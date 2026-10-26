@@ -38,6 +38,37 @@ const [origin='https://localhost:48443',session]=process.argv.slice(2);
    await page.getByRole('menuitem',{name:'Add tag'}).click();
    await page.waitForFunction(()=>{const e=document.activeElement;return e&&e.tagName==='INPUT'&&e.closest('main');},null,{timeout:5000});
   });
+  // Issue #26 (23 October 2026): a note opens ready for typing, and there the browser follows no
+  // link by itself, so a click on a web link in a note opened nothing. Only a real browser shows it.
+  await check('a web link in a note opens in a new tab when clicked, and a link to another note opens that note in the app',async()=>{
+   const other=await api({table:'notes',operation:'insert',values:{title:'Screen check link target '+stamp,content:'LINK-TARGET-NOTE',folder_path:'Screen checks'},selection:'*',single:true});
+   const web='https://example.com/godspeed-screen-check-'+stamp,inApp=origin+'/dashboard/notes/'+other.id;
+   const links=await api({table:'notes',operation:'insert',values:{title:'Screen check links '+stamp,content:'Read [the fictional page]('+web+') first.\n\nThen [the other note]('+inApp+').\n\nNever this: [unsafe link](javascript:document.title=\'opened\')',folder_path:'Screen checks'},selection:'*',single:true});
+   // The web page is answered here, so the check needs no internet.
+   await context.route(web,route=>route.fulfill({status:200,contentType:'text/html',body:'<title>Fictional page</title><p>Fictional page</p>'}));
+   const notePath='/dashboard/notes/'+links.id;
+   await page.goto(origin+notePath);
+   const editor=page.locator('main [contenteditable=true]').first();
+   const external=editor.locator('a[href="'+web+'"]');await external.waitFor();
+   for(const how of [{},{modifiers:['Control']},{button:'middle'}]){
+    const opened=context.waitForEvent('page',{timeout:8000});
+    await external.click(how);
+    const tab=await opened;await tab.waitForURL(web);
+    assert.equal(new URL(page.url()).pathname,notePath,'the note\'s own tab moved');
+    await tab.close();
+   }
+   const none=()=>context.waitForEvent('page',{timeout:2000}).then(p=>p.url(),()=>null);
+   let extra=none();
+   await editor.getByText('unsafe link').last().click();
+   assert.equal(await extra,null,'the unsafe link opened a page');
+   assert.notEqual(await page.title(),'opened','the unsafe link ran');
+   assert.equal(new URL(page.url()).pathname,notePath);
+   extra=none();
+   await editor.locator('a[href="'+inApp+'"]').click();
+   await page.waitForURL(u=>u.pathname==='/dashboard/notes/'+other.id,{timeout:8000});
+   await page.waitForFunction(()=>document.querySelector('main [contenteditable=true]')?.innerText.includes('LINK-TARGET-NOTE'),null,{timeout:15000});
+   assert.equal(await extra,null,'the link to another note opened a new page');
+  });
   await check('the floating chat button steps aside while a chat is docked beside a collection',async()=>{
    await page.goto(origin+'/collections/'+collection.slug);await page.locator('main').getByRole('button',{name:'AI chat'}).click();
    await page.getByPlaceholder('Ask Godspeed...').last().waitFor();
@@ -60,6 +91,33 @@ const [origin='https://localhost:48443',session]=process.argv.slice(2);
   await check('the Media page loads its PDF reader (no refused module script)',async()=>{
    const before=problems.length;await page.goto(origin+'/dashboard/media');await page.waitForTimeout(2500);
    assert.deepEqual(problems.slice(before).filter(p=>/MIME/.test(p)),[]);
+  });
+  // Issue #29 (23 October 2026): the notebook restarted for about 80 seconds, another note was
+  // opened, the one save sent on leaving the first note failed, and its new text was lost for good.
+  await check('text typed in a note survives a failed save while switching notes',async()=>{
+   const first=await api({table:'notes',operation:'insert',values:{title:'Screen check unsaved text '+stamp,content:'Fictional seed list.'},selection:'*',single:true});
+   const second=await api({table:'notes',operation:'insert',values:{title:'Screen check next note '+stamp,content:'NEXT-NOTE-TEXT'},selection:'*',single:true});
+   const typed='Typed while the notebook restarts '+stamp+'.';
+   const saved=async()=>(await api({table:'notes',operation:'select',selection:'id, content',filters:[['eq','id',first.id]],single:true})).content;
+   await page.goto(origin+'/dashboard/notes/'+first.id);
+   await page.waitForFunction(()=>document.querySelector('main [contenteditable=true]')?.innerText.includes('Fictional seed list.'),null,{timeout:15000});
+   await page.locator('main [contenteditable=true]').first().click();await page.keyboard.press('Control+End');
+   // While the notebook is away, a note's save is answered by the web front door as it was then.
+   const away=route=>/"operation":"update"/.test(route.request().postData()||'')?route.fulfill({status:502,contentType:'text/html',body:'<html><body>502 Bad Gateway</body></html>'}):route.fallback();
+   await page.route('**/api/query',away);
+   await page.keyboard.type(' '+typed);
+   // The other note at once, inside the autosave's pause: the save sent on leaving is the one that fails.
+   await page.locator('main').getByText('Screen check next note '+stamp).first().click();
+   await page.waitForFunction(()=>document.querySelector('main [contenteditable=true]')?.innerText.includes('NEXT-NOTE-TEXT'),null,{timeout:15000});
+   await page.waitForTimeout(1500);
+   assert.ok(!(await saved()).includes(typed),'nothing could be saved while the notebook was away');
+   // The notebook is back. Nothing is typed, clicked or reloaded from here on.
+   await page.unroute('**/api/query',away);
+   const until=Date.now()+40000;
+   while(!(await saved()).includes(typed)&&Date.now()<until)await page.waitForTimeout(1000);
+   const content=await saved();
+   assert.ok(content.includes(typed),'the typed text never reached the notebook; it holds: '+JSON.stringify(content));
+   assert.ok(content.includes('Fictional seed list.'));
   });
  }finally{await browser.close();}
  console.log(checks.join('\n'));

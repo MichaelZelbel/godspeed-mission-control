@@ -6,18 +6,26 @@ import {ApiKeys,ASSISTANT_KEY_NAME} from '../core/api-keys.mjs';
 import {installSkillTree} from '../core/packaged-skills.mjs';
 import {commandFile} from './windows-command-file.mjs';
 import {starterBorn} from '../core/starter-workspace.mjs';
-import {withTimezone,godspeedHermesSettings,CRON_PROVIDER} from '../core/hermes-config.mjs';
+import {withTimezone,godspeedHermesSettings,CRON_PROVIDER,backupQuickCommand,BACKUP_COMMAND} from '../core/hermes-config.mjs';
 import {personaOf} from '../core/persona.mjs';
 import {syncSoul,readExtra} from '../core/assistant-soul.mjs';
+import {installModelCommand} from './install-model-command.mjs';
 import {noteHermesMet} from '../core/starting-routines.mjs';
 import {keepOutOfGit} from '../core/first-commit.mjs';
 const root=process.env.GODSPEED_WORKSPACE,home=process.argv[2];if(!root||!home)throw new Error("Set GODSPEED_WORKSPACE to your mission control folder and name your assistant's home folder");
-const store=new Store(root),port=Number(process.env.GODSPEED_PORT||47831),file=path.join(home,'config.yaml');fs.mkdirSync(home,{recursive:true});
+// The notebook is opened only where its records are needed (a starter-made mission control, or a
+// server's key): opening it reads every one of its files, and this runs at every install and every
+// start. On one PC, where an update ran it twice, each run took two minutes until 21 October 2026;
+// the rest needs only the folder's own paths.
+let opened=null;const notebook=()=>opened??=new Store(root);
+const store={root:path.resolve(root),state:path.join(path.resolve(root),'.godspeed'),get:(type,id)=>notebook().get(type,id)};fs.mkdirSync(store.state,{recursive:true});
+const port=Number(process.env.GODSPEED_PORT||47831),file=path.join(home,'config.yaml');fs.mkdirSync(home,{recursive:true});
 const kit=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..');
 // Keep the original main-branch command suite available as well as the
 // integrated adapters below. Dependencies stay beside their original wrappers.
 const commandHome=path.join(home,'bin');
 fs.mkdirSync(commandHome,{recursive:true});
+installModelCommand({root,home});
 // Every Windows command file lives in commandHome; windows-command-file.mjs says why
 // the paths in it are written the way they are.
 const cmd=write=>commandFile(write,{folder:commandHome});
@@ -135,7 +143,7 @@ const notebookTool=()=>{
     const keyFile=path.join(store.state,'assistant-mcp.json');let key;
     // Its name is what Settings, Connect other assistants lists; until 18 October 2026 it was
     // "Candidate assistant", a word from the test channel, and a key made then is renamed here.
-    const keys=new ApiKeys(store),rows=keys.rows(),own=rows.map(r=>r.name==='Candidate assistant'?{...r,name:ASSISTANT_KEY_NAME}:r);if(own.some((r,i)=>r!==rows[i]))keys.write(own);
+    const keys=new ApiKeys(notebook()),rows=keys.rows(),own=rows.map(r=>r.name==='Candidate assistant'?{...r,name:ASSISTANT_KEY_NAME}:r);if(own.some((r,i)=>r!==rows[i]))keys.write(own);
     if(fs.existsSync(keyFile))key=JSON.parse(fs.readFileSync(keyFile)).key;else{key=keys.invoke('mc-api-keys/generate',{name:ASSISTANT_KEY_NAME,scopes:['notes','contacts','world','collections','media','profile','actions','stats']}).api_key;atomic(keyFile,JSON.stringify({key}));fs.chmodSync(keyFile,0o600);}
     headers=`    headers:\n      Authorization: ${JSON.stringify('Bearer '+key)}\n`;
   }
@@ -181,6 +189,15 @@ if(starterBorn(root)){
  const provider=path.join(home,'plugins',CRON_PROVIDER,'__init__.py'),source=fs.readFileSync(path.join(kit,'notebook','assistant-files','godspeed-cron-provider.py'),'utf8').replace(/\r\n/g,'\n');
  if(!fs.existsSync(provider)||fs.readFileSync(provider,'utf8')!==source){fs.mkdirSync(path.dirname(provider),{recursive:true});atomic(provider,source);}
 }
+// /backupai in Telegram on the one-click server, where its Telegram runner hands the chat to the
+// backup AI setup (hermes-config.mjs, core/backup-ai.mjs); on every other installation a backup AI
+// is connected in Settings. The context plugin names the way that exists here when someone asks.
+{
+ const runner=process.env.GODSPEED_ORIGINAL_RUNTIME==='on'&&!!process.env.GODSPEED_TELEGRAM_DIR&&!['on','off'].includes(process.env.GODSPEED_TELEGRAM||'');
+ text=backupQuickCommand(text,runner?{node:process.execPath,script:path.join(kit,'notebook','scripts','backup-ai.mjs'),dir:process.env.GODSPEED_TELEGRAM_DIR}:null);
+ const marker=path.join(home,'plugins','godspeed-context','backup-command.txt');
+ if(runner)atomic(marker,'/'+BACKUP_COMMAND+'\n');else fs.rmSync(marker,{force:true});
+}
 atomic(file,text);fs.chmodSync(file,0o600);
 // Hermes reads its own SOUL.md before AGENTS.md, as the assistant's identity, and seeds it with
 // "You are Hermes Agent, built by Nous Research ..." (core/assistant-soul.mjs says why and how).
@@ -192,5 +209,5 @@ try{const persona=personaOf(fs.readFileSync(path.join(root,'AGENTS.md'),'utf8'))
 // When this mission control first met this Hermes, once: a routine the reader already had in it is
 // theirs, one made afterwards was made for this mission control (core/starting-routines.mjs,
 // ownRoutines). At an install this comes before anything is made in it.
-if(starterBorn(root))try{noteHermesMet(store,{home:path.resolve(home)});}catch{}
+if(starterBorn(root))try{noteHermesMet(notebook(),{home:path.resolve(home)});}catch{}
 console.log(JSON.stringify({wired:true,isolated:true,port}));

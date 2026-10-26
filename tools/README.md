@@ -439,3 +439,10 @@ Because a reader who never opens a terminal should never have a Node program and
 Python program sitting in the folder they were told is theirs to read. The kit's
 `starter-godspeed/` is what your mission control is *made of*. This folder is what the installer
 *puts on the machine*. Two different things, kept apart on purpose.
+
+## Looking for `stage.sh` or `stage.mjs`?
+
+They used to be here. They are not programs you type and the installer does not put them on
+your computer, and everything in this folder is copied onto a user's computer as a program, so
+they live in `stage/` at the top of this repository now, beside the stage file they read.
+`stage/README.md` says what they are and how to run them.

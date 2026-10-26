@@ -1,6 +1,6 @@
 {
   "name": "godspeed-journal",
-  "version": "0.4.0",
+  "version": "0.4.7",
   "description": "Interstitial journaling for Godspeed Mission Control: say what you are starting and what done means, and mission control checks it when you finish. An add-on for Teach It Once.",
   "license": "MIT",
   "type": "module",

@@ -33,7 +33,7 @@ COPY --from=frontend /build/notebook/ui/dist /opt/godspeed/kit/notebook/ui/dist
 RUN chmod 755 /opt/godspeed/kit/docker/full-candidate/entrypoint.sh && chown -R hermes:hermes /opt/godspeed/kit
 ENV GODSPEED_WORKSPACE=/opt/data/full-candidate/workspace \
     GODSPEED_MEDIA_ROOT=/opt/data/full-candidate/media \
-    GODSPEED_BIND=0.0.0.0 GODSPEED_PORT=47831 GODSPEED_DEVICE=vps \
+    GODSPEED_BIND=0.0.0.0 GODSPEED_PORT=47831 GODSPEED_LOCAL_PORT=47832 GODSPEED_DEVICE=vps \
     HOME=/opt/data/full-candidate/hermes HERMES_HOME=/opt/data/full-candidate/hermes \
     GODSPEED_FILE_HERMES=0 GODSPEED_NODE=/usr/local/bin/node \
     GODSPEED_ASSISTANT_PUBLISHER=/opt/godspeed/kit/notebook/scripts/save-assistant-state.mjs \

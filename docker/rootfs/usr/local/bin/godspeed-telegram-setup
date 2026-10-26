@@ -99,26 +99,23 @@ NOTEBOOK_URL = os.environ.get("GODSPEED_TG_NOTEBOOK_URL", "").strip()
 if not re.fullmatch(r"https?://[A-Za-z0-9.:\[\]-]+(?:/[A-Za-z0-9._~/-]*)?", NOTEBOOK_URL):
     NOTEBOOK_URL = ""
 
+# The installers this server hands its owner for their other computers. Both name the version the
+# maintainer promoted, not whatever was merged today: the Windows setup is the release marked
+# Latest, which only a promotion moves, and the Mac and Linux one-liner is install-godspeed.sh at
+# the top of the public stage branch, beta. Until 25 October 2026 they read main, so every merge
+# reached these owners the same day, tried or not.
 WINDOWS_EXE = "https://github.com/MichaelZelbel/godspeed-mission-control/releases/latest/download/GodspeedSetup.exe"
-ONE_LINER = "https://raw.githubusercontent.com/MichaelZelbel/godspeed-mission-control/main/install-godspeed.sh"
+ONE_LINER = "https://raw.githubusercontent.com/MichaelZelbel/godspeed-mission-control/beta/install-godspeed.sh"
 if FLOW == "notebook":
-    # The one-click server is version 2; the latest release and main are still version 1, so a
-    # reader sent there got the other product (until 6 October 2026). Send them to version 2's
-    # PUBLISHED installers instead.
-    #
-    # NOT GODSPEED_REVISION, the commit the image was built from: a commit's installers/ folder
-    # is filled by a LATER commit, so the build at b327fe0 carried the previous product's
-    # installers (pinning 5961989, ~69 commits behind), and linking to the build commit served
-    # that stale product to every reader. Fixed 7 October 2026.
-    #
-    # GODSPEED_INSTALLER_REF pins a release tag or a known-good commit when the image sets one;
-    # otherwise main, whose installers/ folder always holds the current published pair (version 2
-    # is developed on main since 9 October 2026; until then it was codex/godspeed-v2-completeness).
-    _ref = os.environ.get("GODSPEED_INSTALLER_REF", "").strip() or "main"
+    # An image may send the one-click server's readers to another ref with GODSPEED_INSTALLER_REF
+    # (a release tag or a known-good commit); an invalid value falls back to beta. Never
+    # GODSPEED_REVISION, the commit the image was built from: a commit's installers/ folder is
+    # filled by a LATER commit, so linking to the build commit served every reader a stale product
+    # (the build at b327fe0 carried the previous one; fixed 7 October 2026).
+    _ref = os.environ.get("GODSPEED_INSTALLER_REF", "").strip() or "beta"
     if ".." in _ref or not re.fullmatch(r"[0-9A-Za-z][0-9A-Za-z._/-]{0,99}", _ref):
-        _ref = "main"
-    WINDOWS_EXE = "https://github.com/MichaelZelbel/godspeed-mission-control/raw/%s/installers/GodspeedSetup.exe" % _ref
-    ONE_LINER = "https://raw.githubusercontent.com/MichaelZelbel/godspeed-mission-control/%s/installers/install-godspeed.sh" % _ref
+        _ref = "beta"
+    ONE_LINER = "https://raw.githubusercontent.com/MichaelZelbel/godspeed-mission-control/%s/install-godspeed.sh" % _ref
 
 
 SECRETS = []   # keys the reader sent, masked in every log line like the bot token
@@ -213,6 +210,10 @@ class TelegramError(Exception):
         self.code = code
 
 
+class TimeUp(Exception):
+    """The backup chat ran out of its time (BACKUP_MINUTES) and hands the bot back."""
+
+
 def tg(method, http_timeout=30, **params):
     body = json.dumps({k: v for k, v in params.items() if v is not None}).encode()
     req = urllib.request.Request("%s/bot%s/%s" % (API, TOKEN, method), data=body,
@@ -280,6 +281,7 @@ class Chat:
         self.hinted = {}
         self.question = None        # (text, buttons) to show again on /start
         self.reassured = 0          # when "Still working on it" was last said
+        self.deadline = None        # the backup chat hands the bot back by then (TimeUp)
 
     # sending
     def send(self, text, buttons=None):
@@ -458,7 +460,10 @@ class Chat:
         self.question = (text, buttons)
         self.send(text, buttons)
         while True:
-            for kind, value in self.poll(50):
+            if self.deadline and time.time() > self.deadline:
+                raise TimeUp()
+            wait = max(1, min(50, int(self.deadline - time.time()) + 1)) if self.deadline else 50
+            for kind, value in self.poll(wait):
                 if kind == "button" and any(value == d for d, _ in buttons):
                     self.question = None
                     return value
@@ -818,8 +823,11 @@ def step_brain(chat):
         if ok:
             st["brain_ok"] = True
             save_state(st)
+            # /backupai exists where the container's runner hands the chat over (the one-click server).
             chat.send("%s is connected, and I answered a first test question with it. To switch to "
-                      "another AI later, send /model here." % esc(brain_label(slug)))
+                      "another AI later, send /model here.%s" % (esc(brain_label(slug)), (
+                          " To add a second AI that steps in when this one fails, send /backupai."
+                          if FLOW == "notebook" else "")))
             return
         st.pop("brain", None)       # "Pick another AI"
         save_state(st)
@@ -888,6 +896,182 @@ def brain_key(chat, slug):
             return True
         prompt = ("%s did not answer with that key. It said: %s\n\nSend another key, or pick another AI."
                   % (esc(name), esc(why[:400])))
+
+
+# --- The backup AI: GODSPEED_TG_FLOW=backup, any time after the setup (22 October 2026) -----------
+# A second AI the owner chooses, which Hermes and godspeed-model use only when the main one fails,
+# and only for that request (notebook/core/backup-ai.mjs). /backupai in Telegram is a Hermes quick
+# command (notebook/scripts/backup-ai.mjs telegram-request, no AI involved): it leaves a request for
+# the container's runner (docker/full-candidate/telegram-runner.mjs), which stops the gateway and
+# starts this program with the owner it already knows. Like the first setup it needs no AI, which
+# matters when the main AI is the one that fails, and a key is deleted from the chat as soon as it
+# is read. A backup is saved only after it answered a test question by itself, so a new one that
+# does not answer never replaces one that does. After BACKUP_MINUTES the bot goes back to the
+# assistant whatever happened.
+BACKUP = shlex.split(os.environ.get("GODSPEED_TG_BACKUP", ""))
+REQUEST = os.environ.get("GODSPEED_TG_REQUEST", "")
+try:
+    BACKUP_MINUTES = min(20.0, float(os.environ.get("GODSPEED_TG_BACKUP_MINUTES") or 20))   # shorter only in tests
+except ValueError:
+    BACKUP_MINUTES = 20.0
+
+
+def backup_cmd(*args, stdin_text="", timeout=60):
+    """(exit code, the JSON object it printed) of notebook/scripts/backup-ai.mjs."""
+    rc, out = run(BACKUP + list(args), timeout=timeout, stdin_text=stdin_text,
+                  env=dict(os.environ, NODE_NO_WARNINGS="1"))
+    for line in reversed(out.splitlines()):
+        line = line.strip()
+        if line.startswith("{"):
+            try:
+                return rc, json.loads(line)
+            except ValueError:
+                pass
+    return rc, {}
+
+
+def backup_try(entry):
+    """(True, "") once entry answered a test question by itself and is saved as the backup, else
+    (False, why). Runs inside chat.working, so it must not read the chat."""
+    if not entry.get("model"):
+        return False, "I do not know a model of this service to use"
+    rc, tried = backup_cmd("check", stdin_text=json.dumps(entry), timeout=200)
+    if rc != 0 or not tried.get("ok"):
+        return False, tried.get("error") or "no answer"
+    rc, saved = backup_cmd("set", stdin_text=json.dumps(entry))
+    return (True, "") if rc == 0 and saved.get("configured") else (False, "it could not be saved")
+
+
+def backup_chatgpt(chat):
+    if not chatgpt_done():
+        chat.send("One moment, I am asking ChatGPT for a sign-in code.")
+        device_signin(
+            chat, "ChatGPT",
+            HERMES + ["auth", "add", "openai-codex", "--type", "oauth", "--no-browser"], True,
+            lambda url, code: (
+                "Open this page on your phone or computer:\n%s\n\nType this code there:\n<code>%s</code>\n\n"
+                "Sign in with your ChatGPT account. Any plan with Codex works. The code lasts 15 minutes, "
+                "and I write back as soon as it went through." % (url, code)),
+            chatgpt_done)
+        chat.send("You are signed in to ChatGPT. One moment, I am finding a model your plan may use.")
+
+    def find_model():
+        why = ""
+        for model in codex_models():
+            ok, why = backup_try({"provider": "openai-codex", "model": model})
+            log("backup: ChatGPT with %s: %s" % (model, "answers" if ok else why[:200]))
+            if ok:
+                return True, ""
+        return False, why
+    ok, why = chat.working(find_model)
+    if ok:
+        return True
+    a = chat.ask("You are signed in to ChatGPT, but none of its models answered me. It said: %s"
+                 % esc(why[:400]), [("brain:retry", "Try again"), ("brain:other", "Pick another AI")])
+    return a == "brain:retry" and backup_chatgpt(chat)
+
+
+def backup_key(chat, slug):
+    name = brain_label(slug)
+    prompt = ("Send me your %s API key. You make one in your %s account. I delete your message as "
+              "soon as I have read it, so the key does not stay in this chat." % (esc(name), esc(name)))
+    while True:
+        a = chat.ask(prompt, [("brain:other", "Pick another AI")], free_text=True)
+        if a == "brain:other":
+            return False
+        key = a.strip()
+        chat.delete_last_text()
+        if not key or re.search(r"[\s\"'\\]", key) or len(key) < 16:
+            prompt = "That does not look like an API key. Send the whole key, or pick another AI."
+            continue
+        SECRETS.append(key)
+        chat.send("Thanks, I deleted your message. Checking the key with %s..." % esc(name))
+        ok, why = chat.working(backup_try, {"provider": slug, "model": default_model(slug), "api_key": key})
+        log("backup: %s: %s" % (slug, "answers" if ok else why[:200]))
+        if ok:
+            return True
+        prompt = ("%s did not answer with that key. It said: %s\n\nSend another key, or pick another AI."
+                  % (esc(name), esc(why[:400])))
+
+
+def step_backup(chat):
+    _, shown = backup_cmd("show")
+    main_slug = (shown.get("main") or {}).get("provider") or ""
+    main = esc(brain_label(main_slug)) if main_slug else "your main AI"
+    current = shown.get("backup") if shown.get("configured") else None
+    about = ("<b>Backup AI.</b> A second AI that steps in only when your main AI, %s, fails: during an "
+             "outage, or when its usage limit is reached. It answers only that one request; the next one "
+             "tries %s first again. You use your own account or key and pay that company directly." % (main, main))
+    if current:
+        name = esc(brain_label(current.get("provider")) if current.get("provider") != "custom" else current.get("base_url") or "your own service")
+        a = chat.ask("%s\n\nYour backup AI now is %s (%s)." % (about, name, esc(current.get("model", ""))),
+                     [("backup:replace", "Connect another one"), ("backup:remove", "Remove it"), ("backup:keep", "Keep it")])
+        if a == "backup:keep":
+            chat.send("Nothing changed: %s stays your backup AI." % name)
+            return
+        if a == "backup:remove":
+            rc, out = chat.working(backup_cmd, "remove")
+            chat.send("Done: you have no backup AI now. When %s fails, the work waits for it again. Send "
+                      "/backupai to add one later." % main if rc == 0 and out.get("configured") is False else
+                      "I could not remove the backup AI just now. Nothing changed; send /backupai to try again.")
+            return
+        question = "Which one do you want as your backup instead?"
+    else:
+        question = about + "\n\nWhich one do you want as your backup?"
+    # Exactly the choices the first setup offers for the main AI (step_brain), plus Not now. The
+    # main AI's own service is offered too, and answered in plain words: Hermes' fallback list
+    # cannot hold a second ChatGPT account (a plan has one sign-in in Hermes), and a second key or
+    # model of the same service usually fails with it, so a backup is another service. Settings
+    # says the same (notebook/server/main.mjs, SAME_SERVICE).
+    while True:
+        slug = chat.ask(question, list(TOP_BRAINS) + [("more", "Another provider"), ("backup:none", "Not now")])
+        if slug == "backup:none":
+            chat.send("All right, nothing changed. Send /backupai whenever you want a backup AI.")
+            return
+        if slug == "more":
+            slug = chat.ask("Which one?", more_brains())
+        if slug == main_slug:
+            question = ("That is the service your main AI uses already. A backup steps in when the main AI fails, "
+                        "so it has to be another service. Which one do you want as your backup?")
+            continue
+        ok = backup_chatgpt(chat) if slug == "openai-codex" else backup_key(chat, slug)
+        if ok:
+            chat.send("%s is your backup AI now, and it answered a first test question. It steps in only "
+                      "when %s fails, and only for that request." % (esc(brain_label(slug)), main))
+            return
+        question = "Which one do you want as your backup?"
+
+
+def backup_main():
+    """The whole backup chat: the owner is the setup's own, the request is the one /backupai left."""
+    st = load_state()
+    if st.get("request") != REQUEST:
+        st = {"request": REQUEST}
+    if st.get("done"):
+        return 0
+    owner, chat_id = os.environ.get("GODSPEED_TG_OWNER_ID", ""), os.environ.get("GODSPEED_TG_CHAT_ID", "")
+    if not (TOKEN and REQUEST and BACKUP and re.fullmatch(r"-?[0-9]+", owner) and re.fullmatch(r"-?[0-9]+", chat_id)):
+        log("backup: started without its token, request, command or owner; handing the bot back")
+        st["done"] = True
+        save_state(st)
+        return 0
+    st.update(owner_id=int(owner), chat_id=int(chat_id),
+              owner_name=os.environ.get("GODSPEED_TG_OWNER_NAME") or st.get("owner_name") or "there")
+    save_state(st)
+    chat = Chat(st)
+    chat.deadline = time.time() + BACKUP_MINUTES * 60
+    chat.poll(0)        # what the gateway read but had not marked read, such as the /backupai itself
+    log("backup: the chat is handed over (request %s)" % REQUEST)
+    try:
+        step_backup(chat)
+    except TimeUp:
+        chat.send("I am handing the chat back now; nothing changed. Send /backupai when you want to set a backup AI.")
+    chat.send("Back to normal: write to me as usual.")
+    chat.confirm()
+    st["done"] = True
+    save_state(st)
+    log("backup: the bot goes back to the assistant")
+    return 0
 
 
 def step_github(chat):
@@ -1281,6 +1465,8 @@ def step_hand_over(chat):
 
 
 def main():
+    if FLOW == "backup":
+        return backup_main()
     if not TOKEN:
         log("no GODSPEED_TELEGRAM_TOKEN: nothing to do (setup by terminal: docker compose exec godspeed godspeed-setup)")
         return 0

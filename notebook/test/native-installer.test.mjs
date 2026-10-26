@@ -249,7 +249,9 @@ test('a Mac without Homebrew is told how to get it before anything is downloaded
   fs.writeFileSync(bin+'/uname','#!/bin/sh\necho Darwin\n',{mode:0o755});
   fs.writeFileSync(bin+'/curl','#!/bin/sh\necho curl >> "$FAKE_CALLS"\nexit 22\n',{mode:0o755});
   fs.writeFileSync(bin+'/xcode-select','#!/bin/sh\n[ -n "$FAKE_CLT" ]\n',{mode:0o755});
-  for(const tool of ['cat','bash','dirname'])fs.symlinkSync(spawnSync('bash',['-c','command -v '+tool],{encoding:'utf8'}).stdout.trim(),bin+'/'+tool);
+  // mktemp, sh, cp and rm: the folder the installer reads the stage file into, and the reader it
+  // reads it with (25 October 2026, since the installer names no version of its own any more).
+  for(const tool of ['cat','bash','dirname','mktemp','sh','cp','rm'])fs.symlinkSync(spawnSync('bash',['-c','command -v '+tool],{encoding:'utf8'}).stdout.trim(),bin+'/'+tool);
   // GODSPEED_BREW_PLACES: where this test's Mac keeps Homebrew, nowhere (a runner has a real one).
   const run=env=>spawnSync(bin+'/bash',[entry],{encoding:'utf8',env:{HOME:scratch('mac-home'),PATH:bin,FAKE_CALLS:calls,GODSPEED_BREW_PLACES:bin+'/no-brew',...env}});
   const none=run({});

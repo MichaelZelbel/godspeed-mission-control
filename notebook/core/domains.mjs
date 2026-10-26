@@ -3,7 +3,10 @@ import {conversationRuntimeId,bindConversationSession} from './conversation-stat
 import {draftEvent} from './draft-event.mjs';
 import {momentDates} from './timestamps.mjs';
 import {NOTE_TYPES,processNote} from './proposals.mjs';
-import {NoteProcessing,PIPELINE,contentFingerprint} from './processing.mjs';
+import {NoteProcessing,PIPELINE,contentFingerprint,skipsProcessing} from './processing.mjs';
+import {WITHDRAWN} from './review-sources.mjs';
+import {screenSuggestions,knownRecords,logFiltered} from './suggestion-filter.mjs';
+import {sameValue as sameThing,valueKey} from './same-thing.mjs';
 export {momentDraft,NOTE_TYPES};
 import {groupContext} from './group-context.mjs';
 import {noteConnections,linkSuggestions} from './related.mjs';
@@ -20,6 +23,7 @@ import { fileContext } from './context.mjs';
 import {Connectors} from './connectors.mjs';
 import {visibleRows,knowledgeContext} from './visibility.mjs';
 import {chatContext,chatAttachments,retrievedContext,collectionWriteSnapshot,noteWriteSnapshot} from './chat-context.mjs';
+import {addonDeadlines} from './addon-deadlines.mjs';
 import {personalOperation,conversationOperations,validateConversationOperations,operationContract,requestIdentity} from './personal-operations.mjs';
 import {TRACKER_OPERATIONS} from './tracker-operations.mjs';
 import {cycleTracker} from './cycle-operations.mjs';
@@ -158,7 +162,12 @@ export class Domains {
       const current=c=>claimHolds(c,asOf),closure_evidence={source_type:input.source_type||'manual',source_id:input.source_id||null,quote:input.evidence_quote||null};
       const target=input.replaces_claim_id?all.find(c=>c.id===input.replaces_claim_id):null;
       if(input.replaces_claim_id&&(!target||!current(target)||target._hash!==input.replaces_claim_hash))throw Error('The fact selected for correction changed; reload before replacing it');
-      const sameValue=all.filter(r=>String(r.value??'').toLowerCase()===value.toLowerCase()),existing=sameValue.find(current)||sameValue[0];
+      // The same value is the same once written one way (same-thing.mjs), the rule a suggestion is
+      // screened by too: until 23 October 2026 "+44 7700 900123" and "+44.7700.900123" were two phone numbers
+      // here, and a suggestion's check was another rule again.
+      // An email or a phone number is that kind under any name ("work email" and "email").
+      const typed=['email','phone'].includes(valueKey(value).type)?theirs.filter(seen).filter(r=>!all.includes(r)&&sameThing(r.value,value)):[];
+      const sameValue=[...all.filter(r=>String(r.value??'').toLowerCase()===value.toLowerCase()||sameThing(r.value,value)),...typed],existing=sameValue.find(current)||sameValue[0];
       if (existing&&(current(existing)||input.origin==='review_queue')) {
         const changed=target&&target.id!==existing.id&&current(existing)?[this.store.prepare('claims',{valid_to:asOf,closure_evidence},target)]:[];
         if(changed.length)this.store.commit(changed);
@@ -240,6 +249,8 @@ export class Domains {
     // A charm question belongs to the notebook chat that asked it, named by the chat itself
     // (conversationOperations); a caller of this plain path never names one (spec 2026-10-21).
     if(name==='personal-operation')return personalOperation(this,input?.type==='charm'?{...input,conversation:undefined}:input);
+    // An add-on's own deadlines, on the local door (addon-deadlines.mjs, discussion #27).
+    if(name==='addon-deadlines')return addonDeadlines(this.store,input);
     if(['configure-connector','run-connector','gdrive-proxy','gdrive-sync','github-import-vault','github-people-sync','github-proxy','github-sync-export','github-sync-pull','send-patch','embed-document','delete-my-account'].includes(name))return new Connectors(this).invoke(name,input);
     if(['backfill-profile-extraction','backfill-moment-profile-extraction','backfill-metadata','backfill-media-analysis'].includes(name)){
       if(name==='backfill-media-analysis'){
@@ -255,7 +266,8 @@ export class Domains {
       // on past one that fails; three failures in a row end the run. Until
       // 7 October 2026 they took every note, trashed and hidden ones too,
       // ignored the person and the limit, paid for done notes again, and the
-      // first hidden note stopped the run.
+      // first hidden note stopped the run. A note marked skip_processing is
+      // never waiting (processing.mjs).
       if(!this.provider)throw new Error('Choose and configure a model provider before analysis');
       const limit=Math.max(1,Math.min(500,Number(input.limit)||200)),person=input.contact_id||null,newest=(a,b)=>String(b.updated_at||'').localeCompare(String(a.updated_at||''))||String(b.created_at||'').localeCompare(String(a.created_at||''));
       let sources,run;
@@ -267,7 +279,7 @@ export class Domains {
         const about=n=>!person||n.contact_id===person||documents.has(n.id)||(Array.isArray(n.metadata?.matched_people)&&n.metadata.matched_people.some(p=>p?.contact_id===person));
         // Done: classified, for Classify; else processed for this very text (or imported as processed).
         const done=n=>{if(name==='backfill-metadata')return !!n.metadata?.type;const job=jobs.get(n.id);return job?job.state==='completed'&&job.fingerprint===contentFingerprint(n):n.processing_status==='processed';};
-        sources=visibleRows(this.query,'notes').filter(n=>!n.is_trashed&&about(n)&&!done(n));run=n=>this.invoke('process-note',{note_id:n.id});
+        sources=visibleRows(this.query,'notes').filter(n=>!n.is_trashed&&!skipsProcessing(n)&&about(n)&&!done(n));run=n=>this.invoke('process-note',{note_id:n.id});
       }
       const results=[],errors=[];let inRow=0;
       for(const source of sources.sort(newest).slice(0,limit)){try{results.push(await run(source));inRow=0;}catch(error){errors.push({id:source.id,error:error.message});if(++inRow>=3)break;}}
@@ -411,7 +423,7 @@ export class Domains {
       // search showed nothing (6 October 2026). Both are given.
       const question=String(input.query||input.search_query||'').trim(),limit=Math.min(Number(input.limit)||20,100);
       if(!question)return {results:[],notes:[],mode:'words',semantic:false};
-      const found=await this.index.searchHybrid(question,{limit:limit*3,types:['notes','media_analysis','note_chunks']});
+      const found=await this.index.searchHybrid(question,{limit:limit*3,types:['notes','media_analysis','note_chunks'],signal:input.signal});
       const notes=new Map(searchable().map(n=>[n.id,n])),attached=id=>this.store.get('media_analysis',id)?.note_id||this.store.get('note_chunks',id)?.note_id;
       const seen=new Set(),results=[];
       for(const row of found.rows){const id=row.type==='notes'?row.id:attached(row.id),note=id&&notes.get(id);if(!note||seen.has(id))continue;seen.add(id);results.push({...note,similarity:row.similarity??Math.min(1,row.score*30),matched:row.matched||'words'});if(results.length>=limit)break;}
@@ -452,18 +464,25 @@ export class Domains {
         if(!['add_profile_entry','add_claim','add_contact','add_moment','add_relationship','connect_note_person'].includes(suggestion.type))throw new Error('Unsupported inference proposal '+suggestion.type);
         if(!suggestion.evidence_quote||!cites(source,suggestion.evidence_quote))throw new Error('Inference cites text absent from its source');
       }
+      // What the notebook already has or was already offered is left out, as for a processed note
+      // (suggestion-filter.mjs). Until 23 October 2026 these runs (a person's Enrich, profile
+      // suggestions, an event's facts) queued everything.
+      const note=input.note_id?source:null;
+      const screened=screenSuggestions(suggestions.suggestions.map(s=>({...s,source_note_id:input.note_id||null})),knownRecords(this.query),{fields,note});
       // A type the notebook does not know is left out: the model once wrote
       // the name of this function ("process-note") as the note's type.
       if(input.note_id&&suggestions.metadata&&typeof suggestions.metadata==='object'){const metadata={...suggestions.metadata};if(!NOTE_TYPES.includes(metadata.type))delete metadata.type;this.store.save('notes',{id:source.id,metadata:{...metadata,...source.metadata},tags:[...new Set([...(source.tags||[]),...(suggestions.tags||[])])]},source._hash);}
+      logFiltered(this.store.state,screened.dropped,{note,source:name});
       const saved = [];
-      for (const suggestion of suggestions.suggestions || []) {
+      for (const suggestion of screened.kept) {
         const fingerprint = hash([source.uid, suggestion.type, suggestion.payload]);
-        if (this.query.rows('review_queue').some(r => r.fingerprint === fingerprint)) continue;
+        if (this.query.rows('review_queue').some(r => r.fingerprint === fingerprint && r.status !== WITHDRAWN)) continue;
         // A fact the person answered with Never Again is not proposed again.
         if (['add_profile_entry','add_claim'].includes(suggestion.type)&&factSuppressed(this.query,{...factSubject(suggestion.payload||{}),value:String(suggestion.payload?.value||'').trim()})) continue;
         saved.push(this.store.save('review_queue', { title: suggestion.title || 'Review suggestion', suggestion_type: suggestion.type, payload: suggestion.type === 'add_moment' ? momentDates(suggestion.payload || {}) : suggestion.payload || {}, description: suggestion.evidence_quote || null, source_note_id: input.note_id || null, fingerprint, status: 'pending_review', origin: 'ai', confidence_score: suggestion.confidence || null }));
       }
-      return { success: true, suggestions: saved.map(r=>({...r,...r.payload,review_id:r.id})), processed: saved.length,created:0,linked:0,message:'Saved '+saved.length+' proposals for review.' };
+      const leftOut=screened.dropped.length;
+      return { success: true, suggestions: saved.map(r=>({...r,...r.payload,review_id:r.id})), processed: saved.length,left_out:leftOut,created:0,linked:0,message:'Saved '+saved.length+' proposals for review.'+(leftOut?' Left out '+leftOut+' the notebook already has or had already suggested.':'') };
     }
     if(['note-chat','collection-chat','conversation-chat'].includes(name)&&input.mode==='summarize')return this.summarizeChat(input);
     if (['note-chat','collection-chat','conversation-chat','weekly-review','generate_collection_schema'].includes(name)) {

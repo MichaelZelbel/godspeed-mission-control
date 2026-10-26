@@ -1,0 +1,98 @@
+name: required
+# The one check main requires: nothing reaches main except through a pull request whose
+# `required` check passed. That check name is what the main-branch rules name.
+#
+# Job `suite` runs the part of the product's suite that no pull request used to run: the tool
+# tests (the two lists tools-test.yml runs, and its nested-checkout step on node 22.19.0), the
+# guide check's own self-test, this gate's own self-test, and the native Linux install, upgrade
+# and recover test, as "Integrated Godspeed v2" runs it. A review does not change the code, so a
+# pull_request_review event skips the suite and only the gate below runs again; the gate then
+# counts the suite result from the earlier run on the same commit.
+#
+# Job `required` asks the two questions, each answered with one plain line:
+# .github/workflows/required-gate.mjs. It always runs, even when the suite failed, so that the
+# check reports a reason instead of staying absent and blocking the pull request forever.
+#
+# Nothing here writes anything: the permissions below are all read, and the checkouts keep no
+# token. The gate lives beside this file inside .github/workflows/ on purpose, because only a key
+# with GitHub's `workflows` permission may change files there.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  pull_request_review:
+    types: [submitted, edited, dismissed]
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+  checks: read
+  actions: read
+  pull-requests: read
+  statuses: read
+jobs:
+  suite:
+    name: suite
+    if: github.event_name != 'pull_request_review'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - name: tool tests
+        run: |
+          set -e
+          for t in tools/test-due.sh tools/test-install-count.sh tools/test-uninstall.sh tools/test-goals.sh tools/test-check-moves.sh tools/test-work.sh tools/test-work-run.sh tools/test-forecast.sh tools/test-check-written.sh tools/test-world-pull.sh tools/test-mc-run.sh tools/test-decide.sh tools/test-check-research.sh tools/test-research.sh tools/test-launchers.sh tools/test-prompt-archive.sh; do
+            echo "== $t"; bash "$t"
+          done
+          for t in tools/test-observed-state.js tools/test-check-brief.js tools/test-limit.js tools/test-apply-target.js tools/test-nested-checkout.js; do
+            echo "== $t"; node "$t"
+          done
+      # The notebook needs Node 22.19: started from a checkout inside a "type": "module" folder.
+      - uses: actions/setup-node@v4
+        with: { node-version: '22.19.0' }
+      - name: the product checked out inside an add-on's folder, the notebook too
+        run: node tools/test-nested-checkout.js
+      - name: The stage file, its readers, and the installers that read it
+        run: |
+          set -e
+          node stage/test-stage.mjs
+          bash stage/test-stage-sh.sh
+          # The agreement test compares the add-on pins with sources.json at the stage's own product
+          # commit, which a shallow checkout does not hold; without it, it compares with today's.
+          git fetch -q --depth 1 origin "$(node stage/stage.mjs stage.json get productCommit)"
+          bash stage/test-stage-agree.sh
+          node notebook/scripts/run-tests.mjs notebook/test/installer-stage.test.mjs
+          bash docker/server/test.sh
+          node docker/server/test-browser.mjs
+          bash stage/test-check-public-lines.sh
+          bash stage/check-public-lines.sh
+      - name: The guide check and this gate prove themselves
+        run: |
+          node .github/guide-check.mjs --self-test
+          node .github/workflows/required-gate.mjs --self-test
+      - name: Install, upgrade and recover
+        run: bash notebook/test/native-install-linux.sh
+  required:
+    name: required
+    needs: suite
+    if: always()
+    runs-on: ubuntu-latest
+    # The gate itself waits up to 80 minutes for the other checks on this commit.
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with: { node-version: '22.19.0' }
+      - name: Every other check on this commit passed, and a listed reviewer approved it
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REQUIRED_REVIEWERS: ${{ vars.REQUIRED_REVIEWERS }}
+        run: node .github/workflows/required-gate.mjs

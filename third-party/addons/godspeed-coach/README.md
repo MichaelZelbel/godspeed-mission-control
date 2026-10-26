@@ -81,9 +81,15 @@ node godspeed-mission-control/third-party/addons/godspeed-coach/bin/godspeed-coa
 
 Any folder that holds this add-on, the one this README is in, works the same way: run
 `node bin/godspeed-coach.mjs setup --godspeed <your mission control folder>` inside it, and it
-installs the copy that folder holds. `bash install.sh --godspeed <your mission control folder>`
-does the same and finds a Node.js for it. You need Node.js 22 or newer; the one Hermes brings
-along will do.
+installs the copy that folder holds. You need Node.js 22 or newer; the one Hermes brings along
+will do.
+
+On Windows, setup also writes a PowerShell launcher next to the command, so a talk's opening and
+your words reach the coach exactly as given, line breaks, quotes and umlauts included. cmd.exe
+cannot carry a line break (it stops reading at the first one and drops the rest), so a command
+that reaches the coach cut short through it is refused, never half saved. Where PowerShell is set
+to run no scripts at all, setup says so and leaves that launcher out; text that runs over several
+lines then goes in with `--words-file` or `--opening-file`.
 
 Then ask your assistant for your first area: "I want a weekly health talk on Sundays at seven."
 
@@ -109,6 +115,10 @@ godspeed-coach prep-due --within-hours 48     # the coming talks with no prepare
 godspeed-coach prep-check health --date 2026-10-18   # is that talk's preparation ready? (--json too)
 godspeed-coach talk open health --from-prep coach/health/prep/2026-10-18.md   # open from a prepared talk
 godspeed-coach config show                    # time zone, language, habit check time, cap
+
+# words or an opening that run over several lines, from any shell: put them in a file first
+godspeed-coach talk said health --words-file words.txt
+godspeed-coach talk open health --opening-file opening.txt --prepared-file prepared.txt --read "the week's runs"
 ```
 
 ## Honest limits
@@ -118,3 +128,32 @@ godspeed-coach config show                    # time zone, language, habit check
 - The coach never diagnoses, never tells you to see a doctor, never buys, books, pays or contacts
   anyone for you. Each area can add its own limits.
 - Five active habits at most, by design. More than that is a list, not a habit.
+- Changes reach your other computers through your mission control's git history. One that cannot
+  be committed or pushed straight away (another program in the middle of a pull, git busy, no
+  network) waits in git's own folder, and one sync stays and tries again until it goes out, at
+  pauses of up to a quarter of an hour. The next save, or the next round on the computer that sends
+  the talks, tries it too. `git_sync` (auto,
+  commit or off) works per mission control folder in effect: one push sends every local commit, so
+  commit-only changes go out with the next push of an add-on set to auto.
+
+## For the maintainer
+
+This repository is where the add-on is developed, and it is private, so the line below works
+only with access to it. Godspeed Mission Control carries a copy at
+`third-party/addons/godspeed-coach/`, and changes go both ways between the two.
+
+```
+npx --yes github:MichaelZelbel/godspeed-coach setup --godspeed <your mission control folder>
+```
+
+Tests: `npm test`, and `npm run test:hermes` for the Hermes plugin (Python 3).
+
+Areas can require verified preparation by adding repeated `RESEARCH DOMAIN: id | scope` header
+lines to `area.md`. Those preparations need `<date>.evidence.json` and `<date>.review.json`
+beside the Markdown file. The preparation runner collects successful source-page reads from the
+actual execution transcript, then runs a separate reviewer for every configured domain. The
+runtime checks both receipts against the exact preparation and area file hashes before a brief
+or `talk open --from-prep` may use it. Changing the preparation, its evidence, or the area's scope
+invalidates the review. Search snippets alone and the writer's `STATE: ready` cannot pass.
+Areas without research domains retain the earlier preparation behavior. Future preparation
+timestamps are refused for every area, with one minute allowed for clock differences.

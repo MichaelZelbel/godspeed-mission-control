@@ -25,3 +25,22 @@ print(repr(m.on_pre_llm_call(session_id="s", user_message="hi")))`;
   spawnSync(process.execPath, [path.join(ROOT, "bin", "godspeed-journal.mjs"), "start", "Edit video", "--godspeed", h], { env: { ...env, GODSPEED_NOW: "2026-09-22T08:40:00Z" } });
   assert.match(spawnSync(py, ["-c", probe], { encoding: "utf8", env }).stdout, /Edit video/);
 });
+
+// A mission control that carries the add-on inside its own folder (Godspeed Mission Control does)
+// names the node and the script to run, so no launcher has to be installed for the plugin.
+test("the plugin runs the script it is given with the node it is given, and no launcher", { skip: !py && "no python" }, () => {
+  const h = fs.mkdtempSync(path.join(os.tmpdir(), "hj-plug-script-")); fs.writeFileSync(path.join(h, "AGENTS.md"), "");
+  fs.mkdirSync(path.join(h, "routines", "journal"), { recursive: true });
+  fs.writeFileSync(path.join(h, "routines", "journal", "settings.json"), JSON.stringify({ timezone: "Europe/Berlin", git_sync: "off" }));
+  const script = path.join(ROOT, "bin", "godspeed-journal.mjs");
+  const probe = `import importlib.util
+spec=importlib.util.spec_from_file_location("p", r"${path.join(ROOT, "hermes", "plugin", "godspeed-journal", "__init__.py")}")
+m=importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
+m._bin=lambda: r"${path.join(h, "no-launcher-here")}"
+print(repr(m.on_pre_llm_call(session_id="s", user_message="hi")))`;
+  const env = { ...process.env, GODSPEED_JOURNAL_DIR: h, GODSPEED_NOW: "2026-09-22T09:00:00Z", GODSPEED_NODE: process.execPath, GODSPEED_JOURNAL_SCRIPT: script };
+  spawnSync(process.execPath, [script, "start", "Edit video", "--godspeed", h], { env: { ...env, GODSPEED_NOW: "2026-09-22T08:40:00Z" } });
+  assert.match(spawnSync(py, ["-c", probe], { encoding: "utf8", env }).stdout, /Edit video/);
+  const { GODSPEED_JOURNAL_SCRIPT, GODSPEED_NODE, ...withoutScript } = env;
+  assert.match(spawnSync(py, ["-c", probe], { encoding: "utf8", env: withoutScript }).stdout, /None/, "without them it uses the launcher, which is not there");
+});

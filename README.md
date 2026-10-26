@@ -6,13 +6,97 @@ New here and not a reader yet? The first chapters are free: [download the free s
 
 A new release comes out most weeks. I write about what my AI does for me and what I will not let it do in a free newsletter: [subscribe on Substack](https://michaelzelbel.substack.com/subscribe).
 
-Version 2 is the current edition, here on `main`. Its installers set up a new, separate folder. They do not move an existing version 1 Godspeed folder or your Menerio account.
+Version 2 is the current edition. The lines below install the current public version, which is the branch `beta` of this repository; `main` is where the work goes on, and a change merged into it reaches nobody until the next version is released. The installers set up a new, separate folder. They do not move an existing version 1 Godspeed folder or your Menerio account.
 
-## Coming in the next release: a small copy before each update
+## New in 2.0.0-beta.7
+
+What you install changes only when a version is released. Until now the install lines took whatever had been merged that day, so a change made in the morning was on a stranger's computer in the afternoon, tried or not. They now read the current public version, and it moves only when the maintainer releases one. Nothing inside Godspeed changes, and updating keeps your folder, notes and settings.
+
+A released version can also be taken back. If something is wrong with it, the installers refuse it from then on and install the version before it instead, so a line or a link you saved cannot put it on your computer either.
+
+## New in 2.0.0-beta.5 (24 October 2026)
+
+Search by meaning keeps the notebook responsive. Links in a note open when clicked, and text you type stays in the editor if saving fails. The Review page checks for repeats before adding a suggestion.
+
+Add-ons can ask the AI you connected with `godspeed-model`, use your backup when needed, write searchable notes without queuing processing, and keep deadlines. [The add-on interface](docs/full-version/addon-model.md) describes those commands.
+
+### A backup AI
+
+Your mission control thinks with one AI, the one you connected at setup. When that AI fails, for example during an outage, when its usage limit is reached or when its sign-in runs out, the routines that need it stop until you fix it.
+
+Now you can connect a second AI yourself as a backup, for example Claude when your main AI is ChatGPT, or the other way round. Godspeed uses it only when the main AI fails, and only for that one request; the next request tries the main AI first again. It never adds a backup by itself, so your work never moves to another paid service unless you chose it.
+
+- You connect the backup the same ways as your main AI, in the same places, and it is tested before it is kept.
+- On a computer, and in the notebook on a server: Settings, Your AI, Backup AI. Sign in with your ChatGPT plan right there, or use a key of OpenRouter, OpenAI or another service. Your main AI can now be signed in with a ChatGPT plan in Settings too, as it already could in Telegram.
+- On the one-line server, in Telegram: send `/backupai`. It offers the same AIs as the first setup. A short setup takes over the chat for a few minutes. It needs no AI, so it works even while your main AI is down, and it deletes your key from the chat as soon as it has read it.
+- A backup is another service than your main AI: when one service fails, its other models usually fail with it.
+- Settings shows your backup, how often it answered while your main AI was failing, and a button to remove it. Its check now asks the main AI and the backup each on their own, so a working backup no longer hides a main AI that is broken.
+- Add-ons that ask Godspeed for an answer get the backup too, and the answer says when the backup gave it.
+- When your main AI has been failing for more than an hour while the backup does the work, Godspeed tells you once.
+
+Updating keeps your folder, notes and settings. Nothing changes until you connect a backup.
+
+### add-ons that write many notes
+
+Some add-ons write a note for each thing they handle, for example one note per scanned letter, with its summary and key facts already in it. Until now your notebook's AI read every one of those notes again, at most 40 a day and oldest first, so a pile of a few hundred letters held your own notes back for weeks.
+
+- An add-on can now mark its notes so that your notebook's AI does not read them again. You still find them in search, and your assistant still finds them when you ask about a letter. Your own notes are read as before.
+- When you move a note to the trash, or take out the sentence a suggestion came from, the suggestions from that note you had not kept yet leave the Review Queue. Restore the note and they are back. What you kept stays.
+- **Classify unclassified vault notes** no longer counts the notes it does not classify.
+
+For add-on authors: `docs/full-version/addon-model.md`, "Notes an add-on writes".
+
+### deadlines from add-ons
+
+An add-on can now give Godspeed a deadline it found, for example a documents add-on that reads "pay by 20 November" in a scanned letter. It is a normal deadline: it is in your deadline list, your deadline reminders and your morning brief mention it as the day comes, and you close or move it the way you close or move any deadline. The add-on sends no reminders of its own, so nothing reminds you twice.
+
+- Once you change such a deadline's day or name, or close or drop it, it is yours: the add-on can never change it again.
+- An add-on makes each deadline once, also when it reads the same letter again.
+
+For add-on authors: `docs/full-version/addon-model.md`, "Deadlines an add-on keeps".
+
+### a Review page without repeats
+
+When your notebook reads a new note, its AI suggests facts, timeline entries and people for your Review page. Until now everything it answered went there, also what your notebook already knew, and the same things again each time the note was saved: a phone number you had saved long ago, the same trip three times, a hotel's booking number as a fact about you.
+
+- Your notebook now checks every suggestion against what it already has, by one rule for "the same thing" that keeping a suggestion uses too. A fact is the same when it is about the same person, of the same kind and has the same value, also written another way: +44 7700 900123 and 07700 900 123, € 120,50 and 120.50 €, 15 June 2041 and 2041-06-15, an email in capitals. A timeline entry is the same on the same day from the same note, or with nearly the same title a day apart. A person is the same by name or nickname. Keep never adds a second copy of something you have.
+- Nothing is suggested twice, whatever you did with it the first time: kept, removed or blocked.
+- A note processed again after you edited it brings only what your new words say.
+- A note was sometimes processed again with the same text, when it finished while another program was writing to your mission control folder. That no longer happens.
+- The AI is asked to leave out details of documents, bookings and invoices, such as booking and invoice numbers or a hotel's phone number, and timeline entries for routine things, such as a letter arriving.
+- Each card on the Review page says what it is: Timeline entry, Fact about you, Fact about a person by name, or New person. Facts no longer have a calendar icon, and pointing at the icon says what Keep does.
+- Your assistant can now remove, roll back, block or snooze waiting suggestions when you ask it to. Keeping one still needs your own words.
+
+What was left out is listed in `.godspeed/suggestion-filter.jsonl` in your mission control folder. Updating keeps your folder, notes and settings, and suggestions already waiting stay where they are.
+
+### tracker changes from Claude Code
+
+Asked in Claude Code to change a tracker, a habit or a meal you already have, for example "the health talk should also look at my workouts tracker", your notebook refused with "Read the current record hash before editing", although Claude Code had just read the tracker. Claude Code sent the version it had read as text, because the notebook never said that it takes a list of versions there.
+
+- The notebook now tells every AI app you connect what each part of such a request looks like, so a list of versions arrives as a list. It also reads the text Claude Code sent until now.
+- A change to something that changed after the AI read it is still refused, as before.
+- The same works for goals, routines and deadlines: an AI app can name the version of what it changes in the same way as for a tracker.
+
+### web addresses for add-ons
+
+Some add-ons need a web address on your server, for example a documents add-on whose archive you open on your phone. Until now such an add-on changed the file that gives your notebook its address, and on a server where Godspeed brings its own Caddy every update took that change out again, so the add-on's address was gone until the add-on noticed, up to an hour later.
+
+- Your server now has a folder for add-ons' web addresses, `/etc/caddy/godspeed-addons/`. Each add-on puts a file of its own there, and Godspeed never writes in it, so an update keeps every add-on's address.
+- An add-on can also add a path to your notebook's own address, such as `https://<your server>/pictures/`, and show it only to whoever is signed in to your notebook.
+
+Your server gets the folder when you update it. For add-on authors: `docs/full-version/addon-model.md`, "A web address for an add-on".
+
+### Godspeed inside another project's folder
+
+Checked out inside the folder of a JavaScript project whose settings say its files are ES modules, for example an add-on's own repository, Godspeed's tools took that setting for their own: the deadline tool stopped with "require is not defined", and the notebook, which uses it, did not start. Godspeed now carries its own setting, so its tools and the notebook work wherever it is checked out, and the helper that lends your computer's browser works wherever it is installed.
+
+## New in 2.0.0-beta.4 (21 October 2026): a small copy before each update
 
 Before every update the installer saves a copy of your notebook, so you can go back if the update goes wrong. Until now that copy took your whole folder, also your work folder with its recordings and downloads. On a grown mission control it was gigabytes and many minutes, and an update refused to start when the disk had no room for it. Old copies also piled up.
 
 Now the copy holds only what an update can change, never your work folder. When your folder is a Git repository, it holds only what Git does not already keep, and Git keeps the rest. On one computer it took 85 MB and a few seconds instead of 8.33 GB and sixteen minutes. Once an update has worked, its copy stays as your way back and every older one is removed, also the full copies earlier versions left behind. Importing from Menerio makes the same small copy first, and only the newest import's copy stays.
+
+The update itself is faster too: it reads your notebook once instead of five times. On Windows it waits for a slow first start instead of calling it failed; on one computer the notebook needed two minutes after an update, and the setup used to give up after one. Updating keeps your folder, notes and settings.
 
 ## New in 2.0.0-beta.3 (20 October 2026)
 
@@ -157,26 +241,43 @@ The notebook no longer calls every installation a test installation. Its unavail
 
 ## Windows
 
-[Download GodspeedSetup.exe](https://github.com/MichaelZelbel/godspeed-mission-control/releases/download/godspeed-v2-integrated-2026-10-20-2/GodspeedSetup.exe), then run it.
+[Download GodspeedSetup.exe](https://github.com/MichaelZelbel/godspeed-mission-control/releases/latest/download/GodspeedSetup.exe), then run it.
+
+That is the release marked Latest, the current public version. It changes only when a version is released, and a version that was taken back is not it any more.
 
 This uses Godspeed's original setup wizard and shared installer, then connects the integrated notebook. On a PC that already has Godspeed, the wizard selects a separate installation by default. The notebook opens at [http://127.0.0.1:47831/dashboard](http://127.0.0.1:47831/dashboard). Connect your own model account in Settings to use the assistant. The installer is unsigned.
 
-The executable is also [committed in this repository](installers/GodspeedSetup.exe). The [download page](https://github.com/MichaelZelbel/godspeed-mission-control/releases/tag/godspeed-v2-integrated-2026-10-20-2) lists the same file and its checksums.
+The executable is also [committed in this repository](installers/GodspeedSetup.exe). The [download page](https://github.com/MichaelZelbel/godspeed-mission-control/releases/latest) lists the same file and its checksums.
 
 ## Linux or Mac
 
 This uses Godspeed's shared native installer for Git, Node.js, Hermes and the Godspeed folders, then adds the notebook. Docker is not required for this route. On a Mac, the notebook starting by itself, `mc-uninstall` and connecting Gmail were checked on GitHub's Mac test computers; the whole one-line install on a real Mac has not been checked yet.
 
-Download this release's installer, check that it is the published file, and run it:
+Paste this line into a Terminal window:
 
 ```bash
-curl -fsSLO https://github.com/MichaelZelbel/godspeed-mission-control/releases/download/godspeed-v2-integrated-2026-10-20-2/install-godspeed.sh
-echo "144f1647244a98768bf0b6fc1c2666b71eb1b82d4be6b8a1b421d7ae436e57d4  install-godspeed.sh" | sha256sum -c - && bash install-godspeed.sh
+curl -fsSL https://godspeedmissioncontrol.com/install | bash
 ```
 
-On a Mac, write `shasum -a 256 -c -` where it says `sha256sum -c -`. The check refuses any other file, and the installer names one exact version of the notebook, so every reader of this release gets the same notebook.
+It installs the current public version. That version changes only when the maintainer releases one, so pasting the line again next month gives you what was released, not whatever was changed yesterday. A version that was taken back is refused in one plain sentence, and nothing on the computer is changed.
 
-On a computer that already has Godspeed, download and check it the same way, then use the original installer's separate-folder option:
+If you would rather have the file in front of you first, this is the same installer from the same version:
+
+```bash
+curl -fsSLO https://raw.githubusercontent.com/MichaelZelbel/godspeed-mission-control/beta/install-godspeed.sh
+bash install-godspeed.sh
+```
+
+To install another stage than the public one, name it with `GODSPEED_STAGE_REF`, for example a release candidate before it is released to everybody:
+
+```bash
+curl -fsSLO https://raw.githubusercontent.com/MichaelZelbel/godspeed-mission-control/candidate/2.0.0-beta.7/install-godspeed.sh
+GODSPEED_STAGE_REF=candidate/2.0.0-beta.7 bash install-godspeed.sh
+```
+
+Take the installer from the stage you are installing, as above: each stage's installer and the version it installs belong together.
+
+On a computer that already has Godspeed, use the original installer's separate-folder option:
 
 ```bash
 bash install-godspeed.sh --beside --godspeed "$HOME/godspeed-v2"
@@ -186,7 +287,7 @@ The notebook opens locally at `http://127.0.0.1:47831/dashboard`. On Linux it st
 
 The default folder is `~/godspeed-v2`. The original installer also accepts `--godspeed` and `--repo`.
 
-`install-godspeed.sh` at the top of this repository is the release's installer, so `curl -fsSL https://godspeedmissioncontrol.com/install | bash` installs the same version, without the check. For development only: `install-godspeed-dev.sh` installs the development branch's newest commit, so it can differ from one day to the next. It is not for readers.
+`install-godspeed.sh` at the top of each stage is that stage's installer, and the short line above fetches it from the public stage, so both lines install the same version. It names no version itself: it reads the version it installs from `stage.json` beside it, the one file that says what a published version is made of (`stage/README.md`). For development only: `install-godspeed-dev.sh` installs the development branch's newest commit, so it can differ from one day to the next. It is not for readers.
 
 On a server, the installer also gives the notebook a web address with HTTPS. A server is a Linux computer without a desktop whose public address has a name in public DNS; another name can be given with `GODSPEED_HOST=notebook.example.com`. The address is `https://` plus that name, or that name with `:48443` when the server's own Caddy already serves it. At the end the installer prints a private link that makes your account (username, password, and a recovery code to keep); after that you sign in there. Ports 80 and 443 must be free or held by Caddy, and the installer needs sudo once. The assistant and the routines on the server keep using `http://127.0.0.1:47831`, which asks no sign-in and answers only on the server itself.
 

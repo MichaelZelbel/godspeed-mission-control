@@ -2,8 +2,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {spawnSync} from 'node:child_process';
 import {createHash,randomUUID} from 'node:crypto';
-import {atomic,hash,retrying} from './records/store.mjs';
-import {inUpdateCopy,updateCopyRoots,updateCopyFiles,updateUntouchedRoots,devicePrivate,devicePrivatePaths} from './file-policy.mjs';
+import {atomic,hash,retrying,Store} from './records/store.mjs';
+import {inUpdateCopy,updateCopyRoots,updateCopyFiles,updateUntouchedRoots,devicePrivate,devicePrivatePaths,recordsFolder} from './file-policy.mjs';
 import {partialOf,requireSpace,readBackupManifest} from './archives.mjs';
 
 // THE COPY AN UPDATE MAKES BEFORE IT CHANGES ANYTHING (21 October 2026).
@@ -19,8 +19,10 @@ import {partialOf,requireSpace,readBackupManifest} from './archives.mjs';
 // its own Git repository only the part of it Git does not already hold:
 //   - the commit the folder stood at, kept by a ref of its own (refs/godspeed/update-copies/<name>)
 //     so no Git cleanup can lose it, and
-//   - the files whose bytes on disk are not the commit's (changed, new, ignored, or checked out
-//     with other line endings), byte for byte, and the names of committed files that were deleted.
+//   - the files that are not in it (new, ignored) and the committed ones Git's own index says
+//     changed, byte for byte, and the names of committed files that were deleted. Only those are
+//     read: no notebook is opened and no unchanged committed file is touched, which is what made
+//     the first version of this copy take seven minutes during a real update (see look()).
 // A folder without a repository of its own (a new reader, or a folder inside another
 // repository) gets those paths copied whole. Either way the copy is checked file by file
 // (backup.json), built under a .partial- name and renamed once complete, so one that stops
@@ -133,13 +135,23 @@ function look(root,hashed=new Map()){
     const at=line.indexOf('\t'),[mode,,oid]=line.slice(0,at).split(' '),name=line.slice(at+1);
     if(inUpdateCopy(name)||mode==='160000')committed.set(name,{mode,oid});
   }
+  // Git's own index says, from each file's size and times alone, which committed files may have
+  // changed (diff-files reads no file and writes no index). Only those are opened. Until 21 October
+  // 2026 every committed file was read and hashed: on a PC where opening a file is slow (an update
+  // running in the background, a cold disk) 17,500 of them took minutes.
+  const indexed=new Map(list(git(root,['ls-files','-z','-s',...specs])).map(line=>{const at=line.indexOf('\t');return [line.slice(at+1),{mode:line.slice(0,6),oid:line.slice(7,at).split(' ')[0]}];}));
+  const touched=new Set(list(git(root,['diff-files','--name-only','-z',...specs])));
   // Staged but not committed, untracked, ignored, and the checkouts of other repositories Git
   // carries as links (mode 160000), whose files are in no history of this folder.
-  const extra=[...list(git(root,['ls-files','-z','-s',...specs])).map(line=>{const at=line.indexOf('\t');return {mode:line.slice(0,6),name:line.slice(at+1)};}).filter(entry=>entry.mode==='160000'||!committed.has(entry.name)).map(entry=>entry.name+(entry.mode==='160000'?'/':'')),
+  const extra=[...[...indexed].filter(([name,entry])=>entry.mode==='160000'||!committed.has(name)).map(([name,entry])=>name+(entry.mode==='160000'?'/':'')),
     ...list(git(root,['ls-files','-z','--others',...specs]))];
   const absent=[],differ=[];
   for(const [name,entry] of committed){
     if(entry.mode==='160000'){extra.push(name+'/');continue;}
+    // Unchanged by Git's own account: left to the commit, and restored with the commit's own
+    // bytes. A file Git checked out with other line endings and nobody touched since comes back
+    // with the line endings the commit holds; that is the one thing such a copy does not keep.
+    if(indexed.get(name)?.oid===entry.oid&&!touched.has(name))continue;
     let info;try{info=fs.lstatSync(path.join(root,...name.split('/')),{bigint:true});}catch{absent.push(name);continue;}
     // A committed link is not restored (Store.restore follows none); a file now in its place is saved.
     if(!info.isFile()){if(entry.mode!=='120000'){absent.push(name);extra.push(name+'/');}continue;}
@@ -159,11 +171,14 @@ function copyOne(root,destination,name,copied){
   const source=path.join(root,...name.split('/')),target=path.join(destination,...name.split('/'));let info;
   try{info=fs.lstatSync(source,{bigint:true});}catch(error){if(error.code==='ENOENT'||error.code==='ENOTDIR')return false;throw error;}
   if(!info.isFile())return false;
-  if(sameFile(copied.get(name),info))return true;
-  fs.mkdirSync(path.dirname(target),{recursive:true});fs.copyFileSync(source,target);
+  if(sameFile(copied.get(name)?.info,info))return true;
+  // Read once, checksummed from memory and written: the copy is never opened again to checksum it,
+  // which on Windows (a new file is scanned when it is first opened) took 9 of 11 seconds.
+  const bytes=fs.readFileSync(source);
+  fs.mkdirSync(path.dirname(target),{recursive:true});fs.writeFileSync(target,bytes);
   // A file that changed while it was copied is copied again on the next look.
   let after=null;try{after=fs.lstatSync(source,{bigint:true});}catch{}
-  copied.set(name,sameFile(info,after)?info:null);return true;
+  copied.set(name,{info:sameFile(info,after)?info:null,sha256:hash(bytes)});return true;
 }
 function size(root,names){let bytes=0,count=0;for(const name of names){try{bytes+=fs.statSync(path.join(root,...name.split('/'))).size;count++;}catch{}}return {bytes,count};}
 function mediaFiles(mediaRoot){const out=[],links=[];if(fs.existsSync(mediaRoot))for(const child of fs.readdirSync(mediaRoot))walk(mediaRoot,child,out,links);return out;}
@@ -174,7 +189,9 @@ export function makeUpdateCopy(store,mediaRoot,destination,{refName}={}){
   destination=path.resolve(destination);
   if(refName!==undefined&&(typeof refName!=='string'||!refName.startsWith(updateCopyRefs)))throw Error('A copy\'s ref belongs under '+updateCopyRefs);
   if(fs.existsSync(destination))throw new Error('Backup destination already exists');
-  const root=store.root,hashed=new Map(),first=look(root,hashed),media=mediaFiles(mediaRoot);
+  // How long each step took, in the result, so a slow copy says where its time went.
+  const took={},since=Date.now(),step=(name,work)=>{const at=Date.now();try{return work();}finally{took[name]=(took[name]||0)+Date.now()-at;}};
+  const root=store.root,hashed=new Map(),first=step('look',()=>look(root,hashed)),media=mediaFiles(mediaRoot);
   // Room for the files it saves, for those Git converted (checked once and saved should Git not
   // give them back exactly), and for the media.
   const own=size(root,[...first.files,...Object.keys(first.converted)]),pictures=size(mediaRoot,media);
@@ -183,32 +200,46 @@ export function makeUpdateCopy(store,mediaRoot,destination,{refName}={}){
   let ref=null,pinned=false;
   try{
     fs.mkdirSync(partial,{recursive:true});
-    settle(root,first,hashed,partial);
+    step('check',()=>settle(root,first,hashed,partial));
     // The files are copied without the writer lock and checked again under it, so saves go on
     // while it copies and the copy still holds the folder as it was at one moment (as Store.backup).
-    const copied=new Map();for(const file of first.files)copyOne(root,partial,file,copied);
-    let now,at,records;
-    store.withLockSoon(()=>{
+    const copied=new Map();step('copy',()=>{for(const file of first.files)copyOne(root,partial,file,copied);});
+    let now,at;
+    step('locked',()=>store.withLockSoon(()=>{
       store.recover();now=settle(root,look(root,hashed),hashed,partial);
       const seen=new Set();for(const file of now.files)if(copyOne(root,partial,file,copied))seen.add(file);
       for(const file of [...copied.keys()])if(!seen.has(file)){fs.rmSync(path.join(partial,...file.split('/')),{force:true});copied.delete(file);}
-      at=new Date().toISOString();records=store.scan(true).size;
-    });
-    if(fs.existsSync(mediaRoot))fs.cpSync(mediaRoot,path.join(partial,'media'),{recursive:true});
+      at=new Date().toISOString();
+    }));
+    const mediaCopied=new Map();step('media',()=>{for(const file of media)copyOne(mediaRoot,path.join(partial,'media'),file,mediaCopied);});
     if(now.commit){ref=refName||refFor(name);git(root,['update-ref','-m','Godspeed Mission Control: before an update',ref,now.commit]);pinned=true;}
-    const files=[...copied.keys()].sort().map(file=>({path:file,sha256:hash(fs.readFileSync(path.join(partial,...file.split('/'))))}));
-    for(const file of mediaFiles(path.join(partial,'media')))files.push({path:'media/'+file,sha256:hash(fs.readFileSync(path.join(partial,'media',...file.split('/'))))});
+    const files=[...[...copied].sort(([a],[b])=>a<b?-1:a>b?1:0).map(([file,entry])=>({path:file,sha256:entry.sha256})),
+      ...[...mediaCopied].sort(([a],[b])=>a<b?-1:a>b?1:0).map(([file,entry])=>({path:'media/'+file,sha256:entry.sha256}))];
+    // A whole copy (no Git) counts its records from what it holds, as every backup does; a copy
+    // made with Git holds only some of them, so its count is taken when it is laid out to restore.
+    const records=now.commit?null:step('count',()=>Store.inspect(partial).records.size);
     const manifest={format:now.commit?updateCopyFormat:1,kind:'update-copy',at,records,workspace:root,scope:{roots:updateCopyRoots,files:updateCopyFiles},
       ...(now.commit?{git:{commit:now.commit,ref},absent:now.absent,converted:now.converted}:{}),...(now.links.length?{links_not_copied:now.links}:{}),files};
     atomic(path.join(partial,'backup.json'),JSON.stringify(manifest,null,2));
     retrying(()=>fs.renameSync(partial,destination),5000);
     const bytes=size(destination,files.map(f=>f.path)).bytes;
-    return {path:destination,kind:now.commit?'git':'files',commit:now.commit,ref,files:files.length,bytes,records,absent:now.absent.length};
+    return {path:destination,kind:now.commit?'git':'files',commit:now.commit,ref,files:files.length,bytes,records,absent:now.absent.length,took_ms:{...took,total:Date.now()-since}};
   }catch(error){
     try{fs.rmSync(partial,{recursive:true,force:true});}catch{}
     if(pinned)try{git(root,['update-ref','-d',ref]);}catch{}
     throw error;
   }
+}
+
+// The workspace as the copy needs it: its folders and the writer lock, without reading a single
+// record. Opening a Store reads every file of the notebook (13,700 on one PC, more than a minute
+// when the disk is cold), and the copy needs none of them. recover() still finishes a save that
+// stopped part-way, as opening the notebook would; only then are the records read.
+export function workspaceForCopy(root,{device='local'}={}){
+  const view=Object.create(Store.prototype);root=path.resolve(root);
+  Object.assign(view,{root,device,failAfter:null,recordsRoot:path.join(root,recordsFolder),state:path.join(root,'.godspeed')});
+  fs.mkdirSync(view.state,{recursive:true});
+  return view;
 }
 
 // Where an update copy's commit is: the folder it was made from, or the one named.
@@ -264,7 +295,8 @@ export function materializeUpdateCopy(source,into,{repository}={}){
     fs.mkdirSync(path.dirname(target),{recursive:true});fs.copyFileSync(path.join(source,...entry.path.split('/')),target);
   }
   const files=[],links=[];for(const child of fs.readdirSync(into))walk(into,child,files,links);
-  atomic(path.join(into,'backup.json'),JSON.stringify({format:1,kind:'update-copy-laid-out',at:manifest.at,records:manifest.records,source:path.resolve(source),commit,files:files.sort().map(name=>({path:name,sha256:hash(fs.readFileSync(path.join(into,...name.split('/'))))}))},null,2));
+  const records=Number.isInteger(manifest.records)?manifest.records:Store.inspect(into).records.size;
+  atomic(path.join(into,'backup.json'),JSON.stringify({format:1,kind:'update-copy-laid-out',at:manifest.at,records,source:path.resolve(source),commit,files:files.sort().map(name=>({path:name,sha256:hash(fs.readFileSync(path.join(into,...name.split('/'))))}))},null,2));
   return into;
 }
 

@@ -1,43 +1,43 @@
 #!/usr/bin/env bash
-# Main's shared installer, followed by the integrated notebook connection.
+# The published address of the Mac and Linux installer. Godspeed servers already running send
+# their readers here (docker/rootfs/usr/local/bin/godspeed-telegram-setup), so this address keeps
+# working; it is no longer a second copy of the installer. It runs the install-godspeed.sh of the
+# stage it is given, with the arguments it was given, and names no version of its own.
+#
+#   GODSPEED_STAGE_REF   the branch or tag whose installer and stage file to use; beta, the
+#                        public stage, when nothing names another
+#   GODSPEED_STAGE_RAW   where that ref's files are read from; raw.githubusercontent.com by
+#                        default, a file:// folder in a test
 set -euo pipefail
-# A Mac gets Git and Node.js from Homebrew, so Homebrew is checked first, before anything is
-# downloaded. Until 18 October 2026 nothing checked, and a Mac without it ended with a broken
-# install. One Homebrew just installed is often not on this window's PATH yet: it is used anyway.
-# GODSPEED_BREW_PLACES names other places to look, for a test.
-if [ "$(uname -s)" = Darwin ]; then
-  for brew in ${GODSPEED_BREW_PLACES:-/opt/homebrew/bin/brew /usr/local/bin/brew}; do
-    if ! command -v brew >/dev/null 2>&1 && [ -x "$brew" ]; then eval "$("$brew" shellenv)"; fi
+stop() { printf '\n%s\n\n' "$1" >&2; exit 1; }
+
+STAGE_REF=${GODSPEED_STAGE_REF:-beta}
+STAGE_RAW=${GODSPEED_STAGE_RAW:-https://raw.githubusercontent.com/MichaelZelbel/godspeed-mission-control}
+STAGE_RAW=${STAGE_RAW%/}
+# The same rule install-godspeed.sh holds a ref to, word for word: git's own rules for the name of
+# a branch or tag, written out because git is not on the computer yet, and the characters narrowed
+# to the ones a shell and a web address keep plain. It stands here as well as there because a ref
+# has to be judged before anything may be fetched from it.
+ref_is_a_name() { # <ref>: true when it could be the name of a branch or tag
+  case $1 in '' | -* | /* | */ | *//* | *..* | *. | *[!A-Za-z0-9._/-]*) return 1 ;; esac
+  _rest=$1
+  while :; do
+    case $_rest in
+      */*) _part=${_rest%%/*}; _rest=${_rest#*/} ;;
+      *)   _part=$_rest;       _rest='' ;;
+    esac
+    case $_part in '' | .* | *.lock) return 1 ;; esac
+    [ -n "$_rest" ] || return 0
   done
-  if ! command -v brew >/dev/null 2>&1 && { ! command -v node >/dev/null 2>&1 || ! xcode-select -p >/dev/null 2>&1; }; then
-    cat >&2 <<'BREW'
+}
+ref_is_a_name "$STAGE_REF" \
+  || stop "Nothing was installed and nothing on this computer was changed, because GODSPEED_STAGE_REF=$STAGE_REF is not the name of a branch or tag of Godspeed Mission Control."
+# Passed on, so the installer reads the stage this one was asked for.
+export GODSPEED_STAGE_REF=$STAGE_REF
+export GODSPEED_STAGE_RAW=$STAGE_RAW
 
-This Mac needs Homebrew first. Homebrew is the free program that installs the tools Godspeed
-uses, Git and Node.js. Nothing was changed.
-
-1. Open https://brew.sh and copy the line under "Install Homebrew".
-2. Paste it into this Terminal window and press Return. It asks for your Mac password.
-3. When it has finished, paste the Godspeed line again.
-
-BREW
-    exit 1
-  fi
-fi
-export GODSPEED_PRODUCT_REF=9b8b3d022899f8d3112218aa3d65762ba4c4fd7d
-export GODSPEED_STARTER_REF=9b8b3d022899f8d3112218aa3d65762ba4c4fd7d
-# The shared installer adds Hermes here; keep it visible to the notebook hook.
-export PATH="$HOME/.local/bin:$PATH"
-ENGINE=https://raw.githubusercontent.com/MichaelZelbel/kit-bootstrap/86da1dd27fea804ab131a8494b79a2ccf868e847/setup-godspeed.sh
-STARTER=https://github.com/MichaelZelbel/godspeed-mission-control.git
-KB_BRANCH=86da1dd27fea804ab131a8494b79a2ccf868e847
-export KB_BRANCH
-root=${GODSPEED_V2_INSTALL_DIR:-$HOME/godspeed-v2}
-args=("$@")
-for ((i=0;i<$#;i++)); do
-  if [ "${args[i]}" = --beside ]; then export GODSPEED_INTEGRATED_BESIDE=1; fi
-  if [ "${args[i]}" = --godspeed ]; then root=${args[i+1]:?Name the Godspeed folder}; fi
-done
-SCRIPT=$(curl -fsSL "$ENGINE")
-bash -c "$SCRIPT" setup-godspeed --starter-repo "$STARTER" --godspeed "$root" "$@"
-hook=$(curl -fsSL https://raw.githubusercontent.com/MichaelZelbel/godspeed-mission-control/9b8b3d022899f8d3112218aa3d65762ba4c4fd7d/notebook/scripts/install-native-notebook.sh)
-bash -c "$hook" install-native-notebook "$root"
+# curl says nothing of its own here: its "(22) ... 404" before the sentence below would only make a
+# reader look for a fault of their own.
+url=$STAGE_RAW/$STAGE_REF/install-godspeed.sh
+INSTALLER=$(curl -fsL "$url" 2>/dev/null) || stop "Nothing was installed and nothing on this computer was changed, because the installer of Godspeed Mission Control could not be read from $url."
+bash -c "$INSTALLER" install-godspeed "$@"

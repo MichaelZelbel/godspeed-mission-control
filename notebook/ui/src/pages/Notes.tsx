@@ -91,6 +91,7 @@ import { useSearchParams, useParams, useNavigate, useLocation } from "react-rout
 import { cn } from "@/lib/utils";
 import { brandLogo } from "@/lib/brand-assets";
 import { escapeLike, pgOrValue } from "@/lib/postgrest";
+import { vaultCounts } from "@/lib/vault-counts";
 
 
 type SearchMode = "semantic" | "exact";
@@ -146,6 +147,8 @@ export default function Notes() {
   const [searchType, setSearchType] = useState<SearchMode>("semantic");
   const [searchScope, setSearchScope] = useState<SearchScope>("all");
   const [semanticResults, setSemanticResults] = useState<SemanticSearchResult[] | null>(null);
+  const [keywordResults, setKeywordResults] = useState<SemanticSearchResult[] | null>(null);
+  const searchControllerRef = useRef<AbortController | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [topicFilter, setTopicFilter] = useState<string | null>(null);
   const [personFilter, setPersonFilter] = useState<string | null>(null);
@@ -605,17 +608,22 @@ export default function Notes() {
   // click handler still sees this render's searchType ("exact"), so without
   // it switching back to Smart ran only the keyword search.
   const handleSearch = useCallback(
-    (q: string, type: SearchMode = searchType) => {
+    (q: string, type: SearchMode = searchType, scope: SearchScope = searchScope) => {
+      searchControllerRef.current?.abort();
+      const controller=new AbortController();searchControllerRef.current=controller;
+      if(debounceRef.current)clearTimeout(debounceRef.current);
       setSearchQuery(q);
       setSemanticResults(null);
+      setKeywordResults(null);
       if (!q.trim()) return;
-      ilikeSearch.mutate(q);
+      const showWords=(data:SemanticSearchResult[])=>{if(!controller.signal.aborted)setKeywordResults(data);};
+      ilikeSearch.mutate({query:q,signal:controller.signal,complete:type==='exact',onWords:showWords},{onSuccess:showWords});
       if (type === "semantic") {
         if (debounceRef.current) clearTimeout(debounceRef.current);
         debounceRef.current = setTimeout(() => {
           semanticSearch.mutate(
-            { query: q, scope: searchScope },
-            { onSuccess: (data) => setSemanticResults(data.results as SemanticSearchResult[]) }
+            { query: q, scope, signal:controller.signal },
+            { onSuccess: (data) => {if(!controller.signal.aborted)setSemanticResults(data.results as SemanticSearchResult[]);} }
           );
         }, 300);
       }
@@ -624,7 +632,7 @@ export default function Notes() {
   );
 
   useEffect(() => {
-    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current);searchControllerRef.current?.abort(); };
   }, []);
 
   // ?q=... opens the search with that text (the topic chips on an analysed
@@ -641,9 +649,9 @@ export default function Notes() {
 
   const searchResults: SemanticSearchResult[] | null = useMemo(() => {
     if (!searchMode || !searchQuery.trim()) return null;
-    if (searchType === "exact") return ilikeSearch.data || null;
-    return semanticResults || ilikeSearch.data || null;
-  }, [searchMode, searchQuery, searchType, semanticResults, ilikeSearch.data]);
+    if (searchType === "exact") return keywordResults;
+    return semanticResults || keywordResults;
+  }, [searchMode, searchQuery, searchType, semanticResults, keywordResults]);
 
   const currentNotes = useMemo(() => {
     let notes: (Note | SemanticSearchResult)[];
@@ -722,7 +730,7 @@ export default function Notes() {
       whole(trashNotes.find((n) => n.id === selectedId)) ||
       whole(favNotes.find((n) => n.id === selectedId)) ||
       // Also check current search results (semantic/ilike may return notes not yet in cache)
-      (searchResults ?? []).find((n) => n.id === selectedId) ||
+      whole((searchResults ?? []).find((n) => n.id === selectedId)) ||
       null;
     if (!selectedNoteRow) return fallback;
     if (!fallback) return selectedNoteRow;
@@ -761,9 +769,12 @@ export default function Notes() {
   
 
   const exitSearch = () => {
+    searchControllerRef.current?.abort();
+    if(debounceRef.current)clearTimeout(debounceRef.current);
     setSearchMode(false);
     setSearchQuery("");
     setSemanticResults(null);
+    setKeywordResults(null);
   };
 
   const clearAllFilters = () => {
@@ -792,37 +803,7 @@ export default function Notes() {
     project: "bg-indigo-500/15 text-indigo-700 dark:text-indigo-400",
   };
 
-  const { topicCounts, peopleCounts, typeCounts, unclassifiedCount } = useMemo(() => {
-    const topics: Record<string, number> = {};
-    const people: Record<string, number> = {};
-    const types: Record<string, number> = {};
-    let unclassified = 0;
-    for (const note of allNotes) {
-      const meta = note.metadata as Record<string, unknown> | null;
-      if (!meta || !meta.type) { unclassified++; continue; }
-      if (Array.isArray(meta.topics)) for (const t of meta.topics as string[]) topics[t] = (topics[t] || 0) + 1;
-      // Normalize people names: use canonical_name from matched_people when available
-      const matchedMap = new Map<string, string>();
-      if (Array.isArray(meta.matched_people)) {
-        for (const m of meta.matched_people as Array<{ name: string; canonical_name: string }>) {
-          matchedMap.set(m.name.toLowerCase(), m.canonical_name);
-        }
-      }
-      if (Array.isArray(meta.people)) {
-        for (const p of meta.people as string[]) {
-          const canonical = matchedMap.get(p.toLowerCase()) || p;
-          people[canonical] = (people[canonical] || 0) + 1;
-        }
-      }
-      if (typeof meta.type === "string") types[meta.type] = (types[meta.type] || 0) + 1;
-    }
-    return {
-      topicCounts: Object.entries(topics).sort((a, b) => b[1] - a[1]),
-      peopleCounts: Object.entries(people).sort((a, b) => b[1] - a[1]),
-      typeCounts: Object.entries(types).sort((a, b) => b[1] - a[1]),
-      unclassifiedCount: unclassified,
-    };
-  }, [allNotes]);
+  const { topicCounts, peopleCounts, typeCounts, unclassifiedCount } = useMemo(() => vaultCounts(allNotes), [allNotes]);
 
   const [isBackfilling, setIsBackfilling] = useState(false);
   const handleBackfill = useCallback(async () => {
@@ -1177,13 +1158,7 @@ export default function Notes() {
                       className="h-6 px-2 text-[10px] gap-1"
                       onClick={() => {
                         setSearchScope(s);
-                        setSemanticResults(null);
-                        if (searchQuery.trim()) {
-                          semanticSearch.mutate(
-                            { query: searchQuery, scope: s },
-                            { onSuccess: (data) => setSemanticResults(data.results as SemanticSearchResult[]) }
-                          );
-                        }
+                        handleSearch(searchQuery,searchType,s);
                       }}
                     >
                       {s === "media" && <Image className="h-3 w-3" />}

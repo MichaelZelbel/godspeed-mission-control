@@ -247,6 +247,12 @@ CADDY_VERSION=2.11.4
 HTTPS_SERVICE=godspeed-https.service
 CADDYFILE=/etc/caddy/Caddyfile
 SITE_FILE=/etc/caddy/godspeed-notebook.caddy
+# Add-ons' web addresses, whichever Caddy gives the notebook its address: each add-on that needs one
+# writes a file of its own here, a site of its own, or in paths/ paths on the notebook's own
+# address (docs/full-version/addon-model.md, "A web address for an add-on"). The installer makes the
+# folder once Caddy reads it and never writes in it. Until 24 October 2026 an add-on edited the
+# Caddyfile this installer writes, and on Godspeed's own Caddy every update took its line out.
+ADDON_SITES=/etc/caddy/godspeed-addons
 
 desktop_here() { systemd_here && systemctl is-active --quiet display-manager 2>/dev/null; }
 
@@ -291,11 +297,20 @@ install_caddy() {
   printf '%s' "$dir/caddy"
 }
 
-# The site: the address, and the notebook's web door behind it.
+# The site: the address, and the notebook's web door behind it, after the paths add-ons add to it
+# (Caddy runs a handle_path block before the reverse_proxy line); then the add-ons' own sites. An
+# import whose pattern finds no file is no error to Caddy.
 site_text() {
   printf '# The Godspeed Mission Control notebook'"'"'s web address. Its installer writes this file.\n'
-  printf '%s {\n\treverse_proxy 127.0.0.1:%s\n}\n' "$1" "$2"
+  printf '%s {\n' "$1"
+  printf '\t# Paths add-ons add to this address, before the notebook'"'"'s own pages: one file each, written by the add-on.\n'
+  printf '\timport %s/paths/*.caddy\n\treverse_proxy 127.0.0.1:%s\n}\n\n' "$ADDON_SITES" "$2"
+  printf '# Add-ons'"'"' own web addresses: one file each, written by the add-on (docs/full-version/addon-model.md).\n'
+  printf 'import %s/*.caddy\n' "$ADDON_SITES"
 }
+# The add-ons' folder, once Caddy reads it: an add-on that finds it knows its file will be read.
+# Readable for Godspeed's own Caddy, which runs as the notebook's account.
+addon_folders() { as_root mkdir -p "$ADDON_SITES/paths" && as_root chmod 755 "$ADDON_SITES" "$ADDON_SITES/paths"; }
 # The whole configuration of the installation's own Caddy. It has no admin endpoint (a
 # change restarts it), so it never holds the port another Caddy's endpoint uses.
 own_caddyfile() { printf '{\n\tadmin off\n}\n\n'; site_text "$1" "$2"; }
@@ -357,6 +372,7 @@ add_to_caddy() {
     rm -rf "$keep"; return 1
   fi
   rm -rf "$keep"
+  addon_folders || true
 }
 
 start_own_caddy() {
@@ -364,7 +380,8 @@ start_own_caddy() {
   caddy=$(install_caddy) || return 1
   mkdir -p "$state/https" && own_caddyfile "$1" "$GODSPEED_WEB_PORT" > "$state/https/Caddyfile" || return 1
   https_unit_text "$caddy" | as_root tee "/etc/systemd/system/$HTTPS_SERVICE" >/dev/null
-  as_root systemctl daemon-reload && as_root systemctl enable "$HTTPS_SERVICE" >/dev/null 2>&1 && as_root systemctl restart "$HTTPS_SERVICE"
+  as_root systemctl daemon-reload && as_root systemctl enable "$HTTPS_SERVICE" >/dev/null 2>&1 && as_root systemctl restart "$HTTPS_SERVICE" \
+    && { addon_folders || true; }
 }
 
 # The address answers with the notebook's own /health, over a certificate curl trusts. A

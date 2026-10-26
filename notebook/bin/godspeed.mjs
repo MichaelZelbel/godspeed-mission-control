@@ -33,6 +33,15 @@ if(args[0]==='prune-backups'){
  console.log(JSON.stringify(outcome,null,2));process.exit(outcome.failed.length?1:0);
 }
 if(!root)throw new Error('Set GODSPEED_WORKSPACE to your mission control folder');
+// The copy before an update opens no notebook (core/update-copy.mjs workspaceForCopy): opening it
+// reads every one of its files, which on one PC took over a minute of an update's seven-minute copy.
+if(args[0]==='backup'&&args.includes('--before-update')){
+ const folder=args[1];
+ if(!folder||folder.startsWith('--'))throw new Error('Name a new folder for the backup: backup FOLDER [--before-update]');
+ const {makeUpdateCopy,workspaceForCopy}=await import('../core/update-copy.mjs');
+ const view=workspaceForCopy(root,{device:machineDevice(root).id});
+ console.log(JSON.stringify(makeUpdateCopy(view,process.env.GODSPEED_MEDIA_ROOT||path.join(view.state,'media'),path.resolve(folder)),null,2));process.exit(0);
+}
 if(args[0]==='workspace-move'){
  const [_,action,value,installationFile]=args;
  let outcome;
@@ -45,6 +54,10 @@ if(args[0]==='workspace-move'){
 const store=new Store(root,{device:machineDevice(root).id}),query=new QueryService(store),domains=new Domains(query),media=process.env.GODSPEED_MEDIA_ROOT||path.join(store.state,'media');
 const [command,verb,...rest]=args;let result;
 if(command==='init'){
+  // One read of the notebook serves all of init's questions (Store reuseFor; every write still
+  // reads it afresh under the lock). Until 21 October 2026 each question re-read every file: seed
+  // asked once per template, and on one PC an update's init took seven minutes.
+  store.reuseFor=Infinity;
   seed(store);
   const adopted=adoptedMissionControl(root);
   installStarter(root);
@@ -90,12 +103,13 @@ else if(command==='record'){
 // What is no longer true ends: the daily closing, by hand (core/fact-closing.mjs).
 else if(command==='world'&&verb==='close')result=await (await import('../core/fact-closing.mjs')).closeFacts({store,query,dryRun:args.includes('--dry-run')});
 else if(command==='world'&&verb==='event')result=store.save('moments',JSON.parse(fs.readFileSync(rest[0],'utf8')));
-// --before-update: what the installers ask for before they update (core/update-copy.mjs): only what
-// an update can change, and in a folder with Git only what its commit does not already hold. An
-// older notebook ignores the word and makes its whole backup, so one call serves every version.
+// The whole backup. With --before-update (handled above, before the notebook is opened) it is what
+// the installers ask for before they update (core/update-copy.mjs): only what an update can change,
+// and in a folder with Git only what its commit does not already hold. An older notebook ignores
+// the word and makes its whole backup, so one call serves every version.
 else if(command==='backup'){
   if(!verb||verb.startsWith('--'))throw new Error('Name a new folder for the backup: backup FOLDER [--before-update]');
-  result=rest.includes('--before-update')?(await import('../core/update-copy.mjs')).makeUpdateCopy(store,media,path.resolve(verb)):backup(store,media,path.resolve(verb));
+  result=backup(store,media,path.resolve(verb));
 }
 else if(command==='restore'){
   if(!verb||verb.startsWith('--'))throw new Error('Name the backup folder to restore: restore FOLDER [--repository PATH]');

@@ -530,13 +530,13 @@ def test_one_click_happy():
     check("setup is marked done", r["state"].get("done") is True)
     check("neither the key nor the start code is in any log",
           all(x not in r["log"] and x not in r["out"] for x in (TOKEN, CODE)))
-    # Version 2's PUBLISHED installers, never the build commit (GODSPEED_REVISION) whose own
-    # installers/ folder still held the previous product, and never version 1's latest release.
-    check("another computer is sent to version 2's published installers, not the build commit",
-          any_has(to_anna, "/main/installers/GodspeedSetup.exe",
-                  "/main/installers/install-godspeed.sh",
+    # The promoted version: the release marked Latest and beta's install-godspeed.sh, never the
+    # build commit (GODSPEED_REVISION) whose own installers/ folder still held the previous product.
+    check("another computer is sent to the promoted installers, not the build commit",
+          any_has(to_anna, "releases/latest/download/GodspeedSetup.exe",
+                  "/beta/install-godspeed.sh",
                   "--repo https://github.com/anna/notebook.git")
-          and not any_has(to_anna, REVISION) and not any_has(to_anna, "releases/latest")
+          and not any_has(to_anna, REVISION)
           and not any_has(to_anna, "Same folder"))
 
 
@@ -669,28 +669,153 @@ def links_for(env):
                 os.environ[k] = v
 
 
+# The Windows link: the release marked Latest, which only a promotion moves.
+LATEST_EXE = ("https://github.com/MichaelZelbel/godspeed-mission-control"
+              "/releases/latest/download/GodspeedSetup.exe")
+
+
 def test_one_click_links():
-    print("== the install links for another computer never point at the build commit")
+    print("== the install links for another computer name the promoted version, not the build commit")
     build = REVISION  # the image's GODSPEED_REVISION, the commit it was built from
-    # Default: main, whose installers/ folder always holds the current published pair.
+    # Default: the public stage, beta, which holds the version the maintainer promoted.
     exe, sh = links_for({"GODSPEED_TG_FLOW": "notebook", "GODSPEED_REVISION": build})
-    check("notebook default points at main's installers, not the build commit",
-          "/main/installers/GodspeedSetup.exe" in exe
-          and "/main/installers/install-godspeed.sh" in sh
-          and build not in exe and build not in sh and "releases/latest" not in exe)
+    check("notebook default: the release marked Latest and beta's install-godspeed.sh",
+          exe == LATEST_EXE and sh.endswith("/beta/install-godspeed.sh")
+          and build not in exe and build not in sh)
     # A deployment may pin a release tag or a known-good commit; the build commit stays unused.
     exe, sh = links_for({"GODSPEED_TG_FLOW": "notebook", "GODSPEED_REVISION": build, "GODSPEED_INSTALLER_REF": "v2.6.0"})
-    check("a pinned installer ref is honoured, and the build commit is still not used",
-          "/raw/v2.6.0/installers/GodspeedSetup.exe" in exe and "/v2.6.0/installers/install-godspeed.sh" in sh
+    check("a pinned installer ref is honoured for the one-liner, and the Windows link stays Latest",
+          sh.endswith("/v2.6.0/install-godspeed.sh") and exe == LATEST_EXE
           and build not in exe and build not in sh)
-    # A ref that tries to climb out of installers/ is refused and falls back to main.
+    # A ref that tries to climb out of the repository is refused and falls back to beta.
     exe, sh = links_for({"GODSPEED_TG_FLOW": "notebook", "GODSPEED_INSTALLER_REF": "../../etc/passwd"})
-    check("a ref that tries to climb out is refused and falls back to main",
-          "/main/installers/" in exe and ".." not in exe and ".." not in sh)
-    # Version 1 (the plain terminal flow) is unchanged: the release asset and main.
+    check("a ref that tries to climb out is refused and falls back to beta",
+          sh.endswith("/beta/install-godspeed.sh") and exe == LATEST_EXE
+          and ".." not in exe and ".." not in sh)
+    # The plain terminal flow hands out the same promoted pair.
     exe, sh = links_for({})
-    check("the plain (non-notebook) flow is unchanged: the release asset and main",
-          exe.endswith("releases/latest/download/GodspeedSetup.exe") and sh.endswith("/main/install-godspeed.sh"))
+    check("the plain (non-notebook) flow: the release asset and beta",
+          exe == LATEST_EXE and sh.endswith("/beta/install-godspeed.sh"))
+
+
+# --- The backup AI chat (GODSPEED_TG_FLOW=backup), after /backupai on the one-click server ---------
+# A stand-in for notebook/scripts/backup-ai.mjs: the main AI and the backup in a file, a check that
+# fails for a key with "bad" in it (and for ChatGPT models other than FAKE_CODEX_OK), and a record of
+# every call with its words, so a key on a command line would show.
+FAKE_BACKUP = r'''
+import json, os, sys
+d = os.environ["FAKE_DIR"]; a = sys.argv[1:]
+f = os.path.join(d, "backup-state.json")
+st = json.load(open(f)) if os.path.exists(f) else {"main": {"provider": "openai-codex", "model": "gpt-plan"}, "backup": None}
+text = sys.stdin.read()
+open(os.path.join(d, "backup-calls"), "a").write(" ".join(a) + "\n")
+def save(): json.dump(st, open(f, "w"))
+def out(v): print("(node:1) ExperimentalWarning: noise before the answer", file=sys.stderr); print(json.dumps(v))
+if a == ["show"]:
+    b = st["backup"]
+    out({"main": st["main"], "configured": bool(b), "backup": b and {k: b[k] for k in ("provider", "model")}}); sys.exit(0)
+if a == ["check"]:
+    e = json.loads(text) if text.strip() else st["backup"]
+    if e["provider"] == "openai-codex":
+        ok = os.path.exists(os.path.join(d, "chatgpt-signed-in")) and e["model"] in os.environ.get("FAKE_CODEX_OK", "gpt-5.6-terra").split(",")
+    else:
+        ok = "bad" not in e.get("api_key", "bad")
+    out({"ok": True} if ok else {"ok": False, "error": "The AI account needs to be signed in again, or its key was refused."}); sys.exit(0 if ok else 1)
+if a == ["set"]:
+    st["backup"] = json.loads(text); save(); out({"configured": True, "backup": {"provider": st["backup"]["provider"]}}); sys.exit(0)
+if a == ["remove"]:
+    st["backup"] = None; save(); out({"removed": True, "configured": False}); sys.exit(0)
+sys.exit(2)
+'''
+BACKUP_ASK = "Which one do you want as your backup?"
+
+
+def backup_run(name, rules, backup_state=None, extra=None, timeout=90):
+    def prepare(workspace):
+        fakes = os.path.join(os.path.dirname(workspace), "fake")
+        with open(os.path.join(fakes, "backup.py"), "w") as f:
+            f.write(FAKE_BACKUP)
+        if backup_state is not None:
+            with open(os.path.join(fakes, "backup-state.json"), "w") as f:
+                json.dump(backup_state, f)
+    py = shlex.quote(fwd(sys.executable))
+    env = {"GODSPEED_TG_FLOW": "backup", "GODSPEED_TG_REQUEST": "fictional0request",
+           "GODSPEED_TG_OWNER_ID": "111", "GODSPEED_TG_CHAT_ID": "111", "GODSPEED_TG_OWNER_NAME": "Anna",
+           # The fake lives in the run's own folder, which only FAKE_DIR names.
+           "GODSPEED_TG_BACKUP": "%s -c %s" % (py, shlex.quote(
+               "import os,runpy,sys;sys.argv=['backup.py']+sys.argv[1:];"
+               "runpy.run_path(os.path.join(os.environ['FAKE_DIR'],'backup.py'),run_name='__main__')"))}
+    env.update(extra or {})
+    # The reader's /backupai is still unread when the chat starts: the gateway had it.
+    r = scenario_run(name, {"users": USERS, "start": [{"from": 111, "text": "/backupai"}], "rules": rules},
+                     extra_env=env, prepare=prepare, timeout=timeout)
+    r["backup_calls"] = open(os.path.join(r["fakes"], "backup-calls")).read() if os.path.exists(os.path.join(r["fakes"], "backup-calls")) else ""
+    try:
+        r["backup_state"] = json.load(open(os.path.join(r["fakes"], "backup-state.json")))
+    except (OSError, ValueError):
+        r["backup_state"] = {}
+    return r
+
+
+def test_backup_key():
+    good, bad = "sk-or-backup-good-0123456789", "sk-or-backup-bad-0123456789"
+    r = backup_run("/backupai: the main setup's own choices, a backup by key, tried before it is saved, the main AI untouched", [
+        {"when": BACKUP_ASK, "do": [{"from": 111, "press": "openai-codex"}]},
+        {"when": "That is the service your main AI uses already", "do": [{"from": 111, "press": "openrouter"}]},
+        {"when": "Send me your OpenRouter API key", "do": [{"from": 111, "text": bad}]},
+        {"when": "did not answer with that key", "do": [{"from": 111, "text": good}]},
+    ])
+    to_anna = r["to"](111)
+    check("it finishes and says the chat is done for this request", r["rc"] == 0 and r["state"].get("done") is True
+          and r["state"].get("request") == "fictional0request")
+    check("it explains what a backup is, naming the main AI", any_has(to_anna, "<b>Backup AI.</b>", "your main AI, ChatGPT, fails"))
+    asked = next((m for m in r["fake"].sent if BACKUP_ASK in m["text"]), {"buttons": [], "labels": []})
+    main_setup = load("tg_setup_backup_list", PROGRAM)
+    check("it offers exactly the main setup's choices, with their labels, and Not now",
+          asked["buttons"] == [s for s, _ in main_setup.TOP_BRAINS] + ["more", "backup:none"]
+          and asked["labels"] == [l for _, l in main_setup.TOP_BRAINS] + ["Another provider", "Not now"])
+    check("the main AI's own service is answered in plain words, and asked again",
+          any_has(to_anna, "That is the service your main AI uses already. A backup steps in when the main AI fails"))
+    check("the /backupai the gateway had read is not taken for an answer", not any_has(to_anna, "Tap one of the buttons"))
+    check("a key that does not answer is said and not saved; the one that answers is saved with OpenRouter's default model",
+          any_has(to_anna, "OpenRouter did not answer with that key")
+          and r["backup_state"].get("backup") == {"provider": "openrouter", "model": "z-ai/glm-5.2", "api_key": good})
+    check("both messages with a key are deleted from the chat", len(r["fake"].deleted) == 2)
+    check("no key is in the log, the output, any message or on a command line",
+          all(k not in r["log"] and k not in r["out"] and not any_has(to_anna, k) and k not in r["backup_calls"] for k in (good, bad)))
+    check("the main AI is not touched", "config set model" not in r["hermes"] and "auth add" not in r["hermes"])
+    check("it says the backup works, and that the chat is back to normal",
+          any_has(to_anna, "OpenRouter is your backup AI now", "only when ChatGPT fails") and to_anna[-1] == "Back to normal: write to me as usual.")
+
+
+def test_backup_chatgpt_and_remove():
+    r = backup_run("/backupai: a ChatGPT plan as the backup, signed in by code, the first model that answers",
+                   [{"when": BACKUP_ASK, "do": [{"from": 111, "press": "openai-codex"}]}],
+                   backup_state={"main": {"provider": "openrouter", "model": "z-ai/glm-5.2"}, "backup": None})
+    to_anna = r["to"](111)
+    check("the sign-in code reaches the chat and the plan's model that answers is saved",
+          r["rc"] == 0 and any_has(to_anna, "ABCD-12345") and r["backup_state"].get("backup") == {"provider": "openai-codex", "model": "gpt-5.6-terra"})
+    check("it is a sign-in only: ChatGPT does not become the main AI", "config set model" not in r["hermes"])
+    have = {"main": {"provider": "openai-codex", "model": "gpt-plan"}, "backup": {"provider": "anthropic", "model": "claude-fictional"}}
+    r = backup_run("/backupai with a backup already: remove it", [{"when": "Your backup AI now is Claude", "do": [{"from": 111, "press": "backup:remove"}]}],
+                   backup_state=have)
+    check("removing it is said and done", r["rc"] == 0 and r["backup_state"].get("backup") is None
+          and any_has(r["to"](111), "you have no backup AI now"))
+    r = backup_run("/backupai with a backup already: keep it", [{"when": "Your backup AI now is Claude", "do": [{"from": 111, "press": "backup:keep"}]}],
+                   backup_state=have)
+    check("keeping it changes nothing", r["rc"] == 0 and r["backup_state"].get("backup") == have["backup"]
+          and "set" not in r["backup_calls"].split() and any_has(r["to"](111), "Nothing changed: Claude stays your backup AI."))
+
+
+def test_backup_time_up():
+    r = backup_run("/backupai and then no answer: the bot goes back to the assistant", [],
+                   extra={"GODSPEED_TG_BACKUP_MINUTES": "0.05"}, timeout=60)
+    to_anna = r["to"](111)
+    check("it hands the chat back on its own, nothing changed", r["rc"] == 0 and r["state"].get("done") is True
+          and any_has(to_anna, "I am handing the chat back now; nothing changed.") and r["backup_state"].get("backup") is None)
+    r = scenario_run("a backup chat started without its owner hands the bot back at once", {"users": USERS, "start": []},
+                     extra_env={"GODSPEED_TG_FLOW": "backup", "GODSPEED_TG_REQUEST": "x", "GODSPEED_TG_BACKUP": "true"}, timeout=30)
+    check("nothing is asked and it is done", r["rc"] == 0 and r["state"].get("done") is True and not r["fake"].sent)
 
 
 def test_nothing_to_do():
@@ -716,6 +841,9 @@ if __name__ == "__main__":
     test_one_click_existing()
     test_one_click_old_state()
     test_one_click_links()
+    test_backup_key()
+    test_backup_chatgpt_and_remove()
+    test_backup_time_up()
     test_nothing_to_do()
     print()
     if FAILS:

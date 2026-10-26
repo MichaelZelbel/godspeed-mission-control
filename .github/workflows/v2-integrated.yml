@@ -57,19 +57,29 @@ jobs:
           python3 notebook/test/habit-progress-telegram-native.test.py
       - name: Coaching talks prepared the day before
         run: |
-          node notebook/scripts/run-tests.mjs third-party/addons/godspeed-coach/test/prep.test.mjs notebook/test/starting-routines.test.mjs
+          node notebook/scripts/run-tests.mjs third-party/addons/godspeed-coach/test/prep.test.mjs notebook/test/starting-routines.test.mjs notebook/test/coach-prep-recipe.test.mjs
           bash tools/test-coach-prep.sh
       - name: Charm Challenge
         run: |
           node --test "third-party/addons/godspeed-charm/test/*.test.mjs"
           node notebook/scripts/run-tests.mjs notebook/test/charm-operation.test.mjs notebook/test/charm-brief.test.mjs notebook/test/charm-tracker-list.test.mjs
       - name: Original folder and integrated core checks
-        run: node notebook/scripts/run-tests.mjs notebook/test/starter-workspace.test.mjs notebook/test/assistant-starter-wiring.test.mjs notebook/test/computer-wiring-on-existing-server.test.mjs notebook/test/windows-command-files.test.mjs notebook/test/final-core-contracts.test.mjs notebook/test/telegram-replies.test.mjs notebook/test/native-runtime.test.mjs
+        run: |
+          node notebook/scripts/run-tests.mjs notebook/test/starter-workspace.test.mjs notebook/test/assistant-starter-wiring.test.mjs notebook/test/computer-wiring-on-existing-server.test.mjs notebook/test/windows-command-files.test.mjs notebook/test/final-core-contracts.test.mjs notebook/test/telegram-replies.test.mjs notebook/test/native-runtime.test.mjs notebook/test/addon-model.test.mjs notebook/test/docker-model-proxy.test.mjs notebook/test/backup-ai.test.mjs notebook/test/backup-ai-telegram.test.mjs notebook/test/routine-ai.test.mjs notebook/test/plan-signin.test.mjs
+          python3 notebook/test/addon-model-python.py
+      - name: The Review page gets each thing once, and the shipped suggestion cases get their right answers
+        run: node notebook/scripts/run-tests.mjs notebook/test/suggestion-cases.test.mjs notebook/test/same-thing.test.mjs notebook/test/review-suggestions-mcp.test.mjs notebook/test/review-kind.test.mjs notebook/test/note-processing.test.mjs notebook/test/review-source-withdrawal.test.mjs notebook/test/field-names.test.mjs notebook/test/memory-subject.test.mjs
+      - name: An assistant's hashes and lists arrive as the tools declare them, and a changed record still needs its current hash
+        run: node notebook/scripts/run-tests.mjs notebook/test/mcp-object-arguments.test.mjs notebook/test/tracker-talk.test.mjs notebook/test/trackers-mcp.test.mjs notebook/test/food-mcp.test.mjs notebook/test/cycle-mcp.test.mjs notebook/test/assistant-control-records.test.mjs
       - name: Clearing chat starts a fresh conversation and keeps earlier messages archived
         run: node notebook/scripts/run-tests.mjs notebook/test/chat-reset.test.mjs notebook/test/conversation-state.test.mjs notebook/test/scoped-chat-state.test.mjs
       - name: Installers and setup, without Docker
         run: |
-          node notebook/scripts/run-tests.mjs notebook/test/native-installer.test.mjs notebook/test/native-start-script.test.mjs notebook/test/setup-code.test.mjs notebook/test/native-web-address.test.mjs notebook/test/server-address.test.mjs notebook/test/web-door.test.mjs
+          # The installer's own Caddy, checked against its checksum, so the web address test runs
+          # the configuration it writes, add-ons' folder and all, in a real Caddy.
+          caddy=$(bash -c 'set -euo pipefail; GODSPEED_INSTALLER_FUNCTIONS_ONLY=1; . notebook/scripts/install-native-notebook.sh; state="$RUNNER_TEMP/caddy"; install_caddy')
+          export GODSPEED_TEST_CADDY="$caddy"
+          node notebook/scripts/run-tests.mjs notebook/test/native-installer.test.mjs notebook/test/native-start-script.test.mjs notebook/test/setup-code.test.mjs notebook/test/native-web-address.test.mjs notebook/test/server-address.test.mjs notebook/test/web-door.test.mjs notebook/test/docker-local-door.test.mjs
           bash docker/full-candidate/test-package-update.sh
           python3 docker/test/test-telegram-setup.py
       - name: Docker Hub images through Google's mirror (Docker Hub limits GitHub's shared runners; images stay pinned by digest)

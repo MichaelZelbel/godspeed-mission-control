@@ -12,7 +12,8 @@ import { dueMessages } from "../lib/tick.mjs";
 import { contextBlock } from "../lib/context.mjs";
 import { checkRecord, recordNeeds } from "../lib/evidence.mjs";
 import { dayReport, weekReport, renderWeek, wordsReport, renderWords } from "../lib/report.mjs";
-import { commitJournal, syncInBackground, pullQuietly } from "../lib/sync.mjs";
+import { commitJournal, syncInBackground, syncQueued, pullQuietly } from "../lib/sync.mjs";
+import { decodeArgv, readWordsFile, restoreShellEnv, startedFromGitBash, gitBashPath, LAUNCHER_ENV, CMDLINE_ENV } from "../lib/argv.mjs";
 
 const REPEATABLE = new Set(["done-means", "met", "missed"]);
 function parseArgs(argv) {
@@ -33,13 +34,31 @@ function parseArgs(argv) {
   return { pos, f };
 }
 
-const [cmd = "help", ...rest] = process.argv.slice(2);
+// The launchers say how they handed the arguments over (lib/argv.mjs). The marker is read once
+// and taken out of the environment, so a program this one starts (the background sync) never
+// mistakes itself for something the .cmd launcher started.
+const launched = decodeArgv(process.argv.slice(2), process.env);
+const fromGitBash = startedFromGitBash(process.env);
+delete process.env[LAUNCHER_ENV]; delete process.env[CMDLINE_ENV];
+restoreShellEnv(process.env);
+const [cmd = "help", ...rest] = launched.argv;
 const { pos, f, error: argError } = parseArgs(rest);
 const QUIET = cmd === "context" || cmd === "tick";
 
 function die(msg) { if (QUIET) process.exit(0); console.error(msg); process.exit(1); }
 
+if (launched.error) die(launched.error);
 if (argError) die(argError);
+// The flags whose values are paths. From Git Bash they can arrive the Git Bash way (/c/...,
+// /tmp/...), which the launcher no longer rewrites, so they are turned into Windows paths here.
+const PATH_FLAGS = ["godspeed", "words-file", "extra-skills-dir"];
+if (fromGitBash) for (const k of PATH_FLAGS) if (typeof f[k] === "string") f[k] = gitBashPath(f[k]);
+// Words that hold a line break or a quote travel safest in a file: no shell reads a file's
+// contents, so nothing on the way can cut or change them.
+if (f["words-file"] !== undefined) {
+  if (f.words !== undefined) die("Give the words once: either --words or --words-file, not both.");
+  try { f.words = readWordsFile(f["words-file"]); } catch (e) { die(e.message); }
+}
 
 const mcDir = findMissionControl({ arg: f.godspeed });
 if (!mcDir && cmd !== "help" && cmd !== "setup") die("Could not find your mission control folder. Run this from inside it, or add --godspeed <folder>.");
@@ -88,7 +107,9 @@ const commands = {
     out(`Saved: done for "${t.title}" now means ${[...t.done_means, ...f["done-means"]].join("; ")}`, { ok: true, task: resolveTask(entries(), t.id) });
   },
   note() {
-    const words = pos.join(" ").trim();
+    const text = pos.join(" ").trim();
+    if (text && f.words !== undefined) die("Give a note's words once: as text, or with --words or --words-file, not both.");
+    const words = text || String(f.words || "").trim();
     if (!words) die("A note needs words.");
     const t = f.task ? needTask(f.task) : null;
     save({ kind: "note", task: t?.id, words }, "note");
@@ -221,7 +242,7 @@ const commands = {
   },
   async setup() { const { setup } = await import("../lib/setup.mjs"); process.exitCode = await setup(f); },
   async check() { const { check } = await import("../lib/setup.mjs"); process.exitCode = await check(mcDir, f); },
-  _sync() { commitJournal(mcDir, pos.join(" ") || "journal: entries", syncMode); },
+  _sync() { syncQueued(mcDir); },
   help() {
     console.log(fs.readFileSync(new URL("../README.md", import.meta.url), "utf8").split("## Use")[1]?.split("\n## ")[0] || "See README.md");
   },

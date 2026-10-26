@@ -3,7 +3,6 @@
 // opened on a stale to-do title he no longer knew. Continued in Claude Code, the talk re-read its
 // record, area, due list and journal on his screen, then ran `talk said` for every message.
 //
-// Ported from the upstream coach 0.3.0 (its --prepared-file and --words-file are not in this copy).
 // Now: the brief carries what the research found, the record keeps what was prepared beyond the
 // opening, the [godspeed-coach] block carries both, and `talk said` takes every message at once.
 import assert from "node:assert/strict";
@@ -113,7 +112,11 @@ test("the brief's open command asks for what was prepared, and talk open keeps i
   const rec = fs.readFileSync(path.join(mc, "coach", "work", "talks", "2026-10-15.md"), "utf8");
   assert.match(rec, /## The opening\nFrom your coach, your weekly work and money talk: a talk call in Dresden closes on 31 October\. Will you send one\?\n\n## Prepared\n- 29 October: the central bank decides rates \(https:\/\/example\.org\/b\)\n- 3 November: an online hackathon, \$9,000 in prizes \(https:\/\/example\.org\/c\)\n\n## What you said\n/);
   assert.equal(readTalk(readArea(path.join(mc, "coach", "work")), "2026-10-15").sections.Prepared, prepared);
-  // A record without it has no such section.
+  // From a file, for a shell that cannot carry a line break; a record without it has no such section.
+  const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "coach-prep-")), "prepared.txt");
+  fs.writeFileSync(file, prepared.replace(/\n/g, "\r\n"));
+  assert.equal(cli(mc, "2026-10-16T17:02:00Z", "talk", "open", "work", "--date", "2026-10-16", "--opening", "Hi.", "--prepared-file", file).code, 0);
+  assert.equal(readTalk(readArea(path.join(mc, "coach", "work")), "2026-10-16").sections.Prepared, prepared);
   assert.equal(cli(mc, "2026-10-17T17:02:00Z", "talk", "open", "work", "--date", "2026-10-17", "--opening", "Hi.").code, 0);
   assert.doesNotMatch(fs.readFileSync(path.join(mc, "coach", "work", "talks", "2026-10-17.md"), "utf8"), /## Prepared/);
 });
@@ -158,6 +161,14 @@ test("talk said takes one --words per message, each on a line of its own", () =>
   assert.equal(cli(mc, "2026-10-15T17:31:00Z", "talk", "said", "work", "--words", "Thanks.", "--json").out, '{"ok":true,"date":"2026-10-15","saved":1}');
   const rec = fs.readFileSync(path.join(mc, "coach", "work", "talks", "2026-10-15.md"), "utf8");
   assert.match(rec, /## What you said\n- 19:30 Which call do you mean\?\n- 19:30 Ah, Dresden\. Yes, I will\.\n- 19:30 What else do you have\?\n- 19:31 Thanks\.\n\n## What changed/);
+  // Several files work the same way; words and a file together are still refused.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "coach-said-"));
+  fs.writeFileSync(path.join(dir, "1.txt"), "first\nmessage");
+  fs.writeFileSync(path.join(dir, "2.txt"), "second");
+  assert.equal(cli(mc, "2026-10-15T17:40:00Z", "talk", "said", "work", "--words-file", path.join(dir, "1.txt"), "--words-file", path.join(dir, "2.txt")).out, "Saved 2 messages.");
+  assert.match(fs.readFileSync(path.join(mc, "coach", "work", "talks", "2026-10-15.md"), "utf8"), /- 19:40 first message\n- 19:40 second\n/);
+  const both = cli(mc, "2026-10-15T17:41:00Z", "talk", "said", "work", "--words", "x", "--words-file", path.join(dir, "2.txt"));
+  assert.equal(both.code, 1);
   const none = cli(mc, "2026-10-15T17:42:00Z", "talk", "said", "work", "--words", " ");
   assert.equal(none.code, 1); assert.match(none.err, /Give their words/);
 });
@@ -180,7 +191,7 @@ test("the recipe: the research is the talk's material, things are said as what t
   assert.doesNotMatch(text, /—/, "no em dash in the recipe");
 });
 
-// This copy only: without a messenger a talk waits in the chat, and its line already quotes the
+// Without a messenger a talk waits in the chat, and its line already quotes the
 // opening, so what was prepared follows it without the opening a second time.
 test("a waiting talk carries what was prepared, and its opening once", () => {
   const mc = workMission();
