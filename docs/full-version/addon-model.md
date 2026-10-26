@@ -87,7 +87,23 @@ global `godspeed-model` command belonging to a native installation is preserved.
 For a native Hermes installation, Godspeed follows the verified assistant launcher to
 its own Python and source folder. When that installation uses Hermes' package manager,
 its own bootstrap selects its installed dependencies before the helper reads the current
-home's model settings. No alternate interpreter, provider or login is selected.
+home's model settings. When that Python cannot load Hermes for the account the command
+runs as (its bootstrap stops, or a module Hermes needs is missing), the command tries the
+other Pythons of the same installation in turn, the virtual environment of Hermes' own
+source folder last. Nothing has been asked of any model at that
+point, so no request is sent twice. The one that loaded is remembered in
+`.godspeed/assistant-python.json` until the executable changes or that Python stops
+loading Hermes. No other installation, account, provider or login is selected.
+
+When no Python of the installation loads Hermes, the command fails with "Godspeed could
+not load its AI program (Hermes) on this computer", naming the missing module when one
+is missing, and says that this is not a usage limit or a sign-in problem.
+
+The Linux and Mac installer checks the Hermes it finds the same way (`--check`, no model
+call) before it writes `.godspeed/assistant.json`. A Hermes that does not load for the
+installing account never replaces one that does; the installer keeps the earlier one and
+says why. When none loads, the installer says so and the update still completes: the
+update did not cause it, and putting the earlier version back would not repair it.
 
 ## The local notebook API in Docker
 
