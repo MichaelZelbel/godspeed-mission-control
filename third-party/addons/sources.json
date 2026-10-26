@@ -1,7 +1,7 @@
 [
   {
     "name": "godspeed-charm",
-    "commit": "13d52e875fd12dbf49a555a5012078dffaf71d85",
+    "commit": "966f13f1b2bb4ec6122b1650255bc35801ddcf20",
     "license": "MIT",
     "files": [
       "LICENSE",
@@ -9,6 +9,7 @@
       "bin/godspeed-charm.mjs",
       "hermes/plugin/godspeed-charm/__init__.py",
       "hermes/plugin/godspeed-charm/plugin.yaml",
+      "hermes/plugin/godspeed-charm/telegram_question.py",
       "lib/argv.mjs",
       "lib/brief.mjs",
       "lib/clock.mjs",
@@ -31,6 +32,8 @@
       "test/plugin.test.mjs",
       "test/record.test.mjs",
       "test/setup.test.mjs",
+      "test/telegram.test.mjs",
+      "test/telegram_driver.py",
       "test/texts.test.mjs",
       "test/words.test.mjs"
     ],
