@@ -33,10 +33,12 @@ export function VoiceState({status}:{status?:VoiceStatus}){
       :chats?.all?<p>In your Telegram chat every answer is spoken. Send <code>/voice on</code> there to have only your voice notes answered with a voice note.</p>
       :status.auto_tts===false&&!chats?.voice_only?<p>Spoken answers are switched off in Hermes' own settings, so your voice notes get text. Send <code>/voice on</code> in your Telegram chat to switch voice replies on there.</p>
       :null}
-    {/* Where the voice note is understood, and the one sentence when it stays on this computer
-        because the ElevenLabs key may not transcribe or could not be asked. */}
-    {transcribe?.service==='elevenlabs'?<p>Your voice notes are understood by ElevenLabs{transcribe.model?<> ({transcribe.model})</>:null}, which is quicker than understanding them on this computer.</p>
-      :transcribe?.words?<p>{transcribe.words}</p>:null}
+    {/* Where the voice note is understood, and the sentence about the last answer from ElevenLabs
+        when there is one. Both, not one instead of the other: a key saved while ElevenLabs was down
+        leaves ElevenLabs understanding the voice notes with its permission unread, and the page has
+        to say so rather than call it settled. */}
+    {transcribe?.service==='elevenlabs'&&<p>Your voice notes are understood by ElevenLabs{transcribe.model?<> ({transcribe.model})</>:null}, which is quicker than understanding them on this computer.</p>}
+    {transcribe?.words&&<p>{transcribe.words}</p>}
     {failing&&<p className="flex gap-2 items-start" role="alert"><AlertTriangle className="h-5 w-5 shrink-0 text-amber-500" aria-hidden="true"/><span>The last voice note could not be made on {when(failing.at||failing.since)}. {failing.error} Your answers still arrive as text.</span></p>}
   </div>;
 }

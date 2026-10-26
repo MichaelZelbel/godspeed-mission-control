@@ -3,7 +3,7 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {atomic} from './records/store.mjs';
 import {setConfigValue,readConfigValue,deleteConfigValue} from './hermes-config.mjs';
-import {KEY_NAME,SETTINGS,STT_PROVIDER,STT_MODEL,readVoiceRecord,writeVoiceRecord,envValue,elevenLabsSpeech,elevenLabsMayTranscribe,voiceSettings,VoiceProblem} from './voice-speech.mjs';
+import {KEY_NAME,SETTINGS,STT_PROVIDER,STT_MODEL,STT_PERMISSION,readVoiceRecord,writeVoiceRecord,envValue,elevenLabsSpeech,elevenLabsMayTranscribe,voiceSettings,VoiceProblem} from './voice-speech.mjs';
 
 // VOICE REPLIES (25 October 2026, discussion #41 of the public repository). A voice note sent to the
 // assistant in Telegram is answered with a voice note and the same answer as text; a written request
@@ -126,14 +126,26 @@ function dropEmpty(text,keys){
  const without=deleteConfigValue(text,keys);
  return text.split('\n').length-without.split('\n').length===1?without:text;
 }
-// What Settings says about understanding a voice note: where it happens, with which model, and the one
-// sentence about the last answer from ElevenLabs while it still happens on the computer.
+// What Settings says about understanding a voice note: where it happens, with which model, and what
+// the last answer from ElevenLabs means for it.
+//
+// Every sentence has to be true of the state it is shown in. An answer that is not a yes is still
+// open, and it is shown whether the voice note is understood here or at ElevenLabs, because both
+// states can hold one: a key replaced while ElevenLabs is down leaves ElevenLabs set with the new
+// key's permission unread, and nobody is served by a page that then says ElevenLabs understands the
+// voice notes. While ElevenLabs is set, the page says that is still where they go; while they are
+// understood here, it says that instead. A provider the owner chose themselves is their own, so
+// nothing about an ElevenLabs key is said under it.
 export function transcribeStatus({config,record={}}){
  const provider=unquote(readConfigValue(config,['stt','provider'])||'');
- const asked=record.transcribe||null;
- if(provider===STT_PROVIDER)return {service:'elevenlabs',model:unquote(readConfigValue(config,['stt','elevenlabs','model_id'])||'')||STT_MODEL,words:null};
+ const asked=record.transcribe||null,open=asked&&asked.answer!=='yes'?asked:null;
+ if(provider===STT_PROVIDER)return {service:'elevenlabs',model:unquote(readConfigValue(config,['stt','elevenlabs','model_id'])||'')||STT_MODEL,
+  words:!open?null:open.answer==='no'
+   ?'Your ElevenLabs key may not transcribe, and your voice notes are sent to ElevenLabs all the same, because stt.provider says so in Hermes itself: allow the key '+STT_PERMISSION+' on the ElevenLabs page for API keys, or change that setting in Hermes.'
+   :String(open.words||'')+' Your voice notes are sent to ElevenLabs until you save your key again.'};
  if(provider&&provider!=='local')return {service:'hermes',provider,words:null};
- return {service:'local',model:null,words:asked&&asked.answer!=='yes'?asked.words||null:null};
+ return {service:'local',model:null,
+  words:!open?null:open.answer==='no'?open.words||null:String(open.words||'')+' Your voice notes are understood on this computer until it is known.'};
 }
 
 // THE OWNER'S TELEGRAM CHAT, wherever this installation keeps it: TELEGRAM_HOME_CHANNEL in Hermes'

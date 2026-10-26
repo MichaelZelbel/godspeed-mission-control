@@ -90,6 +90,14 @@ describe("Voice replies in Settings", () => {
     expect(screen.queryByText(/may not transcribe/)).toBeNull();
   });
 
+  it("says ElevenLabs could not be asked while it is still the one being asked, not that it is settled", async () => {
+    const words = "ElevenLabs could not be reached from here, so it is not known yet whether your key may transcribe. Your voice notes are sent to ElevenLabs until you save your key again.";
+    serve({ voice: () => [200, { ...eleven, transcribe: { service: "elevenlabs", model: "scribe_v2", words } }] });
+    show();
+    expect(await screen.findByText(/Your voice notes are understood by ElevenLabs/)).toHaveTextContent("(scribe_v2)");
+    expect(screen.getAllByText(words)).toHaveLength(1);
+  });
+
   it("is not shown where no Hermes runs the assistant", async () => {
     serve({ voice: () => [200, { available: false }] });
     const { container } = show();

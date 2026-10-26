@@ -133,6 +133,10 @@ export const transcribePermissionWords=()=>'Your ElevenLabs key may not transcri
 // 'yes' (ElevenLabs transcribed it), 'no' (it refused for a missing permission) or 'unknown' (anything
 // else: no answer, a limit, a problem of its own), with the words for the page. It never throws: a key
 // whose permission could not be read must still save the voice that was just heard.
+//
+// The words for 'unknown' say only what ElevenLabs did, never where the voice note is understood
+// meanwhile: that depends on what the person had before (core/voice-replies.mjs, transcribeStatus,
+// adds it), because a key replaced while ElevenLabs is down leaves ElevenLabs set.
 export async function elevenLabsMayTranscribe({key,fetcher=fetch,api=elevenLabsApi(),model=STT_MODEL,timeoutMs=60000}){
  if(!key)return {may:'unknown',words:'No ElevenLabs key was given, so it could not be asked whether it may transcribe.'};
  let response;
@@ -144,7 +148,7 @@ export async function elevenLabsMayTranscribe({key,fetcher=fetch,api=elevenLabsA
    {method:'POST',headers:{'xi-api-key':key,Accept:'application/json'},body:form,signal:AbortSignal.timeout(timeoutMs)});
  }catch(error){
   const why=error?.name==='TimeoutError'?'ElevenLabs did not answer in time':'ElevenLabs could not be reached from here';
-  return {may:'unknown',words:why+', so it is not known yet whether your key may transcribe; your voice notes are understood on this computer until it is.'};
+  return {may:'unknown',words:why+', so it is not known yet whether your key may transcribe.'};
  }
  if(response.ok)return {may:'yes',words:null};
  const raw=await response.text().catch(()=>'');let body=raw;try{body=JSON.parse(raw);}catch{}
@@ -153,7 +157,7 @@ export async function elevenLabsMayTranscribe({key,fetcher=fetch,api=elevenLabsA
  const text=(code+' '+String(detail&&typeof detail==='object'?detail.message||detail.msg||'':typeof detail==='string'?detail:'')).toLowerCase();
  if(code==='missing_permissions'||(/permission|not authorized|unauthorized_scope/.test(text)&&(response.status===401||response.status===403)))
   return {may:'no',words:transcribePermissionWords()};
- return {may:'unknown',words:'ElevenLabs did not say whether your key may transcribe, so your voice notes are understood on this computer. '+elevenLabsProblem(response.status,body)};
+ return {may:'unknown',words:'ElevenLabs did not say whether your key may transcribe. '+elevenLabsProblem(response.status,body)};
 }
 
 // WHEN THE VOICE FAILS, THE TEXT STILL ARRIVES (Hermes sends the answer as text when the voice note

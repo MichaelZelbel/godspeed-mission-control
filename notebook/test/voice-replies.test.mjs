@@ -257,11 +257,29 @@ test('a key that replaces one ElevenLabs allowed, and may not transcribe, has vo
  await saving(owned,{key:KEY},elevenLabs(undefined,refusal).fetcher);
  assert.equal(readConfigValue(owned.config(),['stt','provider']),'openai');
  // An ElevenLabs that cannot be reached changes nothing either way: what was switched on stays on
- // until an answer arrives, and the next save asks again.
- const kept=await saving(f,{key:KEY},async url=>{if(/speech-to-text/.test(String(url)))throw new TypeError('fetch failed');return new Response(OGG);});
+ // until an answer arrives, and the next save asks again. The page says that, instead of calling
+ // ElevenLabs settled: the key saved now may be one that cannot transcribe at all.
+ const down=async url=>{if(/speech-to-text/.test(String(url)))throw new TypeError('fetch failed');return new Response(OGG);};
+ const kept=await saving(f,{key:'sk_during_an_outage0000000000000'},down);
  assert.equal(JSON.parse(readConfigValue(f.config(),['stt','provider'])),STT_PROVIDER);
  assert.equal(kept.transcribe.service,'elevenlabs');
+ assert.match(kept.transcribe.words,/ElevenLabs could not be reached from here, so it is not known yet whether your key may transcribe\./);
+ assert.match(kept.transcribe.words,/Your voice notes are sent to ElevenLabs until you save your key again\./);
+ assert.ok(!/understood on this computer/.test(kept.transcribe.words),'and not that they are understood here, which they are not');
+ assert.equal(voiceStatus(f).transcribe.words,kept.transcribe.words,'the page reads the same after a restart');
  assert.equal(readVoiceRecord(f.state).transcribe.answer,'unknown');
+ // Saving again once ElevenLabs answers settles it and the sentence goes.
+ const settled=await saving(f,{key:KEY},elevenLabs().fetcher);
+ assert.deepEqual(settled.transcribe,{service:'elevenlabs',model:'scribe_v2',words:null});
+ // The one state where ElevenLabs is set and the key may not: the owner set stt.provider themselves.
+ // Godspeed does not change it, and does not pretend the voice notes are understood either.
+ const theirs=installation(t);
+ fs.writeFileSync(path.join(theirs.home,'config.yaml'),'stt:\n  provider: elevenlabs\n');
+ const under=await saving(theirs,{key:KEY},elevenLabs(undefined,refusal).fetcher);
+ assert.equal(readConfigValue(theirs.config(),['stt','provider']),'elevenlabs','theirs, so it stays');
+ assert.equal(under.transcribe.service,'elevenlabs');
+ assert.match(under.transcribe.words,/may not transcribe, and your voice notes are sent to ElevenLabs all the same/);
+ assert.match(under.transcribe.words,/allow the key Speech to Text on the ElevenLabs page for API keys, or change that setting in Hermes/);
  // Only what Godspeed wrote goes: stt settings of the owner's own beside it stay, and the section
  // goes only when nothing of theirs is under it.
  assert.equal(withoutElevenLabsTranscription('stt:\n  provider: "elevenlabs"\n  language: de\n  elevenlabs:\n    model_id: "scribe_v2"\n    language_code: de\n'),
