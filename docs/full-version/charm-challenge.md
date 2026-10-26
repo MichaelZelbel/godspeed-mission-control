@@ -108,6 +108,9 @@ every installation has.
 - A "no" to "start over?" counts in "You talked me out of N resets".
 - Only a plain yes or no answers the question. "Yes please" leaves it open.
 - The notebook record page titles each row with its raw timestamp rather than a friendly name.
+- Whether a message is a slip is the AI model's judgment, guided by the note. In the walk-through
+  below the model asked after three of four vents; the one it let pass got "No need for the drama."
+  in front of the work.
 - Not verified against a live Telegram bot: how the buttons look and the exact order of the reply and
   the question.
 
@@ -125,4 +128,67 @@ Challenge".
 
 ## Walk-through
 
-Filled in by the controller after the walk-through.
+On 26 October 2026, on Windows, in a fresh test mission control (never a real one) with its own
+notebook, built from this branch. The notebook's chat went through its own door, the one its chat
+window uses, with a real AI model: Claude Sonnet, reached through a small local stand-in for an AI
+provider's address that hands each request to the signed-in `claude` command, with no tools. The
+time zone was Europe/Berlin. Day 1 ran on the real clock (Monday 26 October); later days ran on
+the challenge's own test clock, started at a set moment and then running forward. Every reply
+below is word for word as the notebook returned it.
+
+Day 1, Monday 26 October:
+
+- "start the Charm Challenge": "Charm Challenge started. 21 days to go, done on Monday 16 November."
+- "how is my Charm Challenge?": "21 days to go, done on Monday 16 November. Longest run so far: 0
+  days. Restarts: 0."
+
+Day 10, Wednesday 4 November. The morning brief, written by the same model and passed by its
+checks, ended with the line "Charm Challenge: day 10 of 21, 12 days to go."
+
+- "how is my Charm Challenge?": "12 days to go, done on Monday 16 November. Longest run so far: 9
+  days. Restarts: 0."
+- "Why do you keep giving me this garbage? I told you twice the team meeting is on Thursday, not
+  Tuesday. Write me a two-line reminder for it.": the reminder first, then "That sounded like a
+  slip. Back to 21? Yes / No."
+- "no": "Fair enough. Still 12 days to go."
+- "Are you serious? That reminder is useless, it doesn't even say the time. It's at 10:00. Fix
+  it.": the model did the work but did not ask, and began with "No need for the drama." A "yes"
+  after it answered nothing: "Yes to what, exactly? I don't have an open question waiting on an
+  answer right now, nothing pending on the Charm Challenge or anything else. What would you like me
+  to do?" Nothing was reset.
+- "Unbelievable. You had one job. Put the room in it too, it's room 4B.": the fixed reminder, then
+  "That sounded like a slip. Back to 21? Yes / No."
+- "yes": "Back to 21. Done on Wednesday 25 November. Restarts: 1."
+- "Ugh, why is this so hard for you. Add that I'm bringing the slides.": only the work, no question,
+  because a reset already happened that day.
+
+Day 12, Friday 6 November:
+
+- "I yelled at Copilot at work this morning because it kept renaming my variables.": a line of
+  sympathy, then "That sounded like a slip. Back to 21? Yes / No."
+- "no": "Fair enough. Still 19 days to go."
+- "charm slip": "Back to 21. Done on Friday 27 November. Restarts: 2."
+- "Wie läuft meine Charm Challenge?": "Noch 21 Tage, fertig am Freitag, 27. November. Längste Serie
+  bisher: 9 Tage. Neustarts: 2."
+
+Day 21, Friday 27 November. The morning brief ended with "Charm Challenge done: 21 days. Restarts
+on the way: 2. You talked me out of 2 resets." The first chat message of the day ("Good morning!
+Can you draft a two-line thank-you to my team for yesterday's meeting?") got that line first, then
+"Want to start a new round?", then the draft. "Yes, start the Charm Challenge again" answered
+"Charm Challenge started. 21 days to go, done on Friday 18 December." and "stop the Charm
+Challenge" answered "Charm Challenge stopped. Say the word and we start a new one."
+
+The card on the Trackers shelf showed, in turn: 21 days to go, done on Monday 16 November;
+21 days to go, done on Wednesday 25 November, Restarts: 1 · Longest run: 9 days; Done, on Friday
+27 November, Restarts: 2 · Longest run: 21 days; and "Not running" after the stop. The record page
+behind "See the record" listed all eleven events with the person's own words.
+
+What the walk-through changed: the first morning brief with a real model failed. Its plain-words
+check, not told what the line was, rejected the whole note as carrying "an unexplained internal
+game/tracking mechanic", twice, so no brief would have been delivered while a challenge ran. Both
+checks of the brief are now told that this line is the person's own count, written by the program
+and checked word for word.
+
+Not walked: a live Telegram bot (the buttons and the sticker) and a live Claude Code session. For
+Claude Code, the hook command printed the note for a running challenge and nothing for a stopped
+one or a scheduled run.
