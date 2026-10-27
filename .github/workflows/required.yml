@@ -70,6 +70,8 @@ jobs:
           node docker/server/test-browser.mjs
           bash stage/test-check-public-lines.sh
           bash stage/check-public-lines.sh
+      - name: The release's proving scenarios judge what they saw rightly
+        run: bash scenarios/test-scenarios.sh
       - name: The guide check and this gate prove themselves
         run: |
           node .github/guide-check.mjs --self-test

@@ -14,7 +14,11 @@ What you install changes only when a version is released. Until now the install 
 
 A released version can also be taken back. If something is wrong with it, the installers refuse it from then on and install the version before it instead, so a line or a link you saved cannot put it on your computer either.
 
-## Coming in the next release: voice replies
+## New in 2.0.0-beta.8
+
+The chat answers faster. In Telegram the answer appears while it is written, in one message that grows, and no "let me check" lines are left behind. A long chat is shortened at night, when you are not waiting for an answer, instead of in front of your next message.
+
+### Voice replies
 
 Talk to your assistant while you walk or drive, and listen to the answer. When you send it a voice note in Telegram, it answers with a voice note and the same answer as text, so you can listen now and read or search it later. Ask in writing for a spoken answer ("answer me with a voice note"), and you get one too, with the text.
 

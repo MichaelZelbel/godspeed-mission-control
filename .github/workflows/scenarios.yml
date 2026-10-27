@@ -1,7 +1,13 @@
 name: scenarios
+# The run's name carries the stage it proved, so a run on a candidate's tag that was left at the
+# default stage (beta) cannot be read as that candidate's pass: GitHub shows the input itself only
+# in the run's logs.
+run-name: scenarios ${{ inputs.stage }}
 # The proving scenarios a candidate runs before the maintainer is asked for "go" (godspeed-dev,
-# releases/godspeed-2.0.0-beta.7-stages/plan.md, "Proving scenarios" 1, 2 and 5). Started by hand
-# with the stage ref to prove: a candidate tag (candidate/2.0.0-beta.7), or beta, or main.
+# releases/godspeed-2.0.0-beta.7-stages/plan.md, "Proving scenarios" 1, 2 and 5, and
+# releases/godspeed-2.0.0-beta.8-faster-chat/plan.md, "Proving scenarios" 1 to 4, which are the
+# scripts in scenarios/). Started by hand on the candidate's own tag, with the same tag as the stage
+# to prove: --ref candidate/2.0.0-beta.8 -f stage=candidate/2.0.0-beta.8 (or beta, or main).
 # Each scenario runs on a fresh GitHub machine, installs the way a stranger does, and ends with one
 # line in the run's summary: PASS <name>, or FAIL <name>: <what went wrong>. A scenario that cannot
 # run fails: the verdict job at the end says so for every scenario that did not pass, and fails the
@@ -195,10 +201,84 @@ jobs:
         if: failure()
         run: '[ -s "$RUNNER_TEMP/failed" ] || echo "FAIL linux-update: a step before the checks failed (its step log says how)" | tee -a "$GITHUB_STEP_SUMMARY"'
 
+  # The four scenarios of 2.0.0-beta.8 are scripts in scenarios/ (their README says how each one
+  # proves what it proves), run from the stage's own copy of them.
+  settings-on-install:
+    name: the faster-chat settings a fresh install carries
+    needs: stage
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.stage }}
+          persist-credentials: false
+      - name: The scenario, the stage's own copy of it
+        run: bash scenarios/settings-on-install.sh "$STAGE_REF"
+      - name: Say so when it stopped before its own verdict
+        if: failure()
+        run: 'grep -q "settings-on-install" "$GITHUB_STEP_SUMMARY" || echo "FAIL settings-on-install: it stopped before its own verdict (its step log says how)" | tee -a "$GITHUB_STEP_SUMMARY"'
+
+  night-tidy:
+    name: the night chat tidy-up does only its job
+    needs: stage
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      GODSPEED_SCENARIO_AI_KEY: ${{ secrets.GODSPEED_SCENARIO_AI_KEY }}
+      GODSPEED_SCENARIO_AI_URL: ${{ vars.GODSPEED_SCENARIO_AI_URL }}
+      GODSPEED_SCENARIO_AI_MODEL: ${{ vars.GODSPEED_SCENARIO_AI_MODEL }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.stage }}
+          persist-credentials: false
+      - name: The scenario, the stage's own copy of it
+        run: bash scenarios/night-tidy.sh "$STAGE_REF"
+      - name: Say so when it stopped before its own verdict
+        if: failure()
+        run: 'grep -q "night-tidy" "$GITHUB_STEP_SUMMARY" || echo "FAIL night-tidy: it stopped before its own verdict (its step log says how)" | tee -a "$GITHUB_STEP_SUMMARY"'
+
+  voice:
+    name: a voice note, with the permission and without it
+    needs: stage
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      ELEVENLABS_TEST_KEY_STT: ${{ secrets.ELEVENLABS_TEST_KEY_STT }}
+      ELEVENLABS_TEST_KEY_NO_STT: ${{ secrets.ELEVENLABS_TEST_KEY_NO_STT }}
+      ELEVENLABS_TEST_VOICE_ID: ${{ vars.ELEVENLABS_TEST_VOICE_ID }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.stage }}
+          persist-credentials: false
+      - name: The scenario, the stage's own copy of it
+        run: bash scenarios/voice.sh "$STAGE_REF"
+      - name: Say so when it stopped before its own verdict
+        if: failure()
+        run: 'grep -q "voice" "$GITHUB_STEP_SUMMARY" || echo "FAIL voice: it stopped before its own verdict (its step log says how)" | tee -a "$GITHUB_STEP_SUMMARY"'
+
+  update-keeps-everything:
+    name: an update from the current public version keeps everything
+    needs: stage
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.stage }}
+          persist-credentials: false
+      - name: The scenario, the stage's own copy of it
+        run: bash scenarios/update-keeps-everything.sh "$STAGE_REF"
+      - name: Say so when it stopped before its own verdict
+        if: failure()
+        run: 'grep -q "update-keeps-everything" "$GITHUB_STEP_SUMMARY" || echo "FAIL update-keeps-everything: it stopped before its own verdict (its step log says how)" | tee -a "$GITHUB_STEP_SUMMARY"'
+
   verdict:
     name: the verdict
     if: always()
-    needs: [stage, linux-install, mac-install, docker-server, linux-update]
+    needs: [stage, linux-install, mac-install, docker-server, linux-update, settings-on-install, night-tidy, voice, update-keeps-everything]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     env:
@@ -209,6 +289,10 @@ jobs:
         mac-install=${{ needs.mac-install.result }}
         docker-server=${{ needs.docker-server.result }}
         linux-update=${{ needs.linux-update.result }}
+        settings-on-install=${{ needs.settings-on-install.result }}
+        night-tidy=${{ needs.night-tidy.result }}
+        voice=${{ needs.voice.result }}
+        update-keeps-everything=${{ needs.update-keeps-everything.result }}
     steps:
       - name: Every scenario passed, or the run fails
         run: |
