@@ -278,14 +278,31 @@ contains "  naming the check that said so" "$(cat "$TMP/work/$MEND.md")" "VERIFI
 contains "  and the run names the copy it kept" "$OUT" "$MEND kept 1 file(s) as they were before the repair"
 
 # A repair whose check still fails is not done: the fault is the deliverable, not the attempt.
+# This assistant copies the file as it was and then leaves it alone, the way the five runs of
+# October 2026 did, and says it is done anyway.
 STILL="$OUTSIDE/etc/godspeed/other-upgrade.conf"
 printf 'upgrade=broken\n' > "$STILL"
 hw file --what "Put the other fixed upgrade in place" --done-when "that upgrade's own check passes again on this machine" --check "grep -q '^upgrade=fixed$' $STILL" --kind repair --key mend2 --source test >/dev/null
 MEND2="$(grep -l 'KEY: mend2$' "$TMP/work"/W-*.md | head -1 | xargs basename | sed 's/.md$//')"
-OUT="$(run --only "$MEND2" 2>&1)"
+OUT="$(FAKE_KEEP="${STILL#/}" run --only "$MEND2" 2>&1)"
 contains "a repair whose live check still fails stays open" "$OUT" "attempted, not verified"
 check "  the item is not closed" "$(status_of "$MEND2")" "attempted"
 check "  and the fault outside the folder is untouched" "$(cat "$STILL")" "upgrade=broken"
+
+# NO UNDO, NOT DONE, FOR A REPAIR TOO (2026-10-27). The copy is the only way back from a change
+# outside the folder, so a repair that kept none is failed even when its own check passes.
+NOCOPY="$OUTSIDE/etc/godspeed/third-upgrade.conf"
+printf 'upgrade=broken\n' > "$NOCOPY"
+hw file --what "Put the third fixed upgrade in place" --done-when "that upgrade's own check passes again on this machine" --check "grep -q '^repaired$' $NOCOPY" --kind repair --key mend3 --source test >/dev/null
+MEND3="$(grep -l 'KEY: mend3$' "$TMP/work"/W-*.md | head -1 | xargs basename | sed 's/.md$//')"
+OUT="$(FAKE_TOUCH="$NOCOPY" run --only "$MEND3" 2>&1)"
+check "  (this one really did change the file outside the folder)" "$(cat "$NOCOPY")" "repaired"
+check "  and its own check passes on it" "$(grep -q '^repaired$' "$NOCOPY" && echo yes || echo no)" "yes"
+check "a repair that kept no copy of what it changed is recorded failed" "$(status_of "$MEND3")" "failed"
+contains "  with the reason" "$(cat "$TMP/work/$MEND3.md")" "no UNDO: nothing was copied under routines/work/2026-09-15/$MEND3/before/"
+missing "  and no ATTEMPTED line, so the check never closed it" "$(cat "$TMP/work/$MEND3.md")" " ATTEMPTED "
+contains "  the run says so" "$OUT" "$MEND3 failed: no UNDO"
+contains "  and the prompt had warned it" "$(cat "$TMP/routines/work/2026-09-15/$MEND3/prompt-seen.txt")" "With nothing in that folder this item is recorded as failed"
 
 echo
 echo "$PASS passed, $FAIL failed"

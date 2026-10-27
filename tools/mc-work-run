@@ -259,7 +259,7 @@ while IFS=$'\t' read -r ID KIND WHAT; do
       echo
       echo "## This item is a machine repair"
       echo "It mends the mission control's own machinery on this computer: the fault WHAT names. For this item, and only for it, you may change files outside $GODSPEED: the ones the mission control itself installed or runs here (its scheduled scripts and programs, and their settings), and only as far as repairing that fault needs."
-      echo "Before you change such a file, copy it whole under routines/work/$TODAY/$ID/before/, keeping its full path beneath that folder (/etc/example/job.conf goes to routines/work/$TODAY/$ID/before/etc/example/job.conf), so it can be put back. Never touch a password, a key or a token, an account, a payment, or anything that reaches another person."
+      echo "Before you change such a file, copy it whole under routines/work/$TODAY/$ID/before/, keeping its full path beneath that folder (/etc/example/job.conf goes to routines/work/$TODAY/$ID/before/etc/example/job.conf), so it can be put back. With nothing in that folder this item is recorded as failed, whatever it did and whatever its check says, because what it changed could not be put back. Never touch a password, a key or a token, an account, a payment, or anything that reaches another person."
       echo "Then prove the fault is gone: run again, live, the check that found it, and quote what it says now. A repair written down for later (a note, a file of steps, a card saying what someone should change) is not a repair. If you cannot make the change from here, end with RESULT: FAILED and say what it needs."
     fi
     echo
@@ -325,6 +325,18 @@ while IFS=$'\t' read -r ID KIND WHAT; do
   # the place the approved-move prompt names; without it the step is recorded failed, never attempted.
   if [ -n "$MAY_KIND" ] && [ ! -f "$ITEMDIR/before.txt" ]; then
     WHY="no UNDO: routines/work/$TODAY/$ID/before.txt was not written before the step went out, so it cannot be put back; check the live place by hand"
+    reg work attempt "$ID" --runner "$RUNNER_NAME" --failed "$WHY" 2>&1 | sed 's/^/  /'
+    log "$ID failed: $WHY"
+    continue
+  fi
+  # A REPAIR KEEPS THE SAME PROMISE (2026-10-27). A repair is the one item that changes files
+  # outside the folder, so its copy is the only way back; it goes under routines/work/<day>/<id>/before/,
+  # the place the repair prompt names. Until now that copy was only counted when it happened to be
+  # there, so a repair could change a program on this machine, pass its own check and be closed with
+  # nothing to put back. Without it the item is recorded failed, never attempted, and its check
+  # never gets to close it.
+  if [ "$KIND" = "repair" ] && [ -z "$(find "$ITEMDIR/before" -type f 2>/dev/null | head -1)" ]; then
+    WHY="no UNDO: nothing was copied under routines/work/$TODAY/$ID/before/ before the repair, so what it changed cannot be put back; check this machine by hand"
     reg work attempt "$ID" --runner "$RUNNER_NAME" --failed "$WHY" 2>&1 | sed 's/^/  /'
     log "$ID failed: $WHY"
     continue
