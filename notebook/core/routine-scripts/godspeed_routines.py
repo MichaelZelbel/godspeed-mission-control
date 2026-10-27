@@ -896,8 +896,11 @@ def chat_tidy(c):
     try:
         res = ch.call("session.resume", {"session_id": target}, a.resume_timeout)
         sid = res.get("session_id")
-        if res.get("resumed") != target or not sid:
-            fail("Resume opened %r, not %r; stopping." % (res.get("resumed"), target))
+        # The stored conversation it opened: the assistant's stdio channel names it "resumed", its
+        # running gateway "stored_session_id" (session_id is the runtime's own id either way).
+        opened = res.get("resumed") or res.get("stored_session_id")
+        if opened != target or not sid:
+            fail("Resume opened %r, not %r; stopping." % (opened, target))
         if res.get("running") or res.get("inflight") or res.get("status") != "idle":
             chat_log("skip: conversation busy (status %s)" % res.get("status"))
             return ""
@@ -1025,7 +1028,12 @@ async def channel_attached(endpoint):
                     answer["result"] = await client.rpc(request.get("method"), _timeout=float("inf"),
                                                         **(request.get("params") or {}))
                 except GatewayRPCError as error:
-                    answer["error"] = {"code": error.code, "message": str(error), "data": error.data}
+                    if request.get("method") == "session.close" and str(error) == "unknown_method":
+                        # A gateway that has no close for a viewer: the viewer leaves the session
+                        # by hanging up, which is what this channel does next.
+                        answer["result"] = {"closed": True}
+                    else:
+                        answer["error"] = {"code": error.code, "message": str(error), "data": error.data}
                 sys.stdout.write(json.dumps(answer) + "\n")
                 sys.stdout.flush()
         finally:

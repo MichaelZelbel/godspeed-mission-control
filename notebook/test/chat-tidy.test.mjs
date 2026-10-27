@@ -280,7 +280,10 @@ test('the assistant\'s own terminal is no chat app: its conversations beside the
 });
 
 test('beside a running gateway it attaches to it, as the assistant\'s own terminal does, and sends the same requests',needs,async t=>{
- const chat=home(t,{gateway:true,plan:{'session.resume':resumed(),'session.compress':compressed,'session.close':{closed:true}}});
+ // The gateway names the stored conversation it opened stored_session_id, and has no close for a
+ // viewer (the installed one answered both so on 27 October 2026).
+ const opened={session_id:'live-1',stored_session_id:CHAT,status:'idle',message_count:320};
+ const chat=home(t,{gateway:true,plan:{'session.resume':opened,'session.compress':compressed,'session.close':{error:'unknown_method'}}});
  const {code,said,log}=chat.run();
  assert.equal(code,0,log);
  assert.equal(said,'');
@@ -288,6 +291,15 @@ test('beside a running gateway it attaches to it, as the assistant\'s own termin
  assert.deepEqual(chat.asked().map(a=>a.method),['session.resume','session.compress','session.close']);
  assert.ok(chat.asked().every(a=>a.via==='the-running-gateway'),'every request went to the gateway');
  assert.deepEqual(chat.asked()[0].params,{session_id:CHAT});
+ assert.doesNotMatch(log,/close:/,'a gateway with no close for a viewer is no failed close');
+});
+
+test('beside a running gateway a resume that names another conversation stops it too',needs,async t=>{
+ const chat=home(t,{gateway:true,plan:{'session.resume':{session_id:'live-1',stored_session_id:OTHER,status:'idle'},'session.compress':compressed,'session.close':{closed:true}}});
+ const {code,log}=chat.run();
+ assert.equal(code,1);
+ assert.match(log,/Resume opened 'other-session-2', not 'chat-session-1'; stopping\./);
+ assert.ok(!chat.asked().some(a=>a.method==='session.compress'),'nothing was compressed');
 });
 
 test('beside a running gateway a refusal is still a refusal, and nothing is compressed',needs,async t=>{
