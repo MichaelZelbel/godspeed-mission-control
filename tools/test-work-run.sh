@@ -16,7 +16,10 @@ done
 [ -n "$NODE" ] || { echo "FAIL: no node on this box"; exit 1; }
 
 TMP="$(mktemp -d)"
-trap 'rm -rf "$TMP" "$TEST_GUARD_HOME"' EXIT
+# A second throwaway folder, outside the mission control's own: it stands for the rest of this
+# computer, where the files the mission control installed and runs live. Only a repair reaches it.
+OUTSIDE="$(mktemp -d)"
+trap 'rm -rf "$TMP" "$OUTSIDE" "$TEST_GUARD_HOME"' EXIT
 mkdir -p "$TMP/rules" "$TMP/bin" "$TMP/goals/playbooks" "$TMP/skills/work-item" "$TMP/research"
 : > "$TMP/AGENTS.md"
 printf 'receipt\n' > "$TMP/rules/machine-words.txt"
@@ -42,6 +45,9 @@ case "${FAKE_MODE:-ok}" in
   *)        [ -n "${FAKE_TOUCH:-}" ] && printf 'repaired\n' > "$FAKE_TOUCH"
             [ -n "${FAKE_BEFORE:-}" ] && printf '%s\n' "$FAKE_BEFORE" > "$(dirname "$OUT")/before.txt"
             [ -n "${FAKE_KEEP:-}" ] && { mkdir -p "$(dirname "$OUT")/before/$(dirname "$FAKE_KEEP")"; printf 'as it was\n' > "$(dirname "$OUT")/before/$FAKE_KEEP"; }
+            # FAKE_FIX is a repair done the way the prompt asks: the file outside the folder is
+            # copied whole under before/, keeping its path, and only then changed.
+            [ -n "${FAKE_FIX:-}" ] && { KEPT="$(dirname "$OUT")/before/${FAKE_FIX#/}"; mkdir -p "$(dirname "$KEPT")"; cp "$FAKE_FIX" "$KEPT"; printf 'upgrade=fixed\n' > "$FAKE_FIX"; }
             [ -n "$P" ] && { mkdir -p "$(dirname "$P")"; { echo "# Answer"; for i in $(seq 1 80); do printf 'word%s ' "$i"; done; echo; echo; echo "## Sources"; echo "- https://example.org/a"; } > "$P"; }
             echo "scratch line"; [ -n "${FAKE_SAY:-}" ] && echo "SAY: $FAKE_SAY"
             echo "RESULT: wrote $P with 80 words" ;;
@@ -252,6 +258,34 @@ OUT="$(GODSPEED_NOW=2026-09-15T19:01:00.000Z run --only "$C2" 2>&1)"
 contains "a step stopped a minute before its time is never run" "$OUT" "not runnable now"
 check "  and stays stopped" "$(status_of "$C2")" "cancelled"
 check "  no assistant ever saw it" "$([ -d "$TMP/routines/work/2026-09-15/$C2" ] && echo ran || echo never)" "never"
+
+# --- a repair mending a stand-in fault outside the folder, start to finish (2026-10-27) ----------
+# The fault that started all this was a file outside the folder: the server's nightly upgrade
+# script. Here a throwaway file in $OUTSIDE stands for it. The item carries as its CHECK the live
+# check that found the fault, the assistant keeps the file as it was before changing it, and the
+# item is closed by that check and by nothing else.
+FAULT="$OUTSIDE/etc/godspeed/nightly-upgrade.conf"
+mkdir -p "$(dirname "$FAULT")"
+printf 'upgrade=broken\n' > "$FAULT"
+hw file --what "Put the fixed nightly upgrade in place of the broken one" --done-when "the upgrade's own check passes again on this machine" --check "grep -q '^upgrade=fixed$' $FAULT" --kind repair --key mend --source test >/dev/null
+MEND="$(grep -l 'KEY: mend$' "$TMP/work"/W-*.md | head -1 | xargs basename | sed 's/.md$//')"
+OUT="$(FAKE_FIX="$FAULT" run --only "$MEND" 2>&1)"
+check "a stand-in fault outside the folder is mended: the file as it was is kept first" "$(cat "$TMP/routines/work/2026-09-15/$MEND/before/${FAULT#/}" 2>/dev/null)" "upgrade=broken"
+check "  the file outside the folder now holds the fix" "$(cat "$FAULT")" "upgrade=fixed"
+contains "  the item's own live check closed it" "$OUT" "$MEND verified"
+check "  so the register says verified" "$(status_of "$MEND")" "verified"
+contains "  naming the check that said so" "$(cat "$TMP/work/$MEND.md")" "VERIFIED check passed (grep -q '^upgrade=fixed\$' $FAULT)"
+contains "  and the run names the copy it kept" "$OUT" "$MEND kept 1 file(s) as they were before the repair"
+
+# A repair whose check still fails is not done: the fault is the deliverable, not the attempt.
+STILL="$OUTSIDE/etc/godspeed/other-upgrade.conf"
+printf 'upgrade=broken\n' > "$STILL"
+hw file --what "Put the other fixed upgrade in place" --done-when "that upgrade's own check passes again on this machine" --check "grep -q '^upgrade=fixed$' $STILL" --kind repair --key mend2 --source test >/dev/null
+MEND2="$(grep -l 'KEY: mend2$' "$TMP/work"/W-*.md | head -1 | xargs basename | sed 's/.md$//')"
+OUT="$(run --only "$MEND2" 2>&1)"
+contains "a repair whose live check still fails stays open" "$OUT" "attempted, not verified"
+check "  the item is not closed" "$(status_of "$MEND2")" "attempted"
+check "  and the fault outside the folder is untouched" "$(cat "$STILL")" "upgrade=broken"
 
 echo
 echo "$PASS passed, $FAIL failed"
