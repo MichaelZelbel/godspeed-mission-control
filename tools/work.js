@@ -376,6 +376,15 @@ cmds.file = (a) => {
     const why = checkProblem(oneLine(a.check));
     if (why) die(`--check "${oneLine(a.check)}" cannot verify this step: ${why}. Write one shell line that exits 0 only when the step is done, for example: ${CHECK_EXAMPLE}`);
   }
+  // A REPAIR IS CLOSED BY ITS CHECK, SO ITS CHECK MUST LOOK AT SOMETHING (2026-10-27). A repair
+  // changes a program outside this folder and is then closed by running its CHECK live. A line
+  // that looks at nothing (`true`, `:`, `echo ok`, and a bare --check, which reads as the word
+  // true) passes whatever happened, so it would close the card on a machine still broken: the very
+  // thing this kind of item exists to stop. The same rule has held for a step that goes out on a
+  // standing permission since 13 October.
+  if (kind === 'repair' && a.check !== undefined && oneLine(a.check) && !looksAtSomething(oneLine(a.check))) {
+    die(`a repair is closed by its --check, run live after the change, so the check must look at the thing it repaired (a file, a command, a service): "${oneLine(a.check)}" passes whatever happened, so it checks nothing`);
+  }
   // UNDER A STANDING PERMISSION (2026-10-12): the goal card's MAY line for this kind is the yes,
   // up to its weekly limit. Counted are the steps filed on that permission in the seven days to
   // this one, not the ones stopped; past the limit the step waits for a fresh yes like any other.

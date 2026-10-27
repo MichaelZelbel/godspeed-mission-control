@@ -46,8 +46,13 @@ case "${FAKE_MODE:-ok}" in
             [ -n "${FAKE_BEFORE:-}" ] && printf '%s\n' "$FAKE_BEFORE" > "$(dirname "$OUT")/before.txt"
             [ -n "${FAKE_KEEP:-}" ] && { mkdir -p "$(dirname "$OUT")/before/$(dirname "$FAKE_KEEP")"; printf 'as it was\n' > "$(dirname "$OUT")/before/$FAKE_KEEP"; }
             # FAKE_FIX is a repair done the way the prompt asks: the file outside the folder is
-            # copied whole under before/, keeping its path, and only then changed.
-            [ -n "${FAKE_FIX:-}" ] && { KEPT="$(dirname "$OUT")/before/${FAKE_FIX#/}"; mkdir -p "$(dirname "$KEPT")"; cp "$FAKE_FIX" "$KEPT"; printf 'upgrade=fixed\n' > "$FAKE_FIX"; }
+            # copied whole under before/, keeping its path, and only then changed. FAKE_HALF keeps
+            # the copy and changes the file, but not the line the fault is in. FAKE_COPY keeps a
+            # faithful copy of a file and changes nothing in it.
+            keep_copy() { KEPT="$(dirname "$OUT")/before/${1#/}"; mkdir -p "$(dirname "$KEPT")"; cp "$1" "$KEPT"; }
+            [ -n "${FAKE_FIX:-}" ] && { keep_copy "$FAKE_FIX"; printf 'upgrade=fixed\n' > "$FAKE_FIX"; }
+            [ -n "${FAKE_HALF:-}" ] && { keep_copy "$FAKE_HALF"; sed -i 's/^comment=old$/comment=new/' "$FAKE_HALF"; }
+            [ -n "${FAKE_COPY:-}" ] && keep_copy "$FAKE_COPY"
             [ -n "$P" ] && { mkdir -p "$(dirname "$P")"; { echo "# Answer"; for i in $(seq 1 80); do printf 'word%s ' "$i"; done; echo; echo; echo "## Sources"; echo "- https://example.org/a"; } > "$P"; }
             echo "scratch line"; [ -n "${FAKE_SAY:-}" ] && echo "SAY: $FAKE_SAY"
             echo "RESULT: wrote $P with 80 words" ;;
@@ -276,18 +281,20 @@ contains "  the item's own live check closed it" "$OUT" "$MEND verified"
 check "  so the register says verified" "$(status_of "$MEND")" "verified"
 contains "  naming the check that said so" "$(cat "$TMP/work/$MEND.md")" "VERIFIED check passed (grep -q '^upgrade=fixed\$' $FAULT)"
 contains "  and the run names the copy it kept" "$OUT" "$MEND kept 1 file(s) as they were before the repair"
+contains "  and names the file it changed, which that copy puts back" "$OUT" "$MEND changed $FAULT, and the copy that puts it back is under"
 
 # A repair whose check still fails is not done: the fault is the deliverable, not the attempt.
-# This assistant copies the file as it was and then leaves it alone, the way the five runs of
-# October 2026 did, and says it is done anyway.
+# This assistant keeps its copy and does change the file, but it changes the wrong line and leaves
+# the fault where it was, then says it is done.
 STILL="$OUTSIDE/etc/godspeed/other-upgrade.conf"
-printf 'upgrade=broken\n' > "$STILL"
+printf 'upgrade=broken\ncomment=old\n' > "$STILL"
 hw file --what "Put the other fixed upgrade in place" --done-when "that upgrade's own check passes again on this machine" --check "grep -q '^upgrade=fixed$' $STILL" --kind repair --key mend2 --source test >/dev/null
 MEND2="$(grep -l 'KEY: mend2$' "$TMP/work"/W-*.md | head -1 | xargs basename | sed 's/.md$//')"
-OUT="$(FAKE_KEEP="${STILL#/}" run --only "$MEND2" 2>&1)"
+OUT="$(FAKE_HALF="$STILL" run --only "$MEND2" 2>&1)"
 contains "a repair whose live check still fails stays open" "$OUT" "attempted, not verified"
 check "  the item is not closed" "$(status_of "$MEND2")" "attempted"
-check "  and the fault outside the folder is untouched" "$(cat "$STILL")" "upgrade=broken"
+check "  and the fault outside the folder is untouched" "$(grep -c '^upgrade=broken$' "$STILL")" "1"
+check "  though the file was changed, and the copy that puts it back was kept" "$(grep -c '^comment=new$' "$STILL")" "1"
 
 # NO UNDO, NOT DONE, FOR A REPAIR TOO (2026-10-27). The copy is the only way back from a change
 # outside the folder, so a repair that kept none is failed even when its own check passes.
@@ -302,7 +309,23 @@ check "a repair that kept no copy of what it changed is recorded failed" "$(stat
 contains "  with the reason" "$(cat "$TMP/work/$MEND3.md")" "no UNDO: nothing was copied under routines/work/2026-09-15/$MEND3/before/"
 missing "  and no ATTEMPTED line, so the check never closed it" "$(cat "$TMP/work/$MEND3.md")" " ATTEMPTED "
 contains "  the run says so" "$OUT" "$MEND3 failed: no UNDO"
-contains "  and the prompt had warned it" "$(cat "$TMP/routines/work/2026-09-15/$MEND3/prompt-seen.txt")" "With nothing in that folder this item is recorded as failed"
+contains "  and the prompt had warned it" "$(cat "$TMP/routines/work/2026-09-15/$MEND3/prompt-seen.txt")" "this item is recorded as failed, whatever it did and whatever its check says"
+
+# A COPY OF SOMETHING ELSE IS NOT AN UNDO (2026-10-27). This assistant keeps a faithful copy of a
+# file it never touches, changes the installed one it never copied, and its own check passes on it.
+SNEAK="$OUTSIDE/etc/godspeed/fourth-upgrade.conf"
+BYSTANDER="$OUTSIDE/etc/godspeed/unrelated.conf"
+printf 'upgrade=broken\n' > "$SNEAK"
+printf 'nothing to do with the fault\n' > "$BYSTANDER"
+hw file --what "Put the fourth fixed upgrade in place" --done-when "that upgrade's own check passes again on this machine" --check "grep -q '^repaired$' $SNEAK" --kind repair --key mend4 --source test >/dev/null
+MEND4="$(grep -l 'KEY: mend4$' "$TMP/work"/W-*.md | head -1 | xargs basename | sed 's/.md$//')"
+OUT="$(FAKE_COPY="$BYSTANDER" FAKE_TOUCH="$SNEAK" run --only "$MEND4" 2>&1)"
+check "  (this one kept a copy, of a file it left alone)" "$(cat "$TMP/routines/work/2026-09-15/$MEND4/before/${BYSTANDER#/}")" "nothing to do with the fault"
+check "  and changed the installed file it never copied" "$(cat "$SNEAK")" "repaired"
+check "a repair whose copy is of some other file is recorded failed" "$(status_of "$MEND4")" "failed"
+contains "  with the reason" "$(cat "$TMP/work/$MEND4.md")" "no UNDO: nothing under routines/work/2026-09-15/$MEND4/before/ is a copy of a file this repair changed"
+missing "  and no ATTEMPTED line, so its passing check never closed it" "$(cat "$TMP/work/$MEND4.md")" " ATTEMPTED "
+contains "  the prompt had warned it too" "$(cat "$TMP/routines/work/2026-09-15/$MEND4/prompt-seen.txt")" "a copy of something you left alone counts for nothing"
 
 echo
 echo "$PASS passed, $FAIL failed"

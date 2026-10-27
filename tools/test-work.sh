@@ -171,6 +171,15 @@ OUT="$(hw file --what "Tell the host about the fault" --done-when "the host has 
 contains "  and says why" "$OUT" "never outward"
 check "  and files nothing" "$(idof rep-out)" "none"
 OUT="$(hw help 2>&1)"; contains "help names the repair kind" "$OUT" "--kind do|learn|repair"
+# A REPAIR IS CLOSED BY ITS CHECK, SO ITS CHECK MUST LOOK AT SOMETHING (2026-10-27). `true` run
+# after a change to an installed program would close the card on a machine still broken.
+OUT="$(hw file --what "Mend the nightly upgrade" --done-when "its own check passes again on this machine" --check "true" --kind repair --key rep-blind --source test 2>&1)"; check "a repair whose check looks at nothing is refused" "$?" "1"
+contains "  and says why" "$OUT" "the check must look at the thing it repaired"
+check "  and files nothing" "$(idof rep-blind)" "none"
+OUT="$(hw file --what "Mend it" --done-when "its own check passes again" --check "echo ok" --kind repair --key rep-echo --source test 2>&1)"; check "  the same for a check that only prints" "$?" "1"
+OUT="$(hw file --what "Mend it" --done-when "its own check passes again" --check --kind repair --key rep-bare --source test 2>&1)"; check "  and for a bare --check, which reads as the word true" "$?" "1"
+OUT="$(hw file --what "Mend the nightly upgrade" --done-when "its own check passes again on this machine" --check "grep -q '^upgrade=fixed\$' /etc/example/upgrade.conf" --kind repair --key rep-looks --source test 2>&1)"; contains "a repair whose check reads the file it repaired is filed" "$OUT" ": planned"
+OUT="$(hw file --what "Mend the other thing" --done-when "it works again" --kind repair --key rep-nocheck --source test 2>&1)"; contains "a repair with no check at all still files (its run can never close it)" "$OUT" ": planned"
 
 # --- sweep by goal, check ---------------------------------------------------------------------------
 hw file --what "Write the chapter" --done-when "chapter in the manuscript" --key chapter --goal book --source test >/dev/null

@@ -259,7 +259,7 @@ while IFS=$'\t' read -r ID KIND WHAT; do
       echo
       echo "## This item is a machine repair"
       echo "It mends the mission control's own machinery on this computer: the fault WHAT names. For this item, and only for it, you may change files outside $GODSPEED: the ones the mission control itself installed or runs here (its scheduled scripts and programs, and their settings), and only as far as repairing that fault needs."
-      echo "Before you change such a file, copy it whole under routines/work/$TODAY/$ID/before/, keeping its full path beneath that folder (/etc/example/job.conf goes to routines/work/$TODAY/$ID/before/etc/example/job.conf), so it can be put back. With nothing in that folder this item is recorded as failed, whatever it did and whatever its check says, because what it changed could not be put back. Never touch a password, a key or a token, an account, a payment, or anything that reaches another person."
+      echo "Before you change such a file, copy it whole under routines/work/$TODAY/$ID/before/, keeping its full path beneath that folder (/etc/example/job.conf goes to routines/work/$TODAY/$ID/before/etc/example/job.conf), so it can be put back. Unless that folder holds a copy of a file you then changed, at that file's own full path, this item is recorded as failed, whatever it did and whatever its check says, because what it changed could not be put back: a copy of something you left alone counts for nothing. Never touch a password, a key or a token, an account, a payment, or anything that reaches another person."
       echo "Then prove the fault is gone: run again, live, the check that found it, and quote what it says now. A repair written down for later (a note, a file of steps, a card saying what someone should change) is not a repair. If you cannot make the change from here, end with RESULT: FAILED and say what it needs."
     fi
     echo
@@ -340,6 +340,31 @@ while IFS=$'\t' read -r ID KIND WHAT; do
     reg work attempt "$ID" --runner "$RUNNER_NAME" --failed "$WHY" 2>&1 | sed 's/^/  /'
     log "$ID failed: $WHY"
     continue
+  fi
+  # A COPY OF SOMETHING ELSE PUTS NOTHING BACK (2026-10-27). The gate above only asks that the
+  # folder is not empty, so a run could copy some file it never touched, change an installed
+  # program without keeping it, pass its own check and close the item, leaving nothing to put back.
+  # A copy is an UNDO only where the prompt says to put it, at before/<the file's full path>, and
+  # only when what it holds is no longer what is at that path: that is the run showing it kept the
+  # file it then changed. Nothing inside this folder can see the whole machine, so this proves the
+  # copy that was kept; it cannot prove that nothing else was touched.
+  if [ "$KIND" = "repair" ]; then
+    PUT_BACK=""
+    while IFS= read -r COPY; do
+      [ -n "$COPY" ] || continue
+      LIVE="/${COPY#"$ITEMDIR/before/"}"
+      [ -f "$LIVE" ] || continue
+      cmp -s "$COPY" "$LIVE" || { PUT_BACK="$LIVE"; break; }
+    done <<KEPT_COPIES
+$(find "$ITEMDIR/before" -type f 2>/dev/null)
+KEPT_COPIES
+    if [ -z "$PUT_BACK" ]; then
+      WHY="no UNDO: nothing under routines/work/$TODAY/$ID/before/ is a copy of a file this repair changed, so what it changed cannot be put back; each copy belongs at before/<the file's full path>; check this machine by hand"
+      reg work attempt "$ID" --runner "$RUNNER_NAME" --failed "$WHY" 2>&1 | sed 's/^/  /'
+      log "$ID failed: $WHY"
+      continue
+    fi
+    log "$ID changed $PUT_BACK, and the copy that puts it back is under routines/work/$TODAY/$ID/before/"
   fi
   RESULT="$(printf '%s' "$RESULT_LINE" | sed 's/^RESULT: *//' | cut -c1-300)"
   SAY="$(grep -a '^SAY:' "$ITEMDIR/answer.txt" 2>/dev/null | tail -1 | tr -d '\r' | sed 's/^SAY: *//' | cut -c1-300)"
