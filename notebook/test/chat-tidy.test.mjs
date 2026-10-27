@@ -200,12 +200,14 @@ test('a resume that answers with another conversation compresses nothing',needs,
 });
 
 test('a chat the assistant reports as running, or a busy status, is left alone',needs,async t=>{
- const chat=home(t,{plan:{'session.resume':resumed({running:true}),'session.compress':compressed,'session.close':{closed:true}}});
- const {code,log}=chat.run();
- assert.equal(code,0,log);
- assert.match(log,/skip: conversation busy/);
- assert.ok(!chat.asked().some(a=>a.method==='session.compress'));
- assert.deepEqual(chat.asked().map(a=>a.method),['session.resume','session.close']);
+ for(const busy of [{running:true},{status:'working'},{inflight:{user:'a message still being answered'}}]){
+  const chat=home(t,{plan:{'session.resume':resumed(busy),'session.compress':compressed,'session.close':{closed:true}}});
+  const {code,log}=chat.run();
+  assert.equal(code,0,log);
+  assert.match(log,/skip: conversation busy/,JSON.stringify(busy));
+  assert.ok(!chat.asked().some(a=>a.method==='session.compress'));
+  assert.deepEqual(chat.asked().map(a=>a.method),['session.resume','session.close']);
+ }
 });
 
 test('a control channel that does not answer ends with the conversation closed and a failing exit',needs,async t=>{
@@ -282,7 +284,8 @@ test('the assistant\'s own terminal is no chat app: its conversations beside the
 test('beside a running gateway it attaches to it, as the assistant\'s own terminal does, and sends the same requests',needs,async t=>{
  // The gateway names the stored conversation it opened stored_session_id, and has no close for a
  // viewer (the installed one answered both so on 27 October 2026).
- const opened={session_id:'live-1',stored_session_id:CHAT,status:'idle',message_count:320};
+ // A conversation it rebuilt from storage it gives no status at all.
+ const opened={session_id:'live-1',stored_session_id:CHAT,message_count:320};
  const chat=home(t,{gateway:true,plan:{'session.resume':opened,'session.compress':compressed,'session.close':{error:'unknown_method'}}});
  const {code,said,log}=chat.run();
  assert.equal(code,0,log);

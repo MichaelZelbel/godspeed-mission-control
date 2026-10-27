@@ -901,8 +901,13 @@ def chat_tidy(c):
         opened = res.get("resumed") or res.get("stored_session_id")
         if opened != target or not sid:
             fail("Resume opened %r, not %r; stopping." % (opened, target))
-        if res.get("running") or res.get("inflight") or res.get("status") != "idle":
-            chat_log("skip: conversation busy (status %s)" % res.get("status"))
+        # Busy is what the answer says it is: a turn running or in flight, or a status other than
+        # idle. The running gateway gives a conversation it rebuilt from storage no status at all;
+        # the routine has already seen it quiet for half an hour with no turn open, and the
+        # assistant summarises only an idle conversation, under its own lock.
+        status = res.get("status")
+        if res.get("running") or res.get("inflight") or status not in (None, "idle"):
+            chat_log("skip: conversation busy (status %s)" % status)
             return ""
         if a.dry_run:
             chat_log("dry run: would summarise %s (%s messages loaded)" % (target, res.get("message_count")))
