@@ -481,11 +481,16 @@ else
   bad "a chat could not be seeded beside a titled conversation of the assistant's own"
 fi
 counted=$(node "$ROOT/scenarios/night-tidy-chat.mjs" --home "$C/home" count --session scenario-chat-1 2>/dev/null)
-[ "$counted" = "messages=40 tokens=174000" ] && ok "the seeded chat holds its 40 messages and its size" ||
+if [ "$counted" = "messages=40 tokens=174000" ]; then
+  ok "the seeded chat holds its 40 messages and its size"
+else
   bad "the seeded chat holds $counted, not messages=40 tokens=174000"
-[ "$(sql "select count(*) from sessions where id = 'first' and title = 'Hello'")" = 1 ] &&
-  ok "the assistant's own conversation is still there, with its title" ||
+fi
+if [ "$(sql "select count(*) from sessions where id = 'first' and title = 'Hello'")" = 1 ]; then
+  ok "the assistant's own conversation is still there, with its title"
+else
   bad "the assistant's own conversation is gone or lost its title after the seed"
+fi
 
 # ============================================================ every one of them, the same shape
 section 'every script'
