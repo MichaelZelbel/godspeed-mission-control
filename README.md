@@ -8,6 +8,16 @@ A new release comes out most weeks. I write about what my AI does for me and wha
 
 Version 2 is the current edition. The lines below install the current public version, which is the branch `beta` of this repository; `main` is where the work goes on, and a change merged into it reaches nobody until the next version is released. The installers set up a new, separate folder. They do not move an existing version 1 Godspeed folder or your Menerio account.
 
+## New in 2.0.0-beta.9
+
+Three faults readers ran into are fixed.
+
+- **Folders in your notes.** Making, renaming and moving a folder in **Notes** works, and the folder is still there after you reload the page, with its notes. Until now it ended in an error.
+- **Skills you save in the chat.** When you ask your assistant to save something as a skill, it lands in your mission control's `skills` folder, so it reaches your GitHub copy, your other computers and **Godspeed's brain**. Until now it went into the assistant's own folder, where none of them saw it. Updating moves the skills you saved there before into your `skills` folder, after keeping a copy of them in your backups.
+- **"Open my notebook" on Windows.** The Start menu entry starts the notebook when it is not running yet and opens it when it is ready, instead of showing "This site can't be reached". Typing "Open my notebook" into Start search now finds it. When it cannot open the notebook, it says why in plain words.
+
+Updating keeps your folder, notes and settings.
+
 ## New in 2.0.0-beta.8
 
 The chat answers faster. In Telegram the answer appears while it is written, in one message that grows, and no "let me check" lines are left behind.
