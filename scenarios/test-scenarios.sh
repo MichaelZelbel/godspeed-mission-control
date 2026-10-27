@@ -486,6 +486,11 @@ if [ "$counted" = "messages=40 tokens=174000" ]; then
 else
   bad "the seeded chat holds $counted, not messages=40 tokens=174000"
 fi
+if [ "$(sql "select source from sessions where id = 'scenario-chat-1'")" = telegram ]; then
+  ok "the seeded chat is a chat app's chat, not the terminal conversation it took its shape from"
+else
+  bad "the seeded chat says it is $(sql "select source from sessions where id = 'scenario-chat-1'"), not telegram"
+fi
 if [ "$(sql "select count(*) from sessions where id = 'first' and title = 'Hello'")" = 1 ]; then
   ok "the assistant's own conversation is still there, with its title"
 else
