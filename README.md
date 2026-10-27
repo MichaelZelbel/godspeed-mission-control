@@ -8,6 +8,16 @@ A new release comes out most weeks. I write about what my AI does for me and wha
 
 Version 2 is the current edition. The lines below install the current public version, which is the branch `beta` of this repository; `main` is where the work goes on, and a change merged into it reaches nobody until the next version is released. The installers set up a new, separate folder. They do not move an existing version 1 Godspeed folder or your Menerio account.
 
+## New in 2.0.0-beta.10
+
+The installers stop asking things they should not.
+
+- **No install note.** No installer asks any more whether it may send an anonymous note that the install worked, and none sends one. The next time a server set up earlier is updated, it loses the job that sent a second note with the first morning brief.
+- **No browser question when you update on Windows.** Updating never shows the **Your browser** page or the page that asks for a connection code, and a computer keeps its browser connection as it is. A new install does not ask either.
+- **A true word about email.** At the end, the installer on Windows, a Mac or a Linux computer names the mailbox your mission control is connected to, or says that email is optional and how to connect it, or says nothing when it cannot tell. Its notes, the deadlines README it writes and the mail tool's messages no longer name a book chapter; where a pointer helps, they give the page of the guide.
+
+Updating keeps your folder, notes and settings.
+
 ## New in 2.0.0-beta.9
 
 Three faults readers ran into are fixed.
