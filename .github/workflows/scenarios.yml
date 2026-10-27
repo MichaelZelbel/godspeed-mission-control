@@ -267,6 +267,11 @@ jobs:
     needs: stage
     runs-on: ubuntu-24.04
     timeout-minutes: 120
+    # The owner's chat history is a conversation with the assistant, which needs an AI.
+    env:
+      GODSPEED_SCENARIO_AI_KEY: ${{ secrets.GODSPEED_SCENARIO_AI_KEY }}
+      GODSPEED_SCENARIO_AI_URL: ${{ vars.GODSPEED_SCENARIO_AI_URL }}
+      GODSPEED_SCENARIO_AI_MODEL: ${{ vars.GODSPEED_SCENARIO_AI_MODEL }}
     steps:
       - uses: actions/checkout@v4
         with:

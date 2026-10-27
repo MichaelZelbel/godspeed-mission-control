@@ -54,19 +54,33 @@ Settings files are read by a small reader of these scripts' own (`config_value` 
 `scenario-lib.sh`), not by importing the product's own reader, so a scenario is never the change
 checking itself.
 
-## The keys two of them need
+## The keys three of them need
 
 Named by the job, never in a file here:
 
 | scenario | environment | what it is |
 | --- | --- | --- |
 | `night-tidy` | `GODSPEED_SCENARIO_AI_KEY` | summarising a chat needs an AI model; `GODSPEED_SCENARIO_AI_URL` and `GODSPEED_SCENARIO_AI_MODEL` say which |
+| `update-keeps-everything` | `GODSPEED_SCENARIO_AI_KEY` | the owner's chat with the assistant needs one too; the same two say which |
 | `voice` | `ELEVENLABS_TEST_KEY_STT` | a test key ElevenLabs lets transcribe |
 | `voice` | `ELEVENLABS_TEST_KEY_NO_STT` | a test key it refuses that permission |
 
 `voice.sh` also takes `ELEVENLABS_TEST_VOICE_ID` (a public ElevenLabs voice by default) and sends
 `voice-note.wav`, the short recording kept beside it. No chat account of any kind is needed: the
 voice note goes through the two halves of the assistant that a voice note in a chat goes through.
+
+## Where they find the assistant, and its chat store
+
+The assistant's settings and its chat store are in its own home, which is the one the install
+recorded in `.godspeed/assistant.json`: `~/.hermes` on a stranger's machine, and
+`.godspeed/integrated-runtime/hermes` only on one installed beside another assistant (`--beside`).
+The scenarios read it from there after every run of a line (`assistant_home` in `scenario-lib.sh`)
+and never name a folder by hand.
+
+A fresh install has no chat store yet: the assistant makes `state.db` the first time it keeps a
+conversation. So the two scenarios that seed a chat have the assistant keep one conversation of its
+own first, through its own command and with the AI the scenario connected, and seed the chat beside
+it (`assistant_keeps_a_conversation`).
 
 ## The other files here
 

@@ -54,16 +54,24 @@ const tables=()=>new Set(db.prepare("select name from sqlite_master where type =
 const columns=name=>db.prepare('pragma table_info('+name+')').all();
 const newest=name=>{try{return db.prepare('select * from '+name+' order by rowid desc limit 1').get()||null;}catch{return null;}};
 
+// The columns a table keeps unique beside its key (the conversations' title has an index of its own).
+const uniqueColumns=name=>new Set(db.prepare('pragma index_list('+name+')').all()
+ .filter(index=>index.unique&&index.origin!=='pk')
+ .flatMap(index=>db.prepare('pragma index_info('+JSON.stringify(index.name)+')').all().map(column=>column.name)));
+
 // One row of a table the assistant owns: the newest row as its template, our own values over it,
-// and for a column neither of those names, what the column itself says it must hold.
+// and for a column neither of those names, what the column itself says it must hold. A column the
+// table keeps unique is never taken from the template: a row with the newest row's own title would
+// replace that row instead of standing beside it, which on 27 October 2026 took the assistant's own
+// first conversation out from under its messages ("FOREIGN KEY constraint failed").
 function write(name,mine){
- const template=newest(name)||{};
+ const template=newest(name)||{},unique=uniqueColumns(name);
  const row={};
  for(const column of columns(name)){
   const key=column.name;
   if(key in mine){row[key]=mine[key];continue;}                                      // what the scenario says
   if(column.pk)continue;                                                             // the store's own counting
-  if(template[key]!==null&&template[key]!==undefined){row[key]=template[key];continue;} // the newest row's own
+  if(template[key]!==null&&template[key]!==undefined&&!unique.has(key)){row[key]=template[key];continue;} // the newest row's own
   if(!column.notnull||column.dflt_value!==null)continue;                             // the store fills it itself
   row[key]=/INT|REAL|NUM|FLOA|DOUB/i.test(column.type||'')?0:'';                     // it must hold something
  }
@@ -97,18 +105,49 @@ function needOwnTables(){
  if(!have.has('session_turn_leases'))db.exec('create table session_turn_leases(conversation_id text, expires_at real)');
 }
 
+// WHICH CHAT IT IS. A stored conversation names the chat it belongs to - the routing key, the app,
+// the chat and the person, which the assistant calls its lane - in its own row and in the routing
+// table's entry. The newest rows are those of the conversation the assistant kept first, in its own
+// terminal, and taking them whole made the seeded chat claim that conversation's place: the running
+// assistant, asked to resume it, looked for the terminal conversation's own records and refused
+// ("storage_unavailable", 27 October 2026). The seeded chat is the owner's private chat in a chat
+// app, so its lane says that, in the newest rows' own shape; the second stored conversation is an
+// earlier one of the same chat, which the routing table no longer names.
+const APP='telegram';
+const shapeOf=text=>{try{const value=JSON.parse(text||'{}');return value&&typeof value==='object'&&!Array.isArray(value)?value:{};}catch{return {};}};
+function origin(template){
+ const shape=Object.fromEntries(Object.keys(shapeOf(template)).map(key=>[key,null]));
+ return {...shape,platform:APP,chat_id:ROUTED_CHAT,chat_type:'dm',user_id:ROUTED_CHAT};
+}
+function lane(routed){
+ return {source:APP,created_source:APP,session_key:routed?KEY:null,user_id:ROUTED_CHAT,chat_id:ROUTED_CHAT,
+  chat_type:'dm',thread_id:null,display_name:null,origin_json:JSON.stringify(origin(newest('sessions')?.origin_json)),
+  transport_profile:null};
+}
+function routeEntry(){
+ const shape=shapeOf(newest('gateway_routing')?.entry_json),entry={...shape,session_id:CHAT};
+ if('session_key' in shape)entry.session_key=KEY;
+ if('platform' in shape)entry.platform=APP;
+ if('chat_type' in shape)entry.chat_type='dm';
+ if('display_name' in shape)entry.display_name=null;
+ if('origin' in shape)entry.origin=origin(JSON.stringify(shape.origin));
+ if('last_prompt_tokens' in shape)entry.last_prompt_tokens=TOKENS;
+ return JSON.stringify(entry);
+}
+
 function seed(){
  needOwnTables();
  db.prepare('delete from gateway_routing where scope = ? and session_key = ?').run(SCOPE,KEY);
  db.prepare('delete from messages where session_id in (?,?)').run(CHAT,OTHER);
  for(const session of [CHAT,OTHER])db.prepare('delete from sessions where id = ?').run(session);
- write('sessions',{id:CHAT,model_config:configWith(CHAT,TOKENS),parent_session_id:null});
- write('sessions',{id:OTHER,model_config:configWith(OTHER,120000),parent_session_id:null});
+ const entry=routeEntry();
+ write('sessions',{id:CHAT,model_config:configWith(CHAT,TOKENS),parent_session_id:null,...lane(true)});
+ write('sessions',{id:OTHER,model_config:configWith(OTHER,120000),parent_session_id:null,...lane(false)});
  for(let i=0;i<MESSAGES;i++)write('messages',{session_id:CHAT,timestamp:stamp(QUIET*60+i*60),
   role:i%2?'assistant':'user',content:'A message of the owner\'s own chat, long enough to be worth summarising.'});
  for(let i=0;i<5;i++)write('messages',{session_id:OTHER,timestamp:stamp(5*3600+i*60),
   role:i%2?'assistant':'user',content:'A message of a second stored conversation, which nothing may touch.'});
- write('gateway_routing',{scope:SCOPE,session_key:KEY,entry_json:JSON.stringify({session_id:CHAT})});
+ write('gateway_routing',{scope:SCOPE,session_key:KEY,entry_json:entry});
  db.prepare('delete from session_turn_leases where conversation_id in (?,?)').run(CHAT,OTHER);
  process.stdout.write('seeded '+CHAT+': '+MESSAGES+' messages, '+TOKENS+' recorded tokens, quiet for '+QUIET+' min, routed as '+KEY+'\n');
 }

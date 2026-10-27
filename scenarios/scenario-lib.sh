@@ -99,8 +99,83 @@ install_paths() {
   ROOT=${GODSPEED_SCENARIO_ROOT:-$HOME/godspeed-v2}
   STATE=$ROOT/.godspeed
   RUNTIME=$STATE/integrated-runtime
-  HERMES=$RUNTIME/hermes
   NOTEBOOK_PORT=${GODSPEED_PORT:-47831}
+}
+
+# THE ASSISTANT'S OWN HOME, as the install recorded it. The installer keeps the assistant where the
+# shared installer put it, ~/.hermes on a stranger's machine, and makes one of its own in
+# .godspeed/integrated-runtime/hermes only when it was told to sit beside an assistant already
+# there (--beside, which is how the maintainer's own server was installed). Either way it writes
+# the home it wired into .godspeed/assistant.json, which is where the notebook itself looks for it.
+# Until 27 October 2026 the scenarios named the second folder by hand, so on a fresh machine they
+# looked for the settings and the chat store where no install of a stranger's puts them, and all
+# four failed on the candidate before they had seen anything. Read after every run of a line,
+# because an update is the one thing that could move it.
+assistant_home() {
+  local home
+  home=$(json_value "$STATE/assistant.json" home) ||
+    fail "the install recorded no home for its assistant ($STATE/assistant.json names none), so its settings and its chat store cannot be found"
+  [ -n "$home" ] && [ -d "$home" ] ||
+    fail "the install recorded '$home' as its assistant's home, and there is no such folder"
+  HERMES=$home
+  say "The assistant's home, as the install recorded it: $HERMES"
+}
+# What the assistant's home holds, for the step log, when something that should be in it is not.
+show_assistant_home() {
+  say "  the assistant's home ($HERMES) holds: $(find "$HERMES" -mindepth 1 -maxdepth 1 -printf '%f ' 2>/dev/null)"
+}
+
+# ------------------------------------------------------------- the AI, and the assistant's chat
+# The two scenarios that need the assistant's chat store need an AI as well, named by the job:
+#   GODSPEED_SCENARIO_AI_KEY    the key (the release step names the repository secret; without it: FAIL)
+#   GODSPEED_SCENARIO_AI_URL    the service's address, OpenRouter by default
+#   GODSPEED_SCENARIO_AI_MODEL  the model
+AI_URL=${GODSPEED_SCENARIO_AI_URL:-https://openrouter.ai/api/v1}
+AI_MODEL=${GODSPEED_SCENARIO_AI_MODEL:-anthropic/claude-sonnet-4.5}
+need_the_ai_key() { # <what it is needed for>
+  [ -n "${GODSPEED_SCENARIO_AI_KEY:-}" ] ||
+    fail "GODSPEED_SCENARIO_AI_KEY is not in this job's environment, and $1 needs an AI model, so this scenario cannot run"
+}
+# The AI connected the way Settings connects it (core/routine-ai.mjs writes it into the assistant's
+# own config.yaml and .env, which is where the assistant reads it), with the installed version's own
+# code.
+connect_the_ai() {
+  local version
+  version=$(cat "$RUNTIME/version") || fail "the install left no version file behind"
+  "$NODE" -e '
+const [module_,home,state,url,key,model]=process.argv.slice(1);
+import(require("url").pathToFileURL(module_).href).then(m=>{
+ m.connectRoutineAI({home,state,config:{url,key,model}});
+}).catch(error=>{console.error(error.message);process.exit(1);});
+' "$RUNTIME/versions/$version/notebook/core/routine-ai.mjs" "$HERMES" "$STATE" \
+    "$AI_URL" "$GODSPEED_SCENARIO_AI_KEY" "$AI_MODEL" ||
+    fail "the AI could not be connected to the assistant (model $AI_MODEL at $AI_URL)"
+  say "The assistant thinks with $AI_MODEL at $AI_URL"
+}
+
+# THE ASSISTANT'S OWN CHAT STORE, made by the assistant. A fresh install has none: the assistant
+# makes state.db the first time it keeps a conversation (the first message of a chat app, a chat
+# in its terminal), and a stranger's machine has had none yet; the candidate's run on 27 October
+# 2026 found its home without one after five minutes. The scenarios never make the store or its
+# tables themselves (night-tidy-chat.mjs says why), so the assistant keeps one conversation of its
+# own first, through its own command, with the AI connect_the_ai gave it: that is what makes the
+# store, its tables and one row of each the way the assistant itself writes them, which the chat
+# seeded afterwards takes as its template.
+assistant_keeps_a_conversation() { # <file for what it said>
+  local executable
+  executable=$(json_value "$STATE/assistant.json" executable) ||
+    fail "the install recorded no command for its assistant ($STATE/assistant.json names none), so it could keep no conversation"
+  say "The assistant keeps one conversation of its own, through its own command ($executable chat)"
+  (cd "$ROOT" && HERMES_HOME="$HERMES" timeout 600 "$executable" chat -q 'Reply with the single word Hello.' -Q </dev/null) \
+    >"$1" 2>&1
+  local code=$?
+  sed 's/^/  | /' "$1" >&2
+  [ "$code" -eq 0 ] ||
+    fail "the assistant could not keep a conversation with the AI connected to it (it ended $code; its words are in the step log), so it made no chat store"
+  [ -f "$HERMES/state.db" ] || {
+    show_assistant_home
+    fail "the assistant kept a conversation and made no chat store ($HERMES/state.db is not there), so no chat could be seeded"
+  }
 }
 
 # Node: the one the install carries (22.19, which has node:sqlite) before any other, so the

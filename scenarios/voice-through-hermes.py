@@ -20,6 +20,7 @@ ElevenLabs path and not through anything this script decided.
 Exit 0 when a transcript was written, 1 with one sentence on the error stream otherwise.
 """
 import argparse
+import importlib.util
 import inspect
 import json
 import os
@@ -101,6 +102,13 @@ def main():
 
     if a.source:
         sys.path.insert(0, a.source)
+    # Hermes 0.22 keeps no venv: its own packages are found only once its own bootstrap has run, as
+    # its launcher runs it, so its modules are loaded the same way here (the notebook's own helpers,
+    # notebook/assistant-files/chat-options.py and addon-model.py, do the same). Until 27 October
+    # 2026 this script skipped it, and on a fresh machine the assistant's transcription could not be
+    # loaded at all ("No module named 'ruamel'").
+    if importlib.util.find_spec("hermes_bootstrap") is not None:
+        import hermes_bootstrap  # noqa: F401
     if not os.path.isfile(a.audio):
         fail("the recording %s is not there" % a.audio)
 

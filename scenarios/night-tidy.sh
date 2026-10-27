@@ -15,7 +15,9 @@
 # that one run answers from scenarios/stand-in-channel.py - the routine's own command, the real
 # routine script, the real chat store, a stand-in only for the channel. The verdict says so.
 #
-# Summarising needs an AI model, so the job hands this scenario a key:
+# Summarising needs an AI model, and so does the one conversation the assistant keeps first to make
+# its own chat store (scenario-lib.sh, assistant_keeps_a_conversation), so the job hands this
+# scenario a key:
 #   GODSPEED_SCENARIO_AI_KEY    (the release step names the repository secret; without it: FAIL)
 #   GODSPEED_SCENARIO_AI_URL    the service's address, OpenRouter by default
 #   GODSPEED_SCENARIO_AI_MODEL  the model the summary is written with
@@ -39,30 +41,11 @@ ROUTINE='Night chat tidy-up'
 SCRIPT=godspeed-chat-tidy.py
 CHAT=scenario-chat-1
 OTHER=scenario-other-2
-AI_URL=${GODSPEED_SCENARIO_AI_URL:-https://openrouter.ai/api/v1}
-AI_MODEL=${GODSPEED_SCENARIO_AI_MODEL:-anthropic/claude-sonnet-4.5}
 
-# The AI the summary is written with, connected the way Settings connects it (core/routine-ai.mjs
-# writes it into the assistant's own config.yaml and .env, which is where the assistant reads it).
-connect_the_ai() {
-  local version
-  version=$(cat "$RUNTIME/version") || fail "the install left no version file behind"
-  "$NODE" -e '
-const [module_,home,state,url,key,model]=process.argv.slice(1);
-import(require("url").pathToFileURL(module_).href).then(m=>{
- m.connectRoutineAI({home,state,config:{url,key,model}});
-}).catch(error=>{console.error(error.message);process.exit(1);});
-' "$RUNTIME/versions/$version/notebook/core/routine-ai.mjs" "$HERMES" "$STATE" \
-    "$AI_URL" "$GODSPEED_SCENARIO_AI_KEY" "$AI_MODEL" ||
-    fail "the AI the summary is written with could not be connected to the assistant (model $AI_MODEL at $AI_URL)"
-  say "The assistant writes its summary with $AI_MODEL at $AI_URL"
-}
-
-# These two are asked by wait_for, which takes the command to try as its arguments.
+# Asked by wait_for, which takes the command to try as its arguments.
 # shellcheck disable=SC2329
 routine_is_there() { grep -qF "$ROUTINE" "$HERMES/cron/jobs.json" 2>/dev/null; }
 # The store is ready when the tables the assistant owns are there to be read.
-# shellcheck disable=SC2329
 chat_store_is_ready() { chat_store count --session "$CHAT" >/dev/null 2>&1; }
 
 # The routine, run the way the routine runs it: the small script file the notebook wrote, from the
@@ -84,26 +67,31 @@ run_the_routine() { # <scripts folder> <name for the evidence> [extra environmen
 }
 
 act() {
-  [ -n "${GODSPEED_SCENARIO_AI_KEY:-}" ] ||
-    fail "GODSPEED_SCENARIO_AI_KEY is not in this job's environment, and summarising a chat needs an AI model, so this scenario cannot run"
+  need_the_ai_key "summarising a chat"
   fresh_evidence
   install_paths
   install_the_stage_line "$EVIDENCE/install-trace.log"
   need_node
+  assistant_home
   connect_the_ai
 
-  wait_for 300 "the assistant's own chat store" chat_store_is_ready ||
-    fail "the install left the assistant no chat store ($HERMES/state.db), so no chat could be seeded"
+  assistant_keeps_a_conversation "$EVIDENCE/first-conversation.txt"
+  chat_store_is_ready ||
+    fail "the assistant's own chat store holds no conversations and messages to seed a chat beside ($HERMES/state.db)"
   say "Seeding a chat of the owner's own: above 60,000 recorded tokens, quiet for an hour"
   chat_store seed --session "$CHAT" --other "$OTHER" --tokens 174000 --quiet-minutes 60 --messages 40 >&2 ||
     fail "a chat of the owner's own could not be seeded into the assistant's chat store (its own message says why)"
 
-  wait_for 480 "the notebook to make the routine \"$ROUTINE\"" routine_is_there ||
+  wait_for 480 "the notebook to make the routine \"$ROUTINE\"" routine_is_there || {
+    show_assistant_home
     fail "the notebook never made the routine \"$ROUTINE\" on this install, although the assistant has a chat app"
+  }
   [ -f "$HERMES/scripts/$SCRIPT" ] ||
     fail "the routine is there but its script is not ($HERMES/scripts/$SCRIPT)"
 
   chat_store routing >"$EVIDENCE/routing-before.txt"
+  say "The assistant's routing table, as the routine reads it:"
+  sed 's/^/  | /' "$EVIDENCE/routing-before.txt" >&2
   chat_store dump --session "$OTHER" >"$EVIDENCE/other-before.txt"
   chat_store count --session "$CHAT" >"$EVIDENCE/chat-before.txt"
   run_the_routine "$HERMES/scripts" summarised
