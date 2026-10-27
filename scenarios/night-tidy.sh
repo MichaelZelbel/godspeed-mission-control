@@ -90,16 +90,21 @@ act() {
   install_paths
   install_the_stage_line "$EVIDENCE/install-trace.log"
   need_node
+  assistant_home
   connect_the_ai
 
-  wait_for 300 "the assistant's own chat store" chat_store_is_ready ||
+  wait_for 300 "the assistant's own chat store" chat_store_is_ready || {
+    show_assistant_home
     fail "the install left the assistant no chat store ($HERMES/state.db), so no chat could be seeded"
+  }
   say "Seeding a chat of the owner's own: above 60,000 recorded tokens, quiet for an hour"
   chat_store seed --session "$CHAT" --other "$OTHER" --tokens 174000 --quiet-minutes 60 --messages 40 >&2 ||
     fail "a chat of the owner's own could not be seeded into the assistant's chat store (its own message says why)"
 
-  wait_for 480 "the notebook to make the routine \"$ROUTINE\"" routine_is_there ||
+  wait_for 480 "the notebook to make the routine \"$ROUTINE\"" routine_is_there || {
+    show_assistant_home
     fail "the notebook never made the routine \"$ROUTINE\" on this install, although the assistant has a chat app"
+  }
   [ -f "$HERMES/scripts/$SCRIPT" ] ||
     fail "the routine is there but its script is not ($HERMES/scripts/$SCRIPT)"
 

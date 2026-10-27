@@ -99,8 +99,30 @@ install_paths() {
   ROOT=${GODSPEED_SCENARIO_ROOT:-$HOME/godspeed-v2}
   STATE=$ROOT/.godspeed
   RUNTIME=$STATE/integrated-runtime
-  HERMES=$RUNTIME/hermes
   NOTEBOOK_PORT=${GODSPEED_PORT:-47831}
+}
+
+# THE ASSISTANT'S OWN HOME, as the install recorded it. The installer keeps the assistant where the
+# shared installer put it, ~/.hermes on a stranger's machine, and makes one of its own in
+# .godspeed/integrated-runtime/hermes only when it was told to sit beside an assistant already
+# there (--beside, which is how the maintainer's own server was installed). Either way it writes
+# the home it wired into .godspeed/assistant.json, which is where the notebook itself looks for it.
+# Until 27 October 2026 the scenarios named the second folder by hand, so on a fresh machine they
+# looked for the settings and the chat store where no install of a stranger's puts them, and all
+# four failed on the candidate before they had seen anything. Read after every run of a line,
+# because an update is the one thing that could move it.
+assistant_home() {
+  local home
+  home=$(json_value "$STATE/assistant.json" home) ||
+    fail "the install recorded no home for its assistant ($STATE/assistant.json names none), so its settings and its chat store cannot be found"
+  [ -n "$home" ] && [ -d "$home" ] ||
+    fail "the install recorded '$home' as its assistant's home, and there is no such folder"
+  HERMES=$home
+  say "The assistant's home, as the install recorded it: $HERMES"
+}
+# What the assistant's home holds, for the step log, when something that should be in it is not.
+show_assistant_home() {
+  say "  the assistant's home ($HERMES) holds: $(cd "$HERMES" 2>/dev/null && ls -A | tr '\n' ' ')"
 }
 
 # Node: the one the install carries (22.19, which has node:sqlite) before any other, so the

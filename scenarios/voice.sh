@@ -107,13 +107,15 @@ act() {
   install_paths
   install_the_stage_line "$EVIDENCE/install-trace.log"
   need_node
+  assistant_home
   wait_for 120 "the notebook to answer" notebook_answers ||
     fail "the notebook does not answer on this install, so Settings could not be used at all"
 
   say "The key that may transcribe, saved in Settings the way a person saves it"
   save_the_key "$ELEVENLABS_TEST_KEY_STT" may
   settings_voice "$EVIDENCE/may-status.json"
-  cp "$HERMES/config.yaml" "$EVIDENCE/may-config.yaml"
+  cp "$HERMES/config.yaml" "$EVIDENCE/may-config.yaml" ||
+    fail "the assistant has no settings file after Settings kept the key ($HERMES/config.yaml is not there)"
 
   local found python source extra=()
   found=$(assistant_python) || fail "the assistant's own Python could not be found on this install"
@@ -131,7 +133,8 @@ act() {
   say "The key that may not transcribe, saved the way a person replaces their key"
   save_the_key "$ELEVENLABS_TEST_KEY_NO_STT" maynot
   settings_voice "$EVIDENCE/maynot-status.json"
-  cp "$HERMES/config.yaml" "$EVIDENCE/maynot-config.yaml"
+  cp "$HERMES/config.yaml" "$EVIDENCE/maynot-config.yaml" ||
+    fail "the assistant has no settings file after Settings kept the second key ($HERMES/config.yaml is not there)"
 }
 
 check() { # <evidence folder>
