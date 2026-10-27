@@ -414,6 +414,42 @@ printf '000\n' >"$U/silent/health.txt"
 refuses "a notebook that does not answer after the update" update-keeps-everything "$U/silent" \
   "answered 000 on its own address"
 
+# ================================================================== the assistant's own home
+# Where the acting parts look for the assistant's settings and chat store: the home the install
+# recorded in .godspeed/assistant.json (scenario-lib.sh, assistant_home), never a folder named by
+# hand. Until 27 October 2026 they named .godspeed/integrated-runtime/hermes, which only an install
+# beside another assistant makes, and all four failed on a stranger's machine.
+section "the assistant's home"
+H=$TMP/home
+home_of() { # <state folder>: what assistant_home makes of it, its last line and its code
+  OUT=$(SCENARIO=home STATE=$1 NODE=$(command -v node) bash -c '. "$0" && assistant_home && printf "%s\n" "$HERMES"' \
+    "$ROOT/scenarios/scenario-lib.sh" 2>/dev/null)
+  CODE=$?
+  OUT=$(printf '%s\n' "$OUT" | tail -n 1)
+}
+mkdir -p "$H/recorded/state" "$H/recorded/.hermes"
+printf '{"verified":true,"executable":"/usr/local/bin/hermes","home":"%s"}\n' "$H/recorded/.hermes" \
+  >"$H/recorded/state/assistant.json"
+home_of "$H/recorded/state"
+if [ "$CODE" = 0 ] && [ "$OUT" = "$H/recorded/.hermes" ]; then
+  ok "the assistant's home is the one the install recorded"
+else
+  bad "the assistant's home is not the one the install recorded (exit $CODE: $OUT)"
+fi
+mkdir -p "$H/none/state"
+home_of "$H/none/state"
+case "$CODE $OUT" in
+  "1 FAIL home: the install recorded no home for its assistant"*) ok "an install that recorded no home is one FAIL line" ;;
+  *) bad "an install that recorded no home was not one FAIL line (exit $CODE: $OUT)" ;;
+esac
+mkdir -p "$H/gone/state"
+printf '{"verified":true,"home":"%s"}\n' "$H/gone/.hermes" >"$H/gone/state/assistant.json"
+home_of "$H/gone/state"
+case "$CODE $OUT" in
+  "1 FAIL home: "*"there is no such folder") ok "a recorded home that is not there is one FAIL line" ;;
+  *) bad "a recorded home that is not there was not one FAIL line (exit $CODE: $OUT)" ;;
+esac
+
 # ============================================================ every one of them, the same shape
 section 'every script'
 for file in scenario-lib.sh settings-on-install.sh night-tidy.sh voice.sh update-keeps-everything.sh \

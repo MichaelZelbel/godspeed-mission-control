@@ -10,6 +10,11 @@
 # Twice, because an update that is run again is what a person does when they are not sure the first
 # one finished, and because "exactly once" is only worth checking after the second run.
 #
+# The owner's chat history is a conversation they had with the assistant, which is also what makes
+# the assistant's chat store at all (scenario-lib.sh, assistant_keeps_a_conversation), so the job
+# hands this scenario an AI as well: GODSPEED_SCENARIO_AI_KEY (without it: FAIL), and
+# GODSPEED_SCENARIO_AI_URL and GODSPEED_SCENARIO_AI_MODEL, as night-tidy.sh takes them.
+#
 #   bash scenarios/update-keeps-everything.sh candidate/2.0.0-beta.8
 #   bash scenarios/update-keeps-everything.sh --check <folder>
 #
@@ -41,12 +46,11 @@ const key=r=>JSON.stringify([r.type||r.kind||"",r.id||r.slug||r.path||JSON.strin
 process.stdout.write(list(data).map(key).sort().join("\n")+"\n");
 '
 
-# These three are asked by wait_for, which takes the command to try as its arguments.
+# These two are asked by wait_for, which takes the command to try as its arguments.
 # shellcheck disable=SC2329
 notebook_answers() { curl -fsS "http://127.0.0.1:$NOTEBOOK_PORT/health" >/dev/null 2>&1; }
 # shellcheck disable=SC2329
 routine_is_there() { grep -qF "$ROUTINE" "$HERMES/cron/jobs.json" 2>/dev/null; }
-# shellcheck disable=SC2329
 chat_store_is_ready() { chat_store count --session "$CHAT" >/dev/null 2>&1; }
 routine_names() { # <file>
   "$NODE" -e '
@@ -58,6 +62,7 @@ process.stdout.write(jobs.map(j=>String(j&&j.name||"")).join("\n")+"\n");
 }
 
 act() {
+  need_the_ai_key "the owner's chat with the assistant"
   fresh_evidence
   install_paths
   install_the_public_line
@@ -79,10 +84,10 @@ act() {
     fail "the notebook's export before the update could not be read"
   owner_sets_threshold "$HERMES/config.yaml" "$OWNER_VALUE"
   config_value "$HERMES/config.yaml" compression.threshold_tokens >"$EVIDENCE/owner-setting-before.txt"
-  wait_for 300 "the assistant's own chat store" chat_store_is_ready || {
-    show_assistant_home
-    fail "the public install left the assistant no chat store, so no chat history could be written"
-  }
+  connect_the_ai
+  assistant_keeps_a_conversation "$EVIDENCE/first-conversation.txt"
+  chat_store_is_ready ||
+    fail "the assistant's own chat store holds no conversations and messages to write a chat history beside ($HERMES/state.db)"
   chat_store seed --session "$CHAT" --tokens 174000 --quiet-minutes 60 --messages 12 >&2 ||
     fail "a chat history could not be written into the assistant's chat store"
   chat_store dump --session "$CHAT" >"$EVIDENCE/chat-before.txt"
