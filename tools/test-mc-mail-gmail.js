@@ -358,6 +358,13 @@ async function main() {
   ok("32 no key in any assistant file", !/r\d|s3cret|AGENTMAIL|REFRESH/.test(JSON.stringify(mcpj) + toml + yaml));
   const launched = spawnSync(process.execPath, ["-e", mcpj.mcpServers["mc-mail"].args[1], "status"], { env: { ...process.env, HOME: HOME, USERPROFILE: HOME }, encoding: "utf8" });
   ok("33 the entry starts the tool from ~/.local/bin on any computer", /Cannot find module/.test(launched.stderr) && /\.local[\\/]bin[\\/]mc-mail\.js/.test(launched.stderr), "expected a clean 'not installed here' in a home without the tool");
+  // Right after a mailbox is connected (connect gmail-imap, pair finish) mc-mail.js runs setup and must
+  // not end with how to connect email. Until 27 October 2026 it matched the line's first words, and
+  // a new wording (#81) slipped past it.
+  const WIRE = require("./mc-mail-wire.js"), MAIL = fs.readFileSync(path.join(__dirname, "mc-mail.js"), "utf8");
+  ok("34 setup ends with how to connect email, and both places that run it right after a connect leave exactly that line out",
+     W1.lines[W1.lines.length - 1] === WIRE.CONNECT_HINT && (MAIL.match(/l !== W\.CONNECT_HINT/g) || []).length === 2 && !/Email itself/.test(MAIL),
+     W1.lines.slice(-1).join(""));
 
   server.close();
   fs.rmSync(W, { recursive: true, force: true });

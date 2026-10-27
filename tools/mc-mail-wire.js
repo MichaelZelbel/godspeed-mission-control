@@ -220,6 +220,11 @@ function claudeDesktop(check, tool) {
   return lines.join("\n");
 }
 
+// The last line of a setup run: how to connect email. The two places in mc-mail.js that run setup
+// right after a mailbox was connected leave exactly this line out (until 27 October 2026 they matched
+// its first words, which a wording change would silently break).
+const CONNECT_HINT = "Email is optional. To connect it, ask your assistant \"Connect Gmail for me\" for your mailbox, or run mc-mail connect agentmail for the mission control's own address. How it works: https://godspeedmissioncontrol.com/guide/email";
+
 function wire({ check = false, godspeed = "", desktop = false } = {}) {
   const lines = [];
   let failed = false;
@@ -231,8 +236,8 @@ function wire({ check = false, godspeed = "", desktop = false } = {}) {
     if (/\(failed\)/.test(line)) failed = true;
     lines.push(line);
   }
-  if (!check) lines.push("Email is optional. To connect it, ask your assistant \"Connect Gmail for me\" for your mailbox, or run mc-mail connect agentmail for the mission control's own address. How it works: https://godspeedmissioncontrol.com/guide/email");
+  if (!check) lines.push(CONNECT_HINT);
   return { lines, failed };
 }
 
-module.exports = { wire, ENTRY, LAUNCH, handshake, claudeDesktopFiles };
+module.exports = { wire, ENTRY, LAUNCH, handshake, claudeDesktopFiles, CONNECT_HINT };

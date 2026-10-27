@@ -28,7 +28,8 @@ function walk(root, dir, out = []) {
   try { entries = fs.readdirSync(path.join(root, dir), { withFileTypes: true }); } catch { return out; }
   for (const e of entries) {
     const rel = path.posix.join(dir, e.name);
-    if (e.isDirectory()) { if (!["node_modules", "dist", ".git"].includes(e.name)) walk(root, rel, out); }
+    // __pycache__ holds what Python compiled while the tests ran, never something that ships.
+    if (e.isDirectory()) { if (!["node_modules", "dist", ".git", "__pycache__"].includes(e.name)) walk(root, rel, out); }
     else out.push(rel);
   }
   return out;
@@ -50,11 +51,13 @@ function scan(root) {
   const bad = [];
   for (const f of files) {
     let text = fs.readFileSync(path.join(root, f), "utf8").replace(/\r\n/g, "\n");
+    if (text.includes("\0")) continue;   // a compiled or binary file is nobody's text
     // A Python docstring is not shown to anybody; blank it out, keeping the line numbers.
     if (f.endsWith(".py") || /^#!.*python|^''''/m.test(text.slice(0, 300))) text = text.replace(/("""|''')[\s\S]*?\1/g, m => m.replace(/[^\n]/g, " "));
     text.split("\n").forEach((line, i) => {
       const t = line.trim();
-      if (!COMMENT.test(t) && CHAPTER.test(t)) bad.push(`${f}:${i + 1}: ${t.slice(0, 160)}`);
+      // In a Markdown file a line starting with # is a heading a person reads, not a comment.
+      if ((f.endsWith(".md") || !COMMENT.test(t)) && CHAPTER.test(t)) bad.push(`${f}:${i + 1}: ${t.slice(0, 160)}`);
     });
   }
   return { files, bad };
@@ -79,9 +82,11 @@ try {
     : no("a comment or a docstring was refused: " + quiet.bad.join(" | "));
   fs.writeFileSync(path.join(tmp, "tools", "shown.js"), 'console.log("Siehe Kapitel 12 im Buch.");\n');
   fs.writeFileSync(path.join(tmp, "tools", "test-shown.js"), 'console.log("Chapter 3 of a test is nobody\'s business");\n');
+  fs.mkdirSync(path.join(tmp, "tools", "__pycache__"));
+  fs.writeFileSync(path.join(tmp, "tools", "__pycache__", "mc-x.cpython-312.pyc"), "\0\0compiled: Chapter 2 of the book\n");
   const loud = scan(tmp);
   loud.bad.length === 1 && loud.bad[0].startsWith("tools/shown.js:1:")
-    ? ok("a printed line naming a chapter is caught, in German too, and a test file is not read")
+    ? ok("a printed line naming a chapter is caught, in German too, and a test or a compiled file is not read")
     : no("the check missed a printed chapter, or read a test: " + JSON.stringify(loud.bad));
 } finally {
   fs.rmSync(tmp, { recursive: true, force: true });
