@@ -998,8 +998,11 @@ async def channel_attached(endpoint):
         loop.call_soon_threadsafe(lines.put_nowait, None)
 
     threading.Thread(target=read_requests, daemon=True).start()
-    # A resume answer carries the whole conversation, so a frame may be as large as a long chat.
-    async with connect_gateway(endpoint=endpoint, max_size=256 * 1024 * 1024) as client:
+    # A resume answer carries the whole conversation, so a frame may be as large as a long chat:
+    # the limit is raised where the assistant's client lets it be (not every version takes it).
+    import inspect
+    larger = {"max_size": 256 * 1024 * 1024} if "max_size" in inspect.signature(connect_gateway).parameters else {}
+    async with connect_gateway(endpoint=endpoint, **larger) as client:
         async def drain():
             # What the gateway streams beside the answers (a resumed chat's own frames) is read and
             # left: the routine needs only the answers, and an unread queue would stall the socket.
