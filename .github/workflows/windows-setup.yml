@@ -1,0 +1,78 @@
+name: windows setup
+# GodspeedSetup.exe for every commit on main, built by GitHub instead of by hand on X30 (the
+# maintainer's yes of 27 October 2026, after the release step of 2.0.0-beta.8 failed three times
+# when it was done by hand). It runs docs/full-version/release-beta-2026-10-19/build-exe.sh itself,
+# so there is one way the setup is built: the notebook's pages with Node 22.19.0, kit-bootstrap's
+# windows/build-full-alpha.ps1 under Windows PowerShell 5.1 with Inno Setup, at the kit-bootstrap
+# commit pinned below. The three files it writes (GodspeedSetup.exe, windows-manifest.json and the
+# source archive) are kept as the artifact windows-setup-<commit>, which godspeed-dev's freeze.mjs
+# downloads for its --commit. Nothing is published here.
+#
+# On a pull request it runs only when this file or build-exe.sh changes, so that the change itself
+# proves the build before it is merged.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - .github/workflows/windows-setup.yml
+      - docs/full-version/release-beta-2026-10-19/build-exe.sh
+  workflow_dispatch:
+permissions:
+  contents: read
+env:
+  # The kit-bootstrap commit every Windows setup of 2.0.0-beta.7 and 2.0.0-beta.8 was built with
+  # (their stage files name it as windowsBootstrapCommit). A release that changes it changes it here.
+  KIT_BOOTSTRAP_COMMIT: 5364e82b44ab0b093e04262c680a21d666faf5e1
+jobs:
+  setup:
+    name: windows setup
+    runs-on: windows-2025
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: product
+          persist-credentials: false
+      # In a short folder: Inno Setup reads the payload from inside it and takes no path longer than
+      # 260 characters, and under this workspace the deepest product file would be 273.
+      - name: kit-bootstrap at the pinned commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          kb="$(cygpath -u "$RUNNER_TEMP")/kb"
+          git init -q "$kb"
+          git -C "$kb" fetch -q --depth 1 https://github.com/MichaelZelbel/kit-bootstrap.git "$KIT_BOOTSTRAP_COMMIT"
+          git -C "$kb" checkout -q --detach FETCH_HEAD
+          echo "KB=$kb" >> "$GITHUB_ENV"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.19.0
+      - name: Inno Setup 6.5 or newer
+        shell: pwsh
+        run: choco upgrade innosetup --no-progress -y
+      - name: build-exe.sh
+        id: build
+        shell: bash
+        run: |
+          set -euo pipefail
+          commit=$(git -C product rev-parse HEAD)
+          BUILD="$PWD/product" OUT="$PWD/out" bash product/docs/full-version/release-beta-2026-10-19/build-exe.sh "$commit"
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
+          echo "folder=out/assets-${commit:0:7}" >> "$GITHUB_OUTPUT"
+          {
+            echo "Windows setup of $commit:"
+            echo '```'
+            (cd "out/assets-${commit:0:7}" && sha256sum *)
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: The build's own logs, when it failed
+        if: failure()
+        shell: bash
+        run: for f in out/*.log; do [ -f "$f" ] && { echo "== $f"; tail -n 60 "$f"; }; done; true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-setup-${{ steps.build.outputs.commit }}
+          path: ${{ steps.build.outputs.folder }}/
+          if-no-files-found: error
+          retention-days: 90
