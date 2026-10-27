@@ -42,6 +42,54 @@ for line in sys.stdin:
     sys.stdout.flush()
 `;
 
+// A RUNNING GATEWAY, as a current assistant has one wherever a chat app is connected: its stdio
+// channel then refuses to start (the real one says "[gateway-exit] refused: <home> is owned by a
+// running gateway; attach to it instead"), and the assistant's own client attaches to the gateway.
+// The stand-in has the three modules the routine's channel uses for that, answering from the same
+// plan and recording into the same record, each request marked as one the gateway was sent.
+const REFUSED=`import sys
+sys.stderr.write("[gateway-exit] refused: this home is owned by a running gateway; attach to it instead\\n")
+sys.exit(1)
+`;
+const GATEWAY={
+ 'hermes_constants.py':`import os
+from pathlib import Path
+def get_hermes_home():
+    return Path(os.environ["HERMES_HOME"])
+`,
+ 'hermes_cli/__init__.py':'',
+ 'hermes_cli/gateway_runtime.py':`class Found:
+    state = "ready"
+    endpoint = "the-running-gateway"
+def discover_gateway_endpoint(home, timeout=2.0):
+    return Found()
+def attachable(found):
+    return found.state == "ready" and found.endpoint is not None
+`,
+ 'hermes_cli/gateway_client.py':`import asyncio, json, os
+from contextlib import asynccontextmanager
+class GatewayRPCError(ValueError):
+    def __init__(self, reason, code=None, data=None):
+        super().__init__(reason)
+        self.code, self.data = code, data or {}
+class Client:
+    def __init__(self, endpoint):
+        self.endpoint, self.events, self.seen = endpoint, asyncio.Queue(), []
+    async def rpc(self, method, *, _timeout=None, **params):
+        self.seen.append({"method": method, "params": params, "via": self.endpoint})
+        with open(os.environ["CHANNEL_RECORD"], "w", encoding="utf-8") as f:
+            json.dump(self.seen, f)
+        answer = json.load(open(os.environ["CHANNEL_PLAN"], encoding="utf-8")).get(method)
+        if answer is None:
+            await asyncio.sleep(3600)
+        if "error" in answer:
+            raise GatewayRPCError(answer["error"])
+        return answer
+@asynccontextmanager
+async def connect_gateway(endpoint=None, subject=None, *, max_size=None):
+    yield Client(endpoint)
+`};
+
 // The whole chat the routine could find: the routing table, the stored conversations, their messages
 // and any open turn lease, in the tables the routine reads.
 function seed(home,{routed=CHAT,tokens=174000,quietMinutes=60,lease=null,anchor=true,chain=null}={}){
@@ -64,11 +112,14 @@ function seed(home,{routed=CHAT,tokens=174000,quietMinutes=60,lease=null,anchor=
 
 // A throwaway Hermes home with the routine's own files in it, exactly the ones the notebook writes,
 // and the stand-in named as the assistant's Python and source folder.
-function home(t,{plan,seeded={}}={}){
+function home(t,{plan,seeded={},gateway=false,entry=gateway?REFUSED:CHANNEL}={}){
  const root=temporary(t),hermes=path.join(root,'hermes'),channel=path.join(root,'channel');
  fs.mkdirSync(hermes,{recursive:true});fs.mkdirSync(path.join(channel,'tui_gateway'),{recursive:true});
  fs.writeFileSync(path.join(channel,'tui_gateway','__init__.py'),'');
- fs.writeFileSync(path.join(channel,'tui_gateway','entry.py'),CHANNEL);
+ fs.writeFileSync(path.join(channel,'tui_gateway','entry.py'),entry);
+ if(gateway)for(const [name,text] of Object.entries(GATEWAY)){
+  fs.mkdirSync(path.dirname(path.join(channel,name)),{recursive:true});fs.writeFileSync(path.join(channel,name),text);
+ }
  const files=routineFiles({root,home:hermes,state:path.join(root,'.godspeed'),timezone:'Europe/Berlin',hermes:null});
  files['godspeed-routines.json']=JSON.stringify({...JSON.parse(files['godspeed-routines.json']),hermes_python:python,hermes_source:channel},null,2)+'\n';
  writeRoutineFiles(hermes,files);
@@ -226,6 +277,32 @@ test('the assistant\'s own terminal is no chat app: its conversations beside the
  assert.match(log,/chat chat-session-1: /,'the Telegram chat is the one it found');
  assert.match(log,/summarised in \d+ s: status compressed/);
  assert.equal(chat.asked()[0].params.session_id,CHAT);
+});
+
+test('beside a running gateway it attaches to it, as the assistant\'s own terminal does, and sends the same requests',needs,async t=>{
+ const chat=home(t,{gateway:true,plan:{'session.resume':resumed(),'session.compress':compressed,'session.close':{closed:true}}});
+ const {code,said,log}=chat.run();
+ assert.equal(code,0,log);
+ assert.equal(said,'');
+ assert.match(log,/summarised in \d+ s: status compressed, messages 320 -> 20, about 174000 -> 45000 tokens/);
+ assert.deepEqual(chat.asked().map(a=>a.method),['session.resume','session.compress','session.close']);
+ assert.ok(chat.asked().every(a=>a.via==='the-running-gateway'),'every request went to the gateway');
+ assert.deepEqual(chat.asked()[0].params,{session_id:CHAT});
+});
+
+test('beside a running gateway a refusal is still a refusal, and nothing is compressed',needs,async t=>{
+ const chat=home(t,{gateway:true,plan:{'session.resume':{error:'session_not_found'},'session.close':{closed:true}}});
+ const {code,log}=chat.run();
+ assert.equal(code,1);
+ assert.match(log,/session\.resume refused: .*session_not_found/);
+ assert.deepEqual(chat.asked().map(a=>a.method),['session.resume']);
+});
+
+test('a channel that ends says why, in the assistant\'s own words',needs,async t=>{
+ const chat=home(t,{entry:REFUSED,plan:{}});
+ const {code,log}=chat.run();
+ assert.equal(code,1);
+ assert.match(log,/session\.resume: the assistant's control channel exited \(1\): \[gateway-exit\] refused: this home is owned by a running gateway/);
 });
 
 test('a summary that ends with any other status is a failed run',needs,async t=>{

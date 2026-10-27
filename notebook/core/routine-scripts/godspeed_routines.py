@@ -767,7 +767,17 @@ def chat_state(con, session_id):
 
 
 class Channel:
-    """The assistant's control channel over stdio, one request at a time."""
+    """The assistant's control channel over stdio, one request at a time.
+
+    WHOSE CHANNEL (27 October 2026). The assistant's own stdio channel (python -m tui_gateway.entry)
+    has to own the assistant's home, and a current assistant refuses it beside its running gateway
+    ("[gateway-exit] refused: ... is owned by a running gateway; attach to it instead"): its own
+    terminal and desktop app attach to that gateway instead. A gateway runs wherever a chat app is
+    connected, so on a real install the night tidy-up never got as far as resuming the chat. The
+    channel is therefore this file run as its own program (channel_main below), with the
+    assistant's Python and folder: it attaches to the gateway when one owns the home, through the
+    assistant's own client, and is the assistant's stdio channel when none does. Either way the
+    routine speaks the same requests and reads the same answers."""
 
     def __init__(self, c):
         python, source = c.get("hermes_python"), c.get("hermes_source")
@@ -780,18 +790,29 @@ class Channel:
         if source:
             env["PYTHONPATH"] = os.pathsep.join([source] + [p for p in [env.get("PYTHONPATH")] if p])
         try:
-            self.p = subprocess.Popen([python, "-m", "tui_gateway.entry"], cwd=c["root"], env=env,
-                                      stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                                      stderr=subprocess.DEVNULL, text=True, encoding="utf-8",
+            self.p = subprocess.Popen([python, os.path.abspath(__file__), CHANNEL_ARGUMENT], cwd=c["root"],
+                                      env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                      stderr=subprocess.PIPE, text=True, encoding="utf-8",
                                       errors="replace", bufsize=1)
         except OSError as error:
             fail("The assistant's control channel could not be started: %s" % error)
-        self.q, self.n = queue.Queue(), 0
+        self.q, self.n, self.said = queue.Queue(), 0, []
         threading.Thread(target=self._lines, daemon=True).start()
+        threading.Thread(target=self._errors, daemon=True).start()
 
     def _lines(self):
         for line in self.p.stdout:
             self.q.put(line)
+
+    def _errors(self):
+        # Its last words, so a channel that ends says why instead of only its exit code.
+        for line in self.p.stderr:
+            if line.strip():
+                self.said = (self.said + [line.strip()[:300]])[-3:]
+
+    def why(self):
+        time.sleep(0.2)
+        return (": " + self.said[-1]) if self.said else ""
 
     def call(self, method, params, timeout):
         self.n += 1
@@ -806,7 +827,7 @@ class Channel:
                 line = self.q.get(timeout=1)
             except queue.Empty:
                 if self.p.poll() is not None:
-                    fail("%s: the assistant's control channel exited (%s)." % (method, self.p.returncode))
+                    fail("%s: the assistant's control channel exited (%s)%s." % (method, self.p.returncode, self.why()))
                 continue
             try:
                 msg = json.loads(line)
@@ -926,3 +947,87 @@ def main(kind):
         # UTF-8 whatever the console's code page: a curly quote must not end the run on Windows.
         sys.stdout.buffer.write((out + "\n").encode("utf-8"))
         sys.stdout.flush()
+
+
+# ---------------------------------------------------------------- the assistant's control channel
+# This file run as its own program, `<the assistant's Python> godspeed_routines.py
+# --godspeed-channel`, with the assistant's folder first on Python's path and HERMES_HOME naming its
+# home (Channel above starts it so, and says why it exists). One JSON-RPC request a line in, each
+# answer as a line out, as the assistant's own stdio channel speaks.
+CHANNEL_ARGUMENT = "--godspeed-channel"
+
+
+def channel_main():
+    import contextlib
+    import runpy
+    # What the assistant's own launcher does first: Hermes 0.22 finds its packages only after it.
+    # Anything it prints goes to the error stream, because the output is the channel.
+    with contextlib.redirect_stdout(sys.stderr):
+        try:
+            import hermes_bootstrap  # noqa: F401
+        except ImportError:
+            pass
+        endpoint = None
+        try:
+            from hermes_constants import get_hermes_home
+            from hermes_cli.gateway_runtime import attachable, discover_gateway_endpoint
+            from hermes_cli.gateway_client import connect_gateway  # noqa: F401
+        except ImportError:
+            pass  # an assistant whose gateway takes no clients: its stdio channel is the only one
+        else:
+            found = discover_gateway_endpoint(get_hermes_home().resolve(), timeout=5)
+            if attachable(found):
+                endpoint = found.endpoint
+    if endpoint is None:
+        sys.argv = ["tui_gateway.entry"]
+        runpy.run_module("tui_gateway.entry", run_name="__main__", alter_sys=True)
+        return
+    import asyncio
+    asyncio.run(channel_attached(endpoint))
+
+
+async def channel_attached(endpoint):
+    """The same requests and answers, through the assistant's own client of its running gateway."""
+    import asyncio
+    from hermes_cli.gateway_client import GatewayRPCError, connect_gateway
+    loop, lines = asyncio.get_running_loop(), asyncio.Queue()
+
+    def read_requests():
+        for line in sys.stdin:
+            loop.call_soon_threadsafe(lines.put_nowait, line)
+        loop.call_soon_threadsafe(lines.put_nowait, None)
+
+    threading.Thread(target=read_requests, daemon=True).start()
+    # A resume answer carries the whole conversation, so a frame may be as large as a long chat.
+    async with connect_gateway(endpoint=endpoint, max_size=256 * 1024 * 1024) as client:
+        async def drain():
+            # What the gateway streams beside the answers (a resumed chat's own frames) is read and
+            # left: the routine needs only the answers, and an unread queue would stall the socket.
+            while True:
+                await client.events.get()
+
+        drained = asyncio.create_task(drain())
+        try:
+            while True:
+                line = await lines.get()
+                if line is None:
+                    break
+                try:
+                    request = json.loads(line)
+                except ValueError:
+                    continue
+                answer = {"jsonrpc": "2.0", "id": request.get("id")}
+                try:
+                    # No deadline here: the routine keeps its own for every request it sends.
+                    answer["result"] = await client.rpc(request.get("method"), _timeout=float("inf"),
+                                                        **(request.get("params") or {}))
+                except GatewayRPCError as error:
+                    answer["error"] = {"code": error.code, "message": str(error), "data": error.data}
+                sys.stdout.write(json.dumps(answer) + "\n")
+                sys.stdout.flush()
+        finally:
+            drained.cancel()
+
+
+if __name__ == "__main__" and sys.argv[1:] == [CHANNEL_ARGUMENT]:
+    channel_main()
