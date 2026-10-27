@@ -169,6 +169,15 @@ function memberOf(people){
   return id=>{let person=byId.get(id);for(let hops=0;person?.merged_into&&hops<5;hops++)person=byId.get(person.merged_into)||byUid.get(person.merged_into);return person?.id||id;};
 }
 export const claimHolds=(claim,day)=>(!claim.valid_from||claim.valid_from<=day)&&(!claim.valid_to||claim.valid_to>day);
+// A note folder's path as the Notes page writes it: no leading, trailing or doubled slash. The page
+// strips, collapses and then trims (Notes.tsx), which can leave a slash the trim uncovered
+// ("/Travel//Japan/ "), so the ends are stripped once more and the shape always holds.
+const folderPath=raw=>String(raw??'').replace(/^\/+|\/+$/g,'').replace(/\/+/g,'/').trim().replace(/^\/+|\/+$/g,'');
+const namedFolder=(raw,missing)=>{const path=folderPath(raw);if(!path)throw new Error(missing);return path;};
+// "A/B/C" sits in "A/B", which sits in "A": every one of them is a folder of its own.
+const folderLine=path=>path?path.split('/').map((part,i,parts)=>parts.slice(0,i+1).join('/')):[];
+// Is this path the folder itself, or something under it?
+const underFolder=(path,folder)=>path===folder||path.startsWith(folder+'/');
 export class QueryService {
   constructor(store) { this.store = store; }
   withSnapshot(read){if(!this.snapshotDepth)this.store.scan();this.snapshotDepth=(this.snapshotDepth||0)+1;try{return read();}finally{this.snapshotDepth--;}}
@@ -466,8 +475,66 @@ export class QueryService {
     }
     if(name==='reassign_contact_topics')return this.store.withLock(()=>{const topics=this.rows('contact_topics').filter(t=>t.contact_id===args.p_source_contact_id).map(t=>this.store.prepare('contact_topics',{contact_id:args.p_target_contact_id,version:(t.version||0)+1},t));for(const t of topics)t.references=this.references(t.type,t);this.store.commit(topics);return {moved:topics.length};});
     if(name==='apply_contact_topic_command')return this.topicCommand(args.p_request_id,args.p_command);
+    // The Notes page's four folder operations, on the store's own note_folders rows and the notes'
+    // folder_path. Until 27 October 2026 the local notebook answered none of them, so making,
+    // renaming or moving a folder in Notes ended in an error toast ("Unimplemented RPC:
+    // create_note_folder") and no folder, while the hosted notebook did it (#37). A folder row
+    // carries its path and what the store gives every row; the page reads the path alone.
+    if(name==='create_note_folder'){
+      const path=namedFolder(args.p_path,'A folder needs a name');
+      return this.store.withLock(()=>{
+        const known=this.savedFolderPaths(),made=folderLine(path).filter(p=>!known.has(p));
+        // An existing path is not saved a second time, and a folder deeper than the ones
+        // above it brings them with it ("Travel/Japan" also saves "Travel").
+        this.store.commit(made.map(p=>this.store.prepare('note_folders',{path:p})));
+        return {path,created:made};
+      });
+    }
+    if(name==='rename_note_folder'){
+      const from=namedFolder(args.p_old_path,'Name the folder to rename'),to=namedFolder(args.p_new_path,'A folder needs a name');
+      return this.store.withLock(()=>this.renameFolderTree(from,to));
+    }
+    if(name==='move_note_folder'){
+      // An empty target parent is the top level, as the page sends it.
+      const from=namedFolder(args.p_source_path,'Name the folder to move'),parent=folderPath(args.p_target_parent_path);
+      if(underFolder(parent,from))throw new Error('A folder cannot move into itself');
+      return this.store.withLock(()=>this.renameFolderTree(from,parent?parent+'/'+from.split('/').pop():from.split('/').pop()));
+    }
+    // Every folder the notes are filed in becomes a folder the page lists, parents included. A
+    // note in the trash is left out, as the hosted notebook's own folder list leaves it out.
+    if(name==='reconcile_note_folders')return this.store.withLock(()=>{
+      const known=this.savedFolderPaths(),wanted=new Set();
+      for(const note of this.rows('notes'))if(!note.is_trashed)for(const path of folderLine(folderPath(note.folder_path)))wanted.add(path);
+      const made=[...wanted].filter(path=>!known.has(path)).sort();
+      this.store.commit(made.map(path=>this.store.prepare('note_folders',{path})));
+      return {created:made};
+    });
     if(name==='my_staff_access_log')return [];
     throw new Error('Unimplemented RPC: ' + name);
+  }
+  // The folders the store has saved, in the page's path shape.
+  savedFolderRows(){return this.rows('note_folders').filter(folder=>folderPath(folder.path));}
+  savedFolderPaths(){return new Set(this.savedFolderRows().map(folder=>folderPath(folder.path)));}
+  // A rename and a move are one change: the folder, every folder under it and the folder_path of
+  // every note in or under it take the new path, together with the new path's missing parents, in
+  // one commit under the store's lock. Either all of it applies or none, so a failure can never
+  // leave half a renamed tree. Called by rename_note_folder and move_note_folder.
+  renameFolderTree(from,to){
+    const folders=this.savedFolderRows(),known=new Set(folders.map(folder=>folderPath(folder.path))),notes=this.rows('notes');
+    const noteIn=note=>underFolder(folderPath(note.folder_path),from);
+    if(!known.has(from)&&!notes.some(noteIn))throw new Error('There is no folder called '+from);
+    if(from===to)return {path:to,folders:0,notes:0,created:[]};
+    if(underFolder(to,from))throw new Error('A folder cannot move into itself');
+    if(known.has(to))throw new Error('A folder called '+to+' already exists');
+    const renamed=path=>to+path.slice(from.length);
+    const movedFolders=folders.filter(folder=>underFolder(folderPath(folder.path),from))
+      .map(folder=>this.store.prepare('note_folders',{path:renamed(folderPath(folder.path))},folder));
+    const movedNotes=notes.filter(noteIn).map(note=>this.store.prepare('notes',{folder_path:renamed(folderPath(note.folder_path))},note));
+    // The folder is now somewhere else, and the folders above its new place are folders too.
+    const have=new Set([...[...known].filter(path=>!underFolder(path,from)),...movedFolders.map(folder=>folder.path)]);
+    const added=folderLine(to).slice(0,-1).filter(path=>!have.has(path)).map(path=>this.store.prepare('note_folders',{path}));
+    this.store.commit([...movedFolders,...movedNotes,...added]);
+    return {path:to,folders:movedFolders.length,notes:movedNotes.length,created:added.map(folder=>folder.path)};
   }
   topicCommand(requestId,command){
     if(!requestId||!command?.action)throw new Error('Invalid topic command');
