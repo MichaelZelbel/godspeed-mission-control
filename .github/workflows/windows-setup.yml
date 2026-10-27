@@ -34,12 +34,17 @@ jobs:
         with:
           path: product
           persist-credentials: false
-      - uses: actions/checkout@v4
-        with:
-          repository: MichaelZelbel/kit-bootstrap
-          ref: ${{ env.KIT_BOOTSTRAP_COMMIT }}
-          path: kit-bootstrap
-          persist-credentials: false
+      # In a short folder: Inno Setup reads the payload from inside it and takes no path longer than
+      # 260 characters, and under this workspace the deepest product file would be 273.
+      - name: kit-bootstrap at the pinned commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          kb="$(cygpath -u "$RUNNER_TEMP")/kb"
+          git init -q "$kb"
+          git -C "$kb" fetch -q --depth 1 https://github.com/MichaelZelbel/kit-bootstrap.git "$KIT_BOOTSTRAP_COMMIT"
+          git -C "$kb" checkout -q --detach FETCH_HEAD
+          echo "KB=$kb" >> "$GITHUB_ENV"
       - uses: actions/setup-node@v4
         with:
           node-version: 22.19.0
@@ -52,7 +57,7 @@ jobs:
         run: |
           set -euo pipefail
           commit=$(git -C product rev-parse HEAD)
-          BUILD="$PWD/product" KB="$PWD/kit-bootstrap" OUT="$PWD/out" bash product/docs/full-version/release-beta-2026-10-19/build-exe.sh "$commit"
+          BUILD="$PWD/product" OUT="$PWD/out" bash product/docs/full-version/release-beta-2026-10-19/build-exe.sh "$commit"
           echo "commit=$commit" >> "$GITHUB_OUTPUT"
           echo "folder=out/assets-${commit:0:7}" >> "$GITHUB_OUTPUT"
           {
