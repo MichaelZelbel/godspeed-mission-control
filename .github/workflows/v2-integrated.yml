@@ -63,6 +63,8 @@ jobs:
         run: |
           node notebook/scripts/run-tests.mjs notebook/test/starter-workspace.test.mjs notebook/test/assistant-starter-wiring.test.mjs notebook/test/computer-wiring-on-existing-server.test.mjs notebook/test/windows-command-files.test.mjs notebook/test/final-core-contracts.test.mjs notebook/test/telegram-replies.test.mjs notebook/test/native-runtime.test.mjs notebook/test/addon-model.test.mjs notebook/test/docker-model-proxy.test.mjs notebook/test/backup-ai.test.mjs notebook/test/backup-ai-telegram.test.mjs notebook/test/routine-ai.test.mjs notebook/test/plan-signin.test.mjs
           python3 notebook/test/addon-model-python.py
+      - name: The chat answers as it is written, a long chat is tidied up at night, and a voice note gets a voice note back
+        run: node notebook/scripts/run-tests.mjs notebook/test/hermes-for-the-notebook.test.mjs notebook/test/chat-tidy.test.mjs notebook/test/settings-routines.test.mjs notebook/test/voice-replies.test.mjs
       - name: The Review page gets each thing once, and the shipped suggestion cases get their right answers
         run: node notebook/scripts/run-tests.mjs notebook/test/suggestion-cases.test.mjs notebook/test/same-thing.test.mjs notebook/test/review-suggestions-mcp.test.mjs notebook/test/review-kind.test.mjs notebook/test/note-processing.test.mjs notebook/test/review-source-withdrawal.test.mjs notebook/test/field-names.test.mjs notebook/test/memory-subject.test.mjs
       - name: An assistant's hashes and lists arrive as the tools declare them, and a changed record still needs its current hash

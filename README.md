@@ -8,13 +8,11 @@ A new release comes out most weeks. I write about what my AI does for me and wha
 
 Version 2 is the current edition. The lines below install the current public version, which is the branch `beta` of this repository; `main` is where the work goes on, and a change merged into it reaches nobody until the next version is released. The installers set up a new, separate folder. They do not move an existing version 1 Godspeed folder or your Menerio account.
 
-## New in 2.0.0-beta.7
+## New in 2.0.0-beta.8
 
-What you install changes only when a version is released. Until now the install lines took whatever had been merged that day, so a change made in the morning was on a stranger's computer in the afternoon, tried or not. They now read the current public version, and it moves only when the maintainer releases one. Nothing inside Godspeed changes, and updating keeps your folder, notes and settings.
+The chat answers faster. In Telegram the answer appears while it is written, in one message that grows, and no "let me check" lines are left behind. A long chat is shortened at night, when you are not waiting for an answer, instead of in front of your next message.
 
-A released version can also be taken back. If something is wrong with it, the installers refuse it from then on and install the version before it instead, so a line or a link you saved cannot put it on your computer either.
-
-## Coming in the next release: voice replies
+### Voice replies
 
 Talk to your assistant while you walk or drive, and listen to the answer. When you send it a voice note in Telegram, it answers with a voice note and the same answer as text, so you can listen now and read or search it later. Ask in writing for a spoken answer ("answer me with a voice note"), and you get one too, with the text.
 
@@ -23,6 +21,12 @@ Talk to your assistant while you walk or drive, and listen to the answer. When y
 - The written answer always arrives. When the voice service refuses, for example because your ElevenLabs credits are used up, you get the text and Godspeed tells you once why the voice note is missing.
 
 Updating keeps your folder, notes and settings. A chat where you already chose `/voice off` keeps it.
+
+## New in 2.0.0-beta.7
+
+What you install changes only when a version is released. Until now the install lines took whatever had been merged that day, so a change made in the morning was on a stranger's computer in the afternoon, tried or not. They now read the current public version, and it moves only when the maintainer releases one. Nothing inside Godspeed changes, and updating keeps your folder, notes and settings.
+
+A released version can also be taken back. If something is wrong with it, the installers refuse it from then on and install the version before it instead, so a line or a link you saved cannot put it on your computer either.
 
 ## New in 2.0.0-beta.5 (24 October 2026)
 
