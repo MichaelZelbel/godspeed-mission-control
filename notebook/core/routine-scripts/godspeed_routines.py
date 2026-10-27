@@ -782,16 +782,28 @@ class Channel:
         try:
             self.p = subprocess.Popen([python, "-m", "tui_gateway.entry"], cwd=c["root"], env=env,
                                       stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                                      stderr=subprocess.DEVNULL, text=True, encoding="utf-8",
+                                      stderr=subprocess.PIPE, text=True, encoding="utf-8",
                                       errors="replace", bufsize=1)
         except OSError as error:
             fail("The assistant's control channel could not be started: %s" % error)
-        self.q, self.n = queue.Queue(), 0
+        self.q, self.n, self.said = queue.Queue(), 0, []
         threading.Thread(target=self._lines, daemon=True).start()
+        threading.Thread(target=self._errors, daemon=True).start()
 
     def _lines(self):
         for line in self.p.stdout:
             self.q.put(line)
+
+    def _errors(self):
+        # Its last words, so a channel that ends says why and not only its exit code (27 October
+        # 2026: "exited (1)" was all a real install said, and the reason was in a log of its own).
+        for line in self.p.stderr:
+            if line.strip():
+                self.said = (self.said + [line.strip()[:300]])[-3:]
+
+    def why(self):
+        time.sleep(0.2)  # the reader thread takes the last line just after the exit
+        return (": " + self.said[-1]) if self.said else ""
 
     def call(self, method, params, timeout):
         self.n += 1
@@ -806,7 +818,7 @@ class Channel:
                 line = self.q.get(timeout=1)
             except queue.Empty:
                 if self.p.poll() is not None:
-                    fail("%s: the assistant's control channel exited (%s)." % (method, self.p.returncode))
+                    fail("%s: the assistant's control channel exited (%s)%s." % (method, self.p.returncode, self.why()))
                 continue
             try:
                 msg = json.loads(line)

@@ -64,11 +64,11 @@ function seed(home,{routed=CHAT,tokens=174000,quietMinutes=60,lease=null,anchor=
 
 // A throwaway Hermes home with the routine's own files in it, exactly the ones the notebook writes,
 // and the stand-in named as the assistant's Python and source folder.
-function home(t,{plan,seeded={}}={}){
+function home(t,{plan,seeded={},entry=CHANNEL}={}){
  const root=temporary(t),hermes=path.join(root,'hermes'),channel=path.join(root,'channel');
  fs.mkdirSync(hermes,{recursive:true});fs.mkdirSync(path.join(channel,'tui_gateway'),{recursive:true});
  fs.writeFileSync(path.join(channel,'tui_gateway','__init__.py'),'');
- fs.writeFileSync(path.join(channel,'tui_gateway','entry.py'),CHANNEL);
+ fs.writeFileSync(path.join(channel,'tui_gateway','entry.py'),entry);
  const files=routineFiles({root,home:hermes,state:path.join(root,'.godspeed'),timezone:'Europe/Berlin',hermes:null});
  files['godspeed-routines.json']=JSON.stringify({...JSON.parse(files['godspeed-routines.json']),hermes_python:python,hermes_source:channel},null,2)+'\n';
  writeRoutineFiles(hermes,files);
@@ -226,6 +226,16 @@ test('the assistant\'s own terminal is no chat app: its conversations beside the
  assert.match(log,/chat chat-session-1: /,'the Telegram chat is the one it found');
  assert.match(log,/summarised in \d+ s: status compressed/);
  assert.equal(chat.asked()[0].params.session_id,CHAT);
+});
+
+test('a channel that ends says why, in the assistant\'s own words',needs,async t=>{
+ // What a current assistant's stdio channel says beside its running gateway (27 October 2026).
+ const refused='import sys\nsys.stderr.write("[gateway-exit] refused: this home is owned by a running gateway; attach to it instead\\n")\nsys.exit(1)\n';
+ const chat=home(t,{entry:refused,plan:{}});
+ const {code,log}=chat.run();
+ assert.equal(code,1);
+ assert.match(log,/session\.resume: the assistant's control channel exited \(1\): \[gateway-exit\] refused: this home is owned by a running gateway/);
+ assert.deepEqual(chat.asked(),[]);
 });
 
 test('a summary that ends with any other status is a failed run',needs,async t=>{
