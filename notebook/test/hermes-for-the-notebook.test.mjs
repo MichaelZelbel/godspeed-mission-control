@@ -1,7 +1,7 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';
 import {fileURLToPath} from 'node:url';import {execFileSync} from 'node:child_process';
 import {Store} from '../core/records/store.mjs';import {NativeScheduler} from '../core/native-scheduler.mjs';import {installStarter} from '../core/starter-workspace.mjs';
-import {SCRIPT_TIMEOUT_SECONDS,godspeedHermesSettings,setConfigValue,readConfigValue,configList,CRON_PROVIDER} from '../core/hermes-config.mjs';
+import {SCRIPT_TIMEOUT_SECONDS,COMPRESSION_THRESHOLD_TOKENS,godspeedHermesSettings,setConfigValue,readConfigValue,configList,CRON_PROVIDER} from '../core/hermes-config.mjs';
 
 // What a live run of the book's prompts found on 9 October 2026 (a scratch Windows install, free
 // models, the notebook's own chat), each a thing any model would hit:
@@ -45,6 +45,48 @@ test('the settings join a configuration Hermes itself wrote, and keep what the o
  assert.equal(readConfigValue(godspeedHermesSettings(''),['cron','provider']),CRON_PROVIDER);
  // A nested key that is missing goes at the end of its own section.
  assert.equal(setConfigValue('a:\n  b: 1\nc: 2\n',['a','d'],'3'),'a:\n  b: 1\n  d: 3\nc: 2\n');
+});
+
+// THE CHAT ANSWERS AT ONCE AND SAYS NOTHING ELSE (25 and 26 October 2026, by hand on the
+// maintainer's server, then here for everyone). A fresh Hermes config.yaml, as Hermes 0.21.2 writes
+// it: streaming.enabled: false, no display.platforms section at all, interim_assistant_messages and
+// long_running_notifications at the display level, which a per-platform value beats, and a
+// compression section without threshold_tokens. display.streaming is Hermes' setting for its own
+// terminal, not for a chat, and is none of Godspeed's business.
+const HERMES_DEFAULTS='compression:\n  enabled: true\n  threshold: 0.5\n  target_ratio: 0.2\ndisplay:\n  compact: false\n  streaming: false\n  interim_assistant_messages: true\n  tool_progress: all\n  long_running_notifications: true\n  tool_progress_overrides: {}\nstreaming:\n  enabled: false\n  transport: auto\n_config_version: 44\n';
+const chatSettings=text=>{const out=godspeedHermesSettings(text);return {
+ streaming:readConfigValue(out,['streaming','enabled']),
+ draft:readConfigValue(out,['display','platforms','telegram','streaming']),
+ interim:readConfigValue(out,['display','platforms','telegram','interim_assistant_messages']),
+ heartbeat:readConfigValue(out,['display','platforms','telegram','long_running_notifications']),
+ summarise:readConfigValue(out,['compression','threshold_tokens']),
+};};
+const FAST_CHAT={streaming:'true',draft:'true',interim:'false',heartbeat:'false',summarise:String(COMPRESSION_THRESHOLD_TOKENS)};
+
+test('the chat shows the answer as it is written, leaves no "let me check" behind, and summarises before a message waits',()=>{
+ assert.equal(COMPRESSION_THRESHOLD_TOKENS,100000);
+ // A settings text without these keys gets all of them.
+ assert.deepEqual(chatSettings(''),FAST_CHAT);
+ assert.deepEqual(chatSettings(LIVE),FAST_CHAT);
+ // A text holding Hermes' own default values gets Godspeed's.
+ assert.deepEqual(chatSettings(HERMES_DEFAULTS),FAST_CHAT);
+ const fresh=godspeedHermesSettings(HERMES_DEFAULTS);
+ for(const line of ['compression:','  threshold: 0.5','  target_ratio: 0.2','display:','  compact: false','  tool_progress: all','  tool_progress_overrides: {}','  transport: auto','_config_version: 44'])assert.ok(fresh.includes(line+'\n'),line);
+ assert.equal(readConfigValue(fresh,['display','streaming']),'false','the setting for Hermes own terminal is left as it was');
+ // A second run of the function over its own output changes nothing.
+ for(const text of ['',LIVE,HERMES_DEFAULTS]){const out=godspeedHermesSettings(text);assert.equal(godspeedHermesSettings(out),out);}
+});
+
+test('a value the owner set themselves stays',()=>{
+ const owner=godspeedHermesSettings('compression:\n  threshold_tokens: 150000\n');
+ assert.equal(readConfigValue(owner,['compression','threshold_tokens']),'150000');
+ assert.equal(godspeedHermesSettings(owner),owner);
+ // Hermes' third word for the heartbeat is "generic" (one line, no tool names): not its default,
+ // so it is the owner's.
+ const generic=godspeedHermesSettings('display:\n  platforms:\n    telegram:\n      long_running_notifications: generic\n');
+ assert.equal(readConfigValue(generic,['display','platforms','telegram','long_running_notifications']),'generic');
+ assert.equal(readConfigValue(generic,['display','platforms','telegram','interim_assistant_messages']),'false','the rest still goes in');
+ assert.equal(godspeedHermesSettings(generic),generic);
 });
 
 const wireScript=fileURLToPath(new URL('../scripts/wire-assistant.mjs',import.meta.url));
