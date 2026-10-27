@@ -2,7 +2,7 @@
 
 **This room starts empty, and an empty one costs you nothing.** It fills the first time you tell
 your mission control about something with a day attached: a day you would like it done by, or a
-last day before it costs you (Chapter 30). If you never do, you have an empty folder and you have
+last day before it costs you. If you never do, you have an empty folder and you have
 lost nothing.
 
 ## Why this is not a reminder
@@ -172,4 +172,4 @@ mc-due check               run the self checks, close what is provably done
 mc-due state               which are open, and what closed the others
 ```
 
-The card is `procedures/what-runs-out-and-when.md` in the kit. Chapter 30.
+The card is `procedures/what-runs-out-and-when.md` in the kit. The guide: https://godspeedmissioncontrol.com/guide/deadlines

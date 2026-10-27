@@ -358,8 +358,8 @@ async function connectGmail({ here, noWait }) {
     catch (e) { say('That did not work: ' + e.message); }
     if (r.connected) {
       say('');
-      const w = require('./mc-mail-wire.js').wire({ godspeed: godspeedDir(), desktop: true });
-      for (const line of w.lines.filter(l => !/^Email itself/.test(l))) say(line);
+      const W = require('./mc-mail-wire.js'), w = W.wire({ godspeed: godspeedDir(), desktop: true });
+      for (const line of w.lines.filter(l => l !== W.CONNECT_HINT)) say(line);
       say('');
       say('Done. Your assistants can now search your Gmail, read a message you pick and save drafts.');
       say('An assistant that was already open may need closing and opening again, once.');
@@ -503,8 +503,8 @@ async function main(argv) {
       } else if (sub === 'finish') {
         const r = P.finish(args[0]);
         console.log(`Paired: this computer's assistants now use the mail tool on ${r.route.user}@${r.route.host}. The Gmail password stays on the server.`);
-        const w = require('./mc-mail-wire.js').wire({ godspeed: godspeedDir(), desktop: true });
-        for (const line of w.lines.filter(l => !/^Email itself/.test(l))) console.log(line);
+        const W = require('./mc-mail-wire.js'), w = W.wire({ godspeed: godspeedDir(), desktop: true });
+        for (const line of w.lines.filter(l => l !== W.CONNECT_HINT)) console.log(line);
       } else if (sub === 'forget') {
         const r = P.forget();
         console.log(r ? `This computer no longer uses the mail tool on ${r.host}. On the server, remove its key with: mc-mail pair remove ${r.device}` : 'This computer was not paired with a server.');

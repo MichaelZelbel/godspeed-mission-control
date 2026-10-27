@@ -670,7 +670,7 @@ if [ "${KB_MORNING_BRIEF:-}" != "yes" ] && [ "${KB_MORNING_BRIEF:-}" != "no" ]; 
    It arrives at 06:00 $BRIEF_ZONE time, the time zone this server is set to.
    At first it is short, because your assistant knows little about you yet;
    it grows with what you tell it. You can change what goes into it at any
-   time just by telling your assistant (Chapter 25 of the book shows how).
+   time just by telling your assistant. How: https://godspeedmissioncontrol.com/guide/morning-brief
 
    Say no if you do not want it yet. Nothing is sent, and you can switch it
    on later by running this same install line again.

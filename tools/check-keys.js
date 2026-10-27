@@ -124,8 +124,8 @@ say("");
 // ---------------------------------------------------------------- 1. any keys at all?
 say("  1. Does your folder carry any keys?");
 if (!fs.existsSync(store)) {
-  good("No, and that is a complete way to own a mission control. Everything the book builds up to");
-  good("Chapter 30 works on plain files with no key anywhere. Nothing to check.");
+  good("No, and that is a complete way to own a mission control. Your notes, skills, routines and");
+  good("deadlines work on plain files with no key anywhere. Nothing to check.");
   say("");
   process.exit(0);
 }
