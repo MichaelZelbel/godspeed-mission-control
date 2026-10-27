@@ -51,9 +51,6 @@ part in the chat, then, whenever you like, a short chat in which your assistant 
   exists it prints a fresh link (the old one stops working), after that it says to sign in.
 - **What it noted** is in `/opt/godspeed-mission-control/install.log`. By hand afterwards:
   `cd /opt/godspeed-mission-control && docker compose ps` (or `logs`).
-- **The install count** is sent only with `GODSPEED_INSTALL_COUNT=yes` in front of `bash`: the
-  word "installed", the kind `docker-server` and a random number, once, to godspeedmissioncontrol.com,
-  which counts it and keeps no address. Without it, nothing.
 - **Trying a version before it is released.** The stage this line installs names the image it runs,
   and by default that is the public stage, `beta`. To run a whole other stage on a test server, name
   it with `GODSPEED_STAGE_REF`, as above. To run one single image, name that instead:

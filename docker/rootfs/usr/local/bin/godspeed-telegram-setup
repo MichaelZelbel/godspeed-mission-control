@@ -1304,12 +1304,10 @@ def step_install(chat):
         env.pop(k, None)
     # The brain is set up and proved already (step_brain), so the installer's own ChatGPT
     # sign-in is skipped: for any other provider it would wait fifteen minutes for a code
-    # nobody sees. The install count is not asked in the chat (2026-10-01: it brings
-    # nothing), so it is answered no and nothing is sent.
+    # nobody sees.
     env.update(KB_TELEGRAM_SKIP="1", KB_SIGNIN_SKIP="1",
                KB_MORNING_BRIEF="yes" if st.get("brief") else "no",
-               KB_OBSERVED_STATE="yes" if st.get("brief") and st.get("world") else "no",
-               GODSPEED_INSTALL_COUNT="no")
+               KB_OBSERVED_STATE="yes" if st.get("brief") and st.get("world") else "no")
     if st.get("repo"):
         env["GODSPEED_REPO"] = "https://github.com/%s.git" % st["repo"]
     elif not os.path.isdir(os.path.join(GODSPEED, ".git")):

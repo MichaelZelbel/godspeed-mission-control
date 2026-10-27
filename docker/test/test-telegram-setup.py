@@ -322,7 +322,7 @@ def test_happy():
     check("git is set up to push after the sign-in", "auth setup-git" in r["gh"])
     run = r["runs"][0] if r["runs"] else {}
     check("the installer ran once, with the answers and no token",
-          len(r["runs"]) == 1 and run.get("KB_MORNING_BRIEF") == "yes" and run.get("GODSPEED_INSTALL_COUNT") == "no"
+          len(r["runs"]) == 1 and run.get("KB_MORNING_BRIEF") == "yes" and run.get("GODSPEED_INSTALL_COUNT") is None
           and run.get("KB_OBSERVED_STATE") == "yes"
           and run.get("KB_REPO_NAME") == "godspeed" and run.get("KB_TELEGRAM_SKIP") == "1"
           and run.get("KB_SIGNIN_SKIP") == "1"
@@ -377,7 +377,7 @@ def test_snags():
     runs = r["runs"]
     check("Try again runs the installer again, with the same answers",
           len(runs) == 2 and runs[1].get("GODSPEED_REPO") == "https://github.com/anna/mission.git"
-          and runs[1].get("KB_MORNING_BRIEF") == "no" and runs[1].get("GODSPEED_INSTALL_COUNT") == "no"
+          and runs[1].get("KB_MORNING_BRIEF") == "no" and runs[1].get("GODSPEED_INSTALL_COUNT") is None
           and not runs[1].get("KB_REPO_NAME"))
     check("the last message carries the address they gave", any_has(to_anna, "https://github.com/anna/mission.git"))
     check("no brief, no question about the clock", not any_has(to_anna, "comes at 06:00") and "timezone" not in r["hermes"])
