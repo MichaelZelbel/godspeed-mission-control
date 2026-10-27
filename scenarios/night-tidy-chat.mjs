@@ -54,16 +54,24 @@ const tables=()=>new Set(db.prepare("select name from sqlite_master where type =
 const columns=name=>db.prepare('pragma table_info('+name+')').all();
 const newest=name=>{try{return db.prepare('select * from '+name+' order by rowid desc limit 1').get()||null;}catch{return null;}};
 
+// The columns a table keeps unique beside its key (the conversations' title has an index of its own).
+const uniqueColumns=name=>new Set(db.prepare('pragma index_list('+name+')').all()
+ .filter(index=>index.unique&&index.origin!=='pk')
+ .flatMap(index=>db.prepare('pragma index_info('+JSON.stringify(index.name)+')').all().map(column=>column.name)));
+
 // One row of a table the assistant owns: the newest row as its template, our own values over it,
-// and for a column neither of those names, what the column itself says it must hold.
+// and for a column neither of those names, what the column itself says it must hold. A column the
+// table keeps unique is never taken from the template: a row with the newest row's own title would
+// replace that row instead of standing beside it, which on 27 October 2026 took the assistant's own
+// first conversation out from under its messages ("FOREIGN KEY constraint failed").
 function write(name,mine){
- const template=newest(name)||{};
+ const template=newest(name)||{},unique=uniqueColumns(name);
  const row={};
  for(const column of columns(name)){
   const key=column.name;
   if(key in mine){row[key]=mine[key];continue;}                                      // what the scenario says
   if(column.pk)continue;                                                             // the store's own counting
-  if(template[key]!==null&&template[key]!==undefined){row[key]=template[key];continue;} // the newest row's own
+  if(template[key]!==null&&template[key]!==undefined&&!unique.has(key)){row[key]=template[key];continue;} // the newest row's own
   if(!column.notnull||column.dflt_value!==null)continue;                             // the store fills it itself
   row[key]=/INT|REAL|NUM|FLOA|DOUB/i.test(column.type||'')?0:'';                     // it must hold something
  }

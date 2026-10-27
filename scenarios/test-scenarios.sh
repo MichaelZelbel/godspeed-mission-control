@@ -450,6 +450,43 @@ case "$CODE $OUT" in
   *) bad "a recorded home that is not there was not one FAIL line (exit $CODE: $OUT)" ;;
 esac
 
+# ======================================================================= the assistant's chat store
+# night-tidy-chat.mjs seeds a chat beside the conversation the assistant kept first, with that
+# conversation's rows as its template. This store has the two parts of the assistant's own shape that
+# made that fail on 27 October 2026: a title no two conversations may share, and messages that may
+# not lose their conversation (node:sqlite keeps foreign keys on).
+section "the assistant's chat store"
+C=$TMP/chat
+mkdir -p "$C/home"
+sql() { # <sql>: one value out of the store
+  node --input-type=module -e '
+import {DatabaseSync} from "node:sqlite";
+const db=new DatabaseSync(process.argv[1]);
+const [statement,...more]=process.argv[2].split(";").map(s=>s.trim()).filter(Boolean).reverse();
+for(const s of more.reverse())db.exec(s);
+const row=db.prepare(statement).get();process.stdout.write(row?String(Object.values(row)[0]):"");
+' "$C/home/state.db" "$1" 2>/dev/null
+}
+sql "create table sessions(id text primary key, source text not null, title text, model_config text,
+  parent_session_id text references sessions(id), started_at real not null);
+create unique index idx_sessions_title_unique on sessions(title) where title is not null;
+create table messages(id integer primary key autoincrement, session_id text not null references sessions(id),
+  role text not null, content text, timestamp real not null);
+insert into sessions(id, source, title, started_at) values ('first', 'cli', 'Hello', 1761559800);
+insert into messages(session_id, role, content, timestamp) values ('first', 'user', 'Reply with the single word Hello.', 1761559800);
+select count(*) from sessions" >/dev/null
+if node "$ROOT/scenarios/night-tidy-chat.mjs" --home "$C/home" seed >/dev/null 2>&1; then
+  ok "a chat is seeded beside a titled conversation of the assistant's own"
+else
+  bad "a chat could not be seeded beside a titled conversation of the assistant's own"
+fi
+counted=$(node "$ROOT/scenarios/night-tidy-chat.mjs" --home "$C/home" count --session scenario-chat-1 2>/dev/null)
+[ "$counted" = "messages=40 tokens=174000" ] && ok "the seeded chat holds its 40 messages and its size" ||
+  bad "the seeded chat holds $counted, not messages=40 tokens=174000"
+[ "$(sql "select count(*) from sessions where id = 'first' and title = 'Hello'")" = 1 ] &&
+  ok "the assistant's own conversation is still there, with its title" ||
+  bad "the assistant's own conversation is gone or lost its title after the seed"
+
 # ============================================================ every one of them, the same shape
 section 'every script'
 for file in scenario-lib.sh settings-on-install.sh night-tidy.sh voice.sh update-keeps-everything.sh \
