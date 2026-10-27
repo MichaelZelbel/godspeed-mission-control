@@ -6,7 +6,8 @@ import {ApiKeys,ASSISTANT_KEY_NAME} from '../core/api-keys.mjs';
 import {installSkillTree} from '../core/packaged-skills.mjs';
 import {commandFile} from './windows-command-file.mjs';
 import {starterBorn} from '../core/starter-workspace.mjs';
-import {withTimezone,godspeedHermesSettings,CRON_PROVIDER,backupQuickCommand,BACKUP_COMMAND} from '../core/hermes-config.mjs';
+import {withTimezone,godspeedHermesSettings,setConfigValue,CRON_PROVIDER,backupQuickCommand,BACKUP_COMMAND} from '../core/hermes-config.mjs';
+import {moveSavedSkills} from '../core/assistant-skills.mjs';
 import {personaOf} from '../core/persona.mjs';
 import {syncSoul,readExtra} from '../core/assistant-soul.mjs';
 import {installModelCommand} from './install-model-command.mjs';
@@ -108,7 +109,8 @@ for(const command of (process.env.GODSPEED_ORIGINAL_RUNTIME==='on'?['mail','watc
  if(process.platform==='win32')atomic(bin+'.cmd',cmd(at=>'"'+at(process.execPath)+'" "'+at(script)+'" %* --godspeed "'+at(root)+'"\r\n'));
  shellCommand(bin,[process.execPath,script],' --godspeed '+quote(root));
 }
-for(const [addon,skill] of [['coach','coach'],['journal','interstitial-journal'],['headache','headache-tracker']]){
+const packagedSkills=[['coach','coach'],['journal','interstitial-journal'],['headache','headache-tracker']];
+for(const [addon,skill] of packagedSkills){
  const source=path.join(kit,'third-party/addons/godspeed-'+addon);
  fs.cpSync(path.join(source,'hermes/plugin/godspeed-'+addon),path.join(home,'plugins/godspeed-'+addon),{recursive:true});
  atomic(path.join(home,'plugins/godspeed-'+addon,'mission-control.txt'),root+'\n');
@@ -121,12 +123,28 @@ for(const [addon,skill] of [['coach','coach'],['journal','interstitial-journal']
  // The coach's talk brief tells the assistant to type `godspeed-coach ...` in that shell.
  shellCommand(bin,[process.execPath,script],' --godspeed '+quote(root));
 }
+// THE SKILLS THE OWNER ASKED THEIR ASSISTANT TO SAVE BEFORE create_dir WAS SET (core/assistant-skills.mjs):
+// they are in the Hermes home, where they are in nobody's files and in no backup, so each one the
+// owner made comes over to the mission control's skills/ here, with a copy kept first in
+// .godspeed/backups/. After the packaged skills above, so the ledger that tells theirs from ours is
+// current. What the reader must hear goes to standard error, as the installer's other notices do:
+// the server's start throws this script's standard output away.
+try{for(const line of moveSavedSkills({home,root:store.root,state:store.state,packaged:packagedSkills.map(([,skill])=>skill)}).lines)console.error(line);}
+catch(error){console.error('The skills your assistant saved in its own folder were left there: '+error.message);}
 // The getting-to-know-you chat's own plugin (core/context-setup.mjs): it tells the assistant, before
 // each turn, that its owner was invited to that chat and has not answered yet, since an invitation a
 // scheduled job delivered is not part of the chat the assistant sees next.
 fs.cpSync(path.join(kit,'notebook','assistant-files','godspeed-context'),path.join(home,'plugins','godspeed-context'),{recursive:true,filter:source=>!/__pycache__/.test(source)});
 atomic(path.join(home,'plugins','godspeed-context','mission-control.txt'),root+'\n');
 let text=fs.existsSync(file)?fs.readFileSync(file,'utf8').replace(/^\uFEFF/,''):`terminal:\n  cwd: ${JSON.stringify(root)}\nskills:\n  external_dirs: [${JSON.stringify(path.join(root,'skills'))}]\nmemory:\n  memory_enabled: false\n`;
+// WHERE A SKILL THE OWNER ASKS FOR IN A CHAT IS MADE. external_dirs above only lets Hermes read the
+// mission control's skills; it creates a new one in its own home unless skills.create_dir names
+// another folder, so "Save this as a skill called check-my-email" wrote it where nothing of the
+// owner's ever reaches (27 October 2026). The same folder as external_dirs, written absolute as
+// that one is, because Hermes reads a relative value against its own home. On every wiring, not
+// only when this file is made: an install that already had a config.yaml would never get it
+// otherwise, and an update runs this.
+text=setConfigValue(text,['skills','create_dir'],JSON.stringify(path.join(root,'skills')));
 if(!/^plugins:/m.test(text))text+='\nplugins:\n  enabled: ["godspeed-coach", "godspeed-journal", "godspeed-headache", "godspeed-context"]\n';
 else{
  const block=text.match(/^plugins:[^\n]*\n(?:[ \t]+[^\n]*\n|\n)*/m)?.[0]||'';
