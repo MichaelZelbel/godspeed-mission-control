@@ -90,6 +90,8 @@ act() {
     fail "the routine is there but its script is not ($HERMES/scripts/$SCRIPT)"
 
   chat_store routing >"$EVIDENCE/routing-before.txt"
+  say "The assistant's routing table, as the routine reads it:"
+  sed 's/^/  | /' "$EVIDENCE/routing-before.txt" >&2
   chat_store dump --session "$OTHER" >"$EVIDENCE/other-before.txt"
   chat_store count --session "$CHAT" >"$EVIDENCE/chat-before.txt"
   run_the_routine "$HERMES/scripts" summarised
