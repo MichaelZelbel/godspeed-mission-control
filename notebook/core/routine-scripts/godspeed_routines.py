@@ -690,8 +690,13 @@ def journal_tick(c):
 #
 # The routing key of the owner's own chat in a chat app. The app's name is the routing table's, so a
 # chat app the gateway routes the same way needs no new code here (today: telegram, a private chat).
+# "local" is no chat app: it is the assistant's own terminal and desktop app, which the assistant
+# routes the same way, one key per conversation (agent:main:local:dm:local-<id>). Until 27 October
+# 2026 it counted, so on a machine where the owner had once talked to the assistant in its terminal
+# the routine found two chats beside a Telegram one and refused every night ("found 2"), and with no
+# chat app at all it would have summarised a terminal conversation.
 CHAT_KEY_LIKE = "agent:main:%:dm:%"
-CHAT_KEY = re.compile(r"^agent:main:[^:]+:dm:.+$")
+CHAT_KEY = re.compile(r"^agent:main:(?!local:)[^:]+:dm:.+$")
 
 
 def chat_log(line):
@@ -777,16 +782,28 @@ class Channel:
         try:
             self.p = subprocess.Popen([python, "-m", "tui_gateway.entry"], cwd=c["root"], env=env,
                                       stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                                      stderr=subprocess.DEVNULL, text=True, encoding="utf-8",
+                                      stderr=subprocess.PIPE, text=True, encoding="utf-8",
                                       errors="replace", bufsize=1)
         except OSError as error:
             fail("The assistant's control channel could not be started: %s" % error)
-        self.q, self.n = queue.Queue(), 0
+        self.q, self.n, self.said = queue.Queue(), 0, []
         threading.Thread(target=self._lines, daemon=True).start()
+        threading.Thread(target=self._errors, daemon=True).start()
 
     def _lines(self):
         for line in self.p.stdout:
             self.q.put(line)
+
+    def _errors(self):
+        # Its last words, so a channel that ends says why and not only its exit code (27 October
+        # 2026: "exited (1)" was all a real install said, and the reason was in a log of its own).
+        for line in self.p.stderr:
+            if line.strip():
+                self.said = (self.said + [line.strip()[:300]])[-3:]
+
+    def why(self):
+        time.sleep(0.2)  # the reader thread takes the last line just after the exit
+        return (": " + self.said[-1]) if self.said else ""
 
     def call(self, method, params, timeout):
         self.n += 1
@@ -801,7 +818,7 @@ class Channel:
                 line = self.q.get(timeout=1)
             except queue.Empty:
                 if self.p.poll() is not None:
-                    fail("%s: the assistant's control channel exited (%s)." % (method, self.p.returncode))
+                    fail("%s: the assistant's control channel exited (%s)%s." % (method, self.p.returncode, self.why()))
                 continue
             try:
                 msg = json.loads(line)
