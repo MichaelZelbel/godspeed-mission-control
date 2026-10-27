@@ -19,7 +19,7 @@ jobs:
           for t in tools/test-due.sh tools/test-install-count.sh tools/test-uninstall.sh tools/test-goals.sh tools/test-check-moves.sh tools/test-work.sh tools/test-work-run.sh tools/test-forecast.sh tools/test-check-written.sh tools/test-world-pull.sh tools/test-mc-run.sh tools/test-decide.sh tools/test-check-research.sh tools/test-research.sh tools/test-launchers.sh tools/test-prompt-archive.sh; do
             echo "== $t"; bash "$t"
           done
-          for t in tools/test-observed-state.js tools/test-check-brief.js tools/test-limit.js tools/test-apply-target.js tools/test-nested-checkout.js; do
+          for t in tools/test-observed-state.js tools/test-check-brief.js tools/test-limit.js tools/test-apply-target.js tools/test-nested-checkout.js tools/test-no-chapters.js; do
             echo "== $t"; node "$t"
           done
       # The notebook needs Node 22.19: started from a checkout inside a "type": "module" folder.

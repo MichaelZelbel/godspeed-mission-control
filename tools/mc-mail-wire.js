@@ -231,7 +231,7 @@ function wire({ check = false, godspeed = "", desktop = false } = {}) {
     if (/\(failed\)/.test(line)) failed = true;
     lines.push(line);
   }
-  if (!check) lines.push("Email itself stays off until you connect it: ask your assistant \"Connect Gmail for me\" (Chapter 32) for your mailbox, mc-mail connect agentmail (Chapter 31) for the mission control's own address.");
+  if (!check) lines.push("Email is optional. To connect it, ask your assistant \"Connect Gmail for me\" for your mailbox, or run mc-mail connect agentmail for the mission control's own address. How it works: https://godspeedmissioncontrol.com/guide/email");
   return { lines, failed };
 }
 
