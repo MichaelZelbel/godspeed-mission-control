@@ -43,7 +43,7 @@ If it contradicts something you believe about me, the file wins.
 - **A recipe from the book's kit.** When I name a skill that is not in
   `skills/`, fetch it from the companion kit yourself, save it as
   `skills/<name>/SKILL.md` and tell me what you saved. `answer-email-my-way`,
-  `plan-my-day`, `prep-me-for-a-meeting`, `draft-my-update` and
+  `plan-my-day`, `prep-me-for-a-meeting`, `draft-my-update`, `check-my-email` and
   `summarize-for-me` are single files, at
   `https://raw.githubusercontent.com/MichaelZelbel/godspeed-mission-control/main/skills/<name>.md`.
   `prepare-a-decision` is a folder: fetch
