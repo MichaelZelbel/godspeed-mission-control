@@ -67,10 +67,14 @@ export function journalWanted(root){
 // chat is long enough to be worth it (godspeed_routines.py, chat_tidy). It sends nothing to the
 // chat: its output is its log, which is why its results are kept here and never delivered
 // (followDelivery leaves this one alone).
+// MADE FOR NO INSTALL SINCE 27 OCTOBER 2026 (godspeed-dev,
+// releases/godspeed-2.0.0-beta.8-faster-chat/plan.md): on Hermes 0.22.5, which a new install gets,
+// the control channel it speaks is refused while the gateway runs, so it would fail every night. It
+// comes back in a release of its own. Its script is still written (starting-routines.mjs,
+// routineFiles), and the routine is taken off an install that already has it
+// (native-scheduler.mjs, removeChatTidy).
 export const CHAT_TIDY_JOB='Night chat tidy-up';
 export const CHAT_TIDY_SCRIPT='godspeed-chat-tidy.py';
-export const CHAT_TIDY_SCHEDULE='30 1 * * *';
-export const CHAT_TIDY_WHAT='Every night at 01:30 it shortens your long chat with your assistant, so the assistant never has to do it while you wait for an answer. It reads the chat, writes a summary of its older part, and sends you nothing.';
 // The journal reads its times on its own clock, which starts as UTC until its setup writes the
 // person's; the installation's zone is the person's, so it becomes the journal's when the journal
 // still has the default one.

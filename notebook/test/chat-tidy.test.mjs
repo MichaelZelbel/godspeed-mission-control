@@ -187,8 +187,9 @@ test('two chats of the owner\'s in the routing table stop it: it could be the wr
 });
 
 test('a chat app connected but no message yet: nothing to tidy up, and no failed run',needs,async t=>{
- // The routine is made the moment a chat app is connected (native-scheduler.mjs, followChatTidy),
- // which on a fresh install is before the first message gives the gateway anything to route.
+ // The routine was made the moment a chat app was connected, which on a fresh install is before the
+ // first message gives the gateway anything to route (made for no install since 27 October 2026,
+ // notebook-routines.mjs; the release that brings it back makes it the same way).
  const chat=home(t,{plan:{'session.resume':resumed(),'session.compress':compressed}});
  const db=new DatabaseSync(path.join(chat.hermes,'state.db'));
  db.exec('delete from gateway_routing');db.close();

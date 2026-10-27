@@ -5,10 +5,11 @@
 # machine that installed the current public version through today's public line, and then ran the
 # line against the stage twice, ends on the stage's own commits with everything of the owner's still
 # there: every notebook record, the setting they made in the assistant's own settings file, their
-# chat history - and the night chat tidy-up exactly once, not a second one beside it.
+# chat history - and no night chat tidy-up, which left this release on 27 October 2026 (the plan's
+# note at its top) although the notebook of main made it for a while.
 #
 # Twice, because an update that is run again is what a person does when they are not sure the first
-# one finished, and because "exactly once" is only worth checking after the second run.
+# one finished, and because nothing of theirs may be doubled or lost by it.
 #
 # The owner's chat history is a conversation they had with the assistant, which is also what makes
 # the assistant's chat store at all (scenario-lib.sh, assistant_keeps_a_conversation), so the job
@@ -46,11 +47,9 @@ const key=r=>JSON.stringify([r.type||r.kind||"",r.id||r.slug||r.path||JSON.strin
 process.stdout.write(list(data).map(key).sort().join("\n")+"\n");
 '
 
-# These two are asked by wait_for, which takes the command to try as its arguments.
+# Asked by wait_for, which takes the command to try as its arguments.
 # shellcheck disable=SC2329
 notebook_answers() { curl -fsS "http://127.0.0.1:$NOTEBOOK_PORT/health" >/dev/null 2>&1; }
-# shellcheck disable=SC2329
-routine_is_there() { grep -qF "$ROUTINE" "$HERMES/cron/jobs.json" 2>/dev/null; }
 chat_store_is_ready() { chat_store count --session "$CHAT" >/dev/null 2>&1; }
 routine_names() { # <file>
   "$NODE" -e '
@@ -94,14 +93,8 @@ act() {
 
   install_the_stage_line "$EVIDENCE/trace-1.log"
   assistant_home
-  # The night chat tidy-up came with 2.0.0-beta.8, so the public version has none to keep: it is the
-  # updated notebook that makes it, on its own tick, because the chat seeded above is routed to the
-  # owner's chat app. It is waited for here, before the second run, so that "exactly once" below is
-  # a second run finding the routine there and making no other one beside it.
-  wait_for 480 "the updated notebook to make the routine \"$ROUTINE\"" routine_is_there || {
-    show_assistant_home
-    fail "the update never made the routine \"$ROUTINE\", although the assistant has a chat app"
-  }
+  wait_for 120 "the notebook to answer after the first run" notebook_answers ||
+    fail "the notebook does not answer after the line ran against the stage"
   # A person who is not sure the first run finished runs the line again, and nothing of theirs may
   # be doubled or lost by it.
   say "The same line again, so nothing is doubled by a second update"
@@ -109,9 +102,10 @@ act() {
   assistant_home
   wait_for 120 "the notebook to answer after the second run" notebook_answers ||
     fail "the notebook does not answer after the line ran a second time"
-  # The notebook looks for the routine on its own tick, at most once a minute (native-scheduler.mjs),
-  # so a second one would be there after two of them.
-  say "Two of the notebook's own ticks, in which a second night routine would be made"
+  # The notebook makes its routines on its own tick, at most once a minute (native-scheduler.mjs),
+  # so a night routine it should not make would be there after two of them, although the chat
+  # seeded above is routed to the owner's chat app.
+  say "Two of the notebook's own ticks, in which a night routine would be made"
   sleep 150
 
   cp "$RUNTIME/version" "$EVIDENCE/version-after" || fail "the update left no version file behind"
@@ -177,15 +171,15 @@ check() { # <evidence folder>
   cmp -s "$folder/chat-before.txt" "$folder/chat-after.txt" ||
     fail "the chat history is not the same after the update"
 
-  # The notebook answers, and the night routine is there exactly once.
+  # The notebook answers, and there is no night routine.
   [ "$(tr -d ' \n\r' <"$folder/health.txt")" = 200 ] ||
     fail "the notebook answered $(tr -d ' \n\r' <"$folder/health.txt") on its own address after the update, not 200"
   local routines
   routines=$(grep -c -x -F "$ROUTINE" "$folder/routines-after.txt" || true)
-  [ "$routines" = 1 ] ||
-    fail "the assistant has the routine \"$ROUTINE\" $routines times after the update, not once"
+  [ "$routines" = 0 ] ||
+    fail "the assistant has the routine \"$ROUTINE\" $routines times after the update, which this release does not make"
 
-  pass "$before became $after, the stage's own commit, with its kit-bootstrap $engine and its stage file; every notebook record, the owner's own $owner_after and the chat history came through two runs of the line, the notebook answers, and \"$ROUTINE\" is there exactly once"
+  pass "$before became $after, the stage's own commit, with its kit-bootstrap $engine and its stage file; every notebook record, the owner's own $owner_after and the chat history came through two runs of the line, the notebook answers, and there is no \"$ROUTINE\""
 }
 
 if [ "$CHECK_ONLY" = yes ]; then

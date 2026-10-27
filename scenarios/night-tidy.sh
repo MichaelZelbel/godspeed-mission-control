@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 # PROVING SCENARIO 2: the night chat tidy-up does its job, and only its job.
 #
+# NOT RUN ON A CANDIDATE SINCE 27 OCTOBER 2026: the tidy-up left 2.0.0-beta.8 (the plan's note at
+# its top) and no install gets the routine (notebook/core/notebook-routines.mjs), so this scenario
+# would only find it missing. It is kept, with its checking part tested, for the release that
+# brings the tidy-up back, which puts its job into .github/workflows/scenarios.yml again.
+#
 # What it proves (godspeed-dev, releases/godspeed-2.0.0-beta.8-faster-chat/plan.md, scenario 2): on
 # a fresh install whose assistant has a chat app, the notebook makes the routine "Night chat
 # tidy-up" (notebook/core/notebook-routines.mjs, native-scheduler.mjs), and its script - run the way

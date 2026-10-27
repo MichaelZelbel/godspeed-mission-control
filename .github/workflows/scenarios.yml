@@ -5,8 +5,9 @@ name: scenarios
 run-name: scenarios ${{ inputs.stage }}
 # The proving scenarios a candidate runs before the maintainer is asked for "go" (godspeed-dev,
 # releases/godspeed-2.0.0-beta.7-stages/plan.md, "Proving scenarios" 1, 2 and 5, and
-# releases/godspeed-2.0.0-beta.8-faster-chat/plan.md, "Proving scenarios" 1 to 4, which are the
-# scripts in scenarios/). Started by hand on the candidate's own tag, with the same tag as the stage
+# releases/godspeed-2.0.0-beta.8-faster-chat/plan.md, "Proving scenarios" 1, 3 and 4, which are
+# scripts in scenarios/; its scenario 2, the night chat tidy-up, left the release with the tidy-up
+# on 27 October 2026). Started by hand on the candidate's own tag, with the same tag as the stage
 # to prove: --ref candidate/2.0.0-beta.8 -f stage=candidate/2.0.0-beta.8 (or beta, or main).
 # Each scenario runs on a fresh GitHub machine, installs the way a stranger does, and ends with one
 # line in the run's summary: PASS <name>, or FAIL <name>: <what went wrong>. A scenario that cannot
@@ -201,7 +202,7 @@ jobs:
         if: failure()
         run: '[ -s "$RUNNER_TEMP/failed" ] || echo "FAIL linux-update: a step before the checks failed (its step log says how)" | tee -a "$GITHUB_STEP_SUMMARY"'
 
-  # The four scenarios of 2.0.0-beta.8 are scripts in scenarios/ (their README says how each one
+  # The scenarios of 2.0.0-beta.8 are scripts in scenarios/ (their README says how each one
   # proves what it proves), run from the stage's own copy of them.
   settings-on-install:
     name: the faster-chat settings a fresh install carries
@@ -219,27 +220,6 @@ jobs:
       - name: Say so when it stopped before its own verdict
         if: failure()
         run: 'grep -qE "^(PASS|FAIL) settings-on-install:" "$RUNNER_TEMP/verdict" 2>/dev/null || echo "FAIL settings-on-install: it stopped before its own verdict (its step log says how)" | tee -a "$GITHUB_STEP_SUMMARY"'
-
-  night-tidy:
-    name: the night chat tidy-up does only its job
-    needs: stage
-    runs-on: ubuntu-24.04
-    timeout-minutes: 90
-    env:
-      GODSPEED_SCENARIO_AI_KEY: ${{ secrets.GODSPEED_SCENARIO_AI_KEY }}
-      GODSPEED_SCENARIO_AI_URL: ${{ vars.GODSPEED_SCENARIO_AI_URL }}
-      GODSPEED_SCENARIO_AI_MODEL: ${{ vars.GODSPEED_SCENARIO_AI_MODEL }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.stage }}
-          persist-credentials: false
-      - name: The scenario, the stage's own copy of it
-        shell: bash
-        run: bash scenarios/night-tidy.sh "$STAGE_REF" | tee "$RUNNER_TEMP/verdict"
-      - name: Say so when it stopped before its own verdict
-        if: failure()
-        run: 'grep -qE "^(PASS|FAIL) night-tidy:" "$RUNNER_TEMP/verdict" 2>/dev/null || echo "FAIL night-tidy: it stopped before its own verdict (its step log says how)" | tee -a "$GITHUB_STEP_SUMMARY"'
 
   voice:
     name: a voice note, with the permission and without it
@@ -287,7 +267,7 @@ jobs:
   verdict:
     name: the verdict
     if: always()
-    needs: [stage, linux-install, mac-install, docker-server, linux-update, settings-on-install, night-tidy, voice, update-keeps-everything]
+    needs: [stage, linux-install, mac-install, docker-server, linux-update, settings-on-install, voice, update-keeps-everything]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     env:
@@ -299,7 +279,6 @@ jobs:
         docker-server=${{ needs.docker-server.result }}
         linux-update=${{ needs.linux-update.result }}
         settings-on-install=${{ needs.settings-on-install.result }}
-        night-tidy=${{ needs.night-tidy.result }}
         voice=${{ needs.voice.result }}
         update-keeps-everything=${{ needs.update-keeps-everything.result }}
     steps:
