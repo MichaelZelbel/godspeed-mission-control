@@ -132,14 +132,17 @@ export function telegramInHermes(home){try{return /^\s*TELEGRAM_BOT_TOKEN\s*=\s*
 // the owner connects it, before the first message is routed), or when the gateway already routes a
 // private chat through any app: a second chat app Hermes routes the same way needs no new code here
 // either. The table is read read-only and a database that cannot be read counts as no chat app.
-export const OWNER_CHAT_KEY_LIKE='agent:main:%:dm:%';
+// The assistant's own terminal and desktop app are routed the same way, as agent:main:local:dm:<id>,
+// and are no chat app: until 27 October 2026 one conversation in the terminal counted as one
+// (godspeed_routines.py, CHAT_KEY, says what that did to the routine).
+export const OWNER_CHAT_KEY_LIKE='agent:main:%:dm:%',OWN_SURFACES_LIKE='agent:main:local:%';
 export function routedOwnerChats(home){
  const file=path.join(home,'state.db');if(!fs.existsSync(file))return [];
  let db;
  try{
   db=new DatabaseSync(file,{readOnly:true});
-  return db.prepare('select session_key from gateway_routing where scope = ? and session_key like ?')
-   .all(path.join(home,'sessions'),OWNER_CHAT_KEY_LIKE).map(row=>row.session_key);
+  return db.prepare('select session_key from gateway_routing where scope = ? and session_key like ? and session_key not like ?')
+   .all(path.join(home,'sessions'),OWNER_CHAT_KEY_LIKE,OWN_SURFACES_LIKE).map(row=>row.session_key);
  }catch{return [];}finally{try{db?.close();}catch{}}
 }
 export function chatAppInHermes(home){return telegramInHermes(home)||routedOwnerChats(home).length>0;}
