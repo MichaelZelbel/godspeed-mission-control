@@ -214,10 +214,11 @@ jobs:
           ref: ${{ inputs.stage }}
           persist-credentials: false
       - name: The scenario, the stage's own copy of it
-        run: bash scenarios/settings-on-install.sh "$STAGE_REF"
+        shell: bash
+        run: bash scenarios/settings-on-install.sh "$STAGE_REF" | tee "$RUNNER_TEMP/verdict"
       - name: Say so when it stopped before its own verdict
         if: failure()
-        run: 'grep -q "settings-on-install" "$GITHUB_STEP_SUMMARY" || echo "FAIL settings-on-install: it stopped before its own verdict (its step log says how)" | tee -a "$GITHUB_STEP_SUMMARY"'
+        run: 'grep -qE "^(PASS|FAIL) settings-on-install:" "$RUNNER_TEMP/verdict" 2>/dev/null || echo "FAIL settings-on-install: it stopped before its own verdict (its step log says how)" | tee -a "$GITHUB_STEP_SUMMARY"'
 
   night-tidy:
     name: the night chat tidy-up does only its job
@@ -234,10 +235,11 @@ jobs:
           ref: ${{ inputs.stage }}
           persist-credentials: false
       - name: The scenario, the stage's own copy of it
-        run: bash scenarios/night-tidy.sh "$STAGE_REF"
+        shell: bash
+        run: bash scenarios/night-tidy.sh "$STAGE_REF" | tee "$RUNNER_TEMP/verdict"
       - name: Say so when it stopped before its own verdict
         if: failure()
-        run: 'grep -q "night-tidy" "$GITHUB_STEP_SUMMARY" || echo "FAIL night-tidy: it stopped before its own verdict (its step log says how)" | tee -a "$GITHUB_STEP_SUMMARY"'
+        run: 'grep -qE "^(PASS|FAIL) night-tidy:" "$RUNNER_TEMP/verdict" 2>/dev/null || echo "FAIL night-tidy: it stopped before its own verdict (its step log says how)" | tee -a "$GITHUB_STEP_SUMMARY"'
 
   voice:
     name: a voice note, with the permission and without it
@@ -254,10 +256,11 @@ jobs:
           ref: ${{ inputs.stage }}
           persist-credentials: false
       - name: The scenario, the stage's own copy of it
-        run: bash scenarios/voice.sh "$STAGE_REF"
+        shell: bash
+        run: bash scenarios/voice.sh "$STAGE_REF" | tee "$RUNNER_TEMP/verdict"
       - name: Say so when it stopped before its own verdict
         if: failure()
-        run: 'grep -q "voice" "$GITHUB_STEP_SUMMARY" || echo "FAIL voice: it stopped before its own verdict (its step log says how)" | tee -a "$GITHUB_STEP_SUMMARY"'
+        run: 'grep -qE "^(PASS|FAIL) voice:" "$RUNNER_TEMP/verdict" 2>/dev/null || echo "FAIL voice: it stopped before its own verdict (its step log says how)" | tee -a "$GITHUB_STEP_SUMMARY"'
 
   update-keeps-everything:
     name: an update from the current public version keeps everything
@@ -270,10 +273,11 @@ jobs:
           ref: ${{ inputs.stage }}
           persist-credentials: false
       - name: The scenario, the stage's own copy of it
-        run: bash scenarios/update-keeps-everything.sh "$STAGE_REF"
+        shell: bash
+        run: bash scenarios/update-keeps-everything.sh "$STAGE_REF" | tee "$RUNNER_TEMP/verdict"
       - name: Say so when it stopped before its own verdict
         if: failure()
-        run: 'grep -q "update-keeps-everything" "$GITHUB_STEP_SUMMARY" || echo "FAIL update-keeps-everything: it stopped before its own verdict (its step log says how)" | tee -a "$GITHUB_STEP_SUMMARY"'
+        run: 'grep -qE "^(PASS|FAIL) update-keeps-everything:" "$RUNNER_TEMP/verdict" 2>/dev/null || echo "FAIL update-keeps-everything: it stopped before its own verdict (its step log says how)" | tee -a "$GITHUB_STEP_SUMMARY"'
 
   verdict:
     name: the verdict
