@@ -16,7 +16,8 @@ done
 [ -n "$NODE" ] || { echo "FAIL: no node on this box"; exit 1; }
 
 TMP="$(mktemp -d)"
-trap 'rm -rf "$TMP" "$TEST_GUARD_HOME"' EXIT
+OUTSIDE="$(mktemp -d)"   # stands in for the machine outside the mission control's folder
+trap 'rm -rf "$TMP" "$OUTSIDE" "$TEST_GUARD_HOME"' EXIT
 mkdir -p "$TMP/rules" "$TMP/bin" "$TMP/goals/playbooks" "$TMP/skills/work-item" "$TMP/research"
 : > "$TMP/AGENTS.md"
 printf 'receipt\n' > "$TMP/rules/machine-words.txt"
@@ -39,6 +40,9 @@ case "${FAKE_MODE:-ok}" in
   noresult) echo "I did things but never said so" > "$OUT"; exit 0 ;;
   failed)   echo "RESULT: FAILED: the shop needs a login this machine does not have" > "$OUT"; exit 0 ;;
   short)    [ -n "$P" ] && { mkdir -p "$(dirname "$P")"; echo "too short" > "$P"; }; echo "RESULT: wrote $P" > "$OUT"; exit 0 ;;
+  repair)   KEPT="$(dirname "$OUT")/before$FAKE_FAULT"; mkdir -p "$(dirname "$KEPT")"; cp "$FAKE_FAULT" "$KEPT"
+            if [ "${FAKE_FIX:-works}" = works ]; then printf 'upgrade: runs\n' > "$FAKE_FAULT"; else printf 'upgrade: still broken\n' > "$FAKE_FAULT"; fi
+            echo "RESULT: put the fixed setting in place; it now says: $(cat "$FAKE_FAULT")" ;;
   *)        [ -n "${FAKE_TOUCH:-}" ] && printf 'repaired\n' > "$FAKE_TOUCH"
             [ -n "${FAKE_BEFORE:-}" ] && printf '%s\n' "$FAKE_BEFORE" > "$(dirname "$OUT")/before.txt"
             [ -n "${FAKE_KEEP:-}" ] && { mkdir -p "$(dirname "$OUT")/before/$(dirname "$FAKE_KEEP")"; printf 'as it was\n' > "$(dirname "$OUT")/before/$FAKE_KEEP"; }
@@ -191,6 +195,28 @@ contains "  and that a repair written down for later does not count" "$PS" "A re
 contains "the copies it kept are named in the run" "$OUT" "$RID kept 1 file(s) as they were before the repair"
 missing "an item of another kind is never told it may reach outside" "$(cat "$TMP/routines/work/2026-09-15/W-20260915-02/prompt-seen.txt")" "machine repair"
 missing "  and neither is a do item" "$(cat "$TMP/routines/work/2026-09-15/W-20260915-01/prompt-seen.txt")" "machine repair"
+check "a repair with no check is not closed on the assistant's word" "$(status_of "$RID")" "attempted"
+
+# A stand-in fault outside the folder: the repair keeps a copy, changes the file, and is closed
+# only when the check that found the fault passes again; a repair whose check still fails stays open.
+mkdir -p "$OUTSIDE/etc/nightly"
+printf 'upgrade: broken\n' > "$OUTSIDE/etc/nightly/job.conf"
+printf 'upgrade: broken\n' > "$OUTSIDE/etc/nightly/other.conf"
+hw file --what "Mend the nightly upgrade's setting $OUTSIDE/etc/nightly/job.conf" --done-when "the nightly upgrade's own check passes again" --check "grep -qx 'upgrade: runs' $OUTSIDE/etc/nightly/job.conf" --kind repair --key fault-mended --source test >/dev/null
+hw file --what "Mend the nightly upgrade's setting $OUTSIDE/etc/nightly/other.conf" --done-when "the nightly upgrade's own check passes again" --check "grep -qx 'upgrade: runs' $OUTSIDE/etc/nightly/other.conf" --kind repair --key fault-stays --source test >/dev/null
+MID="$(grep -l 'KEY: fault-mended$' "$TMP/work"/W-*.md | head -1 | xargs basename | sed 's/.md$//')"
+STAYID="$(grep -l 'KEY: fault-stays$' "$TMP/work"/W-*.md | head -1 | xargs basename | sed 's/.md$//')"
+OUT="$(FAKE_MODE=repair FAKE_FAULT="$OUTSIDE/etc/nightly/job.conf" run --only "$MID" 2>&1)"
+check "a repair whose check passes after the run is verified" "$(status_of "$MID")" "verified"
+contains "  by the check that found the fault, not by the assistant's word" "$(cat "$TMP/work/$MID.md")" "VERIFIED check passed (grep -qx 'upgrade: runs'"
+check "  the file outside the folder was changed" "$(cat "$OUTSIDE/etc/nightly/job.conf")" "upgrade: runs"
+check "  and was kept whole first, under its full path in the item's run folder" "$(cat "$TMP/routines/work/2026-09-15/$MID/before$OUTSIDE/etc/nightly/job.conf" 2>&1)" "upgrade: broken"
+contains "  and the run names the copy" "$OUT" "$MID kept 1 file(s) as they were before the repair"
+OUT="$(FAKE_MODE=repair FAKE_FIX=fails FAKE_FAULT="$OUTSIDE/etc/nightly/other.conf" run --only "$STAYID" 2>&1)"
+check "a repair whose check still fails stays open" "$(status_of "$STAYID")" "attempted"
+contains "  the run says so" "$OUT" "$STAYID attempted, not verified"
+contains "  and the failing check is on the record" "$(cat "$TMP/work/$STAYID.md")" "UNVERIFIED check failed"
+check "  the copy is there to put it back" "$(cat "$TMP/routines/work/2026-09-15/$STAYID/before$OUTSIDE/etc/nightly/other.conf" 2>&1)" "upgrade: broken"
 
 # --- the budget and the limit -----------------------------------------------------------------------------------
 hw file --what "One more" --done-when "research/one.md exists" --key one --source test >/dev/null
