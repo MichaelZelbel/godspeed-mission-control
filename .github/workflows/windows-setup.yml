@@ -21,11 +21,12 @@ on:
 permissions:
   contents: read
 env:
-  # The kit-bootstrap commit the Windows setup is built with: kit-bootstrap #1 merged ("Open my notebook"
-  # starts the notebook and Start search finds it, product #58). 2.0.0-beta.7 and 2.0.0-beta.8 were built
-  # with 5364e82b44ab0b093e04262c680a21d666faf5e1 (their stage files name it as windowsBootstrapCommit). A release that changes it
-  # changes it here.
-  KIT_BOOTSTRAP_COMMIT: cbe395a88a1cfd366ede8b80c01ec086b34527c3
+  # The kit-bootstrap commit the Windows setup is built with: kit-bootstrap #2 merged (no install-count
+  # question, a true email note without book chapters, product #81, and no browser code page on an
+  # update, product #79). 2.0.0-beta.9 was built with cbe395a88a1cfd366ede8b80c01ec086b34527c3, and
+  # 2.0.0-beta.7 and 2.0.0-beta.8 with 5364e82b44ab0b093e04262c680a21d666faf5e1 (their stage files name it
+  # as windowsBootstrapCommit). A release that changes it changes it here.
+  KIT_BOOTSTRAP_COMMIT: 8ac85e063fea08069ab6ef260525c48aa03338b4
 jobs:
   setup:
     name: windows setup
