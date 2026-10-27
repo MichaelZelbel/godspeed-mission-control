@@ -120,7 +120,7 @@ missing "  not from whatever mc-due is on the path" "$due" "ran due.js"
 
 # 4. The others still read as shell.
 for f in mc-run mc-decide mc-work-run; do bash -n "$HERE/$f" && ok "$f reads as bash" || bad "$f does not read as bash"; done
-for f in mc-notebook-sync mc-notebook-env mc-install-count; do sh -n "$HERE/$f" && ok "$f reads as sh" || bad "$f does not read as sh"; done
+for f in mc-notebook-sync mc-notebook-env; do sh -n "$HERE/$f" && ok "$f reads as sh" || bad "$f does not read as sh"; done
 
 echo
 echo "launchers: $PASS passed, $FAIL failed"

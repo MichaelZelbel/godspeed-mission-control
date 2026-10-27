@@ -74,12 +74,11 @@ check "the deadline tool takes a target alone, and asks once when it has passed"
 check "the goal register reads, bets and settles each goal's weekly number" x sh -c \
   'H=$(/opt/data/.local/bin/mc-goals help) && for w in "read <id>" "bets --moves" "settle ["; do printf "%s" "$H" | grep -qF "$w" || exit 1; done &&
    grep -q "BET:" /opt/data/godspeed/skills/next-action/SKILL.md'
-# The install count (kit-bootstrap lib.sh, THE INSTALL COUNT): asked only of a person, so an
-# unattended setup writes no answer and sends nothing, and the program that would send the
-# first-brief word is installed and does nothing without a yes.
-check "unattended setup writes no install-count answer" x sh -c '! grep -q "^GODSPEED_INSTALL_COUNT" /opt/data/.godspeed/device.env'
-check "the install-count program is installed and silent without a yes" x sh -c \
-  'test -x /opt/data/.local/bin/mc-install-count && KB_INSTALL_COUNT_URL=http://127.0.0.1:9/none /opt/data/.local/bin/mc-install-count first-brief'
+# No install count (27 October 2026): no installer asks whether the install may be reported, so
+# the setup writes no answer, and the program that once reported the first brief is not there.
+check "the setup writes no install-count answer" x sh -c '! grep -q "^GODSPEED_INSTALL_COUNT" /opt/data/.godspeed/device.env'
+check "no install-count program is installed, and nothing for it is on the clock" x sh -c \
+  '! test -e /opt/data/.local/bin/mc-install-count && ! crontab -l 2>/dev/null | grep -q mc-install-count'
 check "the image version is recorded" sh -c "docker exec godspeed grep -q '^v1+' /opt/data/.godspeed/image-version"
 check "healthy after setup restarted the gateway" wait_healthy
 check "nothing in the volume belongs to root" sh -c "[ -z \"\$(docker exec godspeed find /opt/data -user root -print -quit)\" ]"
@@ -221,7 +220,7 @@ check "the first writer is greeted and owns the bot" grep -q 'Hi Tess' "$WORK/tg
 check "a stranger is turned away" grep -q 'This assistant belongs to someone else' "$WORK/tg/record.json"
 check "the installer built the folder and pushed it" x sh -c \
   'test -f /opt/data/godspeed/AGENTS.md && git -C /opt/data/godspeed ls-remote --exit-code origin >/dev/null'
-check "the chat asks no install-count question and the installer sends nothing" x grep -q '^GODSPEED_INSTALL_COUNT=0' /opt/data/.godspeed/device.env
+check "the chat setup leaves no install-count answer either" x sh -c '! grep -q "^GODSPEED_INSTALL_COUNT" /opt/data/.godspeed/device.env'
 check "the image's GitHub tool knows every flag the shared installer uses" x sh -c '/usr/bin/gh auth login --help | grep -q -- --skip-ssh-key'
 check "the bot is handed to Hermes, for its owner only" x sh -c \
   "grep -qx 'TELEGRAM_ALLOWED_USERS=111' /opt/data/.env && grep -qx 'TELEGRAM_HOME_CHANNEL=111' /opt/data/.env && grep -q '^TELEGRAM_BOT_TOKEN=' /opt/data/.env"

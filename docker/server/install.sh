@@ -30,7 +30,6 @@
 #
 # Settings, all optional:
 #   GODSPEED_HOST=name.example.com     use your own domain instead of <ip>.sslip.io
-#   GODSPEED_INSTALL_COUNT=yes         send one anonymous note that the install worked (default: nothing is sent)
 #   GODSPEED_STAGE_REF=beta            the branch or tag whose stage file says which version to
 #                                      install (default beta, the version everybody gets)
 #   GODSPEED_IMAGE=ghcr.io/michaelzelbel/godspeed-mission-control:v2-sha-<commit>
@@ -505,28 +504,6 @@ else console.log("error "+(d.error||("status "+r.status)));}
 catch(e){console.log("error "+e.message)}' 2>>"$LOG"
 }
 
-# --- The install count -----------------------------------------------------------
-
-# The other installers ask; this one, run through a pipe, only honours GODSPEED_INSTALL_COUNT=yes
-# set by the reader (default: nothing is sent). It sends the word "installed", the kind of
-# install and a random number made here, once, to the website godspeedmissioncontrol.com, which
-# counts it and keeps no address (THE INSTALL COUNT in kit-bootstrap's lib.sh).
-count_install() {
-  case "${GODSPEED_INSTALL_COUNT:-}" in [Yy]*|1) ;; *) return 0 ;; esac
-  case "${DO_NOT_TRACK:-}" in ""|0|false|no) ;; *) return 0 ;; esac
-  local file="$DIR/install-count" id
-  [ -f "$file" ] && grep -q '^sent=installed' "$file" && return 0
-  id="$(sed -n 's/^id=//p' "$file" 2>/dev/null)"
-  [ -n "$id" ] || id="$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
-  printf 'id=%s\n' "$id" > "$file"
-  if curl -fsS -m 8 -o /dev/null -X POST -H 'Content-Type: application/json' \
-       --data "{\"product\":\"mission-control\",\"event\":\"installed\",\"install\":\"$id\",\"kind\":\"docker-server\",\"run\":\"new\"}" \
-       "${KB_INSTALL_COUNT_URL:-https://godspeedmissioncontrol.com/signal/v1}" >/dev/null 2>&1; then
-    printf 'sent=installed\n' >> "$file"
-  fi
-  return 0
-}
-
 # The last words a person reads after installing: where the mission control is, how to start
 # talking to it, and where to hear more. The Linux and Mac installer and the Windows setup's
 # finish page end with the same three things. With a private link (the account is not made yet)
@@ -559,7 +536,7 @@ as_root() {
   command -v sudo >/dev/null 2>&1 || stop "This needs the server's administrator account. Log in as root and run this line again."
   say "This needs the server's administrator rights, so it asks sudo (it may ask for your password)."
   local pass=() v
-  for v in GODSPEED_HOST GODSPEED_IMAGE GODSPEED_STAGE_REF GODSPEED_STAGE_RAW GODSPEED_RAW GODSPEED_SELF_URL GODSPEED_DIR GODSPEED_INSTALL_COUNT DO_NOT_TRACK GODSPEED_CERT_WAIT GODSPEED_START_WAIT GODSPEED_APT_WAIT; do
+  for v in GODSPEED_HOST GODSPEED_IMAGE GODSPEED_STAGE_REF GODSPEED_STAGE_RAW GODSPEED_RAW GODSPEED_SELF_URL GODSPEED_DIR GODSPEED_CERT_WAIT GODSPEED_START_WAIT GODSPEED_APT_WAIT; do
     [ -n "${!v:-}" ] && pass+=("$v=${!v}")
   done
   if [ -n "$SELF_FILE" ] && [ -f "$SELF_FILE" ]; then
@@ -666,7 +643,9 @@ main() {
 
   local answer; answer="$(owner_link "$code")"
   log "owner link: ${answer%% *}"
-  count_install   # sends at most once per server, and only when asked to
+  # Until 27 October 2026 GODSPEED_INSTALL_COUNT=yes sent one note that the install worked, and this
+  # file remembered it was sent. Nothing is sent any more; the old record goes.
+  rm -f "$DIR/install-count"
   case "$answer" in
     link\ *) finished_words "$host" "${answer#link }" ;;
     owner)   finished_words "$host" ;;
