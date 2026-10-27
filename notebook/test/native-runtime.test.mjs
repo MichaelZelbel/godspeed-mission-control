@@ -178,10 +178,10 @@ test('a server that joins later and takes the routines over gets the starting ro
  serverScheduler.lastTick=0;await serverScheduler.tick();
  const named=serverHermes.calls.filter(c=>c.args[1]==='create').map(c=>c.args[c.args.indexOf('--name')+1]);
  assert.equal(named.filter(n=>STARTING.some(([name])=>name===n)).length,STARTING.length,'once');
- // This server has a chat app, so the tick also gives it the night chat tidy-up, which no goal
- // starts (notebook-routines.mjs, CHAT_TIDY_JOB), and that one keeps its results to itself.
- assert.deepEqual(named.filter(n=>!STARTING.some(([name])=>name===n)),[CHAT_TIDY_JOB]);
- assert.equal(serverHermes.jobs().find(j=>j.name===CHAT_TIDY_JOB).deliver,'local');
+ // This server has a chat app, and still the tick makes nothing else: the night chat tidy-up is
+ // made for no install since 27 October 2026 (notebook-routines.mjs, CHAT_TIDY_JOB).
+ assert.deepEqual(named.filter(n=>!STARTING.some(([name])=>name===n)),[]);
+ assert.equal(serverHermes.jobs().some(j=>j.name===CHAT_TIDY_JOB),false);
  // The computer no longer runs them: its Hermes is not ticked.
  pc.save('settings',{id:'installation',owner:'vps'});pcScheduler.lastTick=0;const before=pcHermes.calls.length;await pcScheduler.tick();
  assert.equal(pcHermes.calls.length,before);
@@ -225,11 +225,12 @@ for(const [label,sent] of [['still waits to be sent',false],['went out, and Herm
   if(sent){const [invite]=hermes.jobs();hermes.write([{...invite,enabled:false,state:'completed',next_run_at:null,last_run_at:new Date().toISOString(),last_status:'ok',repeat:{times:1,completed:1}}]);}
   fileGoal(root,'--status','adopted','--title','Fictional first goal');
   scheduler.lastTick=0;await scheduler.tick();
-  // The seven, beside the invitation, and the night chat tidy-up this server's chat app brings.
-  assert.deepEqual(names(hermes.jobs()),[INVITE_JOB,...STARTING_NAMES,CHAT_TIDY_JOB]);
+  // The seven, beside the invitation, and no night chat tidy-up although this server has a chat
+  // app (made for no install since 27 October 2026, notebook-routines.mjs, CHAT_TIDY_JOB).
+  assert.deepEqual(names(hermes.jobs()),[INVITE_JOB,...STARTING_NAMES]);
   assert.equal(store.get('settings',FLAG).state,'created');assert.equal(readMachineRecord(store).state,'created');
-  assert.deepEqual([...new Set(hermes.jobs().filter(j=>![INVITE_JOB,CHAT_TIDY_JOB].includes(j.name)).map(j=>j.deliver))],['telegram']);
-  assert.equal(hermes.jobs().find(j=>j.name===CHAT_TIDY_JOB).deliver,'local','the night tidy-up sends nothing to the chat');
+  assert.deepEqual([...new Set(hermes.jobs().filter(j=>j.name!==INVITE_JOB).map(j=>j.deliver))],['telegram']);
+  assert.equal(hermes.jobs().some(j=>j.name===CHAT_TIDY_JOB),false);
  });
 }
 

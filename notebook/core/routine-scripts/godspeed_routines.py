@@ -32,7 +32,8 @@ Each routine runs the original programs of the mission control, never a copy of 
               while nobody waits for an answer, through the assistant's own control channel. It is
               the one routine that runs no program of the mission control's; its rules and reasons
               are in its own block below (chat_tidy). It prints nothing for the person: its log is
-              its output and goes to the error stream, and it sends nothing to the chat.
+              its output and goes to the error stream, and it sends nothing to the chat. No
+              install is given this routine since 27 October 2026 (notebook-routines.mjs).
 
 The two that run every 15 minutes, coach-tick and journal-tick, also say once what the notebook
 needs the person to hear and could not send itself, such as a nightly backup that failed: the
@@ -718,10 +719,11 @@ def chat_db(c):
 
 def chat_session(c, con):
     """The stored conversation the gateway currently routes the owner's chat to, or None while it
-    routes none: the routine is there from the moment a chat app is connected, and a chat app
-    connected today has nothing routed until the first message (native-scheduler.mjs,
-    followChatTidy). Nothing to tidy up is not a failure. More than one chat is: acting then could
-    summarise the wrong conversation, which is the one thing this must never do."""
+    routes none: the routine is made from the moment a chat app is connected, and a chat app
+    connected today has nothing routed until the first message (made for no install since 27
+    October 2026, notebook-routines.mjs says why). Nothing to tidy up is not a failure. More than
+    one chat is: acting then could summarise the wrong conversation, which is the one thing this
+    must never do."""
     scope = os.path.join(c["home"], "sessions")
     try:
         rows = [row for row in con.execute(

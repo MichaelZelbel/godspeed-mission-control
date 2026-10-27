@@ -363,15 +363,15 @@ update_good() { # <folder>
   printf '{"id":"scenario-chat-1"}\n{"content":"a message of the chat history","session_id":"scenario-chat-1"}\n' \
     >"$folder/chat-before.txt"
   cp "$folder/chat-before.txt" "$folder/chat-after.txt"
-  printf 'Goal research\nThe day ahead\nNight chat tidy-up\n' >"$folder/routines-after.txt"
+  printf 'Goal research\nThe day ahead\n' >"$folder/routines-after.txt"
   printf '200\n' >"$folder/health.txt"
 }
 
 section update-keeps-everything
 U=$TMP/update
 update_good "$U/good"
-passes "an update onto the stage's commits that kept the records, the setting, the chat and one routine" \
-  update-keeps-everything "$U/good" "is there exactly once"
+passes "an update onto the stage's commits that kept the records, the setting and the chat, and made no night routine" \
+  update-keeps-everything "$U/good" "there is no \"Night chat tidy-up\""
 
 copy "$U/good" "$U/no-version"
 rm "$U/no-version/version-after"
@@ -404,10 +404,10 @@ printf '{"id":"scenario-chat-1"}\n' >"$U/chat-gone/chat-after.txt"
 refuses "an update that lost the chat history" update-keeps-everything "$U/chat-gone" \
   "the chat history is not the same"
 
-copy "$U/good" "$U/twice"
-printf 'Goal research\nNight chat tidy-up\nNight chat tidy-up\n' >"$U/twice/routines-after.txt"
-refuses "an update that left the night routine there twice" update-keeps-everything "$U/twice" \
-  "2 times after the update, not once"
+copy "$U/good" "$U/made-it"
+printf 'Goal research\nNight chat tidy-up\n' >"$U/made-it/routines-after.txt"
+refuses "an update that made the night routine this release leaves out" update-keeps-everything "$U/made-it" \
+  "1 times after the update, which this release does not make"
 
 copy "$U/good" "$U/silent"
 printf '000\n' >"$U/silent/health.txt"

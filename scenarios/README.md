@@ -13,15 +13,15 @@ and these are not programs for users.
 | script | what it proves |
 | --- | --- |
 | `settings-on-install.sh` | a fresh install carries the faster-chat settings, and a value the owner set stays theirs |
-| `night-tidy.sh` | the night chat tidy-up summarises the owner's chat and touches nothing else |
+| `night-tidy.sh` | the night chat tidy-up summarises the owner's chat and touches nothing else (not run on a candidate since 27 October 2026, when the tidy-up left 2.0.0-beta.8: no install gets it, so there is nothing to prove until the release that brings it back) |
 | `voice.sh` | a voice note is understood and answered, with the ElevenLabs permission and without it |
 | `update-keeps-everything.sh` | an update from the current public version keeps records, settings and the chat |
 
 ## How one is run
 
 ```
-bash scenarios/night-tidy.sh candidate/2.0.0-beta.8   the whole scenario, on a throwaway machine
-bash scenarios/night-tidy.sh --check <folder>         only the checking part, against a folder
+bash scenarios/voice.sh candidate/2.0.0-beta.8   the whole scenario, on a throwaway machine
+bash scenarios/voice.sh --check <folder>         only the checking part, against a folder
 ```
 
 The one argument is the stage ref: a branch or tag of this repository holding `stage.json`, which
@@ -31,8 +31,8 @@ scenario installs the way a stranger does, through the one line the `linux-insta
 output:
 
 ```
-PASS night-tidy: the routed chat went from 320 messages ... to 20 ...
-FAIL night-tidy: the notebook never made the routine "Night chat tidy-up" on this install ...
+PASS voice: a key that may transcribe had the voice note understood by ElevenLabs Scribe ...
+FAIL voice: ELEVENLABS_TEST_KEY_STT is not in this job's environment, so ...
 ```
 
 Exit 0 or 1, and the line is appended to the run's summary as well. Everything else it says goes to
@@ -60,8 +60,8 @@ Named by the job, never in a file here:
 
 | scenario | environment | what it is |
 | --- | --- | --- |
-| `night-tidy` | `GODSPEED_SCENARIO_AI_KEY` | summarising a chat needs an AI model; `GODSPEED_SCENARIO_AI_URL` and `GODSPEED_SCENARIO_AI_MODEL` say which |
-| `update-keeps-everything` | `GODSPEED_SCENARIO_AI_KEY` | the owner's chat with the assistant needs one too; the same two say which |
+| `update-keeps-everything` | `GODSPEED_SCENARIO_AI_KEY` | the owner's chat with the assistant needs an AI model; `GODSPEED_SCENARIO_AI_URL` and `GODSPEED_SCENARIO_AI_MODEL` say which |
+| `night-tidy` | `GODSPEED_SCENARIO_AI_KEY` | summarising a chat needs one too; the same two say which |
 | `voice` | `ELEVENLABS_TEST_KEY_STT` | a test key ElevenLabs lets transcribe |
 | `voice` | `ELEVENLABS_TEST_KEY_NO_STT` | a test key it refuses that permission |
 

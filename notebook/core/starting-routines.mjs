@@ -135,6 +135,8 @@ export function telegramInHermes(home){try{return /^\s*TELEGRAM_BOT_TOKEN\s*=\s*
 // The assistant's own terminal and desktop app are routed the same way, as agent:main:local:dm:<id>,
 // and are no chat app: until 27 October 2026 one conversation in the terminal counted as one
 // (godspeed_routines.py, CHAT_KEY, says what that did to the routine).
+// Since 27 October 2026 the night chat tidy-up is made for no install (notebook-routines.mjs), so
+// nothing asks this until the release that brings it back.
 export const OWNER_CHAT_KEY_LIKE='agent:main:%:dm:%',OWN_SURFACES_LIKE='agent:main:local:%';
 export function routedOwnerChats(home){
  const file=path.join(home,'state.db');if(!fs.existsSync(file))return [];

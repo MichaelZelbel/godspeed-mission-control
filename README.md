@@ -10,7 +10,7 @@ Version 2 is the current edition. The lines below install the current public ver
 
 ## New in 2.0.0-beta.8
 
-The chat answers faster. In Telegram the answer appears while it is written, in one message that grows, and no "let me check" lines are left behind. A long chat is shortened at night, when you are not waiting for an answer, instead of in front of your next message.
+The chat answers faster. In Telegram the answer appears while it is written, in one message that grows, and no "let me check" lines are left behind.
 
 ### Voice replies
 
