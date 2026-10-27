@@ -690,8 +690,13 @@ def journal_tick(c):
 #
 # The routing key of the owner's own chat in a chat app. The app's name is the routing table's, so a
 # chat app the gateway routes the same way needs no new code here (today: telegram, a private chat).
+# "local" is no chat app: it is the assistant's own terminal and desktop app, which the assistant
+# routes the same way, one key per conversation (agent:main:local:dm:local-<id>). Until 27 October
+# 2026 it counted, so on a machine where the owner had once talked to the assistant in its terminal
+# the routine found two chats beside a Telegram one and refused every night ("found 2"), and with no
+# chat app at all it would have summarised a terminal conversation.
 CHAT_KEY_LIKE = "agent:main:%:dm:%"
-CHAT_KEY = re.compile(r"^agent:main:[^:]+:dm:.+$")
+CHAT_KEY = re.compile(r"^agent:main:(?!local:)[^:]+:dm:.+$")
 
 
 def chat_log(line):

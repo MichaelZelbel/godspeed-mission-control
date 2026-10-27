@@ -178,6 +178,9 @@ test('any chat app Hermes routes the same way gets the night tidy-up, with no ne
  const route=(key,id)=>db.prepare('insert into gateway_routing values (?,?,?)').run(path.join(home,'sessions'),key,JSON.stringify({session_id:id}));
  route('agent:main:telegram:group:8','a-group-chat');
  assert.equal(chatAppInHermes(home),false,'a group chat is not the owner\'s own chat');
+ route('agent:main:local:dm:local-1','a-conversation-in-the-terminal');
+ assert.equal(chatAppInHermes(home),false,'the assistant\'s own terminal is no chat app');
+ await scheduler.followChatTidy();assert.equal(mine().length,0,'so it gets no night tidy-up');
  route('agent:main:signal:dm:7','the-owners-chat');
  db.close();
  assert.equal(telegramInHermes(home),false,'still no Telegram bot in Hermes');

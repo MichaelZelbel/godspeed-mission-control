@@ -213,6 +213,21 @@ test('the routing table decides which chat app it is, so another one needs no ne
  assert.match(log,/summarised in \d+ s: status compressed/);
 });
 
+test('the assistant\'s own terminal is no chat app: its conversations beside the Telegram chat do not count',needs,async t=>{
+ const chat=home(t,{plan:{'session.resume':resumed(),'session.compress':compressed,'session.close':{closed:true}}});
+ const db=new DatabaseSync(path.join(chat.hermes,'state.db'));
+ // How the assistant routes a conversation in its own terminal or desktop app, one key each, in the
+ // same scope as the chat app's (seen on a fresh install on 27 October 2026, when this was "found 2").
+ for(const id of ['local-1','local-2'])db.prepare('insert into gateway_routing values (?,?,?)')
+  .run(path.join(chat.hermes,'sessions'),'agent:main:local:dm:'+id,JSON.stringify({session_id:OTHER}));
+ db.close();
+ const {code,log}=chat.run();
+ assert.equal(code,0,log);
+ assert.match(log,/chat chat-session-1: /,'the Telegram chat is the one it found');
+ assert.match(log,/summarised in \d+ s: status compressed/);
+ assert.equal(chat.asked()[0].params.session_id,CHAT);
+});
+
 test('a summary that ends with any other status is a failed run',needs,async t=>{
  const chat=home(t,{plan:{'session.resume':resumed(),'session.compress':{status:'locked'},'session.close':{closed:true}}});
  const {code,log}=chat.run();
