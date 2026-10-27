@@ -28,6 +28,11 @@ Each routine runs the original programs of the mission control, never a copy of 
   coach-tick  godspeed-coach tick: the one follow-up and the evening habit check, or nothing.
   journal-tick  godspeed-journal tick: the journal's check-ins, evening list and weekly summary that
               the person switched on, when one is due, or nothing (notebook-routines.mjs).
+  chat-tidy   the night chat tidy-up, at 01:30: the long chat with the assistant is summarised
+              while nobody waits for an answer, through the assistant's own control channel. It is
+              the one routine that runs no program of the mission control's; its rules and reasons
+              are in its own block below (chat_tidy). It prints nothing for the person: its log is
+              its output and goes to the error stream, and it sends nothing to the chat.
 
 The two that run every 15 minutes, coach-tick and journal-tick, also say once what the notebook
 needs the person to hear and could not send itself, such as a nightly backup that failed: the
@@ -43,13 +48,19 @@ reaches the person the way their lines do (a note in "From your routines" on a c
 on a server), and it is kept in godspeed-routines-status.json beside Hermes' own record, from which
 the Routines list still says that the run failed (starting-routines.mjs, routineStatus).
 """
+import argparse
 import json
 import os
+import queue
 import re
 import shutil
+import sqlite3
 import subprocess
 import sys
+import threading
+import time
 from datetime import datetime, timezone
+from pathlib import Path
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 NO_WAKE = '{"wakeAgent": false}'
@@ -639,6 +650,251 @@ def journal_tick(c):
     return "\n\n".join(said + ([r.stdout.strip()] if r.stdout.strip() else []))
 
 
+# ===================================================================== THE NIGHT CHAT TIDY-UP
+#
+# WHY THIS EXISTS (26 October 2026). The assistant keeps a chat app's chat as one long conversation
+# and summarises its older part once it passes its threshold (compression.threshold_tokens). It does
+# that BEFORE answering the message that crossed the line, and a summary takes minutes: a real
+# message waited 4 min 9 s while 348 messages became 43, and all the person saw was "typing". The
+# assistant has no idle-time summarising of its own (idle_compact_after_seconds also runs before the
+# next reply) and no compress command.
+#
+# What it does have is its own control channel, the stdio JSON-RPC its terminal and desktop apps use
+# (python -m tui_gateway.entry): session.resume opens a stored conversation and session.compress
+# summarises it under the assistant's own compression lock. The gateway reloads the chat from the
+# database on every message, so a summary written here at night is what the next morning's message
+# starts from.
+#
+# RULES IT HOLDS ITSELF TO
+#   - It only ever summarises the conversation the gateway's routing table names for the owner's
+#     chat, and only after session.resume confirms that exact conversation. Any other answer stops
+#     it. (On 26 October 2026 a hand test whose copy step failed went on to summarise the live chat
+#     instead of the copy; every step here is checked before the next one runs.)
+#   - It does nothing while the chat is in use: last message less than --idle-minutes ago, an open
+#     turn lease on any conversation of its chain, or the conversation reported running.
+#   - It does nothing below --min-tokens (the last real prompt size the gateway recorded), because
+#     summarising an already short chat only rewrites the summary.
+#   - It talks to the assistant only through that control channel, checks every answer before the
+#     next step, always closes what it opened, and opens the database read-only.
+#   - It sends nothing to the chat. Its output is its log, which goes to the error stream so that
+#     what the routine prints for the person stays empty: the assistant's silence, so nothing is
+#     sent and no note is saved. A run that went wrong says one sentence and exits non-zero.
+#
+# The assistant's home, the assistant's own Python and the working folder come from this install
+# (godspeed-routines.json, written by starting-routines.mjs), never from a path written by hand.
+#
+# By hand, from the assistant's scripts folder:
+#   godspeed-chat-tidy.py --dry-run             find the chat, open and close it, say what it would do
+#   godspeed-chat-tidy.py --session ID --force  summarise one named stored conversation whatever its
+#                                               size (for a test on a copy; a chat in use is refused)
+#
+# The routing key of the owner's own chat in a chat app. The app's name is the routing table's, so a
+# chat app the gateway routes the same way needs no new code here (today: telegram, a private chat).
+CHAT_KEY_LIKE = "agent:main:%:dm:%"
+CHAT_KEY = re.compile(r"^agent:main:[^:]+:dm:.+$")
+
+
+def chat_log(line):
+    sys.stderr.write(time.strftime("%Y-%m-%d %H:%M:%S UTC ", time.gmtime()) + line + "\n")
+    sys.stderr.flush()
+
+
+def chat_db(c):
+    """The assistant's own database, read-only. A path becomes a URI through as_uri(), because a
+    Windows path is none as it stands and a space or a hash in it would end the file name."""
+    file = os.path.join(c["home"], "state.db")
+    if not os.path.isfile(file):
+        fail("The assistant keeps no chat on this machine yet.")
+    try:
+        return sqlite3.connect(Path(file).as_uri() + "?mode=ro", uri=True, timeout=30)
+    except sqlite3.Error as error:
+        fail("The assistant's chat could not be opened: %s" % error)
+
+
+def chat_session(c, con):
+    """The stored conversation the gateway currently routes the owner's chat to, or None while it
+    routes none: the routine is there from the moment a chat app is connected, and a chat app
+    connected today has nothing routed until the first message (native-scheduler.mjs,
+    followChatTidy). Nothing to tidy up is not a failure. More than one chat is: acting then could
+    summarise the wrong conversation, which is the one thing this must never do."""
+    scope = os.path.join(c["home"], "sessions")
+    try:
+        rows = [row for row in con.execute(
+            "select session_key, entry_json from gateway_routing where scope = ? and session_key like ?",
+            (scope, CHAT_KEY_LIKE)).fetchall() if CHAT_KEY.match(row[0] or "")]
+    except sqlite3.Error as error:
+        fail("The assistant's routing table could not be read: %s" % error)
+    if not rows:
+        return None
+    if len(rows) > 1:
+        fail("Expected one chat of the owner's in the assistant's routing table, found %d." % len(rows))
+    try:
+        entry = json.loads(rows[0][1] or "{}")
+    except ValueError:
+        entry = {}
+    if not entry.get("session_id"):
+        fail("The assistant's routing table names no stored conversation for %s." % rows[0][0])
+    return entry["session_id"]
+
+
+def chat_state(con, session_id):
+    """The last prompt size the gateway recorded, when the last message was, and open turn leases."""
+    row = con.execute("select model_config from sessions where id = ?", (session_id,)).fetchone()
+    if row is None:
+        fail("The stored conversation %s was not found." % session_id)
+    try:
+        anchor = (json.loads(row[0] or "{}").get("_usage_anchor") or {})
+    except ValueError:
+        anchor = {}
+    last = con.execute("select max(timestamp) from messages where session_id = ?", (session_id,)).fetchone()[0]
+    # A turn lease is keyed by the lineage root (the first conversation this one continues), so look
+    # for one on every conversation in the chain.
+    chain, sid = [], session_id
+    while sid and sid not in chain and len(chain) < 50:
+        chain.append(sid)
+        parent = con.execute("select parent_session_id from sessions where id = ?", (sid,)).fetchone()
+        sid = parent[0] if parent else None
+    marks = ",".join("?" * len(chain))
+    leases = con.execute(
+        "select count(*) from session_turn_leases where expires_at > ? and conversation_id in (%s)" % marks,
+        (time.time(), *chain)).fetchone()[0]
+    return anchor.get("prompt_tokens"), last, leases
+
+
+class Channel:
+    """The assistant's control channel over stdio, one request at a time."""
+
+    def __init__(self, c):
+        python, source = c.get("hermes_python"), c.get("hermes_source")
+        if not python or not os.path.isfile(python):
+            fail("The assistant's own Python was not found on this machine, so its chat is left as it is.")
+        env = dict(os.environ, HERMES_HOME=c["home"], GODSPEED_ROOT=c["root"], GODSPEED_DIR=c["root"],
+                   GODSPEED_WORKSPACE=c["root"], PYTHONIOENCODING="utf-8")
+        # The assistant's own folder first on Python's path, the way the add-ons reach its modules
+        # (core/addon-model.mjs); an install that runs it from a package needs nothing here.
+        if source:
+            env["PYTHONPATH"] = os.pathsep.join([source] + [p for p in [env.get("PYTHONPATH")] if p])
+        try:
+            self.p = subprocess.Popen([python, "-m", "tui_gateway.entry"], cwd=c["root"], env=env,
+                                      stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                      stderr=subprocess.DEVNULL, text=True, encoding="utf-8",
+                                      errors="replace", bufsize=1)
+        except OSError as error:
+            fail("The assistant's control channel could not be started: %s" % error)
+        self.q, self.n = queue.Queue(), 0
+        threading.Thread(target=self._lines, daemon=True).start()
+
+    def _lines(self):
+        for line in self.p.stdout:
+            self.q.put(line)
+
+    def call(self, method, params, timeout):
+        self.n += 1
+        try:
+            self.p.stdin.write(json.dumps({"jsonrpc": "2.0", "id": self.n, "method": method, "params": params}) + "\n")
+            self.p.stdin.flush()
+        except OSError:
+            fail("%s: the assistant's control channel closed." % method)
+        end = time.time() + timeout
+        while time.time() < end:
+            try:
+                line = self.q.get(timeout=1)
+            except queue.Empty:
+                if self.p.poll() is not None:
+                    fail("%s: the assistant's control channel exited (%s)." % (method, self.p.returncode))
+                continue
+            try:
+                msg = json.loads(line)
+            except ValueError:
+                continue
+            if msg.get("id") == self.n:
+                if msg.get("error"):
+                    fail("%s refused: %s" % (method, msg["error"]))
+                return msg.get("result") or {}
+        fail("%s: no answer within %d s." % (method, timeout))
+
+    def close(self):
+        try:
+            self.p.stdin.close()
+            self.p.wait(timeout=20)
+        except Exception:
+            self.p.kill()
+
+
+def chat_tidy(c):
+    ap = argparse.ArgumentParser(prog="godspeed-chat-tidy",
+                                 description="Summarise the long chat with the assistant at night.")
+    ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--force", action="store_true", help="ignore --min-tokens")
+    ap.add_argument("--session", help="a stored conversation id instead of the owner's chat")
+    ap.add_argument("--min-tokens", type=int, default=60000)
+    ap.add_argument("--idle-minutes", type=int, default=30)
+    ap.add_argument("--resume-timeout", type=int, default=180)
+    ap.add_argument("--compress-timeout", type=int, default=900)
+    a = ap.parse_args()
+
+    con = chat_db(c)
+    try:
+        target = a.session or chat_session(c, con)
+        state = chat_state(con, target) if target else None
+    finally:
+        try:
+            con.close()
+        except sqlite3.Error:
+            pass
+    if not target:
+        chat_log("skip: the assistant routes no chat of the owner's yet")
+        return ""
+    tokens, last, leases = state
+    idle_min = (time.time() - last) / 60 if last else None
+    if idle_min is None:
+        chat_log("chat %s: no messages" % target)
+    else:
+        chat_log("chat %s: last prompt %s tokens, last message %.0f min ago, open leases %d"
+                 % (target, tokens if tokens is not None else "unknown", idle_min, leases))
+    if leases:
+        chat_log("skip: a turn is open")
+        return ""
+    if idle_min is not None and idle_min < a.idle_minutes:
+        chat_log("skip: in use (quiet for less than %d min)" % a.idle_minutes)
+        return ""
+    if not a.force and tokens is None:
+        # The assistant clears the recorded size when it summarises; it comes back with the next reply.
+        chat_log("skip: no reply since the last summary")
+        return ""
+    if not a.force and tokens < a.min_tokens:
+        chat_log("skip: below %d tokens" % a.min_tokens)
+        return ""
+
+    ch, sid = Channel(c), None
+    try:
+        res = ch.call("session.resume", {"session_id": target}, a.resume_timeout)
+        sid = res.get("session_id")
+        if res.get("resumed") != target or not sid:
+            fail("Resume opened %r, not %r; stopping." % (res.get("resumed"), target))
+        if res.get("running") or res.get("inflight") or res.get("status") != "idle":
+            chat_log("skip: conversation busy (status %s)" % res.get("status"))
+            return ""
+        if a.dry_run:
+            chat_log("dry run: would summarise %s (%s messages loaded)" % (target, res.get("message_count")))
+            return ""
+        started = time.time()
+        out = ch.call("session.compress", {"session_id": sid}, a.compress_timeout)
+        chat_log("summarised in %.0f s: status %s, messages %s -> %s, about %s -> %s tokens"
+                 % (time.time() - started, out.get("status"), out.get("before_messages"),
+                    out.get("after_messages"), out.get("before_tokens"), out.get("after_tokens")))
+        if out.get("status") != "compressed":
+            fail("The summary ended with status %r." % out.get("status"))
+        return ""
+    finally:
+        if sid:
+            try:
+                ch.call("session.close", {"session_id": sid}, 30)
+            except SystemExit as error:
+                chat_log("close: %s" % error)
+        ch.close()
+
+
 def coach(c, command):
     day = today(c)
     env = environment(c, day)
@@ -660,7 +916,7 @@ def main(kind):
     c = config()
     out = {"research": research, "decide": decide, "work": work, "due": due, "coach-prep": coach_prep,
            "coach-gate": lambda c: coach(c, "gate"), "coach-tick": lambda c: coach(c, "tick"),
-           "journal-tick": journal_tick}[kind](c)
+           "journal-tick": journal_tick, "chat-tidy": chat_tidy}[kind](c)
     if out:
         # UTF-8 whatever the console's code page: a curly quote must not end the run on Windows.
         sys.stdout.buffer.write((out + "\n").encode("utf-8"))
