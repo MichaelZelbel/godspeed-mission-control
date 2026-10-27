@@ -35,17 +35,18 @@ while [ $# -gt 0 ]; do case "$1" in --prompt-file) PF="$2"; shift 2;; --out) OUT
 cp "$PF" "$(dirname "$OUT")/prompt-seen.txt"
 mkdir -p "$(dirname "$OUT")"
 P="$(grep -m1 '^DONE WHEN:' "$PF" | grep -oE '[A-Za-z0-9_][A-Za-z0-9_./-]*/[A-Za-z0-9_./-]+\.(md|csv|txt)' | head -1)"
+KEEP="$GODSPEED_ROOT/$(grep -o 'copy it whole under [^,]*' "$PF" | head -1 | sed 's/^copy it whole under //; s:/$::')"   # where a repair is told to keep its copies
 case "${FAKE_MODE:-ok}" in
   exit1)    echo "boom" > "$OUT"; exit 1 ;;
   noresult) echo "I did things but never said so" > "$OUT"; exit 0 ;;
   failed)   echo "RESULT: FAILED: the shop needs a login this machine does not have" > "$OUT"; exit 0 ;;
   short)    [ -n "$P" ] && { mkdir -p "$(dirname "$P")"; echo "too short" > "$P"; }; echo "RESULT: wrote $P" > "$OUT"; exit 0 ;;
-  repair)   KEPT="$(dirname "$OUT")/before$FAKE_FAULT"; mkdir -p "$(dirname "$KEPT")"; cp "$FAKE_FAULT" "$KEPT"
+  repair)   KEPT="$KEEP$FAKE_FAULT"; mkdir -p "$(dirname "$KEPT")"; cp "$FAKE_FAULT" "$KEPT"
             if [ "${FAKE_FIX:-works}" = works ]; then printf 'upgrade: runs\n' > "$FAKE_FAULT"; else printf 'upgrade: still broken\n' > "$FAKE_FAULT"; fi
             echo "RESULT: put the fixed setting in place; it now says: $(cat "$FAKE_FAULT")" ;;
   *)        [ -n "${FAKE_TOUCH:-}" ] && printf 'repaired\n' > "$FAKE_TOUCH"
             [ -n "${FAKE_BEFORE:-}" ] && printf '%s\n' "$FAKE_BEFORE" > "$(dirname "$OUT")/before.txt"
-            [ -n "${FAKE_KEEP:-}" ] && { mkdir -p "$(dirname "$OUT")/before/$(dirname "$FAKE_KEEP")"; printf 'as it was\n' > "$(dirname "$OUT")/before/$FAKE_KEEP"; }
+            [ -n "${FAKE_KEEP:-}" ] && { mkdir -p "$KEEP/$(dirname "$FAKE_KEEP")"; printf 'as it was\n' > "$KEEP/$FAKE_KEEP"; }
             [ -n "$P" ] && { mkdir -p "$(dirname "$P")"; { echo "# Answer"; for i in $(seq 1 80); do printf 'word%s ' "$i"; done; echo; echo; echo "## Sources"; echo "- https://example.org/a"; } > "$P"; }
             echo "scratch line"; [ -n "${FAKE_SAY:-}" ] && echo "SAY: $FAKE_SAY"
             echo "RESULT: wrote $P with 80 words" ;;
@@ -188,7 +189,8 @@ PS="$(cat "$TMP/routines/work/2026-09-15/$RID/prompt-seen.txt")"
 contains "  and told it is a machine repair" "$PS" "## This item is a machine repair"
 contains "  that it may change what the mission control installed or runs outside its folder" "$PS" "you may change files outside "
 contains "  only for the fault the item names" "$PS" "only as far as repairing that fault needs"
-contains "  to copy each file whole first, under the item's own run folder" "$PS" "copy it whole under routines/work/2026-09-15/$RID/before/"
+contains "  to copy each file whole first, on this computer only" "$PS" "copy it whole under .godspeed/repairs/2026-09-15/$RID/"
+contains "  out of the folder's history, because a copy can hold a key" "$PS" "stays on this computer and out of the folder's history"
 contains "  never a secret, an account, a payment or anything outward" "$PS" "Never touch a password, a key or a token, an account, a payment"
 contains "  to prove the fault gone with the check that found it" "$PS" "run again, live, the check that found it"
 contains "  and that a repair written down for later does not count" "$PS" "A repair written down for later"
@@ -210,13 +212,19 @@ OUT="$(FAKE_MODE=repair FAKE_FAULT="$OUTSIDE/etc/nightly/job.conf" run --only "$
 check "a repair whose check passes after the run is verified" "$(status_of "$MID")" "verified"
 contains "  by the check that found the fault, not by the assistant's word" "$(cat "$TMP/work/$MID.md")" "VERIFIED check passed (grep -qx 'upgrade: runs'"
 check "  the file outside the folder was changed" "$(cat "$OUTSIDE/etc/nightly/job.conf")" "upgrade: runs"
-check "  and was kept whole first, under its full path in the item's run folder" "$(cat "$TMP/routines/work/2026-09-15/$MID/before$OUTSIDE/etc/nightly/job.conf" 2>&1)" "upgrade: broken"
+check "  and was kept whole first, under its full path, on this computer only" "$(cat "$TMP/.godspeed/repairs/2026-09-15/$MID$OUTSIDE/etc/nightly/job.conf" 2>&1)" "upgrade: broken"
 contains "  and the run names the copy" "$OUT" "$MID kept 1 file(s) as they were before the repair"
 OUT="$(FAKE_MODE=repair FAKE_FIX=fails FAKE_FAULT="$OUTSIDE/etc/nightly/other.conf" run --only "$STAYID" 2>&1)"
 check "a repair whose check still fails stays open" "$(status_of "$STAYID")" "attempted"
 contains "  the run says so" "$OUT" "$STAYID attempted, not verified"
 contains "  and the failing check is on the record" "$(cat "$TMP/work/$STAYID.md")" "UNVERIFIED check failed"
-check "  the copy is there to put it back" "$(cat "$TMP/routines/work/2026-09-15/$STAYID/before$OUTSIDE/etc/nightly/other.conf" 2>&1)" "upgrade: broken"
+check "  the copy is there to put it back" "$(cat "$TMP/.godspeed/repairs/2026-09-15/$STAYID$OUTSIDE/etc/nightly/other.conf" 2>&1)" "upgrade: broken"
+# A whole settings file can hold a key, and the run commits and pushes what it saves, so the copies
+# stay out of the history even in a folder whose .gitignore does not leave .godspeed/ out (this one).
+if [ -d "$TMP/.git" ]; then
+  check "the copies never go into the folder's history" "$(git -C "$TMP" log --all --name-only --format= | grep -c '\.godspeed/')" "0"
+  contains "  while the run's own record does" "$(git -C "$TMP" log --all --name-only --format=)" "routines/work/2026-09-15/$MID/answer.txt"
+fi
 
 # --- the budget and the limit -----------------------------------------------------------------------------------
 hw file --what "One more" --done-when "research/one.md exists" --key one --source test >/dev/null
