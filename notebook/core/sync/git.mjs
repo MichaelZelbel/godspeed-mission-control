@@ -4,7 +4,7 @@ import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { Store, atomic, decode, encode, hash, identityIds } from '../records/store.mjs';
 import { identityPlan, identities, readBlobs } from './identity.mjs';
-import { shared,durableRoots,durableFiles,devicePrivatePaths,recordsFolder,isRecordPath,deletableTypes,windowsInvalid } from '../file-policy.mjs';
+import { shared,durableRoots,durableFiles,devicePrivatePaths,recordsFolder,isRecordPath,deletableTypes,windowsInvalid,notebookNote,retiredNotebookNote } from '../file-policy.mjs';
 import { candidate, key as nameKey } from '../records/layout.mjs';
 import {validateAssistantFiles} from '../assistant-files.mjs';
 import {resolveSavedConflict} from '../conflicts.mjs';
@@ -70,8 +70,12 @@ export async function useFolderRepository(store,paths,{branch='main',remote='ori
   // A new installation's folder has its first commit but no copy on GitHub yet.
   let url;try{url=probe.git(['remote','get-url',remote]);}catch{throw new Error('This folder\'s repository has no copy on GitHub yet ('+remote+'); connect one with Connect record sync in Settings');}
   await probe.verifyRemote(url);
-  const local=['.godspeed/probe','conflicts/probe.json','FULL-ALPHA.md',...(probe.inScope('assistant-state/probe/x.json')?[]:['assistant-state/probe/x.json'])];
-  const visible=local.filter(name=>{try{probe.git(['check-ignore','-q','--no-index',name]);return false;}catch{return true;}});
+  const local=['.godspeed/probe','conflicts/probe.json',notebookNote,...(probe.inScope('assistant-state/probe/x.json')?[]:['assistant-state/probe/x.json'])];
+  const ignored=name=>{try{probe.git(['check-ignore','-q','--no-index',name]);return true;}catch{return false;}};
+  // An ignore file from before 2.0.0-beta.11 names the note's old name, FULL-ALPHA.md. It still
+  // counts: the notebook gives NOTEBOOK.md the same line at init and at its start, before it
+  // writes the note (notebook-note.mjs carryIgnoreLine), and this check changes nothing itself.
+  const visible=local.filter(name=>!ignored(name)&&!(name===notebookNote&&ignored(retiredNotebookNote)));
   if(visible.length)throw new Error('Add these to the ignore file of the repository first: '+visible.map(n=>n.split('/')[0]+(n.includes('/')?'/':'')).join(', '));
   // The notebook commits a page an ignore rule happens to match (a title like
   // "id_rsa rotation"), but a rule that hides pages as such is a mistake.
@@ -93,7 +97,7 @@ export async function useFolderRepository(store,paths,{branch='main',remote='ori
 // Settings (Connect record sync), on the server or on a first computer, tracks
 // nothing but what that connection syncs, and nothing else commits all of it.
 // Until 8 October 2026 the installer joined that copy in folder mode too: it
-// was refused, because its ignore file lets FULL-ALPHA.md and assistant-state/
+// was refused, because its ignore file lets the notebook's note and assistant-state/
 // through (Settings syncs them), and had it passed, this computer would have
 // sent nothing but notebook/. Such a copy is now connected the way Settings
 // connects it, with the same full list.
@@ -305,7 +309,13 @@ export class FileSync {
     if(staged.some(n=>!shared(n)&&n!=='.gitignore'))throw new Error('Sync repository contains staged files outside durable state');
     const roots=[...durableRoots.filter(r=>fs.existsSync(path.join(this.store.root,r))),...durableFiles.filter(r=>fs.existsSync(path.join(this.store.root,r))),...(this.gitDir?[]:['.gitignore'])];
     const untracked=this.untrackSpecial(roots.filter(r=>r!=='.gitignore')),heavy=new Set(this.heavyLocalFiles());
-    const changes=this.names(['status','--porcelain','-z','--no-renames','--untracked-files=all','--',...roots]),kept=changes.filter(e=>e.startsWith('?? ')).map(e=>e.slice(3)).filter(name=>this.keptLocal(name));
+    // The notebook's note was FULL-ALPHA.md until 2.0.0-beta.11 (notebook-note.mjs). Once it is
+    // renamed here, the old name's removal goes into the commit with NOTEBOOK.md: a durable file
+    // that is gone is otherwise never looked at, and every computer that joined later would get
+    // the old note back from the repository beside the new one.
+    const retired=fs.existsSync(path.join(this.store.root,retiredNotebookNote))?[]:[retiredNotebookNote];
+    const changes=this.names(['status','--porcelain','-z','--no-renames','--untracked-files=all','--',...roots,...retired]),kept=changes.filter(e=>e.startsWith('?? ')).map(e=>e.slice(3)).filter(name=>this.keptLocal(name));
+    const gone=changes.includes(' D '+retiredNotebookNote)?[retiredNotebookNote]:[];
     // Validation guards what a commit uploads. With nothing to commit there is
     // nothing to guard, and reading the whole vault to validate it anyway held
     // the workspace for a second of every idle round on an imported vault.
@@ -317,7 +327,7 @@ export class FileSync {
     // tracks, so the rename never left this machine. Its old entry goes first.
     const respelled=this.respelled(this.names(['--literal-pathspecs','diff','--name-only','-z','--no-renames','--diff-filter=M','--',recordsFolder]));
     for(let i=0;i<respelled.length;i+=200)this.git(['--literal-pathspecs','rm','--cached','--quiet','--',...respelled.slice(i,i+200).map(([old])=>old)]);
-    this.git(['add','--',...roots,...[...heavy,...kept].map(name=>':(exclude,literal)'+name.replace(/\/$/,''))]);
+    this.git(['add','--',...roots,...gone,...[...heavy,...kept].map(name=>':(exclude,literal)'+name.replace(/\/$/,''))]);
     if(this.names(['diff','--cached','--name-only','-z','--diff-filter=d']).some(n=>!shared(n)&&n!=='.gitignore'))throw new Error('A private path was staged; sync stopped');
     if(this.git(['diff','--cached','--name-only']))this.git(['commit','-m','Save Godspeed Mission Control records'],undefined,{env:this.identity(),timeout:120000});
   }

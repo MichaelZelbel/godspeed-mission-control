@@ -1,5 +1,5 @@
 import fs from 'node:fs';import path from 'node:path';import {randomUUID} from 'node:crypto';
-import {Store,hash,atomic} from './records/store.mjs';import {backup,restoreSeparateCopy} from './archives.mjs';import {SearchIndex} from './index/search.mjs';
+import {Store,hash,atomic} from './records/store.mjs';import {backup,restoreSeparateCopy} from './archives.mjs';import {SearchIndex} from './index/search.mjs';import {hasNotebookNote} from './notebook-note.mjs';
 const readJSON=file=>JSON.parse(fs.readFileSync(file,'utf8').replace(/^\uFEFF/,''));
 const normalized=file=>process.platform==='win32'?path.resolve(file).toLowerCase():path.resolve(file);
 function noLinks(file){let current=path.resolve(file);for(;;){if(fs.existsSync(current)&&fs.lstatSync(current).isSymbolicLink())throw Error('The selected physical move paths must not use symbolic links');const parent=path.dirname(current);if(parent===current)return;current=parent;}}
@@ -51,7 +51,8 @@ export function planWorkspaceMove({root,to,installationFile}){
  const source=path.resolve(root),destination=path.resolve(to||'');noLinks(source);noLinks(destination);const selected=setup(source,installationFile);
  if(!to||normalized(source)===normalized(destination)||contained(destination,source)||contained(source,destination)||fs.existsSync(destination))throw Error('Choose an absent destination outside the current workspace');
  if(contained(selected.file,destination))throw Error('The installation pointer must also live outside the destination');
- if(!fs.existsSync(path.join(source,'FULL-ALPHA.md'))||!['notebook','records'].some(name=>fs.existsSync(path.join(source,name))))throw Error('Only a mission control folder with the integrated notebook (it holds FULL-ALPHA.md and notebook/) can be moved this way');
+ // Its note is NOTEBOOK.md, or FULL-ALPHA.md on an install that has not started since its update to 2.0.0-beta.11.
+ if(!hasNotebookNote(source)||!['notebook','records'].some(name=>fs.existsSync(path.join(source,name))))throw Error('Only a mission control folder with the integrated notebook (it holds NOTEBOOK.md and notebook/) can be moved this way');
  const {files,links}=inventory(source);let active=false;try{stopped(source);}catch{active=true;}
  const sorted=Object.entries(files).sort(([a],[b])=>a.localeCompare(b)),linked=Object.entries(links).sort(([a],[b])=>a.localeCompare(b));
  return {format:1,source,destination,installation_file:selected.file,installation_hash:selected.config_hash,files,file_count:sorted.length,links,files_hash:hash(linked.length?{files:sorted,links:linked}:sorted),requires_owned_stop:active,retains_original:true,old_path_alias:true,scope:'Only this selected workspace and its explicit installation pointer; other apps and sessions are untouched'};

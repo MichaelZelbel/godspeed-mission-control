@@ -186,7 +186,8 @@ function writeStore(changes) {
 // failed push is said in one line. Nothing else in the mission control is committed.
 //
 // NOT ON A MISSION CONTROL WITH THE NOTEBOOK (version 2, the one the book's second edition
-// installs; FULL-ALPHA.md marks it). There a key stays on the computer it was typed on: the book
+// installs; NOTEBOOK.md marks it, FULL-ALPHA.md on an install from before 2.0.0-beta.11). There
+// a key stays on the computer it was typed on: the book
 // promises that passwords and keys never go into the private GitHub copy, and the notebook's own
 // sync leaves secrets/ out for that reason. Until 8 October 2026 this still committed and pushed
 // the locked store whenever the folder was its own repository with a remote, which is what a
@@ -194,7 +195,7 @@ function writeStore(changes) {
 // ignore file is told to leave secrets/ alone, unless the owner already keeps files in secrets/
 // under version control on purpose (an older setup that shares its keys that way).
 const SHARED_HERE = "kept on this computer only, and never sent to your GitHub copy";
-const keepsKeysHere = godspeed => fs.existsSync(path.join(godspeed, "FULL-ALPHA.md"));
+const keepsKeysHere = godspeed => ["NOTEBOOK.md", "FULL-ALPHA.md"].some(note => fs.existsSync(path.join(godspeed, note)));
 function keepOutOfGit(godspeed, store) {
   if (!fs.existsSync(path.join(godspeed, ".git"))) return;
   const git = (...a) => spawnSync("git", ["-C", godspeed, ...a], { encoding: "utf8", windowsHide: true });

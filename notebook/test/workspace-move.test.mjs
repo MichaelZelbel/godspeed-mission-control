@@ -18,6 +18,15 @@ test('move rejects changed plans, foreign pointers, nested destinations and live
  fs.writeFileSync(path.join(f.root,'.godspeed','supervisor.json'),JSON.stringify({pid:process.pid}));const active=planWorkspaceMove(f);assert.equal(active.requires_owned_stop,true);assert.throws(()=>moveWorkspace(active),/Stop only/);assert.equal(fs.existsSync(f.to),false);
  fs.writeFileSync(f.installationFile,JSON.stringify({channel:'full-alpha',dataFormat:1,workspace:f.base}));assert.throws(()=>planWorkspaceMove(f),/does not own/);
 });
+// The folder's note is NOTEBOOK.md since 2.0.0-beta.11; an install that has not started since its
+// update still has FULL-ALPHA.md (the fixture's), and both are a mission control with the notebook.
+test('move takes a folder by its note under either name, and refuses one with neither',()=>{
+ const f=fixture();fs.renameSync(path.join(f.root,'FULL-ALPHA.md'),path.join(f.root,'NOTEBOOK.md'));
+ assert.equal(planWorkspaceMove(f).source,path.resolve(f.root));
+ const g=fixture();assert.equal(planWorkspaceMove(g).source,path.resolve(g.root));
+ const h=fixture();fs.rmSync(path.join(h.root,'FULL-ALPHA.md'));
+ assert.throws(()=>planWorkspaceMove(h),/it holds NOTEBOOK\.md and notebook\//);assert.equal(fs.existsSync(h.to),false);
+});
 test('move refuses linked contents and installation pointers stored inside the folder being moved',()=>{
  const f=fixture();fs.symlinkSync(f.installationFile,path.join(f.root,'linked.json'));assert.throws(()=>planWorkspaceMove(f),/linked folder/);
  const g=fixture(),inside=path.join(g.root,'installation.json');fs.copyFileSync(g.installationFile,inside);assert.throws(()=>planWorkspaceMove({...g,installationFile:inside}),/outside/);

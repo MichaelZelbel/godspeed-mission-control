@@ -49,7 +49,7 @@ test('a computer that joins a copy made in Settings syncs everything Settings sy
   assert.ok(fs.readFileSync(path.join(dir,'rules','server-rule.md')).includes(13),'the clone has Windows line endings');
   // What the installer got until now: a refusal, and nothing joined.
   const store=new Store(dir,{device:'laptop-1234abcd'});
-  await assert.rejects(useFolderRepository(store,undefined),/FULL-ALPHA\.md/);
+  await assert.rejects(useFolderRepository(store,undefined),/NOTEBOOK\.md/);
   assert.deepEqual(await joinRepository(store),{enabled:true,remote:address});
   assert.deepEqual(readSyncConfig(store.state),{enabled:true},'connected the way Settings connects');
   assert.equal(fs.readFileSync(path.join(dir,'rules','server-rule.md'),'utf8'),'A rule written on the server.\n','given back exactly as committed');

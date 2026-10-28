@@ -6,7 +6,13 @@ export const legacyRecordsFolder='records';
 // assistant: the owner's extra instructions for the assistant (assistant/extra-instructions.md),
 // which its program reads right after "who it is" (assistant-soul.mjs).
 export const durableRoots=[recordsFolder,'coach','journal','routines/journal','routines/headache','profile','rules','observations','goals','work','due','world','prompts','ideas','inbox','forecasts','skills','assistant-state','assistant'];
-export const durableFiles=['AGENTS.md','CLAUDE.md','README.md','procedures.md','decisions.md','MEMORY.md','FULL-ALPHA.md'];
+// The note at the top of the folder that says it is a mission control with the notebook
+// (core/notebook-note.mjs). It was FULL-ALPHA.md until 2.0.0-beta.11; the first start after an
+// update renames it once. The old name stays durable, so a copy, a backup, a restore and sync
+// still carry one wherever it is left.
+export const notebookNote='NOTEBOOK.md';
+export const retiredNotebookNote='FULL-ALPHA.md';
+export const durableFiles=['AGENTS.md','CLAUDE.md','README.md','procedures.md','decisions.md','MEMORY.md',notebookNote,retiredNotebookNote];
 // Inside a durable root but device-private: kept on this machine, never put in
 // the knowledge repository and never indexed. assistant-state/history is the
 // assistant's own undo archive. It holds every previous version of its state,

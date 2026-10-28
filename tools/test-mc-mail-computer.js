@@ -89,14 +89,15 @@ async function main() {
   const remote = path.join(W, "github.git");
   git(W, "init", "-q", "--bare", remote);
   git(GS, "init", "-q", "-b", "main"); git(GS, "remote", "add", "origin", remote);
-  fs.writeFileSync(path.join(GS, "FULL-ALPHA.md"), "# Integrated notebook\n");
-  git(GS, "add", "AGENTS.md", "FULL-ALPHA.md"); git(GS, "commit", "-q", "-m", "start"); git(GS, "push", "-q", "origin", "main");
+  fs.writeFileSync(path.join(GS, "NOTEBOOK.md"), "# Integrated notebook\n");
+  git(GS, "add", "AGENTS.md", "NOTEBOOK.md"); git(GS, "commit", "-q", "-m", "start"); git(GS, "push", "-q", "origin", "main");
   const said = G.shareStore("mc-mail: connect the mission control address (sam-mc@agentmail.to)");
   ok("6 on a mission control with the notebook the key is kept on this computer only", said === "kept on this computer only, and never sent to your GitHub copy", said);
   ok("7 nothing is committed", git(GS, "log", "--oneline").stdout.trim().split("\n").length === 1 && !git(GS, "ls-files", "secrets").stdout.trim());
   ok("8 nothing reaches the stand-in for GitHub", !git(remote, "ls-tree", "-r", "--name-only", "main").stdout.includes("secrets/"));
   ok("9 the folder's own Git is told to leave secrets/ alone, so no later commit picks the key up", git(GS, "check-ignore", "-q", "secrets/mc-secrets.env.age").status === 0 && /^\/secrets\/$/m.test(fs.readFileSync(path.join(GS, ".gitignore"), "utf8")));
   // A notebook folder whose owner keeps files in secrets/ under version control on purpose: no ignore line, still no commit.
+  // Its note still has the name from before 2.0.0-beta.11 (FULL-ALPHA.md), which marks a notebook folder too.
   const GS2 = path.join(W, "owner-keeps-secrets"); fs.mkdirSync(path.join(GS2, "secrets"), { recursive: true });
   fs.writeFileSync(path.join(GS2, "AGENTS.md"), "x\n"); fs.writeFileSync(path.join(GS2, "FULL-ALPHA.md"), "x\n"); fs.writeFileSync(path.join(GS2, "secrets", "README.md"), "mine\n");
   git(GS2, "init", "-q", "-b", "main"); git(GS2, "add", "-A"); git(GS2, "commit", "-q", "-m", "start");
