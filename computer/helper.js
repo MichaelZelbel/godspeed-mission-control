@@ -96,7 +96,7 @@ function postJson(server, pathName, obj) {
 
 async function pair(line, name) {
   const p = C.decodePairLine(line);
-  if (!p) { say('That is not a connection code from your assistant. Using a browser on this computer is not available yet in Godspeed Mission Control.'); return 2; }
+  if (!p) { say('That is not a whole connection code: copy the one line that starts with godspeed1.'); return 2; }
   let certPem;
   try {
     // The door opens a moment after the code is made, and a home line can drop a packet: try a few times.

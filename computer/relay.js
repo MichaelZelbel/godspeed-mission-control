@@ -77,7 +77,7 @@ function startRelay(opts = {}) {
       if (!dev) {
         failures.get(ip).push(Date.now());
         log('door: a connection code was refused, from', ip);
-        return send(403, { error: 'This connection code is not valid any more. This computer cannot be connected to an assistant yet.' });
+        return send(403, { error: 'This connection code is not valid any more. A code works once, for half an hour.' });
       }
       log('door: paired a computer:', short(o.name || 'computer', 60));
       send(200, { device: dev.id, key: dev.key, protocol: C.PROTOCOL });
