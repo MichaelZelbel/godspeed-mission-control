@@ -366,7 +366,7 @@ async function main() {
   let line;
   if (localOnly) line = "local files";
   else if (answeredEmpty) line = "local files (Menerio answered and had nothing for this, so I looked here too)";
-  else if (reason === "none") line = "local files (no Menerio connected)";
+  else if (reason === "none") line = "local files (the files of your mission control folder as its Git history holds them; a new file is found once it is saved there)";
   else if (reason === "no copy") line = "local files (your mission control is not copied to Menerio, so there was nothing to ask it)";
   else line = "local files (Menerio not reached: " + reason + ")";
   show({ query: query, source: "local", mode: "words only", source_line: line,
