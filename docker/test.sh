@@ -59,6 +59,9 @@ check "setup finishes with exit 0" test "$rc" -eq 0
 check "setup names no book chapter" sh -c "! grep -qiE '(chapter|kapitel)[[:space:]]+[0-9]' '$WORK/setup.log'"
 check "setup says email is optional and not connected, with the guide page, and never the old note" sh -c \
   "grep -q 'Email is optional and not connected' '$WORK/setup.log' && grep -q 'godspeedmissioncontrol.com/guide/email' '$WORK/setup.log' && ! grep -q 'Email is optional and switched off' '$WORK/setup.log'"
+# This image has no notebook, so setup must not send anyone to its Settings page to import from
+# Menerio (kit-bootstrap prints that line only where the notebook is, since product pull request #88).
+check "setup sends nobody to a notebook page this server does not have" sh -c "! grep -q 'Import from Menerio' '$WORK/setup.log'"
 echo "   what setup said about email:"
 sed 's/\x1b\[[0-9;]*m//g' "$WORK/setup.log" | grep -iE 'e-?mail|gmail|agentmail' | sed 's/^/   | /'
 check "the folder is in the volume" x test -f /opt/data/godspeed/AGENTS.md

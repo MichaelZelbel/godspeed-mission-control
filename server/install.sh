@@ -59,9 +59,10 @@ export KB_SELF_URL
 # that reads it takes either: the raw lib.sh address below, fetch_repo, KB_BRANCH for
 # setup-godspeed.sh, open-the-door.sh's own copy of the line, and the Docker image, which reads
 # this line. Until 28 October 2026 it was the tag v2.18, whose email note named book chapters and
-# never asked the mail tool (product issue #81); 8ac85e0 is the commit the Windows, Mac and Linux
-# setup moved to for that fix.
-KB_PIN="8ac85e063fea08069ab6ef260525c48aa03338b4"
+# never asked the mail tool (product issue #81). The pin is past 8ac85e0, the commit the Windows,
+# Mac and Linux setup moved to for that fix, and past the one after it that keeps the version 2
+# notebook's Menerio import line off a server, which has no such notebook.
+KB_PIN="313610bfbe8c905d93684383285f60b7cb0b3314"
 LIB_URL="https://raw.githubusercontent.com/MichaelZelbel/kit-bootstrap/$KB_PIN/lib.sh"
 
 # The agent cage (see "The agent cage" in phase 1): one file from kit-bootstrap at its
