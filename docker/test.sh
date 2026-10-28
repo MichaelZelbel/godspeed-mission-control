@@ -52,6 +52,18 @@ timeout 900 docker exec -e KB_TELEGRAM_SKIP=1 -e KB_MORNING_BRIEF=no -e KB_SIGNI
   godspeed godspeed-setup </dev/null > "$WORK/setup.log" 2>&1
 rc=$?
 check "setup finishes with exit 0" test "$rc" -eq 0
+# Only what is true about email, and no book chapter (product issue #81): nothing is connected
+# here, so the true note is that email is optional, with the guide page. Until 28 October 2026 the
+# image ran kit-bootstrap v2.18, whose note said "Email is optional and switched off" without asking
+# the mail tool and named Chapters 30 and 29. What setup said about email is printed either way.
+check "setup names no book chapter" sh -c "! grep -qiE '(chapter|kapitel)[[:space:]]+[0-9]' '$WORK/setup.log'"
+check "setup says email is optional and not connected, with the guide page, and never the old note" sh -c \
+  "grep -q 'Email is optional and not connected' '$WORK/setup.log' && grep -q 'godspeedmissioncontrol.com/guide/email' '$WORK/setup.log' && ! grep -q 'Email is optional and switched off' '$WORK/setup.log'"
+# This image has no notebook, so setup must not send anyone to its Settings page to import from
+# Menerio (kit-bootstrap prints that line only where the notebook is, since product pull request #88).
+check "setup sends nobody to a notebook page this server does not have" sh -c "! grep -q 'Import from Menerio' '$WORK/setup.log'"
+echo "   what setup said about email:"
+sed 's/\x1b\[[0-9;]*m//g' "$WORK/setup.log" | grep -iE 'e-?mail|gmail|agentmail' | sed 's/^/   | /'
 check "the folder is in the volume" x test -f /opt/data/godspeed/AGENTS.md
 check "the first commit reached the (stand-in) GitHub" x git -C /opt/data/godspeed ls-remote --exit-code origin
 check "Hermes works in the folder" sh -c "docker exec -u hermes -e HOME=/opt/data godspeed hermes config get terminal.cwd | grep -q /opt/data/godspeed"

@@ -83,12 +83,15 @@ ENV AGENT_BROWSER_EXECUTABLE_PATH=/opt/godspeed/chrome-headless-shell
 # The kit: this repository at the commit being built.
 COPY . /opt/godspeed/kit
 
-# kit-bootstrap at the SAME tag server/install.sh pins (its KB_PIN line), read from the
-# file rather than written twice, so the two can never disagree.
+# kit-bootstrap at the SAME pin server/install.sh names (its KB_PIN line), read from the
+# file rather than written twice, so the two can never disagree. The pin is a full commit or a
+# tag: fetched by name, which takes either (`git clone --branch` takes no commit).
 RUN set -eu; \
     pin="$(sed -n 's/^KB_PIN="\(.*\)"$/\1/p' /opt/godspeed/kit/server/install.sh)"; \
     test -n "$pin"; \
-    git clone -q --depth 1 --branch "$pin" https://github.com/MichaelZelbel/kit-bootstrap.git /opt/godspeed/kit-bootstrap; \
+    git init -q /opt/godspeed/kit-bootstrap; \
+    git -C /opt/godspeed/kit-bootstrap fetch -q --depth 1 https://github.com/MichaelZelbel/kit-bootstrap.git "$pin"; \
+    git -C /opt/godspeed/kit-bootstrap -c advice.detachedHead=false checkout -q --detach FETCH_HEAD; \
     rm -rf /opt/godspeed/kit/.git /opt/godspeed/kit-bootstrap/.git; \
     echo "$pin" > /opt/godspeed/kit-bootstrap/PIN
 

@@ -223,12 +223,17 @@ function claudeDesktop(check, tool) {
   return lines.join("\n");
 }
 
-// The last line of a setup run: how to connect email. The two places in mc-mail.js that run setup
-// right after a mailbox was connected leave exactly this line out (until 27 October 2026 they matched
-// its first words, which a wording change would silently break).
+// The last line of a setup run when no mailbox is connected: how to connect email.
+// ONLY WHEN THE CALLER KNOWS NONE IS (28 October 2026). Until then every setup ended with it, and
+// an install, which runs setup every time, printed "Email is optional. To connect it, ..." just
+// before the line naming the mailbox that was connected (product issue #81). Now it is printed only
+// for `connected: false`, which `mc-mail setup` passes after looking at this computer's own files
+// (mailboxesHere in mc-mail.js). Connected, or not known (a locked store this computer cannot open,
+// or a caller that did not look), nothing is said about connecting, rather than something untrue;
+// so the two places in mc-mail.js that run setup right after a connect need not leave it out.
 const CONNECT_HINT = "Email is optional. To connect it, ask your assistant \"Connect Gmail for me\" for your mailbox, or run mc-mail connect agentmail for the mission control's own address. How it works: https://godspeedmissioncontrol.com/guide/email";
 
-function wire({ check = false, godspeed = "", desktop = false } = {}) {
+function wire({ check = false, godspeed = "", desktop = false, connected } = {}) {
   const lines = [];
   let failed = false;
   const tool = fs.existsSync(installed()) ? installed() : path.join(__dirname, "mc-mail.js");
@@ -239,7 +244,7 @@ function wire({ check = false, godspeed = "", desktop = false } = {}) {
     if (/\(failed\)/.test(line)) failed = true;
     lines.push(line);
   }
-  if (!check) lines.push(CONNECT_HINT);
+  if (!check && connected === false) lines.push(CONNECT_HINT);
   return { lines, failed };
 }
 

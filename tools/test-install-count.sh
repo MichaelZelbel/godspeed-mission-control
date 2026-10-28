@@ -35,10 +35,14 @@ check "nothing reads an earlier answer or DO_NOT_TRACK, so an old yes sends noth
   "$(cat $INSTALLERS | grep -v '^ *#' | grep -c -e 'GODSPEED_INSTALL_COUNT' -e 'GODSPEED_INSTALL_ID' -e 'DO_NOT_TRACK')" "0"
 check "the program that reported the first morning brief is gone from the kit" \
   "$([ -e "$HERE/mc-install-count" ] && echo there || echo gone)" "gone"
-# The server installer runs kit-bootstrap's setup-godspeed.sh at a pinned tag whose last step is
-# still the question; KB_INSTALL_COUNT_SKIP=1 keeps it from asking until that pin moves.
-check "the server installer keeps the pinned shared code from asking" \
-  "$(grep -c '^KB_INSTALL_COUNT_SKIP=1 KB_BRANCH="$KB_PIN" bash "$BOOTSTRAP_DIR/setup-godspeed.sh"' "$ROOT/server/install.sh")" "1"
+# The server installer runs kit-bootstrap's setup-godspeed.sh at its pin. Until 28 October 2026
+# that was the tag v2.18, whose last step was still the question, and KB_INSTALL_COUNT_SKIP=1 kept
+# it from asking. The pin is now past kit-bootstrap's own removal of the question (8ac85e0), so
+# the setting is gone, and the pin must not go back to v2.18 or another v2.x tag from before it.
+check "the server installer runs the shared setup at its pin" \
+  "$(grep -c '^KB_BRANCH="$KB_PIN" bash "$BOOTSTRAP_DIR/setup-godspeed.sh"' "$ROOT/server/install.sh")" "1"
+check "and that pin is past the removal of the question (no tag from before it)" \
+  "$(sed -n 's/^KB_PIN="\(.*\)"$/\1/p' "$ROOT/server/install.sh" "$ROOT/server/open-the-door.sh" | grep -c -E '^v2\.([0-9]|1[0-8])$')" "0"
 
 # --- A server set up before 27 October 2026 loses the job on its next run -------------------
 FN="$(sed -n '/^retire_install_count() {$/,/^}$/p' "$ROOT/server/install.sh")"
