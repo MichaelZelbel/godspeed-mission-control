@@ -102,7 +102,7 @@ body:
         The log: copy the last 50 lines or so of the one that fits your problem.
 
         - **Windows, while installing or updating:** `%LOCALAPPDATA%\Godspeed\setup-log.txt`. Press Windows+R, paste the path and press Enter.
-        - **Windows, the running notebook:** `service-error.log` in `%LOCALAPPDATA%\Godspeed Mission Control Full Alpha State`. If Hermes would not install, `hermes-install-error.log` in the same folder.
+        - **Windows, the running notebook:** `service-error.log` in `%LOCALAPPDATA%\Godspeed Mission Control State` (installed before 2.0.0-beta.11: `%LOCALAPPDATA%\Godspeed Mission Control Full Alpha State`). If Hermes would not install, `hermes-install-error.log` in the same folder.
         - **Mac, while installing or updating:** the last lines in the Terminal window.
         - **Mac, the running notebook:** `~/Library/Logs/Godspeed Mission Control/notebook.log`. In Finder, press Shift+Cmd+G and paste the path.
         - **Linux, or a server without Docker:** run `journalctl -u godspeed-integrated-notebook.service -n 50`. Add `--user` after `journalctl` if it shows no entries.
