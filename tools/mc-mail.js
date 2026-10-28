@@ -151,6 +151,20 @@ function gmailKind() {
   if (st && st.address) return 'imap';
   return G.credentials().GMAIL_REFRESH_TOKEN ? 'oauth' : '';
 }
+// What this computer has connected, from its own files only, with no call to Google or AgentMail,
+// so an install can ask without waiting on the network: Gmail (either way), the mission control's
+// own address, a server this computer is paired with for mail. `known` is false when nothing is
+// found AND the mission control's locked store is there but cannot be opened here (or there is no
+// mission control folder), because then nobody can tell. `mc-mail setup` says how to connect
+// email only when this is known and empty (28 October 2026, product issue #81).
+function mailboxesHere() {
+  const here = [];
+  if (require('./mc-mail-pair.js').route()) here.push('server');
+  if (gmailKind()) here.push('gmail');
+  const a = agentmailConfig();
+  if (a.key && a.inbox) here.push('godspeed');
+  return { here, known: here.length > 0 || G.readStore().lines !== null };
+}
 const ImapBox = { search: I.search, read: args => I.read(args, wrap), drafts: I.listDrafts, draft: I.draft };
 const OAuthBox = { search: G.search, read: args => G.read(args, wrap), drafts: G.listDrafts, draft: G.draft };
 // NEVER THE OTHER MAILBOX. Until 2026-09-22 a call without an account went to the mission control's own
@@ -358,8 +372,7 @@ async function connectGmail({ here, noWait }) {
     catch (e) { say('That did not work: ' + e.message); }
     if (r.connected) {
       say('');
-      const W = require('./mc-mail-wire.js'), w = W.wire({ godspeed: godspeedDir(), desktop: true });
-      for (const line of w.lines.filter(l => l !== W.CONNECT_HINT)) say(line);
+      for (const line of require('./mc-mail-wire.js').wire({ godspeed: godspeedDir(), desktop: true, connected: true }).lines) say(line);
       say('');
       say('Done. Your assistants can now search your Gmail, read a message you pick and save drafts.');
       say('An assistant that was already open may need closing and opening again, once.');
@@ -503,8 +516,7 @@ async function main(argv) {
       } else if (sub === 'finish') {
         const r = P.finish(args[0]);
         console.log(`Paired: this computer's assistants now use the mail tool on ${r.route.user}@${r.route.host}. The Gmail password stays on the server.`);
-        const W = require('./mc-mail-wire.js'), w = W.wire({ godspeed: godspeedDir(), desktop: true });
-        for (const line of w.lines.filter(l => l !== W.CONNECT_HINT)) console.log(line);
+        for (const line of require('./mc-mail-wire.js').wire({ godspeed: godspeedDir(), desktop: true, connected: true }).lines) console.log(line);
       } else if (sub === 'forget') {
         const r = P.forget();
         console.log(r ? `This computer no longer uses the mail tool on ${r.host}. On the server, remove its key with: mc-mail pair remove ${r.device}` : 'This computer was not paired with a server.');
@@ -515,7 +527,8 @@ async function main(argv) {
         console.log(P.remove(args[0]) ? `Removed "${args[0]}". Other devices, and the Gmail connection, are untouched.` : 'No device of that name here.');
       } else throw new Error('pair request | pair approve <request> | pair finish <receipt> | pair list | pair remove <device> | pair forget');
     } else if (cmd === 'setup') {
-      const r = require('./mc-mail-wire.js').wire({ check: flag(args, '--check'), godspeed: godspeedDir() });
+      const check = flag(args, '--check'), m = check ? null : mailboxesHere();
+      const r = require('./mc-mail-wire.js').wire({ check, godspeed: godspeedDir(), connected: m && m.known ? m.here.length > 0 : undefined });
       for (const line of r.lines) console.log(line);
       process.exitCode = r.failed ? 1 : 0;
     } else {

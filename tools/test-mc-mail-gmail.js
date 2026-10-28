@@ -16,7 +16,8 @@
  *   attachments: one is fetched to a place outside the mission control folder, text comes back marked
  *     untrusted, a name that tries to climb out of its folder cannot, and a place inside the mission control
  *     is refused;
- *   setup: the tool is added to each assistant once, with no key in any file.
+ *   setup: the tool is added to each assistant once, with no key in any file, and how to connect
+ *     email is said only when no mailbox is connected (never when one is, or when it cannot tell).
  *
  * Connecting that way is retired for new connections (2026-09-22); these checks keep a connection
  * someone already made working. The retired guided step and its checks are in git history, and
@@ -358,13 +359,29 @@ async function main() {
   ok("32 no key in any assistant file", !/r\d|s3cret|AGENTMAIL|REFRESH/.test(JSON.stringify(mcpj) + toml + yaml));
   const launched = spawnSync(process.execPath, ["-e", mcpj.mcpServers["mc-mail"].args[1], "status"], { env: { ...process.env, HOME: HOME, USERPROFILE: HOME }, encoding: "utf8" });
   ok("33 the entry starts the tool from ~/.local/bin on any computer", /Cannot find module/.test(launched.stderr) && /\.local[\\/]bin[\\/]mc-mail\.js/.test(launched.stderr), "expected a clean 'not installed here' in a home without the tool");
-  // Right after a mailbox is connected (connect gmail-imap, pair finish) mc-mail.js runs setup and must
-  // not end with how to connect email. Until 27 October 2026 it matched the line's first words, and
-  // a new wording (#81) slipped past it.
+  // How to connect email is said only when no mailbox is connected (#81). Until 27 October 2026 every
+  // setup ended with it, and an install, which runs `mc-mail setup` every time, said "Email is
+  // optional. To connect it, ..." on a computer whose Gmail was connected. The real command is run
+  // here three ways: Gmail connected (33b above), nothing connected, and a store this computer
+  // cannot open, where nobody can tell and so nothing is said.
   const WIRE = require("./mc-mail-wire.js"), MAIL = fs.readFileSync(path.join(__dirname, "mc-mail.js"), "utf8");
-  ok("34 setup ends with how to connect email, and both places that run it right after a connect leave exactly that line out",
-     W1.lines[W1.lines.length - 1] === WIRE.CONNECT_HINT && (MAIL.match(/l !== W\.CONNECT_HINT/g) || []).length === 2 && !/Email itself/.test(MAIL),
-     W1.lines.slice(-1).join(""));
+  const setupSays = env => spawnSync(process.execPath, [path.join(__dirname, "mc-mail.js"), "setup"], { env: { ...process.env, ...env }, encoding: "utf8" });
+  const hinted = r => r.stdout.trim().split(/\r?\n/).pop() === WIRE.CONNECT_HINT;
+  const gmailOn = setupSays({});
+  ok("34 with Gmail connected, setup says nothing about connecting email",
+     gmailOn.status === 0 && !hinted(gmailOn) && !gmailOn.stdout.includes("Email is optional"), gmailOn.stdout + gmailOn.stderr);
+  ok("34b wire() names how to connect only when told no mailbox is connected, so a connect's own setup run (connected: true) and a caller that did not look leave it out",
+     WIRE.wire({ godspeed: GODSPEED, connected: false }).lines.slice(-1)[0] === WIRE.CONNECT_HINT &&
+     !WIRE.wire({ godspeed: GODSPEED, connected: true }).lines.includes(WIRE.CONNECT_HINT) && !W1.lines.includes(WIRE.CONNECT_HINT) &&
+     (MAIL.match(/desktop: true, connected: true \}\)\.lines/g) || []).length === 2 && !/CONNECT_HINT/.test(MAIL));
+  await G.disconnect();
+  const nothingOn = setupSays({});
+  ok("34c with nothing connected, setup ends with how to connect email", nothingOn.status === 0 && hinted(nothingOn), nothingOn.stdout + nothingOn.stderr);
+  const otherKey = path.join(W, "other-age-key.txt");
+  spawnSync(keygen, ["-o", otherKey]);
+  const locked = setupSays({ GODSPEED_AGE_KEY: otherKey });
+  ok("34d when this computer cannot open the mission control's locked store, setup says nothing about connecting either",
+     locked.status === 0 && !locked.stdout.includes("Email is optional") && /mail tool/.test(locked.stdout), locked.stdout + locked.stderr);
 
   server.close();
   fs.rmSync(W, { recursive: true, force: true });
