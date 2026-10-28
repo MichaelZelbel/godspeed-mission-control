@@ -21,8 +21,8 @@ vi.mock("./RecordSync", () => ({ RecordSyncForm: () => null }));
 const scrolled: string[] = [];
 Element.prototype.scrollIntoView = function () { scrolled.push((this as Element).id); };
 
-function settings(at: string) {
-  vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ data: [], schedules: [], kinds: [], problems: [], conflicts: [] }), { status: 200, headers: { "Content-Type": "application/json" } })));
+function settings(at: string, status: Record<string, unknown> = {}) {
+  vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ data: [], schedules: [], kinds: [], problems: [], conflicts: [], ...status }), { status: 200, headers: { "Content-Type": "application/json" } })));
   return render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
     <MemoryRouter initialEntries={[at]}>
       <Routes><Route path="/dashboard/settings" element={<Control />} /></Routes>
@@ -54,5 +54,18 @@ describe("Settings opened at one of its sections", () => {
     await new Promise(resolve => setTimeout(resolve, 20));
     expect(container.querySelector("#connect-ai")).not.toBeNull();
     expect(scrolled).toEqual([]);
+  });
+
+  // Issue #4: the button started the Windows assistant and showed on every install, though it works on Windows only.
+  it("shows Open the Windows assistant on Windows", async () => {
+    const { findByText } = settings("/dashboard/settings", { platform: "win32" });
+    expect(await findByText("Open the Windows assistant")).toBeInTheDocument();
+  });
+
+  it.each(["darwin", "linux"])("does not show Open the Windows assistant on %s", async (platform) => {
+    const { queryByText, findByText } = settings("/dashboard/settings", { platform });
+    await findByText("Settings");
+    await new Promise(resolve => setTimeout(resolve, 50));
+    expect(queryByText("Open the Windows assistant")).toBeNull();
   });
 });
