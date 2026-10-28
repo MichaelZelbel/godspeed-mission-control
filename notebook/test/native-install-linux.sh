@@ -7,6 +7,7 @@
 # 2026) and one whose notebook does not answer is undone and removes none; since 21 October 2026
 # the copy holds what an update can change and never work/. Since 26 October 2026: an update that
 # finds a Hermes this account cannot load keeps the one that works, and add-ons still reach it.
+# Since 2.0.0-beta.11: the upgrade renames the folder's note FULL-ALPHA.md to NOTEBOOK.md.
 set -euo pipefail
 here=$(cd "$(dirname "$0")/../.." && pwd)
 work=$(mktemp -d)
@@ -72,6 +73,9 @@ mkdir -p "$state/backups/.partial-20261001-110000-$first" "$state/backups/my own
 # The owner's work in progress, which no update writes and no copy before one holds.
 mkdir -p "$root/work" && head -c 1048576 /dev/zero > "$root/work/recording.bin"
 copies() { local n=0 dir; for dir in "$state"/backups/2*/; do [ -f "$dir/backup.json" ] && n=$((n+1)); done; echo "$n"; }
+# The folder's note under the name every version before 2.0.0-beta.11 gave it, with the same text.
+[ -f "$root/NOTEBOOK.md" ] && [ ! -e "$root/FULL-ALPHA.md" ] || fail 'a new installation does not have NOTEBOOK.md alone'
+mv "$root/NOTEBOOK.md" "$root/FULL-ALPHA.md"
 
 echo '== an upgrade that does not name the machine again'
 GODSPEED_SKIP_UI=1 install "$second"
@@ -86,6 +90,9 @@ made=$(cd "$state/backups" && ls -d 2*-"$first" | sort | tail -1)
 [[ "$made" > 20261005 ]] && [ -f "$state/backups/$made/backup.json" ] || fail 'the upgrade made no copy before it'
 grep -q '"kind": "update-copy"' "$state/backups/$made/backup.json" || fail 'the copy made before the update is not the copy of what an update can change'
 [ -d "$state/backups/$made/notebook" ] && [ ! -e "$state/backups/$made/work" ] || fail 'the copy made before the update holds work/ or not the notebook'
+[ -f "$root/NOTEBOOK.md" ] && [ ! -e "$root/FULL-ALPHA.md" ] || fail 'the upgrade did not rename FULL-ALPHA.md to NOTEBOOK.md'
+grep -q 'Notebook records live in notebook/' "$root/NOTEBOOK.md" || fail 'the renamed note does not say what the notebook writes'
+[ -f "$state/backups/$made/FULL-ALPHA.md" ] || fail 'the copy made before the update does not hold the note as it was'
 [ "$(copies)" = 1 ] || fail "the upgrade kept $(copies) copies made before updates, not only its own"
 for day in 01 02 03 04; do [ ! -e "$state/backups/202610$day-120000-$first" ] || fail 'an older copy made before updates was kept'; done
 [ ! -e "$state/backups/.partial-20261001-110000-$first" ] || fail 'a copy that stopped part-way was kept'
@@ -125,4 +132,4 @@ sudo systemctl kill -s KILL "$service"
 sleep 8
 systemctl is-active --quiet "$service" || fail 'systemd did not restart a killed notebook'
 answers || fail 'the restarted notebook does not answer'
-echo 'Installed, upgraded with the machine name kept and only its own copy made before the update, a Hermes that loads kept over one that does not, a failed update undone with every copy kept, and restarted after a kill.'
+echo 'Installed, upgraded with the machine name kept, the note in the folder renamed and only its own copy made before the update, a Hermes that loads kept over one that does not, a failed update undone with every copy kept, and restarted after a kill.'
