@@ -1121,13 +1121,16 @@ echo "$S80" | grep -q 'mc-prompt-archive archive' && ! echo "$S80" | grep -q 'go
   || bad "80 the miss named a command readers do not have" "$S80"
 
 # 81 and 82. The reader's own Godspeed assistant on Windows keeps its chats in a Hermes home of its
-#     own; and any home an assistant.json names. Both are read without being told.
-H81="$W/home81"; L81="$W/lad81"; HP81="$L81/Godspeed Mission Control Full Alpha State/hermes-profile"
-mkdir -p "$H81/.godspeed" "$HP81" "$W/mc81/prompts/archive"
-echo 'model: {}' > "$HP81/config.yaml"
-"$PY" - "$HP81/state.db" "$W/assist82/state.db" <<'PYEOF'
+#     own, in the setup's state folder: "Godspeed Mission Control State" since 2.0.0-beta.11, and
+#     "... Full Alpha State" on an install made before (81b); and any home an assistant.json names.
+#     All are read without being told.
+H81="$W/home81"; L81="$W/lad81"; HP81="$L81/Godspeed Mission Control State/hermes-profile"
+HP81B="$L81/Godspeed Mission Control Full Alpha State/hermes-profile"
+mkdir -p "$H81/.godspeed" "$HP81" "$HP81B" "$W/mc81/prompts/archive"
+echo 'model: {}' > "$HP81/config.yaml"; echo 'model: {}' > "$HP81B/config.yaml"
+"$PY" - "$HP81/state.db" "$W/assist82/state.db" "$HP81B/state.db" <<'PYEOF'
 import sqlite3, sys, os
-for db, words in ((sys.argv[1], "the Calathea plant food"), (sys.argv[2], "the Lupin seed order")):
+for db, words in ((sys.argv[1], "the Calathea plant food"), (sys.argv[2], "the Lupin seed order"), (sys.argv[3], "the Hosta division")):
     os.makedirs(os.path.dirname(db), exist_ok=True)
     con = sqlite3.connect(db)
     con.execute("CREATE TABLE sessions (id TEXT, source TEXT)")
@@ -1149,6 +1152,9 @@ A81="$(cat "$W/mc81/prompts/archive/"*.jsonl 2>/dev/null)"
 echo "$A81" | grep 'Calathea' | grep -q '"project": "godspeed"' \
   && ok "81 the Windows assistant's own Hermes (\"Open the Windows assistant\") is read, as the mission control's assistant" \
   || bad "81 the Windows assistant's chats were not saved" "$(cat "$W/r81.out") $A81"
+echo "$A81" | grep 'Hosta' | grep -q '"project": "godspeed"' \
+  && ok "81b and so is the one of an install made before 2.0.0-beta.11, under the state folder's old name" \
+  || bad "81b the Windows assistant under the state folder's old name was not read" "$(cat "$W/r81.out") $A81"
 echo "$A81" | grep -q 'Lupin seed' && ok "82 a Hermes home named in .godspeed/assistant.json is read" \
   || bad "82 the home assistant.json names was not read" "$(cat "$W/r81.out") $A81"
 
@@ -1162,24 +1168,29 @@ if command -v node >/dev/null 2>&1; then
   echo "$S83" | grep -q 'new claude chat about the Larkspur' && ok "83 mc-prompt-archive runs by name, the way the assistant's terminal runs it" \
     || bad "83 mc-prompt-archive by name did not search" "$S83"
   # A computer whose only Python is Hermes' own: a real venv where the Windows setup's Hermes keeps
-  # it, and a PATH with node and none of the usual Pythons.
-  V84="$W/lad84/Godspeed Mission Control Full Alpha State/hermes-runtime/hermes-agent/venv"
+  # it, and a PATH with node and none of the usual Pythons. The setup's state folder is "Godspeed
+  # Mission Control State" since 2.0.0-beta.11 (84) and "... Full Alpha State" on an install made
+  # before (84b).
+  for C84 in "84:Godspeed Mission Control State" "84b:Godspeed Mission Control Full Alpha State"; do
+  N84="${C84%%:*}"; L84="$W/lad$N84"
+  V84="$L84/${C84#*:}/hermes-runtime/hermes-agent/venv"
   if "$PY" -m venv --without-pip "$V84" >/dev/null 2>&1; then
     S84="$( unset GODSPEED_DIR GODSPEED_WORKSPACE GODSPEED_PYTHON; export HOME="$H7" GODSPEED_HOME="$H7" USERPROFILE="$H7"
-      export LOCALAPPDATA="$( (command -v cygpath >/dev/null && cygpath -w "$W/lad84") || echo "$W/lad84")"
+      export LOCALAPPDATA="$( (command -v cygpath >/dev/null && cygpath -w "$L84") || echo "$L84")"
       cd "$G7" && PATH="$NODE_DIR83" "$(command -v node)" "$B83/prompt-harvest.js" --collector search Larkspur 2>&1 )"
     VPY84="$V84/bin/python3"; [ -x "$VPY84" ] || VPY84="$V84/Scripts/python.exe"
     if PATH="$NODE_DIR83" command -v python3 >/dev/null 2>&1 || PATH="$NODE_DIR83" command -v python >/dev/null 2>&1; then
-      echo "  --   84 skipped: node shares its folder with a Python here, so 'Hermes' Python only' cannot be staged"
-    elif ! ( export LOCALAPPDATA="$( (command -v cygpath >/dev/null && cygpath -w "$W/lad84") || echo "$W/lad84")"; "$VPY84" -c 1 ) >/dev/null 2>&1; then
-      echo "  --   84 skipped: a venv of this Python does not run once LOCALAPPDATA moves (the Microsoft Store Python)"
+      echo "  --   $N84 skipped: node shares its folder with a Python here, so 'Hermes' Python only' cannot be staged"
+    elif ! ( export LOCALAPPDATA="$( (command -v cygpath >/dev/null && cygpath -w "$L84") || echo "$L84")"; "$VPY84" -c 1 ) >/dev/null 2>&1; then
+      echo "  --   $N84 skipped: a venv of this Python does not run once LOCALAPPDATA moves (the Microsoft Store Python)"
     else
-      echo "$S84" | grep -q 'new claude chat about the Larkspur' && ok "84 with no Python on the PATH, Hermes' own Python runs it" \
-        || bad "84 Hermes' own Python was not found" "$S84"
+      echo "$S84" | grep -q 'new claude chat about the Larkspur' && ok "$N84 with no Python on the PATH, Hermes' own Python runs it (${C84#*:})" \
+        || bad "$N84 Hermes' own Python was not found (${C84#*:})" "$S84"
     fi
   else
-    echo "  --   84 skipped: this Python cannot make a venv"
+    echo "  --   $N84 skipped: this Python cannot make a venv"
   fi
+  done
   if command -v cmd >/dev/null 2>&1 && command -v cygpath >/dev/null 2>&1; then
     S85="$( unset GODSPEED_DIR GODSPEED_WORKSPACE; export HOME="$H7" GODSPEED_HOME="$H7" USERPROFILE="$(cygpath -w "$H7")"
       cd "$G7" && cmd //c "$(cygpath -w "$B83/mc-prompt-archive.cmd")" search Larkspur 2>&1 )"
