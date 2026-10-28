@@ -314,11 +314,16 @@ else process.stdout.write('AB ' + a.join(' '));`);
     return (init.result.serverInfo.name === 'godspeed-computer' && names.includes('computer_browser_open') && names.includes('computer_when_back')
       && !names.some(n => /cookie|eval|upload|download/.test(n))) || names;
   });
-  await check('before any computer is paired, a tool explains how to set it up', async () => /NOT SET UP/.test(await tool('computer_browser_open', { url: 'https://example.org/' })) || 'no');
-  await check('"connect my computer" gives a code that reads back to this server', async () => {
-    const t = await tool('computer_connect_code');
-    const d = C.decodePairLine(t);
-    return (d && d.host === '127.0.0.1' && d.fingerprint === S.serverCert(mdir).fingerprint) || t;
+  await check('before any computer is paired, every computer tool says it is not available yet and makes no code', async () => {
+    const list = await rpc('tools/list', {});
+    for (const t of list.result.tools) {
+      const args = t.name === 'computer_switch' ? { on: true } : t.name === 'computer_when_back' ? { task: 'x' } : /_(open|show_for_login)$/.test(t.name) ? { url: 'https://example.org/' }
+        : t.name === 'computer_browser_click' ? { ref: '@e1' } : t.name === 'computer_browser_fill' ? { ref: '@e1', text: 'x' } : t.name === 'computer_browser_press' ? { key: 'Enter' }
+        : t.name === 'computer_browser_scroll' ? { direction: 'down' } : {};
+      const out = await tool(t.name, args);
+      if (!/NOT AVAILABLE YET/.test(out) || !/not available yet in Godspeed Mission Control/.test(out) || /install|godspeed1\./i.test(out.replace(/Do not tell them to install, tick, pair or paste anything/, ''))) return t.name + ': ' + out;
+    }
+    return (S.devices(mdir).length === 0 && !fs.existsSync(path.join(mdir, 'pair-codes.json'))) || 'a code or a device was made';
   });
   S.redeemPairCode(mdir, S.newPairCode(mdir), 'mcp laptop');
   await check('with the computer off, a tool says so in plain words and offers to wait', async () => {
@@ -332,6 +337,11 @@ else process.stdout.write('AB ' + a.join(' '));`);
   await check('the tools never open the home network or files', async () =>
     /Not opened/.test(await tool('computer_browser_open', { url: 'http://192.168.178.1/' })) && /Not opened/.test(await tool('computer_browser_open', { url: 'file:///etc/passwd' })) || 'opened');
   await until(() => mrelay.doorPort(), 3000);
+  await check('once a computer is paired, "connect my computer" gives a code that reads back to this server', async () => {
+    const t = await tool('computer_connect_code');
+    const d = C.decodePairLine(t);
+    return (d && d.host === '127.0.0.1' && d.fingerprint === S.serverCert(mdir).fingerprint) || t;
+  });
   const mdev = S.redeemPairCode(mdir, S.newPairCode(mdir), 'mcp laptop 2');
   const mh = fakeHelper({ port: mrelay.doorPort(), certPem: S.serverCert(mdir).certPem, device: mdev.id, key: mdev.key });
   await until(() => mh.open, 3000);

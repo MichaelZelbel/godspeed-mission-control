@@ -118,7 +118,7 @@ check "the assistant has the computer tools" sh -c "docker exec -u hermes -e HOM
 x hermes config set mcp_servers.computer.env '{"GODSPEED_COMPUTER_ALLOW_HOSTS": "127.0.0.1"}' >/dev/null 2>&1
 check "nothing answers on the computer port before a code was asked for" sh -c "! curl -sk --max-time 5 https://127.0.0.1:7443/v1/ping"
 OUT="$(P computer_browser_open '{"url":"https://example.org/"}')"
-check "before a computer is paired, the tools say how to set it up" has "$OUT" "NOT SET UP"
+check "before a computer is paired, the tools say it is not available yet" has "$OUT" "NOT AVAILABLE YET"
 LINE="$(x godspeed-computer pair | tail -1)"
 check "\"connect my computer\" makes a connection code" has "$LINE" "^godspeed1\."
 check "the door answers once a code was asked for" sh -c "for i in 1 2 3 4 5 6 7 8 9 10; do curl -sk --max-time 5 https://127.0.0.1:7443/v1/ping | grep -q computer && exit 0; sleep 1; done; exit 1"

@@ -59,7 +59,7 @@ async function statusText(dir = C.serverDir()) {
   if (!st) return 'The computer link is not running on this server.';
   if (st.off) return 'Switched off: the user said "stop using my computer". Say "use my computer again" to switch it back on.';
   if (st.connected) return `Connected: ${st.computer} is lending Godspeed ${st.browser === 'edge' ? 'Edge' : 'Chrome'} since ${st.since}.`;
-  if (!st.paired) return 'No computer is paired yet. The user installs Godspeed on Windows or Mac, ticks "Let your assistant use a browser on this computer", and pastes a connection code from "connect my computer".';
+  if (!st.paired) return 'No computer is paired. Using a browser on the user\'s own computer, with their own logins, is not available yet in Godspeed Mission Control: tell the user that in one plain sentence and offer your own browser for public pages. Do not tell them to install, tick, pair or paste anything for it.';
   return 'No computer connected right now: it is off, asleep, paused or offline.';
 }
 

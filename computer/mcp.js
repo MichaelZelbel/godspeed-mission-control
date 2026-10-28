@@ -20,7 +20,6 @@ const K = require('./lib/control');
 const CDP = Number(process.env.GODSPEED_COMPUTER_CDP_PORT || C.CDP_PORT);
 const AB = process.env.GODSPEED_COMPUTER_AGENT_BROWSER || 'agent-browser';
 const SESSION = 'godspeed-computer';
-const INSTALL = 'https://github.com/MichaelZelbel/godspeed-mission-control/releases/latest/download/GodspeedSetup.exe';
 
 const NOT_CONNECTED = 'NOT CONNECTED. The user\'s computer is off, asleep, paused or offline, so their logins cannot be used right now. '
   + 'Tell the user in one plain sentence, for example: "Your computer is off or asleep, so I can\'t use your Amazon login right now. '
@@ -28,15 +27,16 @@ const NOT_CONNECTED = 'NOT CONNECTED. The user\'s computer is off, asleep, pause
   + 'For public pages you can still use your own browser tools.';
 const SWITCHED_OFF = 'SWITCHED OFF. The user told you to stop using their computer. Do not use it. '
   + 'If they want it back, they say "use my computer again"; then call computer_switch with on=true.';
-const NOT_SET_UP = 'NOT SET UP. No computer is paired with this server yet. Tell the user: install Godspeed on their Windows or Mac computer '
-  + `(Windows: ${INSTALL}), tick "Let your assistant use a browser on this computer", and paste the connection code you get from computer_connect_code.`;
+const NOT_SET_UP = 'NOT AVAILABLE YET. Using a browser on the user\'s own computer, with their own logins, is not available yet in Godspeed Mission Control. '
+  + 'Tell the user that in one plain sentence, then offer to do what can be done with your own browser on public pages. '
+  + 'Do not tell them to install, tick, pair or paste anything for it, and do not make or ask for a connection code.';
 
 const OPEN_RULES = 'Use these computer_browser tools (not your own browser) only for pages that need the user\'s own login: their accounts, orders, '
   + 'inboxes, bookings, dashboards. For public pages use your own browser tools. Never buy, book, send, post, delete or change a setting without asking the user first.';
 
 const TOOLS = [
   { name: 'computer_status', description: 'Whether the user\'s own computer is connected and lending its browser (Godspeed Chrome), so their logged-in sites can be used.', inputSchema: { type: 'object', properties: {} } },
-  { name: 'computer_connect_code', description: 'Make a one-time connection code (valid half an hour) for when the user says "connect my computer" or the Godspeed installer on their computer asks for one. Send the user the code exactly as returned.', inputSchema: { type: 'object', properties: {} } },
+  { name: 'computer_connect_code', description: 'Make a one-time connection code (valid half an hour) for when the user says "connect my computer". While no computer is paired this makes no code and answers that using a browser on their own computer is not available yet. Send the user a code exactly as returned.', inputSchema: { type: 'object', properties: {} } },
   { name: 'computer_switch', description: 'Switch the use of the user\'s computer off ("stop using my computer") or back on ("use my computer again").', inputSchema: { type: 'object', properties: { on: { type: 'boolean', description: 'true to switch on, false to switch off' } }, required: ['on'] } },
   { name: 'computer_browser_open', description: 'Open a web page in Godspeed Chrome on the user\'s own computer, where they are logged in to their own sites. ' + OPEN_RULES + ' Returns the page title and address.', inputSchema: { type: 'object', properties: { url: { type: 'string' } }, required: ['url'] } },
   { name: 'computer_browser_snapshot', description: 'The page open in Godspeed Chrome on the user\'s computer, as a list of its parts with refs like @e3 to click or fill.', inputSchema: { type: 'object', properties: {} } },
@@ -188,12 +188,15 @@ function cdpCall(steps) {
 
 async function call(name, a = {}) {
   const dir = C.serverDir();
+  // No computer paired: nothing here can work, and nothing the person could do would change that,
+  // so every tool (the connection code too) gives the same one instruction and makes no code.
+  if (name.startsWith('computer_') && TOOLS.some(t => t.name === name) && S.devices(dir).length === 0) return text(NOT_SET_UP);
   switch (name) {
     case 'computer_status': return text(await K.statusText(dir));
     case 'computer_connect_code': {
       const line = await K.pairLine(dir);
       return text('Send the user this connection code exactly, on a line of its own, and say it works once, for half an hour. '
-        + 'They paste it where the Godspeed installer on their computer asks for "connection code".\n\n' + line);
+        + 'They paste it where Godspeed on their computer asks for "connection code".\n\n' + line);
     }
     case 'computer_switch':
       S.setOff(dir, !a.on);

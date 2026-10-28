@@ -1,16 +1,15 @@
 ---
 name: use-my-computer
-description: Use the person's own computer's browser for sites where they are logged in (their orders, bank, bookings, inboxes, dashboards), and run that link. Use when a job needs one of their logins, when they say "connect my computer", "use my computer", "stop using my computer", "use my computer again", "what did you open on my computer", or when the Godspeed installer on their computer asks for a connection code. Not for public pages: those go through your own browser.
+description: Use the person's own computer's browser for sites where they are logged in (their orders, bank, bookings, inboxes, dashboards), once a computer is paired. Use when a job needs one of their logins, or when they say "use my browser", "connect my computer", "use my computer", "stop using my computer", "use my computer again" or "what did you open on my computer". Not for public pages: those go through your own browser.
 ---
 
 ## What this is
 
-When the person installed Godspeed on their Windows or Mac computer and said yes to "Let your
-assistant use a browser on this computer", that computer runs Godspeed Chrome: a Chrome window of
-its own, with a profile of its own, where the person logs in once to each site you may use. Their
-everyday Chrome is never touched. The computer connects out to this server, and the
-`computer_browser_*` tools drive that window. When the computer is off or asleep, the tools say
-so in plain words.
+Using a browser on the person's own computer, with their own logins, is **not available yet** in
+Godspeed Mission Control. When a computer has been paired with this install, the
+`computer_browser_*` tools drive a Chrome window of its own on it (Godspeed Chrome), and when that
+computer is off or asleep they say so in plain words. When no computer is paired, every
+`computer_*` tool answers NOT AVAILABLE YET and makes no connection code.
 
 ## Which browser
 
@@ -34,8 +33,9 @@ so in plain words.
 
 ## When they ask
 
-- **"Connect my computer"** (or the installer asks for a connection code): `computer_connect_code`,
-  then send the code exactly as it came, on its own line, and say it works once, for half an hour.
+- **"Connect my computer"**: `computer_connect_code`, then send the code exactly as it came, on
+  its own line, and say it works once, for half an hour. If it answers NOT AVAILABLE YET, see the
+  last point below.
 - **The computer is off or asleep** (a tool answers NOT CONNECTED): one sentence, for example
   "Your computer is off or asleep, so I can't use your Amazon login right now. I'll do it as soon
   as it's back on." Then `computer_when_back` with the whole job written out so it stands on its
@@ -45,12 +45,9 @@ so in plain words.
   say "use my computer again" (then `computer_switch` with on=true). On the computer itself they
   can also press Pause in the Godspeed menu.
 - **"What did you open on my computer?"**: `computer_pages`.
-- **No computer paired yet** (a tool answers NOT SET UP): tell them how, in two sentences, and only
-  when the job needs a login: install Godspeed on their computer, tick the browser question, and
-  ask you for a connection code.
-- **`computer_connect_code` is not among your tools at all**: this server was installed with the
-  computer connection switched off, so no code exists and none can be made from the chat. Say that
-  in one sentence and name the one step that changes it: the server has to be started again with
-  the computer connection on. **Never invent a screen, a menu or an option for them to go and
-  find.** You have not seen their server's installer, so a guess at where that switch lives is a
-  guess, and sending them to look for a switch that is not there costs them the evening.
+- **No computer paired** (a tool answers NOT AVAILABLE YET, or `computer_connect_code` is not
+  among your tools): say in one plain sentence that using a browser on their own computer, with
+  their own logins, is not available yet in Godspeed Mission Control, and offer to do what can be
+  done with your own browser on public pages. **Never tell them to install, tick, pair or paste
+  anything for it, and never invent a screen, a menu or an option for them to go and find.** There
+  is none.
