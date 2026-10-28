@@ -25,7 +25,7 @@
     "glossary": ["notebook/core/backup-schedule.mjs", "notebook/ui/src/components/layout/DashboardSidebar.tsx", "notebook/ui/src/components/timeline/ImportanceSlider.tsx", "notebook/ui/src/pages/Profile.tsx", "notebook/ui/src/pages/WeeklyReview.tsx", "starter-godspeed/README.md", "starter-godspeed/rules/never-spend-my-money.md", "starter-godspeed/rules/unsure-goes-to-inbox.md"],
     "goals": ["notebook/core/goal-overview.mjs", "notebook/core/personal-operations.mjs", "notebook/ui/src/local/Goals.tsx", "tools/goals.js"],
     "habits": ["notebook/recipes/coach/**", "notebook/ui/src/pages/HabitTracker.tsx", "third-party/addons/godspeed-coach/lib/tick.mjs"],
-    "how-godspeed-works": ["docker/full-candidate/supervisor.mjs"],
+    "how-godspeed-works": ["docker/full-candidate/supervisor.mjs", "notebook/core/domains.mjs"],
     "how-sync-works": ["notebook/core/conflicts.mjs", "notebook/core/file-policy.mjs", "notebook/core/sync/git.mjs", "notebook/core/sync/runner.mjs"],
     "install-linux": ["install-godspeed.sh", "notebook/scripts/choose-assistant.mjs", "notebook/scripts/install-native-notebook.sh"],
     "install-mac": ["install-godspeed.sh", "notebook/scripts/choose-assistant.mjs", "notebook/scripts/install-native-notebook.sh"],
