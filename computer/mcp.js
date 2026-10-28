@@ -190,7 +190,7 @@ async function call(name, a = {}) {
   const dir = C.serverDir();
   // No computer paired: nothing here can work, and nothing the person could do would change that,
   // so every tool (the connection code too) gives the same one instruction and makes no code.
-  if (name.startsWith('computer_') && TOOLS.some(t => t.name === name) && S.devices(dir).length === 0) return text(NOT_SET_UP);
+  if (TOOLS.some(t => t.name === name) && S.devices(dir).length === 0) return text(NOT_SET_UP);
   switch (name) {
     case 'computer_status': return text(await K.statusText(dir));
     case 'computer_connect_code': {

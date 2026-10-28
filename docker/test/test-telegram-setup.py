@@ -342,6 +342,8 @@ def test_happy():
           and "folder" not in r["hermes_sent"])
     check("the last message carries the address for another computer",
           any_has(to_anna, "GodspeedSetup.exe", "<code>https://github.com/anna/godspeed.git</code>", "--repo https://github.com/anna/godspeed.git"))
+    check("it does not send them to set up a browser on their computer",
+          not any_has(to_anna, "connect my computer", "connection code", "use a browser on your computer"))
     check("setup is marked done", r["state"].get("done") is True)
     check("the token is in no log", TOKEN not in r["log"] and TOKEN not in r["out"])
     sent_before = len(r["fake"].sent)
