@@ -128,7 +128,8 @@ for f in mc-notebook-sync mc-notebook-env; do sh -n "$HERE/$f" && ok "$f reads a
 # (kit-bootstrap's join.ps1); mc-uninstall is the uninstaller for Mac and Linux. Any other command
 # here without a starter fails this check. 28 October 2026: mc-check-built-on and mc-research had none.
 MADE_BY_SETUP=" mc-compile-rules mc-prompt-harvest mc-check-keys mc-due mc-goals mc-forecast mc-work mc-check-written mc-check-moves mc-run mc-decide mc-work-run mc-menerio-connect mc-search "
-NOT_ON_WINDOWS=" mc-uninstall "
+# mc-notebook-env prints the stored credentials as bash export lines for the shell start-up to read, never for a person, so a starter would only show them in clear text.
+NOT_ON_WINDOWS=" mc-uninstall mc-notebook-env "
 for f in "$HERE"/mc-*; do
   n="$(basename "$f")"
   case "$n" in *.*) continue;; esac

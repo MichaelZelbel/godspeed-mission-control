@@ -34,7 +34,7 @@ recipe-shipped-hashes.sh search.js subscriptions.cjs test_world_pull.py work.js 
 PROGRAMS="mc-check-brief mc-check-brief.cmd mc-check-built-on mc-check-built-on.cmd mc-coach-prep mc-coach-prep.cmd mc-check-keys mc-check-moves
 mc-check-research mc-check-research.cmd mc-check-written
 mc-compile-rules mc-decide mc-due mc-forecast mc-goals mc-install-count mc-judge-brief mc-judge-brief.cmd mc-mail mc-mail.cmd
-mc-menerio-connect mc-menerio-connect.cmd mc-notebook-env mc-notebook-env.cmd mc-notebook-sync mc-notebook-sync.cmd mc-observed-state
+mc-menerio-connect mc-menerio-connect.cmd mc-notebook-env mc-notebook-sync mc-notebook-sync.cmd mc-observed-state
 mc-observed-state.cmd mc-prompt-archive mc-prompt-archive.cmd mc-prompt-harvest mc-research mc-research.cmd mc-run
 mc-search mc-search.cmd mc-work mc-work-run godspeed-browser mc-uninstall"
 
