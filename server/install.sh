@@ -31,10 +31,9 @@
 #
 # What it asks you: a Telegram bot token (Enter skips); whether a repository
 # already holds your folder, and for a fresh godspeed what its new private repository
-# should be called; whether to connect Menerio (optional); whether to put the
-# morning brief on the clock (opt-in). Plus two codes. What only you can do
-# afterwards: paste server/open-the-door.sh, then point the Hermes app on your
-# computer at the server.
+# should be called; whether to put the morning brief on the clock (opt-in). Plus
+# two codes. What only you can do afterwards: paste server/open-the-door.sh, then
+# point the Hermes app on your computer at the server.
 #
 # The by-hand version of all of this is in server/setup.md, for when something
 # breaks and you want to know what it did.
@@ -55,9 +54,14 @@ export KB_TAG
 KB_SELF_URL="${KB_SELF_URL:-https://raw.githubusercontent.com/MichaelZelbel/godspeed-mission-control/beta/server/install.sh}"
 export KB_SELF_URL
 
-# The pin is an immutable TAG, never the moving v2 branch, so this installer runs
-# exactly the code that passed its end-to-end runs until this line is edited.
-KB_PIN="v2.18"
+# The pin is a full commit (or an immutable tag), never the moving v2 branch, so this installer
+# runs exactly the code that passed its end-to-end runs until this line is edited. Everything
+# that reads it takes either: the raw lib.sh address below, fetch_repo, KB_BRANCH for
+# setup-godspeed.sh, open-the-door.sh's own copy of the line, and the Docker image, which reads
+# this line. Until 28 October 2026 it was the tag v2.18, whose email note named book chapters and
+# never asked the mail tool (product issue #81); 8ac85e0 is the commit the Windows, Mac and Linux
+# setup moved to for that fix.
+KB_PIN="8ac85e063fea08069ab6ef260525c48aa03338b4"
 LIB_URL="https://raw.githubusercontent.com/MichaelZelbel/kit-bootstrap/$KB_PIN/lib.sh"
 
 # The agent cage (see "The agent cage" in phase 1): one file from kit-bootstrap at its
@@ -611,9 +615,9 @@ fi
 say "Setting the folder up the way the laptop installer does"
 SETUP_ARGS=(--godspeed "$GODSPEED" --skip-prereqs --sources "${KB_SYNC_SOURCES:-hermes}")
 [ -n "$GODSPEED_REPO" ] && SETUP_ARGS+=(--repo "$GODSPEED_REPO")
-# KB_INSTALL_COUNT_SKIP: the shared code at this pin still ends with the opt-in install-count
-# question, which no installer asks since 27 October 2026; this keeps it from asking.
-KB_INSTALL_COUNT_SKIP=1 KB_BRANCH="$KB_PIN" bash "$BOOTSTRAP_DIR/setup-godspeed.sh" "${SETUP_ARGS[@]}" \
+# The shared code at this pin no longer asks the install-count question (gone since 27 October
+# 2026), so KB_INSTALL_COUNT_SKIP, which kept the tag v2.18 from asking it, is not passed any more.
+KB_BRANCH="$KB_PIN" bash "$BOOTSTRAP_DIR/setup-godspeed.sh" "${SETUP_ARGS[@]}" \
   || warn "the folder setup reported a problem above. Read it; everything below still runs."
 
 # --- The keys go where the folder is not --------------------------------------

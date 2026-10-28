@@ -30,7 +30,9 @@ set -uo pipefail
 
 KB_TAG="door"
 export KB_TAG
-KB_PIN="v2.18"
+# The same pin as server/install.sh's KB_PIN line (a full commit or a tag; the raw address takes
+# either), moved together with it.
+KB_PIN="8ac85e063fea08069ab6ef260525c48aa03338b4"
 LIB_URL="https://raw.githubusercontent.com/MichaelZelbel/kit-bootstrap/$KB_PIN/lib.sh"
 AI_USER="${AI_USER:-ai}"
 PORT=9119
