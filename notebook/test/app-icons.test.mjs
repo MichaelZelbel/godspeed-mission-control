@@ -50,3 +50,12 @@ test('the page links a real favicon and keeps the opaque iPhone icon',()=>{
   assert.equal(png(path.join(pub,'favicon-96.png')).corner[3],0,'the tab icon is transparent');
   const touch=png(path.join(pub,'apple-touch-icon.png'));assert.ok(!touch.alpha||touch.corner[3]===255,'apple-touch-icon.png is opaque');
 });
+
+// On 28 October 2026 Windows Apps listed two entries called "Godspeed Mission Control" after someone
+// used Chrome's or Edge's "Install app" on the notebook page: the Windows setup's own entry and the
+// web app. The web app's name says what it is; the short name under its icon stays short.
+test('the installed web app is not named like the Windows setup',()=>{
+  const manifest=JSON.parse(fs.readFileSync(path.join(pub,'manifest.webmanifest'),'utf8'));
+  assert.equal(manifest.name,'Godspeed Mission Control notebook');
+  assert.equal(manifest.short_name,'Mission Control');
+});

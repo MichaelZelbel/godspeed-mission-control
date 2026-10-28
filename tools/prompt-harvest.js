@@ -188,8 +188,10 @@ function findPython(told) {
 function hermesPythons() {
   const roots = [];
   const local = process.env.LOCALAPPDATA;
-  const state = local ? path.join(local, 'Godspeed Mission Control Full Alpha State') : null;
-  const configs = [process.env.GODSPEED_ASSISTANT_CONFIG, state && path.join(state, 'assistant.json')];
+  // The Windows setup's state folder: its name since 2.0.0-beta.11 first, then the name of an
+  // install made before (kit-bootstrap's windows/godspeed-folders.ps1 names both).
+  const states = local ? ['Godspeed Mission Control State', 'Godspeed Mission Control Full Alpha State'].map(f => path.join(local, f)) : [];
+  const configs = [process.env.GODSPEED_ASSISTANT_CONFIG, ...states.map(s => path.join(s, 'assistant.json'))];
   for (const g of [process.env.GODSPEED_DIR, process.env.GODSPEED_WORKSPACE, deviceEnvValue('GODSPEED_DIR')]) {
     if (g) configs.push(path.join(g, '.godspeed', 'assistant.json'));
   }
@@ -201,7 +203,7 @@ function hermesPythons() {
       if (a.executable) roots.push(path.join(path.dirname(path.dirname(a.executable)), 'hermes-agent'));
     } catch (_) {}
   }
-  if (state) roots.push(path.join(state, 'hermes-runtime', 'hermes-agent'));
+  for (const s of states) roots.push(path.join(s, 'hermes-runtime', 'hermes-agent'));
   if (local) roots.push(path.join(local, 'hermes', 'hermes-agent'));
   roots.push(path.join(os.homedir(), '.hermes', 'hermes-agent'));
   const out = [];

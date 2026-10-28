@@ -161,7 +161,7 @@ out="$(MENERIO_API_KEY=test-key GODSPEED_NOTEBOOK_MIRROR= MENERIO_BASE_URL="http
 contains "and no answer at all counts as no" "$out" "source: local files (your mission control is not copied to Menerio"
 
 out="$(MENERIO_API_KEY="" hs dentist)"; rc=$?
-[ "$rc" = "0" ] && contains "no key: the files answer, and nothing is called broken" "$(echo "$out" | tail -1)" "source: local files (no Menerio connected)" || bad "no key broke the search (exit $rc)" "$out"
+[ "$rc" = "0" ] && contains "no key: the files answer, and nothing is called broken" "$(echo "$out" | tail -1)" "source: local files (the files of your mission control folder as its Git history holds them; a new file is found once it is saved there)" || bad "no key broke the search (exit $rc)" "$out"
 lacks "  and the stand-in was never called for it" "$("$NODE" -e 'require("http").get(process.argv[1]+"/__seen",r=>{let d="";r.on("data",c=>d+=c);r.on("end",()=>console.log(d))})' "$MENERIO_BASE_URL")" '"q":"dentist"'
 
 # 11. Menerio answers, and has nothing: look in the files too, and say so.

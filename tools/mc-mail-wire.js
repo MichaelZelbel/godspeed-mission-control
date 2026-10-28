@@ -130,16 +130,19 @@ function hermesHome() {
 }
 // THE NOTEBOOK'S OWN HERMES (8 October 2026). A mission control with the notebook (version 2) runs
 // the assistant in a profile of its own, named in assistant.json: on Windows in the setup's state
-// folder (...\Godspeed Mission Control Full Alpha State\hermes-profile), on a Mac, Linux or a
-// server in the mission control's .godspeed folder. Until this date `mc-mail setup` wired only the
-// default profile, so on a Windows version 2 install the assistant the reader talks to had the
-// notebook tool and no mail tool.
+// folder (...\Godspeed Mission Control State\hermes-profile), on a Mac, Linux or a server in the
+// mission control's .godspeed folder. Until this date `mc-mail setup` wired only the default
+// profile, so on a Windows version 2 install the assistant the reader talks to had the notebook
+// tool and no mail tool.
 const samePath = (a, b) => process.platform === "win32" ? path.resolve(a).toLowerCase() === path.resolve(b).toLowerCase() : path.resolve(a) === path.resolve(b);
+// The Windows setup's state folder, under its name since 2.0.0-beta.11 first and under the name of
+// an install made before second (kit-bootstrap's windows/godspeed-folders.ps1 names both).
+const WINDOWS_STATE_FOLDERS = ["Godspeed Mission Control State", "Godspeed Mission Control Full Alpha State"];
 function notebookHermesHomes(godspeed) {
   const files = [];
   if (process.env.GODSPEED_ASSISTANT_CONFIG) files.push(process.env.GODSPEED_ASSISTANT_CONFIG);
   if (godspeed) files.push(path.join(godspeed, ".godspeed", "assistant.json"));
-  if (process.platform === "win32" && process.env.LOCALAPPDATA) files.push(path.join(process.env.LOCALAPPDATA, "Godspeed Mission Control Full Alpha State", "assistant.json"));
+  if (process.platform === "win32" && process.env.LOCALAPPDATA) for (const folder of WINDOWS_STATE_FOLDERS) files.push(path.join(process.env.LOCALAPPDATA, folder, "assistant.json"));
   const out = [];
   for (const f of files) {
     let d = null;

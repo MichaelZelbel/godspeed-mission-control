@@ -31,10 +31,11 @@ compile-rules.js due.js forecast.js goals.js judge-brief.js limit-cases.json mc-
 mc-mail-age.json mc-mail-gmail.js mc-mail-himalaya.json mc-mail-imap.js mc-mail-pair.js mc-mail-wire.js
 mc-mail.js mc-notebook.js menerio-connect.js notebook-sync.py observed-state.js prompt-harvest.js
 recipe-shipped-hashes.sh search.js subscriptions.cjs test_world_pull.py work.js world-pull.py"
-PROGRAMS="mc-check-brief mc-check-built-on mc-coach-prep mc-check-keys mc-check-moves mc-check-research mc-check-written
-mc-compile-rules mc-decide mc-due mc-forecast mc-goals mc-install-count mc-judge-brief mc-mail mc-mail.cmd
-mc-menerio-connect mc-menerio-connect.cmd mc-notebook-env mc-notebook-sync mc-observed-state
-mc-observed-state.cmd mc-prompt-archive mc-prompt-archive.cmd mc-prompt-harvest mc-research mc-run
+PROGRAMS="mc-check-brief mc-check-brief.cmd mc-check-built-on mc-check-built-on.cmd mc-coach-prep mc-coach-prep.cmd mc-check-keys mc-check-moves
+mc-check-research mc-check-research.cmd mc-check-written
+mc-compile-rules mc-decide mc-due mc-forecast mc-goals mc-install-count mc-judge-brief mc-judge-brief.cmd mc-mail mc-mail.cmd
+mc-menerio-connect mc-menerio-connect.cmd mc-notebook-env mc-notebook-sync mc-notebook-sync.cmd mc-observed-state
+mc-observed-state.cmd mc-prompt-archive mc-prompt-archive.cmd mc-prompt-harvest mc-research mc-research.cmd mc-run
 mc-search mc-search.cmd mc-work mc-work-run godspeed-browser mc-uninstall"
 
 LABEL=com.godspeedmissioncontrol.notebook
