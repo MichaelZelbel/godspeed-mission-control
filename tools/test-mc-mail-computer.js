@@ -155,6 +155,20 @@ async function main() {
   ok("16 and the default Hermes still gets its usual entry", /^Hermes: added the mail tool/m.test(run1.stdout) && /mc-mail:/.test(fs.readFileSync(path.join(H4, ".hermes", "config.yaml"), "utf8")), run1.stdout);
   const run2 = child(`require("./mc-mail.js").main(["setup","--check"]);`, tmpAll);
   ok("17 the notebook's Hermes entry starts and answers like Hermes would start it, and a second run adds nothing", /Hermes \(the assistant your notebook set up\): the mail tool answers/.test(run2.stdout) && fs.readFileSync(path.join(profile, "config.yaml"), "utf8") === cfg, run2.stdout + run2.stderr);
+  // On Windows the notebook's Hermes is also found through the setup's state folder, with nothing in
+  // the mission control naming it: "Godspeed Mission Control State" since 2.0.0-beta.11 (17b), and
+  // "... Full Alpha State" on an install made before (17c).
+  if (process.platform === "win32") {
+    for (const [n, folder] of [["17b", "Godspeed Mission Control State"], ["17c", "Godspeed Mission Control Full Alpha State"]]) {
+      const H = path.join(W, "home" + n), G = path.join(W, "wired" + n), L = path.join(W, "local" + n), prof = path.join(L, folder, "hermes-profile");
+      fs.mkdirSync(H, { recursive: true }); fs.mkdirSync(G, { recursive: true }); fs.mkdirSync(prof, { recursive: true });
+      fs.writeFileSync(path.join(G, "AGENTS.md"), "x\n");
+      fs.writeFileSync(path.join(prof, "config.yaml"), notebookEntry);
+      fs.writeFileSync(path.join(L, folder, "assistant.json"), "﻿" + JSON.stringify({ verified: true, home: prof, workspace: G }));
+      const run = child(`require("./mc-mail.js").main(["setup"]);`, { HOME_DIR: H, GODSPEED_DIR: G, GODSPEED_ROOT: G, LOCALAPPDATA: L, APPDATA: path.join(W, "roaming" + n), CODEX_HOME: path.join(W, "no-codex") });
+      ok(n + " mc-mail setup finds the notebook's Hermes in %LOCALAPPDATA%\\" + folder, /Hermes \(the assistant your notebook set up\): added the mail tool/.test(run.stdout) && /^  mc-mail:$/m.test(fs.readFileSync(path.join(prof, "config.yaml"), "utf8")), run.stdout + run.stderr);
+    }
+  } else console.log("  --   17b, 17c skipped: the Windows setup's state folder is looked for on Windows only");
 
   // 5. The first connect, without a terminal: age is fetched before anything is asked.
   const H5 = path.join(W, "home5"); fs.mkdirSync(H5, { recursive: true });

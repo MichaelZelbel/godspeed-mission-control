@@ -4,8 +4,9 @@
 #
 #   1. BUILD, a product worktree, is detached at the commit; npm ci + npm run build in notebook/ui with
 #      Node 22.19.0 (the build refuses another Node)
-#   2. kit-bootstrap's windows/build-full-alpha.ps1 from KB, a kit-bootstrap worktree whose HEAD is the
-#      bootstrap commit the setup will pin, run with Windows PowerShell 5.1 (Inno Setup 6 installed)
+#   2. kit-bootstrap's windows/build-godspeed-setup.ps1 (build-full-alpha.ps1 before 2.0.0-beta.11) from
+#      KB, a kit-bootstrap worktree whose HEAD is the bootstrap commit the setup will pin, run with
+#      Windows PowerShell 5.1 (Inno Setup 6 installed)
 #   3. OUT/assets-<short>/: GodspeedSetup.exe, windows-manifest.json (the build's manifest as two-space
 #      JSON with a final newline, checked to name both commits) and the source archive
 #      (git archive --prefix=godspeed-mission-control/ of the commit). install-godspeed.sh and
@@ -26,11 +27,15 @@ echo "product $P, kit-bootstrap $B, node $(node --version)"
 mkdir -p "$OUT"
 ( cd "$BUILD/notebook/ui" && npm ci --no-audit --no-fund && npm run build ) > "$OUT/ui-build-$S.log" 2>&1 || { echo "UI build failed: $OUT/ui-build-$S.log"; exit 1; }
 echo "UI built"
-rm -f "$KB/windows/dist/GodspeedSetup-Full-Alpha.exe" "$KB/windows/dist/candidate-manifest.json"
-( cd "$OUT" && powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(cygpath -w "$KB/windows/build-full-alpha.ps1")" -KitCheckout "$(cygpath -w "$BUILD")" ) > "$OUT/exe-build-$S.log" 2>&1 || { echo "exe build failed: $OUT/exe-build-$S.log"; exit 1; }
+# kit-bootstrap's build script and the file it writes lost "full-alpha" in 2.0.0-beta.11; a pin from
+# before still has the old names, so the new ones are looked for first and the old ones second.
+BUILD_PS1=build-godspeed-setup.ps1; BUILT=GodspeedSetup.exe
+[ -f "$KB/windows/$BUILD_PS1" ] || { BUILD_PS1=build-full-alpha.ps1; BUILT=GodspeedSetup-Full-Alpha.exe; }
+rm -f "$KB/windows/dist/$BUILT" "$KB/windows/dist/candidate-manifest.json"
+( cd "$OUT" && powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(cygpath -w "$KB/windows/$BUILD_PS1")" -KitCheckout "$(cygpath -w "$BUILD")" ) > "$OUT/exe-build-$S.log" 2>&1 || { echo "exe build failed: $OUT/exe-build-$S.log"; exit 1; }
 ls -la "$KB/windows/dist/"
 A=$OUT/assets-$S; mkdir -p "$A"
-cp "$KB/windows/dist/GodspeedSetup-Full-Alpha.exe" "$A/GodspeedSetup.exe"
+cp "$KB/windows/dist/$BUILT" "$A/GodspeedSetup.exe"
 node -e '
 const fs=require("fs");const [src,dst,p,b]=process.argv.slice(1);
 const m=JSON.parse(fs.readFileSync(src,"utf8").replace(/^\uFEFF/,""));

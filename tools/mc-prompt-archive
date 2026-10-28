@@ -725,14 +725,19 @@ def running_hermes_homes():
     return sorted(set(out))
 
 
+# The Windows setup's state folder: its name since 2.0.0-beta.11 first, then the name of an install
+# made before (kit-bootstrap's windows/godspeed-folders.ps1 names both).
+WINDOWS_STATE_FOLDERS = ("Godspeed Mission Control State", "Godspeed Mission Control Full Alpha State")
+
+
 def assistant_homes(godspeed=None):
     """The Hermes home named by each assistant.json this computer has (the "home" field)."""
     files = []
     if os.environ.get("GODSPEED_ASSISTANT_CONFIG"):
         files.append(os.environ["GODSPEED_ASSISTANT_CONFIG"])
     if os.environ.get("LOCALAPPDATA"):
-        files.append(os.path.join(os.environ["LOCALAPPDATA"], "Godspeed Mission Control Full Alpha State",
-                                  "assistant.json"))
+        for folder in WINDOWS_STATE_FOLDERS:
+            files.append(os.path.join(os.environ["LOCALAPPDATA"], folder, "assistant.json"))
     if godspeed:
         files.append(os.path.join(godspeed, ".godspeed", "assistant.json"))
     out = []
@@ -783,8 +788,8 @@ def hermes_homes(godspeed=None):
         # The reader's own Godspeed assistant on Windows (2026-10-12): the setup gives it a Hermes
         # home of its own, and "Open the Windows assistant" and the notebook's chat both talk to
         # it there. Nothing else on the PC names that folder, so no chat with it was ever saved.
-        candidates.append(os.path.join(os.environ["LOCALAPPDATA"],
-                                       "Godspeed Mission Control Full Alpha State", "hermes-profile"))
+        for folder in WINDOWS_STATE_FOLDERS:
+            candidates.append(os.path.join(os.environ["LOCALAPPDATA"], folder, "hermes-profile"))
     # Wherever the assistant's own settings say its home is: the Windows setup writes them in its
     # state folder, the one-click server and the notebook in <mission control>/.godspeed/.
     candidates += assistant_homes(godspeed)
@@ -818,7 +823,7 @@ def _default_store_label(hermes):
     if len(parts) >= 2 and parts[-2] == "profiles":
         return parts[-1]
     if norm.endswith("/.godspeed/integrated-runtime/hermes") \
-            or norm.endswith("/Godspeed Mission Control Full Alpha State/hermes-profile") \
+            or any(norm.endswith("/" + folder + "/hermes-profile") for folder in WINDOWS_STATE_FOLDERS) \
             or norm == "/opt/data/full-candidate/hermes":
         return "godspeed"
     return "default"
