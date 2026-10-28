@@ -122,6 +122,32 @@ missing "  not from whatever mc-due is on the path" "$due" "ran due.js"
 for f in mc-run mc-decide mc-work-run; do bash -n "$HERE/$f" && ok "$f reads as bash" || bad "$f does not read as bash"; done
 for f in mc-notebook-sync mc-notebook-env; do sh -n "$HERE/$f" && ok "$f reads as sh" || bad "$f does not read as sh"; done
 
+# 5. Every command the Windows setup puts on the PATH can be typed in PowerShell (issue #8). PowerShell
+# finds an extension-less file, shows nothing, and says nothing, so each mc-* command needs a starter
+# (mc-<name>.cmd) beside it. The Windows setup writes the starters of the commands in this list itself
+# (kit-bootstrap's join.ps1); mc-uninstall is the uninstaller for Mac and Linux. Any other command
+# here without a starter fails this check. 28 October 2026: mc-check-built-on and mc-research had none.
+MADE_BY_SETUP=" mc-compile-rules mc-prompt-harvest mc-check-keys mc-due mc-goals mc-forecast mc-work mc-check-written mc-check-moves mc-run mc-decide mc-work-run mc-menerio-connect mc-search "
+NOT_ON_WINDOWS=" mc-uninstall "
+for f in "$HERE"/mc-*; do
+  n="$(basename "$f")"
+  case "$n" in *.*) continue;; esac
+  case "$MADE_BY_SETUP$NOT_ON_WINDOWS" in *" $n "*) continue;; esac
+  if [ -f "$HERE/$n.cmd" ]; then ok "$n has a starter for PowerShell"; else bad "$n has no $n.cmd, so PowerShell shows nothing when it is typed"; fi
+done
+# A starter runs the program that sits beside it: node for a Node program, Git's bash for a shell one.
+for c in "$HERE"/mc-*.cmd; do
+  n="$(basename "$c" .cmd)"
+  [ -f "$HERE/$n" ] || { bad "$n.cmd starts $n, which is not here"; continue; }
+  if grep -q "bash.exe" "$c"; then
+    head -1 "$HERE/$n" | grep -Eq '^#!.*(sh|bash)' && ok "$n.cmd starts the shell program with bash" || bad "$n.cmd uses bash for something that is not a shell program"
+  else
+    prog="$(sed -n 's/.*node "%~dp0\([^"]*\)".*/\1/p' "$c")"
+    [ -n "$prog" ] && [ -f "$HERE/$prog" ] && ok "$n.cmd starts $prog" || bad "$n.cmd starts a program that is not here ($prog)"
+  fi
+  if [ "$(tr -cd '\r' < "$c" | wc -c)" -gt 0 ]; then ok "$n.cmd has Windows line endings"; else bad "$n.cmd needs Windows line endings (cmd reads a file with Unix ones wrongly)"; fi
+done
+
 echo
 echo "launchers: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]
