@@ -49,7 +49,7 @@ written". A model produces it while trying to manufacture continuity it never pl
 we will return to this / as we will see / in the next section / later in this book / keep this in
 mind / this will matter later / for the remainder of this chapter.
 
-**Backward:** as we discussed earlier / as you have already seen / as we learned in Chapter 2 / now
+**Backward:** as we discussed earlier / as you have already seen / as we learned in the last chapter / now
 that we have covered X / building on what we discussed.
 
 **Roadmap:** in this chapter we will explore / first we will look at / before we dive into / let us

@@ -55,7 +55,8 @@ server's own terminal). You do everything else. Email is optional; never push it
 ## When it does not work
 
 - **Google says app passwords are not available for the account:** that account cannot use this
-  route. Nothing is broken. Offer pasting, or forwarding to the mission control's own address (Chapter 31).
+  route. Nothing is broken. Offer pasting, or forwarding to the mission control's own address
+  (`mc-mail connect agentmail` gives it one: https://godspeedmissioncontrol.com/guide/terminal-commands).
   Never suggest turning off security settings or opening Google Cloud Console.
 - **"Gmail did not accept the app password" later on:** it was removed at Google, or their Google
   password changed (that removes every app password). Start step 5 again.
