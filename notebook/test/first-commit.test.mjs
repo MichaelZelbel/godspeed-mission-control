@@ -35,7 +35,8 @@ test('init gives a new mission control its first commit, on main, with the noteb
   assert.equal(git(root,['symbolic-ref','--short','HEAD'],env).stdout.trim(),'main');
   assert.equal(git(root,['log','--format=%s|%an','-1'],env).stdout.trim(),'Start my mission control|Godspeed Mission Control','a computer with no Git name commits under the notebook\'s');
   const tracked=git(root,['ls-files'],env).stdout.split('\n').filter(Boolean);
-  for(const file of ['AGENTS.md','procedures.md','.gitignore','FULL-ALPHA.md'])assert.ok(tracked.includes(file),file+' is in the first commit');
+  for(const file of ['AGENTS.md','procedures.md','.gitignore','NOTEBOOK.md'])assert.ok(tracked.includes(file),file+' is in the first commit');
+  assert.ok(!tracked.includes('FULL-ALPHA.md'),'the note has its name since 2.0.0-beta.11 only');
   assert.ok(tracked.some(file=>file.startsWith('notebook/')),'the notebook\'s pages are in it');
   assert.ok(tracked.some(file=>file.startsWith('skills/')),'the recipes are in it');
   assert.ok(!tracked.some(file=>file.startsWith('.godspeed/')),'keys, databases and media never are');

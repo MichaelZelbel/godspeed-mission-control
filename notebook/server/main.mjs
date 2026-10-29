@@ -660,6 +660,11 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   // 2026 a missing media file ended the process with no word in the log.
   process.on('unhandledRejection', error => console.error('Godspeed Mission Control: unhandledRejection, the server keeps running:', error));
   process.on('uncaughtException', error => { console.error('Godspeed Mission Control: uncaughtException, the server restarts:', error); process.exit(1); });
+  // The note at the top of the folder (core/notebook-note.mjs): FULL-ALPHA.md becomes NOTEBOOK.md
+  // here too if no init has renamed it yet and it never leaves this computer through Git, and both
+  // names at once are said in this log once.
+  try { (await import('../core/notebook-note.mjs')).settleNotebookNote(root, { say: line => console.error('Godspeed Mission Control: ' + line) }); }
+  catch (error) { console.error('Godspeed Mission Control: the note at the top of your folder was not checked: ' + error.message); }
   // This machine's own name, never one shared by every PC (device-id.mjs).
   const {machineDevice,claimLegacyOwner}=await import('../core/device-id.mjs'),device=machineDevice(root);
   const service = await createService({ root, mediaRoot: process.env.GODSPEED_MEDIA_ROOT, host: process.env.GODSPEED_BIND || '127.0.0.1', port: Number(process.env.GODSPEED_PORT || 47831), webPort: process.env.GODSPEED_WEB_PORT || undefined, localPort: process.env.GODSPEED_LOCAL_PORT || undefined, token: process.env.GODSPEED_ACCESS_TOKEN,device:device.id });
