@@ -71,6 +71,17 @@ test('the start renames a note no init has renamed yet',()=>{
   assert.equal(read(root,'NOTEBOOK.md'),'Mine.\n');assert.equal(has(root,'FULL-ALPHA.md'),false);assert.deepEqual(said,[]);
 });
 
+test('where Git cannot read the folder\'s repository, the note keeps its name',()=>{
+  // A repository Git refuses (one another user owns, "dubious ownership"; here a .git that leads
+  // nowhere) cannot tell whether the note leaves this computer.
+  const root=temp('refused');fs.writeFileSync(path.join(root,'.git'),'gitdir: '+path.join(root,'missing')+'\n');
+  fs.writeFileSync(path.join(root,'FULL-ALPHA.md'),notebookNoteText);
+  assert.notEqual(git(root,'rev-parse','--is-inside-work-tree').status,0,'precondition: Git refuses the folder');
+  init(root);
+  assert.equal(read(root,'FULL-ALPHA.md'),notebookNoteText);assert.equal(has(root,'NOTEBOOK.md'),false);
+  assert.equal(settleNotebookNote(root,{say:()=>assert.fail('nothing to say')}).state,'shared');
+});
+
 // An owner's repository with an ignore file and some history: their own mission control. With
 // `remote`, it has a copy elsewhere that other computers pull from.
 function ownersFolder(name,ignore,{remote=false}={}){
@@ -227,6 +238,38 @@ test('a copy made in Settings keeps FULL-ALPHA.md on every computer, carries no 
   for(const dir of [server,computer]){assert.equal(read(dir,'FULL-ALPHA.md'),notebookNoteText);assert.equal(has(dir,'NOTEBOOK.md'),false);}
   assert.ok(!w.run(w.remote,'ls-tree','-r','--name-only','main').split('\n').includes('NOTEBOOK.md'));
   assert.deepEqual(serverSync.pendingConflicts(),[]);assert.deepEqual(computerSync.pendingConflicts(),[]);
+});
+
+test('a new device that connects from its own Settings to a copy made before 2.0.0-beta.11 keeps FULL-ALPHA.md alone, and its sync settles',async t=>{
+  // The Docker server's path, or a second device set up from Settings rather than the installer:
+  // its init wrote NOTEBOOK.md, then the copy brings FULL-ALPHA.md.
+  const w=world(t),server=path.join(w.base,'server');
+  for(const [file,text] of [['FULL-ALPHA.md',notebookNoteText],['AGENTS.md','# My mission control\n'],['rules/server-rule.md','A rule written on the server.\n']])atomic(path.join(server,file),text);
+  const serverStore=new Store(server,{device:'vps'}),serverSync=new FileSync(serverStore);
+  await serverSync.verifyRemote(address);serverSync.initialize(address);atomic(path.join(serverStore.state,'sync-config.json'),JSON.stringify({enabled:true}));
+  assert.equal(serverSync.reconcile().state,'synced');
+  const device=async(name,edited)=>{
+    const dir=path.join(w.base,name);fs.mkdirSync(dir);init(dir);
+    assert.equal(read(dir,'NOTEBOOK.md'),notebookNoteText);if(edited)fs.writeFileSync(path.join(dir,'NOTEBOOK.md'),edited);
+    const store=new Store(dir,{device:name}),sync=new FileSync(store);
+    await sync.verifyRemote(address);sync.initialize(address);atomic(path.join(store.state,'sync-config.json'),JSON.stringify({enabled:true}));
+    assert.equal(sync.reconcile().state,'synced');assert.ok(has(dir,'FULL-ALPHA.md'),'precondition: the copy brought its note');
+    return {dir,sync};
+  };
+  // Its next start removes its own NOTEBOOK.md, which still reads as init wrote it, and says nothing.
+  const said=[],plain=await device('plain');
+  assert.equal(settleNotebookNote(plain.dir,{say:line=>said.push(line)}).state,'shared');
+  assert.equal(has(plain.dir,'NOTEBOOK.md'),false);assert.equal(read(plain.dir,'FULL-ALPHA.md'),notebookNoteText);assert.deepEqual(said,[]);
+  init(plain.dir);assert.equal(has(plain.dir,'NOTEBOOK.md'),false,'its next update writes none either');
+  for(let i=0;i<2;i++)assert.equal(plain.sync.reconcile().state,'synced');
+  // A NOTEBOOK.md the owner edited stays beside it, said once, and FULL-ALPHA.md is not named as one to delete.
+  const edited=await device('edited','My own words about this folder.\n');
+  for(let i=0;i<3;i++)assert.equal(settleNotebookNote(edited.dir,{say:line=>said.push(line)}).state,'both');
+  assert.equal(read(edited.dir,'NOTEBOOK.md'),'My own words about this folder.\n');assert.ok(has(edited.dir,'FULL-ALPHA.md'));
+  assert.equal(said.length,1,'said once');
+  assert.match(said[0],/FULL-ALPHA\.md is the note your other computers share, so it stays; NOTEBOOK\.md has your own changes/);assert.doesNotMatch(said[0],/delete/);
+  assert.equal(edited.sync.reconcile().state,'synced');assert.equal(serverSync.reconcile().state,'synced');
+  assert.ok(!w.run(w.remote,'ls-tree','-r','--name-only','main').split('\n').includes('NOTEBOOK.md'));
 });
 
 test('a copy made in Settings beside an owner\'s repository (.godspeed/sync.git) keeps FULL-ALPHA.md',async t=>{

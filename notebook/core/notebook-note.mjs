@@ -41,9 +41,11 @@ export function noteTravels(root){
     const listed=git(root,['--git-dir='+copy,'--work-tree='+root,'ls-files','-z','--',retiredNotebookNote]);
     if(listed.error||listed.status!==0||listed.stdout)return true;
   }
+  // Git missing, or refusing a folder that has a repository (one another user owns, "dubious
+  // ownership"), cannot tell; only a folder with no repository is one.
   const inside=git(root,['rev-parse','--is-inside-work-tree']);
-  if(inside.error)return fs.existsSync(path.join(root,'.git'));
-  if(inside.status!==0||inside.stdout.trim()!=='true')return false;
+  if(inside.error||inside.status!==0)return fs.existsSync(path.join(root,'.git'));
+  if(inside.stdout.trim()!=='true')return false;
   const remotes=git(root,['remote']);
   if(remotes.status!==0)return true;
   if(!remotes.stdout.trim())return false;
@@ -72,8 +74,14 @@ export function carryIgnoreLine(root){
 
 // Renames FULL-ALPHA.md to NOTEBOOK.md once where it never leaves this computer, and with `write`
 // (init) writes the note or brings a generated one up to date, under the name the folder keeps.
-// When both are there the notebook keeps NOTEBOOK.md and leaves FULL-ALPHA.md as it is; with `say`
-// (the notebook's start) it says so in its log, once.
+// When both are there and FULL-ALPHA.md stays on this computer, the notebook keeps NOTEBOOK.md and
+// leaves FULL-ALPHA.md as it is. When FULL-ALPHA.md is the name the folder shares through Git (a
+// new device that connected from its own Settings to a copy made before 2.0.0-beta.11: its init
+// wrote NOTEBOOK.md, the copy then brought FULL-ALPHA.md), the device's own NOTEBOOK.md goes while
+// it still reads as the notebook wrote it, so the folder keeps FULL-ALPHA.md alone; one the owner
+// edited stays beside it. With `say` (the notebook's start) a folder left with both is said in the
+// log, once, and a shared FULL-ALPHA.md is never named as one to delete: the sync does not commit
+// the removal of a top-level file, so deleting it left that device's sync pending for good.
 // state: 'none' (no note yet, unless `write` made one), 'current' (NOTEBOOK.md only), 'renamed',
 // 'both', 'shared' (FULL-ALPHA.md keeps its name: it leaves this computer through Git), or 'kept'
 // (the rename failed, e.g. a file another program holds on Windows; the old note still marks the
@@ -83,12 +91,14 @@ export function settleNotebookNote(root,{write=false,say}={}){
   const note=path.join(root,notebookNote),old=path.join(root,retiredNotebookNote);
   let state=fs.existsSync(note)?'current':'none',target=note;
   if(fs.existsSync(old)){
+    const travels=noteTravels(root);
+    if(state==='current'&&travels&&[notebookNoteText,...earlierTexts].includes(fs.readFileSync(note,'utf8'))){fs.rmSync(note,{force:true});state='none';}
     if(state==='current'){
       state='both';
       const said=path.join(root,'.godspeed','notebook-note-both-said');
-      if(say&&!fs.existsSync(said)){say('Your mission control folder holds both '+notebookNote+' and '+retiredNotebookNote+'. The notebook uses '+notebookNote+' and leaves '+retiredNotebookNote+' as it is; delete it once you no longer need what it says.');atomic(said,new Date().toISOString()+'\n');}
+      if(say&&!fs.existsSync(said)){say('Your mission control folder holds both '+notebookNote+' and '+retiredNotebookNote+'. '+(travels?retiredNotebookNote+' is the note your other computers share, so it stays; '+notebookNote+' has your own changes and is left as it is.':'The notebook uses '+notebookNote+' and leaves '+retiredNotebookNote+' as it is; delete it once you no longer need what it says.'));atomic(said,new Date().toISOString()+'\n');}
     }
-    else if(noteTravels(root)){state='shared';target=old;}
+    else if(travels){state='shared';target=old;}
     else {try{fs.renameSync(old,note);state='renamed';}catch(error){return {state:'kept',error:error.message};}}
   }
   if(write&&(!fs.existsSync(target)||earlierTexts.includes(fs.readFileSync(target,'utf8')))){atomic(target,notebookNoteText);if(state==='none')state='current';}
