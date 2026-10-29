@@ -8,6 +8,18 @@ A new release comes out most weeks. I write about what my AI does for me and wha
 
 Version 2 is the current edition. The lines below install the current public version, which is the branch `beta` of this repository; `main` is where the work goes on, and a change merged into it reaches nobody until the next version is released. The installers set up a new, separate folder. They do not move an existing version 1 Godspeed folder or your Menerio account.
 
+## New in 2.0.0-beta.11
+
+What you meet in your first hour is cleaned up.
+
+- **No dead end when you ask for your own browser.** Asked to use a browser on your computer with your logins, your assistant now says plainly that this is not available yet and offers its own browser for public pages. It no longer sends you to a setup question that does not exist any more, and neither does the Telegram welcome on a new server.
+- **No "Full Alpha" in a new Windows install.** A new install keeps its program in `Godspeed Mission Control` and its data in `Godspeed Mission Control State`, both in your local app data folder, and its scripts have plain names. An install made before this version keeps its folders and keeps working; a later version moves them.
+- **`NOTEBOOK.md` instead of `FULL-ALPHA.md`.** The note at the top of your mission control folder has a plain name. A folder you share between computers through Git keeps the old name for now, so a computer that is not updated yet never loses it.
+- **Servers say only what is true about email.** The server installer and the Docker image check whether a mailbox is connected before they say anything about email, name no book chapter, and no longer point to a Menerio import page that a server does not have.
+- **Small things.** `mc-search` no longer mentions Menerio. **Open the Windows assistant** shows only on Windows. `mc-research`, `mc-check-built-on` and the other commands print in PowerShell. The notebook installed as an app from Chrome or Edge is called **Godspeed Mission Control notebook**, so Windows Apps no longer shows two entries with the same name.
+
+Updating keeps your folder, notes and settings.
+
 ## New in 2.0.0-beta.10
 
 The installers stop asking things they should not.

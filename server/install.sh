@@ -61,8 +61,9 @@ export KB_SELF_URL
 # this line. Until 28 October 2026 it was the tag v2.18, whose email note named book chapters and
 # never asked the mail tool (product issue #81). The pin is past 8ac85e0, the commit the Windows,
 # Mac and Linux setup moved to for that fix, and past the one after it that keeps the version 2
-# notebook's Menerio import line off a server, which has no such notebook.
-KB_PIN="f32c4024a5eb4b3ccf10eed84042cdc5f84d54a5"
+# notebook's Menerio import line off a server, which has no such notebook. 2.0.0-beta.11 pins
+# kit-bootstrap main as merged for it (#3 and #4), the same commit its Windows setup is built with.
+KB_PIN="fe78248e4a9ccd72c6eea36984eaf0f83999a59c"
 LIB_URL="https://raw.githubusercontent.com/MichaelZelbel/kit-bootstrap/$KB_PIN/lib.sh"
 
 # The agent cage (see "The agent cage" in phase 1): one file from kit-bootstrap at its
