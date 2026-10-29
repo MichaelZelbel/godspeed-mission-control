@@ -5,7 +5,7 @@ description: Plan, verify and undo moving the person's Godspeed Mission Control 
 
 # Move Godspeed Mission Control
 
-Use this method when the person explicitly asks to move their mission control to a different folder on the same computer. A dry run is harmless; physically moving it requires their request. The helper accepts only a mission control folder with the integrated notebook (it holds NOTEBOOK.md and notebook/; an install that has not started since its update to 2.0.0-beta.11 still has FULL-ALPHA.md instead, which counts the same), paired with the installation.json the Windows installer keeps for it. Never invent that file or change what it says to make a different folder pass. Links inside the folder that lead to another place in it, such as .claude/skills and .agents/skills, move with it and lead into the new folder afterwards.
+Use this method when the person explicitly asks to move their mission control to a different folder on the same computer. A dry run is harmless; physically moving it requires their request. The helper accepts only a mission control folder with the integrated notebook (it holds NOTEBOOK.md, or FULL-ALPHA.md, the name from before 2.0.0-beta.11, which counts the same, and notebook/), paired with the installation.json the Windows installer keeps for it. Never invent that file or change what it says to make a different folder pass. Links inside the folder that lead to another place in it, such as .claude/skills and .agents/skills, move with it and lead into the new folder afterwards.
 
 ## Establish ownership and show the plan
 

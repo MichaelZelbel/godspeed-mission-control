@@ -6,14 +6,16 @@ import path from 'node:path';
 import {execFileSync,spawnSync} from 'node:child_process';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import {Store,atomic} from '../core/records/store.mjs';
-import {FileSync,joinRepository} from '../core/sync/git.mjs';
+import {FileSync,joinRepository,useFolderRepository} from '../core/sync/git.mjs';
+import {syncedFiles} from '../core/file-policy.mjs';
 import {settleNotebookNote,carryIgnoreLine,notebookNoteText} from '../core/notebook-note.mjs';
 
 // THE NOTEBOOK'S NOTE IS NOTEBOOK.md (2.0.0-beta.11, ticket 08 of that release). Every mission
 // control with the notebook, on every system, had FULL-ALPHA.md at its top: the first file a
 // newcomer saw in their folder, under a name the product no longer has. A new install writes
-// NOTEBOOK.md, an update renames the old note once, and a folder that kept the old note out of
-// its own Git, or committed it, goes on doing the same with the new one.
+// NOTEBOOK.md. An update renames the old note once, but only where it never leaves this computer
+// through Git: where it does, another computer of the same folder may still run 2.0.0-beta.10,
+// which knows only FULL-ALPHA.md, so there it keeps its name in this release.
 const cli=fileURLToPath(new URL('../bin/godspeed.mjs',import.meta.url));
 const temp=name=>fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-notebook-note-'+name+'-'));
 // `init` is what every installer runs on an install and on an update.
@@ -69,30 +71,34 @@ test('the start renames a note no init has renamed yet',()=>{
   assert.equal(read(root,'NOTEBOOK.md'),'Mine.\n');assert.equal(has(root,'FULL-ALPHA.md'),false);assert.deepEqual(said,[]);
 });
 
-// An owner's repository with an ignore file and some history: their own mission control.
-function ownersFolder(name,ignore){
+// An owner's repository with an ignore file and some history: their own mission control. With
+// `remote`, it has a copy elsewhere that other computers pull from.
+function ownersFolder(name,ignore,{remote=false}={}){
   const root=temp(name);
   assert.equal(git(root,'init','-q','-b','main').status,0);
   fs.writeFileSync(path.join(root,'.gitignore'),ignore);fs.writeFileSync(path.join(root,'AGENTS.md'),'Owner manual\n');
   assert.equal(git(root,'add','-A').status,0);assert.equal(git(root,'commit','-qm','Owner').status,0);
+  if(remote){const bare=temp(name+'-remote');assert.equal(git(bare,'init','-q','--bare').status,0);assert.equal(git(root,'remote','add','origin',bare).status,0);assert.equal(git(root,'push','-q','origin','main').status,0);}
   return root;
 }
 const ignored=(root,name)=>git(root,'check-ignore','-q','--',name).status===0;
 const status=root=>git(root,'status','--porcelain','--untracked-files=all','--','.gitignore','NOTEBOOK.md','FULL-ALPHA.md').stdout.split('\n').filter(Boolean).sort();
+const exclude=root=>read(root,'.git/info/exclude');
 
-test('a folder whose ignore file lists /FULL-ALPHA.md keeps NOTEBOOK.md out of its commits too',()=>{
-  const ignore='/.godspeed/\n/conflicts/\n/FULL-ALPHA.md\n/assistant-state/\n',root=ownersFolder('ignores',ignore);
+test('a folder whose ignore file lists /FULL-ALPHA.md is renamed, and keeps NOTEBOOK.md out of its commits through its own exclude file',()=>{
+  // The note never leaves this computer, so the copy elsewhere changes nothing for other computers.
+  const ignore='/.godspeed/\n/conflicts/\n/FULL-ALPHA.md\n/assistant-state/\n',root=ownersFolder('ignores',ignore,{remote:true});
   fs.writeFileSync(path.join(root,'FULL-ALPHA.md'),notebookNoteText);
   init(root);
   assert.equal(read(root,'NOTEBOOK.md'),notebookNoteText);assert.equal(has(root,'FULL-ALPHA.md'),false);
-  assert.equal(read(root,'.gitignore'),'/.godspeed/\n/conflicts/\n/FULL-ALPHA.md\n/NOTEBOOK.md\n/assistant-state/\n','the same line for the new name, beside the old one, and no line of the owner\'s changed');
+  assert.equal(read(root,'.gitignore'),ignore,'the owner\'s tracked ignore file is untouched');
+  assert.match(exclude(root),/\n\/NOTEBOOK\.md\n$/,'the line is in this clone\'s own exclude file');
   assert.ok(ignored(root,'NOTEBOOK.md'),'NOTEBOOK.md is ignored as FULL-ALPHA.md was');
-  assert.deepEqual(status(root),[' M .gitignore'],'nothing of the note shows to the owner\'s Git');
-  assert.equal(git(root,'add','-A').status,0);
-  assert.ok(!git(root,'diff','--cached','--name-only').stdout.includes('NOTEBOOK.md'),'the owner\'s next commit does not take it');
+  assert.deepEqual(status(root),[],'nothing of the note or the ignore file shows to the owner\'s Git');
+  init(root);assert.equal((exclude(root).match(/NOTEBOOK/g)||[]).length,1,'the line goes in once');
 });
 
-test('a folder whose own Git commits its note goes on committing it under the new name, whatever its ignore file says',()=>{
+test('a folder whose own Git commits its note but has no copy elsewhere is renamed, and goes on committing it',()=>{
   // Committed (the first commit of a new installation holds it), and an ignore line added later,
   // which Git does not apply to a file it already tracks.
   const root=ownersFolder('commits','/.godspeed/\n');
@@ -101,25 +107,40 @@ test('a folder whose own Git commits its note goes on committing it under the ne
   fs.appendFileSync(path.join(root,'.gitignore'),'/FULL-ALPHA.md\n');assert.equal(git(root,'commit','-qam','Ignore the note').status,0);
   const ignoreBefore=read(root,'.gitignore');
   init(root);
-  assert.equal(read(root,'.gitignore'),ignoreBefore,'no line added: the old note was committed, not ignored');
-  assert.equal(ignored(root,'NOTEBOOK.md'),false);
+  assert.equal(read(root,'.gitignore'),ignoreBefore);
+  assert.equal(ignored(root,'NOTEBOOK.md'),false,'no line: the old note was committed, not ignored');
   assert.deepEqual(status(root),[' D FULL-ALPHA.md','?? NOTEBOOK.md']);
   assert.equal(git(root,'add','-A').status,0);assert.equal(git(root,'commit','-qm','Update').status,0);
   const tracked=git(root,'ls-files').stdout.split('\n');
   assert.ok(tracked.includes('NOTEBOOK.md')&&!tracked.includes('FULL-ALPHA.md'),'the owner\'s next commit takes the note under its new name');
 });
 
-test('the ignore line goes in beside the old one with its line ending, into the file that held the old one',()=>{
+test('a folder whose own repository has a copy elsewhere and carries the note there keeps FULL-ALPHA.md, with no NOTEBOOK.md beside it',()=>{
+  // Tracked: the owner's pulls bring the note to their other computers, which may still run beta.10.
+  const tracked=ownersFolder('tracked','/.godspeed/\n',{remote:true});
+  fs.writeFileSync(path.join(tracked,'FULL-ALPHA.md'),recordsText);
+  assert.equal(git(tracked,'add','FULL-ALPHA.md').status,0);assert.equal(git(tracked,'commit','-qm','The note').status,0);
+  init(tracked);
+  assert.equal(read(tracked,'FULL-ALPHA.md'),notebookNoteText,'kept, and brought up to date as 2.0.0-beta.10 does');
+  assert.equal(has(tracked,'NOTEBOOK.md'),false);
+  // Neither tracked nor ignored: the owner's next commit would carry it.
+  const visible=ownersFolder('visible','/.godspeed/\n',{remote:true});
+  fs.writeFileSync(path.join(visible,'FULL-ALPHA.md'),notebookNoteText);
+  init(visible);
+  assert.equal(has(visible,'FULL-ALPHA.md'),true);assert.equal(has(visible,'NOTEBOOK.md'),false);
+  assert.equal(settleNotebookNote(visible,{say:()=>assert.fail('nothing to say')}).state,'shared','the start leaves it too');
+});
+
+test('the line for NOTEBOOK.md goes into the repository\'s own exclude file, never into the tracked .gitignore',()=>{
   const crlf=ownersFolder('crlf','# mine\r\n/FULL-ALPHA.md\r\nbuild/\r\n');
-  assert.equal(carryIgnoreLine(crlf),path.join(crlf,'.gitignore'));
-  assert.equal(read(crlf,'.gitignore'),'# mine\r\n/FULL-ALPHA.md\r\n/NOTEBOOK.md\r\nbuild/\r\n');
+  assert.equal(carryIgnoreLine(crlf),path.join(crlf,'.git','info','exclude'));
+  assert.equal(read(crlf,'.gitignore'),'# mine\r\n/FULL-ALPHA.md\r\nbuild/\r\n');
+  assert.ok(ignored(crlf,'NOTEBOOK.md'));
   assert.equal(carryIgnoreLine(crlf),null,'once: NOTEBOOK.md is ignored now');
-  const exclude=ownersFolder('exclude','build/\n'),excludeFile=path.join(exclude,'.git','info','exclude');
-  fs.appendFileSync(excludeFile,'FULL-*\n');
-  assert.equal(carryIgnoreLine(exclude),excludeFile);
-  assert.match(read(exclude,'.git/info/exclude'),/\nFULL-\*\n\/NOTEBOOK\.md\n$/);
-  assert.equal(read(exclude,'.gitignore'),'build/\n');
-  // A rule from outside the folder (a global excludes file) is matched in the repository's own exclude file.
+  // An old rule in the exclude file itself, or in a global excludes file outside the folder.
+  const own=ownersFolder('exclude','build/\n');fs.appendFileSync(path.join(own,'.git','info','exclude'),'FULL-*\n');
+  assert.equal(carryIgnoreLine(own),path.join(own,'.git','info','exclude'));
+  assert.match(exclude(own),/\nFULL-\*\n\/NOTEBOOK\.md\n$/);assert.equal(read(own,'.gitignore'),'build/\n');
   const global=ownersFolder('global','build/\n'),outside=path.join(temp('excludes'),'ignore');fs.writeFileSync(outside,'FULL-ALPHA.md\n');
   assert.equal(git(global,'config','core.excludesFile',outside).status,0);
   assert.equal(carryIgnoreLine(global),path.join(global,'.git','info','exclude'));
@@ -142,45 +163,86 @@ function world(t){
   return {base,remote,run};
 }
 
-test('an owner\'s repository that ignores only FULL-ALPHA.md still joins in folder mode after an install, and NOTEBOOK.md stays out of it',async t=>{
+test('two clones of an owner\'s repository that ignores only FULL-ALPHA.md are renamed, join in folder mode, and still pull',async t=>{
   const w=world(t),seed=path.join(w.base,'seed'),ignore='/.godspeed/\n/conflicts/\n/FULL-ALPHA.md\n/assistant-state/\n';
   for(const [file,text] of [['.gitignore',ignore],['.gitattributes','* text=auto eol=lf\nnotebook/** -text\n'],['AGENTS.md','Owner manual\n'],['tools/run.sh','echo owner\n']])atomic(path.join(seed,file),text);
-  w.run(seed,'init','-q','-b','main');w.run(seed,'add','-A');w.run(seed,'-c','user.name=Owner','-c','user.email=owner@localhost','commit','-qm','Owner');w.run(seed,'push','-q',address,'main');
+  const owner=['-c','user.name=Owner','-c','user.email=owner@localhost'];
+  w.run(seed,'init','-q','-b','main');w.run(seed,'add','-A');w.run(seed,...owner,'commit','-qm','Owner');w.run(seed,'push','-q',address,'main');
   // The installer's order on a new computer: clone, init, then join (scripts/install-native-notebook.sh).
-  const dir=path.join(w.base,'computer');w.run(w.base,'clone','-q',address,dir);
-  init(dir);
-  assert.equal(read(dir,'NOTEBOOK.md'),notebookNoteText);
-  assert.equal(read(dir,'.gitignore'),'/.godspeed/\n/conflicts/\n/FULL-ALPHA.md\n/NOTEBOOK.md\n/assistant-state/\n');
-  const joined=await joinRepository(new Store(dir));
-  assert.equal(joined.repository,'folder');assert.deepEqual(joined.paths,['notebook']);
-  assert.ok(ignored(dir,'NOTEBOOK.md'));
-  assert.ok(!w.run(dir,'status','--porcelain','--untracked-files=all').split('\n').some(line=>line.endsWith('NOTEBOOK.md')),'the owner\'s Git does not see the note');
+  const clones=[];
+  for(const name of ['computer','second']){
+    const dir=path.join(w.base,name);w.run(w.base,'clone','-q',address,dir);fs.writeFileSync(path.join(dir,'FULL-ALPHA.md'),notebookNoteText);
+    init(dir);
+    assert.equal(read(dir,'NOTEBOOK.md'),notebookNoteText);assert.equal(has(dir,'FULL-ALPHA.md'),false);
+    assert.equal(read(dir,'.gitignore'),ignore,'the owner\'s ignore file is untouched');
+    const joined=await joinRepository(new Store(dir));
+    assert.equal(joined.repository,'folder');assert.deepEqual(joined.paths,['notebook']);
+    assert.ok(!w.run(dir,'status','--porcelain','--untracked-files=all').split('\n').some(line=>/NOTEBOOK\.md|\.gitignore/.test(line)),'Git sees nothing of the note and no change to a tracked file');
+    clones.push(dir);
+  }
+  // The owner's own pull still works on both, with nothing the notebook wrote in its way.
+  atomic(path.join(seed,'rules','new-rule.md'),'From another computer.\n');w.run(seed,'add','-A');w.run(seed,...owner,'commit','-qm','A rule');w.run(seed,'push','-q',address,'main');
+  for(const dir of clones){w.run(dir,...owner,'pull','-q','--no-rebase');assert.equal(read(dir,'rules/new-rule.md'),'From another computer.\n');}
 });
 
-test('through a copy made in Settings the rename reaches GitHub and the other computers, and the old name leaves the repository',async t=>{
+test('folder mode asks the ignore file to hide the note under the name the folder has',async t=>{
+  // A new install has NOTEBOOK.md; a folder whose note leaves this computer keeps FULL-ALPHA.md.
+  const w=world(t),base='/.godspeed/\n/conflicts/\n/assistant-state/\n';
+  const folder=(name,ignore,note)=>{
+    const dir=path.join(w.base,name);
+    for(const [file,text] of [['.gitignore',ignore],['.gitattributes','* text=auto eol=lf\nnotebook/** -text\n'],['AGENTS.md','Owner manual\n'],['tools/run.sh','echo owner\n']])atomic(path.join(dir,file),text);
+    w.run(dir,'init','-q','-b','main');w.run(dir,'add','-A');w.run(dir,'-c','user.name=Owner','-c','user.email=owner@localhost','commit','-qm','Owner');w.run(dir,'remote','add','origin',address);
+    atomic(path.join(dir,note),notebookNoteText);return new Store(dir);
+  };
+  await assert.rejects(useFolderRepository(folder('new',base,'NOTEBOOK.md')),/first: NOTEBOOK\.md$/);
+  assert.equal((await useFolderRepository(folder('new-ignored',base+'/NOTEBOOK.md\n','NOTEBOOK.md'))).repository,'folder');
+  assert.equal((await useFolderRepository(folder('new-old-line',base+'/FULL-ALPHA.md\n','NOTEBOOK.md'))).repository,'folder','an old line counts: init puts the new one into the exclude file');
+  await assert.rejects(useFolderRepository(folder('old',base+'/NOTEBOOK.md\n','FULL-ALPHA.md')),/first: FULL-ALPHA\.md$/);
+  assert.equal((await useFolderRepository(folder('old-ignored',base+'/FULL-ALPHA.md\n','FULL-ALPHA.md'))).repository,'folder');
+});
+
+test('a copy made in Settings keeps FULL-ALPHA.md on every computer, carries no NOTEBOOK.md, and its rounds settle',async t=>{
+  // What the copy lets through is the list 2.0.0-beta.10 has, so a computer of it still on beta.10
+  // sees nothing change (run against that version's sync, a changed list made both computers push
+  // their own ignore file every minute and lose their note).
+  assert.deepEqual(syncedFiles,['AGENTS.md','CLAUDE.md','README.md','procedures.md','decisions.md','MEMORY.md','FULL-ALPHA.md']);
   const w=world(t),server=path.join(w.base,'server');
-  for(const [file,text] of [['FULL-ALPHA.md',notebookNoteText],['AGENTS.md','# My mission control\n'],['rules/server-rule.md','A rule written on the server.\n']])atomic(path.join(server,file),text);
+  for(const [file,text] of [['FULL-ALPHA.md',recordsText],['AGENTS.md','# My mission control\n'],['rules/server-rule.md','A rule written on the server.\n']])atomic(path.join(server,file),text);
   const serverStore=new Store(server,{device:'vps'}),serverSync=new FileSync(serverStore);
   await serverSync.verifyRemote(address);serverSync.initialize(address);atomic(path.join(serverStore.state,'sync-config.json'),JSON.stringify({enabled:true}));
   assert.equal(serverSync.reconcile().state,'synced');
-  const remoteFiles=()=>w.run(w.remote,'ls-tree','-r','--name-only','main').split('\n');
-  assert.ok(remoteFiles().includes('FULL-ALPHA.md'),'precondition: the copy carries the note under its old name');
-  // A computer joined that copy before the update.
+  assert.doesNotMatch(read(server,'.gitignore'),/NOTEBOOK/);
+  // A computer joins: clone, init, join. It keeps the note it joined and writes none beside it.
   const computer=path.join(w.base,'computer');w.run(w.base,'clone','-q',address,computer);
-  const computerStore=new Store(computer,{device:'laptop-1234abcd'});await joinRepository(computerStore);
-  const computerSync=new FileSync(computerStore);assert.equal(computerSync.reconcile().state,'synced');
-  assert.equal(read(computer,'FULL-ALPHA.md'),notebookNoteText);
-  // The server updates: its notebook renames the note, and the next round syncs it.
-  assert.equal(settleNotebookNote(server,{write:true}).state,'renamed');
-  assert.equal(serverSync.reconcile().state,'synced');
-  assert.ok(remoteFiles().includes('NOTEBOOK.md'),'the new name is on GitHub');
-  assert.ok(!remoteFiles().includes('FULL-ALPHA.md'),'the old name is not');
-  // The computer takes the rename on its next round.
-  assert.equal(computerSync.reconcile().state,'synced');
-  assert.equal(read(computer,'NOTEBOOK.md'),notebookNoteText);
-  assert.equal(has(computer,'FULL-ALPHA.md'),false);
+  init(computer);
+  assert.equal(has(computer,'FULL-ALPHA.md'),true);assert.equal(has(computer,'NOTEBOOK.md'),false);
+  const computerStore=new Store(computer,{device:'laptop-1234abcd'});await joinRepository(computerStore);const computerSync=new FileSync(computerStore);
+  // The server's notebook starts after its update.
+  assert.equal(settleNotebookNote(server,{write:true,say:()=>assert.fail('nothing to say')}).state,'shared');
+  const round=()=>{assert.equal(computerSync.reconcile().state,'synced');assert.equal(serverSync.reconcile().state,'synced');};
+  for(let i=0;i<3;i++)round();
+  const commits=()=>Number(w.run(w.remote,'rev-list','--count','main')),settled=commits();
+  for(let i=0;i<3;i++)round();
+  assert.equal(commits(),settled,'no commit once nothing changed');
+  for(const dir of [server,computer]){assert.equal(read(dir,'FULL-ALPHA.md'),notebookNoteText);assert.equal(has(dir,'NOTEBOOK.md'),false);}
+  assert.ok(!w.run(w.remote,'ls-tree','-r','--name-only','main').split('\n').includes('NOTEBOOK.md'));
   assert.deepEqual(serverSync.pendingConflicts(),[]);assert.deepEqual(computerSync.pendingConflicts(),[]);
-  // A computer that joins after the update gets only the new name.
-  const later=path.join(w.base,'later');w.run(w.base,'clone','-q',address,later);
-  assert.ok(has(later,'NOTEBOOK.md')&&!has(later,'FULL-ALPHA.md'));
+});
+
+test('a copy made in Settings beside an owner\'s repository (.godspeed/sync.git) keeps FULL-ALPHA.md',async t=>{
+  // The owner's own repository has no copy elsewhere and does not track the note, so only the copy
+  // made in Settings carries it to the other computers. (Its ignore file cannot name the note:
+  // Git applies the folder's .gitignore to the copy beside it too, and that copy then cannot sync.)
+  const w=world(t),dir=path.join(w.base,'owner');
+  for(const [file,text] of [['.gitignore','/.godspeed/\n'],['AGENTS.md','Owner manual\n'],['tools/run.sh','echo owner\n']])atomic(path.join(dir,file),text);
+  w.run(dir,'init','-q','-b','main');w.run(dir,'add','-A');w.run(dir,'-c','user.name=Owner','-c','user.email=owner@localhost','commit','-qm','Owner');
+  atomic(path.join(dir,'FULL-ALPHA.md'),notebookNoteText);
+  const store=new Store(dir),sync=new FileSync(store);await sync.verifyRemote(address);sync.initialize(address);atomic(path.join(store.state,'sync-config.json'),JSON.stringify({enabled:true}));
+  assert.ok(fs.existsSync(path.join(store.state,'sync.git')),'precondition: the copy lives beside the owner\'s repository');
+  const first=sync.reconcile();assert.equal(first.state,'synced',JSON.stringify(first));
+  assert.ok(w.run(w.remote,'ls-tree','-r','--name-only','main').split('\n').includes('FULL-ALPHA.md'));
+  init(dir);
+  assert.equal(has(dir,'FULL-ALPHA.md'),true);assert.equal(has(dir,'NOTEBOOK.md'),false);
+  assert.equal(sync.reconcile().state,'synced');
+  assert.ok(w.run(w.remote,'ls-tree','-r','--name-only','main').split('\n').includes('FULL-ALPHA.md'),'the copy still carries it');
 });

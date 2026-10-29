@@ -7,10 +7,16 @@ import {notebookNote,retiredNotebookNote} from './file-policy.mjs';
 // THE NOTE AT THE TOP OF A MISSION CONTROL WITH THE NOTEBOOK IS NOTEBOOK.md (2.0.0-beta.11). It
 // says what the folder is, and its presence is how the move recipe, the mail tool and the sync
 // tell such a folder from any other. Until this version it was FULL-ALPHA.md: the first file a
-// newcomer saw in their folder, on every system, and a name the product no longer has. An
-// install from before keeps working: whatever recognises the folder by its note accepts either
-// name, and the notebook renames the old one once, at `init` (every install and update) and at
-// its start.
+// newcomer saw in their folder, on every system, and a name the product no longer has. A new
+// install writes NOTEBOOK.md. Whatever recognises the folder by its note accepts either name.
+//
+// An existing FULL-ALPHA.md is renamed only where it never leaves this computer through Git
+// (noteTravels). Where it does, another computer of the same folder may still run 2.0.0-beta.10,
+// which knows only FULL-ALPHA.md: run against that version's sync (ticket 08's first review, 29
+// October 2026), a renamed note was deleted on both computers, they pushed their own ignore file
+// every minute, and the older computer's mail tool, no longer seeing a notebook, committed the
+// locked key store. There the note keeps its name in this release; a later release renames it
+// once every computer of a copy runs 2.0.0-beta.11 or later.
 
 // What `init` writes, and what earlier versions wrote. A note that still reads as one of those
 // was written by the notebook and is brought up to date; one the owner changed is left alone.
@@ -22,52 +28,69 @@ export const notebookNoteText='# Integrated notebook\n\nThis is the complete God
 /** Whether `root` is a mission control with the notebook: it holds the note under either name. */
 export const hasNotebookNote=root=>[notebookNote,retiredNotebookNote].some(name=>fs.existsSync(path.join(root,name)));
 
-const inside=(folder,file)=>{const relative=path.relative(folder,file);return relative!==''&&!relative.startsWith('..')&&!path.isAbsolute(relative);};
-// Git quotes a path with a backslash, a quote or a non-ASCII letter in it, C style (a Windows
-// path to a global excludes file comes back as "C:\\Users\\..."); this gives back the path.
-const unquote=name=>{if(!/^".*"$/.test(name))return name;const bytes=[];const body=name.slice(1,-1);for(let i=0;i<body.length;i++){if(body[i]!=='\\'){bytes.push(...Buffer.from(body[i]));continue;}const next=body[++i];if(/[0-7]/.test(next)){bytes.push(parseInt(body.slice(i,i+3),8));i+=2;}else bytes.push(...Buffer.from({a:'\x07',b:'\b',f:'\f',n:'\n',r:'\r',t:'\t',v:'\v'}[next]??next));}return Buffer.from(bytes).toString('utf8');};
+const git=(root,args)=>spawnSync('git',args,{cwd:root,encoding:'utf8',windowsHide:true,timeout:30000});
+
+// Whether FULL-ALPHA.md reaches other computers through Git, now or with the owner's next commit:
+// the folder's own repository has a remote and tracks it, or does not ignore it; or a copy made in
+// Settings beside an owner's repository (.godspeed/sync.git) tracks it. A copy made in Settings in
+// the folder itself is the folder's own repository, with a remote. When Git cannot answer, the
+// note is taken to travel, so it keeps its name.
+export function noteTravels(root){
+  const copy=path.join(root,'.godspeed','sync.git');
+  if(fs.existsSync(copy)){
+    const listed=git(root,['--git-dir='+copy,'--work-tree='+root,'ls-files','-z','--',retiredNotebookNote]);
+    if(listed.error||listed.status!==0||listed.stdout)return true;
+  }
+  const inside=git(root,['rev-parse','--is-inside-work-tree']);
+  if(inside.error)return fs.existsSync(path.join(root,'.git'));
+  if(inside.status!==0||inside.stdout.trim()!=='true')return false;
+  const remotes=git(root,['remote']);
+  if(remotes.status!==0)return true;
+  if(!remotes.stdout.trim())return false;
+  const tracked=git(root,['ls-files','-z','--',retiredNotebookNote]);
+  if(tracked.status!==0||tracked.stdout)return true;
+  return git(root,['check-ignore','-q','--',retiredNotebookNote]).status!==0;
+}
 
 // An owner's own repository keeps the note out of its commits with a line such as /FULL-ALPHA.md
-// (folder mode asks for one: sync/git.mjs useFolderRepository). The renamed note keeps whatever
-// the folder did: when Git ignores the old name and not the new one, the same line for the new
-// name goes in right below the old one, in the file that holds it (an ignore rule from outside
-// the folder goes into the repository's own exclude file instead). A FULL-ALPHA.md the folder
-// tracks is not ignored in Git's eyes, so a folder that commits its note goes on committing it.
-// No line of the owner's is changed or removed. Returns the file it wrote to, or null.
+// (folder mode asks for one: sync/git.mjs useFolderRepository). When Git ignores the old name and
+// not the new one, the line for NOTEBOOK.md goes into the repository's own exclude file, which
+// belongs to this clone alone, so every clone keeps what the folder did and nothing the owner's
+// Git tracks changes. Written into the tracked .gitignore instead (the first build of this
+// ticket), the line was an uncommitted change on every updated clone: a second clone's sync
+// stopped on it and the owner's own pull failed. A FULL-ALPHA.md the folder tracks is not ignored
+// in Git's eyes, so a folder that commits its note gets no line. Returns the file written, or null.
 export function carryIgnoreLine(root){
   if(!fs.existsSync(path.join(root,'.git')))return null;
-  const git=args=>spawnSync('git',['-C',root,...args],{encoding:'utf8',windowsHide:true,timeout:30000});
-  const old=git(['check-ignore','-v','--',retiredNotebookNote]);
-  if(old.status!==0||git(['check-ignore','-q','--',notebookNote]).status===0)return null;
-  const match=/^(.*):(\d+):(.*)\t/.exec(old.stdout||'');if(!match)return null;
-  const [,source,number,pattern]=match,twin=pattern.includes(retiredNotebookNote)?pattern.split(retiredNotebookNote).join(notebookNote):'/'+notebookNote;
-  let file=path.resolve(root,unquote(source)),at=Number(number);
-  if(!inside(root,file)){const exclude=git(['rev-parse','--git-path','info/exclude']).stdout.trim();if(!exclude)return null;file=path.resolve(root,exclude);at=0;}
-  let text='';try{text=fs.readFileSync(file,'utf8');}catch(error){if(error.code!=='ENOENT')throw error;}
-  const lines=text.split('\n');
-  if(at>0&&at<=lines.length){lines.splice(at,0,twin+(lines[at-1].endsWith('\r')?'\r':''));atomic(file,lines.join('\n'));}
-  else atomic(file,(text?text.replace(/\n*$/,'\n'):'')+twin+'\n');
+  if(git(root,['check-ignore','-q','--',retiredNotebookNote]).status!==0||git(root,['check-ignore','-q','--',notebookNote]).status===0)return null;
+  const where=git(root,['rev-parse','--git-path','info/exclude']).stdout?.trim();if(!where)return null;
+  const file=path.resolve(root,where);let text='';
+  try{text=fs.readFileSync(file,'utf8');}catch(error){if(error.code!=='ENOENT')throw error;}
+  atomic(file,(text?text.replace(/\n*$/,'\n'):'')+'/'+notebookNote+'\n');
   return file;
 }
 
-// Renames FULL-ALPHA.md to NOTEBOOK.md once, and with `write` (init) writes the note or brings a
-// generated one up to date. When both are there the notebook keeps NOTEBOOK.md and leaves
-// FULL-ALPHA.md as it is; with `say` (the notebook's start) it says so in its log, once.
+// Renames FULL-ALPHA.md to NOTEBOOK.md once where it never leaves this computer, and with `write`
+// (init) writes the note or brings a generated one up to date, under the name the folder keeps.
+// When both are there the notebook keeps NOTEBOOK.md and leaves FULL-ALPHA.md as it is; with `say`
+// (the notebook's start) it says so in its log, once.
 // state: 'none' (no note yet, unless `write` made one), 'current' (NOTEBOOK.md only), 'renamed',
-// 'both', or 'kept' (the rename failed, e.g. a file another program holds on Windows; the old
-// note still marks the folder and the next start tries again).
+// 'both', 'shared' (FULL-ALPHA.md keeps its name: it leaves this computer through Git), or 'kept'
+// (the rename failed, e.g. a file another program holds on Windows; the old note still marks the
+// folder and the next start tries again).
 export function settleNotebookNote(root,{write=false,say}={}){
   try{carryIgnoreLine(root);}catch{}
   const note=path.join(root,notebookNote),old=path.join(root,retiredNotebookNote);
-  let state=fs.existsSync(note)?'current':'none';
+  let state=fs.existsSync(note)?'current':'none',target=note;
   if(fs.existsSync(old)){
-    if(state==='none'){try{fs.renameSync(old,note);state='renamed';}catch(error){return {state:'kept',error:error.message};}}
-    else {
+    if(state==='current'){
       state='both';
       const said=path.join(root,'.godspeed','notebook-note-both-said');
       if(say&&!fs.existsSync(said)){say('Your mission control folder holds both '+notebookNote+' and '+retiredNotebookNote+'. The notebook uses '+notebookNote+' and leaves '+retiredNotebookNote+' as it is; delete it once you no longer need what it says.');atomic(said,new Date().toISOString()+'\n');}
     }
+    else if(noteTravels(root)){state='shared';target=old;}
+    else {try{fs.renameSync(old,note);state='renamed';}catch(error){return {state:'kept',error:error.message};}}
   }
-  if(write&&(!fs.existsSync(note)||earlierTexts.includes(fs.readFileSync(note,'utf8')))){atomic(note,notebookNoteText);if(state==='none')state='current';}
+  if(write&&(!fs.existsSync(target)||earlierTexts.includes(fs.readFileSync(target,'utf8')))){atomic(target,notebookNoteText);if(state==='none')state='current';}
   return {state};
 }

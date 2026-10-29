@@ -4,7 +4,8 @@ import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { Store, atomic, decode, encode, hash, identityIds } from '../records/store.mjs';
 import { identityPlan, identities, readBlobs } from './identity.mjs';
-import { shared,durableRoots,durableFiles,devicePrivatePaths,recordsFolder,isRecordPath,deletableTypes,windowsInvalid,notebookNote,retiredNotebookNote } from '../file-policy.mjs';
+// What a copy made in Settings carries: syncedFiles, the list 2.0.0-beta.10 has too (file-policy.mjs).
+import { shared,durableRoots,syncedFiles,devicePrivatePaths,recordsFolder,isRecordPath,deletableTypes,windowsInvalid,notebookNote,retiredNotebookNote } from '../file-policy.mjs';
 import { candidate, key as nameKey } from '../records/layout.mjs';
 import {validateAssistantFiles} from '../assistant-files.mjs';
 import {resolveSavedConflict} from '../conflicts.mjs';
@@ -55,7 +56,7 @@ const staleLockAge=15*60*1000;
 // repository. "*" means every shared path, for a folder nobody else commits to.
 export function folderPaths(paths){
   const list=paths===undefined?[recordsFolder]:paths;
-  if(!Array.isArray(list)||!list.length||list.some(p=>typeof p!=='string'||!(p==='*'||p===recordsFolder||durableRoots.includes(p)||durableFiles.includes(p))))throw new Error('Invalid sync configuration');
+  if(!Array.isArray(list)||!list.length||list.some(p=>typeof p!=='string'||!(p==='*'||p===recordsFolder||durableRoots.includes(p)||syncedFiles.includes(p))))throw new Error('Invalid sync configuration');
   return [...new Set(list)];
 }
 
@@ -70,12 +71,15 @@ export async function useFolderRepository(store,paths,{branch='main',remote='ori
   // A new installation's folder has its first commit but no copy on GitHub yet.
   let url;try{url=probe.git(['remote','get-url',remote]);}catch{throw new Error('This folder\'s repository has no copy on GitHub yet ('+remote+'); connect one with Connect record sync in Settings');}
   await probe.verifyRemote(url);
-  const local=['.godspeed/probe','conflicts/probe.json',notebookNote,...(probe.inScope('assistant-state/probe/x.json')?[]:['assistant-state/probe/x.json'])];
   const ignored=name=>{try{probe.git(['check-ignore','-q','--no-index',name]);return true;}catch{return false;}};
-  // An ignore file from before 2.0.0-beta.11 names the note's old name, FULL-ALPHA.md. It still
-  // counts: the notebook gives NOTEBOOK.md the same line at init and at its start, before it
-  // writes the note (notebook-note.mjs carryIgnoreLine), and this check changes nothing itself.
-  const visible=local.filter(name=>!ignored(name)&&!(name===notebookNote&&ignored(retiredNotebookNote)));
+  // The notebook's note under the name this folder has: FULL-ALPHA.md where it is still here (a
+  // note that leaves this computer keeps that name in 2.0.0-beta.11), otherwise NOTEBOOK.md. An
+  // ignore line for FULL-ALPHA.md counts for NOTEBOOK.md too: the notebook puts the line for
+  // NOTEBOOK.md into this repository's own exclude file at init and at its start, before it
+  // writes the note (notebook-note.mjs carryIgnoreLine). This check changes nothing itself.
+  const note=fs.existsSync(path.join(store.root,retiredNotebookNote))?(ignored(retiredNotebookNote)?null:retiredNotebookNote):(ignored(notebookNote)||ignored(retiredNotebookNote)?null:notebookNote);
+  const local=['.godspeed/probe','conflicts/probe.json',note,...(probe.inScope('assistant-state/probe/x.json')?[]:['assistant-state/probe/x.json'])];
+  const visible=local.filter(name=>name&&(name===note||!ignored(name)));
   if(visible.length)throw new Error('Add these to the ignore file of the repository first: '+visible.map(n=>n.split('/')[0]+(n.includes('/')?'/':'')).join(', '));
   // The notebook commits a page an ignore rule happens to match (a title like
   // "id_rsa rotation"), but a rule that hides pages as such is a mistake.
@@ -97,7 +101,7 @@ export async function useFolderRepository(store,paths,{branch='main',remote='ori
 // Settings (Connect record sync), on the server or on a first computer, tracks
 // nothing but what that connection syncs, and nothing else commits all of it.
 // Until 8 October 2026 the installer joined that copy in folder mode too: it
-// was refused, because its ignore file lets the notebook's note and assistant-state/
+// was refused, because its ignore file lets FULL-ALPHA.md and assistant-state/
 // through (Settings syncs them), and had it passed, this computer would have
 // sent nothing but notebook/. Such a copy is now connected the way Settings
 // connects it, with the same full list.
@@ -209,7 +213,7 @@ export class FileSync {
   // without "!routines/" meant the journal and the headache log could never be
   // staged, and `git add` stopped the whole sync over it. The parent negation
   // only lets Git descend; the leading "*" still ignores its other children.
-  ignoreText(){return '*\n'+[...new Set(durableRoots.flatMap(r=>r.split('/').map((_,i,parts)=>parts.slice(0,i+1).join('/'))))].map(r=>'!'+r+'/\n').join('')+durableRoots.map(r=>'!'+r+'/**\n').join('')+durableFiles.map(r=>'!'+r+'\n').join('')+devicePrivatePaths.map(r=>r+'/\n').join('')+'**/.*\n!.gitignore\n**/secrets/\n**/node_modules/\n**/*.sqlite*\n**/*.png\n**/*.jpg\n**/*.mp4\n**/*.mp3\n**/*.pdf\n'+
+  ignoreText(){return '*\n'+[...new Set(durableRoots.flatMap(r=>r.split('/').map((_,i,parts)=>parts.slice(0,i+1).join('/'))))].map(r=>'!'+r+'/\n').join('')+durableRoots.map(r=>'!'+r+'/**\n').join('')+syncedFiles.map(r=>'!'+r+'\n').join('')+devicePrivatePaths.map(r=>r+'/\n').join('')+'**/.*\n!.gitignore\n**/secrets/\n**/node_modules/\n**/*.sqlite*\n**/*.png\n**/*.jpg\n**/*.mp4\n**/*.mp3\n**/*.pdf\n'+
     // Installers, archives and recordings are build output and copies, not
     // knowledge. An owner's work/ folder held 4 GB of them, one file 1 GB: every
     // `git add` ran into the time limit, and GitHub refuses any file over 100 MB.
@@ -279,7 +283,7 @@ export class FileSync {
   // (an empty folder) or link is not a document to bring in.
   blobFiles(cwd){return this.names(['ls-files','-s','-z'],cwd).map(line=>line.match(/^100(?:644|755) [0-9a-f]+ \d\t([\s\S]+)$/)?.[1]).filter(Boolean);}
   largeFiles(){
-    const roots=[...durableRoots,...durableFiles].filter(r=>fs.existsSync(path.join(this.store.root,r)));if(!roots.length)return [];
+    const roots=[...durableRoots,...syncedFiles].filter(r=>fs.existsSync(path.join(this.store.root,r)));if(!roots.length)return [];
     return this.gitBytes(['ls-files','-z','--others','--exclude-standard','--',...roots]).toString('utf8').split('\0').filter(name=>{if(!name)return false;try{return fs.statSync(path.join(this.store.root,name)).size>this.largeFile;}catch{return false;}});
   }
   // Through the folder's own repository a saved conflict is already merged
@@ -307,15 +311,9 @@ export class FileSync {
     // correct, and the guard must not read it as an attempt to sync one.
     const staged=this.names(['diff','--cached','--name-only','-z','--diff-filter=d']);
     if(staged.some(n=>!shared(n)&&n!=='.gitignore'))throw new Error('Sync repository contains staged files outside durable state');
-    const roots=[...durableRoots.filter(r=>fs.existsSync(path.join(this.store.root,r))),...durableFiles.filter(r=>fs.existsSync(path.join(this.store.root,r))),...(this.gitDir?[]:['.gitignore'])];
+    const roots=[...durableRoots.filter(r=>fs.existsSync(path.join(this.store.root,r))),...syncedFiles.filter(r=>fs.existsSync(path.join(this.store.root,r))),...(this.gitDir?[]:['.gitignore'])];
     const untracked=this.untrackSpecial(roots.filter(r=>r!=='.gitignore')),heavy=new Set(this.heavyLocalFiles());
-    // The notebook's note was FULL-ALPHA.md until 2.0.0-beta.11 (notebook-note.mjs). Once it is
-    // renamed here, the old name's removal goes into the commit with NOTEBOOK.md: a durable file
-    // that is gone is otherwise never looked at, and every computer that joined later would get
-    // the old note back from the repository beside the new one.
-    const retired=fs.existsSync(path.join(this.store.root,retiredNotebookNote))?[]:[retiredNotebookNote];
-    const changes=this.names(['status','--porcelain','-z','--no-renames','--untracked-files=all','--',...roots,...retired]),kept=changes.filter(e=>e.startsWith('?? ')).map(e=>e.slice(3)).filter(name=>this.keptLocal(name));
-    const gone=changes.includes(' D '+retiredNotebookNote)?[retiredNotebookNote]:[];
+    const changes=this.names(['status','--porcelain','-z','--no-renames','--untracked-files=all','--',...roots]),kept=changes.filter(e=>e.startsWith('?? ')).map(e=>e.slice(3)).filter(name=>this.keptLocal(name));
     // Validation guards what a commit uploads. With nothing to commit there is
     // nothing to guard, and reading the whole vault to validate it anyway held
     // the workspace for a second of every idle round on an imported vault.
@@ -327,7 +325,7 @@ export class FileSync {
     // tracks, so the rename never left this machine. Its old entry goes first.
     const respelled=this.respelled(this.names(['--literal-pathspecs','diff','--name-only','-z','--no-renames','--diff-filter=M','--',recordsFolder]));
     for(let i=0;i<respelled.length;i+=200)this.git(['--literal-pathspecs','rm','--cached','--quiet','--',...respelled.slice(i,i+200).map(([old])=>old)]);
-    this.git(['add','--',...roots,...gone,...[...heavy,...kept].map(name=>':(exclude,literal)'+name.replace(/\/$/,''))]);
+    this.git(['add','--',...roots,...[...heavy,...kept].map(name=>':(exclude,literal)'+name.replace(/\/$/,''))]);
     if(this.names(['diff','--cached','--name-only','-z','--diff-filter=d']).some(n=>!shared(n)&&n!=='.gitignore'))throw new Error('A private path was staged; sync stopped');
     if(this.git(['diff','--cached','--name-only']))this.git(['commit','-m','Save Godspeed Mission Control records'],undefined,{env:this.identity(),timeout:120000});
   }
@@ -436,7 +434,7 @@ export class FileSync {
     }finally{this.dropIndex(index);}
   }
   integrate(remoteRef,{fastForward=false}={}){
-    const carried=this.names(['ls-tree','-r','-z','--name-only',remoteRef,'--',...durableRoots,...durableFiles]).filter(windowsInvalid);
+    const carried=this.names(['ls-tree','-r','-z','--name-only',remoteRef,'--',...durableRoots,...syncedFiles]).filter(windowsInvalid);
     if(carried.length)remoteRef=this.without(remoteRef,carried);
     const integrationRoot=path.join(this.store.state,'sync-worktrees'),dir=path.join(integrationRoot,randomUUID());fs.mkdirSync(integrationRoot,{recursive:true});
     if(!path.resolve(dir).startsWith(path.resolve(integrationRoot)+path.sep))throw new Error('Unsafe sync staging path');
@@ -628,7 +626,7 @@ export class FileSync {
     fs.writeFileSync(path.join(folder,'README.txt'),'These files on this machine stood in the way of the other machines\' changes and were never part of what the notebook commits. They are kept here whole.\n'+names.join('\n')+'\n');
     return folder;
   }
-  scopeRoots(){return this.folder.paths.includes('*')?[...durableRoots,...durableFiles]:this.folder.paths;}
+  scopeRoots(){return this.folder.paths.includes('*')?[...durableRoots,...syncedFiles]:this.folder.paths;}
   // Git's own hooks belong to the owner's commits and pushes from a person:
   // the notebook's commits must not start the owner's post-commit jobs. Its
   // push still runs the owner's pre-push gate.

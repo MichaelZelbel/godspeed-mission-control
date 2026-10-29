@@ -51,7 +51,7 @@ export function planWorkspaceMove({root,to,installationFile}){
  const source=path.resolve(root),destination=path.resolve(to||'');noLinks(source);noLinks(destination);const selected=setup(source,installationFile);
  if(!to||normalized(source)===normalized(destination)||contained(destination,source)||contained(source,destination)||fs.existsSync(destination))throw Error('Choose an absent destination outside the current workspace');
  if(contained(selected.file,destination))throw Error('The installation pointer must also live outside the destination');
- // Its note is NOTEBOOK.md, or FULL-ALPHA.md on an install that has not started since its update to 2.0.0-beta.11.
+ // Its note is NOTEBOOK.md, or FULL-ALPHA.md, the name from before 2.0.0-beta.11 (core/notebook-note.mjs).
  if(!hasNotebookNote(source)||!['notebook','records'].some(name=>fs.existsSync(path.join(source,name))))throw Error('Only a mission control folder with the integrated notebook (it holds NOTEBOOK.md and notebook/) can be moved this way');
  const {files,links}=inventory(source);let active=false;try{stopped(source);}catch{active=true;}
  const sorted=Object.entries(files).sort(([a],[b])=>a.localeCompare(b)),linked=Object.entries(links).sort(([a],[b])=>a.localeCompare(b));

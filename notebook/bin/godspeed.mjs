@@ -68,8 +68,9 @@ if(command==='init'){
     const source=path.join(addons,name,'skill',recipe);if(fs.existsSync(source)&&!fs.existsSync(path.join(root,'skills',recipe)))fs.cpSync(source,path.join(root,'skills',recipe),{recursive:true});
   }
   if(fs.existsSync(recipes))for(const name of fs.readdirSync(recipes))installSkillTree(store,path.join(recipes,name),path.join(root,'skills',name),{adopted});
-  // The note that says what this folder is: NOTEBOOK.md, renamed from FULL-ALPHA.md once, and
-  // brought up to date while it still reads as the notebook wrote it (core/notebook-note.mjs).
+  // The note that says what this folder is: NOTEBOOK.md, renamed from FULL-ALPHA.md once where that
+  // never leaves this computer through Git, and brought up to date under the name it keeps while it
+  // still reads as the notebook wrote it (core/notebook-note.mjs).
   (await import('../core/notebook-note.mjs')).settleNotebookNote(root,{write:true});
   const spec=fs.readFileSync(fileURLToPath(new URL('../../docs/full-version/file-format.md',import.meta.url)),'utf8');
   if(!fs.existsSync(path.join(root,'README.md')))atomic(path.join(root,'README.md'),'# Godspeed Mission Control\n\n'+spec);
