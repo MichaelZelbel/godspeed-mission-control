@@ -30,7 +30,6 @@
     "install-server": ["docker/README.md", "docker/rootfs/usr/local/bin/godspeed-telegram-setup", "docker/server/install.sh"],
     "install-windows": ["installers/SHA256SUMS"],
     "journal": ["notebook/core/notebook-routines.mjs", "notebook/recipes/interstitial-journal/**", "third-party/addons/godspeed-journal/lib/context.mjs", "third-party/addons/godspeed-journal/lib/evidence.mjs", "third-party/addons/godspeed-journal/lib/settings.mjs", "third-party/addons/godspeed-journal/lib/store.mjs", "third-party/addons/godspeed-journal/lib/tick.mjs"],
-    "known-issues": ["tools/search.js"],
     "memory": ["notebook/core/processing.mjs", "notebook/core/review-sources.mjs", "notebook/server/memory-tools.mjs", "notebook/ui/src/pages/ReviewQueue.tsx", "starter-godspeed/README.md"],
     "morning-brief": ["starter-godspeed/procedures.md", "starter-godspeed/skills/morning-brief/**"],
     "move": ["notebook/core/workspace-move.mjs", "notebook/recipes/move-godspeed/**", "notebook/ui/src/local/RecordSync.tsx"],
