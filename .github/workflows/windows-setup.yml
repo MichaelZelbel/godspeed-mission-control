@@ -3,7 +3,7 @@ name: windows setup
 # maintainer's yes of 27 October 2026, after the release step of 2.0.0-beta.8 failed three times
 # when it was done by hand). It runs docs/full-version/release-beta-2026-10-19/build-exe.sh itself,
 # so there is one way the setup is built: the notebook's pages with Node 22.19.0, kit-bootstrap's
-# windows/build-full-alpha.ps1 under Windows PowerShell 5.1 with Inno Setup, at the kit-bootstrap
+# windows/build-godspeed-setup.ps1 under Windows PowerShell 5.1 with Inno Setup, at the kit-bootstrap
 # commit pinned below. The three files it writes (GodspeedSetup.exe, windows-manifest.json and the
 # source archive) are kept as the artifact windows-setup-<commit>, which godspeed-dev's freeze.mjs
 # downloads for its --commit. Nothing is published here.
@@ -21,12 +21,14 @@ on:
 permissions:
   contents: read
 env:
-  # The kit-bootstrap commit the Windows setup is built with: kit-bootstrap #2 merged (no install-count
-  # question, a true email note without book chapters, product #81, and no browser code page on an
-  # update, product #79). 2.0.0-beta.9 was built with cbe395a88a1cfd366ede8b80c01ec086b34527c3, and
-  # 2.0.0-beta.7 and 2.0.0-beta.8 with 5364e82b44ab0b093e04262c680a21d666faf5e1 (their stage files name it
-  # as windowsBootstrapCommit). A release that changes it changes it here.
-  KIT_BOOTSTRAP_COMMIT: 8ac85e063fea08069ab6ef260525c48aa03338b4
+  # The kit-bootstrap commit the Windows setup is built with: kit-bootstrap #3 and #4 merged for
+  # 2.0.0-beta.11 (no "Full Alpha" in a new Windows install's folder and script names, old installs
+  # found under their names; the Menerio import line only where the notebook is). 2.0.0-beta.10 was
+  # built with 8ac85e063fea08069ab6ef260525c48aa03338b4, 2.0.0-beta.9 with
+  # cbe395a88a1cfd366ede8b80c01ec086b34527c3, and 2.0.0-beta.7 and 2.0.0-beta.8 with
+  # 5364e82b44ab0b093e04262c680a21d666faf5e1 (their stage files name it as windowsBootstrapCommit). A
+  # release that changes it changes it here, together with KB_PIN in server/install.sh.
+  KIT_BOOTSTRAP_COMMIT: fe78248e4a9ccd72c6eea36984eaf0f83999a59c
 jobs:
   setup:
     name: windows setup
