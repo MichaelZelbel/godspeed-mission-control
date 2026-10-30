@@ -8,6 +8,16 @@ A new release comes out most weeks. I write about what my AI does for me and wha
 
 Version 2 is the current edition. The lines below install the current public version, which is the branch `beta` of this repository; `main` is where the work goes on, and a change merged into it reaches nobody until the next version is released. The installers set up a new, separate folder. They do not move an existing version 1 Godspeed folder or your Menerio account.
 
+## New in 2.0.0-beta.12
+
+Your reminders travel between your computers by themselves.
+
+- **A reminder you close on one computer is closed on every computer.** Reminders and their closings now live in your notebook, so they travel with every note, through the same sync and the same conflict handling. Nobody saves anything by hand any more: before this version a closing could stay on the computer it was made on while the morning brief on another kept asking about something you had finished.
+- **A reminder is a page you can read.** Each one is a page under `Deadlines/` in your mission control folder, carrying what done means, what slipping costs, its days and its log, so you can read and edit it in Obsidian or any editor. A closing or a drop is a moment on your notebook's timeline, with the evidence you gave.
+- **Nothing you see changes.** The same reminders, the same days, the same wording, the same loudness, and still one calendar entry each. Your reminders and their closings from before are taken into the notebook the first time you start this version, with nothing lost, and the old files are kept in `archives/`; where your mission control is a Git repository of your own, they are left untouched with one note beside them saying where the reminders are now.
+
+Updating keeps your folder, notes and settings.
+
 ## New in 2.0.0-beta.11
 
 What you meet in your first hour is cleaned up.
