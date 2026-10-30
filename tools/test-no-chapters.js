@@ -6,8 +6,9 @@
 // book chapters; they came back with the Gmail change of 22 September.
 //
 // It reads what the installers and the programs print or write for a person: the installers, the
-// programs in tools/, the server's and the Docker image's scripts, the notebook's server, scripts
-// and pages, and the due/ README that due.js keeps current. Comments may name a chapter, and so
+// programs in tools/, the server's and the Docker image's scripts, and the notebook's server,
+// scripts, pages and recipes (the deadlines text among them, which was a README in the old
+// reminders folder until 30 October 2026). Comments may name a chapter, and so
 // may the files written for the book (the starter mission control's other files, living/,
 // procedures/, profile/, skills/, mail/), which a reader opens beside the book. It fails on
 // "Chapter <n>" or "Kapitel <n>". Reads files only; first it proves on a throwaway folder that it
@@ -47,7 +48,7 @@ function walk(root, dir, out = []) {
 
 function shownFiles(root) {
   return [
-    "install-godspeed.sh", "install-godspeed-dev.sh", "starter-godspeed/due/README.md",
+    "install-godspeed.sh", "install-godspeed-dev.sh",
     ...walk(root, "tools").filter(f => !/\.(md|json)$/.test(f)),
     ...walk(root, "server").filter(f => CODE.test(f)),
     ...walk(root, "docker/server").filter(f => CODE.test(f)),

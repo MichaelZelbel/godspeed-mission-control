@@ -1,8 +1,8 @@
-# due - the things with a day
+# Deadlines - the things with a day
 
-**This room starts empty, and an empty one costs you nothing.** It fills the first time you tell
-your mission control about something with a day attached: a day you would like it done by, or a
-last day before it costs you. If you never do, you have an empty folder and you have
+**You start with none of these, and none of them costs you anything.** Your mission control keeps
+its first one the moment you tell it about something with a day attached: a day you would like it
+done by, or a last day before it costs you. If you never do, there is nothing to keep and you have
 lost nothing.
 
 ## Why this is not a reminder
@@ -12,11 +12,11 @@ the thing, so it goes off afterwards, and after that happens a few times you sto
 reminders. Then one of them stops on its last occurrence whether or not the job got done, and that
 is the one that mattered.
 
-Everything in here is built to fix both halves of that.
+Everything below is built to fix both halves of that.
 
 ## Three dates, and you usually need only one
 
-Every thing in here can carry up to three dates:
+Every one of these can carry up to three dates:
 
 - **The day you can start.** Optional. If you leave it out, it is the day you add the thing.
 - **The day you would like it done.** A target, soft, like a date in a calendar. Missing it costs
@@ -55,39 +55,44 @@ hundred of these. There is nothing to tune per item, and if a thing feels like i
 setting, the window is wrong rather than the rule. A target adds no setting either: every target
 behaves the same way.
 
-## What a file looks like
+## Where one lives, and what it looks like
 
-One file per thing, named however you like:
+**Each one is a page in your notebook**, under `Deadlines/`, named after its own title:
 
 ```
-due/car-service.md
+Deadlines/Car service before the warranty runs out.md
 
-TITLE:          Car service before the warranty runs out
-DONE-WHEN:      The car has been serviced at a garage the warranty accepts.
-COST-IF-MISSED: The warranty ends. A gearbox after that is mine to pay for.
-SELF-CHECK:     none
-SELF-CHECK-ARG:
-REPEATS:        yearly
-LINK:           https://example.com/book-a-service
-SOURCE:         me, 2026-08-29
-
-## Windows
-STRIP: 2026-09-01 2027-02-28
-
-## Log
+---
+title: Car service before the warranty runs out
+done_when: The car has been serviced at a garage the warranty accepts.
+cost_if_missed: The warranty ends. A gearbox after that is mine to pay for.
+self_check: none
+repeats: yearly
+link: https://example.com/book-a-service
+source: me, 2026-08-29
+windows:
+  - start: 2026-09-01
+    deadline: 2027-02-28
+---
 - 2026-08-29 created, window 2026-09-01 to 2027-02-28
 ```
 
-A target is one more word on the window line. A present to buy before a birthday, with no
-deadline at all, reads `STRIP: 2026-04-20 - target 2026-05-10`: from the 20th of April, aiming for
-the 10th of May, and the `-` says there is no last day. With both, it is
-`STRIP: 2026-10-01 2027-02-28 target 2027-01-31`. When you give a new day after missing one, it is
-written beside the old one as `moved 2027-02-10`.
+The page carries a few more lines your notebook keeps for every page of every kind: when it was
+made, when it last changed, and the name by which all your computers know it is this same page.
 
-Plain text. Read it, edit it, delete it. The program writes the same shape you would.
+A target is one more line in the window, and a window may carry `target`, `moved` and an
+`extra` list as well, each left empty when it has nothing to say. A present to buy before a
+birthday, with no deadline at all, has `start: 2026-04-20`, `target: 2026-05-10` and an empty
+`deadline:`: from the 20th of April, aiming for the 10th of May, and no last day. With both, the
+window carries a start, a deadline and a target together. When you give a new day after missing
+one, it is written beside the old one as `moved: 2027-02-10`.
 
-**A repeating thing is ONE file that grows a new window each time**, never one file per occurrence.
-That is what keeps a hundred of these at a hundred files instead of thousands.
+Plain Markdown. Read it, edit it in Obsidian or any editor, and the next command reads what you
+wrote. Your notebook carries it to your other computers the way it carries every note, so one you
+add on one computer is there on the next, with nobody running Git.
+
+**A repeating thing is ONE page that grows a new window each time**, never one page per occurrence.
+That is what keeps a hundred of these at a hundred pages instead of thousands.
 
 ## The four questions, asked once
 
@@ -112,7 +117,7 @@ around it.
 ## No date, not eligible
 
 `mc-due add` refuses anything that has neither a target nor a deadline, in those words. That
-refusal is the only thing between this folder and a to-do app you stop maintaining. "Someday" is
+refusal is the only thing between these and a to-do app you stop maintaining. "Someday" is
 not a target; "by the 10th of May" is.
 
 ## Three states, and only three
@@ -120,23 +125,28 @@ not a target; "by the 10th of May" is.
 **open, done, dropped.** Done can happen by itself when there is a self check. **Dropped only ever
 comes from you**, which is why the command makes you type `--yes`.
 
-**Done is never written in here.** A file in this room is the plan. When a thing is finished,
-that is something that happened, so it goes where the things that happened go: a small file in
-`world/events/` that says `closes: [due/car-service]` and, on an `evidence:` line, what shows it
-(your words, a receipt, a commit). A drop is the same with `drops:`. Everything that asks "is this
-still open" works it out from those, so there is only one place the answer can live and nothing
-can disagree with it. Why: in the mission control this kit comes from, a post was approved and
-published in a working session, the memory wrote that down the same day, and the deadline file
-kept saying open, so the morning brief told its owner for five mornings that the finished work was
-waiting. `mc-due done` and `mc-due drop` write the event for you, and when your assistant finishes
-one of these with you in a session it closes it before the session ends.
+**Done is never written on the page.** The page is the plan. When a thing is finished, that is
+something that happened, so it goes where the things that happened go: a moment on your notebook's
+timeline, `Timeline/<the day> Done: <its title>`, which names the reminder and carries, on an
+`evidence:` line, what shows it (your words, a receipt, a commit). A drop is the same moment with
+"Dropped". Everything that asks "is this still open" works it out from those moments, so there is
+only one place the answer can live and nothing can disagree with it. Why: in the mission control
+this kit comes from, a post was approved and published in a working session, the memory wrote that
+down the same day, and the plan kept saying open, so the morning brief told its owner for five
+mornings that the finished work was waiting. `mc-due done` and `mc-due drop` write the moment for
+you, and when your assistant finishes one of these with you in a session it closes it before the
+session ends.
+
+A closing is a moment like any other, so it travels with your notebook. Close one on the computer
+in your kitchen and the computer in your office knows it the next time the two talk, with nothing
+to save by hand and nothing for you to settle if you closed the same one on both.
 
 Something whose window closed without being done **stays open**. Nothing tidies it away, because
 for a deadline "nobody got to it" is the failure, not a quiet success. It does stop shouting:
 your brief mentions it twice more, three days apart, and then waits for your word, because the
 likeliest reason is that you did it and forgot to say so. The full list keeps showing it.
 
-## Your keys are already in here
+## Your keys are already among them
 
 If you have `secrets/expires.txt`, the list of when each key runs out, `mc-due` reads it and treats each key as one of
 these. You never write a date in two places, and there is one thing nagging you rather than two
@@ -166,7 +176,7 @@ mc-due                     everything, loudest first
 mc-due today               at most three, which is what your morning brief reads
 mc-due add <name> ...      make one: --target, --to (the deadline), or both
 mc-due target <name> D     a new day you would like it done (or: asap, as soon as you can)
-mc-due done <name>         you did it (an event in world/events/ says so)
+mc-due done <name>         you did it (a moment on your notebook's timeline says so)
 mc-due drop <name> --yes   call it off; nothing is deleted
 mc-due check               run the self checks, close what is provably done
 mc-due state               which are open, and what closed the others

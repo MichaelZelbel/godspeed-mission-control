@@ -458,18 +458,23 @@ check "  and fails" "$rc" "1"
 out="$(w "$W" sh "$HERE/mc-due" today)"
 contains "the mc-due launcher, run inside a mission control, reads it" "$out" "Reader own deadline"
 
-# --- the due/README.md this kit ships, kept in step with the one inside due.js ----------------------
-# Until 30 October 2026 due.js also brought an unchanged older copy of this README in a person's own
-# mission control up to date. It writes nothing in due/ at all now (a reminder is a page in the
-# notebook, and in folder mode a rewritten tracked file would be an uncommitted change nobody asked
-# for), so what is left to hold is that the text inside the program and the text the kit ships are
-# the one text.
+# --- the deadlines text the kit ships, kept in step with the one inside due.js ----------------------
+# Until 30 October 2026 this text was a README the kit put in the old folder, and due.js brought an
+# unchanged older copy of it in a person's own mission control up to date. It writes nothing there
+# at all now (a reminder is a page in the notebook, and in folder mode a rewritten tracked file
+# would be an uncommitted change nobody asked for), and the words themselves have moved into the
+# notebook's due recipe. What is left to hold is that the text inside the program and the text the
+# recipe ships are the one text.
 KIT="$(cd "$HERE/.." && pwd)"
+DEADLINES_TEXT="$KIT/notebook/recipes/due/reference/due-room.md"
 EMBED="$(node -e '
 const s = require("fs").readFileSync(process.argv[1], "utf8");
 const m = s.match(/^const README = (".*");$/m); process.stdout.write(m ? JSON.parse(m[1]) : "");' "$HERE/due.js")"
-check "the README inside due.js is the kit's README, byte for byte (python embed_readme.py if not)" \
-  "$EMBED" "$(tr -d '\r' < "$KIT/starter-godspeed/due/README.md")"
+check "the README inside due.js is the due recipe's deadlines text, byte for byte" \
+  "$EMBED" "$(tr -d '\r' < "$DEADLINES_TEXT")"
+# Both shipped copies of the recipe carry it, so a reader gets the same words whichever put it there.
+check "and the reusable recipe ships the same text" \
+  "$(tr -d '\r' < "$KIT/notebook/reusable-recipes/due/reference/due-room.md")" "$(tr -d '\r' < "$DEADLINES_TEXT")"
 echo
 echo "due.js: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

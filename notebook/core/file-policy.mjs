@@ -5,6 +5,19 @@ export const recordsFolder='notebook';
 export const legacyRecordsFolder='records';
 // assistant: the owner's extra instructions for the assistant (assistant/extra-instructions.md),
 // which its program reads right after "who it is" (assistant-soul.mjs).
+//
+// due AND world STAY IN THIS LIST THOUGH NOTHING DURABLE IS KEPT IN THEM ANY MORE (2026-10-30,
+// #90). A reminder is a page in the notebook and its closing a moment on the timeline; due/ holds
+// only what an older version or another machine left there and the note saying where the reminders
+// went. Taking `due` out would not leave those files alone, it would delete them: a commit from a
+// notebook connected to a repository of its own runs untrackPrivate (sync/git.mjs), `git rm
+// --cached` over every tracked path shared() has stopped allowing, so the path leaves the
+// repository - and a computer still on the older version, where due IS durable, takes that removal
+// and loses its reminders. It would also drop them out of the copy an installer makes before an
+// update (updateCopyRoots, below), and it would untrack a file this release deliberately left in
+// place because the records and the files do not agree yet (core/due-retire.mjs).
+// notebook/test/due-root-policy.test.mjs holds both roots here for those reasons. world/ keeps the
+// rest of its kinds anyway; they move in a later release.
 export const durableRoots=[recordsFolder,'coach','journal','routines/journal','routines/headache','profile','rules','observations','goals','work','due','world','prompts','ideas','inbox','forecasts','skills','assistant-state','assistant'];
 // The note at the top of the folder that says it is a mission control with the notebook
 // (core/notebook-note.mjs): NOTEBOOK.md, and FULL-ALPHA.md until 2.0.0-beta.11, which the notebook

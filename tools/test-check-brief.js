@@ -10,9 +10,14 @@ const path = require('path');
 const script = path.join(__dirname, 'check-brief.js');
 let failures = 0;
 
+// A brief read from stdin is checked from wherever the person stands, and the deadline rule looks
+// up from there for their mission control. These cases are about the other rules, so they run in a
+// folder of their own: standing in this product's own checkout, which carries an AGENTS.md and a
+// notebook folder of its own, mc-due would be asked about it.
+const nowhere = require('fs').mkdtempSync(path.join(require('os').tmpdir(), 'brief-nowhere-'));
 function run(input) {
   try {
-    const out = execFileSync('node', [script, '-'], { input, encoding: 'utf8' });
+    const out = execFileSync('node', [script, '-'], { input, encoding: 'utf8', cwd: nowhere });
     return { code: 0, out };
   } catch (e) {
     return { code: e.status, out: (e.stdout || '').toString() };
@@ -135,11 +140,14 @@ expect('a paragraph pointing at another by number is refused',
 fs.rmSync(dir, { recursive: true, force: true });
 
 
-// --- deadline: only mc-due's lines speak about what is open in due/ (2026-09-30) ---------------
+// --- deadline: only mc-due's lines speak about an open reminder (2026-09-30) -------------------
+// The mission control here is one of the shape an install has since 30 October 2026: an AGENTS.md,
+// a rules folder, and no folder for reminders at all, because they are pages in its notebook. That
+// is the proof that this check still finds the mission control a brief belongs to.
 {
   const fs = require('fs'), os = require('os');
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'brief-due-'));
-  fs.mkdirSync(path.join(root, 'due')); fs.mkdirSync(path.join(root, 'brief'));
+  fs.mkdirSync(path.join(root, 'rules')); fs.mkdirSync(path.join(root, 'brief'));
   fs.writeFileSync(path.join(root, 'AGENTS.md'), '');
   const due = (...a) => execFileSync('node', [path.join(__dirname, 'due.js'), '--godspeed', root, ...a],
     { encoding: 'utf8', env: Object.assign({}, process.env, { GODSPEED_TODAY: '2026-10-07' }) });
