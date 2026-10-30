@@ -182,7 +182,14 @@ const folderLine=path=>path?path.split('/').map((part,i,parts)=>parts.slice(0,i+
 const underFolder=(path,folder)=>path===folder||path.startsWith(folder+'/');
 export class QueryService {
   constructor(store) { this.store = store; }
-  withSnapshot(read){if(!this.snapshotDepth)this.store.scan();this.snapshotDepth=(this.snapshotDepth||0)+1;try{return read();}finally{this.snapshotDepth--;}}
+  // ONE READ OF THE VAULT SERVES EVERY STEP INSIDE, the store's own reads as well as this
+  // service's (records/store.mjs, snapshot). A reminder is a record now (#90), and dueRows
+  // reaches the store for its pages, its moments and the installation's clock, so a read that
+  // held only this service's snapshot read the whole vault six times for one Settings poll
+  // (/api/personal, every five seconds) and nine times for one chat context
+  // (notebook/test/chat-context-snapshot.test.mjs, 30 October 2026). A write inside still
+  // refreshes the view it wrote, through scan(true).
+  withSnapshot(read){return this.store.snapshot(()=>{this.snapshotDepth=(this.snapshotDepth||0)+1;try{return read();}finally{this.snapshotDepth--;}});}
   rows(table) {
     // With the original assistant the routines are Hermes' jobs, plus the notebook's own record
     // routines that run beside them (NativeScheduler.recordKinds). Until 6 October 2026 only
@@ -197,12 +204,12 @@ export class QueryService {
     const ofType=type=>typeof this.store.ofType==='function'?this.store.ofType(type):all().filter(r=>r.type===type);
     const memo=new Map(),list = type => {
       if(memo.has(type))return memo.get(type);
-      // A reminder that lives in due/ is listed once: through dueRows, which works out its state,
-      // its band and its sentence from the files. Its page in the notebook (due-copy.mjs copies
-      // every one of them since 30 October 2026) carries the same reminder and would otherwise
-      // stand in this list a second time, in the brief, in Settings and in the chat's context.
-      // Ticket 03 of #90 turns this round: the page becomes the one that is listed.
-      const values=ofType(type).filter(r=>!r.removed_at&&!(type==='deadlines'&&r.native_slug));if(type==='deadlines')values.push(...dueRows(this.store));
+      // A reminder with a day attached is listed once, through dueRows: the page itself is left out
+      // above and dueRows puts it back with what only the program that owns it can work out - which
+      // window is open, how loud it is today, the one sentence it says - from the records
+      // (tools/due.js on the notebook's store, #90). Listing the page as well would stand it in
+      // this list twice, in the brief, in Settings and in the chat's context.
+      const values=ofType(type).filter(r=>!r.removed_at&&!(type==='deadlines'&&r.native_slug));if(type==='deadlines')values.push(...this.store.snapshot(()=>dueRows(this.store)));
       if(type!=='moments'){memo.set(type,values);return values;}
       const byMoment=new Map();for(const c of ofType('event_corrections')){let l=byMoment.get(c.moment_id);if(!l)byMoment.set(c.moment_id,l=[]);l.push(c);}
       // Dates as ISO 8601, the shape the Menerio screens read (timestamps.mjs).
