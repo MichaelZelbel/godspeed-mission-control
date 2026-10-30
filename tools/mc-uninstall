@@ -27,7 +27,7 @@
 set -u
 
 HELPERS="check-brief.js check-built-on.js check-keys.js check-moves.js check-research.js check-written.js
-compile-rules.js due.js forecast.js goals.js judge-brief.js limit-cases.json mc-cards.js mc-mail-age.js
+compile-rules.js due-files.js due.js forecast.js goals.js judge-brief.js limit-cases.json mc-cards.js mc-mail-age.js
 mc-mail-age.json mc-mail-gmail.js mc-mail-himalaya.json mc-mail-imap.js mc-mail-pair.js mc-mail-wire.js
 mc-mail.js mc-notebook.js menerio-connect.js notebook-sync.py observed-state.js prompt-harvest.js
 recipe-shipped-hashes.sh search.js subscriptions.cjs test_world_pull.py work.js world-pull.py"

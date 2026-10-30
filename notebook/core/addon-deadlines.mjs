@@ -1,6 +1,7 @@
 import fs from 'node:fs';import path from 'node:path';import {createRequire} from 'node:module';import {spawnSync} from 'node:child_process';import {fileURLToPath} from 'node:url';
 const {createDueCommands}=createRequire(import.meta.url)('../../tools/due.js');
 const script=fileURLToPath(new URL('../../tools/due.js',import.meta.url));
+import {copyOldReminders} from './due-copy.mjs';
 
 // DEADLINES AN ADD-ON KEEPS (discussion #27, 23 October 2026). A documents add-on reads "pay by
 // 20 November" in a letter; this makes it a Godspeed deadline. It is an ordinary file in due/,
@@ -24,15 +25,18 @@ const slugOf=title=>String(title).toLowerCase().normalize('NFKD').replace(/[Ì€-Í
 
 function rows(store,addon){
  if(!fs.existsSync(path.join(store.root,'due')))return [];
- return createDueCommands({root:store.root,commandArgs:[],date:dayOf(store)}).stateRows().filter(r=>r.addon?.name===addon).map(r=>({
+ return createDueCommands({root:store.root,commandArgs:[],date:dayOf(store),copy:false}).stateRows().filter(r=>r.addon?.name===addon).map(r=>({
   key:r.addon.key,slug:r.slug,title:r.title,due:r.addon.due||null,start:r.addon.from||null,
   state:r.state,touched:r.addon.touched,closed_on:r.closedOn||null,link:r.addon.link||null}));
 }
 const find=(store,addon,key)=>rows(store,addon).find(d=>d.key===key)||null;
 // tools/due.js as its own process under the workspace lock, as every other deadline change is made.
+// The deadline it writes is copied into the notebook's records inside the same lock, which is why
+// the child is told not to do it itself (native-due.mjs, due-copy.mjs).
 function due(store,args){
  return store.withLock(()=>{
-  const run=spawnSync(process.execPath,[script,...args,'--godspeed',store.root],{cwd:store.root,encoding:'utf8',timeout:15000,windowsHide:true,shell:false,env:{...process.env,GODSPEED_TODAY:dayOf(store)}});
+  const run=spawnSync(process.execPath,[script,...args,'--godspeed',store.root],{cwd:store.root,encoding:'utf8',timeout:15000,windowsHide:true,shell:false,env:{...process.env,GODSPEED_TODAY:dayOf(store),GODSPEED_DUE_COPY:'off'}});
+  try{copyOldReminders(store,{day:dayOf(store)});}catch(error){if(process.env.GODSPEED_DUE_COPY==='say')console.error('due-copy: not this time: '+error.message);}
   return {status:run.status,out:String(run.stdout||run.stderr||'').trim()};
  });
 }

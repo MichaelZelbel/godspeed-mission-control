@@ -150,6 +150,10 @@ export class Review {
       }
       primaryId=keep.id;linked={type:'contacts',id:keep.id};
     }else if(type==='adjudicate_relationship'){}
+    // A reminder whose file in due/ and whose page in the notebook both changed since the page was
+    // copied from the file (due-copy.mjs). The page is kept and the file's version is here to be
+    // read, so Keep confirms what is already true and changes nothing.
+    else if(type==='deadline_both_changed'){}
     else if(type==='resolve_relationship_conflict')throw Error('Choose which role to keep on the suggestion itself.');
     else throw new Error('Unsupported review suggestion '+type);
     const receipt=[...changed].map(([key,record])=>({type:record.type,id:record.id,before:before.get(key)||null,after_hash:this.store.get(record.type,record.id)._hash}));

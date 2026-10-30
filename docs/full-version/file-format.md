@@ -65,11 +65,13 @@ The frontmatter starts with `id`, the friendly `type`, the type's own fields (a 
 
 `notebook/_system/<type>/<id>.json` holds every record a person does not read as a page, one JSON file per record, named by its id as before 2026-10-05. Its name does not start with a dot, because sync never carries dot folders; in an alphabetical list it sorts before the pages, as one folder apart. What goes there, and why:
 
-- Bookkeeping: `record_history` (earlier versions), `jobs`, `job_receipts`, `command_receipts`, `work_tool_receipts`, `settings`, `import_mappings`, `approvals`, `notifications`, `connector_status`, `embeddings`, `review_queue` and its bulk jobs, AI job state (`note_ai_jobs`, `media_analysis`, `gdrive_imports` and the like), `conversation_messages` and `note_conversations`, `event_corrections`.
+- Bookkeeping: `record_history` (earlier versions), `jobs`, `job_receipts`, `command_receipts`, `work_tool_receipts`, `settings`, `import_mappings`, `due_copies`, `approvals`, `notifications`, `connector_status`, `embeddings`, `review_queue` and its bulk jobs, AI job state (`note_ai_jobs`, `media_analysis`, `gdrive_imports` and the like), `conversation_messages` and `note_conversations`, `event_corrections`.
 - Links between records: group memberships, moment participants and entities, relationships, note connections, person documents, note attachments, contact topic events. Their identity is the pair of records they join, so they have no title of their own; the pages they join are readable.
 - Settings of the notebook itself: `profiles`, `profile_categories`, `fact_slots` (how facts are labelled and shown), `user_self_aliases`, `collection_templates`, suggestion preferences.
 - The assistant's working records: `goals`, `decisions`, `forecasts`, `work_items`, `habits`, `journal`, `coach_talks`, `health_*`, `watch_*`, `lead_*`, `radar_*`. The mission control keeps its readable form of these in its own folders (`goals/`, `work/`, `journal/`, `coach/`, `forecasts/`). Reminders left this list on 29 October 2026: they are `Deadlines/` pages now. A reminder that Settings saved before 18 October 2026 and that was then moved into `due/` stays here, closed and carrying `moved_to`, so that one reminder is never two pages.
 - Any type not in the table above.
+
+One `due_copies` record per old file says what the notebook has already taken in from `due/` and from the closing events in `world/events/` while `tools/due.js` still keeps them (#90, 30 October 2026): the file's path, the hash of the content that was copied, and which record it became. It syncs with everything else here, so a second machine does not copy the same file again, and every field of it is worked out from that file, so two machines that copy the same folder write the same record.
 
 ## Records
 
