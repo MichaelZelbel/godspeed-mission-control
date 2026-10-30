@@ -9,7 +9,15 @@ import {Domains} from '../core/domains.mjs';
 import {mcp} from '../server/mcp.mjs';
 import {SearchIndex} from '../core/index/search.mjs';
 
-const fixture=t=>{const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-mcp-versions-'));const store=new Store(root),query=new QueryService(store),domains=new Domains(query),index=new SearchIndex(store);t.after(()=>{index.close();fs.rmSync(root,{recursive:true,force:true});});return {store,query,domains,index};};
+// THIS WORKSPACE IS TAKEN AWAY ONLY ONCE THE SEARCH INDEX HAS LET GO OF IT. close() is finished
+// when its promise is (it also ends the meaning workers), and on Windows the operating system can
+// hold search.sqlite for a moment after that, which under the load of the whole suite made the
+// removal fail with EBUSY and failed this test for its cleanup rather than for anything it checks
+// (30 October 2026). maxRetries is what Node retries EBUSY with, and is what
+// notebook/scripts/run-tests.mjs uses for the run folder it owns; a folder that still cannot be
+// taken away is said and left to the next run, which sweeps it.
+const removeWorkspace=root=>{try{fs.rmSync(root,{recursive:true,force:true,maxRetries:10,retryDelay:100});}catch(error){console.error('left behind for the next run to sweep: '+root+' ('+error.code+')');}};
+const fixture=t=>{const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-mcp-versions-'));const store=new Store(root),query=new QueryService(store),domains=new Domains(query),index=new SearchIndex(store);t.after(async()=>{await index.close();removeWorkspace(root);});return {store,query,domains,index};};
 const call=async(env,name,args)=>{const r=await mcp({id:1,method:'tools/call',params:{name,arguments:args}},env);return {error:!!r.result.isError,text:r.result.content[0].text};};
 
 test('update_note without a hash never overwrites an owner edit made after the assistant read the note',async t=>{

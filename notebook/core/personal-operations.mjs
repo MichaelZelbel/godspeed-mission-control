@@ -77,14 +77,16 @@ function nativeArguments(input){
  if(type==='habit-observe'){required(input.observation,'Observation');if(!['done','no','skip'].includes(input.answer))throw Error('Habit observation needs an explicit done, no or skip answer');}
  if(type==='journal-add')required(input.content,'Journal entry');
  if(type==='journal-switch'&&typeof input.enabled!=='boolean')throw Error('Choose enabled or disabled');
- // The due files' own obligations (native-due.mjs), checked here before any change is made.
+ // The reminders mc-due keeps (native-due.mjs), checked here before any change is made.
  if(type==='obligation-complete')required(input.evidence,'Completion evidence');
  if(type==='obligation-add'){required(input.title,'Obligation');required(input.done_when,'What is true when it is done');if(!input.due_at&&!input.target_at)throw Error('An obligation needs a target or a deadline');if(input.due_at){date(input.due_at,'Deadline');required(input.cost,'What passing the deadline costs');}if(input.target_at)date(input.target_at,'Target');}
  if(type==='obligation-snooze')date(input.until,'New target');
 }
-// With the original assistant every obligation lives in due/, where the deadline reminders and the
-// morning brief read it (native-due.mjs, addDueObligation).
-const dueFilesHere=domains=>process.env.GODSPEED_ORIGINAL_RUNTIME==='on'||!!domains.nativeScheduler;
+// With the original assistant every obligation is one of mc-due's reminders, which is what the
+// deadline reminders and the morning brief read (native-due.mjs, addDueObligation). Since
+// 30 October 2026 such a reminder is a page under Deadlines/ in the notebook's own records (#90);
+// which runtime this is has not changed.
+const remindersHere=domains=>process.env.GODSPEED_ORIGINAL_RUNTIME==='on'||!!domains.nativeScheduler;
 // A habit's day is written to the coach's own file, as habit-observe writes it (habit-trackers.mjs).
 const habitTrack=(domains,op)=>['track','tracker-correct','habit-progress'].includes(op.type)&&isHabitRef(domains.store,op.tracker);
 // A goal's weekly number (its LEAD: "<what is counted> | total or per week | <where it is read>").
@@ -94,7 +96,7 @@ const measured=op=>op.value!==undefined&&op.value!==null&&op.value!=='';
 // the morning decision writes and settle judges by, so it is a card command in either runtime.
 const readsLead=(domains,op)=>op.type==='goal-reading'||op.type==='goal-outcome'&&measured(op)&&!!leadOf(domains.query.rows('goals').find(g=>g.id===op.id));
 // A headache is written by the headache add-on into its tracker's files (headache-operation.mjs).
-const outsideRecords=(domains,op)=>NATIVE.includes(op.type)||op.type==='headache'||habitTrack(domains,op)||readsLead(domains,op)||op.type==='routine-change'&&!!domains.nativeScheduler||process.env.GODSPEED_ORIGINAL_RUNTIME==='on'&&['goal-add','goal-change','goal-outcome','forecast-settle'].includes(op.type)||['obligation-complete','obligation-snooze'].includes(op.type)&&dueRows(domains.store).some(d=>d.id===op.id)||op.type==='obligation-add'&&dueFilesHere(domains);
+const outsideRecords=(domains,op)=>NATIVE.includes(op.type)||op.type==='headache'||habitTrack(domains,op)||readsLead(domains,op)||op.type==='routine-change'&&!!domains.nativeScheduler||process.env.GODSPEED_ORIGINAL_RUNTIME==='on'&&['goal-add','goal-change','goal-outcome','forecast-settle'].includes(op.type)||['obligation-complete','obligation-snooze'].includes(op.type)&&dueRows(domains.store).some(d=>d.id===op.id)||op.type==='obligation-add'&&remindersHere(domains);
 // The same domains, reading and writing a staged view of the store.
 const staged=(domains,store)=>{const query=new domains.query.constructor(store);query.nativeHermesHome=domains.query.nativeHermesHome;return Object.assign(Object.create(Object.getPrototypeOf(domains)),domains,{store,query});};
 // A copy of the records to try a change on, without the workspace lock and
@@ -218,7 +220,7 @@ export function personalOperation(domains,input){
  if(type==='goal-outcome'){const g=old('goals');required(input.evidence,'Outcome evidence');if(input.value!==undefined&&input.value!==null&&!Number.isFinite(input.value))throw Error('A measured outcome value must be a finite number');const saved=store.save('goals',{id:g.id,progress:[...(g.progress||[]),{kind:'observed',evidence:input.evidence,value:input.value??null,outcome:input.outcome||'observed',at:new Date().toISOString()}]},g._hash);
   // A measured value of a goal that has a weekly number is a reading of it as well (goalReading).
   return measured(input)&&leadOf(g)?goalReading(domains,{id:g.id,value:input.value,where:input.where,on:input.on,source_quote:input.source_quote}):saved;}
- if(type==='obligation-add'&&dueFilesHere(domains))return addDueObligation(store,input);
+ if(type==='obligation-add'&&remindersHere(domains))return addDueObligation(store,input);
  if(type==='obligation-add'){
   if(input.recurrence&&(!Number.isInteger(input.recurrence.days)||input.recurrence.days<1||input.recurrence.days>366))throw Error('Recurrence needs 1 to 366 days');
   if(!input.due_at&&!input.target_at)throw Error('An obligation needs a target or a deadline');

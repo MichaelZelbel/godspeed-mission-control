@@ -27,6 +27,10 @@ export function fileContext(store,limit=40000){
       const text=full.slice(0,remaining);result.push({path:relative,content:text});remaining-=text.length;
     }
   };
-  for(const name of ['profile','goals','due','coach','journal','work','observations','rules'])walk(name);
+  // The rooms whose files are themselves the content. 'due' is not among them any more: a reminder
+  // is a record (#90), and both readers of this already get every one of them as rows of their
+  // own (briefing.mjs context.deadlines, chat-context.mjs context.personal.deadlines), worked
+  // out by the program that owns them rather than read off a page.
+  for(const name of ['profile','goals','coach','journal','work','observations','rules'])walk(name);
   return {files:result,truncated:remaining<=0};
 }

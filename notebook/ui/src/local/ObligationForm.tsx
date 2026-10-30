@@ -1,7 +1,8 @@
 import {useState} from 'react';
 
-// Settings > Obligations and reminders. A deadline saved here becomes a file in due/, the one the
-// 08:00 deadline reminders and the morning brief read (notebook/core/native-due.mjs). Until
+// Settings > Obligations and reminders. A deadline saved here becomes one of mc-due's reminders,
+// the kind the 08:00 deadline reminders and the morning brief read (notebook/core/native-due.mjs):
+// a page under Deadlines/ in the notebook, which syncs the way every note does (#90). Until
 // 18 October 2026 it stayed a notebook record that nothing reminded about. It asks what mc-due asks
 // once: what is true when it is done, and what passing the deadline costs.
 export function ObligationForm({operation}:{operation:(input:any)=>Promise<boolean>}){

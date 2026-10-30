@@ -26,7 +26,7 @@ function fixture(t){
   insert('notes',{title:'Review head lifts',content:'Habit check about tomatoes',source_app:'habit-check',habit_ids:['h1']});
   insert('claims',{subject_type:'self',attribute:'favourite_vegetable',value:'tomatoes grown at home'});
   const index=new SearchIndex(store);index.syncRecords();
-  t.after(()=>{index.close();fs.rmSync(root,{recursive:true,force:true});});
+  t.after(async()=>{await index.close();fs.rmSync(root,{recursive:true,force:true,maxRetries:10,retryDelay:100});});
   const call=(name,args,scopes)=>mcp({jsonrpc:'2.0',id:1,method:'tools/call',params:{name,arguments:args}},{store,query,index,domains:new Domains(query),scopes,delegated:true}).then(r=>r.result.content[0].text);
   return {store,call};
 }

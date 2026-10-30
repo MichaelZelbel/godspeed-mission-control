@@ -546,8 +546,15 @@ export class Store {
   }
   validateReferences(records) { return referenceProblems(integrity(records)); }
   // Callers get copies: a record they change is theirs, never the view's.
-  list(type, { removed = false } = {}) { this.scan(); return this.ofType(type).filter(r => removed || !r.removed_at).map(copy); }
-  get(type, id) { this.scan(); const record = this.records.get(type + '/' + id) || this.ofType(type).find(r => (r.former_ids || []).includes(id)) || this.ofType(type).find(r => (r.aliases || []).includes(id)); return record && copy(record); }
+  // Inside a snapshot the view is the snapshot's, so a read asks for none of its own: that is what
+  // one read serving every step inside means (snapshot above). It learns nothing new either way,
+  // because scan() hands back the held view unchanged; what it saves is the asking. A reminder is a
+  // record now (#90), and the one that lists them reaches here for its pages, its moments and the
+  // installation's clock, so one chat context asked nine times and one Settings poll six
+  // (notebook/test/chat-context-snapshot.test.mjs, 30 October 2026).
+  read() { if (!this.snapshotDepth || !this.records) this.scan(); return this.records; }
+  list(type, { removed = false } = {}) { this.read(); return this.ofType(type).filter(r => removed || !r.removed_at).map(copy); }
+  get(type, id) { this.read(); const record = this.records.get(type + '/' + id) || this.ofType(type).find(r => (r.former_ids || []).includes(id)) || this.ofType(type).find(r => (r.aliases || []).includes(id)); return record && copy(record); }
   prepare(type, value, old = null) {
     const now = new Date().toISOString(), uid = safe(String(old?.uid || value.uid || randomUUID()));
     const id = old?.id || value.id || readableSlug(value.name || value.title || type) + '-' + uid.slice(0, 8);

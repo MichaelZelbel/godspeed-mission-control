@@ -1,13 +1,13 @@
-import fs from 'node:fs';import path from 'node:path';import {createRequire} from 'node:module';import {spawnSync} from 'node:child_process';import {fileURLToPath} from 'node:url';
+import {createRequire} from 'node:module';import {spawnSync} from 'node:child_process';import {fileURLToPath} from 'node:url';
 const {createDueCommands}=createRequire(import.meta.url)('../../tools/due.js');
 const script=fileURLToPath(new URL('../../tools/due.js',import.meta.url));
 
 // DEADLINES AN ADD-ON KEEPS (discussion #27, 23 October 2026). A documents add-on reads "pay by
-// 20 November" in a letter; this makes it a Godspeed deadline. It is an ordinary file in due/,
-// made by tools/due.js like every other, so the deadline reminders, the morning brief and the
-// deadline list read it and the person closes or moves it the usual way. The add-on reaches it on
-// the notebook's local door, POST /api/functions/addon-deadlines, with its name and its own key for
-// each deadline:
+// 20 November" in a letter; this makes it a Godspeed deadline. It is an ordinary reminder, made by
+// tools/due.js like every other and kept as a page under Deadlines/ (#90), so the deadline
+// reminders, the morning brief and the deadline list read it and the person closes or moves it the
+// usual way. The add-on reaches it on the notebook's local door,
+// POST /api/functions/addon-deadlines, with its name and its own key for each deadline:
 //   {addon, action:'list'}                                               its deadlines
 //   {addon, action:'create', key, title, due, done_when, cost, link?, start?}   made once per key
 //   {addon, action:'update', key, due?, title?}                          only while nobody touched it
@@ -23,8 +23,8 @@ const line=(value,label,max)=>{const v=String(value??'').trim();if(!v)fail(label
 const slugOf=title=>String(title).toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g,'').replace(/ß/g,'ss').replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,50).replace(/-+$/,'')||'deadline';
 
 function rows(store,addon){
- // The store this door already has: a reminder is a page in the notebook now (#90), so there is
- // nothing to look for in due/ first.
+ // The store this door already has: a reminder is a page in the notebook now (#90), so the records
+ // are the whole answer.
  return createDueCommands({root:store.root,commandArgs:[],date:dayOf(store),store,copy:false}).stateRows().filter(r=>r.addon?.name===addon).map(r=>({
   key:r.addon.key,slug:r.slug,title:r.title,due:r.addon.due||null,start:r.addon.from||null,
   state:r.state,touched:r.addon.touched,closed_on:r.closedOn||null,link:r.addon.link||null}));
@@ -68,9 +68,10 @@ export function addonDeadlines(store,input={}){
  const old=find(store,addon,key);if(old)return {created:false,deadline:old};
  const args=['--title',title,'--to',input.due,'--done-when',doneWhen,'--cost',cost,...(input.start?['--from',input.start]:[]),...(link?['--link',link]:[]),'--addon',addon,'--addon-key',key];
  const base=slugOf(title);
+ // A name already used gets the next number, and tools/due.js is what says so: it refuses a name it
+ // already has, in those words, whether a page or a file nobody can read is holding it.
  for(let n=1;n<=30;n++){
   const slug=n===1?base:base.slice(0,56)+'-'+n;
-  if(fs.existsSync(path.join(store.root,'due',slug+'.md')))continue;
   const r=due(store,['add',slug,...args]);
   if(r.status!==0){if(/already have one called|was used before/.test(r.out))continue;fail(r.out.split('\n')[0]||'The deadline could not be made.');}
   const made=find(store,addon,key);

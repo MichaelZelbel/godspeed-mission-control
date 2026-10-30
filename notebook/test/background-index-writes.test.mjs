@@ -9,7 +9,7 @@ import {Store} from '../core/records/store.mjs';import {SearchIndex} from '../co
 test('a full refresh finishes while the notebook keeps writing, and keeps the newer rows it wrote',async t=>{
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-refresh-writes-'));
  for(let i=0;i<400;i++){const folder=path.join(root,'archives','batch-'+(i%20));fs.mkdirSync(folder,{recursive:true});fs.writeFileSync(path.join(folder,'entry-'+i+'.md'),'# Entry '+i+'\n'+'Archived journal text about the knee doctor and groceries. '.repeat(30));}
- const store=new Store(root,{device:'local'}),note=store.save('notes',{title:'Fictional plan',content:'before-marker'}),index=new SearchIndex(store);t.after(()=>{index.close();fs.rmSync(root,{recursive:true,force:true});});
+ const store=new Store(root,{device:'local'}),note=store.save('notes',{title:'Fictional plan',content:'before-marker'}),index=new SearchIndex(store);t.after(async()=>{await index.close();fs.rmSync(root,{recursive:true,force:true,maxRetries:10,retryDelay:100});});
  let started=performance.now();await index.rebuildBackground();const pass=performance.now()-started;
  fs.writeFileSync(path.join(root,'archives','batch-0','new-finding.md'),'# Fresh\nzebrafinch observation');
  let reads=0;const read=index.readBackground.bind(index);index.readBackground=async()=>{reads++;const documents=await read();return documents;};

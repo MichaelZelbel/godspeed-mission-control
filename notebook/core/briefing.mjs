@@ -19,14 +19,20 @@ export async function briefing(job,{store,query,provider}){
   const copy=path.join(store.state,'brief-rehearsals',randomUUID());fs.mkdirSync(copy,{recursive:true,mode:0o700});
   await store.waitForWriter();await store.withLockAsync(()=>{
    fs.cpSync(store.recordsRoot,path.join(copy,path.basename(store.recordsRoot)),{recursive:true,preserveTimestamps:true});
+   // A rehearsal is a copy of the workspace, so the rooms the brief reads come along as they are.
+   // 'due' is among them not to read a reminder out of it - a reminder is a record now (#90) and
+   // the line below takes its self check from there - but because a file in it that no program can
+   // read has no record on purpose and is said as "needs a look" every day until it is fixed: the
+   // rehearsal must say the same thing the real brief would.
    for(const name of ['profile','rules','due','coach','journal','routines/headache']){const source=path.join(store.root,name);if(fs.existsSync(source))fs.cpSync(source,path.join(copy,name),{recursive:true,preserveTimestamps:true});}
    // file-newer tests only existence and mtime. Reproduce that evidence without
    // copying unrelated deliverables or credential contents into the rehearsal.
-   const due=path.join(store.root,'due');
-   if(fs.existsSync(due))for(const name of fs.readdirSync(due).filter(n=>n.endsWith('.md'))){
-    const text=fs.readFileSync(localPath(store.root,'due/'+name),'utf8');
-    if(!/^SELF-CHECK:\s*file-newer\s*$/m.test(text))continue;
-    const value=text.match(/^SELF-CHECK-ARG:\s*(.+)$/m)?.[1]?.trim();if(!value)continue;
+   // Which reminders have such a self check is the records' answer (deadline-records.mjs:
+   // SELF-CHECK and SELF-CHECK-ARG are self_check and self_check_arg), read under the lock this
+   // already holds.
+   for(const reminder of store.list('deadlines')){
+    if(!reminder.native_slug||String(reminder.self_check||'').trim().toLowerCase()!=='file-newer')continue;
+    const value=String(reminder.self_check_arg||'').trim();if(!value)continue;
     const original=localPath(store.root,value),relative=path.relative(store.root,original);
     if(relative.split(path.sep).some(p=>p.startsWith('.')))throw Error('Rehearsal dependency must not use private runtime state');
     if(!fs.existsSync(original))continue;
