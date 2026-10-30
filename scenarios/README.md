@@ -3,7 +3,8 @@
 Not for you: nothing here is a program you type, and no installer puts any of it on your computer.
 
 These are the **proving scenarios** a candidate runs before the maintainer is asked for "go"
-(godspeed-dev, `releases/godspeed-2.0.0-beta.8-faster-chat/plan.md`, "Proving scenarios"). Each one
+(godspeed-dev, `releases/godspeed-2.0.0-beta.8-faster-chat/plan.md` and
+`releases/godspeed-2.0.0-beta.12-reminders-in-the-notebook/plan.md`, "Proving scenarios"). Each one
 is one job of `.github/workflows/scenarios.yml` on a fresh `ubuntu-24.04` machine, and each is one
 script here, so that what a scenario does can be read, run by hand and held to its own tests —
 which a step written inside a workflow file cannot be. They live in a folder of their own for the
@@ -16,6 +17,12 @@ and these are not programs for users.
 | `night-tidy.sh` | the night chat tidy-up summarises the owner's chat and touches nothing else (not run on a candidate since 27 October 2026, when the tidy-up left 2.0.0-beta.8: no install gets it, so there is nothing to prove until the release that brings it back) |
 | `voice.sh` | a voice note is understood and answered, with the ElevenLabs permission and without it |
 | `update-keeps-everything.sh` | an update from the current public version keeps records, settings and the chat |
+| `reminder-closed-elsewhere.sh` | a reminder closed on one computer is closed on the other, both ways of syncing, with no Git run by anyone |
+| `reminders-move-keeps-everything.sh` | the move of the reminders into the notebook keeps every one of them and loses none of the old files |
+| `two-machines-move-at-once.sh` | two computers that move the same reminders before either syncs end with every reminder and every closing exactly once |
+| `late-reminder-file.sh` | a reminder or a closing written the old way after the move is still taken in, once, and one changed on both sides waits as one review item |
+| `closed-offline-on-both.sh` | one reminder closed on two computers while they were apart is closed on both, with two closing moments and no conflict |
+| `reminder-from-settings.sh` | a reminder saved in Settings on a fresh install is a page in the notebook, is said at 08:00 and is in the brief's input |
 
 ## How one is run
 
@@ -65,6 +72,13 @@ Named by the job, never in a file here:
 | `voice` | `ELEVENLABS_TEST_KEY_STT` | a test key ElevenLabs lets transcribe |
 | `voice` | `ELEVENLABS_TEST_KEY_NO_STT` | a test key it refuses that permission |
 
+The six reminder scenarios need no key at all: everything they do is this machine's own. "Two
+computers" are two installations on the one machine, each with its own mission control folder, its
+own port (`GODSPEED_PORT`) and its own device identity, joined through one bare Git repository on
+that machine standing in for the private GitHub repository, which Git is told to use for that
+address. The product still checks the address is a private GitHub one, so the one thing they ask of
+the network beyond the install itself is that api.github.com answers 404 for an owner nobody has.
+
 `voice.sh` also takes `ELEVENLABS_TEST_VOICE_ID` (a public ElevenLabs voice by default) and sends
 `voice-note.wav`, the short recording kept beside it. No chat account of any kind is needed: the
 voice note goes through the two halves of the assistant that a voice note in a chat goes through.
@@ -85,7 +99,12 @@ it (`assistant_keeps_a_conversation`).
 ## The other files here
 
 - `scenario-lib.sh` — the part they share: the one verdict line, the install lines, the install's
-  own paths, and the readers the checking parts use.
+  own paths, and the readers the checking parts use. For the reminder scenarios it also holds the
+  per-computer forms of all of that (`due_on`, `sync_on`, `notebook_on`, `install_the_stage_line_into`),
+  the stand-in for the private GitHub repository (`stand_in_github`), the `git` that writes down
+  every call with the step it was made in (`git_calls_shim`), the readers of the notebook's reminder
+  pages, closing moments and review queue, and the set of reminders the old version wrote
+  (`seed_the_old_set`), which three of them start from.
 - `night-tidy-chat.mjs` — the assistant's own chat store, seeded, re-timed and read back. It writes
   the schema it finds (the newest row of a table is the template for a new one), and never invents
   the two tables the assistant owns.

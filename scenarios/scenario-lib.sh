@@ -324,3 +324,252 @@ owner_sets_threshold() { # <config file> <value>
   [ "$(config_value "$file" compression.threshold_tokens)" = "$value" ] ||
     fail "the owner's own compression.threshold_tokens: $value could not be written into $file, so there was nothing to keep"
 }
+
+# ======================================================= TWO COMPUTERS, AND THE REMINDERS ON THEM
+# The six scenarios of 2.0.0-beta.12 (reminders and their closings live in the notebook) need what
+# the four before them did not: a second computer, a reminder's own commands, and the notebook's
+# sync run the way Settings runs it. Everything below is that, and nothing below reaches into the
+# product's code: a scenario runs the installed programs and reads plain files.
+
+# A SECOND COMPUTER ON ONE MACHINE. The install line, with the two things a second installation on
+# one machine needs and nothing else: its own folder (--godspeed, which install-godspeed.sh and
+# kit-bootstrap both take) and its own port (GODSPEED_PORT, which install-native-notebook.sh names
+# itself when another notebook already answers on 47831). Its mission control folder is its own, so
+# it names itself in .godspeed/device.json (core/device-id.mjs) and the two are two computers. The
+# first computer always runs the unchanged line above.
+install_the_stage_line_into() { # <root> <port> <trace file>
+  say "The line, from the stage's own address, into $1 on port $2: $STAGE_REF"
+  curl -fsSL "$RAW/$STAGE_REF/install-godspeed.sh" |
+    GODSPEED_STAGE_REF="$STAGE_REF" GODSPEED_PORT="$2" bash -xs -- --godspeed "$1" 2> >(tee "$3" >&2) ||
+    fail "the install line for $STAGE_REF into $1 failed before this scenario could do anything (its trace is in the step log)"
+}
+install_the_public_line_into() { # <root> <port>
+  say "Today's public line, into $1 on port $2"
+  curl -fsSL https://godspeedmissioncontrol.com/install | GODSPEED_PORT="$2" bash -s -- --godspeed "$1" ||
+    fail "today's public install line into $1 failed, so there was nothing to update from"
+}
+
+# An installation's own paths and its own programs, by its folder, so one machine can run two.
+runtime_of() { printf '%s/.godspeed/integrated-runtime\n' "$1"; }
+# The version an installation runs. Never read inside a command substitution that would swallow a
+# verdict: it fills VERSION and says so itself.
+# shellcheck disable=SC2034  # the scenario that sourced this file is what reads it
+read_version() { # <root>
+  VERSION=$(cat "$(runtime_of "$1")/version" 2>/dev/null) && [ -n "$VERSION" ] ||
+    fail "the installation in $1 left no version file behind, so its own programs cannot be run"
+  say "The installation in $1 runs $VERSION"
+}
+product_script() { # <root> <path inside the version>
+  printf '%s/versions/%s/%s\n' "$(runtime_of "$1")" "$(cat "$(runtime_of "$1")/version" 2>/dev/null)" "$2"
+}
+# A REMINDER'S OWN COMMANDS, the one line an owner's assistant runs: add, done, target, drop, check,
+# state, list, today. notebook/bin/personal-command.mjs hands them to the notebook's obligation
+# command under the workspace lock (core/personal-operations.mjs, core/native-due.mjs), which is
+# also how Settings and the 08:00 reminders reach them, and it is in the public version as well, so
+# the same line seeds on the old version and reads on the stage.
+due_on() { # <root> <arguments...>
+  local root=$1
+  shift
+  GODSPEED_WORKSPACE="$root" "$NODE" "$(product_script "$root" notebook/bin/personal-command.mjs)" due "$@"
+}
+notebook_on() { # <root> <arguments...>
+  local root=$1
+  shift
+  GODSPEED_WORKSPACE="$root" GODSPEED_MEDIA_ROOT="$(runtime_of "$root")/media" \
+    "$NODE" "$(product_script "$root" notebook/bin/godspeed.mjs)" "$@"
+}
+# ONE SYNC ROUND, AND SETTINGS' OWN WAY OF CONNECTING A REPOSITORY. scripts/sync-worker.mjs is what
+# Settings runs (core/sync/runner.mjs, server/main.mjs /api/sync/configure and /api/sync/run) and
+# what the notebook's own timer runs: `<root> configure <url>` connects one, `<root>` alone is one
+# round. So a scenario never carries anything with Git of its own.
+sync_on() { # <root> [configure <url>]
+  local root=$1
+  shift
+  "$NODE" "$(product_script "$root" notebook/scripts/sync-worker.mjs)" "$root" "$@"
+}
+
+# THE PRIVATE GITHUB REPOSITORY, STOOD IN FOR BY ONE BARE REPOSITORY ON THIS MACHINE, the way
+# notebook/test/installer-join-sync.test.mjs does it: Git is told that the GitHub address leads to
+# the folder, for this process and every program it starts. The product still checks the address is
+# a private GitHub one (FileSync.verifyRemote asks api.github.com and wants a 404, which an owner
+# nobody has gives), and then reads it with git, which the redirect sends here. Prints the address.
+stand_in_github() { # <folder>
+  local folder=$1 owner=godspeed-scenario-stand-in name
+  name=stand-in-$(od -An -N4 -tx1 /dev/urandom | tr -d ' \n')
+  mkdir -p "$folder" || fail "the folder for the stand-in repository ($folder) could not be made"
+  git init -q --bare --initial-branch=main "$folder/$name.git" >&2 ||
+    fail "the bare repository standing in for the private GitHub repository could not be made"
+  git config --global "url.file://$folder/.insteadOf" "https://github.com/$owner/" ||
+    fail "git could not be told that https://github.com/$owner/ leads to $folder"
+  # A stranger's computer has a Git identity of its own; a commit without one fails.
+  git config --global user.name "Godspeed Scenario" || fail "this machine's Git could not be given a name"
+  git config --global user.email "scenario@localhost" || fail "this machine's Git could not be given an address"
+  say "The private GitHub repository is stood in for by $folder/$name.git"
+  printf 'https://github.com/%s/%s.git\n' "$owner" "$name"
+}
+
+# WHAT RAN GIT, AND IN WHICH STEP. "Nobody runs Git" is the whole point of these reminders living in
+# the notebook, so it is evidence and not a claim: a `git` earlier on the path writes down every
+# call with the step it was made in and then runs the real one. The product's own sync runs git
+# through the same path, so what a scenario has to see is a log with calls in the sync rounds and
+# none in the steps. phase <name> says which step the scenario is in.
+git_calls_shim() { # <log file>
+  local real
+  real=$(command -v git) || fail "this machine has no git at all, so two computers cannot be joined"
+  GIT_CALLS=$1
+  : >"$GIT_CALLS" || fail "the log of git calls ($GIT_CALLS) could not be written"
+  SHIM=${GODSPEED_SCENARIO_WORK:-${RUNNER_TEMP:-/tmp}}/git-shim-$SCENARIO
+  mkdir -p "$SHIM" || fail "the folder for this scenario's own git ($SHIM) could not be made"
+  {
+    printf '#!/bin/sh\n'
+    printf '# Written by scenarios/scenario-lib.sh: every call of git, with the step it was made in.\n'
+    # shellcheck disable=SC2016  # a program for another shell, which this one must not expand
+    printf 'printf "%%s\\t%%s\\n" "${GODSPEED_SCENARIO_PHASE:-none}" "$*" >> "$GODSPEED_SCENARIO_GIT_CALLS"\n'
+    printf 'exec "%s" "$@"\n' "$real"
+  } >"$SHIM/git"
+  chmod +x "$SHIM/git" || fail "this scenario's own git could not be made runnable"
+  GODSPEED_SCENARIO_GIT_CALLS=$GIT_CALLS
+  PATH=$SHIM:$PATH
+  export GODSPEED_SCENARIO_GIT_CALLS PATH
+  say "Every git call is written to $GIT_CALLS, with the step it was made in"
+}
+phase() { # <name>
+  GODSPEED_SCENARIO_PHASE=$1
+  export GODSPEED_SCENARIO_PHASE
+  say "-- $1"
+}
+
+# ----------------------------------------------- what a person sees in the notebook, read as files
+# A reminder is a page under notebook/Deadlines/ and a closing is a moment under notebook/Timeline/
+# (core/records/layout.mjs, core/deadline-records.mjs). Both are plain Markdown with their fields
+# above the text, so these read them with a reader of their own and never import the product's, for
+# the reason the README gives: a scenario is never the change checking itself. Two records whose
+# name would be the same get "<name> 2.md" (layout.mjs candidateName), so counting is by the title
+# inside the file and never by its name.
+front_matter_value() { # <file> <field>
+  sed -n '/^---$/,/^---$/p' "$1" | sed -n "s/^$2:[[:space:]]*//p" | head -n 1 | sed 's/^"\(.*\)"$/\1/'
+}
+# One line per reminder page: <title><TAB><file name>
+pages_of() { # <root> <file>
+  local folder=$1/notebook/Deadlines page title
+  : >"$2"
+  [ -d "$folder" ] || return 0
+  for page in "$folder"/*.md; do
+    [ -f "$page" ] || continue
+    title=$(front_matter_value "$page" title)
+    printf '%s\t%s\n' "${title:-$(basename "$page" .md)}" "$(basename "$page")" >>"$2"
+  done
+  sort -o "$2" "$2"
+}
+# One line per closing moment: <kind><TAB><title><TAB><evidence><TAB><file name>
+closings_of() { # <root> <file>
+  local folder=$1/notebook/Timeline page kind
+  : >"$2"
+  [ -d "$folder" ] || return 0
+  for page in "$folder"/*.md; do
+    [ -f "$page" ] || continue
+    kind=$(front_matter_value "$page" obligation_kind)
+    [ -n "$kind" ] || continue
+    printf '%s\t%s\t%s\t%s\n' "$kind" "$(front_matter_value "$page" title)" \
+      "$(front_matter_value "$page" evidence)" "$(basename "$page")" >>"$2"
+  done
+  sort -o "$2" "$2"
+}
+# THE REVIEW QUEUE, where a difference the owner has to settle waits: conflicts/<id>.json in the
+# mission control (core/sync/git.mjs saveReview and pendingConflicts, /api/conflicts). One line per
+# item still waiting: <id><TAB>what it says.
+reviews_of() { # <root> <file>
+  local folder=$1/conflicts item
+  : >"$2"
+  [ -d "$folder" ] || return 0
+  for item in "$folder"/*.json; do
+    [ -f "$item" ] || continue
+    grep -q '"resolved_at"[[:space:]]*:[[:space:]]*"' "$item" && continue
+    printf '%s\t%s\n' "$(basename "$item" .json)" "$(tr -d '\n' <"$item" | cut -c1-400)" >>"$2"
+  done
+  sort -o "$2" "$2"
+}
+# The bytes of every file under one or more folders, so "untouched" and "nothing changed" are
+# comparisons and not looks: <sha256><TAB><path below the root>, sorted.
+fingerprint() { # <root> <file> <folder below the root...>
+  local root=$1 out=$2 folder
+  shift 2
+  : >"$out"
+  for folder in "$@"; do
+    [ -d "$root/$folder" ] || continue
+    (cd "$root" && find "$folder" -type f -print0 | sort -z | xargs -0 -r sha256sum) |
+      sed 's/[[:space:]][[:space:]]*/\t/' >>"$out"
+  done
+  sort -o "$out" "$out"
+}
+# What a scenario kept, as one list, so a missing piece is one sentence and not a crash.
+kept_all() { # <folder> <what they are> <file...>
+  local folder=$1 what=$2 file
+  shift 2
+  for file in "$@"; do
+    kept "$folder" "$file" "$what"
+  done
+}
+
+# ----------------------------------------- THE SET OF REMINDERS THE OLD VERSION WROTE, AND ITS DAYS
+# The set of the release plan's scenario 2, which scenarios 2, 3 and 4 all start from: a deadline
+# only; a target only, past its target; one with both; one whose target was moved after it was
+# missed; a repeating one grown to three windows with one of them closed; one dropped; one
+# hand-written file that does not read; and a key in secrets/expires.txt. Every one of them is
+# written by the installed version's OWN commands, so what is seeded is what that version writes;
+# the hand-written file is the one exception, because a file nobody wrote with the commands is the
+# point of it.
+# shellcheck disable=SC2034  # the scenarios that source this file are what read it
+OLD_SET='deadline-only target-only-passed both-dates target-moved repeating-windows dropped-one does-not-read'
+# The pages the move has to make of them, by their titles. The hand-written file that does not read
+# is not among them: it gets no record and stays "needs a look", as it is today.
+# shellcheck disable=SC2034  # the scenarios that source this file are what read it
+OLD_SET_PAGES='File the VAT return
+Buy a present for Anna
+Send the tax papers
+Book the dentist
+Pay the quarterly rates
+Change the insurance'
+# The two closings the set holds, as closings_of prints them: <kind><TAB><title>.
+# shellcheck disable=SC2034  # the scenarios that source this file are what read it
+OLD_SET_CLOSINGS='closes	Done: Pay the quarterly rates
+drops	Dropped: Change the insurance'
+
+day_in() { # <days from today, + or ->
+  date -u -d "$1 days" +%Y-%m-%d 2>/dev/null || date -u -v"$1"d +%Y-%m-%d
+}
+seed_the_old_set() { # <root>
+  local root=$1
+  say "The set of the plan, written by the installed version's own commands"
+  due_on "$root" add deadline-only --title 'File the VAT return' --to "$(day_in +30)" \
+    --cost 'A late fee of 200 euro.' --done-when 'The return shows as filed.' >&2 ||
+    fail "deadline-only could not be seeded in $root"
+  due_on "$root" add target-only-passed --title 'Buy a present for Anna' --target "$(day_in -5)" \
+    --done-when 'The present is bought.' >&2 || fail "target-only-passed could not be seeded in $root"
+  due_on "$root" add both-dates --title 'Send the tax papers' --target "$(day_in +10)" --to "$(day_in +40)" \
+    --cost 'The accountant charges for the rush.' --done-when 'The papers are with the accountant.' >&2 ||
+    fail "both-dates could not be seeded in $root"
+  due_on "$root" add target-moved --title 'Book the dentist' --target "$(day_in -3)" \
+    --done-when 'The appointment is in the calendar.' >&2 || fail "target-moved could not be seeded in $root"
+  due_on "$root" target target-moved "$(day_in +5)" >&2 || fail "the new day for target-moved could not be set in $root"
+  due_on "$root" add repeating-windows --title 'Pay the quarterly rates' --from "$(day_in -60)" --to "$(day_in -35)" \
+    --repeats monthly --cost 'A late fee of 40 euro.' --done-when 'The payment shows on the statement.' >&2 ||
+    fail "repeating-windows could not be seeded in $root"
+  # Reading it is what opens the windows between its first one and today (tools/due.js growWindows).
+  due_on "$root" state >/dev/null || fail "the windows of repeating-windows could not be grown in $root"
+  due_on "$root" 'done' repeating-windows --evidence 'the statement of this quarter shows it' >&2 ||
+    fail "the closed window of repeating-windows could not be seeded in $root"
+  due_on "$root" add dropped-one --title 'Change the insurance' --to "$(day_in +20)" \
+    --cost 'Another year on the old policy.' --done-when 'The new policy is signed.' >&2 ||
+    fail "dropped-one could not be seeded in $root"
+  due_on "$root" drop dropped-one --yes --evidence 'I am staying with the old policy' >&2 ||
+    fail "dropped-one could not be dropped in $root"
+  # The one nobody wrote with the commands: lines of its own invention and no window at all.
+  mkdir -p "$root/due" || fail "due/ could not be written in $root"
+  printf 'TITLE: Something an assistant wrote by hand\nKIND: deadline\nWHEN: soon\n' >"$root/due/does-not-read.md" ||
+    fail "the hand-written file that does not read could not be written in $root"
+  # A key that runs out is a reminder like any other (tools/due.js reads this file).
+  mkdir -p "$root/secrets" || fail "secrets/ could not be written in $root"
+  printf '# key\texpires\nscenario-api-key\t%s\n' "$(day_in +45)" >"$root/secrets/expires.txt" ||
+    fail "the key in secrets/expires.txt could not be written in $root"
+}
