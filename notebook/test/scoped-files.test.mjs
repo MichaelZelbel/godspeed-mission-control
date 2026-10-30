@@ -24,7 +24,7 @@ function fixture(t){
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-scoped-files-'));
  for(const [name,text] of Object.entries(files)){fs.mkdirSync(path.dirname(path.join(root,name)),{recursive:true});fs.writeFileSync(path.join(root,name),text);}
  const store=new Store(root),query=new QueryService(store),domains=new Domains(query),index=new SearchIndex(store);index.rebuild();
- t.after(()=>{index.close();fs.rmSync(root,{recursive:true,force:true});});
+ t.after(async()=>{await index.close();fs.rmSync(root,{recursive:true,force:true,maxRetries:10,retryDelay:100});});
  return {store,query,domains,index};
 }
 const call=async(env,name,args,scopes)=>{const r=await mcp({id:1,method:'tools/call',params:{name,arguments:args}},{...env,scopes});return {error:!!r.result.isError,text:r.result.content[0].text};};
