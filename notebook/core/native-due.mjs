@@ -1,5 +1,6 @@
 import fs from 'node:fs';import path from 'node:path';import {createRequire} from 'node:module';import {spawnSync} from 'node:child_process';import {fileURLToPath} from 'node:url';import {hash} from './records/store.mjs';
 import {localPath} from './local-path.mjs';
+import {copyOldReminders} from './due-copy.mjs';
 const {createDueCommands}=createRequire(import.meta.url)('../../tools/due.js');
 // A file in due/ that tools/due.js cannot read is 'needs-a-look', never closed (9 October 2026: an
 // assistant's hand-written deadline showed here as closed). It carries the reason and is said in the
@@ -7,9 +8,9 @@ const {createDueCommands}=createRequire(import.meta.url)('../../tools/due.js');
 export function dueRows(store,now=new Date()){
  if(!fs.existsSync(path.join(store.root,'due')))return [];
  const timezone=store.get('settings','installation')?.timezone||'UTC',day=new Intl.DateTimeFormat('en-CA',{timeZone:timezone,year:'numeric',month:'2-digit',day:'2-digit'}).format(now);
- return createDueCommands({root:store.root,commandArgs:[],date:day}).stateRows().map(r=>({id:'due-'+r.slug,type:'deadlines',uid:hash('due/'+r.slug).slice(0,32),title:r.title,native_file:'due/'+r.slug+'.md',native_slug:r.slug,status:['closed','dropped'].includes(r.state)?'closed':r.state,...(r.problem?{problem:r.problem}:{}),start_at:r.firstDay?r.firstDay+'T00:00:00Z':null,due_at:r.lastDay?r.lastDay+'T23:59:59Z':null,target_at:r.targetDay?r.targetDay+'T23:59:59Z':null,completion_check:r.doneWhen,completion_evidence:r.closedBy,closed_at:r.closedOn,band:r.band,attention:r.attention,sentence:r.sentence,_hash:hash(r),created_at:(r.firstDay||day)+'T00:00:00Z'}));
+ return createDueCommands({root:store.root,commandArgs:[],date:day,copy:false}).stateRows().map(r=>({id:'due-'+r.slug,type:'deadlines',uid:hash('due/'+r.slug).slice(0,32),title:r.title,native_file:'due/'+r.slug+'.md',native_slug:r.slug,status:['closed','dropped'].includes(r.state)?'closed':r.state,...(r.problem?{problem:r.problem}:{}),start_at:r.firstDay?r.firstDay+'T00:00:00Z':null,due_at:r.lastDay?r.lastDay+'T23:59:59Z':null,target_at:r.targetDay?r.targetDay+'T23:59:59Z':null,completion_check:r.doneWhen,completion_evidence:r.closedBy,closed_at:r.closedOn,band:r.band,attention:r.attention,sentence:r.sentence,_hash:hash(r),created_at:(r.firstDay||day)+'T00:00:00Z'}));
 }
-export function dueCommand(store,args){
+export function dueCommand(store,args,{copy:alsoCopy=true}={}){
  if(!Array.isArray(args)||!['add','done','target','drop','check','state','list','today','help','--help','-h','marker'].includes(args[0])||args.some(a=>typeof a!=='string'||a.length>20000)||args.some(a=>a==='--godspeed'||a.startsWith('--godspeed=')))throw Error('Unsupported obligation command');
  if(args[0]==='help')args=['--help',...args.slice(1)];
  if(['add','done','target','drop','marker'].includes(args[0])&&!(args[0]==='marker'&&['--needed','--stale'].includes(args[1]))&&!/^[a-z0-9][a-z0-9-]{0,59}$/.test(args[1]||''))throw Error('Choose an obligation slug inside the isolated workspace');
@@ -18,7 +19,12 @@ export function dueCommand(store,args){
  // Historical self-check paths are never allowed to inspect another installation.
  if(args[0]==='check'&&fs.existsSync(path.join(store.root,'due')))for(const file of fs.readdirSync(path.join(store.root,'due')).filter(f=>f.endsWith('.md'))){const match=fs.readFileSync(localPath(store.root,'due/'+file),'utf8').match(/^SELF-CHECK-ARG:\s*(.+)$/m);if(match)localPath(store.root,match[1]);}
  const timezone=store.get('settings','installation')?.timezone||'UTC',day=new Intl.DateTimeFormat('en-CA',{timeZone:timezone,year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date()),script=fileURLToPath(new URL('../../tools/due.js',import.meta.url));
- return store.withLock(()=>{const run=spawnSync(process.execPath,[script,...args,'--godspeed',store.root],{cwd:store.root,encoding:'utf8',timeout:15000,windowsHide:true,shell:false,env:{...process.env,GODSPEED_TODAY:day}});if(run.status!==0)throw Object.assign(Error(String(run.stderr||run.stdout||'Obligation command failed').slice(0,500)),{status:run.status});return {result:run.stdout.trim()};});
+ // The reminders and their closings are copied into the notebook's own records after the command
+ // ran, inside this lock: the child is told not to do it (GODSPEED_DUE_COPY=off), because the lock
+ // is one writer at a time and is never re-entered, and because doing it here also takes in what
+ // this very command wrote (due-copy.mjs, #90). An answer is never held back by the copy: a copy
+ // that cannot finish is left to the next run, which is safe because copying twice changes nothing.
+ return store.withLock(()=>{const run=spawnSync(process.execPath,[script,...args,'--godspeed',store.root],{cwd:store.root,encoding:'utf8',timeout:15000,windowsHide:true,shell:false,env:{...process.env,GODSPEED_TODAY:day,GODSPEED_DUE_COPY:'off'}});if(run.status!==0){if(alsoCopy)copy(store,day);throw Object.assign(Error(String(run.stderr||run.stdout||'Obligation command failed').slice(0,500)),{status:run.status});}if(alsoCopy)copy(store,day);return {result:run.stdout.trim()};});
 }
 // A DEADLINE SAVED IN SETTINGS OR TOLD IN THE NOTEBOOK'S CHAT IS A FILE IN due/ (18 October 2026).
 // Until then Settings > Obligations and reminders saved a notebook record, while the 08:00 deadline
@@ -28,7 +34,7 @@ export function dueCommand(store,args){
 // days, on the installation's clock. A name already used gets a number, never a second file for
 // the same name. {title, done_when, due_at?, target_at?, start_at?, cost?, recurrence?:{days}}
 const slugOf=title=>String(title).toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g,'').replace(/ß/g,'ss').replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,50).replace(/-+$/,'')||'deadline';
-export function addDueObligation(store,input){
+export function addDueObligation(store,input,{copy:alsoCopy=true}={}){
  const title=String(input?.title||'').trim();if(!title)throw Error('Say what needs doing');
  if(/[\r\n]/.test(title)||title.length>300)throw Error('Give what needs doing in one line');
  const doneWhen=String(input.done_when||'').trim();if(!doneWhen)throw Error('Say what is true when it is done, so the reminders know when to stop');
@@ -43,7 +49,7 @@ export function addDueObligation(store,input){
  const base=slugOf(title);let last=null;
  for(let n=1;n<=30;n++){
   const slug=n===1?base:base.slice(0,56)+'-'+n;if(fs.existsSync(path.join(store.root,'due',slug+'.md')))continue;
-  try{const made=dueCommand(store,['add',slug,...args]);const row=dueRows(store).find(r=>r.native_slug===slug);return {...(row||{id:'due-'+slug,native_slug:slug,title}),result:made.result};}
+  try{const made=dueCommand(store,['add',slug,...args],{copy:alsoCopy});const row=dueRows(store).find(r=>r.native_slug===slug);return {...(row||{id:'due-'+slug,native_slug:slug,title}),result:made.result};}
   catch(error){last=error;if(/already have one called|was used before/.test(error.message))continue;throw Error(String(error.message).split('\n').filter(Boolean).slice(0,2).join(' '));}
  }
  throw last||Error('Choose another name for this obligation');
@@ -56,10 +62,18 @@ export function moveSettingsDeadlines(store){
  const moved=[];
  for(const d of store.list('deadlines').filter(r=>r.status==='open'&&!r.moved_to&&!r.removed_at)){
   try{
-   const row=addDueObligation(store,{title:d.title,done_when:d.completion_check?.text?'The note it was tied to says: '+d.completion_check.text:d.title+': done.',cost:'Not said when it was saved in Settings.',due_at:d.due_at,target_at:d.target_at,start_at:d.start_at&&Date.parse(d.start_at)>Date.parse(d.created_at||0)?d.start_at:undefined,recurrence:d.recurrence});
+   // The copy of the new file into the notebook's records waits until the record Settings saved
+   // has been closed below: while it is open it is a page of the same name, and the reminder's own
+   // page would be written beside it as "<title> 2" and keep that name for good.
+   const row=addDueObligation(store,{title:d.title,done_when:d.completion_check?.text?'The note it was tied to says: '+d.completion_check.text:d.title+': done.',cost:'Not said when it was saved in Settings.',due_at:d.due_at,target_at:d.target_at,start_at:d.start_at&&Date.parse(d.start_at)>Date.parse(d.created_at||0)?d.start_at:undefined,recurrence:d.recurrence},{copy:false});
    store.save('deadlines',{id:d.id,status:'closed',closed_at:new Date().toISOString(),moved_to:row.native_file||'due/'+row.native_slug+'.md'});moved.push(row.native_slug);
   }catch{}
  }
+ if(moved.length)copy(store,new Intl.DateTimeFormat('en-CA',{timeZone:store.get('settings','installation')?.timezone||'UTC',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date()));
  return moved;
 }
-export function dueDelivered(store,slugs,now=new Date()){const timezone=store.get('settings','installation')?.timezone||'UTC',day=new Intl.DateTimeFormat('en-CA',{timeZone:timezone}).format(now);return store.withLock(()=>createDueCommands({root:store.root,date:day,commandArgs:[]}).recordSaid(slugs,day));}
+export function dueDelivered(store,slugs,now=new Date()){const timezone=store.get('settings','installation')?.timezone||'UTC',day=new Intl.DateTimeFormat('en-CA',{timeZone:timezone}).format(now);return store.withLock(()=>{const done=createDueCommands({root:store.root,date:day,commandArgs:[],copy:false}).recordSaid(slugs,day);copy(store,day);return done;});}
+// The copy of the old files into the notebook's records, where the brief, the 08:00 reminders,
+// Settings and the add-ons already hold the workspace lock. Cheap when nothing changed, and never
+// the reason an answer fails: a copy left undone is done by the next run.
+function copy(store,day){try{copyOldReminders(store,{day});}catch(error){if(process.env.GODSPEED_DUE_COPY==='say')console.error('due-copy: not this time: '+error.message);}}

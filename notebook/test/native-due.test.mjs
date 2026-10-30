@@ -19,13 +19,15 @@ test('installed obligation help and calendar bookkeeping share the canonical pla
  assert.match((await run(['marker','--stale'])).result,new RegExp('fictional-new-event\t'+moved));
  await run(['marker','fictional-marker','--clear']);
  assert.equal((await run(['marker','--stale'])).result,'');
- assert.equal(store.list('deadlines').length,0);
+ // The reminder is the file in due/, and since 30 October 2026 the notebook holds a copy of it as
+ // a page of its own (core/due-copy.mjs): one page, with the file's own name on it.
+ assert.deepEqual(store.list('deadlines').map(d=>d.native_slug),['fictional-marker']);
  await assert.rejects(run(['done','../../outside','--evidence','fictional']),/slug|inside/i);
  await assert.rejects(run(['marker','fictional-marker','--set','id\nTITLE: changed']),/single line/i);
 });
 test('original due files are canonical, recurring closures keep evidence and repeated reminder is quiet',async()=>{
  const {store,query,domains}=fixture(),today=new Date().toISOString().slice(0,10),command=message=>domains.invoke('conversation-chat',{message,conversation_id:'due-test',request_id:message});
- await command('/due add fictional --title "Fictional practice" --from '+today+' --to '+today+' --done-when "Practice recorded" --cost "Fictional missed practice" --repeats "every 7 days"');assert.equal(query.rows('deadlines').length,1);assert.equal(store.list('deadlines').length,0);
+ await command('/due add fictional --title "Fictional practice" --from '+today+' --to '+today+' --done-when "Practice recorded" --cost "Fictional missed practice" --repeats "every 7 days"');assert.equal(query.rows('deadlines').length,1);assert.deepEqual(store.list('deadlines').map(d=>d.native_slug),['fictional'],'the page copied out of the file, and the list still names the reminder once');
  assert.equal(remind({}, {store,query}).silent,false);assert.equal(remind({}, {store,query}).silent,true);
  const row=query.rows('deadlines')[0];await domains.invoke('personal-operation',{type:'obligation-complete',id:row.id,evidence:'Fictional diary records practice'});assert.ok(fs.readdirSync(path.join(store.root,'world/events')).length);assert.equal(query.rows('deadlines').length,1);assert.notEqual(query.rows('deadlines')[0].start_at,row.start_at);
  assert.throws(()=>query.execute({table:'deadlines',operation:'update',values:{status:'closed'},filters:[['eq','id',row.id]]}),/read-only/);

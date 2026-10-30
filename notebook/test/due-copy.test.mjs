@@ -1,0 +1,562 @@
+// EVERY OLD REMINDER AND CLOSING IS COPIED INTO THE NOTEBOOK, AND KEPT LEVEL (2026-10-30, #90).
+//
+// A reminder with a day attached is still a file due/<slug>.md written by tools/due.js, and its
+// closing or drop still a second file in world/events/; on a mission control that is its own
+// repository the notebook's sync carries only notebook/, so neither file travels unless a session
+// commits it, and on 19 October 2026 only the first of the two was committed. Ticket 01 gave both a
+// home inside notebook/; this fills it, while tools/due.js goes on reading and writing the files.
+//
+// These tests hold the copy to what the ticket asks: a seeded mission control copied with nothing
+// lost (the check of item 5 says so, by running the same program over the files and over the
+// records), nothing of the owner's touched, a second run that changes nothing, two machines that
+// end with one record each, a late file and a late closing taken in, a changed file that updates
+// its page, a changed file whose page also changed kept as one review item, a file that does not
+// read left alone, and a year of the brief's daily mentions that does not fill the notebook.
+// Everything in here is made up.
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { execFileSync } from 'node:child_process';
+import { Store, hash } from '../core/records/store.mjs';
+import { QueryService } from '../core/query.mjs';
+import { FileSync } from '../core/sync/git.mjs';
+import { deadlineUid } from '../core/deadline-records.mjs';
+import { copyOldReminders, sameThroughRecords, COPY_TYPE, BOTH_CHANGED } from '../core/due-copy.mjs';
+import { dueCommand, dueDelivered, dueRows } from '../core/native-due.mjs';
+
+for (const key of Object.keys(process.env)) if (/^(GODSPEED_|HERMES_)/.test(key)) delete process.env[key];
+
+const DAY = '2026-10-30';
+const git = (cwd, ...args) => execFileSync('git', args, { cwd, encoding: 'utf8', windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+
+// ---------------------------------------------------------------- the seeded mission control
+// One of every kind the ticket names. The dates are fixed around 30 October 2026, so what every
+// reminder says is the same on every run of these tests.
+const SEED = {
+  'deadline-only': `TITLE: Service the boiler
+DONE-WHEN: The boiler has been serviced.
+COST-IF-MISSED: The warranty on it ends.
+SELF-CHECK: none
+SELF-CHECK-ARG:
+REPEATS: no
+LINK:
+SOURCE: me, 2026-09-01
+
+## Windows
+STRIP: 2026-10-01 2026-12-31
+
+## Log
+- 2026-09-01 created, window 2026-10-01 to 2026-12-31
+`,
+  'present': `TITLE: Buy Priya a present
+DONE-WHEN: The present is bought.
+COST-IF-MISSED:
+SELF-CHECK: none
+REPEATS: no
+SOURCE: me, 2026-09-20
+
+## Windows
+STRIP: 2026-09-25 - target 2026-10-20
+
+## Log
+- 2026-09-20 created, window 2026-09-25, aiming for 2026-10-20
+- 2026-10-20 SAID brief
+`,
+  'tax-return': `TITLE: The tax return
+DONE-WHEN: The return is filed.
+COST-IF-MISSED: A fine of 250 euro.
+SELF-CHECK: none
+REPEATS: no
+LINK: https://example.invalid/file-it
+SOURCE: the letter, 2026-09-10
+
+## Windows
+STRIP: 2026-10-01 2027-02-28 target 2027-01-31
+
+## Log
+- 2026-09-10 created, window 2026-10-01 to 2027-02-28, aiming for 2027-01-31
+`,
+  'rates': `TITLE: Pay the quarterly rates
+DONE-WHEN: The payment shows on the statement.
+COST-IF-MISSED: A late fee of 40 euro.
+SELF-CHECK: none
+REPEATS: quarterly
+SOURCE: me, 2026-01-05
+
+## Windows
+STRIP: 2026-01-05 2026-03-31 target 2026-03-15
+STRIP: 2026-04-01 2026-06-30 target 2026-06-15 moved 2026-06-22
+STRIP: 2026-07-01 2026-09-30 target 2026-09-15 asked
+
+## Log
+- 2026-01-05 created, window 2026-01-05 to 2026-03-31, aiming for 2026-03-15
+`,
+  'old-plan': `TITLE: Move the shed
+DONE-WHEN: The shed stands behind the house.
+COST-IF-MISSED: Nothing now.
+SELF-CHECK: none
+REPEATS: no
+SOURCE: me, 2026-08-01
+
+## Windows
+STRIP: 2026-08-01 2026-11-30
+
+## Log
+- 2026-08-01 created, window 2026-08-01 to 2026-11-30
+`,
+  // A file nothing can read: lines of somebody's own invention and no window at all.
+  'broken': `KIND: a birthday present
+TARGET-DATE: 2026-12-01
+NOTES: for my sister
+`,
+  'letter-pay': `TITLE: Pay the invented water bill
+DONE-WHEN: Paid.
+COST-IF-MISSED: A reminder fee.
+SELF-CHECK: none
+REPEATS: no
+LINK: http://127.0.0.1:8000/documents/7/details
+SOURCE: an-addon, 2026-10-02
+ADDON: an-addon
+ADDON-KEY: a1b2c3#1
+ADDON-STATE: 4d6e8f0a1b2c3d4e
+CALENDAR-MARKER: made-up-calendar:7
+
+## Windows
+STRIP: 2026-10-02 2026-11-20
+
+## Log
+- 2026-10-02 created by an-addon, window 2026-10-02 to 2026-11-20
+`,
+};
+const EVENTS = {
+  '2026-03-12-rates-closed.md': `---
+date: 2026-03-12
+participants: [me]
+closes: [due/rates#2026-01-05]
+evidence: the statement of 12 March shows the payment
+source: me, in a session
+written_by: mc-due
+origin: mission control
+---
+
+Pay the quarterly rates: finished (window 2026-01-05 to 2026-03-31, aiming for 2026-03-15).
+`,
+  '2026-10-05-old-plan-dropped.md': `---
+date: 2026-10-05
+participants: [me]
+drops: [due/old-plan]
+evidence: the shed is staying where it is
+source: me, in a session
+written_by: mc-due
+origin: mission control
+---
+
+Move the shed: called off.
+`,
+};
+
+function seeded(t, { device = 'pc' } = {}) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'godspeed-due-copy-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  write(root);
+  const store = new Store(root, { device });
+  store.save('settings', { id: 'installation', owner: device, timezone: 'UTC' });
+  return store;
+}
+function write(root) {
+  fs.mkdirSync(path.join(root, 'due'), { recursive: true });
+  fs.mkdirSync(path.join(root, 'world', 'events'), { recursive: true });
+  fs.mkdirSync(path.join(root, 'secrets'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'AGENTS.md'), '');
+  for (const [slug, text] of Object.entries(SEED)) fs.writeFileSync(path.join(root, 'due', slug + '.md'), text);
+  for (const [name, text] of Object.entries(EVENTS)) fs.writeFileSync(path.join(root, 'world', 'events', name), text);
+  // A key that runs out: tools/due.js makes a reminder of it (adoptKeys), and that reminder is an
+  // ordinary file in due/ which the copy takes in like any other.
+  fs.writeFileSync(path.join(root, 'secrets', 'expires.txt'),
+    'made-up-api-key 2026-12-20 https://example.invalid/keys # The key that signs the invented receipts.\n');
+}
+const pages = store => filesIn(path.join(store.root, 'notebook', 'Deadlines'));
+const timeline = store => filesIn(path.join(store.root, 'notebook', 'Timeline'));
+function filesIn(dir) {
+  try { return fs.readdirSync(dir, { withFileTypes: true }).filter(e => e.isFile()).map(e => e.name).sort(); }
+  catch (error) { if (error.code === 'ENOENT') return []; throw error; }
+}
+// Every file under notebook/, with its bytes: what one copy added, and what a second one did not.
+function notebookFiles(root) {
+  const out = new Map(), walk = dir => {
+    for (const entry of filesIn0(dir)) {
+      const file = path.join(dir, entry.name);
+      if (entry.isDirectory()) walk(file);
+      else out.set(path.relative(root, file).split(path.sep).join('/'), fs.readFileSync(file, 'utf8'));
+    }
+  };
+  walk(path.join(root, 'notebook'));
+  return out;
+}
+const filesIn0 = dir => { try { return fs.readdirSync(dir, { withFileTypes: true }); } catch (error) { if (error.code === 'ENOENT') return []; throw error; } };
+// The owner's own files, as they are this moment.
+function oldFiles(root) {
+  const out = new Map();
+  for (const folder of ['due', 'world/events']) {
+    for (const name of filesIn(path.join(root, ...folder.split('/')))) out.set(folder + '/' + name, fs.readFileSync(path.join(root, ...folder.split('/'), name), 'utf8'));
+  }
+  return out;
+}
+const slugsOf = store => store.list('deadlines').filter(r => r.native_slug).map(r => r.native_slug).sort();
+const closings = store => store.list('moments').filter(r => r.category === 'obligation');
+
+// ---------------------------------------------------------------- the seeded set, copied
+
+test('the seeded set is copied, and every reminder says the same through the records', t => {
+  const store = seeded(t);
+  // The key in secrets/expires.txt becomes a file in due/ the moment tools/due.js runs, and that
+  // run is also what copies: this is the path a command, the brief and the 08:00 reminders take.
+  dueCommand(store, ['state']);
+
+  assert.deepEqual(slugsOf(store),
+    ['deadline-only', 'key-made-up-api-key', 'letter-pay', 'old-plan', 'present', 'rates', 'tax-return'],
+    'every reminder that reads has a page, the key picked up out of secrets/expires.txt included');
+  assert.ok(!slugsOf(store).includes('broken'), 'and the file that does not read has none');
+  assert.deepEqual(pages(store).sort(), ['Buy Priya a present.md', 'Move the shed.md', 'Pay the invented water bill.md',
+    'Pay the quarterly rates.md', 'Service the boiler.md', 'The key that signs the invented receipts needs replacing.md',
+    'The tax return.md'], 'each one a page a person can read: ' + pages(store).join(', '));
+
+  // The uid is derived from the file's name, as ticket 01 derives it, and the id is the one the
+  // notebook's rows have always given this reminder.
+  const rates = store.list('deadlines').find(r => r.native_slug === 'rates');
+  assert.equal(rates.uid, deadlineUid('rates'));
+  assert.equal(rates.id, 'due-rates');
+  // Three windows, and the ones tools/due.js has opened since (growWindows) on top.
+  assert.ok(rates.windows.length >= 3, 'every window, three of them seeded: ' + rates.windows.length);
+  assert.equal(rates.windows[1].moved, '2026-06-22', 'with the day one of them was moved to');
+  assert.deepEqual(rates.windows[2].extra, ['asked'], 'and the word on the line that nothing knows, kept');
+  const letter = store.list('deadlines').find(r => r.native_slug === 'letter-pay');
+  assert.equal(letter.addon, 'an-addon');
+  assert.equal(letter.addon_key, 'a1b2c3#1');
+  assert.equal(letter.calendar_marker, 'made-up-calendar:7', 'an add-on obligation keeps whose it is and its calendar entry');
+
+  // A closing and a drop are moments on the timeline, each naming its reminder by uid.
+  assert.equal(closings(store).length, 2);
+  const done = closings(store).find(m => m.obligation_kind === 'closes');
+  assert.equal(done.title, 'Done: Pay the quarterly rates');
+  assert.equal(done.happened_at, '2026-03-12');
+  assert.equal(done.obligation_window, '2026-01-05');
+  assert.equal(done.evidence, 'the statement of 12 March shows the payment');
+  assert.equal(done.moved_from, 'world/events/2026-03-12-rates-closed.md');
+  assert.deepEqual(done.references, [{ type: 'deadlines', id: 'due-rates', uid: deadlineUid('rates'), field: 'deadline_id' }]);
+  const dropped = closings(store).find(m => m.obligation_kind === 'drops');
+  assert.equal(dropped.title, 'Dropped: Move the shed');
+  assert.deepEqual(timeline(store), ['2026-03-12 Done Pay the quarterly rates.md', '2026-10-05 Dropped Move the shed.md']);
+  assert.deepEqual(store.problems, [], 'and nothing in the notebook is a problem');
+
+  // The check ticket 03 relies on: the same state, the same windows and the same `today` sentence.
+  const check = sameThroughRecords(store, { day: DAY });
+  assert.deepEqual(check.differences, [], 'no difference between the files and the records');
+  assert.equal(check.same, true);
+  assert.deepEqual(check.needsALook, ['broken'], 'the file that does not read is named, not copied');
+
+  // And the readers see exactly what they saw: one row per reminder, not two.
+  const rows = new QueryService(store).rows('deadlines');
+  assert.equal(rows.filter(r => r.native_slug === 'rates').length, 1, 'one row for the reminder, not one for the page as well');
+  assert.equal(rows.length, dueRows(store).length, 'and the list is the one the files give');
+});
+
+test('per old file, the hash that was copied, and a second run that changes nothing', t => {
+  const store = seeded(t);
+  dueCommand(store, ['state']);
+  const book = store.list(COPY_TYPE);
+  assert.equal(book.length, 9, 'seven reminders that read, plus the two closing events: ' + book.map(r => r.file).join(', '));
+  const rates = book.find(r => r.file === 'due/rates.md');
+  assert.equal(rates.file_hash, hash(fs.readFileSync(path.join(store.root, 'due', 'rates.md'), 'utf8')));
+  assert.equal(rates.record_uid, deadlineUid('rates'));
+  assert.equal(rates.kind, 'reminder');
+  assert.equal(book.find(r => r.file === 'world/events/2026-10-05-old-plan-dropped.md').kind, 'closing');
+  assert.ok(!book.some(r => r.file === 'due/broken.md'), 'a file that does not read is not remembered as copied');
+  assert.equal(store.file(rates).split(path.sep).slice(-3).join('/'), '_system/due_copies/' + rates.id + '.json',
+    'it is bookkeeping, in the system folder, where it syncs with everything else');
+
+  const before = notebookFiles(store.root);
+  const again = copyOldReminders(store, { day: DAY });
+  assert.equal(again.unchanged, true, 'a second run has nothing to do');
+  assert.deepEqual(again.copied, []);
+  assert.deepEqual(again.updated, []);
+  assert.deepEqual([...notebookFiles(store.root)], [...before], 'and the notebook is byte for byte what it was');
+  assert.equal(store.list('record_history').length, 0, 'no copy of anything was kept: the copy prunes its own');
+});
+
+test('in a mission control that is its own Git repository, the copy touches nothing of the owner', t => {
+  const store = seeded(t);
+  dueCommand(store, ['state']);
+  const root = store.root;
+  git(root, 'init', '--initial-branch=main');
+  git(root, 'config', 'user.name', 'A Tester');
+  git(root, 'config', 'user.email', 'tester@localhost');
+  // A folder-mode mission control, as the kit leaves one: the owner's repository carries their
+  // folders, its .gitignore keeps this computer's own state out of it (.godspeed/ holds the
+  // workspace lock, what changed, and this copy's own note of the files it has seen), and the
+  // notebook's sync commits notebook/ and nothing else.
+  fs.writeFileSync(path.join(root, '.gitignore'), '/.godspeed/\n/conflicts/\n');
+  fs.writeFileSync(path.join(root, '.godspeed', 'sync-config.json'), JSON.stringify({ enabled: true, repository: 'folder', paths: ['notebook'] }));
+  git(root, 'add', '-A');
+  git(root, 'commit', '-q', '-m', 'the mission control as it stands');
+  assert.equal(git(root, 'status', '--porcelain'), '', 'everything the owner keeps is committed');
+
+  // A reminder and a closing written the old way, committed: what one machine still on the old
+  // version sends to the others.
+  fs.writeFileSync(path.join(root, 'due', 'passport.md'), `TITLE: Renew the passport
+DONE-WHEN: The new passport is in the drawer.
+COST-IF-MISSED: No travel.
+SELF-CHECK: none
+REPEATS: no
+SOURCE: me, 2026-10-29
+
+## Windows
+STRIP: 2026-10-29 2027-03-31
+
+## Log
+- 2026-10-29 created, window 2026-10-29 to 2027-03-31
+`);
+  fs.writeFileSync(path.join(root, 'world', 'events', '2026-10-28-boiler-closed.md'), `---
+date: 2026-10-28
+participants: [me]
+closes: [due/deadline-only]
+evidence: the engineer left a receipt
+source: me, in a session
+---
+
+Service the boiler: finished.
+`);
+  git(root, 'add', '-A');
+  git(root, 'commit', '-q', '-m', 'a reminder and a closing written the old way');
+  const status = git(root, 'status', '--porcelain');
+  const mine = oldFiles(root);
+
+  const report = copyOldReminders(store, { day: DAY });
+  assert.deepEqual(report.copied, ['passport'], 'the late reminder became a page');
+  assert.ok(report.closed.some(title => title === 'Done: Service the boiler'), 'and the late closing a moment: ' + report.closed.join(', '));
+
+  assert.deepEqual([...oldFiles(root)], [...mine], 'not one byte of due/ or world/events/ changed');
+  assert.equal(git(root, 'status', '--porcelain', '--', 'due', 'world'), '', 'so the owner\'s repository has nothing to say about them');
+  // Git puts a name with a space in it in quotes, so the quote comes off before the folder is read.
+  const named = line => line.slice(3).replace(/^"/, '');
+  const left = git(root, 'status', '--porcelain').split('\n').filter(line => line.trim() && !named(line).startsWith('notebook/'));
+  assert.deepEqual(left, status ? status.split('\n') : [], 'and nothing else outside the notebook changed either: ' + left.join(' | '));
+
+  const check = sameThroughRecords(store, { day: DAY });
+  assert.deepEqual(check.differences, [], 'the records still say what the files say');
+  assert.equal(new QueryService(store).rows('deadlines').find(r => r.native_slug === 'deadline-only').status, 'closed',
+    'and the closing written the old way is what the reader sees, as before');
+});
+
+// ---------------------------------------------------------------- kept level
+
+test('a changed reminder file updates its page while the page has not changed since', t => {
+  const store = seeded(t);
+  dueCommand(store, ['state']);
+  const before = store.list('deadlines').find(r => r.native_slug === 'tax-return');
+
+  // The old way: a new day written into the file by tools/due.js itself.
+  dueCommand(store, ['target', 'tax-return', '2027-02-10']);
+  const after = store.list('deadlines').find(r => r.native_slug === 'tax-return');
+  assert.equal(after.uid, before.uid, 'the same reminder, not a second one');
+  assert.equal(after.windows[0].moved, '2027-02-10', 'the page follows the file');
+  assert.equal(store.list('deadlines').filter(r => r.native_slug === 'tax-return').length, 1);
+  assert.deepEqual(sameThroughRecords(store, { day: DAY }).differences, []);
+
+  // The brief's daily line is such a change too, and it must not make a second page either.
+  dueDelivered(store, ['present'], new Date(DAY + 'T07:00:00Z'));
+  const present = store.list('deadlines').find(r => r.native_slug === 'present');
+  assert.match(present.log, new RegExp('- ' + DAY + ' SAID brief'), 'the line the brief writes is in the page\'s log');
+  assert.equal(store.list('deadlines').filter(r => r.native_slug === 'present').length, 1);
+});
+
+test('when the file and the page both changed, the page is kept and both are one review item', t => {
+  const store = seeded(t);
+  dueCommand(store, ['state']);
+  const page = store.list('deadlines').find(r => r.native_slug === 'present');
+
+  // The owner changes the page in the notebook...
+  store.save('deadlines', { id: page.id, title: 'Buy Priya a birthday present' });
+  // ...and something changes the file as well.
+  const file = path.join(store.root, 'due', 'present.md');
+  fs.writeFileSync(file, fs.readFileSync(file, 'utf8').replace('TITLE: Buy Priya a present', 'TITLE: Buy Priya a book'));
+
+  const report = copyOldReminders(store, { day: DAY });
+  assert.equal(report.reviews.length, 1, 'one review item');
+  const kept = store.list('deadlines').find(r => r.native_slug === 'present');
+  assert.equal(kept.title, 'Buy Priya a birthday present', 'the notebook\'s version stays');
+  assert.equal(store.list('deadlines').filter(r => r.native_slug === 'present').length, 1, 'and there is no second reminder');
+
+  const item = store.get('review_queue', report.reviews[0]);
+  assert.equal(item.suggestion_type, BOTH_CHANGED);
+  assert.equal(item.status, 'pending_review');
+  assert.equal(item.payload.from_the_file.title, 'Buy Priya a book', 'the file\'s version is in it');
+  assert.equal(item.payload.in_the_notebook.title, 'Buy Priya a birthday present', 'and the notebook\'s');
+  assert.match(item.description, /due\/present\.md/);
+
+  // However often it runs, it is one item and the page is still the owner's.
+  assert.deepEqual(copyOldReminders(store, { day: DAY }).reviews, []);
+  copyOldReminders(store, { day: DAY });
+  assert.equal(store.list('review_queue').filter(r => r.suggestion_type === BOTH_CHANGED).length, 1);
+  assert.equal(store.list('deadlines').find(r => r.native_slug === 'present').title, 'Buy Priya a birthday present');
+});
+
+test('a page somebody deleted is written again, and a file that does not read is left alone', t => {
+  const store = seeded(t);
+  dueCommand(store, ['state']);
+  const page = store.list('deadlines').find(r => r.native_slug === 'rates');
+  fs.rmSync(store.file(page));
+  const fresh = new Store(store.root, { device: 'pc' });
+  assert.equal(fresh.list('deadlines').filter(r => r.native_slug === 'rates').length, 0, 'the page is gone');
+
+  const report = copyOldReminders(fresh, { day: DAY });
+  assert.deepEqual(report.copied, ['rates'], 'a reminder that is in due/ is a reminder this machine holds');
+  assert.equal(fresh.list('deadlines').find(r => r.native_slug === 'rates').uid, deadlineUid('rates'));
+  assert.deepEqual(report.needsALook, ['due/broken.md']);
+  assert.equal(fs.readFileSync(path.join(store.root, 'due', 'broken.md'), 'utf8'), SEED.broken, 'and the file nobody can read is untouched');
+});
+
+test('a closing of a reminder that is not there waits, and lands when the reminder does', t => {
+  const store = seeded(t);
+  copyOldReminders(store, { day: DAY });
+  // A closing written the old way, for a reminder whose file has not arrived yet (another machine
+  // committed the one and not the other: the incident of 19 October 2026, the other way round).
+  fs.writeFileSync(path.join(store.root, 'world', 'events', '2026-10-29-passport-closed.md'), `---
+date: 2026-10-29
+participants: [me]
+closes: [due/passport]
+evidence: the new passport is in the drawer
+source: me, in a session
+---
+
+Renew the passport: finished.
+`);
+  const waited = copyOldReminders(store, { day: DAY });
+  assert.deepEqual(waited.waiting, ['world/events/2026-10-29-passport-closed.md'],
+    'a moment may not name a reminder that is not there, so it waits');
+  assert.equal(closings(store).length, 2, 'and nothing was made up in the meantime');
+  assert.ok(!store.list(COPY_TYPE).some(r => r.file.includes('passport')), 'nor is the file remembered as copied');
+
+  fs.writeFileSync(path.join(store.root, 'due', 'passport.md'), `TITLE: Renew the passport
+DONE-WHEN: The new passport is in the drawer.
+COST-IF-MISSED: No travel.
+SELF-CHECK: none
+REPEATS: no
+SOURCE: me, 2026-10-01
+
+## Windows
+STRIP: 2026-10-01 2027-03-31
+
+## Log
+- 2026-10-01 created, window 2026-10-01 to 2027-03-31
+`);
+  const landed = copyOldReminders(store, { day: DAY });
+  assert.deepEqual(landed.copied, ['passport']);
+  assert.deepEqual(landed.waiting, []);
+  assert.ok(landed.closed.includes('Done: Renew the passport'), 'and the closing that waited is a moment now');
+  assert.deepEqual(sameThroughRecords(store, { day: DAY }).differences, []);
+  assert.equal(copyOldReminders(store, { day: DAY }).unchanged, true);
+});
+
+// ---------------------------------------------------------------- two machines
+
+test('two machines copy the same folder and end, after both have synced, with one record each', t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'godspeed-due-copy-two-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const remote = path.join(root, 'remote.git');
+  fs.mkdirSync(remote);
+  git(remote, 'init', '--bare', '--initial-branch=main');
+  const machine = (name, first) => {
+    const dir = path.join(root, name);
+    git(root, 'clone', '-q', '-c', 'core.autocrlf=false', remote, dir);
+    git(dir, 'config', 'user.name', name);
+    git(dir, 'config', 'user.email', name + '@localhost');
+    if (first) write(dir);
+    const store = new Store(dir, { device: name }), sync = new FileSync(store);
+    sync.initialize('https://github.com/synthetic/private.git');
+    if (first) store.save('settings', { id: 'installation', owner: 'the owner', timezone: 'UTC' });
+    return { dir, store, sync, name };
+  };
+  // One mission control on two machines: the second one joined the first, so both hold the same
+  // reminders and the same closings before either of them has copied anything.
+  const desktop = machine('desktop', true);
+  assert.equal(desktop.sync.reconcile().state, 'synced');
+  const laptop = machine('laptop', false);
+  assert.equal(laptop.sync.reconcile().state, 'synced');
+  assert.deepEqual(filesIn(path.join(laptop.dir, 'due')).sort(), filesIn(path.join(desktop.dir, 'due')).sort(),
+    'the second machine holds the same reminders');
+  // secrets/ is never synced (file-policy.mjs): every machine has its own copy of the list of
+  // what runs out, so the second one is given it here as the installer gives it.
+  fs.mkdirSync(path.join(laptop.dir, 'secrets'), { recursive: true });
+  fs.copyFileSync(path.join(desktop.dir, 'secrets', 'expires.txt'), path.join(laptop.dir, 'secrets', 'expires.txt'));
+
+  // Both take this version and copy, before either syncs again.
+  for (const one of [desktop, laptop]) {
+    dueCommand(one.store, ['state']);
+    assert.equal(slugsOf(one.store).length, 7, one.name + ' copied every reminder that reads');
+  }
+  assert.equal(desktop.sync.reconcile().state, 'synced');
+  assert.equal(laptop.sync.reconcile().state, 'synced', 'and neither machine has anything for its owner to settle');
+  assert.equal(desktop.sync.reconcile().state, 'synced');
+
+  for (const one of [desktop, laptop]) {
+    const store = new Store(one.dir, { device: one.name });
+    const slugs = slugsOf(store);
+    assert.deepEqual(slugs, [...new Set(slugs)], one.name + ': one page per reminder, not two');
+    assert.equal(slugs.length, 7, one.name + ': ' + slugs.join(', '));
+    const uids = closings(store).map(m => m.uid);
+    assert.deepEqual(uids.sort(), [...new Set(uids)].sort(), one.name + ': one moment per closing');
+    assert.equal(uids.length, 2);
+    assert.equal(store.list(COPY_TYPE).length, 9, one.name + ': one note per old file');
+    assert.deepEqual(store.problems, [], one.name + ': and nothing is a problem');
+    assert.deepEqual(store.list('review_queue'), [], one.name + ': and nothing for the owner to settle');
+    assert.deepEqual(one.sync.pendingConflicts(), [], one.name + ': no saved conflict');
+    assert.deepEqual(sameThroughRecords(store, { day: DAY }).differences, [], one.name + ': and the records say what the files say');
+  }
+});
+
+// ---------------------------------------------------------------- what it adds to the notebook
+
+test('a year of the brief\'s daily mentions of fifty reminders stays well inside a megabyte', t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'godspeed-due-copy-grow-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  fs.mkdirSync(path.join(root, 'due'), { recursive: true });
+  fs.mkdirSync(path.join(root, 'world', 'events'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'AGENTS.md'), '');
+  const REMINDERS = 10, DAYS = 10;
+  for (let n = 0; n < REMINDERS; n++) {
+    fs.writeFileSync(path.join(root, 'due', 'thing-' + n + '.md'), `TITLE: An invented thing number ${n}
+DONE-WHEN: It is done.
+COST-IF-MISSED: Something made up.
+SELF-CHECK: none
+REPEATS: no
+SOURCE: me, 2026-01-01
+
+## Windows
+STRIP: 2026-01-01 2027-06-30
+
+## Log
+- 2026-01-01 created, window 2026-01-01 to 2027-06-30
+`);
+  }
+  const store = new Store(root, { device: 'pc' });
+  store.save('settings', { id: 'installation', owner: 'pc', timezone: 'UTC' });
+  const slugs = Array.from({ length: REMINDERS }, (_, n) => 'thing-' + n);
+  copyOldReminders(store, { day: '2026-10-01' });
+  const size = () => [...notebookFiles(root).values()].reduce((bytes, text) => bytes + Buffer.byteLength(text), 0);
+  const before = size();
+  for (let d = 0; d < DAYS; d++) {
+    // What the brief does every morning it mentions them, and the copy that follows it.
+    dueDelivered(store, slugs, new Date(Date.parse('2026-10-01T07:00:00Z') + d * 86400000));
+  }
+  const added = size() - before;
+  const year = Math.round(added / (REMINDERS * DAYS) * 50 * 365);
+  console.log('    one day of one reminder mentioned adds ' + Math.round(added / (REMINDERS * DAYS)) +
+    ' bytes; fifty reminders for a year: about ' + Math.round(year / 1024) + ' KB');
+  assert.equal(store.list('record_history').filter(h => h.source_type === 'deadlines' || h.source_type === COPY_TYPE).length, 0,
+    'the copy keeps no history copy of what it writes: the whole log is in the record itself');
+  assert.ok(year < 1024 * 1024, 'a year of fifty reminders mentioned daily: about ' + Math.round(year / 1024) + ' KB, which must stay inside a megabyte');
+  assert.equal(store.list('deadlines').length, REMINDERS, 'and still one page per reminder');
+});

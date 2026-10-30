@@ -78,6 +78,14 @@
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
+// The old files a reminder lives in - due/<slug>.md and the closing events in world/events/ - are
+// read and written in one place since 30 October 2026, because the notebook's copy of them into
+// its own records (notebook/core/due-copy.mjs) has to read exactly what this program reads. Plain
+// CommonJS and nothing of the notebook at load time: these tools run on Node 20 in the suite.
+const {
+  createDueFiles, isDate, addDays, daysBetween, addMonths, repeatOf, aimOf, endOf,
+  readText, writeText, slugify, fileOf, windowWords,
+} = require("./due-files.js");
 
 // ---------------------------------------------------------------- where is the mission control
 // The order mc-goals, mc-work and mc-forecast use (mc-cards.js), so every command a chat types reads
@@ -118,7 +126,7 @@ function findGodspeed() {
   return "";
 }
 
-function createDueCommands({root,commandArgs=process.argv.slice(2),date}={}) {
+function createDueCommands({root,commandArgs=process.argv.slice(2),date,copy=true}={}) {
 // --godspeed and its value are pulled OUT of the list before anything else looks at it. Left in, the
 // very first thing a person types (mc-due --godspeed /somewhere check) reads "--godspeed" as the command
 // and quietly runs the list instead, which looks like it worked.
@@ -136,56 +144,21 @@ if (!godspeed || !fs.existsSync(godspeed)) {
   console.log("Run this from inside it, or say where it is:  mc-due --godspeed /path/to/your/godspeed");
   process.exit(1);
 }
-const DUE = path.join(godspeed, "due");
+// The one reader and writer of the old files (due-files.js): this folder's due/ and its closing
+// events, with this run's own cache of them.
+const files = createDueFiles({ root: godspeed });
+const { DUE, filePath, slugs, parseFile, unreadable, worldEvents, applyEvents, writeEvent, save } = files;
+const UNPROVEN = files.unproven;
 const EXPIRES = path.join(godspeed, "secrets", "expires.txt");
-const EVENTS_DIR = path.join(godspeed, "world", "events");
 
 // ---------------------------------------------------------------- dates
 // Everything is YYYY-MM-DD and UTC. A date that means two different days on two of your computers
-// is how a monthly job runs twice, or never.
+// is how a monthly job runs twice, or never. The arithmetic itself is in due-files.js.
 function today() {
   if(date)return date;
   const o = (process.env.GODSPEED_TODAY || "").trim();
   if (/^\d{4}-\d{2}-\d{2}$/.test(o)) return o;
   return new Date().toISOString().slice(0, 10);
-}
-function parseDate(s) {
-  if (!s || !/^\d{4}-\d{2}-\d{2}$/.test(String(s).trim())) return null;
-  const d = new Date(String(s).trim() + "T00:00:00Z");
-  return isNaN(d.getTime()) ? null : d;
-}
-const isDate = (s) => !!parseDate(s);
-function addDays(iso, n) {
-  const d = parseDate(iso); if (!d) return null;
-  d.setUTCDate(d.getUTCDate() + n);
-  return d.toISOString().slice(0, 10);
-}
-function daysBetween(a, b) {
-  const x = parseDate(a), y = parseDate(b);
-  if (!x || !y) return null;
-  return Math.round((y - x) / 86400000);
-}
-// Adding months clamps to the end of the month. Without that, a window ending on the 31st walks
-// into the next month every other period and the whole schedule slides.
-function addMonths(iso, n) {
-  const d = parseDate(iso); if (!d) return null;
-  const day = d.getUTCDate();
-  const t = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + n, 1));
-  const last = new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth() + 1, 0)).getUTCDate();
-  t.setUTCDate(Math.min(day, last));
-  return t.toISOString().slice(0, 10);
-}
-function repeatOf(text) {
-  const t = String(text || "").trim().toLowerCase();
-  if (!t || t === "no" || t === "none" || t === "once") return null;
-  if (t === "weekly") return { kind: "days", n: 7 };
-  if (t === "fortnightly" || t === "biweekly") return { kind: "days", n: 14 };
-  if (t === "monthly") return { kind: "months", n: 1 };
-  if (t === "quarterly") return { kind: "months", n: 3 };
-  if (t === "yearly" || t === "annually") return { kind: "months", n: 12 };
-  const m = t.match(/^every\s+(\d{1,4})\s*days?$/);
-  if (m) return { kind: "days", n: parseInt(m[1], 10) };
-  return undefined;                       // never guessed; `check` says so out loud
 }
 
 // ---------------------------------------------------------------- THE BAND RULE
@@ -266,11 +239,6 @@ function bandOf(from, to, day) {
   return "green";
 }
 
-// A window's target is the day you moved it to, if you did; the planned one stays on the line so a
-// repeating thing's later windows keep their place. A window ends on its deadline, or with none, on
-// its target.
-const aimOf = (s) => (s && (s.moved || s.target)) || "";
-const endOf = (s) => (s && (s.to || aimOf(s))) || "";
 // The step of one window. A deadline decides whenever there is one, target or not, so every window
 // written before targets existed gets exactly the answer it always got.
 function bandFor(s, day) {
@@ -290,167 +258,6 @@ function firstSaidAfter(o, t) {
   return first;
 }
 
-// ---------------------------------------------------------------- the files
-function readText(p) { try { return fs.readFileSync(p, "utf8"); } catch (e) { return ""; } }
-function writeText(p, s) {
-  try { fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, s); return true; }
-  catch (e) { console.log("   I could not write " + p + ": " + e.message); return false; }
-}
-const slugify = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60);
-const filePath = (slug) => path.join(DUE, slug + ".md");
-function slugs() {
-  if (!fs.existsSync(DUE)) return [];
-  return fs.readdirSync(DUE)
-    .filter((f) => f.endsWith(".md") && f !== "README.md" && !f.startsWith("."))
-    .map((f) => f.slice(0, -3)).sort();
-}
-const CACHE = new Map();
-function parseFile(slug) {
-  if (!/^[a-z0-9][a-z0-9-]{0,59}$/.test(slug || "")) return null;
-  if (CACHE.has(slug)) return CACHE.get(slug);
-  const p = filePath(slug);
-  const text = readText(p);
-  if (!text) return null;
-  const head = {}, strips = [], log = [], said = [];
-  for (const raw of text.split(/\r?\n/)) {
-    const line = raw.replace(/\s+$/, "");
-    // `STRIP: <from> <to>`. An older line may still say `open` or `done <date>`: kept as `legacy`
-    // and honoured until it has been turned into an event. The deadline may be `-` (a target only),
-    // and `target <day>` or `moved <day>` may follow. A word nothing here knows is kept, never eaten.
-    let m = line.match(/^STRIP:\s*(\S+)\s+(\S+)((?:\s+\S+)*)\s*$/);
-    if (m) {
-      const st = { from: m[1], to: m[2] === "-" ? "" : m[2], target: "", moved: "", extra: [],
-                   state: "open", closed: "", legacy: "" };
-      const w = m[3].trim() ? m[3].trim().split(/\s+/) : [];
-      for (let k = 0; k < w.length; k++) {
-        const word = w[k].toLowerCase();
-        if (word === "open") continue;
-        if (word === "done") { st.legacy = isDate(w[k + 1]) ? w[++k] : (st.to || st.from); continue; }
-        if ((word === "target" || word === "moved") && isDate(w[k + 1])) { st[word] = w[++k]; continue; }
-        st.extra.push(w[k]);
-      }
-      strips.push(st);
-      continue;
-    }
-    m = line.match(/^-\s*(\d{4}-\d{2}-\d{2})\s+SAID\s+(\S+)\s*$/);
-    if (m) { said.push({ date: m[1], channel: m[2] }); log.push(line); continue; }
-    if (/^-\s/.test(line)) { log.push(line); continue; }
-    m = line.match(/^([A-Z][A-Z0-9-]{1,30}):\s?(.*)$/);
-    if (m && !(m[1] in head)) head[m[1]] = m[2].trim();
-  }
-  const o = { slug, path: p, text, head, strips, log, said };
-  o.problem = strips.some(readableStrip) ? "" : strips.length
-    ? "its STRIP line does not hold dates I can read"
-    : "it has no STRIP line, so I cannot tell its dates";
-  applyEvents(o);
-  CACHE.set(slug, o);
-  return o;
-}
-// A window this program can place in time: a start, and a deadline or a target after it.
-function readableStrip(s) {
-  if (!isDate(s.from)) return false;
-  if (s.to) return isDate(s.to) && s.to >= s.from;
-  const aim = aimOf(s);
-  return isDate(aim) && aim >= s.from;
-}
-// A FILE I CANNOT READ NEEDS A LOOK, AND IS NEVER DONE (2026-10-09). An assistant wrote a deadline
-// by hand with lines of its own invention (KIND:, TARGET-DATE:) and no STRIP line. With no window
-// to be open, it was listed as DONE, and the notebook showed it as closed: a birthday present
-// nobody had bought, quietly finished. A file with no window I can read, an empty one, or one
-// whose name I cannot use is now listed as needing a look, by its file name, and nothing here
-// ever writes to it.
-function unreadable(slug) {
-  const p = filePath(slug);
-  const problem = !/^[a-z0-9][a-z0-9-]{0,59}$/.test(slug || "")
-    ? "its file name is not one I can use (small letters, digits and dashes only)"
-    : !readText(p).trim() ? "it is empty" : "I could not read it";
-  return { slug, path: p, text: "", head: {}, strips: [], log: [], said: [], dropped: null, problem };
-}
-const fileOf = (r) => "due/" + r.slug + ".md";
-
-// ---------------------------------------------------------------- the events: the only "is it done"
-let EVENTS = null;
-const UNPROVEN = [];
-function frontmatter(text) {
-  const m = String(text).replace(/\r\n/g, "\n").match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/);
-  if (!m) return null;
-  const meta = {};
-  for (const line of m[1].split("\n")) {
-    const kv = line.match(/^([A-Za-z_][A-Za-z0-9_-]*):\s*(.*)$/);
-    if (!kv) continue;
-    const v = kv[2].trim();
-    meta[kv[1]] = v.startsWith("[") && v.endsWith("]")
-      ? v.slice(1, -1).split(",").map((x) => x.trim().replace(/^["']|["']$/g, "")).filter(Boolean)
-      : v.replace(/^["']|["']$/g, "");
-  }
-  return meta;
-}
-function parseRef(r) {
-  const m = String(r || "").trim().match(/^due\/([a-z0-9][a-z0-9-]*)(?:\.md)?(?:#(\d{4}-\d{2}-\d{2}))?$/);
-  return m ? { slug: m[1], window: m[2] || "" } : null;
-}
-const listOf = (v) => (Array.isArray(v) ? v : v ? [v] : []);
-function worldEvents() {
-  if (EVENTS) return EVENTS;
-  EVENTS = [];
-  let files = [];
-  try { files = fs.readdirSync(EVENTS_DIR).filter((f) => f.endsWith(".md")).sort(); } catch (e) { return EVENTS; }
-  for (const f of files) {
-    const text = readText(path.join(EVENTS_DIR, f));
-    if (!/^(closes|drops):/m.test(text)) continue;
-    const meta = frontmatter(text);
-    if (!meta || !isDate(meta.date)) continue;
-    const closes = listOf(meta.closes).map(parseRef).filter(Boolean);
-    const drops = listOf(meta.drops).map(parseRef).filter(Boolean);
-    if (!closes.length && !drops.length) continue;
-    // No evidence, no closing: an event that says a thing is done without what shows it closes nothing.
-    if (!String(meta.evidence || "").trim()) { UNPROVEN.push("world/events/" + f); continue; }
-    EVENTS.push({ file: "world/events/" + f, date: meta.date, closes, drops });
-  }
-  return EVENTS;
-}
-// A named window closes that one; a bare name closes the window that was current on the event's day.
-function targetStrip(o, ref, date) {
-  const open = o.strips.filter((s) => s.state === "open");
-  if (!open.length) return null;
-  if (ref.window) return open.find((s) => s.from === ref.window) || null;
-  const started = open.filter((s) => s.from <= date);
-  return started.length ? started[started.length - 1] : open[0];
-}
-function applyEvents(o) {
-  for (const s of o.strips) { s.state = "open"; s.closed = ""; s.by = ""; }
-  o.dropped = null;
-  const acts = [];
-  for (const e of worldEvents()) {
-    for (const r of e.closes) if (r.slug === o.slug) acts.push({ date: e.date, ref: r, by: e.file, legacy: false });
-    for (const r of e.drops) if (r.slug === o.slug && (!o.dropped || e.date < o.dropped.date)) o.dropped = { date: e.date, by: e.file };
-  }
-  for (const s of o.strips) if (s.legacy) acts.push({ date: s.legacy, ref: { slug: o.slug, window: s.from }, by: "", legacy: true });
-  acts.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : a.legacy === b.legacy ? 0 : a.legacy ? 1 : -1));
-  for (const a of acts) {
-    const s = targetStrip(o, a.ref, a.date);
-    if (s) { s.state = "done"; s.closed = a.date; s.by = a.by || "legacy"; }
-  }
-  if (o.dropped) for (const s of o.strips) if (s.state === "open") { s.state = "dropped"; s.closed = o.dropped.date; s.by = o.dropped.by; }
-}
-// The one writer of a closing or a drop: one new file per event, never an edit of an old one.
-function writeEvent(day, { closes = [], drops = [], evidence, source, text }) {
-  if (!String(evidence || "").trim()) return null;
-  const first = (closes[0] || drops[0] || "due/thing").replace(/^due\//, "").replace(/#.*/, "");
-  const base = day + "-" + slugify(first + " " + (closes.length ? "closed" : "dropped"));
-  let file = path.join(EVENTS_DIR, base + ".md");
-  for (let n = 2; fs.existsSync(file); n++) file = path.join(EVENTS_DIR, base + "-" + n + ".md");
-  const lines = ["---", "date: " + day, "participants: [me]"];
-  if (closes.length) lines.push("closes: [" + closes.join(", ") + "]");
-  if (drops.length) lines.push("drops: [" + drops.join(", ") + "]");
-  lines.push("evidence: " + String(evidence).replace(/\s+/g, " ").trim(), "source: " + (source || "mc-due"),
-             "written_by: mc-due", "origin: mission control", "---", "", String(text || "").trim(), "");
-  if (!writeText(file, lines.join("\n"))) return null;
-  const rel = "world/events/" + path.basename(file);
-  worldEvents().push({ file: rel, date: day, closes: closes.map(parseRef).filter(Boolean), drops: drops.map(parseRef).filter(Boolean) });
-  for (const x of CACHE.values()) applyEvents(x);
-  return rel;
-}
 // An older file that still says `done <date>`: the closing becomes an event on its true date, with
 // the file's own log line of that day as the evidence, and only then does the word go.
 function migrateLegacy(notes) {
@@ -476,38 +283,6 @@ function migrateLegacy(notes) {
     if (wrote) notes.push(slug + ": " + wrote + " closing(s) moved into world/events/");
   }
 }
-const ORDER = ["TITLE", "DONE-WHEN", "COST-IF-MISSED", "SELF-CHECK", "SELF-CHECK-ARG",
-               "REPEATS", "LINK", "SOURCE"];
-function render(o) {
-  const H = (k) => (o.head[k] === undefined ? "" : o.head[k]);
-  const out = ["# " + (H("TITLE") || o.slug), ""];
-  for (const k of ORDER) out.push(k + ": " + H(k));
-  // Anything you added by hand survives. A program that eats a line you wrote is a program you
-  // stop editing by hand, and these are meant to be edited by hand.
-  for (const k of Object.keys(o.head)) if (!ORDER.includes(k)) out.push(k + ": " + H(k));
-  out.push("", "## Windows", "");
-  // The window only. A state word survives only while it is still the one record of that closing.
-  for (const s of o.strips) out.push(stripLine(s));
-  out.push("", "## Log", "");
-  for (const l of o.log) out.push(l);
-  out.push("");
-  return out.join("\n");
-}
-// A window with a deadline and no target is `STRIP: <from> <to>` and nothing else, byte for byte
-// what it always was, so no file you already have changes when it is written back.
-function stripLine(s) {
-  return ["STRIP:", s.from, s.to || "-"]
-    .concat(s.target ? ["target", s.target] : [], s.moved ? ["moved", s.moved] : [])
-    .concat(s.legacy && s.by === "legacy" ? ["done", s.legacy] : [], s.extra || [])
-    .join(" ");
-}
-// A window in words. A deadline window reads as it always has.
-function windowWords(s) {
-  const aim = aimOf(s);
-  if (!aim) return s.from + " to " + s.to;
-  return s.from + (s.to ? " to " + s.to + ", aiming for " + aim : ", aiming for " + aim);
-}
-const save = (o) => { CACHE.set(o.slug, o); return writeText(o.path, render(o)); };
 
 // ---------------------------------------------------------------- add-on deadlines
 // AN ADD-ON MAKES A DEADLINE, AND FROM THE MOMENT THE PERSON TOUCHES IT, IT IS THEIRS (23 October
@@ -1275,7 +1050,40 @@ switch (cmd) {
 return rc;
 }
 function recordSaid(selected,day=today()) {for(const r of load(day,false).filter(r=>selected.includes(r.slug)&&!r.problem)){if(r.o.said.some(x=>x.date===day&&x.channel==='brief'))continue;r.o.said.push({date:day,channel:'brief'});logLine(r.o,day,'SAID brief');save(r.o);}}
-return {run,stateRows,recordSaid};
+
+// ---------------------------------------------------------------- the notebook holds all of this too
+// A REMINDER AND ITS CLOSING LIVE IN THE NOTEBOOK AS WELL (30 October 2026, #90). This program is
+// unchanged: it reads and writes the same files and prints the same words. After it has answered -
+// and after the windows this run grew, the keys it picked up out of secrets/expires.txt and the
+// closing a command of this run wrote - the notebook copies every one of those files into its own
+// records (notebook/core/due-copy.mjs), where its sync carries them to the owner's other machines.
+// Once per run, and nothing at all when no file in due/ or world/events/ has changed.
+//
+// The bridge, and why it is this one: the notebook's store is an ES module and this is CommonJS.
+// `require` of an ES module needs Node 22.12 or newer, and these tools must keep running on the
+// Node 20 the product's suite uses for them, so the copy is required here and only here, inside a
+// try, after the answer. A Node that cannot, a kit installed without the notebook beside it, or a
+// workspace another writer is holding this moment leaves the copy to the next run, which is safe
+// because copying twice changes nothing. The notebook itself never comes through here: it holds
+// the workspace lock already and does the copy with the store it has (native-due.mjs), saying so
+// with `copy: false` in this process and GODSPEED_DUE_COPY=off in the one it starts.
+let copied = false;
+function copyIntoTheNotebook() {
+  const say = (process.env.GODSPEED_DUE_COPY || "").trim();
+  if (copied || copy === false || say === "off") return;
+  copied = true;
+  try {
+    const result = require("../notebook/core/due-copy.mjs").copyIfFilesChanged(godspeed, { day: today() });
+    if (say === "say") console.error("due-copy: " + JSON.stringify(result));
+  } catch (e) {
+    if (say === "say") console.error("due-copy: not this time: " + e.message);
+  }
+}
+return {
+  run: () => { const rc = run(); copyIntoTheNotebook(); return rc; },
+  stateRows: (...a) => { const rows = stateRows(...a); copyIntoTheNotebook(); return rows; },
+  recordSaid: (...a) => { const done = recordSaid(...a); copyIntoTheNotebook(); return done; },
+};
 }
 module.exports={createDueCommands};
 if(require.main===module)process.exit(createDueCommands().run());

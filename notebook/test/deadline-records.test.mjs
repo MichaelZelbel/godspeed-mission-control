@@ -267,7 +267,11 @@ test('a deadline Settings saved before 18 October and moved into due/ does not s
   assert.equal(moved.moved_to, 'due/car-service.md');
   assert.equal(pageOf(store, moved), '_system/deadlines/' + moved.id + '.md',
     'and it then keeps its place in the system folder, where nobody reads it as a page');
-  assert.deepEqual(deadlinePages(store), [], 'so the reminder it was moved to is not standing in Deadlines/ twice');
+  // Since 30 October 2026 the reminder in due/ is copied into the notebook as a page of its own
+  // (core/due-copy.mjs), so Deadlines/ holds that one page - under the plain name, because the
+  // record Settings saved had left the folder before it was written - and never the two of them.
+  assert.deepEqual(deadlinePages(store), ['Car service.md'], 'the reminder it was moved to stands there once, not twice');
+  assert.equal(store.list('deadlines').filter(d => d.native_slug === 'car-service').length, 1);
 
   const rows = new QueryService(store).rows('deadlines').filter(d => d.title === 'Car service' && d.status !== 'closed');
   assert.equal(rows.length, 1, 'and the notebook lists that reminder once');

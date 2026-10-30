@@ -32,6 +32,8 @@ tables.add('lead_comparisons');
 tables.add('tracker_proposals');tables.add('tracker_deletions');
 // A meal held for its one question about an amount, and her answer (D-321 step 5).
 tables.add('food_questions');
+// What the notebook has already copied out of due/ and world/events/, per old file (due-copy.mjs).
+tables.add('due_copies');
 const defaults = {
   // Postgres filled in status; an item saved without one would now be left
   // out by Actions' .neq("status", "dismissed"), since NULL <> x is not true.
@@ -195,7 +197,12 @@ export class QueryService {
     const ofType=type=>typeof this.store.ofType==='function'?this.store.ofType(type):all().filter(r=>r.type===type);
     const memo=new Map(),list = type => {
       if(memo.has(type))return memo.get(type);
-      const values=ofType(type).filter(r=>!r.removed_at);if(type==='deadlines')values.push(...dueRows(this.store));
+      // A reminder that lives in due/ is listed once: through dueRows, which works out its state,
+      // its band and its sentence from the files. Its page in the notebook (due-copy.mjs copies
+      // every one of them since 30 October 2026) carries the same reminder and would otherwise
+      // stand in this list a second time, in the brief, in Settings and in the chat's context.
+      // Ticket 03 of #90 turns this round: the page becomes the one that is listed.
+      const values=ofType(type).filter(r=>!r.removed_at&&!(type==='deadlines'&&r.native_slug));if(type==='deadlines')values.push(...dueRows(this.store));
       if(type!=='moments'){memo.set(type,values);return values;}
       const byMoment=new Map();for(const c of ofType('event_corrections')){let l=byMoment.get(c.moment_id);if(!l)byMoment.set(c.moment_id,l=[]);l.push(c);}
       // Dates as ISO 8601, the shape the Menerio screens read (timestamps.mjs).
