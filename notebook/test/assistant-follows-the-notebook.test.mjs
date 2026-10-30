@@ -130,7 +130,7 @@ test('the starter manual says what the live run needed, and still fits under the
   // server/install-hermes.sh warns from 19,000 characters; past 20,000 Hermes drops the middle.
   assert.ok([...manual].length<19000,'AGENTS.md is '+[...manual].length+' characters');
   for(const said of [/will NOT fire\s+until the gateway is started/,/never from `procedures\.md`/,/`save_record` type `collections`/,/"How I like to be helped" and "My hard limits"/,
-    /`mc-goals file --kind/,/never write a card by hand/,/never make one of its\s+files yourself/,/`mc-work file --what "\.\.\." --done-when/,/--check "<a\s+line that exits 0/,
+    /`mc-goals file --kind/,/never write a card by hand/,/never make one yourself/,/`mc-work file --what "\.\.\." --done-when/,/--check "<a\s+line that exits 0/,
     // Live run of 9 October 2026: the assistant answered its own questions, filed a "(?)" item as a
     // fact, never reached the research-watch recipe, and switched the brief on as a plain prompt.
     /end your reply with the question and stop/,/Never answer it yourself/,/marked \(\?\) or "not\s+sure" is an open question for `inbox\/`, never a fact/,

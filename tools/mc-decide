@@ -10,7 +10,8 @@
 #
 # IT KNOWS NO GOAL AND NO ACTION, AND THAT IS THE DESIGN. Adding a goal means adding a file under
 # `goals/`. It never means another line in here and never another entry in your schedule. Same
-# rule as `due/`: one program, many small files.
+# rule as your deadlines: one program, many small records. It asks `mc-due today` for them and
+# never reads where they are kept.
 #
 # IT NEVER MESSAGES YOU AND IT NEVER POSTS. Anything that goes outside your machine is filed as
 # blocked until your own words are on it.

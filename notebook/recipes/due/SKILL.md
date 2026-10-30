@@ -9,7 +9,7 @@ description: Carry an obligation with an actual target or costly deadline, compl
 
 In normal chat or the notebook personal-command form, use `/due` followed by the command below. In the isolated native assistant terminal, use `mc-due`. The wrapper binds the current workspace; never override it with `--godspeed` or use a personal engine installation. `mc-due help` shows the actual installed command contract.
 
-This recipe retains the complete obligation workflow. Calendar creation, updates and deletion require the person's exact approval. Calendar bookkeeping is local and works with no account. Read `reference/due-room.md` for bands, targets, windows and the canonical file format.
+This recipe retains the complete obligation workflow. Calendar creation, updates and deletion require the person's exact approval. Calendar bookkeeping is local and works with no account. Read `reference/due-room.md` for bands, targets, windows and what a reminder's page holds.
 
 ## What this is
 
@@ -19,12 +19,12 @@ is done. The design target is **hundreds** of them (credentials, domains, taxes,
 insurance, timesheets, returns, health checks, promises to people), so nothing here may cost
 anything per obligation.
 
-**The rule that shapes every decision: one skill, one runner, N data files, one output gate.**
-Adding obligation 301 means adding a file under `due/`. If a change to this recipe would have to be
+**The rule that shapes every decision: one skill, one runner, N records, one output gate.**
+Adding obligation 301 means one more page under `Deadlines/`. If a change to this recipe would have to be
 repeated per obligation, it is the wrong change.
 
 **Read `reference/due-room.md` before your first run.** The three dates (start, target, deadline) and how
-each combination behaves, the strip, the bands, the three states, the file format and the gate are
+each combination behaves, the strip, the bands, the three states, the page a reminder is and the gate are
 all defined there and are not restated here.
 
 **Read `../watch/SKILL.md` too.** This recipe is its sibling and follows the same law: four
@@ -93,16 +93,17 @@ for the three things arithmetic cannot do: creating one, closing one on the pers
 mc-due done <slug> --evidence "<what shows it: a receipt, a link, or their own words>"
 ```
 
-That writes the closing as an event in `world/events/` (`closes: [due/<slug>#<first day>]` plus an
-`evidence:` line); the `due/` file keeps only the plan and is never edited to say done. A
-hand-written or life-capture event with `closes:` and `evidence:` closes it just the same, and
-`mc-due state` shows what closed each one.
+That writes the closing as a moment on the notebook's timeline (`Timeline/<day> Done: <title>`),
+which names the reminder, says which window it closes and carries an `evidence:` line; the
+reminder's page under `Deadlines/` keeps only the plan and is never edited to say done. A closing
+written by hand as a moment, with the reminder named and `evidence:` filled in, closes it just the
+same, and `mc-due state` shows what closed each one.
 
 **Never close an obligation on an inference.** "They mentioned the tax adviser" is not "they filed the
-return". If a self check cannot prove it, the person's word is the only thing that closes it, and the event
-must carry what shows it: an event without `evidence:` closes nothing. **Their word includes doing it
+return". If a self check cannot prove it, the person's word is the only thing that closes it, and the closing
+must carry what shows it: a closing without `evidence:` closes nothing. **Their word includes doing it
 with you:** when they approve, send or publish the thing in this session, that is their word; close it
-before the session ends and never ask them to say "close it" afterwards. The installed notebook and chat use the same obligation files and event evidence. At the end of work that actually completes one, run `mc-due done` with that evidence. Do not infer completion from discussion or a saved draft. The deadline reminders routine runs the self checks every morning; Settings > Routines shows whether it is switched on and when it last ran.
+before the session ends and never ask them to say "close it" afterwards. The installed notebook and chat read the same reminders and the same closing moments. At the end of work that actually completes one, run `mc-due done` with that evidence. Do not infer completion from discussion or a saved draft. The deadline reminders routine runs the self checks every morning; Settings > Routines shows whether it is switched on and when it last ran.
 
 ### `target`: their answer after a target passed
 
@@ -132,7 +133,7 @@ in the same session (below).
 mc-due drop <slug> --yes --evidence "<their words>"
 ```
 
-A drop is an event too (`drops: [due/<slug>]`). Nothing is deleted: the plan stays as history.
+A drop is a moment too, "Dropped" instead of "Done". Nothing is deleted: the page stays as history.
 
 **`dropped` only ever comes from the person.** Never propose dropping one to tidy up a red week, and
 never drop one because it has been red for a while. A red obligation that has been red for weeks is
@@ -223,9 +224,9 @@ layer was built to replace.
 
 ## What reaches the person, and what does not
 
-The installed notebook deadline-reminder routine is the delivery gate. It reads native `due/` plans and structured obligations together, creates at most three notices in a batch, records delivery evidence and suppresses unchanged repeats. Enable it through notebook setup or routine controls; use one scheduler owner. The selected morning brief reads the resulting obligation evidence. Never install another reminder per obligation.
+The installed notebook deadline-reminder routine is the delivery gate. It reads the reminders in the notebook and structured obligations together, creates at most three notices in a batch, records delivery evidence and suppresses unchanged repeats. Enable it through notebook setup or routine controls; use one scheduler owner. The selected morning brief reads the resulting obligation evidence. Never install another reminder per obligation.
 
-Native `mc-due today` gives at most three currently eligible obligations. `mc-due check` runs self-checks and preserves closure events. `mc-due state` shows actual closure evidence. `mc-due marker` only maintains local bookkeeping; it cannot reach a calendar. A configured delivery connector and exact authorization are required for external messages. A target is not a costly deadline, and a missed deadline remains open. Do not send a separate message from this recipe.
+Native `mc-due today` gives at most three currently eligible obligations. `mc-due check` runs self-checks and keeps every closing moment. `mc-due state` shows actual closure evidence. `mc-due marker` only maintains local bookkeeping; it cannot reach a calendar. A configured delivery connector and exact authorization are required for external messages. A target is not a costly deadline, and a missed deadline remains open. Do not send a separate message from this recipe.
 
 The quiet-spacing rules come from the native band arithmetic, not a model's opinion. Green is normally quiet. Do not claim cross-channel caps passed until an actual paired delivery test demonstrates them.
 
@@ -246,7 +247,7 @@ The quiet-spacing rules come from the native band arithmetic, not a model's opin
 - **Never invent a date, a window or a consequence.** Ask them for the one date you are missing.
 - **Never close an obligation without either a self check that proved it or the person's word.**
 - **Never drop one.** That is theirs to decide, and only ever in their own words.
-- **Never write a state word into a `due/` file.** Done and dropped are events in `world/events/`.
+- **Never write a state word onto a reminder's page.** Done and dropped are moments on the timeline.
 - **Never let a calendar become the mechanism.** Display and capture, never the brain.
 - **Never write a second entry for one obligation**, and never one on the last day.
 - **Never add a per-obligation tuning knob.** If a band feels wrong for one thing, the strip is

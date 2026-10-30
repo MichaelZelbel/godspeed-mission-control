@@ -14,6 +14,13 @@ A file with no origin line at all is treated as origin: godspeed, because the tw
 files that existed before this script have no origin line and losing one of them
 is worse than keeping a stale copy.
 
+Every moment it writes is a life event and nothing else: render_event below writes
+the day, who was there and where it came from, and never a line that closes one of
+the owner's deadlines. Since 30 October 2026 a deadline is a page in the notebook and
+closing one is a moment on the notebook's timeline, written by `godspeed due done`
+with the evidence; this script neither writes nor reads one. Its own events stay
+files in the world folder.
+
 Usage:
     python3 scripts/world_pull.py                      # dry run, prints the plan
     python3 scripts/world_pull.py --apply              # write the files

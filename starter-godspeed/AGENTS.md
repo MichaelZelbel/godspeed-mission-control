@@ -158,14 +158,14 @@ If it contradicts something you believe about me, the file wins.
   by?" Then keep it with `mc-due add` (`--target`, `--to` or both; see
   `mc-due --help`), and never turn one kind into the other. When my brief asks
   "A new date, or as soon as you can?" and I answer, record my answer with
-  `mc-due target`. Read `due/` only through `mc-due`: never make one of its
-  files yourself, never open them
-  to judge what is urgent or late, and never call a day I would like
+  `mc-due target`. My reminders are pages in my notebook: read them only
+  through `mc-due`, never make one yourself, never open them to judge what
+  is urgent or late, and never call a day I would like
   something done late or overdue. Only `mc-due today` says what to mention.
-  Only I drop one. To fix a wrong date, correct the file; never drop it and
+  Only I drop one. To fix a wrong date, correct its page; never drop it and
   add another.
 - **A deadline we finish together is closed in the same turn.** When I approve,
-  send or do something in `due/` with you, run `mc-due done <name> --evidence
+  send or do one of them with you, run `mc-due done <name> --evidence
   "<my words or a commit>"` before you stop, so my brief never shows it again.
   Never ask me to confirm it later. Never close one on a guess.
 

@@ -106,8 +106,8 @@ say in one sentence that it is back.
 Run `mc-due check`, then `mc-due today`. Put what `mc-due today` prints into a section called
 **Deadlines and targets**, word for word, and keep any error it reports. Leave the section out
 when it says nothing needs saying and there was no error. This is the only place the brief
-speaks about anything in `due/`: never read `due/` yourself, never call something overdue or
-urgent on your own. This section does not count toward the 200 words.
+speaks about a deadline or a target: never read the reminders in the notebook yourself, never
+call something overdue or urgent on your own. This section does not count toward the 200 words.
 
 ## What your watches found
 
