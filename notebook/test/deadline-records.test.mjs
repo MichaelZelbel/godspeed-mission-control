@@ -9,6 +9,7 @@
 // edit by hand, a closing is an append-only moment that names the reminder by uid, and the
 // identities can be derived, so two machines never make one reminder twice.
 import test from 'node:test';
+import { createRequire } from 'node:module';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -233,7 +234,13 @@ test('nothing a due/ file holds is lost: every line of one has a field of its ow
     '--repeats', 'yearly', '--link', everything.link, '--self-check', 'file-newer',
     '--self-check-arg', 'secrets/expires.txt', '--addon', 'documents', '--addon-key', 'letter-2026-08-29#2']);
   dueCommand(store, ['marker', 'car-service', '--set', 'google:abcdef1234567890']);
-  const file = fs.readFileSync(path.join(store.root, 'due', 'car-service.md'), 'utf8');
+  // The page written back out as the plain file it replaced (tools/due-files.js, writeFilesFrom):
+  // if a line of that format had no field of its own on the page, it could not come back.
+  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'godspeed-deadline-lines-'));
+  t.after(() => fs.rmSync(scratch, { recursive: true, force: true }));
+  createRequire(import.meta.url)('../../tools/due-files.js').createDueFiles({ root: scratch })
+    .writeFilesFrom({ deadlines: store.list('deadlines').filter(r => r.native_slug), closings: [] });
+  const file = fs.readFileSync(path.join(scratch, 'due', 'car-service.md'), 'utf8');
 
   // The head lines, read the way tools/due.js reads them (parseFile): the window lines and the
   // log lines are taken first and never reach the head.

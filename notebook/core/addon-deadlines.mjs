@@ -1,7 +1,6 @@
 import fs from 'node:fs';import path from 'node:path';import {createRequire} from 'node:module';import {spawnSync} from 'node:child_process';import {fileURLToPath} from 'node:url';
 const {createDueCommands}=createRequire(import.meta.url)('../../tools/due.js');
 const script=fileURLToPath(new URL('../../tools/due.js',import.meta.url));
-import {copyOldReminders} from './due-copy.mjs';
 
 // DEADLINES AN ADD-ON KEEPS (discussion #27, 23 October 2026). A documents add-on reads "pay by
 // 20 November" in a letter; this makes it a Godspeed deadline. It is an ordinary file in due/,
@@ -24,21 +23,22 @@ const line=(value,label,max)=>{const v=String(value??'').trim();if(!v)fail(label
 const slugOf=title=>String(title).toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g,'').replace(/ß/g,'ss').replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,50).replace(/-+$/,'')||'deadline';
 
 function rows(store,addon){
- if(!fs.existsSync(path.join(store.root,'due')))return [];
- return createDueCommands({root:store.root,commandArgs:[],date:dayOf(store),copy:false}).stateRows().filter(r=>r.addon?.name===addon).map(r=>({
+ // The store this door already has: a reminder is a page in the notebook now (#90), so there is
+ // nothing to look for in due/ first.
+ return createDueCommands({root:store.root,commandArgs:[],date:dayOf(store),store,copy:false}).stateRows().filter(r=>r.addon?.name===addon).map(r=>({
   key:r.addon.key,slug:r.slug,title:r.title,due:r.addon.due||null,start:r.addon.from||null,
   state:r.state,touched:r.addon.touched,closed_on:r.closedOn||null,link:r.addon.link||null}));
 }
 const find=(store,addon,key)=>rows(store,addon).find(d=>d.key===key)||null;
-// tools/due.js as its own process under the workspace lock, as every other deadline change is made.
-// The deadline it writes is copied into the notebook's records inside the same lock, which is why
-// the child is told not to do it itself (native-due.mjs, due-copy.mjs).
+// tools/due.js as its own process, as every other deadline change is made. It writes the
+// notebook's own records now, so it opens the workspace and takes the workspace lock itself; the
+// lock is one writer at a time and is never re-entered, so nothing may hold it here while the
+// child runs (native-due.mjs, dueCommand).
 function due(store,args){
- return store.withLock(()=>{
-  const run=spawnSync(process.execPath,[script,...args,'--godspeed',store.root],{cwd:store.root,encoding:'utf8',timeout:15000,windowsHide:true,shell:false,env:{...process.env,GODSPEED_TODAY:dayOf(store),GODSPEED_DUE_COPY:'off'}});
-  try{copyOldReminders(store,{day:dayOf(store)});}catch(error){if(process.env.GODSPEED_DUE_COPY==='say')console.error('due-copy: not this time: '+error.message);}
-  return {status:run.status,out:String(run.stdout||run.stderr||'').trim()};
- });
+ const run=spawnSync(process.execPath,[script,...args,'--godspeed',store.root],{cwd:store.root,encoding:'utf8',timeout:15000,windowsHide:true,shell:false,env:{...process.env,GODSPEED_TODAY:dayOf(store)}});
+ // What the child wrote, for the answer this door is about to read back.
+ store.scan(true);
+ return {status:run.status,out:String(run.stdout||run.stderr||'').trim()};
 }
 
 export function addonDeadlines(store,input={}){

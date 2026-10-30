@@ -36,7 +36,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { Store, hash, readableSlug } from './records/store.mjs';
-import { deadlineUid, closingUid } from './deadline-records.mjs';
+import { deadlineUid, closingUid, closingMoment } from './deadline-records.mjs';
 
 const require_ = createRequire(import.meta.url);
 const { createDueFiles } = require_('../../tools/due-files.js');
@@ -91,10 +91,23 @@ function marks(root) {
   return hash(out.join('\n'));
 }
 const markFile = root => path.join(root, '.godspeed', 'due-copy.json');
-function marked(root) { try { return JSON.parse(fs.readFileSync(markFile(root), 'utf8')).files || ''; } catch { return ''; } }
-function mark(root, value) {
-  try { fs.mkdirSync(path.dirname(markFile(root)), { recursive: true }); fs.writeFileSync(markFile(root), JSON.stringify({ files: value }) + '\n'); } catch { /* a copy that cannot leave a note just looks again next time */ }
+// This computer's own note beside the marks: the names of the old files as they were last looked
+// at, what the copy saw in them that closes nothing (`unproven`, which mc-due check names), and
+// when the retirement check last agreed (due-retire.mjs). It never syncs, and losing it costs one
+// full pass and one more check.
+export function noteOf(root) { try { return JSON.parse(fs.readFileSync(markFile(root), 'utf8')) || {}; } catch { return {}; } }
+const marked = root => noteOf(root).files || '';
+export function writeNote(root, patch) {
+  const note = { ...noteOf(root), ...patch };
+  try { fs.mkdirSync(path.dirname(markFile(root)), { recursive: true }); fs.writeFileSync(markFile(root), JSON.stringify(note) + '\n'); }
+  catch { /* a copy that cannot leave a note just looks again next time */ }
+  return note;
 }
+// A closing nobody could place yet (`waiting`: it names a reminder with no page and no file) leaves
+// the marks unwritten, so the next run looks at these files again instead of waiting for something
+// else in the folder to change.
+const mark = (root, value, report) => writeNote(root,
+  { files: report && report.waiting.length ? '' : value, unproven: report ? report.unproven : [] });
 
 // ---------------------------------------------------------------- a closing, as a reader sees it
 //
@@ -163,7 +176,7 @@ export const writable = store => !!store && !Object.hasOwn(store, 'withLock');
 function copyUnderLock(store, day) {
   const root = store.root;
   const files = createDueFiles({ root });
-  const report = { copied: [], updated: [], closed: [], corrected: [], reviews: [], needsALook: [], waiting: [], unchanged: true };
+  const report = { copied: [], updated: [], closed: [], corrected: [], reviews: [], needsALook: [], waiting: [], unproven: [], unchanged: true };
   const book = new Map(store.list(COPY_TYPE).map(record => [record.file, record]));
   const pages = new Map(store.list('deadlines').map(record => [record.uid, record]));
   const moments = new Set(store.list('moments', { removed: true }).map(record => record.uid));
@@ -301,7 +314,21 @@ function copyUnderLock(store, day) {
         if (!SLUG.test(ref.slug)) { missing.push(ref.slug); continue; }
         const uid = closingUid({ slug: ref.slug, window: ref.window, kind, from: file });
         says.add(uid);
-        if (!moments.has(uid)) missing.push(ref.slug);
+        if (moments.has(uid)) continue;
+        // A CLOSING WRITTEN THE OLD WAY AFTER THE REMINDER'S OWN FILE WAS RETIRED (30 October
+        // 2026). The reminder is a page here and its file has gone to archives/ (due-retire.mjs),
+        // so there is no file to read it out of, and without this the closing was waited for for
+        // ever and the reminder stayed open: exactly the fault of 19 October that this is all for.
+        // The page it names is all that is needed to make the moment.
+        const page = pages.get(deadlineUid(ref.slug));
+        if (!page) { missing.push(ref.slug); continue; }
+        moments.add(uid);
+        const closing = { ...closingMoment({ deadline: page, kind, day: event.date, window: ref.window,
+          evidence: event.evidence, source: event.source || 'world/events', from: file }),
+          created_at: event.date + 'T00:00:00Z', updated_at: event.date + 'T00:00:00Z' };
+        wantedClosings.set(uid, closing);
+        prepare('moments', closing, null);
+        report.closed.push(closing.title);
       }
     }
     if (missing.length) { report.waiting.push(file); continue; }
@@ -344,12 +371,16 @@ function copyUnderLock(store, day) {
     if (old && bookDigest(old) === bookDigest(record)) continue;
     prepare(COPY_TYPE, record, old);
   }
-  if (!write.length) { mark(root, marks(root)); return report; }
+  // An old event that says it closes something without saying what shows it closes nothing, and
+  // mc-due check goes on naming it: nothing in the notebook can be in that state (a closing moment
+  // without evidence is refused), so it is reported from here, where those files are read.
+  report.unproven = [...files.unproven];
+  if (!write.length) { mark(root, marks(root), report); return report; }
   report.unchanged = false;
   store.commit(write);
   const gone = forget.filter(key => store.get('record_history', key.slice('record_history/'.length)));
   if (gone.length) store.commit([], { removeKeys: gone });
-  mark(root, marks(root));
+  mark(root, marks(root), report);
   return report;
 }
 
@@ -359,7 +390,7 @@ function copyUnderLock(store, day) {
 // is left for the next run: the copy is idempotent, so nothing is lost by waiting.
 export function copyIfFilesChanged(root, { day = null, store = null, timeoutMs = 30000 } = {}) {
   if (!fs.existsSync(path.join(root, 'notebook')) && !fs.existsSync(path.join(root, '.godspeed'))) return { skipped: 'no notebook' };
-  if (marks(root) === marked(root)) return { skipped: 'nothing changed' };
+  if (marks(root) === marked(root)) return { skipped: 'nothing changed', unproven: noteOf(root).unproven || [] };
   return copyOldReminders(store || new Store(root), { day, timeoutMs });
 }
 
@@ -367,40 +398,32 @@ export function copyIfFilesChanged(root, { day = null, store = null, timeoutMs =
 //
 // Whether every reminder says the same thing through the records as tools/due.js says from the
 // files, on the same day: the same state, the same windows, the same `today` sentence, and what
-// closed it. The records are written back as old files into a folder of their own and the SAME
-// program is run over both, so a difference can only come from the copy. Neither folder is
-// changed: stateRows() is read without rolling anything.
+// closed it. ONE PROGRAM, TWO STORAGES: tools/due.js is run with the old files as its storage and
+// again with the notebook's records as its storage, over the same mission control on the same day,
+// so a difference can only come from the copy and never from the program. Nothing is changed by
+// asking: stateRows() is read without rolling anything, and ticket 02's copy is not run again.
 const COMPARED = ['title', 'state', 'band', 'firstDay', 'lastDay', 'targetDay', 'sentence', 'attention',
   'closedOn', 'closedBy', 'doneWhen', 'selfCheck', 'problem', 'addon'];
 export function sameThroughRecords(store, { day = null } = {}) {
   const when = day || dayOf(store);
   const { createDueCommands } = require_('../../tools/due.js');
-  const rows = root => {
+  // `files: true` is the old storage, the one every version before this read; without it the
+  // records are the storage. The store is handed over so that the records are read inside the lock
+  // this check already runs under, which is never re-entered.
+  const rows = how => {
     const out = new Map();
-    for (const row of createDueCommands({ root, commandArgs: [], date: when, copy: false }).stateRows(when)) out.set(row.slug, row);
+    for (const row of createDueCommands({ root: store.root, commandArgs: [], date: when, copy: false, ...how }).stateRows(when)) out.set(row.slug, row);
     return out;
   };
-  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'godspeed-due-check-'));
-  try {
-    fs.mkdirSync(path.join(scratch, 'due'), { recursive: true });
-    fs.mkdirSync(path.join(scratch, 'world', 'events'), { recursive: true });
-    fs.writeFileSync(path.join(scratch, 'AGENTS.md'), '');
-    const deadlines = store.list('deadlines').filter(record => record.native_slug);
-    // The closings as every reader of the notebook sees them: their corrections applied, and the
-    // ones a correction took back left out (liveMoments above).
-    const closings = liveMoments(store).filter(record => record.category === 'obligation' && record.obligation_kind);
-    createDueFiles({ root: scratch }).writeFilesFrom({ deadlines, closings });
-    const mine = rows(store.root), theirs = rows(scratch);
+  {
+    const mine = rows({ files: true }), theirs = rows({ store });
     const differences = [], needsALook = [];
     for (const [slug, row] of mine) {
+      // A file that does not read has no record on purpose, and says so every day in the list and
+      // the brief, through both storages. It is named here, and it is never a difference.
+      if (row.state === 'needs-a-look') { needsALook.push(slug); continue; }
       const other = theirs.get(slug);
-      if (!other) {
-        // A file that does not read has no record on purpose, and says so every day in the list
-        // and the brief. It is named here, and it is not a difference.
-        if (row.state === 'needs-a-look') { needsALook.push(slug); continue; }
-        differences.push(slug + ': the files have it, the records do not');
-        continue;
-      }
+      if (!other) { differences.push(slug + ': the files have it, the records do not'); continue; }
       for (const field of COMPARED) {
         // A closing that was only ever the word `done` on a window line names no event file in
         // the files ("legacy"), and names the event the records made of it in the records.
@@ -409,9 +432,12 @@ export function sameThroughRecords(store, { day = null } = {}) {
         if (canonical(a) !== canonical(b)) differences.push(slug + ': ' + field + ' is ' + canonical(a) + ' from the files and ' + canonical(b) + ' through the records');
       }
     }
-    for (const slug of theirs.keys()) if (!mine.has(slug)) differences.push(slug + ': the records have it, the files do not');
-    return { same: differences.length === 0, differences, needsALook, day: when, reminders: mine.size };
-  } finally {
-    fs.rmSync(scratch, { recursive: true, force: true });
+    // A reminder the records hold and the files do not is NOT a difference. It is either one the
+    // owner made after their files were retired (due-retire.mjs), which is the normal case from
+    // 30 October 2026 on, or one whose file has already gone to archives/. What this check is for
+    // is that nothing was lost on the way in, so it is asked of every reminder the files still
+    // hold, and those are named here so a caller can see them.
+    const extra = [...theirs.keys()].filter(slug => !mine.has(slug));
+    return { same: differences.length === 0, differences, needsALook, extra, day: when, reminders: mine.size };
   }
 }

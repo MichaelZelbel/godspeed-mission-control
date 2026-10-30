@@ -35,131 +35,8 @@ for (const key of Object.keys(process.env)) if (/^(GODSPEED_|HERMES_)/.test(key)
 const DAY = '2026-10-30';
 const git = (cwd, ...args) => execFileSync('git', args, { cwd, encoding: 'utf8', windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] }).trim();
 
-// ---------------------------------------------------------------- the seeded mission control
-// One of every kind the ticket names. The dates are fixed around 30 October 2026, so what every
-// reminder says is the same on every run of these tests.
-const SEED = {
-  'deadline-only': `TITLE: Service the boiler
-DONE-WHEN: The boiler has been serviced.
-COST-IF-MISSED: The warranty on it ends.
-SELF-CHECK: none
-SELF-CHECK-ARG:
-REPEATS: no
-LINK:
-SOURCE: me, 2026-09-01
-
-## Windows
-STRIP: 2026-10-01 2026-12-31
-
-## Log
-- 2026-09-01 created, window 2026-10-01 to 2026-12-31
-`,
-  'present': `TITLE: Buy Priya a present
-DONE-WHEN: The present is bought.
-COST-IF-MISSED:
-SELF-CHECK: none
-REPEATS: no
-SOURCE: me, 2026-09-20
-
-## Windows
-STRIP: 2026-09-25 - target 2026-10-20
-
-## Log
-- 2026-09-20 created, window 2026-09-25, aiming for 2026-10-20
-- 2026-10-20 SAID brief
-`,
-  'tax-return': `TITLE: The tax return
-DONE-WHEN: The return is filed.
-COST-IF-MISSED: A fine of 250 euro.
-SELF-CHECK: none
-REPEATS: no
-LINK: https://example.invalid/file-it
-SOURCE: the letter, 2026-09-10
-
-## Windows
-STRIP: 2026-10-01 2027-02-28 target 2027-01-31
-
-## Log
-- 2026-09-10 created, window 2026-10-01 to 2027-02-28, aiming for 2027-01-31
-`,
-  'rates': `TITLE: Pay the quarterly rates
-DONE-WHEN: The payment shows on the statement.
-COST-IF-MISSED: A late fee of 40 euro.
-SELF-CHECK: none
-REPEATS: quarterly
-SOURCE: me, 2026-01-05
-
-## Windows
-STRIP: 2026-01-05 2026-03-31 target 2026-03-15
-STRIP: 2026-04-01 2026-06-30 target 2026-06-15 moved 2026-06-22
-STRIP: 2026-07-01 2026-09-30 target 2026-09-15 asked
-
-## Log
-- 2026-01-05 created, window 2026-01-05 to 2026-03-31, aiming for 2026-03-15
-`,
-  'old-plan': `TITLE: Move the shed
-DONE-WHEN: The shed stands behind the house.
-COST-IF-MISSED: Nothing now.
-SELF-CHECK: none
-REPEATS: no
-SOURCE: me, 2026-08-01
-
-## Windows
-STRIP: 2026-08-01 2026-11-30
-
-## Log
-- 2026-08-01 created, window 2026-08-01 to 2026-11-30
-`,
-  // A file nothing can read: lines of somebody's own invention and no window at all.
-  'broken': `KIND: a birthday present
-TARGET-DATE: 2026-12-01
-NOTES: for my sister
-`,
-  'letter-pay': `TITLE: Pay the invented water bill
-DONE-WHEN: Paid.
-COST-IF-MISSED: A reminder fee.
-SELF-CHECK: none
-REPEATS: no
-LINK: http://127.0.0.1:8000/documents/7/details
-SOURCE: an-addon, 2026-10-02
-ADDON: an-addon
-ADDON-KEY: a1b2c3#1
-ADDON-STATE: 4d6e8f0a1b2c3d4e
-CALENDAR-MARKER: made-up-calendar:7
-
-## Windows
-STRIP: 2026-10-02 2026-11-20
-
-## Log
-- 2026-10-02 created by an-addon, window 2026-10-02 to 2026-11-20
-`,
-};
-const EVENTS = {
-  '2026-03-12-rates-closed.md': `---
-date: 2026-03-12
-participants: [me]
-closes: [due/rates#2026-01-05]
-evidence: the statement of 12 March shows the payment
-source: me, in a session
-written_by: mc-due
-origin: mission control
----
-
-Pay the quarterly rates: finished (window 2026-01-05 to 2026-03-31, aiming for 2026-03-15).
-`,
-  '2026-10-05-old-plan-dropped.md': `---
-date: 2026-10-05
-participants: [me]
-drops: [due/old-plan]
-evidence: the shed is staying where it is
-source: me, in a session
-written_by: mc-due
-origin: mission control
----
-
-Move the shed: called off.
-`,
-};
+// The seeded mission control, in one place for every test and for ticket 03's own checks.
+import { SEED, EVENTS, write } from './due-seed.mjs';
 
 function seeded(t, { device = 'pc' } = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'godspeed-due-copy-'));
@@ -168,18 +45,6 @@ function seeded(t, { device = 'pc' } = {}) {
   const store = new Store(root, { device });
   store.save('settings', { id: 'installation', owner: device, timezone: 'UTC' });
   return store;
-}
-function write(root) {
-  fs.mkdirSync(path.join(root, 'due'), { recursive: true });
-  fs.mkdirSync(path.join(root, 'world', 'events'), { recursive: true });
-  fs.mkdirSync(path.join(root, 'secrets'), { recursive: true });
-  fs.writeFileSync(path.join(root, 'AGENTS.md'), '');
-  for (const [slug, text] of Object.entries(SEED)) fs.writeFileSync(path.join(root, 'due', slug + '.md'), text);
-  for (const [name, text] of Object.entries(EVENTS)) fs.writeFileSync(path.join(root, 'world', 'events', name), text);
-  // A key that runs out: tools/due.js makes a reminder of it (adoptKeys), and that reminder is an
-  // ordinary file in due/ which the copy takes in like any other.
-  fs.writeFileSync(path.join(root, 'secrets', 'expires.txt'),
-    'made-up-api-key 2026-12-20 https://example.invalid/keys # The key that signs the invented receipts.\n');
 }
 const pages = store => filesIn(path.join(store.root, 'notebook', 'Deadlines'));
 const timeline = store => filesIn(path.join(store.root, 'notebook', 'Timeline'));
@@ -271,13 +136,22 @@ test('per old file, the hash that was copied, and a second run that changes noth
   const store = seeded(t);
   dueCommand(store, ['state']);
   const book = store.list(COPY_TYPE);
-  assert.equal(book.length, 9, 'seven reminders that read, plus the two closing events: ' + book.map(r => r.file).join(', '));
+  // Six reminders that read, plus the two closing events. The seventh reminder is the one made out
+  // of secrets/expires.txt, which is a page straight away now and never a file to copy.
+  assert.equal(book.length, 8, 'one note per old file: ' + book.map(r => r.file).join(', '));
   const rates = book.find(r => r.file === 'due/rates.md');
-  assert.equal(rates.file_hash, hash(fs.readFileSync(path.join(store.root, 'due', 'rates.md'), 'utf8')));
+  assert.equal(rates.file_hash, hash(SEED.rates), 'the hash of the file it took in, which is now in archives/');
   assert.equal(rates.record_uid, deadlineUid('rates'));
   assert.equal(rates.kind, 'reminder');
   assert.equal(book.find(r => r.file === 'world/events/2026-10-05-old-plan-dropped.md').kind, 'closing');
   assert.ok(!book.some(r => r.file === 'due/broken.md'), 'a file that does not read is not remembered as copied');
+  assert.equal(fs.readFileSync(path.join(store.root, 'due', 'broken.md'), 'utf8'), SEED.broken,
+    'and it stays where it is, to be said in the reminders every day until it is fixed');
+  // And every file that WAS taken in is out of the owner's way, byte for byte as it was
+  // (notebook/core/due-retire.mjs). Nothing is deleted, ever.
+  const archive = path.join(store.root, 'archives', DAY + '-due-moved-to-the-notebook');
+  assert.equal(fs.readFileSync(path.join(archive, 'due', 'rates.md'), 'utf8'), SEED.rates);
+  assert.equal(fs.existsSync(path.join(store.root, 'due', 'rates.md')), false, 'and is not in due/ any more');
   assert.equal(store.file(rates).split(path.sep).slice(-3).join('/'), '_system/due_copies/' + rates.id + '.json',
     'it is bookkeeping, in the system folder, where it syncs with everything else');
 
@@ -383,9 +257,9 @@ test('when the file and the page both changed, the page is kept and both are one
 
   // The owner changes the page in the notebook...
   store.save('deadlines', { id: page.id, title: 'Buy Priya a birthday present' });
-  // ...and something changes the file as well.
-  const file = path.join(store.root, 'due', 'present.md');
-  fs.writeFileSync(file, fs.readFileSync(file, 'utf8').replace('TITLE: Buy Priya a present', 'TITLE: Buy Priya a book'));
+  // ...and a computer still running an older version writes the file again, the old way.
+  fs.writeFileSync(path.join(store.root, 'due', 'present.md'),
+    SEED.present.replace('TITLE: Buy Priya a present', 'TITLE: Buy Priya a book'));
 
   const report = copyOldReminders(store, { day: DAY });
   assert.equal(report.reviews.length, 1, 'one review item');
@@ -412,6 +286,8 @@ test('a page somebody deleted is written again, and a file that does not read is
   dueCommand(store, ['state']);
   const page = store.list('deadlines').find(r => r.native_slug === 'rates');
   fs.rmSync(store.file(page));
+  // And the file comes back, the way a computer still on an older version writes it.
+  fs.writeFileSync(path.join(store.root, 'due', 'rates.md'), SEED.rates);
   const fresh = new Store(store.root, { device: 'pc' });
   assert.equal(fresh.list('deadlines').filter(r => r.native_slug === 'rates').length, 0, 'the page is gone');
 
@@ -513,7 +389,7 @@ test('two machines copy the same folder and end, after both have synced, with on
     const uids = closings(store).map(m => m.uid);
     assert.deepEqual(uids.sort(), [...new Set(uids)].sort(), one.name + ': one moment per closing');
     assert.equal(uids.length, 2);
-    assert.equal(store.list(COPY_TYPE).length, 9, one.name + ': one note per old file');
+    assert.equal(store.list(COPY_TYPE).length, 8, one.name + ': one note per old file');
     assert.deepEqual(store.problems, [], one.name + ': and nothing is a problem');
     assert.deepEqual(store.list('review_queue'), [], one.name + ': and nothing for the owner to settle');
     assert.deepEqual(one.sync.pendingConflicts(), [], one.name + ': no saved conflict');
@@ -685,8 +561,13 @@ test('tools/due.js copied into the command folder finds the notebook beside the 
   const commit = '0'.repeat(39) + '1';
   const version = path.join(root, '.godspeed', 'integrated-runtime', 'versions', commit);
   fs.mkdirSync(path.join(version, 'notebook', 'core'), { recursive: true });
-  const real = new URL('../core/due-copy.mjs', import.meta.url).href;
-  fs.writeFileSync(path.join(version, 'notebook', 'core', 'due-copy.mjs'), 'export * from ' + JSON.stringify(real) + ';\n');
+  for (const name of ['due-copy.mjs', 'due-records.mjs', 'due-retire.mjs']) {
+    const real = new URL('../core/' + name, import.meta.url).href;
+    fs.writeFileSync(path.join(version, 'notebook', 'core', name), 'export * from ' + JSON.stringify(real) + ';\n');
+  }
+  fs.mkdirSync(path.join(version, 'notebook', 'core', 'records'), { recursive: true });
+  const store_ = new URL('../core/records/store.mjs', import.meta.url).href;
+  fs.writeFileSync(path.join(version, 'notebook', 'core', 'records', 'store.mjs'), 'export * from ' + JSON.stringify(store_) + ';\n');
   fs.writeFileSync(path.join(root, '.godspeed', 'integrated-runtime', 'start.mjs'),
     'const child=spawn("node",[' + JSON.stringify(path.join(version, 'notebook', 'scripts', 'supervise.mjs')) + ']);\n');
 
@@ -724,10 +605,11 @@ test('the obligations list Settings reads copies them too, and a read-only copy 
   assert.equal(query.withSnapshot(() => query.rows('deadlines')).length, 1);
   assert.equal(store.get('deadlines', page(store, 'boiler').id)._hash, before, 'nothing was written again');
 
-  // The read-only copy a backup or a restore looks at is never written through.
+  // The read-only copy a backup or a restore looks at is never written through: it answers from the
+  // records it holds and takes nothing in, so a file written the old way waits for a real read.
   fs.writeFileSync(path.join(root, 'due', 'later.md'), RATES.replace('Pay the quarterly rates', 'Pay the rates later'));
   const reading = Store.inspect(root);
-  assert.equal(dueRows(reading).length, 2, 'it still answers from the files');
+  assert.equal(dueRows(reading).length, 1, 'it answers from the records it holds');
   assert.equal(new Store(root, { device: 'pc' }).list('deadlines').length, 1, 'and copied nothing');
 });
 

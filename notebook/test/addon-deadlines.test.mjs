@@ -6,21 +6,24 @@ for(const key of Object.keys(process.env))if(/^(GODSPEED_|HERMES_)/.test(key))de
 
 // AN ADD-ON MAKES DEADLINES THAT GODSPEED REMINDS ABOUT (discussion #27, 23 October 2026). A
 // documents add-on reads "pay by 20 November" in a letter and makes a deadline through the
-// notebook's local door. It is an ordinary file in due/, so the reminders, the morning brief and the
-// deadline list read it. The add-on's key makes it once; once the person changed or closed it, the
-// add-on can no longer change it. Everything here is made up.
+// notebook's local door. It is an ordinary reminder, a page under notebook/Deadlines/ like every
+// other since 30 October 2026 (#90), so the reminders, the morning brief and the deadline list read
+// it. The add-on's key makes it once; once the person changed or closed it, the add-on can no longer
+// change it. Everything here is made up.
 const fixture=()=>{const store=new Store(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-addon-due-'))),query=new QueryService(store);store.save('settings',{id:'installation',timezone:'UTC'});return {store,query,domains:new Domains(query)};};
 const dayFrom=n=>new Date(Date.parse(new Date().toISOString().slice(0,10)+'T00:00:00Z')+n*86400000).toISOString().slice(0,10);
 const bill=(over={})=>({addon:'an-addon',action:'create',key:'a1b2c3#1',title:'Pay the invented water bill',due:dayFrom(2),done_when:'Paid',cost:'A reminder fee',link:'http://127.0.0.1:8000/documents/7/details',...over});
+// The page of one reminder, which is what a person opens and edits.
+const pageOf=(store,slug)=>store.list('deadlines').find(r=>r.native_slug===slug);
+const pageFile=(store,slug)=>store.file(pageOf(store,slug));
 
-test('an add-on deadline is a due file the reminders read',()=>{
+test('an add-on deadline is a page the reminders read',()=>{
  const {store,query}=fixture();
  const made=addonDeadlines(store,bill());
  assert.equal(made.created,true);
  assert.equal(made.deadline.key,'a1b2c3#1');assert.equal(made.deadline.due,dayFrom(2));assert.equal(made.deadline.state,'open');assert.equal(made.deadline.touched,false);
  assert.equal(made.deadline.link,'http://127.0.0.1:8000/documents/7/details');
- const file=path.join(store.root,'due',made.deadline.slug+'.md');
- assert.match(fs.readFileSync(file,'utf8'),/^ADDON: an-addon$/m);
+ assert.match(fs.readFileSync(pageFile(store,made.deadline.slug),'utf8'),/^addon: an-addon$/m);
  const row=query.rows('deadlines').find(d=>d.native_slug===made.deadline.slug);
  assert.equal(row.title,'Pay the invented water bill');assert.equal(row.due_at,dayFrom(2)+'T23:59:59Z');
  const said=remind({},{store,query});
@@ -32,7 +35,7 @@ test('create twice with one key makes one deadline',()=>{
  const first=addonDeadlines(store,bill());
  const again=addonDeadlines(store,bill({title:'Something else',due:dayFrom(9)}));
  assert.equal(again.created,false);assert.equal(again.deadline.slug,first.deadline.slug);assert.equal(again.deadline.due,dayFrom(2));
- assert.equal(fs.readdirSync(path.join(store.root,'due')).filter(f=>f.endsWith('.md')).length,1);
+ assert.equal(store.list('deadlines').filter(r=>r.native_slug).length,1);
  // Two requests of one letter with the same words get two deadlines under two names.
  const second=addonDeadlines(store,bill({key:'a1b2c3#2'}));
  assert.equal(second.created,true);assert.notEqual(second.deadline.slug,first.deadline.slug);
@@ -62,7 +65,7 @@ test('update moves an untouched one, and renames it',()=>{
 test('an add-on deadline the person changed or closed is never changed by the add-on',async()=>{
  const {store,domains}=fixture(),run=args=>domains.invoke('personal-operation',{type:'due-command',args});
  const cases={
-  'by-hand':d=>{const f=path.join(store.root,'due',d.slug+'.md');fs.writeFileSync(f,fs.readFileSync(f,'utf8').replace('STRIP: '+d.start+' '+d.due,'STRIP: '+d.start+' '+dayFrom(12)));},
+  'by-hand':d=>{const f=pageFile(store,d.slug);fs.writeFileSync(f,fs.readFileSync(f,'utf8').replace('deadline: '+d.due,'deadline: '+dayFrom(12)));},
   'closed':d=>run(['done',d.slug,'--evidence','paid it']),
   'dropped':d=>run(['drop',d.slug,'--yes']),
   'target':d=>run(['target',d.slug,dayFrom(3)]),
@@ -70,7 +73,7 @@ test('an add-on deadline the person changed or closed is never changed by the ad
  for(const [key,change] of Object.entries(cases)){
   const {deadline}=addonDeadlines(store,bill({key,title:'Invented deadline '+key,due:dayFrom(8)}));
   await change(deadline);
-  const file=path.join(store.root,'due',deadline.slug+'.md'),before=fs.readFileSync(file,'utf8');
+  const file=pageFile(store,deadline.slug),before=fs.readFileSync(file,'utf8');
   const out=addonDeadlines(store,{addon:'an-addon',action:'update',key,due:dayFrom(20)});
   assert.deepEqual([out.updated,out.touched],[false,true],key);
   assert.equal(fs.readFileSync(file,'utf8'),before,key+': the file is as the person left it');
