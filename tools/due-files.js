@@ -130,11 +130,80 @@ function stripLine(s) {
     .concat(s.legacy && s.by === "legacy" ? ["done", s.legacy] : [], s.extra || [])
     .join(" ");
 }
+// ---------------------------------------------------------------- which window a closing closed
+//
+// WHETHER A WINDOW IS FINISHED IS NEVER WRITTEN IN THE PLAN (D-258). It is worked out from the
+// closings, and this is the arithmetic that does it, over a list of
+// {file, date, closes, drops} - the old events in world/events/ for the files, the closing moments
+// on the notebook's timeline for the records (notebook/core/due-records.mjs). One copy of it, so
+// the two storages can never disagree about which window a closing closed.
+//
+// A named window closes that one; a bare name closes the window that was current on the event's day.
+function targetStrip(o, ref, date) {
+  const open = o.strips.filter((s) => s.state === "open");
+  if (!open.length) return null;
+  if (ref.window) return open.find((s) => s.from === ref.window) || null;
+  const started = open.filter((s) => s.from <= date);
+  return started.length ? started[started.length - 1] : open[0];
+}
+function applyEventsOver(o, events) {
+  for (const s of o.strips) { s.state = "open"; s.closed = ""; s.by = ""; }
+  o.dropped = null;
+  const acts = [];
+  for (const e of events) {
+    for (const r of e.closes) if (r.slug === o.slug) acts.push({ date: e.date, ref: r, by: e.file, legacy: false });
+    for (const r of e.drops) if (r.slug === o.slug && (!o.dropped || e.date < o.dropped.date)) o.dropped = { date: e.date, by: e.file };
+  }
+  for (const s of o.strips) if (s.legacy) acts.push({ date: s.legacy, ref: { slug: o.slug, window: s.from }, by: "", legacy: true });
+  acts.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : a.legacy === b.legacy ? 0 : a.legacy ? 1 : -1));
+  for (const a of acts) {
+    const s = targetStrip(o, a.ref, a.date);
+    if (s) { s.state = "done"; s.closed = a.date; s.by = a.by || "legacy"; }
+  }
+  if (o.dropped) for (const s of o.strips) if (s.state === "open") { s.state = "dropped"; s.closed = o.dropped.date; s.by = o.dropped.by; }
+}
+// Why a file cannot be read, for one this program may not touch. The reason is the sentence the
+// list, the brief and the notebook say every day until it is fixed, so there is one place that
+// words it (notebook/core/due-records.mjs says it for a file that has no record).
+function problemOf(slug, text, strips) {
+  if (!SLUG.test(slug || "")) return "its file name is not one I can use (small letters, digits and dashes only)";
+  if (!String(text || "").trim()) return "it is empty";
+  if (strips === null || strips === undefined) return "I could not read it";
+  return strips.some(readableStrip) ? "" : strips.length
+    ? "its STRIP line does not hold dates I can read"
+    : "it has no STRIP line, so I cannot tell its dates";
+}
+
 // A window in words. A deadline window reads as it always has.
 function windowWords(s) {
   const aim = aimOf(s);
   if (!aim) return s.from + " to " + s.to;
   return s.from + (s.to ? " to " + s.to + ", aiming for " + aim : ", aiming for " + aim);
+}
+
+// `extra` is whatever the window line carried that nothing here knows. It is kept, never eaten.
+const windowOf = (s) => ({ start: s.from, deadline: s.to || "", target: s.target || "", moved: s.moved || "", extra: [...(s.extra || [])] });
+// The first day of the first window, else the first day its log mentions: the day this reminder
+// began, as far as the file can say.
+function beganOn(o) {
+  const first = o.strips.map((s) => s.from).filter(isDate).sort()[0];
+  if (first) return first;
+  return logDays(o)[0] || "";
+}
+// The days this reminder's log speaks of, in order. Every change tools/due.js makes writes one
+// (created, the brief said it, it closed, the next window opened, a day moved), so the last of
+// them is the day the file last changed as far as the file itself can say. Never a window's day:
+// the last day of a tax return is next year, and nothing may be written as changed in the future.
+function logDays(o) {
+  const days = [];
+  for (const line of o.log) { const m = line.match(/^-\s*(\d{4}-\d{2}-\d{2})\b/); if (m) days.push(m[1]); }
+  return days.sort();
+}
+// What the log said on one day, for the evidence of a closing that was only ever a word on a
+// window line (migrateLegacy writes the same sentence into the event it makes).
+function logOf(o, day) {
+  const said = o.log.filter((l) => l.startsWith("- " + day + " ") && !/ SAID /.test(l)).map((l) => l.slice(13).trim());
+  return said.length ? said[said.length - 1] : "the file said done";
 }
 
 // ---------------------------------------------------------------- one mission control's files
@@ -186,9 +255,7 @@ function parseFile(slug) {
     if (m && !(m[1] in head)) head[m[1]] = m[2].trim();
   }
   const o = { slug, path: p, text, head, strips, log, said };
-  o.problem = strips.some(readableStrip) ? "" : strips.length
-    ? "its STRIP line does not hold dates I can read"
-    : "it has no STRIP line, so I cannot tell its dates";
+  o.problem = problemOf(slug, text, strips);
   applyEvents(o);
   CACHE.set(slug, o);
   return o;
@@ -201,11 +268,24 @@ function parseFile(slug) {
 // ever writes to it.
 function unreadable(slug) {
   const p = filePath(slug);
-  const problem = !SLUG.test(slug || "")
-    ? "its file name is not one I can use (small letters, digits and dashes only)"
-    : !readText(p).trim() ? "it is empty" : "I could not read it";
-  return { slug, path: p, text: "", head: {}, strips: [], log: [], said: [], dropped: null, problem };
+  return { slug, path: p, text: "", head: {}, strips: [], log: [], said: [], dropped: null,
+           problem: problemOf(slug, readText(p), null) };
 }
+// Every file in due/ that does not read, with the reason, and the title it manages to carry. They
+// get no record on purpose (notebook/core/due-copy.mjs), and after this program moved to the
+// records they are the one thing still read out of due/: a file nobody can read is said in the
+// reminders every day until it is fixed, as it is today, and is never written to and never moved.
+function needsALook() {
+  const out = [];
+  for (const slug of slugs()) {
+    const o = parseFile(slug);
+    if (o && !o.problem) continue;
+    const seen = o || unreadable(slug);
+    out.push({ slug, problem: seen.problem, head: seen.head, log: seen.log, text: seen.text });
+  }
+  return out;
+}
+const exists = (slug) => fs.existsSync(filePath(slug));
 
 // ---------------------------------------------------------------- the events: the only "is it done"
 let EVENTS = null;
@@ -230,30 +310,7 @@ function worldEvents() {
   }
   return EVENTS;
 }
-// A named window closes that one; a bare name closes the window that was current on the event's day.
-function targetStrip(o, ref, date) {
-  const open = o.strips.filter((s) => s.state === "open");
-  if (!open.length) return null;
-  if (ref.window) return open.find((s) => s.from === ref.window) || null;
-  const started = open.filter((s) => s.from <= date);
-  return started.length ? started[started.length - 1] : open[0];
-}
-function applyEvents(o) {
-  for (const s of o.strips) { s.state = "open"; s.closed = ""; s.by = ""; }
-  o.dropped = null;
-  const acts = [];
-  for (const e of worldEvents()) {
-    for (const r of e.closes) if (r.slug === o.slug) acts.push({ date: e.date, ref: r, by: e.file, legacy: false });
-    for (const r of e.drops) if (r.slug === o.slug && (!o.dropped || e.date < o.dropped.date)) o.dropped = { date: e.date, by: e.file };
-  }
-  for (const s of o.strips) if (s.legacy) acts.push({ date: s.legacy, ref: { slug: o.slug, window: s.from }, by: "", legacy: true });
-  acts.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : a.legacy === b.legacy ? 0 : a.legacy ? 1 : -1));
-  for (const a of acts) {
-    const s = targetStrip(o, a.ref, a.date);
-    if (s) { s.state = "done"; s.closed = a.date; s.by = a.by || "legacy"; }
-  }
-  if (o.dropped) for (const s of o.strips) if (s.state === "open") { s.state = "dropped"; s.closed = o.dropped.date; s.by = o.dropped.by; }
-}
+function applyEvents(o) { return applyEventsOver(o, worldEvents()); }
 // What one closing or drop looks like as a file in world/events/. One place, so the copy's own
 // check writes exactly the file this program writes.
 function eventText(day, { closes = [], drops = [], evidence, source, text }) {
@@ -299,31 +356,6 @@ const save = (o) => { CACHE.set(o.slug, o); return writeText(o.path, render(o));
 // and this moment on it (notebook/core/due-copy.mjs, `converted`), so the two machines write one
 // record, byte for byte, and the merge has nothing to decide.
 const records = () => require("../notebook/core/deadline-records.mjs");
-
-// `extra` is whatever the window line carried that nothing here knows. It is kept, never eaten.
-const windowOf = (s) => ({ start: s.from, deadline: s.to || "", target: s.target || "", moved: s.moved || "", extra: [...(s.extra || [])] });
-// The first day of the first window, else the first day its log mentions: the day this reminder
-// began, as far as the file can say.
-function beganOn(o) {
-  const first = o.strips.map((s) => s.from).filter(isDate).sort()[0];
-  if (first) return first;
-  return logDays(o)[0] || "";
-}
-// The days this reminder's log speaks of, in order. Every change tools/due.js makes writes one
-// (created, the brief said it, it closed, the next window opened, a day moved), so the last of
-// them is the day the file last changed as far as the file itself can say. Never a window's day:
-// the last day of a tax return is next year, and nothing may be written as changed in the future.
-function logDays(o) {
-  const days = [];
-  for (const line of o.log) { const m = line.match(/^-\s*(\d{4}-\d{2}-\d{2})\b/); if (m) days.push(m[1]); }
-  return days.sort();
-}
-// What the log said on one day, for the evidence of a closing that was only ever a word on a
-// window line (migrateLegacy writes the same sentence into the event it makes).
-function logOf(o, day) {
-  const said = o.log.filter((l) => l.startsWith("- " + day + " ") && !/ SAID /.test(l)).map((l) => l.slice(13).trim());
-  return said.length ? said[said.length - 1] : "the file said done";
-}
 
 // One `due/<slug>.md` as ticket 01's records: {deadline, closings}, or null for a file that does
 // not read (it gets no record and stays "needs a look", as it is today).
@@ -413,10 +445,12 @@ function writeFilesFrom({ deadlines = [], closings = [] }) {
   CACHE.clear(); EVENTS = null;
 }
 
-return { DUE, EVENTS_DIR, filePath, slugs, parseFile, unreadable, worldEvents, applyEvents, writeEvent, save,
-         cache: CACHE, unproven: UNPROVEN, recordsOf, writeFilesFrom, reread: () => { CACHE.clear(); EVENTS = null; } };
+return { DUE, EVENTS_DIR, filePath, exists, slugs, parseFile, unreadable, needsALook, worldEvents, applyEvents,
+         writeEvent, save, cache: CACHE, unproven: UNPROVEN, recordsOf, writeFilesFrom,
+         reread: () => { CACHE.clear(); EVENTS = null; } };
 }
 
 module.exports = { createDueFiles, SLUG, parseDate, isDate, addDays, daysBetween, addMonths, repeatOf,
                    aimOf, endOf, readText, writeText, slugify, readableStrip, fileOf, frontmatter,
-                   parseRef, listOf, ORDER, render, stripLine, windowWords };
+                   parseRef, listOf, ORDER, render, stripLine, windowWords, applyEventsOver, targetStrip,
+                   problemOf, beganOn, logDays };

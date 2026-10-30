@@ -1,21 +1,18 @@
 import fs from 'node:fs';import path from 'node:path';import {createRequire} from 'node:module';import {spawnSync} from 'node:child_process';import {fileURLToPath} from 'node:url';import {hash} from './records/store.mjs';
 import {localPath} from './local-path.mjs';
-import {copyOldReminders,copyIfFilesChanged,writable} from './due-copy.mjs';
+import {copyOldReminders,writable} from './due-copy.mjs';
 const {createDueCommands}=createRequire(import.meta.url)('../../tools/due.js');
 // A file in due/ that tools/due.js cannot read is 'needs-a-look', never closed (9 October 2026: an
 // assistant's hand-written deadline showed here as closed). It carries the reason and is said in the
 // deadline reminders every day until it is fixed.
 export function dueRows(store,now=new Date(),{copy:alsoCopy=true}={}){
- if(!fs.existsSync(path.join(store.root,'due')))return [];
  const timezone=store.get('settings','installation')?.timezone||'UTC',day=new Intl.DateTimeFormat('en-CA',{timeZone:timezone,year:'numeric',month:'2-digit',day:'2-digit'}).format(now);
- // Settings > Obligations, the cards and the chat's context read the reminders through here, and
- // the ticket asks for the copy on those occasions too (#90). It costs nothing when no file in
- // due/ or world/events/ has changed - the names, sizes and times are looked at first - and it
- // waits only a moment for the lock, because a screen is waiting for this answer. A staged or
- // read-only copy of the workspace is never written through (writable), and a copy that cannot
- // finish is left to the next read.
- if(alsoCopy&&writable(store))try{copyIfFilesChanged(store.root,{day,store,timeoutMs:2000});}catch(error){if(process.env.GODSPEED_DUE_COPY==='say')console.error('due-copy: not this time: '+error.message);}
- return createDueCommands({root:store.root,commandArgs:[],date:day,copy:false}).stateRows().map(r=>({id:'due-'+r.slug,type:'deadlines',uid:hash('due/'+r.slug).slice(0,32),title:r.title,native_file:'due/'+r.slug+'.md',native_slug:r.slug,status:['closed','dropped'].includes(r.state)?'closed':r.state,...(r.problem?{problem:r.problem}:{}),start_at:r.firstDay?r.firstDay+'T00:00:00Z':null,due_at:r.lastDay?r.lastDay+'T23:59:59Z':null,target_at:r.targetDay?r.targetDay+'T23:59:59Z':null,completion_check:r.doneWhen,completion_evidence:r.closedBy,closed_at:r.closedOn,band:r.band,attention:r.attention,sentence:r.sentence,_hash:hash(r),created_at:(r.firstDay||day)+'T00:00:00Z'}));
+ // THE STORE THIS SCREEN ALREADY HAS, and the lock it may already hold: tools/due.js reads the
+ // reminders out of the notebook's records now (#90), and the workspace lock is one writer at a
+ // time and is never re-entered. It takes in what an older version left in due/ on the way, which
+ // costs nothing when no file there has changed. A staged or read-only copy of the workspace is
+ // only read (writable), and work that cannot finish is left to the next read.
+ return createDueCommands({root:store.root,commandArgs:[],date:day,store,copy:alsoCopy&&writable(store)}).stateRows().map(r=>({id:'due-'+r.slug,type:'deadlines',uid:hash('due/'+r.slug).slice(0,32),title:r.title,native_file:'due/'+r.slug+'.md',native_slug:r.slug,status:['closed','dropped'].includes(r.state)?'closed':r.state,...(r.problem?{problem:r.problem}:{}),start_at:r.firstDay?r.firstDay+'T00:00:00Z':null,due_at:r.lastDay?r.lastDay+'T23:59:59Z':null,target_at:r.targetDay?r.targetDay+'T23:59:59Z':null,completion_check:r.doneWhen,completion_evidence:r.closedBy,closed_at:r.closedOn,band:r.band,attention:r.attention,sentence:r.sentence,_hash:hash(r),created_at:(r.firstDay||day)+'T00:00:00Z'}));
 }
 export function dueCommand(store,args,{copy:alsoCopy=true}={}){
  if(!Array.isArray(args)||!['add','done','target','drop','check','state','list','today','help','--help','-h','marker'].includes(args[0])||args.some(a=>typeof a!=='string'||a.length>20000)||args.some(a=>a==='--godspeed'||a.startsWith('--godspeed=')))throw Error('Unsupported obligation command');
@@ -23,15 +20,23 @@ export function dueCommand(store,args,{copy:alsoCopy=true}={}){
  if(['add','done','target','drop','marker'].includes(args[0])&&!(args[0]==='marker'&&['--needed','--stale'].includes(args[1]))&&!/^[a-z0-9][a-z0-9-]{0,59}$/.test(args[1]||''))throw Error('Choose an obligation slug inside the isolated workspace');
  const marker=args.indexOf('--set');if(marker>=0&&(!args[marker+1]||/[\r\n\t]/.test(args[marker+1])))throw Error('Calendar event identity must be a single line');
  const selfCheck=args.indexOf('--self-check-arg');if(selfCheck>=0)localPath(store.root,args[selfCheck+1]||'');
- // Historical self-check paths are never allowed to inspect another installation.
- if(args[0]==='check'&&fs.existsSync(path.join(store.root,'due')))for(const file of fs.readdirSync(path.join(store.root,'due')).filter(f=>f.endsWith('.md'))){const match=fs.readFileSync(localPath(store.root,'due/'+file),'utf8').match(/^SELF-CHECK-ARG:\s*(.+)$/m);if(match)localPath(store.root,match[1]);}
+ // Historical self-check paths are never allowed to inspect another installation. They are in the
+ // notebook's own records now (#90), and in the files of due/ only until those are retired.
+ if(args[0]==='check'){
+  for(const record of store.list('deadlines'))if(record.self_check_arg)localPath(store.root,String(record.self_check_arg));
+  if(fs.existsSync(path.join(store.root,'due')))for(const file of fs.readdirSync(path.join(store.root,'due')).filter(f=>f.endsWith('.md'))){const match=fs.readFileSync(localPath(store.root,'due/'+file),'utf8').match(/^SELF-CHECK-ARG:\s*(.+)$/m);if(match)localPath(store.root,match[1]);}
+ }
  const timezone=store.get('settings','installation')?.timezone||'UTC',day=new Intl.DateTimeFormat('en-CA',{timeZone:timezone,year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date()),script=fileURLToPath(new URL('../../tools/due.js',import.meta.url));
- // The reminders and their closings are copied into the notebook's own records after the command
- // ran, inside this lock: the child is told not to do it (GODSPEED_DUE_COPY=off), because the lock
- // is one writer at a time and is never re-entered, and because doing it here also takes in what
- // this very command wrote (due-copy.mjs, #90). An answer is never held back by the copy: a copy
- // that cannot finish is left to the next run, which is safe because copying twice changes nothing.
- return store.withLock(()=>{const run=spawnSync(process.execPath,[script,...args,'--godspeed',store.root],{cwd:store.root,encoding:'utf8',timeout:15000,windowsHide:true,shell:false,env:{...process.env,GODSPEED_TODAY:day,GODSPEED_DUE_COPY:'off'}});if(run.status!==0){if(alsoCopy)copy(store,day);throw Object.assign(Error(String(run.stderr||run.stdout||'Obligation command failed').slice(0,500)),{status:run.status});}if(alsoCopy)copy(store,day);return {result:run.stdout.trim()};});
+ // THE CHILD TAKES THE WORKSPACE LOCK ITSELF, AND THIS DOES NOT HOLD IT (30 October 2026, #90).
+ // tools/due.js writes the notebook's own records now, so it opens the workspace; the lock is one
+ // writer at a time and is never re-entered, so a child started inside a lock held here would be
+ // told the workspace is busy and could do nothing at all. It takes in what an older version left
+ // in due/ before it answers, and retires those files afterwards, both under its own lock.
+ const run=spawnSync(process.execPath,[script,...args,'--godspeed',store.root],{cwd:store.root,encoding:'utf8',timeout:15000,windowsHide:true,shell:false,env:{...process.env,GODSPEED_TODAY:day}});
+ // What the child wrote, for the reader that is about to ask this store for it.
+ store.scan(true);
+ if(run.status!==0)throw Object.assign(Error(String(run.stderr||run.stdout||'Obligation command failed').slice(0,500)),{status:run.status});
+ return {result:run.stdout.trim()};
 }
 // A DEADLINE SAVED IN SETTINGS OR TOLD IN THE NOTEBOOK'S CHAT IS A FILE IN due/ (18 October 2026).
 // Until then Settings > Obligations and reminders saved a notebook record, while the 08:00 deadline
@@ -54,8 +59,11 @@ export function addDueObligation(store,input,{copy:alsoCopy=true}={}){
  const repeats=!days?'no':days===7?'weekly':days===14?'fortnightly':'every '+days+' days';
  const args=['--title',title,'--done-when',doneWhen,...(to?['--to',to,'--cost',cost]:[]),...(target?['--target',target]:[]),...(from?['--from',from]:[]),'--repeats',repeats];
  const base=slugOf(title);let last=null;
+ // A name already used, in the notebook's records or in a file of due/ that is still there: the
+ // next number, never a second reminder for the same thing.
+ const taken=new Set(store.list('deadlines').filter(r=>r.native_slug).map(r=>r.native_slug));
  for(let n=1;n<=30;n++){
-  const slug=n===1?base:base.slice(0,56)+'-'+n;if(fs.existsSync(path.join(store.root,'due',slug+'.md')))continue;
+  const slug=n===1?base:base.slice(0,56)+'-'+n;if(taken.has(slug)||fs.existsSync(path.join(store.root,'due',slug+'.md')))continue;
   try{const made=dueCommand(store,['add',slug,...args],{copy:alsoCopy});const row=dueRows(store,new Date(),{copy:alsoCopy}).find(r=>r.native_slug===slug);return {...(row||{id:'due-'+slug,native_slug:slug,title}),result:made.result};}
   catch(error){last=error;if(/already have one called|was used before/.test(error.message))continue;throw Error(String(error.message).split('\n').filter(Boolean).slice(0,2).join(' '));}
  }
@@ -68,18 +76,25 @@ export function addDueObligation(store,input,{copy:alsoCopy=true}={}){
 export function moveSettingsDeadlines(store){
  const moved=[];
  for(const d of store.list('deadlines').filter(r=>r.status==='open'&&!r.moved_to&&!r.removed_at)){
+  // THE RECORD SETTINGS SAVED LEAVES Deadlines/ FIRST, and only then is the reminder made. A
+  // deadline carrying moved_to keeps its place in _system/ and is nobody's page
+  // (records/layout.mjs, isReadable), so one reminder is never two; while it was still open, the
+  // reminder's own page was written beside it under the same title with a number and kept that
+  // name for good (30 October 2026, when the reminder itself became a page). If the reminder
+  // cannot be made after all, this record is put back exactly as it was.
+  const back={id:d.id,status:d.status,closed_at:d.closed_at??null,moved_to:null};
   try{
-   // The copy of the new file into the notebook's records waits until the record Settings saved
-   // has been closed below: while it is open it is a page of the same name, and the reminder's own
-   // page would be written beside it as "<title> 2" and keep that name for good.
+   store.save('deadlines',{id:d.id,status:'closed',closed_at:new Date().toISOString(),moved_to:'due/'+slugOf(d.title)+'.md'});
    const row=addDueObligation(store,{title:d.title,done_when:d.completion_check?.text?'The note it was tied to says: '+d.completion_check.text:d.title+': done.',cost:'Not said when it was saved in Settings.',due_at:d.due_at,target_at:d.target_at,start_at:d.start_at&&Date.parse(d.start_at)>Date.parse(d.created_at||0)?d.start_at:undefined,recurrence:d.recurrence},{copy:false});
-   store.save('deadlines',{id:d.id,status:'closed',closed_at:new Date().toISOString(),moved_to:row.native_file||'due/'+row.native_slug+'.md'});moved.push(row.native_slug);
-  }catch{}
+   const file=row.native_file||'due/'+row.native_slug+'.md';
+   if(file!=='due/'+slugOf(d.title)+'.md')store.save('deadlines',{id:d.id,moved_to:file});
+   moved.push(row.native_slug);
+  }catch{try{store.save('deadlines',back);}catch{}}
  }
  if(moved.length)copy(store,new Intl.DateTimeFormat('en-CA',{timeZone:store.get('settings','installation')?.timezone||'UTC',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date()));
  return moved;
 }
-export function dueDelivered(store,slugs,now=new Date()){const timezone=store.get('settings','installation')?.timezone||'UTC',day=new Intl.DateTimeFormat('en-CA',{timeZone:timezone}).format(now);return store.withLock(()=>{const done=createDueCommands({root:store.root,date:day,commandArgs:[],copy:false}).recordSaid(slugs,day);copy(store,day);return done;});}
+export function dueDelivered(store,slugs,now=new Date()){const timezone=store.get('settings','installation')?.timezone||'UTC',day=new Intl.DateTimeFormat('en-CA',{timeZone:timezone}).format(now);return store.withLock(()=>createDueCommands({root:store.root,date:day,commandArgs:[],store,copy:false}).recordSaid(slugs,day));}
 // The copy of the old files into the notebook's records, where the brief, the 08:00 reminders,
 // Settings and the add-ons already hold the workspace lock. Cheap when nothing changed, and never
 // the reason an answer fails: a copy left undone is done by the next run.

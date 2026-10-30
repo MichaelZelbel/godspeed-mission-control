@@ -84,7 +84,7 @@ const path = require("path");
 // CommonJS and nothing of the notebook at load time: these tools run on Node 20 in the suite.
 const {
   createDueFiles, isDate, addDays, daysBetween, addMonths, repeatOf, aimOf, endOf,
-  readText, writeText, slugify, fileOf, windowWords,
+  readText, slugify, fileOf, windowWords,
 } = require("./due-files.js");
 
 // ---------------------------------------------------------------- where is the mission control
@@ -126,7 +126,12 @@ function findGodspeed() {
   return "";
 }
 
-function createDueCommands({root,commandArgs=process.argv.slice(2),date,copy=true}={}) {
+// `store` is the notebook of this mission control when the caller has one open already (the
+// notebook runs every obligation command inside its workspace lock); `files: true` asks for the
+// old files as the storage instead of the notebook's records, which is what ticket 02's own check
+// holds the records against (notebook/core/due-copy.mjs, sameThroughRecords) and what nothing else
+// uses. `copy: false` says the caller has already taken in what an older version left in due/.
+function createDueCommands({root,commandArgs=process.argv.slice(2),date,copy=true,store:given=null,files:onFiles=false}={}) {
 // --godspeed and its value are pulled OUT of the list before anything else looks at it. Left in, the
 // very first thing a person types (mc-due --godspeed /somewhere check) reads "--godspeed" as the command
 // and quietly runs the list instead, which looks like it worked.
@@ -144,12 +149,38 @@ if (!godspeed || !fs.existsSync(godspeed)) {
   console.log("Run this from inside it, or say where it is:  mc-due --godspeed /path/to/your/godspeed");
   process.exit(1);
 }
-// The one reader and writer of the old files (due-files.js): this folder's due/ and its closing
-// events, with this run's own cache of them.
-const files = createDueFiles({ root: godspeed });
-const { DUE, filePath, slugs, parseFile, unreadable, worldEvents, applyEvents, writeEvent, save } = files;
-const UNPROVEN = files.unproven;
+// ---------------------------------------------------------------- where a reminder is kept
+//
+// A REMINDER AND ITS CLOSING ARE RECORDS IN THE NOTEBOOK (30 October 2026, #90). Until then this
+// program kept an obligation as a file due/<slug>.md and its closing as a second file in
+// world/events/, and on a mission control that is its own repository the notebook's sync carries
+// only notebook/, so neither file travelled unless a session committed it: on 19 October only the
+// first of the two was committed, and the morning brief asked its owner for nine mornings about
+// something he had finished. Now the reminder is a page under notebook/Deadlines/ and its closing a
+// moment under notebook/Timeline/ (notebook/core/due-records.mjs), which the notebook's sync
+// carries the way it carries every note.
+//
+// NOTHING ELSE ABOUT THIS PROGRAM CHANGED. The storage is one object with one surface - slugs,
+// parseFile, worldEvents, applyEvents, writeEvent, save - and everything below reads and writes
+// through it without knowing which one it is. due-files.js is still the one reader and writer of
+// the old files, and it is still the storage when `files: true` says so.
+const oldFiles = createDueFiles({ root: godspeed });
+// Chosen in `inTheNotebook` below, before any command runs.
+let keep = onFiles ? oldFiles : null;
+const filePath = (...a) => keep.filePath(...a);
+const exists = (...a) => keep.exists(...a);
+const slugs = (...a) => keep.slugs(...a);
+const parseFile = (...a) => keep.parseFile(...a);
+const unreadable = (...a) => keep.unreadable(...a);
+const worldEvents = (...a) => keep.worldEvents(...a);
+const applyEvents = (...a) => keep.applyEvents(...a);
+const writeEvent = (...a) => keep.writeEvent(...a);
+const save = (...a) => keep.save(...a);
+// The list of when each key runs out stays exactly where it is, and is read as it always was.
 const EXPIRES = path.join(godspeed, "secrets", "expires.txt");
+// What the old files and the notebook still disagree about, if anything: while they do, nothing in
+// due/ is moved aside and the list and the brief say so in one plain sentence (notebook/core/due-retire.mjs).
+let OUT_OF_STEP = [];
 
 // ---------------------------------------------------------------- dates
 // Everything is YYYY-MM-DD and UTC. A date that means two different days on two of your computers
@@ -258,31 +289,11 @@ function firstSaidAfter(o, t) {
   return first;
 }
 
-// An older file that still says `done <date>`: the closing becomes an event on its true date, with
-// the file's own log line of that day as the evidence, and only then does the word go.
-function migrateLegacy(notes) {
-  for (const slug of slugs()) {
-    const o = parseFile(slug);
-    if (!o) continue;
-    if (!o.strips.some((s) => s.legacy) && !/^STRIP:\s*\S+\s+\S+\s+open\b/m.test(o.text || "")) continue;
-    let moved = true, wrote = 0;
-    for (const s of o.strips) {
-      if (!s.legacy || s.by !== "legacy") continue;
-      const said = o.log.filter((l) => l.startsWith("- " + s.legacy + " ") && !/ SAID /.test(l)).map((l) => l.slice(13).trim());
-      const rel = writeEvent(s.legacy, {
-        closes: ["due/" + slug + "#" + s.from],
-        evidence: "due/" + slug + ".md log, " + s.legacy + ": " + (said.length ? said[said.length - 1] : "the file said done").slice(0, 300),
-        source: "moved out of the deadline file",
-        text: (o.head["TITLE"] || slug) + ": finished (window " + windowWords(s) + ").",
-      });
-      if (!rel) moved = false; else wrote += 1;
-    }
-    if (!moved) continue;
-    for (const s of o.strips) s.legacy = "";
-    save(o);
-    if (wrote) notes.push(slug + ": " + wrote + " closing(s) moved into world/events/");
-  }
-}
+// AN OLDER FILE THAT STILL SAYS `done <date>` on a window line is turned into a closing by the one
+// thing that still reads those files: ticket 02's converter (tools/due-files.js, recordsOf) makes
+// the closing a moment on the notebook's timeline, with the file's own log line of that day as the
+// evidence, as this program used to make it an event in world/events/. So nothing here has a word
+// to move any more: no window of a record ever carries one.
 
 // ---------------------------------------------------------------- add-on deadlines
 // AN ADD-ON MAKES A DEADLINE, AND FROM THE MOMENT THE PERSON TOUCHES IT, IT IS THEIRS (23 October
@@ -442,32 +453,17 @@ function growWindows(day, notes) {
     }
   }
 }
-// ---------------------------------------------------------------- your due/ README, kept current
-// An update replaces this program but never a file in your mission control: starter files are
-// copied once and then they are yours. So somebody who installed before targets existed would keep
-// a README describing two dates for ever, beside a program that knows three. This keeps the room's
-// README current, but ONLY when it is exactly a copy this kit once shipped. One you changed by hand
-// is yours and is never touched. Fingerprints: sha256 of each shipped version, line endings
-// ignored, first 16 characters.
-const SHIPPED_READMES = [
-  "e1e1f8072396ad20", "4f75edcae9a8f66c", "b783ca077e858d36", "10afeedb162f4649",
-  "53b028714c10f9c5", "d06b4543c3d443ba", "ee5bc45cc2b90854", "908242977b69f16d",
-  "98f4f151e9a7f876", "9f2ee7c634e95770",
-];
-function keepReadmeCurrent(notes) {
-  const p = path.join(DUE, "README.md");
-  let text;
-  try { text = fs.readFileSync(p, "utf8"); } catch (e) { return; }
-  const plain = text.replace(/\r\n/g, "\n");
-  if (plain === README) return;
-  const h = require("crypto").createHash("sha256").update(plain).digest("hex").slice(0, 16);
-  if (!SHIPPED_READMES.includes(h)) return;
-  if (writeText(p, text.includes("\r\n") ? README.replace(/\n/g, "\r\n") : README)) {
-    notes.push("due/README.md brought up to date (you had not changed it)");
-  }
-}
+// ---------------------------------------------------------------- your due/ README
+// Until 30 October 2026 this program kept due/README.md up to date whenever it was still exactly a
+// copy the kit once shipped, because an update replaces the program but never a file in your
+// mission control. It writes nothing in due/ at all now: a reminder is a page in the notebook, and
+// in folder mode - where the mission control is your own Git repository - a program that rewrote a
+// tracked file here would leave you uncommitted changes you never asked for. The text itself is
+// still kept beside this program (the README constant below, which tools/test-due.sh holds against
+// starter-godspeed/due/README.md byte for byte), so that the two stay in step until the words
+// themselves move into the notebook's recipe.
 
-function roll(day) { const notes = []; keepReadmeCurrent(notes); migrateLegacy(notes); adoptKeys(day, notes); growWindows(day, notes); return notes; }
+function roll(day) { const notes = []; adoptKeys(day, notes); growWindows(day, notes); return notes; }
 
 function load(day,mutate=true) {
   if(mutate)roll(day);
@@ -631,8 +627,18 @@ the window is a week or a year. Nothing to tune. A target alone is quiet until i
 so that day, asks once after it, then comes back about once a week and never gets louder.`);
 }
 
+// What is said while the old files and the notebook are not level yet: one plain sentence, in the
+// place a file that needs a look has always had, every morning until it is fixed. Nothing in due/
+// is moved aside while it stands (notebook/core/due-retire.mjs).
+function sayOutOfStep() {
+  if (!OUT_OF_STEP.length) return;
+  console.log(WORDS.unreadable.padEnd(15) + "due/ and your notebook do not agree yet, so nothing in due/ has been moved aside: " +
+    OUT_OF_STEP[0] + (OUT_OF_STEP.length > 1 ? " (and " + (OUT_OF_STEP.length - 1) + " more)" : "") + ".");
+}
+
 function cmdList(day, capped) {
   const rows = load(day);
+  sayOutOfStep();
   if (!rows.length) {
     console.log("Nothing with a last day yet.");
     console.log("Add one:  mc-due add tax --title \"My tax return\" --from 2027-01-01 --to 2027-07-31 \\");
@@ -711,7 +717,7 @@ function cmdAdd(day) {
   }
   // Say how to change the one that exists. A practice run met the bare refusal by adding a second
   // tax return beside the wrong one, which left two things reminding about one date.
-  if (fs.existsSync(filePath(slug))) {
+  if (exists(slug)) {
     console.log("You already have one called " + slug + ". Never add a second one for the same thing.");
     console.log("To change its dates, edit the STRIP line in due/" + slug + ".md (for a new target: mc-due target " + slug + " YYYY-MM-DD).");
     return 1;
@@ -959,7 +965,7 @@ function cmdCheck(day) {
       closed++;
     }
   }
-  for (const f of UNPROVEN) { console.log("  " + f + " says it closes something but not what shows it, so it closes nothing."); problems++; }
+  for (const f of keep.unproven) { console.log("  " + f + " says it closes something but not what shows it, so it closes nothing."); problems++; }
   const n = slugs().length;
   console.log("Looked at " + n + " thing" + (n === 1 ? "" : "s") + " with a last day. " +
     closed + " closed " + (closed === 1 ? "itself" : "themselves") + ", " + (problems + looks) + " need a look.");
@@ -1051,63 +1057,95 @@ return rc;
 }
 function recordSaid(selected,day=today()) {for(const r of load(day,false).filter(r=>selected.includes(r.slug)&&!r.problem)){if(r.o.said.some(x=>x.date===day&&x.channel==='brief'))continue;r.o.said.push({date:day,channel:'brief'});logLine(r.o,day,'SAID brief');save(r.o);}}
 
-// ---------------------------------------------------------------- the notebook holds all of this too
-// A REMINDER AND ITS CLOSING LIVE IN THE NOTEBOOK AS WELL (30 October 2026, #90). This program is
-// unchanged: it reads and writes the same files and prints the same words. After it has answered -
-// and after the windows this run grew, the keys it picked up out of secrets/expires.txt and the
-// closing a command of this run wrote - the notebook copies every one of those files into its own
-// records (notebook/core/due-copy.mjs), where its sync carries them to the owner's other machines.
-// Once per run, and nothing at all when no file in due/ or world/events/ has changed.
+// ---------------------------------------------------------------- the notebook is where this is kept
 //
-// The bridge, and why it is this one: the notebook's store is an ES module and this is CommonJS.
-// `require` of an ES module needs Node 22.12 or newer, and these tools must keep running on the
-// Node 20 the product's suite uses for them, so the copy is required here and only here, inside a
-// try, after the answer. A Node that cannot, a kit installed without the notebook beside it, or a
-// workspace another writer is holding this moment leaves the copy to the next run, which is safe
-// because copying twice changes nothing. The notebook itself never comes through here: it holds
-// the workspace lock already and does the copy with the store it has (native-due.mjs), saying so
-// with `copy: false` in this process and GODSPEED_DUE_COPY=off in the one it starts.
+// A REMINDER AND ITS CLOSING ARE RECORDS IN THE NOTEBOOK (30 October 2026, #90). Every command
+// below runs inside `inTheNotebook`: the notebook is opened, what an older version of this program
+// left in due/ is taken in FIRST (notebook/core/due-copy.mjs, so a computer still on the old
+// version can never be lost), the workspace lock is held once for the whole command, and the old
+// files are then retired where that is safe (notebook/core/due-retire.mjs).
 //
-// WHERE THAT MODULE IS, when this program is not standing in the kit. The installer copies every
+// WHY THE LOCK IS TAKEN HERE AND NOT AROUND THIS PROGRAM. The lock is one writer at a time and is
+// never re-entered, so the notebook, which runs these commands inside its own lock, hands its open
+// store down (`store`) and this program works under the lock it already holds.
+//
+// THE BRIDGE, AND WHY IT IS THIS ONE: the notebook's store is an ES module and this is CommonJS.
+// `require` of an ES module is on by default from Node 20.19 and from 22.12, and nothing in
+// notebook/core waits at the top level, so the tools keep running on the Node the product's suite
+// uses for them (20). A copy of this program with no notebook beside it cannot keep a reminder at
+// all and says so in one plain sentence rather than pretending.
+//
+// WHERE THAT CODE IS, when this program is not standing in the kit. The installer copies every
 // file in tools/ into the assistant's command folder as well, and there is no notebook folder
-// beside it there, so `mc-due` typed by a person would have copied nothing at all (found in
-// review, 30 October 2026). The mission control itself says where its installed version is: a
-// computer keeps each one in <root>/.godspeed/integrated-runtime/versions/<commit>, and the
-// start.mjs beside them names the one it runs (notebook/scripts/install-native-notebook.sh). The
-// kit's own notebook comes first, so a developer's checkout and the Windows kit need nothing of
-// this; and whichever is found brings its own due-files.js, never the one beside this copy.
-function dueCopy() {
-  const tries = [path.join(__dirname, "..", "notebook", "core", "due-copy.mjs")];
+// beside it there (found in review, 30 October 2026). The mission control itself says where its
+// installed version is: a computer keeps each one in
+// <root>/.godspeed/integrated-runtime/versions/<commit>, and the start.mjs beside them names the
+// one it runs (notebook/scripts/install-native-notebook.sh). The kit's own notebook comes first, so
+// a developer's checkout and the Windows kit need nothing of this.
+function notebookCore() {
+  const tries = [path.join(__dirname, "..", "notebook", "core")];
   const state = path.join(godspeed, ".godspeed", "integrated-runtime");
-  const under = (name) => path.join(state, "versions", name, "notebook", "core", "due-copy.mjs");
+  const under = (name) => path.join(state, "versions", name, "notebook", "core");
   const running = readText(path.join(state, "start.mjs")).match(/versions[/\\]+([0-9a-f]{40})/);
   if (running) tries.push(under(running[1]));
   try {
     const versions = fs.readdirSync(state + path.sep + "versions", { withFileTypes: true })
       .filter((e) => e.isDirectory() && /^[0-9a-f]{40}$/.test(e.name)).map((e) => under(e.name))
-      .filter((f) => fs.existsSync(f)).sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs);
+      .filter((d) => fs.existsSync(path.join(d, "due-records.mjs")))
+      .sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs);
     tries.push(...versions);
   } catch (e) { /* no installed version beside the mission control: nothing more to try */ }
-  for (const file of tries) if (fs.existsSync(file)) return require(file);
-  return null;
+  for (const dir of tries) if (fs.existsSync(path.join(dir, "due-records.mjs"))) return dir;
+  return "";
 }
-let copied = false;
-function copyIntoTheNotebook() {
-  const say = (process.env.GODSPEED_DUE_COPY || "").trim();
-  if (copied || copy === false || say === "off") return;
-  copied = true;
-  try {
-    const module = dueCopy();
-    const result = module ? module.copyIfFilesChanged(godspeed, { day: today() }) : { skipped: "no notebook code" };
-    if (say === "say") console.error("due-copy: " + JSON.stringify(result));
-  } catch (e) {
-    if (say === "say") console.error("due-copy: not this time: " + e.message);
+const say = () => (process.env.GODSPEED_DUE_COPY || "").trim();
+function inTheNotebook(work, writes) {
+  const dir = notebookCore();
+  if (!dir) {
+    console.log("I could not find the notebook that keeps your reminders, so I did not read or change anything.");
+    console.log("Your reminders are pages in notebook/Deadlines/. Run this through your mission control (godspeed due ...).");
+    return { rc: 1 };
   }
+  const { createDueRecords } = require(path.join(dir, "due-records.mjs"));
+  const { copyIfFilesChanged, writable } = require(path.join(dir, "due-copy.mjs"));
+  const { retireOldFiles } = require(path.join(dir, "due-retire.mjs"));
+  const store = given || new (require(path.join(dir, "records", "store.mjs")).Store)(godspeed);
+  // A staged view of a transaction and the read-only copy a backup looks at are only read, and
+  // neither may be locked at all (records/store.mjs, Store.inspect).
+  const mayWrite = writable(store) && copy !== false;
+  // A screen is waiting for a list, so it waits only a moment for the lock; a command that is
+  // changing something waits as long as any other writer does.
+  const timeoutMs = writes ? 30000 : 2000;
+  const underLock = (fn) => store.holding ? fn() : store.withLockSoon(fn, { timeoutMs });
+  let report = { unproven: [] };
+  // Ticket 02 first, every run: a file an older version on another machine wrote is a reminder here
+  // before anything is read. It costs nothing when no file in due/ or world/events/ has changed.
+  // Then what is left of the old files, once ticket 02's check agrees for the whole set; a
+  // difference moves nothing and is said with the reminders, which is why this comes before the
+  // answer. Neither is ever the reason an answer fails: work left undone is done by the next run,
+  // which is safe because both are the same twice over.
+  if (mayWrite) try {
+    underLock(() => {
+      report = copyIfFilesChanged(godspeed, { day: today(), store }) || report;
+      const retired = retireOldFiles(store, { day: today() });
+      OUT_OF_STEP = retired.differences || [];
+      if (say() === "say") console.error("due-retire: " + JSON.stringify(retired));
+    });
+  } catch (e) { if (say() === "say") console.error("due-copy: not this time: " + e.message); }
+  keep = createDueRecords({ store, files: oldFiles, unproven: report.unproven || [] });
+  // ONLY A COMMAND THAT CHANGES SOMETHING TAKES THE LOCK. Reading needs none, and a list that took
+  // the one writer lock would be refused on a workspace somebody else is writing this moment - and
+  // the 08:00 reminders, the morning brief, Settings and the cards are all reads.
+  return writes && mayWrite ? underLock(() => ({ rc: work() })) : { rc: work() };
 }
+// The old files as the storage, for ticket 02's own check and for nothing else.
+const onTheFiles = (work) => { keep = oldFiles; return { rc: work() }; };
+const through = onFiles ? onTheFiles : inTheNotebook;
 return {
-  run: () => { const rc = run(); copyIntoTheNotebook(); return rc; },
-  stateRows: (...a) => { const rows = stateRows(...a); copyIntoTheNotebook(); return rows; },
-  recordSaid: (...a) => { const done = recordSaid(...a); copyIntoTheNotebook(); return done; },
+  run: () => through(run, true).rc,
+  // stateRows() with nothing to roll is a read, and every screen reads it that way.
+  stateRows: (...a) => { let rows = []; through(() => { rows = stateRows(...a); }, !!a[1]); return rows; },
+  recordSaid: (...a) => { let done; through(() => { done = recordSaid(...a); }, true); return done; },
 };
 }
 module.exports={createDueCommands};

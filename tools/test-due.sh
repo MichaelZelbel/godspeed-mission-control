@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# test-due.sh - the gate for due.js: done is an event in world/events/, and every reader works out
-# "open" from those events. Case 1 is the incident this model was built against: a post approved and
-# published in a working session, the memory recording it that day, and the deadline file still
-# saying open, so the morning brief kept handing the finished work back for five mornings.
+# test-due.sh - the gate for due.js: a reminder is a page in the notebook, done is a moment on its
+# timeline, and every reader works out "open" from those moments. Case 1 is the incident this model
+# was built against: a post approved and published in a working session, the memory recording it
+# that day, and the deadline still saying open, so the morning brief kept handing the finished work
+# back for five mornings.
 #
 # Runs inside a throwaway mission control. Needs node only.
 # Usage: bash tools/test-due.sh
@@ -15,6 +16,46 @@ G="$TMP/godspeed"
 mkdir -p "$G/due" "$G/world/events" "$G/rules"
 : > "$G/AGENTS.md"
 d() { GODSPEED_ROOT="$G" node "$HERE/due.js" --godspeed "$G" "$@"; }
+
+# A REMINDER IS A PAGE IN THE NOTEBOOK NOW, AND ITS CLOSING A MOMENT (#90, 30 October 2026). Every
+# case below says exactly what it always said; where one used to read due/<slug>.md or a file in
+# world/events/, it reads the page under notebook/Deadlines/ or the timeline instead. Seeding by
+# writing an old file is kept on purpose: ticket 02's converter takes it in on the next run, which
+# is how a computer still on an older version is never lost, so these are its tests as well.
+#
+# The page of one reminder, found by its identity and not by its name, because a rename renames the
+# file.
+page() { grep -rl "^id: due-$2\$" "$1/notebook/Deadlines" 2>/dev/null | head -1; }
+pg() { local f; f="$(page "$1" "$2")"; if [ -n "$f" ]; then cat "$f"; fi; }
+# Every closing and drop this mission control holds.
+moments() { cat "$1"/notebook/Timeline/*.md 2>/dev/null; }
+# The windows of a page, written the way the STRIP lines they came from read, so every case below
+# keeps the words it had.
+strips() { pg "$1" "$2" | node -e '
+let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{
+ const v=x=>String(x).trim().replace(/^["\x27]|["\x27]$/g,"");
+ const out=[];let w=null,inW=false;
+ for(const l of s.split("\n")){
+  if(/^windows:/.test(l)){inW=true;continue;}
+  if(!inW)continue;
+  if(/^[a-z_]+:/.test(l))break;
+  const m=l.match(/^\s*-\s*start:\s*(.*)$/);
+  if(m){if(w)out.push(w);w={start:v(m[1])};continue;}
+  const k=l.match(/^\s+([a-z_]+):\s*(.*)$/);
+  if(k&&w)w[k[1]]=v(k[2]);
+ }
+ if(w)out.push(w);
+ process.stdout.write(out.map(w=>["STRIP:",w.start,w.deadline||"-"]
+  .concat(w.target?["target",w.target]:[],w.moved?["moved",w.moved]:[]).join(" ")).join("\n"));
+});'; }
+# One line of a page's frontmatter, changed the way a person changes it in their editor.
+setline() { local f; f="$(page "$1" "$2")"; node -e '
+const fs=require("fs"),[file,key,value]=process.argv.slice(1);
+const out=fs.readFileSync(file,"utf8").split("\n").map(l=>new RegExp("^"+key+":").test(l)?key+": "+value:l);
+fs.writeFileSync(file,out.join("\n"));' "$f" "$3" "$4"; }
+# Everything this mission control holds about reminders, gone: a reminder is a record, so clearing
+# due/ no longer clears it.
+wipe() { rm -rf "$1/notebook" "$1/archives" "$1/.godspeed/due-copy.json"; rm -f "$1"/due/*.md "$1"/world/events/*.md; }
 
 PASS=0; FAIL=0
 ok()  { PASS=$((PASS+1)); printf '  ok   %s\n' "$1"; }
@@ -72,7 +113,7 @@ missing "incident: nor does the full list" "$(GODSPEED_TODAY=2026-09-28 d)" "RUN
 contains "incident: state names the event" "$(GODSPEED_TODAY=2026-09-28 d state)" "CLOSED   post-publish  (world/events/2026-09-23-post-approved-and-published.md)"
 
 # --- no evidence, no closing -----------------------------------------------------------------
-rm -f "$G"/due/*.md "$G"/world/events/*.md
+wipe "$G"
 d add chore --title "CHORE" --from 2026-01-01 --to 2026-01-10 --done-when x --cost y >/dev/null
 printf -- '---\ndate: 2026-01-05\nparticipants: [me]\ncloses: [due/chore]\n---\n\nSurely done.\n' > "$G/world/events/2026-01-05-guess.md"
 contains "an event without evidence closes nothing" "$(GODSPEED_TODAY=2026-01-06 d)" "CHORE"
@@ -80,22 +121,24 @@ contains "and check names it" "$(GODSPEED_TODAY=2026-01-06 d check)" "closes not
 
 # --- done and drop write events, and the file keeps only the window ------------------------------
 GODSPEED_TODAY=2026-01-07 d done chore --evidence "the receipt is in my mail" >/dev/null
-EV="$(cat "$G"/world/events/2026-01-07-chore-closed.md 2>/dev/null)"
-contains "done writes an event with the window it closes" "$EV" "closes: [due/chore#2026-01-01]"
+EV="$(moments "$G")"
+contains "done writes a moment that names which window it closes" "$EV" "deadline_id: due-chore"
+contains "  and the window" "$EV" "obligation_window: 2026-01-01"
+contains "  as a closing and not a drop" "$EV" "obligation_kind: closes"
 contains "and the evidence" "$EV" "evidence: you said so; the receipt is in my mail"
-check "the file carries no state word" "$(grep -c '^STRIP: 2026-01-01 2026-01-10$' "$G/due/chore.md")" "1"
+check "the page carries no state word" "$(strips "$G" chore)" "STRIP: 2026-01-01 2026-01-10"
 contains "and the list shows it done" "$(GODSPEED_TODAY=2026-01-08 d)" "DONE      CHORE"
 missing "and the brief does not carry it" "$(GODSPEED_TODAY=2026-01-08 d today)" "CHORE"
 d add monthly --title "MONTHLY" --from 2026-01-01 --to 2026-01-28 --repeats monthly --done-when x --cost y >/dev/null
 GODSPEED_TODAY=2026-02-10 d drop monthly >/dev/null
-[ -f "$G/due/monthly.md" ] && ok "drop refuses without --yes" || bad "drop refuses without --yes"
+[ -n "$(page "$G" monthly)" ] && ok "drop refuses without --yes" || bad "drop refuses without --yes"
 GODSPEED_TODAY=2026-02-10 d drop monthly --yes >/dev/null
-[ -f "$G/due/monthly.md" ] && ok "drop deletes nothing" || bad "drop deletes nothing"
+[ -n "$(page "$G" monthly)" ] && ok "drop deletes nothing" || bad "drop deletes nothing"
 contains "a dropped one is listed as called off" "$(GODSPEED_TODAY=2026-05-10 d)" "CALLED OFF     MONTHLY"
 missing "and never comes back to the brief" "$(GODSPEED_TODAY=2026-05-10 d today)" "MONTHLY"
 
 # --- the old form moves itself -------------------------------------------------------------------
-rm -f "$G"/due/*.md "$G"/world/events/*.md
+wipe "$G"
 cat > "$G/due/old.md" <<'PLAN'
 # OLD
 
@@ -115,22 +158,22 @@ STRIP: 2026-01-01 2026-01-10 done 2026-01-04
 - 2026-01-04 you said it was done
 PLAN
 contains "an old done word is honoured" "$(GODSPEED_TODAY=2026-01-05 d)" "DONE      OLD"
-contains "and turned into an event on its true date" "$(cat "$G"/world/events/2026-01-04-old-closed.md 2>/dev/null)" "evidence: due/old.md log, 2026-01-04: you said it was done"
-check "then the word goes" "$(grep -c '^STRIP: 2026-01-01 2026-01-10$' "$G/due/old.md")" "1"
+contains "and turned into a closing on its true date" "$(moments "$G")" "due/old.md log, 2026-01-04: you said it was done"
+check "then the word goes" "$(strips "$G" old)" "STRIP: 2026-01-01 2026-01-10"
 GODSPEED_TODAY=2026-01-06 d >/dev/null
-check "moving twice writes one event" "$(ls "$G/world/events" | grep -c old)" "1"
+check "moving twice makes one closing" "$(grep -rl 'deadline_id: due-old' "$G/notebook/Timeline" 2>/dev/null | wc -l | tr -d ' ')" "1"
 
 # =================================================================================================
 # THREE DATES: the day you can start, the day you would like it done (a target, soft) and the day
 # it starts costing you (a deadline, hard). At least one of the last two.
 # =================================================================================================
-fresh() { rm -f "$G"/due/*.md "$G"/world/events/*.md; }
+fresh() { wipe "$G"; }
 said() { GODSPEED_TODAY="$1" d today; }
 fresh
 
 # --- still no date, not eligible -----------------------------------------------------------------
 contains "neither a target nor a deadline is refused" "$(d add wish --title W --done-when x)" "No date, not eligible"
-[ -f "$G/due/wish.md" ] && bad "and leaves no file" || ok "and leaves no file"
+[ -n "$(page "$G" wish)" ] && bad "and leaves nothing behind" || ok "and leaves nothing behind"
 contains "a start alone is no day either" "$(d add half --title H --from 2026-01-01 --done-when x --cost y)" "No date, not eligible"
 contains "a target after the deadline is refused" "$(d add up --title U --from 2026-01-01 --target 2026-03-01 --to 2026-02-01 --done-when x --cost y)" "A target sits on or before the deadline"
 contains "a deadline still says what it costs" "$(d add nc --title N --target 2026-02-01 --to 2026-03-01 --done-when x)" "what it costs you if it slips"
@@ -138,7 +181,7 @@ contains "a deadline still says what it costs" "$(d add nc --title N --target 20
 # --- a target only: quiet, one mention, one question, then about weekly ------------------------------
 OUT="$(GODSPEED_TODAY=2026-04-20 d add present --title "PRESENT" --target 2026-05-10 --done-when "the present is bought")"
 contains "a target alone is enough, and no cost is asked for" "$OUT" "Nothing is said about it before that day"
-contains "the start is today and there is no deadline" "$(cat "$G/due/present.md")" "STRIP: 2026-04-20 - target 2026-05-10"
+contains "the start is today and there is no deadline" "$(strips "$G" present)" "STRIP: 2026-04-20 - target 2026-05-10"
 contains "the list says when" "$(GODSPEED_TODAY=2026-05-01 d)" "AIMING FOR     PRESENT: you would like it done by 2026-05-10, in 9 days."
 missing "the brief says nothing before the day" "$(said 2026-04-21; said 2026-05-09)" "PRESENT"
 contains "on the day it is said once" "$(said 2026-05-10)" "TARGET TODAY   PRESENT: today, 2026-05-10, is the day you would like it done."
@@ -155,7 +198,7 @@ missing "which does not ask again" "$OUT" "A new date"
 contains "it never becomes a deadline, a year on" "$(GODSPEED_TODAY=2027-05-10 d)" "WHEN YOU CAN   PRESENT"
 contains "state names the day aimed for" "$(GODSPEED_TODAY=2026-05-18 d state --json)" '"targetDay":"2026-05-10"'
 contains "as soon as you can is taken as the answer" "$(GODSPEED_TODAY=2026-05-19 d target present asap)" "Kept present open, as soon as you can"
-contains "and written into the log" "$(cat "$G/due/present.md")" "you said as soon as you can, after aiming for 2026-05-10"
+contains "and written into the log" "$(pg "$G" present)" "you said as soon as you can, after aiming for 2026-05-10"
 missing "and changes nothing else: still quiet" "$(said 2026-05-20)" "PRESENT"
 contains "still weekly" "$(said 2026-05-25)" "PRESENT: still open"
 
@@ -170,7 +213,9 @@ missing "a target a few days back is normal and not warned about" "$(GODSPEED_TO
 # --- a name with a history is not reused ------------------------------------------------------------
 GODSPEED_TODAY=2026-09-30 d add oldtax --title T --to 2027-01-31 --done-when x --cost y >/dev/null
 GODSPEED_TODAY=2026-09-30 d drop oldtax --yes >/dev/null
-rm -f "$G/due/oldtax.md"
+# The page itself taken away (in an editor, say): the closing it left behind is what refuses the
+# name, because a new thing under it would be born called off.
+rm -f "$(page "$G" oldtax)"
 contains "a name a drop or a closing already names is refused" "$(GODSPEED_TODAY=2026-09-30 d add oldtax --title T --to 2027-01-31 --done-when x --cost y)" "was used before"
 
 # --- a new date is the new target ------------------------------------------------------------------
@@ -180,12 +225,12 @@ said 2026-05-01 >/dev/null; said 2026-05-02 >/dev/null
 contains "a new day before the start is refused" "$(GODSPEED_TODAY=2026-05-02 d target fence 2026-03-01)" "before the day you can start"
 contains "a guessed flag gets the one right form back" "$(GODSPEED_TODAY=2026-05-02 d target fence --to 2026-06-15)" "mc-due target fence 2027-03-14"
 contains "a new date becomes the target" "$(GODSPEED_TODAY=2026-05-02 d target fence 2026-06-15)" "you would like it done by 2026-06-15"
-contains "kept beside the old one" "$(cat "$G/due/fence.md")" "STRIP: 2026-04-01 - target 2026-05-01 moved 2026-06-15"
+contains "kept beside the old one" "$(strips "$G" fence)" "STRIP: 2026-04-01 - target 2026-05-01 moved 2026-06-15"
 missing "quiet again until then" "$(said 2026-05-09; said 2026-06-14)" "FENCE"
 contains "one mention on the new day" "$(said 2026-06-15)" "FENCE: today, 2026-06-15"
 contains "and the question again if it passes too" "$(said 2026-06-16)" "you aimed for 2026-06-15. A new date"
 GODSPEED_TODAY=2026-06-20 d done fence >/dev/null
-contains "done closes a target like anything else" "$(cat "$G"/world/events/2026-06-20-fence-closed.md)" "done (window 2026-04-01, aiming for 2026-06-15)"
+contains "done closes a target like anything else" "$(moments "$G")" "done (window 2026-04-01, aiming for 2026-06-15)"
 
 # --- a target and a deadline: the deadline rules, plus the target day ------------------------------
 fresh
@@ -203,12 +248,15 @@ missing "while the same deadline without a target waits" "$OUT" "TWIN"
 contains "after the target it says so and names the deadline" "$(GODSPEED_TODAY=2027-02-01 d)" "TAX: past the day you aimed for (2027-01-31). 28 days left, and the last one is 2027-02-28."
 missing "and never asks for a new date" "$(GODSPEED_TODAY=2027-02-01 d; said 2027-02-10)" "A new date"
 
-# --- a deadline only: exactly as before, and an old file is left as it was ----------------------------
+# --- a deadline only: exactly as before, and an old file is kept, never changed ----------------------
 fresh
 printf '# OLDFORM\n\nTITLE: OLDFORM\nDONE-WHEN: x\nCOST-IF-MISSED: y\nSELF-CHECK: none\nSELF-CHECK-ARG: \nREPEATS: no\nLINK: \nSOURCE: you\n\n## Windows\n\nSTRIP: 2026-01-01 2026-02-01\n\n## Log\n\n- 2026-01-01 created, window 2026-01-01 to 2026-02-01\n' > "$G/due/oldform.md"
 BEFORE="$(cat "$G/due/oldform.md")"
 for day in 2026-01-05 2026-01-20 2026-02-03; do GODSPEED_TODAY=$day d >/dev/null; GODSPEED_TODAY=$day d check >/dev/null; GODSPEED_TODAY=$day d state --json >/dev/null; done
-check "an old window file is byte for byte unchanged by list, check and state" "$(cat "$G/due/oldform.md")" "$BEFORE"
+# Once it is a page, and only once the check says the page says what the file said, the file is
+# moved out of the owner's way - byte for byte as it was, and never deleted.
+check "the old window file is byte for byte what it was, in the archive" "$(cat "$G"/archives/*-due-moved-to-the-notebook/due/oldform.md 2>/dev/null)" "$BEFORE"
+[ -f "$G/due/oldform.md" ] && bad "and is out of the owner's way" || ok "and is out of the owner's way"
 contains "and read the way it always was" "$(GODSPEED_TODAY=2026-01-20 d)" "ON THE WAY     OLDFORM: 13 days left, and the last one is 2026-02-01."
 missing "with no target words" "$(GODSPEED_TODAY=2026-01-20 d; GODSPEED_TODAY=2026-01-20 d state --json)" "target"
 
@@ -239,11 +287,11 @@ missing "a passed target comes after even a quiet deadline's first mention" "$(s
 fresh
 d add sheet --title "SHEET" --from 2026-01-01 --target 2026-01-20 --to 2026-01-31 --repeats monthly --done-when x --cost y >/dev/null
 GODSPEED_TODAY=2026-03-15 d >/dev/null
-contains "February keeps the target's place" "$(cat "$G/due/sheet.md")" "STRIP: 2026-02-01 2026-02-28 target 2026-02-20"
-contains "and March too" "$(cat "$G/due/sheet.md")" "STRIP: 2026-03-01 2026-03-31 target 2026-03-20"
+contains "February keeps the target's place" "$(strips "$G" sheet)" "STRIP: 2026-02-01 2026-02-28 target 2026-02-20"
+contains "and March too" "$(strips "$G" sheet)" "STRIP: 2026-03-01 2026-03-31 target 2026-03-20"
 GODSPEED_TODAY=2026-01-05 d add bins --title "BINS" --target 2026-01-09 --repeats weekly --done-when x >/dev/null
 GODSPEED_TODAY=2026-01-10 d >/dev/null
-contains "a repeating target grows its next window once the target passed" "$(cat "$G/due/bins.md")" "STRIP: 2026-01-12 - target 2026-01-16"
+contains "a repeating target grows its next window once the target passed" "$(strips "$G" bins)" "STRIP: 2026-01-12 - target 2026-01-16"
 contains "the passed one stays as soon as you can until then" "$(GODSPEED_TODAY=2026-01-10 d)" "WHEN YOU CAN   BINS"
 
 # --- a file I cannot read needs a look, and is never done (2026-10-09) -------------------------------
@@ -309,55 +357,59 @@ ad() { GODSPEED_TODAY=2026-10-23 GODSPEED_ROOT="$A" node "$HERE/due.js" --godspe
 mk() { ad add "$1" --title "$2" --to "$3" --done-when "Paid" --cost "A reminder fee" --link "http://127.0.0.1:8000/documents/7/details" --addon an-addon --addon-key "$4"; }
 out="$(mk pay-the-invented-water-bill "Pay the invented water bill" 2026-11-20 "a1b2c3#1")"; rc=$?
 check "an add-on deadline is made" "$rc" "0"
-F="$A/due/pay-the-invented-water-bill.md"
-contains "  it names the add-on" "$(cat "$F")" "ADDON: an-addon"
-contains "  and the add-on's key" "$(cat "$F")" "ADDON-KEY: a1b2c3#1"
-contains "  and what the add-on wrote" "$(cat "$F")" "ADDON-STATE: "
-contains "  and where it came from" "$(cat "$F")" "SOURCE: an-addon, 2026-10-23"
-contains "  and is an ordinary window to the last day" "$(cat "$F")" "STRIP: 2026-10-23 2026-11-20"
+B=pay-the-invented-water-bill
+contains "  it names the add-on" "$(pg "$A" $B)" "addon: an-addon"
+contains "  and the add-on's key" "$(pg "$A" $B)" "addon_key: a1b2c3#1"
+contains "  and what the add-on wrote" "$(pg "$A" $B)" "addon_state: "
+contains "  and where it came from" "$(pg "$A" $B)" "source: an-addon, 2026-10-23"
+contains "  and is an ordinary window to the last day" "$(strips "$A" $B)" "STRIP: 2026-10-23 2026-11-20"
 contains "  which the reminders read like any other" "$(GODSPEED_TODAY=2026-11-18 ad today)" "Pay the invented water bill"
 out="$(mk another-name "Pay it again" 2026-12-01 "a1b2c3#1")"; rc=$?
-check "the same key again makes no second deadline" "$(ls "$A/due" | grep -c '\.md$')" "1"
+check "the same key again makes no second deadline" "$(ls "$A/notebook/Deadlines" | grep -c '\.md$')" "1"
 check "  and is not an error" "$rc" "0"
 contains "  it says which one it kept" "$out" "Kept pay-the-invented-water-bill"
-check "  and the first one is as it was" "$(grep '^STRIP' "$F")" "STRIP: 2026-10-23 2026-11-20"
+check "  and the first one is as it was" "$(strips "$A" $B)" "STRIP: 2026-10-23 2026-11-20"
 mk other-addons-key "Another add-on's deadline" 2026-11-30 "a1b2c3#2" >/dev/null
 out="$(ad add third --title "Same key, other add-on" --to 2026-11-30 --done-when d --cost c --addon other-addon --addon-key "a1b2c3#1")"
-check "another add-on's same key is another deadline" "$( [ -f "$A/due/third.md" ] && echo made)" "made"
+check "another add-on's same key is another deadline" "$( [ -n "$(page "$A" third)" ] && echo made)" "made"
 out="$(ad add bad-key --title "Bad" --to 2026-11-30 --done-when d --cost c --addon an-addon --addon-key "two words")"; rc=$?
 check "a key with a space is refused" "$rc" "1"
-check "  and nothing is made" "$( [ -f "$A/due/bad-key.md" ] && echo made || echo none)" "none"
+check "  and nothing is made" "$( [ -n "$(page "$A" bad-key)" ] && echo made || echo none)" "none"
 out="$(ad add bad-name --title "Bad" --to 2026-11-30 --done-when d --cost c --addon "An Addon" --addon-key k1)"; rc=$?
 check "an add-on name that is not plain is refused" "$rc" "1"
 out="$(ad addon-update pay-the-invented-water-bill --addon an-addon --to 2026-11-25)"; rc=$?
 check "the add-on moves its untouched deadline" "$rc" "0"
-check "  to the new last day" "$(grep '^STRIP' "$F")" "STRIP: 2026-10-23 2026-11-25"
-contains "  and says so in its log" "$(cat "$F")" "moved by an-addon"
+check "  to the new last day" "$(strips "$A" $B)" "STRIP: 2026-10-23 2026-11-25"
+contains "  and says so in its log" "$(pg "$A" $B)" "moved by an-addon"
 out="$(ad addon-update pay-the-invented-water-bill --addon an-addon --title "Pay the invented water bill of 40 EUR")"; rc=$?
-check "the add-on renames its untouched deadline" "$(grep '^TITLE' "$F")" "TITLE: Pay the invented water bill of 40 EUR"
+check "the add-on renames its untouched deadline" "$(pg "$A" $B | grep '^title:')" "title: Pay the invented water bill of 40 EUR"
 out="$(ad addon-update pay-the-invented-water-bill --addon other-addon --to 2026-11-28)"; rc=$?
 check "another add-on cannot change it" "$rc" "1"
-check "  and it stays" "$(grep '^STRIP' "$F")" "STRIP: 2026-10-23 2026-11-25"
-# Another reader writes the same file in its own shape (the engine's mc-due: another heading, SAID
-# lines): that is not the person changing it.
-sed -i 's/^## Windows$/## Strips/' "$F"; printf -- '- 2026-10-24 SAID brief\n' >> "$F"
+check "  and it stays" "$(strips "$A" $B)" "STRIP: 2026-10-23 2026-11-25"
+# Another reader writes the same page in its own shape (the morning brief's own SAID lines): that
+# is not the person changing it.
+printf -- '- 2026-10-24 SAID brief\n' >> "$(page "$A" $B)"
 out="$(ad addon-update pay-the-invented-water-bill --addon an-addon --to 2026-11-26)"; rc=$?
 check "another reader's own layout and log lines are no change by the person" "$rc" "0"
 st() { ad state --json | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const r=JSON.parse(s).find(x=>x.slug===process.argv[1]);process.stdout.write(String(JSON.stringify(r&&r.addon)))})' "$1"; }
 contains "state names the add-on, its key and that nobody touched it" "$(st pay-the-invented-water-bill)" '"name":"an-addon","key":"a1b2c3#1","touched":false'
 # The person changes it: by hand, by a target, by closing or dropping it. From then on it is theirs.
+# The last day of a page, moved by hand in an editor.
+bump() { local f; f="$(page "$1" "$2")"; node -e '
+const fs=require("fs"),file=process.argv[1];
+fs.writeFileSync(file,fs.readFileSync(file,"utf8").replace("deadline: 2026-12-10","deadline: 2026-12-12"));' "$f"; }
 touchcase() {
   local slug="$1" what="$2"; shift 2
   mk "$slug" "Invented deadline $slug" 2026-12-10 "k-$slug" >/dev/null
-  local before; "$@" >/dev/null; before="$(cat "$A/due/$slug.md")"
+  local before; "$@" >/dev/null; before="$(pg "$A" "$slug")"
   out="$(ad addon-update "$slug" --addon an-addon --to 2026-12-20)"; rc=$?
   check "$what: the add-on's update is refused" "$rc" "4"
   contains "  in words" "$out" "Left as it is"
-  check "  and the file is as the person left it" "$(cat "$A/due/$slug.md")" "$before"
+  check "  and the page is as the person left it" "$(pg "$A" "$slug")" "$before"
   contains "  state says it was touched" "$(st "$slug")" '"touched":true'
 }
-touchcase by-hand "the person changed the last day by hand" sed -i 's/^STRIP: \(.*\) 2026-12-10$/STRIP: \1 2026-12-12/' "$A/due/by-hand.md"
-touchcase new-title "the person renamed it by hand" sed -i 's/^TITLE: .*/TITLE: My own words/' "$A/due/new-title.md"
+touchcase by-hand "the person changed the last day by hand" bump "$A" by-hand
+touchcase new-title "the person renamed it by hand" setline "$A" new-title title "My own words"
 touchcase target "the person set a day to aim for" ad target target 2026-12-01
 touchcase closed "the person closed it" ad done closed --evidence "paid it"
 touchcase dropped "the person dropped it" ad drop dropped --yes
@@ -380,8 +432,8 @@ out="$(w "$W" GODSPEED_ROOT="$WP" GODSPEED_DIR="$WP" GODSPEED_WORKSPACE="$WP" no
 contains "the chat of a mission control lists its own deadlines" "$out" "Reader own deadline"
 missing "  not those of the one device.env names" "$out" "DECOY"
 w "$W" GODSPEED_ROOT="$WP" GODSPEED_DIR="$WP" GODSPEED_WORKSPACE="$WP" node "$HERE/due.js" add priya --title "Present for Priya" --target 2026-10-20 --done-when "bought" >/dev/null
-check "  and mc-due add files the new one there" "$( [ -f "$W/due/priya.md" ] && echo here)" "here"
-check "  and never in the other one" "$( [ -f "$DEC/due/priya.md" ] && echo there || echo absent)" "absent"
+check "  and mc-due add files the new one there" "$( [ -n "$(page "$W" priya)" ] && echo here)" "here"
+check "  and never in the other one" "$( [ -n "$(page "$DEC" priya)" ] && echo there || echo absent)" "absent"
 out="$(w "$W/notes/deep" node "$HERE/due.js" list)"
 contains "standing inside a mission control with no environment: that one, not device.env" "$out" "Reader own deadline"
 out="$(w "$DEC" GODSPEED_ROOT="$WP" node "$HERE/due.js" list)"
@@ -406,26 +458,18 @@ check "  and fails" "$rc" "1"
 out="$(w "$W" sh "$HERE/mc-due" today)"
 contains "the mc-due launcher, run inside a mission control, reads it" "$out" "Reader own deadline"
 
-# --- your due/README.md: brought up to date only if you never changed it ----------------------------
+# --- the due/README.md this kit ships, kept in step with the one inside due.js ----------------------
+# Until 30 October 2026 due.js also brought an unchanged older copy of this README in a person's own
+# mission control up to date. It writes nothing in due/ at all now (a reminder is a page in the
+# notebook, and in folder mode a rewritten tracked file would be an uncommitted change nobody asked
+# for), so what is left to hold is that the text inside the program and the text the kit ships are
+# the one text.
 KIT="$(cd "$HERE/.." && pwd)"
 EMBED="$(node -e '
 const s = require("fs").readFileSync(process.argv[1], "utf8");
 const m = s.match(/^const README = (".*");$/m); process.stdout.write(m ? JSON.parse(m[1]) : "");' "$HERE/due.js")"
 check "the README inside due.js is the kit's README, byte for byte (python embed_readme.py if not)" \
   "$EMBED" "$(tr -d '\r' < "$KIT/starter-godspeed/due/README.md")"
-if git -C "$KIT" cat-file -e d6583b2 2>/dev/null; then
-  git -C "$KIT" show d6583b2:starter-godspeed/due/README.md > "$G/due/README.md"
-  GODSPEED_TODAY=2026-01-10 d >/dev/null
-  check "an unchanged older README is brought up to date" "$(cat "$G/due/README.md")" "$(cat "$KIT/starter-godspeed/due/README.md")"
-  git -C "$KIT" show d6583b2:starter-godspeed/due/README.md | sed 's/an empty one costs you nothing/an empty one costs me nothing/' > "$G/due/README.md"
-  MINE="$(cat "$G/due/README.md")"
-  GODSPEED_TODAY=2026-01-10 d >/dev/null
-  check "a README you changed by hand is never touched" "$(cat "$G/due/README.md")" "$MINE"
-  rm -f "$G/due/README.md"
-else
-  ok "the kit's history is not here (a shallow copy), so the README refresh is checked where it is"
-fi
-
 echo
 echo "due.js: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]
