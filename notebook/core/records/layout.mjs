@@ -41,6 +41,17 @@ const layouts = {
     name: r => [text(r.attribute).replaceAll('_', ' ').trim(), text(r.value).trim()].filter(Boolean).join(' - '),
   },
   moments: { word: 'moment', folder: () => 'Timeline', name: r => [day(r.happened_at), text(r.title).trim()].filter(Boolean).join(' '), body: 'description', first: ['title', 'happened_at', 'happened_end', 'category'] },
+  // A reminder with a day attached: the page a person reads instead of the file
+  // tools/due.js keeps in due/. The frontmatter holds what that file holds (what
+  // done means, what slipping costs, the self check, how it repeats, the link,
+  // the source, every window, the add-on, the calendar entry) and its log is the
+  // body, so it still reads and edits like the plain file it replaces. Whether it
+  // is open is never written here: that is worked out from the moments that close
+  // its windows (deadline-records.mjs), as it is worked out from events today.
+  deadlines: {
+    word: 'deadline', folder: () => 'Deadlines', name: r => r.title, body: 'log',
+    first: ['title', 'done_when', 'cost_if_missed', 'self_check', 'self_check_arg', 'repeats', 'link', 'source', 'windows'],
+  },
   collections: { word: 'collection', folder: () => 'Collections', name: r => r.name, body: 'description', first: ['name', 'slug'] },
   // Items sit in a folder named after their collection, so renaming a
   // collection moves its items.
@@ -99,8 +110,15 @@ export const key = name => { const text = String(name); return (/^[\x20-\x7e]*$/
 // person) keeps that form but leaves the readable folders for the system
 // folder, so it no longer shows among the live pages.
 export const isReadableType = type => Object.hasOwn(layouts, type);
+// A deadline Settings saved before 18 October 2026 and that was then moved into
+// due/ (native-due.mjs, moveSettingsDeadlines) stays in the system folder too.
+// It is closed and carries moved_to; as a page it would stand in Deadlines/
+// beside the very reminder it was moved to, and the owner would see one reminder
+// twice. It is kept, not thrown away, because it is the record of what Settings
+// saved and where it went.
 export function isReadable(record) {
-  return isReadableType(record.type) && !record.removed_at && !(record.type === 'contacts' && record.merged_into);
+  return isReadableType(record.type) && !record.removed_at && !(record.type === 'contacts' && record.merged_into)
+    && !(record.type === 'deadlines' && record.moved_to);
 }
 // The type and id become a file name here, so both are checked here as well.
 export function systemPath(record) { return systemFolder + '/' + safe(record.type) + '/' + safe(record.id) + (isReadableType(record.type) ? '.md' : '.json'); }

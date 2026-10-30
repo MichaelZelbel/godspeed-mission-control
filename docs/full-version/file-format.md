@@ -12,12 +12,17 @@ The notebook is the folder `notebook/` of the mission control (it was `records/`
 | `entities` | `World/` | name | `description` | `entity` |
 | `claims` (facts) | `Facts/`; `Facts/Earlier/` once closed (`valid_to`) | `<attribute> - <value>` | none | `fact` |
 | `moments` | `Timeline/` | `<YYYY-MM-DD> <title>` | `description` | `moment` |
+| `deadlines` (reminders) | `Deadlines/` | title | `log` | `deadline` |
 | `collections` | `Collections/` | name | `description` | `collection` |
 | `collection_items` | `Collections/<collection name>/` | title, else its first text value | none | `collection item` |
 | `contact_topics` | `Topics/` | title | none | `topic` |
 | `weekly_reviews` | `Reviews/` | `Week of <week_start>` | none | `weekly review` |
 
-Why these: they are what the notebook shows as pages (Notes, People, Groups, Timeline, World, Collections), each with a title of its own. Folders and the field names below follow Menerio where Menerio had them (`People/`, `Groups/`, the note's own folder, `id`, `title`, `name`, `created`, `modified`, `tags`, `aliases`, `favorite`, `pinned`, `sensitive`). An item sits under its collection's name because that is how a person looks for it; renaming the collection moves its items.
+Why these: they are what the notebook shows as pages (Notes, People, Groups, Timeline, World, Collections, Deadlines), each with a title of its own. Folders and the field names below follow Menerio where Menerio had them (`People/`, `Groups/`, the note's own folder, `id`, `title`, `name`, `created`, `modified`, `tags`, `aliases`, `favorite`, `pinned`, `sensitive`). An item sits under its collection's name because that is how a person looks for it; renaming the collection moves its items.
+
+**A reminder, and its closing.** A reminder with a day attached is a `deadlines` page. Its frontmatter holds what the plain file in `due/` holds, so a person reads and edits it as before: `title`, `done_when`, `cost_if_missed`, `self_check` and `self_check_arg`, `repeats`, `link`, `source`, `windows` (one per window, each with its `start`, its `deadline` or none, its `target` and a `moved` day), the `addon`, `addon_key` and `addon_state` of a reminder an add-on made, the `calendar_marker` naming its one calendar entry, `native_slug`, and any line the owner added by hand in `head_lines`. Its log, the `SAID` lines the morning brief writes included, is the Markdown body.
+
+Whether a reminder is open is never written on the page. Finishing one or calling it off is something that happened, so it is a moment on the timeline: `Done: <title>` or `Dropped: <title>` on the day it happened, category `obligation`, carrying a typed reference to the reminder by uid, `obligation_kind` (`closes` or `drops`), `obligation_window` (the window's first day, for one window of a repeating reminder), the `evidence` that shows it, and its `source`. Moments are append-only, so a closing is never edited; a correction is its own record. One copy of the answer cannot disagree with itself, and a reminder closed on one computer is closed on every computer, because the page and the moment sync the way every note does.
 
 The Lexicon (Menerio's wiki pages, `Lexicon/`) was retired on 8 October 2026 at the maintainer's request, so that every kind of record is one the notebook shows and lets its owner edit. One notebook's 296 pages, their sources and revisions were moved to `archives/notebook-lexicon-2026-10-08/` in that owner's mission control, and an import from Menerio leaves them in its source archive.
 
@@ -63,7 +68,7 @@ The frontmatter starts with `id`, the friendly `type`, the type's own fields (a 
 - Bookkeeping: `record_history` (earlier versions), `jobs`, `job_receipts`, `command_receipts`, `work_tool_receipts`, `settings`, `import_mappings`, `approvals`, `notifications`, `connector_status`, `embeddings`, `review_queue` and its bulk jobs, AI job state (`note_ai_jobs`, `media_analysis`, `gdrive_imports` and the like), `conversation_messages` and `note_conversations`, `event_corrections`.
 - Links between records: group memberships, moment participants and entities, relationships, note connections, person documents, note attachments, contact topic events. Their identity is the pair of records they join, so they have no title of their own; the pages they join are readable.
 - Settings of the notebook itself: `profiles`, `profile_categories`, `fact_slots` (how facts are labelled and shown), `user_self_aliases`, `collection_templates`, suggestion preferences.
-- The assistant's working records: `goals`, `decisions`, `forecasts`, `work_items`, `deadlines`, `habits`, `journal`, `coach_talks`, `health_*`, `watch_*`, `lead_*`, `radar_*`. The mission control keeps its readable form of these in its own folders (`goals/`, `work/`, `due/`, `journal/`, `coach/`, `forecasts/`).
+- The assistant's working records: `goals`, `decisions`, `forecasts`, `work_items`, `habits`, `journal`, `coach_talks`, `health_*`, `watch_*`, `lead_*`, `radar_*`. The mission control keeps its readable form of these in its own folders (`goals/`, `work/`, `journal/`, `coach/`, `forecasts/`). Reminders left this list on 29 October 2026: they are `Deadlines/` pages now. A reminder that Settings saved before 18 October 2026 and that was then moved into `due/` stays here, closed and carrying `moved_to`, so that one reminder is never two pages.
 - Any type not in the table above.
 
 ## Records
