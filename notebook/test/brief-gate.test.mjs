@@ -1,6 +1,9 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';
 import {Store} from '../core/records/store.mjs';import {QueryService} from '../core/query.mjs';import {jobExecutor} from '../core/runtime.mjs';
 import {dueCommand} from '../core/native-due.mjs';
+// Where one reminder is kept: its page under notebook/Deadlines/, which is what a rehearsal must
+// leave exactly as it was (since 30 October 2026 a reminder is a record, not a file in due/).
+const page=(store,slug)=>store.file(store.list('deadlines').find(r=>r.native_slug===slug));
 test('a briefing cannot request a decision on a prepared artifact changed during judgment',async()=>{
  const store=new Store(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-brief-action-stale-'))),query=new QueryService(store),goal=store.save('goals',{title:'Fictional inspect sources',status:'adopted'}),draft=store.save('notes',{title:'Fictional exact proposed change',content:'Original fictional proposal.'});
  store.save('work_items',{title:'Fictional source review',state:'awaiting_approval',goal_id:goal.id,draft_id:draft.id});let checks=0;
@@ -65,7 +68,8 @@ test('rehearsal executes reminder completion in its retained copy without changi
 test('rehearsal includes canonical native obligations without altering their live text or timestamp',async()=>{
  const store=new Store(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-native-brief-rehearsal-'))),query=new QueryService(store),today=new Date().toISOString().slice(0,10);
  dueCommand(store,['add','fictional-native','--title','Fictional native practice','--from',today,'--to',today,'--done-when','Practice recorded','--cost','Fictional missed practice']);
- const source=path.join(store.root,'due','fictional-native.md'),original=fs.readFileSync(source,'utf8'),modified=fs.statSync(source).mtimeMs;
+ // The reminder itself, as a person opens it: its page under notebook/Deadlines/ (#90).
+ const source=page(store,'fictional-native'),original=fs.readFileSync(source,'utf8'),modified=fs.statSync(source).mtimeMs;
  const provider=async input=>{if(input.kind==='brief-verification')return {passed:true,reason:'Fixture checked.'};assert.ok(input.context.deadlines.some(d=>d.native_slug==='fictional-native'));return 'No fresh fictional health observations are available. Complete the fictional practice today.';};
  const result=await jobExecutor(provider,query)({kind:'brief-rehearsal',id:'native-rehearsal'},{store,settings:{}});
  assert.equal(fs.readFileSync(source,'utf8'),original);assert.equal(fs.statSync(source).mtimeMs,modified);
@@ -77,11 +81,11 @@ test('rehearsal preserves file-newer completion evidence without copying the dep
  fs.mkdirSync(path.join(store.root,'work'),{recursive:true});const dependency=path.join(store.root,'work','fictional-result.txt');fs.writeFileSync(dependency,'Fictional private result, not needed to check its date.');
  const before=fs.readFileSync(dependency,'utf8'),stamp=fs.statSync(dependency).mtimeMs;
  dueCommand(store,['add','fictional-date','--title','Fictional dated result','--from',today,'--to',today,'--done-when','The result file exists in this window','--cost','Fictional missed result','--self-check','file-newer','--self-check-arg','work/fictional-result.txt']);
- const originalDue=fs.readFileSync(path.join(store.root,'due','fictional-date.md'),'utf8');
+ const originalPage=fs.readFileSync(page(store,'fictional-date'),'utf8');
  const provider=async input=>{if(input.kind==='brief-verification')return {passed:true,reason:'Fixture checked.'};assert.ok(!input.context.deadlines.some(d=>d.native_slug==='fictional-date'));return 'No fresh fictional health observations are available. The fictional result has been recorded.';};
  const result=await jobExecutor(provider,query)({kind:'brief-rehearsal',id:'date-rehearsal'},{store,settings:{}}),copied=path.join(result.rehearsal_workspace,'work','fictional-result.txt');
  assert.equal(fs.readFileSync(copied,'utf8'),'');assert.ok(Math.abs(fs.statSync(copied).mtimeMs-stamp)<1);
- assert.equal(fs.readFileSync(dependency,'utf8'),before);assert.equal(fs.statSync(dependency).mtimeMs,stamp);assert.equal(fs.readFileSync(path.join(store.root,'due','fictional-date.md'),'utf8'),originalDue);
+ assert.equal(fs.readFileSync(dependency,'utf8'),before);assert.equal(fs.statSync(dependency).mtimeMs,stamp);assert.equal(fs.readFileSync(page(store,'fictional-date'),'utf8'),originalPage);
  assert.equal(new QueryService(new Store(result.rehearsal_workspace)).rows('deadlines').find(d=>d.native_slug==='fictional-date').status,'closed');
 });
 

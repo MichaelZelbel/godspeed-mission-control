@@ -1,8 +1,10 @@
-import fs from 'node:fs';import path from 'node:path';import {createRequire} from 'node:module';import {spawnSync} from 'node:child_process';import {fileURLToPath} from 'node:url';import {hash} from './records/store.mjs';
+import {createRequire} from 'node:module';import {spawnSync} from 'node:child_process';import {fileURLToPath} from 'node:url';import {hash} from './records/store.mjs';
 import {localPath} from './local-path.mjs';
 import {copyOldReminders,writable} from './due-copy.mjs';
 const {createDueCommands}=createRequire(import.meta.url)('../../tools/due.js');
-// A file in due/ that tools/due.js cannot read is 'needs-a-look', never closed (9 October 2026: an
+// Every reminder with a day attached, as a row of the notebook: out of the records, through the
+// program that owns them (tools/due.js on the notebook's store, #90). A file an older version left
+// in due/ that that program cannot read is 'needs-a-look', never closed (9 October 2026: an
 // assistant's hand-written deadline showed here as closed). It carries the reason and is said in the
 // deadline reminders every day until it is fixed.
 export function dueRows(store,now=new Date(),{copy:alsoCopy=true}={}){
@@ -20,13 +22,16 @@ export function dueCommand(store,args,{copy:alsoCopy=true}={}){
  if(['add','done','target','drop','marker'].includes(args[0])&&!(args[0]==='marker'&&['--needed','--stale'].includes(args[1]))&&!/^[a-z0-9][a-z0-9-]{0,59}$/.test(args[1]||''))throw Error('Choose an obligation slug inside the isolated workspace');
  const marker=args.indexOf('--set');if(marker>=0&&(!args[marker+1]||/[\r\n\t]/.test(args[marker+1])))throw Error('Calendar event identity must be a single line');
  const selfCheck=args.indexOf('--self-check-arg');if(selfCheck>=0)localPath(store.root,args[selfCheck+1]||'');
- // Historical self-check paths are never allowed to inspect another installation. They are in the
- // notebook's own records now (#90), and in the files of due/ only until those are retired.
- if(args[0]==='check'){
-  for(const record of store.list('deadlines'))if(record.self_check_arg)localPath(store.root,String(record.self_check_arg));
-  if(fs.existsSync(path.join(store.root,'due')))for(const file of fs.readdirSync(path.join(store.root,'due')).filter(f=>f.endsWith('.md'))){const match=fs.readFileSync(localPath(store.root,'due/'+file),'utf8').match(/^SELF-CHECK-ARG:\s*(.+)$/m);if(match)localPath(store.root,match[1]);}
- }
  const timezone=store.get('settings','installation')?.timezone||'UTC',day=new Intl.DateTimeFormat('en-CA',{timeZone:timezone,year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date()),script=fileURLToPath(new URL('../../tools/due.js',import.meta.url));
+ // Historical self-check paths are never allowed to inspect another installation. Every one of
+ // them is in the notebook's own records now (#90): what an older version left in due/ is taken
+ // in first, so the reminder it wrote is a record before its self check is looked at, and a file
+ // that no program can read never reaches a self check at all (tools/due.js, cmdCheck steps over
+ // a reminder it cannot read before it gets there).
+ if(args[0]==='check'){
+  if(alsoCopy&&writable(store))copy(store,day);
+  for(const record of store.list('deadlines'))if(record.self_check_arg)localPath(store.root,String(record.self_check_arg));
+ }
  // THE CHILD TAKES THE WORKSPACE LOCK ITSELF, AND THIS DOES NOT HOLD IT (30 October 2026, #90).
  // tools/due.js writes the notebook's own records now, so it opens the workspace; the lock is one
  // writer at a time and is never re-entered, so a child started inside a lock held here would be
@@ -38,13 +43,14 @@ export function dueCommand(store,args,{copy:alsoCopy=true}={}){
  if(run.status!==0)throw Object.assign(Error(String(run.stderr||run.stdout||'Obligation command failed').slice(0,500)),{status:run.status});
  return {result:run.stdout.trim()};
 }
-// A DEADLINE SAVED IN SETTINGS OR TOLD IN THE NOTEBOOK'S CHAT IS A FILE IN due/ (18 October 2026).
-// Until then Settings > Obligations and reminders saved a notebook record, while the 08:00 deadline
-// reminders and the morning brief read only due/ (tools/due.js), so such a deadline was never
-// mentioned. Now it is made the way mc-due add makes one, with the two answers mc-due asks for: what
-// is true when it is done, and, for a deadline, what slipping past it costs. Dates are the person's
-// days, on the installation's clock. A name already used gets a number, never a second file for
-// the same name. {title, done_when, due_at?, target_at?, start_at?, cost?, recurrence?:{days}}
+// A DEADLINE SAVED IN SETTINGS OR TOLD IN THE NOTEBOOK'S CHAT IS A REMINDER OF ITS OWN
+// (18 October 2026). Until then Settings > Obligations and reminders saved a notebook record that
+// the 08:00 deadline reminders and the morning brief never read: they read what mc-due keeps, which
+// was a file in due/ then and is a page under Deadlines/ since 30 October 2026 (#90). It is made
+// the way mc-due add makes one, with the two answers mc-due asks for: what is true when it is done,
+// and, for a deadline, what slipping past it costs. Dates are the person's days, on the
+// installation's clock. A name already used gets a number, never a second reminder for the same
+// name. {title, done_when, due_at?, target_at?, start_at?, cost?, recurrence?:{days}}
 const slugOf=title=>String(title).toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g,'').replace(/ß/g,'ss').replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,50).replace(/-+$/,'')||'deadline';
 export function addDueObligation(store,input,{copy:alsoCopy=true}={}){
  const title=String(input?.title||'').trim();if(!title)throw Error('Say what needs doing');
@@ -59,20 +65,22 @@ export function addDueObligation(store,input,{copy:alsoCopy=true}={}){
  const repeats=!days?'no':days===7?'weekly':days===14?'fortnightly':'every '+days+' days';
  const args=['--title',title,'--done-when',doneWhen,...(to?['--to',to,'--cost',cost]:[]),...(target?['--target',target]:[]),...(from?['--from',from]:[]),'--repeats',repeats];
  const base=slugOf(title);let last=null;
- // A name already used, in the notebook's records or in a file of due/ that is still there: the
- // next number, never a second reminder for the same thing.
+ // A name already used, as the notebook's records have it: the next number, never a second
+ // reminder for the same thing. The rule itself is tools/due.js's own, which refuses a name it
+ // already has in those words; the loop walks on to the next number when it says so, and that is
+ // what still catches a name only a file no program can read is holding.
  const taken=new Set(store.list('deadlines').filter(r=>r.native_slug).map(r=>r.native_slug));
  for(let n=1;n<=30;n++){
-  const slug=n===1?base:base.slice(0,56)+'-'+n;if(taken.has(slug)||fs.existsSync(path.join(store.root,'due',slug+'.md')))continue;
+  const slug=n===1?base:base.slice(0,56)+'-'+n;if(taken.has(slug))continue;
   try{const made=dueCommand(store,['add',slug,...args],{copy:alsoCopy});const row=dueRows(store,new Date(),{copy:alsoCopy}).find(r=>r.native_slug===slug);return {...(row||{id:'due-'+slug,native_slug:slug,title}),result:made.result};}
   catch(error){last=error;if(/already have one called|was used before/.test(error.message))continue;throw Error(String(error.message).split('\n').filter(Boolean).slice(0,2).join(' '));}
  }
  throw last||Error('Choose another name for this obligation');
 }
 // A deadline Settings saved as a notebook record before 18 October 2026 was never reminded. On the
-// machine that runs the routines each one still open becomes a file in due/ once, and its record is
-// closed with the file's name, so it is listed once. The two answers it was never asked are written
-// in words that say so; the file is the person's to correct.
+// machine that runs the routines each one still open becomes a reminder of its own once, and the
+// old record is closed and points at it, so it is listed once. The two answers it was never asked
+// are written in words that say so; the reminder's own page is the person's to correct.
 export function moveSettingsDeadlines(store){
  const moved=[];
  for(const d of store.list('deadlines').filter(r=>r.status==='open'&&!r.moved_to&&!r.removed_at)){
