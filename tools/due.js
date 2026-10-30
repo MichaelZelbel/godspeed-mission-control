@@ -1067,13 +1067,38 @@ function recordSaid(selected,day=today()) {for(const r of load(day,false).filter
 // because copying twice changes nothing. The notebook itself never comes through here: it holds
 // the workspace lock already and does the copy with the store it has (native-due.mjs), saying so
 // with `copy: false` in this process and GODSPEED_DUE_COPY=off in the one it starts.
+//
+// WHERE THAT MODULE IS, when this program is not standing in the kit. The installer copies every
+// file in tools/ into the assistant's command folder as well, and there is no notebook folder
+// beside it there, so `mc-due` typed by a person would have copied nothing at all (found in
+// review, 30 October 2026). The mission control itself says where its installed version is: a
+// computer keeps each one in <root>/.godspeed/integrated-runtime/versions/<commit>, and the
+// start.mjs beside them names the one it runs (notebook/scripts/install-native-notebook.sh). The
+// kit's own notebook comes first, so a developer's checkout and the Windows kit need nothing of
+// this; and whichever is found brings its own due-files.js, never the one beside this copy.
+function dueCopy() {
+  const tries = [path.join(__dirname, "..", "notebook", "core", "due-copy.mjs")];
+  const state = path.join(godspeed, ".godspeed", "integrated-runtime");
+  const under = (name) => path.join(state, "versions", name, "notebook", "core", "due-copy.mjs");
+  const running = readText(path.join(state, "start.mjs")).match(/versions[/\\]+([0-9a-f]{40})/);
+  if (running) tries.push(under(running[1]));
+  try {
+    const versions = fs.readdirSync(state + path.sep + "versions", { withFileTypes: true })
+      .filter((e) => e.isDirectory() && /^[0-9a-f]{40}$/.test(e.name)).map((e) => under(e.name))
+      .filter((f) => fs.existsSync(f)).sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs);
+    tries.push(...versions);
+  } catch (e) { /* no installed version beside the mission control: nothing more to try */ }
+  for (const file of tries) if (fs.existsSync(file)) return require(file);
+  return null;
+}
 let copied = false;
 function copyIntoTheNotebook() {
   const say = (process.env.GODSPEED_DUE_COPY || "").trim();
   if (copied || copy === false || say === "off") return;
   copied = true;
   try {
-    const result = require("../notebook/core/due-copy.mjs").copyIfFilesChanged(godspeed, { day: today() });
+    const module = dueCopy();
+    const result = module ? module.copyIfFilesChanged(godspeed, { day: today() }) : { skipped: "no notebook code" };
     if (say === "say") console.error("due-copy: " + JSON.stringify(result));
   } catch (e) {
     if (say === "say") console.error("due-copy: not this time: " + e.message);

@@ -1,13 +1,20 @@
 import fs from 'node:fs';import path from 'node:path';import {createRequire} from 'node:module';import {spawnSync} from 'node:child_process';import {fileURLToPath} from 'node:url';import {hash} from './records/store.mjs';
 import {localPath} from './local-path.mjs';
-import {copyOldReminders} from './due-copy.mjs';
+import {copyOldReminders,copyIfFilesChanged,writable} from './due-copy.mjs';
 const {createDueCommands}=createRequire(import.meta.url)('../../tools/due.js');
 // A file in due/ that tools/due.js cannot read is 'needs-a-look', never closed (9 October 2026: an
 // assistant's hand-written deadline showed here as closed). It carries the reason and is said in the
 // deadline reminders every day until it is fixed.
-export function dueRows(store,now=new Date()){
+export function dueRows(store,now=new Date(),{copy:alsoCopy=true}={}){
  if(!fs.existsSync(path.join(store.root,'due')))return [];
  const timezone=store.get('settings','installation')?.timezone||'UTC',day=new Intl.DateTimeFormat('en-CA',{timeZone:timezone,year:'numeric',month:'2-digit',day:'2-digit'}).format(now);
+ // Settings > Obligations, the cards and the chat's context read the reminders through here, and
+ // the ticket asks for the copy on those occasions too (#90). It costs nothing when no file in
+ // due/ or world/events/ has changed - the names, sizes and times are looked at first - and it
+ // waits only a moment for the lock, because a screen is waiting for this answer. A staged or
+ // read-only copy of the workspace is never written through (writable), and a copy that cannot
+ // finish is left to the next read.
+ if(alsoCopy&&writable(store))try{copyIfFilesChanged(store.root,{day,store,timeoutMs:2000});}catch(error){if(process.env.GODSPEED_DUE_COPY==='say')console.error('due-copy: not this time: '+error.message);}
  return createDueCommands({root:store.root,commandArgs:[],date:day,copy:false}).stateRows().map(r=>({id:'due-'+r.slug,type:'deadlines',uid:hash('due/'+r.slug).slice(0,32),title:r.title,native_file:'due/'+r.slug+'.md',native_slug:r.slug,status:['closed','dropped'].includes(r.state)?'closed':r.state,...(r.problem?{problem:r.problem}:{}),start_at:r.firstDay?r.firstDay+'T00:00:00Z':null,due_at:r.lastDay?r.lastDay+'T23:59:59Z':null,target_at:r.targetDay?r.targetDay+'T23:59:59Z':null,completion_check:r.doneWhen,completion_evidence:r.closedBy,closed_at:r.closedOn,band:r.band,attention:r.attention,sentence:r.sentence,_hash:hash(r),created_at:(r.firstDay||day)+'T00:00:00Z'}));
 }
 export function dueCommand(store,args,{copy:alsoCopy=true}={}){
@@ -49,7 +56,7 @@ export function addDueObligation(store,input,{copy:alsoCopy=true}={}){
  const base=slugOf(title);let last=null;
  for(let n=1;n<=30;n++){
   const slug=n===1?base:base.slice(0,56)+'-'+n;if(fs.existsSync(path.join(store.root,'due',slug+'.md')))continue;
-  try{const made=dueCommand(store,['add',slug,...args],{copy:alsoCopy});const row=dueRows(store).find(r=>r.native_slug===slug);return {...(row||{id:'due-'+slug,native_slug:slug,title}),result:made.result};}
+  try{const made=dueCommand(store,['add',slug,...args],{copy:alsoCopy});const row=dueRows(store,new Date(),{copy:alsoCopy}).find(r=>r.native_slug===slug);return {...(row||{id:'due-'+slug,native_slug:slug,title}),result:made.result};}
   catch(error){last=error;if(/already have one called|was used before/.test(error.message))continue;throw Error(String(error.message).split('\n').filter(Boolean).slice(0,2).join(' '));}
  }
  throw last||Error('Choose another name for this obligation');

@@ -96,6 +96,30 @@ function mark(root, value) {
   try { fs.mkdirSync(path.dirname(markFile(root)), { recursive: true }); fs.writeFileSync(markFile(root), JSON.stringify({ files: value }) + '\n'); } catch { /* a copy that cannot leave a note just looks again next time */ }
 }
 
+// ---------------------------------------------------------------- a closing, as a reader sees it
+//
+// A moment is append-only: what happened is never rewritten. When a closing event in world/events/
+// is edited (its evidence, its day, or `closes:` turned into `drops:`), the notebook's own way to
+// say so is a correction record on the timeline (event_corrections), which every reader applies
+// over the moment and which takes it back when it carries removed_at. query.mjs does exactly this
+// for every screen; the copy does it here, and reads the same way, so what the old files say and
+// what the records say cannot drift apart.
+const CLOSING_FIELDS = ['title', 'happened_at', 'evidence', 'source'];
+function corrections(store) {
+  const byMoment = new Map();
+  for (const item of store.list('event_corrections')) {
+    if (!byMoment.has(item.moment_id)) byMoment.set(item.moment_id, []);
+    byMoment.get(item.moment_id).push(item);
+  }
+  return byMoment;
+}
+export function liveMoments(store, byMoment = corrections(store)) {
+  return store.list('moments').map(moment => {
+    const over = (byMoment.get(moment.id) || []).slice().sort((a, b) => a.sequence - b.sequence || a.id.localeCompare(b.id));
+    return over.reduce((result, item) => ({ ...result, ...item.patch }), moment);
+  }).filter(moment => !moment.removed_at);
+}
+
 // ---------------------------------------------------------------- a record out of a file
 //
 // Not store.prepare(): that stamps the record with this computer's name and this moment, and two
@@ -123,22 +147,40 @@ function converted(type, value, old) {
 // Under the notebook's workspace lock, and under it exactly once: the caller may hold it already
 // (native-due.mjs runs every obligation command inside store.withLock), and the lock is one
 // writer at a time, never re-entered.
-export function copyOldReminders(store, { day = null } = {}) {
+export function copyOldReminders(store, { day = null, timeoutMs = 30000 } = {}) {
   const when = day || dayOf(store);
   const work = () => copyUnderLock(store, when);
-  return store.holding ? work() : store.withLockSoon(work);
+  return store.holding ? work() : store.withLockSoon(work, { timeoutMs });
 }
 
+// A store that may be written: not a staged view of a transaction and not the read-only copy a
+// backup or a restore looks at, both of which bring a `withLock` of their own (records/store.mjs,
+// transaction and Store.inspect). A read that lands on one of those copies them nothing.
+export const writable = store => !!store && !Object.hasOwn(store, 'withLock');
+
 // What `copyOldReminders` answers, so a caller (and the tests) can see what one run did:
-// {copied, updated, closed, reviews, needsALook, waiting, unchanged}.
+// {copied, updated, closed, corrected, reviews, needsALook, waiting, unchanged}.
 function copyUnderLock(store, day) {
   const root = store.root;
   const files = createDueFiles({ root });
-  const report = { copied: [], updated: [], closed: [], reviews: [], needsALook: [], waiting: [], unchanged: true };
+  const report = { copied: [], updated: [], closed: [], corrected: [], reviews: [], needsALook: [], waiting: [], unchanged: true };
   const book = new Map(store.list(COPY_TYPE).map(record => [record.file, record]));
   const pages = new Map(store.list('deadlines').map(record => [record.uid, record]));
   const moments = new Set(store.list('moments', { removed: true }).map(record => record.uid));
+  const corrected = corrections(store);
+  // Every closing the notebook holds as its readers see it, by uid, and which old event file each
+  // one came out of: what a changed event file is held against below.
+  const live = new Map(liveMoments(store, corrected).map(record => [record.uid, record]));
+  const fromFile = new Map();
+  for (const moment of live.values()) {
+    if (!moment.moved_from) continue;
+    if (!fromFile.has(moment.moved_from)) fromFile.set(moment.moved_from, []);
+    fromFile.get(moment.moved_from).push(moment);
+  }
   const write = [], forget = [], touched = new Map();
+  // What the old files say every closing should be now, by uid, filled in as the reminders are
+  // read (recordsOf gives a reminder and its closings together).
+  const wantedClosings = new Map();
 
   // One record of this write, and the history copy that writing it would leave behind, named so it
   // can be taken away again afterwards: commit() names that copy after the version going out, its
@@ -150,6 +192,16 @@ function copyUnderLock(store, day) {
     return record;
   };
   const remember = (file, text, value) => touched.set(file, { file, text, ...value });
+  // One correction on the timeline, named after the moment and the new content of the old file it
+  // came out of, so two machines that read the same edit write the one correction and not two.
+  const correct = (moment, patch, digest, day) => {
+    const already = (corrected.get(moment.id) || []).length + write.filter(r => r.type === 'event_corrections' && r.moment_id === moment.id).length;
+    const id = idFor('due-copy-correction', [moment.uid, digest, canonical(patch)].join('|'));
+    if (store.get('event_corrections', id)) return;
+    prepare('event_corrections', { id, uid: hash(id).slice(0, 32), moment_id: moment.id, patch, sequence: already + 1,
+      created_at: day + 'T00:00:00Z', updated_at: day + 'T00:00:00Z',
+      references: [{ type: 'moments', id: moment.id, uid: moment.uid }] }, null);
+  };
 
   // ---- the reminders, and the closings of each
   const events = files.worldEvents();
@@ -170,8 +222,10 @@ function copyUnderLock(store, day) {
     const known = book.get(file);
     const uid = SLUG.test(slug) ? deadlineUid(slug) : null;
     // Unchanged, and its page is there: nothing to do. A page somebody deleted is written again,
-    // because a reminder that is in due/ is a reminder this machine holds.
-    if (uid && known?.file_hash === hash(text) && pages.has(uid) && !todo.has(slug)) continue;
+    // because a reminder that is in due/ is a reminder this machine holds. One whose file and page
+    // both changed (`review_item`) is looked at on every run until they agree again, because what
+    // moves then is the page, and only the page: the copy would otherwise never notice.
+    if (uid && known?.file_hash === hash(text) && !known.review_item && pages.has(uid) && !todo.has(slug)) continue;
     todo.add(slug);
   }
   for (const slug of [...todo].sort()) {
@@ -194,15 +248,20 @@ function copyUnderLock(store, day) {
       // The page already says what the file says (the usual second run, and the usual other
       // machine): nothing is written but the note of what was copied.
       remember(file, text, { kind: 'reminder', at: made.deadline.updated_at, file_hash: digest, record_type: 'deadlines', record_uid: page.uid, record_id: page.id, record_digest: wanted });
-    } else if (known && digestOf(page) === known.record_digest) {
-      // The file changed, the page did not since it was copied: the page follows the file.
+    } else if (known && known.record_digest && digestOf(page) === known.record_digest) {
+      // The page is still exactly what the copy last wrote, and the file says something else now:
+      // the page follows the file. `record_digest` is what the COPY wrote, never what the owner
+      // has: a page the owner changed can never match it, so a page kept for review below is
+      // never overwritten later, however often this reminder comes back through a changed closing.
       prepare('deadlines', made.deadline, page);
       report.updated.push(slug);
       remember(file, text, { kind: 'reminder', at: made.deadline.updated_at, file_hash: digest, record_type: 'deadlines', record_uid: page.uid, record_id: page.id, record_digest: wanted });
     } else {
       // Both changed. The notebook's version stays, and both are kept as one review item, named
       // after the two versions so that it is one item however often this runs. Nothing is dropped
-      // and nothing becomes a second reminder.
+      // and nothing becomes a second reminder. What the copy wrote last stays the baseline below
+      // (30 October 2026: it was replaced with the page the owner had, and then the next changed
+      // closing of that reminder made the branch above take the file's version over the owner's).
       const id = idFor('due-copy-review', file + '\n' + digest + '\n' + digestOf(page));
       if (!store.get('review_queue', id)) {
         prepare('review_queue', { id, uid: hash(id).slice(0, 32), suggestion_type: BOTH_CHANGED, status: 'pending_review',
@@ -212,12 +271,13 @@ function copyUnderLock(store, day) {
           payload: { file, slug, from_the_file: made.deadline, in_the_notebook: page, deadline_id: page.id } }, null);
         report.reviews.push(id);
       }
-      remember(file, text, { kind: 'reminder', at: made.deadline.updated_at, file_hash: digest, record_type: 'deadlines', record_uid: page.uid, record_id: page.id, record_digest: digestOf(page), review_item: id });
+      remember(file, text, { kind: 'reminder', at: made.deadline.updated_at, file_hash: digest, record_type: 'deadlines', record_uid: page.uid, record_id: page.id, record_digest: known?.record_digest || null, review_item: id });
     }
     // The closings of this reminder: each one once, by the uid derived from the old event file it
     // came out of, so two machines taking in the same file make one moment. A moment is
     // append-only: one that is there is never written again.
     for (const closing of made.closings) {
+      wantedClosings.set(closing.uid, closing);
       if (moments.has(closing.uid)) continue;
       moments.add(closing.uid);
       prepare('moments', closing, null);
@@ -234,26 +294,50 @@ function copyUnderLock(store, day) {
     // One of a reminder with no page (its file is gone, or does not read) is not: a moment may not
     // point at a reminder that is not there. Then the file's hash is not remembered and the next
     // run looks again, rather than the closing being quietly left out for ever.
-    const named = [], missing = [];
+    const named = [], missing = [], says = new Set();
     for (const [kind, refs] of [['closes', event.closes], ['drops', event.drops]]) {
       for (const ref of refs) {
         named.push(ref.slug);
         if (!SLUG.test(ref.slug)) { missing.push(ref.slug); continue; }
-        if (!moments.has(closingUid({ slug: ref.slug, window: ref.window, kind, from: file }))) missing.push(ref.slug);
+        const uid = closingUid({ slug: ref.slug, window: ref.window, kind, from: file });
+        says.add(uid);
+        if (!moments.has(uid)) missing.push(ref.slug);
       }
     }
     if (missing.length) { report.waiting.push(file); continue; }
+    // The file was edited after it was copied. A moment it no longer says anything about is taken
+    // back, and one whose words or day it changed is corrected to what the file says now - as a
+    // correction on the timeline, because what happened is never rewritten. Without this, turning
+    // `closes:` into `drops:` left both (the kind is part of a closing's identity), and an edited
+    // evidence or day stayed as it first arrived.
+    for (const moment of fromFile.get(file) || []) {
+      if (says.has(moment.uid)) continue;
+      correct(moment, { removed_at: event.date + 'T00:00:00Z' }, digest, event.date);
+      report.corrected.push(moment.title + ' (taken back: ' + file + ' no longer says it)');
+    }
+    for (const uid of says) {
+      const moment = live.get(uid), should = wantedClosings.get(uid);
+      if (!moment || !should) continue;
+      const patch = {};
+      for (const field of CLOSING_FIELDS) if (canonical(moment[field] ?? null) !== canonical(should[field] ?? null)) patch[field] = should[field] ?? null;
+      if (!Object.keys(patch).length) continue;
+      correct(moment, patch, digest, event.date);
+      report.corrected.push(moment.title + ' (' + Object.keys(patch).join(', ') + ' as ' + file + ' says it now)');
+    }
     remember(file, text, { kind: 'closing', at: event.date + 'T00:00:00Z', file_hash: digest, record_type: 'moments', names: [...new Set(named)].sort() });
   }
 
   // ---- one write, then the history copies of this very write taken away again
   for (const [file, value] of touched) {
     const old = book.get(file) || null;
+    // Every field of it is written on every pass, `null` where it does not apply: a record this
+    // one is built from keeps nothing it no longer says (a reminder that came to agree with its
+    // page again must stop carrying `review_item`, or it would be held for review for ever).
     const record = { id: idFor('due-copy', file), uid: copyUid(file), file,
       kind: value.kind, file_hash: value.file_hash, record_type: value.record_type,
-      ...(value.record_uid ? { record_uid: value.record_uid, record_id: value.record_id, record_digest: value.record_digest } : {}),
-      ...(value.names ? { names: value.names } : {}),
-      ...(value.review_item ? { review_item: value.review_item } : {}),
+      record_uid: value.record_uid ?? null, record_id: value.record_id ?? null,
+      record_digest: value.record_digest ?? null, names: value.names ?? null,
+      review_item: value.review_item ?? null,
       // Out of the old file too, like every field here: a bookkeeping record two machines write
       // must be the same record with the same words, or their merge would ask its owner about it.
       created_at: value.at, updated_at: value.at };
@@ -273,11 +357,10 @@ function copyUnderLock(store, day) {
 // For a caller that holds no store: tools/due.js, after it has answered. Opens the workspace only
 // when an old file is new or changed. A workspace another writer holds, or one with no notebook,
 // is left for the next run: the copy is idempotent, so nothing is lost by waiting.
-export function copyIfFilesChanged(root, { day = null } = {}) {
+export function copyIfFilesChanged(root, { day = null, store = null, timeoutMs = 30000 } = {}) {
   if (!fs.existsSync(path.join(root, 'notebook')) && !fs.existsSync(path.join(root, '.godspeed'))) return { skipped: 'no notebook' };
   if (marks(root) === marked(root)) return { skipped: 'nothing changed' };
-  const store = new Store(root);
-  return copyOldReminders(store, { day });
+  return copyOldReminders(store || new Store(root), { day, timeoutMs });
 }
 
 // ---------------------------------------------------------------- the check ticket 03 relies on
@@ -303,7 +386,9 @@ export function sameThroughRecords(store, { day = null } = {}) {
     fs.mkdirSync(path.join(scratch, 'world', 'events'), { recursive: true });
     fs.writeFileSync(path.join(scratch, 'AGENTS.md'), '');
     const deadlines = store.list('deadlines').filter(record => record.native_slug);
-    const closings = store.list('moments').filter(record => record.category === 'obligation' && record.obligation_kind);
+    // The closings as every reader of the notebook sees them: their corrections applied, and the
+    // ones a correction took back left out (liveMoments above).
+    const closings = liveMoments(store).filter(record => record.category === 'obligation' && record.obligation_kind);
     createDueFiles({ root: scratch }).writeFilesFrom({ deadlines, closings });
     const mine = rows(store.root), theirs = rows(scratch);
     const differences = [], needsALook = [];

@@ -11,7 +11,10 @@
 // records), nothing of the owner's touched, a second run that changes nothing, two machines that
 // end with one record each, a late file and a late closing taken in, a changed file that updates
 // its page, a changed file whose page also changed kept as one review item, a file that does not
-// read left alone, and a year of the brief's daily mentions that does not fill the notebook.
+// read left alone, and a year of the brief's daily mentions that does not fill the notebook. The
+// last four, at the end, are what a second review found missing afterwards: a page kept for review
+// that must stay the owner's, the copy of tools/due.js in the assistant's command folder, the list
+// Settings reads, and an edited closing event.
 // Everything in here is made up.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -23,7 +26,8 @@ import { Store, hash } from '../core/records/store.mjs';
 import { QueryService } from '../core/query.mjs';
 import { FileSync } from '../core/sync/git.mjs';
 import { deadlineUid } from '../core/deadline-records.mjs';
-import { copyOldReminders, sameThroughRecords, COPY_TYPE, BOTH_CHANGED } from '../core/due-copy.mjs';
+import { fileURLToPath } from 'node:url';
+import { copyOldReminders, sameThroughRecords, liveMoments, COPY_TYPE, BOTH_CHANGED } from '../core/due-copy.mjs';
 import { dueCommand, dueDelivered, dueRows } from '../core/native-due.mjs';
 
 for (const key of Object.keys(process.env)) if (/^(GODSPEED_|HERMES_)/.test(key)) delete process.env[key];
@@ -559,4 +563,206 @@ STRIP: 2026-01-01 2027-06-30
     'the copy keeps no history copy of what it writes: the whole log is in the record itself');
   assert.ok(year < 1024 * 1024, 'a year of fifty reminders mentioned daily: about ' + Math.round(year / 1024) + ' KB, which must stay inside a megabyte');
   assert.equal(store.list('deadlines').length, REMINDERS, 'and still one page per reminder');
+});
+
+// ---------------------------------------------------------------- when the old files change again
+//
+// Four ways a second review found the copy losing what it promises after the first pass, each one
+// reproduced and then held here:
+//
+// 1. A reminder kept for review because the file AND the page had changed was overwritten from the
+//    file as soon as anything else brought that reminder back - the next closing event was enough.
+// 2. The installer copies every file in tools/ into the assistant's command folder as well, where
+//    there is no notebook beside tools/due.js: `mc-due` typed there copied nothing at all.
+// 3. Settings reads its obligations through dueRows, which copied nothing, so that occasion - one
+//    the ticket names - never took the old reminders in.
+// 4. An edited closing event was passed over: its evidence and its day stayed as they first
+//    arrived, and `closes:` written again as `drops:` left the reminder closed AND dropped.
+
+const BOILER = `TITLE: Service the boiler
+DONE-WHEN: The boiler has been serviced.
+COST-IF-MISSED: The warranty on it ends.
+SELF-CHECK: none
+REPEATS: no
+SOURCE: me, 2026-09-01
+
+## Windows
+STRIP: 2026-10-01 2026-12-31
+
+## Log
+- 2026-09-01 created, window 2026-10-01 to 2026-12-31
+`;
+const RATES = `TITLE: Pay the quarterly rates
+DONE-WHEN: The payment shows on the statement.
+COST-IF-MISSED: A late fee of 40 euro.
+SELF-CHECK: none
+REPEATS: no
+SOURCE: me, 2026-01-05
+
+## Windows
+STRIP: 2026-01-05 2026-03-31
+
+## Log
+- 2026-01-05 created, window 2026-01-05 to 2026-03-31
+`;
+const closingEvent = ({ kind = 'closes', ref = 'due/rates', day = '2026-03-12', evidence = 'the statement of 12 March shows the payment' }) => `---
+date: ${day}
+participants: [me]
+${kind}: [${ref}]
+evidence: ${evidence}
+source: me, in a session
+written_by: mc-due
+origin: mission control
+---
+
+Pay the quarterly rates: finished.
+`;
+
+function workspace(t, files = {}) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'godspeed-due-level-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  fs.mkdirSync(path.join(root, 'due'), { recursive: true });
+  fs.mkdirSync(path.join(root, 'world', 'events'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'AGENTS.md'), '');
+  for (const [name, text] of Object.entries(files)) {
+    fs.mkdirSync(path.dirname(path.join(root, name)), { recursive: true });
+    fs.writeFileSync(path.join(root, name), text);
+  }
+  return root;
+}
+function opened(root, device = 'pc') {
+  const store = new Store(root, { device });
+  if (!store.get('settings', 'installation')) store.save('settings', { id: 'installation', owner: 'the owner', timezone: 'UTC' });
+  return store;
+}
+const page = (store, slug) => store.list('deadlines').find(r => r.native_slug === slug);
+const obligations = store => liveMoments(store).filter(r => r.category === 'obligation');
+
+// ---------------------------------------------------------------- 1. the page kept for review
+
+test('a reminder kept for review stays the owner\'s, however often it comes back', t => {
+  const root = workspace(t, { 'due/boiler.md': BOILER });
+  const store = opened(root);
+  copyOldReminders(store, { day: DAY });
+
+  // The owner renames the page in the notebook, and something changes the file as well.
+  store.save('deadlines', { id: page(store, 'boiler').id, title: 'Service the boiler before winter' });
+  fs.writeFileSync(path.join(root, 'due', 'boiler.md'), BOILER.replace('TITLE: Service the boiler', 'TITLE: Boiler service'));
+  const review = copyOldReminders(store, { day: DAY });
+  assert.equal(review.reviews.length, 1, 'one review item, with both versions');
+  assert.equal(page(store, 'boiler').title, 'Service the boiler before winter', 'and the notebook\'s version stays');
+
+  // Anything at all that brings this reminder back must leave the owner's page alone: a closing
+  // written the old way is enough (until this was fixed, it took the file's title over the owner's).
+  fs.writeFileSync(path.join(root, 'world', 'events', '2026-10-28-boiler-closed.md'),
+    closingEvent({ ref: 'due/boiler', day: '2026-10-28', evidence: 'the engineer left a receipt' }));
+  const later = copyOldReminders(store, { day: DAY });
+  assert.equal(page(store, 'boiler').title, 'Service the boiler before winter', 'the page is still the owner\'s');
+  assert.deepEqual(later.updated, [], 'nothing of it was taken from the file');
+  assert.equal(obligations(store).length, 1, 'and the closing that arrived is a moment');
+  assert.equal(store.list('deadlines').filter(r => r.native_slug === 'boiler').length, 1, 'still one reminder');
+
+  // And the file's version is still the one review item, not a second one.
+  assert.equal(store.list('review_queue').filter(r => r.suggestion_type === BOTH_CHANGED).length, 1);
+  assert.equal(store.get('review_queue', review.reviews[0]).payload.from_the_file.title, 'Boiler service');
+  // The way back: once the page says what the file says, the two are level again - the copy sees
+  // its own words on the page - and from then on the file's changes are taken as before.
+  store.save('deadlines', { id: page(store, 'boiler').id, title: 'Boiler service' });
+  const level = copyOldReminders(store, { day: DAY });
+  assert.deepEqual(level.reviews, [], 'nothing to review once they agree');
+  fs.writeFileSync(path.join(root, 'due', 'boiler.md'), BOILER.replace('TITLE: Service the boiler', 'TITLE: Boiler service, yearly'));
+  assert.deepEqual(copyOldReminders(store, { day: DAY }).updated, ['boiler']);
+  assert.equal(page(store, 'boiler').title, 'Boiler service, yearly', 'the page follows the file again');
+});
+
+// ---------------------------------------------------------------- 2. the copy in the command folder
+
+test('tools/due.js copied into the command folder finds the notebook beside the mission control', t => {
+  const root = workspace(t, { 'due/boiler.md': BOILER });
+  const store = opened(root);
+  // A computer keeps each installed version in .godspeed/integrated-runtime/versions/<commit>, and
+  // start.mjs names the one it runs. Here that version's due-copy.mjs is this one.
+  const commit = '0'.repeat(39) + '1';
+  const version = path.join(root, '.godspeed', 'integrated-runtime', 'versions', commit);
+  fs.mkdirSync(path.join(version, 'notebook', 'core'), { recursive: true });
+  const real = new URL('../core/due-copy.mjs', import.meta.url).href;
+  fs.writeFileSync(path.join(version, 'notebook', 'core', 'due-copy.mjs'), 'export * from ' + JSON.stringify(real) + ';\n');
+  fs.writeFileSync(path.join(root, '.godspeed', 'integrated-runtime', 'start.mjs'),
+    'const child=spawn("node",[' + JSON.stringify(path.join(version, 'notebook', 'scripts', 'supervise.mjs')) + ']);\n');
+
+  // The command folder: the files the installer copies there, and no notebook of its own.
+  const bin = fs.mkdtempSync(path.join(os.tmpdir(), 'godspeed-bin-'));
+  t.after(() => fs.rmSync(bin, { recursive: true, force: true }));
+  for (const name of ['due.js', 'due-files.js']) fs.copyFileSync(fileURLToPath(new URL('../../tools/' + name, import.meta.url)), path.join(bin, name));
+  assert.ok(!fs.existsSync(path.join(bin, '..', 'notebook')), 'nothing of the notebook is beside it');
+
+  const said = execFileSync(process.execPath, [path.join(bin, 'due.js'), '--godspeed', root, 'state'],
+    { encoding: 'utf8', env: { ...process.env, GODSPEED_TODAY: DAY, GODSPEED_DUE_COPY: 'say' }, stdio: ['ignore', 'pipe', 'pipe'] });
+  assert.match(said, /OPEN\s+boiler/, 'it answers as it always did: ' + said.trim());
+
+  const after = opened(root);
+  assert.equal(page(after, 'boiler')?.title, 'Service the boiler', 'and the reminder is in the notebook');
+  assert.equal(after.list(COPY_TYPE).length, 1, 'with the note of what was copied');
+  assert.deepEqual(sameThroughRecords(after, { day: DAY }).differences, []);
+});
+
+// ---------------------------------------------------------------- 3. Settings reading the list
+
+test('the obligations list Settings reads copies them too, and a read-only copy is never written', t => {
+  const root = workspace(t, { 'due/boiler.md': BOILER });
+  const store = opened(root);
+  // What the notebook answers /api/personal with: the rows, read inside one snapshot.
+  const query = new QueryService(store);
+  const rows = query.withSnapshot(() => query.rows('deadlines'));
+  assert.equal(rows.length, 1, 'Settings sees the one reminder, as before');
+  assert.equal(rows[0].native_slug, 'boiler');
+  assert.equal(page(store, 'boiler')?.title, 'Service the boiler', 'and reading the list copied it');
+  assert.deepEqual(sameThroughRecords(store, { day: DAY }).differences, []);
+
+  // A second read writes nothing, and the rows are the same.
+  const before = store.get('deadlines', page(store, 'boiler').id)._hash;
+  assert.equal(query.withSnapshot(() => query.rows('deadlines')).length, 1);
+  assert.equal(store.get('deadlines', page(store, 'boiler').id)._hash, before, 'nothing was written again');
+
+  // The read-only copy a backup or a restore looks at is never written through.
+  fs.writeFileSync(path.join(root, 'due', 'later.md'), RATES.replace('Pay the quarterly rates', 'Pay the rates later'));
+  const reading = Store.inspect(root);
+  assert.equal(dueRows(reading).length, 2, 'it still answers from the files');
+  assert.equal(new Store(root, { device: 'pc' }).list('deadlines').length, 1, 'and copied nothing');
+});
+
+// ---------------------------------------------------------------- 4. an edited closing event
+
+test('an edited closing event is followed: its words, its day, and closes turned into drops', t => {
+  const root = workspace(t, { 'due/rates.md': RATES, 'world/events/2026-03-12-rates-closed.md': closingEvent({}) });
+  const store = opened(root);
+  copyOldReminders(store, { day: DAY });
+  assert.equal(obligations(store).length, 1);
+  assert.equal(obligations(store)[0].happened_at, '2026-03-12');
+
+  // The owner corrects the event file: another day, other words.
+  fs.writeFileSync(path.join(root, 'world', 'events', '2026-03-12-rates-closed.md'),
+    closingEvent({ day: '2026-03-14', evidence: 'the receipt from the bank, found later' }));
+  const fixed = copyOldReminders(store, { day: DAY });
+  assert.equal(fixed.corrected.length, 1, 'the moment is corrected: ' + fixed.corrected.join('; '));
+  const one = obligations(store);
+  assert.equal(one.length, 1, 'one closing, not two');
+  assert.equal(one[0].happened_at, '2026-03-14');
+  assert.equal(one[0].evidence, 'the receipt from the bank, found later');
+  assert.deepEqual(sameThroughRecords(store, { day: DAY }).differences, [], 'and the records say what the files say');
+  assert.equal(copyOldReminders(store, { day: DAY }).unchanged, true, 'a run after that has nothing to do');
+
+  // And `closes:` written again as `drops:`: the reminder is dropped, not both.
+  fs.writeFileSync(path.join(root, 'world', 'events', '2026-03-12-rates-closed.md'),
+    closingEvent({ kind: 'drops', day: '2026-03-14', evidence: 'the bill was not ours after all' }));
+  const dropped = copyOldReminders(store, { day: DAY });
+  assert.ok(dropped.corrected.some(line => /taken back/.test(line)), 'the closing is taken back: ' + dropped.corrected.join('; '));
+  const now = obligations(store);
+  assert.equal(now.length, 1, 'one moment about this reminder, not a close and a drop: ' + now.map(m => m.title).join(', '));
+  assert.equal(now[0].obligation_kind, 'drops');
+  assert.equal(new QueryService(store).rows('deadlines').find(r => r.native_slug === 'rates').status, 'closed',
+    'the reader sees what the file says: dropped reads as closed, as it always did');
+  assert.deepEqual(sameThroughRecords(store, { day: DAY }).differences, []);
+  assert.equal(copyOldReminders(store, { day: DAY }).unchanged, true);
+  assert.deepEqual(store.problems, [], 'and nothing in the notebook is a problem');
 });
