@@ -9,7 +9,21 @@ import path from "node:path";
 export const HYPERFRAMES_TAG = "v0.8.43";
 export const HYPERFRAMES_VERSION = HYPERFRAMES_TAG.slice(1);
 export const MARKER = ".installed-by-mc-video";
-export const RECIPE = "video-finishing";
+
+// The recipes this add-on carries in skill/ and the setup copies into the reader's skills folder,
+// beside the HyperFrames recipes it downloads from the pin. Until 31 October 2026 Godspeed Mission
+// Control handed all four to every new reader whether they made videos or not; now only the people
+// who set up this add-on get them, so they travel with it.
+export const RECIPES = ["video-finishing", "video-captions", "video-hooks", "embedded-captions"];
+// `embedded-captions` is the odd one out: it is HyperFrames' own skill, one of the 21 in v0.8.43
+// (skill/embedded-captions/LICENSE says so, and Apache 2.0 asks us to). It is carried so the
+// reader gets it even when the download cannot be made, but the pinned release's copy is the
+// newer one, so that one wins and this one is only the fallback. It is HyperFrames' either way:
+// it stays out of the mission control's history like the rest of them.
+export const HYPERFRAMES_OWN = ["embedded-captions"];
+// The recipes that are ours to keep: the ones that go into the reader's own history.
+export const OURS = RECIPES.filter((n) => !HYPERFRAMES_OWN.includes(n));
+export const RECIPE = RECIPES[0];
 
 export function home() {
   return process.env.GODSPEED_VIDEO_HOME || path.join(os.homedir(), ".mc-video");
@@ -19,12 +33,14 @@ export function nodeMajor(version = process.versions.node) {
   return Number(String(version).split(".")[0]);
 }
 
-// Where the mission control is, in the order a reader would expect: said on the command line, recorded
-// by the kit's installer, the folder you are standing in, then the book's default.
-export function findGodspeed({ arg, cwd = process.cwd(), userHome = os.homedir() } = {}) {
+// Where the mission control is, in the order a reader would expect: said on the command line, named
+// by Godspeed Mission Control in GODSPEED_WORKSPACE when it starts this, recorded by the kit's
+// installer, the folder you are standing in, then the book's default. The same order as the copy
+// bundled with Godspeed Mission Control.
+export function findGodspeed({ arg, cwd = process.cwd(), userHome = os.homedir(), env = process.env } = {}) {
   const looksLikeGodspeed = (d) => d && fs.existsSync(path.join(d, "AGENTS.md"));
   if (arg) return looksLikeGodspeed(path.resolve(arg)) ? path.resolve(arg) : null;
-  if(process.env.GODSPEED_WORKSPACE&&looksLikeGodspeed(process.env.GODSPEED_WORKSPACE))return path.resolve(process.env.GODSPEED_WORKSPACE);
+  if (env.GODSPEED_WORKSPACE && looksLikeGodspeed(env.GODSPEED_WORKSPACE)) return path.resolve(env.GODSPEED_WORKSPACE);
   const envFile = path.join(userHome, ".godspeed", "device.env");
   if (fs.existsSync(envFile)) {
     const m = fs.readFileSync(envFile, "utf8").match(/^\s*GODSPEED_DIR=(.+)$/m);
@@ -148,10 +164,52 @@ export function onPath(dir, envPath = process.env.PATH || "", platform = process
   return envPath.split(sep).filter(Boolean).some((p) => norm(p) === norm(dir));
 }
 
-export function launchers(appDir, platform = process.platform) {
-  const script = path.join(appDir, "bin", "mc-video.mjs");
+export const LAUNCHER_STAMP = "Written by mc-video setup.";
+
+// One launcher per shell, each built so what is given arrives exactly as given (argv.mjs):
+// - sh (Linux, macOS, and Git Bash on Windows, which rewrites /c/... paths for node as it should).
+// - .cmd (cmd.exe). It cannot carry a line break, so it marks where its arguments end and
+//   mc-video refuses a line that was cut.
+// - .ps1 (PowerShell, which picks it over the .cmd in the same folder), only when ps1 is true:
+//   PowerShell refuses every .ps1 under a Restricted or AllSigned policy instead of falling back
+//   to the .cmd, so setup writes it only where PowerShell runs it (argv.mjs, ps1Allowed).
+export function launchers(appDir, platform = process.platform, { ps1 = false } = {}) {
+  // Joined the way the launcher's own system joins paths, whichever computer writes it.
+  const script = (platform === "win32" ? path.win32 : path.posix).join(appDir, "bin", "mc-video.mjs");
   const out = [{ name: "mc-video", body: `#!/bin/sh\nexec node "${script.replace(/\\/g, "/")}" "$@"\n`, mode: 0o755 }];
-  if (platform === "win32") out.push({ name: "mc-video.cmd", body: `@echo off\r\nnode "${script}" %*\r\n`, mode: 0o644 });
+  if (platform !== "win32") return out;
+  out.push({
+    name: "mc-video.cmd",
+    body: [
+      "@echo off",
+      `rem ${LAUNCHER_STAMP} cmd.exe stops reading a command line at its first line break`,
+      "rem and drops the rest. The line as it was given, and a marker after the arguments, let",
+      "rem mc-video see that and refuse instead of running half of it.",
+      "setlocal EnableDelayedExpansion",
+      'set "MC_VIDEO_CMDLINE=!CMDCMDLINE!"',
+      "setlocal DisableDelayedExpansion",
+      "set MC_VIDEO_LAUNCHER=cmd",
+      `node "${script}" %* --end-of-cmd-args`,
+      "",
+    ].join("\r\n"),
+    mode: 0o644,
+  });
+  // PowerShell turns an unquoted a,b into a list; it reaches a .cmd as "a,b", so it is handed
+  // over that way here too, never as "a b". A byte order mark, so Windows PowerShell 5.1 reads
+  // a path with an umlaut in it correctly.
+  if (ps1) out.push({
+    name: "mc-video.ps1",
+    body: "﻿" + [
+      `# ${LAUNCHER_STAMP} PowerShell runs this file in place of mc-video.cmd next to it.`,
+      "# The arguments reach node as one base64 string, so no line break, quote, $ or % in them is",
+      "# changed or cut on the way (cmd.exe stops at the first line break and drops the rest).",
+      "$argvJson = ConvertTo-Json -Compress -InputObject @($args | ForEach-Object { if ($_ -is [array]) { @($_ | ForEach-Object { [string]$_ }) -join ',' } else { [string]$_ } })",
+      `& node '${script.replace(/'/g, "''")}' --argv-base64 ([Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($argvJson)))`,
+      "exit $LASTEXITCODE",
+      "",
+    ].join("\r\n"),
+    mode: 0o644,
+  });
   return out;
 }
 
@@ -188,6 +246,38 @@ export function hyperframesSkills(unpackedRoot) {
     .filter((e) => e.isDirectory() && fs.existsSync(path.join(dir, e.name, "SKILL.md")))
     .map((e) => e.name)
     .sort();
+}
+
+// Every recipe into the reader's skills folder: HyperFrames' own from the release the setup just
+// unpacked, then the ones this add-on carries in skill/. A recipe the reader wrote under the same
+// name is never replaced, and the pinned release's copy of a recipe we also carry wins, because
+// it is the newer one. Kept here, away from the download and the talking, so a test can prove the
+// whole room against a mission control in a temporary folder, with no network.
+export function installRecipes({ room, hyperframesRoot = null, pkgRoot, version, adapt = () => {} }) {
+  const written = [];
+  const kept = [];
+  const install = (name, from, changed) => {
+    const dst = path.join(room, name);
+    if (!mayReplace(dst)) {
+      kept.push(name);
+      return;
+    }
+    fs.rmSync(dst, { recursive: true, force: true });
+    copyDir(from, dst);
+    if (changed) adapt(dst);
+    fs.writeFileSync(path.join(dst, MARKER),
+      `mc-video ${version}, HyperFrames ${HYPERFRAMES_TAG}` +
+      (changed ? ". Changed from the original: `npx hyperframes` reads `mc-video hyperframes`, and SKILL.md starts with a note for this mission control.\n" : "\n"));
+    written.push(name);
+  };
+  if (hyperframesRoot) {
+    for (const name of hyperframesSkills(hyperframesRoot)) install(name, path.join(hyperframesRoot, "skills", name), true);
+  }
+  for (const name of RECIPES) {
+    if (written.includes(name) || kept.includes(name)) continue;
+    install(name, path.join(pkgRoot, "skill", name), !OURS.includes(name));
+  }
+  return { written, kept };
 }
 
 // The mission control's .gitignore with one block listing HyperFrames' recipe folders. The block is

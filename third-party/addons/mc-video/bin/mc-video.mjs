@@ -19,6 +19,7 @@ import path from "node:path";
 import readline from "node:readline/promises";
 import { fileURLToPath } from "node:url";
 import * as L from "./lib.mjs";
+import { decodeArgv, ps1Allowed, powershellPolicies, LAUNCHER_ENV, CMDLINE_ENV } from "./argv.mjs";
 
 const PKG_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const VERSION = JSON.parse(fs.readFileSync(path.join(PKG_ROOT, "package.json"), "utf8")).version;
@@ -240,42 +241,37 @@ function runHyperframes(cfg, args) {
 }
 
 async function stepSkills(godspeed) {
-  say(`The recipes in your mission control (HyperFrames ${L.HYPERFRAMES_TAG}, pinned, plus ${L.RECIPE})`);
+  say(`The recipes in your mission control (HyperFrames ${L.HYPERFRAMES_TAG}, pinned, plus ${L.RECIPES.join(", ")})`);
   const room = L.skillsRoom(godspeed);
   fs.mkdirSync(room, { recursive: true });
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "mc-video-"));
-  const written = [];
-  const kept = [];
+  let written = [];
+  let kept = [];
+  let hyperframesRoot = null;
+  let failed = false;
   try {
     const tgz = path.join(tmp, "hyperframes.tar.gz");
     await download(`https://codeload.github.com/heygen-com/hyperframes/tar.gz/refs/tags/${L.HYPERFRAMES_TAG}`, tgz);
     const r = run("tar", ["-xzf", "hyperframes.tar.gz"], { cwd: tmp });
     if (r.status !== 0) throw new Error(`tar could not unpack the download: ${r.stderr}`);
     const root = fs.readdirSync(tmp, { withFileTypes: true }).find((e) => e.isDirectory());
-    const src = path.join(tmp, root.name);
-    const install = (name, from, adapt) => {
-      const dst = path.join(room, name);
-      if (!L.mayReplace(dst)) {
-        kept.push(name);
-        return;
-      }
-      fs.rmSync(dst, { recursive: true, force: true });
-      L.copyDir(from, dst);
-      if (adapt) adaptRecipe(dst);
-      fs.writeFileSync(path.join(dst, L.MARKER),
-        `mc-video ${VERSION}, HyperFrames ${L.HYPERFRAMES_TAG}` +
-        (adapt ? ". Changed from the original: `npx hyperframes` reads `mc-video hyperframes`, and SKILL.md starts with a note for this mission control.\n" : "\n"));
-      written.push(name);
-    };
-    for (const name of L.hyperframesSkills(src)) install(name, path.join(src, "skills", name), true);
-    install(L.RECIPE, path.join(PKG_ROOT, "skill", L.RECIPE), false);
+    hyperframesRoot = path.join(tmp, root.name);
   } catch (e) {
     warn(`could not fetch HyperFrames' recipes: ${e.message}. Check the internet connection and run this setup again.`);
-    return { room, written, kept, failed: true };
+    failed = true;
+  }
+  try {
+    // The recipes this add-on carries do not come from the download, so the reader still gets
+    // them when it could not be made.
+    ({ written, kept } = L.installRecipes({ room, hyperframesRoot, pkgRoot: PKG_ROOT, version: VERSION, adapt: adaptRecipe }));
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true });
   }
   ok(`${written.length} recipes in ${room} (your assistant reads that folder)`);
+  if (failed) {
+    if (kept.length) console.log(`   Left alone because you already have a recipe with the same name: ${kept.join(", ")}`);
+    return { room, written, kept, failed: true };
+  }
   if (kept.length) console.log(`   Left alone because you already have a recipe with the same name: ${kept.join(", ")}`);
 
   // Your caption look lives in the mission control, beside your other settings, and is never overwritten.
@@ -291,18 +287,20 @@ async function stepSkills(godspeed) {
   if (fs.existsSync(path.join(godspeed, ".git"))) {
     // HyperFrames' recipes are about 19 MB in close to a thousand files, and the setup fetches
     // them again on every computer. They stay out of the mission control's history; only what is yours
-    // (the recipe that says how you work, and your caption look) goes in.
-    const upstream = written.filter((n) => n !== L.RECIPE).map((n) => path.relative(godspeed, path.join(room, n)));
+    // (the recipes that say how you work, and your caption look) goes in. `embedded-captions` is
+    // HyperFrames' own, carried here or downloaded, so it stays out with the rest of theirs.
+    const upstream = written.filter((n) => !L.OURS.includes(n)).map((n) => path.relative(godspeed, path.join(room, n)));
     const gi = path.join(godspeed, ".gitignore");
     const before = fs.existsSync(gi) ? fs.readFileSync(gi, "utf8") : "";
     const block = L.gitignoreBlock(before, upstream);
     if (block !== before) fs.writeFileSync(gi, block);
-    const mine = [path.relative(godspeed, path.join(room, L.RECIPE)), path.relative(godspeed, styleDir), ".gitignore"];
+    const mine = [...L.OURS.filter((n) => fs.existsSync(path.join(room, n))).map((n) => path.relative(godspeed, path.join(room, n))),
+      path.relative(godspeed, styleDir), ".gitignore"];
     run("git", ["-C", godspeed, "add", "--", ...mine]);
     const staged = run("git", ["-C", godspeed, "diff", "--cached", "--quiet", "--", ...mine]);
     if (staged.status === 1) {
       const c = run("git", ["-C", godspeed, "-c", "user.name=mc-video", "-c", "user.email=mc-video@localhost",
-        "commit", "-q", "-m", `Add the video recipe and caption look (mc-video ${VERSION})`, "--", ...mine]);
+        "commit", "-q", "-m", `Add the video recipes and caption look (mc-video ${VERSION})`, "--", ...mine]);
       if (c.status === 0) ok("saved in your mission control's history, so you can undo it like any other change");
     }
   }
@@ -318,11 +316,18 @@ function stepCommand() {
   }
   const dir = L.binDir();
   fs.mkdirSync(dir, { recursive: true });
-  for (const l of L.launchers(app)) {
+  const policies = isWin ? powershellPolicies() : [];
+  const ps1 = isWin && ps1Allowed(policies);
+  const ps1File = path.join(dir, "mc-video.ps1");
+  // Only a .ps1 this installer wrote is ever removed; one the person wrote is theirs.
+  if (isWin && !ps1 && fs.existsSync(ps1File) && fs.readFileSync(ps1File, "utf8").includes(L.LAUNCHER_STAMP)) fs.rmSync(ps1File, { force: true });
+  for (const l of L.launchers(app, process.platform, { ps1 })) {
     const f = path.join(dir, l.name);
     fs.rmSync(f, { force: true });
     fs.writeFileSync(f, l.body, { mode: l.mode });
   }
+  if (ps1) ok("PowerShell gets its own launcher, so text with line breaks arrives whole");
+  else if (isWin && policies.length) warn(`PowerShell runs no scripts on this computer (${policies.map((p) => `${p.exe}: ${p.policy}`).join(", ")}), so from PowerShell mc-video goes through cmd.exe, which cannot carry a line break. Text that runs over several lines then goes in a .txt file. Set-ExecutionPolicy -Scope CurrentUser RemoteSigned, then this setup again, lifts that.`);
   if (L.onPath(dir)) ok(`mc-video is ready to type (${dir})`);
   else {
     const where = path.join(dir, isWin ? "mc-video.cmd" : "mc-video");
@@ -423,15 +428,26 @@ function check(cfg) {
   line(L.nodeMajor() >= 22, `Node.js ${process.versions.node} (22 or newer)`);
   line(!!cfg.godspeed && fs.existsSync(path.join(cfg.godspeed, "AGENTS.md")), `godspeed ${cfg.godspeed || "(none recorded)"}`);
   const room = cfg.godspeed ? L.skillsRoom(cfg.godspeed) : "";
-  line(!!room && fs.existsSync(path.join(room, L.RECIPE, "SKILL.md")), `the ${L.RECIPE} recipe`);
+  for (const r of L.RECIPES) line(!!room && fs.existsSync(path.join(room, r, "SKILL.md")), `the ${r} recipe`);
   line(!!room && fs.existsSync(path.join(room, "hyperframes", "SKILL.md")), `HyperFrames recipes (${cfg.hyperframes || "?"})`);
   line(hyperframesInstalled(), `HyperFrames ${L.HYPERFRAMES_VERSION} itself (mc-video hyperframes <command>)`);
   line(!!cfg.ffmpeg && !!findFfmpeg(cfg).exe, `ffmpeg ${cfg.ffmpeg || ""}`);
   line(!!cfg.python && fs.existsSync(cfg.python) && run(cfg.python, ["-c", "import faster_whisper, PIL"]).status === 0, "the speech model's code");
   if (cfg.godspeed) line(fs.existsSync(path.join(cfg.godspeed, "video", "caption-style.json")), `caption look ${path.join(cfg.godspeed, "video", "caption-style.json")}`);
+  // Said missing only where setup would write it: where PowerShell runs no scripts, setup cannot.
+  if (isWin) {
+    const has = fs.existsSync(path.join(L.binDir(), "mc-video.ps1"));
+    if (has || ps1Allowed(powershellPolicies())) line(has, "the PowerShell launcher (text with line breaks arrives whole)");
+  }
 }
 
-const [given, ...args] = process.argv.slice(2);
+// The launchers say how they handed the arguments over (argv.mjs). The markers are read once and
+// taken out of the environment, so nothing mc-video starts mistakes itself for the .cmd's child.
+const launched = decodeArgv(process.argv.slice(2), process.env);
+delete process.env[LAUNCHER_ENV];
+delete process.env[CMDLINE_ENV];
+if (launched.error) fail(launched.error);
+const [given, ...args] = launched.argv;
 // "caption" is what people (and assistants) type as often as "captions".
 const sub = given === "caption" ? "captions" : given;
 const flags = parseFlags(args);

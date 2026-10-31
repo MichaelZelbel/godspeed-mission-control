@@ -51,4 +51,7 @@ for name in args[1:] or ADDONS:
     entry={'name':name,'commit':commit,'license':'MIT','files':files,'activation':ACTIVATION}
     pins=[entry if e['name']==name else e for e in pins] if any(e['name']==name for e in pins) else sorted(pins+[entry],key=lambda e:e['name'])
     print(f'{name}: {len(files)} files from {commit}')
-pins_file.write_text(json.dumps(pins,indent=2)+'\n',encoding='utf-8')
+# LF on every platform, like the carried files themselves (written with write_bytes above). A run on
+# Windows wrote the pins with CRLF, which this repository's .gitattributes turns back into LF on the
+# way into a commit, so the file stayed "changed" in the working tree after every run (31 Oct 2026).
+pins_file.write_text(json.dumps(pins,indent=2)+'\n',encoding='utf-8',newline='\n')

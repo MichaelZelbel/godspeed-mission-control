@@ -24,9 +24,16 @@ This is for some people, not most. If you do not post videos, you do not need th
   The mission control's copy of its recipes differs in one way, said at the top of each: they call
   `mc-video hyperframes` where the originals say `npx hyperframes`. Usage reports are off, and
   the commands that publish, render in the cloud or sign in are refused.
-- **One recipe of its own**, `video-finishing`, which tells your assistant which tool fits which
-  request, how to check the result before saying it is done, and what it must not do: cut
-  your footage, overwrite the source, or post anything.
+- **Four recipes it brings along**, copied into your mission control's skills folder beside
+  HyperFrames' own. `video-finishing` tells your assistant which tool fits which request, how to
+  check the result before saying it is done, and what it must not do: cut your footage, overwrite
+  the source, or post anything. `video-captions` is the older, stand-alone way to burn captions,
+  kept for the people who already work that way. `video-hooks` writes the first sentence or two
+  you say on camera, judges every candidate against your script and shows you only the survivors.
+  `embedded-captions` is HyperFrames' own, for captions composited behind the subject; it comes
+  from the pinned release when the download can be made and from this add-on when it cannot.
+  Until Godspeed Mission Control 2.0.0-beta.13 the first three came with every install whether the
+  reader made videos or not; now they travel with this add-on.
 - **Your caption look**, one file in your mission control: `video/caption-style.json`. Every video uses it.
 
 Nothing here is paid. Generated video clips from paid services are not included; see
@@ -56,6 +63,13 @@ speech model and offers to install what is missing, then proves both halves: it 
 them. Run the same line again any time to update; it keeps your caption look and any recipe you
 wrote yourself, and deletes nothing.
 
+On Windows it also writes a PowerShell launcher next to the command, so text you hand it from
+PowerShell (a script for `mc-video hyperframes tts`, say) arrives exactly as written, line breaks
+included. cmd.exe cannot carry a line break (it stops reading at the first one and drops the
+rest), so a command that reaches mc-video cut short through it is refused, never half run. Where
+PowerShell is set to run no scripts at all, setup says so and leaves that launcher out; text that
+runs over several lines then goes in a .txt file (`mc-video hyperframes tts script.txt`).
+
 ## Use
 
 Ask your assistant, in your own words:
@@ -84,7 +98,9 @@ Pages: [setup/2-first-captions.md](setup/2-first-captions.md),
 - `bin/`: the `mc-video` command (Node, no dependencies).
 - `tools/`: `captions.py` the layout, `burn.py` hearing, burning and the vertical cut,
   `caption-style.json` the starting look.
-- `skill/video-finishing/`: the recipe the setup copies into your mission control.
+- `skill/`: the four recipes the setup copies into your mission control: `video-finishing`,
+  `video-captions`, `video-hooks`, and `embedded-captions`, which is HyperFrames' own and
+  carries its Apache 2.0 licence in `skill/embedded-captions/LICENSE`.
 - `fonts/`: Archivo Black, under the SIL Open Font License (`fonts/OFL.txt`).
 - `sample/`: the 8-second clips and the title card the setup's proof uses. The voice is
   synthetic (Kokoro, Apache 2.0).
