@@ -522,6 +522,10 @@ closed_elsewhere_good() { # <folder>
   } >"$folder/git-calls.txt"
   printf '{"enabled":true}\n' >"$folder/connected-sync-config.json"
   printf '{"enabled":true,"repository":"folder","paths":["notebook"]}\n' >"$folder/folder-sync-config.json"
+  # What the notebook answered when the folder pair joined: the address it read back is a
+  # GitHub one, which is the whole point of the stand-in that pair joins through.
+  printf '{"enabled":true,"repository":"folder","paths":["notebook"],"remote":"git@github.com:godspeed-scenario-stand-in/stand-in-abcd1234.git"}\n' \
+    >"$folder/folder-join.json"
   for mode in connected folder; do
     printf '[{"slug":"passport-renewal","title":"Renew my passport","state":"closed","closedBy":"Timeline/2026-10-30 Done: Renew my passport","closedOn":"2026-10-30"}]\n' \
       >"$folder/$mode-state.json"
@@ -554,6 +558,17 @@ copy "$E/good" "$E/folder-twice"
 cp "$E/folder-twice/folder-sync-config.json" "$E/folder-twice/connected-sync-config.json"
 refuses "a pair that was joined in folder mode where Settings' own way was asked for" \
   reminder-closed-elsewhere "$E/folder-twice" "was joined in folder mode"
+
+copy "$E/good" "$E/joined-a-folder"
+printf '{"enabled":true,"repository":"folder","paths":["notebook"],"remote":"file:///tmp/github-folder/stand-in-abcd1234.git"}\n' \
+  >"$E/joined-a-folder/folder-join.json"
+refuses "a folder-mode pair that joined a file:// address and not a GitHub one" \
+  reminder-closed-elsewhere "$E/joined-a-folder" "joined the address"
+
+copy "$E/good" "$E/no-address"
+rm "$E/no-address/folder-join.json"
+refuses "a folder-mode pair that kept no word of the address it joined" \
+  reminder-closed-elsewhere "$E/no-address" "folder-join.json is not in what the scenario kept"
 
 copy "$E/good" "$E/no-state"
 printf '{"not":"a state"}\n' >"$E/no-state/connected-state.json"
@@ -597,12 +612,15 @@ refuses "sync rounds in which git was never used at all" reminder-closed-elsewhe
 # one that is the owner's own repository.
 OLD_COMMIT=5555555555555555555555555555555555555555
 NEW_COMMIT=6666666666666666666666666666666666666666
-SHA_ONE=1111111111111111111111111111111111111111111111111111111111111111
-SHA_TWO=2222222222222222222222222222222222222222222222222222222222222222
 SHA_THREE=3333333333333333333333333333333333333333333333333333333333333333
+# The reminders the version before the move wrote as files in due/ (scenario-lib.sh OLD_SET),
+# which is what that scenario asks of what a pass kept, and one sha of each that is the same
+# every run.
+OLD_SET_SLUGS='deadline-only target-only-passed both-dates target-moved repeating-windows dropped-one does-not-read'
+fake_sha() { printf '%s' "$1" | sha256sum | cut -d' ' -f1; }
 
 move_good() { # <folder>
-  local folder=$1 pass what
+  local folder=$1 pass what slug sha path
   rm -rf "$folder"
   mkdir -p "$folder"
   for pass in owned folder; do
@@ -625,31 +643,51 @@ move_good() { # <folder>
       cp "$folder/$pass-$what-before.txt" "$folder/$pass-$what-after.txt"
       cp "$folder/$pass-$what-before.txt" "$folder/$pass-$what-second.txt"
     done
+    # The old files the move had to take in: one for every reminder the version before the
+    # move wrote as a file, and the two closings beside them.
+    : >"$folder/$pass-copied.txt"
+    for slug in $OLD_SET_SLUGS; do
+      printf '%s\tdue/%s.md\n' "$(fake_sha "$slug")" "$slug" >>"$folder/$pass-copied.txt"
+    done
     {
-      printf '%s\tdue/deadline-only.md\n' "$SHA_ONE"
-      printf '%s\tdue/repeating-windows.md\n' "$SHA_TWO"
-      printf '%s\tworld/events/2026-10-30-repeating-windows-closed.md\n' "$SHA_THREE"
-    } >"$folder/$pass-copied.txt"
+      printf '%s\tworld/events/2026-10-30-repeating-windows-closed.md\n' "$(fake_sha closed)"
+      printf '%s\tworld/events/2026-10-30-dropped-one-dropped.md\n' "$(fake_sha dropped)"
+    } >>"$folder/$pass-copied.txt"
+    sort -o "$folder/$pass-copied.txt" "$folder/$pass-copied.txt"
     printf 'nothing yet\n' >"$folder/$pass-fingerprint-after.txt"
     cp "$folder/$pass-fingerprint-after.txt" "$folder/$pass-fingerprint-second.txt"
+    # What `due check` said on the second start, as the reminder commands hand it over while a file
+    # needs a look: the words of the check itself, and the 1 they refuse with (the program that owns
+    # reminders answers 3; both say the same thing and neither is 0).
+    {
+      printf 'Error:   due/does-not-read.md needs a look: it has no STRIP line, so I cannot tell its dates.\n'
+      printf 'Looked at 7 things with a last day. 0 closed themselves, 1 need a look.\n'
+    } >"$folder/$pass-check-second.txt"
+    printf '1\n' >"$folder/$pass-check-code.txt"
   done
-  # Where the notebook owns the files: in the archive, out of due/.
-  {
-    printf '%s\tarchives/2026-10-30-due-moved-to-the-notebook/due/deadline-only.md\n' "$SHA_ONE"
-    printf '%s\tarchives/2026-10-30-due-moved-to-the-notebook/due/repeating-windows.md\n' "$SHA_TWO"
-    printf '%s\tarchives/2026-10-30-due-moved-to-the-notebook/world/events/2026-10-30-repeating-windows-closed.md\n' "$SHA_THREE"
-  } >"$folder/owned-archive.txt"
-  {
-    printf 'gone\tdue/deadline-only.md\n'
-    printf 'gone\tdue/repeating-windows.md\n'
-    printf 'gone\tworld/events/2026-10-30-repeating-windows-closed.md\n'
-  } >"$folder/owned-files-after.txt"
-  printf 'README.md\n' >"$folder/owned-due-after.txt"
+  # Where the notebook owns the files: in the archive, out of due/ - every one of them but the
+  # file no version can read, which the move never took in and so never touched.
+  : >"$folder/owned-archive.txt"
+  : >"$folder/owned-files-after.txt"
+  while IFS=$'\t' read -r sha path; do
+    if [ "$path" = due/does-not-read.md ]; then
+      printf '%s\t%s\n' "$sha" "$path" >>"$folder/owned-files-after.txt"
+    else
+      printf '%s\tarchives/2026-10-30-due-moved-to-the-notebook/%s\n' "$sha" "$path" >>"$folder/owned-archive.txt"
+      printf 'gone\t%s\n' "$path" >>"$folder/owned-files-after.txt"
+    fi
+  done <"$folder/owned-copied.txt"
+  sort -o "$folder/owned-archive.txt" "$folder/owned-archive.txt"
+  sort -o "$folder/owned-files-after.txt" "$folder/owned-files-after.txt"
+  printf 'README.md\ndoes-not-read.md\n' >"$folder/owned-due-after.txt"
   printf 'not there\n' >"$folder/owned-note.txt"
   printf 'no repository of the owner\n' >"$folder/owned-git-status.txt"
   # Where they are the owner's own repository's: untouched, with the one note beside them.
   cp "$folder/folder-copied.txt" "$folder/folder-files-after.txt"
-  printf 'MOVED-TO-THE-NOTEBOOK.txt\nREADME.md\ndeadline-only.md\nrepeating-windows.md\n' >"$folder/folder-due-after.txt"
+  {
+    printf 'MOVED-TO-THE-NOTEBOOK.txt\nREADME.md\n'
+    sed -n 's|^.*\tdue/||p' "$folder/folder-copied.txt"
+  } >"$folder/folder-due-after.txt"
   printf 'The reminders now live in the notebook, under Deadlines/.\nNothing here is read any more except to take in a change an older version makes.\n' \
     >"$folder/folder-note.txt"
   printf '?? due/MOVED-TO-THE-NOTEBOOK.txt\n' >"$folder/folder-git-status.txt"
@@ -724,6 +762,34 @@ copy "$M/good" "$M/dirty-repository"
 printf '?? due/MOVED-TO-THE-NOTEBOOK.txt\n D due/deadline-only.md\n' >"$M/dirty-repository/folder-git-status.txt"
 refuses "a move that left the owner's repository with more to commit than the note" \
   reminders-move-keeps-everything "$M/dirty-repository" "says more about due/ and world/ than the one note"
+
+copy "$M/good" "$M/check-said-nothing"
+printf '0\n' >"$M/check-said-nothing/owned-check-code.txt"
+refuses "a second start whose check said nothing needed a look" \
+  reminders-move-keeps-everything "$M/check-said-nothing" "rightly answers 3 for"
+
+copy "$M/good" "$M/check-named-nothing"
+printf 'Looked at 7 things with a last day. 0 closed themselves, 0 need a look.\n' \
+  >"$M/check-named-nothing/owned-check-second.txt"
+refuses "a second start whose check never said which file needs a look" \
+  reminders-move-keeps-everything "$M/check-named-nothing" "never names due/does-not-read.md"
+
+copy "$M/good" "$M/already-moved"
+grep 'does-not-read' "$M/good/owned-copied.txt" >"$M/already-moved/owned-copied.txt"
+refuses "a start from a version that had already moved the reminders" \
+  reminders-move-keeps-everything "$M/already-moved" "was not a version before the move"
+
+copy "$M/good" "$M/read-file-gone"
+sed 's|^.*\tdue/does-not-read.md$|gone\tdue/does-not-read.md|' "$M/good/owned-files-after.txt" \
+  >"$M/read-file-gone/owned-files-after.txt"
+refuses "a move that did not leave the file it cannot read where it was" \
+  reminders-move-keeps-everything "$M/read-file-gone" "it is a file it cannot read"
+
+copy "$M/good" "$M/read-file-archived"
+grep 'does-not-read' "$M/good/owned-copied.txt" |
+  sed 's|\tdue/|\tarchives/2026-10-30-due-moved-to-the-notebook/due/|' >>"$M/read-file-archived/owned-archive.txt"
+refuses "a move that put the file it cannot read into the archive" \
+  reminders-move-keeps-everything "$M/read-file-archived" "was never taken in"
 
 copy "$M/good" "$M/second-start-writes"
 printf 'a file the second start wrote\n' >"$M/second-start-writes/owned-fingerprint-second.txt"
@@ -837,7 +903,9 @@ late_good() { # <folder>
   } | sort >"$folder/pages.txt"
   printf 'closes\tDone: File the VAT return\tthe portal says it was filed, another machine saw it\t2026-10-30 Done: File the VAT return.md\n' \
     >"$folder/closings.txt"
-  printf 'c0ffee1234567890abcd\t{"id":"c0ffee1234567890abcd","path":"due/both-dates.md","kind":"deadline","kept":"local"}\n' \
+  # The notebook's own review queue, where the product keeps the item about a reminder changed
+  # in two places: <suggestion type><TAB><status><TAB><title><TAB><what it says>.
+  printf 'deadline_both_changed\tpending_review\tA reminder changed in two places: Send the tax papers\tdue/both-dates.md and the page Send the tax papers were both changed since this reminder was copied into the notebook. The version in the notebook is the one being kept.\n' \
     >"$folder/reviews.txt"
   printf 'RUNNING OUT  Renew the car insurance: 25 days left\nAIMING FOR   Send the tax papers\n' \
     >"$folder/changed-list.txt"
@@ -897,15 +965,22 @@ refuses "a change on both sides that left nothing for the owner" late-reminder-f
   "reviews.txt is not in what the scenario kept"
 
 copy "$L/good" "$L/two-reviews"
-printf 'deadbeef1234\t{"id":"deadbeef1234","path":"due/both-dates.md","kind":"deadline"}\n' >>"$L/two-reviews/reviews.txt"
+printf 'deadline_both_changed\tpending_review\tA reminder changed in two places: Book the dentist\tdue/target-moved.md and the page Book the dentist were both changed.\n' \
+  >>"$L/two-reviews/reviews.txt"
 refuses "a change on both sides that left two review items" late-reminder-file "$L/two-reviews" \
-  "review items, and the plan asks for one"
+  "review items about a reminder changed in two places"
 
 copy "$L/good" "$L/wrong-review"
-printf 'c0ffee1234567890abcd\t{"id":"c0ffee1234567890abcd","path":"notes/something-else.md","kind":"git"}\n' \
+printf 'deadline_both_changed\tpending_review\tA reminder changed in two places: Buy a present for Anna\tdue/target-only-passed.md and its page were both changed.\n' \
   >"$L/wrong-review/reviews.txt"
 refuses "a review item about something else entirely" late-reminder-file "$L/wrong-review" \
   "does not name"
+
+copy "$L/good" "$L/other-kind-only"
+printf 'media_conflict\tpending_review\tReview the new imported version of a photo\tTwo machines wrote the same picture.\n' \
+  >"$L/other-kind-only/reviews.txt"
+refuses "a review queue that holds only an item about something else" late-reminder-file "$L/other-kind-only" \
+  "review items about a reminder changed in two places"
 
 copy "$L/good" "$L/changed-twice"
 printf 'Send the tax papers\tSend the tax papers 2.md\n' >>"$L/changed-twice/pages.txt"

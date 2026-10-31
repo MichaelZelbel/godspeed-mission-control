@@ -33,6 +33,8 @@
 #   what.txt                     the reminder it added: its name, its title, the evidence it closed it with
 #   git-calls.txt                every call of git, as <step><TAB>arguments
 #   <mode>-sync-config.json      how that pair was joined, as the notebook wrote it
+#   folder-join.json             what the notebook answered when the folder pair joined, the
+#                                address it read back among it
 #   <mode>-state.json/.txt       A's own `due state`, after the two sync rounds
 #   <mode>-today.txt             A's own `due today`
 #   <mode>-closing.txt           what `due done --evidence` said on B
@@ -88,14 +90,18 @@ one_pair() { # <mode> <A root> <A port> <B root> <B port> <stand-in folder>
   read_version "$a"
 
   phase "$mode-join"
-  address=$(stand_in_github "$bare")
   if [ "$mode" = folder ]; then
     # The owner's own mission control, which the installer has already made a repository with its
-    # first commit (core/first-commit.mjs), given the copy on GitHub a person makes for it.
+    # first commit (core/first-commit.mjs), given the copy on GitHub a person makes for it. Here the
+    # stand-in is the SSH address of that repository and nothing is rewritten, because this way in
+    # reads the address back with `git remote get-url` (scenario-lib.sh stand_in_github_over_ssh
+    # says the whole of it), and what it read back is kept, so the judging part can see it.
+    address=$(stand_in_github_over_ssh "$bare")
     git -C "$a" remote add origin "$address" || fail "the mission control in $a could not be given its copy on GitHub"
-    notebook_on "$a" sync folder notebook >&2 ||
-      fail "godspeed sync folder notebook was refused on $a, so there is no mission control carrying its own notebook"
+    notebook_on "$a" sync folder notebook >"$EVIDENCE/$mode-join.json" ||
+      fail "godspeed sync folder notebook was refused on $a, so there is no mission control carrying its own notebook (what it said is in the step log)"
   else
+    address=$(stand_in_github "$bare")
     sync_on "$a" configure "$address" >"$EVIDENCE/$mode-configure.json" ||
       fail "Settings' own way of connecting a repository was refused on $a (its answer is in $mode-configure.json)"
     grep -q 'configuration_failed\|configuration_error' "$EVIDENCE/$mode-configure.json" &&
@@ -160,7 +166,7 @@ act() {
 
 # ----------------------------------------------------------------------------------- the judging
 check() { # <evidence folder>
-  local folder=$1 mode slug title evidence row state closed_by git_calls carried
+  local folder=$1 mode slug title evidence row state closed_by git_calls carried joined
   [ -d "$folder" ] || fail "there is nothing at $folder, so this scenario kept no evidence of a reminder closed elsewhere"
   need_node
   kept_all "$folder" "what the two computers did and what git did" what.txt git-calls.txt
@@ -179,6 +185,18 @@ check() { # <evidence folder>
     if [ "$mode" = folder ]; then
       want_json "$folder/$mode-sync-config.json" repository folder "how the $mode pair was joined"
       want_json "$folder/$mode-sync-config.json" paths '["notebook"]' "how the $mode pair was joined"
+      # AND THE ADDRESS IT JOINED IS A GITHUB ONE. This way in reads the address back out of the
+      # owner's own repository with `git remote get-url`, which applies every rewriting this
+      # machine's Git settings ask for, and the notebook joins a private GitHub repository and
+      # nothing else (core/sync/git.mjs verifyRemote). A stand-in that is a folder on this machine
+      # is therefore no stand-in at all: the product refuses it, rightly, and this scenario proved
+      # nothing. So what the notebook answered when it joined is kept, and read here.
+      kept "$folder" "$mode-join.json" "what the notebook answered when the $mode pair joined"
+      joined=$(json_value "$folder/$mode-join.json" remote)
+      case $joined in
+        https://github.com/*.git | https://github.com/*/* | git@github.com:*) ;;
+        *) fail "the $mode pair joined the address \"$joined\", and a mission control carrying its own notebook joins a private GitHub repository: the stand-in has to be one the product takes as GitHub" ;;
+      esac
     else
       want_json "$folder/$mode-sync-config.json" enabled true "how the $mode pair was joined"
       grep -q '"repository"' "$folder/$mode-sync-config.json" &&
@@ -223,7 +241,7 @@ check() { # <evidence folder>
   [ "$carried" -gt 0 ] ||
     fail "no git call at all was made in the sync rounds that carry the closing, so nothing was carried by the product's own sync"
 
-  pass "a reminder added on one computer and closed on the other with \"$evidence\" is closed on the first, both joined the way Settings connects a repository and in folder mode with notebook/ only; its due today no longer names \"$title\", and the scenario ran no git of its own in any step - only the notebook's own sync did, $carried calls in the rounds that carried the closing"
+  pass "a reminder added on one computer and closed on the other with \"$evidence\" is closed on the first, both joined the way Settings connects a repository and in folder mode with notebook/ only, that one through the GitHub address $joined; its due today no longer names \"$title\", and the scenario ran no git of its own in any step - only the notebook's own sync did, $carried calls in the rounds that carried the closing"
 }
 
 if [ "$CHECK_ONLY" = yes ]; then
