@@ -179,7 +179,7 @@ check() { # <evidence folder>
 
   # AND NOTHING WENT INTO due/ ANY MORE.
   left=$(grep -cE '\.md$' "$folder/due-folder.txt" || true)
-  if [ "$left" != 0 ] && grep -qvxE 'README\.md|MOVED-TO-THE-NOTEBOOK\.md' "$folder/due-folder.txt"; then
+  if [ "$left" != 0 ] && grep -qvxE 'README\.md|MOVED-TO-THE-NOTEBOOK\.txt' "$folder/due-folder.txt"; then
     fail "due/ holds $(tr '\n' ' ' <"$folder/due-folder.txt") after a reminder was saved in Settings, and reminders live in the notebook now"
   fi
 

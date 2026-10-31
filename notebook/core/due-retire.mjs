@@ -34,7 +34,12 @@ import { readSyncConfig } from './sync/git.mjs';
 
 // The two sentences the owner finds in due/ in folder mode. Two, because that is all there is to
 // say: where the reminders are now, and that nothing here is read any more.
-export const MOVED_NOTE = 'due/MOVED-TO-THE-NOTEBOOK.md';
+// Not a .md file: every reader of due/ (this product's tools/due-files.js, the engine's mc-due, any
+// older version) takes each .md file there for a reminder, so on 31 October 2026, the first night of
+// 2.0.0-beta.12, the note named MOVED-TO-THE-NOTEBOOK.md was listed every day as a reminder whose
+// file needs a look. The one machine that got it is given the new name (OLD_MOVED_NOTE, below).
+export const MOVED_NOTE = 'due/MOVED-TO-THE-NOTEBOOK.txt';
+const OLD_MOVED_NOTE = 'due/MOVED-TO-THE-NOTEBOOK.md';
 export const movedNoteText =
   '# These reminders live in the notebook now\n\n' +
   'Every reminder that was a file in this folder, and every closing that was a file in ' +
@@ -57,7 +62,13 @@ export function retireOldFiles(store, { day, force = false } = {}) {
   const root = store.root;
   const files = takenIn(store);
   const folder = folderMode(store);
-  if (folder && fs.existsSync(path.join(root, ...MOVED_NOTE.split('/'))))
+  const oldNote = path.join(root, ...OLD_MOVED_NOTE.split('/')), newNote = path.join(root, ...MOVED_NOTE.split('/'));
+  // Only the note exactly as this program wrote it: one the owner edited is theirs and stays.
+  if (folder && fs.existsSync(oldNote) && fs.readFileSync(oldNote, 'utf8') === movedNoteText) {
+    if (fs.existsSync(newNote)) fs.unlinkSync(oldNote); // the same two sentences twice
+    else fs.renameSync(oldNote, newNote);
+  }
+  if (folder && fs.existsSync(newNote))
     return { done: true, moved: [], note: MOVED_NOTE, differences: [], reason: 'the note is already there' };
   const left = files.filter(record => fs.existsSync(path.join(root, ...record.file.split('/'))));
   if (!files.length || !left.length)
