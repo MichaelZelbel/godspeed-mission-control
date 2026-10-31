@@ -24,7 +24,7 @@ and these are not programs for users.
 | `late-reminder-file.sh` | a reminder or a closing written the old way after the move is still taken in, once, and one changed on both sides waits as one review item |
 | `closed-offline-on-both.sh` | one reminder closed on two computers while they were apart is closed on both, with two closing moments and no conflict |
 | `reminder-from-settings.sh` | a reminder saved in Settings on a fresh install is a page in the notebook, is said at 08:00 and is in the brief's input |
-| `charm-challenge.sh` | the Charm Challenge start to finish: started with the right end date, one line in the brief's input, a vent answered with the one question, "no" changing nothing, "yes" and "charm slip" starting over |
+| `charm-challenge.sh` | the Charm Challenge start to finish: started with the right end date, the one line the morning brief is given and the note the brief then wrote with it, a vent answered with the one question, "no" changing nothing, "yes" and "charm slip" starting over, and the card on the Trackers shelf saying the same numbers as the chat |
 | `no-video-skills-by-default.sh` | a fresh install lists none of the video skills, the video add-on's own setup brings all of them, and `video-finishing` captions the add-on's sample clip |
 | `update-removes-only-unchanged-skills.sh` | an update from the current public version removes a video skill only where Godspeed put it there unchanged: the one the reader changed stays, and an install with the video add-on keeps them all |
 
@@ -97,7 +97,12 @@ of the add-on (`mc_video_on`), so what runs is the commit the stage pins.
 watched starting over on one machine in one job while every day is today, so it sets `GODSPEED_NOW`
 on the notebook's own service and starts it again, which is the product's own frozen clock for a
 rehearsal (`notebook/core/tracker-operations.mjs`). It counts the days in UTC and says so if the
-machine it runs on is not.
+machine it runs on is not. It also reads each thing where the notebook itself holds it: the owner's
+chat over the notebook's own chat, the line the morning brief is given through the same call
+`core/briefing.mjs` makes, the morning brief itself run as Settings runs it (the routine turned on
+and the notebook's own run of what is due) and the note it wrote, and the Trackers shelf's own list
+and the card's own numbers. The day it runs the brief is the day the clock has moved to, so the
+routine is due whether the install had made it already or not.
 
 ## Where they find the assistant, and its chat store
 

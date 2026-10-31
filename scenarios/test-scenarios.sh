@@ -1134,6 +1134,14 @@ charm_shelf() { # <file> <day of each event...>
     printf 'event\t%s\t{"when":"%s"}\n' "$day" "$day" >>"$file"
   done
 }
+# The card on the Trackers shelf and the chat say the same thing, because the chat relays what the
+# notebook answers. So one writer fills both files of a moment.
+charm_stands() { # <folder> <moment> <days to go> <end date> <longest run> <restarts>
+  local folder=$1 moment=$2
+  printf '%s days to go, done on %s. Longest run so far: %s days. Restarts: %s.\n' "$3" "$4" "$5" "$6" \
+    >"$folder/card-$moment.txt"
+  cp "$folder/card-$moment.txt" "$folder/status-$moment.txt"
+}
 charm_good() { # <folder>
   local folder=$1 first second third
   first=$(charm_date "$CHARM_START" 21)
@@ -1148,25 +1156,38 @@ charm_good() { # <folder>
     printf 'offset=+0000\n'
   } >"$folder/days.txt"
   printf 'Charm Challenge started. 21 days to go, done on %s.\n' "$first" >"$folder/start-reply.txt"
-  printf '21 days to go, done on %s. Longest run so far: 0 days. Restarts: 0.\n' "$first" >"$folder/status-after-start.txt"
+  charm_stands "$folder" after-start 21 "$first" 0 0
   printf 'Charm Challenge: day 1 of 21, 21 days to go.\n' >"$folder/brief-after-start.txt"
   charm_shelf "$folder/shelf-after-start.txt" "$CHARM_START"
   printf 'I have corrected the captions file and read it back.\n\nThat sounded like a slip. %s\n' \
     "$CHARM_QUESTION" >"$folder/vent-reply.txt"
   printf 'Fair enough. Still 21 days to go.\n' >"$folder/no-reply.txt"
-  cp "$folder/status-after-start.txt" "$folder/status-after-no.txt"
+  charm_stands "$folder" after-no 21 "$first" 0 0
   cp "$folder/brief-after-start.txt" "$folder/brief-after-no.txt"
   charm_shelf "$folder/shelf-after-no.txt" "$CHARM_START" "$CHARM_START"
-  printf '18 days to go, done on %s. Longest run so far: 3 days. Restarts: 0.\n' "$first" >"$folder/status-fourth-day.txt"
+  charm_stands "$folder" fourth-day 18 "$first" 3 0
   printf 'Charm Challenge: day 4 of 21, 18 days to go.\n' >"$folder/brief-fourth-day.txt"
+  # The morning brief, run the way Settings runs it, and the note it wrote with the line in it.
+  printf '{"results":[{"id":"morning-brief","kind":"morning-brief","state":"completed","verified":true}]}\n' \
+    >"$folder/brief-run.json"
+  {
+    printf 'state=completed\n'
+    printf 'paused=true\n'
+    printf 'next_run=%sT06:00:00.000Z\n' "$CHARM_SLIP"
+  } >"$folder/brief-job.txt"
+  {
+    printf 'Good morning. Two things today.\n\n'
+    printf 'Charm Challenge: day 4 of 21, 18 days to go.\n\n'
+    printf 'No fresh health observations are recorded, so there is nothing to say there yet.\n'
+  } >"$folder/brief-note.txt"
   printf 'The draft is rewritten and saved.\n\nThat sounded like a slip. %s\n' \
     "$CHARM_QUESTION" >"$folder/second-vent-reply.txt"
   printf 'Back to 21. Done on %s. Restarts: 1.\n' "$second" >"$folder/yes-reply.txt"
-  printf '21 days to go, done on %s. Longest run so far: 3 days. Restarts: 1.\n' "$second" >"$folder/status-after-yes.txt"
+  charm_stands "$folder" after-yes 21 "$second" 3 1
   printf 'Charm Challenge: day 1 of 21, 21 days to go.\n' >"$folder/brief-after-yes.txt"
   charm_shelf "$folder/shelf-after-yes.txt" "$CHARM_START" "$CHARM_START" "$CHARM_RESET"
   printf 'Back to 21. Done on %s. Restarts: 2.\n' "$third" >"$folder/slip-reply.txt"
-  printf '21 days to go, done on %s. Longest run so far: 3 days. Restarts: 2.\n' "$third" >"$folder/status-after-slip.txt"
+  charm_stands "$folder" after-slip 21 "$third" 3 2
   printf 'Charm Challenge: day 1 of 21, 21 days to go.\n' >"$folder/brief-after-slip.txt"
   charm_shelf "$folder/shelf-after-slip.txt" "$CHARM_START" "$CHARM_START" "$CHARM_RESET" "$CHARM_SLIP"
   {
@@ -1236,9 +1257,47 @@ refuses 'a vent whose question is not the end of the reply' charm-challenge "$C/
   "ends with \"$CHARM_QUESTION\""
 
 copy "$C/good" "$C/no-reset-counted"
-sed -i 's/Restarts: 0./Restarts: 1./' "$C/no-reset-counted/status-after-no.txt"
+sed -i 's/Restarts: 0./Restarts: 1./' "$C/no-reset-counted/status-after-no.txt" \
+  "$C/no-reset-counted/card-after-no.txt"
 refuses 'a "no" that counted a restart anyway' charm-challenge "$C/no-reset-counted" \
-  'and a "no" changes nothing'
+  'moved the restarts on the card'
+
+copy "$C/good" "$C/no-moved-the-run"
+sed -i 's/Longest run so far: 0/Longest run so far: 1/' "$C/no-moved-the-run/status-after-no.txt" \
+  "$C/no-moved-the-run/card-after-no.txt"
+refuses 'a "no" that moved the longest run' charm-challenge "$C/no-moved-the-run" \
+  'moved the longest run on the card'
+
+copy "$C/good" "$C/card-without-the-date"
+printf '18 days to go. Longest run so far: 3 days. Restarts: 0.\n' >"$C/card-without-the-date/card-fourth-day.txt"
+refuses 'a card that shows the number and not the end date' charm-challenge "$C/card-without-the-date" \
+  'the card on the Trackers shelf does not name the end date'
+
+copy "$C/good" "$C/card-against-the-chat"
+sed -i 's/Restarts: 0./Restarts: 1./' "$C/card-against-the-chat/status-fourth-day.txt"
+refuses 'a card and a chat that count restarts differently' charm-challenge "$C/card-against-the-chat" \
+  'restarts and the chat says'
+
+copy "$C/good" "$C/run-against-the-chat"
+sed -i 's/Longest run so far: 3/Longest run so far: 5/' "$C/run-against-the-chat/status-fourth-day.txt"
+refuses 'a card and a chat that say different longest runs' charm-challenge "$C/run-against-the-chat" \
+  'the longest run is 3 and the chat says 5'
+
+copy "$C/good" "$C/no-brief-note"
+: >"$C/no-brief-note/brief-note.txt"
+refuses 'a morning brief that wrote no note' charm-challenge "$C/no-brief-note" \
+  'wrote no note on the fourth day'
+
+copy "$C/good" "$C/brief-lost-the-line"
+printf 'Good morning. Nothing much today.\n' >"$C/brief-lost-the-line/brief-note.txt"
+refuses 'a morning brief that was given the line and lost it' charm-challenge "$C/brief-lost-the-line" \
+  'does not carry'
+
+copy "$C/good" "$C/brief-said-it-twice"
+printf 'Good morning.\nCharm Challenge: day 4 of 21, 18 days to go.\nAnd again:\nCharm Challenge: day 4 of 21, 18 days to go.\n' \
+  >"$C/brief-said-it-twice/brief-note.txt"
+refuses 'a morning brief that said the line twice' charm-challenge "$C/brief-said-it-twice" \
+  'times, and the brief carries its one line once'
 
 copy "$C/good" "$C/no-was-a-reset"
 charm_shelf "$C/no-was-a-reset/shelf-after-no.txt" "$CHARM_START" "$CHARM_START" "$CHARM_START"
@@ -1246,24 +1305,28 @@ refuses 'a "no" that left a third event on the card' charm-challenge "$C/no-was-
   'should hold the start and the kept answer'
 
 copy "$C/good" "$C/never-counted-down"
+cp "$C/good/card-after-start.txt" "$C/never-counted-down/card-fourth-day.txt"
 cp "$C/good/status-after-start.txt" "$C/never-counted-down/status-fourth-day.txt"
 cp "$C/good/brief-after-start.txt" "$C/never-counted-down/brief-fourth-day.txt"
 refuses 'a count that did not go down by itself' charm-challenge "$C/never-counted-down" \
-  'days to go, and it started on'
+  'days to go, and the challenge started on'
 
 copy "$C/good" "$C/same-end-date"
-printf '21 days to go, done on %s. Before that it was %s. Restarts: 1.\n' \
-  "$(charm_date "$CHARM_RESET" 21)" "$(charm_date "$CHARM_START" 21)" >"$C/same-end-date/status-after-yes.txt"
+printf '21 days to go, done on %s. Before that it was %s. Longest run so far: 3 days. Restarts: 1.\n' \
+  "$(charm_date "$CHARM_RESET" 21)" "$(charm_date "$CHARM_START" 21)" >"$C/same-end-date/card-after-yes.txt"
+cp "$C/same-end-date/card-after-yes.txt" "$C/same-end-date/status-after-yes.txt"
 refuses 'a "yes" that kept the end date it had' charm-challenge "$C/same-end-date" \
-  'so it did not start over'
+  'so the challenge did not start over'
 
 copy "$C/good" "$C/yes-no-restart"
-sed -i 's/Restarts: 1./Restarts: 0./' "$C/yes-no-restart/status-after-yes.txt"
+sed -i 's/Restarts: 1./Restarts: 0./' "$C/yes-no-restart/status-after-yes.txt" \
+  "$C/yes-no-restart/card-after-yes.txt"
 refuses 'a "yes" that counted no restart' charm-challenge "$C/yes-no-restart" \
   'restarts after the first "yes"'
 
 copy "$C/good" "$C/slip-not-counted"
-sed -i 's/Restarts: 2./Restarts: 1./' "$C/slip-not-counted/status-after-slip.txt"
+sed -i 's/Restarts: 2./Restarts: 1./' "$C/slip-not-counted/status-after-slip.txt" \
+  "$C/slip-not-counted/card-after-slip.txt"
 refuses 'a charm slip on another day that counted as the same restart' charm-challenge "$C/slip-not-counted" \
   'so it should count 2'
 
