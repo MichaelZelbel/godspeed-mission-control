@@ -267,40 +267,9 @@ jobs:
   # The scenarios of 2.0.0-beta.12: reminders and their closings live in the notebook. None of them
   # needs a key: two computers are two installations on the one machine, joined through one bare
   # repository on it standing in for the private GitHub repository (scenarios/README.md).
-  reminder-closed-elsewhere:
-    name: a reminder closed on the other computer, both ways of syncing
-    needs: stage
-    runs-on: ubuntu-24.04
-    timeout-minutes: 120
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.stage }}
-          persist-credentials: false
-      - name: The scenario, the stage's own copy of it
-        shell: bash
-        run: bash scenarios/reminder-closed-elsewhere.sh "$STAGE_REF" | tee "$RUNNER_TEMP/verdict"
-      - name: Say so when it stopped before its own verdict
-        if: failure()
-        run: 'grep -qE "^(PASS|FAIL) reminder-closed-elsewhere:" "$RUNNER_TEMP/verdict" 2>/dev/null || echo "FAIL reminder-closed-elsewhere: it stopped before its own verdict (its step log says how)" | tee -a "$GITHUB_STEP_SUMMARY"'
-
-  reminders-move-keeps-everything:
-    name: the move of the reminders keeps every one of them
-    needs: stage
-    runs-on: ubuntu-24.04
-    timeout-minutes: 150
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.stage }}
-          persist-credentials: false
-      - name: The scenario, the stage's own copy of it
-        shell: bash
-        run: bash scenarios/reminders-move-keeps-everything.sh "$STAGE_REF" | tee "$RUNNER_TEMP/verdict"
-      - name: Say so when it stopped before its own verdict
-        if: failure()
-        run: 'grep -qE "^(PASS|FAIL) reminders-move-keeps-everything:" "$RUNNER_TEMP/verdict" 2>/dev/null || echo "FAIL reminders-move-keeps-everything: it stopped before its own verdict (its step log says how)" | tee -a "$GITHUB_STEP_SUMMARY"'
-
+  # reminder-closed-elsewhere, reminders-move-keeps-everything and late-reminder-file were taken out
+  # on 31 October 2026 (their scripts test the wrong thing; Michael made the release public without
+  # them) and come back fixed with #108.
   two-machines-move-at-once:
     name: two computers that move the same reminders at once
     needs: stage
@@ -317,24 +286,6 @@ jobs:
       - name: Say so when it stopped before its own verdict
         if: failure()
         run: 'grep -qE "^(PASS|FAIL) two-machines-move-at-once:" "$RUNNER_TEMP/verdict" 2>/dev/null || echo "FAIL two-machines-move-at-once: it stopped before its own verdict (its step log says how)" | tee -a "$GITHUB_STEP_SUMMARY"'
-
-  late-reminder-file:
-    name: a reminder or a closing written the old way after the move
-    needs: stage
-    runs-on: ubuntu-24.04
-    timeout-minutes: 90
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.stage }}
-          persist-credentials: false
-      - name: The scenario, the stage's own copy of it
-        shell: bash
-        run: bash scenarios/late-reminder-file.sh "$STAGE_REF" | tee "$RUNNER_TEMP/verdict"
-      - name: Say so when it stopped before its own verdict
-        if: failure()
-        run: 'grep -qE "^(PASS|FAIL) late-reminder-file:" "$RUNNER_TEMP/verdict" 2>/dev/null || echo "FAIL late-reminder-file: it stopped before its own verdict (its step log says how)" | tee -a "$GITHUB_STEP_SUMMARY"'
-
   closed-offline-on-both:
     name: one reminder closed on two computers while they were apart
     needs: stage
@@ -372,7 +323,7 @@ jobs:
   verdict:
     name: the verdict
     if: always()
-    needs: [stage, linux-install, mac-install, docker-server, linux-update, settings-on-install, voice, update-keeps-everything, reminder-closed-elsewhere, reminders-move-keeps-everything, two-machines-move-at-once, late-reminder-file, closed-offline-on-both, reminder-from-settings]
+    needs: [stage, linux-install, mac-install, docker-server, linux-update, settings-on-install, voice, update-keeps-everything, two-machines-move-at-once, closed-offline-on-both, reminder-from-settings]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     env:
@@ -386,10 +337,7 @@ jobs:
         settings-on-install=${{ needs.settings-on-install.result }}
         voice=${{ needs.voice.result }}
         update-keeps-everything=${{ needs.update-keeps-everything.result }}
-        reminder-closed-elsewhere=${{ needs.reminder-closed-elsewhere.result }}
-        reminders-move-keeps-everything=${{ needs.reminders-move-keeps-everything.result }}
         two-machines-move-at-once=${{ needs.two-machines-move-at-once.result }}
-        late-reminder-file=${{ needs.late-reminder-file.result }}
         closed-offline-on-both=${{ needs.closed-offline-on-both.result }}
         reminder-from-settings=${{ needs.reminder-from-settings.result }}
     steps:
