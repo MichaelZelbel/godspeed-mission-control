@@ -433,6 +433,40 @@ test('every wiring of a mission control made from the starter switches voice rep
  assert.equal(fs.existsSync(path.join(other,VOICE_MODE_FILE)),false);assert.equal(readConfigValue(fs.readFileSync(path.join(other,'config.yaml'),'utf8'),['tts']),null);
 });
 
+// AN ADOPTED MISSION CONTROL'S OWN ELEVENLABS VOICE (found live on 31 October 2026). Settings wrote
+// the command with the speech script of the version installed that day; later updates installed new
+// version folders and removed that one, so every voice reply failed with "Cannot find module
+// .../versions/63b3b1e3.../notebook/scripts/elevenlabs-voice.mjs" and the answer came as text only.
+// The renewal sat inside wiring's starterBorn block and never ran here. It names this version's
+// script again now, with the voice settings the record keeps, and still nothing else of the starter's.
+test('an adopted mission control keeps its ElevenLabs voice when an update moves the speech script',t=>{
+ const base=temporary(t),root=path.join(base,'adopted'),home=path.join(base,'hermes');
+ fs.mkdirSync(path.join(root,'rules'),{recursive:true});fs.writeFileSync(path.join(root,'AGENTS.md'),'# Mine\n');fs.writeFileSync(path.join(root,'rules','mine.md'),'Mine.\n');installStarter(root);
+ fs.mkdirSync(home);fs.writeFileSync(path.join(home,'.env'),'TELEGRAM_HOME_CHANNEL='+CHAT+'\n');
+ const state=path.join(root,'.godspeed');fs.mkdirSync(state,{recursive:true});
+ fs.writeFileSync(path.join(state,VOICE_FILE),JSON.stringify({service:'elevenlabs',elevenlabs:CHOICE}));
+ // The command an update left behind: the script in a version folder that is gone, and the voice
+ // settings of the day it was written, which are no longer the record's.
+ const gone=path.join(base,'versions','63b3b1e3','notebook','scripts','elevenlabs-voice.mjs');
+ assert.equal(fs.existsSync(gone),false);
+ fs.writeFileSync(path.join(home,'config.yaml'),withElevenLabs('',{home,state,choice:{...CHOICE,stability:0.9},script:gone,node:process.execPath}));
+ wire(root,home);
+ const config=fs.readFileSync(path.join(home,'config.yaml'),'utf8'),at=key=>readConfigValue(config,['tts','providers',PROVIDER,key]);
+ const command=JSON.parse(at('command'));
+ assert.ok(command.includes(SPEECH_SCRIPT),'the script of the version installed now: '+command);
+ assert.ok(!command.includes(gone),'not the version folder the update took away');
+ assert.ok(command.includes(process.execPath),'and the node running now');
+ assert.match(command,/--stability 0\.3 --similarity 1 --style 0\.3/,'the voice settings the record keeps');
+ assert.equal(JSON.parse(at('voice')),VOICE);assert.equal(JSON.parse(at('model')),CHOICE.model);
+ assert.equal(readConfigValue(config,['tts','provider']),'"'+PROVIDER+'"');
+ // Nothing else of the starter's reaches an adopted mission control: no free Edge voice beside the
+ // owner's choice, and no voice mode file for its chats.
+ assert.equal(readConfigValue(config,['tts','edge','voice']),null);
+ assert.equal(fs.existsSync(path.join(home,VOICE_MODE_FILE)),false);
+ wire(root,home);
+ assert.equal(fs.readFileSync(path.join(home,'config.yaml'),'utf8'),config,'wiring again changes nothing');
+});
+
 test('the real ElevenLabs request is the one the stand-in saw',async()=>{
  // No network here: the request is checked as fetch receives it.
  let seen;await elevenLabsSpeech({key:KEY,voice:VOICE,model:'eleven_v3',settings:{stability:0.3},text:'Hi',fetcher:async(url,init)=>{seen={url,init};return new Response(OGG);}});
