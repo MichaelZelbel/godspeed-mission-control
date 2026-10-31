@@ -649,10 +649,10 @@ move_good() { # <folder>
   printf 'no repository of the owner\n' >"$folder/owned-git-status.txt"
   # Where they are the owner's own repository's: untouched, with the one note beside them.
   cp "$folder/folder-copied.txt" "$folder/folder-files-after.txt"
-  printf 'MOVED-TO-THE-NOTEBOOK.md\nREADME.md\ndeadline-only.md\nrepeating-windows.md\n' >"$folder/folder-due-after.txt"
+  printf 'MOVED-TO-THE-NOTEBOOK.txt\nREADME.md\ndeadline-only.md\nrepeating-windows.md\n' >"$folder/folder-due-after.txt"
   printf 'The reminders now live in the notebook, under Deadlines/.\nNothing here is read any more except to take in a change an older version makes.\n' \
     >"$folder/folder-note.txt"
-  printf '?? due/MOVED-TO-THE-NOTEBOOK.md\n' >"$folder/folder-git-status.txt"
+  printf '?? due/MOVED-TO-THE-NOTEBOOK.txt\n' >"$folder/folder-git-status.txt"
 }
 
 section reminders-move-keeps-everything
@@ -721,7 +721,7 @@ refuses "a folder-mode move that left no note saying where the reminders are" \
   reminders-move-keeps-everything "$M/no-note" "does not say that the reminders live in the notebook now"
 
 copy "$M/good" "$M/dirty-repository"
-printf '?? due/MOVED-TO-THE-NOTEBOOK.md\n D due/deadline-only.md\n' >"$M/dirty-repository/folder-git-status.txt"
+printf '?? due/MOVED-TO-THE-NOTEBOOK.txt\n D due/deadline-only.md\n' >"$M/dirty-repository/folder-git-status.txt"
 refuses "a move that left the owner's repository with more to commit than the note" \
   reminders-move-keeps-everything "$M/dirty-repository" "says more about due/ and world/ than the one note"
 

@@ -25,7 +25,7 @@ import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { Store } from '../core/records/store.mjs';
 import { copyOldReminders, sameThroughRecords } from '../core/due-copy.mjs';
-import { MOVED_NOTE, folderMode } from '../core/due-retire.mjs';
+import { MOVED_NOTE, movedNoteText, folderMode } from '../core/due-retire.mjs';
 import { dueCommand } from '../core/native-due.mjs';
 import { write, SEED, EVENTS } from './due-seed.mjs';
 
@@ -160,6 +160,22 @@ test('in folder mode not one file is changed, and one note is left beside them',
   const before = everything(root);
   say(root, 'state');
   assert.deepEqual([...everything(root)], [...before], 'and a second run retires nothing more');
+
+  // The note is never read as a reminder. Until 31 October 2026 it was a .md file, which every
+  // reader of due/ took for one, and the reminders said each day that its file needed a look.
+  assert.doesNotMatch(say(root, 'state'), /MOVED-TO-THE-NOTEBOOK/, 'the note is not a reminder');
+  // The one machine that got the .md note has it renamed, and nothing else changes.
+  fs.renameSync(path.join(root, ...MOVED_NOTE.split('/')), path.join(root, 'due', 'MOVED-TO-THE-NOTEBOOK.md'));
+  const state = say(root, 'state');
+  assert.equal(fs.existsSync(path.join(root, 'due', 'MOVED-TO-THE-NOTEBOOK.md')), false, 'the old note is gone');
+  assert.equal(fs.readFileSync(path.join(root, ...MOVED_NOTE.split('/')), 'utf8'), movedNoteText, 'under its new name');
+  assert.doesNotMatch(state, /MOVED-TO-THE-NOTEBOOK/, 'and it is not a reminder either');
+  // Both names at once (the old note came back from another machine): the old copy goes.
+  fs.writeFileSync(path.join(root, 'due', 'MOVED-TO-THE-NOTEBOOK.md'), movedNoteText);
+  const both = say(root, 'state');
+  assert.equal(fs.existsSync(path.join(root, 'due', 'MOVED-TO-THE-NOTEBOOK.md')), false, 'the old copy is gone');
+  assert.equal(fs.readFileSync(path.join(root, ...MOVED_NOTE.split('/')), 'utf8'), movedNoteText, 'the note stays');
+  assert.doesNotMatch(both, /MOVED-TO-THE-NOTEBOOK/, 'and neither is a reminder');
 });
 
 test('a difference retires nothing, and is said in the reminders in one plain sentence', t => {

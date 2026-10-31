@@ -39,7 +39,7 @@
 #   <pass>-files-after.txt  the same paths after the update, with their bytes
 #   <pass>-archive.txt      everything under archives/*-due-moved-to-the-notebook/
 #   <pass>-due-after.txt    what is in due/ afterwards
-#   <pass>-note.txt         due/MOVED-TO-THE-NOTEBOOK.md, where the plan asks for it
+#   <pass>-note.txt         due/MOVED-TO-THE-NOTEBOOK.txt, where the plan asks for it
 #   <pass>-git-status.txt / -git-status-all.txt   due/ and world/ alone, and the whole folder
 #   <pass>-fingerprint-after.txt / -second.txt    the bytes of due/, world/events/, archives/ and
 #                                                 the notebook's reminder pages, twice
@@ -54,7 +54,7 @@ READS='state list today'
 # The set, as scenario-lib.sh seeds it (OLD_SET), by the name each one has in `due state`.
 SEEDED=$OLD_SET
 WATCHED_FOLDERS='due world/events archives notebook/Deadlines notebook/Timeline'
-NOTE=due/MOVED-TO-THE-NOTEBOOK.md
+NOTE=due/MOVED-TO-THE-NOTEBOOK.txt
 ARCHIVE_NAME='due-moved-to-the-notebook'
 
 # The old files the move has to take in: every reminder in due/ except its README, and every event
@@ -64,7 +64,7 @@ copied_files() { # <root> <file>
   : >"$out"
   for file in "$root"/due/*.md; do
     [ -f "$file" ] || continue
-    case $(basename "$file") in README.md | MOVED-TO-THE-NOTEBOOK.md) continue ;; esac
+    case $(basename "$file") in README.md | MOVED-TO-THE-NOTEBOOK.txt) continue ;; esac
     printf '%s\tdue/%s\n' "$(sha256sum <"$file" | cut -d' ' -f1)" "$(basename "$file")" >>"$out"
   done
   for file in "$root"/world/events/*.md; do
@@ -215,7 +215,7 @@ check() { # <evidence folder>
           fail "$path is not in the archive with the bytes it had, so the move did not keep it"
       done <"$folder/$pass-copied.txt"
       # And they are out of the owner's way: nothing is left in due/ but its own two notes.
-      left=$(grep -E '\.md$' "$folder/$pass-due-after.txt" | grep -vxE 'README\.md|MOVED-TO-THE-NOTEBOOK\.md' | grep -c . || true)
+      left=$(grep -E '\.md$' "$folder/$pass-due-after.txt" | grep -vxE 'README\.md|MOVED-TO-THE-NOTEBOOK\.txt' | grep -c . || true)
       [ "$left" = 0 ] ||
         fail "due/ still holds $left reminder file(s) after the move, and the notebook owns them here"
     else
