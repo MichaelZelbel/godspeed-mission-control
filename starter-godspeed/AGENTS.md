@@ -41,7 +41,7 @@ If it contradicts something you believe about me, the file wins.
   the file is enough. When I do name a skill, run its file exactly. When I
   correct the same thing twice, add the correction to the skill file.
 - **A recipe from the book's kit.** When I name a skill that is not in
-  `skills/`, fetch it from the companion kit yourself, save it as
+  `skills/`, fetch it from the kit yourself, save it as
   `skills/<name>/SKILL.md` and tell me what you saved. `answer-email-my-way`,
   `plan-my-day`, `prep-me-for-a-meeting`, `draft-my-update`, `check-my-email` and
   `summarize-for-me` are single files, at
