@@ -1,12 +1,30 @@
 # Godspeed Mission Control
 
+A personal AI that runs on your own computer or server and works from one folder of plain files you own: your goals, notes, people, deadlines and the routines it runs for you, including a briefing every morning. It thinks with your own AI (your ChatGPT plan, or an API key from Claude or another AI company) and keeps what it learns in that folder.
+
+Free and open source. No account with us; you connect your own AI after installing.
+
+- **Windows:** [download GodspeedSetup.exe](https://github.com/MichaelZelbel/godspeed-mission-control/releases/latest/download/GodspeedSetup.exe) and run it.
+- **Mac or Linux:** `curl -fsSL https://godspeedmissioncontrol.com/install | bash` (on a Mac, checked on GitHub's Mac test machines, not yet a whole install on a real Mac)
+- **A Linux server:** `curl -fsSL https://godspeedmissioncontrol.com/server | bash` (it runs in Docker; [what it does](docker/README.md))
+
+In use by its maintainer since April 2026. Counted in his own folder on 26 October 2026:
+
+- **115 mornings** with a written briefing, since 4 July 2026.
+- **365 decisions** written down, each with its reason.
+- **181 jobs** it set itself and finished, each confirmed by a check it ran afterwards, since 13 September 2026.
+
+Each install in detail, and what every version changed, are further down.
+
+## About this version
+
 Godspeed with the integrated notebook, for readers of [Teach It Once: Make AI your mission control for life and work](https://leanpub.com/teachitonce). It includes Menerio's notebook functionality: notes, collections, people, world knowledge, timeline, media, comments and memory review, alongside Godspeed's goals, chat, routines and recovery controls.
 
 New here and not a reader yet? The first chapters are free: [download the free sample of *Teach It Once* on Leanpub](https://leanpub.com/teachitonce).
 
 A new release comes out most weeks. I write about what my AI does for me and what I will not let it do in a free newsletter: [subscribe on Substack](https://michaelzelbel.substack.com/subscribe).
 
-Version 2 is the current edition. The lines below install the current public version, which is the branch `beta` of this repository; `main` is where the work goes on, and a change merged into it reaches nobody until the next version is released. The installers set up a new, separate folder. They do not move an existing version 1 Godspeed folder or your Menerio account.
+Version 2 is the current edition. The install lines on this page install the current public version, which is the branch `beta` of this repository; `main` is where the work goes on, and a change merged into it reaches nobody until the next version is released. The installers set up a new, separate folder. They do not move an existing version 1 Godspeed folder or your Menerio account.
 
 ## New in 2.0.0-beta.12
 
