@@ -573,3 +573,93 @@ seed_the_old_set() { # <root>
   printf '# key\texpires\nscenario-api-key\t%s\n' "$(day_in +45)" >"$root/secrets/expires.txt" ||
     fail "the key in secrets/expires.txt could not be written in $root"
 }
+
+# ====================================================== THE VIDEO SKILLS, AND THE VIDEO ADD-ON
+# 2.0.0-beta.13 takes every skill whose only job is making or finishing video out of the set a new
+# install hands the reader (the release plan's item 2): a fresh install no longer copies it into the
+# reader's skills folder, only the video add-on's own setup puts them there, and an update removes
+# from an install that has them only the copies Godspeed itself put there unchanged. Two of the
+# scenarios read that, so their list and their readers are here.
+
+# THE NAMES, the plan's own list of twenty-five: the HyperFrames family the product had vendored
+# (hyperframes and its parts, the two GSAP ones, media-use, figma, remotion-to-hyperframes, the
+# nine recipes for a kind of video) and the four of our own. One name per line, so a symptom can
+# say which of them it found or missed.
+# shellcheck disable=SC2034  # the scenarios that source this file are what read it
+VIDEO_SKILLS='hyperframes
+hyperframes-animation
+hyperframes-audio
+hyperframes-cli
+hyperframes-core
+hyperframes-creative
+hyperframes-keyframes
+hyperframes-registry
+gsap-core
+gsap-timeline
+media-use
+figma
+remotion-to-hyperframes
+general-video
+motion-graphics
+faceless-explainer
+music-to-video
+pr-to-video
+product-launch-video
+slideshow
+talking-head-recut
+video-captions
+embedded-captions
+video-finishing
+video-hooks'
+# The skills the plan says stay, because they are about web pages and pictures and not about video.
+# A scenario asks for these as well: a folder that holds none of them was never the reader's skills
+# folder, and "it lists none of the video ones" would then be true of an empty room.
+# shellcheck disable=SC2034  # the scenarios that source this file are what read it
+VIDEO_SKILLS_KEEP='scroll-craft
+web-design
+social-visuals
+nano-banana-images
+excalidraw-diagram
+excalidraw-visuals'
+
+# THE READER'S SKILLS FOLDER, as one name per line, sorted: every folder under skills/ that holds a
+# SKILL.md. That is the folder the install copies the packaged recipes into
+# (notebook/bin/godspeed.mjs: skills/<name>) and the one the video add-on's own setup writes to
+# (mc-video's lib.mjs, skillsRoom), so it is what "the reader's skills folder" means for both.
+skills_of() { # <root> <file>
+  local folder=$1/skills skill
+  : >"$2"
+  [ -d "$folder" ] || return 0
+  for skill in "$folder"/*; do
+    [ -f "$skill/SKILL.md" ] || continue
+    basename "$skill" >>"$2"
+  done
+  sort -o "$2" "$2"
+}
+# Which of a list of names a skills list holds, and which it does not, as one line of names, so a
+# symptom names them instead of counting them. Both read the files a scenario kept.
+skills_present() { # <skills file> <names file>
+  comm -12 <(sort -u "$1") <(sort -u "$2") | tr '\n' ' ' | sed 's/[[:space:]]*$//'
+}
+skills_missing() { # <skills file> <names file>
+  comm -13 <(sort -u "$1") <(sort -u "$2") | tr '\n' ' ' | sed 's/[[:space:]]*$//'
+}
+how_many() { # <one line of names>
+  printf '%s\n' "$1" | tr ' ' '\n' | grep -c . || true
+}
+
+# THE VIDEO ADD-ON'S OWN PROGRAM, as the install carries it, so what runs is the commit the stage
+# pins and not whatever mc-video's own main holds today (a reader runs the same program through
+# `npx --yes github:MichaelZelbel/mc-video`). Its own home is kept inside the installation, so two
+# installations on one machine share neither HyperFrames nor a caption look.
+mc_video_on() { # <root> <arguments...>
+  local root=$1
+  shift
+  GODSPEED_VIDEO_HOME="$root/.godspeed/mc-video" \
+    "$NODE" "$(product_script "$root" third-party/addons/mc-video/bin/mc-video.mjs)" "$@"
+}
+# The file the add-on carries beside its program, by its path inside the installed version: its
+# sample clip, which is the one a scenario captions.
+addon_file() { # <root> <path below third-party/addons/mc-video/>
+  product_script "$1" "third-party/addons/mc-video/$2"
+}
