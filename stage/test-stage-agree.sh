@@ -307,10 +307,22 @@ else
   cp third-party/addons/sources.json "$TMP/sources.json"
   WHERE="third-party/addons/sources.json in the working tree"
 fi
+# AN ADD-ON THIS REPOSITORY CARRIES ITSELF has no commit of its own to be pinned to: its entry in
+# sources.json says "carriedHere": true in place of a commit (notebook/scripts/vendor-addons.py says
+# why; the Charm Challenge is the first). The product at the product commit is its source, so that
+# commit is the pin the stage file names for it, and it is compared like every other add-on.
+# Such an add-on is read from the working tree as well as from the product commit, and the two lists
+# are merged by name: it is part of the product itself, so the stage file names it from the stage
+# that first carries it, which is a stage whose product commit may still be an older one. Every
+# other add-on is still read only at the product commit, never at today's main.
 node -e '
-  const s = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
-  for (const a of s) console.log(a.name + " " + a.commit);
-' "$TMP/sources.json" > "$TMP/pins.txt"
+  const read = (f) => JSON.parse(require("fs").readFileSync(f, "utf8"));
+  const [frozen, here, product] = [read(process.argv[1]), read(process.argv[2]), process.argv[3]];
+  const pins = new Map();
+  for (const a of frozen) pins.set(a.name, a.carriedHere ? product : a.commit);
+  for (const a of here) if (a.carriedHere && !pins.has(a.name)) pins.set(a.name, product);
+  for (const name of [...pins.keys()].sort()) console.log(name + " " + pins.get(name));
+' "$TMP/sources.json" third-party/addons/sources.json "$PRODUCT" > "$TMP/pins.txt"
 pins=0
 while read -r name commit; do
   [ -n "$name" ] || continue

@@ -109,7 +109,7 @@ for(const command of (process.env.GODSPEED_ORIGINAL_RUNTIME==='on'?['mail','watc
  if(process.platform==='win32')atomic(bin+'.cmd',cmd(at=>'"'+at(process.execPath)+'" "'+at(script)+'" %* --godspeed "'+at(root)+'"\r\n'));
  shellCommand(bin,[process.execPath,script],' --godspeed '+quote(root));
 }
-const packagedSkills=[['coach','coach'],['journal','interstitial-journal'],['headache','headache-tracker']];
+const packagedSkills=[['coach','coach'],['journal','interstitial-journal'],['headache','headache-tracker'],['charm','charm-challenge']];
 for(const [addon,skill] of packagedSkills){
  const source=path.join(kit,'third-party/addons/godspeed-'+addon);
  fs.cpSync(path.join(source,'hermes/plugin/godspeed-'+addon),path.join(home,'plugins/godspeed-'+addon),{recursive:true});
@@ -145,11 +145,11 @@ let text=fs.existsSync(file)?fs.readFileSync(file,'utf8').replace(/^\uFEFF/,''):
 // only when this file is made: an install that already had a config.yaml would never get it
 // otherwise, and an update runs this.
 text=setConfigValue(text,['skills','create_dir'],JSON.stringify(path.join(root,'skills')));
-if(!/^plugins:/m.test(text))text+='\nplugins:\n  enabled: ["godspeed-coach", "godspeed-journal", "godspeed-headache", "godspeed-context"]\n';
+if(!/^plugins:/m.test(text))text+='\nplugins:\n  enabled: ["godspeed-coach", "godspeed-journal", "godspeed-headache", "godspeed-charm", "godspeed-context"]\n';
 else{
  const block=text.match(/^plugins:[^\n]*\n(?:[ \t]+[^\n]*\n|\n)*/m)?.[0]||'';
  const disabled=block.match(/  disabled:\s*\[([^\]]*)\]/)?.[1]||'';
- const names=['godspeed-coach','godspeed-journal','godspeed-headache','godspeed-context'].filter(n=>!disabled.includes(n));
+ const names=['godspeed-coach','godspeed-journal','godspeed-headache','godspeed-charm','godspeed-context'].filter(n=>!disabled.includes(n));
  let updated=block;
  if(/  enabled:\s*\[([^\]]*)\]/.test(block))updated=block.replace(/  enabled:\s*\[([^\]]*)\]/,(_m,old)=>'  enabled: ['+[old.trim(),...names.filter(n=>!old.includes(n)).map(n=>JSON.stringify(n))].filter(Boolean).join(', ')+']');
  else if(/^  enabled:\s*\n/m.test(block))updated=block.replace(/^  enabled:\s*\n((?:    - [^\n]*\n)*)/m,(_m,old)=>'  enabled:\n'+old+names.filter(n=>!old.includes(n)).map(n=>'    - '+JSON.stringify(n)+'\n').join(''));

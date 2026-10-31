@@ -1,0 +1,9 @@
+name: godspeed-charm
+version: "0.2.0"
+description: >-
+  Shows the model the state of the Charm Challenge, once per turn, before it reads the message
+  (pre_llm_call). Prints nothing when no challenge runs. On Telegram, the question after a slip
+  comes as its own message with Yes and No buttons (post_tool_call, transform_llm_output and a
+  scoped Telegram button handler). Installed by `godspeed-charm setup`.
+author: godspeed-charm
+kind: standalone

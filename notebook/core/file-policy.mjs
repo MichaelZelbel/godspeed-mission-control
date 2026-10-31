@@ -18,7 +18,7 @@ export const legacyRecordsFolder='records';
 // place because the records and the files do not agree yet (core/due-retire.mjs).
 // notebook/test/due-root-policy.test.mjs holds both roots here for those reasons. world/ keeps the
 // rest of its kinds anyway; they move in a later release.
-export const durableRoots=[recordsFolder,'coach','journal','routines/journal','routines/headache','profile','rules','observations','goals','work','due','world','prompts','ideas','inbox','forecasts','skills','assistant-state','assistant'];
+export const durableRoots=[recordsFolder,'coach','journal','routines/journal','routines/headache','routines/charm','profile','rules','observations','goals','work','due','world','prompts','ideas','inbox','forecasts','skills','assistant-state','assistant'];
 // The note at the top of the folder that says it is a mission control with the notebook
 // (core/notebook-note.mjs): NOTEBOOK.md, and FULL-ALPHA.md until 2.0.0-beta.11, which the notebook
 // renames only where it never leaves this computer through Git. syncedFiles are the files a copy

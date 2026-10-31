@@ -22,6 +22,7 @@ import {logFromRows} from '../../third-party/addons/godspeed-headache/lib/rows.m
 import {visibleRows} from './visibility.mjs';
 import {currentHealth} from './health-inputs.mjs';
 import {loadSettings as headacheSettings,saveSettings as saveHeadache} from '../../third-party/addons/godspeed-headache/lib/settings.mjs';
+import {loadSettings as charmSettings,saveSettings as saveCharm} from '../../third-party/addons/godspeed-charm/lib/settings.mjs';
 const iso=()=>new Date().toISOString();
 // The Headaches tracker (D-321): the collection whose tracker card names the headache specialist,
 // the oldest should there be two, as the add-on's own lib/notebook.mjs picks it. Once it exists its
@@ -71,13 +72,22 @@ export function nativeOperation(store,input){
  if(input.type==='journal-switch'){const settings=journalSettings(store.root);saveJournal(store.root,{...settings,capture_enabled:input.enabled});return {enabled:input.enabled};}
  return null;
 }
+// A refusal of the charm add-on (it exits 2, ruling R4): nothing was written, and the reply is a
+// plain sentence for the person, never "Personal command failed". charm-operation.mjs answers with
+// it; /charm shows the add-on's own {ok:false,reply,state} (personal-operations.mjs).
+const refusal=(reply,state=null,output=JSON.stringify({ok:false,reply,state}))=>Object.assign(Error(reply),{refusal:{reply,state},output});
 export function addonCommand(store,{addon,args}){
- if(!['coach','journal','headache'].includes(addon)||!Array.isArray(args)||args.some(a=>typeof a!=='string'||a.length>20000)||args.some(a=>['--godspeed','--evidence-script'].includes(a)))throw Error('Invalid personal command');
- const allowed=addon==='headache'?['help','start','log','end','set','med','cancel','open','list','show','patterns','daily','context','config']:addon==='coach'?['help','areas','show','area','brief','talk','habit','habits','context','config']:['help','start','define','note','done','drop','reopen','check','status','context','report','week','words','open','met','config'];
+ if(!['coach','journal','headache','charm'].includes(addon)||!Array.isArray(args)||args.some(a=>typeof a!=='string'||a.length>20000)||args.some(a=>['--godspeed','--evidence-script'].includes(a)))throw Error('Invalid personal command');
+ const allowed=addon==='charm'?['help','start','status','asked','answer','slip','stop','brief','context','config']:addon==='headache'?['help','start','log','end','set','med','cancel','open','list','show','patterns','daily','context','config']:addon==='coach'?['help','areas','show','area','brief','talk','habit','habits','context','config']:['help','start','define','note','done','drop','reopen','check','status','context','report','week','words','open','met','config'];
  if(!allowed.includes(args[0]))throw Error('This personal command is not available through the notebook');
  if(args.some(a=>/^(?:evidence[.]script|--hook|--command|--script)$/.test(a)))throw Error('Executable hooks require a separately reviewed installation');
  const autoIndex=args.indexOf('--auto');if(autoIndex!==-1&&!parseAuto(args[autoIndex+1]))throw Error('Automatic habit evidence needs a numeric measurement comparison');
- const timezone=store.get('settings','installation')?.timezone||'UTC',load=addon==='headache'?headacheSettings:addon==='coach'?coachSettings:journalSettings,save=addon==='headache'?saveHeadache:addon==='coach'?saveCoach:saveJournal,settings=load(store.root);if(settings.timezone!==timezone)save(store.root,{...settings,timezone});
+ const timezone=store.get('settings','installation')?.timezone||'UTC',load=addon==='charm'?charmSettings:addon==='headache'?headacheSettings:addon==='coach'?coachSettings:journalSettings,save=addon==='charm'?saveCharm:addon==='headache'?saveHeadache:addon==='coach'?saveCoach:saveJournal;
+ // The charm's settings name the day boundary of its count, so a file it cannot read stops it
+ // (its loadSettings throws) rather than filing events on a guessed day: a refusal, said plainly.
+ // The sentence is the notebook's own, in English, so the chat puts it in the person's language.
+ let settings;try{settings=load(store.root);}catch(error){if(addon!=='charm')throw error;const said=refusal('The Charm Challenge cannot read its settings file, so nothing was changed.');said.refusal.language='en';throw said;}
+ if(settings.timezone!==timezone)save(store.root,{...settings,timezone});
  if(addon==='coach'&&settings.daily_table)localPath(store.root,settings.daily_table);
  if(args[0]==='config'&&args[1]==='set'&&args[2]==='daily_table'&&args[3])localPath(store.root,args[3]);
  if(addon==='journal'&&settings.evidence?.script&&args[0]==='check')throw Error('Executable journal evidence requires a separately reviewed installation');
@@ -85,6 +95,7 @@ export function addonCommand(store,{addon,args}){
  if(!fs.existsSync(path.join(store.root,'AGENTS.md')))atomic(path.join(store.root,'AGENTS.md'),'# Personal workspace\n\nKeep durable state in user files. Outward actions require exact approval.\n');
  const script=fileURLToPath(new URL('../../third-party/addons/godspeed-'+addon+'/bin/godspeed-'+addon+'.mjs',import.meta.url));
  const run=spawnSync(process.execPath,[script,...args,'--godspeed',store.root,'--json'],{cwd:store.root,windowsHide:true,shell:false,timeout:15000,encoding:'utf8',env:{...process.env,GODSPEED_COACH_APP:path.join(store.state,'coach-app'),GODSPEED_JOURNAL_APP:path.join(store.state,'journal-app'),GODSPEED_COACH_GIT_SYNC:'off',GODSPEED_JOURNAL_GIT_SYNC:'off',GODSPEED_HEADACHE_GIT_SYNC:'off'}});
+ if(addon==='charm'&&run.status===2){let said=null;try{said=JSON.parse(run.stdout.trim());}catch{}if(said&&said.ok===false&&typeof said.reply==='string')throw refusal(said.reply,said.state??null,run.stdout.trim());}
  if(run.status!==0)throw Error('Personal command failed: '+String(run.stderr||'No result').slice(0,300));return {result:run.stdout.trim()};
 }
 export function nativeCoachContext(store,area){const a=findArea(store.root,area);if(!a)return null;return brief(store.root,coachSettings(store.root),a,localParts(new Date(),coachSettings(store.root).timezone).date);}

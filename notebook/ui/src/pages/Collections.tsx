@@ -22,8 +22,9 @@ import { AICollectionDialog } from "@/components/collections/AICollectionDialog"
 import { BRAND } from "@/lib/brand";
 import { dbErrorMessage } from "@/lib/function-error";
 import { LoadErrorState } from "@/components/collections/LoadErrorState";
-import { habitShelf, lastEntryDays, shelve, talksLabel } from "@/lib/tracker-shelf";
+import { charmShelf, habitShelf, lastEntryDays, shelve, talksLabel, type CharmListed } from "@/lib/tracker-shelf";
 import type { HabitProgress } from "@/lib/habit-progress";
+import { CharmCard } from "@/components/collections/CharmCard";
 
 type Collection = Database["public"]["Tables"]["collections"]["Row"];
 // itemCount is null when the count could not be read: "0 items" would be a
@@ -305,6 +306,9 @@ export default function Collections() {
   const [restingOpen, setRestingOpen] = useState(false);
   // Habits, from tracker-list; none when it could not be read, and the rest of the page still loads.
   const [habits, setHabits] = useState<{ active: HabitCardData[]; resting: HabitCardData[] }>({ active: [], resting: [] });
+  // The Charm Challenge's count, from tracker-list too; none when it could not be read, and its card
+  // then says so instead of a number.
+  const [charmListed, setCharmListed] = useState<CharmListed[]>([]);
   const userId = user?.id;
 
   useEffect(() => {
@@ -367,11 +371,13 @@ export default function Collections() {
       }
       // Habits are trackers made from the coach's own files (D-321): tracker-list gives them.
       const { data: listed, error: listError } = await supabase.functions.invoke("personal-operation", { body: { type: "tracker-list" } });
-      const habitList = listError ? { active: [], resting: [] } : habitShelf(((listed as { trackers?: HabitCardData[] } | null)?.trackers ?? []));
+      const listedTrackers = listError ? [] : ((listed as { trackers?: (HabitCardData & CharmListed)[] } | null)?.trackers ?? []);
+      const habitList = habitShelf(listedTrackers);
       if (!cancelled) {
         setCollections(rows.map((collection) => ({ ...collection, itemCount: countById.get(collection.id) ?? null })));
         setLastWhen(days);
         setHabits(habitList);
+        setCharmListed(listedTrackers.filter((t) => t.specialist === "charm"));
         setIsLoading(false);
       }
     };
@@ -385,8 +391,9 @@ export default function Collections() {
     const sorted = shelve(collections, lastWhen ?? {}, new Date());
     return lastWhen ? sorted : { ...sorted, trackers: [...sorted.trackers, ...sorted.resting], resting: [] };
   }, [collections, lastWhen]);
-  const hasTrackers = shelf.trackers.length + shelf.resting.length + habits.active.length + habits.resting.length > 0;
-  const resting = shelf.resting.length + habits.resting.length;
+  const charm = useMemo(() => charmShelf(collections, charmListed, lastWhen, new Date()), [collections, charmListed, lastWhen]);
+  const hasTrackers = shelf.trackers.length + shelf.resting.length + habits.active.length + habits.resting.length + charm.active.length + charm.resting.length > 0;
+  const resting = shelf.resting.length + habits.resting.length + charm.resting.length;
 
   return (
     <div className="w-full max-w-6xl">
@@ -424,8 +431,9 @@ export default function Collections() {
           {hasTrackers && (
             <section className="space-y-3" aria-labelledby="trackers-heading">
               <h2 id="trackers-heading" className="text-lg font-bold font-display">Trackers</h2>
-              {shelf.trackers.length + habits.active.length > 0 && (
+              {shelf.trackers.length + habits.active.length + charm.active.length > 0 && (
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+                  {charm.active.map((card) => <CharmCard key={card.collection.id} collection={card.collection} charm={card.charm} />)}
                   {shelf.trackers.map((collection) => <CollectionCard key={collection.id} collection={collection} />)}
                   {habits.active.map((habit) => <HabitCard key={habit.id} habit={habit} />)}
                 </div>
@@ -440,6 +448,7 @@ export default function Collections() {
                   </CollapsibleTrigger>
                   <CollapsibleContent>
                     <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+                      {charm.resting.map((card) => <CharmCard key={card.collection.id} collection={card.collection} charm={card.charm} />)}
                       {shelf.resting.map((collection) => <CollectionCard key={collection.id} collection={collection} />)}
                       {habits.resting.map((habit) => <HabitCard key={habit.id} habit={habit} />)}
                     </div>

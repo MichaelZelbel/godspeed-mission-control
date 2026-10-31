@@ -19,6 +19,16 @@ because a candidate's setup is published on `candidate/<version>`, as `candidate
 a part is never empty, never starts with a dot, and no tag holds two dots in a row, because a tag
 is a Git ref and Git takes none of those.
 
+An add-on the product carries itself has no commit of its own: its entry in
+`third-party/addons/sources.json` says `"carriedHere": true` in place of a commit, and the stage
+file pins it by the product commit, because the product is its source. `stage.json` names such an
+add-on from the stage that first carries it, which is why `godspeed-charm` is named with
+2.0.0-beta.6's product commit: the add-on reached the product after that stage was frozen, and the
+next freeze writes its own product commit there for every add-on alike.
+`stage/test-stage-agree.sh` holds it to that pin like any other, and reads which add-ons are carried
+this way from the working tree as well as from the product commit, since the product itself is where
+they live.
+
 `stage/stage.mjs` reads a stage file in Node and `stage/stage.sh` reads it in POSIX shell,
 without `jq`, Node or Python, because an installer runs before Node is installed and on
 servers that have none. They take the same command line and leave the same exit code:

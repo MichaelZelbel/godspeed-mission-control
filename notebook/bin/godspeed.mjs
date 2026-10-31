@@ -88,8 +88,8 @@ if(command==='init'){
   const committed=(await import('../core/first-commit.mjs')).firstCommit(root);
   if(!committed.made&&/failed/.test(committed.reason))process.stderr.write('The folder\'s first Git commit was not made ('+committed.reason+'); everything else is set up.\n');
   result={initialized:true,preservedExisting:true,habitProgressUpgrades:progressUpgrades,...(retired.removed.length?{videoSkillsRemoved:retired.removed}:{}),...(retired.kept.length?{videoSkillsKept:retired.kept}:{}),...(retired.videoAddon?{videoSkillsKeptFor:retired.videoAddon}:{}),...(committed.made?{firstCommit:{branch:committed.branch,files:committed.files}}:{})};
-}else if(['coach','journal'].includes(command)){
-  const addon=command==='coach'?'godspeed-coach':'godspeed-journal';
+}else if(['coach','journal','charm'].includes(command)){
+  const addon='godspeed-'+command;
   const executable=fileURLToPath(new URL('../../third-party/addons/'+addon+'/bin/'+addon+'.mjs',import.meta.url));
   process.stdout.write(execFileSync(process.execPath,[executable,verb,...rest,'--godspeed',root],{encoding:'utf8',windowsHide:true,env:{...process.env,GODSPEED_COACH_GIT_SYNC:'off',GODSPEED_JOURNAL_GIT_SYNC:'off'}}));process.exit(0);
 }else if(command==='assistant'&&verb==='profiles')result=assistantProfiles(store);
