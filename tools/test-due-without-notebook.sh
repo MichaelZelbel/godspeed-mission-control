@@ -31,6 +31,13 @@ missing()  { case "$2" in *"$3"*) bad "$1 (should not contain [$3])";; *) ok "$1
 # The tools exactly as the installer hands them over: every file of tools/, copied away from the
 # kit, with no notebook folder anywhere above them.
 BIN="$TMP/bin"; mkdir -p "$BIN"; cp -r "$KIT/tools/." "$BIN/"
+# What the tool writes beside itself is measured from here on, not from due.js's own timestamp: the
+# copy above gives every file the time it was copied, so some siblings are always newer than due.js
+# before anything has run, and the check below read this test's own copy order as if due.js had
+# written them. On GitHub's Ubuntu runner one of those was mc-notebook.js and the check failed; on
+# the Windows machine the ticket was built on, the two that landed newer happened not to be named
+# "notebook". (The release step of 2.0.0-beta.13, 2026-10-31.)
+AFTER_THE_COPY="$TMP/after-the-copy"; : >"$AFTER_THE_COPY"
 [ -e "$TMP/notebook" ] || [ -e "$BIN/../notebook" ] && bad "the copied tools must have no notebook beside them" || ok "the copied tools have no notebook beside them"
 
 # A mission control folder as a reader has one, and nothing else.
@@ -102,7 +109,7 @@ check "  and the brief has nothing left to ask" "$OUT" "Nothing needs saying tod
   && ok "its closing is a moment under notebook/Timeline/" || bad "its closing is a moment under notebook/Timeline/"
 check "nothing is kept in due/" "$(ls "$G/due" | wc -l | tr -d ' ')" "0"
 check "nothing is kept in world/events/" "$(ls "$G/world/events" | wc -l | tr -d ' ')" "0"
-missing "and nothing of it is written beside the copied tools" "$(find "$BIN" -newer "$BIN/due.js" -type f 2>/dev/null)" "notebook"
+missing "and nothing of it is written beside the copied tools" "$(find "$BIN" -newer "$AFTER_THE_COPY" -type f 2>/dev/null)" "notebook"
 
 # --- the same answers as a kit's own copy -------------------------------------------------------
 # What a reader on this edition is told, word for word against what a developer's checkout says:
