@@ -38,10 +38,11 @@ stopped. Each line names the kit files that chapter uses.
 
 ## Part III: Teach AI Repeated Jobs
 
-- [ ] Chapter 15: Save a Repeated Job as an AI Skill. Kit: `skills/summarize-for-me.md` and
-      `skills/practice-texts.md`.
-- [ ] Chapter 16: Make an AI Skill Work Your Way. Kit: `skills/skill-interview.md` and
-      `living/saved-prompt-card.md`.
+- [ ] Chapter 15: Save a Repeated Job as an AI Skill. Kit: `skills/check-my-email.md` and
+      `skills/practice-emails.md` (earlier editions: `skills/summarize-for-me.md`
+      and `skills/practice-texts.md`).
+- [ ] Chapter 16: Make an AI Skill Work Your Way. Kit: `skills/check-skill-interview.md` and
+      `living/saved-prompt-card.md` (earlier editions: `skills/skill-interview.md`).
 - [ ] Chapter 17: Skills for Email, Planning, Conversations and Decisions. Kit:
       `skills/first-five-skills.md` and `skills/prepare-a-decision/SKILL.md`.
 - [ ] Chapter 18: Create Skills for Your Own Work. Kit: `skills/craft-skill-interview.md`.
