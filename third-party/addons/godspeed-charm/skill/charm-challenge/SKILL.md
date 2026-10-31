@@ -5,7 +5,7 @@ description: The Charm Challenge, 21 days of charming your AI into the result in
 
 ## What this is
 
-The Charm Challenge comes from Chapter 12 of *Teach It Once*: 21 days in a row of charming your
+The Charm Challenge comes from the book *Teach It Once*: 21 days in a row of charming your
 assistants into the result instead of arguing with them. Godspeed Mission Control keeps the count
 by itself and shows it to you in the `[godspeed-charm]` block. A slip, venting at an AI, sends the
 count back to 21, but only after a yes from the person. You do the work they asked for, you ask
