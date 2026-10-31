@@ -13,7 +13,7 @@ import {syncSoul,readExtra} from '../core/assistant-soul.mjs';
 import {installModelCommand} from './install-model-command.mjs';
 import {noteHermesMet} from '../core/starting-routines.mjs';
 import {keepOutOfGit} from '../core/first-commit.mjs';
-import {godspeedVoiceSettings,chatVoiceDefaults,ownerChats} from '../core/voice-replies.mjs';
+import {godspeedVoiceSettings,renewElevenLabsCommand,chatVoiceDefaults,ownerChats} from '../core/voice-replies.mjs';
 const root=process.env.GODSPEED_WORKSPACE,home=process.argv[2];if(!root||!home)throw new Error("Set GODSPEED_WORKSPACE to your mission control folder and name your assistant's home folder");
 // The notebook is opened only where its records are needed (a starter-made mission control, or a
 // server's key): opening it reads every one of its files, and this runs at every install and every
@@ -198,6 +198,14 @@ if(process.env.GODSPEED_COMPUTER==='on'){
 // read "every weekday at seven" from the chat on the server's clock, usually UTC. Only for a
 // mission control made from the starter, and only where no zone was chosen yet.
 if(starterBorn(root))text=withTimezone(text,store.get('settings','installation')?.timezone);
+// The ElevenLabs voice chosen in Settings, in every mission control: its command names the speech
+// script of the version that was installed when it was chosen, and an update puts the script in a
+// new version folder and removes the old one, so the command is written again here with this
+// version's path (core/voice-replies.mjs says what went wrong without this). Settings writes that
+// command for an adopted mission control as much as for one made from the starter, so this one line
+// stands outside the starter's block below; a mission control with no ElevenLabs voice of Godspeed's
+// is left exactly as it is.
+text=renewElevenLabsCommand(text,{home,state:store.state});
 // What the assistant of a mission control made from the starter needs from Hermes, found by a live
 // run of the book's prompts on 9 October 2026 (hermes-config.mjs says why for each): no Hermes
 // memory beside the notebook, no clarify tool in a chat nobody can answer it in, the notebook's
@@ -206,7 +214,8 @@ if(starterBorn(root))text=withTimezone(text,store.get('settings','installation')
 if(starterBorn(root)){
  text=godspeedHermesSettings(text);
  // The voice the assistant answers voice notes with (core/voice-replies.mjs): the multilingual free
- // voice, or the ElevenLabs voice chosen in Settings with its command where this version keeps it.
+ // voice where nobody chose one. An ElevenLabs voice was renewed above already, for every mission
+ // control, and this writes the same command again without changing anything.
  text=godspeedVoiceSettings(text,{home,state:store.state});
  const provider=path.join(home,'plugins',CRON_PROVIDER,'__init__.py'),source=fs.readFileSync(path.join(kit,'notebook','assistant-files','godspeed-cron-provider.py'),'utf8').replace(/\r\n/g,'\n');
  if(!fs.existsSync(provider)||fs.readFileSync(provider,'utf8')!==source){fs.mkdirSync(path.dirname(provider),{recursive:true});atomic(provider,source);}
