@@ -135,7 +135,7 @@ export function hermesFailureMessage(diagnostic){
 export function providerReason(diagnostic){
   const lines=String(diagnostic||'').replace(/\x1b\[[0-9;]*m/g,'').split(/\r?\n/).map(l=>l.trim()).filter(l=>/\b(?:HTTP\s*|Error code:?\s*|status(?:_code)?[=: ]\s*)[45]\d\d\b/i.test(l));
   const line=lines.at(-1);if(!line)return '';
-  return line.replace(/Bearer\s+\S+/gi,'Bearer ***').replace(/\b(?:sk|or|key|tok)[-_][A-Za-z0-9_-]{8,}/gi,'***').replace(/\b[A-Za-z0-9_-]{32,}\b/g,'***').replace(/\s+/g,' ').slice(0,240);
+  return line.replace(/\b(?:authorization|proxy-authorization|api[_-]?key|x-api-key|token|secret|password|passwd)\b[\"']?\s*[:=]\s*[\"']?(?:(?:Bearer|Basic|Token)\s+)?[^\s\"',;&}]+/gi,'$1***'.replace('$1','credential: ')).replace(/\b(?:Bearer|Basic)\s+\S+/gi,'***').replace(/\b(?:sk|or|key|tok)[-_][A-Za-z0-9_-]{8,}/gi,'***').replace(/\b[A-Za-z0-9_+\/=-]{20,}\b/g,'***').replace(/\s+/g,' ').slice(0,240);
 }
 // A PROVIDER'S PASSING HICCUP IS TRIED AGAIN (18 October 2026). Connecting a free model in Settings
 // failed on one "HTTP 502: Provider returned error" from OpenRouter, an answer the same request got
