@@ -8,7 +8,7 @@ import {fileURLToPath} from 'node:url';
 import {createRequire} from 'node:module';
 import {Store,atomic,hash} from '../core/records/store.mjs';
 import {FileSync} from '../core/sync/git.mjs';
-import {IdentityShelf,personaOf,MANUAL_LIMIT} from '../core/identity-shelf.mjs';
+import {IdentityShelf,personaOf,MANUAL_LIMIT,MANUAL_WARN} from '../core/identity-shelf.mjs';
 import {SOUL_MARK,HERMES_DEFAULTS} from '../core/assistant-soul.mjs';
 import {installSkillTree} from '../core/packaged-skills.mjs';
 import {scanContext} from '../core/context-scan.mjs';
@@ -141,8 +141,11 @@ test('a rule list that would pass its limit, or a rule without its sentence, is 
 });
 
 test('a change that would push the manual past what the assistant reads is refused; near it, a warning',async()=>{
-  const pad='\n\n'+'Reference material that belongs in its own file. '.repeat(4),{shelf,root}=workspace({manual:read(starter,'AGENTS.md')+pad});
-  const size=[...read(root,'AGENTS.md')].length;assert.ok(size>19000&&size<MANUAL_LIMIT,String(size));
+  // Padded to a size of its own, so this stays a test of the ceiling and not of how long the
+  // starter's manual happens to be (it has to stay well under it, for a reader's own rules).
+  const base=read(starter,'AGENTS.md'),pad=('\n\n'+'Reference material that belongs in its own file. '.repeat(400)).slice(0,MANUAL_WARN+190-[...base].length);
+  const {shelf,root}=workspace({manual:base+pad});
+  const size=[...read(root,'AGENTS.md')].length;assert.ok(size>MANUAL_WARN&&size<MANUAL_LIMIT,String(size));
   const now=shelf.read('who');
   const near=await shelf.save('who',{text:now.text+' Short.'},{expected_hash:now.hash});
   assert.match(near.manual.warning,/Short enough for you to read all of it\?/);

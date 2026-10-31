@@ -1,6 +1,7 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import {createHash} from 'node:crypto';
 import {createService} from '../server/main.mjs';
 import {titleFromContent} from '../core/note-title.mjs';
+import {MANUAL_WARN} from '../core/identity-shelf.mjs';
 
 for(const key of Object.keys(process.env))if(/^(GODSPEED_|HERMES_)/.test(key))delete process.env[key];
 
@@ -125,10 +126,18 @@ test('a note given no title is named by its first words, and the answer calls li
   assert.deepEqual(third.links_to_no_note,['No such note']);
 });
 
-test('the starter manual says what the live run needed, and still fits under the ceiling Hermes reads',()=>{
-  const manual=fs.readFileSync(new URL('../../starter-godspeed/AGENTS.md',import.meta.url),'utf8');
-  // server/install-hermes.sh warns from 19,000 characters; past 20,000 Hermes drops the middle.
-  assert.ok([...manual].length<19000,'AGENTS.md is '+[...manual].length+' characters');
+// The room this text has to leave free. A reader's manual is this text plus the rules they add
+// through Godspeed's brain, and the Identity page refuses a manual over MANUAL_WARN once a program
+// of the reader's own keeps the rules list (server/install-hermes.sh warns from there too, because
+// past MANUAL_LIMIT Hermes drops the middle of what it reads). One short rule through the brain
+// costs 59 characters, so the starter has to stop well before the ceiling: on 31 October 2026 it
+// stopped 6 characters short of it, and a reader could not add a single rule of their own without
+// being told to make something shorter first about a file that is Godspeed's text, not theirs
+// (#121). This much room is five or six rules.
+const ROOM_FOR_A_READERS_OWN_RULES=300;
+test('the starter manual says what the live run needed, and leaves a reader room for rules of their own under the ceiling Hermes reads',()=>{
+  const manual=fs.readFileSync(new URL('../../starter-godspeed/AGENTS.md',import.meta.url),'utf8'),size=[...manual].length;
+  assert.ok(size<=MANUAL_WARN-ROOM_FOR_A_READERS_OWN_RULES,'AGENTS.md is '+size+' characters, which leaves a reader '+(MANUAL_WARN-size)+' characters of room for rules of their own; it has to leave '+ROOM_FOR_A_READERS_OWN_RULES);
   for(const said of [/will NOT fire\s+until the gateway is started/,/never from `procedures\.md`/,/`save_record` type `collections`/,/"How I like to be helped" and "My hard limits"/,
     /`mc-goals file --kind/,/never write a card by hand/,/never make one yourself/,/`mc-work file --what "\.\.\." --done-when/,/--check "<a\s+line that exits 0/,
     // Live run of 9 October 2026: the assistant answered its own questions, filed a "(?)" item as a
