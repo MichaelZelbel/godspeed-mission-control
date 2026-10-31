@@ -19,6 +19,12 @@ because a candidate's setup is published on `candidate/<version>`, as `candidate
 a part is never empty, never starts with a dot, and no tag holds two dots in a row, because a tag
 is a Git ref and Git takes none of those.
 
+An add-on the product carries itself has no commit of its own: its entry in
+`third-party/addons/sources.json` says `"carriedHere": true` in place of a commit, and the stage
+file pins it by the product commit, because the product at that commit is where its files are. A
+stage file names such an add-on from the first freeze whose product commit carries it, and
+`stage/test-stage-agree.sh` holds it to that pin like any other.
+
 `stage/stage.mjs` reads a stage file in Node and `stage/stage.sh` reads it in POSIX shell,
 without `jq`, Node or Python, because an installer runs before Node is installed and on
 servers that have none. They take the same command line and leave the same exit code:

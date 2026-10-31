@@ -307,10 +307,16 @@ else
   cp third-party/addons/sources.json "$TMP/sources.json"
   WHERE="third-party/addons/sources.json in the working tree"
 fi
+# AN ADD-ON THIS REPOSITORY CARRIES ITSELF has no commit of its own to be pinned to: its entry in
+# sources.json says "carriedHere": true in place of a commit (notebook/scripts/vendor-addons.py says
+# why; the Charm Challenge is the first). Its source is the product at the product commit, so that
+# is the pin the stage file must name for it, and the comparison below is the same one as for every
+# other add-on. Until a stage is frozen at a product commit that carries such an add-on, no stage
+# file names it at all, and nothing here looks for it.
 node -e '
   const s = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
-  for (const a of s) console.log(a.name + " " + a.commit);
-' "$TMP/sources.json" > "$TMP/pins.txt"
+  for (const a of s) console.log(a.name + " " + (a.carriedHere ? process.argv[2] : a.commit));
+' "$TMP/sources.json" "$PRODUCT" > "$TMP/pins.txt"
 pins=0
 while read -r name commit; do
   [ -n "$name" ] || continue

@@ -1,7 +1,7 @@
 [
   {
     "name": "godspeed-charm",
-    "commit": "966f13f1b2bb4ec6122b1650255bc35801ddcf20",
+    "carriedHere": true,
     "license": "MIT",
     "files": [
       "LICENSE",
