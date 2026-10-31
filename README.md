@@ -8,6 +8,17 @@ A new release comes out most weeks. I write about what my AI does for me and wha
 
 Version 2 is the current edition. The lines below install the current public version, which is the branch `beta` of this repository; `main` is where the work goes on, and a change merged into it reaches nobody until the next version is released. The installers set up a new, separate folder. They do not move an existing version 1 Godspeed folder or your Menerio account.
 
+## New in 2.0.0-beta.13
+
+Godspeed keeps your 21-day Charm Challenge, and a fresh install hands your assistant a shorter list of skills.
+
+- **The Charm Challenge is built in.** Say "start the Charm Challenge" and Godspeed counts the 21 days for you: one line in your morning brief, a card on the Trackers shelf, and the record behind it. When you vent at your assistant it does the work you asked for first and then asks once, "Back to 21? Yes / No" — and it never starts your count over without your yes.
+- **No video skills unless you want them.** A fresh install no longer copies twenty-five skills for making and finishing video into your skills folder, so your assistant has a shorter list to choose from and picks better. Set up the video add-on and you have all of them. When you update, only the copies Godspeed itself put there and nobody changed are taken away: one you edited stays, and an install with the video add-on keeps every one.
+- **Your notebook names the thing instead of saying "page".** What Godspeed knows about you is listed by each file's own title, "My projects and priorities", on the screen and in what your assistant is told, so it never calls it "profile page 3" to you either.
+- **A server install with no notebook has its reminders back.** On the Docker image, which is what the one-line server installer and a Hostinger reader get, the last version had quietly left you with no reminders at all: every reminder command refused, the morning brief said nothing about your days, and nothing closed a key that had been renewed. It works again, and the check that would have caught it runs from now on.
+
+Updating keeps your folder, notes and settings.
+
 ## New in 2.0.0-beta.12
 
 Your reminders travel between your computers by themselves.
