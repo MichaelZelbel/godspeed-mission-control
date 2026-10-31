@@ -122,7 +122,8 @@ one_pass() { # <pass> <root> <port> <stand-in folder>
     # The SSH address of the stand-in repository, because this way in reads the address back with
     # `git remote get-url` and the notebook joins a private GitHub repository and nothing else
     # (scenario-lib.sh stand_in_github_over_ssh says the whole of it).
-    address=$(stand_in_github_over_ssh "$bare")
+    stand_in_github_over_ssh "$bare"
+    address=$STAND_IN_ADDRESS
     git -C "$root" remote add origin "$address" || fail "the mission control in $root could not be given its copy on GitHub"
     notebook_on "$root" sync folder notebook >&2 ||
       fail "godspeed sync folder notebook was refused on $root, so there is no mission control carrying its own notebook"

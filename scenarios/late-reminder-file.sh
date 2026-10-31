@@ -143,8 +143,9 @@ act() {
   closings_of "$ROOT" "$EVIDENCE/closings.txt"
   # Where the product keeps it: a reminder changed in two places at once waits as a review_queue
   # record of the notebook's (core/due-copy.mjs), which is notebook/_system/review_queue/<id>.json
-  # on disk - not in conflicts/, which is where a difference the SYNC could not settle waits.
-  queued_reviews_of "$ROOT" "$EVIDENCE/reviews.txt"
+  # on disk - not in conflicts/, which is where a difference the SYNC could not settle waits. The
+  # folder is named here, at the place that looked in the wrong one.
+  queued_reviews_of "$ROOT/$REVIEW_QUEUE" "$EVIDENCE/reviews.txt"
   say "== once more, so a second run is seen to change nothing"
   due_on "$ROOT" list >"$EVIDENCE/second-list.txt" || fail "due list could not be read a second time"
 }

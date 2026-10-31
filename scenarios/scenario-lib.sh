@@ -433,7 +433,8 @@ stand_in_github() { # <folder>
 # git), and git reaches the bare repository on this machine because this scenario's own `ssh` runs
 # the server side here. Every call of git still goes through the git the scenario wrote down
 # (git_calls_shim), including the ones this ssh makes inside the product's own sync rounds.
-# Prints the address.
+# NEVER CALLED INSIDE A COMMAND SUBSTITUTION: it fills STAND_IN_ADDRESS, because what tells git the
+# way to that ssh is this shell's environment and a subshell would throw it away.
 stand_in_github_over_ssh() { # <folder>
   local folder=$1 owner=godspeed-scenario-stand-in name
   name=stand-in-$(od -An -N4 -tx1 /dev/urandom | tr -d ' \n')
@@ -472,15 +473,19 @@ exit 1
 STAND_IN_SSH
     chmod +x "$stand_in/ssh" || fail "this scenario's own ssh could not be made runnable"
   fi
-  # In this machine's Git settings, the way the rewriting above is set, so that it holds however
-  # this was called and for every program the scenario starts, the product's own sync among them;
-  # and in this shell's environment as well, where GIT_SSH_COMMAND is what git reads first.
-  git config --global core.sshCommand "$stand_in/ssh" ||
-    fail "git could not be told how to reach github.com on this machine"
+  # IN THIS SHELL'S ENVIRONMENT, AND NOWHERE ELSE. GIT_SSH_COMMAND is the first thing git reads for
+  # how to reach a server, and every program the scenario starts after this inherits it, the
+  # product's own sync among them. Nothing is written into this machine's Git settings: a
+  # core.sshCommand left behind there would send every later git over SSH, on any repository, to a
+  # program in a folder this run deletes.
   GIT_SSH_COMMAND=$stand_in/ssh
   export GIT_SSH_COMMAND
-  say "The private GitHub repository is stood in for by $folder/$name.git, reached as GitHub's own SSH address"
-  printf 'git@github.com:%s/%s.git\n' "$owner" "$name"
+  # So it cannot be read inside a command substitution, which would throw that environment away
+  # with the subshell: it fills STAND_IN_ADDRESS and says what it stood in for, as read_version does
+  # with the version it read.
+  # shellcheck disable=SC2034  # the scenario that sourced this file is what reads it
+  STAND_IN_ADDRESS=git@github.com:$owner/$name.git
+  say "The private GitHub repository is stood in for by $folder/$name.git, reached as its own SSH address $STAND_IN_ADDRESS"
 }
 
 # WHAT RAN GIT, AND IN WHICH STEP. "Nobody runs Git" is the whole point of these reminders living in
@@ -569,10 +574,14 @@ reviews_of() { # <root> <file>
 # types a person reads, so it is kept as notebook/_system/review_queue/<id>.json
 # (core/records/layout.mjs systemPath). The reminder that changed in two places at once waits there
 # (core/due-copy.mjs saves it with suggestion_type deadline_both_changed), never in conflicts/,
-# which is where a difference the SYNC could not settle waits. One line per item still waiting:
+# which is where a difference the SYNC could not settle waits. Mistaking the one for the other is
+# what this scenario did until 31 October 2026, so the folder is named here and named again where it
+# is read, the way fingerprint takes the folders it is about. One line per item still waiting:
 # <suggestion type><TAB><status><TAB><title><TAB><what it says>. Waiting is what the notebook calls
 # waiting (core/records/store.mjs: pending, pending_review or auto_applied_unreviewed, and neither
 # answered nor removed), read here with a reader of this script's own.
+# shellcheck disable=SC2034  # the scenario that sourced this file is what reads it
+REVIEW_QUEUE=notebook/_system/review_queue
 # shellcheck disable=SC2016  # a JavaScript program, which this shell must not expand
 QUEUED_REVIEWS='
 const fs=require("fs"),path=require("path");
@@ -588,9 +597,9 @@ for(const name of names.sort()){
 }
 process.stdout.write(lines.sort().map(l=>l+"\n").join(""));
 '
-queued_reviews_of() { # <root> <file>
-  "$NODE" -e "$QUEUED_REVIEWS" "$1/notebook/_system/review_queue" >"$2" ||
-    fail "the notebook's review queue in $1 could not be read"
+queued_reviews_of() { # <the review queue's own folder: <root>/$REVIEW_QUEUE> <file>
+  "$NODE" -e "$QUEUED_REVIEWS" "$1" >"$2" ||
+    fail "the notebook's review queue at $1 could not be read"
 }
 # The bytes of every file under one or more folders, so "untouched" and "nothing changed" are
 # comparisons and not looks: <sha256><TAB><path below the root>, sorted.

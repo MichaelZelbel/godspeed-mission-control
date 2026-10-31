@@ -96,7 +96,8 @@ one_pair() { # <mode> <A root> <A port> <B root> <B port> <stand-in folder>
     # stand-in is the SSH address of that repository and nothing is rewritten, because this way in
     # reads the address back with `git remote get-url` (scenario-lib.sh stand_in_github_over_ssh
     # says the whole of it), and what it read back is kept, so the judging part can see it.
-    address=$(stand_in_github_over_ssh "$bare")
+    stand_in_github_over_ssh "$bare"
+    address=$STAND_IN_ADDRESS
     git -C "$a" remote add origin "$address" || fail "the mission control in $a could not be given its copy on GitHub"
     notebook_on "$a" sync folder notebook >"$EVIDENCE/$mode-join.json" ||
       fail "godspeed sync folder notebook was refused on $a, so there is no mission control carrying its own notebook (what it said is in the step log)"
