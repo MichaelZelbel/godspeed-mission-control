@@ -150,7 +150,7 @@
     "addons": {
       "title": "add-ons",
       "description": "an object",
-      "comment": "The pinned commit of every carried add-on, by name, as third-party/addons/sources.json held them at the product commit. An add-on this repository carries itself, whose entry there says carriedHere instead of naming a commit, is pinned by the product commit, because the product at that commit is its source.",
+      "comment": "The pinned commit of every carried add-on, by name, as third-party/addons/sources.json held them at the product commit. An add-on this repository carries itself, whose entry there says carriedHere instead of naming a commit, is pinned by the product commit: the product is its source, so it has no commit of its own, and it is named here from the stage that first carries it.",
       "type": "object",
       "additionalProperties": false,
       "patternProperties": {
