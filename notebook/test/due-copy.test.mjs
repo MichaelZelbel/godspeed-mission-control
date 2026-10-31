@@ -149,7 +149,11 @@ test('per old file, the hash that was copied, and a second run that changes noth
     'and it stays where it is, to be said in the reminders every day until it is fixed');
   // And every file that WAS taken in is out of the owner's way, byte for byte as it was
   // (notebook/core/due-retire.mjs). Nothing is deleted, ever.
-  const archive = path.join(store.root, 'archives', DAY + '-due-moved-to-the-notebook');
+  // dueCommand is the notebook's own command and runs on the real day, so the folder is that day's
+  // (fixed on 31 October 2026, when a DAY written here failed the first run after midnight).
+  const moved = fs.readdirSync(path.join(store.root, 'archives')).filter(name => name.endsWith('-due-moved-to-the-notebook'));
+  assert.equal(moved.length, 1, 'one archive folder: ' + moved.join(', '));
+  const archive = path.join(store.root, 'archives', moved[0]);
   assert.equal(fs.readFileSync(path.join(archive, 'due', 'rates.md'), 'utf8'), SEED.rates);
   assert.equal(fs.existsSync(path.join(store.root, 'due', 'rates.md')), false, 'and is not in due/ any more');
   assert.equal(store.file(rates).split(path.sep).slice(-3).join('/'), '_system/due_copies/' + rates.id + '.json',
