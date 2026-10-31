@@ -77,5 +77,13 @@ for skill in inventory['skills']:
 for name in ['tracker','context-setup','cycle-tracker','food-tracker','coach-prep']:
  if not (root/'notebook/recipes'/name/'SKILL.md').exists():raise ValueError('Missing product recipe '+name)
  classified.append({'name':name,'classification':'source only','reason':'Portable recipe and shared record/runtime operations; no private incident prose or account details.'})
+# The product's own add-ons with no Mission Control original either: the add-on that ships the recipe
+# is its source, copied here as the native recipes above are (the Charm Challenge, 21 October 2026).
+# They are never in the source inventory, which inventory.py rewrites from Mission Control's skills.
+for name,(addon,recipe) in {'charm-challenge':('godspeed-charm','charm-challenge')}.items():
+ source=root/'third-party/addons'/addon/'skill'/recipe
+ if not (source/'SKILL.md').exists():raise ValueError('Missing maintained workflow '+name)
+ shutil.copytree(source,root/'notebook/recipes'/name,dirs_exist_ok=True)
+ classified.append({'name':name,'classification':'source only','reason':'Portable recipe and shared record/runtime operations; no private incident prose or account details.'})
 (root/'notebook/data/recipe-inventory.json').write_text(json.dumps(classified,indent=2)+'\n',encoding='utf-8',newline='\n')
 print('Classified',len(classified),'recipes; packaged',len(classified)-len(company),'portable recipes')

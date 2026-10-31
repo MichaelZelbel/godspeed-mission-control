@@ -39,8 +39,12 @@ Holidays, illness and outages are exemptions, never scarce protection. Preserve 
 4. **Food, a meal or something they ate or drank** ("track food, tofu with rice", "track lunch, two
    eggs", "track usual breakfast"): load the food-tracker recipe and do what it says; its `food`
    operation keeps their food tracker. Never `track` on the food tracker (`"specialist":"food"`).
-5. **One of the trackers' names or other names**: yours, below.
-6. **Anything else**: a new tracker, asked about once, below.
+5. **The Charm Challenge** ("track charm challenge", "track charm slip", or anything else about the
+   Charm Challenge): load the charm-challenge recipe and do what it says; its `godspeed-charm` command
+   keeps the count. Never `track` on the Charm Challenge tracker (`"specialist":"charm"`), and never
+   hold or start a tracker called Charm Challenge.
+6. **One of the trackers' names or other names**: yours, below.
+7. **Anything else**: a new tracker, asked about once, below.
 
 The journal no longer takes "track", with one exception: "track journal" or "track Tagebuch" names
 the journal itself, the way "track headache" names the Headaches tracker. That message is a journal

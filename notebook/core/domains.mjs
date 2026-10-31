@@ -238,15 +238,17 @@ export class Domains {
       const talkId=input.talk_id||last?.talk_id;
       if(talkId){const talk=this.query.rows('coach_talks').find(t=>t.id===talkId&&t.status==='open');if(input.talk_id&&!talk)throw Error('Choose an open coaching conversation');if(talk){const {source,requestId}=requestIdentity(this.query,input,String(input.message||'')),id='coach-reply-'+hash([input.conversation_id,requestId]);if(!this.store.get('command_receipts',id)){personalOperation(this,{type:'coach-reply',id:talk.id,content:input.message,expected:talk._hash});this.store.save('command_receipts',{id,state:'verified',talk_id:talk.id,source_id:source?.id});}input={...input,talk_id:talk.id,retained_coach_reply:true};}}
     }
-    if(name==='conversation-chat'&&/^\/(coach|journal|headache|goals|forecast|work|due|subs|watch|lead|radar)\b/.test(String(input.message||''))){
+    if(name==='conversation-chat'&&/^\/(coach|journal|headache|charm|goals|forecast|work|due|subs|watch|lead|radar)\b/.test(String(input.message||''))){
       const [command,...args]=/^\/lead\b/.test(input.message)?leadWords(input.message):/^\/radar\b/.test(input.message)?radarWords(input.message):commandWords(input.message),name=command.slice(1),id='explicit-command-'+hash([input.conversation_id,requestIdentity(this.query,input,String(input.message)).requestId]),previous=this.store.get('command_receipts',id);
       if(previous){if(previous.state!=='verified')throw Error('Previous command requires review');return previous.result;}
       await this.store.saveAsync('command_receipts',{id,state:'attempted',source_id:input.request_id||null},undefined,{signal:input.signal});
-      const action=await personalOperation(this,['coach','journal','headache'].includes(name)?{type:'addon-command',addon:name,args}:name==='due'?{type:'due-command',args}:name==='subs'?{type:'subscription-command',args}:name==='watch'?{type:'watch-command',args}:name==='lead'?{type:'lead-command',args}:name==='radar'?{type:'radar-command',args}:{type:'card-command',card:name,args});
+      const action=await personalOperation(this,['coach','journal','headache','charm'].includes(name)?{type:'addon-command',addon:name,args}:name==='due'?{type:'due-command',args}:name==='subs'?{type:'subscription-command',args}:name==='watch'?{type:'watch-command',args}:name==='lead'?{type:'lead-command',args}:name==='radar'?{type:'radar-command',args}:{type:'card-command',card:name,args});
       const result={reply:action.result,operation_results:[action]};await this.store.saveAsync('conversation_messages',{role:'assistant',content:result.reply,conversation_id:input.conversation_id||null,source_app:'personal-command'},undefined,{signal:input.signal});await this.store.saveAsync('command_receipts',{id,state:'verified',result},undefined,{signal:input.signal});return result;
     }
     if(name==='import-goal-files')return importGoalFiles(this.store);
-    if(name==='personal-operation')return personalOperation(this,input);
+    // A charm question belongs to the notebook chat that asked it, named by the chat itself
+    // (conversationOperations); a caller of this plain path never names one (spec 2026-10-21).
+    if(name==='personal-operation')return personalOperation(this,input?.type==='charm'?{...input,conversation:undefined}:input);
     // An add-on's own deadlines, on the local door (addon-deadlines.mjs, discussion #27).
     if(name==='addon-deadlines')return addonDeadlines(this.store,input);
     if(['configure-connector','run-connector','gdrive-proxy','gdrive-sync','github-import-vault','github-people-sync','github-proxy','github-sync-export','github-sync-pull','send-patch','embed-document','delete-my-account'].includes(name))return new Connectors(this).invoke(name,input);
@@ -525,7 +527,9 @@ export class Domains {
           }
           if(name==='conversation-chat'&&structured.operations!==undefined){
             if(!Array.isArray(structured.operations))throw Error('operations must be a list');
-            validateConversationOperations(this,input,structured.operations.filter(op=>!(input.retained_coach_reply&&op.type==='coach-reply'&&op.id===input.talk_id)));
+            // A slip question the checks leave out (R15) is taken out of the answer's operations.
+            const checked=structured.operations.filter(op=>!(input.retained_coach_reply&&op.type==='coach-reply'&&op.id===input.talk_id)),kept=validateConversationOperations(this,input,checked);
+            structured.operations=structured.operations.filter(op=>!checked.includes(op)||kept.includes(op));
           }
           break;
         }catch(error){
@@ -549,18 +553,23 @@ export class Domains {
       if(name==='conversation-chat'&&structured.operations?.length){
         // The cycle tracker writes its replies in her language itself (cycle.mjs), told by the model.
         const language=typeof structured.language==='string'?structured.language:undefined;
-        const ran=structured.operations.filter(op=>!(input.retained_coach_reply&&op.type==='coach-reply'&&op.id===input.talk_id)).map(op=>op&&['cycle','food'].includes(op.type)&&!op.language&&language?{...op,language}:op);
+        const ran=structured.operations.filter(op=>!(input.retained_coach_reply&&op.type==='coach-reply'&&op.id===input.talk_id)).map(op=>op&&['cycle','food','charm'].includes(op.type)&&!op.language&&language?{...op,language}:op);
         structured.operation_results=conversationOperations(this,input,ran);
         // A tracker's answer is the server's line ("Tracked: 91 cm, down 1 since
         // Monday."), never the model's guess at the numbers (D-321). The model's
         // own words stay after it only when it also did something else.
-        // A habit tracked, a headache and the cycle are answered the same way (their own lines).
-        const computed=op=>TRACKER_OPERATIONS.includes(op.type)||['headache','cycle','food'].includes(op.type);
-        const lines=ran.map((op,i)=>computed(op)?{text:structured.operation_results[i]?.reply,language:structured.operation_results[i]?.language||'en'}:null).filter(l=>l&&typeof l.text==='string'&&l.text);
+        // A habit tracked, a headache, the cycle and the Charm Challenge are answered the same way
+        // (their own lines).
+        const computed=op=>TRACKER_OPERATIONS.includes(op.type)||['headache','cycle','food'].includes(op.type)||op.type==='charm'&&op.action!=='asked';
+        // The Charm Challenge's slip question (ruling R14): the model's reply is the work it did, so it
+        // stays, and the question comes at its end; a question the command refused adds nothing.
+        const asked=(op,i)=>op.type==='charm'&&op.action==='asked'&&structured.operation_results[i]?.ok!==false;
+        const lines=ran.map((op,i)=>computed(op)||asked(op,i)?{text:structured.operation_results[i]?.reply,language:structured.operation_results[i]?.language||'en',last:!computed(op)}:null).filter(l=>l&&typeof l.text==='string'&&l.text);
         // In the language of the message, as the bot answers (D-321): until 12 October 2026 these
         // lines were English whatever the person wrote.
         said=await this.inLanguage(lines,structured.language,signal);
-        if(said.length)structured.reply=said.join(' ')+(ran.some(op=>!computed(op))&&structured.reply?' '+structured.reply:'');
+        const first=said.filter((_,i)=>!lines[i].last),last=said.filter((_,i)=>lines[i].last);
+        if(said.length)structured.reply=[...first,...(ran.some(op=>!computed(op))&&structured.reply?[structured.reply]:[]),...last].join(' ');
       }
       // Never a fertile window, an ovulation day, safe days, advice about conceiving or avoiding
       // pregnancy, or a diagnosis, where a cycle tracker is kept (D-321 step 4): such a question is
