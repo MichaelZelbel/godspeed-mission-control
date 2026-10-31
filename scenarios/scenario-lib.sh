@@ -337,17 +337,31 @@ owner_sets_threshold() { # <config file> <value>
 # itself when another notebook already answers on 47831). Its mission control folder is its own, so
 # it names itself in .godspeed/device.json (core/device-id.mjs) and the two are two computers. The
 # first computer always runs the unchanged line above.
+install_the_line_of_into() { # <ref> <root> <port> <trace file>
+  say "The line, from that version's own address, into $2 on port $3: $1"
+  curl -fsSL "$RAW/$1/install-godspeed.sh" |
+    GODSPEED_STAGE_REF="$1" GODSPEED_PORT="$3" bash -xs -- --godspeed "$2" 2> >(tee "$4" >&2) ||
+    fail "the install line for $1 into $2 failed before this scenario could do anything (its trace is in the step log)"
+}
 install_the_stage_line_into() { # <root> <port> <trace file>
-  say "The line, from the stage's own address, into $1 on port $2: $STAGE_REF"
-  curl -fsSL "$RAW/$STAGE_REF/install-godspeed.sh" |
-    GODSPEED_STAGE_REF="$STAGE_REF" GODSPEED_PORT="$2" bash -xs -- --godspeed "$1" 2> >(tee "$3" >&2) ||
-    fail "the install line for $STAGE_REF into $1 failed before this scenario could do anything (its trace is in the step log)"
+  install_the_line_of_into "$STAGE_REF" "$@"
 }
 install_the_public_line_into() { # <root> <port>
   say "Today's public line, into $1 on port $2"
   curl -fsSL https://godspeedmissioncontrol.com/install | GODSPEED_PORT="$2" bash -s -- --godspeed "$1" ||
     fail "today's public install line into $1 failed, so there was nothing to update from"
 }
+
+# THE LAST VERSION BEFORE THE REMINDERS MOVED INTO THE NOTEBOOK, by its own tag. The scenario about
+# that move (reminders-move-keeps-everything) is "an update from 2.0.0-beta.11" in the release plan
+# it comes from, and said so by installing "today's public version", which was 2.0.0-beta.11 while
+# that plan was being built. Since 31 October 2026 the public version is 2.0.0-beta.12, which keeps
+# reminders in the notebook already: `due add` on it writes a page under Deadlines/ and no file in
+# due/ at all, so from today's public line that scenario would have nothing to move. It installs the
+# version before the move instead, which is what the plan asks of it and what it stays for every
+# candidate after this one.
+# shellcheck disable=SC2034  # the scenario that sourced this file is what reads it
+BEFORE_THE_MOVE=${GODSPEED_SCENARIO_BEFORE_THE_MOVE:-candidate/2.0.0-beta.11}
 
 # An installation's own paths and its own programs, by its folder, so one machine can run two.
 runtime_of() { printf '%s/.godspeed/integrated-runtime\n' "$1"; }
@@ -406,6 +420,72 @@ stand_in_github() { # <folder>
   git config --global user.email "scenario@localhost" || fail "this machine's Git could not be given an address"
   say "The private GitHub repository is stood in for by $folder/$name.git"
   printf 'https://github.com/%s/%s.git\n' "$owner" "$name"
+}
+
+# THE SAME STAND-IN FOR A MISSION CONTROL THAT IS ITS OWN REPOSITORY, where telling Git that the
+# GitHub address leads to a folder cannot work. `godspeed sync folder` reads the address back with
+# `git remote get-url` (core/sync/git.mjs useFolderRepository), and that applies the rewriting above:
+# the product is handed file:///... and rightly refuses it, because a notebook joins a private
+# GitHub repository and not a folder on this machine. So no rewriting is set here at all. The
+# address is the SSH form of the same private repository, which the product takes exactly as it
+# takes a real one (verifyRemote: https://github.com/<owner>/<name> or git@github.com:<owner>/<name>,
+# the owner asked of api.github.com, which answers 404 for an owner nobody has, and then read with
+# git), and git reaches the bare repository on this machine because this scenario's own `ssh` runs
+# the server side here. Every call of git still goes through the git the scenario wrote down
+# (git_calls_shim), including the ones this ssh makes inside the product's own sync rounds.
+# NEVER CALLED INSIDE A COMMAND SUBSTITUTION: it fills STAND_IN_ADDRESS, because what tells git the
+# way to that ssh is this shell's environment and a subshell would throw it away.
+stand_in_github_over_ssh() { # <folder>
+  local folder=$1 owner=godspeed-scenario-stand-in name
+  name=stand-in-$(od -An -N4 -tx1 /dev/urandom | tr -d ' \n')
+  mkdir -p "$folder" || fail "the folder for the stand-in repository ($folder) could not be made"
+  git init -q --bare --initial-branch=main "$folder/$name.git" >&2 ||
+    fail "the bare repository standing in for the private GitHub repository could not be made"
+  # A stranger's computer has a Git identity of its own; a commit without one fails.
+  git config --global user.name "Godspeed Scenario" || fail "this machine's Git could not be given a name"
+  git config --global user.email "scenario@localhost" || fail "this machine's Git could not be given an address"
+  # Where each stood-in repository is, by the name in its address, so a run can have more than one.
+  local stand_in=${GODSPEED_SCENARIO_WORK:-${RUNNER_TEMP:-/tmp}}/github-over-ssh-$SCENARIO
+  mkdir -p "$stand_in" || fail "the folder for this scenario's own ssh ($stand_in) could not be made"
+  printf '%s.git\t%s\n' "$name" "$folder/$name.git" >>"$stand_in/repositories.txt" ||
+    fail "where the stand-in repository is could not be written down ($stand_in/repositories.txt)"
+  if [ ! -x "$stand_in/ssh" ]; then
+    # A program for another shell, written as it is: git calls ssh with the options it wants, the
+    # host, and then the one command to run on the server, `git-upload-pack '<owner>/<name>.git'`.
+    # The repository standing in for that name is in the list beside this program, and what git
+    # itself would run on the server runs here instead.
+    cat >"$stand_in/ssh" <<'STAND_IN_SSH'
+#!/bin/sh
+# Written by scenarios/scenario-lib.sh (stand_in_github_over_ssh): the server side of
+# git@github.com, on this machine.
+for argument in "$@"; do asked=$argument; done
+program=${asked%% *}
+repository=$(basename "$(printf '%s' "${asked#* }" | tr -d "'\"")")
+here=$(awk -F'\t' -v name="$repository" '$1==name{print $2;exit}' "$(dirname "$0")/repositories.txt")
+[ -n "$here" ] || { echo "no repository on this machine stands in for $repository" >&2; exit 1; }
+case $program in
+  git-upload-pack) exec git upload-pack "$here" ;;
+  git-receive-pack) exec git receive-pack "$here" ;;
+  git-upload-archive) exec git upload-archive "$here" ;;
+esac
+echo "this stand-in for github.com was asked for [$asked], which it cannot do" >&2
+exit 1
+STAND_IN_SSH
+    chmod +x "$stand_in/ssh" || fail "this scenario's own ssh could not be made runnable"
+  fi
+  # IN THIS SHELL'S ENVIRONMENT, AND NOWHERE ELSE. GIT_SSH_COMMAND is the first thing git reads for
+  # how to reach a server, and every program the scenario starts after this inherits it, the
+  # product's own sync among them. Nothing is written into this machine's Git settings: a
+  # core.sshCommand left behind there would send every later git over SSH, on any repository, to a
+  # program in a folder this run deletes.
+  GIT_SSH_COMMAND=$stand_in/ssh
+  export GIT_SSH_COMMAND
+  # So it cannot be read inside a command substitution, which would throw that environment away
+  # with the subshell: it fills STAND_IN_ADDRESS and says what it stood in for, as read_version does
+  # with the version it read.
+  # shellcheck disable=SC2034  # the scenario that sourced this file is what reads it
+  STAND_IN_ADDRESS=git@github.com:$owner/$name.git
+  say "The private GitHub repository is stood in for by $folder/$name.git, reached as its own SSH address $STAND_IN_ADDRESS"
 }
 
 # WHAT RAN GIT, AND IN WHICH STEP. "Nobody runs Git" is the whole point of these reminders living in
@@ -488,6 +568,38 @@ reviews_of() { # <root> <file>
     printf '%s\t%s\n' "$(basename "$item" .json)" "$(tr -d '\n' <"$item" | cut -c1-400)" >>"$2"
   done
   sort -o "$2" "$2"
+}
+# THE NOTEBOOK'S OWN REVIEW QUEUE, which is a different thing in a different place: a suggestion
+# the owner is asked about is a review_queue record of the notebook's, and that is not one of the
+# types a person reads, so it is kept as notebook/_system/review_queue/<id>.json
+# (core/records/layout.mjs systemPath). The reminder that changed in two places at once waits there
+# (core/due-copy.mjs saves it with suggestion_type deadline_both_changed), never in conflicts/,
+# which is where a difference the SYNC could not settle waits. Mistaking the one for the other is
+# what this scenario did until 31 October 2026, so the folder is named here and named again where it
+# is read, the way fingerprint takes the folders it is about. One line per item still waiting:
+# <suggestion type><TAB><status><TAB><title><TAB><what it says>. Waiting is what the notebook calls
+# waiting (core/records/store.mjs: pending, pending_review or auto_applied_unreviewed, and neither
+# answered nor removed), read here with a reader of this script's own.
+# shellcheck disable=SC2034  # the scenario that sourced this file is what reads it
+REVIEW_QUEUE=notebook/_system/review_queue
+# shellcheck disable=SC2016  # a JavaScript program, which this shell must not expand
+QUEUED_REVIEWS='
+const fs=require("fs"),path=require("path");
+const folder=process.argv[1];let names=[];try{names=fs.readdirSync(folder);}catch{process.exit(0);}
+const lines=[];
+for(const name of names.sort()){
+ if(!name.endsWith(".json"))continue;
+ let item;try{item=JSON.parse(fs.readFileSync(path.join(folder,name),"utf8"));}catch{lines.push(["unreadable",name,"",""].join("\t"));continue;}
+ const status=item.status||"pending_review";
+ if(!["pending","pending_review","auto_applied_unreviewed"].includes(status))continue;
+ if(item.removed_at||item.reviewed_at)continue;
+ lines.push([item.suggestion_type||"",status,String(item.title||"").replace(/\s+/g," "),String(item.description||"").replace(/\s+/g," ").slice(0,400)].join("\t"));
+}
+process.stdout.write(lines.sort().map(l=>l+"\n").join(""));
+'
+queued_reviews_of() { # <the review queue's own folder: <root>/$REVIEW_QUEUE> <file>
+  "$NODE" -e "$QUEUED_REVIEWS" "$1" >"$2" ||
+    fail "the notebook's review queue at $1 could not be read"
 }
 # The bytes of every file under one or more folders, so "untouched" and "nothing changed" are
 # comparisons and not looks: <sha256><TAB><path below the root>, sorted.

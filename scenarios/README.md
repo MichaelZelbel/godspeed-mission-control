@@ -19,7 +19,7 @@ and these are not programs for users.
 | `voice.sh` | a voice note is understood and answered, with the ElevenLabs permission and without it |
 | `update-keeps-everything.sh` | an update from the current public version keeps records, settings and the chat |
 | `reminder-closed-elsewhere.sh` | a reminder closed on one computer is closed on the other, both ways of syncing, with no Git run by anyone |
-| `reminders-move-keeps-everything.sh` | the move of the reminders into the notebook keeps every one of them and loses none of the old files |
+| `reminders-move-keeps-everything.sh` | the move of the reminders into the notebook keeps every one of them and loses none of the old files (an update from the last version before that move, `BEFORE_THE_MOVE`, because the public version has it already) |
 | `two-machines-move-at-once.sh` | two computers that move the same reminders before either syncs end with every reminder and every closing exactly once |
 | `late-reminder-file.sh` | a reminder or a closing written the old way after the move is still taken in, once, and one changed on both sides waits as one review item |
 | `closed-offline-on-both.sh` | one reminder closed on two computers while they were apart is closed on both, with two closing moments and no conflict |
@@ -121,11 +121,17 @@ it (`assistant_keeps_a_conversation`).
 
 - `scenario-lib.sh` — the part they share: the one verdict line, the install lines, the install's
   own paths, and the readers the checking parts use. For the reminder scenarios it also holds the
-  per-computer forms of all of that (`due_on`, `sync_on`, `notebook_on`, `install_the_stage_line_into`),
-  the stand-in for the private GitHub repository (`stand_in_github`), the `git` that writes down
-  every call with the step it was made in (`git_calls_shim`), the readers of the notebook's reminder
-  pages, closing moments and review queue, and the set of reminders the old version wrote
-  (`seed_the_old_set`), which three of them start from. For the two video scenarios it holds the
+  per-computer forms of all of that (`due_on`, `sync_on`, `notebook_on`, `install_the_stage_line_into`,
+  and `install_the_line_of_into` for one named version, the last one before the reminders moved into
+  the notebook among them: `BEFORE_THE_MOVE`), the two stand-ins for the private GitHub repository -
+  `stand_in_github`, which tells Git that the GitHub address leads to a bare repository here, and
+  `stand_in_github_over_ssh` for a mission control that is its own repository, where the product
+  reads the address back out of that repository and so has to be given a GitHub one - the `git` that
+  writes down every call with the step it was made in (`git_calls_shim`), the readers of the
+  notebook's reminder pages and closing moments, of the review queue a sync difference waits in
+  (`reviews_of`, `conflicts/`) and of the notebook's own review queue a suggestion waits in
+  (`queued_reviews_of`, `notebook/_system/review_queue/`), and the set of reminders the old version
+  wrote (`seed_the_old_set`), which three of them start from. For the two video scenarios it holds the
   names of the video skills the release plan takes out of the default set (`VIDEO_SKILLS`, and
   `VIDEO_SKILLS_KEEP` for the ones about web pages and pictures, which stay), the reader's skills
   folder as a list of names (`skills_of`, `skills_present`, `skills_missing`) and the video add-on's

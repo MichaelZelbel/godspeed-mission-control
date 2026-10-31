@@ -3,8 +3,13 @@
 # nothing of the old files.
 #
 # What it proves (godspeed-dev, releases/godspeed-2.0.0-beta.12-reminders-in-the-notebook/plan.md,
-# scenario 2): a mission control on today's public version, with the whole set of reminders a person
-# can have, is updated to the stage. Afterwards the three things a person and the morning read -
+# scenario 2): a mission control on the last version before the move, with the whole set of
+# reminders a person can have, is updated to the stage. That plan says "an update from
+# 2.0.0-beta.11", and this scenario installed "today's public version" to say it, which was
+# 2.0.0-beta.11 while that version was the public one. Since 31 October 2026 the public version is
+# 2.0.0-beta.12, which keeps reminders in the notebook already and writes no file in due/ at all, so
+# from today's public line there would be nothing to move: it installs the version before the move
+# by its own tag instead (scenario-lib.sh BEFORE_THE_MOVE). Afterwards the three things a person and the morning read -
 # `due state`, `due list`, `due today` - print the same bytes as before the update, and the old
 # files are where the plan says: in archives/<date>-due-moved-to-the-notebook/ where the notebook
 # owns them, and untouched with one note beside them where they are the owner's own repository's
@@ -41,6 +46,9 @@
 #   <pass>-due-after.txt    what is in due/ afterwards
 #   <pass>-note.txt         due/MOVED-TO-THE-NOTEBOOK.txt, where the plan asks for it
 #   <pass>-git-status.txt / -git-status-all.txt   due/ and world/ alone, and the whole folder
+#   <pass>-check-second.txt / -check-code.txt     what `due check` said on the second start, and
+#                                                 the answer it left (never 0 for this seed, which
+#                                                 holds a file that needs a look on purpose)
 #   <pass>-fingerprint-after.txt / -second.txt    the bytes of due/, world/events/, archives/ and
 #                                                 the notebook's reminder pages, twice
 SCENARIO=reminders-move-keeps-everything
@@ -56,6 +64,12 @@ SEEDED=$OLD_SET
 WATCHED_FOLDERS='due world/events archives notebook/Deadlines notebook/Timeline'
 NOTE=due/MOVED-TO-THE-NOTEBOOK.txt
 ARCHIVE_NAME='due-moved-to-the-notebook'
+# THE ONE FILE THE MOVE LEAVES EXACTLY WHERE IT IS. The move takes in the files it can read and
+# retires those; "a file nobody can read was never taken in and is never touched"
+# (core/due-retire.mjs), and the hand-written one of this seed is such a file on purpose. So it is
+# in neither archive, it stays in due/ with the bytes it had, and it is what makes `due check`
+# answer 3 - every morning until someone fixes it, which is what a person should see.
+STAYS_BEHIND=due/does-not-read.md
 
 # The old files the move has to take in: every reminder in due/ except its README, and every event
 # that closes or drops one (tools/due.js writes `closes:`/`drops:` with due/<name>).
@@ -94,10 +108,10 @@ reads_into() { # <root> <pass> <when>
 
 # ------------------------------------------------------------------------------------ the acting
 one_pass() { # <pass> <root> <port> <stand-in folder>
-  local pass=$1 root=$2 port=$3 bare=$4 address
+  local pass=$1 root=$2 port=$3 bare=$4 address code
   say "== the $pass pass, in $root"
   rm -rf "$root"
-  install_the_public_line_into "$root" "$port"
+  install_the_line_of_into "$BEFORE_THE_MOVE" "$root" "$port" "$EVIDENCE/$pass-before.log"
   # This installation's own Node, the one the product itself runs on.
   RUNTIME=$(runtime_of "$root")
   need_node
@@ -105,7 +119,11 @@ one_pass() { # <pass> <root> <port> <stand-in folder>
   cp "$(runtime_of "$root")/version" "$EVIDENCE/$pass-version-before" ||
     fail "the public install in $root left no version file, so what it was cannot be said"
   if [ "$pass" = folder ]; then
-    address=$(stand_in_github "$bare")
+    # The SSH address of the stand-in repository, because this way in reads the address back with
+    # `git remote get-url` and the notebook joins a private GitHub repository and nothing else
+    # (scenario-lib.sh stand_in_github_over_ssh says the whole of it).
+    stand_in_github_over_ssh "$bare"
+    address=$STAND_IN_ADDRESS
     git -C "$root" remote add origin "$address" || fail "the mission control in $root could not be given its copy on GitHub"
     notebook_on "$root" sync folder notebook >&2 ||
       fail "godspeed sync folder notebook was refused on $root, so there is no mission control carrying its own notebook"
@@ -150,7 +168,13 @@ one_pass() { # <pass> <root> <port> <stand-in folder>
   fingerprint "$root" "$EVIDENCE/$pass-fingerprint-after.txt" $WATCHED_FOLDERS
 
   say "A second start: the move finds nothing left to do"
-  due_on "$root" check >&2 || fail "the second start's own checks could not be run on $root"
+  # What its own check answered is kept, not required to be 0: `due check` says that a file needs a
+  # look whenever one does, and this seed holds such a file on purpose. The judging part is where
+  # that answer is held to what it should be.
+  due_on "$root" check >"$EVIDENCE/$pass-check-second.txt" 2>&1
+  code=$?
+  printf '%s\n' "$code" >"$EVIDENCE/$pass-check-code.txt"
+  sed 's/^/  | /' "$EVIDENCE/$pass-check-second.txt" >&2
   reads_into "$root" "$pass" second
   # shellcheck disable=SC2086  # the folders are one list on purpose
   fingerprint "$root" "$EVIDENCE/$pass-fingerprint-second.txt" $WATCHED_FOLDERS
@@ -167,7 +191,7 @@ act() {
 
 # ----------------------------------------------------------------------------------- the judging
 check() { # <evidence folder>
-  local folder=$1 pass what missing archive_folders line sha path second left
+  local folder=$1 pass what missing archive_folders line sha path second left code stays
   [ -d "$folder" ] || fail "there is nothing at $folder, so this scenario kept no evidence of a move"
   need_node
 
@@ -175,7 +199,8 @@ check() { # <evidence folder>
     kept_all "$folder" "what the $pass pass saw before the update and after it" \
       "$pass-version-before" "$pass-version-after" "$pass-copied.txt" "$pass-files-after.txt" \
       "$pass-due-after.txt" "$pass-note.txt" "$pass-git-status.txt" \
-      "$pass-fingerprint-after.txt" "$pass-fingerprint-second.txt"
+      "$pass-fingerprint-after.txt" "$pass-fingerprint-second.txt" \
+      "$pass-check-second.txt" "$pass-check-code.txt"
     for what in $READS; do
       kept_all "$folder" "what a person reads, before the update and after it" \
         "$pass-$what-before.txt" "$pass-$what-after.txt" "$pass-$what-second.txt"
@@ -191,7 +216,18 @@ check() { # <evidence folder>
       grep -qF "$line" "$folder/$pass-state-before.txt" || missing="$missing $line"
     done
     [ -z "$missing" ] ||
-      fail "the set this scenario has to seed is not in what the public version said in the $pass pass:$missing"
+      fail "the set this scenario has to seed is not in what the version before the move said in the $pass pass:$missing"
+
+    # AND THAT VERSION WROTE THEM AS FILES IN due/, or there was never a move to prove. This is
+    # an update from the last version before the move: the public version keeps reminders in the
+    # notebook already and writes no file there, so a pass that started from one of those would
+    # have nothing to take in, nothing to archive, and would say nothing about the move.
+    missing=''
+    for line in $SEEDED; do
+      grep -q "	due/$line.md$" "$folder/$pass-copied.txt" || missing="$missing $line"
+    done
+    [ -z "$missing" ] ||
+      fail "the version the $pass pass started from kept no file in due/ for:$missing, so it was not a version before the move and there was nothing to move"
 
     # THE THREE, BYTE FOR BYTE: before the update and after it, and again after a second start.
     for what in $READS; do
@@ -211,11 +247,22 @@ check() { # <evidence folder>
         fail "the move put the old files under archives/$(printf '%s' "$archive_folders" | tr '\n' ' '), and the plan asks for <date>-$ARCHIVE_NAME"
       while IFS=$'\t' read -r sha path; do
         [ -n "$path" ] || continue
-        grep -q "^$sha	archives/.*/$path\$" "$folder/$pass-archive.txt" ||
+        [ "$path" != "$STAYS_BEHIND" ] || continue
+        grep -q "^$sha	archives/.*/$path$" "$folder/$pass-archive.txt" ||
           fail "$path is not in the archive with the bytes it had, so the move did not keep it"
       done <"$folder/$pass-copied.txt"
-      # And they are out of the owner's way: nothing is left in due/ but its own two notes.
-      left=$(grep -E '\.md$' "$folder/$pass-due-after.txt" | grep -vxE 'README\.md|MOVED-TO-THE-NOTEBOOK\.txt' | grep -c . || true)
+      # AND THE ONE IT CANNOT READ IS LEFT EXACTLY WHERE IT WAS, with the bytes it had: the
+      # move never took it in, so it never touches it (core/due-retire.mjs), and the reminders
+      # go on saying it needs a look.
+      stays=$(awk -F'\t' -v path="$STAYS_BEHIND" '$2==path{print $1;exit}' "$folder/$pass-copied.txt")
+      grep -q "^$stays	$STAYS_BEHIND$" "$folder/$pass-files-after.txt" ||
+        fail "the move did not leave $STAYS_BEHIND where it was with the bytes it had, and it is a file it cannot read: $(grep -F "$STAYS_BEHIND" "$folder/$pass-files-after.txt" | tr '\n' ' ' | cut -c1-120)"
+      grep -q "	archives/.*/$STAYS_BEHIND$" "$folder/$pass-archive.txt" &&
+        fail "the move put $STAYS_BEHIND into the archive, and a file it cannot read was never taken in, so it is never touched"
+      # And the rest are out of the owner's way: nothing is left in due/ but its own two notes
+      # and that one file.
+      left=$(grep -E '\.md$' "$folder/$pass-due-after.txt" |
+        grep -vxE 'README\.md|MOVED-TO-THE-NOTEBOOK\.txt|does-not-read\.md' | grep -c . || true)
       [ "$left" = 0 ] ||
         fail "due/ still holds $left reminder file(s) after the move, and the notebook owns them here"
     else
@@ -230,13 +277,29 @@ check() { # <evidence folder>
       fi
     fi
 
+    # THE SECOND START'S OWN CHECK SAID WHAT THIS SEED MAKES IT SAY, and never that all was clear.
+    # The program that owns reminders answers 3 when the only thing wrong is a file that needs a
+    # look and 0 when nothing is (tools/due.js cmdCheck), and this seed holds such a file on
+    # purpose; run the way the owner's assistant runs it, through the reminder commands
+    # (notebook/bin/personal-command.mjs), that 3 reaches whoever asked as a refusal, 1, carrying
+    # the same words. So both are the right answer here and 0 is not: a 0 would mean the file
+    # nobody can read had been swallowed somewhere in the move, and nobody would ever be told
+    # about it again.
+    code=$(tr -d ' \n\r' <"$folder/$pass-check-code.txt")
+    case $code in
+      1 | 3) ;;
+      *) fail "the second start's own check answered $code on the $pass pass, and this seed holds a file that needs a look, which the product rightly answers 3 for (1 through the reminder commands)" ;;
+    esac
+    grep -qF "$(basename "$STAYS_BEHIND")" "$folder/$pass-check-second.txt" ||
+      fail "the second start's own check never names $STAYS_BEHIND, the file that needs a look ($pass): $(tr '\n' ' ' <"$folder/$pass-check-second.txt" | cut -c1-200)"
+
     # A SECOND START CHANGES NOTHING, down to the bytes of every folder the move touches.
     second=$(comm -3 "$folder/$pass-fingerprint-after.txt" "$folder/$pass-fingerprint-second.txt" | grep -c . || true)
     [ "$second" = 0 ] ||
       fail "a second start changed $second file(s) under $WATCHED_FOLDERS ($pass)"
   done
 
-  pass "the set of the plan, seeded by the public version, prints the same due state, list and today after the update as before it, byte for byte, in a mission control the notebook owns and in one that is the owner's own repository; the old files are in archives/<date>-$ARCHIVE_NAME with their bytes, or untouched with $NOTE beside them and nothing else to commit; a second start changed nothing"
+  pass "the set of the plan, seeded by the version before the move, prints the same due state, list and today after the update as before it, byte for byte, in a mission control the notebook owns and in one that is the owner's own repository; the old files are in archives/<date>-$ARCHIVE_NAME with their bytes, or untouched with $NOTE beside them and nothing else to commit; $STAYS_BEHIND, which no version can read, is where it was and the second start's own check still says so instead of all-clear; a second start changed nothing else"
 }
 
 if [ "$CHECK_ONLY" = yes ]; then
