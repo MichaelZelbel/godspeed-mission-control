@@ -40,11 +40,6 @@
     "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details."
   },
   {
-    "name": "embedded-captions",
-    "classification": "optional connector",
-    "reason": "Portable recipe with local file contract; chosen media/service provider is configured separately."
-  },
-  {
     "name": "excalidraw-diagram",
     "classification": "source only",
     "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details."
@@ -55,24 +50,9 @@
     "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details."
   },
   {
-    "name": "faceless-explainer",
-    "classification": "optional connector",
-    "reason": "Portable recipe with local file contract; chosen media/service provider is configured separately."
-  },
-  {
-    "name": "figma",
-    "classification": "optional connector",
-    "reason": "Portable recipe with local file contract; chosen media/service provider is configured separately."
-  },
-  {
     "name": "found-company",
     "classification": "separately owned",
     "reason": "Company and specialist enterprise-agent systems remain separate from personal Mission Control."
-  },
-  {
-    "name": "general-video",
-    "classification": "optional connector",
-    "reason": "Portable recipe with local file contract; chosen media/service provider is configured separately."
   },
   {
     "name": "grill-me",
@@ -93,46 +73,6 @@
     "name": "headache-tracker",
     "classification": "source only",
     "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details."
-  },
-  {
-    "name": "hyperframes",
-    "classification": "optional connector",
-    "reason": "Portable recipe with local file contract; chosen media/service provider is configured separately."
-  },
-  {
-    "name": "hyperframes-animation",
-    "classification": "optional connector",
-    "reason": "Portable recipe with local file contract; chosen media/service provider is configured separately."
-  },
-  {
-    "name": "hyperframes-audio",
-    "classification": "optional connector",
-    "reason": "Portable recipe with local file contract; chosen media/service provider is configured separately."
-  },
-  {
-    "name": "hyperframes-cli",
-    "classification": "optional connector",
-    "reason": "Portable recipe with local file contract; chosen media/service provider is configured separately."
-  },
-  {
-    "name": "hyperframes-core",
-    "classification": "optional connector",
-    "reason": "Portable recipe with local file contract; chosen media/service provider is configured separately."
-  },
-  {
-    "name": "hyperframes-creative",
-    "classification": "optional connector",
-    "reason": "Portable recipe with local file contract; chosen media/service provider is configured separately."
-  },
-  {
-    "name": "hyperframes-keyframes",
-    "classification": "optional connector",
-    "reason": "Portable recipe with local file contract; chosen media/service provider is configured separately."
-  },
-  {
-    "name": "hyperframes-registry",
-    "classification": "optional connector",
-    "reason": "Portable recipe with local file contract; chosen media/service provider is configured separately."
   },
   {
     "name": "interstitial-journal",
@@ -160,11 +100,6 @@
     "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details."
   },
   {
-    "name": "media-use",
-    "classification": "optional connector",
-    "reason": "Portable recipe with local file contract; chosen media/service provider is configured separately."
-  },
-  {
     "name": "memory-audit",
     "classification": "source only",
     "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details."
@@ -175,19 +110,9 @@
     "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details."
   },
   {
-    "name": "motion-graphics",
-    "classification": "optional connector",
-    "reason": "Portable recipe with local file contract; chosen media/service provider is configured separately."
-  },
-  {
     "name": "move-godspeed",
     "classification": "source only",
     "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details."
-  },
-  {
-    "name": "music-to-video",
-    "classification": "optional connector",
-    "reason": "Portable recipe with local file contract; chosen media/service provider is configured separately."
   },
   {
     "name": "nano-banana-images",
@@ -210,21 +135,6 @@
     "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details."
   },
   {
-    "name": "pr-to-video",
-    "classification": "optional connector",
-    "reason": "Portable recipe with local file contract; chosen media/service provider is configured separately."
-  },
-  {
-    "name": "product-launch-video",
-    "classification": "optional connector",
-    "reason": "Portable recipe with local file contract; chosen media/service provider is configured separately."
-  },
-  {
-    "name": "remotion-to-hyperframes",
-    "classification": "optional connector",
-    "reason": "Portable recipe with local file contract; chosen media/service provider is configured separately."
-  },
-  {
     "name": "sap-ai-agent-low-code",
     "classification": "separately owned",
     "reason": "Company and specialist enterprise-agent systems remain separate from personal Mission Control."
@@ -245,11 +155,6 @@
     "reason": "Portable recipe with local file contract; chosen media/service provider is configured separately."
   },
   {
-    "name": "slideshow",
-    "classification": "optional connector",
-    "reason": "Portable recipe with local file contract; chosen media/service provider is configured separately."
-  },
-  {
     "name": "social-visuals",
     "classification": "source only",
     "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details."
@@ -266,26 +171,6 @@
   },
   {
     "name": "talk-about",
-    "classification": "source only",
-    "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details."
-  },
-  {
-    "name": "talking-head-recut",
-    "classification": "optional connector",
-    "reason": "Portable recipe with local file contract; chosen media/service provider is configured separately."
-  },
-  {
-    "name": "video-captions",
-    "classification": "optional connector",
-    "reason": "Portable recipe with local file contract; chosen media/service provider is configured separately."
-  },
-  {
-    "name": "video-finishing",
-    "classification": "source only",
-    "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details."
-  },
-  {
-    "name": "video-hooks",
     "classification": "source only",
     "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details."
   },

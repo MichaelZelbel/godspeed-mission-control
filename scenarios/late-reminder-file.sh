@@ -21,7 +21,8 @@
 #   closed-state.json   `due state --json` after the closing written the old way appeared
 #   pages.txt           the reminder pages afterwards: <title><TAB>file
 #   closings.txt        the closing moments afterwards
-#   reviews.txt         the review queue, one line per item still waiting
+#   reviews.txt         the notebook's review queue, one line per item still waiting:
+#                       <suggestion type><TAB><status><TAB><title><TAB><what it says>
 #   changed-list.txt    `due list` after the one that changed on both sides
 #   second-list.txt     and `due list` once more, so a second run is seen to change nothing
 SCENARIO='late-reminder-file'
@@ -140,7 +141,11 @@ act() {
 
   pages_of "$ROOT" "$EVIDENCE/pages.txt"
   closings_of "$ROOT" "$EVIDENCE/closings.txt"
-  reviews_of "$ROOT" "$EVIDENCE/reviews.txt"
+  # Where the product keeps it: a reminder changed in two places at once waits as a review_queue
+  # record of the notebook's (core/due-copy.mjs), which is notebook/_system/review_queue/<id>.json
+  # on disk - not in conflicts/, which is where a difference the SYNC could not settle waits. The
+  # folder is named here, at the place that looked in the wrong one.
+  queued_reviews_of "$ROOT/$REVIEW_QUEUE" "$EVIDENCE/reviews.txt"
   say "== once more, so a second run is seen to change nothing"
   due_on "$ROOT" list >"$EVIDENCE/second-list.txt" || fail "due list could not be read a second time"
 }
@@ -182,12 +187,16 @@ check() { # <evidence folder>
     *) fail "$closed (\"$closed_title\") is \"$state\" after a closing written the old way named it, and a closing closes it" ;;
   esac
 
-  # THE ONE THAT CHANGED ON BOTH SIDES IS ONE REVIEW ITEM, and no second reminder.
-  kept "$folder" reviews.txt "the review queue after the old file and its page both changed"
-  reviews=$(grep -c . "$folder/reviews.txt" || true)
+  # THE ONE THAT CHANGED ON BOTH SIDES IS ONE REVIEW ITEM, and no second reminder. The item is the
+  # notebook's own, about a reminder changed in two places (core/due-copy.mjs saves it with
+  # suggestion_type deadline_both_changed), so that is what is counted: anything else waiting in
+  # that queue is something else's business and never stands in for this one.
+  kept "$folder" reviews.txt "the notebook's review queue after the old file and its page both changed"
+  reviews=$(awk -F'\t' '$1=="deadline_both_changed"' "$folder/reviews.txt" | grep -c . || true)
   [ "$reviews" = 1 ] ||
-    fail "the old file and its page both changed and left $reviews review items, and the plan asks for one"
-  grep -qF "$changed" "$folder/reviews.txt" || grep -qF "$changed_title" "$folder/reviews.txt" ||
+    fail "the old file and its page both changed and left $reviews review items about a reminder changed in two places, and the plan asks for one"
+  awk -F'\t' '$1=="deadline_both_changed"' "$folder/reviews.txt" |
+    grep -qF -e "$changed" -e "$changed_title" ||
     fail "the one review item does not name \"$changed_title\", so it is about something else"
   n=$(counted "$folder/pages.txt" 1 "$changed_title")
   [ "$n" = 1 ] || fail "the notebook holds $n pages for \"$changed_title\" after it changed on both sides, and it is one reminder"
@@ -196,7 +205,7 @@ check() { # <evidence folder>
   cmp -s "$folder/late-list.txt" "$folder/second-list.txt" ||
     fail "due list does not print the same bytes on a second run: $(diff "$folder/late-list.txt" "$folder/second-list.txt" | tr '\n' ' ' | cut -c1-240)"
 
-  pass "a reminder written the old way after the move is listed once and has one page, a closing written the old way closed $closed, the one changed on both sides left exactly one review item and no second page, and a second run changed nothing"
+  pass "a reminder written the old way after the move is listed once and has one page, a closing written the old way closed $closed, the one changed on both sides left exactly one review item waiting in the notebook and no second page, and a second run changed nothing"
 }
 
 if [ "$CHECK_ONLY" = yes ]; then

@@ -1,6 +1,6 @@
 {
   "name": "mc-video",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Let your mission control finish your videos: captions in one look, a vertical cut, and HyperFrames for animated slides and overlays. An add-on for Teach It Once.",
   "license": "MIT",
   "type": "module",

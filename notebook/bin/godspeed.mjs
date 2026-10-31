@@ -12,6 +12,7 @@ import { seed } from '../core/seeds.mjs';
 import { execFileSync } from 'node:child_process';
 import {assistantProfiles,selectAssistantProfile} from '../core/assistant-files.mjs';
 import {installSkillTree} from '../core/packaged-skills.mjs';
+import {removeRetiredSkills} from '../core/retired-skills.mjs';
 import {planWorkspaceMove,moveWorkspace,undoWorkspaceMove} from '../core/workspace-move.mjs';
 import {installStarter,adoptedMissionControl,addArchiveLine} from '../core/starter-workspace.mjs';
 import {machineDevice} from '../core/device-id.mjs';
@@ -64,10 +65,17 @@ if(command==='init'){
   addArchiveLine(root,store.state);
   const addons=fileURLToPath(new URL('../../third-party/addons/',import.meta.url));
   const recipes=fileURLToPath(new URL('../recipes/',import.meta.url));
-  for(const [name,recipe] of [['godspeed-coach','coach'],['godspeed-journal','interstitial-journal'],['mc-phone','phone-errands'],['mc-video','video-finishing']]){
+  // mc-video is not in this list any more (31 October 2026): the recipes for making and finishing
+  // video are the video add-on's, and its own setup installs them, so a folder whose owner never set
+  // that add-on up no longer gets video-finishing either (core/retired-skills.mjs).
+  for(const [name,recipe] of [['godspeed-coach','coach'],['godspeed-journal','interstitial-journal'],['mc-phone','phone-errands']]){
     const source=path.join(addons,name,'skill',recipe);if(fs.existsSync(source)&&!fs.existsSync(path.join(root,'skills',recipe)))fs.cpSync(source,path.join(root,'skills',recipe),{recursive:true});
   }
   if(fs.existsSync(recipes))for(const name of fs.readdirSync(recipes))installSkillTree(store,path.join(recipes,name),path.join(root,'skills',name),{adopted});
+  // An update takes the video recipes an earlier version installed out of the owner's skills/ again,
+  // but only the copies Godspeed itself put there unchanged: one the owner edited stays, and an
+  // installation with the video add-on set up keeps them all (core/retired-skills.mjs).
+  const retired=removeRetiredSkills(store,root);
   // The note that says what this folder is: NOTEBOOK.md, renamed from FULL-ALPHA.md once where that
   // never leaves this computer through Git, and brought up to date under the name it keeps while it
   // still reads as the notebook wrote it (core/notebook-note.mjs).
@@ -79,7 +87,7 @@ if(command==='init'){
   // Last, once everything above is in the folder: a new mission control's first commit (core/first-commit.mjs).
   const committed=(await import('../core/first-commit.mjs')).firstCommit(root);
   if(!committed.made&&/failed/.test(committed.reason))process.stderr.write('The folder\'s first Git commit was not made ('+committed.reason+'); everything else is set up.\n');
-  result={initialized:true,preservedExisting:true,habitProgressUpgrades:progressUpgrades,...(committed.made?{firstCommit:{branch:committed.branch,files:committed.files}}:{})};
+  result={initialized:true,preservedExisting:true,habitProgressUpgrades:progressUpgrades,...(retired.removed.length?{videoSkillsRemoved:retired.removed}:{}),...(retired.kept.length?{videoSkillsKept:retired.kept}:{}),...(retired.videoAddon?{videoSkillsKeptFor:retired.videoAddon}:{}),...(committed.made?{firstCommit:{branch:committed.branch,files:committed.files}}:{})};
 }else if(['coach','journal','charm'].includes(command)){
   const addon='godspeed-'+command;
   const executable=fileURLToPath(new URL('../../third-party/addons/'+addon+'/bin/'+addon+'.mjs',import.meta.url));

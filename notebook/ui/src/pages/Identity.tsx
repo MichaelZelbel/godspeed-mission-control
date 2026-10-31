@@ -29,8 +29,8 @@ import {
 // GODSPEED'S BRAIN (lib/brain-page.ts; notebook/ui/DESIGN.md, "Godspeed's brain"): the files that
 // make this mission control behave as it does, each changed here or by asking in the chat docked
 // beside the page. Every change keeps the earlier version, and any version can be brought back as
-// a new change. Rules, profile pages and skills carry the numbers the chat is told, so "change
-// rule 13" means the tile that shows 13.
+// a new change. Rules, what it knows about you and skills carry the numbers the chat is told, so
+// "change rule 13" means the tile that shows 13.
 const selectClass = "block w-full min-h-11 rounded-md border border-input bg-background px-3 text-base sm:text-sm";
 const CHAT = { page: PAGE_CHAT, label: BRAIN_PAGE.label, toggleEvent: TOGGLE_PAGE_CHAT, changedEvent: PAGE_CHAT_CHANGED };
 
@@ -185,8 +185,8 @@ function Editor({ target, overview, onClose }: { target: string; overview?: Over
     finally { setBusy(false); setConfirmRemove(false); }
   };
   const tile = overview?.rules.find((r) => r.target === target), page = overview?.profile.find((p) => p.target === target), skill = overview?.skills.find((k) => k.target === target);
-  const title = !d ? "Loading…" : d.kind === "who" ? "Who it is" : d.kind === "extra" ? "Extra instructions" : d.kind === "rule" ? (tile?.title || (d.fields as RuleFields).title) : d.kind === "skill" ? "Skill: " + (skill?.title ?? (d.fields as SkillFields).name) : (page?.title ?? "Profile page");
-  const numbered = tile ? "Rule " + tile.n + ". " : page ? "Profile page " + page.n + ". " : skill ? "Skill " + skill.n + ". " : "";
+  const title = !d ? "Loading…" : d.kind === "who" ? "Who it is" : d.kind === "extra" ? "Extra instructions" : d.kind === "rule" ? (tile?.title || (d.fields as RuleFields).title) : d.kind === "skill" ? "Skill: " + (skill?.title ?? (d.fields as SkillFields).name) : (page?.title ?? "What it knows about you");
+  const numbered = tile ? "Rule " + tile.n + ". " : page ? page.n + ". " : skill ? "Skill " + skill.n + ". " : "";
   // What a change does to AGENTS.md and to what the assistant's program reads first.
   const manualSize = d?.manual ?? overview?.manual, soulSize = d?.soul ?? overview?.soul;
   const ruleBefore = d?.kind === "rule" && (d.fields as RuleFields).always ? (d.fields as RuleFields).line : "", ruleAfter = d?.kind === "rule" && draft?.always ? draft?.line ?? "" : "";
@@ -564,11 +564,11 @@ export default function Identity() {
                 <Instructions />
               </Section>
 
-              <Section id="profile" icon={<BookUser className="h-5 w-5" />} title="What it knows about you" explain="Pages about you, your work and your voice. Your assistant opens them when its main instructions point to them or when their subject comes up.">
+              <Section id="profile" icon={<BookUser className="h-5 w-5" />} title="What it knows about you" explain="What it knows about you, your work and your voice. Your assistant opens them when its main instructions point to them or when their subject comes up.">
                 {o.profile.length > 0 && <div className={grid}>
                   {o.profile.map((p) => <Tile key={p.target} n={p.n} name={p.title} text={plainInline(p.preview)} waiting={p.review_waiting} onOpen={() => setOpen(p.target)} />)}
                 </div>}
-                {!o.profile.length && <p className="text-sm text-muted-foreground">No pages yet.</p>}
+                {!o.profile.length && <p className="text-sm text-muted-foreground">Nothing about you yet.</p>}
                 <InYourNotebook />
               </Section>
 

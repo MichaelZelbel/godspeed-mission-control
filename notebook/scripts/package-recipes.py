@@ -38,11 +38,28 @@ specific={
 'move-godspeed':'Stop the candidate service, verify a complete knowledge and media backup, copy the workspace into an empty destination and validate identities, references and restored contents. Change only the candidate installation path. Restart and read the original note and media; preserve the old folder for rollback.',
 }
 company={'found-company','pattern1-build','sap-ai-agent-low-code','sap-ai-agent-pro-code','sap-build-ai-patterns'}
+# THE RECIPES THAT LEFT THE DEFAULT SET (31 October 2026, release 2.0.0-beta.13). A skill whose only
+# job is making or finishing video is no longer handed to every new reader: the video add-on
+# (mc-video) carries four of them in its own skill/ folder and installs the other nineteen from the
+# HyperFrames release it is pinned to, so only a reader who sets that add-on up gets them. They are
+# skipped here so a later run of this script cannot put them back into notebook/recipes.
+# gsap-core and gsap-timeline are NOT in this list: they are the official GSAP skills for a
+# JavaScript animation library (React/Vue/vanilla, scroll-driven animation, Webflow Interactions),
+# which is web work as much as video, and HyperFrames v0.8.43 does not publish them, so nothing
+# would put them back. notebook/data/recipe-revisions.json keeps every hash it ever shipped of the
+# ones below: that is how an update tells a reader's untouched copy, which it removes, from one the
+# reader changed, which it keeps (notebook/core/retired-skills.mjs).
+left_the_default_set={'embedded-captions','faceless-explainer','figma','general-video','hyperframes',
+ 'hyperframes-animation','hyperframes-audio','hyperframes-cli','hyperframes-core','hyperframes-creative',
+ 'hyperframes-keyframes','hyperframes-registry','media-use','motion-graphics','music-to-video','pr-to-video',
+ 'product-launch-video','remotion-to-hyperframes','slideshow','talking-head-recut','video-captions',
+ 'video-finishing','video-hooks'}
 media={'embedded-captions','faceless-explainer','figma','general-video','gsap-core','gsap-timeline','hyperframes','hyperframes-animation','hyperframes-audio','hyperframes-cli','hyperframes-core','hyperframes-creative','hyperframes-keyframes','hyperframes-registry','media-use','motion-graphics','music-to-video','nano-banana-images','pr-to-video','product-launch-video','remotion-to-hyperframes','slideshow','talking-head-recut','video-captions','scroll-craft'}
 aliases={'mc-brief-operations':'daily-brief','morning-note':'morning-note','subscription-review':'subscription-review','talk-about':'talk-about','memory-audit':'memory-audit','social-visuals':'social-visuals','video-hooks':'video-hooks'}
 classified=[]
 for skill in inventory['skills']:
  name=skill['name']
+ if name in left_the_default_set:continue
  if name in company:
   classified.append({'name':name,'classification':'separately owned','reason':'Company and specialist enterprise-agent systems remain separate from personal Mission Control.'});continue
  purpose=specific.get(aliases.get(name,name))

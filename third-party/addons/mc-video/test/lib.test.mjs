@@ -16,8 +16,8 @@ const godspeedAt = (d) => {
 test("the mission control named on the command line wins, and a folder without AGENTS.md is refused", () => {
   const home = tmp();
   const godspeed = godspeedAt(path.join(home, "elsewhere"));
-  assert.equal(L.findGodspeed({ arg: godspeed, userHome: home, cwd: home }), godspeed);
-  assert.equal(L.findGodspeed({ arg: home, userHome: home, cwd: home }), null);
+  assert.equal(L.findGodspeed({ arg: godspeed, userHome: home, cwd: home, env: {} }), godspeed);
+  assert.equal(L.findGodspeed({ arg: home, userHome: home, cwd: home, env: {} }), null);
 });
 
 test("the mission control recorded by the kit comes before the current folder", () => {
@@ -26,15 +26,33 @@ test("the mission control recorded by the kit comes before the current folder", 
   const here = godspeedAt(path.join(home, "here"));
   fs.mkdirSync(path.join(home, ".godspeed"));
   fs.writeFileSync(path.join(home, ".godspeed", "device.env"), `GODSPEED_PROMPT_SOURCES=hermes\nGODSPEED_DIR=${recorded}\n`);
-  assert.equal(L.findGodspeed({ userHome: home, cwd: here }), recorded);
+  assert.equal(L.findGodspeed({ userHome: home, cwd: here, env: {} }), recorded);
 });
 
 test("without a record, the current folder, then ~/godspeed", () => {
   const home = tmp();
   const here = godspeedAt(path.join(home, "here"));
-  assert.equal(L.findGodspeed({ userHome: home, cwd: here }), here);
+  assert.equal(L.findGodspeed({ userHome: home, cwd: here, env: {} }), here);
   const dflt = godspeedAt(path.join(home, "godspeed"));
-  assert.equal(L.findGodspeed({ userHome: home, cwd: home }), dflt);
+  assert.equal(L.findGodspeed({ userHome: home, cwd: home, env: {} }), dflt);
+});
+
+// The product starts setup with GODSPEED_WORKSPACE naming its mission control (the bundled copy
+// has read it since 3 October 2026); --godspeed still wins over it.
+test("GODSPEED_WORKSPACE comes after --godspeed and before everything else", () => {
+  const home = tmp();
+  const named = godspeedAt(path.join(home, "named"));
+  const workspace = godspeedAt(path.join(home, "workspace"));
+  const recorded = godspeedAt(path.join(home, "recorded"));
+  const here = godspeedAt(path.join(home, "here"));
+  fs.mkdirSync(path.join(home, ".godspeed"));
+  fs.writeFileSync(path.join(home, ".godspeed", "device.env"), `GODSPEED_DIR=${recorded}
+`);
+  const env = { GODSPEED_WORKSPACE: workspace };
+  assert.equal(L.findGodspeed({ arg: named, userHome: home, cwd: here, env }), named, "--godspeed wins");
+  assert.equal(L.findGodspeed({ userHome: home, cwd: here, env }), workspace, "before the kit's record and the current folder");
+  assert.equal(L.findGodspeed({ userHome: home, cwd: here, env: { GODSPEED_WORKSPACE: path.join(home, "no-agents-md") } }), recorded, "a folder without AGENTS.md is passed over");
+  assert.equal(L.findGodspeed({ userHome: home, cwd: here, env: {} }), recorded);
 });
 
 test("recipes go to the visible skills room unless the mission control only has .claude/skills", () => {
@@ -87,13 +105,20 @@ test("Windows looks for winget's ffmpeg before the one on PATH", () => {
   assert.equal(c[1], "ffmpeg");
 });
 
-test("launchers: a shell one everywhere, and a .cmd twin on Windows", () => {
-  const unix = L.launchers("/home/r/.mc-video/app", "linux");
+test("launchers: a shell one everywhere, a .cmd twin on Windows, and a .ps1 only when asked for", () => {
+  const unix = L.launchers("/home/r/.mc-video/app", "linux", { ps1: true });
   assert.deepEqual(unix.map((l) => l.name), ["mc-video"]);
   assert.match(unix[0].body, /exec node ".*\/bin\/mc-video\.mjs" "\$@"/);
   const win = L.launchers("C:\\Users\\r\\.mc-video\\app", "win32");
   assert.deepEqual(win.map((l) => l.name), ["mc-video", "mc-video.cmd"]);
-  assert.match(win[1].body, /node ".*mc-video\.mjs" %\*/);
+  // Git Bash keeps rewriting /c/... paths: almost everything mc-video is given is a path.
+  assert.doesNotMatch(win[0].body, /MSYS/);
+  assert.match(win[1].body, /set "MC_VIDEO_CMDLINE=!CMDCMDLINE!"\r\nsetlocal DisableDelayedExpansion\r\nset MC_VIDEO_LAUNCHER=cmd\r\nnode ".*mc-video\.mjs" %\* --end-of-cmd-args\r\n$/);
+  const ps = L.launchers("C:\\Users\\o'neil\\.mc-video\\app", "win32", { ps1: true });
+  assert.deepEqual(ps.map((l) => l.name), ["mc-video", "mc-video.cmd", "mc-video.ps1"]);
+  assert.equal(ps[2].body.charCodeAt(0), 0xfeff);
+  assert.match(ps[2].body, /& node 'C:\\Users\\o''neil\\\.mc-video\\app\\bin\\mc-video\.mjs' --argv-base64 /);
+  assert.match(ps[2].body, /-is \[array\]\) \{ @\(\$_ \| ForEach-Object \{ \[string\]\$_ \}\) -join ',' \}/, "a,b stays a,b, as it reaches a .cmd");
 });
 
 test("the kit's command folder is used when it exists", () => {

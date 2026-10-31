@@ -44,7 +44,7 @@ export function noteContentHash(content){const s=String(content??'');let h=0x811
 const IDENTITY_PAGE=Symbol('identity page');
 // For a model without tools (the notebook's own provider): how it asks for a change on that page.
 // The server makes the change through the page's own path, and only with the owner's own words.
-const identityContract=' The user has the notebook page open that shows who you are, your rules, the profile pages and your skills: context.identity_page lists them by number, each rule with its sentence now. To change one there because the current message of the user explicitly asks for it, add identity_changes:[{action,target,source_quote,text?,fields?}] (at most 3): action save, add_rule, remove_rule or undo; target from that list ("who", "extra", "rule:<name>", "profile:<name>", "skill:<name>"); source_quote the exact words of the current message that ask for it. save on who takes text, the whole new paragraph; save on extra takes text, the whole new extra instructions. save on a rule, and add_rule, take fields with only what changes: title (its short name, a few words), line (the one sentence), group must, never or how, always (true: read before every job), story. Profile pages and skills take only undo here; for any other change to them, say they can be changed on that page. Do not say in reply that something was changed: the server adds what it changed, or why it did not.';
+const identityContract=' The user has the notebook page open that shows who you are, your rules, what you know about them and your skills: context.identity_page lists them by number, each rule with its sentence now. To change one there because the current message of the user explicitly asks for it, add identity_changes:[{action,target,source_quote,text?,fields?}] (at most 3): action save, add_rule, remove_rule or undo; target from that list ("who", "extra", "rule:<name>", "profile:<name>", "skill:<name>"); source_quote the exact words of the current message that ask for it. save on who takes text, the whole new paragraph; save on extra takes text, the whole new extra instructions. save on a rule, and add_rule, take fields with only what changes: title (its short name, a few words), line (the one sentence), group must, never or how, always (true: read before every job), story. What you know about them, and your skills, take only undo here; for any other change to them, say they can be changed on that page. Do not say in reply that something was changed: the server adds what it changed, or why it did not.';
 function json(result){return typeof result==='string'?JSON.parse(result.trim().replace(/^```(?:json)?\s*/,'').replace(/\s*```$/,'')):result;}
 function cites(source,quote){return typeof source==='string'?source.includes(quote):source&&typeof source==='object'?Object.values(source).some(value=>cites(value,quote)):false;}
 function reviewData(value){const result={...value};for(const field of ['themes','open_loops','connections','gaps','people_summary']){if(typeof result[field]==='string'&&field==='gaps')result[field]=[result[field]];if(result[field]==null)result[field]=[];if(!Array.isArray(result[field]))throw new Error('The review returned an invalid '+field+' list');}return result;}
@@ -659,8 +659,8 @@ export class Domains {
   // Changes a model without tools asked for on the page that shows who the assistant is: made
   // through that page's own path (identity-shelf.mjs), each with the owner's own words from this
   // message, which must also be a message the owner really sent (ownerAsked), as for the
-  // assistant's identity_files tool. Profile pages and skills only by undo: such a model never
-  // read them whole, so it cannot write them whole.
+  // assistant's identity_files tool. What it knows about the owner, and skills, only by undo: such
+  // a model never read them whole, so it cannot write them whole.
   async identityChanges(changes,message){
     const shelf=this.identity,done=[],said=[],refused=[];
     for(const change of changes){
@@ -672,7 +672,7 @@ export class Domains {
         if(action==='add_rule')result=await shelf.addRule(change.fields||{},options);
         else{
           const now=shelf.read(target);options.expected_hash=now.hash;
-          if(action==='save'&&!['who','extra','rule'].includes(now.kind))throw Error('a profile page or a skill is changed on the page itself, or by undo here.');
+          if(action==='save'&&!['who','extra','rule'].includes(now.kind))throw Error('what it knows about the owner, and a skill, are changed on the page itself, or by undo here.');
           result=action==='save'?await shelf.save(target,{text:change.text,fields:change.fields},options):action==='remove_rule'?await shelf.removeRule(target,options):await shelf.undo(target,options);
         }
         done.push({tool:'identity_files',success:true,action,target:result.target||target});

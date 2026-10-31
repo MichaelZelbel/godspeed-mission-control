@@ -500,7 +500,7 @@ const brainPage: DocPage = {
     { id: "what-is-brain", title: "What It Is" },
     { id: "brain-changes", title: "Changing It" },
   ],
-  searchText: "brain identity who it is extra instructions rules skills profile pages assistant persona soul",
+  searchText: "brain identity who it is extra instructions rules skills what it knows about you assistant persona soul",
   content: () => (
     <>
       <h2 id="what-is-brain">What It Is</h2>
