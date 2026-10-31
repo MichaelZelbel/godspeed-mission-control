@@ -402,6 +402,22 @@ sync_on() { # <root> [configure <url>]
   "$NODE" "$(product_script "$root" notebook/scripts/sync-worker.mjs)" "$root" "$@"
 }
 
+# Puts a .gitignore listing NOTEBOOK.md and assistant-state/ into a bare repository as its first commit.
+stand_in_ignore_file() { # <bare repository>
+  local bare=$1 work
+  work=$(mktemp -d) || return 1
+  { git clone -q "$bare" "$work/c" 2>/dev/null &&
+    printf 'NOTEBOOK.md
+assistant-state/
+' >"$work/c/.gitignore" &&
+    git -C "$work/c" add .gitignore &&
+    git -C "$work/c" -c user.name="Godspeed Scenario" -c user.email="scenario@localhost" commit -q -m "ignore file" &&
+    git -C "$work/c" push -q origin HEAD:main; } >&2
+  local rc=$?
+  rm -rf "$work"
+  return $rc
+}
+
 # THE PRIVATE GITHUB REPOSITORY, STOOD IN FOR BY ONE BARE REPOSITORY ON THIS MACHINE, the way
 # notebook/test/installer-join-sync.test.mjs does it: Git is told that the GitHub address leads to
 # the folder, for this process and every program it starts. The product still checks the address is
@@ -413,6 +429,9 @@ stand_in_github() { # <folder>
   mkdir -p "$folder" || fail "the folder for the stand-in repository ($folder) could not be made"
   git init -q --bare --initial-branch=main "$folder/$name.git" >&2 ||
     fail "the bare repository standing in for the private GitHub repository could not be made"
+  # The ignore file a reader's own repository has: `godspeed sync folder notebook` refuses one that
+  # does not list NOTEBOOK.md and assistant-state/ (issue #125).
+  stand_in_ignore_file "$folder/$name.git" || fail "the stand-in repository could not be given its ignore file"
   git config --global "url.file://$folder/.insteadOf" "https://github.com/$owner/" ||
     fail "git could not be told that https://github.com/$owner/ leads to $folder"
   # A stranger's computer has a Git identity of its own; a commit without one fails.
@@ -441,6 +460,9 @@ stand_in_github_over_ssh() { # <folder>
   mkdir -p "$folder" || fail "the folder for the stand-in repository ($folder) could not be made"
   git init -q --bare --initial-branch=main "$folder/$name.git" >&2 ||
     fail "the bare repository standing in for the private GitHub repository could not be made"
+  # The ignore file a reader's own repository has: `godspeed sync folder notebook` refuses one that
+  # does not list NOTEBOOK.md and assistant-state/ (issue #125).
+  stand_in_ignore_file "$folder/$name.git" || fail "the stand-in repository could not be given its ignore file"
   # A stranger's computer has a Git identity of its own; a commit without one fails.
   git config --global user.name "Godspeed Scenario" || fail "this machine's Git could not be given a name"
   git config --global user.email "scenario@localhost" || fail "this machine's Git could not be given an address"
@@ -693,7 +715,7 @@ seed_the_old_set() { # <root>
 # from an install that has them only the copies Godspeed itself put there unchanged. Two of the
 # scenarios read that, so their list and their readers are here.
 
-# THE NAMES, the plan's own list of twenty-five: the HyperFrames family the product had vendored
+# THE NAMES, the plan's list of twenty-five less gsap-core and gsap-timeline, which stay in the default set (Michael, 2026-10-31, issue #124): the HyperFrames family the product had vendored
 # (hyperframes and its parts, the two GSAP ones, media-use, figma, remotion-to-hyperframes, the
 # nine recipes for a kind of video) and the four of our own. One name per line, so a symptom can
 # say which of them it found or missed.
@@ -706,8 +728,6 @@ hyperframes-core
 hyperframes-creative
 hyperframes-keyframes
 hyperframes-registry
-gsap-core
-gsap-timeline
 media-use
 figma
 remotion-to-hyperframes

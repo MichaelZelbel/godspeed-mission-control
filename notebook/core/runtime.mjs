@@ -125,7 +125,17 @@ export function hermesFailureMessage(diagnostic){
   if(/context length exceeded|context_length_exceeded|maximum context length|cannot compress further|(?:model )?input exceeds (?:the )?context (?:window|limit)/i.test(diagnostic))return 'The AI request exceeded the model context limit. Reduce the selected source scope before retrying.';
   if(/rate_limit_exceeded|rate limit exceeded|too many requests|usage limit reached|quota exceeded|insufficient_quota/i.test(diagnostic))return 'The connected AI account reached a usage limit. Retry after its limit resets.';
   if(/authenticationerror|invalid_api_key|incorrect api key|token expired|unauthorized|authentication failed/i.test(diagnostic))return 'The connected AI account needs sign-in. Check the account in Settings before retrying.';
-  return 'The AI request failed. Its private runtime diagnostics are retained for investigation.';
+  // Issue #127: a reader met only this sentence and the scenario could not say why. The provider's own
+  // one-line reason (an HTTP status and its message) is said too, with anything key-shaped taken out.
+  const reason=providerReason(diagnostic);
+  return 'The AI request failed'+(reason?' ('+reason+')':'')+'. Its private runtime diagnostics are retained for investigation.';
+}
+// The provider's own reason out of what the AI program printed: the last line naming an HTTP 4xx or
+// 5xx status, shortened, with keys and bearer tokens replaced. Empty when there is none.
+export function providerReason(diagnostic){
+  const lines=String(diagnostic||'').replace(/\x1b\[[0-9;]*m/g,'').split(/\r?\n/).map(l=>l.trim()).filter(l=>/\b(?:HTTP\s*|Error code:?\s*|status(?:_code)?[=: ]\s*)[45]\d\d\b/i.test(l));
+  const line=lines.at(-1);if(!line)return '';
+  return line.replace(/[\w.-]*(?:authorization|api[_-]?key|token|secret|password|passwd)[\w.-]*[\"']?\s*[:=]\s*[\"']?(?:(?:Bearer|Basic|Token)\s+)?[^\s\"',;&}]+/gi,'$1***'.replace('$1','credential: ')).replace(/\b(?:Bearer|Basic)\s+\S+/gi,'***').replace(/\b(?:sk|or|key|tok)[-_][A-Za-z0-9_-]{8,}/gi,'***').replace(/\b[A-Za-z0-9_+\/=-]{20,}\b/g,'***').replace(/\s+/g,' ').slice(0,240);
 }
 // A PROVIDER'S PASSING HICCUP IS TRIED AGAIN (18 October 2026). Connecting a free model in Settings
 // failed on one "HTTP 502: Provider returned error" from OpenRouter, an answer the same request got

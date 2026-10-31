@@ -164,3 +164,22 @@ test("the research night fits inside Hermes' script limit, which fits inside the
  assert.ok(at('research')+own<=at('coach-prep'),'it starts after the research night can have ended');
  assert.ok(at('coach-prep')+prepOwn<at('decide'),'and ends before the daily round chooses');
 });
+
+// Issue #127: the failure sentence says what the provider answered, without any key.
+import {hermesFailureMessage as failureMessage,providerReason} from '../core/runtime.mjs';
+import assertStrict from 'node:assert/strict';
+import {test as nodeTest} from 'node:test';
+nodeTest('a failed AI request says the provider status and hides keys',()=>{
+  const said=failureMessage('x\nError code: 400 - {"error":{"message":"messages: text content blocks must be non-empty"}} Bearer sk-or-v1-abcdef1234567890abcdef\n');
+  assertStrict.match(said,/^The AI request failed \(.*400.*non-empty.*\)\./);
+  assertStrict.doesNotMatch(said,/sk-or-v1|abcdef1234567890/);
+  assertStrict.equal(providerReason('nothing useful here'),'');
+  assertStrict.equal(failureMessage('boom'),'The AI request failed. Its private runtime diagnostics are retained for investigation.');
+});
+nodeTest('credential-shaped parts of a provider line never reach the sentence',()=>{
+  for(const line of ['HTTP 401 Authorization: Basic dXNlcjpwYXNzd29yZA==','HTTP 400 api_key=abc123 failed','Error code: 401 {"api_key":"zzz999","message":"bad"}','HTTP 403 x-api-key: secretvalue1','HTTP 401: access_token=abc.def.ghi']){
+    const said=failureMessage(line);
+    assertStrict.doesNotMatch(said,/dXNlcjpwYXNzd29yZA|abc123|zzz999|secretvalue1|abc.def.ghi/);
+    assertStrict.match(said,/^The AI request failed \(/);
+  }
+});
