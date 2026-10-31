@@ -202,8 +202,10 @@ check() { # <evidence folder>
   [ "$n" = 1 ] || fail "the notebook holds $n pages for \"$changed_title\" after it changed on both sides, and it is one reminder"
 
   # AND A SECOND RUN CHANGES NOTHING.
-  cmp -s "$folder/late-list.txt" "$folder/second-list.txt" ||
-    fail "due list does not print the same bytes on a second run: $(diff "$folder/late-list.txt" "$folder/second-list.txt" | tr '\n' ' ' | cut -c1-240)"
+  # Compared with the list read right before it (changed-list.txt), not with late-list.txt: that one
+  # was read before the late closing was written, so the closing rightly shows up between the two.
+  cmp -s "$folder/changed-list.txt" "$folder/second-list.txt" ||
+    fail "due list does not print the same bytes on a second run: $(diff "$folder/changed-list.txt" "$folder/second-list.txt" | tr '\n' ' ' | cut -c1-240)"
 
   pass "a reminder written the old way after the move is listed once and has one page, a closing written the old way closed $closed, the one changed on both sides left exactly one review item waiting in the notebook and no second page, and a second run changed nothing"
 }

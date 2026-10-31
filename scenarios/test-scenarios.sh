@@ -1669,6 +1669,24 @@ grep -v '^figma$' "$UR/good/two-after.txt" >"$UR/addon-lost-them/two-after.txt"
 refuses 'an install with the add-on that lost one all the same' \
   update-removes-only-unchanged-skills "$UR/addon-lost-them" 'gone from the install that has the video add-on'
 
+# =========================================== the stand-in for the private GitHub repository (issue #125)
+# `godspeed sync folder notebook` refuses a repository whose ignore file lacks NOTEBOOK.md and
+# assistant-state/, so both stand-ins must come with one.
+section stand-in-ignore-file
+SI_HOME=$TMP/stand-in-home
+mkdir -p "$SI_HOME"
+for shape in stand_in_github stand_in_github_over_ssh; do
+  SI_OUT=$(HOME="$SI_HOME" GIT_CONFIG_GLOBAL="$SI_HOME/gitconfig" SCENARIO=stand-in-test GODSPEED_SCENARIO_WORK="$TMP/si-work" bash -c '
+    . "$1/scenarios/scenario-lib.sh"; '"$shape"' "$2/'"$shape"'" >/dev/null 2>&1; echo done' _ "$ROOT" "$TMP" 2>/dev/null)
+  bare=$(ls -d "$TMP/$shape"/*.git 2>/dev/null | head -1)
+  if [ -n "$bare" ] && git -C "$bare" show main:.gitignore 2>/dev/null | grep -qx 'NOTEBOOK.md' &&
+    git -C "$bare" show main:.gitignore | grep -qx 'assistant-state/'; then
+    ok "$shape makes a repository whose ignore file lists NOTEBOOK.md and assistant-state/"
+  else
+    bad "$shape made a repository without the ignore file the product asks for ($SI_OUT)"
+  fi
+done
+
 # ============================================================ every one of them, the same shape
 section 'every script'
 for file in scenario-lib.sh settings-on-install.sh night-tidy.sh voice.sh update-keeps-everything.sh \

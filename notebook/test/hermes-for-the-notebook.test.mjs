@@ -164,3 +164,15 @@ test("the research night fits inside Hermes' script limit, which fits inside the
  assert.ok(at('research')+own<=at('coach-prep'),'it starts after the research night can have ended');
  assert.ok(at('coach-prep')+prepOwn<at('decide'),'and ends before the daily round chooses');
 });
+
+// Issue #127: the failure sentence says what the provider answered, without any key.
+import {hermesFailureMessage as failureMessage,providerReason} from '../core/runtime.mjs';
+import assertStrict from 'node:assert/strict';
+import {test as nodeTest} from 'node:test';
+nodeTest('a failed AI request says the provider status and hides keys',()=>{
+  const said=failureMessage('x\nError code: 400 - {"error":{"message":"messages: text content blocks must be non-empty"}} Bearer sk-or-v1-abcdef1234567890abcdef\n');
+  assertStrict.match(said,/^The AI request failed \(.*400.*non-empty.*\)\./);
+  assertStrict.doesNotMatch(said,/sk-or-v1|abcdef1234567890/);
+  assertStrict.equal(providerReason('nothing useful here'),'');
+  assertStrict.equal(failureMessage('boom'),'The AI request failed. Its private runtime diagnostics are retained for investigation.');
+});
