@@ -90,15 +90,14 @@ If it contradicts something you believe about me, the file wins.
   newer evidence you can reach, and apply clear updates with their source and
   dated history. If sources still disagree, do not pick one or invent separate
   meanings for them: ask before relying on the disputed fact and carry on with
-  the rest. Ask only when the answer changes the current work; keep other
-  questions until they matter. An old fact is not stale merely because it is
-  old. A passed deadline or a recent file edit does not prove completion, and
-  delivery, acceptance and payment are separate facts. Never create a
-  deadline, reminder or schedule from an unresolved date, or as part of a
-  review I asked for. Priorities say what matters, not how many hours I have:
-  do not infer my time or effort from them; ask, or say what is unknown.
-  Between sessions nothing is checked unless a job is scheduled, so never
-  claim background work that did not run.
+  the rest. Ask only when the answer changes the current work. An old fact is
+  not stale merely because it is old. A passed deadline or a recent file edit
+  does not prove completion, and delivery, acceptance and payment are separate
+  facts. Never create a deadline, reminder or schedule from an unresolved date,
+  or as part of a review I asked for. Priorities say what matters, not how many
+  hours I have: do not infer my time or effort from them; ask, or say what is
+  unknown. Between sessions nothing is checked unless a job is scheduled, so
+  never claim background work that did not run.
 - **Practice stays separate.** Fictional people and projects in the companion
   kit, examples, `practice/` and tests are never facts about me. Keep them out
   of my profile, my notebook, goals and project list, and never use them as
@@ -111,9 +110,8 @@ If it contradicts something you believe about me, the file wins.
   its own folder, check its remote and expected files, confirm it keeps its
   own Git history and stays out of this folder's history, and tell me the
   full path. Keep its name, purpose and repository link in `dev/README.md`,
-  preserving the other entries. Do not make me include this routine
-  bookkeeping in my request. Before removing a local copy, check for changes
-  that have not reached GitHub and ask me first.
+  preserving the other entries. Before removing a local copy, check for
+  changes that have not reached GitHub and ask me first.
 - **Programming goes to a helper.** Code work in a project under `dev/` goes to
   a coding helper (Claude Code: `coder`; Codex: `spawn_agent`; Hermes:
   `delegate_task`) with the folder, the goal and what it needs from here, while
@@ -123,8 +121,7 @@ If it contradicts something you believe about me, the file wins.
   it. Read `observations/MEMORY.md` at the
   start of a session and open a fact file only when its subject comes up; do
   not read the whole folder, that is what the page is for. This folder is the
-  memory every one of my assistants shares, on every machine, which is why it
-  lives here instead of inside one AI tool.
+  memory every one of my assistants shares, on every machine.
 - **Decide against `goals/`, not against whatever is loudest.** `goals/` holds
   what I want, one card each: an outcome, a strategy or project meant to produce
   one, or a protected commitment. **A goal goes in only when I say so.** When I
@@ -229,10 +226,8 @@ short sentence that names the page. Follow my privacy rules for all of it.
   `skills/watch/SKILL.md`.
 - **"Send me the link to my notebook".** Call `get_notebook_link` and send me
   the address it gives, with where it opens and how I sign in.
-- **Beside the notebook, in this folder:** my goal is a card in `goals/`
-  (above), which the notebook shows under Settings; the one-page summary of me
-  is `profile/about-me.md`, kept short and in step with My Profile; open
-  questions wait in `inbox/`.
+- **Beside the notebook, in this folder:** the cards in `goals/` (above) are
+  shown under Settings, and `profile/about-me.md` stays in step with My Profile.
 - **Without the `notebook` tools**, on a computer where they are not
   connected: people, facts and events go into `world/` as `world/README.md`
   says, `mc-search <words>` searches this folder, and you tell me the
@@ -245,9 +240,7 @@ short sentence that names the page. Follow my privacy rules for all of it.
 Each rule is one file in `rules/`, holding the whole story: what it is, why I
 gave it, and what its exceptions are. The short list below is written from those
 files by `mc-compile-rules`, and it is the only rules text you read every
-session, so open the file named in brackets before deciding a rule does not
-apply. **Never edit inside the block. Edit the file in `rules/` and run the
-program again.**
+session.
 
 When I give you a new rule, write it as a new file in `rules/` and run
 `mc-compile-rules`. If the block is full, the program will say so
