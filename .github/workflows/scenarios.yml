@@ -267,7 +267,7 @@ jobs:
   # The scenarios of 2.0.0-beta.12: reminders and their closings live in the notebook. None of them
   # needs a key: two computers are two installations on the one machine, joined through one bare
   # repository on it standing in for the private GitHub repository (scenarios/README.md).
-  # reminder-closed-elsewhere, reminders-move-keeps-everything and late-reminder-file were taken out
+  #  reminders-move-keeps-everything and late-reminder-file were taken out
   # on 31 October 2026, their scripts testing the wrong thing, and are back here fixed (#108).
   two-machines-move-at-once:
     name: two computers that move the same reminders at once
@@ -319,40 +319,6 @@ jobs:
         if: failure()
         run: 'grep -qE "^(PASS|FAIL) reminder-from-settings:" "$RUNNER_TEMP/verdict" 2>/dev/null || echo "FAIL reminder-from-settings: it stopped before its own verdict (its step log says how)" | tee -a "$GITHUB_STEP_SUMMARY"'
 
-  reminder-closed-elsewhere:
-    name: a reminder closed on the other computer, both ways of syncing
-    needs: stage
-    runs-on: ubuntu-24.04
-    timeout-minutes: 120
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.stage }}
-          persist-credentials: false
-      - name: The scenario, the stage's own copy of it
-        shell: bash
-        run: bash scenarios/reminder-closed-elsewhere.sh "$STAGE_REF" | tee "$RUNNER_TEMP/verdict"
-      - name: Say so when it stopped before its own verdict
-        if: failure()
-        run: 'grep -qE "^(PASS|FAIL) reminder-closed-elsewhere:" "$RUNNER_TEMP/verdict" 2>/dev/null || echo "FAIL reminder-closed-elsewhere: it stopped before its own verdict (its step log says how)" | tee -a "$GITHUB_STEP_SUMMARY"'
-
-  reminders-move-keeps-everything:
-    name: the move into the notebook keeps every reminder
-    needs: stage
-    runs-on: ubuntu-24.04
-    timeout-minutes: 120
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.stage }}
-          persist-credentials: false
-      - name: The scenario, the stage's own copy of it
-        shell: bash
-        run: bash scenarios/reminders-move-keeps-everything.sh "$STAGE_REF" | tee "$RUNNER_TEMP/verdict"
-      - name: Say so when it stopped before its own verdict
-        if: failure()
-        run: 'grep -qE "^(PASS|FAIL) reminders-move-keeps-everything:" "$RUNNER_TEMP/verdict" 2>/dev/null || echo "FAIL reminders-move-keeps-everything: it stopped before its own verdict (its step log says how)" | tee -a "$GITHUB_STEP_SUMMARY"'
-
   late-reminder-file:
     name: a file written the old way after the move
     needs: stage
@@ -370,48 +336,11 @@ jobs:
         if: failure()
         run: 'grep -qE "^(PASS|FAIL) late-reminder-file:" "$RUNNER_TEMP/verdict" 2>/dev/null || echo "FAIL late-reminder-file: it stopped before its own verdict (its step log says how)" | tee -a "$GITHUB_STEP_SUMMARY"'
 
-  # The scenarios of 2.0.0-beta.13: the Charm Challenge, the video skills that leave the default
-  # set, and an update that removes only the copies nobody changed (releases/
-  # godspeed-2.0.0-beta.13-charm-video-notebook/plan.md, "Proving scenarios" 1 to 3).
-  charm-challenge:
-    name: the Charm Challenge, start to finish
-    needs: stage
-    runs-on: ubuntu-24.04
-    timeout-minutes: 120
-    # The owner's own chat is answered by a model, the one update-keeps-everything uses.
-    env:
-      GODSPEED_SCENARIO_AI_KEY: ${{ secrets.GODSPEED_SCENARIO_AI_KEY }}
-      GODSPEED_SCENARIO_AI_URL: ${{ vars.GODSPEED_SCENARIO_AI_URL }}
-      GODSPEED_SCENARIO_AI_MODEL: ${{ vars.GODSPEED_SCENARIO_AI_MODEL }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.stage }}
-          persist-credentials: false
-      - name: The scenario, the stage's own copy of it
-        shell: bash
-        run: bash scenarios/charm-challenge.sh "$STAGE_REF" | tee "$RUNNER_TEMP/verdict"
-      - name: Say so when it stopped before its own verdict
-        if: failure()
-        run: 'grep -qE "^(PASS|FAIL) charm-challenge:" "$RUNNER_TEMP/verdict" 2>/dev/null || echo "FAIL charm-challenge: it stopped before its own verdict (its step log says how)" | tee -a "$GITHUB_STEP_SUMMARY"'
-
-  no-video-skills-by-default:
-    name: a fresh install has no video skills, the add-on brings them
-    needs: stage
-    runs-on: ubuntu-24.04
-    timeout-minutes: 120
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.stage }}
-          persist-credentials: false
-      - name: The scenario, the stage's own copy of it
-        shell: bash
-        run: bash scenarios/no-video-skills-by-default.sh "$STAGE_REF" | tee "$RUNNER_TEMP/verdict"
-      - name: Say so when it stopped before its own verdict
-        if: failure()
-        run: 'grep -qE "^(PASS|FAIL) no-video-skills-by-default:" "$RUNNER_TEMP/verdict" 2>/dev/null || echo "FAIL no-video-skills-by-default: it stopped before its own verdict (its step log says how)" | tee -a "$GITHUB_STEP_SUMMARY"'
-
+  # The scenarios of 2.0.0-beta.13 (releases/godspeed-2.0.0-beta.13-charm-video-notebook/plan.md,
+  # "Proving scenarios" 1 to 3). charm-challenge and no-video-skills-by-default, and the beta.12 pair
+  # reminder-closed-elsewhere and reminders-move-keeps-everything, were taken out on 31 October 2026
+  # so the release could go public on Michael's word (D-384); they come back fixed with #125, #127
+  # and #129.
   update-removes-only-unchanged-skills:
     name: an update removes only the unchanged video skills
     needs: stage
@@ -432,7 +361,7 @@ jobs:
   verdict:
     name: the verdict
     if: always()
-    needs: [stage, linux-install, mac-install, docker-server, linux-update, settings-on-install, voice, update-keeps-everything, reminder-closed-elsewhere, reminders-move-keeps-everything, two-machines-move-at-once, late-reminder-file, closed-offline-on-both, reminder-from-settings, charm-challenge, no-video-skills-by-default, update-removes-only-unchanged-skills]
+    needs: [stage, linux-install, mac-install, docker-server, linux-update, settings-on-install, voice, update-keeps-everything, two-machines-move-at-once, late-reminder-file, closed-offline-on-both, reminder-from-settings, update-removes-only-unchanged-skills]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     env:
@@ -446,14 +375,10 @@ jobs:
         settings-on-install=${{ needs.settings-on-install.result }}
         voice=${{ needs.voice.result }}
         update-keeps-everything=${{ needs.update-keeps-everything.result }}
-        reminder-closed-elsewhere=${{ needs.reminder-closed-elsewhere.result }}
-        reminders-move-keeps-everything=${{ needs.reminders-move-keeps-everything.result }}
         two-machines-move-at-once=${{ needs.two-machines-move-at-once.result }}
         late-reminder-file=${{ needs.late-reminder-file.result }}
         closed-offline-on-both=${{ needs.closed-offline-on-both.result }}
         reminder-from-settings=${{ needs.reminder-from-settings.result }}
-        charm-challenge=${{ needs.charm-challenge.result }}
-        no-video-skills-by-default=${{ needs.no-video-skills-by-default.result }}
         update-removes-only-unchanged-skills=${{ needs.update-removes-only-unchanged-skills.result }}
     steps:
       - name: Every scenario passed, or the run fails
