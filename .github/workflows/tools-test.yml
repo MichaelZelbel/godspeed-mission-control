@@ -22,6 +22,11 @@ jobs:
           for t in tools/test-observed-state.js tools/test-check-brief.js tools/test-limit.js tools/test-apply-target.js tools/test-nested-checkout.js tools/test-no-chapters.js; do
             echo "== $t"; node "$t"
           done
+      # The reminder tool the way a reader receives it: copied away from the kit, with no notebook
+      # beside it (the Docker image, a Hostinger server). 2.0.0-beta.12 left that edition with no
+      # reminders at all, and only docker.yml, which does not run on tools/, could have seen it (#112).
+      - name: Reminders on an install with no notebook
+        run: bash tools/test-due-without-notebook.sh
       # The notebook needs Node 22.19: started from a checkout inside a "type": "module" folder.
       - uses: actions/setup-node@v4
         with: { node-version: '22.19.0' }
