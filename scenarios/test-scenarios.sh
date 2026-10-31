@@ -1115,11 +1115,407 @@ printf 'README.md\npick-up-the-parcel-from-the-post-office.md\n' >"$S6/wrote-a-d
 refuses "a reminder that went into due/ as well" reminder-from-settings "$S6/wrote-a-due-file" \
   "reminders live in the notebook now"
 
+# ================================================== 11. charm-challenge (2.0.0-beta.13, 1)
+# What the scenario saw on a machine where the Charm Challenge did everything the release plan
+# promises. The days are fixed days, and every date in a reply is worked out from them the way the
+# scenario works it out, so these cases say the same thing in any month.
+CHARM_START=2026-11-02
+CHARM_RESET=2026-11-05
+CHARM_SLIP=2026-11-06
+CHARM_QUESTION='Back to 21? Yes / No'
+charm_date() { # <day> <days later>: "Monday 23 November", as a reply names a day
+  date -u -d "$1 + $2 days" +'%A %-d %B'
+}
+charm_shelf() { # <file> <day of each event...>
+  local file=$1 day
+  shift
+  printf 'card\tCharm Challenge\tcharm\t{"names":["Charm Challenge"],"cadence":"daily","specialist":"charm"}\n' >"$file"
+  for day in "$@"; do
+    printf 'event\t%s\t{"when":"%s"}\n' "$day" "$day" >>"$file"
+  done
+}
+charm_good() { # <folder>
+  local folder=$1 first second third
+  first=$(charm_date "$CHARM_START" 21)
+  second=$(charm_date "$CHARM_RESET" 21)
+  third=$(charm_date "$CHARM_SLIP" 21)
+  rm -rf "$folder"
+  mkdir -p "$folder"
+  {
+    printf 'start=%s\n' "$CHARM_START"
+    printf 'reset=%s\n' "$CHARM_RESET"
+    printf 'slip=%s\n' "$CHARM_SLIP"
+    printf 'offset=+0000\n'
+  } >"$folder/days.txt"
+  printf 'Charm Challenge started. 21 days to go, done on %s.\n' "$first" >"$folder/start-reply.txt"
+  printf '21 days to go, done on %s. Longest run so far: 0 days. Restarts: 0.\n' "$first" >"$folder/status-after-start.txt"
+  printf 'Charm Challenge: day 1 of 21, 21 days to go.\n' >"$folder/brief-after-start.txt"
+  charm_shelf "$folder/shelf-after-start.txt" "$CHARM_START"
+  printf 'I have corrected the captions file and read it back.\n\nThat sounded like a slip. %s\n' \
+    "$CHARM_QUESTION" >"$folder/vent-reply.txt"
+  printf 'Fair enough. Still 21 days to go.\n' >"$folder/no-reply.txt"
+  cp "$folder/status-after-start.txt" "$folder/status-after-no.txt"
+  cp "$folder/brief-after-start.txt" "$folder/brief-after-no.txt"
+  charm_shelf "$folder/shelf-after-no.txt" "$CHARM_START" "$CHARM_START"
+  printf '18 days to go, done on %s. Longest run so far: 3 days. Restarts: 0.\n' "$first" >"$folder/status-fourth-day.txt"
+  printf 'Charm Challenge: day 4 of 21, 18 days to go.\n' >"$folder/brief-fourth-day.txt"
+  printf 'The draft is rewritten and saved.\n\nThat sounded like a slip. %s\n' \
+    "$CHARM_QUESTION" >"$folder/second-vent-reply.txt"
+  printf 'Back to 21. Done on %s. Restarts: 1.\n' "$second" >"$folder/yes-reply.txt"
+  printf '21 days to go, done on %s. Longest run so far: 3 days. Restarts: 1.\n' "$second" >"$folder/status-after-yes.txt"
+  printf 'Charm Challenge: day 1 of 21, 21 days to go.\n' >"$folder/brief-after-yes.txt"
+  charm_shelf "$folder/shelf-after-yes.txt" "$CHARM_START" "$CHARM_START" "$CHARM_RESET"
+  printf 'Back to 21. Done on %s. Restarts: 2.\n' "$third" >"$folder/slip-reply.txt"
+  printf '21 days to go, done on %s. Longest run so far: 3 days. Restarts: 2.\n' "$third" >"$folder/status-after-slip.txt"
+  printf 'Charm Challenge: day 1 of 21, 21 days to go.\n' >"$folder/brief-after-slip.txt"
+  charm_shelf "$folder/shelf-after-slip.txt" "$CHARM_START" "$CHARM_START" "$CHARM_RESET" "$CHARM_SLIP"
+  {
+    printf 'user\tstart the Charm Challenge\n'
+    printf 'assistant\tCharm Challenge started. 21 days to go, done on %s.\n' "$first"
+    printf 'user\tThis caption file is garbage again.\n'
+    printf 'assistant\tThat sounded like a slip. %s\n' "$CHARM_QUESTION"
+    printf 'user\tno\n'
+    printf 'assistant\tFair enough. Still 21 days to go.\n'
+  } >"$folder/chat.txt"
+}
+
+section charm-challenge
+C=$TMP/charm
+charm_good "$C/good"
+passes 'a challenge started, vented at, kept once and started over twice' \
+  charm-challenge "$C/good" 'started over with a new end date each and 2 restarts'
+
+copy "$C/good" "$C/no-shelf"
+rm "$C/no-shelf/shelf-after-yes.txt"
+refuses 'a run that kept nothing of the shelf after the yes' charm-challenge "$C/no-shelf" \
+  'shelf-after-yes.txt is not in what the scenario kept'
+
+copy "$C/good" "$C/no-days"
+printf 'offset=+0000\n' >"$C/no-days/days.txt"
+refuses 'a run that did not say which days it acted on' charm-challenge "$C/no-days" \
+  'does not say which days this scenario acted on'
+
+copy "$C/good" "$C/other-zone"
+sed -i 's/^offset=.*/offset=+0200/' "$C/other-zone/days.txt"
+refuses 'a machine whose clock is not UTC' charm-challenge "$C/other-zone" \
+  'counts the days of the challenge in UTC'
+
+copy "$C/good" "$C/no-end-date"
+printf 'Charm Challenge started. 21 days to go.\n' >"$C/no-end-date/start-reply.txt"
+refuses 'a start reply that leaves the owner working out the end date' charm-challenge "$C/no-end-date" \
+  'the start reply does not name the end date'
+
+copy "$C/good" "$C/not-21"
+sed -i 's/21 days to go/20 days to go/' "$C/not-21/start-reply.txt"
+refuses 'a start reply that does not start at 21' charm-challenge "$C/not-21" \
+  'and a challenge that starts stands at 21'
+
+copy "$C/good" "$C/no-brief-line"
+printf 'Nothing to say about today.\n' >"$C/no-brief-line/brief-after-start.txt"
+refuses 'a morning brief that is given no line' charm-challenge "$C/no-brief-line" \
+  'is given no line about the Charm Challenge'
+
+copy "$C/good" "$C/brief-twice"
+cat "$C/good/brief-after-start.txt" "$C/good/brief-after-start.txt" >"$C/brief-twice/brief-after-start.txt"
+refuses 'a morning brief that is given the line twice' charm-challenge "$C/brief-twice" \
+  'times, and it is one line'
+
+copy "$C/good" "$C/wrong-day"
+sed -i 's/day 1 of 21/day 2 of 21/' "$C/wrong-day/brief-after-start.txt"
+refuses "a brief's line on the wrong day of the count" charm-challenge "$C/wrong-day" \
+  'is day 1 of 21'
+
+copy "$C/good" "$C/no-question"
+printf 'I have corrected the captions file. No need for the drama.\n' >"$C/no-question/vent-reply.txt"
+refuses 'a vent that was answered without the one question' charm-challenge "$C/no-question" \
+  "ends with \"$CHARM_QUESTION\""
+
+copy "$C/good" "$C/no-at-the-end"
+printf 'That sounded like a slip. %s\nAnything else?\n' "$CHARM_QUESTION" >"$C/no-at-the-end/vent-reply.txt"
+refuses 'a vent whose question is not the end of the reply' charm-challenge "$C/no-at-the-end" \
+  "ends with \"$CHARM_QUESTION\""
+
+copy "$C/good" "$C/no-reset-counted"
+sed -i 's/Restarts: 0./Restarts: 1./' "$C/no-reset-counted/status-after-no.txt"
+refuses 'a "no" that counted a restart anyway' charm-challenge "$C/no-reset-counted" \
+  'and a "no" changes nothing'
+
+copy "$C/good" "$C/no-was-a-reset"
+charm_shelf "$C/no-was-a-reset/shelf-after-no.txt" "$CHARM_START" "$CHARM_START" "$CHARM_START"
+refuses 'a "no" that left a third event on the card' charm-challenge "$C/no-was-a-reset" \
+  'should hold the start and the kept answer'
+
+copy "$C/good" "$C/never-counted-down"
+cp "$C/good/status-after-start.txt" "$C/never-counted-down/status-fourth-day.txt"
+cp "$C/good/brief-after-start.txt" "$C/never-counted-down/brief-fourth-day.txt"
+refuses 'a count that did not go down by itself' charm-challenge "$C/never-counted-down" \
+  'days to go, and it started on'
+
+copy "$C/good" "$C/same-end-date"
+printf '21 days to go, done on %s. Before that it was %s. Restarts: 1.\n' \
+  "$(charm_date "$CHARM_RESET" 21)" "$(charm_date "$CHARM_START" 21)" >"$C/same-end-date/status-after-yes.txt"
+refuses 'a "yes" that kept the end date it had' charm-challenge "$C/same-end-date" \
+  'so it did not start over'
+
+copy "$C/good" "$C/yes-no-restart"
+sed -i 's/Restarts: 1./Restarts: 0./' "$C/yes-no-restart/status-after-yes.txt"
+refuses 'a "yes" that counted no restart' charm-challenge "$C/yes-no-restart" \
+  'restarts after the first "yes"'
+
+copy "$C/good" "$C/slip-not-counted"
+sed -i 's/Restarts: 2./Restarts: 1./' "$C/slip-not-counted/status-after-slip.txt"
+refuses 'a charm slip on another day that counted as the same restart' charm-challenge "$C/slip-not-counted" \
+  'so it should count 2'
+
+copy "$C/good" "$C/not-a-charm-card"
+sed -i 's/"specialist":"charm"/"specialist":"habit"/' "$C/not-a-charm-card/shelf-after-start.txt"
+refuses 'a card on the shelf that is a habit card' charm-challenge "$C/not-a-charm-card" \
+  'does not name the charm specialist'
+
+copy "$C/good" "$C/question-elsewhere"
+grep -v 'Back to 21' "$C/good/chat.txt" >"$C/question-elsewhere/chat.txt"
+refuses 'a question that was never in the conversation the owner answered in' charm-challenge "$C/question-elsewhere" \
+  'so the owner was never asked in the chat they answered in'
+
+# =========================================== 12. no-video-skills-by-default (2.0.0-beta.13, 2)
+# The names the two video scenarios work from are read out of scenario-lib.sh itself, so a case here
+# is about what the scenario makes of a skills folder and never about the list drifting from it.
+video_names() { sed -n "/^VIDEO_SKILLS='/,/'\$/p" "$ROOT/scenarios/scenario-lib.sh" | sed "s/^VIDEO_SKILLS='//;s/'\$//" | grep -v '^$'; }
+keep_names() { sed -n "/^VIDEO_SKILLS_KEEP='/,/'\$/p" "$ROOT/scenarios/scenario-lib.sh" | sed "s/^VIDEO_SKILLS_KEEP='//;s/'\$//" | grep -v '^$'; }
+ORDINARY='keep-a-note
+morning-note
+next-action
+work-item'
+video_good() { # <folder>
+  local folder=$1
+  rm -rf "$folder"
+  mkdir -p "$folder"
+  printf 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0\n' >"$folder/version.txt"
+  video_names >"$folder/video-skills.txt"
+  keep_names >"$folder/keep-skills.txt"
+  { keep_names; printf '%s\n' "$ORDINARY"; } | sort -u >"$folder/skills-after-install.txt"
+  : >"$folder/recipes-in-the-version.txt"
+  {
+    printf 'mc-video 0.4.0: let your mission control finish your videos\n'
+    printf 'ok: 25 recipes in /home/runner/godspeed-v2/skills (your assistant reads that folder)\n'
+    printf 'ok: your caption look starts here: /home/runner/godspeed-v2/video/caption-style.json\n'
+  } >"$folder/setup.log"
+  printf '0\n' >"$folder/setup-code.txt"
+  { keep_names; printf '%s\n' "$ORDINARY"; video_names; } | sort -u >"$folder/skills-after-addon.txt"
+  {
+    printf 'mc-video 0.4.0\n'
+    printf 'ok: Node.js 22.19.0 (22 or newer)\n'
+    printf 'ok: godspeed /home/runner/godspeed-v2\n'
+    printf 'ok: the video-finishing recipe\n'
+    printf 'ok: HyperFrames recipes (v0.8.43)\n'
+    printf 'ok: HyperFrames 0.8.43 itself (mc-video hyperframes <command>)\n'
+    printf 'ok: ffmpeg /usr/bin/ffmpeg\n'
+    printf "ok: the speech model's code\n"
+  } >"$folder/addon-check.txt"
+  {
+    printf 'ok: heard 46 words, language en, on the processor, 11s\n'
+    printf 'ok: 7 captions written to /tmp/clip/sample-vertical.ass (box, 1080x1920, font Archivo Black)\n'
+    printf 'burning the captions into the picture...\n'
+    printf 'ok: /tmp/clip/sample-vertical.captioned.mp4 (1.4 MB, 8.0s; the source was 8.0s)\n'
+    printf 'ok: captions inside the safe zone in 5 of 5 sample frames (/tmp/clip)\n'
+  } >"$folder/captions.log"
+  printf '0\n' >"$folder/captions-code.txt"
+  {
+    printf '[Events]\n'
+    printf 'Dialogue: 0,0:00:00.10,0:00:01.40,box,,0,0,0,,{\\an5}THE FIRST WORDS\n'
+    printf 'Dialogue: 0,0:00:01.40,0:00:02.90,box,,0,0,0,,{\\an5}AND THE NEXT ONES\n'
+  } >"$folder/captions.ass"
+  printf '[\n {"word": "the", "start": 0.1, "end": 0.3},\n {"word": "first", "start": 0.3, "end": 0.6}\n]\n' >"$folder/words.json"
+  {
+    printf 'clip=273446\n'
+    printf 'captioned=1402331\n'
+  } >"$folder/sizes.txt"
+}
+
+section no-video-skills-by-default
+NV=$TMP/no-video
+video_good "$NV/good"
+passes 'a fresh install without them, the add-on bringing them, and the sample clip captioned' \
+  no-video-skills-by-default "$NV/good" 'are in the reader'
+
+copy "$NV/good" "$NV/no-setup-log"
+rm "$NV/no-setup-log/setup.log"
+refuses "a run that kept nothing of the add-on's setup" no-video-skills-by-default "$NV/no-setup-log" \
+  'setup.log is not in what the scenario kept'
+
+copy "$NV/good" "$NV/no-recipe-list"
+rm "$NV/no-recipe-list/recipes-in-the-version.txt"
+refuses 'a run that never read what the version still carries' no-video-skills-by-default "$NV/no-recipe-list" \
+  'recipes-in-the-version.txt is not in what the scenario kept'
+
+copy "$NV/good" "$NV/video-on-install"
+{ cat "$NV/good/skills-after-install.txt"; printf 'hyperframes\nslideshow\n'; } | sort -u \
+  >"$NV/video-on-install/skills-after-install.txt"
+refuses 'a fresh install that still lists video skills' no-video-skills-by-default "$NV/video-on-install" \
+  'of the video skills in the reader'
+
+copy "$NV/good" "$NV/still-a-recipe"
+printf 'slideshow\n' >"$NV/still-a-recipe/recipes-in-the-version.txt"
+refuses 'a version that still carries one of them as its own recipe' no-video-skills-by-default "$NV/still-a-recipe" \
+  'so the next install would copy them'
+
+copy "$NV/good" "$NV/took-the-others"
+grep -v '^web-design$' "$NV/good/skills-after-install.txt" >"$NV/took-the-others/skills-after-install.txt"
+refuses 'an install that lost a skill about web pages too' no-video-skills-by-default "$NV/took-the-others" \
+  'this release takes out the video skills only'
+
+copy "$NV/good" "$NV/setup-stopped"
+printf '1\n' >"$NV/setup-stopped/setup-code.txt"
+printf "not yet: HyperFrames did not install (see above).\n" >>"$NV/setup-stopped/setup.log"
+refuses "an add-on setup that did not finish" no-video-skills-by-default "$NV/setup-stopped" \
+  'so the skills it installs were never installed'
+
+copy "$NV/good" "$NV/one-missing"
+grep -v '^figma$' "$NV/good/skills-after-addon.txt" >"$NV/one-missing/skills-after-addon.txt"
+refuses "a setup that brought all but one" no-video-skills-by-default "$NV/one-missing" \
+  "of the video skills are missing after the video add-on's setup"
+
+copy "$NV/good" "$NV/check-missing"
+printf 'missing: HyperFrames recipes (v0.8.43)\n' >>"$NV/check-missing/addon-check.txt"
+refuses 'an add-on that says something is missing after its own setup' no-video-skills-by-default "$NV/check-missing" \
+  'says something is missing after its own setup'
+
+copy "$NV/good" "$NV/captions-stopped"
+printf '1\n' >"$NV/captions-stopped/captions-code.txt"
+refuses 'a captions run that ended badly' no-video-skills-by-default "$NV/captions-stopped" \
+  'captioning the add-on'
+
+copy "$NV/good" "$NV/no-speech"
+printf '[Events]\n' >"$NV/no-speech/captions.ass"
+refuses 'captions without one line of speech in them' no-video-skills-by-default "$NV/no-speech" \
+  'hold no line of speech at all'
+
+copy "$NV/good" "$NV/another-clip"
+sed -i 's/the source was 8.0s/the source was 21.0s/' "$NV/another-clip/captions.log"
+refuses 'a captioned clip that is not the sample clip' no-video-skills-by-default "$NV/another-clip" \
+  'so it is not the same clip with captions on it'
+
+copy "$NV/good" "$NV/nothing-burned"
+sed -i 's/^captioned=.*/captioned=273446/' "$NV/nothing-burned/sizes.txt"
+refuses 'a captioned clip that is the sample clip byte for byte' no-video-skills-by-default "$NV/nothing-burned" \
+  'so nothing was burned into the picture'
+
+copy "$NV/good" "$NV/no-clip"
+sed -i 's/^captioned=.*/captioned=/' "$NV/no-clip/sizes.txt"
+refuses 'a captions run that wrote no clip at all' no-video-skills-by-default "$NV/no-clip" \
+  'so video-finishing captioned nothing'
+
+# ==================================== 13. update-removes-only-unchanged-skills (2.0.0-beta.13, 3)
+PRODUCT_COMMIT=1111111111111111111111111111111111111111
+ENGINE_COMMIT=2222222222222222222222222222222222222222
+PUBLIC_COMMIT=3333333333333333333333333333333333333333
+EDITED_SUM=4b227777d4dd1fc61c6f884f48641d02b4d121d3fd328cb08b5531fcacdabf8a
+update_trace() { # <file>
+  {
+    printf '+ curl -fsSL https://raw.githubusercontent.com/MichaelZelbel/kit-bootstrap/%s/setup-godspeed.sh\n' "$ENGINE_COMMIT"
+    printf '+ KB_BRANCH=%s\n' "$ENGINE_COMMIT"
+    printf '+ GODSPEED_STARTER_REF=%s\n' "$PRODUCT_COMMIT"
+  } >"$1"
+}
+update_good() { # <folder>
+  local folder=$1
+  rm -rf "$folder"
+  mkdir -p "$folder"
+  video_names >"$folder/video-skills.txt"
+  printf '{"version":"2.0.0-beta.13","productCommit":"%s","kitBootstrap":{"unixEngineCommit":"%s"}}\n' \
+    "$PRODUCT_COMMIT" "$ENGINE_COMMIT" >"$folder/stage.json"
+  printf '%s\n' "$PUBLIC_COMMIT" >"$folder/one-version-before.txt"
+  printf '%s\n' "$PRODUCT_COMMIT" >"$folder/one-version-after.txt"
+  { video_names; keep_names; printf '%s\n' "$ORDINARY"; } | sort -u >"$folder/one-before.txt"
+  { keep_names; printf '%s\n' "$ORDINARY"; printf 'video-hooks\n'; } | sort -u >"$folder/one-after.txt"
+  {
+    printf 'name=video-hooks\n'
+    printf 'sum=%s\n' "$EDITED_SUM"
+    printf 'line=My own note: always ask me before you cut the first three seconds.\n'
+  } >"$folder/one-edited-before.txt"
+  {
+    printf 'there=yes\n'
+    printf 'sum=%s\n' "$EDITED_SUM"
+    printf 'line=yes\n'
+  } >"$folder/one-edited-after.txt"
+  update_trace "$folder/one-trace.log"
+  printf '%s\n' "$PUBLIC_COMMIT" >"$folder/two-version-before.txt"
+  printf '%s\n' "$PRODUCT_COMMIT" >"$folder/two-version-after.txt"
+  cp "$folder/one-before.txt" "$folder/two-before.txt"
+  {
+    printf 'mc-video 0.4.0: let your mission control finish your videos\n'
+    printf 'ok: 1 recipes in /tmp/computer-b/skills (your assistant reads that folder)\n'
+    printf '   Left alone because you already have a recipe with the same name: hyperframes, slideshow\n'
+  } >"$folder/two-setup.log"
+  printf '0\n' >"$folder/two-setup-code.txt"
+  cp "$folder/one-before.txt" "$folder/two-after-addon.txt"
+  cp "$folder/one-before.txt" "$folder/two-after.txt"
+  update_trace "$folder/two-trace.log"
+}
+
+section update-removes-only-unchanged-skills
+UR=$TMP/update-removes
+update_good "$UR/good"
+passes 'the changed one kept, the unchanged ones gone, and all of them kept where the add-on is' \
+  update-removes-only-unchanged-skills "$UR/good" 'is still there with their own line'
+
+copy "$UR/good" "$UR/no-trace"
+rm "$UR/no-trace/two-trace.log"
+refuses 'a run that kept nothing of the second update' update-removes-only-unchanged-skills "$UR/no-trace" \
+  'two-trace.log is not in what the scenario kept'
+
+copy "$UR/good" "$UR/nothing-to-remove"
+{ keep_names; printf '%s\n' "$ORDINARY"; } | sort -u >"$UR/nothing-to-remove/one-before.txt"
+refuses 'a public version that never gave the reader the video skills' \
+  update-removes-only-unchanged-skills "$UR/nothing-to-remove" 'had nothing to watch being removed'
+
+copy "$UR/good" "$UR/never-updated"
+printf '%s\n' "$PUBLIC_COMMIT" >"$UR/never-updated/one-version-after.txt"
+refuses 'a first computer that is not on the stage after all' \
+  update-removes-only-unchanged-skills "$UR/never-updated" 'after the update, and the stage names'
+
+copy "$UR/good" "$UR/another-engine"
+grep -v 'KB_BRANCH=' "$UR/good/one-trace.log" >"$UR/another-engine/one-trace.log"
+refuses "an update that did not run the stage's own kit-bootstrap" \
+  update-removes-only-unchanged-skills "$UR/another-engine" "did not run kit-bootstrap"
+
+copy "$UR/good" "$UR/edited-gone"
+printf 'there=no\nsum=\nline=no\n' >"$UR/edited-gone/one-edited-after.txt"
+refuses 'an update that removed the one the reader had changed' \
+  update-removes-only-unchanged-skills "$UR/edited-gone" 'which the reader had changed by hand'
+
+copy "$UR/good" "$UR/edited-replaced"
+sed -i "s/^sum=.*/sum=0000000000000000000000000000000000000000000000000000000000000000/" \
+  "$UR/edited-replaced/one-edited-after.txt"
+refuses "an update that wrote over the reader's own copy" \
+  update-removes-only-unchanged-skills "$UR/edited-replaced" "is not the reader's own file any more"
+
+copy "$UR/good" "$UR/line-gone"
+sed -i 's/^line=yes/line=no/' "$UR/line-gone/one-edited-after.txt"
+refuses 'an update that left the file and lost the line in it' \
+  update-removes-only-unchanged-skills "$UR/line-gone" 'is not in it after the update'
+
+copy "$UR/good" "$UR/unchanged-stayed"
+{ cat "$UR/good/one-after.txt"; printf 'slideshow\nfigma\n'; } | sort -u >"$UR/unchanged-stayed/one-after.txt"
+refuses 'an update that left the unchanged copies behind' \
+  update-removes-only-unchanged-skills "$UR/unchanged-stayed" 'unchanged video skills are still in the reader'
+
+copy "$UR/good" "$UR/addon-setup-failed"
+printf '1\n' >"$UR/addon-setup-failed/two-setup-code.txt"
+refuses "a second computer whose add-on setup did not finish" \
+  update-removes-only-unchanged-skills "$UR/addon-setup-failed" 'so there was no install with the add-on to update'
+
+copy "$UR/good" "$UR/addon-lost-them"
+grep -v '^figma$' "$UR/good/two-after.txt" >"$UR/addon-lost-them/two-after.txt"
+refuses 'an install with the add-on that lost one all the same' \
+  update-removes-only-unchanged-skills "$UR/addon-lost-them" 'gone from the install that has the video add-on'
+
 # ============================================================ every one of them, the same shape
 section 'every script'
 for file in scenario-lib.sh settings-on-install.sh night-tidy.sh voice.sh update-keeps-everything.sh \
   reminder-closed-elsewhere.sh reminders-move-keeps-everything.sh two-machines-move-at-once.sh \
   late-reminder-file.sh closed-offline-on-both.sh reminder-from-settings.sh \
+  charm-challenge.sh no-video-skills-by-default.sh update-removes-only-unchanged-skills.sh \
   test-scenarios.sh; do
   if bash -n "$ROOT/scenarios/$file" 2>/dev/null; then
     ok "bash reads scenarios/$file"
@@ -1129,7 +1525,8 @@ for file in scenario-lib.sh settings-on-install.sh night-tidy.sh voice.sh update
 done
 for scenario in settings-on-install night-tidy voice update-keeps-everything \
   reminder-closed-elsewhere reminders-move-keeps-everything two-machines-move-at-once \
-  late-reminder-file closed-offline-on-both reminder-from-settings; do
+  late-reminder-file closed-offline-on-both reminder-from-settings charm-challenge \
+  no-video-skills-by-default update-removes-only-unchanged-skills; do
   refuses "$scenario on a folder that is not there" "$scenario" "$TMP/no-such-folder" \
     "there is nothing at"
   run "$scenario"
