@@ -798,7 +798,7 @@ refuses "a second start that changed a file" reminders-move-keeps-everything "$M
 
 # ============================================== 7. two-machines-move-at-once (2.0.0-beta.12, 3)
 two_machines_good() { # <folder>
-  local folder=$1 computer
+  local folder=$1 computer slug
   rm -rf "$folder"
   mkdir -p "$folder"
   printf 'File the VAT return\nBuy a present for Anna\nSend the tax papers\nBook the dentist\nPay the quarterly rates\nChange the insurance\n' \
@@ -815,6 +815,13 @@ two_machines_good() { # <folder>
     } | sort >"$folder/$computer-closings.txt"
     printf 'OPEN     deadline-only\nCLOSED   repeating-windows  (Timeline/2026-10-30 Done: Pay the quarterly rates)\n' \
       >"$folder/$computer-state.txt"
+    # The old files that computer held before the update: one for every reminder the version before
+    # the move wrote as a file in due/ (scenario-lib.sh OLD_SET), which is what it takes in.
+    : >"$folder/$computer-old-files.txt"
+    for slug in $OLD_SET_SLUGS; do
+      printf 'due/%s.md\n' "$slug" >>"$folder/$computer-old-files.txt"
+    done
+    sort -o "$folder/$computer-old-files.txt" "$folder/$computer-old-files.txt"
   done
 }
 
@@ -826,6 +833,20 @@ passes "two computers that moved the same reminders at once and hold every one o
 
 refuses "a run that kept nothing at all" two-machines-move-at-once "$W/never-written" \
   "there is nothing at"
+
+# A START THAT HAD ALREADY MOVED, which is what this scenario did until #120: on the public version
+# `due add` writes a page in the notebook and no file in due/ at all, so the only file left there is
+# the hand-written one the scenario writes itself, and neither computer has anything to take in.
+copy "$W/good" "$W/already-moved"
+printf 'due/does-not-read.md\n' >"$W/already-moved/a-old-files.txt"
+cp "$W/already-moved/a-old-files.txt" "$W/already-moved/b-old-files.txt"
+refuses "two computers that started from a version which had already moved the reminders" \
+  two-machines-move-at-once "$W/already-moved" "did not start on a version before the move"
+
+copy "$W/good" "$W/second-never-got-them"
+printf 'due/does-not-read.md\n' >"$W/second-never-got-them/b-old-files.txt"
+refuses "a second computer that never got the old files through the sync" \
+  two-machines-move-at-once "$W/second-never-got-them" "computer b held no old reminder file"
 
 copy "$W/good" "$W/two-versions-before"
 printf '%s\n' "$NEW_COMMIT" >"$W/two-versions-before/b-version-before"
