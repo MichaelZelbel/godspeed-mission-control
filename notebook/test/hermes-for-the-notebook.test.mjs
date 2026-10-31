@@ -177,9 +177,9 @@ nodeTest('a failed AI request says the provider status and hides keys',()=>{
   assertStrict.equal(failureMessage('boom'),'The AI request failed. Its private runtime diagnostics are retained for investigation.');
 });
 nodeTest('credential-shaped parts of a provider line never reach the sentence',()=>{
-  for(const line of ['HTTP 401 Authorization: Basic dXNlcjpwYXNzd29yZA==','HTTP 400 api_key=abc123 failed','Error code: 401 {"api_key":"zzz999","message":"bad"}','HTTP 403 x-api-key: secretvalue1']){
+  for(const line of ['HTTP 401 Authorization: Basic dXNlcjpwYXNzd29yZA==','HTTP 400 api_key=abc123 failed','Error code: 401 {"api_key":"zzz999","message":"bad"}','HTTP 403 x-api-key: secretvalue1','HTTP 401: access_token=abc.def.ghi']){
     const said=failureMessage(line);
-    assertStrict.doesNotMatch(said,/dXNlcjpwYXNzd29yZA|abc123|zzz999|secretvalue1/);
+    assertStrict.doesNotMatch(said,/dXNlcjpwYXNzd29yZA|abc123|zzz999|secretvalue1|abc.def.ghi/);
     assertStrict.match(said,/^The AI request failed \(/);
   }
 });
