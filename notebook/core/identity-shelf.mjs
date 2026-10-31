@@ -26,9 +26,9 @@ import {normalized} from './packaged-skills.mjs';
 //   skill:x  skills/x/SKILL.md; a skill the package keeps up to date stays the person's once they
 //            change it (packaged-skills.mjs keeps an edited skill and offers the update for review)
 //
-// The page numbers rules, profile pages and skills (overview), and the chat on the page is given
-// the same numbers (chatContext), so "change rule 13" means the rule the page shows as 13, and the
-// rules read before every job carry the numbers AGENTS.md gives them.
+// The page numbers rules, the files about the owner and skills (overview), and the chat on the
+// page is given the same numbers (chatContext), so "change rule 13" means the rule the page shows
+// as 13, and the rules read before every job carry the numbers AGENTS.md gives them.
 //
 // What the page shows must save: a field the person did not change is never refused for its
 // length or form, and never written (rulePlan).
@@ -148,7 +148,7 @@ export class IdentityShelf{
     const t=String(target??'');
     if(t==='who')return {kind:'who',target:t,file:MANUAL,label:'who it is'};
     if(t==='extra')return {kind:'extra',target:t,file:EXTRA,label:'the extra instructions',missingOk:true};
-    const m=/^(rule|profile|skill):(.+)$/.exec(t);if(!m)refuse('Choose a part of this page: who it is, the extra instructions, a rule, a profile page or a skill.','UNKNOWN_TARGET');
+    const m=/^(rule|profile|skill):(.+)$/.exec(t);if(!m)refuse('Choose a part of this page: who it is, the extra instructions, a rule, something it knows about you or a skill.','UNKNOWN_TARGET');
     const [,kind,name]=m;
     if(name.includes('..')||windowsInvalid(name)||!(kind==='rule'?SLUG:NAME).test(name)||kind==='rule'&&['readme','memory'].includes(name.toLowerCase()))refuse('That is not one of the files this page shows.','UNKNOWN_TARGET');
     const file=kind==='rule'?'rules/'+name+'.md':kind==='profile'?'profile/'+name+'.md':'skills/'+name+'/SKILL.md';
@@ -255,8 +255,8 @@ export class IdentityShelf{
   }
   // Everything the page shows, numbered. Rules come in the order the page lists them: first the
   // ones read before every job, with the numbers AGENTS.md gives them (ruleNumbers), then the rest
-  // grouped by where they are read (placeOf), numbered on. Profile pages and skills are numbered
-  // 1, 2, 3 in their own lists.
+  // grouped by where they are read (placeOf), numbered on. The files about the owner and the
+  // skills are numbered 1, 2, 3 in their own lists.
   overview(){
     const manual=this.readText(MANUAL),waiting=this.waitingReviews();
     const persona=manual===null?null:personaOf(manual);
@@ -287,8 +287,9 @@ export class IdentityShelf{
     for(const {slug} of placed)out.set(slug,++last);
     return out;
   }
-  // A part named the way the page names it: 'rule 29, "Tickets arrive readable"', 'profile page 2,
-  // "About me"', 'skill 4, "Keep a note"'; without a number when it has none (a rule removed).
+  // A part named the way the page names it: 'rule 29, "Tickets arrive readable"', 'skill 4, "Keep
+  // a note"', and a file about the owner by its own title alone, '"My projects and priorities"' (a
+  // page is in a book or a magazine, 26 October 2026); a rule removed has no number left.
   // Every version's message says this, never a file name (16 October 2026: 'Changed the rule
   // "tickets-reach-fictional-alex-as-formatted-markdown"'). Messages written before stay as they were.
   pageName(t){
@@ -301,8 +302,8 @@ export class IdentityShelf{
       if(t.kind==='profile'||t.kind==='skill'){
         const names=t.kind==='profile'?this.profileNames():this.skillNames(),i=names.indexOf(t.name),text=this.readText(t.file);
         const title=t.kind==='profile'?oneLine((lf(splitFront(text||'').body).match(/^#\s+(.+)$/m)||[])[1]||inWords(t.name)):inWords(readFront(splitFront(text||'').front).name||t.name);
-        const what=t.kind==='profile'?'profile page':'skill';
-        return i>=0?what+' '+(i+1)+', "'+title+'"':'the '+what+' "'+title+'"';
+        if(t.kind==='profile')return '"'+title+'"';
+        return i>=0?'skill '+(i+1)+', "'+title+'"':'the skill "'+title+'"';
       }
     }catch{}
     return t.label;
@@ -316,12 +317,12 @@ export class IdentityShelf{
   chatContext({label,detail=false}={}){
     const o=this.overview(),name=oneLine(label).slice(0,40),always=o.rules.filter(r=>r.always),rest=o.rules.filter(r=>!r.always);
     const said=r=>r.line?'. '+(r.always||r.stated?KIND_WORDS[r.group]+': ':'')+r.line:'';
-    const lines=['The owner has the notebook page '+(name?'"'+name+'" ':'')+'open that shows who you are, your rules, what you know about them and your skills, numbered as below. When they name one by its number ("rule 13", "profile page 2", "skill 4"), they mean the one with that number here. Change these only with the identity_files tool, as that page does: read the part first, then change it with its expected_hash and their words. Never change these files with file tools.',
+    const lines=['The owner has the notebook page '+(name?'"'+name+'" ':'')+'open that shows who you are, your rules, what you know about them and your skills, numbered as below. When they name one by its number ("rule 13", "skill 4"), they mean the one with that number here. Change these only with the identity_files tool, as that page does: read the part first, then change it with its expected_hash and their words. Never change these files with file tools.',
       'Who you are: target "who".'+(detail&&o.who.text?' Now: "'+oneLine(o.who.text)+'"':''),
       'Extra instructions, read right after who you are: target "extra".'+(detail?o.extra.text?' Now: "'+oneLine(o.extra.text)+'"':' None yet.':'')];
     if(always.length)lines.push('Rules read before every job, numbered as in AGENTS.md. Each sentence follows its kind: "Must:" is something you always do, "Never:" something you must never do (AGENTS.md lists it under "I must never"), "How it works:" how things work here. Quote a rule with its kind, never its sentence alone: a "Never" sentence alone says the opposite.',...always.map(r=>r.n+'. '+r.title+' ('+r.target+')'+said(r)));
     if(rest.length)lines.push('Rules read only when their subject comes up:',...rest.map(r=>r.n+'. '+r.title+' ('+r.target+'; '+r.place.label.toLowerCase()+')'+said(r)));
-    if(o.profile.length)lines.push('Profile pages:',...o.profile.map(p=>p.n+'. '+p.title+' ('+p.target+')'));
+    if(o.profile.length)lines.push('What you know about them:',...o.profile.map(p=>p.n+'. '+p.title+' ('+p.target+')'));
     if(o.skills.length)lines.push('Skills:',...o.skills.map(k=>k.n+'. '+k.title+' ('+k.target+')'));
     return lines.join('\n');
   }

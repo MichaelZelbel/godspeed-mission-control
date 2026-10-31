@@ -43,8 +43,10 @@ const versions = [
   { id: "c2", at: "2026-10-15T08:00:00Z", current: true, removed: false, by: "you, on this page", message: "changed who it is", text: who },
   { id: "c1", at: "2026-10-14T08:00:00Z", current: false, removed: false, by: "kept by your notebook", message: "kept the version from before the next change", text: "You are Godspeed." },
 ];
-// A rule as an owner's own files hold it: its name from the file, a long summary nobody sees.
+// A file about the owner as the server gives it, and a rule as an owner's own files hold it: its
+// name from the file, a long summary nobody sees.
 const ruleItem = { target: "rule:never-spend", kind: "rule", file: "rules/never-spend.md", label: "the rule", state: "ok", hash: "h-rule", fields: { slug: "never-spend", title: "Never spend my money", line: "Buy anything for me.", group: "never", always: true, where: "always", story: "Story." } };
+const pageItem = { target: "profile:about-me", kind: "profile", file: "profile/about-me.md", label: "profile/about-me.md", state: "ok", hash: "h-page", fields: { text: "# About me\n\nI grow tomatoes.", kept_details: true } };
 let calls: { route: string; body?: any }[] = [];
 let state: ReturnType<typeof overview>;
 let chatAnswer: Record<string, unknown> = { reply: "Done.", identity_changed: true };
@@ -58,6 +60,7 @@ function serve() {
     if (route.startsWith("/api/identity/item")) {
       const target = decodeURIComponent(route.split("target=")[1]);
       if (target.startsWith("rule:")) return json(ruleItem);
+      if (target.startsWith("profile:")) return json(pageItem);
       if (target === "extra") return json({ target: "extra", kind: "extra", file: "assistant/extra-instructions.md", label: "the extra instructions", state: state.extra.text ? "ok" : "missing", text: state.extra.text, hash: "h-extra", soul: state.soul });
       return json({ target: "who", kind: "who", file: "AGENTS.md", label: "who it is", state: "ok", text: who, hash: "h-who", manual: state.manual, soul: state.soul });
     }
@@ -107,9 +110,36 @@ describe("Godspeed's brain", () => {
     expect(await screen.findByRole("heading", { name: "For the companies (1)" })).toBeVisible();
     expect(screen.getByRole("heading", { name: "For the skill daily brief (1)" })).toBeVisible();
     expect(within(screen.getByRole("button", { name: /Founder only/ })).getByText("3")).toBeVisible();
-    // Profile pages and skills are numbered too.
+    // What it knows about you, and the skills, are numbered too.
     expect(within(screen.getByRole("button", { name: /About me/ })).getByText("1")).toBeVisible();
     expect(within(screen.getByRole("button", { name: /Keep a note/ })).getByText("1")).toBeVisible();
+  });
+
+  it("names each file about you by its own title, numbered, and never calls one a page", async () => {
+    open();
+    // The section says what they are, instead of "Pages about you...".
+    expect(await screen.findByText(/What it knows about you, your work and your voice\./)).toBeVisible();
+    const file = await screen.findByRole("button", { name: /About me/ });
+    expect(within(file).getByText("1")).toBeVisible();
+    expect(within(file).getByText("About me")).toBeVisible();
+    // The screen itself is still a page.
+    expect(screen.getByRole("navigation", { name: "Parts of this page" })).toBeVisible();
+    // Open it: its own title, its number, and the file it is kept in.
+    fireEvent.click(file);
+    expect(await screen.findByRole("heading", { name: "About me" })).toBeVisible();
+    expect(screen.getByText(/^1\. Kept in/)).toBeVisible();
+    expect(screen.getByText("profile/about-me.md")).toBeVisible();
+    // Nowhere a page, in the tiles or in the editor (26 October 2026: "a page is in a book or a
+    // magazine").
+    expect(document.body.textContent).not.toMatch(/profile page/i);
+    expect(document.body.textContent).not.toMatch(/pages about/i);
+  });
+
+  it("says what is missing when it knows nothing about you yet", async () => {
+    state = overview({ profile: [] });
+    open();
+    expect(await screen.findByText("Nothing about you yet.")).toBeVisible();
+    expect(document.body.textContent).not.toMatch(/no pages yet/i);
   });
 
   it("saves a rule with only \"Read before every job\" switched, and holds only a changed name to a few words", async () => {
