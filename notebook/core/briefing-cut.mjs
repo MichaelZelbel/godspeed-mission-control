@@ -23,7 +23,7 @@ export const describeRefusal=r=>r.rule==='WRITING-STYLE'?'the plain writing styl
 // The draft without the sentences that carry a refusal. `protectedLines` are the lines Godspeed
 // requires word for word (already checked when they were made); they stay as they are.
 // Returns {text, cut:[{sentence,refusals}]}; blank lines are kept once, lines left empty go.
-export function cutRefused(draft,voice,protectedLines){
+function cutOnce(draft,voice,protectedLines){
  const keep=new Set(protectedLines.map(l=>l.trim()).filter(Boolean)),cut=[];
  const firstReal=draft.split(/\r?\n/).findIndex(l=>l.trim());
  const kept=draft.split(/\r?\n/).map((line,index)=>{
@@ -41,4 +41,16 @@ export function cutRefused(draft,voice,protectedLines){
  for(const line of kept){if(!line.trim()&&(!lines.length||!lines.at(-1).trim()))continue;lines.push(line);}
  while(lines.length&&!lines.at(-1).trim())lines.pop();
  return {text:lines.join('\n'),cut};
+}
+
+// A banned opener refuses whatever sentence is first once the others are gone, so a pass that cuts
+// can make a later sentence the opener: passes go on until one cuts nothing.
+export function cutRefused(draft,voice,protectedLines){
+ let text=draft;const cut=[];
+ for(let round=0;round<50;round++){
+  const pass=cutOnce(text,voice,protectedLines);
+  cut.push(...pass.cut);text=pass.text;
+  if(!pass.cut.length)break;
+ }
+ return {text,cut};
 }

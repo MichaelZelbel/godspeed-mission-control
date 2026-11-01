@@ -66,3 +66,12 @@ test('a draft where every sentence breaks a rule sends the short fallback and op
  assert.equal(items[0].note_id,saved.id);assert.match(items[0].title,/morning briefing/);
  assert.ok(items[0].refusals.some(e=>/voice check failed: realm/.test(e)));
 });
+
+test('a sentence that becomes the first one after a cut is judged as an opener too',async()=>{
+ const {store,query}=fixture(['BANNED-WORD: realm','BANNED-OPENER: Please']);let writes=0;
+ const provider=async input=>{const v=verifies(input);if(v)return v;writes++;return 'Your realm is open today. Please review the fictional list today. A useful closing remains.';};
+ const result=await run(provider,query,store,'brief-new-opener');
+ const saved=store.get('notes',result.record_id);
+ assert.equal(writes,2);assert.equal(saved.content,'A useful closing remains.');assert.equal(saved.fallback,undefined);
+ assert.equal(repairs(query).length,0);
+});
