@@ -199,6 +199,63 @@ need_node() {
   NODE=$(node_bin) || fail "node is not on this machine and the install carries none, so nothing the scenario kept can be read"
 }
 
+# ------------------------------------------------- the diagnosis of a failed AI request (issue #127)
+# The notebook tells the reader only that the AI request failed, and keeps the diagnosis, with the
+# keys taken out, in .godspeed/ai-failures.log (notebook/core/ai-failures.mjs); the assistant keeps
+# its own in logs/errors.log of its home. On a throwaway machine both are gone with it, and on 31
+# October 2026 the Charm Challenge failed twice with nothing to read. A scenario that meets a failed
+# AI request calls this before it says FAIL, and the job log then holds what the machine knew.
+# Whatever it prints passes through a second taking-out of keys here, with the scenario's own key
+# removed literally, so a diagnosis that carried the key would still not reach the log.
+KEPT_DIAGNOSIS_READER='
+const fs=require("fs");
+const secrets=[process.env.GODSPEED_SCENARIO_AI_KEY].filter(k=>k&&k.length>=6);
+const scrub=line=>{
+ for(const s of secrets)line=line.split(s).join("***");
+ return line
+  .replace(/[\w.-]*(?:authorization|api[_-]?key|token|secret|password|passwd)[\w.-]*["'"'"']?\s*[:=]\s*["'"'"']?(?:(?:Bearer|Basic|Token)\s+)?[^\s"'"'"',;&}]+/gi,"credential: ***")
+  .replace(/\b(?:Bearer|Basic)\s+\S+/gi,"***")
+  .replace(/\b(?:sk|or|key|tok)[-_][A-Za-z0-9_-]{8,}/gi,"***");
+};
+const [file,most]=[process.argv[1],Number(process.argv[2])||40];
+let text;try{text=fs.readFileSync(file,"utf8");}catch{process.exit(3);}
+const lines=text.split(/\r?\n/).filter(Boolean).slice(-most);
+if(!lines.length)process.exit(3);
+for(const line of lines){
+ let shown=line;
+ try{const e=JSON.parse(line);shown=[e.at||"",e.said||"","exit "+e.exit_code,"model "+e.model,"conversation "+e.conversation].join(" | ")+"\n"+String(e.diagnosis||"");}catch{}
+ process.stdout.write(shown.split("\n").map(l=>"  "+scrub(l)).join("\n")+"\n");
+}
+'
+print_kept_diagnosis() { # [state folder] [assistant home]
+  local state=${1:-${STATE:-}} home=${2:-${HERMES:-}} node=${NODE:-} shown=no
+  [ -n "$node" ] || node=$(command -v node 2>/dev/null || true)
+  if [ -z "$node" ]; then
+    say "No diagnosis printed: node is not on this machine, and a diagnosis is not printed without taking the keys out"
+    return 0
+  fi
+  if [ -z "$home" ] && [ -n "$state" ] && [ -f "$state/assistant.json" ]; then
+    home=$("$node" -e "$JSON_READER" "$state/assistant.json" home 2>/dev/null || true)
+  fi
+  if [ -n "$state" ] && [ -s "$state/ai-failures.log" ]; then
+    say "THE NOTEBOOK'S KEPT DIAGNOSIS OF ITS FAILED AI REQUESTS ($state/ai-failures.log, newest last, keys taken out):"
+    "$node" -e "$KEPT_DIAGNOSIS_READER" "$state/ai-failures.log" 5 >&2 && shown=yes
+  fi
+  if [ -n "$home" ] && [ -s "$home/logs/errors.log" ]; then
+    say "THE ASSISTANT'S OWN ERROR LOG ($home/logs/errors.log, its last 40 lines, keys taken out):"
+    tail -n 40 "$home/logs/errors.log" | "$node" -e '
+const fs=require("fs");const secrets=[process.env.GODSPEED_SCENARIO_AI_KEY].filter(k=>k&&k.length>=6);
+for(let line of fs.readFileSync(0,"utf8").split(/\r?\n/)){
+ if(!line)continue;
+ for(const s of secrets)line=line.split(s).join("***");
+ line=line.replace(/[\w.-]*(?:authorization|api[_-]?key|token|secret|password|passwd)[\w.-]*["'"'"']?\s*[:=]\s*["'"'"']?(?:(?:Bearer|Basic|Token)\s+)?[^\s"'"'"',;&}]+/gi,"credential: ***").replace(/\b(?:Bearer|Basic)\s+\S+/gi,"***").replace(/\b(?:sk|or|key|tok)[-_][A-Za-z0-9_-]{8,}/gi,"***");
+ process.stdout.write("  "+line.slice(0,600)+"\n");
+}' >&2 && shown=yes
+  fi
+  [ "$shown" = yes ] || say "No kept diagnosis was found (neither $state/ai-failures.log nor the assistant's logs/errors.log has anything)"
+  return 0
+}
+
 # ------------------------------------------------------------------- reading what was kept
 # ONE KEY OF A SETTINGS FILE, read by a reader of this script's own. The assistant's config.yaml is
 # the block layout the notebook and the assistant both write (two spaces a level, one key a line),

@@ -37,7 +37,7 @@ test('Hermes\' waiting lines never reach a chat reply, and lines like them that 
 });
 test('Hermes failures distinguish context, usage and sign-in without exposing diagnostics',()=>{
  const secret='synthetic-private-credential';
- for(const [diagnostic,expected] of [['Context length exceeded: 413,274 tokens. Cannot compress further.',/context limit/],['rate_limit_exceeded',/usage limit/],['AuthenticationError: token expired',/needs sign-in/],['unclassified process failure',/diagnostics/]]){
+ for(const [diagnostic,expected] of [['Context length exceeded: 413,274 tokens. Cannot compress further.',/context limit/],['rate_limit_exceeded',/usage limit/],['AuthenticationError: token expired',/needs sign-in/],['unclassified process failure',/Check the AI connection in Settings, then try again/]]){
   const message=hermesFailureMessage(diagnostic+' '+secret);assert.match(message,expected);assert.ok(!message.includes(secret));assert.ok(!message.includes('413,274'));
  }
  assert.match(hermesFailureMessage('Context length exceeded; AuthenticationError'),/context limit/);
