@@ -1706,7 +1706,7 @@ kd_run() { # <state> <home>
 }
 KD_OUT=$(kd_run "$KD/state" "$KD/home")
 case $KD_OUT in
-  *'Resume retains gateway session policy'*) ok "a prepared failure prints the notebook's kept diagnosis" ;;
+  *'Resume retains gateway session policy'*) ok "a prepared AI problem prints the notebook's kept diagnosis" ;;
   *) bad "the notebook's kept diagnosis was not printed ($KD_OUT)" ;;
 esac
 case $KD_OUT in
@@ -1722,7 +1722,7 @@ case $KD_OUT in
   *) ok "and no bearer credential" ;;
 esac
 case $KD_OUT in
-  *'rc=0'*) ok "printing it never fails the scenario by itself (it leaves that to fail)" ;;
+  *'rc=0'*) ok "printing it ends well by itself (the scenario still says its own verdict)" ;;
   *) bad "printing the diagnosis ended with something other than 0 ($KD_OUT)" ;;
 esac
 KD_NONE=$(kd_run "$KD/empty-state" "$KD/empty-home")
@@ -1740,9 +1740,9 @@ case $KD_HOME in
 esac
 # The Charm Challenge calls it before it says FAIL, in both places where the AI can fail it.
 if [ "$(grep -c '^ *print_kept_diagnosis$' "$ROOT/scenarios/charm-challenge.sh")" -ge 2 ]; then
-  ok "charm-challenge.sh prints the kept diagnosis when Settings or the chat meets a failure"
+  ok "charm-challenge.sh prints the kept diagnosis when Settings or the chat meets a broken AI request"
 else
-  bad "charm-challenge.sh does not print the kept diagnosis at both of its AI failures"
+  bad "charm-challenge.sh does not print the kept diagnosis at both places its AI can break"
 fi
 
 # ============================================================ every one of them, the same shape
