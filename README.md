@@ -26,6 +26,16 @@ A new release comes out most weeks. I write about what my AI does for me and wha
 
 Version 2 is the current edition. The install lines on this page install the current public version, which is the branch `beta` of this repository; `main` is where the work goes on, and a change merged into it reaches nobody until the next version is released. The installers set up a new, separate folder. They do not move an existing version 1 Godspeed folder or your Menerio account.
 
+## New in 2.0.0-beta.14
+
+Your morning briefing arrives even when one sentence breaks your writing rules, and the chat tells you what to do when your AI does not answer.
+
+- **One sentence no longer costs you the morning briefing.** When a sentence breaks a writing rule of yours in `profile/voice.md`, Godspeed cuts that sentence and sends the rest. A line it has to carry word for word, such as your Charm Challenge line, is left out when it breaks one of your rules, and a repair item tells you which line and why. Until now the whole briefing was dropped that morning.
+- **A failed chat request says what to do next.** "The AI request failed" now gives your AI company's own reason when it sent one, and tells you to check the AI connection in **Settings** and try again. When the AI you connected in Settings was not set up for your assistant, because **Use it for the daily routines and the chat too** was unticked, the chat says so and how to fix it, instead of failing on your first message.
+- **The timeline opens when a contact has no name.** A person saved without a name made the timeline show its error screen. Such a person now shows as "Unnamed person" and can still be picked, and the record stays as it was.
+
+Updating keeps your folder, notes and settings.
+
 ## New in 2.0.0-beta.13
 
 Godspeed keeps your 21-day Charm Challenge, and a fresh install hands your assistant a shorter list of skills.
