@@ -125,7 +125,7 @@ it (`assistant_keeps_a_conversation`).
   and `install_the_line_of_into` for one named version, the last one before the reminders moved into
   the notebook among them: `BEFORE_THE_MOVE`), the two stand-ins for the private GitHub repository -
   `stand_in_github`, which tells Git that the GitHub address leads to a bare repository here, and
-  `stand_in_github_over_ssh` for a mission control that is its own repository, where the product
+  `stand_in_github_over_ssh` (an empty repository; the mission control carries the ignore lines itself) for a mission control that is its own repository, where the product
   reads the address back out of that repository and so has to be given a GitHub one - the `git` that
   writes down every call with the step it was made in (`git_calls_shim`), the readers of the
   notebook's reminder pages and closing moments, of the review queue a sync difference waits in

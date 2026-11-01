@@ -418,6 +418,20 @@ assistant-state/
   return $rc
 }
 
+# THE IGNORE LINES A READER'S OWN MISSION CONTROL REPOSITORY HAS, before it joins with
+# `godspeed sync folder notebook`: that command runs `git check-ignore` in the mission control's own
+# folder and refuses one that does not ignore NOTEBOOK.md and assistant-state/ (issue #125). The
+# lines are added to the folder's .gitignore and committed, as a reader does after the refusal.
+owner_ignores_what_the_notebook_keeps() { # <mission control folder>
+  local root=$1
+  printf 'NOTEBOOK.md\nassistant-state/\n' >>"$root/.gitignore" ||
+    fail "the ignore file of the mission control in $root could not be written"
+  git -C "$root" add .gitignore >&2 || fail "the ignore file of the mission control in $root could not be added"
+  git -C "$root" -c user.name="Godspeed Scenario" -c user.email="scenario@localhost" -c commit.gpgsign=false \
+    commit -q -m "Ignore what the notebook keeps on each machine" >&2 ||
+    fail "the ignore file of the mission control in $root could not be committed"
+}
+
 # THE PRIVATE GITHUB REPOSITORY, STOOD IN FOR BY ONE BARE REPOSITORY ON THIS MACHINE, the way
 # notebook/test/installer-join-sync.test.mjs does it: Git is told that the GitHub address leads to
 # the folder, for this process and every program it starts. The product still checks the address is
@@ -460,9 +474,9 @@ stand_in_github_over_ssh() { # <folder>
   mkdir -p "$folder" || fail "the folder for the stand-in repository ($folder) could not be made"
   git init -q --bare --initial-branch=main "$folder/$name.git" >&2 ||
     fail "the bare repository standing in for the private GitHub repository could not be made"
-  # The ignore file a reader's own repository has: `godspeed sync folder notebook` refuses one that
-  # does not list NOTEBOOK.md and assistant-state/ (issue #125).
-  stand_in_ignore_file "$folder/$name.git" || fail "the stand-in repository could not be given its ignore file"
+  # No ignore file in this one: the repository stays empty, and the ignore lines go into the mission
+  # control's own repository (owner_ignores_what_the_notebook_keeps), because that is the repository
+  # `godspeed sync folder notebook` checks (issue #125).
   # A stranger's computer has a Git identity of its own; a commit without one fails.
   git config --global user.name "Godspeed Scenario" || fail "this machine's Git could not be given a name"
   git config --global user.email "scenario@localhost" || fail "this machine's Git could not be given an address"

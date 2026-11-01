@@ -98,6 +98,7 @@ one_pair() { # <mode> <A root> <A port> <B root> <B port> <stand-in folder>
     # says the whole of it), and what it read back is kept, so the judging part can see it.
     stand_in_github_over_ssh "$bare"
     address=$STAND_IN_ADDRESS
+    owner_ignores_what_the_notebook_keeps "$a"
     git -C "$a" remote add origin "$address" || fail "the mission control in $a could not be given its copy on GitHub"
     notebook_on "$a" sync folder notebook >"$EVIDENCE/$mode-join.json" ||
       fail "godspeed sync folder notebook was refused on $a, so there is no mission control carrying its own notebook (what it said is in the step log)"

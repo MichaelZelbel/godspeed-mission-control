@@ -1675,7 +1675,8 @@ refuses 'an install with the add-on that lost one all the same' \
 section stand-in-ignore-file
 SI_HOME=$TMP/stand-in-home
 mkdir -p "$SI_HOME"
-for shape in stand_in_github stand_in_github_over_ssh; do
+shape=stand_in_github
+{
   SI_OUT=$(HOME="$SI_HOME" GIT_CONFIG_GLOBAL="$SI_HOME/gitconfig" SCENARIO=stand-in-test GODSPEED_SCENARIO_WORK="$TMP/si-work" bash -c '
     . "$1/scenarios/scenario-lib.sh"; '"$shape"' "$2/'"$shape"'" >/dev/null 2>&1; echo done' _ "$ROOT" "$TMP" 2>/dev/null)
   bare=$(ls -d "$TMP/$shape"/*.git 2>/dev/null | head -1)
@@ -1685,7 +1686,35 @@ for shape in stand_in_github stand_in_github_over_ssh; do
   else
     bad "$shape made a repository without the ignore file the product asks for ($SI_OUT)"
   fi
-done
+}
+# The folder-mode join checks the mission control's own repository, the way useFolderRepository does
+# (git check-ignore --no-index): refused without the two lines, accepted with them.
+ignores_both() { # <repository>
+  git -C "$1" check-ignore -q --no-index NOTEBOOK.md && git -C "$1" check-ignore -q --no-index assistant-state/probe/x.json
+}
+SI_MC=$TMP/si-mission-control
+git init -q -b main "$SI_MC"
+printf '/.godspeed/\n' >"$SI_MC/.gitignore"
+if ignores_both "$SI_MC"; then
+  bad "a mission control without the two ignore lines was taken"
+else
+  ok "a mission control whose ignore file lacks NOTEBOOK.md and assistant-state/ is refused"
+fi
+SI_OUT=$(HOME="$SI_HOME" GIT_CONFIG_GLOBAL="$SI_HOME/gitconfig" SCENARIO=stand-in-test bash -c '
+  . "$1/scenarios/scenario-lib.sh"; owner_ignores_what_the_notebook_keeps "$2"' _ "$ROOT" "$SI_MC" 2>&1)
+if ignores_both "$SI_MC" && [ -z "$(git -C "$SI_MC" status --porcelain)" ]; then
+  ok "owner_ignores_what_the_notebook_keeps makes a committed ignore file the product accepts"
+else
+  bad "a mission control given the ignore lines is still refused or left them uncommitted ($SI_OUT)"
+fi
+SI_SSH=$(HOME="$SI_HOME" GIT_CONFIG_GLOBAL="$SI_HOME/gitconfig" SCENARIO=stand-in-test GODSPEED_SCENARIO_WORK="$TMP/si-work" bash -c '
+  . "$1/scenarios/scenario-lib.sh"; stand_in_github_over_ssh "$2/ssh" >/dev/null 2>&1; echo done' _ "$ROOT" "$TMP" 2>/dev/null)
+SI_SSH_BARE=$(find "$TMP/ssh" -maxdepth 1 -name "*.git" | head -1)
+if [ -n "$SI_SSH_BARE" ] && [ -z "$(git -C "$SI_SSH_BARE" for-each-ref 2>/dev/null)" ]; then
+  ok "stand_in_github_over_ssh makes an empty repository, so the mission control's history can be pushed to it"
+else
+  bad "stand_in_github_over_ssh made a repository with history ($SI_SSH)"
+fi
 
 # ============================================================ every one of them, the same shape
 section 'every script'
