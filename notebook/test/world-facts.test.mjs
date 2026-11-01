@@ -112,8 +112,11 @@ test('the chat answers with the assistant home\'s own model; the notebook\'s mod
   assert.equal(own.args.includes('--provider'),false);assert.equal(own.args.includes('--model'),false);assert.equal(own.env.OPENAI_API_KEY,undefined);
   const picked=await run(home,{model:'fictional/large'});
   assert.deepEqual(picked.args.slice(picked.args.indexOf('--model'),picked.args.indexOf('--model')+2),['--model','fictional/large']);assert.ok(picked.args.includes('--provider'));
+  // A home with no model is given the notebook's in its config, not by flags: the assistant refuses
+  // model flags next to --continue (issue #127).
   const none=await run(bare,{});
-  assert.deepEqual(none.args.slice(none.args.indexOf('--model'),none.args.indexOf('--model')+2),['--model','fictional/small']);assert.equal(none.env.OPENAI_API_KEY,'fictional-key');
+  assert.equal(none.args.includes('--model'),false);assert.equal(none.args.includes('--provider'),false);assert.equal(none.env.OPENAI_API_KEY,undefined);
+  assert.equal(homeHasModel(bare),true);assert.match(fs.readFileSync(path.join(bare,'config.yaml'),'utf8'),/default: "fictional\/small"/);
 });
 
 test('one fixed name per kind of fact: the newest value of a one-at-a-time fact is its value, under any name and from either store',async()=>{

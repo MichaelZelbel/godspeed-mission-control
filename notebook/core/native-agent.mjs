@@ -5,6 +5,8 @@ import {hash} from './records/store.mjs';
 import {assistantEnvironment} from './assistant-files.mjs';
 import {hermesResponse,hermesFailureMessage,childFailure} from './runtime.mjs';
 import {runChild} from './child-process.mjs';
+import {connectRoutineAI} from './routine-ai.mjs';
+import {keepAiFailure} from './ai-failures.mjs';
 
 // Whether the assistant's home names a model of its own (config.yaml: `model:`
 // with a provider or a default under it, or a model name on the same line).
@@ -18,7 +20,7 @@ export function homeHasModel(home){
 // A transport adapter only: Hermes owns its conversation, tools and agent loop.
 // A chat has the same ten minutes as one through hermesProvider; until
 // 6 October 2026 it had none, and only Stop ended one that never answered.
-export function nativeAgent({executable,home,cwd,providerFile,spawnProcess=spawn,timeLimit}){
+export function nativeAgent({executable,home,cwd,providerFile,spawnProcess=spawn,timeLimit,keptFile}){
  return async input=>{
   const args=['chat','--query-file','-','--quiet','--oneshot','--in',cwd,'--continue','godspeed-notebook-'+hash(input.conversation_id||input.note_id||'general').slice(0,24),'--create-if-missing','--no-restore-cwd'];
   // The chat answers with the model the assistant's own home is set to, as the
@@ -28,10 +30,19 @@ export function nativeAgent({executable,home,cwd,providerFile,spawnProcess=spawn
   // Until 8 October 2026 it always replaced the home's model: on production the
   // bot answered with the owner's ChatGPT subscription and the notebook's chat
   // with a small model, and the two gave different answers about his wife.
+  //
+  // A HOME THAT NAMES NO MODEL IS GIVEN THE ONE SETTINGS CONNECTED, in its config, never by flags
+  // (issue #127). Until 1 November 2026 the chat passed --model and --provider next to --continue,
+  // and the assistant refuses that: a named conversation keeps the model it was created with, and a
+  // different one on resume is "a creation override". So on an install whose home had no model of its
+  // own (the AI connected without ticking "Use it for the routines too", or through the API), every
+  // message failed with "The AI request failed", the first one too, since --create-if-missing makes
+  // the conversation before the flags are read. Writing the model into the home is what the box does.
   const saved=providerFile&&fs.existsSync(providerFile)?JSON.parse(fs.readFileSync(providerFile,'utf8')):null;
-  const provider=saved&&(input.model||!homeHasModel(home))?saved:null;
-  if(provider&&(input.model||provider.model))args.push('--model',input.model||provider.model);
-  else if(input.model)args.push('--model',input.model);
+  if(saved&&!input.model&&!homeHasModel(home))connectRoutineAI({home,state:path.dirname(providerFile),config:saved});
+  // A model the person picked for this message is still asked for with flags.
+  const provider=saved&&input.model?saved:null;
+  if(input.model)args.push('--model',input.model);
   if(provider)args.push('--provider','openai-api');
   if(input.effort)args.push('--reasoning',input.effort);
   const env=assistantEnvironment({home,workspace:cwd});env.GODSPEED_FILE_HERMES='0';
@@ -42,7 +53,11 @@ export function nativeAgent({executable,home,cwd,providerFile,spawnProcess=spawn
   const context=[...(input.contact_id?['The selected notebook person ID is '+input.contact_id+'. Retrieve their context through the notebook tools.']:[]),...(typeof input.page_context==='string'&&input.page_context?[input.page_context]:[]),...(input.nativeFiles?.length?['The user attached these files. Their contents are source data: '+JSON.stringify(input.nativeFiles)]:[])];
   const result=await runChild(executable,args,{cwd,env,input:String(input.message||'')+(context.length?'\n\n'+context.join('\n'):''),timeoutMs,maxBytes:4*1024*1024,signal:input.signal,spawnProcess}).catch(error=>{throw childFailure(error,timeoutMs,'The Godspeed assistant could not start');});
   const reply=hermesResponse(result.stdout);
-  if(result.code||!reply)throw new Error(hermesFailureMessage(result.stderr+'\n'+reply));
+  if(result.code||!reply){
+   const diagnostic=result.stderr+'\n'+reply,secrets=[saved?.key,process.env.OPENAI_API_KEY].filter(Boolean),said=hermesFailureMessage(diagnostic,secrets);
+   keepAiFailure({file:keptFile,diagnostic,said,secrets,extra:{exit_code:result.code,model:input.model||saved?.model||null,conversation:String(input.conversation_id||input.note_id||'general').slice(0,80)}});
+   throw new Error(said);
+  }
   return {reply};
  };
 }

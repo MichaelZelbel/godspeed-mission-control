@@ -171,10 +171,10 @@ import assertStrict from 'node:assert/strict';
 import {test as nodeTest} from 'node:test';
 nodeTest('a failed AI request says the provider status and hides keys',()=>{
   const said=failureMessage('x\nError code: 400 - {"error":{"message":"messages: text content blocks must be non-empty"}} Bearer sk-or-v1-abcdef1234567890abcdef\n');
-  assertStrict.match(said,/^The AI request failed \(.*400.*non-empty.*\)\./);
+  assertStrict.match(said,/^The AI request failed \(.*400.*non-empty.*\)\. Check the AI connection in Settings, then try again\.$/);
   assertStrict.doesNotMatch(said,/sk-or-v1|abcdef1234567890/);
   assertStrict.equal(providerReason('nothing useful here'),'');
-  assertStrict.equal(failureMessage('boom'),'The AI request failed. Its private runtime diagnostics are retained for investigation.');
+  assertStrict.equal(failureMessage('boom'),'The AI request failed. Check the AI connection in Settings, then try again.');
 });
 nodeTest('credential-shaped parts of a provider line never reach the sentence',()=>{
   for(const line of ['HTTP 401 Authorization: Basic dXNlcjpwYXNzd29yZA==','HTTP 400 api_key=abc123 failed','Error code: 401 {"api_key":"zzz999","message":"bad"}','HTTP 403 x-api-key: secretvalue1','HTTP 401: access_token=abc.def.ghi']){

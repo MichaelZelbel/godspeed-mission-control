@@ -1687,6 +1687,64 @@ for shape in stand_in_github stand_in_github_over_ssh; do
   fi
 done
 
+# =========================== the diagnosis of a failed AI request, printed into the job log (issue #127)
+# On 31 October 2026 the Charm Challenge failed twice with "The AI request failed" and the diagnosis
+# went with the throwaway machine. A scenario that meets such a failure prints what the notebook and
+# the assistant kept, and never a key. Prepared here: a state folder whose ai-failures.log holds a
+# failure that carries the scenario's own key in three forms, and an assistant home whose error log
+# does too.
+section kept-diagnosis
+KD=$TMP/kept-diagnosis
+KD_KEY='fictional-scenario-key-0123456789'
+mkdir -p "$KD/state" "$KD/home/logs" "$KD/empty-state"
+printf '%s\n' \
+  '{"at":"2026-11-01T10:00:00.000Z","said":"The AI request failed (HTTP 400). Check the AI connection in Settings, then try again.","exit_code":2,"model":"fictional/model","conversation":"browser-owner","diagnosis":"Error: Resume retains gateway session policy; creation overrides are unsupported on resume.\nOPENAI_API_KEY='"$KD_KEY"'\nrequest sent with Authorization: Bearer '"$KD_KEY"'"}' \
+  >"$KD/state/ai-failures.log"
+printf '%s\n' "2026-11-01 10:00:01 ERROR agent: API call failed for key $KD_KEY" "2026-11-01 10:00:02 ERROR agent: Error code: 400 - No endpoints found" >"$KD/home/logs/errors.log"
+kd_run() { # <state> <home>
+  GODSPEED_SCENARIO_AI_KEY=$KD_KEY SCENARIO=kept-diagnosis-test bash -c '. "$1/scenarios/scenario-lib.sh"; print_kept_diagnosis "$2" "$3"; echo "rc=$?"' _ "$ROOT" "$1" "$2" 2>&1
+}
+KD_OUT=$(kd_run "$KD/state" "$KD/home")
+case $KD_OUT in
+  *'Resume retains gateway session policy'*) ok "a prepared failure prints the notebook's kept diagnosis" ;;
+  *) bad "the notebook's kept diagnosis was not printed ($KD_OUT)" ;;
+esac
+case $KD_OUT in
+  *'No endpoints found'*) ok "and the assistant's own error log" ;;
+  *) bad "the assistant's error log was not printed ($KD_OUT)" ;;
+esac
+case $KD_OUT in
+  *"$KD_KEY"*) bad "the scenario's key is in what was printed ($KD_OUT)" ;;
+  *) ok "the scenario's key is nowhere in what was printed" ;;
+esac
+case $KD_OUT in
+  *'Bearer fictional'*) bad "a bearer credential is in what was printed" ;;
+  *) ok "and no bearer credential" ;;
+esac
+case $KD_OUT in
+  *'rc=0'*) ok "printing it never fails the scenario by itself (it leaves that to fail)" ;;
+  *) bad "printing the diagnosis ended with something other than 0 ($KD_OUT)" ;;
+esac
+KD_NONE=$(kd_run "$KD/empty-state" "$KD/empty-home")
+case $KD_NONE in
+  *'No kept diagnosis was found'*'rc=0'*) ok "a machine that kept nothing says so, and carries on" ;;
+  *) bad "a machine that kept nothing did not say so ($KD_NONE)" ;;
+esac
+# The home the install recorded is found from the state folder, as the Charm Challenge (which never
+# asks for the assistant's home itself) needs.
+printf '{"home":"%s"}\n' "$KD/home" >"$KD/state/assistant.json"
+KD_HOME=$(kd_run "$KD/state" "")
+case $KD_HOME in
+  *'No endpoints found'*) ok "the assistant's home is found from the state folder's assistant.json" ;;
+  *) bad "the assistant's home was not found from assistant.json ($KD_HOME)" ;;
+esac
+# The Charm Challenge calls it before it says FAIL, in both places where the AI can fail it.
+if [ "$(grep -c '^ *print_kept_diagnosis$' "$ROOT/scenarios/charm-challenge.sh")" -ge 2 ]; then
+  ok "charm-challenge.sh prints the kept diagnosis when Settings or the chat meets a failure"
+else
+  bad "charm-challenge.sh does not print the kept diagnosis at both of its AI failures"
+fi
+
 # ============================================================ every one of them, the same shape
 section 'every script'
 for file in scenario-lib.sh settings-on-install.sh night-tidy.sh voice.sh update-keeps-everything.sh \

@@ -121,21 +121,31 @@ export function hermesResponse(output){
   return output.replace(/\x1b\[[0-9;]*m/g,'').replace(/^Warning: Unknown toolsets: none\r?\n\s*/,'').replace(/^\s*⚠ tirith security scanner enabled but not available[^\n]*\r?\n\s*/,'')
     .split(/\r?\n/).filter(line=>!waitingLine(line)).join('\n').trim();
 }
-export function hermesFailureMessage(diagnostic){
+export function hermesFailureMessage(diagnostic,secrets=[]){
   if(/context length exceeded|context_length_exceeded|maximum context length|cannot compress further|(?:model )?input exceeds (?:the )?context (?:window|limit)/i.test(diagnostic))return 'The AI request exceeded the model context limit. Reduce the selected source scope before retrying.';
   if(/rate_limit_exceeded|rate limit exceeded|too many requests|usage limit reached|quota exceeded|insufficient_quota/i.test(diagnostic))return 'The connected AI account reached a usage limit. Retry after its limit resets.';
   if(/authenticationerror|invalid_api_key|incorrect api key|token expired|unauthorized|authentication failed/i.test(diagnostic))return 'The connected AI account needs sign-in. Check the account in Settings before retrying.';
-  // Issue #127: a reader met only this sentence and the scenario could not say why. The provider's own
-  // one-line reason (an HTTP status and its message) is said too, with anything key-shaped taken out.
-  const reason=providerReason(diagnostic);
-  return 'The AI request failed'+(reason?' ('+reason+')':'')+'. Its private runtime diagnostics are retained for investigation.';
+  // Issue #127: a reader met only "The AI request failed" and could do nothing with it. The provider's own
+  // one-line reason (an HTTP status and its message) is said too, with anything key-shaped taken out, and
+  // the sentence ends on what to do next. The private diagnosis itself is never shown: the notebook keeps
+  // a copy with the keys taken out (core/ai-failures.mjs), for whoever has to find the cause.
+  const reason=providerReason(diagnostic,secrets);
+  return 'The AI request failed'+(reason?' ('+reason+')':'')+'. Check the AI connection in Settings, then try again.';
+}
+// Anything in a line of text that could be a credential, replaced: a value named like a key, a token
+// or a password, a bearer or basic credential, a key with a well-known prefix, a long unbroken token,
+// and every literal secret the caller knows (the key Settings holds).
+export function scrubCredentials(text,secrets=[]){
+  let out=String(text||'');
+  for(const secret of secrets)if(typeof secret==='string'&&secret.length>=6)out=out.split(secret).join('***');
+  return out.replace(/[\w.-]*(?:authorization|api[_-]?key|token|secret|password|passwd)[\w.-]*[\"']?\s*[:=]\s*[\"']?(?:(?:Bearer|Basic|Token)\s+)?[^\s\"',;&}]+/gi,'$1***'.replace('$1','credential: ')).replace(/\b(?:Bearer|Basic)\s+\S+/gi,'***').replace(/\b(?:sk|or|key|tok)[-_][A-Za-z0-9_-]{8,}/gi,'***').replace(/\b[A-Za-z0-9_+\/=-]{20,}\b/g,'***');
 }
 // The provider's own reason out of what the AI program printed: the last line naming an HTTP 4xx or
 // 5xx status, shortened, with keys and bearer tokens replaced. Empty when there is none.
-export function providerReason(diagnostic){
+export function providerReason(diagnostic,secrets=[]){
   const lines=String(diagnostic||'').replace(/\x1b\[[0-9;]*m/g,'').split(/\r?\n/).map(l=>l.trim()).filter(l=>/\b(?:HTTP\s*|Error code:?\s*|status(?:_code)?[=: ]\s*)[45]\d\d\b/i.test(l));
   const line=lines.at(-1);if(!line)return '';
-  return line.replace(/[\w.-]*(?:authorization|api[_-]?key|token|secret|password|passwd)[\w.-]*[\"']?\s*[:=]\s*[\"']?(?:(?:Bearer|Basic|Token)\s+)?[^\s\"',;&}]+/gi,'$1***'.replace('$1','credential: ')).replace(/\b(?:Bearer|Basic)\s+\S+/gi,'***').replace(/\b(?:sk|or|key|tok)[-_][A-Za-z0-9_-]{8,}/gi,'***').replace(/\b[A-Za-z0-9_+\/=-]{20,}\b/g,'***').replace(/\s+/g,' ').slice(0,240);
+  return scrubCredentials(line,secrets).replace(/\s+/g,' ').slice(0,240);
 }
 // A PROVIDER'S PASSING HICCUP IS TRIED AGAIN (18 October 2026). Connecting a free model in Settings
 // failed on one "HTTP 502: Provider returned error" from OpenRouter, an answer the same request got

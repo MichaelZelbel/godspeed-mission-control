@@ -127,8 +127,10 @@ settings_connects_the_model() {
     -H 'Content-Type: application/json' --data-binary @"$request" \
     "http://127.0.0.1:$NOTEBOOK_PORT/api/provider") ||
     fail "Settings could not be reached to connect a model, so the owner's chat has nobody to answer it"
-  [ "$code" = 200 ] ||
+  if [ "$code" != 200 ]; then
+    print_kept_diagnosis
     fail "Settings refused the model $AI_MODEL at $AI_URL with HTTP $code: $(tr -d '\n' <"$body" | cut -c1-200)"
+  fi
   say "The owner's chat and the routines think with $AI_MODEL at $AI_URL"
 }
 
@@ -144,8 +146,12 @@ owner_says() { # <what they say> <file for the reply>
     -H 'Content-Type: application/json' --data-binary @"$request" \
     "http://127.0.0.1:$NOTEBOOK_PORT/api/browser-chat") ||
     fail "the notebook's own chat could not be reached, so the owner could not say \"$said\""
-  [ "$code" = 200 ] ||
+  if [ "$code" != 200 ]; then
+    # A failed AI request is all the chat says; what the notebook and the assistant kept of it is
+    # printed here, because the machine is gone when anyone reads the log (issue #127).
+    print_kept_diagnosis
     fail "the notebook's own chat answered HTTP $code to \"$said\": $(tr -d '\n' <"$body" | cut -c1-200)"
+  fi
   json_value "$body" reply >"$file" ||
     fail "the notebook's own chat answered \"$said\" with no reply of its own"
   printf '\n' >>"$file"
