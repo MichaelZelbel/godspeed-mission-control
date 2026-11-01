@@ -1571,6 +1571,15 @@ sed -i 's/HELLO/GOODBYE/g; s/THERE/FRIENDS/g' "$NV/from-nowhere/captions.ass"
 refuses 'captions that carry none of the heard words' no-video-skills-by-default "$NV/from-nowhere" \
   'words the speech model never heard (GOODBYE)'
 
+copy "$NV/good" "$NV/tags-only"
+{
+  printf '[Events]\n'
+  printf 'Dialogue: 0,0:00:00.10,0:00:00.60,Pop,,0,0,0,,{\\an5\\pos(540,1440)}\n'
+  printf 'Dialogue: 0,0:00:00.60,0:00:01.40,Pop,,0,0,0,,{\\an5\\pos(540,1440)}{\\r}\n'
+} >"$NV/tags-only/captions.ass"
+refuses 'captions whose lines show no word at all' no-video-skills-by-default "$NV/tags-only" \
+  'shows no word at all'
+
 copy "$NV/good" "$NV/count-differs"
 sed -i 's/heard 5 words/heard 33 words/' "$NV/count-differs/captions.log"
 refuses 'a words file that keeps fewer words than the add-on heard' no-video-skills-by-default "$NV/count-differs" \
@@ -1603,7 +1612,7 @@ update_trace() { # <file>
     printf '+ GODSPEED_STARTER_REF=%s\n' "$PRODUCT_COMMIT"
   } >"$1"
 }
-update_good() { # <folder>
+update_removes_good() { # <folder>
   local folder=$1
   rm -rf "$folder"
   mkdir -p "$folder"
@@ -1641,7 +1650,7 @@ update_good() { # <folder>
 
 section update-removes-only-unchanged-skills
 UR=$TMP/update-removes
-update_good "$UR/good"
+update_removes_good "$UR/good"
 passes 'the changed one kept, the unchanged ones gone, and all of them kept where the add-on is' \
   update-removes-only-unchanged-skills "$UR/good" 'is still there with their own line'
 
@@ -1706,7 +1715,7 @@ shape=stand_in_github
 {
   SI_OUT=$(HOME="$SI_HOME" GIT_CONFIG_GLOBAL="$SI_HOME/gitconfig" SCENARIO=stand-in-test GODSPEED_SCENARIO_WORK="$TMP/si-work" bash -c '
     . "$1/scenarios/scenario-lib.sh"; '"$shape"' "$2/'"$shape"'" >/dev/null 2>&1; echo done' _ "$ROOT" "$TMP" 2>/dev/null)
-  bare=$(ls -d "$TMP/$shape"/*.git 2>/dev/null | head -1)
+  bare=$(find "$TMP/$shape" -maxdepth 1 -name "*.git" 2>/dev/null | sort | head -1)
   if [ -n "$bare" ] && git -C "$bare" show main:.gitignore 2>/dev/null | grep -qx 'NOTEBOOK.md' &&
     git -C "$bare" show main:.gitignore | grep -qx 'assistant-state/'; then
     ok "$shape makes a repository whose ignore file lists NOTEBOOK.md and assistant-state/"

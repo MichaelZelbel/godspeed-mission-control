@@ -40,7 +40,7 @@ scenario_arguments "$@"
 
 SAMPLE=sample/sample-vertical.mp4
 
-# shellcheck disable=SC2329  # asked by wait_for, which takes the command to try as its arguments
+# shellcheck disable=SC2317,SC2329  # asked by wait_for, which takes the command to try as its arguments
 notebook_answers() { curl -fsS "http://127.0.0.1:$NOTEBOOK_PORT/health" >/dev/null 2>&1; }
 
 # The video skills the installed version still carries as recipes of its own: a fresh install copies
@@ -145,7 +145,9 @@ const heard=new Set(joined.map(w=>norm(w.trim())).filter(Boolean));
 for(const line of fs.readFileSync(af,"utf8").split(/\r?\n/)){
   if(!line.startsWith("Dialogue:"))continue;
   const text=line.split(",").slice(9).join(",").replace(/\{[^}]*\}/g,"");
-  for(const w of text.split(/\s+/).map(norm).filter(Boolean))
+  const shown=text.split(/\s+/).map(norm).filter(Boolean);
+  if(!shown.length){console.log("empty");process.exit(0);}
+  for(const w of shown)
     if(!heard.has(w)){console.log("strange "+w);process.exit(0);}
 }
 console.log("ok");
@@ -199,6 +201,9 @@ check() { # <evidence folder>
     strange*)
       fail "the captions written for the sample clip hold words the speech model never heard (${heard#strange }), so they did not come from the clip"
       ;;
+    empty)
+      fail "a line of the captions written for the sample clip shows no word at all, so the captions do not carry what the speech model heard"
+      ;;
     count*)
       fail "the add-on said it heard ${heard#count } but words.json keeps another number, so the words were not kept whole"
       ;;
@@ -209,14 +214,16 @@ check() { # <evidence folder>
   local made source clip captioned
   made=$(seconds_of "$folder/captions.log" made)
   source=$(seconds_of "$folder/captions.log" source)
-  [ -n "$made" ] && [ -n "$source" ] ||
+  if [ -z "$made" ] || [ -z "$source" ]; then
     fail "the add-on never said it burned the captions into the picture: $(tr '\n' ' ' <"$folder/captions.log" | cut -c1-200)"
+  fi
   [ "${made%.*}" = "${source%.*}" ] ||
     fail "the captioned clip is ${made}s long and the sample clip is ${source}s, so it is not the same clip with captions on it"
   clip=$(size_of "$folder" clip)
   captioned=$(size_of "$folder" captioned)
-  [ -n "$captioned" ] && [ "$captioned" != 0 ] ||
+  if [ -z "$captioned" ] || [ "$captioned" = 0 ]; then
     fail "the captioned clip was never written, so video-finishing captioned nothing"
+  fi
   [ "$captioned" != "$clip" ] ||
     fail "the captioned clip is the sample clip's own $clip bytes, so nothing was burned into the picture"
 
