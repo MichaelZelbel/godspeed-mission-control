@@ -75,3 +75,13 @@ test('a sentence that becomes the first one after a cut is judged as an opener t
  assert.equal(writes,2);assert.equal(saved.content,'A useful closing remains.');assert.equal(saved.fallback,undefined);
  assert.equal(repairs(query).length,0);
 });
+
+test('a required line that opens with a banned opener is left out and reported, and the briefing is saved',async()=>{
+ const {store,query}=fixture(['BANNED-OPENER: Charm'],{charm:true});let writes=0;
+ const provider=async input=>{const v=verifies(input);if(v)return v;writes++;assert.equal(input.context.charm_line,null);return OK;};
+ const result=await run(provider,query,store,'brief-banned-opener-line');
+ const saved=store.get('notes',result.record_id);
+ assert.equal(writes,1);assert.equal(saved.content,OK);assert.equal(saved.fallback,undefined);
+ const items=repairs(query);assert.equal(items.length,1);assert.equal(items[0].line_name,'the Charm Challenge line');
+ assert.ok(items[0].refusals.some(r=>r.rule==='BANNED-OPENER'));
+});

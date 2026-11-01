@@ -69,7 +69,7 @@ async function runBriefing(job,{store,query,provider}){
  context.source_receipts=[...latestSources.values()];
 
  let contribution=visibleRows(query,'lead_entries').filter(e=>e.status==='ready'&&e.note_id&&e.content).sort((a,b)=>String(b.delivery_day).localeCompare(String(a.delivery_day))).find(e=>visibleRows(query,'notes').some(n=>n.id===e.note_id&&n.content===e.content));
- if(contribution){const refusals=ruleRefusals(contribution.content+'\n/dashboard/notes/'+encodeURIComponent(contribution.note_id),voice,{alone:true});if(refusals.length){leftOut.push({name:'the checked contribution',line:contribution.title||contribution.id,refusals});contribution=null;}}
+ if(contribution){const refusals=ruleRefusals(contribution.content+'\n/dashboard/notes/'+encodeURIComponent(contribution.note_id),voice);if(refusals.length){leftOut.push({name:'the checked contribution',line:contribution.title||contribution.id,refusals});contribution=null;}}
  context.contribution=contribution?{id:contribution.id,title:contribution.title,content:contribution.content,link:'/dashboard/notes/'+encodeURIComponent(contribution.note_id),state:'draft',source_ids:contribution.evidence?.map(e=>e.source_id)||[]}:null;
  const actionSources=[],actionArtifacts=[];
  if(contribution){const source=visibleRows(query,'notes').find(n=>n.id===contribution.note_id);actionSources.push(source);actionArtifacts.push({kind:'review-checked-contribution',record_id:contribution.id,title:contribution.title,goal:context.goals.find(g=>g.id===contribution.goal_id)?.title||null,link:context.contribution.link,next_step:'Review this exact checked draft and decide whether to use it. It has not been sent or published.'});}
@@ -81,10 +81,10 @@ async function runBriefing(job,{store,query,provider}){
  // Her cycle heads-up (D-321 step 4): one line, only on the day two days before the forecast window
  // and only when she switched it on; null otherwise. The brief carries it word for word.
  try{context.cycle_heads_up=cycleOperation({store,query},{action:'brief'}).line||null;}catch{context.cycle_heads_up=null;}
- if(context.cycle_heads_up){const refusals=ruleRefusals(context.cycle_heads_up,voice,{alone:true});if(refusals.length){leftOut.push({name:'the cycle heads-up line',line:context.cycle_heads_up,refusals});context.cycle_heads_up=null;}}
+ if(context.cycle_heads_up){const refusals=ruleRefusals(context.cycle_heads_up,voice);if(refusals.length){leftOut.push({name:'the cycle heads-up line',line:context.cycle_heads_up,refusals});context.cycle_heads_up=null;}}
  // The Charm Challenge line, written by the add-on itself. A rehearsal never settles a finish into the record (--no-write).
  try{context.charm_line=String(JSON.parse(addonCommand(store,{addon:'charm',args:job.rehearsal?['brief','--no-write']:['brief']}).result).reply||'').trim()||null;}catch{context.charm_line=null;}
- if(context.charm_line){const refusals=ruleRefusals(context.charm_line,voice,{alone:true});if(refusals.length){leftOut.push({name:'the Charm Challenge line',line:context.charm_line,refusals});context.charm_line=null;}}
+ if(context.charm_line){const refusals=ruleRefusals(context.charm_line,voice);if(refusals.length){leftOut.push({name:'the Charm Challenge line',line:context.charm_line,refusals});context.charm_line=null;}}
  for(const out of leftOut){const id='repair-brief-line-'+hash([out.name,out.line]),old=store.get('work_items',id);if(old&&old.state!=='verified')continue;store.save('work_items',{id,kind:'repair',title:'The morning briefing left out '+out.name+', because it breaks your writing rules',state:'needs_review',job_id:job.id,line_name:out.name,line:out.line,refusals:out.refusals,error:out.refusals.map(describeRefusal).join('; '),check:'The line passes the writing rules in profile/voice.md, or the rule is changed',allowed_action:'inspect-and-retry',dependencies:[],max_attempts:3});}
  context.workflow=recipeContext(store,'morning-note');
  context.workspace_sources=fileContext(store,20000);

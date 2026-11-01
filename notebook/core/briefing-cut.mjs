@@ -6,15 +6,15 @@ import {checkVoice} from './voice-check.mjs';
 const EM_DASH='—';
 const sentencesOf=line=>line.split(/(?<=[.!?])\s+/).filter(s=>s.trim());
 
-// Why a piece of text is refused: [{rule,value}]. `alone` is a line checked by itself, as a line
-// Godspeed requires word for word is when it is made: it is always the first line of what is
-// checked, so a banned opener says nothing about where the writer will put it, and is not asked.
-export function ruleRefusals(text,voice,{alone=false}={}){
+// Why a piece of text is refused: [{rule,value}]. A line Godspeed requires word for word is asked
+// everything when it is made, a banned opener too: the writer may put it first. `skipOpener` is for
+// one sentence of a draft, where only the first sentence of the briefing can be an opener.
+export function ruleRefusals(text,voice,{skipOpener=false}={}){
  const out=[];
  if(String(text).includes(EM_DASH))out.push({rule:'WRITING-STYLE',value:'em dash'});
  if(voice){
   const checked=checkVoice(String(text),voice);
-  if(checked.configured)for(const hit of checked.hits)if(!hit.advisory&&!(alone&&hit.rule==='BANNED-OPENER'))out.push({rule:hit.rule,value:hit.value});
+  if(checked.configured)for(const hit of checked.hits)if(!hit.advisory&&!(skipOpener&&hit.rule==='BANNED-OPENER'))out.push({rule:hit.rule,value:hit.value});
  }
  return out;
 }
@@ -30,7 +30,7 @@ function cutOnce(draft,voice,protectedLines){
   if(!line.trim()||keep.has(line.trim()))return line.trim()?line:'';
   const parts=sentencesOf(line),left=[];
   for(const [i,sentence] of parts.entries()){
-   let refusals=ruleRefusals(sentence,voice,{alone:true});
+   let refusals=ruleRefusals(sentence,voice,{skipOpener:true});
    // A banned opener refuses the first sentence of the first line, wherever it is checked from.
    if(!refusals.length&&index===firstReal&&i===0&&voice){refusals=ruleRefusals(sentence,voice).filter(r=>r.rule==='BANNED-OPENER');}
    if(refusals.length)cut.push({sentence,refusals});else left.push(sentence);
