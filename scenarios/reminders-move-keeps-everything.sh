@@ -124,6 +124,7 @@ one_pass() { # <pass> <root> <port> <stand-in folder>
     # (scenario-lib.sh stand_in_github_over_ssh says the whole of it).
     stand_in_github_over_ssh "$bare"
     address=$STAND_IN_ADDRESS
+    owner_ignores_what_the_notebook_keeps "$root"
     git -C "$root" remote add origin "$address" || fail "the mission control in $root could not be given its copy on GitHub"
     notebook_on "$root" sync folder notebook >&2 ||
       fail "godspeed sync folder notebook was refused on $root, so there is no mission control carrying its own notebook"
