@@ -5,7 +5,6 @@ import {hash} from './records/store.mjs';
 import {assistantEnvironment} from './assistant-files.mjs';
 import {hermesResponse,hermesFailureMessage,childFailure} from './runtime.mjs';
 import {runChild} from './child-process.mjs';
-import {connectRoutineAI} from './routine-ai.mjs';
 import {keepAiFailure} from './ai-failures.mjs';
 
 // Whether the assistant's home names a model of its own (config.yaml: `model:`
@@ -17,6 +16,8 @@ export function homeHasModel(home){
  const block=text.slice(line.index+line[0].length).split(/\r?\n(?=\S)/)[0];
  return /^[ \t]+(provider|default)[ \t]*:[ \t]*['"]?[^\s'"#]/m.test(block);
 }
+// What the reader is told when the AI is connected in Settings but not for the assistant itself.
+export const NO_MODEL_IN_HOME='The assistant has no AI to think with: the AI connected in Settings was not set up for it. Open Settings, connect the AI again with "Use it for the routines too" ticked, or sign the assistant in to an AI account, then try again.';
 // A transport adapter only: Hermes owns its conversation, tools and agent loop.
 // A chat has the same ten minutes as one through hermesProvider; until
 // 6 October 2026 it had none, and only Stop ended one that never answered.
@@ -31,15 +32,21 @@ export function nativeAgent({executable,home,cwd,providerFile,spawnProcess=spawn
   // bot answered with the owner's ChatGPT subscription and the notebook's chat
   // with a small model, and the two gave different answers about his wife.
   //
-  // A HOME THAT NAMES NO MODEL IS GIVEN THE ONE SETTINGS CONNECTED, in its config, never by flags
-  // (issue #127). Until 1 November 2026 the chat passed --model and --provider next to --continue,
-  // and the assistant refuses that: a named conversation keeps the model it was created with, and a
-  // different one on resume is "a creation override". So on an install whose home had no model of its
-  // own (the AI connected without ticking "Use it for the routines too", or through the API), every
-  // message failed with "The AI request failed", the first one too, since --create-if-missing makes
-  // the conversation before the flags are read. Writing the model into the home is what the box does.
+  //
+  // A HOME THAT NAMES NO MODEL CANNOT ANSWER, AND THE CHAT SAYS SO (issue #127). Until 1 November 2026
+  // the chat asked the assistant for the Settings model with --model and --provider next to --continue.
+  // The assistant refuses that (a named conversation keeps the model it was created with; a different
+  // one on resume is "a creation override"), and it cannot make a conversation at all without a model
+  // in its home, so every message, the first one too, ended in "The AI request failed". The model is
+  // NOT written into the home here: that is the home the routines think with, and a person who
+  // unticked "Use it for the routines too" chose not to spend that AI on them. Ticked (the box's
+  // default on a fresh install), Settings writes the model into the home and the chat just works.
   const saved=providerFile&&fs.existsSync(providerFile)?JSON.parse(fs.readFileSync(providerFile,'utf8')):null;
-  if(saved&&!input.model&&!homeHasModel(home))connectRoutineAI({home,state:path.dirname(providerFile),config:saved});
+  if(saved&&!input.model&&!homeHasModel(home)){
+   const said=NO_MODEL_IN_HOME;
+   keepAiFailure({file:keptFile,diagnostic:'The assistant\'s home ('+home+') names no model, and the AI connected in Settings was not set for the routines, which is where the assistant reads its model. Nothing was asked of the assistant.',said,extra:{exit_code:null,model:saved.model||null,conversation:String(input.conversation_id||input.note_id||'general').slice(0,80)}});
+   throw new Error(said);
+  }
   // A model the person picked for this message is still asked for with flags.
   const provider=saved&&input.model?saved:null;
   if(input.model)args.push('--model',input.model);

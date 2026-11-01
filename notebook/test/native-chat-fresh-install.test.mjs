@@ -1,8 +1,7 @@
 // Issue #127: on a fresh install the notebook's chat answered "start the Charm Challenge" (and every
-// other first message) with "The AI request failed". The scenario had connected the AI the way
-// Settings does without ticking "Use it for the routines too", so the assistant's home named no model,
-// and the chat then asked the assistant for the Settings model with --model and --provider next to
-// --continue. The assistant freezes a named conversation's model when it makes it and refuses a
+// other first message) with "The AI request failed". The scenario had connected the AI without
+// ticking "Use it for the routines too", so the assistant's home named no model, and the chat then
+// asked the assistant for the Settings model with --model and --provider next to --continue. The assistant freezes a named conversation's model when it makes it and refuses a
 // different one on resume ("creation overrides are unsupported on resume"), so the answer was
 // always the generic sentence. The fake assistant below keeps that rule, as the real one (Hermes
 // v0.22.5, hermes_cli/gateway_chat.py check_resume_policy) does.
@@ -13,7 +12,8 @@ import os from 'node:os';
 import path from 'node:path';
 import {EventEmitter} from 'node:events';
 import {PassThrough} from 'node:stream';
-import {nativeAgent,homeHasModel} from '../core/native-agent.mjs';
+import {nativeAgent,homeHasModel,NO_MODEL_IN_HOME} from '../core/native-agent.mjs';
+import {connectRoutineAI} from '../core/routine-ai.mjs';
 import {createService} from '../server/main.mjs';
 import {KEPT_FILE,keepAiFailure} from '../core/ai-failures.mjs';
 import {hermesFailureMessage} from '../core/runtime.mjs';
@@ -44,21 +44,35 @@ function fakeAssistant(home,{failWith}={}){
 const folder=t=>{const dir=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-fresh-chat-'));t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));return dir;};
 const connect=(dir,extra={})=>{const file=path.join(dir,'provider.json');fs.writeFileSync(file,JSON.stringify({url:'https://openrouter.ai/api/v1/chat/completions',key:KEY,model:'fictional/model',...extra}));return file;};
 
-test('a fresh install, whose assistant home names no model, answers the first message and the next',async t=>{
+test('a fresh install whose Settings connected the AI for the routines too answers the first message and the next',async t=>{
   const dir=folder(t),home=path.join(dir,'home');fs.mkdirSync(home);
   const providerFile=connect(dir),{calls,spawnProcess}=fakeAssistant(home);
-  assert.equal(homeHasModel(home),false);
+  // What Settings does with the box ticked (server/main.mjs POST /api/provider).
+  connectRoutineAI({home,state:dir,config:JSON.parse(fs.readFileSync(providerFile,'utf8'))});
+  assert.equal(homeHasModel(home),true);
   const ask=nativeAgent({executable:'hermes',home,cwd:dir,providerFile,spawnProcess,keptFile:path.join(dir,KEPT_FILE)});
   const first=await ask({message:'start the Charm Challenge',conversation_id:'browser-owner'});
   assert.equal(first.reply,'Charm Challenge started. Answered by fictional/model.');
-  const second=await ask({message:'how is my Charm Challenge?',conversation_id:'browser-owner'});
-  assert.match(second.reply,/Answered by fictional\/model/);
+  assert.match((await ask({message:'how is my Charm Challenge?',conversation_id:'browser-owner'})).reply,/Answered by fictional\/model/);
   for(const call of calls){
     for(const flag of ['--model','--provider','--base-url'])assert.equal(call.args.includes(flag),false,flag+' next to --continue is refused by the assistant');
     assert.equal(call.env.OPENAI_API_KEY,undefined);
   }
-  assert.equal(homeHasModel(home),true,'the model Settings connected is now the home\'s own');
   assert.equal(fs.existsSync(path.join(dir,KEPT_FILE)),false,'nothing failed, so nothing is kept');
+});
+
+test('a home with no model is never given the Settings AI behind the person\'s back, and the chat says what to do',async t=>{
+  const dir=folder(t),home=path.join(dir,'home'),kept=path.join(dir,KEPT_FILE);fs.mkdirSync(home);
+  const providerFile=connect(dir),{calls,spawnProcess}=fakeAssistant(home);
+  assert.equal(homeHasModel(home),false);
+  const ask=nativeAgent({executable:'hermes',home,cwd:dir,providerFile,spawnProcess,keptFile:kept});
+  const error=await ask({message:'start the Charm Challenge',conversation_id:'browser-owner'}).then(()=>null,e=>e);
+  assert.ok(error);assert.equal(error.message,NO_MODEL_IN_HOME);
+  assert.match(error.message,/Settings/);assert.match(error.message,/try again/);assert.equal(error.message.includes(KEY),false);
+  assert.equal(calls.length,0,'the assistant is not asked with a model it would refuse');
+  assert.equal(homeHasModel(home),false,'the routines\' AI was not set for them: the person unticked that');
+  assert.equal(fs.existsSync(path.join(home,'config.yaml')),false);assert.equal(fs.existsSync(path.join(home,'.env')),false);
+  const text=fs.readFileSync(kept,'utf8');assert.equal(text.includes(KEY),false);assert.match(text,/names no model/);
 });
 
 test('a home that already has a model of its own is left alone',async t=>{
@@ -73,8 +87,9 @@ test('through the notebook\'s own chat door the first message gets the assistant
   const dir=folder(t),home=path.join(dir,'home'),root=path.join(dir,'root');fs.mkdirSync(home);fs.mkdirSync(root);
   const s=await createService({root,port:0}),base='http://127.0.0.1:'+s.address.port;
   try{
-    const {spawnProcess}=fakeAssistant(home);
-    s.domains.nativeAgent=nativeAgent({executable:'hermes',home,cwd:root,providerFile:connect(root),spawnProcess});
+    const {spawnProcess}=fakeAssistant(home),providerFile=connect(root);
+    connectRoutineAI({home,state:root,config:JSON.parse(fs.readFileSync(providerFile,'utf8'))});
+    s.domains.nativeAgent=nativeAgent({executable:'hermes',home,cwd:root,providerFile,spawnProcess});
     const answer=await fetch(base+'/api/browser-chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:'start the Charm Challenge',request_id:'fictional-first'})});
     assert.equal(answer.status,200);
     assert.match((await answer.json()).reply,/^Charm Challenge started\./);
@@ -84,8 +99,9 @@ test('through the notebook\'s own chat door the first message gets the assistant
 test('a failed AI request tells the reader what to do, and the notebook keeps the diagnosis without any key',async t=>{
   const dir=folder(t),home=path.join(dir,'home'),kept=path.join(dir,KEPT_FILE);fs.mkdirSync(home);
   const failure='Traceback (most recent call last):\n  File "run_agent.py", line 88\nOPENAI_API_KEY='+KEY+'\nopenai.BadRequestError: Error code: 400 - {"error":{"message":"No endpoints found for fictional/model","code":400}} for '+KEY+'\n';
-  const {spawnProcess}=fakeAssistant(home,{failWith:failure});
-  const ask=nativeAgent({executable:'hermes',home,cwd:dir,providerFile:connect(dir),spawnProcess,keptFile:kept});
+  const {spawnProcess}=fakeAssistant(home,{failWith:failure}),providerFile=connect(dir);
+  connectRoutineAI({home,state:dir,config:JSON.parse(fs.readFileSync(providerFile,'utf8'))});
+  const ask=nativeAgent({executable:'hermes',home,cwd:dir,providerFile,spawnProcess,keptFile:kept});
   const error=await ask({message:'start the Charm Challenge',conversation_id:'browser-owner'}).then(()=>null,e=>e);
   assert.ok(error,'the failure reaches the caller');
   assert.match(error.message,/^The AI request failed \(.*No endpoints found for fictional\/model.*\)\. Check the AI connection in Settings, then try again\.$/);
@@ -102,8 +118,9 @@ test('through the chat door a failure is a plain sentence with a next step, neve
   const dir=folder(t),home=path.join(dir,'home'),root=path.join(dir,'root');fs.mkdirSync(home);fs.mkdirSync(root);
   const s=await createService({root,port:0}),base='http://127.0.0.1:'+s.address.port;
   try{
-    const {spawnProcess}=fakeAssistant(home,{failWith:'something broke inside\n'});
-    s.domains.nativeAgent=nativeAgent({executable:'hermes',home,cwd:root,providerFile:connect(root),spawnProcess});
+    const {spawnProcess}=fakeAssistant(home,{failWith:'something broke inside\n'}),providerFile=connect(root);
+    connectRoutineAI({home,state:root,config:JSON.parse(fs.readFileSync(providerFile,'utf8'))});
+    s.domains.nativeAgent=nativeAgent({executable:'hermes',home,cwd:root,providerFile,spawnProcess});
     const answer=await fetch(base+'/api/browser-chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:'hello',request_id:'fictional-failing'})});
     assert.equal(answer.status,400);
     const {error}=await answer.json();
