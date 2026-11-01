@@ -31,7 +31,7 @@
 #   addon-check.txt              what `mc-video check` says is installed and what is missing
 #   captions.log / captions-code.txt   video-finishing's own work on the sample clip
 #   captions.ass                 the captions it wrote
-#   words.json                   the words the speech model heard in the clip
+#   words.json                   the words the speech model heard in the clip, [{"w","s","e"}]
 #   sizes.txt                    the bytes of the sample clip and of the captioned one
 SCENARIO=no-video-skills-by-default
 # shellcheck source=scenarios/scenario-lib.sh
@@ -123,6 +123,34 @@ seconds_of() { # <log> <made|source>
   fi
 }
 
+# What the add-on keeps of what it heard (tools/burn.py): a JSON list of {"w": " word", "s": start,
+# "e": end}; a piece with no leading space belongs to the word before it (captions.py join_pieces).
+# Prints ok, or why not: nowords, count "<said> words, kept <n>", strange <word>.
+WORDS_READER='
+const fs=require("fs");
+const [wf,af,lf]=process.argv.slice(1);
+const norm=(w)=>w.replace(/^[.,!?;:]+|[.,!?;:]+$/g,"").toUpperCase();
+let list;
+try{list=JSON.parse(fs.readFileSync(wf,"utf8"));}catch{console.log("nowords");process.exit(0);}
+if(!Array.isArray(list)||!list.some(x=>x&&typeof x.w==="string"&&x.w.trim())){console.log("nowords");process.exit(0);}
+const said=(fs.readFileSync(lf,"utf8").match(/^ok: heard (\d+) words/m)||[])[1];
+if(said!==undefined&&Number(said)!==list.length){console.log("count "+said+" words, kept "+list.length);process.exit(0);}
+const joined=[];
+for(const x of list){
+  const w=x&&typeof x.w==="string"?x.w:"";
+  if(joined.length&&w&&!/^\s/.test(w)&&joined[joined.length-1].trim())joined[joined.length-1]+=w;
+  else joined.push(w);
+}
+const heard=new Set(joined.map(w=>norm(w.trim())).filter(Boolean));
+for(const line of fs.readFileSync(af,"utf8").split(/\r?\n/)){
+  if(!line.startsWith("Dialogue:"))continue;
+  const text=line.split(",").slice(9).join(",").replace(/\{[^}]*\}/g,"");
+  for(const w of text.split(/\s+/).map(norm).filter(Boolean))
+    if(!heard.has(w)){console.log("strange "+w);process.exit(0);}
+}
+console.log("ok");
+'
+
 check() { # <evidence folder>
   local folder=$1 missing present stay
   [ -d "$folder" ] || fail "there is nothing at $folder, so this scenario kept no evidence of an install"
@@ -163,8 +191,21 @@ check() { # <evidence folder>
     fail "captioning the add-on's own sample clip ended $(tr -d ' \n\r' <"$folder/captions-code.txt"): $(tr '\n' ' ' <"$folder/captions.log" | cut -c1-200)"
   grep -q '^Dialogue:' "$folder/captions.ass" ||
     fail "the captions written for the sample clip hold no line of speech at all, so nothing was heard in it"
-  grep -q '"word"' "$folder/words.json" ||
-    fail "the words the speech model heard in the sample clip were not kept, so the captions came from nowhere"
+  need_node
+  local heard
+  heard=$("$NODE" -e "$WORDS_READER" "$folder/words.json" "$folder/captions.ass" "$folder/captions.log")
+  case $heard in
+    ok) ;;
+    strange*)
+      fail "the captions written for the sample clip hold words the speech model never heard (${heard#strange }), so they did not come from the clip"
+      ;;
+    count*)
+      fail "the add-on said it heard ${heard#count } but words.json keeps another number, so the words were not kept whole"
+      ;;
+    *)
+      fail "the words the speech model heard in the sample clip were not kept, so the captions came from nowhere"
+      ;;
+  esac
   local made source clip captioned
   made=$(seconds_of "$folder/captions.log" made)
   source=$(seconds_of "$folder/captions.log" source)
