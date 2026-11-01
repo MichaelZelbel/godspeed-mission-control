@@ -33,7 +33,11 @@ jobs:
       - name: Install, upgrade and recover
         run: bash notebook/test/native-install-linux.sh
   image:
-    runs-on: ubuntu-latest
+    # Ubuntu 24.04, named, not ubuntu-latest: on 1 November 2026 GitHub's ubuntu-latest became
+    # Ubuntu 26.04, for which Playwright 1.56.1 (docker/full-candidate/test.sh) cannot install the
+    # browser's system packages, so every image from b57c899 on failed its browser check and none
+    # was published. The scenarios run on 24.04 too.
+    runs-on: ubuntu-24.04
     timeout-minutes: 40
     permissions:
       contents: read
