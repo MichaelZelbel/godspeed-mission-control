@@ -1705,6 +1705,74 @@ grep -v '^figma$' "$UR/good/two-after.txt" >"$UR/addon-lost-them/two-after.txt"
 refuses 'an install with the add-on that lost one all the same' \
   update-removes-only-unchanged-skills "$UR/addon-lost-them" 'gone from the install that has the video add-on'
 
+# ======================================== 14. briefing-breaks-a-rule (2.0.0-beta.14, 4)
+# What the scenario saw on a machine where a line the morning brief must carry broke the owner's voice
+# rules: the brief was saved and delivered without it, and a repair item reported it.
+briefing_good() { # <folder>
+  local folder=$1
+  rm -rf "$folder"
+  mkdir -p "$folder"
+  printf 'Challenge\n' >"$folder/banned-word.txt"
+  # shellcheck disable=SC2016  # the backticks are the voice file's own fence, not a command
+  printf '# My voice\n\n```voice-rules\nBANNED-WORD: Challenge\n```\n' >"$folder/voice.md"
+  printf 'Charm Challenge: day 1 of 21, 21 days to go.\n' >"$folder/brief-line.txt"
+  printf '{"results":[{"id":"morning-brief","state":"verified"}]}\n' >"$folder/brief-run.json"
+  printf 'state=pending\npaused=true\n' >"$folder/brief-job.txt"
+  printf 'No fresh health observations are recorded.\nReview the fictional list today.\n' >"$folder/brief-note.txt"
+  printf 'ready\n' >"$folder/delivery.txt"
+  printf 'repair-brief-line-abc\tneeds_review\tthe Charm Challenge line\tBANNED-WORD: Challenge\n' >"$folder/repairs.txt"
+}
+section '14. briefing-breaks-a-rule'
+briefing_good "$TMP/briefing-good"
+passes 'briefing: saved and delivered without the line, problem reported' briefing-breaks-a-rule \
+  "$TMP/briefing-good" 'saved and delivered'
+
+copy "$TMP/briefing-good" "$TMP/briefing-case"
+printf 'Short and plain.\n' >"$TMP/briefing-case/voice.md"
+refuses 'briefing: a voice file that bans nothing' briefing-breaks-a-rule "$TMP/briefing-case" 'nothing was banned'
+
+copy "$TMP/briefing-good" "$TMP/briefing-case"
+printf 'Charm: day 1 of 21, 21 days to go.\n' >"$TMP/briefing-case/brief-line.txt"
+refuses 'briefing: the line holds no banned word, so nothing was proved' briefing-breaks-a-rule \
+  "$TMP/briefing-case" 'does not contain the banned word'
+
+copy "$TMP/briefing-good" "$TMP/briefing-case"
+: >"$TMP/briefing-case/brief-note.txt"
+refuses 'briefing: no note was saved' briefing-breaks-a-rule "$TMP/briefing-case" 'saved no note'
+
+copy "$TMP/briefing-good" "$TMP/briefing-case"
+printf 'Your full morning briefing for 2026-11-02 could not be written today.\n' >"$TMP/briefing-case/brief-note.txt"
+refuses 'briefing: the note is the short fallback' briefing-breaks-a-rule "$TMP/briefing-case" 'short fallback'
+
+copy "$TMP/briefing-good" "$TMP/briefing-case"
+printf 'Review the fictional list today.\nCharm Challenge: day 1 of 21, 21 days to go.\n' >"$TMP/briefing-case/brief-note.txt"
+refuses 'briefing: the note carries the line that breaks the rules' briefing-breaks-a-rule "$TMP/briefing-case" \
+  'the line that breaks'
+
+copy "$TMP/briefing-good" "$TMP/briefing-case"
+printf 'Review the fictional challenge list today.\n' >"$TMP/briefing-case/brief-note.txt"
+refuses 'briefing: the note holds the banned word elsewhere' briefing-breaks-a-rule "$TMP/briefing-case" \
+  'still contains the banned word'
+
+copy "$TMP/briefing-good" "$TMP/briefing-case"
+printf 'none\n' >"$TMP/briefing-case/delivery.txt"
+refuses 'briefing: saved but not delivered' briefing-breaks-a-rule "$TMP/briefing-case" 'not delivered'
+
+copy "$TMP/briefing-good" "$TMP/briefing-case"
+: >"$TMP/briefing-case/repairs.txt"
+printf '\n' >"$TMP/briefing-case/repairs.txt"
+refuses 'briefing: no repair item reports the problem' briefing-breaks-a-rule "$TMP/briefing-case" 'no open repair item'
+
+copy "$TMP/briefing-good" "$TMP/briefing-case"
+printf 'repair-x\tneeds_review\tsomething else\tother\n' >"$TMP/briefing-case/repairs.txt"
+refuses 'briefing: a repair item that is not about the line' briefing-breaks-a-rule "$TMP/briefing-case" \
+  'names the Charm Challenge line'
+
+copy "$TMP/briefing-good" "$TMP/briefing-case"
+rm "$TMP/briefing-case/delivery.txt"
+refuses 'briefing: a file the scenario should have kept is missing' briefing-breaks-a-rule "$TMP/briefing-case" \
+  'delivery.txt is not in what the scenario kept'
+
 # =========================================== the stand-in for the private GitHub repository (issue #125)
 # `godspeed sync folder notebook` refuses a repository whose ignore file lacks NOTEBOOK.md and
 # assistant-state/, so both stand-ins must come with one.
@@ -1816,7 +1884,7 @@ for file in scenario-lib.sh settings-on-install.sh night-tidy.sh voice.sh update
   reminder-closed-elsewhere.sh reminders-move-keeps-everything.sh two-machines-move-at-once.sh \
   late-reminder-file.sh closed-offline-on-both.sh reminder-from-settings.sh \
   charm-challenge.sh no-video-skills-by-default.sh update-removes-only-unchanged-skills.sh \
-  test-scenarios.sh; do
+  briefing-breaks-a-rule.sh test-scenarios.sh; do
   if bash -n "$ROOT/scenarios/$file" 2>/dev/null; then
     ok "bash reads scenarios/$file"
   else
@@ -1826,7 +1894,7 @@ done
 for scenario in settings-on-install night-tidy voice update-keeps-everything \
   reminder-closed-elsewhere reminders-move-keeps-everything two-machines-move-at-once \
   late-reminder-file closed-offline-on-both reminder-from-settings charm-challenge \
-  no-video-skills-by-default update-removes-only-unchanged-skills; do
+  no-video-skills-by-default update-removes-only-unchanged-skills briefing-breaks-a-rule; do
   refuses "$scenario on a folder that is not there" "$scenario" "$TMP/no-such-folder" \
     "there is nothing at"
   run "$scenario"

@@ -27,6 +27,7 @@ and these are not programs for users.
 | `charm-challenge.sh` | the Charm Challenge start to finish: started with the right end date, the one line the morning brief is given and the note the brief then wrote with it, a vent answered with the one question, "no" changing nothing, "yes" and "charm slip" starting over, and the card on the Trackers shelf saying the same numbers as the chat |
 | `no-video-skills-by-default.sh` | a fresh install lists none of the video skills, the video add-on's own setup brings all of them, and `video-finishing` captions the add-on's sample clip |
 | `update-removes-only-unchanged-skills.sh` | an update from the current public version removes a video skill only where Godspeed put it there unchanged: the one the reader changed stays, and an install with the video add-on keeps them all |
+| `briefing-breaks-a-rule.sh` | a fresh install whose voice rules ban a word that a line the morning brief must carry contains still gets its morning briefing saved and delivered, without that line, and the problem reported as a repair item |
 
 ## How one is run
 
