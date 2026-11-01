@@ -22,6 +22,7 @@ import { Slider } from "@/components/ui/slider";
 import { parseDateOnly } from "@/lib/local-date";
 import { fetchAllPages } from "@/lib/postgrest";
 import { dbErrorMessage } from "@/lib/function-error";
+import { displayPeople } from "@/components/timeline/people";
 import AddEventDialog, { type EditMomentData, type TimelineContact } from "@/components/timeline/AddEventDialog";
 
 interface TimelineMoment {
@@ -98,7 +99,7 @@ export default function TimelinePage() {
             .order("id").range(from, to)),
       ]);
       setMoments(momentRows);
-      setPeople(peopleRows);
+      setPeople(displayPeople(peopleRows));
 
       const parts: Record<string, string[]> = {};
       for (const row of partRows) {

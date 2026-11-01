@@ -17,6 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Slider } from "@/components/ui/slider";
 import { Textarea } from "@/components/ui/textarea";
 import ImportanceSlider from "./ImportanceSlider";
+import { UNNAMED_PERSON } from "./people";
 import { filledOnOpen, mergeSuggestion } from "./moment-form.mjs";
 
 export interface TimelineContact {
@@ -169,7 +170,7 @@ export default function AddEventDialog({ people, onCreated, editEvent, open: con
     try {
       const { data, error } = await supabase.functions.invoke("draft-event", {
         headers: { Authorization: `Bearer ${session.access_token}` },
-        body: { messages: [{ role: "user", content: description.trim() }], today, people: people.map((p) => ({ name: p.name })) },
+        body: { messages: [{ role: "user", content: description.trim() }], today, people: people.filter((p) => p.name !== UNNAMED_PERSON).map((p) => ({ name: p.name })) },
       });
       if (error) {
         const details = await readFunctionError(error);
