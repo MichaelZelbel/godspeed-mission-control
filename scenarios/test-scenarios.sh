@@ -1472,7 +1472,7 @@ video_good() { # <folder>
     printf "ok: the speech model's code\n"
   } >"$folder/addon-check.txt"
   {
-    printf 'ok: heard 46 words, language en, on the processor, 11s\n'
+    printf 'ok: heard 5 words, language en, on the processor, 11s\n'
     printf 'ok: 7 captions written to /tmp/clip/sample-vertical.ass (box, 1080x1920, font Archivo Black)\n'
     printf 'burning the captions into the picture...\n'
     printf 'ok: /tmp/clip/sample-vertical.captioned.mp4 (1.4 MB, 8.0s; the source was 8.0s)\n'
@@ -1481,10 +1481,11 @@ video_good() { # <folder>
   printf '0\n' >"$folder/captions-code.txt"
   {
     printf '[Events]\n'
-    printf 'Dialogue: 0,0:00:00.10,0:00:01.40,box,,0,0,0,,{\\an5}THE FIRST WORDS\n'
-    printf 'Dialogue: 0,0:00:01.40,0:00:02.90,box,,0,0,0,,{\\an5}AND THE NEXT ONES\n'
+    printf 'Dialogue: 0,0:00:00.10,0:00:00.60,Pop,,0,0,0,,{\\an5\\pos(540,1440)\\fad(80,0)}{\\t(0,120,0.5,\\c&H0000E5FF&\\fscy112)}HELLO{\\r} THERE\n'
+    printf 'Dialogue: 0,0:00:00.60,0:00:01.40,Pop,,0,0,0,,{\\an5\\pos(540,1440)\\fad(0,90)}HELLO {\\t(0,120,0.5,\\c&H0000E5FF&\\fscy112)}THERE{\\r}\n'
+    printf 'Dialogue: 0,0:00:01.40,0:00:02.90,Pop,,0,0,0,,{\\an5\\pos(540,1440)}AN ADD-ON\n'
   } >"$folder/captions.ass"
-  printf '[\n {"word": "the", "start": 0.1, "end": 0.3},\n {"word": "first", "start": 0.3, "end": 0.6}\n]\n' >"$folder/words.json"
+  printf '[\n {"w": " Hello", "s": 0.1, "e": 0.4},\n {"w": " there,", "s": 0.4, "e": 0.8},\n {"w": " an", "s": 1.4, "e": 1.5},\n {"w": " add", "s": 1.5, "e": 1.8},\n {"w": "-on.", "s": 1.8, "e": 2.1}\n]\n' >"$folder/words.json"
   {
     printf 'clip=273446\n'
     printf 'captioned=1402331\n'
@@ -1549,6 +1550,41 @@ printf '[Events]\n' >"$NV/no-speech/captions.ass"
 refuses 'captions without one line of speech in them' no-video-skills-by-default "$NV/no-speech" \
   'hold no line of speech at all'
 
+copy "$NV/good" "$NV/nothing-heard"
+printf '[]\n' >"$NV/nothing-heard/words.json"
+refuses 'a words file in which nothing was heard' no-video-skills-by-default "$NV/nothing-heard" \
+  'were not kept, so the captions came from nowhere'
+
+copy "$NV/good" "$NV/words-not-json"
+printf 'the words were here\n' >"$NV/words-not-json/words.json"
+refuses 'a words file that is not JSON' no-video-skills-by-default "$NV/words-not-json" \
+  'were not kept, so the captions came from nowhere'
+
+copy "$NV/good" "$NV/old-word-key"
+printf '[{"word": "hello", "start": 0.1, "end": 0.3}]\n' >"$NV/old-word-key/words.json"
+sed -i 's/heard 5 words/heard 1 words/' "$NV/old-word-key/captions.log"
+refuses 'a words file without the add-on'"'"'s own w key' no-video-skills-by-default "$NV/old-word-key" \
+  'were not kept, so the captions came from nowhere'
+
+copy "$NV/good" "$NV/from-nowhere"
+sed -i 's/HELLO/GOODBYE/g; s/THERE/FRIENDS/g' "$NV/from-nowhere/captions.ass"
+refuses 'captions that carry none of the heard words' no-video-skills-by-default "$NV/from-nowhere" \
+  'words the speech model never heard (GOODBYE)'
+
+copy "$NV/good" "$NV/tags-only"
+{
+  printf '[Events]\n'
+  printf 'Dialogue: 0,0:00:00.10,0:00:00.60,Pop,,0,0,0,,{\\an5\\pos(540,1440)}\n'
+  printf 'Dialogue: 0,0:00:00.60,0:00:01.40,Pop,,0,0,0,,{\\an5\\pos(540,1440)}{\\r}\n'
+} >"$NV/tags-only/captions.ass"
+refuses 'captions whose lines show no word at all' no-video-skills-by-default "$NV/tags-only" \
+  'shows no word at all'
+
+copy "$NV/good" "$NV/count-differs"
+sed -i 's/heard 5 words/heard 33 words/' "$NV/count-differs/captions.log"
+refuses 'a words file that keeps fewer words than the add-on heard' no-video-skills-by-default "$NV/count-differs" \
+  'keeps another number'
+
 copy "$NV/good" "$NV/another-clip"
 sed -i 's/the source was 8.0s/the source was 21.0s/' "$NV/another-clip/captions.log"
 refuses 'a captioned clip that is not the sample clip' no-video-skills-by-default "$NV/another-clip" \
@@ -1576,7 +1612,7 @@ update_trace() { # <file>
     printf '+ GODSPEED_STARTER_REF=%s\n' "$PRODUCT_COMMIT"
   } >"$1"
 }
-update_good() { # <folder>
+update_removes_good() { # <folder>
   local folder=$1
   rm -rf "$folder"
   mkdir -p "$folder"
@@ -1614,7 +1650,7 @@ update_good() { # <folder>
 
 section update-removes-only-unchanged-skills
 UR=$TMP/update-removes
-update_good "$UR/good"
+update_removes_good "$UR/good"
 passes 'the changed one kept, the unchanged ones gone, and all of them kept where the add-on is' \
   update-removes-only-unchanged-skills "$UR/good" 'is still there with their own line'
 
@@ -1679,7 +1715,7 @@ shape=stand_in_github
 {
   SI_OUT=$(HOME="$SI_HOME" GIT_CONFIG_GLOBAL="$SI_HOME/gitconfig" SCENARIO=stand-in-test GODSPEED_SCENARIO_WORK="$TMP/si-work" bash -c '
     . "$1/scenarios/scenario-lib.sh"; '"$shape"' "$2/'"$shape"'" >/dev/null 2>&1; echo done' _ "$ROOT" "$TMP" 2>/dev/null)
-  bare=$(ls -d "$TMP/$shape"/*.git 2>/dev/null | head -1)
+  bare=$(find "$TMP/$shape" -maxdepth 1 -name "*.git" 2>/dev/null | sort | head -1)
   if [ -n "$bare" ] && git -C "$bare" show main:.gitignore 2>/dev/null | grep -qx 'NOTEBOOK.md' &&
     git -C "$bare" show main:.gitignore | grep -qx 'assistant-state/'; then
     ok "$shape makes a repository whose ignore file lists NOTEBOOK.md and assistant-state/"

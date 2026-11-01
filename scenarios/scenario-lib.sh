@@ -56,7 +56,7 @@ scenario_arguments() {
     '') usage 2 ;;
     -h | --help) usage 0 ;;
     --check)
-      [ $# -eq 2 ] && [ -n "$2" ] || usage 2
+      if [ $# -ne 2 ] || [ -z "$2" ]; then usage 2; fi
       CHECK_ONLY=yes
       EVIDENCE=$2
       ;;
@@ -115,8 +115,9 @@ assistant_home() {
   local home
   home=$(json_value "$STATE/assistant.json" home) ||
     fail "the install recorded no home for its assistant ($STATE/assistant.json names none), so its settings and its chat store cannot be found"
-  [ -n "$home" ] && [ -d "$home" ] ||
+  if [ -z "$home" ] || [ ! -d "$home" ]; then
     fail "the install recorded '$home' as its assistant's home, and there is no such folder"
+  fi
   HERMES=$home
   say "The assistant's home, as the install recorded it: $HERMES"
 }
@@ -369,7 +370,8 @@ runtime_of() { printf '%s/.godspeed/integrated-runtime\n' "$1"; }
 # verdict: it fills VERSION and says so itself.
 # shellcheck disable=SC2034  # the scenario that sourced this file is what reads it
 read_version() { # <root>
-  VERSION=$(cat "$(runtime_of "$1")/version" 2>/dev/null) && [ -n "$VERSION" ] ||
+  VERSION=$(cat "$(runtime_of "$1")/version" 2>/dev/null) || VERSION=
+  [ -n "$VERSION" ] ||
     fail "the installation in $1 left no version file behind, so its own programs cannot be run"
   say "The installation in $1 runs $VERSION"
 }
