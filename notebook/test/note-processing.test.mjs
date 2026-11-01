@@ -70,10 +70,12 @@ test('another machine, the daily limit and a missing model all leave notes alone
   const b=setup(),processing=new NoteProcessing({store:b.store,query:b.query,domains:b.domains,device:'vps'});
   await processing.tick();b.store.save('settings',{id:'processing',daily_limit:1});
   b.store.save('notes',{title:'One',content:'First fictional note mentioning Fictional Ana.'});b.store.save('notes',{title:'Two',content:'Second fictional note mentioning Fictional Ana.'});
-  await processing.tick({now:Date.now()+600000});const second=await processing.tick({now:Date.now()+700000});
+  // A fixed clock of its own (noon, June 2099): the real clock plus ten minutes crossed midnight Berlin time late in the evening and the day's count started again.
+  const noon=Date.parse('2099-06-15T10:00:00Z');
+  await processing.tick({now:noon});const second=await processing.tick({now:noon+100000});
   assert.equal(second.skipped,'daily limit reached');assert.equal(b.calls(),1);
   b.domains.provider=null;b.store.save('settings',{id:'processing',daily_limit:10});
-  assert.equal((await processing.tick({now:Date.now()+800000})).skipped,'no model connected');
+  assert.equal((await processing.tick({now:noon+200000})).skipped,'no model connected');
   assert.equal((await b.domains.invoke('sweep-note-processing',{})).waiting,1);
 });
 

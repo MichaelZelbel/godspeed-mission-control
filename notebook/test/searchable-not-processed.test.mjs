@@ -16,6 +16,11 @@ import {visibleRows} from '../core/visibility.mjs';
 // also takes a note out of search, and the assistant has to find these notes. A note written with
 // skip_processing: true stays visible and searchable; processing never takes it, in the queue or in
 // a bulk run, and it never counts against the daily limit. One note's own "process" still works.
+// The runs below are given their own clock instead of the real one plus ten minutes: that landed on
+// the next day, in the notebook's time zone, when the tests ran in the last minutes before midnight
+// Berlin time, and the per-day count then started again. Noon in June 2099 is a day far from midnight
+// and later than any note the test saves, so each note is ready.
+const NOON = Date.parse('2099-06-15T10:00:00Z');
 const setup = ({limit = 40} = {}) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'godspeed-search-only-'));
   const store = new Store(root, {device: 'vps'}), query = new QueryService(store), domains = new Domains(query);
@@ -40,7 +45,7 @@ test('a note marked skip_processing is never queued, and the person\'s own note 
   const mine = store.save('notes', {title: 'My plan', content: 'A fictional plan of my own for the weekend, written after the letters.'});
   assert.deepEqual(processing.candidates().map(c => c.note.id), [mine.id], 'only the person\'s note waits');
   assert.equal(processing.sweep().waiting, 1);
-  const now = Date.now() + 600000;
+  const now = NOON;
   assert.equal((await processing.tick({now})).note_id, mine.id);
   assert.equal((await processing.tick({now: now + 60000})).skipped, 'daily limit reached', 'the person\'s note used the one run');
   assert.deepEqual(asked, [mine.id]);
@@ -52,7 +57,7 @@ test('marked notes never count against the daily limit', async () => {
   for (let n = 1; n <= 5; n++) letter(query, n);
   const a = store.save('notes', {title: 'First own note', content: 'A fictional first note of my own about the garden.'});
   const b = store.save('notes', {title: 'Second own note', content: 'A fictional second note of my own about the garage.'});
-  const now = Date.now() + 600000;
+  const now = NOON;
   await processing.tick({now}); await processing.tick({now: now + 60000});
   assert.deepEqual(asked.sort(), [a.id, b.id].sort());
   assert.equal(processing.status.processed_today, 2);
