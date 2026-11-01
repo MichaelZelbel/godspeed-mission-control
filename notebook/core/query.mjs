@@ -390,6 +390,7 @@ export class QueryService {
             return correction;
           }
           const record = this.store.prepare(table, { ...(defaults[table] || {}), ...old, ...payload }, old);
+          if(table==='contacts'&&operation!=='delete'&&!(typeof record.name==='string'&&record.name.trim()))throw new Error('A person needs a name. Type their name and save again.');
           if(table==='contact_groups'&&payload.type&&payload.type!=='contact_groups')record.group_type=payload.type;
           if(table==='contact_group_memberships'&&!record.status_changed_at)record.status_changed_at=record.created_at;
           if(table==='contact_group_memberships'&&(!record.last_movement_at||old&&payload.status&&old.status!==payload.status))record.last_movement_at=record.updated_at;

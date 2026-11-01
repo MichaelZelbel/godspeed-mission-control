@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/command";
 import { cn } from "@/lib/utils";
 import type { TimelineContact } from "./AddEventDialog";
+import { personLabel } from "./people";
 
 interface PeopleMultiSelectProps {
   people: TimelineContact[];
@@ -34,7 +35,7 @@ export default function PeopleMultiSelect({ people, value, onChange }: PeopleMul
   const { selected, unselected } = useMemo(() => {
     const sel: TimelineContact[] = [];
     const unsel: TimelineContact[] = [];
-    const sorted = [...people].sort((a, b) => a.name.localeCompare(b.name));
+    const sorted = [...people].sort((a, b) => personLabel(a).localeCompare(personLabel(b)));
     for (const p of sorted) {
       if (selectedSet.has(p.id)) sel.push(p);
       else unsel.push(p);
@@ -53,12 +54,12 @@ export default function PeopleMultiSelect({ people, value, onChange }: PeopleMul
         <div className="flex flex-wrap gap-1.5">
           {selected.map((p) => (
             <Badge key={p.id} variant="secondary" className="gap-1 pr-1 h-6 text-xs">
-              {p.name}
+              {personLabel(p)}
               <button
                 type="button"
                 onClick={() => toggle(p.id)}
                 className="rounded-sm hover:bg-muted-foreground/20 p-0.5"
-                aria-label={`Remove ${p.name}`}
+                aria-label={`Remove ${personLabel(p)}`}
               >
                 <X className="h-3 w-3" />
               </button>
@@ -99,11 +100,11 @@ export default function PeopleMultiSelect({ people, value, onChange }: PeopleMul
                     {selected.map((p) => (
                       <CommandItem
                         key={p.id}
-                        value={p.name}
+                        value={personLabel(p)}
                         onSelect={() => toggle(p.id)}
                       >
                         <Check className={cn("mr-2 h-4 w-4 opacity-100")} />
-                        {p.name}
+                        {personLabel(p)}
                       </CommandItem>
                     ))}
                   </CommandGroup>
@@ -115,11 +116,11 @@ export default function PeopleMultiSelect({ people, value, onChange }: PeopleMul
                 {unselected.map((p) => (
                   <CommandItem
                     key={p.id}
-                    value={p.name}
+                    value={personLabel(p)}
                     onSelect={() => toggle(p.id)}
                   >
                     <Check className="mr-2 h-4 w-4 opacity-0" />
-                    {p.name}
+                    {personLabel(p)}
                   </CommandItem>
                 ))}
               </CommandGroup>
