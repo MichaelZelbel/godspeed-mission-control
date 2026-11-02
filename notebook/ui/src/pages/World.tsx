@@ -7,6 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Plus, Search, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SEOHead } from "@/components/SEOHead";
+import { personNames } from "@/components/timeline/people";
 import { EntityDetail } from "@/components/world/EntityDetail";
 import { ENTITY_TYPE_SUGGESTIONS, useCreateEntity, useEntities } from "@/hooks/useEntities";
 import { useWorldClaims, useWorldEntities, useWorldEvents } from "@/hooks/useWorld";
@@ -53,10 +54,10 @@ export default function World() {
     return entities.filter((e) => {
       if (kindFilter && e.kind !== kindFilter) return false;
       if (!q) return true;
+      // A contact without a name is an entity too (#154): names and aliases that are not text are skipped.
       return (
-        e.name.toLowerCase().includes(q) ||
-        (e.aliases || []).some((a) => a.toLowerCase().includes(q)) ||
-        (e.description || "").toLowerCase().includes(q)
+        personNames(e).some((n) => n.includes(q)) ||
+        String(e.description || "").toLowerCase().includes(q)
       );
     });
   }, [entities, search, kindFilter]);
@@ -66,8 +67,8 @@ export default function World() {
     if (!q) return events;
     return events.filter(
       (e) =>
-        e.title.toLowerCase().includes(q) ||
-        (e.description || "").toLowerCase().includes(q),
+        String(e.title || "").toLowerCase().includes(q) ||
+        String(e.description || "").toLowerCase().includes(q),
     );
   }, [events, search]);
 
