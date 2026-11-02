@@ -20,7 +20,7 @@ vi.mock("@/hooks/useWorld", () => ({
     { id: "p2", kind: "person", name: "Ada Example", aliases: [] },
   ], isLoading: false }),
   useWorldEvents: () => ({ data: [{ id: "e1", title: undefined }], isLoading: false }),
-  useWorldClaims: () => ({ data: [], isLoading: false }),
+  useWorldClaims: () => ({ data: [{ id: "c1", subject_id: "review-0001", attribute: "lives in", value: "Somewhere", created_by: "user", created_at: "2026-11-01" }], isLoading: false }),
 }));
 
 describe("the World page with a contact that has no name", () => {
@@ -29,5 +29,9 @@ describe("the World page with a contact that has no name", () => {
     render(<MemoryRouter><World /></MemoryRouter>);
     fireEvent.change(screen.getByPlaceholderText("Search the whole world"), { target: { value: "ada" } });
     expect(screen.getAllByText("Ada Example").length).toBeGreaterThan(0);
+  });
+  it("lists it as Unnamed person", () => {
+    render(<MemoryRouter><World /></MemoryRouter>);
+    expect(screen.getAllByText("Unnamed person").length).toBeGreaterThan(0);
   });
 });
