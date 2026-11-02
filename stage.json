@@ -1,29 +1,32 @@
 {
   "stageFormat": 1,
-  "version": "2.0.0-beta.6",
-  "productCommit": "9390da492a0035a41b0eb02584234e269bca6dc8",
+  "version": "2.0.0-beta.14",
+  "productCommit": "8d7ecf7ae8195000babee7635fa5f9b958924117",
   "kitBootstrap": {
-    "unixEngineCommit": "86da1dd27fea804ab131a8494b79a2ccf868e847",
-    "windowsBootstrapCommit": "5364e82b44ab0b093e04262c680a21d666faf5e1"
+    "unixEngineCommit": "fe78248e4a9ccd72c6eea36984eaf0f83999a59c",
+    "windowsBootstrapCommit": "fe78248e4a9ccd72c6eea36984eaf0f83999a59c"
   },
   "serverEditions": {
     "server": {
-      "image": "ghcr.io/michaelzelbel/godspeed-mission-control@sha256:70a07e63bad57ee9cf114a86be3261db533191af28927453a81d5ea8fc330291"
+      "image": "ghcr.io/michaelzelbel/godspeed-mission-control@sha256:966591d1d8fdc5c46da90b7adffd1cc1f51513929f7419b8bdb564f59064aa6a"
     }
   },
   "windowsSetup": {
     "file": "GodspeedSetup.exe",
-    "releaseTag": "godspeed-v2-integrated-2026-10-24-2",
-    "sha256": "4a1c63c8a14af59a0c5b295b63a2bc5e45f6637174b706f1b2b7826fd513c2a5"
+    "releaseTag": "candidate/2.0.0-beta.14",
+    "sha256": "38fbf2d13e3ebad7dd692efb24ad4e62459b400eb00384333ecf6c74f1d0561f"
   },
   "addons": {
-    "godspeed-charm": "9390da492a0035a41b0eb02584234e269bca6dc8",
-    "godspeed-coach": "085eb63febce37b87dbf947eac2b840dc0c5fdc3",
-    "godspeed-headache": "d07d6a0250ff3266ed3ddff2416cbd788c6dfb2c",
-    "godspeed-journal": "d370b082fec8ef85eee54b4be1f64b502b00447d",
-    "mc-phone": "ceab2992233c6f360accb1542624fcf527a22df8",
-    "mc-video": "fecb22dd6f0376ebec810fa733a50eb880484f2e"
+    "godspeed-charm": "8d7ecf7ae8195000babee7635fa5f9b958924117",
+    "godspeed-coach": "b134abffccb7fe7b33f4d971c802db8d1ff4f00f",
+    "godspeed-headache": "30dc063286c0f95e7fe68ab03b0c03321a1e2465",
+    "godspeed-journal": "6d810f457a78606e2a0bc778b0bb9f366311ae80",
+    "mc-phone": "82c3edcec79505ce71fee7dd8ebaf60165ef0e54",
+    "mc-video": "f652ea78722a7412f3fdaf829b56b3adf1921147"
   },
-  "previous": null,
+  "previous": {
+    "version": "2.0.0-beta.13",
+    "stageCommit": "bbc975d45a6c30816cf2dd8363c13b5f6945483a"
+  },
   "withdrawn": []
 }
