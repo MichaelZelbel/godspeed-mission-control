@@ -21,14 +21,16 @@ on:
 permissions:
   contents: read
 env:
-  # The kit-bootstrap commit the Windows setup is built with: kit-bootstrap #3 and #4 merged for
-  # 2.0.0-beta.11 (no "Full Alpha" in a new Windows install's folder and script names, old installs
-  # found under their names; the Menerio import line only where the notebook is). 2.0.0-beta.10 was
-  # built with 8ac85e063fea08069ab6ef260525c48aa03338b4, 2.0.0-beta.9 with
+  # The kit-bootstrap commit the Windows setup is built with: kit-bootstrap #5 merged for
+  # 2.0.0-beta.15 (an install from before 2.0.0-beta.11 moves to the folder names without "Full
+  # Alpha" on update, product issue #6). 2.0.0-beta.11 to 2.0.0-beta.14 were built with
+  # fe78248e4a9ccd72c6eea36984eaf0f83999a59c (#3 and #4: no "Full Alpha" in a new Windows install's
+  # folder and script names, old installs found under their names; the Menerio import line only where
+  # the notebook is). 2.0.0-beta.10 was built with 8ac85e063fea08069ab6ef260525c48aa03338b4, 2.0.0-beta.9 with
   # cbe395a88a1cfd366ede8b80c01ec086b34527c3, and 2.0.0-beta.7 and 2.0.0-beta.8 with
   # 5364e82b44ab0b093e04262c680a21d666faf5e1 (their stage files name it as windowsBootstrapCommit). A
   # release that changes it changes it here, together with KB_PIN in server/install.sh.
-  KIT_BOOTSTRAP_COMMIT: fe78248e4a9ccd72c6eea36984eaf0f83999a59c
+  KIT_BOOTSTRAP_COMMIT: 15c666da8ef37dd80c56feef0f7d508131ac34f8
 jobs:
   setup:
     name: windows setup

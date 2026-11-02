@@ -62,8 +62,10 @@ export KB_SELF_URL
 # never asked the mail tool (product issue #81). The pin is past 8ac85e0, the commit the Windows,
 # Mac and Linux setup moved to for that fix, and past the one after it that keeps the version 2
 # notebook's Menerio import line off a server, which has no such notebook. 2.0.0-beta.11 pins
-# kit-bootstrap main as merged for it (#3 and #4), the same commit its Windows setup is built with.
-KB_PIN="fe78248e4a9ccd72c6eea36984eaf0f83999a59c"
+# kit-bootstrap main as merged for it (#3 and #4), the same commit its Windows setup is built with;
+# 2.0.0-beta.15 pins main as merged for #5 (the old Windows folder names move; it changes only
+# Windows files, so a server runs the same code as before), again the same as its Windows setup.
+KB_PIN="15c666da8ef37dd80c56feef0f7d508131ac34f8"
 LIB_URL="https://raw.githubusercontent.com/MichaelZelbel/kit-bootstrap/$KB_PIN/lib.sh"
 
 # The agent cage (see "The agent cage" in phase 1): one file from kit-bootstrap at its
