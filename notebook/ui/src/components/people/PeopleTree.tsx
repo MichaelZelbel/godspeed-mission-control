@@ -59,6 +59,7 @@ import {
   type PersonLite,
 } from "./peopleTreeBuild";
 import { PeopleBulkBar } from "./PeopleBulkBar";
+import { personLabel, personNames } from "@/components/timeline/people";
 
 // Reuse the Groups page icon idiom so a group's chosen icon renders in the tree.
 const iconMap = { Sparkles, Landmark, Clapperboard, Handshake, Podcast, UserSearch, Compass, UsersRound };
@@ -211,11 +212,11 @@ const PersonRow = memo(function PersonRow({
                   person.id,
                 );
               }}
-              aria-label={`Select ${person.name}`}
+              aria-label={`Select ${personLabel(person)}`}
               className={cn("h-3.5 w-3.5", multiActive ? "opacity-100" : "opacity-0 group-hover:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100")}
             />
           </span>
-          <span className="min-w-0 flex-1 truncate">{person.name}</span>
+          <span className="min-w-0 flex-1 truncate">{personLabel(person)}</span>
           <button
             type="button"
             onClick={(event) => {
@@ -579,7 +580,7 @@ export function PeopleTree({
       if (!c || c.merged_into) continue;
       byId.set(c.id, {
         id: c.id,
-        name: c.name,
+        name: personLabel(c),
         aliases: c.aliases ?? [],
         is_favorite: !!c.is_favorite,
         last_viewed_at: c.last_viewed_at,
@@ -603,7 +604,7 @@ export function PeopleTree({
   );
 
   const favorites = useMemo(
-    () => knownPeople.filter((p) => p.is_favorite).sort((a, b) => a.name.localeCompare(b.name)),
+    () => knownPeople.filter((p) => p.is_favorite).sort((a, b) => personLabel(a).localeCompare(personLabel(b))),
     [knownPeople],
   );
 
@@ -621,12 +622,8 @@ export function PeopleTree({
     if (!q) return [];
     if (serverSearch) return people;
     return people
-      .filter(
-        (p) =>
-          p.name.toLowerCase().includes(q) ||
-          (p.aliases || []).some((a) => a.toLowerCase().includes(q)),
-      )
-      .sort((a, b) => a.name.localeCompare(b.name));
+      .filter((p) => personNames(p).some((n) => n.includes(q)))
+      .sort((a, b) => personLabel(a).localeCompare(personLabel(b)));
   }, [people, searchQuery, serverSearch]);
 
   const searching = searchQuery.trim().length > 0;

@@ -60,7 +60,8 @@ export interface ContactPage {
 }
 
 function normalizePerson(d: Person): Person {
-  return { ...d, aliases: d.aliases || [], app_mappings: d.app_mappings || {},
+  return { ...d, name: typeof d.name === "string" ? d.name : "",
+    aliases: Array.isArray(d.aliases) ? d.aliases.filter((a) => typeof a === "string" && a.trim() !== "") : [], app_mappings: d.app_mappings || {},
     is_favorite: d.is_favorite ?? false, last_viewed_at: d.last_viewed_at ?? null };
 }
 

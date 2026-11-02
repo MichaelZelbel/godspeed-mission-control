@@ -50,6 +50,7 @@ const ChatMarkdown = lazy(() => import("./ChatMarkdown"));
 
 import ChatComposer, {type ChatFile} from "./ChatComposer";
 import { BRAIN_PAGE } from "@/lib/brain-page";
+import { personLabel } from "@/components/timeline/people";
 type ChatMessage = PersistedChatMessage;
 type SizeMode = "docked" | "expanded" | "fullscreen";
 
@@ -175,7 +176,7 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
         ? `person:${personId}`
         : "general";
 
-  useEffect(()=>{let active=true;setContextTitle(noteTitle||'');if(noteId&&noteTitle===undefined)supabase.from('notes').select('*').eq('id',noteId).single().then(({data}:any)=>{if(active&&data)setContextTitle(data.title||'Untitled note');});else if(personId)supabase.from('contacts').select('*').eq('id',personId).single().then(({data}:any)=>{if(active&&data)setContextTitle(data.name||'Current person');});return()=>{active=false;};},[noteId,personId,noteTitle]);
+  useEffect(()=>{let active=true;setContextTitle(noteTitle||'');if(noteId&&noteTitle===undefined)supabase.from('notes').select('*').eq('id',noteId).single().then(({data}:any)=>{if(active&&data)setContextTitle(data.title||'Untitled note');});else if(personId)supabase.from('contacts').select('*').eq('id',personId).single().then(({data}:any)=>{if(active&&data)setContextTitle(personLabel(data));});return()=>{active=false;};},[noteId,personId,noteTitle]);
 
   // Persisted chat state for the current context
   const chatKey = `${user?.id ?? "anon"}|${contextKey}`;

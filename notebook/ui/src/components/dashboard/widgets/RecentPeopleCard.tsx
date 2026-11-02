@@ -5,6 +5,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { UserCircle, ArrowRight, Heart } from "lucide-react";
+import { personLabel } from "@/components/timeline/people";
 
 type RecentPerson = { id: string; name: string; relationship: string | null; updated_at: string | null };
 
@@ -53,7 +54,7 @@ export function RecentPeopleCard() {
                 className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm transition-colors hover:bg-accent"
               >
                 <UserCircle className="h-4 w-4 shrink-0 text-muted-foreground" />
-                <span className="truncate font-medium">{person.name}</span>
+                <span className="truncate font-medium">{personLabel(person)}</span>
                 {person.relationship && (
                   <span className="truncate text-xs text-muted-foreground">{person.relationship}</span>
                 )}

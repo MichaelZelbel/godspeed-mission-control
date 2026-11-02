@@ -9,6 +9,7 @@ import { usePeopleSync } from "@/hooks/usePeopleSync";
 import { invalidateFactViews } from "@/hooks/useFacts";
 import { broadcastInvalidation } from "@/lib/query-sync";
 import { topicSelectClass } from "./ContactTopicRow";
+import { personLabel } from "@/components/timeline/people";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -139,7 +140,7 @@ export function MergePersonDialog({
       // refreshes the survivor + affected group pages.
       triggerPeopleSync();
       showToast.success(
-        `Merged ${sourcePerson.name} into ${mergeIntoSelf ? "your profile" : targetPerson?.name || "target"}`
+        `Merged ${personLabel(sourcePerson)} into ${mergeIntoSelf ? "your profile" : (targetPerson ? personLabel(targetPerson) : "target")}`
       );
       onOpenChange(false);
       onMergeComplete();
@@ -165,16 +166,16 @@ export function MergePersonDialog({
     mergeMutation.mutate();
   };
 
-  const targetLabel = mergeIntoSelf ? "your profile" : targetPerson?.name || "";
+  const targetLabel = mergeIntoSelf ? "your profile" : (targetPerson ? personLabel(targetPerson) : "");
 
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Merge {sourcePerson.name}</DialogTitle>
+            <DialogTitle>Merge {personLabel(sourcePerson)}</DialogTitle>
             <DialogDescription>
-              Choose who {sourcePerson.name} should be merged into. All notes, profile data, and
+              Choose who {personLabel(sourcePerson)} should be merged into. All notes, profile data, and
               mappings will be combined.
             </DialogDescription>
           </DialogHeader>
@@ -226,7 +227,7 @@ export function MergePersonDialog({
                       <User className="h-4 w-4 text-muted-foreground" />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium truncate">{p.name}</p>
+                      <p className="text-sm font-medium truncate">{personLabel(p)}</p>
                       {p.aliases && p.aliases.length > 0 && (
                         <p className="text-xs text-muted-foreground truncate">
                           aka {p.aliases.join(", ")}
@@ -258,12 +259,12 @@ export function MergePersonDialog({
             <AlertDialogTitle>Confirm merge</AlertDialogTitle>
             <AlertDialogDescription className="space-y-2">
               <span className="block">
-                <strong>{sourcePerson.name}</strong> will be merged into{" "}
+                <strong>{personLabel(sourcePerson)}</strong> will be merged into{" "}
                 <strong>{targetLabel}</strong>.
               </span>
               <span className="block">
                 All notes, profile data, aliases, app mappings, and conversation topics will be combined into the
-                target. {sourcePerson.name} will no longer appear as a separate person.
+                target. {personLabel(sourcePerson)} will no longer appear as a separate person.
               </span>
               <span className="block text-destructive font-medium">
                 This cannot be easily undone.
@@ -278,10 +279,10 @@ export function MergePersonDialog({
               <p>{topicCandidates.data.length} of {topicCandidates.total} people</p>
               {topicCandidates.isPending && <p role="status">Loading recipients...</p>}
               {topicCandidates.isError && <p role="alert">Could not load recipients. <button onClick={() => topicCandidates.refetch()}>Retry</button></p>}
-              <select id="merge-topic-target" value={topicTarget} onChange={e => { setTopicTarget(e.target.value); setTopicTargetName(topicCandidates.data.find(p => p.id === e.target.value)?.name ?? ''); }} className={`${topicSelectClass} w-full`}>
+              <select id="merge-topic-target" value={topicTarget} onChange={e => { setTopicTarget(e.target.value); setTopicTargetName((() => { const p = topicCandidates.data.find(p => p.id === e.target.value); return p ? personLabel(p) : ''; })()); }} className={`${topicSelectClass} w-full`}>
                 <option value="">Choose a person</option>
                 {topicTarget && !topicCandidates.data.some(p => p.id === topicTarget) && <option value={topicTarget}>{topicTargetName}</option>}
-                {topicCandidates.data.map(p => <option value={p.id} key={p.id}>{p.name}</option>)}
+                {topicCandidates.data.map(p => <option value={p.id} key={p.id}>{personLabel(p)}</option>)}
               </select>
               {topicCandidates.hasNextPage && <Button variant="outline" disabled={topicCandidates.isFetching} onClick={() => topicCandidates.fetchNextPage()}>Load more recipients</Button>}
               <p className="text-muted-foreground">Moving topics happens first and remains saved if the profile merge later fails.</p>

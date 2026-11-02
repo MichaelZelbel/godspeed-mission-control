@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tansta
 import { supabase } from "@/integrations/supabase/client";
 import { showToast } from "@/lib/toast";
 import { invalidateFactViews, retractFact } from "@/hooks/useFacts";
+import { personLabel } from "@/components/timeline/people";
 
 /**
  * Drop every cached view of the data a footprint removal deletes. These are
@@ -116,7 +117,8 @@ async function subjectNames(rows: Array<{ subject_type: string; subject_id: stri
     contactIds.length ? (supabase as any).from("contacts").select("id, name").in("id", contactIds) : { data: [] },
     entityIds.length ? (supabase as any).from("entities").select("id, name").in("id", entityIds) : { data: [] },
   ]);
-  for (const r of [...(contacts?.data ?? []), ...(entities?.data ?? [])]) names.set(r.id, r.name);
+  for (const r of contacts?.data ?? []) names.set(r.id, personLabel(r));
+  for (const r of entities?.data ?? []) names.set(r.id, typeof r.name === "string" && r.name.trim() ? r.name : "Unnamed");
   return names;
 }
 
