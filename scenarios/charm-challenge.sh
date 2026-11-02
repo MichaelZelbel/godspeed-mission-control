@@ -14,10 +14,11 @@
 #                   are in the conversation that asked it, which is the only place the design lets a
 #                   bare "yes" count. The model that answers is the one Settings connects (POST
 #                   /api/provider), with the key the job hands this scenario.
-#   the brief       the line the morning brief is GIVEN, through the notebook's own operation, which
-#                   is the call the brief itself makes (core/briefing.mjs asks the cycle tracker for
-#                   its heads-up line exactly so: {action:'brief'}.line, and puts it in word for
-#                   word or refuses the draft). And then the morning brief itself, run as Settings
+#   the brief       the line the morning brief is GIVEN, asked through the notebook's addon-command
+#                   operation as {"type":"addon-command","addon":"charm","args":["brief","--no-write"]},
+#                   which is the call the brief itself makes (core/briefing.mjs runs the add-on's own
+#                   command and reads the reply of its JSON; it puts the line in word for word or
+#                   refuses the draft). The scenario tests the path the briefing uses. And then the morning brief itself, run as Settings
 #                   runs it, and the note it wrote, which is what the owner reads.
 #   the shelf       the Trackers shelf's own list, as the notebook answers it for its own pages
 #                   (tracker-list: every tracker with its card, its columns and its entries), and
@@ -32,8 +33,8 @@
 #
 # WHAT IT ASSUMES OF THE ADD-ON, because it is written from the release plan while the add-on is
 # built beside it (ticket 01), and both are the design's own words: the notebook answers the charm
-# operation (`{type:"charm"}`, as it answers the cycle's and the headache's) with `brief` for the
-# one line the morning brief is given and `status` for what the challenge stands at; and the
+# operation (`{type:"charm"}`) with `status` for what the challenge stands at, and the add-on's own
+# `brief --no-write` command (addon-command) with the one line the morning brief is given; and the
 # challenge is a collection on the Trackers shelf whose card names the specialist "charm" and whose
 # items are its events, each with its own `when`. A stage where they are not so fails here with that
 # as its symptom, which is what a proving scenario is for.
@@ -180,10 +181,15 @@ one_table() { # <table> <file>
 
 # THE ONE LINE THE MORNING BRIEF IS GIVEN: the notebook's own answer, the call the brief makes.
 keep_the_brief_line() { # <file>
-  notebook_answer personal-operation '{"type":"charm","action":"brief"}' "$EVIDENCE/.brief.json" \
+  # core/briefing.mjs asks the add-on's own command, brief --no-write, and reads the reply of the
+  # JSON it prints; so does this, through the notebook's addon-command operation.
+  notebook_answer personal-operation '{"type":"addon-command","addon":"charm","args":["brief","--no-write"]}' "$EVIDENCE/.brief.json" \
     'the one line the morning brief is given about the Charm Challenge'
-  json_value "$EVIDENCE/.brief.json" data.line >"$1" ||
+  if ! json_value "$EVIDENCE/.brief.json" data.result >"$EVIDENCE/.brief-result.json" ||
+    ! json_value "$EVIDENCE/.brief-result.json" reply >"$1" ||
+    [ ! -s "$1" ]; then
     fail "the notebook's own answer for the morning brief holds no line about the Charm Challenge: $(tr -d '\n' <"$EVIDENCE/.brief.json" | cut -c1-200)"
+  fi
   printf '\n' >>"$1"
   sed 's/^/  | /' "$1" >&2
 }
