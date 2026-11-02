@@ -36,7 +36,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { Store, hash, readableSlug } from './records/store.mjs';
-import { deadlineUid, closingUid, closingMoment } from './deadline-records.mjs';
+import { deadlineUid, closingUid, closingMoment, closingMomentRatings, CLOSING_KINDS } from './deadline-records.mjs';
 
 const require_ = createRequire(import.meta.url);
 const { createDueFiles } = require_('../../tools/due-files.js');
@@ -216,6 +216,21 @@ function copyUnderLock(store, day) {
       references: [{ type: 'moments', id: moment.id, uid: moment.uid }] }, null);
   };
 
+  // Older due closings have no timeline ratings or status. Keep their original event intact:
+  // a correction supplies only missing fields, preserving any rating the owner already gave.
+  // The correction id and timestamp come from the event, so two machines repair it identically.
+  for (const moment of live.values()) {
+    if (moment.category !== 'obligation' || !CLOSING_KINDS.includes(moment.obligation_kind)) continue;
+    const defaults = closingMomentRatings(moment.evidence);
+    const patch = {};
+    for (const [field, value] of Object.entries(defaults)) {
+      if (moment[field] == null || (field === 'status' && moment[field] === 'confirmed')) patch[field] = value;
+    }
+    if (!Object.keys(patch).length || !/^\d{4}-\d{2}-\d{2}$/.test(moment.happened_at || '')) continue;
+    correct(moment, patch, 'timeline-ratings-v1', moment.happened_at);
+    report.corrected.push(moment.title + ' (timeline ratings)');
+  }
+
   // ---- the reminders, and the closings of each
   const events = files.worldEvents();
   const eventOf = new Map(events.map(event => [event.file, event]));
@@ -390,7 +405,13 @@ function copyUnderLock(store, day) {
 // is left for the next run: the copy is idempotent, so nothing is lost by waiting.
 export function copyIfFilesChanged(root, { day = null, store = null, timeoutMs = 30000 } = {}) {
   if (!fs.existsSync(path.join(root, 'notebook')) && !fs.existsSync(path.join(root, '.godspeed'))) return { skipped: 'no notebook' };
-  if (marks(root) === marked(root)) return { skipped: 'nothing changed', unproven: noteOf(root).unproven || [] };
+  if (marks(root) === marked(root)) {
+    const current = store || new Store(root);
+    const needsRatings = liveMoments(current).some(moment => moment.category === 'obligation' && CLOSING_KINDS.includes(moment.obligation_kind)
+      && Object.entries(closingMomentRatings(moment.evidence)).some(([field]) => moment[field] == null || (field === 'status' && moment[field] === 'confirmed')));
+    if (!needsRatings) return { skipped: 'nothing changed', unproven: noteOf(root).unproven || [] };
+    return copyOldReminders(current, { day, timeoutMs });
+  }
   return copyOldReminders(store || new Store(root), { day, timeoutMs });
 }
 
