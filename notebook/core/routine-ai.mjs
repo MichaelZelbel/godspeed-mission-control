@@ -15,7 +15,7 @@ import {fallbackChain,noteMainAnswered,noteMainFailed} from './backup-ai.mjs';
 // plainly whether the routines can reach it.
 //
 // A Hermes that already has a sign-in of its own (the Windows app, `hermes model`) keeps it: the
-// form writes into Hermes only when the person ticks "Use it for the routines too", which is ticked
+// form writes into Hermes only when the person ticks "Use it for the daily routines and the chat too", which is ticked
 // for them only when the routines have no AI yet or use the one this form connected before.
 
 const RECORD='routine-ai.json';
