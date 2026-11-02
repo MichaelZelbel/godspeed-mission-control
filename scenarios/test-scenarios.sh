@@ -1938,5 +1938,16 @@ for scenario in settings-on-install night-tidy voice update-keeps-everything \
   esac
 done
 
+# ================================================================ the night's report
+# report-night.mjs opens, comments on and closes the issues of a failed night; its own tests stand a
+# fake GitHub in for the real one.
+section "report-night.mjs: the night's issues"
+if node --test "$ROOT/scenarios/test-report-night.mjs" >"$TMP/report-night.log" 2>&1; then
+  ok "report-night.mjs: its node --test cases pass"
+else
+  cat "$TMP/report-night.log"
+  bad "report-night.mjs: its node --test cases fail"
+fi
+
 printf '\n%s of %s pass.\n' "$PASS" "$((PASS + FAIL))"
 [ "$FAIL" -eq 0 ]
