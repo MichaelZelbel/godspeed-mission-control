@@ -26,7 +26,7 @@ test('the reply plugin is installed beside the context plugin, enabled, and know
  const again=wire(root,home);assert.equal(fs.readFileSync(path.join(home,'config.yaml'),'utf8'),text);assert.deepEqual(lines(again),[]);
 });
 
-test('an already enabled list gains the reply plugin,',t=>{
+test('an already enabled list gains the reply plugin',t=>{
  const {root,home}=setup(t);
  fs.writeFileSync(path.join(home,'config.yaml'),'plugins:\n  enabled: ["godspeed-coach", "my-own"]\n');
  assert.equal(wire(root,home).status,0);
