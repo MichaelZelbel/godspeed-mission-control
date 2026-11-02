@@ -84,3 +84,16 @@ test('GODSPEED_TIMELINE_REPAIR=off leaves it to the deadline runner', async t =>
   assert.deepEqual(await service.timelineRepair, { skipped: 'off' });
   assert.equal(needsTimelineRatings(new Store(root, { device: 'pc' })), true, 'nothing was repaired');
 });
+
+test('a notebook closed before the repair began settles it as closed and writes nothing', async t => {
+  const { root, own } = updated(t);
+  process.env.GODSPEED_ASSISTANT_CONFIG = path.join(root, 'no-assistant.json');
+  process.env.GODSPEED_TIMELINE_REPAIR = 'on';
+  t.after(() => { delete process.env.GODSPEED_ASSISTANT_CONFIG; delete process.env.GODSPEED_TIMELINE_REPAIR; });
+  const { createService } = await import('../server/main.mjs');
+  const service = await createService({ root, port: 0 });
+  await service.close();
+  assert.deepEqual(await service.timelineRepair, { skipped: 'closed' });
+  assert.equal(needsTimelineRatings(new Store(root, { device: 'pc' })), true, 'nothing was written after the close');
+  own.service = null;
+});

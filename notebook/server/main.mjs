@@ -594,14 +594,30 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   // waiting for the workspace without holding the notebook up; nothing to do costs one read.
   // GODSPEED_TIMELINE_REPAIR=off switches it off; under the test runner it runs only when a test asks.
   const timelineRepairWanted = process.env.GODSPEED_TIMELINE_REPAIR !== 'off' && (!process.env.NODE_TEST_CONTEXT || process.env.GODSPEED_TIMELINE_REPAIR === 'on');
-  let timelineRepairTimer = null;
+  // Shutting down cancels a repair still waiting for the workspace and waits for one already
+  // writing (it runs to its end under the lock), and a timer that never fired settles as closed.
+  let timelineRepairTimer = null, timelineRepairDone = null;
+  const timelineRepairStop = new AbortController();
   const timelineRepair = !timelineRepairWanted ? Promise.resolve({ skipped: 'off' }) : new Promise(resolve => {
-    timelineRepairTimer = setTimeout(() => resolve(repairTimelineAtStart(store).then(report => {
-      if (report?.corrected?.length) console.log('Godspeed Mission Control: ' + report.corrected.length + ' finished deadline(s) now show their status and scores in the timeline.');
-      return report;
-    }).catch(error => { console.error('Godspeed Mission Control: the finished deadlines were not given their timeline scores this time (the next deadline run does it): ' + error.message); return { failed: error.message }; })), 2000);
+    timelineRepairDone = resolve;
+    timelineRepairTimer = setTimeout(() => {
+      timelineRepairTimer = null;
+      resolve(repairTimelineAtStart(store, { signal: timelineRepairStop.signal }).then(report => {
+        if (report?.corrected?.length) console.log('Godspeed Mission Control: ' + report.corrected.length + ' finished deadline(s) now show their status and scores in the timeline.');
+        return report;
+      }).catch(error => {
+        if (timelineRepairStop.signal.aborted) return { skipped: 'closed' };
+        console.error('Godspeed Mission Control: the finished deadlines were not given their timeline scores this time (the next deadline run does it): ' + error.message);
+        return { failed: error.message };
+      }));
+    }, 2000);
     timelineRepairTimer.unref?.();
   });
+  const stopTimelineRepair = async () => {
+    if (timelineRepairTimer) { clearTimeout(timelineRepairTimer); timelineRepairTimer = null; timelineRepairDone?.({ skipped: 'closed' }); }
+    timelineRepairStop.abort();
+    await timelineRepair;
+  };
   // Only the HTTPS proxy on this machine reaches the web door. A door that cannot open
   // (its port taken) leaves the notebook running for everything on this machine; the
   // installer's check of the web address then says so.
@@ -656,7 +672,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   let soulDebounce;const followPersona=()=>{clearTimeout(soulDebounce);soulDebounce=setTimeout(()=>{try{shelf.followPersona();}catch{}},2000);soulDebounce.unref?.();};
   const rootWatcher=fs.watch(store.root,(event,name)=>{if(durableRoots.includes(name)){watchRoot(name);changed(name)(event,null);}else if(durableFiles.includes(name)){changed('')(event,name);if(name==='AGENTS.md')followPersona();}});
   let localServer = null;
-  const close = async () => { clearTimeout(timelineRepairTimer); index.meaning?.close(); index.expansionWorker?.close(); if (localServer) await new Promise(resolve => localServer.close(resolve)); if (webServer) await new Promise(resolve => webServer.close(resolve)); clearInterval(meaningTimer);clearInterval(processingTimer);clearInterval(backupTimer);clearInterval(factTimer);stopIndexing();store.unwatch();githubSignIn.close();planSignIn?.cancel();clearTimeout(soulDebounce);await syncRunner.close();await menerioImport.close();rootWatcher.close();for(const watcher of watchers.values())watcher.close();clearTimeout(debounce);clearTimeout(indexDebounce);clearInterval(telegramTimer);clearInterval(interval);clearInterval(jobs);clearInterval(syncTimer);clearInterval(mediaTimer); await new Promise(resolve => server.close(resolve)); await index.close(); };
+  const close = async () => { await stopTimelineRepair(); index.meaning?.close(); index.expansionWorker?.close(); if (localServer) await new Promise(resolve => localServer.close(resolve)); if (webServer) await new Promise(resolve => webServer.close(resolve)); clearInterval(meaningTimer);clearInterval(processingTimer);clearInterval(backupTimer);clearInterval(factTimer);stopIndexing();store.unwatch();githubSignIn.close();planSignIn?.cancel();clearTimeout(soulDebounce);await syncRunner.close();await menerioImport.close();rootWatcher.close();for(const watcher of watchers.values())watcher.close();clearTimeout(debounce);clearTimeout(indexDebounce);clearInterval(telegramTimer);clearInterval(interval);clearInterval(jobs);clearInterval(syncTimer);clearInterval(mediaTimer); await new Promise(resolve => server.close(resolve)); await index.close(); };
   // A container's main door listens on its network interface and always needs sign-in.
   // Add-ons and tools in that same container may use this opt-in, loopback-only door,
   // with the exact Host/Origin guards and API contract of a native local installation.

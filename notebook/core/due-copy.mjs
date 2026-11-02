@@ -428,11 +428,12 @@ export function needsTimelineRatings(store) {
 // therefore runs it once when it starts (server/main.mjs). It waits for the workspace lock without
 // holding up the notebook (withLockAsync), does nothing when nothing needs it, never touches a
 // staged or read-only copy, and is the same idempotent correction, so running it again adds nothing.
-export async function repairTimelineAtStart(store, { day = null, timeoutMs = 60000 } = {}) {
+// `signal` (the notebook closing) cancels the wait for the lock; a copy already under way finishes.
+export async function repairTimelineAtStart(store, { day = null, timeoutMs = 60000, signal } = {}) {
   if (!writable(store)) return { skipped: 'not writable' };
   if (!needsTimelineRatings(store)) return { skipped: 'nothing to repair' };
   const when = day || dayOf(store);
-  return store.withLockAsync(() => copyUnderLock(store, when), { timeoutMs });
+  return store.withLockAsync(() => copyUnderLock(store, when), { timeoutMs, signal });
 }
 
 // ---------------------------------------------------------------- the check ticket 03 relies on
