@@ -1661,7 +1661,7 @@ refuses 'a run that kept nothing of the second update' update-removes-only-uncha
 
 copy "$UR/good" "$UR/nothing-to-remove"
 { keep_names; printf '%s\n' "$ORDINARY"; } | sort -u >"$UR/nothing-to-remove/one-before.txt"
-refuses 'a public version that never gave the reader the video skills' \
+refuses 'a starting version that never gave the reader the video skills' \
   update-removes-only-unchanged-skills "$UR/nothing-to-remove" 'had nothing to watch being removed'
 
 copy "$UR/good" "$UR/never-updated"
@@ -1704,6 +1704,19 @@ copy "$UR/good" "$UR/addon-lost-them"
 grep -v '^figma$' "$UR/good/two-after.txt" >"$UR/addon-lost-them/two-after.txt"
 refuses 'an install with the add-on that lost one all the same' \
   update-removes-only-unchanged-skills "$UR/addon-lost-them" 'gone from the install that has the video add-on'
+
+# The script starts both computers from the last version with the video skills, by its constant.
+UR_SCRIPT=$ROOT/scenarios/update-removes-only-unchanged-skills.sh
+# shellcheck disable=SC2016 # the script text is searched for literally, nothing is meant to expand
+UR_INSTALLS=$(grep -c '^[[:space:]]*install_the_line_of_into "\$WITH_THE_VIDEO_SKILLS" ' "$UR_SCRIPT")
+# shellcheck disable=SC2016 # likewise
+if grep -qxF 'WITH_THE_VIDEO_SKILLS=${GODSPEED_SCENARIO_WITH_THE_VIDEO_SKILLS:-candidate/2.0.0-beta.12}' "$UR_SCRIPT" &&
+  [ "$UR_INSTALLS" = 2 ] && ! grep -q 'install_the_public_line_into' "$UR_SCRIPT" &&
+  ! grep -qi 'public version' "$UR_SCRIPT"; then
+  ok "update-removes-only-unchanged-skills installs both computers from WITH_THE_VIDEO_SKILLS (candidate/2.0.0-beta.12), never through install_the_public_line_into"
+else
+  bad "update-removes-only-unchanged-skills does not install both computers from WITH_THE_VIDEO_SKILLS=candidate/2.0.0-beta.12 alone ($UR_INSTALLS installs from it)"
+fi
 
 # ======================================== 14. briefing-breaks-a-rule (2.0.0-beta.14, 4)
 # What the scenario saw on a machine where a line the morning brief must carry broke the owner's voice

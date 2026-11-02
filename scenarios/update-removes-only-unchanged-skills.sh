@@ -3,8 +3,8 @@
 # unchanged.
 #
 # What it proves (godspeed-dev, releases/godspeed-2.0.0-beta.13-charm-video-notebook/plan.md,
-# scenario 3 and item 2): from today's public version, where every new install still gets the
-# twenty-five video skills, an install where the reader changed one of them by hand keeps that one
+# scenario 3 and item 2): from the last version with the video skills, where every new install still
+# gets the twenty-five video skills, an install where the reader changed one of them by hand keeps that one
 # and loses the unchanged others when it is updated to the stage; and an install where the video
 # add-on is set up keeps them all.
 #
@@ -29,7 +29,8 @@
 #   one-edited-after.txt              whether it is still there, still theirs
 #   one-trace.log                     what the update did on it
 #   two-version-before.txt / two-version-after.txt   the second computer, the one with the add-on
-#   two-before.txt                    its skills folder on the public version
+#   two-before.txt                    its skills folder on the last version with the video skills
+#   one-start.log / two-start.log     the install of that version on each computer
 #   two-setup.log / two-setup-code.txt  the video add-on's own setup on it
 #   two-after-addon.txt / two-after.txt  its skills folder after that setup, and after the update
 #   two-trace.log                     what the update did on it
@@ -37,6 +38,14 @@ SCENARIO=update-removes-only-unchanged-skills
 # shellcheck source=scenarios/scenario-lib.sh
 . "$(dirname "$0")/scenario-lib.sh"
 scenario_arguments "$@"
+
+# THE LAST VERSION THAT HANDED OUT THE VIDEO SKILLS, by its own tag. This scenario used to install
+# whatever the install line on the website gave, which was 2.0.0-beta.12 while 2.0.0-beta.13 was
+# being built, and every new install still got the twenty-five video skills. From 2.0.0-beta.13 on
+# a new install gets none, so from that line there is nothing to remove (it failed so on
+# candidate/2.0.0-beta.14). It installs the last version with them instead, for every candidate after this one, the way
+# reminders-move-keeps-everything installs BEFORE_THE_MOVE.
+WITH_THE_VIDEO_SKILLS=${GODSPEED_SCENARIO_WITH_THE_VIDEO_SKILLS:-candidate/2.0.0-beta.12}
 
 # The one the reader changes by hand: a skill of our own, whose SKILL.md is prose a reader can edit.
 EDITED=video-hooks
@@ -74,8 +83,8 @@ act() {
   curl -fsSL "$RAW/$STAGE_REF/stage.json" -o "$EVIDENCE/stage.json" ||
     fail "the stage's own file at $STAGE_REF could not be read, so what the update should make cannot be said"
 
-  say '== the first computer: today public version, with one video skill changed by hand'
-  install_the_public_line_into "$ROOT" "$NOTEBOOK_PORT"
+  say '== the first computer: the last version with the video skills, with one video skill changed by hand'
+  install_the_line_of_into "$WITH_THE_VIDEO_SKILLS" "$ROOT" "$NOTEBOOK_PORT" "$EVIDENCE/one-start.log"
   RUNTIME=$(runtime_of "$ROOT")
   need_node
   read_version "$ROOT"
@@ -83,7 +92,7 @@ act() {
   skills_of "$ROOT" "$EVIDENCE/one-before.txt"
   skill=$ROOT/skills/$EDITED/SKILL.md
   [ -f "$skill" ] ||
-    fail "today's public version put no $EDITED in the reader's skills folder, so the reader had nothing to change by hand"
+    fail "the last version with the video skills ($WITH_THE_VIDEO_SKILLS) put no $EDITED in the reader's skills folder, so the reader had nothing to change by hand"
   say "The reader writes a line of their own into $EDITED"
   printf '\n%s\n' "$OWNER_LINE" >>"$skill" ||
     fail "the reader's own line could not be written into $EDITED"
@@ -99,8 +108,8 @@ act() {
   skills_of "$ROOT" "$EVIDENCE/one-after.txt"
   keep_the_edited_skill "$ROOT" "$EVIDENCE/one-edited-after.txt"
 
-  say '== the second computer: the same public version, with the video add-on set up on it'
-  install_the_public_line_into "$b" "$SECOND_PORT"
+  say '== the second computer: the same last version with the video skills, with the video add-on set up on it'
+  install_the_line_of_into "$WITH_THE_VIDEO_SKILLS" "$b" "$SECOND_PORT" "$EVIDENCE/two-start.log"
   read_version "$b"
   printf '%s\n' "$VERSION" >"$EVIDENCE/two-version-before.txt"
   skills_of "$b" "$EVIDENCE/two-before.txt"
@@ -144,7 +153,7 @@ check() { # <evidence folder>
   # There was something to remove: the version both computers started on gave them all of them.
   before=$(skills_missing "$folder/one-before.txt" "$folder/video-skills.txt")
   [ -z "$before" ] ||
-    fail "today's public version put $(how_many "$before") of the video skills nowhere in the reader's skills folder, so this scenario had nothing to watch being removed: $before"
+    fail "the last version with the video skills put $(how_many "$before") of the video skills nowhere in the reader's skills folder, so this scenario had nothing to watch being removed: $before"
 
   the_stage_was_installed "$folder" 'the first computer' one-version-after.txt one-trace.log
   the_stage_was_installed "$folder" 'the computer with the video add-on' two-version-after.txt two-trace.log
