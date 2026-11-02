@@ -12,7 +12,8 @@
 # operation and the line the brief is given (asked as the briefing asks it: the add-on's command
 # `brief --no-write` through the notebook's addon-command operation, not a charm action) reads "Charm Challenge: day 1 of 21, ...". The owner's
 # voice rules (profile/voice.md, the file a person keeps their voice in) ban the word "Challenge".
-# The brief then runs the way Settings runs it (POST /api/jobs/add, POST /api/jobs/run) with the
+# The brief then runs the way Settings runs it (POST /api/jobs/add, POST /api/jobs/run with the
+# routine's id, which answers at once; scenario-lib.sh, run_the_morning_brief, waits for its note) with the
 # model Settings connects (POST /api/provider), and what the notebook holds afterwards is read back
 # through its own address: the note, whether it was delivered (its notification is "ready") and the
 # open repair items.
@@ -50,7 +51,7 @@ READER='
 const fs=require("fs");
 const rows=f=>{const d=JSON.parse(fs.readFileSync(f,"utf8"));return Array.isArray(d)?d:(d.data||[]);};
 const [jobsF,notesF,notificationsF,workF,jobOut,noteOut,deliveryOut,repairOut]=process.argv.slice(1);
-const job=rows(jobsF).find(j=>j&&j.id==="morning-brief")||{};
+const job=rows(jobsF).find(j=>j&&(j.id===process.env.BRIEF_ID||j.id==="morning-brief"))||{};
 fs.writeFileSync(jobOut,["state="+(job.state||""),"paused="+(job.paused===true)].join("\n")+"\n");
 const notes=rows(notesF).filter(n=>n&&n.source_app==="morning-brief"&&!n.is_trashed)
  .sort((a,b)=>String(a.created_at).localeCompare(String(b.created_at)));
@@ -96,7 +97,6 @@ one_table() { # <table> <file>
 }
 
 act() {
-  local body=$EVIDENCE/.job-answer.json code
   need_the_ai_key "the morning brief"
   fresh_evidence
   install_paths
@@ -129,27 +129,18 @@ act() {
   sed 's/^/  | /' "$EVIDENCE/brief-line.txt" >&2
 
   phase 'the morning brief, turned on and run the way Settings runs it'
-  code=$(curl -sS -o "$body" -w '%{http_code}' --max-time 300 -X POST \
-    -H 'Content-Type: application/json' -d '{"kind":"morning-brief","interval_ms":60000}' \
-    "http://127.0.0.1:$NOTEBOOK_PORT/api/jobs/add") ||
-    fail "the notebook could not be reached to turn its morning brief on"
-  [ "$code" = 200 ] ||
-    fail "the notebook would not turn its morning brief on (HTTP $code): $(tr -d '\n' <"$body" | cut -c1-200)"
-  curl -sS --max-time 2400 -X POST -H 'Content-Type: application/json' -d '{}' \
-    "http://127.0.0.1:$NOTEBOOK_PORT/api/jobs/run" -o "$EVIDENCE/brief-run.json" ||
-    fail "the notebook's own run of its routines could not be asked for, so the morning brief never ran"
-  sed 's/^/  | /' "$EVIDENCE/brief-run.json" >&2
+  run_the_morning_brief "$EVIDENCE/brief-run.json" 1800
   one_table jobs "$EVIDENCE/.jobs.json"
   one_table notes "$EVIDENCE/.notes.json"
   one_table notifications "$EVIDENCE/.notifications.json"
   one_table work_items "$EVIDENCE/.work.json"
-  "$NODE" -e "$READER" "$EVIDENCE/.jobs.json" "$EVIDENCE/.notes.json" "$EVIDENCE/.notifications.json" \
+  BRIEF_ID=$BRIEF_ID "$NODE" -e "$READER" "$EVIDENCE/.jobs.json" "$EVIDENCE/.notes.json" "$EVIDENCE/.notifications.json" \
     "$EVIDENCE/.work.json" "$EVIDENCE/brief-job.txt" "$EVIDENCE/brief-note.txt" "$EVIDENCE/delivery.txt" \
     "$EVIDENCE/repairs.txt" ||
     fail "what the notebook holds of its morning brief could not be read"
   for file in brief-job.txt brief-note.txt delivery.txt repairs.txt; do sed "s/^/  $file | /" "$EVIDENCE/$file" >&2; done
   curl -sS -o /dev/null --max-time 300 -X POST -H 'Content-Type: application/json' \
-    -d '{"id":"morning-brief","paused":true}' "http://127.0.0.1:$NOTEBOOK_PORT/api/jobs/update" ||
+    -d "{\"id\":\"$BRIEF_ID\",\"paused\":true}" "http://127.0.0.1:$NOTEBOOK_PORT/api/jobs/update" ||
     say '  (the morning brief could not be paused again; it will write another note each minute)'
   rm -f "$EVIDENCE"/.[a-z]*
 }

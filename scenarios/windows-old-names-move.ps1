@@ -166,6 +166,12 @@ $Held = ($args.Count -eq 2)
 # ------------------------------------------------------------------ the acting part
 function Stop-Scenario([string]$Why) { Finish "FAIL ${Scenario}: $Why" 1 }
 if (-not $IsWindows -and $PSVersionTable.PSEdition -eq 'Core') { Stop-Scenario 'it installs on Windows and this is not Windows' }
+# A reader starts the setup and the updater from Explorer and the Start menu. Started from this
+# PowerShell 7, their Windows PowerShell 5.1 would inherit PowerShell 7's module path and lose
+# Get-FileHash, and the setup of 2.0.0-beta.10 ends with exit 1 after half a minute (the first run of
+# this scenario, on candidate/2.0.0-beta.15). kit-bootstrap's own test does the same
+# (windows/test-beta-install.ps1).
+$env:PSModulePath = [Environment]::GetEnvironmentVariable('PSModulePath', 'Machine')
 
 $work = if ($env:GODSPEED_SCENARIO_WORK) { $env:GODSPEED_SCENARIO_WORK } elseif ($env:RUNNER_TEMP) { $env:RUNNER_TEMP } else { [IO.Path]::GetTempPath() }
 $Evidence = Join-Path $work $Scenario
@@ -293,7 +299,11 @@ function Save-State([string]$P, [string]$StateFolder) {
 $fromSetup = Get-Setup $From 'from'
 $toSetup = Get-Setup $StageRef 'to'
 $code = Invoke-Setup $fromSetup @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART') 'setup-from.log'
-if ($code -ne 0) { Stop-Scenario "the setup of $From ended with exit $code" }
+if ($code -ne 0) {
+  # What the setup's own script said, which the installer's log does not hold.
+  if (Test-Path -LiteralPath $setupLog) { Copy-Item -LiteralPath $setupLog -Destination (Join-Path $Evidence 'setup-log-from.txt') -Force }
+  Stop-Scenario "the setup of $From ended with exit $code (setup-log-from.txt in the evidence says why)"
+}
 if (-not (Test-Path -LiteralPath $oldProgram) -or -not (Test-Path -LiteralPath (Join-Path $oldState 'installation.json'))) {
   Stop-Scenario "$From did not make $oldProgram and $oldState, so the start is not an old install"
 }
