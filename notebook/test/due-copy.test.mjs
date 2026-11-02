@@ -27,7 +27,7 @@ import { QueryService } from '../core/query.mjs';
 import { FileSync } from '../core/sync/git.mjs';
 import { deadlineUid } from '../core/deadline-records.mjs';
 import { fileURLToPath } from 'node:url';
-import { copyOldReminders, sameThroughRecords, liveMoments, COPY_TYPE, BOTH_CHANGED } from '../core/due-copy.mjs';
+import { copyOldReminders, copyIfFilesChanged, sameThroughRecords, liveMoments, COPY_TYPE, BOTH_CHANGED } from '../core/due-copy.mjs';
 import { dueCommand, dueDelivered, dueRows } from '../core/native-due.mjs';
 
 for (const key of Object.keys(process.env)) if (/^(GODSPEED_|HERMES_)/.test(key)) delete process.env[key];
@@ -75,6 +75,22 @@ function oldFiles(root) {
 }
 const slugsOf = store => store.list('deadlines').filter(r => r.native_slug).map(r => r.native_slug).sort();
 const closings = store => store.list('moments').filter(r => r.category === 'obligation');
+
+test('an older closing gets an append-only timeline correction without replacing an owner rating', t => {
+  const store = seeded(t);
+  copyOldReminders(store, { day: DAY });
+  const old = store.save('moments', { title: 'Done: Fictional task', happened_at: DAY,
+    category: 'obligation', obligation_kind: 'closes', deadline_id: 'due-rates',
+    evidence: 'A receipt exists', confidence_truth: 7 });
+  const before = store.get('moments', old.id);
+  const fixed = copyIfFilesChanged(store.root, { store, day: DAY });
+  assert.equal(fixed.unchanged, false);
+  assert.equal(store.get('moments', old.id)._hash, before._hash, 'the original event stays unchanged');
+  const visible = new QueryService(store).rows('moments').find(m => m.id === old.id);
+  assert.deepEqual([visible.status, visible.impact_level, visible.confidence_date, visible.confidence_truth],
+    ['past_fact', 1, 10, 7]);
+  assert.equal(copyIfFilesChanged(store.root, { store, day: DAY }).skipped, 'nothing changed');
+});
 
 // ---------------------------------------------------------------- the seeded set, copied
 
