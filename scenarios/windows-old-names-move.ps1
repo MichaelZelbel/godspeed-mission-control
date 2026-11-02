@@ -33,7 +33,8 @@
 #   reminders-<p>.txt             what `due list` answered
 #   setup-log-<p>.txt             the setup's update log (%LOCALAPPDATA%\Godspeed\setup-log.txt) and
 #                                 the move's note, when there is one
-#   setup-<p>.log (and setup-from.log)  the setup's own /LOG
+#   update-exit-<p>.txt           the exit code of the reader's update (update-godspeed.ps1); after must be 0
+#   updater-<p>.log               what that update said; setup-from.log is beta.10's own setup /LOG
 # The job uploads the folder as an artifact.
 $ErrorActionPreference = 'Stop'
 $Scenario = 'windows-old-names-move'
@@ -99,6 +100,8 @@ function Test-Moved([string]$Folder, [string[]]$Before, [string]$P) {
       return "after the update the listing of what a person sees holds no $kind entry for Godspeed, so nothing proves it was repointed"
     }
   }
+  $exit = (Read-Lines $Folder "update-exit-$P.txt")[0]
+  if ($exit -ne '0') { return "the update ended with exit $exit, not 0, so it did not finish" }
   $health = (Read-Lines $Folder "health-$P.txt")[0]
   if ($health -ne 'ok') { return "the notebook does not answer after the update: $health" }
   $notes = (Read-Lines $Folder "notes-$P.txt") -join "`n"
@@ -190,9 +193,12 @@ function Get-Setup([string]$Ref, [string]$Name) {
   $dir = Join-Path $Downloads $Name
   New-Item -ItemType Directory -Force -Path $dir | Out-Null
   $exe = Join-Path $dir $ws.file
-  $url = "https://github.com/$Repo/releases/download/$($ws.releaseTag)/$($ws.file)"
-  Say "Downloading $url"
-  try { Invoke-WebRequest -Uri $url -OutFile $exe } catch { Stop-Scenario "$url could not be downloaded: $($_.Exception.Message)" }
+  # The updater a reader runs reads these three files from the release (update-godspeed.ps1 -ReleaseBase).
+  foreach ($name in $ws.file, 'windows-manifest.json', 'SHA256SUMS') {
+    $url = "https://github.com/$Repo/releases/download/$($ws.releaseTag)/$name"
+    Say "Downloading $url"
+    try { Invoke-WebRequest -Uri $url -OutFile (Join-Path $dir $name) } catch { Stop-Scenario "$url could not be downloaded: $($_.Exception.Message)" }
+  }
   $got = (Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash.ToLowerInvariant()
   if ($got -ne ([string]$ws.sha256).ToLowerInvariant()) { Stop-Scenario "the setup downloaded for $Ref has sha256 $got, the stage names $($ws.sha256)" }
   $exe
@@ -309,18 +315,32 @@ if ($Held) {
 }
 Save-State 'before' $oldState
 
-# 4. The update, the way a reader's own updater runs the setup (update-godspeed.ps1).
-$updateFlags = @('/SILENT', '/SUPPRESSMSGBOXES', '/NORESTART')
+# 4. The update, the way a reader updates: the installed "Update my mission control" (the installed
+# update-godspeed.ps1), which runs the newest release's setup. Its -ReleaseBase is the stage's release
+# folder instead of releases/latest; nothing else of it is changed. Windows PowerShell 5.1 runs it, as the
+# Start menu entry does.
+function Invoke-Update([string]$P) {
+  $updater = @(Get-ChildItem -LiteralPath $oldProgram, (Join-Path $local 'Godspeed Mission Control') -Filter 'update-godspeed*.ps1' -ErrorAction SilentlyContinue |
+      Select-Object -First 1)
+  if (-not $updater.Count) { Stop-Scenario "the install has no update-godspeed.ps1 to run as the reader's update" }
+  $out = Join-Path $Evidence "updater-$P.log"
+  Say "Running $($updater[0].FullName) -ReleaseBase $(Split-Path $toSetup)"
+  $ps = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+  $p = Start-Process -FilePath $ps -PassThru -RedirectStandardOutput $out -RedirectStandardError "$out.err" -ArgumentList @(
+    '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$($updater[0].FullName)`"", '-ReleaseBase', "`"$(Split-Path $toSetup)`"", '-NoPause')
+  if (-not $p.WaitForExit(60 * 60 * 1000)) { Stop-Process -Id $p.Id -Force; Stop-Scenario 'the update did not end within an hour' }
+  Say "  the update ended with exit $($p.ExitCode)"
+  Set-Content -LiteralPath (Join-Path $Evidence "update-exit-$P.txt") -Value $p.ExitCode
+}
 if (Test-Path -LiteralPath $setupLog) { Remove-Item -LiteralPath $setupLog -Force -ErrorAction SilentlyContinue }
-$code = Invoke-Setup $toSetup $updateFlags $(if ($Held) { 'setup-held.log' } else { 'setup-after.log' })
-Say "The update ended with exit $code"
+Invoke-Update $(if ($Held) { 'held' } else { 'after' })
 if ($Held) {
+  # With a folder held the update may end either way; what it must show is in the held checks.
   Save-State 'held' $oldState
   $handle.Dispose()
   Say 'Released. The next update:'
   if (Test-Path -LiteralPath $setupLog) { Remove-Item -LiteralPath $setupLog -Force -ErrorAction SilentlyContinue }
-  $code = Invoke-Setup $toSetup $updateFlags 'setup-after.log'
-  Say "The next update ended with exit $code"
+  Invoke-Update 'after'
 }
 Save-State 'after' $newState
 $line = Test-Evidence $Evidence

@@ -1834,6 +1834,7 @@ else
       'startup: C:\Startup\Godspeed Mission Control.lnk -> powershell.exe -File "C:\Local\Godspeed Mission Control\start-notebook.ps1"' \
       'task: Godspeed prompt archive -> powershell.exe -File "C:\Local\Godspeed Mission Control\archive.ps1"' \
       'uninstall: Godspeed Mission Control_is1 Godspeed Mission Control C:\Local\Godspeed Mission Control "C:\Local\Godspeed Mission Control\unins000.exe"' >"$f/names-$p.txt"
+    echo 0 >"$f/update-exit-$p.txt"
     echo ok >"$f/health-$p.txt"
     printf 'written-before-the-move\tWritten before the move\n' >"$f/notes-$p.txt"
     printf '%s\n' 'Reminder written before the move (in 30 days)' >"$f/reminders-$p.txt"
@@ -1889,6 +1890,9 @@ else
   copy "$TMP/wn-good" "$TMP/wn-x"
   printf '%s\n' installation.json notes.db 'media/photo.png' 'backups/one/notes.db' 'hermes/config.yaml' >"$TMP/wn-x/files-after.txt"
   passes "$WN: only the setup's own logs missing is no loss" "$WN" "$TMP/wn-x" "both folders moved"
+  copy "$TMP/wn-good" "$TMP/wn-x"
+  echo 1 >"$TMP/wn-x/update-exit-after.txt"
+  refuses "$WN: the update ending with a failure code, everything else in place" "$WN" "$TMP/wn-x" "ended with exit 1"
   copy "$TMP/wn-good" "$TMP/wn-x"
   echo 'no answer' >"$TMP/wn-x/health-after.txt"
   refuses "$WN: the notebook not answering after the move" "$WN" "$TMP/wn-x" "does not answer"
