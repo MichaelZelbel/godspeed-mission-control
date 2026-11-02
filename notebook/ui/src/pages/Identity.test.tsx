@@ -49,6 +49,7 @@ const ruleItem = { target: "rule:never-spend", kind: "rule", file: "rules/never-
 const pageItem = { target: "profile:about-me", kind: "profile", file: "profile/about-me.md", label: "profile/about-me.md", state: "ok", hash: "h-page", fields: { text: "# About me\n\nI grow tomatoes.", kept_details: true } };
 let calls: { route: string; body?: any }[] = [];
 let state: ReturnType<typeof overview>;
+let removedList: Record<string, unknown>[] = [];
 let chatAnswer: Record<string, unknown> = { reply: "Done.", identity_changed: true };
 function serve() {
   calls = [];
@@ -57,6 +58,19 @@ function serve() {
     calls.push({ route, body });
     const json = (data: unknown, status = 200) => ({ ok: status < 400, status, json: async () => data, clone: () => ({}) });
     if (route === "/api/identity") return json(state);
+    if (route === "/api/identity/removed") return json({ data: removedList });
+    if (route === "/api/identity/remove") {
+      const gone = (state.rules as any[]).find((r) => r.target === body.target)!;
+      state = { ...state, rules: (state.rules as any[]).filter((r) => r !== gone) };
+      removedList = [{ target: gone.target, slug: gone.slug, title: gone.title, line: gone.line, group: gone.group, removed_at: "2026-10-15T09:00:00Z", by: "you, on this page", version: "v-before" }];
+      return json({ saved: true, now: { removed: true } });
+    }
+    if (route === "/api/identity/restore" && body.target.startsWith("rule:")) {
+      const back = removedList.find((r) => r.target === body.target)!;
+      state = { ...state, rules: [...(state.rules as any[]), rule(5, back.slug as string, back.title as string, back.line as string, "never")] };
+      removedList = [];
+      return json({ saved: true });
+    }
     if (route.startsWith("/api/identity/item")) {
       const target = decodeURIComponent(route.split("target=")[1]);
       if (target.startsWith("rule:")) return json(ruleItem);
@@ -78,7 +92,7 @@ function open() {
 }
 
 describe("Godspeed's brain", () => {
-  beforeEach(() => { state = overview(); chatAnswer = { reply: "Done.", identity_changed: true }; serve(); window.localStorage.clear(); });
+  beforeEach(() => { state = overview(); removedList = []; chatAnswer = { reply: "Done.", identity_changed: true }; serve(); window.localStorage.clear(); });
   afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
   it("shows its parts in plain words under its own name, with no word for the machinery", async () => {
@@ -94,6 +108,31 @@ describe("Godspeed's brain", () => {
     // The size of AGENTS.md is not shown under a text it does not describe.
     expect(document.body.textContent).not.toMatch(/of 20,000 characters/);
     for (const word of [/manual/i, /recipe/i, /markdown/i, /commit/i, /repository/i, /persona/i, /Identity/, /—/]) expect(document.body.textContent).not.toMatch(word);
+  });
+
+  it("shows no Removed rules heading while no rule is removed", async () => {
+    open();
+    await screen.findByRole("heading", { level: 2, name: "Rules" });
+    await screen.findByText("Always address me as Sam.");
+    expect(screen.queryByText(/Removed rules/)).toBeNull();
+  });
+
+  it("moves a removed rule to Removed rules, opens its earlier versions there, and brings it back", async () => {
+    open();
+    fireEvent.click(await screen.findByRole("button", { name: /Never spend my money/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /Remove this rule/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Remove" }));
+    const closed = await screen.findByRole("button", { name: "Removed rules (1)" });
+    expect(closed).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByRole("button", { name: /^Never spend my money/ })).toBeNull();
+    fireEvent.click(closed);
+    fireEvent.click(await screen.findByRole("button", { name: "Open Never spend my money" }));
+    expect(await screen.findByRole("heading", { name: "Earlier versions" })).toBeVisible();
+    expect(await screen.findByText("2 versions, newest first.")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Bring it back" }));
+    await waitFor(() => expect(calls.find((c) => c.route === "/api/identity/restore")?.body).toMatchObject({ target: "rule:never-spend", version: "v-before" }));
+    await waitFor(() => expect(screen.queryByText(/Removed rules/)).toBeNull());
+    expect(await screen.findByRole("button", { name: /Never spend my money/ })).toBeVisible();
   });
 
   it("numbers the rules as the server does, the kind as a tag, and keeps the one-job rules closed until asked", async () => {

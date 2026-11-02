@@ -40,6 +40,9 @@ export type Instruction = { id: string; instruction: string; applies_to: string;
 export type InstructionVersion = { id: string; at: string; current: boolean; instruction: string; applies_to: string; is_active: boolean; removed: boolean };
 export type SaveResult = { saved: boolean; unchanged?: boolean; message?: string; target?: string; manual?: ManualSize; soul?: { kind: string; written: boolean }; recorded?: { where: string | null; commit: string | null; note?: string }; now?: { text?: string; hash?: string; fields?: unknown; removed?: boolean } };
 
+// A rule taken away: its last version before the removal is `version`, what "Bring it back" restores.
+export type RemovedRule = { target: string; slug: string; title: string; line: string; group: RuleGroup; removed_at: string; by: string; version: string };
+
 export class IdentityError extends Error { code?: string; constructor(message: string, code?: string) { super(message); this.code = code; } }
 
 async function call<T>(route: string, body?: unknown): Promise<T> {
@@ -52,6 +55,7 @@ async function call<T>(route: string, body?: unknown): Promise<T> {
 const q = (target: string) => "?target=" + encodeURIComponent(target);
 export const identity = {
   overview: () => call<Overview>(""),
+  removedRules: () => call<{ data: RemovedRule[] }>("/removed").then((r) => (Array.isArray(r?.data) ? r.data : [])),
   item: (target: string) => call<Item>("/item" + q(target)),
   history: (target: string) => call<{ data: Version[] }>("/history" + q(target)).then((r) => r.data),
   save: (target: string, change: { text?: string; fields?: unknown }, expected_hash?: string) => call<SaveResult>("/save", { target, ...change, expected_hash }),

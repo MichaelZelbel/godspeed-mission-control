@@ -23,7 +23,7 @@ import { BRAIN_PAGE } from "@/lib/brain-page";
 import { PageMarkdown, ShowMore } from "@/components/brain/PageMarkdown";
 import {
   GROUPS, NAME_LIMIT, ORIGIN_NOTE, ORIGIN_WORDS, PAGE_CHAT, PAGE_CHAT_CHANGED, TOGGLE_PAGE_CHAT, chars, identity, kindTag, manualAfter, places, plainInline, reflow, ruleListLine, sizeLine, sizeState, versionWords, whenLabel,
-  type Instruction, type InstructionVersion, type Item, type ManualSize, type NotebookTotals, type Overview, type PageFields, type RuleFields, type RuleGroup, type SkillFields, type SoulSize, type Version,
+  type Instruction, type InstructionVersion, type Item, type ManualSize, type NotebookTotals, type Overview, type PageFields, type RemovedRule, type RuleFields, type RuleGroup, type SkillFields, type SoulSize, type Version,
 } from "@/lib/identity";
 
 // GODSPEED'S BRAIN (lib/brain-page.ts; notebook/ui/DESIGN.md, "Godspeed's brain"): the files that
@@ -314,6 +314,43 @@ function NewRule({ overview, onClose }: { overview?: Overview; onClose: () => vo
 }
 
 // Instructions for the AI apps connected to the notebook: records they receive with the profile.
+// Rules taken away, closed until asked: each opens its earlier versions, with a way to bring it back.
+function RemovedRules() {
+  const removed = useQuery({ queryKey: ["identity", "removed"], queryFn: identity.removedRules });
+  const invalidate = useInvalidate();
+  const [openList, setOpenList] = useState(false), [of, setOf] = useState<RemovedRule | null>(null), [busy, setBusy] = useState(false), [error, setError] = useState("");
+  const list = removed.data ?? [];
+  if (!list.length) return null;
+  const bringBack = async (rule: RemovedRule) => {
+    setBusy(true); setError("");
+    try { await identity.restore(rule.target, rule.version); toast.success("Brought back. The removal is kept as an earlier version."); invalidate(rule.target); setOf(null); }
+    catch (e) { setError((e as Error).message); }
+    finally { setBusy(false); }
+  };
+  return (
+    <>
+      <Collapsible open={openList} onOpenChange={setOpenList} className="rounded-lg border border-border">
+        <CollapsibleTrigger asChild><button type="button" className="flex min-h-12 w-full items-center justify-between gap-2 rounded-lg px-4 py-2 text-left text-base font-semibold hover:bg-accent/50"><span>Removed rules ({list.length})</span><ChevronDown className={cn("h-5 w-5 shrink-0 transition-transform", openList && "rotate-180")} aria-hidden="true" /></button></CollapsibleTrigger>
+        <CollapsibleContent className="space-y-2 px-4 pb-4 pt-1">
+          {list.map((r) => <div key={r.target} className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border p-3">
+            <div className="min-w-0"><p className="text-sm font-medium">{r.title}</p>{r.line && <p className="text-xs text-muted-foreground">{plainInline(r.line)}</p>}<p className="text-xs text-muted-foreground">Removed {whenLabel(r.removed_at)}</p></div>
+            <Button size="sm" variant="outline" className="min-h-11 sm:min-h-9" onClick={() => { setError(""); setOf(r); }}>{`Open ${r.title}`}</Button>
+          </div>)}
+        </CollapsibleContent>
+      </Collapsible>
+      {of && <Dialog open onOpenChange={(o) => { if (!o) setOf(null); }}>
+        <DialogContent className="max-h-[92dvh] max-w-2xl overflow-y-auto p-4 sm:p-6">
+          <DialogHeader><DialogTitle className="pr-6 text-xl leading-snug">{of.title}</DialogTitle><DialogDescription>This rule was removed. Your assistant does not follow it now.</DialogDescription></DialogHeader>
+          <h3 className="text-base font-semibold">Earlier versions</h3>
+          {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+          <Button className="min-h-11 sm:min-h-9" disabled={busy} onClick={() => void bringBack(of)}>Bring it back</Button>
+          <Versions target={of.target} kind="rule" onChanged={() => { invalidate(of.target); setOf(null); }} />
+        </DialogContent>
+      </Dialog>}
+    </>
+  );
+}
+
 function Instructions() {
   const invalidate = useInvalidate();
   const list = useQuery({ queryKey: ["identity-instructions"], queryFn: identity.instructions });
@@ -561,6 +598,7 @@ export default function Identity() {
                   </CollapsibleContent>
                 </Collapsible>}
                 {!o.rules.length && <p className="text-sm text-muted-foreground">No rules yet.</p>}
+                <RemovedRules />
                 <Instructions />
               </Section>
 

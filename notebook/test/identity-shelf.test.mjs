@@ -119,6 +119,14 @@ test('rules: adding, changing and removing one keeps the list in AGENTS.md in st
   assert.equal(fs.existsSync(path.join(root,'rules','no-calls-after-nine.md')),false);assert.match(compileCheck(root),/up to date: 8 rules/);
   // A removed rule comes back with undo, and the list with it.
   await shelf.undo('rule:no-calls-after-nine');assert.equal(fs.existsSync(path.join(root,'rules','no-calls-after-nine.md')),true);
+  // The page lists a removed rule, and a rule brought back is no longer listed as removed.
+  await shelf.removeRule('rule:no-calls-after-nine');
+  const removedList=await shelf.removedRules();
+  assert.deepEqual(removedList.map(r=>r.target),['rule:no-calls-after-nine']);assert.equal(removedList[0].title,'No calls after nine');
+  const history=await shelf.versions('rule:no-calls-after-nine');assert.equal(history[0].removed,true);
+  await shelf.restore('rule:no-calls-after-nine',removedList[0].version);
+  assert.equal(fs.existsSync(path.join(root,'rules','no-calls-after-nine.md')),true);assert.deepEqual(await shelf.removedRules(),[]);
+  assert.ok((await shelf.versions('rule:no-calls-after-nine')).some(v=>v.removed),'the removal is kept as an earlier version');
   // Changing a starter rule keeps the lines of its header it did not touch as they were written.
   const spend=shelf.read('rule:never-spend-my-money'),old=read(root,'rules','never-spend-my-money.md');
   await shelf.save('rule:never-spend-my-money',{fields:{...spend.fields,story:spend.fields.story+'\nNot even a coffee.\n'}},{expected_hash:spend.hash});
