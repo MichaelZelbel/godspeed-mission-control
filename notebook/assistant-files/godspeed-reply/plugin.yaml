@@ -1,0 +1,12 @@
+name: godspeed-reply
+version: "0.1.0"
+description: >-
+  The one step that runs on every reply the assistant has finished and before it is sent or spoken
+  (transform_llm_output; Hermes keeps only the first replacement any plugin returns, so Godspeed
+  has one). The first step it runs: a reply in English or German to a message clearly in the other
+  language is translated faithfully by the AI connected in Settings, unless the person asked for a
+  language; scheduled deliveries are never touched. Other plugins add their own step with the
+  documented call in this plugin's __init__.py (godspeed_reply_steps_v1) instead of registering their
+  own transformer. Installed by the Godspeed Mission Control notebook.
+author: godspeed-mission-control
+kind: standalone
