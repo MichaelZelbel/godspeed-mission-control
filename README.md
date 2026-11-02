@@ -26,6 +26,16 @@ A new release comes out most weeks. I write about what my AI does for me and wha
 
 Version 2 is the current edition. The install lines on this page install the current public version, which is the branch `beta` of this repository; `main` is where the work goes on, and a change merged into it reaches nobody until the next version is released. The installers set up a new, separate folder. They do not move an existing version 1 Godspeed folder or your Menerio account.
 
+## New in 2.0.0-beta.15
+
+Six things that were wrong for people using Godspeed are fixed.
+
+- **Telegram answers in the language you wrote in.** Write in English and the answer comes in English, write in German and it comes in German, even when the AI drafted it in the other language. When you ask for a language ("answer in German"), that wins. Scheduled messages are left as they are.
+- **An older Windows install moves to the plain folder names.** If you installed before 2.0.0-beta.11, this update moves `Godspeed Mission Control Full Alpha` and `Godspeed Mission Control Full Alpha State` in your local app data folder to `Godspeed Mission Control` and `Godspeed Mission Control State`, with everything in them, and points the Start menu, the scheduled tasks and the uninstall entry at the new place. If a file is in use, your install keeps working where it is and the next update tries again.
+- **Smaller repairs.** A rule you removed on **Godspeed's brain** is listed under **Removed rules**, with its earlier versions and **Bring it back**. A deadline you mark done or drop shows in the timeline like any other moment. A second computer joined through your private GitHub copy alone gets everything, because the first computer's first sync now fills an empty copy by itself. When your assistant has no AI of its own, the chat names the Settings box as Settings shows it.
+
+Updating keeps your folder, notes and settings.
+
 ## New in 2.0.0-beta.14
 
 Your morning briefing arrives even when one sentence breaks your writing rules, and the chat tells you what to do when your AI does not answer.
