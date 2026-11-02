@@ -413,6 +413,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
       // change through the workspace's writer and lock, kept as a version of its own.
       if(route==='/api/identity'||route.startsWith('/api/identity/')){
         if(route==='/api/identity'&&req.method==='GET')return send(res,200,shelf.overview());
+        if(route==='/api/identity/removed'&&req.method==='GET')return send(res,200,{data:await shelf.removedRules()});
         if(route==='/api/identity/item'&&req.method==='GET')return send(res,200,shelf.read(url.searchParams.get('target')));
         if(route==='/api/identity/history'&&req.method==='GET')return send(res,200,{data:await shelf.versions(url.searchParams.get('target'))});
         // Beside the profile pages: what else the assistant can look up, as its own tools count it.

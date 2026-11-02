@@ -547,6 +547,23 @@ export class IdentityShelf{
     return out.reverse().slice(0,limit).map((v,i)=>({id:v.commit||'now',at:v.at,current:i===0&&v.view===currentView,removed:v.view===null,by:this.byWhom(v),message:v.message&&v.message.startsWith(COMMIT_PREFIX)?v.message.slice(COMMIT_PREFIX.length):v.message,
       ...(t.kind==='who'||t.kind==='extra'?{text:v.view}:{fields:v.view===null?null:JSON.parse(v.view)}),...(v.unrecorded?{unrecorded:true}:{})}));
   }
+  // The rules taken away: those whose newest version is the removal, newest removal first. Each
+  // carries what it said before it was removed, and the id of that version (restore brings it back).
+  async removedRules(){
+    const now=new Set(this.ruleNames()),slugs=[];
+    for(const file of await this.history.deletedFiles('rules/')){
+      const m=/^rules\/([^/]+)\.md$/.exec(file);
+      if(m&&SLUG.test(m[1])&&!['readme','memory'].includes(m[1].toLowerCase())&&!now.has(m[1])&&!slugs.includes(m[1]))slugs.push(m[1]);
+    }
+    const out=[];
+    for(const slug of slugs){
+      let list;try{list=await this.versions('rule:'+slug,{limit:200});}catch{continue;}
+      if(!list.length||!list[0].removed||list[0].unrecorded)continue;
+      const before=list.find(v=>!v.removed&&v.fields);if(!before)continue;
+      out.push({target:'rule:'+slug,slug,title:before.fields.title||inWords(slug),line:before.fields.line||'',group:before.fields.group,removed_at:list[0].at,by:list[0].by,version:before.id});
+    }
+    return out.sort((a,b)=>Date.parse(b.removed_at)-Date.parse(a.removed_at));
+  }
   byWhom(v){
     if(v.unrecorded)return 'not kept as a version yet';
     if(String(v.message).startsWith(COMMIT_PREFIX+'kept the version from before'))return 'kept by your notebook';

@@ -119,6 +119,15 @@ export class ShelfHistory{
     if(fs.existsSync(path.join(this.privateDir(),'HEAD')))add('machine',this.privateDir(),['--git-dir='+this.privateDir()]);
     return out;
   }
+  // The files under `prefix` that some recorded change deleted (they may exist again).
+  async deletedFiles(prefix){
+    const out=new Set();
+    for(const reader of this.readers()){
+      let log;try{log=(await reader.git(['log','--diff-filter=D','--name-only','-z','--format=','-n','500','--',prefix])).toString('utf8');}catch{continue;}
+      for(const name of log.split('\0').map(n=>n.replace(/^\n+/,'')).filter(Boolean))out.add(name);
+    }
+    return [...out];
+  }
   // Every recorded version of `file`, newest first, one per change: {id, at, author, message,
   // body, text} (text null where the file did not exist). Up to `limit` commits per repository.
   async versions(file,{limit=60}={}){
