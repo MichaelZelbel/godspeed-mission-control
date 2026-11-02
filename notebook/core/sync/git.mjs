@@ -79,17 +79,24 @@ export async function useFolderRepository(store,paths,{branch='main',remote='ori
   // writes the note (notebook-note.mjs carryIgnoreLine). This check changes nothing itself.
   const note=fs.existsSync(path.join(store.root,retiredNotebookNote))?(ignored(retiredNotebookNote)?null:retiredNotebookNote):(ignored(notebookNote)||ignored(retiredNotebookNote)?null:notebookNote);
   const local=['.godspeed/probe','conflicts/probe.json',note,...(probe.inScope('assistant-state/probe/x.json')?[]:['assistant-state/probe/x.json'])];
-  const visible=local.filter(name=>name&&(name===note||!ignored(name)));
+  let visible=local.filter(name=>name&&(name===note||!ignored(name)));
+  // The two lines the product itself asks for are written by the product (2 November 2026), when
+  // nothing else is wrong and the owner has no unsaved change in the ignore file.
+  const mine=visible.filter(name=>name===notebookNote||name==='assistant-state/probe/x.json'),said=[];
+  let toWrite=null;
+  if(mine.length&&mine.length===visible.length&&probe.git(['status','--porcelain','--','.gitignore'])===''){toWrite=mine.map(n=>n===notebookNote?'/'+notebookNote:'/assistant-state/');visible=[];}
   if(visible.length)throw new Error('Add these to the ignore file of the repository first: '+visible.map(n=>n.split('/')[0]+(n.includes('/')?'/':'')).join(', '));
   // The notebook commits a page an ignore rule happens to match (a title like
   // "id_rsa rotation"), but a rule that hides pages as such is a mistake.
   const hidden=['Page.md','Projects/Page.md','_system/notes/page.md','_system/jobs/job.json'].map(n=>recordsFolder+'/'+n).filter(name=>{try{probe.git(['check-ignore','-q','--no-index',name]);return true;}catch{return false;}});
   if(hidden.length)throw new Error('The ignore file of the repository hides notebook pages ('+hidden[0]+'); stop ignoring them first');
   const endings=probe.lineEndingProblem();if(endings)throw new Error(endings);
+  // Only now, with nothing left to refuse, is anything written.
+  if(toWrite)said.push(probe.writeIgnoreLines(toWrite));
   const old=path.join(store.state,'sync.git');
   if(fs.existsSync(old))fs.renameSync(old,path.join(store.state,'retired-sync.git-'+new Date().toISOString().replace(/[:.]/g,'-')));
   const config={enabled:true,repository:'folder',paths:list};atomic(path.join(store.state,'sync-config.json'),JSON.stringify(config));
-  return {...config,remote:url};
+  return {...config,remote:url,...(said.length?{said:said[0]}:{})};
 }
 
 // The installers' join (`godspeed sync folder` with no paths), run once when a
@@ -159,6 +166,32 @@ export class FileSync {
     const response=await fetch('https://api.github.com/repos/'+match[1]+'/'+match[2],{headers:{Accept:'application/vnd.github+json'},signal:AbortSignal.timeout(15000)});
     if(response.status===200)throw new Error('This repository is publicly readable. Choose a private repository for your knowledge');if(response.status!==404)throw new Error('Repository privacy could not be verified; no files were uploaded');
     try{this.git(['ls-remote',remoteUrl]);}catch{throw new Error('The private repository could not be read with this device Git credentials; no files were uploaded');}
+  }
+  // Adds the lines to the folder's own .gitignore, stops tracking NOTEBOOK.md (the first commit of a
+  // new install holds it) and commits exactly that, in an index of its own, as the notebook's
+  // commits are made; the owner's other staged work stays staged. Returns the one line it says.
+  writeIgnoreLines(lines){
+    const file=path.join(this.store.root,'.gitignore');let text='';try{text=fs.readFileSync(file,'utf8');}catch{}
+    atomic(file,(text?text.replace(/\n*$/,'\n'):'')+lines.join('\n')+'\n');
+    let head=null;try{head=this.git(['rev-parse','--verify','-q','HEAD']);}catch{}
+    if(head){
+      const index=path.join(this.store.state,'sync-ignore-index'),env={GIT_INDEX_FILE:index};this.dropIndex(index);
+      try{
+        this.git(['read-tree',head],undefined,{env});
+        const oid=this.git(['hash-object','-w','--no-filters','--',file]);
+        this.git(['update-index','--add','--cacheinfo','100644,'+oid+',.gitignore'],undefined,{env});
+        const tracked=this.git(['ls-tree','--name-only',head,'--',notebookNote])!=='';
+        if(tracked)this.git(['update-index','--force-remove','--',notebookNote],undefined,{env});
+        const tree=this.git(['write-tree'],undefined,{env});
+        if(tree!==this.git(['rev-parse',head+'^{tree}'])){
+          const commit=this.git(['commit-tree',tree,'-p',head,'-m','Keep NOTEBOOK.md and assistant-state/ on this computer'],undefined,{env:this.identity()});
+          this.indexFree();this.git(['update-ref','-m','Keep NOTEBOOK.md and assistant-state/ on this computer','refs/heads/'+this.branch,commit,head]);
+          this.git(['update-index','--add','--cacheinfo','100644,'+oid+',.gitignore']);
+          if(tracked)this.git(['update-index','--force-remove','--',notebookNote]);
+        }
+      }finally{this.dropIndex(index);}
+    }
+    return 'Added '+lines.map(l=>l.replace(/^\//,'')).join(' and ')+' to .gitignore and committed it; the first sync sends it.';
   }
   initialize(remoteUrl) {
     // Connecting a knowledge repository replaced the folder setting with
@@ -750,6 +783,13 @@ export class FileSync {
     const keep=this.checkIncoming(local,target,remoteHead);
     return {head,local,target:keep.length?this.restore(target,keep,local):target,lines,reviews};
   }
+  // The first round to a copy with no branch yet: this machine's notebook changes as a commit, and
+  // the whole branch goes out with it, the owner's first commit included.
+  planFirst(){
+    const head=this.git(['rev-parse','HEAD']),files=this.folderChanges();
+    const {commit:local,lines}=files.length?this.commitFolder(head,files):{commit:head,lines:[]};
+    return {head,local,target:local,lines,reviews:[]};
+  }
   // Before the branch takes `target`: the notebook this machine would read
   // must still read. Until 6 October 2026 a merged notebook was taken
   // unchecked, and a page deleted on one machine while another linked to it
@@ -976,11 +1016,17 @@ export class FileSync {
     try{
       this.folderReady();
       let networkError=null;
+      let empty=false;
       try{this.git(['fetch','--no-tags',this.remote,this.branch],undefined,{timeout:120000});}catch(error){networkError=error;}
+      // A new private copy on GitHub has no branch yet, so that fetch fails although the copy is
+      // reachable; until 2 November 2026 that read as "offline" and the first round never sent
+      // anything (the second computer of beta.14's reminder-closed-elsewhere cloned an empty
+      // repository). A copy that answers and holds no branch at all is empty: the round sends to it. One that has other branches but not this one is not (its default branch would stay the other, and a clone would not get this), so it waits as before.
+      if(networkError){try{if(this.git(['ls-remote','--heads',this.remote],undefined,{timeout:120000})==='')empty=true;}catch{}if(empty)networkError=null;}
       const remoteRef=this.remote+'/'+this.branch,pushing=path.join(this.store.state,'sync-pushing.json');
       // Offline nothing is committed: the edits wait as files, which a plain
       // `git pull --rebase` of the owner's leaves alone.
-      const plan=this.store.withLock(()=>{this.folderReady();this.finishPush(remoteRef,{fetched:!networkError});return networkError?null:this.planFolder(remoteRef);});
+      const plan=this.store.withLock(()=>{this.folderReady();this.finishPush(remoteRef,{fetched:!networkError});return networkError?null:empty?this.planFirst():this.planFolder(remoteRef);});
       if(networkError)throw networkError;
       if(plan){
         // Exactly the commit checked under the lock goes out, with whatever

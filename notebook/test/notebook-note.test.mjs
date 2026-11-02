@@ -205,7 +205,8 @@ test('folder mode asks the ignore file to hide the note under the name the folde
     w.run(dir,'init','-q','-b','main');w.run(dir,'add','-A');w.run(dir,'-c','user.name=Owner','-c','user.email=owner@localhost','commit','-qm','Owner');w.run(dir,'remote','add','origin',address);
     atomic(path.join(dir,note),notebookNoteText);return new Store(dir);
   };
-  await assert.rejects(useFolderRepository(folder('new',base,'NOTEBOOK.md')),/first: NOTEBOOK\.md$/);
+  // The product adds the missing NOTEBOOK.md line itself (2 November 2026); a missing line for anything else is still refused.
+  assert.match((await useFolderRepository(folder('new',base,'NOTEBOOK.md')))?.said,/Added \/?NOTEBOOK\.md/);
   assert.equal((await useFolderRepository(folder('new-ignored',base+'/NOTEBOOK.md\n','NOTEBOOK.md'))).repository,'folder');
   assert.equal((await useFolderRepository(folder('new-old-line',base+'/FULL-ALPHA.md\n','NOTEBOOK.md'))).repository,'folder','an old line counts: init puts the new one into the exclude file');
   await assert.rejects(useFolderRepository(folder('old',base+'/NOTEBOOK.md\n','FULL-ALPHA.md')),/first: FULL-ALPHA\.md$/);

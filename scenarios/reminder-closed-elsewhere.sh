@@ -47,7 +47,8 @@ SCENARIO=reminder-closed-elsewhere
 . "$(dirname "$0")/scenario-lib.sh"
 scenario_arguments "$@"
 
-MODES='connected folder'
+# GODSPEED_SCENARIO_MODES chooses the halves (connected, folder); both by default, as the workflow runs it.
+MODES=${GODSPEED_SCENARIO_MODES:-connected folder}
 SLUG=passport-renewal
 TITLE='Renew my passport'
 EVIDENCE_WORDS='I posted it at the town hall, receipt 4711'
@@ -77,6 +78,16 @@ calls_in() { # <file> <step>
 }
 
 # ------------------------------------------------------------------------------------ the acting
+# A sync round. In folder mode it has to end synced by its deadline (scenario-lib.sh sync_round); the
+# connected half goes on as it was.
+round() { # <root> <mode> <what the round does>
+  if [ "$2" = folder ]; then
+    sync_round "$1" "$2" "$3"
+  else
+    sync_on "$1" >>"$EVIDENCE/$2-rounds.txt" || fail "the sync round that $3 failed"
+  fi
+}
+
 # One pair of computers, joined one of the two ways, and the one thing that has to happen on them.
 one_pair() { # <mode> <A root> <A port> <B root> <B port> <stand-in folder>
   local mode=$1 a=$2 a_port=$3 b=$4 b_port=$5 bare=$6 address
@@ -98,8 +109,9 @@ one_pair() { # <mode> <A root> <A port> <B root> <B port> <stand-in folder>
     # says the whole of it), and what it read back is kept, so the judging part can see it.
     stand_in_github_over_ssh "$bare"
     address=$STAND_IN_ADDRESS
-    owner_ignores_what_the_notebook_keeps "$a"
     git -C "$a" remote add origin "$address" || fail "the mission control in $a could not be given its copy on GitHub"
+    # The mission control's own .gitignore does not list NOTEBOOK.md and assistant-state/, and nobody
+    # adds them here: the product adds them itself and says so in the answer (issue #125).
     notebook_on "$a" sync folder notebook >"$EVIDENCE/$mode-join.json" ||
       fail "godspeed sync folder notebook was refused on $a, so there is no mission control carrying its own notebook (what it said is in the step log)"
   else
@@ -109,7 +121,8 @@ one_pair() { # <mode> <A root> <A port> <B root> <B port> <stand-in folder>
     grep -q 'configuration_failed\|configuration_error' "$EVIDENCE/$mode-configure.json" &&
       fail "connecting the repository the way Settings connects it failed: $(tr -d '\n' <"$EVIDENCE/$mode-configure.json" | cut -c1-300)"
   fi
-  sync_on "$a" >"$EVIDENCE/$mode-rounds.txt" || fail "the first sync round on $a failed, so the second computer had nothing to be set up from"
+  : >"$EVIDENCE/$mode-rounds.txt"
+  round "$a" "$mode" "the first sync round on $a, which has to send the mission control to its copy so the second computer has something to be set up from"
   cp "$a/.godspeed/sync-config.json" "$EVIDENCE/$mode-sync-config.json" ||
     fail "$a kept no sync-config.json, so how it was joined cannot be said"
   # The second computer, the way a person's installer sets it up: it clones the copy on GitHub and
@@ -129,9 +142,9 @@ one_pair() { # <mode> <A root> <A port> <B root> <B port> <stand-in folder>
     fail "the reminder could not be added on the first computer $a"
 
   phase "$mode-sync-a-1"
-  sync_on "$a" >>"$EVIDENCE/$mode-rounds.txt" || fail "the sync round that carries the new reminder away from $a failed"
+  round "$a" "$mode" "carries the new reminder away from $a"
   phase "$mode-sync-b-1"
-  sync_on "$b" >>"$EVIDENCE/$mode-rounds.txt" || fail "the sync round that brings the new reminder to $b failed"
+  round "$b" "$mode" "brings the new reminder to $b"
 
   phase "$mode-close-on-b"
   due_on "$b" 'done' "$SLUG" --evidence "$EVIDENCE_WORDS" >"$EVIDENCE/$mode-closing.txt" 2>&1 ||
@@ -139,9 +152,9 @@ one_pair() { # <mode> <A root> <A port> <B root> <B port> <stand-in folder>
   sed 's/^/  | /' "$EVIDENCE/$mode-closing.txt" >&2
 
   phase "$mode-sync-b-2"
-  sync_on "$b" >>"$EVIDENCE/$mode-rounds.txt" || fail "the sync round that carries the closing away from $b failed"
+  round "$b" "$mode" "carries the closing away from $b"
   phase "$mode-sync-a-2"
-  sync_on "$a" >>"$EVIDENCE/$mode-rounds.txt" || fail "the sync round that brings the closing to $a failed"
+  round "$a" "$mode" "brings the closing to $a"
 
   phase "$mode-read-on-a"
   due_on "$a" state --json >"$EVIDENCE/$mode-state.json" || fail "the first computer $a could not say what it holds (due state --json)"
@@ -161,22 +174,23 @@ act() {
     printf 'evidence\t%s\n' "$EVIDENCE_WORDS"
   } >"$EVIDENCE/what.txt"
   local work=${GODSPEED_SCENARIO_WORK:-${RUNNER_TEMP:-/tmp}}
-  one_pair connected "$ROOT" "$NOTEBOOK_PORT" "$work/computer-b" 47841 "$work/github-connected"
-  one_pair folder "$work/computer-c" 47851 "$work/computer-d" 47861 "$work/github-folder"
+  case " $MODES " in *" connected "*) one_pair connected "$ROOT" "$NOTEBOOK_PORT" "$work/computer-b" 47841 "$work/github-connected" ;; esac
+  case " $MODES " in *" folder "*) one_pair folder "$work/computer-c" 47851 "$work/computer-d" 47861 "$work/github-folder" ;; esac
   phase finished
 }
 
 # ----------------------------------------------------------------------------------- the judging
 check() { # <evidence folder>
-  local folder=$1 mode slug title evidence row state closed_by git_calls carried joined
+  local folder=$1 mode slug title evidence row state closed_by git_calls carried joined built=''
   [ -d "$folder" ] || fail "there is nothing at $folder, so this scenario kept no evidence of a reminder closed elsewhere"
   need_node
   kept_all "$folder" "what the two computers did and what git did" what.txt git-calls.txt
   slug=$(said "$folder/what.txt" slug)
   title=$(said "$folder/what.txt" title)
   evidence=$(said "$folder/what.txt" evidence)
-  [ -n "$slug" ] && [ -n "$title" ] && [ -n "$evidence" ] ||
+  if [ -z "$slug" ] || [ -z "$title" ] || [ -z "$evidence" ]; then
     fail "what.txt says no reminder (slug '$slug', title '$title', evidence '$evidence'), so there is nothing to look for"
+  fi
 
   for mode in $MODES; do
     kept_all "$folder" "what the $mode pair of computers saw" \
@@ -194,6 +208,12 @@ check() { # <evidence folder>
       # is therefore no stand-in at all: the product refuses it, rightly, and this scenario proved
       # nothing. So what the notebook answered when it joined is kept, and read here.
       kept "$folder" "$mode-join.json" "what the notebook answered when the $mode pair joined"
+      # And the round that sent the mission control to its copy, and every one after it, ended synced:
+      # a round still answering "pending" sent nothing (issue #125), whatever came after it.
+      case $(tail -n 1 "$folder/$mode-rounds.txt") in
+        *'"state":"synced"'*) ;;
+        *) fail "the last sync round of the $mode pair answered \"$(tail -n 1 "$folder/$mode-rounds.txt" | cut -c1-300)\" and not synced" ;;
+      esac
       joined=$(json_value "$folder/$mode-join.json" remote)
       case $joined in
         https://github.com/*.git | https://github.com/*/* | git@github.com:*) ;;
@@ -243,7 +263,8 @@ check() { # <evidence folder>
   [ "$carried" -gt 0 ] ||
     fail "no git call at all was made in the sync rounds that carry the closing, so nothing was carried by the product's own sync"
 
-  pass "a reminder added on one computer and closed on the other with \"$evidence\" is closed on the first, both joined the way Settings connects a repository and in folder mode with notebook/ only, that one through the GitHub address $joined; its due today no longer names \"$title\", and the scenario ran no git of its own in any step - only the notebook's own sync did, $carried calls in the rounds that carried the closing"
+  [ -z "${GODSPEED_SCENARIO_PRODUCT:-}" ] || built=" (in the builder's copy, from $GODSPEED_SCENARIO_PRODUCT, halves: $MODES)"
+  pass "a reminder added on one computer and closed on the other with \"$evidence\" is closed on the first, both joined the way Settings connects a repository and in folder mode with notebook/ only, that one through the GitHub address $joined; its due today no longer names \"$title\", and the scenario ran no git of its own in any step - only the notebook's own sync did, $carried calls in the rounds that carried the closing${built:-}"
 }
 
 if [ "$CHECK_ONLY" = yes ]; then
