@@ -348,11 +348,13 @@ function Invoke-Update([string]$P) {
   $out = Join-Path $Evidence "updater-$P.log"
   Say "Running $($updater[0].FullName) -ReleaseBase $(Split-Path $toSetup)"
   $ps = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
-  $p = Start-Process -FilePath $ps -PassThru -RedirectStandardOutput $out -RedirectStandardError "$out.err" -ArgumentList @(
+  # Not $p: PowerShell's names ignore case, so that would be the [string] parameter $P, and the
+  # process would be turned into text (the second run of this scenario, on candidate/2.0.0-beta.15).
+  $proc = Start-Process -FilePath $ps -PassThru -RedirectStandardOutput $out -RedirectStandardError "$out.err" -ArgumentList @(
     '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$($updater[0].FullName)`"", '-ReleaseBase', "`"$(Split-Path $toSetup)`"", '-NoPause')
-  if (-not $p.WaitForExit(60 * 60 * 1000)) { Stop-Process -Id $p.Id -Force; Stop-Scenario 'the update did not end within an hour' }
-  Say "  the update ended with exit $($p.ExitCode)"
-  Set-Content -LiteralPath (Join-Path $Evidence "update-exit-$P.txt") -Value $p.ExitCode
+  if (-not $proc.WaitForExit(60 * 60 * 1000)) { Stop-Process -Id $proc.Id -Force; Stop-Scenario 'the update did not end within an hour' }
+  Say "  the update ended with exit $($proc.ExitCode)"
+  Set-Content -LiteralPath (Join-Path $Evidence "update-exit-$P.txt") -Value $proc.ExitCode
 }
 if (Test-Path -LiteralPath $setupLog) { Remove-Item -LiteralPath $setupLog -Force -ErrorAction SilentlyContinue }
 Invoke-Update $(if ($Held) { 'held' } else { 'after' })
