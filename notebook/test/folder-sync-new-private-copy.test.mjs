@@ -116,3 +116,32 @@ test('a mission control that ignores them another way is accepted unchanged', as
   assert.equal(fs.readFileSync(path.join(a, '.gitignore'), 'utf8'), before.ignore);
   assert.equal(git(a, 'rev-parse', 'HEAD'), before.head);
 });
+
+test('a join that is refused for another reason writes and commits nothing', async t => {
+  const w = world(t), a = newMissionControl(w);
+  fs.appendFileSync(path.join(a, '.gitignore'), 'notebook/**\n');
+  git(a, 'add', '.gitignore');
+  git(a, 'commit', '-qm', 'Hide the notebook');
+  const before = { ignore: fs.readFileSync(path.join(a, '.gitignore'), 'utf8'), head: git(a, 'rev-parse', 'HEAD') };
+  await assert.rejects(useFolderRepository(new Store(a, { device: 'computer-a' }), ['notebook']), /hides notebook pages/);
+  assert.equal(fs.readFileSync(path.join(a, '.gitignore'), 'utf8'), before.ignore);
+  assert.equal(git(a, 'rev-parse', 'HEAD'), before.head);
+  assert.ok(tracked(a).includes('NOTEBOOK.md'));
+});
+
+test('a private copy that has another branch and no main is not taken for an empty one', async t => {
+  const w = world(t), a = newMissionControl(w);
+  const other = path.join(w.base, 'other');
+  git(w.base, 'clone', '-q', w.copy, other);
+  git(other, 'config', 'user.name', 'Other');
+  git(other, 'config', 'user.email', 'other@localhost');
+  git(other, 'checkout', '-q', '-b', 'trunk');
+  atomic(path.join(other, 'README.md'), 'someone else\n');
+  git(other, 'add', '-A');
+  git(other, 'commit', '-qm', 'trunk');
+  git(other, 'push', '-q', 'origin', 'trunk');
+  const store = new Store(a, { device: 'computer-a' });
+  await useFolderRepository(store, ['notebook']);
+  assert.equal(round(store).state, 'pending');
+  assert.deepEqual(git(w.copy, 'for-each-ref', '--format=%(refname)').split('\n'), ['refs/heads/trunk'], 'nothing was created in the copy');
+});

@@ -83,13 +83,16 @@ export async function useFolderRepository(store,paths,{branch='main',remote='ori
   // The two lines the product itself asks for are written by the product (2 November 2026), when
   // nothing else is wrong and the owner has no unsaved change in the ignore file.
   const mine=visible.filter(name=>name===notebookNote||name==='assistant-state/probe/x.json'),said=[];
-  if(mine.length&&mine.length===visible.length&&probe.git(['status','--porcelain','--','.gitignore'])===''){said.push(probe.writeIgnoreLines(mine.map(n=>n===notebookNote?'/'+notebookNote:'/assistant-state/')));visible=[];}
+  let toWrite=null;
+  if(mine.length&&mine.length===visible.length&&probe.git(['status','--porcelain','--','.gitignore'])===''){toWrite=mine.map(n=>n===notebookNote?'/'+notebookNote:'/assistant-state/');visible=[];}
   if(visible.length)throw new Error('Add these to the ignore file of the repository first: '+visible.map(n=>n.split('/')[0]+(n.includes('/')?'/':'')).join(', '));
   // The notebook commits a page an ignore rule happens to match (a title like
   // "id_rsa rotation"), but a rule that hides pages as such is a mistake.
   const hidden=['Page.md','Projects/Page.md','_system/notes/page.md','_system/jobs/job.json'].map(n=>recordsFolder+'/'+n).filter(name=>{try{probe.git(['check-ignore','-q','--no-index',name]);return true;}catch{return false;}});
   if(hidden.length)throw new Error('The ignore file of the repository hides notebook pages ('+hidden[0]+'); stop ignoring them first');
   const endings=probe.lineEndingProblem();if(endings)throw new Error(endings);
+  // Only now, with nothing left to refuse, is anything written.
+  if(toWrite)said.push(probe.writeIgnoreLines(toWrite));
   const old=path.join(store.state,'sync.git');
   if(fs.existsSync(old))fs.renameSync(old,path.join(store.state,'retired-sync.git-'+new Date().toISOString().replace(/[:.]/g,'-')));
   const config={enabled:true,repository:'folder',paths:list};atomic(path.join(store.state,'sync-config.json'),JSON.stringify(config));
@@ -1018,8 +1021,8 @@ export class FileSync {
       // A new private copy on GitHub has no branch yet, so that fetch fails although the copy is
       // reachable; until 2 November 2026 that read as "offline" and the first round never sent
       // anything (the second computer of beta.14's reminder-closed-elsewhere cloned an empty
-      // repository). A copy that answers and holds no such branch is empty: the round sends to it.
-      if(networkError){try{if(this.git(['ls-remote','--heads',this.remote,this.branch],undefined,{timeout:120000})==='')empty=true;}catch{}if(empty)networkError=null;}
+      // repository). A copy that answers and holds no branch at all is empty: the round sends to it. One that has other branches but not this one is not (its default branch would stay the other, and a clone would not get this), so it waits as before.
+      if(networkError){try{if(this.git(['ls-remote','--heads',this.remote],undefined,{timeout:120000})==='')empty=true;}catch{}if(empty)networkError=null;}
       const remoteRef=this.remote+'/'+this.branch,pushing=path.join(this.store.state,'sync-pushing.json');
       // Offline nothing is committed: the edits wait as files, which a plain
       // `git pull --rebase` of the owner's leaves alone.
