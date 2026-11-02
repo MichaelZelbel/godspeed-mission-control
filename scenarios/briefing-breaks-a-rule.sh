@@ -9,7 +9,8 @@
 # was not saved that morning.
 #
 # The line used is the Charm Challenge's: the owner starts the challenge through the notebook's own
-# operation and the line the brief is given reads "Charm Challenge: day 1 of 21, ...". The owner's
+# operation and the line the brief is given (asked as the briefing asks it: the add-on's command
+# `brief --no-write` through the notebook's addon-command operation, not a charm action) reads "Charm Challenge: day 1 of 21, ...". The owner's
 # voice rules (profile/voice.md, the file a person keeps their voice in) ban the word "Challenge".
 # The brief then runs the way Settings runs it (POST /api/jobs/add, POST /api/jobs/run) with the
 # model Settings connects (POST /api/provider), and what the notebook holds afterwards is read back
@@ -115,10 +116,15 @@ act() {
   printf '%s\n' "$BANNED" >"$EVIDENCE/banned-word.txt"
   notebook_answer personal-operation '{"type":"charm","action":"start"}' "$EVIDENCE/.start.json" \
     'the start of the Charm Challenge'
-  notebook_answer personal-operation '{"type":"charm","action":"brief"}' "$EVIDENCE/.brief.json" \
+  # The call the morning briefing makes (core/briefing.mjs sets charm_line from the add-on's own
+  # command, brief --no-write, and reads the reply of the JSON it prints), so this tests that path.
+  notebook_answer personal-operation '{"type":"addon-command","addon":"charm","args":["brief","--no-write"]}' "$EVIDENCE/.brief.json" \
     'the one line the morning brief is given about the Charm Challenge'
-  json_value "$EVIDENCE/.brief.json" data.line >"$EVIDENCE/brief-line.txt" ||
+  if ! json_value "$EVIDENCE/.brief.json" data.result >"$EVIDENCE/.brief-result.json" ||
+    ! json_value "$EVIDENCE/.brief-result.json" reply >"$EVIDENCE/brief-line.txt" ||
+    [ ! -s "$EVIDENCE/brief-line.txt" ]; then
     fail "the notebook's own answer for the morning brief holds no line about the Charm Challenge: $(tr -d '\n' <"$EVIDENCE/.brief.json" | cut -c1-200)"
+  fi
   printf '\n' >>"$EVIDENCE/brief-line.txt"
   sed 's/^/  | /' "$EVIDENCE/brief-line.txt" >&2
 

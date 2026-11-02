@@ -1773,6 +1773,21 @@ rm "$TMP/briefing-case/delivery.txt"
 refuses 'briefing: a file the scenario should have kept is missing' briefing-breaks-a-rule "$TMP/briefing-case" \
   'delivery.txt is not in what the scenario kept'
 
+section 'the Charm Challenge line is asked as the briefing asks it'
+for scenario in charm-challenge briefing-breaks-a-rule; do
+  file="$ROOT/scenarios/$scenario.sh"
+  if grep -qF -- '{"type":"addon-command","addon":"charm","args":["brief","--no-write"]}' "$file"; then
+    ok "$scenario asks the addon-command call with --no-write, as core/briefing.mjs does"
+  else
+    bad "$scenario does not ask the addon-command call with --no-write"
+  fi
+  if grep -qF -- '{"type":"charm","action":"brief"}' "$file"; then
+    bad "$scenario still asks {\"type\":\"charm\",\"action\":\"brief\"}, which the charm operation refuses"
+  else
+    ok "$scenario never asks {\"type\":\"charm\",\"action\":\"brief\"}"
+  fi
+done
+
 # =========================================== the stand-in for the private GitHub repository (issue #125)
 # `godspeed sync folder notebook` refuses a repository whose ignore file lacks NOTEBOOK.md and
 # assistant-state/, so both stand-ins must come with one.

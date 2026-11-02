@@ -75,3 +75,17 @@ test('on the finish day the line is the finish line; a rehearsal writes no finis
  await jobExecutor(provider,query)({kind:'morning-brief',id:'brief-finish'},{store,settings:{}});
  assert.equal(seen[1],seen[0]);assert.equal(finishes(store),1);
 });
+
+// The scenarios (charm-challenge, briefing-breaks-a-rule) ask for the morning line the way the
+// briefing does: the personal operation addon-command with the add-on's own `brief --no-write`.
+test('addon-command brief --no-write answers a JSON with the one line of a started challenge, and writes nothing',async()=>{
+ const {store,query}=fixture(false);
+ const {Domains}=await import('../core/domains.mjs');
+ const domains=new Domains(query);
+ await domains.invoke('personal-operation',{type:'charm',action:'start'});
+ const before=readEvents(store.root).length;
+ const answer=await domains.invoke('personal-operation',{type:'addon-command',addon:'charm',args:['brief','--no-write']});
+ const reply=String(JSON.parse(answer.result).reply||'').trim();
+ assert.match(reply,/^Charm Challenge: day 1 of 21/);
+ assert.equal(readEvents(store.root).length,before);
+});
