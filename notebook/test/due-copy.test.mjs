@@ -101,9 +101,9 @@ test('done through the due command writes a moment with status and all three rat
   dueCommand(store, ['done', 'dentist', '--evidence', 'the receipt is in my mail']);
   const moment = closings(store).find(m => m.deadline_id === 'due-dentist');
   assert.equal(moment.obligation_kind, 'closes');
-  assert.deepEqual(ratingsOf(moment), ['past_fact', 1, 10, 5]);
+  assert.deepEqual(ratingsOf(moment), ['past_fact', 1, 10, 10]);
   const row = new QueryService(store).rows('moments').find(m => m.id === moment.id);
-  assert.deepEqual(ratingsOf(row), ['past_fact', 1, 10, 5], 'as the timeline reads it');
+  assert.deepEqual(ratingsOf(row), ['past_fact', 1, 10, 10], 'as the timeline reads it');
 });
 
 test('dropping a deadline writes a moment with status and all three ratings', t => {
@@ -112,8 +112,7 @@ test('dropping a deadline writes a moment with status and all three ratings', t 
   dueCommand(store, ['drop', 'gym', '--yes']);
   const moment = closings(store).find(m => m.deadline_id === 'due-gym');
   assert.equal(moment.obligation_kind, 'drops');
-  assert.deepEqual(ratingsOf(moment), ['past_fact', 1, 10, moment.confidence_truth]);
-  assert.ok(Number.isInteger(moment.confidence_truth));
+  assert.deepEqual(ratingsOf(moment), ['past_fact', 1, 10, 10]);
 });
 
 test('the correction for older closings runs once and keeps an owner rating', t => {

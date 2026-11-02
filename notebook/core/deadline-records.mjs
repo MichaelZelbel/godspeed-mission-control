@@ -71,7 +71,7 @@ export const CLOSING_KINDS = Object.freeze(['closes', 'drops']);
 // confidence; other evidence is retained but does not silently become certainty.
 export function closingMomentRatings(evidence) {
   return { status: 'past_fact', impact_level: 1, confidence_date: 10,
-    confidence_truth: /^Michael said so\b/i.test(text(evidence).trim()) ? 10 : 5 };
+    confidence_truth: /^(you|Michael) said so\b/i.test(text(evidence).trim()) ? 10 : 5 };
 }
 
 // The uid of the moment that closes or drops a reminder, derived from what it closes: the
