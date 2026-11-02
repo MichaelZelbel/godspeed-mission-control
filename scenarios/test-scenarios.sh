@@ -37,7 +37,12 @@ section() { printf '== %s\n' "$1"; }
 run() { # <scenario> <arguments...>
   local scenario=$1
   shift
-  OUT=$(bash "$ROOT/scenarios/$scenario.sh" "$@" 2>/dev/null)
+  if [ -f "$ROOT/scenarios/$scenario.ps1" ]; then
+    # The Windows scenarios are PowerShell; their checking part runs under pwsh anywhere.
+    OUT=$("${PWSH:-pwsh}" -NoProfile -File "$ROOT/scenarios/$scenario.ps1" "$@" 2>/dev/null)
+  else
+    OUT=$(bash "$ROOT/scenarios/$scenario.sh" "$@" 2>/dev/null)
+  fi
   CODE=$?
   LINES=$(printf '%s\n' "$OUT" | grep -c .)
 }
@@ -1805,6 +1810,129 @@ for scenario in charm-challenge briefing-breaks-a-rule; do
     ok "$scenario never asks {\"type\":\"charm\",\"action\":\"brief\"}"
   fi
 done
+
+# ======================================== 15. windows-old-names-move (2.0.0-beta.15, 3)
+# What the scenario saw on a Windows machine whose install from 2.0.0-beta.10 was updated: listings
+# of the folders, the Start menu, tasks and Apps entries, and the notebook's and the setup's answers.
+# The acting part needs Windows; its checking part is held to these prepared folders under pwsh.
+section "windows-old-names-move: the checks' own logic"
+WN=windows-old-names-move
+if ! "${PWSH:-pwsh}" -NoProfile -Command '$PSVersionTable.PSVersion.ToString()' >/dev/null 2>&1; then
+  bad "$WN: pwsh is not installed, so the scenario's checking part cannot be run (this is a failure, not a skip)"
+else
+  if "${PWSH:-pwsh}" -NoProfile -Command "[scriptblock]::Create((Get-Content -Raw '$ROOT/scenarios/$WN.ps1')) | Out-Null"; then
+    ok "$WN: pwsh reads the script"
+  else
+    bad "$WN: pwsh cannot parse the script"
+  fi
+  wn_after() { # <folder> <p>: the machine after a move that went right
+    local f=$1 p=$2
+    printf '%s\n' 'Godspeed' 'Godspeed Mission Control' 'Godspeed Mission Control State' 'Temp' >"$f/localappdata-$p.txt"
+    printf '%s\n' installation.json notes.db 'media/photo.png' 'backups/one/notes.db' 'logs/today.log' 'hermes/config.yaml' >"$f/files-$p.txt"
+    printf '%s\n' \
+      'startmenu: C:\Start\Godspeed Mission Control\Open my notebook.lnk -> powershell.exe -File "C:\Local\Godspeed Mission Control\open-notebook.ps1"' \
+      'startup: C:\Startup\Godspeed Mission Control.lnk -> powershell.exe -File "C:\Local\Godspeed Mission Control\start-notebook.ps1"' \
+      'task: Godspeed prompt archive -> powershell.exe -File "C:\Local\Godspeed Mission Control\archive.ps1"' \
+      'uninstall: Godspeed Mission Control_is1 Godspeed Mission Control C:\Local\Godspeed Mission Control "C:\Local\Godspeed Mission Control\unins000.exe"' >"$f/names-$p.txt"
+    echo 0 >"$f/update-exit-$p.txt"
+    echo ok >"$f/health-$p.txt"
+    printf 'written-before-the-move\tWritten before the move\n' >"$f/notes-$p.txt"
+    printf '%s\n' 'Reminder written before the move (in 30 days)' >"$f/reminders-$p.txt"
+    printf '%s\n' '2026-11-02T10:00:00 Godspeed Mission Control now lives in C:\Local\Godspeed Mission Control and keeps its notebook'"'"'s data in C:\Local\Godspeed Mission Control State.' >"$f/setup-log-$p.txt"
+  }
+  wn_good() { # <folder>
+    local f=$1
+    rm -rf "$f"
+    mkdir -p "$f"
+    echo moves >"$f/mode.txt"
+    printf '%s\n' 'Godspeed' 'Godspeed Mission Control Full Alpha' 'Godspeed Mission Control Full Alpha State' >"$f/localappdata-before.txt"
+    printf '%s\n' installation.json notes.db 'media/photo.png' 'backups/one/notes.db' 'logs/yesterday.log' 'hermes/config.yaml' >"$f/files-before.txt"
+    wn_after "$f" after
+  }
+  wn_good_held() { # <folder>
+    local f=$1
+    wn_good "$f"
+    echo held >"$f/mode.txt"
+    printf '%s\n' 'Godspeed' 'Godspeed Mission Control Full Alpha' 'Godspeed Mission Control Full Alpha State' >"$f/localappdata-held.txt"
+    printf '%s\n' installation.json notes.db 'media/photo.png' >"$f/files-held.txt"
+    echo ok >"$f/health-held.txt"
+    printf 'written-before-the-move\tWritten before the move\n' >"$f/notes-held.txt"
+    echo '2026-11-02T10:00:00 Godspeed Mission Control stays in its old folders this time and works there as before, because a file is in use. The next update tries the move again.' >"$f/setup-log-held.txt"
+    : >"$f/names-held.txt"
+    : >"$f/reminders-held.txt"
+  }
+  wn_good "$TMP/wn-good"
+  passes "$WN: a moved install passes" "$WN" "$TMP/wn-good" "both folders moved"
+  wn_good_held "$TMP/wn-held"
+  passes "$WN: a held folder left working, then moved, passes" "$WN" "$TMP/wn-held" "kept working"
+
+  copy "$TMP/wn-good" "$TMP/wn-x"
+  printf '%s\n' 'Godspeed' 'Godspeed Mission Control Full Alpha' 'Godspeed Mission Control' 'Godspeed Mission Control State' >"$TMP/wn-x/localappdata-after.txt"
+  refuses "$WN: the old folders left behind" "$WN" "$TMP/wn-x" "old folder Godspeed Mission Control Full Alpha is still there"
+  copy "$TMP/wn-good" "$TMP/wn-x"
+  printf '%s\n' 'Godspeed' 'Godspeed Mission Control' >"$TMP/wn-x/localappdata-after.txt"
+  refuses "$WN: the new state folder missing" "$WN" "$TMP/wn-x" "Godspeed Mission Control State is not there"
+  copy "$TMP/wn-good" "$TMP/wn-x"
+  echo 'startmenu: C:\Start\Godspeed Mission Control Full Alpha\Open my notebook.lnk -> powershell.exe' >>"$TMP/wn-x/names-after.txt"
+  refuses "$WN: a Start menu entry still naming Full Alpha" "$WN" "$TMP/wn-x" "still names Full Alpha"
+  copy "$TMP/wn-good" "$TMP/wn-x"
+  echo 'task: Godspeed daily -> powershell.exe -File "C:\Local\Godspeed Mission Control Full Alpha State\x.ps1"' >>"$TMP/wn-x/names-after.txt"
+  refuses "$WN: a scheduled task still naming Full Alpha" "$WN" "$TMP/wn-x" "still names Full Alpha"
+  copy "$TMP/wn-good" "$TMP/wn-x"
+  echo 'uninstall: Godspeed_Full_Alpha_is1 Godspeed Mission Control Full Alpha' >>"$TMP/wn-x/names-after.txt"
+  refuses "$WN: an uninstall entry still naming Full Alpha" "$WN" "$TMP/wn-x" "still names Full Alpha"
+  copy "$TMP/wn-good" "$TMP/wn-x"
+  grep -v '^startmenu:' "$TMP/wn-good/names-after.txt" >"$TMP/wn-x/names-after.txt"
+  refuses "$WN: no Start menu entry at all proves nothing" "$WN" "$TMP/wn-x" "no startmenu entry"
+  copy "$TMP/wn-good" "$TMP/wn-x"
+  grep -v 'notes.db$' "$TMP/wn-good/files-after.txt" >"$TMP/wn-x/files-after.txt"
+  refuses "$WN: a file of the old state folder missing after the move" "$WN" "$TMP/wn-x" "not in the new one"
+  copy "$TMP/wn-good" "$TMP/wn-x"
+  printf '%s\n' installation.json notes.db 'media/photo.png' 'backups/one/notes.db' 'hermes/config.yaml' >"$TMP/wn-x/files-after.txt"
+  passes "$WN: only the setup's own logs missing is no loss" "$WN" "$TMP/wn-x" "both folders moved"
+  copy "$TMP/wn-good" "$TMP/wn-x"
+  echo 1 >"$TMP/wn-x/update-exit-after.txt"
+  refuses "$WN: the update ending with a failure code, everything else in place" "$WN" "$TMP/wn-x" "ended with exit 1"
+  copy "$TMP/wn-good" "$TMP/wn-x"
+  echo 'no answer' >"$TMP/wn-x/health-after.txt"
+  refuses "$WN: the notebook not answering after the move" "$WN" "$TMP/wn-x" "does not answer"
+  copy "$TMP/wn-good" "$TMP/wn-x"
+  : >"$TMP/wn-x/notes-after.txt"
+  refuses "$WN: the note missing after the move" "$WN" "$TMP/wn-x" "note written before"
+  copy "$TMP/wn-good" "$TMP/wn-x"
+  echo 'nothing due' >"$TMP/wn-x/reminders-after.txt"
+  refuses "$WN: the reminder missing after the move" "$WN" "$TMP/wn-x" "reminder written before"
+  copy "$TMP/wn-good" "$TMP/wn-x"
+  echo 'Update finished.' >"$TMP/wn-x/setup-log-after.txt"
+  refuses "$WN: the setup never says the move happened" "$WN" "$TMP/wn-x" "never say the move happened"
+  copy "$TMP/wn-good" "$TMP/wn-x"
+  printf '%s\n' 'Godspeed' 'Godspeed Mission Control Full Alpha' 'Godspeed Mission Control' >"$TMP/wn-x/localappdata-before.txt"
+  printf '%s\n' 'Godspeed' >"$TMP/wn-x/localappdata-before.txt"
+  refuses "$WN: a start that was not an old install" "$WN" "$TMP/wn-x" "was not an old install"
+
+  copy "$TMP/wn-held" "$TMP/wn-x"
+  echo 'no answer' >"$TMP/wn-x/health-held.txt"
+  refuses "$WN: a held folder left not working" "$WN" "$TMP/wn-x" "does not start while the move waits"
+  copy "$TMP/wn-held" "$TMP/wn-x"
+  printf '%s\n' 'Godspeed' 'Godspeed Mission Control' 'Godspeed Mission Control State' >"$TMP/wn-x/localappdata-held.txt"
+  refuses "$WN: a held folder moved anyway" "$WN" "$TMP/wn-x" "took Godspeed Mission Control Full Alpha away"
+  copy "$TMP/wn-held" "$TMP/wn-x"
+  printf '%s\n' 'Godspeed' 'Godspeed Mission Control Full Alpha' 'Godspeed Mission Control Full Alpha State' 'Godspeed Mission Control State' >"$TMP/wn-x/localappdata-held.txt"
+  refuses "$WN: a held folder left half moved" "$WN" "$TMP/wn-x" "half a move"
+  copy "$TMP/wn-held" "$TMP/wn-x"
+  echo 'Update finished.' >"$TMP/wn-x/setup-log-held.txt"
+  refuses "$WN: a held folder and no word of trying again" "$WN" "$TMP/wn-x" "never said it will try again"
+  copy "$TMP/wn-held" "$TMP/wn-x"
+  printf '%s\n' 'Godspeed' 'Godspeed Mission Control Full Alpha' 'Godspeed Mission Control' 'Godspeed Mission Control Full Alpha State' >"$TMP/wn-x/localappdata-after.txt"
+  refuses "$WN: released, the next update still leaves the old folders" "$WN" "$TMP/wn-x" "still there after the update"
+
+  run "$WN"
+  if [ "$CODE" = 2 ]; then ok "$WN with no stage ref says how it is called (exit 2)"; else bad "$WN with no stage ref left exit $CODE, not 2"; fi
+  refuses "$WN on a folder that is not there" "$WN" "$TMP/no-such-folder" "there is nothing at"
+  OUT=$("${PWSH:-pwsh}" -NoProfile -File "$ROOT/scenarios/$WN.ps1" 2>&1 >/dev/null)
+  case $OUT in *usage*) ok "$WN prints its usage on the error stream" ;; *) bad "$WN printed no usage ($OUT)" ;; esac
+  if grep -qF "candidate/2.0.0-beta.10" "$ROOT/scenarios/$WN.ps1"; then ok "$WN starts from candidate/2.0.0-beta.10"; else bad "$WN does not name candidate/2.0.0-beta.10"; fi
+fi
 
 # =========================================== the stand-in for the private GitHub repository (issue #125)
 # `godspeed sync folder notebook` refuses a repository whose ignore file lacks NOTEBOOK.md and
