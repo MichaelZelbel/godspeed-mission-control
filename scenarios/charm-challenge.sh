@@ -96,7 +96,9 @@ const answer=JSON.parse(fs.readFileSync(process.argv[1],"utf8")),list=(answer.da
 const out=[];
 for(const t of list.filter(t=>t&&t.specialist==="charm")){
  out.push(["card",t.name||"",t.specialist,JSON.stringify(t)].join("\t"));
- for(const e of (t.recent||[]))out.push(["event",String(e.when||"?"),JSON.stringify(e.data||{})].join("\t"));
+ // The day of each event: the shelf says when it happened with the hour ("2026-11-02 22:28"), and
+ // this scenario judges days, as the event itself does ("date").
+ for(const e of (t.recent||[]))out.push(["event",String((e.data&&e.data.date)||String(e.when||"?").slice(0,10)),JSON.stringify(e.data||{})].join("\t"));
 }
 process.stdout.write(out.sort().join("\n")+"\n");
 '
@@ -111,7 +113,7 @@ process.stdout.write(rows.map(m=>[m.role||"",String(m.content||"").replace(/\s+/
 BRIEF_READER='
 const fs=require("fs");
 const rows=f=>{const d=JSON.parse(fs.readFileSync(f,"utf8"));return Array.isArray(d)?d:(d.data||[]);};
-const job=rows(process.argv[1]).find(j=>j&&j.id==="morning-brief")||{};
+const job=rows(process.argv[1]).find(j=>j&&(j.id===process.env.BRIEF_ID||j.id==="morning-brief"))||{};
 fs.writeFileSync(process.argv[3],["state="+(job.state||""),"paused="+(job.paused===true),"next_run="+(job.next_run||"")].join("\n")+"\n");
 const notes=rows(process.argv[2]).filter(n=>n&&n.source_app==="morning-brief"&&!n.is_trashed)
  .sort((a,b)=>String(a.created_at).localeCompare(String(b.created_at)));
@@ -212,33 +214,22 @@ keep_the_shelf() { # <file>
   sed 's/^/  | /' "$1" >&2
 }
 
-# THE MORNING BRIEF ITSELF, run the way Settings runs it: the routine turned on (POST /api/jobs/add,
-# core/jobs/routine-control.mjs) and then the notebook's own run of what is due (POST /api/jobs/run).
-# On this day the clock has moved three days on, so the brief is due whether the install had made
-# the routine already or not. It is paused afterwards, so it does not write a note a minute for the
-# rest of the scenario.
+# THE MORNING BRIEF ITSELF, run the way Settings runs it: the routine turned on and run now
+# (scenario-lib.sh, run_the_morning_brief: POST /api/jobs/add, then POST /api/jobs/run with its id,
+# which answers at once, and the wait for the note it saves). On this day the clock has moved three
+# days on. It is paused afterwards, so it does not write a note a minute for the rest of the scenario.
 the_brief_runs() {
-  local body=$EVIDENCE/.job-answer.json code
   say 'The morning brief, turned on and run the way Settings runs it'
-  code=$(curl -sS -o "$body" -w '%{http_code}' --max-time 300 -X POST \
-    -H 'Content-Type: application/json' -d '{"kind":"morning-brief","interval_ms":60000}' \
-    "http://127.0.0.1:$NOTEBOOK_PORT/api/jobs/add") ||
-    fail "the notebook could not be reached to turn its morning brief on"
-  [ "$code" = 200 ] ||
-    fail "the notebook would not turn its morning brief on (HTTP $code): $(tr -d '\n' <"$body" | cut -c1-200)"
-  curl -sS --max-time 2400 -X POST -H 'Content-Type: application/json' -d '{}' \
-    "http://127.0.0.1:$NOTEBOOK_PORT/api/jobs/run" -o "$EVIDENCE/brief-run.json" ||
-    fail "the notebook's own run of its routines could not be asked for, so the morning brief never ran"
-  sed 's/^/  | /' "$EVIDENCE/brief-run.json" >&2
+  run_the_morning_brief "$EVIDENCE/brief-run.json" 1800
   one_table jobs "$EVIDENCE/.jobs.json"
   one_table notes "$EVIDENCE/.notes.json"
-  "$NODE" -e "$BRIEF_READER" "$EVIDENCE/.jobs.json" "$EVIDENCE/.notes.json" \
+  BRIEF_ID=$BRIEF_ID "$NODE" -e "$BRIEF_READER" "$EVIDENCE/.jobs.json" "$EVIDENCE/.notes.json" \
     "$EVIDENCE/brief-job.txt" "$EVIDENCE/brief-note.txt" ||
     fail "what the notebook holds of its morning brief and its note could not be read"
   sed 's/^/  | /' "$EVIDENCE/brief-job.txt" >&2
   sed 's/^/  | /' "$EVIDENCE/brief-note.txt" >&2
   curl -sS -o /dev/null --max-time 300 -X POST -H 'Content-Type: application/json' \
-    -d '{"id":"morning-brief","paused":true}' "http://127.0.0.1:$NOTEBOOK_PORT/api/jobs/update" ||
+    -d "{\"id\":\"$BRIEF_ID\",\"paused\":true}" "http://127.0.0.1:$NOTEBOOK_PORT/api/jobs/update" ||
     say '  (the morning brief could not be paused again; it will write another note each minute)'
 }
 

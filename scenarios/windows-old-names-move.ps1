@@ -166,6 +166,12 @@ $Held = ($args.Count -eq 2)
 # ------------------------------------------------------------------ the acting part
 function Stop-Scenario([string]$Why) { Finish "FAIL ${Scenario}: $Why" 1 }
 if (-not $IsWindows -and $PSVersionTable.PSEdition -eq 'Core') { Stop-Scenario 'it installs on Windows and this is not Windows' }
+# A reader starts the setup and the updater from Explorer and the Start menu. Started from this
+# PowerShell 7, their Windows PowerShell 5.1 would inherit PowerShell 7's module path and lose
+# Get-FileHash, and the setup of 2.0.0-beta.10 ends with exit 1 after half a minute (the first run of
+# this scenario, on candidate/2.0.0-beta.15). kit-bootstrap's own test does the same
+# (windows/test-beta-install.ps1).
+$env:PSModulePath = [Environment]::GetEnvironmentVariable('PSModulePath', 'Machine')
 
 $work = if ($env:GODSPEED_SCENARIO_WORK) { $env:GODSPEED_SCENARIO_WORK } elseif ($env:RUNNER_TEMP) { $env:RUNNER_TEMP } else { [IO.Path]::GetTempPath() }
 $Evidence = Join-Path $work $Scenario
@@ -232,14 +238,22 @@ function Get-Query([string]$Body) {
 }
 
 # The reminder's own command (notebook/bin/personal-command.mjs), the line an owner's assistant runs.
+# The setup keeps it in the program folder, payload\kit\notebook\bin, beside its own Node in
+# payload\runtime (the guide's notebook-command page names the same two), under the new name once
+# the update moved it, else the old one.
 function Invoke-Due([string[]]$Arguments) {
-  $script = @(Get-ChildItem -Path $workspace, $newState, $oldState -Recurse -Filter personal-command.mjs -ErrorAction SilentlyContinue |
-      Where-Object { $_.FullName -match 'notebook[\\/]bin' } | Sort-Object LastWriteTime -Descending)
-  if (-not $script.Count) { return 'personal-command.mjs was not found' }
-  $node = (Get-Command node -ErrorAction SilentlyContinue)
-  if (-not $node) { return 'node was not found' }
+  $program = @((Join-Path $local 'Godspeed Mission Control'), $oldProgram | Where-Object {
+      Test-Path -LiteralPath (Join-Path $_ 'payload\kit\notebook\bin\personal-command.mjs') })
+  if (-not $program.Count) { return "personal-command.mjs was not found in payload\kit\notebook\bin of either program folder" }
+  $script = Join-Path $program[0] 'payload\kit\notebook\bin\personal-command.mjs'
+  $node = Join-Path $program[0] 'payload\runtime\node.exe'
+  if (-not (Test-Path -LiteralPath $node)) {
+    $onPath = Get-Command node -ErrorAction SilentlyContinue
+    if (-not $onPath) { return "node was found neither in $($program[0])\payload\runtime nor on the PATH" }
+    $node = $onPath.Source
+  }
   $env:GODSPEED_WORKSPACE = $workspace
-  $out = & $node.Source $script[0].FullName due @Arguments 2>&1
+  $out = & $node $script due @Arguments 2>&1
   ($out | ForEach-Object { [string]$_ }) -join "`n"
 }
 
@@ -293,7 +307,11 @@ function Save-State([string]$P, [string]$StateFolder) {
 $fromSetup = Get-Setup $From 'from'
 $toSetup = Get-Setup $StageRef 'to'
 $code = Invoke-Setup $fromSetup @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART') 'setup-from.log'
-if ($code -ne 0) { Stop-Scenario "the setup of $From ended with exit $code" }
+if ($code -ne 0) {
+  # What the setup's own script said, which the installer's log does not hold.
+  if (Test-Path -LiteralPath $setupLog) { Copy-Item -LiteralPath $setupLog -Destination (Join-Path $Evidence 'setup-log-from.txt') -Force }
+  Stop-Scenario "the setup of $From ended with exit $code (setup-log-from.txt in the evidence says why)"
+}
 if (-not (Test-Path -LiteralPath $oldProgram) -or -not (Test-Path -LiteralPath (Join-Path $oldState 'installation.json'))) {
   Stop-Scenario "$From did not make $oldProgram and $oldState, so the start is not an old install"
 }
@@ -303,7 +321,11 @@ if ($h -ne 'ok') { Stop-Scenario "the notebook of $From does not answer: $h" }
 # 2. A note and a reminder, through the notebook's own doors.
 $body = @{ table = 'notes'; operation = 'insert'; values = @{ id = $NoteId; title = $NoteTitle; content = 'A note the owner wrote before the move.' }; selection = '*'; single = $true } | ConvertTo-Json -Depth 5 -Compress
 try { Get-Query $body | Out-Null } catch { Stop-Scenario "the note could not be written: $($_.Exception.Message)" }
-$added = Invoke-Due @('add', $ReminderTitle, '--date', (Get-Date).AddDays(30).ToString('yyyy-MM-dd'))
+# mc-due's own form (tools/due.js, cmdAdd): a short name, the title, the day it should be done and
+# the last day, what done means and what slipping costs.
+$added = Invoke-Due @('add', 'written-before-the-move', '--title', $ReminderTitle,
+  '--target', (Get-Date).AddDays(30).ToString('yyyy-MM-dd'), '--to', (Get-Date).AddDays(60).ToString('yyyy-MM-dd'),
+  '--done-when', 'the scenario finds it after the move', '--cost', 'nothing, it is a scenario')
 Say "due add: $added"
 if ((Invoke-Due @('list')) -notmatch [regex]::Escape($ReminderTitle)) { Stop-Scenario "the reminder could not be written: $added" }
 

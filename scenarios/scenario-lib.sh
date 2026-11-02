@@ -352,6 +352,82 @@ wait_for() { # <seconds> <what to say> <command...>
   return 1
 }
 
+# THE MORNING BRIEF, TURNED ON AND RUN THE WAY SETTINGS RUNS IT: the routine added (POST
+# /api/jobs/add, which answers the routine it made, under Hermes' id) and that routine run now (POST
+# /api/jobs/run with its id, Settings' "Run now"). Since 9 October 2026 the run answers
+# {"started":true} at once and goes on in the background (core/native-scheduler.mjs, startRun), so
+# this waits until the brief has saved a note it had not saved before (core/briefing.mjs: source_app
+# "morning-brief"). The routine is added to run once a day, so no run on its own schedule can come
+# in the minutes this waits and be taken for the one asked for. It FAILS when the run could not be
+# asked for, when the routine reports a finished run and no new note is there, and when <seconds>
+# pass without one: a run that saved nothing is never judged on a note from before. Writes <run
+# answer> and sets BRIEF_ID to the routine's id (never call it inside $(...): a fail there would end
+# only that subshell); the caller reads what the notebook holds afterwards and pauses the routine.
+BRIEF_NOTES_COUNTER='
+const fs=require("fs");const d=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));
+const rows=Array.isArray(d)?d:(d.data||[]);
+process.stdout.write(String(rows.filter(n=>n&&n.source_app==="morning-brief"&&!n.is_trashed).length));
+'
+# The routine's own word on its last run: "last_run_at<TAB>last_status<TAB>last_error", or nothing.
+BRIEF_JOB_RUN='
+const fs=require("fs");const d=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));
+const rows=Array.isArray(d)?d:(d.data||[]);const job=rows.find(j=>j&&j.id===process.argv[2])||{};
+const one=v=>String(v==null?"":v).replace(/\s+/g," ").trim();
+process.stdout.write(job.last_run_at?[one(job.last_run_at),one(job.last_status),one(job.last_error).slice(0,300)].join("\t"):"");
+'
+run_the_morning_brief() { # <run answer file> <seconds>
+  local added=$EVIDENCE/.brief-added.json tables=$EVIDENCE/.brief-tables.json code id before ran
+  code=$(curl -sS -o "$added" -w '%{http_code}' --max-time 300 -X POST \
+    -H 'Content-Type: application/json' -d '{"kind":"morning-brief","interval_ms":86400000}' \
+    "http://127.0.0.1:$NOTEBOOK_PORT/api/jobs/add") ||
+    fail "the notebook could not be reached to turn its morning brief on"
+  [ "$code" = 200 ] ||
+    fail "the notebook would not turn its morning brief on (HTTP $code): $(tr -d '\n' <"$added" | cut -c1-200)"
+  id=$(json_value "$added" data.id) && [ -n "$id" ] ||
+    fail "the notebook turned its morning brief on but named no routine: $(tr -d '\n' <"$added" | cut -c1-200)"
+  curl -fsS --max-time 300 -X POST -H 'Content-Type: application/json' -d '{"table":"notes"}' \
+    "http://127.0.0.1:$NOTEBOOK_PORT/api/query" -o "$tables" ||
+    fail "the notebook's own notes could not be read before the morning brief ran"
+  before=$("$NODE" -e "$BRIEF_NOTES_COUNTER" "$tables") ||
+    fail "the notebook's own notes could not be counted before the morning brief ran"
+  code=$(curl -sS -o "$1" -w '%{http_code}' --max-time 600 -X POST -H 'Content-Type: application/json' \
+    -d "{\"id\":$("$NODE" -e 'process.stdout.write(JSON.stringify(process.argv[1]))' "$id")}" \
+    "http://127.0.0.1:$NOTEBOOK_PORT/api/jobs/run") ||
+    fail "the notebook could not be reached to run its morning brief, so the morning brief never ran"
+  sed 's/^/  | /' "$1" >&2
+  { [ "$code" = 200 ] || [ "$code" = 202 ]; } && grep -qE '"started": *true|"results"' "$1" ||
+    fail "the notebook did not run its morning brief (HTTP $code): $(tr -d '\n' <"$1" | cut -c1-200)"
+  # Done when a new note is there; or when the routine says its run finished and there is none.
+  brief_done() {
+    curl -fsS --max-time 60 -X POST -H 'Content-Type: application/json' -d '{"table":"notes"}' \
+      "http://127.0.0.1:$NOTEBOOK_PORT/api/query" -o "$tables" 2>/dev/null &&
+      [ "$("$NODE" -e "$BRIEF_NOTES_COUNTER" "$tables" 2>/dev/null || echo 0)" -gt "$before" ] && return 0
+    curl -fsS --max-time 60 -X POST -H 'Content-Type: application/json' -d '{"table":"jobs"}' \
+      "http://127.0.0.1:$NOTEBOOK_PORT/api/query" -o "$tables" 2>/dev/null &&
+      ran=$("$NODE" -e "$BRIEF_JOB_RUN" "$tables" "$id" 2>/dev/null) && [ -n "$ran" ]
+  }
+  ran=''
+  wait_for "$2" "the morning brief (routine $id) to save its note" brief_done ||
+    fail "the morning brief saved no note within $2 s of being run (its routine $id has not finished a run)"
+  curl -fsS --max-time 300 -X POST -H 'Content-Type: application/json' -d '{"table":"notes"}' \
+    "http://127.0.0.1:$NOTEBOOK_PORT/api/query" -o "$tables" ||
+    fail "the notebook's own notes could not be read after the morning brief ran"
+  if [ "$("$NODE" -e "$BRIEF_NOTES_COUNTER" "$tables" || echo 0)" -le "$before" ]; then
+    # Where Hermes runs the routines (GODSPEED_ORIGINAL_RUNTIME=on, every install line), the
+    # "Morning brief" routine is the assistant's morning-brief recipe (core/notebook-routines.mjs),
+    # which writes brief/<day>.md; the notebook's own briefing (core/briefing.mjs, the note judged
+    # here) runs only in the notebook's own runtime. Say which one ran, so the failure names it.
+    local written
+    written=$(find "$ROOT/brief" -maxdepth 1 -name '*.md' -newer "$1" 2>/dev/null | head -n 1)
+    [ -z "$written" ] ||
+      fail "the morning brief ran as the assistant's morning-brief recipe and wrote brief/$(basename "$written"), not the notebook's own briefing (core/briefing.mjs), which saved no note; on an install where Hermes runs the routines that briefing never runs, so this scenario cannot judge what the owner gets"
+    fail "the morning brief ran and saved no note (its routine says: $(printf '%s' "$ran" | tr '\t' ' ' | cut -c1-300))"
+  fi
+  rm -f "$added" "$tables"
+  # shellcheck disable=SC2034  # read by the scenario that sourced this file
+  BRIEF_ID=$id
+}
+
 # The notebook the install put on this machine, run as its own command line does.
 notebook_cli() { # <arguments...>
   local version
