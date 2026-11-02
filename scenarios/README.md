@@ -29,6 +29,7 @@ and these are not programs for users.
 | `update-removes-only-unchanged-skills.sh` | an update from the current public version removes a video skill only where Godspeed put it there unchanged: the one the reader changed stays, and an install with the video add-on keeps them all |
 | `briefing-breaks-a-rule.sh` | a fresh install whose voice rules ban a word that a line the morning brief must carry contains still gets its morning briefing saved and delivered, without that line, and the problem reported as a repair item |
 | `windows-old-names-move.ps1` | an install from 2.0.0-beta.10 (PowerShell, a Windows runner, a candidate only) moves to the folder names without "Full Alpha" on the next update, with everything in them, and nothing a person sees still names it; with a folder held open the old install keeps working and the setup says it will try again, and the next update moves it. Run `pwsh -NoProfile -File scenarios/windows-old-names-move.ps1 <stage ref> [held]`; its checking part, `--check <folder>`, runs under pwsh anywhere |
+| `telegram-language.sh` | through the installed assistant's own outgoing hook and Telegram send path, a reply written in the other language than the message it answers is sent in the message's language (three English journal messages with a German draft, English, German, English in one chat, a cron delivery left alone); the builder's copy runs it with `GODSPEED_SCENARIO_PRODUCT` and a Hermes it can run |
 
 ## Where there is no network
 

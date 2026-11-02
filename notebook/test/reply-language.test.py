@@ -1,0 +1,275 @@
+"""godspeed-reply (notebook/assistant-files/godspeed-reply): the reply goes out in the language of the
+message it answers. The plugin's own code runs for real, against a real SQLite store shaped like
+Hermes' (sessions, messages) and a stand-in for the `godspeed-model` command the notebook installs,
+which answers from a table and records every request. Run: python reply-language.test.py [-v]"""
+import importlib.util
+import json
+import os
+import shutil
+import sqlite3
+import sys
+import tempfile
+import types
+import unittest
+
+SOURCE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "assistant-files", "godspeed-reply")
+
+STAND_IN = """#!%s
+import json, os, sys
+here = os.path.dirname(os.path.abspath(__file__))
+request = json.load(sys.stdin)
+with open(os.path.join(here, "requests.jsonl"), "a", encoding="utf-8") as f:
+    f.write(json.dumps(request) + "\\n")
+table = json.load(open(os.path.join(here, "table.json"), encoding="utf-8"))
+text = request["prompt"].split("\\n\\n", 1)[1]
+if text not in table:
+    sys.exit(1)
+print(json.dumps({"text": table[text]}))
+"""
+
+JOURNAL = [
+    "Track Journal: finished the login page and starting on the API docs",
+    "Done with the API docs, now working on the tests for the login page",
+    "I finished the tests and started on the release notes for this week",
+]
+DRAFT = "Alles klar, das ist gespeichert. Woran merkst du, dass es fertig ist?"
+SENT = "Got it, that is saved. What does done look like?"
+GERMAN_MESSAGE = "Ich bin heute mit dem Bericht fertig und fange jetzt mit den Tests an"
+
+
+class Reply(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.mkdtemp(prefix="godspeed-reply-")
+        self.home = os.path.join(self.temp, "home")
+        self.plugin = os.path.join(self.home, "plugins", "godspeed-reply")
+        shutil.copytree(SOURCE, self.plugin, ignore=shutil.ignore_patterns("__pycache__"))
+        self.model = os.path.join(self.temp, "model")
+        os.makedirs(self.model)
+        command = os.path.join(self.model, "godspeed-model")
+        with open(command, "w", encoding="utf-8") as f:
+            f.write(STAND_IN % sys.executable)
+        os.chmod(command, 0o755)
+        with open(os.path.join(self.plugin, "model-command.txt"), "w", encoding="utf-8") as f:
+            f.write(command + "\n")
+        self.table = {}
+        self.save_table()
+        db = sqlite3.connect(os.path.join(self.home, "state.db"))
+        db.executescript("CREATE TABLE sessions(id TEXT PRIMARY KEY, source TEXT NOT NULL);"
+                         "CREATE TABLE messages(id INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT NOT NULL,"
+                         " role TEXT NOT NULL, content TEXT);")
+        db.commit()
+        self.db = db
+        self.env = dict(os.environ)
+        os.environ["HERMES_HOME"] = self.home
+        os.environ.pop("GODSPEED_SCHEDULED_RUN", None)
+        for name in ("godspeed_reply_steps_v1", "godspeed_progress_output_v1"):
+            sys.modules.pop(name, None)
+        spec = importlib.util.spec_from_file_location("godspeed_reply_under_test", os.path.join(self.plugin, "__init__.py"))
+        self.mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(self.mod)
+        self.hooks = {}
+        self.mod.register(types.SimpleNamespace(register_hook=lambda n, cb: self.hooks.setdefault(n, []).append(cb)))
+
+    def tearDown(self):
+        self.db.close()
+        os.environ.clear()
+        os.environ.update(self.env)
+        shutil.rmtree(self.temp, ignore_errors=True)
+
+    # -- helpers
+    def save_table(self):
+        with open(os.path.join(self.model, "table.json"), "w", encoding="utf-8") as f:
+            json.dump(self.table, f)
+
+    def teach(self, draft, translation):
+        """The stand-in translates `draft` (as the plugin holds it back) into `translation`."""
+        self.table[self.mod._protect(draft)[0]] = translation
+        self.save_table()
+
+    def requests(self):
+        try:
+            with open(os.path.join(self.model, "requests.jsonl"), encoding="utf-8") as f:
+                return [json.loads(line) for line in f if line.strip()]
+        except OSError:
+            return []
+
+    def say(self, session, text, source="telegram"):
+        self.db.execute("INSERT OR IGNORE INTO sessions(id, source) VALUES (?, ?)", (session, source))
+        self.db.execute("INSERT INTO messages(session_id, role, content) VALUES (?, 'user', ?)", (session, text))
+        self.db.commit()
+
+    def send(self, session, draft, platform="telegram"):
+        """What Hermes sends: the first replacement text of the hook, else the draft itself."""
+        outs = [cb(response_text=draft, session_id=session, platform=platform, model="m", turn_id="t")
+                for cb in self.hooks["transform_llm_output"]]
+        return next((o for o in outs if isinstance(o, str) and o), draft)
+
+    def log(self):
+        with open(os.path.join(self.home, "logs", "godspeed-reply.log"), encoding="utf-8") as f:
+            return [json.loads(line) for line in f if line.strip()]
+
+    # -- the cases of the ticket
+    def test_three_english_journal_turns_with_a_german_draft_go_out_in_english(self):
+        self.teach(DRAFT, SENT)
+        for n, message in enumerate(JOURNAL):
+            session = "journal-%d" % n
+            self.say(session, message)
+            self.assertEqual(self.send(session, DRAFT), SENT, message)
+        self.assertEqual(len(self.requests()), 3)
+        self.assertIn("English", self.requests()[0]["prompt"])
+        self.assertEqual([e["result"] for e in self.log()], ["corrected"] * 3)
+
+    def test_english_german_english_in_one_session_each_follow_their_message(self):
+        english_draft = "I saved that. What does done look like for you?"
+        german_sent = "Ich habe das gespeichert. Woran merkst du, dass es fertig ist?"
+        self.teach(DRAFT, SENT)
+        self.teach(english_draft, german_sent)
+        self.say("chat", JOURNAL[0])
+        self.assertEqual(self.send("chat", DRAFT), SENT)
+        self.say("chat", GERMAN_MESSAGE)
+        self.assertEqual(self.send("chat", english_draft), german_sent)
+        self.say("chat", JOURNAL[1])
+        self.teach(DRAFT + "!", SENT)
+        self.assertEqual(self.send("chat", DRAFT + "!"), SENT)
+        # A reply already in the message's language is left alone, with no request.
+        before = len(self.requests())
+        self.assertEqual(self.send("chat", SENT), SENT)
+        self.assertEqual(len(self.requests()), before)
+
+    def test_an_explicit_language_request_wins(self):
+        listing = "Here is your list for today and the tasks that are open for this week"
+        german = "Hier ist deine Liste für heute und die Aufgaben, die diese Woche offen sind"
+        self.teach(listing, german)
+        self.say("a", "Please answer in German from now on, what is on my list for today")
+        self.assertEqual(self.send("a", listing), german)
+        self.say("b", "Bitte antworte auf Englisch, was steht heute auf meiner Liste")
+        self.teach(german, listing)
+        self.assertEqual(self.send("b", german), listing)
+        # The same English message without the request keeps its English reply, and a request
+        # whose language the reply already has changes nothing.
+        self.say("c", "What is on my list for today and for the rest of this week")
+        self.assertEqual(self.send("c", listing), listing)
+        self.say("d", "Translate this into English: the list for today and for this week")
+        self.assertEqual(self.send("d", listing), listing)
+        self.assertEqual(len(self.requests()), 2)
+
+    def test_mixed_text_is_unchanged(self):
+        mixed = "Ok, das ist erledigt and I will save the notes for you now"
+        self.assertIsNone(self.mod.language_of(mixed))
+        self.say("m", JOURNAL[0])
+        self.assertEqual(self.send("m", mixed), mixed)
+        self.assertIsNone(self.mod.language_of("Das ist gut und I think the tests are done"))
+        self.say("n", "Das ist gut und I think the tests are done")
+        self.assertEqual(self.send("n", DRAFT), DRAFT)
+        self.assertEqual(self.requests(), [])
+
+    def test_a_two_word_acknowledgement_is_unchanged(self):
+        self.say("s", "Thanks, done")
+        self.assertEqual(self.send("s", "Alles klar"), "Alles klar")
+        self.say("t", JOURNAL[0])
+        self.assertEqual(self.send("t", "Alles klar!"), "Alles klar!")
+        self.say("u", "Ok")
+        self.assertEqual(self.send("u", DRAFT), DRAFT)
+        self.assertEqual(self.requests(), [])
+
+    def test_names_numbers_urls_and_quotes_survive_a_correction(self):
+        draft = ('Ich habe "Projekt Nordlicht" mit Anna Schmidt auf 14 Aufgaben gesetzt, siehe '
+                 'https://example.com/a?b=1 und `make test`. Das ist für den 3. Mai fertig.')
+        held, kept = self.mod._protect(draft)
+        self.assertEqual(len(kept), 3)
+        marks = {k: "{{%d}}" % (i + 1) for i, k in enumerate(kept)}
+        english = ("I put %s with Anna Schmidt on 14 tasks, see %s and %s. That is done for May 3."
+                   % (marks['"Projekt Nordlicht"'], marks["https://example.com/a?b=1"], marks["`make test`"]))
+        self.table[held] = english
+        self.save_table()
+        self.say("k", JOURNAL[0])
+        sent = self.send("k", draft)
+        for must in ('"Projekt Nordlicht"', "Anna Schmidt", "14", "https://example.com/a?b=1", "`make test`", "May 3"):
+            self.assertIn(must, sent)
+        self.assertNotIn("{{", sent)
+        self.assertNotIn("Ich habe", sent)
+        # What the model was shown held the protected parts back.
+        self.assertNotIn("example.com", self.requests()[0]["prompt"])
+        # A translation that drops a link, or changes a number, never goes out.
+        for n, bad in enumerate((english.replace(marks["https://example.com/a?b=1"], "the link"),
+                                 english.replace("14 tasks", "15 tasks"))):
+            self.table[held] = bad
+            self.save_table()
+            self.say("bad%d" % n, JOURNAL[0])
+            self.assertEqual(self.send("bad%d" % n, draft), draft)
+
+    def test_a_cron_delivery_is_unchanged(self):
+        self.say("job", JOURNAL[0], source="cron")
+        self.assertEqual(self.send("job", DRAFT, platform="cron"), DRAFT)
+        self.say("job2", JOURNAL[0], source="cron")
+        self.assertEqual(self.send("job2", DRAFT, platform=""), DRAFT)
+        self.say("hook", JOURNAL[0], source="webhook")
+        self.assertEqual(self.send("hook", DRAFT, platform="webhook"), DRAFT)
+        os.environ["GODSPEED_SCHEDULED_RUN"] = "1"
+        self.say("env", JOURNAL[0])
+        self.assertEqual(self.send("env", DRAFT), DRAFT)
+        self.assertEqual(self.requests(), [])
+        self.assertEqual({e["result"] for e in self.log()}, {"scheduled"})
+
+    def test_a_failed_correction_sends_the_original(self):
+        self.say("f", JOURNAL[0])
+        self.assertEqual(self.send("f", DRAFT), DRAFT)  # the stand-in has no answer: it exits 1
+        self.assertTrue(self.log()[-1]["result"].startswith("correction-failed"))
+        self.teach(DRAFT + " ", DRAFT + " ")  # an answer that is still German
+        self.say("g", JOURNAL[1])
+        self.assertEqual(self.send("g", DRAFT + " "), DRAFT + " ")
+        self.assertEqual(self.log()[-1]["result"], "correction-failed:still-the-wrong-language")
+        os.remove(os.path.join(self.plugin, "model-command.txt"))  # no door at all
+        self.say("h", JOURNAL[2])
+        self.assertEqual(self.send("h", DRAFT + "  "), DRAFT + "  ")
+        self.assertEqual(self.log()[-1]["result"], "correction-failed:no-model-command")
+
+    def test_a_second_step_added_by_the_documented_call_runs_after_the_language_step(self):
+        self.teach(DRAFT, SENT)
+        seen = []
+
+        def later(text, **hook):
+            seen.append((text, hook.get("session_id")))
+            return text + " (checked)"
+        bus = sys.modules["godspeed_reply_steps_v1"]
+        bus.__dict__.setdefault("STEPS", []).append(("later", later))  # the documented call, by hand
+        self.say("x", JOURNAL[0])
+        self.assertEqual(self.send("x", DRAFT), SENT + " (checked)")
+        self.assertEqual(seen, [(SENT, "x")])
+        # A step that raises is skipped, and the one after it still runs.
+        bus.add_step("broken", lambda text, **hook: 1 / 0)
+        bus.add_step("last", lambda text, **hook: text + "!")
+        self.say("y", JOURNAL[1])
+        self.assertEqual(self.send("y", DRAFT), SENT + " (checked)!")
+        # Only one transformer is registered, whatever the steps are.
+        self.assertEqual(len(self.hooks["transform_llm_output"]), 1)
+
+    def test_the_bus_slot_the_addons_call_runs_the_same_steps_with_one_request(self):
+        self.teach(DRAFT, SENT)
+        bus = sys.modules["godspeed_progress_output_v1"]
+        bus.append = lambda **kw: kw["response_text"] + "\n\nMEDIA:/tmp/p.png"
+        self.say("z", JOURNAL[0])
+        out = bus.voice_transform(response_text=DRAFT, session_id="z", platform="telegram")
+        self.assertEqual(out, SENT + "\n\nMEDIA:/tmp/p.png")
+        self.assertEqual(len(self.requests()), 1)
+
+    def test_the_same_draft_gets_its_own_decision_for_each_message(self):
+        self.teach(DRAFT, SENT)
+        self.say("same", JOURNAL[0])
+        self.assertEqual(self.send("same", DRAFT), SENT)
+        self.say("same", GERMAN_MESSAGE)  # the same reply text, now to a German message
+        self.assertEqual(self.send("same", DRAFT), DRAFT)
+
+    def test_one_log_line_per_reply_says_what_was_sent(self):
+        self.teach(DRAFT, SENT)
+        self.say("l", JOURNAL[0])
+        self.send("l", DRAFT)
+        self.send("l", SENT)
+        lines = self.log()
+        self.assertEqual([e["result"] for e in lines], ["corrected", "unchanged"])
+        self.assertEqual(lines[0]["sent"], SENT)
+        self.assertEqual(lines[0]["session"], "l")
+
+
+if __name__ == "__main__":
+    unittest.main()

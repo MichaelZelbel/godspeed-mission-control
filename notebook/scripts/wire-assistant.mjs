@@ -6,7 +6,7 @@ import {ApiKeys,ASSISTANT_KEY_NAME} from '../core/api-keys.mjs';
 import {installSkillTree} from '../core/packaged-skills.mjs';
 import {commandFile} from './windows-command-file.mjs';
 import {starterBorn} from '../core/starter-workspace.mjs';
-import {withTimezone,godspeedHermesSettings,setConfigValue,CRON_PROVIDER,backupQuickCommand,BACKUP_COMMAND} from '../core/hermes-config.mjs';
+import {withTimezone,godspeedHermesSettings,setConfigValue,readConfigValue,configList,CRON_PROVIDER,backupQuickCommand,BACKUP_COMMAND} from '../core/hermes-config.mjs';
 import {moveSavedSkills} from '../core/assistant-skills.mjs';
 import {personaOf} from '../core/persona.mjs';
 import {syncSoul,readExtra} from '../core/assistant-soul.mjs';
@@ -27,7 +27,7 @@ const kit=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..');
 // integrated adapters below. Dependencies stay beside their original wrappers.
 const commandHome=path.join(home,'bin');
 fs.mkdirSync(commandHome,{recursive:true});
-installModelCommand({root,home});
+const modelCommand=installModelCommand({root,home});
 // Every Windows command file lives in commandHome; windows-command-file.mjs says why
 // the paths in it are written the way they are.
 const cmd=write=>commandFile(write,{folder:commandHome});
@@ -136,6 +136,13 @@ catch(error){console.error('The skills your assistant saved in its own folder we
 // scheduled job delivered is not part of the chat the assistant sees next.
 fs.cpSync(path.join(kit,'notebook','assistant-files','godspeed-context'),path.join(home,'plugins','godspeed-context'),{recursive:true,filter:source=>!/__pycache__/.test(source)});
 atomic(path.join(home,'plugins','godspeed-context','mission-control.txt'),root+'\n');
+// THE ONE OUTGOING STEP (core: assistant-files/godspeed-reply, issue #140): Hermes keeps only the first
+// replacement any transform_llm_output callback returns, so this plugin is the one, and it runs the
+// steps other plugins add. Its first step has a reply go out in the language of the message it
+// answers; it asks the AI connected in Settings through the godspeed-model command written above.
+fs.cpSync(path.join(kit,'notebook','assistant-files','godspeed-reply'),path.join(home,'plugins','godspeed-reply'),{recursive:true,filter:source=>!/__pycache__/.test(source)});
+atomic(path.join(home,'plugins','godspeed-reply','mission-control.txt'),root+'\n');
+atomic(path.join(home,'plugins','godspeed-reply','model-command.txt'),modelCommand.command+'\n');
 let text=fs.existsSync(file)?fs.readFileSync(file,'utf8').replace(/^\uFEFF/,''):`terminal:\n  cwd: ${JSON.stringify(root)}\nskills:\n  external_dirs: [${JSON.stringify(path.join(root,'skills'))}]\nmemory:\n  memory_enabled: false\n`;
 // WHERE A SKILL THE OWNER ASKS FOR IN A CHAT IS MADE. external_dirs above only lets Hermes read the
 // mission control's skills; it creates a new one in its own home unless skills.create_dir names
@@ -145,11 +152,11 @@ let text=fs.existsSync(file)?fs.readFileSync(file,'utf8').replace(/^\uFEFF/,''):
 // only when this file is made: an install that already had a config.yaml would never get it
 // otherwise, and an update runs this.
 text=setConfigValue(text,['skills','create_dir'],JSON.stringify(path.join(root,'skills')));
-if(!/^plugins:/m.test(text))text+='\nplugins:\n  enabled: ["godspeed-coach", "godspeed-journal", "godspeed-headache", "godspeed-charm", "godspeed-context"]\n';
+if(!/^plugins:/m.test(text))text+='\nplugins:\n  enabled: ["godspeed-coach", "godspeed-journal", "godspeed-headache", "godspeed-charm", "godspeed-context", "godspeed-reply"]\n';
 else{
  const block=text.match(/^plugins:[^\n]*\n(?:[ \t]+[^\n]*\n|\n)*/m)?.[0]||'';
  const disabled=block.match(/  disabled:\s*\[([^\]]*)\]/)?.[1]||'';
- const names=['godspeed-coach','godspeed-journal','godspeed-headache','godspeed-charm','godspeed-context'].filter(n=>!disabled.includes(n));
+ const names=['godspeed-coach','godspeed-journal','godspeed-headache','godspeed-charm','godspeed-context','godspeed-reply'].filter(n=>!disabled.includes(n));
  let updated=block;
  if(/  enabled:\s*\[([^\]]*)\]/.test(block))updated=block.replace(/  enabled:\s*\[([^\]]*)\]/,(_m,old)=>'  enabled: ['+[old.trim(),...names.filter(n=>!old.includes(n)).map(n=>JSON.stringify(n))].filter(Boolean).join(', ')+']');
  else if(/^  enabled:\s*\n/m.test(block))updated=block.replace(/^  enabled:\s*\n((?:    - [^\n]*\n)*)/m,(_m,old)=>'  enabled:\n'+old+names.filter(n=>!old.includes(n)).map(n=>'    - '+JSON.stringify(n)+'\n').join(''));
@@ -230,6 +237,21 @@ if(starterBorn(root)){
  if(runner)atomic(marker,'/'+BACKUP_COMMAND+'\n');else fs.rmSync(marker,{force:true});
 }
 atomic(file,text);fs.chmodSync(file,0o600);
+// A SECOND TRANSFORMER CAN CANCEL THE FIRST: Hermes keeps only the first reply any plugin returns, in
+// plugin load order. So one line names every other enabled plugin that registers its own
+// transform_llm_output; it should add a step to godspeed-reply instead (godspeed_reply_steps_v1,
+// documented in the plugin). godspeed-charm and godspeed-coach register one but hand their reply to
+// the steps (they call the output bus godspeed-reply takes), so they are not named.
+try{
+ const composing=['godspeed-reply','godspeed-charm','godspeed-coach'];
+ const registers=name=>{
+  const dir=path.join(home,'plugins',name),files=[];
+  try{for(const entry of fs.readdirSync(dir,{withFileTypes:true}))if(entry.isFile()&&entry.name.endsWith('.py'))files.push(path.join(dir,entry.name));}catch{return false;}
+  return files.some(f=>/register_hook\(\s*["']transform_llm_output["']/.test(fs.readFileSync(f,'utf8')));
+ };
+ const others=configList(readConfigValue(text,['plugins','enabled'])||'[]').map(n=>n.replace(/^["']|["']$/g,'')).filter(n=>n&&!composing.includes(n)&&registers(n));
+ if(others.length)console.error('Other plugins register their own transform_llm_output, so only one of them can change a reply and Godspeed\'s language check (godspeed-reply) can be cancelled: '+others.join(', ')+'. Each should add a step to godspeed-reply instead (godspeed_reply_steps_v1).');
+}catch(error){console.error('The enabled plugins were not checked for a second reply transformer: '+error.message);}
 // A voice note in the owner's Telegram chat is answered with a voice note and the text, by default and
 // only there (core/voice-replies.mjs says why not through voice.auto_tts); a chat's own choice stays.
 // The gateway reads it when it starts next.

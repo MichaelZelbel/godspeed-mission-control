@@ -2057,13 +2057,74 @@ else
   bad "charm-challenge.sh does not print the kept diagnosis at both places its AI can break"
 fi
 
+# ============================================================ telegram-language
+# What the replies went through (the installed Hermes' hook and Telegram send path) is judged from the
+# turns the driver kept and the plugin's own log.
+telegram_good() { # <folder>
+  local folder=$1
+  mkdir -p "$folder"
+  cat >"$folder/turns.json" <<'JSON'
+{
+ "j1": {"user": "Track Journal: finished the login page", "draft": "Alles klar, das ist gespeichert. Woran merkst du, dass es fertig ist?", "delivered": true, "sent": "All right, that is saved. What does done look like?"},
+ "j2": {"user": "Done with the docs", "draft": "Gespeichert. Woran merkst du, dass es fertig ist?", "delivered": true, "sent": "Saved. What does done look like?"},
+ "j3": {"user": "I finished the tests", "draft": "Notiert. Woran merkst du, dass es fertig ist?", "delivered": true, "sent": "Noted. What does done look like?"},
+ "chat-en-1": {"user": "Track Journal: finished it", "draft": "Gespeichert. Woran merkst du, dass es fertig ist?", "delivered": true, "sent": "Saved. What does done look like?"},
+ "chat-de": {"user": "Ich bin heute fertig", "draft": "I saved it. What does done look like?", "delivered": true, "sent": "Ich habe es gespeichert. Woran merkst du, dass es fertig ist?"},
+ "chat-en-2": {"user": "Done with the tests", "draft": "Gespeichert. Woran merkst du, dass es fertig ist?", "delivered": true, "sent": "Saved. What does done look like?"},
+ "cron": {"user": "Good morning", "draft": "Guten Morgen, hier ist die Liste für heute.", "delivered": true, "sent": "Guten Morgen, hier ist die Liste für heute."},
+ "_plugins": ["godspeed-coach", "godspeed-reply"]
+}
+JSON
+  printf 'plugins:\n  enabled: ["godspeed-coach", "godspeed-reply"]\n' >"$folder/config.yaml"
+  : >"$folder/godspeed-reply.log"
+  local n
+  for n in 1 2 3 4 5 6; do printf '{"session": "s", "result": "corrected"}\n' >>"$folder/godspeed-reply.log"; done
+  printf '{"session": "morning", "result": "scheduled"}\n' >>"$folder/godspeed-reply.log"
+  printf 'stand-in AI\n' >"$folder/ai.txt"
+}
+section telegram-language
+TL=$TMP/telegram
+telegram_good "$TL/good"
+passes "three English journal messages with a German draft sent in English, a chat that follows its messages, a cron delivery left alone" \
+  telegram-language "$TL/good" "three English journal messages with a German draft were sent in English"
+
+copy "$TL/good" "$TL/german-question"
+sed -i 's/"sent": "Saved. What does done look like?"/"sent": "Gespeichert. Woran merkst du, dass es fertig ist?"/' "$TL/german-question/turns.json"
+refuses "an English journal message that still got the German question" telegram-language "$TL/german-question" \
+  "answered in something other than English"
+
+copy "$TL/good" "$TL/stayed-english"
+sed -i 's/"sent": "Ich habe es gespeichert. Woran merkst du, dass es fertig ist?"/"sent": "I saved it. What does done look like?"/' "$TL/stayed-english/turns.json"
+refuses "a German message answered in English" telegram-language "$TL/stayed-english" \
+  "German message in the chat was not answered in German"
+
+copy "$TL/good" "$TL/cron-changed"
+sed -i 's/"sent": "Guten Morgen, hier ist die Liste für heute."/"sent": "Good morning, here is the list for today."/' "$TL/cron-changed/turns.json"
+refuses "a scheduled delivery that was changed" telegram-language "$TL/cron-changed" "a scheduled delivery was changed"
+
+copy "$TL/good" "$TL/not-delivered"
+sed -i '0,/"delivered": true/s//"delivered": false/' "$TL/not-delivered/turns.json"
+refuses "a reply the Telegram send path did not deliver" telegram-language "$TL/not-delivered" "delivered is 'false'"
+
+copy "$TL/good" "$TL/not-enabled"
+printf 'plugins:\n  enabled: ["godspeed-coach"]\n' >"$TL/not-enabled/config.yaml"
+refuses "an install that never enabled the plugin" telegram-language "$TL/not-enabled" "never enabled the plugin"
+
+copy "$TL/good" "$TL/not-loaded"
+sed -i 's/"_plugins": \["godspeed-coach", "godspeed-reply"\]/"_plugins": ["godspeed-coach"]/' "$TL/not-loaded/turns.json"
+refuses "a Hermes that never loaded the plugin" telegram-language "$TL/not-loaded" "did not load godspeed-reply"
+
+copy "$TL/good" "$TL/short-log"
+sed -i '1d' "$TL/short-log/godspeed-reply.log"
+refuses "a plugin log that misses a correction" telegram-language "$TL/short-log" "records 5 corrections, not 6"
+
 # ============================================================ every one of them, the same shape
 section 'every script'
 for file in scenario-lib.sh settings-on-install.sh night-tidy.sh voice.sh update-keeps-everything.sh \
   reminder-closed-elsewhere.sh reminders-move-keeps-everything.sh two-machines-move-at-once.sh \
   late-reminder-file.sh closed-offline-on-both.sh reminder-from-settings.sh \
   charm-challenge.sh no-video-skills-by-default.sh update-removes-only-unchanged-skills.sh \
-  briefing-breaks-a-rule.sh test-scenarios.sh; do
+  briefing-breaks-a-rule.sh telegram-language.sh test-scenarios.sh; do
   if bash -n "$ROOT/scenarios/$file" 2>/dev/null; then
     ok "bash reads scenarios/$file"
   else
@@ -2073,7 +2134,7 @@ done
 for scenario in settings-on-install night-tidy voice update-keeps-everything \
   reminder-closed-elsewhere reminders-move-keeps-everything two-machines-move-at-once \
   late-reminder-file closed-offline-on-both reminder-from-settings charm-challenge \
-  no-video-skills-by-default update-removes-only-unchanged-skills briefing-breaks-a-rule; do
+  no-video-skills-by-default update-removes-only-unchanged-skills briefing-breaks-a-rule telegram-language; do
   refuses "$scenario on a folder that is not there" "$scenario" "$TMP/no-such-folder" \
     "there is nothing at"
   run "$scenario"
