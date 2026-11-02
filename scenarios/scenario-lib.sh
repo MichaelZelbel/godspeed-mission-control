@@ -412,8 +412,17 @@ run_the_morning_brief() { # <run answer file> <seconds>
   curl -fsS --max-time 300 -X POST -H 'Content-Type: application/json' -d '{"table":"notes"}' \
     "http://127.0.0.1:$NOTEBOOK_PORT/api/query" -o "$tables" ||
     fail "the notebook's own notes could not be read after the morning brief ran"
-  [ "$("$NODE" -e "$BRIEF_NOTES_COUNTER" "$tables" || echo 0)" -gt "$before" ] ||
+  if [ "$("$NODE" -e "$BRIEF_NOTES_COUNTER" "$tables" || echo 0)" -le "$before" ]; then
+    # Where Hermes runs the routines (GODSPEED_ORIGINAL_RUNTIME=on, every install line), the
+    # "Morning brief" routine is the assistant's morning-brief recipe (core/notebook-routines.mjs),
+    # which writes brief/<day>.md; the notebook's own briefing (core/briefing.mjs, the note judged
+    # here) runs only in the notebook's own runtime. Say which one ran, so the failure names it.
+    local written
+    written=$(find "$ROOT/brief" -maxdepth 1 -name '*.md' -newer "$1" 2>/dev/null | head -n 1)
+    [ -z "$written" ] ||
+      fail "the morning brief ran as the assistant's morning-brief recipe and wrote brief/$(basename "$written"), not the notebook's own briefing (core/briefing.mjs), which saved no note; on an install where Hermes runs the routines that briefing never runs, so this scenario cannot judge what the owner gets"
     fail "the morning brief ran and saved no note (its routine says: $(printf '%s' "$ran" | tr '\t' ' ' | cut -c1-300))"
+  fi
   rm -f "$added" "$tables"
   # shellcheck disable=SC2034  # read by the scenario that sourced this file
   BRIEF_ID=$id
