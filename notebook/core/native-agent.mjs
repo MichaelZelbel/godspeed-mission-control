@@ -17,7 +17,7 @@ export function homeHasModel(home){
  return /^[ \t]+(provider|default)[ \t]*:[ \t]*['"]?[^\s'"#]/m.test(block);
 }
 // What the reader is told when the AI is connected in Settings but not for the assistant itself.
-export const NO_MODEL_IN_HOME='The assistant has no AI to think with: the AI connected in Settings was not set up for it. Open Settings, connect the AI again with "Use it for the routines too" ticked, or sign the assistant in to an AI account, then try again.';
+export const NO_MODEL_IN_HOME='The assistant has no AI to think with: the AI connected in Settings was not set up for it. Open Settings, connect the AI again with "Use it for the daily routines and the chat too" ticked, or sign the assistant in to an AI account, then try again.';
 // A transport adapter only: Hermes owns its conversation, tools and agent loop.
 // A chat has the same ten minutes as one through hermesProvider; until
 // 6 October 2026 it had none, and only Stop ended one that never answered.
@@ -39,7 +39,7 @@ export function nativeAgent({executable,home,cwd,providerFile,spawnProcess=spawn
   // one on resume is "a creation override"), and it cannot make a conversation at all without a model
   // in its home, so every message, the first one too, ended in "The AI request failed". The model is
   // NOT written into the home here: that is the home the routines think with, and a person who
-  // unticked "Use it for the routines too" chose not to spend that AI on them. Ticked (the box's
+  // unticked "Use it for the daily routines and the chat too" chose not to spend that AI on them. Ticked (the box's
   // default on a fresh install), Settings writes the model into the home and the chat just works.
   const saved=providerFile&&fs.existsSync(providerFile)?JSON.parse(fs.readFileSync(providerFile,'utf8')):null;
   if(saved&&!input.model&&!homeHasModel(home)){
