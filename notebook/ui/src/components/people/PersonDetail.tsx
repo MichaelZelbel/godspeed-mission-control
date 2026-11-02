@@ -33,6 +33,7 @@ import { ContactTopicsPanel } from "@/components/people/ContactTopicsPanel";
 import { PersonTimeline } from "@/components/people/PersonTimeline";
 import { PersonDocuments } from "@/components/people/PersonDocuments";
 import { PersonGroupsTab } from "@/components/people/PersonGroupsTab";
+import { personLabel } from "@/components/timeline/people";
 import { AiVisibilityButton } from "@/components/common/AiVisibilityButton";
 import { useIsMobile } from "@/hooks/use-mobile";
 import {
@@ -62,6 +63,7 @@ export function PersonDetail({ person, people, onClose }: PersonDetailProps) {
   const toggleFavorite = useToggleFavoritePerson();
   const touchPersonViewed = useTouchPersonViewed();
   const updatePerson = useUpdatePerson();
+  const shownName = personLabel(person);
   const deletePerson = useDeletePerson();
 
   const [editingAliases, setEditingAliases] = useState<string[] | null>(null);
@@ -86,7 +88,7 @@ export function PersonDetail({ person, people, onClose }: PersonDetailProps) {
     queryKey: ["contact_notes", person.name, person.aliases],
     enabled: !!person,
     queryFn: async () => {
-      const names = [person.name, ...(person.aliases || [])];
+      const names = [person.name, ...(person.aliases || [])].filter((n): n is string => typeof n === "string" && n.trim() !== "");
       // The database does the matching over ALL notes. Scanning the 50 newest
       // here missed every older note about this person.
       const { data: matched, error: rpcError } = await supabase.rpc("notes_mentioning_people" as never, {
@@ -108,7 +110,7 @@ export function PersonDetail({ person, people, onClose }: PersonDetailProps) {
       return (data || []).filter((note: any) => {
         const people = note.metadata?.people as string[] | undefined;
         if (!people || !Array.isArray(people)) return false;
-        return names.some((n) => people.some((p) => p.toLowerCase() === n.toLowerCase()));
+        return names.some((n) => people.some((p) => typeof p === "string" && p.toLowerCase() === n.toLowerCase()));
       });
     },
   });
@@ -116,7 +118,7 @@ export function PersonDetail({ person, people, onClose }: PersonDetailProps) {
   const startEditing = () => {
     setEditingAliases([...(person.aliases || [])]);
     setEditingNotes(person.notes || "");
-    setEditingName(person.name);
+    setEditingName(typeof person.name === "string" ? person.name : "");
     setNewAlias("");
   };
 
@@ -169,7 +171,7 @@ export function PersonDetail({ person, people, onClose }: PersonDetailProps) {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <SEOHead title={`${person.name} - People - Godspeed Mission Control`} noIndex />
+      <SEOHead title={`${shownName} - People - Godspeed Mission Control`} noIndex />
 
       {isMobile && (
         <div className="flex items-center gap-1 border-b border-border px-2 py-1.5 shrink-0">
@@ -204,7 +206,7 @@ export function PersonDetail({ person, people, onClose }: PersonDetailProps) {
                           className="h-9 text-xl font-semibold"
                         />
                       ) : (
-                        <span className="min-w-0 break-words [overflow-wrap:anywhere]">{person.name}</span>
+                        <span className="min-w-0 break-words [overflow-wrap:anywhere]">{shownName}</span>
                       )}
                     </CardTitle>
 
@@ -289,7 +291,7 @@ export function PersonDetail({ person, people, onClose }: PersonDetailProps) {
                       </AlertDialogTrigger>
                       <AlertDialogContent>
                         <AlertDialogHeader>
-                          <AlertDialogTitle>Delete {person.name}?</AlertDialogTitle>
+                          <AlertDialogTitle>Delete {shownName}?</AlertDialogTitle>
                           <AlertDialogDescription>
                             This removes the person together with their topics, facts, interactions, relationships and group memberships. Notes that mention them stay. It cannot be undone.
                           </AlertDialogDescription>
@@ -324,7 +326,7 @@ export function PersonDetail({ person, people, onClose }: PersonDetailProps) {
           </div>
 
 
-          <ContactTopicsPanel contactId={person.id} contactName={person.name} />
+          <ContactTopicsPanel contactId={person.id} contactName={shownName} />
           <Tabs value={activePersonTab} onValueChange={setActivePersonTab} className="space-y-4">
             <TabsList className="flex flex-wrap h-auto">
               <TabsTrigger value="profile">Profile</TabsTrigger>
@@ -337,7 +339,7 @@ export function PersonDetail({ person, people, onClose }: PersonDetailProps) {
             <TabsContent value="profile" className="mt-0 space-y-4">
               <ContactProfileTab
                 contactId={person.id}
-                contactName={person.name}
+                contactName={shownName}
                 notes={notes}
                 isEditingNotes={isEditing}
                 onChangeNotes={(value) => setEditingNotes(value)}
@@ -351,14 +353,14 @@ export function PersonDetail({ person, people, onClose }: PersonDetailProps) {
             </TabsContent>
 
             <TabsContent value="conversation" className="mt-0">
-              <ConversationTab personId={person.id} personName={person.name} initialContext={conversationContext} />
+              <ConversationTab personId={person.id} personName={shownName} initialContext={conversationContext} />
             </TabsContent>
 
             <TabsContent value="timeline" className="mt-0">
               <PersonTimeline
                 personId={person.id}
-                personName={person.name}
-                people={people.map((p) => ({ id: p.id, name: p.name, relationship: null }))}
+                personName={shownName}
+                people={people.map((p) => ({ id: p.id, name: personLabel(p), relationship: null }))}
                 onAskMira={(context) => {
                   setConversationContext(context);
                   setActivePersonTab("conversation");
@@ -367,7 +369,7 @@ export function PersonDetail({ person, people, onClose }: PersonDetailProps) {
             </TabsContent>
 
             <TabsContent value="documents" className="mt-0">
-              <PersonDocuments personId={person.id} personName={person.name} />
+              <PersonDocuments personId={person.id} personName={shownName} />
             </TabsContent>
           </Tabs>
 

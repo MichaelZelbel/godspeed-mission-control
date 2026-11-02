@@ -50,7 +50,7 @@ function isActiveGroup(group: GroupLite): boolean {
 }
 
 const byName = <T extends { name: string }>(a: T, b: T) =>
-  a.name.localeCompare(b.name);
+  String(a.name ?? "").localeCompare(String(b.name ?? ""));
 
 /**
  * Assemble the group tree plus the ungrouped bucket.

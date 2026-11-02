@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Users, Merge, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { personLabel, personNames } from "@/components/timeline/people";
 
 interface Person {
   id: string;
@@ -116,19 +117,20 @@ interface DuplicateMatch {
 
 function findPossibleDuplicates(person: Person, allPeople: Person[]): DuplicateMatch[] {
   const matches: DuplicateMatch[] = [];
-  const personNames = [person.name, ...(person.aliases || [])].map((n) => n.toLowerCase());
+  const ownNames = personNames(person);
+  if (ownNames.length === 0) return matches;
 
   for (const other of allPeople) {
     if (other.id === person.id) continue;
 
-    const otherNames = [other.name, ...(other.aliases || [])].map((n) => n.toLowerCase());
+    const otherNames = personNames(other);
 
     // Exact match
     let matched = false;
-    for (const pn of personNames) {
+    for (const pn of ownNames) {
       for (const on of otherNames) {
         if (pn === on) {
-          matches.push({ id: other.id, name: other.name, reason: "same name" });
+          matches.push({ id: other.id, name: personLabel(other), reason: "same name" });
           matched = true;
           break;
         }
@@ -138,7 +140,7 @@ function findPossibleDuplicates(person: Person, allPeople: Person[]): DuplicateM
     if (matched) continue;
 
     // One name contains the other (e.g. "Sam" vs "Sam Example")
-    for (const pn of personNames) {
+    for (const pn of ownNames) {
       for (const on of otherNames) {
         if (
           pn.length >= 3 &&
@@ -146,7 +148,7 @@ function findPossibleDuplicates(person: Person, allPeople: Person[]): DuplicateM
           (on.startsWith(pn + " ") || pn.startsWith(on + " ") ||
            on.endsWith(" " + pn) || pn.endsWith(" " + on))
         ) {
-          matches.push({ id: other.id, name: other.name, reason: "similar name" });
+          matches.push({ id: other.id, name: personLabel(other), reason: "similar name" });
           matched = true;
           break;
         }

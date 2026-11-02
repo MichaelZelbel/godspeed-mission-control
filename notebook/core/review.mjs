@@ -98,6 +98,8 @@ export class Review {
     }else if(type==='source_version'){
       if(!this.store.get('notes',p.previous_note_id)||!this.store.get('notes',p.new_note_id))throw new Error('An imported source version is missing');
     }else if(type==='add_contact'){
+      // A person needs a name; a suggestion without a usable one cannot become one (issue 154: until 2.0.0-beta.14 Keep wrote a nameless review-<id> person).
+      if(typeof p.name!=='string'||!p.name.trim())throw new Error('This suggestion has no name, so it cannot become a person. Remove it instead.');
       // A person of that name (or nickname) who exists already is the one
       // meant: Keep links the suggestion to them and creates no one, so Undo
       // removes no one. Until 6 October 2026 every Keep made a new person.
