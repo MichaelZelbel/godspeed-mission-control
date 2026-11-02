@@ -29,6 +29,14 @@ and these are not programs for users.
 | `update-removes-only-unchanged-skills.sh` | an update from the current public version removes a video skill only where Godspeed put it there unchanged: the one the reader changed stays, and an install with the video add-on keeps them all |
 | `briefing-breaks-a-rule.sh` | a fresh install whose voice rules ban a word that a line the morning brief must carry contains still gets its morning briefing saved and delivered, without that line, and the problem reported as a repair item |
 
+## Where there is no network
+
+`GODSPEED_SCENARIO_PRODUCT=<a checkout> GODSPEED_SCENARIO_MODES=folder bash scenarios/reminder-closed-elsewhere.sh local`
+runs the folder half of `reminder-closed-elsewhere` against a checkout instead of the install line: the
+installation steps are done by `local_install_into` in `scenario-lib.sh`, and a stand-in answers 404 for
+the stand-in owner's repositories. The workflow never sets either variable. A sync round that has to end
+synced (`sync_round`) is asked again until `GODSPEED_SCENARIO_ROUND_DEADLINE` seconds (180) have passed.
+
 ## How one is run
 
 ```

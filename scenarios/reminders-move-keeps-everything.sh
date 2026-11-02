@@ -106,6 +106,21 @@ reads_into() { # <root> <pass> <when>
   done
 }
 
+# THE IGNORE LINES, BY HAND, FOR THE OLD VERSION ONLY. This scenario joins the folder pair with the
+# version before the move (BEFORE_THE_MOVE), whose `godspeed sync folder notebook` still refuses a
+# repository that lacks NOTEBOOK.md and assistant-state/ in its ignore file and writes nothing itself.
+# The current product writes the two lines itself (reminder-closed-elsewhere.sh proves that), so this
+# helper lives here and not in scenario-lib.sh.
+old_version_needs_the_ignore_lines() { # <mission control folder>
+  local root=$1
+  printf 'NOTEBOOK.md\nassistant-state/\n' >>"$root/.gitignore" ||
+    fail "the ignore file of the mission control in $root could not be written"
+  git -C "$root" add .gitignore >&2 || fail "the ignore file of the mission control in $root could not be added"
+  git -C "$root" -c user.name="Godspeed Scenario" -c user.email="scenario@localhost" -c commit.gpgsign=false \
+    commit -q -m "Ignore what the notebook keeps on each machine" >&2 ||
+    fail "the ignore file of the mission control in $root could not be committed"
+}
+
 # ------------------------------------------------------------------------------------ the acting
 one_pass() { # <pass> <root> <port> <stand-in folder>
   local pass=$1 root=$2 port=$3 bare=$4 address code
@@ -124,7 +139,7 @@ one_pass() { # <pass> <root> <port> <stand-in folder>
     # (scenario-lib.sh stand_in_github_over_ssh says the whole of it).
     stand_in_github_over_ssh "$bare"
     address=$STAND_IN_ADDRESS
-    owner_ignores_what_the_notebook_keeps "$root"
+    old_version_needs_the_ignore_lines "$root"
     git -C "$root" remote add origin "$address" || fail "the mission control in $root could not be given its copy on GitHub"
     notebook_on "$root" sync folder notebook >&2 ||
       fail "godspeed sync folder notebook was refused on $root, so there is no mission control carrying its own notebook"

@@ -402,6 +402,10 @@ install_the_line_of_into() { # <ref> <root> <port> <trace file>
     fail "the install line for $1 into $2 failed before this scenario could do anything (its trace is in the step log)"
 }
 install_the_stage_line_into() { # <root> <port> <trace file>
+  if [ -n "${GODSPEED_SCENARIO_PRODUCT:-}" ]; then
+    local_install_into "$1" "$2" "$3"
+    return
+  fi
   install_the_line_of_into "$STAGE_REF" "$@"
 }
 install_the_public_line_into() { # <root> <port>
@@ -477,18 +481,71 @@ assistant-state/
   return $rc
 }
 
-# THE IGNORE LINES A READER'S OWN MISSION CONTROL REPOSITORY HAS, before it joins with
-# `godspeed sync folder notebook`: that command runs `git check-ignore` in the mission control's own
-# folder and refuses one that does not ignore NOTEBOOK.md and assistant-state/ (issue #125). The
-# lines are added to the folder's .gitignore and committed, as a reader does after the refusal.
-owner_ignores_what_the_notebook_keeps() { # <mission control folder>
-  local root=$1
-  printf 'NOTEBOOK.md\nassistant-state/\n' >>"$root/.gitignore" ||
-    fail "the ignore file of the mission control in $root could not be written"
-  git -C "$root" add .gitignore >&2 || fail "the ignore file of the mission control in $root could not be added"
-  git -C "$root" -c user.name="Godspeed Scenario" -c user.email="scenario@localhost" -c commit.gpgsign=false \
-    commit -q -m "Ignore what the notebook keeps on each machine" >&2 ||
-    fail "the ignore file of the mission control in $root could not be committed"
+# ONE SYNC ROUND THAT HAS TO END SYNCED, and whose every answer is kept. The first round of a mission
+# control that is its own repository sends it to a private copy that may be empty; on 2.0.0-beta.14
+# that round answered "pending" and sent nothing, the answer went to a file the run did not keep, and
+# the scenario went on to clone an empty repository (issue #125). So every answer is appended to
+# $EVIDENCE/<mode>-rounds.txt and shown in the step log, a round that does not say "synced" is asked
+# again every GODSPEED_SCENARIO_ROUND_STEP seconds (5), and one still not synced when
+# GODSPEED_SCENARIO_ROUND_DEADLINE seconds (180) have passed fails the scenario with that answer.
+sync_round() { # <root> <mode> <what the round does, for the symptom>
+  local root=$1 mode=$2 what=$3 deadline=${GODSPEED_SCENARIO_ROUND_DEADLINE:-180} step=${GODSPEED_SCENARIO_ROUND_STEP:-5} waited=0 answer
+  while :; do
+    answer=$(sync_on "$root") || fail "the sync round that $what failed on $root (it could not be run at all)"
+    printf '%s\n' "$answer" >>"$EVIDENCE/$mode-rounds.txt"
+    say "  the sync round on $root answered: $answer"
+    case $answer in *'"state":"synced"'*) return 0 ;; esac
+    [ "$waited" -lt "$deadline" ] ||
+      fail "the sync round that $what answered something other than synced and was still doing so at its deadline of ${deadline}s: $(printf '%s' "$answer" | tr -d '\n' | cut -c1-300)"
+    sleep "$step"
+    waited=$((waited + step))
+  done
+}
+
+# THE BUILDER'S COPY. The install line downloads kit-bootstrap, Hermes and Node and installs
+# services, so it cannot run where there is no network. With GODSPEED_SCENARIO_PRODUCT=<a checkout of
+# this repository> an installation is made from that checkout instead, doing what the install does
+# to the folder and nothing else: a new mission control is the starter copied into an empty folder
+# with `git init -b main` and `godspeed.mjs init` (the first commit); a folder that is not empty and
+# is not a mission control is refused as kit-bootstrap's kb_new_godspeed refuses it; a folder that
+# has an origin is joined with `godspeed sync folder`, as install-native-notebook.sh does. The checks
+# of a private GitHub address ask api.github.com, which a stand-in cannot reach, so a program loaded
+# by NODE_OPTIONS answers 404 for the stand-in owner, as GitHub does for a repository nobody can see.
+# The workflow never sets it, and the verdict says when it was used.
+local_install_into() { # <root> <port> <trace file>
+  local root=$1 product=$GODSPEED_SCENARIO_PRODUCT folder
+  folder=${GODSPEED_SCENARIO_WORK:-${RUNNER_TEMP:-/tmp}}/local-product
+  say "The builder's copy: installing from $product into $root, not from the install line"
+  [ -f "$product/notebook/bin/godspeed.mjs" ] || fail "GODSPEED_SCENARIO_PRODUCT=$product holds no notebook/bin/godspeed.mjs"
+  if [ -e "$root" ] && [ -n "$(ls -A "$root" 2>/dev/null)" ] &&
+    ! { [ -d "$root/.git" ] && { [ -f "$root/AGENTS.md" ] || [ -f "$root/CLAUDE.md" ] || [ -d "$root/observations" ]; }; }; then
+    fail "$root already exists and has things in it, but it is not a mission control (the installer refuses such a folder, so a second computer cloned from a copy that holds nothing cannot be set up)"
+  fi
+  if [ ! -d "$root/.git" ]; then
+    if ! { mkdir -p "$root" && cp -a "$product/starter-godspeed/." "$root/" && git -C "$root" init -q -b main >&2; }; then
+      fail "the starter could not be made into a new mission control in $root"
+    fi
+  fi
+  mkdir -p "$root/.godspeed/integrated-runtime/versions" "$folder" || fail "the runtime folder in $root could not be made"
+  ln -sfn "$product" "$root/.godspeed/integrated-runtime/versions/local" || fail "the product could not be linked into $root"
+  printf 'local\n' >"$root/.godspeed/integrated-runtime/version" || fail "the version file in $root could not be written"
+  cat >"$folder/github-404.mjs" <<'STUB'
+// Written by scenarios/scenario-lib.sh (local_install_into): api.github.com answers 404 for the
+// stand-in owner's repositories, which is what it answers for a private one asked without a key.
+const real = globalThis.fetch;
+globalThis.fetch = (url, ...rest) =>
+  String(url).startsWith('https://api.github.com/repos/godspeed-scenario-stand-in/')
+    ? Promise.resolve(new Response('{"message":"Not Found"}', { status: 404 }))
+    : real(url, ...rest);
+STUB
+  NODE_OPTIONS="--import=file://$folder/github-404.mjs"
+  export NODE_OPTIONS
+  RUNTIME=$(runtime_of "$root")
+  need_node
+  GODSPEED_WORKSPACE="$root" "$NODE" "$product/notebook/bin/godspeed.mjs" init >"$3" 2>&1 || fail "godspeed init failed in $root (see $3)"
+  if [ ! -f "$root/.godspeed/sync-config.json" ] && git -C "$root" remote get-url origin >/dev/null 2>&1; then
+    notebook_on "$root" sync folder >>"$3" 2>&1 || say "The notebook was not joined to the repository in $root; it works on that computer alone until it is."
+  fi
 }
 
 # THE PRIVATE GITHUB REPOSITORY, STOOD IN FOR BY ONE BARE REPOSITORY ON THIS MACHINE, the way
@@ -533,9 +590,9 @@ stand_in_github_over_ssh() { # <folder>
   mkdir -p "$folder" || fail "the folder for the stand-in repository ($folder) could not be made"
   git init -q --bare --initial-branch=main "$folder/$name.git" >&2 ||
     fail "the bare repository standing in for the private GitHub repository could not be made"
-  # No ignore file in this one: the repository stays empty, and the ignore lines go into the mission
-  # control's own repository (owner_ignores_what_the_notebook_keeps), because that is the repository
-  # `godspeed sync folder notebook` checks (issue #125).
+  # No ignore file in this one: the repository stays empty, as a reader's new private repository is.
+  # The two ignore lines `godspeed sync folder notebook` asks the mission control's own repository
+  # for are written by the product itself when they are missing (issue #125).
   # A stranger's computer has a Git identity of its own; a commit without one fails.
   git config --global user.name "Godspeed Scenario" || fail "this machine's Git could not be given a name"
   git config --global user.email "scenario@localhost" || fail "this machine's Git could not be given an address"

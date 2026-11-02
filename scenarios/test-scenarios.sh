@@ -570,6 +570,11 @@ rm "$E/no-address/folder-join.json"
 refuses "a folder-mode pair that kept no word of the address it joined" \
   reminder-closed-elsewhere "$E/no-address" "folder-join.json is not in what the scenario kept"
 
+copy "$E/good" "$E/folder-pending"
+printf '{"state":"pending","at":"2026-10-30T09:00:00.000Z","detail":"Command failed: git fetch --no-tags origin main"}\n' >>"$E/folder-pending/folder-rounds.txt"
+refuses "a folder pair whose last sync round answered pending" reminder-closed-elsewhere "$E/folder-pending" \
+  'answered "{"state":"pending"'
+
 copy "$E/good" "$E/no-state"
 printf '{"not":"a state"}\n' >"$E/no-state/connected-state.json"
 refuses "a state that is not what due state --json answers" reminder-closed-elsewhere "$E/no-state" \
@@ -1819,25 +1824,11 @@ shape=stand_in_github
     bad "$shape made a repository without the ignore file the product asks for ($SI_OUT)"
   fi
 }
-# The folder-mode join checks the mission control's own repository, the way useFolderRepository does
-# (git check-ignore --no-index): refused without the two lines, accepted with them.
-ignores_both() { # <repository>
-  git -C "$1" check-ignore -q --no-index NOTEBOOK.md && git -C "$1" check-ignore -q --no-index assistant-state/probe/x.json
-}
-SI_MC=$TMP/si-mission-control
-git init -q -b main "$SI_MC"
-printf '/.godspeed/\n' >"$SI_MC/.gitignore"
-if ignores_both "$SI_MC"; then
-  bad "a mission control without the two ignore lines was taken"
+# The scenario no longer writes the two ignore lines by hand: the product does (issue #125).
+if grep -q 'owner_ignores_what_the_notebook_''keeps' "$ROOT/scenarios/scenario-lib.sh" "$ROOT/scenarios/reminder-closed-elsewhere.sh"; then
+  bad "a scenario still has the helper that writes NOTEBOOK.md and assistant-state/ into an ignore file by hand"
 else
-  ok "a mission control whose ignore file lacks NOTEBOOK.md and assistant-state/ is refused"
-fi
-SI_OUT=$(HOME="$SI_HOME" GIT_CONFIG_GLOBAL="$SI_HOME/gitconfig" SCENARIO=stand-in-test bash -c '
-  . "$1/scenarios/scenario-lib.sh"; owner_ignores_what_the_notebook_keeps "$2"' _ "$ROOT" "$SI_MC" 2>&1)
-if ignores_both "$SI_MC" && [ -z "$(git -C "$SI_MC" status --porcelain)" ]; then
-  ok "owner_ignores_what_the_notebook_keeps makes a committed ignore file the product accepts"
-else
-  bad "a mission control given the ignore lines is still refused or left them uncommitted ($SI_OUT)"
+  ok "no scenario writes NOTEBOOK.md and assistant-state/ into a mission control's ignore file by hand"
 fi
 SI_SSH=$(HOME="$SI_HOME" GIT_CONFIG_GLOBAL="$SI_HOME/gitconfig" SCENARIO=stand-in-test GODSPEED_SCENARIO_WORK="$TMP/si-work" bash -c '
   . "$1/scenarios/scenario-lib.sh"; stand_in_github_over_ssh "$2/ssh" >/dev/null 2>&1; echo done' _ "$ROOT" "$TMP" 2>/dev/null)
@@ -1846,6 +1837,38 @@ if [ -n "$SI_SSH_BARE" ] && [ -z "$(git -C "$SI_SSH_BARE" for-each-ref 2>/dev/nu
   ok "stand_in_github_over_ssh makes an empty repository, so the mission control's history can be pushed to it"
 else
   bad "stand_in_github_over_ssh made a repository with history ($SI_SSH)"
+fi
+
+# ======================================= sync rounds that have to end synced (issue #125)
+# On 2.0.0-beta.14 the folder half's first round answered "pending", sent nothing, and the answer went
+# to folder-rounds.txt, which the run did not keep. sync_round keeps every answer in the evidence and
+# fails a round still not synced at its deadline, with that answer.
+section sync-round
+SR_HOME=$TMP/sync-round-home
+mkdir -p "$SR_HOME"
+sr_run() { # <answer the round gives> <evidence folder>
+  HOME="$SR_HOME" GIT_CONFIG_GLOBAL="$SR_HOME/gitconfig" SCENARIO=sync-round-test EVIDENCE="$2" \
+    GODSPEED_SCENARIO_ROUND_DEADLINE=2 GODSPEED_SCENARIO_ROUND_STEP=1 SR_ANSWER="$1" bash -c '
+    . "$1/scenarios/scenario-lib.sh"
+    sync_on() { printf "%s\n" "$SR_ANSWER"; }
+    mkdir -p "$EVIDENCE"
+    sync_round /nowhere folder "sends the mission control to its copy" && echo REACHED' _ "$ROOT" 2>/dev/null
+}
+SR_OUT=$(sr_run '{"state":"synced","at":"2026-11-02T10:00:00.000Z"}' "$TMP/sr-synced")
+if [ "$SR_OUT" = REACHED ] && grep -q '"state":"synced"' "$TMP/sr-synced/folder-rounds.txt"; then
+  ok "a round that answers synced lands in the evidence as folder-rounds.txt, and the scenario goes on"
+else
+  bad "folder-rounds.txt did not land in the evidence for a synced round ($SR_OUT)"
+fi
+SR_OUT=$(sr_run '{"state":"pending","detail":"Command failed: git fetch --no-tags origin main"}' "$TMP/sr-pending")
+case $SR_OUT in
+  "FAIL sync-round-test: "*'"state":"pending"'*'git fetch --no-tags origin main'*) ok "a round still pending at the deadline fails the scenario with that answer" ;;
+  *) bad "a round still pending at its deadline did not fail with its answer ($SR_OUT)" ;;
+esac
+if [ "$(grep -c pending "$TMP/sr-pending/folder-rounds.txt")" -ge 2 ]; then
+  ok "every pending answer is kept in folder-rounds.txt, the round having been asked again until the deadline"
+else
+  bad "the pending answers were not all kept in folder-rounds.txt"
 fi
 
 # =========================== the diagnosis of a failed AI request, printed into the job log (issue #127)
