@@ -407,12 +407,32 @@ export function copyIfFilesChanged(root, { day = null, store = null, timeoutMs =
   if (!fs.existsSync(path.join(root, 'notebook')) && !fs.existsSync(path.join(root, '.godspeed'))) return { skipped: 'no notebook' };
   if (marks(root) === marked(root)) {
     const current = store || new Store(root);
-    const needsRatings = liveMoments(current).some(moment => moment.category === 'obligation' && CLOSING_KINDS.includes(moment.obligation_kind)
-      && Object.entries(closingMomentRatings(moment.evidence)).some(([field]) => moment[field] == null || (field === 'status' && moment[field] === 'confirmed')));
-    if (!needsRatings) return { skipped: 'nothing changed', unproven: noteOf(root).unproven || [] };
+    if (!needsTimelineRatings(current)) return { skipped: 'nothing changed', unproven: noteOf(root).unproven || [] };
     return copyOldReminders(current, { day, timeoutMs });
   }
   return copyOldReminders(store || new Store(root), { day, timeoutMs });
+}
+
+// Whether a closed or dropped deadline's moment still lacks the timeline status or a score that
+// copyUnderLock gives it (2.0.0-beta.15, #141): read only, no lock.
+export function needsTimelineRatings(store) {
+  return liveMoments(store).some(moment => moment.category === 'obligation' && CLOSING_KINDS.includes(moment.obligation_kind)
+    && Object.entries(closingMomentRatings(moment.evidence)).some(([field]) => moment[field] == null || (field === 'status' && moment[field] === 'confirmed')));
+}
+
+// ---------------------------------------------------------------- the repair when the notebook starts
+// THE OLD CLOSINGS GET THEIR TIMELINE STATUS AND SCORES WITH THE UPDATE, NOT WITH THE NEXT DEADLINE
+// (2 November 2026). The correction above ran only when the deadline copy next ran (the due runner's
+// check, or a screen that lists deadlines), so on the first server updated to 2.0.0-beta.15 thirty
+// finished deadlines still showed an unknown status and no scores after the update. The notebook
+// therefore runs it once when it starts (server/main.mjs). It waits for the workspace lock without
+// holding up the notebook (withLockAsync), does nothing when nothing needs it, never touches a
+// staged or read-only copy, and is the same idempotent correction, so running it again adds nothing.
+export async function repairTimelineAtStart(store, { day = null, timeoutMs = 60000 } = {}) {
+  if (!writable(store)) return { skipped: 'not writable' };
+  if (!needsTimelineRatings(store)) return { skipped: 'nothing to repair' };
+  const when = day || dayOf(store);
+  return store.withLockAsync(() => copyUnderLock(store, when), { timeoutMs });
 }
 
 // ---------------------------------------------------------------- the check ticket 03 relies on
