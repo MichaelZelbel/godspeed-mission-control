@@ -65,6 +65,15 @@ export function deadlineUid(slug) {
 
 export const CLOSING_KINDS = Object.freeze(['closes', 'drops']);
 
+// A dated closing is a past event. The impact is the lowest tier until the owner rates it;
+// completing a reminder alone does not establish a lasting effect. Its date is exact because
+// the event carries a calendar day. Only the owner's own confirmation warrants maximum truth
+// confidence; other evidence is retained but does not silently become certainty.
+export function closingMomentRatings(evidence) {
+  return { status: 'past_fact', impact_level: 1, confidence_date: 10,
+    confidence_truth: /^(you|Michael) said so\b/i.test(text(evidence).trim()) ? 10 : 5 };
+}
+
 // The uid of the moment that closes or drops a reminder, derived from what it closes: the
 // reminder's name, the window it closes (the window's first day, empty when the reminder has one
 // window), which kind it is, and `from`, the world/events/ file the closing was read out of.
@@ -102,6 +111,7 @@ export function closingMoment({ deadline, kind, day, window = '', evidence, sour
     ...(from ? { uid: closingUid({ slug, window, kind, from }) } : {}),
     title,
     happened_at: day,
+    ...closingMomentRatings(evidence),
     category: 'obligation',
     obligation_kind: kind,
     obligation_window: window || null,

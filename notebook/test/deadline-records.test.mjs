@@ -150,6 +150,8 @@ test('a closing is a moment on the timeline that names the reminder by uid', t =
   assert.equal(moment.obligation_window, '2026-09-01', 'which window of the repeating reminder it closes');
   assert.equal(moment.evidence, 'Michael said so in the session.');
   assert.equal(moment.source, 'godspeed due done');
+  assert.deepEqual([moment.status, moment.impact_level, moment.confidence_date, moment.confidence_truth],
+    ['past_fact', 1, 10, 10], 'a first-hand completion has a valid status and all timeline ratings');
   assert.deepEqual(moment.references, [{ type: 'deadlines', id: one.id, uid: one.uid, field: 'deadline_id' }],
     'a typed reference, by uid, so it survives a rename of either');
   assert.ok(pageOf(store, moment).startsWith('Timeline/2026-10-19 Done'), 'it is on the timeline: ' + pageOf(store, moment));
@@ -160,6 +162,8 @@ test('a closing is a moment on the timeline that names the reminder by uid', t =
   }));
   assert.equal(dropped.title, 'Dropped: Car service before the warranty runs out');
   assert.equal(dropped.obligation_kind, 'drops');
+  assert.deepEqual([dropped.status, dropped.impact_level, dropped.confidence_date, dropped.confidence_truth],
+    ['past_fact', 1, 10, 5], 'a drop with evidence other than the owner\'s words keeps conservative truth confidence');
 });
 
 test('a closing cannot be edited, and says nothing without what shows it', t => {

@@ -27,7 +27,7 @@ import { QueryService } from '../core/query.mjs';
 import { FileSync } from '../core/sync/git.mjs';
 import { deadlineUid } from '../core/deadline-records.mjs';
 import { fileURLToPath } from 'node:url';
-import { copyOldReminders, sameThroughRecords, liveMoments, COPY_TYPE, BOTH_CHANGED } from '../core/due-copy.mjs';
+import { copyOldReminders, copyIfFilesChanged, sameThroughRecords, liveMoments, COPY_TYPE, BOTH_CHANGED } from '../core/due-copy.mjs';
 import { dueCommand, dueDelivered, dueRows } from '../core/native-due.mjs';
 
 for (const key of Object.keys(process.env)) if (/^(GODSPEED_|HERMES_)/.test(key)) delete process.env[key];
@@ -75,6 +75,73 @@ function oldFiles(root) {
 }
 const slugsOf = store => store.list('deadlines').filter(r => r.native_slug).map(r => r.native_slug).sort();
 const closings = store => store.list('moments').filter(r => r.category === 'obligation');
+
+test('an older closing gets an append-only timeline correction without replacing an owner rating', t => {
+  const store = seeded(t);
+  copyOldReminders(store, { day: DAY });
+  const old = store.save('moments', { title: 'Done: Fictional task', happened_at: DAY,
+    category: 'obligation', obligation_kind: 'closes', deadline_id: 'due-rates',
+    evidence: 'A receipt exists', confidence_truth: 7 });
+  const before = store.get('moments', old.id);
+  const fixed = copyIfFilesChanged(store.root, { store, day: DAY });
+  assert.equal(fixed.unchanged, false);
+  assert.equal(store.get('moments', old.id)._hash, before._hash, 'the original event stays unchanged');
+  const visible = new QueryService(store).rows('moments').find(m => m.id === old.id);
+  assert.deepEqual([visible.status, visible.impact_level, visible.confidence_date, visible.confidence_truth],
+    ['past_fact', 1, 10, 7]);
+  assert.equal(copyIfFilesChanged(store.root, { store, day: DAY }).skipped, 'nothing changed');
+});
+
+const correctionsOf = store => store.list('event_corrections');
+const ratingsOf = row => [row.status, row.impact_level, row.confidence_date, row.confidence_truth];
+
+test('done through the due command writes a moment with status and all three ratings', t => {
+  const store = seeded(t);
+  dueCommand(store, ['add', 'dentist', '--title', 'See the dentist', '--target', '2026-12-01', '--done-when', 'the appointment has happened']);
+  dueCommand(store, ['done', 'dentist', '--evidence', 'the receipt is in my mail']);
+  const moment = closings(store).find(m => m.deadline_id === 'due-dentist');
+  assert.equal(moment.obligation_kind, 'closes');
+  assert.deepEqual(ratingsOf(moment), ['past_fact', 1, 10, 10]);
+  const row = new QueryService(store).rows('moments').find(m => m.id === moment.id);
+  assert.deepEqual(ratingsOf(row), ['past_fact', 1, 10, 10], 'as the timeline reads it');
+});
+
+test('dropping a deadline writes a moment with status and all three ratings', t => {
+  const store = seeded(t);
+  dueCommand(store, ['add', 'gym', '--title', 'Join the gym', '--target', '2026-12-01', '--done-when', 'I am a member']);
+  dueCommand(store, ['drop', 'gym', '--yes']);
+  const moment = closings(store).find(m => m.deadline_id === 'due-gym');
+  assert.equal(moment.obligation_kind, 'drops');
+  assert.deepEqual(ratingsOf(moment), ['past_fact', 1, 10, 10]);
+});
+
+test('the correction for older closings runs once and keeps an owner rating', t => {
+  const store = seeded(t);
+  copyOldReminders(store, { day: DAY });
+  const old = store.save('moments', { title: 'Done: Fictional task', happened_at: DAY,
+    category: 'obligation', obligation_kind: 'closes', deadline_id: 'due-rates',
+    evidence: 'A receipt exists', impact_level: 3, confidence_truth: 7 });
+  copyIfFilesChanged(store.root, { store, day: DAY });
+  const count = correctionsOf(store).length;
+  assert.ok(count >= 1);
+  copyIfFilesChanged(store.root, { store, day: DAY });
+  copyOldReminders(store, { day: DAY });
+  assert.equal(correctionsOf(store).length, count, 'a second run appends nothing');
+  const row = new QueryService(store).rows('moments').find(m => m.id === old.id);
+  assert.deepEqual(ratingsOf(row), ['past_fact', 3, 10, 7], 'the owner\'s impact and truth stay');
+});
+
+test('a moment that is not a deadline\'s is never corrected', t => {
+  const store = seeded(t);
+  const plain = store.save('moments', { title: 'Lunch', happened_at: DAY, status: 'confirmed' });
+  const other = store.save('moments', { title: 'Something', happened_at: DAY, category: 'obligation', obligation_kind: 'note' });
+  const hashes = [plain, other].map(m => store.get('moments', m.id)._hash);
+  copyOldReminders(store, { day: DAY });
+  copyIfFilesChanged(store.root, { store, day: DAY });
+  const touched = correctionsOf(store).map(c => c.moment_id);
+  assert.ok(!touched.includes(plain.id) && !touched.includes(other.id));
+  assert.deepEqual([plain, other].map(m => store.get('moments', m.id)._hash), hashes);
+});
 
 // ---------------------------------------------------------------- the seeded set, copied
 
