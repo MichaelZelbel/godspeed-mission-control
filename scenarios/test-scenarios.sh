@@ -2202,7 +2202,7 @@ add("s1","assistant",JSON.stringify([{id:"c4",function:{name:"terminal",argument
 add("s1","assistant",null,2500);
 add("s1","user",JSON.stringify([{function:{name:"terminal",arguments:"{\"command\":\"not the model\"}"}}]),2600);
 db.close();' "$C/home" 2>/dev/null
-OUT=$(node "$ROOT/scenarios/night-tidy-chat.mjs" --home "$C/home" commands 2>&1)
+OUT=$(node "$ROOT/scenarios/night-tidy-chat.mjs" --home "$C/home" commands 2>"$C/stderr")
 if [ "$(printf '%s\n' "$OUT" | grep -c .)" = 3 ] && printf '%s\n' "$OUT" | head -n 1 | grep -q "^500	s1	old command$"; then
   ok "the command log lists the commands the model ran, oldest first"
 else
@@ -2220,7 +2220,7 @@ case $OUT in
   *nothing*|*'not the model'*) bad "the command log lists a call that ran no command, or a message that is not the assistant's: $OUT" ;;
   *) ok "a search, an empty call and a message of the person are not commands" ;;
 esac
-OUT=$(node "$ROOT/scenarios/night-tidy-chat.mjs" --home "$C/home" commands --since 2500 2>&1)
+OUT=$(node "$ROOT/scenarios/night-tidy-chat.mjs" --home "$C/home" commands --since 2500 2>"$C/stderr")
 if [ "$OUT" = "$(printf '3000\ts2\tls -la')" ]; then
   ok "--since leaves out the commands before that time"
 else
@@ -2231,7 +2231,7 @@ node --input-type=module -e '
 import {DatabaseSync} from "node:sqlite";
 const db=new DatabaseSync(process.argv[1]+"/state.db");
 db.exec("create table messages(id integer primary key, session_id text, role text, content text, timestamp real)");db.close();' "$C/plain" 2>/dev/null
-if OUT=$(node "$ROOT/scenarios/night-tidy-chat.mjs" --home "$C/plain" commands 2>&1) && [ -z "$OUT" ]; then
+if OUT=$(node "$ROOT/scenarios/night-tidy-chat.mjs" --home "$C/plain" commands 2>"$C/stderr") && [ -z "$OUT" ]; then
   ok "a store without a tool_calls column has no commands, and no crash"
 else
   bad "a store without tool_calls answered [$OUT]"
