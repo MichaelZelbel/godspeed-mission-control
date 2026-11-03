@@ -83,7 +83,7 @@ fresh_evidence() {
 # install, traced so the checking part can see which kit-bootstrap and which starter it used.
 install_the_stage_line() { # <trace file>
   say "The line, from the stage's own address: $STAGE_REF"
-  curl -fsSL "$RAW/$STAGE_REF/install-godspeed.sh" | GODSPEED_STAGE_REF="$STAGE_REF" bash -x 2> >(tee "$1" >&2) ||
+  curl -fsSL "$RAW/$STAGE_REF/install-godspeed.sh" | GODSPEED_STAGE_REF="$STAGE_REF" GODSPEED_STAGE_RAW="$RAW" bash -x 2> >(tee "$1" >&2) ||
     fail "the install line for $STAGE_REF failed before this scenario could do anything (its trace is in the step log)"
 }
 # Today's public line, the one a reader copies, which installs the current public version.
@@ -474,7 +474,7 @@ owner_sets_threshold() { # <config file> <value>
 install_the_line_of_into() { # <ref> <root> <port> <trace file>
   say "The line, from that version's own address, into $2 on port $3: $1"
   curl -fsSL "$RAW/$1/install-godspeed.sh" |
-    GODSPEED_STAGE_REF="$1" GODSPEED_PORT="$3" bash -xs -- --godspeed "$2" 2> >(tee "$4" >&2) ||
+    GODSPEED_STAGE_REF="$1" GODSPEED_STAGE_RAW="$RAW" GODSPEED_PORT="$3" bash -xs -- --godspeed "$2" 2> >(tee "$4" >&2) ||
     fail "the install line for $1 into $2 failed before this scenario could do anything (its trace is in the step log)"
 }
 install_the_stage_line_into() { # <root> <port> <trace file>
