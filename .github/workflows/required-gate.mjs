@@ -149,7 +149,7 @@ export function reviewVerdict({
 
   for (const [login, { item }] of latest) {
     if (item.state === "CHANGES_REQUESTED") {
-      return { ok: false, blocked: true, line: `the review failed: ${wanted.get(login)} requested changes` };
+      return { ok: false, line: `the review failed: ${wanted.get(login)} requested changes` };
     }
   }
   for (const [login, { item }] of latest) {
@@ -280,9 +280,9 @@ export async function gate({
   const reviews = needsReview ? await fetchReviews() : [];
   let review = reviewVerdict({ reviews, headSha, requiredReviewers, needsReview, event });
   lines.push(review.line);
-  // without an approval of the release App, Archon's verdict may pass it instead (never over a
-  // listed reviewer's request for changes)
-  if (needsReview && !review.ok && !review.blocked) {
+  // without an approval of the release App, Archon's verdict passes it instead, exactly as Archon's
+  // merge queue would (which reads no GitHub review at all)
+  if (needsReview && !review.ok) {
     let archon;
     try {
       archon = archonVerdict({ comments: await fetchComments(), maintainers: await fetchMaintainers(), headSha });
@@ -318,9 +318,9 @@ async function getJson(url, token) {
   return response.json();
 }
 
-async function allPages(url, token, pick) {
+async function allPages(url, token, pick, maxPages = 20) {
   const out = [];
-  for (let page = 1; page <= 20; page += 1) {
+  for (let page = 1; page <= maxPages; page += 1) {
     const batch = pick(await getJson(`${url}&page=${page}`, token));
     out.push(...batch);
     if (batch.length < 100) break;
@@ -629,9 +629,9 @@ const CASES = [
     args: () => archon({ fetchMaintainers: async () => parseMaintainers('{"login":"x"}'), fetchComments: async () => [marked(BUILDER, SHA, "ready")] }),
   },
   {
-    name: "a listed reviewer's request for changes is never overruled by Archon's verdict",
-    want: false,
-    says: `the review failed: ${BOT} requested changes`,
+    name: "Archon's verdict passes even beside a listed reviewer's request for changes, as Archon's gate reads no GitHub review",
+    want: true,
+    says: `the review passed: Archon's verdict from ${BUILDER} is ready for ${SHA}`,
     args: () => archon({ fetchReviews: async () => [reviewOf(BOT, "CHANGES_REQUESTED", SHA, T2)], fetchComments: async () => [marked(BUILDER, SHA, "ready")] }),
   },
   {
@@ -724,6 +724,7 @@ async function decide() {
     prNumber
       ? allPages(`${API}/repos/${repo}/issues/${prNumber}/comments?per_page=100`, token, (body) =>
           Array.isArray(body) ? body : [],
+          Infinity, // every comment, as Archon reads them: until a short page
         )
       : Promise.resolve([]);
   // Archon's maintainer list at the head of the default branch (never the pull request's own copy):

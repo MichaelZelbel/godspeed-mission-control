@@ -83,6 +83,7 @@ jobs:
         run: |
           node .github/guide-check.mjs --self-test
           node .github/workflows/required-gate.mjs --self-test
+          node .github/workflows/required-on-verdict.mjs --self-test
       - name: Install, upgrade and recover
         run: bash notebook/test/native-install-linux.sh
   required:
