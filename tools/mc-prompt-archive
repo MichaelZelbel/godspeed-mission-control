@@ -725,9 +725,23 @@ def running_hermes_homes():
     return sorted(set(out))
 
 
-# The Windows setup's state folder: its name since 2.0.0-beta.11 first, then the name of an install
-# made before (kit-bootstrap's windows/godspeed-folders.ps1 names both).
-WINDOWS_STATE_FOLDERS = ("Godspeed Mission Control State", "Godspeed Mission Control Full Alpha State")
+def running_notebook(godspeed=None):
+    """The record the running notebook writes in its mission control (.godspeed/running-notebook.json):
+    the folder it really runs from. No folder name is guessed. {} when there is none, or when it
+    was written for another mission control."""
+    if not godspeed:
+        return {}
+    try:
+        with io.open(os.path.join(godspeed, ".godspeed", "running-notebook.json"), encoding="utf-8-sig") as fh:
+            rec = json.load(fh)
+    except Exception:
+        return {}
+    if not isinstance(rec, dict):
+        return {}
+    ws = rec.get("workspace")
+    if ws and os.path.normcase(os.path.abspath(ws)) != os.path.normcase(os.path.abspath(godspeed)):
+        return {}
+    return rec
 
 
 def assistant_homes(godspeed=None):
@@ -735,9 +749,9 @@ def assistant_homes(godspeed=None):
     files = []
     if os.environ.get("GODSPEED_ASSISTANT_CONFIG"):
         files.append(os.environ["GODSPEED_ASSISTANT_CONFIG"])
-    if os.environ.get("LOCALAPPDATA"):
-        for folder in WINDOWS_STATE_FOLDERS:
-            files.append(os.path.join(os.environ["LOCALAPPDATA"], folder, "assistant.json"))
+    rec = running_notebook(godspeed)
+    if rec.get("assistantConfig"):
+        files.append(rec["assistantConfig"])
     if godspeed:
         files.append(os.path.join(godspeed, ".godspeed", "assistant.json"))
     out = []
@@ -785,11 +799,11 @@ def hermes_homes(godspeed=None):
         candidates.append(os.environ["HERMES_HOME"])
     if os.environ.get("LOCALAPPDATA"):
         candidates.append(os.path.join(os.environ["LOCALAPPDATA"], "hermes"))
-        # The reader's own Godspeed assistant on Windows (2026-10-12): the setup gives it a Hermes
-        # home of its own, and "Open the Windows assistant" and the notebook's chat both talk to
-        # it there. Nothing else on the PC names that folder, so no chat with it was ever saved.
-        for folder in WINDOWS_STATE_FOLDERS:
-            candidates.append(os.path.join(os.environ["LOCALAPPDATA"], folder, "hermes-profile"))
+    # The reader's own Godspeed assistant on Windows (2026-10-12): the setup gives it a Hermes
+    # home of its own in the notebook's state folder, which the running notebook's record names.
+    state = running_notebook(godspeed).get("stateFolder")
+    if state:
+        candidates.append(os.path.join(state, "hermes-profile"))
     # Wherever the assistant's own settings say its home is: the Windows setup writes them in its
     # state folder, the one-click server and the notebook in <mission control>/.godspeed/.
     candidates += assistant_homes(godspeed)
@@ -823,7 +837,7 @@ def _default_store_label(hermes):
     if len(parts) >= 2 and parts[-2] == "profiles":
         return parts[-1]
     if norm.endswith("/.godspeed/integrated-runtime/hermes") \
-            or any(norm.endswith("/" + folder + "/hermes-profile") for folder in WINDOWS_STATE_FOLDERS) \
+            or norm.endswith("/hermes-profile") \
             or norm == "/opt/data/full-candidate/hermes":
         return "godspeed"
     return "default"

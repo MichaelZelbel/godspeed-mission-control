@@ -156,20 +156,36 @@ async function main() {
   ok("16 and the default Hermes still gets its usual entry", /^Hermes: added the mail tool/m.test(run1.stdout) && /mc-mail:/.test(fs.readFileSync(path.join(H4, ".hermes", "config.yaml"), "utf8")), run1.stdout);
   const run2 = child(`require("./mc-mail.js").main(["setup","--check"]);`, tmpAll);
   ok("17 the notebook's Hermes entry starts and answers like Hermes would start it, and a second run adds nothing", /Hermes \(the assistant your notebook set up\): the mail tool answers/.test(run2.stdout) && fs.readFileSync(path.join(profile, "config.yaml"), "utf8") === cfg, run2.stdout + run2.stderr);
-  // On Windows the notebook's Hermes is also found through the setup's state folder, with nothing in
-  // the mission control naming it: "Godspeed Mission Control State" since 2.0.0-beta.11 (17b), and
-  // "... Full Alpha State" on an install made before (17c).
-  if (process.platform === "win32") {
-    for (const [n, folder] of [["17b", "Godspeed Mission Control State"], ["17c", "Godspeed Mission Control Full Alpha State"]]) {
-      const H = path.join(W, "home" + n), G = path.join(W, "wired" + n), L = path.join(W, "local" + n), prof = path.join(L, folder, "hermes-profile");
-      fs.mkdirSync(H, { recursive: true }); fs.mkdirSync(G, { recursive: true }); fs.mkdirSync(prof, { recursive: true });
-      fs.writeFileSync(path.join(G, "AGENTS.md"), "x\n");
-      fs.writeFileSync(path.join(prof, "config.yaml"), notebookEntry);
-      fs.writeFileSync(path.join(L, folder, "assistant.json"), "﻿" + JSON.stringify({ verified: true, home: prof, workspace: G }));
-      const run = child(`require("./mc-mail.js").main(["setup"]);`, { HOME_DIR: H, GODSPEED_DIR: G, GODSPEED_ROOT: G, LOCALAPPDATA: L, APPDATA: path.join(W, "roaming" + n), CODEX_HOME: path.join(W, "no-codex") });
-      ok(n + " mc-mail setup finds the notebook's Hermes in %LOCALAPPDATA%\\" + folder, /Hermes \(the assistant your notebook set up\): added the mail tool/.test(run.stdout) && /^  mc-mail:$/m.test(fs.readFileSync(path.join(prof, "config.yaml"), "utf8")), run.stdout + run.stderr);
-    }
-  } else console.log("  --   17b, 17c skipped: the Windows setup's state folder is looked for on Windows only");
+  // The Windows setup's state folder is found through the record the running notebook writes in its
+  // mission control (notebook/core/running-notebook.mjs), never by a folder name: a fresh install
+  // (17b), a finished move whose record was rewritten at the next start (17c), a move that is
+  // waiting, where the record names the folder the notebook really runs from (17d), and a record
+  // written for another mission control, which stays that one's business (17e). Runs everywhere.
+  const record = (G, config) => require("child_process").execFileSync(process.execPath, ["--input-type=module", "-e",
+    `import {recordRunningNotebook} from ${JSON.stringify(require("url").pathToFileURL(path.join(__dirname, "..", "notebook", "core", "running-notebook.mjs")).href)};recordRunningNotebook({root:${JSON.stringify(G)},assistantConfig:${JSON.stringify(config)},platform:"win32"});`]);
+  const scene = n => {
+    const H = path.join(W, "home" + n), G = path.join(W, "wired" + n), L = path.join(W, "local" + n);
+    fs.mkdirSync(H, { recursive: true }); fs.mkdirSync(G, { recursive: true });
+    fs.writeFileSync(path.join(G, "AGENTS.md"), "x\n");
+    const state = name => { const d = path.join(L, name), prof = path.join(d, "hermes-profile"); fs.mkdirSync(prof, { recursive: true }); fs.writeFileSync(path.join(prof, "config.yaml"), notebookEntry); fs.writeFileSync(path.join(d, "assistant.json"), "\uFEFF" + JSON.stringify({ verified: true, home: prof, workspace: G })); return { config: path.join(d, "assistant.json"), prof }; };
+    const setup = () => child(`require("./mc-mail.js").main(["setup"]);`, { HOME_DIR: H, GODSPEED_DIR: G, GODSPEED_ROOT: G, LOCALAPPDATA: L, APPDATA: path.join(W, "roaming" + n), CODEX_HOME: path.join(W, "no-codex") });
+    const wired = a => /^  mc-mail:$/m.test(fs.readFileSync(path.join(a.prof, "config.yaml"), "utf8"));
+    return { G, state, setup, wired };
+  };
+  const wiredMsg = /Hermes \(the assistant your notebook set up\): added the mail tool/;
+  { const c = scene("17b"), a = c.state("State"); record(c.G, a.config); const r = c.setup();
+    ok("17b fresh install: the record names the new folder, and mc-mail setup wires the notebook's Hermes there", wiredMsg.test(r.stdout) && c.wired(a), r.stdout + r.stderr); }
+  { const c = scene("17c"), old = c.state("Previous State"); record(c.G, old.config);
+    const moved = c.state("State"); record(c.G, moved.config); const r = c.setup();
+    ok("17c finished move: the record rewritten at the next start sends the wiring to the new folder only", wiredMsg.test(r.stdout) && c.wired(moved) && !c.wired(old), r.stdout + r.stderr); }
+  { const c = scene("17d"), old = c.state("Previous State"); record(c.G, old.config); const r = c.setup();
+    ok("17d waiting move: the record names the old folder and the wiring goes there", wiredMsg.test(r.stdout) && c.wired(old), r.stdout + r.stderr); }
+  { const c = scene("17e"), other = c.state("State"); record(path.join(W, "another-mission-control"), other.config);
+    fs.mkdirSync(path.join(c.G, ".godspeed"), { recursive: true });
+    fs.writeFileSync(path.join(c.G, ".godspeed", "running-notebook.json"), JSON.stringify({ format: 1, assistantConfig: other.config, stateFolder: path.dirname(other.config), workspace: path.join(W, "another-mission-control") }));
+    fs.writeFileSync(other.config, JSON.stringify({ verified: true, home: other.prof, workspace: path.join(W, "another-mission-control") }));
+    const r = c.setup();
+    ok("17e a record or assistant of another mission control is left alone", !wiredMsg.test(r.stdout) && !c.wired(other), r.stdout + r.stderr); }
 
   // 5. The first connect, without a terminal: age is fetched before anything is asked.
   const H5 = path.join(W, "home5"); fs.mkdirSync(H5, { recursive: true });
