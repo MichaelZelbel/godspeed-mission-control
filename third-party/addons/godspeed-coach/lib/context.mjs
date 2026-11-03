@@ -50,7 +50,7 @@ export function goOn({ prep = "", from = "what was prepared" } = {}) {
 // Prepared section: the card is carried whole, line by line as it was written, up to CARD_CHARS,
 // with the file that holds the depth behind it.
 export const CARD_CHARS = 1600;
-export function talkCard(talk, max = CARD_CHARS) {
+export function talkCard(talk, max = CARD_CHARS, slug = "<area>") {
   const lines = String(talk.sections.Prepared || "").split("\n").map((l) => l.trimEnd()).filter((l) => l.trim());
   const L = [`  Talk card, prepared ahead (the short version; ${talk.prep} holds the depth):`];
   let room = max;
@@ -60,6 +60,7 @@ export function talkCard(talk, max = CARD_CHARS) {
     L.push(line); room -= line.length + 1;
   }
   L.push(...goOn({ prep: talk.prep, from: "the card's moves" }));
+  L.push(`  If they ask what was researched or how, run \`godspeed-coach talk evidence ${slug}\` once and answer from what it prints; never claim how long or how widely research ran.`);
   return L;
 }
 
@@ -67,7 +68,7 @@ export function talkCard(talk, max = CARD_CHARS) {
 export function talkMaterial(talk, slug, { max = TALK_CHARS, opening = true } = {}) {
   const first = cut(clean(talk.sections["The opening"]), Math.min(max, 700));
   const said = !opening ? [] : [first ? `  It opened with: "${first}"` : "  No opening is recorded."];
-  if (talk.prep) return [...said, ...talkCard(talk)];
+  if (talk.prep) return [...said, ...talkCard(talk, CARD_CHARS, slug)];
   const items = String(talk.sections.Prepared || "").split("\n").map((l) => clean(l.replace(/^\s*[-*]\s+/, ""))).filter(Boolean);
   if (!items.length) return [...said, `  Nothing else was prepared. If they ask what else there is, run \`godspeed-coach brief ${slug}\` once and answer from its sections "What the research found for ..."; this talk stays the open one, so open no other.`, ANSWER_LENGTH];
   const L = [...said, "  Prepared, for when they ask what else there is:"];

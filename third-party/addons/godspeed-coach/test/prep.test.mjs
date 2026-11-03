@@ -267,7 +267,7 @@ test("an open talk from a preparation carries its whole talk card and names the 
   const block = cli(mc, "2026-10-21T17:30:00Z", "context", "--hook", "claude").out.split("\n");
   const at = block.findIndex((l) => l.startsWith("- Open talk: Work and money (id for commands: work), opened today at 19:00, record coach/work/talks/2026-10-21.md."));
   assert.ok(at > 0, block.join("\n"));
-  assert.deepEqual(block.slice(at + 1, at + 11), [
+  assert.deepEqual(block.slice(at + 1, at + 12), [
     `  It opened with: "${OPENING}"`,
     "  Talk card, prepared ahead (the short version; coach/work/prep/2026-10-21.md holds the depth):",
     ...CARD.split("\n").map((l) => `  ${l}`),
@@ -276,8 +276,9 @@ test("an open talk from a preparation carries its whole talk card and names the 
     "  Everything needed to continue this talk is here: answer from it without running commands or looking things up, unless they ask for something it lacks (then read coach/work/prep/2026-10-21.md once).",
     `  While this talk is open, a question like "what else do you have?", "what do you suggest?" or "what should I do?" is about this talk: answer from the card's moves.`,
     "  Every answer is two sentences at most, about 300 characters, a closing question included: one that answers, and if needed one that asks or suggests.",
+    "  If they ask what was researched or how, run `godspeed-coach talk evidence work` once and answer from what it prints; never claim how long or how widely research ran.",
   ]);
-  assert.equal(block.length, at + 11, "nothing after it but the end of the block");
+  assert.equal(block.length, at + 12, "nothing after it but the end of the block");
   // A card longer than about 1600 characters is cut by whole lines.
   const long = Array.from({ length: 40 }, (_, i) => `- line ${i}: ${"a number with its date and source, ".repeat(2)}`).join("\n");
   const mc2 = mission({ "coach/work/prep/2026-10-21.md": prep({ card: long }) });
@@ -356,4 +357,90 @@ test("prep-check says whether one talk's preparation can open it, and whether it
   const reading = cli(mission({ "coach/reading/area.md": area({ AREA: "reading", TITLE: "Reading", RHYTHM: "none" }) }), at, "prep-check", "reading");
   assert.equal(reading.code, 1);
   assert.match(reading.err, /The Reading area has no talk to prepare/);
+});
+
+// Ticket 05 of 2.0.0-beta.16 (#135): a talk without a usable preparation says so, and the evidence
+// of a ready one stays reachable.
+import { prepWords, prepMissing } from "../lib/prep.mjs";
+import crypto from "node:crypto";
+
+const sha = (b) => crypto.createHash("sha256").update(b).digest("hex");
+const addDomain = (mc) => { const f = path.join(mc, "coach", "work", "area.md"); fs.writeFileSync(f, fs.readFileSync(f, "utf8").replace("\nLIMIT:", "\nRESEARCH DOMAIN: income | new earning paths\nLIMIT:")); };
+const withDomains = (mc, verdict) => {
+  const dir = path.join(mc, "coach", "work");
+  addDomain(mc);
+  const file = path.join(dir, "prep", "2026-10-21.md");
+  const text = prep().replace("## Cut, and why", "## Routes\nRoute: a hackathon (https://example.org/r)\n\n## Research coverage\nincome: checked\n\n## Cut, and why");
+  fs.writeFileSync(file, text);
+  const ev = { version: 1, prep_sha256: sha(fs.readFileSync(file)), area_sha256: sha(fs.readFileSync(path.join(dir, "area.md"))),
+    run: { token: "w", session_id: "ws", transcript_sha256: "a".repeat(64), started_at: "2026-10-20T08:00:00Z", finished_at: "2026-10-20T08:30:00Z" },
+    sources: [{ url: "https://example.org/r", tool: "WebFetch", call_id: "c1", read_at: "2026-10-20T08:10:00Z", text: "t" }], searches: [], coverage_domains: ["income"] };
+  fs.writeFileSync(file.replace(/\.md$/, ".evidence.json"), JSON.stringify(ev));
+  fs.writeFileSync(file.replace(/\.md$/, ".review.json"), JSON.stringify({ version: 1, verdict, prep_sha256: ev.prep_sha256, area_sha256: ev.area_sha256, evidence_sha256: sha(fs.readFileSync(file.replace(/\.md$/, ".evidence.json"))), reviewed_at: "2026-10-20T09:00:00Z",
+    reviewer: { token: "r", session_id: "rs", transcript_sha256: "b".repeat(64) }, coverage: [{ id: "income", verdict: "pass", reason: "ok", sources: ["https://example.org/r"] },
+      { id: "buffer", verdict: "pass", reason: "ok", sources: ["https://example.org/r"] }] }));
+};
+const SAYS = (w) => `The preparation for this talk is not ready: ${w}.`;
+
+test("a refused preparation: the brief tells the talk to open with one sentence naming the reason in plain words", () => {
+  const mc = mission({ "coach/work/prep/2026-10-21.md": prep() });
+  withDomains(mc, "fail");
+  const b = brief(mc, S, work(mc), "2026-10-21");
+  assert.match(b, /^## Not prepared$/m);
+  assert.ok(b.includes(SAYS("the second check did not pass")), b);
+  assert.doesNotMatch(b, /The prepared talk|--from-prep/);
+  // A draft says it was not finished; no file at all in an area that names research domains says none was written.
+  const d = mission({ "coach/work/prep/2026-10-21.md": prep({ state: "draft" }) });
+  assert.ok(brief(d, S, work(d), "2026-10-21").includes(SAYS("it was not finished")));
+  const none = mission(); addDomain(none);
+  assert.ok(brief(none, S, work(none), "2026-10-21").includes(SAYS("none was written")));
+});
+
+test("an area that never prepares gets no sentence; one that prepared before and has nothing for this talk does", () => {
+  const never = mission();
+  assert.doesNotMatch(brief(never, S, work(never), "2026-10-21"), /Not prepared|is not ready/);
+  assert.equal(prepMissing(work(never), "2026-10-21"), null);
+  const before = mission({ "coach/work/prep/2026-10-14.md": prep({ talk: "2026-10-14 19:00", prepared: "2026-10-13T08:00:00Z" }) });
+  assert.ok(brief(before, S, work(before), "2026-10-21").includes(SAYS("none was written")));
+});
+
+test("a ready preparation opens unchanged, with no sentence, and talk evidence prints its routes and sources", () => {
+  const mc = mission({ "coach/work/prep/2026-10-21.md": prep() });
+  withDomains(mc, "pass");
+  assert.doesNotMatch(brief(mc, S, work(mc), "2026-10-21"), /Not prepared|is not ready/);
+  const o = cli(mc, "2026-10-21T17:00:00Z", "talk", "open", "work", "--from-prep", "coach/work/prep/2026-10-21.md");
+  assert.equal(o.out, `Opened: coach/work/talks/2026-10-21.md. The opening, to send exactly as it is:\n\n${OPENING}`);
+  const e = cli(mc, "2026-10-21T17:30:00Z", "talk", "evidence", "work");
+  assert.equal(e.code, 0, e.err);
+  assert.match(e.out, /Route: a hackathon \(https:\/\/example\.org\/r\)/);
+  assert.match(e.out, /^- https:\/\/example\.org\/r \(read 2026-10-20T08:10:00Z, with WebFetch\)$/m);
+  assert.match(e.out, /Second check: pass/);
+  const j = JSON.parse(cli(mc, "2026-10-21T17:30:00Z", "talk", "evidence", "work", "--json").out);
+  assert.equal(j.sources[0].url, "https://example.org/r");
+});
+
+test("talk evidence for a talk with no preparation says there is none", () => {
+  const mc = mission();
+  cli(mc, "2026-10-21T17:00:00Z", "talk", "open", "work", "--opening", "How did the week go?");
+  const e = cli(mc, "2026-10-21T17:30:00Z", "talk", "evidence", "work");
+  assert.match(e.out, /no preparation to show/);
+});
+
+test("prepWords gives everyday words for each reason, never the raw one", () => {
+  for (const [why, words] of [
+    ["there is no such file", "none was written"], ["its STATE is draft, not ready", "it was not finished"],
+    ["its independent research review did not pass", "the second check did not pass"],
+    ["its research evidence or independent review is missing or unreadable", "the record of what it read, or its second check, is missing"],
+    ["its research evidence or review belongs to another preparation", "it changed after it was checked"],
+    ['its independent review did not judge the goal "buffer"', "the second check left out a goal this talk serves"],
+    ['its independent review does not substantiate goal "buffer"', "the second check did not confirm the research on a goal this talk serves"],
+    ["something else entirely", "it did not pass its checks"]]) assert.equal(prepWords(why), words);
+});
+
+test("the recipe says never to claim how long or how widely research ran, and has the step for a talk that is not prepared", () => {
+  const text = read("skill/coach/SKILL.md");
+  assert.match(text, /Never claim how long or how widely research ran/);
+  assert.match(text, /section "Not prepared"/);
+  assert.match(text, /godspeed-coach talk evidence <area>/);
+  assert.doesNotMatch(text, /all week|researched for/i);
 });

@@ -21,6 +21,7 @@
       "lib/settings.mjs",
       "lib/setup.mjs",
       "lib/texts.mjs",
+      "lib/turns.mjs",
       "lib/words.mjs",
       "lib/yaml.mjs",
       "package.json",

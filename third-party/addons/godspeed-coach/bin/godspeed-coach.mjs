@@ -15,7 +15,7 @@ import { brief, habitLine } from "../lib/brief.mjs";
 import { gate, NO_WAKE } from "../lib/gate.mjs";
 import { dueTick } from "../lib/tick.mjs";
 import { contextBlock, waitingTalks } from "../lib/context.mjs";
-import { readPrep, prepProblem, prepDue, prepPath, prepCheck, prepFile } from "../lib/prep.mjs";
+import { readPrep, prepProblem, prepForBrief, prepDue, prepPath, prepCheck, prepFile } from "../lib/prep.mjs";
 import { commitCoach, syncInBackground, syncQueued, pullQuietly } from "../lib/sync.mjs";
 import { decodeArgv, readTextFile, restoreShellEnv, startedFromGitBash, gitBashPath, LAUNCHER_ENV, CMDLINE_ENV } from "../lib/argv.mjs";
 
@@ -283,6 +283,28 @@ const commands = {
       if (r.created && t.prep) return out(`Opened: ${where}. The opening, to send exactly as it is:\n\n${t.opening}`, { ok: true, created: true, file: r.file, opening: t.opening });
       return out(r.created ? `Opened: ${where}` : `Already open: ${where} (kept the first opening)`, { ok: true, created: r.created, file: r.file });
     }
+    if (sub === "evidence") {
+      // What the preparation behind a talk shows (routes, sources read, the second check), so "what did
+      // you actually research?" is answered from it. Read only.
+      const ds = talkDates(a);
+      const d = f.date ? dateArg(f.date) : ([...ds].reverse().find((x) => readTalk(a, x).state === "opened") || today);
+      const t = ds.includes(d) ? readTalk(a, d) : null;
+      const found = t ? null : prepForBrief(a, d);
+      const p = t ? (t.prep ? readPrep(path.resolve(mcDir, t.prep)) : null) : (found ? readPrep(found.file) : null);
+      if (!p) return out(`There is no preparation to show for the ${a.title} talk of ${d}: do not claim any research for it.`, { ok: true, prep: null });
+      const lines = [`Preparation: ${prepPath(mcDir, p.file)}`, `Prepared: ${p.head.PREPARED || "no time recorded"}`];
+      const sec = (n) => { const k = Object.keys(p.sections).find((x) => x.toLowerCase() === n.toLowerCase()); return k ? String(p.sections[k]).trim() : ""; };
+      const shown = {};
+      for (const n of ["Routes", "Rejected routes", "Opportunities", "Research coverage", "Cut, and why"]) if (sec(n)) { lines.push("", `${n}:`, sec(n)); shown[n] = sec(n); }
+      let review = null, sources = [];
+      const base = p.file.replace(/\.md$/i, "");
+      try { review = JSON.parse(fs.readFileSync(`${base}.review.json`, "utf8")); } catch { /* none */ }
+      try { sources = JSON.parse(fs.readFileSync(`${base}.evidence.json`, "utf8")).sources || []; } catch { /* none */ }
+      lines.push("", review ? `Second check: ${review.verdict}, ${review.reviewed_at || "no time recorded"}` : "Second check: none recorded");
+      if (sources.length) { lines.push("Sources read:"); for (const x of sources) lines.push(`- ${x.url} (read ${x.read_at || "at no recorded time"}${x.tool ? `, with ${x.tool}` : ""})`); }
+      else lines.push("No source pages were recorded.");
+      return out(lines.join("\n"), { ok: true, prep: prepPath(mcDir, p.file), prepared: p.head.PREPARED || "", sections: shown, review: review ? { verdict: review.verdict, reviewed_at: review.reviewed_at } : null, sources });
+    }
     if (sub === "said") {
       // One --words per message: where commands show on their screen, the whole talk is saved in
       // one command at its close, each message on a line of its own.
@@ -304,7 +326,7 @@ const commands = {
       const ds = talkDates(a);
       return out(ds.slice(-5).map((d) => `${d}: ${readTalk(a, d).state}`).join("\n") || "No talks yet.", ds.map((d) => ({ date: d, state: readTalk(a, d).state })));
     }
-    die("godspeed-coach talk open|said|held|not-held|state <area>");
+    die("godspeed-coach talk open|said|evidence|held|not-held|state <area>");
   },
   habit() {
     const [sub, ...args] = pos;
