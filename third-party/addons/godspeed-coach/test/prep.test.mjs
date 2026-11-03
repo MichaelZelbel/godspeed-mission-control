@@ -333,7 +333,7 @@ test("prep-check says whether one talk's preparation can open it, and whether it
   assert.equal(none.out, "not ready: coach/work/prep/2026-10-21.md: there is no such file");
   assert.deepEqual(JSON.parse(check({}, "--date", "2026-10-21", "--json").out), {
     area: "work", title: "Work and money", date: "2026-10-21", time: "19:00", timezone: "Europe/Berlin", file: "coach/work/prep/2026-10-21.md",
-    talk_day: true, ready: false, problem: "there is no such file", stale: false, prepared: "",
+    talk_day: true, ready: false, problem: "there is no such file", stale: false, prepared: "", research_domains: [], goals: ["buffer"],
   });
   // Ready and fresh; the day is the talk's next one when no --date is given.
   const fresh = check({ "coach/work/prep/2026-10-21.md": prep({ prepared: "2026-10-20T11:00:00Z" }) });
@@ -377,7 +377,8 @@ const withDomains = (mc, verdict) => {
     sources: [{ url: "https://example.org/r", tool: "WebFetch", call_id: "c1", read_at: "2026-10-20T08:10:00Z", text: "t" }], searches: [], coverage_domains: ["income"] };
   fs.writeFileSync(file.replace(/\.md$/, ".evidence.json"), JSON.stringify(ev));
   fs.writeFileSync(file.replace(/\.md$/, ".review.json"), JSON.stringify({ version: 1, verdict, prep_sha256: ev.prep_sha256, area_sha256: ev.area_sha256, evidence_sha256: sha(fs.readFileSync(file.replace(/\.md$/, ".evidence.json"))), reviewed_at: "2026-10-20T09:00:00Z",
-    reviewer: { token: "r", session_id: "rs", transcript_sha256: "b".repeat(64) }, coverage: [{ id: "income", verdict: "pass", reason: "ok", sources: ["https://example.org/r"] }] }));
+    reviewer: { token: "r", session_id: "rs", transcript_sha256: "b".repeat(64) }, coverage: [{ id: "income", verdict: "pass", reason: "ok", sources: ["https://example.org/r"] },
+      { id: "buffer", verdict: "pass", reason: "ok", sources: ["https://example.org/r"] }] }));
 };
 const SAYS = (w) => `The preparation for this talk is not ready: ${w}.`;
 
@@ -431,6 +432,8 @@ test("prepWords gives everyday words for each reason, never the raw one", () => 
     ["its independent research review did not pass", "the second check did not pass"],
     ["its research evidence or independent review is missing or unreadable", "the record of what it read, or its second check, is missing"],
     ["its research evidence or review belongs to another preparation", "it changed after it was checked"],
+    ['its independent review did not judge the goal "buffer"', "the second check left out a goal this talk serves"],
+    ['its independent review does not substantiate goal "buffer"', "the second check did not confirm the research on a goal this talk serves"],
     ["something else entirely", "it did not pass its checks"]]) assert.equal(prepWords(why), words);
 });
 

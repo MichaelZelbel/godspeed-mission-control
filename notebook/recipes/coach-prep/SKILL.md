@@ -83,14 +83,52 @@ find it if they raise it. Cut everything else too: small tweaks, generic advice 
 anything that rests on a draft, plan or idea they have not seen, anything a LIMIT forbids, anything
 that rests on a stale or unchecked fact. Each cut gets one line under "Cut, and why".
 
-## 4. Take a position
+## 4. Record every route
+
+A route is a way to move one of the goals this talk serves: a training plan, a treatment, a change
+of job, a course, a tool. Every route you weighed goes under "Routes" (the ones you keep and the
+ones you would try) or "Rejected routes" (the attractive ones you ruled out), so that someone who
+did not write the file can check it. Under "Routes", each route as a short block:
+
+- **Source**: the original source, opened and read, not a search snippet or a summary of it, with
+  its link; when it was published and the day you read it.
+- **Who was studied**: the people (how many, how old, how fit or how placed), so the person can see
+  whether it applies to them.
+- **Measured effect**: what changed, in numbers, and over what time.
+- **Limits**: its limitations, what weakens it; and its **contrary evidence**, what other sources
+  found against it.
+- **Fit to this person**: why it suits their situation, their limits and the area's LIMIT lines.
+- **Cost**: its cost or burden in time, money, effort and risk.
+- **Experiment**: a small, feasible experiment they could run, with what to measure and for how long.
+
+Under "Rejected routes", each one with why: the source or the fact that rules it out. A route you
+leave out without a reason, or a number with no source, is a gap in the preparation.
+
+When `area.md` has `RESEARCH DOMAIN:` lines, the talk opens from this file only after a second AI,
+which did not write it, has checked it against the pages you read. So:
+
+- Read the source pages themselves (open them), not only search results: only pages you opened
+  in this run count as read, and the routine takes the list of them from the record of your run. A
+  page read in an earlier try, or known from memory, does not count: open again every source you
+  rely on.
+- Cover every research domain and every goal the area serves. A goal with no new study still needs
+  adjacent evidence, the competing routes and real leads weighed; "nothing new worth trying" needs
+  the same evidence as a recommendation.
+- Under "Research coverage", one short paragraph per research domain and per goal (by its id): what
+  you looked for, what you read, what you found, and why the result holds.
+- Never write a `.json` file: the receipts (`<talk date>.evidence.json`) and the review
+  (`<talk date>.review.json`) are written by the routine, and one you write is thrown away.
+- When the prompt hands you the issues of a failed review, resolve each with evidence, not new
+  wording: read the source it names, correct the claim, or weigh the route it says you missed.
+
+## 5. Take a position
 
 Say what you think they should do: one to three moves, ranked, each in one sentence, each with its
 evidence and the strongest argument against it. Say what they should stop or drop. When their goal
 and their numbers do not meet, say so plainly and show the arithmetic: that is the most useful thing
 a coach can tell them, and it leads to the real question (change the number, or find the lever).
 
-## 5. The opening and the talk card
+## 6. The opening and the talk card
 
 **The opening** is at most two sentences and about 400 characters. It starts with where it comes
 from and which talk it is ("From your coach, your weekly check-in:"), because it reaches a phone
@@ -117,13 +155,13 @@ saw that draft, and a side chance came before their goal. Failed: "the free kit 
 the captions are overdue". A to-do title instead of what the thing is; the answer was "What free
 kit?"
 
-## 6. Read it as the person
+## 7. Read it as the person
 
 Read the whole file again as the person, who has seen none of your files. Anything they would answer
 with "what is that?": say what it is, or cut it. Anything weak: cut it. Anything that breaks a LIMIT
 or one of their rules: fix it. Plain everyday words, no jargon, no long dashes, no praise.
 
-## 7. Write it
+## 8. Write it
 
 `coach/<area>/prep/<talk date>.md`, in exactly this shape:
 
@@ -139,15 +177,19 @@ STATE: ready
 ## What changed since the last talk
 ## The world this week
 ## Opportunities
+## Routes
+## Rejected routes
 ## What I think
 ## Gaps
 ## Cut, and why
+## Research coverage
 ```
 
 The facts under "Where they stand" and "The world this week" are short lines, each with its date and
 source. "Opportunities" holds only the ones you kept, strongest first, each as: what it is (one
-sentence), what it brings, what it costs, its deadline, its source. STATE is `ready` only when every
-section is filled; otherwise `draft`, with what is missing under Gaps. A draft never opens a talk.
+sentence), what it brings, what it costs, its deadline, its source. "Routes", "Rejected routes" and
+"Research coverage" are written as step 4 says. STATE is `ready` only when every section is filled;
+otherwise `draft`, with what is missing under Gaps. A draft never opens a talk.
 
 Write only this file. The routine that started you saves it in your mission control's history.
 

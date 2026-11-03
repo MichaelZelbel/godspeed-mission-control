@@ -13,14 +13,14 @@ const settings = { timezone: "Europe/Berlin" };
 const fixtures = new Set();
 test.after(() => { for (const root of fixtures) fs.rmSync(root, { recursive: true, force: true }); });
 
-function fixture() {
+function fixture({ serves = "", stand = "Where he stands", without = null } = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "coach-research-")); fixtures.add(root);
   const dir = path.join(root, "coach", "work"), prepDir = path.join(dir, "prep");
   fs.mkdirSync(prepDir, { recursive: true });
-  fs.writeFileSync(path.join(dir, "area.md"), "AREA: work\nTITLE: Work and money\nRHYTHM: weekly wednesday\nTIME: 19:00\nSTARTS: 2026-10-14\nSTATUS: on\nRESEARCH DOMAIN: income | new earning paths\nRESEARCH DOMAIN: market | market changes\n");
+  fs.writeFileSync(path.join(dir, "area.md"), `AREA: work\nTITLE: Work and money\nRHYTHM: weekly wednesday\nTIME: 19:00\nSTARTS: 2026-10-14\nSTATUS: on\n${serves ? `SERVES: ${serves}\n` : ""}RESEARCH DOMAIN: income | new earning paths\nRESEARCH DOMAIN: market | market changes\n`);
   const file = path.join(prepDir, "2026-10-21.md");
-  const sections = ["The opening", "Talk card", "Where he stands", "What changed since the last talk", "The world this week", "Opportunities", "What I think", "Gaps", "Cut, and why", "Research coverage"];
-  fs.writeFileSync(file, "AREA: work\nTALK: 2026-10-21 19:00\nPREPARED: 2026-10-21T10:30:00Z\nSTATE: ready\n\n" + sections.map((title) => `## ${title}\n${title === "Research coverage" ? "income and market: considered current source evidence." : "A substantive section for the review fixture."}\n`).join("\n"));
+  const sections = ["The opening", "Talk card", "Where he stands", "What changed since the last talk", "The world this week", "Opportunities", "Routes", "What I think", "Gaps", "Cut, and why", "Research coverage"];
+  fs.writeFileSync(file, "AREA: work\nTALK: 2026-10-21 19:00\nPREPARED: 2026-10-21T10:30:00Z\nSTATE: ready\n\n" + sections.filter((s) => s !== without).map((s) => (s === "Where he stands" ? stand : s)).map((title) => `## ${title}\n${title === "Research coverage" ? "income and market: considered current source evidence." : "A substantive section for the review fixture."}\n`).join("\n"));
   const area = readArea(dir);
   const evidence = {
     version: 1, prep_sha256: hash(fs.readFileSync(file)), area_sha256: hash(fs.readFileSync(area.file)),
@@ -85,4 +85,24 @@ test("failed fetches and empty page receipts cannot qualify", () => {
 test("an area without research-domain requirements retains existing preparation compatibility", () => {
   const f = fixture(); fs.writeFileSync(f.area.file, fs.readFileSync(f.area.file, "utf8").replace(/^RESEARCH DOMAIN:.*\n/gm, ""));
   fs.unlinkSync(f.efile); fs.unlinkSync(f.rfile); assert.equal(f.problem(), null);
+});
+
+test("Hermes' page reads count as readings, listed with Claude Code's in one place", async () => {
+  const { READING_TOOLS } = await import("../lib/prep-evidence.mjs");
+  assert.deepEqual(Object.values(READING_TOOLS).sort(), ["WebFetch", "web_extract"]);
+  const f = fixture(); f.evidence.sources[0].tool = READING_TOOLS.hermes; f.save(); assert.equal(f.problem(), null);
+});
+
+test("the review judges every goal the area serves, as well as every domain", () => {
+  const f = fixture({ serves: "buffer" }); assert.equal(f.problem(), 'its independent review did not judge the goal "buffer"');
+  f.review.coverage.push({ id: "buffer", verdict: "pass", reason: "Adjacent evidence and competing routes are weighed.", sources: ["https://example.org/report"] }); f.save();
+  assert.equal(f.problem(), null);
+  f.review.coverage[2].sources = []; f.save(); assert.equal(f.problem(), 'its independent review does not substantiate goal "buffer"');
+  const extra = fixture(); extra.review.coverage.push({ id: "unknown", verdict: "pass", reason: "x", sources: ["https://example.org/report"] }); extra.save();
+  assert.match(extra.problem(), /omitted or duplicated/);
+});
+
+test("a researched preparation records its routes; the recipe's section name for where they stand is accepted", () => {
+  assert.equal(fixture({ without: "Routes" }).problem(), 'its research section "Routes" is empty');
+  assert.equal(fixture({ stand: "Where they stand" }).problem(), null);
 });

@@ -19,7 +19,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { parseDoc } from "./header.mjs";
 import { localParts, addDays, zonedToUtc, now as clockNow } from "./clock.mjs";
-import { researchEvidenceProblem, researchDomains } from "./prep-evidence.mjs";
+import { researchEvidenceProblem, researchDomains, servedGoals } from "./prep-evidence.mjs";
 import { listAreas, isTalkDay, nextTalkDay } from "./areas.mjs";
 import { talkFile, talkDates, readTalk } from "./talks.mjs";
 
@@ -161,6 +161,8 @@ export function prepWords(reason, area = null) {
     [/does not cover the configured domains|omitted or duplicated a research domain/, () => "its research does not cover every area of this talk"],
     [/^its independent research review did not pass/, () => "the second check did not pass"],
     [/does not substantiate research domain "(.*)"/, (m) => `the second check did not confirm the research on ${domainLabel(area, m[1])}`],
+    [/did not judge the goal "(.*)"/, () => "the second check left out a goal this talk serves"],
+    [/does not substantiate goal "(.*)"/, () => "the second check did not confirm the research on a goal this talk serves"],
     [/was not recorded as an independent execution/, () => "its second check was not done independently"],
     [/no source-page reading receipts|source-page reading receipt is invalid/, () => "it shows no source pages it actually read"],
     [/execution receipt is incomplete|timestamps are invalid|PREPARED time does not match/, () => "its research record is incomplete or its times do not add up"],
@@ -200,7 +202,8 @@ export function prepMissing(area, ymd, now = clockNow()) {
 // Control, mc-coach-prep with the coach-prep recipe) and for a person who asks: which file it is,
 // whether that day is a day of this talk, whether the file can open the talk (ready, or the reason
 // it cannot), and whether it is stale (prepared more than PREP_FRESH_HOURS before the talk). It
-// only reads.
+// only reads. research_domains and goals tell the job whether the talk needs receipts and a review
+// (an area with RESEARCH DOMAIN lines) and what the review must judge.
 export function prepCheck(mcDir, s, area, ymd) {
   const file = prepFile(area, ymd);
   const p = readPrep(file);
@@ -211,5 +214,6 @@ export function prepCheck(mcDir, s, area, ymd) {
     area: area.slug, title: area.title, date: ymd, time: area.time, timezone: s.timezone, file: rel(mcDir, file),
     talk_day: talkDay, ready: !problem, ...(problem ? { problem } : {}),
     stale: !problem && prepStale(p, at), prepared: preparedAt(p)?.toISOString().replace(/\.\d+Z$/, "Z") || "",
+    research_domains: researchDomains(area), goals: servedGoals(area),
   };
 }
