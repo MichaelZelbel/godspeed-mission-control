@@ -1,7 +1,10 @@
 """godspeed-charm: the Charm Challenge, handed to the model before each turn, and on Telegram the
 slip question as its own message with Yes and No under it.
 
-pre_llm_call runs `godspeed-charm context` and returns its output as injected context.
+pre_llm_call runs `godspeed-charm context` and returns its output as injected context; that run
+also leaves the turn marker (.godspeed/charm-turns) the command falls back on. pre_tool_call adds
+this session's --conversation to a `godspeed-charm asked|start|answer` typed without one
+(Hermes v2026.9.24 applies a hook's {"action": "modify"} args and passes them to post_tool_call).
 post_tool_call notices a successful `godspeed-charm asked` for this very Telegram conversation;
 transform_llm_output then takes the question out of the reply, and the question goes out as its
 own message with two buttons (telegram_question.py). Every failure returns None, so a broken
@@ -26,6 +29,7 @@ SILENT = ("[SILENT]", "SILENT", "[NO_REPLY]", "NO_REPLY")
 _output_bus = sys.modules.setdefault("godspeed_progress_output_v1", types.ModuleType("godspeed_progress_output_v1"))
 _pending_lock = threading.Lock()
 _pending = {}  # (session_id, turn_id) -> the question asked in that turn
+_platforms = {}  # session_id -> the platform of its latest turn (never a scheduled one)
 
 
 def _mission_control():
@@ -118,6 +122,19 @@ def _stickers_available():
         return False
 
 
+def _remember_platform(session_id, platform, scheduled):
+    if not session_id:
+        return
+    with _pending_lock:
+        if scheduled or not platform:
+            _platforms.pop(session_id, None)
+            return
+        _platforms.pop(session_id, None)
+        _platforms[session_id] = platform
+        while len(_platforms) > 200:
+            _platforms.pop(next(iter(_platforms)))
+
+
 def on_pre_llm_call(**kwargs):
     try:
         args = _base() + ["context"]
@@ -128,8 +145,11 @@ def on_pre_llm_call(**kwargs):
         session_id = str(kwargs.get("session_id") or "")
         if platform and session_id:
             args += ["--conversation", f"{platform}:{session_id}"]
-        # A scheduled run is not a conversation with the person: no block at all.
-        if platform == "cron" or os.environ.get("GODSPEED_SCHEDULED_RUN"):
+        # A scheduled run is not a conversation with the person: no block at all, no turn marker
+        # (the command writes it) and no conversation for its commands (_remember_platform).
+        scheduled = platform == "cron" or bool(os.environ.get("GODSPEED_SCHEDULED_RUN"))
+        _remember_platform(session_id, platform, scheduled)
+        if scheduled:
             args.append("--scheduled")
         if platform == "telegram" and _stickers_available():
             args.append("--stickers")
@@ -241,6 +261,34 @@ def on_charm_tool(**kwargs):
         return None
 
 
+_COMMAND = re.compile(r"(?:^|[/\\\s'\"&;|(])godspeed-charm(?:\.mjs|\.cmd)?['\"]?\s+(?:asked|start|answer)(?=\s|$)")
+_SAFE = re.compile(r"^[A-Za-z0-9_.:-]+$")
+
+
+def on_charm_before_tool(**kwargs):
+    """Hermes' pre_tool_call: a `godspeed-charm asked|start|answer` the model types in the terminal
+    without --conversation gets this session's conversation, so the model never copies the id.
+    An explicit --conversation is left alone; a scheduled run has no conversation. None otherwise."""
+    try:
+        if str(kwargs.get("tool_name") or "") != "terminal" or os.environ.get("GODSPEED_SCHEDULED_RUN"):
+            return None
+        args = kwargs.get("args") or {}
+        command = str(args.get("command") or "")
+        m = _COMMAND.search(command)
+        if not m or re.search(r"--conversation(?:\s|=)", command):
+            return None
+        session_id = str(kwargs.get("session_id") or "")
+        with _pending_lock:
+            platform = _platforms.get(session_id)
+        conversation = f"{platform}:{session_id}" if platform and session_id else ""
+        if not conversation or not _SAFE.match(conversation):
+            return None
+        fixed = command[:m.end()] + f' --conversation "{conversation}"' + command[m.end():]
+        return {"action": "modify", "args": {**args, "command": fixed}}
+    except Exception:
+        return None
+
+
 def _sticker_plugin():
     """The hermes-telegram-stickers plugin's own module, when Hermes loaded it in this process."""
     for module in list(sys.modules.values()):
@@ -322,6 +370,7 @@ def on_charm_reply(**kwargs):
 
 def register(ctx):
     ctx.register_hook("pre_llm_call", on_pre_llm_call)
+    ctx.register_hook("pre_tool_call", on_charm_before_tool)
     ctx.register_hook("post_tool_call", on_charm_tool)
     ctx.register_hook("transform_llm_output", on_charm_reply)
     if _question is not None and callable(getattr(ctx, "register_telegram_handler", None)):
@@ -330,6 +379,7 @@ def register(ctx):
         def detach():
             with _pending_lock:
                 _pending.clear()
+                _platforms.clear()
             if _question is not None:
                 _question.close()
         ctx.on_unload(detach)

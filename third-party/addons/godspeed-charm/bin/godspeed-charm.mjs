@@ -17,6 +17,7 @@ import { readEvents, appendEvent, localDate } from "../lib/record.mjs";
 import { charmState } from "../lib/count.mjs";
 import { T, pickLanguage, buttonTexts } from "../lib/texts.mjs";
 import { isYes, isNo, isExplicitReset } from "../lib/words.mjs";
+import { writeTurn, currentConversation } from "../lib/turns.mjs";
 import { contextBlock } from "../lib/context.mjs";
 import { briefText, isFinishDay } from "../lib/brief.mjs";
 import { decodeArgv, readWordsFile, restoreShellEnv, startedFromGitBash, gitBashPath, LAUNCHER_ENV, CMDLINE_ENV } from "../lib/argv.mjs";
@@ -118,7 +119,25 @@ function need(key, example) {
   if (typeof f[key] !== "string" || !f[key].trim()) die(`godspeed-charm ${cmd} needs --${key}, for example: ${example}`);
   return f[key];
 }
-const extras = () => ({ words: f.words, conversation: f.conversation });
+// The conversation this command runs in: --conversation wins; else the one fresh turn marker
+// (lib/turns.mjs), never in a scheduled run. Empty when it cannot be known.
+let learned;
+function conversationOf() {
+  if (typeof f.conversation === "string" && f.conversation.trim()) return f.conversation;
+  if (learned === undefined) {
+    learned = "";
+    if (!f.scheduled && !process.env.GODSPEED_SCHEDULED_RUN) {
+      try { learned = currentConversation(mcDir, at).conversation ?? ""; } catch { /* unknown */ }
+    }
+  }
+  return learned;
+}
+function needConversation(example) {
+  const c = conversationOf();
+  if (!c) die(`godspeed-charm ${cmd} could not tell which conversation it runs in: add --conversation, for example: ${example}`);
+  return c;
+}
+const extras = () => ({ words: f.words, conversation: conversationOf() || undefined });
 
 const commands = {
   start() {
@@ -130,7 +149,7 @@ const commands = {
     }
     // Already running: say how far it is and ask whether to start over. That question is a reset
     // question like any other, so it is opened in this conversation and a yes there starts over.
-    if (f.conversation && !state.resetToday) {
+    if (conversationOf() && !state.resetToday) {
       write("asked", extras());
       const asked = load();
       return done(say.alreadyRunning(asked), asked);
@@ -146,7 +165,7 @@ const commands = {
     return done(say.notRunning(), state);
   },
   asked() {
-    need("conversation", 'godspeed-charm asked --conversation telegram:123 --words "why is this garbage again"');
+    needConversation('godspeed-charm asked --conversation telegram:123 --words "why is this garbage again"');
     const state = settle();
     if (!state.running) refuse(say.notRunning(), state);
     if (state.resetToday) refuse(say.resetToday(state), state);
@@ -154,7 +173,7 @@ const commands = {
     return done(say.question(), load());
   },
   answer() {
-    const conversation = need("conversation", "godspeed-charm answer yes --conversation telegram:123");
+    const conversation = needConversation("godspeed-charm answer yes --conversation telegram:123");
     // The notebook and the Telegram buttons say yes or no; a model may pass only the person's words.
     const given = pos.length ? pos.join(" ") : f.words;
     if (given === undefined) die('godspeed-charm answer needs yes or no, for example: godspeed-charm answer yes --conversation telegram:123 --words "yes"');
@@ -220,6 +239,9 @@ const commands = {
       if (!input || typeof input.session_id !== "string" || !input.session_id) return null;
       conversation = `claude:${input.session_id}`;
     }
+    // This turn's conversation, for the commands the model runs in it (lib/turns.mjs). Never
+    // for a scheduled run, and never at the cost of the block.
+    if (conversation) { try { writeTurn(mcDir, conversation, at); } catch { /* the command then needs --conversation */ } }
     let state = load();
     // A busy notebook gets a moment, not the lock's usual 20 seconds: the person's message is
     // waiting (Hermes gives this hook 5 seconds). Unwritten, the finish is still said, and written

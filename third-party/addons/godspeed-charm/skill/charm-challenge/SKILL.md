@@ -20,8 +20,8 @@ character for character, nothing added and nothing left out. When the person wri
 or fails, never pass its text on as your own: say in one plain sentence that it did not work and
 carry on with their request.
 
-**Start:** `godspeed-charm start --conversation "<id from the block>" --words "<their words>"`
-(leave out `--conversation` when the block names none). Starting while a challenge runs saves
+**Start:** `godspeed-charm start --words "<their words>"`
+(the command finds this conversation itself; never type a conversation id). Starting while a challenge runs saves
 nothing new; it asks whether to start over, and a yes in this conversation does that.
 
 **How far am I:** `godspeed-charm status`
@@ -30,10 +30,9 @@ nothing new; it asks whether to start over, and a yes in this conversation does 
 
 **Something that sounded like a slip (a story of venting at an AI):** do their work first, then
 follow the `[godspeed-charm]` block: ask the one question it gives you and record it with
-`godspeed-charm asked --conversation "<id from the block>" --words "<their words>"`.
+`godspeed-charm asked --words "<their words>"`.
 
-**Their yes or no to an open question:** `godspeed-charm answer yes --conversation "<id from the
-block>" --words "<their words>"`, or `answer no` the same way. Only the conversation that was
+**Their yes or no to an open question:** `godspeed-charm answer yes --words "<their words>"`, or `answer no` the same way. Only the conversation that was
 asked can answer it.
 
 **Stop for good:** `godspeed-charm stop`
