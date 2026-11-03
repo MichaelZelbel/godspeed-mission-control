@@ -53,7 +53,9 @@ $SaidMoved = 'now lives in'
 $SaidTryAgain = 'tries the move again'
 # Files the setup itself rewrites or the machine makes while running, which a move may drop or
 # re-make without losing anything of the person's: logs, locks, process records, caches, temp files.
-$Churn = @('\.log$', '\.lock$', '\.tmp$', '(^|[\\/])process\.json$', '(^|[\\/])logs?[\\/]', '__pycache__', '\.pyc$', '(^|[\\/])folder-move[\\/]')
+# uv's cache of the assistant's Python is keyed by the interpreter's path, which the move changes, so
+# its entries come back under other names (the scenario's fourth run on candidate/2.0.0-beta.15).
+$Churn = @('\.log$', '\.lock$', '\.tmp$', '(^|[\\/])process\.json$', '(^|[\\/])logs?[\\/]', '__pycache__', '\.pyc$', '(^|[\\/])folder-move[\\/]', '(^|[\\/])uv-cache[\\/]')
 
 function Say([string]$Text) { [Console]::Error.WriteLine($Text) }
 function Finish([string]$Line, [int]$Code) {
