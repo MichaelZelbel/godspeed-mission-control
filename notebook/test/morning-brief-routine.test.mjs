@@ -12,7 +12,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import {spawnSync} from 'node:child_process';
+import {spawnSync,execFileSync} from 'node:child_process';
+import {fileURLToPath} from 'node:url';
 import {Store} from '../core/records/store.mjs';
 import {QueryService} from '../core/query.mjs';
 import {addonCommand} from '../core/native-personal.mjs';
@@ -60,6 +61,47 @@ test('the routine\'s entry cuts a sentence that breaks a writing rule and delive
 test('without an AI the routine\'s entry says so in one sentence',async t=>{
  const {root}=workspace(t);
  await assert.rejects(runMorningBrief({root,env:{GODSPEED_ASSISTANT_CONFIG:path.join(root,'none.json')}}),/no AI to write with: connect one in Settings/);
+});
+
+// WITH THE ORIGINAL ASSISTANT (#163). Where the assistant runs the routines, goals and work are its
+// cards, and the notebook server reads them there; the routine's entry must read them the same way,
+// and the repair item the briefing files for a left-out line must be in the notebook's work list,
+// beside the cards. On candidate/2.0.0-beta.15 it was saved on disk and listed nowhere.
+test('with the original assistant the routine\'s entry reads the goal cards, and its repair item is listed beside the work cards',async t=>{
+ process.env.GODSPEED_CHARM_NOW='2026-10-21T08:00:00Z';process.env.GODSPEED_NOW='2026-10-21T08:00:00Z';
+ t.after(()=>{delete process.env.GODSPEED_CHARM_NOW;delete process.env.GODSPEED_NOW;});
+ const {root,store}=workspace(t,{charm:true,rules:['BANNED-WORD: Challenge']});
+ fs.mkdirSync(path.join(root,'rules'),{recursive:true});
+ const tools=fileURLToPath(new URL('../../tools/',import.meta.url)),cli=(file,...args)=>execFileSync(process.execPath,[path.join(tools,file),...args,'--godspeed',root],{cwd:root,env:{...process.env,GODSPEED_ROOT:root},encoding:'utf8'});
+ cli('goals.js','file','--kind','outcome','--status','adopted','--id','garden','--title','Plant the fictional garden','--source','test','--date','2026-10-20');
+ const work=cli('work.js','file','--what','Buy fictional seeds','--done-when','seeds.md lists them','--goal','garden','--source','test','--date','2026-10-20').split(':')[0];
+ // A work item the notebook keeps that is not a repair stays out, as before.
+ store.save('work_items',{id:'fictional-draft',kind:'draft',title:'A fictional draft',state:'verified'});
+ const config=path.join(root,'assistant.json');fs.writeFileSync(config,JSON.stringify({verified:true,home:path.join(root,'.hermes')}));
+ const env={GODSPEED_ORIGINAL_RUNTIME:'on',GODSPEED_ASSISTANT_CONFIG:config};let seen=null;
+ const provider=async input=>{const v=verifies(input);if(v)return v;seen=input.context;return OK;};
+ const {text}=await runMorningBrief({root,provider,env});
+ assert.deepEqual(seen.goals.map(g=>g.title),['Plant the fictional garden'],'the briefing read the goal card, as the notebook server does');
+ assert.ok(seen.work.some(w=>w.id===work),'and the work card');
+ assert.equal(seen.charm_line,null,'the Charm line breaks the rule, so it is left out');
+ assert.doesNotMatch(text,/Challenge/);
+ // The notebook server's own list, with the original assistant.
+ const query=new QueryService(new Store(root));query.nativeHermesHome=path.join(root,'.hermes');
+ const listed=query.rows('work_items'),repairs=listed.filter(w=>w.kind==='repair');
+ assert.equal(repairs.length,1,'the repair item is in the work list: '+JSON.stringify(listed.map(w=>w.id)));
+ assert.equal(repairs[0].line_name,'the Charm Challenge line');assert.match(repairs[0].error,/Challenge/);
+ assert.ok(listed.some(w=>w.id===work),'beside the work card');
+ assert.ok(!listed.some(w=>w.id==='fictional-draft'),'a kept item that is not a repair is not listed');
+ assert.equal(listed.filter(w=>w.id===work).length,1,'and each card once');
+ // Without the original assistant the entry reads the notebook's own records, as before.
+ seen=null;process.env.GODSPEED_CHARM_NOW='2026-10-22T08:00:00Z';process.env.GODSPEED_NOW='2026-10-22T08:00:00Z';
+ await runMorningBrief({root,provider:async input=>{const v=verifies(input);if(v)return v;seen=input.context;return OK+' Fictional second day.';},env:{GODSPEED_ASSISTANT_CONFIG:config}});
+ assert.deepEqual(seen.goals,[],'no goal records were kept, only the card');
+ // With the original assistant but none connected, the server would not start; the briefing
+ // refuses in one sentence rather than write without the cards.
+ fs.writeFileSync(config,JSON.stringify({verified:false,home:path.join(root,'.hermes')}));
+ await assert.rejects(runMorningBrief({root,provider,env}),/cannot read your goals and work: the assistant this notebook runs with is not connected/);
+ await assert.rejects(runMorningBrief({root,provider,env:{...env,GODSPEED_ASSISTANT_CONFIG:path.join(root,'none.json')}}),/not connected/);
 });
 
 // The routine's own script, as Hermes runs it: its Python, and the entry above replaced by a stand-in.

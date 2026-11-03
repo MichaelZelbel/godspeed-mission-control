@@ -196,7 +196,21 @@ export class QueryService {
     // Hermes' were listed, so a watch or radar routine could be neither seen nor paused.
     // The routines a first goal started say in a sentence what they do (starting-routines.mjs).
     if(table==='jobs'&&this.nativeHermesHome){if(!this.snapshotDepth)this.store.scan();const what=new Map([...(readMachineRecord(this.store)?.jobs||[]),...readNotebookRoutines(this.store).jobs].filter(j=>j.what).map(j=>[j.id,j.what]));return [...nativeJobs(this.nativeHermesHome,this.store.device).map(j=>({...j,...(what.get(j.id)?{what:what.get(j.id)}:{}),...coachRoutineTimes(j,this.store.root),...talkRow(j,this.store.root)})),...this.store.list('jobs').filter(j=>NativeScheduler.recordKinds.includes(j.kind))];}
-    if(this.nativeHermesHome&&['goals','forecasts','work_items'].includes(table))return nativeCardRows(this.store,table);
+    if(this.nativeHermesHome&&['goals','forecasts','work_items'].includes(table)){
+     const cards=nativeCardRows(this.store,table);
+     if(table!=='work_items')return cards;
+     // THE NOTEBOOK'S OWN REPAIR ITEMS (#163). With the original assistant the work list is the
+     // assistant's work cards, and until 3 November 2026 that was all it held: a repair item the
+     // notebook files itself (a morning brief that left out a line breaking the person's writing
+     // rules, a routine that missed its run) is a record with no card, so it was saved and never
+     // listed, and the person was never told. They are listed beside the cards; a card's own record
+     // (legacy_source) and an id a card already has are the card's, not a second item.
+     if(!this.snapshotDepth)this.store.scan();
+     const ids=new Set(cards.map(card=>card.id));
+     const own=(typeof this.store.ofType==='function'?this.store.ofType('work_items'):[...this.store.records.values()].filter(r=>r.type==='work_items'))
+      .filter(r=>r.kind==='repair'&&!r.removed_at&&!r.legacy_source&&!ids.has(r.id));
+     return [...cards,...own];
+    }
     if(!this.snapshotDepth)this.store.scan();
     // Records of one type come from the store's per-type lists: filtering all
     // sixteen thousand records once per table and query added up.
