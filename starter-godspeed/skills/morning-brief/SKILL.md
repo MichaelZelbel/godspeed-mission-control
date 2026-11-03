@@ -1,6 +1,6 @@
 ---
 name: morning-brief
-description: Write today's morning brief into brief/YYYY-MM-DD.md, the short message that reaches the person each morning when they switched it on in setup, with what their watches found. The starter version every mission control ships with, which the person makes their own by asking you to change it. Use when the morning brief job runs, when the person asks for "today's brief", "my brief" or "the brief again", when they answer a list of steps going out (in the brief, or in the daily round's morning message on a day without a brief) with "stop" or "stop" and a number, when they ask to put back a step the brief reported as done without asking, and when they ask to switch the morning brief on.
+description: Gives the person their morning brief, the short message that reaches them each morning when they switched it on in setup. Where the command `mc-brief` exists (every desktop chat and routine) it only ever runs that command, the notebook's own briefing, and shows its text; it writes brief/YYYY-MM-DD.md by hand only as the fallback on a mission control without that command (a server's morning job). The starter version every mission control ships with, which the person makes their own by asking you to change it. Use when the morning brief job runs, when the person asks for "today's brief", "my brief" or "the brief again", when they answer a list of steps going out (in the brief, or in the daily round's morning message on a day without a brief) with "stop" or "stop" and a number, when they ask to put back a step the brief reported as done without asking, and when they ask to switch the morning brief on.
 ---
 
 # Morning brief (starter)
@@ -9,6 +9,28 @@ This is the starter version. It exists so that a person who said yes to a mornin
 gets a real one from the first morning, before they have shaped it. The person makes it their
 own (how: https://godspeedmissioncontrol.com/guide/morning-brief): when they ask you to change
 what goes into their brief, edit this file, and from then on it is theirs.
+
+## Which brief: run `mc-brief` where it exists
+
+First run `command -v mc-brief`. Where it prints a path, the notebook's own briefing is the brief
+(the Charm Challenge line, a sentence that breaks one of the person's writing rules cut), and it is
+the only brief there is: for the morning job, for "today's brief", "my brief" and "the brief again",
+and for a test run, run `mc-brief`. It shows today's saved "Your morning briefing" as it is, and
+only when none is saved yet does it write it once and save it. Your final answer is its text, word
+for word, and nothing else. When it prints nothing, the notebook keeps the briefing silent today:
+say in one sentence that there is no briefing today. When it fails, say its one sentence. Where
+`mc-brief` exists, never write a brief file into `brief/` by hand and never follow the writing part
+below: a brief written here would differ from the one the morning sent.
+
+The other duties of this recipe hold everywhere, with or without `mc-brief`: answering "stop" or
+"stop" and a number to the steps going out (the part "When they answer it" below), putting back a
+step done without asking (the end of "Done yesterday without asking"), and "Switching it on".
+
+## Where there is no `mc-brief` (a server's morning brief)
+
+A mission control without the command (the server job `server/install-hermes.sh` makes, and the
+Docker image) has no notebook briefing to run. There, and only there, the brief is written by hand:
+everything below up to "Your answer" is the fallback.
 
 ## What to read
 
@@ -155,7 +177,8 @@ Otherwise make one with Hermes' cronjob tool: `action: create`, the name `Mornin
 time they named in their time zone (with none named, 07:00), this recipe attached
 (`skills: ["morning-brief"]`), this mission control's folder as `workdir`, and the prompt
 `Follow the morning-brief recipe for this mission control.` Never write a prompt that retells
-the recipe. To run it once now, follow this recipe yourself, right here, exactly as the routine
+the recipe. To run it once now, run `mc-brief` where it exists and show its text; without it,
+follow this recipe yourself, right here, exactly as the routine
 will (the same reading, the same notebook calls, the same checks, today's date), and show the
 brief you wrote. Never start the routine's own `run` from the chat for this: Hermes runs it in
 the background and its answer never comes back to the chat. Add its row to `procedures.md`, and tell

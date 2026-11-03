@@ -109,6 +109,14 @@ for(const command of (process.env.GODSPEED_ORIGINAL_RUNTIME==='on'?['mail','watc
  if(process.platform==='win32')atomic(bin+'.cmd',cmd(at=>'"'+at(process.execPath)+'" "'+at(script)+'" %* --godspeed "'+at(root)+'"\r\n'));
  shellCommand(bin,[process.execPath,script],' --godspeed '+quote(root));
 }
+// mc-brief: the notebook's own briefing, for "today's brief" in the chat (scripts/morning-brief.mjs --today).
+// It is written here, not in tools/, so a server install (which copies tools/ and has no notebook)
+// does not have it, and the morning-brief recipe keeps writing there.
+{
+ const script=path.join(kit,'notebook','scripts','morning-brief.mjs'),bin=path.join(home,'bin','mc-brief');
+ if(process.platform==='win32')atomic(bin+'.cmd',cmd(at=>'"'+at(process.execPath)+'" "'+at(script)+'" --today --godspeed "'+at(root)+'" %*\r\n'));
+ shellCommand(bin,[process.execPath,script,'--today','--godspeed',root]);
+}
 const packagedSkills=[['coach','coach'],['journal','interstitial-journal'],['headache','headache-tracker'],['charm','charm-challenge']];
 for(const [addon,skill] of packagedSkills){
  const source=path.join(kit,'third-party/addons/godspeed-'+addon);

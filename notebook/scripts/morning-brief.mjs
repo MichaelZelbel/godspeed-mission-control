@@ -15,6 +15,11 @@
 //
 //   GODSPEED_WORKSPACE=<mission control> node notebook/scripts/morning-brief.mjs
 //
+// ASKED FOR IN THE CHAT (3 November 2026). `--today` (the assistant's command `mc-brief`) shows
+// today's saved "Your morning briefing" as it is and writes nothing; only when none is saved yet
+// does it run the briefing above, so the note is saved once and the chat and the morning say the
+// same words. `--godspeed <mission control>` names the folder instead of GODSPEED_WORKSPACE.
+//
 // The AI is the notebook's own: the one connected in Settings (.godspeed/provider.json), else the
 // assistant the notebook was wired to (assistant.json), as the notebook's server chooses it.
 import fs from 'node:fs';
@@ -62,11 +67,31 @@ export async function runMorningBrief({root,provider=null,env=process.env}){
  return {result,text:note?String(note.content||'').trim():''};
 }
 
+// Today's saved briefing note in the installation's time zone, or null. Reads only.
+export function todaysBriefing({root,env=process.env}){
+ const store=new Store(root,{device:machineDevice(root).id});
+ let zone=store.get('settings','installation')?.timezone||'UTC';
+ try{new Intl.DateTimeFormat('en',{timeZone:zone});}catch{zone='UTC';}
+ const day=at=>new Intl.DateTimeFormat('en-CA',{timeZone:zone,year:'numeric',month:'2-digit',day:'2-digit'}).format(at);
+ const today=day(new Date());
+ const notes=new QueryService(store).rows('notes').filter(n=>n.source_app==='morning-brief'&&n.title==='Your morning briefing'&&n.created_at&&day(new Date(n.created_at))===today&&String(n.content||'').trim());
+ return notes.length?notes[notes.length-1]:null;
+}
+
+// The words for "today's brief": the saved note's, else the briefing run once. '' when it stays silent.
+export async function briefToday({root,provider=null,env=process.env}){
+ const saved=todaysBriefing({root,env});
+ if(saved)return {text:String(saved.content).trim(),saved:true};
+ const {text}=await runMorningBrief({root,provider,env});
+ return {text,saved:false};
+}
+
 if(import.meta.url===pathToFileURL(process.argv[1]||'').href){
- const root=process.env.GODSPEED_WORKSPACE||process.env.GODSPEED_ROOT;
+ const args=process.argv.slice(2),at=args.indexOf('--godspeed');
+ const root=(at>=0&&args[at+1])||process.env.GODSPEED_WORKSPACE||process.env.GODSPEED_ROOT;
  if(!root){console.error('The morning brief does not know which mission control to read (GODSPEED_WORKSPACE).');process.exit(2);}
  try{
-  const {text}=await runMorningBrief({root});
+  const {text}=args.includes('--today')?await briefToday({root}):await runMorningBrief({root});
   if(text)process.stdout.write(text+'\n');
   process.exit(0);
  }catch(error){
