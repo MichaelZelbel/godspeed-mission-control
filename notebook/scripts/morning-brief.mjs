@@ -57,11 +57,11 @@ export function notebookQuery(store,env=process.env){
 }
 
 // The briefing, and the words to deliver: the saved note's, or '' when the briefing stays silent.
-export async function runMorningBrief({root,provider=null,env=process.env}){
+export async function runMorningBrief({root,provider=null,env=process.env,now=new Date()}){
  const store=new Store(root,{device:machineDevice(root).id}),query=notebookQuery(store,env);
  const ai=provider||notebookProvider(store,env);
  if(!ai)throw Error('The morning brief has no AI to write with: connect one in Settings, Your AI.');
- const result=await briefing({id:'morning-brief',kind:'morning-brief'},{store,query,provider:ai});
+ const result=await briefing({id:'morning-brief',kind:'morning-brief'},{store,query,provider:ai,now});
  const note=result.record_id?store.get('notes',result.record_id):null;
  return {result,text:note?String(note.content||'').trim():''};
 }
@@ -69,12 +69,37 @@ export async function runMorningBrief({root,provider=null,env=process.env}){
 // Asked for in the chat (#193): today's briefing note if the notebook already saved one, else the
 // briefing is run once, so the same words reach the person whether the morning or the chat asked.
 // Today is the person's own day (the installation's time zone). Read-only when a note exists.
-export async function todaysMorningBrief({root,provider=null,env=process.env,now=new Date()}){
+// Requests that overlap take turns (the notebook's state folder holds the turn), and each one
+// reads again after waiting, so all of them get the one note the first saved.
+export async function todaysMorningBrief({root,provider=null,env=process.env,now=new Date(),waitMs=600000}){
  const store=new Store(root,{device:machineDevice(root).id}),zone=store.get('settings','installation')?.timezone||'UTC',today=dayOf(now,zone);
- const saved=new QueryService(store).rows('notes').filter(n=>n.source_app==='morning-brief'&&n.created_at&&dayOf(new Date(n.created_at),zone)===today).at(-1);
- if(saved)return {result:null,text:String(saved.content||'').trim()};
- return runMorningBrief({root,provider,env});
+ const savedToday=()=>new QueryService(store).rows('notes').filter(n=>n.source_app==='morning-brief'&&n.created_at&&dayOf(new Date(n.created_at),zone)===today).at(-1);
+ const release=await takeTurn(path.join(store.state,'brief-today.lock'),waitMs);
+ try{
+  const saved=savedToday();
+  if(saved)return {result:null,text:String(saved.content||'').trim()};
+  return await runMorningBrief({root,provider,env,now});
+ }finally{release();}
 }
+
+const alive=pid=>{try{process.kill(pid,0);return true;}catch(error){return error.code==='EPERM';}};
+async function takeTurn(lock,waitMs){
+ fs.mkdirSync(path.dirname(lock),{recursive:true});
+ const until=Date.now()+waitMs;
+ for(;;){
+  try{
+   const fd=fs.openSync(lock,'wx');fs.writeSync(fd,String(process.pid));fs.closeSync(fd);
+   return ()=>{try{fs.unlinkSync(lock);}catch{}};
+  }catch(error){
+   if(error.code!=='EEXIST')throw error;
+   const holder=Number.parseInt(readText(lock),10);
+   if(holder&&!alive(holder)){try{fs.unlinkSync(lock);}catch{}continue;}
+   if(Date.now()>=until)throw Error('Another request for today\'s brief is still being written. Ask again in a moment.');
+   await new Promise(resolve=>setTimeout(resolve,50));
+  }
+ }
+}
+const readText=file=>{try{return fs.readFileSync(file,'utf8');}catch{return '';}};
 
 if(import.meta.url===pathToFileURL(process.argv[1]||'').href){
  const at=process.argv.indexOf('--godspeed'),root=(at>0&&process.argv[at+1])||process.env.GODSPEED_WORKSPACE||process.env.GODSPEED_ROOT;

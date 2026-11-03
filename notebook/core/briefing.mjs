@@ -16,7 +16,8 @@ import {localPath} from './local-path.mjs';
 import {currentHealth} from './health-inputs.mjs';
 import {cycleOperation} from './cycle-operations.mjs';
 import {addonCommand} from './native-personal.mjs';
-export async function briefing(job,{store,query,provider}){
+import {dayOf} from './trackers.mjs';
+export async function briefing(job,{store,query,provider,now=new Date()}){
  if(job.rehearsal){
   const copy=path.join(store.state,'brief-rehearsals',randomUUID());fs.mkdirSync(copy,{recursive:true,mode:0o700});
   await store.waitForWriter();await store.withLockAsync(()=>{
@@ -46,11 +47,11 @@ export async function briefing(job,{store,query,provider}){
    }
   });
   const rehearsalStore=new Store(copy,{device:store.device}),rehearsalQuery=new QueryService(rehearsalStore);
-  return {...await runBriefing(job,{store:rehearsalStore,query:rehearsalQuery,provider}),rehearsal_workspace:copy};
+  return {...await runBriefing(job,{store:rehearsalStore,query:rehearsalQuery,provider,now}),rehearsal_workspace:copy};
  }
- return runBriefing(job,{store,query,provider});
+ return runBriefing(job,{store,query,provider,now});
 }
-async function runBriefing(job,{store,query,provider}){
+async function runBriefing(job,{store,query,provider,now}){
  if(!provider)throw Error('Connect an assistant before writing a briefing');
  remind({},{store,query});
  const voiceFile=path.join(store.root,'profile','voice.md'),voice=fs.existsSync(voiceFile)?fs.readFileSync(voiceFile,'utf8'):null;
@@ -95,7 +96,9 @@ async function runBriefing(job,{store,query,provider}){
   if(hash(ids(context.goals))!==hash(ids(visibleRows(query,'goals').filter(g=>['active','adopted'].includes(g.status))))||hash(ids(context.deadlines))!==hash(ids(visibleRows(query,'deadlines').filter(d=>d.status!=='closed')))||hash(ids(context.health))!==hash(ids(currentHealth(query).observations))||hash(context.workspace_sources)!==hash(fileContext(store,20000))||hash(context.workflow)!==hash(recipeContext(store,'morning-note')))throw Error('Briefing sources changed during judgment; retain its checks and prepare a new draft');
  });
  const writerContract='Write only the short useful morning note from these actual sources. Use concise everyday language and the configured voice, without em dashes, headings or machinery chatter. Include one factual health sentence using only fresh recorded inputs, or honestly say fresh observations are missing. Explain the useful next action and the goal it serves in everyday words. User decisions must refer to an actual action_artifacts item with its exact link and reviewed content; an unprepared work item or a goal is not a finished proposal to approve. When contribution is present, make reviewing that checked contribution the main user action; include its complete copy-ready content unchanged and exactly its usable notebook link. Do not confuse that choice with approval for a different unprepared workflow. It is a draft awaiting the user’s choice, not a posted result. When no prepared artifact needs a decision, do not invent an approval request. Retain uncertainty. Do not repeat unchanged prior advice or claim a draft caused real-world progress. No unsupported figures, invented links, medical diagnosis or requests for self-management. When cycle_heads_up is a line, put it in word for word as one line of its own, and say nothing else about the cycle. When charm_line is a line, put it in word for word as one line of its own, and say nothing else about the Charm Challenge.';
- const codeGate=text=>{const errors=[];if(typeof text!=='string'||!text.trim())errors.push('Briefing produced no text');else{if(context.cycle_heads_up&&!text.split(/\r?\n/).some(line=>line.trim()===context.cycle_heads_up))errors.push('Include the cycle heads-up line word for word, as one line of its own');if(context.charm_line&&!text.split(/\r?\n/).some(line=>line.trim()===context.charm_line))errors.push('Include the Charm Challenge line word for word, as one line of its own');if(text.includes('\u2014'))errors.push('Use the configured plain writing style');if(context.contribution&&(!text.includes(context.contribution.content)||!text.includes(context.contribution.link)))errors.push('Include the complete checked contribution and its usable link');if(voice){const checked=checkVoice(text,voice);if(checked.configured&&!checked.passed)errors.push('Configured voice check failed: '+checked.hits.map(h=>h.value).join(', '));}if(context.previous.some(n=>n.content.trim()===text.trim()))errors.push('The same note was already saved; do not repeat it');}return errors;};
+ // The same words may open a later day's briefing; within one day they are a repeat (#195).
+ const zone=store.get('settings','installation')?.timezone||'UTC',today=dayOf(now,zone),savedToday=visibleRows(query,'notes').filter(n=>n.source_app==='morning-brief'&&n.created_at&&dayOf(new Date(n.created_at),zone)===today);
+ const codeGate=text=>{const errors=[];if(typeof text!=='string'||!text.trim())errors.push('Briefing produced no text');else{if(context.cycle_heads_up&&!text.split(/\r?\n/).some(line=>line.trim()===context.cycle_heads_up))errors.push('Include the cycle heads-up line word for word, as one line of its own');if(context.charm_line&&!text.split(/\r?\n/).some(line=>line.trim()===context.charm_line))errors.push('Include the Charm Challenge line word for word, as one line of its own');if(text.includes('\u2014'))errors.push('Use the configured plain writing style');if(context.contribution&&(!text.includes(context.contribution.content)||!text.includes(context.contribution.link)))errors.push('Include the complete checked contribution and its usable link');if(voice){const checked=checkVoice(text,voice);if(checked.configured&&!checked.passed)errors.push('Configured voice check failed: '+checked.hits.map(h=>h.value).join(', '));}if(savedToday.some(n=>n.content.trim()===text.trim()))errors.push('The same note was already saved today; do not repeat it');}return errors;};
  // The Charm Challenge line is the person's own count, written by the add-on and checked word for word
  // by the gate above. Without this the plain-words check, with a real model, failed every brief while a
  // challenge ran, calling the line unexplained jargon (walk-through, 26 October 2026).
@@ -113,7 +116,7 @@ async function runBriefing(job,{store,query,provider}){
    // A model check that still fails names no sentence, and a note repeated word for word has none to
    // cut: those stop the job as they always did. What is left is a refusal of the code checks, and
    // each of those names the sentence or line that carries it (issue #117).
-   if([facts,reader].some(r=>r.verdict.passed!==true)||code.some(e=>/already saved/.test(e)))throw Error('Briefing check failed after one rewrite: '+feedback.join('; '));
+   if([facts,reader].some(r=>r.verdict.passed!==true)||code.some(e=>/already saved today/.test(e)))throw Error('Briefing check failed after one rewrite: '+feedback.join('; '));
    check=facts.receipt;deliveryCheck=reader.receipt;
    const required=[context.cycle_heads_up,context.charm_line].filter(Boolean),c=context.contribution;
    const protectedLines=[...required,...(c?[...c.content.split(/\r?\n/),c.link]:[])];
@@ -135,7 +138,7 @@ async function runBriefing(job,{store,query,provider}){
  }
  const finalErrors=fallback?[]:codeGate(draft);if(finalErrors.length)throw Error('Final exact briefing check failed: '+finalErrors.join('; '));
  if(job.rehearsal){checkCurrentSources();return {verified:true,silent:true,rehearsal:true,source_hash:hash(context),draft_hash:hash(draft),verification_ids:[check.id,deliveryCheck.id],...(fallback?{fallback:true}:{}),...(cutReceipt&&!fallback?{cut:true}:{}),...(leftOut.length?{left_out:leftOut.map(o=>o.name)}:{})};}
- const key='brief-'+hash(draft);if(store.get('notifications',key))return {verified:true,silent:true};
+ const key='brief-'+hash([today,draft]);if(store.get('notifications',key))return {verified:true,silent:true};
  const note=store.prepare('notes',{title:'Your morning briefing',content:draft,source_app:'morning-brief',verification_id:check.id,delivery_verification_id:deliveryCheck.id,...(cutReceipt?{cut_receipt_id:cutReceipt.id}:{}),...(fallback?{fallback:true}:{}),sources:context.source_receipts.map(s=>s.id),evidence:context});
  await store.waitForWriter();
  let suppressed=false;await store.withLockAsync(()=>{if(store.get('notifications',key)){suppressed=true;return;}checkCurrentSources();const findings=context.watch_findings.filter(f=>draft.includes(f.what)&&draft.includes(f.link)).map(f=>store.get('watch_findings',f.id)).filter(f=>f?.status==='pending'),entry=context.contribution?store.get('lead_entries',context.contribution.id):null;if(entry&&(entry._hash!==contribution._hash||entry.status!=='ready'||!visibleRows(query,'notes').some(n=>n.id===entry.note_id&&n.content===entry.content)))throw Error('The contribution changed during briefing checks; preserve it and retry later');store.commit([note,...(fallback?[store.prepare('work_items',{id:'repair-brief-fallback-'+hash([job.id,fallback.day]),kind:'repair',title:'Repair the morning briefing of '+fallback.day+': only the short fallback went out',state:'needs_review',job_id:job.id,note_id:note.id,refusals:fallback.refusals,cut:fallback.cut,draft_hash:fallback.draft_hash,error:fallback.refusals.join('; '),check:'The next morning briefing is written in full',allowed_action:'inspect-and-retry',dependencies:[],max_attempts:3})]:[]),store.prepare('notifications',{id:key,record_id:note.id,verification_id:check.id,status:'ready'}),...findings.map(f=>store.prepare('watch_findings',{status:'shown',shown_at:new Date().toISOString(),channel:'brief',delivery_note_id:note.id},f)),...(entry?[store.prepare('lead_entries',{status:'queued',brief_queued_at:new Date().toISOString(),delivery_note_id:note.id},entry)]:[])]);});

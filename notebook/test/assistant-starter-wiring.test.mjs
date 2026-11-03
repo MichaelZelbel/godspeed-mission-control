@@ -1,4 +1,4 @@
-import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import path from 'node:path';import os from 'node:os';import {fileURLToPath} from 'node:url';import {execFileSync} from 'node:child_process';import {installStarter} from '../core/starter-workspace.mjs';
+import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import path from 'node:path';import os from 'node:os';import {fileURLToPath} from 'node:url';import {execFileSync} from 'node:child_process';import {Store} from '../core/records/store.mjs';import {installStarter} from '../core/starter-workspace.mjs';
 test('original Godspeed skills and commands reach the integrated notebook in developer assistants',()=>{
   const base=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-wiring-')),root=path.join(base,'workspace'),home=path.join(base,'assistant');installStarter(root);
   const script=fileURLToPath(new URL('../scripts/wire-assistant.mjs',import.meta.url));
@@ -9,6 +9,11 @@ test('original Godspeed skills and commands reach the integrated notebook in dev
   assert.equal(local().GODSPEED_NOTEBOOK_URL,'http://127.0.0.1:41987/mcp');
   for(const alias of ['.claude','.agents'])assert.equal(fs.realpathSync(path.join(root,alias,'skills')),fs.realpathSync(path.join(root,'skills')));
   for(const command of ['mc-search','mc-check-brief','mc-decide','mc-goals','mc-work-run','mc-compile-rules'])assert.ok(fs.existsSync(path.join(home,'bin',command+(process.platform==='win32'?'.cmd':''))),command);
+  // The chat's "today's brief" runs this command (#193): it prints the saved briefing of today, unchanged.
+  const store=new Store(root);store.save('settings',{id:'installation',timezone:'UTC'});
+  store.save('notes',{title:'Your morning briefing',content:'Saved briefing, made up.',source_app:'morning-brief'});
+  const brief=path.join(home,'bin','godspeed-brief'+(process.platform==='win32'?'.cmd':''));
+  assert.equal(execFileSync(brief,[],{encoding:'utf8',shell:process.platform==='win32',windowsHide:true,env:{...process.env,GODSPEED_WORKSPACE:'',GODSPEED_ROOT:''}}),'Saved briefing, made up.\n');
   const ignored=fs.readFileSync(path.join(root,'.gitignore'),'utf8');
   wire(41988);
   assert.equal(fs.readFileSync(path.join(root,'.mcp.json'),'utf8'),shared,'another port leaves the shared file as it was');

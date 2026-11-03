@@ -151,12 +151,25 @@ test('asked for in the chat with none saved, the briefing is saved once, and ask
  assert.equal(again.text,first.text);assert.equal(briefNotes(root).length,1);assert.equal(writes,1);
 });
 
-test('a briefing saved on an earlier day is not today\'s',async t=>{
+test('a briefing saved on an earlier day is not today\'s, and the same words may open the next day',async t=>{
  const {root}=workspace(t);
  const provider=async input=>verifies(input)||OK;
- await runMorningBrief({root,provider});
+ const first=await runMorningBrief({root,provider});
  const tomorrow=new Date(Date.now()+2*86400000);
- await assert.rejects(todaysMorningBrief({root,provider,now:tomorrow}),/already saved/,'the briefing ran again rather than print yesterday\'s');
+ const next=await todaysMorningBrief({root,provider,now:tomorrow});
+ assert.equal(next.text,first.text);assert.equal(briefNotes(root).length,2,'two notes, one for each day');
+});
+
+test('overlapping chat requests save one briefing and every one of them gets its words',async t=>{
+ for(const distinct of [false,true]){
+  const {root}=workspace(t);let writes=0;
+  const provider=async input=>{const checked=verifies(input);if(checked)return checked;await new Promise(r=>setTimeout(r,40));return distinct?OK+' Draft '+(++writes)+'.':(writes++,OK);};
+  const asked=await Promise.all([1,2,3].map(()=>todaysMorningBrief({root,provider})));
+  assert.equal(briefNotes(root).length,1,distinct?'different drafts':'equal drafts');
+  assert.equal(writes,1);
+  for(const a of asked)assert.equal(a.text,asked[0].text);
+  assert.ok(asked[0].text);
+ }
 });
 
 test('the recipe names the command first and keeps hand-writing only as the fallback without it',()=>{
