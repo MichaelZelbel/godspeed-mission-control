@@ -58,6 +58,7 @@ import {installFoodTable,foodTableWanted} from '../core/food-table.mjs';
 import {repairTimelineAtStart} from '../core/due-copy.mjs';
 import {IdentityShelf} from '../core/identity-shelf.mjs';
 import {VERSION} from '../core/version.mjs';
+import {recordRunningNotebook} from '../core/running-notebook.mjs';
 
 // A backup AI is another service than the main AI, in Settings and in /backupai alike: when one
 // service fails, its other models and keys usually fail with it, and Hermes counts the same service
@@ -111,6 +112,8 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   if(!provider&&fs.existsSync(providerPath))provider=guarded(modelProvider(JSON.parse(fs.readFileSync(providerPath,'utf8'))));
   provider ||= guarded(modelProvider({url:process.env.GODSPEED_MODEL_URL,key:process.env.GODSPEED_MODEL_KEY,model:process.env.GODSPEED_MODEL}));
   const assistantPath=process.env.GODSPEED_ASSISTANT_CONFIG||path.join(store.state,'assistant.json');
+  // Where this notebook really runs from, for the tools (core/running-notebook.mjs): Windows only.
+  try{recordRunningNotebook({root:store.root,assistantConfig:process.env.GODSPEED_ASSISTANT_CONFIG});}catch(error){console.error('Godspeed Mission Control: could not record where the notebook runs:',error.message);}
   if(!provider&&fs.existsSync(assistantPath)){const descriptor=JSON.parse(fs.readFileSync(assistantPath,'utf8').replace(/^\uFEFF/,''));if(descriptor.verified)provider=hermesProvider({executable:descriptor.executable,home:descriptor.home,cwd:store.root,sourceRoot:descriptor.sourceRoot});}
   // What the supervisor reads as "alive" (supervisor-health.mjs): an AI call
   // beats while it is inside its own time limit, plus a minute to be stopped.
