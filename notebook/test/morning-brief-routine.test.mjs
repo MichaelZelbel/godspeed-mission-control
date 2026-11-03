@@ -97,6 +97,11 @@ test('with the original assistant the routine\'s entry reads the goal cards, and
  seen=null;process.env.GODSPEED_CHARM_NOW='2026-10-22T08:00:00Z';process.env.GODSPEED_NOW='2026-10-22T08:00:00Z';
  await runMorningBrief({root,provider:async input=>{const v=verifies(input);if(v)return v;seen=input.context;return OK+' Fictional second day.';},env:{GODSPEED_ASSISTANT_CONFIG:config}});
  assert.deepEqual(seen.goals,[],'no goal records were kept, only the card');
+ // With the original assistant but none connected, the server would not start; the briefing
+ // refuses in one sentence rather than write without the cards.
+ fs.writeFileSync(config,JSON.stringify({verified:false,home:path.join(root,'.hermes')}));
+ await assert.rejects(runMorningBrief({root,provider,env}),/cannot read your goals and work: the assistant this notebook runs with is not connected/);
+ await assert.rejects(runMorningBrief({root,provider,env:{...env,GODSPEED_ASSISTANT_CONFIG:path.join(root,'none.json')}}),/not connected/);
 });
 
 // The routine's own script, as Hermes runs it: its Python, and the entry above replaced by a stand-in.
