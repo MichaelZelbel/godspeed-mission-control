@@ -172,3 +172,7 @@ the server image the commit's own `v2-sha-<commit>`, or the newest first-parent 
 when CI built none for it), written with the commit's files into a folder the jobs read as
 `file://`. Main's own `stage.json` is never read by a night, because it names whatever version was
 frozen last. Its cases are in `test-scenarios.sh`.
+
+Only the stage's own ref is read from that folder. A scenario that first installs an older version
+(`BEFORE_THE_MOVE`, `WITH_THE_VIDEO_SKILLS`) reads it from GitHub, as it always has
+(`install_the_line_of_into` in `scenario-lib.sh`).

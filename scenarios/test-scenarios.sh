@@ -2237,6 +2237,26 @@ if [ "$SFR_CODE" != 0 ]; then ok "no image within reach fails"; else bad "no ima
 bash "$SFR" '' notacommit "$TMP/sfr-night4" >/dev/null 2>&1
 if [ $? = 2 ]; then ok "a commit that is not one prints the usage (exit 2)"; else bad "a bad commit was not refused with exit 2"; fi
 
+# install_the_line_of_into: the stage's own ref is read from the stage's address (a folder on a
+# night), any other version from GitHub, because the folder holds only this commit and beta.
+mkdir -p "$TMP/sfr-bin"
+cat >"$TMP/sfr-bin/curl" <<'STUB'
+#!/bin/sh
+for a in "$@"; do case $a in *install-godspeed.sh) echo "$a" >>"$SFR_ASKED" ;; esac; done
+echo true
+STUB
+chmod +x "$TMP/sfr-bin/curl"
+: >"$TMP/sfr-asked"
+PATH="$TMP/sfr-bin:$PATH" SFR_ASKED=$TMP/sfr-asked SCENARIO=sfr-test GODSPEED_SCENARIO_RAW=file:///the/folder bash -c '
+  . "$1/scenarios/scenario-lib.sh"; STAGE_REF=this-commit
+  install_the_line_of_into this-commit /r1 47831 /dev/null
+  install_the_line_of_into candidate/2.0.0-beta.11 /r2 47832 /dev/null' _ "$ROOT" >/dev/null 2>&1
+if [ "$(cat "$TMP/sfr-asked")" = "$(printf 'file:///the/folder/this-commit/install-godspeed.sh\n%s/candidate/2.0.0-beta.11/install-godspeed.sh' "$GH_RAW_ADDR")" ]; then
+  ok "another version's line reads GitHub, the stage's own line reads the stage's address"
+else
+  bad "install_the_line_of_into read: $(cat "$TMP/sfr-asked")"
+fi
+
 # ================================================================ the night's report
 # report-night.mjs opens, comments on and closes the issues of a failed night; its own tests stand a
 # fake GitHub in for the real one.
