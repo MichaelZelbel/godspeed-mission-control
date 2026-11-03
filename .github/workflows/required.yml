@@ -30,6 +30,8 @@ permissions:
   actions: read
   pull-requests: read
   statuses: read
+  # the pull request's conversation comments, where Archon publishes its review verdict
+  issues: read
 jobs:
   suite:
     name: suite
@@ -81,6 +83,7 @@ jobs:
         run: |
           node .github/guide-check.mjs --self-test
           node .github/workflows/required-gate.mjs --self-test
+          node .github/workflows/required-on-verdict.mjs --self-test
       - name: Install, upgrade and recover
         run: bash notebook/test/native-install-linux.sh
   required:
