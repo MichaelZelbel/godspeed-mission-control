@@ -479,11 +479,14 @@ check() { # <evidence folder>
   [ "$(events_in "$folder/shelf-after-start.txt" | head -n 1)" = "$start" ] ||
     fail "the start the card holds is dated $(events_in "$folder/shelf-after-start.txt" | head -n 1), and the challenge was started on $start"
 
-  # 2. A vent is answered with the work and then the one question, at the end of the reply.
+  # 2. A vent is answered with the work and then the one question, at the end of the reply. The
+  # add-on's own words end the question with a full stop ("That sounded like a slip. Back to 21?
+  # Yes / No.", lib/texts.mjs), and a reply that quotes them word for word is the right one; on
+  # candidate/2.0.0-beta.15 it was failed for that full stop.
   local tail_of
   tail_of=$(tr -d '\r' <"$folder/vent-reply.txt" | sed -e :a -e '/^[[:space:]]*$/{$d;N;ba' -e '}' | tail -n 1)
   case $tail_of in
-    *"$QUESTION") ;;
+    *"$QUESTION" | *"$QUESTION.") ;;
     *) fail "the reply to a vent ends \"$(printf '%s' "$tail_of" | tail -c 60)\", and a slip Godspeed sees ends with \"$QUESTION\"" ;;
   esac
 

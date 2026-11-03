@@ -488,8 +488,13 @@ jobs:
         shell: pwsh
         run: |
           $a = @('${{ inputs.stage }}'); if ('${{ matrix.mode }}' -eq 'held') { $a += 'held' }
-          & pwsh -NoProfile -File scenarios/windows-old-names-move.ps1 @a | Tee-Object "$env:RUNNER_TEMP/verdict"
-          exit $LASTEXITCODE
+          # Its output goes to files, not to this step's pipe: a program the install leaves running
+          # would otherwise hold that pipe open, and the step never ended (2 November 2026, held).
+          $p = Start-Process pwsh -ArgumentList (@('-NoProfile', '-File', 'scenarios/windows-old-names-move.ps1') + $a) -NoNewWindow -PassThru `
+            -RedirectStandardOutput "$env:RUNNER_TEMP/verdict" -RedirectStandardError "$env:RUNNER_TEMP/scenario-steps.log"
+          $p.WaitForExit()
+          Get-Content "$env:RUNNER_TEMP/scenario-steps.log", "$env:RUNNER_TEMP/verdict" -ErrorAction SilentlyContinue
+          exit $p.ExitCode
       - uses: actions/upload-artifact@v4
         if: always()
         with:
