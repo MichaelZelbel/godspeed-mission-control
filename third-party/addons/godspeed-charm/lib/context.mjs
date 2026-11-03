@@ -33,7 +33,13 @@ const SLIP =
   'A slip is venting at the assistant instead of saying what to fix: insults, sarcasm, contempt, "why do you give me this garbage?", ' +
   "or arguing about the mistake instead of asking for the correction. A firm correction is not a slip " +
   '("The deadline is wrong. Check the client\'s message and fix the draft.").';
-const ONLY_AI = "Only how they talk to you or to another AI they mention counts; never ask about anger at people, traffic or the weather.";
+// Venting at another AI counts the same as venting at this one (the book's challenge is about how they
+// talk to AI). On candidate/2.0.0-beta.15 a model asked "Was that message directed at me, or were you
+// telling me about venting at a different AI?" instead of the one question, and the slip was never
+// asked about: that question is never needed, so the block says so.
+const ONLY_AI =
+  "Only how they talk to you or to another AI they mention counts, and both count the same, so never ask which AI they meant " +
+  "or whether it was meant for you: ask the one question below or nothing. Never ask about anger at people, traffic or the weather.";
 const KIND = "At most once per message. Never lecture, and never refuse or delay the work because of a slip.";
 // A refusal's text is for the model, never for the person: only a success is passed on.
 const COMMANDS =

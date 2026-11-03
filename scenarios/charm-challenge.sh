@@ -380,6 +380,14 @@ cards_in() { # <shelf file>
 events_in() { # <shelf file>
   awk -F'\t' '$1=="event"{print $2}' "$1"
 }
+# The kinds of the card's events, sorted, on one line ("asked kept start"). Every start, question,
+# reset, kept answer, finish and stop is one row of the card (the add-on's README, "Files"), so
+# the question asked after a vent is one too; until candidate/2.0.0-beta.15 this scenario counted
+# the rows as if it were not, and failed a card that held exactly what it should. A row whose
+# kind cannot be read counts as "?", so it fails the comparison instead of dropping out of it.
+event_kinds_in() { # <shelf file>
+  awk -F'\t' '$1=="event"{print $3}' "$1" | sed 's/.*"kind":"\([a-z][a-z]*\)".*/\1/;t;s/.*/?/' | sort | tr '\n' ' ' | sed 's/[[:space:]]*$//'
+}
 event_days_in() { # <shelf file>
   events_in "$1" | sort -u | tr '\n' ' ' | sed 's/[[:space:]]*$//'
 }
@@ -497,9 +505,9 @@ check() { # <evidence folder>
     fail "the \"no\" moved the restarts on the card from $(restarts_in "$folder/card-after-start.txt") to $(restarts_in "$folder/card-after-no.txt"), and a \"no\" changes nothing"
   [ "$(longest_run_in "$folder/card-after-no.txt")" = "$(longest_run_in "$folder/card-after-start.txt")" ] ||
     fail "the \"no\" moved the longest run on the card from $(longest_run_in "$folder/card-after-start.txt") to $(longest_run_in "$folder/card-after-no.txt"), and a \"no\" changes nothing"
-  events=$(events_in "$folder/shelf-after-no.txt" | grep -c . || true)
-  [ "$events" = 2 ] ||
-    fail "the card holds $events events after the \"no\", and it should hold the start and the kept answer"
+  events=$(event_kinds_in "$folder/shelf-after-no.txt")
+  [ "$events" = 'asked kept start' ] ||
+    fail "the card holds the events \"$events\" after the \"no\", and it should hold the start, the question and the kept answer"
   [ "$(event_days_in "$folder/shelf-after-no.txt")" = "$start" ] ||
     fail "the events on the card after the \"no\" are dated $(event_days_in "$folder/shelf-after-no.txt"), and all of it happened on $start"
 
@@ -527,9 +535,9 @@ check() { # <evidence folder>
   fi
   [ "$(restarts_in "$folder/card-after-yes.txt")" = 1 ] ||
     fail "the card counts $(restarts_in "$folder/card-after-yes.txt") restarts after the first \"yes\", and it should count 1"
-  events=$(events_in "$folder/shelf-after-yes.txt" | grep -c . || true)
-  [ "$events" = 3 ] ||
-    fail "the card holds $events events after the \"yes\", and it should hold the start, the kept answer and the reset"
+  events=$(event_kinds_in "$folder/shelf-after-yes.txt")
+  [ "$events" = 'asked asked kept reset start' ] ||
+    fail "the card holds the events \"$events\" after the \"yes\", and it should hold the start, the two questions, the kept answer and the reset"
   events_in "$folder/shelf-after-yes.txt" | grep -qx "$reset" ||
     fail "the card holds no event of $reset, the day the owner said yes"
 
@@ -540,9 +548,9 @@ check() { # <evidence folder>
     fail "the reply to \"charm slip\" does not name the new end date, $(all_day_words "$(day_plus "$slip" "$DAYS")"): $(tr '\n' ' ' <"$folder/slip-reply.txt" | cut -c1-160)"
   [ "$(restarts_in "$folder/card-after-slip.txt")" = 2 ] ||
     fail "the card counts $(restarts_in "$folder/card-after-slip.txt") restarts after a \"yes\" on $reset and a \"charm slip\" on $slip, and those are two days, so it should count 2"
-  events=$(events_in "$folder/shelf-after-slip.txt" | grep -c . || true)
-  [ "$events" = 4 ] ||
-    fail "the card holds $events events after the charm slip, and it should hold the start, the kept answer and two resets"
+  events=$(event_kinds_in "$folder/shelf-after-slip.txt")
+  [ "$events" = 'asked asked kept reset reset start' ] ||
+    fail "the card holds the events \"$events\" after the charm slip, and it should hold the start, the two questions, the kept answer and two resets"
   events_in "$folder/shelf-after-slip.txt" | grep -qx "$slip" ||
     fail "the card holds no event of $slip, the day of the charm slip"
 
@@ -550,7 +558,7 @@ check() { # <evidence folder>
   grep -q "$QUESTION" "$folder/chat.txt" ||
     fail "the conversation the notebook kept holds no \"$QUESTION\", so the owner was never asked in the chat they answered in"
 
-  pass "\"start the Charm Challenge\" answered with $DAYS days to go and $(all_day_words "$(day_plus "$start" "$DAYS")") as its end date; on the fourth day the card on the Trackers shelf, the chat and the brief's own line all said day 4 of $DAYS and $((DAYS - 3)) days to go, and the morning brief's note carried \"$line\" word for word; a vent ended with \"$QUESTION\", \"no\" left every number where it was, and \"yes\" on the fourth day and \"charm slip\" the day after started over with a new end date each and 2 restarts, with the four events of it on the card"
+  pass "\"start the Charm Challenge\" answered with $DAYS days to go and $(all_day_words "$(day_plus "$start" "$DAYS")") as its end date; on the fourth day the card on the Trackers shelf, the chat and the brief's own line all said day 4 of $DAYS and $((DAYS - 3)) days to go, and the morning brief's note carried \"$line\" word for word; a vent ended with \"$QUESTION\", \"no\" left every number where it was, and \"yes\" on the fourth day and \"charm slip\" the day after started over with a new end date each and 2 restarts, with the six events of it on the card (the start, two questions, the kept answer and two resets)"
 }
 
 if [ "$CHECK_ONLY" = yes ]; then
