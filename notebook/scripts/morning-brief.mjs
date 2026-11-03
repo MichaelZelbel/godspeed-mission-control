@@ -57,7 +57,14 @@ export function notebookQuery(store,env=process.env){
 }
 
 // The briefing, and the words to deliver: the saved note's, or '' when the briefing stays silent.
-export async function runMorningBrief({root,provider=null,env=process.env,now=new Date()}){
+// The routine and the chat's --today share one turn per installation, so two writers never draft
+// the same day's briefing side by side.
+export async function runMorningBrief({root,provider=null,env=process.env,now=new Date(),waitMs=600000}){
+ const release=await takeTurn(path.join(new Store(root,{device:machineDevice(root).id}).state,'brief-today.lock'),waitMs);
+ try{return await writeMorningBrief({root,provider,env,now});}finally{release();}
+}
+
+async function writeMorningBrief({root,provider,env,now}){
  const store=new Store(root,{device:machineDevice(root).id}),query=notebookQuery(store,env);
  const ai=provider||notebookProvider(store,env);
  if(!ai)throw Error('The morning brief has no AI to write with: connect one in Settings, Your AI.');
@@ -69,8 +76,8 @@ export async function runMorningBrief({root,provider=null,env=process.env,now=ne
 // Asked for in the chat (#193): today's briefing note if the notebook already saved one, else the
 // briefing is run once, so the same words reach the person whether the morning or the chat asked.
 // Today is the person's own day (the installation's time zone). Read-only when a note exists.
-// Requests that overlap take turns (the notebook's state folder holds the turn), and each one
-// reads again after waiting, so all of them get the one note the first saved.
+// Requests that overlap, the morning routine included, take turns (the notebook's state folder holds
+// the turn), and each one reads again after waiting, so all of them get the one note the first saved.
 export async function todaysMorningBrief({root,provider=null,env=process.env,now=new Date(),waitMs=600000}){
  const store=new Store(root,{device:machineDevice(root).id}),zone=store.get('settings','installation')?.timezone||'UTC',today=dayOf(now,zone);
  const savedToday=()=>new QueryService(store).rows('notes').filter(n=>n.source_app==='morning-brief'&&n.created_at&&dayOf(new Date(n.created_at),zone)===today).at(-1);
@@ -78,7 +85,7 @@ export async function todaysMorningBrief({root,provider=null,env=process.env,now
  try{
   const saved=savedToday();
   if(saved)return {result:null,text:String(saved.content||'').trim()};
-  return await runMorningBrief({root,provider,env,now});
+  return await writeMorningBrief({root,provider,env,now});
  }finally{release();}
 }
 

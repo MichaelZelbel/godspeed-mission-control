@@ -172,6 +172,16 @@ test('overlapping chat requests save one briefing and every one of them gets its
  }
 });
 
+test('the morning routine and chat requests at once save one briefing and the chat gets its words',async t=>{
+ for(const distinct of [false,true]){
+  const {root}=workspace(t);let writes=0;
+  const provider=async input=>{const checked=verifies(input);if(checked)return checked;await new Promise(r=>setTimeout(r,40));return distinct?OK+' Draft '+(++writes)+'.':(writes++,OK);};
+  const [routine,chat]=await Promise.all([runMorningBrief({root,provider}),todaysMorningBrief({root,provider})]);
+  assert.equal(briefNotes(root).length,1,distinct?'different drafts':'equal drafts');
+  assert.ok(chat.text);assert.equal(chat.text,routine.text);
+ }
+});
+
 test('the recipe names the command first and keeps hand-writing only as the fallback without it',()=>{
  const recipe=fs.readFileSync(fileURLToPath(new URL('../../starter-godspeed/skills/morning-brief/SKILL.md',import.meta.url)),'utf8');
  const command=recipe.indexOf('godspeed-brief'),fallback=recipe.indexOf('## The fallback'),write=recipe.indexOf('## What to write');
