@@ -56,6 +56,17 @@ test('a new mission control gets the recipe with the notebook\'s others, and not
   assert.equal(fs.readFileSync(path.join(root,'skills','coach-prep','SKILL.md'),'utf8').replaceAll('\r',''),recipe);
 });
 
+test('the recipe reads the live questions first and answers each: found, ruled out, still open',()=>{
+  const section1=recipe.split('## 1. ')[1].split('## 2. ')[0];
+  assert.match(section1,/`coach\/<area>\/questions\/<talk date>\.md`/);
+  assert.match(section1,/what was found/);assert.match(section1,/what was ruled out/);assert.match(section1,/what is still\s+open/);
+  assert.match(recipe,/each live question gets its own entry/);
+  const goalResearch=read('../../starter-godspeed/skills/goal-research/SKILL.md');
+  assert.match(goalResearch,/coach\/<area>\/questions\/<next talk date>\.md/);
+  assert.match(goalResearch,/never as proof/);
+  assert.match(goalResearch,/Open every source tonight/);
+});
+
 // The preparation proves itself (#135, 3 November 2026): for an area with research domains every
 // route is recorded so it can be checked, and a second AI reviews the preparation with its own
 // recipe, coach-prep-review, which ships beside coach-prep and answers only with JSON.

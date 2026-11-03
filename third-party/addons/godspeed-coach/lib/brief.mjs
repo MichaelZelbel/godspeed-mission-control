@@ -12,6 +12,7 @@ import { lastTalk, missedInARow, talkFile, talkDates, readTalk } from "./talks.m
 import { listHabits, stats, verdict, daysWords } from "./habits.mjs";
 import { rhythmWords, listAreas, findArea } from "./areas.mjs";
 import { prepForBrief, prepMissing } from "./prep.mjs";
+import { readQuestions, questionsFile } from "./questions.mjs";
 
 export function queuedQuestions(area, ymd) {
   const f = path.join(area.dir, "questions.md");
@@ -166,6 +167,14 @@ export function brief(mcDir, s, area, ymd, { inChat = false } = {}) {
   if (area.sections.Preparation) L.push("", "## Preparation", area.sections.Preparation);
   // The whole file, its headings one level down so they stay inside this section.
   if (prep) L.push("", `## The prepared talk (${rel(prep.file)})`, prep.text.replace(/^(#{2,5}) /gm, "#$1 "));
+
+  // The live questions written after the last talk (lib/questions.mjs), only when the file exists.
+  const live = readQuestions(questionsFile(area, ymd));
+  if (live && live.items.length) {
+    L.push("", `## Live questions for this talk (${rel(live.file)})`, "What this talk must answer. The nightly research worked on them; the preparation says what was found, ruled out and still open.");
+    for (const q of live.items) L.push(`- ${q.text}${q.why ? ` (open because: ${q.why})` : ""}`);
+    if (area.sources.length) L.push("Sources this area reads first:", ...area.sources.map((x) => `- ${x}`));
+  }
 
   const qs = queuedQuestions(area, ymd);
   L.push("", "## Question queued for this talk");
