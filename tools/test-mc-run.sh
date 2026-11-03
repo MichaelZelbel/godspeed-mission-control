@@ -107,6 +107,16 @@ contains "claude still gets its tools" "$(cat "$L/claude.args")" "[--allowedTool
 [Read]"
 contains "codex still reads standard input" "$(cat "$L/codex.args")" "[--skip-git-repo-check]
 [-]"
+contains "  and may write in the mission control" "$(cat "$L/codex.args")" "[--sandbox]
+[workspace-write]"
+
+# A RUN THAT MUST WRITE NOTHING (--read-only): codex takes no tool list, so it gets the sandbox
+# that writes nothing; the coach's preparation reviewer runs so.
+HOME="$TMP/home" PATH="$B:$PATH" GODSPEED_RUNNER=codex bash "$HERE/mc-run" big --godspeed "$G" --prompt "X" --out "$G/out/codex-ro.txt" --timeout 60 --read-only
+check "a --read-only codex run finished" "$?" "0"
+contains "  in codex's read-only sandbox" "$(cat "$L/codex.args")" "[--sandbox]
+[read-only]"
+missing "  and never the one that writes" "$(cat "$L/codex.args")" "workspace-write"
 check "the answer's last line is the assistant's, not Hermes' waiting line" "$(tail -n 1 "$G/out/hermes.txt")" "RESULT: done"
 
 # A LIST THAT LIMITS THE SHELL BINDS CLAUDE (2026-10-13). --allowedTools only adds approvals to the

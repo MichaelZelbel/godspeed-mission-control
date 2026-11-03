@@ -14,7 +14,7 @@
 #
 # USAGE
 #   mc-run <recipe-name> [--cwd DIR] [--prompt-file FILE | --prompt TEXT] [--timeout SECONDS]
-#           [--out FILE] [--allowed-tools "Bash Read Write"] [--hermes-toolsets web] [--godspeed DIR] [--list]
+#           [--out FILE] [--allowed-tools "Bash Read Write"] [--hermes-toolsets web] [--read-only] [--godspeed DIR] [--list]
 #
 # The prompt it builds is: the recipe's own text, then whatever extra you passed (usually
 # today's date and where to write), then one line saying which folder and which assistant.
@@ -40,11 +40,16 @@
 # notebook tool. The coach's preparation review (mc-coach-prep) runs so, because the reviewer must
 # write nothing. claude and codex ignore it; give claude its --allowed-tools as well.
 #
+# A RUN THAT MUST WRITE NOTHING (--read-only, 3 November 2026) runs codex in its read-only sandbox
+# (`codex exec --sandbox read-only`) instead of workspace-write: codex takes no tool list, so without
+# it the preparation's reviewer could have changed the preparation it was judging before the seal.
+# claude and hermes ignore it; they are held by --allowed-tools and --hermes-toolsets.
+#
 # The exit code is the assistant's own. Nothing in here reads or edits the answer, except that
 # Hermes' waiting lines are taken out of it (see run_hermes).
 set -uo pipefail
 
-SKILL=""; CWD=""; PROMPT_FILE=""; PROMPT_TEXT=""; TIMEOUT=1500; OUT=""; ALLOWED=""; GODSPEED=""; LIST=0; HERMES_TOOLSETS=""
+SKILL=""; CWD=""; PROMPT_FILE=""; PROMPT_TEXT=""; TIMEOUT=1500; OUT=""; ALLOWED=""; GODSPEED=""; LIST=0; HERMES_TOOLSETS=""; READ_ONLY=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --cwd) CWD="$2"; shift 2 ;;
@@ -55,6 +60,7 @@ while [ $# -gt 0 ]; do
     --out) OUT="$2"; shift 2 ;;
     --allowed-tools) ALLOWED="$2"; shift 2 ;;
     --hermes-toolsets) HERMES_TOOLSETS="$2"; shift 2 ;;
+    --read-only) READ_ONLY=1; shift ;;
     --list) LIST=1; shift ;;
     -h|--help) sed -n '2,45p' "$0"; exit 0 ;;
     *) if [ -z "$SKILL" ]; then SKILL="$1"; shift; else echo "mc-run: I do not know the argument $1" >&2; exit 2; fi ;;
@@ -342,8 +348,13 @@ run_hermes() {
 # Codex refuses to work in a folder it has not been told to trust, and says so instead of
 # starting, which is the right way round. `--skip-git-repo-check` is what lets it work on a mission control
 # that is not a git repository, and a mission control is allowed not to be one. `--full-auto` is the retired
-# spelling of the sandbox that may write in the folder it was pointed at.
-run_codex()  { printf '%s' "$PROMPT" | TO codex exec --sandbox workspace-write --skip-git-repo-check -; }
+# spelling of the sandbox that may write in the folder it was pointed at. A --read-only run gets the
+# sandbox that writes nothing at all.
+run_codex()  {
+  local sandbox=workspace-write
+  [ "$READ_ONLY" = 1 ] && sandbox=read-only
+  printf '%s' "$PROMPT" | TO codex exec --sandbox "$sandbox" --skip-git-repo-check -
+}
 
 if [ -n "$OUT" ]; then
   mkdir -p "$(dirname "$OUT")"

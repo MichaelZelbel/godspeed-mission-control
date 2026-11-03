@@ -321,9 +321,10 @@ while IFS=$'\t' read -r AT A TI D TM ZONE F PR <&3; do
       review_prompt "$RPROMPT" "$RMARK" "$A" "$TI" "$D" "$TM" "$ZONE" "$F" "$T.evidence.json" "$DOMS" "$GOALS"
       RSTARTED="$(now_ms)"
       # The reviewer writes nothing: with claude its list has no Edit (so no Write) and no shell,
-      # and mc-run makes it binding; Hermes gets only its web toolset.
+      # and mc-run makes it binding; Hermes gets only its web toolset; codex, which takes no tool
+      # list, runs in its read-only sandbox (--read-only).
       bash "$RUNNER" coach-prep-review --godspeed "$GODSPEED" --cwd "$GODSPEED" --prompt-file "$RPROMPT" --timeout "$REVIEW_TIMEOUT" \
-        --out "$T.review-answer.txt" --allowed-tools "Read Grep Glob WebSearch WebFetch" --hermes-toolsets web < /dev/null > /dev/null 2>&1 || true
+        --out "$T.review-answer.txt" --allowed-tools "Read Grep Glob WebSearch WebFetch" --hermes-toolsets web --read-only < /dev/null > /dev/null 2>&1 || true
       RFINISHED="$(now_ms)"; rm -f "${RPROMPT:?}"
       R="$(coach prep-seal "$A" --date "$D" --evidence "$T.evidence.json" --answer "$T.review-answer.txt" --marker "$RMARK" \
         --started "$RSTARTED" --finished "$RFINISHED" --out "$T.review.json" --issues-out "$ISS" 2>&1)" \

@@ -252,6 +252,7 @@ contains "  and the preparation and the evidence whole" "$(cat "$ST/prompt.2")" 
 contains "  the reviewer may read and search only" "$(cat "$ST/args.2")" "[--tools]
 [Read,Grep,Glob,WebSearch,WebFetch,ToolSearch]"
 case "$(cat "$ST/args.2")" in *Edit*|*Write*|*Bash*) bad "  and has no write tool and no shell";; *) ok "  and has no write tool and no shell";; esac
+contains "  and is asked to be read-only, which holds codex too" "$(grep -n 'coach-prep-review --godspeed' -A1 "$HERE/mc-coach-prep")" "--read-only"
 contains "  the writer's own list is still binding" "$(cat "$ST/args.1")" "[dontAsk]"
 EVF="$P4/2026-11-15.evidence.json"; RVF="$P4/2026-11-15.review.json"
 check "  the coach opens the talk from it" "$("$NODE" "$GODSPEED_COACH_SCRIPT" prep-check work --date 2026-11-15 --godspeed "$G4" | cut -d, -f1)" "ready: coach/work/prep/2026-11-15.md"
