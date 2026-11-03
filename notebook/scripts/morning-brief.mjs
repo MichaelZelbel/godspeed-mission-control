@@ -37,9 +37,22 @@ export function notebookProvider(store,env=process.env){
  return null;
 }
 
+// The notebook server's own query (server/main.mjs): with the original assistant, goals, forecasts
+// and work are the assistant's cards (goals/, forecasts/, work/), and the notebook's own repair items
+// beside them. Until #163 this script read the notebook's goal records instead, so on an install
+// whose goals are cards the briefing found none.
+export function notebookQuery(store,env=process.env){
+ const query=new QueryService(store);
+ if(env.GODSPEED_ORIGINAL_RUNTIME==='on'){
+  const descriptor=readJson(env.GODSPEED_ASSISTANT_CONFIG||path.join(store.state,'assistant.json'));
+  if(descriptor?.verified&&descriptor.home)query.nativeHermesHome=descriptor.home;
+ }
+ return query;
+}
+
 // The briefing, and the words to deliver: the saved note's, or '' when the briefing stays silent.
 export async function runMorningBrief({root,provider=null,env=process.env}){
- const store=new Store(root,{device:machineDevice(root).id}),query=new QueryService(store);
+ const store=new Store(root,{device:machineDevice(root).id}),query=notebookQuery(store,env);
  const ai=provider||notebookProvider(store,env);
  if(!ai)throw Error('The morning brief has no AI to write with: connect one in Settings, Your AI.');
  const result=await briefing({id:'morning-brief',kind:'morning-brief'},{store,query,provider:ai});
