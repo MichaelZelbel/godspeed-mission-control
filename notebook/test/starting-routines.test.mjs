@@ -54,6 +54,16 @@ test('on a computer, every run of a routine that reaches nobody becomes one note
  assert.equal(saveRoutineResults(otherStore,{home:otherHome,jobs:[{id:'chat1',deliver:'origin'}],messenger:true}).length,0);
 });
 
+test('the Morning brief run is no second note: the notebook keeps it as Your morning briefing (#160)',t=>{
+ const root=temporary(t,'results-brief'),home=path.join(root,'.hermes');installStarter(root);
+ const store=new Store(root,{device:'pc'});
+ jobsFile(home,[{id:'brief',name:'Morning brief',deliver:'local',script:'godspeed-morning-brief.py',no_agent:true}]);
+ const jobs=JSON.parse(fs.readFileSync(path.join(home,'cron','jobs.json'),'utf8')).jobs;
+ saveRoutineResults(store,{home,jobs});
+ output(home,'brief','2026-10-09_07-00-00.md',agentRun('Your morning briefing, made up.'));
+ assert.equal(saveRoutineResults(store,{home,jobs}).length,0);
+});
+
 test('an adopted mission control gets no notes from its routines',async t=>{
  const root=temporary(t,'adopted-results'),home=path.join(root,'.hermes');fs.mkdirSync(path.join(root,'rules'),{recursive:true});fs.writeFileSync(path.join(root,'AGENTS.md'),'# Mine\n');fs.writeFileSync(path.join(root,'rules','mine.md'),'Mine.\n');installStarter(root);
  const store=new Store(root,{device:'pc'});store.save('settings',{id:'installation',owner:'pc',timezone:'Europe/Berlin',delivery:'notebook'});

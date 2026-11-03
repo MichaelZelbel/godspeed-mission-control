@@ -232,8 +232,9 @@ export class NativeScheduler{
  // remembers making, and the one the starter recipe itself tells the assistant to make when asked
  // in the chat ("Morning brief", the morning-brief recipe, this mission control's folder); a brief
  // of the owner's under another name or folder stays. Safe to stop anywhere: a script brief that is
- // already there is never made twice (the recipe job is then only removed), and a new one whose
- // delivery or pause could not be set is taken out again, so a paused brief never comes back on.
+ // already there is never made twice; it takes the recipe job's time, delivery and on or off, and
+ // only then does the recipe job go. A new one whose delivery or pause could not be set is taken out
+ // again, so a paused brief never comes back on and the recipe job stays for the next tick.
  async followBrief(){
   const mine=readNotebookRoutines(this.store),root=path.resolve(this.store.root);
   const all=hermesJobs(this.home);
@@ -242,9 +243,19 @@ export class NativeScheduler{
   const moved=[],done=id=>{const after=readNotebookRoutines(this.store);writeNotebookRoutines(this.store,{...after,jobs:after.jobs.filter(e=>e.id!==id)});};
   let existing=all.find(j=>j.script===BRIEF_SCRIPT&&typeof j.workdir==='string'&&path.resolve(j.workdir)===root)?.id||null;
   for(const job of old){
-   if(existing){await this.command(['remove',job.id]);done(job.id);continue;}
    const schedule=job.schedule?.kind==='interval'&&Number.isFinite(job.schedule.minutes)?job.schedule.minutes+'m':(job.schedule?.expr||job.schedule_display);
    if(typeof schedule!=='string'||!schedule.trim())continue;
+   if(existing){
+    // The script brief takes the recipe job's settings, then the recipe job goes.
+    const there=hermesJobs(this.home).find(j=>j.id===existing),when=schedule.trim().replace(/^every\s+/,'');
+    if(there){
+     const theirs=there.schedule?.kind==='interval'&&Number.isFinite(there.schedule.minutes)?there.schedule.minutes+'m':(there.schedule?.expr||there.schedule_display);
+     if(String(theirs||'').trim().replace(/^every\s+/,'')!==when)await this.command(['edit',existing,'--schedule',when]);
+     if(job.deliver&&job.deliver!==there.deliver)await this.command(['edit',existing,'--deliver',job.deliver]);
+     if((job.enabled===false)!==(there.enabled===false))await this.command([job.enabled===false?'pause':'resume',existing]);
+    }
+    await this.command(['remove',job.id]);done(job.id);continue;
+   }
    const id=await this.makeBrief(schedule.trim().replace(/^every\s+/,''),job.name);
    if(!id)continue; // the old one stays until Hermes keeps the new one
    try{

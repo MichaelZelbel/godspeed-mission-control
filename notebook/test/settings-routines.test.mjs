@@ -275,3 +275,13 @@ test('a move of the recipe brief that stopped half-way never leaves two briefs, 
  const left=hermes.jobs().filter(j=>j.name==='Morning brief');
  assert.deepEqual(left.map(j=>[j.id,j.enabled]),[['old-brief',false]],'only the paused recipe brief is left, for the next tick');
 });
+
+test('a script brief already there takes the recipe brief\'s time, delivery and on or off before the recipe brief goes',async t=>{
+ const {store,hermes,scheduler}=await withGoal(t);
+ hermes.write([...hermes.jobs(),
+  {id:'old-brief',name:'Morning brief',schedule:{kind:'cron',expr:'15 6 * * *'},schedule_display:'15 6 * * *',prompt:'Follow the morning-brief recipe for this mission control.',script:null,skill:'morning-brief',no_agent:false,deliver:'telegram',workdir:store.root,enabled:true},
+  {id:'script-brief',name:'Morning brief',schedule:{kind:'cron',expr:'0 9 * * *'},schedule_display:'0 9 * * *',prompt:null,script:BRIEF_SCRIPT,no_agent:true,deliver:'local',workdir:store.root,enabled:false}]);
+ await scheduler.followBrief();
+ const left=hermes.jobs().filter(j=>j.name==='Morning brief');
+ assert.deepEqual(left.map(j=>[j.id,j.schedule.expr,j.deliver,j.enabled]),[['script-brief','15 6 * * *','telegram',true]],'the briefing stays switched on, at its time, where it went');
+});

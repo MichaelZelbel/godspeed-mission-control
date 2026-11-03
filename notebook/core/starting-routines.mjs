@@ -279,6 +279,9 @@ export function saveRoutineResults(store,{home,jobs,messenger=false,now=Date.now
  const before=started?'':JSON.stringify(progress),since=Date.parse(progress.since),saved=[];
  for(const job of jobs){
   if(!job?.id||!/^[A-Za-z0-9_-]+$/.test(job.id)||!reachesNobody(job,{messenger}))continue;
+  // The Morning brief keeps its own note, "Your morning briefing" (scripts/morning-brief.mjs, #160):
+  // what its run printed is that note's text, and a second copy here would show it twice.
+  if(job.script===BRIEF_SCRIPT)continue;
   const folder=path.join(home,'cron','output',job.id);if(!fs.existsSync(folder))continue;
   for(const name of fs.readdirSync(folder).filter(n=>/^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}\.md$/.test(n)).sort()){
    if(progress.jobs[job.id]&&name<=progress.jobs[job.id])continue;
