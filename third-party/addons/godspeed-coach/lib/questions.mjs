@@ -144,16 +144,17 @@ export function dropQuestion(area, ymd, words, at = new Date()) {
   return { file, dropped: gone.text };
 }
 
-// A talk that was answered but never closed: the latest talk before today, however long ago, that has
-// no questions file for its next talk or any later one. Used by the tick, which writes them for the
-// first talk day on or after today. Once written, the file exists and the talk is not seen again.
+// A talk that was answered but never closed: the latest talk before today, however long ago, that was
+// answered (a later talk the person never answered does not hide it) and has no questions file for its
+// next talk or any later one. Used by the tick, which writes them for the first talk day on or after
+// today. Once written, the file exists and the talk is not seen again.
 export function unclosedTalk(area, todayYmd) {
   if (!hasQuestions(area)) return null;
-  const d = talkDates(area).filter((x) => x < todayYmd).at(-1);
-  if (!d) return null;
-  const t = readTalk(area, d);
-  if (!t.answered || t.state === "not-held") return null;
-  const first = nextDateAfter(area, d);
-  if (!first || openQuestionsDate(area, first)) return null;
-  return d;
+  for (const d of talkDates(area).filter((x) => x < todayYmd).reverse()) {
+    const t = readTalk(area, d);
+    if (!t.answered || t.state === "not-held") continue;
+    const first = nextDateAfter(area, d);
+    return !first || openQuestionsDate(area, first) ? null : d;
+  }
+  return null;
 }

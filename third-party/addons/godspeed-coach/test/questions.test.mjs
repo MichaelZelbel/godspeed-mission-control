@@ -134,3 +134,13 @@ test("an answered talk never closed, first seen by the coach after its next talk
   assert.match(all, /broader search for new abs studies/);
   assert.equal(dueTick(mc, S, new Date("2026-11-11T09:00:00Z")).writes.filter((x) => x.kind === "questions").length, 0, "once written, not again");
 });
+
+test("an older answered, unclosed talk is not hidden by a later talk the person never answered", () => {
+  const mc = mission();
+  fs.writeFileSync(path.join(mc, "coach/health/talks/2026-11-08.md"), talk("", "").replace("DATE: 2026-11-01", "DATE: 2026-11-08").replace("OPENED: 2026-11-01", "OPENED: 2026-11-08"));
+  const w = dueTick(mc, S, new Date("2026-11-10T09:00:00Z")).writes.filter((x) => x.kind === "questions");
+  assert.equal(w.length, 1);
+  assert.equal(w[0].ymd, "2026-11-01");
+  writeQuestions(mc, load(mc), "2026-11-01", new Date(), "2026-11-10");
+  assert.equal(dueTick(mc, S, new Date("2026-11-10T10:00:00Z")).writes.filter((x) => x.kind === "questions").length, 0, "once written, not again");
+});
