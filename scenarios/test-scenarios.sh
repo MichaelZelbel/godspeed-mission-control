@@ -1232,12 +1232,14 @@ CHARM_QUESTION='Back to 21? Yes / No'
 charm_date() { # <day> <days later>: "Monday 23 November", as a reply names a day
   date -u -d "$1 + $2 days" +'%A %-d %B'
 }
-charm_shelf() { # <file> <day of each event...>
-  local file=$1 day
+charm_shelf() { # <file> <kind@day of each event...>
+  # Every start, question, reset, kept answer, finish and stop is one row of the card, with its kind
+  # (the add-on's README, Files), so the question asked after a vent is a row too.
+  local file=$1 event
   shift
   printf 'card\tCharm Challenge\tcharm\t{"names":["Charm Challenge"],"cadence":"daily","specialist":"charm"}\n' >"$file"
-  for day in "$@"; do
-    printf 'event\t%s\t{"when":"%s"}\n' "$day" "$day" >>"$file"
+  for event in "$@"; do
+    printf 'event\t%s\t{"kind":"%s","when":"%s"}\n' "${event#*@}" "${event%@*}" "${event#*@}" >>"$file"
   done
 }
 # The card on the Trackers shelf and the chat say the same thing, because the chat relays what the
@@ -1264,13 +1266,13 @@ charm_good() { # <folder>
   printf 'Charm Challenge started. 21 days to go, done on %s.\n' "$first" >"$folder/start-reply.txt"
   charm_stands "$folder" after-start 21 "$first" 0 0
   printf 'Charm Challenge: day 1 of 21, 21 days to go.\n' >"$folder/brief-after-start.txt"
-  charm_shelf "$folder/shelf-after-start.txt" "$CHARM_START"
+  charm_shelf "$folder/shelf-after-start.txt" "start@$CHARM_START"
   printf 'I have corrected the captions file and read it back.\n\nThat sounded like a slip. %s\n' \
     "$CHARM_QUESTION" >"$folder/vent-reply.txt"
   printf 'Fair enough. Still 21 days to go.\n' >"$folder/no-reply.txt"
   charm_stands "$folder" after-no 21 "$first" 0 0
   cp "$folder/brief-after-start.txt" "$folder/brief-after-no.txt"
-  charm_shelf "$folder/shelf-after-no.txt" "$CHARM_START" "$CHARM_START"
+  charm_shelf "$folder/shelf-after-no.txt" "start@$CHARM_START" "asked@$CHARM_START" "kept@$CHARM_START"
   charm_stands "$folder" fourth-day 18 "$first" 3 0
   printf 'Charm Challenge: day 4 of 21, 18 days to go.\n' >"$folder/brief-fourth-day.txt"
   # The morning brief, run the way Settings runs it, and the note it wrote with the line in it.
@@ -1291,11 +1293,13 @@ charm_good() { # <folder>
   printf 'Back to 21. Done on %s. Restarts: 1.\n' "$second" >"$folder/yes-reply.txt"
   charm_stands "$folder" after-yes 21 "$second" 3 1
   printf 'Charm Challenge: day 1 of 21, 21 days to go.\n' >"$folder/brief-after-yes.txt"
-  charm_shelf "$folder/shelf-after-yes.txt" "$CHARM_START" "$CHARM_START" "$CHARM_RESET"
+  charm_shelf "$folder/shelf-after-yes.txt" "start@$CHARM_START" "asked@$CHARM_START" "kept@$CHARM_START" \
+    "asked@$CHARM_RESET" "reset@$CHARM_RESET"
   printf 'Back to 21. Done on %s. Restarts: 2.\n' "$third" >"$folder/slip-reply.txt"
   charm_stands "$folder" after-slip 21 "$third" 3 2
   printf 'Charm Challenge: day 1 of 21, 21 days to go.\n' >"$folder/brief-after-slip.txt"
-  charm_shelf "$folder/shelf-after-slip.txt" "$CHARM_START" "$CHARM_START" "$CHARM_RESET" "$CHARM_SLIP"
+  charm_shelf "$folder/shelf-after-slip.txt" "start@$CHARM_START" "asked@$CHARM_START" "kept@$CHARM_START" \
+    "asked@$CHARM_RESET" "reset@$CHARM_RESET" "reset@$CHARM_SLIP"
   {
     printf 'user\tstart the Charm Challenge\n'
     printf 'assistant\tCharm Challenge started. 21 days to go, done on %s.\n' "$first"
@@ -1406,9 +1410,20 @@ refuses 'a morning brief that said the line twice' charm-challenge "$C/brief-sai
   'times, and the brief carries its one line once'
 
 copy "$C/good" "$C/no-was-a-reset"
-charm_shelf "$C/no-was-a-reset/shelf-after-no.txt" "$CHARM_START" "$CHARM_START" "$CHARM_START"
-refuses 'a "no" that left a third event on the card' charm-challenge "$C/no-was-a-reset" \
-  'should hold the start and the kept answer'
+charm_shelf "$C/no-was-a-reset/shelf-after-no.txt" "start@$CHARM_START" "asked@$CHARM_START" "reset@$CHARM_START"
+refuses 'a "no" that was written as a reset' charm-challenge "$C/no-was-a-reset" \
+  'should hold the start, the question and the kept answer'
+
+copy "$C/good" "$C/no-question-row"
+charm_shelf "$C/no-question-row/shelf-after-no.txt" "start@$CHARM_START" "kept@$CHARM_START"
+refuses 'a "no" with no question on the card before it' charm-challenge "$C/no-question-row" \
+  'should hold the start, the question and the kept answer'
+
+copy "$C/good" "$C/unreadable-row"
+charm_shelf "$C/unreadable-row/shelf-after-slip.txt" "start@$CHARM_START" "asked@$CHARM_START" "kept@$CHARM_START" \
+  "asked@$CHARM_RESET" "reset@$CHARM_RESET" "reset@$CHARM_SLIP" "Weird@$CHARM_SLIP"
+refuses 'a card row whose kind cannot be read' charm-challenge "$C/unreadable-row" \
+  'after the charm slip, and it should hold'
 
 copy "$C/good" "$C/never-counted-down"
 cp "$C/good/card-after-start.txt" "$C/never-counted-down/card-fourth-day.txt"
