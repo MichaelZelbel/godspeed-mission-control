@@ -108,7 +108,9 @@ When `area.md` has `RESEARCH DOMAIN:` lines, the talk opens from this file only 
 which did not write it, has checked it against the pages you read. So:
 
 - Read the source pages themselves (open them), not only search results: only pages you opened
-  count as read, and the routine takes the list of them from the record of your run.
+  in this run count as read, and the routine takes the list of them from the record of your run. A
+  page read in an earlier try, or known from memory, does not count: open again every source you
+  rely on.
 - Cover every research domain and every goal the area serves. A goal with no new study still needs
   adjacent evidence, the competing routes and real leads weighed; "nothing new worth trying" needs
   the same evidence as a recommendation.

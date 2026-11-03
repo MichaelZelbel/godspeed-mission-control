@@ -289,7 +289,7 @@ while IFS=$'\t' read -r AT A TI D TM ZONE F PR <&3; do
     PROMPT="Today is $TODAY. Now: $(now_iso) (UTC). Prepare the $TI talk (area $A) on $D at $TM ($ZONE). Follow the coach-prep recipe for this one talk and write $F.$AGAIN Write no other file, and never run godspeed-coach talk open: the talk opens by itself at its time. Your final answer is one plain sentence."
     if [ -n "$RESEARCH" ]; then
       MARK="$("$NODE" -e 'process.stdout.write("gs-prep-"+require("crypto").randomBytes(12).toString("hex"))')"
-      PROMPT="RUN MARKER: $MARK"$'\n'"$PROMPT This area has research domains ($DOMS) and serves the goals ${GOALS:-it names}: open and read the source pages themselves, and write Routes, Rejected routes and Research coverage as step 4 of the recipe says. Write no .json file: the routine takes the pages you read from the record of this run, and a second AI reviews the preparation before the talk may open from it."
+      PROMPT="RUN MARKER: $MARK"$'\n'"$PROMPT This area has research domains ($DOMS) and serves the goals ${GOALS:-it names}: open and read the source pages themselves in this run (a page read in an earlier try, or known from memory, does not count: open again every source you rely on), and write Routes, Rejected routes and Research coverage as step 4 of the recipe says. Write no .json file: the routine takes the pages you read from the record of this run, and a second AI reviews the preparation before the talk may open from it."
       if [ "$(in_a_row "$A" "$D")" -gt 0 ] && ISSUES="$(last_issues "$A" "$D")" && [ -n "$ISSUES" ]; then
         PROMPT="$PROMPT"$'\n\n'"The last try at this talk failed its review. Resolve each issue with evidence, not new wording:"$'\n'"$ISSUES"
       fi

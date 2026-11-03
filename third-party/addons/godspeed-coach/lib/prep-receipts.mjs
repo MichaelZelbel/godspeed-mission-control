@@ -98,7 +98,8 @@ export function readClaudeRun(file, marker) {
       if (SEARCH_TOOLS.has(call.name)) { searches.push({ tool: call.name, query: String(call.input.query || ""), at }); continue; }
       if (call.name !== READING_TOOLS.claude) continue;
       const code = Number(l.toolUseResult?.code);
-      const failed = c.is_error === true || (Number.isFinite(code) && (code < 200 || code >= 400));
+      // A redirect WebFetch did not follow (3xx) read only the notice of it, not the page.
+      const failed = c.is_error === true || (Number.isFinite(code) && (code < 200 || code >= 300));
       reads.push({ url: String(call.input.url || l.toolUseResult?.url || ""), tool: call.name, call_id: c.tool_use_id, at, text: textOf(c.content), failed });
     }
   }

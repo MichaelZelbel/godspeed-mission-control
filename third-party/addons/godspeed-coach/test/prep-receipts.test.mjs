@@ -50,6 +50,8 @@ function claudeTranscript(home, marker, session = "claude-session-1") {
     use("toolu_err", "WebFetch", { url: "https://example.org/gone", prompt: "read" }, START + 200_000), result("toolu_err", "Request failed with status code 404", START + 201_000, { is_error: true }),
     use("toolu_404", "WebFetch", { url: "https://example.org/missing", prompt: "read" }, START + 210_000),
     { ...result("toolu_404", "Not Found", START + 211_000), toolUseResult: { code: 404 } },
+    use("toolu_302", "WebFetch", { url: "https://doi.org/10.1/x", prompt: "read" }, START + 215_000),
+    { ...result("toolu_302", "REDIRECT DETECTED: the URL redirects to another host.", START + 216_000), toolUseResult: { code: 302 } },
     use("toolu_http", "WebFetch", { url: "http://example.org/plain", prompt: "read" }, START + 220_000), result("toolu_http", "A page over plain http.", START + 221_000),
     use("toolu_late", "WebFetch", { url: "https://example.org/late", prompt: "read" }, END + 60_000), result("toolu_late", "Read after the run ended.", END + 61_000),
     { type: "assistant", sessionId: session, timestamp: at(END - 1000), message: { role: "assistant", content: [{ type: "text", text: "Prepared." }] } },
@@ -103,7 +105,7 @@ test("from a Claude Code transcript, only successful page reads inside the run's
     assert.equal(run.record_sha256, digest(fs.readFileSync(file)));
     assert.deepEqual(run.sources, [{ url: "https://example.org/report", tool: "WebFetch", call_id: "toolu_ok", read_at: at(START + 125_000), text: "The report says freelance rates rose 12 percent in 2026." }]);
     assert.deepEqual(run.searches.map((s) => s.query), ["earning paths 2026"]);
-    assert.equal(run.dropped, 4, "the error, the 404, the plain-http page and the late page are left out");
+    assert.equal(run.dropped, 5, "the error, the 404, the redirect, the plain-http page and the late page are left out");
 });
 
 test("from a Hermes session store, only successful page reads inside the run's time are kept", async () => {
@@ -214,7 +216,7 @@ test("the coach's prep-receipts and prep-seal commands write the candidates and 
   const rundir = path.join(m.root, "routines", "coach-prep", "2026-10-21"), ev = path.join(rundir, "e.json"), rv = path.join(rundir, "r.json"), ans = path.join(rundir, "answer.txt");
   const r1 = coach("prep-receipts", "work", "--date", "2026-10-21", "--marker", marker, "--started", at(START), "--finished", at(END), "--out", ev);
   assert.equal(r1.status, 0, r1.stdout + r1.stderr);
-  assert.match(r1.stdout, /^receipts: claude session writer-session: 1 source page read, 4 readings left out/);
+  assert.match(r1.stdout, /^receipts: claude session writer-session: 1 source page read, 5 readings left out/);
   fs.writeFileSync(ans, JSON.stringify({ verdict: "pass", coverage: ["income", "market", "buffer"].map((id) => ({ id, verdict: "pass", reason: "Supported by the report.", sources: ["https://example.org/report"] })), issues: [] }));
   const r2 = coach("prep-seal", "work", "--date", "2026-10-21", "--evidence", ev, "--answer", ans, "--marker", review, "--started", at(START), "--finished", at(END + 60_000), "--out", rv, "--json");
   assert.equal(r2.status, 0, r2.stdout + r2.stderr);
