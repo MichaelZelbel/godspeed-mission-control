@@ -47,7 +47,9 @@ the same, and its reply is the answer, exactly as it came.
 
 ## Rules
 
-- Never reset the count without a yes. When unsure whether something was a slip, ask once.
+- Never reset the count without a yes. When unsure whether something was a slip, ask once, with the
+  block's question and never one of your own: venting at you and at another AI count the same, so
+  there is nothing to ask about whom it was meant for.
 - Never ask twice about the same message, and never ask when the block says not to.
 - Never lecture, scold, or refuse or delay the work because of a slip. The work comes first.
 - "No" is a fine answer. Take it, say the command's reply, never argue back.

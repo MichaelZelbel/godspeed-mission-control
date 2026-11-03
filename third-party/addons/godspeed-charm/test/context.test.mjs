@@ -29,6 +29,8 @@ test("while running: the day, the end date, the rule and how to record the quest
   assert.match(b, /at most once per message/i);
   assert.match(b, /Never lecture/);
   assert.match(b, /traffic/);
+  // Venting at another AI counts the same, so the one question is asked, never "was that meant for me?".
+  assert.match(b, /both count the same, so never ask which AI they meant or whether it was meant for you: ask the one question below or nothing/);
   assert.ok(b.includes('godspeed-charm asked --conversation "telegram:1" --words "<their words>"'));
   assert.ok(b.includes('godspeed-charm slip --words "<their words>"'));
   assert.match(b, /--language de/);
