@@ -79,7 +79,11 @@ function Read-Lines([string]$Folder, [string]$File) {
 function Test-Moved([string]$Folder, [string[]]$Before, [string]$P) {
   $dirs = Read-Lines $Folder "localappdata-$P.txt"
   foreach ($old in 'Godspeed Mission Control Full Alpha', 'Godspeed Mission Control Full Alpha State') {
-    if ($dirs -contains $old) { return "the old folder $old is still there after the update" }
+    if ($dirs -contains $old) {
+      $left = Join-Path $Folder "old-state-left-$P.txt"
+      $what = if (Test-Path -LiteralPath $left) { ' (it still holds: ' + ((Get-Content -LiteralPath $left | Select-Object -First 5) -join ', ') + ')' } else { '' }
+      return "the old folder $old is still there after the update$what"
+    }
   }
   foreach ($new in 'Godspeed Mission Control', 'Godspeed Mission Control State') {
     if ($dirs -notcontains $new) { return "the folder $new is not there after the update" }
@@ -366,6 +370,22 @@ if ($Held) {
   if (Test-Path -LiteralPath $setupLog) { Remove-Item -LiteralPath $setupLog -Force -ErrorAction SilentlyContinue }
   Invoke-Update 'after'
 }
+# AFTER A MOVE THE OLD STATE NAME GOES A MOMENT LATER, NOT AT ONCE. The setup gives an updater from
+# before 2.0.0-beta.11 (2.0.0-beta.10's own "Update my mission control", the one this runs) a record under
+# the old state name, which it reads to see the new version is in, and a hidden window removes that
+# folder once the updater has ended (kit-bootstrap windows/move-to-new-folders.ps1). The scenario's
+# third run on candidate/2.0.0-beta.15 looked the instant the updater ended and found it still there.
+# So it waits up to two minutes for the old name to go, and keeps what is left there if it never does.
+function Wait-OldStateGone([string]$P, [int]$Seconds) {
+  $end = (Get-Date).AddSeconds($Seconds)
+  while ((Test-Path -LiteralPath $oldState) -and (Get-Date) -lt $end) { Start-Sleep -Seconds 2 }
+  if (Test-Path -LiteralPath $oldState) {
+    $root = (Resolve-Path -LiteralPath $oldState).Path.TrimEnd('\')
+    Set-Content -LiteralPath (Join-Path $Evidence "old-state-left-$P.txt") -Value @(
+      Get-ChildItem -LiteralPath $oldState -Recurse -Force -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName.Substring($root.Length + 1) })
+  }
+}
+Wait-OldStateGone 'after' 120
 Save-State 'after' $newState
 $line = Test-Evidence $Evidence
 Finish $line $(if ($line.StartsWith('PASS')) { 0 } else { 1 })
