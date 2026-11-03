@@ -273,13 +273,35 @@ check() { # <evidence folder>
     fail "the coach's own seal sealed a review that leaves a goal uncovered (visible-abs): $(tr '\n' ' ' <"$folder/seal-a.txt" | cut -c1-200)"
   grep -qi 'not sealed' "$folder/seal-a.txt" ||
     fail "the coach's own seal refused the review of (a) without saying it was not sealed: $(tr '\n' ' ' <"$folder/seal-a.txt" | cut -c1-200)"
+  # The refusal is for the reason (a) is about, and not for some other one: the review the seal made
+  # says fail and leaves exactly visible-abs uncovered, the other two goals covered, and the
+  # preparation records no route for visible-abs. The seal and the gate name the review.
+  [ "$(json_value "$folder/review-a.json" verdict)" = fail ] ||
+    fail "the review beside the preparation of (a) does not say fail, so it is not a review that leaves a goal uncovered"
+  for goal in lower-ldl sleep-better; do
+    "$NODE" -e 'const r=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));const row=(r.coverage||[]).find(x=>x.id===process.argv[2]);process.exit(row&&row.verdict==="pass"?0:1)' "$folder/review-a.json" "$goal" ||
+      fail "the review of (a) does not cover the goal $goal, so more than the one goal visible-abs is uncovered"
+  done
+  "$NODE" -e 'const r=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));const row=(r.coverage||[]).find(x=>x.id==="visible-abs");process.exit(row&&row.verdict!=="pass"?0:1)' "$folder/review-a.json" ||
+    fail "the review of (a) does not leave the goal visible-abs uncovered (it has no failing row for it)"
+  if grep -q '^- Goal: visible-abs$' "$folder/prep-a.md"; then
+    fail "the preparation of (a) records a route for visible-abs, so the goal is not missing from it"
+  fi
+  grep -qi 'review did not pass' "$folder/seal-a.txt" ||
+    fail "the seal refused (a) for another reason than the review not passing: $(tr '\n' ' ' <"$folder/seal-a.txt" | cut -c1-200)"
   grep -q '^not ready' "$folder/check-a.txt" ||
     fail "the installed gate does not refuse the preparation whose review leaves a goal uncovered: $(tr '\n' ' ' <"$folder/check-a.txt" | cut -c1-200)"
+  grep -qi 'review did not pass' "$folder/check-a.txt" ||
+    fail "the installed gate refused the preparation of (a) for another reason than the review not passing: $(tr '\n' ' ' <"$folder/check-a.txt" | cut -c1-200)"
 
   # (a) 2. The brief carries the one sentence, and the talk opened with it, word for word.
   grep -q '^## Not prepared' "$folder/brief-a.txt" ||
     fail "the coach's brief for a talk without a usable preparation has no section \"Not prepared\", so nothing tells the model to say so: $(tr '\n' ' ' <"$folder/brief-a.txt" | cut -c1-200)"
   sentence=$(sed -n 's/.*word for word: "\(The preparation for this talk is not ready: [^"]*\)" Then.*/\1/p' "$folder/brief-a.txt" | head -n 1)
+  case $sentence in
+    *'second check'*) ;;
+    *) fail "the brief's sentence (\"$sentence\") does not name the second check, which is what left the goal uncovered" ;;
+  esac
   [ -n "$sentence" ] ||
     fail "the coach's brief has a section \"Not prepared\" but no sentence \"The preparation for this talk is not ready: ...\" in it"
   folded "$folder/opening-a.txt" | grep -qF -- "$sentence" ||

@@ -2343,7 +2343,7 @@ talk_good() { # <folder>
   } >"$folder/area.md"
   talk_prep "$folder/prep-a.md" "$PREP_A_OPENING" 2
   talk_prep "$folder/prep-b.md" "$PREP_B_OPENING" 3
-  printf '{"verdict":"fail","coverage":[{"id":"visible-abs","verdict":"fail"}]}\n' >"$folder/review-a.json"
+  printf '{"verdict":"fail","coverage":[{"id":"lower-ldl","verdict":"pass"},{"id":"sleep-better","verdict":"pass"},{"id":"visible-abs","verdict":"fail"}]}\n' >"$folder/review-a.json"
   printf '{"verdict":"pass","coverage":[' >"$folder/review-b.json"
   for goal in lower-ldl sleep-better visible-abs; do printf '{"id":"%s","verdict":"pass"},' "$goal" >>"$folder/review-b.json"; done
   printf '{"id":"sleep","verdict":"pass"}]}\n' >>"$folder/review-b.json"
@@ -2380,6 +2380,30 @@ refuses 'a refusal that never says it was not sealed' talk-prep-honest "$T/no-se
 copy "$T/good" "$T/gate-open"
 printf 'ready: coach/health/prep/2026-11-02.md\n' >"$T/gate-open/check-a.txt"
 refuses 'a preparation the gate did not refuse' talk-prep-honest "$T/gate-open" 'does not refuse the preparation'
+
+copy "$T/good" "$T/a-all-covered"
+printf '{"verdict":"pass","coverage":[{"id":"lower-ldl","verdict":"pass"},{"id":"sleep-better","verdict":"pass"},{"id":"visible-abs","verdict":"pass"}]}\n' >"$T/a-all-covered/review-a.json"
+refuses 'a refusal although the review of (a) covered every goal' talk-prep-honest "$T/a-all-covered" 'does not say fail'
+
+copy "$T/good" "$T/a-two-uncovered"
+printf '{"verdict":"fail","coverage":[{"id":"lower-ldl","verdict":"fail"},{"id":"sleep-better","verdict":"pass"},{"id":"visible-abs","verdict":"fail"}]}\n' >"$T/a-two-uncovered/review-a.json"
+refuses 'a review of (a) that leaves two goals uncovered' talk-prep-honest "$T/a-two-uncovered" 'does not cover the goal lower-ldl'
+
+copy "$T/good" "$T/a-other-goal"
+printf '{"verdict":"fail","coverage":[{"id":"lower-ldl","verdict":"pass"},{"id":"sleep-better","verdict":"pass"}]}\n' >"$T/a-other-goal/review-a.json"
+refuses 'a review of (a) with no failing row for visible-abs' talk-prep-honest "$T/a-other-goal" 'visible-abs uncovered'
+
+copy "$T/good" "$T/a-has-route"
+talk_prep "$T/a-has-route/prep-a.md" "$PREP_A_OPENING" 3
+refuses 'a preparation of (a) that records a route for visible-abs' talk-prep-honest "$T/a-has-route" 'is not missing from it'
+
+copy "$T/good" "$T/a-malformed"
+printf 'not sealed: the review could not be read\n' >"$T/a-malformed/seal-a.txt"
+refuses 'a seal that refused (a) for a malformed review' talk-prep-honest "$T/a-malformed" 'for another reason than the review not passing'
+
+copy "$T/good" "$T/a-gate-other"
+printf 'not ready: coach/health/prep/2026-11-02.md: its research evidence or independent review is missing or unreadable\n' >"$T/a-gate-other/check-a.txt"
+refuses 'a gate that refused (a) for another reason' talk-prep-honest "$T/a-gate-other" 'another reason than the review not passing'
 
 copy "$T/good" "$T/no-section"
 printf '# Brief\n\nRecord: x\n' >"$T/no-section/brief-a.txt"
