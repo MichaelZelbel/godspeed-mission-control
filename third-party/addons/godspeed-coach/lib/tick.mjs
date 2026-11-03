@@ -84,7 +84,7 @@ export function dueTick(mcDir, s, now, table = {}) {
     for (const d of notHeldDue(a, now, s.timezone)) writes.push({ kind: "not-held", area: a, ymd: d });
     // A talk that ended without a closing turn still gets its next talk's live questions. Silent.
     const unclosed = unclosedTalk(a, lp.date);
-    if (unclosed) writes.push({ kind: "questions", area: a, ymd: unclosed });
+    if (unclosed) writes.push({ kind: "questions", area: a, ymd: unclosed, from: lp.date });
     const f = followUpDue(a, now, s.timezone);
     if (f) {
       const talk = readTalk(a, f);

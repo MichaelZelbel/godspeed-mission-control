@@ -19,7 +19,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { parseDoc } from "./header.mjs";
 import { localParts, addDays, zonedToUtc, now as clockNow } from "./clock.mjs";
-import { researchEvidenceProblem } from "./prep-evidence.mjs";
+import { researchEvidenceProblem, researchDomains, servedGoals } from "./prep-evidence.mjs";
 import { listAreas, isTalkDay, nextTalkDay } from "./areas.mjs";
 import { talkFile, talkDates, readTalk } from "./talks.mjs";
 
@@ -138,11 +138,72 @@ export function prepDue(mcDir, s, now, hours) {
 
 export const prepPath = rel;
 
+// A refusal reason (prepProblem, researchEvidenceProblem) in everyday words, for the one sentence a
+// talk opens with when its preparation is not ready. Anything not listed falls back to a plain line.
+const domainLabel = (area, id) => {
+  const line = (area?.lists?.["RESEARCH DOMAIN"] || []).find((l) => l.split("|")[0].trim() === id);
+  return (line && line.split("|")[1]?.trim()) || id;
+};
+export function prepWords(reason, area = null) {
+  const r = String(reason || "");
+  const rows = [
+    [/^there is no such file/, () => "none was written"],
+    [/^it is for the .* talk, not/, () => "the one written was for another talk"],
+    [/^its STATE is/, () => "it was not finished"],
+    [/^its sections? .* (is|are) empty/, () => "it has no opening or no talk card"],
+    [/^its PREPARED time is in the future/, () => "its time stamp is wrong"],
+    [/^its research section "(.*)" is empty/, (m) => `it left out its part on ${m[1].toLowerCase()}`],
+    [/^its research domains are invalid/, () => "the research areas of this talk are set up wrongly"],
+    [/missing or unreadable/, () => "the record of what it read, or its second check, is missing"],
+    [/^its research evidence version is unsupported/, () => "its research record is in a format the coach cannot read"],
+    [/belongs to another preparation|changed after review/, () => "it changed after it was checked"],
+    [/^its research scope changed/, () => "the talk's research areas changed after it was written"],
+    [/does not cover the configured domains|omitted or duplicated a research domain/, () => "its research does not cover every area of this talk"],
+    [/^its independent research review did not pass/, () => "the second check did not pass"],
+    [/does not substantiate research domain "(.*)"/, (m) => `the second check did not confirm the research on ${domainLabel(area, m[1])}`],
+    [/did not judge the goal "(.*)"/, () => "the second check left out a goal this talk serves"],
+    [/does not substantiate goal "(.*)"/, () => "the second check did not confirm the research on a goal this talk serves"],
+    [/was not recorded as an independent execution/, () => "its second check was not done independently"],
+    [/no source-page reading receipts|source-page reading receipt is invalid/, () => "it shows no source pages it actually read"],
+    [/execution receipt is incomplete|timestamps are invalid|PREPARED time does not match/, () => "its research record is incomplete or its times do not add up"],
+    [/^its opening was already used/, () => "its opening was already used in another talk"],
+  ];
+  for (const [re, f] of rows) { const m = r.match(re); if (m) return f(m); }
+  return "it did not pass its checks";
+}
+
+// Whether a preparation was due for the brief of <ymd> and is missing, and why in everyday words;
+// null when the brief carries a usable one or the area never prepares. Due means: the area names
+// research domains (the gate needs a preparation), or a preparation file for this talk exists but is
+// refused, or the area's prep folder holds an earlier preparation (a job prepares this area's talks).
+export function prepMissing(area, ymd, now = clockNow()) {
+  if (area.noTalk || !area.rhythm) return null;
+  if (prepForBrief(area, ymd)) return null;
+  const days = [];
+  if (isTalkDay(area, ymd)) days.push(ymd);
+  else {
+    const next = nextTalkDay(area, addDays(ymd, 1));
+    if (next && next <= addDays(ymd, PREP_AHEAD_DAYS)) days.push(next);
+    days.push(ymd, addDays(ymd, -1));
+  }
+  for (const d of days) {
+    const p = readPrep(prepFile(area, d));
+    if (!p) continue;
+    const problem = prepProblem(p, area, now);
+    return prepWords(problem || `its opening was already used in the talk of ${prepUsedOn(area, p, ymd)}`, area);
+  }
+  let earlier = false;
+  try { earlier = fs.readdirSync(prepDir(area)).some((f) => /^\d{4}-\d{2}-\d{2}\.md$/.test(f)); } catch { /* no prep folder */ }
+  if (researchDomains(area).length || earlier) return "none was written";
+  return null;
+}
+
 // One talk's preparation, for the job that prepares talks the day before (in Godspeed Mission
 // Control, mc-coach-prep with the coach-prep recipe) and for a person who asks: which file it is,
 // whether that day is a day of this talk, whether the file can open the talk (ready, or the reason
 // it cannot), and whether it is stale (prepared more than PREP_FRESH_HOURS before the talk). It
-// only reads.
+// only reads. research_domains and goals tell the job whether the talk needs receipts and a review
+// (an area with RESEARCH DOMAIN lines) and what the review must judge.
 export function prepCheck(mcDir, s, area, ymd) {
   const file = prepFile(area, ymd);
   const p = readPrep(file);
@@ -153,5 +214,6 @@ export function prepCheck(mcDir, s, area, ymd) {
     area: area.slug, title: area.title, date: ymd, time: area.time, timezone: s.timezone, file: rel(mcDir, file),
     talk_day: talkDay, ready: !problem, ...(problem ? { problem } : {}),
     stale: !problem && prepStale(p, at), prepared: preparedAt(p)?.toISOString().replace(/\.\d+Z$/, "Z") || "",
+    research_domains: researchDomains(area), goals: servedGoals(area),
   };
 }

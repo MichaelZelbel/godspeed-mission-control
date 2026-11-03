@@ -132,7 +132,7 @@ talk must answer, in `coach/<area>/questions/<next talk date>.md`: a plain list,
 goal, per decision or promise, per correction and per thing the person asked to be looked into, each
 with why it is open. The coach program writes the file from the talk's record; a second close for the
 same next talk updates it and never lists a question twice. A talk that ends without a closing turn
-gets its questions at the next coach tick. Each night until the talk, the nightly goal research
+gets its questions at the next coach tick, however late: they are for the first talk day still to come. Each night until the talk, the nightly goal research
 (`mc-research`) for each goal the area serves reads the file and works on the questions, using the
 area's `SOURCE:` lines first (an expert, a newsletter, a community as a lead only); the preparation
 the day before says for each question what was found, what was ruled out and what is still open. An
@@ -167,10 +167,36 @@ Tests: `npm test`, and `npm run test:hermes` for the Hermes plugin (Python 3).
 
 Areas can require verified preparation by adding repeated `RESEARCH DOMAIN: id | scope` header
 lines to `area.md`. Those preparations need `<date>.evidence.json` and `<date>.review.json`
-beside the Markdown file. The preparation runner collects successful source-page reads from the
-actual execution transcript, then runs a separate reviewer for every configured domain. The
-runtime checks both receipts against the exact preparation and area file hashes before a brief
-or `talk open --from-prep` may use it. Changing the preparation, its evidence, or the area's scope
-invalidates the review. Search snippets alone and the writer's `STATE: ready` cannot pass.
-Areas without research domains retain the earlier preparation behavior. Future preparation
-timestamps are refused for every area, with one minute allowed for clock differences.
+beside the Markdown file, and both are written by the job that prepares the talk, never by the
+model (in Godspeed Mission Control, `mc-coach-prep`, through `lib/prep-receipts.mjs`):
+
+- **Receipts.** Each run's prompt carries a fresh marker (`RUN MARKER: gs-prep-...`). After the run,
+  `godspeed-coach prep-receipts` finds the run's own record by it, Claude Code's transcript
+  (`~/.claude/projects/...`) or Hermes' session store (`state.db`), and writes the evidence: the
+  run's marker, session, the record's sha256, its start and end, and every source page it opened
+  successfully between the two, with the URL, the time, the tool call's id and the text read. Only
+  page reads count: Claude Code's `WebFetch` and Hermes' `web_extract`, listed once as
+  `READING_TOOLS` in `lib/prep-evidence.mjs`. A search snippet is never a reading.
+- **The review step.** A preparation that says `STATE: ready` is then read by a second run that did
+  not write it, with a marker of its own and the `coach-prep-review` recipe: it gets the preparation,
+  the area and the evidence, searches on its own for routes the preparation missed and for contrary
+  findings, and answers only with JSON (`{"verdict","coverage":[{"id","verdict","reason","sources"}],
+  "issues"}`). It cannot write: with Claude Code its tools are Read, Grep, Glob, WebSearch and
+  WebFetch; with Hermes only the `web` toolset. `godspeed-coach prep-seal` seals its answer as the
+  review, with the reviewer's own marker, session and record hash and the hashes of the preparation,
+  the area and the evidence, and checks the pair. Both stay in the run folder until they pass, then
+  go beside the preparation, over any file the model wrote there, so an older preparation that
+  still opens its talk keeps its own proof.
+- **Tries.** A failed review's issues go to the next try, which must resolve each with evidence, not
+  new wording. After three failed tries in a row for one talk, one repair item is filed in the
+  notebook's work list; a try that passes ends the count.
+
+The coach checks both receipts against the exact preparation and area file hashes before a brief
+or `talk open --from-prep` may use it. The review must judge every research domain and every goal
+in the area's `SERVES` line, each with a source page from the evidence; the preparation must fill
+its research sections, "Routes" among them (each route with its source, when it was published and
+read, who was studied, the measured effect, its limits, contrary evidence, its fit, its cost and an
+experiment). Changing the preparation, its evidence, or the area's scope invalidates the review.
+Search snippets alone and the writer's `STATE: ready` cannot pass. Areas without research domains
+retain the earlier preparation behavior. Future preparation timestamps are refused for every area,
+with one minute allowed for clock differences.

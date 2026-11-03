@@ -111,3 +111,90 @@ test("returns None when the command fails, prints nothing, or takes too long", {
     assert.equal(call(k, { script: stub(d, "setTimeout(() => console.log('late'), 5000);"), env: { GODSPEED_CHARM_PLUGIN_TIMEOUT: "0.5" } }), null);
   } finally { fs.rmSync(d, { recursive: true, force: true }); }
 });
+
+// ---- pre_tool_call: the command gets this session's conversation; a turn leaves its marker -------
+const HOOKS = [
+  "import importlib.util, json, sys",
+  "folder, calls = sys.argv[1], json.loads(sys.argv[2])",
+  'spec = importlib.util.spec_from_file_location("charm_plugin", folder + "/__init__.py")',
+  "m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)",
+  "h = {}",
+  "class C:",
+  "    def register_hook(self, n, f): h[n] = f",
+  "m.register(C())",
+  "print(json.dumps([h[n](**k) for n, k in calls]))",
+].join("\n");
+function hooks(calls, { script, env = {}, mc } = {}) {
+  const r = spawnSync(PY, ["-I", "-c", HOOKS, PLUGIN, JSON.stringify(calls)], {
+    encoding: "utf8", timeout: 30000,
+    env: { ...process.env, GODSPEED_NODE: process.execPath, GODSPEED_CHARM_SCRIPT: script, GODSPEED_CHARM_DIR: mc ?? "", GODSPEED_SCHEDULED_RUN: "", GODSPEED_CHARM_PLUGIN_TIMEOUT: "", ...env },
+  });
+  assert.equal(r.status, 0, r.stderr);
+  return JSON.parse(r.stdout.trim().split("\n").pop());
+}
+const tool = (command, session_id = "s1") => ["pre_tool_call", { tool_name: "terminal", args: { command }, session_id, turn_id: "t", task_id: "", tool_call_id: "c" }];
+const turnOf = (platform, session_id) => ["pre_llm_call", { platform, session_id }];
+
+test("pre_tool_call adds the session's conversation to asked, start and answer typed without one", { skip }, () => {
+  const d = tmp();
+  try {
+    const out = hooks([
+      turnOf("telegram", "s1"),
+      tool('godspeed-charm asked --words "why this garbage"'),
+      tool("godspeed-charm answer yes --words yes"),
+      tool('godspeed-charm start --words "start"'),
+      tool("node /x/bin/godspeed-charm.mjs asked --words x"),
+    ], { script: stub(d, ECHO) });
+    assert.equal(out[1].action, "modify");
+    assert.equal(out[1].args.command, 'godspeed-charm asked --conversation "telegram:s1" --words "why this garbage"');
+    assert.equal(out[2].args.command, 'godspeed-charm answer --conversation "telegram:s1" yes --words yes');
+    assert.equal(out[3].args.command, 'godspeed-charm start --conversation "telegram:s1" --words "start"');
+    assert.match(out[4].args.command, /godspeed-charm\.mjs asked --conversation "telegram:s1" --words x/);
+  } finally { fs.rmSync(d, { recursive: true, force: true }); }
+});
+
+test("pre_tool_call leaves an explicit --conversation, other commands and unknown sessions alone", { skip }, () => {
+  const d = tmp();
+  try {
+    const out = hooks([
+      turnOf("telegram", "s1"),
+      tool('godspeed-charm asked --conversation "telegram:other" --words x'),
+      tool("ls -la"),
+      tool("godspeed-charm status"),
+      tool("godspeed-charm asked --words x", "never-seen"),
+      ["pre_tool_call", { tool_name: "web_search", args: { command: "godspeed-charm asked" }, session_id: "s1" }],
+    ], { script: stub(d, ECHO) });
+    for (const i of [1, 2, 3, 4, 5]) assert.equal(out[i], null, `call ${i}`);
+  } finally { fs.rmSync(d, { recursive: true, force: true }); }
+});
+
+test("a cron turn, or a scheduled run, gives its commands no conversation", { skip }, () => {
+  const d = tmp();
+  try {
+    const cron = hooks([turnOf("cron", "k1"), tool("godspeed-charm asked --words x", "k1")], { script: stub(d, ECHO) });
+    assert.equal(cron[1], null);
+    const sched = hooks([turnOf("telegram", "k2"), tool("godspeed-charm asked --words x", "k2")], { script: stub(d, ECHO), env: { GODSPEED_SCHEDULED_RUN: "1" } });
+    assert.equal(sched[1], null);
+    // a session that was telegram and then runs as cron forgets the platform
+    const flip = hooks([turnOf("telegram", "k3"), turnOf("cron", "k3"), tool("godspeed-charm asked --words x", "k3")], { script: stub(d, ECHO) });
+    assert.equal(flip[2], null);
+  } finally { fs.rmSync(d, { recursive: true, force: true }); }
+});
+
+test("a turn through the real command leaves its marker, and a cron turn does not", { skip }, () => {
+  const mc = tmp(), d = tmp();
+  try {
+    fs.writeFileSync(path.join(mc, "AGENTS.md"), "# t\n");
+    fs.mkdirSync(path.join(mc, "notebook")); fs.mkdirSync(path.join(mc, ".godspeed"));
+    fs.mkdirSync(path.join(mc, "routines", "charm"), { recursive: true });
+    fs.writeFileSync(path.join(mc, "routines", "charm", "settings.json"), JSON.stringify({ version: 1, timezone: "Europe/Berlin", language: "en" }) + "\n");
+    const real = path.join(HERE, "..", "bin", "godspeed-charm.mjs");
+    const env = { GODSPEED_CHARM_PLUGIN_TIMEOUT: "20" };
+    hooks([turnOf("telegram", "abc")], { script: real, mc, env });
+    hooks([turnOf("cron", "job1")], { script: real, mc, env });
+    hooks([turnOf("telegram", "sched")], { script: real, mc, env: { ...env, GODSPEED_SCHEDULED_RUN: "1" } });
+    const dir = path.join(mc, ".godspeed", "charm-turns");
+    assert.deepEqual(fs.readdirSync(dir), ["telegram_abc.json"]);
+    assert.equal(JSON.parse(fs.readFileSync(path.join(dir, "telegram_abc.json"), "utf8")).conversation, "telegram:abc");
+  } finally { fs.rmSync(d, { recursive: true, force: true }); fs.rmSync(mc, { recursive: true, force: true }); }
+});

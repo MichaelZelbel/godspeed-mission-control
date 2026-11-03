@@ -15,7 +15,7 @@ import { brief, habitLine } from "../lib/brief.mjs";
 import { gate, NO_WAKE } from "../lib/gate.mjs";
 import { dueTick } from "../lib/tick.mjs";
 import { contextBlock, waitingTalks } from "../lib/context.mjs";
-import { readPrep, prepProblem, prepDue, prepPath, prepCheck } from "../lib/prep.mjs";
+import { readPrep, prepProblem, prepForBrief, prepDue, prepPath, prepCheck, prepFile } from "../lib/prep.mjs";
 import { writeQuestions, readQuestions, questionsFile, openQuestionsDate, addQuestion, dropQuestion, hasQuestions } from "../lib/questions.mjs";
 import { commitCoach, syncInBackground, syncQueued, pullQuietly } from "../lib/sync.mjs";
 import { decodeArgv, readTextFile, restoreShellEnv, startedFromGitBash, gitBashPath, LAUNCHER_ENV, CMDLINE_ENV } from "../lib/argv.mjs";
@@ -23,7 +23,7 @@ import { decodeArgv, readTextFile, restoreShellEnv, startedFromGitBash, gitBashP
 const FLAGS = new Set(["json", "yes", "no-hermes", "no-claude", "all", "scheduled", "remove", "shown"]);
 // The values that name a file or folder. From Git Bash these are turned into Windows paths;
 // the person's words never are (lib/argv.mjs).
-const PATH_FLAGS = ["godspeed", "words-file", "opening-file", "prepared-file", "from-prep", "extra-skills-dir", "daily-table"];
+const PATH_FLAGS = ["godspeed", "out", "evidence", "answer", "issues-out", "words-file", "opening-file", "prepared-file", "from-prep", "extra-skills-dir", "daily-table"];
 // Free text that may run over several lines, and the flag that takes it from a file instead.
 const TEXT_FILES = [["words-file", "words"], ["opening-file", "opening"], ["prepared-file", "prepared"]];
 // A flag given more than once keeps its last value in f, as always, and every value in all: "talk
@@ -214,6 +214,47 @@ const commands = {
     out(r.ready ? `ready: ${r.file}, ${when}${r.stale ? ", stale: more than 48 hours before the talk" : ""}${day}` : `not ready: ${r.file}: ${r.problem}${day}`, r);
     if (!r.ready) process.exitCode = 1;
   },
+  // THE RECEIPTS OF A PREPARATION RUN (lib/prep-receipts.mjs), for the job that prepares talks
+  // (mc-coach-prep): after the run, the pages it read are taken from its own record (Claude Code's
+  // transcript or Hermes' session store, found by --marker) and written to --out as the evidence.
+  // Exit 1, with the reason, when no record holds the marker or the run read no page.
+  async "prep-receipts"() {
+    const a = needArea(pos[0]);
+    const d = dateArg(f.date);
+    if (!f.marker || !f.started || !f.finished || !f.out) die("godspeed-coach prep-receipts <area> --date <talk day> --marker <run marker> --started <time> --finished <time> --out <file> [--json]");
+    const { captureRun, writeEvidence } = await import("../lib/prep-receipts.mjs");
+    const run = await captureRun({ marker: f.marker, startedMs: Date.parse(f.started), finishedMs: Date.parse(f.finished) });
+    if (run.problem) { out(`no receipts: ${run.problem}`, { ok: false, problem: run.problem }); process.exitCode = 1; return; }
+    const file = prepFile(a, d);
+    if (!fs.existsSync(file)) { out(`no receipts: there is no ${prepPath(mcDir, file)}`, { ok: false, problem: "there is no preparation" }); process.exitCode = 1; return; }
+    const ev = writeEvidence({ prepFile: file, area: a, run: { ...run, marker: f.marker }, out: path.resolve(f.out) });
+    const n = ev.sources.length;
+    const said = `${run.assistant} session ${run.session_id}: ${n} source page${n === 1 ? "" : "s"} read${run.dropped ? `, ${run.dropped} reading${run.dropped === 1 ? "" : "s"} left out (failed, empty or outside the run's time)` : ""}`;
+    out(n ? `receipts: ${said}` : `no receipts: ${said}`, { ok: n > 0, assistant: run.assistant, session_id: run.session_id, sources: n, dropped: run.dropped, ...(n ? {} : { problem: "the run opened no source page successfully" }) });
+    if (!n) process.exitCode = 1;
+  },
+  // THE SEAL OF THE SEPARATE REVIEW: the reviewer's answer (--answer, its JSON) and its own run's
+  // record (--marker) become the review in --out, bound to the preparation, the area and --evidence;
+  // then the coach's gate checks the pair. Exit 0 when it opens the talk; 1 with the reason, and the
+  // issues for the next try in --issues-out, when it does not.
+  async "prep-seal"() {
+    const a = needArea(pos[0]);
+    const d = dateArg(f.date);
+    if (!f.marker || !f.started || !f.finished || !f.out || !f.evidence || !f.answer) die("godspeed-coach prep-seal <area> --date <talk day> --evidence <file> --answer <reviewer's answer> --marker <review marker> --started <time> --finished <time> --out <file> [--issues-out <file>] [--json]");
+    const { captureRun, sealReview } = await import("../lib/prep-receipts.mjs");
+    const fail = (problem, issues) => {
+      if (f["issues-out"]) fs.writeFileSync(path.resolve(f["issues-out"]), issues.map((x) => `- ${x}\n`).join(""));
+      out(`not sealed: ${problem}`, { ok: false, problem, issues }); process.exitCode = 1;
+    };
+    const run = await captureRun({ marker: f.marker, startedMs: Date.parse(f.started), finishedMs: Date.parse(f.finished) });
+    if (run.problem) return fail(`the review run: ${run.problem}`, ["The review could not be checked: " + run.problem]);
+    let answer = "";
+    try { answer = fs.readFileSync(path.resolve(f.answer), "utf8"); } catch { /* none */ }
+    const r = sealReview({ prepFile: prepFile(a, d), area: a, evidenceFile: path.resolve(f.evidence), answer, out: path.resolve(f.out),
+      reviewer: { ...run, marker: f.marker }, reviewedAt: run.finished_at, now: at });
+    if (r.problem) return fail(r.problem, r.issues);
+    out(`sealed: the review passed, ${r.review.coverage.length} domains and goals judged`, { ok: true, coverage: r.review.coverage.length });
+  },
   gate() {
     pullQuietly(mcDir, syncMode);
     const g = gate(mcDir, s, at, path.join(appHome(), "state.json"));
@@ -246,6 +287,28 @@ const commands = {
       if (r.created && t.prep) return out(`Opened: ${where}. The opening, to send exactly as it is:\n\n${t.opening}`, { ok: true, created: true, file: r.file, opening: t.opening });
       return out(r.created ? `Opened: ${where}` : `Already open: ${where} (kept the first opening)`, { ok: true, created: r.created, file: r.file });
     }
+    if (sub === "evidence") {
+      // What the preparation behind a talk shows (routes, sources read, the second check), so "what did
+      // you actually research?" is answered from it. Read only.
+      const ds = talkDates(a);
+      const d = f.date ? dateArg(f.date) : ([...ds].reverse().find((x) => readTalk(a, x).state === "opened") || today);
+      const t = ds.includes(d) ? readTalk(a, d) : null;
+      const found = t ? null : prepForBrief(a, d);
+      const p = t ? (t.prep ? readPrep(path.resolve(mcDir, t.prep)) : null) : (found ? readPrep(found.file) : null);
+      if (!p) return out(`There is no preparation to show for the ${a.title} talk of ${d}: do not claim any research for it.`, { ok: true, prep: null });
+      const lines = [`Preparation: ${prepPath(mcDir, p.file)}`, `Prepared: ${p.head.PREPARED || "no time recorded"}`];
+      const sec = (n) => { const k = Object.keys(p.sections).find((x) => x.toLowerCase() === n.toLowerCase()); return k ? String(p.sections[k]).trim() : ""; };
+      const shown = {};
+      for (const n of ["Routes", "Rejected routes", "Opportunities", "Research coverage", "Cut, and why"]) if (sec(n)) { lines.push("", `${n}:`, sec(n)); shown[n] = sec(n); }
+      let review = null, sources = [];
+      const base = p.file.replace(/\.md$/i, "");
+      try { review = JSON.parse(fs.readFileSync(`${base}.review.json`, "utf8")); } catch { /* none */ }
+      try { sources = JSON.parse(fs.readFileSync(`${base}.evidence.json`, "utf8")).sources || []; } catch { /* none */ }
+      lines.push("", review ? `Second check: ${review.verdict}, ${review.reviewed_at || "no time recorded"}` : "Second check: none recorded");
+      if (sources.length) { lines.push("Sources read:"); for (const x of sources) lines.push(`- ${x.url} (read ${x.read_at || "at no recorded time"}${x.tool ? `, with ${x.tool}` : ""})`); }
+      else lines.push("No source pages were recorded.");
+      return out(lines.join("\n"), { ok: true, prep: prepPath(mcDir, p.file), prepared: p.head.PREPARED || "", sections: shown, review: review ? { verdict: review.verdict, reviewed_at: review.reviewed_at } : null, sources });
+    }
     if (sub === "said") {
       // One --words per message: where commands show on their screen, the whole talk is saved in
       // one command at its close, each message on a line of its own.
@@ -261,7 +324,7 @@ const commands = {
       const d = f.date ? dateArg(f.date) : (talkDates(a).at(-1) || die(`No ${a.title} talk exists yet.`));
       setTalkState(a, d, sub);
       // Closing a talk writes the next talk's live questions (lib/questions.mjs), for an area that serves a goal.
-      const q = sub === "held" ? writeQuestions(mcDir, a, d, at) : null;
+      const q = sub === "held" ? writeQuestions(mcDir, a, d, at, today) : null;
       saved(`${a.slug} talk ${d} ${sub}`);
       return out(`Recorded: the ${a.title} talk of ${d} is ${sub}.`, { ok: true, date: d, state: sub, ...(q ? { questions: path.relative(mcDir, q.file).replace(/\\/g, "/"), questions_date: q.date } : {}) });
     }
@@ -269,7 +332,7 @@ const commands = {
       const ds = talkDates(a);
       return out(ds.slice(-5).map((d) => `${d}: ${readTalk(a, d).state}`).join("\n") || "No talks yet.", ds.map((d) => ({ date: d, state: readTalk(a, d).state })));
     }
-    die("godspeed-coach talk open|said|held|not-held|state <area>");
+    die("godspeed-coach talk open|said|evidence|held|not-held|state <area>");
   },
   // The live questions of an area's next talk (lib/questions.mjs). The program writes the file when
   // a talk closes; the model refines it only here. With no date: the next talk that has a file, else
@@ -432,7 +495,7 @@ const commands = {
       else if (w.kind === "auto") track(w.habit, w.ymd, "done", "data", w.words);
       else if (w.kind === "follow-up") setFollowUp(w.area, w.ymd, w.at);
       else if (w.kind === "not-held") setTalkState(w.area, w.ymd, "not-held");
-      else if (w.kind === "questions") writeQuestions(mcDir, w.area, w.ymd, at);
+      else if (w.kind === "questions") writeQuestions(mcDir, w.area, w.ymd, at, w.from);
     }
     commitCoach(mcDir, writes.length ? `coach: ${[...new Set(writes.map((w) => w.kind))].join(", ")}` : "coach: pending changes", syncMode);
     if (messages.length) process.stdout.write(messages.join("\n\n") + "\n");

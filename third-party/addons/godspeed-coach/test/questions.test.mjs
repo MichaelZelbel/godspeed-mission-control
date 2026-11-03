@@ -117,3 +117,20 @@ test("SOURCE lines: a new health area starts with some, the person changes them 
   coach(unknown, "area", "add", "gardening", "--rhythm", "weekly sunday");
   assert.deepEqual(readArea(path.join(unknown, "coach", "gardening")).sources, [], "an area of no known kind starts with none");
 });
+
+test("an answered talk never closed, first seen by the coach after its next talk date, still gets questions for the next coming talk, once", () => {
+  const mc = mission();
+  const late = new Date("2026-11-10T09:00:00Z");
+  const t = dueTick(mc, S, late);
+  assert.deepEqual(t.messages, []);
+  const w = t.writes.filter((x) => x.kind === "questions");
+  assert.equal(w.length, 1);
+  assert.equal(w[0].ymd, "2026-11-01");
+  process.env.TEST_NOW = "2026-11-10T09:00:00Z";
+  try { assert.equal(coach(mc, "tick"), ""); } finally { delete process.env.TEST_NOW; }
+  assert.deepEqual(fs.readdirSync(path.join(mc, "coach/health/questions")), ["2026-11-15.md"], "for the talk still to come, not the one that passed");
+  const all = items(mc, "2026-11-15").map((q) => q.text).join("\n");
+  assert.match(all, /creatine 5 g/);
+  assert.match(all, /broader search for new abs studies/);
+  assert.equal(dueTick(mc, S, new Date("2026-11-11T09:00:00Z")).writes.filter((x) => x.kind === "questions").length, 0, "once written, not again");
+});

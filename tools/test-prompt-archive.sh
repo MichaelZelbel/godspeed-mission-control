@@ -1121,14 +1121,20 @@ echo "$S80" | grep -q 'mc-prompt-archive archive' && ! echo "$S80" | grep -q 'go
   || bad "80 the miss named a command readers do not have" "$S80"
 
 # 81 and 82. The reader's own Godspeed assistant on Windows keeps its chats in a Hermes home of its
-#     own, in the setup's state folder: "Godspeed Mission Control State" since 2.0.0-beta.11, and
-#     "... Full Alpha State" on an install made before (81b); and any home an assistant.json names.
-#     All are read without being told.
-H81="$W/home81"; L81="$W/lad81"; HP81="$L81/Godspeed Mission Control State/hermes-profile"
-HP81B="$L81/Godspeed Mission Control Full Alpha State/hermes-profile"
-mkdir -p "$H81/.godspeed" "$HP81" "$HP81B" "$W/mc81/prompts/archive"
-echo 'model: {}' > "$HP81/config.yaml"; echo 'model: {}' > "$HP81B/config.yaml"
-"$PY" - "$HP81/state.db" "$W/assist82/state.db" "$HP81B/state.db" <<'PYEOF'
+#     own, in the setup's state folder, which the running notebook records in its mission control
+#     (.godspeed/running-notebook.json, written by notebook/core/running-notebook.mjs): a fresh
+#     install (81), a finished move whose record was rewritten at the next start (81b), a waiting
+#     move whose record names the old folder (81c); and any home an assistant.json names (82).
+#     All are read without being told, and no folder name is guessed.
+record_notebook() { # <mission control> <assistant.json>
+  node --input-type=module -e 'const {recordRunningNotebook}=await import(process.argv[1]); recordRunningNotebook({root:process.argv[2],assistantConfig:process.argv[3],platform:"win32"});' "$(node -p 'require("url").pathToFileURL(process.argv[1]).href' "$HERE/../notebook/core/running-notebook.mjs")" "$1" "$2"
+}
+H81="$W/home81"; L81="$W/lad81"; HP81="$L81/State/hermes-profile"
+HP81B="$L81/Previous State/hermes-profile"
+HP81C="$L81/Waiting State/hermes-profile"
+mkdir -p "$H81/.godspeed" "$HP81" "$HP81B" "$HP81C" "$W/mc81/prompts/archive" "$W/mc81c/prompts/archive" "$W/mc81/.godspeed" "$W/mc81c/.godspeed"
+echo 'model: {}' > "$HP81/config.yaml"; echo 'model: {}' > "$HP81B/config.yaml"; echo 'model: {}' > "$HP81C/config.yaml"
+"$PY" - "$HP81/state.db" "$W/assist82/state.db" "$HP81C/state.db" <<'PYEOF'
 import sqlite3, sys, os
 for db, words in ((sys.argv[1], "the Calathea plant food"), (sys.argv[2], "the Lupin seed order"), (sys.argv[3], "the Hosta division")):
     os.makedirs(os.path.dirname(db), exist_ok=True)
@@ -1140,21 +1146,27 @@ for db, words in ((sys.argv[1], "the Calathea plant food"), (sys.argv[2], "the L
     con.execute("INSERT INTO messages VALUES ('s1','assistant','It was the one you picked.',1790000005)")
     con.commit()
 PYEOF
-mkdir -p "$W/mc81/.godspeed"
+# 81 the fresh install and 81b the finished move: the notebook first ran from the previous folder, then
+# from the new one, and its record was rewritten. 81c the waiting move: the record keeps the old one.
+record_notebook "$W/mc81" "$L81/Previous State/assistant.json"; record_notebook "$W/mc81" "$L81/State/assistant.json"
+record_notebook "$W/mc81c" "$L81/Waiting State/assistant.json"
 printf '{"verified":true,"home":"%s"}\n' "$( (command -v cygpath >/dev/null && cygpath -m "$W/assist82") || echo "$W/assist82")" > "$W/mc81/.godspeed/assistant.json"
 printf 'GODSPEED_PROMPT_SOURCES=-\nGODSPEED_PROMPT_SINCE=2026-08-15T00:00:00Z\n' > "$H81/.godspeed/device.env"
 ( unset GODSPEED_HERMES_HOME HERMES_HOME GODSPEED_PROMPT_SOURCES
   export HOME="$H81" GODSPEED_HOME="$H81" USERPROFILE="$H81" GODSPEED_HERMES_NO_SYSTEM=1 \
          LOCALAPPDATA="$( (command -v cygpath >/dev/null && cygpath -w "$L81") || echo "$L81")" \
          GODSPEED_TELEGRAM_TRANSCRIPT="$W/none.jsonl"
-  cd "$W" && "$PY" "$ARC" --godspeed "$W/mc81" archive ) >"$W/r81.out" 2>&1
-A81="$(cat "$W/mc81/prompts/archive/"*.jsonl 2>/dev/null)"
+  cd "$W" && "$PY" "$ARC" --godspeed "$W/mc81" archive; "$PY" "$ARC" --godspeed "$W/mc81c" archive ) >"$W/r81.out" 2>&1
+A81="$(cat "$W/mc81/prompts/archive/"*.jsonl 2>/dev/null)"; A81C="$(cat "$W/mc81c/prompts/archive/"*.jsonl 2>/dev/null)"
 echo "$A81" | grep 'Calathea' | grep -q '"project": "godspeed"' \
-  && ok "81 the Windows assistant's own Hermes (\"Open the Windows assistant\") is read, as the mission control's assistant" \
+  && ok "81 fresh install: the Windows assistant's own Hermes (\"Open the Windows assistant\") is read through the notebook's record" \
   || bad "81 the Windows assistant's chats were not saved" "$(cat "$W/r81.out") $A81"
-echo "$A81" | grep 'Hosta' | grep -q '"project": "godspeed"' \
-  && ok "81b and so is the one of an install made before 2.0.0-beta.11, under the state folder's old name" \
-  || bad "81b the Windows assistant under the state folder's old name was not read" "$(cat "$W/r81.out") $A81"
+echo "$A81" | grep -q 'Hosta' \
+  && bad "81b finished move: the folder the record no longer names was read" "$A81" \
+  || ok "81b finished move: the record rewritten at the next start names the new folder only"
+echo "$A81C" | grep 'Hosta' | grep -q '"project": "godspeed"' \
+  && ok "81c waiting move: the record names the old folder, where the notebook runs, and it is read" \
+  || bad "81c the folder a waiting move leaves in use was not read" "$(cat "$W/r81.out") $A81C"
 echo "$A81" | grep -q 'Lupin seed' && ok "82 a Hermes home named in .godspeed/assistant.json is read" \
   || bad "82 the home assistant.json names was not read" "$(cat "$W/r81.out") $A81"
 
@@ -1168,13 +1180,14 @@ if command -v node >/dev/null 2>&1; then
   echo "$S83" | grep -q 'new claude chat about the Larkspur' && ok "83 mc-prompt-archive runs by name, the way the assistant's terminal runs it" \
     || bad "83 mc-prompt-archive by name did not search" "$S83"
   # A computer whose only Python is Hermes' own: a real venv where the Windows setup's Hermes keeps
-  # it, and a PATH with node and none of the usual Pythons. The setup's state folder is "Godspeed
-  # Mission Control State" since 2.0.0-beta.11 (84) and "... Full Alpha State" on an install made
-  # before (84b).
-  for C84 in "84:Godspeed Mission Control State" "84b:Godspeed Mission Control Full Alpha State"; do
+  # it, and a PATH with node and none of the usual Pythons. The setup's state folder is found through
+  # the notebook's record: a fresh install (84), and a waiting move, whose record names the old
+  # folder (84b); the folder names are arbitrary.
+  for C84 in "84:State" "84b:Waiting State"; do
   N84="${C84%%:*}"; L84="$W/lad$N84"
   V84="$L84/${C84#*:}/hermes-runtime/hermes-agent/venv"
   if "$PY" -m venv --without-pip "$V84" >/dev/null 2>&1; then
+    record_notebook "$G7" "$L84/${C84#*:}/assistant.json"
     S84="$( unset GODSPEED_DIR GODSPEED_WORKSPACE GODSPEED_PYTHON; export HOME="$H7" GODSPEED_HOME="$H7" USERPROFILE="$H7"
       export LOCALAPPDATA="$( (command -v cygpath >/dev/null && cygpath -w "$L84") || echo "$L84")"
       cd "$G7" && PATH="$NODE_DIR83" "$(command -v node)" "$B83/prompt-harvest.js" --collector search Larkspur 2>&1 )"

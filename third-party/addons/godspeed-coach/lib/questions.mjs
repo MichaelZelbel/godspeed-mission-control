@@ -81,13 +81,18 @@ export function buildItems(mcDir, area, talkYmd) {
   return items;
 }
 
-export function nextDateAfter(area, talkYmd) { return nextTalkDay(area, addDays(talkYmd, 1)); }
+export function nextDateAfter(area, talkYmd, fromYmd = "") {
+  const day = addDays(talkYmd, 1);
+  return nextTalkDay(area, fromYmd > day ? fromYmd : day);
+}
 
 // Writes (or rewrites) the questions for the talk after `talkYmd`. The program's own items are
 // rebuilt from the record; items added through the coach's command are kept; one dropped stays dropped.
-export function writeQuestions(mcDir, area, talkYmd, at = new Date()) {
+// `fromYmd` is the day the coach looks: a talk closed or noticed late gets its questions for the first
+// talk day on or after it, because the research reads only questions for a talk still to come.
+export function writeQuestions(mcDir, area, talkYmd, at = new Date(), fromYmd = "") {
   if (!hasQuestions(area)) return null;
-  const next = nextDateAfter(area, talkYmd);
+  const next = nextDateAfter(area, talkYmd, fromYmd);
   if (!next) return null;
   const file = questionsFile(area, next);
   const before = readQuestions(file);
@@ -139,15 +144,16 @@ export function dropQuestion(area, ymd, words, at = new Date()) {
   return { file, dropped: gone.text };
 }
 
-// A talk that was answered but never closed: the latest talk before today whose next talk is still
-// to come and has no questions yet. Used by the tick.
+// A talk that was answered but never closed: the latest talk before today, however long ago, that has
+// no questions file for its next talk or any later one. Used by the tick, which writes them for the
+// first talk day on or after today. Once written, the file exists and the talk is not seen again.
 export function unclosedTalk(area, todayYmd) {
   if (!hasQuestions(area)) return null;
   const d = talkDates(area).filter((x) => x < todayYmd).at(-1);
   if (!d) return null;
   const t = readTalk(area, d);
   if (!t.answered || t.state === "not-held") return null;
-  const next = nextDateAfter(area, d);
-  if (!next || next < todayYmd || fs.existsSync(questionsFile(area, next))) return null;
+  const first = nextDateAfter(area, d);
+  if (!first || openQuestionsDate(area, first)) return null;
   return d;
 }

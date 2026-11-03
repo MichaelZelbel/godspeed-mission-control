@@ -31,6 +31,10 @@ area's style, tone and limits, its preparation, the question queued for today, t
 full, what other talks raised this week, the habits' week (its own, and other areas' habits this
 talk may look at), the goals it serves, and the talk prepared ahead when there is one.
 
+0. If the brief has a section "Not prepared", the preparation is missing or was refused. The opening
+   starts, after where it comes from and which talk it is, with the one sentence that section gives,
+   word for word, then carries on from the brief as steps 2 to 4 say. Never say or imply how long or
+   how widely anything was researched.
 1. If the brief carries a prepared talk (its section "The prepared talk"), that is the preparation
    and the opening is written: skip steps 2 to 4, run the open command the brief prints (with
    `--from-prep`) as step 5 says, and your final answer is the opening it prints, exactly.
@@ -85,7 +89,11 @@ talk they start themselves".
    evidence does. The talk card in the block is the short version; the prepared talk file
    (`coach/<area>/prep/<date>.md`) holds the depth, so when the card does not answer them, read
    that file once rather than searching anywhere else.
-4. The area's LIMIT lines are binding in every reply. Where an area has none, these hold anyway:
+4. Never claim how long or how widely research ran ("I looked into this for days", "I read many
+   studies"). Say what the preparation file shows: when asked what was researched, run
+   `godspeed-coach talk evidence <area>` once and answer from its routes, sources and second check,
+   or say there is no preparation for this talk.
+5. The area's LIMIT lines are binding in every reply. Where an area has none, these hold anyway:
    a health talk never diagnoses, never makes "see a doctor" the answer and never tells them to buy
    or book anything; a money talk never moves money, buys or signs up for anything; a relationships
    talk never contacts anyone for them and raises romance only when they do.
@@ -117,7 +125,7 @@ that makes sense on its own and ask:
    first. If they asked in the talk for something more to be looked into, add it with
    `godspeed-coach questions <area> add "<the question>" --why "<why>"`; `questions <area> drop
    "<words>"` takes one away and plain `questions <area>` lists them. Never edit the file by hand.
-   A talk that ends with no closing turn gets its questions at the next coach tick.
+   A talk that ends with no closing turn gets its questions at the next coach tick, however late (for the first talk day still to come).
 4. For each goal in the area's SERVES that the change moves, one line:
    `godspeed goals progress <goal> --evidence "<date> <area> talk: <what changed>"`.
    If that command is not available here, write the same line under "What changed" instead.

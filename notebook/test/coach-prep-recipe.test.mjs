@@ -66,3 +66,42 @@ test('the recipe reads the live questions first and answers each: found, ruled o
   assert.match(goalResearch,/never as proof/);
   assert.match(goalResearch,/Open every source tonight/);
 });
+
+// The preparation proves itself (#135, 3 November 2026): for an area with research domains every
+// route is recorded so it can be checked, and a second AI reviews the preparation with its own
+// recipe, coach-prep-review, which ships beside coach-prep and answers only with JSON.
+const review=read('../recipes/coach-prep-review/SKILL.md');
+test('the coach-prep recipe records every route, and the review recipe ships beside it',()=>{
+  const shape=recipe.split('`coach/<area>/prep/<talk date>.md`, in exactly this shape:')[1].match(/```\n([\s\S]*?)```/)[1];
+  for(const section of ['## Routes','## Rejected routes','## Research coverage'])assert.ok(shape.includes(section),section);
+  for(const field of ['original source','published','Who was studied','Measured effect','limitations','contrary evidence','Fit to this person','cost or burden','feasible experiment'])assert.ok(recipe.includes(field),field);
+  assert.match(recipe,/Never write a `\.json` file/);
+  assert.match(recipe,/resolve each with evidence, not new\s+wording/);
+  assert.match(review,/^---\nname: coach-prep-review\ndescription: /);
+  const description=review.match(/^description: (.*)$/m)[1];
+  assert.ok(description.length<1024);
+  assert.match(description,/It only reads and searches: it writes no file/);
+  assert.match(review,/\{"verdict":"pass","coverage":\[\{"id":/);
+  for(const rule of ['every research domain and every goal','Search on your own for strong routes the preparation did not weigh','unsupported exclusion','snippet','Stale and generic advice','"Nothing new worth trying"','Never count searches, pages or time spent as quality','Cite only URLs that are in the evidence'])assert.ok(review.includes(rule),rule);
+  assert.doesNotMatch(review,/[–—]/,'no long dashes');
+  const inventory=JSON.parse(read('../data/recipe-inventory.json'));
+  assert.deepEqual(inventory.find(r=>r.name==='coach-prep-review'),{...inventory.find(r=>r.name==='coach-prep'),name:'coach-prep-review'});
+  assert.ok(JSON.parse(read('../data/recipe-revisions.json'))['coach-prep-review/SKILL.md'].includes(digest(review)),'coach-prep-review ships a known revision');
+});
+
+test('a preparation in the recipe\'s shape, for an area with research domains, needs its receipts and review',t=>{
+  const shape=recipe.split('`coach/<area>/prep/<talk date>.md`, in exactly this shape:')[1].match(/```\n([\s\S]*?)```/)[1];
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-coach-prep-research-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+  fs.mkdirSync(path.join(root,'coach','work','prep'),{recursive:true});
+  fs.writeFileSync(path.join(root,'coach','work','area.md'),'AREA: work\nTITLE: Work\nRHYTHM: weekly sunday\nTIME: 18:00\nSTARTS: 2026-10-04\nSERVES: buffer\nRESEARCH DOMAIN: income | new earning paths\n');
+  const filled=shape.replace('<area>','work').replace('<talk date> <time>','2026-10-25 18:00').replace(/<the time you write it[^>]*>/,'2026-10-24T03:20:00Z').replace(/^(## .+)$/gm,'$1\nA fictional line.');
+  const file=path.join(root,'coach','work','prep','2026-10-25.md');fs.writeFileSync(file,filled);
+  // Every research section the coach asks for is in the shape: what is missing is only the proof.
+  assert.equal(prepProblem(readPrep(file),readArea(path.join(root,'coach','work')),new Date('2026-10-25T17:00:00Z')),'its research evidence or independent review is missing or unreadable');
+});
+
+test('a new mission control gets the review recipe too',t=>{
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-coach-prep-review-install-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+  const state=path.join(root,'.godspeed');fs.mkdirSync(state,{recursive:true});
+  assert.deepEqual(installSkillTree({root,state},fileURLToPath(new URL('../recipes/coach-prep-review/',import.meta.url)),path.join(root,'skills','coach-prep-review')),{updated:1,conflicts:0});
+});

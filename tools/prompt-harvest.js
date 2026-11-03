@@ -185,20 +185,29 @@ function findPython(told) {
  * so it is the last place looked: where the assistant's settings say Hermes was installed
  * (assistant.json, which the Windows setup and the server write), then where Hermes installs
  * itself on each system. */
+/* The found mission control, or null; findPython can run (--collector) before GODSPEED is set. */
+function foundGodspeed() { try { return GODSPEED; } catch (_) { return null; } }
 function hermesPythons() {
   const roots = [];
   const local = process.env.LOCALAPPDATA;
-  // The Windows setup's state folder: its name since 2.0.0-beta.11 first, then the name of an
-  // install made before (kit-bootstrap's windows/godspeed-folders.ps1 names both).
-  const states = local ? ['Godspeed Mission Control State', 'Godspeed Mission Control Full Alpha State'].map(f => path.join(local, f)) : [];
-  const configs = [process.env.GODSPEED_ASSISTANT_CONFIG, ...states.map(s => path.join(s, 'assistant.json'))];
-  for (const g of [process.env.GODSPEED_DIR, process.env.GODSPEED_WORKSPACE, deviceEnvValue('GODSPEED_DIR')]) {
-    if (g) configs.push(path.join(g, '.godspeed', 'assistant.json'));
+  // The Windows setup's state folder is not guessed by name: the running notebook records it in its
+  // mission control (.godspeed/running-notebook.json), moved or waiting to be moved alike.
+  const gods = [process.env.GODSPEED_DIR, process.env.GODSPEED_WORKSPACE, deviceEnvValue('GODSPEED_DIR'), foundGodspeed()].filter(Boolean);
+  const states = [];
+  const configs = [process.env.GODSPEED_ASSISTANT_CONFIG];
+  for (const g of gods) {
+    configs.push(path.join(g, '.godspeed', 'assistant.json'));
+    try {
+      const r = JSON.parse(fs.readFileSync(path.join(g, '.godspeed', 'running-notebook.json'), 'utf8').replace(/^\uFEFF/, ''));
+      if (r.workspace && path.resolve(r.workspace).toLowerCase() !== path.resolve(g).toLowerCase()) continue;
+      if (r.assistantConfig) configs.push(r.assistantConfig);
+      if (r.stateFolder) states.push(r.stateFolder);
+    } catch (_) {}
   }
   for (const c of configs) {
     if (!c) continue;
     try {
-      const a = JSON.parse(fs.readFileSync(c, 'utf8'));
+      const a = JSON.parse(fs.readFileSync(c, 'utf8').replace(/^\uFEFF/, ''));
       if (a.sourceRoot) roots.push(a.sourceRoot);
       if (a.executable) roots.push(path.join(path.dirname(path.dirname(a.executable)), 'hermes-agent'));
     } catch (_) {}
