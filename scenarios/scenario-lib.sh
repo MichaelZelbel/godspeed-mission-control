@@ -1001,3 +1001,110 @@ mc_video_on() { # <root> <arguments...>
 addon_file() { # <root> <path below third-party/addons/mc-video/>
   product_script "$1" "third-party/addons/mc-video/$2"
 }
+
+# ------------------------------------------------------------------ 2.0.0-beta.16 (additions only)
+# What the three scenarios of that release share: the notebook's own clock moved to another day, a
+# NEW conversation of the notebook's chat panel and a message in it, and the assistant's command log.
+
+# A string written the way JSON writes it, so the owner's own words go into a request whole.
+quoted_json() { # <text>
+  "$NODE" -e 'process.stdout.write(JSON.stringify(process.argv[1]))' "$1"
+}
+# shellcheck disable=SC2317,SC2329  # asked by wait_for, which takes the command to try as its arguments
+notebook_is_up() { curl -fsS "http://127.0.0.1:$NOTEBOOK_PORT/health" >/dev/null 2>&1; }
+
+# THE NOTEBOOK'S OWN CLOCK AT ANOTHER DAY: GODSPEED_NOW is the product's own frozen clock for a
+# rehearsal (notebook/core/tracker-operations.mjs), set on the notebook's own service, which is then
+# started again. The same three functions charm-challenge.sh had of its own until this release.
+clock_of_this_account() { # <moment>
+  local unit=${UNIT:-godspeed-integrated-notebook.service} dropin
+  dropin=$HOME/.config/systemd/user/$unit.d
+  mkdir -p "$dropin" || return 1
+  printf '[Service]\nEnvironment="GODSPEED_NOW=%s"\n' "$1" >"$dropin/scenario-clock.conf" || return 1
+  systemctl --user daemon-reload || return 1
+  systemctl --user restart "$unit" || return 1
+}
+clock_of_the_machine() { # <moment>
+  local unit=${UNIT:-godspeed-integrated-notebook.service} dropin
+  dropin=/etc/systemd/system/$unit.d
+  sudo mkdir -p "$dropin" || return 1
+  printf '[Service]\nEnvironment="GODSPEED_NOW=%s"\n' "$1" | sudo tee "$dropin/scenario-clock.conf" >/dev/null || return 1
+  sudo systemctl daemon-reload || return 1
+  sudo systemctl restart "$unit" || return 1
+}
+notebook_clock_at() { # <day, YYYY-MM-DD>
+  local day=$1 moment=$1T12:00:00Z unit=${UNIT:-godspeed-integrated-notebook.service}
+  say "The notebook's own clock is set to $day"
+  if systemctl --user cat "$unit" >/dev/null 2>&1; then
+    clock_of_this_account "$moment" ||
+      fail "the notebook's own clock could not be set to $day (its own service of this account would not take it), so the days could not pass"
+  elif systemctl cat "$unit" >/dev/null 2>&1; then
+    clock_of_the_machine "$moment" ||
+      fail "the notebook's own clock could not be set to $day (the machine's own service would not take it), so the days could not pass"
+  else
+    fail "the install runs its notebook neither as this account's own service nor as the machine's ($unit is not there), so the days could not pass"
+  fi
+  wait_for 180 "the notebook to answer on $day" notebook_is_up ||
+    fail "the notebook does not answer after its clock was set to $day"
+}
+
+# A NEW CONVERSATION OF THE NOTEBOOK'S CHAT PANEL, made the way its Clear button makes one
+# (ui GlobalAIChatFAB, POST /api/chat-state with clear: true and the state it is clearing), which
+# gives the conversation of the "general" context a new session; the assistant then keeps a
+# conversation of its own for it (core/native-agent.mjs, --continue godspeed-notebook-<hash of the
+# conversation and its session>). Sets CHAT_SESSION. Never call it inside $(...).
+CHAT_PANEL_EMPTY='{"messages":[],"summary":"","summarizedUpTo":0}'
+CHAT_STATE_READER='
+const fs=require("fs");
+const d=JSON.parse(fs.readFileSync(process.argv[1],"utf8")),rows=Array.isArray(d)?d:(d.data||[]);
+const row=rows.find(r=>r&&r.context_key===process.argv[2]);
+process.stdout.write(JSON.stringify(row&&row.state?row.state:JSON.parse(process.argv[3])));
+'
+chat_panel_new_conversation() { # <file for what the notebook answered>
+  local tables=$EVIDENCE/.panel-state.json state request code
+  curl -fsS --max-time 120 -X POST -H 'Content-Type: application/json' -d '{"table":"note_conversations"}' \
+    "http://127.0.0.1:$NOTEBOOK_PORT/api/query" -o "$tables" ||
+    fail "the notebook's own chat conversations could not be read, so a new conversation could not be made"
+  state=$("$NODE" -e "$CHAT_STATE_READER" "$tables" general "$CHAT_PANEL_EMPTY") ||
+    fail "the chat conversation the notebook holds could not be read"
+  request=$EVIDENCE/.panel-clear.json
+  printf '{"context_key":"general","state":%s,"clear":true,"expected_state":%s}\n' "$CHAT_PANEL_EMPTY" "$state" >"$request"
+  code=$(curl -sS -o "$1" -w '%{http_code}' --max-time 120 -X POST -H 'Content-Type: application/json' \
+    --data-binary @"$request" "http://127.0.0.1:$NOTEBOOK_PORT/api/chat-state") ||
+    fail "the notebook's chat panel could not be reached to start a new conversation"
+  [ "$code" = 200 ] ||
+    fail "the notebook's chat panel would not start a new conversation (HTTP $code): $(tr -d '\n' <"$1" | cut -c1-200)"
+  CHAT_SESSION=$(json_value "$1" state.session_id) || CHAT_SESSION=''
+  if [ -z "$CHAT_SESSION" ]; then
+    fail "the notebook's chat panel started a conversation with no session of its own: $(tr -d '\n' <"$1" | cut -c1-200)"
+  fi
+  rm -f "$tables" "$request"
+}
+# The owner says something in the conversation chat_panel_new_conversation made; the reply is kept.
+# The panel's request id is a UUID (server/main.mjs refuses any other for a chat function).
+chat_panel_says() { # <what they say> <file for the reply>
+  local said=$1 request=$EVIDENCE/.panel-ask.json body=$EVIDENCE/.panel-answer.json code
+  say "The owner says (in the chat panel): $said"
+  printf '{"message":%s,"conversation_id":"notebook:general","conversation_session":%s,"request_id":%s}\n' \
+    "$(quoted_json "$said")" "$(quoted_json "$CHAT_SESSION")" \
+    "$(quoted_json "$("$NODE" -e 'process.stdout.write(require("crypto").randomUUID())')")" >"$request"
+  code=$(curl -sS -o "$body" -w '%{http_code}' --max-time 900 -X POST -H 'Content-Type: application/json' \
+    --data-binary @"$request" "http://127.0.0.1:$NOTEBOOK_PORT/api/functions/conversation-chat") ||
+    fail "the notebook's chat panel could not be reached, so the owner could not say \"$said\""
+  if [ "$code" != 200 ]; then
+    print_kept_diagnosis "${STATE:-}" "${HERMES:-}"
+    fail "the notebook's chat panel answered HTTP $code to \"$said\": $(tr -d '\n' <"$body" | cut -c1-200)"
+  fi
+  json_value "$body" data.reply >"$2" ||
+    fail "the notebook's chat panel answered \"$said\" with no reply of its own"
+  printf '\n' >>"$2"
+  sed 's/^/  | /' "$2" >&2
+  rm -f "$request" "$body"
+}
+
+# THE ASSISTANT'S COMMAND LOG: every command the model ran with a tool since <epoch seconds>, as
+# the model typed it, <epoch><TAB><session><TAB><command> (night-tidy-chat.mjs, commands).
+assistant_commands() { # <file> <since, epoch seconds>
+  "$NODE" "$HERE/night-tidy-chat.mjs" --home "${HERMES:?assistant_home first}" commands --since "${2:-0}" >"$1" ||
+    fail "the assistant's command log could not be read from $HERMES/state.db"
+}

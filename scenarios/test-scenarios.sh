@@ -1270,9 +1270,25 @@ charm_good() { # <folder>
   printf 'I have corrected the captions file and read it back.\n\nThat sounded like a slip. %s\n' \
     "$CHARM_QUESTION" >"$folder/vent-reply.txt"
   printf 'Fair enough. Still 21 days to go.\n' >"$folder/no-reply.txt"
+  # Five first vents, each in a conversation of its own (the first keeps the names it always had),
+  # and the assistant's command log with the record command of each, typed without --conversation.
+  local n at=1793000000
+  : >"$folder/vents.txt"
+  : >"$folder/commands.txt"
+  for n in 1 2 3 4 5; do
+    if [ "$n" != 1 ]; then
+      printf 'The file is fixed.\n\nThat sounded like a slip. %s\n' "$CHARM_QUESTION" >"$folder/vent-$n-reply.txt"
+      printf 'Fair enough. Still 21 days to go.\n' >"$folder/no-$n-reply.txt"
+    fi
+    printf 'vent\t%s\t%s\t%s\n' "$n" "$((at + n * 100))" "$((at + n * 100 + 40))" >>"$folder/vents.txt"
+    printf '%s\tsession-%s\tgodspeed-charm asked --words "caption file is garbage"\n' "$((at + n * 100 + 20))" "$n" >>"$folder/commands.txt"
+  done
+  printf '%s\tsession-1\tls -la\n' "$((at + 30))" >>"$folder/commands.txt"
   charm_stands "$folder" after-no 21 "$first" 0 0
   cp "$folder/brief-after-start.txt" "$folder/brief-after-no.txt"
-  charm_shelf "$folder/shelf-after-no.txt" "start@$CHARM_START" "asked@$CHARM_START" "kept@$CHARM_START"
+  charm_shelf "$folder/shelf-after-no.txt" "start@$CHARM_START" "asked@$CHARM_START" "asked@$CHARM_START" \
+    "asked@$CHARM_START" "asked@$CHARM_START" "asked@$CHARM_START" "kept@$CHARM_START" "kept@$CHARM_START" \
+    "kept@$CHARM_START" "kept@$CHARM_START" "kept@$CHARM_START"
   charm_stands "$folder" fourth-day 18 "$first" 3 0
   printf 'Charm Challenge: day 4 of 21, 18 days to go.\n' >"$folder/brief-fourth-day.txt"
   # The morning brief, run the way Settings runs it, and the note it wrote with the line in it.
@@ -1293,13 +1309,15 @@ charm_good() { # <folder>
   printf 'Back to 21. Done on %s. Restarts: 1.\n' "$second" >"$folder/yes-reply.txt"
   charm_stands "$folder" after-yes 21 "$second" 3 1
   printf 'Charm Challenge: day 1 of 21, 21 days to go.\n' >"$folder/brief-after-yes.txt"
-  charm_shelf "$folder/shelf-after-yes.txt" "start@$CHARM_START" "asked@$CHARM_START" "kept@$CHARM_START" \
-    "asked@$CHARM_RESET" "reset@$CHARM_RESET"
+  charm_shelf "$folder/shelf-after-yes.txt" "start@$CHARM_START" "asked@$CHARM_START" "asked@$CHARM_START" \
+    "asked@$CHARM_START" "asked@$CHARM_START" "asked@$CHARM_START" "kept@$CHARM_START" "kept@$CHARM_START" \
+    "kept@$CHARM_START" "kept@$CHARM_START" "kept@$CHARM_START" "asked@$CHARM_RESET" "reset@$CHARM_RESET"
   printf 'Back to 21. Done on %s. Restarts: 2.\n' "$third" >"$folder/slip-reply.txt"
   charm_stands "$folder" after-slip 21 "$third" 3 2
   printf 'Charm Challenge: day 1 of 21, 21 days to go.\n' >"$folder/brief-after-slip.txt"
-  charm_shelf "$folder/shelf-after-slip.txt" "start@$CHARM_START" "asked@$CHARM_START" "kept@$CHARM_START" \
-    "asked@$CHARM_RESET" "reset@$CHARM_RESET" "reset@$CHARM_SLIP"
+  charm_shelf "$folder/shelf-after-slip.txt" "start@$CHARM_START" "asked@$CHARM_START" "asked@$CHARM_START" \
+    "asked@$CHARM_START" "asked@$CHARM_START" "asked@$CHARM_START" "kept@$CHARM_START" "kept@$CHARM_START" \
+    "kept@$CHARM_START" "kept@$CHARM_START" "kept@$CHARM_START" "asked@$CHARM_RESET" "reset@$CHARM_RESET" "reset@$CHARM_SLIP"
   {
     printf 'user\tstart the Charm Challenge\n'
     printf 'assistant\tCharm Challenge started. 21 days to go, done on %s.\n' "$first"
@@ -1410,20 +1428,45 @@ refuses 'a morning brief that said the line twice' charm-challenge "$C/brief-sai
   'times, and the brief carries its one line once'
 
 copy "$C/good" "$C/no-was-a-reset"
-charm_shelf "$C/no-was-a-reset/shelf-after-no.txt" "start@$CHARM_START" "asked@$CHARM_START" "reset@$CHARM_START"
+sed -i '0,/^event\t[^\t]*\t{"kind":"kept"/s//event\t'"$CHARM_START"'\t{"kind":"reset"/' "$C/no-was-a-reset/shelf-after-no.txt"
 refuses 'a "no" that was written as a reset' charm-challenge "$C/no-was-a-reset" \
-  'should hold the start, the question and the kept answer'
+  'and, for each of the five vents, the question and the kept answer'
 
 copy "$C/good" "$C/no-question-row"
-charm_shelf "$C/no-question-row/shelf-after-no.txt" "start@$CHARM_START" "kept@$CHARM_START"
+sed -i '0,/^event\t[^\t]*\t{"kind":"asked"/{//d}' "$C/no-question-row/shelf-after-no.txt"
 refuses 'a "no" with no question on the card before it' charm-challenge "$C/no-question-row" \
-  'should hold the start, the question and the kept answer'
+  'and, for each of the five vents, the question and the kept answer'
 
 copy "$C/good" "$C/unreadable-row"
-charm_shelf "$C/unreadable-row/shelf-after-slip.txt" "start@$CHARM_START" "asked@$CHARM_START" "kept@$CHARM_START" \
-  "asked@$CHARM_RESET" "reset@$CHARM_RESET" "reset@$CHARM_SLIP" "Weird@$CHARM_SLIP"
+charm_shelf "$C/unreadable-row/shelf-after-slip.txt" "Weird@$CHARM_SLIP"
+sed -n '2,$p' "$C/good/shelf-after-slip.txt" | grep -v '"kind":"asked","when":"'"$CHARM_RESET"'"' >>"$C/unreadable-row/shelf-after-slip.txt"
 refuses 'a card row whose kind cannot be read' charm-challenge "$C/unreadable-row" \
   'after the charm slip, and it should hold'
+
+copy "$C/good" "$C/four-vents"
+sed -i '$d' "$C/four-vents/vents.txt"
+refuses 'a run that kept four vents, not five' charm-challenge "$C/four-vents" \
+  'holds 4 vents, and this scenario vents five times'
+
+copy "$C/good" "$C/fifth-no-question"
+printf 'The slides are redone.\n' >"$C/fifth-no-question/vent-5-reply.txt"
+refuses 'a fifth vent that ended without the question' charm-challenge "$C/fifth-no-question" \
+  'the reply to vent 5'
+
+copy "$C/good" "$C/no-asked-for-vent-3"
+awk -F'\t' '!($2=="session-3")' "$C/good/commands.txt" >"$C/no-asked-for-vent-3/commands.txt"
+refuses 'a vent with no godspeed-charm asked in the command log' charm-challenge "$C/no-asked-for-vent-3" \
+  'holds no godspeed-charm asked command while vent 3'
+
+copy "$C/good" "$C/typed-conversation"
+printf '1793000250\tsession-2\tgodspeed-charm asked --conversation "cli:20261103_101010_abcd" --words "x"\n' >>"$C/typed-conversation/commands.txt"
+refuses 'a vent command typed with --conversation by the model' charm-challenge "$C/typed-conversation" \
+  'typed with --conversation'
+
+copy "$C/good" "$C/path-and-node"
+sed -i 's|godspeed-charm asked|node /x/godspeed-charm.mjs asked|' "$C/path-and-node/commands.txt"
+passes 'record commands typed with the add-on'"'"'s program and its path' charm-challenge "$C/path-and-node" \
+  'five first vents, each in a new conversation'
 
 copy "$C/good" "$C/never-counted-down"
 cp "$C/good/card-after-start.txt" "$C/never-counted-down/card-fourth-day.txt"
@@ -2073,7 +2116,7 @@ case $KD_HOME in
   *) bad "the assistant's home was not found from assistant.json ($KD_HOME)" ;;
 esac
 # The Charm Challenge calls it before it says FAIL, in both places where the AI can fail it.
-if [ "$(grep -c '^ *print_kept_diagnosis$' "$ROOT/scenarios/charm-challenge.sh")" -ge 2 ]; then
+if [ "$(grep -c '^ *print_kept_diagnosis\( \|$\)' "$ROOT/scenarios/charm-challenge.sh")" -ge 2 ]; then
   ok "charm-challenge.sh prints the kept diagnosis when Settings or the chat meets a broken AI request"
 else
   bad "charm-challenge.sh does not print the kept diagnosis at both places its AI can break"
@@ -2140,13 +2183,277 @@ copy "$TL/good" "$TL/short-log"
 sed -i '1d' "$TL/short-log/godspeed-reply.log"
 refuses "a plugin log that misses a correction" telegram-language "$TL/short-log" "records 5 corrections, not 6"
 
+# ============================================================ the assistant's command log
+# night-tidy-chat.mjs commands: the commands the model ran with a tool, as it typed them, read only.
+section "the assistant's command log"
+C=$TMP/commands
+mkdir -p "$C/home"
+node --input-type=module -e '
+import {DatabaseSync} from "node:sqlite";
+const db=new DatabaseSync(process.argv[1]+"/state.db");
+db.exec("create table sessions(id text primary key, source text not null, started_at real not null)");
+db.exec("create table messages(id integer primary key autoincrement, session_id text not null, role text not null, content text, tool_calls text, timestamp real not null)");
+db.prepare("insert into sessions(id, source, started_at) values (?,?,?)").run("s1","cli",1000);
+db.prepare("insert into sessions(id, source, started_at) values (?,?,?)").run("s2","cli",1000);
+const add=(session,role,calls,t)=>db.prepare("insert into messages(session_id, role, content, tool_calls, timestamp) values (?,?,?,?,?)").run(session,role,"x",calls,t);
+add("s1","assistant",JSON.stringify([{id:"c1",function:{name:"terminal",arguments:JSON.stringify({command:"godspeed-charm asked --words \"a vent\"\n  --foo"})}}]),2000);
+add("s2","assistant",JSON.stringify([{id:"c2",function:{name:"web_search",arguments:JSON.stringify({query:"nothing to run"})}},{id:"c3",function:{name:"terminal",arguments:{command:"ls -la"}}}]),3000);
+add("s1","assistant",JSON.stringify([{id:"c4",function:{name:"terminal",arguments:JSON.stringify({command:"old command"})}}]),500);
+add("s1","assistant",null,2500);
+add("s1","user",JSON.stringify([{function:{name:"terminal",arguments:"{\"command\":\"not the model\"}"}}]),2600);
+db.close();' "$C/home" 2>/dev/null
+OUT=$(node "$ROOT/scenarios/night-tidy-chat.mjs" --home "$C/home" commands 2>&1)
+if [ "$(printf '%s\n' "$OUT" | grep -c .)" = 3 ] && printf '%s\n' "$OUT" | head -n 1 | grep -q "^500	s1	old command$"; then
+  ok "the command log lists the commands the model ran, oldest first"
+else
+  bad "the command log listed [$OUT]"
+fi
+case $OUT in
+  *'2000	s1	godspeed-charm asked --words "a vent" --foo'*) ok "a command is one line, as the model typed it, with its session and time" ;;
+  *) bad "the command log does not show the command of session s1 as one line: $OUT" ;;
+esac
+case $OUT in
+  *'3000	s2	ls -la'*) ok "a command whose arguments are an object counts too" ;;
+  *) bad "the command log lacks the command whose arguments are an object: $OUT" ;;
+esac
+case $OUT in
+  *nothing*|*'not the model'*) bad "the command log lists a call that ran no command, or a message that is not the assistant's: $OUT" ;;
+  *) ok "a search, an empty call and a message of the person are not commands" ;;
+esac
+OUT=$(node "$ROOT/scenarios/night-tidy-chat.mjs" --home "$C/home" commands --since 2500 2>&1)
+if [ "$OUT" = "$(printf '3000\ts2\tls -la')" ]; then
+  ok "--since leaves out the commands before that time"
+else
+  bad "--since 2500 listed [$OUT]"
+fi
+mkdir -p "$C/plain"
+node --input-type=module -e '
+import {DatabaseSync} from "node:sqlite";
+const db=new DatabaseSync(process.argv[1]+"/state.db");
+db.exec("create table messages(id integer primary key, session_id text, role text, content text, timestamp real)");db.close();' "$C/plain" 2>/dev/null
+if OUT=$(node "$ROOT/scenarios/night-tidy-chat.mjs" --home "$C/plain" commands 2>&1) && [ -z "$OUT" ]; then
+  ok "a store without a tool_calls column has no commands, and no crash"
+else
+  bad "a store without tool_calls answered [$OUT]"
+fi
+
+# ===================================================== brief-asked-in-chat (2.0.0-beta.16)
+# The briefing the routine saved, with the Charm line and without the sentence that breaks a rule,
+# the repair item for it, and the chat's two answers.
+BRIEF_LINE='Charm Challenge: day 1 of 21, 21 days to go, done on Tuesday 24 November.'
+BRIEF_SENTENCE='Synergy between your goals is worth a look today, so keep one hour free for it.'
+brief_good() { # <folder>
+  local folder=$1
+  rm -rf "$folder"
+  mkdir -p "$folder"
+  printf 'synergy\n' >"$folder/banned-word.txt"
+  printf '# My voice\n\n```voice-rules\nBANNED-WORD: synergy\n```\n' >"$folder/voice.md"
+  printf '%s\n' "$BRIEF_SENTENCE" >"$folder/contribution.txt"
+  printf '%s\n' "$BRIEF_LINE" >"$folder/charm-line.txt"
+  printf '{"results":[{"id":"morning-brief","state":"completed"}]}\n' >"$folder/brief-run.json"
+  printf 'state=completed\npaused=true\n' >"$folder/brief-job.txt"
+  printf 'Good morning. One thing today.\n\n%s\n' "$BRIEF_LINE" >"$folder/brief-note.txt"
+  printf 'repair-brief-line-1\tneeds_review\tthe checked contribution\tIt breaks the rule: the word synergy is banned.\n' >"$folder/repairs.txt"
+  printf '1\n' >"$folder/notes-after-brief.txt"
+  printf '1\n' >"$folder/notes-after-asks.txt"
+  printf 'Good morning. One thing today.\n\n%s\n' "$BRIEF_LINE" >"$folder/chat-brief-1.txt"
+  printf 'Here it is again.\n\n%s\n' "$BRIEF_LINE" >"$folder/chat-brief-2.txt"
+  : >"$folder/brief-folder.txt"
+}
+section brief-asked-in-chat
+B=$TMP/brief
+brief_good "$B/good"
+passes 'the briefing asked for twice in the chat, with the Charm line and without the rule-breaking sentence' \
+  brief-asked-in-chat "$B/good" 'were each answered with that Charm line word for word'
+
+copy "$B/good" "$B/no-note"
+: >"$B/no-note/brief-note.txt"
+refuses 'a run that kept no briefing note' brief-asked-in-chat "$B/no-note" 'saved no note'
+
+copy "$B/good" "$B/line-lost"
+printf 'Good morning. One thing today.\n' >"$B/line-lost/brief-note.txt"
+refuses 'a briefing without its Charm line' brief-asked-in-chat "$B/line-lost" 'does not carry'
+
+copy "$B/good" "$B/note-has-sentence"
+printf '%s\n%s\n' "$BRIEF_LINE" "$BRIEF_SENTENCE" >"$B/note-has-sentence/brief-note.txt"
+refuses 'a briefing that still carries the sentence that breaks a rule' brief-asked-in-chat "$B/note-has-sentence" \
+  'still carries the sentence that breaks'
+
+copy "$B/good" "$B/no-repair"
+: >"$B/no-repair/repairs.txt"
+refuses 'a briefing with no repair item for the cut line' brief-asked-in-chat "$B/no-repair" 'holds no open repair item'
+
+copy "$B/good" "$B/repair-elsewhere"
+printf 'repair-1\tneeds_review\tthe cycle heads-up line\tit breaks the rule synergy\n' >"$B/repair-elsewhere/repairs.txt"
+refuses 'a repair item that is about another line' brief-asked-in-chat "$B/repair-elsewhere" 'names the checked contribution'
+
+copy "$B/good" "$B/chat-other-line"
+printf 'Your day: day 3 of 21, 18 days to go.\n' >"$B/chat-other-line/chat-brief-1.txt"
+refuses "a chat brief whose Charm line is not the note's" brief-asked-in-chat "$B/chat-other-line" \
+  'does not carry the briefing'"'"'s Charm line word for word'
+
+copy "$B/good" "$B/chat-has-sentence"
+printf '%s\n%s\n' "$BRIEF_LINE" "$BRIEF_SENTENCE" >"$B/chat-has-sentence/chat-brief-2.txt"
+refuses 'a chat brief that still carries the line that breaks a rule' brief-asked-in-chat "$B/chat-has-sentence" \
+  'carries the sentence that breaks'
+
+copy "$B/good" "$B/second-note"
+printf '2\n' >"$B/second-note/notes-after-asks.txt"
+refuses 'asking again saved a second briefing note' brief-asked-in-chat "$B/second-note" 'asking saves no second one'
+
+copy "$B/good" "$B/own-brief"
+printf '2026-11-03.md\n' >"$B/own-brief/brief-folder.txt"
+refuses 'a chat that wrote a brief of its own' brief-asked-in-chat "$B/own-brief" 'wrote a brief of its own'
+
+copy "$B/good" "$B/charm-line-banned"
+printf 'Charm Challenge: day 1 of 21, synergy of 21 days to go.\n' >"$B/charm-line-banned/charm-line.txt"
+refuses 'a Charm line that holds the banned word' brief-asked-in-chat "$B/charm-line-banned" 'contains the banned word'
+
+copy "$B/good" "$B/sentence-fine"
+printf 'Plain words between your goals are worth a look today.\n' >"$B/sentence-fine/contribution.txt"
+refuses 'a seeded sentence that breaks no rule' brief-asked-in-chat "$B/sentence-fine" 'does not contain the banned word'
+
+copy "$B/good" "$B/no-chat"
+rm "$B/no-chat/chat-brief-2.txt"
+refuses 'a second question that was never answered' brief-asked-in-chat "$B/no-chat" 'chat-brief-2.txt is not in what the scenario kept'
+
+# ======================================================= talk-prep-honest (2.0.0-beta.16)
+TALK_SENTENCE='The preparation for this talk is not ready: the second check did not pass.'
+PREP_A_OPENING='Good evening. Tonight: your LDL result, the half hour of sleep, and one thing to try.'
+PREP_B_OPENING='Good evening. Tonight: three routes, one for each of your goals, and the experiment I would start with.'
+talk_prep() { # <file> <opening> <routes>
+  local n goal
+  {
+    printf 'AREA: health\nSTATE: ready\n\n## The opening\n\n%s\n\n## Talk card\n\n- one\n\n## Routes\n\n' "$2"
+    for n in $(seq 1 "$3"); do
+      goal=$(printf 'lower-ldl sleep-better visible-abs' | cut -d' ' -f"$n")
+      printf '### Route %s: a route\n- Goal: %s\n- Source: https://example.org/%s\n- Published: 2025-09-10\n- Read: 2026-11-03\n- Studied: 400 adults\n- Effect: 8 percent\n- Limits: short trial\n- Contrary evidence: a larger trial found less\n- Fit to this person: fits\n- Cost or burden: 20 minutes a day\n- Experiment: two weeks\n\n' "$n" "$goal" "$n"
+    done
+    printf '## Rejected routes\n\n- A trending supplement: unreplicated.\n'
+  } >"$1"
+}
+talk_good() { # <folder>
+  local folder=$1 goal
+  rm -rf "$folder"
+  mkdir -p "$folder"
+  printf 'a=2026-11-02\nb=2026-11-03\noffset=+0000\n' >"$folder/days.txt"
+  {
+    printf 'AREA: health\nSERVES: lower-ldl, sleep-better, visible-abs\n'
+    printf 'RESEARCH DOMAIN: blood-lipids | LDL\nRESEARCH DOMAIN: sleep | sleep\nRESEARCH DOMAIN: body-composition | abs\n'
+  } >"$folder/area.md"
+  talk_prep "$folder/prep-a.md" "$PREP_A_OPENING" 2
+  talk_prep "$folder/prep-b.md" "$PREP_B_OPENING" 3
+  printf '{"verdict":"fail","coverage":[{"id":"visible-abs","verdict":"fail"}]}\n' >"$folder/review-a.json"
+  printf '{"verdict":"pass","coverage":[' >"$folder/review-b.json"
+  for goal in lower-ldl sleep-better visible-abs; do printf '{"id":"%s","verdict":"pass"},' "$goal" >>"$folder/review-b.json"; done
+  printf '{"id":"sleep","verdict":"pass"}]}\n' >>"$folder/review-b.json"
+  printf '{"version":1}\n' >"$folder/evidence-b.json"
+  printf 'not sealed: its independent research review did not pass\n' >"$folder/seal-a.txt"
+  printf '1\n' >"$folder/seal-a.code"
+  printf 'sealed: the review passed, 6 domains and goals judged\n' >"$folder/seal-b.txt"
+  printf '0\n' >"$folder/seal-b.code"
+  printf 'not ready: coach/health/prep/2026-11-02.md: its independent research review did not pass\n' >"$folder/check-a.txt"
+  printf 'ready: coach/health/prep/2026-11-03.md, prepared 2026-11-02 21:00\n' >"$folder/check-b.txt"
+  {
+    printf '# Brief\n\nRecord: coach/health/talks/2026-11-02.md\n\n## Not prepared\n'
+    printf 'The preparation for this talk is not ready, and the opening must say so. Right after where it comes from, say this one sentence, word for word: "%s" Then carry on from this brief. Never say how long anything was researched.\n' "$TALK_SENTENCE"
+  } >"$folder/brief-a.txt"
+  printf '%s Let us start from your week: how did the sleep go?\n' "$TALK_SENTENCE" >"$folder/opening-a.txt"
+  printf '%s\n' "$PREP_B_OPENING" >"$folder/opening-b.txt"
+  printf 'AREA: health\n\n## The opening\n\n%s Let us start from your week: how did the sleep go?\n\n## Prepared\n\n- nothing\n' "$TALK_SENTENCE" >"$folder/talk-a.md"
+  printf 'AREA: health\n\n## The opening\n\n%s\n\n## Prepared\n\n- the card\n' "$PREP_B_OPENING" >"$folder/talk-b.md"
+}
+section talk-prep-honest
+T=$TMP/talk
+talk_good "$T/good"
+passes 'a talk opened unprepared saying so, then one opened from a sealed preparation of all three goals' \
+  talk-prep-honest "$T/good" 'opened from the preparation'"'"'s own opening'
+
+copy "$T/good" "$T/sealed-anyway"
+printf '0\n' >"$T/sealed-anyway/seal-a.code"
+refuses 'a review the seal sealed although a goal was uncovered' talk-prep-honest "$T/sealed-anyway" 'sealed a review that leaves a goal uncovered'
+
+copy "$T/good" "$T/no-seal-words"
+printf 'something went wrong\n' >"$T/no-seal-words/seal-a.txt"
+refuses 'a refusal that never says it was not sealed' talk-prep-honest "$T/no-seal-words" 'without saying it was not sealed'
+
+copy "$T/good" "$T/gate-open"
+printf 'ready: coach/health/prep/2026-11-02.md\n' >"$T/gate-open/check-a.txt"
+refuses 'a preparation the gate did not refuse' talk-prep-honest "$T/gate-open" 'does not refuse the preparation'
+
+copy "$T/good" "$T/no-section"
+printf '# Brief\n\nRecord: x\n' >"$T/no-section/brief-a.txt"
+refuses 'a brief with no Not prepared section' talk-prep-honest "$T/no-section" 'has no section'
+
+copy "$T/good" "$T/no-sentence"
+printf 'Good evening! How did the sleep go?\n' >"$T/no-sentence/opening-a.txt"
+refuses 'an unready talk that opens without the sentence' talk-prep-honest "$T/no-sentence" 'did not open with the one sentence'
+
+copy "$T/good" "$T/not-in-record"
+printf 'AREA: health\n\n## The opening\n\nGood evening.\n' >"$T/not-in-record/talk-a.md"
+refuses 'a talk record that lost the sentence' talk-prep-honest "$T/not-in-record" 'talk record of (a) does not hold the sentence'
+
+for claim in 'I researched this all week.' 'I spent hours researching your LDL.' 'After 3 hours of research I found a route.' 'I read dozens of studies for you.'; do
+  copy "$T/good" "$T/claims"
+  printf '%s %s\n' "$TALK_SENTENCE" "$claim" >"$T/claims/opening-a.txt"
+  refuses "an opening that claims how long research ran: $claim" talk-prep-honest "$T/claims" 'claims research it cannot show'
+done
+
+copy "$T/good" "$T/claim-in-record"
+printf 'AREA: health\n\n## The opening\n\n%s I have been through the research all week.\n' "$TALK_SENTENCE" >"$T/claim-in-record/talk-a.md"
+refuses 'a talk record that claims how long research ran' talk-prep-honest "$T/claim-in-record" 'claims research it cannot show'
+
+copy "$T/good" "$T/refused-words"
+printf '%s %s\n' "$TALK_SENTENCE" "$PREP_A_OPENING" >"$T/refused-words/opening-a.txt"
+refuses "an opening that uses the refused preparation's words" talk-prep-honest "$T/refused-words" 'refused'
+
+copy "$T/good" "$T/two-routes"
+talk_prep "$T/two-routes/prep-b.md" "$PREP_B_OPENING" 2
+refuses 'a covered preparation with only two routes recorded' talk-prep-honest "$T/two-routes" 'records 2 routes'
+
+copy "$T/good" "$T/no-experiment"
+sed -i '0,/^- Experiment:/{//d}' "$T/no-experiment/prep-b.md"
+refuses 'a route recorded without its experiment' talk-prep-honest "$T/no-experiment" 'does not record "Experiment"'
+
+copy "$T/good" "$T/no-rejected"
+sed -i '/^## Rejected routes/,$d' "$T/no-rejected/prep-b.md"
+refuses 'a preparation with no rejected routes section' talk-prep-honest "$T/no-rejected" 'Rejected routes'
+
+copy "$T/good" "$T/seal-b-refused"
+printf '1\n' >"$T/seal-b-refused/seal-b.code"
+refuses 'a passing review the seal refused' talk-prep-honest "$T/seal-b-refused" 'refused the passing review'
+
+copy "$T/good" "$T/review-missing-goal"
+printf '{"verdict":"pass","coverage":[{"id":"lower-ldl","verdict":"pass"},{"id":"sleep-better","verdict":"pass"}]}\n' >"$T/review-missing-goal/review-b.json"
+refuses 'a sealed review that does not judge every goal' talk-prep-honest "$T/review-missing-goal" 'does not judge the goal visible-abs'
+
+copy "$T/good" "$T/gate-refuses"
+printf 'not ready: coach/health/prep/2026-11-03.md: its research scope changed after preparation\n' >"$T/gate-refuses/check-b.txt"
+refuses 'a sealed review the gate refuses' talk-prep-honest "$T/gate-refuses" 'does not call the covered, sealed preparation ready'
+
+copy "$T/good" "$T/b-not-from-prep"
+printf 'Good evening! How was your week?\n' >"$T/b-not-from-prep/opening-b.txt"
+refuses "a ready talk whose opening is not the preparation's" talk-prep-honest "$T/b-not-from-prep" 'did not open with the preparation'"'"'s opening'
+
+copy "$T/good" "$T/b-says-not-ready"
+printf '%s %s\n' "$TALK_SENTENCE" "$PREP_B_OPENING" >"$T/b-says-not-ready/opening-b.txt"
+refuses 'a ready talk that still says the preparation is not ready' talk-prep-honest "$T/b-says-not-ready" 'still opened by saying'
+
+copy "$T/good" "$T/two-goals"
+sed -i 's/^SERVES:.*/SERVES: lower-ldl, sleep-better/' "$T/two-goals/area.md"
+refuses 'an area that serves two goals' talk-prep-honest "$T/two-goals" 'exactly three goals'
+
+copy "$T/good" "$T/no-domains"
+sed -i '/^RESEARCH DOMAIN/d' "$T/no-domains/area.md"
+refuses 'an area with no research domain' talk-prep-honest "$T/no-domains" 'names no RESEARCH DOMAIN'
+
 # ============================================================ every one of them, the same shape
 section 'every script'
 for file in scenario-lib.sh settings-on-install.sh night-tidy.sh voice.sh update-keeps-everything.sh \
   reminder-closed-elsewhere.sh reminders-move-keeps-everything.sh two-machines-move-at-once.sh \
   late-reminder-file.sh closed-offline-on-both.sh reminder-from-settings.sh \
   charm-challenge.sh no-video-skills-by-default.sh update-removes-only-unchanged-skills.sh \
-  briefing-breaks-a-rule.sh telegram-language.sh test-scenarios.sh; do
+  briefing-breaks-a-rule.sh telegram-language.sh brief-asked-in-chat.sh talk-prep-honest.sh test-scenarios.sh; do
   if bash -n "$ROOT/scenarios/$file" 2>/dev/null; then
     ok "bash reads scenarios/$file"
   else
@@ -2156,7 +2463,8 @@ done
 for scenario in settings-on-install night-tidy voice update-keeps-everything \
   reminder-closed-elsewhere reminders-move-keeps-everything two-machines-move-at-once \
   late-reminder-file closed-offline-on-both reminder-from-settings charm-challenge \
-  no-video-skills-by-default update-removes-only-unchanged-skills briefing-breaks-a-rule telegram-language; do
+  no-video-skills-by-default update-removes-only-unchanged-skills briefing-breaks-a-rule telegram-language \
+  brief-asked-in-chat talk-prep-honest; do
   refuses "$scenario on a folder that is not there" "$scenario" "$TMP/no-such-folder" \
     "there is nothing at"
   run "$scenario"

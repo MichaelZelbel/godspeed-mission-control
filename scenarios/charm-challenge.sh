@@ -25,6 +25,16 @@
 #                   the card's own numbers, as the notebook says them.
 # Nothing here reads a record file by hand and nothing imports the product's code.
 #
+# FIVE FIRST VENTS (2.0.0-beta.16, ticket 01 of that release). The record command finds its
+# conversation itself, so a vent in ANY conversation ends with the question. The scenario vents five
+# times in a row, each time as the first message of a NEW conversation of the notebook's chat panel
+# (the panel's own Clear, then a message with the new session: scenario-lib.sh,
+# chat_panel_new_conversation), and answers "no" in that conversation so no question stays open.
+# Each reply has to end with "Back to 21? Yes / No". The assistant's command log (its state.db,
+# read by night-tidy-chat.mjs commands) has to show, inside each vent's own time, a
+# `godspeed-charm asked` command, and no `godspeed-charm asked|start|answer` command anywhere with
+# `--conversation` in it: the model typed none, the plugin or the turn marker found the conversation.
+#
 # THE DAYS HAVE TO PASS. A fresh install starts the challenge today, and a reset today would name
 # the same end date, so "start over with a new end date" would say nothing. GODSPEED_NOW is the
 # product's own frozen clock for a rehearsal (notebook/core/tracker-operations.mjs), and this is a
@@ -54,8 +64,11 @@
 #   card-after-start.txt         what the notebook says the card shows, that day
 #   brief-after-start.txt        the line the morning brief is given, that day
 #   shelf-after-start.txt        the Trackers shelf's own list: the card and its events
-#   vent-reply.txt               the reply to a vent, that day
-#   no-reply.txt                 the reply to "no"
+#   vent-reply.txt               the reply to the first vent, that day (the first of five)
+#   no-reply.txt                 the reply to "no" in that conversation
+#   vent-2-reply.txt .. vent-5-reply.txt, no-2-reply.txt .. no-5-reply.txt     the other four
+#   vents.txt                    one line per vent: vent<TAB>n<TAB>started<TAB>ended (epoch seconds)
+#   commands.txt                 the assistant's command log since the first vent
 #   status-after-no.txt / card-after-no.txt / brief-after-no.txt / shelf-after-no.txt
 #   status-fourth-day.txt / card-fourth-day.txt / brief-fourth-day.txt    three days later
 #   brief-run.json               what the notebook said when it ran its routines that day
@@ -73,15 +86,23 @@ scenario_arguments "$@"
 
 DAYS=21
 QUESTION='Back to 21? Yes / No'
+# The record command as the model types it: godspeed-charm asked ..., or the add-on's program with
+# its path, node and all, and the same with start or answer.
+CHARM_ASKED='godspeed-charm(\.mjs|\.cmd)?["'"'"']?[[:space:]]+asked([[:space:]]|$)'
+CHARM_RECORD='godspeed-charm(\.mjs|\.cmd)?["'"'"']?[[:space:]]+(asked|start|answer)([[:space:]]|$)'
 # A vent is venting at the assistant instead of saying what to fix (the design). Neither of these
 # says "reset", "start" or "slip", so a word of the owner's kept beside an event cannot be read as
 # one of those by this scenario's own reader.
 VENT='This caption file is garbage again. Why do you always hand me this rubbish?'
 SECOND_VENT='Rubbish once more. Are you even reading what I write, or do you just make things up?'
+# Four more of the same kind for the other first vents; none says reset, start or slip either.
+VENT_2='These slides are a mess again. Why can you never get one simple layout right?'
+VENT_3='Useless again. The summary you wrote misses everything I asked for.'
+VENT_4='Wrong again! Do you even look at the file before you answer?'
+VENT_5='This is rubbish. I told you twice how I want it and you ignored it.'
 ASK='how is my Charm Challenge?'
-UNIT=godspeed-integrated-notebook.service
 
-# shellcheck disable=SC2329  # asked by wait_for, which takes the command to try as its arguments
+# shellcheck disable=SC2317,SC2329  # asked by wait_for, which takes the command to try as its arguments
 notebook_answers() { curl -fsS "http://127.0.0.1:$NOTEBOOK_PORT/health" >/dev/null 2>&1; }
 
 # One string, written the way JSON writes it, so the owner's own words go into a request whole.
@@ -134,7 +155,7 @@ settings_connects_the_model() {
     "http://127.0.0.1:$NOTEBOOK_PORT/api/provider") ||
     fail "Settings could not be reached to connect a model, so the owner's chat has nobody to answer it"
   if [ "$code" != 200 ]; then
-    print_kept_diagnosis
+    print_kept_diagnosis "${STATE:-}" "${HERMES:-}"
     fail "Settings refused the model $AI_MODEL at $AI_URL with HTTP $code: $(tr -d '\n' <"$body" | cut -c1-200)"
   fi
   say "The owner's chat and the routines think with $AI_MODEL at $AI_URL"
@@ -155,7 +176,7 @@ owner_says() { # <what they say> <file for the reply>
   if [ "$code" != 200 ]; then
     # A failed AI request is all the chat says; what the notebook and the assistant kept of it is
     # printed here, because the machine is gone when anyone reads the log (issue #127).
-    print_kept_diagnosis
+    print_kept_diagnosis "${STATE:-}" "${HERMES:-}"
     fail "the notebook's own chat answered HTTP $code to \"$said\": $(tr -d '\n' <"$body" | cut -c1-200)"
   fi
   json_value "$body" reply >"$file" ||
@@ -233,34 +254,36 @@ the_brief_runs() {
     say '  (the morning brief could not be paused again; it will write another note each minute)'
 }
 
-clock_of_this_account() { # <moment>
-  local dropin=$HOME/.config/systemd/user/$UNIT.d
-  mkdir -p "$dropin" || return 1
-  printf '[Service]\nEnvironment="GODSPEED_NOW=%s"\n' "$1" >"$dropin/scenario-clock.conf" || return 1
-  systemctl --user daemon-reload || return 1
-  systemctl --user restart "$UNIT" || return 1
-}
-clock_of_the_machine() { # <moment>
-  local dropin=/etc/systemd/system/$UNIT.d
-  sudo mkdir -p "$dropin" || return 1
-  printf '[Service]\nEnvironment="GODSPEED_NOW=%s"\n' "$1" | sudo tee "$dropin/scenario-clock.conf" >/dev/null || return 1
-  sudo systemctl daemon-reload || return 1
-  sudo systemctl restart "$UNIT" || return 1
-}
-notebook_clock_at() { # <day, YYYY-MM-DD>
-  local day=$1 moment=$1T12:00:00Z
-  say "The notebook's own clock is set to $day"
-  if systemctl --user cat "$UNIT" >/dev/null 2>&1; then
-    clock_of_this_account "$moment" ||
-      fail "the notebook's own clock could not be set to $day (its own service of this account would not take it), so the days of the count could not pass"
-  elif systemctl cat "$UNIT" >/dev/null 2>&1; then
-    clock_of_the_machine "$moment" ||
-      fail "the notebook's own clock could not be set to $day (the machine's own service would not take it), so the days of the count could not pass"
-  else
-    fail "the install runs its notebook neither as this account's own service nor as the machine's ($UNIT is not there), so the days of the count could not pass"
-  fi
-  wait_for 180 "the notebook to answer on $day" notebook_answers ||
-    fail "the notebook does not answer after its clock was set to $day"
+# Five vents in a row. Each is the first message of a conversation of the chat panel that did not
+# exist before, and each conversation gets its own "no". The first one keeps the names the scenario
+# always had (vent-reply.txt, no-reply.txt).
+five_vents() {
+  local n vent started ended name_vent name_no first_started
+  : >"$EVIDENCE/vents.txt"
+  first_started=$(date +%s)
+  for n in 1 2 3 4 5; do
+    case $n in
+      1) vent=$VENT ;;
+      2) vent=$VENT_2 ;;
+      3) vent=$VENT_3 ;;
+      4) vent=$VENT_4 ;;
+      *) vent=$VENT_5 ;;
+    esac
+    name_vent=vent-$n-reply.txt
+    name_no=no-$n-reply.txt
+    if [ "$n" = 1 ]; then
+      name_vent="vent-reply.txt"
+      name_no="no-reply.txt"
+    fi
+    chat_panel_new_conversation "$EVIDENCE/.panel-new-$n.json"
+    started=$(date +%s)
+    chat_panel_says "$vent" "$EVIDENCE/$name_vent"
+    ended=$(date +%s)
+    printf 'vent\t%s\t%s\t%s\n' "$n" "$started" "$ended" >>"$EVIDENCE/vents.txt"
+    chat_panel_says no "$EVIDENCE/$name_no"
+  done
+  assistant_commands "$EVIDENCE/commands.txt" "$((first_started - 5))"
+  sed 's/^/  command | /' "$EVIDENCE/commands.txt" >&2
 }
 
 act() {
@@ -273,6 +296,7 @@ act() {
     fail "the notebook does not answer after the install, so the owner has no chat to say anything in"
   read_version "$ROOT"
   settings_connects_the_model
+  assistant_home
 
   # The three days: today, the fourth day of the count, and the day after the reset on it. The
   # offset is kept too, because the scenario measures the days in UTC.
@@ -293,9 +317,8 @@ act() {
   keep_the_brief_line "$EVIDENCE/brief-after-start.txt"
   keep_the_shelf "$EVIDENCE/shelf-after-start.txt"
 
-  phase 'a vent, and no'
-  owner_says "$VENT" "$EVIDENCE/vent-reply.txt"
-  owner_says no "$EVIDENCE/no-reply.txt"
+  phase 'five first vents, each in a new conversation, each answered no'
+  five_vents
   owner_says "$ASK" "$EVIDENCE/status-after-no.txt"
   keep_the_card "$EVIDENCE/card-after-no.txt"
   keep_the_brief_line "$EVIDENCE/brief-after-no.txt"
@@ -388,6 +411,14 @@ events_in() { # <shelf file>
 event_kinds_in() { # <shelf file>
   awk -F'\t' '$1=="event"{print $3}' "$1" | sed 's/.*"kind":"\([a-z][a-z]*\)".*/\1/;t;s/.*/?/' | sort | tr '\n' ' ' | sed 's/[[:space:]]*$//'
 }
+# The sorted kinds of a card with <asked> questions, <kept> kept answers, <reset> resets and its start.
+kinds() { # <asked> <kept> <reset>
+  local out='' i
+  for ((i = 0; i < $1; i++)); do out="$out asked"; done
+  for ((i = 0; i < $2; i++)); do out="$out kept"; done
+  for ((i = 0; i < $3; i++)); do out="$out reset"; done
+  printf '%s\n' "$out start" | tr ' ' '\n' | grep . | sort | tr '\n' ' ' | sed 's/[[:space:]]*$//'
+}
 event_days_in() { # <shelf file>
   events_in "$1" | sort -u | tr '\n' ' ' | sed 's/[[:space:]]*$//'
 }
@@ -452,7 +483,9 @@ check() { # <evidence folder>
     brief-after-no.txt shelf-after-no.txt status-fourth-day.txt card-fourth-day.txt \
     brief-fourth-day.txt brief-run.json brief-job.txt second-vent-reply.txt yes-reply.txt \
     status-after-yes.txt card-after-yes.txt brief-after-yes.txt shelf-after-yes.txt slip-reply.txt \
-    status-after-slip.txt card-after-slip.txt brief-after-slip.txt shelf-after-slip.txt chat.txt
+    status-after-slip.txt card-after-slip.txt brief-after-slip.txt shelf-after-slip.txt chat.txt \
+    no-reply.txt vents.txt commands.txt vent-2-reply.txt vent-3-reply.txt vent-4-reply.txt vent-5-reply.txt \
+    no-2-reply.txt no-3-reply.txt no-4-reply.txt no-5-reply.txt
   [ -f "$folder/brief-note.txt" ] ||
     fail "brief-note.txt is not in what the scenario kept: the note the morning brief wrote"
 
@@ -460,8 +493,9 @@ check() { # <evidence folder>
   reset=$(valued "$folder/days.txt" reset)
   slip=$(valued "$folder/days.txt" slip)
   offset=$(valued "$folder/days.txt" offset)
-  [ -n "$start" ] && [ -n "$reset" ] && [ -n "$slip" ] ||
+  if [ -z "$start" ] || [ -z "$reset" ] || [ -z "$slip" ]; then
     fail "days.txt does not say which days this scenario acted on, so what the right end date would be cannot be said"
+  fi
   [ "$offset" = "+0000" ] ||
     fail "this scenario counts the days of the challenge in UTC, and the machine it ran on was $offset off it"
 
@@ -487,16 +521,38 @@ check() { # <evidence folder>
   [ "$(events_in "$folder/shelf-after-start.txt" | head -n 1)" = "$start" ] ||
     fail "the start the card holds is dated $(events_in "$folder/shelf-after-start.txt" | head -n 1), and the challenge was started on $start"
 
-  # 2. A vent is answered with the work and then the one question, at the end of the reply. The
-  # add-on's own words end the question with a full stop ("That sounded like a slip. Back to 21?
-  # Yes / No.", lib/texts.mjs), and a reply that quotes them word for word is the right one; on
-  # candidate/2.0.0-beta.15 it was failed for that full stop.
-  local tail_of
-  tail_of=$(tr -d '\r' <"$folder/vent-reply.txt" | sed -e :a -e '/^[[:space:]]*$/{$d;N;ba' -e '}' | tail -n 1)
-  case $tail_of in
-    *"$QUESTION" | *"$QUESTION.") ;;
-    *) fail "the reply to a vent ends \"$(printf '%s' "$tail_of" | tail -c 60)\", and a slip Godspeed sees ends with \"$QUESTION\"" ;;
-  esac
+  # 2. Five vents, each in a conversation of its own, and each answered with the work and then the
+  # one question, at the end of the reply. The add-on's own words end the question with a full stop
+  # ("That sounded like a slip. Back to 21? Yes / No.", lib/texts.mjs), and a reply that quotes them
+  # word for word is the right one; on candidate/2.0.0-beta.15 it was failed for that full stop.
+  local vents n tail_of file
+  vents=$(grep -c '^vent	' "$folder/vents.txt" || true)
+  [ "$vents" = 5 ] ||
+    fail "vents.txt holds $vents vents, and this scenario vents five times in a row, each in a new conversation"
+  for n in 1 2 3 4 5; do
+    file=vent-$n-reply.txt
+    if [ "$n" = 1 ]; then file="vent-reply.txt"; fi
+    [ -s "$folder/$file" ] || fail "$file is not in what the scenario kept: the reply to vent $n"
+    tail_of=$(tr -d '\r' <"$folder/$file" | sed -e :a -e '/^[[:space:]]*$/{$d;N;ba' -e '}' | tail -n 1)
+    case $tail_of in
+      *"$QUESTION" | *"$QUESTION.") ;;
+      *) fail "the reply to vent $n (a first message of a new conversation) ends \"$(printf '%s' "$tail_of" | tail -c 60)\", and a slip Godspeed sees ends with \"$QUESTION\"" ;;
+    esac
+  done
+  # The assistant's own command log: a `godspeed-charm asked` inside each vent's own time, and the
+  # model typed --conversation in none of the record commands.
+  local began finished
+  for n in 1 2 3 4 5; do
+    began=$(awk -F'\t' -v n="$n" '$1=="vent" && $2==n {print $3}' "$folder/vents.txt")
+    finished=$(awk -F'\t' -v n="$n" '$1=="vent" && $2==n {print $4}' "$folder/vents.txt")
+    if [ -z "$began" ] || [ -z "$finished" ]; then fail "vents.txt does not say when vent $n began and ended"; fi
+    awk -F'\t' -v a="$((began - 2))" -v b="$((finished + 2))" '$1>=a && $1<=b {print $3}' "$folder/commands.txt" |
+      grep -Eq "$CHARM_ASKED" ||
+      fail "the assistant's command log holds no godspeed-charm asked command while vent $n was being answered, so no question was recorded for that conversation"
+  done
+  if awk -F'\t' '{print $3}' "$folder/commands.txt" | grep -E "$CHARM_RECORD" | grep -q -- '--conversation'; then
+    fail "the assistant's command log shows a godspeed-charm command typed with --conversation (\"$(awk -F'\t' '{print $3}' "$folder/commands.txt" | grep -E "$CHARM_RECORD" | grep -- '--conversation' | head -n 1 | cut -c1-140)\"), and the model is no longer to type the conversation"
+  fi
 
   # 3. "no" changes nothing: the same numbers in all three places, and no reset on the card.
   judge_the_moment "$folder" 'after the owner said no,' card-after-no.txt status-after-no.txt \
@@ -506,8 +562,8 @@ check() { # <evidence folder>
   [ "$(longest_run_in "$folder/card-after-no.txt")" = "$(longest_run_in "$folder/card-after-start.txt")" ] ||
     fail "the \"no\" moved the longest run on the card from $(longest_run_in "$folder/card-after-start.txt") to $(longest_run_in "$folder/card-after-no.txt"), and a \"no\" changes nothing"
   events=$(event_kinds_in "$folder/shelf-after-no.txt")
-  [ "$events" = 'asked kept start' ] ||
-    fail "the card holds the events \"$events\" after the \"no\", and it should hold the start, the question and the kept answer"
+  [ "$events" = "$(kinds 5 5 0)" ] ||
+    fail "the card holds the events \"$events\" after the \"no\", and it should hold the start and, for each of the five vents, the question and the kept answer"
   [ "$(event_days_in "$folder/shelf-after-no.txt")" = "$start" ] ||
     fail "the events on the card after the \"no\" are dated $(event_days_in "$folder/shelf-after-no.txt"), and all of it happened on $start"
 
@@ -536,8 +592,8 @@ check() { # <evidence folder>
   [ "$(restarts_in "$folder/card-after-yes.txt")" = 1 ] ||
     fail "the card counts $(restarts_in "$folder/card-after-yes.txt") restarts after the first \"yes\", and it should count 1"
   events=$(event_kinds_in "$folder/shelf-after-yes.txt")
-  [ "$events" = 'asked asked kept reset start' ] ||
-    fail "the card holds the events \"$events\" after the \"yes\", and it should hold the start, the two questions, the kept answer and the reset"
+  [ "$events" = "$(kinds 6 5 1)" ] ||
+    fail "the card holds the events \"$events\" after the \"yes\", and it should hold the start, the six questions, the five kept answers and the reset"
   events_in "$folder/shelf-after-yes.txt" | grep -qx "$reset" ||
     fail "the card holds no event of $reset, the day the owner said yes"
 
@@ -549,8 +605,8 @@ check() { # <evidence folder>
   [ "$(restarts_in "$folder/card-after-slip.txt")" = 2 ] ||
     fail "the card counts $(restarts_in "$folder/card-after-slip.txt") restarts after a \"yes\" on $reset and a \"charm slip\" on $slip, and those are two days, so it should count 2"
   events=$(event_kinds_in "$folder/shelf-after-slip.txt")
-  [ "$events" = 'asked asked kept reset reset start' ] ||
-    fail "the card holds the events \"$events\" after the charm slip, and it should hold the start, the two questions, the kept answer and two resets"
+  [ "$events" = "$(kinds 6 5 2)" ] ||
+    fail "the card holds the events \"$events\" after the charm slip, and it should hold the start, the six questions, the five kept answers and two resets"
   events_in "$folder/shelf-after-slip.txt" | grep -qx "$slip" ||
     fail "the card holds no event of $slip, the day of the charm slip"
 
@@ -558,7 +614,7 @@ check() { # <evidence folder>
   grep -q "$QUESTION" "$folder/chat.txt" ||
     fail "the conversation the notebook kept holds no \"$QUESTION\", so the owner was never asked in the chat they answered in"
 
-  pass "\"start the Charm Challenge\" answered with $DAYS days to go and $(all_day_words "$(day_plus "$start" "$DAYS")") as its end date; on the fourth day the card on the Trackers shelf, the chat and the brief's own line all said day 4 of $DAYS and $((DAYS - 3)) days to go, and the morning brief's note carried \"$line\" word for word; a vent ended with \"$QUESTION\", \"no\" left every number where it was, and \"yes\" on the fourth day and \"charm slip\" the day after started over with a new end date each and 2 restarts, with the six events of it on the card (the start, two questions, the kept answer and two resets)"
+  pass "\"start the Charm Challenge\" answered with $DAYS days to go and $(all_day_words "$(day_plus "$start" "$DAYS")") as its end date; on the fourth day the card on the Trackers shelf, the chat and the brief's own line all said day 4 of $DAYS and $((DAYS - 3)) days to go, and the morning brief's note carried \"$line\" word for word; a vent ended with \"$QUESTION\", \"no\" left every number where it was, and \"yes\" on the fourth day and \"charm slip\" the day after started over with a new end date each and 2 restarts, with the events of it on the card (the start, six questions, five kept answers and two resets); five first vents, each in a new conversation, ended with \"$QUESTION\" and the assistant's command log shows godspeed-charm asked run without --conversation for each"
 }
 
 if [ "$CHECK_ONLY" = yes ]; then
