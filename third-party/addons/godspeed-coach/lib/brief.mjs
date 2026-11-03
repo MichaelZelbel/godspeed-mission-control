@@ -11,7 +11,7 @@ import { localParts, addDays, dayWords } from "./clock.mjs";
 import { lastTalk, missedInARow, talkFile, talkDates, readTalk } from "./talks.mjs";
 import { listHabits, stats, verdict, daysWords } from "./habits.mjs";
 import { rhythmWords, listAreas, findArea } from "./areas.mjs";
-import { prepForBrief } from "./prep.mjs";
+import { prepForBrief, prepMissing } from "./prep.mjs";
 
 export function queuedQuestions(area, ymd) {
   const f = path.join(area.dir, "questions.md");
@@ -154,6 +154,8 @@ export function brief(mcDir, s, area, ymd, { inChat = false } = {}) {
   L.push(prep
     ? `Record: ${rel(talkFile(area, ymd))}, created by (run it exactly like this): ${fromPrepCommand(area, home, rel(prep.file))}${inChat ? " --shown" : ""}. ${FROM_PREP_SAYS}`
     : `Record: ${rel(talkFile(area, ymd))}, created by (run it exactly like this): godspeed-coach talk open ${area.slug} --godspeed "${home}" --opening "<the opening>" --prepared "${hint}" --read "<what you read>"${inChat ? " --shown" : ""}`);
+  const missing = prep ? null : prepMissing(area, ymd);
+  if (missing) L.push("", "## Not prepared", `The preparation for this talk is not ready, and the opening must say so. Right after where it comes from, say this one sentence, word for word: "The preparation for this talk is not ready: ${missing}." Then carry on from this brief. Never say or suggest how long or how widely anything was researched; say only what the brief shows.`, "");
   L.push(`Mission control folder: ${home} (every godspeed-coach command in this talk takes --godspeed "${home}")`);
   L.push(`Style: ${area.style}. Tone: ${area.tone}. Rhythm: ${rhythmWords(area)}.`);
   if (area.serves.length) L.push(`Serves: ${area.serves.join(", ")}.`);
