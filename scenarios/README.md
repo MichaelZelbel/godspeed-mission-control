@@ -164,3 +164,19 @@ it (`assistant_keeps_a_conversation`).
   (labels `bug` and `scenario-failure`, made if missing), or adds the night to the one already open;
   for each that passed with an issue open it comments the run link and closes it. Its tests are
   `test-report-night.mjs` (`node --test`, against a stand-in for GitHub), run by `test-scenarios.sh`.
+
+## Which stage a run proves
+
+`stage-for-run.sh <stage or ''> <commit> <folder>` answers it for `.github/workflows/scenarios.yml`.
+A stage given (a candidate's tag, `beta`) is that stage, read from GitHub: nothing is made. No stage
+given, which is the night on main, is **this commit**: a stage file made the way godspeed-dev's
+`freeze.mjs` makes a candidate's (the commit as product commit, kit-bootstrap, Windows setup and
+withdrawn list carried from `beta`, add-ons pinned as `third-party/addons/sources.json` holds them,
+the server image the commit's own `v2-sha-<commit>`, or the newest first-parent ancestor's within 50
+when CI built none for it), written with the commit's files into a folder the jobs read as
+`file://`. Main's own `stage.json` is never read by a night, because it names whatever version was
+frozen last. Its cases are in `test-scenarios.sh`.
+
+Only the stage's own ref is read from that folder. A scenario that first installs an older version
+(`BEFORE_THE_MOVE`, `WITH_THE_VIDEO_SKILLS`) reads it from GitHub, as it always has
+(`install_the_line_of_into` in `scenario-lib.sh`).

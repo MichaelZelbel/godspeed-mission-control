@@ -2504,6 +2504,91 @@ for scenario in settings-on-install night-tidy voice update-keeps-everything \
   esac
 done
 
+# ================================================================ which stage a run proves
+# stage-for-run.sh: a stage given is that stage; none given is this commit's own build.
+section "stage-for-run.sh: which stage a run proves"
+SFR="$ROOT/scenarios/stage-for-run.sh"
+SFR_REPO="$TMP/sfr-repo"
+mkdir -p "$SFR_REPO/third-party/addons"
+git -C "$SFR_REPO" init -q
+printf '#!/bin/sh\necho installer\n' >"$SFR_REPO/install-godspeed.sh"
+printf '[{"name":"carried","carriedHere":true},{"name":"outside","commit":"%s"}]\n' "$(printf 'c%.0s' $(seq 40))" >"$SFR_REPO/third-party/addons/sources.json"
+git -C "$SFR_REPO" add -A
+git -C "$SFR_REPO" -c user.name=t -c user.email=t@t commit -q -m one
+SFR_ONE=$(git -C "$SFR_REPO" rev-parse HEAD)
+echo two >"$SFR_REPO/two"
+git -C "$SFR_REPO" add -A
+git -C "$SFR_REPO" -c user.name=t -c user.email=t@t commit -q -m two
+SFR_TWO=$(git -C "$SFR_REPO" rev-parse HEAD)
+mkdir -p "$TMP/sfr-public/beta"
+cp "$ROOT/stage.json" "$TMP/sfr-public/beta/stage.json"
+SFR_IMAGE=$(node "$ROOT/stage/stage.mjs" "$ROOT/stage.json" get serverEditions.server.image)
+SFR_IMAGE=${SFR_IMAGE%%@*}
+SFR_DA=sha256:$(printf 'a%.0s' $(seq 64))
+SFR_DB=sha256:$(printf 'b%.0s' $(seq 64))
+printf '%s:v2-sha-%s %s\n' "$SFR_IMAGE" "$SFR_TWO" "$SFR_DA" >"$TMP/sfr-images-two"
+printf '%s:v2-sha-%s %s\n' "$SFR_IMAGE" "$SFR_ONE" "$SFR_DB" >"$TMP/sfr-images-one"
+: >"$TMP/sfr-images-none"
+GH_RAW_ADDR=https://raw.githubusercontent.com/MichaelZelbel/godspeed-mission-control
+sfr() { # <images file> <stage> <commit> <folder>
+  GODSPEED_SCENARIO_REPO=$SFR_REPO GODSPEED_SCENARIO_PUBLIC_RAW=file:///no/such/place GODSPEED_SCENARIO_IMAGES=$1 \
+    bash "$SFR" "$2" "$3" "$4" 2>"$TMP/sfr.err"
+}
+SFR_OUT=$(sfr "$TMP/sfr-images-none" candidate/2.0.0-beta.15 "$SFR_TWO" "$TMP/sfr-given"); SFR_CODE=$?
+if [ "$SFR_CODE" = 0 ] && [ "$SFR_OUT" = "$(printf 'ref=candidate/2.0.0-beta.15\nraw=%s' "$GH_RAW_ADDR")" ] && [ ! -e "$TMP/sfr-given" ]; then
+  ok "a stage given means that stage: GitHub's address, nothing made, nothing read"
+else
+  bad "a stage given means that stage (exit $SFR_CODE: $SFR_OUT)"
+fi
+sfr_night() { # <images file> <folder>
+  SFR_OUT=$(GODSPEED_SCENARIO_REPO=$SFR_REPO GODSPEED_SCENARIO_PUBLIC_RAW=file://$TMP/sfr-public GODSPEED_SCENARIO_IMAGES=$1 \
+    bash "$SFR" '' "$SFR_TWO" "$2" 2>"$TMP/sfr.err"); SFR_CODE=$?
+}
+sfr_night "$TMP/sfr-images-two" "$TMP/sfr-night"
+SFR_S=$TMP/sfr-night/this-commit/stage.json
+if [ "$SFR_CODE" = 0 ] && [ "$SFR_OUT" = "$(printf 'ref=this-commit\nraw=file://%s' "$TMP/sfr-night")" ] \
+  && node "$ROOT/stage/stage.mjs" "$SFR_S" check && sh "$ROOT/stage/stage.sh" "$SFR_S" check \
+  && [ "$(node "$ROOT/stage/stage.mjs" "$SFR_S" get productCommit)" = "$SFR_TWO" ] \
+  && [ "$(node "$ROOT/stage/stage.mjs" "$SFR_S" get serverEditions.server.image)" = "$SFR_IMAGE@$SFR_DA" ] \
+  && [ "$(node "$ROOT/stage/stage.mjs" "$SFR_S" get addons.carried)" = "$SFR_TWO" ] \
+  && [ "$(node "$ROOT/stage/stage.mjs" "$SFR_S" get kitBootstrap.unixEngineCommit)" = "$(node "$ROOT/stage/stage.mjs" "$ROOT/stage.json" get kitBootstrap.unixEngineCommit)" ] \
+  && [ -f "$TMP/sfr-night/this-commit/two" ] && [ -f "$TMP/sfr-night/beta/stage.json" ]; then
+  ok "no stage means this commit's own build: its commit, its image, its add-on pins, the public kit-bootstrap, its files"
+else
+  bad "no stage means this commit's own build (exit $SFR_CODE: $SFR_OUT; $(cat "$TMP/sfr.err"))"
+fi
+sfr_night "$TMP/sfr-images-one" "$TMP/sfr-night2"
+if [ "$SFR_CODE" = 0 ] && [ "$(node "$ROOT/stage/stage.mjs" "$TMP/sfr-night2/this-commit/stage.json" get serverEditions.server.image)" = "$SFR_IMAGE@$SFR_DB" ] \
+  && grep -qF "${SFR_ONE:0:7}" "$TMP/sfr.err"; then
+  ok "a commit with no image of its own gets the newest ancestor's, and says whose"
+else
+  bad "a commit with no image of its own (exit $SFR_CODE: $(cat "$TMP/sfr.err"))"
+fi
+sfr_night "$TMP/sfr-images-none" "$TMP/sfr-night3"
+if [ "$SFR_CODE" != 0 ]; then ok "no image within reach fails"; else bad "no image within reach succeeded"; fi
+bash "$SFR" '' notacommit "$TMP/sfr-night4" >/dev/null 2>&1
+if [ $? = 2 ]; then ok "a commit that is not one prints the usage (exit 2)"; else bad "a bad commit was not refused with exit 2"; fi
+
+# install_the_line_of_into: the stage's own ref is read from the stage's address (a folder on a
+# night), any other version from GitHub, because the folder holds only this commit and beta.
+mkdir -p "$TMP/sfr-bin"
+cat >"$TMP/sfr-bin/curl" <<'STUB'
+#!/bin/sh
+for a in "$@"; do case $a in *install-godspeed.sh) echo "$a" >>"$SFR_ASKED" ;; esac; done
+echo true
+STUB
+chmod +x "$TMP/sfr-bin/curl"
+: >"$TMP/sfr-asked"
+PATH="$TMP/sfr-bin:$PATH" SFR_ASKED=$TMP/sfr-asked SCENARIO=sfr-test GODSPEED_SCENARIO_RAW=file:///the/folder bash -c '
+  . "$1/scenarios/scenario-lib.sh"; STAGE_REF=this-commit
+  install_the_line_of_into this-commit /r1 47831 /dev/null
+  install_the_line_of_into candidate/2.0.0-beta.11 /r2 47832 /dev/null' _ "$ROOT" >/dev/null 2>&1
+if [ "$(cat "$TMP/sfr-asked")" = "$(printf 'file:///the/folder/this-commit/install-godspeed.sh\n%s/candidate/2.0.0-beta.11/install-godspeed.sh' "$GH_RAW_ADDR")" ]; then
+  ok "another version's line reads GitHub, the stage's own line reads the stage's address"
+else
+  bad "install_the_line_of_into read: $(cat "$TMP/sfr-asked")"
+fi
+
 # ================================================================ the night's report
 # report-night.mjs opens, comments on and closes the issues of a failed night; its own tests stand a
 # fake GitHub in for the real one.

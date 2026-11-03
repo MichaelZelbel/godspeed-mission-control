@@ -27,7 +27,10 @@ export LC_ALL
 
 : "${SCENARIO:?A scenario script sets SCENARIO before it sources scenario-lib.sh}"
 
-RAW=${GODSPEED_SCENARIO_RAW:-https://raw.githubusercontent.com/MichaelZelbel/godspeed-mission-control}
+GH_RAW=https://raw.githubusercontent.com/MichaelZelbel/godspeed-mission-control
+# Where the stage's files are read from: GitHub, or (a night on main, scenarios/stage-for-run.sh)
+# a folder holding the commit's own stage as file://. Only the stage's own ref lives there.
+RAW=${GODSPEED_SCENARIO_RAW:-$GH_RAW}
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
 # ------------------------------------------------------------------- what it says, and to whom
@@ -83,7 +86,7 @@ fresh_evidence() {
 # install, traced so the checking part can see which kit-bootstrap and which starter it used.
 install_the_stage_line() { # <trace file>
   say "The line, from the stage's own address: $STAGE_REF"
-  curl -fsSL "$RAW/$STAGE_REF/install-godspeed.sh" | GODSPEED_STAGE_REF="$STAGE_REF" bash -x 2> >(tee "$1" >&2) ||
+  curl -fsSL "$RAW/$STAGE_REF/install-godspeed.sh" | GODSPEED_STAGE_REF="$STAGE_REF" GODSPEED_STAGE_RAW="$RAW" bash -x 2> >(tee "$1" >&2) ||
     fail "the install line for $STAGE_REF failed before this scenario could do anything (its trace is in the step log)"
 }
 # Today's public line, the one a reader copies, which installs the current public version.
@@ -473,8 +476,10 @@ owner_sets_threshold() { # <config file> <value>
 # first computer always runs the unchanged line above.
 install_the_line_of_into() { # <ref> <root> <port> <trace file>
   say "The line, from that version's own address, into $2 on port $3: $1"
-  curl -fsSL "$RAW/$1/install-godspeed.sh" |
-    GODSPEED_STAGE_REF="$1" GODSPEED_PORT="$3" bash -xs -- --godspeed "$2" 2> >(tee "$4" >&2) ||
+  local from=$GH_RAW
+  [ "$1" != "$STAGE_REF" ] || from=$RAW # any other version (the one before a move) is GitHub's
+  curl -fsSL "$from/$1/install-godspeed.sh" |
+    GODSPEED_STAGE_REF="$1" GODSPEED_STAGE_RAW="$from" GODSPEED_PORT="$3" bash -xs -- --godspeed "$2" 2> >(tee "$4" >&2) ||
     fail "the install line for $1 into $2 failed before this scenario could do anything (its trace is in the step log)"
 }
 install_the_stage_line_into() { # <root> <port> <trace file>
