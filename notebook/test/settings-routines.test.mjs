@@ -2,7 +2,7 @@ import test from 'node:test';import assert from 'node:assert/strict';import fs f
 import {NativeScheduler,nativeJobs} from '../core/native-scheduler.mjs';import {Store} from '../core/records/store.mjs';import {QueryService} from '../core/query.mjs';import {Domains} from '../core/domains.mjs';
 import {installStarter} from '../core/starter-workspace.mjs';import {readMachineRecord,telegramInHermes,chatAppInHermes} from '../core/starting-routines.mjs';import {runCommand} from '../core/child-process.mjs';
 import {DatabaseSync} from 'node:sqlite';
-import {cronCalendar,calendarCron,retimeWhat} from '../core/routine-times.mjs';import {enableKinds,readNotebookRoutines,rememberNotebookRoutine,JOURNAL_JOB,CHAT_TIDY_JOB,CHAT_TIDY_SCRIPT,deliveryFor} from '../core/notebook-routines.mjs';
+import {cronCalendar,calendarCron,retimeWhat} from '../core/routine-times.mjs';import {enableKinds,readNotebookRoutines,rememberNotebookRoutine,JOURNAL_JOB,CHAT_TIDY_JOB,CHAT_TIDY_SCRIPT,BRIEF_SCRIPT,deliveryFor} from '../core/notebook-routines.mjs';
 import {personalOperation} from '../core/personal-operations.mjs';import {readArea} from '../../third-party/addons/godspeed-coach/lib/areas.mjs';
 
 // THE SETTINGS CONTROLS FOR HERMES' ROUTINES, 18 October 2026. Routine times was refused for every
@@ -203,11 +203,12 @@ test('Settings, Notifications switches the morning brief and the weekly review o
  const {store,hermes,scheduler}=await withGoal(t);
  assert.deepEqual(scheduler.notifications(),{daily:{enabled:false,time:'07:00'},weekly:{enabled:false,time:'17:00',day:5},delivery:'local'});
  await scheduler.setNotifications({daily:{enabled:true,time:'06:45'},weekly:{enabled:true,day:5,time:'17:00'}});
- const brief=()=>hermes.jobs().find(j=>j.skill==='morning-brief'),review=()=>hermes.jobs().find(j=>j.skill==='weekly-review');
+ const brief=()=>hermes.jobs().find(j=>j.script===BRIEF_SCRIPT),review=()=>hermes.jobs().find(j=>j.skill==='weekly-review');
  assert.equal(brief().schedule.expr,'45 6 * * *');assert.equal(brief().name,'Morning brief');assert.equal(brief().workdir,store.root);
+ assert.equal(brief().no_agent,true,'the notebook\'s own briefing, not the recipe (#160)');assert.equal(brief().skill,null);
  assert.equal(review().schedule.expr,'0 17 * * 5');
  assert.deepEqual(scheduler.notifications().daily,{enabled:true,time:'06:45'});
- await scheduler.setNotifications({daily:{enabled:true,time:'07:30'}});assert.equal(brief().schedule.expr,'30 7 * * *','moved, not doubled');assert.equal(hermes.jobs().filter(j=>j.skill==='morning-brief').length,1);
+ await scheduler.setNotifications({daily:{enabled:true,time:'07:30'}});assert.equal(brief().schedule.expr,'30 7 * * *','moved, not doubled');assert.equal(hermes.jobs().filter(j=>j.script===BRIEF_SCRIPT).length,1);
  await scheduler.setNotifications({daily:{enabled:false,time:'07:30'}});assert.equal(brief().enabled,false,'off pauses it');
  await scheduler.setNotifications({daily:{enabled:true,time:'07:30'}});assert.equal(brief().enabled,true,'on resumes it');
  await assert.rejects(scheduler.setNotifications({weekly:{enabled:true,day:9,time:'17:00'}}),/day of the week/);
@@ -216,4 +217,36 @@ test('Settings, Notifications switches the morning brief and the weekly review o
 test('the morning brief reads what the watches found',()=>{
  const recipe=fs.readFileSync(fileURLToPath(new URL('../../starter-godspeed/skills/morning-brief/SKILL.md',import.meta.url)),'utf8');
  assert.match(recipe,/## What your watches found/);assert.match(recipe,/mc-watch pull --channel brief --limit 1 --dry-run/);assert.match(recipe,/watch\/\*\/findings\.md/);
+});
+
+// THE MORNING BRIEF IS THE NOTEBOOK'S OWN BRIEFING (#160): a script routine whose script runs
+// core/briefing.mjs (scripts/morning-brief.mjs), never the starter recipe as an AI job.
+test('a Morning brief added in Settings is the script that runs the notebook\'s own briefing',async t=>{
+ const {store,hermes,scheduler,home}=await withGoal(t);
+ const row=await scheduler.control({kind:'morning-brief',interval_ms:86400000},{enable:true});
+ const job=hermes.jobs().find(j=>j.id===row.id);
+ assert.equal(job.script,BRIEF_SCRIPT);assert.equal(job.no_agent,true);assert.equal(job.skill,null);assert.equal(job.name,'Morning brief');
+ assert.equal(job.schedule_display,'1440m');assert.equal(job.workdir,store.root);
+ const wrapper=fs.readFileSync(path.join(home,'scripts',BRIEF_SCRIPT),'utf8');assert.match(wrapper,/main\("brief"\)/);
+ const config=JSON.parse(fs.readFileSync(path.join(home,'scripts','godspeed-routines.json'),'utf8'));
+ assert.ok(fs.existsSync(config.brief),'the script it runs is there: '+config.brief);assert.match(config.brief,/morning-brief\.mjs$/);
+ assert.equal(readNotebookRoutines(store).jobs.find(e=>e.id===row.id)?.key,'morning-brief');
+ await assert.rejects(scheduler.control({kind:'morning-brief',at:'07:00'},{enable:true}),/already runs this/);
+ assert.deepEqual(scheduler.notifications().daily.enabled,true,'Settings > Notifications finds it');
+});
+
+test('a Morning brief the notebook made as the recipe becomes the script, at its time and paused as it was',async t=>{
+ const {store,hermes,scheduler}=await withGoal(t);
+ const jobs=hermes.jobs();
+ jobs.push({id:'old-brief',name:'Morning brief',schedule:{kind:'cron',expr:'15 6 * * *'},schedule_display:'15 6 * * *',prompt:'Follow the morning-brief recipe for this mission control.',script:null,skill:'morning-brief',no_agent:false,deliver:'telegram',workdir:store.root,enabled:false});
+ jobs.push({id:'theirs',name:'My own brief',schedule:{kind:'cron',expr:'0 9 * * *'},schedule_display:'0 9 * * *',prompt:'Brief me',script:null,skill:'morning-brief',no_agent:false,deliver:'local',workdir:'/somewhere/else',enabled:true});
+ hermes.write(jobs);rememberNotebookRoutine(store,{id:'old-brief',key:'morning-brief',name:'Morning brief',skill:'morning-brief'});
+ const moved=await scheduler.followBrief();
+ assert.equal(moved.length,1);
+ const now=hermes.jobs(),made=now.find(j=>j.id===moved[0]);
+ assert.equal(now.some(j=>j.id==='old-brief'),false,'the recipe job is gone');
+ assert.equal(made.script,BRIEF_SCRIPT);assert.equal(made.schedule.expr,'15 6 * * *');assert.equal(made.enabled,false,'paused as it was');assert.equal(made.deliver,'telegram');
+ assert.ok(now.some(j=>j.id==='theirs'),'a brief of the owner\'s own stays');
+ assert.deepEqual(readNotebookRoutines(store).jobs.filter(e=>e.key==='morning-brief').map(e=>e.id),[made.id]);
+ assert.deepEqual(await scheduler.followBrief(),[],'once');
 });

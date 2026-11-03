@@ -19,6 +19,10 @@ Each routine runs the original programs of the mission control, never a copy of 
   work        mc-work-run, the daily round's work (the work-item recipe). Prints one sentence for
               each finished piece the person will open, one for each step that went out on a
               kind of step they allowed once, one for each piece whose check failed, or nothing.
+  brief       the notebook's own morning briefing (notebook/scripts/morning-brief.mjs, core/briefing.mjs):
+              saved in the notebook as "Your morning briefing" and printed, with the Charm Challenge
+              line and without a sentence that breaks the person's writing rules; nothing when the
+              same briefing went out already (#160, 3 November 2026: it was the starter recipe).
   due         mc-due check and mc-due today. Prints the reminders that need saying today, or
               nothing, and nothing at all on a day a morning brief carries them.
   coach-gate  godspeed-coach gate: the talk brief when a talk is due, else {"wakeAgent": false}.
@@ -297,10 +301,19 @@ def local_day(stamp, c):
 BRIEF = re.compile(r"morning[\s_-]*brief", re.I)
 
 
+# The Morning brief that is the notebook's own briefing (#160, notebook-routines.mjs BRIEF_SCRIPT).
+BRIEF_SCRIPT = "godspeed-morning-brief.py"
+
+
 def brief_today(c, day):
     """Whether a morning brief that is switched on runs today: (already ran today, still to run
     today). The brief carries the dates and the daily round's line itself (Teach It Once,
-    Chapter 25), so the routines here never say the same thing twice in one morning."""
+    Chapter 25), so the routines here never say the same thing twice in one morning.
+
+    Only the starter recipe's brief does that. The notebook's own briefing (BRIEF_SCRIPT, since
+    3 November 2026) carries neither the daily round's line nor the steps going out tonight unless
+    the person says stop, so beside it the daily round and the deadline reminders speak for
+    themselves: a step must never go out without its one chance to be stopped."""
     try:
         with open(os.path.join(c["home"], "cron", "jobs.json"), encoding="utf-8") as f:
             data = json.load(f)
@@ -310,6 +323,8 @@ def brief_today(c, day):
     ran = later = False
     for j in jobs:
         if not isinstance(j, dict) or j.get("enabled") is False or str(j.get("state") or "") in ("paused", "completed"):
+            continue
+        if j.get("script") == BRIEF_SCRIPT:
             continue
         names = [j.get("skill") or ""] + list(j.get("skills") or []) + [j.get("name") or "", j.get("prompt") or ""]
         if not any(BRIEF.search(str(n)) for n in names):
@@ -603,6 +618,19 @@ def due(c):
         said.append(tag.capitalize() + ". " + line[len(tag):].strip() if tag else line.strip())
     said += ["Closed by its own check: " + x for x in closed]
     return ("From your deadline reminders:\n" + "\n".join(said)) if said else ""
+
+
+def brief(c):
+    """The Morning brief routine: the notebook's own briefing, its words printed for Hermes to deliver."""
+    day = today(c)
+    env = environment(c, day)
+    try:
+        r = run([c["node"], c["brief"]], c, env, timeout=LIMIT)
+    except subprocess.TimeoutExpired:
+        fail("The morning brief took too long and was stopped.")
+    if r.returncode != 0:
+        fail("The morning brief could not be written.", r)
+    return r.stdout.strip()
 
 
 NOTICES_SAID = "godspeed-notices-said.json"
@@ -933,7 +961,7 @@ def coach(c, command):
 
 def main(kind):
     c = config()
-    out = {"research": research, "decide": decide, "work": work, "due": due, "coach-prep": coach_prep,
+    out = {"research": research, "decide": decide, "work": work, "due": due, "brief": brief, "coach-prep": coach_prep,
            "coach-gate": lambda c: coach(c, "gate"), "coach-tick": lambda c: coach(c, "tick"),
            "journal-tick": journal_tick, "chat-tidy": chat_tidy}[kind](c)
     if out:

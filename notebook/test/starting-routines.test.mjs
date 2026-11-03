@@ -129,6 +129,13 @@ test('deadline reminders: the dates that need a mention today, without a morning
  assert.equal(quiet.status,0,quiet.stderr);assert.equal(quiet.stdout,'');
 });
 
+test('beside the notebook\'s own morning briefing the deadline reminders speak for themselves (#160)',{skip:!havePython&&'no Python here'},t=>{
+ const brief={id:'brief',name:'Morning brief',script:'godspeed-morning-brief.py',no_agent:true,enabled:true,state:'scheduled',next_run_at:berlinAt(berlinDay,'23:59:00'),last_run_at:null};
+ const {root,home}=scriptFixture(t,{brief});addDue(root);
+ const run=runScript(home,'godspeed-deadline-reminders.py');
+ assert.equal(run.status,0,run.stderr);assert.match(run.stdout,/^From your deadline reminders:/,'the notebook\'s briefing does not carry the reminders\' lines');
+});
+
 test('deadline reminders say nothing on a day a morning brief carries the dates, and speak when it is paused',{skip:!havePython&&'no Python here'},t=>{
  const brief={id:'brief',name:'Morning brief',skill:'morning-brief',enabled:true,state:'scheduled',next_run_at:berlinAt(berlinDay,'23:59:00'),last_run_at:null};
  const later=scriptFixture(t,{brief});addDue(later.root);
