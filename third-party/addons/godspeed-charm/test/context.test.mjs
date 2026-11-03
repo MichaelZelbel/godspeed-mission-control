@@ -31,25 +31,25 @@ test("while running: the day, the end date, the rule and how to record the quest
   assert.match(b, /traffic/);
   // Venting at another AI counts the same, so the one question is asked, never "was that meant for me?".
   assert.match(b, /both count the same, so never ask which AI they meant or whether it was meant for you: ask the one question below or nothing/);
-  assert.ok(b.includes('godspeed-charm asked --conversation "telegram:1" --words "<their words>"'));
+  assert.ok(b.includes('godspeed-charm asked --words "<their words>"'));
   assert.ok(b.includes('godspeed-charm slip --words "<their words>"'));
   assert.match(b, /--language de/);
   assert.doesNotMatch(b, /Open question/);
   // A start while it runs opens its question here, so the conversation goes with it.
-  assert.ok(b.includes('godspeed-charm start --conversation "telegram:1" --words "<their words>"'));
+  assert.ok(b.includes('godspeed-charm start --words "<their words>"'));
   // Only a success is passed on word for word; a refusal's text never reaches the person.
   assert.match(b, /When a godspeed-charm command succeeds, use its reply word for word\. When it refuses, never pass its text on; do what this note says\./);
   assert.doesNotMatch(b, /After a godspeed-charm command, reply with its reply/);
   // A story slip: slip refuses, then asked, and the reply ends with asked's reply.
-  assert.ok(b.includes('When it refuses, run godspeed-charm asked --conversation "telegram:1" --words "<their words>" and end your reply with its reply.'));
+  assert.ok(b.includes('When it refuses, run godspeed-charm asked --words "<their words>" and end your reply with its reply.'));
 });
 
 test("the open question shows only in its own conversation", () => {
   const s = running([ev("asked", "2026-10-30", { conversation: "telegram:1", words: "why do you give me this garbage?" })]);
   const own = block(s, { conversation: "telegram:1" });
   assert.match(own, /why do you give me this garbage\?" earlier today/);
-  assert.ok(own.includes('godspeed-charm answer yes --conversation "telegram:1" --words "<their words>"'));
-  assert.ok(own.includes('godspeed-charm answer no --conversation "telegram:1" --words "<their words>"'));
+  assert.ok(own.includes('godspeed-charm answer yes --words "<their words>"'));
+  assert.ok(own.includes('godspeed-charm answer no --words "<their words>"'));
   assert.match(own, /Anything else leaves it open/);
   const other = block(s, { conversation: "telegram:2" });
   assert.doesNotMatch(other, /garbage\?" earlier/);
@@ -81,7 +81,7 @@ test("the finish day: the finish line once, a new round, the sticker, no slip qu
   assert.match(once, /skip this if you already did it here/);
   assert.match(once, /Charm Challenge done: 21 days/);
   assert.match(once, /offer a new round/);
-  assert.ok(b.includes('godspeed-charm start --conversation "telegram:1" --words "<their words>"'));
+  assert.ok(b.includes('godspeed-charm start --words "<their words>"'));
   // No sticker unless the caller says the sticker plugin is there (R13).
   assert.doesNotMatch(b, /sticker/i);
   const withStickers = contextBlock(due, S, { conversation: "telegram:1", today: "2026-11-11", stickers: true });
@@ -123,7 +123,7 @@ test("their words are quoted safely, and a question without words reads without 
     assert.doesNotMatch(l, /""/);
     assert.doesNotMatch(l, /after their words/);
     assert.match(l, /earlier today you asked whether to go back to 21/);
-    assert.match(l, /answer yes --conversation "c"/);
+    assert.match(l, /answer yes/);
   }
 });
 

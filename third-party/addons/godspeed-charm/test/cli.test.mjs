@@ -287,7 +287,7 @@ test("context: the block while running, nothing when scheduled, nothing when not
   assert.match(here.stdout, /^\[godspeed-charm\]/);
   assert.match(here.stdout, /12 days to go/);
   assert.match(here.stdout, /you useless pile of bits/);
-  assert.match(here.stdout, /godspeed-charm answer yes --conversation "telegram:1"/);
+  assert.match(here.stdout, /godspeed-charm answer yes/);
   const there = run(dir, ["context", "--conversation", "telegram:2"], { day: "2026-10-30" });
   assert.match(there.stdout, /12 days to go/);
   assert.doesNotMatch(there.stdout, /useless pile of bits/);
@@ -309,7 +309,9 @@ test("context --hook claude: the hook's JSON for its own session, silent for SDK
   assert.equal(out.hookSpecificOutput.hookEventName, "UserPromptSubmit");
   assert.match(out.hookSpecificOutput.additionalContext, /^\[godspeed-charm\]/);
   assert.match(out.hookSpecificOutput.additionalContext, /you useless thing/);
-  assert.match(out.hookSpecificOutput.additionalContext, /--conversation "claude:abc-123"/);
+  assert.match(out.hookSpecificOutput.additionalContext, /godspeed-charm answer yes --words/);
+  assert.doesNotMatch(out.hookSpecificOutput.additionalContext, /--conversation/);
+  assert.ok(fs.existsSync(path.join(dir, ".godspeed", "charm-turns", "claude_abc-123.json")), "the turn left its marker");
   for (const env of [{ CLAUDE_CODE_ENTRYPOINT: "sdk-ts" }, { CLAUDE_CODE_ENTRYPOINT: "sdk-cli" }, { GODSPEED_SCHEDULED_RUN: "1" }]) {
     const quiet = run(dir, ["context", "--hook", "claude"], { day: "2026-10-30", input, env });
     assert.equal(quiet.status, 0);
@@ -517,5 +519,102 @@ test("answer --asked-when answers only the question asked at that moment", () =>
   // Answered: the same moment answers nothing again.
   assert.equal(answer(second).status, 2);
   assert.equal(run(dir, ["answer", "yes", "--conversation", "telegram:s1", "--asked-when"], { day: "2026-10-30" }).status, 1);
+  gone(dir);
+});
+
+// ---- The command learns its conversation from the turn marker (lib/turns.mjs) ---------------------
+const turn = (dir, conversation, day = "2026-10-30", env = {}) => run(dir, ["context", "--conversation", conversation], { day, env });
+const openOf = (dir, day = "2026-10-30") => json(run(dir, ["status", "--json"], { day })).state.open.map((q) => q.conversation).sort();
+
+test("asked with no --conversation and one fresh marker opens the question for that conversation", () => {
+  const dir = mission();
+  run(dir, ["start"], { day: "2026-10-29" });
+  turn(dir, "telegram:42");
+  const r = run(dir, ["asked", "--words", "useless thing", "--json"], { day: "2026-10-30" });
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(json(r).reply, T.en.question());
+  assert.deepEqual(openOf(dir), ["telegram:42"]);
+  gone(dir);
+});
+
+test("asked with no fresh marker, or two, refuses in one sentence naming the flag and opens nothing", () => {
+  const dir = mission();
+  run(dir, ["start"], { day: "2026-10-29" });
+  const none = run(dir, ["asked", "--words", "idiot"], { day: "2026-10-30" });
+  assert.notEqual(none.status, 0);
+  assert.match(none.stderr, /--conversation/);
+  assert.equal(none.stderr.trim().split("\n").length, 1);
+  turn(dir, "telegram:1");
+  turn(dir, "telegram:2");
+  const two = run(dir, ["asked", "--words", "idiot"], { day: "2026-10-30" });
+  assert.notEqual(two.status, 0);
+  assert.match(two.stderr, /--conversation/);
+  assert.equal(two.stderr.trim().split("\n").length, 1);
+  assert.deepEqual(openOf(dir), []);
+  gone(dir);
+});
+
+test("a marker older than ten minutes is not used", () => {
+  const dir = mission();
+  run(dir, ["start"], { day: "2026-10-29" });
+  turn(dir, "telegram:1");
+  const stale = spawnSync(process.execPath, [BIN, "asked", "--words", "idiot"], {
+    encoding: "utf8", env: { ...process.env, GODSPEED_CHARM_DIR: dir, GODSPEED_CHARM_NOW: new Date(new Date("2026-10-30T08:00:00Z").getTime() + 45 * 60 * 1000).toISOString(), GODSPEED_SCHEDULED_RUN: "" },
+  });
+  assert.notEqual(stale.status, 0);
+  assert.match(stale.stderr, /--conversation/);
+  gone(dir);
+});
+
+test("--conversation ignores the markers", () => {
+  const dir = mission();
+  run(dir, ["start"], { day: "2026-10-29" });
+  turn(dir, "telegram:1");
+  turn(dir, "telegram:2");
+  const r = run(dir, ["asked", "--conversation", "telegram:9", "--words", "idiot"], { day: "2026-10-30" });
+  assert.equal(r.status, 0, r.stderr);
+  assert.deepEqual(openOf(dir), ["telegram:9"]);
+  gone(dir);
+});
+
+test("answer without the flag answers only its own conversation's question", () => {
+  const dir = mission();
+  run(dir, ["start"], { day: "2026-10-29" });
+  run(dir, ["asked", "--conversation", "telegram:8", "--words", "moron"], { day: "2026-10-30" });
+  turn(dir, "telegram:9");
+  const other = run(dir, ["answer", "yes", "--words", "yes", "--json"], { day: "2026-10-30" });
+  assert.equal(other.status, 2);
+  assert.deepEqual(openOf(dir), ["telegram:8"]);
+  gone(dir);
+  const d2 = mission();
+  run(d2, ["start"], { day: "2026-10-29" });
+  turn(d2, "telegram:8");
+  run(d2, ["asked", "--words", "moron"], { day: "2026-10-30" });
+  const own = run(d2, ["answer", "yes", "--words", "yes", "--json"], { day: "2026-10-30" });
+  assert.equal(own.status, 0, own.stderr);
+  assert.deepEqual(openOf(d2), []);
+  gone(d2);
+});
+
+test("start while running opens its question in the marker's conversation", () => {
+  const dir = mission();
+  run(dir, ["start"], { day: "2026-10-29" });
+  turn(dir, "telegram:5");
+  const r = run(dir, ["start", "--words", "start the Charm Challenge"], { day: "2026-10-30" });
+  assert.equal(r.status, 0, r.stderr);
+  assert.deepEqual(openOf(dir), ["telegram:5"]);
+  gone(dir);
+});
+
+test("a scheduled run leaves no marker and cannot use one", () => {
+  const dir = mission();
+  run(dir, ["start"], { day: "2026-10-29" });
+  turn(dir, "telegram:1", "2026-10-30", { GODSPEED_SCHEDULED_RUN: "1" });
+  assert.equal(run(dir, ["context", "--conversation", "cron:x", "--scheduled"], { day: "2026-10-30" }).stdout, "");
+  assert.equal(fs.existsSync(path.join(dir, ".godspeed", "charm-turns")), false);
+  turn(dir, "telegram:1");
+  const r = run(dir, ["asked", "--words", "idiot"], { day: "2026-10-30", env: { GODSPEED_SCHEDULED_RUN: "1" } });
+  assert.notEqual(r.status, 0);
+  assert.deepEqual(openOf(dir), []);
   gone(dir);
 });

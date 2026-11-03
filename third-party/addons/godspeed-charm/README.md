@@ -37,9 +37,9 @@ godspeed-charm config set language de
 What the assistant runs for you:
 
 ```
-godspeed-charm asked --conversation telegram:123 --words "why do you give me this garbage?"
-godspeed-charm answer yes --conversation telegram:123 --words "yes"
-godspeed-charm answer no --conversation telegram:123 --words "that didn't count"
+godspeed-charm asked --words "why do you give me this garbage?"
+godspeed-charm answer yes --words "yes"
+godspeed-charm answer no --words "that didn't count"
 godspeed-charm context --conversation telegram:123
 godspeed-charm context --conversation telegram:123 --stickers   # the sticker plugin is installed
 godspeed-charm context --hook claude
@@ -84,6 +84,10 @@ the Godspeed notebook and refuses to install without one.
 - `routines/charm/settings.json`: your time zone (where a day ends) and the reply language.
 - The notebook collection "Charm Challenge": every start, question, reset, kept answer, finish and
   stop is one row. An answer given by a button has "(button)" as its words.
+- `.godspeed/charm-turns/`: one small marker per conversation, written when the person's message
+  arrives (never for a scheduled run). `asked`, `answer` and `start` given no `--conversation`
+  take the one marker written in the last ten minutes; with none or two they refuse and name the
+  flag. An explicit `--conversation` always wins. On Hermes the plugin also adds the flag itself.
 - `.godspeed/charm-buttons/`: one small file per Telegram button (which conversation asked, when,
   and the answer it gives), kept 30 days.
 
