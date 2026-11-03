@@ -54,6 +54,16 @@ test('on a computer, every run of a routine that reaches nobody becomes one note
  assert.equal(saveRoutineResults(otherStore,{home:otherHome,jobs:[{id:'chat1',deliver:'origin'}],messenger:true}).length,0);
 });
 
+test('the Morning brief run is no second note: the notebook keeps it as Your morning briefing (#160)',t=>{
+ const root=temporary(t,'results-brief'),home=path.join(root,'.hermes');installStarter(root);
+ const store=new Store(root,{device:'pc'});
+ jobsFile(home,[{id:'brief',name:'Morning brief',deliver:'local',script:'godspeed-morning-brief.py',no_agent:true}]);
+ const jobs=JSON.parse(fs.readFileSync(path.join(home,'cron','jobs.json'),'utf8')).jobs;
+ saveRoutineResults(store,{home,jobs});
+ output(home,'brief','2026-10-09_07-00-00.md',agentRun('Your morning briefing, made up.'));
+ assert.equal(saveRoutineResults(store,{home,jobs}).length,0);
+});
+
 test('an adopted mission control gets no notes from its routines',async t=>{
  const root=temporary(t,'adopted-results'),home=path.join(root,'.hermes');fs.mkdirSync(path.join(root,'rules'),{recursive:true});fs.writeFileSync(path.join(root,'AGENTS.md'),'# Mine\n');fs.writeFileSync(path.join(root,'rules','mine.md'),'Mine.\n');installStarter(root);
  const store=new Store(root,{device:'pc'});store.save('settings',{id:'installation',owner:'pc',timezone:'Europe/Berlin',delivery:'notebook'});
@@ -127,6 +137,13 @@ test('deadline reminders: the dates that need a mention today, without a morning
  // Nothing to say: nothing printed, which is Hermes' silence.
  const empty=scriptFixture(t),quiet=runScript(empty.home,'godspeed-deadline-reminders.py');
  assert.equal(quiet.status,0,quiet.stderr);assert.equal(quiet.stdout,'');
+});
+
+test('beside the notebook\'s own morning briefing the deadline reminders speak for themselves (#160)',{skip:!havePython&&'no Python here'},t=>{
+ const brief={id:'brief',name:'Morning brief',script:'godspeed-morning-brief.py',no_agent:true,enabled:true,state:'scheduled',next_run_at:berlinAt(berlinDay,'23:59:00'),last_run_at:null};
+ const {root,home}=scriptFixture(t,{brief});addDue(root);
+ const run=runScript(home,'godspeed-deadline-reminders.py');
+ assert.equal(run.status,0,run.stderr);assert.match(run.stdout,/^From your deadline reminders:/,'the notebook\'s briefing does not carry the reminders\' lines');
 });
 
 test('deadline reminders say nothing on a day a morning brief carries the dates, and speak when it is paused',{skip:!havePython&&'no Python here'},t=>{

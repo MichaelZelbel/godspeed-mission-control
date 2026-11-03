@@ -2,7 +2,7 @@ import test from 'node:test';import assert from 'node:assert/strict';import fs f
 import {nativeAgent} from '../core/native-agent.mjs';import {NativeScheduler,nativeJobs} from '../core/native-scheduler.mjs';import {Store} from '../core/records/store.mjs';import {Domains} from '../core/domains.mjs';import {QueryService} from '../core/query.mjs';
 import {execFileSync} from 'node:child_process';import {installStarter,adoptedMissionControl} from '../core/starter-workspace.mjs';import {FLAG,readMachineRecord,writeMachineRecord} from '../core/starting-routines.mjs';import {runCommand} from '../core/child-process.mjs';
 import {beginContext,scheduleInvite,setTimezone,writeContext,INVITE_JOB} from '../core/context-setup.mjs';
-import {CHAT_TIDY_JOB} from '../core/notebook-routines.mjs';
+import {CHAT_TIDY_JOB,BRIEF_SCRIPT} from '../core/notebook-routines.mjs';
 const goalsTool=fileURLToPath(new URL('../../tools/goals.js',import.meta.url));
 // The chat files a goal with the original tool. It finds its mission control from GODSPEED_ROOT or the
 // folder it runs in, never from a flag, so both are this fixture's.
@@ -258,6 +258,9 @@ const CHAT_JOBS={
  'a reminder every weekday at seven':()=>({name:'Stretch',schedule:{kind:'cron',expr:'0 7 * * 1-5'},schedule_display:'0 7 * * 1-5',prompt:'Remind me to stretch.',workdir:null,deliver:'origin'}),
  'a one-time reminder':()=>({name:'Call the dentist',schedule:{kind:'once',run_at:'2026-10-20T09:00:00+02:00'},schedule_display:'once at 2026-10-20 09:00',repeat:{times:1,completed:0},prompt:'Remind me to call the dentist.',workdir:null,deliver:'origin'}),
 };
+// A Morning brief made the old way, as the recipe, is made again as the notebook's own briefing on the
+// tick (NativeScheduler.followBrief, #160), so it comes after the routines that tick started.
+const briefLast=(what,name)=>what==='a morning brief'?[...STARTING_NAMES,name]:[name,...STARTING_NAMES];
 const chatJob=(job,{created_at=new Date().toISOString(),...more}={})=>({id:'chat-'+job.name.toLowerCase().replace(/\W+/g,'-'),repeat:{times:null,completed:0},...job,enabled:true,state:'scheduled',created_at,next_run_at:null,last_run_at:null,...more});
 
 test('a morning brief, a research watch or a reminder asked for in the chat before the first goal never keeps the routines away',async t=>{
@@ -268,8 +271,9 @@ test('a morning brief, a research watch or a reminder asked for in the chat befo
   hermes.write([chatJob(make(root))]);
   fileGoal(root,'--status','adopted','--title','Fictional first goal');
   scheduler.lastTick=0;await scheduler.tick();
-  assert.deepEqual(names(hermes.jobs()),[make(root).name,...STARTING_NAMES],what);
+  assert.deepEqual(names(hermes.jobs()),briefLast(what,make(root).name),what);
   assert.equal(store.get('settings',FLAG).state,'created',what);
+  if(what==='a morning brief')assert.equal(hermes.jobs().find(j=>j.name==='Morning brief').script,BRIEF_SCRIPT,'made again as the notebook\'s own briefing (#160)');
  }
  // A one-time job is a reminder, never a routine, even one the reader made before Godspeed came, and
  // so is one Hermes keeps after it ran.
@@ -324,7 +328,7 @@ test('after the update, a machine whose routines were kept away only by jobs mad
   hermes.write([make(root)]);fileGoal(root,'--status','adopted','--title','Fictional first goal');before(store);
   const scheduler=new NativeScheduler(store,{home,executable:'hermes',device:'pc',run:hermes.run});
   await scheduler.tick();
-  assert.deepEqual(names(hermes.jobs()),[make(root).name,...STARTING_NAMES],what);
+  assert.deepEqual(names(hermes.jobs()),briefLast(what,make(root).name),what);
   assert.equal(store.get('settings',FLAG).state,'created',what);assert.equal(readMachineRecord(store).state,'created',what);
   // Made once: a routine the reader removes afterwards stays removed.
   hermes.write(hermes.jobs().filter(j=>j.name!=='Deadline reminders'));scheduler.lastTick=0;await scheduler.tick();
@@ -362,7 +366,7 @@ test('notebook schedule controls call Hermes cron and reflect its job file',asyn
  fs.writeFileSync(path.join(home,'cron/jobs.json'),JSON.stringify([{id:'fixture',name:'Morning brief',enabled:true,state:'scheduled'}]));
  const scheduler=new NativeScheduler(store,{home,executable:'hermes',run:async(exe,args)=>{calls.push({exe,args});return {stdout:''};}});
  await scheduler.control({id:'fixture',paused:true});assert.deepEqual(calls[0],{exe:'hermes',args:['cron','pause','fixture']});
- await scheduler.control({kind:'morning-brief',interval_ms:86400000},{enable:true});assert.ok(calls[1].args.includes('--skill'));assert.ok(calls[1].args.includes('morning-brief'));assert.equal(store.list('jobs').length,0);
+ await scheduler.control({kind:'morning-brief',interval_ms:86400000},{enable:true});assert.ok(calls[1].args.includes('--no-agent'));assert.equal(calls[1].args[calls[1].args.indexOf('--script')+1],BRIEF_SCRIPT);assert.ok(!calls[1].args.includes('--skill'),'the notebook\'s own briefing, not the recipe (#160)');assert.equal(store.list('jobs').length,0);
 });
 
 test('a machine that got the first routines before the nightly research existed gets it once, and never again after the reader removed it',async t=>{

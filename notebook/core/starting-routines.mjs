@@ -8,7 +8,7 @@ import {addArea,findArea,listAreas,rhythmWords,nextTalkDay} from '../../third-pa
 import {loadSettings as coachSettings,saveSettings as saveCoach} from '../../third-party/addons/godspeed-coach/lib/settings.mjs';
 import {localParts,addDays,zonedToUtc} from '../../third-party/addons/godspeed-coach/lib/clock.mjs';
 import {TALK_PROMPT,NOTEBOOK_TALK_JOB,NOTEBOOK_TICK_JOB,TALK_JOB,TICK_JOB} from '../../third-party/addons/godspeed-coach/lib/setup.mjs';
-import {JOURNAL_JOB,JOURNAL_SCRIPT,CHAT_TIDY_JOB,CHAT_TIDY_SCRIPT} from './notebook-routines.mjs';
+import {JOURNAL_JOB,JOURNAL_SCRIPT,CHAT_TIDY_JOB,CHAT_TIDY_SCRIPT,BRIEF_JOB,BRIEF_SCRIPT} from './notebook-routines.mjs';
 import {NOTICES_FILE} from './notices.mjs';
 import {hermesPython} from './runtime.mjs';
 
@@ -171,9 +171,9 @@ function hermesRuntime({home,state,hermes}){
 export function routineFiles({root,home,state,timezone,node=process.execPath,hermes=null}){
  // tools: the kit's own programs (mc-decide, mc-work-run, due.js), run where they are; bin: the
  // assistant's command folder, first on the path for the recipes they run.
- const config={root,home,bin:path.join(home,'bin'),tools:path.join(kit,'tools'),node,hermes:hermes&&path.isAbsolute(hermes)?hermes:null,...hermesRuntime({home,state,hermes}),coach:path.join(kit,'third-party','addons','godspeed-coach','bin','godspeed-coach.mjs'),coach_app:path.join(state,'coach-app'),journal:path.join(kit,'third-party','addons','godspeed-journal','bin','godspeed-journal.mjs'),journal_app:path.join(state,'journal-app'),notices:path.join(state,NOTICES_FILE),timezone};
+ const config={root,home,bin:path.join(home,'bin'),tools:path.join(kit,'tools'),node,hermes:hermes&&path.isAbsolute(hermes)?hermes:null,...hermesRuntime({home,state,hermes}),brief:path.join(kit,'notebook','scripts','morning-brief.mjs'),coach:path.join(kit,'third-party','addons','godspeed-coach','bin','godspeed-coach.mjs'),coach_app:path.join(state,'coach-app'),journal:path.join(kit,'third-party','addons','godspeed-journal','bin','godspeed-journal.mjs'),journal_app:path.join(state,'journal-app'),notices:path.join(state,NOTICES_FILE),timezone};
  const files={'godspeed_routines.py':fs.readFileSync(runner,'utf8').replace(/\r\n/g,'\n'),'godspeed-routines.json':JSON.stringify(config,null,2)+'\n'};
- for(const routine of [...STARTING_ROUTINES,{key:'journal-tick',name:JOURNAL_JOB,script:JOURNAL_SCRIPT},{key:'chat-tidy',name:CHAT_TIDY_JOB,script:CHAT_TIDY_SCRIPT}])files[routine.script]='# Written by the Godspeed Mission Control notebook for the routine "'+routine.name+'".\n# The notebook writes it again when its own folders change; the work is in godspeed_routines.py.\nfrom godspeed_routines import main\n\nmain('+JSON.stringify(routine.key)+')\n';
+ for(const routine of [...STARTING_ROUTINES,{key:'journal-tick',name:JOURNAL_JOB,script:JOURNAL_SCRIPT},{key:'chat-tidy',name:CHAT_TIDY_JOB,script:CHAT_TIDY_SCRIPT},{key:'brief',name:BRIEF_JOB,script:BRIEF_SCRIPT}])files[routine.script]='# Written by the Godspeed Mission Control notebook for the routine "'+routine.name+'".\n# The notebook writes it again when its own folders change; the work is in godspeed_routines.py.\nfrom godspeed_routines import main\n\nmain('+JSON.stringify(routine.key)+')\n';
  return files;
 }
 export function writeRoutineFiles(home,files){
@@ -279,6 +279,9 @@ export function saveRoutineResults(store,{home,jobs,messenger=false,now=Date.now
  const before=started?'':JSON.stringify(progress),since=Date.parse(progress.since),saved=[];
  for(const job of jobs){
   if(!job?.id||!/^[A-Za-z0-9_-]+$/.test(job.id)||!reachesNobody(job,{messenger}))continue;
+  // The Morning brief keeps its own note, "Your morning briefing" (scripts/morning-brief.mjs, #160):
+  // what its run printed is that note's text, and a second copy here would show it twice.
+  if(job.script===BRIEF_SCRIPT)continue;
   const folder=path.join(home,'cron','output',job.id);if(!fs.existsSync(folder))continue;
   for(const name of fs.readdirSync(folder).filter(n=>/^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}\.md$/.test(n)).sort()){
    if(progress.jobs[job.id]&&name<=progress.jobs[job.id])continue;

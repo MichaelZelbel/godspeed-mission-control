@@ -49,6 +49,14 @@ export function deliveryFor(installation,{telegram=false}={}){
 // came. Now the machine that runs the routines keeps one routine for them while any of the three is
 // switched on: every 15 minutes it runs the journal's own tick, which says something only when one
 // is due, at the times the settings name, outside its quiet hours. All three off pauses it.
+// THE MORNING BRIEF IS THE NOTEBOOK'S OWN BRIEFING (3 November 2026, #160). It was the starter
+// morning-brief recipe, an AI job of Hermes, so the notebook's briefing (core/briefing.mjs: the
+// Charm Challenge line, a sentence that breaks a writing rule cut) never ran on an install. It is a
+// script routine now, like the deadline reminders (routine-scripts/godspeed_routines.py, brief);
+// isBriefJob also knows one made the old way, which NativeScheduler.followBrief turns into this.
+export const BRIEF_JOB='Morning brief';
+export const BRIEF_SCRIPT='godspeed-morning-brief.py';
+export const isBriefJob=j=>!!j&&(j.script===BRIEF_SCRIPT||[j.skill,...(Array.isArray(j.skills)?j.skills:[])].includes('morning-brief'));
 export const JOURNAL_JOB='Journal check-ins';
 export const JOURNAL_SCRIPT='godspeed-journal-checkins.py';
 export const JOURNAL_WHAT='Sends your journal\'s check-ins, its evening list and its weekly summary, the ones you switched on. It looks every 15 minutes whether one is due.';

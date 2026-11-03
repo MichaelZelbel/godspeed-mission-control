@@ -11,7 +11,7 @@ import {starterBorn} from './starter-workspace.mjs';
 import {setHermesTimezone} from './hermes-config.mjs';
 import {FLAG,STARTING_ROUTINES,routineFiles,writeRoutineFiles,prepareCheckIn,saveRoutineResults,readMachineRecord,writeMachineRecord,telegramInHermes,routineStatus,ownRoutines,metAt,noteHermesMet,cityFiledFirst,OWN_ROUTINES_RULE} from './starting-routines.mjs';
 import {cronOf,cronCalendar,calendarCron,retimeWhat,isTalkGate,isCoachTick,talkArea,moveTalk} from './routine-times.mjs';
-import {readNotebookRoutines,rememberNotebookRoutine,enableKind,deliveryFor,journalWanted,journalOnTheClock,JOURNAL_JOB,JOURNAL_SCRIPT,JOURNAL_WHAT,CHAT_TIDY_JOB,CHAT_TIDY_SCRIPT,writeNotebookRoutines} from './notebook-routines.mjs';
+import {readNotebookRoutines,rememberNotebookRoutine,enableKind,deliveryFor,journalWanted,journalOnTheClock,JOURNAL_JOB,JOURNAL_SCRIPT,JOURNAL_WHAT,CHAT_TIDY_JOB,CHAT_TIDY_SCRIPT,writeNotebookRoutines,BRIEF_JOB,BRIEF_SCRIPT,isBriefJob} from './notebook-routines.mjs';
 import {loadSettings as coachSettings,saveSettings as saveCoach} from '../../third-party/addons/godspeed-coach/lib/settings.mjs';
 import {rhythmWords} from '../../third-party/addons/godspeed-coach/lib/areas.mjs';
 import {moveSettingsDeadlines} from './native-due.mjs';
@@ -212,6 +212,62 @@ export class NativeScheduler{
   rememberNotebookRoutine(this.store,{id:made.id,key:'journal-tick',name:JOURNAL_JOB,what:JOURNAL_WHAT});
   return made.id;
  }
+ // THE MORNING BRIEF AS THE NOTEBOOK'S OWN BRIEFING (3 November 2026, #160; notebook-routines.mjs
+ // says why). A script routine like the deadline reminders, whose script runs core/briefing.mjs
+ // (scripts/morning-brief.mjs) and prints the briefing for Hermes to deliver where this machine's
+ // routines deliver. Returns the routine's id, or null when Hermes shows no new routine.
+ async makeBrief(schedule,title){
+  const root=this.store.root,installation=this.store.get('settings','installation'),timezone=installation?.timezone||Intl.DateTimeFormat().resolvedOptions().timeZone;
+  writeRoutineFiles(this.home,routineFiles({root,home:this.home,state:this.store.state,timezone,hermes:this.executable}));
+  const known=enableKind('morning-brief'),name=title||known.label,delivery=deliveryFor(installation,{telegram:telegramInHermes(this.home)}),before=new Set(hermesJobs(this.home).map(j=>j.id));
+  await this.command(['create',schedule,'--no-agent','--name',name,'--script',BRIEF_SCRIPT,'--deliver',delivery,'--failure-deliver','local','--workdir',root]);
+  const made=hermesJobs(this.home).find(j=>!before.has(j.id));
+  if(!made)return null;
+  rememberNotebookRoutine(this.store,{id:made.id,key:'morning-brief',name:made.name||name,skill:'morning-brief',what:known.what});
+  return made.id;
+ }
+ // A Morning brief made the old way, as the morning-brief recipe (an AI job of Hermes), is made
+ // again as the script on the next tick: the same time or rhythm, the same delivery, paused if it
+ // was paused, and this machine's record of it moves to the new one. Which jobs: one this machine
+ // remembers making, and the one the starter recipe itself tells the assistant to make when asked
+ // in the chat ("Morning brief", the morning-brief recipe, this mission control's folder); a brief
+ // of the owner's under another name or folder stays. Safe to stop anywhere: a script brief that is
+ // already there is never made twice; it takes the recipe job's time, delivery and on or off, and
+ // only then does the recipe job go. A new one whose delivery or pause could not be set is taken out
+ // again, so a paused brief never comes back on and the recipe job stays for the next tick.
+ async followBrief(){
+  const mine=readNotebookRoutines(this.store),root=path.resolve(this.store.root);
+  const all=hermesJobs(this.home);
+  const old=all.filter(j=>isBriefJob(j)&&j.script!==BRIEF_SCRIPT&&(mine.jobs.some(e=>e.id===j.id)||(j.name===BRIEF_JOB&&typeof j.workdir==='string'&&path.resolve(j.workdir)===root)));
+  if(!old.length)return [];
+  const moved=[],done=id=>{const after=readNotebookRoutines(this.store);writeNotebookRoutines(this.store,{...after,jobs:after.jobs.filter(e=>e.id!==id)});};
+  let existing=all.find(j=>j.script===BRIEF_SCRIPT&&typeof j.workdir==='string'&&path.resolve(j.workdir)===root)?.id||null;
+  for(const job of old){
+   const schedule=job.schedule?.kind==='interval'&&Number.isFinite(job.schedule.minutes)?job.schedule.minutes+'m':(job.schedule?.expr||job.schedule_display);
+   if(typeof schedule!=='string'||!schedule.trim())continue;
+   if(existing){
+    // The script brief takes the recipe job's settings, then the recipe job goes.
+    const there=hermesJobs(this.home).find(j=>j.id===existing),when=schedule.trim().replace(/^every\s+/,'');
+    if(there){
+     const theirs=there.schedule?.kind==='interval'&&Number.isFinite(there.schedule.minutes)?there.schedule.minutes+'m':(there.schedule?.expr||there.schedule_display);
+     if(String(theirs||'').trim().replace(/^every\s+/,'')!==when)await this.command(['edit',existing,'--schedule',when]);
+     if(job.deliver&&job.deliver!==there.deliver)await this.command(['edit',existing,'--deliver',job.deliver]);
+     if((job.enabled===false)!==(there.enabled===false))await this.command([job.enabled===false?'pause':'resume',existing]);
+    }
+    await this.command(['remove',job.id]);done(job.id);continue;
+   }
+   const id=await this.makeBrief(schedule.trim().replace(/^every\s+/,''),job.name);
+   if(!id)continue; // the old one stays until Hermes keeps the new one
+   try{
+    const made=hermesJobs(this.home).find(j=>j.id===id);
+    if(job.deliver&&made&&job.deliver!==made.deliver)await this.command(['edit',id,'--deliver',job.deliver]);
+    if(job.enabled===false)await this.command(['pause',id]);
+   }catch(error){await this.command(['remove',id]).catch(()=>{});done(id);throw error;}
+   await this.command(['remove',job.id]);done(job.id);
+   existing=id;moved.push(id);
+  }
+  return moved;
+ }
  // THE NIGHT CHAT TIDY-UP IS MADE FOR NO INSTALL (27 October 2026, notebook-routines.mjs says why).
  // An install whose notebook already made it (main between 26 and 27 October 2026) has it taken
  // off on the next tick, found by the id this machine remembers or by its name and script, and this
@@ -234,7 +290,7 @@ export class NativeScheduler{
  // {daily:{enabled,time}, weekly:{enabled,day,time}}, day 0 (Sunday) to 6.
  notificationJob(skill){
   const mine=new Set(readNotebookRoutines(this.store).jobs.map(j=>j.id)),root=this.store.root;
-  const jobs=hermesJobs(this.home).filter(j=>[j.skill,...(Array.isArray(j.skills)?j.skills:[])].includes(skill));
+  const jobs=hermesJobs(this.home).filter(j=>skill==='morning-brief'?isBriefJob(j):[j.skill,...(Array.isArray(j.skills)?j.skills:[])].includes(skill));
   return jobs.find(j=>mine.has(j.id))||jobs.find(j=>typeof j.workdir==='string'&&path.resolve(j.workdir)===path.resolve(root))||jobs[0]||null;
  }
  notifications(){
@@ -243,6 +299,8 @@ export class NativeScheduler{
  }
  async setNotifications(input={}){
   this.requireOwner('Change what is sent');
+  // A brief still made as the recipe becomes the notebook's own briefing first, so this changes that one.
+  if(input.daily)await this.followBrief();
   for(const [key,skill,kind] of [['daily','morning-brief','morning-brief'],['weekly','weekly-review','review']]){
    const want=input[key];if(!want||typeof want.enabled!=='boolean')continue;
    const time=String(want.time||(key==='daily'?'07:00':'17:00'));if(!dailyTime(time))throw Error('Give a time written like 07:30');
@@ -255,6 +313,7 @@ export class NativeScheduler{
     if(job.enabled===false)await this.command(['resume',job.id]);
     continue;
    }
+   if(kind==='morning-brief'){await this.makeBrief(calendarCron(calendar));continue;}
    const known=enableKind(kind),delivery=deliveryFor(this.store.get('settings','installation'),{telegram:telegramInHermes(this.home)}),before=new Set(hermesJobs(this.home).map(j=>j.id));
    await this.command(['create',calendarCron(calendar),'Follow the '+skill+' recipe for this mission control.','--name',known.label,'--skill',skill,'--workdir',this.store.root,'--deliver',delivery]);
    const made=hermesJobs(this.home).find(j=>!before.has(j.id));
@@ -314,6 +373,7 @@ export class NativeScheduler{
    await this.addNewStartingRoutines().catch(()=>null);
    await this.followJournal().catch(()=>null);
    await this.removeChatTidy().catch(()=>null);
+   await this.followBrief().catch(()=>null);
    await this.followDelivery().catch(()=>null);
    try{moveSettingsDeadlines(this.store);}catch{}
    await beatWhile(this.command(['tick'],{timeout:this.tickLimit}),()=>this.onProgress?.(),{limitMs:this.tickLimit+60000,every:this.beatEvery});
@@ -349,10 +409,11 @@ export class NativeScheduler{
    this.requireOwner('Add the routine');
    const known=enableKind(input.kind),skill=known?.skill||skills[input.kind]||input.kind;
    if(!/^[a-z0-9-]+$/.test(skill)||!fs.existsSync(path.join(this.store.root,'skills',skill,'SKILL.md')))throw Error('This mission control does not have the recipe for that routine');
-   const running=hermesJobs(this.home).find(j=>j.enabled!==false&&[j.skill,...(Array.isArray(j.skills)?j.skills:[])].includes(skill));
+   const running=hermesJobs(this.home).find(j=>j.enabled!==false&&(input.kind==='morning-brief'?isBriefJob(j):[j.skill,...(Array.isArray(j.skills)?j.skills:[])].includes(skill)));
    if(running)throw Error('"'+(running.name||skill)+'" already runs this. Change its time under Routine times, or pause it under Routines.');
    const daily=dailyTime(input.at);
    if(!daily&&(!Number.isFinite(input.interval_ms)||input.interval_ms<60000))throw Error('Choose a daily time or a routine interval of at least a minute');
+   if(input.kind==='morning-brief'){const id=await this.makeBrief(daily?daily.minute+' '+daily.hour+' * * *':Math.ceil(input.interval_ms/60000)+'m',input.title);const rows=nativeJobs(this.home,this.device);return rows.find(j=>j.id===id)||rows.at(-1);}
    const delivery=deliveryFor(this.store.get('settings','installation'),{telegram:telegramInHermes(this.home)}),before=new Set(hermesJobs(this.home).map(j=>j.id));
    await this.command(['create',daily?daily.minute+' '+daily.hour+' * * *':Math.ceil(input.interval_ms/60000)+'m','Follow the '+skill+' recipe for this mission control.','--name',input.title||known?.label||skill,'--skill',skill,'--workdir',this.store.root,'--deliver',delivery]);
    const made=hermesJobs(this.home).find(j=>!before.has(j.id));
