@@ -33,7 +33,8 @@
 #   reminders-<p>.txt             what `due list` answered
 #   setup-log-<p>.txt             the setup's update log (%LOCALAPPDATA%\Godspeed\setup-log.txt) and
 #                                 the move's note, when there is one
-#   update-exit-<p>.txt           the exit code of the reader's update (update-godspeed.ps1); after must be 0
+#   update-exit-<p>.txt           the exit code of the reader's update (update-godspeed.ps1), and in the
+#                                 held run the retry's (the setup run again); after must be 0
 #   updater-<p>.log               what that update said; setup-from.log is beta.10's own setup /LOG
 # The job uploads the folder as an artifact.
 $ErrorActionPreference = 'Stop'
@@ -368,9 +369,17 @@ if ($Held) {
   # With a folder held the update may end either way; what it must show is in the held checks.
   Save-State 'held' $oldState
   $handle.Dispose()
-  Say 'Released. The next update:'
-  if (Test-Path -LiteralPath $setupLog) { Remove-Item -LiteralPath $setupLog -Force -ErrorAction SilentlyContinue }
-  Invoke-Update 'after'
+  # THE NEXT UPDATE IS THE NEXT RUN OF THE SETUP. A move that was put off is tried again by the next
+  # run of the setup (move-to-new-folders.ps1 runs inside it). The reader's updater runs the setup
+  # only for a newer release, and here the release is the same one, so the updater rightly says "You
+  # have the newest version already" and moves nothing (the scenario's third run on
+  # candidate/2.0.0-beta.15). So the retry runs this release's setup again, as the next release's
+  # update will and as kit-bootstrap's own test does (windows/test-beta-install.ps1, Mode fail).
+  # The first update's words, kept in the move's note, go first, so only the retry's are judged.
+  Say 'Released. The next run of the setup:'
+  foreach ($f in $setupLog, $moveNote) { if (Test-Path -LiteralPath $f) { Remove-Item -LiteralPath $f -Force -ErrorAction SilentlyContinue } }
+  $code = Invoke-Setup $toSetup @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART') 'setup-after.log'
+  Set-Content -LiteralPath (Join-Path $Evidence 'update-exit-after.txt') -Value $code
 }
 # AFTER A MOVE THE OLD STATE NAME GOES A MOMENT LATER, NOT AT ONCE. The setup gives an updater from
 # before 2.0.0-beta.11 (2.0.0-beta.10's own "Update my mission control", the one this runs) a record under
