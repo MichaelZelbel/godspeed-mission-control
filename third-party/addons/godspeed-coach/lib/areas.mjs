@@ -55,6 +55,8 @@ export function readArea(dir) {
     on: (h.STATUS || "on").toLowerCase() === "on",
     style: h.STYLE || "compass", tone: h.TONE || "gentle",
     serves: (h.SERVES || "").split(",").map((x) => x.trim()).filter(Boolean),
+    // Where the goal research looks first for this area: an expert, a newsletter, a community.
+    sources: d.lists.SOURCE || [],
   };
 }
 
@@ -120,6 +122,18 @@ export const AREA_FIELDS = Object.keys(FIELD_CHECKS);
 
 const areaSlug = (name) => String(name || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 30);
 
+// What a new area of a well-known kind starts with as its SOURCE lines. The research reads them
+// first; a community is only ever a lead to check. The person changes them by asking.
+export const DEFAULT_SOURCES = {
+  health: ["PubMed, Cochrane reviews and the guidelines of health bodies (primary studies and guidance first)", "Peter Attia, The Drive (longevity)", "Examine.com (evidence summaries on training, nutrition, supplements)", "Stronger by Science, Greg Nuckols (training research)", "r/Fitness and r/Biohackers (community: leads to check, never proof)"],
+  money: ["Bogleheads wiki (index investing basics)", "Morningstar (fund and market research)", "r/personalfinance (community: leads to check, never proof)"],
+  work: ["Harvard Business Review", "Hacker News (community: leads to check, never proof)"],
+  relationships: ["The Gottman Institute (research on couples)", "Greater Good Science Center (research on relationships)"],
+  psychology: ["American Psychological Association (apa.org)", "Greater Good Science Center (research on well-being)"],
+};
+DEFAULT_SOURCES.fitness = DEFAULT_SOURCES.health;
+DEFAULT_SOURCES["work-money"] = [...DEFAULT_SOURCES.work, ...DEFAULT_SOURCES.money];
+
 export function addArea(mcDir, { slug, title, rhythm, time = "19:00", starts, style = "compass", tone = "gentle", serves = "", limits = [], reads = [], preparation = "" }) {
   const s = areaSlug(slug || title);
   if (!s) throw new Error("An area needs a name, for example health.");
@@ -136,7 +150,8 @@ export function addArea(mcDir, { slug, title, rhythm, time = "19:00", starts, st
   }
   const kept = (key) => (before?.lists[key] || []);
   const head = [`AREA: ${s}`, ...Object.entries(fields).map(([k, v]) => `${k}: ${v}`.trimEnd()),
-    ...[...kept("MAY READ"), ...[].concat(reads).filter(Boolean)].map((r) => `MAY READ: ${r}`), ...[...kept("LIMIT"), ...[].concat(limits).filter(Boolean)].map((l) => `LIMIT: ${l}`)];
+    ...[...kept("MAY READ"), ...[].concat(reads).filter(Boolean)].map((r) => `MAY READ: ${r}`), ...[...kept("LIMIT"), ...[].concat(limits).filter(Boolean)].map((l) => `LIMIT: ${l}`),
+    ...(kept("SOURCE").length ? kept("SOURCE") : DEFAULT_SOURCES[s] || []).map((x) => `SOURCE: ${x}`)];
   const others = Object.entries(before?.sections || {}).filter(([t, c]) => t !== "Preparation" && c).map(([t, c]) => `\n## ${t}\n\n${c}\n`).join("");
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, "area.md"), `${head.join("\n")}\n\n## Preparation\n\n${preparation || DEFAULT_PREPARATION[style]}\n${others}`);
@@ -167,7 +182,7 @@ export function habitArea(mcDir, name) {
 // could only be given when the area was made, and later the assistant had to edit the file by
 // hand. One header line is added or taken away; every other line, and the file's own line endings,
 // stay exactly as they were. An area with no talk takes them too, for the talk it gets later.
-export const AREA_LINES = ["MAY READ", "LIMIT"];
+export const AREA_LINES = ["MAY READ", "LIMIT", "SOURCE"];
 const lineText = (v) => String(v ?? "").replace(/\s+/g, " ").trim();
 const sameLine = (v) => lineText(v).toLowerCase().replace(/[.!]+$/, "");
 const FILLER = new Set(["my", "the", "a", "an", "your", "his", "her", "our", "their", "its", "mein", "meine", "meinen", "der", "die", "das", "den"]);
@@ -180,7 +195,7 @@ const fits = (words, line) => {
 };
 function areaLineKey(key) {
   const k = String(key || "").toUpperCase();
-  if (!AREA_LINES.includes(k)) throw new Error(`An area's lines here are MAY READ or LIMIT, not "${key}".`);
+  if (!AREA_LINES.includes(k)) throw new Error(`An area's lines here are MAY READ or LIMIT (or SOURCE, through area source), not "${key}".`);
   return k;
 }
 function areaLines(area) {
@@ -196,7 +211,7 @@ const talkName = (area) => `the ${area.title} talk`;
 export function addAreaLine(area, key, value) {
   const k = areaLineKey(key);
   const v = lineText(value);
-  if (!v) throw new Error(k === "LIMIT" ? 'Say what the talk must never do, for example "never suggest buying anything".' : 'Say what the talk may look at, for example "my sleep tracker".');
+  if (!v) throw new Error(k === "LIMIT" ? 'Say what the talk must never do, for example "never suggest buying anything".' : k === "SOURCE" ? 'Say the source the research reads first, for example "Peter Attia, The Drive".' : 'Say what the talk may look at, for example "my sleep tracker".');
   const had = (area.lists[k] || []).find((x) => sameLine(x) === sameLine(v));
   if (had !== undefined) return { area: readArea(area.dir), changed: false, line: had };
   const { eol, lines, end } = areaLines(area);
@@ -211,19 +226,20 @@ export function addAreaLine(area, key, value) {
 
 export function removeAreaLine(area, key, words) {
   const k = areaLineKey(key);
-  if (!lineText(words)) throw new Error(k === "LIMIT" ? "Say which limit to take away." : "Say what the talk no longer needs to look at.");
+  if (!lineText(words)) throw new Error(k === "LIMIT" ? "Say which limit to take away." : k === "SOURCE" ? "Say which source to take away." : "Say what the talk no longer needs to look at.");
   const { eol, lines, end } = areaLines(area);
   const found = lines.slice(0, end).map((l, i) => ({ i, value: lineOf(k, l) })).filter((x) => x.value !== null);
   const exact = found.filter((x) => sameLine(x.value) === sameLine(words));
   const hit = exact.length ? exact : found.filter((x) => fits(words, x.value));
   const names = found.map((x) => x.value).join("; ");
   if (!hit.length) {
+    if (k === "SOURCE") throw new Error(`None of ${talkName(area)}'s sources matches "${lineText(words)}". ${found.length ? `Its sources: ${names}.` : "It has no sources of its own."}`);
     throw new Error(k === "LIMIT"
       ? `None of ${talkName(area)}'s limits matches "${lineText(words)}". ${found.length ? `Its limits: ${names}.` : "It has no limits of its own."}`
       : `Nothing ${talkName(area)} may look at matches "${lineText(words)}". ${found.length ? `It may look at: ${names}.` : "Nothing is named for it to look at."}`);
   }
   if (!exact.length && hit.length > 1) {
-    throw new Error(`Several ${k === "LIMIT" ? `of ${talkName(area)}'s limits match` : `things ${talkName(area)} may look at match`} "${lineText(words)}": ${hit.map((x) => x.value).join(" / ")}. Say which one.`);
+    throw new Error(`Several ${k === "SOURCE" ? `of ${talkName(area)}'s sources match` : k === "LIMIT" ? `of ${talkName(area)}'s limits match` : `things ${talkName(area)} may look at match`} "${lineText(words)}": ${hit.map((x) => x.value).join(" / ")}. Say which one.`);
   }
   const gone = new Set(hit.map((x) => x.i));
   fs.writeFileSync(area.file, lines.filter((_, i) => !gone.has(i)).join(eol));

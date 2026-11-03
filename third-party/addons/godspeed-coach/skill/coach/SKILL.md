@@ -108,7 +108,16 @@ that makes sense on its own and ask:
 2. Fill the record `coach/<area>/talks/<date>.md`: "What was read" (what you actually used),
    "What changed" (the decision in their terms, and each habit started, paused or graduated). Keep
    "What you said" as the command wrote it.
-3. `godspeed-coach talk held <area>`.
+   If they corrected something in the talk ("no, I already walk ten thousand steps"), also write it
+   as a line under a section "Corrections" in the same record.
+3. `godspeed-coach talk held <area>`. For an area that serves goals, this also writes the next
+   talk's live questions, `coach/<area>/questions/<next talk date>.md`: one per goal it serves, per
+   decision or promise, per correction and per thing they asked to be looked into, each with why it
+   is open. The nightly goal research works on them until that talk, and its preparation reads them
+   first. If they asked in the talk for something more to be looked into, add it with
+   `godspeed-coach questions <area> add "<the question>" --why "<why>"`; `questions <area> drop
+   "<words>"` takes one away and plain `questions <area>` lists them. Never edit the file by hand.
+   A talk that ends with no closing turn gets its questions at the next coach tick.
 4. For each goal in the area's SERVES that the change moves, one line:
    `godspeed goals progress <goal> --evidence "<date> <area> talk: <what changed>"`.
    If that command is not available here, write the same line under "What changed" instead.
@@ -254,7 +263,15 @@ talk that already exists or an area with no talk yet:
   `"never suggest buying anything"`; taking it back: the same with `--remove`. A limit binds every
   reply of that talk.
 
-`godspeed-coach area read <area>` and `area limit <area>` list what is there now. Confirm in one
+- **Where the research looks first** ("The health talk should follow Peter Attia", "Add this
+  newsletter to the health sources", "Stop using that forum"): the area's `SOURCE:` lines, an
+  expert, a newsletter or a community, which the goal research reads first for the questions of
+  that talk (a community is only a lead to check, never proof). A new health, money, work,
+  relationships or psychology talk starts with a few sensible ones.
+  `godspeed-coach area source <area> "<the source, in their words>"`; taking it back: the same
+  with `--remove`.
+
+`godspeed-coach area read <area>`, `area limit <area>` and `area source <area>` list what is there now. Confirm in one
 short sentence that makes sense on its own, in their words, never the command's output as it is:
 "The health talk may now look at your running app.", "The health talk will never suggest buying
 anything.", "The health talk no longer looks at your running app.", "The psychology talk may now

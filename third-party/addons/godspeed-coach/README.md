@@ -112,6 +112,10 @@ godspeed-coach habits week                    # the last seven days of each habi
 godspeed-coach talk state health              # the last five health talks and how they went
 godspeed-coach talk said health --words "first message" --words "second message"   # one --words per message
 godspeed-coach prep-due --within-hours 48     # the coming talks with no prepared talk yet (--json too)
+godspeed-coach questions health                  # the live questions of the next health talk (coach/health/questions/<date>.md)
+godspeed-coach questions health add "Is zone 2 worth it?" --why "they asked"   # the model refines them only here
+godspeed-coach questions health drop "zone 2"    # takes one away
+godspeed-coach area source health "Peter Attia, The Drive"   # where the research looks first (SOURCE: lines in area.md); --remove takes one back
 godspeed-coach prep-check health --date 2026-10-18   # is that talk's preparation ready? (--json too)
 godspeed-coach talk open health --from-prep coach/health/prep/2026-10-18.md   # open from a prepared talk
 godspeed-coach config show                    # time zone, language, habit check time, cap
@@ -120,6 +124,19 @@ godspeed-coach config show                    # time zone, language, habit check
 godspeed-coach talk said health --words-file words.txt
 godspeed-coach talk open health --opening-file opening.txt --prepared-file prepared.txt --read "the week's runs"
 ```
+
+## Live questions
+
+When a talk closes (`talk held`), an area that serves goals (`SERVES:`) gets the questions its next
+talk must answer, in `coach/<area>/questions/<next talk date>.md`: a plain list, one question per
+goal, per decision or promise, per correction and per thing the person asked to be looked into, each
+with why it is open. The coach program writes the file from the talk's record; a second close for the
+same next talk updates it and never lists a question twice. A talk that ends without a closing turn
+gets its questions at the next coach tick. Each night until the talk, the nightly goal research
+(`mc-research`) for each goal the area serves reads the file and works on the questions, using the
+area's `SOURCE:` lines first (an expert, a newsletter, a community as a lead only); the preparation
+the day before says for each question what was found, what was ruled out and what is still open. An
+area that serves no goal has none, and `brief` is unchanged for an area without a questions file.
 
 ## Honest limits
 

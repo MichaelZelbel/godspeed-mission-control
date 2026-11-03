@@ -16,6 +16,7 @@ import { gate, NO_WAKE } from "../lib/gate.mjs";
 import { dueTick } from "../lib/tick.mjs";
 import { contextBlock, waitingTalks } from "../lib/context.mjs";
 import { readPrep, prepProblem, prepDue, prepPath, prepCheck } from "../lib/prep.mjs";
+import { writeQuestions, readQuestions, questionsFile, openQuestionsDate, addQuestion, dropQuestion, hasQuestions } from "../lib/questions.mjs";
 import { commitCoach, syncInBackground, syncQueued, pullQuietly } from "../lib/sync.mjs";
 import { decodeArgv, readTextFile, restoreShellEnv, startedFromGitBash, gitBashPath, LAUNCHER_ENV, CMDLINE_ENV } from "../lib/argv.mjs";
 
@@ -152,18 +153,19 @@ const commands = {
         return out(`Changed: ${b.title} ${key.toUpperCase()} = ${v.join(" ")}. ${b.noTalk ? "It has no talk." : b.on ? `Next talk: ${first || "none"}.` : "Paused: no talks until it is on again."}`, { ok: true, next: b.noTalk ? null : first });
       } catch (e) { die(e.message); }
     }
-    if (sub === "read" || sub === "limit") {
+    if (sub === "read" || sub === "limit" || sub === "source") {
       // "The health talk may also look at my sleep tracker" (read), "must never suggest buying
       // anything" (limit), and --remove to take one back. Only that header line changes
       // (lib/areas.mjs addAreaLine, removeAreaLine).
       const a = needArea(name);
-      const K = sub === "read" ? "MAY READ" : "LIMIT";
+      const K = sub === "read" ? "MAY READ" : sub === "source" ? "SOURCE" : "LIMIT";
       const talk = `the ${a.title} talk`;
-      const state = (b) => ({ ok: true, area: b.slug, may_read: b.lists["MAY READ"] || [], limits: b.lists.LIMIT || [] });
+      const state = (b) => ({ ok: true, area: b.slug, may_read: b.lists["MAY READ"] || [], limits: b.lists.LIMIT || [], ...(sub === "source" || (b.lists.SOURCE || []).length ? { sources: b.lists.SOURCE || [] } : {}) });
       const later = a.noTalk ? " It has no talk yet; the talk it gets later keeps this." : "";
       if (pos.length < 3) {
         const have = a.lists[K] || [];
         const T = talk.charAt(0).toUpperCase() + talk.slice(1);
+        if (sub === "source") return out(have.length ? `${T} reads first: ${have.join("; ")}.` : `Nothing is named for ${talk} to read first.`, state(a));
         return out(sub === "read"
           ? (have.length ? `${T} may look at: ${have.join("; ")}.` : `Nothing is named for ${talk} to look at.`)
           : (have.length ? `${T}'s limits: ${have.join("; ")}.` : `${T} has no limits of its own.`), state(a));
@@ -173,15 +175,17 @@ const commands = {
         if (f.remove) {
           const r = removeAreaLine(a, K, what);
           saved(`area ${a.slug} ${K} taken away`);
+          if (sub === "source") return out(`Taken away: ${talk} no longer reads ${r.removed.join(" and ")} first.`, { ...state(r.area), removed: r.removed });
           return out(sub === "read" ? `Taken away: ${talk} no longer looks at ${r.removed.join(" and ")}.` : `Taken away: ${talk}'s limit ${r.removed.map((x) => `"${x}"`).join(" and ")}.`, { ...state(r.area), removed: r.removed });
         }
         const r = addAreaLine(a, K, what);
         if (r.changed) saved(`area ${a.slug} ${K} added`);
+        if (sub === "source") return out(r.changed ? `Added: ${talk} reads ${r.line} first.` : `Already there: ${talk} reads ${r.line} first. Nothing changed.`, { ...state(r.area), changed: r.changed });
         const said = sub === "read" ? `${talk} may look at ${r.line}.` : r.changed ? `Added a limit to ${talk}: ${r.line}.` : `${talk}'s limit "${r.line}".`;
         return out(r.changed ? (sub === "read" ? `Added: ${said}` : said) + later : `Already there: ${said} Nothing changed.`, { ...state(r.area), changed: r.changed });
       } catch (e) { die(e.message); }
     }
-    die("godspeed-coach area add <name> --title ... --rhythm ... | area set <area> <SETTING> <value> | area read <area> \"<what it may look at>\" [--remove] | area limit <area> \"<what it must never do>\" [--remove]");
+    die("godspeed-coach area add <name> --title ... --rhythm ... | area set <area> <SETTING> <value> | area read <area> \"<what it may look at>\" [--remove] | area limit <area> \"<what it must never do>\" [--remove] | area source <area> \"<what the research reads first>\" [--remove]");
   },
   // Asked for in the conversation ("Can we do the health talk now?"): the open command it prints
   // carries --shown. The scheduled talk gets its brief from the gate, without it.
@@ -256,14 +260,53 @@ const commands = {
     if (sub === "held" || sub === "not-held") {
       const d = f.date ? dateArg(f.date) : (talkDates(a).at(-1) || die(`No ${a.title} talk exists yet.`));
       setTalkState(a, d, sub);
+      // Closing a talk writes the next talk's live questions (lib/questions.mjs), for an area that serves a goal.
+      const q = sub === "held" ? writeQuestions(mcDir, a, d, at) : null;
       saved(`${a.slug} talk ${d} ${sub}`);
-      return out(`Recorded: the ${a.title} talk of ${d} is ${sub}.`, { ok: true, date: d, state: sub });
+      return out(`Recorded: the ${a.title} talk of ${d} is ${sub}.`, { ok: true, date: d, state: sub, ...(q ? { questions: path.relative(mcDir, q.file).replace(/\\/g, "/"), questions_date: q.date } : {}) });
     }
     if (sub === "state") {
       const ds = talkDates(a);
       return out(ds.slice(-5).map((d) => `${d}: ${readTalk(a, d).state}`).join("\n") || "No talks yet.", ds.map((d) => ({ date: d, state: readTalk(a, d).state })));
     }
     die("godspeed-coach talk open|said|held|not-held|state <area>");
+  },
+  // The live questions of an area's next talk (lib/questions.mjs). The program writes the file when
+  // a talk closes; the model refines it only here. With no date: the next talk that has a file, else
+  // the next talk day.
+  questions() {
+    const [name, sub, ...args] = pos;
+    const a = needArea(name);
+    if (!hasQuestions(a)) die(`The ${a.title} area serves no goal, so it has no live questions.`);
+    const d = f.date ? dateArg(f.date) : openQuestionsDate(a, today) || nextTalkDay(a, today);
+    if (!d) die(`The ${a.title} talk has no coming day.`);
+    const rel = (p) => path.relative(mcDir, p).replace(/\\/g, "/");
+    if (!sub || sub === "show") {
+      const q = readQuestions(questionsFile(a, d));
+      if (!q) return out(`No questions yet for the ${a.title} talk of ${d}. They are written when a talk closes.`, { ok: true, date: d, questions: [] });
+      return out(`${rel(q.file)}\n` + q.items.map((i) => `- ${i.text}\n  why: ${i.why}`).join("\n"), { ok: true, date: d, file: rel(q.file), questions: q.items });
+    }
+    try {
+      if (sub === "add") {
+        const r = addQuestion(a, d, args.join(" "), f.why, at);
+        if (r.changed) saved(`${a.slug} question added for ${d}`);
+        return out(r.changed ? `Added to ${rel(r.file)}.` : "Already there. Nothing changed.", { ok: true, date: d, changed: r.changed });
+      }
+      if (sub === "drop") {
+        const r = dropQuestion(a, d, args.join(" "), at);
+        saved(`${a.slug} question dropped for ${d}`);
+        return out(`Dropped: ${r.dropped}`, { ok: true, date: d, dropped: r.dropped });
+      }
+      if (sub === "write") {
+        const last = talkDates(a).filter((x) => x < d).at(-1);
+        if (!last) die(`The ${a.title} area has no talk before ${d} to write questions from.`);
+        const r = writeQuestions(mcDir, a, last, at);
+        if (!r) die("No questions could be written.");
+        saved(`${a.slug} questions ${r.date}`);
+        return out(`Written: ${rel(r.file)} (${r.count} questions).`, { ok: true, date: r.date, count: r.count });
+      }
+    } catch (e) { die(e.message); }
+    die('godspeed-coach questions <area> [show] | add "<question>" --why "<why>" | drop "<words>" | write [--date <talk day>]');
   },
   habit() {
     const [sub, ...args] = pos;
@@ -389,6 +432,7 @@ const commands = {
       else if (w.kind === "auto") track(w.habit, w.ymd, "done", "data", w.words);
       else if (w.kind === "follow-up") setFollowUp(w.area, w.ymd, w.at);
       else if (w.kind === "not-held") setTalkState(w.area, w.ymd, "not-held");
+      else if (w.kind === "questions") writeQuestions(mcDir, w.area, w.ymd, at);
     }
     commitCoach(mcDir, writes.length ? `coach: ${[...new Set(writes.map((w) => w.kind))].join(", ")}` : "coach: pending changes", syncMode);
     if (messages.length) process.stdout.write(messages.join("\n\n") + "\n");

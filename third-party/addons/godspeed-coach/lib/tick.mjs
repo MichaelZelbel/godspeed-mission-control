@@ -6,6 +6,7 @@ import { listAreas, nextTalkDay } from "./areas.mjs";
 import { followUpDue, notHeldDue, readTalk } from "./talks.mjs";
 import { listHabits, dueOn, answerOn, askedOn, daysWords } from "./habits.mjs";
 import { autoTicks } from "./auto.mjs";
+import { unclosedTalk } from "./questions.mjs";
 
 export const CHECK_WINDOW_HOURS = 3;
 
@@ -81,6 +82,9 @@ export function dueTick(mcDir, s, now, table = {}) {
 
   for (const a of listAreas(mcDir)) {
     for (const d of notHeldDue(a, now, s.timezone)) writes.push({ kind: "not-held", area: a, ymd: d });
+    // A talk that ended without a closing turn still gets its next talk's live questions. Silent.
+    const unclosed = unclosedTalk(a, lp.date);
+    if (unclosed) writes.push({ kind: "questions", area: a, ymd: unclosed });
     const f = followUpDue(a, now, s.timezone);
     if (f) {
       const talk = readTalk(a, f);
