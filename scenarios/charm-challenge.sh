@@ -383,9 +383,10 @@ events_in() { # <shelf file>
 # The kinds of the card's events, sorted, on one line ("asked kept start"). Every start, question,
 # reset, kept answer, finish and stop is one row of the card (the add-on's README, "Files"), so
 # the question asked after a vent is one too; until candidate/2.0.0-beta.15 this scenario counted
-# the rows as if it were not, and failed a card that held exactly what it should.
+# the rows as if it were not, and failed a card that held exactly what it should. A row whose
+# kind cannot be read counts as "?", so it fails the comparison instead of dropping out of it.
 event_kinds_in() { # <shelf file>
-  awk -F'\t' '$1=="event"{print $3}' "$1" | sed -n 's/.*"kind":"\([a-z]*\)".*/\1/p' | sort | tr '\n' ' ' | sed 's/[[:space:]]*$//'
+  awk -F'\t' '$1=="event"{print $3}' "$1" | sed 's/.*"kind":"\([a-z][a-z]*\)".*/\1/;t;s/.*/?/' | sort | tr '\n' ' ' | sed 's/[[:space:]]*$//'
 }
 event_days_in() { # <shelf file>
   events_in "$1" | sort -u | tr '\n' ' ' | sed 's/[[:space:]]*$//'
