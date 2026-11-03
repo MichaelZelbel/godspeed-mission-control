@@ -250,3 +250,28 @@ test('a Morning brief the notebook made as the recipe becomes the script, at its
  assert.deepEqual(readNotebookRoutines(store).jobs.filter(e=>e.key==='morning-brief').map(e=>e.id),[made.id]);
  assert.deepEqual(await scheduler.followBrief(),[],'once');
 });
+
+test('Settings, Notifications moves a recipe brief over before it changes it',async t=>{
+ const {store,hermes,scheduler}=await withGoal(t);
+ const jobs=hermes.jobs();
+ jobs.push({id:'old-brief',name:'Morning brief',schedule:{kind:'cron',expr:'15 6 * * *'},schedule_display:'15 6 * * *',prompt:'Follow the morning-brief recipe for this mission control.',script:null,skill:'morning-brief',no_agent:false,deliver:'local',workdir:store.root,enabled:true});
+ hermes.write(jobs);
+ await scheduler.setNotifications({daily:{enabled:true,time:'07:30'}});
+ const briefs=hermes.jobs().filter(j=>j.name==='Morning brief');
+ assert.equal(briefs.length,1);assert.equal(briefs[0].script,BRIEF_SCRIPT);assert.equal(briefs[0].schedule.expr,'30 7 * * *');
+});
+
+test('a move of the recipe brief that stopped half-way never leaves two briefs, nor a paused one running',async t=>{
+ const {store,hermes,scheduler,home}=await withGoal(t);
+ const recipe=over=>({id:'old-brief',name:'Morning brief',schedule:{kind:'cron',expr:'15 6 * * *'},schedule_display:'15 6 * * *',prompt:'Follow the morning-brief recipe for this mission control.',script:null,skill:'morning-brief',no_agent:false,deliver:'local',workdir:store.root,enabled:true,...over});
+ // A script brief made by a move that stopped before the recipe job went: the recipe job only goes.
+ hermes.write([...hermes.jobs(),recipe(),{id:'made-before',name:'Morning brief',schedule:{kind:'cron',expr:'15 6 * * *'},schedule_display:'15 6 * * *',prompt:null,script:BRIEF_SCRIPT,no_agent:true,deliver:'local',workdir:store.root,enabled:true}]);
+ assert.deepEqual(await scheduler.followBrief(),[]);
+ assert.deepEqual(hermes.jobs().filter(j=>j.name==='Morning brief').map(j=>j.id),['made-before']);
+ // A paused recipe brief whose new script brief could not be paused: the new one is taken out again.
+ hermes.write([...hermes.jobs().filter(j=>j.name!=='Morning brief'),recipe({enabled:false})]);
+ const failing=new NativeScheduler(store,{home,executable:'hermes',device:'pc',run:async(exe,args,options)=>{if(args[1]==='pause')throw Error('Hermes could not pause it');return hermes.run(exe,args,options);}});
+ await assert.rejects(failing.followBrief(),/could not pause/);
+ const left=hermes.jobs().filter(j=>j.name==='Morning brief');
+ assert.deepEqual(left.map(j=>[j.id,j.enabled]),[['old-brief',false]],'only the paused recipe brief is left, for the next tick');
+});
