@@ -13,7 +13,10 @@
 // A briefing the notebook keeps silent prints nothing, which is Hermes' silence; one that cannot be
 // written (no AI, a draft its checks refuse twice) fails the run in one sentence.
 //
-//   GODSPEED_WORKSPACE=<mission control> node notebook/scripts/morning-brief.mjs
+//   GODSPEED_WORKSPACE=<mission control> node notebook/scripts/morning-brief.mjs [--today] [--godspeed <mission control>]
+//
+// With --today (the assistant's `godspeed-brief` command, which is what the chat's "today's brief" runs) a briefing already saved today is printed
+// unchanged and nothing is written; otherwise it runs as above. Silent stays silent: no output.
 //
 // The AI is the notebook's own: the one connected in Settings (.godspeed/provider.json), else the
 // assistant the notebook was wired to (assistant.json), as the notebook's server chooses it.
@@ -24,6 +27,7 @@ import {Store} from '../core/records/store.mjs';
 import {QueryService} from '../core/query.mjs';
 import {machineDevice} from '../core/device-id.mjs';
 import {briefing} from '../core/briefing.mjs';
+import {dayOf} from '../core/trackers.mjs';
 import {modelProvider,hermesProvider} from '../core/runtime.mjs';
 
 const readJson=file=>{try{return JSON.parse(fs.readFileSync(file,'utf8').replace(/^﻿/,''));}catch{return null;}};
@@ -62,11 +66,21 @@ export async function runMorningBrief({root,provider=null,env=process.env}){
  return {result,text:note?String(note.content||'').trim():''};
 }
 
+// Asked for in the chat (#193): today's briefing note if the notebook already saved one, else the
+// briefing is run once, so the same words reach the person whether the morning or the chat asked.
+// Today is the person's own day (the installation's time zone). Read-only when a note exists.
+export async function todaysMorningBrief({root,provider=null,env=process.env,now=new Date()}){
+ const store=new Store(root,{device:machineDevice(root).id}),zone=store.get('settings','installation')?.timezone||'UTC',today=dayOf(now,zone);
+ const saved=new QueryService(store).rows('notes').filter(n=>n.source_app==='morning-brief'&&n.created_at&&dayOf(new Date(n.created_at),zone)===today).at(-1);
+ if(saved)return {result:null,text:String(saved.content||'').trim()};
+ return runMorningBrief({root,provider,env});
+}
+
 if(import.meta.url===pathToFileURL(process.argv[1]||'').href){
- const root=process.env.GODSPEED_WORKSPACE||process.env.GODSPEED_ROOT;
+ const at=process.argv.indexOf('--godspeed'),root=(at>0&&process.argv[at+1])||process.env.GODSPEED_WORKSPACE||process.env.GODSPEED_ROOT;
  if(!root){console.error('The morning brief does not know which mission control to read (GODSPEED_WORKSPACE).');process.exit(2);}
  try{
-  const {text}=await runMorningBrief({root});
+  const {text}=await (process.argv.includes('--today')?todaysMorningBrief:runMorningBrief)({root});
   if(text)process.stdout.write(text+'\n');
   process.exit(0);
  }catch(error){

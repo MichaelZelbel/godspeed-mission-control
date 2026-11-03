@@ -1,6 +1,6 @@
 ---
 name: morning-brief
-description: Write today's morning brief into brief/YYYY-MM-DD.md, the short message that reaches the person each morning when they switched it on in setup, with what their watches found. The starter version every mission control ships with, which the person makes their own by asking you to change it. Use when the morning brief job runs, when the person asks for "today's brief", "my brief" or "the brief again", when they answer a list of steps going out (in the brief, or in the daily round's morning message on a day without a brief) with "stop" or "stop" and a number, when they ask to put back a step the brief reported as done without asking, and when they ask to switch the morning brief on.
+description: Show the person today's morning brief by running `godspeed-brief`, the notebook's own briefing, which also reaches them each morning when they switched it on in setup. Only where that command does not exist (a server's morning job) write the brief by hand into brief/YYYY-MM-DD.md, with what their watches found. The starter version every mission control ships with, which the person makes their own by asking you to change it. Use when the person asks for "today's brief", "my brief" or "the brief again", when a morning brief job without that command runs, when they answer a list of steps going out (in the brief, or in the daily round's morning message on a day without a brief) with "stop" or "stop" and a number, when they ask to put back a step the brief reported as done without asking, and when they ask to switch the morning brief on.
 ---
 
 # Morning brief (starter)
@@ -9,6 +9,24 @@ This is the starter version. It exists so that a person who said yes to a mornin
 gets a real one from the first morning, before they have shaped it. The person makes it their
 own (how: https://godspeedmissioncontrol.com/guide/morning-brief): when they ask you to change
 what goes into their brief, edit this file, and from then on it is theirs.
+
+## Where the command exists: run it
+
+When `godspeed-brief` is a command you can run (every desktop chat and every Hermes routine of
+this app), it is the notebook's own briefing, and it is the only way to give the person a brief.
+Run `godspeed-brief`, with no other word. It prints today's "Your morning briefing" if the
+notebook already saved it, or writes it once and prints it. Your answer is its text, word for word.
+When it prints nothing and succeeds, the notebook keeps today's briefing silent: say in one
+sentence that there is no briefing today. When it fails, give its one sentence and stop. Never write
+`brief/YYYY-MM-DD.md` by hand for "today's brief", "my brief" or "the brief again", and never
+add to or reword what it printed. The sections below on going out tonight, going out without asking,
+and switching it on still apply; everything else from "What to read" through "Your answer" is
+the fallback.
+
+## The fallback: where `godspeed-brief` does not exist
+
+Only a mission control without that command (a server's morning job, which runs this recipe from its
+own prompt) writes the brief by hand, by the rest of this section's parts.
 
 ## What to read
 

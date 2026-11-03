@@ -19,7 +19,7 @@ import {QueryService} from '../core/query.mjs';
 import {addonCommand} from '../core/native-personal.mjs';
 import {routineFiles} from '../core/starting-routines.mjs';
 import {BRIEF_SCRIPT} from '../core/notebook-routines.mjs';
-import {runMorningBrief} from '../scripts/morning-brief.mjs';
+import {runMorningBrief,todaysMorningBrief} from '../scripts/morning-brief.mjs';
 
 const python=process.env.GODSPEED_TEST_PYTHON||(process.platform==='win32'?'python':'python3');
 const havePython=spawnSync(python,['--version']).status===0;
@@ -127,4 +127,43 @@ test('a briefing that could not be written fails the routine in one sentence',{s
  const run=scripts(t,"console.error('The morning brief has no AI to write with: connect one in Settings, Your AI.');process.exit(1);");
  assert.notEqual(run.status,0);
  assert.match(run.stderr,/^The morning brief could not be written\.\r?\nThe morning brief has no AI to write with/);
+});
+
+// "TODAY'S BRIEF" IN THE CHAT (#193). The chat runs `godspeed-brief` (morning-brief.mjs --today): the
+// morning's own note when it is saved, else the briefing once; never a second note.
+const briefNotes=root=>new QueryService(new Store(root)).rows('notes').filter(n=>n.source_app==='morning-brief');
+
+test('asked for in the chat, a saved briefing of today is printed unchanged and nothing is written',async t=>{
+ const {root}=workspace(t);
+ const provider=async input=>verifies(input)||OK;
+ const {text}=await runMorningBrief({root,provider});
+ const before=JSON.stringify(briefNotes(root));
+ const asked=await todaysMorningBrief({root,provider:async()=>{throw Error('the AI must not be asked');}});
+ assert.equal(asked.text,text);assert.equal(JSON.stringify(briefNotes(root)),before);
+});
+
+test('asked for in the chat with none saved, the briefing is saved once, and asking again saves no second note',async t=>{
+ const {root}=workspace(t);let writes=0;
+ const provider=async input=>verifies(input)||(writes++,OK);
+ const first=await todaysMorningBrief({root,provider});
+ assert.equal(briefNotes(root).length,1);
+ const again=await todaysMorningBrief({root,provider});
+ assert.equal(again.text,first.text);assert.equal(briefNotes(root).length,1);assert.equal(writes,1);
+});
+
+test('a briefing saved on an earlier day is not today\'s',async t=>{
+ const {root}=workspace(t);
+ const provider=async input=>verifies(input)||OK;
+ await runMorningBrief({root,provider});
+ const tomorrow=new Date(Date.now()+2*86400000);
+ await assert.rejects(todaysMorningBrief({root,provider,now:tomorrow}),/already saved/,'the briefing ran again rather than print yesterday\'s');
+});
+
+test('the recipe names the command first and keeps hand-writing only as the fallback without it',()=>{
+ const recipe=fs.readFileSync(fileURLToPath(new URL('../../starter-godspeed/skills/morning-brief/SKILL.md',import.meta.url)),'utf8');
+ const command=recipe.indexOf('godspeed-brief'),fallback=recipe.indexOf('## The fallback'),write=recipe.indexOf('## What to write');
+ assert.ok(command>0&&command<fallback&&fallback<write,'the command comes before the fallback, which comes before the writing part');
+ assert.match(recipe,/where `godspeed-brief` does not exist/);
+ assert.match(recipe,/Save a new file as `brief\/YYYY-MM-DD\.md`/,'a mission control without the command is still told what to write');
+ assert.match(recipe,/Never write\s+`brief\/YYYY-MM-DD\.md` by hand for "today's brief"/);
 });
