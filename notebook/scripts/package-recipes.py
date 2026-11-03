@@ -90,8 +90,9 @@ for skill in inventory['skills']:
 # notebook/recipes is their source and stays as it is. The tracker recipe owns "track" (D-321), and
 # hands the period and food to their own recipes; context-setup leads the getting-to-know-you chat
 # after the technical setup (16 October 2026); coach-prep prepares each coaching talk the day before
-# (18 October 2026).
-for name in ['tracker','context-setup','cycle-tracker','food-tracker','coach-prep']:
+# (18 October 2026), and coach-prep-review is the second AI that checks it before the talk may open
+# from it (3 November 2026).
+for name in ['tracker','context-setup','cycle-tracker','food-tracker','coach-prep','coach-prep-review']:
  if not (root/'notebook/recipes'/name/'SKILL.md').exists():raise ValueError('Missing product recipe '+name)
  classified.append({'name':name,'classification':'source only','reason':'Portable recipe and shared record/runtime operations; no private incident prose or account details.'})
 # The product's own add-ons with no Mission Control original either: the add-on that ships the recipe

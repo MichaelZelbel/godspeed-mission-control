@@ -215,6 +215,11 @@
     "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details."
   },
   {
+    "name": "coach-prep-review",
+    "classification": "source only",
+    "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details."
+  },
+  {
     "name": "charm-challenge",
     "classification": "source only",
     "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details."

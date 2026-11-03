@@ -19,7 +19,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { parseDoc } from "./header.mjs";
 import { localParts, addDays, zonedToUtc, now as clockNow } from "./clock.mjs";
-import { researchEvidenceProblem } from "./prep-evidence.mjs";
+import { researchEvidenceProblem, researchDomains, servedGoals } from "./prep-evidence.mjs";
 import { listAreas, isTalkDay, nextTalkDay } from "./areas.mjs";
 import { talkFile, talkDates, readTalk } from "./talks.mjs";
 
@@ -142,7 +142,8 @@ export const prepPath = rel;
 // Control, mc-coach-prep with the coach-prep recipe) and for a person who asks: which file it is,
 // whether that day is a day of this talk, whether the file can open the talk (ready, or the reason
 // it cannot), and whether it is stale (prepared more than PREP_FRESH_HOURS before the talk). It
-// only reads.
+// only reads. research_domains and goals tell the job whether the talk needs receipts and a review
+// (an area with RESEARCH DOMAIN lines) and what the review must judge.
 export function prepCheck(mcDir, s, area, ymd) {
   const file = prepFile(area, ymd);
   const p = readPrep(file);
@@ -153,5 +154,6 @@ export function prepCheck(mcDir, s, area, ymd) {
     area: area.slug, title: area.title, date: ymd, time: area.time, timezone: s.timezone, file: rel(mcDir, file),
     talk_day: talkDay, ready: !problem, ...(problem ? { problem } : {}),
     stale: !problem && prepStale(p, at), prepared: preparedAt(p)?.toISOString().replace(/\.\d+Z$/, "Z") || "",
+    research_domains: researchDomains(area), goals: servedGoals(area),
   };
 }

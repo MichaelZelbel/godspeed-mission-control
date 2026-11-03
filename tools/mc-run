@@ -14,7 +14,7 @@
 #
 # USAGE
 #   mc-run <recipe-name> [--cwd DIR] [--prompt-file FILE | --prompt TEXT] [--timeout SECONDS]
-#           [--out FILE] [--allowed-tools "Bash Read Write"] [--godspeed DIR] [--list]
+#           [--out FILE] [--allowed-tools "Bash Read Write"] [--hermes-toolsets web] [--godspeed DIR] [--list]
 #
 # The prompt it builds is: the recipe's own text, then whatever extra you passed (usually
 # today's date and where to write), then one line saying which folder and which assistant.
@@ -35,11 +35,16 @@
 # settings files on the computer cannot add to it, and it writes only where its Edit(<path>) rules
 # say. A list that grants the whole shell (a bare Bash) changes nothing. See claude_binding below.
 #
+# HERMES' TOOLSETS (--hermes-toolsets, comma-separated, 3 November 2026) are Hermes' own way to hold a
+# run to some tools: `hermes chat -t web` has only web_search and web_extract, no file, terminal or
+# notebook tool. The coach's preparation review (mc-coach-prep) runs so, because the reviewer must
+# write nothing. claude and codex ignore it; give claude its --allowed-tools as well.
+#
 # The exit code is the assistant's own. Nothing in here reads or edits the answer, except that
 # Hermes' waiting lines are taken out of it (see run_hermes).
 set -uo pipefail
 
-SKILL=""; CWD=""; PROMPT_FILE=""; PROMPT_TEXT=""; TIMEOUT=1500; OUT=""; ALLOWED=""; GODSPEED=""; LIST=0
+SKILL=""; CWD=""; PROMPT_FILE=""; PROMPT_TEXT=""; TIMEOUT=1500; OUT=""; ALLOWED=""; GODSPEED=""; LIST=0; HERMES_TOOLSETS=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --cwd) CWD="$2"; shift 2 ;;
@@ -49,8 +54,9 @@ while [ $# -gt 0 ]; do
     --timeout) TIMEOUT="$2"; shift 2 ;;
     --out) OUT="$2"; shift 2 ;;
     --allowed-tools) ALLOWED="$2"; shift 2 ;;
+    --hermes-toolsets) HERMES_TOOLSETS="$2"; shift 2 ;;
     --list) LIST=1; shift ;;
-    -h|--help) sed -n '2,40p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,45p' "$0"; exit 0 ;;
     *) if [ -z "$SKILL" ]; then SKILL="$1"; shift; else echo "mc-run: I do not know the argument $1" >&2; exit 2; fi ;;
   esac
 done
@@ -294,6 +300,8 @@ fs.writeFileSync(dst,JSON.stringify({mcpServers:out},null,2)+"\n");' "$(winpath 
 trap '[ -n "$MCP_TMP" ] && rm -f "$MCP_TMP"' EXIT
 if [ "$RUNNER" = claude ]; then
   claude_binding
+elif [ "$RUNNER" = hermes ] && [ -n "$HERMES_TOOLSETS" ]; then
+  :
 elif limits_shell; then
   echo "mc-run: $RUNNER takes no list of tools, so this run is held to its limits only by the recipe's own words." >&2
 fi
@@ -323,10 +331,12 @@ run_claude() {
 # up in the answer, whose last paragraph is what the person is told, so it is taken out.
 strip_waiting() { sed -E '/^[[:space:]]*\[tool\][[:space:]].*[[:space:]][a-z]+\.\.\.[[:space:]]*$/d'; }
 run_hermes() {
+  local only=()
+  [ -n "$HERMES_TOOLSETS" ] && only=(-t "$HERMES_TOOLSETS")
   if [ -n "${GODSPEED_HERMES_PROFILE:-}" ]; then
-    printf '%s' "$PROMPT" | TO hermes -p "$GODSPEED_HERMES_PROFILE" chat --query-file - --quiet --oneshot --yolo --accept-hooks --in "$CWD" | strip_waiting
+    printf '%s' "$PROMPT" | TO hermes -p "$GODSPEED_HERMES_PROFILE" chat --query-file - --quiet --oneshot --yolo --accept-hooks ${only[@]+"${only[@]}"} --in "$CWD" | strip_waiting
   else
-    printf '%s' "$PROMPT" | TO hermes chat --query-file - --quiet --oneshot --yolo --accept-hooks --in "$CWD" | strip_waiting
+    printf '%s' "$PROMPT" | TO hermes chat --query-file - --quiet --oneshot --yolo --accept-hooks ${only[@]+"${only[@]}"} --in "$CWD" | strip_waiting
   fi
 }
 # Codex refuses to work in a folder it has not been told to trust, and says so instead of

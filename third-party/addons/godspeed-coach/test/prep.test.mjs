@@ -332,7 +332,7 @@ test("prep-check says whether one talk's preparation can open it, and whether it
   assert.equal(none.out, "not ready: coach/work/prep/2026-10-21.md: there is no such file");
   assert.deepEqual(JSON.parse(check({}, "--date", "2026-10-21", "--json").out), {
     area: "work", title: "Work and money", date: "2026-10-21", time: "19:00", timezone: "Europe/Berlin", file: "coach/work/prep/2026-10-21.md",
-    talk_day: true, ready: false, problem: "there is no such file", stale: false, prepared: "",
+    talk_day: true, ready: false, problem: "there is no such file", stale: false, prepared: "", research_domains: [], goals: ["buffer"],
   });
   // Ready and fresh; the day is the talk's next one when no --date is given.
   const fresh = check({ "coach/work/prep/2026-10-21.md": prep({ prepared: "2026-10-20T11:00:00Z" }) });

@@ -172,5 +172,140 @@ sed -i "s#$G2/#$G3/#g" "$B/claude"
 OUT="$(nameless env PATH="$B:$PATH" GODSPEED_RUNNER=claude bash "$HERE/mc-coach-prep" --godspeed "$G3" 2>&1)"; check "a run where git has no name exits 0" "$?" "0"
 check "  and still commits, as Godspeed Mission Control" "$(nameless git -C "$G3" log -1 --format='%an|%s')" "Godspeed Mission Control|Coaching talks prepared 2026-11-08"
 
+# AN AREA WITHOUT RESEARCH DOMAINS needs no receipts and no review: none were written for it.
+check "an area without research domains gets no receipts, review or tries" "$(ls "$G"/routines/coach-prep/*/ "$G"/coach/*/prep/ 2>/dev/null | grep -cE 'evidence|review|tries')" "0"
+
+# A TALK WHOSE AREA HAS RESEARCH DOMAINS (#135): the run's own record gives the receipts, a second
+# run reviews the preparation, the host seals the review, and only then does the talk open from it.
+# The stand-in claude keeps a transcript as Claude Code does (~/.claude/projects/...), with the
+# prompt's RUN MARKER: one page read successfully at the run's time, one that failed, one read long
+# before the run. As the reviewer (the coach-prep-review recipe) it answers with the JSON verdict:
+# a pass for every domain and goal named in its prompt, or a fail when $ST/review.fail exists.
+# With $ST/forge the writer also writes the sidecars itself, which must never count.
+ST="$TMP/research"; mkdir -p "$ST"
+G4="$(P "$TMP/g4")"; mkdir -p "$G4/rules" "$G4/coach/work" "$G4/skills/coach-prep" "$G4/skills/coach-prep-review"
+cp "$HERE/../notebook/recipes/coach-prep/SKILL.md" "$G4/skills/coach-prep/SKILL.md"
+cp "$HERE/../notebook/recipes/coach-prep-review/SKILL.md" "$G4/skills/coach-prep-review/SKILL.md"
+: > "$G4/AGENTS.md"; printf '{"timezone":"Europe/Berlin","git_sync":"off"}\n' > "$G4/coach/settings.json"
+printf 'AREA: work\nTITLE: Work and money\nRHYTHM: weekly sunday\nTIME: 18:00\nSTARTS: 2026-10-01\nSTATUS: on\nSERVES: run-10k\nRESEARCH DOMAIN: income | new earning paths\n\n## Preparation\nIncome routes.\n' > "$G4/coach/work/area.md"
+git -C "$G4" init -q && git -C "$G4" add -A && git -C "$G4" commit -q -m start
+cat > "$B/claude" <<'STAND'
+#!/bin/sh
+[ "$1" = --help ] && { printf '  --restricted  Restricted mode\n  --permission-mode <mode>  ("dontAsk")\n  --strict-mcp-config\n'; exit 0; }
+P="$*"; [ -t 0 ] || P="$P
+$(cat)"
+n=$(( $(cat "$ST/calls" 2>/dev/null || echo 0) + 1 )); echo "$n" > "$ST/calls"
+for a in "$@"; do printf '[%s]\n' "$a"; done > "$ST/args.$n"; printf '%s\n' "$P" > "$ST/prompt.$n"
+NOW="$(printf '%s\n' "$P" | sed -n 's/.*Now: \([0-9TZ:.-]*\) (UTC).*/\1/p' | head -1)"
+MARK="$(printf '%s\n' "$P" | sed -n 's/^RUN MARKER: \([a-z0-9-]*\)$/\1/p' | head -1)"
+mkdir -p "$HOME/.claude/projects/-stand-in"
+S="session-$MARK"; L="$HOME/.claude/projects/-stand-in/$S.jsonl"
+printf '{"type":"user","sessionId":"%s","timestamp":"%s","message":{"role":"user","content":"RUN MARKER: %s\\nThe prompt."}}\n' "$S" "$NOW" "$MARK" > "$L"
+read_page() { # id url when text error
+  printf '{"type":"assistant","sessionId":"%s","timestamp":"%s","message":{"role":"assistant","content":[{"type":"tool_use","id":"%s","name":"WebFetch","input":{"url":"%s","prompt":"read"}}]}}\n' "$S" "$3" "$1" "$2" >> "$L"
+  printf '{"type":"user","sessionId":"%s","timestamp":"%s","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"%s","content":"%s","is_error":%s}]},"toolUseResult":{"code":200}}\n' "$S" "$3" "$1" "$4" "$5" >> "$L"
+}
+case "$P" in
+*"# Reviewing a coaching talk's preparation"*)
+  DOMS="$(printf '%s\n' "$P" | sed -n 's/^The research domains: \(.*\)\. The goals it serves: \(.*\)\. Your coverage.*/\1, \2/p' | head -1)"
+  ROWS=""; for id in $(printf '%s' "$DOMS" | tr ',' ' '); do
+    ROWS="$ROWS${ROWS:+,}{\"id\":\"$id\",\"verdict\":\"pass\",\"reason\":\"The report supports it; the contrary finding is weighed.\",\"sources\":[\"https://example.org/report\"]}"
+  done
+  if [ -f "$ST/review.fail" ]; then
+    printf '{"verdict":"fail","coverage":[%s],"issues":["The 12 percent rise in Routes is not in the text of https://example.org/report."]}\n' "$ROWS"
+  else printf '{"verdict":"pass","coverage":[%s],"issues":[]}\n' "$ROWS"; fi ;;
+*)
+  F="$(printf '%s' "$P" | sed -n 's/.*and write \(coach\/[a-z0-9-]*\/prep\/[0-9-]*\.md\)\..*/\1/p' | head -1)"
+  read_page toolu_ok https://example.org/report "$NOW" "Freelance rates rose 12 percent in 2026." false
+  read_page toolu_err https://example.org/gone "$NOW" "Request failed with status code 404" true
+  read_page toolu_old https://example.org/old 2020-01-01T00:00:00.000Z "Read long before this run." false
+  mkdir -p "$G4/$(dirname "$F")"
+  { printf 'AREA: work\nTALK: %s 18:00\nPREPARED: %s\nSTATE: ready\n\n' "$(basename "$F" .md)" "$NOW"
+    for s in "The opening" "Talk card" "Where they stand" "What changed since the last talk" "The world this week" "Opportunities" "Routes" "Rejected routes" "What I think" "Gaps" "Cut, and why" "Research coverage"; do
+      printf '## %s\nRun %s: a line for %s, from https://example.org/report.\n\n' "$s" "$MARK" "$s"; done; } > "$G4/$F"
+  [ -f "$ST/forge" ] && for x in evidence review; do printf '{"version":1,"forged":true}\n' > "$G4/${F%.md}.$x.json"; done
+  echo "Prepared the talk." ;;
+esac
+STAND
+chmod +x "$B/claude"
+export ST G4
+rrun() { PATH="$B:$PATH" GODSPEED_RUNNER=claude bash "$HERE/mc-coach-prep" --godspeed "$G4" "$@" 2>&1; }
+repairs() { "$NODE" --input-type=module -e 'import {pathToFileURL} from "node:url";const {Store}=await import(pathToFileURL(process.argv[1]).href);console.log(new Store(process.argv[2]).list("work_items").filter(r=>r.kind==="repair").length)' "$(P "$HERE/../notebook/core/records/store.mjs")" "$G4"; }
+export GODSPEED_NOW=2026-11-14T01:00:00Z GODSPEED_TODAY=2026-11-14
+R4="$G4/routines/coach-prep/2026-11-14"; P4="$G4/coach/work/prep"
+
+echo "-- an area with research domains"
+OUT="$(rrun --dry-run)"; check "a dry run of a researched talk exits 0" "$?" "0"
+contains "  it names the talk" "$OUT" "Work and money (work), 2026-11-15 at 18:00 Europe/Berlin -> coach/work/prep/2026-11-15.md"
+contains "  and the receipts and the review step" "$OUT" "then its receipts (coach/work/prep/2026-11-15.evidence.json, from the run's own record) and a review by a second AI (coach-prep-review, coach/work/prep/2026-11-15.review.json) before it may open the talk"
+contains "  and the tries and the repair item" "$OUT" "after three failed tries in a row, one repair item goes to your work list"
+
+: > "$ST/forge"
+OUT="$(rrun)"; check "a researched talk whose review passes exits 0" "$?" "0"
+check "  the writer ran, then the reviewer" "$(cat "$ST/calls")" "2"
+contains "  the writer's prompt carries its marker" "$(cat "$ST/prompt.1")" "RUN MARKER: gs-prep-"
+contains "  and asks for Routes, from pages read" "$(cat "$ST/prompt.1")" "write Routes, Rejected routes and Research coverage"
+contains "  the reviewer's prompt carries a marker of its own" "$(cat "$ST/prompt.2")" "RUN MARKER: gs-review-"
+contains "  and the review recipe" "$(cat "$ST/prompt.2")" "# Reviewing a coaching talk's preparation"
+contains "  and the domains and goals it must judge" "$(cat "$ST/prompt.2")" "The research domains: income. The goals it serves: run-10k."
+contains "  and the preparation and the evidence whole" "$(cat "$ST/prompt.2")" "Freelance rates rose 12 percent in 2026."
+contains "  the reviewer may read and search only" "$(cat "$ST/args.2")" "[--tools]
+[Read,Grep,Glob,WebSearch,WebFetch,ToolSearch]"
+case "$(cat "$ST/args.2")" in *Edit*|*Write*|*Bash*) bad "  and has no write tool and no shell";; *) ok "  and has no write tool and no shell";; esac
+contains "  the writer's own list is still binding" "$(cat "$ST/args.1")" "[dontAsk]"
+EVF="$P4/2026-11-15.evidence.json"; RVF="$P4/2026-11-15.review.json"
+check "  the coach opens the talk from it" "$("$NODE" "$GODSPEED_COACH_SCRIPT" prep-check work --date 2026-11-15 --godspeed "$G4" | cut -d, -f1)" "ready: coach/work/prep/2026-11-15.md"
+missing "  the evidence the model wrote is overwritten" "$(cat "$EVF")" "forged"
+missing "  and so is its review" "$(cat "$RVF")" "forged"
+WM="$(sed -n 's/^RUN MARKER: //p' "$ST/prompt.1" | head -1)"
+check "  the evidence names the writer's marker" "$("$NODE" -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).run.token)' "$EVF")" "$WM"
+check "  and only the page read successfully inside the run" "$("$NODE" -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).sources.map(s=>s.url+" "+s.tool).join("|"))' "$EVF")" "https://example.org/report WebFetch"
+check "  the review is the reviewer's session, not the writer's" "$("$NODE" -e 'const r=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));console.log(r.reviewer.token.slice(0,10)+" "+r.verdict+" "+r.coverage.map(c=>c.id).join(","))' "$RVF")" "gs-review- pass income,run-10k"
+contains "  the summary says it passed its review" "$(cat "$R4/summary.txt")" "work 2026-11-15: prepared (coach/work/prep/2026-11-15.md), its review passed on try 1"
+check "  the try is recorded as passed" "$(cut -f1 "$R4/work-2026-11-15.tries")" "pass"
+IN="$(git -C "$G4" show --name-only --format= HEAD)"
+contains "  the commit holds the evidence" "$IN" "coach/work/prep/2026-11-15.evidence.json"
+contains "  and the review" "$IN" "coach/work/prep/2026-11-15.review.json"
+check "  and nothing but the talk's files and the run folder" "$(printf '%s\n' "$IN" | grep -vcE '^(coach/work/prep/2026-11-15\.|routines/coach-prep/2026-11-14/)')" "0"
+
+# AN OLDER PREPARATION THAT STILL OPENS ITS TALK KEEPS ITS PROOF when a new try fails its review.
+for x in md evidence.json review.json; do cp "$P4/2026-11-15.$x" "$ST/kept.$x"; done
+: > "$ST/review.fail"; rm -f "$ST/calls"
+OUT="$(rrun --area work --talk 2026-11-15 --tries 1)"; check "a new try that fails its review exits 1" "$?" "1"
+for x in md evidence.json review.json; do
+  check "  the older $x is back, unchanged" "$(cmp -s "$ST/kept.$x" "$P4/2026-11-15.$x" && echo same || echo changed)" "same"
+done
+check "  and still opens the talk" "$("$NODE" "$GODSPEED_COACH_SCRIPT" prep-check work --date 2026-11-15 --godspeed "$G4" | cut -d, -f1)" "ready: coach/work/prep/2026-11-15.md"
+contains "  the summary says why, and that it stays" "$(cat "$R4/summary.txt")" "work 2026-11-15: NOT PREPARED again (its independent research review did not pass); its earlier preparation stays"
+check "  no copy is left behind" "$(ls "$R4" | grep -c before)" "0"
+contains "  the failed candidates stay in the run folder" "$(ls "$R4")" "work-2026-11-15.try1.review.json"
+
+# THREE FAILED TRIES IN A ROW FILE ONE REPAIR ITEM, and a fourth files no second one. Each try
+# after a failed one gets the review's issues.
+rm -f "$ST/calls"
+OUT="$(rrun --area work --talk 2026-11-22)"; check "a talk whose review fails three times exits 1" "$?" "1"
+check "  it was tried three times in one run (writer and reviewer each)" "$(cat "$ST/calls")" "6"
+contains "  the second try gets the review's issues" "$(cat "$ST/prompt.3")" "The last try at this talk failed its review. Resolve each issue with evidence, not new wording:
+- The 12 percent rise in Routes is not in the text of https://example.org/report."
+missing "  the first try had none to resolve" "$(cat "$ST/prompt.1")" "Resolve each issue"
+check "  three failed tries are recorded" "$(cut -f1 "$R4/work-2026-11-22.tries" | tr '\n' ' ')" "fail fail fail "
+check "  one repair item is in the work list" "$(repairs)" "1"
+contains "  the summary names it" "$(cat "$R4/summary.txt")" "work 2026-11-22: 3 failed tries in a row; repair item: filed repair-coach-prep-"
+check "  no sidecar stays beside a preparation that did not pass" "$(ls "$P4" | grep -c '2026-11-22\..*json')" "0"
+OUT="$(rrun --area work --talk 2026-11-22 --tries 1)"; check "a fourth failed try exits 1" "$?" "1"
+check "  and files no second repair item" "$(repairs)" "1"
+contains "  the summary says the item is open" "$(cat "$R4/summary.txt")" "work 2026-11-22: 4 failed tries in a row; repair item: already open repair-coach-prep-"
+rm -f "$ST/review.fail"
+OUT="$(rrun --area work --talk 2026-11-22)"; check "a try that passes exits 0" "$?" "0"
+check "  and ends the count" "$(tail -1 "$R4/work-2026-11-22.tries" | cut -f1)" "pass"
+OUT="$(rrun --area work --talk 2026-11-22 --tries 1)"
+check "  a run after it starts with no issues to resolve" "$(grep -c 'Resolve each issue' "$ST/prompt.$(cat "$ST/calls" | awk '{print $1-1}')")" "0"
+
+# A RUN WHOSE RECORD HAS NO PAGE READ gets no receipts: the review is not even started.
+rm -f "$ST/calls"; sed -i 's/^  read_page toolu_ok /  : read_page toolu_ok /' "$B/claude"
+OUT="$(rrun --area work --talk 2026-11-29 --tries 1)"; check "a run that read no page exits 1" "$?" "1"
+check "  and no reviewer ran" "$(cat "$ST/calls")" "1"
+contains "  the summary says why" "$(cat "$R4/summary.txt")" "work 2026-11-29: try 1 did not pass (claude session"
+
 echo "$PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

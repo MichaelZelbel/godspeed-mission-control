@@ -15,14 +15,37 @@
 #
 # THE TIME BUDGET (--budget-minutes, default 120) bounds when the run FINISHES: a talk starts only if
 # the time already used plus its own limit (--timeout, default 2700 seconds) still fits. A talk that
-# does not fit is named in the summary and is prepared by the next run.
+# does not fit is named in the summary and is prepared by the next run. A talk that needs a review
+# counts its review's limit (--review-timeout, default 900 seconds) as well.
 #
 # IT NEVER CONTACTS ANYONE AND WRITES ONLY THE TALK'S OWN PREPARATION. The recipe reads and writes
 # coach/<area>/prep/<date>.md. With claude that is enforced: it gets only the tools below, its file
 # tools may write only in that talk's prep folder, and mc-run makes the list binding. Hermes and
 # Codex take no tool list, so with them it rests on the recipe's own words, as for mc-research.
 #
-# IT COMMITS ONLY ITS OWN FILES: each preparation it wrote and its run folder
+# A TALK WHOSE AREA HAS RESEARCH DOMAINS (RESEARCH DOMAIN: lines in its area.md) opens from its
+# preparation only with receipts and a separate review beside it (the coach's lib/prep-evidence.mjs).
+# Since beta.16 this tool writes both, and the model never does (#135):
+#   1. The run's prompt carries a fresh marker (RUN MARKER: gs-prep-...). After the run, the coach
+#      (godspeed-coach prep-receipts) finds the run's own record by it, Claude Code's transcript or
+#      Hermes' session store, and writes the evidence: every source page the run opened successfully
+#      between its start and its end, with the text it read.
+#   2. A file that says STATE: ready is then reviewed by a second run with a marker of its own and
+#      the coach-prep-review recipe: it reads the preparation, the area and the evidence, searches on
+#      its own for what was missed, and answers only with JSON. It cannot write: with claude its
+#      tools are Read Grep Glob WebSearch WebFetch, with Hermes the web toolset only.
+#   3. The coach (prep-seal) seals the review with the reviewer's own record and the hashes of the
+#      preparation, the area and the evidence, and checks the pair. Both are kept in the run folder
+#      until they pass, then moved beside the preparation (<date>.evidence.json, <date>.review.json),
+#      over any the model wrote. So an older preparation that still opens its talk keeps its proof.
+#   4. A failed review's issues go to the next try, which must resolve each with evidence. A talk is
+#      tried again in the same run while a whole try still fits the time (at most --tries, 3). Each
+#      try is a line in the run folder (<area>-<talk>.tries); after three failed tries in a row,
+#      across runs, one repair item is filed in the notebook's work list
+#      (notebook/scripts/coach-prep-repair.mjs), and a passing try ends the count.
+# An area without research domains is prepared as before: no marker, no receipts, no review.
+#
+# IT COMMITS ONLY ITS OWN FILES: each preparation it wrote, its two sidecars and its run folder
 # (routines/coach-prep/<date>/), by name, and pushes them when the folder has an origin.
 #
 # RUN IT BY HAND:   mc-coach-prep --dry-run               the talks it would prepare now
@@ -34,23 +57,26 @@
 # fit the time. 2: a wrong argument or no mission control. 3: the coach, Node.js or mc-run is missing.
 set -uo pipefail
 
-GODSPEED=""; TODAY=""; BUDGET=120; TIMEOUT=2700; DRY=0; AREA=""; TALK=""
+GODSPEED=""; TODAY=""; BUDGET=120; TIMEOUT=2700; REVIEW_TIMEOUT=900; MAXTRIES=3; DRY=0; AREA=""; TALK=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --godspeed) GODSPEED="${2:-}"; shift 2 ;;
     --date) TODAY="${2:-}"; shift 2 ;;
     --budget-minutes) BUDGET="${2:-}"; shift 2 ;;
     --timeout) TIMEOUT="${2:-}"; shift 2 ;;
+    --review-timeout) REVIEW_TIMEOUT="${2:-}"; shift 2 ;;
+    --tries) MAXTRIES="${2:-}"; shift 2 ;;
     --area) AREA="${2:-}"; shift 2 ;;
     --talk) TALK="${2:-}"; shift 2 ;;
     --dry-run) DRY=1; shift ;;
-    -h|--help) sed -n '2,33p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,54p' "$0"; exit 0 ;;
     *) echo "mc-coach-prep: I do not know the argument $1" >&2; exit 2 ;;
   esac
 done
-for n in "$BUDGET" "$TIMEOUT"; do
-  printf '%s' "$n" | grep -Eq '^[0-9]+$' || { echo "mc-coach-prep: --budget-minutes and --timeout are whole numbers, not $n" >&2; exit 2; }
+for n in "$BUDGET" "$TIMEOUT" "$REVIEW_TIMEOUT" "$MAXTRIES"; do
+  printf '%s' "$n" | grep -Eq '^[0-9]+$' || { echo "mc-coach-prep: --budget-minutes, --timeout, --review-timeout and --tries are whole numbers, not $n" >&2; exit 2; }
 done
+[ "$MAXTRIES" -ge 1 ] || MAXTRIES=1
 if [ -n "$AREA$TALK" ]; then
   printf '%s' "$AREA" | grep -Eq '^[a-z0-9][a-z0-9-]*$' || { echo "mc-coach-prep: --area is the talk's area, one word like weekly-check-in, and goes with --talk" >&2; exit 2; }
   printf '%s' "$TALK" | grep -Eq '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' || { echo "mc-coach-prep: --talk is the talk's day as YYYY-MM-DD, and goes with --area" >&2; exit 2; }
@@ -121,6 +147,17 @@ let s = ""; process.stdin.on("data", d => s += d).on("end", () => {
   for (const r of out) console.log(r.join("\t"));
 });' "$1"
 }
+# A talk's research domains and the goals its area serves, from the coach (prep-check --json), as
+# one tab-separated line "<domains, comma-separated>\t<goals>"; nothing when the area has no
+# research domains, so its talk needs no receipts and no review.
+research_of() { # area day
+  coach prep-check "$1" --date "$2" --json 2>/dev/null | "$NODE" -e '
+let s = ""; process.stdin.on("data", d => s += d).on("end", () => {
+  let j = {}; try { j = JSON.parse(s.trim() || "{}"); } catch (e) {}
+  const d = Array.isArray(j.research_domains) ? j.research_domains : [], g = Array.isArray(j.goals) ? j.goals : [];
+  if (d.length) process.stdout.write(d.join(", ") + "\t" + g.join(", "));
+});'
+}
 ERRF="$(mktemp "${TMPDIR:-/tmp}/mc-coach-prep.XXXXXX")"; trap 'rm -f "$ERRF"' EXIT
 if [ -n "$AREA" ]; then
   JSON="$(coach prep-check "$AREA" --date "$TALK" --json 2>"$ERRF")"
@@ -136,10 +173,16 @@ LIST="$(printf '%s' "$LIST" | tr -d '\r')"
 if [ "$DRY" -eq 1 ]; then
   if [ -z "$LIST" ]; then echo "Nothing to prepare: no talk today or tomorrow is without a preparation."; exit 0; fi
   echo "Would prepare, soonest first:"
-  printf '%s\n' "$LIST" | while IFS=$'\t' read -r _ A TI D TM ZONE F PR; do
+  REVIEWED=0
+  while IFS=$'\t' read -r _ A TI D TM ZONE F PR; do
     OVER=""; [ "$PR" != - ] && [ -f "$GODSPEED/$F" ] && OVER=", over its preparation of $PR"
     echo "  $TI ($A), $D at $TM $ZONE -> $F$OVER"
-  done
+    if [ -n "$(research_of "$A" "$D")" ]; then
+      REVIEWED=1
+      echo "    then its receipts (${F%.md}.evidence.json, from the run's own record) and a review by a second AI (coach-prep-review, ${F%.md}.review.json) before it may open the talk"
+    fi
+  done <<< "$LIST"
+  [ "$REVIEWED" -eq 1 ] && echo "A preparation that fails its review is tried again with the review's issues, up to $MAXTRIES times in this run while the time allows; after three failed tries in a row, one repair item goes to your work list."
   exit 0
 fi
 [ -n "$LIST" ] || { echo "nothing to prepare $TODAY"; exit 0; }
@@ -157,14 +200,21 @@ now_iso() {
   if [ -n "${GODSPEED_NOW:-}" ]; then "$NODE" -e 'process.stdout.write(new Date(process.argv[1]).toISOString().replace(/\.\d+Z$/,"Z"))' "$GODSPEED_NOW"
   else date -u +%Y-%m-%dT%H:%M:%SZ; fi
 }
+# The time now, to the millisecond, for the start and end of a run: its receipts count only the
+# pages read between the two. GODSPEED_NOW when a rehearsal froze the clock.
+now_ms() { "$NODE" -e 'const n=process.env.GODSPEED_NOW;process.stdout.write((n?new Date(n):new Date()).toISOString())'; }
 # A preparation whose PREPARED line is missing or unreadable gets the time the run finished, so the
-# coach can tell how fresh it is; one the recipe dated stays as it is.
-stamp() { # file time
-  "$NODE" -e 'const fs=require("fs"),[f,now]=process.argv.slice(1);let t;try{t=fs.readFileSync(f,"utf8")}catch(e){process.exit(0)}
+# coach can tell how fresh it is; one the recipe dated stays as it is. For a talk with receipts
+# (start and end given) a PREPARED time outside the run gets the run's end too: the coach refuses a
+# preparation whose PREPARED time its receipts do not show.
+stamp() { # file time [start end]
+  "$NODE" -e 'const fs=require("fs"),[f,now,from,to]=process.argv.slice(1);let t;try{t=fs.readFileSync(f,"utf8")}catch(e){process.exit(0)}
 const head=t.split(/^## /m)[0],m=head.match(/^PREPARED:[ \t]*(.*)$/m);
-if(m&&/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(m[1].trim()))process.exit(0);
+const at=m&&/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(m[1].trim())?Date.parse(m[1].trim()):NaN;
+const inside=!from||(Number.isFinite(at)&&at>=Date.parse(from)-60000&&at<=Date.parse(to)+60000);
+if(Number.isFinite(at)&&inside)process.exit(0);
 if(m)t=t.replace(/^PREPARED:.*$/m,"PREPARED: "+now);else if(/^STATE:/m.test(head))t=t.replace(/^(STATE:.*)$/m,"PREPARED: "+now+"\n$1");else process.exit(0);
-fs.writeFileSync(f,t);' "$1" "$2"
+fs.writeFileSync(f,t);' "$@"
 }
 # Ready, as the coach judges it (prep-check), and, for a run that is not by hand, not out of date.
 ready() { # area day
@@ -173,39 +223,153 @@ ready() { # area day
   printf '%s' "$j" | grep -q '"stale":true' && return 1
   return 0
 }
+# The failed tries in a row of one talk, across its run folders (oldest first): a passing try ends
+# the count.
+in_a_row() { # area day
+  local f n=0 r
+  for f in "$GODSPEED"/routines/coach-prep/*/"$1-$2.tries"; do
+    [ -f "$f" ] || continue
+    while IFS=$'\t' read -r r _; do case "$r" in pass) n=0 ;; fail) n=$((n+1)) ;; esac; done < "$f"
+  done
+  echo "$n"
+}
+# The issues of the talk's last failed review, from its newest run folder that has them.
+last_issues() { # area day
+  local f last=""
+  for f in "$GODSPEED"/routines/coach-prep/*/"$1-$2.issues.txt"; do [ -f "$f" ] && last="$f"; done
+  [ -n "$last" ] && head -c 4000 "$last"
+}
+# The reviewer's prompt, outside the mission control: its marker, the talk, and the area, the
+# preparation and the evidence whole (each page's text cut at 6000 characters for the prompt; the
+# evidence file keeps it all).
+review_prompt() { # out marker area title day time zone file evidence domains goals
+  { printf 'RUN MARKER: %s\n\n' "$2"
+    printf 'Today is %s. Now: %s (UTC). Review the preparation of the %s talk (area %s) on %s at %s (%s), %s.\n' "$TODAY" "$(now_iso)" "$4" "$3" "$5" "$6" "$7" "$8"
+    printf 'The research domains: %s. The goals it serves: %s. Your coverage has one row for each of them, by these ids.\n' "${10}" "${11:-none}"
+    printf 'Answer with the JSON object only. Write no file.\n\n'
+    printf '===== THE AREA (coach/%s/area.md) =====\n' "$3"; cat "$GODSPEED/coach/$3/area.md"
+    printf '\n===== THE PREPARATION (%s) =====\n' "$8"; cat "$GODSPEED/$8"
+    printf '\n===== THE EVIDENCE: the source pages the writer opened, taken by the routine from the record of its run =====\n'
+    "$NODE" -e 'const fs=require("fs");let e={};try{e=JSON.parse(fs.readFileSync(process.argv[1],"utf8"))}catch(x){}
+for(const s of e.sources||[]){const t=String(s.text||"");s.text=t.length>6000?t.slice(0,6000)+" [... cut here for this prompt; "+t.length+" characters were read]":t;}
+process.stdout.write(JSON.stringify({run:e.run,sources:e.sources||[],searches:e.searches||[]},null,2)+"\n");' "$9"
+  } > "$1"
+}
+REPAIR="$HERE/../notebook/scripts/coach-prep-repair.mjs"
 WROTE=()
 START=$(date +%s); BAD=0; SKIPPED=""
+fits() { [ $(( $(date +%s) - START + $1 )) -le $(( BUDGET * 60 )) ]; }
 while IFS=$'\t' read -r AT A TI D TM ZONE F PR <&3; do
   [ -n "$A" ] || continue
-  if [ $(( $(date +%s) - START + TIMEOUT )) -gt $(( BUDGET * 60 )) ]; then
+  RESEARCH="$(research_of "$A" "$D")"; DOMS="${RESEARCH%%$'\t'*}"; GOALS=""; [ -n "$RESEARCH" ] && GOALS="${RESEARCH#*$'\t'}"
+  PER=$TIMEOUT; [ -n "$RESEARCH" ] && PER=$((TIMEOUT + REVIEW_TIMEOUT))
+  if ! fits "$PER"; then
     SKIPPED="$SKIPPED $A/$D"; echo "$A $D: skipped for time; the next run prepares it" >> "$SUMMARY"; continue
   fi
+  EV_AT="$GODSPEED/${F%.md}.evidence.json"; RV_AT="$GODSPEED/${F%.md}.review.json"
+  ASIDE="${RUNDIR:?}/${A:?}-${D:?}.before"
   BEFORE=""
   if [ -f "$GODSPEED/$F" ] && coach prep-check "$A" --date "$D" >/dev/null 2>&1; then
-    BEFORE="$RUNDIR/$A-$D.before.md"; cp -p "$GODSPEED/$F" "$BEFORE"
+    BEFORE="$ASIDE.md"; cp -p "$GODSPEED/$F" "$BEFORE"
+    # Its proof goes aside with it, and comes back with it.
+    [ -f "$EV_AT" ] && cp -p "$EV_AT" "$ASIDE.evidence.json"
+    [ -f "$RV_AT" ] && cp -p "$RV_AT" "$ASIDE.review.json"
   fi
   AGAIN=""; [ "$PR" = - ] && PR=""
   [ -n "$BEFORE" ] && AGAIN=" That file holds an older preparation${PR:+ (prepared $PR)}; prepare the talk again from today's facts and give PREPARED the time you write it."
-  PROMPT="Today is $TODAY. Now: $(now_iso) (UTC). Prepare the $TI talk (area $A) on $D at $TM ($ZONE). Follow the coach-prep recipe for this one talk and write $F.$AGAIN Write no other file, and never run godspeed-coach talk open: the talk opens by itself at its time. Your final answer is one plain sentence."
   # Its tools, when claude runs it: reading, the web, the notebook's reading tools, the coach's and
   # the goals' reading commands, and writing in this talk's prep folder only. mc-run splits the list
   # at spaces, so a command of several words is written with * between them.
   TOOLS="Read Grep Glob Edit(/coach/$A/prep/**) WebSearch WebFetch Bash(godspeed-coach*areas*) Bash(godspeed-coach*brief*) Bash(godspeed-coach*prep-check*) Bash(mc-goals*list*) Bash(mc-goals*show*) Bash(mc-prompt-archive*search*) Bash(godspeed-journal*words*) Bash(godspeed-journal*week*) Bash(ls:*) Bash(wc:*)"
   for t in search_knowledge search_notes get_note list_records retrieve_memory list_note_folders personal_operation; do TOOLS="$TOOLS mcp__notebook__$t"; done
   ANSWER="$RUNDIR/$A-$D.answer.txt"
-  bash "$RUNNER" coach-prep --godspeed "$GODSPEED" --cwd "$GODSPEED" --prompt "$PROMPT" --timeout "$TIMEOUT" \
-    --out "$ANSWER" --allowed-tools "$TOOLS" < /dev/null > /dev/null 2>&1 || true
-  [ -f "$GODSPEED/$F" ] && stamp "$GODSPEED/$F" "$(now_iso)"
-  if ready "$A" "$D" && { [ -z "$BEFORE" ] || ! cmp -s "$BEFORE" "$GODSPEED/$F"; }; then
-    rm -f "$BEFORE"; WROTE+=("$F")
-    echo "$A $D: prepared ($F): $(last_paragraph "$ANSWER")" >> "$SUMMARY"
+  OK=0; TRY=0; WHY=""; FILED=""
+  while :; do
+    TRY=$((TRY+1))
+    PROMPT="Today is $TODAY. Now: $(now_iso) (UTC). Prepare the $TI talk (area $A) on $D at $TM ($ZONE). Follow the coach-prep recipe for this one talk and write $F.$AGAIN Write no other file, and never run godspeed-coach talk open: the talk opens by itself at its time. Your final answer is one plain sentence."
+    if [ -n "$RESEARCH" ]; then
+      MARK="$("$NODE" -e 'process.stdout.write("gs-prep-"+require("crypto").randomBytes(12).toString("hex"))')"
+      PROMPT="RUN MARKER: $MARK"$'\n'"$PROMPT This area has research domains ($DOMS) and serves the goals ${GOALS:-it names}: open and read the source pages themselves, and write Routes, Rejected routes and Research coverage as step 4 of the recipe says. Write no .json file: the routine takes the pages you read from the record of this run, and a second AI reviews the preparation before the talk may open from it."
+      if [ "$(in_a_row "$A" "$D")" -gt 0 ] && ISSUES="$(last_issues "$A" "$D")" && [ -n "$ISSUES" ]; then
+        PROMPT="$PROMPT"$'\n\n'"The last try at this talk failed its review. Resolve each issue with evidence, not new wording:"$'\n'"$ISSUES"
+      fi
+    fi
+    STARTED="$(now_ms)"
+    bash "$RUNNER" coach-prep --godspeed "$GODSPEED" --cwd "$GODSPEED" --prompt "$PROMPT" --timeout "$TIMEOUT" \
+      --out "$ANSWER" --allowed-tools "$TOOLS" < /dev/null > /dev/null 2>&1 || true
+    FINISHED="$(now_ms)"
+    if [ -z "$RESEARCH" ]; then
+      [ -f "$GODSPEED/$F" ] && stamp "$GODSPEED/$F" "$(now_iso)"
+      if ready "$A" "$D" && { [ -z "$BEFORE" ] || ! cmp -s "$BEFORE" "$GODSPEED/$F"; }; then OK=1; fi
+      break
+    fi
+    # THE RECEIPTS AND THE REVIEW. Each step that fails says why in one line, and that line and the
+    # review's issues are what the next try gets.
+    [ -f "$GODSPEED/$F" ] && stamp "$GODSPEED/$F" "$(now_iso)" "$STARTED" "$FINISHED"
+    T="$RUNDIR/$A-$D.try$TRY"; ISS="$RUNDIR/$A-$D.issues.txt"; WHY=""
+    if [ ! -f "$GODSPEED/$F" ]; then WHY="the run wrote no preparation"
+    elif [ -n "$BEFORE" ] && cmp -s "$BEFORE" "$GODSPEED/$F"; then WHY="the run did not write a new preparation"
+    elif ! sed -n '/^## /q;p' "$GODSPEED/$F" | grep -Eiq '^STATE:[[:space:]]*ready[[:space:]]*$'; then WHY="its STATE is not ready"
+    fi
+    if [ -z "$WHY" ]; then
+      R="$(coach prep-receipts "$A" --date "$D" --marker "$MARK" --started "$STARTED" --finished "$FINISHED" --out "$T.evidence.json" 2>&1)" \
+        || WHY="$(printf '%s' "$R" | tr -d '\r' | tail -1 | sed 's/^no receipts: //')"
+    fi
+    if [ -z "$WHY" ]; then
+      RMARK="$("$NODE" -e 'process.stdout.write("gs-review-"+require("crypto").randomBytes(12).toString("hex"))')"
+      RPROMPT="$(mktemp "${TMPDIR:-/tmp}/mc-coach-prep-review.XXXXXX")"
+      review_prompt "$RPROMPT" "$RMARK" "$A" "$TI" "$D" "$TM" "$ZONE" "$F" "$T.evidence.json" "$DOMS" "$GOALS"
+      RSTARTED="$(now_ms)"
+      # The reviewer writes nothing: with claude its list has no Edit (so no Write) and no shell,
+      # and mc-run makes it binding; Hermes gets only its web toolset.
+      bash "$RUNNER" coach-prep-review --godspeed "$GODSPEED" --cwd "$GODSPEED" --prompt-file "$RPROMPT" --timeout "$REVIEW_TIMEOUT" \
+        --out "$T.review-answer.txt" --allowed-tools "Read Grep Glob WebSearch WebFetch" --hermes-toolsets web < /dev/null > /dev/null 2>&1 || true
+      RFINISHED="$(now_ms)"; rm -f "${RPROMPT:?}"
+      R="$(coach prep-seal "$A" --date "$D" --evidence "$T.evidence.json" --answer "$T.review-answer.txt" --marker "$RMARK" \
+        --started "$RSTARTED" --finished "$RFINISHED" --out "$T.review.json" --issues-out "$ISS" 2>&1)" \
+        || WHY="$(printf '%s' "$R" | tr -d '\r' | tail -1 | sed 's/^not sealed: //')"
+    else
+      printf -- '- %s\n' "The preparation: $WHY." > "$ISS"
+    fi
+    if [ -z "$WHY" ]; then
+      # Passed: the host's receipts and review go beside the preparation, over any the model wrote.
+      mv -f "$T.evidence.json" "$EV_AT" && mv -f "$T.review.json" "$RV_AT"
+      if ready "$A" "$D"; then
+        OK=1; printf 'pass\t%s\t%s\n' "$(now_iso)" "try $TRY: the review passed" >> "$RUNDIR/$A-$D.tries"; break
+      fi
+      WHY="$(coach prep-check "$A" --date "$D" 2>&1 | tr -d '\r' | tail -1)"
+      printf -- '- %s\n' "$WHY" > "$ISS"
+    fi
+    printf 'fail\t%s\t%s\n' "$(now_iso)" "try $TRY: $WHY" >> "$RUNDIR/$A-$D.tries"
+    echo "$A $D: try $TRY did not pass ($WHY)" >> "$SUMMARY"
+    if [ "$(in_a_row "$A" "$D")" -ge 3 ] && [ -z "$FILED" ]; then
+      FILED="none could be filed: the notebook is not beside this tool"
+      if [ -f "$REPAIR" ]; then
+        FILED="$("$NODE" "$REPAIR" --godspeed "$GODSPEED" --area "$A" --talk "$D" --title "$TI" --tries "$(in_a_row "$A" "$D")" \
+          --issues-file "$ISS" --summary "routines/coach-prep/$TODAY/summary.txt" 2>&1 | tr -d '\r' | tail -1)"
+      fi
+      echo "$A $D: $(in_a_row "$A" "$D") failed tries in a row; repair item: $FILED" >> "$SUMMARY"
+    fi
+    [ "$TRY" -lt "$MAXTRIES" ] && fits "$PER" || break
+  done
+  if [ "$OK" -eq 1 ]; then
+    rm -f "${ASIDE:?}.md" "${ASIDE:?}.evidence.json" "${ASIDE:?}.review.json"; WROTE+=("$F")
+    [ -n "$RESEARCH" ] && WROTE+=("${F%.md}.evidence.json" "${F%.md}.review.json")
+    echo "$A $D: prepared ($F)${RESEARCH:+, its review passed on try $TRY}: $(last_paragraph "$ANSWER")" >> "$SUMMARY"
   else
-    WHY="$(coach prep-check "$A" --date "$D" 2>&1 | tr -d '\r' | tail -1)"
+    [ -n "$RESEARCH" ] || WHY="$(coach prep-check "$A" --date "$D" 2>&1 | tr -d '\r' | tail -1)"
     if [ -n "$BEFORE" ]; then
-      cp -p "$BEFORE" "$GODSPEED/$F" && rm -f "$BEFORE"
+      cp -p "$BEFORE" "$GODSPEED/$F" && rm -f "${ASIDE:?}.md"
+      # The older preparation's own proof comes back with it; a sidecar the model wrote does not stay.
+      for s in evidence review; do
+        if [ -f "$ASIDE.$s.json" ]; then mv -f "$ASIDE.$s.json" "$GODSPEED/${F%.md}.$s.json"
+        else rm -f "${GODSPEED:?}/${F%.md}.$s.json"; fi
+      done
       echo "$A $D: NOT PREPARED again ($WHY); its earlier preparation stays" >> "$SUMMARY"
     else
       [ -f "$GODSPEED/$F" ] && WROTE+=("$F")
+      # A sidecar the model wrote beside a preparation that did not pass is no proof: it goes.
+      [ -n "$RESEARCH" ] && rm -f "${EV_AT:?}" "${RV_AT:?}"
       echo "$A $D: NOT PREPARED ($WHY); the talk opens from its brief unless the next run prepares it" >> "$SUMMARY"
     fi
     BAD=$((BAD+1))
@@ -219,7 +383,7 @@ if [ -d "$GODSPEED/.git" ] && command -v git >/dev/null 2>&1; then
   REL="routines/coach-prep/$TODAY"
   # The run folder's files that differ from the last commit, staged or not (a commit refused earlier
   # left them staged), and the ones git has not seen yet; as mc-research reads its own folders.
-  while IFS= read -r -d '' f; do case "$f" in *.tmp|*.before.md) ;; *) OWN+=("$f") ;; esac; done < <(
+  while IFS= read -r -d '' f; do case "$f" in *.tmp|*.before.md|*.before.*.json) ;; *) OWN+=("$f") ;; esac; done < <(
     { gl diff -z --name-only HEAD -- "$REL" 2>/dev/null || gl ls-files -z -m -d -- "$REL" 2>/dev/null
       gl ls-files -z -o --exclude-standard -- "$REL" 2>/dev/null; })
   if [ "${#OWN[@]}" -gt 0 ]; then

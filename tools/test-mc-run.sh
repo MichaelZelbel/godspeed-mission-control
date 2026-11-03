@@ -67,6 +67,12 @@ STAND
   chmod +x "$B/$name"
 done
 
+# mc-run puts ~/.local/bin, then /usr/local/bin, before the path it was given, so on a computer with
+# a real assistant in /usr/local/bin (a build server with codex there) that one answered instead of
+# the stand-in, and asked the Internet. The stand-ins stand in the throwaway home's ~/.local/bin too.
+mkdir -p "$TMP/home/.local/bin"
+for name in hermes claude codex; do ln -sf "$B/$name" "$TMP/home/.local/bin/$name"; done
+
 # HOME is the throwaway one: mc-run puts ~/.local/bin first on its path, and a real assistant
 # there must never be the one that answers a test.
 run() { HOME="$TMP/home" PATH="$B:$PATH" GODSPEED_RUNNER="$1" bash "$HERE/mc-run" big --godspeed "$G" --prompt "THE EXTRA LINE" --out "$G/out/$1.txt" --timeout 60 --allowed-tools "Bash Read"; }
@@ -182,6 +188,21 @@ for name in hermes codex; do
 done
 runl hermes restricted "Bash Read"
 check "hermes with a whole-shell list says nothing about it" "$(cat "$L/hermes.err" 2>/dev/null)" ""
+# HERMES' TOOLSETS (2026-11-03): the coach's preparation review must write nothing, and Hermes takes
+# no list of tools, so mc-run hands it Hermes' own toolsets (-t web), and says nothing about a list.
+HOME="$TMP/home" PATH="$B:$PATH" GODSPEED_RUNNER=hermes bash "$HERE/mc-run" big --godspeed "$G" --out "$G/out/hermes-t.txt" --timeout 60 \
+  --allowed-tools "Read Grep WebSearch WebFetch" --hermes-toolsets web 2> "$L/hermes-t.err"
+check "hermes with --hermes-toolsets runs" "$?" "0"
+contains "  and is held to those toolsets" "$(cat "$L/hermes.args")" "[-t]
+[web]
+[--in]"
+check "  and says nothing about a list of tools" "$(cat "$L/hermes-t.err")" ""
+HOME="$TMP/home" PATH="$B:$PATH" GODSPEED_RUNNER=hermes bash "$HERE/mc-run" big --godspeed "$G" --out "$G/out/hermes-t.txt" --timeout 60 >/dev/null 2>&1
+missing "hermes without it gets no -t" "$(cat "$L/hermes.args")" "[-t]"
+HOME="$TMP/home" PATH="$B:$PATH" GODSPEED_RUNNER=claude bash "$HERE/mc-run" big --godspeed "$G" --out "$G/out/claude-t.txt" --timeout 60 --allowed-tools "Read Grep Glob WebSearch WebFetch" --hermes-toolsets web >/dev/null 2>&1
+missing "claude never gets -t" "$(cat "$L/claude.args")" "[-t]"
+contains "  and its read-only list has no Edit or Write" "$(cat "$L/claude.args")" "[--tools]
+[Read,Grep,Glob,WebSearch,WebFetch,ToolSearch]"
 contains "a whole-shell list keeps acceptEdits" "$(runl claude restricted "Bash Read"; cat "$L/claude.args")" "[acceptEdits]"
 rm -f "$G/.mcp.json"
 
