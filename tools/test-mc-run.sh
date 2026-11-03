@@ -26,6 +26,14 @@ G="$TMP/godspeed"; B="$TMP/bin"; L="$TMP/log"
 mkdir -p "$G/rules" "$G/skills/big" "$B" "$L" "$TMP/home"
 "$NODE" -e 'process.stdout.write("---\nname: big\ndescription: a long recipe\n---\n"+"Read every line of this. ".repeat(1700)+"\nTHE END OF THE RECIPE\n")' > "$G/skills/big/SKILL.md"
 
+# mc-run puts /usr/local/bin and /usr/bin ahead of the caller's PATH, so on a computer where a real
+# codex, claude or hermes is installed there, it would answer instead of the stand-ins below. The
+# test runs a copy of mc-run whose only difference is that the caller's PATH (where the stand-ins
+# are) comes before those folders.
+MCRUN="$TMP/mc-run"
+sed 's#^export PATH="\$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin:\$PATH"#export PATH="$HOME/.local/bin:$PATH:/usr/local/bin:/usr/bin:/bin"#' "$HERE/mc-run" > "$MCRUN"
+cmp -s "$MCRUN" "$HERE/mc-run" && { echo "FAIL: the PATH line of mc-run was not found to copy"; exit 1; }
+
 PASS=0; FAIL=0
 ok()  { PASS=$((PASS+1)); printf '  ok   %s\n' "$1"; }
 bad() { FAIL=$((FAIL+1)); printf '  FAIL %s\n' "$1"; }
@@ -69,7 +77,7 @@ done
 
 # HOME is the throwaway one: mc-run puts ~/.local/bin first on its path, and a real assistant
 # there must never be the one that answers a test.
-run() { HOME="$TMP/home" PATH="$B:$PATH" GODSPEED_RUNNER="$1" bash "$HERE/mc-run" big --godspeed "$G" --prompt "THE EXTRA LINE" --out "$G/out/$1.txt" --timeout 60 --allowed-tools "Bash Read"; }
+run() { HOME="$TMP/home" PATH="$B:$PATH" GODSPEED_RUNNER="$1" bash "$MCRUN" big --godspeed "$G" --prompt "THE EXTRA LINE" --out "$G/out/$1.txt" --timeout 60 --allowed-tools "Bash Read"; }
 
 for name in hermes claude codex; do
   echo "-- $name"
@@ -115,7 +123,7 @@ LIMITED="Bash(mc-goals:*) Bash(ls:*) Read Edit(/goals/research/**) WebFetch mcp_
 GC="$(cd "$G" && pwd)"; command -v cygpath >/dev/null 2>&1 && GC="$(cygpath -m "$GC" | sed -E 's#^([A-Za-z]):#/\L\1#')"
 runl() { # runner help-kind list
   rm -f "$L/$1.args" "$L/$1.help" "$L/$1.mcp"
-  HOME="$TMP/home" PATH="$B:$PATH" GODSPEED_RUNNER="$1" STAND_HELP="$2" bash "$HERE/mc-run" big --godspeed "$G" \
+  HOME="$TMP/home" PATH="$B:$PATH" GODSPEED_RUNNER="$1" STAND_HELP="$2" bash "$MCRUN" big --godspeed "$G" \
     --out "$G/out/l-$1.txt" --timeout 60 ${3:+--allowed-tools "$3"} 2> "$L/$1.err"
 }
 echo "-- a list that limits the shell"
@@ -197,7 +205,7 @@ G4="$TMP/mission [control] one"; mkdir -p "$G4/rules" "$G4/skills"; cp -r "$G/sk
 ANCHOR_LIST="Bash(ls:*) Read Edit(goals/research/**) Edit(./ideas/**) Edit(/notes/**) Edit(*.tmp) Read(docs/**) Edit(//etc/keep/**) Edit(~/keep/**) Edit(!x) Edit(../up/**) WebFetch"
 runa() { # folder
   rm -f "$L/claude.args"
-  HOME="$TMP/home" PATH="$B:$PATH" GODSPEED_RUNNER=claude STAND_HELP=restricted bash "$HERE/mc-run" big --godspeed "$1" \
+  HOME="$TMP/home" PATH="$B:$PATH" GODSPEED_RUNNER=claude STAND_HELP=restricted bash "$MCRUN" big --godspeed "$1" \
     --out "$TMP/anchor.txt" --timeout 60 --allowed-tools "$ANCHOR_LIST" 2> "$L/claude.err"
   cat "$L/claude.args" 2>/dev/null
 }
@@ -228,7 +236,7 @@ contains "  a carve-out stays as written" "$args" "[Edit(!x)]"
 contains "  a rule above the folder stays as written" "$args" "[Edit(../up/**)]"
 missing "  no plain path is left" "$args" "[Edit(goals/research/**)]"
 check "  the run still finishes" "$(cat "$TMP/anchor.txt" | tail -n 1)" "RESULT: done"
-args="$(rm -f "$L/claude.args"; HOME="$TMP/home" PATH="$B:$PATH" GODSPEED_RUNNER=claude bash "$HERE/mc-run" big --godspeed "$G4" --out "$TMP/anchor.txt" --timeout 60 --allowed-tools "Bash Read Edit(goals/research/**)" 2>/dev/null; cat "$L/claude.args")"
+args="$(rm -f "$L/claude.args"; HOME="$TMP/home" PATH="$B:$PATH" GODSPEED_RUNNER=claude bash "$MCRUN" big --godspeed "$G4" --out "$TMP/anchor.txt" --timeout 60 --allowed-tools "Bash Read Edit(goals/research/**)" 2>/dev/null; cat "$L/claude.args")"
 contains "a whole-shell list is passed as given" "$args" "[Edit(goals/research/**)]"
 
 # ALREADY IN A CAGE (2026-10-13). On the server a cron job runs in agent-cage as a whole, and
@@ -250,14 +258,14 @@ printf '0::/user.slice/user-0.slice/session-1.scope\n' > "$TMP/cgroup-free"
 rm -f "$L/cage.used"
 t0=$(date +%s)
 HOME="$TMP/home" PATH="$CG:$B:$PATH" GODSPEED_RUNNER=claude STAND_SLEEP=40 MC_RUN_CGROUP_FILE="$TMP/cgroup-caged" \
-  bash "$HERE/mc-run" big --godspeed "$G" --out "$G/out/caged.txt" --timeout 2 --allowed-tools "Bash Read"; rc=$?
+  bash "$MCRUN" big --godspeed "$G" --out "$G/out/caged.txt" --timeout 2 --allowed-tools "Bash Read"; rc=$?
 took=$(( $(date +%s) - t0 ))
 [ "$took" -lt 20 ] && ok "a hung run inside a cage still ends at its own --timeout (${took}s)" || bad "a hung run inside a cage ran ${took}s past its 2 s limit"
 check "  and the exit says it was ended for time" "$rc" "124"
 check "  the cage was not asked again" "$(test -f "$L/cage.used" && echo used || echo not)" "not"
 rm -f "$L/cage.used"
 HOME="$TMP/home" PATH="$CG:$B:$PATH" GODSPEED_RUNNER=claude MC_RUN_CGROUP_FILE="$TMP/cgroup-free" \
-  bash "$HERE/mc-run" big --godspeed "$G" --out "$G/out/free.txt" --timeout 60 --allowed-tools "Bash Read"; rc=$?
+  bash "$MCRUN" big --godspeed "$G" --out "$G/out/free.txt" --timeout 60 --allowed-tools "Bash Read"; rc=$?
 check "outside a cage the run goes through the cage" "$(test -f "$L/cage.used" && echo used || echo not)" "used"
 check "  and finishes" "$rc" "0"
 
@@ -284,7 +292,7 @@ STUB
   contains "  and the reason is the length" "$out" "Argument list too long"
   rm -f "$L/native.json"
   HOME="$TMP/home" PATH="$W:$PATH" GODSPEED_RUNNER=hermes MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' \
-    STAND_IN_LOG="$WLOG" NODE_OPTIONS="$NOPTS" bash "$HERE/mc-run" big --godspeed "$G" --cwd "$G" --out "$G/out/native.txt" --timeout 60
+    STAND_IN_LOG="$WLOG" NODE_OPTIONS="$NOPTS" bash "$MCRUN" big --godspeed "$G" --cwd "$G" --out "$G/out/native.txt" --timeout 60
   rc=$?
   check "mc-run hands the same recipe to it and it answers" "$rc" "0"
   seen="$(cat "$L/native.json" 2>/dev/null)"
