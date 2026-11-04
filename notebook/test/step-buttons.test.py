@@ -186,4 +186,47 @@ def no_client():
     assert status(IDS[0]) == "waiting"
 
 
+def send_fails():
+    buttons, bot = gateway()
+
+    async def broken(**kw):
+        raise RuntimeError("telegram is down")
+    bot.send_message = broken
+    buttons.post_waiting()
+    assert queue() == [IDS[0] + ".json"], queue()
+    assert status(IDS[0]) == "waiting"
+
+
+def expired():
+    buttons, bot = gateway()
+    file = os.path.join(ROOT, ".godspeed", "step-questions", IDS[0] + ".json")
+    with open(file, encoding="utf-8") as f:
+        item = json.load(f)
+    item["expires_at"] = "2020-01-01T00:00:00.000Z"
+    with open(file, "w", encoding="utf-8") as f:
+        json.dump(item, f)
+    buttons.post_waiting()
+    assert queue() == [] and bot.sent == []
+
+
+def registered():
+    spec = importlib.util.spec_from_file_location("godspeed_context_plugin", os.path.join(folder, "__init__.py"),
+                                                  submodule_search_locations=[folder])
+    plugin = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(plugin)
+    factories, unloads = [], []
+    ctx = types.SimpleNamespace(register_hook=lambda *a: None, register_telegram_handler=factories.append, on_unload=unloads.append)
+    plugin.register(ctx)
+    assert len(factories) == 1 and len(unloads) == 1
+    bot = Bot()
+    app = App(bot)
+
+    async def connect():
+        factories[0](app, None)
+    asyncio.run(connect())
+    assert [h.pattern for h in app.handlers] == [r"^gss1:"], [h.pattern for h in app.handlers]
+    unloads[0]()
+    assert plugin._buttons.active is False
+
+
 globals()[sys.argv[1]]()

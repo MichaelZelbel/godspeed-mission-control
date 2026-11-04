@@ -7,7 +7,7 @@ use of them: tokens live in .godspeed/step-buttons/ under the prefix gss1:, and 
 
 Why a folder: the process that delivers a report often has no Telegram client (the notebook runs
 `hermes cron tick` itself), and the buttons can only be sent from the gateway. So when the notebook
-makes a Telegram step answerable it leaves {id, text, at} in .godspeed/step-questions/<id>.json
+makes a Telegram step answerable it leaves {id, text, at, expires_at} in .godspeed/step-questions/<id>.json
 (notebook/core/waiting-steps.mjs), and the gateway posts the button message for each file it finds.
 """
 import asyncio
@@ -19,6 +19,7 @@ import subprocess
 import sys
 import threading
 import time
+from datetime import datetime, timezone
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SHARED = "godspeed_buttons_v1"
@@ -46,7 +47,7 @@ FOLDER = "step-buttons"
 CALLBACK = "waiting-step"
 QUEUE = "step-questions"
 EVERY = 5            # seconds between looks at the hand-off folder
-MAX_AGE = 86400      # a question the gateway never got to in a day gets no buttons; a typed yes still works
+SENT_WITHIN = 60     # seconds to wait for the scheduled send before keeping the file for the next look
 STEP_ID = re.compile(r"^step-[0-9a-f-]{36}$")
 GENERIC = {"en": "A question is waiting for your answer.", "de": "Eine Frage wartet auf deine Antwort."}
 WORDS = {
@@ -64,6 +65,15 @@ GERMAN_WORDS = {"ich", "du", "soll", "sollen", "möchtest", "willst", "darf", "u
 def language_of(text):
     words = set(re.findall(r"\w+", text.lower()))
     return "de" if re.search("[äöüß]", text.lower()) or len(words & GERMAN_WORDS) >= 2 else "en"
+
+
+def expiry(item):
+    """When the notebook says a hand-off stops being worth posting (epoch seconds); None if it names no time."""
+    try:
+        when = datetime.fromisoformat(item["expires_at"].replace("Z", "+00:00"))
+        return (when if when.tzinfo else when.replace(tzinfo=timezone.utc)).timestamp()
+    except (KeyError, ValueError, TypeError, AttributeError):
+        return None
 
 
 class StepButtons(buttons.YesNoButtons):
@@ -85,10 +95,22 @@ class StepButtons(buttons.YesNoButtons):
         if not owner:
             return False
         self._local.question = text
+        self._local.sending = None
         try:
-            return self.offer(CALLBACK, {"step": step_id}, {"ownerId": owner, "chatId": owner}, language_of(text))
+            if not self.offer(CALLBACK, {"step": step_id}, {"ownerId": owner, "chatId": owner}, language_of(text)):
+                return False
+            # offer only schedules the send; the question counts as posted once the send itself succeeded.
+            return self._local.sending.result(SENT_WITHIN) is True
+        except Exception:
+            return False
         finally:
             self._local.question = None
+            self._local.sending = None
+
+    def deliver(self, app, loop, route, tokens, words):
+        sending = super().deliver(app, loop, route, tokens, words)
+        self._local.sending = sending
+        return sending
 
     def post_waiting(self):
         """Posts the buttons for every question the notebook handed over; a file stays until it is posted."""
@@ -103,15 +125,14 @@ class StepButtons(buttons.YesNoButtons):
                 files.append((os.path.getmtime(file), file))
             except OSError:
                 continue
-        for modified, file in sorted(files):
+        for _, file in sorted(files):
             try:
-                if time.time() - modified > MAX_AGE:
-                    os.remove(file)
-                    continue
                 with open(file, encoding="utf-8") as f:
                     item = json.load(f)
                 if not (isinstance(item, dict) and STEP_ID.match(str(item.get("id"))) and isinstance(item.get("text"), str)
-                        and item["text"]):
+                        and item["text"] and expiry(item) is not None):
+                    os.remove(file)
+                elif expiry(item) < time.time():
                     os.remove(file)
                 elif self.post(item["id"], item["text"]):
                     os.remove(file)

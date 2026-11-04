@@ -94,6 +94,14 @@ test('a Hermes receipt of two questions certifies both or neither, and a later r
  assert.equal(heard(store,{chat:'telegram',words:'yes'}).kind,'ask');
 });
 
+test('a direct Telegram reply hands each stamped question to the buttons, with its own expiry',async t=>{
+ const {store}=fixture(t),a=open(store,'The bot stopped.');
+ stampReply(store,{words:a.message,since:'',messageId:7});
+ const item=JSON.parse(fs.readFileSync(path.join(store.state,'step-questions',a.id+'.json'),'utf8'));
+ assert.equal(item.text,store.get('approvals',a.id).about+' '+store.get('approvals',a.id).question);
+ assert.ok(Date.parse(item.expires_at)>Date.now());
+});
+
 test('a direct Telegram reply of two questions certifies both or neither',async t=>{
  const {store}=fixture(t),a=open(store,'The bot stopped.'),b=open(store,'The disk is full.');
  const commit=store.commit.bind(store);store.commit=changes=>{if(changes.some(r=>r.id===b.id))throw new Error('disk');return commit(changes);};

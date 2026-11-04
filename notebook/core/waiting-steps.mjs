@@ -115,7 +115,7 @@ function handOffButtons(store,ids){
  }
  for(const id of ids){
   const record=store.get('approvals',id);
-  if(record&&STEP_ID.test(id))atomic(path.join(dir,id+'.json'),JSON.stringify({id,text:record.about+' '+record.question,at:record.sent_at})+'\n');
+  if(record&&STEP_ID.test(id))atomic(path.join(dir,id+'.json'),JSON.stringify({id,text:record.about+' '+record.question,at:record.sent_at,expires_at:new Date(Date.now()+STEP_QUESTION_MAX_AGE_MS).toISOString()})+'\n');
  }
 }
 // The pending, unsent Telegram steps whose questions a routine printed in full, oldest first; a
@@ -131,7 +131,9 @@ export function stepsForWords(store,text,since=''){
 }
 export function stampReply(store,{words,since,messageId}){
  const ids=stepsForWords(store,words,since);
- if(ids.length)stampAll(store,ids,{messageId});
+ if(!ids.length)return;
+ const stamped=stampAll(store,ids,{messageId});
+ try{handOffButtons(store,stamped);}catch{}
 }
 function withdrawStep(store,id){
  try{store.withLock(()=>{const record=store.get('approvals',id);if(record?.status==='pending'&&!record.sent_at)store.commit([store.prepare('approvals',{status:'withdrawn'},record)]);});}catch{}
