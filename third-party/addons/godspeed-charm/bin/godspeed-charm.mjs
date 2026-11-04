@@ -185,7 +185,11 @@ const commands = {
     // by the moment it was asked and --asked-seq by its place in the record (two questions can share
     // a moment), so a button from yesterday, or from a question answered since, never answers a newer one.
     const sent = (flag, now) => f[flag] === undefined || String(now) === f[flag];
-    if (!open || !sent("asked-when", open.when) || !sent("asked-seq", open.seq)) refuse(say.noOpenQuestion(), state);
+    // A button issued before places were recorded names its question by moment alone: that is enough
+    // only while no other question of this conversation was asked at the same moment.
+    const shareMoment = f["asked-seq"] === undefined && f["asked-when"] !== undefined
+      && readEvents(mcDir).filter((e) => e.kind === "asked" && (e.conversation ?? "") === conversation && String(e.when) === f["asked-when"]).length > 1;
+    if (!open || shareMoment || !sent("asked-when", open.when) || !sent("asked-seq", open.seq)) refuse(say.noOpenQuestion(), state);
     if (isYes(given)) {
       write("reset", extras());
       const after = load();

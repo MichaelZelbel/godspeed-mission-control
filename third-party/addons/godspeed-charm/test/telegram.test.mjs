@@ -344,6 +344,23 @@ test("a Yes on the older of two questions asked at the same instant answers noth
   } finally { gone(dir); }
 });
 
+test("a legacy Yes naming only a moment two questions share answers nothing and the count stays", { skip }, () => {
+  const dir = mission();
+  try {
+    assert.equal(charm(dir, ["start"], at("2026-10-21")).status, 0);
+    const now = at("2026-10-22");
+    const out = drive(dir, [
+      { do: "register" },
+      askAt("t-1", now), reply(`Done.\n\n${Q}`, { turn: "t-1" }),
+      askAt("t-2", now), reply(`Done.\n\n${Q}`, { turn: "t-2" }),
+      { do: "legacy" },
+      { do: "tap", message: 0, button: 0, now },
+    ]);
+    assert.equal(edits(out)[0].text, T.en.noOpenQuestion());
+    assert.equal(kinds(dir, "reset"), 0);
+  } finally { gone(dir); }
+});
+
 test("a button issued before questions carried their place in the record still answers once", { skip }, () => {
   const dir = mission();
   try {
