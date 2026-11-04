@@ -48,7 +48,7 @@
 #   talk-a.md / talk-b.md           the talk records the coach holds afterwards
 # shellcheck disable=SC2034  # read by scenario-lib.sh, which this file sources
 SCENARIO=talk-prep-honest
-# shellcheck source=scenarios/scenario-lib.sh
+# shellcheck source=scenarios/scenario-lib.sh disable=SC1091 # the library is not an input of the one-file lint
 . "$(dirname "$0")/scenario-lib.sh"
 scenario_arguments "$@"
 
