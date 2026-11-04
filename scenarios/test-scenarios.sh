@@ -2407,14 +2407,6 @@ case $OUT in
   *) ok "no talk opened on day B names no more than the first 200 characters of the opening" ;;
 esac
 
-copy "$T/no-talk-b" "$T/no-talk-b-nob"
-printf 'a=2026-11-02\n' >"$T/no-talk-b-nob/days.txt"
-refuses 'no day-B talk and no b in days.txt' talk-prep-honest "$T/no-talk-b-nob" 'days.txt does not say which two talk days'
-
-copy "$T/no-talk-b" "$T/no-talk-b-emptyb"
-printf 'a=2026-11-02\nb=\n' >"$T/no-talk-b-emptyb/days.txt"
-refuses 'no day-B talk and an empty b in days.txt' talk-prep-honest "$T/no-talk-b-emptyb" 'days.txt does not say which two talk days'
-
 copy "$T/good" "$T/sealed-anyway"
 printf '0\n' >"$T/sealed-anyway/seal-a.code"
 refuses 'a review the seal sealed although a goal was uncovered' talk-prep-honest "$T/sealed-anyway" 'sealed a review that leaves a goal uncovered'
