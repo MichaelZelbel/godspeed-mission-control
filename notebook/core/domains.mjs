@@ -1,5 +1,6 @@
 import {momentDraft} from './moment-draft.mjs';
 import {conversationRuntimeId,bindConversationSession} from './conversation-state.mjs';
+import {startCharmJudgement} from './charm-judgement.mjs';
 import {draftEvent} from './draft-event.mjs';
 import {momentDates} from './timestamps.mjs';
 import {NOTE_TYPES,processNote} from './proposals.mjs';
@@ -222,7 +223,10 @@ export class Domains {
       if(input.contact_id&&!visibleRows(this.query,'contacts').some(p=>p.id===input.contact_id))throw Error('Choose an available person');
       const files=input.uploadedFiles||[];if(files.length)chatAttachments(this.mediaRoot,files);
       const nativeFiles=files.map(item=>{const mapping=JSON.parse(fs.readFileSync(path.join(this.mediaRoot,hash(item.path)+'.mapping.json'),'utf8'));return {name:item.name||item.path,path:path.join(this.mediaRoot,mapping.file)};});
-      const result=await this.nativeAgent({...input,nativeFiles,page_context:input[IDENTITY_PAGE]});
+      // The Charm Challenge's slip judgement runs while the assistant works (core/charm-judgement.mjs).
+      const judged=startCharmJudgement(this,input);
+      const result=await this.nativeAgent({...input,nativeFiles,page_context:input[IDENTITY_PAGE]}).catch(error=>{judged.drop();throw error;});
+      result.reply=await judged.end(result.reply);
       await this.store.saveAsync('conversation_messages',{role:'assistant',content:result.reply,conversation_id:input.conversation_id||null,contact_id:input.contact_id||null,source_app:'hermes'},undefined,{signal:input.signal});
       return result;
     }
