@@ -109,6 +109,13 @@ for(const command of (process.env.GODSPEED_ORIGINAL_RUNTIME==='on'?['mail','watc
  if(process.platform==='win32')atomic(bin+'.cmd',cmd(at=>'"'+at(process.execPath)+'" "'+at(script)+'" %* --godspeed "'+at(root)+'"\r\n'));
  shellCommand(bin,[process.execPath,script],' --godspeed '+quote(root));
 }
+{
+ // The morning-brief recipe's command for "today's brief" in the chat (#193): the routine's own
+ // briefing, shown if today's is saved, else saved once.
+ const script=path.join(kit,'notebook/scripts/morning-brief.mjs'),bin=path.join(home,'bin','godspeed-brief');
+ if(process.platform==='win32')atomic(bin+'.cmd',cmd(at=>'"'+at(process.execPath)+'" "'+at(script)+'" --today %* --godspeed "'+at(root)+'"\r\n'));
+ shellCommand(bin,[process.execPath,script,'--today'],' --godspeed '+quote(root));
+}
 const packagedSkills=[['coach','coach'],['journal','interstitial-journal'],['headache','headache-tracker'],['charm','charm-challenge']];
 for(const [addon,skill] of packagedSkills){
  const source=path.join(kit,'third-party/addons/godspeed-'+addon);

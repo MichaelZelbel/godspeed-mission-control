@@ -109,10 +109,11 @@ the only place it exists.
 ## Wiring it into the brief you already have
 
 Open `skills/morning-brief/SKILL.md`, your morning brief's recipe (Chapter 25), and paste
-this into the session:
+this into the session. Do this only on a mission control without `godspeed-brief` (a server's morning job). Where that command exists, the notebook's own briefing is delivered and ignores the recipe, so editing it changes nothing the person receives; skip this and leave the recipe as it is.
+
 
 ```
-Open skills/morning-brief/SKILL.md and add one part. Read secrets/expires.txt, which
+Only where `godspeed-brief` does not exist, open skills/morning-brief/SKILL.md and add one part. Read secrets/expires.txt, which
 lists my keys and the date each one runs out. Work out how many days are left
 for each. Say nothing at all about a key with more than 60 days left. Between
 60 and 15 days, mention it once a week, on Mondays. With 14 days or fewer,
@@ -133,7 +134,7 @@ it reads this very file as one of its sources. So a key is in the same list as y
 tax return, with the same rhythm worked out from the same rule, and you never write
 a date in two places.
 
-If you have that, take the paragraph you just pasted back out of
+If you have that, and your mission control has no `godspeed-brief` command (where it exists the recipe is ignored and holds no paragraph), take the paragraph you just pasted back out of
 `skills/morning-brief/SKILL.md` and let `mc-due today` carry keys along with everything
 else. **Two things nagging you about the same key is worse than one**, because the
 day they disagree you stop believing either.
