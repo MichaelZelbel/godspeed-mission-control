@@ -1,6 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import {fileURLToPath} from 'node:url';import {execFileSync} from 'node:child_process';
 import {Store} from '../core/records/store.mjs';import {QueryService} from '../core/query.mjs';import {chatContext} from '../core/chat-context.mjs';
-import {queueNotice,readNotices} from '../core/notices.mjs';import {sayNotice,recordRoutine,REPORT_CONTRACT} from '../core/background-reports.mjs';
+import {queueNotice,readNotices} from '../core/notices.mjs';import {openStep,heard} from '../core/waiting-steps.mjs';import {sayNotice,recordRoutine,delivered,REPORT_CONTRACT} from '../core/background-reports.mjs';
 
 // BACKGROUND REPORTS (4 November 2026, #198): a notice is written with the chat's guidance, recorded
 // where the chat reads it, and the chat's next reply is told about it.
@@ -24,7 +24,7 @@ test('a queued notice is written with the chat\'s guidance and recorded',async t
  assert.doesNotMatch(seen[0].contract,/word for word/i);assert.equal(seen[0].contract,REPORT_CONTRACT);
  const [saved,...none]=records(store);assert.equal(none.length,0);
  assert.deepEqual([saved.role,saved.source_app,saved.conversation_id,saved.delivered_to,saved.report.written],['assistant','background','telegram-owner','telegram','assistant']);
- assert.deepEqual(saved.report.facts,notice.facts);assert.equal(saved.report.step,notice.step);assert.ok(saved.sent_at);
+ assert.deepEqual(saved.report.facts,notice.facts);assert.deepEqual(saved.report.steps,[notice.step]);assert.ok(saved.sent_at);
 });
 
 test('the next chat turn\'s context contains the report, and so does the plugin\'s block',async t=>{
@@ -56,7 +56,7 @@ test('two unrelated facts become two reports, said one at a time',async t=>{
  assert.equal((await sayNotice(store,{notice:second,home,provider:two})).text,'Your voice replies stopped.');
  assert.equal(seen.length,1,'a report already written asks the AI nothing');assert.equal(records(store).length,2);
  const [,persisted]=records(store).sort((a,b)=>a.sent_at<b.sent_at?-1:1);
- assert.deepEqual([persisted.report.facts,persisted.report.step],[notice.facts,notice.step],'the second report keeps the facts and the waiting step');
+ assert.deepEqual([persisted.report.facts,persisted.report.steps],[notice.facts,[notice.step]],'the second report keeps the facts and the waiting step');
 });
 
 test('with the AI unavailable or refused, the plain text goes out and is recorded',async t=>{
@@ -81,6 +81,17 @@ test('the plugin lists at most the five newest reports, newest first',async t=>{
  const block=execFileSync(python,['-I','-c','import importlib.util,sys;s=importlib.util.spec_from_file_location("p",sys.argv[1]);m=importlib.util.module_from_spec(s);s.loader.exec_module(m);print(m.reports_block(sys.argv[2],sys.argv[3]))',plugin,root,'telegram'],{encoding:'utf8',env:{...process.env,PYTHONIOENCODING:'utf-8'}});
  const seen=[...block.matchAll(/Report (\d+)/g)].map(m=>Number(m[1]));
  assert.deepEqual(seen,[3,5,10,25,40],'five, the most recent first; the oldest left out');
+});
+
+test('the plugin lists a waiting step on a report persisted with the scalar step',async t=>{
+ if(!python)return t.skip('needs Python');
+ const {root,store}=setup(t),{recordReport}=await import('../core/background-reports.mjs');
+ const saved=await recordReport(store,{text:'Report old',delivery:'telegram',written:'assistant',steps:['step-9f3a2c']});
+ const file=path.join(root,'notebook','_system','conversation_messages',saved.id+'.json'),record=JSON.parse(fs.readFileSync(file,'utf8'));
+ const {steps,...report}=record.report;fs.writeFileSync(file,JSON.stringify({...record,report:{...report,step:steps[0]}}));
+ const plugin=fileURLToPath(new URL('../assistant-files/godspeed-context/__init__.py',import.meta.url));
+ const block=execFileSync(python,['-I','-c','import importlib.util,sys;s=importlib.util.spec_from_file_location("p",sys.argv[1]);m=importlib.util.module_from_spec(s);s.loader.exec_module(m);print(m.reports_block(sys.argv[2],sys.argv[3]))',plugin,root,'telegram'],{encoding:'utf8',env:{...process.env,PYTHONIOENCODING:'utf-8'}});
+ assert.ok(!JSON.parse(fs.readFileSync(file,'utf8')).report.steps);assert.match(block,/A step waits for their yes\./);
 });
 
 // A routine made in Settings (--skill ... --deliver) is recorded by the wrapper the scheduler plugin
@@ -130,6 +141,49 @@ test('what a Settings routine delivers is recorded as Hermes will send it, for l
  assert.deepEqual(out.errors,[null,null,null,null,null,null]);assert.deepEqual(out.delivered,[words,'Good morning.','Printed by its script.','It failed.','To a chat.','From origin.']);
  store.scan?.();const saved=[...new Store(store.root,{device:'pc'}).records.values()].filter(r=>r.id.startsWith('background-report-')).sort((a,b)=>a.content<b.content?-1:1);
  assert.deepEqual(saved.map(r=>[r.content,r.delivered_to,r.conversation_id,r.report.routine]),[['From origin.','telegram','telegram-owner','Origin'],['Good morning.','notebook',null,'Morning brief'],['It failed.','telegram','telegram-owner','Failing'],['To a chat.','telegram','telegram-owner','Targeted'],[words,'telegram','telegram-owner','Weekly review']]);
+});
+
+const TELEGRAM_JOB={id:'j1',name:'Asker',skill:'ask',deliver:'telegram',resolved:{targets:{'telegram':[{platform:'telegram'}]},lane:'telegram'}};
+const openAsk=(store,about)=>openStep(store,{about,question:'Shall I go on?',yes:'I will restart it now.',no:'I will leave it as it is.',by:'routine:test',chat:'telegram'});
+
+test('a question Hermes really delivers through the wrapper is answered by a bare yes, with no stamping by hand',t=>{
+ if(!python)return t.skip('needs Python');
+ const {store,run}=wiredProvider(t),one=openAsk(store,'The bot stopped.'),two=openAsk(store,'The disk is full.'),third=openAsk(store,'The bot stopped.');
+ assert.equal(heard(new Store(store.root,{device:'pc'}),{chat:'telegram',words:'yes'}).kind,'none');
+ const out=run([[TELEGRAM_JOB,one.message+'\n'+two.message,false]]);
+ assert.deepEqual(out.errors,[null]);
+ const fresh=new Store(store.root,{device:'pc'});
+ assert.ok(fresh.get('approvals',one.id).sent_at&&fresh.get('approvals',two.id).sent_at);
+ assert.equal(fresh.get('approvals',third.id).sent_at,undefined,'an unseen step with equal words is not certified by another record');
+ assert.equal(heard(fresh,{chat:'telegram',words:'yes'}).kind,'ask');
+});
+
+const staleDelivery=(store,words,report)=>{const id='background-report-20200101T000000Z-stale000';
+ store.commit([store.prepare('conversation_messages',{id,role:'assistant',content:words,source_app:'background',conversation_id:'telegram-owner',delivered_to:'telegram',sent_at:'2020-01-01T00:00:00.000Z',report})]);return id;};
+
+test('an older undelivered record with the same words is not the receipt of a newer delivery',t=>{
+ if(!python)return t.skip('needs Python');
+ const {store,run}=wiredProvider(t),old=openAsk(store,'The disk is full.'),fresh=openAsk(store,'The bot stopped.');
+ staleDelivery(store,fresh.message,{steps:[old.id],routine:'older'});
+ assert.deepEqual(run([[TELEGRAM_JOB,fresh.message,false]]).errors,[null]);
+ const after=new Store(store.root,{device:'pc'});
+ assert.ok(after.get('approvals',fresh.id).sent_at);assert.equal(after.get('approvals',old.id).sent_at,undefined);
+});
+
+test('a delivery record persisted with the single step it once named still makes that step answerable',t=>{
+ const {store}=setup(t),step=openAsk(store,'The bot stopped.');
+ staleDelivery(store,step.message,{step:step.id,routine:'before the upgrade'});
+ assert.equal(delivered(store,step.message).length,1);
+ assert.ok(new Store(store.root,{device:'pc'}).get('approvals',step.id).sent_at);
+});
+
+test('a delivery whose receipt cannot be used says so, and still reports that the words went out',t=>{
+ if(!python)return t.skip('needs Python');
+ const bin=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-node-'));t.after(()=>fs.rmSync(bin,{recursive:true,force:true}));
+ const node=path.join(bin,'node');fs.writeFileSync(node,`#!/bin/sh\ncase " $* " in *" delivered "*) echo broken >&2; exit 1;; esac\nexec ${process.execPath} "$@"\n`,{mode:0o755});
+ const {store,run}=wiredProvider(t,{node}),one=openAsk(store,'The bot stopped.');
+ const out=run([[TELEGRAM_JOB,one.message,false]]);
+ assert.match(out.errors[0],/^Delivered, but a question in it could not be marked as answerable.*broken/);assert.deepEqual(out.delivered,[one.message]);
 });
 
 test('a Settings routine\'s result that cannot be recorded is not delivered',t=>{
