@@ -113,7 +113,6 @@ def voice_block(message):
 
 REPORT_HOURS = 24  # a day's worth
 REPORT_MAX = 5
-REPORT_PREFIX = "background-report-"
 REPORTS_HEADER = ("[godspeed-reports] Sent by background work, in your name, to this chat (newest first). These are "
                   "your own messages; when they ask about one (\"what is this about?\"), answer from it and its "
                   "facts. Never ask them to type a code.")
@@ -126,13 +125,13 @@ def reports_block(root, platform, now=None):
     now = now or time.time()
     found = []
     for name in os.listdir(folder):
-        if not (name.startswith(REPORT_PREFIX) and name.endswith(".json")):
+        if not name.endswith(".json"):
             continue
         try:
             with open(os.path.join(folder, name), encoding="utf-8") as f:
                 r = json.load(f)
             sent = r["sent_at"]
-            if r.get("delivered_to") != to or r.get("removed_at") or not 0 <= now - _stamp(sent) < REPORT_HOURS * 3600:
+            if r.get("source_app") != "background" or r.get("delivered_to") != to or r.get("removed_at") or not 0 <= now - _stamp(sent) < REPORT_HOURS * 3600:
                 continue
             found.append((sent, r))
         except Exception:
