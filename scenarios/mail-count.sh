@@ -39,8 +39,6 @@ ASK="Count the mails from $SENDER that say new order."
 ORDERS='scenario-1@example.invalid scenario-2@example.invalid scenario-3@example.invalid'
 OTHERS='scenario-4@example.invalid scenario-5@example.invalid scenario-6@example.invalid scenario-7@example.invalid scenario-8@example.invalid scenario-9@example.invalid'
 
-# shellcheck disable=SC2317,SC2329  # asked by wait_for
-notebook_answers() { curl -fsS "http://127.0.0.1:$NOTEBOOK_PORT/health" >/dev/null 2>&1; }
 api_table() { # <table> <file>
   curl -fsS --max-time 120 -X POST -H 'Content-Type: application/json' -d "{\"table\":\"$1\"}" \
     "http://127.0.0.1:$NOTEBOOK_PORT/api/query" -o "$2" || fail "the notebook would not answer a query of $1"
@@ -82,7 +80,7 @@ act() {
   install_paths
   install_the_stage_line "$EVIDENCE/.install.log"
   need_node
-  wait_for 180 "the notebook to answer after the install" notebook_answers || fail "the notebook does not answer after the install"
+  wait_for 180 "the notebook to answer after the install" notebook_is_up || fail "the notebook does not answer after the install"
   read_version "$ROOT"
   assistant_home
   settings_connects_the_model

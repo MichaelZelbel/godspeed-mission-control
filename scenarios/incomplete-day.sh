@@ -57,7 +57,7 @@ act() {
   sed 's/^/  | /' "$EVIDENCE/brief-1.txt" >&2
   phase 'a protein number given by hand for that day'
   printf '{"type":"health-add","metric":"protein_g","value":%s,"unit":"g","observed_at":"%sT12:00:00Z"}' "$PROTEIN" "$DAY" >"$EVIDENCE/.give.json"
-  server_post_record /api/functions/personal-operation "$EVIDENCE/.give.json" "$EVIDENCE/.give.answer" >"$EVIDENCE/given.txt"
+  { server_post /api/functions/personal-operation "$EVIDENCE/.give.json" "$EVIDENCE/.give.answer"; echo; cat "$EVIDENCE/.give.answer"; } >"$EVIDENCE/given.txt"
   phase 'the next briefing'
   server_brief "$EVIDENCE/brief-2.txt" 600
   sed 's/^/  | /' "$EVIDENCE/brief-2.txt" >&2
