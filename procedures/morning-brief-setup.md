@@ -27,7 +27,7 @@ Keep the normal brief body under 200 words. Include copyable action text in the 
 
 Keep urgent unfinished work and failed-check notices visible after the normal body when they need more space. These sections are exempt from the 200-word limit. Never cut them to pass the limit. Omit empty sections.
 
-Run mc-check-brief on the completed file, fix delivery-format failures and preserve important content. A passed format check is not an evidence check. If checking fails, report the failure and keep the draft available for inspection.
+Run mc-check-brief on the brief (the text godspeed-brief printed, or the completed file where that command does not exist), fix delivery-format failures and preserve important content. A passed format check is not an evidence check. If checking fails, report the failure and keep the draft available for inspection.
 ```
 
 *[Copy prompt](https://querino.ai/prompts/morning-brief)*
@@ -50,7 +50,7 @@ The prompt above runs the first. To add the second, paste this as well:
 ```
 Add this to skills/morning-brief/SKILL.md: the full text I would copy is right
 there in the brief, in double quotes. After mc-check-brief passes, run
-mc-judge-brief on the file, and never put back what it removed.
+mc-judge-brief on the brief (the file only where godspeed-brief does not exist), and never put back what it removed.
 ```
 
 A rule in the recipe can be forgotten by a session; a command cannot. If a
@@ -91,7 +91,7 @@ Once the brief is useful, ask your assistant to schedule it:
 Set up a daily morning brief at 7am in the time zone we agreed. Inspect existing jobs first. If a morning brief already exists for this mission control, show it and update that job rather than creating a duplicate.
 
 Use this mission control's full path as the job's working folder. Save this job prompt:
-Read AGENTS.md in the working folder and follow it. Read skills/morning-brief/SKILL.md and write today's brief to brief/ using that skill. Preserve any existing daily brief. Report unavailable inputs or failed checks. Do not send anything externally.
+Read AGENTS.md in the working folder and follow it. Read skills/morning-brief/SKILL.md and make today's brief using that skill: where godspeed-brief is a command you can run, run it and use its text, and do not write brief/ by hand; only where that command does not exist, write brief/YYYY-MM-DD.md. Preserve any existing daily brief. Report unavailable inputs or failed checks. Do not send anything externally.
 
 Keep delivery local. Confirm that the scheduler is running on this computer; a saved job alone is not enough. If it needs setup, explain what must run and configure it within my existing permissions. Do not change other jobs or a shared time-zone setting silently.
 
