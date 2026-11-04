@@ -82,17 +82,42 @@ export const saveReached=(store,value)=>store.withLockAsync(()=>store.saveUnderL
 // none of them answerable, never a prefix of a multi-question message. Each gets its own position.
 const stampAll=(store,ids,{chat,messageId,receipt}={})=>store.withLock(()=>{
  const base=Date.parse(deliveryClock(store));let n=0;
- const changes=[];
+ const changes=[],stamped=[];
  for(const id of ids){
   const record=store.get('approvals',id);
-  if(record?.asked_in&&(!chat||record.asked_in===chat)&&record.status==='pending'&&!record.sent_at)changes.push(store.prepare('approvals',{sent_at:new Date(base+n++).toISOString(),...(messageId?{sent_message_id:messageId}:{})},record));
+  if(record?.asked_in&&(!chat||record.asked_in===chat)&&record.status==='pending'&&!record.sent_at){
+   changes.push(store.prepare('approvals',{sent_at:new Date(base+n++).toISOString(),...(messageId?{sent_message_id:messageId}:{})},record));
+   stamped.push(id);
+  }
  }
  const stored=receipt&&store.get('conversation_messages',receipt.id);
  if(stored)changes.push(store.prepare('conversation_messages',{delivered_at:new Date(base+n++).toISOString()},stored));
  if(changes.length)store.commit(changes);
+ return stamped;
 });
 const stamp=(store,id)=>stampAll(store,[id]);
-export const stampDelivered=(store,ids,receipt)=>stampAll(store,ids,{chat:'telegram',receipt});
+export const stampDelivered=(store,ids,receipt)=>{
+ const stamped=stampAll(store,ids,{chat:'telegram',receipt});
+ try{handOffButtons(store,stamped);}catch{}
+};
+// The process that delivers a report usually has no Telegram client (the notebook's own `hermes cron
+// tick`), so the Yes/No buttons are sent by the gateway's godspeed-context plugin (step_buttons.py),
+// which watches this folder: one file per Telegram step that has just become answerable.
+export const STEP_QUESTIONS='step-questions',STEP_QUESTION_MAX_AGE_MS=24*3600000;
+const STEP_ID=/^step-[0-9a-f-]{36}$/;
+function handOffButtons(store,ids){
+ if(!ids.length)return;
+ const dir=path.join(store.state,STEP_QUESTIONS);
+ fs.mkdirSync(dir,{recursive:true,mode:0o700});
+ for(const name of fs.readdirSync(dir)){
+  const file=path.join(dir,name);
+  try{if(Date.now()-fs.statSync(file).mtimeMs>STEP_QUESTION_MAX_AGE_MS)fs.rmSync(file);}catch{}
+ }
+ for(const id of ids){
+  const record=store.get('approvals',id);
+  if(record&&STEP_ID.test(id))atomic(path.join(dir,id+'.json'),JSON.stringify({id,text:record.about+' '+record.question,at:record.sent_at})+'\n');
+ }
+}
 // The pending, unsent Telegram steps whose questions a routine printed in full, oldest first; a
 // question printed once names one step, however many steps ask the same words.
 export function stepsForWords(store,text,since=''){
@@ -190,6 +215,26 @@ export function heard(store,{chat,words,at=new Date().toISOString(),scheduled=fa
  return {kind:'ask',steps,answer,context:askContext(steps,answer)};
 }
 const answeredContext=(step,answer)=>'[godspeed-step] Your owner answered '+answer+' to "'+step.about+'" and the program has recorded it. Confirm in one plain sentence what happens now: '+(answer==='yes'?step.on_yes:step.on_no)+' Do not ask anything else about it.';
+
+const PRESS_WORDS={
+ en:{yes:'Yes',no:'No',already:answer=>'This was already answered ('+answer+'). Nothing changed.',closed:'This question is no longer open. Nothing changed.'},
+ de:{yes:'Ja',no:'Nein',already:answer=>'Das war schon beantwortet ('+(answer==='yes'?'ja':'nein')+'). Es hat sich nichts geändert.',closed:'Diese Frage ist nicht mehr offen. Es hat sich nichts geändert.'}};
+
+// A press on the Yes or No button under one step's own message (godspeed-context's step_buttons.py).
+// It answers that step id and no other, once, exactly as a typed answer does (answerStep); a step
+// that is not a sent Telegram question has no button to press.
+export function pressStep(store,{id,answer,language='en',scheduled=false,at=new Date().toISOString()}){
+ if(scheduled)throw Error('A scheduled run cannot answer for your owner.');
+ if(answer!=='yes'&&answer!=='no')throw Error('Say yes or no.');
+ const record=store.get('approvals',id);
+ if(!record||record.asked_in!=='telegram'||!record.sent_at)throw Error('That button belongs to no question it can answer.');
+ const words=PRESS_WORDS[language]||PRESS_WORDS.en,text=record.about+' '+record.question+'\n\n';
+ const unchanged=(status,step)=>({changed:false,step,reply:text+(status==='approved'||status==='rejected'?words.already(status==='approved'?'yes':'no'):words.closed)});
+ if(record.status!=='pending'||(record.expires_at&&record.expires_at<=at))return unchanged(record.status,readStep(record));
+ const done=answerStep(store,id,answer,{chat:'telegram',words:'(button)'});
+ if(done.already)return unchanged(store.get('approvals',id).status,done.step);
+ return {changed:true,step:done.step,reply:text+words[answer]+': '+(answer==='yes'?done.step.on_yes:done.step.on_no)};
+}
 
 // The model's read-back after "which one?": only the step id comes from the model. The yes or no is
 // the one the owner gave, and only a step the open question listed, in the turn that answered it.

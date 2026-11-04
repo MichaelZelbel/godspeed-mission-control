@@ -366,3 +366,18 @@ test('a direct reply is stamped with the words actually sent, so a progress phot
  await telegram.tick();
  assert.equal(sent.at(-1)[0],'sendPhoto');assert.equal(sent.at(-1)[1],'Nice. '+short.message);assert.ok(store.get('approvals',short.id).sent_at);
 });
+
+test('a button press answers only a Telegram question that has gone out; a delivery that stamps nothing hands nothing to the buttons',async t=>{
+ const {root,store}=fixture(t),notebook=open(store,'The disk is full.','notebook'),unsent=open(store,'The bot stopped.');
+ const press=id=>spawnSync(process.execPath,[script,'press',id,'yes','--godspeed',root],{encoding:'utf8'});
+ for(const {id} of [notebook,unsent]){
+  assert.equal(press(id).status,1);
+  assert.equal(store.get('approvals',id).status,'pending');
+ }
+ delivered(store,'Something nobody asked about.');
+ assert.equal(fs.existsSync(path.join(store.state,'step-questions')),false);
+ await deliver(store,unsent);
+ assert.equal(fs.existsSync(path.join(store.state,'step-questions',unsent.id+'.json')),true);
+ assert.equal(press(unsent.id).status,0);
+ assert.equal(store.get('approvals',unsent.id).status,'approved');
+});
