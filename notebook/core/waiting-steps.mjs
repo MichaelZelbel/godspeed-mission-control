@@ -63,18 +63,23 @@ export function openStep(store,{about,question,yes,no,by,chat,job}){
  return {id,message};
 }
 
-// A Telegram question is eligible only once the Telegram sender has recorded it: an assistant message
-// in the owner's Telegram conversation, carrying Telegram's own message id, that holds the step's exact
-// words and was saved after the step opened. The asker's say-so is not a receipt. A notebook step is
-// stamped by openStep itself, right after its question is written into the notebook chat.
+// A Telegram question is eligible only once the Telegram sender has recorded it, with Telegram's own
+// message id, after the step opened and holding the step's exact words: either as a message
+// the sender saved (a delivery) or as the verified receipt of a direct reply to the owner. The asker's
+// say-so is not a receipt, and one sent message certifies one step: equal questions need a message each.
+// A notebook step is stamped by openStep itself, right after its question is written into the notebook chat.
+const telegramReceipts=store=>[
+ ...store.list('conversation_messages').filter(m=>m.role==='assistant'&&m.conversation_id===ROUTES.telegram.conversation&&m.source_app==='telegram').map(m=>({message_id:m.message_id,words:m.content,at:m.created_at})),
+ ...store.list('command_receipts').filter(r=>r.source==='telegram'&&r.state==='verified').map(r=>({message_id:r.message_id,words:r.result,at:r.updated_at}))
+].filter(r=>r.message_id&&typeof r.words==='string');
 export function markSent(store,id){
  return store.withLock(()=>{
   const record=store.get('approvals',id);
   if(!record?.asked_in)throw Error('That step does not exist.');
   if(record.status!=='pending')throw Error('That step is no longer waiting.');
   if(record.asked_in!=='telegram')throw Error('A notebook step is marked when it is asked.');
-  const words=record.about+' '+record.question;
-  const receipt=store.list('conversation_messages').find(m=>m.role==='assistant'&&m.conversation_id===ROUTES.telegram.conversation&&m.source_app==='telegram'&&m.message_id&&String(m.content).includes(words)&&String(m.created_at||'')>=record.asked_at);
+  const words=record.about+' '+record.question,claimed=new Set(store.list('approvals').map(r=>r.sent_message_id).filter(Boolean));
+  const receipt=telegramReceipts(store).find(r=>r.words.includes(words)&&String(r.at||'')>=record.asked_at&&!claimed.has(r.message_id));
   if(!receipt)throw Error('Telegram has not recorded that question as sent; it cannot be answered with a plain yes yet.');
   stampLocked(store,record,receipt.message_id);
  });

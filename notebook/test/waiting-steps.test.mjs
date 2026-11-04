@@ -8,6 +8,7 @@ import {fileURLToPath} from 'node:url';
 import {Store,hash} from '../core/records/store.mjs';
 import {QueryService} from '../core/query.mjs';
 import {Domains} from '../core/domains.mjs';
+import {Telegram} from '../core/telegram.mjs';
 import {Scheduler} from '../core/jobs/scheduler.mjs';
 import {openStep,markSent,ROUTES,CHATS,chatOf,ASKER_KINDS,answerStep,answerChosen,heard,readStep,waitingSteps} from '../core/waiting-steps.mjs';
 
@@ -19,7 +20,8 @@ function fixture(t){
  return {root,store};
 }
 const open=(store,about,chat='telegram',extra={})=>openStep(store,{about,question:'Shall I go on?',yes:'I will restart it now.',no:'I will leave it as it is.',by:'routine:test',chat,...extra});
-const telegramSaid=(store,message,messageId=7)=>store.save('conversation_messages',{role:'assistant',content:message,conversation_id:'telegram-owner',source_app:'telegram',message_id:messageId,created_at:new Date().toISOString()});
+let sentCount=0;
+const telegramSaid=(store,message,messageId=++sentCount)=>store.save('conversation_messages',{role:'assistant',content:message,conversation_id:'telegram-owner',source_app:'telegram',message_id:messageId,created_at:new Date().toISOString()});
 const ask=(...args)=>{const opened=open(...args);if(args[2]!=='notebook'){telegramSaid(args[0],opened.message);markSent(args[0],opened.id);}return opened;};
 
 test('one step waiting: a yes approves it and the reply says what happens; a no rejects it',t=>{
@@ -194,4 +196,33 @@ test('a chat-note that cannot be saved after the answer does not hide the commit
  fs.mkdirSync(path.join(root,'.godspeed','waiting-step-chats.json'),{recursive:true});
  const result=heard(store,{chat:'telegram',words:'yes'});
  assert.equal(result.kind,'answered');assert.equal(store.list('approvals')[0].status,'approved');
+});
+
+test('an equal question opened twice needs a sent message each; one message certifies one step',t=>{
+ const {store}=fixture(t),a=open(store,'The bot stopped.'),b=open(store,'The bot stopped.');
+ telegramSaid(store,a.message,71);
+ markSent(store,a.id);
+ assert.throws(()=>markSent(store,b.id),/not recorded/);
+ assert.deepEqual(waitingSteps(store).map(s=>s.id),[a.id]);
+ telegramSaid(store,b.message,72);markSent(store,b.id);
+ assert.equal(store.get('approvals',b.id).sent_message_id,72);
+});
+
+test('a question Telegram recorded before the step opened does not make it answerable',t=>{
+ const {store}=fixture(t);
+ store.save('conversation_messages',{role:'assistant',content:'The bot stopped. Shall I go on?',conversation_id:'telegram-owner',source_app:'telegram',message_id:5,created_at:'2020-01-01T00:00:00.000Z'});
+ const {id}=open(store,'The bot stopped.');
+ assert.throws(()=>markSent(store,id),/not recorded/);
+ assert.equal(heard(store,{chat:'telegram',words:'yes'}).kind,'none');
+});
+
+test('a question put into a direct Telegram reply is certified by that reply and a later yes answers it',async t=>{
+ const {store}=fixture(t);let opened,sends=0;
+ const domains={invoke:async()=>{opened=open(store,'The bot stopped.');return {reply:opened.message};}};
+ const updates=[{update_id:1,message:{from:{id:123,is_bot:false},chat:{id:123,type:'private'},text:'how is it going'}}];
+ const transport=async url=>({ok:true,json:async()=>url.endsWith('getUpdates')?{ok:true,result:updates}:{ok:true,result:{message_id:100+ ++sends}}});
+ await new Telegram({store,domains,token:'synthetic-bot',owner:'123',transport}).tick();
+ markSent(store,opened.id);
+ assert.equal(store.get('approvals',opened.id).sent_message_id,101);
+ assert.equal(heard(store,{chat:'telegram',words:'yes'}).kind,'answered');
 });
