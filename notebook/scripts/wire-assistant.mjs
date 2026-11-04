@@ -109,6 +109,13 @@ for(const command of (process.env.GODSPEED_ORIGINAL_RUNTIME==='on'?['mail','watc
  if(process.platform==='win32')atomic(bin+'.cmd',cmd(at=>'"'+at(process.execPath)+'" "'+at(script)+'" %* --godspeed "'+at(root)+'"\r\n'));
  shellCommand(bin,[process.execPath,script],' --godspeed '+quote(root));
 }
+// THE ONE WAY TO ASK FOR A YES (core/waiting-steps.mjs): routines, add-ons and the assistant open a
+// waiting step with `godspeed-step open`; the chat plugin below hands the owner's plain yes or no to it.
+{
+ const script=path.join(kit,'notebook','bin','godspeed-step.mjs'),bin=path.join(home,'bin','godspeed-step');
+ if(process.platform==='win32')atomic(bin+'.cmd',cmd(at=>'"'+at(process.execPath)+'" "'+at(script)+'" %* --godspeed "'+at(root)+'"\r\n'));
+ shellCommand(bin,[process.execPath,script],' --godspeed '+quote(root));
+}
 {
  // The morning-brief recipe's command for "today's brief" in the chat (#193): the routine's own
  // briefing, shown if today's is saved, else saved once.
@@ -143,6 +150,7 @@ catch(error){console.error('The skills your assistant saved in its own folder we
 // scheduled job delivered is not part of the chat the assistant sees next.
 fs.cpSync(path.join(kit,'notebook','assistant-files','godspeed-context'),path.join(home,'plugins','godspeed-context'),{recursive:true,filter:source=>!/__pycache__/.test(source)});
 atomic(path.join(home,'plugins','godspeed-context','mission-control.txt'),root+'\n');
+atomic(path.join(home,'plugins','godspeed-context','step-command.txt'),JSON.stringify([process.execPath,path.join(kit,'notebook','bin','godspeed-step.mjs'),'--godspeed',root])+'\n');
 // THE SHARED YES/NO BUTTONS (assistant-files/godspeed-buttons, issue #197): a library, not a plugin
 // (it is not in plugins.enabled). Charm's slip question and the waiting-step questions use it, so
 // a button's owner check, its one-answer claim and its token live in one place.

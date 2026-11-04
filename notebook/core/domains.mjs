@@ -1,6 +1,9 @@
 import {momentDraft} from './moment-draft.mjs';
 import {conversationRuntimeId,bindConversationSession} from './conversation-state.mjs';
 import {startCharmJudgement} from './charm-judgement.mjs';
+import {chatOf,classifyAnswer,heard as heardStep} from './waiting-steps.mjs';
+
+const STEP_RETRY='I could not check your waiting questions just now. Please send your answer again in a moment.';
 import {draftEvent} from './draft-event.mjs';
 import {momentDates} from './timestamps.mjs';
 import {NOTE_TYPES,processNote} from './proposals.mjs';
@@ -199,6 +202,26 @@ export class Domains {
       this.store.commit([...changed, slot, claim]); return { ok: true, facts: [{ attribute, outcome: 'inserted', claimId: claim.id, closed: changed.length }] };
     });
   }
+  // A plain yes or no that belongs to a waiting step is answered here by the program (waiting-steps.mjs).
+  // A failure to look falls through to the ordinary chat; the answer itself is recorded once, under a receipt.
+  async waitingStepTurn(input){
+    const chat=chatOf(input.conversation_id),message=String(input.message||''),{source,requestId}=requestIdentity(this.query,input,message),id='step-heard-'+hash([input.conversation_id,requestId]);
+    const previous=this.store.get('command_receipts',id);if(previous?.result)return previous.result;
+    let found;
+    try{
+      const last=this.query.rows('conversation_messages').filter(m=>m.role==='assistant'&&m.conversation_id===input.conversation_id).sort((a,b)=>a.created_at.localeCompare(b.created_at)).at(-1);
+      found=heardStep(this.store,{chat,words:message,yieldTo:last?.habit_ids?.length?last.created_at:''});
+    }catch{return classifyAnswer(message)?{reply:STEP_RETRY}:null;}
+    if(found.kind==='answered'){
+      // The answer is committed; a failed note of it must not turn the owner's confirmation into an error.
+      try{
+        await this.store.saveAsync('conversation_messages',{role:'assistant',content:found.reply,conversation_id:input.conversation_id,source_app:'waiting-step'},undefined,{signal:input.signal});
+        await this.store.saveAsync('command_receipts',{id,state:'verified',source_id:source?.id||null,result:{reply:found.reply}},undefined,{signal:input.signal});
+      }catch{}
+      return {reply:found.reply};
+    }
+    return found.context?{context:found.context}:null;
+  }
   async invoke(name, input = {}) {
     if(name==='draft-event')return draftEvent(this.provider,input);
     if(name==='retrieve-memory')return retrieveNoteWindows(this.query,input.query||input.message||'');
@@ -219,13 +242,18 @@ export class Domains {
       input={...input,conversation_id:conversationRuntimeId(input)};
       if(!input.message)input={...input,message:input.messages?.filter(m=>m.role==='user').at(-1)?.content||''};
     }
+    if(name==='conversation-chat'&&chatOf(input.conversation_id)&&!String(input.message||'').startsWith('/')){
+      const step=await this.waitingStepTurn(input);
+      if(step?.reply!==undefined)return step;
+      if(step?.context)input={...input,step_context:step.context};
+    }
     if(name==='conversation-chat'&&this.nativeAgent){
       if(input.contact_id&&!visibleRows(this.query,'contacts').some(p=>p.id===input.contact_id))throw Error('Choose an available person');
       const files=input.uploadedFiles||[];if(files.length)chatAttachments(this.mediaRoot,files);
       const nativeFiles=files.map(item=>{const mapping=JSON.parse(fs.readFileSync(path.join(this.mediaRoot,hash(item.path)+'.mapping.json'),'utf8'));return {name:item.name||item.path,path:path.join(this.mediaRoot,mapping.file)};});
       // The Charm Challenge's slip judgement runs while the assistant works (core/charm-judgement.mjs).
       const judged=startCharmJudgement(this,input);
-      const result=await this.nativeAgent({...input,nativeFiles,page_context:input[IDENTITY_PAGE]}).catch(error=>{judged.drop();throw error;});
+      const result=await this.nativeAgent({...input,nativeFiles,page_context:input[IDENTITY_PAGE],step_context:input.step_context}).catch(error=>{judged.drop();throw error;});
       result.reply=await judged.end(result.reply);
       await this.store.saveAsync('conversation_messages',{role:'assistant',content:result.reply,conversation_id:input.conversation_id||null,contact_id:input.contact_id||null,source_app:'hermes'},undefined,{signal:input.signal});
       return result;

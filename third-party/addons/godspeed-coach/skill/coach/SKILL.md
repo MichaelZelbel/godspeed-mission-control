@@ -204,7 +204,11 @@ missed day.
 and follow "Opening a talk" in this conversation (skip the `[SILENT]` rule). The open command that
 brief prints ends with `--shown`, because they read the opening right here: run it exactly as
 printed, so a later conversation does not bring the talk up again. If a talk of that area is
-already open, continue it instead. This holds while a talk of another area is open: that talk stays
+already open, continue it instead, with one exception: on a talk day of that area, when the open
+talk is an earlier one with no reply from them, run the brief anyway. It opens today's talk from
+its preparation and closes the earlier one as not held, and the opening names that earlier talk in
+one short sentence. If today's talk is the open one, the brief says so: continue it. A talk with a
+reply is always continued. This holds while a talk of another area is open: that talk stays
 open as it is, and the request is never saved with `talk said` as an answer to it.
 
 ## A new area

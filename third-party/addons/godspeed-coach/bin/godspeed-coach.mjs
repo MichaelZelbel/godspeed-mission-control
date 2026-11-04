@@ -7,7 +7,7 @@ import { findMissionControl, appHome } from "../lib/paths.mjs";
 import { now, localParts, addDays, weekdayOf, WEEKDAY_WORDS } from "../lib/clock.mjs";
 import { loadSettings, setSetting, DEFAULTS } from "../lib/settings.mjs";
 import { listAreas, findArea, isTalkDay, addArea, setAreaField, nextTalkDay, habitArea, AREA_FIELDS, addAreaLine, removeAreaLine } from "../lib/areas.mjs";
-import { openTalk, readTalk, setTalkState, setFollowUp, addSaid, setShown, talkDates, talkFile } from "../lib/talks.mjs";
+import { openTalk, unansweredBefore, readTalk, setTalkState, setFollowUp, addSaid, setShown, talkDates, talkFile } from "../lib/talks.mjs";
 import { addHabit, listHabits, findHabit, track, untrack, lastAnsweredDay, setStatus, stats, askedOn, answerOn,setHabitSchedule,setHabitDisplay,exemptHabitDays, setHabitReader, habitReadersWords } from "../lib/habits.mjs";
 import {habitProgress,assertDay} from '../lib/progress.mjs';
 import { readTable } from "../lib/auto.mjs";
@@ -281,7 +281,12 @@ const commands = {
         Object.assign(t, { opening: p.opening, prepared: p.card, read: f.read || `the prepared talk ${prepPath(mcDir, file)}`, prep: prepPath(mcDir, file) });
       }
       if (!t.opening) die('Give the opening: --opening "<what you are sending them>", or --from-prep <file> for a talk prepared ahead');
+      // A prepared talk they asked for on a talk day replaces an earlier one that got no reply. The
+      // opening is sealed, so the one sentence naming the replaced talk is added to it here.
+      const replaced = t.prep && shown && isTalkDay(a, d) ? unansweredBefore(a, d) : [];
+      if (replaced.length) t.opening = `${t.opening}\n\nYour ${a.title} talk of ${replaced.at(-1)} got no reply, so I closed it as not held.`;
       const r = openTalk(a, d, t, at);
+      if (r.created) for (const e of replaced) setTalkState(a, e, "not-held");
       if (r.created) saved(`${a.slug} talk opened ${d}`);
       const where = path.relative(mcDir, r.file).replace(/\\/g, "/");
       if (r.created && t.prep) return out(`Opened: ${where}. The opening, to send exactly as it is:\n\n${t.opening}`, { ok: true, created: true, file: r.file, opening: t.opening });
