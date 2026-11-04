@@ -365,6 +365,16 @@ def say(c,env,n):
 g.say=say`);
  assert.equal(split.status,0,split.stderr);assert.equal(split.stdout.trim(),'First.');
  assert.deepEqual(JSON.parse(fs.readFileSync(said,'utf8')).ids,['seed']);
+ // A report that cannot be said fails the run and says nothing; the notices it never attempted are released, not left claimed.
+ fs.rmSync(said,{force:true});fs.writeFileSync(queued,JSON.stringify({notices:[{id:'one',text:'First.'},{id:'two',text:'Second.'}]}));
+ const claims=()=>fs.readdirSync(home).filter(f=>f.endsWith('.claim'));
+ const broken=attempt(okRun+`
+def say(c,env,n):
+    raise RuntimeError("provider down")
+g.say=say`);
+ assert.notEqual(broken.status,0);assert.equal(broken.stdout,'');assert.match(broken.stderr,/provider down/);
+ assert.equal(fs.existsSync(said)&&JSON.parse(fs.readFileSync(said,'utf8')).ids.length>0,false,'no id is said');
+ assert.deepEqual(claims(),[],'no claim file remains');
  for(const bad of ['{not json','[]','{"notices":5}','{"notices":[{"id":"a"}]}','{"notices":[{"id":"a","text":"x"},"b"]}','{"notices":[{"id":5,"text":"x"}]}','{"notices":[{"id":"a","text":"   "}]}']){
   fs.writeFileSync(queued,bad);fs.rmSync(said,{force:true});
   const run=attempt(okRun);
