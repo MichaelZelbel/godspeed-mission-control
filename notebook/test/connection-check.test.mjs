@@ -162,6 +162,23 @@ test('a deadline that could not be made or closed fails the routine and is retri
  assert.equal(deadlines(store)[0].state,'closed');assert.equal(bell(store,'telegram').status,'resolved');
 });
 
-test('every connection owns its probe',()=>{
+test('every connection owns its probe, and mail reaches its own check',async()=>{
  assert.deepEqual(Object.keys(defaultProbes({store:{},home:'x'})),Object.keys(CONNECTIONS));
+ let checks=0;
+ const imap=()=>({status:()=>({state:'connected'}),check:async()=>{checks++;return {state:'disconnected'};}});
+ assert.deepEqual(await defaultProbes({store:{},home:'x',imap}).mail(),{set_up:true,ok:false,kind:'sign-in'});
+ assert.equal(checks,1);
+});
+
+test('a refusal whose deadline failed, then an unset day, is neither repeated nor forgotten',async t=>{
+ const failing=()=>({status:1,out:''}),unset=async()=>({set_up:false});
+ for(const [third,closed] of [[refused,false],[undefined,true]]){
+  const {store}=fixture(t);
+  await assert.rejects(checkConnections({store,day:D1,probes:stubs({telegram:refused}),due:failing}),/deadline/);
+  await checkConnections({store,day:D2,probes:stubs({telegram:unset})});
+  await checkConnections({store,day:D3,probes:stubs(third&&{telegram:third})});
+  assert.equal(readNotices(store).length,1,'one message for the whole stretch');
+  if(closed){assert.equal(bell(store,'telegram').status,'resolved');}
+  else assert.equal(deadlines(store).length,1,'the deadline is made on the first day it can be');
+ }
 });

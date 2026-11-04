@@ -33,7 +33,7 @@ export const CONNECTIONS={
   signIn:'Telegram refused your bot\'s key this morning, so nothing from your mission control reaches you on Telegram and your messages there go unanswered. To fix it, get the bot\'s current key from BotFather and connect Telegram again in Settings.'},
  github:{probe:deps=>githubProbe(deps),label:'GitHub',stops:'your notebook stops syncing with your other computers',
   signIn:'GitHub did not let this computer read your notebook\'s repository this morning, so your notebook stops syncing with your other computers. To fix it, open Settings in your notebook and press Connect record sync again; GitHub\'s sign-in page opens.'},
- mail:{probe:deps=>mailProbe(),label:'Gmail',stops:'your assistants cannot search your mail or save drafts',
+ mail:{probe:deps=>mailProbe(deps),label:'Gmail',stops:'your assistants cannot search your mail or save drafts',
   signIn:'Gmail did not accept the app password this morning, so your assistants cannot search your mail or save drafts. To fix it, ask your assistant: Connect Gmail for me.'},
 };
 const NAMES=Object.keys(CONNECTIONS);
@@ -95,7 +95,11 @@ const deadlineSlug=(name,day)=>`connection-${name}-${day}`;
 // entry to keep and the things to do, in words the caller carries out.
 export function nextState(prev={},result,day){
  const carried=prev.deadline?{deadline:prev.deadline}:{};
- if(!result.set_up)return {entry:{set_up:false,...carried},actions:[]};
+ // An unset day keeps a pending sign-in whole (what was told, since when, its deadline), so the next day neither repeats the message nor forgets to recover.
+ if(!result.set_up){
+  const pending=prev.kind==='sign-in'?{kind:prev.kind,told:prev.told,failing_since:prev.failing_since}:{};
+  return {entry:{set_up:false,...pending,...carried},actions:[]};
+ }
  if(result.ok)return {entry:{set_up:true,ok:true},actions:prev.deadline||prev.kind==='sign-in'?[{do:'recover'}]:[]};
  if(result.kind==='sign-in'){
   if(prev.kind==='sign-in'&&prev.told||prev.deadline)return {entry:{...prev,set_up:true,ok:false,kind:'sign-in',told:true},actions:prev.deadline?[]:[{do:'deadline'}]};

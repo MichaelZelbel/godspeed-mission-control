@@ -979,7 +979,9 @@ def connection_check(c):
     said = notices(c)
     if r is None or r.returncode != 0:
         if said:
-            return "\n\n".join(said)
+            # The owner still hears what was queued; the run is still a failure.
+            sys.stdout.buffer.write(("\n\n".join(said) + "\n").encode("utf-8"))
+            sys.stdout.flush()
         fail("The daily connection check could not run.", r)
     return "\n\n".join(said)
 

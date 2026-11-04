@@ -337,6 +337,18 @@ print(json.dumps(g.work(g.config())))`;
  assert.equal(never.status,0,never.stderr);assert.equal(JSON.parse(never.stdout),'The daily round\'s work could not start today.');
 });
 
+test('the daily connection check says what it queued, and still fails when it exited nonzero',{skip:!havePython&&'no Python here'},t=>{
+ const {home}=scriptFixture(t);
+ const code=`import sys,types;sys.path.insert(0,${JSON.stringify(path.join(home,'scripts'))})
+import godspeed_routines as g
+g.run=lambda args,c,env,timeout=None:types.SimpleNamespace(returncode=1,stdout="",stderr="boom")
+g.notices=lambda c:["Telegram refused your bot's key."]
+c=g.config();c["connection_check"]="x"
+print(g.connection_check(c))`;
+ const run=spawnSync(python,['-c',code],{cwd:path.join(home,'scripts'),encoding:'utf8',env:{...process.env,PYTHONIOENCODING:'utf-8'}});
+ assert.equal(run.status,1);assert.match(run.stdout,/Telegram refused your bot's key\./);assert.match(run.stderr,/^The daily connection check could not run\./);
+});
+
 // 9 October 2026, a live run: the Weekly check-in row said "Runs every 15 minutes.", which is only
 // how often it looks whether a talk is due. It says the talk's day and time, and the next talk.
 test('Settings > Routines gives the coach routines their real rhythm, not the 15-minute look',t=>{
