@@ -369,6 +369,29 @@ async function search(args) {
     untrusted: "from, subject and preview are text written by whoever sent the mail", messages };
 }
 
+// THE HEADER-ONLY SEARCH A TRACKER'S MAIL RULE COUNTS WITH (2026-11-04, issue #215). `fields` keeps Gmail's
+// snippet, which is body text, out of the answer altogether, and only four headers are asked for.
+async function headerSearch({ senders, after }) {
+  const c = credentials(); need(c);
+  const out = [], seen = new Set();
+  for (const sender of senders) {
+    let token = "";
+    do {
+      const qs = new URLSearchParams({ maxResults: "100", q: "from:(" + sender + ") after:" + String(after).slice(0, 10).replace(/-/g, "/") });
+      if (token) qs.set("pageToken", token);
+      const list = await gmail(c, "GET", "/messages?" + qs);
+      for (const m of list.messages || []) {
+        if (seen.has(m.id)) continue;
+        seen.add(m.id);
+        const full = await gmail(c, "GET", "/messages/" + encodeURIComponent(m.id) + "?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date&metadataHeaders=Message-ID&fields=id,payload/headers");
+        out.push({ message_id: hdr(full, "Message-ID").replace(/[<>]/g, "").trim() || m.id, from: hdr(full, "From"), subject: hdr(full, "Subject"), date: hdr(full, "Date") });
+      }
+      token = list.nextPageToken || "";
+    } while (token && out.length < 2000);
+  }
+  return out;
+}
+
 async function read(args, wrap) {
   const c = credentials(); need(c);
   if (args.draft_id) return readDraft(c, args.draft_id, wrap);
@@ -906,5 +929,5 @@ async function status() {
   }
 }
 
-module.exports = { findAge, readDeviceEnv, shareStore, findGodspeed, credentials, state, attachment, openBrowser, search, read, draft, listDrafts, proposeSend, approve, reject, pending, tidy, connect, disconnect, status,
+module.exports = { findAge, readDeviceEnv, shareStore, findGodspeed, credentials, state, attachment, openBrowser, search, headerSearch, read, draft, listDrafts, proposeSend, approve, reject, pending, tidy, connect, disconnect, status,
   authorize, writeStore, readStore, storePaths, readyAge, adoptOldHome, buildRaw, SCOPE_READ, SCOPE_COMPOSE };

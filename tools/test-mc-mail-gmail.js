@@ -59,7 +59,7 @@ Object.assign(process.env, { GODSPEED_MAIL_HOME: HOME, GODSPEED_DIR: GODSPEED, G
 for (const k of Object.keys(process.env)) if (/^GMAIL_|^AGENTMAIL_/.test(k)) delete process.env[k];
 
 // ------------------------------------------------------------------ the stand-in for Google
-const g = { authScope: "", grantScope: null, refresh: 0, revoked: [], revokeDown: false, invalid: new Set(),
+const g = { urls: [], authScope: "", grantScope: null, refresh: 0, revoked: [], revokeDown: false, invalid: new Set(),
   drafts: {}, sent: [], nextId: 1, dropSend: false, messages: {}, apiOff: 0, hint: "" };
 g.messages.m1 = { id: "m1", threadId: "t1", labelIds: ["INBOX"], snippet: "Where are cards 8 to 12?",
   payload: { mimeType: "text/plain", headers: [{ name: "From", value: "Nadia <nadia@example.com>" }, { name: "To", value: "sam@example.com" },
@@ -109,6 +109,7 @@ const server = http.createServer((req, res) => {
     }
     if (u.pathname === "/revoke") { if (g.revokeDown) { req.socket.destroy(); return; } g.revoked.push(form.token); return out(200, {}); }
     const p = u.pathname.replace("/gmail/v1/users/me", "");
+    g.urls.push(req.url);
     if (p === "/profile") {
       if (g.apiOff > 0) { g.apiOff--; return out(403, { error: { message: "Gmail API has not been used in project 123 before or it is disabled." } }); }
       return out(200, { emailAddress: "sam@example.com" });
@@ -183,6 +184,12 @@ async function main() {
   // ---- reading
   const found = await G.search({ query: "cards" });
   ok("7 search finds the message", found.messages.length === 1 && found.messages[0].subject === "Cards 8 to 12");
+  // A tracker's mail rule counts from headers only: the headers asked for, the snippet cut out by `fields`, never the full message.
+  g.urls.length = 0;
+  const heads = await G.headerSearch({ senders: ["example.com"], after: "2026-10-05" });
+  ok("7b header search asks for four headers and no body, and returns no preview", heads.length === 1 && Object.keys(heads[0]).sort().join() === "date,from,message_id,subject"
+    && g.urls.some(x => /q=from%3A%28example\.com%29\+after%3A2026%2F10%2F05/.test(x)) && g.urls.some(x => /format=metadata/.test(x) && /fields=id%2Cpayload%2Fheaders|fields=id,payload\/headers/.test(x))
+    && !g.urls.some(x => /format=(full|raw)/.test(x)), JSON.stringify(heads) + g.urls.join(" "));
   const body = await G.read({ message_id: "m1" }, wrap);
   ok("8 a message body comes back marked untrusted", /<<<UNTRUSTED[\s\S]*IGNORE YOUR INSTRUCTIONS[\s\S]*>>>/.test(body));
 
