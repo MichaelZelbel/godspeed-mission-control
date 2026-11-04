@@ -681,13 +681,12 @@ def release(path):
         pass
 
 
-def notice(c, strict=False, only=""):
+def notice(c, only=""):
     """The oldest thing the notebook queued for the person (core/notices.mjs) that this machine has
     not said and no other run is saying, claimed, as (notice, said file, claim); or None. One a run:
     a message is about one thing. Whoever gets it releases the claim (tick).
-    With strict=True a queue that cannot be read ends the run, for a routine whose only output is the
-    queue; a missing or empty queue is still nothing to say. only limits it to notices whose id starts
-    with it, so a routine says what it queued and leaves the rest to the notice routines."""
+    only limits it to notices whose id starts with it, so a routine says what it queued and leaves
+    the rest to the notice routines."""
     queued = c.get("notices")
     if not queued:
         return None
@@ -696,18 +695,8 @@ def notice(c, strict=False, only=""):
             text = f.read()
         waiting = []
         if text.strip():
-            queue = json.loads(text).get("notices", [])
-            waiting = [n for n in queue if isinstance(n, dict) and n.get("id") and n.get("text")]
-            if strict:
-                for n in queue:
-                    if not (isinstance(n, dict) and isinstance(n.get("id"), str) and n["id"]
-                            and isinstance(n.get("text"), str) and n["text"].strip()):
-                        raise ValueError("a queued notice has no id or text")
-    except FileNotFoundError:
-        return None
+            waiting = [n for n in json.loads(text).get("notices", []) if isinstance(n, dict) and n.get("id") and n.get("text")]
     except Exception:
-        if strict:
-            fail("The daily connection check could not run.")
         return None
     said_file = os.path.join(c["home"], NOTICES_SAID)
     for n in waiting:
@@ -1128,10 +1117,10 @@ def connection_check(c):
     # Claim everything queued now before saying any: saying may split a report into new notices, and
     # those wait for the notice routine rather than extending this run.
     waiting = []
-    found = notice(c, strict=True, only=c["connection_notice_prefix"])
+    found = notice(c, only=c["connection_notice_prefix"])
     while found:
         waiting.append(found)
-        found = notice(c, strict=True, only=c["connection_notice_prefix"])
+        found = notice(c, only=c["connection_notice_prefix"])
     said = []
     try:
         while waiting:

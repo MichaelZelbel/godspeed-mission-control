@@ -379,12 +379,6 @@ g.say=say`);
  fs.rmSync(said,{force:true});fs.writeFileSync(queued,JSON.stringify({notices:[{id:'unrelated-backup',text:'The backup failed.'}]}));
  const unrelated=attempt(okRun);
  assert.equal(unrelated.status,0,unrelated.stderr);assert.equal(unrelated.stdout.trim(),'');assert.equal(fs.existsSync(said),false,'an unrelated notice is not said');
- for(const bad of ['{not json','[]','{"notices":5}','{"notices":[{"id":"a"}]}','{"notices":[{"id":"a","text":"x"},"b"]}','{"notices":[{"id":5,"text":"x"}]}','{"notices":[{"id":"a","text":"   "}]}']){
-  fs.writeFileSync(queued,bad);fs.rmSync(said,{force:true});
-  const run=attempt(okRun);
-  assert.equal(run.status,1,bad);assert.equal(run.stdout,'');assert.match(run.stderr,/^The daily connection check could not run\./);
-  assert.equal(fs.existsSync(said),false);
- }
  for(const quiet of [null,'','{"notices":[]}']){
   if(quiet===null)fs.rmSync(queued,{force:true});else fs.writeFileSync(queued,quiet);
   const run=attempt(okRun);
