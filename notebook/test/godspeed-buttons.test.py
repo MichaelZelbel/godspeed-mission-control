@@ -3,6 +3,7 @@ Hermes would: stand-ins for the telegram SDK and the bot, real token files on a 
 import asyncio
 import importlib.util
 import os
+import re
 import sys
 import tempfile
 import types
@@ -48,7 +49,7 @@ class Bot:
         self.edits.append(kw)
 
 
-def tap(buttons_, bot, data, message_id, user=OWNER):
+def tap(buttons_, bot, data, message_id, user=OWNER, handler=None):
     message = types.SimpleNamespace(chat=types.SimpleNamespace(id=OWNER, type="private"), message_id=message_id,
                                     text=WORDS["en"]["question"], from_user=types.SimpleNamespace(id=BOT),
                                     reply_markup=None)
@@ -56,7 +57,7 @@ def tap(buttons_, bot, data, message_id, user=OWNER):
     async def answer():
         pass
     query = types.SimpleNamespace(from_user=types.SimpleNamespace(id=user), message=message, data=data, answer=answer)
-    asyncio.run(buttons_.callback(types.SimpleNamespace(callback_query=query), types.SimpleNamespace(bot=bot)))
+    asyncio.run((handler or buttons_.callback)(types.SimpleNamespace(callback_query=query), types.SimpleNamespace(bot=bot)))
 
 
 class SharedButtons(unittest.TestCase):
@@ -124,7 +125,28 @@ class SharedButtons(unittest.TestCase):
         other.bind(theirs, 300)
         self.assertNotEqual(self.buttons.data.pattern, other.data.pattern)
         self.assertIsNone(self.buttons.data.match(other.prefix + theirs["yes"]))
-        tap(other, self.bot, other.prefix + theirs["yes"], 300)
+        handlers = []
+
+        class Native:
+            def add_handler(self, handler):
+                handlers.append(handler)
+
+        class Handler:
+            def __init__(self, callback, pattern):
+                self.callback, self.pattern = callback, pattern
+        ext = types.ModuleType("telegram.ext")
+        ext.CallbackQueryHandler = Handler
+        sys.modules["telegram.ext"] = ext
+        self.addCleanup(sys.modules.pop, "telegram.ext", None)
+
+        async def register():
+            self.buttons.factory(Native(), None)
+            other.factory(Native(), None)
+        asyncio.run(register())
+        data = other.prefix + theirs["yes"]
+        selected = next(h for h in handlers if re.match(h.pattern, data))
+        self.assertEqual(selected.callback.__self__, other)
+        tap(other, self.bot, data, 300, handler=selected.callback)
         self.assertEqual((self.heard, other_heard), ([], ["yes"]))
         tap(self.buttons, self.bot, self.data(mine, "no"), mine_message)
         self.assertEqual(self.heard, [("one", "no", "s1")])
