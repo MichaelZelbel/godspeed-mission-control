@@ -639,8 +639,9 @@ def brief(c):
 NOTICES_SAID = "godspeed-notices-said.json"
 
 
-def notices(c):
-    """What the notebook queued for the person (core/notices.mjs), each said once on this machine."""
+def notices(c, mark=True):
+    """What the notebook queued for the person (core/notices.mjs), each said once on this machine.
+    With mark=False nothing is marked said, for a run whose result will not reach the person."""
     queued = c.get("notices")
     if not queued:
         return []
@@ -658,6 +659,8 @@ def notices(c):
     fresh = [n for n in waiting if n["id"] not in said]
     if not fresh:
         return []
+    if not mark:
+        return [n["text"] for n in fresh]
     keep = (said + [n["id"] for n in fresh])[-200:]
     tmp = said_file + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:
@@ -976,14 +979,10 @@ def connection_check(c):
         r = run(args, c, env, timeout=900)
     except subprocess.TimeoutExpired:
         r = None
-    said = notices(c)
     if r is None or r.returncode != 0:
-        if said:
-            # The owner still hears what was queued; the run is still a failure.
-            sys.stdout.buffer.write(("\n\n".join(said) + "\n").encode("utf-8"))
-            sys.stdout.flush()
+        # A failed run's result is not shown to the person, so what was queued stays unsaid for the next run that succeeds.
         fail("The daily connection check could not run.", r)
-    return "\n\n".join(said)
+    return "\n\n".join(notices(c))
 
 
 def main(kind):

@@ -182,3 +182,14 @@ test('a refusal whose deadline failed, then an unset day, is neither repeated no
   else assert.equal(deadlines(store).length,1,'the deadline is made on the first day it can be');
  }
 });
+
+test('a refusal whose deadline failed survives an unset day and then network trouble until a working call',async t=>{
+ const {store}=fixture(t);
+ await assert.rejects(checkConnections({store,day:D1,probes:stubs({telegram:refused}),due:()=>({status:1,out:''})}),/deadline/);
+ await checkConnections({store,day:D2,probes:stubs({telegram:async()=>({set_up:false})})});
+ await checkConnections({store,day:D3,probes:stubs({telegram:async()=>({set_up:true,ok:false,kind:'other'})})});
+ assert.equal(deadlines(store).length,1,'its deadline is made while the connection is still down');
+ await checkConnections({store,day:D3,probes:stubs()});
+ assert.equal(bell(store,'telegram').status,'resolved');
+ assert.equal(readNotices(store).length,1);
+});

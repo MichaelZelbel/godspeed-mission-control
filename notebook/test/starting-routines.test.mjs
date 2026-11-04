@@ -337,16 +337,23 @@ print(json.dumps(g.work(g.config())))`;
  assert.equal(never.status,0,never.stderr);assert.equal(JSON.parse(never.stdout),'The daily round\'s work could not start today.');
 });
 
-test('the daily connection check says what it queued, and still fails when it exited nonzero',{skip:!havePython&&'no Python here'},t=>{
+test('a failed daily connection check leaves what it queued unsaid, and a timeout is a failure too',{skip:!havePython&&'no Python here'},t=>{
  const {home}=scriptFixture(t);
- const code=`import sys,types;sys.path.insert(0,${JSON.stringify(path.join(home,'scripts'))})
+ const attempt=result=>{
+  const code=`import sys,types,subprocess;sys.path.insert(0,${JSON.stringify(path.join(home,'scripts'))})
 import godspeed_routines as g
-g.run=lambda args,c,env,timeout=None:types.SimpleNamespace(returncode=1,stdout="",stderr="boom")
-g.notices=lambda c:["Telegram refused your bot's key."]
+${result}
+g.notices=lambda c,mark=True:["Telegram refused your bot's key."]
 c=g.config();c["connection_check"]="x"
 print(g.connection_check(c))`;
- const run=spawnSync(python,['-c',code],{cwd:path.join(home,'scripts'),encoding:'utf8',env:{...process.env,PYTHONIOENCODING:'utf-8'}});
- assert.equal(run.status,1);assert.match(run.stdout,/Telegram refused your bot's key\./);assert.match(run.stderr,/^The daily connection check could not run\./);
+  return spawnSync(python,['-c',code],{cwd:path.join(home,'scripts'),encoding:'utf8',env:{...process.env,PYTHONIOENCODING:'utf-8'}});
+ };
+ for(const result of ['g.run=lambda args,c,env,timeout=None:types.SimpleNamespace(returncode=1,stdout="",stderr="boom")','def r(*a,**k): raise subprocess.TimeoutExpired("x",1)\ng.run=r']){
+  const run=attempt(result);
+  assert.equal(run.status,1);assert.equal(run.stdout,'');assert.match(run.stderr,/^The daily connection check could not run\./);
+ }
+ const ok=attempt('g.run=lambda args,c,env,timeout=None:types.SimpleNamespace(returncode=0,stdout="",stderr="")');
+ assert.equal(ok.status,0,ok.stderr);assert.match(ok.stdout,/Telegram refused your bot's key\./);
 });
 
 // 9 October 2026, a live run: the Weekly check-in row said "Runs every 15 minutes.", which is only

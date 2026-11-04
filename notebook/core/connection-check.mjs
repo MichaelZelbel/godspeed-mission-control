@@ -105,6 +105,8 @@ export function nextState(prev={},result,day){
   if(prev.kind==='sign-in'&&prev.told||prev.deadline)return {entry:{...prev,set_up:true,ok:false,kind:'sign-in',told:true},actions:prev.deadline?[]:[{do:'deadline'}]};
   return {entry:{set_up:true,ok:false,kind:'sign-in',failing_since:day,told:true},actions:[{do:'sign-in'},{do:'deadline'}]};
  }
+ // A pending sign-in outlives a day of network trouble: only a working probe resolves it.
+ if(prev.kind==='sign-in')return {entry:{...prev,set_up:true,ok:false},actions:prev.deadline?[]:[{do:'deadline'}]};
  const sameDay=prev.kind==='other'&&prev.last_failed_day===day,again=sameDay||prev.kind==='other'&&prev.last_failed_day===addDays(day,-1);
  const failedDays=again?prev.failed_days+(sameDay?0:1):1,told=again&&prev.told;
  return {entry:{set_up:true,ok:false,kind:'other',failing_since:again?prev.failing_since:day,failed_days:failedDays,last_failed_day:day,told:told||failedDays>=2,...carried},
