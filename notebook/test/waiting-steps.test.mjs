@@ -467,3 +467,13 @@ test('a bundled report is split and each finding is checked',async t=>{
  const results=[{...base,about:'The gateway needs a restart.',quietly:'restart'},{...base,about:'The disk is nearly full.'}].map(finding=>openStep(store,finding));
  assert.deepEqual(results.map(r=>r.outcome),['quiet','asked']);
 });
+
+test('a step finished quietly, answered from an earlier decision or dropped has no button to press',async t=>{
+ const {root,store}=fixture(t),press=id=>spawnSync(process.execPath,[script,'press',id,'yes','--godspeed',root],{encoding:'utf8'});
+ const base={question:'Shall I go on?',yes:'Done.',no:'Left.',by:'routine:test',chat:'telegram'};
+ const outcomes=[{about:'The gateway needs a restart.',quietly:'restart'},{about:'Also tidy the shelf.',extra:{instruction:'Tidy',within:false}}].map(f=>openStep(store,{...base,...f}));
+ assert.deepEqual(outcomes.map(r=>r.outcome),['quiet','dropped']);
+ assert.equal(store.list('approvals').length,0);
+ assert.equal(press('step-none').status,1);
+ assert.equal(store.list('approvals').length,0);
+});
