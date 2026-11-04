@@ -233,6 +233,7 @@ if(starterBorn(root)){
  text=godspeedVoiceSettings(text,{home,state:store.state});
  const provider=path.join(home,'plugins',CRON_PROVIDER,'__init__.py'),source=fs.readFileSync(path.join(kit,'notebook','assistant-files','godspeed-cron-provider.py'),'utf8').replace(/\r\n/g,'\n');
  if(!fs.existsSync(provider)||fs.readFileSync(provider,'utf8')!==source){fs.mkdirSync(path.dirname(provider),{recursive:true});atomic(provider,source);}
+ atomic(path.join(path.dirname(provider),'report.json'),JSON.stringify({node:process.execPath,script:path.join(kit,'notebook','scripts','background-report.mjs'),root})+'\n');
 }
 // /backupai in Telegram on the one-click server, where its Telegram runner hands the chat to the
 // backup AI setup (hermes-config.mjs, core/backup-ai.mjs); on every other installation a backup AI
