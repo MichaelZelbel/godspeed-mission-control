@@ -387,7 +387,7 @@ async function headerSearch({ senders, after }) {
         out.push({ message_id: hdr(full, "Message-ID").replace(/[<>]/g, "").trim() || m.id, from: hdr(full, "From"), subject: hdr(full, "Subject"), date: hdr(full, "Date") });
       }
       token = list.nextPageToken || "";
-    } while (token && out.length < 2000);
+    } while (token);
   }
   return out;
 }

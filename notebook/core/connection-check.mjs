@@ -9,6 +9,7 @@ import {queueNotice} from './notices.mjs';
 import {routineAIStatus,askDirectly} from './routine-ai.mjs';
 import {FileSync,readSyncConfig} from './sync/git.mjs';
 import {telegramInHermes} from './starting-routines.mjs';
+import {mailTrackers,mailCountWanted} from './mail-trackers.mjs';
 import {addDays} from '../../third-party/addons/godspeed-coach/lib/clock.mjs';
 
 // THE DAILY CONNECTION CHECK (4 November 2026, #200). Godspeed only noticed a broken connection (the
@@ -36,6 +37,8 @@ export const CONNECTIONS={
   signIn:'GitHub did not let this computer read your notebook\'s repository this morning, so your notebook stops syncing with your other computers. To fix it, open Settings in your notebook and press Connect record sync again; GitHub\'s sign-in page opens.'},
  mail:{...CONNECTION_NAMES.mail,probe:deps=>mailProbe(deps),
   signIn:'Gmail did not accept the app password this morning, so your assistants cannot search your mail or save drafts. To fix it, ask your assistant: Connect Gmail for me.'},
+ agentmail:{...CONNECTION_NAMES.agentmail,probe:deps=>agentmailProbe(deps),
+  signIn:'Your mission control\'s own mailbox did not accept its key this morning, so the trackers that count its mail cannot read it. To fix it, ask your assistant: Connect the mission control\'s own address.'},
 };
 const NAMES=Object.keys(CONNECTIONS);
 export const RECORD_FILE='connection-check.json';
@@ -46,16 +49,19 @@ const GIT_SIGN_IN=/Authentication failed|could not read Username|terminal prompt
 const kit=fileURLToPath(new URL('../../',import.meta.url));
 const dueScript=path.join(kit,'tools','due.js');
 
-// Whether this install has what the check is for: Telegram or Gmail connected. It decides only
-// whether the routine starts on or paused (NativeScheduler.followConnectionCheck).
+// Whether this install has what the check is for: Telegram or Gmail (either way it was connected) or a
+// tracker's mail rule. It decides only whether the routine starts on or paused (NativeScheduler.followConnectionCheck).
 export function mailImap(){return createRequire(import.meta.url)('../../tools/mc-mail-imap.js');}
-export function mailConnected(imap=mailImap){try{return imap().status().state!=='not connected';}catch{return false;}}
-export const connectionCheckWanted=(home,imap)=>telegramInHermes(home)||mailConnected(imap);
+export function mailLegacy(){return createRequire(import.meta.url)('../../tools/mc-mail-gmail.js');}
+export function mailGodspeedStatus(){return createRequire(import.meta.url)('../../tools/mc-mail.js').godspeedStatus();}
+const legacyConnected=legacy=>{try{return !!legacy().credentials().GMAIL_REFRESH_TOKEN;}catch{return false;}};
+export function mailConnected(imap=mailImap,legacy=mailLegacy){try{if(imap().status().state!=='not connected')return true;}catch{}return legacyConnected(legacy);}
+export const connectionCheckWanted=(home,imap,store,legacy)=>telegramInHermes(home)||mailConnected(imap,legacy)||!!store&&mailCountWanted(store);
 
 export const telegramKind=(status,body)=>[401,404].includes(status)||body?.error_code===401?'sign-in':'other';
 export const gitKind=stderr=>GIT_SIGN_IN.test(String(stderr||''))?'sign-in':'other';
 export const aiKind=error=>error?.reason==='sign-in'?'sign-in':'other';
-export const mailKind=state=>state==='disconnected'?'sign-in':'other';
+export const mailKind=state=>state==='disconnected'||state==='reconnect needed'?'sign-in':'other';
 
 const outcome=(ok,kind)=>ok?{set_up:true,ok:true}:{set_up:true,ok:false,kind};
 const NOT_SET_UP={set_up:false};
@@ -81,9 +87,22 @@ export const githubProbe=({store,run=args=>new FileSync(store).git(args,undefine
  try{run(['ls-remote','--heads','origin','main']);return outcome(true);}
  catch(error){return outcome(false,gitKind(error?.stderr));}
 };
-export const mailProbe=({imap=mailImap}={})=>async()=>{
- let tool;try{tool=imap();if(tool.status().state==='not connected')return NOT_SET_UP;}catch{return NOT_SET_UP;}
+// Gmail by app password (IMAP) when it is connected, otherwise Gmail connected the older way (OAuth).
+export const mailProbe=({imap=mailImap,legacy=mailLegacy}={})=>async()=>{
+ let tool;try{tool=imap();if(tool.status().state==='not connected')tool=null;}catch{tool=null;}
+ if(!tool){
+  if(!legacyConnected(legacy))return NOT_SET_UP;
+  try{const {state}=await legacy().status();return ['connected','reading only'].includes(state)?outcome(true):outcome(false,mailKind(state));}
+  catch{return outcome(false,'other');}
+ }
  try{const result=await tool.check();return result.state==='connected'&&!result.error?outcome(true):outcome(false,mailKind(result.state));}
+ catch{return outcome(false,'other');}
+};
+// The mission control's own mailbox, probed only while a tracker's mail rule names it. A rule for it with no key
+// is a sign-in too: nothing will ever be counted until it is connected.
+export const agentmailProbe=({store,godspeed=mailGodspeedStatus})=>async()=>{
+ if(!mailTrackers(store).some(t=>t.rule.mailbox==='godspeed'))return NOT_SET_UP;
+ try{const {state}=await godspeed();return state==='connected'?outcome(true):outcome(false,state==='unreachable'?'other':'sign-in');}
  catch{return outcome(false,'other');}
 };
 export const defaultProbes=deps=>Object.fromEntries(NAMES.map(name=>[name,CONNECTIONS[name].probe(deps)]));

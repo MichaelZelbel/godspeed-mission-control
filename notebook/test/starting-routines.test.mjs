@@ -470,7 +470,7 @@ test('every routine wrapper the notebook writes names a routine the Python runne
 for(const [kind,days,words] of [['sign-in',['2026-11-04'],/Telegram/],['other',['2026-11-04','2026-11-05'],/Telegram/]])test(`the daily connection check says the ${kind} notice the connection check really queued`,{skip:!havePython&&'no Python here'},async t=>{
  const {root,home}=scriptFixture(t),store=new Store(root,{device:'pc'}),said=path.join(home,'godspeed-notices-said.json');
  const ok=async()=>({set_up:true,ok:true});
- for(const day of days)await checkConnections({store,day,probes:{ai:ok,telegram:async()=>({set_up:true,ok:false,kind}),github:ok,mail:ok}});
+ for(const day of days)await checkConnections({store,day,probes:{ai:ok,telegram:async()=>({set_up:true,ok:false,kind}),github:ok,mail:ok,agentmail:ok}});
  const queued=path.join(store.state,'notices.json'),id=JSON.parse(fs.readFileSync(queued,'utf8')).notices[0].id;
  const code=`import sys,types;sys.path.insert(0,${JSON.stringify(path.join(home,'scripts'))})
 import godspeed_routines as g
@@ -480,4 +480,14 @@ print(g.connection_check(c)[0])`;
  const run=spawnSync(python,['-c',code],{cwd:path.join(home,'scripts'),encoding:'utf8',env:{...process.env,PYTHONIOENCODING:'utf-8'}});
  assert.equal(run.status,0,run.stderr);assert.match(run.stdout,words);
  assert.deepEqual(JSON.parse(fs.readFileSync(said,'utf8')).ids,[id]);
+});
+
+// The wrappers the notebook writes (JavaScript) and the dispatcher that runs them (Python) list the same keys by hand.
+test('every routine wrapper names a routine the Python runner dispatches, and no dispatcher entry is orphaned',t=>{
+ const root=temporary(t,'routine-keys'),files=routineFiles({root,home:path.join(root,'hermes'),state:path.join(root,'.godspeed'),timezone:'Europe/Berlin'});
+ const emitted=Object.entries(files).filter(([name])=>name.endsWith('.py')&&name!=='godspeed_routines.py').map(([,text])=>/^main\("([a-z-]+)"\)$/m.exec(text)[1]).sort();
+ const runner=files['godspeed_routines.py'],table=/^ROUTINES = \{([^}]*)\}/m.exec(runner)[1],dispatched=[...table.matchAll(/"([a-z-]+)":/g)].map(m=>m[1]).sort();
+ assert.deepEqual(emitted,dispatched);
+ const silent=[...(/^NOT_RECORDED = \(([^)]*)\)/m.exec(runner)[1]).matchAll(/"([a-z-]+)"/g)].map(m=>m[1]);
+ assert.ok(silent.every(key=>dispatched.includes(key)),'a silent routine that no wrapper runs');
 });

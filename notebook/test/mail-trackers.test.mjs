@@ -74,6 +74,7 @@ test('setup asks in one sentence with the 30-day number, saves the rule only on 
  assert.equal(count(store,'Shop orders').length,4);assert.equal(count(store,'Applications').length,2);
  assert.ok(count(store,'Shop orders').every(i=>i.data.value===1));
  assert.deepEqual(leaks(root),[],'no body or preview in any record');
+ assert.ok(count(store,'Shop orders').every(i=>/^godspeed:[0-9a-f]{32}$/.test(i.data.mail_id)),'only a digest of the message id is kept');
  assert.ok(!requests.some(r=>/\/messages\/[^/?]+(\?|$)/.test(r)),'no message is fetched one by one');
 });
 

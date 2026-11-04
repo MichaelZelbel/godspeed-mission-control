@@ -17,11 +17,12 @@ import {atomic} from './records/store.mjs';
 import {norm,trackers,entries} from './trackers.mjs';
 import {addDays,localParts} from '../../third-party/addons/godspeed-coach/lib/clock.mjs';
 
-export const MAILBOXES=['gmail','godspeed'];
+// The mailboxes a rule may name, with how the sentence says each: the one owner of both the accepted keys and the words.
+const MAILBOX_WORDS={gmail:'your Gmail',godspeed:"your mission control's own mailbox"};
+export const MAILBOXES=Object.keys(MAILBOX_WORDS);
 export const FIRST_DAYS=30;
 const MAX_SENDERS=10,MAX_SUBJECTS=10;
 const ADDRESS=/^[^\s@<>,;"']+@[^\s@<>,;"']+\.[^\s@<>,;"']+$/,DOMAIN=/^[a-z0-9-]+(?:\.[a-z0-9-]+)+$/;
-const MAILBOX_WORDS={gmail:'your Gmail',godspeed:"your mission control's own mailbox"};
 const list=(items,and='or')=>items.length<2?items.join(''):items.slice(0,-1).join(', ')+' '+and+' '+items.at(-1);
 
 // The rule as a person gave it, checked and normalised: lowercase senders (an address or a domain),
@@ -51,7 +52,8 @@ export function mailColumn(c){
  return own.length===1&&own[0].type==='number'?own[0].key:false;
 }
 export const NOT_FITTING=name=>name+' keeps one entry a day or its own columns, and a mail count needs one entry for each mail. Say a new name and I will start a tracker for the mails.';
-export const mailId=(mailbox,id)=>mailbox+':'+id;
+// Only a digest is kept: a Message-ID is written by the sender and may carry an address that is no named sender's.
+export const mailId=(mailbox,id)=>mailbox+':'+crypto.createHash('sha256').update(mailbox+'\0'+id).digest('hex').slice(0,32);
 export const mailTrackers=store=>trackers(store).map(c=>({c,rule:cardRule(c)})).filter(t=>t.rule);
 export const mailCountWanted=store=>mailTrackers(store).length>0;
 const countedIds=(store,c,items)=>new Set(entries(store,c,items).map(i=>i.data?.mail_id).filter(Boolean));
@@ -102,7 +104,7 @@ export async function countMail({store,query,search,now=new Date(),tz}){
     query.execute({table:'collection_items',operation:'insert',holdingLock:true,values:{collection_id:c.id,data:{when,...(column?{[column]:1}:{}),mail_id:id}}});added++;
    }
   });
-  if(result.complete===true)state.rules[c.id]={digest:ruleDigest(rule),last_day:today};
+  state.rules[c.id]={digest:ruleDigest(rule),last_day:today};
  }
  atomic(stateFile(store),JSON.stringify(state,null,2)+'\n');
  return {added,failed};

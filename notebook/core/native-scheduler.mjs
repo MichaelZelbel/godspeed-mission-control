@@ -232,7 +232,7 @@ export class NativeScheduler{
   const entry=readNotebookRoutines(this.store).jobs.find(j=>j.key==='connection-check'),jobs=hermesJobs(this.home);
   const job=(entry&&jobs.find(j=>j.id===entry.id))||jobs.find(j=>j.name===CONNECTION_JOB&&j.script===CONNECTION_SCRIPT);
   if(entry&&!job)return null;
-  const installation=this.store.get('settings','installation'),timezone=installation?.timezone||Intl.DateTimeFormat().resolvedOptions().timeZone,wanted=connectionCheckWanted(this.home);
+  const installation=this.store.get('settings','installation'),timezone=installation?.timezone||Intl.DateTimeFormat().resolvedOptions().timeZone,wanted=connectionCheckWanted(this.home,undefined,this.store);
   writeRoutineFiles(this.home,routineFiles({root,home:this.home,state:this.store.state,timezone,hermes:this.executable}));
   if(job){
    if(!entry)return job.id;
