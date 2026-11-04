@@ -217,6 +217,17 @@ test("a real model asked with no button helper is exactly one asked event", { sk
   } finally { gone(dir); }
 });
 
+test("a model question at the very instant of an older open one is still the model's own", { skip }, () => {
+  const dir = mission();
+  try {
+    drive(dir, [{ do: "charm", args: ["asked", "--conversation", "api_server:s-1", "--words", VENT, "--json"], now: at("2026-10-22", 9) }]);
+    const out = drive(dir, [register, pre(VENT), modelAsks("api_server:s-1"), reply(`Here.\n\n${Q}`)]);
+    assert.equal(out.results[3].text, null);
+    assert.deepEqual(kinds(dir), ["start", "asked", "asked"]);
+    assert.equal(out.log[0].did, "the model asked itself");
+  } finally { gone(dir); }
+});
+
 test("only a question this call recorded for this conversation counts as the model's own", { skip }, () => {
   const other = mission();
   const stale = mission();

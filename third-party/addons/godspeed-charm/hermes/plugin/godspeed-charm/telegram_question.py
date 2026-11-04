@@ -66,10 +66,12 @@ def remove_question(text, questions):
 
 
 class QuestionTelegram(buttons.YesNoButtons):
-    def __init__(self, root, command):
-        # root(): the mission control folder; command(*args): the add-on command as a list.
+    def __init__(self, root, command, reports):
+        # root(): the mission control folder; command(*args): the add-on command as a list;
+        # reports(stdout): the {ok, reply, state} objects a `--json` command printed, in order.
         super().__init__(root, {CALLBACK: self.answer}, prefix=PREFIX, folder=FOLDER, default_id=CALLBACK)
         self.command = command
+        self.reports = reports
         self._texts = None
 
     # ---- the add-on's own words and command -------------------------------------------------
@@ -94,19 +96,6 @@ class QuestionTelegram(buttons.YesNoButtons):
         self._texts = value
         return value
 
-    @staticmethod
-    def report(stdout):
-        """The last {ok, reply, state} object a `--json` command printed, or None."""
-        for line in reversed((stdout or "").splitlines()):
-            if line.strip().startswith("{"):
-                try:
-                    value = json.loads(line)
-                except ValueError:
-                    continue
-                if isinstance(value, dict) and "ok" in value and "reply" in value:
-                    return value
-        return None
-
     def answer(self, token):
         """The command's reply to a tap: what happened, or why nothing did (exit 2). The question
         is named by the moment it was asked, so the tap answers that question or none."""
@@ -115,7 +104,8 @@ class QuestionTelegram(buttons.YesNoButtons):
                      "--language", token["language"], timeout=25)
         if r.returncode not in (0, 2):
             raise RuntimeError("godspeed-charm answer failed")
-        value = self.report(r.stdout)
+        found = self.reports(r.stdout)
+        value = found[-1] if found else None
         if not value or not isinstance(value.get("reply"), str) or not value["reply"]:
             raise RuntimeError("godspeed-charm answer gave no reply")
         return value["reply"]

@@ -85,7 +85,7 @@ try:
     _telegram_spec = importlib.util.spec_from_file_location("godspeed_charm_telegram_question", os.path.join(HERE, "telegram_question.py"))
     _telegram_module = importlib.util.module_from_spec(_telegram_spec)
     _telegram_spec.loader.exec_module(_telegram_module)
-    _question = _telegram_module.QuestionTelegram(lambda: _mission_control(), _command)
+    _question = _telegram_module.QuestionTelegram(lambda: _mission_control(), _command, lambda out: _reports(out))
 except Exception:
     # Without the buttons the challenge still works: the question stays in the reply.
     _telegram_module, _question = None, None
@@ -324,7 +324,8 @@ def _judged_reply(turn, session_id, text, kwargs, model_asked=False):
     if str(kwargs.get("platform") or "") == "telegram" and _question is not None:
         conversation = turn["conversation"]
         language = verdict.get("language")
-        entry = {"conversation": conversation, "askedWhen": _asked_when(report, conversation), "reply": reply,
+        asked = _open_asked(conversation)
+        entry = {"conversation": conversation, "askedWhen": asked and asked["when"], "reply": reply,
                  "language": language if language in (_question.texts() or {}) else None,
                  "route": _question.route(session_id), "at": time.monotonic()}
         plan = _question.prepare(entry, text)
@@ -375,29 +376,23 @@ def _reports(output):
     return found
 
 
-def _asked_when(report, conversation):
-    """The moment the question open in `conversation` was asked, from a command's report."""
-    questions = (report.get("state") or {}).get("open") or []
-    return next((q.get("when") for q in reversed(questions)
-                 if isinstance(q, dict) and q.get("conversation") == conversation), None)
-
-
 def _open_asked(conversation):
-    """The moment the question open in `conversation` was asked, read from the record itself
-    (`godspeed-charm status --json`), or None. The one reader of that fact, on every platform."""
+    """The question open in `conversation` ({conversation, words, when, seq}: `seq` tells apart two
+    questions asked at the same instant), read from the record itself (`godspeed-charm status
+    --json`), or None. The one reader of that fact, on every platform."""
     try:
         r = subprocess.run(_command("status", "--json"), capture_output=True, text=True, encoding="utf-8",
                            errors="replace", stdin=subprocess.DEVNULL, timeout=_timeout())
         reports = _reports(r.stdout) if r.returncode == 0 else []
         questions = ((reports[-1] if reports else {}).get("state") or {}).get("open") or []
-        return next((q.get("when") for q in questions if isinstance(q, dict)
+        return next((q for q in questions if isinstance(q, dict)
                      and q.get("conversation") == conversation and isinstance(q.get("when"), str)), None)
     except (OSError, ValueError, subprocess.SubprocessError):
         return None
 
 
 def _asked_by_this_call(session_id, turn_id, conversation):
-    """The moment of the question this very `asked` call recorded for `conversation`, or None.
+    """The question this very `asked` call recorded for `conversation`, or None.
     Only the record counts, and only a change since pre_tool_call: terminal output and the command
     line are text anyone can print, and an older open question is not this call's."""
     with _pending_lock:
@@ -428,8 +423,8 @@ def on_charm_tool(**kwargs):
         code, output = _tool_output(kwargs.get("result"))
         if code != 0:
             return None
-        asked_when = _asked_by_this_call(session_id, turn_id, conversation)
-        if asked_when is None:
+        asked = _asked_by_this_call(session_id, turn_id, conversation)
+        if asked is None:
             return None
         # On any platform a question the model asked itself is that conversation's one question.
         with _pending_lock:
@@ -447,7 +442,7 @@ def on_charm_tool(**kwargs):
         if not any(w["question"] in reply for w in words.values()):
             return None
         language = _flag(rest, "language")
-        entry = {"conversation": conversation, "askedWhen": asked_when, "reply": reply,
+        entry = {"conversation": conversation, "askedWhen": asked["when"], "reply": reply,
                  "language": language if language in words else None,
                  "route": _question.route(session_id), "at": time.monotonic()}
         with _pending_lock:
