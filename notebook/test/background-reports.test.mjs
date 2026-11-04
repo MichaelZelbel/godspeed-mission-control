@@ -120,3 +120,13 @@ test('a Settings routine\'s result that cannot be recorded is not delivered',t=>
  const out=run([[{id:'j1',name:'Weekly review',skill:'weekly-review',deliver:'telegram'},'Words.',false]]);
  assert.match(out.errors[0],/Not delivered: it could not be recorded/);assert.deepEqual(out.delivered,[]);
 });
+
+test('a failure is recorded in the lane Hermes sends failures to, not the normal lane',t=>{
+ if(!python)return t.skip('needs Python');
+ const {store,run}=wiredProvider(t);
+ const out=run([[{id:'j1',name:'To notebook',skill:'coach',deliver:'local',failure_deliver:'telegram'},'Failed A.',true],[{id:'j2',name:'To Telegram',skill:'coach',deliver:'telegram',failure_deliver:'local'},'Failed B.',true],
+  [{id:'j3',name:'Failure silenced',skill:'coach',deliver:'telegram',failure_deliver:'origin'},'Failed C.',true],[{id:'j4',name:'Blank lane',skill:'coach',deliver:'local',failure_deliver:' '},'Failed D.',true]]);
+ assert.deepEqual(out.errors,[null,null,null,null]);
+ const saved=[...new Store(store.root,{device:'pc'}).records.values()].filter(r=>r.id.startsWith('background-report-')).sort((a,b)=>a.content<b.content?-1:1);
+ assert.deepEqual(saved.map(r=>[r.content,r.delivered_to]),[['Failed A.','telegram'],['Failed B.','notebook'],['Failed D.','notebook']]);
+});

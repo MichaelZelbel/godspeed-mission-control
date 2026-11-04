@@ -33,17 +33,18 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 HOME = os.path.dirname(os.path.dirname(HERE))
 
 
-def _delivery(job):
-    """Where the notebook's chat reads this job's report, or None where no chat is involved."""
-    where = str(job.get("deliver") or "")
+def _delivery(job, for_failure=False):
+    """Where the notebook's chat reads this job's report, or None where no chat is involved. A
+    failure goes where Hermes sends failures: failure_deliver when it is set, else deliver."""
+    where = str((for_failure and str(job.get("failure_deliver") or "").strip()) or job.get("deliver") or "")
     if where == "local":
         return "notebook"
     return "telegram" if where == "telegram" or where.startswith("telegram:") else None
 
 
-def record_result(job, content):
+def record_result(job, content, for_failure=False):
     """None when nothing needs recording or it was recorded, else why the result must not go out."""
-    delivery = _delivery(job)
+    delivery = _delivery(job, for_failure)
     if not delivery or not (job.get("skill") or job.get("skills")) or not isinstance(content, str) or not content.strip():
         return None
     try:
@@ -61,7 +62,7 @@ def record_result(job, content):
 
 def wrap_delivery(deliver):
     def deliver_recorded(job, content, *args, for_failure=False, **kwargs):
-        refused = record_result(job, content)
+        refused = record_result(job, content, for_failure)
         return refused or deliver(job, content, *args, for_failure=for_failure, **kwargs)
     deliver_recorded.godspeed_wrapped = True
     return deliver_recorded

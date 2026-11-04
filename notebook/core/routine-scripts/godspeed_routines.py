@@ -58,6 +58,7 @@ the Routines list still says that the run failed (starting-routines.mjs, routine
 """
 import argparse
 import hashlib
+import contextlib
 import json
 import os
 import queue
@@ -703,30 +704,39 @@ def notice(c):
     return None
 
 
-def mark_said(n, said_file):
-    """Adds the notice to what this machine has said, on top of what is there now. Runs saying
-    different notices all write the one file, so the read-through-replace is taken one at a time."""
-    lock = said_file + ".lock"
-    for _ in range(600):
-        try:
-            os.close(os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY))
-            break
-        except FileExistsError:
-            try:
-                if time.time() - os.path.getmtime(lock) > 30:
-                    os.remove(lock)
+@contextlib.contextmanager
+def one_at_a_time(path):
+    """Holds an operating-system lock on path, waiting for it: it goes with the process that holds
+    it, so it can neither be stolen from a live holder nor outlive a dead one."""
+    with open(path, "a+b") as f:
+        if os.name == "nt":
+            import msvcrt
+            f.seek(0)
+            while True:
+                try:
+                    msvcrt.locking(f.fileno(), msvcrt.LK_LOCK, 1)
+                    break
+                except OSError:
                     continue
-            except OSError:
-                pass
-            time.sleep(0.05)
-    try:
-        keep = (said_ids(said_file) + [n["id"]])[-200:]
-        tmp = "%s.%d.tmp" % (said_file, os.getpid())
-        with open(tmp, "w", encoding="utf-8") as f:
-            json.dump({"ids": keep}, f)
-        os.replace(tmp, said_file)
-    finally:
-        release(lock)
+        else:
+            import fcntl
+            fcntl.flock(f, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            if os.name == "nt":
+                f.seek(0)
+                msvcrt.locking(f.fileno(), msvcrt.LK_UNLCK, 1)
+
+
+def mark_said(n, said_file):
+    """Adds the notice to what this machine has said, on top of what is there now (the caller holds
+    the notices lock, since runs saying different notices all write this one file)."""
+    keep = (said_ids(said_file) + [n["id"]])[-200:]
+    tmp = "%s.%d.tmp" % (said_file, os.getpid())
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump({"ids": keep}, f)
+    os.replace(tmp, said_file)
 
 
 def reports(c, env, args, stdin, timeout):
@@ -767,8 +777,9 @@ def tick(c, env, kind, r):
     if found:
         n, said_file, held = found
         try:
-            words = say(c, env, n)
-            mark_said(n, said_file)
+            with one_at_a_time(said_file + ".lock"):  # the notebook has one writer at a time
+                words = say(c, env, n)
+                mark_said(n, said_file)
         finally:
             release(held)
         return words, True
