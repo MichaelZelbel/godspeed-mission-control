@@ -115,7 +115,7 @@ function handOffButtons(store,ids){
  }
  for(const id of ids){
   const record=store.get('approvals',id);
-  if(record&&STEP_ID.test(id))atomic(path.join(dir,id+'.json'),JSON.stringify({id,text:record.about+' '+record.question,at:record.sent_at,expires_at:new Date(Date.now()+STEP_QUESTION_MAX_AGE_MS).toISOString()})+'\n');
+  if(record&&STEP_ID.test(id))atomic(path.join(dir,id+'.json'),JSON.stringify({id,text:record.about+' '+record.question,expires_at:new Date(Date.now()+STEP_QUESTION_MAX_AGE_MS).toISOString()})+'\n');
  }
 }
 // The pending, unsent Telegram steps whose questions a routine printed in full, oldest first; a

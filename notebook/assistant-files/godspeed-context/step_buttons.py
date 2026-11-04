@@ -7,7 +7,7 @@ use of them: tokens live in .godspeed/step-buttons/ under the prefix gss1:, and 
 
 Why a folder: the process that delivers a report often has no Telegram client (the notebook runs
 `hermes cron tick` itself), and the buttons can only be sent from the gateway. So when the notebook
-makes a Telegram step answerable it leaves {id, text, at, expires_at} in .godspeed/step-questions/<id>.json
+makes a Telegram step answerable it leaves {id, text, expires_at} in .godspeed/step-questions/<id>.json
 (notebook/core/waiting-steps.mjs), and the gateway posts the button message for each file it finds.
 """
 import asyncio
@@ -58,13 +58,6 @@ WORDS = {
            "noOpenQuestion": "Diese Frage ist schon beantwortet. Es hat sich nichts geändert.",
            "buttonFailed": "Das hat nicht geklappt. Versuch es gleich noch einmal."},
 }
-GERMAN_WORDS = {"ich", "du", "soll", "sollen", "möchtest", "willst", "darf", "und", "nicht", "der", "die", "das",
-                "ist", "es", "wir", "mit"}
-
-
-def language_of(text):
-    words = set(re.findall(r"\w+", text.lower()))
-    return "de" if re.search("[äöüß]", text.lower()) or len(words & GERMAN_WORDS) >= 2 else "en"
 
 
 def expiry(item):
@@ -97,7 +90,7 @@ class StepButtons(buttons.YesNoButtons):
         self._local.question = text
         self._local.sending = None
         try:
-            if not self.offer(CALLBACK, {"step": step_id}, {"ownerId": owner, "chatId": owner}, language_of(text)):
+            if not self.offer(CALLBACK, {"step": step_id}, {"ownerId": owner, "chatId": owner}, "en"):
                 return False
             # offer only schedules the send; the question counts as posted once the send itself succeeded.
             return self._local.sending.result(SENT_WITHIN) is True
