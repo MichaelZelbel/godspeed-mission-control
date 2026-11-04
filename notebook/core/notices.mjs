@@ -8,6 +8,7 @@ import {atomic} from './records/store.mjs';
 // (the coach's reminders and the journal's check-ins, routine-scripts/godspeed_routines.py notices)
 // say each one once, where the routines' results go: Telegram, or a note in "From your routines".
 // The notebook's bell shows it too (a notifications record), for a machine with neither routine.
+// The unattended Git helper (tools/unattended-git.cjs) queues a git-sign-in-<day> notice when this computer's GitHub sign-in is missing.
 export const NOTICES_FILE='notices.json';
 const KEEP=50;
 export function readNotices(store){try{const data=JSON.parse(fs.readFileSync(path.join(store.state,NOTICES_FILE),'utf8'));return Array.isArray(data?.notices)?data.notices:[];}catch{return [];}}

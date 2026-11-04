@@ -34,12 +34,23 @@ import json
 import os
 import pathlib
 import re
+import shutil
 import subprocess
 import sys
 import urllib.error
 import urllib.request
 
 DEFAULT_BASE_URL = "https://tjeapelvjlmbxafsmjef.supabase.co/functions/v1"
+
+def unattended_git():
+    """The command that runs git without any chance of a sign-in window (tools/unattended-git.cjs)."""
+    node = shutil.which("node")
+    helper = pathlib.Path(__file__).resolve().parent / "unattended-git.cjs"
+    if node and helper.is_file():
+        return [node, str(helper)]
+    # Plain git, without unattended-git.cjs: these commands are local and read no credential, so no window can open.
+    return ["git"]
+
 
 GODSPEED = "godspeed"
 MENERIO = "menerio"
@@ -754,7 +765,7 @@ def save_to_history(root, plan):
         return False
 
     def git(*args, data=None):
-        return subprocess.run(["git", "-C", str(root)] + list(args), input=data,
+        return subprocess.run(unattended_git() + ["-C", str(root)] + list(args), input=data,
                               stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=120)
 
     try:

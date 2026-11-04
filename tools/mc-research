@@ -69,6 +69,9 @@ export PATH="$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
 HERE="$(winpath "$(cd "$(dirname "$0")" && pwd)")"
 NODE=""; for c in node nodejs /usr/local/bin/node /usr/bin/node; do "$c" -e '' >/dev/null 2>&1 && { NODE="$c"; break; }; done
 [ -n "$NODE" ] || { echo "mc-research: there is no Node.js on this computer." >&2; exit 1; }
+# No GitHub sign-in window from a run nobody watches: every git line below goes through unattended-git.cjs
+# (the no-prompt environment, and a once-a-day notice that names Connect when the sign-in is missing).
+if [ -f "$HERE/unattended-git.cjs" ]; then git() { "$NODE" "$HERE/unattended-git.cjs" --tell "$GODSPEED" "$@"; }; fi
 GOALS="$HERE/goals.js"; [ -f "$GOALS" ] || GOALS="$HOME/.local/bin/goals.js"
 CHECK="$HERE/check-research.js"; [ -f "$CHECK" ] || CHECK="$HOME/.local/bin/check-research.js"
 RUNNER="$HERE/mc-run"; [ -f "$RUNNER" ] || RUNNER="$HOME/.local/bin/mc-run"

@@ -36,6 +36,7 @@ for p in sorted((source/'skills').glob('*/SKILL.md')):
 procedures=(source/'procedures.md').read_text(encoding='utf-8')
 register={'source':'procedures.md','headings':re.findall(r'^##+ (.+)$',procedures,re.M),
           'services':sorted(set(re.findall(r'[\w-]+\.(?:service|timer)',procedures)))}
+# A person is present: a maintainer runs this script by hand.
 result={'version':1,'menerio_commit':subprocess.check_output(['git','-C',str(source/'dev/menerio'),'rev-parse','HEAD'],text=True).strip(),
         'pages':pages,'dependencies':evidence,'skills':skills,'job_ids':[j['id'] for j in jobs],'procedure_register':register}
 (out/'source-inventory.json').write_text(json.dumps(result,indent=2)+'\n',encoding='utf-8')
