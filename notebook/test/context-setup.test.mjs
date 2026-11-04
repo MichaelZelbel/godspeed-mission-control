@@ -169,10 +169,10 @@ test('the installed plugin hands the owner\'s private Telegram yes to a real wai
   const step=(...args)=>JSON.parse(execFileSync(process.execPath,[path.join(kit,'notebook','bin','godspeed-step.mjs'),...args,'--godspeed',root],{encoding:'utf8'}));
   const open=async about=>{const {id,message}=step('open','--about',about,'--question','Restart it?','--yes','I restart it.','--no','I leave it.','--by','routine:test','--chat','telegram');const store=new Store(root,{device:'vps'});await recordReport(store,{text:message,steps:[id],delivery:'telegram'});delivered(store,message);return id;};
   const plugin=path.join(home,'plugins','godspeed-context','__init__.py');
-  const turn=session=>{
+  const turn=(session,words='yes')=>{
     const out=execFileSync(python,['-c',`import importlib.util,json,sys
 spec=importlib.util.spec_from_file_location("p",sys.argv[1]);m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
-print(json.dumps(m.on_pre_llm_call(platform="telegram",user_message="yes",session_id="sess")))`,plugin],
+print(json.dumps(m.on_pre_llm_call(platform="telegram",user_message=sys.argv[2],session_id="sess")))`,plugin,words],
       {encoding:'utf8',env:{...process.env,PYTHONPATH:path.join(base,'stubs'),TELEGRAM_ALLOWED_USERS:'4242',STUB_HERMES_SESSION_PLATFORM:'telegram',STUB_HERMES_SESSION_CHAT_TYPE:'dm',
         STUB_HERMES_SESSION_CHAT_ID:session.chat,STUB_HERMES_SESSION_USER_ID:session.user,STUB_HERMES_SESSION_ID:session.id}}).trim();
     return JSON.parse(out);
@@ -182,6 +182,8 @@ print(json.dumps(m.on_pre_llm_call(platform="telegram",user_message="yes",sessio
   for(const other of [{...owner,user:'7'},{...owner,chat:'-100'},{...owner,id:'other'}])assert.equal(turn(other)?.context?.includes('godspeed-step')??false,false);
   assert.equal(status(stranger),'waiting');
   const reply=turn(owner);assert.match(reply.context,/the program has recorded it/);assert.equal(status(stranger),'yes');
+  const refused=await open('The cache is stale.');
+  assert.match(turn(owner,'no').context,/the program has recorded it/);assert.equal(status(refused),'no');
   const command=path.join(home,'plugins','godspeed-context','step-command.txt'),kept=fs.readFileSync(command,'utf8');
   fs.writeFileSync(command,JSON.stringify([path.join(base,'no-such-node'),'x','y'])+'\n');
   const failed=turn(owner);assert.match(failed.context,/send it again/);assert.ok(!/no-such-node/.test(failed.context));

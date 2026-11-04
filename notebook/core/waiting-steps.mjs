@@ -133,6 +133,10 @@ function chooseContext(steps,chat){
   steps.map(s=>s.id+': '+s.about).join('; ')+'.';
 }
 
+// A bare yes answers the last thing asked: any other message delivered to the chat after the step's
+// question went out (a background report that does not carry this step) is the newer one.
+const spokeSince=(store,chat,step)=>store.list('conversation_messages').some(r=>r.delivered_to===chat&&r.delivered_at&&r.delivered_at>stepTime(step)&&!(r.report?.steps||[r.report?.step]).includes(step.id));
+
 // The program matches; nothing here asks a model. `scheduled` runs answer for nobody.
 // yieldTo: when a habit question was asked after a step, a plain yes belongs to that question.
 export function heard(store,{chat,words,at=new Date().toISOString(),scheduled=false,yieldTo=''}){
@@ -154,7 +158,7 @@ export function heard(store,{chat,words,at=new Date().toISOString(),scheduled=fa
  const here=waitingSteps(store,at).filter(s=>s.asked_in===chat),legacy=waitingSteps(store,at).filter(s=>!s.asked_in);
  const waiting=(here.length?here:legacy).filter(s=>!yieldTo||stepTime(s)>yieldTo);
  if(!waiting.length){remember(dir,chats,chat,at);return {kind:'none'};}
- const [only]=waiting,newerHere=store.list('approvals').some(r=>r.id!==only.id&&r.asked_in===chat&&r.status==='pending'&&delivered(r)&&stepTime(r)>stepTime(only));
+ const [only]=waiting,newerHere=store.list('approvals').some(r=>r.id!==only.id&&r.asked_in===chat&&r.status==='pending'&&delivered(r)&&stepTime(r)>stepTime(only))||spokeSince(store,chat,only);
  if(waiting.length===1&&only.asked_in===chat&&!newerHere&&!(mine.last_owner_at&&mine.last_owner_at>=stepTime(only))){
   const done=answerStep(store,only.id,answer,{chat,words});
   rememberAfterAnswer(dir,chats,chat,at);

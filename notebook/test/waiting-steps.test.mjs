@@ -35,6 +35,14 @@ test('one step waiting: a yes approves it and the reply says what happens; a no 
  assert.equal(store.get('approvals',other.id).status,'rejected');
 });
 
+test('a later ordinary Telegram message makes a bare yes a worded question, not an answer to the older step',async t=>{
+ const {store}=fixture(t),{id}=await ask(store,'The bot stopped.');
+ await new Promise(r=>setTimeout(r,5));
+ await recordReport(store,{text:'Your calendar changed.',steps:[],delivery:'telegram'});delivered(store,'Your calendar changed.');
+ const reply=heard(store,{chat:'telegram',words:'yes'});
+ assert.equal(reply.kind,'ask');assert.equal(store.get('approvals',id).status,'pending');
+});
+
 test('a step answered twice stays answered once',async t=>{
  const {store}=fixture(t),{id}=await ask(store,'The bot stopped.');
  const first=answerStep(store,id,'yes',{chat:'telegram',words:'yes'}),at=store.get('approvals',id).answered_at;
