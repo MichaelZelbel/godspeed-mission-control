@@ -66,7 +66,7 @@ export function journalWanted(root){
  return s.capture_enabled!==false&&!!(s.nudge?.enabled||s.evening?.enabled||s.weekly?.enabled);
 }
 // THE DAILY CONNECTION CHECK (4 November 2026, #200; core/connection-check.mjs). A script routine at
-// 05:00, before the morning briefing, made once on a machine that made its starting routines (one
+// 05:00 (earlier when an early Morning brief needs it first), before the morning briefing, made once on a machine that made its starting routines (one
 // that kept the reader's own routines never gets Godspeed's beside them). It starts on when this
 // install has Telegram or Gmail connected and paused when it has neither; the Routines list's
 // Pause and Resume is its switch.

@@ -167,7 +167,7 @@ test('two queued notices are said one in each run',{skip:!['python','python3'].s
  assert.deepEqual([run(),run(),run()],['First thing.','Second thing.','']);
 });
 
-// THE DAILY CONNECTION CHECK (#200, 4 November 2026): a script routine at 05:00, on when Telegram or
+// THE DAILY CONNECTION CHECK (#200, 4 November 2026): a script routine at 05:00 (earlier before an early Morning brief), on when Telegram or
 // Gmail is connected and paused when neither is; Settings > Routines lists it with its switch.
 const noMail=t=>{const was=process.env.GODSPEED_MAIL_HOME,dir=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-no-mail-'));process.env.GODSPEED_MAIL_HOME=dir;t.after(()=>{if(was===undefined)delete process.env.GODSPEED_MAIL_HOME;else process.env.GODSPEED_MAIL_HOME=was;fs.rmSync(dir,{recursive:true,force:true});});};
 test('the daily connection check is listed with its switch, paused until Telegram or Gmail is connected',async t=>{
@@ -212,7 +212,17 @@ test('a Morning brief set early brings the daily connection check ahead of it, a
  const failing=new NativeScheduler(store,{home,executable:'hermes',device:'pc',run:async(exe,args,options)=>{if(args[1]==='create'&&args.includes(CONNECTION_JOB))throw Error('Hermes could not create it');return hermes.run(exe,args,options);}});
  await failing.tick();failing.lastTick=0;assert.equal(job(CONNECTION_JOB),undefined,'a periodic tick swallows it');
  await assert.rejects(failing.tick({raise:true}),/could not create it/);
- failing.lastTick=0;
+ // The cooldown from the tick above is still running: the setup hears it too.
+ await assert.rejects(failing.tick({raise:true}),/could not create it/);
+});
+
+test('a Morning brief already at 04:30 when the daily connection check is first made puts the check ahead of it',async t=>{
+ noMail(t);
+ const {scheduler,job}=await withGoal(t);
+ await scheduler.setNotifications({daily:{enabled:true,time:'04:30'}});
+ assert.equal(job(CONNECTION_JOB),undefined,'not made yet');
+ scheduler.lastTick=0;await scheduler.tick();
+ assert.equal(job(CONNECTION_JOB).schedule.expr,'0 4 * * *');
 });
 
 test('Gmail alone, read through the real mail adapter, starts the daily connection check on',async t=>{

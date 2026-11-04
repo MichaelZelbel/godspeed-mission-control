@@ -221,7 +221,8 @@ export class NativeScheduler{
   return made.id;
  }
  // THE DAILY CONNECTION CHECK (4 November 2026, #200; notebook-routines.mjs, core/connection-check.mjs).
- // Made once, only on a machine that made its starting routines, at 05:00 on the install's clock. It
+ // Made once, only on a machine that made its starting routines, at 05:00 on the install's clock (earlier when
+ // a Morning brief set before 05:30 needs it first; connectionCheckTime). It
  // is made enabled when Telegram or Gmail is connected and paused when neither is; the notebook later
  // resumes it only if it paused it itself and one of them has since been connected. A routine the
  // person paused or resumed, or removed, is theirs from then on.
@@ -417,10 +418,12 @@ export class NativeScheduler{
   if(this.owner()===LEGACY_DEVICE&&this.claimLegacy)try{await this.claimLegacy();}catch{}
   if(!this.owns()){this.onProgress?.();return [];}
   const records=this.records?.tick().catch(()=>[])||Promise.resolve([]);
-  if(this.ticking)return records;
-  if(Date.now()-(this.lastTick||0)<60000){this.onProgress?.();return records;}
+  // A setup asking inside a running tick or the cooldown still hears whether the connection check could be made.
+  if(this.ticking){if(raise){await this.current?.catch(()=>null);await this.followConnectionCheck();}return records;}
+  if(Date.now()-(this.lastTick||0)<60000){this.onProgress?.();if(raise)await this.followConnectionCheck();return records;}
   this.ticking=true;this.lastTick=Date.now();
-  let failure=null;
+  let failure=null,finish;
+  this.current=new Promise(r=>{finish=r;});
   try{
    await this.startRoutines().catch(()=>null);
    await this.addNewStartingRoutines().catch(()=>null);
@@ -433,7 +436,7 @@ export class NativeScheduler{
    await beatWhile(this.command(['tick'],{timeout:this.tickLimit}),()=>this.onProgress?.(),{limitMs:this.tickLimit+60000,every:this.beatEvery});
    try{this.afterTick();}catch{}
   }
-  finally{this.ticking=false;}
+  finally{this.ticking=false;finish();}
   // The setup that asked for this tick hears that the connection check could not be made; the periodic tick keeps going.
   if(raise&&failure)throw failure;
   return records;
