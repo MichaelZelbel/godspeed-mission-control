@@ -213,7 +213,9 @@ def _verdict_of(stdout):
                 value = json.loads(line)
             except ValueError:
                 continue
-            if isinstance(value, dict) and value.get("ok") is True and value.get("verdict") in ("ask", "answer", "none"):
+            if (isinstance(value, dict) and value.get("ok") is True and value.get("verdict") in ("ask", "answer", "none")
+                    and value.get("source") in ("rule", "model", "words")
+                    and (value["verdict"] != "answer" or value.get("answer") in ("yes", "no"))):
                 return value
     return None
 
@@ -271,7 +273,9 @@ def _verdict(turn):
     """The verdict, waiting for it until at most the judge's seconds after the turn began; after
     that the word check alone (`judge --no-model`)."""
     turn["thread"].join(max(0.0, turn["began"] + _judge_seconds() - time.monotonic()))
-    return turn["result"] or _run_judge(turn, ["--no-model"], _timeout())
+    if turn["result"] is None:
+        turn["result"] = _run_judge(turn, ["--no-model"], _timeout())
+    return turn["result"]
 
 
 def _log(turn, verdict, did):
@@ -569,7 +573,7 @@ def on_charm_reply(**kwargs):
             return None
         elif not text.strip() or text.strip() in SILENT:
             out, did = None, "no reply to add to"
-            turn["result"] = _verdict(turn)
+            _verdict(turn)
         else:
             try:
                 out, did = _judged_reply(turn, session_id, text, kwargs, model_asked)

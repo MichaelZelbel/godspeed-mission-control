@@ -6,6 +6,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { charmState } from "../lib/count.mjs";
 import { judge } from "../lib/judge.mjs";
+import { SLIP, ONLY_AI } from "../lib/context.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const FIXTURE = path.join(HERE, "fixtures", "model-command.mjs");
@@ -75,6 +76,16 @@ test("a plain yes or no to this conversation's open question is an answer by rul
 test("charm slip is none by rule: the model resets, the program never does", { skip: WINDOWS }, () => {
   const { verdict, modelAsked } = ask("charm slip");
   assert.deepEqual([verdict.verdict, verdict.source, modelAsked], ["none", "rule", false]);
+});
+
+test("the model gets one JSON request: system with the shared slip wording, the person's words, the timeout and a token cap", { skip: WINDOWS }, () => {
+  ask(VENTS[0], { timeoutMs: 4321 });
+  const request = JSON.parse(fs.readFileSync(path.join(dir, "model.log"), "utf8"));
+  assert.deepEqual(Object.keys(request).sort(), ["max_tokens", "prompt", "system", "timeout_ms"]);
+  assert.equal(request.timeout_ms, 4321);
+  assert.ok(request.max_tokens > 0);
+  assert.ok(request.system.includes(SLIP) && request.system.includes(ONLY_AI));
+  assert.ok(request.prompt.includes(VENTS[0]));
 });
 
 test("the model's slip and unsure ask, not does not", { skip: WINDOWS }, () => {

@@ -44,9 +44,10 @@ const STUB = `
 import { spawnSync } from "node:child_process";
 const [command, ...rest] = process.argv.slice(2);
 const mode = process.env.FIXTURE_JUDGE;
-if (command === "judge" && mode && !(mode === "slow" && rest.includes("--no-model"))) {
+const FALLS_BACK = ["slow", "answer"];
+if (command === "judge" && mode && !(rest.includes("--no-model") && FALLS_BACK.includes(mode))) {
   if (mode === "slow") await new Promise((r) => setTimeout(r, 30000));
-  console.log(JSON.stringify({ ok: true, verdict: mode, source: "rule", why: "stub", language: "en" }));
+  console.log(JSON.stringify({ ok: true, verdict: mode, source: "rule", why: "stub", language: "en", answer: process.env.FIXTURE_JUDGE_ANSWER || undefined }));
 } else {
   const r = spawnSync(process.execPath, [process.env.REAL_BIN, command, ...rest], { stdio: "inherit" });
   process.exitCode = r.status;
@@ -166,7 +167,21 @@ test("a judgement that does not finish in time falls back to the word check", { 
   try {
     const out = drive(dir, [register, pre(VENT), reply("Here.")], { FIXTURE_JUDGE: "slow", GODSPEED_CHARM_JUDGE_SECONDS: "1" });
     assert.equal(out.results[2].text, `Here.\n\n${Q}`);
+    assert.equal(out.log.length, 1);
+    assert.deepEqual([out.log[0].verdict, out.log[0].source], ["ask", "words"]);
+    assert.ok(out.log[0].why);
   } finally { gone(dir); }
+});
+
+test("a judgement outside the protocol is refused: an answer without yes or no gives the word check", { skip }, () => {
+  for (const bad of ["", "maybe"]) {
+    const dir = mission();
+    try {
+      const out = drive(dir, [register, pre(VENT), reply("Here.")], { FIXTURE_JUDGE: "answer", FIXTURE_JUDGE_ANSWER: bad });
+      assert.equal(out.results[2].text, `Here.\n\n${Q}`);
+      assert.deepEqual([out.log[0].verdict, out.log[0].source], ["ask", "words"]);
+    } finally { gone(dir); }
+  }
 });
 
 test("a plain no the model did not record is recorded and its reply added; one it recorded adds nothing", { skip }, () => {
