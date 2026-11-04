@@ -25,6 +25,9 @@ Each routine runs the original programs of the mission control, never a copy of 
               same briefing went out already (#160, 3 November 2026: it was the starter recipe).
   due         mc-due check and mc-due today. Prints the reminders that need saying today, or
               nothing, and nothing at all on a day a morning brief carries them.
+  connection-check  the Daily connection check (notebook/scripts/connection-check.mjs): one harmless call
+              to each connection that is set up; prints only the notices it queued (a login or key
+              refused, or a second failed morning in a row).
   coach-gate  godspeed-coach gate: the talk brief when a talk is due, else {"wakeAgent": false}.
   coach-prep  mc-coach-prep, every night at 03:00: each coaching talk of the next day is prepared
               with the coach-prep recipe, within two hours. It prints nothing: a talk it could not
@@ -678,21 +681,36 @@ def release(path):
         pass
 
 
-def notice(c):
+def notice(c, only=""):
     """The oldest thing the notebook queued for the person (core/notices.mjs) that this machine has
     not said and no other run is saying, claimed, as (notice, said file, claim); or None. One a run:
-    a message is about one thing. Whoever gets it releases the claim (tick)."""
+    a message is about one thing. Whoever gets it releases the claim (tick).
+    only limits it to notices whose id starts with it, so a routine says what it queued and leaves
+    the rest to the notice routines; a notice with that prefix and no text raises ValueError, and
+    so does an unreadable queue.
+    Entries that are not objects with a string id are ignored."""
     queued = c.get("notices")
     if not queued:
         return None
+    waiting = []
     try:
         with open(queued, encoding="utf-8") as f:
-            waiting = [n for n in (json.load(f) or {}).get("notices", []) if isinstance(n, dict) and n.get("id") and n.get("text")]
-    except Exception:
+            text = f.read()
+        if text.strip():
+            waiting = [n for n in json.loads(text).get("notices", []) if isinstance(n, dict) and isinstance(n.get("id"), str) and n["id"].startswith(only)]
+    except FileNotFoundError:
         return None
+    except Exception:
+        # Whoever asks for its own notices must hear that the queue is unreadable; the general notice routine just has nothing to say.
+        if only:
+            raise
+        return None
+    if only and any(not isinstance(n.get("text"), str) or not n["text"].strip() for n in waiting):
+        raise ValueError("a queued notice has no text")
+    waiting = [n for n in waiting if isinstance(n.get("text"), str) and n["text"].strip()]
     said_file = os.path.join(c["home"], NOTICES_SAID)
     for n in waiting:
-        if n["id"] in said_ids(said_file):
+        if not n["id"].startswith(only) or n["id"] in said_ids(said_file):
             continue
         held = claim(said_file, n["id"])
         if not held:
@@ -767,6 +785,18 @@ def record(c, env, kind, text):
     reports(c, env, ["record", "--routine", kind], text, 120)
 
 
+def say_claimed(c, env, found):
+    """Says a claimed notice and marks it said, then releases the claim."""
+    n, said_file, held = found
+    try:
+        with one_at_a_time(said_file + ".lock"):  # the notebook has one writer at a time
+            words = say(c, env, n)
+            mark_said(n, said_file)
+    finally:
+        release(held)
+    return words
+
+
 def tick(c, env, kind, r):
     """What a 15-minute routine says: its own line when it has one, else the oldest fresh notice,
     else (a program that failed) its failure. Returns (text, already recorded)."""
@@ -775,14 +805,7 @@ def tick(c, env, kind, r):
         return own, False
     found = notice(c)
     if found:
-        n, said_file, held = found
-        try:
-            with one_at_a_time(said_file + ".lock"):  # the notebook has one writer at a time
-                words = say(c, env, n)
-                mark_said(n, said_file)
-        finally:
-            release(held)
-        return words, True
+        return say_claimed(c, env, found), True
     return "", True
 
 
@@ -1083,11 +1106,55 @@ def coach(c, command):
 NOT_RECORDED = ("research", "coach-gate", "coach-prep", "chat-tidy")
 
 
+def connection_check(c):
+    """The Daily connection check (core/connection-check.mjs): it makes its calls and queues what the
+    person must be told as notices. They are said in this same run only when the check succeeded; after a failure they wait
+    for the next successful run."""
+    day = today(c)
+    env = environment(c, day)
+    args = [c["node"], c["connection_check"]]
+    if c.get("hermes"):
+        args += ["--hermes", c["hermes"]]
+    if c.get("hermes_source"):
+        args += ["--hermes-source", c["hermes_source"]]
+    try:
+        r = run(args, c, env, timeout=900)
+    except subprocess.TimeoutExpired:
+        r = None
+    if r is None or r.returncode != 0:
+        # A failed run's result is not shown to the person, so what was queued stays unsaid for the next run that succeeds.
+        fail("The daily connection check could not run.", r)
+    # Claim everything queued now before saying any: saying may split a report into new notices, and
+    # those wait for the notice routine rather than extending this run.
+    waiting = []
+    try:
+        found = notice(c, only=c["connection_notice_prefix"])
+        while found:
+            waiting.append(found)
+            found = notice(c, only=c["connection_notice_prefix"])
+    except Exception:
+        for _, _, held in waiting:
+            release(held)
+        fail("The daily connection check could not run.")
+    said = []
+    try:
+        while waiting:
+            said.append(say_claimed(c, env, waiting.pop(0)))
+    finally:
+        for _, _, held in waiting:
+            release(held)
+    return "\n\n".join(said), True
+
+
+# Every routine wrapper the notebook writes (routineFiles in starting-routines.mjs) names one of these.
+ROUTINES = {"research": research, "decide": decide, "work": work, "due": due, "brief": brief, "coach-prep": coach_prep,
+            "coach-gate": lambda c: coach(c, "gate"), "coach-tick": lambda c: coach(c, "tick"),
+            "journal-tick": journal_tick, "chat-tidy": chat_tidy, "connection-check": connection_check}
+
+
 def main(kind):
     c = config()
-    out = {"research": research, "decide": decide, "work": work, "due": due, "brief": brief, "coach-prep": coach_prep,
-           "coach-gate": lambda c: coach(c, "gate"), "coach-tick": lambda c: coach(c, "tick"),
-           "journal-tick": journal_tick, "chat-tidy": chat_tidy}[kind](c)
+    out = ROUTINES[kind](c)
     out, recorded = out if isinstance(out, tuple) else (out, kind in NOT_RECORDED)
     if out:
         if not recorded:

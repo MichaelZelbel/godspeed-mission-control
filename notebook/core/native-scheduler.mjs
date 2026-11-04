@@ -11,7 +11,8 @@ import {starterBorn} from './starter-workspace.mjs';
 import {setHermesTimezone} from './hermes-config.mjs';
 import {FLAG,STARTING_ROUTINES,routineFiles,writeRoutineFiles,prepareCheckIn,saveRoutineResults,readMachineRecord,writeMachineRecord,telegramInHermes,routineStatus,ownRoutines,metAt,noteHermesMet,cityFiledFirst,OWN_ROUTINES_RULE} from './starting-routines.mjs';
 import {cronOf,cronCalendar,calendarCron,retimeWhat,isTalkGate,isCoachTick,talkArea,moveTalk} from './routine-times.mjs';
-import {readNotebookRoutines,rememberNotebookRoutine,enableKind,deliveryFor,journalWanted,journalOnTheClock,JOURNAL_JOB,JOURNAL_SCRIPT,JOURNAL_WHAT,CHAT_TIDY_JOB,CHAT_TIDY_SCRIPT,writeNotebookRoutines,BRIEF_JOB,BRIEF_SCRIPT,isBriefJob} from './notebook-routines.mjs';
+import {readNotebookRoutines,rememberNotebookRoutine,enableKind,deliveryFor,journalWanted,journalOnTheClock,JOURNAL_JOB,JOURNAL_SCRIPT,JOURNAL_WHAT,CHAT_TIDY_JOB,CHAT_TIDY_SCRIPT,writeNotebookRoutines,BRIEF_JOB,BRIEF_SCRIPT,isBriefJob,CONNECTION_JOB,CONNECTION_SCRIPT,CONNECTION_WHAT} from './notebook-routines.mjs';
+import {connectionCheckWanted} from './connection-check.mjs';
 import {loadSettings as coachSettings,saveSettings as saveCoach} from '../../third-party/addons/godspeed-coach/lib/settings.mjs';
 import {rhythmWords} from '../../third-party/addons/godspeed-coach/lib/areas.mjs';
 import {moveSettingsDeadlines} from './native-due.mjs';
@@ -30,6 +31,13 @@ export function nativeJobs(home,device='local'){
 }
 const RETRY_STARTING=3600000;
 // "05:16": once a day at that time in the owner's timezone.
+// The daily connection check runs at 05:00; a morning brief set before 05:30 pulls it half an hour ahead of it
+// (a brief at 00:10 is preceded by the check at 23:40 the evening before).
+export function connectionCheckTime(briefAt){
+ const brief=dailyTime(briefAt);if(!brief)return '05:00';
+ const at=brief.hour*60+brief.minute,minutes=at<330?(at-30+1440)%1440:300;
+ return dailyTime(Math.floor(minutes/60)+':'+String(minutes%60).padStart(2,'0')).time;
+}
 export function dailyTime(at){const m=/^([01]?\d|2[0-3]):([0-5]\d)$/.exec(String(at||'').trim());return m?{hour:Number(m[1]),minute:Number(m[2]),time:m[1].padStart(2,'0')+':'+m[2]}:null;}
 // `hermes cron tick` runs every due job to the end before it returns (and has
 // already moved each job's next run on, so a killed run is lost for the day).
@@ -212,6 +220,42 @@ export class NativeScheduler{
   rememberNotebookRoutine(this.store,{id:made.id,key:'journal-tick',name:JOURNAL_JOB,what:JOURNAL_WHAT});
   return made.id;
  }
+ // THE DAILY CONNECTION CHECK (4 November 2026, #200; notebook-routines.mjs, core/connection-check.mjs).
+ // Made once, only on a machine that made its starting routines, at 05:00 on the install's clock (earlier when
+ // a Morning brief set before 05:30 needs it first; connectionCheckTime). It
+ // is made enabled when Telegram or Gmail is connected and paused when neither is; the notebook later
+ // resumes it only if it paused it itself and one of them has since been connected. A routine the
+ // person paused or resumed, or removed, is theirs from then on.
+ async followConnectionCheck(){
+  const root=this.store.root;if(!starterBorn(root)||readMachineRecord(this.store)?.state!=='created')return null;
+  const entry=readNotebookRoutines(this.store).jobs.find(j=>j.key==='connection-check'),jobs=hermesJobs(this.home);
+  const job=(entry&&jobs.find(j=>j.id===entry.id))||jobs.find(j=>j.name===CONNECTION_JOB&&j.script===CONNECTION_SCRIPT);
+  if(entry&&!job)return null;
+  const installation=this.store.get('settings','installation'),timezone=installation?.timezone||Intl.DateTimeFormat().resolvedOptions().timeZone,wanted=connectionCheckWanted(this.home);
+  writeRoutineFiles(this.home,routineFiles({root,home:this.home,state:this.store.state,timezone,hermes:this.executable}));
+  if(job){
+   if(!entry)return job.id;
+   if(!entry.paused_by_notebook){
+    // Still running as the notebook left it: it goes off with the last connection. A person's pause ends that ownership.
+    if(job.enabled===false&&entry.running_by_notebook)rememberNotebookRoutine(this.store,{...entry,running_by_notebook:false});
+    else if(job.enabled!==false&&entry.running_by_notebook&&!wanted){await this.command(['pause',job.id]);rememberNotebookRoutine(this.store,{...entry,paused_by_notebook:true,running_by_notebook:false});}
+    return job.id;
+   }
+   if(job.enabled===false&&!wanted)return job.id;
+   const resumed=job.enabled===false;
+   if(resumed)await this.command(['resume',job.id]);
+   rememberNotebookRoutine(this.store,{...entry,paused_by_notebook:false,running_by_notebook:resumed});
+   return job.id;
+  }
+  const before=new Set(jobs.map(j=>j.id));
+  const brief=this.notificationJob('morning-brief'),briefAt=brief&&brief.enabled!==false?cronCalendar(cronOf(brief))?.times?.[0]:null,check=dailyTime(connectionCheckTime(briefAt));
+  await this.command(['create',check.minute+' '+check.hour+' * * *','--no-agent','--name',CONNECTION_JOB,'--script',CONNECTION_SCRIPT,'--deliver',deliveryFor(installation,{telegram:telegramInHermes(this.home)}),'--failure-deliver','local','--workdir',root]);
+  const made=hermesJobs(this.home).find(j=>!before.has(j.id)&&j.name===CONNECTION_JOB);
+  if(!made)throw Error('Hermes did not keep the routine "'+CONNECTION_JOB+'"');
+  if(!wanted)try{await this.command(['pause',made.id]);}catch(error){await this.command(['remove',made.id]).catch(()=>{});throw error;}
+  rememberNotebookRoutine(this.store,{id:made.id,key:'connection-check',name:CONNECTION_JOB,what:CONNECTION_WHAT,paused_by_notebook:!wanted,running_by_notebook:wanted});
+  return made.id;
+ }
  // THE MORNING BRIEF AS THE NOTEBOOK'S OWN BRIEFING (3 November 2026, #160; notebook-routines.mjs
  // says why). A script routine like the deadline reminders, whose script runs core/briefing.mjs
  // (scripts/morning-brief.mjs) and prints the briefing for Hermes to deliver where this machine's
@@ -297,6 +341,14 @@ export class NativeScheduler{
   const read=(skill,fallback)=>{const job=this.notificationJob(skill),calendar=job?cronCalendar(cronOf(job)):null;return {enabled:!!job&&job.enabled!==false,time:calendar?.times?.[0]||fallback.time,...(fallback.day!==undefined?{day:calendar&&calendar.weekdays.length===1?calendar.weekdays[0]:fallback.day}:{})};};
   return {daily:read('morning-brief',{time:'07:00'}),weekly:read('weekly-review',{time:'17:00',day:5}),delivery:deliveryFor(this.store.get('settings','installation'),{telegram:telegramInHermes(this.home)})};
  }
+ // The check the notebook made moves ahead of a morning brief set before it; one the person removed stays removed.
+ async keepCheckBeforeBrief(briefAt){
+  const entry=readNotebookRoutines(this.store).jobs.find(j=>j.key==='connection-check'),job=entry&&hermesJobs(this.home).find(j=>j.id===entry.id);
+  if(!job)return;
+  const want=connectionCheckTime(briefAt),now=cronCalendar(cronOf(job))?.times?.[0],minutes=t=>{const d=dailyTime(t);return d.hour*60+d.minute;};
+  // Only the default time or a time at or after the brief moves; a time the person chose before it stays.
+  if(now&&now!==want&&(now==='05:00'||minutes(now)>=minutes(briefAt)))await this.retime(job,{times:[want],weekdays:[0,1,2,3,4,5,6]});
+ }
  async setNotifications(input={}){
   this.requireOwner('Change what is sent');
   // A brief still made as the recipe becomes the notebook's own briefing first, so this changes that one.
@@ -311,9 +363,10 @@ export class NativeScheduler{
    if(job){
     const before=cronCalendar(cronOf(job));if(!before||calendarCron(before)!==calendarCron(calendar))await this.retime(job,calendar);
     if(job.enabled===false)await this.command(['resume',job.id]);
+    if(key==='daily')await this.keepCheckBeforeBrief(calendar.times[0]);
     continue;
    }
-   if(kind==='morning-brief'){await this.makeBrief(calendarCron(calendar));continue;}
+   if(kind==='morning-brief'){await this.makeBrief(calendarCron(calendar));await this.keepCheckBeforeBrief(calendar.times[0]);continue;}
    const known=enableKind(kind),delivery=deliveryFor(this.store.get('settings','installation'),{telegram:telegramInHermes(this.home)}),before=new Set(hermesJobs(this.home).map(j=>j.id));
    await this.command(['create',calendarCron(calendar),'Follow the '+skill+' recipe for this mission control.','--name',known.label,'--skill',skill,'--workdir',this.store.root,'--deliver',delivery]);
    const made=hermesJobs(this.home).find(j=>!before.has(j.id));
@@ -360,18 +413,22 @@ export class NativeScheduler{
  // machine with the assistant ticked them, so a routine could run twice.
  owner(){return this.store.get('settings','installation')?.owner||null;}
  owns(){const owner=this.owner();return !owner||owner===this.device;}
- async tick(){
+ async tick({raise=false}={}){
   // A notebook still owned by the old shared name is taken over (device-id.mjs).
   if(this.owner()===LEGACY_DEVICE&&this.claimLegacy)try{await this.claimLegacy();}catch{}
   if(!this.owns()){this.onProgress?.();return [];}
   const records=this.records?.tick().catch(()=>[])||Promise.resolve([]);
-  if(this.ticking)return records;
-  if(Date.now()-(this.lastTick||0)<60000){this.onProgress?.();return records;}
+  // A setup asking inside a running tick or the cooldown still hears whether the connection check could be made.
+  if(this.ticking){if(raise){await this.current?.catch(()=>null);await this.followConnectionCheck();}return records;}
+  if(Date.now()-(this.lastTick||0)<60000){this.onProgress?.();if(raise)await this.followConnectionCheck();return records;}
   this.ticking=true;this.lastTick=Date.now();
+  let failure=null,finish;
+  this.current=new Promise(r=>{finish=r;});
   try{
    await this.startRoutines().catch(()=>null);
    await this.addNewStartingRoutines().catch(()=>null);
    await this.followJournal().catch(()=>null);
+   await this.followConnectionCheck().catch(e=>{failure=e;});
    await this.removeChatTidy().catch(()=>null);
    await this.followBrief().catch(()=>null);
    await this.followDelivery().catch(()=>null);
@@ -379,7 +436,9 @@ export class NativeScheduler{
    await beatWhile(this.command(['tick'],{timeout:this.tickLimit}),()=>this.onProgress?.(),{limitMs:this.tickLimit+60000,every:this.beatEvery});
    try{this.afterTick();}catch{}
   }
-  finally{this.ticking=false;}
+  finally{this.ticking=false;finish();}
+  // The setup that asked for this tick hears that the connection check could not be made; the periodic tick keeps going.
+  if(raise&&failure)throw failure;
   return records;
  }
  // A routine lives in the Hermes of the machine that runs routines; added or

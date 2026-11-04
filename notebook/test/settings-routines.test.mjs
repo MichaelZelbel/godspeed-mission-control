@@ -1,8 +1,8 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import {fileURLToPath} from 'node:url';import {execFileSync,spawnSync,spawn} from 'node:child_process';
 import {NativeScheduler,nativeJobs} from '../core/native-scheduler.mjs';import {Store} from '../core/records/store.mjs';import {QueryService} from '../core/query.mjs';import {Domains} from '../core/domains.mjs';
 import {installStarter} from '../core/starter-workspace.mjs';import {readMachineRecord,telegramInHermes,chatAppInHermes} from '../core/starting-routines.mjs';import {runCommand} from '../core/child-process.mjs';
-import {DatabaseSync} from 'node:sqlite';
-import {cronCalendar,calendarCron,retimeWhat} from '../core/routine-times.mjs';import {enableKinds,readNotebookRoutines,rememberNotebookRoutine,JOURNAL_JOB,CHAT_TIDY_JOB,CHAT_TIDY_SCRIPT,BRIEF_SCRIPT,deliveryFor} from '../core/notebook-routines.mjs';
+import {DatabaseSync} from 'node:sqlite';import {CONNECTION_NOTICE_PREFIX} from '../core/connection-names.mjs';
+import {cronCalendar,calendarCron,retimeWhat} from '../core/routine-times.mjs';import {enableKinds,readNotebookRoutines,rememberNotebookRoutine,writeNotebookRoutines,JOURNAL_JOB,CHAT_TIDY_JOB,CHAT_TIDY_SCRIPT,BRIEF_SCRIPT,deliveryFor,CONNECTION_JOB} from '../core/notebook-routines.mjs';
 import {personalOperation} from '../core/personal-operations.mjs';import {readArea} from '../../third-party/addons/godspeed-coach/lib/areas.mjs';
 
 // THE SETTINGS CONTROLS FOR HERMES' ROUTINES, 18 October 2026. Routine times was refused for every
@@ -165,6 +165,118 @@ test('two queued notices are said one in each run',{skip:!['python','python3'].s
  const python=['python3','python'].find(p=>{try{execFileSync(p,['--version'],{stdio:'ignore'});return true;}catch{return false;}});
  const run=()=>execFileSync(python,[path.join(home,'scripts','godspeed-journal-checkins.py')],{cwd:path.join(home,'scripts'),encoding:'utf8',env:{...process.env,PYTHONIOENCODING:'utf-8'},windowsHide:true}).trim();
  assert.deepEqual([run(),run(),run()],['First thing.','Second thing.','']);
+});
+
+// THE DAILY CONNECTION CHECK (#200, 4 November 2026): a script routine at 05:00 (earlier before an early Morning brief), on when Telegram or
+// Gmail is connected and paused when neither is; Settings > Routines lists it with its switch.
+const noMail=t=>{const was=process.env.GODSPEED_MAIL_HOME,dir=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-no-mail-'));process.env.GODSPEED_MAIL_HOME=dir;t.after(()=>{if(was===undefined)delete process.env.GODSPEED_MAIL_HOME;else process.env.GODSPEED_MAIL_HOME=was;fs.rmSync(dir,{recursive:true,force:true});});};
+test('the daily connection check is listed with its switch, paused until Telegram or Gmail is connected',async t=>{
+ noMail(t);
+ const {root,home,store,hermes,scheduler,job}=await withGoal(t);
+ scheduler.lastTick=0;await scheduler.tick();
+ const made=job(CONNECTION_JOB);assert.ok(made,'made beside the starting routines');
+ assert.equal(made.schedule.expr,'0 5 * * *');assert.equal(made.script,'godspeed-connection-check.py');assert.equal(made.no_agent,true);assert.equal(made.workdir,root);assert.equal(made.enabled,false,'neither is connected: made paused');
+ assert.match(fs.readFileSync(path.join(home,'scripts','godspeed-connection-check.py'),'utf8'),/main\("connection-check"\)/);
+ assert.ok(JSON.parse(fs.readFileSync(path.join(home,'scripts','godspeed-routines.json'),'utf8')).connection_check.endsWith('connection-check.mjs'));
+ const q=new QueryService(store);q.nativeHermesHome=home;
+ const row=q.rows('jobs').find(j=>j.title===CONNECTION_JOB);assert.match(row.what,/one harmless call to each connection/);assert.equal(row.paused,true);
+ // Telegram connected later: the notebook, which paused it, resumes it.
+ fs.writeFileSync(path.join(home,'.env'),'TELEGRAM_BOT_TOKEN=123:abc\n');
+ scheduler.lastTick=0;await scheduler.tick();assert.equal(job(CONNECTION_JOB).enabled,true);
+ // The last connection removed while it still runs as the notebook left it: the notebook pauses it, and resumes it when one returns.
+ fs.writeFileSync(path.join(home,'.env'),'');
+ scheduler.lastTick=0;await scheduler.tick();assert.equal(job(CONNECTION_JOB).enabled,false);
+ fs.writeFileSync(path.join(home,'.env'),'TELEGRAM_BOT_TOKEN=123:abc\n');
+ scheduler.lastTick=0;await scheduler.tick();assert.equal(job(CONNECTION_JOB).enabled,true);
+ // The person pauses it: it stays paused, with Telegram connected.
+ const domains=new Domains(q);domains.nativeScheduler=scheduler;
+ await personalOperation(domains,{type:'routine-change',id:made.id,paused:true});assert.equal(job(CONNECTION_JOB).enabled,false);
+ scheduler.lastTick=0;await scheduler.tick();assert.equal(job(CONNECTION_JOB).enabled,false);
+ scheduler.lastTick=0;await scheduler.tick();assert.equal(job(CONNECTION_JOB).enabled,false);
+ // Removed: stays removed.
+ hermes.write(hermes.jobs().filter(j=>j.name!==CONNECTION_JOB));scheduler.lastTick=0;await scheduler.tick();assert.equal(job(CONNECTION_JOB),undefined);
+});
+
+test('a Morning brief set early brings the daily connection check ahead of it, and a failed creation reaches the setup tick',async t=>{
+ noMail(t);
+ const {store,home,hermes,scheduler,job}=await withGoal(t);
+ scheduler.lastTick=0;await scheduler.tick();assert.equal(job(CONNECTION_JOB).schedule.expr,'0 5 * * *');
+ await scheduler.setNotifications({daily:{enabled:true,time:'04:30'}});
+ assert.equal(job(CONNECTION_JOB).schedule.expr,'0 4 * * *','before a 04:30 brief');
+ await scheduler.setNotifications({daily:{enabled:true,time:'00:10'}});
+ assert.equal(job(CONNECTION_JOB).schedule.expr,'40 23 * * *','before a 00:10 brief');
+ await scheduler.setNotifications({daily:{enabled:true,time:'07:00'}});
+ assert.equal(job(CONNECTION_JOB).schedule.expr,'0 5 * * *','a later brief gives the check its usual time back');
+ await scheduler.setNotifications({daily:{enabled:true,time:'09:00'}});
+ hermes.write(hermes.jobs().filter(j=>j.name!==CONNECTION_JOB));writeNotebookRoutines(store,{...readNotebookRoutines(store),jobs:readNotebookRoutines(store).jobs.filter(j=>j.key!=='connection-check')});
+ const failing=new NativeScheduler(store,{home,executable:'hermes',device:'pc',run:async(exe,args,options)=>{if(args[1]==='create'&&args.includes(CONNECTION_JOB))throw Error('Hermes could not create it');return hermes.run(exe,args,options);}});
+ await failing.tick();failing.lastTick=0;assert.equal(job(CONNECTION_JOB),undefined,'a periodic tick swallows it');
+ await assert.rejects(failing.tick({raise:true}),/could not create it/);
+ // The cooldown from the tick above is still running: the setup hears it too.
+ await assert.rejects(failing.tick({raise:true}),/could not create it/);
+});
+
+test('a setup that overlaps the running periodic tick still hears its failed connection-check creation',async t=>{
+ noMail(t);
+ const {store,home,hermes,job}=await withGoal(t);
+ let entered,release;const inside=new Promise(r=>{entered=r;}),gate=new Promise(r=>{release=r;});
+ const failing=new NativeScheduler(store,{home,executable:'hermes',device:'pc',run:async(exe,args,options)=>{if(args[1]==='create'&&args.includes(CONNECTION_JOB)){entered();await gate;throw Error('Hermes could not create it');}return hermes.run(exe,args,options);}});
+ const periodic=failing.tick();
+ await inside;
+ const setup=assert.rejects(failing.tick({raise:true}),/could not create it/);
+ release();
+ await Promise.all([periodic,setup]);
+ assert.equal(job(CONNECTION_JOB),undefined);
+});
+
+test('a Morning brief already at 04:30 when the daily connection check is first made puts the check ahead of it',async t=>{
+ noMail(t);
+ const {scheduler,job}=await withGoal(t);
+ await scheduler.setNotifications({daily:{enabled:true,time:'04:30'}});
+ assert.equal(job(CONNECTION_JOB),undefined,'not made yet');
+ scheduler.lastTick=0;await scheduler.tick();
+ assert.equal(job(CONNECTION_JOB).schedule.expr,'0 4 * * *');
+});
+
+test('Gmail alone, read through the real mail adapter, starts the daily connection check on',async t=>{
+ const mail=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-gmail-only-')),was=process.env.GODSPEED_MAIL_HOME;
+ fs.mkdirSync(path.join(mail,'.godspeed','mail','imap'),{recursive:true});
+ fs.writeFileSync(path.join(mail,'.godspeed','mail','imap','state.json'),JSON.stringify({address:'someone@example.invalid',state:'ready'}));
+ process.env.GODSPEED_MAIL_HOME=mail;
+ t.after(()=>{if(was===undefined)delete process.env.GODSPEED_MAIL_HOME;else process.env.GODSPEED_MAIL_HOME=was;fs.rmSync(mail,{recursive:true,force:true});});
+ const {home,scheduler,job}=await withGoal(t);
+ assert.equal(telegramInHermes(home),false);
+ scheduler.lastTick=0;await scheduler.tick();assert.equal(job(CONNECTION_JOB).enabled,true);
+});
+
+test('a person who resumes the daily connection check keeps it on, and one with Telegram from the start gets it on',async t=>{
+ noMail(t);
+ const {home,store,scheduler,job}=await withGoal(t);
+ scheduler.lastTick=0;await scheduler.tick();assert.equal(job(CONNECTION_JOB).enabled,false);
+ const q=new QueryService(store);q.nativeHermesHome=home;const domains=new Domains(q);domains.nativeScheduler=scheduler;
+ await personalOperation(domains,{type:'routine-change',id:job(CONNECTION_JOB).id,paused:false});assert.equal(job(CONNECTION_JOB).enabled,true);
+ scheduler.lastTick=0;await scheduler.tick();assert.equal(job(CONNECTION_JOB).enabled,true);
+ assert.equal(readNotebookRoutines(store).jobs.find(j=>j.key==='connection-check').paused_by_notebook,false,'the notebook no longer thinks it is theirs to resume');
+ // A fresh machine whose Hermes already has a Telegram bot.
+ const other=temporary(t),otherHome=path.join(other,'.hermes-home');installStarter(other);fs.mkdirSync(otherHome,{recursive:true});fs.writeFileSync(path.join(otherHome,'config.yaml'),'model:\n  default: x\n');fs.writeFileSync(path.join(otherHome,'.env'),'TELEGRAM_BOT_TOKEN=123:abc\n');
+ const otherStore=new Store(other,{device:'pc'}),otherHermes=fakeHermes(otherHome),otherScheduler=new NativeScheduler(otherStore,{home:otherHome,executable:'hermes',device:'pc',run:otherHermes.run});
+ await otherScheduler.configure({goal:'Run a fictional 10k',timezone:'Europe/Berlin'});otherScheduler.lastTick=0;await otherScheduler.tick();
+ const made=otherHermes.jobs().find(j=>j.name===CONNECTION_JOB);assert.ok(made);assert.notEqual(made.enabled,false,'Telegram connected: on from the start');assert.equal(made.deliver,'telegram');
+ fs.writeFileSync(path.join(otherHome,'.env'),'');otherScheduler.lastTick=0;await otherScheduler.tick();
+ assert.equal(otherHermes.jobs().find(j=>j.name===CONNECTION_JOB).enabled,false,'made running by the notebook, it goes off with the last connection');
+});
+
+test('the daily connection check\'s script says what the check queued, once',{skip:!['python','python3'].some(p=>{try{execFileSync(p,['--version'],{stdio:'ignore'});return true;}catch{return false;}})&&'needs Python'},async t=>{
+ noMail(t);
+ const {root,home,store,scheduler}=await withGoal(t);
+ scheduler.lastTick=0;await scheduler.tick();
+ const stand=path.join(root,'stand-in-check.mjs');
+ fs.writeFileSync(stand,"import {Store} from '"+new URL('../core/records/store.mjs',import.meta.url).href+"';import {queueNotice} from '"+new URL('../core/notices.mjs',import.meta.url).href+"';queueNotice(new Store(process.env.GODSPEED_WORKSPACE,{device:'pc'}),{id:'"+CONNECTION_NOTICE_PREFIX+"telegram-2026-11-04',text:'Telegram refused your bot key.'});");
+ const file=path.join(home,'scripts','godspeed-routines.json');fs.writeFileSync(file,JSON.stringify({...JSON.parse(fs.readFileSync(file,'utf8')),connection_check:stand}));
+ const python=['python3','python'].find(p=>{try{execFileSync(p,['--version'],{stdio:'ignore'});return true;}catch{return false;}});
+ const run=()=>execFileSync(python,[path.join(home,'scripts','godspeed-connection-check.py')],{cwd:path.join(home,'scripts'),encoding:'utf8',env:{...process.env,PYTHONIOENCODING:'utf-8'},windowsHide:true});
+ assert.equal(run().trim(),'Telegram refused your bot key.');
+ assert.equal(run().trim(),'','said once');
 });
 
 // THE NIGHT CHAT TIDY-UP IS MADE FOR NO INSTALL (27 October 2026, notebook-routines.mjs says why).

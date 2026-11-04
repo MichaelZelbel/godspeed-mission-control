@@ -88,7 +88,7 @@ mc-due today               at most three, which is what your morning brief reads
 mc-due add <name> ...      make one: --target, --to (the deadline), or both
 mc-due target <name> D     a new day you would like it done, or asap
 mc-due done <name>         you did it
-mc-due check               close whatever can prove itself done
+mc-due check [<name>]      close whatever can prove itself done (only <name>, when given)
 ```
 
 Two things about it are worth knowing before you use it. It **refuses anything
