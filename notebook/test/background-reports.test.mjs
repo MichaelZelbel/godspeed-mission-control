@@ -1,6 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import {fileURLToPath} from 'node:url';import {execFileSync} from 'node:child_process';
 import {Store} from '../core/records/store.mjs';import {QueryService} from '../core/query.mjs';import {chatContext} from '../core/chat-context.mjs';
-import {queueNotice,readNotices} from '../core/notices.mjs';import {openStep,heard} from '../core/waiting-steps.mjs';import {sayNotice,recordRoutine,REPORT_CONTRACT} from '../core/background-reports.mjs';
+import {queueNotice,readNotices} from '../core/notices.mjs';import {openStep,heard} from '../core/waiting-steps.mjs';import {sayNotice,recordRoutine,delivered,REPORT_CONTRACT} from '../core/background-reports.mjs';
 
 // BACKGROUND REPORTS (4 November 2026, #198): a notice is written with the chat's guidance, recorded
 // where the chat reads it, and the chat's next reply is told about it.
@@ -145,6 +145,25 @@ test('a question Hermes really delivers through the wrapper is answered by a bar
  assert.ok(fresh.get('approvals',one.id).sent_at&&fresh.get('approvals',two.id).sent_at);
  assert.equal(fresh.get('approvals',third.id).sent_at,undefined,'an unseen step with equal words is not certified by another record');
  assert.equal(heard(fresh,{chat:'telegram',words:'yes'}).kind,'ask');
+});
+
+const staleDelivery=(store,words,report)=>{const id='background-report-20200101T000000Z-stale000';
+ store.commit([store.prepare('conversation_messages',{id,role:'assistant',content:words,source_app:'background',conversation_id:'telegram-owner',delivered_to:'telegram',sent_at:'2020-01-01T00:00:00.000Z',report})]);return id;};
+
+test('an older undelivered record with the same words is not the receipt of a newer delivery',t=>{
+ if(!python)return t.skip('needs Python');
+ const {store,run}=wiredProvider(t),old=openAsk(store,'The disk is full.'),fresh=openAsk(store,'The bot stopped.');
+ staleDelivery(store,fresh.message,{steps:[old.id],routine:'older'});
+ assert.deepEqual(run([[TELEGRAM_JOB,fresh.message,false]]).errors,[null]);
+ const after=new Store(store.root,{device:'pc'});
+ assert.ok(after.get('approvals',fresh.id).sent_at);assert.equal(after.get('approvals',old.id).sent_at,undefined);
+});
+
+test('a delivery record persisted with the single step it once named still makes that step answerable',t=>{
+ const {store}=setup(t),step=openAsk(store,'The bot stopped.');
+ staleDelivery(store,step.message,{step:step.id,routine:'before the upgrade'});
+ assert.equal(delivered(store,step.message).length,1);
+ assert.ok(new Store(store.root,{device:'pc'}).get('approvals',step.id).sent_at);
 });
 
 test('a delivery whose receipt cannot be used says so, and still reports that the words went out',t=>{

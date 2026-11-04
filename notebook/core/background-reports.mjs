@@ -77,7 +77,8 @@ export function delivered(store,words,receipts=[]){
  const found=receipts.length?receipts.map(id=>store.get('conversation_messages',id)).filter(r=>r&&open(r))
   :store.list('conversation_messages').filter(r=>open(r)&&r.content===words).sort((a,b)=>a.sent_at.localeCompare(b.sent_at)).slice(0,1);
  for(const record of found){
-  for(const id of record.report?.steps||[])stampDelivered(store,id,'telegram');
+  // `step` is the scalar a record persisted before the set `steps` existed.
+  for(const id of record.report?.steps||[record.report?.step].filter(Boolean))stampDelivered(store,id,'telegram');
   store.commit([store.prepare('conversation_messages',{delivered_at:new Date().toISOString()},record)]);
  }
  return found.map(r=>r.id);
