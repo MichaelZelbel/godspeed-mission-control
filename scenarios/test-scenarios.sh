@@ -2754,6 +2754,10 @@ printf '[{"slug":"telegram-key","title":"Connect Telegram again","state":"open"}
 copy "$C/good" "$C/deleted"
 printf '[]\n' >"$C/deleted/due-repaired.json"
 refuses 'a deadline deleted instead of closed' connection-check "$C/deleted" 'absent, not closed'
+copy "$C/good" "$C/decoy-closed"
+printf '[{"slug":"the-open-deadline","title":"Connect Telegram again","state":"open"},{"slug":"the-decoy","title":"Telegram old","state":"closed"}]\n' >"$C/decoy-closed/due-broken.json"
+printf '[{"slug":"the-open-deadline","title":"Connect Telegram again","state":"open"},{"slug":"the-decoy","title":"Telegram old","state":"closed"}]\n' >"$C/decoy-closed/due-repaired.json"
+refuses 'another closed Telegram deadline standing in for the open one' connection-check "$C/decoy-closed" 'not closed, after'
 refuses 'a deadline still open after the key is valid again' connection-check "$C/still-open" 'not closed, after'
 
 # ============================================================ every one of them, the same shape

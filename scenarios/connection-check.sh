@@ -113,7 +113,7 @@ check() { # <evidence folder>
   [ "$count" = 1 ] || fail "a refused Telegram key opened $count deadlines about Telegram, not one"
 
   # repaired: the deadline is closed.
-  deadline=$("$NODE" "$HERE/telegram-judge.mjs" deadlines "$folder/due-broken.json" "$folder/due-before.json" | awk -F'\t' 'tolower($2) ~ /telegram/ {print $2 "\t" $3}')
+  deadline=$("$NODE" "$HERE/telegram-judge.mjs" deadlines "$folder/due-broken.json" "$folder/due-before.json" | awk -F'\t' '$1=="open" && tolower($2) ~ /telegram/ {print $2 "\t" $3}')
   title=${deadline%%$'\t'*}
   slug=${deadline##*$'\t'}
   state=$("$NODE" "$HERE/telegram-judge.mjs" state "$folder/due-repaired.json" "$slug")
