@@ -37,6 +37,7 @@ const path = require("path");
 const http = require("http");
 const crypto = require("crypto");
 const { spawnSync } = require("child_process");
+const { quietGit } = require("./unattended-git.cjs");
 const A = require("./mc-mail-age.js");
 
 const SCOPE_READ = "https://www.googleapis.com/auth/gmail.readonly";
@@ -198,7 +199,7 @@ const SHARED_HERE = "kept on this computer only, and never sent to your GitHub c
 const keepsKeysHere = godspeed => ["NOTEBOOK.md", "FULL-ALPHA.md"].some(note => fs.existsSync(path.join(godspeed, note)));
 function keepOutOfGit(godspeed, store) {
   if (!fs.existsSync(path.join(godspeed, ".git"))) return;
-  const git = (...a) => spawnSync("git", ["-C", godspeed, ...a], { encoding: "utf8", windowsHide: true });
+  const git = (...a) => spawnSync(...quietGit(["-C", godspeed, ...a], { encoding: "utf8" }));
   const rel = path.relative(godspeed, store).split(path.sep).join("/");
   const folder = rel.split("/")[0];
   if ((git("ls-files", "--", folder).stdout || "").trim()) return;
@@ -213,7 +214,7 @@ function shareStore(why) {
   if (!godspeed || !store) return "";
   if (keepsKeysHere(godspeed)) { try { keepOutOfGit(godspeed, store); } catch (e) { /* the key is still not committed */ } return SHARED_HERE; }
   if (!fs.existsSync(path.join(godspeed, ".git"))) return "";
-  const git = (...a) => spawnSync("git", ["-C", godspeed, ...a], { encoding: "utf8" });
+  const git = (...a) => spawnSync(...quietGit(["-C", godspeed, ...a], { encoding: "utf8" }));
   const rel = path.relative(godspeed, store).split(path.sep).join("/");
   git("add", "--", rel);
   const c = git("commit", "-q", "-m", why, "--", rel);

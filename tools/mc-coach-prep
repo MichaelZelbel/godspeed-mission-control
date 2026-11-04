@@ -104,6 +104,9 @@ HERE="$(winpath "$(cd "$(dirname "$0")" && pwd)")"
 NODE=""
 for c in "${GODSPEED_NODE:-}" node nodejs /usr/local/bin/node /usr/bin/node; do [ -n "$c" ] && "$c" -e '' >/dev/null 2>&1 && { NODE="$c"; break; }; done
 [ -n "$NODE" ] || { echo "mc-coach-prep: there is no Node.js on this computer." >&2; exit 3; }
+# No GitHub sign-in window from a run nobody watches: every git line below goes through unattended-git.cjs
+# (the no-prompt environment, and a once-a-day notice that names Connect when the sign-in is missing).
+if [ -f "$HERE/unattended-git.cjs" ]; then git() { "$NODE" "$HERE/unattended-git.cjs" --tell "$GODSPEED" "$@"; }; fi
 RUNNER="$HERE/mc-run"; [ -f "$RUNNER" ] || RUNNER="$HOME/.local/bin/mc-run"
 [ -f "$RUNNER" ] || { echo "mc-coach-prep: mc-run is not installed." >&2; exit 3; }
 # THE COACH. A routine names the coach's own program (GODSPEED_COACH_SCRIPT); by hand it is the

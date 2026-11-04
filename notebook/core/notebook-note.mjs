@@ -3,6 +3,8 @@ import path from 'node:path';
 import {spawnSync} from 'node:child_process';
 import {atomic} from './records/store.mjs';
 import {notebookNote,retiredNotebookNote} from './file-policy.mjs';
+import {createRequire} from 'node:module';
+const {quietGit}=createRequire(import.meta.url)('../../tools/unattended-git.cjs');
 
 // THE NOTE AT THE TOP OF A MISSION CONTROL WITH THE NOTEBOOK IS NOTEBOOK.md (2.0.0-beta.11). It
 // says what the folder is, and its presence is how the move recipe, the mail tool and the sync
@@ -28,7 +30,7 @@ export const notebookNoteText='# Integrated notebook\n\nThis is the complete God
 /** Whether `root` is a mission control with the notebook: it holds the note under either name. */
 export const hasNotebookNote=root=>[notebookNote,retiredNotebookNote].some(name=>fs.existsSync(path.join(root,name)));
 
-const git=(root,args)=>spawnSync('git',args,{cwd:root,encoding:'utf8',windowsHide:true,timeout:30000});
+const git=(root,args)=>spawnSync(...quietGit(args,{cwd:root,encoding:'utf8',timeout:30000}));
 
 // Whether FULL-ALPHA.md reaches other computers through Git, now or with the owner's next commit:
 // the folder's own repository has a remote and tracks it, or does not ignore it; or a copy made in

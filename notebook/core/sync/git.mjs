@@ -9,6 +9,9 @@ import { shared,durableRoots,syncedFiles,devicePrivatePaths,recordsFolder,isReco
 import { candidate, key as nameKey } from '../records/layout.mjs';
 import {validateAssistantFiles} from '../assistant-files.mjs';
 import {resolveSavedConflict} from '../conflicts.mjs';
+import {queueNotice} from '../notices.mjs';
+import {createRequire} from 'node:module';
+const {quietGit,signInMissing,signInNotice}=createRequire(import.meta.url)('../../../tools/unattended-git.cjs');
 
 // What sync never puts in a repository, whichever repository it is: build
 // output, archives, recordings, pictures and the disposable SQLite indexes.
@@ -147,7 +150,9 @@ export class FileSync {
   // pass Windows' 260-character path limit, which Git for Windows refuses
   // unless told otherwise. Node writes such a file fine; without this, sync
   // would stop at it on Windows only.
-  gitBytes(args,cwd=this.store.root,{env={},timeout=30000,input}={}){if(this.gitDir&&cwd===this.store.root)args=['--git-dir='+this.gitDir,'--work-tree='+this.store.root,...args];if(process.platform==='win32')args=['-c','core.longpaths=true',...args];return execFileSync('git',args,{cwd,windowsHide:true,timeout,maxBuffer:256*1024*1024,env:{...process.env,GIT_TERMINAL_PROMPT:'0',GCM_INTERACTIVE:'Never',...env},...(input===undefined?{stdio:['ignore','pipe','pipe']}:{input,stdio:['pipe','pipe','pipe']})});}
+  gitBytes(args,cwd=this.store.root,{env={},timeout=30000,input}={}){if(this.gitDir&&cwd===this.store.root)args=['--git-dir='+this.gitDir,'--work-tree='+this.store.root,...args];return execFileSync(...quietGit(args,{cwd,timeout,maxBuffer:256*1024*1024,env:{...process.env,...env},...(input===undefined?{stdio:['ignore','pipe','pipe']}:{input,stdio:['pipe','pipe','pipe']})}));}
+  // A sync round that failed for lack of a GitHub sign-in says so once a day; a notices error never fails the round.
+  tellSignInMissing(error){if(signInMissing(error?.stderr))try{queueNotice(this.store,signInNotice());}catch{}}
   git(args,cwd=this.store.root,options){return this.gitBytes(args,cwd,options).toString('utf8').trim();}
   // File names exactly as Git has them. Its line output quotes a name with an
   // umlaut or an emoji, and notes are named after their titles; `args` must
@@ -447,7 +452,7 @@ export class FileSync {
           ...this.gitBytes(['ls-files','--others','--exclude-standard','-z']).toString('utf8').split('\0').filter(name=>!this.keptLocal(name))
         ].filter(name=>name&&!heavy.has(name)&&(shared(name)||(name==='.gitignore'&&!this.gitDir)))).size;});
         this.last={state:pending?'pending':'synced',at:new Date().toISOString(),pending,...(pending?{detail:'New local edits will upload on the next synchronization cycle.'}:{})};
-    }catch(error){this.last={state:this.pendingConflicts().length?'conflict':'pending',at:new Date().toISOString(),error:'Sync did not complete; local files remain available',detail:error.message==='Workspace is being written by another process'?'The assistant is saving its state.':String(error.message).split('\n')[0]};}
+    }catch(error){this.tellSignInMissing(error);this.last={state:this.pendingConflicts().length?'conflict':'pending',at:new Date().toISOString(),error:'Sync did not complete; local files remain available',detail:error.message==='Workspace is being written by another process'?'The assistant is saving its state.':String(error.message).split('\n')[0]};}
     atomic(path.join(this.store.state,'sync-status.json'),JSON.stringify(this.last,null,2));return this.last;
   }
   // Whether commit `ancestor` is already part of the history of `descendant`.
@@ -1046,7 +1051,7 @@ export class FileSync {
       }
       const pending=this.folderChanges().length;
       this.last={state:pending?'pending':'synced',at:new Date().toISOString(),pending,...(pending?{detail:'New local edits will upload on the next synchronization cycle.'}:{})};
-    }catch(error){this.last={state:error.code==='REVIEW'?'conflict':'pending',at:new Date().toISOString(),error:'Sync did not complete; local files remain available',detail:error.message==='Workspace is being written by another process'?'The assistant is saving its state.':String(error.message).split('\n')[0]};}
+    }catch(error){this.tellSignInMissing(error);this.last={state:error.code==='REVIEW'?'conflict':'pending',at:new Date().toISOString(),error:'Sync did not complete; local files remain available',detail:error.message==='Workspace is being written by another process'?'The assistant is saving its state.':String(error.message).split('\n')[0]};}
     atomic(path.join(this.store.state,'sync-status.json'),JSON.stringify(this.last,null,2));return this.last;
   }
 }
