@@ -69,7 +69,7 @@ class SharedButtons(unittest.TestCase):
             lambda: self.dir.name,
             {"one": lambda t: self.heard.append(("one", t["answer"], t["step"])) or "one done",
              "two": lambda t: self.heard.append(("two", t["answer"], t["step"])) or "two done"},
-            texts=lambda: WORDS)
+            texts=lambda: WORDS, prefix="gsb1:", folder="buttons")
         self.bot = Bot()
 
     def tearDown(self):
@@ -113,6 +113,21 @@ class SharedButtons(unittest.TestCase):
         self.assertEqual(self.heard, [("two", "no", "s2")])
         tap(self.buttons, self.bot, self.data(first, "yes"), first_message)
         self.assertEqual(self.heard, [("two", "no", "s2"), ("one", "yes", "s1")])
+
+    def test_two_callers_keep_their_own_prefix_and_tokens(self):
+        other_heard = []
+        other = buttons.YesNoButtons(lambda: self.dir.name, {"one": lambda t: other_heard.append(t["answer"]) or "other"},
+                                     texts=lambda: WORDS, prefix="gsx1:", folder="other-buttons")
+        mine, mine_message = self.ask("one", "s1")
+        route = {"ownerId": str(OWNER), "chatId": str(OWNER)}
+        theirs = other.issue("one", {"step": "t1"}, route, BOT, "en")
+        other.bind(theirs, 300)
+        self.assertNotEqual(self.buttons.data.pattern, other.data.pattern)
+        self.assertIsNone(self.buttons.data.match(other.prefix + theirs["yes"]))
+        tap(other, self.bot, other.prefix + theirs["yes"], 300)
+        self.assertEqual((self.heard, other_heard), ([], ["yes"]))
+        tap(self.buttons, self.bot, self.data(mine, "no"), mine_message)
+        self.assertEqual(self.heard, [("one", "no", "s1")])
 
     def test_a_token_for_an_id_nobody_registered_runs_nothing(self):
         tokens, message = self.ask("one", "s1")

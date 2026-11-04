@@ -10,8 +10,9 @@ is answered at most once. A tap by anyone but the owner, on a message that is no
 on an answered message changes nothing.
 
 A caller builds `YesNoButtons(root, callbacks, texts, prefix=..., folder=...)`, hands `factory` to
-`register_telegram_handler`, and calls `offer(route, id, fields, language)` once its message is
-known to go out. `texts()` gives {language: {question, buttonYes, buttonNo, noOpenQuestion,
+`register_telegram_handler`, and calls `offer(id, fields, route, language)` once its message is
+known to go out. Every caller names its own `prefix` (ending in ":", unique among callers, as
+Hermes gives a press to the first handler that matches) and its own `folder`; there is no default. `texts()` gives {language: {question, buttonYes, buttonNo, noOpenQuestion,
 buttonFailed}}; `callbacks` maps an id to `fn(token) -> reply text`, token["answer"] being yes or no.
 """
 import asyncio
@@ -21,15 +22,13 @@ import re
 import secrets
 import time
 
-PREFIX = "gsb1:"
-FOLDER = "buttons"
 HEX = re.compile(r"^[a-f0-9]{32}$")
 RETENTION = 30 * 86400  # seconds; habit-button tokens are kept as long
 MAX_TOKENS = 4096
 
 
 class YesNoButtons:
-    def __init__(self, root, callbacks, texts=None, prefix=PREFIX, folder=FOLDER, default_id=None):
+    def __init__(self, root, callbacks, texts=None, *, prefix, folder, default_id=None):
         # root(): the mission control folder. default_id: the callback of a token kept without an id.
         self.root, self.callbacks = root, callbacks
         if texts:  # a subclass may define texts() itself
