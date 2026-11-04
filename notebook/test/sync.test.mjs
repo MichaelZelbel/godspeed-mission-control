@@ -175,3 +175,14 @@ test('a merge never acts on a view of the vault older than the lock it holds',()
   assert.equal(new Store(a.root).get('notes',note.id).content,'Saved here a moment ago','the merge must keep the newer local save');
   assert.equal(new Store(a.root).list('contacts').length,1);
 });
+
+test('a sync refused for lack of a GitHub sign-in stays pending and queues one Connect notice a day',()=>{
+  const {a}=fixture(),sync=new FileSync(a),original=sync.git.bind(sync);
+  sync.git=(args,cwd)=>{
+    if(['fetch','ls-remote'].includes(args[0]))throw Object.assign(new Error('git failed'),{stderr:'fatal: could not read Username for \'https://github.com\': terminal prompts disabled'});
+    return original(args,cwd);
+  };
+  assert.equal(sync.reconcile().state,'pending');assert.equal(sync.reconcile().state,'pending');
+  const notices=JSON.parse(fs.readFileSync(path.join(a.state,'notices.json'),'utf8')).notices.filter(n=>/^git-sign-in-/.test(n.id));
+  assert.equal(notices.length,1);assert.match(notices[0].text,/Connect record sync/);
+});
