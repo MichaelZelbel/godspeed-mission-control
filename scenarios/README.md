@@ -32,6 +32,10 @@ and these are not programs for users.
 | `telegram-language.sh` | through the installed assistant's own outgoing hook and Telegram send path, a reply written in the other language than the message it answers is sent in the message's language (three English journal messages with a German draft, English, German, English in one chat, a cron delivery left alone); the builder's copy runs it with `GODSPEED_SCENARIO_PRODUCT` and a Hermes it can run |
 | `brief-asked-in-chat.sh` | with the Charm Challenge running and the Morning brief routine run, "today's brief" asked in the notebook's chat is answered with the saved briefing's Charm line word for word, a seeded sentence that breaks a writing rule is absent from the briefing and the answer and its repair item is listed, and asking again saves no second briefing note |
 | `talk-prep-honest.sh` | a fixture person with one health area serving three goals and naming research domains: a preparation whose review leaves a goal uncovered is refused by the real seal and the installed gate, and the talk opens with the one sentence naming what is missing and no line claiming a research duration; a preparation covering all three goals, routes recorded in full, with a passing review sealed by the real seal opens the talk from its own opening |
+| `no-question-he-cannot-judge.sh` | on an install whose owner is on a fixture Telegram, five situations are replayed by a fixture asker: a quiet restart, a bundle of questions, an optional extra and the reminders afterwards send the owner nothing and leave nothing waiting; the one real yes is a single question in words, and his plain "approve" is approved with one reply that only confirms; no message tells him to type `approve <id>` or shows a hex id of six or more |
+| `plain-yes.sh` | on the same fixture: with one step waiting a plain "yes" approves it; with two waiting it gets one question naming both and approves neither, and the answer naming one approves only that one; a Yes button approves its own step and No rejects its own; a "yes" with nothing waiting approves nothing |
+| `what-was-that.sh` | on the same fixture: a queued notice said by its routine is recorded where the chat reads it, with the facts it was written from, and "what is this about?" asked in a new conversation is answered with what the report was about |
+| `connection-check.sh` | on the same fixture: the Daily connection check sends nothing, opens no deadline and rings no bell while Telegram's key is valid, tells the owner once and opens one deadline when Telegram refuses it, and closes the deadline when the key is valid again |
 
 ## Where there is no network
 
@@ -91,6 +95,7 @@ Named by the job, never in a file here:
 | `charm-challenge` | `GODSPEED_SCENARIO_AI_KEY` | the owner's own chat has to be answered by a model, because that is where a vent is noticed; the same two say which |
 | `brief-asked-in-chat` | `GODSPEED_SCENARIO_AI_KEY` | the Morning brief is written by a model and the chat that is asked for it is answered by one; the same two say which |
 | `talk-prep-honest` | `GODSPEED_SCENARIO_AI_KEY` | the talk the owner asks for in the chat is opened by a model; the same two say which. Coverage is never judged by it: the preparations, the run records and the reviews are fixtures sealed by the coach's own commands |
+| `no-question-he-cannot-judge`, `plain-yes`, `what-was-that` | `GODSPEED_SCENARIO_AI_KEY` | the install's assistant answers the owner on the fixture Telegram through a model; the same two say which. The Telegram account and bot key are the fixture's, never a real one |
 
 The six reminder scenarios need no key at all: everything they do is this machine's own. "Two
 computers" are two installations on the one machine, each with its own mission control folder, its
@@ -180,3 +185,17 @@ frozen last. Its cases are in `test-scenarios.sh`.
 Only the stage's own ref is read from that folder. A scenario that first installs an older version
 (`BEFORE_THE_MOVE`, `WITH_THE_VIDEO_SKILLS`) reads it from GitHub, as it always has
 (`install_the_line_of_into` in `scenario-lib.sh`).
+
+## The fixture Telegram of the beta.17 scenarios
+
+Four scenarios put the owner on a Telegram that is a fixture. `owner-on-telegram.py` runs inside the
+installed Hermes' own Python, as `telegram-through-hermes.py` does, but as a whole emulated gateway:
+Hermes loads the install's plugins, runs a routine by name and delivers what it prints, runs one turn
+of its own agent for an owner message, and takes a button press. What is stood in for is Telegram's
+servers: every call lands in an outbox, and a call with a token other than the fixture's valid one
+is refused as Telegram refuses a revoked key. `telegram-fixture-fetch.mjs` stands in for them for the
+one program that asks them straight from Node, the daily connection check, and `scenario-asker.py` is
+the routine that opens waiting steps through the product's one way to ask (`godspeed-step`); its flag
+table is the only place that names the flags of tickets 01 and 04. `telegram-judge.mjs` reads what
+was sent. Before the installed Hermes has run them for real, the entry points the driver calls are
+read from Hermes' source, not exercised: a first real run is what settles them.

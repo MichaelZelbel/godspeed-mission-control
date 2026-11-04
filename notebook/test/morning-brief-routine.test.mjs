@@ -105,14 +105,14 @@ test('with the original assistant the routine\'s entry reads the goal cards, and
 });
 
 // The routine's own script, as Hermes runs it: its Python, and the entry above replaced by a stand-in.
-function scripts(t,entry){
+function scripts(t,entry,{telegram=false,config={}}={}){
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-brief-script-')),home=path.join(root,'.hermes'),state=path.join(root,'.godspeed');
  t.after(()=>fs.rmSync(root,{recursive:true,force:true,maxRetries:5}));
  const files=routineFiles({root,home,state,timezone:'Europe/Berlin'}),stub=path.join(root,'stand-in-brief.mjs');
  fs.writeFileSync(stub,entry);
- files['godspeed-routines.json']=JSON.stringify({...JSON.parse(files['godspeed-routines.json']),brief:stub});
- fs.mkdirSync(path.join(home,'scripts'),{recursive:true});for(const [name,text] of Object.entries(files))fs.writeFileSync(path.join(home,'scripts',name),text);
- return spawnSync(python,[path.join(home,'scripts',BRIEF_SCRIPT)],{cwd:path.join(home,'scripts'),encoding:'utf8',env:{...process.env,PYTHONIOENCODING:'utf-8'},timeout:120000});
+ files['godspeed-routines.json']=JSON.stringify({...JSON.parse(files['godspeed-routines.json']),brief:stub,...config});
+ fs.mkdirSync(path.join(home,'scripts'),{recursive:true});if(telegram)fs.writeFileSync(path.join(home,'.env'),'TELEGRAM_BOT_TOKEN=123:abc\n');for(const [name,text] of Object.entries(files))fs.writeFileSync(path.join(home,'scripts',name),text);
+ return {...spawnSync(python,[path.join(home,'scripts',BRIEF_SCRIPT)],{cwd:path.join(home,'scripts'),encoding:'utf8',env:{...process.env,PYTHONIOENCODING:'utf-8'},timeout:120000}),root};
 }
 
 test('the Morning brief routine\'s script prints the briefing for Hermes to deliver',{skip:!havePython&&'no Python here'},t=>{
@@ -121,6 +121,24 @@ test('the Morning brief routine\'s script prints the briefing for Hermes to deli
  assert.equal(run.stdout.trim(),'Your morning briefing, made up.\n\nCharm Challenge: day 1 of 21.'.replace(/\n/g,process.platform==='win32'?'\r\n':'\n').replace(/\r\n/g,'\n'));
  const silent=scripts(t,'process.exit(0);');
  assert.equal(silent.status,0,silent.stderr);assert.equal(silent.stdout,'','nothing printed is Hermes\' silence');
+ assert.equal(fs.existsSync(path.join(silent.root,'notebook','_system','conversation_messages')),false,'and nothing is recorded');
+ const folder=path.join(run.root,'notebook','_system','conversation_messages'),[file,...others]=fs.readdirSync(folder);
+ const saved=JSON.parse(fs.readFileSync(path.join(folder,file),'utf8'));
+ assert.equal(others.length,0);assert.equal(saved.content,'Your morning briefing, made up.\n\nCharm Challenge: day 1 of 21.');assert.equal(saved.report.written,'routine','recorded as printed, not rewritten');
+});
+
+test('a briefing sent to Telegram is recorded in the Telegram chat, unchanged',{skip:!havePython&&'no Python here'},t=>{
+ const run=scripts(t,"process.stdout.write('Your morning briefing, made up.\\n');",{telegram:true});
+ assert.equal(run.status,0,run.stderr);
+ const folder=path.join(run.root,'notebook','_system','conversation_messages'),[file]=fs.readdirSync(folder);
+ const saved=JSON.parse(fs.readFileSync(path.join(folder,file),'utf8'));
+ assert.deepEqual([saved.content,saved.conversation_id,saved.delivered_to],['Your morning briefing, made up.','telegram-owner','telegram']);
+});
+
+test('a briefing that cannot be recorded is not sent',{skip:!havePython&&'no Python here'},t=>{
+ const run=scripts(t,"process.stdout.write('Your morning briefing, made up.\\n');",{config:{reports:'/nonexistent/background-report.mjs'}});
+ assert.notEqual(run.status,0);assert.equal(run.stdout,'');
+ assert.match(run.stderr,/^What was sent to you could not be recorded in your notebook\./);
 });
 
 test('a briefing that could not be written fails the routine in one sentence',{skip:!havePython&&'no Python here'},t=>{
