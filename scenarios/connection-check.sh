@@ -17,8 +17,7 @@
 # THE ROUTINE is matched by its name and the deadline by its title and its being new, so this does not
 # depend on the slugs ticket 06 (#200) chose.
 #
-#   GODSPEED_SCENARIO_AI_KEY    the AI the install is connected to (without it: FAIL), with
-#                               GODSPEED_SCENARIO_AI_URL and GODSPEED_SCENARIO_AI_MODEL.
+# No AI is connected: nothing in this scenario talks to a model.
 #
 #   bash scenarios/connection-check.sh candidate/2.0.0-beta.17
 #   bash scenarios/connection-check.sh --check <folder>
@@ -29,7 +28,7 @@
 #   due-before.json, due-<label>.json   the deadlines before and after each run: fine, broken, repaired
 #   notifications-before.json, notifications-<label>.json   the notebook's bell
 #   telegram-fixture-calls.log       one line per call the stand-in answered
-#   telegram-fixture.json, driver.log, ai.txt, config.yaml, plugins.txt
+#   telegram-fixture.json, driver.log, config.yaml, plugins.txt
 SCENARIO=connection-check
 # shellcheck source=scenarios/scenario-lib.sh
 . "$(dirname "$0")/scenario-lib.sh"
@@ -49,7 +48,6 @@ run_and_look() { # <label>: the routine, then the deadlines and the bell as they
 }
 
 act() {
-  need_the_ai_key "the install's own assistant"
   fresh_evidence
   install_paths
   install_the_stage_line "$EVIDENCE/.install.log"
@@ -58,8 +56,6 @@ act() {
     fail "the notebook does not answer after the install"
   read_version "$ROOT"
   assistant_home
-  connect_the_ai
-  echo "the connected AI ($AI_MODEL)" >"$EVIDENCE/ai.txt"
   phase 'the owner on a fixture Telegram'
   owner_on_telegram_install no
   has_the_routine "$EVIDENCE" || no_routine

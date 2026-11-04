@@ -95,7 +95,7 @@ Named by the job, never in a file here:
 | `charm-challenge` | `GODSPEED_SCENARIO_AI_KEY` | the owner's own chat has to be answered by a model, because that is where a vent is noticed; the same two say which |
 | `brief-asked-in-chat` | `GODSPEED_SCENARIO_AI_KEY` | the Morning brief is written by a model and the chat that is asked for it is answered by one; the same two say which |
 | `talk-prep-honest` | `GODSPEED_SCENARIO_AI_KEY` | the talk the owner asks for in the chat is opened by a model; the same two say which. Coverage is never judged by it: the preparations, the run records and the reviews are fixtures sealed by the coach's own commands |
-| `no-question-he-cannot-judge`, `plain-yes`, `what-was-that`, `connection-check` | `GODSPEED_SCENARIO_AI_KEY` | the install's assistant answers the owner on the fixture Telegram through a model; the same two say which. The Telegram account and bot key are the fixture's, never a real one |
+| `no-question-he-cannot-judge`, `plain-yes`, `what-was-that` | `GODSPEED_SCENARIO_AI_KEY` | the install's assistant answers the owner on the fixture Telegram through a model; the same two say which. The Telegram account and bot key are the fixture's, never a real one |
 
 The six reminder scenarios need no key at all: everything they do is this machine's own. "Two
 computers" are two installations on the one machine, each with its own mission control folder, its
