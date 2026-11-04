@@ -11,7 +11,7 @@ import {Domains} from '../core/domains.mjs';
 import {recordReport,recordRoutine,delivered} from '../core/background-reports.mjs';
 import {Telegram} from '../core/telegram.mjs';
 import {Scheduler} from '../core/jobs/scheduler.mjs';
-import {openStep,ROUTES,CHATS,chatOf,ASKER_KINDS,answerStep,answerChosen,heard,readStep,waitingSteps} from '../core/waiting-steps.mjs';
+import {openStep,ROUTES,CHATS,chatOf,ASKER_KINDS,answerStep,answerChosen,heard,stampReply,readStep,waitingSteps} from '../core/waiting-steps.mjs';
 
 for(const key of Object.keys(process.env))if(/^GODSPEED_/.test(key))delete process.env[key];
 const script=fileURLToPath(new URL('../bin/godspeed-step.mjs',import.meta.url));
@@ -83,7 +83,7 @@ test('a Telegram receipt reserved after the question was certified is newer, whe
 test('a Hermes receipt of two questions certifies both or neither, and a later receipt makes a bare yes ask',async t=>{
  const {store}=fixture(t),a=open(store,'The bot stopped.'),b=open(store,'The disk is full.'),words=a.message+'\n'+b.message;
  const [receipt]=await recordRoutine(store,{routine:'asker',text:words,delivery:'telegram'});
- const commit=store.commit.bind(store);store.commit=()=>{throw new Error('disk');};
+ const commit=store.commit.bind(store);store.commit=changes=>{if(changes.some(r=>r.id===receipt))throw new Error('disk');return commit(changes);};
  assert.throws(()=>delivered(store,words,[receipt]));
  store.commit=commit;
  assert.deepEqual(waitingSteps(store).map(s=>s.id),[],'no prefix of the message became answerable');
@@ -92,6 +92,16 @@ test('a Hermes receipt of two questions certifies both or neither, and a later r
  delivered(store,words,[receipt]);
  assert.deepEqual(waitingSteps(store).map(s=>s.id).sort(),[a.id,b.id].sort());
  assert.equal(heard(store,{chat:'telegram',words:'yes'}).kind,'ask');
+});
+
+test('a direct Telegram reply of two questions certifies both or neither',async t=>{
+ const {store}=fixture(t),a=open(store,'The bot stopped.'),b=open(store,'The disk is full.');
+ const commit=store.commit.bind(store);store.commit=changes=>{if(changes.some(r=>r.id===b.id))throw new Error('disk');return commit(changes);};
+ assert.throws(()=>stampReply(store,{words:a.message+'\n'+b.message,since:'',messageId:7}));
+ assert.deepEqual(waitingSteps(store).map(s=>s.id),[],'no prefix of the reply became answerable');
+ store.commit=commit;
+ stampReply(store,{words:a.message+'\n'+b.message,since:'',messageId:7});
+ assert.deepEqual(waitingSteps(store).map(s=>s.id).sort(),[a.id,b.id].sort());
 });
 
 test('a question sent but not registered tells the owner, and is not sent again',async t=>{
