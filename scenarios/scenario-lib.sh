@@ -378,6 +378,16 @@ const rows=Array.isArray(d)?d:(d.data||[]);const job=rows.find(j=>j&&j.id===proc
 const one=v=>String(v==null?"":v).replace(/\s+/g," ").trim();
 process.stdout.write(job.last_run_at?[one(job.last_run_at),one(job.last_status),one(job.last_error).slice(0,300)].join("\t"):"");
 '
+# Fails the scenario when the routine's record (BRIEF_JOB_RUN) says its run failed: a run that
+# failed leaves the state as it was, and a state that did not change must never read as success.
+the_run_did_not_fail() { # <record> <what the routine is>
+  local status error
+  status=$(printf '%s' "$1" | cut -f2)
+  error=$(printf '%s' "$1" | cut -f3)
+  case $status in
+    [Ee]rror* | [Ff]ail*) fail "$2 ended its run as \"$status\"${error:+: $error}" ;;
+  esac
+}
 run_the_morning_brief() { # <run answer file> <seconds>
   local added=$EVIDENCE/.brief-added.json tables=$EVIDENCE/.brief-tables.json code id before ran
   code=$(curl -sS -o "$added" -w '%{http_code}' --max-time 300 -X POST \

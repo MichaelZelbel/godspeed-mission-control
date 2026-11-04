@@ -2969,6 +2969,17 @@ else
   bad "mail fixture read over IMAP is not the expected population: $FX"
 fi
 
+section 'a failed routine run is not a finished one'
+for status in error failed Error; do
+  JOB_OUT=$(SCENARIO=job-test bash -c '. "$1/scenarios/scenario-lib.sh"; the_run_did_not_fail "$2" "the routine"; echo went-on' _ "$ROOT" "$(printf '2026-11-04T10:00:00Z\t%s\tboom' "$status")" 2>/dev/null)
+  case $JOB_OUT in
+    "FAIL job-test: the routine ended its run as \"$status\": boom") ok "a run that ended as \"$status\" fails the scenario with the routine's own error" ;;
+    *) bad "a run that ended as \"$status\" did not fail the scenario ($JOB_OUT)" ;;
+  esac
+done
+JOB_OUT=$(SCENARIO=job-test bash -c '. "$1/scenarios/scenario-lib.sh"; the_run_did_not_fail "$2" "the routine"; echo went-on' _ "$ROOT" "$(printf '2026-11-04T10:00:00Z\tok\t')" 2>/dev/null)
+[ "$JOB_OUT" = went-on ] && ok "a run that ended ok goes on" || bad "a run that ended ok was refused ($JOB_OUT)"
+
 section 'talk-on-talk-day'
 T2=$TMP/talkday
 talkday_good() {
@@ -2988,8 +2999,12 @@ copy "$T2/good" "$T2/continued"; : >"$T2/continued/talk-new.md"
 refuses 'last week'"'"'s talk continued instead' talk-on-talk-day "$T2/continued" "opened no talk of 2026-11-10"
 copy "$T2/good" "$T2/unnamed"; printf 'Good evening. Tonight: your LDL result and one thing to try.\n' >"$T2/unnamed/opening-new.txt"
 refuses 'last week'"'"'s talk never named' talk-on-talk-day "$T2/unnamed" "never names last week's talk"
-copy "$T2/good" "$T2/twice"; printf 'Last Tuesday was open, and on Tuesday 2026-11-03 it stayed so. Good evening. Tonight: your LDL result and one thing to try.\n' >"$T2/twice/opening-new.txt"
+copy "$T2/good" "$T2/twice"; printf 'Last Tuesday was open. On 2026-11-03 it stayed so. Good evening. Tonight: your LDL result and one thing to try.\n' >"$T2/twice/opening-new.txt"
 refuses 'last week'"'"'s talk named twice' talk-on-talk-day "$T2/twice" 'more than once'
+copy "$T2/good" "$T2/weekday-decoy"; printf 'Today is Tuesday and it was not held. Good evening. Tonight: your LDL result and one thing to try.\n' >"$T2/weekday-decoy/opening-new.txt"
+refuses 'only today'"'"'s weekday, no mention of last week'"'"'s talk' talk-on-talk-day "$T2/weekday-decoy" "never names last week's talk"
+copy "$T2/good" "$T2/split-claim"; printf 'Last Tuesday we had a talk planned. Still open is nothing here. Good evening. Tonight: your LDL result and one thing to try.\n' >"$T2/split-claim/opening-new.txt"
+refuses 'last week'"'"'s talk named in one sentence and its state in another' talk-on-talk-day "$T2/split-claim" 'without saying it is still open'
 copy "$T2/good" "$T2/held"; printf 'AREA: health\nSTATE: held\n\n## The opening\n\nGood evening.\n' >"$T2/held/talk-old.md"
 refuses 'last week'"'"'s talk already held, not open' talk-on-talk-day "$T2/held" 'was not open and unanswered'
 copy "$T2/good" "$T2/still-open"; cp "$T2/good/talk-old.md" "$T2/still-open/talk-old-after.md"

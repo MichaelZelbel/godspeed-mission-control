@@ -41,6 +41,8 @@ run_the_check() { # <label>
   [ "$(server_post /api/jobs/run "$EVIDENCE/.run.json" "$EVIDENCE/.run.answer")" = 200 ] ||
     fail "the server would not run \"$ROUTINE\" ($1): $(tr -d '\n' <"$EVIDENCE/.run.answer" | cut -c1-200)"
   wait_for 120 "the check to finish ($1)" check_finished "$id" || fail "\"$ROUTINE\" did not finish its run ($1) within 120 s"
+  server_table jobs "$EVIDENCE/.jobs.json"
+  the_run_did_not_fail "$("$NODE" -e "$BRIEF_JOB_RUN" "$EVIDENCE/.jobs.json" "$id")" "\"$ROUTINE\""
   looked "$1"
 }
 # shellcheck disable=SC2317,SC2329  # asked by wait_for

@@ -175,7 +175,7 @@ folded() { tr -s '[:space:]' ' ' <"$1"; }
 section_of() { awk -v h="## $2" '$0==h{f=1;next} /^## /{f=0} f' "$1"; }
 
 check() { # <evidence folder>
-  local folder=$1 old new weekday opening
+  local folder=$1 old new weekday opening sentences named
   [ -d "$folder" ] || fail "there is nothing at $folder, so this scenario kept no evidence of a talk on a talk day"
   kept_all "$folder" 'what the two requests opened' days.txt prep-new.md check-new.txt opening-old.txt opening-new.txt talk-old.md
   [ -f "$folder/talk-new.md" ] && [ -f "$folder/talk-old-after.md" ] || fail "talk-new.md or talk-old-after.md is not in what the scenario kept"
@@ -197,13 +197,16 @@ check() { # <evidence folder>
   section_of "$folder/talk-new.md" 'The opening' | tr -s '[:space:]' ' ' | grep -qF -- "$opening" ||
     fail "the talk record of $new does not hold the preparation's opening"
 
-  # (2) Last week's talk is named, once, in one sentence.
+  # (2) Last week's talk is named, once, in one sentence that says it is still open or was not held.
+  # A bare weekday is not a name: the talk day falls on the same weekday, so "Today is Tuesday" would pass.
   weekday=$(date -u -d "$old" +%A)
-  [ "$(folded "$folder/opening-new.txt" | grep -Eio "($old|$weekday)" | wc -l)" -ge 1 ] ||
-    fail "the opening never names last week's talk ($weekday $old): $(folded "$folder/opening-new.txt" | cut -c1-240)"
-  [ "$(folded "$folder/opening-new.txt" | grep -Eio "($old|$weekday)" | wc -l)" -le 1 ] ||
+  sentences=$(folded "$folder/opening-new.txt" | sed 's/\([.!?]\) /\1\n/g')
+  named=$(printf '%s\n' "$sentences" | grep -Ei "($old|last $weekday|last week)" || true)
+  [ -n "$named" ] ||
+    fail "the opening never names last week's talk ($old, or \"last $weekday\"): $(folded "$folder/opening-new.txt" | cut -c1-240)"
+  [ "$(printf '%s\n' "$named" | grep -c .)" = 1 ] ||
     fail "the opening names last week's talk more than once: $(folded "$folder/opening-new.txt" | cut -c1-240)"
-  folded "$folder/opening-new.txt" | grep -Eiq 'still open|not held|never held|was not held|still waiting' ||
+  printf '%s\n' "$named" | grep -Eiq 'still open|not held|never held|was not held|still waiting' ||
     fail "the opening names last week's talk without saying it is still open or was not held: $(folded "$folder/opening-new.txt" | cut -c1-240)"
 
   # (3) Last week's talk is closed as not held, and its record is kept.

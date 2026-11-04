@@ -71,7 +71,7 @@ run_the_routine() { # <id>: runs it and waits until it has a finished run it did
     waited=$((waited + 5))
     api_table jobs "$EVIDENCE/.jobs.json"
     after=$("$NODE" -e "$BRIEF_JOB_RUN" "$EVIDENCE/.jobs.json" "$id")
-    [ -z "$after" ] || [ "$after" = "$before" ] || return 0
+    [ -z "$after" ] || [ "$after" = "$before" ] || { the_run_did_not_fail "$after" "the mail routine"; return 0; }
   done
   fail "the mail routine ended no run within 300 s of being run"
 }
