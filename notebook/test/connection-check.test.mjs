@@ -12,14 +12,12 @@ const fixture=t=>{const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-conn
 const stubs=(over={})=>({ai:async()=>({set_up:true,ok:true}),telegram:async()=>({set_up:true,ok:true}),github:async()=>({set_up:true,ok:true}),mail:async()=>({set_up:true,ok:true}),...over});
 const refused=async()=>({set_up:true,ok:false,kind:'sign-in'}),down=async()=>({set_up:true,ok:false,kind:'other'});
 const deadlines=store=>addonDeadlines(store,{addon:'connection-check',action:'list'}).deadlines;
-const bell=(store,name)=>store.get('notifications','connection-'+name);
 const D1='2026-11-04',D2='2026-11-05',D3='2026-11-06';
 
 test('all connections working: nothing is said and no deadline is made',async t=>{
  const {store,root}=fixture(t);
  const record=await checkConnections({store,day:D1,probes:stubs()});
  assert.deepEqual(readNotices(store),[]);assert.deepEqual(deadlines(store),[]);
- assert.equal(bell(store,'telegram'),undefined);
  assert.deepEqual(Object.values(record.connections).map(c=>[c.set_up,c.ok]),[[true,true],[true,true],[true,true],[true,true]]);
  assert.ok(!fs.existsSync(path.join(root,'.godspeed','connection-check')),'no marker file on an ordinary day');
 });
@@ -36,13 +34,12 @@ test('a refused Telegram key: one message and one deadline, closed by the routin
  await checkConnections({store,day:D1,probes:stubs({telegram:refused})});
  const notices=readNotices(store);assert.equal(notices.length,1);assert.match(notices[0].text,/Telegram refused your bot's key/);
  const open=deadlines(store);assert.equal(open.length,1);assert.equal(open[0].key,'telegram:'+D1);assert.equal(open[0].state,'open');
- assert.equal(bell(store,'telegram').status,'pending');
  await checkConnections({store,day:D1,probes:stubs({telegram:refused})});
  assert.equal(readNotices(store).length,1,'a second run the same day says nothing more');assert.equal(deadlines(store).length,1);
  await checkConnections({store,day:D2,probes:stubs({telegram:refused})});
  assert.equal(readNotices(store).length,1,'still refused the next day: one message for the whole stretch');assert.equal(deadlines(store).length,1);
  await checkConnections({store,day:D3,probes:stubs()});
- assert.equal(deadlines(store)[0].state,'closed');assert.equal(bell(store,'telegram').status,'resolved');
+ assert.equal(deadlines(store)[0].state,'closed');
  assert.equal(readNotices(store).length,1);
  await checkConnections({store,day:'2026-11-07',probes:stubs()});
  assert.equal(deadlines(store).length,1,'working days after that touch nothing');
@@ -171,7 +168,7 @@ test('a connection reported unset between a refusal and its recovery still close
  await checkConnections({store,day:D1,probes:stubs({telegram:refused})});
  await checkConnections({store,day:D2,probes:stubs({telegram:async()=>({set_up:false})})});
  await checkConnections({store,day:D3,probes:stubs()});
- assert.equal(deadlines(store)[0].state,'closed');assert.equal(bell(store,'telegram').status,'resolved');
+ assert.equal(deadlines(store)[0].state,'closed');
 });
 
 test('a missed day breaks a network-failure streak',async t=>{
@@ -189,9 +186,8 @@ test('a deadline that could not be made or closed fails the routine and is retri
  await checkConnections({store,day:D1,probes:stubs({telegram:refused})});
  assert.equal(deadlines(store).length,1);assert.equal(readNotices(store).length,1,'the message is not repeated');
  await assert.rejects(checkConnections({store,day:D2,probes:stubs(),due:failing}),/deadline/);
- assert.equal(bell(store,'telegram').status,'pending');
  await checkConnections({store,day:D2,probes:stubs()});
- assert.equal(deadlines(store)[0].state,'closed');assert.equal(bell(store,'telegram').status,'resolved');
+ assert.equal(deadlines(store)[0].state,'closed');
 });
 
 test('every connection owns its probe, and mail reaches its own check',async()=>{
@@ -210,8 +206,7 @@ test('a refusal whose deadline failed, then an unset day, is neither repeated no
   await checkConnections({store,day:D2,probes:stubs({telegram:unset})});
   await checkConnections({store,day:D3,probes:stubs(third&&{telegram:third})});
   assert.equal(readNotices(store).length,closed?0:1,closed?'recovered before any deadline: the sign-in notice is taken back':'one message for the whole stretch');
-  if(closed){assert.equal(bell(store,'telegram').status,'resolved');}
-  else assert.equal(deadlines(store).length,1,'the deadline is made on the first day it can be');
+  if(!closed)assert.equal(deadlines(store).length,1,'the deadline is made on the first day it can be');
  }
 });
 
@@ -222,7 +217,6 @@ test('a refusal whose deadline failed survives an unset day and then network tro
  await checkConnections({store,day:D3,probes:stubs({telegram:async()=>({set_up:true,ok:false,kind:'other'})})});
  assert.equal(deadlines(store).length,1,'its deadline is made while the connection is still down');
  await checkConnections({store,day:D3,probes:stubs()});
- assert.equal(bell(store,'telegram').status,'resolved');
  assert.equal(readNotices(store).length,1);
 });
 

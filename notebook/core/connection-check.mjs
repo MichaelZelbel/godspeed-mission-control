@@ -124,7 +124,6 @@ export function runDue(store,day,args){
  try{store.scan(true);}catch{}
  return {status:run.status,out:String(run.stdout||run.stderr||'').trim()};
 }
-const bell=async(store,record)=>{try{await store.saveAsync('notifications',record,undefined,{timeoutMs:30000});}catch{}};
 
 const isText=v=>typeof v==='string'&&v!=='';
 // The finite shapes nextState writes: unset, working, a sign-in (maybe with its deadline), an ordinary failure.
@@ -163,7 +162,6 @@ export async function checkConnections({store,day,probes,due=runDue,now=()=>new 
     catch{connections[name]=before.connections[name];failures.push(name);continue;}
     const slug=before.connections[name]?.deadline?.slug;
     if(slug&&due(store,day,['check',slug]).status!==0){connections[name]=before.connections[name];failures.push(name);continue;}
-    await bell(store,{id:'connection-'+name,status:'resolved',resolved_at:now().toISOString()});
    }
    if(action.do==='other'){
     try{tellOwner(store,{id:`${CONNECTION_NOTICE_PREFIX}${name}-other-${entry.failing_since}`,text:otherWords(name)});}
@@ -171,7 +169,6 @@ export async function checkConnections({store,day,probes,due=runDue,now=()=>new 
    }
    if(action.do==='sign-in'){
     fs.rmSync(worked,{force:true});
-    await bell(store,{id:'connection-'+name,status:'pending',title:`${label} needs your sign-in`,body:CONNECTIONS[name].signIn,link:'/dashboard/settings'});
    }
    if(action.do==='notice'){
     try{tellOwner(store,{id:`${CONNECTION_NOTICE_PREFIX}${name}-${entry.failing_since}`,text:CONNECTIONS[name].signIn});}
