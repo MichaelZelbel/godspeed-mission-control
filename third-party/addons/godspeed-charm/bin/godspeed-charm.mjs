@@ -182,9 +182,10 @@ const commands = {
     // Only the conversation that asked can answer (a bare yes elsewhere answers something else).
     const open = state.open.find((q) => q.conversation === conversation);
     // A Telegram button answers only the question it was sent with: --asked-when names that question
-    // by the moment it was asked, so a button from yesterday, or from a question answered since,
-    // never answers a newer one.
-    if (!open || (f["asked-when"] !== undefined && open.when !== f["asked-when"])) refuse(say.noOpenQuestion(), state);
+    // by the moment it was asked and --asked-seq by its place in the record (two questions can share
+    // a moment), so a button from yesterday, or from a question answered since, never answers a newer one.
+    const sent = (flag, now) => f[flag] === undefined || String(now) === f[flag];
+    if (!open || !sent("asked-when", open.when) || !sent("asked-seq", open.seq)) refuse(say.noOpenQuestion(), state);
     if (isYes(given)) {
       write("reset", extras());
       const after = load();

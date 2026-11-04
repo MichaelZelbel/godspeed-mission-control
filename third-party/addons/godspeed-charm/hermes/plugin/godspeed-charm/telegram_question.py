@@ -100,7 +100,8 @@ class QuestionTelegram(buttons.YesNoButtons):
         """The command's reply to a tap: what happened, or why nothing did (exit 2). The question
         is named by the moment it was asked, so the tap answers that question or none."""
         r = self.run("answer", token["answer"], "--conversation", token["conversation"],
-                     "--asked-when", token["askedWhen"], "--words", "(button)", "--json",
+                     "--asked-when", token["askedWhen"], "--asked-seq", str(token["askedSeq"]),
+                     "--words", "(button)", "--json",
                      "--language", token["language"], timeout=25)
         if r.returncode not in (0, 2):
             raise RuntimeError("godspeed-charm answer failed")
@@ -116,7 +117,7 @@ class QuestionTelegram(buttons.YesNoButtons):
         owner's private chat, no single Telegram client, the add-on's words or the question's
         moment unknown): the reply then goes as written, question and all. Sends nothing yet."""
         route = entry.get("route")
-        if not self.active or not route or not entry.get("askedWhen") or not self.client():
+        if not self.active or not route or not entry.get("askedWhen") or entry.get("askedSeq") is None or not self.client():
             return None
         words = self.texts()
         if not words:
@@ -133,5 +134,6 @@ class QuestionTelegram(buttons.YesNoButtons):
     def post(self, entry, language):
         """Last of all, once the reply is known to go out: the question's message, with the
         conversation and the moment it was asked kept behind its buttons."""
-        fields = {"conversation": entry["conversation"], "askedWhen": entry.get("askedWhen")}
+        fields = {"conversation": entry["conversation"], "askedWhen": entry.get("askedWhen"),
+                  "askedSeq": entry.get("askedSeq")}
         return self.offer(CALLBACK, fields, entry["route"], language)

@@ -52,7 +52,7 @@ Every command but `judge` takes `--json` (it then prints `{ok, reply, state}`; `
 reply in that language, and `--words-file <file>` in place of `--words` for words with quotes or
 line breaks. Exit 0 means done, 2 means refused with nothing written (the reply says why), 1 is
 an error. `answer --asked-when <moment>` answers only the open question asked at that moment (the
-`when` of the question in `state.open`); the Telegram buttons use it.
+`when` of the question in `state.open`), and `--asked-seq <n>` its place in the record (`seq`) when two share a moment; the Telegram buttons use both.
 
 ## Install
 

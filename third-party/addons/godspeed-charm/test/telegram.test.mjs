@@ -91,6 +91,7 @@ test("a slip question on Telegram comes as its own message with Yes and No, and 
     for (const t of tokens) {
       assert.equal(t.conversation, CONVERSATION);
       assert.equal(t.askedWhen, a.when);
+      assert.equal(t.askedSeq, 1);
       assert.ok(Number.isFinite(t.created));
       assert.equal(t.messageId, String(sent[0].message_id));
       assert.equal(t.language, "en");

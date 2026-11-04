@@ -325,7 +325,8 @@ def _judged_reply(turn, session_id, text, kwargs, model_asked=False):
         conversation = turn["conversation"]
         language = verdict.get("language")
         asked = _open_asked(conversation)
-        entry = {"conversation": conversation, "askedWhen": asked and asked["when"], "reply": reply,
+        entry = {"conversation": conversation, "askedWhen": asked and asked["when"],
+                 "askedSeq": asked and asked.get("seq"), "reply": reply,
                  "language": language if language in (_question.texts() or {}) else None,
                  "route": _question.route(session_id), "at": time.monotonic()}
         plan = _question.prepare(entry, text)
@@ -442,7 +443,8 @@ def on_charm_tool(**kwargs):
         if not any(w["question"] in reply for w in words.values()):
             return None
         language = _flag(rest, "language")
-        entry = {"conversation": conversation, "askedWhen": asked["when"], "reply": reply,
+        entry = {"conversation": conversation, "askedWhen": asked["when"],
+                 "askedSeq": asked.get("seq"), "reply": reply,
                  "language": language if language in words else None,
                  "route": _question.route(session_id), "at": time.monotonic()}
         with _pending_lock:

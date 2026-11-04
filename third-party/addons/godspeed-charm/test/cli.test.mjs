@@ -522,6 +522,26 @@ test("answer --asked-when answers only the question asked at that moment", () =>
   gone(dir);
 });
 
+test("answer --asked-seq tells apart two questions asked at the same instant", () => {
+  const dir = mission();
+  run(dir, ["start"]);
+  const SAME = { GODSPEED_CHARM_NOW: "2026-10-30T09:00:00.000Z" };
+  const ask = () => json(run(dir, ["asked", "--conversation", "telegram:s1", "--words", "useless", "--json"], { day: "2026-10-30", env: SAME }));
+  const answer = (open) => run(dir, ["answer", "yes", "--conversation", "telegram:s1", "--words", "(button)", "--json",
+    "--asked-when", open.when, "--asked-seq", String(open.seq)], { day: "2026-10-30" });
+  const first = ask().state.open[0];
+  const second = ask().state.open[0];
+  assert.equal(second.when, first.when);
+  assert.notEqual(second.seq, first.seq);
+  const stale = answer(first);
+  assert.equal(stale.status, 2);
+  assert.equal(json(stale).state.restarts, 0);
+  const right = answer(second);
+  assert.equal(right.status, 0, right.stderr);
+  assert.equal(json(right).state.restarts, 1);
+  gone(dir);
+});
+
 // ---- The command learns its conversation from the turn marker (lib/turns.mjs) ---------------------
 const turn = (dir, conversation, day = "2026-10-30", env = {}) => run(dir, ["context", "--conversation", conversation], { day, env });
 const openOf = (dir, day = "2026-10-30") => json(run(dir, ["status", "--json"], { day })).state.open.map((q) => q.conversation).sort();
