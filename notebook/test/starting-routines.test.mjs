@@ -379,6 +379,17 @@ g.say=say`);
  fs.rmSync(said,{force:true});fs.writeFileSync(queued,JSON.stringify({notices:[{id:'unrelated-backup',text:'The backup failed.'}]}));
  const unrelated=attempt(okRun);
  assert.equal(unrelated.status,0,unrelated.stderr);assert.equal(unrelated.stdout.trim(),'');assert.equal(fs.existsSync(said),false,'an unrelated notice is not said');
+ // A queue entry whose id is not a string is not this check's: ignored, never read, nothing said.
+ fs.rmSync(said,{force:true});fs.writeFileSync(queued,JSON.stringify({notices:[{id:7,text:'Seven.'},{id:null,text:'None.'},'text',{id:['connection-notice-x'],text:'List.'}]}));
+ const nonString=attempt(okRun);
+ assert.equal(nonString.status,0,nonString.stderr);assert.equal(nonString.stdout.trim(),'');assert.equal(fs.existsSync(said),false,'nothing is said');
+ // A notice with this check's prefix and no usable text fails the run with the fixed sentence and says nothing.
+ for(const bad of [{id:'connection-notice-bad',text:42},{id:'connection-notice-bad',text:'  '}]){
+  fs.rmSync(said,{force:true});fs.writeFileSync(queued,JSON.stringify({notices:[{id:'connection-notice-good',text:'Good.'},bad]}));
+  const run=attempt(okRun);
+  assert.equal(run.status,1);assert.equal(run.stdout,'');assert.match(run.stderr,/^The daily connection check could not run\.\n?$/);
+  assert.equal(fs.existsSync(said),false,'no id is said');assert.deepEqual(claims(),[],'no claim file remains');
+ }
  for(const quiet of [null,'','{"notices":[]}']){
   if(quiet===null)fs.rmSync(queued,{force:true});else fs.writeFileSync(queued,quiet);
   const run=attempt(okRun);

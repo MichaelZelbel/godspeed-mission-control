@@ -686,7 +686,8 @@ def notice(c, only=""):
     not said and no other run is saying, claimed, as (notice, said file, claim); or None. One a run:
     a message is about one thing. Whoever gets it releases the claim (tick).
     only limits it to notices whose id starts with it, so a routine says what it queued and leaves
-    the rest to the notice routines."""
+    the rest to the notice routines; a notice with that prefix and no text raises ValueError.
+    Entries that are not objects with a string id are ignored."""
     queued = c.get("notices")
     if not queued:
         return None
@@ -695,9 +696,12 @@ def notice(c, only=""):
             text = f.read()
         waiting = []
         if text.strip():
-            waiting = [n for n in json.loads(text).get("notices", []) if isinstance(n, dict) and n.get("id") and n.get("text")]
+            waiting = [n for n in json.loads(text).get("notices", []) if isinstance(n, dict) and isinstance(n.get("id"), str) and n["id"].startswith(only)]
     except Exception:
         return None
+    if only and any(not isinstance(n.get("text"), str) or not n["text"].strip() for n in waiting):
+        raise ValueError("a queued notice has no text")
+    waiting = [n for n in waiting if isinstance(n.get("text"), str) and n["text"].strip()]
     said_file = os.path.join(c["home"], NOTICES_SAID)
     for n in waiting:
         if not n["id"].startswith(only) or n["id"] in said_ids(said_file):
@@ -1117,10 +1121,15 @@ def connection_check(c):
     # Claim everything queued now before saying any: saying may split a report into new notices, and
     # those wait for the notice routine rather than extending this run.
     waiting = []
-    found = notice(c, only=c["connection_notice_prefix"])
-    while found:
-        waiting.append(found)
+    try:
         found = notice(c, only=c["connection_notice_prefix"])
+        while found:
+            waiting.append(found)
+            found = notice(c, only=c["connection_notice_prefix"])
+    except ValueError:
+        for _, _, held in waiting:
+            release(held)
+        fail("The daily connection check could not run.")
     said = []
     try:
         while waiting:
