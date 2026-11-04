@@ -103,7 +103,7 @@ export function nextState(prev={},result,day){
  }
  if(result.ok)return {entry:{set_up:true,ok:true},actions:prev.deadline||prev.kind==='sign-in'?[{do:'recover'}]:[]};
  if(result.kind==='sign-in'){
-  if(prev.kind==='sign-in'&&prev.told||prev.deadline)return {entry:{...prev,set_up:true,ok:false,kind:'sign-in',told:true},actions:prev.deadline?[]:[{do:'deadline'}]};
+  if(prev.kind==='sign-in'&&prev.told||prev.deadline)return {entry:{...prev,set_up:true,ok:false,kind:'sign-in',told:true},actions:[...prev.deadline?[]:[{do:'deadline'}],...prev.deadline&&prev.told===false?[{do:'notice'}]:[]]};
   return {entry:{set_up:true,ok:false,kind:'sign-in',failing_since:day,told:true},actions:[{do:'sign-in'},{do:'deadline'}]};
  }
  // A pending sign-in outlives a day of network trouble: only a working probe resolves it.
@@ -126,11 +126,22 @@ export function runDue(store,day,args){
 }
 const bell=async(store,record)=>{try{await store.saveAsync('notifications',record,undefined,{timeoutMs:30000});}catch{}};
 
+const isText=v=>typeof v==='string'&&v!=='';
+// The finite shapes nextState writes: unset, working, a sign-in (maybe with its deadline), an ordinary failure.
+function validEntry(e){
+ if(!e||typeof e!=='object'||Array.isArray(e)||typeof e.set_up!=='boolean')return false;
+ if(e.deadline!==undefined&&!(e.deadline&&isText(e.deadline.slug)&&isText(e.deadline.key)))return false;
+ if(e.kind===undefined)return true;
+ if(e.kind==='sign-in')return isText(e.failing_since)&&typeof e.told==='boolean';
+ return e.kind==='other'&&isText(e.failing_since)&&isText(e.last_failed_day)&&Number.isInteger(e.failed_days)&&typeof e.told==='boolean';
+}
+
 // Only an absent record is a first run; a damaged one throws, so an outage streak is never silently restarted.
 export function readCheckRecord(store){
  let text;try{text=fs.readFileSync(path.join(store.state,RECORD_FILE),'utf8');}catch(error){if(error.code==='ENOENT')return {connections:{}};throw error;}
  const data=JSON.parse(text);
  if(!data||typeof data.connections!=='object'||!data.connections||Array.isArray(data.connections))throw new Error('The connection check record is damaged');
+ for(const name of NAMES)if(data.connections[name]!==undefined&&!validEntry(data.connections[name]))throw new Error('The connection check record is damaged');
  return data;
 }
 
@@ -158,6 +169,10 @@ export async function checkConnections({store,day,probes,due=runDue,now=()=>new 
     fs.rmSync(worked,{force:true});
     await bell(store,{id:'connection-'+name,status:'pending',title:`${label} needs your sign-in`,body:CONNECTIONS[name].signIn,link:'/dashboard/settings'});
    }
+   if(action.do==='notice'){
+    try{tellOwner(store,{id:`${CONNECTION_NOTICE_PREFIX}${name}-${entry.failing_since}`,text:CONNECTIONS[name].signIn});}
+    catch{entry.told=false;failures.push(name);}
+   }
    if(action.do==='deadline'){
     const since=entry.failing_since,slug=deadlineSlug(name,since),key=deadlineKey(name,since);
     const made=due(store,day,['add',slug,'--title',`Connect ${label} again`,'--target',day,'--to',addDays(day,DEADLINE_DAYS),
@@ -167,7 +182,7 @@ export async function checkConnections({store,day,probes,due=runDue,now=()=>new 
     if(made.status!==0){failures.push(name);continue;}
     entry.deadline={slug,key};
     try{tellOwner(store,{id:`${CONNECTION_NOTICE_PREFIX}${name}-${since}`,text:CONNECTIONS[name].signIn});}
-    catch{delete entry.deadline;failures.push(name);}
+    catch{entry.told=false;failures.push(name);}
    }
   }
  }

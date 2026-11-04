@@ -245,6 +245,27 @@ test('a damaged record fails the check instead of restarting the outage count',a
  assert.deepEqual(readNotices(store),[]);
 });
 
+test('a damaged entry for one connection fails the check instead of restarting its outage count',async t=>{
+ const {store}=fixture(t);
+ await checkConnections({store,day:D1,probes:stubs({github:down})});
+ const file=path.join(store.state,RECORD_FILE),good=fs.readFileSync(file,'utf8');
+ for(const bad of [1,'x',[],{},{set_up:true,kind:'other'}]){
+  const record=JSON.parse(good);record.connections.github=bad;fs.writeFileSync(file,JSON.stringify(record));
+  await assert.rejects(checkConnections({store,day:D2,probes:stubs({github:down})}));
+ }
+ assert.deepEqual(readNotices(store),[]);
+});
+
+test('a sign-in notice that cannot be stored keeps its deadline, so a recovery still closes it',async t=>{
+ const {store,root}=fixture(t);
+ const file=path.join(store.state,'notices.json');
+ fs.rmSync(file,{force:true});fs.mkdirSync(file);
+ await assert.rejects(checkConnections({store,day:D1,probes:stubs({telegram:refused})}));
+ fs.rmSync(file,{recursive:true});
+ await checkConnections({store,day:D2,probes:stubs()});
+ assert.equal(deadlines(store).find(d=>/telegram/.test(d.key)).state,'closed');
+});
+
 test('a notice that cannot be stored does not stop the connections after it, and is retried',async t=>{
  const {store}=fixture(t);
  await checkConnections({store,day:D1,probes:stubs({ai:down,telegram:refused})}).catch(()=>{});
