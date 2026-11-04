@@ -266,8 +266,8 @@ claims_research_time() { # <file>: prints the first line that does, and leaves 0
 check() { # <evidence folder>
   local folder=$1 sentence a b opening_b goal route_count label field reply
   [ -d "$folder" ] || fail "there is nothing at $folder, so this scenario kept no evidence of a talk's preparation"
+  b=$(sed -n 's/^b=//p' "$folder/days.txt" 2>/dev/null)
   if [ ! -s "$folder/talk-b.md" ]; then
-    b=$(sed -n 's/^b=//p' "$folder/days.txt" 2>/dev/null)
     [ -n "$b" ] || fail "days.txt does not say which two talk days this scenario worked on"
     fail "no talk of day $b was opened when the owner asked for it: $(tr '\n' ' ' <"$folder/opening-b.txt" 2>/dev/null | cut -c1-200)"
   fi
@@ -276,7 +276,6 @@ check() { # <evidence folder>
     seal-b.txt seal-b.code check-a.txt check-b.txt brief-a.txt close-a.txt opening-a.txt opening-b.txt talk-a.md talk-b.md
   [ -f "$folder/block-b.txt" ] || fail "block-b.txt is not in what the scenario kept"
   a=$(sed -n 's/^a=//p' "$folder/days.txt")
-  b=$(sed -n 's/^b=//p' "$folder/days.txt")
   if [ -z "$a" ] || [ -z "$b" ]; then fail "days.txt does not say which two talk days this scenario worked on"; fi
 
   # 0. The person is what the scenario says: one area, three goals, research domains.
