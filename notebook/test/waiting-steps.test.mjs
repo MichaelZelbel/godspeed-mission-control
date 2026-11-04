@@ -35,9 +35,15 @@ test('one step waiting: a yes approves it and the reply says what happens; a no 
  assert.equal(store.get('approvals',other.id).status,'rejected');
 });
 
+test('a later message sent in the same millisecond still moves a bare yes on',async t=>{
+ const {store}=fixture(t),{id}=await ask(store,'The bot stopped.'),RealDate=Date,fixed=Date.parse(store.get('approvals',id).sent_at);
+ global.Date=class extends RealDate{constructor(...a){super(...(a.length?a:[fixed]));}static now(){return fixed;}};
+ try{await recordReport(store,{text:'Your calendar changed.',steps:[],delivery:'telegram'});delivered(store,'Your calendar changed.');}finally{global.Date=RealDate;}
+ assert.equal(heard(store,{chat:'telegram',words:'yes'}).kind,'ask');assert.equal(store.get('approvals',id).status,'pending');
+});
+
 test('a later ordinary Telegram message makes a bare yes a worded question, not an answer to the older step',async t=>{
  const {store}=fixture(t),{id}=await ask(store,'The bot stopped.');
- await new Promise(r=>setTimeout(r,5));
  await recordReport(store,{text:'Your calendar changed.',steps:[],delivery:'telegram'});delivered(store,'Your calendar changed.');
  const reply=heard(store,{chat:'telegram',words:'yes'});
  assert.equal(reply.kind,'ask');assert.equal(store.get('approvals',id).status,'pending');
@@ -45,7 +51,6 @@ test('a later ordinary Telegram message makes a bare yes a worded question, not 
 
 test('a later ordinary Telegram message makes a bare no a worded question too',async t=>{
  const {store}=fixture(t),{id}=await ask(store,'The bot stopped.');
- await new Promise(r=>setTimeout(r,5));
  await recordReport(store,{text:'Your calendar changed.',steps:[],delivery:'telegram'});delivered(store,'Your calendar changed.');
  assert.equal(heard(store,{chat:'telegram',words:'no'}).kind,'ask');assert.equal(store.get('approvals',id).status,'pending');
 });
@@ -56,7 +61,6 @@ test('a scheduler delivery, a command reply or a failure notice sent after the q
   bot=>bot.failureNotice('telegram-8','Sorry.')];
  for(const [i,send] of sends.entries()){
   const {store}=fixture(t),{id}=await ask(store,'The bot stopped.');
-  await new Promise(r=>setTimeout(r,5));
   const text=i===1?'/status':'';
   const transport=async url=>({ok:true,json:async()=>url.endsWith('/getUpdates')?{ok:true,result:text?[{update_id:9,message:{text,chat:{id:1,type:'private'},from:{id:1}}}]:[]}:{ok:true,result:{message_id:3}}});
   const bot=new Telegram({store,domains:{},token:'x',owner:1,transport});
@@ -260,7 +264,6 @@ test('a direct reply that prints two questions certifies both, even when the rec
 
 test('an unrelated reply, an older step and a command reply cannot certify a step',async t=>{
  const {store}=fixture(t),old=open(store,'The bot stopped.');
- await new Promise(r=>setTimeout(r,5));
  let fresh;const domains={invoke:async()=>{fresh=open(store,'The disk is full.');return {reply:'Nothing to report. '+old.message};}};
  const updates=[{update_id:1,message:{from:{id:123,is_bot:false},chat:{id:123,type:'private'},text:'hello'}},{update_id:2,message:{from:{id:123,is_bot:false},chat:{id:123,type:'private'},text:'/notebook'}}];
  const transport=async url=>({ok:true,json:async()=>url.endsWith('getUpdates')?{ok:true,result:updates}:{ok:true,result:{message_id:7}}});

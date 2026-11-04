@@ -68,9 +68,16 @@ export function openStep(store,{about,question,yes,no,by,chat,job}){
 // names the step (background-reports.mjs, via stampDelivered); and the Telegram sender, for a direct
 // reply it sent that holds the words of a step opened during that very turn (stampReply). The asker's
 // own say-so never counts, and a question printed once certifies one step, however many ask the same words.
+// The time a question or a later message reached the chat, never equal to one already recorded, so a
+// message sent in the same millisecond still counts as newer (`spokeSince`).
+export const deliveryClock=store=>{
+ let last=0;
+ for(const t of [...store.list('approvals').map(r=>r.sent_at),...store.list('conversation_messages').map(r=>r.delivered_at)])if(t)last=Math.max(last,Date.parse(t)||0);
+ return new Date(Math.max(Date.now(),last+1)).toISOString();
+};
 const stamp=(store,id,messageId)=>store.withLock(()=>{
  const record=store.get('approvals',id);
- if(record?.asked_in&&record.status==='pending'&&!record.sent_at)store.commit([store.prepare('approvals',{sent_at:new Date().toISOString(),...(messageId?{sent_message_id:messageId}:{})},record)]);
+ if(record?.asked_in&&record.status==='pending'&&!record.sent_at)store.commit([store.prepare('approvals',{sent_at:deliveryClock(store),...(messageId?{sent_message_id:messageId}:{})},record)]);
 });
 export const stampDelivered=(store,id,chat)=>{if(store.get('approvals',id)?.asked_in===chat)stamp(store,id);};
 // The pending, unsent Telegram steps whose questions a routine printed in full, oldest first; a

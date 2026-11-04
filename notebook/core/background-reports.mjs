@@ -5,7 +5,7 @@ import {ruleRefusals} from './briefing-cut.mjs';
 import {queueNotice} from './notices.mjs';
 import {deliveryFor} from './notebook-routines.mjs';
 import {telegramInHermes} from './starting-routines.mjs';
-import {stampDelivered,stepsForWords} from './waiting-steps.mjs';
+import {stampDelivered,stepsForWords,deliveryClock} from './waiting-steps.mjs';
 
 // BACKGROUND WORK TELLS THE OWNER IN THE CHAT'S VOICE, AND THE CHAT KNOWS IT (4 November 2026, #198).
 //
@@ -79,7 +79,7 @@ export function delivered(store,words,receipts=[]){
  for(const record of found){
   // `step` is the scalar a record persisted before the set `steps` existed.
   for(const id of record.report?.steps||[record.report?.step].filter(Boolean))stampDelivered(store,id,'telegram');
-  store.commit([store.prepare('conversation_messages',{delivered_at:new Date().toISOString()},record)]);
+  store.commit([store.prepare('conversation_messages',{delivered_at:deliveryClock(store)},record)]);
  }
  return found.map(r=>r.id);
 }
