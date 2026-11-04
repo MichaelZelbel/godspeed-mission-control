@@ -941,7 +941,8 @@ function cmdDrop() {
 
 function cmdCheck(day) {
   const only = args[1] && !args[1].startsWith("--") ? args[1] : "";
-  const notes = roll(day);
+  // A check of one thing touches that thing only: rolling would adopt keys and grow windows of every other deadline.
+  const notes = only ? [] : roll(day);
   for (const n of notes) notes.length && console.log("  " + n);
   let closed = 0, problems = 0, looks = 0;
   if (only && !slugs().includes(only)) { console.log("You have nothing called " + only + ". Type mc-due to see the list."); return 1; }

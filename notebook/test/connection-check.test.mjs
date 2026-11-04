@@ -199,6 +199,24 @@ test('a refusal whose deadline failed survives an unset day and then network tro
  assert.equal(readNotices(store).length,1);
 });
 
+test('a recovery leaves an unrelated repeating deadline that is overdue exactly as it was',async t=>{
+ const {store,root}=fixture(t);
+ await checkConnections({store,day:D1,probes:stubs({telegram:refused})});
+ const added=runDue(store,D1,['add','weekly','--title','Weekly','--to',D1,'--done-when','x','--cost','y','--repeats','weekly']);assert.equal(added.status,0,added.out);
+ const dir=path.join(root,'notebook','Deadlines'),snapshot=()=>JSON.stringify(fs.readdirSync(dir).filter(f=>/weekly/i.test(f)).map(f=>[f,fs.readFileSync(path.join(dir,f),'utf8')]));
+ const before=snapshot();assert.ok(before.length>4);
+ await checkConnections({store,day:D2,probes:stubs()});
+ assert.equal(addonDeadlines(store,{addon:'connection-check',action:'list'}).deadlines[0].state,'closed');
+ assert.equal(snapshot(),before,'no window of the unrelated deadline was grown');
+});
+
+test('the GitHub probe only reads the remote',async t=>{
+ const {store}=fixture(t),calls=[];
+ fs.mkdirSync(store.state,{recursive:true});fs.writeFileSync(path.join(store.state,'sync-config.json'),JSON.stringify({enabled:true}));
+ assert.deepEqual(await githubProbe({store,run:args=>{calls.push(args);}})(),{set_up:true,ok:true});
+ assert.deepEqual(calls,[['ls-remote','--heads','origin','main']]);
+});
+
 test('the probes cover exactly the connections Settings names, in the same order',()=>{
  assert.deepEqual(Object.keys(CONNECTIONS),Object.keys(CONNECTION_NAMES));
  assert.deepEqual(Object.keys(defaultProbes({store:{},home:'x'})),Object.keys(CONNECTION_NAMES));
