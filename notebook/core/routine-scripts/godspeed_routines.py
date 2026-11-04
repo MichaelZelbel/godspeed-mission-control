@@ -639,16 +639,25 @@ def brief(c):
 NOTICES_SAID = "godspeed-notices-said.json"
 
 
-def notices(c, mark=True):
+def notices(c, mark=True, strict=False):
     """What the notebook queued for the person (core/notices.mjs), each said once on this machine.
-    With mark=False nothing is marked said, for a run whose result will not reach the person."""
+    With mark=False nothing is marked said, for a run whose result will not reach the person.
+    With strict=True a queue that cannot be read ends the run, for a routine whose only output is the queue;
+    a missing or empty queue is still nothing to say."""
     queued = c.get("notices")
     if not queued:
         return []
     try:
         with open(queued, encoding="utf-8") as f:
-            waiting = [n for n in (json.load(f) or {}).get("notices", []) if isinstance(n, dict) and n.get("id") and n.get("text")]
+            text = f.read()
+        waiting = []
+        if text.strip():
+            waiting = [n for n in json.loads(text).get("notices", []) if isinstance(n, dict) and n.get("id") and n.get("text")]
+    except FileNotFoundError:
+        return []
     except Exception:
+        if strict:
+            fail("The daily connection check could not run.")
         return []
     said_file = os.path.join(c["home"], NOTICES_SAID)
     try:
@@ -983,7 +992,7 @@ def connection_check(c):
     if r is None or r.returncode != 0:
         # A failed run's result is not shown to the person, so what was queued stays unsaid for the next run that succeeds.
         fail("The daily connection check could not run.", r)
-    return "\n\n".join(notices(c))
+    return "\n\n".join(notices(c, strict=True))
 
 
 def main(kind):

@@ -3,6 +3,7 @@ import path from 'node:path';
 import {createRequire} from 'node:module';
 import {spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
+import {CONNECTION_NAMES} from './connection-names.mjs';
 import {atomic} from './records/store.mjs';
 import {queueNotice} from './notices.mjs';
 import {routineAIStatus,askDirectly} from './routine-ai.mjs';
@@ -27,13 +28,13 @@ import {addDays} from '../../third-party/addons/godspeed-coach/lib/clock.mjs';
 // A probe answers only {set_up, ok, kind}; kind is 'sign-in' (login or key refused) or 'other'. No
 // service text, address or key ever leaves a probe, so none can reach a record, a message or a log.
 export const CONNECTIONS={
- ai:{probe:deps=>aiProbe(deps),label:'your AI',stops:'your routines and your chat cannot think',
+ ai:{...CONNECTION_NAMES.ai,probe:deps=>aiProbe(deps),
   signIn:'Your AI did not accept its sign-in or key this morning, so your routines and your chat cannot think until it is fixed. To fix it, open Settings in your notebook and connect your AI again under Your AI.'},
- telegram:{probe:deps=>telegramProbe(deps),label:'Telegram',stops:'nothing from your mission control reaches you on Telegram and your messages there go unanswered',
+ telegram:{...CONNECTION_NAMES.telegram,probe:deps=>telegramProbe(deps),
   signIn:'Telegram refused your bot\'s key this morning, so nothing from your mission control reaches you on Telegram and your messages there go unanswered. To fix it, get the bot\'s current key from BotFather and connect Telegram again in Settings.'},
- github:{probe:deps=>githubProbe(deps),label:'GitHub',stops:'your notebook stops syncing with your other computers',
+ github:{...CONNECTION_NAMES.github,probe:deps=>githubProbe(deps),
   signIn:'GitHub did not let this computer read your notebook\'s repository this morning, so your notebook stops syncing with your other computers. To fix it, open Settings in your notebook and press Connect record sync again; GitHub\'s sign-in page opens.'},
- mail:{probe:deps=>mailProbe(deps),label:'Gmail',stops:'your assistants cannot search your mail or save drafts',
+ mail:{...CONNECTION_NAMES.mail,probe:deps=>mailProbe(deps),
   signIn:'Gmail did not accept the app password this morning, so your assistants cannot search your mail or save drafts. To fix it, ask your assistant: Connect Gmail for me.'},
 };
 const NAMES=Object.keys(CONNECTIONS);
