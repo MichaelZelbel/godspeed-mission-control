@@ -37,7 +37,7 @@ SILENT = ("[SILENT]", "SILENT", "[NO_REPLY]", "NO_REPLY")
 _output_bus = sys.modules.setdefault("godspeed_progress_output_v1", types.ModuleType("godspeed_progress_output_v1"))
 _pending_lock = threading.Lock()
 _pending = {}  # (session_id, turn_id) -> the question asked in that turn
-_model_asked_turns = {}  # (session_id, turn_id) -> when the model itself ran a successful `asked` in that turn
+_model_asked_turns = {}  # (session_id, turn_id) -> the conversation of the question the model itself asked in that turn
 _platforms = {}  # session_id -> the platform of its latest turn (never a scheduled one)
 _turns = collections.OrderedDict()  # session_id -> the judged turn in flight (see _start_judge)
 LOG_LIMIT = 1_000_000
@@ -157,11 +157,11 @@ def on_pre_llm_call(**kwargs):
         if platform and session_id:
             args += ["--conversation", f"{platform}:{session_id}", "--program-asks"]
         # A scheduled run is not a conversation with the person: no block at all, no turn marker
-        # (the command writes it) and no conversation for its commands (_remember_platform).
+        # (the command writes it) and no conversation for its commands (_remember_platform). It
+        # leaves the session's interactive turn alone: on_charm_reply ignores scheduled replies.
         scheduled = platform == "cron" or bool(os.environ.get("GODSPEED_SCHEDULED_RUN"))
         _remember_platform(session_id, platform, scheduled)
         if scheduled:
-            _drop_turn(session_id)
             args.append("--scheduled")
         else:
             _start_judge(session_id, platform, kwargs.get("user_message"))
@@ -224,14 +224,6 @@ def _run_judge(turn, extra, timeout):
         return _verdict_of(r.stdout) if r.returncode == 0 else None
     except Exception:
         return None
-
-
-def _drop_turn(session_id):
-    """A scheduled run reusing a session id must not inherit the interactive turn's judgement."""
-    with _pending_lock:
-        old = _turns.pop(session_id, None)
-    if old:
-        _forget(old)
 
 
 def _forget(turn):
@@ -389,6 +381,16 @@ def _asked_when(report, conversation):
                  if isinstance(q, dict) and q.get("conversation") == conversation), None)
 
 
+def _asked_happened(reports, output, conversation):
+    """Whether the terminal output shows `asked` really recorded a question for `conversation`: its
+    --json report names the open question, or the output holds the question's own words. The command
+    line merely containing `godspeed-charm asked` (an echo, a comment) shows nothing."""
+    if reports:
+        return reports[-1].get("ok") is True and _asked_when(reports[-1], conversation) is not None
+    words = _question.texts() if _question is not None else None
+    return bool(words) and any(w["question"] in output for w in words.values())
+
+
 def on_charm_tool(**kwargs):
     """Remember a slip question asked in this turn, in this Telegram conversation. Hermes owns
     the reply; on_charm_reply acts on it."""
@@ -409,9 +411,12 @@ def on_charm_tool(**kwargs):
         code, output = _tool_output(kwargs.get("result"))
         if code != 0:
             return None
-        # On any platform a question the model asked itself is the turn's one question.
+        reports = _reports(output)
+        if not _asked_happened(reports, output, conversation):
+            return None
+        # On any platform a question the model asked itself is that conversation's one question.
         with _pending_lock:
-            _model_asked_turns[(session_id, turn_id)] = time.monotonic()
+            _model_asked_turns[(session_id, turn_id)] = conversation
             while len(_model_asked_turns) > 200:
                 _model_asked_turns.pop(next(iter(_model_asked_turns)))
         # The question belongs to the conversation that asked it: only this chat gets buttons.
@@ -420,7 +425,6 @@ def on_charm_tool(**kwargs):
         words = _question.texts()
         if not words:
             return None
-        reports = _reports(output)
         asked_when = None
         if reports:
             if reports[-1].get("ok") is not True:
@@ -538,8 +542,9 @@ def on_charm_reply(**kwargs):
             return None
         with _pending_lock:
             entry = _pending.pop((session_id, turn_id), None)
-            model_asked = _model_asked_turns.pop((session_id, turn_id), None) is not None
+            asked_in = _model_asked_turns.pop((session_id, turn_id), None)
             turn = _turns.get(session_id)
+        model_asked = turn is not None and asked_in == turn["conversation"]
         text = str(kwargs.get("response_text") or "")
         key = hashlib.sha256(text.encode("utf-8")).hexdigest()
         if turn is not None and key in turn["done"]:

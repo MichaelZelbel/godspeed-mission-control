@@ -203,6 +203,30 @@ test("a question the model asked itself on another platform is not asked a secon
   } finally { gone(dir); }
 });
 
+test("only a question really recorded for this conversation counts as the model's own", { skip }, () => {
+  const mismatched = mission();
+  const echoed = mission();
+  try {
+    const r = spawnSync(process.execPath, [BIN, "asked", "--conversation", "api_server:other", "--words", VENT], { encoding: "utf8", env: { ...process.env, GODSPEED_CHARM_DIR: mismatched, GODSPEED_CHARM_NOW: at("2026-10-22", 9), GODSPEED_SCHEDULED_RUN: "" } });
+    assert.equal(r.status, 0, r.stderr);
+    const other = `godspeed-charm asked --conversation "api_server:other" --words "${VENT}"`;
+    let out = drive(mismatched, [register, pre(VENT), { do: "tool", session: "s-1", turn: "t-1", command: other, output: r.stdout }, reply("Here.")]);
+    assert.equal(out.results[3].text, `Here.\n\n${Q}`);
+    const printed = "echo godspeed-charm asked --conversation api_server:s-1";
+    out = drive(echoed, [register, pre(VENT), { do: "tool", session: "s-1", turn: "t-1", command: printed, output: "godspeed-charm asked --conversation api_server:s-1" }, reply("Here.")]);
+    assert.equal(out.results[3].text, `Here.\n\n${Q}`);
+  } finally { gone(mismatched); gone(echoed); }
+});
+
+test("a scheduled pre-call sharing an interactive session id leaves its pending judgement", { skip }, () => {
+  const dir = mission();
+  try {
+    const out = drive(dir, [register, pre(VENT), pre("Do the report.", { platform: "cron" }), reply("Done.", { platform: "cron" }), reply("Here.")]);
+    assert.equal(out.results[3].text, null);
+    assert.equal(out.results[4].text, `Here.\n\n${Q}`);
+  } finally { gone(dir); }
+});
+
 test("a scheduled reply sharing an interactive session id neither takes its judgement nor asks", { skip }, () => {
   const dir = mission();
   try {
