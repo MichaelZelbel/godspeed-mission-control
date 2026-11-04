@@ -1124,11 +1124,20 @@ def connection_check(c):
     if r is None or r.returncode != 0:
         # A failed run's result is not shown to the person, so what was queued stays unsaid for the next run that succeeds.
         fail("The daily connection check could not run.", r)
-    said = []
+    # Claim everything queued now before saying any: saying may split a report into new notices, and
+    # those wait for the notice routine rather than extending this run.
+    waiting = []
     found = notice(c, strict=True)
     while found:
-        said.append(say_claimed(c, env, found))
+        waiting.append(found)
         found = notice(c, strict=True)
+    said = []
+    try:
+        while waiting:
+            said.append(say_claimed(c, env, waiting.pop(0)))
+    finally:
+        for _, _, held in waiting:
+            release(held)
     return "\n\n".join(said), True
 
 

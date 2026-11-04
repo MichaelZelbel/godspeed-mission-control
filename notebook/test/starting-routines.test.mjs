@@ -356,6 +356,15 @@ print(g.connection_check(c)[0])`;
  const okRun='g.run=lambda args,c,env,timeout=None:types.SimpleNamespace(returncode=0,stdout="",stderr="")',ok=attempt(okRun);
  assert.equal(ok.status,0,ok.stderr);assert.match(ok.stdout,/Telegram refused your bot's key\./);
  assert.deepEqual(JSON.parse(fs.readFileSync(said,'utf8')).ids,['telegram-key']);
+ // A report provider that splits every notice in two must not extend the run: the split-off notice waits for the notice routine.
+ fs.rmSync(said,{force:true});fs.writeFileSync(queued,JSON.stringify({notices:[{id:'seed',text:'First.'}]}));
+ const split=attempt(okRun+`
+def say(c,env,n):
+    import json
+    q=json.load(open(c["notices"]));q["notices"].append({"id":n["id"]+"~2","text":"Split off."});json.dump(q,open(c["notices"],"w"));return n["text"]
+g.say=say`);
+ assert.equal(split.status,0,split.stderr);assert.equal(split.stdout.trim(),'First.');
+ assert.deepEqual(JSON.parse(fs.readFileSync(said,'utf8')).ids,['seed']);
  for(const bad of ['{not json','[]','{"notices":5}','{"notices":[{"id":"a"}]}','{"notices":[{"id":"a","text":"x"},"b"]}','{"notices":[{"id":5,"text":"x"}]}','{"notices":[{"id":"a","text":"   "}]}']){
   fs.writeFileSync(queued,bad);fs.rmSync(said,{force:true});
   const run=attempt(okRun);
