@@ -87,11 +87,12 @@ export const githubProbe=({store,run=args=>new FileSync(store).git(args,undefine
  try{run(['ls-remote','--heads','origin','main']);return outcome(true);}
  catch(error){return outcome(false,gitKind(error?.stderr));}
 };
-// Gmail by app password (IMAP) when it is connected, otherwise Gmail connected the older way (OAuth).
-export const mailProbe=({imap=mailImap,legacy=mailLegacy}={})=>async()=>{
+// Gmail by app password (IMAP) when it is connected, otherwise Gmail connected the older way (OAuth). A tracker's
+// rule for Gmail with neither left is a sign-in: nothing will be counted until it is connected again.
+export const mailProbe=({imap=mailImap,legacy=mailLegacy,store}={})=>async()=>{
  let tool;try{tool=imap();if(tool.status().state==='not connected')tool=null;}catch{tool=null;}
  if(!tool){
-  if(!legacyConnected(legacy))return NOT_SET_UP;
+  if(!legacyConnected(legacy))return store&&mailTrackers(store).some(t=>t.rule.mailbox==='gmail')?outcome(false,'sign-in'):NOT_SET_UP;
   try{const {state}=await legacy().status();return ['connected','reading only'].includes(state)?outcome(true):outcome(false,mailKind(state));}
   catch{return outcome(false,'other');}
  }

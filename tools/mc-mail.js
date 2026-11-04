@@ -83,8 +83,16 @@ function agentmailConfig() {
   return { key, inbox };
 }
 
+// The read key travels in a header, so it goes only over HTTPS; the loopback address is the local test stand-in.
+function secureApi() {
+  const base = new URL(API);
+  if (base.protocol !== 'https:' && !(base.protocol === 'http:' && ['127.0.0.1', 'localhost', '[::1]'].includes(base.hostname)))
+    throw new Error('AgentMail: GODSPEED_MAIL_AGENTMAIL_API must be an https address');
+  return API;
+}
+
 async function am(cfg, p, params) {
-  const url = new URL(API + p);
+  const url = new URL(secureApi() + p);
   for (const [k, v] of Object.entries(params || {})) {
     if (v === undefined || v === null || v === '') continue;
     for (const one of [].concat(v)) url.searchParams.append(k, String(one));

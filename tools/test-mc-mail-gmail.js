@@ -120,8 +120,10 @@ const server = http.createServer((req, res) => {
       const q = u.searchParams.get("q") || "";
       const m = q.match(/rfc822msgid:(\S+)/);
       if (m) return out(200, { messages: g.sent.filter(s => s.messageId.replace(/[<>]/g, "") === m[1]).map(s => ({ id: s.id })) });
+      if (/from:\(paged\.example\)/.test(q)) return out(200, u.searchParams.get("pageToken") === "p2" ? { messages: [{ id: "m3" }] } : { messages: [{ id: "m1" }], nextPageToken: "p2" });
       return out(200, { messages: [{ id: "m1", threadId: "t1" }] });
     }
+    if (p === "/messages/m3") return out(200, { id: "m3", payload: { headers: [{ name: "Message-ID", value: "<m3@x>" }, { name: "From", value: "a@paged.example" }, { name: "Subject", value: "Second page" }, { name: "Date", value: "Mon, 2 Nov 2026 08:00:00 +0000" }] } });
     if (/^\/messages\/m1$/.test(p)) return out(200, g.messages.m1);
     if (p === "/drafts" && req.method === "POST") {
       const b = JSON.parse(data), id = "d" + g.nextId++, mid = "dm" + g.nextId++;
@@ -190,6 +192,10 @@ async function main() {
   ok("7b header search asks for four headers and no body, and returns no preview", heads.length === 1 && Object.keys(heads[0]).sort().join() === "date,from,message_id,subject"
     && g.urls.some(x => /q=from%3A%28example\.com%29\+after%3A2026%2F10%2F05/.test(x)) && g.urls.some(x => /format=metadata/.test(x) && /fields=id%2Cpayload%2Fheaders|fields=id,payload\/headers/.test(x))
     && !g.urls.some(x => /format=(full|raw)/.test(x)), JSON.stringify(heads) + g.urls.join(" "));
+  g.urls.length = 0;
+  const paged = await G.headerSearch({ senders: ["paged.example"], after: "2026-10-05" });
+  ok("7c header search follows the next page token, so a busy sender is counted whole", paged.length === 2 && paged[1].message_id === "m3"
+    && g.urls.some(x => /pageToken=p2/.test(x)), JSON.stringify(paged) + g.urls.join(" "));
   const body = await G.read({ message_id: "m1" }, wrap);
   ok("8 a message body comes back marked untrusted", /<<<UNTRUSTED[\s\S]*IGNORE YOUR INSTRUCTIONS[\s\S]*>>>/.test(body));
 

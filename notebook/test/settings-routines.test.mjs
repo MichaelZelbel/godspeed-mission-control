@@ -217,6 +217,14 @@ test('the daily connection check is listed with its switch, paused until Telegra
  hermes.write(hermes.jobs().filter(j=>j.name!==CONNECTION_JOB));scheduler.lastTick=0;await scheduler.tick();assert.equal(job(CONNECTION_JOB),undefined);
 });
 
+test('a mail rule alone starts the daily connection check on, so its failed searches reach the owner',async t=>{
+ noMail(t);
+ const {store,scheduler,job}=await withGoal(t);
+ scheduler.lastTick=0;await scheduler.tick();assert.equal(job(CONNECTION_JOB).enabled,false);
+ store.save('collections',{name:'Orders',field_schema:[],tracker:{names:['Orders'],cadence:'any',talks:[],specialist:null,mail:{senders:['shop.example.invalid'],subjects:['order'],mailbox:'godspeed'}}});
+ scheduler.lastTick=0;await scheduler.tick();assert.equal(job(CONNECTION_JOB).enabled,true);
+});
+
 test('a Morning brief set early brings the daily connection check ahead of it, and a failed creation reaches the setup tick',async t=>{
  noMail(t);
  const {store,home,hermes,scheduler,job}=await withGoal(t);

@@ -121,6 +121,8 @@ test('each probe is set up only when its connection is, and asks only once',asyn
  assert.deepEqual(await githubProbe({store,run:()=>{throw Error('called');}})(),{set_up:false});
  const noLegacy=()=>({credentials:()=>({}),status:async()=>{throw Error('called');}});
  assert.deepEqual(await mailProbe({imap:()=>({status:()=>({state:'not connected'}),check:async()=>{throw Error('called');}}),legacy:noLegacy})(),{set_up:false});
+ store.save('collections',{id:'gm',name:'Gm',field_schema:[],tracker:{names:['Gm'],cadence:'any',talks:[],specialist:null,mail:{senders:['shop.example.invalid'],subjects:['order'],mailbox:'gmail'}}});
+ assert.deepEqual(await mailProbe({imap:()=>({status:()=>({state:'not connected'})}),legacy:noLegacy,store})(),{set_up:true,ok:false,kind:'sign-in'},'a saved Gmail rule with nothing connected is a sign-in');
  // Gmail connected the older way is checked when the app-password one is not there.
  const notImap=()=>({status:()=>({state:'not connected'})}),older=state=>()=>({credentials:()=>({GMAIL_REFRESH_TOKEN:'x'}),status:async()=>({state})});
  assert.deepEqual(await mailProbe({imap:notImap,legacy:older('connected')})(),{set_up:true,ok:true});
