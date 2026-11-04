@@ -158,7 +158,16 @@ export function findTracker(store,name){const n=norm(name),candidates=trackers(s
 // that name made another way.
 export function proposalState(store,p,now=new Date()){
  if(!p||p.removed_at)return 'missing';
- const all=trackers(store);if(all.some(c=>c.tracker.proposal_id===p.id))return 'created';
+ const all=trackers(store);
+ // A question about a mail rule is answered by the card that holds the rule: its name is the tracker's,
+ // which exists already when the rule extends one, so the name check below would drop it at once.
+ if(p.specialist==='mail'){
+  // A later rule for the same tracker has taken the card over: this question was answered, then changed.
+  const answered=o=>all.some(c=>c.tracker.proposal_id===o.id||c.tracker.mail?.proposal_id===o.id);
+  if(answered(p)||store.list('tracker_proposals').some(o=>o.specialist==='mail'&&o.id!==p.id&&o.created_at>p.created_at&&(p.tracker_id?o.tracker_id===p.tracker_id:!o.tracker_id&&norm(o.name)===norm(p.name))&&answered(o)))return 'created';
+  if(store.list('tracker_proposals').some(o=>o.id!==p.id&&(o.replaces||[]).includes(p.id)))return 'dropped';
+  return now-Date.parse(p.created_at)<=HOLD_MS?'pending':'expired';
+ }if(all.some(c=>c.tracker.proposal_id===p.id))return 'created';
  if(store.list('tracker_proposals').some(o=>o.id!==p.id&&(o.replaces||[]).includes(p.id)))return 'dropped';
  if(!(now-Date.parse(p.created_at)<=HOLD_MS))return 'expired';
  if(all.some(c=>[c.name,...(c.tracker.names||[])].some(x=>norm(x)===norm(p.name))))return 'dropped';
@@ -239,6 +248,8 @@ const ordinal=n=>n+(n%100>=11&&n%100<=13?'th':['th','st','nd','rd'][n%10]||'th')
 export function holdQuestion(p,today){
  // The cycle tracker asks its own question, the design's words (cycle.mjs).
  if(p.specialist==='cycle')return setupQuestion(lang(p.language),p.entry?{day:p.entry.when,period:PERIOD_FLOWS.has(p.entry.data?.flow),symptoms:p.entry.data?.symptoms||[]}:null,today);
+ // A mail rule's question was worded when it was asked (tracker-operations.mjs, tracker-mail).
+ if(p.specialist==='mail')return p.question;
  // The food tracker asks its own question, with the one about an unclear amount (food.mjs).
  if(p.specialist==='food')return foodQuestion(foodLang(p.language),{questions:foodAmounts(foodLang(p.language),p.unclear||[]),kept:!!p.meal?.items?.length});
  const fields=(p.field_schema||[]).filter(f=>!['when','note'].includes(f.key)),one=fields.length===1&&fields[0].type==='number'?fields[0]:null;

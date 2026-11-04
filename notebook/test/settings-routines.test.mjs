@@ -126,6 +126,26 @@ test('the journal\'s check-ins are scheduled once any of them is switched on, on
  hermes.write(hermes.jobs().filter(j=>j.name!==JOURNAL_JOB));await scheduler.followJournal();assert.equal(mine(),undefined);
 });
 
+test('the mail counts are scheduled while a tracker has a mail rule, stay on this machine, and are paused when none has',async t=>{
+ const {root,home,store,hermes,scheduler}=await withGoal(t);
+ const mine=()=>hermes.jobs().find(j=>j.name==='Mail counts');
+ await scheduler.followMailCount();assert.equal(mine(),undefined,'no rule: no routine');
+ const rule={senders:['shop.example.invalid'],subjects:['order'],mailbox:'gmail'};
+ const tracker=store.save('collections',{name:'Orders',field_schema:[],tracker:{names:['Orders'],cadence:'any',talks:[],specialist:null,mail:rule}});
+ await scheduler.followMailCount();
+ const made=mine();assert.ok(made,'a rule: the routine exists');
+ assert.equal(made.schedule.expr,'30 4 * * *');assert.equal(made.script,'godspeed-mail-count.py');assert.equal(made.no_agent,true);assert.equal(made.deliver,'local');assert.equal(made.workdir,root);
+ assert.match(fs.readFileSync(path.join(home,'scripts','godspeed-mail-count.py'),'utf8'),/main\("mail-count"\)/);
+ const q=new QueryService(store);q.nativeHermesHome=home;assert.match(q.rows('jobs').find(j=>j.title==='Mail counts').what,/never reads a mail's text and sends nothing/);
+ store.save('settings',{id:'installation',timezone:'Europe/Berlin',delivery:'telegram'});
+ await scheduler.followDelivery();assert.equal(mine().deliver,'local','it never sends, whatever the others deliver');
+ await scheduler.followMailCount();assert.equal(hermes.jobs().filter(j=>j.name==='Mail counts').length,1,'once');
+ store.save('collections',{...tracker,tracker:{...tracker.tracker,mail:undefined}});
+ await scheduler.followMailCount();assert.equal(mine().enabled,false,'no rule left: paused');
+ store.save('collections',tracker);await scheduler.followMailCount();assert.equal(mine().enabled,true,'a rule again: resumed');
+ hermes.write(hermes.jobs().filter(j=>j.name!=='Mail counts'));await scheduler.followMailCount();assert.equal(mine(),undefined,'removed by the person: not made again');
+});
+
 test('the routine scripts run the journal\'s tick and say a queued notice once',{skip:!['python','python3'].some(p=>{try{execFileSync(p,['--version'],{stdio:'ignore'});return true;}catch{return false;}})&&'needs Python'},async t=>{
  const {root,home,store,scheduler}=await withGoal(t);
  const journal=fileURLToPath(new URL('../../third-party/addons/godspeed-journal/bin/godspeed-journal.mjs',import.meta.url));
