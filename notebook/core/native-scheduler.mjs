@@ -31,6 +31,13 @@ export function nativeJobs(home,device='local'){
 }
 const RETRY_STARTING=3600000;
 // "05:16": once a day at that time in the owner's timezone.
+// The daily connection check runs at 05:00; a morning brief set before 05:30 pulls it half an hour ahead of it
+// (a brief at 00:10 is preceded by the check at 23:40 the evening before).
+export function connectionCheckTime(briefAt){
+ const brief=dailyTime(briefAt);if(!brief)return '05:00';
+ const at=brief.hour*60+brief.minute,minutes=at<330?(at-30+1440)%1440:300;
+ return dailyTime(Math.floor(minutes/60)+':'+String(minutes%60).padStart(2,'0')).time;
+}
 export function dailyTime(at){const m=/^([01]?\d|2[0-3]):([0-5]\d)$/.exec(String(at||'').trim());return m?{hour:Number(m[1]),minute:Number(m[2]),time:m[1].padStart(2,'0')+':'+m[2]}:null;}
 // `hermes cron tick` runs every due job to the end before it returns (and has
 // already moved each job's next run on, so a killed run is lost for the day).
@@ -240,7 +247,8 @@ export class NativeScheduler{
    return job.id;
   }
   const before=new Set(jobs.map(j=>j.id));
-  await this.command(['create','0 5 * * *','--no-agent','--name',CONNECTION_JOB,'--script',CONNECTION_SCRIPT,'--deliver',deliveryFor(installation,{telegram:telegramInHermes(this.home)}),'--failure-deliver','local','--workdir',root]);
+  const brief=this.notificationJob('morning-brief'),briefAt=brief&&brief.enabled!==false?cronCalendar(cronOf(brief))?.times?.[0]:null,check=dailyTime(connectionCheckTime(briefAt));
+  await this.command(['create',check.minute+' '+check.hour+' * * *','--no-agent','--name',CONNECTION_JOB,'--script',CONNECTION_SCRIPT,'--deliver',deliveryFor(installation,{telegram:telegramInHermes(this.home)}),'--failure-deliver','local','--workdir',root]);
   const made=hermesJobs(this.home).find(j=>!before.has(j.id)&&j.name===CONNECTION_JOB);
   if(!made)throw Error('Hermes did not keep the routine "'+CONNECTION_JOB+'"');
   if(!wanted)try{await this.command(['pause',made.id]);}catch(error){await this.command(['remove',made.id]).catch(()=>{});throw error;}
@@ -332,6 +340,14 @@ export class NativeScheduler{
   const read=(skill,fallback)=>{const job=this.notificationJob(skill),calendar=job?cronCalendar(cronOf(job)):null;return {enabled:!!job&&job.enabled!==false,time:calendar?.times?.[0]||fallback.time,...(fallback.day!==undefined?{day:calendar&&calendar.weekdays.length===1?calendar.weekdays[0]:fallback.day}:{})};};
   return {daily:read('morning-brief',{time:'07:00'}),weekly:read('weekly-review',{time:'17:00',day:5}),delivery:deliveryFor(this.store.get('settings','installation'),{telegram:telegramInHermes(this.home)})};
  }
+ // The check the notebook made moves ahead of a morning brief set before it; one the person removed stays removed.
+ async keepCheckBeforeBrief(briefAt){
+  const entry=readNotebookRoutines(this.store).jobs.find(j=>j.key==='connection-check'),job=entry&&hermesJobs(this.home).find(j=>j.id===entry.id);
+  if(!job)return;
+  const want=connectionCheckTime(briefAt),now=cronCalendar(cronOf(job))?.times?.[0],minutes=t=>{const d=dailyTime(t);return d.hour*60+d.minute;};
+  // Only the default time or a time at or after the brief moves; a time the person chose before it stays.
+  if(now&&now!==want&&(now==='05:00'||minutes(now)>=minutes(briefAt)))await this.retime(job,{times:[want],weekdays:[0,1,2,3,4,5,6]});
+ }
  async setNotifications(input={}){
   this.requireOwner('Change what is sent');
   // A brief still made as the recipe becomes the notebook's own briefing first, so this changes that one.
@@ -346,9 +362,10 @@ export class NativeScheduler{
    if(job){
     const before=cronCalendar(cronOf(job));if(!before||calendarCron(before)!==calendarCron(calendar))await this.retime(job,calendar);
     if(job.enabled===false)await this.command(['resume',job.id]);
+    if(key==='daily')await this.keepCheckBeforeBrief(calendar.times[0]);
     continue;
    }
-   if(kind==='morning-brief'){await this.makeBrief(calendarCron(calendar));continue;}
+   if(kind==='morning-brief'){await this.makeBrief(calendarCron(calendar));await this.keepCheckBeforeBrief(calendar.times[0]);continue;}
    const known=enableKind(kind),delivery=deliveryFor(this.store.get('settings','installation'),{telegram:telegramInHermes(this.home)}),before=new Set(hermesJobs(this.home).map(j=>j.id));
    await this.command(['create',calendarCron(calendar),'Follow the '+skill+' recipe for this mission control.','--name',known.label,'--skill',skill,'--workdir',this.store.root,'--deliver',delivery]);
    const made=hermesJobs(this.home).find(j=>!before.has(j.id));
@@ -395,7 +412,7 @@ export class NativeScheduler{
  // machine with the assistant ticked them, so a routine could run twice.
  owner(){return this.store.get('settings','installation')?.owner||null;}
  owns(){const owner=this.owner();return !owner||owner===this.device;}
- async tick(){
+ async tick({raise=false}={}){
   // A notebook still owned by the old shared name is taken over (device-id.mjs).
   if(this.owner()===LEGACY_DEVICE&&this.claimLegacy)try{await this.claimLegacy();}catch{}
   if(!this.owns()){this.onProgress?.();return [];}
@@ -403,11 +420,12 @@ export class NativeScheduler{
   if(this.ticking)return records;
   if(Date.now()-(this.lastTick||0)<60000){this.onProgress?.();return records;}
   this.ticking=true;this.lastTick=Date.now();
+  let failure=null;
   try{
    await this.startRoutines().catch(()=>null);
    await this.addNewStartingRoutines().catch(()=>null);
    await this.followJournal().catch(()=>null);
-   await this.followConnectionCheck().catch(()=>null);
+   await this.followConnectionCheck().catch(e=>{failure=e;});
    await this.removeChatTidy().catch(()=>null);
    await this.followBrief().catch(()=>null);
    await this.followDelivery().catch(()=>null);
@@ -416,6 +434,8 @@ export class NativeScheduler{
    try{this.afterTick();}catch{}
   }
   finally{this.ticking=false;}
+  // The setup that asked for this tick hears that the connection check could not be made; the periodic tick keeps going.
+  if(raise&&failure)throw failure;
   return records;
  }
  // A routine lives in the Hermes of the machine that runs routines; added or

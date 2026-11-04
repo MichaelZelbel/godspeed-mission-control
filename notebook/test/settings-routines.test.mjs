@@ -2,7 +2,7 @@ import test from 'node:test';import assert from 'node:assert/strict';import fs f
 import {NativeScheduler,nativeJobs} from '../core/native-scheduler.mjs';import {Store} from '../core/records/store.mjs';import {QueryService} from '../core/query.mjs';import {Domains} from '../core/domains.mjs';
 import {installStarter} from '../core/starter-workspace.mjs';import {readMachineRecord,telegramInHermes,chatAppInHermes} from '../core/starting-routines.mjs';import {runCommand} from '../core/child-process.mjs';
 import {DatabaseSync} from 'node:sqlite';import {CONNECTION_NOTICE_PREFIX} from '../core/connection-names.mjs';
-import {cronCalendar,calendarCron,retimeWhat} from '../core/routine-times.mjs';import {enableKinds,readNotebookRoutines,rememberNotebookRoutine,JOURNAL_JOB,CHAT_TIDY_JOB,CHAT_TIDY_SCRIPT,BRIEF_SCRIPT,deliveryFor,CONNECTION_JOB} from '../core/notebook-routines.mjs';
+import {cronCalendar,calendarCron,retimeWhat} from '../core/routine-times.mjs';import {enableKinds,readNotebookRoutines,rememberNotebookRoutine,writeNotebookRoutines,JOURNAL_JOB,CHAT_TIDY_JOB,CHAT_TIDY_SCRIPT,BRIEF_SCRIPT,deliveryFor,CONNECTION_JOB} from '../core/notebook-routines.mjs';
 import {personalOperation} from '../core/personal-operations.mjs';import {readArea} from '../../third-party/addons/godspeed-coach/lib/areas.mjs';
 
 // THE SETTINGS CONTROLS FOR HERMES' ROUTINES, 18 October 2026. Routine times was refused for every
@@ -195,6 +195,24 @@ test('the daily connection check is listed with its switch, paused until Telegra
  scheduler.lastTick=0;await scheduler.tick();assert.equal(job(CONNECTION_JOB).enabled,false);
  // Removed: stays removed.
  hermes.write(hermes.jobs().filter(j=>j.name!==CONNECTION_JOB));scheduler.lastTick=0;await scheduler.tick();assert.equal(job(CONNECTION_JOB),undefined);
+});
+
+test('a Morning brief set early brings the daily connection check ahead of it, and a failed creation reaches the setup tick',async t=>{
+ noMail(t);
+ const {store,home,hermes,scheduler,job}=await withGoal(t);
+ scheduler.lastTick=0;await scheduler.tick();assert.equal(job(CONNECTION_JOB).schedule.expr,'0 5 * * *');
+ await scheduler.setNotifications({daily:{enabled:true,time:'04:30'}});
+ assert.equal(job(CONNECTION_JOB).schedule.expr,'0 4 * * *','before a 04:30 brief');
+ await scheduler.setNotifications({daily:{enabled:true,time:'00:10'}});
+ assert.equal(job(CONNECTION_JOB).schedule.expr,'40 23 * * *','before a 00:10 brief');
+ await scheduler.setNotifications({daily:{enabled:true,time:'07:00'}});
+ assert.equal(job(CONNECTION_JOB).schedule.expr,'0 5 * * *','a later brief gives the check its usual time back');
+ await scheduler.setNotifications({daily:{enabled:true,time:'09:00'}});
+ hermes.write(hermes.jobs().filter(j=>j.name!==CONNECTION_JOB));writeNotebookRoutines(store,{...readNotebookRoutines(store),jobs:readNotebookRoutines(store).jobs.filter(j=>j.key!=='connection-check')});
+ const failing=new NativeScheduler(store,{home,executable:'hermes',device:'pc',run:async(exe,args,options)=>{if(args[1]==='create'&&args.includes(CONNECTION_JOB))throw Error('Hermes could not create it');return hermes.run(exe,args,options);}});
+ await failing.tick();failing.lastTick=0;assert.equal(job(CONNECTION_JOB),undefined,'a periodic tick swallows it');
+ await assert.rejects(failing.tick({raise:true}),/could not create it/);
+ failing.lastTick=0;
 });
 
 test('Gmail alone, read through the real mail adapter, starts the daily connection check on',async t=>{

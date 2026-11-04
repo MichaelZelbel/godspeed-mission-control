@@ -48,6 +48,14 @@ test('a refused Telegram key: one message and one deadline, closed by the routin
  assert.equal(deadlines(store).length,1,'working days after that touch nothing');
 });
 
+test('a refused mail sign-in is pending in Settings and resolved on recovery, like Telegram',async t=>{
+ const {store}=fixture(t);
+ await checkConnections({store,day:D1,probes:stubs({mail:refused})});
+ assert.equal(bell(store,'mail').status,'pending');assert.equal(bell(store,'telegram'),undefined);
+ await checkConnections({store,day:D2,probes:stubs()});
+ assert.equal(bell(store,'mail').status,'resolved');
+});
+
 test('a network failure is said only on the second failure in a row',async t=>{
  const {store}=fixture(t);
  await checkConnections({store,day:D1,probes:stubs({telegram:down})});
