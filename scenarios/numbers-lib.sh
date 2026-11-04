@@ -42,6 +42,12 @@ server_post() { # <path> <json file> <answer file>
   in_server cat /tmp/answer >"$3" 2>/dev/null || : >"$3"
   cat "$3.code"
 }
+# The same post, kept as one record: the code on the first line, the answer after it.
+server_post_record() { # <path> <json file> <answer file>
+  server_post "$@"
+  echo
+  cat "$3"
+}
 # A table of the server's notebook as the query operation answers it.
 server_table() { # <table> <file>
   printf '{"table":"%s"}' "$1" >"$EVIDENCE/.q.json"

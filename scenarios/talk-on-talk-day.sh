@@ -41,6 +41,8 @@ URL_1=https://example.org/trials/statin-alternatives
 URL_2=https://example.org/reviews/sleep-extension
 OPENING='Good evening. Tonight: your LDL result, the half hour of sleep, and the one thing I would try this week.'
 
+# shellcheck disable=SC2317,SC2329  # asked by wait_for
+notebook_answers() { curl -fsS "http://127.0.0.1:$NOTEBOOK_PORT/health" >/dev/null 2>&1; }
 settings_connects_the_model() {
   local body=$EVIDENCE/.provider.json
   printf '{"url":%s,"key":%s,"model":%s,"routines":true}\n' \
@@ -137,7 +139,7 @@ act() {
   install_paths
   install_the_stage_line "$EVIDENCE/.install.log"
   need_node
-  wait_for 180 "the notebook to answer after the install" notebook_is_up || fail "the notebook does not answer after the install"
+  wait_for 180 "the notebook to answer after the install" notebook_answers || fail "the notebook does not answer after the install"
   read_version "$ROOT"
   settings_connects_the_model
   assistant_home

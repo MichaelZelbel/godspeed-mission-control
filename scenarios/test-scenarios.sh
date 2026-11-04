@@ -2882,6 +2882,14 @@ refuses 'a number given by hand that is not counted' incomplete-day "$I/still" '
 copy "$I/good" "$I/given-500"; printf '500\nInternal server failure\n' >"$I/given-500/given.txt"
 refuses 'a manual protein number the server failed on' incomplete-day "$I/given-500" 'was refused'
 
+# given.txt is made by server_post_record from the unterminated code server_post prints and the answer body;
+# the check reads the code as the first line, so the record is made here from a stand-in container.
+printf '{}' >"$I/post.json"
+made=$(bash -c '. "$1"; in_server() { case $1 in curl) cat >/dev/null; printf 200 ;; cat) printf "{\"ok\":true}" ;; esac; }
+  INGEST_PORT=1; server_post_record /x "$2" "$3"' _ "$ROOT/scenarios/numbers-lib.sh" "$I/post.json" "$I/answer" 2>/dev/null)
+copy "$I/good" "$I/made-record"; printf '%s\n' "$made" >"$I/made-record/given.txt"
+passes 'a protein number recorded by the acting step, code on its own line' incomplete-day "$I/made-record" 'counted it'
+
 section 'phone-goes-quiet'
 Q=$TMP/quiet
 quiet_good() {
