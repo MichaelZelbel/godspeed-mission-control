@@ -1,5 +1,7 @@
 import fs from 'node:fs';import path from 'node:path';import {randomInt} from 'node:crypto';import {spawnSync} from 'node:child_process';
 import {hash,encode} from './records/store.mjs';import {visibleRows} from './visibility.mjs';import {localPath} from './local-path.mjs';
+import {createRequire} from 'node:module';
+const {quietGit}=createRequire(import.meta.url)('../../tools/unattended-git.cjs');
 
 export function comparisonConfiguration(query,input){
  if(!input||typeof input.enabled!=='boolean')throw Error('Choose whether the adopted weekly comparison is enabled');if(!input.enabled)return {enabled:false};
@@ -18,7 +20,7 @@ function committedBlindKey(store,id,key){
  const file=localPath(store.root,'work/lead-comparisons/'+id+'/blind-key.json'),text=JSON.stringify(key,null,2)+'\n';
  if(fs.existsSync(file)){if(fs.readFileSync(file,'utf8')!==text)throw Error('Retained comparison blind key changed; preserve it for review');}else fs.writeFileSync(file,text,{flag:'wx',mode:0o600});
  const env={...process.env};for(const name of Object.keys(env))if(name.startsWith('GIT_'))delete env[name];env.GIT_CONFIG_NOSYSTEM='1';env.GIT_CONFIG_GLOBAL=process.platform==='win32'?'NUL':'/dev/null';
- const git=args=>{const result=spawnSync('git',['-c','core.hooksPath='+path.join(folder,'empty-hooks'),...(args[0]==='init'?[]:['-c','core.bare=false','--git-dir='+gitDir,'--work-tree='+folder]),...args],{env,windowsHide:true,encoding:'utf8',timeout:10000,maxBuffer:1024*1024});if(result.error||result.status)throw Error('The private comparison blind key could not be committed; no comparison draft was filed');return result.stdout.trim();};
+ const git=args=>{const result=spawnSync(...quietGit(['-c','core.hooksPath='+path.join(folder,'empty-hooks'),...(args[0]==='init'?[]:['-c','core.bare=false','--git-dir='+gitDir,'--work-tree='+folder]),...args],{env,encoding:'utf8',timeout:10000,maxBuffer:1024*1024}));if(result.error||result.status)throw Error('The private comparison blind key could not be committed; no comparison draft was filed');return result.stdout.trim();};
  if(!fs.existsSync(gitDir))git(['init','--bare','--template=',gitDir]);
  git(['add','--','blind-key.json']);if(git(['diff','--cached','--name-only']))git(['-c','user.name=Godspeed Mission Control','-c','user.email=local@invalid','commit','-m','Retain private blind comparison key']);
  const commit=git(['rev-parse','HEAD']);if(git(['show',commit+':blind-key.json'])!==text.trim())throw Error('The committed comparison blind key does not match its retained source');

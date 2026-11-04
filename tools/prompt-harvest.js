@@ -40,6 +40,7 @@ const { spawnSync } = require('child_process');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const unattended = require('./unattended-git.cjs');
 
 const ARGS = process.argv.slice(2);
 
@@ -158,6 +159,13 @@ function findCollector() {
 
 function say(msg) { if (VERBOSE) process.stdout.write(msg + '\n'); }
 function warn(msg) { process.stderr.write('prompt-harvest: ' + msg + '\n'); }
+
+let signInFailed = false;
+function git(args, opts) {
+  const r = spawnSync(...unattended.quietGit(args, Object.assign({ cwd: GODSPEED, encoding: 'utf8', timeout: 15 * 60 * 1000 }, opts || {})));
+  if (r.status !== 0 && unattended.signInMissing(r.stderr)) signInFailed = true;
+  return r;
+}
 
 function run(cmd, args, opts) {
   return spawnSync(cmd, args, Object.assign({ cwd: GODSPEED, encoding: 'utf8', timeout: 15 * 60 * 1000, windowsHide: true }, opts || {}));
@@ -420,33 +428,34 @@ function main() {
    * failed with "Author identity unknown". What was archived is complete and searchable in the
    * folder already; it is saved with everything else by the backup's first commit. So the run
    * stops here, successfully, and touches nothing in git. */
-  const head = run('git', ['rev-parse', '--verify', '-q', 'HEAD']);
+  const head = git(['rev-parse', '--verify', '-q', 'HEAD']);
   if (!head || head.status !== 0) {
     say('archived here; this mission control has no backup yet, so it is saved with the backup\'s first commit');
     return 0;
   }
-  run('git', ['add', '--', rel]);
-  const dirty = run('git', ['status', '--porcelain', '--', rel]);
+  git(['add', '--', rel]);
+  const dirty = git(['status', '--porcelain', '--', rel]);
   if (!String((dirty && dirty.stdout) || '').trim()) { say('nothing new to commit'); return 0; }
   if (receiptOnlyAndSavedToday(rel, dirty.stdout)) { say('nothing new to commit (this machine\'s receipt is already saved today)'); return 0; }
 
   const machine = MACHINE;
-  const c = run('git', ['commit', '-m', 'Archive the prompts typed on ' + machine, '--', rel], { env: commitEnv() });
+  const c = git(['commit', '-m', 'Archive the prompts typed on ' + machine, '--', rel], { env: commitEnv() });
   if (!c || c.status !== 0) { warn('commit failed: ' + String((c && (c.stderr || c.stdout)) || '').slice(0, 200)); return 1; }
   say('committed');
 
   if (NO_PUSH) return 0;
-  const origin = run('git', ['remote', 'get-url', 'origin']);
+  const origin = git(['remote', 'get-url', 'origin']);
   if (!origin || origin.status !== 0) { say('no backup to send it to yet; the commit is kept here'); return 0; }
   // HEAD:main rather than main: a folder whose first commit the notebook made on a branch git
   // called master still sends to the backup's main, which is where the notebook sends too.
-  let p = run('git', ['push', 'origin', 'HEAD:main']);
-  if (!p || p.status !== 0) {
+  let p = git(['push', 'origin', 'HEAD:main']);
+  if ((!p || p.status !== 0) && !signInFailed) {
     // Somebody else pushed while we worked. Rebase onto them and try once more; a second
     // failure is left alone, because the next run picks the commit up anyway.
     pullOrUndo();
-    p = run('git', ['push', 'origin', 'HEAD:main']);
+    p = git(['push', 'origin', 'HEAD:main']);
   }
+  if (signInFailed) { say('this computer is not signed in to GitHub; the commit is kept here, and a notice says how to sign in'); return 0; }
   if (!p || p.status !== 0) { say('push did not go through; the commit is local and the next run will carry it'); return 0; }
   say('pushed');
   return 0;
@@ -463,7 +472,7 @@ function receiptOnlyAndSavedToday(rel, porcelain) {
   const lines = String(porcelain || '').split('\n').map((l) => l.trim()).filter(Boolean);
   const mine = path.posix.join(rel.split(path.sep).join('/'), 'status', MACHINE + '.json');
   if (lines.length !== 1 || !lines[0].endsWith(mine)) return false;
-  const before = run('git', ['show', 'HEAD:' + mine]);
+  const before = git(['show', 'HEAD:' + mine]);
   if (!before || before.status !== 0) return false;
   let was, now;
   try {
@@ -475,8 +484,8 @@ function receiptOnlyAndSavedToday(rel, porcelain) {
     && Number(now.added || 0) === 0 && was.tool_version === now.tool_version
     && was.godspeed === now.godspeed;
   if (!same) return false;
-  run('git', ['reset', '-q', '--', mine]);
-  run('git', ['checkout', '--', mine]);
+  git(['reset', '-q', '--', mine]);
+  git(['checkout', '--', mine]);
   return true;
 }
 
@@ -487,7 +496,7 @@ function receiptOnlyAndSavedToday(rel, porcelain) {
  * notebook signs its own commits with (notebook/core/sync/git.mjs), because a reader's new
  * computer has no git name and a commit without one fails. */
 function commitEnv() {
-  const name = run('git', ['config', 'user.name']), email = run('git', ['config', 'user.email']);
+  const name = git(['config', 'user.name']), email = git(['config', 'user.email']);
   const has = (r) => r && r.status === 0 && String(r.stdout || '').trim();
   if (has(name) && has(email)) return process.env;
   return Object.assign({}, process.env, {
@@ -497,12 +506,14 @@ function commitEnv() {
 }
 
 function pullOrUndo() {
-  const pulled = run('git', ['pull', '--rebase', '--autostash', 'origin', 'main'], { env: commitEnv() });
+  const pulled = git(['pull', '--rebase', '--autostash', 'origin', 'main'], { env: commitEnv() });
   if (pulled && pulled.status !== 0) {
-    const git = path.join(GODSPEED, '.git');
-    if (fs.existsSync(path.join(git, 'rebase-merge')) || fs.existsSync(path.join(git, 'rebase-apply'))) run('git', ['rebase', '--abort']);
+    const gitDir = path.join(GODSPEED, '.git');
+    if (fs.existsSync(path.join(gitDir, 'rebase-merge')) || fs.existsSync(path.join(gitDir, 'rebase-apply'))) git(['rebase', '--abort']);
   }
   return pulled;
 }
 
-process.exit(main());
+const code = main();
+if (signInFailed && GODSPEED) unattended.tellSignInMissing(GODSPEED).catch(() => false).then(() => process.exit(code));
+else process.exit(code);

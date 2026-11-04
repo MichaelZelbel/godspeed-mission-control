@@ -116,6 +116,13 @@ for(const command of (process.env.GODSPEED_ORIGINAL_RUNTIME==='on'?['mail','watc
  if(process.platform==='win32')atomic(bin+'.cmd',cmd(at=>'"'+at(process.execPath)+'" "'+at(script)+'" %* --godspeed "'+at(root)+'"\r\n'));
  shellCommand(bin,[process.execPath,script],' --godspeed '+quote(root));
 }
+{
+ // The morning-brief recipe's command for "today's brief" in the chat (#193): the routine's own
+ // briefing, shown if today's is saved, else saved once.
+ const script=path.join(kit,'notebook/scripts/morning-brief.mjs'),bin=path.join(home,'bin','godspeed-brief');
+ if(process.platform==='win32')atomic(bin+'.cmd',cmd(at=>'"'+at(process.execPath)+'" "'+at(script)+'" --today %* --godspeed "'+at(root)+'"\r\n'));
+ shellCommand(bin,[process.execPath,script,'--today'],' --godspeed '+quote(root));
+}
 const packagedSkills=[['coach','coach'],['journal','interstitial-journal'],['headache','headache-tracker'],['charm','charm-challenge']];
 for(const [addon,skill] of packagedSkills){
  const source=path.join(kit,'third-party/addons/godspeed-'+addon);
@@ -144,6 +151,10 @@ catch(error){console.error('The skills your assistant saved in its own folder we
 fs.cpSync(path.join(kit,'notebook','assistant-files','godspeed-context'),path.join(home,'plugins','godspeed-context'),{recursive:true,filter:source=>!/__pycache__/.test(source)});
 atomic(path.join(home,'plugins','godspeed-context','mission-control.txt'),root+'\n');
 atomic(path.join(home,'plugins','godspeed-context','step-command.txt'),JSON.stringify([process.execPath,path.join(kit,'notebook','bin','godspeed-step.mjs'),'--godspeed',root])+'\n');
+// THE SHARED YES/NO BUTTONS (assistant-files/godspeed-buttons, issue #197): a library, not a plugin
+// (it is not in plugins.enabled). Charm's slip question and the waiting-step questions use it, so
+// a button's owner check, its one-answer claim and its token live in one place.
+fs.cpSync(path.join(kit,'notebook','assistant-files','godspeed-buttons'),path.join(home,'plugins','godspeed-buttons'),{recursive:true,filter:source=>!/__pycache__/.test(source)});
 // THE ONE OUTGOING STEP (core: assistant-files/godspeed-reply, issue #140): Hermes keeps only the first
 // replacement any transform_llm_output callback returns, so this plugin is the one, and it runs the
 // steps other plugins add. Its first step has a reply go out in the language of the message it

@@ -15,6 +15,7 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const { spawnSync } = require("child_process");
+const { quietGit } = require("./unattended-git.cjs");
 
 // ---------------------------------------------------------------- where is the mission control
 function readDeviceEnv(name) {
@@ -128,8 +129,8 @@ const MAX_FILE_BYTES = 300 * 1024;
 // repository: a mission control sitting inside some other repository gets the answer "nothing", and
 // nothing is the wrong answer.
 function trackedMarkdown(godspeed) {
-  const git = (args) => spawnSync("git", ["-C", godspeed].concat(args),
-    { encoding: "utf8", maxBuffer: 64e6, timeout: 60000 });
+  const git = (args) => spawnSync(...quietGit(["-C", godspeed].concat(args),
+    { encoding: "utf8", maxBuffer: 64e6, timeout: 60000 }));
   const top = git(["rev-parse", "--show-cdup"]);
   if (top.error || top.status !== 0 || (top.stdout || "").trim()) return null;
   const listed = git(["ls-files", "-z", "--cached"]);

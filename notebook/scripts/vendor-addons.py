@@ -22,6 +22,7 @@ import pathlib,subprocess,json,sys,shutil
 ADDONS=['godspeed-coach','godspeed-headache','godspeed-journal','mc-phone','mc-video']
 ACTIVATION='Explicit setup only. No connector or outward action is enabled by packaging.'
 product=pathlib.Path(__file__).resolve().parents[2];target=product/'third-party/addons';pins_file=target/'sources.json'
+# A person is present: a maintainer runs this script by hand.
 git=lambda root,*a:subprocess.check_output(['git','-C',str(root),*a])
 
 def selected(name,tracked):

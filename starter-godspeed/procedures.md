@@ -187,12 +187,12 @@ Filled example:
 
 ## Morning brief
 
-Does: reads my profile files and writes today's brief before I start work;
+Does: runs godspeed-brief, which saves the notebook's "Your morning briefing" before I start work;
       skill: skills/morning-brief/SKILL.md.
 Rhythm: daily at 07:00, Europe/Berlin; next run tomorrow 07:00.
-Lands: brief/YYYY-MM-DD.md in this folder; run history in Hermes.
+Lands: the note "Your morning briefing" in the notebook; run history in Hermes.
 Lives: Hermes cron, on this laptop, in C:\Users\<you>\godspeed.
-May: read this folder, write only into brief/, send nothing.
+May: read the notebook, save that one note, send nothing.
 Off-switch: hermes cron pause morning-brief, or hermes cron remove morning-brief.
 Last checked: 2026-09-02, one manual run and one timed test; phone delivery untested.
 
