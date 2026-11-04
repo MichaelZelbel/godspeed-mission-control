@@ -10,7 +10,10 @@ const fail=error=>{process.stderr.write('Error: '+(error?.message||String(error)
 process.on('uncaughtException',fail);process.on('unhandledRejection',fail);
 const HELP=`godspeed-step: ask your owner for a yes, and read the answer.
 
-  open --about "..." --question "..." --yes "..." --no "..." --by ${ASKER_KINDS.map(kind=>kind+':<name>').join('|')} [--chat telegram|notebook] [--job <routine id>]
+  open --about "..." --question "..." --yes "..." --no "..." --by ${ASKER_KINDS.map(kind=>kind+':<name>').join('|')} [--chat telegram|notebook] [--job <routine id>] [--quietly restart|reload|retry] [--subject <key>] [--outward]
+      --quietly: the system does it and nothing is asked. --subject: an earlier answer about the same key answers it.
+      --outward: sending, paying, deleting, publishing; never quiet, never approved by an earlier yes.
+      Prints {"outcome"}: quiet, decided or asked (asked also carries id and message).
       Opens a waiting step and prints {"id","message"}. Each text is one plain line without a code.
       --about says what this is about for someone who saw none of the work, --yes and --no say what
       happens. A step asked in the notebook is put into the notebook chat for you. A step asked in
@@ -41,7 +44,7 @@ if(verb==='heard'){
 const store=new Store(root,{device:machineDevice(root).id});
 if(verb==='open'){
  const installation=store.get('settings','installation');
- print(openStep(store,{about:option('--about'),question:option('--question'),yes:option('--yes'),no:option('--no'),by:option('--by'),job:option('--job'),
+ print(openStep(store,{about:option('--about'),question:option('--question'),yes:option('--yes'),no:option('--no'),by:option('--by'),job:option('--job'),quietly:option('--quietly'),subject:option('--subject'),outward:args.includes('--outward'),
   chat:option('--chat')||(installation?.delivery==='telegram'?'telegram':'notebook')}));
 }else if(verb==='get'){
  const record=store.get('approvals',args[1]);if(!record)throw Error('That step does not exist.');print(readStep(record));

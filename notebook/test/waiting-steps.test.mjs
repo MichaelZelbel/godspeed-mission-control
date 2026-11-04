@@ -11,7 +11,7 @@ import {Domains} from '../core/domains.mjs';
 import {recordReport,recordRoutine,delivered} from '../core/background-reports.mjs';
 import {Telegram} from '../core/telegram.mjs';
 import {Scheduler} from '../core/jobs/scheduler.mjs';
-import {openStep,ROUTES,CHATS,chatOf,ASKER_KINDS,answerStep,answerChosen,heard,stampReply,readStep,waitingSteps} from '../core/waiting-steps.mjs';
+import {openStep,openFindings,ROUTES,CHATS,chatOf,ASKER_KINDS,answerStep,answerChosen,heard,stampReply,readStep,waitingSteps} from '../core/waiting-steps.mjs';
 
 for(const key of Object.keys(process.env))if(/^GODSPEED_/.test(key))delete process.env[key];
 const script=fileURLToPath(new URL('../bin/godspeed-step.mjs',import.meta.url));
@@ -365,4 +365,52 @@ test('a direct reply is stamped with the words actually sent, so a progress phot
  uid=2;
  await telegram.tick();
  assert.equal(sent.at(-1)[0],'sendPhoto');assert.equal(sent.at(-1)[1],'Nice. '+short.message);assert.ok(store.get('approvals',short.id).sent_at);
+});
+
+// Issue #220: the gate every waiting step passes before it is asked.
+test('a quiet restart is done and nothing is asked',async t=>{
+ const {store}=fixture(t),result=open(store,'The gateway needs a restart.','telegram',{quietly:'restart'});
+ assert.equal(result.outcome,'quiet');assert.equal(waitingSteps(store).length,0);
+ assert.equal(store.list('approvals').filter(r=>r.status==='done_quietly').length,1);
+ assert.throws(()=>open(store,'x','telegram',{quietly:'delete'}),/Quietly is one of/);
+ assert.throws(()=>open(store,'Send the mail.','telegram',{quietly:'retry',outward:true}),/never done quietly/);
+});
+
+test('a subject decided earlier answers from the decision, without expiry',async t=>{
+ const {store}=fixture(t),first=await ask(store,'Turn off the old programs?','telegram',{subject:'old-programs'});
+ assert.equal(heard(store,{chat:'telegram',words:'yes'}).kind,'answered');
+ const record=store.get('approvals',first.id);store.commit([store.prepare('approvals',{expires_at:'2000-01-01T00:00:00.000Z'},record)]);
+ const again=open(store,'Turn off the old programs, again?','telegram',{subject:'old-programs'});
+ assert.equal(again.outcome,'decided');assert.equal(again.answer,'yes');assert.equal(again.decision.user_words,'yes');
+ assert.equal(waitingSteps(store).length,0);
+ assert.equal(open(store,'Something else.','telegram',{subject:'other'}).outcome,'asked');
+});
+
+test('a rejected step is asked again only when it changed, and then says what changed',async t=>{
+ const {store}=fixture(t);await ask(store,'Delete the cache.','telegram',{subject:'cache'});
+ heard(store,{chat:'telegram',words:'no'});
+ assert.equal(open(store,'Delete the cache.','telegram',{subject:'cache'}).answer,'no');
+ const changed=open(store,'Delete the cache, now twice the size.','telegram',{subject:'cache'});
+ assert.equal(changed.outcome,'asked');assert.match(changed.message,/You said no to "Delete the cache\." before\. What changed: Delete the cache, now twice/);
+});
+
+test('an outward step with an earlier unrelated decision is still asked',async t=>{
+ const {store}=fixture(t);await ask(store,'Restart the bot?','telegram',{subject:'bot'});
+ heard(store,{chat:'telegram',words:'yes'});
+ assert.equal(open(store,'Send the mail.','telegram',{subject:'mail',outward:true}).outcome,'asked');
+ assert.equal(open(store,'Send the mail to everyone.','telegram',{subject:'bot',outward:true}).outcome,'asked');
+});
+
+test('an optional extra after an instruction is never asked',async t=>{
+ const {store}=fixture(t),extra={instruction:'Stop them'};
+ assert.equal(open(store,'Also clean up the logs.','telegram',{extra:{...extra,within:false}}).outcome,'dropped');
+ assert.equal(open(store,'Also stop the helper.','telegram',{extra:{...extra,within:true}}).outcome,'do');
+ assert.equal(open(store,'Also send a note.','telegram',{extra:{...extra,within:true},outward:true}).outcome,'dropped');
+ assert.equal(waitingSteps(store).length,0);assert.equal(store.list('approvals').length,0);
+});
+
+test('a bundled report is split and each finding is checked',async t=>{
+ const {store}=fixture(t),base={question:'Shall I go on?',yes:'Done.',no:'Left.',by:'routine:test',chat:'notebook'};
+ const results=openFindings(store,[{...base,about:'The gateway needs a restart.',quietly:'restart'},{...base,about:'The disk is nearly full.'}]);
+ assert.deepEqual(results.map(r=>r.outcome),['quiet','asked']);
 });
