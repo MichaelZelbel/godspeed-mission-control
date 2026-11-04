@@ -109,11 +109,11 @@ the only place it exists.
 ## Wiring it into the brief you already have
 
 Open `skills/morning-brief/SKILL.md`, your morning brief's recipe (Chapter 25), and paste
-this into the session. The recipe shapes the brief only where `godspeed-brief` does not exist (a server's morning job). Where that command exists, the notebook's own briefing is delivered and ignores this file.
+this into the session. Do this only on a mission control without `godspeed-brief` (a server's morning job). Where that command exists, the notebook's own briefing is delivered and ignores the recipe, so editing it changes nothing the person receives; skip this and leave the recipe as it is.
 
 
 ```
-Open skills/morning-brief/SKILL.md and add one part. Read secrets/expires.txt, which
+Only where `godspeed-brief` does not exist, open skills/morning-brief/SKILL.md and add one part. Read secrets/expires.txt, which
 lists my keys and the date each one runs out. Work out how many days are left
 for each. Say nothing at all about a key with more than 60 days left. Between
 60 and 15 days, mention it once a week, on Mondays. With 14 days or fewer,

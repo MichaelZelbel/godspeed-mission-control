@@ -9,13 +9,13 @@ clock on it.
 Your mission control already carries a starter version at
 `skills/morning-brief/SKILL.md`, so a brief you switched on during setup has
 something real to send from the first morning. The prompt below replaces that
-starter with your own. The recipe shapes the brief only where `godspeed-brief` does not exist (a server's morning job). Where that command exists, the notebook's own briefing is delivered and ignores this file.
+starter with your own. Where `godspeed-brief` exists, the notebook's own briefing is delivered and ignores this file, so the prompt below changes nothing the person receives: skip it. Only a mission control without that command (a server's morning job) needs the recipe.
 
 First tell your assistant which time zone to use, such as Europe/London.
 Then, in a session in Hermes, paste this:
 
 ```
-Build skills/morning-brief/SKILL.md with these instructions, then run it once.
+Only where `godspeed-brief` does not exist, build skills/morning-brief/SKILL.md with these instructions, then run it once.
 
 Read AGENTS.md, the profile, current work files, decisions and inbox. Read the previous brief if there is one. Use the current date in the selected job time zone. Do not invent change over time when there is no earlier record.
 
@@ -49,7 +49,7 @@ contract, and two commands enforce it (both installed with this kit):
 The prompt above runs the first. To add the second, paste this as well:
 
 ```
-Add this to skills/morning-brief/SKILL.md: the full text I would copy is right
+Only where `godspeed-brief` does not exist, add this to skills/morning-brief/SKILL.md: the full text I would copy is right
 there in the brief, in double quotes. Where godspeed-brief does not exist, after mc-check-brief passes, run
 mc-judge-brief on the brief file (it rewrites a file, and
 where the command exists the saved note is not edited by hand), and never put back what it removed.

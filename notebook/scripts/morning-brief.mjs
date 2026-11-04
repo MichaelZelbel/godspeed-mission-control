@@ -15,9 +15,10 @@
 //
 //   GODSPEED_WORKSPACE=<mission control> node notebook/scripts/morning-brief.mjs [--today] [--godspeed <mission control>]
 //
-// A briefing already saved today is printed unchanged and nothing is written, for the routine and
-// for --today (the assistant's `godspeed-brief` command, which is what the chat's "today's brief" runs)
-// alike; otherwise it runs as above. Silent stays silent: no output. The last --godspeed wins, so the
+// A briefing already saved today is never written again. --today (the assistant's `godspeed-brief`
+// command, which is what the chat's "today's brief" runs) prints it unchanged; the routine prints
+// nothing for it, so a person who already read it in the chat is not sent it a second time.
+// Otherwise it runs as above. Silent stays silent: no output. The last --godspeed wins, so the
 // root a wired command appends cannot be redirected by an argument before it.
 //
 // The AI is the notebook's own: the one connected in Settings (.godspeed/provider.json), else the
@@ -58,17 +59,18 @@ export function notebookQuery(store,env=process.env){
 }
 
 // The briefing, and the words to deliver: the saved note's, or '' when the briefing stays silent.
+// `existing` says the note was already saved, so only the one who asks for it prints it again.
 export async function runMorningBrief({root,provider=null,env=process.env,now=new Date()}){
  const store=new Store(root,{device:machineDevice(root).id});
  const {note:saved,hidden}=savedBriefToday(store,now);
- if(saved)return {result:null,text:String(saved.content||'').trim()};
- if(hidden)return {result:null,text:''};
+ if(saved)return {result:null,existing:true,text:String(saved.content||'').trim()};
+ if(hidden)return {result:null,existing:true,text:''};
  const query=notebookQuery(store,env);
  const ai=provider||notebookProvider(store,env);
  if(!ai)throw Error('The morning brief has no AI to write with: connect one in Settings, Your AI.');
  const result=await briefing({id:'morning-brief',kind:'morning-brief'},{store,query,provider:ai,now});
  const note=result.record_id?store.get('notes',result.record_id):null;
- return {result,text:note?String(note.content||'').trim():''};
+ return {result,existing:false,text:note?String(note.content||'').trim():''};
 }
 
 // Asked for in the chat (#193): the same admission runMorningBrief gives the routine, so one day has one briefing whoever asks first.
@@ -78,8 +80,9 @@ if(import.meta.url===pathToFileURL(process.argv[1]||'').href){
  const at=process.argv.lastIndexOf('--godspeed'),root=(at>0&&process.argv[at+1])||process.env.GODSPEED_WORKSPACE||process.env.GODSPEED_ROOT;
  if(!root){console.error('The morning brief does not know which mission control to read (GODSPEED_WORKSPACE).');process.exit(2);}
  try{
-  const {text}=await (process.argv.includes('--today')?todaysMorningBrief:runMorningBrief)({root});
-  if(text)process.stdout.write(text+'\n');
+  const today=process.argv.includes('--today');
+  const {text,existing}=await (today?todaysMorningBrief:runMorningBrief)({root});
+  if(text&&(today||!existing))process.stdout.write(text+'\n');
   process.exit(0);
  }catch(error){
   // One plain sentence: the routine's script shows it as the run's last line in Settings > Routines.

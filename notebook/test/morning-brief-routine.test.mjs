@@ -171,12 +171,16 @@ test('the recipe names the command first and keeps hand-writing only as the fall
  assert.match(recipe,/Never write\s+`brief\/YYYY-MM-DD\.md` by hand for "today's brief"/);
 });
 
-test('the routine after the chat made today\'s briefing saves no second, different one',async t=>{
+test('the routine after the chat prints nothing for the briefing the chat showed, and saves no second one',async t=>{
  const {root}=workspace(t);let n=0;
- const provider=async input=>verifies(input)||(n++,n===1?OK:OK+' A different, valid second draft.');
+ const provider=async input=>verifies(input)||(n++,OK);
  const chat=await todaysMorningBrief({root,provider});
- const routine=await runMorningBrief({root,provider});
- assert.equal(routine.text,chat.text);assert.equal(briefNotes(root).length,1);assert.equal(n,1);
+ const script=fileURLToPath(new URL('../scripts/morning-brief.mjs',import.meta.url));
+ const run=(...args)=>spawnSync(process.execPath,[script,...args],{encoding:'utf8',env:{...process.env,GODSPEED_WORKSPACE:root}});
+ const routine=run();
+ assert.equal(routine.status,0,routine.stderr);assert.equal(routine.stdout,'','the routine says nothing for a briefing already saved');
+ assert.equal(briefNotes(root).length,1);assert.equal(n,1,'one AI draft');
+ assert.equal(run('--today').stdout,chat.text+'\n','the chat still gets the saved note');
 });
 
 test('the recipe has the one-sentence answer for a briefing the notebook keeps silent',()=>{

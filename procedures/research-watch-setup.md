@@ -71,10 +71,10 @@ question keeps its weekly pace unless a failure calls for an earlier retry
 
 ## Step 4: findings in the morning brief
 
-The recipe shapes the brief only where `godspeed-brief` does not exist (a server's morning job). Where that command exists, the notebook's own briefing is delivered and ignores this file.
+Do this only on a mission control without `godspeed-brief` (a server's morning job). Where that command exists, the notebook's own briefing is delivered and ignores the recipe, so editing it changes nothing the person receives; skip this and leave the recipe as it is.
 
 ```
-Update skills/morning-brief/SKILL.md to read each active watch's requirements.md, findings.md and latest log lines. Add a Research section after the normal body.
+Only where `godspeed-brief` does not exist, update skills/morning-brief/SKILL.md to read each active watch's requirements.md, findings.md and latest log lines. Add a Research section after the normal body.
 
 Use the research skill's UTC due-date rules to check whether a required run is missing or overdue. Read the common schedule's latest run record if accessible. An empty log means no completed check exists. An old success does not prove the latest scheduled check happened. Report a missing or overdue check with its last success and next retry when known. If the schedule record cannot be read, say its status is unknown. Do not invent a failure record or change research state during brief generation.
 

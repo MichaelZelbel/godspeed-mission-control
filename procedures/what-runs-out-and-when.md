@@ -225,10 +225,10 @@ five separate reminders you will scroll past.
 ## Wiring it into the brief you already have
 
 Open the chat in your mission control, the one whose brief you set up in Chapter 25,
-and paste this. The recipe shapes the brief only where `godspeed-brief` does not exist (a server's morning job). Where that command exists, the notebook's own briefing is delivered and ignores this file.
+and paste this. Do this only on a mission control without `godspeed-brief` (a server's morning job). Where that command exists, the notebook's own briefing is delivered and ignores the recipe, so editing it changes nothing the person receives; skip this and leave the recipe as it is.
 
 ```
-Update skills/morning-brief/SKILL.md with a section called Deadlines and targets.
+Only where `godspeed-brief` does not exist, update skills/morning-brief/SKILL.md with a section called Deadlines and targets.
 
 First run mc-due check, then mc-due today. Put what mc-due today prints into that section word for word, every title included, and keep any error it reports. Leave the section out only when it says nothing needs saying and there was no error.
 
