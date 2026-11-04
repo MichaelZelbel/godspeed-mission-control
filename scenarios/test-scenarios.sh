@@ -2471,13 +2471,267 @@ copy "$T/good" "$T/no-domains"
 sed -i '/^RESEARCH DOMAIN/d' "$T/no-domains/area.md"
 refuses 'an area with no research domain' talk-prep-honest "$T/no-domains" 'names no RESEARCH DOMAIN'
 
+# ===================================================== the owner on Telegram (2.0.0-beta.17)
+# no-question-he-cannot-judge, plain-yes, what-was-that and connection-check judge what an install sent
+# to a fixture Telegram (run.json) and what the notebook held afterwards. Every case is a folder of
+# those files with one thing changed.
+JUDGE="$ROOT/scenarios/telegram-judge.mjs"
+msg() { # <label> <text> [accepted true|false] [buttons JSON]
+  printf '{"label":"%s","method":"send_message","chat_id":"31415","text":%s,"buttons":%s,"accepted":%s}' \
+    "$1" "$(node -e 'process.stdout.write(JSON.stringify(process.argv[1]))' "$2")" "${4:-[]}" "${3:-true}"
+}
+run_json() { # <folder> <messages...>: a run.json holding these messages and steps that all worked
+  local folder=$1 joined='' m
+  shift
+  for m in "$@"; do joined=${joined:+$joined,}$m; done
+  printf '{"outbox":[%s],"steps":[{"label":"s1","kind":"cron","success":true}],"_plugins":[],"hermes":"test"}\n' "$joined" >"$folder/run.json"
+}
+rows() { # <file> <status|id|text>...: waiting-step records
+  local file=$1 joined='' status id text
+  shift
+  while [ $# -ge 3 ]; do
+    status=$1 id=$2 text=$3
+    shift 3
+    joined=${joined:+$joined,}$(printf '{"id":"%s","status":"%s","about":"%s"}' "$id" "$status" "$text")
+  done
+  printf '[%s]\n' "$joined" >"$file"
+}
+OLD='Seven old programs can post into your bot chats'
+
+section 'telegram-judge: what counts as a code'
+code_case() { # <wanted: clean|code> <text>
+  printf '{"outbox":[{"label":"x","text":%s,"accepted":true,"buttons":[]}]}\n' "$(node -e 'process.stdout.write(JSON.stringify(process.argv[1]))' "$2")" >"$TMP/code.json"
+  if node "$JUDGE" codes "$TMP/code.json" >/dev/null; then got=clean; else got=code; fi
+  if [ "$got" = "$1" ]; then ok "a message [$2] is $1"; else bad "a message [$2] is $got, not $1"; fi
+}
+code_case clean 'The decade ends with a facade on 2026-11-04.'
+code_case clean 'Yes, I turned them off.'
+code_case code 'Reply approve 59f1d506 to continue'
+code_case code 'reject aad2598f'
+code_case code '/approve x1'
+code_case code 'Your step is 1ad58918.'
+rows "$TMP/code-rows.json" pending step-aaaa-1111-2222 'x'
+printf '{"outbox":[{"label":"x","text":"see step-aaa","accepted":true,"buttons":[]}]}\n' >"$TMP/code.json"
+if node "$JUDGE" codes "$TMP/code.json" "$TMP/code-rows.json" >/dev/null; then bad "a step id from the snapshot passed"; else ok "a step id from the snapshot is a code"; fi
+
+# ---------------------------------------------------------------- no-question-he-cannot-judge
+nq_good() { # <folder>
+  local f=$1 label
+  rm -rf "$f"
+  mkdir -p "$f"
+  run_json "$f" "$(msg s3-ask 'Should I turn off the seven old programs that can still post into your bot chats?')" \
+    "$(msg s3 'Done: they are turned off.')" "$(msg s5 'Your deadline today: file the tax papers.')"
+  for label in s1 s2 s4 s5; do rows "$f/approvals-$label.json" approved step-qqqq-0001 'Restart the gateway'; done
+  rows "$f/approvals-s3-ask.json" pending step-qqqq-0002 "$OLD"
+  rows "$f/approvals-s3.json" approved step-qqqq-0002 "$OLD"
+  printf '{"owner":"31415"}\n' >"$f/telegram-fixture.json"
+}
+section no-question-he-cannot-judge
+Q=$TMP/nq
+nq_good "$Q/good"
+passes 'five situations: nothing for 1, 2, 4, 5, one question and one confirming reply for 3' no-question-he-cannot-judge "$Q/good" 'none holds a code'
+copy "$Q/good" "$Q/asker-failed"
+printf '{"outbox":[],"steps":[{"label":"s1","kind":"cron","success":false,"error":"this install has no godspeed-step, the one way to ask for a yes (ticket 01, #196)"}]}\n' >"$Q/asker-failed/run.json"
+refuses 'an asker that cannot ask (no godspeed-step)' no-question-he-cannot-judge "$Q/asker-failed" 'no godspeed-step'
+copy "$Q/good" "$Q/s1-asked"
+run_json "$Q/s1-asked" "$(msg s1 'Restart your bot gateway?')" "$(msg s3-ask 'Turn off the seven old programs?')" "$(msg s3 'Done.')"
+refuses 'a message for the quiet restart' no-question-he-cannot-judge "$Q/s1-asked" 'situation s1 sent'
+copy "$Q/good" "$Q/s1-waits"
+rows "$Q/s1-waits/approvals-s1.json" pending step-qqqq-0001 'Restart the gateway'
+refuses 'a quiet restart left waiting' no-question-he-cannot-judge "$Q/s1-waits" 'situation s1 left a step waiting'
+copy "$Q/good" "$Q/s2-waits"
+rows "$Q/s2-waits/approvals-s2.json" pending step-qqqq-0003 "$OLD"
+refuses 'a bundle that left a step waiting' no-question-he-cannot-judge "$Q/s2-waits" 'situation s2 left a step waiting'
+copy "$Q/good" "$Q/s4-asked"
+run_json "$Q/s4-asked" "$(msg s3-ask 'Turn off the seven old programs?')" "$(msg s3 'Done.')" "$(msg s4 'Lock the seven stopped programs down too?')"
+refuses 'a message for the optional extra' no-question-he-cannot-judge "$Q/s4-asked" 'situation s4 sent'
+copy "$Q/good" "$Q/s5-lock"
+run_json "$Q/s5-lock" "$(msg s3-ask 'Turn off the seven old programs?')" "$(msg s3 'Done.')" "$(msg s5 'Reminder: lock the seven programs down.')"
+refuses 'a reminder about the optional extra' no-question-he-cannot-judge "$Q/s5-lock" 'spoke of the optional extra'
+copy "$Q/good" "$Q/vague-question"
+run_json "$Q/vague-question" "$(msg s3-ask 'Is it fine to go on?')" "$(msg s3 'Done.')"
+refuses 'a question that does not say what it is about' no-question-he-cannot-judge "$Q/vague-question" 'does not say what it is about'
+copy "$Q/good" "$Q/asks-again"
+run_json "$Q/asks-again" "$(msg s3-ask 'Turn off the seven old programs?')" "$(msg s3 'Done, anything else?')"
+refuses 'a reply to "approve" that asks again' no-question-he-cannot-judge "$Q/asks-again" 'asks the owner something again'
+copy "$Q/good" "$Q/not-approved"
+rows "$Q/not-approved/approvals-s3.json" pending step-qqqq-0002 "$OLD"
+refuses 'an "approve" that approved nothing' no-question-he-cannot-judge "$Q/not-approved" 'did not approve the step'
+copy "$Q/good" "$Q/typed-code"
+run_json "$Q/typed-code" "$(msg s3-ask 'Turn off the seven old programs? Reply approve 59f1d506')" "$(msg s3 'Done.')"
+refuses 'a question that tells him to type approve and an id' no-question-he-cannot-judge "$Q/typed-code" 'holds a code'
+copy "$Q/good" "$Q/hex-id"
+run_json "$Q/hex-id" "$(msg s3-ask 'Turn off the seven old programs?')" "$(msg s3 'Done: aad2598f.')"
+refuses 'a reply that shows an id' no-question-he-cannot-judge "$Q/hex-id" 'holds a code'
+copy "$Q/good" "$Q/no-snapshot"
+rm "$Q/no-snapshot/approvals-s4.json"
+refuses 'a run that kept no snapshot after situation 4' no-question-he-cannot-judge "$Q/no-snapshot" 'approvals-s4.json is not in what the scenario kept'
+
+# ---------------------------------------------------------------------------------- plain-yes
+PB1='Send this week food log to your nutritionist'
+PB2='Cancel the renewal of your gym membership'
+PA='Share this week food log with your nutritionist'
+PC='Book the car yearly inspection'
+YN='[{"text":"Yes","callback_data":"y"},{"text":"No","callback_data":"n"}]'
+py_snapshots() { # <folder> <statuses of a, b1, b2, c in order, for each label>
+  local f=$1
+  rows "$f/approvals-a-ask.json" pending a1 "$PA"
+  rows "$f/approvals-a.json" approved a1 "$PA"
+  rows "$f/approvals-b-ask.json" approved a1 "$PA" pending b1 "$PB1" pending b2 "$PB2"
+  rows "$f/approvals-b.json" approved a1 "$PA" pending b1 "$PB1" pending b2 "$PB2"
+  rows "$f/approvals-b-choice.json" approved a1 "$PA" approved b1 "$PB1" pending b2 "$PB2"
+  rows "$f/approvals-c-ask.json" approved a1 "$PA" approved b1 "$PB1" pending b2 "$PB2" pending c1 "$PC"
+  rows "$f/approvals-c-press.json" approved a1 "$PA" approved b1 "$PB1" approved b2 "$PB2" pending c1 "$PC"
+  rows "$f/approvals-d-no.json" approved a1 "$PA" approved b1 "$PB1" approved b2 "$PB2" rejected c1 "$PC"
+  rows "$f/approvals-d.json" approved a1 "$PA" approved b1 "$PB1" approved b2 "$PB2" rejected c1 "$PC"
+}
+py_good() { # <folder>
+  local f=$1
+  rm -rf "$f"
+  mkdir -p "$f"
+  run_json "$f" "$(msg a-ask 'Share the food log with your nutritionist?' true "$YN")" "$(msg a 'Done, I shared it.')" \
+    "$(msg b-ask 'Send the food log to your nutritionist?' true "$YN")" "$(msg b-ask 'Cancel the renewal of your gym membership?' true "$YN")" \
+    "$(msg b 'Which one: the food log for your nutritionist, or cancelling the gym membership?')" "$(msg b-choice 'Sent the food log.')" \
+    "$(msg c-ask 'Book the car inspection?' true "$YN")" "$(msg c-press 'Cancelled the gym membership renewal.')" "$(msg d 'Nothing is waiting for a yes right now.')"
+  py_snapshots "$f"
+  printf '{"owner":"31415"}\n' >"$f/telegram-fixture.json"
+}
+section plain-yes
+P=$TMP/py
+py_good "$P/good"
+passes 'plain yes, two waiting, a button, and nothing waiting' plain-yes "$P/good" 'approved nothing'
+copy "$P/good" "$P/a-open"
+rows "$P/a-open/approvals-a.json" pending a1 "$PA"
+refuses 'a yes to one waiting step that approved nothing' plain-yes "$P/a-open" 'did not approve it'
+copy "$P/good" "$P/b-approved-one"
+rows "$P/b-approved-one/approvals-b.json" approved a1 "$PA" approved b1 "$PB1" pending b2 "$PB2"
+refuses 'a yes with two waiting that approved one' plain-yes "$P/b-approved-one" 'approved one of them'
+copy "$P/good" "$P/b-names-one"
+run_json "$P/b-names-one" "$(msg a-ask 'Share the log?' true "$YN")" "$(msg a 'Done.')" "$(msg b 'Do you mean the food log for your nutritionist?')" \
+  "$(msg b-ask 'Cancel the gym membership?' true "$YN")" "$(msg c-ask 'Book the inspection?' true "$YN")"
+refuses 'a question that names only one of two waiting steps' plain-yes "$P/b-names-one" 'does not name both'
+copy "$P/good" "$P/b-two-questions"
+run_json "$P/b-two-questions" "$(msg a 'Done.')" "$(msg b 'The food log, or the gym membership?')" "$(msg b 'Which one, the food log or the gym?')" \
+  "$(msg b-ask 'Cancel the gym?' true "$YN")" "$(msg c-ask 'Book the inspection?' true "$YN")"
+refuses 'two questions for one yes' plain-yes "$P/b-two-questions" 'got 2 messages'
+copy "$P/good" "$P/choice-approved-both"
+rows "$P/choice-approved-both/approvals-b-choice.json" approved a1 "$PA" approved b1 "$PB1" approved b2 "$PB2"
+refuses 'an answer naming one that approved both' plain-yes "$P/choice-approved-both" 'approved the gym step too'
+copy "$P/good" "$P/no-buttons"
+run_json "$P/no-buttons" "$(msg a 'Done.')" "$(msg b 'The food log, or the gym membership?')" \
+  "$(msg b-ask 'Cancel the gym membership?')" "$(msg c-ask 'Book the inspection?')"
+refuses 'a question that went out without buttons' plain-yes "$P/no-buttons" 'without Yes/No buttons'
+copy "$P/good" "$P/press-approved-other"
+rows "$P/press-approved-other/approvals-c-press.json" approved a1 "$PA" approved b1 "$PB1" approved b2 "$PB2" approved c1 "$PC"
+refuses 'a press that approved another step too' plain-yes "$P/press-approved-other" 'changed the car inspection step'
+copy "$P/good" "$P/no-not-rejected"
+rows "$P/no-not-rejected/approvals-d-no.json" approved a1 "$PA" approved b1 "$PB1" approved b2 "$PB2" pending c1 "$PC"
+refuses 'a No that rejected nothing' plain-yes "$P/no-not-rejected" 'did not reject it'
+copy "$P/good" "$P/yes-with-nothing-waiting"
+rows "$P/yes-with-nothing-waiting/approvals-d.json" approved a1 "$PA" approved b1 "$PB1" approved b2 "$PB2" approved c1 "$PC"
+refuses 'a yes with nothing waiting that approved something' plain-yes "$P/yes-with-nothing-waiting" 'changed the status of a step'
+copy "$P/good" "$P/typed-code"
+run_json "$P/typed-code" "$(msg a 'Done.')" "$(msg b 'The food log, or the gym membership? Reply approve 59f1d506')" \
+  "$(msg b-ask 'Cancel the gym membership?' true "$YN")" "$(msg c-ask 'Book the inspection?' true "$YN")" "$(msg d 'ok')"
+refuses 'a question that asks for a code' plain-yes "$P/typed-code" 'holds a code'
+
+# ------------------------------------------------------------------------------- what-was-that
+WW_TEXT='Your notebook backup to GitHub did not run last night.'
+WW_FACTS='["At 03:00 GitHub refused the sign-in this computer uses for the backup","Your notes are safe on this computer; the copy on GitHub is from the day before"]'
+ww_good() { # <folder>
+  local f=$1
+  rm -rf "$f"
+  mkdir -p "$f"
+  run_json "$f" "$(msg report "$WW_TEXT")" "$(msg question 'That was about last night: the nightly backup of your notebook to GitHub stopped, because GitHub refused the sign-in.')"
+  printf '%s\n' "$WW_FACTS" >"$f/report-facts.json"
+  printf '{"data":[{"id":"m1","source_app":"background","content":%s,"report":{"facts":%s}}]}\n' \
+    "$(node -e 'process.stdout.write(JSON.stringify(process.argv[1]))' "$WW_TEXT")" "$WW_FACTS" >"$f/conversation_messages-report.json"
+  printf '{"owner":"31415"}\n' >"$f/telegram-fixture.json"
+}
+section what-was-that
+W=$TMP/ww
+ww_good "$W/good"
+passes 'a report recorded with its facts and explained afterwards' what-was-that "$W/good" 'was answered with the backup and GitHub'
+copy "$W/good" "$W/not-recorded"
+printf '{"data":[]}\n' >"$W/not-recorded/conversation_messages-report.json"
+refuses 'a report that was not recorded in the chat' what-was-that "$W/not-recorded" 'not recorded where the chat reads it'
+copy "$W/good" "$W/other-words"
+printf '{"data":[{"id":"m1","source_app":"background","content":"Something else was said","report":{"facts":%s}}]}\n' "$WW_FACTS" >"$W/other-words/conversation_messages-report.json"
+refuses 'a record with other words than were sent' what-was-that "$W/other-words" 'not recorded where the chat reads it'
+copy "$W/good" "$W/facts-differ"
+printf '["Something else"]\n' >"$W/facts-differ/report-facts.json"
+refuses 'recorded facts that differ' what-was-that "$W/facts-differ" 'does not carry the facts'
+copy "$W/good" "$W/not-sent"
+run_json "$W/not-sent" "$(msg question 'It was about the backup to GitHub.')"
+refuses 'a routine that sent no report' what-was-that "$W/not-sent" 'did not send exactly one message'
+copy "$W/good" "$W/vague-answer"
+run_json "$W/vague-answer" "$(msg report "$WW_TEXT")" "$(msg question 'I am not sure what you mean.')"
+refuses 'an answer that does not name the subject' what-was-that "$W/vague-answer" 'did not name what the report was about'
+copy "$W/good" "$W/no-answer"
+run_json "$W/no-answer" "$(msg report "$WW_TEXT")"
+refuses 'a question that got no answer' what-was-that "$W/no-answer" 'got no answer'
+
+# ---------------------------------------------------------------------------- connection-check
+cc_good() { # <folder>
+  local f=$1 label
+  rm -rf "$f"
+  mkdir -p "$f"
+  run_json "$f" "$(msg broken 'Telegram refused your bot key, so I cannot reach you there. Open Settings to connect it again.')"
+  printf '[{"id":"r1","name":"Daily connection check"}]\n' >"$f/routines.json"
+  printf '[]\n' >"$f/due-before.json"
+  printf '{"data":[]}\n' >"$f/notifications-before.json"
+  for label in fine; do printf '[]\n' >"$f/due-$label.json"; printf '{"data":[]}\n' >"$f/notifications-$label.json"; done
+  printf '[{"slug":"telegram-key","title":"Connect Telegram again","state":"open"}]\n' >"$f/due-broken.json"
+  printf '{"data":[{"id":"n1","kind":"connection-telegram","body":"Telegram refused your bot key, so I cannot reach you there. Open Settings to connect it again."}]}\n' >"$f/notifications-broken.json"
+  printf '[{"slug":"telegram-key","title":"Connect Telegram again","state":"closed"}]\n' >"$f/due-repaired.json"
+  printf '{"data":[]}\n' >"$f/notifications-repaired.json"
+  printf 'getMe valid\ngetMe invalid\ngetMe valid\n' >"$f/telegram-fixture-calls.log"
+}
+section connection-check
+C=$TMP/cc
+cc_good "$C/good"
+passes 'silent while fine, one message and one deadline when broken, closed when repaired' connection-check "$C/good" 'told the owner once'
+copy "$C/good" "$C/no-routine"
+printf '[{"id":"r1","name":"Journal check-ins"}]\n' >"$C/no-routine/routines.json"
+refuses 'an install with no Daily connection check' connection-check "$C/no-routine" 'has no Daily connection check'
+copy "$C/good" "$C/never-reached"
+printf 'getMe valid\n' >"$C/never-reached/telegram-fixture-calls.log"
+refuses 'a check that never reached the stand-in' connection-check "$C/never-reached" 'never asked the stand-in'
+copy "$C/good" "$C/speaks-when-fine"
+run_json "$C/speaks-when-fine" "$(msg fine 'All is well.')" "$(msg broken 'Telegram refused your bot key.')"
+refuses 'a message although everything is fine' connection-check "$C/speaks-when-fine" 'although everything was fine'
+copy "$C/good" "$C/deadline-when-fine"
+printf '[{"slug":"x","title":"Something","state":"open"}]\n' >"$C/deadline-when-fine/due-fine.json"
+refuses 'a deadline although everything is fine' connection-check "$C/deadline-when-fine" 'opened a deadline although'
+copy "$C/good" "$C/bell-when-fine"
+printf '{"data":[{"id":"n9","kind":"connection-telegram","body":"x"}]}\n' >"$C/bell-when-fine/notifications-fine.json"
+printf '{"data":[{"id":"n9","kind":"connection-telegram","body":"x"}]}\n' >"$C/bell-when-fine/notifications-broken.json"
+refuses 'a connection record in the bell although everything is fine' connection-check "$C/bell-when-fine" 'connection record in the bell'
+copy "$C/good" "$C/two-texts"
+run_json "$C/two-texts" "$(msg broken 'Telegram refused your bot key.')"
+refuses 'two different texts when broken' connection-check "$C/two-texts" 'in 2 different texts'
+copy "$C/good" "$C/silent-when-broken"
+run_json "$C/silent-when-broken"
+printf '{"data":[]}\n' >"$C/silent-when-broken/notifications-broken.json"
+refuses 'no word at all when broken' connection-check "$C/silent-when-broken" 'in 0 different texts'
+copy "$C/good" "$C/no-deadline"
+printf '[]\n' >"$C/no-deadline/due-broken.json"
+refuses 'no deadline when broken' connection-check "$C/no-deadline" 'opened 0 deadlines'
+copy "$C/good" "$C/two-deadlines"
+printf '[{"slug":"a","title":"Connect Telegram again","state":"open"},{"slug":"b","title":"Telegram again","state":"open"}]\n' >"$C/two-deadlines/due-broken.json"
+refuses 'two deadlines when broken' connection-check "$C/two-deadlines" 'opened 2 deadlines'
+copy "$C/good" "$C/still-open"
+printf '[{"slug":"telegram-key","title":"Connect Telegram again","state":"open"}]\n' >"$C/still-open/due-repaired.json"
+refuses 'a deadline still open after the key is valid again' connection-check "$C/still-open" 'still open after'
+
 # ============================================================ every one of them, the same shape
 section 'every script'
 for file in scenario-lib.sh settings-on-install.sh night-tidy.sh voice.sh update-keeps-everything.sh \
   reminder-closed-elsewhere.sh reminders-move-keeps-everything.sh two-machines-move-at-once.sh \
   late-reminder-file.sh closed-offline-on-both.sh reminder-from-settings.sh \
   charm-challenge.sh no-video-skills-by-default.sh update-removes-only-unchanged-skills.sh \
-  briefing-breaks-a-rule.sh telegram-language.sh brief-asked-in-chat.sh talk-prep-honest.sh test-scenarios.sh; do
+  briefing-breaks-a-rule.sh telegram-language.sh brief-asked-in-chat.sh talk-prep-honest.sh \
+  no-question-he-cannot-judge.sh plain-yes.sh what-was-that.sh connection-check.sh test-scenarios.sh; do
   if bash -n "$ROOT/scenarios/$file" 2>/dev/null; then
     ok "bash reads scenarios/$file"
   else
@@ -2488,7 +2742,7 @@ for scenario in settings-on-install night-tidy voice update-keeps-everything \
   reminder-closed-elsewhere reminders-move-keeps-everything two-machines-move-at-once \
   late-reminder-file closed-offline-on-both reminder-from-settings charm-challenge \
   no-video-skills-by-default update-removes-only-unchanged-skills briefing-breaks-a-rule telegram-language \
-  brief-asked-in-chat talk-prep-honest; do
+  brief-asked-in-chat talk-prep-honest no-question-he-cannot-judge plain-yes what-was-that connection-check; do
   refuses "$scenario on a folder that is not there" "$scenario" "$TMP/no-such-folder" \
     "there is nothing at"
   run "$scenario"
