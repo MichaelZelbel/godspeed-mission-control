@@ -101,6 +101,18 @@ test("a vent in a notebook chat ends with the exact question, once, also when th
   } finally { gone(dir); }
 });
 
+test("a silent reply to a judged turn still writes its one log line and ends the turn", { skip }, () => {
+  const dir = mission();
+  try {
+    const out = drive(dir, [register, pre(VENT), reply("[SILENT]")]);
+    assert.equal(out.results[2].text, null);
+    assert.equal(out.log.length, 1);
+    assert.equal(out.log[0].did, "no reply to add to");
+    assert.ok(!JSON.stringify(out.log).includes("garbage"));
+    assert.deepEqual(kinds(dir), ["start"]);
+  } finally { gone(dir); }
+});
+
 test("a German vent gets the German question", { skip }, () => {
   const dir = mission();
   try {

@@ -74,7 +74,8 @@ and finishes underneath.
 No (Ja and Nein in German). A tap answers it, the message then says what happened, and the buttons
 go. Only you can tap them, only in your private chat with the bot. Each message answers only its own
 question, and only once: a tap on a question from another day, or one that was answered or asked
-again since, changes nothing. Typing yes or no works as well.
+again since, changes nothing (so does an older button from before places were recorded, when two
+questions shared its moment). Typing yes or no works as well.
 
 Every reply exists in English and German. German in, German out.
 

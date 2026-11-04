@@ -565,8 +565,10 @@ def on_charm_reply(**kwargs):
             return turn["done"][key]
         if entry is not None:
             out, did = _model_asked(entry, text, kwargs), "the model's own question"
-        elif turn is None or not text.strip() or text.strip() in SILENT:
+        elif turn is None:
             return None
+        elif not text.strip() or text.strip() in SILENT:
+            out, did = None, "no reply to add to"
         else:
             try:
                 out, did = _judged_reply(turn, session_id, text, kwargs, model_asked)

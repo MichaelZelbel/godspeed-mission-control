@@ -84,7 +84,8 @@ the Godspeed notebook and refuses to install without one.
   German); a tap answers it, the message then says what happened, and the buttons go. Only you can
   tap them (the one id in `TELEGRAM_ALLOWED_USERS`), only in your private chat with the bot. Each
   message answers only its own question, and only once: a tap on a question from another day, or
-  on one that was answered or asked again since, changes nothing. Typing yes or no works as well.
+  on one that was answered or asked again since, changes nothing (so does a button from before places were recorded, when two questions
+  shared its moment). Typing yes or no works as well.
   The question comes only with a reply that goes out; when no button can be sent, it stays in the
   reply.
   When the hermes-telegram-stickers plugin is installed too, the finish gets one celebration sticker.
