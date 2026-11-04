@@ -19,7 +19,7 @@ Reports (4 November 2026, #198): a routine made in Settings (`--skill ... --deli
 its agent wrote, and Hermes does not put that into the chat's history. register() wraps Hermes'
 delivery of a skill job's result so the notebook first records the words Hermes will send (media tags out, redacted; without its header and footer)
 (notebook/scripts/background-report.mjs record), where the chat reads them. A composite lane is recorded for all its destinations at once or not at all. A result that could not be recorded is not delivered: the run says why in its delivery
-error, like the routines that print their own words. Once Hermes has delivered any result, the notebook is told the words (background-report.mjs delivered), and a waiting step named by the record of those words becomes answerable. The wiring writes report.json beside this file.
+error, like the routines that print their own words. Once Hermes has delivered any result, the notebook is told the words (background-report.mjs delivered, with the receipts of the records written for it), and the waiting steps that record names become answerable; a delivery whose receipt could not be used says so in its delivery error. The wiring writes report.json beside this file.
 """
 
 import json
@@ -66,50 +66,56 @@ def _sent_words(content):
 
 
 def record_result(job, content, for_failure=False):
-    """None when nothing needs recording or it was recorded, else why the result must not go out."""
+    """(refusal, receipts): why the result must not go out, or None; and the ids of the delivery
+    records written for it, which `delivered` hands back once Hermes has delivered."""
     if not (job.get("skill") or job.get("skills")) or not isinstance(content, str) or not content.strip():
-        return None
+        return None, []
     try:
         destinations = _destinations(job, for_failure)
         if not destinations:
-            return None
+            return None, []
         words = _sent_words(content) or MEDIA_ONLY
         with open(os.path.join(HERE, "report.json"), encoding="utf-8") as f:
             wiring = json.load(f)
         r = subprocess.run([wiring["node"], wiring["script"], "record", "--godspeed", wiring["root"], "--home", HOME,
-                            "--routine", str(job.get("name") or job.get("id")), "--delivery", ",".join(destinations)],
+                            "--routine", str(job.get("name") or job.get("id")), "--delivery", ",".join(destinations), "--receipts"],
                            input=words, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=120)
         if r.returncode != 0:
-            return "Not delivered: it could not be recorded in the notebook. " + r.stderr.strip()[:300]
-        return None
+            return "Not delivered: it could not be recorded in the notebook. " + r.stderr.strip()[:300], []
+        return None, r.stdout.strip().split(",")
     except Exception as error:
-        return "Not delivered: it could not be recorded in the notebook. %s" % error
+        return "Not delivered: it could not be recorded in the notebook. %s" % error, []
 
 
-def mark_delivered(job, content, for_failure=False):
-    """Hermes delivered these words: a waiting step whose question they are becomes answerable. The
-    step is named by the delivery record, never by the job."""
+def mark_delivered(job, content, receipts, for_failure=False):
+    """Hermes delivered these words: the waiting steps their delivery record names become answerable.
+    None when that is done or nothing needed it, else why it is not (the words did go out)."""
     try:
         if not isinstance(content, str) or not content.strip() or not _destinations(job, for_failure):
-            return
+            return None
         words = _sent_words(content) or MEDIA_ONLY
         with open(os.path.join(HERE, "report.json"), encoding="utf-8") as f:
             wiring = json.load(f)
-        subprocess.run([wiring["node"], wiring["script"], "delivered", "--godspeed", wiring["root"], "--home", HOME],
-                       input=words, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=120)
-    except Exception:
-        pass
+        r = subprocess.run([wiring["node"], wiring["script"], "delivered", "--godspeed", wiring["root"], "--home", HOME,
+                            "--receipts", ",".join(receipts)],
+                           input=words, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=120)
+        return None if r.returncode == 0 else r.stderr.strip()[:300] or "the notebook refused it"
+    except Exception as error:
+        return str(error)
 
 
 def wrap_delivery(deliver):
     def deliver_recorded(job, content, *args, for_failure=False, **kwargs):
-        refused = record_result(job, content, for_failure)
+        refused, receipts = record_result(job, content, for_failure)
         if refused:
             return refused
         failed = deliver(job, content, *args, for_failure=for_failure, **kwargs)
-        if not failed:
-            mark_delivered(job, content, for_failure)
-        return failed
+        if failed:
+            return failed
+        unmarked = mark_delivered(job, content, receipts, for_failure)
+        if unmarked:
+            return "Delivered, but a question in it could not be marked as answerable in the notebook. " + unmarked
+        return None
     deliver_recorded.godspeed_wrapped = True
     return deliver_recorded
 

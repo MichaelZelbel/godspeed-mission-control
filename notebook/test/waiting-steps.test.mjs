@@ -22,7 +22,7 @@ function fixture(t){
 }
 const open=(store,about,chat='telegram',extra={})=>openStep(store,{about,question:'Shall I go on?',yes:'I will restart it now.',no:'I will leave it as it is.',by:'routine:test',chat,...extra});
 // A Telegram question reaches the owner the way Hermes delivers a notice: the delivery record names the step.
-const deliver=async(store,{id,message})=>{await recordReport(store,{text:message,about:'',step:id,routine:'notice',written:'assistant',delivery:'telegram'});delivered(store,message);};
+const deliver=async(store,{id,message})=>{await recordReport(store,{text:message,about:'',steps:[id],routine:'notice',written:'assistant',delivery:'telegram'});delivered(store,message);};
 const ask=async(...args)=>{const opened=open(...args);if(args[2]!=='notebook')await deliver(args[0],opened);return opened;};
 
 test('one step waiting: a yes approves it and the reply says what happens; a no rejects it',async t=>{
@@ -166,7 +166,7 @@ test('a step whose question was not sent cannot be reached by a bare yes, and a 
  const {store}=fixture(t),{id,message}=open(store,'The bot stopped.'),other=open(store,'The disk is full.');
  assert.equal(heard(store,{chat:'telegram',words:'yes'}).kind,'none');assert.equal(store.get('approvals',id).status,'pending');
  await recordReport(store,{text:'Something else entirely.',step:null,delivery:'telegram'});
- await recordReport(store,{text:message,step:id,delivery:'notebook'});delivered(store,message);
+ await recordReport(store,{text:message,steps:[id],delivery:'notebook'});delivered(store,message);
  assert.equal(heard(store,{chat:'telegram',words:'yes'}).kind,'none');
  await deliver(store,{id,message});
  assert.equal(heard(store,{chat:'telegram',words:'yes'}).kind,'answered');
@@ -236,12 +236,25 @@ test('only steps asked in the receiving chat count, whatever waits in the other 
 test('a Hermes routine that prints a step question makes it answerable only after Hermes delivered the words',async t=>{
  const {store}=fixture(t),{message,id}=open(store,'The bot stopped.');
  await recordRoutine(store,{routine:'asker',text:message,delivery:'telegram'});
- assert.equal(store.list('conversation_messages')[0].report.step,id);
+ assert.deepEqual(store.list("conversation_messages")[0].report.steps,[id]);
  assert.equal(heard(store,{chat:'telegram',words:'yes'}).kind,'none');
  delivered(store,'Other words');
  assert.equal(heard(store,{chat:'telegram',words:'yes'}).kind,'none');
  delivered(store,message);
  assert.equal(heard(store,{chat:'telegram',words:'yes'}).kind,'answered');
+});
+
+test('two equal-text records certify one delivery each, in order, and a delivery names the whole step set of its record',async t=>{
+ const {store}=fixture(t),a=open(store,'The bot stopped.'),b=open(store,'The bot stopped.'),c=open(store,'The disk is full.');
+ const first=await recordRoutine(store,{routine:'asker',text:a.message,delivery:'telegram'});
+ assert.equal(first.length,1);
+ assert.deepEqual(delivered(store,a.message,first),first);
+ assert.deepEqual(delivered(store,a.message,first),[],'a receipt is used once');
+ assert.deepEqual(waitingSteps(store).map(s=>s.id),[a.id],'only the step its record named became answerable');
+ const both=await recordRoutine(store,{routine:'asker',text:b.message+'\n'+c.message,delivery:'telegram'});
+ assert.deepEqual(store.get('conversation_messages',both[0]).report.steps,[b.id,c.id]);
+ delivered(store,b.message+'\n'+c.message);
+ assert.deepEqual(heard(store,{chat:'telegram',words:'yes'}).steps.map(s=>s.id).sort(),[a.id,b.id,c.id].sort(),'a two-question message makes both answerable, so a bare yes asks which');
 });
 
 test('a direct reply is stamped with the words actually sent, so a progress photo or a cut reply cannot certify an unseen question',async t=>{

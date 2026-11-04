@@ -5,7 +5,7 @@ import {ruleRefusals} from './briefing-cut.mjs';
 import {queueNotice} from './notices.mjs';
 import {deliveryFor} from './notebook-routines.mjs';
 import {telegramInHermes} from './starting-routines.mjs';
-import {stampDelivered,stepForWords} from './waiting-steps.mjs';
+import {stampDelivered,stepsForWords} from './waiting-steps.mjs';
 
 // BACKGROUND WORK TELLS THE OWNER IN THE CHAT'S VOICE, AND THE CHAT KNOWS IT (4 November 2026, #198).
 //
@@ -57,21 +57,30 @@ export const reportDelivery=(store,home)=>deliveryFor(store.get('settings','inst
 
 const stamp=at=>at.toISOString().replace(/[-:]/g,'').replace(/\.\d+Z$/,'Z');
 
-const reportValue=({text,about='',facts=[],step=null,routine=null,written,delivery,at=new Date()})=>{
+const reportValue=({text,about='',facts=[],steps=[],routine=null,written,delivery,at=new Date()})=>{
  const telegram=delivery==='telegram';
- return {id:REPORT_PREFIX+stamp(at)+'-'+hash([text,about,at.toISOString(),delivery]).slice(0,8),role:'assistant',content:text,source_app:'background',conversation_id:telegram?'telegram-owner':null,delivered_to:telegram?'telegram':'notebook',sent_at:at.toISOString(),report:{about,facts,step,routine,written}};
+ return {id:REPORT_PREFIX+stamp(at)+'-'+hash([text,about,at.toISOString(),delivery]).slice(0,8),role:'assistant',content:text,source_app:'background',conversation_id:telegram?'telegram-owner':null,delivered_to:telegram?'telegram':'notebook',sent_at:at.toISOString(),report:{about,facts,steps,routine,written}};
 };
 
-// One conversation_messages record for a message handed to delivery.
-// A report that carries a waiting step's id is that step's question on its way, not yet sent:
-// `delivered` (the Hermes wrapper, once Hermes reports success) makes the step answerable.
+// One conversation_messages record for a message handed to delivery; resolves to the record, whose
+// id is the receipt of its delivery. A report that names waiting steps is their questions on their
+// way, not yet sent: `delivered` makes them answerable once Hermes reports success.
 export const recordReport=(store,message)=>store.saveAsync('conversation_messages',reportValue(message));
 
-// Called only after Hermes delivered `words` to the owner. The delivery record that holds exactly
-// those words and names a step is the step's question sent: the step becomes answerable.
-export function delivered(store,words){
- for(const record of store.list('conversation_messages'))
-  if(record.delivered_to==='telegram'&&record.report?.step&&record.content===words)stampDelivered(store,record.report.step,'telegram');
+// Called only after Hermes delivered `words` to the owner. `receipts` are the ids of the delivery
+// records the caller recorded for this delivery; a caller that did not record them (a routine
+// script recorded its own words earlier) gets the oldest Telegram record of exactly those words
+// not yet delivered. A receipt is used once, and certifies the complete step set its record names.
+// Returns the ids of the receipts used; none when nothing matched.
+export function delivered(store,words,receipts=[]){
+ const open=r=>r.delivered_to==='telegram'&&!r.delivered_at;
+ const found=receipts.length?receipts.map(id=>store.get('conversation_messages',id)).filter(r=>r&&open(r))
+  :store.list('conversation_messages').filter(r=>open(r)&&r.content===words).sort((a,b)=>a.sent_at.localeCompare(b.sent_at)).slice(0,1);
+ for(const record of found){
+  for(const id of record.report?.steps||[])stampDelivered(store,id,'telegram');
+  store.commit([store.prepare('conversation_messages',{delivered_at:new Date().toISOString()},record)]);
+ }
+ return found.map(r=>r.id);
 }
 
 // The words to say for a fresh notice. Reports a writing split off wait as notices of their own.
@@ -79,16 +88,18 @@ export async function sayNotice(store,{notice,home,provider=null,guidance}){
  const written=await writeReport(notice,{provider,guidance:guidance||chatGuidance({root:store.root,home})});
  const [first,...rest]=written.reports;
  rest.forEach((r,i)=>queueNotice(store,{id:`${notice.id}~${i+2}`,text:r.text,about:r.about,facts:notice.facts,step:notice.step,written:true}));
- await recordReport(store,{text:first.text,about:first.about,facts:notice.facts||[notice.text],step:notice.step||null,routine:'notice',written:written.written,delivery:reportDelivery(store,home)});
+ await recordReport(store,{text:first.text,about:first.about,facts:notice.facts||[notice.text],steps:notice.step?[notice.step]:[],routine:'notice',written:written.written,delivery:reportDelivery(store,home)});
  return {text:first.text};
 }
 
 // A routine's own words, recorded as they were printed. A job made in Settings delivers where its
-// own job says, which the Hermes hook passes as delivery.
-// A list of deliveries is recorded together or not at all.
+// own job says, which the Hermes hook passes as delivery. A list of deliveries is recorded together
+// or not at all. Resolves (a list: returns) to the ids of the records, the receipts of their delivery.
 export function recordRoutine(store,{routine,text,home,delivery}){
- const step=stepForWords(store,text);
- const message=d=>({text,about:routine,routine,step,written:'routine',delivery:d});
- if(!Array.isArray(delivery))return recordReport(store,message(delivery||reportDelivery(store,home)));
- return store.transaction(view=>view.commit(delivery.map(d=>store.prepare('conversation_messages',reportValue(message(d))))));
+ const steps=stepsForWords(store,text);
+ const message=d=>({text,about:routine,routine,steps,written:'routine',delivery:d});
+ if(!Array.isArray(delivery))return recordReport(store,message(delivery||reportDelivery(store,home))).then(r=>[r.id]);
+ const values=delivery.map(d=>reportValue(message(d)));
+ store.transaction(view=>view.commit(values.map(v=>store.prepare('conversation_messages',v))));
+ return values.map(v=>v.id);
 }

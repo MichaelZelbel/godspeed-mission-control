@@ -73,8 +73,17 @@ const stamp=(store,id,messageId)=>store.withLock(()=>{
  if(record?.asked_in&&record.status==='pending'&&!record.sent_at)store.commit([store.prepare('approvals',{sent_at:new Date().toISOString(),...(messageId?{sent_message_id:messageId}:{})},record)]);
 });
 export const stampDelivered=(store,id,chat)=>{if(store.get('approvals',id)?.asked_in===chat)stamp(store,id);};
-// The pending, unsent Telegram step whose question a routine printed in full.
-export const stepForWords=(store,text)=>store.list('approvals').filter(r=>r.status==='pending'&&r.asked_in==='telegram'&&!r.sent_at&&String(text).includes(r.about+' '+r.question)).sort((a,b)=>a.asked_at.localeCompare(b.asked_at))[0]?.id??null;
+// The pending, unsent Telegram steps whose questions a routine printed in full, oldest first; a
+// question printed once names one step, however many steps ask the same words.
+export function stepsForWords(store,text){
+ const left=new Map(),named=[];
+ for(const r of store.list('approvals').filter(r=>r.status==='pending'&&r.asked_in==='telegram'&&!r.sent_at).sort((a,b)=>a.asked_at.localeCompare(b.asked_at))){
+  const question=r.about+' '+r.question;
+  if(!left.has(question))left.set(question,String(text).split(question).length-1);
+  if(left.get(question)>0){left.set(question,left.get(question)-1);named.push(r.id);}
+ }
+ return named;
+}
 export function stampReply(store,{chat,words,since,messageId}){
  const step=store.list('approvals').filter(r=>r.status==='pending'&&r.asked_in===chat&&!r.sent_at&&r.asked_at>=since&&words.includes(r.about+' '+r.question))
   .sort((a,b)=>a.asked_at.localeCompare(b.asked_at))[0];

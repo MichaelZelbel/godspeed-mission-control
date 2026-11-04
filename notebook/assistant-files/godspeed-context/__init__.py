@@ -147,7 +147,7 @@ def reports_block(root, platform, now=None):
         facts = [str(x) for x in info.get("facts") or [] if x]
         if facts and info.get("written") != "routine":
             line += "\n  Facts: " + "; ".join(facts)[:300]
-        if info.get("step"):
+        if info.get("steps"):
             line += "\n  A step waits for their yes."
         lines.append(line)
     return REPORTS_HEADER + "\n" + "\n".join(lines) if lines else None

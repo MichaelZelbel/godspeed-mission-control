@@ -2,12 +2,12 @@
 // BACKGROUND WORK TELLS THE OWNER, AS THE ROUTINE SCRIPTS RUN IT (4 November 2026, #198).
 //
 //   node background-report.mjs say    --godspeed <mission control> --home <Hermes home>   (a notice as JSON on stdin)
-//   node background-report.mjs delivered --godspeed <mission control> --home <Hermes home>   (the words Hermes just delivered, on stdin)
-//   node background-report.mjs record --godspeed <mission control> --home <Hermes home> --routine <kind> [--delivery telegram|notebook[,...]]   (its words on stdin)
+//   node background-report.mjs delivered --godspeed <mission control> --home <Hermes home> [--receipts id,id]   (the words Hermes just delivered, on stdin)
+//   node background-report.mjs record --godspeed <mission control> --home <Hermes home> --routine <kind> [--delivery telegram|notebook[,...]] [--receipts]   (its words on stdin)
 //
 // `say` prints the words to deliver for one queued notice, written with the chat's guidance (or its
 // plain fallback text) and recorded where the chat reads it; `record` records a routine's own words
-// as printed and `delivered` makes a waiting step answerable once Hermes has delivered the words of the record that names it (where Hermes delivered it, when the caller knows: a skill job's own delivery). See core/background-reports.mjs. Exit 1 only when the notebook cannot be written.
+// as printed and `delivered` makes the waiting steps a delivery record names answerable once Hermes has delivered it; `record --receipts` prints the ids of the records it wrote (a skill job's wrapper hands them back to `delivered --receipts`; otherwise the oldest undelivered record of exactly those words is used). See core/background-reports.mjs. Exit 1 only when the notebook cannot be written.
 import fs from 'node:fs';
 import {pathToFileURL} from 'node:url';
 import {Store} from '../core/records/store.mjs';
@@ -25,13 +25,17 @@ export async function main(argv,stdin){
   let provider=null;try{provider=notebookProvider(store);}catch{}
   return (await sayNotice(store,{notice:JSON.parse(stdin),home,provider})).text;
  }
- if(command==='delivered'){delivered(store,stdin.trim());return '';}
+ if(command==='delivered'){
+  const receipts=option(argv,'receipts')?.split(',').filter(Boolean)||[];
+  delivered(store,stdin.trim(),receipts);
+  return '';
+ }
  const routine=option(argv,'routine');
  if(!routine)throw Error('Say which routine the words are from (--routine)');
  const delivery=option(argv,'delivery')?.split(',');
  if(delivery&&!delivery.every(d=>['telegram','notebook'].includes(d)))throw Error('--delivery is telegram or notebook');
- await recordRoutine(store,{routine,text:stdin.trim(),home,delivery});
- return '';
+ const receipts=await recordRoutine(store,{routine,text:stdin.trim(),home,delivery});
+ return argv.includes('--receipts')?receipts.join(','):'';
 }
 
 if(import.meta.url===pathToFileURL(process.argv[1]||'').href){
