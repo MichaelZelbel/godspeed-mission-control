@@ -64,8 +64,8 @@ export class Telegram {
           else {await this.store.saveAsync('conversation_messages',{role:'user',content:text,source_app:'telegram',conversation_id:'telegram-owner'});turnStart=new Date().toISOString();const result=await this.domains.invoke('conversation-chat',{message:text,conversation_id:'telegram-owner',request_id:id});answerResult=result;reply=result.reply;answered=true;}
           sendAttempted=true;
           const delivered=await this.replyWithProgress(reply,answerResult,message.from?.language_code||'en');
+          if(answered)stampReply(this.store,{words:delivered.dispatched,since:turnStart,messageId:delivered.message_id});
           await this.store.saveAsync('command_receipts',{id,state:'verified',message_id:delivered.message_id,result:reply});
-          if(answered)stampReply(this.store,{chat:'telegram',words:delivered.dispatched,since:turnStart,messageId:delivered.message_id});
           if(!answered)await this.store.saveAsync('conversation_messages',{role:'assistant',content:reply,source_app:'telegram',message_id:delivered.message_id,conversation_id:'telegram-owner'});
         }catch{await this.store.saveAsync('command_receipts',{id,state:'needs_review',error:'Telegram request did not finish. It will not be replayed automatically.'});if(!sendAttempted)await this.failureNotice(id,'I could not finish your message. I have not repeated any actions. Please try again.');}
         atomic(this.file,JSON.stringify({offset:update.update_id+1}));

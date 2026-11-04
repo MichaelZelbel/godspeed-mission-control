@@ -67,7 +67,7 @@ export function openStep(store,{about,question,yes,no,by,chat,job}){
 // openStep, for a question it writes into the notebook chat itself; a background delivery record that
 // names the step (background-reports.mjs, via stampDelivered); and the Telegram sender, for a direct
 // reply it sent that holds the words of a step opened during that very turn (stampReply). The asker's
-// own say-so never counts, and one sent message certifies one step.
+// own say-so never counts, and a question printed once certifies one step, however many ask the same words.
 const stamp=(store,id,messageId)=>store.withLock(()=>{
  const record=store.get('approvals',id);
  if(record?.asked_in&&record.status==='pending'&&!record.sent_at)store.commit([store.prepare('approvals',{sent_at:new Date().toISOString(),...(messageId?{sent_message_id:messageId}:{})},record)]);
@@ -75,19 +75,17 @@ const stamp=(store,id,messageId)=>store.withLock(()=>{
 export const stampDelivered=(store,id,chat)=>{if(store.get('approvals',id)?.asked_in===chat)stamp(store,id);};
 // The pending, unsent Telegram steps whose questions a routine printed in full, oldest first; a
 // question printed once names one step, however many steps ask the same words.
-export function stepsForWords(store,text){
+export function stepsForWords(store,text,since=''){
  const left=new Map(),named=[];
- for(const r of store.list('approvals').filter(r=>r.status==='pending'&&r.asked_in==='telegram'&&!r.sent_at).sort((a,b)=>a.asked_at.localeCompare(b.asked_at))){
+ for(const r of store.list('approvals').filter(r=>r.status==='pending'&&r.asked_in==='telegram'&&!r.sent_at&&r.asked_at>=since).sort((a,b)=>a.asked_at.localeCompare(b.asked_at))){
   const question=r.about+' '+r.question;
   if(!left.has(question))left.set(question,String(text).split(question).length-1);
   if(left.get(question)>0){left.set(question,left.get(question)-1);named.push(r.id);}
  }
  return named;
 }
-export function stampReply(store,{chat,words,since,messageId}){
- const step=store.list('approvals').filter(r=>r.status==='pending'&&r.asked_in===chat&&!r.sent_at&&r.asked_at>=since&&words.includes(r.about+' '+r.question))
-  .sort((a,b)=>a.asked_at.localeCompare(b.asked_at))[0];
- if(step)stamp(store,step.id,messageId);
+export function stampReply(store,{words,since,messageId}){
+ for(const id of stepsForWords(store,words,since))stamp(store,id,messageId);
 }
 function withdrawStep(store,id){
  try{store.withLock(()=>{const record=store.get('approvals',id);if(record?.status==='pending'&&!record.sent_at)store.commit([store.prepare('approvals',{status:'withdrawn'},record)]);});}catch{}

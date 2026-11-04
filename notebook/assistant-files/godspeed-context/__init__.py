@@ -195,8 +195,8 @@ STEP_RETRY_BLOCK = ("[godspeed-step] Your waiting questions could not be checked
 
 
 def step_block(report):
-    """The block the step command returned for an answered, asked or choosing turn, or None."""
-    if isinstance(report, dict) and report.get("kind") in ("answered", "ask", "choose") and isinstance(report.get("context"), str):
+    """The context the step command returned, whatever kind of result carried it, or None."""
+    if isinstance(report, dict) and isinstance(report.get("context"), str):
         return report["context"] or None
     return None
 

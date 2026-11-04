@@ -214,6 +214,20 @@ test('one direct reply certifies one step: the one opened in that turn whose wor
  assert.deepEqual(waitingSteps(store).map(s=>s.id),[opened[0].id]);
 });
 
+test('a direct reply that prints two questions certifies both, even when the receipt write fails after the send',async t=>{
+ const {store}=fixture(t);let a,b,sends=0;
+ const domains={invoke:async()=>{a=open(store,'The bot stopped.');b=open(store,'The disk is full.');return {reply:a.message+'\n'+b.message};}};
+ const updates=[{update_id:1,message:{from:{id:123,is_bot:false},chat:{id:123,type:'private'},text:'how is it going'}}];
+ const transport=async url=>({ok:true,json:async()=>url.endsWith('getUpdates')?{ok:true,result:updates}:{ok:true,result:{message_id:100+ ++sends}}});
+ const telegram=new Telegram({store,domains,token:'synthetic-bot',owner:'123',transport});
+ const save=store.saveAsync.bind(store);
+ store.saveAsync=(kind,record)=>{if(kind==='command_receipts'&&record.state==='verified')throw new Error('disk');return save(kind,record);};
+ await telegram.tick();
+ assert.equal(sends,1);
+ assert.deepEqual(waitingSteps(store).map(s=>s.id).sort(),[a.id,b.id].sort());
+ assert.equal(heard(store,{chat:'telegram',words:'yes'}).kind,'ask');
+});
+
 test('an unrelated reply, an older step and a command reply cannot certify a step',async t=>{
  const {store}=fixture(t),old=open(store,'The bot stopped.');
  await new Promise(r=>setTimeout(r,5));
