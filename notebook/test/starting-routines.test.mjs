@@ -345,7 +345,7 @@ test('a failed daily connection check leaves what it queued unsaid, and a timeou
 import godspeed_routines as g
 ${result}
 c=g.config();c["connection_check"]="x";c["notices"]=${JSON.stringify(queued)}
-print(g.connection_check(c))`;
+print(g.connection_check(c)[0])`;
   return spawnSync(python,['-c',code],{cwd:path.join(home,'scripts'),encoding:'utf8',env:{...process.env,PYTHONIOENCODING:'utf-8'}});
  };
  for(const result of ['g.run=lambda args,c,env,timeout=None:types.SimpleNamespace(returncode=1,stdout="",stderr="boom")','def r(*a,**k): raise subprocess.TimeoutExpired("x",1)\ng.run=r']){
