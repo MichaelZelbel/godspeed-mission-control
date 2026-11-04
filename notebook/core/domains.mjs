@@ -1,6 +1,8 @@
 import {momentDraft} from './moment-draft.mjs';
 import {conversationRuntimeId,bindConversationSession} from './conversation-state.mjs';
-import {chatOf,heard as heardStep} from './waiting-steps.mjs';
+import {chatOf,classifyAnswer,heard as heardStep} from './waiting-steps.mjs';
+
+const STEP_RETRY='I could not check your waiting questions just now. Please send your answer again in a moment.';
 import {draftEvent} from './draft-event.mjs';
 import {momentDates} from './timestamps.mjs';
 import {NOTE_TYPES,processNote} from './proposals.mjs';
@@ -208,10 +210,13 @@ export class Domains {
     try{
       const last=this.query.rows('conversation_messages').filter(m=>m.role==='assistant'&&m.conversation_id===input.conversation_id).sort((a,b)=>a.created_at.localeCompare(b.created_at)).at(-1);
       found=heardStep(this.store,{chat,words:message,yieldTo:last?.habit_ids?.length?last.created_at:''});
-    }catch{return null;}
+    }catch{return classifyAnswer(message)?{reply:STEP_RETRY}:null;}
     if(found.kind==='answered'){
-      await this.store.saveAsync('conversation_messages',{role:'assistant',content:found.reply,conversation_id:input.conversation_id,source_app:'waiting-step'},undefined,{signal:input.signal});
-      await this.store.saveAsync('command_receipts',{id,state:'verified',source_id:source?.id||null,result:{reply:found.reply}},undefined,{signal:input.signal});
+      // The answer is committed; a failed note of it must not turn the owner's confirmation into an error.
+      try{
+        await this.store.saveAsync('conversation_messages',{role:'assistant',content:found.reply,conversation_id:input.conversation_id,source_app:'waiting-step'},undefined,{signal:input.signal});
+        await this.store.saveAsync('command_receipts',{id,state:'verified',source_id:source?.id||null,result:{reply:found.reply}},undefined,{signal:input.signal});
+      }catch{}
       return {reply:found.reply};
     }
     return found.context?{context:found.context}:null;

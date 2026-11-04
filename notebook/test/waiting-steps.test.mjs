@@ -9,7 +9,7 @@ import {Store,hash} from '../core/records/store.mjs';
 import {QueryService} from '../core/query.mjs';
 import {Domains} from '../core/domains.mjs';
 import {Scheduler} from '../core/jobs/scheduler.mjs';
-import {openStep,answerStep,answerChosen,heard,readStep,waitingSteps} from '../core/waiting-steps.mjs';
+import {openStep,markSent,ROUTES,CHATS,chatOf,ASKER_KINDS,answerStep,answerChosen,heard,readStep,waitingSteps} from '../core/waiting-steps.mjs';
 
 for(const key of Object.keys(process.env))if(/^GODSPEED_/.test(key))delete process.env[key];
 const script=fileURLToPath(new URL('../bin/godspeed-step.mjs',import.meta.url));
@@ -18,7 +18,8 @@ function fixture(t){
  const store=new Store(root,{device:'vps'});store.save('settings',{id:'installation',owner:'vps',timezone:'UTC',delivery:'notebook'});
  return {root,store};
 }
-const ask=(store,about,chat='telegram',extra={})=>openStep(store,{about,question:'Shall I go on?',yes:'I will restart it now.',no:'I will leave it as it is.',by:'routine:test',chat,...extra});
+const open=(store,about,chat='telegram',extra={})=>openStep(store,{about,question:'Shall I go on?',yes:'I will restart it now.',no:'I will leave it as it is.',by:'routine:test',chat,...extra});
+const ask=(...args)=>{const opened=open(...args);if(args[2]!=='notebook')markSent(args[0],opened.id);return opened;};
 
 test('one step waiting: a yes approves it and the reply says what happens; a no rejects it',t=>{
  const {store}=fixture(t),{id}=ask(store,'The bot stopped.');
@@ -105,6 +106,20 @@ test('the notebook chat answers a plain yes itself and hands every other message
  assert.equal(calls.length,2);assert.match(calls[1].step_context,/One/);
 });
 
+test('a committed answer still reaches the owner when the chat note fails, and a failed match asks for the answer again',async t=>{
+ const {store}=fixture(t),calls=[],domains=new Domains(new QueryService(store)),conversation={conversation_id:'notebook:general'};
+ domains.nativeAgent=async input=>{calls.push(input);return {reply:'ordinary'};};
+ const {id}=ask(store,'The bot stopped.','notebook');
+ const save=store.saveAsync.bind(store);store.saveAsync=async(type,...rest)=>{if(type==='conversation_messages')throw Error('disk full');return save(type,...rest);};
+ const answered=await domains.invoke('conversation-chat',{...conversation,message:'yes',request_id:'f1'});
+ assert.equal(answered.reply,'I will restart it now.');assert.equal(store.get('approvals',id).status,'approved');
+ store.saveAsync=save;
+ const list=store.list.bind(store);store.list=type=>{if(type==='approvals')throw Error('unreadable');return list(type);};
+ const retry=await domains.invoke('conversation-chat',{...conversation,message:'yes',request_id:'f2'});
+ assert.match(retry.reply,/send your answer again/);assert.ok(!/unreadable/.test(retry.reply));assert.equal(calls.length,0);
+ assert.equal((await domains.invoke('conversation-chat',{...conversation,message:'hello',request_id:'f3'})).reply,'ordinary');
+});
+
 test('a payload changed after the yes does not run, and the scheduler is unchanged',async t=>{
  const {store}=fixture(t),at=new Date(Date.now()-1000).toISOString(),payload={message:'Fictional post'};
  store.save('jobs',{id:'post',kind:'browser-post',owner:'vps',next_run:at,paused:false,state:'awaiting_approval',interval_ms:60000,outward:true,payload});
@@ -131,6 +146,7 @@ test('godspeed-step opens, reads and answers; a scheduled run cannot answer',t=>
  const opened=run(['open','--about','The bot stopped.','--question','Restart it?','--yes','I restart it.','--no','I leave it.','--by','routine:test','--chat','telegram']);
  assert.equal(opened.status,0,opened.stderr);const {id,message}=JSON.parse(opened.stdout);assert.equal(message,'The bot stopped. Restart it?');
  assert.equal(JSON.parse(run(['get',id]).stdout).status,'waiting');
+ assert.equal(run(['sent',id]).status,0);
  assert.equal(JSON.parse(run(['heard','--chat','telegram'],{input:'how are you'}).stdout).kind,'none');
  assert.equal(JSON.parse(run(['heard','--chat','telegram'],{input:'yes'}).stdout).kind,'ask');
  assert.equal(JSON.parse(run(['heard','--chat','telegram'],{input:'yes'}).stdout).kind,'answered');
@@ -138,4 +154,26 @@ test('godspeed-step opens, reads and answers; a scheduled run cannot answer',t=>
  const refused=run(['answer',id,'--chat','telegram'],{env:{GODSPEED_SCHEDULED_RUN:'1'}});assert.equal(refused.status,1);assert.match(refused.stderr,/scheduled run/);
  assert.equal(JSON.parse(run(['heard','--chat','telegram'],{input:'yes',env:{GODSPEED_SCHEDULED_RUN:'1'}}).stdout).kind,'none');
  const bad=run(['open','--about','Reply "approve 59f1d506"','--question','q','--yes','y','--no','n','--by','routine:test']);assert.equal(bad.status,1);
+});
+
+test('a step whose question was not sent cannot be reached by a bare yes',t=>{
+ const {store}=fixture(t),{id}=open(store,'The bot stopped.');
+ assert.equal(heard(store,{chat:'telegram',words:'yes'}).kind,'none');assert.equal(store.get('approvals',id).status,'pending');
+ markSent(store,id);
+ assert.equal(heard(store,{chat:'telegram',words:'yes'}).kind,'answered');
+});
+
+test('a notebook step whose question could not be written is withdrawn and the error is raised',t=>{
+ const {store}=fixture(t);
+ store.save('note_conversations',{id:'chat-'+hash('general').slice(0,24),context_key:'general',state:{messages:5}});
+ assert.throws(()=>open(store,'The bot stopped.','notebook'));
+ assert.deepEqual(store.list('approvals').map(r=>r.status),['withdrawn']);
+ assert.equal(heard(store,{chat:'notebook',words:'yes'}).kind,'none');
+});
+
+test('every chat a step can be asked in has one conversation that routes back to it, and every asker kind opens a step',t=>{
+ for(const chat of CHATS)assert.equal(chatOf(ROUTES[chat].conversation),chat);
+ assert.equal(chatOf('notebook:person:x'),null);
+ const {store}=fixture(t);
+ for(const kind of ASKER_KINDS)assert.ok(open(store,'About '+kind,'telegram',{by:kind+':x'}).id);
 });

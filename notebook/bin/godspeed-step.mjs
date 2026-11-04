@@ -3,18 +3,20 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {Store} from '../core/records/store.mjs';
 import {machineDevice} from '../core/device-id.mjs';
-import {openStep,answerChosen,heard,quietMessage,readStep,CHATS} from '../core/waiting-steps.mjs';
+import {openStep,markSent,ASKER_KINDS,answerChosen,heard,quietMessage,readStep,CHATS} from '../core/waiting-steps.mjs';
 
 // The one way to ask the owner for a yes (core/waiting-steps.mjs). A refusal reads as one plain line.
 const fail=error=>{process.stderr.write('Error: '+(error?.message||String(error))+'\n'+(process.env.GODSPEED_DEBUG?String(error?.stack||'')+'\n':''));process.exit(1);};
 process.on('uncaughtException',fail);process.on('unhandledRejection',fail);
 const HELP=`godspeed-step: ask your owner for a yes, and read the answer.
 
-  open --about "..." --question "..." --yes "..." --no "..." --by routine:<name>|addon:<name>|job:<name> [--chat telegram|notebook] [--job <routine id>]
+  open --about "..." --question "..." --yes "..." --no "..." --by ${ASKER_KINDS.map(kind=>kind+':<name>').join('|')} [--chat telegram|notebook] [--job <routine id>]
       Opens a waiting step and prints {"id","message"}. Each text is one plain line without a code.
       --about says what this is about for someone who saw none of the work, --yes and --no say what
       happens. For a step asked in Telegram nothing is sent: say "message" yourself in your own
-      output. A step asked in the notebook is put into the notebook chat for you.
+      output, then run: sent <id>; until then a plain yes cannot reach it. A step asked in the notebook is put into the notebook chat for you.
+  sent <id>
+      Tells the program the question of a Telegram step has been said to your owner.
   get <id>
       Prints the step with status waiting, yes or no.
   heard --chat telegram|notebook
@@ -42,6 +44,8 @@ if(verb==='open'){
  const installation=store.get('settings','installation');
  print(openStep(store,{about:option('--about'),question:option('--question'),yes:option('--yes'),no:option('--no'),by:option('--by'),job:option('--job'),
   chat:option('--chat')||(installation?.delivery==='telegram'?'telegram':'notebook')}));
+}else if(verb==='sent'){
+ markSent(store,args[1]);print({id:args[1],sent:true});
 }else if(verb==='get'){
  const record=store.get('approvals',args[1]);if(!record)throw Error('That step does not exist.');print(readStep(record));
 }else if(verb==='answer'){

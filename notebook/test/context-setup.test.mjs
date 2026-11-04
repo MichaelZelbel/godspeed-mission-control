@@ -159,6 +159,33 @@ print(json.dumps(m.on_pre_llm_call(platform="cron",user_message="yes",session_id
   assert.equal(out[2],'null');
 });
 
+test('the installed plugin hands the owner\'s private Telegram yes to a real waiting step, and no other session reaches it',{skip:!havePython&&'no Python here'},t=>{
+  const base=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-step-plugin-')),root=path.join(base,'workspace'),home=path.join(base,'assistant');t.after(()=>fs.rmSync(base,{recursive:true,force:true}));
+  installStarter(root);
+  execFileSync(process.execPath,[path.join(kit,'notebook','scripts','wire-assistant.mjs'),home],{env:{...process.env,GODSPEED_WORKSPACE:root,GODSPEED_PORT:'41990',GODSPEED_DEVICE:'local'},windowsHide:true});
+  fs.mkdirSync(path.join(base,'stubs','gateway'),{recursive:true});fs.writeFileSync(path.join(base,'stubs','gateway','__init__.py'),'');
+  fs.writeFileSync(path.join(base,'stubs','gateway','session_context.py'),'import os\ndef get_session_env(key, default=""):\n    return os.environ.get("STUB_" + key, default)\n');
+  const step=(...args)=>JSON.parse(execFileSync(process.execPath,[path.join(kit,'notebook','bin','godspeed-step.mjs'),...args,'--godspeed',root],{encoding:'utf8'}));
+  const open=about=>{const {id}=step('open','--about',about,'--question','Restart it?','--yes','I restart it.','--no','I leave it.','--by','routine:test','--chat','telegram');step('sent',id);return id;};
+  const plugin=path.join(home,'plugins','godspeed-context','__init__.py');
+  const turn=session=>{
+    const out=execFileSync(python,['-c',`import importlib.util,json,sys
+spec=importlib.util.spec_from_file_location("p",sys.argv[1]);m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
+print(json.dumps(m.on_pre_llm_call(platform="telegram",user_message="yes",session_id="sess")))`,plugin],
+      {encoding:'utf8',env:{...process.env,PYTHONPATH:path.join(base,'stubs'),TELEGRAM_ALLOWED_USERS:'4242',STUB_HERMES_SESSION_PLATFORM:'telegram',STUB_HERMES_SESSION_CHAT_TYPE:'dm',
+        STUB_HERMES_SESSION_CHAT_ID:session.chat,STUB_HERMES_SESSION_USER_ID:session.user,STUB_HERMES_SESSION_ID:session.id}}).trim();
+    return JSON.parse(out);
+  };
+  const owner={chat:'4242',user:'4242',id:'sess'},status=id=>step('get',id).status;
+  const stranger=open('The disk is full.');
+  for(const other of [{...owner,user:'7'},{...owner,chat:'-100'},{...owner,id:'other'}])assert.equal(turn(other)?.context?.includes('godspeed-step')??false,false);
+  assert.equal(status(stranger),'waiting');
+  const reply=turn(owner);assert.match(reply.context,/the program has recorded it/);assert.equal(status(stranger),'yes');
+  const command=path.join(home,'plugins','godspeed-context','step-command.txt'),kept=fs.readFileSync(command,'utf8');
+  fs.writeFileSync(command,JSON.stringify([path.join(base,'no-such-node'),'x','y'])+'\n');
+  const failed=turn(owner);assert.match(failed.context,/send it again/);assert.ok(!/no-such-node/.test(failed.context));
+});
+
 test('the recipe is installed for a starter-born assistant, names its doors and uses only tools the notebook has',async t=>{
   const {root,store}=workspace(t),source=path.join(kit,'notebook','recipes','context-setup');
   installSkillTree(store,source,path.join(root,'skills','context-setup'));

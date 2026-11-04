@@ -139,6 +139,13 @@ def _step_command():
         return None
 
 
+# The match could not be made: a plain yes or no may have been meant for a waiting step, so the owner
+# is asked to send it again rather than having it handled as an ordinary message. No diagnostics.
+STEP_RETRY_BLOCK = ("[godspeed-step] Your waiting questions could not be checked just now. If your owner's message is only a "
+                    "plain yes or no, tell them in one sentence that you could not process it and to send it again in a "
+                    "moment, and do nothing else with it. Otherwise ignore this note.")
+
+
 def step_block(report):
     """The block the step command returned for an answered, asked or choosing turn, or None."""
     if isinstance(report, dict) and report.get("kind") in ("answered", "ask", "choose") and isinstance(report.get("context"), str):
@@ -163,9 +170,14 @@ def waiting_step_block(message, session_id):
     command = _step_command()
     if not command or not _text(message).strip() or not _owner_telegram(session_id):
         return None
-    run = subprocess.run(command[:2] + ["heard", "--chat", "telegram"] + command[2:], input=_text(message),
-                         capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=_step_timeout())
-    return step_block(json.loads(run.stdout)) if run.returncode == 0 else None
+    try:
+        run = subprocess.run(command[:2] + ["heard", "--chat", "telegram"] + command[2:], input=_text(message),
+                             capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=_step_timeout())
+        if run.returncode == 0:
+            return step_block(json.loads(run.stdout))
+    except Exception:
+        pass
+    return STEP_RETRY_BLOCK
 
 
 def on_pre_llm_call(**kwargs):

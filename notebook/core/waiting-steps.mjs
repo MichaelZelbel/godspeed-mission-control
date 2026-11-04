@@ -8,10 +8,13 @@ import {appendAssistantMessage} from './conversation-state.mjs';
 // step, an `approvals` record, and the owner answers it with a plain yes or no in the chat it was
 // asked in. The program finds which step a yes belongs to from these records; the model only
 // phrases "which one?" and reads the owner's choice back into a step id (answerChosen).
-export const CHATS=['telegram','notebook'];
+// Each chat a step can be asked in, with the one conversation it is read from; `asked_in` and the
+// matcher's route both come from this table.
+export const ROUTES={telegram:{conversation:'telegram-owner',matches:id=>id==='telegram-owner'},notebook:{conversation:'notebook:general',matches:id=>/^notebook:general(:session:|$)/.test(id)}};
+export const CHATS=Object.keys(ROUTES);
+export const ASKER_KINDS=['routine','addon','job'];
 const CHATS_FILE='waiting-step-chats.json',CLARIFICATION_MS=30*60000;
-// The notebook's own chat is `notebook:general`, with or without a session; Telegram's is `telegram-owner`.
-export const chatOf=conversationId=>/^notebook:general(:session:|$)/.test(conversationId)?'notebook':conversationId==='telegram-owner'?'telegram':null;
+export const chatOf=conversationId=>CHATS.find(chat=>ROUTES[chat].matches(conversationId))??null;
 
 const YES=new Set(['yes','yeah','yep','ja','jep','jo','ok','okay','sure','klar','gerne','passt','einverstanden','do it','ok do it','ok, do it','go ahead','mach','mach es','mach das','machs','approve','approved']);
 const NO=new Set(['no','nope','nein','stop','stop it','stopp',"don't",'dont','cancel','lass es','lass das','lieber nicht','nicht','reject']);
@@ -32,16 +35,19 @@ export function readStep(record){
  return {id:record.id,status:record.status==='pending'?'waiting':answered||record.status,about:record.about||record.title||record.action||'',question:record.question||null,
   on_yes:record.on_yes||null,on_no:record.on_no||null,asked_by:record.asked_by||null,asked_in:record.asked_in||null,asked_at:record.asked_at||null,answered_at:record.answered_at||null};
 }
-const stepTime=record=>record.asked_at||record.created_at||'';
+// A step asked in a chat waits for an answer only once its question is known to have gone out (`sent_at`);
+// a legacy approval has no chat and counts as it always did.
+const delivered=record=>!record.asked_in||Boolean(record.sent_at);
+const stepTime=record=>record.sent_at||record.asked_at||record.created_at||'';
 export const waitingSteps=(store,at=new Date().toISOString())=>store.list('approvals')
- .filter(r=>r.status==='pending'&&!(r.expires_at&&r.expires_at<=at)).sort((a,b)=>stepTime(a).localeCompare(stepTime(b)));
+ .filter(r=>r.status==='pending'&&delivered(r)&&!(r.expires_at&&r.expires_at<=at)).sort((a,b)=>stepTime(a).localeCompare(stepTime(b)));
 
 export function openStep(store,{about,question,yes,no,by,chat,job}){
  const id='step-'+randomUUID();
  for(const [label,text] of [['reason',about],['question',question],['yes outcome',yes],['no outcome',no]])checkStepText(label,text,id);
  if(!CHATS.includes(chat))throw Error('Say where to ask: telegram or notebook.');
  const [kind,name='']=String(by||'').split(':');
- if(!['routine','addon','job'].includes(kind))throw Error('Say who asks: routine, addon or job:<name>.');
+ if(!ASKER_KINDS.includes(kind))throw Error('Say who asks: '+ASKER_KINDS.map(kind=>kind+':<name>').join(', ')+'.');
  const step=store.withLock(()=>{
   const owned=job?store.get('jobs',job):null;
   if(job&&!owned)throw Error('That routine does not exist.');
@@ -50,8 +56,25 @@ export function openStep(store,{about,question,yes,no,by,chat,job}){
   return record;
  });
  const message=about+' '+question;
- if(chat==='notebook')appendAssistantMessage(store,'general',message);
+ if(chat==='notebook'){
+  try{appendAssistantMessage(store,'general',message);markSent(store,id);}
+  catch(error){withdrawStep(store,id);throw error;}
+ }
  return {id,message};
+}
+
+// The asker says the question went out (a notebook step is marked by openStep itself); a step the owner
+// was never shown cannot be answered by a bare yes.
+export function markSent(store,id){
+ return store.withLock(()=>{
+  const record=store.get('approvals',id);
+  if(!record?.asked_in)throw Error('That step does not exist.');
+  if(record.status!=='pending')throw Error('That step is no longer waiting.');
+  if(!record.sent_at)store.commit([store.prepare('approvals',{sent_at:new Date().toISOString()},record)]);
+ });
+}
+function withdrawStep(store,id){
+ try{store.withLock(()=>{const record=store.get('approvals',id);if(record?.status==='pending'&&!record.sent_at)store.commit([store.prepare('approvals',{status:'withdrawn'},record)]);});}catch{}
 }
 
 // A step is answered once. A yes for a step that holds an outward job lets that job run again only
@@ -114,8 +137,8 @@ export function heard(store,{chat,words,at=new Date().toISOString(),scheduled=fa
  if(!answer){remember(dir,chats,chat,at);return {kind:'none'};}
  const waiting=waitingSteps(store,at).filter(s=>!yieldTo||stepTime(s)>yieldTo);
  if(!waiting.length){remember(dir,chats,chat,at);return {kind:'none'};}
- const [only]=waiting,newerHere=store.list('approvals').some(r=>r.id!==only.id&&r.asked_in===chat&&stepTime(r)>stepTime(only));
- if(waiting.length===1&&only.asked_in===chat&&!newerHere&&!(mine.last_owner_at&&mine.last_owner_at>=only.asked_at)){
+ const [only]=waiting,newerHere=store.list('approvals').some(r=>r.id!==only.id&&r.asked_in===chat&&r.status==='pending'&&delivered(r)&&stepTime(r)>stepTime(only));
+ if(waiting.length===1&&only.asked_in===chat&&!newerHere&&!(mine.last_owner_at&&mine.last_owner_at>=stepTime(only))){
   const done=answerStep(store,only.id,answer,{chat,words});
   remember(dir,chats,chat,at);
   return {kind:'answered',step:done.step,reply:answer==='yes'?done.step.on_yes:done.step.on_no,context:answeredContext(done.step,answer)};
