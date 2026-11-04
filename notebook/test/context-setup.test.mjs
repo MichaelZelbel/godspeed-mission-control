@@ -1,4 +1,4 @@
-import {recordReport} from '../core/background-reports.mjs';
+import {recordReport,delivered} from '../core/background-reports.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -167,7 +167,7 @@ test('the installed plugin hands the owner\'s private Telegram yes to a real wai
   fs.mkdirSync(path.join(base,'stubs','gateway'),{recursive:true});fs.writeFileSync(path.join(base,'stubs','gateway','__init__.py'),'');
   fs.writeFileSync(path.join(base,'stubs','gateway','session_context.py'),'import os\ndef get_session_env(key, default=""):\n    return os.environ.get("STUB_" + key, default)\n');
   const step=(...args)=>JSON.parse(execFileSync(process.execPath,[path.join(kit,'notebook','bin','godspeed-step.mjs'),...args,'--godspeed',root],{encoding:'utf8'}));
-  const open=async about=>{const {id,message}=step('open','--about',about,'--question','Restart it?','--yes','I restart it.','--no','I leave it.','--by','routine:test','--chat','telegram');await recordReport(new Store(root,{device:'vps'}),{text:message,step:id,delivery:'telegram'});return id;};
+  const open=async about=>{const {id,message}=step('open','--about',about,'--question','Restart it?','--yes','I restart it.','--no','I leave it.','--by','routine:test','--chat','telegram');const store=new Store(root,{device:'vps'});await recordReport(store,{text:message,step:id,delivery:'telegram'});delivered(store,message);return id;};
   const plugin=path.join(home,'plugins','godspeed-context','__init__.py');
   const turn=session=>{
     const out=execFileSync(python,['-c',`import importlib.util,json,sys

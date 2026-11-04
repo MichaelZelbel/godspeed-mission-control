@@ -10,7 +10,7 @@ export class Telegram {
     const habit=habits.at(-1);let bytes;
     if(habit)try{bytes=await this.renderProgress(habit,{locale});}catch{}
     const text=String(reply).slice(0,4000);
-    if(!bytes)return this.call('sendMessage',{chat_id:this.owner,text});
+    if(!bytes)return {...await this.call('sendMessage',{chat_id:this.owner,text}),dispatched:text};
     // One picture is the reply, with its text as the caption. Long answers keep their text reply.
     let message;if(text.length>1024)message=await this.call('sendMessage',{chat_id:this.owner,text});
     const form=new FormData();form.set('chat_id',this.owner);form.set('caption',text.length<=1024?text:habitProgressText(habit,{locale}).split('\n').slice(0,4).join('\n'));
@@ -19,8 +19,8 @@ export class Telegram {
     // means no photo was delivered, so the already-saved answer can safely fall back to text.
     const response=await this.transport(this.origin+'/bot'+this.token+'/sendPhoto',{method:'POST',body:form,signal:AbortSignal.timeout(35000)});
     const data=await response.json();
-    if(response.ok&&data.ok)return data.result;
-    if(data.ok===false&&Number(data.error_code)>=400&&Number(data.error_code)<500)return message||this.call('sendMessage',{chat_id:this.owner,text});
+    if(response.ok&&data.ok)return {...data.result,dispatched:text};
+    if(data.ok===false&&Number(data.error_code)>=400&&Number(data.error_code)<500)return message?{...message,dispatched:text}:{...await this.call('sendMessage',{chat_id:this.owner,text}),dispatched:text};
     throw Error('Telegram picture delivery is uncertain');
   }
   // A message carrying a link goes without a preview: Telegram's servers fetch
@@ -65,7 +65,7 @@ export class Telegram {
           sendAttempted=true;
           const delivered=await this.replyWithProgress(reply,answerResult,message.from?.language_code||'en');
           await this.store.saveAsync('command_receipts',{id,state:'verified',message_id:delivered.message_id,result:reply});
-          if(answered)stampReply(this.store,{chat:'telegram',words:reply,since:turnStart,messageId:delivered.message_id});
+          if(answered)stampReply(this.store,{chat:'telegram',words:delivered.dispatched,since:turnStart,messageId:delivered.message_id});
           if(!answered)await this.store.saveAsync('conversation_messages',{role:'assistant',content:reply,source_app:'telegram',message_id:delivered.message_id,conversation_id:'telegram-owner'});
         }catch{await this.store.saveAsync('command_receipts',{id,state:'needs_review',error:'Telegram request did not finish. It will not be replayed automatically.'});if(!sendAttempted)await this.failureNotice(id,'I could not finish your message. I have not repeated any actions. Please try again.');}
         atomic(this.file,JSON.stringify({offset:update.update_id+1}));

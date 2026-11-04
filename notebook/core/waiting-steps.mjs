@@ -73,6 +73,8 @@ const stamp=(store,id,messageId)=>store.withLock(()=>{
  if(record?.asked_in&&record.status==='pending'&&!record.sent_at)store.commit([store.prepare('approvals',{sent_at:new Date().toISOString(),...(messageId?{sent_message_id:messageId}:{})},record)]);
 });
 export const stampDelivered=(store,id,chat)=>{if(store.get('approvals',id)?.asked_in===chat)stamp(store,id);};
+// The pending, unsent Telegram step whose question a routine printed in full.
+export const stepForWords=(store,text)=>store.list('approvals').filter(r=>r.status==='pending'&&r.asked_in==='telegram'&&!r.sent_at&&String(text).includes(r.about+' '+r.question)).sort((a,b)=>a.asked_at.localeCompare(b.asked_at))[0]?.id??null;
 export function stampReply(store,{chat,words,since,messageId}){
  const step=store.list('approvals').filter(r=>r.status==='pending'&&r.asked_in===chat&&!r.sent_at&&r.asked_at>=since&&words.includes(r.about+' '+r.question))
   .sort((a,b)=>a.asked_at.localeCompare(b.asked_at))[0];
@@ -142,7 +144,8 @@ export function heard(store,{chat,words,at=new Date().toISOString(),scheduled=fa
   return {kind:'choose',steps:named(listed),context:chooseContext(named(listed),chat)};
  }
  if(!answer){remember(dir,chats,chat,at);return {kind:'none'};}
- const waiting=waitingSteps(store,at).filter(s=>!yieldTo||stepTime(s)>yieldTo);
+ const here=waitingSteps(store,at).filter(s=>s.asked_in===chat),legacy=waitingSteps(store,at).filter(s=>!s.asked_in);
+ const waiting=(here.length?here:legacy).filter(s=>!yieldTo||stepTime(s)>yieldTo);
  if(!waiting.length){remember(dir,chats,chat,at);return {kind:'none'};}
  const [only]=waiting,newerHere=store.list('approvals').some(r=>r.id!==only.id&&r.asked_in===chat&&r.status==='pending'&&delivered(r)&&stepTime(r)>stepTime(only));
  if(waiting.length===1&&only.asked_in===chat&&!newerHere&&!(mine.last_owner_at&&mine.last_owner_at>=stepTime(only))){

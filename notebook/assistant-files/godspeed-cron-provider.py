@@ -19,7 +19,7 @@ Reports (4 November 2026, #198): a routine made in Settings (`--skill ... --deli
 its agent wrote, and Hermes does not put that into the chat's history. register() wraps Hermes'
 delivery of a skill job's result so the notebook first records the words Hermes will send (media tags out, redacted; without its header and footer)
 (notebook/scripts/background-report.mjs record), where the chat reads them. A composite lane is recorded for all its destinations at once or not at all. A result that could not be recorded is not delivered: the run says why in its delivery
-error, like the routines that print their own words. The wiring writes report.json beside this file.
+error, like the routines that print their own words. Once Hermes has delivered any result, the notebook is told the words (background-report.mjs delivered), and a waiting step named by the record of those words becomes answerable. The wiring writes report.json beside this file.
 """
 
 import json
@@ -86,10 +86,30 @@ def record_result(job, content, for_failure=False):
         return "Not delivered: it could not be recorded in the notebook. %s" % error
 
 
+def mark_delivered(job, content, for_failure=False):
+    """Hermes delivered these words: a waiting step whose question they are becomes answerable. The
+    step is named by the delivery record, never by the job."""
+    try:
+        if not isinstance(content, str) or not content.strip() or not _destinations(job, for_failure):
+            return
+        words = _sent_words(content) or MEDIA_ONLY
+        with open(os.path.join(HERE, "report.json"), encoding="utf-8") as f:
+            wiring = json.load(f)
+        subprocess.run([wiring["node"], wiring["script"], "delivered", "--godspeed", wiring["root"], "--home", HOME],
+                       input=words, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=120)
+    except Exception:
+        pass
+
+
 def wrap_delivery(deliver):
     def deliver_recorded(job, content, *args, for_failure=False, **kwargs):
         refused = record_result(job, content, for_failure)
-        return refused or deliver(job, content, *args, for_failure=for_failure, **kwargs)
+        if refused:
+            return refused
+        failed = deliver(job, content, *args, for_failure=for_failure, **kwargs)
+        if not failed:
+            mark_delivered(job, content, for_failure)
+        return failed
     deliver_recorded.godspeed_wrapped = True
     return deliver_recorded
 

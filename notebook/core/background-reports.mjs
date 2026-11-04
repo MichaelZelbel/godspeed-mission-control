@@ -5,7 +5,7 @@ import {ruleRefusals} from './briefing-cut.mjs';
 import {queueNotice} from './notices.mjs';
 import {deliveryFor} from './notebook-routines.mjs';
 import {telegramInHermes} from './starting-routines.mjs';
-import {stampDelivered} from './waiting-steps.mjs';
+import {stampDelivered,stepForWords} from './waiting-steps.mjs';
 
 // BACKGROUND WORK TELLS THE OWNER IN THE CHAT'S VOICE, AND THE CHAT KNOWS IT (4 November 2026, #198).
 //
@@ -63,11 +63,15 @@ const reportValue=({text,about='',facts=[],step=null,routine=null,written,delive
 };
 
 // One conversation_messages record for a message handed to delivery.
-// A report that carries a waiting step's id and goes to Telegram is that step's question sent: the step becomes answerable.
-export async function recordReport(store,message){
- const saved=await store.saveAsync('conversation_messages',reportValue(message));
- if(message.step&&message.delivery==='telegram')stampDelivered(store,message.step,'telegram');
- return saved;
+// A report that carries a waiting step's id is that step's question on its way, not yet sent:
+// `delivered` (the Hermes wrapper, once Hermes reports success) makes the step answerable.
+export const recordReport=(store,message)=>store.saveAsync('conversation_messages',reportValue(message));
+
+// Called only after Hermes delivered `words` to the owner. The delivery record that holds exactly
+// those words and names a step is the step's question sent: the step becomes answerable.
+export function delivered(store,words){
+ for(const record of store.list('conversation_messages'))
+  if(record.delivered_to==='telegram'&&record.report?.step&&record.content===words)stampDelivered(store,record.report.step,'telegram');
 }
 
 // The words to say for a fresh notice. Reports a writing split off wait as notices of their own.
@@ -83,7 +87,8 @@ export async function sayNotice(store,{notice,home,provider=null,guidance}){
 // own job says, which the Hermes hook passes as delivery.
 // A list of deliveries is recorded together or not at all.
 export function recordRoutine(store,{routine,text,home,delivery}){
- const message=d=>({text,about:routine,routine,written:'routine',delivery:d});
+ const step=stepForWords(store,text);
+ const message=d=>({text,about:routine,routine,step,written:'routine',delivery:d});
  if(!Array.isArray(delivery))return recordReport(store,message(delivery||reportDelivery(store,home)));
  return store.transaction(view=>view.commit(delivery.map(d=>store.prepare('conversation_messages',reportValue(message(d))))));
 }
