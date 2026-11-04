@@ -306,4 +306,7 @@ test('a recovery marker that cannot be written does not stop the connections aft
  const called=[],spy=name=>async()=>{called.push(name);return {set_up:true,ok:true};};
  await assert.rejects(checkConnections({store,day:D2,probes:{ai:spy('ai'),telegram:spy('telegram'),github:spy('github'),mail:spy('mail')}}),/ai/);
  assert.deepEqual(called,['ai','telegram','github','mail']);
+ fs.rmSync(path.join(root,'.godspeed','connection-check'));
+ await checkConnections({store,day:D3,probes:stubs()});
+ assert.equal(deadlines(store).find(d=>/^ai:/.test(d.key)).state,'closed','the deadline is still pending after the failed day, so the next working day closes it');
 });
