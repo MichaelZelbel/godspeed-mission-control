@@ -183,6 +183,11 @@ test('the daily connection check is listed with its switch, paused until Telegra
  // Telegram connected later: the notebook, which paused it, resumes it.
  fs.writeFileSync(path.join(home,'.env'),'TELEGRAM_BOT_TOKEN=123:abc\n');
  scheduler.lastTick=0;await scheduler.tick();assert.equal(job(CONNECTION_JOB).enabled,true);
+ // The last connection removed while it still runs as the notebook left it: the notebook pauses it, and resumes it when one returns.
+ fs.writeFileSync(path.join(home,'.env'),'');
+ scheduler.lastTick=0;await scheduler.tick();assert.equal(job(CONNECTION_JOB).enabled,false);
+ fs.writeFileSync(path.join(home,'.env'),'TELEGRAM_BOT_TOKEN=123:abc\n');
+ scheduler.lastTick=0;await scheduler.tick();assert.equal(job(CONNECTION_JOB).enabled,true);
  // The person pauses it: it stays paused, with Telegram connected.
  const domains=new Domains(q);domains.nativeScheduler=scheduler;
  await personalOperation(domains,{type:'routine-change',id:made.id,paused:true});assert.equal(job(CONNECTION_JOB).enabled,false);

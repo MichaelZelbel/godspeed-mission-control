@@ -226,10 +226,17 @@ export class NativeScheduler{
   const installation=this.store.get('settings','installation'),timezone=installation?.timezone||Intl.DateTimeFormat().resolvedOptions().timeZone,wanted=connectionCheckWanted(this.home);
   writeRoutineFiles(this.home,routineFiles({root,home:this.home,state:this.store.state,timezone,hermes:this.executable}));
   if(job){
-   if(!entry?.paused_by_notebook)return job.id;
+   if(!entry)return job.id;
+   if(!entry.paused_by_notebook){
+    // Still running as the notebook left it: it goes off with the last connection. A person's pause ends that ownership.
+    if(job.enabled===false&&entry.running_by_notebook)rememberNotebookRoutine(this.store,{...entry,running_by_notebook:false});
+    else if(job.enabled!==false&&entry.running_by_notebook&&!wanted){await this.command(['pause',job.id]);rememberNotebookRoutine(this.store,{...entry,paused_by_notebook:true,running_by_notebook:false});}
+    return job.id;
+   }
    if(job.enabled===false&&!wanted)return job.id;
-   if(job.enabled===false)await this.command(['resume',job.id]);
-   rememberNotebookRoutine(this.store,{...entry,paused_by_notebook:false});
+   const resumed=job.enabled===false;
+   if(resumed)await this.command(['resume',job.id]);
+   rememberNotebookRoutine(this.store,{...entry,paused_by_notebook:false,running_by_notebook:resumed});
    return job.id;
   }
   const before=new Set(jobs.map(j=>j.id));
@@ -237,7 +244,7 @@ export class NativeScheduler{
   const made=hermesJobs(this.home).find(j=>!before.has(j.id)&&j.name===CONNECTION_JOB);
   if(!made)throw Error('Hermes did not keep the routine "'+CONNECTION_JOB+'"');
   if(!wanted)try{await this.command(['pause',made.id]);}catch(error){await this.command(['remove',made.id]).catch(()=>{});throw error;}
-  rememberNotebookRoutine(this.store,{id:made.id,key:'connection-check',name:CONNECTION_JOB,what:CONNECTION_WHAT,paused_by_notebook:!wanted});
+  rememberNotebookRoutine(this.store,{id:made.id,key:'connection-check',name:CONNECTION_JOB,what:CONNECTION_WHAT,paused_by_notebook:!wanted,running_by_notebook:wanted});
   return made.id;
  }
  // THE MORNING BRIEF AS THE NOTEBOOK'S OWN BRIEFING (3 November 2026, #160; notebook-routines.mjs

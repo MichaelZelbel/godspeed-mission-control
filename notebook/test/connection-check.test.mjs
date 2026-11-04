@@ -182,7 +182,7 @@ test('a refusal whose deadline failed, then an unset day, is neither repeated no
   await assert.rejects(checkConnections({store,day:D1,probes:stubs({telegram:refused}),due:failing}),/deadline/);
   await checkConnections({store,day:D2,probes:stubs({telegram:unset})});
   await checkConnections({store,day:D3,probes:stubs(third&&{telegram:third})});
-  assert.equal(readNotices(store).length,1,'one message for the whole stretch');
+  assert.equal(readNotices(store).length,closed?0:1,closed?'recovered before any deadline: the sign-in notice is taken back':'one message for the whole stretch');
   if(closed){assert.equal(bell(store,'telegram').status,'resolved');}
   else assert.equal(deadlines(store).length,1,'the deadline is made on the first day it can be');
  }

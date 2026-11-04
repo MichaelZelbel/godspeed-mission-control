@@ -5,7 +5,7 @@ import {spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {CONNECTION_NAMES,CONNECTION_NOTICE_PREFIX} from './connection-names.mjs';
 import {atomic} from './records/store.mjs';
-import {queueNotice} from './notices.mjs';
+import {queueNotice,withdrawNotice} from './notices.mjs';
 import {routineAIStatus,askDirectly} from './routine-ai.mjs';
 import {FileSync,readSyncConfig} from './sync/git.mjs';
 import {telegramInHermes} from './starting-routines.mjs';
@@ -140,7 +140,9 @@ export async function checkConnections({store,day,probes,due=runDue,now=()=>new 
   for(const action of actions){
    if(action.do==='recover'){
     fs.mkdirSync(path.dirname(worked),{recursive:true});fs.writeFileSync(worked,'');
-    const slug=before.connections[name]?.deadline?.slug;
+    const was=before.connections[name],slug=was?.deadline?.slug;
+    // A sign-in whose deadline never got made and which now works is not said late.
+    if(!slug&&was?.kind==='sign-in'&&was.failing_since)withdrawNotice(store,`${CONNECTION_NOTICE_PREFIX}${name}-${was.failing_since}`);
     if(slug&&due(store,day,['check',slug]).status!==0){connections[name]=before.connections[name];failures.push(name);continue;}
     await bell(store,{id:'connection-'+name,status:'resolved',resolved_at:now().toISOString()});
    }
