@@ -418,6 +418,20 @@ test('godspeed-step open carries quiet, subject and optional-extra gates and ref
  assert.equal(JSON.parse(run(['--extra','Stop them','--within']).stdout).outcome,'do');
  assert.equal(waitingSteps(store).length,0);
  const refused=run(['--quiet','restart']);assert.equal(refused.status,1);assert.match(refused.stderr,/Unknown option --quiet/);
+ for(const missing of [['--extra','--within'],['--subject']]){const bad=run(missing);assert.equal(bad.status,1);assert.match(bad.stderr,/needs a value/);}
+ assert.equal(waitingSteps(store).length,0);
+});
+
+test('the scenario asker passes quiet and optional_after to godspeed-step as --quietly and --extra',async t=>{
+ const home=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-asker-'));t.after(()=>fs.rmSync(home,{recursive:true,force:true}));
+ fs.mkdirSync(path.join(home,'bin'));
+ fs.writeFileSync(path.join(home,'bin','godspeed-step'),'#!/bin/sh\nprintf "%s\\n" "$*" >> argv.log\necho "{}"\n',{mode:0o755});
+ const asks=[{about:'a',question:'q',yes:'y',no:'n',quiet:'restart'},{about:'b',question:'q',yes:'y',no:'n',optional_after:'Stop them'}];
+ fs.writeFileSync(path.join(home,'.scenario-asks.json'),JSON.stringify(asks));
+ const done=spawnSync('python3',[fileURLToPath(new URL('../../scenarios/scenario-asker.py',import.meta.url))],{cwd:home,encoding:'utf8',env:{...process.env,HERMES_HOME:home}});
+ assert.equal(done.status,0,done.stderr);
+ const lines=fs.readFileSync(path.join(home,'argv.log'),'utf8').trim().split('\n');
+ assert.match(lines[0],/--quietly restart/);assert.match(lines[1],/--extra Stop them/);
 });
 
 test('a bundled report is split and each finding is checked',async t=>{

@@ -3,8 +3,8 @@ way the product gives a job to ask, `godspeed-step open`, for the scenarios that
 is asked and how he answers (no-question-he-cannot-judge.sh, plain-yes.sh).
 
 It reads ./.scenario-asks.json (the routine runs in the workspace; the scenario writes the file before
-each run), a list of {about, question, yes, no, quiet?, subject?, optional_after?}, opens one waiting
-step per ask, and prints what the operation says to send, which Hermes delivers to the owner's
+each run), a list of {about, question, yes, no, quiet?, subject?, optional_after?}, opens a waiting
+step for each ask the operation answers with a question (not a quiet, decided, done or dropped one), and prints what the operation says to send, which Hermes delivers to the owner's
 Telegram. An ask the operation answers with nothing (it decided quietly, or the question is already
 out) prints nothing.
 

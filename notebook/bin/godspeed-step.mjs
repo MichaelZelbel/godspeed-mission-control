@@ -15,7 +15,7 @@ const HELP=`godspeed-step: ask your owner for a yes, and read the answer.
       --outward: sending, paying, deleting, publishing; never quiet, never approved by an earlier yes.
       --extra: an optional follow-up to that instruction of the owner; with --within it is done, otherwise dropped, and never asked.
       Prints {"outcome"}: quiet, decided, do, dropped or asked (asked also carries id and message).
-      Opens a waiting step and prints {"id","message"}. Each text is one plain line without a code.
+      Only an asked outcome opens a waiting step, and prints {"id","message"}; the others open none. Each text is one plain line without a code.
       --about says what this is about for someone who saw none of the work, --yes and --no say what
       happens. A step asked in the notebook is put into the notebook chat for you. A step asked in
       Telegram is sent by the one who tells your owner: hand the step's id to the notice, or say "message"
@@ -45,7 +45,7 @@ if(verb==='heard'){
 const store=new Store(root,{device:machineDevice(root).id});
 if(verb==='open'){
  const VALUED=['--about','--question','--yes','--no','--by','--chat','--job','--quietly','--subject','--extra','--godspeed'],BARE=['--outward','--within'];
- for(let at=1;at<args.length;at++){if(VALUED.includes(args[at]))at++;else if(!BARE.includes(args[at]))throw Error('Unknown option '+args[at]+' for open.');}
+ for(let at=1;at<args.length;at++){if(VALUED.includes(args[at])){const value=args[at+1];if(value===undefined||value.startsWith('--'))throw Error(args[at]+' needs a value.');at++;}else if(!BARE.includes(args[at]))throw Error('Unknown option '+args[at]+' for open.');}
  if(args.includes('--within')&&option('--extra')===undefined)throw Error('--within needs --extra.');
  const installation=store.get('settings','installation');
  print(openStep(store,{about:option('--about'),question:option('--question'),yes:option('--yes'),no:option('--no'),by:option('--by'),job:option('--job'),quietly:option('--quietly'),subject:option('--subject'),outward:args.includes('--outward'),extra:option('--extra')===undefined?undefined:{instruction:option('--extra'),within:args.includes('--within')},
