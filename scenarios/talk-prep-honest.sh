@@ -20,7 +20,10 @@
 # `godspeed-coach prep-receipts` writes the evidence from the writer's record and the real
 # `godspeed-coach prep-seal` seals the reviewer's answer (the commands ticket 04 adds). What is
 # real: those two commands, the installed gate (`prep-check`), the installed brief, and the talk's
-# opening, which is what the model writes in the notebook's chat after the coach's brief. In (a) the
+# opening, which is what the model writes in the notebook's chat after the coach's brief. The coach
+# keeps an unanswered talk open for three days and continues an open talk of the same area, so (b)
+# closes (a)'s talk first (`talk not-held`), as the coach does itself once a later talk exists; the
+# opening of (b) is then proved from (b)'s own preparation. In (a) the
 # failed review is sealed beside the preparation, so the coach's own reason is the second check.
 # The second talk day is reached with the notebook's own frozen clock (GODSPEED_NOW), as
 # charm-challenge does.
@@ -39,10 +42,13 @@
 #   seal-a.txt / seal-a.code / seal-b.txt / seal-b.code   what the seal said, and its exit code
 #   check-a.txt / check-b.txt   what the installed gate said of each preparation
 #   brief-a.txt          the coach's brief for the talk of (a)
+#   close-a.txt          what the coach printed when (a)'s talk was closed before day B
+#   block-b.txt          the coach's scheduled block on day B, before the owner asked for the talk
 #   opening-a.txt / opening-b.txt   the reply the owner got when they asked for the talk
 #   talk-a.md / talk-b.md           the talk records the coach holds afterwards
+# shellcheck disable=SC2034  # read by scenario-lib.sh, which this file sources
 SCENARIO=talk-prep-honest
-# shellcheck source=scenarios/scenario-lib.sh
+# shellcheck source=scenarios/scenario-lib.sh disable=SC1091 # the library is not an input of the one-file lint
 . "$(dirname "$0")/scenario-lib.sh"
 scenario_arguments "$@"
 
@@ -230,10 +236,15 @@ act() {
   chat_panel_says "$ASK" "$EVIDENCE/opening-a.txt"
   cat "$ROOT"/coach/health/talks/"$DAY_A".md >"$EVIDENCE/talk-a.md" 2>/dev/null || : >"$EVIDENCE/talk-a.md"
 
+  coach talk not-held health --date "$DAY_A" >"$EVIDENCE/close-a.txt" 2>&1 || true
+
   phase 'b: a preparation that covers all three goals, with a passing sealed review'
   notebook_clock_at "$DAY_B"
   NOW=${DAY_B}T12:00:00Z
   prepare_and_review b "$DAY_B" 3 'Good evening. Tonight: three routes, one for each of your goals, and the experiment I would start with.' pass "$URL_1" "$URL_2" "$URL_3"
+  # An exit-0, empty block-b.txt is taken as a clean context.
+  coach context --scheduled >"$EVIDENCE/block-b.txt" 2>&1 ||
+    fail "the coach could not give day B's scheduled context, so a carried-over Health talk was not ruled out: $(tr '\n' ' ' <"$EVIDENCE/block-b.txt" | cut -c1-200)"
   chat_panel_new_conversation "$EVIDENCE/.panel-new-b.json"
   chat_panel_says "$ASK" "$EVIDENCE/opening-b.txt"
   cat "$ROOT"/coach/health/talks/"$DAY_B".md >"$EVIDENCE/talk-b.md" 2>/dev/null || : >"$EVIDENCE/talk-b.md"
@@ -255,11 +266,16 @@ claims_research_time() { # <file>: prints the first line that does, and leaves 0
 check() { # <evidence folder>
   local folder=$1 sentence a b opening_b goal route_count label field reply
   [ -d "$folder" ] || fail "there is nothing at $folder, so this scenario kept no evidence of a talk's preparation"
+  b=$(sed -n 's/^b=//p' "$folder/days.txt" 2>/dev/null)
+  if [ ! -s "$folder/talk-b.md" ]; then
+    [ -n "$b" ] || fail "days.txt does not say which two talk days this scenario worked on"
+    fail "no talk of day $b was opened when the owner asked for it: $(tr '\n' ' ' <"$folder/opening-b.txt" 2>/dev/null | cut -c1-200)"
+  fi
   kept_all "$folder" 'what the preparations, the real seal, the gate and the talks held' \
     days.txt area.md prep-a.md prep-b.md review-a.json review-b.json evidence-b.json seal-a.txt seal-a.code \
-    seal-b.txt seal-b.code check-a.txt check-b.txt brief-a.txt opening-a.txt opening-b.txt talk-a.md talk-b.md
+    seal-b.txt seal-b.code check-a.txt check-b.txt brief-a.txt close-a.txt opening-a.txt opening-b.txt talk-a.md talk-b.md
+  [ -f "$folder/block-b.txt" ] || fail "block-b.txt is not in what the scenario kept"
   a=$(sed -n 's/^a=//p' "$folder/days.txt")
-  b=$(sed -n 's/^b=//p' "$folder/days.txt")
   if [ -z "$a" ] || [ -z "$b" ]; then fail "days.txt does not say which two talk days this scenario worked on"; fi
 
   # 0. The person is what the scenario says: one area, three goals, research domains.
@@ -317,6 +333,13 @@ check() { # <evidence folder>
   rm -f "$folder/.claim"
   if folded "$folder/opening-a.txt" | grep -qF -- "$(section_of "$folder/prep-a.md" 'The opening' | tr -s '[:space:]' ' ' | sed 's/^ //;s/ $//')"; then
     fail "the talk of (a) opened with the words of the preparation the coach refused"
+  fi
+
+  # (a)'s talk is closed, and day B's block does not carry it over.
+  grep -qF -- "Recorded: the Health talk of $a is not-held." "$folder/close-a.txt" ||
+    fail "the talk of (a) was not closed before day B: $(tr '\n' ' ' <"$folder/close-a.txt" | cut -c1-200)"
+  if grep -Eq '^- (Open|Waiting) talk: Health' "$folder/block-b.txt"; then
+    fail "on day B the coach still lists a Health talk as open or waiting: $(grep -E '^- (Open|Waiting) talk: Health' "$folder/block-b.txt" | head -n 1 | cut -c1-200)"
   fi
 
   # (b) 1. Every goal is covered, with its route recorded in full.

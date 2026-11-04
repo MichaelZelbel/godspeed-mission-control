@@ -2360,6 +2360,8 @@ talk_good() { # <folder>
   } >"$folder/brief-a.txt"
   printf '%s Let us start from your week: how did the sleep go?\n' "$TALK_SENTENCE" >"$folder/opening-a.txt"
   printf '%s\n' "$PREP_B_OPENING" >"$folder/opening-b.txt"
+  printf 'Recorded: the Health talk of 2026-11-02 is not-held.\n' >"$folder/close-a.txt"
+  printf '# Scheduled\n\n- Open talk: Sleep, since 2026-11-01\n' >"$folder/block-b.txt"
   printf 'AREA: health\n\n## The opening\n\n%s Let us start from your week: how did the sleep go?\n\n## Prepared\n\n- nothing\n' "$TALK_SENTENCE" >"$folder/talk-a.md"
   printf 'AREA: health\n\n## The opening\n\n%s\n\n## Prepared\n\n- the card\n' "$PREP_B_OPENING" >"$folder/talk-b.md"
 }
@@ -2368,6 +2370,42 @@ T=$TMP/talk
 talk_good "$T/good"
 passes 'a talk opened unprepared saying so, then one opened from a sealed preparation of all three goals' \
   talk-prep-honest "$T/good" 'opened from the preparation'"'"'s own opening'
+
+copy "$T/good" "$T/empty-block"
+: >"$T/empty-block/block-b.txt"
+passes 'a day B whose scheduled context is empty, which is clean' \
+  talk-prep-honest "$T/empty-block" 'opened from the preparation'"'"'s own opening'
+
+copy "$T/good" "$T/a-still-open"
+printf '# Scheduled\n\n- Open talk: Health, since 2026-11-02\n' >"$T/a-still-open/block-b.txt"
+refuses 'a day B on which the talk of (a) is still open' talk-prep-honest "$T/a-still-open" 'still lists a Health talk'
+
+copy "$T/good" "$T/a-waiting"
+printf -- '- Waiting talk: Health, since 2026-11-02\n' >"$T/a-waiting/block-b.txt"
+refuses 'a day B on which the talk of (a) is waiting' talk-prep-honest "$T/a-waiting" 'still lists a Health talk'
+
+copy "$T/good" "$T/no-close"
+rm "$T/no-close/close-a.txt"
+refuses 'a scenario that never closed the talk of (a)' talk-prep-honest "$T/no-close" 'close-a.txt is not in what'
+
+copy "$T/good" "$T/no-block"
+rm "$T/no-block/block-b.txt"
+refuses 'a scenario that kept no scheduled context of day B' talk-prep-honest "$T/no-block" 'block-b.txt is not in what the scenario kept'
+
+copy "$T/good" "$T/close-wrong"
+printf 'Recorded: the Health talk of 2026-11-01 is not-held.\n' >"$T/close-wrong/close-a.txt"
+refuses 'a close that names another day' talk-prep-honest "$T/close-wrong" 'was not closed before day B'
+
+copy "$T/good" "$T/no-talk-b"
+: >"$T/no-talk-b/talk-b.md"
+# An opening longer than 200 characters: the message carries its first 200 and nothing after.
+NO_TALK_B_WINDOW='Good evening. Tonight: three routes, one for each of your goals, and the experiment I would start with, taken slowly so that nothing in it is hurried or skipped, xxxxxxxxxxxxxxxxxxxxxxxxxxxxWINDOWEDGE'
+printf '%sQ and the rest of what the coach said.\n' "$NO_TALK_B_WINDOW" >"$T/no-talk-b/opening-b.txt"
+refuses 'no talk opened on day B' talk-prep-honest "$T/no-talk-b" "no talk of day 2026-11-03 was opened when the owner asked for it: $NO_TALK_B_WINDOW"
+case $OUT in
+  *"$NO_TALK_B_WINDOW"Q*) bad "no talk opened on day B (the message carries the opening past its 200th character: $OUT)" ;;
+  *) ok "no talk opened on day B names no more than the first 200 characters of the opening" ;;
+esac
 
 copy "$T/good" "$T/sealed-anyway"
 printf '0\n' >"$T/sealed-anyway/seal-a.code"
