@@ -108,10 +108,10 @@ test('what a Settings routine delivers is recorded unchanged, for local and Tele
  if(!python)return t.skip('needs Python');
  const {store,run}=wiredProvider(t),words='Your weekly review is ready. Reply "ok" and I will start.';
  const out=run([[{id:'j1',name:'Weekly review',skill:'weekly-review',deliver:'telegram'},words,false],[{id:'j2',name:'Morning brief',skills:['morning-brief'],deliver:'local'},'Good morning.',false],
-  [{id:'j3',name:'Own script',script:'x.py',deliver:'telegram'},'Printed by its script.',false],[{id:'j4',name:'Failing',skill:'coach',deliver:'telegram'},'It failed.',true]]);
- assert.deepEqual(out.errors,[null,null,null,null]);assert.deepEqual(out.delivered,[words,'Good morning.','Printed by its script.','It failed.']);
+  [{id:'j3',name:'Own script',script:'x.py',deliver:'telegram'},'Printed by its script.',false],[{id:'j4',name:'Failing',skill:'coach',deliver:'telegram'},'It failed.',true],[{id:'j5',name:'Targeted',skill:'coach',deliver:'telegram:123'},'To a chat.',false]]);
+ assert.deepEqual(out.errors,[null,null,null,null,null]);assert.deepEqual(out.delivered,[words,'Good morning.','Printed by its script.','It failed.','To a chat.']);
  store.scan?.();const saved=[...new Store(store.root,{device:'pc'}).records.values()].filter(r=>r.id.startsWith('background-report-')).sort((a,b)=>a.content<b.content?-1:1);
- assert.deepEqual(saved.map(r=>[r.content,r.delivered_to,r.conversation_id,r.report.routine]),[['Good morning.','notebook',null,'Morning brief'],[words,'telegram','telegram-owner','Weekly review']]);
+ assert.deepEqual(saved.map(r=>[r.content,r.delivered_to,r.conversation_id,r.report.routine]),[['Good morning.','notebook',null,'Morning brief'],['It failed.','telegram','telegram-owner','Failing'],['To a chat.','telegram','telegram-owner','Targeted'],[words,'telegram','telegram-owner','Weekly review']]);
 });
 
 test('a Settings routine\'s result that cannot be recorded is not delivered',t=>{

@@ -704,12 +704,29 @@ def notice(c):
 
 
 def mark_said(n, said_file):
-    """Adds the notice to what this machine has said, on top of what is there now."""
-    keep = (said_ids(said_file) + [n["id"]])[-200:]
-    tmp = "%s.%d.tmp" % (said_file, os.getpid())
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump({"ids": keep}, f)
-    os.replace(tmp, said_file)
+    """Adds the notice to what this machine has said, on top of what is there now. Runs saying
+    different notices all write the one file, so the read-through-replace is taken one at a time."""
+    lock = said_file + ".lock"
+    for _ in range(600):
+        try:
+            os.close(os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY))
+            break
+        except FileExistsError:
+            try:
+                if time.time() - os.path.getmtime(lock) > 30:
+                    os.remove(lock)
+                    continue
+            except OSError:
+                pass
+            time.sleep(0.05)
+    try:
+        keep = (said_ids(said_file) + [n["id"]])[-200:]
+        tmp = "%s.%d.tmp" % (said_file, os.getpid())
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump({"ids": keep}, f)
+        os.replace(tmp, said_file)
+    finally:
+        release(lock)
 
 
 def reports(c, env, args, stdin, timeout):

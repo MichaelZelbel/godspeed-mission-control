@@ -41,10 +41,10 @@ def _delivery(job):
     return "telegram" if where == "telegram" or where.startswith("telegram:") else None
 
 
-def record_result(job, content, for_failure=False):
+def record_result(job, content):
     """None when nothing needs recording or it was recorded, else why the result must not go out."""
     delivery = _delivery(job)
-    if for_failure or not delivery or not (job.get("skill") or job.get("skills")) or not isinstance(content, str) or not content.strip():
+    if not delivery or not (job.get("skill") or job.get("skills")) or not isinstance(content, str) or not content.strip():
         return None
     try:
         with open(os.path.join(HERE, "report.json"), encoding="utf-8") as f:
@@ -61,7 +61,7 @@ def record_result(job, content, for_failure=False):
 
 def wrap_delivery(deliver):
     def deliver_recorded(job, content, *args, for_failure=False, **kwargs):
-        refused = record_result(job, content, for_failure)
+        refused = record_result(job, content)
         return refused or deliver(job, content, *args, for_failure=for_failure, **kwargs)
     deliver_recorded.godspeed_wrapped = True
     return deliver_recorded

@@ -329,3 +329,19 @@ test('two routines running at once say a queued notice once',{skip:!['python','p
  assert.equal(store.list('conversation_messages').filter(m=>m.source_app==='background').length,1,'and recorded once');
  assert.deepEqual(fs.readdirSync(home).filter(f=>f.endsWith('.claim')),[],'no claim left behind');
 });
+
+test('two routines running at once say two queued notices once each, and a third tick has nothing left',{skip:!['python','python3'].some(p=>{try{execFileSync(p,['--version'],{stdio:'ignore'});return true;}catch{return false;}})&&'needs Python'},async t=>{
+ const {root,home,store,scheduler}=await withGoal(t);
+ const journal=fileURLToPath(new URL('../../third-party/addons/godspeed-journal/bin/godspeed-journal.mjs',import.meta.url));
+ execFileSync(process.execPath,[journal,'config','set','nudge.enabled','on','--godspeed',root],{env:{...process.env,GODSPEED_JOURNAL_GIT_SYNC:'off'},windowsHide:true});
+ await scheduler.followJournal();
+ const {queueNotice}=await import('../core/notices.mjs');queueNotice(store,{id:'backup-1',text:'Last night\'s backup failed.'});queueNotice(store,{id:'disk-1',text:'The disk is nearly full.'});
+ const python=['python3','python'].find(p=>{try{execFileSync(p,['--version'],{stdio:'ignore'});return true;}catch{return false;}});
+ const script=path.join(home,'scripts','godspeed-journal-checkins.py');
+ const start=()=>new Promise(resolve=>{const child=spawn(python,[script],{cwd:path.join(home,'scripts'),env:{...process.env,PYTHONIOENCODING:'utf-8'},windowsHide:true});let out='';child.stdout.on('data',d=>out+=d);child.on('close',code=>resolve({code,out:out.trim()}));});
+ const ticks=await Promise.all([start(),start()]);
+ assert.deepEqual(ticks.map(r=>r.code),[0,0]);assert.deepEqual(ticks.map(r=>r.out).sort(),['Last night\'s backup failed.','The disk is nearly full.'],'one each');
+ assert.equal((await start()).out,'','both are remembered');
+ assert.equal(store.list('conversation_messages').filter(m=>m.source_app==='background').length,2,'and recorded once each');
+ assert.deepEqual(fs.readdirSync(home).filter(f=>f.endsWith('.claim')),[],'no claim left behind');
+});
