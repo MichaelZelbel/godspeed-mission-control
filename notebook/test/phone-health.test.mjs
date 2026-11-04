@@ -159,15 +159,29 @@ test('an upload whose rollback also fails is kept and answered as pending, not a
  t.after(async()=>{console.error=error;await service.close();fs.rmSync(root,{recursive:true,force:true});});
  const token=fs.readFileSync(tokenFile(service.store.state),'utf8').trim(),dir=rawFolder(service.store.state),truncate=fs.truncateSync;
  const send=value=>request(service.address.port,'/ingest/'+token,{method:'POST',body:{data:upload([metric('step_count','count',['2026-11-04 08:00:00 +0100',value])])}});
- assert.equal((await send(1)).status,200);
+ assert.equal((await send(48151)).status,200);
  const file=path.join(dir,fs.readdirSync(dir)[0]),before=fs.readFileSync(file,'utf8');
  service.store.commit=()=>{throw new Error('disk full');};
  fs.truncateSync=()=>{throw new Error('read-only');};
- let second;try{second=await send(2);}finally{fs.truncateSync=truncate;}
+ let second;try{second=await send(62342);}finally{fs.truncateSync=truncate;}
  assert.equal(second.status,202);
  assert.equal(JSON.parse(second.text).pending,true);
  assert.ok(fs.readFileSync(file,'utf8').length>before.length);
  assert.ok(logged.some(l=>l.includes('read-only')&&l.includes('disk full')));
+ assert.ok(!logged.some(l=>l.includes(token)||l.includes('62342')||l.includes('48151')),logged.join('\n'));
+});
+
+test('an upload that is not kept answers 500 and logs neither its value nor the token',async t=>{
+ const root=serverRoot('godspeed-phone-notkept-'),service=await createService({root,port:0,webPort:0}),logged=[],error=console.error;
+ console.error=(...args)=>logged.push(args.join(' '));
+ t.after(async()=>{console.error=error;await service.close();fs.rmSync(root,{recursive:true,force:true});});
+ const token=fs.readFileSync(tokenFile(service.store.state),'utf8').trim();
+ service.store.commit=()=>{throw new Error('disk full');};
+ const sent=await request(service.address.port,'/ingest/'+token,{method:'POST',body:{data:upload([metric('step_count','count',['2026-11-04 08:00:00 +0100',73519])])}});
+ assert.equal(sent.status,500);
+ assert.ok(logged.some(l=>l.includes('disk full')));
+ assert.ok(!logged.some(l=>l.includes(token)||l.includes('73519')),logged.join('\n'));
+ assert.ok(!sent.text.includes('73519')&&!sent.text.includes(token));
 });
 
 test('Personal Settings shows one value per day and metric when a phone and a CSV both gave one',async t=>{
