@@ -2371,6 +2371,11 @@ talk_good "$T/good"
 passes 'a talk opened unprepared saying so, then one opened from a sealed preparation of all three goals' \
   talk-prep-honest "$T/good" 'opened from the preparation'"'"'s own opening'
 
+copy "$T/good" "$T/empty-block"
+: >"$T/empty-block/block-b.txt"
+passes 'a day B whose scheduled context is empty, which is clean' \
+  talk-prep-honest "$T/empty-block" 'opened from the preparation'"'"'s own opening'
+
 copy "$T/good" "$T/a-still-open"
 printf '# Scheduled\n\n- Open talk: Health, since 2026-11-02\n' >"$T/a-still-open/block-b.txt"
 refuses 'a day B on which the talk of (a) is still open' talk-prep-honest "$T/a-still-open" 'still lists a Health talk'
