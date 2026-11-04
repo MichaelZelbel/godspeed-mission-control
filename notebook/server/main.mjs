@@ -257,7 +257,8 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
           const data=upload?.data;
           if(!data||typeof data!=='object'||Array.isArray(data)||[data.metrics,data.workouts].some(x=>x!==undefined&&!Array.isArray(x)))return send(res,400,{error:'Not a Health Auto Export upload'});
           acceptUpload(store,data);return send(res,200,{ok:true});
-        }catch(error){console.error('Godspeed Mission Control: a phone upload was not kept: '+error.message);return send(res,500,{error:'Not kept'});}
+        }catch(error){
+          if(error.retained){console.error('Godspeed Mission Control: a phone upload is kept but could not be turned into day records: '+error.message+'; the rollback also failed: '+error.rollbackMessage);return send(res,202,{ok:true,pending:true});}console.error('Godspeed Mission Control: a phone upload was not kept: '+error.message);return send(res,500,{error:'Not kept'});}
       }
       if(route==='/api/shared-note'&&req.method==='GET'){const share=query.rows('shared_notes').find(s=>s.share_token===url.searchParams.get('token')&&s.is_active),note=share&&store.get('notes',share.note_id);if(!note||note.removed_at||note.is_trashed)return send(res,404,{error:'This share is unavailable'});return send(res,200,{title:note.title,content:note.content,tags:note.tags,entity_type:note.entity_type,created_at:note.created_at,updated_at:note.updated_at});}
       if (route.startsWith('/api/') && !authorized(req, route)) return send(res, 401, { error: 'Sign in to continue.', code: auth.cookie(req)?'SESSION_EXPIRED':'SIGN_IN_REQUIRED' });
@@ -400,8 +401,11 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
       if(route==='/api/phone-health'||route==='/api/phone-health/renew'){
         if(!phoneUploads){if(route==='/api/phone-health')return send(res,200,{available:false});return send(res,404,{error:'Unknown operation'});}
         if(route==='/api/phone-health/renew'&&req.method!=='POST')return send(res,405,{error:'Use POST'});
-        const token=route==='/api/phone-health/renew'?renewToken(store.state):ensureToken(store.state),link=notebookAddress({port:server.address().port}).link;
-        return send(res,200,{available:true,path:'/ingest/'+token,address:link?.startsWith('https://')?link.replace(/\/dashboard$/,'')+'/ingest/'+token:null});
+        const link=notebookAddress({port:server.address().port}).link;
+        // The token travels only inside an https address: over http a network observer would read the phone's credential.
+        if(!link?.startsWith('https://')){if(route==='/api/phone-health/renew')return send(res,409,{error:'A new address needs this server\'s https web address'});return send(res,200,{available:true,address:null});}
+        const token=route==='/api/phone-health/renew'?renewToken(store.state):ensureToken(store.state);
+        return send(res,200,{available:true,address:link.replace(/\/dashboard$/,'')+'/ingest/'+token});
       }
       if(route==='/api/voice'&&req.method==='GET')return send(res,200,backupHome?voiceStatus({home:backupHome,state:store.state}):{available:false});
       if(route==='/api/voice'&&req.method==='POST'){

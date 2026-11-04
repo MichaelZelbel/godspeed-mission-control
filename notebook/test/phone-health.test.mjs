@@ -153,6 +153,23 @@ test('an upload that cannot be published is not kept in the raw files either',()
  assert.deepEqual(fs.readdirSync(rawFolder(fresh.state)),[]);
 });
 
+test('an upload whose rollback also fails is kept and answered as pending, not as not kept',async t=>{
+ const root=serverRoot('godspeed-phone-rollback-'),service=await createService({root,port:0,webPort:0}),logged=[],error=console.error;
+ console.error=(...args)=>logged.push(args.join(' '));
+ t.after(async()=>{console.error=error;await service.close();fs.rmSync(root,{recursive:true,force:true});});
+ const token=fs.readFileSync(tokenFile(service.store.state),'utf8').trim(),dir=rawFolder(service.store.state),truncate=fs.truncateSync;
+ const send=value=>request(service.address.port,'/ingest/'+token,{method:'POST',body:{data:upload([metric('step_count','count',['2026-11-04 08:00:00 +0100',value])])}});
+ assert.equal((await send(1)).status,200);
+ const file=path.join(dir,fs.readdirSync(dir)[0]),before=fs.readFileSync(file,'utf8');
+ service.store.commit=()=>{throw new Error('disk full');};
+ fs.truncateSync=()=>{throw new Error('read-only');};
+ let second;try{second=await send(2);}finally{fs.truncateSync=truncate;}
+ assert.equal(second.status,202);
+ assert.equal(JSON.parse(second.text).pending,true);
+ assert.ok(fs.readFileSync(file,'utf8').length>before.length);
+ assert.ok(logged.some(l=>l.includes('read-only')&&l.includes('disk full')));
+});
+
 test('Personal Settings shows one value per day and metric when a phone and a CSV both gave one',async t=>{
  const root=serverRoot('godspeed-phone-personal-'),service=await createService({root,port:0,webPort:0});
  t.after(async()=>{await service.close();fs.rmSync(root,{recursive:true,force:true});});
@@ -206,18 +223,24 @@ test('the receiver on a server: a wrong token stores nothing, the right one keep
  assert.ok(!logged.some(line=>line.includes(token)||line.includes('127.0.0.1')||line.includes('123')),logged.join('\n'));
 });
 
-test('Settings shows the address, a new address replaces the old one at once, and a computer offers nothing',async t=>{
+test('Settings shows an https address only, a new address replaces the old one at once, and a computer offers nothing',async t=>{
  const root=serverRoot('godspeed-phone-settings-'),service=await createService({root,port:0,webPort:0}),computerRoot=serverRoot('godspeed-phone-computer-'),computer=await createService({root:computerRoot,port:0});
- t.after(async()=>{await service.close();await computer.close();fs.rmSync(root,{recursive:true,force:true});fs.rmSync(computerRoot,{recursive:true,force:true});});
- const port=service.address.port,first=JSON.parse((await request(port,'/api/phone-health')).text);
- assert.equal(first.available,true);
- const token=fs.readFileSync(tokenFile(service.store.state),'utf8').trim();
- assert.equal(first.path,'/ingest/'+token);
- assert.equal(first.address,null,'an http address is never given the token');
+ t.after(async()=>{delete process.env.GODSPEED_WEB_ADDRESS;await service.close();await computer.close();fs.rmSync(root,{recursive:true,force:true});fs.rmSync(computerRoot,{recursive:true,force:true});});
+ const port=service.address.port,token=fs.readFileSync(tokenFile(service.store.state),'utf8').trim();
+ for(const route of ['/api/phone-health','/api/phone-health/renew']){
+  const over=await request(port,route,{method:route.endsWith('renew')?'POST':'GET',body:route.endsWith('renew')?{}:undefined});
+  assert.ok(!over.text.includes(token),'no token over http: '+route);
+ }
+ assert.deepEqual(JSON.parse((await request(port,'/api/phone-health')).text),{available:true,address:null});
+ assert.equal(fs.readFileSync(tokenFile(service.store.state),'utf8').trim(),token,'renew over http changed nothing');
+ process.env.GODSPEED_WEB_ADDRESS='https://notes.example.test';
+ const first=JSON.parse((await request(port,'/api/phone-health')).text);
+ assert.equal(first.address,'https://notes.example.test/ingest/'+token);
  const second=JSON.parse((await request(port,'/api/phone-health/renew',{method:'POST',body:{}})).text);
- assert.notEqual(second.path,first.path);
- assert.equal((await request(port,first.path,{method:'POST',body:{data:{}}})).status,404);
- assert.equal((await request(port,second.path,{method:'POST',body:{data:{}}})).status,200);
+ assert.notEqual(second.address,first.address);
+ const route=address=>new URL(address).pathname;
+ assert.equal((await request(port,route(first.address),{method:'POST',body:{data:{}}})).status,404);
+ assert.equal((await request(port,route(second.address),{method:'POST',body:{data:{}}})).status,200);
 
  assert.deepEqual(JSON.parse((await request(computer.address.port,'/api/phone-health')).text),{available:false});
  assert.equal((await request(computer.address.port,'/api/phone-health/renew',{method:'POST',body:{}})).status,404);

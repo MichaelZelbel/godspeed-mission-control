@@ -189,7 +189,10 @@ export function acceptUpload(store,data,{now=clockNow()}={}){
  return store.withLock(()=>{
   const undo=appendRaw(store.state,{received_at:now.toISOString(),data});
   // An upload that could not become day records is not kept either, so the phone's retry is the only copy.
-  try{pruneRaw(store.state,now);return rebuild(store,touchedDays(data),{now});}catch(error){undo();throw error;}
+  try{pruneRaw(store.state,now);return rebuild(store,touchedDays(data),{now});}catch(error){
+   try{undo();}catch(rollback){throw Object.assign(error,{retained:true,rollbackMessage:rollback.message});}
+   throw error;
+  }
  });
 }
 

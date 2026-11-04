@@ -63,6 +63,16 @@ test('chat retrieves relevant records without sending a thousand notes or hidden
   const relevant=chatContext(query,{message:'Lighthouse'});assert.equal(relevant.notes.length,1);assert.equal(relevant.notes[0].id,'900');assert.equal(relevant.contacts.length,0);assert.ok(JSON.stringify(relevant).length<12000);
   assert.equal(chatContext(query,{note_id:'900'}).notes[0].id,'900');assert.throws(()=>chatContext(query,{person_id:'secret'}),/hidden/);
 });
+test('chat is given one health value per day and metric: the one written last',()=>{
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-chat-health-')),at=new Date().toISOString();
+  const row=(id,source,value,updated_at)=>({id,source,metric:'steps',value,observed_on:at.slice(0,10),date_precision:'day',observed_at:at,updated_at});
+  const rows={health_observations:[row('csv','Selected CSV',1000,'2026-11-01T00:00:00Z'),row('phone','Health Auto Export',2000,'2026-11-02T00:00:00Z')]};
+  const query={store:{root},withSnapshot:fn=>fn(),rows:type=>rows[type]||[]};
+  assert.deepEqual(chatContext(query,{message:'hi'}).personal.health.map(h=>h.value),[2000]);
+  rows.health_observations[0].updated_at='2026-11-03T00:00:00Z';
+  assert.deepEqual(chatContext(query,{message:'hi'}).personal.health.map(h=>h.value),[1000]);
+  assert.equal(rows.health_observations.length,2);
+});
 test('uploaded document contents require a valid saved binary and supported type',()=>{
   const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-chat-file-')),data=Buffer.from('silver anchor'),mapping={file:hash(data)+'-document.txt',sha256:hash(data),contentType:'text/plain'};
   fs.writeFileSync(path.join(root,mapping.file),data);fs.writeFileSync(path.join(root,hash('chat/document.txt')+'.mapping.json'),JSON.stringify(mapping));

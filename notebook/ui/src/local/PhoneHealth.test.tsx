@@ -23,8 +23,8 @@ describe("Health data from your phone in Settings", () => {
 
   it("shows the address with its token and makes a new one after a confirmation", async () => {
     const calls = serve({
-      "phone-health": () => ({ available: true, path: "/ingest/madeUpTokenOne", address: "https://notes.example.test/ingest/madeUpTokenOne" }),
-      "phone-health/renew": () => ({ available: true, path: "/ingest/madeUpTokenTwo", address: "https://notes.example.test/ingest/madeUpTokenTwo" }),
+      "phone-health": () => ({ available: true, address: "https://notes.example.test/ingest/madeUpTokenOne" }),
+      "phone-health/renew": () => ({ available: true, address: "https://notes.example.test/ingest/madeUpTokenTwo" }),
     });
     vi.stubGlobal("confirm", vi.fn(() => true));
     show();
@@ -35,12 +35,20 @@ describe("Health data from your phone in Settings", () => {
   });
 
   it("keeps the old address when the new one is not confirmed", async () => {
-    const calls = serve({ "phone-health": () => ({ available: true, path: "/ingest/madeUpTokenOne", address: null }), "phone-health/renew": () => ({}) });
+    const calls = serve({ "phone-health": () => ({ available: true, address: "https://notes.example.test/ingest/madeUpTokenOne" }), "phone-health/renew": () => ({}) });
     vi.stubGlobal("confirm", vi.fn(() => false));
     show();
-    expect(await screen.findByLabelText("Address for Health Auto Export")).toHaveValue("https://<your server's address>/ingest/madeUpTokenOne");
+    expect(await screen.findByLabelText("Address for Health Auto Export")).toHaveValue("https://notes.example.test/ingest/madeUpTokenOne");
     fireEvent.click(screen.getByRole("button", { name: "Make a new address" }));
     expect(calls.some(c => c.route === "phone-health/renew")).toBe(false);
+  });
+
+  it("shows no address and no button when the server has no https address", async () => {
+    serve({ "phone-health": () => ({ available: true, address: null }) });
+    show();
+    expect(await screen.findByText(/only for this server's https web address/)).toBeInTheDocument();
+    expect(screen.queryByLabelText("Address for Health Auto Export")).toBeNull();
+    expect(screen.queryByRole("button")).toBeNull();
   });
 
   it("says on Windows that the phone needs the server install, with no button", async () => {
