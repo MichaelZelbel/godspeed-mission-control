@@ -2398,7 +2398,7 @@ refuses 'a close that names another day' talk-prep-honest "$T/close-wrong" 'was 
 
 copy "$T/good" "$T/no-talk-b"
 : >"$T/no-talk-b/talk-b.md"
-refuses 'no talk opened on day B' talk-prep-honest "$T/no-talk-b" 'no talk of day 2026-11-03 was opened when the owner asked for it'
+refuses 'no talk opened on day B' talk-prep-honest "$T/no-talk-b" 'talk-b.md is not in what the scenario kept'
 
 copy "$T/good" "$T/sealed-anyway"
 printf '0\n' >"$T/sealed-anyway/seal-a.code"

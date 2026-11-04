@@ -266,9 +266,6 @@ claims_research_time() { # <file>: prints the first line that does, and leaves 0
 check() { # <evidence folder>
   local folder=$1 sentence a b opening_b goal route_count label field reply
   [ -d "$folder" ] || fail "there is nothing at $folder, so this scenario kept no evidence of a talk's preparation"
-  if [ ! -s "$folder/talk-b.md" ]; then
-    fail "no talk of day $(sed -n 's/^b=//p' "$folder/days.txt" 2>/dev/null) was opened when the owner asked for it: $(tr '\n' ' ' <"$folder/opening-b.txt" 2>/dev/null | cut -c1-200)"
-  fi
   kept_all "$folder" 'what the preparations, the real seal, the gate and the talks held' \
     days.txt area.md prep-a.md prep-b.md review-a.json review-b.json evidence-b.json seal-a.txt seal-a.code \
     seal-b.txt seal-b.code check-a.txt check-b.txt brief-a.txt close-a.txt opening-a.txt opening-b.txt talk-a.md talk-b.md
