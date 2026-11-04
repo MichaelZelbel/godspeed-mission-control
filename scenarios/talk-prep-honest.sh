@@ -46,6 +46,7 @@
 #   block-b.txt          the coach's scheduled block on day B, before the owner asked for the talk
 #   opening-a.txt / opening-b.txt   the reply the owner got when they asked for the talk
 #   talk-a.md / talk-b.md           the talk records the coach holds afterwards
+# shellcheck disable=SC2034  # read by scenario-lib.sh, which this file sources
 SCENARIO=talk-prep-honest
 # shellcheck source=scenarios/scenario-lib.sh
 . "$(dirname "$0")/scenario-lib.sh"
@@ -241,6 +242,7 @@ act() {
   notebook_clock_at "$DAY_B"
   NOW=${DAY_B}T12:00:00Z
   prepare_and_review b "$DAY_B" 3 'Good evening. Tonight: three routes, one for each of your goals, and the experiment I would start with.' pass "$URL_1" "$URL_2" "$URL_3"
+  # An exit-0, empty block-b.txt is taken as a clean context.
   coach context --scheduled >"$EVIDENCE/block-b.txt" 2>&1 ||
     fail "the coach could not give day B's scheduled context, so a carried-over Health talk was not ruled out: $(tr '\n' ' ' <"$EVIDENCE/block-b.txt" | cut -c1-200)"
   chat_panel_new_conversation "$EVIDENCE/.panel-new-b.json"
