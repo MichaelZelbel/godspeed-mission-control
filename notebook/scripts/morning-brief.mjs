@@ -67,10 +67,11 @@ export async function runMorningBrief({root,provider=null,env=process.env,now=ne
 
 // Asked for in the chat (#193): today's briefing note if the notebook already saved one, else the
 // briefing is run once, so the same words reach the person whether the morning or the chat asked.
-// Today is the person's own day (the installation's time zone). Read-only when a note exists.
+// Today is the person's own day (the installation's time zone). Read-only when a note exists; one the person hid is not shown and no second one is made.
 export async function todaysMorningBrief({root,provider=null,env=process.env,now=new Date()}){
- const saved=savedBriefToday(new Store(root,{device:machineDevice(root).id}),now);
- if(saved)return {result:null,text:String(saved.content||'').trim()};
+ const {note,hidden}=savedBriefToday(new Store(root,{device:machineDevice(root).id}),now);
+ if(note)return {result:null,text:String(note.content||'').trim()};
+ if(hidden)return {result:null,text:''};
  return runMorningBrief({root,provider,env,now});
 }
 

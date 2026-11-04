@@ -168,3 +168,41 @@ test('the recipe names the command first and keeps hand-writing only as the fall
  assert.match(recipe,/Save a new file as `brief\/YYYY-MM-DD\.md`/,'a mission control without the command is still told what to write');
  assert.match(recipe,/Never write\s+`brief\/YYYY-MM-DD\.md` by hand for "today's brief"/);
 });
+
+// The person's day is the installation's (Europe/Berlin here), not UTC, and a briefing keeps the day
+// it was asked for even when it is committed after local midnight.
+const save=(store,fields)=>store.save('notes',{title:'Your morning briefing',content:'MADE-UP',source_app:'morning-brief',...fields});
+const seen=(root,at)=>todaysMorningBrief({root,provider:async()=>{throw Error('asked');},now:new Date(at)}).then(r=>r.text,e=>e.message);
+
+test('a saved briefing without a day belongs to the installation\'s day, not the UTC day',async t=>{
+ const {root,store}=workspace(t);
+ save(store,{created_at:'2026-11-04T22:30:00Z'});
+ assert.equal(await seen(root,'2026-11-04T22:50:00Z'),'MADE-UP','23:30 in Berlin is still 4 November');
+ assert.equal(await seen(root,'2026-11-04T23:10:00Z'),'asked','5 November in Berlin has none');
+ assert.equal(await seen(root,'2026-11-04T10:00:00Z'),'MADE-UP','same Berlin day, earlier');
+ const late=workspace(t);
+ save(late.store,{created_at:'2026-11-04T23:30:00Z'});
+ assert.equal(await seen(late.root,'2026-11-04T12:00:00Z'),'asked','00:30 on 5 November is not 4 November');
+ assert.equal(await seen(late.root,'2026-11-05T12:00:00Z'),'MADE-UP');
+});
+
+test('a briefing asked for before local midnight and committed after it stays that day\'s',async t=>{
+ const {root}=workspace(t);
+ const provider=async input=>verifies(input)||OK;
+ const asked=new Date('2026-11-04T22:45:00Z');
+ await runMorningBrief({root,provider,now:asked});
+ const [note]=briefNotes(root);
+ assert.equal(note.brief_day,'2026-11-04');
+ // Its commit time lands after midnight in Berlin; the next day's request must still run its own.
+ new Store(root).save('notes',{...note,created_at:'2026-11-04T23:30:00Z'});
+ assert.equal(await seen(root,'2026-11-04T23:50:00Z'),'asked','5 November does not take 4 November\'s note');
+ assert.equal((await todaysMorningBrief({root,provider:async()=>{throw Error('asked');},now:new Date('2026-11-04T22:55:00Z')})).text,note.content.trim());
+});
+
+for(const [name,fields] of [['hidden',{ai_visibility:'hidden'}],['sensitive',{is_sensitive:true}]])
+ test(`a ${name} briefing of today is not given to the assistant, and no second one is written`,async t=>{
+  const {root,store}=workspace(t);
+  save(store,{content:'PRIVATE',brief_day:'2026-11-04',created_at:'2026-11-04T08:00:00Z',...fields});
+  const r=await todaysMorningBrief({root,provider:async()=>{throw Error('the AI must not be asked');},now:new Date('2026-11-04T09:00:00Z')});
+  assert.equal(r.text,'');assert.equal(briefNotes(root).length,1);
+ });
