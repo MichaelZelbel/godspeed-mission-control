@@ -19,7 +19,6 @@ import {QueryService} from '../core/query.mjs';
 import {addonCommand} from '../core/native-personal.mjs';
 import {routineFiles} from '../core/starting-routines.mjs';
 import {BRIEF_SCRIPT} from '../core/notebook-routines.mjs';
-import {briefing} from '../core/briefing.mjs';
 import {runMorningBrief,todaysMorningBrief} from '../scripts/morning-brief.mjs';
 
 const python=process.env.GODSPEED_TEST_PYTHON||(process.platform==='win32'?'python':'python3');
@@ -159,42 +158,6 @@ test('a briefing saved on an earlier day is not today\'s, and the same words may
  const tomorrow=new Date(Date.now()+2*86400000);
  const next=await todaysMorningBrief({root,provider,now:tomorrow});
  assert.equal(next.text,first.text);assert.equal(briefNotes(root).length,2,'two notes, one for each day');
-});
-
-test('overlapping chat requests save one briefing and every one of them gets its words',async t=>{
- for(const distinct of [false,true]){
-  const {root}=workspace(t);let writes=0;
-  const provider=async input=>{const checked=verifies(input);if(checked)return checked;await new Promise(r=>setTimeout(r,40));return distinct?OK+' Draft '+(++writes)+'.':(writes++,OK);};
-  const asked=await Promise.all([1,2,3].map(()=>todaysMorningBrief({root,provider})));
-  assert.equal(briefNotes(root).length,1,distinct?'different drafts':'equal drafts');
-  assert.equal(writes,1);
-  for(const a of asked)assert.equal(a.text,asked[0].text);
-  assert.ok(asked[0].text);
- }
-});
-
-test('the morning routine and chat requests at once save one briefing and the chat gets its words',async t=>{
- for(const distinct of [false,true]){
-  const {root}=workspace(t);let writes=0;
-  const provider=async input=>{const checked=verifies(input);if(checked)return checked;await new Promise(r=>setTimeout(r,40));return distinct?OK+' Draft '+(++writes)+'.':(writes++,OK);};
-  const [routine,chat]=await Promise.all([runMorningBrief({root,provider}),todaysMorningBrief({root,provider})]);
-  assert.equal(briefNotes(root).length,1,distinct?'different drafts':'equal drafts');
-  assert.ok(chat.text);assert.equal(chat.text,routine.text);
- }
-});
-
-test('a chat first and the routine or the in-process scheduler right behind it all get the one saved briefing',async t=>{
- for(const distinct of [false,true]){
-  const {root,store}=workspace(t);let writes=0;
-  const provider=async input=>{const checked=verifies(input);if(checked)return checked;await new Promise(r=>setTimeout(r,40));return distinct?OK+' Draft '+(++writes)+'.':(writes++,OK);};
-  const chat=todaysMorningBrief({root,provider}),later=async()=>{await new Promise(r=>setTimeout(r,10));};
-  const routine=later().then(()=>runMorningBrief({root,provider}));
-  const scheduler=later().then(()=>briefing({id:'morning-brief',kind:'morning-brief'},{store:new Store(root),query:new QueryService(new Store(root)),provider}));
-  const [c,r,s]=await Promise.all([chat,routine,scheduler]);
-  const notes=briefNotes(root);
-  assert.equal(notes.length,1,distinct?'different drafts':'equal drafts');
-  assert.equal(r.text,c.text);assert.equal(s.record_id,notes[0].id);assert.equal(notes[0].content.trim(),c.text);
- }
 });
 
 test('the recipe names the command first and keeps hand-writing only as the fallback without it',()=>{

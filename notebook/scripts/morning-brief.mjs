@@ -56,13 +56,11 @@ export function notebookQuery(store,env=process.env){
 }
 
 // The briefing, and the words to deliver: the saved note's, or '' when the briefing stays silent.
-// Every writer of the day's briefing takes the one turn inside core/briefing.mjs, and one that
-// waited returns the note the other saved.
-export async function runMorningBrief({root,provider=null,env=process.env,now=new Date(),waitMs=600000,reuseToday=false}){
+export async function runMorningBrief({root,provider=null,env=process.env,now=new Date()}){
  const store=new Store(root,{device:machineDevice(root).id}),query=notebookQuery(store,env);
  const ai=provider||notebookProvider(store,env);
  if(!ai)throw Error('The morning brief has no AI to write with: connect one in Settings, Your AI.');
- const result=await briefing({id:'morning-brief',kind:'morning-brief',waitMs,reuseToday},{store,query,provider:ai,now});
+ const result=await briefing({id:'morning-brief',kind:'morning-brief'},{store,query,provider:ai,now});
  const note=result.record_id?store.get('notes',result.record_id):null;
  return {result,text:note?String(note.content||'').trim():''};
 }
@@ -70,11 +68,10 @@ export async function runMorningBrief({root,provider=null,env=process.env,now=ne
 // Asked for in the chat (#193): today's briefing note if the notebook already saved one, else the
 // briefing is run once, so the same words reach the person whether the morning or the chat asked.
 // Today is the person's own day (the installation's time zone). Read-only when a note exists.
-// A request that overlaps another waits its turn inside the briefing and gets the note that one saved.
-export async function todaysMorningBrief({root,provider=null,env=process.env,now=new Date(),waitMs=600000}){
+export async function todaysMorningBrief({root,provider=null,env=process.env,now=new Date()}){
  const saved=savedBriefToday(new Store(root,{device:machineDevice(root).id}),now);
  if(saved)return {result:null,text:String(saved.content||'').trim()};
- return runMorningBrief({root,provider,env,now,waitMs,reuseToday:true});
+ return runMorningBrief({root,provider,env,now});
 }
 
 if(import.meta.url===pathToFileURL(process.argv[1]||'').href){

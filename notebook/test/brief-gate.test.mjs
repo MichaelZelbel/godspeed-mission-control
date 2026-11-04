@@ -99,10 +99,10 @@ test('a briefing cannot deliver after its adopted goal or health source changes 
  }
 });
 
-test('overlapping checked briefings file identical content only once and both get that note',async()=>{
+test('overlapping checked briefings file identical content only once',async()=>{
  const store=new Store(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-brief-overlap-'))),query=new QueryService(store),provider=async input=>input.kind==='brief-verification'?{passed:true,reason:'Fictional sources checked'}:'No fresh fictional health observations are available. Inspect the fictional source.';
  const run=jobExecutor(provider,query),results=await Promise.all([run({kind:'morning-brief',id:'brief-one'},{store,settings:{}}),run({kind:'morning-brief',id:'brief-two'},{store,settings:{}})]);
- assert.equal(store.list('notes').filter(n=>n.source_app==='morning-brief').length,1);assert.equal(store.list('notifications').length,1);assert.equal(new Set(results.map(r=>r.record_id)).size,1,'the one that waited gets the note the other saved');
+ assert.equal(store.list('notes').filter(n=>n.source_app==='morning-brief').length,1);assert.equal(store.list('notifications').length,1);assert.equal(results.filter(r=>r.silent).length,1);
 });
 
 

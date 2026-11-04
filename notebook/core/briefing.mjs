@@ -17,48 +17,12 @@ import {currentHealth} from './health-inputs.mjs';
 import {cycleOperation} from './cycle-operations.mjs';
 import {addonCommand} from './native-personal.mjs';
 import {dayOf} from './trackers.mjs';
-// Every writer of a day's briefing (the routine's script, the chat's --today, the in-process
-// scheduler) takes one turn per installation. A writer that waited for another rereads the day and
-// returns the note that one saved, so they all select the same persisted note; the chat asks for
-// that every time (reuseToday), since it only wants a note to read.
-export async function briefing(job,loop){
- if(job.rehearsal)return draftBriefing(job,loop);
- const {store,now=new Date()}=loop,turn=await takeTurn(path.join(store.state,'brief-today.lock'),job.waitMs??600000);
- try{
-  if(turn.waited||job.reuseToday){
-   const saved=savedBriefToday(store,now);
-   if(saved)return {verified:true,record_id:saved.id,content_hash:saved._hash,delivery:'notebook'};
-  }
-  return await draftBriefing(job,loop);
- }finally{turn.release();}
-}
-
 export function savedBriefToday(store,now=new Date()){
  const zone=store.get('settings','installation')?.timezone||'UTC',today=dayOf(now,zone);
  return new QueryService(store).rows('notes').filter(n=>n.source_app==='morning-brief'&&n.created_at&&dayOf(new Date(n.created_at),zone)===today).at(-1);
 }
 
-const alive=pid=>{try{process.kill(pid,0);return true;}catch(error){return error.code==='EPERM';}};
-const readText=file=>{try{return fs.readFileSync(file,'utf8');}catch{return '';}};
-async function takeTurn(lock,waitMs){
- fs.mkdirSync(path.dirname(lock),{recursive:true});
- const until=Date.now()+waitMs;let waited=false;
- for(;;){
-  try{
-   const fd=fs.openSync(lock,'wx');fs.writeSync(fd,String(process.pid));fs.closeSync(fd);
-   return {waited,release:()=>{try{fs.unlinkSync(lock);}catch{}}};
-  }catch(error){
-   if(error.code!=='EEXIST')throw error;
-   const holder=Number.parseInt(readText(lock),10);
-   if(holder&&!alive(holder)){try{fs.unlinkSync(lock);}catch{}continue;}
-   if(Date.now()>=until)throw Error('Another request for today\'s brief is still being written. Ask again in a moment.');
-   waited=true;
-   await new Promise(resolve=>setTimeout(resolve,50));
-  }
- }
-}
-
-async function draftBriefing(job,{store,query,provider,now=new Date()}){
+export async function briefing(job,{store,query,provider,now=new Date()}){
  if(job.rehearsal){
   const copy=path.join(store.state,'brief-rehearsals',randomUUID());fs.mkdirSync(copy,{recursive:true,mode:0o700});
   await store.waitForWriter();await store.withLockAsync(()=>{

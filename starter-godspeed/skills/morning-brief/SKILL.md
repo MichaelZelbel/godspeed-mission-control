@@ -19,7 +19,7 @@ notebook already saved it, or writes it once and prints it. Your answer is its t
 When it prints nothing and succeeds, the notebook keeps today's briefing silent: say in one
 sentence that there is no briefing today. When it fails, give its one sentence and stop. Never write
 `brief/YYYY-MM-DD.md` by hand for "today's brief", "my brief" or "the brief again", and never
-add to or reword what it printed. The sections below on going out tonight, going out without asking,
+add to or reword what it printed. Requests that overlap in time rely on the notebook's existing same-day check, which refuses a note it already saved today. The sections below on going out tonight, going out without asking,
 and switching it on still apply; everything else from "What to read" through "Your answer" is
 the fallback.
 
