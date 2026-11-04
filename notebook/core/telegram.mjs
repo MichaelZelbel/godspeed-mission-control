@@ -3,6 +3,9 @@ import path from 'node:path';
 import {atomic,hash} from './records/store.mjs';
 import {habitProgressPng,habitProgressText} from './habit-progress-image.mjs';
 import {stampReply} from './waiting-steps.mjs';
+// Every message that reached the owner's chat says so, so a bare yes never answers an older question
+// once something newer has been said (waiting-steps.mjs `spokeSince`).
+const reached=()=>({delivered_to:'telegram',delivered_at:new Date().toISOString()});
 export class Telegram {
   constructor({store,domains,token,owner,origin='https://api.telegram.org',transport=fetch,loginLink,renderProgress=habitProgressPng}){this.store=store;this.domains=domains;this.token=token;this.owner=String(owner);this.origin=origin;this.transport=transport;this.loginLink=loginLink;this.renderProgress=renderProgress;this.file=path.join(store.state,'telegram-offset.json');this.running=false;}
   async replyWithProgress(reply,result,locale='en'){
@@ -32,7 +35,7 @@ export class Telegram {
     if(this.store.get('command_receipts',receiptId))return;
     // Record the send before contacting Telegram. An uncertain send is never replayed.
     await this.store.saveAsync('command_receipts',{id:receiptId,source:'telegram',state:'attempted'});
-    try{const sent=await this.call('sendMessage',{chat_id:this.owner,text});await this.store.saveAsync('command_receipts',{id:receiptId,state:'verified',message_id:sent.message_id});}
+    try{const sent=await this.call('sendMessage',{chat_id:this.owner,text});await this.store.saveAsync('command_receipts',{id:receiptId,state:'verified',message_id:sent.message_id});await this.store.saveAsync('conversation_messages',{role:'assistant',content:text,source_app:'telegram',message_id:sent.message_id,conversation_id:'telegram-owner',...reached()});}
     catch{await this.store.saveAsync('command_receipts',{id:receiptId,state:'needs_review'});}
   }
   async deliver(id,result){
@@ -43,7 +46,7 @@ export class Telegram {
     const receiptId='delivery-'+hash([record.type,record.id,String(record.content)]).slice(0,40),old=this.store.get('command_receipts',receiptId)||this.store.get('command_receipts','delivery-'+id);if(old?.state==='verified')return old;if(old)throw Object.assign(new Error('A previous delivery needs review before another send'),{code:'OUTWARD_UNCERTAIN'});
     const text=String(record.content);if(text.length>4000)throw new Error('Prepare a shorter delivery before sending this saved result');
     await this.store.saveAsync('command_receipts',{id:receiptId,source:'telegram-delivery',state:'attempted',record_id:record.id,content:text});
-    try{const sent=await this.call('sendMessage',{chat_id:this.owner,text});await this.store.saveAsync('conversation_messages',{role:'assistant',content:text,talk_id:result.talk_id||record.talk_id||null,habit_ids:record.habit_ids||[],observation_day:record.observation_day||null,source_app:'telegram',message_id:sent.message_id,conversation_id:'telegram-owner'});return await this.store.saveAsync('command_receipts',{id:receiptId,state:'verified',message_id:sent.message_id});}catch{await this.store.saveAsync('command_receipts',{id:receiptId,state:'needs_review'});throw Object.assign(new Error('Telegram delivery is uncertain and will not be replayed'),{code:'OUTWARD_UNCERTAIN'});}
+    try{const sent=await this.call('sendMessage',{chat_id:this.owner,text});await this.store.saveAsync('conversation_messages',{role:'assistant',content:text,talk_id:result.talk_id||record.talk_id||null,habit_ids:record.habit_ids||[],observation_day:record.observation_day||null,source_app:'telegram',message_id:sent.message_id,conversation_id:'telegram-owner',...reached()});return await this.store.saveAsync('command_receipts',{id:receiptId,state:'verified',message_id:sent.message_id});}catch{await this.store.saveAsync('command_receipts',{id:receiptId,state:'needs_review'});throw Object.assign(new Error('Telegram delivery is uncertain and will not be replayed'),{code:'OUTWARD_UNCERTAIN'});}
   }
   async tick(){
     if(this.running)return;this.running=true;
@@ -66,7 +69,7 @@ export class Telegram {
           const delivered=await this.replyWithProgress(reply,answerResult,message.from?.language_code||'en');
           if(answered)stampReply(this.store,{words:delivered.dispatched,since:turnStart,messageId:delivered.message_id});
           await this.store.saveAsync('command_receipts',{id,state:'verified',message_id:delivered.message_id,result:reply});
-          if(!answered)await this.store.saveAsync('conversation_messages',{role:'assistant',content:reply,source_app:'telegram',message_id:delivered.message_id,conversation_id:'telegram-owner'});
+          if(!answered)await this.store.saveAsync('conversation_messages',{role:'assistant',content:reply,source_app:'telegram',message_id:delivered.message_id,conversation_id:'telegram-owner',...reached()});
         }catch{await this.store.saveAsync('command_receipts',{id,state:'needs_review',error:'Telegram request did not finish. It will not be replayed automatically.'});if(!sendAttempted)await this.failureNotice(id,'I could not finish your message. I have not repeated any actions. Please try again.');}
         atomic(this.file,JSON.stringify({offset:update.update_id+1}));
       }

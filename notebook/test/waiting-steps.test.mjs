@@ -43,6 +43,28 @@ test('a later ordinary Telegram message makes a bare yes a worded question, not 
  assert.equal(reply.kind,'ask');assert.equal(store.get('approvals',id).status,'pending');
 });
 
+test('a later ordinary Telegram message makes a bare no a worded question too',async t=>{
+ const {store}=fixture(t),{id}=await ask(store,'The bot stopped.');
+ await new Promise(r=>setTimeout(r,5));
+ await recordReport(store,{text:'Your calendar changed.',steps:[],delivery:'telegram'});delivered(store,'Your calendar changed.');
+ assert.equal(heard(store,{chat:'telegram',words:'no'}).kind,'ask');assert.equal(store.get('approvals',id).status,'pending');
+});
+
+test('a scheduler delivery, a command reply or a failure notice sent after the question also moves a bare yes or no on',async t=>{
+ const sends=[async(bot,store)=>{const note=store.save('notes',{id:'n1',content:'Result.'});await bot.deliver('run-1',{record_id:note.id});},
+  bot=>bot.tick(),
+  bot=>bot.failureNotice('telegram-8','Sorry.')];
+ for(const [i,send] of sends.entries()){
+  const {store}=fixture(t),{id}=await ask(store,'The bot stopped.');
+  await new Promise(r=>setTimeout(r,5));
+  const text=i===1?'/status':'';
+  const transport=async url=>({ok:true,json:async()=>url.endsWith('/getUpdates')?{ok:true,result:text?[{update_id:9,message:{text,chat:{id:1,type:'private'},from:{id:1}}}]:[]}:{ok:true,result:{message_id:3}}});
+  const bot=new Telegram({store,domains:{},token:'x',owner:1,transport});
+  await send(bot,store);
+  assert.equal(heard(store,{chat:'telegram',words:i%2?'no':'yes'}).kind,'ask',String(i));assert.equal(store.get('approvals',id).status,'pending');
+ }
+});
+
 test('a step answered twice stays answered once',async t=>{
  const {store}=fixture(t),{id}=await ask(store,'The bot stopped.');
  const first=answerStep(store,id,'yes',{chat:'telegram',words:'yes'}),at=store.get('approvals',id).answered_at;
