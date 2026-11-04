@@ -83,6 +83,17 @@ test('the plugin lists at most the five newest reports, newest first',async t=>{
  assert.deepEqual(seen,[3,5,10,25,40],'five, the most recent first; the oldest left out');
 });
 
+test('the plugin lists a waiting step on a report persisted with the scalar step',async t=>{
+ if(!python)return t.skip('needs Python');
+ const {root,store}=setup(t),{recordReport}=await import('../core/background-reports.mjs');
+ const saved=await recordReport(store,{text:'Report old',delivery:'telegram',written:'assistant',steps:['step-9f3a2c']});
+ const file=path.join(root,'notebook','_system','conversation_messages',saved.id+'.json'),record=JSON.parse(fs.readFileSync(file,'utf8'));
+ const {steps,...report}=record.report;fs.writeFileSync(file,JSON.stringify({...record,report:{...report,step:steps[0]}}));
+ const plugin=fileURLToPath(new URL('../assistant-files/godspeed-context/__init__.py',import.meta.url));
+ const block=execFileSync(python,['-I','-c','import importlib.util,sys;s=importlib.util.spec_from_file_location("p",sys.argv[1]);m=importlib.util.module_from_spec(s);s.loader.exec_module(m);print(m.reports_block(sys.argv[2],sys.argv[3]))',plugin,root,'telegram'],{encoding:'utf8',env:{...process.env,PYTHONIOENCODING:'utf-8'}});
+ assert.ok(!JSON.parse(fs.readFileSync(file,'utf8')).report.steps);assert.match(block,/A step waits for their yes\./);
+});
+
 // A routine made in Settings (--skill ... --deliver) is recorded by the wrapper the scheduler plugin
 // puts on Hermes' delivery: what the job delivered is recorded unchanged, before it is delivered.
 const CRON_STUB=`
