@@ -78,6 +78,11 @@ test('setup asks in one sentence with the 30-day number, saves the rule only on 
  assert.ok(!requests.some(r=>/\/messages\/[^/?]+(\?|$)/.test(r)),'no message is fetched one by one');
 });
 
+test('an address and its domain named together count each mail once',async t=>{
+ const {domains}=fixture(t);
+ const asked=await trackerOperation(domains,{type:'tracker-mail',action:'ask',name:'Both',...ORDERS,senders:['shop.example.invalid','orders@shop.example.invalid'],words:'count my mails'});
+ assert.match(asked.reply,/that is 4 mails\.$/);
+});
 test('a second run adds nothing, and neither does a window that overlaps the last',async t=>{
  const {root,store,domains}=fixture(t);await setUp(domains,ORDERS,{name:'Shop orders'});
  assert.deepEqual(await runMailCount({root,now:NOW}),{added:4,failed:0});

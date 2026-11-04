@@ -296,7 +296,7 @@ const TOOLS = [
 // and its id, never a body, a preview or an attachment. Only mail from a requested sender is returned, as
 // a bare lowercase address, so no one else's address leaves this program. A sender with an @ is one
 // address; one without is a domain, and matches its subdomains too. Every page the mailbox has since that
-// day is read, so the answer is the whole window.
+// day is read, so the answer is the whole window; a message found by two selectors is returned once.
 const addressOf = from => { const m = String(from || '').match(/[^\s<>"',;()]+@[^\s<>"',;()]+/); return m ? m[0].toLowerCase() : ''; };
 const fromSender = (address, sender) => sender.includes('@') ? address === sender : address.endsWith('@' + sender) || address.endsWith('.' + sender);
 async function headerSearch({ account, senders, after }) {
@@ -305,10 +305,10 @@ async function headerSearch({ account, senders, after }) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(String(after))) throw new Error('headerSearch: after is a day like 2026-11-04');
   await prepare();
   const found = await box(account).headerSearch({ senders: wanted, after });
-  const messages = [];
+  const messages = [], seen = new Set();
   for (const m of found) {
     const sender = addressOf(m.from);
-    if (sender && wanted.some(w => fromSender(sender, w))) messages.push({ message_id: String(m.message_id), sender, subject: String(m.subject || ''), date: String(m.date || '') });
+    if (!seen.has(String(m.message_id)) && sender && wanted.some(w => fromSender(sender, w))) { seen.add(String(m.message_id)); messages.push({ message_id: String(m.message_id), sender, subject: String(m.subject || ''), date: String(m.date || '') }); }
   }
   return { account: account || 'gmail', messages };
 }
