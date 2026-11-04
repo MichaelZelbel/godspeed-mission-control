@@ -41,7 +41,10 @@ Each routine runs the original programs of the mission control, never a copy of 
 
 The two that run every 15 minutes, coach-tick and journal-tick, also say once what the notebook
 needs the person to hear and could not send itself, such as a nightly backup that failed: the
-notebook queues it in notices.json in its own state, and each one is said once (notices).
+notebook queues it in notices.json in its own state, and each one is said once (notice), one a
+run and only when the routine has no line of its own. The notebook writes it with the guidance the
+chat reads. Every message a routine sends is recorded in the notebook's conversation_messages, so
+the chat can tell what a message was about (core/background-reports.mjs).
 
 Printing nothing is Hermes' silence: nothing is sent and no note is saved. A failure exits non-zero
 with one plain sentence, which the notebook's Routines list shows as the last run.
@@ -54,6 +57,8 @@ on a server), and it is kept in godspeed-routines-status.json beside Hermes' own
 the Routines list still says that the run failed (starting-routines.mjs, routineStatus).
 """
 import argparse
+import hashlib
+import contextlib
 import json
 import os
 import queue
@@ -636,31 +641,149 @@ def brief(c):
 NOTICES_SAID = "godspeed-notices-said.json"
 
 
-def notices(c):
-    """What the notebook queued for the person (core/notices.mjs), each said once on this machine."""
+CLAIM_STALE = 900  # seconds: longer than say() may take, so a claim whose run died can be taken over
+
+
+def said_ids(said_file):
+    try:
+        with open(said_file, encoding="utf-8") as f:
+            return list((json.load(f) or {}).get("ids", []))
+    except Exception:
+        return []
+
+
+def claim(said_file, notice_id):
+    """Take the right to say one notice, or None. The two 15-minute routines can run at once; the
+    claim (an exclusive file per notice) covers selection through marking, so only one says it."""
+    path = "%s.%s.claim" % (said_file, hashlib.sha256(notice_id.encode("utf-8")).hexdigest()[:16])
+    for _ in range(2):
+        try:
+            os.close(os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY))
+            return path
+        except FileExistsError:
+            try:
+                if time.time() - os.path.getmtime(path) < CLAIM_STALE:
+                    return None
+                os.rename(path, "%s.stale-%d" % (path, os.getpid()))
+                os.remove("%s.stale-%d" % (path, os.getpid()))
+            except OSError:
+                return None
+    return None
+
+
+def release(path):
+    try:
+        os.remove(path)
+    except OSError:
+        pass
+
+
+def notice(c):
+    """The oldest thing the notebook queued for the person (core/notices.mjs) that this machine has
+    not said and no other run is saying, claimed, as (notice, said file, claim); or None. One a run:
+    a message is about one thing. Whoever gets it releases the claim (tick)."""
     queued = c.get("notices")
     if not queued:
-        return []
+        return None
     try:
         with open(queued, encoding="utf-8") as f:
             waiting = [n for n in (json.load(f) or {}).get("notices", []) if isinstance(n, dict) and n.get("id") and n.get("text")]
     except Exception:
-        return []
+        return None
     said_file = os.path.join(c["home"], NOTICES_SAID)
-    try:
-        with open(said_file, encoding="utf-8") as f:
-            said = list((json.load(f) or {}).get("ids", []))
-    except Exception:
-        said = []
-    fresh = [n for n in waiting if n["id"] not in said]
-    if not fresh:
-        return []
-    keep = (said + [n["id"] for n in fresh])[-200:]
-    tmp = said_file + ".tmp"
+    for n in waiting:
+        if n["id"] in said_ids(said_file):
+            continue
+        held = claim(said_file, n["id"])
+        if not held:
+            continue
+        if n["id"] in said_ids(said_file):  # said by a run that finished between the look and the claim
+            release(held)
+            continue
+        return n, said_file, held
+    return None
+
+
+@contextlib.contextmanager
+def one_at_a_time(path):
+    """Holds an operating-system lock on path, waiting for it: it goes with the process that holds
+    it, so it can neither be stolen from a live holder nor outlive a dead one."""
+    with open(path, "a+b") as f:
+        if os.name == "nt":
+            import msvcrt
+            f.seek(0)
+            while True:
+                try:
+                    msvcrt.locking(f.fileno(), msvcrt.LK_LOCK, 1)
+                    break
+                except OSError:
+                    continue
+        else:
+            import fcntl
+            fcntl.flock(f, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            if os.name == "nt":
+                f.seek(0)
+                msvcrt.locking(f.fileno(), msvcrt.LK_UNLCK, 1)
+
+
+def mark_said(n, said_file):
+    """Adds the notice to what this machine has said, on top of what is there now (the caller holds
+    the notices lock, since runs saying different notices all write this one file)."""
+    keep = (said_ids(said_file) + [n["id"]])[-200:]
+    tmp = "%s.%d.tmp" % (said_file, os.getpid())
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump({"ids": keep}, f)
     os.replace(tmp, said_file)
-    return [n["text"] for n in fresh]
+
+
+def reports(c, env, args, stdin, timeout):
+    """core/background-reports.mjs through its script (notebook/scripts/background-report.mjs): its
+    stdout, or None where no script is configured. A message that could not be recorded does not go
+    out: a run that fails says so and the notice stays unsaid."""
+    script = c.get("reports")
+    if not script:
+        return None
+    try:
+        r = subprocess.run([c["node"], script] + args + ["--godspeed", c["root"], "--home", c["home"]], cwd=c["root"], env=env,
+                           input=stdin, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout)
+    except Exception:
+        fail("What was sent to you could not be recorded in your notebook.")
+    if r.returncode != 0:
+        fail("What was sent to you could not be recorded in your notebook.", r)
+    return r.stdout.strip()
+
+
+def say(c, env, n):
+    """The words for a notice: written with the chat's guidance and recorded where the chat reads it
+    (its plain text where no script is configured)."""
+    return reports(c, env, ["say"], json.dumps(n), 360) or n["text"]
+
+
+def record(c, env, kind, text):
+    """A routine's own words, recorded as printed."""
+    reports(c, env, ["record", "--routine", kind], text, 120)
+
+
+def tick(c, env, kind, r):
+    """What a 15-minute routine says: its own line when it has one, else the oldest fresh notice,
+    else (a program that failed) its failure. Returns (text, already recorded)."""
+    own = r.stdout.strip() if r is not None and r.returncode == 0 else ""
+    if own:
+        return own, False
+    found = notice(c)
+    if found:
+        n, said_file, held = found
+        try:
+            with one_at_a_time(said_file + ".lock"):  # the notebook has one writer at a time
+                words = say(c, env, n)
+                mark_said(n, said_file)
+        finally:
+            release(held)
+        return words, True
+    return "", True
 
 
 def journal_tick(c):
@@ -671,12 +794,10 @@ def journal_tick(c):
         r = run([c["node"], c["journal"], "tick", "--godspeed", c["root"]], c, env, timeout=600)
     except subprocess.TimeoutExpired:
         r = None
-    said = notices(c)
-    if r is None or r.returncode != 0:
-        if said:
-            return "\n\n".join(said)
+    text, recorded = tick(c, env, "journal-tick", r)
+    if not text and (r is None or r.returncode != 0):
         fail("The journal's check-ins could not run.", r)
-    return "\n\n".join(said + ([r.stdout.strip()] if r.stdout.strip() else []))
+    return text, recorded
 
 
 # ===================================================================== THE NIGHT CHAT TIDY-UP
@@ -951,12 +1072,15 @@ def coach(c, command):
         r = None
     if command == "gate":
         return r.stdout.strip() if r is not None and r.returncode == 0 and r.stdout.strip() else NO_WAKE
-    said = notices(c)
-    if r is None or r.returncode != 0:
-        if said:
-            return "\n\n".join(said)
+    text, recorded = tick(c, env, "coach-tick", r)
+    if not text and (r is None or r.returncode != 0):
         fail("The coach's reminders could not run.", r)
-    return "\n\n".join(said + ([r.stdout.strip()] if r.stdout.strip() else []))
+    return text, recorded
+
+
+# Every other routine's words are recorded as printed (record); the two 15-minute routines record a
+# notice themselves, when it is written (tick). These print nothing for the person or feed an agent job.
+NOT_RECORDED = ("research", "coach-gate", "coach-prep", "chat-tidy")
 
 
 def main(kind):
@@ -964,7 +1088,10 @@ def main(kind):
     out = {"research": research, "decide": decide, "work": work, "due": due, "brief": brief, "coach-prep": coach_prep,
            "coach-gate": lambda c: coach(c, "gate"), "coach-tick": lambda c: coach(c, "tick"),
            "journal-tick": journal_tick, "chat-tidy": chat_tidy}[kind](c)
+    out, recorded = out if isinstance(out, tuple) else (out, kind in NOT_RECORDED)
     if out:
+        if not recorded:
+            record(c, environment(c, today(c)), kind, out)
         # UTF-8 whatever the console's code page: a curly quote must not end the run on Windows.
         sys.stdout.buffer.write((out + "\n").encode("utf-8"))
         sys.stdout.flush()

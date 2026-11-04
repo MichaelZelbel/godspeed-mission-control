@@ -12,6 +12,11 @@ reached an assistant that never saw the invitation. While the invitation waits f
 the chat is under way, this says so. It also hands the owner's plain yes or no in their private Telegram
 chat to `godspeed-step`, which answers the waiting step it belongs to (see waiting_step_block). Every
 failure returns None: it never breaks the assistant.
+
+Reports (4 November 2026, #198): for the same reason, every message background work sends is
+recorded by the notebook (core/background-reports.mjs) as a conversation_messages record named
+background-report-*, and the last few of a day are listed before each reply (reports_block), so
+"what is this about?" can be answered from the message itself.
 """
 import json
 import os
@@ -32,9 +37,13 @@ def _mission_control():
         return ""
 
 
-def _seconds_since(stamp):
+def _stamp(stamp):
     from datetime import datetime
-    return time.time() - datetime.fromisoformat(str(stamp).replace("Z", "+00:00")).timestamp()
+    return datetime.fromisoformat(str(stamp).replace("Z", "+00:00")).timestamp()
+
+
+def _seconds_since(stamp):
+    return time.time() - _stamp(stamp)
 
 
 def context_block(state):
@@ -103,6 +112,45 @@ def voice_block(message):
             "that there, /voice tts makes every answer spoken, /voice on goes back. The voice (the free one "
             "or their ElevenLabs voice) is chosen in the notebook: Settings, Voice replies. Never ask for "
             "an ElevenLabs key in this chat.")
+
+
+REPORT_HOURS = 24  # a day's worth
+REPORT_MAX = 5
+REPORTS_HEADER = ("[godspeed-reports] Sent by background work, in your name, to this chat (newest first). These are "
+                  "your own messages; when they ask about one (\"what is this about?\"), answer from it and its "
+                  "facts. Never ask them to type a code.")
+
+
+def reports_block(root, platform, now=None):
+    """The block listing the reports sent to this kind of chat in the last day, or None."""
+    folder = os.path.join(root, "notebook", "_system", "conversation_messages")
+    to = "telegram" if platform == "telegram" else "notebook"
+    now = now or time.time()
+    found = []
+    for name in os.listdir(folder):
+        if not name.endswith(".json"):
+            continue
+        try:
+            with open(os.path.join(folder, name), encoding="utf-8") as f:
+                r = json.load(f)
+            sent = r["sent_at"]
+            if r.get("source_app") != "background" or r.get("delivered_to") != to or r.get("removed_at") or not 0 <= now - _stamp(sent) < REPORT_HOURS * 3600:
+                continue
+            found.append((sent, r))
+        except Exception:
+            continue
+    found.sort(key=lambda p: _stamp(p[0]), reverse=True)
+    lines = []
+    for sent, r in found[:REPORT_MAX]:
+        info = r.get("report") if isinstance(r.get("report"), dict) else {}
+        line = "- %s UTC, about %s: \"%s\"" % (str(sent)[:16].replace("T", " "), info.get("about") or "something", str(r.get("content", ""))[:600])
+        facts = [str(x) for x in info.get("facts") or [] if x]
+        if facts and info.get("written") != "routine":
+            line += "\n  Facts: " + "; ".join(facts)[:300]
+        if info.get("step"):
+            line += "\n  A step waits for their yes."
+        lines.append(line)
+    return REPORTS_HEADER + "\n" + "\n".join(lines) if lines else None
 
 
 def _backup_command():
@@ -204,6 +252,10 @@ def on_pre_llm_call(**kwargs):
             try:
                 with open(os.path.join(root, ".godspeed", "context-setup.json"), encoding="utf-8") as f:
                     blocks.append(context_block(json.load(f)))
+            except Exception:
+                pass
+            try:
+                blocks.append(reports_block(root, kwargs.get("platform")))
             except Exception:
                 pass
         blocks = [b for b in blocks if b]

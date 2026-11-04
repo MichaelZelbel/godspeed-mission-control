@@ -104,7 +104,8 @@ test('every wiring of a mission control made from the starter gives its Hermes t
  // The provider Hermes loads from its plugins folder: its own built-in ticker under another name.
  const plugin=fs.readFileSync(path.join(home,'plugins','godspeed_notebook','__init__.py'),'utf8');
  assert.match(plugin,/from cron\.scheduler_provider import InProcessCronScheduler/);
- assert.match(plugin,/return "godspeed_notebook"/);assert.match(plugin,/def register\(ctx\):\n    ctx\.register_cron_scheduler\(/);
+ assert.match(plugin,/return "godspeed_notebook"/);
+ assert.match(JSON.parse(fs.readFileSync(path.join(home,'plugins','godspeed_notebook','report.json'),'utf8')).script,/background-report\.mjs$/);assert.match(plugin,/def register\(ctx\):\n    ctx\.register_cron_scheduler\(/);
  assert.ok(!fs.existsSync(path.join(home,'plugins','godspeed_notebook','plugin.yaml')),'not a general plugin: Hermes would list it among them');
  // mc-watch and mc-subs, which the watch and subscription recipes name, exist with the original assistant too.
  for(const name of ['mc-watch','mc-subs'])assert.match(fs.readFileSync(path.join(home,'bin',name),'utf8'),new RegExp('personal-command\\.mjs\' \''+name.slice(3)+'\' "\\$@"'));

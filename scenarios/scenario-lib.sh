@@ -1113,3 +1113,143 @@ assistant_commands() { # <file> <since, epoch seconds>
   "$NODE" "$HERE/night-tidy-chat.mjs" --home "${HERMES:?assistant_home first}" commands --since "${2:-0}" >"$1" ||
     fail "the assistant's command log could not be read from $HERMES/state.db"
 }
+
+# --------------------------------------------------- 2.0.0-beta.17 (additions only): THE OWNER ON TELEGRAM
+# What the four scenarios of "a plain yes" share (no-question-he-cannot-judge, plain-yes, what-was-that,
+# connection-check): an install whose owner is on a fixture Telegram. owner-on-telegram.py plays the
+# owner and Telegram's servers inside the installed Hermes, telegram-fixture-fetch.mjs answers the one
+# program that asks Telegram's servers directly (the connection check), and telegram-judge.mjs reads
+# what was sent. Only Telegram's account and servers are stood in for: the plugins, the routine runner,
+# the delivery, the agent and the notebook are the install's own. The scenario AI key is still the
+# job's own; "no real key" means no real Telegram bot.
+FIXTURE_OWNER=31415
+FIXTURE_VALID_TOKEN='5550001111:SCENARIO-valid-aaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+FIXTURE_OTHER_TOKEN='5550001111:SCENARIO-revoked-bbbbbbbbbbbbbbbbbbbbbbbb'
+
+# The installed assistant's Python and source folder; the same as telegram-language.sh finds them, which
+# keeps its own copy. Sets HERMES_PYTHON and HERMES_SOURCE. Never call it inside $(...).
+installed_hermes_python() {
+  local version executable source_root found
+  version=$(cat "$RUNTIME/version") || fail "the install left no version file behind"
+  executable=$(json_value "$STATE/assistant.json" executable) ||
+    fail "this install's notebook has no assistant of its own, so the owner has nobody to talk to on Telegram"
+  source_root=$(json_value "$STATE/assistant.json" sourceRoot) || source_root=''
+  found=$("$NODE" -e '
+const [module_,executable,sourceRoot,home]=process.argv.slice(1);
+import(require("url").pathToFileURL(module_).href).then(m=>{
+ const {python,source}=m.hermesPython({executable,sourceRoot:sourceRoot||undefined,home});
+ process.stdout.write(JSON.stringify({python:python||"",source:source||sourceRoot||""}));
+}).catch(error=>{console.error(error.message);process.exit(1);});
+' "$RUNTIME/versions/$version/notebook/core/runtime.mjs" "$executable" "$source_root" "$HERMES") ||
+    fail "the assistant's own Python could not be found on this install"
+  HERMES_PYTHON=$(printf '%s' "$found" | "$NODE" -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s).python))')
+  HERMES_SOURCE=$(printf '%s' "$found" | "$NODE" -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s).source))')
+  [ -n "$HERMES_PYTHON" ] && [ -f "$HERMES_PYTHON" ] || fail "the assistant's own Python is not on this machine"
+}
+
+# shellcheck disable=SC2317,SC2329  # asked by wait_for, which takes the command to try as its arguments
+routines_exist() {
+  curl -fsS --max-time 60 -X POST -H 'Content-Type: application/json' -d '{"table":"jobs"}' \
+    "http://127.0.0.1:$NOTEBOOK_PORT/api/query" -o "$EVIDENCE/.jobs.json" 2>/dev/null &&
+    "$NODE" -e 'const d=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.exit((Array.isArray(d)?d:d.data||[]).length?0:1)' "$EVIDENCE/.jobs.json"
+}
+# Settings' own pause for every routine the install made, so neither the notebook's minute tick nor a
+# gateway that Telegram's token starts can say something outside the driver, where the stand-in
+# would not see it. The driver runs a paused routine by name.
+pause_every_routine() {
+  local ids id
+  routines_exist || fail "the install made no routines to pause"
+  ids=$("$NODE" -e 'const d=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));for(const j of (Array.isArray(d)?d:d.data||[]))console.log(j.id)' "$EVIDENCE/.jobs.json")
+  for id in $ids; do
+    curl -sS -o /dev/null --max-time 120 -X POST -H 'Content-Type: application/json' \
+      -d "{\"id\":$(quoted_json "$id"),\"paused\":true}" "http://127.0.0.1:$NOTEBOOK_PORT/api/jobs/update" ||
+      fail "Settings would not pause the routine $id, so it could speak outside the scenario"
+  done
+}
+# The fixture Telegram connected the way the hand-over connects it (Hermes' .env), a first goal adopted
+# through the notebook's setup so the starting routines are made, and every routine paused.
+# <with the asker>: yes to also make the fixture asker (scenario-asker.py), a routine like the notebook's own.
+owner_on_telegram_install() { # [with the asker: yes|no]
+  local executable
+  printf '{"owner":"%s","valid_token":"%s","other_token":"%s","bot_id":5550001111}\n' \
+    "$FIXTURE_OWNER" "$FIXTURE_VALID_TOKEN" "$FIXTURE_OTHER_TOKEN" >"$EVIDENCE/telegram-fixture.json"
+  : >"$EVIDENCE/telegram-fixture-calls.log"
+  touch "$HERMES/.env"
+  chmod 600 "$HERMES/.env"
+  printf 'TELEGRAM_BOT_TOKEN=%s\nTELEGRAM_ALLOWED_USERS=%s\nTELEGRAM_HOME_CHANNEL=%s\n' \
+    "$FIXTURE_VALID_TOKEN" "$FIXTURE_OWNER" "$FIXTURE_OWNER" >>"$HERMES/.env"
+  curl -fsS --max-time 600 -X POST -H 'Content-Type: application/json' \
+    -d '{"goal":"Sleep eight hours a night","timezone":"Etc/UTC","delivery":"telegram"}' \
+    "http://127.0.0.1:$NOTEBOOK_PORT/api/setup" -o "$EVIDENCE/.setup.json" ||
+    fail "the notebook would not take a first goal, so the install made no routines"
+  wait_for 180 "the starting routines to exist" routines_exist ||
+    fail "the install made no routines after its first goal was adopted"
+  if [ "${1:-no}" = yes ]; then
+    executable=$(json_value "$STATE/assistant.json" executable) ||
+      fail "the install recorded no command for its assistant, so the fixture asker could not be made"
+    mkdir -p "$HERMES/scripts"
+    cp "$HERE/scenario-asker.py" "$HERMES/scripts/scenario-asker.py"
+    (cd "$ROOT" && HERMES_HOME="$HERMES" "$executable" cron create '0 0 1 1 *' --no-agent --name 'Scenario asker' \
+      --script scenario-asker.py --deliver telegram --failure-deliver local --workdir "$ROOT") >&2 ||
+      fail "the assistant would not make the fixture asker routine"
+    routines_exist
+  fi
+  pause_every_routine
+  cp "$HERMES/config.yaml" "$EVIDENCE/config.yaml" 2>/dev/null || :
+  find "$HERMES/plugins" -mindepth 1 -maxdepth 1 -printf '%f\n' 2>/dev/null | sort >"$EVIDENCE/plugins.txt"
+  routines_exist
+  cp "$EVIDENCE/.jobs.json" "$EVIDENCE/routines.json"
+  rm -f "$EVIDENCE/.jobs.json" "$EVIDENCE/.setup.json"
+}
+
+# One JSON list of steps for owner-on-telegram.py, from step objects given as arguments.
+steps_file() { # <file> <step object>...
+  local file=$1 joined='' step
+  shift
+  for step in "$@"; do joined=${joined:+$joined,}$step; done
+  printf '[%s]\n' "$joined" >"$file"
+}
+# A step of the driver in one line: <kind> <label> [more members of the object, already JSON]
+step_of() { # <kind> <label> [members]
+  printf '{"kind":"%s","label":"%s"%s}' "$1" "$2" "${3:+,$3}"
+}
+# The owner's turn: an ask file copied where the asker reads it, then the asker routine run. Two steps.
+asker_steps() { # <label> <ask file>
+  step_of run "$1" "\"argv\":[\"cp\",$(quoted_json "$2"),$(quoted_json "$ROOT/.scenario-asks.json")]"
+  printf ','
+  step_of cron "$1" '"job":"Scenario asker"'
+}
+snapshot_step() { # <label> <table>
+  step_of query "$1" "\"table\":\"$2\",\"file\":\"$2-$1.json\""
+}
+
+# The driver, with the stand-in for Telegram's servers loaded into every Node program it starts.
+# Its own words go to driver.log; a driver that ended before its steps did is one FAIL.
+owner_on_telegram() { # <steps file> <run file>
+  local log=$EVIDENCE/driver.log
+  installed_hermes_python
+  say "The owner on Telegram, through the installed Hermes: $HERMES_PYTHON (source ${HERMES_SOURCE:-none})"
+  NODE_OPTIONS="${NODE_OPTIONS:+$NODE_OPTIONS }--import=file://$HERE/telegram-fixture-fetch.mjs" \
+    GODSPEED_SCENARIO_FIXTURE="$EVIDENCE/telegram-fixture.json" \
+    GODSPEED_SCENARIO_CALLS="$EVIDENCE/telegram-fixture-calls.log" \
+    "$HERMES_PYTHON" "$HERE/owner-on-telegram.py" --home "$HERMES" --source "$HERMES_SOURCE" \
+    --fixture "$EVIDENCE/telegram-fixture.json" --steps "$1" --out "$2" --notebook-port "$NOTEBOOK_PORT" 2>"$log" ||
+    { sed 's/^/  | /' "$log" >&2; fail "the owner could not be played through the installed Hermes (its words are in the step log): $(tail -n 1 "$log")"; }
+  sed 's/^/  | /' "$log" >&2
+}
+
+# --- what the checking part asks of what was kept
+# The first step of a run that did not succeed, as one sentence for FAIL, or nothing.
+step_failure() { # <run.json>
+  "$NODE" "$HERE/telegram-judge.mjs" failed "$1" || true
+}
+# FAILs when any message sent in the run holds a code the owner would have to type or hold (what a
+# code is: telegram-judge.mjs). Waiting-step snapshots add their ids to the codes to look for.
+no_code_in() { # <run.json> [approvals snapshot...]
+  local found
+  found=$("$NODE" "$HERE/telegram-judge.mjs" codes "$@") || fail "a message to the owner holds a code he would have to type: $found"
+}
+# What was sent while the given steps ran, refused sends too, one JSON-quoted text per line.
+outbox_between() { # <run.json> <label>[,<label>...] [accepted]
+  "$NODE" "$HERE/telegram-judge.mjs" messages "$@"
+}
