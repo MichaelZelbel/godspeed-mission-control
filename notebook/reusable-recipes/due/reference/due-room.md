@@ -178,7 +178,7 @@ mc-due add <name> ...      make one: --target, --to (the deadline), or both
 mc-due target <name> D     a new day you would like it done (or: asap, as soon as you can)
 mc-due done <name>         you did it (a moment on your notebook's timeline says so)
 mc-due drop <name> --yes   call it off; nothing is deleted
-mc-due check               run the self checks, close what is provably done
+mc-due check [<name>]      run the self checks, close what is provably done (only <name>, when given)
 mc-due state               which are open, and what closed the others
 ```
 

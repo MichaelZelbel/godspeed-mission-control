@@ -98,6 +98,19 @@ test('no key, token or password reaches a record, a message, a deadline or a log
  assert.ok(!everything.join('\n').includes(TOKEN.split(':')[1])&&!everything.join('\n').includes(TOKEN),'no file of the mission control holds the key');
 });
 
+test('a recovery marker that cannot be written does not stop the probes after it, and is retried',async t=>{
+ const {store}=fixture(t);
+ await checkConnections({store,day:D1,probes:stubs({ai:refused})});
+ fs.writeFileSync(path.join(store.state,'connection-check'),'in the way');
+ const called=[];const probes=Object.fromEntries(Object.keys(stubs()).map(n=>[n,async()=>{called.push(n);return {set_up:true,ok:true};}]));
+ await assert.rejects(checkConnections({store,day:D2,probes}),/ai/);
+ assert.deepEqual(called,Object.keys(stubs()),'every connection was still called');
+ assert.equal(deadlines(store)[0].state,'open');
+ fs.rmSync(path.join(store.state,'connection-check'));
+ await checkConnections({store,day:D3,probes:stubs()});
+ assert.equal(deadlines(store)[0].state,'closed');
+});
+
 test('the classifiers sort sign-in failures from the rest',()=>{
  assert.equal(gitKind("fatal: Authentication failed for 'https://github.com/a/b'"),'sign-in');
  assert.equal(gitKind('fatal: could not read Username for https://github.com: terminal prompts disabled'),'sign-in');
