@@ -77,6 +77,20 @@ test("talk open --from-prep opens with the prepared opening, keeps the talk card
   assert.match(record(mc2, "2026-10-21"), /^PREP: coach\/work\/prep\/2026-10-21\.md$/m);
 });
 
+test("talk open --from-prep --shown on a talk day names the earlier unanswered talk in the sealed opening and closes it", () => {
+  const mc = mission({ "coach/work/prep/2026-10-21.md": prep(), "coach/work/talks/2026-10-14.md": "TALK: work\nDATE: 2026-10-14\nSTATE: opened\nOPENED: 2026-10-14T17:00:00Z\nFOLLOW-UP: \n\n## What was read\nx\n\n## The opening\nEarlier.\n\n## What you said\n\n## What changed\n\n" });
+  const b = cli(mc, "2026-10-21T17:00:00Z", "brief", "work");
+  assert.match(b.out, /talk of 2026-10-14 is still open with no reply/);
+  assert.match(b.out, /do not add another/);
+  const r = cli(mc, "2026-10-21T17:00:00Z", "talk", "open", "work", "--from-prep", "coach/work/prep/2026-10-21.md", "--shown");
+  assert.equal(r.code, 0, r.err);
+  const rec = record(mc, "2026-10-21");
+  assert.match(rec, /^PREP: coach\/work\/prep\/2026-10-21\.md$/m);
+  assert.ok(rec.includes(`## The opening\n${OPENING}\n\nYour Work and money talk of 2026-10-14 got no reply, so I closed it as not held.\n`));
+  assert.equal(r.out.split("2026-10-14").length, 2, "named once");
+  assert.match(fs.readFileSync(path.join(mc, "coach", "work", "talks", "2026-10-14.md"), "utf8"), /^STATE: not-held$/m);
+});
+
 test("talk open --from-prep refuses a preparation that is not ready, and opens nothing", () => {
   const cases = [
     [prep({ state: "draft" }), /its STATE is draft, not ready/],

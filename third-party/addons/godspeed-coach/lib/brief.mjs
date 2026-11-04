@@ -153,7 +153,7 @@ export function brief(mcDir, s, area, ymd, { inChat = false } = {}) {
   if (inChat && fs.existsSync(talkFile(area, ymd))) L.push(`Today's ${area.title} talk is already open: continue it (the coach recipe, "Continuing a talk") and do not run the open command below.`);
   else if (inChat) {
     const earlier = unansweredBefore(area, ymd);
-    if (earlier.length) L.push(`The ${area.title} talk of ${earlier.at(-1)} is still open with no reply from them. Opening today's talk closes it as not held. Name it once, in one short sentence in the opening.`);
+    if (earlier.length) L.push(`The ${area.title} talk of ${earlier.at(-1)} is still open with no reply from them. Opening today's talk closes it as not held. ${prep ? "The open command adds the sentence naming it to the prepared opening: do not add another." : "Name it once, in one short sentence in the opening."}`);
   }
   const home = mcDir.replace(/\\/g, "/");
   const hint = preparedHint(research.some((r) => r.found) ? "the research" : "what you read");
