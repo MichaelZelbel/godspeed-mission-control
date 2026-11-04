@@ -298,3 +298,12 @@ test('a notice that cannot be stored does not stop the connections after it, and
  await checkConnections({store,day:D2,probes:stubs({ai:down,telegram:refused})});
  assert.equal(readNotices(store).filter(n=>/ai-other/.test(n.id)).length,1);
 });
+
+test('a recovery marker that cannot be written does not stop the connections after it, and the routine fails',async t=>{
+ const {store,root}=fixture(t);
+ await checkConnections({store,day:D1,probes:stubs({ai:refused})});
+ fs.writeFileSync(path.join(root,'.godspeed','connection-check'),'');
+ const called=[],spy=name=>async()=>{called.push(name);return {set_up:true,ok:true};};
+ await assert.rejects(checkConnections({store,day:D2,probes:{ai:spy('ai'),telegram:spy('telegram'),github:spy('github'),mail:spy('mail')}}),/ai/);
+ assert.deepEqual(called,['ai','telegram','github','mail']);
+});
