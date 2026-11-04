@@ -83,7 +83,7 @@ export const githubProbe=({store,run=args=>new FileSync(store).git(args,undefine
 };
 export const mailProbe=({imap=mailImap}={})=>async()=>{
  let tool;try{tool=imap();if(tool.status().state==='not connected')return NOT_SET_UP;}catch{return NOT_SET_UP;}
- try{const result=await tool.check();return result.state==='connected'?outcome(true):outcome(false,mailKind(result.state));}
+ try{const result=await tool.check();return result.state==='connected'&&!result.error?outcome(true):outcome(false,mailKind(result.state));}
  catch{return outcome(false,'other');}
 };
 export const defaultProbes=deps=>Object.fromEntries(NAMES.map(name=>[name,CONNECTIONS[name].probe(deps)]));
@@ -140,7 +140,8 @@ export async function checkConnections({store,day,probes,due=runDue,now=()=>new 
   for(const action of actions){
    if(action.do==='recover'){
     fs.mkdirSync(path.dirname(worked),{recursive:true});fs.writeFileSync(worked,'');
-    if(due(store,day,['check']).status!==0){connections[name]=before.connections[name];failures.push(name);continue;}
+    const slug=before.connections[name]?.deadline?.slug;
+    if(slug&&due(store,day,['done',slug,'--evidence','The daily connection check reached '+label+' again.']).status!==0){connections[name]=before.connections[name];failures.push(name);continue;}
     await bell(store,{id:'connection-'+name,status:'resolved',resolved_at:now().toISOString()});
    }
    if(action.do==='other')tellOwner(store,{id:`connection-${name}-other-${entry.failing_since}`,text:otherWords(name)});

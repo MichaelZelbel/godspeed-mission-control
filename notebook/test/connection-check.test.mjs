@@ -1,7 +1,7 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';
 import {Store} from '../core/records/store.mjs';import {installStarter} from '../core/starter-workspace.mjs';
 import {readNotices} from '../core/notices.mjs';import {addonDeadlines} from '../core/addon-deadlines.mjs';
-import {CONNECTIONS,defaultProbes,checkConnections,nextState,telegramProbe,githubProbe,mailProbe,aiProbe,gitKind,aiKind,telegramKind,mailKind,connectionCheckWanted,RECORD_FILE} from '../core/connection-check.mjs';
+import {CONNECTION_NAMES} from '../core/connection-names.mjs';import {runDue} from '../core/connection-check.mjs';import {CONNECTIONS,defaultProbes,checkConnections,nextState,telegramProbe,githubProbe,mailProbe,aiProbe,gitKind,aiKind,telegramKind,mailKind,connectionCheckWanted,RECORD_FILE} from '../core/connection-check.mjs';
 
 for(const key of Object.keys(process.env))if(/^(GODSPEED_|HERMES_)/.test(key))delete process.env[key];
 
@@ -117,6 +117,11 @@ test('each probe is set up only when its connection is, and asks only once',asyn
  assert.deepEqual(await mailProbe({imap:imap('connected')})(),{set_up:true,ok:true});
  assert.deepEqual(await mailProbe({imap:imap('disconnected')})(),{set_up:true,ok:false,kind:'sign-in'});
  assert.deepEqual(await mailProbe({imap:imap('degraded')})(),{set_up:true,ok:false,kind:'other'});
+ // The shapes mc-mail-imap's check() really returns when Gmail was asked and failed: a refused password
+ // leaves the state disconnected, any other trouble leaves it connected beside an error.
+ const failed=(state,error)=>()=>({status:()=>({state:'connected'}),check:async()=>({state,checked:'failed just now',error})});
+ assert.deepEqual(await mailProbe({imap:failed('disconnected','Gmail did not accept the app password.')})(),{set_up:true,ok:false,kind:'sign-in'});
+ assert.deepEqual(await mailProbe({imap:failed('connected','Gmail does not have the folder')})(),{set_up:true,ok:false,kind:'other'});
  fs.writeFileSync(path.join(home,'config.yaml'),'model:\n  provider: openrouter\n  default: x\n');
  let asked=0;
  assert.deepEqual(await aiProbe({store,home,hermes:process.execPath.replace(/[^/\\]+$/,'hermes'),ask:async o=>{asked++;assert.equal(o.route,'main');}})(),{set_up:true,ok:true});
@@ -192,4 +197,21 @@ test('a refusal whose deadline failed survives an unset day and then network tro
  await checkConnections({store,day:D3,probes:stubs()});
  assert.equal(bell(store,'telegram').status,'resolved');
  assert.equal(readNotices(store).length,1);
+});
+
+test('the probes cover exactly the connections Settings names, in the same order',()=>{
+ assert.deepEqual(Object.keys(CONNECTIONS),Object.keys(CONNECTION_NAMES));
+ assert.deepEqual(Object.keys(defaultProbes({store:{},home:'x'})),Object.keys(CONNECTION_NAMES));
+});
+
+test('a recovery closes only its own connection\'s deadline, never another that closes itself',async t=>{
+ const {store,root}=fixture(t);
+ await checkConnections({store,day:D1,probes:stubs({telegram:refused})});
+ const marker=path.join(root,'other.marker');
+ assert.equal(runDue(store,D1,['add','unrelated','--title','Unrelated','--target',D1,'--to','2026-12-01','--done-when','x','--cost','y','--self-check','file-newer','--self-check-arg','other.marker']).status,0);
+ fs.writeFileSync(marker,'');
+ await checkConnections({store,day:D2,probes:stubs()});
+ const state=addonDeadlines(store,{addon:'connection-check',action:'list'}).deadlines;
+ assert.equal(state[0].state,'closed');
+ assert.match(runDue(store,D2,['state']).out,/unrelated[^\n]*open|open[^\n]*unrelated/i,'the unrelated deadline stays open');
 });

@@ -356,7 +356,7 @@ print(g.connection_check(c))`;
  const okRun='g.run=lambda args,c,env,timeout=None:types.SimpleNamespace(returncode=0,stdout="",stderr="")',ok=attempt(okRun);
  assert.equal(ok.status,0,ok.stderr);assert.match(ok.stdout,/Telegram refused your bot's key\./);
  assert.deepEqual(JSON.parse(fs.readFileSync(said,'utf8')).ids,['telegram-key']);
- for(const bad of ['{not json','[]','{"notices":5}']){
+ for(const bad of ['{not json','[]','{"notices":5}','{"notices":[{"id":"a"}]}','{"notices":[{"id":"a","text":"x"},"b"]}']){
   fs.writeFileSync(queued,bad);fs.rmSync(said,{force:true});
   const run=attempt(okRun);
   assert.equal(run.status,1,bad);assert.equal(run.stdout,'');assert.match(run.stderr,/^The daily connection check could not run\./);
@@ -425,4 +425,13 @@ test('the coaching talk preparation runs mc-coach-prep with a two-hour budget an
  assert.match(status().failed,/could not be prepared ahead/);
  tool('echo "mc-coach-prep: the coach (godspeed-coach) is not installed" >&2\nexit 3\n');
  assert.match(runScript(home,'godspeed-coach-prep.py').stdout,/could not start tonight/);
+});
+
+test('every routine wrapper the notebook writes names a routine the Python runner dispatches',{skip:!havePython&&'no Python here'},t=>{
+ const {home}=scriptFixture(t),scripts=path.join(home,'scripts');
+ const wrapped=fs.readdirSync(scripts).filter(f=>f.endsWith('.py')&&f!=='godspeed_routines.py').map(f=>/main\("([^"]+)"\)/.exec(fs.readFileSync(path.join(scripts,f),'utf8'))?.[1]);
+ assert.ok(wrapped.length>=8&&wrapped.every(Boolean),wrapped.join());
+ const run=spawnSync(python,['-c','import json,sys;sys.path.insert(0,sys.argv[1]);import godspeed_routines as g;print(json.dumps(sorted(g.ROUTINES)))',scripts],{encoding:'utf8'});
+ assert.equal(run.status,0,run.stderr);
+ assert.deepEqual(JSON.parse(run.stdout),[...new Set(wrapped)].sort());
 });

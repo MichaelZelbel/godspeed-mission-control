@@ -652,7 +652,10 @@ def notices(c, mark=True, strict=False):
             text = f.read()
         waiting = []
         if text.strip():
-            waiting = [n for n in json.loads(text).get("notices", []) if isinstance(n, dict) and n.get("id") and n.get("text")]
+            queue = json.loads(text).get("notices", [])
+            waiting = [n for n in queue if isinstance(n, dict) and n.get("id") and n.get("text")]
+            if strict and len(waiting) != len(queue):
+                raise ValueError("a queued notice has no id or text")
     except FileNotFoundError:
         return []
     except Exception:
@@ -995,11 +998,15 @@ def connection_check(c):
     return "\n\n".join(notices(c, strict=True))
 
 
+# Every routine wrapper the notebook writes (routineFiles in starting-routines.mjs) names one of these.
+ROUTINES = {"research": research, "decide": decide, "work": work, "due": due, "brief": brief, "coach-prep": coach_prep,
+            "coach-gate": lambda c: coach(c, "gate"), "coach-tick": lambda c: coach(c, "tick"),
+            "journal-tick": journal_tick, "chat-tidy": chat_tidy, "connection-check": connection_check}
+
+
 def main(kind):
     c = config()
-    out = {"research": research, "decide": decide, "work": work, "due": due, "brief": brief, "coach-prep": coach_prep,
-           "coach-gate": lambda c: coach(c, "gate"), "coach-tick": lambda c: coach(c, "tick"),
-           "journal-tick": journal_tick, "chat-tidy": chat_tidy, "connection-check": connection_check}[kind](c)
+    out = ROUTINES[kind](c)
     if out:
         # UTF-8 whatever the console's code page: a curly quote must not end the run on Windows.
         sys.stdout.buffer.write((out + "\n").encode("utf-8"))

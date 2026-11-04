@@ -163,6 +163,17 @@ test('the daily connection check is listed with its switch, paused until Telegra
  hermes.write(hermes.jobs().filter(j=>j.name!==CONNECTION_JOB));scheduler.lastTick=0;await scheduler.tick();assert.equal(job(CONNECTION_JOB),undefined);
 });
 
+test('Gmail alone, read through the real mail adapter, starts the daily connection check on',async t=>{
+ const mail=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-gmail-only-')),was=process.env.GODSPEED_MAIL_HOME;
+ fs.mkdirSync(path.join(mail,'.godspeed','mail','imap'),{recursive:true});
+ fs.writeFileSync(path.join(mail,'.godspeed','mail','imap','state.json'),JSON.stringify({address:'someone@example.invalid',state:'ready'}));
+ process.env.GODSPEED_MAIL_HOME=mail;
+ t.after(()=>{if(was===undefined)delete process.env.GODSPEED_MAIL_HOME;else process.env.GODSPEED_MAIL_HOME=was;fs.rmSync(mail,{recursive:true,force:true});});
+ const {home,scheduler,job}=await withGoal(t);
+ assert.equal(telegramInHermes(home),false);
+ scheduler.lastTick=0;await scheduler.tick();assert.equal(job(CONNECTION_JOB).enabled,true);
+});
+
 test('a person who resumes the daily connection check keeps it on, and one with Telegram from the start gets it on',async t=>{
  noMail(t);
  const {home,store,scheduler,job}=await withGoal(t);
