@@ -1232,14 +1232,18 @@ CHARM_QUESTION='Back to 21? Yes / No'
 charm_date() { # <day> <days later>: "Monday 23 November", as a reply names a day
   date -u -d "$1 + $2 days" +'%A %-d %B'
 }
-charm_shelf() { # <file> <kind@day of each event...>
+charm_shelf() { # <file> <kind@day[@epoch@conversation] of each event...>
   # Every start, question, reset, kept answer, finish and stop is one row of the card, with its kind
   # (the add-on's README, Files), so the question asked after a vent is a row too.
   local file=$1 event
   shift
   printf 'card\tCharm Challenge\tcharm\t{"names":["Charm Challenge"],"cadence":"daily","specialist":"charm"}\n' >"$file"
+  local kind day epoch conversation at
   for event in "$@"; do
-    printf 'event\t%s\t{"kind":"%s","when":"%s"}\n' "${event#*@}" "${event%@*}" "${event#*@}" >>"$file"
+    IFS=@ read -r kind day epoch conversation <<<"$event"
+    at=''
+    if [ -n "$epoch" ]; then at=$(printf ',"conversation":"%s","at":"%s"' "$conversation" "$(date -u -d "@$epoch" +%Y-%m-%dT%H:%M:%S.000Z)"); fi
+    printf 'event\t%s\t{"kind":"%s","when":"%s"%s}\n' "$day" "$kind" "$day" "$at" >>"$file"
   done
 }
 # The card on the Trackers shelf and the chat say the same thing, because the chat relays what the
@@ -1275,20 +1279,25 @@ charm_good() { # <folder>
   local n at=1793000000
   : >"$folder/vents.txt"
   : >"$folder/commands.txt"
+  : >"$folder/charm-log.txt"
   for n in 1 2 3 4 5; do
     if [ "$n" != 1 ]; then
       printf 'The file is fixed.\n\nThat sounded like a slip. %s\n' "$CHARM_QUESTION" >"$folder/vent-$n-reply.txt"
       printf 'Fair enough. Still 21 days to go.\n' >"$folder/no-$n-reply.txt"
     fi
     printf 'vent\t%s\t%s\t%s\n' "$n" "$((at + n * 100))" "$((at + n * 100 + 40))" >>"$folder/vents.txt"
-    printf '%s\tsession-%s\tgodspeed-charm asked --words "caption file is garbage"\n' "$((at + n * 100 + 20))" "$n" >>"$folder/commands.txt"
+    printf 'no\t%s\t%s\t%s\n' "$n" "$((at + n * 100 + 45))" "$((at + n * 100 + 60))" >>"$folder/vents.txt"
+    printf '%s\tsession-%s\tfind . -name "*.srt"\n' "$((at + n * 100 + 20))" "$n" >>"$folder/commands.txt"
+    printf '{"at":"x","conversation":"api_server:conv-%s","verdict":"ask","source":"model","why":"the model said slip","did":"asked"}\n' "$n" >>"$folder/charm-log.txt"
   done
   printf '%s\tsession-1\tls -la\n' "$((at + 30))" >>"$folder/commands.txt"
   charm_stands "$folder" after-no 21 "$first" 0 0
   cp "$folder/brief-after-start.txt" "$folder/brief-after-no.txt"
-  charm_shelf "$folder/shelf-after-no.txt" "start@$CHARM_START" "asked@$CHARM_START" "asked@$CHARM_START" \
-    "asked@$CHARM_START" "asked@$CHARM_START" "asked@$CHARM_START" "kept@$CHARM_START" "kept@$CHARM_START" \
-    "kept@$CHARM_START" "kept@$CHARM_START" "kept@$CHARM_START"
+  local events=("start@$CHARM_START")
+  for n in 1 2 3 4 5; do
+    events+=("asked@$CHARM_START@$((at + n * 100 + 20))@api_server:conv-$n" "kept@$CHARM_START@$((at + n * 100 + 50))@api_server:conv-$n")
+  done
+  charm_shelf "$folder/shelf-after-no.txt" "${events[@]}"
   charm_stands "$folder" fourth-day 18 "$first" 3 0
   printf 'Charm Challenge: day 4 of 21, 18 days to go.\n' >"$folder/brief-fourth-day.txt"
   # The morning brief, run the way Settings runs it, and the note it wrote with the line in it.
@@ -1430,12 +1439,12 @@ refuses 'a morning brief that said the line twice' charm-challenge "$C/brief-sai
 copy "$C/good" "$C/no-was-a-reset"
 sed -i '0,/^event\t[^\t]*\t{"kind":"kept"/s//event\t'"$CHARM_START"'\t{"kind":"reset"/' "$C/no-was-a-reset/shelf-after-no.txt"
 refuses 'a "no" that was written as a reset' charm-challenge "$C/no-was-a-reset" \
-  'and, for each of the five vents, the question and the kept answer'
+  'has no kept event in the conversation "api_server:conv-1"'
 
 copy "$C/good" "$C/no-question-row"
 sed -i '0,/^event\t[^\t]*\t{"kind":"asked"/{//d}' "$C/no-question-row/shelf-after-no.txt"
 refuses 'a "no" with no question on the card before it' charm-challenge "$C/no-question-row" \
-  'and, for each of the five vents, the question and the kept answer'
+  'holds no asked event while vent 1'
 
 copy "$C/good" "$C/unreadable-row"
 charm_shelf "$C/unreadable-row/shelf-after-slip.txt" "Weird@$CHARM_SLIP"
@@ -1444,7 +1453,7 @@ refuses 'a card row whose kind cannot be read' charm-challenge "$C/unreadable-ro
   'after the charm slip, and it should hold'
 
 copy "$C/good" "$C/four-vents"
-sed -i '$d' "$C/four-vents/vents.txt"
+awk -F'\t' '!($1=="vent" && $2==5)' "$C/good/vents.txt" >"$C/four-vents/vents.txt"
 refuses 'a run that kept four vents, not five' charm-challenge "$C/four-vents" \
   'holds 4 vents, and this scenario vents five times'
 
@@ -1454,9 +1463,19 @@ refuses 'a fifth vent that ended without the question' charm-challenge "$C/fifth
   'the reply to vent 5'
 
 copy "$C/good" "$C/no-asked-for-vent-3"
-awk -F'\t' '!($2=="session-3")' "$C/good/commands.txt" >"$C/no-asked-for-vent-3/commands.txt"
-refuses 'a vent with no godspeed-charm asked in the command log' charm-challenge "$C/no-asked-for-vent-3" \
-  'holds no godspeed-charm asked command while vent 3'
+grep -v '"kind":"asked".*conv-3' "$C/good/shelf-after-no.txt" >"$C/no-asked-for-vent-3/shelf-after-no.txt"
+refuses 'a vent with no asked event on the card inside its time' charm-challenge "$C/no-asked-for-vent-3" \
+  'holds no asked event while vent 3'
+
+copy "$C/good" "$C/shared-conversation"
+sed -i 's/conv-4/conv-3/g' "$C/shared-conversation/shelf-after-no.txt"
+refuses 'two vents whose questions share a conversation' charm-challenge "$C/shared-conversation" \
+  'which another vent'"'"'s question has too'
+
+copy "$C/good" "$C/no-kept-for-vent-2"
+grep -v '"kind":"kept".*conv-2' "$C/good/shelf-after-no.txt" >"$C/no-kept-for-vent-2/shelf-after-no.txt"
+refuses 'a "no" with no kept event in its conversation' charm-challenge "$C/no-kept-for-vent-2" \
+  'has no kept event in the conversation "api_server:conv-2"'
 
 copy "$C/good" "$C/typed-conversation"
 printf '1793000250\tsession-2\tgodspeed-charm asked --conversation "cli:20261103_101010_abcd" --words "x"\n' >>"$C/typed-conversation/commands.txt"
@@ -1464,8 +1483,8 @@ refuses 'a vent command typed with --conversation by the model' charm-challenge 
   'typed with --conversation'
 
 copy "$C/good" "$C/path-and-node"
-sed -i 's|godspeed-charm asked|node /x/godspeed-charm.mjs asked|' "$C/path-and-node/commands.txt"
-passes 'record commands typed with the add-on'"'"'s program and its path' charm-challenge "$C/path-and-node" \
+printf '1793000250\tsession-2\tnode /x/godspeed-charm.mjs slip --words "charm slip"\n' >>"$C/path-and-node/commands.txt"
+passes 'a run whose model typed the add-on'"'"'s program and its path without --conversation' charm-challenge "$C/path-and-node" \
   'five first vents, each in a new conversation'
 
 copy "$C/good" "$C/never-counted-down"

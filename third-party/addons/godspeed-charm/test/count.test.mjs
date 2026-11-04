@@ -83,7 +83,7 @@ test("open question: today only, closed by reset or kept of the same conversatio
   const start = ev("start", "2026-10-21");
   const asked = (date, conversation, hour = "10") => ({ kind: "asked", date, when: `${date}T${hour}:00:00Z`, conversation, words: "ugh" });
   const open = charmState([start, asked("2026-10-25", "A")], "2026-10-25").open;
-  assert.deepEqual(open, [{ conversation: "A", words: "ugh", when: "2026-10-25T10:00:00Z" }]);
+  assert.deepEqual(open, [{ conversation: "A", words: "ugh", when: "2026-10-25T10:00:00Z", seq: 1 }]);
   const kept = charmState([start, asked("2026-10-25", "A"), { kind: "kept", date: "2026-10-25", when: "2026-10-25T11:00:00Z", conversation: "A" }], "2026-10-25");
   assert.deepEqual(kept.open, []);
   assert.equal(kept.kept, 1);

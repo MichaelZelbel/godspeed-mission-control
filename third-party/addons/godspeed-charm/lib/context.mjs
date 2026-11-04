@@ -29,7 +29,7 @@ const NO_ID = {
   de: () => `Das klang nach einem Ausrutscher. Wenn du zurück auf ${LENGTH} willst, sag: charm slip.`,
 };
 
-const SLIP =
+export const SLIP =
   'A slip is venting at the assistant instead of saying what to fix: insults, sarcasm, contempt, "why do you give me this garbage?", ' +
   "or arguing about the mistake instead of asking for the correction. A firm correction is not a slip " +
   '("The deadline is wrong. Check the client\'s message and fix the draft.").';
@@ -37,7 +37,7 @@ const SLIP =
 // talk to AI). On candidate/2.0.0-beta.15 a model asked "Was that message directed at me, or were you
 // telling me about venting at a different AI?" instead of the one question, and the slip was never
 // asked about: that question is never needed, so the block says so.
-const ONLY_AI =
+export const ONLY_AI =
   "Only how they talk to you or to another AI they mention counts, and both count the same, so never ask which AI they meant " +
   "or whether it was meant for you: ask the one question below or nothing. Never ask about anger at people, traffic or the weather.";
 const KIND = "At most once per message. Never lecture, and never refuse or delay the work because of a slip.";
@@ -61,14 +61,15 @@ const NOTEBOOK = {
   replies: "The notebook adds each charm operation's reply to your answer itself, in the language of their message: never write those sentences yourself.",
 };
 
-// contextBlock(state, settings, {conversation, scheduled, today, language, stickers, channel}): ""
+// contextBlock(state, settings, {conversation, scheduled, today, language, stickers, channel, programAsks}): ""
 // when scheduled, or when no challenge runs and it is not the finish day. `conversation` names where
 // this message came from ("telegram:<chat>", "claude:<session>", "notebook:<id>"): only there does
 // a bare yes or no answer the open question. `stickers` is true only when the caller knows the
 // hermes-telegram-stickers plugin will turn a tag into a sticker (R13). `channel` is "shell" (the
 // default: the steps are godspeed-charm commands) or "notebook" (the notebook's own chat, where
-// the same steps are charm operations).
-export function contextBlock(state, settings = {}, { conversation = "", scheduled = false, today, language, stickers = false, channel = "shell" } = {}) {
+// the same steps are charm operations). `programAsks` (shell channel with a conversation; only the
+// Hermes plugin sets it) says the program asks the slip question after the reply, so the model never does.
+export function contextBlock(state, settings = {}, { conversation = "", scheduled = false, today, language, stickers = false, channel = "shell", programAsks = false } = {}) {
   if (scheduled || !state) return "";
   const lang = pickLanguage(language, settings?.language);
   const conv = typeof conversation === "string" ? conversation.trim() : "";
@@ -95,6 +96,16 @@ export function contextBlock(state, settings = {}, { conversation = "", schedule
     L.push(
       `If they report a slip themselves, here or about another AI: a plain "charm slip" or "reset my Charm Challenge" is ${NOTEBOOK.slip}, ` +
         `which goes back to ${LENGTH} at once; a story ("I yelled at Copilot") is ${NOTEBOOK.asked}.`,
+    );
+  } else if (conv && programAsks) {
+    L.push(SLIP, ONLY_AI);
+    L.push(
+      "If this message is a slip, or might be one, the program asks after your reply: it records the question and ends the reply with it, " +
+        `in their language. Never write that question or one of your own about it, and never run godspeed-charm asked. Do their work as usual. ${KIND}`,
+    );
+    L.push(
+      'If they ask for a reset in plain words ("charm slip", "reset my Charm Challenge"): run godspeed-charm slip --words "<their words>" and use its reply. ' +
+        "When it refuses, say nothing about it: the program asks if it should.",
     );
   } else if (conv) {
     L.push(SLIP, ONLY_AI);

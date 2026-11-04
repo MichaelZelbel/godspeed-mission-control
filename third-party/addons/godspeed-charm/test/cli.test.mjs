@@ -522,6 +522,26 @@ test("answer --asked-when answers only the question asked at that moment", () =>
   gone(dir);
 });
 
+test("answer --asked-seq tells apart two questions asked at the same instant", () => {
+  const dir = mission();
+  run(dir, ["start"]);
+  const SAME = { GODSPEED_CHARM_NOW: "2026-10-30T09:00:00.000Z" };
+  const ask = () => json(run(dir, ["asked", "--conversation", "telegram:s1", "--words", "useless", "--json"], { day: "2026-10-30", env: SAME }));
+  const answer = (open) => run(dir, ["answer", "yes", "--conversation", "telegram:s1", "--words", "(button)", "--json",
+    "--asked-when", open.when, "--asked-seq", String(open.seq)], { day: "2026-10-30" });
+  const first = ask().state.open[0];
+  const second = ask().state.open[0];
+  assert.equal(second.when, first.when);
+  assert.notEqual(second.seq, first.seq);
+  const stale = answer(first);
+  assert.equal(stale.status, 2);
+  assert.equal(json(stale).state.restarts, 0);
+  const right = answer(second);
+  assert.equal(right.status, 0, right.stderr);
+  assert.equal(json(right).state.restarts, 1);
+  gone(dir);
+});
+
 // ---- The command learns its conversation from the turn marker (lib/turns.mjs) ---------------------
 const turn = (dir, conversation, day = "2026-10-30", env = {}) => run(dir, ["context", "--conversation", conversation], { day, env });
 const openOf = (dir, day = "2026-10-30") => json(run(dir, ["status", "--json"], { day })).state.open.map((q) => q.conversation).sort();
@@ -617,4 +637,24 @@ test("a scheduled run leaves no marker and cannot use one", () => {
   assert.notEqual(r.status, 0);
   assert.deepEqual(openOf(dir), []);
   gone(dir);
+});
+
+test("judge: prints the verdict as JSON and writes nothing; context --program-asks changes only the slip lines", () => {
+  const dir = mission();
+  try {
+    assert.equal(run(dir, ["start", "--json"]).status, 0);
+    const before = fs.readdirSync(path.join(dir, "notebook", "Collections"), { recursive: true }).length;
+    const r = run(dir, ["judge", "--conversation", "api_server:s1", "--words", "Wrong again! Do you even look?", "--no-model", "--json"]);
+    assert.equal(r.status, 0, r.stderr);
+    const v = json(r);
+    assert.deepEqual([v.ok, v.verdict, v.source, v.language], [true, "ask", "words", "en"]);
+    const none = json(run(dir, ["judge", "--words", "wrong again", "--no-model"]));
+    assert.deepEqual([none.verdict, none.why], ["none", "no conversation"]);
+    assert.equal(fs.readdirSync(path.join(dir, "notebook", "Collections"), { recursive: true }).length, before);
+    const file = path.join(dir, "words.txt");
+    fs.writeFileSync(file, "charm slip\n");
+    assert.equal(json(run(dir, ["judge", "--conversation", "c:1", "--words-file", file, "--no-model"])).why, "an explicit reset request");
+    const block = run(dir, ["context", "--conversation", "c:1", "--program-asks"]).stdout;
+    assert.match(block, /the program asks after your reply/);
+  } finally { gone(dir); }
 });

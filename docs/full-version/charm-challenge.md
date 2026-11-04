@@ -32,7 +32,9 @@ November. Longest run so far: 9 days. Restarts: 2."
 slip is venting at the assistant instead of saying what to fix: insults, sarcasm, "why do you give
 me this garbage?", or arguing instead of asking for the correction. A firm correction is not a
 slip. When a message is a slip, or might be one, the assistant first does everything you asked, then
-ends with one question: "That sounded like a slip. Back to 21? Yes / No." When unsure, it asks.
+ends with one question: "That sounded like a slip. Back to 21? Yes / No." When unsure, it asks. With
+Hermes the program asks, not the assistant: it checks your message with the AI connected in Settings
+(or, if that is unavailable, a short list of words of contempt) and adds the question itself.
 It never lectures, never refuses or delays the work, and never asks twice about the same message.
 Anger at people, traffic or the weather is not about how you talk to AI, so it never asks about
 that. If a reset already happened today, a slip today changes nothing and it does not ask again.
@@ -72,7 +74,8 @@ and finishes underneath.
 No (Ja and Nein in German). A tap answers it, the message then says what happened, and the buttons
 go. Only you can tap them, only in your private chat with the bot. Each message answers only its own
 question, and only once: a tap on a question from another day, or one that was answered or asked
-again since, changes nothing. Typing yes or no works as well.
+again since, changes nothing (so does an older button from before places were recorded, when two
+questions shared its moment). Typing yes or no works as well.
 
 Every reply exists in English and German. German in, German out.
 
@@ -108,9 +111,10 @@ every installation has.
 - A "no" to "start over?" counts in "You talked me out of N resets".
 - Only a plain yes or no answers the question. "Yes please" leaves it open.
 - The notebook record page titles each row with its raw timestamp rather than a friendly name.
-- Whether a message is a slip is the AI model's judgment, guided by the note. In the walk-through
-  below the model asked after three of four vents; the one it let pass got "No need for the drama."
-  in front of the work.
+- Under Hermes, whether a message is a slip is decided by the program's own small check (the AI
+  connected in Settings, with a word list behind it), not by the assistant that does the work. In
+  the walk-through below the assistant, before that change, asked after three of four vents; the one
+  it let pass got "No need for the drama." in front of the work.
 - Not verified against a live Telegram bot: how the buttons look and the exact order of the reply and
   the question.
 

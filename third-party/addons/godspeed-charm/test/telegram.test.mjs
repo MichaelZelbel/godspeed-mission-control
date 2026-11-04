@@ -51,7 +51,7 @@ function asked(dir, { language } = {}) {
     when: JSON.parse(r.stdout).state.open[0].when,
   };
 }
-const tool = (a, extra = {}) => ({ do: "tool", session: SESSION, turn: TURN, command: a.command, output: a.output, ...extra });
+const tool = (a, extra = {}) => ({ do: "tool", session: SESSION, turn: TURN, command: a.command, output: a.output, unasked: true, ...extra });
 const reply = (text, extra = {}) => ({ do: "reply", session: SESSION, turn: TURN, text, ...extra });
 
 function drive(dir, steps, env = {}) {
@@ -91,6 +91,7 @@ test("a slip question on Telegram comes as its own message with Yes and No, and 
     for (const t of tokens) {
       assert.equal(t.conversation, CONVERSATION);
       assert.equal(t.askedWhen, a.when);
+      assert.equal(t.askedSeq, 1);
       assert.ok(Number.isFinite(t.created));
       assert.equal(t.messageId, String(sent[0].message_id));
       assert.equal(t.language, "en");
@@ -322,6 +323,52 @@ test("a Yes on yesterday's message answers nothing once today asked again; today
     assert.deepEqual(edits(out).map((e) => e.text), [T.en.noOpenQuestion(), "Back to 21. Done on Friday 13 November. Restarts: 1."]);
     assert.equal(kinds(dir, "reset"), 1);
     assert.equal(readEvents(dir).find((e) => e.kind === "reset").date, "2026-10-23");
+  } finally { gone(dir); }
+});
+
+test("a Yes on the older of two questions asked at the same instant answers nothing; the newer one's answers", { skip }, () => {
+  const dir = mission();
+  try {
+    assert.equal(charm(dir, ["start"], at("2026-10-21")).status, 0);
+    const now = at("2026-10-22");
+    const out = drive(dir, [
+      { do: "register" },
+      askAt("t-1", now), reply(`Done.\n\n${Q}`, { turn: "t-1" }),
+      askAt("t-2", now), reply(`Done.\n\n${Q}`, { turn: "t-2" }),
+      { do: "tap", message: 0, button: 0, now },
+      { do: "tap", message: 1, button: 0, now },
+    ]);
+    assert.equal(sends(out).length, 2);
+    assert.equal(edits(out)[0].text, T.en.noOpenQuestion());
+    assert.equal(kinds(dir, "reset"), 1);
+  } finally { gone(dir); }
+});
+
+test("a legacy Yes naming only a moment two questions share answers nothing and the count stays", { skip }, () => {
+  const dir = mission();
+  try {
+    assert.equal(charm(dir, ["start"], at("2026-10-21")).status, 0);
+    const now = at("2026-10-22");
+    const out = drive(dir, [
+      { do: "register" },
+      askAt("t-1", now), reply(`Done.\n\n${Q}`, { turn: "t-1" }),
+      askAt("t-2", now), reply(`Done.\n\n${Q}`, { turn: "t-2" }),
+      { do: "legacy" },
+      { do: "tap", message: 0, button: 0, now },
+    ]);
+    assert.equal(edits(out)[0].text, T.en.noOpenQuestion());
+    assert.equal(kinds(dir, "reset"), 0);
+  } finally { gone(dir); }
+});
+
+test("a button issued before questions carried their place in the record still answers once", { skip }, () => {
+  const dir = mission();
+  try {
+    const a = asked(dir);
+    const out = drive(dir, [{ do: "register" }, tool(a), reply(`Done.\n\n${Q}`), { do: "legacy" }, { do: "tap", button: 0 }]);
+    assert.equal(edits(out).length, 1);
+    assert.match(edits(out)[0].text, /^Back to 21/);
+    assert.equal(kinds(dir, "reset"), 1);
   } finally { gone(dir); }
 });
 

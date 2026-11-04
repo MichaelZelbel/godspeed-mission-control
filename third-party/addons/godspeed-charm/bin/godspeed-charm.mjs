@@ -19,13 +19,14 @@ import { T, pickLanguage, buttonTexts } from "../lib/texts.mjs";
 import { isYes, isNo, isExplicitReset } from "../lib/words.mjs";
 import { writeTurn, currentConversation } from "../lib/turns.mjs";
 import { contextBlock } from "../lib/context.mjs";
+import { judge } from "../lib/judge.mjs";
 import { briefText, isFinishDay } from "../lib/brief.mjs";
 import { decodeArgv, readWordsFile, restoreShellEnv, startedFromGitBash, gitBashPath, LAUNCHER_ENV, CMDLINE_ENV } from "../lib/argv.mjs";
 
 // The values that name a file or folder. From Git Bash these are turned into Windows paths;
 // the person's words never are (lib/argv.mjs).
-const PATH_FLAGS = ["godspeed", "words-file", "extra-skills-dir"];
-const FLAGS = new Set(["json", "scheduled", "no-write", "stickers", "yes", "no-hermes", "no-claude"]);
+const PATH_FLAGS = ["godspeed", "words-file", "extra-skills-dir", "model-command"];
+const FLAGS = new Set(["json", "scheduled", "no-write", "stickers", "yes", "no-hermes", "no-claude", "program-asks", "no-model"]);
 // setup and check install and inspect; they need no record, no settings and no day.
 const INSTALL = ["setup", "check"];
 // help and texts only print what this add-on says; they need no mission control at all.
@@ -181,9 +182,14 @@ const commands = {
     // Only the conversation that asked can answer (a bare yes elsewhere answers something else).
     const open = state.open.find((q) => q.conversation === conversation);
     // A Telegram button answers only the question it was sent with: --asked-when names that question
-    // by the moment it was asked, so a button from yesterday, or from a question answered since,
-    // never answers a newer one.
-    if (!open || (f["asked-when"] !== undefined && open.when !== f["asked-when"])) refuse(say.noOpenQuestion(), state);
+    // by the moment it was asked and --asked-seq by its place in the record (two questions can share
+    // a moment), so a button from yesterday, or from a question answered since, never answers a newer one.
+    const sent = (flag, now) => f[flag] === undefined || String(now) === f[flag];
+    // A button issued before places were recorded names its question by moment alone: that is enough
+    // only while no other question of this conversation was asked at the same moment.
+    const shareMoment = f["asked-seq"] === undefined && f["asked-when"] !== undefined
+      && readEvents(mcDir).filter((e) => e.kind === "asked" && (e.conversation ?? "") === conversation && String(e.when) === f["asked-when"]).length > 1;
+    if (!open || shareMoment || !sent("asked-when", open.when) || !sent("asked-seq", open.seq)) refuse(say.noOpenQuestion(), state);
     if (isYes(given)) {
       write("reset", extras());
       const after = load();
@@ -248,10 +254,24 @@ const commands = {
     // by the next command.
     if (state.needsFinish) { try { write("finish", {}, { lockTimeoutMs: 1500 }); state = load(); } catch { /* written next time */ } }
     // --stickers: the caller knows the hermes-telegram-stickers plugin turns a tag into a sticker.
-    const block = contextBlock(state, s, { conversation, today, language: lang, stickers: f.stickers === true });
+    const block = contextBlock(state, s, { conversation, today, language: lang, stickers: f.stickers === true, programAsks: f["program-asks"] === true });
     if (!block) return null;
     if (f.hook === "claude") console.log(JSON.stringify({ hookSpecificOutput: { hookEventName: "UserPromptSubmit", additionalContext: block } }));
     else process.stdout.write(block + "\n");
+    return null;
+  },
+  // The program's judgement of the person's words (lib/judge.mjs): ask, answer or none. Reads the
+  // record and writes nothing; the Hermes plugin acts on the verdict.
+  judge() {
+    const timeout = Number(process.env.GODSPEED_CHARM_JUDGE_TIMEOUT_MS);
+    const verdict = judge({
+      state: load(), settings: s, today, language: f.language, words: f.words ?? "",
+      conversation: typeof f.conversation === "string" ? f.conversation : "",
+      scheduled: Boolean(f.scheduled || process.env.GODSPEED_SCHEDULED_RUN),
+      modelCommand: typeof f["model-command"] === "string" ? f["model-command"] : "", noModel: f["no-model"] === true,
+      ...(timeout > 0 ? { timeoutMs: timeout } : {}),
+    });
+    console.log(JSON.stringify({ ok: true, ...verdict }));
     return null;
   },
   config() {

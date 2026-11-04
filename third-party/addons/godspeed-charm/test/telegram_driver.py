@@ -14,8 +14,10 @@ import importlib.util
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import types
@@ -173,15 +175,40 @@ def step_tool(s):
     ROUTE.clear()
     ROUTE.update(route_for(s["session"], s.get("route")))
     result = s.get("result")
+    command = s["command"]
+    if s.get("now"):
+        os.environ["GODSPEED_CHARM_NOW"] = s["now"]
+    # `unasked`: the question in the record was written before this driver ran, so pre_tool_call
+    # is shown a mission control where nothing is open yet, as it would have been.
+    real_dir = os.environ.get("GODSPEED_CHARM_DIR")
+    if s.get("unasked"):
+        os.environ["GODSPEED_CHARM_DIR"] = tempfile.mkdtemp(prefix="charm-unasked-")
+    for cb in hooks.get("pre_tool_call", []):
+        out = cb(tool_name=s.get("tool", "terminal"), args={"command": command}, session_id=s["session"],
+                 turn_id=s["turn"], task_id="", tool_call_id="call-1")
+        if isinstance(out, dict) and out.get("action") == "modify":
+            command = out["args"]["command"]
+    if s.get("unasked"):
+        shutil.rmtree(os.environ["GODSPEED_CHARM_DIR"], ignore_errors=True)
+        os.environ["GODSPEED_CHARM_DIR"] = real_dir
     if s.get("run"):
         code, output = charm(s["run"], s.get("now"))
         result = json.dumps({"output": output, "exit_code": code, "error": None})
     if result is None:
         result = json.dumps({"output": s.get("output", ""), "exit_code": s.get("exit_code", 0), "error": None})
     for cb in hooks.get("post_tool_call", []):
-        cb(tool_name=s.get("tool", "terminal"), args={"command": s["command"]}, result=result,
+        cb(tool_name=s.get("tool", "terminal"), args={"command": command}, result=result,
            session_id=s["session"], turn_id=s["turn"], status=s.get("status", "ok"), tool_call_id="call-1")
     return {}
+
+
+def step_pre(s):
+    """Hermes' pre_llm_call for the person's message, the way it starts the program's judgement."""
+    ROUTE.clear()
+    ROUTE.update(route_for(s["session"], s.get("route")))
+    outs = [cb(session_id=s["session"], platform=s.get("platform", "telegram"), user_message=s["message"],
+               model="test-model") for cb in hooks.get("pre_llm_call", [])]
+    return {"outs": outs}
 
 
 def step_reply(s):
@@ -267,6 +294,19 @@ def step_files(s):
     return {"files": out}
 
 
+def step_legacy(s):
+    """Makes the issued tokens the shape an earlier version wrote: no askedSeq."""
+    folder = os.path.join(os.environ["GODSPEED_CHARM_DIR"], ".godspeed", "charm-buttons")
+    for name in os.listdir(folder):
+        file = os.path.join(folder, name)
+        with open(file, encoding="utf-8") as f:
+            token = json.load(f)
+        token.pop("askedSeq", None)
+        with open(file, "w", encoding="utf-8") as f:
+            json.dump(token, f)
+    return {}
+
+
 def step_fail(s):
     FAIL["send"] = int(s.get("send", 0))
     FAIL["markup"] = int(s.get("markup", 0))
@@ -324,10 +364,10 @@ def step_unload(s):
     return {}
 
 
-STEPS = {"register": step_register, "tool": step_tool, "reply": step_reply, "tap": step_tap,
+STEPS = {"register": step_register, "pre": step_pre, "tool": step_tool, "reply": step_reply, "tap": step_tap,
          "bus": step_bus, "files": step_files, "fail": step_fail, "env": step_env, "unload": step_unload,
          "charm": step_charm, "cancel": step_cancel, "break": step_break, "mend": step_mend,
-         "corrupt": step_corrupt}
+         "corrupt": step_corrupt, "legacy": step_legacy}
 
 results = []
 # UTF-8 both ways, whatever the console code page (Windows reads stdin as cp1252 otherwise).

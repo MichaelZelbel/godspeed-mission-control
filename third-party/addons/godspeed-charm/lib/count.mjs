@@ -28,7 +28,7 @@ export function charmState(events, today) {
   const asked = []; // open questions, in the order asked
   const dropAsked = (conversation) => { for (let i = asked.length - 1; i >= 0; i--) if (asked[i].conversation === conversation) asked.splice(i, 1); };
 
-  for (const e of run.slice(1)) {
+  for (const [at, e] of run.slice(1).entries()) {
     if (ended) break; // after a stop or finish only a new start counts, and that begins a new list
     if (e.kind === "reset") {
       asked.length = 0; // any reset answers every open question, even a duplicate one
@@ -42,7 +42,7 @@ export function charmState(events, today) {
       dropAsked(e.conversation ?? "");
     } else if (e.kind === "asked") {
       dropAsked(e.conversation ?? ""); // at most one open question per conversation: the latest
-      if (e.date === today) asked.push({ conversation: e.conversation ?? "", words: e.words ?? "", when: e.when });
+      if (e.date === today) asked.push({ conversation: e.conversation ?? "", words: e.words ?? "", when: e.when, seq: from + 1 + at });
     } else if (e.kind === "finish") {
       ended = e.date; finishedOn = e.date;
     } else if (e.kind === "stop") {

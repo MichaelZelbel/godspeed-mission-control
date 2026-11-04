@@ -66,10 +66,12 @@ def remove_question(text, questions):
 
 
 class QuestionTelegram(buttons.YesNoButtons):
-    def __init__(self, root, command):
-        # root(): the mission control folder; command(*args): the add-on command as a list.
+    def __init__(self, root, command, reports):
+        # root(): the mission control folder; command(*args): the add-on command as a list;
+        # reports(stdout): the {ok, reply, state} objects a `--json` command printed, in order.
         super().__init__(root, {CALLBACK: self.answer}, prefix=PREFIX, folder=FOLDER, default_id=CALLBACK)
         self.command = command
+        self.reports = reports
         self._texts = None
 
     # ---- the add-on's own words and command -------------------------------------------------
@@ -94,39 +96,20 @@ class QuestionTelegram(buttons.YesNoButtons):
         self._texts = value
         return value
 
-    @staticmethod
-    def report(stdout):
-        """The last {ok, reply, state} object a `--json` command printed, or None."""
-        for line in reversed((stdout or "").splitlines()):
-            if line.strip().startswith("{"):
-                try:
-                    value = json.loads(line)
-                except ValueError:
-                    continue
-                if isinstance(value, dict) and "ok" in value and "reply" in value:
-                    return value
-        return None
-
-    def asked_when(self, conversation):
-        """The moment the question open in `conversation` was asked, from the record, or None."""
-        try:
-            r = self.run("status", "--json")
-            value = self.report(r.stdout) if r.returncode == 0 else None
-            questions = ((value or {}).get("state") or {}).get("open") or []
-            return next((q.get("when") for q in questions if isinstance(q, dict)
-                         and q.get("conversation") == conversation and isinstance(q.get("when"), str)), None)
-        except (OSError, ValueError, subprocess.SubprocessError):
-            return None
-
     def answer(self, token):
         """The command's reply to a tap: what happened, or why nothing did (exit 2). The question
         is named by the moment it was asked, so the tap answers that question or none."""
+        # A button issued before questions carried their place in the record has no askedSeq: it
+        # still answers by its moment alone.
+        seq = ("--asked-seq", str(token["askedSeq"])) if "askedSeq" in token else ()
         r = self.run("answer", token["answer"], "--conversation", token["conversation"],
-                     "--asked-when", token["askedWhen"], "--words", "(button)", "--json",
+                     "--asked-when", token["askedWhen"], *seq,
+                     "--words", "(button)", "--json",
                      "--language", token["language"], timeout=25)
         if r.returncode not in (0, 2):
             raise RuntimeError("godspeed-charm answer failed")
-        value = self.report(r.stdout)
+        found = self.reports(r.stdout)
+        value = found[-1] if found else None
         if not value or not isinstance(value.get("reply"), str) or not value["reply"]:
             raise RuntimeError("godspeed-charm answer gave no reply")
         return value["reply"]
@@ -137,7 +120,7 @@ class QuestionTelegram(buttons.YesNoButtons):
         owner's private chat, no single Telegram client, the add-on's words or the question's
         moment unknown): the reply then goes as written, question and all. Sends nothing yet."""
         route = entry.get("route")
-        if not self.active or not route or not entry.get("askedWhen") or not self.client():
+        if not self.active or not route or not entry.get("askedWhen") or entry.get("askedSeq") is None or not self.client():
             return None
         words = self.texts()
         if not words:
@@ -154,5 +137,6 @@ class QuestionTelegram(buttons.YesNoButtons):
     def post(self, entry, language):
         """Last of all, once the reply is known to go out: the question's message, with the
         conversation and the moment it was asked kept behind its buttons."""
-        fields = {"conversation": entry["conversation"], "askedWhen": entry.get("askedWhen")}
+        fields = {"conversation": entry["conversation"], "askedWhen": entry.get("askedWhen"),
+                  "askedSeq": entry.get("askedSeq")}
         return self.offer(CALLBACK, fields, entry["route"], language)
