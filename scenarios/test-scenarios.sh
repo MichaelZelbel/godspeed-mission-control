@@ -2970,7 +2970,7 @@ else
 fi
 
 section 'a failed routine run is not a finished one'
-for status in error failed Error; do
+for status in error failed Error blocked_config delivery_failed; do
   JOB_OUT=$(SCENARIO=job-test bash -c '. "$1/scenarios/scenario-lib.sh"; the_run_did_not_fail "$2" "the routine"; echo went-on' _ "$ROOT" "$(printf '2026-11-04T10:00:00Z\t%s\tboom' "$status")" 2>/dev/null)
   case $JOB_OUT in
     "FAIL job-test: the routine ended its run as \"$status\": boom") ok "a run that ended as \"$status\" fails the scenario with the routine's own error" ;;
