@@ -11,7 +11,7 @@ import {Domains} from '../core/domains.mjs';
 import {recordReport,recordRoutine,delivered} from '../core/background-reports.mjs';
 import {Telegram} from '../core/telegram.mjs';
 import {Scheduler} from '../core/jobs/scheduler.mjs';
-import {openStep,openFindings,ROUTES,CHATS,chatOf,ASKER_KINDS,answerStep,answerChosen,heard,stampReply,readStep,waitingSteps} from '../core/waiting-steps.mjs';
+import {openStep,ROUTES,CHATS,chatOf,ASKER_KINDS,answerStep,answerChosen,heard,stampReply,readStep,waitingSteps} from '../core/waiting-steps.mjs';
 
 for(const key of Object.keys(process.env))if(/^GODSPEED_/.test(key))delete process.env[key];
 const script=fileURLToPath(new URL('../bin/godspeed-step.mjs',import.meta.url));
@@ -371,7 +371,7 @@ test('a direct reply is stamped with the words actually sent, so a progress phot
 test('a quiet restart is done and nothing is asked',async t=>{
  const {store}=fixture(t),result=open(store,'The gateway needs a restart.','telegram',{quietly:'restart'});
  assert.equal(result.outcome,'quiet');assert.equal(waitingSteps(store).length,0);
- assert.equal(store.list('approvals').filter(r=>r.status==='done_quietly').length,1);
+ assert.equal(store.list('approvals').length,0);
  assert.throws(()=>open(store,'x','telegram',{quietly:'delete'}),/Quietly is one of/);
  assert.throws(()=>open(store,'Send the mail.','telegram',{quietly:'retry',outward:true}),/never done quietly/);
 });
@@ -441,6 +441,6 @@ test('the scenario asker drives the real godspeed-step open with every flag it e
 
 test('a bundled report is split and each finding is checked',async t=>{
  const {store}=fixture(t),base={question:'Shall I go on?',yes:'Done.',no:'Left.',by:'routine:test',chat:'notebook'};
- const results=openFindings(store,[{...base,about:'The gateway needs a restart.',quietly:'restart'},{...base,about:'The disk is nearly full.'}]);
+ const results=[{...base,about:'The gateway needs a restart.',quietly:'restart'},{...base,about:'The disk is nearly full.'}].map(finding=>openStep(store,finding));
  assert.deepEqual(results.map(r=>r.outcome),['quiet','asked']);
 });

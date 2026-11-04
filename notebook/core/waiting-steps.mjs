@@ -54,7 +54,7 @@ const decisionAbout=(store,subject,at)=>store.list('approvals')
 const remembered=record=>({about:record.about,user_words:record.user_words,answered_at:record.answered_at});
 
 // Every waiting step passes three checks, in order, before anything is asked (issue #220):
-//  1. `quietly` (one of QUIET_KINDS): the system does it; the step is recorded, never asked.
+//  1. `quietly` (one of QUIET_KINDS): the system does it; nothing is recorded or asked.
 //  2. `subject` (a stable key the asker gives): an earlier answer about the same subject answers it.
 //     A "no" is reused only while the thing is unchanged, otherwise the question says what changed.
 //     A "yes" never approves an outward step: that is asked every time.
@@ -77,10 +77,8 @@ export function openStep(store,{about,question,yes,no,by,chat,job,quietly,subjec
   const reach=outward||Boolean(owned?.outward);
   const fingerprint=hash([about,owned?hash(owned.payload):'']);
   const at=new Date().toISOString();
-  const settled=(status,more)=>{store.commit([store.prepare('approvals',{id,status,title:about,about,question,on_yes:yes,on_no:no,asked_by:{kind,name},asked_in:chat,asked_at:at,...(subject?{subject}:{}),...more})]);};
   if(quietly){
    if(reach)throw Error('An outward step is never done quietly.');
-   settled('done_quietly',{quietly});
    return {outcome:'quiet',quietly,about};
   }
   const earlier=subject?decisionAbout(store,subject,at):null;
@@ -105,10 +103,6 @@ export function openStep(store,{about,question,yes,no,by,chat,job,quietly,subjec
  }
  return {outcome:'asked',id,message};
 }
-
-// A report hands the owner one thing. A report that bundles unrelated findings is split: each
-// finding is its own step and passes the same checks, so most of them end in silence.
-export const openFindings=(store,findings)=>findings.map(finding=>openStep(store,finding));
 
 // A step is answerable once the code that sent its question has said so (`sent_at`). Three senders do:
 // openStep, for a question it writes into the notebook chat itself; a background delivery record that
