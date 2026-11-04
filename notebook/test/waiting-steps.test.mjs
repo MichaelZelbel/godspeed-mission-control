@@ -80,6 +80,31 @@ test('a Telegram receipt reserved after the question was certified is newer, whe
  assert.equal(heard(store,{chat:'telegram',words:'yes'}).kind,'ask');assert.equal(store.get('approvals',opened.id).status,'pending');
 });
 
+test('a Hermes receipt of two questions certifies both or neither, and a later receipt makes a bare yes ask',async t=>{
+ const {store}=fixture(t),a=open(store,'The bot stopped.'),b=open(store,'The disk is full.'),words=a.message+'\n'+b.message;
+ const [receipt]=await recordRoutine(store,{routine:'asker',text:words,delivery:'telegram'});
+ const commit=store.commit.bind(store);store.commit=()=>{throw new Error('disk');};
+ assert.throws(()=>delivered(store,words,[receipt]));
+ store.commit=commit;
+ assert.deepEqual(waitingSteps(store).map(s=>s.id),[],'no prefix of the message became answerable');
+ const lock=store.withLock.bind(store);let later=false;
+ store.withLock=fn=>{if(!later){later=true;store.saveUnderLock('conversation_messages',{role:'assistant',content:'Later.',delivered_to:'telegram',delivered_at:new Date(Date.now()+5).toISOString()});}return lock(fn);};
+ delivered(store,words,[receipt]);
+ assert.deepEqual(waitingSteps(store).map(s=>s.id).sort(),[a.id,b.id].sort());
+ assert.equal(heard(store,{chat:'telegram',words:'yes'}).kind,'ask');
+});
+
+test('a question sent but not registered tells the owner, and is not sent again',async t=>{
+ const {store}=fixture(t);let a,sent=[];
+ const domains={invoke:async()=>{a=open(store,'The bot stopped.');return {reply:a.message};}};
+ const updates=[{update_id:1,message:{from:{id:123,is_bot:false},chat:{id:123,type:'private'},text:'hi'}}];
+ const transport=async(url,o)=>({ok:true,json:async()=>{if(url.endsWith('getUpdates'))return {ok:true,result:updates};sent.push(JSON.parse(o.body).text);return {ok:true,result:{message_id:sent.length}};}});
+ const commit=store.commit.bind(store);store.commit=changes=>{if(changes.some(r=>r.sent_at))throw new Error('disk');return commit(changes);};
+ await new Telegram({store,domains,token:'synthetic-bot',owner:'123',transport}).tick();
+ assert.equal(sent.length,2);assert.equal(sent[0],a.message);assert.match(sent[1],/could not register/);
+ assert.equal(store.get('command_receipts','telegram-1').state,'needs_review');
+});
+
 test('a step answered twice stays answered once',async t=>{
  const {store}=fixture(t),{id}=await ask(store,'The bot stopped.');
  const first=answerStep(store,id,'yes',{chat:'telegram',words:'yes'}),at=store.get('approvals',id).answered_at;

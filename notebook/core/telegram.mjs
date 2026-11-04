@@ -56,7 +56,7 @@ export class Telegram {
         const id='telegram-'+update.update_id,prior=this.store.get('command_receipts',id);
         if(prior){if(prior.state==='attempted'){await this.store.saveAsync('command_receipts',{id,state:'needs_review',error:'Interrupted Telegram request; actions were not repeated.'});await this.failureNotice(id,'Your previous message did not finish. I have not repeated any actions. Please send it again.');}atomic(this.file,JSON.stringify({offset:update.update_id+1}));continue;}
         await this.store.saveAsync('command_receipts',{id,source:'telegram',state:'attempted',request:text});
-        let reply,answerResult,answered=false,sendAttempted=false,turnStart;
+        let reply,answerResult,answered=false,sendAttempted=false,unregistered=false,turnStart;
         try{
           if(['/notebook','/chat'].includes(text)&&this.loginLink)reply='Open your '+(text==='/chat'?'chat':'notebook')+': '+this.loginLink(text==='/chat'?'/chat':'/');
           else if(text.startsWith('/capture ')){const note=await this.store.saveAsync('notes',{id:'telegram-note-'+update.update_id,title:'Telegram capture',content:text.slice(9),source_app:'telegram'});reply='Saved your note: '+note.title;}
@@ -64,10 +64,12 @@ export class Telegram {
           else {await this.store.saveAsync('conversation_messages',{role:'user',content:text,source_app:'telegram',conversation_id:'telegram-owner'});turnStart=new Date().toISOString();const result=await this.domains.invoke('conversation-chat',{message:text,conversation_id:'telegram-owner',request_id:id});answerResult=result;reply=result.reply;answered=true;}
           sendAttempted=true;
           const delivered=await this.replyWithProgress(reply,answerResult,message.from?.language_code||'en');
-          if(answered)stampReply(this.store,{words:delivered.dispatched,since:turnStart,messageId:delivered.message_id});
+          if(answered)try{stampReply(this.store,{words:delivered.dispatched,since:turnStart,messageId:delivered.message_id});}
+          catch{unregistered=true;}
           await this.store.saveAsync('command_receipts',{id,state:'verified',message_id:delivered.message_id,result:reply});
           if(!answered)await saveReached(this.store,{role:'assistant',content:reply,source_app:'telegram',message_id:delivered.message_id,conversation_id:'telegram-owner'});
-        }catch{await this.store.saveAsync('command_receipts',{id,state:'needs_review',error:'Telegram request did not finish. It will not be replayed automatically.'});if(!sendAttempted)await this.failureNotice(id,'I could not finish your message. I have not repeated any actions. Please try again.');}
+          if(unregistered)throw Error('A question was sent but could not be registered');
+        }catch{await this.store.saveAsync('command_receipts',{id,state:'needs_review',error:'Telegram request did not finish. It will not be replayed automatically.'});if(!sendAttempted)await this.failureNotice(id,'I could not finish your message. I have not repeated any actions. Please try again.');else if(unregistered)await this.failureNotice(id,'I asked you a question but could not register it, so a plain yes or no will not answer it. Please ask me again.');}
         atomic(this.file,JSON.stringify({offset:update.update_id+1}));
       }
     }finally{this.running=false;}

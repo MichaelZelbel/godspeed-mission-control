@@ -65,7 +65,7 @@ export function openStep(store,{about,question,yes,no,by,chat,job}){
 
 // A step is answerable once the code that sent its question has said so (`sent_at`). Three senders do:
 // openStep, for a question it writes into the notebook chat itself; a background delivery record that
-// names the step (background-reports.mjs, via stampDelivered); and the Telegram sender, for a direct
+// names the step (background-reports.mjs, via stampDelivered, together with its receipt); and the Telegram sender, for a direct
 // reply it sent that holds the words of a step opened during that very turn (stampReply). The asker's
 // own say-so never counts, and a question printed once certifies one step, however many ask the same words.
 // The time a question or a later message reached the chat, never equal to one already recorded, so a
@@ -78,11 +78,21 @@ export const deliveryClock=store=>{
 // The position is taken under the writer lock that commits the record, so records ordered by lock
 // are ordered by position.
 export const saveReached=(store,value)=>store.withLockAsync(()=>store.saveUnderLock('conversation_messages',{...value,delivered_to:'telegram',delivered_at:deliveryClock(store)}));
-const stamp=(store,id,messageId)=>store.withLock(()=>{
- const record=store.get('approvals',id);
- if(record?.asked_in&&record.status==='pending'&&!record.sent_at)store.commit([store.prepare('approvals',{sent_at:deliveryClock(store),...(messageId?{sent_message_id:messageId}:{})},record)]);
+// One delivery certifies every question it carries, and its receipt, in one commit: a failure leaves
+// none of them answerable, never a prefix of a multi-question message. Each gets its own position.
+const stampAll=(store,ids,{chat,messageId,receipt}={})=>store.withLock(()=>{
+ const base=Date.parse(deliveryClock(store));let n=0;
+ const changes=[];
+ for(const id of ids){
+  const record=store.get('approvals',id);
+  if(record?.asked_in&&(!chat||record.asked_in===chat)&&record.status==='pending'&&!record.sent_at)changes.push(store.prepare('approvals',{sent_at:new Date(base+n++).toISOString(),...(messageId?{sent_message_id:messageId}:{})},record));
+ }
+ const stored=receipt&&store.get('conversation_messages',receipt.id);
+ if(stored)changes.push(store.prepare('conversation_messages',{delivered_at:new Date(base+n++).toISOString()},stored));
+ if(changes.length)store.commit(changes);
 });
-export const stampDelivered=(store,id,chat)=>{if(store.get('approvals',id)?.asked_in===chat)stamp(store,id);};
+const stamp=(store,id)=>stampAll(store,[id]);
+export const stampDelivered=(store,ids,receipt)=>stampAll(store,ids,{chat:'telegram',receipt});
 // The pending, unsent Telegram steps whose questions a routine printed in full, oldest first; a
 // question printed once names one step, however many steps ask the same words.
 export function stepsForWords(store,text,since=''){
@@ -95,7 +105,8 @@ export function stepsForWords(store,text,since=''){
  return named;
 }
 export function stampReply(store,{words,since,messageId}){
- for(const id of stepsForWords(store,words,since))stamp(store,id,messageId);
+ const ids=stepsForWords(store,words,since);
+ if(ids.length)stampAll(store,ids,{messageId});
 }
 function withdrawStep(store,id){
  try{store.withLock(()=>{const record=store.get('approvals',id);if(record?.status==='pending'&&!record.sent_at)store.commit([store.prepare('approvals',{status:'withdrawn'},record)]);});}catch{}

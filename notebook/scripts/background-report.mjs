@@ -10,6 +10,7 @@
 // as printed and `delivered` makes the waiting steps a delivery record names answerable once Hermes has delivered it; `record --receipts` prints the ids of the records it wrote (a skill job's wrapper hands them back to `delivered --receipts`; otherwise the oldest undelivered record of exactly those words is used). See core/background-reports.mjs. Exit 1 only when the notebook cannot be written.
 import fs from 'node:fs';
 import {pathToFileURL} from 'node:url';
+import {CHATS} from '../core/waiting-steps.mjs';
 import {Store} from '../core/records/store.mjs';
 import {machineDevice} from '../core/device-id.mjs';
 import {sayNotice,recordRoutine,delivered} from '../core/background-reports.mjs';
@@ -33,7 +34,7 @@ export async function main(argv,stdin){
  const routine=option(argv,'routine');
  if(!routine)throw Error('Say which routine the words are from (--routine)');
  const delivery=option(argv,'delivery')?.split(',');
- if(delivery&&!delivery.every(d=>['telegram','notebook'].includes(d)))throw Error('--delivery is telegram or notebook');
+ if(delivery&&!delivery.every(d=>CHATS.includes(d)))throw Error('--delivery is telegram or notebook');
  const receipts=await recordRoutine(store,{routine,text:stdin.trim(),home,delivery});
  return argv.includes('--receipts')?receipts.join(','):'';
 }
