@@ -11,7 +11,9 @@ import {starterBorn} from './starter-workspace.mjs';
 import {setHermesTimezone} from './hermes-config.mjs';
 import {FLAG,STARTING_ROUTINES,routineFiles,writeRoutineFiles,prepareCheckIn,saveRoutineResults,readMachineRecord,writeMachineRecord,telegramInHermes,routineStatus,ownRoutines,metAt,noteHermesMet,cityFiledFirst,OWN_ROUTINES_RULE} from './starting-routines.mjs';
 import {cronOf,cronCalendar,calendarCron,retimeWhat,isTalkGate,isCoachTick,talkArea,moveTalk} from './routine-times.mjs';
-import {readNotebookRoutines,rememberNotebookRoutine,enableKind,deliveryFor,journalWanted,journalOnTheClock,JOURNAL_JOB,JOURNAL_SCRIPT,JOURNAL_WHAT,CHAT_TIDY_JOB,CHAT_TIDY_SCRIPT,writeNotebookRoutines,BRIEF_JOB,BRIEF_SCRIPT,isBriefJob,CONNECTION_JOB,CONNECTION_SCRIPT,CONNECTION_WHAT} from './notebook-routines.mjs';
+import {readNotebookRoutines,rememberNotebookRoutine,enableKind,deliveryFor,journalWanted,journalOnTheClock,JOURNAL_JOB,JOURNAL_SCRIPT,JOURNAL_WHAT,CHAT_TIDY_JOB,CHAT_TIDY_SCRIPT,writeNotebookRoutines,BRIEF_JOB,BRIEF_SCRIPT,isBriefJob,CONNECTION_JOB,CONNECTION_SCRIPT,CONNECTION_WHAT,NOTICES_JOB,NOTICES_SCRIPT,NOTICES_WHAT} from './notebook-routines.mjs';
+import {holdQueuedNotices} from './notices.mjs';
+import {switchable,switchedOn} from './routine-switches.mjs';
 import {connectionCheckWanted} from './connection-check.mjs';
 import {loadSettings as coachSettings,saveSettings as saveCoach} from '../../third-party/addons/godspeed-coach/lib/settings.mjs';
 import {rhythmWords} from '../../third-party/addons/godspeed-coach/lib/areas.mjs';
@@ -108,7 +110,8 @@ export class NativeScheduler{
   const waiting=!flag&&!!installation&&cityFiledFirst(this.store,installation);
   if(!flag&&installation&&!setup&&!waiting)return null;
   // Never for a mission control not made from the starter: the owner's adopted one, live on
-  // several machines with routines of its own, gets nothing new.
+  // several machines with routines of its own, gets none of these at once. Since #225 it gets the
+  // notice sender (followNoticeSender) and each routine as a switch (followSwitches).
   if(!starterBorn(root))return null;
   // When this mission control came to this machine, written once (starting-routines.mjs, metAt).
   try{noteHermesMet(this.store,{home:this.home,now});}catch{}
@@ -191,14 +194,77 @@ export class NativeScheduler{
   const moved=[];
   for(const job of hermesJobs(this.home).filter(j=>ids.has(j.id)&&['local','telegram'].includes(String(j.deliver||''))&&j.deliver!==want)){await this.command(['edit',job.id,'--deliver',want]);moved.push(job.id);}
   if(created&&here.delivery!==want)writeMachineRecord(this.store,{...here,delivery:want});
-  if(created)try{const settings=coachSettings(this.store.root),talk=want==='telegram'?'messenger':'chat';if(settings.talk_delivery!==talk)saveCoach(this.store.root,{...settings,talk_delivery:talk});}catch{}
+  if(created||mine.jobs.some(j=>['coach-gate','coach-tick'].includes(j.key)))try{const settings=coachSettings(this.store.root),talk=want==='telegram'?'messenger':'chat';if(settings.talk_delivery!==talk)saveCoach(this.store.root,{...settings,talk_delivery:talk});}catch{}
   return moved;
+ }
+ // THE NOTICE SENDER OF A MISSION CONTROL NOT MADE FROM THE STARTER (4 November 2026, #225; notebook-routines.mjs).
+ // Made once on the machine that runs the routines, and a routine the person removed stays removed.
+ // Notices queued before it is made are marked not sent first, and again on every attempt until it is
+ // made, so none queued earlier is ever said.
+ async followNoticeSender(){
+  const root=this.store.root;if(starterBorn(root))return null;
+  const entry=readNotebookRoutines(this.store).jobs.find(j=>j.key==='notices'),jobs=hermesJobs(this.home);
+  const job=(entry&&jobs.find(j=>j.id===entry.id))||jobs.find(j=>j.name===NOTICES_JOB&&j.script===NOTICES_SCRIPT&&typeof j.workdir==='string'&&path.resolve(j.workdir)===path.resolve(root));
+  if(entry&&!job)return null;
+  if(job){if(!entry)rememberNotebookRoutine(this.store,{id:job.id,key:'notices',name:NOTICES_JOB,what:NOTICES_WHAT});return job.id;}
+  const installation=this.store.get('settings','installation'),timezone=installation?.timezone||Intl.DateTimeFormat().resolvedOptions().timeZone;
+  writeRoutineFiles(this.home,routineFiles({root,home:this.home,state:this.store.state,timezone,hermes:this.executable}));
+  holdQueuedNotices(this.store);
+  const before=new Set(jobs.map(j=>j.id));
+  await this.command(['create','*/15 * * * *','--no-agent','--name',NOTICES_JOB,'--script',NOTICES_SCRIPT,'--deliver',deliveryFor(installation,{telegram:telegramInHermes(this.home)}),'--failure-deliver','local','--workdir',root]);
+  const made=hermesJobs(this.home).find(j=>!before.has(j.id)&&j.name===NOTICES_JOB);
+  if(!made)throw Error('Hermes did not keep the routine "'+NOTICES_JOB+'"');
+  rememberNotebookRoutine(this.store,{id:made.id,key:'notices',name:NOTICES_JOB,what:NOTICES_WHAT});
+  return made.id;
+ }
+ // Routines wait for their switches only once the notice sender exists, which means the earlier notices are marked.
+ switchesReady(){return !starterBorn(this.store.root)&&readNotebookRoutines(this.store).jobs.some(j=>j.key==='notices');}
+ // THE SWITCHES OF A MISSION CONTROL NOT MADE FROM THE STARTER (routine-switches.mjs). A starting routine
+ // switched on is made as the starter-born start makes it; the journal's check-ins and the connection check
+ // are made by their own follow methods. Off pauses the routine and keeps its record; on again resumes it.
+ async followSwitches(){
+  if(!this.switchesReady())return [];
+  const root=this.store.root,changed=[];
+  for(const routine of switchable()){
+   const on=switchedOn(this.store,routine.key),starting=STARTING_ROUTINES.find(r=>r.key===routine.key);
+   let entry=readNotebookRoutines(this.store).jobs.find(j=>j.key===routine.key);
+   const jobs=hermesJobs(this.home),job=entry&&jobs.find(j=>j.id===entry.id);
+   const forget=()=>{const all=readNotebookRoutines(this.store);writeNotebookRoutines(this.store,{...all,jobs:all.jobs.filter(j=>j.key!==routine.key)});entry=undefined;};
+   if(!on){
+    if(entry&&!entry.switched_off){
+     if(!job)forget();
+     else{if(job.enabled!==false)await this.command(['pause',job.id]);rememberNotebookRoutine(this.store,{...entry,switched_off:true});changed.push(job.id);}
+    }
+    continue;
+   }
+   if(entry?.switched_off){
+    if(!job){forget();}
+    else{
+     const {switched_off,...rest}=entry;
+     if(starting){if(job.enabled===false)await this.command(['resume',job.id]);rememberNotebookRoutine(this.store,rest);}
+     else rememberNotebookRoutine(this.store,{...rest,paused_by_notebook:true,running_by_notebook:false});
+     changed.push(job.id);continue;
+    }
+   }
+   if(entry||!starting)continue;
+   if(starting.needs&&!fs.existsSync(path.join(root,'skills',starting.needs,'SKILL.md')))continue;
+   const installation=this.store.get('settings','installation'),timezone=installation?.timezone||Intl.DateTimeFormat().resolvedOptions().timeZone,delivery=deliveryFor(installation,{telegram:telegramInHermes(this.home)});
+   writeRoutineFiles(this.home,routineFiles({root,home:this.home,state:this.store.state,timezone,hermes:this.executable}));
+   if(['coach-gate','coach-tick'].includes(routine.key)){
+    const first=nativeCardRows(this.store,'goals').filter(g=>g.status==='adopted').sort((a,b)=>String(a.created_at).localeCompare(String(b.created_at)))[0];
+    prepareCheckIn(root,{timezone,delivery,goal:first?.id||''});
+   }
+   const [made]=await this.createStartingRoutines(delivery,[starting]);
+   rememberNotebookRoutine(this.store,made);changed.push(made.id);
+  }
+  return changed;
  }
  // THE JOURNAL'S CHECK-INS (notebook-routines.mjs): one routine while the person has any of them
  // switched on, paused when all are off, made again by nothing once the person removed it.
  async followJournal(){
-  const root=this.store.root;if(!starterBorn(root))return null;
+  const root=this.store.root;if(!(starterBorn(root)||this.switchesReady()&&switchedOn(this.store,'journal-tick')))return null;
   const mine=readNotebookRoutines(this.store),entry=mine.jobs.find(j=>j.key==='journal-tick'),jobs=hermesJobs(this.home);
+  if(entry?.switched_off)return null;
   const job=(entry&&jobs.find(j=>j.id===entry.id))||jobs.find(j=>[JOURNAL_JOB,'godspeed-journal-tick'].includes(j.name));
   if(!journalWanted(root)){
    if(job&&entry&&job.enabled!==false){await this.command(['pause',job.id]);rememberNotebookRoutine(this.store,{...entry,paused_by_notebook:true});}
@@ -221,14 +287,17 @@ export class NativeScheduler{
   return made.id;
  }
  // THE DAILY CONNECTION CHECK (4 November 2026, #200; notebook-routines.mjs, core/connection-check.mjs).
- // Made once, only on a machine that made its starting routines, at 05:00 on the install's clock (earlier when
+ // Made once, only on a machine that made its starting routines (on a mission control not made from the
+ // starter: once its switch is on, #225), at 05:00 on the install's clock (earlier when
  // a Morning brief set before 05:30 needs it first; connectionCheckTime). It
  // is made enabled when Telegram or Gmail is connected and paused when neither is; the notebook later
  // resumes it only if it paused it itself and one of them has since been connected. A routine the
  // person paused or resumed, or removed, is theirs from then on.
  async followConnectionCheck(){
-  const root=this.store.root;if(!starterBorn(root)||readMachineRecord(this.store)?.state!=='created')return null;
+  const root=this.store.root;
+  if(!(starterBorn(root)?readMachineRecord(this.store)?.state==='created':this.switchesReady()&&switchedOn(this.store,'connection-check')))return null;
   const entry=readNotebookRoutines(this.store).jobs.find(j=>j.key==='connection-check'),jobs=hermesJobs(this.home);
+  if(entry?.switched_off)return null;
   const job=(entry&&jobs.find(j=>j.id===entry.id))||jobs.find(j=>j.name===CONNECTION_JOB&&j.script===CONNECTION_SCRIPT);
   if(entry&&!job)return null;
   const installation=this.store.get('settings','installation'),timezone=installation?.timezone||Intl.DateTimeFormat().resolvedOptions().timeZone,wanted=connectionCheckWanted(this.home);
@@ -389,13 +458,21 @@ export class NativeScheduler{
   await this.command(['edit',job.id,'--schedule',expr]);
   const here=readMachineRecord(this.store);
   if(here?.jobs?.some(j=>j.id===job.id))writeMachineRecord(this.store,{...here,jobs:here.jobs.map(j=>j.id===job.id?{...j,what:retimeWhat(j.what,before.times,after.times)}:j)});
+  const switched=readNotebookRoutines(this.store).jobs.find(j=>j.id===job.id&&STARTING_ROUTINES.some(r=>r.key===j.key)&&typeof j.what==='string');
+  if(switched)rememberNotebookRoutine(this.store,{...switched,what:retimeWhat(switched.what,before.times,after.times)});
   return nativeJobs(this.home,this.device).find(j=>j.id===job.id);
  }
- // After every tick on the machine that runs the routines of a starter-born mission control: the
- // starting routines' scripts follow the notebook's folders (an upgrade moves them), and a reply
- // that reached nobody becomes a note.
+ // After every tick on the machine that runs the routines: the routines' scripts follow the notebook's
+ // folders (an upgrade moves them), and a reply that reached nobody becomes a note. On a mission control
+ // not made from the starter that is only for the routines the notebook made itself (the notice sender,
+ // switched-on routines), never the owner's own jobs.
  afterTick(){
-  if(!starterBorn(this.store.root))return [];
+  if(!starterBorn(this.store.root)){
+   const made=new Set(readNotebookRoutines(this.store).jobs.map(j=>j.id));if(!made.size)return [];
+   const timezone=this.store.get('settings','installation')?.timezone||Intl.DateTimeFormat().resolvedOptions().timeZone;
+   writeRoutineFiles(this.home,routineFiles({root:this.store.root,home:this.home,state:this.store.state,timezone,hermes:this.executable}));
+   return saveRoutineResults(this.store,{home:this.home,jobs:hermesJobs(this.home).filter(j=>made.has(j.id)),messenger:telegramInHermes(this.home)});
+  }
   const here=readMachineRecord(this.store),installation=this.store.get('settings','installation');
   if(here?.state==='created'&&installation?.timezone)writeRoutineFiles(this.home,routineFiles({root:this.store.root,home:this.home,state:this.store.state,timezone:installation.timezone,hermes:this.executable}));
   return saveRoutineResults(this.store,{home:this.home,jobs:hermesJobs(this.home),messenger:telegramInHermes(this.home)});
@@ -426,6 +503,8 @@ export class NativeScheduler{
   this.current=new Promise(r=>{finish=r;});
   try{
    await this.startRoutines().catch(()=>null);
+   await this.followNoticeSender().catch(()=>null);
+   await this.followSwitches().catch(()=>null);
    await this.addNewStartingRoutines().catch(()=>null);
    await this.followJournal().catch(()=>null);
    await this.followConnectionCheck().catch(e=>{failure=e;});

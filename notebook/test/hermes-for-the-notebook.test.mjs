@@ -120,12 +120,17 @@ test('every wiring of a mission control made from the starter gives its Hermes t
  wire(root,home);assert.equal(fs.readFileSync(path.join(home,'config.yaml'),'utf8'),text);
 });
 
-test('an adopted mission control keeps its assistant as it was',t=>{
+test('an adopted mission control keeps its assistant as it was, apart from the delivery wrapper',t=>{
  const base=temporary(t,'wire-adopted-hermes'),root=path.join(base,'workspace'),home=path.join(base,'assistant');
  fs.mkdirSync(path.join(root,'rules'),{recursive:true});fs.writeFileSync(path.join(root,'AGENTS.md'),'# Mine\n');fs.writeFileSync(path.join(root,'rules','mine.md'),'Mine.\n');installStarter(root);
  wire(root,home);const text=fs.readFileSync(path.join(home,'config.yaml'),'utf8');
- for(const keys of [['memory','user_profile_enabled'],['agent','disabled_toolsets'],['tools','tool_search','enabled'],['cron','provider']])assert.equal(readConfigValue(text,keys),null,keys.join('.'));
- assert.ok(!fs.existsSync(path.join(home,'plugins','godspeed_notebook')));
+ for(const keys of [['memory','user_profile_enabled'],['agent','disabled_toolsets'],['tools','tool_search','enabled']])assert.equal(readConfigValue(text,keys),null,keys.join('.'));
+ assert.equal(readConfigValue(text,['cron','provider']),'godspeed_notebook');
+ assert.ok(fs.existsSync(path.join(home,'plugins','godspeed_notebook','__init__.py')));assert.ok(fs.existsSync(path.join(home,'plugins','godspeed_notebook','report.json')));
+ wire(root,home);assert.equal(fs.readFileSync(path.join(home,'config.yaml'),'utf8'),text,'wiring again changes nothing');
+ // A scheduler the owner chose stays.
+ const other=path.join(base,'other');fs.mkdirSync(other);fs.writeFileSync(path.join(other,'config.yaml'),'cron:\n  provider: owners_own\n');
+ wire(root,other);assert.equal(readConfigValue(fs.readFileSync(path.join(other,'config.yaml'),'utf8'),['cron','provider']),'owners_own');
 });
 
 // "Run now" waited for the whole run (a live run's fetch gave up after 300 seconds).

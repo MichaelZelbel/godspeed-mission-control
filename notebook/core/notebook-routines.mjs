@@ -73,6 +73,13 @@ export function journalWanted(root){
 export const CONNECTION_JOB='Daily connection check';
 export const CONNECTION_SCRIPT='godspeed-connection-check.py';
 export const CONNECTION_WHAT=`Early every morning, before your morning brief, it makes one harmless call to each connection you set up (${Object.values(CONNECTION_NAMES).map(c=>c.label).join(', ')}) and tells you only when one needs your sign-in or key, or failed two mornings in a row. It sends nothing else.`;
+// THE NOTICE SENDER OF A MISSION CONTROL NOT MADE FROM THE STARTER (4 November 2026, #225). On a starter-born
+// install the coach's reminders and the journal's check-ins say the notices in .godspeed/notices.json. An
+// adopted mission control runs neither unasked, so it gets this one routine instead: every 15 minutes it says
+// only the notices Godspeed itself queued, and nothing else (NativeScheduler.followNoticeSender).
+export const NOTICES_JOB='Godspeed notices';
+export const NOTICES_SCRIPT='godspeed-notices.py';
+export const NOTICES_WHAT='Every 15 minutes it says what Godspeed itself queued for you, such as a backup that failed or a question waiting for your yes, one at a time. It sends nothing else.';
 // THE NIGHT CHAT TIDY-UP (26 October 2026). The assistant keeps a chat app's chat as one long
 // conversation and summarises its older part once it passes its threshold, and it does that before
 // answering the message that crossed the line: a real message waited 4 minutes 9 seconds while 348

@@ -28,6 +28,8 @@ Each routine runs the original programs of the mission control, never a copy of 
   connection-check  the Daily connection check (notebook/scripts/connection-check.mjs): one harmless call
               to each connection that is set up; prints only the notices it queued (a login or key
               refused, or a second failed morning in a row).
+  notices     the notice sender of a mission control not made from the starter (#225): every 15
+              minutes it says the oldest queued notice, and never one marked not_sent.
   coach-gate  godspeed-coach gate: the talk brief when a talk is due, else {"wakeAgent": false}.
   coach-prep  mc-coach-prep, every night at 03:00: each coaching talk of the next day is prepared
               with the coach-prep recipe, within two hours. It prints nothing: a talk it could not
@@ -46,7 +48,8 @@ The two that run every 15 minutes, coach-tick and journal-tick, also say once wh
 needs the person to hear and could not send itself, such as a nightly backup that failed: the
 notebook queues it in notices.json in its own state, and each one is said once (notice), one a
 run and only when the routine has no line of its own. The notebook writes it with the guidance the
-chat reads. Every message a routine sends is recorded in the notebook's conversation_messages, so
+chat reads. A mission control not made from the starter has a third one, notices, that says only notices; a
+notice marked not_sent (queued before that routine first started) is never said. Every message a routine sends is recorded in the notebook's conversation_messages, so
 the chat can tell what a message was about (core/background-reports.mjs).
 
 Printing nothing is Hermes' silence: nothing is sent and no note is saved. A failure exits non-zero
@@ -697,7 +700,7 @@ def notice(c, only=""):
         with open(queued, encoding="utf-8") as f:
             text = f.read()
         if text.strip():
-            waiting = [n for n in json.loads(text).get("notices", []) if isinstance(n, dict) and isinstance(n.get("id"), str) and n["id"].startswith(only)]
+            waiting = [n for n in json.loads(text).get("notices", []) if isinstance(n, dict) and isinstance(n.get("id"), str) and n["id"].startswith(only) and not n.get("not_sent")]
     except FileNotFoundError:
         return None
     except Exception:
@@ -807,6 +810,14 @@ def tick(c, env, kind, r):
     if found:
         return say_claimed(c, env, found), True
     return "", True
+
+
+def notices(c):
+    """The notice sender of a mission control not made from the starter (#225): it says the oldest queued
+    notice and nothing else."""
+    env = environment(c, today(c))
+    found = notice(c)
+    return (say_claimed(c, env, found), True) if found else ("", True)
 
 
 def journal_tick(c):
@@ -1149,7 +1160,7 @@ def connection_check(c):
 # Every routine wrapper the notebook writes (routineFiles in starting-routines.mjs) names one of these.
 ROUTINES = {"research": research, "decide": decide, "work": work, "due": due, "brief": brief, "coach-prep": coach_prep,
             "coach-gate": lambda c: coach(c, "gate"), "coach-tick": lambda c: coach(c, "tick"),
-            "journal-tick": journal_tick, "chat-tidy": chat_tidy, "connection-check": connection_check}
+            "journal-tick": journal_tick, "notices": notices, "chat-tidy": chat_tidy, "connection-check": connection_check}
 
 
 def main(kind):

@@ -259,3 +259,25 @@ test('a locally delivered Settings result is in the notebook chat\'s next reply'
  assert.match(reply,/\[godspeed-reports\]/);assert.ok(reply.includes('Good morning from Settings.'));
  assert.equal(JSON.parse(hook('telegram'))?.context??null,null,'a notebook report is not for Telegram');
 });
+
+// AN ADOPTED MISSION CONTROL (4 November 2026, #225): the question of a waiting step reaches the owner
+// through the notice sender and Hermes' wrapper, and a plain yes then approves it.
+test('on an adopted mission control a waiting step\'s question is delivered by the notice sender and a plain yes approves it',async t=>{
+ if(!python)return t.skip('needs Python');
+ const {installStarter}=await import('../core/starter-workspace.mjs'),{routineFiles,writeRoutineFiles}=await import('../core/starting-routines.mjs');
+ const {root,home,store}=setup(t);
+ fs.mkdirSync(path.join(root,'rules'),{recursive:true});fs.writeFileSync(path.join(root,'AGENTS.md'),'# My own mission control\n');fs.writeFileSync(path.join(root,'rules','mine.md'),'Mine.\n');installStarter(root);
+ const wire=fileURLToPath(new URL('../scripts/wire-assistant.mjs',import.meta.url));
+ execFileSync(process.execPath,[wire,home],{env:{...process.env,GODSPEED_WORKSPACE:root,GODSPEED_PORT:'41992',GODSPEED_DEVICE:'local',GODSPEED_ORIGINAL_RUNTIME:'on'},windowsHide:true});
+ assert.match(fs.readFileSync(path.join(home,'config.yaml'),'utf8'),/provider: "?godspeed_notebook"?/);
+ writeRoutineFiles(home,routineFiles({root,home,state:store.state,timezone:'Europe/Berlin'}));
+ const opened=openAsk(store,'The bot stopped.');queueNotice(store,{id:'step-question',text:opened.message,step:opened.id});
+ const words=execFileSync(python,[path.join(home,'scripts','godspeed-notices.py')],{cwd:path.join(home,'scripts'),encoding:'utf8',env:{...process.env,PYTHONIOENCODING:'utf-8'}}).trim();
+ assert.match(words,/Shall I go on\?/);
+ const dir=path.join(home,'plugins','godspeed_notebook');
+ const out=JSON.parse(execFileSync(python,['-I','-c',CRON_STUB,path.join(dir,'__init__.py'),JSON.stringify([[{...TELEGRAM_JOB,name:'Godspeed notices',script:'godspeed-notices.py'},words,false]])],{encoding:'utf8'}));
+ assert.deepEqual(out.errors,[null]);
+ const fresh=new Store(root,{device:'pc'});
+ assert.ok(fresh.get('approvals',opened.id).sent_at,'certified once Hermes delivered it');
+ const answer=heard(fresh,{chat:'telegram',words:'yes'});assert.equal(answer.kind,'answered');assert.equal(fresh.get('approvals',opened.id).status,'approved');
+});
