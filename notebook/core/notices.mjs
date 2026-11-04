@@ -24,8 +24,3 @@ export function queueNotice(store,{id,text,at=new Date().toISOString(),about,fac
  atomic(path.join(store.state,NOTICES_FILE),JSON.stringify({notices:[...notices,entry].slice(-KEEP)},null,2)+'\n');
  return true;
 }
-// A notice that is no longer true and was not yet said is taken back, so it is never said late.
-export function withdrawNotice(store,id){
- const notices=readNotices(store),kept=notices.filter(n=>n.id!==id);
- if(kept.length!==notices.length)atomic(path.join(store.state,NOTICES_FILE),JSON.stringify({notices:kept},null,2)+'\n');
-}

@@ -5,7 +5,7 @@ import {spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {CONNECTION_NAMES,CONNECTION_NOTICE_PREFIX} from './connection-names.mjs';
 import {atomic} from './records/store.mjs';
-import {queueNotice,withdrawNotice} from './notices.mjs';
+import {queueNotice} from './notices.mjs';
 import {routineAIStatus,askDirectly} from './routine-ai.mjs';
 import {FileSync,readSyncConfig} from './sync/git.mjs';
 import {telegramInHermes} from './starting-routines.mjs';
@@ -140,16 +140,13 @@ export async function checkConnections({store,day,probes,due=runDue,now=()=>new 
   for(const action of actions){
    if(action.do==='recover'){
     fs.mkdirSync(path.dirname(worked),{recursive:true});fs.writeFileSync(worked,'');
-    const was=before.connections[name],slug=was?.deadline?.slug;
-    // A sign-in whose deadline never got made and which now works is not said late.
-    if(!slug&&was?.kind==='sign-in'&&was.failing_since)withdrawNotice(store,`${CONNECTION_NOTICE_PREFIX}${name}-${was.failing_since}`);
+    const slug=before.connections[name]?.deadline?.slug;
     if(slug&&due(store,day,['check',slug]).status!==0){connections[name]=before.connections[name];failures.push(name);continue;}
     await bell(store,{id:'connection-'+name,status:'resolved',resolved_at:now().toISOString()});
    }
    if(action.do==='other')tellOwner(store,{id:`${CONNECTION_NOTICE_PREFIX}${name}-other-${entry.failing_since}`,text:otherWords(name)});
    if(action.do==='sign-in'){
     fs.rmSync(worked,{force:true});
-    tellOwner(store,{id:`${CONNECTION_NOTICE_PREFIX}${name}-${day}`,text:CONNECTIONS[name].signIn});
     await bell(store,{id:'connection-'+name,status:'pending',title:`${label} needs your sign-in`,body:CONNECTIONS[name].signIn,link:'/dashboard/settings'});
    }
    if(action.do==='deadline'){
@@ -157,7 +154,8 @@ export async function checkConnections({store,day,probes,due=runDue,now=()=>new 
     const made=due(store,day,['add',slug,'--title',`Connect ${label} again`,'--target',day,'--to',addDays(day,DEADLINE_DAYS),
      '--done-when',`The daily connection check reaches ${label} again; it closes this itself.`,'--cost',`Until then ${CONNECTIONS[name].stops}.`,
      '--self-check','file-newer','--self-check-arg',`.godspeed/${WORKED_FOLDER}/${name}.worked`,'--addon','connection-check','--addon-key',key]);
-    if(made.status===0)entry.deadline={slug,key};else failures.push(name);
+    // The owner is told only once the deadline exists, so a connection that works again before then leaves nothing queued to be said late; queueNotice keeps a retry from telling twice.
+    if(made.status===0){entry.deadline={slug,key};tellOwner(store,{id:`${CONNECTION_NOTICE_PREFIX}${name}-${since}`,text:CONNECTIONS[name].signIn});}else failures.push(name);
    }
   }
  }

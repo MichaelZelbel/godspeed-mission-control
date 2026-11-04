@@ -158,7 +158,7 @@ test('a deadline that could not be made or closed fails the routine and is retri
  const {store}=fixture(t);
  const failing=()=>({status:1,out:''});
  await assert.rejects(checkConnections({store,day:D1,probes:stubs({telegram:refused}),due:failing}),/deadline/);
- assert.deepEqual(deadlines(store),[]);assert.equal(readNotices(store).length,1);
+ assert.deepEqual(deadlines(store),[]);assert.equal(readNotices(store).length,0,'nothing is queued until its deadline exists');
  await checkConnections({store,day:D1,probes:stubs({telegram:refused})});
  assert.equal(deadlines(store).length,1);assert.equal(readNotices(store).length,1,'the message is not repeated');
  await assert.rejects(checkConnections({store,day:D2,probes:stubs(),due:failing}),/deadline/);
