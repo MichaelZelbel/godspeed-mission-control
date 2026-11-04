@@ -65,6 +65,8 @@ function drive(dir, steps, env = {}) {
     fs.mkdirSync(path.join(home, "bin"));
     fs.writeFileSync(path.join(home, "bin", "godspeed-model"), `#!/bin/sh\nexec "${process.execPath}" "${path.join(HERE, "fixtures", "model-command.mjs")}"\n`, { mode: 0o755 });
   }
+  const scratch = path.join(home, "tmp");
+  fs.mkdirSync(scratch);
   try {
     const r = spawnSync(PY, [DRIVER, PLUGIN], {
       input: JSON.stringify({ steps }), encoding: "utf8", timeout: 180000, windowsHide: true,
@@ -72,11 +74,12 @@ function drive(dir, steps, env = {}) {
         ...process.env, GODSPEED_CHARM_DIR: dir, GODSPEED_CHARM_NOW: at("2026-10-22", 9), GODSPEED_SCHEDULED_RUN: "",
         GODSPEED_CHARM_LAUNCHER: "", GODSPEED_NODE: process.execPath, GODSPEED_CHARM_SCRIPT: env.FIXTURE_JUDGE ? stub : BIN,
         REAL_BIN: BIN, HERMES_HOME: home, TELEGRAM_ALLOWED_USERS: "31415", GODSPEED_CHARM_BUTTON_DELAY: "0",
-        PYTHONDONTWRITEBYTECODE: "1", ...env,
+        PYTHONDONTWRITEBYTECODE: "1", TMPDIR: scratch, ...env,
       },
     });
     assert.equal(r.status, 0, r.stderr);
     const out = JSON.parse(r.stdout.trim().split("\n").pop());
+    out.turnFiles = fs.readdirSync(scratch).filter((n) => /^godspeed-charm-.*\.txt$/.test(n));
     out.rotated = (() => { try { return fs.readFileSync(path.join(home, "logs", "godspeed-charm.log.1"), "utf8"); } catch { return null; } })();
     out.log = (() => { try { return fs.readFileSync(path.join(home, "logs", "godspeed-charm.log"), "utf8").trim().split("\n").map((l) => JSON.parse(l)); } catch { return []; } })();
     return out;
@@ -110,6 +113,18 @@ test("a silent reply to a judged turn still writes its one log line and ends the
     assert.equal(out.log[0].did, "no reply to add to");
     assert.ok(!JSON.stringify(out.log).includes("garbage"));
     assert.deepEqual(kinds(dir), ["start"]);
+    assert.deepEqual(out.turnFiles, []);
+  } finally { gone(dir); }
+});
+
+test("a silent reply to a slow judgement logs the verdict the word check gave", { skip }, () => {
+  const dir = mission();
+  try {
+    const out = drive(dir, [register, pre(VENT), reply("[SILENT]")], { FIXTURE_JUDGE: "slow", GODSPEED_CHARM_JUDGE_SECONDS: "1" });
+    assert.equal(out.results[2].text, null);
+    assert.equal(out.log.length, 1);
+    assert.deepEqual([out.log[0].verdict, out.log[0].source], ["ask", "words"]);
+    assert.ok(out.log[0].why);
   } finally { gone(dir); }
 });
 

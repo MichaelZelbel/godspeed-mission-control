@@ -569,6 +569,7 @@ def on_charm_reply(**kwargs):
             return None
         elif not text.strip() or text.strip() in SILENT:
             out, did = None, "no reply to add to"
+            turn["result"] = _verdict(turn)
         else:
             try:
                 out, did = _judged_reply(turn, session_id, text, kwargs, model_asked)
