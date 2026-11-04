@@ -9,11 +9,14 @@ the owner one invitation to tell the assistant about themselves. Hermes does not
 scheduled job delivered into the chat the assistant sees next (only with cron.mirror_delivery or a
 job's attach_to_session, which its command line cannot set), so a plain "ok" to the invitation
 reached an assistant that never saw the invitation. While the invitation waits for an answer, or
-the chat is under way, this says so. Every failure returns None: it never breaks the assistant.
+the chat is under way, this says so. It also hands the owner's plain yes or no in their private Telegram
+chat to `godspeed-step`, which answers the waiting step it belongs to (see waiting_step_block). Every
+failure returns None: it never breaks the assistant.
 """
 import json
 import os
 import re
+import subprocess
 import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -110,6 +113,61 @@ def _backup_command():
         return None
 
 
+# A WAITING STEP (issue #196): background work asks the owner for a yes with `godspeed-step open`, and
+# the owner answers with a plain yes or no. The program matches the answer to the step before the model
+# runs (notebook/core/waiting-steps.mjs); this hands it the owner's message, in the owner's own private
+# Telegram chat only, and tells the model what happened or to ask which one is meant.
+def _owner_telegram(session_id):
+    try:
+        from gateway.session_context import get_session_env
+        got = {field: str(get_session_env("HERMES_SESSION_" + field, "") or "")
+               for field in ("PLATFORM", "CHAT_ID", "CHAT_TYPE", "USER_ID", "ID")}
+        owner = os.environ.get("TELEGRAM_ALLOWED_USERS", "").strip()
+        return (re.fullmatch(r"[1-9][0-9]*", owner) is not None and got["PLATFORM"] == "telegram"
+                and got["CHAT_TYPE"] in ("dm", "private") and got["CHAT_ID"] == owner
+                and got["USER_ID"] == owner and got["ID"] == session_id)
+    except (ImportError, AttributeError):
+        return False
+
+
+def _step_command():
+    try:
+        with open(os.path.join(HERE, "step-command.txt"), encoding="utf-8") as f:
+            command = json.load(f)
+        return command if isinstance(command, list) and len(command) >= 3 else None
+    except (OSError, ValueError):
+        return None
+
+
+def step_block(report):
+    """The block the step command returned for an answered, asked or choosing turn, or None."""
+    if isinstance(report, dict) and report.get("kind") in ("answered", "ask", "choose") and isinstance(report.get("context"), str):
+        return report["context"] or None
+    return None
+
+
+def _step_timeout():
+    try:
+        return float(os.environ.get("GODSPEED_STEP_PLUGIN_TIMEOUT") or 5)
+    except ValueError:
+        return 5
+
+
+def _text(message):
+    if isinstance(message, list):
+        message = " ".join(str(p.get("text", "")) for p in message if isinstance(p, dict))
+    return message if isinstance(message, str) else ""
+
+
+def waiting_step_block(message, session_id):
+    command = _step_command()
+    if not command or not _text(message).strip() or not _owner_telegram(session_id):
+        return None
+    run = subprocess.run(command[:2] + ["heard", "--chat", "telegram"] + command[2:], input=_text(message),
+                         capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=_step_timeout())
+    return step_block(json.loads(run.stdout)) if run.returncode == 0 else None
+
+
 def on_pre_llm_call(**kwargs):
     try:
         # A scheduled run is not a conversation with the owner.
@@ -122,6 +180,11 @@ def on_pre_llm_call(**kwargs):
             pass
         try:
             blocks.append(voice_block(kwargs.get("user_message")))
+        except Exception:
+            pass
+        try:
+            if str(kwargs.get("platform") or "") == "telegram":
+                blocks.append(waiting_step_block(kwargs.get("user_message"), str(kwargs.get("session_id") or "")))
         except Exception:
             pass
         root = _mission_control()

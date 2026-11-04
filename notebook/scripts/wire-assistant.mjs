@@ -109,6 +109,13 @@ for(const command of (process.env.GODSPEED_ORIGINAL_RUNTIME==='on'?['mail','watc
  if(process.platform==='win32')atomic(bin+'.cmd',cmd(at=>'"'+at(process.execPath)+'" "'+at(script)+'" %* --godspeed "'+at(root)+'"\r\n'));
  shellCommand(bin,[process.execPath,script],' --godspeed '+quote(root));
 }
+// THE ONE WAY TO ASK FOR A YES (core/waiting-steps.mjs): routines, add-ons and the assistant open a
+// waiting step with `godspeed-step open`; the chat plugin below hands the owner's plain yes or no to it.
+{
+ const script=path.join(kit,'notebook','bin','godspeed-step.mjs'),bin=path.join(home,'bin','godspeed-step');
+ if(process.platform==='win32')atomic(bin+'.cmd',cmd(at=>'"'+at(process.execPath)+'" "'+at(script)+'" %* --godspeed "'+at(root)+'"\r\n'));
+ shellCommand(bin,[process.execPath,script],' --godspeed '+quote(root));
+}
 const packagedSkills=[['coach','coach'],['journal','interstitial-journal'],['headache','headache-tracker'],['charm','charm-challenge']];
 for(const [addon,skill] of packagedSkills){
  const source=path.join(kit,'third-party/addons/godspeed-'+addon);
@@ -136,6 +143,7 @@ catch(error){console.error('The skills your assistant saved in its own folder we
 // scheduled job delivered is not part of the chat the assistant sees next.
 fs.cpSync(path.join(kit,'notebook','assistant-files','godspeed-context'),path.join(home,'plugins','godspeed-context'),{recursive:true,filter:source=>!/__pycache__/.test(source)});
 atomic(path.join(home,'plugins','godspeed-context','mission-control.txt'),root+'\n');
+atomic(path.join(home,'plugins','godspeed-context','step-command.txt'),JSON.stringify([process.execPath,path.join(kit,'notebook','bin','godspeed-step.mjs'),'--godspeed',root])+'\n');
 // THE ONE OUTGOING STEP (core: assistant-files/godspeed-reply, issue #140): Hermes keeps only the first
 // replacement any transform_llm_output callback returns, so this plugin is the one, and it runs the
 // steps other plugins add. Its first step has a reply go out in the language of the message it

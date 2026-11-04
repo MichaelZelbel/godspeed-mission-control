@@ -60,7 +60,6 @@ export class Telegram {
           if(['/notebook','/chat'].includes(text)&&this.loginLink)reply='Open your '+(text==='/chat'?'chat':'notebook')+': '+this.loginLink(text==='/chat'?'/chat':'/');
           else if(text.startsWith('/capture ')){const note=await this.store.saveAsync('notes',{id:'telegram-note-'+update.update_id,title:'Telegram capture',content:text.slice(9),source_app:'telegram'});reply='Saved your note: '+note.title;}
           else if(text==='/status'){const jobs=this.store.list('jobs');reply='Your mission control has '+this.store.records.size+' records and '+jobs.filter(j=>!j.paused).length+' enabled routines.';}
-          else if(text.startsWith('/approve ')){const approval=this.store.get('approvals',text.slice(9).trim());if(!approval||approval.status!=='pending')throw new Error('Pending approval missing');await this.store.saveAsync('approvals',{id:approval.id,status:'approved',user_words:text,approved_at:new Date().toISOString()});reply='Recorded your approval for '+approval.title+'.';}
           else {await this.store.saveAsync('conversation_messages',{role:'user',content:text,source_app:'telegram',conversation_id:'telegram-owner'});const result=await this.domains.invoke('conversation-chat',{message:text,conversation_id:'telegram-owner',request_id:id});answerResult=result;reply=result.reply;answered=true;}
           sendAttempted=true;
           const delivered=await this.replyWithProgress(reply,answerResult,message.from?.language_code||'en');

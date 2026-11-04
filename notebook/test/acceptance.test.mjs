@@ -49,6 +49,14 @@ test('candidate Telegram acknowledges owner captures once and never replays unce
  const bot=new Telegram({store,domains,token:'synthetic-bot',owner:'123',transport});await bot.tick();await bot.tick();assert.equal(sends,1);assert.equal(query.rows('notes').length,1);assert.equal(store.get('command_receipts','telegram-1').state,'verified');
  const failed=new Telegram({store,domains,token:'synthetic-bot',owner:'123',transport:async url=>{if(url.endsWith('sendMessage'))throw new Error('Network uncertainty');return {ok:true,json:async()=>({ok:true,result:[{update_id:3,message:{from:{id:123,is_bot:false},chat:{id:123,type:'private'},text:'/capture Uncertain send'}}]})};}});await failed.tick();await failed.tick();assert.equal(store.get('command_receipts','telegram-3').state,'needs_review');assert.equal(query.rows('notes').length,2);
 });
+test('candidate Telegram no longer takes an /approve command: the text is an ordinary message',async()=>{
+ const store=new Store(temporary()),query=new QueryService(store),seen=[],domains={invoke:async(name,input)=>{seen.push(input.message);return {reply:'ordinary'};}};
+ store.save('approvals',{id:'abc',status:'pending',title:'Fictional send'});
+ const updates=[{update_id:1,message:{from:{id:123,is_bot:false},chat:{id:123,type:'private'},text:'/approve abc'}}];
+ const transport=async url=>({ok:true,json:async()=>url.endsWith('getUpdates')?{ok:true,result:updates}:{ok:true,result:{message_id:1}}});
+ await new Telegram({store,domains,token:'synthetic-bot',owner:'123',transport}).tick();
+ assert.deepEqual(seen,['/approve abc']);assert.equal(store.get('approvals','abc').status,'pending');
+});
 test('health, disk and routine checks produce verified artifacts without a model',async()=>{
  const store=new Store(temporary()),query=new QueryService(store);store.save('health_observations',{observed_at:new Date().toISOString(),metric:'sleep_hours',value:7.5});store.save('medications',{taken_at:new Date().toISOString(),name:'Synthetic medicine',dose:'Reported amount'});
  for(const kind of ['health-summary','disk-check','selftest','job-check','attention-review'])assert.ok((await procedure({id:kind,kind},{store,query})).verified);

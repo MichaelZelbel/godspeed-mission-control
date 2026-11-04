@@ -146,6 +146,19 @@ print(json.dumps(m.on_pre_llm_call(platform="cron")))`,plugin],{encoding:'utf8'}
   assert.equal(blocks[1],'null','never in a scheduled run');
 });
 
+test('a plain yes in the owner\'s private Telegram chat reaches the waiting step command, and nowhere else does',{skip:!havePython&&'no Python here'},t=>{
+  const plugin=path.join(kit,'notebook','assistant-files','godspeed-context','__init__.py');
+  const out=execFileSync(python,['-c',`import importlib.util,json,sys
+spec=importlib.util.spec_from_file_location("p",sys.argv[1]);m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
+reports=[{"kind":"answered","context":"[godspeed-step] a"},{"kind":"ask","context":"b"},{"kind":"choose","context":"c"},{"kind":"none"},{"kind":"ask"},"x",None]
+print(json.dumps([m.step_block(r) for r in reports]))
+print(json.dumps(m.on_pre_llm_call(platform="telegram",user_message="yes",session_id="s")))
+print(json.dumps(m.on_pre_llm_call(platform="cron",user_message="yes",session_id="s")))`,plugin],{encoding:'utf8'}).trim().split('\n');
+  assert.deepEqual(JSON.parse(out[0]),['[godspeed-step] a','b','c',null,null,null,null]);
+  assert.equal(out[1],'null','without the owner\'s Telegram session nothing is asked of the step command');
+  assert.equal(out[2],'null');
+});
+
 test('the recipe is installed for a starter-born assistant, names its doors and uses only tools the notebook has',async t=>{
   const {root,store}=workspace(t),source=path.join(kit,'notebook','recipes','context-setup');
   installSkillTree(store,source,path.join(root,'skills','context-setup'));
