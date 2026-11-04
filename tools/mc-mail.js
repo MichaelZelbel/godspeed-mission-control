@@ -293,7 +293,8 @@ const TOOLS = [
 
 // ------------------------------------------------------------------ counting mail from its headers
 // THE ONE MAIL CALL A TRACKER'S MAIL RULE MAKES (2026-11-04, issue #215): who sent it, its subject, its date
-// and its id, never a body, a preview or an attachment. Only mail from a requested sender is returned, as
+// and its id, never a body or an attachment. AgentMail's list call also returns a preview: it is received
+// and dropped in memory before anything is returned, stored or logged, and is never used for matching. Only mail from a requested sender is returned, as
 // a bare lowercase address, so no one else's address leaves this program. A sender with an @ is one
 // address; one without is a domain, and matches its subdomains too. Every page the mailbox has since that
 // day is read, so the answer is the whole window; a message found by two selectors is returned once.

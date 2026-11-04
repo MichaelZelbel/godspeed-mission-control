@@ -5,8 +5,9 @@
 // routine "Mail counts") adds one entry of 1 for each matching mail, on the mail's local date.
 //
 // NEVER THE BODY. The only mail call here is mc-mail's headerSearch (tools/mc-mail.js): it returns
-// message id, sender, subject and date, and fetches no body, preview or attachment. No sender, shop or
-// phrase is built in: every value comes from the person's rule.
+// message id, sender, subject and date, and fetches no body or attachment. AgentMail's list call also
+// returns a short preview; it is received and dropped in memory before anything is returned, stored or
+// logged, and is never used for matching. No sender, shop or phrase is built in: every value comes from the person's rule.
 //
 // An install where no tracker has a rule makes no mail call and does not even load mc-mail.
 import fs from 'node:fs';
