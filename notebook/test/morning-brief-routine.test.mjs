@@ -19,7 +19,7 @@ import {QueryService} from '../core/query.mjs';
 import {addonCommand} from '../core/native-personal.mjs';
 import {routineFiles} from '../core/starting-routines.mjs';
 import {BRIEF_SCRIPT} from '../core/notebook-routines.mjs';
-import {runMorningBrief,todaysMorningBrief} from '../scripts/morning-brief.mjs';
+import {runMorningBrief} from '../scripts/morning-brief.mjs';
 
 const python=process.env.GODSPEED_TEST_PYTHON||(process.platform==='win32'?'python':'python3');
 const havePython=spawnSync(python,['--version']).status===0;
@@ -140,7 +140,7 @@ test('asked for in the chat, a saved briefing of today is printed unchanged and 
  const provider=async input=>verifies(input)||OK;
  const {text}=await runMorningBrief({root,provider});
  const before=JSON.stringify(briefNotes(root));
- const asked=await todaysMorningBrief({root,provider:async()=>{throw Error('the AI must not be asked');}});
+ const asked=await runMorningBrief({root,provider:async()=>{throw Error('the AI must not be asked');}});
  assert.equal(asked.text,text);assert.equal(JSON.stringify(briefNotes(root)),before);
 });
 
@@ -150,16 +150,16 @@ test('a saved briefing keeps its boundary whitespace when asked for in the chat'
  await runMorningBrief({root,provider});
  const store=new Store(root),note=briefNotes(root)[0],content='\n  '+note.content+'  \n\n';
  store.save('notes',{...store.get('notes',note.id),content});
- const asked=await todaysMorningBrief({root,provider:async()=>{throw Error('the AI must not be asked');}});
+ const asked=await runMorningBrief({root,provider:async()=>{throw Error('the AI must not be asked');}});
  assert.equal(asked.text,content);
 });
 
 test('asked for in the chat with none saved, the briefing is saved once, and asking again saves no second note',async t=>{
  const {root}=workspace(t);let writes=0;
  const provider=async input=>verifies(input)||(writes++,OK);
- const first=await todaysMorningBrief({root,provider});
+ const first=await runMorningBrief({root,provider});
  assert.equal(briefNotes(root).length,1);
- const again=await todaysMorningBrief({root,provider});
+ const again=await runMorningBrief({root,provider});
  assert.equal(again.text,first.text);assert.equal(briefNotes(root).length,1);assert.equal(writes,1);
 });
 
@@ -168,7 +168,7 @@ test('a briefing saved on an earlier day is not today\'s, and the same words may
  const provider=async input=>verifies(input)||OK;
  const first=await runMorningBrief({root,provider});
  const tomorrow=new Date(Date.now()+2*86400000);
- const next=await todaysMorningBrief({root,provider,now:tomorrow});
+ const next=await runMorningBrief({root,provider,now:tomorrow});
  assert.equal(next.text,first.text);assert.equal(briefNotes(root).length,2,'two notes, one for each day');
 });
 
@@ -184,7 +184,7 @@ test('the recipe names the command first and keeps hand-writing only as the fall
 test('the routine after the chat prints nothing for the briefing the chat showed, and saves no second one',async t=>{
  const {root}=workspace(t);let n=0;
  const provider=async input=>verifies(input)||(n++,OK);
- const chat=await todaysMorningBrief({root,provider});
+ const chat=await runMorningBrief({root,provider});
  const script=fileURLToPath(new URL('../scripts/morning-brief.mjs',import.meta.url));
  const run=(...args)=>spawnSync(process.execPath,[script,...args],{encoding:'utf8',env:{...process.env,GODSPEED_WORKSPACE:root}});
  const routine=run();
@@ -201,7 +201,7 @@ test('the recipe has the one-sentence answer for a briefing the notebook keeps s
 // The person's day is the installation's (Europe/Berlin here), not UTC, and a briefing keeps the day
 // it was asked for even when it is committed after local midnight.
 const save=(store,fields)=>store.save('notes',{title:'Your morning briefing',content:'MADE-UP',source_app:'morning-brief',...fields});
-const seen=(root,at)=>todaysMorningBrief({root,provider:async()=>{throw Error('asked');},now:new Date(at)}).then(r=>r.text,e=>e.message);
+const seen=(root,at)=>runMorningBrief({root,provider:async()=>{throw Error('asked');},now:new Date(at)}).then(r=>r.text,e=>e.message);
 
 test('a saved briefing without a day belongs to the installation\'s day, not the UTC day',async t=>{
  const {root,store}=workspace(t);
@@ -225,13 +225,13 @@ test('a briefing asked for before local midnight and committed after it stays th
  // Its commit time lands after midnight in Berlin; the next day's request must still run its own.
  new Store(root).save('notes',{...note,created_at:'2026-11-04T23:30:00Z'});
  assert.equal(await seen(root,'2026-11-04T23:50:00Z'),'asked','5 November does not take 4 November\'s note');
- assert.equal((await todaysMorningBrief({root,provider:async()=>{throw Error('asked');},now:new Date('2026-11-04T22:55:00Z')})).text,note.content.trim());
+ assert.equal((await runMorningBrief({root,provider:async()=>{throw Error('asked');},now:new Date('2026-11-04T22:55:00Z')})).text,note.content.trim());
 });
 
 for(const [name,fields] of [['hidden',{ai_visibility:'hidden'}],['sensitive',{is_sensitive:true}]])
  test(`a ${name} briefing of today is not given to the assistant, and no second one is written`,async t=>{
   const {root,store}=workspace(t);
   save(store,{content:'PRIVATE',brief_day:'2026-11-04',created_at:'2026-11-04T08:00:00Z',...fields});
-  const r=await todaysMorningBrief({root,provider:async()=>{throw Error('the AI must not be asked');},now:new Date('2026-11-04T09:00:00Z')});
+  const r=await runMorningBrief({root,provider:async()=>{throw Error('the AI must not be asked');},now:new Date('2026-11-04T09:00:00Z')});
   assert.equal(r.text,'');assert.equal(briefNotes(root).length,1);
  });

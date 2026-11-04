@@ -73,15 +73,12 @@ export async function runMorningBrief({root,provider=null,env=process.env,now=ne
  return {result,existing:false,text:note?String(note.content||'').trim():''};
 }
 
-// Asked for in the chat (#193): the same admission runMorningBrief gives the routine, so one day has one briefing whoever asks first.
-export const todaysMorningBrief=runMorningBrief;
-
 if(import.meta.url===pathToFileURL(process.argv[1]||'').href){
  const at=process.argv.lastIndexOf('--godspeed'),root=(at>0&&process.argv[at+1])||process.env.GODSPEED_WORKSPACE||process.env.GODSPEED_ROOT;
  if(!root){console.error('The morning brief does not know which mission control to read (GODSPEED_WORKSPACE).');process.exit(2);}
  try{
   const today=process.argv.includes('--today');
-  const {text,existing}=await (today?todaysMorningBrief:runMorningBrief)({root});
+  const {text,existing}=await runMorningBrief({root});
   if(text&&(today||!existing))process.stdout.write(text+'\n');
   process.exit(0);
  }catch(error){
