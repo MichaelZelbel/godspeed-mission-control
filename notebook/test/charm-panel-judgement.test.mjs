@@ -6,6 +6,8 @@ import path from 'node:path';
 import {EventEmitter} from 'node:events';
 import {PassThrough} from 'node:stream';
 import {createService} from '../server/main.mjs';
+import {JUDGE_PROTOCOL} from '../../third-party/addons/godspeed-charm/lib/judge.mjs';
+import {addonInvocation} from '../core/native-personal.mjs';
 
 // Issue #218: a slip typed in the notebook's chat panel gets the same question the Hermes plugin
 // asks. The panel's route is /api/browser-chat -> domains.nativeAgent (a one-shot assistant run that
@@ -70,6 +72,24 @@ test('a yes to the open question records the reset, and a neutral message gets n
  assert.equal(state.open.length,0);assert.equal(state.resetToday,true);
 });
 
+test('a no to the open question records kept, not a reset',{skip},async t=>{
+ const {say,op}=await panel(t);
+ await op({action:'start',words:'start'});
+ assert.match(await say(VENT),/Back to 21\?/);
+ await say('no');
+ const state=(await op({action:'status'})).state;
+ assert.equal(state.open.length,0);assert.equal(state.kept,1);assert.equal(state.resetToday,false);
+});
+
+test('the verdict words the panel accepts are the plugin\'s',()=>{
+ const py=fs.readFileSync(new URL('../../third-party/addons/godspeed-charm/hermes/plugin/godspeed-charm/__init__.py',import.meta.url),'utf8');
+ const literal=py.match(/JUDGE_PROTOCOL = (\{.*\})/)[1].replace(/\(/g,'[').replace(/\)/g,']').replace(/,\s*\]/g,']');
+ assert.deepEqual(JSON.parse(literal),JUDGE_PROTOCOL);
+});
+
+test('a plugin-style judge call carrying a model command is refused on the public path',()=>{
+ assert.throws(()=>addonInvocation({root:'.',state:'.',get:()=>null},{addon:'charm',args:['judge','--model-command','/tmp/x']}),/not available/);
+});
 
 test('with no challenge running the panel is unchanged',{skip},async t=>{
  const {say,op}=await panel(t);

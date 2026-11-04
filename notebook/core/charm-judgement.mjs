@@ -7,19 +7,20 @@
 // goes wrong, the reply goes out as the assistant wrote it.
 import fs from 'node:fs';import path from 'node:path';import {randomUUID} from 'node:crypto';
 import {addonInvocation} from './native-personal.mjs';
+import {JUDGE_PROTOCOL} from '../../third-party/addons/godspeed-charm/lib/judge.mjs';
 import {runChild} from './child-process.mjs';
 import {charmConversation,charmOperation} from './charm-operation.mjs';
 
-const VERDICTS=['ask','answer','none'],SOURCES=['rule','model','words'];
 // The seconds the judgement may take from the message's arrival; as in the plugin the variable exists for tests.
 const judgeSeconds=()=>Number(process.env.GODSPEED_CHARM_JUDGE_SECONDS)||25;
-const WORD_CHECK_MS=15000;
+// The word check after the limit gets the plugin's patience (its _timeout()), under the same variable.
+const wordCheckMs=()=>(Number(process.env.GODSPEED_CHARM_PLUGIN_TIMEOUT)||5)*1000;
 const modelCommand=home=>{const file=path.join(home||'.','bin','godspeed-model'+(process.platform==='win32'?'.cmd':''));return fs.existsSync(file)?file:null;};
 const verdictOf=stdout=>{
  for(const line of String(stdout).split('\n').reverse()){
   if(!line.trim().startsWith('{'))continue;
   let value;try{value=JSON.parse(line);}catch{continue;}
-  if(value?.ok===true&&VERDICTS.includes(value.verdict)&&SOURCES.includes(value.source)&&(value.verdict!=='answer'||['yes','no'].includes(value.answer)))return value;
+  if(value?.ok===true&&JUDGE_PROTOCOL.verdict.includes(value.verdict)&&JUDGE_PROTOCOL.source.includes(value.source)&&(value.verdict!=='answer'||JUDGE_PROTOCOL.answer.includes(value.answer)))return value;
  }
  return null;
 };
@@ -33,7 +34,7 @@ export function startCharmJudgement(domains,input){
  if(!words||!conversation)return nothing;
  const {store}=domains,file=path.join(store.state,'charm-words',randomUUID()+'.txt');
  const judge=async(extra,timeoutMs)=>{
-  const {command,argv,cwd,env}=addonInvocation(store,{addon:'charm',args:['judge','--conversation',conversation,'--words-file',file,...extra]});
+  const {command,argv,cwd,env}=addonInvocation(store,{addon:'charm',args:['judge','--conversation',conversation,'--words-file',file,...extra]},{judge:true});
   const run=await runChild(command,argv,{cwd,env,timeoutMs,signal:input.signal});
   return run.code===0?verdictOf(run.stdout):null;
  };
@@ -47,7 +48,7 @@ export function startCharmJudgement(domains,input){
  return {drop,async end(reply){
   try{
    // Past the limit, or no answer: the word check alone, as the plugin does.
-   const v=await verdict||await judge(['--no-model'],WORD_CHECK_MS).catch(()=>null);
+   const v=await verdict||await judge(['--no-model'],wordCheckMs()).catch(()=>null);
    if(!v||v.verdict==='none')return reply;
    const done=charmOperation(domains,v.verdict==='answer'?{action:'answer',answer:v.answer,conversation,words,language:v.language}:{action:'asked',conversation,words,language:v.language});
    return done.ok&&done.reply?ending(reply,done.reply):reply;

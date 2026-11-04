@@ -77,11 +77,12 @@ export function nativeOperation(store,input){
 // it; /charm shows the add-on's own {ok:false,reply,state} (personal-operations.mjs).
 const refusal=(reply,state=null,output=JSON.stringify({ok:false,reply,state}))=>Object.assign(Error(reply),{refusal:{reply,state},output});
 // The checked command line of an add-on and how to run it; addonCommand runs it and waits, a caller
-// that must not block the server runs it itself (charm-judgement.mjs).
-export function addonInvocation(store,{addon,args}){
+// that must not block the server runs it itself. `judge` takes a command to run (--model-command), so
+// only charm-judgement.mjs, which fixes that command, may ask for it.
+export function addonInvocation(store,{addon,args},{judge=false}={}){
  if(!['coach','journal','headache','charm'].includes(addon)||!Array.isArray(args)||args.some(a=>typeof a!=='string'||a.length>20000)||args.some(a=>['--godspeed','--evidence-script'].includes(a)))throw Error('Invalid personal command');
- const allowed=addon==='charm'?['help','start','status','asked','answer','slip','stop','brief','context','config','judge']:addon==='headache'?['help','start','log','end','set','med','cancel','open','list','show','patterns','daily','context','config']:addon==='coach'?['help','areas','show','area','brief','talk','habit','habits','context','config']:['help','start','define','note','done','drop','reopen','check','status','context','report','week','words','open','met','config'];
- if(!allowed.includes(args[0]))throw Error('This personal command is not available through the notebook');
+ const allowed=addon==='charm'?['help','start','status','asked','answer','slip','stop','brief','context','config']:addon==='headache'?['help','start','log','end','set','med','cancel','open','list','show','patterns','daily','context','config']:addon==='coach'?['help','areas','show','area','brief','talk','habit','habits','context','config']:['help','start','define','note','done','drop','reopen','check','status','context','report','week','words','open','met','config'];
+ if(!allowed.includes(args[0])&&!(judge&&addon==='charm'&&args[0]==='judge'))throw Error('This personal command is not available through the notebook');
  if(args.some(a=>/^(?:evidence[.]script|--hook|--command|--script)$/.test(a)))throw Error('Executable hooks require a separately reviewed installation');
  const autoIndex=args.indexOf('--auto');if(autoIndex!==-1&&!parseAuto(args[autoIndex+1]))throw Error('Automatic habit evidence needs a numeric measurement comparison');
  const timezone=store.get('settings','installation')?.timezone||'UTC',load=addon==='charm'?charmSettings:addon==='headache'?headacheSettings:addon==='coach'?coachSettings:journalSettings,save=addon==='charm'?saveCharm:addon==='headache'?saveHeadache:addon==='coach'?saveCoach:saveJournal;
