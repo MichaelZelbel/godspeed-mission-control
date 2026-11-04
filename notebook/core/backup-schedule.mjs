@@ -76,7 +76,7 @@ export class BackupSchedule{
   const reason=String(error?.message||error||'').split('\n')[0].replace(/[A-Za-z]:[\\/][^\s'"]*|(?<![\w.])\/(?:home|opt|root|var|tmp|Users|srv|data|mnt|private)\/[^\s'"]*/g,'[folder]').trim().slice(0,200)||'it stopped before it was complete';
   const hours=Math.max(1,Math.round((retry-now)/3600000)),day=new Date(now).toISOString().slice(0,10);
   const text='Your nightly backup did not work: '+reason+'. It is tried again in '+(hours===1?'an hour':hours+' hours')+'. To save one now, open Settings in the notebook and click Save a backup under Recovery.';
-  try{queueNotice(this.store,{id:'backup-failed-'+day,text});}catch{}
+  try{queueNotice(this.store,{id:'backup-failed-'+day,text,about:"last night's backup"});}catch{}
   try{await this.store.saveAsync('notifications',{id:'backup-failed',status:'pending',title:'A nightly backup did not work',body:text,link:'/dashboard/settings#recovery',failed_at:new Date(now).toISOString()},undefined,{timeoutMs:30000});}catch{}
  }
  async settle(){try{if(this.store.get('notifications','backup-failed')?.status==='pending')await this.store.saveAsync('notifications',{id:'backup-failed',status:'resolved',resolved_at:new Date().toISOString()},undefined,{timeoutMs:30000});}catch{}}
