@@ -249,7 +249,7 @@ test('a damaged entry for one connection fails the check instead of restarting i
  const {store}=fixture(t);
  await checkConnections({store,day:D1,probes:stubs({github:down})});
  const file=path.join(store.state,RECORD_FILE),good=fs.readFileSync(file,'utf8');
- for(const bad of [1,'x',[],{},{set_up:true,kind:'other'}]){
+ for(const bad of [1,'x',[],{},{set_up:true,kind:'other'},{set_up:true},{set_up:false,deadline:{slug:'other',key:'other:deadline'}},{set_up:false,kind:'sign-in',told:true,failing_since:D1,deadline:{slug:'other',key:'other:deadline'}}]){
   const record=JSON.parse(good);record.connections.github=bad;fs.writeFileSync(file,JSON.stringify(record));
   await assert.rejects(checkConnections({store,day:D2,probes:stubs({github:down})}));
  }
@@ -264,6 +264,18 @@ test('a sign-in notice that cannot be stored keeps its deadline, so a recovery s
  fs.rmSync(file,{recursive:true});
  await checkConnections({store,day:D2,probes:stubs()});
  assert.equal(deadlines(store).find(d=>/telegram/.test(d.key)).state,'closed');
+});
+
+test('a sign-in still refused after its notice could not be stored queues the notice once, deadline kept',async t=>{
+ const {store}=fixture(t);
+ const file=path.join(store.state,'notices.json');
+ fs.rmSync(file,{force:true});fs.mkdirSync(file);
+ await assert.rejects(checkConnections({store,day:D1,probes:stubs({telegram:refused})}));
+ fs.rmSync(file,{recursive:true});
+ await checkConnections({store,day:D2,probes:stubs({telegram:refused})});
+ await checkConnections({store,day:D2,probes:stubs({telegram:refused})});
+ assert.equal(readNotices(store).filter(n=>/telegram/.test(n.id)).length,1);
+ assert.equal(deadlines(store).find(d=>/telegram/.test(d.key)).state,'open');
 });
 
 test('a notice that cannot be stored does not stop the connections after it, and is retried',async t=>{

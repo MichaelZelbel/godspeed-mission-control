@@ -128,12 +128,15 @@ const bell=async(store,record)=>{try{await store.saveAsync('notifications',recor
 
 const isText=v=>typeof v==='string'&&v!=='';
 // The finite shapes nextState writes: unset, working, a sign-in (maybe with its deadline), an ordinary failure.
-function validEntry(e){
+function validEntry(e,name){
  if(!e||typeof e!=='object'||Array.isArray(e)||typeof e.set_up!=='boolean')return false;
- if(e.deadline!==undefined&&!(e.deadline&&isText(e.deadline.slug)&&isText(e.deadline.key)))return false;
- if(e.kind===undefined)return true;
- if(e.kind==='sign-in')return isText(e.failing_since)&&typeof e.told==='boolean';
- return e.kind==='other'&&isText(e.failing_since)&&isText(e.last_failed_day)&&Number.isInteger(e.failed_days)&&typeof e.told==='boolean';
+ if(e.kind===undefined)return e.deadline===undefined&&(e.set_up?e.ok===true:e.ok===undefined);
+ if(e.kind==='sign-in'){
+  if(!isText(e.failing_since)||typeof e.told!=='boolean'||(e.set_up&&e.ok!==false))return false;
+  const d=e.deadline;
+  return d===undefined||!!d&&d.slug===deadlineSlug(name,e.failing_since)&&d.key===deadlineKey(name,e.failing_since);
+ }
+ return e.kind==='other'&&e.set_up&&e.ok===false&&e.deadline===undefined&&isText(e.failing_since)&&isText(e.last_failed_day)&&Number.isInteger(e.failed_days)&&typeof e.told==='boolean';
 }
 
 // Only an absent record is a first run; a damaged one throws, so an outage streak is never silently restarted.
@@ -141,7 +144,7 @@ export function readCheckRecord(store){
  let text;try{text=fs.readFileSync(path.join(store.state,RECORD_FILE),'utf8');}catch(error){if(error.code==='ENOENT')return {connections:{}};throw error;}
  const data=JSON.parse(text);
  if(!data||typeof data.connections!=='object'||!data.connections||Array.isArray(data.connections))throw new Error('The connection check record is damaged');
- for(const name of NAMES)if(data.connections[name]!==undefined&&!validEntry(data.connections[name]))throw new Error('The connection check record is damaged');
+ for(const name of NAMES)if(data.connections[name]!==undefined&&!validEntry(data.connections[name],name))throw new Error('The connection check record is damaged');
  return data;
 }
 
