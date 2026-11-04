@@ -125,7 +125,7 @@ act() {
   api_table collection_items "$EVIDENCE/items-2.json"
   sleep 2
   cp "$EVIDENCE/commands.json" "$EVIDENCE/commands-final.json"
-  grep -rIl --exclude-dir=node_modules --exclude-dir=versions -F -- "$(cat "$EVIDENCE/marker.txt")" "$ROOT" "$HERMES" 2>/dev/null |
+  grep -rl --exclude-dir=node_modules --exclude-dir=versions -F -- "$(cat "$EVIDENCE/marker.txt")" "$ROOT" "$HERMES" 2>/dev/null |
     grep -v "^$EVIDENCE" >"$EVIDENCE/marker-hits.txt" || :
   rm -f "$EVIDENCE"/.[a-z]* "$EVIDENCE/commands.json"
 }

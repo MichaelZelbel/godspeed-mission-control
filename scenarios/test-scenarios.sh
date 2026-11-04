@@ -2844,6 +2844,9 @@ copy "$P/good" "$P/stored"; printf 'zzz  /opt/data/ingest/2026-11-04.jsonl\n' >"
 refuses 'a wrong token that wrote a file' phone-health-days "$P/stored" 'wrote or changed a file'
 copy "$P/good" "$P/unsynced"; sed -i 's/"walk_km"/"walk_kmx"/' "$P/unsynced/second-days.json"
 refuses 'a second notebook that does not show the same days' phone-health-days "$P/unsynced" 'differ from the server'
+copy "$P/good" "$P/duplicated"
+node -e 'const fs=require("fs"),f=process.argv[1]+"/server-days.json",r=JSON.parse(fs.readFileSync(f));r.push({...r[0],id:"dup"});fs.writeFileSync(f,JSON.stringify(r))' "$P/duplicated"
+refuses 'a second record of steps on one day' phone-health-days "$P/duplicated" 'more than one record'
 copy "$P/good" "$P/last"; sed -i 's/69.5/70/' "$P/last/server-days.json"
 refuses 'a weight that is not the last of the day' phone-health-days "$P/last" 'weight_kg on 2026-11-03 is 70'
 
@@ -2865,7 +2868,11 @@ copy "$I/good" "$I/short"; printf 'Yesterday was a short day at 19:55.\nProtein:
 refuses 'a briefing that calls the day short' incomplete-day "$I/short" 'called the unfinished day short'
 copy "$I/good" "$I/counted"; printf 'Data stopped at 19:55.\nProtein days this week: 3 of 7.\n' >"$I/counted/brief-1.txt"
 refuses 'a day counted although it is unfinished' incomplete-day "$I/counted" 'as unknown'
-copy "$I/good" "$I/still"; printf 'Protein: yesterday still unknown, 118 g never counted.\n' >"$I/still/brief-2.txt"
+copy "$I/good" "$I/no-weekly"; printf 'Data stopped at 19:55.\nProtein is unknown.\n' >"$I/no-weekly/brief-1.txt"; printf 'Protein: you gave 118 g.\n' >"$I/no-weekly/brief-2.txt"
+refuses 'protein wording with no weekly count' incomplete-day "$I/no-weekly" 'as unknown'
+copy "$I/good" "$I/no-weekly-after"; printf 'Protein: you gave 118 g.\n' >"$I/no-weekly-after/brief-2.txt"
+refuses 'no weekly count after the number is given' incomplete-day "$I/no-weekly-after" 'gives no weekly protein count'
+copy "$I/good" "$I/still"; printf 'Protein this week: yesterday still unknown, 118 g never counted.\n' >"$I/still/brief-2.txt"
 refuses 'a number given by hand that is not counted' incomplete-day "$I/still" 'still shows the day as unknown'
 
 section 'phone-goes-quiet'
@@ -2916,6 +2923,8 @@ copy "$M/good" "$M/again"; printf '[{"id":"i1","n":"scenario-1@example.invalid"}
 refuses 'a second run that counts again' mail-count "$M/again" 'a second run of the routine changed the count'
 copy "$M/good" "$M/leak"; printf '/home/x/godspeed-v2/logs/a.log\n' >"$M/leak/marker-hits.txt"
 refuses 'the marker in a log' mail-count "$M/leak" 'the marker that every mail body carries'
+mkdir -p "$M/bin/root"; printf 'x\0MAILCOUNT-MARKER-abc\0' >"$M/bin/root/state.db"
+if grep -rl -F -- MAILCOUNT-MARKER-abc "$M/bin/root" | grep -q state.db; then ok "the marker scan reports a marker held in a binary store"; else bad "the marker scan misses a marker held in a binary store"; fi
 
 # the mailbox itself, read over IMAP from the stand-in the way the scenario fills it
 FX=$(node -e '
@@ -2970,11 +2979,33 @@ copy "$T2/good" "$T2/held"; printf 'AREA: health\nSTATE: held\n\n## The opening\
 refuses 'last week'"'"'s talk already held, not open' talk-on-talk-day "$T2/held" 'was not open and unanswered'
 copy "$T2/good" "$T2/still-open"; cp "$T2/good/talk-old.md" "$T2/still-open/talk-old-after.md"
 refuses 'last week'"'"'s talk left open' talk-on-talk-day "$T2/still-open" 'not closed as not held'
+copy "$T2/good" "$T2/open-with-note"; printf 'AREA: health\nSTATE: opened\n\n## The opening\n\nGood evening.\n\n## Note\n\nnot held\n' >"$T2/open-with-note/talk-old-after.md"
+refuses 'last week'"'"'s talk still open with a not-held note' talk-on-talk-day "$T2/open-with-note" 'not closed as not held'
 copy "$T2/good" "$T2/other-opening"; printf 'Last Tuesday'"'"'s talk is still open. Hello there.\n' >"$T2/other-opening/opening-new.txt"
 copy "$T2/good" "$T2/said"; printf 'AREA: health\nSTATE: opened\n\n## The opening\n\nGood evening.\n\n## What you said\n\nMy LDL worries me.\n' >"$T2/said/talk-old.md"
 refuses 'last week'"'"'s talk answered in "What you said"' talk-on-talk-day "$T2/said" 'was answered before'
 copy "$T2/good" "$T2/he-said"; printf 'AREA: health\nSTATE: opened\n\n## The opening\n\nGood evening.\n\n## What he said\n\nMy LDL worries me.\n' >"$T2/he-said/talk-old.md"
 refuses 'last week'"'"'s talk answered in "What he said"' talk-on-talk-day "$T2/he-said" 'was answered before'
+# the scenario's "answered" test and the coach's readTalk(...).answered agree on one corpus
+ANS=$TMP/answered; rm -rf "$ANS"; mkdir -p "$ANS/health/talks"
+i=0
+while IFS= read -r body; do
+  i=$((i + 1)); printf 'AREA: health\nSTATE: opened\n\n## The opening\n\nHi.\n%b' "$body" >"$ANS/health/talks/2026-01-0$i.md"
+done <<'CORPUS'
+\n
+\n## What you said\n
+\n## What you said\n\n \t \n
+\n## What you said\n\nMy LDL.\n
+\n## What he said\n\nMy LDL.\n
+\n## What he said\n \n\n## Note\n\nsomething\n
+\n## Note\n\nWhat you said: nothing\n
+\n## What you said\n\n## What he said\n\nyes\n
+CORPUS
+CORP=$(node --input-type=module -e '
+const { readTalk } = await import(process.argv[1] + "/third-party/addons/godspeed-coach/lib/talks.mjs");
+for (let i = 1; i <= 8; i++) console.log(readTalk({ dir: process.argv[2] + "/health" }, "2026-01-0" + i).answered);' "$ROOT" "$ANS" 2>&1)
+GOT=$(for i in 1 2 3 4 5 6 7 8; do if bash -c '. "$1/scenarios/numbers-lib.sh"; talk_answered "$2"' _ "$ROOT" "$ANS/health/talks/2026-01-0$i.md"; then echo true; else echo false; fi; done)
+if [ -n "$CORP" ] && [ "$CORP" = "$GOT" ]; then ok "the scenario's answered-talk test agrees with readTalk on all 8 records"; else bad "answered-talk test disagrees with readTalk: coach=[$(tr '\n' ' ' <<<"$CORP")] scenario=[$(tr '\n' ' ' <<<"$GOT")]"; fi
 refuses 'an opening that is not the preparation'"'"'s' talk-on-talk-day "$T2/other-opening" "did not open with the preparation's opening"
 
 # ============================================================ every one of them, the same shape

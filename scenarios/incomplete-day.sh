@@ -65,7 +65,8 @@ act() {
 }
 
 folded() { tr -s '[:space:]' ' ' <"$1"; }
-protein_lines() { grep -i 'protein' "$1" || true; }
+# the weekly protein count: the briefing line that speaks of protein and of the week
+protein_lines() { grep -i 'protein' "$1" | grep -i 'week' || true; }
 
 check() { # <evidence folder>
   local folder=$1
@@ -86,7 +87,7 @@ check() { # <evidence folder>
   [ -s "$folder/given.txt" ] && ! grep -qi 'error' "$folder/given.txt" ||
     fail "the protein number given by hand was refused: $(tr -d '\n' <"$folder/given.txt" | cut -c1-200)"
   protein_lines "$folder/brief-2.txt" | grep -q . ||
-    fail "the briefing after the protein number was given says nothing about protein"
+    fail "the briefing after the protein number was given gives no weekly protein count"
   if protein_lines "$folder/brief-2.txt" | grep -Eiq "$UNKNOWN"; then
     fail "the briefing after the protein number was given still shows the day as unknown: $(protein_lines "$folder/brief-2.txt" | grep -Ei "$UNKNOWN" | head -n 1 | cut -c1-240)"
   fi

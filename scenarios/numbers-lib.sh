@@ -102,9 +102,15 @@ observation_lines() { # <file>
 # FAILs unless the day record holds exactly this value.
 want_day() { # <observation lines file> <day> <metric> <value>
   local got
-  got=$(awk -v d="$2" -v m="$3" '$1==d && $2==m {print $3}' "$1" | head -n 1)
+  got=$(awk -v d="$2" -v m="$3" '$1==d && $2==m {print $3}' "$1")
+  [ "$(grep -c . <<<"$got")" -le 1 ] || fail "$3 on $2 has more than one record ($(tr '\n' ' ' <<<"$got"))"
   [ -n "$got" ] || fail "no record of $3 on $2 (the notebook holds: $(awk -v d="$2" '$1==d {print $2}' "$1" | tr '\n' ' '))"
   [ "$got" = "$4" ] || fail "$3 on $2 is $got, not $4"
+}
+# Succeeds when the talk record holds a non-empty "What you said" or "What he said" section: what
+# lib/talks.mjs readTalk calls answered (test-scenarios.sh holds the two to the same corpus).
+talk_answered() { # <talk record file>
+  awk '/^## /{keep = ($0 ~ /^## What (you|he) said[ \t]*$/); next} keep && /[^ \t\r]/{found=1} END{exit !found}' "$1"
 }
 # FAILs when the day holds a record of this metric at all.
 no_day() { # <observation lines file> <day> <metric> <why>

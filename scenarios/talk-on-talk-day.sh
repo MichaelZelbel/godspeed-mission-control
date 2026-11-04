@@ -32,6 +32,8 @@
 SCENARIO=talk-on-talk-day
 # shellcheck source=scenarios/scenario-lib.sh
 . "$(dirname "$0")/scenario-lib.sh"
+# shellcheck source=scenarios/numbers-lib.sh
+. "$HERE/numbers-lib.sh"
 scenario_arguments "$@"
 
 ASK='Let us have my health talk now.'
@@ -208,10 +210,9 @@ check() { # <evidence folder>
   [ -s "$folder/talk-old-after.md" ] || fail "last week's talk record ($old) is gone"
   grep -Eq '^STATE: opened$' "$folder/talk-old.md" ||
     fail "last week's talk ($old) was not open and unanswered before this week's request: $(grep -E '^STATE:' "$folder/talk-old.md" | head -1)"
-  # answered the way lib/talks.mjs readTalk reads it: a non-empty "What you said" or "What he said" section
-  awk '/^## /{keep = ($0 ~ /^## What (you|he) said[ \t]*$/); next} keep && /[^ \t\r]/{found=1} END{exit !found}' "$folder/talk-old.md" &&
+  talk_answered "$folder/talk-old.md" &&
     fail "last week's talk ($old) was answered before this week's request, so it was not an open talk"
-  grep -Eiq 'not[- ]held' "$folder/talk-old-after.md" ||
+  grep -Eq '^STATE: not-held\r?$' "$folder/talk-old-after.md" ||
     fail "last week's talk ($old) was not closed as not held by this week's request"
   pass "on the talk day $new, with the talk of $old still open and unanswered, \"$ASK\" opened this week's talk from its sealed preparation, named last week's once, and left it closed as not held with its record kept"
 }
