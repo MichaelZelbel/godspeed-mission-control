@@ -216,6 +216,19 @@ test('a Morning brief set early brings the daily connection check ahead of it, a
  await assert.rejects(failing.tick({raise:true}),/could not create it/);
 });
 
+test('a setup that overlaps the running periodic tick still hears its failed connection-check creation',async t=>{
+ noMail(t);
+ const {store,home,hermes,job}=await withGoal(t);
+ let entered,release;const inside=new Promise(r=>{entered=r;}),gate=new Promise(r=>{release=r;});
+ const failing=new NativeScheduler(store,{home,executable:'hermes',device:'pc',run:async(exe,args,options)=>{if(args[1]==='create'&&args.includes(CONNECTION_JOB)){entered();await gate;throw Error('Hermes could not create it');}return hermes.run(exe,args,options);}});
+ const periodic=failing.tick();
+ await inside;
+ const setup=assert.rejects(failing.tick({raise:true}),/could not create it/);
+ release();
+ await Promise.all([periodic,setup]);
+ assert.equal(job(CONNECTION_JOB),undefined);
+});
+
 test('a Morning brief already at 04:30 when the daily connection check is first made puts the check ahead of it',async t=>{
  noMail(t);
  const {scheduler,job}=await withGoal(t);
