@@ -13,10 +13,11 @@ const HELP=`godspeed-step: ask your owner for a yes, and read the answer.
   open --about "..." --question "..." --yes "..." --no "..." --by ${ASKER_KINDS.map(kind=>kind+':<name>').join('|')} [--chat telegram|notebook] [--job <routine id>]
       Opens a waiting step and prints {"id","message"}. Each text is one plain line without a code.
       --about says what this is about for someone who saw none of the work, --yes and --no say what
-      happens. For a step asked in Telegram nothing is sent: say "message" yourself in your own
-      output, then run: sent <id>; until then a plain yes cannot reach it. A step asked in the notebook is put into the notebook chat for you.
+      happens. For a step asked in Telegram nothing is sent: send "message" to your owner
+      through Telegram's sender, then run: sent <id>; it is accepted only when Telegram has recorded
+      that message as sent, and until then a plain yes cannot reach it. A step asked in the notebook is put into the notebook chat for you.
   sent <id>
-      Tells the program the question of a Telegram step has been said to your owner.
+      Checks that Telegram recorded the question of a Telegram step as sent to your owner.
   get <id>
       Prints the step with status waiting, yes or no.
   heard --chat telegram|notebook

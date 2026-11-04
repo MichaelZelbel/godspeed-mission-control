@@ -57,22 +57,30 @@ export function openStep(store,{about,question,yes,no,by,chat,job}){
  });
  const message=about+' '+question;
  if(chat==='notebook'){
-  try{appendAssistantMessage(store,'general',message);markSent(store,id);}
+  try{appendAssistantMessage(store,'general',message);stamp(store,id);}
   catch(error){withdrawStep(store,id);throw error;}
  }
  return {id,message};
 }
 
-// The asker says the question went out (a notebook step is marked by openStep itself); a step the owner
-// was never shown cannot be answered by a bare yes.
+// A Telegram question is eligible only once the Telegram sender has recorded it: an assistant message
+// in the owner's Telegram conversation, carrying Telegram's own message id, that holds the step's exact
+// words and was saved after the step opened. The asker's say-so is not a receipt. A notebook step is
+// stamped by openStep itself, right after its question is written into the notebook chat.
 export function markSent(store,id){
  return store.withLock(()=>{
   const record=store.get('approvals',id);
   if(!record?.asked_in)throw Error('That step does not exist.');
   if(record.status!=='pending')throw Error('That step is no longer waiting.');
-  if(!record.sent_at)store.commit([store.prepare('approvals',{sent_at:new Date().toISOString()},record)]);
+  if(record.asked_in!=='telegram')throw Error('A notebook step is marked when it is asked.');
+  const words=record.about+' '+record.question;
+  const receipt=store.list('conversation_messages').find(m=>m.role==='assistant'&&m.conversation_id===ROUTES.telegram.conversation&&m.source_app==='telegram'&&m.message_id&&String(m.content).includes(words)&&String(m.created_at||'')>=record.asked_at);
+  if(!receipt)throw Error('Telegram has not recorded that question as sent; it cannot be answered with a plain yes yet.');
+  stampLocked(store,record,receipt.message_id);
  });
 }
+const stamp=(store,id)=>store.withLock(()=>{const record=store.get('approvals',id);if(record&&!record.sent_at)stampLocked(store,record);});
+const stampLocked=(store,record,messageId)=>{if(!record.sent_at)store.commit([store.prepare('approvals',{sent_at:new Date().toISOString(),...(messageId?{sent_message_id:messageId}:{})},record)]);};
 function withdrawStep(store,id){
  try{store.withLock(()=>{const record=store.get('approvals',id);if(record?.status==='pending'&&!record.sent_at)store.commit([store.prepare('approvals',{status:'withdrawn'},record)]);});}catch{}
 }
@@ -98,6 +106,8 @@ export function readChats(dir){try{const data=JSON.parse(fs.readFileSync(path.jo
 const writeChats=(dir,chats)=>atomic(path.join(dir,CHATS_FILE),JSON.stringify(chats,null,2)+'\n');
 const openClarification=(chat,at)=>{const c=chat.clarification;return c&&Date.parse(at)-Date.parse(c.at)<=CLARIFICATION_MS?c:null;};
 const remember=(dir,chats,chat,at,clarification)=>writeChats(dir,{...chats,[chat]:{last_owner_at:at,...(clarification?{clarification}:{})}});
+// Once an answer is committed, losing the chat note must not turn the owner's confirmation into an error.
+const rememberAfterAnswer=(...args)=>{try{remember(...args);}catch{}};
 
 // An ordinary message, with no question open, changes nothing but when the owner last wrote. That
 // costs no Store, which matters because every Telegram message passes here (Hermes' hook waits seconds).
@@ -128,7 +138,7 @@ export function heard(store,{chat,words,at=new Date().toISOString(),scheduled=fa
  if(clarification?.state==='asked'&&listed.length&&!(answer&&listed.length>1)){
   if(answer&&listed.length===1){
    const done=answerStep(store,listed[0],answer,{chat,words});
-   remember(dir,chats,chat,at);
+   rememberAfterAnswer(dir,chats,chat,at);
    return {kind:'answered',step:done.step,reply:answer==='yes'?done.step.on_yes:done.step.on_no,context:answeredContext(done.step,answer)};
   }
   remember(dir,chats,chat,at,{...clarification,step_ids:listed,state:'choosing',words});
@@ -140,7 +150,7 @@ export function heard(store,{chat,words,at=new Date().toISOString(),scheduled=fa
  const [only]=waiting,newerHere=store.list('approvals').some(r=>r.id!==only.id&&r.asked_in===chat&&r.status==='pending'&&delivered(r)&&stepTime(r)>stepTime(only));
  if(waiting.length===1&&only.asked_in===chat&&!newerHere&&!(mine.last_owner_at&&mine.last_owner_at>=stepTime(only))){
   const done=answerStep(store,only.id,answer,{chat,words});
-  remember(dir,chats,chat,at);
+  rememberAfterAnswer(dir,chats,chat,at);
   return {kind:'answered',step:done.step,reply:answer==='yes'?done.step.on_yes:done.step.on_no,context:answeredContext(done.step,answer)};
  }
  const steps=waiting.map(readStep);
@@ -156,6 +166,6 @@ export function answerChosen(store,{chat,id,scheduled=false,at=new Date().toISOS
  const dir=store.state,chats=readChats(dir),mine=chats[chat]||{},clarification=mine.clarification;
  if(!clarification||clarification.state!=='choosing'||!openClarification(mine,at)||!clarification.step_ids.includes(id))throw Error('Your owner has not just chosen that question.');
  const done=answerStep(store,id,clarification.answer,{chat,words:clarification.words});
- writeChats(dir,{...chats,[chat]:{last_owner_at:mine.last_owner_at}});
+ try{writeChats(dir,{...chats,[chat]:{last_owner_at:mine.last_owner_at}});}catch{}
  return done;
 }

@@ -19,7 +19,8 @@ function fixture(t){
  return {root,store};
 }
 const open=(store,about,chat='telegram',extra={})=>openStep(store,{about,question:'Shall I go on?',yes:'I will restart it now.',no:'I will leave it as it is.',by:'routine:test',chat,...extra});
-const ask=(...args)=>{const opened=open(...args);if(args[2]!=='notebook')markSent(args[0],opened.id);return opened;};
+const telegramSaid=(store,message,messageId=7)=>store.save('conversation_messages',{role:'assistant',content:message,conversation_id:'telegram-owner',source_app:'telegram',message_id:messageId,created_at:new Date().toISOString()});
+const ask=(...args)=>{const opened=open(...args);if(args[2]!=='notebook'){telegramSaid(args[0],opened.message);markSent(args[0],opened.id);}return opened;};
 
 test('one step waiting: a yes approves it and the reply says what happens; a no rejects it',t=>{
  const {store}=fixture(t),{id}=ask(store,'The bot stopped.');
@@ -142,10 +143,11 @@ test('a yes for a payload that changed since the question does not release the j
 });
 
 test('godspeed-step opens, reads and answers; a scheduled run cannot answer',t=>{
- const {root}=fixture(t),run=(args,{input='',env={}}={})=>spawnSync(process.execPath,[script,...args,'--godspeed',root],{input,encoding:'utf8',env:{...process.env,...env}});
+ const {root,store}=fixture(t),run=(args,{input='',env={}}={})=>spawnSync(process.execPath,[script,...args,'--godspeed',root],{input,encoding:'utf8',env:{...process.env,...env}});
  const opened=run(['open','--about','The bot stopped.','--question','Restart it?','--yes','I restart it.','--no','I leave it.','--by','routine:test','--chat','telegram']);
  assert.equal(opened.status,0,opened.stderr);const {id,message}=JSON.parse(opened.stdout);assert.equal(message,'The bot stopped. Restart it?');
  assert.equal(JSON.parse(run(['get',id]).stdout).status,'waiting');
+ assert.equal(run(['sent',id]).status,1);telegramSaid(store,message);
  assert.equal(run(['sent',id]).status,0);
  assert.equal(JSON.parse(run(['heard','--chat','telegram'],{input:'how are you'}).stdout).kind,'none');
  assert.equal(JSON.parse(run(['heard','--chat','telegram'],{input:'yes'}).stdout).kind,'ask');
@@ -157,9 +159,12 @@ test('godspeed-step opens, reads and answers; a scheduled run cannot answer',t=>
 });
 
 test('a step whose question was not sent cannot be reached by a bare yes',t=>{
- const {store}=fixture(t),{id}=open(store,'The bot stopped.');
+ const {store}=fixture(t),{id,message}=open(store,'The bot stopped.');
  assert.equal(heard(store,{chat:'telegram',words:'yes'}).kind,'none');assert.equal(store.get('approvals',id).status,'pending');
- markSent(store,id);
+ assert.throws(()=>markSent(store,id),/not recorded/);
+ telegramSaid(store,'Something else entirely.');assert.throws(()=>markSent(store,id),/not recorded/);
+ assert.equal(heard(store,{chat:'telegram',words:'yes'}).kind,'none');
+ telegramSaid(store,message,42);markSent(store,id);assert.equal(store.get('approvals',id).sent_message_id,42);
  assert.equal(heard(store,{chat:'telegram',words:'yes'}).kind,'answered');
 });
 
@@ -176,4 +181,17 @@ test('every chat a step can be asked in has one conversation that routes back to
  assert.equal(chatOf('notebook:person:x'),null);
  const {store}=fixture(t);
  for(const kind of ASKER_KINDS)assert.ok(open(store,'About '+kind,'telegram',{by:kind+':x'}).id);
+});
+
+test('a visible older question is answered even when a newer one in the same chat was never sent',t=>{
+ const {store}=fixture(t),a=ask(store,'The bot stopped.'),b=open(store,'The disk is full.');
+ const result=heard(store,{chat:'telegram',words:'yes'});
+ assert.equal(result.kind,'answered');assert.equal(store.get('approvals',a.id).status,'approved');assert.equal(store.get('approvals',b.id).status,'pending');
+});
+
+test('a chat-note that cannot be saved after the answer does not hide the committed answer',t=>{
+ const {root,store}=fixture(t);ask(store,'The bot stopped.');
+ fs.mkdirSync(path.join(root,'.godspeed','waiting-step-chats.json'),{recursive:true});
+ const result=heard(store,{chat:'telegram',words:'yes'});
+ assert.equal(result.kind,'answered');assert.equal(store.list('approvals')[0].status,'approved');
 });
