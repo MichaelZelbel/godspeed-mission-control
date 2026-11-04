@@ -27,13 +27,13 @@ import {addDays} from '../../third-party/addons/godspeed-coach/lib/clock.mjs';
 // A probe answers only {set_up, ok, kind}; kind is 'sign-in' (login or key refused) or 'other'. No
 // service text, address or key ever leaves a probe, so none can reach a record, a message or a log.
 export const CONNECTIONS={
- ai:{label:'your AI',stops:'your routines and your chat cannot think',
+ ai:{probe:deps=>aiProbe(deps),label:'your AI',stops:'your routines and your chat cannot think',
   signIn:'Your AI did not accept its sign-in or key this morning, so your routines and your chat cannot think until it is fixed. To fix it, open Settings in your notebook and connect your AI again under Your AI.'},
- telegram:{label:'Telegram',stops:'nothing from your mission control reaches you on Telegram and your messages there go unanswered',
+ telegram:{probe:deps=>telegramProbe(deps),label:'Telegram',stops:'nothing from your mission control reaches you on Telegram and your messages there go unanswered',
   signIn:'Telegram refused your bot\'s key this morning, so nothing from your mission control reaches you on Telegram and your messages there go unanswered. To fix it, get the bot\'s current key from BotFather and connect Telegram again in Settings.'},
- github:{label:'GitHub',stops:'your notebook stops syncing with your other computers',
+ github:{probe:deps=>githubProbe(deps),label:'GitHub',stops:'your notebook stops syncing with your other computers',
   signIn:'GitHub did not let this computer read your notebook\'s repository this morning, so your notebook stops syncing with your other computers. To fix it, open Settings in your notebook and press Connect record sync again; GitHub\'s sign-in page opens.'},
- mail:{label:'Gmail',stops:'your assistants cannot search your mail or save drafts',
+ mail:{probe:deps=>mailProbe(),label:'Gmail',stops:'your assistants cannot search your mail or save drafts',
   signIn:'Gmail did not accept the app password this morning, so your assistants cannot search your mail or save drafts. To fix it, ask your assistant: Connect Gmail for me.'},
 };
 const NAMES=Object.keys(CONNECTIONS);
@@ -85,7 +85,7 @@ export const mailProbe=({imap=mailImap}={})=>async()=>{
  try{const result=await tool.check();return result.state==='connected'?outcome(true):outcome(false,mailKind(result.state));}
  catch{return outcome(false,'other');}
 };
-export const defaultProbes=({store,home,hermes,hermesSource})=>({ai:aiProbe({store,home,hermes,hermesSource}),telegram:telegramProbe({home}),github:githubProbe({store}),mail:mailProbe()});
+export const defaultProbes=deps=>Object.fromEntries(NAMES.map(name=>[name,CONNECTIONS[name].probe(deps)]));
 
 const otherWords=name=>`Your mission control could not reach ${CONNECTIONS[name].label} yesterday or today, so ${CONNECTIONS[name].stops} may not be working. Nothing needs your sign-in: it is tried again tomorrow. If this computer's internet works, the service may be down.`;
 const deadlineKey=(name,day)=>`${name}:${day}`;
@@ -94,14 +94,14 @@ const deadlineSlug=(name,day)=>`connection-${name}-${day}`;
 // What one connection's result today comes to, given its entry from the last check. Pure: the
 // entry to keep and the things to do, in words the caller carries out.
 export function nextState(prev={},result,day){
- if(!result.set_up)return {entry:{set_up:false},actions:[]};
- if(result.ok)return {entry:{set_up:true,ok:true},actions:prev.deadline||prev.kind==='sign-in'?[{do:'recover'}]:[]};
  const carried=prev.deadline?{deadline:prev.deadline}:{};
+ if(!result.set_up)return {entry:{set_up:false,...carried},actions:[]};
+ if(result.ok)return {entry:{set_up:true,ok:true},actions:prev.deadline||prev.kind==='sign-in'?[{do:'recover'}]:[]};
  if(result.kind==='sign-in'){
-  if(prev.kind==='sign-in'&&prev.told||prev.deadline)return {entry:{...prev,set_up:true,ok:false,kind:'sign-in',told:true},actions:[]};
-  return {entry:{set_up:true,ok:false,kind:'sign-in',failing_since:day,told:true},actions:[{do:'sign-in'}]};
+  if(prev.kind==='sign-in'&&prev.told||prev.deadline)return {entry:{...prev,set_up:true,ok:false,kind:'sign-in',told:true},actions:prev.deadline?[]:[{do:'deadline'}]};
+  return {entry:{set_up:true,ok:false,kind:'sign-in',failing_since:day,told:true},actions:[{do:'sign-in'},{do:'deadline'}]};
  }
- const again=prev.kind==='other',sameDay=again&&prev.last_failed_day===day;
+ const sameDay=prev.kind==='other'&&prev.last_failed_day===day,again=sameDay||prev.kind==='other'&&prev.last_failed_day===addDays(day,-1);
  const failedDays=again?prev.failed_days+(sameDay?0:1):1,told=again&&prev.told;
  return {entry:{set_up:true,ok:false,kind:'other',failing_since:again?prev.failing_since:day,failed_days:failedDays,last_failed_day:day,told:told||failedDays>=2,...carried},
   actions:failedDays>=2&&!told?[{do:'other'}]:[]};
@@ -122,33 +122,37 @@ const bell=async(store,record)=>{try{await store.saveAsync('notifications',recor
 export function readCheckRecord(store){try{const data=JSON.parse(fs.readFileSync(path.join(store.state,RECORD_FILE),'utf8'));return data&&typeof data.connections==='object'&&data.connections?data:{connections:{}};}catch{return {connections:{}};}}
 
 // Runs every probe once, in turn, and does what each result calls for. A probe that throws counts
-// as a failure that needs no sign-in. Returns the record it keeps in .godspeed/connection-check.json.
+// as a failure that needs no sign-in. Keeps its record in .godspeed/connection-check.json and, when a deadline could not be made or closed, throws after writing it so the next run retries and the routine reports the failure.
 export async function checkConnections({store,day,probes,due=runDue,now=()=>new Date()}){
- const before=readCheckRecord(store),connections={};
+ const before=readCheckRecord(store),connections={},failures=[];
  for(const name of NAMES){
   let result;try{result=await probes[name]();}catch{result=outcome(false,'other');}
   const worked=path.join(store.state,WORKED_FOLDER,name+'.worked'),{entry,actions}=nextState(before.connections[name],result,day);
   connections[name]=entry;
+  const label=CONNECTIONS[name].label;
   for(const action of actions){
    if(action.do==='recover'){
     fs.mkdirSync(path.dirname(worked),{recursive:true});fs.writeFileSync(worked,'');
-    due(store,day,['check']);
+    if(due(store,day,['check']).status!==0){connections[name]=before.connections[name];failures.push(name);continue;}
     await bell(store,{id:'connection-'+name,status:'resolved',resolved_at:now().toISOString()});
    }
    if(action.do==='other')tellOwner(store,{id:`connection-${name}-other-${entry.failing_since}`,text:otherWords(name)});
    if(action.do==='sign-in'){
-    const label=CONNECTIONS[name].label,slug=deadlineSlug(name,day),key=deadlineKey(name,day);
     fs.rmSync(worked,{force:true});
     tellOwner(store,{id:`connection-${name}-${day}`,text:CONNECTIONS[name].signIn});
+    await bell(store,{id:'connection-'+name,status:'pending',title:`${label} needs your sign-in`,body:CONNECTIONS[name].signIn,link:'/dashboard/settings'});
+   }
+   if(action.do==='deadline'){
+    const since=entry.failing_since,slug=deadlineSlug(name,since),key=deadlineKey(name,since);
     const made=due(store,day,['add',slug,'--title',`Connect ${label} again`,'--target',day,'--to',addDays(day,DEADLINE_DAYS),
      '--done-when',`The daily connection check reaches ${label} again; it closes this itself.`,'--cost',`Until then ${CONNECTIONS[name].stops}.`,
      '--self-check','file-newer','--self-check-arg',`.godspeed/${WORKED_FOLDER}/${name}.worked`,'--addon','connection-check','--addon-key',key]);
-    if(made.status===0)entry.deadline={slug,key};
-    await bell(store,{id:'connection-'+name,status:'pending',title:`${label} needs your sign-in`,body:CONNECTIONS[name].signIn,link:'/dashboard/settings'});
+    if(made.status===0)entry.deadline={slug,key};else failures.push(name);
    }
   }
  }
  const record={at:now().toISOString(),day,connections};
  atomic(path.join(store.state,RECORD_FILE),JSON.stringify(record,null,2)+'\n');
+ if(failures.length)throw new Error('A deadline could not be changed for: '+failures.join(', '));
  return record;
 }

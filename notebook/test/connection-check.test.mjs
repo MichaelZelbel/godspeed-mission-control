@@ -1,7 +1,7 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';
 import {Store} from '../core/records/store.mjs';import {installStarter} from '../core/starter-workspace.mjs';
 import {readNotices} from '../core/notices.mjs';import {addonDeadlines} from '../core/addon-deadlines.mjs';
-import {checkConnections,nextState,telegramProbe,githubProbe,mailProbe,aiProbe,gitKind,aiKind,telegramKind,mailKind,connectionCheckWanted,RECORD_FILE} from '../core/connection-check.mjs';
+import {CONNECTIONS,defaultProbes,checkConnections,nextState,telegramProbe,githubProbe,mailProbe,aiProbe,gitKind,aiKind,telegramKind,mailKind,connectionCheckWanted,RECORD_FILE} from '../core/connection-check.mjs';
 
 for(const key of Object.keys(process.env))if(/^(GODSPEED_|HERMES_)/.test(key))delete process.env[key];
 
@@ -75,7 +75,7 @@ test('a probe that throws counts as a failure that needs no sign-in',async t=>{
 
 test('nextState keeps a deadline that is open while the failure changes kind',()=>{
  const first=nextState({},{set_up:true,ok:false,kind:'sign-in'},D1);
- assert.deepEqual(first.actions,[{do:'sign-in'}]);
+ assert.deepEqual(first.actions,[{do:'sign-in'},{do:'deadline'}]);
  const other=nextState({...first.entry,deadline:{slug:'x',key:'k'}},{set_up:true,ok:false,kind:'other'},D2);
  assert.deepEqual(other.entry.deadline,{slug:'x',key:'k'});assert.deepEqual(other.actions,[]);
 });
@@ -132,4 +132,36 @@ test('the check is wanted when Telegram or Gmail is connected',t=>{
  assert.equal(connectionCheckWanted(home,none),true);
  assert.equal(connectionCheckWanted(home,()=>{throw Error('no mail tool');}),true);
  assert.ok(RECORD_FILE);
+});
+
+test('a connection reported unset between a refusal and its recovery still closes its deadline',async t=>{
+ const {store}=fixture(t);
+ await checkConnections({store,day:D1,probes:stubs({telegram:refused})});
+ await checkConnections({store,day:D2,probes:stubs({telegram:async()=>({set_up:false})})});
+ await checkConnections({store,day:D3,probes:stubs()});
+ assert.equal(deadlines(store)[0].state,'closed');assert.equal(bell(store,'telegram').status,'resolved');
+});
+
+test('a missed day breaks a network-failure streak',async t=>{
+ const {store}=fixture(t);
+ await checkConnections({store,day:D1,probes:stubs({github:down})});
+ await checkConnections({store,day:'2026-11-07',probes:stubs({github:down})});
+ assert.deepEqual(readNotices(store),[]);
+});
+
+test('a deadline that could not be made or closed fails the routine and is retried',async t=>{
+ const {store}=fixture(t);
+ const failing=()=>({status:1,out:''});
+ await assert.rejects(checkConnections({store,day:D1,probes:stubs({telegram:refused}),due:failing}),/deadline/);
+ assert.deepEqual(deadlines(store),[]);assert.equal(readNotices(store).length,1);
+ await checkConnections({store,day:D1,probes:stubs({telegram:refused})});
+ assert.equal(deadlines(store).length,1);assert.equal(readNotices(store).length,1,'the message is not repeated');
+ await assert.rejects(checkConnections({store,day:D2,probes:stubs(),due:failing}),/deadline/);
+ assert.equal(bell(store,'telegram').status,'pending');
+ await checkConnections({store,day:D2,probes:stubs()});
+ assert.equal(deadlines(store)[0].state,'closed');assert.equal(bell(store,'telegram').status,'resolved');
+});
+
+test('every connection owns its probe',()=>{
+ assert.deepEqual(Object.keys(defaultProbes({store:{},home:'x'})),Object.keys(CONNECTIONS));
 });
