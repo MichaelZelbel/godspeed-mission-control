@@ -64,6 +64,14 @@ export function journalWanted(root){
  const s=journalSettings(root);
  return s.capture_enabled!==false&&!!(s.nudge?.enabled||s.evening?.enabled||s.weekly?.enabled);
 }
+// THE DAILY CONNECTION CHECK (4 November 2026, #200; core/connection-check.mjs). A script routine at
+// 05:00, before the morning briefing, made once on a machine that made its starting routines (one
+// that kept the reader's own routines never gets Godspeed's beside them). It starts on when this
+// install has Telegram or Gmail connected and paused when it has neither; the Routines list's
+// Pause and Resume is its switch.
+export const CONNECTION_JOB='Daily connection check';
+export const CONNECTION_SCRIPT='godspeed-connection-check.py';
+export const CONNECTION_WHAT='Early every morning, before your morning brief, it makes one harmless call to each connection you set up (your AI, Telegram, the GitHub sync, Gmail) and tells you only when one needs your sign-in or key, or failed two mornings in a row. It sends nothing else.';
 // THE NIGHT CHAT TIDY-UP (26 October 2026). The assistant keeps a chat app's chat as one long
 // conversation and summarises its older part once it passes its threshold, and it does that before
 // answering the message that crossed the line: a real message waited 4 minutes 9 seconds while 348

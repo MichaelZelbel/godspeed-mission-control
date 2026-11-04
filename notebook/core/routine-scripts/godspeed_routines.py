@@ -25,6 +25,9 @@ Each routine runs the original programs of the mission control, never a copy of 
               same briefing went out already (#160, 3 November 2026: it was the starter recipe).
   due         mc-due check and mc-due today. Prints the reminders that need saying today, or
               nothing, and nothing at all on a day a morning brief carries them.
+  connection-check  the Daily connection check (notebook/scripts/connection-check.mjs): one harmless call
+              to each connection that is set up; prints only the notices it queued (a login or key
+              refused, or a second failed morning in a row).
   coach-gate  godspeed-coach gate: the talk brief when a talk is due, else {"wakeAgent": false}.
   coach-prep  mc-coach-prep, every night at 03:00: each coaching talk of the next day is prepared
               with the coach-prep recipe, within two hours. It prints nothing: a talk it could not
@@ -959,11 +962,33 @@ def coach(c, command):
     return "\n\n".join(said + ([r.stdout.strip()] if r.stdout.strip() else []))
 
 
+def connection_check(c):
+    """The Daily connection check (core/connection-check.mjs): it makes its calls and queues what the
+    person must be told as notices, which are said in this same run, right after the check."""
+    day = today(c)
+    env = environment(c, day)
+    args = [c["node"], c["connection_check"]]
+    if c.get("hermes"):
+        args += ["--hermes", c["hermes"]]
+    if c.get("hermes_source"):
+        args += ["--hermes-source", c["hermes_source"]]
+    try:
+        r = run(args, c, env, timeout=900)
+    except subprocess.TimeoutExpired:
+        r = None
+    said = notices(c)
+    if r is None or r.returncode != 0:
+        if said:
+            return "\n\n".join(said)
+        fail("The daily connection check could not run.", r)
+    return "\n\n".join(said)
+
+
 def main(kind):
     c = config()
     out = {"research": research, "decide": decide, "work": work, "due": due, "brief": brief, "coach-prep": coach_prep,
            "coach-gate": lambda c: coach(c, "gate"), "coach-tick": lambda c: coach(c, "tick"),
-           "journal-tick": journal_tick, "chat-tidy": chat_tidy}[kind](c)
+           "journal-tick": journal_tick, "chat-tidy": chat_tidy, "connection-check": connection_check}[kind](c)
     if out:
         # UTF-8 whatever the console's code page: a curly quote must not end the run on Windows.
         sys.stdout.buffer.write((out + "\n").encode("utf-8"))

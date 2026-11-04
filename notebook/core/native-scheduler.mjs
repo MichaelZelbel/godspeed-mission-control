@@ -11,7 +11,8 @@ import {starterBorn} from './starter-workspace.mjs';
 import {setHermesTimezone} from './hermes-config.mjs';
 import {FLAG,STARTING_ROUTINES,routineFiles,writeRoutineFiles,prepareCheckIn,saveRoutineResults,readMachineRecord,writeMachineRecord,telegramInHermes,routineStatus,ownRoutines,metAt,noteHermesMet,cityFiledFirst,OWN_ROUTINES_RULE} from './starting-routines.mjs';
 import {cronOf,cronCalendar,calendarCron,retimeWhat,isTalkGate,isCoachTick,talkArea,moveTalk} from './routine-times.mjs';
-import {readNotebookRoutines,rememberNotebookRoutine,enableKind,deliveryFor,journalWanted,journalOnTheClock,JOURNAL_JOB,JOURNAL_SCRIPT,JOURNAL_WHAT,CHAT_TIDY_JOB,CHAT_TIDY_SCRIPT,writeNotebookRoutines,BRIEF_JOB,BRIEF_SCRIPT,isBriefJob} from './notebook-routines.mjs';
+import {readNotebookRoutines,rememberNotebookRoutine,enableKind,deliveryFor,journalWanted,journalOnTheClock,JOURNAL_JOB,JOURNAL_SCRIPT,JOURNAL_WHAT,CHAT_TIDY_JOB,CHAT_TIDY_SCRIPT,writeNotebookRoutines,BRIEF_JOB,BRIEF_SCRIPT,isBriefJob,CONNECTION_JOB,CONNECTION_SCRIPT,CONNECTION_WHAT} from './notebook-routines.mjs';
+import {connectionCheckWanted} from './connection-check.mjs';
 import {loadSettings as coachSettings,saveSettings as saveCoach} from '../../third-party/addons/godspeed-coach/lib/settings.mjs';
 import {rhythmWords} from '../../third-party/addons/godspeed-coach/lib/areas.mjs';
 import {moveSettingsDeadlines} from './native-due.mjs';
@@ -212,6 +213,33 @@ export class NativeScheduler{
   rememberNotebookRoutine(this.store,{id:made.id,key:'journal-tick',name:JOURNAL_JOB,what:JOURNAL_WHAT});
   return made.id;
  }
+ // THE DAILY CONNECTION CHECK (4 November 2026, #200; notebook-routines.mjs, core/connection-check.mjs).
+ // Made once, only on a machine that made its starting routines, at 05:00 on the install's clock. It
+ // is made enabled when Telegram or Gmail is connected and paused when neither is; the notebook later
+ // resumes it only if it paused it itself and one of them has since been connected. A routine the
+ // person paused or resumed, or removed, is theirs from then on.
+ async followConnectionCheck(){
+  const root=this.store.root;if(!starterBorn(root)||readMachineRecord(this.store)?.state!=='created')return null;
+  const entry=readNotebookRoutines(this.store).jobs.find(j=>j.key==='connection-check'),jobs=hermesJobs(this.home);
+  const job=(entry&&jobs.find(j=>j.id===entry.id))||jobs.find(j=>j.name===CONNECTION_JOB&&j.script===CONNECTION_SCRIPT);
+  if(entry&&!job)return null;
+  const installation=this.store.get('settings','installation'),timezone=installation?.timezone||Intl.DateTimeFormat().resolvedOptions().timeZone,wanted=connectionCheckWanted(this.home);
+  writeRoutineFiles(this.home,routineFiles({root,home:this.home,state:this.store.state,timezone,hermes:this.executable}));
+  if(job){
+   if(!entry?.paused_by_notebook)return job.id;
+   if(job.enabled===false&&!wanted)return job.id;
+   if(job.enabled===false)await this.command(['resume',job.id]);
+   rememberNotebookRoutine(this.store,{...entry,paused_by_notebook:false});
+   return job.id;
+  }
+  const before=new Set(jobs.map(j=>j.id));
+  await this.command(['create','0 5 * * *','--no-agent','--name',CONNECTION_JOB,'--script',CONNECTION_SCRIPT,'--deliver',deliveryFor(installation,{telegram:telegramInHermes(this.home)}),'--failure-deliver','local','--workdir',root]);
+  const made=hermesJobs(this.home).find(j=>!before.has(j.id)&&j.name===CONNECTION_JOB);
+  if(!made)throw Error('Hermes did not keep the routine "'+CONNECTION_JOB+'"');
+  if(!wanted)try{await this.command(['pause',made.id]);}catch(error){await this.command(['remove',made.id]).catch(()=>{});throw error;}
+  rememberNotebookRoutine(this.store,{id:made.id,key:'connection-check',name:CONNECTION_JOB,what:CONNECTION_WHAT,paused_by_notebook:!wanted});
+  return made.id;
+ }
  // THE MORNING BRIEF AS THE NOTEBOOK'S OWN BRIEFING (3 November 2026, #160; notebook-routines.mjs
  // says why). A script routine like the deadline reminders, whose script runs core/briefing.mjs
  // (scripts/morning-brief.mjs) and prints the briefing for Hermes to deliver where this machine's
@@ -372,6 +400,7 @@ export class NativeScheduler{
    await this.startRoutines().catch(()=>null);
    await this.addNewStartingRoutines().catch(()=>null);
    await this.followJournal().catch(()=>null);
+   await this.followConnectionCheck().catch(()=>null);
    await this.removeChatTidy().catch(()=>null);
    await this.followBrief().catch(()=>null);
    await this.followDelivery().catch(()=>null);
