@@ -2398,7 +2398,15 @@ refuses 'a close that names another day' talk-prep-honest "$T/close-wrong" 'was 
 
 copy "$T/good" "$T/no-talk-b"
 : >"$T/no-talk-b/talk-b.md"
-refuses 'no talk opened on day B' talk-prep-honest "$T/no-talk-b" 'no talk of day 2026-11-03 was opened when the owner asked for it'
+refuses 'no talk opened on day B' talk-prep-honest "$T/no-talk-b" 'no talk of day 2026-11-03 was opened when the owner asked for it: Good evening. Tonight: three routes, one for each of your goals'
+
+copy "$T/no-talk-b" "$T/no-talk-b-nob"
+printf 'a=2026-11-02\n' >"$T/no-talk-b-nob/days.txt"
+refuses 'no day-B talk and no b in days.txt' talk-prep-honest "$T/no-talk-b-nob" 'days.txt does not say which two talk days'
+
+copy "$T/no-talk-b" "$T/no-talk-b-emptyb"
+printf 'a=2026-11-02\nb=\n' >"$T/no-talk-b-emptyb/days.txt"
+refuses 'no day-B talk and an empty b in days.txt' talk-prep-honest "$T/no-talk-b-emptyb" 'days.txt does not say which two talk days'
 
 copy "$T/good" "$T/sealed-anyway"
 printf '0\n' >"$T/sealed-anyway/seal-a.code"
