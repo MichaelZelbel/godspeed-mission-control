@@ -87,6 +87,17 @@ sys.modules["cron"].scheduler=sys.modules["cron.scheduler"]
 class Built:pass
 sys.modules["cron.scheduler_provider"].InProcessCronScheduler=Built
 delivered=[]
+S=sys.modules["cron.scheduler"]
+S._normalize_deliver_value=lambda d:d or "local"
+S._delivery_lane_value=lambda job,*,for_failure=False:(job.get("failure_deliver") or "").strip() if for_failure and (job.get("failure_deliver") or "").strip() else job.get("deliver","local")
+def _targets(job,*,for_failure=False):
+    out=[]
+    for p in S._normalize_deliver_value(S._delivery_lane_value(job,for_failure=for_failure)).split(","):
+        p=p.strip()
+        if p=="origin":p=job.get("origin_platform","")
+        if p.split(":")[0] in("telegram","discord"):out.append({"platform":p.split(":")[0]})
+    return out
+S._resolve_delivery_targets=_targets
 sys.modules["cron.scheduler"]._deliver_result=lambda job,content,adapters=None,loop=None,*,for_failure=False:delivered.append(content)
 import importlib.util
 s=importlib.util.spec_from_file_location("godspeed_notebook",sys.argv[1]);m=importlib.util.module_from_spec(s);s.loader.exec_module(m)
@@ -125,8 +136,10 @@ test('a failure is recorded in the lane Hermes sends failures to, not the normal
  if(!python)return t.skip('needs Python');
  const {store,run}=wiredProvider(t);
  const out=run([[{id:'j1',name:'To notebook',skill:'coach',deliver:'local',failure_deliver:'telegram'},'Failed A.',true],[{id:'j2',name:'To Telegram',skill:'coach',deliver:'telegram',failure_deliver:'local'},'Failed B.',true],
-  [{id:'j3',name:'Failure silenced',skill:'coach',deliver:'telegram',failure_deliver:'origin'},'Failed C.',true],[{id:'j4',name:'Blank lane',skill:'coach',deliver:'local',failure_deliver:' '},'Failed D.',true]]);
- assert.deepEqual(out.errors,[null,null,null,null]);
+  [{id:'j3',name:'Failure silenced',skill:'coach',deliver:'telegram',failure_deliver:'origin'},'Failed C.',true],[{id:'j4',name:'Blank lane',skill:'coach',deliver:'local',failure_deliver:' '},'Failed D.',true],
+  [{id:'j5',name:'Composite',skill:'coach',deliver:'local',failure_deliver:'telegram,local'},'Failed E.',true],[{id:'j6',name:'Origin',skill:'coach',deliver:'local',failure_deliver:'origin',origin_platform:'telegram'},'Failed F.',true],
+  [{id:'j7',name:'Elsewhere',skill:'coach',deliver:'local',failure_deliver:'discord'},'Failed G.',true]]);
+ assert.deepEqual(out.errors,[null,null,null,null,null,null,null]);
  const saved=[...new Store(store.root,{device:'pc'}).records.values()].filter(r=>r.id.startsWith('background-report-')).sort((a,b)=>a.content<b.content?-1:1);
- assert.deepEqual(saved.map(r=>[r.content,r.delivered_to]),[['Failed A.','telegram'],['Failed B.','notebook'],['Failed D.','notebook']]);
+ assert.deepEqual(saved.map(r=>[r.content,r.delivered_to]),[['Failed A.','telegram'],['Failed B.','notebook'],['Failed D.','notebook'],['Failed E.','telegram'],['Failed F.','telegram']]);
 });

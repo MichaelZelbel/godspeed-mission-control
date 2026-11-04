@@ -34,20 +34,24 @@ HOME = os.path.dirname(os.path.dirname(HERE))
 
 
 def _delivery(job, for_failure=False):
-    """Where the notebook's chat reads this job's report, or None where no chat is involved. A
-    failure goes where Hermes sends failures: failure_deliver when it is set, else deliver."""
-    where = str((for_failure and str(job.get("failure_deliver") or "").strip()) or job.get("deliver") or "")
-    if where == "local":
-        return "notebook"
-    return "telegram" if where == "telegram" or where.startswith("telegram:") else None
+    """Where the notebook's chat reads this job's report, or None where no chat is involved. Hermes
+    decides where the job goes (lane, comma-separated targets, origin); a Telegram target is the
+    owner's Telegram chat, and a local lane is the notebook."""
+    from cron import scheduler
+    if any(str(t.get("platform")).lower() == "telegram" for t in scheduler._resolve_delivery_targets(job, for_failure=for_failure)):
+        return "telegram"
+    lane = scheduler._normalize_deliver_value(scheduler._delivery_lane_value(job, for_failure=for_failure))
+    return "notebook" if lane == "local" else None
 
 
 def record_result(job, content, for_failure=False):
     """None when nothing needs recording or it was recorded, else why the result must not go out."""
-    delivery = _delivery(job, for_failure)
-    if not delivery or not (job.get("skill") or job.get("skills")) or not isinstance(content, str) or not content.strip():
+    if not (job.get("skill") or job.get("skills")) or not isinstance(content, str) or not content.strip():
         return None
     try:
+        delivery = _delivery(job, for_failure)
+        if not delivery:
+            return None
         with open(os.path.join(HERE, "report.json"), encoding="utf-8") as f:
             wiring = json.load(f)
         r = subprocess.run([wiring["node"], wiring["script"], "record", "--godspeed", wiring["root"], "--home", HOME,
