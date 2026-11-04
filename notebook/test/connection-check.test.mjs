@@ -213,5 +213,6 @@ test('a recovery closes only its own connection\'s deadline, never another that 
  await checkConnections({store,day:D2,probes:stubs()});
  const state=addonDeadlines(store,{addon:'connection-check',action:'list'}).deadlines;
  assert.equal(state[0].state,'closed');
+ const closing=fs.readFileSync(path.join(root,JSON.parse(runDue(store,D2,['state','--json']).out).find(r=>r.slug===state[0].slug).closedBy),'utf8');assert.match(closing,/self check/i);assert.doesNotMatch(closing,/you said so/i,'the closing is the self-check\'s, not the owner\'s word');
  assert.match(runDue(store,D2,['state']).out,/unrelated[^\n]*open|open[^\n]*unrelated/i,'the unrelated deadline stays open');
 });

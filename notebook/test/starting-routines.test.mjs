@@ -356,7 +356,7 @@ print(g.connection_check(c))`;
  const okRun='g.run=lambda args,c,env,timeout=None:types.SimpleNamespace(returncode=0,stdout="",stderr="")',ok=attempt(okRun);
  assert.equal(ok.status,0,ok.stderr);assert.match(ok.stdout,/Telegram refused your bot's key\./);
  assert.deepEqual(JSON.parse(fs.readFileSync(said,'utf8')).ids,['telegram-key']);
- for(const bad of ['{not json','[]','{"notices":5}','{"notices":[{"id":"a"}]}','{"notices":[{"id":"a","text":"x"},"b"]}']){
+ for(const bad of ['{not json','[]','{"notices":5}','{"notices":[{"id":"a"}]}','{"notices":[{"id":"a","text":"x"},"b"]}','{"notices":[{"id":5,"text":"x"}]}','{"notices":[{"id":"a","text":"   "}]}']){
   fs.writeFileSync(queued,bad);fs.rmSync(said,{force:true});
   const run=attempt(okRun);
   assert.equal(run.status,1,bad);assert.equal(run.stdout,'');assert.match(run.stderr,/^The daily connection check could not run\./);

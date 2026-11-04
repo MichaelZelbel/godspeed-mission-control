@@ -141,7 +141,7 @@ export async function checkConnections({store,day,probes,due=runDue,now=()=>new 
    if(action.do==='recover'){
     fs.mkdirSync(path.dirname(worked),{recursive:true});fs.writeFileSync(worked,'');
     const slug=before.connections[name]?.deadline?.slug;
-    if(slug&&due(store,day,['done',slug,'--evidence','The daily connection check reached '+label+' again.']).status!==0){connections[name]=before.connections[name];failures.push(name);continue;}
+    if(slug&&due(store,day,['check',slug]).status!==0){connections[name]=before.connections[name];failures.push(name);continue;}
     await bell(store,{id:'connection-'+name,status:'resolved',resolved_at:now().toISOString()});
    }
    if(action.do==='other')tellOwner(store,{id:`connection-${name}-other-${entry.failing_since}`,text:otherWords(name)});

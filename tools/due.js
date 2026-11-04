@@ -51,7 +51,7 @@
  *   mc-due target <name> YYYY-MM-DD|asap    a new day you would like it done, or as soon as you can
  *   mc-due done <name> [--evidence "..."]   you did it: writes the event that closes it
  *   mc-due drop <name> --yes  call it off: an event too, and nothing is deleted
- *   mc-due check              run the self checks, close what is provably done
+ *   mc-due check [<name>]     run the self checks, close what is provably done (only <name>, when given)
  *   mc-due state [--json]     open or not, for every one, and what closed it
  *   mc-due --godspeed PATH         work on a mission control somewhere else (without it: the one
  *                                  your assistant was started in, else the one you are standing in;
@@ -940,10 +940,12 @@ function cmdDrop() {
 }
 
 function cmdCheck(day) {
+  const only = args[1] && !args[1].startsWith("--") ? args[1] : "";
   const notes = roll(day);
   for (const n of notes) notes.length && console.log("  " + n);
   let closed = 0, problems = 0, looks = 0;
-  for (const slug of slugs()) {
+  if (only && !slugs().includes(only)) { console.log("You have nothing called " + only + ". Type mc-due to see the list."); return 1; }
+  for (const slug of only ? [only] : slugs()) {
     const o = parseFile(slug) || unreadable(slug);
     if (o.problem && !o.dropped) { console.log("  due/" + slug + ".md needs a look: " + o.problem + "."); looks++; continue; }
     if (repeatOf(o.head["REPEATS"]) === undefined) {
@@ -966,8 +968,8 @@ function cmdCheck(day) {
       closed++;
     }
   }
-  for (const f of keep.unproven) { console.log("  " + f + " says it closes something but not what shows it, so it closes nothing."); problems++; }
-  const n = slugs().length;
+  if (!only) for (const f of keep.unproven) { console.log("  " + f + " says it closes something but not what shows it, so it closes nothing."); problems++; }
+  const n = only ? 1 : slugs().length;
   console.log("Looked at " + n + " thing" + (n === 1 ? "" : "s") + " with a last day. " +
     closed + " closed " + (closed === 1 ? "itself" : "themselves") + ", " + (problems + looks) + " need a look.");
   // 3 when the only thing wrong is files that need a look: they are said in the list, the morning

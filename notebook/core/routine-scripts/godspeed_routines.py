@@ -654,8 +654,11 @@ def notices(c, mark=True, strict=False):
         if text.strip():
             queue = json.loads(text).get("notices", [])
             waiting = [n for n in queue if isinstance(n, dict) and n.get("id") and n.get("text")]
-            if strict and len(waiting) != len(queue):
-                raise ValueError("a queued notice has no id or text")
+            if strict:
+                for n in queue:
+                    if not (isinstance(n, dict) and isinstance(n.get("id"), str) and n["id"]
+                            and isinstance(n.get("text"), str) and n["text"].strip()):
+                        raise ValueError("a queued notice has no id or text")
     except FileNotFoundError:
         return []
     except Exception:
