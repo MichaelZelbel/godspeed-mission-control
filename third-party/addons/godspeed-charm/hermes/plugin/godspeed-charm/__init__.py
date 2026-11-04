@@ -206,7 +206,7 @@ def _judge_command(turn, *extra):
     return _command("judge", "--conversation", turn["conversation"], "--words-file", turn["file"], "--json", *extra)
 
 
-# The words `judge --json` may report (lib/judge.mjs PROTOCOL owns them; a test compares).
+# The words this boundary accepts from `judge --json`; anything else is refused and the word check answers.
 JUDGE_PROTOCOL = {"verdict": ("ask", "answer", "none"), "source": ("rule", "model", "words"), "answer": ("yes", "no")}
 
 

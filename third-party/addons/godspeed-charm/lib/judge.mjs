@@ -10,10 +10,6 @@ import { isYes, isNo, isExplicitReset } from "./words.mjs";
 
 export const MODEL_SECONDS = 15;
 
-// The vocabulary of the report `judge --json` prints. The Hermes plugin's JUDGE_PROTOCOL must list
-// the same words; test/judged.test.mjs holds the two together.
-export const PROTOCOL = { verdict: ["ask", "answer", "none"], source: ["rule", "model", "words"], answer: ["yes", "no"] };
-
 const none = (why) => ({ verdict: "none", source: "rule", why });
 
 // Contempt and blame aimed at the assistant or its work, English and German. Whole words only.
