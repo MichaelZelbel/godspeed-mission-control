@@ -1128,10 +1128,10 @@ def connection_check(c):
     # Claim everything queued now before saying any: saying may split a report into new notices, and
     # those wait for the notice routine rather than extending this run.
     waiting = []
-    found = notice(c, strict=True, only="connection-")
+    found = notice(c, strict=True, only=c["connection_notice_prefix"])
     while found:
         waiting.append(found)
-        found = notice(c, strict=True, only="connection-")
+        found = notice(c, strict=True, only=c["connection_notice_prefix"])
     said = []
     try:
         while waiting:

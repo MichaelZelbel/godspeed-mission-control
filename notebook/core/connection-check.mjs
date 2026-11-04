@@ -3,7 +3,7 @@ import path from 'node:path';
 import {createRequire} from 'node:module';
 import {spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
-import {CONNECTION_NAMES} from './connection-names.mjs';
+import {CONNECTION_NAMES,CONNECTION_NOTICE_PREFIX} from './connection-names.mjs';
 import {atomic} from './records/store.mjs';
 import {queueNotice} from './notices.mjs';
 import {routineAIStatus,askDirectly} from './routine-ai.mjs';
@@ -144,10 +144,10 @@ export async function checkConnections({store,day,probes,due=runDue,now=()=>new 
     if(slug&&due(store,day,['check',slug]).status!==0){connections[name]=before.connections[name];failures.push(name);continue;}
     await bell(store,{id:'connection-'+name,status:'resolved',resolved_at:now().toISOString()});
    }
-   if(action.do==='other')tellOwner(store,{id:`connection-${name}-other-${entry.failing_since}`,text:otherWords(name)});
+   if(action.do==='other')tellOwner(store,{id:`${CONNECTION_NOTICE_PREFIX}${name}-other-${entry.failing_since}`,text:otherWords(name)});
    if(action.do==='sign-in'){
     fs.rmSync(worked,{force:true});
-    tellOwner(store,{id:`connection-${name}-${day}`,text:CONNECTIONS[name].signIn});
+    tellOwner(store,{id:`${CONNECTION_NOTICE_PREFIX}${name}-${day}`,text:CONNECTIONS[name].signIn});
     await bell(store,{id:'connection-'+name,status:'pending',title:`${label} needs your sign-in`,body:CONNECTIONS[name].signIn,link:'/dashboard/settings'});
    }
    if(action.do==='deadline'){

@@ -1,6 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';
 import {fileURLToPath} from 'node:url';import {execFileSync,spawnSync} from 'node:child_process';
-import {Store} from '../core/records/store.mjs';import {NativeScheduler} from '../core/native-scheduler.mjs';import {installStarter} from '../core/starter-workspace.mjs';
+import {Store} from '../core/records/store.mjs';import {checkConnections} from '../core/connection-check.mjs';import {NativeScheduler} from '../core/native-scheduler.mjs';import {installStarter} from '../core/starter-workspace.mjs';
 import {finalReply,saveRoutineResults,RESULTS_FOLDER,routineFiles,prepareCheckIn,coachRoutineTimes} from '../core/starting-routines.mjs';import {QueryService} from '../core/query.mjs';
 import {withTimezone} from '../core/hermes-config.mjs';
 import {routineRow,scheduleWords} from '../ui/src/local/routine-row.mjs';
@@ -339,7 +339,7 @@ print(json.dumps(g.work(g.config())))`;
 
 test('a failed daily connection check leaves what it queued unsaid, and a timeout is a failure too',{skip:!havePython&&'no Python here'},t=>{
  const {root,home}=scriptFixture(t),queued=path.join(root,'queued-notices.json'),said=path.join(home,'godspeed-notices-said.json');
- fs.writeFileSync(queued,JSON.stringify({notices:[{id:'connection-telegram-key',text:'Telegram refused your bot\'s key.'}]}));
+ fs.writeFileSync(queued,JSON.stringify({notices:[{id:'connection-notice-telegram-key',text:'Telegram refused your bot\'s key.'}]}));
  const attempt=result=>{
   const code=`import sys,types,subprocess;sys.path.insert(0,${JSON.stringify(path.join(home,'scripts'))})
 import godspeed_routines as g
@@ -355,18 +355,18 @@ print(g.connection_check(c)[0])`;
  }
  const okRun='g.run=lambda args,c,env,timeout=None:types.SimpleNamespace(returncode=0,stdout="",stderr="")',ok=attempt(okRun);
  assert.equal(ok.status,0,ok.stderr);assert.match(ok.stdout,/Telegram refused your bot's key\./);
- assert.deepEqual(JSON.parse(fs.readFileSync(said,'utf8')).ids,['connection-telegram-key']);
+ assert.deepEqual(JSON.parse(fs.readFileSync(said,'utf8')).ids,['connection-notice-telegram-key']);
  // A report provider that splits every notice in two must not extend the run: the split-off notice waits for the notice routine.
- fs.rmSync(said,{force:true});fs.writeFileSync(queued,JSON.stringify({notices:[{id:'connection-seed',text:'First.'}]}));
+ fs.rmSync(said,{force:true});fs.writeFileSync(queued,JSON.stringify({notices:[{id:'connection-notice-seed',text:'First.'}]}));
  const split=attempt(okRun+`
 def say(c,env,n):
     import json
     q=json.load(open(c["notices"]));q["notices"].append({"id":n["id"]+"~2","text":"Split off."});json.dump(q,open(c["notices"],"w"));return n["text"]
 g.say=say`);
  assert.equal(split.status,0,split.stderr);assert.equal(split.stdout.trim(),'First.');
- assert.deepEqual(JSON.parse(fs.readFileSync(said,'utf8')).ids,['connection-seed']);
+ assert.deepEqual(JSON.parse(fs.readFileSync(said,'utf8')).ids,['connection-notice-seed']);
  // A report that cannot be said fails the run and says nothing; the notices it never attempted are released, not left claimed.
- fs.rmSync(said,{force:true});fs.writeFileSync(queued,JSON.stringify({notices:[{id:'connection-one',text:'First.'},{id:'connection-two',text:'Second.'}]}));
+ fs.rmSync(said,{force:true});fs.writeFileSync(queued,JSON.stringify({notices:[{id:'connection-notice-one',text:'First.'},{id:'connection-notice-two',text:'Second.'}]}));
  const claims=()=>fs.readdirSync(home).filter(f=>f.endsWith('.claim'));
  const broken=attempt(okRun+`
 def say(c,env,n):
@@ -457,4 +457,19 @@ test('every routine wrapper the notebook writes names a routine the Python runne
  const run=spawnSync(python,['-c','import json,sys;sys.path.insert(0,sys.argv[1]);import godspeed_routines as g;print(json.dumps(sorted(g.ROUTINES)))',scripts],{encoding:'utf8'});
  assert.equal(run.status,0,run.stderr);
  assert.deepEqual(JSON.parse(run.stdout),[...new Set(wrapped)].sort());
+});
+
+test('the daily connection check says the notice the connection check really queued',{skip:!havePython&&'no Python here'},async t=>{
+ const {root,home}=scriptFixture(t),store=new Store(root,{device:'pc'}),said=path.join(home,'godspeed-notices-said.json');
+ const ok=async()=>({set_up:true,ok:true});
+ await checkConnections({store,day:'2026-11-04',probes:{ai:ok,telegram:async()=>({set_up:true,ok:false,kind:'sign-in'}),github:ok,mail:ok}});
+ const queued=path.join(store.state,'notices.json'),id=JSON.parse(fs.readFileSync(queued,'utf8')).notices[0].id;
+ const code=`import sys,types;sys.path.insert(0,${JSON.stringify(path.join(home,'scripts'))})
+import godspeed_routines as g
+g.run=lambda args,c,env,timeout=None:types.SimpleNamespace(returncode=0,stdout="",stderr="")
+c=g.config();c["connection_check"]="x";c["notices"]=${JSON.stringify(queued)}
+print(g.connection_check(c)[0])`;
+ const run=spawnSync(python,['-c',code],{cwd:path.join(home,'scripts'),encoding:'utf8',env:{...process.env,PYTHONIOENCODING:'utf-8'}});
+ assert.equal(run.status,0,run.stderr);assert.match(run.stdout,/Telegram/);
+ assert.deepEqual(JSON.parse(fs.readFileSync(said,'utf8')).ids,[id]);
 });
