@@ -2919,25 +2919,27 @@ refuses 'the marker in a log' mail-count "$M/leak" 'the marker that every mail b
 
 # the mailbox itself, read over IMAP from the stand-in the way the scenario fills it
 FX=$(node -e '
-const net = require("net"), F = require(process.argv[1] + "/tools/test-mc-mail-imap-fixture.js"), { mails } = require(process.argv[1] + "/scenarios/mail-fixture.cjs");
+const net = require("net"), F = require(process.argv[1] + "/tools/test-mc-mail-imap-fixture.js"), { mails, fill } = require(process.argv[1] + "/scenarios/mail-fixture.cjs");
 (async () => {
   const f = await F.start();
-  f.boxes.INBOX.messages = mails("FIXTURE-MARKER-xyz");
+  fill(F, f, mails("FIXTURE-MARKER-xyz"));
   const sock = net.connect(f.port, "127.0.0.1"); let buf = "";
   sock.on("data", d => { buf += d; });
   const send = async (c, tag) => { sock.write(tag + " " + c + "\r\n"); for (let i = 0; i < 100 && !buf.includes("\r\n" + tag + " OK") && !buf.includes(tag + " OK"); i++) await new Promise(r => setTimeout(r, 20)); };
   await new Promise(r => setTimeout(r, 100));
-  await send("LOGIN " + F.USER + " " + F.PASSWORD, "a1"); await send("SELECT INBOX", "a2"); buf = "";
-  await send("UID FETCH 1:* (BODY.PEEK[])", "a3");
+  await send("LOGIN " + F.USER + " " + F.PASSWORD, "a1");
+  const box = async (name, t) => { await send("SELECT \"" + name + "\"", t + "s"); buf = ""; await send("UID FETCH 1:* (BODY.PEEK[])", t + "f"); const got = buf; buf = ""; return got; };
+  const all = await box(F.ALL, "b"); buf = await box("INBOX", "c");
+  const sameBoth = (all.match(/^Subject: .*$/gm) || []).join() === (buf.match(/^Subject: .*$/gm) || []).join();
   const subjects = [...buf.matchAll(/^Subject: (.*)\r$/gm)].map(m => m[1].split(".")[0]);
   const froms = [...buf.matchAll(/^From: .*<(.*)>\r$/gm)].map(m => m[1]);
   const marked = (buf.match(/FIXTURE-MARKER-xyz/g) || []).length;
   console.log(JSON.stringify({ n: subjects.length, orders: subjects.filter(s => /^new order #/i.test(s)).length,
     shopOther: froms.filter((a, i) => /^shop@/.test(a) && !/^new order/i.test(subjects[i])).length,
-    replies: subjects.filter(s => /^Re: Your application/.test(s)).length, unrelated: subjects.filter(s => /Lunch|newsletter/.test(s)).length, marked }));
+    replies: subjects.filter(s => /^Re: Your application/.test(s)).length, unrelated: subjects.filter(s => /Lunch|newsletter/.test(s)).length, marked, sameBoth }));
   sock.destroy(); await f.close(); process.exit(0);
 })();' "$ROOT" 2>&1)
-if [ "$FX" = '{"n":9,"orders":3,"shopOther":2,"replies":2,"unrelated":2,"marked":9}' ]; then
+if [ "$FX" = '{"n":9,"orders":3,"shopOther":2,"replies":2,"unrelated":2,"marked":9,"sameBoth":true}' ]; then
   ok "mail fixture: 3 orders, 2 same-sender non-orders, 2 application replies, 2 unrelated mails, the marker in all 9, read over IMAP"
 else
   bad "mail fixture read over IMAP is not the expected population: $FX"
@@ -2969,6 +2971,10 @@ refuses 'last week'"'"'s talk already held, not open' talk-on-talk-day "$T2/held
 copy "$T2/good" "$T2/still-open"; cp "$T2/good/talk-old.md" "$T2/still-open/talk-old-after.md"
 refuses 'last week'"'"'s talk left open' talk-on-talk-day "$T2/still-open" 'not closed as not held'
 copy "$T2/good" "$T2/other-opening"; printf 'Last Tuesday'"'"'s talk is still open. Hello there.\n' >"$T2/other-opening/opening-new.txt"
+copy "$T2/good" "$T2/said"; printf 'AREA: health\nSTATE: opened\n\n## The opening\n\nGood evening.\n\n## What you said\n\nMy LDL worries me.\n' >"$T2/said/talk-old.md"
+refuses 'last week'"'"'s talk answered in "What you said"' talk-on-talk-day "$T2/said" 'was answered before'
+copy "$T2/good" "$T2/he-said"; printf 'AREA: health\nSTATE: opened\n\n## The opening\n\nGood evening.\n\n## What he said\n\nMy LDL worries me.\n' >"$T2/he-said/talk-old.md"
+refuses 'last week'"'"'s talk answered in "What he said"' talk-on-talk-day "$T2/he-said" 'was answered before'
 refuses 'an opening that is not the preparation'"'"'s' talk-on-talk-day "$T2/other-opening" "did not open with the preparation's opening"
 
 # ============================================================ every one of them, the same shape

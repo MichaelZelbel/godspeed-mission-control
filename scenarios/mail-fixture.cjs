@@ -33,7 +33,14 @@ const mails = marker => [
   mail(marker, 9, "Club <news@club.example.invalid>", "Our new newsletter", 7),
 ];
 
-module.exports = { mails };
+// the stand-in's INBOX and its all-mail folder both hold the mails
+const fill = (F, f, list) => {
+  for (const name of Object.keys(f.boxes)) {
+    if (name === "INBOX" || name === F.ALL) { f.boxes[name].messages = list.map(m => Object.assign({}, m)); f.boxes[name].uidnext = 200; }
+  }
+};
+
+module.exports = { mails, fill };
 
 if (require.main === module) (async () => {
   const [tools, root, out] = process.argv.slice(2);
@@ -41,9 +48,7 @@ if (require.main === module) (async () => {
   const MAILS = mails(fs.readFileSync(path.join(out, "marker.txt"), "utf8").trim());
   const F = require(path.join(tools, "test-mc-mail-imap-fixture.js"));
   const f = await F.start();
-  for (const name of Object.keys(f.boxes)) {
-    if (name === "INBOX" || name === F.ALL) { f.boxes[name].messages = MAILS.map(m => Object.assign({}, m)); f.boxes[name].uidnext = 200; }
-  }
+  fill(F, f, MAILS);
   process.env.GODSPEED_MAIL_IMAP_TEST_SERVER = "imap://127.0.0.1:" + f.port;
   process.env.GODSPEED_DIR = root;
   process.env.GODSPEED_ROOT = root;
