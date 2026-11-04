@@ -11,6 +11,7 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { T } from "../lib/texts.mjs";
 import { readEvents } from "../lib/record.mjs";
+import { PROTOCOL } from "../lib/judge.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PLUGIN = path.join(HERE, "..", "hermes", "plugin", "godspeed-charm");
@@ -44,10 +45,10 @@ const STUB = `
 import { spawnSync } from "node:child_process";
 const [command, ...rest] = process.argv.slice(2);
 const mode = process.env.FIXTURE_JUDGE;
-const FALLS_BACK = ["slow", "answer"];
+const FALLS_BACK = ["slow", "answer", ...(process.env.FIXTURE_JUDGE_SOURCE ? [mode] : [])];
 if (command === "judge" && mode && !(rest.includes("--no-model") && FALLS_BACK.includes(mode))) {
   if (mode === "slow") await new Promise((r) => setTimeout(r, 30000));
-  console.log(JSON.stringify({ ok: true, verdict: mode, source: "rule", why: "stub", language: "en", answer: process.env.FIXTURE_JUDGE_ANSWER || undefined }));
+  console.log(JSON.stringify({ ok: true, verdict: mode, source: process.env.FIXTURE_JUDGE_SOURCE || "rule", why: "stub", language: "en", answer: process.env.FIXTURE_JUDGE_ANSWER || undefined }));
 } else {
   const r = spawnSync(process.execPath, [process.env.REAL_BIN, command, ...rest], { stdio: "inherit" });
   process.exitCode = r.status;
@@ -177,11 +178,27 @@ test("a judgement outside the protocol is refused: an answer without yes or no g
   for (const bad of ["", "maybe"]) {
     const dir = mission();
     try {
-      const out = drive(dir, [register, pre(VENT), reply("Here.")], { FIXTURE_JUDGE: "answer", FIXTURE_JUDGE_ANSWER: bad });
+      const out = drive(dir, [register, pre(VENT), reply("Here.")], { FIXTURE_JUDGE: "answer", FIXTURE_MODEL: "slip", FIXTURE_JUDGE_ANSWER: bad });
       assert.equal(out.results[2].text, `Here.\n\n${Q}`);
       assert.deepEqual([out.log[0].verdict, out.log[0].source], ["ask", "words"]);
     } finally { gone(dir); }
   }
+});
+
+test("a judgement from a source outside the protocol is refused and gives the word check", { skip }, () => {
+  const dir = mission();
+  try {
+    const out = drive(dir, [register, pre(VENT), reply("Here.")], { FIXTURE_JUDGE: "ask", FIXTURE_MODEL: "slip", FIXTURE_JUDGE_SOURCE: "oracle" });
+    assert.equal(out.results[2].text, `Here.\n\n${Q}`);
+    assert.deepEqual([out.log[0].verdict, out.log[0].source], ["ask", "words"]);
+  } finally { gone(dir); }
+});
+
+test("the plugin and the judge command list the same protocol words", { skip }, () => {
+  const code = "import importlib.util,json,sys;s=importlib.util.spec_from_file_location('p',sys.argv[1]);m=importlib.util.module_from_spec(s);s.loader.exec_module(m);print(json.dumps(m.JUDGE_PROTOCOL))";
+  const r = spawnSync(PY, ["-c", code, path.join(PLUGIN, "__init__.py")], { encoding: "utf8", env: { ...process.env, PYTHONDONTWRITEBYTECODE: "1" } });
+  assert.equal(r.status, 0, r.stderr);
+  assert.deepEqual(JSON.parse(r.stdout.trim().split("\n").pop()), PROTOCOL);
 });
 
 test("a plain no the model did not record is recorded and its reply added; one it recorded adds nothing", { skip }, () => {

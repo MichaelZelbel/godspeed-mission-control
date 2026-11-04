@@ -206,6 +206,10 @@ def _judge_command(turn, *extra):
     return _command("judge", "--conversation", turn["conversation"], "--words-file", turn["file"], "--json", *extra)
 
 
+# The words `judge --json` may report (lib/judge.mjs PROTOCOL owns them; a test compares).
+JUDGE_PROTOCOL = {"verdict": ("ask", "answer", "none"), "source": ("rule", "model", "words"), "answer": ("yes", "no")}
+
+
 def _verdict_of(stdout):
     for line in reversed((stdout or "").splitlines()):
         if line.strip().startswith("{"):
@@ -213,9 +217,9 @@ def _verdict_of(stdout):
                 value = json.loads(line)
             except ValueError:
                 continue
-            if (isinstance(value, dict) and value.get("ok") is True and value.get("verdict") in ("ask", "answer", "none")
-                    and value.get("source") in ("rule", "model", "words")
-                    and (value["verdict"] != "answer" or value.get("answer") in ("yes", "no"))):
+            if (isinstance(value, dict) and value.get("ok") is True and value.get("verdict") in JUDGE_PROTOCOL["verdict"]
+                    and value.get("source") in JUDGE_PROTOCOL["source"]
+                    and (value["verdict"] != "answer" or value.get("answer") in JUDGE_PROTOCOL["answer"])):
                 return value
     return None
 
