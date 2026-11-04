@@ -7,7 +7,6 @@
 // goes wrong, the reply goes out as the assistant wrote it.
 import fs from 'node:fs';import path from 'node:path';import {randomUUID} from 'node:crypto';
 import {addonInvocation} from './native-personal.mjs';
-import {JUDGE_PROTOCOL} from '../../third-party/addons/godspeed-charm/lib/judge.mjs';
 import {runChild} from './child-process.mjs';
 import {charmConversation,charmOperation} from './charm-operation.mjs';
 
@@ -25,7 +24,7 @@ const verdictOf=stdout=>{
  for(const line of String(stdout).split('\n').reverse()){
   if(!line.trim().startsWith('{'))continue;
   let value;try{value=JSON.parse(line);}catch{continue;}
-  if(value?.ok===true&&JUDGE_PROTOCOL.verdict.includes(value.verdict)&&JUDGE_PROTOCOL.source.includes(value.source)&&(value.verdict!=='answer'||JUDGE_PROTOCOL.answer.includes(value.answer)))return value;
+  if(value?.ok===true&&['ask','answer','none'].includes(value.verdict)&&['rule','model','words'].includes(value.source)&&(value.verdict!=='answer'||['yes','no'].includes(value.answer)))return value;
  }
  return null;
 };
@@ -34,7 +33,7 @@ const ending=(reply,question)=>reply.trimEnd().endsWith(question)?reply:reply.tr
 // Starts the judgement of this message. `end(reply)` says what the reply becomes; `drop()` is for a
 // turn that ends without one.
 export function startCharmJudgement(domains,input){
- const began=Date.now(),words=String(input.message||'').trim(),conversation=charmConversation(input.conversation_id);
+ const words=String(input.message||'').trim(),conversation=charmConversation(input.conversation_id);
  const nothing={end:async reply=>reply,drop(){}};
  if(!words||!conversation)return nothing;
  const {store}=domains,file=path.join(store.state,'charm-words',randomUUID()+'.txt');

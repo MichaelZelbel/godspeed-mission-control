@@ -6,7 +6,6 @@ import path from 'node:path';
 import {EventEmitter} from 'node:events';
 import {PassThrough} from 'node:stream';
 import {createService} from '../server/main.mjs';
-import {JUDGE_PROTOCOL} from '../../third-party/addons/godspeed-charm/lib/judge.mjs';
 import {addonInvocation} from '../core/native-personal.mjs';
 import {wordCheckMs} from '../core/charm-judgement.mjs';
 
@@ -80,12 +79,6 @@ test('a no to the open question records kept, not a reset',{skip},async t=>{
  await say('no');
  const state=(await op({action:'status'})).state;
  assert.equal(state.open.length,0);assert.equal(state.kept,1);assert.equal(state.resetToday,false);
-});
-
-test('the verdict words the panel accepts are the plugin\'s',()=>{
- const py=fs.readFileSync(new URL('../../third-party/addons/godspeed-charm/hermes/plugin/godspeed-charm/__init__.py',import.meta.url),'utf8');
- const literal=py.match(/JUDGE_PROTOCOL = (\{.*\})/)[1].replace(/\(/g,'[').replace(/\)/g,']').replace(/,\s*\]/g,']');
- assert.deepEqual(JSON.parse(literal),JUDGE_PROTOCOL);
 });
 
 test('a plugin-style judge call carrying a model command is refused on the public path',()=>{

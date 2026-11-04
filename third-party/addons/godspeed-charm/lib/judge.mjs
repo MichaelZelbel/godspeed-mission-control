@@ -10,9 +10,6 @@ import { isYes, isNo, isExplicitReset } from "./words.mjs";
 
 export const MODEL_SECONDS = 15;
 
-// The words of `judge --json` that callers accept; the Hermes plugin keeps a copy in Python (a test holds the two equal).
-export const JUDGE_PROTOCOL = Object.freeze({ verdict: ["ask", "answer", "none"], source: ["rule", "model", "words"], answer: ["yes", "no"] });
-
 const none = (why) => ({ verdict: "none", source: "rule", why });
 
 // Contempt and blame aimed at the assistant or its work, English and German. Whole words only.
