@@ -150,6 +150,22 @@ test('changing and removing a rule: the old question is dropped, and the counted
  requests.length=0;assert.deepEqual(await runMailCount({root,now:NOW}),{added:0,failed:0});assert.deepEqual(requests,[]);
 });
 
+test('a Gmail rule previews and counts the Gmail mailbox, and a godspeed rule the other',async t=>{
+ const {root,store,domains}=fixture(t);
+ const accounts=[],search=async a=>{accounts.push(a.account);return {account:a.account,messages:a.account==='gmail'?[{message_id:'g1',sender:'shop@gmail-shop.example.invalid',subject:'New order #7',date:'2026-11-02T08:00:00Z'}]:[]};};
+ domains.mailSearch=search;
+ const rule={senders:['gmail-shop.example.invalid'],subjects:['new order'],mailbox:'gmail'};
+ const {asked}=await setUp(domains,rule,{name:'Gmail orders'});
+ assert.match(asked.reply,/in your Gmail, as one.*In the last 30 days that is 1 mail/);
+ assert.deepEqual(accounts,['gmail']);
+ await setUp(domains,ORDERS,{name:'Shop orders'});
+ accounts.length=0;
+ assert.deepEqual(await runMailCount({root,now:NOW,search}),{added:1,failed:0});
+ assert.deepEqual([...accounts].sort(),['gmail','godspeed']);
+ assert.equal(count(store,'Gmail orders').length,1);assert.equal(count(store,'Shop orders').length,0);
+ assert.match(count(store,'Gmail orders')[0].data.mail_id,/^gmail:/);
+});
+
 test('no sender, shop or phrase is built into the code',()=>{
  for(const file of ['core/mail-trackers.mjs','scripts/mail-count.mjs'])assert.doesNotMatch(fs.readFileSync(new URL('../'+file,import.meta.url),'utf8'),/etsy|amazon|shopify|gumroad|bewerbung/i,file);
 });
