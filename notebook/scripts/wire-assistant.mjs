@@ -136,6 +136,10 @@ catch(error){console.error('The skills your assistant saved in its own folder we
 // scheduled job delivered is not part of the chat the assistant sees next.
 fs.cpSync(path.join(kit,'notebook','assistant-files','godspeed-context'),path.join(home,'plugins','godspeed-context'),{recursive:true,filter:source=>!/__pycache__/.test(source)});
 atomic(path.join(home,'plugins','godspeed-context','mission-control.txt'),root+'\n');
+// THE SHARED YES/NO BUTTONS (assistant-files/godspeed-buttons, issue #197): a library, not a plugin
+// (it is not in plugins.enabled). Charm's slip question and the waiting-step questions use it, so
+// a button's owner check, its one-answer claim and its token live in one place.
+fs.cpSync(path.join(kit,'notebook','assistant-files','godspeed-buttons'),path.join(home,'plugins','godspeed-buttons'),{recursive:true,filter:source=>!/__pycache__/.test(source)});
 // THE ONE OUTGOING STEP (core: assistant-files/godspeed-reply, issue #140): Hermes keeps only the first
 // replacement any transform_llm_output callback returns, so this plugin is the one, and it runs the
 // steps other plugins add. Its first step has a reply go out in the language of the message it
