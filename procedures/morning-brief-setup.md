@@ -21,7 +21,7 @@ Read AGENTS.md, the profile, current work files, decisions and inbox. Read the p
 
 Write what changed, useful work you prepared, and the decision that needs me. Separate recorded claims from your recommendations. Include a short draft or question set when the sources support one. Name important gaps and failed checks. Send nothing, buy nothing and make no commitments.
 
-Save a new file as brief/YYYY-MM-DD.md. If it already exists, preserve it and report that no second daily brief was written. For an explicit test, accept a separate practice output path and never use or overwrite today's real brief.
+Where `godspeed-brief` is a command you can run (every desktop chat and every Hermes routine of this app), run it with no other word and answer with its text, word for word. It saves today's "Your morning briefing" in the notebook once and prints the saved one on any repeat; never write brief/YYYY-MM-DD.md by hand there. Only where that command does not exist, save a new file as brief/YYYY-MM-DD.md. If it already exists, preserve it and report that no second daily brief was written. For an explicit test, accept a separate practice output path and never use or overwrite today's real brief.
 
 Keep the normal brief body under 200 words. Include copyable action text in the brief itself. Use existing approved HTTPS links for longer material only when available; do not publish private material to make a link. The file a fact came from may be named on a Sources: line.
 
@@ -56,8 +56,10 @@ mc-judge-brief on the file, and never put back what it removed.
 A rule in the recipe can be forgotten by a session; a command cannot. If a
 command is missing, run this kit's installer again and it appears.
 
-You get two things: `skills/morning-brief/SKILL.md` (the recipe) and
-`brief/YYYY-MM-DD.md` (today's brief, for real).
+You get two things: `skills/morning-brief/SKILL.md` (the recipe) and today's
+brief for real: the note "Your morning briefing" in your notebook. Only where
+`godspeed-brief` does not exist (a server's morning job) it is the file
+`brief/YYYY-MM-DD.md`.
 
 Run it two or three more times in the same sitting, each time as a test with
 a practice output path such as `practice/brief-tests/`, because the recipe
