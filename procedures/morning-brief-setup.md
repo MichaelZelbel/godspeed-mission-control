@@ -27,7 +27,7 @@ Keep the normal brief body under 200 words. Include copyable action text in the 
 
 Keep urgent unfinished work and failed-check notices visible after the normal body when they need more space. These sections are exempt from the 200-word limit. Never cut them to pass the limit. Omit empty sections.
 
-Run mc-check-brief on the brief (the text godspeed-brief printed, or the completed file where that command does not exist), fix delivery-format failures and preserve important content. A passed format check is not an evidence check. If checking fails, report the failure and keep the draft available for inspection.
+Run mc-check-brief on the brief: where godspeed-brief exists, pipe its text in with `godspeed-brief | mc-check-brief -`; where that command does not exist, run it on the completed file, fix delivery-format failures and preserve important content. A passed format check is not an evidence check. If checking fails, report the failure and keep the draft available for inspection.
 ```
 
 *[Copy prompt](https://querino.ai/prompts/morning-brief)*
@@ -50,7 +50,8 @@ The prompt above runs the first. To add the second, paste this as well:
 ```
 Add this to skills/morning-brief/SKILL.md: the full text I would copy is right
 there in the brief, in double quotes. After mc-check-brief passes, run
-mc-judge-brief on the brief (the file only where godspeed-brief does not exist), and never put back what it removed.
+mc-judge-brief on the brief file, only where godspeed-brief does not exist (it rewrites a file, and
+where the command exists the saved note is not edited by hand), and never put back what it removed.
 ```
 
 A rule in the recipe can be forgotten by a session; a command cannot. If a
