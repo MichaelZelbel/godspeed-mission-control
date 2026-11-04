@@ -88,16 +88,10 @@ class Built:pass
 sys.modules["cron.scheduler_provider"].InProcessCronScheduler=Built
 delivered=[]
 S=sys.modules["cron.scheduler"]
-S._normalize_deliver_value=lambda d:d or "local"
-S._delivery_lane_value=lambda job,*,for_failure=False:(job.get("failure_deliver") or "").strip() if for_failure and (job.get("failure_deliver") or "").strip() else job.get("deliver","local")
-def _targets(job,*,for_failure=False):
-    out=[]
-    for p in S._normalize_deliver_value(S._delivery_lane_value(job,for_failure=for_failure)).split(","):
-        p=p.strip()
-        if p=="origin":p=job.get("origin_platform","")
-        if p.split(":")[0] in("telegram","discord"):out.append({"platform":p.split(":")[0]})
-    return out
-S._resolve_delivery_targets=_targets
+# Opaque: what Hermes resolved is supplied by each case as job["resolved"] = {targets, lane}.
+S._normalize_deliver_value=lambda d:d
+S._delivery_lane_value=lambda job,*,for_failure=False:job["resolved"]["lane"]
+S._resolve_delivery_targets=lambda job,*,for_failure=False:job["resolved"]["targets"]
 sys.modules["cron.scheduler"]._deliver_result=lambda job,content,adapters=None,loop=None,*,for_failure=False:delivered.append(content)
 import importlib.util
 s=importlib.util.spec_from_file_location("godspeed_notebook",sys.argv[1]);m=importlib.util.module_from_spec(s);s.loader.exec_module(m)
@@ -118,27 +112,28 @@ function wiredProvider(t,{node=process.execPath}={}){
 test('what a Settings routine delivers is recorded unchanged, for local and Telegram delivery, before Hermes delivers it',t=>{
  if(!python)return t.skip('needs Python');
  const {store,run}=wiredProvider(t),words='Your weekly review is ready. Reply "ok" and I will start.';
- const out=run([[{id:'j1',name:'Weekly review',skill:'weekly-review',deliver:'telegram'},words,false],[{id:'j2',name:'Morning brief',skills:['morning-brief'],deliver:'local'},'Good morning.',false],
-  [{id:'j3',name:'Own script',script:'x.py',deliver:'telegram'},'Printed by its script.',false],[{id:'j4',name:'Failing',skill:'coach',deliver:'telegram'},'It failed.',true],[{id:'j5',name:'Targeted',skill:'coach',deliver:'telegram:123'},'To a chat.',false]]);
- assert.deepEqual(out.errors,[null,null,null,null,null]);assert.deepEqual(out.delivered,[words,'Good morning.','Printed by its script.','It failed.','To a chat.']);
+ const out=run([[{id:'j1',name:'Weekly review',skill:'weekly-review',deliver:'telegram',resolved:{targets:[{platform:'telegram'}],lane:'telegram'}},words,false],[{id:'j2',name:'Morning brief',skills:['morning-brief'],deliver:'local',resolved:{targets:[],lane:'local'}},'Good morning.',false],
+  [{id:'j3',name:'Own script',script:'x.py',deliver:'telegram',resolved:{targets:[{platform:'telegram'}],lane:'telegram'}},'Printed by its script.',false],[{id:'j4',name:'Failing',skill:'coach',deliver:'telegram',resolved:{targets:[{platform:'telegram'}],lane:'telegram'}},'It failed.',true],[{id:'j5',name:'Targeted',skill:'coach',deliver:'telegram:123',resolved:{targets:[{platform:'telegram'}],lane:'telegram:123'}},'To a chat.',false],
+  [{id:'j6',name:'Origin',skill:'coach',deliver:'origin',resolved:{targets:[{platform:'telegram'}],lane:'origin'}},'From origin.',false]]);
+ assert.deepEqual(out.errors,[null,null,null,null,null,null]);assert.deepEqual(out.delivered,[words,'Good morning.','Printed by its script.','It failed.','To a chat.','From origin.']);
  store.scan?.();const saved=[...new Store(store.root,{device:'pc'}).records.values()].filter(r=>r.id.startsWith('background-report-')).sort((a,b)=>a.content<b.content?-1:1);
- assert.deepEqual(saved.map(r=>[r.content,r.delivered_to,r.conversation_id,r.report.routine]),[['Good morning.','notebook',null,'Morning brief'],['It failed.','telegram','telegram-owner','Failing'],['To a chat.','telegram','telegram-owner','Targeted'],[words,'telegram','telegram-owner','Weekly review']]);
+ assert.deepEqual(saved.map(r=>[r.content,r.delivered_to,r.conversation_id,r.report.routine]),[['From origin.','telegram','telegram-owner','Origin'],['Good morning.','notebook',null,'Morning brief'],['It failed.','telegram','telegram-owner','Failing'],['To a chat.','telegram','telegram-owner','Targeted'],[words,'telegram','telegram-owner','Weekly review']]);
 });
 
 test('a Settings routine\'s result that cannot be recorded is not delivered',t=>{
  if(!python)return t.skip('needs Python');
  const {run}=wiredProvider(t,{node:path.join(os.tmpdir(),'no-such-node')});
- const out=run([[{id:'j1',name:'Weekly review',skill:'weekly-review',deliver:'telegram'},'Words.',false]]);
+ const out=run([[{id:'j1',name:'Weekly review',skill:'weekly-review',deliver:'telegram',resolved:{targets:[{platform:'telegram'}],lane:'telegram'}},'Words.',false]]);
  assert.match(out.errors[0],/Not delivered: it could not be recorded/);assert.deepEqual(out.delivered,[]);
 });
 
 test('a failure is recorded in the lane Hermes sends failures to, not the normal lane',t=>{
  if(!python)return t.skip('needs Python');
  const {store,run}=wiredProvider(t);
- const out=run([[{id:'j1',name:'To notebook',skill:'coach',deliver:'local',failure_deliver:'telegram'},'Failed A.',true],[{id:'j2',name:'To Telegram',skill:'coach',deliver:'telegram',failure_deliver:'local'},'Failed B.',true],
-  [{id:'j3',name:'Failure silenced',skill:'coach',deliver:'telegram',failure_deliver:'origin'},'Failed C.',true],[{id:'j4',name:'Blank lane',skill:'coach',deliver:'local',failure_deliver:' '},'Failed D.',true],
-  [{id:'j5',name:'Composite',skill:'coach',deliver:'local',failure_deliver:'telegram,local'},'Failed E.',true],[{id:'j6',name:'Origin',skill:'coach',deliver:'local',failure_deliver:'origin',origin_platform:'telegram'},'Failed F.',true],
-  [{id:'j7',name:'Elsewhere',skill:'coach',deliver:'local',failure_deliver:'discord'},'Failed G.',true]]);
+ const out=run([[{id:'j1',name:'To notebook',skill:'coach',deliver:'local',failure_deliver:'telegram',resolved:{targets:[{platform:'telegram'}],lane:'telegram'}},'Failed A.',true],[{id:'j2',name:'To Telegram',skill:'coach',deliver:'telegram',failure_deliver:'local',resolved:{targets:[],lane:'local'}},'Failed B.',true],
+  [{id:'j3',name:'Failure silenced',skill:'coach',deliver:'telegram',failure_deliver:'origin',resolved:{targets:[],lane:'origin'}},'Failed C.',true],[{id:'j4',name:'Blank lane',skill:'coach',deliver:'local',failure_deliver:' ',resolved:{targets:[],lane:'local'}},'Failed D.',true],
+  [{id:'j5',name:'Composite',skill:'coach',deliver:'local',failure_deliver:'telegram,local',resolved:{targets:[{platform:'telegram'}],lane:'telegram,local'}},'Failed E.',true],[{id:'j6',name:'Origin',skill:'coach',deliver:'local',failure_deliver:'origin',origin_platform:'telegram',resolved:{targets:[{platform:'telegram'}],lane:'origin'}},'Failed F.',true],
+  [{id:'j7',name:'Elsewhere',skill:'coach',deliver:'local',failure_deliver:'discord',resolved:{targets:[{platform:'discord'}],lane:'discord'}},'Failed G.',true]]);
  assert.deepEqual(out.errors,[null,null,null,null,null,null,null]);
  const saved=[...new Store(store.root,{device:'pc'}).records.values()].filter(r=>r.id.startsWith('background-report-')).sort((a,b)=>a.content<b.content?-1:1);
  assert.deepEqual(saved.map(r=>[r.content,r.delivered_to]),[['Failed A.','telegram'],['Failed B.','notebook'],['Failed D.','notebook'],['Failed E.','telegram'],['Failed F.','telegram']]);
