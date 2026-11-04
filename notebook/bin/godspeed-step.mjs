@@ -45,7 +45,7 @@ if(verb==='heard'){
 const store=new Store(root,{device:machineDevice(root).id});
 if(verb==='open'){
  const VALUED=['--about','--question','--yes','--no','--by','--chat','--job','--quietly','--subject','--extra','--godspeed'],BARE=['--outward','--within'];
- for(let at=1;at<args.length;at++){if(VALUED.includes(args[at])){const value=args[at+1];if(value===undefined||value.startsWith('--'))throw Error(args[at]+' needs a value.');at++;}else if(!BARE.includes(args[at]))throw Error('Unknown option '+args[at]+' for open.');}
+ for(let at=1;at<args.length;at++){if(VALUED.includes(args[at])){const value=args[at+1];if(value===undefined||VALUED.includes(value)||BARE.includes(value))throw Error(args[at]+' needs a value.');at++;}else if(!BARE.includes(args[at]))throw Error('Unknown option '+args[at]+' for open.');}
  if(args.includes('--within')&&option('--extra')===undefined)throw Error('--within needs --extra.');
  const installation=store.get('settings','installation');
  print(openStep(store,{about:option('--about'),question:option('--question'),yes:option('--yes'),no:option('--no'),by:option('--by'),job:option('--job'),quietly:option('--quietly'),subject:option('--subject'),outward:args.includes('--outward'),extra:option('--extra')===undefined?undefined:{instruction:option('--extra'),within:args.includes('--within')},
