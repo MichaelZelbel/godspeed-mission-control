@@ -281,10 +281,10 @@ const commands = {
         Object.assign(t, { opening: p.opening, prepared: p.card, read: f.read || `the prepared talk ${prepPath(mcDir, file)}`, prep: prepPath(mcDir, file) });
       }
       if (!t.opening) die('Give the opening: --opening "<what you are sending them>", or --from-prep <file> for a talk prepared ahead');
-      // A talk they asked for on a talk day replaces an earlier one that got no reply. A prepared
+      // A prepared talk they asked for on a talk day replaces an earlier one that got no reply. The
       // opening is sealed, so the one sentence naming the replaced talk is added to it here.
-      const replaced = shown && isTalkDay(a, d) ? unansweredBefore(a, d) : [];
-      if (t.prep && replaced.length) t.opening = `${t.opening}\n\nYour ${a.title} talk of ${replaced.at(-1)} got no reply, so I closed it as not held.`;
+      const replaced = t.prep && shown && isTalkDay(a, d) ? unansweredBefore(a, d) : [];
+      if (replaced.length) t.opening = `${t.opening}\n\nYour ${a.title} talk of ${replaced.at(-1)} got no reply, so I closed it as not held.`;
       const r = openTalk(a, d, t, at);
       if (r.created) for (const e of replaced) setTalkState(a, e, "not-held");
       if (r.created) saved(`${a.slug} talk opened ${d}`);
