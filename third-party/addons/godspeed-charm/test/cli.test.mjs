@@ -618,3 +618,23 @@ test("a scheduled run leaves no marker and cannot use one", () => {
   assert.deepEqual(openOf(dir), []);
   gone(dir);
 });
+
+test("judge: prints the verdict as JSON and writes nothing; context --program-asks changes only the slip lines", () => {
+  const dir = mission();
+  try {
+    assert.equal(run(dir, ["start", "--json"]).status, 0);
+    const before = fs.readdirSync(path.join(dir, "notebook", "Collections"), { recursive: true }).length;
+    const r = run(dir, ["judge", "--conversation", "api_server:s1", "--words", "Wrong again! Do you even look?", "--no-model", "--json"]);
+    assert.equal(r.status, 0, r.stderr);
+    const v = json(r);
+    assert.deepEqual([v.ok, v.verdict, v.source, v.language], [true, "ask", "words", "en"]);
+    const none = json(run(dir, ["judge", "--words", "wrong again", "--no-model"]));
+    assert.deepEqual([none.verdict, none.why], ["none", "no conversation"]);
+    assert.equal(fs.readdirSync(path.join(dir, "notebook", "Collections"), { recursive: true }).length, before);
+    const file = path.join(dir, "words.txt");
+    fs.writeFileSync(file, "charm slip\n");
+    assert.equal(json(run(dir, ["judge", "--conversation", "c:1", "--words-file", file, "--no-model"])).why, "an explicit reset request");
+    const block = run(dir, ["context", "--conversation", "c:1", "--program-asks"]).stdout;
+    assert.match(block, /the program asks after your reply/);
+  } finally { gone(dir); }
+});

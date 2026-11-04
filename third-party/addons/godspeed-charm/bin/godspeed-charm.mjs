@@ -19,13 +19,14 @@ import { T, pickLanguage, buttonTexts } from "../lib/texts.mjs";
 import { isYes, isNo, isExplicitReset } from "../lib/words.mjs";
 import { writeTurn, currentConversation } from "../lib/turns.mjs";
 import { contextBlock } from "../lib/context.mjs";
+import { judge } from "../lib/judge.mjs";
 import { briefText, isFinishDay } from "../lib/brief.mjs";
 import { decodeArgv, readWordsFile, restoreShellEnv, startedFromGitBash, gitBashPath, LAUNCHER_ENV, CMDLINE_ENV } from "../lib/argv.mjs";
 
 // The values that name a file or folder. From Git Bash these are turned into Windows paths;
 // the person's words never are (lib/argv.mjs).
-const PATH_FLAGS = ["godspeed", "words-file", "extra-skills-dir"];
-const FLAGS = new Set(["json", "scheduled", "no-write", "stickers", "yes", "no-hermes", "no-claude"]);
+const PATH_FLAGS = ["godspeed", "words-file", "extra-skills-dir", "model-command"];
+const FLAGS = new Set(["json", "scheduled", "no-write", "stickers", "yes", "no-hermes", "no-claude", "program-asks", "no-model"]);
 // setup and check install and inspect; they need no record, no settings and no day.
 const INSTALL = ["setup", "check"];
 // help and texts only print what this add-on says; they need no mission control at all.
@@ -248,10 +249,24 @@ const commands = {
     // by the next command.
     if (state.needsFinish) { try { write("finish", {}, { lockTimeoutMs: 1500 }); state = load(); } catch { /* written next time */ } }
     // --stickers: the caller knows the hermes-telegram-stickers plugin turns a tag into a sticker.
-    const block = contextBlock(state, s, { conversation, today, language: lang, stickers: f.stickers === true });
+    const block = contextBlock(state, s, { conversation, today, language: lang, stickers: f.stickers === true, programAsks: f["program-asks"] === true });
     if (!block) return null;
     if (f.hook === "claude") console.log(JSON.stringify({ hookSpecificOutput: { hookEventName: "UserPromptSubmit", additionalContext: block } }));
     else process.stdout.write(block + "\n");
+    return null;
+  },
+  // The program's judgement of the person's words (lib/judge.mjs): ask, answer or none. Reads the
+  // record and writes nothing; the Hermes plugin acts on the verdict.
+  judge() {
+    const timeout = Number(process.env.GODSPEED_CHARM_JUDGE_TIMEOUT_MS);
+    const verdict = judge({
+      state: load(), settings: s, today, language: f.language, words: f.words ?? "",
+      conversation: typeof f.conversation === "string" ? f.conversation : "",
+      scheduled: Boolean(f.scheduled || process.env.GODSPEED_SCHEDULED_RUN),
+      modelCommand: typeof f["model-command"] === "string" ? f["model-command"] : "", noModel: f["no-model"] === true,
+      ...(timeout > 0 ? { timeoutMs: timeout } : {}),
+    });
+    console.log(JSON.stringify({ ok: true, ...verdict }));
     return null;
   },
   config() {

@@ -214,3 +214,19 @@ test("the notebook channel: the same steps as charm operations, never a shell co
   // The shell channel stays the default.
   assert.equal(block(running(), { conversation: "telegram:1" }), block(running(), { conversation: "telegram:1", channel: "shell" }));
 });
+
+test("programAsks: the program asks the slip question, the model never records or writes it; without it the block is as before", () => {
+  const plain = block(running(), { conversation: "telegram:1" });
+  const b = block(running(), { conversation: "telegram:1", programAsks: true });
+  assert.match(b, /the program asks after your reply/);
+  assert.match(b, /never run godspeed-charm asked/);
+  assert.doesNotMatch(b, /godspeed-charm asked --words/);
+  assert.ok(!b.includes("Back to 21? Yes / No"));
+  assert.ok(b.includes('godspeed-charm slip --words "<their words>"'));
+  assert.equal(block(running(), { conversation: "telegram:1", programAsks: false }), plain);
+  const open = running([ev("asked", "2026-10-30", { conversation: "telegram:1", words: "garbage" })]);
+  assert.ok(block(open, { conversation: "telegram:1", programAsks: true }).includes('godspeed-charm answer yes --words "<their words>"'));
+  // The notebook's own chat and a conversation-less shell keep their words.
+  assert.equal(block(running(), { conversation: "notebook:1", channel: "notebook", programAsks: true }), block(running(), { conversation: "notebook:1", channel: "notebook" }));
+  assert.equal(block(running(), { programAsks: true }), block(running()));
+});
