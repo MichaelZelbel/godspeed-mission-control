@@ -366,3 +366,81 @@ test('a direct reply is stamped with the words actually sent, so a progress phot
  await telegram.tick();
  assert.equal(sent.at(-1)[0],'sendPhoto');assert.equal(sent.at(-1)[1],'Nice. '+short.message);assert.ok(store.get('approvals',short.id).sent_at);
 });
+
+// Issue #220: the gate every waiting step passes before it is asked.
+test('a quiet restart is done and nothing is asked',async t=>{
+ const {store}=fixture(t),result=open(store,'The gateway needs a restart.','telegram',{quietly:'restart'});
+ assert.equal(result.outcome,'quiet');assert.equal(waitingSteps(store).length,0);
+ assert.equal(store.list('approvals').length,0);
+ assert.throws(()=>open(store,'x','telegram',{quietly:'delete'}),/Quietly is one of/);
+ assert.throws(()=>open(store,'Send the mail.','telegram',{quietly:'retry',outward:true}),/never done quietly/);
+});
+
+test('a subject decided earlier answers from the decision until the owner\'s expiry',async t=>{
+ const {store}=fixture(t),first=await ask(store,'Turn off the old programs?','telegram',{subject:'old-programs'});
+ assert.equal(heard(store,{chat:'telegram',words:'yes'}).kind,'answered');
+ const dated=store.get('approvals',first.id);store.commit([store.prepare('approvals',{expires_at:'2999-01-01T00:00:00.000Z'},dated)]);
+ const again=open(store,'Turn off the old programs, again?','telegram',{subject:'old-programs'});
+ assert.equal(again.outcome,'decided');assert.equal(again.answer,'yes');assert.equal(again.decision.user_words,'yes');
+ assert.equal(waitingSteps(store).length,0);
+ assert.equal(open(store,'Something else.','telegram',{subject:'other'}).outcome,'asked');
+ const expired=store.get('approvals',first.id);store.commit([store.prepare('approvals',{expires_at:'2000-01-01T00:00:00.000Z'},expired)]);
+ assert.equal(open(store,'Turn off the old programs, once more?','telegram',{subject:'old-programs'}).outcome,'asked');
+});
+
+test('a rejected step is asked again only when it changed, and then says what changed',async t=>{
+ const {store}=fixture(t);await ask(store,'Delete the cache.','telegram',{subject:'cache'});
+ heard(store,{chat:'telegram',words:'no'});
+ assert.equal(open(store,'Delete the cache.','telegram',{subject:'cache'}).answer,'no');
+ const changed=open(store,'Delete the cache, now twice the size.','telegram',{subject:'cache'});
+ assert.equal(changed.outcome,'asked');assert.match(changed.message,/You said no to "Delete the cache\." before\. What changed: Delete the cache, now twice/);
+});
+
+test('an outward step with an earlier unrelated decision is still asked',async t=>{
+ const {store}=fixture(t);await ask(store,'Restart the bot?','telegram',{subject:'bot'});
+ heard(store,{chat:'telegram',words:'yes'});
+ assert.equal(open(store,'Send the mail.','telegram',{subject:'mail',outward:true}).outcome,'asked');
+ assert.equal(open(store,'Send the mail to everyone.','telegram',{subject:'bot',outward:true}).outcome,'asked');
+});
+
+test('an optional extra after an instruction is never asked',async t=>{
+ const {store}=fixture(t),extra={instruction:'Stop them'};
+ assert.equal(open(store,'Also clean up the logs.','telegram',{extra:{...extra,within:false}}).outcome,'dropped');
+ assert.equal(open(store,'Also stop the helper.','telegram',{extra:{...extra,within:true}}).outcome,'do');
+ assert.equal(open(store,'Also send a note.','telegram',{extra:{...extra,within:true},outward:true}).outcome,'dropped');
+ assert.equal(waitingSteps(store).length,0);assert.equal(store.list('approvals').length,0);
+});
+
+test('godspeed-step open carries quiet, subject and optional-extra gates and refuses unknown options',async t=>{
+ const {root,store}=fixture(t),run=args=>spawnSync(process.execPath,[script,'open','--about','The gateway is old.','--question','Restart it?','--yes','y','--no','n','--by','routine:test','--chat','telegram',...args,'--godspeed',root],{encoding:'utf8'});
+ assert.equal(JSON.parse(run(['--quietly','restart']).stdout).outcome,'quiet');
+ assert.equal(JSON.parse(run(['--extra','Stop them']).stdout).outcome,'dropped');
+ assert.equal(JSON.parse(run(['--extra','Stop them','--within']).stdout).outcome,'do');
+ assert.equal(waitingSteps(store).length,0);
+ const refused=run(['--quiet','restart']);assert.equal(refused.status,1);assert.match(refused.stderr,/Unknown option --quiet/);
+ assert.equal(JSON.parse(run(['--extra','-- Stop them']).stdout).outcome,'dropped');
+ for(const missing of [['--extra','--within'],['--subject']]){const bad=run(missing);assert.equal(bad.status,1);assert.match(bad.stderr,/needs a value/);}
+ assert.equal(waitingSteps(store).length,0);
+});
+
+test('the scenario asker drives the real godspeed-step open with every flag it emits',async t=>{
+ const {root,store}=fixture(t),home=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-asker-'));t.after(()=>fs.rmSync(home,{recursive:true,force:true}));
+ fs.mkdirSync(path.join(home,'bin'));
+ fs.writeFileSync(path.join(home,'bin','godspeed-step'),`#!/bin/sh\nprintf '%s\\n' "$@" >> argv.log\nprintf '@@\\n' >> argv.log\nexec "${process.execPath}" "${script}" "$@" --godspeed "${root}"\n`,{mode:0o755});
+ const full={about:'a',question:'q',yes:'y',no:'n'};
+ const asks=[{...full,quiet:'restart'},{...full,optional_after:'Stop them'},{...full,subject:'gw'},{...full,about:'-- restart the gateway'}];
+ fs.writeFileSync(path.join(home,'.scenario-asks.json'),JSON.stringify(asks));
+ const done=spawnSync('python3',[fileURLToPath(new URL('../../scenarios/scenario-asker.py',import.meta.url))],{cwd:home,encoding:'utf8',env:{...process.env,HERMES_HOME:home}});
+ assert.equal(done.status,0,done.stderr);
+ const calls=fs.readFileSync(path.join(home,'argv.log'),'utf8').split('@@\n').filter(Boolean).map(c=>c.trim().split('\n'));
+ assert.ok(calls[0].includes('--quietly')&&calls[0].includes('restart'));
+ assert.ok(calls[1].includes('--extra')&&calls[1].includes('Stop them')&&!calls[1].includes('--within'));
+ assert.ok(calls[2].includes('--subject')&&calls[2].includes('gw'));
+ assert.equal(store.list('approvals').filter(a=>a.status==='pending').length,2);
+});
+
+test('a bundled report is split and each finding is checked',async t=>{
+ const {store}=fixture(t),base={question:'Shall I go on?',yes:'Done.',no:'Left.',by:'routine:test',chat:'notebook'};
+ const results=[{...base,about:'The gateway needs a restart.',quietly:'restart'},{...base,about:'The disk is nearly full.'}].map(finding=>openStep(store,finding));
+ assert.deepEqual(results.map(r=>r.outcome),['quiet','asked']);
+});

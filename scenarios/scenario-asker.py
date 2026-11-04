@@ -3,10 +3,10 @@ way the product gives a job to ask, `godspeed-step open`, for the scenarios that
 is asked and how he answers (no-question-he-cannot-judge.sh, plain-yes.sh).
 
 It reads ./.scenario-asks.json (the routine runs in the workspace; the scenario writes the file before
-each run), a list of {about, question, yes, no, quiet?, subject?, optional_after?}, opens one waiting
-step per ask, and prints what the operation says to send, which Hermes delivers to the owner's
-Telegram. An ask the operation answers with nothing (it decided quietly, or the question is already
-out) prints nothing.
+each run), a list of {about, question, yes, no, quiet?, subject?, optional_after?}, opens a waiting
+step for each ask the operation answers with a question (not a quiet, decided, done or dropped one), and prints what the operation says to send, which Hermes delivers to the owner's
+Telegram. The command prints a JSON outcome for every ask; this fixture prints only its "message",
+so an outcome without one (quiet, decided, do, dropped) prints nothing.
 
 THE COUPLING TO TICKETS 01 AND 04 IS THIS ONE TABLE. Ticket 01 (#196) is rebuilt after #203 and its
 flags may move; ticket 04 has no code yet, so its three flags are provisional. Re-check both against
@@ -24,9 +24,9 @@ FLAGS = (  # ask field -> command line flag
     ("question", "--question"),  # ticket 01
     ("yes", "--yes"),          # ticket 01
     ("no", "--no"),            # ticket 01
-    ("quiet", "--quiet"),      # ticket 04, provisional: safe to do quietly (restart, reload, retry)
-    ("subject", "--subject"),  # ticket 04, provisional: the stable key an earlier decision is matched on
-    ("optional_after", "--optional-after"),  # ticket 04, provisional: an extra after an instruction
+    ("quiet", "--quietly"),    # ticket 04: safe to do quietly (restart, reload, retry)
+    ("subject", "--subject"),  # ticket 04: the stable key an earlier decision is matched on
+    ("optional_after", "--extra"),  # ticket 04: an extra after an instruction (never within it here, so dropped)
 )
 
 
