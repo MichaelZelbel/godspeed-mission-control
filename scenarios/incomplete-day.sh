@@ -84,7 +84,7 @@ check() { # <evidence folder>
   protein_lines "$folder/brief-1.txt" | grep -Eiq "$UNKNOWN" ||
     fail "the weekly protein count in the briefing does not show the unfinished day as unknown: $(protein_lines "$folder/brief-1.txt" | head -n 2 | cut -c1-240)"
 
-  [ -s "$folder/given.txt" ] && ! grep -qi 'error' "$folder/given.txt" ||
+  [ "$(head -n 1 "$folder/given.txt" | tr -d '[:space:]')" = 200 ] && ! grep -qi 'error' "$folder/given.txt" ||
     fail "the protein number given by hand was refused: $(tr -d '\n' <"$folder/given.txt" | cut -c1-200)"
   protein_lines "$folder/brief-2.txt" | grep -q . ||
     fail "the briefing after the protein number was given gives no weekly protein count"

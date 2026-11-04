@@ -2858,7 +2858,7 @@ incomplete_good() {
   printf '200\n' >"$1/upload-code.txt"
   printf 'Your data for yesterday stopped at 19:55, so I cannot say how the day ended.\nProtein days this week: 3 of 6 known, yesterday unknown.\n' >"$1/brief-1.txt"
   printf 'Protein days this week: 4 of 7; yesterday you gave 118 g.\n' >"$1/brief-2.txt"
-  printf '{"ok":true}\n' >"$1/given.txt"
+  printf '200\n{"ok":true}\n' >"$1/given.txt"
 }
 incomplete_good "$I/good"
 passes 'a day stopped at 19:55 briefed so, and counted once a protein number is given' incomplete-day "$I/good" 'counted it'
@@ -2878,6 +2878,9 @@ copy "$I/good" "$I/no-weekly-after"; printf 'Protein: you gave 118 g.\n' >"$I/no
 refuses 'no weekly count after the number is given' incomplete-day "$I/no-weekly-after" 'gives no weekly protein count'
 copy "$I/good" "$I/still"; printf 'Protein days this week: 4 of 7, yesterday still unknown, 118 g never counted.\n' >"$I/still/brief-2.txt"
 refuses 'a number given by hand that is not counted' incomplete-day "$I/still" 'still shows the day as unknown'
+
+copy "$I/good" "$I/given-500"; printf '500\nInternal server failure\n' >"$I/given-500/given.txt"
+refuses 'a manual protein number the server failed on' incomplete-day "$I/given-500" 'was refused'
 
 section 'phone-goes-quiet'
 Q=$TMP/quiet
