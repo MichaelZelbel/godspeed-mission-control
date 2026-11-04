@@ -65,8 +65,8 @@ act() {
 }
 
 folded() { tr -s '[:space:]' ' ' <"$1"; }
-# the weekly protein count: the briefing line that speaks of protein and of the week
-protein_lines() { grep -i 'protein' "$1" | grep -i 'week' || true; }
+# the weekly protein count: the briefing line that speaks of protein and of the week and gives an "N of N" count
+protein_lines() { grep -i 'protein' "$1" | grep -i 'week' | grep -Ei '[0-9]+ of [0-9]+' || true; }
 
 check() { # <evidence folder>
   local folder=$1

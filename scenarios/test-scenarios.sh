@@ -2870,9 +2870,13 @@ copy "$I/good" "$I/counted"; printf 'Data stopped at 19:55.\nProtein days this w
 refuses 'a day counted although it is unfinished' incomplete-day "$I/counted" 'as unknown'
 copy "$I/good" "$I/no-weekly"; printf 'Data stopped at 19:55.\nProtein is unknown.\n' >"$I/no-weekly/brief-1.txt"; printf 'Protein: you gave 118 g.\n' >"$I/no-weekly/brief-2.txt"
 refuses 'protein wording with no weekly count' incomplete-day "$I/no-weekly" 'as unknown'
+copy "$I/good" "$I/countless"; printf 'Data stopped at 19:55.\nProtein was discussed this week; yesterday remains unknown.\n' >"$I/countless/brief-1.txt"
+refuses 'a weekly protein line with no count' incomplete-day "$I/countless" 'as unknown'
+copy "$I/good" "$I/countless-after"; printf 'Protein was discussed this week; yesterday you gave 118 g.\n' >"$I/countless-after/brief-2.txt"
+refuses 'a weekly protein line with no count after the number is given' incomplete-day "$I/countless-after" 'gives no weekly protein count'
 copy "$I/good" "$I/no-weekly-after"; printf 'Protein: you gave 118 g.\n' >"$I/no-weekly-after/brief-2.txt"
 refuses 'no weekly count after the number is given' incomplete-day "$I/no-weekly-after" 'gives no weekly protein count'
-copy "$I/good" "$I/still"; printf 'Protein this week: yesterday still unknown, 118 g never counted.\n' >"$I/still/brief-2.txt"
+copy "$I/good" "$I/still"; printf 'Protein days this week: 4 of 7, yesterday still unknown, 118 g never counted.\n' >"$I/still/brief-2.txt"
 refuses 'a number given by hand that is not counted' incomplete-day "$I/still" 'still shows the day as unknown'
 
 section 'phone-goes-quiet'
