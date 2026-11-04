@@ -641,7 +641,7 @@ NOTICES_SAID = "godspeed-notices-said.json"
 
 def notice(c):
     """The oldest thing the notebook queued for the person (core/notices.mjs) that this machine has
-    not said, marked said now, or None. One a run: a message is about one thing."""
+    not said, with what mark_said needs, or None. One a run: a message is about one thing."""
     queued = c.get("notices")
     if not queued:
         return None
@@ -659,17 +659,21 @@ def notice(c):
     fresh = [n for n in waiting if n["id"] not in said]
     if not fresh:
         return None
-    keep = (said + [fresh[0]["id"]])[-200:]
+    return fresh[0], said, said_file
+
+
+def mark_said(n, said, said_file):
+    keep = (said + [n["id"]])[-200:]
     tmp = said_file + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump({"ids": keep}, f)
     os.replace(tmp, said_file)
-    return fresh[0]
 
 
 def reports(c, env, args, stdin, timeout):
-    """core/background-reports.mjs through its script (notebook/scripts/background-report.mjs):
-    its stdout when it ran and printed something, else None."""
+    """core/background-reports.mjs through its script (notebook/scripts/background-report.mjs): its
+    stdout, or None where no script is configured. A message that could not be recorded does not go
+    out: a run that fails says so and the notice stays unsaid."""
     script = c.get("reports")
     if not script:
         return None
@@ -677,18 +681,20 @@ def reports(c, env, args, stdin, timeout):
         r = subprocess.run([c["node"], script] + args + ["--godspeed", c["root"], "--home", c["home"]], cwd=c["root"], env=env,
                            input=stdin, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout)
     except Exception:
-        return None
-    return r.stdout.strip() if r.returncode == 0 and r.stdout.strip() else None
+        fail("What was sent to you could not be recorded in your notebook.")
+    if r.returncode != 0:
+        fail("What was sent to you could not be recorded in your notebook.", r)
+    return r.stdout.strip()
 
 
 def say(c, env, n):
-    """The words for a notice: written with the chat's guidance and recorded where the chat reads it.
-    Where that cannot run, the notice's own plain text still goes out."""
+    """The words for a notice: written with the chat's guidance and recorded where the chat reads it
+    (its plain text where no script is configured)."""
     return reports(c, env, ["say"], json.dumps(n), 360) or n["text"]
 
 
 def record(c, env, kind, text):
-    """A routine's own words, recorded as printed. The words go out whether or not this works."""
+    """A routine's own words, recorded as printed."""
     reports(c, env, ["record", "--routine", kind], text, 120)
 
 
@@ -698,9 +704,11 @@ def tick(c, env, kind, r):
     own = r.stdout.strip() if r is not None and r.returncode == 0 else ""
     if own:
         return own, False
-    n = notice(c)
-    if n:
-        return say(c, env, n), True
+    found = notice(c)
+    if found:
+        words = say(c, env, found[0])
+        mark_said(*found)
+        return words, True
     return "", True
 
 

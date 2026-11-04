@@ -47,8 +47,11 @@ test('two unrelated facts become two reports, said one at a time',async t=>{
  assert.equal((await sayNotice(store,{notice,home,provider:two})).text,'Your backup failed.');
  const second=readNotices(store).find(n=>n.id==='backup-1~2');
  assert.equal(second.text,'Your voice replies stopped.');assert.equal(second.written,true);
+ assert.deepEqual(second.facts,notice.facts);assert.equal(second.step,notice.step);
  assert.equal((await sayNotice(store,{notice:second,home,provider:two})).text,'Your voice replies stopped.');
  assert.equal(seen.length,1,'a report already written asks the AI nothing');assert.equal(records(store).length,2);
+ const [,persisted]=records(store).sort((a,b)=>a.sent_at<b.sent_at?-1:1);
+ assert.deepEqual([persisted.report.facts,persisted.report.step],[notice.facts,notice.step],'the second report keeps the facts and the waiting step');
 });
 
 test('with the AI unavailable or refused, the plain text goes out and is recorded',async t=>{
@@ -62,4 +65,15 @@ test('with the AI unavailable or refused, the plain text goes out and is recorde
 test('a notice queued with no facts is written from its text',t=>{
  const {store}=setup(t);queueNotice(store,{id:'n1',text:' Plain. '});
  assert.deepEqual(readNotices(store)[0].facts,['Plain.']);
+});
+
+test('the plugin lists at most the five newest reports, newest first',async t=>{
+ if(!python)return t.skip('needs Python');
+ const {root,store,home}=setup(t),{recordReport}=await import('../core/background-reports.mjs');
+ // Saved oldest-last by name, so neither file order nor id order is the time order.
+ for(const [i,minutes] of [3,40,10,60,25,5].entries())await recordReport(store,{text:'Report '+minutes,delivery:'telegram',written:'assistant',at:new Date(Date.now()-minutes*60000+i)});
+ const plugin=fileURLToPath(new URL('../assistant-files/godspeed-context/__init__.py',import.meta.url));
+ const block=execFileSync(python,['-I','-c','import importlib.util,sys;s=importlib.util.spec_from_file_location("p",sys.argv[1]);m=importlib.util.module_from_spec(s);s.loader.exec_module(m);print(m.reports_block(sys.argv[2],sys.argv[3]))',plugin,root,'telegram'],{encoding:'utf8',env:{...process.env,PYTHONIOENCODING:'utf-8'}});
+ const seen=[...block.matchAll(/Report (\d+)/g)].map(m=>Number(m[1]));
+ assert.deepEqual(seen,[3,5,10,25,40],'five, the most recent first; the oldest left out');
 });

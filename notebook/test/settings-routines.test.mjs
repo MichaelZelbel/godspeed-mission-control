@@ -1,4 +1,4 @@
-import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import {fileURLToPath} from 'node:url';import {execFileSync} from 'node:child_process';
+import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import {fileURLToPath} from 'node:url';import {execFileSync,spawnSync} from 'node:child_process';
 import {NativeScheduler,nativeJobs} from '../core/native-scheduler.mjs';import {Store} from '../core/records/store.mjs';import {QueryService} from '../core/query.mjs';import {Domains} from '../core/domains.mjs';
 import {installStarter} from '../core/starter-workspace.mjs';import {readMachineRecord,telegramInHermes,chatAppInHermes} from '../core/starting-routines.mjs';import {runCommand} from '../core/child-process.mjs';
 import {DatabaseSync} from 'node:sqlite';
@@ -138,6 +138,22 @@ test('the routine scripts run the journal\'s tick and say a queued notice once',
  assert.equal(run().trim(),'','said once');
  const sent=()=>store.list('conversation_messages').filter(m=>m.source_app==='background');
  assert.deepEqual(sent().map(m=>[m.content,m.report.written]),[['Last night\'s backup failed.','fallback']],'said with no AI, and recorded');
+});
+
+test('a notice that cannot be recorded is not said or marked said, and goes out once recording works',{skip:!['python','python3'].some(p=>{try{execFileSync(p,['--version'],{stdio:'ignore'});return true;}catch{return false;}})&&'needs Python'},async t=>{
+ const {root,home,store,scheduler}=await withGoal(t);
+ const journal=fileURLToPath(new URL('../../third-party/addons/godspeed-journal/bin/godspeed-journal.mjs',import.meta.url));
+ execFileSync(process.execPath,[journal,'config','set','nudge.enabled','on','--godspeed',root],{env:{...process.env,GODSPEED_JOURNAL_GIT_SYNC:'off'},windowsHide:true});
+ await scheduler.followJournal();
+ const {queueNotice}=await import('../core/notices.mjs');queueNotice(store,{id:'backup-1',text:'Last night\'s backup failed.'});
+ const python=['python3','python'].find(p=>{try{execFileSync(p,['--version'],{stdio:'ignore'});return true;}catch{return false;}});
+ const configFile=path.join(home,'scripts','godspeed-routines.json'),good=fs.readFileSync(configFile,'utf8');
+ fs.writeFileSync(configFile,JSON.stringify({...JSON.parse(good),reports:path.join(root,'missing.mjs')}));
+ const run=()=>spawnSync(python,[path.join(home,'scripts','godspeed-journal-checkins.py')],{cwd:path.join(home,'scripts'),encoding:'utf8',env:{...process.env,PYTHONIOENCODING:'utf-8'},windowsHide:true});
+ const failed=run();assert.notEqual(failed.status,0);assert.equal(failed.stdout,'');assert.match(failed.stderr,/could not be recorded/);
+ assert.equal(fs.existsSync(path.join(home,'godspeed-notices-said.json')),false,'not marked said');
+ fs.writeFileSync(configFile,good);
+ const again=run();assert.equal(again.status,0,again.stderr);assert.equal(again.stdout.trim(),'Last night\'s backup failed.');
 });
 
 test('two queued notices are said one in each run',{skip:!['python','python3'].some(p=>{try{execFileSync(p,['--version'],{stdio:'ignore'});return true;}catch{return false;}})&&'needs Python'},async t=>{
