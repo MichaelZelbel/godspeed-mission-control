@@ -967,7 +967,8 @@ def coach(c, command):
 
 def connection_check(c):
     """The Daily connection check (core/connection-check.mjs): it makes its calls and queues what the
-    person must be told as notices, which are said in this same run, right after the check."""
+    person must be told as notices. They are said in this same run only when the check succeeded; after a failure they wait
+    for the next successful run."""
     day = today(c)
     env = environment(c, day)
     args = [c["node"], c["connection_check"]]

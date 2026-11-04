@@ -338,22 +338,24 @@ print(json.dumps(g.work(g.config())))`;
 });
 
 test('a failed daily connection check leaves what it queued unsaid, and a timeout is a failure too',{skip:!havePython&&'no Python here'},t=>{
- const {home}=scriptFixture(t);
+ const {root,home}=scriptFixture(t),queued=path.join(root,'queued-notices.json'),said=path.join(home,'godspeed-notices-said.json');
+ fs.writeFileSync(queued,JSON.stringify({notices:[{id:'telegram-key',text:'Telegram refused your bot\'s key.'}]}));
  const attempt=result=>{
   const code=`import sys,types,subprocess;sys.path.insert(0,${JSON.stringify(path.join(home,'scripts'))})
 import godspeed_routines as g
 ${result}
-g.notices=lambda c,mark=True:["Telegram refused your bot's key."]
-c=g.config();c["connection_check"]="x"
+c=g.config();c["connection_check"]="x";c["notices"]=${JSON.stringify(queued)}
 print(g.connection_check(c))`;
   return spawnSync(python,['-c',code],{cwd:path.join(home,'scripts'),encoding:'utf8',env:{...process.env,PYTHONIOENCODING:'utf-8'}});
  };
  for(const result of ['g.run=lambda args,c,env,timeout=None:types.SimpleNamespace(returncode=1,stdout="",stderr="boom")','def r(*a,**k): raise subprocess.TimeoutExpired("x",1)\ng.run=r']){
   const run=attempt(result);
   assert.equal(run.status,1);assert.equal(run.stdout,'');assert.match(run.stderr,/^The daily connection check could not run\./);
+  assert.equal(fs.existsSync(said),false,'a failed run marks nothing as said');
  }
  const ok=attempt('g.run=lambda args,c,env,timeout=None:types.SimpleNamespace(returncode=0,stdout="",stderr="")');
  assert.equal(ok.status,0,ok.stderr);assert.match(ok.stdout,/Telegram refused your bot's key\./);
+ assert.deepEqual(JSON.parse(fs.readFileSync(said,'utf8')).ids,['telegram-key']);
 });
 
 // 9 October 2026, a live run: the Weekly check-in row said "Runs every 15 minutes.", which is only
