@@ -639,9 +639,8 @@ def brief(c):
 NOTICES_SAID = "godspeed-notices-said.json"
 
 
-def notices(c, mark=True, strict=False):
+def notices(c, strict=False):
     """What the notebook queued for the person (core/notices.mjs), each said once on this machine.
-    With mark=False nothing is marked said, for a run whose result will not reach the person.
     With strict=True a queue that cannot be read ends the run, for a routine whose only output is the queue;
     a missing or empty queue is still nothing to say."""
     queued = c.get("notices")
@@ -674,8 +673,6 @@ def notices(c, mark=True, strict=False):
     fresh = [n for n in waiting if n["id"] not in said]
     if not fresh:
         return []
-    if not mark:
-        return [n["text"] for n in fresh]
     keep = (said + [n["id"] for n in fresh])[-200:]
     tmp = said_file + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:
