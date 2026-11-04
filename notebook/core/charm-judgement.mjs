@@ -29,7 +29,7 @@ const verdictOf=stdout=>{
  }
  return null;
 };
-const ending=(reply,question)=>reply.includes(question)?reply:reply.trimEnd()+'\n\n'+question;
+const ending=(reply,question)=>reply.trimEnd().endsWith(question)?reply:reply.trimEnd()+'\n\n'+question;
 
 // Starts the judgement of this message. `end(reply)` says what the reply becomes; `drop()` is for a
 // turn that ends without one.

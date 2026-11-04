@@ -18,7 +18,7 @@ const START=Date.parse('2026-10-21T08:00:00Z');
 const VENT='This is useless, you are garbage and wrong again';
 const skip=process.platform==='win32';
 
-function setup(t,{judgeSeconds,model=true}={}){
+function setup(t,{judgeSeconds,model=true,answer='Understood.'}={}){
  process.env.GODSPEED_CHARM_NOW=new Date(START).toISOString();
  if(judgeSeconds)process.env.GODSPEED_CHARM_JUDGE_SECONDS=judgeSeconds;
  t.after(()=>{delete process.env.GODSPEED_CHARM_NOW;delete process.env.GODSPEED_CHARM_JUDGE_SECONDS;});
@@ -30,7 +30,7 @@ function setup(t,{judgeSeconds,model=true}={}){
  if(!model)fs.rmSync(stub);
  const spawnProcess=()=>{
   const child=new EventEmitter();child.stdin=new PassThrough();child.stdout=new PassThrough();child.stderr=new PassThrough();
-  child.stdin.on('data',()=>queueMicrotask(()=>{child.stdout.write('Understood.');child.emit('close',0);}));
+  child.stdin.on('data',()=>queueMicrotask(()=>{child.stdout.write(answer);child.emit('close',0);}));
   return child;
  };
  return {root,home,spawnProcess};
@@ -126,4 +126,13 @@ test('the word check waits five seconds unless GODSPEED_CHARM_PLUGIN_TIMEOUT is 
  const ms=v=>{if(v===undefined)delete process.env.GODSPEED_CHARM_PLUGIN_TIMEOUT;else process.env.GODSPEED_CHARM_PLUGIN_TIMEOUT=v;return wordCheckMs();};
  for(const v of [undefined,'','abc','0','-1','inf','1e309'])assert.equal(ms(v),5000,String(v));
  assert.equal(ms('0.5'),500);assert.equal(ms('20'),20000);
+});
+
+test('a reply that quotes the question and goes on still ends with the question',{skip},async t=>{
+ const question='That sounded like a slip. Back to 21? Yes / No.';
+ const {say,op}=await panel(t,{answer:question+' Here is the requested correction.'});
+ await op({action:'start',words:'start'});
+ const reply=await say(VENT);
+ assert.match(reply,/Here is the requested correction\.\n\nThat sounded like a slip\. Back to 21\?[^]*$/);
+ assert.equal((await op({action:'status'})).state.open.length,1);
 });
