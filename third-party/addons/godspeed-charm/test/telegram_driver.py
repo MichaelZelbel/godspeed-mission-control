@@ -184,6 +184,15 @@ def step_tool(s):
     return {}
 
 
+def step_pre(s):
+    """Hermes' pre_llm_call for the person's message, the way it starts the program's judgement."""
+    ROUTE.clear()
+    ROUTE.update(route_for(s["session"], s.get("route")))
+    outs = [cb(session_id=s["session"], platform=s.get("platform", "telegram"), user_message=s["message"],
+               model="test-model") for cb in hooks.get("pre_llm_call", [])]
+    return {"outs": outs}
+
+
 def step_reply(s):
     outs = [cb(response_text=s["text"], session_id=s["session"], turn_id=s["turn"],
                platform=s.get("platform", "telegram"), model="test-model")
@@ -324,7 +333,7 @@ def step_unload(s):
     return {}
 
 
-STEPS = {"register": step_register, "tool": step_tool, "reply": step_reply, "tap": step_tap,
+STEPS = {"register": step_register, "pre": step_pre, "tool": step_tool, "reply": step_reply, "tap": step_tap,
          "bus": step_bus, "files": step_files, "fail": step_fail, "env": step_env, "unload": step_unload,
          "charm": step_charm, "cancel": step_cancel, "break": step_break, "mend": step_mend,
          "corrupt": step_corrupt}

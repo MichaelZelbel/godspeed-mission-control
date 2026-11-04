@@ -38,7 +38,7 @@ test("passes the conversation as platform:session_id and the mission control fol
   const d = tmp();
   try {
     const out = call({ platform: "telegram", session_id: "abc" }, { script: stub(d, ECHO), mc: "/some/mc" });
-    assert.deepEqual(out.argv, ["context", "--godspeed", "/some/mc", "--conversation", "telegram:abc"]);
+    assert.deepEqual(out.argv, ["context", "--godspeed", "/some/mc", "--conversation", "telegram:abc", "--program-asks"]);
   } finally { fs.rmSync(d, { recursive: true, force: true }); }
 });
 

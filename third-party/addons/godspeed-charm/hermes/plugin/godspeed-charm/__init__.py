@@ -9,6 +9,11 @@ post_tool_call notices a successful `godspeed-charm asked` for this very Telegra
 transform_llm_output then takes the question out of the reply, and the question goes out as its
 own message with two buttons (telegram_question.py). Every failure returns None, so a broken
 challenge never breaks the assistant and the reply goes as the model wrote it.
+
+The slip question is the program's, not the model's choice: pre_llm_call starts `godspeed-charm
+judge` on the person's message while the model works, and transform_llm_output acts on its verdict
+on every platform: it records the question (`asked`) and ends the reply with it, or records a plain
+yes or no the model did not (`answer`).
 """
 import importlib.util
 import json
@@ -17,9 +22,12 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import types
+import hashlib
+import collections
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 STICKERS = "hermes-telegram-stickers"
@@ -30,6 +38,8 @@ _output_bus = sys.modules.setdefault("godspeed_progress_output_v1", types.Module
 _pending_lock = threading.Lock()
 _pending = {}  # (session_id, turn_id) -> the question asked in that turn
 _platforms = {}  # session_id -> the platform of its latest turn (never a scheduled one)
+_turns = collections.OrderedDict()  # session_id -> the judged turn in flight (see _start_judge)
+LOG_LIMIT = 1_000_000
 
 
 def _mission_control():
@@ -144,11 +154,13 @@ def on_pre_llm_call(**kwargs):
         platform = str(kwargs.get("platform") or "")
         session_id = str(kwargs.get("session_id") or "")
         if platform and session_id:
-            args += ["--conversation", f"{platform}:{session_id}"]
+            args += ["--conversation", f"{platform}:{session_id}", "--program-asks"]
         # A scheduled run is not a conversation with the person: no block at all, no turn marker
         # (the command writes it) and no conversation for its commands (_remember_platform).
         scheduled = platform == "cron" or bool(os.environ.get("GODSPEED_SCHEDULED_RUN"))
         _remember_platform(session_id, platform, scheduled)
+        if not scheduled:
+            _start_judge(session_id, platform, kwargs.get("user_message"))
         if scheduled:
             args.append("--scheduled")
         if platform == "telegram" and _stickers_available():
@@ -160,6 +172,164 @@ def on_pre_llm_call(**kwargs):
         return {"context": out} if out else None
     except Exception:
         return None
+
+
+# ---- The program's judgement of the message ----------------------------------------------------
+def _home():
+    return os.environ.get("HERMES_HOME") or os.path.dirname(os.path.dirname(HERE))
+
+
+def _model_command():
+    """The installation's own godspeed-model, or None where it is not installed."""
+    path = os.path.join(_home(), "bin", "godspeed-model" + (".cmd" if os.name == "nt" else ""))
+    return path if os.path.isfile(path) else None
+
+
+def _judge_seconds():
+    # Until 25 seconds after the turn began; the variable exists for the tests.
+    try:
+        return float(os.environ.get("GODSPEED_CHARM_JUDGE_SECONDS") or 25)
+    except ValueError:
+        return 25.0
+
+
+def _words_of(message):
+    if isinstance(message, list):
+        message = " ".join(str(p.get("text", "")) for p in message if isinstance(p, dict))
+    return message.strip() if isinstance(message, str) else ""
+
+
+def _judge_command(turn, *extra):
+    return _command("judge", "--conversation", turn["conversation"], "--words-file", turn["file"], "--json", *extra)
+
+
+def _verdict_of(stdout):
+    for line in reversed((stdout or "").splitlines()):
+        if line.strip().startswith("{"):
+            try:
+                value = json.loads(line)
+            except ValueError:
+                continue
+            if isinstance(value, dict) and value.get("ok") is True and value.get("verdict") in ("ask", "answer", "none"):
+                return value
+    return None
+
+
+def _run_judge(turn, extra, timeout):
+    try:
+        r = subprocess.run(_judge_command(turn, *extra), capture_output=True, text=True, encoding="utf-8",
+                           errors="replace", stdin=subprocess.DEVNULL, timeout=timeout)
+        return _verdict_of(r.stdout) if r.returncode == 0 else None
+    except Exception:
+        return None
+
+
+def _forget(turn):
+    try:
+        os.remove(turn["file"])
+    except OSError:
+        pass
+
+
+def _start_judge(session_id, platform, message):
+    """Start the judgement of this turn's message on a thread, so it runs while the model works.
+    Hermes runs one turn per session at a time, so the session id is the key."""
+    words = _words_of(message)
+    if not session_id or not platform or not words:
+        return
+    digest = hashlib.sha256(words.encode("utf-8")).hexdigest()
+    with _pending_lock:
+        old = _turns.pop(session_id, None)
+        if old and old["hash"] == digest and not old["replied"]:
+            _turns[session_id] = old
+            return
+    if old:
+        _forget(old)
+    handle, file = tempfile.mkstemp(prefix="godspeed-charm-", suffix=".txt")
+    with os.fdopen(handle, "w", encoding="utf-8") as f:
+        f.write(words)
+    model = _model_command()
+    turn = {"conversation": f"{platform}:{session_id}", "file": file, "hash": digest, "began": time.monotonic(),
+            "result": None, "replied": False, "done": {}}
+    deadline = _judge_seconds()
+
+    def work():
+        turn["result"] = _run_judge(turn, ["--model-command", model] if model else ["--no-model"], deadline)
+
+    turn["thread"] = threading.Thread(target=work, daemon=True)
+    with _pending_lock:
+        _turns[session_id] = turn
+        while len(_turns) > 200:
+            _forget(_turns.pop(next(iter(_turns))))
+    turn["thread"].start()
+
+
+def _verdict(turn):
+    """The verdict, waiting for it until at most the judge's seconds after the turn began; after
+    that the word check alone (`judge --no-model`)."""
+    turn["thread"].join(max(0.0, turn["began"] + _judge_seconds() - time.monotonic()))
+    return turn["result"] or _run_judge(turn, ["--no-model"], _timeout())
+
+
+def _log(turn, verdict, did):
+    try:
+        folder = os.path.join(_home(), "logs")
+        os.makedirs(folder, exist_ok=True)
+        path = os.path.join(folder, "godspeed-charm.log")
+        if os.path.exists(path) and os.path.getsize(path) > LOG_LIMIT:
+            os.replace(path, path + ".1")
+        entry = {"at": time.strftime("%Y-%m-%dT%H:%M:%S%z"), "conversation": turn["conversation"],
+                 "verdict": (verdict or {}).get("verdict"), "source": (verdict or {}).get("source"),
+                 "why": (verdict or {}).get("why"), "did": did}
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    except Exception:
+        pass
+
+
+def _record(turn, verdict, *args):
+    """A `godspeed-charm asked|answer` for this turn's conversation and words: its {ok, reply, state}
+    report on success (exit 0), else None."""
+    language = verdict.get("language")
+    r = subprocess.run(_command(*args, "--conversation", turn["conversation"], "--words-file", turn["file"], "--json",
+                                *(["--language", language] if language == "de" else [])),
+                       capture_output=True, text=True, encoding="utf-8", errors="replace", stdin=subprocess.DEVNULL, timeout=_timeout())
+    reports = _reports(r.stdout) if r.returncode == 0 else []
+    return reports[-1] if reports and reports[-1].get("ok") is True and reports[-1].get("reply") else None
+
+
+def _ending(out, reply):
+    return out if reply in out else out.rstrip() + "\n\n" + reply
+
+
+def _judged_reply(turn, session_id, text, kwargs):
+    """What the judged turn makes of the reply `text`, and what was done: (text or None, did)."""
+    verdict = _verdict(turn)
+    if verdict is None or verdict["verdict"] == "none":
+        return None, "nothing"
+    if verdict["verdict"] == "answer":
+        report = _record(turn, verdict, "answer", verdict["answer"])
+        if report is None:
+            return None, "no answer recorded (the model had, or none was open)"
+        return _ending(_compose(text, kwargs), report["reply"]), "answered " + verdict["answer"]
+    report = _record(turn, verdict, "asked")
+    if report is None:
+        return None, "asked refused"
+    reply = str(report["reply"])
+    if str(kwargs.get("platform") or "") == "telegram" and _question is not None:
+        conversation = turn["conversation"]
+        language = verdict.get("language")
+        entry = {"conversation": conversation, "askedWhen": _asked_when(report, conversation), "reply": reply,
+                 "language": language if language in (_question.texts() or {}) else None,
+                 "route": _question.route(session_id), "at": time.monotonic()}
+        plan = _question.prepare(entry, text)
+        if plan is not None:
+            out = _compose(plan["text"], kwargs)
+            if out.strip() in SILENT:
+                return out, "asked"
+            if _question.post(entry, plan["language"]):
+                return (out if plan["found"] or out != text else None), "asked with buttons"
+    return _ending(_compose(text, kwargs), reply), "asked"
 
 
 # ---- The slip question on Telegram ------------------------------------------------------------
@@ -200,6 +370,13 @@ def _reports(output):
     return found
 
 
+def _asked_when(report, conversation):
+    """The moment the question open in `conversation` was asked, from a command's report."""
+    questions = (report.get("state") or {}).get("open") or []
+    return next((q.get("when") for q in reversed(questions)
+                 if isinstance(q, dict) and q.get("conversation") == conversation), None)
+
+
 def on_charm_tool(**kwargs):
     """Remember a slip question asked in this turn, in this Telegram conversation. Hermes owns
     the reply; on_charm_reply acts on it."""
@@ -232,9 +409,7 @@ def on_charm_tool(**kwargs):
             if reports[-1].get("ok") is not True:
                 return None
             reply = str(reports[-1].get("reply") or "")
-            questions = ((reports[-1].get("state") or {}).get("open") or [])
-            asked_when = next((q.get("when") for q in reversed(questions)
-                               if isinstance(q, dict) and q.get("conversation") == conversation), None)
+            asked_when = _asked_when(reports[-1], conversation)
         else:
             reply = output
         if not any(w["question"] in reply for w in words.values()):
@@ -333,39 +508,68 @@ def _compose(text, kwargs):
 
 
 def on_charm_reply(**kwargs):
-    """On Telegram, after a slip question was asked in this turn: the reply without the question,
-    which comes as its own message with Yes and No. None (the reply as written) otherwise, and
-    whenever no button can be sent, so the question is never lost.
+    """The reply with the slip question the program asks, or a yes or no it records, and the
+    Telegram buttons for the question. None (the reply as written) whenever there is nothing to
+    add, and on every failure, so the question is never lost and the reply is never held back.
+
+    A question the model itself asked in this Telegram turn (on_charm_tool) goes on as before
+    (_model_asked); otherwise the turn's judgement decides (_judged_reply). A second call for the
+    same reply returns what the first one did and records nothing again."""
+    try:
+        session_id, turn_id = str(kwargs.get("session_id") or ""), str(kwargs.get("turn_id") or "")
+        with _pending_lock:
+            entry = _pending.pop((session_id, turn_id), None)
+            turn = _turns.get(session_id)
+        text = str(kwargs.get("response_text") or "")
+        key = hashlib.sha256(text.encode("utf-8")).hexdigest()
+        if turn is not None and key in turn["done"]:
+            return turn["done"][key]
+        if entry is not None:
+            out, did = _model_asked(entry, text, kwargs), "the model's own question"
+        elif turn is None or not text.strip() or text.strip() in SILENT:
+            return None
+        else:
+            try:
+                out, did = _judged_reply(turn, session_id, text, kwargs)
+            except Exception as error:
+                out, did = None, "failed: " + type(error).__name__
+        if turn is not None:
+            _log(turn, turn["result"], did)
+            turn["replied"] = True
+            turn["done"][key] = out
+            _forget(turn)
+        return out
+    except Exception:
+        return None
+
+
+def _model_asked(entry, text, kwargs):
+    """On Telegram, after the model itself asked the slip question in this turn: the reply without
+    the question, which comes as its own message with Yes and No. None otherwise, and whenever no
+    button can be sent, so the question is never lost.
 
     The order matters: take the question out, let the other plugins' work in (_compose), and
     only when the reply is known to go out make the tokens and schedule the question's message.
     A reply held back (a SILENT marker) sends no question: a slip question never arrives alone,
     without the work it belongs to."""
-    try:
-        key = (str(kwargs.get("session_id") or ""), str(kwargs.get("turn_id") or ""))
-        with _pending_lock:
-            entry = _pending.pop(key, None)
-        if not entry or _question is None or str(kwargs.get("platform") or "") != "telegram":
-            return None
-        text = str(kwargs.get("response_text") or "")
-        if not text.strip() or text.strip() in SILENT:
-            return None
-        plan = _question.prepare(entry, text)
-        if plan is None:
-            return None
-        out = _compose(plan["text"], kwargs)
-        if out.strip() in SILENT:
-            return out
-        if not _question.post(entry, plan["language"]):
-            # No buttons after all: the question stays in the reply.
-            if not plan["found"]:
-                return out if out != text else None
-            if out == plan["text"]:
-                return None  # nothing else changed it: the reply exactly as the model wrote it
-            return out.rstrip() + "\n\n" + plan["question"]
-        return out if plan["found"] or out != text else None
-    except Exception:
+    if _question is None or str(kwargs.get("platform") or "") != "telegram":
         return None
+    if not text.strip() or text.strip() in SILENT:
+        return None
+    plan = _question.prepare(entry, text)
+    if plan is None:
+        return None
+    out = _compose(plan["text"], kwargs)
+    if out.strip() in SILENT:
+        return out
+    if not _question.post(entry, plan["language"]):
+        # No buttons after all: the question stays in the reply.
+        if not plan["found"]:
+            return out if out != text else None
+        if out == plan["text"]:
+            return None  # nothing else changed it: the reply exactly as the model wrote it
+        return out.rstrip() + "\n\n" + plan["question"]
+    return out if plan["found"] or out != text else None
 
 
 def register(ctx):
@@ -380,6 +584,9 @@ def register(ctx):
             with _pending_lock:
                 _pending.clear()
                 _platforms.clear()
+                for turn in _turns.values():
+                    _forget(turn)
+                _turns.clear()
             if _question is not None:
                 _question.close()
         ctx.on_unload(detach)
