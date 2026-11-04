@@ -47,10 +47,9 @@ export const waitingSteps=(store,at=new Date().toISOString())=>store.list('appro
 export const QUIET_KINDS=['restart','reload','retry'];
 const MEMORY_CHARS=100;
 
-// The owner's latest answer about a subject. A decision has no expiry unless the owner gave one, so
-// the step's own `expires_at` is not consulted.
-const decisionAbout=(store,subject)=>store.list('approvals')
- .filter(r=>r.subject===subject&&['approved','rejected'].includes(r.status)&&r.answered_at)
+// The owner's latest answer about a subject. A decision has no expiry unless the owner gave one.
+const decisionAbout=(store,subject,at)=>store.list('approvals')
+ .filter(r=>r.subject===subject&&['approved','rejected'].includes(r.status)&&r.answered_at&&!(r.expires_at&&r.expires_at<=at))
  .sort((a,b)=>a.answered_at.localeCompare(b.answered_at)).pop()||null;
 const remembered=record=>({about:record.about,user_words:record.user_words,answered_at:record.answered_at});
 
@@ -84,7 +83,7 @@ export function openStep(store,{about,question,yes,no,by,chat,job,quietly,subjec
    settled('done_quietly',{quietly});
    return {outcome:'quiet',quietly,about};
   }
-  const earlier=subject?decisionAbout(store,subject):null;
+  const earlier=subject?decisionAbout(store,subject,at):null;
   if(earlier&&(earlier.status==='rejected'||!reach)){
    const answer=earlier.status==='approved'?'yes':'no';
    if(answer==='yes'||earlier.fingerprint===fingerprint)return {outcome:'decided',answer,reply:answer==='yes'?yes:no,decision:remembered(earlier)};

@@ -376,14 +376,16 @@ test('a quiet restart is done and nothing is asked',async t=>{
  assert.throws(()=>open(store,'Send the mail.','telegram',{quietly:'retry',outward:true}),/never done quietly/);
 });
 
-test('a subject decided earlier answers from the decision, without expiry',async t=>{
+test('a subject decided earlier answers from the decision until the owner\'s expiry',async t=>{
  const {store}=fixture(t),first=await ask(store,'Turn off the old programs?','telegram',{subject:'old-programs'});
  assert.equal(heard(store,{chat:'telegram',words:'yes'}).kind,'answered');
- const record=store.get('approvals',first.id);store.commit([store.prepare('approvals',{expires_at:'2000-01-01T00:00:00.000Z'},record)]);
+ const dated=store.get('approvals',first.id);store.commit([store.prepare('approvals',{expires_at:'2999-01-01T00:00:00.000Z'},dated)]);
  const again=open(store,'Turn off the old programs, again?','telegram',{subject:'old-programs'});
  assert.equal(again.outcome,'decided');assert.equal(again.answer,'yes');assert.equal(again.decision.user_words,'yes');
  assert.equal(waitingSteps(store).length,0);
  assert.equal(open(store,'Something else.','telegram',{subject:'other'}).outcome,'asked');
+ const expired=store.get('approvals',first.id);store.commit([store.prepare('approvals',{expires_at:'2000-01-01T00:00:00.000Z'},expired)]);
+ assert.equal(open(store,'Turn off the old programs, once more?','telegram',{subject:'old-programs'}).outcome,'asked');
 });
 
 test('a rejected step is asked again only when it changed, and then says what changed',async t=>{
@@ -407,6 +409,15 @@ test('an optional extra after an instruction is never asked',async t=>{
  assert.equal(open(store,'Also stop the helper.','telegram',{extra:{...extra,within:true}}).outcome,'do');
  assert.equal(open(store,'Also send a note.','telegram',{extra:{...extra,within:true},outward:true}).outcome,'dropped');
  assert.equal(waitingSteps(store).length,0);assert.equal(store.list('approvals').length,0);
+});
+
+test('godspeed-step open carries quiet, subject and optional-extra gates and refuses unknown options',async t=>{
+ const {root,store}=fixture(t),run=args=>spawnSync(process.execPath,[script,'open','--about','The gateway is old.','--question','Restart it?','--yes','y','--no','n','--by','routine:test','--chat','telegram',...args,'--godspeed',root],{encoding:'utf8'});
+ assert.equal(JSON.parse(run(['--quietly','restart']).stdout).outcome,'quiet');
+ assert.equal(JSON.parse(run(['--extra','Stop them']).stdout).outcome,'dropped');
+ assert.equal(JSON.parse(run(['--extra','Stop them','--within']).stdout).outcome,'do');
+ assert.equal(waitingSteps(store).length,0);
+ const refused=run(['--quiet','restart']);assert.equal(refused.status,1);assert.match(refused.stderr,/Unknown option --quiet/);
 });
 
 test('a bundled report is split and each finding is checked',async t=>{

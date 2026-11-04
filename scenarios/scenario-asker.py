@@ -24,9 +24,9 @@ FLAGS = (  # ask field -> command line flag
     ("question", "--question"),  # ticket 01
     ("yes", "--yes"),          # ticket 01
     ("no", "--no"),            # ticket 01
-    ("quiet", "--quiet"),      # ticket 04, provisional: safe to do quietly (restart, reload, retry)
-    ("subject", "--subject"),  # ticket 04, provisional: the stable key an earlier decision is matched on
-    ("optional_after", "--optional-after"),  # ticket 04, provisional: an extra after an instruction
+    ("quiet", "--quietly"),    # ticket 04: safe to do quietly (restart, reload, retry)
+    ("subject", "--subject"),  # ticket 04: the stable key an earlier decision is matched on
+    ("optional_after", "--extra"),  # ticket 04: an extra after an instruction (never within it here, so dropped)
 )
 
 
