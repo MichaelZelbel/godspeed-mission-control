@@ -8,7 +8,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { parseDoc } from "./header.mjs";
 import { localParts, addDays, dayWords } from "./clock.mjs";
-import { lastTalk, missedInARow, talkFile, talkDates, readTalk } from "./talks.mjs";
+import { lastTalk, unansweredBefore, missedInARow, talkFile, talkDates, readTalk } from "./talks.mjs";
 import { listHabits, stats, verdict, daysWords } from "./habits.mjs";
 import { rhythmWords, listAreas, findArea } from "./areas.mjs";
 import { prepForBrief, prepMissing } from "./prep.mjs";
@@ -150,6 +150,11 @@ export function brief(mcDir, s, area, ymd, { inChat = false } = {}) {
   // brief leaves the research sections out and stays focused.
   const prep = prepForBrief(area, ymd);
   L.push(`COACH TALK DUE: ${area.title} (id for commands: ${area.slug}), ${ymd}, ${area.time} ${s.timezone}`);
+  if (inChat && fs.existsSync(talkFile(area, ymd))) L.push(`Today's ${area.title} talk is already open: continue it (the coach recipe, "Continuing a talk") and do not run the open command below.`);
+  else if (inChat) {
+    const earlier = unansweredBefore(area, ymd);
+    if (earlier.length) L.push(`The ${area.title} talk of ${earlier.at(-1)} is still open with no reply from them. Opening today's talk closes it as not held. Name it once, in one short sentence in the opening.`);
+  }
   const home = mcDir.replace(/\\/g, "/");
   const hint = preparedHint(research.some((r) => r.found) ? "the research" : "what you read");
   L.push(prep

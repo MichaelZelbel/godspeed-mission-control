@@ -11,7 +11,7 @@ import { fileURLToPath } from "node:url";
 import { tmpMission, area, S } from "./helpers.mjs";
 import { contextBlock, waitingTalks } from "../lib/context.mjs";
 import { listAreas } from "../lib/areas.mjs";
-import { openTalk, readTalk } from "../lib/talks.mjs";
+import { openTalk, readTalk, addSaid } from "../lib/talks.mjs";
 import { saveSettings, validateSettings } from "../lib/settings.mjs";
 import { hasTalkJob, hasTickJob, NO_MESSENGER } from "../lib/setup.mjs";
 import { brief } from "../lib/brief.mjs";
@@ -159,4 +159,38 @@ test("while one talk is open or waiting, the block says asking for another talk 
   assert.match(both, /^- Open talk: Health \(id for commands: health\),/m);
   assert.match(both, /^- Open talk: Psychology \(id for commands: psychology\),/m);
   assert.doesNotMatch(both, /Waiting talk/);
+});
+
+test("a talk asked for on a talk day replaces an earlier talk with no reply; one with a reply is never closed", () => {
+  for (const [reply, earlierState] of [[false, "not-held"], [true, "opened"]]) {
+    const { mc, a } = chatMission();
+    openTalk(a, "2026-10-04", { opening: "Earlier opening." }, new Date("2026-10-04T17:00:00Z"));
+    if (reply) addSaid(a, "2026-10-04", ["- 19:10 it went badly"]);
+    const b = cli(mc, {}, "brief", "health");
+    assert.equal(b.status, 0, b.stderr);
+    assert.equal(/talk of 2026-10-04 is still open with no reply/.test(b.stdout), !reply);
+    const r = cli(mc, {}, "talk", "open", "health", "--opening", "Today's opening.", "--read", "x", "--shown");
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(readTalk(a, "2026-10-11").state, "opened");
+    assert.equal(readTalk(a, "2026-10-04").state, earlierState);
+  }
+});
+
+test("on a talk day with today's talk already open the brief says to continue it; off a talk day nothing is closed", () => {
+  const { mc, a } = chatMission();
+  openTalk(a, "2026-10-11", { opening: "Today." }, new Date("2026-10-11T16:00:00Z"));
+  assert.match(cli(mc, {}, "brief", "health").stdout, /Today's Health talk is already open: continue it/);
+  const other = chatMission();
+  openTalk(other.a, "2026-10-04", { opening: "Earlier." }, new Date("2026-10-04T17:00:00Z"));
+  const r = cli(other.mc, { GODSPEED_NOW: "2026-10-13T16:05:00Z" }, "talk", "open", "health", "--opening", "Monday.", "--read", "x", "--shown", "--date", "2026-10-13");
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(readTalk(other.a, "2026-10-04").state, "opened");
+});
+
+test("the block tells the model an earlier unanswered talk is replaced on a talk day, and says nothing of it for today's talk", () => {
+  const { mc, a } = chatMission();
+  openTalk(a, "2026-10-09", { opening: "Earlier." }, new Date("2026-10-09T17:00:00Z"));
+  assert.match(contextBlock(mc, { ...S, talk_delivery: "chat" }, AT), /Exception: if they ask for a talk of this area on one of its talk days/);
+  addSaid(a, "2026-10-09", ["- 19:10 hi"]);
+  assert.doesNotMatch(contextBlock(mc, { ...S, talk_delivery: "chat" }, AT), /Exception/);
 });

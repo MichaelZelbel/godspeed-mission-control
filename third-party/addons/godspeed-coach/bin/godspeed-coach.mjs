@@ -7,7 +7,7 @@ import { findMissionControl, appHome } from "../lib/paths.mjs";
 import { now, localParts, addDays, weekdayOf, WEEKDAY_WORDS } from "../lib/clock.mjs";
 import { loadSettings, setSetting, DEFAULTS } from "../lib/settings.mjs";
 import { listAreas, findArea, isTalkDay, addArea, setAreaField, nextTalkDay, habitArea, AREA_FIELDS, addAreaLine, removeAreaLine } from "../lib/areas.mjs";
-import { openTalk, readTalk, setTalkState, setFollowUp, addSaid, setShown, talkDates, talkFile } from "../lib/talks.mjs";
+import { openTalk, unansweredBefore, readTalk, setTalkState, setFollowUp, addSaid, setShown, talkDates, talkFile } from "../lib/talks.mjs";
 import { addHabit, listHabits, findHabit, track, untrack, lastAnsweredDay, setStatus, stats, askedOn, answerOn,setHabitSchedule,setHabitDisplay,exemptHabitDays, setHabitReader, habitReadersWords } from "../lib/habits.mjs";
 import {habitProgress,assertDay} from '../lib/progress.mjs';
 import { readTable } from "../lib/auto.mjs";
@@ -282,6 +282,8 @@ const commands = {
       }
       if (!t.opening) die('Give the opening: --opening "<what you are sending them>", or --from-prep <file> for a talk prepared ahead');
       const r = openTalk(a, d, t, at);
+      // A talk they asked for on a talk day replaces an earlier one that got no reply.
+      if (r.created && shown && isTalkDay(a, d)) for (const e of unansweredBefore(a, d)) setTalkState(a, e, "not-held");
       if (r.created) saved(`${a.slug} talk opened ${d}`);
       const where = path.relative(mcDir, r.file).replace(/\\/g, "/");
       if (r.created && t.prep) return out(`Opened: ${where}. The opening, to send exactly as it is:\n\n${t.opening}`, { ok: true, created: true, file: r.file, opening: t.opening });

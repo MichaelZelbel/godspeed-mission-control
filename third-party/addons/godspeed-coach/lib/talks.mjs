@@ -110,6 +110,12 @@ export function notHeldDue(area, now, tz) {
   return out;
 }
 
+// Talks of the area before `ymd` that are open with no reply from the person: the ones a talk they
+// ask for on a talk day replaces. A talk with a reply is never among them.
+export function unansweredBefore(area, ymd) {
+  return talkDates(area).filter((d) => d < ymd && readTalk(area, d).state === "opened" && !readTalk(area, d).answered);
+}
+
 export function missedInARow(area) {
   let n = 0;
   for (const d of talkDates(area).reverse()) {
