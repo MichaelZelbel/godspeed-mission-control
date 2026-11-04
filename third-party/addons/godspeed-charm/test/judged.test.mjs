@@ -57,6 +57,10 @@ function drive(dir, steps, env = {}) {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), "charm-home-"));
   const stub = path.join(home, "stub.mjs");
   fs.writeFileSync(stub, STUB);
+  if (env.SEED_LOG) {
+    fs.mkdirSync(path.join(home, "logs"));
+    fs.writeFileSync(path.join(home, "logs", "godspeed-charm.log"), "x".repeat(1_000_001));
+  }
   if (env.FIXTURE_MODEL) {
     fs.mkdirSync(path.join(home, "bin"));
     fs.writeFileSync(path.join(home, "bin", "godspeed-model"), `#!/bin/sh\nexec "${process.execPath}" "${path.join(HERE, "fixtures", "model-command.mjs")}"\n`, { mode: 0o755 });
@@ -73,6 +77,7 @@ function drive(dir, steps, env = {}) {
     });
     assert.equal(r.status, 0, r.stderr);
     const out = JSON.parse(r.stdout.trim().split("\n").pop());
+    out.rotated = (() => { try { return fs.readFileSync(path.join(home, "logs", "godspeed-charm.log.1"), "utf8"); } catch { return null; } })();
     out.log = (() => { try { return fs.readFileSync(path.join(home, "logs", "godspeed-charm.log"), "utf8").trim().split("\n").map((l) => JSON.parse(l)); } catch { return []; } })();
     return out;
   } finally { gone(home); }
@@ -173,5 +178,36 @@ test("the installation's godspeed-model is asked when it is there", { skip: skip
     const out = drive(dir, [register, pre(firm), reply("Fixed.")], { FIXTURE_MODEL: "unsure" });
     assert.equal(out.results[2].text, `Fixed.\n\n${Q}`);
     assert.equal(out.log[0].source, "model");
+  } finally { gone(dir); }
+});
+
+test("an oversized log is moved to .1 and the active log holds only the new line", { skip }, () => {
+  const dir = mission();
+  try {
+    const out = drive(dir, [register, pre(VENT), reply("Here.")], { SEED_LOG: "1" });
+    assert.equal(out.rotated.length, 1_000_001);
+    assert.equal(out.log.length, 1);
+    assert.equal(out.log[0].verdict, "ask");
+  } finally { gone(dir); }
+});
+
+test("a question the model asked itself on another platform is not asked a second time", { skip }, () => {
+  const dir = mission();
+  try {
+    const r = spawnSync(process.execPath, [BIN, "asked", "--conversation", "api_server:s-1", "--words", VENT], { encoding: "utf8", env: { ...process.env, GODSPEED_CHARM_DIR: dir, GODSPEED_CHARM_NOW: at("2026-10-22", 9), GODSPEED_SCHEDULED_RUN: "" } });
+    assert.equal(r.status, 0, r.stderr);
+    const command = `godspeed-charm asked --conversation "api_server:s-1" --words "${VENT}"`;
+    const out = drive(dir, [register, pre(VENT), { do: "tool", session: "s-1", turn: "t-1", command, output: r.stdout }, reply(`Here.\n\n${Q}`)]);
+    assert.equal(out.results[3].text, null);
+    assert.deepEqual(kinds(dir), ["start", "asked"]);
+  } finally { gone(dir); }
+});
+
+test("a scheduled reply sharing an interactive session id neither takes its judgement nor asks", { skip }, () => {
+  const dir = mission();
+  try {
+    const out = drive(dir, [register, pre(VENT), pre("Do the report.", { platform: "cron" }), reply("Done.", { platform: "cron" })]);
+    assert.equal(out.results[3].text, null);
+    assert.deepEqual(kinds(dir), ["start"]);
   } finally { gone(dir); }
 });

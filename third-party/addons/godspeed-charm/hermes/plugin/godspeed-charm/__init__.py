@@ -37,6 +37,7 @@ SILENT = ("[SILENT]", "SILENT", "[NO_REPLY]", "NO_REPLY")
 _output_bus = sys.modules.setdefault("godspeed_progress_output_v1", types.ModuleType("godspeed_progress_output_v1"))
 _pending_lock = threading.Lock()
 _pending = {}  # (session_id, turn_id) -> the question asked in that turn
+_model_asked_turns = {}  # (session_id, turn_id) -> when the model itself ran a successful `asked` in that turn
 _platforms = {}  # session_id -> the platform of its latest turn (never a scheduled one)
 _turns = collections.OrderedDict()  # session_id -> the judged turn in flight (see _start_judge)
 LOG_LIMIT = 1_000_000
@@ -159,10 +160,11 @@ def on_pre_llm_call(**kwargs):
         # (the command writes it) and no conversation for its commands (_remember_platform).
         scheduled = platform == "cron" or bool(os.environ.get("GODSPEED_SCHEDULED_RUN"))
         _remember_platform(session_id, platform, scheduled)
-        if not scheduled:
-            _start_judge(session_id, platform, kwargs.get("user_message"))
         if scheduled:
+            _drop_turn(session_id)
             args.append("--scheduled")
+        else:
+            _start_judge(session_id, platform, kwargs.get("user_message"))
         if platform == "telegram" and _stickers_available():
             args.append("--stickers")
         r = subprocess.run(args, capture_output=True, text=True, timeout=_timeout())
@@ -222,6 +224,14 @@ def _run_judge(turn, extra, timeout):
         return _verdict_of(r.stdout) if r.returncode == 0 else None
     except Exception:
         return None
+
+
+def _drop_turn(session_id):
+    """A scheduled run reusing a session id must not inherit the interactive turn's judgement."""
+    with _pending_lock:
+        old = _turns.pop(session_id, None)
+    if old:
+        _forget(old)
 
 
 def _forget(turn):
@@ -302,7 +312,7 @@ def _ending(out, reply):
     return out if reply in out else out.rstrip() + "\n\n" + reply
 
 
-def _judged_reply(turn, session_id, text, kwargs):
+def _judged_reply(turn, session_id, text, kwargs, model_asked=False):
     """What the judged turn makes of the reply `text`, and what was done: (text or None, did)."""
     verdict = _verdict(turn)
     if verdict is None or verdict["verdict"] == "none":
@@ -312,6 +322,8 @@ def _judged_reply(turn, session_id, text, kwargs):
         if report is None:
             return None, "no answer recorded (the model had, or none was open)"
         return _ending(_compose(text, kwargs), report["reply"]), "answered " + verdict["answer"]
+    if model_asked:
+        return None, "the model asked itself"
     report = _record(turn, verdict, "asked")
     if report is None:
         return None, "asked refused"
@@ -381,7 +393,7 @@ def on_charm_tool(**kwargs):
     """Remember a slip question asked in this turn, in this Telegram conversation. Hermes owns
     the reply; on_charm_reply acts on it."""
     try:
-        if _question is None or str(kwargs.get("tool_name") or "") != "terminal":
+        if str(kwargs.get("tool_name") or "") != "terminal":
             return None
         if kwargs.get("status") not in (None, "success", "ok"):
             return None
@@ -393,12 +405,17 @@ def on_charm_tool(**kwargs):
         if not session_id or not turn_id:
             return None
         rest = command[m.end():]
-        # The question belongs to the conversation that asked it: only this chat gets buttons.
         conversation = _flag(rest, "conversation")
-        if conversation != "telegram:" + session_id:
-            return None
         code, output = _tool_output(kwargs.get("result"))
         if code != 0:
+            return None
+        # On any platform a question the model asked itself is the turn's one question.
+        with _pending_lock:
+            _model_asked_turns[(session_id, turn_id)] = time.monotonic()
+            while len(_model_asked_turns) > 200:
+                _model_asked_turns.pop(next(iter(_model_asked_turns)))
+        # The question belongs to the conversation that asked it: only this chat gets buttons.
+        if _question is None or conversation != "telegram:" + session_id:
             return None
         words = _question.texts()
         if not words:
@@ -479,7 +496,7 @@ def _compose(text, kwargs):
     """What the other plugins' transforms would have made of `text`, minus what they already did.
 
     Hermes calls every transform_llm_output callback with the same original reply and keeps only
-    the FIRST non-empty string they return, in plugin load order (alphabetical, so godspeed-charm
+    the FIRST non-empty string they return, in plugin load order (sorted by key, requires_plugins first; checked in v0.22.7, so godspeed-charm
     runs before godspeed-coach, hermes-telegram-stickers and mc-voice). The results are not
     chained. So when this plugin returns a reply, it carries their work itself:
     - the coach's picture and the owner's voice filter through the coach's own named bus, exactly
@@ -517,8 +534,11 @@ def on_charm_reply(**kwargs):
     same reply returns what the first one did and records nothing again."""
     try:
         session_id, turn_id = str(kwargs.get("session_id") or ""), str(kwargs.get("turn_id") or "")
+        if str(kwargs.get("platform") or "") == "cron" or os.environ.get("GODSPEED_SCHEDULED_RUN"):
+            return None
         with _pending_lock:
             entry = _pending.pop((session_id, turn_id), None)
+            model_asked = _model_asked_turns.pop((session_id, turn_id), None) is not None
             turn = _turns.get(session_id)
         text = str(kwargs.get("response_text") or "")
         key = hashlib.sha256(text.encode("utf-8")).hexdigest()
@@ -530,7 +550,7 @@ def on_charm_reply(**kwargs):
             return None
         else:
             try:
-                out, did = _judged_reply(turn, session_id, text, kwargs)
+                out, did = _judged_reply(turn, session_id, text, kwargs, model_asked)
             except Exception as error:
                 out, did = None, "failed: " + type(error).__name__
         if turn is not None:

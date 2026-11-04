@@ -47,7 +47,8 @@ godspeed-charm texts      # the question and the button words, as JSON, for the 
 godspeed-charm judge --conversation telegram:123 --words-file msg.txt --json   # the Hermes plugin's check
 ```
 
-Every command takes `--json` (it then prints `{ok, reply, state}`), `--language en|de` for one
+Every command but `judge` takes `--json` (it then prints `{ok, reply, state}`; `judge --json` prints
+`{ok, verdict: ask|answer|none, answer?, language?, source, why}` and writes nothing), `--language en|de` for one
 reply in that language, and `--words-file <file>` in place of `--words` for words with quotes or
 line breaks. Exit 0 means done, 2 means refused with nothing written (the reply says why), 1 is
 an error. `answer --asked-when <moment>` answers only the open question asked at that moment (the
