@@ -101,6 +101,10 @@ test("talk open --from-prep --shown never closes an earlier talk with a reply, n
   const offDay = mission({ "coach/work/prep/2026-10-22.md": prep(), "coach/work/talks/2026-10-14.md": earlier("") });
   cli(offDay, "2026-10-22T17:00:00Z", "talk", "open", "work", "--from-prep", "coach/work/prep/2026-10-22.md", "--shown", "--date", "2026-10-22");
   assert.equal(state(offDay), "opened");
+  const fresh = mission({ "coach/work/prep/2026-10-22.md": prep(), "coach/work/talks/2026-10-14.md": earlier("") });
+  const b = cli(fresh, "2026-10-22T17:00:00Z", "brief", "work");
+  assert.match(b.out, /talk of 2026-10-14 is still open and today is not a talk day.*continue that talk/);
+  assert.ok(!b.out.includes("talk open work"), "no open command on an off day with an earlier open talk");
 });
 
 test("talk open --from-prep refuses a preparation that is not ready, and opens nothing", () => {

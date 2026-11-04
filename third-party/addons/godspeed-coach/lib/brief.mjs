@@ -10,7 +10,7 @@ import { parseDoc } from "./header.mjs";
 import { localParts, addDays, dayWords } from "./clock.mjs";
 import { lastTalk, unansweredBefore, missedInARow, talkFile, talkDates, readTalk } from "./talks.mjs";
 import { listHabits, stats, verdict, daysWords } from "./habits.mjs";
-import { rhythmWords, listAreas, findArea } from "./areas.mjs";
+import { rhythmWords, listAreas, findArea, isTalkDay } from "./areas.mjs";
 import { prepForBrief, prepMissing } from "./prep.mjs";
 import { readQuestions, questionsFile } from "./questions.mjs";
 
@@ -150,14 +150,14 @@ export function brief(mcDir, s, area, ymd, { inChat = false } = {}) {
   // brief leaves the research sections out and stays focused.
   const prep = prepForBrief(area, ymd);
   L.push(`COACH TALK DUE: ${area.title} (id for commands: ${area.slug}), ${ymd}, ${area.time} ${s.timezone}`);
+  const earlier = inChat ? unansweredBefore(area, ymd) : [];
+  const continuing = inChat && !fs.existsSync(talkFile(area, ymd)) && earlier.length > 0 && !isTalkDay(area, ymd);
   if (inChat && fs.existsSync(talkFile(area, ymd))) L.push(`Today's ${area.title} talk is already open: continue it (the coach recipe, "Continuing a talk") and do not run the open command below.`);
-  else if (inChat) {
-    const earlier = unansweredBefore(area, ymd);
-    if (earlier.length) L.push(prep ? `The ${area.title} talk of ${earlier.at(-1)} is still open with no reply from them. Opening today's talk closes it as not held. The open command adds the sentence naming it to the prepared opening: do not add another.` : `The ${area.title} talk of ${earlier.at(-1)} is still open with no reply from them. This talk has no preparation, so the open command leaves it open.`);
-  }
+  else if (continuing) L.push(`The ${area.title} talk of ${earlier.at(-1)} is still open and today is not a talk day of this area: continue that talk (the coach recipe, "Continuing a talk") and do not run the open command below.`);
+  else if (earlier.length) L.push(prep ? `The ${area.title} talk of ${earlier.at(-1)} is still open with no reply from them. Opening today's talk closes it as not held. The open command adds the sentence naming it to the prepared opening: do not add another.` : `The ${area.title} talk of ${earlier.at(-1)} is still open with no reply from them. This talk has no preparation, so the open command leaves it open.`);
   const home = mcDir.replace(/\\/g, "/");
   const hint = preparedHint(research.some((r) => r.found) ? "the research" : "what you read");
-  L.push(prep
+  if (!continuing) L.push(prep
     ? `Record: ${rel(talkFile(area, ymd))}, created by (run it exactly like this): ${fromPrepCommand(area, home, rel(prep.file))}${inChat ? " --shown" : ""}. ${FROM_PREP_SAYS}`
     : `Record: ${rel(talkFile(area, ymd))}, created by (run it exactly like this): godspeed-coach talk open ${area.slug} --godspeed "${home}" --opening "<the opening>" --prepared "${hint}" --read "<what you read>"${inChat ? " --shown" : ""}`);
   const missing = prep ? null : prepMissing(area, ymd);
