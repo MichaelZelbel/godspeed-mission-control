@@ -18,9 +18,11 @@ import {atomic} from './records/store.mjs';
 import {norm,trackers,entries} from './trackers.mjs';
 import {addDays,localParts} from '../../third-party/addons/godspeed-coach/lib/clock.mjs';
 
-// The mailboxes a rule may name, with how the sentence says each: the one owner of both the accepted keys and the words.
-const MAILBOX_WORDS={gmail:'your Gmail',godspeed:"your mission control's own mailbox"};
-export const MAILBOXES=Object.keys(MAILBOX_WORDS);
+// The mailboxes a rule may name: the one owner of the accepted keys, how a sentence says each, and which
+// connection of the daily connection check reports it (connection-check.mjs), so a mailbox cannot be
+// accepted without its failure being owned.
+export const MAILBOX={gmail:{words:'your Gmail',connection:'mail'},godspeed:{words:"your mission control's own mailbox",connection:'agentmail'}};
+export const MAILBOXES=Object.keys(MAILBOX);
 export const FIRST_DAYS=30;
 const MAX_SENDERS=10,MAX_SUBJECTS=10;
 const ADDRESS=/^[^\s@<>,;"']+@[^\s@<>,;"']+\.[^\s@<>,;"']+$/,DOMAIN=/^[a-z0-9-]+(?:\.[a-z0-9-]+)+$/;
@@ -41,7 +43,7 @@ export function mailRule(input){
 // The rule on a card, or null: a hand-edited card with a broken rule counts nothing.
 export function cardRule(c){try{return c?.tracker?.mail?mailRule(c.tracker.mail):null;}catch{return null;}}
 export const ruleDigest=rule=>crypto.createHash('sha256').update(JSON.stringify({senders:[...rule.senders].sort(),subjects:rule.subjects.map(norm).sort(),mailbox:rule.mailbox})).digest('hex');
-export const ruleSentence=(rule,name,isNew)=>'Count each mail from '+list(rule.senders)+' whose subject says '+list(rule.subjects.map(s=>'"'+s+'"'))+', in '+MAILBOX_WORDS[rule.mailbox]+', as one in '+(isNew?'a new tracker called ':'')+name+'?';
+export const ruleSentence=(rule,name,isNew)=>'Count each mail from '+list(rule.senders)+' whose subject says '+list(rule.subjects.map(s=>'"'+s+'"'))+', in '+MAILBOX[rule.mailbox].words+', as one in '+(isNew?'a new tracker called ':'')+name+'?';
 
 // Which trackers can take a rule. A daily tracker keeps one entry a day, which is not one entry per mail,
 // and a tracker with other columns has nothing to put in them; a specialist keeps its own rows. Such a
@@ -56,6 +58,8 @@ export const NOT_FITTING=name=>name+' keeps one entry a day or its own columns, 
 // Only a digest is kept: a Message-ID is written by the sender and may carry an address that is no named sender's.
 export const mailId=(mailbox,id)=>mailbox+':'+crypto.createHash('sha256').update(mailbox+'\0'+id).digest('hex').slice(0,32);
 export const mailTrackers=store=>trackers(store).map(c=>({c,rule:cardRule(c)})).filter(t=>t.rule);
+// Whether a rule counts in the mailbox that this connection of the connection check reports.
+export const mailboxInUse=(store,connection)=>mailTrackers(store).some(t=>MAILBOX[t.rule.mailbox].connection===connection);
 export const mailCountWanted=store=>mailTrackers(store).length>0;
 const countedIds=(store,c,items)=>new Set(entries(store,c,items).map(i=>i.data?.mail_id).filter(Boolean));
 
@@ -102,7 +106,7 @@ export async function countMail({store,query,search,now=new Date(),tz}){
     const id=mailId(rule.mailbox,m.message_id),when=whenOf(m.date,now,tz);
     if(!when||have.has(id))continue;
     have.add(id);
-    query.execute({table:'collection_items',operation:'insert',holdingLock:true,values:{collection_id:c.id,data:{when,...(column?{[column]:1}:{}),mail_id:id}}});added++;
+    query.execute({table:'collection_items',operation:'insert',holdingLock:true,values:{collection_id:c.id,data:{when,[column||'value']:1,mail_id:id}}});added++;
    }
   });
   state.rules[c.id]={digest:ruleDigest(rule),last_day:today};

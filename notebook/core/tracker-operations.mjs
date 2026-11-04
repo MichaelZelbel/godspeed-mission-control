@@ -10,7 +10,7 @@ import {CYCLE_WORDS} from './cycle.mjs';
 import {foodOperation,foodCreate,foodSummary} from './food-operations.mjs';
 import {FOOD_WORDS} from './food.mjs';
 import {charmCard} from './charm-operation.mjs';
-import {mailRule,mailColumn,NOT_FITTING,ruleSentence,previewCount,cardRule,FIRST_DAYS} from './mail-trackers.mjs';
+import {mailRule,mailColumn,MAILBOX,NOT_FITTING,ruleSentence,previewCount,cardRule,FIRST_DAYS} from './mail-trackers.mjs';
 export const TRACKER_OPERATIONS=['tracker-hold','tracker-create','track','tracker-correct','tracker-list','tracker-talk','tracker-mail','habit-progress'];
 const tz=store=>store.get('settings','installation')?.timezone||'UTC';
 // The coaching talk that reads a tracker, by its area's name (coach/<area>/: health, work,
@@ -256,7 +256,7 @@ async function mailAsk(domains,input,{now,zone,assistant}){
  const sentence=ruleSentence(rule,name,!c);
  let count;
  try{count=await previewCount({store,rule,c,search:domains.mailSearch,now,tz:zone});}
- catch{return {reply:'I could not search '+(rule.mailbox==='gmail'?'your Gmail':"your mission control's mailbox")+' just now, so nothing was saved. Ask me again in a little while.'};}
+ catch{return {reply:'I could not search '+MAILBOX[rule.mailbox].words+' just now, so nothing was saved. Ask me again in a little while.'};}
  const question=sentence+' In the last '+FIRST_DAYS+' days that is '+count+(count===1?' mail.':' mails.');
  const replaces=store.list('tracker_proposals').filter(o=>o.specialist==='mail'&&proposalState(store,o,now)==='pending'&&(c?o.tracker_id===c.id:!o.tracker_id&&norm(o.name)===norm(name))).map(o=>o.id);
  const p=store.save('tracker_proposals',{specialist:'mail',name,...(c?{tracker_id:c.id}:{field_schema:schemaFor({fields:[{key:'value',label:'Mails',type:'number'}],cadence:'any'})}),mail:rule,count,question,replaces,...(words?{words}:{}),created_at:now.toISOString()});

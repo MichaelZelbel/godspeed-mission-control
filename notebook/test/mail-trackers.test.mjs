@@ -136,6 +136,7 @@ test('a tracker that keeps one entry a day cannot take a rule, and an existing c
  const {asked}=await setUp(domains,ORDERS,{tracker:'Orders'});assert.match(asked.reply,/as one in Orders\? In the last 30 days that is 4 mails\.$/);
  await runMailCount({root,now:NOW});
  assert.equal(entries(store,store.get('collections',orders.id)).length,5);assert.deepEqual(entries(store,store.get('collections',orders.id))[0].data,{when:'2026-10-01 10:00'});
+ assert.ok(entries(store,store.get('collections',orders.id)).slice(1).every(i=>i.data.value===1),'a counting tracker with no column of its own still gets 1 for each mail');
 });
 
 test('changing and removing a rule: the old question is dropped, and the counted entries stay',async t=>{

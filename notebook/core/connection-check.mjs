@@ -9,7 +9,7 @@ import {queueNotice} from './notices.mjs';
 import {routineAIStatus,askDirectly} from './routine-ai.mjs';
 import {FileSync,readSyncConfig} from './sync/git.mjs';
 import {telegramInHermes} from './starting-routines.mjs';
-import {mailTrackers,mailCountWanted} from './mail-trackers.mjs';
+import {mailboxInUse,mailCountWanted} from './mail-trackers.mjs';
 import {addDays} from '../../third-party/addons/godspeed-coach/lib/clock.mjs';
 
 // THE DAILY CONNECTION CHECK (4 November 2026, #200). Godspeed only noticed a broken connection (the
@@ -92,7 +92,7 @@ export const githubProbe=({store,run=args=>new FileSync(store).git(args,undefine
 export const mailProbe=({imap=mailImap,legacy=mailLegacy,store}={})=>async()=>{
  let tool;try{tool=imap();if(tool.status().state==='not connected')tool=null;}catch{tool=null;}
  if(!tool){
-  if(!legacyConnected(legacy))return store&&mailTrackers(store).some(t=>t.rule.mailbox==='gmail')?outcome(false,'sign-in'):NOT_SET_UP;
+  if(!legacyConnected(legacy))return store&&mailboxInUse(store,'mail')?outcome(false,'sign-in'):NOT_SET_UP;
   try{const {state}=await legacy().status();return ['connected','reading only'].includes(state)?outcome(true):outcome(false,mailKind(state));}
   catch{return outcome(false,'other');}
  }
@@ -102,7 +102,7 @@ export const mailProbe=({imap=mailImap,legacy=mailLegacy,store}={})=>async()=>{
 // The mission control's own mailbox, probed only while a tracker's mail rule names it. A rule for it with no key
 // is a sign-in too: nothing will ever be counted until it is connected.
 export const agentmailProbe=({store,godspeed=mailGodspeedStatus})=>async()=>{
- if(!mailTrackers(store).some(t=>t.rule.mailbox==='godspeed'))return NOT_SET_UP;
+ if(!mailboxInUse(store,'agentmail'))return NOT_SET_UP;
  try{const {state}=await godspeed();return state==='connected'?outcome(true):outcome(false,state==='unreachable'?'other':'sign-in');}
  catch{return outcome(false,'other');}
 };

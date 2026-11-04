@@ -454,7 +454,7 @@ export class NativeScheduler{
    await this.addNewStartingRoutines().catch(()=>null);
    await this.followJournal().catch(()=>null);
    await this.followConnectionCheck().catch(e=>{failure=e;});
-   await this.followMailCount().catch(()=>null);
+   await this.followMailCount().catch(e=>{failure||=e;});
    await this.removeChatTidy().catch(()=>null);
    await this.followBrief().catch(()=>null);
    await this.followDelivery().catch(()=>null);
