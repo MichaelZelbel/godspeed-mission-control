@@ -381,14 +381,13 @@ def _asked_when(report, conversation):
                  if isinstance(q, dict) and q.get("conversation") == conversation), None)
 
 
-def _asked_happened(reports, output, conversation):
-    """Whether the terminal output shows `asked` really recorded a question for `conversation`: its
-    --json report names the open question, or the output holds the question's own words. The command
-    line merely containing `godspeed-charm asked` (an echo, a comment) shows nothing."""
+def _asked_happened(reports, conversation):
+    """Whether `asked` really recorded a question for `conversation`: its --json report names the
+    open question, or, without --json, the record itself does. Terminal output and the command line
+    are text anyone can print, so neither shows anything."""
     if reports:
         return reports[-1].get("ok") is True and _asked_when(reports[-1], conversation) is not None
-    words = _question.texts() if _question is not None else None
-    return bool(words) and any(w["question"] in output for w in words.values())
+    return _question is not None and _question.asked_when(conversation) is not None
 
 
 def on_charm_tool(**kwargs):
@@ -412,7 +411,7 @@ def on_charm_tool(**kwargs):
         if code != 0:
             return None
         reports = _reports(output)
-        if not _asked_happened(reports, output, conversation):
+        if not _asked_happened(reports, conversation):
             return None
         # On any platform a question the model asked itself is that conversation's one question.
         with _pending_lock:
