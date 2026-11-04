@@ -46,6 +46,7 @@ const quiet=(command,args)=>{const r=spawnSync(command,args,{encoding:'utf8',win
 // Which way this computer signs in, or null when it has none.
 export function chooseMethod({platform=process.platform,probe=quiet}={}){
   if(platform==='win32'){
+    // A person is present: Connect runs this probe because a person pressed it.
     const gcm=probe('git',['credential-manager','github','--help']);
     if(gcm.status===0&&/^\s*login\b/m.test(gcm.stdout+'\n'+gcm.stderr))return 'gcm';
   }
@@ -74,6 +75,7 @@ export class GitHubSignIn{
     if(!method)throw new Error(noProgram);
     this.current={state:'signing_in',method,message:method==='gh'?said.ghWaiting:said[method],started_at:new Date().toISOString()};
     const env=signInEnvironment(this.env);
+    // A person is present: this is the one place a GitHub sign-in page may open, because a person pressed Connect.
     const [command,args]=method==='gcm'?['git',['credential-manager','github','login','--browser']]:method==='gh'?['gh',['auth','login','--web','--hostname','github.com','--git-protocol','https']]:['git',['ls-remote',url]];
     let child,timer,ended=false,text='';
     const finish=async ok=>{

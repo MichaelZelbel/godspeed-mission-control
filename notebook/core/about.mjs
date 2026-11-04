@@ -7,6 +7,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {execFile} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
+import {createRequire} from 'node:module';
+const {quietGit}=createRequire(import.meta.url)('../../tools/unattended-git.cjs');
 import {BLS,OFF_ATTRIBUTION,tableStatus} from './food-table.mjs';
 import {PRODUCT,VERSION} from './version.mjs';
 
@@ -43,7 +45,7 @@ function commitDate(folder,code){
   if(!dates.has(folder))dates.set(folder,new Promise(resolve=>{
     // Only the copy's own history: without its .git, Git would look in the folders around it.
     if(!fs.existsSync(path.join(folder,'.git')))return resolve(null);
-    try{execFile('git',['-C',folder,'log','-1','--format=%cI',code],{timeout:3000,windowsHide:true},(error,out)=>resolve(error?null:day(String(out).trim())));}
+    try{execFile(...quietGit(['-C',folder,'log','-1','--format=%cI',code],{timeout:3000}),(error,out)=>resolve(error?null:day(String(out).trim())));}
     catch{resolve(null);}
   }));
   return dates.get(folder);

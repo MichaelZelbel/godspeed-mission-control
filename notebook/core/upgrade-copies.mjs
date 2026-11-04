@@ -1,6 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {spawnSync} from 'node:child_process';
+import {createRequire} from 'node:module';
+const {quietGit}=createRequire(import.meta.url)('../../tools/unattended-git.cjs');
 
 // The copy of the notebook an installer makes before it updates it. Until 15 October 2026 none
 // was ever removed: one server had 35 of them, 7.2 GB, after eight days of updates, and its disk
@@ -31,7 +33,7 @@ const isFile=file=>{try{return fs.lstatSync(file).isFile();}catch{return false;}
 // A whole copy: a real folder (never a link) with its manifest, which backup() writes last.
 const isCopy=(folder,name)=>{try{return fs.lstatSync(path.join(folder,name)).isDirectory()&&isFile(path.join(folder,name,'backup.json'));}catch{return false;}};
 const manifestOf=copy=>{try{return JSON.parse(fs.readFileSync(path.join(copy,'backup.json'),'utf8').replace(/^﻿/,''));}catch{return null;}};
-const git=(cwd,args)=>spawnSync('git',['-C',cwd,...args],{encoding:'utf8',windowsHide:true,timeout:60000,env:{...process.env,GIT_TERMINAL_PROMPT:'0'}});
+const git=(cwd,args)=>spawnSync(...quietGit(['-C',cwd,...args],{encoding:'utf8',timeout:60000}));
 // The repository and ref a copy made with Git keeps its commit in, or null.
 function pinOf(copy){
   const manifest=manifestOf(copy);

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# A person is present: a person runs this installer, which is fetched and run as text, so no helper stands beside it.
 # Adds the notebook to the folder the original Godspeed installer made.
 #
 # Each version is installed into a folder of its own (versions/<commit>) while the

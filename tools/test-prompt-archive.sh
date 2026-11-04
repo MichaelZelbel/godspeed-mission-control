@@ -593,7 +593,7 @@ if command -v node >/dev/null 2>&1 && [ -f "$HARV" ]; then
   # (Godspeed-finding itself cannot be broken from a test on a machine that HAS a mission control at one of the
   # well-known paths, and a test-only way to blind it would be a hole in the shipped program.)
   mkdir -p "$R/lonely"
-  cp "$HARV" "$R/lonely/prompt-harvest.js"
+  cp "$HARV" "$HERE/unattended-git.cjs" "$R/lonely/"
   GODSPEED_MACHINE=testbox HOME="$R/home" USERPROFILE="$R/home" GODSPEED_DIR="$R/godspeed" \
     node "$R/lonely/prompt-harvest.js" --no-push >/dev/null 2>&1
   rcpt | grep -q '"ok": false' \
@@ -1173,7 +1173,7 @@ echo "$A81" | grep -q 'Lupin seed' && ok "82 a Hermes home named in .godspeed/as
 # 83 to 85. The command runs where a reader is: by name through the harvester (which finds a Python
 #     that works, Hermes' own included), and on Windows through its .cmd.
 if command -v node >/dev/null 2>&1; then
-  B83="$W/bin83"; mkdir -p "$B83"; cp "$ARC" "$HERE/prompt-harvest.js" "$HERE/mc-prompt-archive.cmd" "$B83/"; chmod +x "$B83/mc-prompt-archive"
+  B83="$W/bin83"; mkdir -p "$B83"; cp "$ARC" "$HERE/prompt-harvest.js" "$HERE/unattended-git.cjs" "$HERE/mc-prompt-archive.cmd" "$B83/"; chmod +x "$B83/mc-prompt-archive"
   NODE_DIR83="$(dirname "$(command -v node)")"
   S83="$( unset GODSPEED_DIR GODSPEED_WORKSPACE; export HOME="$H7" GODSPEED_HOME="$H7" USERPROFILE="$H7"
     cd "$G7" && MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' "$B83/mc-prompt-archive" search Larkspur 2>&1 )"
@@ -1250,6 +1250,47 @@ if command -v node >/dev/null 2>&1; then
   echo "$S88" | grep -q 'new claude chat about the Larkspur' && echo "$S88" | grep -q 'newpc/claude-code' \
     && ok "88 a second machine's copy of the backup finds the chat, by the folder it stands in" \
     || bad "88 the second machine could not find the chat" "$S88"
+
+  # 90 to 90d. A computer with no GitHub sign-in: the push must fail without any chance of a
+  #     sign-in window (no prompt is possible), without a retry, and say so once a day in a notice
+  #     that names Connect. A fake git first on PATH records the environment of every remote call.
+  R90="$W/nosignin90"; mkdir -p "$R90/home/.godspeed" "$R90/home/.claude/projects/p" "$R90/mc/prompts/archive" "$R90/mc/.godspeed" "$R90/bin"
+  cp "$J7" "$R90/home/.claude/projects/p/s.jsonl"
+  printf 'GODSPEED_PROMPT_SOURCES=claude\n' > "$R90/home/.godspeed/device.env"
+  REALGIT90="$(command -v git)"
+  cat > "$R90/bin/git" <<FAKE
+#!/bin/sh
+for a in "\$@"; do case "\$a" in push|pull|fetch)
+  echo "\$a \${GIT_TERMINAL_PROMPT-unset} \${GCM_INTERACTIVE-unset}" >> "$R90/remote.log"
+  echo "fatal: could not read Username for 'https://github.com': terminal prompts disabled" >&2
+  exit 128;; esac; done
+exec "$REALGIT90" "\$@"
+FAKE
+  chmod +x "$R90/bin/git"
+  git init -q --bare "$R90/backup.git"
+  git -C "$R90/mc" init -q
+  git -C "$R90/mc" -c user.name=T -c user.email=t@example.com commit -q --allow-empty -m "Save Godspeed Mission Control records"
+  git -C "$R90/mc" remote add origin "$R90/backup.git"
+  harv90() { ( export HOME="$R90/home" USERPROFILE="$R90/home" GODSPEED_HOME="$R90/home" GODSPEED_DIR="$R90/mc" \
+      GODSPEED_MACHINE=nosignin GIT_TERMINAL_PROMPT=1 GCM_INTERACTIVE=Always PATH="$R90/bin:$PATH"
+      timeout 120 node "$HERE/prompt-harvest.js" --verbose 2>&1 ); }
+  notices90() { node -e 'const f=process.argv[1];let n=[];try{n=JSON.parse(require("fs").readFileSync(f,"utf8")).notices}catch(e){};console.log(n.filter(x=>/^git-sign-in-/.test(x.id)&&/Connect record sync/.test(x.text)).length)' "$R90/mc/.godspeed/notices.json"; }
+  O90="$(harv90)"; RC90=$?
+  [ "$RC90" -eq 0 ] && [ -s "$R90/remote.log" ] && ! grep -qv ' 0 Never$' "$R90/remote.log" \
+    && ok "90 with no GitHub sign-in the push fails and no prompt was possible" \
+    || bad "90 the push could prompt, or the harvest failed" "rc=$RC90 $(cat "$R90/remote.log" 2>/dev/null) $O90"
+  [ "$(grep -c '^push ' "$R90/remote.log")" -eq 1 ] \
+    && ok "90b and it does not retry into a window" || bad "90b the push was tried more than once" "$(cat "$R90/remote.log")"
+  [ "$(notices90)" = "1" ] \
+    && ok "90c and one notice tells the person to press Connect record sync" || bad "90c the notice is missing or doubled" "$(cat "$R90/mc/.godspeed/notices.json" 2>/dev/null)"
+  sed 's/Larkspur/Marigold/g' "$J7" > "$R90/home/.claude/projects/p/t.jsonl"
+  rm -f "$R90/home/.godspeed/prompt-harvest-last"
+  O90d="$(harv90)"
+  [ "$(grep -c '^push ' "$R90/remote.log")" -eq 2 ] && [ "$(notices90)" = "1" ] \
+    && ok "90d a second failure the same day queues no second notice" || bad "90d the second failure did not push once more, or queued another notice" "$(cat "$R90/remote.log") $O90d"
+  node "$HERE/test-unattended-git.js" >/dev/null 2>"$R90/ug.err" \
+    && ok "90e every git call in tools/ and notebook/ goes through the helper, and the helper holds" \
+    || bad "90e test-unattended-git.js failed" "$(head -20 "$R90/ug.err")"
 else
   echo "  --   83-88 skipped: node is not on this machine"
 fi

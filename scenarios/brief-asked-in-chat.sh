@@ -2,7 +2,7 @@
 # PROVING SCENARIO OF 2.0.0-beta.16: "today's brief" asked in the chat is the morning briefing.
 #
 # What it proves (godspeed-dev, releases/godspeed-2.0.0-beta.16-prepared-talks/plan.md, "Proving
-# scenarios" 3, and ticket 02 of that release): on an install with the Charm Challenge running, the
+# scenarios" 3, and ticket 08 of that release): on an install with the Charm Challenge running, the
 # Morning brief routine runs, and then "today's brief" asked in the notebook's chat is answered
 # with the saved briefing: its Charm line word for word, a sentence that breaks one of the owner's
 # writing rules absent from the briefing and from the answer, and the repair item that reports it

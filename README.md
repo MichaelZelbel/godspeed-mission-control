@@ -26,6 +26,20 @@ A new release comes out most weeks. I write about what my AI does for me and wha
 
 Version 2 is the current edition. The install lines on this page install the current public version, which is the branch `beta` of this repository; `main` is where the work goes on, and a change merged into it reaches nobody until the next version is released. The installers set up a new, separate folder. They do not move an existing version 1 Godspeed folder or your Menerio account.
 
+## New in 2.0.0-beta.16
+
+Coaching talks arrive prepared, and a talk that is not prepared says so.
+
+- **A talk's open questions are worked on all week.** When a talk ends, the coach writes down what the next one has to answer: a question for each goal the area serves, and one for each thing you promised, corrected or asked it to look into. Until the next talk, the nightly goal research works on those questions, reading the area's own sources first (experts and newsletters; communities only as leads to check, never as proof), and the preparation says for each question what was found, what was ruled out and what is still open. Ask in a talk for something more to be looked into and it joins the questions; say "add this newsletter to the health sources" and the research reads it first.
+- **A second AI checks the preparation.** Where a talk's area names research topics, the list of pages the preparation read comes from your assistant's own record of the run, never from the AI's word, and a second AI that did not write it checks it: every research topic and every goal the talk serves, good options it missed, and findings against it. Each suggestion keeps its source, its measured effect, its limits, its cost and an experiment you could try, and each one turned down keeps its reason. A preparation that fails the check is tried again with what the check found; after three failed tries in a row, a repair item tells you. Until now a talk on such an area could never open prepared.
+- **A talk that is not prepared says so.** When its preparation is missing or did not pass the check, the talk opens with one short sentence saying so and why, and it never claims how long or how widely it researched. In a talk, ask "what did you research?" and it answers from what the preparation recorded.
+- **"Today's brief" in the chat is your morning briefing.** Ask the chat for "today's brief", "my brief" or "the brief again" and you get the briefing the morning made, with your Charm Challenge line and without a sentence that breaks your writing rules. If none was made yet today, it is made once; asking again makes no second one, and the morning does not send you one you already read in the chat. Until now the chat wrote a different brief of its own.
+- **The Charm Challenge asks every time.** When you vent at your assistant, its answer now always ends with "Back to 21? Yes / No". Until now it sometimes did not, because the assistant had to copy a long conversation code into its command.
+- **Messages Godspeed sends on its own are kept in the chat.** Every message a routine sends you, on Telegram or in the notebook, is saved in the chat, so you can reply "what is this about?" and your assistant knows what it sent you that day. A notice, such as a failed backup, is written in your assistant's usual voice, one notice per message, and is sent once even when two routines run at the same time. A message that cannot be saved is not sent, and the routine says so.
+- **No GitHub sign-in window out of nowhere.** When this computer is not signed in to GitHub, Godspeed's own Git work no longer opens a sign-in window or stops to ask for a username. Instead you get one notice a day saying that what this computer saves stays on it, and that **Connect record sync** in the notebook's Settings signs it in.
+
+Updating keeps your folder, notes and settings.
+
 ## New in 2.0.0-beta.15
 
 Six things that were wrong for people using Godspeed are fixed.

@@ -46,8 +46,9 @@ test('the routine\'s entry saves the notebook\'s own briefing, with the Charm li
  assert.ok(text.split(/\r?\n/).includes(line),'the words to deliver carry it as a line of its own');
  const notes=new QueryService(new Store(root)).rows('notes').filter(n=>n.source_app==='morning-brief');
  assert.equal(notes.length,1);assert.equal(notes[0].id,result.record_id);assert.equal(notes[0].content.trim(),text);
- // The same words again are refused by the briefing's own check, so nothing goes out twice.
- await assert.rejects(runMorningBrief({root,provider}),/already saved/);
+ // Asked again the same day, the saved briefing is given back and the AI is not asked.
+ const again=await runMorningBrief({root,provider:async()=>{throw Error('the AI must not be asked');}});
+ assert.equal(again.text,text);
 });
 
 test('the routine\'s entry cuts a sentence that breaks a writing rule and delivers the rest',async t=>{
@@ -95,13 +96,14 @@ test('with the original assistant the routine\'s entry reads the goal cards, and
  assert.equal(listed.filter(w=>w.id===work).length,1,'and each card once');
  // Without the original assistant the entry reads the notebook's own records, as before.
  seen=null;process.env.GODSPEED_CHARM_NOW='2026-10-22T08:00:00Z';process.env.GODSPEED_NOW='2026-10-22T08:00:00Z';
- await runMorningBrief({root,provider:async input=>{const v=verifies(input);if(v)return v;seen=input.context;return OK+' Fictional second day.';},env:{GODSPEED_ASSISTANT_CONFIG:config}});
+ await runMorningBrief({root,provider:async input=>{const v=verifies(input);if(v)return v;seen=input.context;return OK+' Fictional second day.';},env:{GODSPEED_ASSISTANT_CONFIG:config},now:new Date('2026-10-22T08:00:00Z')});
  assert.deepEqual(seen.goals,[],'no goal records were kept, only the card');
  // With the original assistant but none connected, the server would not start; the briefing
  // refuses in one sentence rather than write without the cards.
  fs.writeFileSync(config,JSON.stringify({verified:false,home:path.join(root,'.hermes')}));
- await assert.rejects(runMorningBrief({root,provider,env}),/cannot read your goals and work: the assistant this notebook runs with is not connected/);
- await assert.rejects(runMorningBrief({root,provider,env:{...env,GODSPEED_ASSISTANT_CONFIG:path.join(root,'none.json')}}),/not connected/);
+ const third=new Date('2026-10-23T08:00:00Z');
+ await assert.rejects(runMorningBrief({root,provider,env,now:third}),/cannot read your goals and work: the assistant this notebook runs with is not connected/);
+ await assert.rejects(runMorningBrief({root,provider,now:third,env:{...env,GODSPEED_ASSISTANT_CONFIG:path.join(root,'none.json')}}),/not connected/);
 });
 
 // The routine's own script, as Hermes runs it: its Python, and the entry above replaced by a stand-in.
@@ -146,3 +148,108 @@ test('a briefing that could not be written fails the routine in one sentence',{s
  assert.notEqual(run.status,0);
  assert.match(run.stderr,/^The morning brief could not be written\.\r?\nThe morning brief has no AI to write with/);
 });
+
+// "TODAY'S BRIEF" IN THE CHAT (#193). The chat runs `godspeed-brief` (morning-brief.mjs --today): the
+// morning's own note when it is saved, else the briefing once; never a second note.
+const briefNotes=root=>new QueryService(new Store(root)).rows('notes').filter(n=>n.source_app==='morning-brief');
+
+test('asked for in the chat, a saved briefing of today is printed unchanged and nothing is written',async t=>{
+ const {root}=workspace(t);
+ const provider=async input=>verifies(input)||OK;
+ const {text}=await runMorningBrief({root,provider});
+ const before=JSON.stringify(briefNotes(root));
+ const asked=await runMorningBrief({root,provider:async()=>{throw Error('the AI must not be asked');}});
+ assert.equal(asked.text,text);assert.equal(JSON.stringify(briefNotes(root)),before);
+});
+
+test('a saved briefing keeps its boundary whitespace when asked for in the chat',async t=>{
+ const {root}=workspace(t);
+ const provider=async input=>verifies(input)||OK;
+ await runMorningBrief({root,provider});
+ const store=new Store(root),note=briefNotes(root)[0],content='\n  '+note.content+'  \n\n';
+ store.save('notes',{...store.get('notes',note.id),content});
+ const asked=await runMorningBrief({root,provider:async()=>{throw Error('the AI must not be asked');}});
+ assert.equal(asked.text,content);
+});
+
+test('asked for in the chat with none saved, the briefing is saved once, and asking again saves no second note',async t=>{
+ const {root}=workspace(t);let writes=0;
+ const provider=async input=>verifies(input)||(writes++,OK);
+ const first=await runMorningBrief({root,provider});
+ assert.equal(briefNotes(root).length,1);
+ const again=await runMorningBrief({root,provider});
+ assert.equal(again.text,first.text);assert.equal(briefNotes(root).length,1);assert.equal(writes,1);
+});
+
+test('a briefing saved on an earlier day is not today\'s, and the same words may open the next day',async t=>{
+ const {root}=workspace(t);
+ const provider=async input=>verifies(input)||OK;
+ const first=await runMorningBrief({root,provider});
+ const tomorrow=new Date(Date.now()+2*86400000);
+ const next=await runMorningBrief({root,provider,now:tomorrow});
+ assert.equal(next.text,first.text);assert.equal(briefNotes(root).length,2,'two notes, one for each day');
+});
+
+test('the recipe names the command first and keeps hand-writing only as the fallback without it',()=>{
+ const recipe=fs.readFileSync(fileURLToPath(new URL('../../starter-godspeed/skills/morning-brief/SKILL.md',import.meta.url)),'utf8');
+ const command=recipe.indexOf('godspeed-brief'),fallback=recipe.indexOf('## The fallback'),write=recipe.indexOf('## What to write');
+ assert.ok(command>0&&command<fallback&&fallback<write,'the command comes before the fallback, which comes before the writing part');
+ assert.match(recipe,/where `godspeed-brief` does not exist/);
+ assert.match(recipe,/Save a new file as `brief\/YYYY-MM-DD\.md`/,'a mission control without the command is still told what to write');
+ assert.match(recipe,/Never write\s+`brief\/YYYY-MM-DD\.md` by hand for "today's brief"/);
+});
+
+test('the routine after the chat prints nothing for the briefing the chat showed, and saves no second one',async t=>{
+ const {root}=workspace(t);let n=0;
+ const provider=async input=>verifies(input)||(n++,OK);
+ const chat=await runMorningBrief({root,provider});
+ const script=fileURLToPath(new URL('../scripts/morning-brief.mjs',import.meta.url));
+ const run=(...args)=>spawnSync(process.execPath,[script,...args],{encoding:'utf8',env:{...process.env,GODSPEED_WORKSPACE:root}});
+ const routine=run();
+ assert.equal(routine.status,0,routine.stderr);assert.equal(routine.stdout,'','the routine says nothing for a briefing already saved');
+ assert.equal(briefNotes(root).length,1);assert.equal(n,1,'one AI draft');
+ assert.equal(run('--today').stdout,chat.text+'\n','the chat still gets the saved note');
+});
+
+test('the recipe has the one-sentence answer for a briefing the notebook keeps silent',()=>{
+ const recipe=fs.readFileSync(fileURLToPath(new URL('../../starter-godspeed/skills/morning-brief/SKILL.md',import.meta.url)),'utf8');
+ assert.match(recipe,/prints nothing and succeeds[^]*?say in one\s+sentence that there is no briefing today/);
+});
+
+// The person's day is the installation's (Europe/Berlin here), not UTC, and a briefing keeps the day
+// it was asked for even when it is committed after local midnight.
+const save=(store,fields)=>store.save('notes',{title:'Your morning briefing',content:'MADE-UP',source_app:'morning-brief',...fields});
+const seen=(root,at)=>runMorningBrief({root,provider:async()=>{throw Error('asked');},now:new Date(at)}).then(r=>r.text,e=>e.message);
+
+test('a saved briefing without a day belongs to the installation\'s day, not the UTC day',async t=>{
+ const {root,store}=workspace(t);
+ save(store,{created_at:'2026-11-04T22:30:00Z'});
+ assert.equal(await seen(root,'2026-11-04T22:50:00Z'),'MADE-UP','23:30 in Berlin is still 4 November');
+ assert.equal(await seen(root,'2026-11-04T23:10:00Z'),'asked','5 November in Berlin has none');
+ assert.equal(await seen(root,'2026-11-04T10:00:00Z'),'MADE-UP','same Berlin day, earlier');
+ const late=workspace(t);
+ save(late.store,{created_at:'2026-11-04T23:30:00Z'});
+ assert.equal(await seen(late.root,'2026-11-04T12:00:00Z'),'asked','00:30 on 5 November is not 4 November');
+ assert.equal(await seen(late.root,'2026-11-05T12:00:00Z'),'MADE-UP');
+});
+
+test('a briefing asked for before local midnight and committed after it stays that day\'s',async t=>{
+ const {root}=workspace(t);
+ const provider=async input=>verifies(input)||OK;
+ const asked=new Date('2026-11-04T22:45:00Z');
+ await runMorningBrief({root,provider,now:asked});
+ const [note]=briefNotes(root);
+ assert.equal(note.brief_day,'2026-11-04');
+ // Its commit time lands after midnight in Berlin; the next day's request must still run its own.
+ new Store(root).save('notes',{...note,created_at:'2026-11-04T23:30:00Z'});
+ assert.equal(await seen(root,'2026-11-04T23:50:00Z'),'asked','5 November does not take 4 November\'s note');
+ assert.equal((await runMorningBrief({root,provider:async()=>{throw Error('asked');},now:new Date('2026-11-04T22:55:00Z')})).text,note.content.trim());
+});
+
+for(const [name,fields] of [['hidden',{ai_visibility:'hidden'}],['sensitive',{is_sensitive:true}]])
+ test(`a ${name} briefing of today is not given to the assistant, and no second one is written`,async t=>{
+  const {root,store}=workspace(t);
+  save(store,{content:'PRIVATE',brief_day:'2026-11-04',created_at:'2026-11-04T08:00:00Z',...fields});
+  const r=await runMorningBrief({root,provider:async()=>{throw Error('the AI must not be asked');},now:new Date('2026-11-04T09:00:00Z')});
+  assert.equal(r.text,'');assert.equal(briefNotes(root).length,1);
+ });

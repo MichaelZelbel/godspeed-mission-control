@@ -22,6 +22,8 @@ test('the reply plugin is installed beside the context plugin, enabled, and know
  assert.equal(command,path.join(home,'bin','godspeed-model'));assert.ok(fs.existsSync(command));
  const text=fs.readFileSync(path.join(home,'config.yaml'),'utf8');
  assert.ok(configList(readConfigValue(text,['plugins','enabled'])).includes('godspeed-reply'));
+ assert.ok(fs.existsSync(path.join(home,'plugins','godspeed-buttons','buttons.py')),'the shared buttons are installed beside the plugins');
+ assert.ok(!configList(readConfigValue(text,['plugins','enabled'])).includes('godspeed-buttons'),'a library, not an enabled plugin');
  assert.deepEqual(lines(first),[],'the add-ons that hand their reply to the steps are not named');
  const again=wire(root,home);assert.equal(fs.readFileSync(path.join(home,'config.yaml'),'utf8'),text);assert.deepEqual(lines(again),[]);
 });

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# A person is present: a maintainer runs this by hand.
 # Writes starter-godspeed/skills/<name>/.shipped-sha256: the sha256 (Windows line endings taken
 # out) of every version of that recipe's SKILL.md ever committed, under its current path or an
 # older one, plus the version in the working tree. kit-bootstrap replaces a reader's copy only

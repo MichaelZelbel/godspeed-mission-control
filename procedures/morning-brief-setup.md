@@ -9,25 +9,25 @@ clock on it.
 Your mission control already carries a starter version at
 `skills/morning-brief/SKILL.md`, so a brief you switched on during setup has
 something real to send from the first morning. The prompt below replaces that
-starter with your own.
+starter with your own. Where `godspeed-brief` exists, the notebook's own briefing is delivered and ignores this file, so the prompt below changes nothing the person receives: skip it. Only a mission control without that command (a server's morning job) needs the recipe.
 
 First tell your assistant which time zone to use, such as Europe/London.
 Then, in a session in Hermes, paste this:
 
 ```
-Build skills/morning-brief/SKILL.md with these instructions, then run it once.
+Only where `godspeed-brief` does not exist, build skills/morning-brief/SKILL.md with these instructions, then run it once.
 
 Read AGENTS.md, the profile, current work files, decisions and inbox. Read the previous brief if there is one. Use the current date in the selected job time zone. Do not invent change over time when there is no earlier record.
 
 Write what changed, useful work you prepared, and the decision that needs me. Separate recorded claims from your recommendations. Include a short draft or question set when the sources support one. Name important gaps and failed checks. Send nothing, buy nothing and make no commitments.
 
-Save a new file as brief/YYYY-MM-DD.md. If it already exists, preserve it and report that no second daily brief was written. For an explicit test, accept a separate practice output path and never use or overwrite today's real brief.
+Where `godspeed-brief` is a command you can run (where assistant wiring installed it), run it with no other word and answer with its text, word for word. It saves today's "Your morning briefing" in the notebook once and prints the saved one on any repeat; never write brief/YYYY-MM-DD.md by hand there. Only where that command does not exist, save a new file as brief/YYYY-MM-DD.md. If it already exists, preserve it and report that no second daily brief was written. For an explicit test, accept a separate practice output path and never use or overwrite today's real brief.
 
 Keep the normal brief body under 200 words. Include copyable action text in the brief itself. Use existing approved HTTPS links for longer material only when available; do not publish private material to make a link. The file a fact came from may be named on a Sources: line.
 
 Keep urgent unfinished work and failed-check notices visible after the normal body when they need more space. These sections are exempt from the 200-word limit. Never cut them to pass the limit. Omit empty sections.
 
-Run mc-check-brief on the completed file, fix delivery-format failures and preserve important content. A passed format check is not an evidence check. If checking fails, report the failure and keep the draft available for inspection.
+Where godspeed-brief does not exist, run mc-check-brief on the completed brief/ file, fix delivery-format failures and preserve important content; where it exists, the command already saved the brief and there is no file to check. A passed format check is not an evidence check. If checking fails, report the failure and keep the draft available for inspection.
 ```
 
 *[Copy prompt](https://querino.ai/prompts/morning-brief)*
@@ -35,7 +35,8 @@ Run mc-check-brief on the completed file, fix delivery-format failures and prese
 The sentences about copyable action text and links are the delivery
 contract, and two commands enforce it (both installed with this kit):
 
-- `mc-check-brief` refuses a brief that sends you to a file instead of
+- `mc-check-brief` checks the `brief/` file of a machine without
+  `godspeed-brief`: it refuses a brief that sends you to a file instead of
   handing you the thing, repeats a link or a line to post from any brief of
   the last 45 days in `brief/`, or hands you a text to send without quotes.
 - `mc-judge-brief` asks your assistant, in a clean session that sees nothing
@@ -48,18 +49,21 @@ contract, and two commands enforce it (both installed with this kit):
 The prompt above runs the first. To add the second, paste this as well:
 
 ```
-Add this to skills/morning-brief/SKILL.md: the full text I would copy is right
-there in the brief, in double quotes. After mc-check-brief passes, run
-mc-judge-brief on the file, and never put back what it removed.
+Only where `godspeed-brief` does not exist, add this to skills/morning-brief/SKILL.md: the full text I would copy is right
+there in the brief, in double quotes. Where godspeed-brief does not exist, after mc-check-brief passes, run
+mc-judge-brief on the brief file (it rewrites a file, and
+where the command exists the saved note is not edited by hand), and never put back what it removed.
 ```
 
 A rule in the recipe can be forgotten by a session; a command cannot. If a
 command is missing, run this kit's installer again and it appears.
 
-You get two things: `skills/morning-brief/SKILL.md` (the recipe) and
-`brief/YYYY-MM-DD.md` (today's brief, for real).
+You get two things: `skills/morning-brief/SKILL.md` (the recipe) and today's
+brief for real: the note "Your morning briefing" in your notebook. Only where
+`godspeed-brief` does not exist (a server's morning job) it is the file
+`brief/YYYY-MM-DD.md`.
 
-Run it two or three more times in the same sitting, each time as a test with
+Where `godspeed-brief` does not exist, run it two or three more times in the same sitting, each time as a test with
 a practice output path such as `practice/brief-tests/`, because the recipe
 never writes a second brief for the same day: read what came out, edit the
 skill file, run it again. The facts differ every morning anyway;
@@ -71,15 +75,15 @@ recipe you have not watched run.
 
 Tony Stubblebine, the CEO of Medium, ends his own AI morning briefing
 with every file he touched in the past 24 hours. The morning starts
-with yesterday's thread back in your hand. Steal it: add one line to
-`skills/morning-brief/SKILL.md`:
+with yesterday's thread back in your hand. Steal it: where `godspeed-brief` does not exist, add one line to
+`skills/morning-brief/SKILL.md` (where it exists, that file is ignored: leave it unchanged):
 
 ```
 End with one short line naming which files in this folder changed in
 the last day. If none did, say nothing.
 ```
 
-Run the brief once more as a test and check the new closing line.
+Where `godspeed-brief` does not exist, run the brief once more as a test and check the new closing line.
 
 ## Half two: the clock
 
@@ -89,7 +93,7 @@ Once the brief is useful, ask your assistant to schedule it:
 Set up a daily morning brief at 7am in the time zone we agreed. Inspect existing jobs first. If a morning brief already exists for this mission control, show it and update that job rather than creating a duplicate.
 
 Use this mission control's full path as the job's working folder. Save this job prompt:
-Read AGENTS.md in the working folder and follow it. Read skills/morning-brief/SKILL.md and write today's brief to brief/ using that skill. Preserve any existing daily brief. Report unavailable inputs or failed checks. Do not send anything externally.
+Read AGENTS.md in the working folder and follow it. Read skills/morning-brief/SKILL.md and make today's brief using that skill: where godspeed-brief is a command you can run, run it and use its text, and do not write brief/ by hand; only where that command does not exist, write brief/YYYY-MM-DD.md. Preserve any existing daily brief. Report unavailable inputs or failed checks. Do not send anything externally.
 
 Keep delivery local. Confirm that the scheduler is running on this computer; a saved job alone is not enough. If it needs setup, explain what must run and configure it within my existing permissions. Do not change other jobs or a shared time-zone setting silently.
 

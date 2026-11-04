@@ -84,6 +84,9 @@ for c in node nodejs /usr/local/bin/node /usr/bin/node; do
   "$c" -e '' >/dev/null 2>&1 && { NODE="$c"; break; }
 done
 [ -n "$NODE" ] || { echo "mc-decide: there is no Node.js on this computer, so nothing could be run." >&2; exit 1; }
+# No GitHub sign-in window from a run nobody watches: every git line below goes through unattended-git.cjs
+# (the no-prompt environment, and a once-a-day notice that names Connect when the sign-in is missing).
+if [ -f "$HERE/unattended-git.cjs" ]; then git() { "$NODE" "$HERE/unattended-git.cjs" --tell "$GODSPEED" "$@"; }; fi
 
 # A PROGRAM THAT IS NOT INSTALLED IS NOT AN ERROR HERE. Two of the three registers are useful on
 # their own, and a reader may have installed only some of this. Each one that is missing is
