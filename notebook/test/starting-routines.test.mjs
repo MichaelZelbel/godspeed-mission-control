@@ -390,6 +390,9 @@ g.say=say`);
   assert.equal(run.status,1);assert.equal(run.stdout,'');assert.match(run.stderr,/^The daily connection check could not run\.\n?$/);
   assert.equal(fs.existsSync(said),false,'no id is said');assert.deepEqual(claims(),[],'no claim file remains');
  }
+ fs.writeFileSync(queued,'{not json}');
+ const damaged=attempt(okRun);
+ assert.equal(damaged.status,1);assert.equal(damaged.stdout,'');assert.match(damaged.stderr,/^The daily connection check could not run\.\n?$/);
  for(const quiet of [null,'','{"notices":[]}']){
   if(quiet===null)fs.rmSync(queued,{force:true});else fs.writeFileSync(queued,quiet);
   const run=attempt(okRun);

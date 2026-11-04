@@ -126,7 +126,13 @@ export function runDue(store,day,args){
 }
 const bell=async(store,record)=>{try{await store.saveAsync('notifications',record,undefined,{timeoutMs:30000});}catch{}};
 
-export function readCheckRecord(store){try{const data=JSON.parse(fs.readFileSync(path.join(store.state,RECORD_FILE),'utf8'));return data&&typeof data.connections==='object'&&data.connections?data:{connections:{}};}catch{return {connections:{}};}}
+// Only an absent record is a first run; a damaged one throws, so an outage streak is never silently restarted.
+export function readCheckRecord(store){
+ let text;try{text=fs.readFileSync(path.join(store.state,RECORD_FILE),'utf8');}catch(error){if(error.code==='ENOENT')return {connections:{}};throw error;}
+ const data=JSON.parse(text);
+ if(!data||typeof data.connections!=='object'||!data.connections||Array.isArray(data.connections))throw new Error('The connection check record is damaged');
+ return data;
+}
 
 // Runs every probe once, in turn, and does what each result calls for. A probe that throws counts
 // as a failure that needs no sign-in. Keeps its record in .godspeed/connection-check.json and, when a deadline could not be made or closed, throws after writing it so the next run retries and the routine reports the failure.
@@ -144,7 +150,10 @@ export async function checkConnections({store,day,probes,due=runDue,now=()=>new 
     if(slug&&due(store,day,['check',slug]).status!==0){connections[name]=before.connections[name];failures.push(name);continue;}
     await bell(store,{id:'connection-'+name,status:'resolved',resolved_at:now().toISOString()});
    }
-   if(action.do==='other')tellOwner(store,{id:`${CONNECTION_NOTICE_PREFIX}${name}-other-${entry.failing_since}`,text:otherWords(name)});
+   if(action.do==='other'){
+    try{tellOwner(store,{id:`${CONNECTION_NOTICE_PREFIX}${name}-other-${entry.failing_since}`,text:otherWords(name)});}
+    catch{entry.told=false;failures.push(name);}
+   }
    if(action.do==='sign-in'){
     fs.rmSync(worked,{force:true});
     await bell(store,{id:'connection-'+name,status:'pending',title:`${label} needs your sign-in`,body:CONNECTIONS[name].signIn,link:'/dashboard/settings'});
@@ -155,12 +164,15 @@ export async function checkConnections({store,day,probes,due=runDue,now=()=>new 
      '--done-when',`The daily connection check reaches ${label} again; it closes this itself.`,'--cost',`Until then ${CONNECTIONS[name].stops}.`,
      '--self-check','file-newer','--self-check-arg',`.godspeed/${WORKED_FOLDER}/${name}.worked`,'--addon','connection-check','--addon-key',key]);
     // The owner is told only once the deadline exists, so a run with nothing left over from a failed delivery queues no sign-in notice for a connection that works again. A notice kept after a failed delivery may still be said on a later run even if its connection has recovered; queueNotice keeps a retry from telling twice.
-    if(made.status===0){entry.deadline={slug,key};tellOwner(store,{id:`${CONNECTION_NOTICE_PREFIX}${name}-${since}`,text:CONNECTIONS[name].signIn});}else failures.push(name);
+    if(made.status!==0){failures.push(name);continue;}
+    entry.deadline={slug,key};
+    try{tellOwner(store,{id:`${CONNECTION_NOTICE_PREFIX}${name}-${since}`,text:CONNECTIONS[name].signIn});}
+    catch{delete entry.deadline;failures.push(name);}
    }
   }
  }
  const record={at:now().toISOString(),day,connections};
  atomic(path.join(store.state,RECORD_FILE),JSON.stringify(record,null,2)+'\n');
- if(failures.length)throw new Error('A deadline could not be changed for: '+failures.join(', '));
+ if(failures.length)throw new Error('A deadline or notice could not be changed for: '+failures.join(', '));
  return record;
 }

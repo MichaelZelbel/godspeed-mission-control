@@ -234,3 +234,26 @@ test('a recovery closes only its own connection\'s deadline, never another that 
  const closing=fs.readFileSync(path.join(root,JSON.parse(runDue(store,D2,['state','--json']).out).find(r=>r.slug===state[0].slug).closedBy),'utf8');assert.match(closing,/self check/i);assert.doesNotMatch(closing,/you said so/i,'the closing is the self-check\'s, not the owner\'s word');
  assert.match(runDue(store,D2,['state']).out,/unrelated[^\n]*open|open[^\n]*unrelated/i,'the unrelated deadline stays open');
 });
+
+test('a damaged record fails the check instead of restarting the outage count',async t=>{
+ const {store}=fixture(t);
+ await checkConnections({store,day:D1,probes:stubs({github:down})});
+ for(const bad of ['{not json}','{"connections":[]}','null']){
+  fs.writeFileSync(path.join(store.state,RECORD_FILE),bad);
+  await assert.rejects(checkConnections({store,day:D2,probes:stubs({github:down})}));
+ }
+ assert.deepEqual(readNotices(store),[]);
+});
+
+test('a notice that cannot be stored does not stop the connections after it, and is retried',async t=>{
+ const {store}=fixture(t);
+ await checkConnections({store,day:D1,probes:stubs({ai:down,telegram:refused})}).catch(()=>{});
+ const file=path.join(store.state,'notices.json');
+ fs.rmSync(file,{force:true});fs.mkdirSync(file);
+ const called=[],spy=name=>async()=>{called.push(name);return {set_up:true,ok:true};};
+ await assert.rejects(checkConnections({store,day:D2,probes:{ai:async()=>{called.push('ai');return {set_up:true,ok:false,kind:'other'};},telegram:spy('telegram'),github:spy('github'),mail:spy('mail')}}));
+ assert.deepEqual(called,['ai','telegram','github','mail']);
+ fs.rmSync(file,{recursive:true});
+ await checkConnections({store,day:D2,probes:stubs({ai:down,telegram:refused})});
+ assert.equal(readNotices(store).filter(n=>/ai-other/.test(n.id)).length,1);
+});

@@ -686,18 +686,24 @@ def notice(c, only=""):
     not said and no other run is saying, claimed, as (notice, said file, claim); or None. One a run:
     a message is about one thing. Whoever gets it releases the claim (tick).
     only limits it to notices whose id starts with it, so a routine says what it queued and leaves
-    the rest to the notice routines; a notice with that prefix and no text raises ValueError.
+    the rest to the notice routines; a notice with that prefix and no text raises ValueError, and
+    so does an unreadable queue.
     Entries that are not objects with a string id are ignored."""
     queued = c.get("notices")
     if not queued:
         return None
+    waiting = []
     try:
         with open(queued, encoding="utf-8") as f:
             text = f.read()
-        waiting = []
         if text.strip():
             waiting = [n for n in json.loads(text).get("notices", []) if isinstance(n, dict) and isinstance(n.get("id"), str) and n["id"].startswith(only)]
+    except FileNotFoundError:
+        return None
     except Exception:
+        # Whoever asks for its own notices must hear that the queue is unreadable; the general notice routine just has nothing to say.
+        if only:
+            raise
         return None
     if only and any(not isinstance(n.get("text"), str) or not n["text"].strip() for n in waiting):
         raise ValueError("a queued notice has no text")
@@ -1126,7 +1132,7 @@ def connection_check(c):
         while found:
             waiting.append(found)
             found = notice(c, only=c["connection_notice_prefix"])
-    except ValueError:
+    except Exception:
         for _, _, held in waiting:
             release(held)
         fail("The daily connection check could not run.")
