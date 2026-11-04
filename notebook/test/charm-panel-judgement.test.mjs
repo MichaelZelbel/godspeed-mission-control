@@ -120,14 +120,10 @@ test('a model slower than the limit is not waited for: the word check answers',{
  assert.equal(await say('What is the weather like?'),'Understood.');
 });
 
-test('the word check patience reads GODSPEED_CHARM_PLUGIN_TIMEOUT as the plugin does',t=>{
+test('the word check waits five seconds unless GODSPEED_CHARM_PLUGIN_TIMEOUT is a plain positive number',t=>{
  const was=process.env.GODSPEED_CHARM_PLUGIN_TIMEOUT;
  t.after(()=>{if(was===undefined)delete process.env.GODSPEED_CHARM_PLUGIN_TIMEOUT;else process.env.GODSPEED_CHARM_PLUGIN_TIMEOUT=was;});
  const ms=v=>{if(v===undefined)delete process.env.GODSPEED_CHARM_PLUGIN_TIMEOUT;else process.env.GODSPEED_CHARM_PLUGIN_TIMEOUT=v;return wordCheckMs();};
- assert.equal(ms(undefined),5000);assert.equal(ms(''),5000);assert.equal(ms('abc'),5000);
+ for(const v of [undefined,'','abc','0','-1','inf','1e309'])assert.equal(ms(v),5000,String(v));
  assert.equal(ms('0.5'),500);assert.equal(ms('20'),20000);
- assert.equal(ms('0'),1);assert.equal(ms('-1'),1);
- for(const v of ['1e309','+1e309','inf','+Infinity',' 1e309 ','1_0e300'])assert.equal(ms(v),0,v);
- for(const v of ['-inf','-Infinity','-1e309','nan'])assert.equal(ms(v),1,v);
- assert.equal(ms('1_0'),10000);assert.equal(ms('1__0'),5000);assert.equal(ms('0x10'),5000);
 });

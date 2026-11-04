@@ -13,17 +13,12 @@ import {charmConversation,charmOperation} from './charm-operation.mjs';
 
 // The seconds the judgement may take from the message's arrival; as in the plugin the variable exists for tests.
 const judgeSeconds=()=>Number(process.env.GODSPEED_CHARM_JUDGE_SECONDS)||25;
-// The word check after the limit gets the plugin's patience (its _timeout()), under the same variable, read
-// as Python's float() reads it: unset, empty or not a number means five seconds; zero, less or NaN runs out
-// at once (subprocess.run's does; runChild would set no timer for it); infinity, or more than a timer can
-// hold, means no deadline (0 for runChild).
-const DIGITS='\\d+(?:_\\d+)*',PYTHON_FLOAT=new RegExp('^[-+]?(?:inf(?:inity)?|nan|(?:'+DIGITS+'(?:\\.(?:'+DIGITS+')?)?|\\.'+DIGITS+')(?:e[-+]?'+DIGITS+')?)$','i');
+// The word check after the limit waits five seconds. The plugin's variable, which exists for tests, sets
+// the wait only when it is a plain, finite, positive ASCII number a timer can hold; anything else is five.
 export const wordCheckMs=()=>{
- const raw=(process.env.GODSPEED_CHARM_PLUGIN_TIMEOUT||'5').trim();
- const seconds=PYTHON_FLOAT.test(raw)?Number(raw.replace(/_/g,'').replace(/^([-+]?)inf(inity)?$/i,'$1Infinity')):5;
- if(!(seconds>0))return 1;
- const ms=seconds*1000;
- return ms>2147483647?0:ms;
+ const raw=(process.env.GODSPEED_CHARM_PLUGIN_TIMEOUT||'').trim();
+ const ms=/^(?:\d+\.?\d*|\.\d+)$/.test(raw)?Number(raw)*1000:0;
+ return ms>0&&ms<=2147483647?ms:5000;
 };
 const modelCommand=home=>{const file=path.join(home||'.','bin','godspeed-model'+(process.platform==='win32'?'.cmd':''));return fs.existsSync(file)?file:null;};
 const verdictOf=stdout=>{
