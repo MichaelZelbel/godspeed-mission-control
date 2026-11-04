@@ -281,6 +281,19 @@ export class NativeScheduler{
   rememberNotebookRoutine(this.store,{id:made.id,key:'mail-count',name:MAIL_COUNT_JOB,what:MAIL_COUNT_WHAT});
   return made.id;
  }
+ // A routine that could not be made or resumed is a pending notice for the owner (like a blind watch
+ // in procedures.mjs), resolved when a later tick manages; the periodic tick has no caller to throw to.
+ async followMailCountVisibly(){
+  const id='mail-count-routine',open=()=>this.store.get('notifications',id)?.status==='pending';
+  try{
+   const done=await this.followMailCount();
+   if(open())this.store.save('notifications',{id,status:'resolved',resolved_at:new Date().toISOString()});
+   return done;
+  }catch(error){
+   if(!open())this.store.save('notifications',{id,status:'pending',body:'The daily mail counts could not be scheduled in Hermes, so your mail rules are not counting yet. It tries again on the next check.',error:String(error?.message||error).slice(0,500)});
+   throw error;
+  }
+ }
  // THE MORNING BRIEF AS THE NOTEBOOK'S OWN BRIEFING (3 November 2026, #160; notebook-routines.mjs
  // says why). A script routine like the deadline reminders, whose script runs core/briefing.mjs
  // (scripts/morning-brief.mjs) and prints the briefing for Hermes to deliver where this machine's
@@ -454,7 +467,7 @@ export class NativeScheduler{
    await this.addNewStartingRoutines().catch(()=>null);
    await this.followJournal().catch(()=>null);
    await this.followConnectionCheck().catch(e=>{failure=e;});
-   await this.followMailCount().catch(e=>{failure||=e;});
+   await this.followMailCountVisibly().catch(e=>{failure||=e;});
    await this.removeChatTidy().catch(()=>null);
    await this.followBrief().catch(()=>null);
    await this.followDelivery().catch(()=>null);

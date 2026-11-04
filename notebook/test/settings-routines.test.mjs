@@ -146,6 +146,20 @@ test('the mail counts are scheduled while a tracker has a mail rule, stay on thi
  hermes.write(hermes.jobs().filter(j=>j.name!=='Mail counts'));await scheduler.followMailCount();assert.equal(mine(),undefined,'removed by the person: not made again');
 });
 
+test('a mail-count routine Hermes cannot make is a pending notice on the periodic path, resolved once it is made',async t=>{
+ const {store,scheduler}=await withGoal(t);
+ store.save('collections',{name:'Orders',field_schema:[],tracker:{names:['Orders'],cadence:'any',talks:[],specialist:null,mail:{senders:['shop.example.invalid'],subjects:['order'],mailbox:'gmail'}}});
+ const command=scheduler.command.bind(scheduler);
+ scheduler.command=async()=>{throw Error('hermes is down');};
+ await assert.rejects(scheduler.followMailCountVisibly(),/hermes is down/);
+ await assert.rejects(scheduler.followMailCountVisibly(),/hermes is down/);
+ const open=store.list('notifications').filter(n=>n.id==='mail-count-routine'&&n.status==='pending');
+ assert.equal(open.length,1);assert.match(open[0].body,/mail rules are not counting/);
+ scheduler.command=command;
+ await scheduler.followMailCountVisibly();
+ assert.equal(store.get('notifications','mail-count-routine').status,'resolved');
+});
+
 test('the routine scripts run the journal\'s tick and say a queued notice once',{skip:!['python','python3'].some(p=>{try{execFileSync(p,['--version'],{stdio:'ignore'});return true;}catch{return false;}})&&'needs Python'},async t=>{
  const {root,home,store,scheduler}=await withGoal(t);
  const journal=fileURLToPath(new URL('../../third-party/addons/godspeed-journal/bin/godspeed-journal.mjs',import.meta.url));
