@@ -681,12 +681,13 @@ def release(path):
         pass
 
 
-def notice(c, strict=False):
+def notice(c, strict=False, only=""):
     """The oldest thing the notebook queued for the person (core/notices.mjs) that this machine has
     not said and no other run is saying, claimed, as (notice, said file, claim); or None. One a run:
     a message is about one thing. Whoever gets it releases the claim (tick).
     With strict=True a queue that cannot be read ends the run, for a routine whose only output is the
-    queue; a missing or empty queue is still nothing to say."""
+    queue; a missing or empty queue is still nothing to say. only limits it to notices whose id starts
+    with it, so a routine says what it queued and leaves the rest to the notice routines."""
     queued = c.get("notices")
     if not queued:
         return None
@@ -710,7 +711,7 @@ def notice(c, strict=False):
         return None
     said_file = os.path.join(c["home"], NOTICES_SAID)
     for n in waiting:
-        if n["id"] in said_ids(said_file):
+        if not n["id"].startswith(only) or n["id"] in said_ids(said_file):
             continue
         held = claim(said_file, n["id"])
         if not held:
@@ -1127,10 +1128,10 @@ def connection_check(c):
     # Claim everything queued now before saying any: saying may split a report into new notices, and
     # those wait for the notice routine rather than extending this run.
     waiting = []
-    found = notice(c, strict=True)
+    found = notice(c, strict=True, only="connection-")
     while found:
         waiting.append(found)
-        found = notice(c, strict=True)
+        found = notice(c, strict=True, only="connection-")
     said = []
     try:
         while waiting:

@@ -339,7 +339,7 @@ print(json.dumps(g.work(g.config())))`;
 
 test('a failed daily connection check leaves what it queued unsaid, and a timeout is a failure too',{skip:!havePython&&'no Python here'},t=>{
  const {root,home}=scriptFixture(t),queued=path.join(root,'queued-notices.json'),said=path.join(home,'godspeed-notices-said.json');
- fs.writeFileSync(queued,JSON.stringify({notices:[{id:'telegram-key',text:'Telegram refused your bot\'s key.'}]}));
+ fs.writeFileSync(queued,JSON.stringify({notices:[{id:'connection-telegram-key',text:'Telegram refused your bot\'s key.'}]}));
  const attempt=result=>{
   const code=`import sys,types,subprocess;sys.path.insert(0,${JSON.stringify(path.join(home,'scripts'))})
 import godspeed_routines as g
@@ -355,18 +355,18 @@ print(g.connection_check(c)[0])`;
  }
  const okRun='g.run=lambda args,c,env,timeout=None:types.SimpleNamespace(returncode=0,stdout="",stderr="")',ok=attempt(okRun);
  assert.equal(ok.status,0,ok.stderr);assert.match(ok.stdout,/Telegram refused your bot's key\./);
- assert.deepEqual(JSON.parse(fs.readFileSync(said,'utf8')).ids,['telegram-key']);
+ assert.deepEqual(JSON.parse(fs.readFileSync(said,'utf8')).ids,['connection-telegram-key']);
  // A report provider that splits every notice in two must not extend the run: the split-off notice waits for the notice routine.
- fs.rmSync(said,{force:true});fs.writeFileSync(queued,JSON.stringify({notices:[{id:'seed',text:'First.'}]}));
+ fs.rmSync(said,{force:true});fs.writeFileSync(queued,JSON.stringify({notices:[{id:'connection-seed',text:'First.'}]}));
  const split=attempt(okRun+`
 def say(c,env,n):
     import json
     q=json.load(open(c["notices"]));q["notices"].append({"id":n["id"]+"~2","text":"Split off."});json.dump(q,open(c["notices"],"w"));return n["text"]
 g.say=say`);
  assert.equal(split.status,0,split.stderr);assert.equal(split.stdout.trim(),'First.');
- assert.deepEqual(JSON.parse(fs.readFileSync(said,'utf8')).ids,['seed']);
+ assert.deepEqual(JSON.parse(fs.readFileSync(said,'utf8')).ids,['connection-seed']);
  // A report that cannot be said fails the run and says nothing; the notices it never attempted are released, not left claimed.
- fs.rmSync(said,{force:true});fs.writeFileSync(queued,JSON.stringify({notices:[{id:'one',text:'First.'},{id:'two',text:'Second.'}]}));
+ fs.rmSync(said,{force:true});fs.writeFileSync(queued,JSON.stringify({notices:[{id:'connection-one',text:'First.'},{id:'connection-two',text:'Second.'}]}));
  const claims=()=>fs.readdirSync(home).filter(f=>f.endsWith('.claim'));
  const broken=attempt(okRun+`
 def say(c,env,n):
@@ -375,6 +375,10 @@ g.say=say`);
  assert.notEqual(broken.status,0);assert.equal(broken.stdout,'');assert.match(broken.stderr,/provider down/);
  assert.equal(fs.existsSync(said)&&JSON.parse(fs.readFileSync(said,'utf8')).ids.length>0,false,'no id is said');
  assert.deepEqual(claims(),[],'no claim file remains');
+ // A healthy check says nothing of what other routines queued.
+ fs.rmSync(said,{force:true});fs.writeFileSync(queued,JSON.stringify({notices:[{id:'unrelated-backup',text:'The backup failed.'}]}));
+ const unrelated=attempt(okRun);
+ assert.equal(unrelated.status,0,unrelated.stderr);assert.equal(unrelated.stdout.trim(),'');assert.equal(fs.existsSync(said),false,'an unrelated notice is not said');
  for(const bad of ['{not json','[]','{"notices":5}','{"notices":[{"id":"a"}]}','{"notices":[{"id":"a","text":"x"},"b"]}','{"notices":[{"id":5,"text":"x"}]}','{"notices":[{"id":"a","text":"   "}]}']){
   fs.writeFileSync(queued,bad);fs.rmSync(said,{force:true});
   const run=attempt(okRun);
