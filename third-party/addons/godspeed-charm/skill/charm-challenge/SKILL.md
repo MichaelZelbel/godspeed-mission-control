@@ -29,8 +29,10 @@ nothing new; it asks whether to start over, and a yes in this conversation does 
 **A plain slip request ("charm slip", "I slipped"):** `godspeed-charm slip --words "<their words>"`
 
 **Something that sounded like a slip (a story of venting at an AI):** do their work first, then
-follow the `[godspeed-charm]` block: ask the one question it gives you and record it with
-`godspeed-charm asked --words "<their words>"`.
+follow the `[godspeed-charm]` block. Where it says the program asks (Hermes), you never ask the
+question and never run `asked`: the program notices a slip with a second small check by the AI
+connected in Settings, records the question and adds it at the end of your reply. Where the block
+gives you the question, ask it and record it with `godspeed-charm asked --words "<their words>"`.
 
 **Their yes or no to an open question:** `godspeed-charm answer yes --words "<their words>"`, or `answer no` the same way. Only the conversation that was
 asked can answer it.

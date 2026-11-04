@@ -44,6 +44,7 @@ godspeed-charm context --conversation telegram:123
 godspeed-charm context --conversation telegram:123 --stickers   # the sticker plugin is installed
 godspeed-charm context --hook claude
 godspeed-charm texts      # the question and the button words, as JSON, for the Telegram buttons
+godspeed-charm judge --conversation telegram:123 --words-file msg.txt --json   # the Hermes plugin's check
 ```
 
 Every command takes `--json` (it then prints `{ok, reply, state}`), `--language en|de` for one
@@ -68,6 +69,16 @@ the Godspeed notebook and refuses to install without one.
 
 - The notebook's own chat, through its `charm` operation.
 - Telegram, through Hermes: the plugin hands the current state to the assistant before every turn.
+  Under Hermes the program, not the model, asks the slip question, on every platform it serves: while
+  the model works, the plugin runs `godspeed-charm judge` on your message. A yes or no to an open
+  question, a scheduled run, a day with a reset, and "charm slip" are decided by rule. Anything else
+  goes to the AI connected in Settings (the installation's `godspeed-model`, 15 seconds) with the
+  add-on's own definition of a slip; slip or unsure asks. When that AI is not there, fails or is
+  slow, a short list of English and German words of contempt decides. The plugin then records the
+  question (`asked`) and ends the reply with it, or records a plain yes or no the model did not.
+  If the verdict is not ready 25 seconds after the turn began, the word check decides. Any failure
+  sends the reply as the model wrote it. One line per judged turn, without your words, goes to
+  `<HERMES_HOME>/logs/godspeed-charm.log`.
   The question after a slip comes as its own message with two buttons, Yes and No (Ja and Nein in
   German); a tap answers it, the message then says what happened, and the buttons go. Only you can
   tap them (the one id in `TELEGRAM_ALLOWED_USERS`), only in your private chat with the bot. Each
