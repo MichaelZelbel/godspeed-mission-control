@@ -150,6 +150,7 @@ def two_steps():
     assert (status(IDS[0]), status(IDS[1])) == ("waiting", "yes")
     press(buttons, bot, mine, "no")
     assert (status(IDS[0]), status(IDS[1])) == ("no", "yes")
+    assert bot.edits[-1]["text"] == MESSAGES[0] + "\n\nNo: I will leave it as it is.", bot.edits
 
 
 def not_the_owner():
