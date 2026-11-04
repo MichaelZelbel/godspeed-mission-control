@@ -12,8 +12,7 @@ what goes into their brief, edit this file, and from then on it is theirs.
 
 ## Where the command exists: run it
 
-When `godspeed-brief` is a command you can run (every desktop chat and every Hermes routine of
-this app), it is the notebook's own briefing, and it is the only way to give the person a brief.
+When `godspeed-brief` is a command you can run (where assistant wiring installed it), it is the notebook's own briefing, and it is the only way to give the person a brief.
 Run `godspeed-brief`, with no other word. It prints today's "Your morning briefing" if the
 notebook already saved it, or writes it once and prints it. Your answer is its text, word for word.
 When it prints nothing and succeeds, the notebook keeps today's briefing silent: say in one
