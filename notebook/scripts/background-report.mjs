@@ -2,7 +2,7 @@
 // BACKGROUND WORK TELLS THE OWNER, AS THE ROUTINE SCRIPTS RUN IT (4 November 2026, #198).
 //
 //   node background-report.mjs say    --godspeed <mission control> --home <Hermes home>   (a notice as JSON on stdin)
-//   node background-report.mjs record --godspeed <mission control> --home <Hermes home> --routine <kind> [--delivery telegram|notebook]   (its words on stdin)
+//   node background-report.mjs record --godspeed <mission control> --home <Hermes home> --routine <kind> [--delivery telegram|notebook[,...]]   (its words on stdin)
 //
 // `say` prints the words to deliver for one queued notice, written with the chat's guidance (or its
 // plain fallback text) and recorded where the chat reads it; `record` records a routine's own words
@@ -26,8 +26,8 @@ export async function main(argv,stdin){
  }
  const routine=option(argv,'routine');
  if(!routine)throw Error('Say which routine the words are from (--routine)');
- const delivery=option(argv,'delivery');
- if(delivery&&!['telegram','notebook'].includes(delivery))throw Error('--delivery is telegram or notebook');
+ const delivery=option(argv,'delivery')?.split(',');
+ if(delivery&&!delivery.every(d=>['telegram','notebook'].includes(d)))throw Error('--delivery is telegram or notebook');
  await recordRoutine(store,{routine,text:stdin.trim(),home,delivery});
  return '';
 }

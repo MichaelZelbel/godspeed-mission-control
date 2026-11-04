@@ -97,6 +97,13 @@ S=sys.modules["cron.scheduler"]
 S._normalize_deliver_value=lambda d:d
 S._delivery_lane_value=lambda job,*,for_failure=False:job["resolved"]["lane"]
 S._resolve_delivery_targets=lambda job,*,for_failure=False:job["resolved"]["targets"].get(job["deliver"],[])
+for name in ("gateway","gateway.platforms","gateway.platforms.base","cron.scheduler_delivery"):sys.modules[name]=types.ModuleType(name)
+class BasePlatformAdapter:
+ @staticmethod
+ def extract_media(text):
+  lines=text.split("\\n");return [l for l in lines if l.startswith("MEDIA:")],"\\n".join(l for l in lines if not l.startswith("MEDIA:"))
+sys.modules["gateway.platforms.base"].BasePlatformAdapter=BasePlatformAdapter
+sys.modules["cron.scheduler_delivery"]._redact_cron_payload=lambda text,what:text.replace("sk-secret-123","[redacted]")
 sys.modules["cron.scheduler"]._deliver_result=lambda job,content,adapters=None,loop=None,*,for_failure=False:delivered.append(content)
 import importlib.util
 s=importlib.util.spec_from_file_location("godspeed_notebook",sys.argv[1]);m=importlib.util.module_from_spec(s);s.loader.exec_module(m)
@@ -114,7 +121,7 @@ function wiredProvider(t,{node=process.execPath}={}){
  return {store,run:jobs=>JSON.parse(execFileSync(python,['-I','-c',CRON_STUB,path.join(dir,'__init__.py'),JSON.stringify(jobs)],{encoding:'utf8'}))};
 }
 
-test('what a Settings routine delivers is recorded unchanged, for local and Telegram delivery, before Hermes delivers it',t=>{
+test('what a Settings routine delivers is recorded as Hermes will send it, for local and Telegram delivery, before Hermes delivers it',t=>{
  if(!python)return t.skip('needs Python');
  const {store,run}=wiredProvider(t),words='Your weekly review is ready. Reply "ok" and I will start.';
  const out=run([[{id:'j1',name:'Weekly review',skill:'weekly-review',deliver:'telegram',resolved:{targets:{'telegram':[{platform:'telegram'}]},lane:'telegram'}},words,false],[{id:'j2',name:'Morning brief',skills:['morning-brief'],deliver:'local',resolved:{targets:{},lane:'local'}},'Good morning.',false],
@@ -140,7 +147,7 @@ test('a failure is recorded in the lane Hermes sends failures to, not the normal
   [{id:'j5',name:'Composite',skill:'coach',deliver:'local',failure_deliver:'telegram,local',resolved:{targets:{telegram:[{platform:'telegram'}]},lane:'telegram,local'}},'Failed E.',true],[{id:'j6',name:'Origin',skill:'coach',deliver:'local',failure_deliver:'origin',origin_platform:'telegram',resolved:{targets:{'origin':[{platform:'telegram'}]},lane:'origin'}},'Failed F.',true],
   [{id:'j7',name:'Elsewhere',skill:'coach',deliver:'local',failure_deliver:'discord',resolved:{targets:{'discord':[{platform:'discord'}]},lane:'discord'}},'Failed G.',true]]);
  assert.deepEqual(out.errors,[null,null,null,null,null,null,null]);
- const saved=[...new Store(store.root,{device:'pc'}).records.values()].filter(r=>r.id.startsWith('background-report-')).sort((a,b)=>a.content<b.content?-1:1);
+ const saved=[...new Store(store.root,{device:'pc'}).records.values()].filter(r=>r.id.startsWith('background-report-')).sort((a,b)=>a.content+a.delivered_to<b.content+b.delivered_to?-1:1);
  assert.deepEqual(saved.map(r=>[r.content,r.delivered_to]),[['Failed A.','telegram'],['Failed B.','notebook'],['Failed D.','notebook'],['Failed E.','notebook'],['Failed E.','telegram'],['Failed F.','telegram']]);
 });
 
@@ -152,4 +159,33 @@ test('a composite lane is recorded once for each destination Hermes resolves',t=
  assert.deepEqual(out.errors,[null,null]);assert.deepEqual(out.delivered,['To both.','To two chats.']);
  const saved=[...new Store(store.root,{device:'pc'}).records.values()].filter(r=>r.id.startsWith('background-report-')).sort((a,b)=>a.content+a.delivered_to<b.content+b.delivered_to?-1:1);
  assert.deepEqual(saved.map(r=>[r.content,r.delivered_to]),[['To both.','notebook'],['To both.','telegram'],['To two chats.','telegram']]);
+});
+
+test('a Settings routine\'s record holds the words Hermes sends: media out, credentials redacted',t=>{
+ if(!python)return t.skip('needs Python');
+ const {store,run}=wiredProvider(t);
+ const out=run([[{id:'j1',name:'Secret',skill:'coach',deliver:'telegram',resolved:{targets:{telegram:[{platform:'telegram'}]},lane:'telegram'}},'Key is sk-secret-123.\nMEDIA:/tmp/x.png',false]]);
+ assert.deepEqual(out.errors,[null]);
+ const [saved,...none]=[...new Store(store.root,{device:'pc'}).records.values()].filter(r=>r.id.startsWith('background-report-'));
+ assert.equal(none.length,0);assert.equal(saved.content,'Key is [redacted].');
+});
+
+test('a composite lane is recorded together or not at all',async t=>{
+ const {store,home}=setup(t),{main}=await import('../scripts/background-report.mjs');
+ await assert.rejects(main(['record','--godspeed',store.root,'--home',home,'--routine','R','--delivery','notebook,bogus'],'Words.'));
+ assert.equal(records(new Store(store.root,{device:'pc'})).length,0);
+ await main(['record','--godspeed',store.root,'--home',home,'--routine','R','--delivery','notebook,telegram'],'Words.');
+ assert.equal(records(new Store(store.root,{device:'pc'})).length,2);
+});
+
+test('a locally delivered Settings result is in the notebook chat\'s next reply',t=>{
+ if(!python)return t.skip('needs Python');
+ const {store,run}=wiredProvider(t),root=store.root;
+ run([[{id:'j2',name:'Morning brief',skill:'morning-brief',deliver:'local',resolved:{targets:{},lane:'local'}},'Good morning from Settings.',false]]);
+ const plugin=fileURLToPath(new URL('../assistant-files/godspeed-context/__init__.py',import.meta.url)),dir=path.join(root,'plugin');
+ fs.mkdirSync(dir);fs.copyFileSync(plugin,path.join(dir,'__init__.py'));fs.writeFileSync(path.join(dir,'mission-control.txt'),root);
+ const hook=platform=>execFileSync(python,['-I','-c','import importlib.util,sys,json;s=importlib.util.spec_from_file_location("p",sys.argv[1]);m=importlib.util.module_from_spec(s);s.loader.exec_module(m);print(json.dumps(m.on_pre_llm_call(user_message="hi",platform=sys.argv[2])))',path.join(dir,'__init__.py'),platform],{encoding:'utf8',env:{...process.env,PYTHONIOENCODING:'utf-8'}}).trim();
+ const reply=JSON.parse(hook('cli')).context;
+ assert.match(reply,/\[godspeed-reports\]/);assert.ok(reply.includes('Good morning from Settings.'));
+ assert.equal(JSON.parse(hook('telegram'))?.context??null,null,'a notebook report is not for Telegram');
 });

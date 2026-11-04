@@ -17,9 +17,8 @@ falls back to its built-in ticker and nothing else changes.
 
 Reports (4 November 2026, #198): a routine made in Settings (`--skill ... --deliver`) delivers what
 its agent wrote, and Hermes does not put that into the chat's history. register() wraps Hermes'
-delivery of a skill job's result so the notebook records the same words first
-(notebook/scripts/background-report.mjs record), where the chat reads them. The words are not
-changed. A result that could not be recorded is not delivered: the run says why in its delivery
+delivery of a skill job's result so the notebook first records the words Hermes will send (media tags out, redacted; without its header and footer)
+(notebook/scripts/background-report.mjs record), where the chat reads them. A composite lane is recorded for all its destinations at once or not at all. A result that could not be recorded is not delivered: the run says why in its delivery
 error, like the routines that print their own words. The wiring writes report.json beside this file.
 """
 
@@ -54,22 +53,31 @@ def _destinations(job, for_failure=False):
     return found
 
 
+def _sent_words(content):
+    """The words Hermes will send, as it makes them: media tags taken out, then redacted. Hermes'
+    header and footer are not part of the message the chat should know."""
+    from gateway.platforms.base import BasePlatformAdapter
+    from cron.scheduler_delivery import _redact_cron_payload
+    _, cleaned = BasePlatformAdapter.extract_media(content)
+    return _redact_cron_payload((cleaned or "").strip(), "delivery content")
+
+
 def record_result(job, content, for_failure=False):
     """None when nothing needs recording or it was recorded, else why the result must not go out."""
     if not (job.get("skill") or job.get("skills")) or not isinstance(content, str) or not content.strip():
         return None
     try:
         destinations = _destinations(job, for_failure)
-        if not destinations:
+        words = _sent_words(content)
+        if not destinations or not words:
             return None
         with open(os.path.join(HERE, "report.json"), encoding="utf-8") as f:
             wiring = json.load(f)
-        for delivery in destinations:
-            r = subprocess.run([wiring["node"], wiring["script"], "record", "--godspeed", wiring["root"], "--home", HOME,
-                                "--routine", str(job.get("name") or job.get("id")), "--delivery", delivery],
-                               input=content, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=120)
-            if r.returncode != 0:
-                return "Not delivered: it could not be recorded in the notebook. " + r.stderr.strip()[:300]
+        r = subprocess.run([wiring["node"], wiring["script"], "record", "--godspeed", wiring["root"], "--home", HOME,
+                            "--routine", str(job.get("name") or job.get("id")), "--delivery", ",".join(destinations)],
+                           input=words, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=120)
+        if r.returncode != 0:
+            return "Not delivered: it could not be recorded in the notebook. " + r.stderr.strip()[:300]
         return None
     except Exception as error:
         return "Not delivered: it could not be recorded in the notebook. %s" % error

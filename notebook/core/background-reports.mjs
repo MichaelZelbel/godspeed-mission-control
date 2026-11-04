@@ -56,11 +56,13 @@ export const reportDelivery=(store,home)=>deliveryFor(store.get('settings','inst
 
 const stamp=at=>at.toISOString().replace(/[-:]/g,'').replace(/\.\d+Z$/,'Z');
 
-// One conversation_messages record for a message handed to delivery.
-export async function recordReport(store,{text,about='',facts=[],step=null,routine=null,written,delivery,at=new Date()}){
+const reportValue=({text,about='',facts=[],step=null,routine=null,written,delivery,at=new Date()})=>{
  const telegram=delivery==='telegram';
- return store.saveAsync('conversation_messages',{id:REPORT_PREFIX+stamp(at)+'-'+hash([text,about,at.toISOString()]).slice(0,8),role:'assistant',content:text,source_app:'background',conversation_id:telegram?'telegram-owner':null,delivered_to:telegram?'telegram':'notebook',sent_at:at.toISOString(),report:{about,facts,step,routine,written}});
-}
+ return {id:REPORT_PREFIX+stamp(at)+'-'+hash([text,about,at.toISOString(),delivery]).slice(0,8),role:'assistant',content:text,source_app:'background',conversation_id:telegram?'telegram-owner':null,delivered_to:telegram?'telegram':'notebook',sent_at:at.toISOString(),report:{about,facts,step,routine,written}};
+};
+
+// One conversation_messages record for a message handed to delivery.
+export const recordReport=(store,message)=>store.saveAsync('conversation_messages',reportValue(message));
 
 // The words to say for a fresh notice. Reports a writing split off wait as notices of their own.
 export async function sayNotice(store,{notice,home,provider=null,guidance}){
@@ -73,4 +75,9 @@ export async function sayNotice(store,{notice,home,provider=null,guidance}){
 
 // A routine's own words, recorded as they were printed. A job made in Settings delivers where its
 // own job says, which the Hermes hook passes as delivery.
-export const recordRoutine=(store,{routine,text,home,delivery})=>recordReport(store,{text,about:routine,routine,written:'routine',delivery:delivery||reportDelivery(store,home)});
+// A list of deliveries is recorded together or not at all.
+export function recordRoutine(store,{routine,text,home,delivery}){
+ const message=d=>({text,about:routine,routine,written:'routine',delivery:d});
+ if(!Array.isArray(delivery))return recordReport(store,message(delivery||reportDelivery(store,home)));
+ return store.transaction(view=>view.commit(delivery.map(d=>store.prepare('conversation_messages',reportValue(message(d))))));
+}
