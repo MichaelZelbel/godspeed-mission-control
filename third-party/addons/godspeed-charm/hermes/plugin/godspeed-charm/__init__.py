@@ -38,6 +38,7 @@ _output_bus = sys.modules.setdefault("godspeed_progress_output_v1", types.Module
 _pending_lock = threading.Lock()
 _pending = {}  # (session_id, turn_id) -> the question asked in that turn
 _model_asked_turns = {}  # (session_id, turn_id) -> the conversation of the question the model itself asked in that turn
+_asked_before = {}  # (session_id, turn_id) -> (conversation, moment of its open question before an `asked` call)
 _platforms = {}  # session_id -> the platform of its latest turn (never a scheduled one)
 _turns = collections.OrderedDict()  # session_id -> the judged turn in flight (see _start_judge)
 LOG_LIMIT = 1_000_000
@@ -381,13 +382,30 @@ def _asked_when(report, conversation):
                  if isinstance(q, dict) and q.get("conversation") == conversation), None)
 
 
-def _asked_happened(reports, conversation):
-    """Whether `asked` really recorded a question for `conversation`: its --json report names the
-    open question, or, without --json, the record itself does. Terminal output and the command line
-    are text anyone can print, so neither shows anything."""
-    if reports:
-        return reports[-1].get("ok") is True and _asked_when(reports[-1], conversation) is not None
-    return _question is not None and _question.asked_when(conversation) is not None
+def _open_asked(conversation):
+    """The moment the question open in `conversation` was asked, read from the record itself
+    (`godspeed-charm status --json`), or None. The one reader of that fact, on every platform."""
+    try:
+        r = subprocess.run(_command("status", "--json"), capture_output=True, text=True, encoding="utf-8",
+                           errors="replace", stdin=subprocess.DEVNULL, timeout=_timeout())
+        reports = _reports(r.stdout) if r.returncode == 0 else []
+        questions = ((reports[-1] if reports else {}).get("state") or {}).get("open") or []
+        return next((q.get("when") for q in questions if isinstance(q, dict)
+                     and q.get("conversation") == conversation and isinstance(q.get("when"), str)), None)
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return None
+
+
+def _asked_by_this_call(session_id, turn_id, conversation):
+    """The moment of the question this very `asked` call recorded for `conversation`, or None.
+    Only the record counts, and only a change since pre_tool_call: terminal output and the command
+    line are text anyone can print, and an older open question is not this call's."""
+    with _pending_lock:
+        before = _asked_before.pop((session_id, turn_id), None)
+    if before is None or before[0] != conversation:
+        return None
+    now = _open_asked(conversation)
+    return now if now is not None and now != before[1] else None
 
 
 def on_charm_tool(**kwargs):
@@ -410,8 +428,8 @@ def on_charm_tool(**kwargs):
         code, output = _tool_output(kwargs.get("result"))
         if code != 0:
             return None
-        reports = _reports(output)
-        if not _asked_happened(reports, conversation):
+        asked_when = _asked_by_this_call(session_id, turn_id, conversation)
+        if asked_when is None:
             return None
         # On any platform a question the model asked itself is that conversation's one question.
         with _pending_lock:
@@ -424,20 +442,9 @@ def on_charm_tool(**kwargs):
         words = _question.texts()
         if not words:
             return None
-        asked_when = None
-        if reports:
-            if reports[-1].get("ok") is not True:
-                return None
-            reply = str(reports[-1].get("reply") or "")
-            asked_when = _asked_when(reports[-1], conversation)
-        else:
-            reply = output
+        reports = _reports(output)
+        reply = str(reports[-1].get("reply") or "") if reports else output
         if not any(w["question"] in reply for w in words.values()):
-            return None
-        # A button answers only its own question, named by the moment it was asked. Without
-        # --json the command did not say that moment: the record does. No moment, no buttons.
-        asked_when = asked_when or _question.asked_when(conversation)
-        if not asked_when:
             return None
         language = _flag(rest, "language")
         entry = {"conversation": conversation, "askedWhen": asked_when, "reply": reply,
@@ -470,16 +477,27 @@ def on_charm_before_tool(**kwargs):
         args = kwargs.get("args") or {}
         command = str(args.get("command") or "")
         m = _COMMAND.search(command)
-        if not m or re.search(r"--conversation(?:\s|=)", command):
+        if not m:
             return None
-        session_id = str(kwargs.get("session_id") or "")
-        with _pending_lock:
-            platform = _platforms.get(session_id)
-        conversation = f"{platform}:{session_id}" if platform and session_id else ""
-        if not conversation or not _SAFE.match(conversation):
-            return None
-        fixed = command[:m.end()] + f' --conversation "{conversation}"' + command[m.end():]
-        return {"action": "modify", "args": {**args, "command": fixed}}
+        session_id, turn_id = str(kwargs.get("session_id") or ""), str(kwargs.get("turn_id") or "")
+        result = None
+        if not re.search(r"--conversation(?:\s|=)", command):
+            with _pending_lock:
+                platform = _platforms.get(session_id)
+            conversation = f"{platform}:{session_id}" if platform and session_id else ""
+            if not conversation or not _SAFE.match(conversation):
+                return None
+            command = command[:m.end()] + f' --conversation "{conversation}"' + command[m.end():]
+            result = {"action": "modify", "args": {**args, "command": command}}
+        asked = _ASKED.search(command)
+        conversation = _flag(command[asked.end():], "conversation") if asked else None
+        if conversation and session_id and turn_id:
+            before = _open_asked(conversation)
+            with _pending_lock:
+                _asked_before[(session_id, turn_id)] = (conversation, before)
+                while len(_asked_before) > 200:
+                    _asked_before.pop(next(iter(_asked_before)))
+        return result
     except Exception:
         return None
 
@@ -607,6 +625,7 @@ def register(ctx):
         def detach():
             with _pending_lock:
                 _pending.clear()
+                _asked_before.clear()
                 _platforms.clear()
                 for turn in _turns.values():
                     _forget(turn)

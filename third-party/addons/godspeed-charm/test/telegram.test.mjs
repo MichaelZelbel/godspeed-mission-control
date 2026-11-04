@@ -51,7 +51,7 @@ function asked(dir, { language } = {}) {
     when: JSON.parse(r.stdout).state.open[0].when,
   };
 }
-const tool = (a, extra = {}) => ({ do: "tool", session: SESSION, turn: TURN, command: a.command, output: a.output, ...extra });
+const tool = (a, extra = {}) => ({ do: "tool", session: SESSION, turn: TURN, command: a.command, output: a.output, unasked: true, ...extra });
 const reply = (text, extra = {}) => ({ do: "reply", session: SESSION, turn: TURN, text, ...extra });
 
 function drive(dir, steps, env = {}) {

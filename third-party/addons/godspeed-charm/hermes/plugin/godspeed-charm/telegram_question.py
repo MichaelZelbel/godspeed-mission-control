@@ -107,17 +107,6 @@ class QuestionTelegram(buttons.YesNoButtons):
                     return value
         return None
 
-    def asked_when(self, conversation):
-        """The moment the question open in `conversation` was asked, from the record, or None."""
-        try:
-            r = self.run("status", "--json")
-            value = self.report(r.stdout) if r.returncode == 0 else None
-            questions = ((value or {}).get("state") or {}).get("open") or []
-            return next((q.get("when") for q in questions if isinstance(q, dict)
-                         and q.get("conversation") == conversation and isinstance(q.get("when"), str)), None)
-        except (OSError, ValueError, subprocess.SubprocessError):
-            return None
-
     def answer(self, token):
         """The command's reply to a tap: what happened, or why nothing did (exit 2). The question
         is named by the moment it was asked, so the tap answers that question or none."""

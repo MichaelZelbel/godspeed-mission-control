@@ -14,8 +14,10 @@ import importlib.util
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import types
@@ -173,13 +175,29 @@ def step_tool(s):
     ROUTE.clear()
     ROUTE.update(route_for(s["session"], s.get("route")))
     result = s.get("result")
+    command = s["command"]
+    if s.get("now"):
+        os.environ["GODSPEED_CHARM_NOW"] = s["now"]
+    # `unasked`: the question in the record was written before this driver ran, so pre_tool_call
+    # is shown a mission control where nothing is open yet, as it would have been.
+    real_dir = os.environ.get("GODSPEED_CHARM_DIR")
+    if s.get("unasked"):
+        os.environ["GODSPEED_CHARM_DIR"] = tempfile.mkdtemp(prefix="charm-unasked-")
+    for cb in hooks.get("pre_tool_call", []):
+        out = cb(tool_name=s.get("tool", "terminal"), args={"command": command}, session_id=s["session"],
+                 turn_id=s["turn"], task_id="", tool_call_id="call-1")
+        if isinstance(out, dict) and out.get("action") == "modify":
+            command = out["args"]["command"]
+    if s.get("unasked"):
+        shutil.rmtree(os.environ["GODSPEED_CHARM_DIR"], ignore_errors=True)
+        os.environ["GODSPEED_CHARM_DIR"] = real_dir
     if s.get("run"):
         code, output = charm(s["run"], s.get("now"))
         result = json.dumps({"output": output, "exit_code": code, "error": None})
     if result is None:
         result = json.dumps({"output": s.get("output", ""), "exit_code": s.get("exit_code", 0), "error": None})
     for cb in hooks.get("post_tool_call", []):
-        cb(tool_name=s.get("tool", "terminal"), args={"command": s["command"]}, result=result,
+        cb(tool_name=s.get("tool", "terminal"), args={"command": command}, result=result,
            session_id=s["session"], turn_id=s["turn"], status=s.get("status", "ok"), tool_call_id="call-1")
     return {}
 

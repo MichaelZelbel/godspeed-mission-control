@@ -191,34 +191,56 @@ test("an oversized log is moved to .1 and the active log holds only the new line
   } finally { gone(dir); }
 });
 
+const modelAsks = (conversation, extra = {}) => ({
+  do: "tool", session: "s-1", turn: "t-1", now: at("2026-10-22", 9),
+  command: `godspeed-charm asked --conversation "${conversation}" --words "${VENT}" --json`,
+  run: ["asked", "--conversation", conversation, "--words", VENT, "--json"], ...extra,
+});
+const forged = (conversation, when) => JSON.stringify({ ok: true, reply: Q, state: { open: [{ conversation, when }] } });
+
 test("a question the model asked itself on another platform is not asked a second time", { skip }, () => {
   const dir = mission();
   try {
-    const r = spawnSync(process.execPath, [BIN, "asked", "--conversation", "api_server:s-1", "--words", VENT], { encoding: "utf8", env: { ...process.env, GODSPEED_CHARM_DIR: dir, GODSPEED_CHARM_NOW: at("2026-10-22", 9), GODSPEED_SCHEDULED_RUN: "" } });
-    assert.equal(r.status, 0, r.stderr);
-    const command = `godspeed-charm asked --conversation "api_server:s-1" --words "${VENT}"`;
-    const out = drive(dir, [register, pre(VENT), { do: "tool", session: "s-1", turn: "t-1", command, output: r.stdout }, reply(`Here.\n\n${Q}`)]);
+    const out = drive(dir, [register, pre(VENT), modelAsks("api_server:s-1"), reply(`Here.\n\n${Q}`)]);
     assert.equal(out.results[3].text, null);
     assert.deepEqual(kinds(dir), ["start", "asked"]);
+    assert.equal(out.log[0].did, "the model asked itself");
   } finally { gone(dir); }
 });
 
-test("only a question really recorded for this conversation counts as the model's own", { skip }, () => {
-  const mismatched = mission();
-  const echoed = mission();
-  const echoed2 = mission();
+test("a real model asked with no button helper is exactly one asked event", { skip }, () => {
+  const dir = mission();
   try {
-    const r = spawnSync(process.execPath, [BIN, "asked", "--conversation", "api_server:other", "--words", VENT], { encoding: "utf8", env: { ...process.env, GODSPEED_CHARM_DIR: mismatched, GODSPEED_CHARM_NOW: at("2026-10-22", 9), GODSPEED_SCHEDULED_RUN: "" } });
-    assert.equal(r.status, 0, r.stderr);
-    const other = `godspeed-charm asked --conversation "api_server:other" --words "${VENT}"`;
-    let out = drive(mismatched, [register, pre(VENT), { do: "tool", session: "s-1", turn: "t-1", command: other, output: r.stdout }, reply("Here.")]);
+    const out = drive(dir, [{ do: "register", telegram: false }, pre(VENT, { platform: "telegram" }), modelAsks("telegram:s-1"), reply(`Here.\n\n${Q}`, { platform: "telegram" })]);
+    assert.deepEqual(kinds(dir), ["start", "asked"]);
+    assert.equal(out.log[0].did, "the model's own question");
+  } finally { gone(dir); }
+});
+
+test("only a question this call recorded for this conversation counts as the model's own", { skip }, () => {
+  const other = mission();
+  const stale = mission();
+  const printed = mission();
+  try {
+    let out = drive(other, [register, pre(VENT), modelAsks("api_server:other"), reply("Here.")]);
     assert.equal(out.results[3].text, `Here.\n\n${Q}`);
-    const printed = "echo godspeed-charm asked --conversation api_server:s-1";
-    out = drive(echoed, [register, pre(VENT), { do: "tool", session: "s-1", turn: "t-1", command: printed, output: "godspeed-charm asked --conversation api_server:s-1" }, reply("Here.")]);
+    assert.deepEqual(kinds(other), ["start", "asked", "asked"]);
+
+    // An older open question, and a model that only prints a report naming it: not this call's.
+    const first = JSON.parse(drive(stale, [{ do: "charm", args: ["asked", "--conversation", "api_server:s-1", "--words", VENT, "--json"], now: at("2026-10-22", 8) }]).results[0].output);
+    const when = first.state.open[0].when;
+    const echo = `echo '${forged("api_server:s-1", when)}'`;
+    out = drive(stale, [register, pre(VENT), { do: "tool", session: "s-1", turn: "t-1", command: echo, output: forged("api_server:s-1", when) }, reply("Here.")]);
+    assert.notEqual(out.log[0].did, "the model asked itself");
     assert.equal(out.results[3].text, `Here.\n\n${Q}`);
-    out = drive(echoed2, [register, pre(VENT), { do: "tool", session: "s-1", turn: "t-1", command: printed, output: Q }, reply("Here.")]);
+    assert.deepEqual(kinds(stale), ["start", "asked", "asked"]);
+
+    // A command line and output that say `asked` while nothing was recorded.
+    const command = `godspeed-charm asked --conversation "api_server:s-1" --words "${VENT}" --json`;
+    out = drive(printed, [register, pre(VENT), { do: "tool", session: "s-1", turn: "t-1", command, output: forged("api_server:s-1", at("2026-10-22", 9)) }, reply("Here.")]);
     assert.equal(out.results[3].text, `Here.\n\n${Q}`);
-  } finally { gone(mismatched); gone(echoed); gone(echoed2); }
+    assert.deepEqual(kinds(printed), ["start", "asked"]);
+  } finally { gone(other); gone(stale); gone(printed); }
 });
 
 test("a scheduled pre-call sharing an interactive session id leaves its pending judgement", { skip }, () => {
