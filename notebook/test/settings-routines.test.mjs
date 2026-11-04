@@ -136,6 +136,19 @@ test('the routine scripts run the journal\'s tick and say a queued notice once',
  const run=()=>execFileSync(python,[path.join(home,'scripts','godspeed-journal-checkins.py')],{cwd:path.join(home,'scripts'),encoding:'utf8',env:{...process.env,PYTHONIOENCODING:'utf-8'},windowsHide:true});
  assert.equal(run().trim(),'Last night\'s backup failed.','the notice, and the journal had nothing due');
  assert.equal(run().trim(),'','said once');
+ const sent=()=>store.list('conversation_messages').filter(m=>m.source_app==='background');
+ assert.deepEqual(sent().map(m=>[m.content,m.report.written]),[['Last night\'s backup failed.','fallback']],'said with no AI, and recorded');
+});
+
+test('two queued notices are said one in each run',{skip:!['python','python3'].some(p=>{try{execFileSync(p,['--version'],{stdio:'ignore'});return true;}catch{return false;}})&&'needs Python'},async t=>{
+ const {root,home,store,scheduler}=await withGoal(t);
+ const journal=fileURLToPath(new URL('../../third-party/addons/godspeed-journal/bin/godspeed-journal.mjs',import.meta.url));
+ execFileSync(process.execPath,[journal,'config','set','nudge.enabled','on','--godspeed',root],{env:{...process.env,GODSPEED_JOURNAL_GIT_SYNC:'off'},windowsHide:true});
+ await scheduler.followJournal();
+ const {queueNotice}=await import('../core/notices.mjs');queueNotice(store,{id:'a-1',text:'First thing.'});queueNotice(store,{id:'b-1',text:'Second thing.'});
+ const python=['python3','python'].find(p=>{try{execFileSync(p,['--version'],{stdio:'ignore'});return true;}catch{return false;}});
+ const run=()=>execFileSync(python,[path.join(home,'scripts','godspeed-journal-checkins.py')],{cwd:path.join(home,'scripts'),encoding:'utf8',env:{...process.env,PYTHONIOENCODING:'utf-8'},windowsHide:true}).trim();
+ assert.deepEqual([run(),run(),run()],['First thing.','Second thing.','']);
 });
 
 // THE NIGHT CHAT TIDY-UP IS MADE FOR NO INSTALL (27 October 2026, notebook-routines.mjs says why).
