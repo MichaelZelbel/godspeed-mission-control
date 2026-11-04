@@ -1,7 +1,7 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import {fileURLToPath} from 'node:url';import {execFileSync,spawnSync,spawn} from 'node:child_process';
 import {NativeScheduler,nativeJobs} from '../core/native-scheduler.mjs';import {Store} from '../core/records/store.mjs';import {QueryService} from '../core/query.mjs';import {Domains} from '../core/domains.mjs';
 import {installStarter} from '../core/starter-workspace.mjs';import {readMachineRecord,telegramInHermes,chatAppInHermes} from '../core/starting-routines.mjs';import {runCommand} from '../core/child-process.mjs';
-import {DatabaseSync} from 'node:sqlite';
+import {DatabaseSync} from 'node:sqlite';import {CONNECTION_NOTICE_PREFIX} from '../core/connection-names.mjs';
 import {cronCalendar,calendarCron,retimeWhat} from '../core/routine-times.mjs';import {enableKinds,readNotebookRoutines,rememberNotebookRoutine,JOURNAL_JOB,CHAT_TIDY_JOB,CHAT_TIDY_SCRIPT,BRIEF_SCRIPT,deliveryFor,CONNECTION_JOB} from '../core/notebook-routines.mjs';
 import {personalOperation} from '../core/personal-operations.mjs';import {readArea} from '../../third-party/addons/godspeed-coach/lib/areas.mjs';
 
@@ -223,7 +223,7 @@ test('the daily connection check\'s script says what the check queued, once',{sk
  const {root,home,store,scheduler}=await withGoal(t);
  scheduler.lastTick=0;await scheduler.tick();
  const stand=path.join(root,'stand-in-check.mjs');
- fs.writeFileSync(stand,"import {Store} from '"+new URL('../core/records/store.mjs',import.meta.url).href+"';import {queueNotice} from '"+new URL('../core/notices.mjs',import.meta.url).href+"';queueNotice(new Store(process.env.GODSPEED_WORKSPACE,{device:'pc'}),{id:'connection-telegram-2026-11-04',text:'Telegram refused your bot key.'});");
+ fs.writeFileSync(stand,"import {Store} from '"+new URL('../core/records/store.mjs',import.meta.url).href+"';import {queueNotice} from '"+new URL('../core/notices.mjs',import.meta.url).href+"';queueNotice(new Store(process.env.GODSPEED_WORKSPACE,{device:'pc'}),{id:'"+CONNECTION_NOTICE_PREFIX+"telegram-2026-11-04',text:'Telegram refused your bot key.'});");
  const file=path.join(home,'scripts','godspeed-routines.json');fs.writeFileSync(file,JSON.stringify({...JSON.parse(fs.readFileSync(file,'utf8')),connection_check:stand}));
  const python=['python3','python'].find(p=>{try{execFileSync(p,['--version'],{stdio:'ignore'});return true;}catch{return false;}});
  const run=()=>execFileSync(python,[path.join(home,'scripts','godspeed-connection-check.py')],{cwd:path.join(home,'scripts'),encoding:'utf8',env:{...process.env,PYTHONIOENCODING:'utf-8'},windowsHide:true});
