@@ -2383,6 +2383,10 @@ copy "$T/good" "$T/no-close"
 rm "$T/no-close/close-a.txt"
 refuses 'a scenario that never closed the talk of (a)' talk-prep-honest "$T/no-close" 'close-a.txt is not in what'
 
+copy "$T/good" "$T/no-block"
+rm "$T/no-block/block-b.txt"
+refuses 'a scenario that kept no scheduled context of day B' talk-prep-honest "$T/no-block" 'block-b.txt is not in what the scenario kept'
+
 copy "$T/good" "$T/close-wrong"
 printf 'Recorded: the Health talk of 2026-11-01 is not-held.\n' >"$T/close-wrong/close-a.txt"
 refuses 'a close that names another day' talk-prep-honest "$T/close-wrong" 'was not closed before day B'

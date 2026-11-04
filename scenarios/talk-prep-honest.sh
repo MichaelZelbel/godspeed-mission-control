@@ -241,7 +241,8 @@ act() {
   notebook_clock_at "$DAY_B"
   NOW=${DAY_B}T12:00:00Z
   prepare_and_review b "$DAY_B" 3 'Good evening. Tonight: three routes, one for each of your goals, and the experiment I would start with.' pass "$URL_1" "$URL_2" "$URL_3"
-  coach context --scheduled >"$EVIDENCE/block-b.txt" 2>&1 || true
+  coach context --scheduled >"$EVIDENCE/block-b.txt" 2>&1 ||
+    fail "the coach could not give day B's scheduled context, so a carried-over Health talk was not ruled out: $(tr '\n' ' ' <"$EVIDENCE/block-b.txt" | cut -c1-200)"
   chat_panel_new_conversation "$EVIDENCE/.panel-new-b.json"
   chat_panel_says "$ASK" "$EVIDENCE/opening-b.txt"
   cat "$ROOT"/coach/health/talks/"$DAY_B".md >"$EVIDENCE/talk-b.md" 2>/dev/null || : >"$EVIDENCE/talk-b.md"
