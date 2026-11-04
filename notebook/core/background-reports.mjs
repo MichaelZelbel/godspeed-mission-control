@@ -5,6 +5,7 @@ import {ruleRefusals} from './briefing-cut.mjs';
 import {queueNotice} from './notices.mjs';
 import {deliveryFor} from './notebook-routines.mjs';
 import {telegramInHermes} from './starting-routines.mjs';
+import {stampDelivered} from './waiting-steps.mjs';
 
 // BACKGROUND WORK TELLS THE OWNER IN THE CHAT'S VOICE, AND THE CHAT KNOWS IT (4 November 2026, #198).
 //
@@ -62,7 +63,12 @@ const reportValue=({text,about='',facts=[],step=null,routine=null,written,delive
 };
 
 // One conversation_messages record for a message handed to delivery.
-export const recordReport=(store,message)=>store.saveAsync('conversation_messages',reportValue(message));
+// A report that carries a waiting step's id and goes to Telegram is that step's question sent: the step becomes answerable.
+export async function recordReport(store,message){
+ const saved=await store.saveAsync('conversation_messages',reportValue(message));
+ if(message.step&&message.delivery==='telegram')stampDelivered(store,message.step,'telegram');
+ return saved;
+}
 
 // The words to say for a fresh notice. Reports a writing split off wait as notices of their own.
 export async function sayNotice(store,{notice,home,provider=null,guidance}){

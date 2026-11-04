@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {atomic,hash} from './records/store.mjs';
 import {habitProgressPng,habitProgressText} from './habit-progress-image.mjs';
+import {stampReply} from './waiting-steps.mjs';
 export class Telegram {
   constructor({store,domains,token,owner,origin='https://api.telegram.org',transport=fetch,loginLink,renderProgress=habitProgressPng}){this.store=store;this.domains=domains;this.token=token;this.owner=String(owner);this.origin=origin;this.transport=transport;this.loginLink=loginLink;this.renderProgress=renderProgress;this.file=path.join(store.state,'telegram-offset.json');this.running=false;}
   async replyWithProgress(reply,result,locale='en'){
@@ -55,15 +56,16 @@ export class Telegram {
         const id='telegram-'+update.update_id,prior=this.store.get('command_receipts',id);
         if(prior){if(prior.state==='attempted'){await this.store.saveAsync('command_receipts',{id,state:'needs_review',error:'Interrupted Telegram request; actions were not repeated.'});await this.failureNotice(id,'Your previous message did not finish. I have not repeated any actions. Please send it again.');}atomic(this.file,JSON.stringify({offset:update.update_id+1}));continue;}
         await this.store.saveAsync('command_receipts',{id,source:'telegram',state:'attempted',request:text});
-        let reply,answerResult,answered=false,sendAttempted=false;
+        let reply,answerResult,answered=false,sendAttempted=false,turnStart;
         try{
           if(['/notebook','/chat'].includes(text)&&this.loginLink)reply='Open your '+(text==='/chat'?'chat':'notebook')+': '+this.loginLink(text==='/chat'?'/chat':'/');
           else if(text.startsWith('/capture ')){const note=await this.store.saveAsync('notes',{id:'telegram-note-'+update.update_id,title:'Telegram capture',content:text.slice(9),source_app:'telegram'});reply='Saved your note: '+note.title;}
           else if(text==='/status'){const jobs=this.store.list('jobs');reply='Your mission control has '+this.store.records.size+' records and '+jobs.filter(j=>!j.paused).length+' enabled routines.';}
-          else {await this.store.saveAsync('conversation_messages',{role:'user',content:text,source_app:'telegram',conversation_id:'telegram-owner'});const result=await this.domains.invoke('conversation-chat',{message:text,conversation_id:'telegram-owner',request_id:id});answerResult=result;reply=result.reply;answered=true;}
+          else {await this.store.saveAsync('conversation_messages',{role:'user',content:text,source_app:'telegram',conversation_id:'telegram-owner'});turnStart=new Date().toISOString();const result=await this.domains.invoke('conversation-chat',{message:text,conversation_id:'telegram-owner',request_id:id});answerResult=result;reply=result.reply;answered=true;}
           sendAttempted=true;
           const delivered=await this.replyWithProgress(reply,answerResult,message.from?.language_code||'en');
           await this.store.saveAsync('command_receipts',{id,state:'verified',message_id:delivered.message_id,result:reply});
+          if(answered)stampReply(this.store,{chat:'telegram',words:reply,since:turnStart,messageId:delivered.message_id});
           if(!answered)await this.store.saveAsync('conversation_messages',{role:'assistant',content:reply,source_app:'telegram',message_id:delivered.message_id,conversation_id:'telegram-owner'});
         }catch{await this.store.saveAsync('command_receipts',{id,state:'needs_review',error:'Telegram request did not finish. It will not be replayed automatically.'});if(!sendAttempted)await this.failureNotice(id,'I could not finish your message. I have not repeated any actions. Please try again.');}
         atomic(this.file,JSON.stringify({offset:update.update_id+1}));
