@@ -1,5 +1,17 @@
 import {visibleRows} from './visibility.mjs';
 
+// Where the phone (Health Auto Export) and another source both give a day's metric, the value
+// written last wins for that day and metric only. A record's updated_at moves only when its value
+// changes, so it is when the value was last written. Every other row passes through.
+export const PHONE_SOURCE='Health Auto Export';
+export function latestPerDayMetric(rows){
+ const best=new Map(),key=row=>row.date_precision==='day'&&row.observed_on?row.observed_on+'\n'+row.metric:null;
+ for(const row of rows){const k=key(row);if(k===null)continue;const group=best.get(k)||best.set(k,{rows:[],phone:false,other:false}).get(k);group.rows.push(row);group[row.source===PHONE_SOURCE?'phone':'other']=true;}
+ const newest=new Map();
+ for(const [k,group] of best)if(group.phone&&group.other)newest.set(k,group.rows.reduce((a,b)=>String(b.updated_at)>String(a.updated_at)?b:a));
+ return rows.filter(row=>{const k=key(row);return !newest.has(k)||newest.get(k)===row;});
+}
+
 // A CSV day is a day, not a manufactured precise observation time.
 export function currentHealth(query,{now=Date.now(),days=7}={}){
  return query.withSnapshot(()=>{
@@ -11,7 +23,7 @@ export function currentHealth(query,{now=Date.now(),days=7}={}){
    const at=Date.parse(row.observed_at||row.created_at);
    return Number.isFinite(at)&&at<=now&&at>=now-days*86400000;
   };
-  const all=visibleRows(query,'health_observations'),observations=all.filter(fresh);
-  return {observations,has_fresh_measurements:!!observations.length,as_of:new Date(now).toISOString(),timezone,window_days:days,excluded_stale_or_future:all.length-observations.length};
+  const all=visibleRows(query,'health_observations'),current=all.filter(fresh),observations=latestPerDayMetric(current);
+  return {observations,has_fresh_measurements:!!observations.length,as_of:new Date(now).toISOString(),timezone,window_days:days,excluded_stale_or_future:all.length-current.length};
  });
 }

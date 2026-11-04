@@ -48,6 +48,7 @@ import {nativeAgent} from '../core/native-agent.mjs';
 import {NativeScheduler} from '../core/native-scheduler.mjs';
 import {enableKinds} from '../core/notebook-routines.mjs';
 import {notebookAddress} from '../core/notebook-address.mjs';
+import {BODY_LIMIT as UPLOAD_LIMIT,ensureToken,renewToken,tokenMatches,pruneRaw,acceptUpload} from '../core/phone-health.mjs';
 import {about} from '../core/about.mjs';
 import {showCard as showContextCard,readContext,markContext} from '../core/context-setup.mjs';
 import {visibleRows} from '../core/visibility.mjs';
@@ -160,6 +161,12 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   // account is made through a private setup link the installer asks the local door for
   // (/api/login-link), so without a token nothing typed into the web door creates one.
   const web = webPort === undefined || webPort === null ? null : { port: Number(webPort), auth: new WebAuth(store.state, { token, remote: true, now: authNow }) };
+  // Health Auto Export uploads (core/phone-health.mjs, issue #214) are taken only where a phone can
+  // reach this notebook: a door that faces outside. A Windows or Mac notebook on 127.0.0.1 with no
+  // web door offers nothing, and /ingest there is what it was before.
+  const phoneUploads=remote||!!web;
+  if(phoneUploads){ensureToken(store.state);try{pruneRaw(store.state);}catch{}}
+  const pruneTimer=phoneUploads?setInterval(()=>{try{pruneRaw(store.state);}catch{}},3600000):null;pruneTimer?.unref?.();
   // What is no longer true ends on its own (core/fact-closing.mjs): once a day
   // on the machine that runs the routines, and soon after a Menerio import,
   // which copies old values under their old names beside the new ones.
@@ -237,6 +244,20 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         pairCodes.delete(input.code);const key=randomBytes(32).toString('hex');pairKeys.push({id:randomBytes(8).toString('hex'),hash:hash(key),created_at:new Date().toISOString()});savePairKeys();return send(res,200,{key,device});
       }
       if (route === '/health') return send(res, 200, { ok: true, format: 1, version: VERSION,instance,scheduler_heartbeat:schedulerHeartbeat });
+      // The token in this address is the phone's credential, so nothing on this path reaches the
+      // generic catch below, which logs the address; no line here carries the token, a health
+      // value or the sender's address.
+      if(phoneUploads&&(route==='/ingest'||route.startsWith('/ingest/'))){
+        if(route==='/ingest/health'&&req.method==='GET')return send(res,200,{ok:true});
+        if(req.method!=='POST'||route.slice(8).includes('/')||!tokenMatches(store.state,route.slice(8)))return send(res,404,{error:'Not found'});
+        try{
+          if(menerioImport.mutating)return send(res,503,{error:'Try again soon'});
+          let upload;try{upload=JSON.parse(await body(req,UPLOAD_LIMIT));}catch(error){return send(res,error.message==='Request is too large'?413:400,{error:error.message==='Request is too large'?'Too large':'Not JSON'});}
+          const data=upload?.data;
+          if(!data||typeof data!=='object'||Array.isArray(data)||[data.metrics,data.workouts].some(x=>x!==undefined&&!Array.isArray(x)))return send(res,400,{error:'Not a Health Auto Export upload'});
+          acceptUpload(store,data);return send(res,200,{ok:true});
+        }catch(error){console.error('Godspeed Mission Control: a phone upload was not kept: '+error.message);return send(res,500,{error:'Not kept'});}
+      }
       if(route==='/api/shared-note'&&req.method==='GET'){const share=query.rows('shared_notes').find(s=>s.share_token===url.searchParams.get('token')&&s.is_active),note=share&&store.get('notes',share.note_id);if(!note||note.removed_at||note.is_trashed)return send(res,404,{error:'This share is unavailable'});return send(res,200,{title:note.title,content:note.content,tags:note.tags,entity_type:note.entity_type,created_at:note.created_at,updated_at:note.updated_at});}
       if (route.startsWith('/api/') && !authorized(req, route)) return send(res, 401, { error: 'Sign in to continue.', code: auth.cookie(req)?'SESSION_EXPIRED':'SIGN_IN_REQUIRED' });
       if(route==='/api/menerio/import'){
@@ -375,6 +396,12 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
       if(route==='/api/backup-ai/remove'&&req.method==='POST')return send(res,200,{hermes:!!backupHome,...removeBackupAI({home:backupHome,state:store.state})});
       // VOICE REPLIES (core/voice-replies.mjs, discussion #41): the voice the assistant answers voice
       // notes with, kept in Hermes' own home. An ElevenLabs voice is kept only after a sample worked.
+      if(route==='/api/phone-health'||route==='/api/phone-health/renew'){
+        if(!phoneUploads){if(route==='/api/phone-health')return send(res,200,{available:false});return send(res,404,{error:'Unknown operation'});}
+        if(route==='/api/phone-health/renew'&&req.method!=='POST')return send(res,405,{error:'Use POST'});
+        const token=route==='/api/phone-health/renew'?renewToken(store.state):ensureToken(store.state),link=notebookAddress({port:server.address().port}).link;
+        return send(res,200,{available:true,path:'/ingest/'+token,address:link?link.replace(/\/dashboard$/,'')+'/ingest/'+token:null});
+      }
       if(route==='/api/voice'&&req.method==='GET')return send(res,200,backupHome?voiceStatus({home:backupHome,state:store.state}):{available:false});
       if(route==='/api/voice'&&req.method==='POST'){
         if(!backupHome)throw new Error('Voice replies are made where Hermes runs your assistant; this notebook has none.');
@@ -675,7 +702,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   let soulDebounce;const followPersona=()=>{clearTimeout(soulDebounce);soulDebounce=setTimeout(()=>{try{shelf.followPersona();}catch{}},2000);soulDebounce.unref?.();};
   const rootWatcher=fs.watch(store.root,(event,name)=>{if(durableRoots.includes(name)){watchRoot(name);changed(name)(event,null);}else if(durableFiles.includes(name)){changed('')(event,name);if(name==='AGENTS.md')followPersona();}});
   let localServer = null;
-  const close = async () => { await stopTimelineRepair(); index.meaning?.close(); index.expansionWorker?.close(); if (localServer) await new Promise(resolve => localServer.close(resolve)); if (webServer) await new Promise(resolve => webServer.close(resolve)); clearInterval(meaningTimer);clearInterval(processingTimer);clearInterval(backupTimer);clearInterval(factTimer);stopIndexing();store.unwatch();githubSignIn.close();planSignIn?.cancel();clearTimeout(soulDebounce);await syncRunner.close();await menerioImport.close();rootWatcher.close();for(const watcher of watchers.values())watcher.close();clearTimeout(debounce);clearTimeout(indexDebounce);clearInterval(telegramTimer);clearInterval(interval);clearInterval(jobs);clearInterval(syncTimer);clearInterval(mediaTimer); await new Promise(resolve => server.close(resolve)); await index.close(); };
+  const close = async () => { await stopTimelineRepair(); index.meaning?.close(); index.expansionWorker?.close(); if (localServer) await new Promise(resolve => localServer.close(resolve)); if (webServer) await new Promise(resolve => webServer.close(resolve)); clearInterval(meaningTimer);clearInterval(processingTimer);clearInterval(backupTimer);clearInterval(factTimer);clearInterval(pruneTimer);stopIndexing();store.unwatch();githubSignIn.close();planSignIn?.cancel();clearTimeout(soulDebounce);await syncRunner.close();await menerioImport.close();rootWatcher.close();for(const watcher of watchers.values())watcher.close();clearTimeout(debounce);clearTimeout(indexDebounce);clearInterval(telegramTimer);clearInterval(interval);clearInterval(jobs);clearInterval(syncTimer);clearInterval(mediaTimer); await new Promise(resolve => server.close(resolve)); await index.close(); };
   // A container's main door listens on its network interface and always needs sign-in.
   // Add-ons and tools in that same container may use this opt-in, loopback-only door,
   // with the exact Host/Origin guards and API contract of a native local installation.

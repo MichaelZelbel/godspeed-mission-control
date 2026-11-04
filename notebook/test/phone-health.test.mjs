@@ -1,0 +1,203 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import http from 'node:http';
+import {Store,hash} from '../core/records/store.mjs';
+import {QueryService} from '../core/query.mjs';
+import {currentHealth} from '../core/health-inputs.mjs';
+import {createService} from '../server/main.mjs';
+import {acceptUpload,importFolder,buildDays,instantOf,pruneRaw,rawFolder,tokenFile,ensureToken,renewToken,tokenMatches,SOURCE} from '../core/phone-health.mjs';
+
+for(const key of Object.keys(process.env))if(/^(GODSPEED_|HERMES_)/.test(key))delete process.env[key];
+
+// Every upload here is made up; no real health data.
+const tmp=prefix=>fs.mkdtempSync(path.join(os.tmpdir(),prefix));
+const setup=()=>{const store=new Store(tmp('godspeed-phone-health-'));store.save('settings',{id:'installation',owner:'local',timezone:'Europe/Berlin'});return store;};
+const at=text=>new Date(text);
+const metric=(name,units,...points)=>({name,units,data:points.map(([date,qty,extra={}])=>({date,qty,source:'Fictional Phone',...extra}))});
+const upload=(metrics=[],workouts=[])=>({metrics,workouts});
+const days=store=>Object.fromEntries(store.list('health_observations').map(r=>[r.observed_on+' '+r.metric,r.value]));
+const D='2026-11-04';
+
+test('overlapping windows count each point once, and kJ becomes kcal',()=>{
+ const store=setup(),steps=[[D+' 08:00:00 +0100',100],[D+' 09:00:00 +0100',200],[D+' 10:00:00 +0100',300]];
+ acceptUpload(store,upload([metric('step_count','count',steps[0],steps[1]),metric('active_energy','kJ',[D+' 08:00:00 +0100',418.4])]),{now:at('2026-11-04T09:30:00Z')});
+ acceptUpload(store,upload([metric('step_count','count',steps[1],steps[2])]),{now:at('2026-11-04T10:30:00Z')});
+ acceptUpload(store,upload([metric('step_count','count',steps[0],steps[2]),metric('active_energy','kJ',[D+' 08:00:00 +0100',418.4])]),{now:at('2026-11-04T11:30:00Z')});
+ assert.equal(days(store)[D+' steps'],600);
+ assert.equal(days(store)[D+' active_kcal'],100);
+});
+
+test('a day re-sent the next morning adds only its new points and rewrites nothing unchanged',()=>{
+ const store=setup();
+ acceptUpload(store,upload([metric('step_count','count',[D+' 08:00:00 +0100',100]),metric('flights_climbed','count',[D+' 08:00:00 +0100',3])]),{now:at('2026-11-04T20:00:00Z')});
+ const before=Object.fromEntries(store.list('health_observations').map(r=>[r.metric,r]));
+ const result=acceptUpload(store,upload([metric('step_count','count',[D+' 08:00:00 +0100',100],[D+' 23:30:00 +0100',50])]),{now:at('2026-11-05T07:00:00Z')});
+ assert.equal(result.written,1);
+ const after=Object.fromEntries(store.list('health_observations').map(r=>[r.metric,r]));
+ assert.equal(after.steps.value,150);
+ assert.equal(after.flights.revision,before.flights.revision);
+ assert.equal(after.flights.updated_at,before.flights.updated_at);
+});
+
+test('records are day records in the CSV feed\'s id scheme, on the date in the point\'s own string',()=>{
+ const store=setup();
+ acceptUpload(store,upload([metric('step_count','count',['2026-11-04 00:09:00 +0100',40])]),{now:at('2026-11-03T23:30:00Z')});
+ const [row]=store.list('health_observations');
+ assert.equal(row.id,'health-feed-'+hash([SOURCE,D,'steps']));
+ assert.deepEqual([row.source,row.date_precision,row.observed_on,row.value],['Health Auto Export','day',D,40]);
+});
+
+test('the last value is the latest moment, not the latest text, and a tie goes to the later upload',()=>{
+ assert.ok(instantOf('2026-10-25 02:30:00 +0200')<instantOf('2026-10-25 02:10:00 +0100'));
+ const dst=[['2026-10-25 02:30:00 +0200',80],['2026-10-25 02:10:00 +0100',81]];
+ assert.equal(buildDays([{received_at:'2026-10-25T03:00:00Z',data:upload([metric('weight_body_mass','kg',...dst)])}]).get('2026-10-25').get('weight_kg'),81);
+ const tie=value=>({received_at:'2026-10-25T0'+value+':00:00Z',data:upload([metric('weight_body_mass','kg',['2026-10-25 08:00:00.250 +0100',70+value])])});
+ const point=buildDays([tie(1),tie(2)]);
+ assert.equal(point.get('2026-10-25').get('weight_kg'),72);
+ assert.equal(buildDays([tie(2),tie(1)].sort((a,b)=>a.received_at.localeCompare(b.received_at))).get('2026-10-25').get('weight_kg'),72);
+});
+
+test('a point of one metric is not dropped because another metric of the day reached later',()=>{
+ const built=buildDays([{received_at:'2026-11-04T20:00:00Z',data:upload([metric('weight_body_mass','kg',[D+' 07:00:00 +0100',80]),metric('lean_body_mass','kg',[D+' 07:00:00 +0100',60],[D+' 21:00:00 +0100',61]),metric('body_fat_percentage','%',[D+' 22:00:00 +0100',18])])}]).get(D);
+ assert.deepEqual([built.get('weight_kg'),built.get('lean_kg'),built.get('body_fat_pct')],[80,61,18]);
+});
+
+test('the longest sleep record wins with its times, and a plain total counts only without one',()=>{
+ const sleep=(total,start,end,extra={})=>({date:D+' 00:00:00 +0100',source:'Fictional Phone',totalSleep:total,inBed:total+0.5,deep:1,rem:2,sleepStart:start,sleepEnd:end,...extra});
+ const built=buildDays([{received_at:'2026-11-04T07:00:00Z',data:upload([{name:'sleep_analysis',units:'hr',data:[sleep(3,'2026-11-03 23:10:00 +0100','2026-11-04 02:10:00 +0100'),sleep(7.5,'2026-11-04 03:00:00 +0100','2026-11-04 10:30:00 +0100',{date:D+' 01:00:00 +0100'})]}])}]).get(D);
+ assert.deepEqual([built.get('sleep_total_h'),built.get('sleep_in_bed_h'),built.get('sleep_start'),built.get('sleep_end')],[7.5,8,'03:00','10:30']);
+ const plain=buildDays([{received_at:'2026-11-04T07:00:00Z',data:upload([metric('sleep_analysis','hr',[D+' 00:00:00 +0100',2],[D+' 01:00:00 +0100',6])])}]).get(D);
+ assert.equal(plain.get('sleep_total_h'),6);
+});
+
+test('runs, walks and gym workouts land in their columns, and a workout sent twice counts once as its last copy',()=>{
+ const workout=(name,minutes,km,extra={})=>({name,start:D+' 07:00:00 +0100',end:D+' 08:00:00 +0100',duration:minutes*60,...(km===null?{}:{distance:{qty:km,units:'km'}}),...extra});
+ const build=(...workouts)=>buildDays(workouts.map((w,i)=>({received_at:'2026-11-04T1'+i+':00:00Z',data:upload([],[w])}))).get(D);
+ const run=build(workout('Running',30,5));
+ assert.deepEqual([run.get('run_km'),run.get('run_min'),run.has('walk_km')],[5,30,false]);
+ const walk=build(workout('Run',30,3));
+ assert.deepEqual([walk.get('walk_km'),walk.get('walk_min'),walk.has('run_km')],[3,30,false]);
+ const bare=build(workout('Outdoor Run',20,null));
+ assert.deepEqual([bare.get('run_km'),bare.get('run_min')],[0,20]);
+ const gym=build(workout('Traditional Strength Training',45,null),workout('Yoga',15,null,{start:D+' 18:00:00 +0100'}));
+ assert.deepEqual([gym.get('workout_min'),gym.get('workout_types')],[60,'Traditional Strength Training+Yoga']);
+ const twice=build(workout('Running',30,5,{id:'w1'}),workout('Running',33,5.5,{id:'w1'}));
+ assert.deepEqual([twice.get('run_km'),twice.get('run_min')],[5.5,33]);
+ const sameStart=build(workout('Running',30,5),workout('Running',40,6,{end:D+' 09:00:00 +0100'}));
+ assert.equal(sameStart.get('run_km'),6);
+ const metres=build({name:'Running',start:D+' 07:00:00 +0100',duration:{qty:30,units:'min'},distance:{qty:5000,units:'m'}});
+ assert.deepEqual([metres.get('run_km'),metres.get('run_min')],[5,30]);
+});
+
+test('metrics that are not listed are kept raw and make no record',()=>{
+ const store=setup();
+ acceptUpload(store,upload([metric('heart_rate_variability','ms',[D+' 08:00:00 +0100',55])]),{now:at('2026-11-04T09:00:00Z')});
+ assert.equal(store.list('health_observations').length,0);
+ assert.match(fs.readFileSync(path.join(rawFolder(store.state),'2026-11-04.jsonl'),'utf8'),/heart_rate_variability/);
+});
+
+test('an expired raw file leaves its day\'s records as they were, and only a new metric is added',()=>{
+ const store=setup();
+ acceptUpload(store,upload([metric('step_count','count',[D+' 08:00:00 +0100',100])]),{now:at('2026-11-04T09:00:00Z')});
+ const before=store.list('health_observations')[0];
+ const later=at('2026-12-05T09:00:00Z');
+ acceptUpload(store,upload([metric('step_count','count',[D+' 08:00:00 +0100',100],[D+' 09:00:00 +0100',999]),metric('flights_climbed','count',[D+' 09:00:00 +0100',4])]),{now:later});
+ assert.equal(fs.existsSync(path.join(rawFolder(store.state),'2026-11-04.jsonl')),false);
+ const after=days(store);
+ assert.equal(after[D+' steps'],before.value);
+ assert.equal(after[D+' flights'],4);
+ assert.equal(pruneRaw(store.state,later),0);
+});
+
+test('the import builds the same days from the same lines as the receiver, and never stores the sender',()=>{
+ const lines=[
+  {received_at:'2026-11-04T09:00:00Z',remote:'203.0.113.9',data:upload([metric('step_count','count',[D+' 08:00:00 +0100',100]),metric('active_energy','kJ',[D+' 08:00:00 +0100',836.8])],[{name:'Running',start:D+' 07:00:00 +0100',duration:1800,distance:{qty:5,units:'km'}}])},
+  {received_at:'2026-11-04T10:00:00Z',remote:'203.0.113.9',data:upload([metric('step_count','count',[D+' 08:00:00 +0100',100],[D+' 09:30:00 +0100',60]),metric('weight_body_mass','kg',[D+' 07:30:00 +0100',79.5])])},
+ ];
+ const a=setup(),b=setup(),folder=tmp('godspeed-phone-import-');
+ for(const line of lines)acceptUpload(a,line.data,{now:at(line.received_at)});
+ fs.writeFileSync(path.join(folder,'old.jsonl'),lines.map(l=>JSON.stringify(l)).join('\n')+'\nnot json\n');
+ const result=importFolder(b,folder,{now:at('2026-11-05T08:00:00Z')});
+ assert.deepEqual([result.lines,result.skipped,result.days],[3,1,1]);
+ assert.deepEqual(days(b),days(a));
+ for(const file of fs.readdirSync(rawFolder(b.state)))assert.doesNotMatch(fs.readFileSync(path.join(rawFolder(b.state),file),'utf8'),/remote|203\.0\.113/);
+ assert.equal(importFolder(b,folder,{now:at('2026-11-05T08:00:00Z')}).written,0);
+});
+
+test('a phone value and a CSV value for one day and metric: the one written last wins, the rest are untouched',()=>{
+ const store=setup(),query=new QueryService(store),now=Date.parse('2026-11-04T12:00:00Z');
+ const row=(id,source,metric,value)=>store.save('health_observations',{id,source,metric,value,observed_on:D,date_precision:'day',observed_at:'2026-11-03T23:00:00.000Z'});
+ row('csv-steps','Selected CSV','steps',1000);row('csv-weight','Selected CSV','weight_kg',80);
+ row('health-feed-phone','Health Auto Export','steps',2000);
+ let seen=Object.fromEntries(currentHealth(query,{now}).observations.map(r=>[r.metric,r.value]));
+ assert.deepEqual(seen,{steps:2000,weight_kg:80});
+ store.save('health_observations',{id:'csv-steps',value:1500});
+ seen=Object.fromEntries(currentHealth(query,{now}).observations.map(r=>[r.metric,r.value]));
+ assert.deepEqual(seen,{steps:1500,weight_kg:80});
+ assert.equal(store.get('health_observations','health-feed-phone').value,2000);
+});
+
+test('the token is random, private to its file, replaced by renew, and compared exactly',()=>{
+ const store=setup(),token=ensureToken(store.state);
+ assert.match(token,/^[A-Za-z0-9_-]{43}$/);
+ assert.equal(ensureToken(store.state),token);
+ assert.ok(tokenMatches(store.state,token));assert.ok(!tokenMatches(store.state,token+'x'));assert.ok(!tokenMatches(store.state,''));
+ const next=renewToken(store.state);
+ assert.notEqual(next,token);assert.ok(!tokenMatches(store.state,token));
+ if(process.platform!=='win32')assert.equal(fs.statSync(tokenFile(store.state)).mode&0o777,0o600);
+});
+
+function request(port,route,{method='GET',body,raw}={}){
+ return new Promise((resolve,reject)=>{
+  const req=http.request({host:'127.0.0.1',port,path:route,method,headers:body||raw?{'Content-Type':'application/json'}:{}},res=>{let text='';res.on('data',c=>text+=c);res.on('end',()=>resolve({status:res.statusCode,text}));});
+  req.on('error',error=>error.code==='EPIPE'||error.code==='ECONNRESET'?resolve({status:413,text:''}):reject(error));
+  if(body||raw)req.write(raw??JSON.stringify(body));req.end();
+ });
+}
+const serverRoot=prefix=>{const root=tmp(prefix);process.env.GODSPEED_ASSISTANT_CONFIG=path.join(root,'no-assistant.json');return root;};
+
+test('the receiver on a server: a wrong token stores nothing, the right one keeps the day, nothing logs the token or the sender',async t=>{
+ const root=serverRoot('godspeed-phone-server-'),service=await createService({root,port:0,webPort:0}),logged=[];
+ const originals={error:console.error,log:console.log,warn:console.warn};
+ for(const name of Object.keys(originals))console[name]=(...args)=>logged.push(args.join(' '));
+ t.after(async()=>{Object.assign(console,originals);await service.close();fs.rmSync(root,{recursive:true,force:true});});
+ const port=service.address.port,token=fs.readFileSync(tokenFile(service.store.state),'utf8').trim(),raw=rawFolder(service.store.state);
+ assert.equal((await request(port,'/ingest/health')).status,200);
+ for(const route of ['/ingest/'+token.slice(1),'/ingest/','/ingest','/ingest/'+token+'/x'])assert.equal((await request(port,route,{method:'POST',body:{data:{}}})).status,404,route);
+ assert.equal((await request(port,'/ingest/'+token)).status,404);
+ assert.equal(fs.existsSync(raw),false);
+ const body={data:upload([metric('step_count','count',['2026-11-04 08:00:00 +0100',123])])};
+ assert.equal((await request(port,'/ingest/'+token,{method:'POST',body})).status,200);
+ assert.equal(days(service.store)['2026-11-04 steps'],123);
+ if(process.platform!=='win32'){
+  assert.equal(fs.statSync(raw).mode&0o777,0o700);
+  for(const file of fs.readdirSync(raw))assert.equal(fs.statSync(path.join(raw,file)).mode&0o777,0o600);
+ }
+ assert.equal((await request(port,'/ingest/'+token,{method:'POST',raw:'{not json'})).status,400);
+ assert.equal((await request(port,'/ingest/'+token,{method:'POST',body:{data:{metrics:'x'}}})).status,400);
+ const before=fs.readdirSync(raw).map(f=>fs.readFileSync(path.join(raw,f),'utf8'));
+ assert.equal((await request(port,'/ingest/'+token,{method:'POST',raw:'{"data":{"pad":"'+'x'.repeat(21*1024*1024)+'"}}'})).status,413);
+ assert.deepEqual(fs.readdirSync(raw).map(f=>fs.readFileSync(path.join(raw,f),'utf8')),before);
+ assert.ok(!logged.some(line=>line.includes(token)||line.includes('127.0.0.1')),logged.join('\n'));
+});
+
+test('Settings shows the address, a new address replaces the old one at once, and a computer offers nothing',async t=>{
+ const root=serverRoot('godspeed-phone-settings-'),service=await createService({root,port:0,webPort:0}),computerRoot=serverRoot('godspeed-phone-computer-'),computer=await createService({root:computerRoot,port:0});
+ t.after(async()=>{await service.close();await computer.close();fs.rmSync(root,{recursive:true,force:true});fs.rmSync(computerRoot,{recursive:true,force:true});});
+ const port=service.address.port,first=JSON.parse((await request(port,'/api/phone-health')).text);
+ assert.equal(first.available,true);
+ const token=fs.readFileSync(tokenFile(service.store.state),'utf8').trim();
+ assert.equal(first.path,'/ingest/'+token);
+ const second=JSON.parse((await request(port,'/api/phone-health/renew',{method:'POST',body:{}})).text);
+ assert.notEqual(second.path,first.path);
+ assert.equal((await request(port,first.path,{method:'POST',body:{data:{}}})).status,404);
+ assert.equal((await request(port,second.path,{method:'POST',body:{data:{}}})).status,200);
+
+ assert.deepEqual(JSON.parse((await request(computer.address.port,'/api/phone-health')).text),{available:false});
+ assert.equal((await request(computer.address.port,'/api/phone-health/renew',{method:'POST',body:{}})).status,404);
+ assert.equal(fs.existsSync(tokenFile(computer.store.state)),false);
+ assert.notEqual(JSON.parse((await request(computer.address.port,'/ingest/health')).text||'null')?.ok,true);
+});
