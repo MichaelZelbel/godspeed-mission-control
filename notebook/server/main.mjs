@@ -48,6 +48,7 @@ import {nativeAgent} from '../core/native-agent.mjs';
 import {NativeScheduler} from '../core/native-scheduler.mjs';
 import {enableKinds} from '../core/notebook-routines.mjs';
 import {notebookAddress} from '../core/notebook-address.mjs';
+import {latestPerDayMetric} from '../core/health-inputs.mjs';
 import {BODY_LIMIT as UPLOAD_LIMIT,ensureToken,renewToken,tokenMatches,pruneRaw,acceptUpload} from '../core/phone-health.mjs';
 import {about} from '../core/about.mjs';
 import {showCard as showContextCard,readContext,markContext} from '../core/context-setup.mjs';
@@ -164,9 +165,9 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   // Health Auto Export uploads (core/phone-health.mjs, issue #214) are taken only where a phone can
   // reach this notebook: a door that faces outside. A Windows or Mac notebook on 127.0.0.1 with no
   // web door offers nothing, and /ingest there is what it was before.
-  const phoneUploads=remote||!!web;
-  if(phoneUploads){ensureToken(store.state);try{pruneRaw(store.state);}catch{}}
-  const pruneTimer=phoneUploads?setInterval(()=>{try{pruneRaw(store.state);}catch{}},3600000):null;pruneTimer?.unref?.();
+  const phoneUploads=remote||!!web,pruneFailed=()=>console.error('Godspeed Mission Control: expired phone health uploads could not be removed');
+  if(phoneUploads){ensureToken(store.state);try{pruneRaw(store.state);}catch{pruneFailed();}}
+  const pruneTimer=phoneUploads?setInterval(()=>{try{pruneRaw(store.state);}catch{pruneFailed();}},3600000):null;pruneTimer?.unref?.();
   // What is no longer true ends on its own (core/fact-closing.mjs): once a day
   // on the machine that runs the routines, and soon after a Menerio import,
   // which copies old values under their old names beside the new ones.
@@ -339,7 +340,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
       // Settings, About: the version and release, this installation's folders, the food table's licence (core/about.mjs).
       if(route==='/api/about'&&req.method==='GET')return send(res,200,await about({store,mediaRoot,device}));
       if (route === '/api/status') return query.withSnapshot(()=>{const installation=query.rows('settings').find(row=>row.id==='installation');return send(res, 200, { configured:!!installation,goalSetupComplete:query.rows('goals').some(g=>['active','adopted','paused','achieved','completed'].includes(g.status)),goals:query.rows('goals'),work:query.rows('work_items'),decisions:query.rows('decisions'),owner:installation?.owner,device,server:mediaSync.server()||(device==='vps'?device:null),platform:process.platform,runtimeConfigured:!!domains.provider,sync:sync.last,mediaSync:mediaSync.last,kinds:originalRuntime?enableKinds(store.root):kinds,problems: store.problems, lastScan: store.lastScan, lastIndex: index.lastRebuild, records: store.records.size, schedules: query.rows('jobs'), conflicts: sync.pendingConflicts().map(name=>{try{const c=JSON.parse(fs.readFileSync(path.join(store.root,'conflicts',name),'utf8'));return {id:c.id,kind:c.kind,path:c.path||c.type+'/'+c.record_id};}catch{return {id:name.replace(/\.json$/,''),kind:null,path:null,degraded:true};}}) });});
-      if(route==='/api/personal')return query.withSnapshot(()=>send(res,200,{goals:query.rows('goals'),work:query.rows('work_items'),deadlines:query.rows('deadlines'),talks:query.rows('coach_talks'),habits:query.rows('habits'),journal:query.rows('journal'),health:query.rows('health_observations'),forecasts:query.rows('forecasts'),watch:query.rows('watch_topics'),jobs:query.rows('jobs')}));
+      if(route==='/api/personal')return query.withSnapshot(()=>send(res,200,{goals:query.rows('goals'),work:query.rows('work_items'),deadlines:query.rows('deadlines'),talks:query.rows('coach_talks'),habits:query.rows('habits'),journal:query.rows('journal'),health:latestPerDayMetric(query.rows('health_observations')),forecasts:query.rows('forecasts'),watch:query.rows('watch_topics'),jobs:query.rows('jobs')}));
       // The AI the person connects in Settings serves the notebook and, unless they untick it,
       // the routines and the chat too: it is written into Hermes' own home (core/routine-ai.mjs),
       // and one short request through Hermes shows whether the routines can reach it.
@@ -400,7 +401,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         if(!phoneUploads){if(route==='/api/phone-health')return send(res,200,{available:false});return send(res,404,{error:'Unknown operation'});}
         if(route==='/api/phone-health/renew'&&req.method!=='POST')return send(res,405,{error:'Use POST'});
         const token=route==='/api/phone-health/renew'?renewToken(store.state):ensureToken(store.state),link=notebookAddress({port:server.address().port}).link;
-        return send(res,200,{available:true,path:'/ingest/'+token,address:link?link.replace(/\/dashboard$/,'')+'/ingest/'+token:null});
+        return send(res,200,{available:true,path:'/ingest/'+token,address:link?.startsWith('https://')?link.replace(/\/dashboard$/,'')+'/ingest/'+token:null});
       }
       if(route==='/api/voice'&&req.method==='GET')return send(res,200,backupHome?voiceStatus({home:backupHome,state:store.state}):{available:false});
       if(route==='/api/voice'&&req.method==='POST'){

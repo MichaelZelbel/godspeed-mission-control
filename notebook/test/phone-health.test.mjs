@@ -140,6 +140,28 @@ test('a phone value and a CSV value for one day and metric: the one written last
  assert.equal(store.get('health_observations','health-feed-phone').value,2000);
 });
 
+test('an upload that cannot be published is not kept in the raw files either',()=>{
+ const store=setup();
+ acceptUpload(store,upload([metric('step_count','count',[D+' 08:00:00 +0100',100])]),{now:at('2026-11-04T09:00:00Z')});
+ const file=path.join(rawFolder(store.state),'2026-11-04.jsonl'),kept=fs.readFileSync(file,'utf8'),commit=store.commit;
+ store.commit=()=>{throw new Error('disk full');};
+ assert.throws(()=>acceptUpload(store,upload([metric('step_count','count',[D+' 08:00:00 +0100',100],[D+' 09:00:00 +0100',50])]),{now:at('2026-11-04T10:00:00Z')}),/disk full/);
+ assert.equal(fs.readFileSync(file,'utf8'),kept);
+ store.commit=commit;
+ const fresh=setup();fresh.commit=()=>{throw new Error('disk full');};
+ assert.throws(()=>acceptUpload(fresh,upload([metric('step_count','count',[D+' 08:00:00 +0100',1])]),{now:at('2026-11-04T09:00:00Z')}));
+ assert.deepEqual(fs.readdirSync(rawFolder(fresh.state)),[]);
+});
+
+test('Personal Settings shows one value per day and metric when a phone and a CSV both gave one',async t=>{
+ const root=serverRoot('godspeed-phone-personal-'),service=await createService({root,port:0,webPort:0});
+ t.after(async()=>{await service.close();fs.rmSync(root,{recursive:true,force:true});});
+ const row=(id,source,value)=>service.store.save('health_observations',{id,source,metric:'steps',value,observed_on:D,date_precision:'day',observed_at:'2026-11-03T23:00:00.000Z'});
+ row('csv-steps','Selected CSV',1000);row('health-feed-phone','Health Auto Export',2000);
+ const shown=JSON.parse((await request(service.address.port,'/api/personal')).text).health;
+ assert.deepEqual(shown.map(r=>r.value),[2000]);
+});
+
 test('the token is random, private to its file, replaced by renew, and compared exactly',()=>{
  const store=setup(),token=ensureToken(store.state);
  assert.match(token,/^[A-Za-z0-9_-]{43}$/);
@@ -181,7 +203,7 @@ test('the receiver on a server: a wrong token stores nothing, the right one keep
  const before=fs.readdirSync(raw).map(f=>fs.readFileSync(path.join(raw,f),'utf8'));
  assert.equal((await request(port,'/ingest/'+token,{method:'POST',raw:'{"data":{"pad":"'+'x'.repeat(21*1024*1024)+'"}}'})).status,413);
  assert.deepEqual(fs.readdirSync(raw).map(f=>fs.readFileSync(path.join(raw,f),'utf8')),before);
- assert.ok(!logged.some(line=>line.includes(token)||line.includes('127.0.0.1')),logged.join('\n'));
+ assert.ok(!logged.some(line=>line.includes(token)||line.includes('127.0.0.1')||line.includes('123')),logged.join('\n'));
 });
 
 test('Settings shows the address, a new address replaces the old one at once, and a computer offers nothing',async t=>{
@@ -191,6 +213,7 @@ test('Settings shows the address, a new address replaces the old one at once, an
  assert.equal(first.available,true);
  const token=fs.readFileSync(tokenFile(service.store.state),'utf8').trim();
  assert.equal(first.path,'/ingest/'+token);
+ assert.equal(first.address,null,'an http address is never given the token');
  const second=JSON.parse((await request(port,'/api/phone-health/renew',{method:'POST',body:{}})).text);
  assert.notEqual(second.path,first.path);
  assert.equal((await request(port,first.path,{method:'POST',body:{data:{}}})).status,404);

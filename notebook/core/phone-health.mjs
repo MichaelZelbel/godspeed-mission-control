@@ -49,7 +49,10 @@ const rawFile=(state,day)=>path.join(rawFolder(state),day+'.jsonl');
 export function appendRaw(state,upload){
  const folder=rawFolder(state),file=rawFile(state,utcDay(new Date(instantOf(upload.received_at))));
  fs.mkdirSync(folder,{recursive:true,mode:0o700});fs.chmodSync(folder,0o700);
+ const size=fs.existsSync(file)?fs.statSync(file).size:0;
  fs.appendFileSync(file,JSON.stringify({received_at:upload.received_at,data:upload.data})+'\n',{mode:0o600});fs.chmodSync(file,0o600);
+ // Takes this line back out of the file: only valid while nothing else has appended (under the store lock).
+ return ()=>{if(size)fs.truncateSync(file,size);else fs.rmSync(file,{force:true});};
 }
 const rawDays=state=>{try{return fs.readdirSync(rawFolder(state)).map(name=>/^(\d{4}-\d{2}-\d{2})\.jsonl$/.exec(name)?.[1]).filter(Boolean);}catch(error){if(error.code==='ENOENT')return [];throw error;}};
 export function pruneRaw(state,now=clockNow()){
@@ -184,8 +187,9 @@ function rebuild(store,touched,{now}){
 
 export function acceptUpload(store,data,{now=clockNow()}={}){
  return store.withLock(()=>{
-  appendRaw(store.state,{received_at:now.toISOString(),data});pruneRaw(store.state,now);
-  return rebuild(store,touchedDays(data),{now});
+  const undo=appendRaw(store.state,{received_at:now.toISOString(),data});
+  // An upload that could not become day records is not kept either, so the phone's retry is the only copy.
+  try{pruneRaw(store.state,now);return rebuild(store,touchedDays(data),{now});}catch(error){undo();throw error;}
  });
 }
 
