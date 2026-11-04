@@ -99,8 +99,11 @@ class QuestionTelegram(buttons.YesNoButtons):
     def answer(self, token):
         """The command's reply to a tap: what happened, or why nothing did (exit 2). The question
         is named by the moment it was asked, so the tap answers that question or none."""
+        # A button issued before questions carried their place in the record has no askedSeq: it
+        # still answers by its moment alone.
+        seq = ("--asked-seq", str(token["askedSeq"])) if "askedSeq" in token else ()
         r = self.run("answer", token["answer"], "--conversation", token["conversation"],
-                     "--asked-when", token["askedWhen"], "--asked-seq", str(token["askedSeq"]),
+                     "--asked-when", token["askedWhen"], *seq,
                      "--words", "(button)", "--json",
                      "--language", token["language"], timeout=25)
         if r.returncode not in (0, 2):

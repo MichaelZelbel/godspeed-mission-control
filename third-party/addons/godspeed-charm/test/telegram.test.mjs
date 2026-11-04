@@ -326,6 +326,35 @@ test("a Yes on yesterday's message answers nothing once today asked again; today
   } finally { gone(dir); }
 });
 
+test("a Yes on the older of two questions asked at the same instant answers nothing; the newer one's answers", { skip }, () => {
+  const dir = mission();
+  try {
+    assert.equal(charm(dir, ["start"], at("2026-10-21")).status, 0);
+    const now = at("2026-10-22");
+    const out = drive(dir, [
+      { do: "register" },
+      askAt("t-1", now), reply(`Done.\n\n${Q}`, { turn: "t-1" }),
+      askAt("t-2", now), reply(`Done.\n\n${Q}`, { turn: "t-2" }),
+      { do: "tap", message: 0, button: 0, now },
+      { do: "tap", message: 1, button: 0, now },
+    ]);
+    assert.equal(sends(out).length, 2);
+    assert.equal(edits(out)[0].text, T.en.noOpenQuestion());
+    assert.equal(kinds(dir, "reset"), 1);
+  } finally { gone(dir); }
+});
+
+test("a button issued before questions carried their place in the record still answers once", { skip }, () => {
+  const dir = mission();
+  try {
+    const a = asked(dir);
+    const out = drive(dir, [{ do: "register" }, tool(a), reply(`Done.\n\n${Q}`), { do: "legacy" }, { do: "tap", button: 0 }]);
+    assert.equal(edits(out).length, 1);
+    assert.match(edits(out)[0].text, /^Back to 21/);
+    assert.equal(kinds(dir, "reset"), 1);
+  } finally { gone(dir); }
+});
+
 test("a Yes on a morning message already answered by a typed no answers nothing after an afternoon question", { skip }, () => {
   const dir = mission();
   try {

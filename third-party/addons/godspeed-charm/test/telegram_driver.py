@@ -294,6 +294,19 @@ def step_files(s):
     return {"files": out}
 
 
+def step_legacy(s):
+    """Makes the issued tokens the shape an earlier version wrote: no askedSeq."""
+    folder = os.path.join(os.environ["GODSPEED_CHARM_DIR"], ".godspeed", "charm-buttons")
+    for name in os.listdir(folder):
+        file = os.path.join(folder, name)
+        with open(file, encoding="utf-8") as f:
+            token = json.load(f)
+        token.pop("askedSeq", None)
+        with open(file, "w", encoding="utf-8") as f:
+            json.dump(token, f)
+    return {}
+
+
 def step_fail(s):
     FAIL["send"] = int(s.get("send", 0))
     FAIL["markup"] = int(s.get("markup", 0))
@@ -354,7 +367,7 @@ def step_unload(s):
 STEPS = {"register": step_register, "pre": step_pre, "tool": step_tool, "reply": step_reply, "tap": step_tap,
          "bus": step_bus, "files": step_files, "fail": step_fail, "env": step_env, "unload": step_unload,
          "charm": step_charm, "cancel": step_cancel, "break": step_break, "mend": step_mend,
-         "corrupt": step_corrupt}
+         "corrupt": step_corrupt, "legacy": step_legacy}
 
 results = []
 # UTF-8 both ways, whatever the console code page (Windows reads stdin as cp1252 otherwise).
