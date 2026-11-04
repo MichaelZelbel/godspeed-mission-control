@@ -14,7 +14,9 @@ import {charmConversation,charmOperation} from './charm-operation.mjs';
 // The seconds the judgement may take from the message's arrival; as in the plugin the variable exists for tests.
 const judgeSeconds=()=>Number(process.env.GODSPEED_CHARM_JUDGE_SECONDS)||25;
 // The word check after the limit gets the plugin's patience (its _timeout()), under the same variable.
-const wordCheckMs=()=>(Number(process.env.GODSPEED_CHARM_PLUGIN_TIMEOUT)||5)*1000;
+// Unset, empty or unparsable means five seconds; zero or less runs out at once, as subprocess.run's does there
+// (runChild would set no timer for it).
+export const wordCheckMs=()=>{const raw=process.env.GODSPEED_CHARM_PLUGIN_TIMEOUT||'5',seconds=/^\s*[-+]?(\d+\.?\d*|\.\d+)([eE][-+]?\d+)?\s*$/.test(raw)?Number(raw):5;return Math.max(1,seconds*1000);};
 const modelCommand=home=>{const file=path.join(home||'.','bin','godspeed-model'+(process.platform==='win32'?'.cmd':''));return fs.existsSync(file)?file:null;};
 const verdictOf=stdout=>{
  for(const line of String(stdout).split('\n').reverse()){

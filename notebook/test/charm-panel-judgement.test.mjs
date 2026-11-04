@@ -8,6 +8,7 @@ import {PassThrough} from 'node:stream';
 import {createService} from '../server/main.mjs';
 import {JUDGE_PROTOCOL} from '../../third-party/addons/godspeed-charm/lib/judge.mjs';
 import {addonInvocation} from '../core/native-personal.mjs';
+import {wordCheckMs} from '../core/charm-judgement.mjs';
 
 // Issue #218: a slip typed in the notebook's chat panel gets the same question the Hermes plugin
 // asks. The panel's route is /api/browser-chat -> domains.nativeAgent (a one-shot assistant run that
@@ -117,4 +118,13 @@ test('a model slower than the limit is not waited for: the word check answers',{
  assert.match(await say(VENT),/Back to 21\?/);
  assert.ok(Date.now()-began<6000,'the reply did not wait for the model');
  assert.equal(await say('What is the weather like?'),'Understood.');
+});
+
+test('the word check patience reads GODSPEED_CHARM_PLUGIN_TIMEOUT as the plugin does',t=>{
+ const was=process.env.GODSPEED_CHARM_PLUGIN_TIMEOUT;
+ t.after(()=>{if(was===undefined)delete process.env.GODSPEED_CHARM_PLUGIN_TIMEOUT;else process.env.GODSPEED_CHARM_PLUGIN_TIMEOUT=was;});
+ const ms=v=>{if(v===undefined)delete process.env.GODSPEED_CHARM_PLUGIN_TIMEOUT;else process.env.GODSPEED_CHARM_PLUGIN_TIMEOUT=v;return wordCheckMs();};
+ assert.equal(ms(undefined),5000);assert.equal(ms(''),5000);assert.equal(ms('abc'),5000);
+ assert.equal(ms('0.5'),500);assert.equal(ms('20'),20000);
+ assert.equal(ms('0'),1);assert.equal(ms('-1'),1);
 });
