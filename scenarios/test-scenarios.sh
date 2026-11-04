@@ -2400,10 +2400,10 @@ copy "$T/good" "$T/no-talk-b"
 : >"$T/no-talk-b/talk-b.md"
 # An opening longer than 200 characters: the message carries its first 200 and nothing after.
 NO_TALK_B_WINDOW='Good evening. Tonight: three routes, one for each of your goals, and the experiment I would start with, taken slowly so that nothing in it is hurried or skipped, xxxxxxxxxxxxxxxxxxxxxxxxxxxxWINDOWEDGE'
-printf '%s PASTTHECUT and the rest of what the coach said.\n' "$NO_TALK_B_WINDOW" >"$T/no-talk-b/opening-b.txt"
+printf '%sQ and the rest of what the coach said.\n' "$NO_TALK_B_WINDOW" >"$T/no-talk-b/opening-b.txt"
 refuses 'no talk opened on day B' talk-prep-honest "$T/no-talk-b" "no talk of day 2026-11-03 was opened when the owner asked for it: $NO_TALK_B_WINDOW"
 case $OUT in
-  *PASTTHECUT*) bad "no talk opened on day B (the message carries the opening past its 200th character: $OUT)" ;;
+  *"$NO_TALK_B_WINDOW"Q*) bad "no talk opened on day B (the message carries the opening past its 200th character: $OUT)" ;;
   *) ok "no talk opened on day B names no more than the first 200 characters of the opening" ;;
 esac
 
