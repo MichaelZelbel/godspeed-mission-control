@@ -144,6 +144,16 @@ test('asked for in the chat, a saved briefing of today is printed unchanged and 
  assert.equal(asked.text,text);assert.equal(JSON.stringify(briefNotes(root)),before);
 });
 
+test('a saved briefing keeps its boundary whitespace when asked for in the chat',async t=>{
+ const {root}=workspace(t);
+ const provider=async input=>verifies(input)||OK;
+ await runMorningBrief({root,provider});
+ const store=new Store(root),note=briefNotes(root)[0],content='\n  '+note.content+'  \n\n';
+ store.save('notes',{...store.get('notes',note.id),content});
+ const asked=await todaysMorningBrief({root,provider:async()=>{throw Error('the AI must not be asked');}});
+ assert.equal(asked.text,content);
+});
+
 test('asked for in the chat with none saved, the briefing is saved once, and asking again saves no second note',async t=>{
  const {root}=workspace(t);let writes=0;
  const provider=async input=>verifies(input)||(writes++,OK);

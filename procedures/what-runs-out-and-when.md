@@ -259,7 +259,7 @@ it forward is what replacing a key looks like from the outside, so the reminder
 closes itself.
 
 If you took the key paragraph from `keys-that-expire.md` and pasted it into your
-morning brief recipe, you can take it back out now. One thing, one place.
+morning brief recipe (only possible without `godspeed-brief`), you can take it back out now. One thing, one place.
 
 ## If you do have a calendar
 

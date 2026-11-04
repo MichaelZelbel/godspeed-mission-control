@@ -63,7 +63,7 @@ brief for real: the note "Your morning briefing" in your notebook. Only where
 `godspeed-brief` does not exist (a server's morning job) it is the file
 `brief/YYYY-MM-DD.md`.
 
-Run it two or three more times in the same sitting, each time as a test with
+Where `godspeed-brief` does not exist, run it two or three more times in the same sitting, each time as a test with
 a practice output path such as `practice/brief-tests/`, because the recipe
 never writes a second brief for the same day: read what came out, edit the
 skill file, run it again. The facts differ every morning anyway;
@@ -75,15 +75,15 @@ recipe you have not watched run.
 
 Tony Stubblebine, the CEO of Medium, ends his own AI morning briefing
 with every file he touched in the past 24 hours. The morning starts
-with yesterday's thread back in your hand. Steal it: add one line to
-`skills/morning-brief/SKILL.md`:
+with yesterday's thread back in your hand. Steal it: where `godspeed-brief` does not exist, add one line to
+`skills/morning-brief/SKILL.md` (where it exists, that file is ignored: leave it unchanged):
 
 ```
 End with one short line naming which files in this folder changed in
 the last day. If none did, say nothing.
 ```
 
-Run the brief once more as a test and check the new closing line.
+Where `godspeed-brief` does not exist, run the brief once more as a test and check the new closing line.
 
 ## Half two: the clock
 

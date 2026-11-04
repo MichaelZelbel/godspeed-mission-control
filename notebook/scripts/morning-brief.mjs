@@ -63,7 +63,7 @@ export function notebookQuery(store,env=process.env){
 export async function runMorningBrief({root,provider=null,env=process.env,now=new Date()}){
  const store=new Store(root,{device:machineDevice(root).id});
  const {note:saved,hidden}=savedBriefToday(store,now);
- if(saved)return {result:null,existing:true,text:String(saved.content||'').trim()};
+ if(saved)return {result:null,existing:true,text:String(saved.content||'')};
  if(hidden)return {result:null,existing:true,text:''};
  const query=notebookQuery(store,env);
  const ai=provider||notebookProvider(store,env);

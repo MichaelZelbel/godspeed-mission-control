@@ -134,7 +134,7 @@ it reads this very file as one of its sources. So a key is in the same list as y
 tax return, with the same rhythm worked out from the same rule, and you never write
 a date in two places.
 
-If you have that, take the paragraph you just pasted back out of
+If you have that, and your mission control has no `godspeed-brief` command (where it exists the recipe is ignored and holds no paragraph), take the paragraph you just pasted back out of
 `skills/morning-brief/SKILL.md` and let `mc-due today` carry keys along with everything
 else. **Two things nagging you about the same key is worse than one**, because the
 day they disagree you stop believing either.
