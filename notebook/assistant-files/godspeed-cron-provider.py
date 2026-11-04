@@ -53,6 +53,9 @@ def _destinations(job, for_failure=False):
     return found
 
 
+MEDIA_ONLY = "(Sent a file, without a message.)"
+
+
 def _sent_words(content):
     """The words Hermes will send, as it makes them: media tags taken out, then redacted. Hermes'
     header and footer are not part of the message the chat should know."""
@@ -68,9 +71,9 @@ def record_result(job, content, for_failure=False):
         return None
     try:
         destinations = _destinations(job, for_failure)
-        words = _sent_words(content)
-        if not destinations or not words:
+        if not destinations:
             return None
+        words = _sent_words(content) or MEDIA_ONLY
         with open(os.path.join(HERE, "report.json"), encoding="utf-8") as f:
             wiring = json.load(f)
         r = subprocess.run([wiring["node"], wiring["script"], "record", "--godspeed", wiring["root"], "--home", HOME,

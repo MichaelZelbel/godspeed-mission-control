@@ -1,6 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import {fileURLToPath} from 'node:url';import {execFileSync} from 'node:child_process';
 import {Store} from '../core/records/store.mjs';import {QueryService} from '../core/query.mjs';import {chatContext} from '../core/chat-context.mjs';
-import {queueNotice,readNotices} from '../core/notices.mjs';import {sayNotice,REPORT_CONTRACT} from '../core/background-reports.mjs';
+import {queueNotice,readNotices} from '../core/notices.mjs';import {sayNotice,recordRoutine,REPORT_CONTRACT} from '../core/background-reports.mjs';
 
 // BACKGROUND REPORTS (4 November 2026, #198): a notice is written with the chat's guidance, recorded
 // where the chat reads it, and the chat's next reply is told about it.
@@ -176,6 +176,22 @@ test('a composite lane is recorded together or not at all',async t=>{
  assert.equal(records(new Store(store.root,{device:'pc'})).length,0);
  await main(['record','--godspeed',store.root,'--home',home,'--routine','R','--delivery','notebook,telegram'],'Words.');
  assert.equal(records(new Store(store.root,{device:'pc'})).length,2);
+});
+
+test('a Settings routine sent as media alone is recorded, so the next reply knows it',t=>{
+ if(!python)return t.skip('needs Python');
+ const {store,run}=wiredProvider(t);
+ const out=run([[{id:'j1',name:'Chart',skill:'coach',deliver:'telegram',resolved:{targets:{telegram:[{platform:'telegram'}]},lane:'telegram'}},'MEDIA:/tmp/x.png',false]]);
+ assert.deepEqual(out.errors,[null]);assert.deepEqual(out.delivered,['MEDIA:/tmp/x.png']);
+ const [saved,...none]=[...new Store(store.root,{device:'pc'}).records.values()].filter(r=>r.id.startsWith('background-report-'));
+ assert.equal(none.length,0);assert.match(saved.content,/file/);
+});
+
+test('a composite record that fails while being staged leaves no destination recorded',t=>{
+ const {store,home}=setup(t);let prepared=0;const prepare=store.prepare.bind(store);
+ store.prepare=(...args)=>{if(++prepared===2)throw new Error('disk full');return prepare(...args);};
+ assert.throws(()=>recordRoutine(store,{routine:'R',text:'Words.',home,delivery:['notebook','telegram']}),/disk full/);
+ assert.equal(records(new Store(store.root,{device:'pc'})).length,0);
 });
 
 test('a locally delivered Settings result is in the notebook chat\'s next reply',t=>{
