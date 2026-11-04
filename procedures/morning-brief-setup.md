@@ -9,7 +9,7 @@ clock on it.
 Your mission control already carries a starter version at
 `skills/morning-brief/SKILL.md`, so a brief you switched on during setup has
 something real to send from the first morning. The prompt below replaces that
-starter with your own.
+starter with your own. The recipe shapes the brief only where `godspeed-brief` does not exist (a server's morning job). Where that command exists, the notebook's own briefing is delivered and ignores this file.
 
 First tell your assistant which time zone to use, such as Europe/London.
 Then, in a session in Hermes, paste this:

@@ -46,8 +46,9 @@ test('the routine\'s entry saves the notebook\'s own briefing, with the Charm li
  assert.ok(text.split(/\r?\n/).includes(line),'the words to deliver carry it as a line of its own');
  const notes=new QueryService(new Store(root)).rows('notes').filter(n=>n.source_app==='morning-brief');
  assert.equal(notes.length,1);assert.equal(notes[0].id,result.record_id);assert.equal(notes[0].content.trim(),text);
- // The same words again are refused by the briefing's own check, so nothing goes out twice.
- await assert.rejects(runMorningBrief({root,provider}),/already saved/);
+ // Asked again the same day, the saved briefing is given back and the AI is not asked.
+ const again=await runMorningBrief({root,provider:async()=>{throw Error('the AI must not be asked');}});
+ assert.equal(again.text,text);
 });
 
 test('the routine\'s entry cuts a sentence that breaks a writing rule and delivers the rest',async t=>{
@@ -95,13 +96,14 @@ test('with the original assistant the routine\'s entry reads the goal cards, and
  assert.equal(listed.filter(w=>w.id===work).length,1,'and each card once');
  // Without the original assistant the entry reads the notebook's own records, as before.
  seen=null;process.env.GODSPEED_CHARM_NOW='2026-10-22T08:00:00Z';process.env.GODSPEED_NOW='2026-10-22T08:00:00Z';
- await runMorningBrief({root,provider:async input=>{const v=verifies(input);if(v)return v;seen=input.context;return OK+' Fictional second day.';},env:{GODSPEED_ASSISTANT_CONFIG:config}});
+ await runMorningBrief({root,provider:async input=>{const v=verifies(input);if(v)return v;seen=input.context;return OK+' Fictional second day.';},env:{GODSPEED_ASSISTANT_CONFIG:config},now:new Date('2026-10-22T08:00:00Z')});
  assert.deepEqual(seen.goals,[],'no goal records were kept, only the card');
  // With the original assistant but none connected, the server would not start; the briefing
  // refuses in one sentence rather than write without the cards.
  fs.writeFileSync(config,JSON.stringify({verified:false,home:path.join(root,'.hermes')}));
- await assert.rejects(runMorningBrief({root,provider,env}),/cannot read your goals and work: the assistant this notebook runs with is not connected/);
- await assert.rejects(runMorningBrief({root,provider,env:{...env,GODSPEED_ASSISTANT_CONFIG:path.join(root,'none.json')}}),/not connected/);
+ const third=new Date('2026-10-23T08:00:00Z');
+ await assert.rejects(runMorningBrief({root,provider,env,now:third}),/cannot read your goals and work: the assistant this notebook runs with is not connected/);
+ await assert.rejects(runMorningBrief({root,provider,now:third,env:{...env,GODSPEED_ASSISTANT_CONFIG:path.join(root,'none.json')}}),/not connected/);
 });
 
 // The routine's own script, as Hermes runs it: its Python, and the entry above replaced by a stand-in.
@@ -167,6 +169,19 @@ test('the recipe names the command first and keeps hand-writing only as the fall
  assert.match(recipe,/where `godspeed-brief` does not exist/);
  assert.match(recipe,/Save a new file as `brief\/YYYY-MM-DD\.md`/,'a mission control without the command is still told what to write');
  assert.match(recipe,/Never write\s+`brief\/YYYY-MM-DD\.md` by hand for "today's brief"/);
+});
+
+test('the routine after the chat made today\'s briefing saves no second, different one',async t=>{
+ const {root}=workspace(t);let n=0;
+ const provider=async input=>verifies(input)||(n++,n===1?OK:OK+' A different, valid second draft.');
+ const chat=await todaysMorningBrief({root,provider});
+ const routine=await runMorningBrief({root,provider});
+ assert.equal(routine.text,chat.text);assert.equal(briefNotes(root).length,1);assert.equal(n,1);
+});
+
+test('the recipe has the one-sentence answer for a briefing the notebook keeps silent',()=>{
+ const recipe=fs.readFileSync(fileURLToPath(new URL('../../starter-godspeed/skills/morning-brief/SKILL.md',import.meta.url)),'utf8');
+ assert.match(recipe,/prints nothing and succeeds[^]*?say in one\s+sentence that there is no briefing today/);
 });
 
 // The person's day is the installation's (Europe/Berlin here), not UTC, and a briefing keeps the day

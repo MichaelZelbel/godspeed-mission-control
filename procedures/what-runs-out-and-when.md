@@ -225,7 +225,7 @@ five separate reminders you will scroll past.
 ## Wiring it into the brief you already have
 
 Open the chat in your mission control, the one whose brief you set up in Chapter 25,
-and paste this:
+and paste this. The recipe shapes the brief only where `godspeed-brief` does not exist (a server's morning job). Where that command exists, the notebook's own briefing is delivered and ignores this file.
 
 ```
 Update skills/morning-brief/SKILL.md with a section called Deadlines and targets.

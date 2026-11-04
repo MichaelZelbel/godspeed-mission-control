@@ -71,6 +71,8 @@ question keeps its weekly pace unless a failure calls for an earlier retry
 
 ## Step 4: findings in the morning brief
 
+The recipe shapes the brief only where `godspeed-brief` does not exist (a server's morning job). Where that command exists, the notebook's own briefing is delivered and ignores this file.
+
 ```
 Update skills/morning-brief/SKILL.md to read each active watch's requirements.md, findings.md and latest log lines. Add a Research section after the normal body.
 

@@ -15,8 +15,10 @@
 //
 //   GODSPEED_WORKSPACE=<mission control> node notebook/scripts/morning-brief.mjs [--today] [--godspeed <mission control>]
 //
-// With --today (the assistant's `godspeed-brief` command, which is what the chat's "today's brief" runs) a briefing already saved today is printed
-// unchanged and nothing is written; otherwise it runs as above. Silent stays silent: no output.
+// A briefing already saved today is printed unchanged and nothing is written, for the routine and
+// for --today (the assistant's `godspeed-brief` command, which is what the chat's "today's brief" runs)
+// alike; otherwise it runs as above. Silent stays silent: no output. The last --godspeed wins, so the
+// root a wired command appends cannot be redirected by an argument before it.
 //
 // The AI is the notebook's own: the one connected in Settings (.godspeed/provider.json), else the
 // assistant the notebook was wired to (assistant.json), as the notebook's server chooses it.
@@ -57,7 +59,11 @@ export function notebookQuery(store,env=process.env){
 
 // The briefing, and the words to deliver: the saved note's, or '' when the briefing stays silent.
 export async function runMorningBrief({root,provider=null,env=process.env,now=new Date()}){
- const store=new Store(root,{device:machineDevice(root).id}),query=notebookQuery(store,env);
+ const store=new Store(root,{device:machineDevice(root).id});
+ const {note:saved,hidden}=savedBriefToday(store,now);
+ if(saved)return {result:null,text:String(saved.content||'').trim()};
+ if(hidden)return {result:null,text:''};
+ const query=notebookQuery(store,env);
  const ai=provider||notebookProvider(store,env);
  if(!ai)throw Error('The morning brief has no AI to write with: connect one in Settings, Your AI.');
  const result=await briefing({id:'morning-brief',kind:'morning-brief'},{store,query,provider:ai,now});
@@ -65,18 +71,11 @@ export async function runMorningBrief({root,provider=null,env=process.env,now=ne
  return {result,text:note?String(note.content||'').trim():''};
 }
 
-// Asked for in the chat (#193): today's briefing note if the notebook already saved one, else the
-// briefing is run once, so the same words reach the person whether the morning or the chat asked.
-// Today is the person's own day (the installation's time zone). Read-only when a note exists; one the person hid is not shown and no second one is made.
-export async function todaysMorningBrief({root,provider=null,env=process.env,now=new Date()}){
- const {note,hidden}=savedBriefToday(new Store(root,{device:machineDevice(root).id}),now);
- if(note)return {result:null,text:String(note.content||'').trim()};
- if(hidden)return {result:null,text:''};
- return runMorningBrief({root,provider,env,now});
-}
+// Asked for in the chat (#193): the same admission runMorningBrief gives the routine, so one day has one briefing whoever asks first.
+export const todaysMorningBrief=runMorningBrief;
 
 if(import.meta.url===pathToFileURL(process.argv[1]||'').href){
- const at=process.argv.indexOf('--godspeed'),root=(at>0&&process.argv[at+1])||process.env.GODSPEED_WORKSPACE||process.env.GODSPEED_ROOT;
+ const at=process.argv.lastIndexOf('--godspeed'),root=(at>0&&process.argv[at+1])||process.env.GODSPEED_WORKSPACE||process.env.GODSPEED_ROOT;
  if(!root){console.error('The morning brief does not know which mission control to read (GODSPEED_WORKSPACE).');process.exit(2);}
  try{
   const {text}=await (process.argv.includes('--today')?todaysMorningBrief:runMorningBrief)({root});

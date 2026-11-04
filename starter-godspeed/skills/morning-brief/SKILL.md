@@ -8,7 +8,7 @@ description: Show the person today's morning brief by running `godspeed-brief`, 
 This is the starter version. It exists so that a person who said yes to a morning brief
 gets a real one from the first morning, before they have shaped it. The person makes it their
 own (how: https://godspeedmissioncontrol.com/guide/morning-brief): when they ask you to change
-what goes into their brief, edit this file, and from then on it is theirs.
+what goes into their brief, edit this file, and from then on it is theirs. This file shapes the brief only where `godspeed-brief` does not exist (a server's morning job). Where that command exists, the notebook's own briefing is delivered and ignores this file.
 
 ## Where the command exists: run it
 

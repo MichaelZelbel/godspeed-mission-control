@@ -109,7 +109,8 @@ the only place it exists.
 ## Wiring it into the brief you already have
 
 Open `skills/morning-brief/SKILL.md`, your morning brief's recipe (Chapter 25), and paste
-this into the session:
+this into the session. The recipe shapes the brief only where `godspeed-brief` does not exist (a server's morning job). Where that command exists, the notebook's own briefing is delivered and ignores this file.
+
 
 ```
 Open skills/morning-brief/SKILL.md and add one part. Read secrets/expires.txt, which

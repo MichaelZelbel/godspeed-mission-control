@@ -14,6 +14,8 @@ test('original Godspeed skills and commands reach the integrated notebook in dev
   store.save('notes',{title:'Your morning briefing',content:'Saved briefing, made up.',source_app:'morning-brief'});
   const brief=path.join(home,'bin','godspeed-brief'+(process.platform==='win32'?'.cmd':''));
   assert.equal(execFileSync(brief,[],{encoding:'utf8',shell:process.platform==='win32',windowsHide:true,env:{...process.env,GODSPEED_WORKSPACE:'',GODSPEED_ROOT:''}}),'Saved briefing, made up.\n');
+  const other=path.join(base,'other');installStarter(other);
+  assert.equal(execFileSync(brief,['--godspeed',other],{encoding:'utf8',shell:process.platform==='win32',windowsHide:true,env:{...process.env,GODSPEED_WORKSPACE:'',GODSPEED_ROOT:''}}),'Saved briefing, made up.\n','an argument before the wired root cannot point the command at another folder');
   const ignored=fs.readFileSync(path.join(root,'.gitignore'),'utf8');
   wire(41988);
   assert.equal(fs.readFileSync(path.join(root,'.mcp.json'),'utf8'),shared,'another port leaves the shared file as it was');
