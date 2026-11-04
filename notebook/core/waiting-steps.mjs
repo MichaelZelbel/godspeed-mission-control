@@ -42,25 +42,66 @@ const stepTime=record=>record.sent_at||record.asked_at||record.created_at||'';
 export const waitingSteps=(store,at=new Date().toISOString())=>store.list('approvals')
  .filter(r=>r.status==='pending'&&delivered(r)&&!(r.expires_at&&r.expires_at<=at)).sort((a,b)=>stepTime(a).localeCompare(stepTime(b)));
 
-export function openStep(store,{about,question,yes,no,by,chat,job}){
+// What the system may do by itself without asking, declared by the asking code from this fixed list.
+// The model never judges it, and an outward step (sending, paying, deleting, publishing) is never on it.
+export const QUIET_KINDS=['restart','reload','retry'];
+const MEMORY_CHARS=100;
+
+// The owner's latest answer about a subject. A decision has no expiry unless the owner gave one.
+const decisionAbout=(store,subject,at)=>store.list('approvals')
+ .filter(r=>r.subject===subject&&['approved','rejected'].includes(r.status)&&r.answered_at&&!(r.expires_at&&r.expires_at<=at))
+ .sort((a,b)=>a.answered_at.localeCompare(b.answered_at)).pop()||null;
+const remembered=record=>({about:record.about,user_words:record.user_words,answered_at:record.answered_at});
+
+// Every waiting step passes three checks, in order, before anything is asked (issue #220):
+//  1. `quietly` (one of QUIET_KINDS): the system does it; nothing is recorded or asked.
+//  2. `subject` (a stable key the asker gives): an earlier answer about the same subject answers it.
+//     A "no" is reused only while the thing is unchanged, otherwise the question says what changed.
+//     A "yes" never approves an outward step: that is asked every time.
+//  3. `extra` ({instruction,within}): an optional follow-up to an instruction the owner gave is done
+//     when it is clearly within it and an outward step is never "within"; otherwise it is dropped.
+// Returns {outcome:'quiet'|'decided'|'do'|'dropped'} with nothing asked, or {outcome:'asked',id,message}.
+export function openStep(store,{about,question,yes,no,by,chat,job,quietly,subject,outward=false,extra}){
  const id='step-'+randomUUID();
  for(const [label,text] of [['reason',about],['question',question],['yes outcome',yes],['no outcome',no]])checkStepText(label,text,id);
  if(!CHATS.includes(chat))throw Error('Say where to ask: telegram or notebook.');
  const [kind,name='']=String(by||'').split(':');
  if(!ASKER_KINDS.includes(kind))throw Error('Say who asks: '+ASKER_KINDS.map(kind=>kind+':<name>').join(', ')+'.');
- const step=store.withLock(()=>{
+ if(quietly!==undefined&&!QUIET_KINDS.includes(quietly))throw Error('Quietly is one of '+QUIET_KINDS.join(', ')+'.');
+ if(extra&&(typeof extra.instruction!=='string'||!extra.instruction.trim()))throw Error('Say which instruction the extra step follows.');
+ if(subject!==undefined&&(typeof subject!=='string'||!subject.trim()))throw Error('Say the subject as a short key.');
+ let asked=about;
+ const result=store.withLock(()=>{
   const owned=job?store.get('jobs',job):null;
   if(job&&!owned)throw Error('That routine does not exist.');
-  const record=store.prepare('approvals',{id,status:'pending',title:about,about,question,on_yes:yes,on_no:no,asked_by:{kind,name},asked_in:chat,asked_at:new Date().toISOString(),...(owned?{job_id:owned.id,payload_hash:hash(owned.payload)}:{})});
+  const reach=outward||Boolean(owned?.outward);
+  const fingerprint=hash([about,owned?hash(owned.payload):'']);
+  const at=new Date().toISOString();
+  if(quietly){
+   if(reach)throw Error('An outward step is never done quietly.');
+   return {outcome:'quiet',quietly,about};
+  }
+  const earlier=subject?decisionAbout(store,subject,at):null;
+  if(earlier&&(earlier.status==='rejected'||!reach)){
+   const answer=earlier.status==='approved'?'yes':'no';
+   if(answer==='yes'||earlier.fingerprint===fingerprint)return {outcome:'decided',answer,reply:answer==='yes'?yes:no,decision:remembered(earlier)};
+   asked='You said no to "'+earlier.about.slice(0,MEMORY_CHARS)+'" before. What changed: '+about;
+   checkStepText('reason',asked,id);
+  }
+  if(extra){
+   return extra.within&&!reach?{outcome:'do',about,instruction:extra.instruction}:{outcome:'dropped',about,instruction:extra.instruction};
+  }
+  const record=store.prepare('approvals',{id,status:'pending',title:asked,about:asked,question,on_yes:yes,on_no:no,asked_by:{kind,name},asked_in:chat,asked_at:at,fingerprint,...(subject?{subject}:{}),...(owned?{job_id:owned.id,payload_hash:hash(owned.payload)}:{})});
   store.commit([record]);
-  return record;
+  return {outcome:'asked'};
  });
- const message=about+' '+question;
+ if(result.outcome!=='asked')return result;
+ const message=asked+' '+question;
  if(chat==='notebook'){
   try{appendAssistantMessage(store,'general',message);stamp(store,id);}
   catch(error){withdrawStep(store,id);throw error;}
  }
- return {id,message};
+ return {outcome:'asked',id,message};
 }
 
 // A step is answerable once the code that sent its question has said so (`sent_at`). Three senders do:
