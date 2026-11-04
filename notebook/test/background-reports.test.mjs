@@ -77,3 +77,46 @@ test('the plugin lists at most the five newest reports, newest first',async t=>{
  const seen=[...block.matchAll(/Report (\d+)/g)].map(m=>Number(m[1]));
  assert.deepEqual(seen,[3,5,10,25,40],'five, the most recent first; the oldest left out');
 });
+
+// A routine made in Settings (--skill ... --deliver) is recorded by the wrapper the scheduler plugin
+// puts on Hermes' delivery: what the job delivered is recorded unchanged, before it is delivered.
+const CRON_STUB=`
+import sys,types,json
+for name in ("cron","cron.scheduler_provider","cron.scheduler"):sys.modules[name]=types.ModuleType(name)
+sys.modules["cron"].scheduler=sys.modules["cron.scheduler"]
+class Built:pass
+sys.modules["cron.scheduler_provider"].InProcessCronScheduler=Built
+delivered=[]
+sys.modules["cron.scheduler"]._deliver_result=lambda job,content,adapters=None,loop=None,*,for_failure=False:delivered.append(content)
+import importlib.util
+s=importlib.util.spec_from_file_location("godspeed_notebook",sys.argv[1]);m=importlib.util.module_from_spec(s);s.loader.exec_module(m)
+class Ctx:
+ def register_cron_scheduler(self,x):pass
+m.register(Ctx());m.register(Ctx())
+deliver=sys.modules["cron.scheduler"]._deliver_result
+jobs=json.loads(sys.argv[2]);errors=[deliver(job,text,for_failure=failed) for job,text,failed in jobs]
+print(json.dumps({"errors":errors,"delivered":delivered}))
+`;
+function wiredProvider(t,{node=process.execPath}={}){
+ const {root,home,store}=setup(t),dir=path.join(home,'plugins','godspeed_notebook');fs.mkdirSync(dir,{recursive:true});
+ fs.copyFileSync(fileURLToPath(new URL('../assistant-files/godspeed-cron-provider.py',import.meta.url)),path.join(dir,'__init__.py'));
+ fs.writeFileSync(path.join(dir,'report.json'),JSON.stringify({node,script:fileURLToPath(new URL('../scripts/background-report.mjs',import.meta.url)),root}));
+ return {store,run:jobs=>JSON.parse(execFileSync(python,['-I','-c',CRON_STUB,path.join(dir,'__init__.py'),JSON.stringify(jobs)],{encoding:'utf8'}))};
+}
+
+test('what a Settings routine delivers is recorded unchanged, for local and Telegram delivery, before Hermes delivers it',t=>{
+ if(!python)return t.skip('needs Python');
+ const {store,run}=wiredProvider(t),words='Your weekly review is ready. Reply "ok" and I will start.';
+ const out=run([[{id:'j1',name:'Weekly review',skill:'weekly-review',deliver:'telegram'},words,false],[{id:'j2',name:'Morning brief',skills:['morning-brief'],deliver:'local'},'Good morning.',false],
+  [{id:'j3',name:'Own script',script:'x.py',deliver:'telegram'},'Printed by its script.',false],[{id:'j4',name:'Failing',skill:'coach',deliver:'telegram'},'It failed.',true]]);
+ assert.deepEqual(out.errors,[null,null,null,null]);assert.deepEqual(out.delivered,[words,'Good morning.','Printed by its script.','It failed.']);
+ store.scan?.();const saved=[...new Store(store.root,{device:'pc'}).records.values()].filter(r=>r.id.startsWith('background-report-')).sort((a,b)=>a.content<b.content?-1:1);
+ assert.deepEqual(saved.map(r=>[r.content,r.delivered_to,r.conversation_id,r.report.routine]),[['Good morning.','notebook',null,'Morning brief'],[words,'telegram','telegram-owner','Weekly review']]);
+});
+
+test('a Settings routine\'s result that cannot be recorded is not delivered',t=>{
+ if(!python)return t.skip('needs Python');
+ const {run}=wiredProvider(t,{node:path.join(os.tmpdir(),'no-such-node')});
+ const out=run([[{id:'j1',name:'Weekly review',skill:'weekly-review',deliver:'telegram'},'Words.',false]]);
+ assert.match(out.errors[0],/Not delivered: it could not be recorded/);assert.deepEqual(out.delivered,[]);
+});

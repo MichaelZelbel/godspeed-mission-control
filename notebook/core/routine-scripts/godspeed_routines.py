@@ -57,6 +57,7 @@ on a server), and it is kept in godspeed-routines-status.json beside Hermes' own
 the Routines list still says that the run failed (starting-routines.mjs, routineStatus).
 """
 import argparse
+import hashlib
 import json
 import os
 import queue
@@ -639,9 +640,47 @@ def brief(c):
 NOTICES_SAID = "godspeed-notices-said.json"
 
 
+CLAIM_STALE = 900  # seconds: longer than say() may take, so a claim whose run died can be taken over
+
+
+def said_ids(said_file):
+    try:
+        with open(said_file, encoding="utf-8") as f:
+            return list((json.load(f) or {}).get("ids", []))
+    except Exception:
+        return []
+
+
+def claim(said_file, notice_id):
+    """Take the right to say one notice, or None. The two 15-minute routines can run at once; the
+    claim (an exclusive file per notice) covers selection through marking, so only one says it."""
+    path = "%s.%s.claim" % (said_file, hashlib.sha256(notice_id.encode("utf-8")).hexdigest()[:16])
+    for _ in range(2):
+        try:
+            os.close(os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY))
+            return path
+        except FileExistsError:
+            try:
+                if time.time() - os.path.getmtime(path) < CLAIM_STALE:
+                    return None
+                os.rename(path, "%s.stale-%d" % (path, os.getpid()))
+                os.remove("%s.stale-%d" % (path, os.getpid()))
+            except OSError:
+                return None
+    return None
+
+
+def release(path):
+    try:
+        os.remove(path)
+    except OSError:
+        pass
+
+
 def notice(c):
     """The oldest thing the notebook queued for the person (core/notices.mjs) that this machine has
-    not said, with what mark_said needs, or None. One a run: a message is about one thing."""
+    not said and no other run is saying, claimed, as (notice, said file, claim); or None. One a run:
+    a message is about one thing. Whoever gets it releases the claim (tick)."""
     queued = c.get("notices")
     if not queued:
         return None
@@ -651,20 +690,23 @@ def notice(c):
     except Exception:
         return None
     said_file = os.path.join(c["home"], NOTICES_SAID)
-    try:
-        with open(said_file, encoding="utf-8") as f:
-            said = list((json.load(f) or {}).get("ids", []))
-    except Exception:
-        said = []
-    fresh = [n for n in waiting if n["id"] not in said]
-    if not fresh:
-        return None
-    return fresh[0], said, said_file
+    for n in waiting:
+        if n["id"] in said_ids(said_file):
+            continue
+        held = claim(said_file, n["id"])
+        if not held:
+            continue
+        if n["id"] in said_ids(said_file):  # said by a run that finished between the look and the claim
+            release(held)
+            continue
+        return n, said_file, held
+    return None
 
 
-def mark_said(n, said, said_file):
-    keep = (said + [n["id"]])[-200:]
-    tmp = said_file + ".tmp"
+def mark_said(n, said_file):
+    """Adds the notice to what this machine has said, on top of what is there now."""
+    keep = (said_ids(said_file) + [n["id"]])[-200:]
+    tmp = "%s.%d.tmp" % (said_file, os.getpid())
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump({"ids": keep}, f)
     os.replace(tmp, said_file)
@@ -706,8 +748,12 @@ def tick(c, env, kind, r):
         return own, False
     found = notice(c)
     if found:
-        words = say(c, env, found[0])
-        mark_said(*found)
+        n, said_file, held = found
+        try:
+            words = say(c, env, n)
+            mark_said(n, said_file)
+        finally:
+            release(held)
         return words, True
     return "", True
 

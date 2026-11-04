@@ -71,5 +71,6 @@ export async function sayNotice(store,{notice,home,provider=null,guidance}){
  return {text:first.text};
 }
 
-// A routine's own words, recorded as they were printed.
-export const recordRoutine=(store,{routine,text,home})=>recordReport(store,{text,about:routine,routine,written:'routine',delivery:reportDelivery(store,home)});
+// A routine's own words, recorded as they were printed. A job made in Settings delivers where its
+// own job says, which the Hermes hook passes as delivery.
+export const recordRoutine=(store,{routine,text,home,delivery})=>recordReport(store,{text,about:routine,routine,written:'routine',delivery:delivery||reportDelivery(store,home)});
