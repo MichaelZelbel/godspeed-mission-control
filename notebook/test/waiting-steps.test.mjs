@@ -69,6 +69,17 @@ test('a scheduler delivery, a command reply or a failure notice sent after the q
  }
 });
 
+test('a Telegram receipt reserved after the question was certified is newer, whenever it chose its position',async t=>{
+ const {store}=fixture(t),opened=open(store,'The bot stopped.');
+ await recordReport(store,{text:opened.message,about:'',steps:[opened.id],routine:'notice',written:'assistant',delivery:'telegram'});
+ const bot=new Telegram({store,domains:{},token:'x',owner:1,transport:async()=>({ok:true,json:async()=>({ok:true,result:{message_id:3}})})});
+ const lock=store.withLockAsync.bind(store);let certified=false;
+ store.withLockAsync=(fn,options)=>{if(!certified&&store.get('command_receipts','telegram-8-failure-notice')?.state==='verified'){certified=true;delivered(store,opened.message);}return lock(fn,options);};
+ await bot.failureNotice('telegram-8','Sorry.');
+ assert.ok(certified);
+ assert.equal(heard(store,{chat:'telegram',words:'yes'}).kind,'ask');assert.equal(store.get('approvals',opened.id).status,'pending');
+});
+
 test('a step answered twice stays answered once',async t=>{
  const {store}=fixture(t),{id}=await ask(store,'The bot stopped.');
  const first=answerStep(store,id,'yes',{chat:'telegram',words:'yes'}),at=store.get('approvals',id).answered_at;

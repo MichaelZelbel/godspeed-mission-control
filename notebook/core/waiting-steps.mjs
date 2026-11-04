@@ -75,6 +75,9 @@ export const deliveryClock=store=>{
  for(const t of [...store.list('approvals').map(r=>r.sent_at),...store.list('conversation_messages').map(r=>r.delivered_at)])if(t)last=Math.max(last,Date.parse(t)||0);
  return new Date(Math.max(Date.now(),last+1)).toISOString();
 };
+// The position is taken under the writer lock that commits the record, so records ordered by lock
+// are ordered by position.
+export const saveReached=(store,value)=>store.withLockAsync(()=>store.saveUnderLock('conversation_messages',{...value,delivered_to:'telegram',delivered_at:deliveryClock(store)}));
 const stamp=(store,id,messageId)=>store.withLock(()=>{
  const record=store.get('approvals',id);
  if(record?.asked_in&&record.status==='pending'&&!record.sent_at)store.commit([store.prepare('approvals',{sent_at:deliveryClock(store),...(messageId?{sent_message_id:messageId}:{})},record)]);
