@@ -206,9 +206,8 @@ check() { # <evidence folder>
 
   # (3) Last week's talk is closed as not held, and its record is kept.
   [ -s "$folder/talk-old-after.md" ] || fail "last week's talk record ($old) is gone"
-  if grep -Eiq 'not[- ]held' "$folder/talk-old.md"; then
-    fail "last week's talk was already marked not held before this week's request"
-  fi
+  grep -Eq '^STATE: opened$' "$folder/talk-old.md" ||
+    fail "last week's talk ($old) was not open and unanswered before this week's request: $(grep -E '^STATE:' "$folder/talk-old.md" | head -1)"
   grep -Eiq 'not[- ]held' "$folder/talk-old-after.md" ||
     fail "last week's talk ($old) was not closed as not held by this week's request"
   pass "on the talk day $new, with the talk of $old still open and unanswered, \"$ASK\" opened this week's talk from its sealed preparation, named last week's once, and left it closed as not held with its record kept"

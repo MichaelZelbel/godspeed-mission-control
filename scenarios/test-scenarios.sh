@@ -2917,6 +2917,32 @@ refuses 'a second run that counts again' mail-count "$M/again" 'a second run of 
 copy "$M/good" "$M/leak"; printf '/home/x/godspeed-v2/logs/a.log\n' >"$M/leak/marker-hits.txt"
 refuses 'the marker in a log' mail-count "$M/leak" 'the marker that every mail body carries'
 
+# the mailbox itself, read over IMAP from the stand-in the way the scenario fills it
+FX=$(node -e '
+const net = require("net"), F = require(process.argv[1] + "/tools/test-mc-mail-imap-fixture.js"), { mails } = require(process.argv[1] + "/scenarios/mail-fixture.cjs");
+(async () => {
+  const f = await F.start();
+  f.boxes.INBOX.messages = mails("FIXTURE-MARKER-xyz");
+  const sock = net.connect(f.port, "127.0.0.1"); let buf = "";
+  sock.on("data", d => { buf += d; });
+  const send = async (c, tag) => { sock.write(tag + " " + c + "\r\n"); for (let i = 0; i < 100 && !buf.includes("\r\n" + tag + " OK") && !buf.includes(tag + " OK"); i++) await new Promise(r => setTimeout(r, 20)); };
+  await new Promise(r => setTimeout(r, 100));
+  await send("LOGIN " + F.USER + " " + F.PASSWORD, "a1"); await send("SELECT INBOX", "a2"); buf = "";
+  await send("UID FETCH 1:* (BODY.PEEK[])", "a3");
+  const subjects = [...buf.matchAll(/^Subject: (.*)\r$/gm)].map(m => m[1].split(".")[0]);
+  const froms = [...buf.matchAll(/^From: .*<(.*)>\r$/gm)].map(m => m[1]);
+  const marked = (buf.match(/FIXTURE-MARKER-xyz/g) || []).length;
+  console.log(JSON.stringify({ n: subjects.length, orders: subjects.filter(s => /^new order #/i.test(s)).length,
+    shopOther: froms.filter((a, i) => /^shop@/.test(a) && !/^new order/i.test(subjects[i])).length,
+    replies: subjects.filter(s => /^Re: Your application/.test(s)).length, unrelated: subjects.filter(s => /Lunch|newsletter/.test(s)).length, marked }));
+  sock.destroy(); await f.close(); process.exit(0);
+})();' "$ROOT" 2>&1)
+if [ "$FX" = '{"n":9,"orders":3,"shopOther":2,"replies":2,"unrelated":2,"marked":9}' ]; then
+  ok "mail fixture: 3 orders, 2 same-sender non-orders, 2 application replies, 2 unrelated mails, the marker in all 9, read over IMAP"
+else
+  bad "mail fixture read over IMAP is not the expected population: $FX"
+fi
+
 section 'talk-on-talk-day'
 T2=$TMP/talkday
 talkday_good() {
@@ -2926,7 +2952,7 @@ talkday_good() {
   printf 'ready: the review passed\n' >"$1/check-new.txt"
   printf 'Good evening.\n' >"$1/opening-old.txt"
   printf 'Last Tuesday'"'"'s talk is still open; its points are in today'"'"'s. Good evening. Tonight: your LDL result and one thing to try.\n' >"$1/opening-new.txt"
-  printf 'AREA: health\nSTATE: open\n\n## The opening\n\nGood evening.\n' >"$1/talk-old.md"
+  printf 'AREA: health\nSTATE: opened\n\n## The opening\n\nGood evening.\n' >"$1/talk-old.md"
   printf 'AREA: health\nSTATE: not-held\n\n## The opening\n\nGood evening.\n' >"$1/talk-old-after.md"
   printf 'AREA: health\n\n## The opening\n\nGood evening. Tonight: your LDL result and one thing to try.\n' >"$1/talk-new.md"
 }
@@ -2938,6 +2964,8 @@ copy "$T2/good" "$T2/unnamed"; printf 'Good evening. Tonight: your LDL result an
 refuses 'last week'"'"'s talk never named' talk-on-talk-day "$T2/unnamed" "never names last week's talk"
 copy "$T2/good" "$T2/twice"; printf 'Last Tuesday was open, and on Tuesday 2026-11-03 it stayed so. Good evening. Tonight: your LDL result and one thing to try.\n' >"$T2/twice/opening-new.txt"
 refuses 'last week'"'"'s talk named twice' talk-on-talk-day "$T2/twice" 'more than once'
+copy "$T2/good" "$T2/held"; printf 'AREA: health\nSTATE: held\n\n## The opening\n\nGood evening.\n' >"$T2/held/talk-old.md"
+refuses 'last week'"'"'s talk already held, not open' talk-on-talk-day "$T2/held" 'was not open and unanswered'
 copy "$T2/good" "$T2/still-open"; cp "$T2/good/talk-old.md" "$T2/still-open/talk-old-after.md"
 refuses 'last week'"'"'s talk left open' talk-on-talk-day "$T2/still-open" 'not closed as not held'
 copy "$T2/good" "$T2/other-opening"; printf 'Last Tuesday'"'"'s talk is still open. Hello there.\n' >"$T2/other-opening/opening-new.txt"
