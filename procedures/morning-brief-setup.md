@@ -27,7 +27,7 @@ Keep the normal brief body under 200 words. Include copyable action text in the 
 
 Keep urgent unfinished work and failed-check notices visible after the normal body when they need more space. These sections are exempt from the 200-word limit. Never cut them to pass the limit. Omit empty sections.
 
-Run mc-check-brief on the brief: where godspeed-brief exists, pipe its text in with `godspeed-brief | mc-check-brief -`; where that command does not exist, run it on the completed file, fix delivery-format failures and preserve important content. A passed format check is not an evidence check. If checking fails, report the failure and keep the draft available for inspection.
+Where godspeed-brief does not exist, run mc-check-brief on the completed brief/ file, fix delivery-format failures and preserve important content; where it exists, the command already saved the brief and there is no file to check. A passed format check is not an evidence check. If checking fails, report the failure and keep the draft available for inspection.
 ```
 
 *[Copy prompt](https://querino.ai/prompts/morning-brief)*
@@ -35,7 +35,8 @@ Run mc-check-brief on the brief: where godspeed-brief exists, pipe its text in w
 The sentences about copyable action text and links are the delivery
 contract, and two commands enforce it (both installed with this kit):
 
-- `mc-check-brief` refuses a brief that sends you to a file instead of
+- `mc-check-brief` checks the `brief/` file of a machine without
+  `godspeed-brief`: it refuses a brief that sends you to a file instead of
   handing you the thing, repeats a link or a line to post from any brief of
   the last 45 days in `brief/`, or hands you a text to send without quotes.
 - `mc-judge-brief` asks your assistant, in a clean session that sees nothing
@@ -49,8 +50,8 @@ The prompt above runs the first. To add the second, paste this as well:
 
 ```
 Add this to skills/morning-brief/SKILL.md: the full text I would copy is right
-there in the brief, in double quotes. After mc-check-brief passes, run
-mc-judge-brief on the brief file, only where godspeed-brief does not exist (it rewrites a file, and
+there in the brief, in double quotes. Where godspeed-brief does not exist, after mc-check-brief passes, run
+mc-judge-brief on the brief file (it rewrites a file, and
 where the command exists the saved note is not edited by hand), and never put back what it removed.
 ```
 
