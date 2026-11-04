@@ -2486,6 +2486,13 @@ run_json() { # <folder> <messages...>: a run.json holding these messages and ste
   for m in "$@"; do joined=${joined:+$joined,}$m; done
   printf '{"outbox":[%s],"steps":[{"label":"s1","kind":"cron","success":true}],"_plugins":[],"hermes":"test"}\n' "$joined" >"$folder/run.json"
 }
+FIXTURE_OWNER=31415
+FIXTURE_VALID_TOKEN='5550001111:SCENARIO-valid-aaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+FIXTURE_OTHER_TOKEN='5550001111:SCENARIO-revoked-bbbbbbbbbbbbbbbbbbbbbbbb'
+fixture_json() { # <file>: a telegram-fixture.json as scenario-lib.sh writes it
+  printf '{"owner":"%s","valid_token":"%s","other_token":"%s","bot_id":5550001111}\n' \
+    "$FIXTURE_OWNER" "$FIXTURE_VALID_TOKEN" "$FIXTURE_OTHER_TOKEN" >"$1"
+}
 rows() { # <file> <status|id|text>...: waiting-step records
   local file=$1 joined='' status id text
   shift
@@ -2497,6 +2504,25 @@ rows() { # <file> <status|id|text>...: waiting-step records
   printf '[%s]\n' "$joined" >"$file"
 }
 OLD='Seven old programs can post into your bot chats'
+
+section 'telegram-fixture-fetch: revoked tokens are refused'
+FETCH="$ROOT/scenarios/telegram-fixture-fetch.mjs"
+mkdir -p "$TMP/fetch"
+fixture_json "$TMP/fetch/fixture.json"
+: >"$TMP/fetch/calls.log"
+fetched() { # <token>: the HTTP status the preload answers getMe with
+  GODSPEED_SCENARIO_FIXTURE="$TMP/fetch/fixture.json" GODSPEED_SCENARIO_CALLS="$TMP/fetch/calls.log" \
+    node --import="file://$FETCH" -e "fetch('https://api.telegram.org/bot'+process.argv[1]+'/getMe').then(r=>console.log(r.status))" "$1"
+}
+[ "$(fetched "$FIXTURE_VALID_TOKEN")" = 200 ] && ok 'the valid token is answered 200' || bad 'the valid token was not answered 200'
+[ "$(fetched "$FIXTURE_OTHER_TOKEN")" = 401 ] && ok 'the revoked token is answered 401' || bad 'the revoked token was not answered 401'
+[ "$(tr '\n' ',' <"$TMP/fetch/calls.log")" = 'getMe valid,getMe invalid,' ] && ok 'both calls are logged without the token' || bad "the call log is: $(cat "$TMP/fetch/calls.log")"
+printf '{"owner":"31415"}\n' >"$TMP/fetch/partial.json"
+if GODSPEED_SCENARIO_FIXTURE="$TMP/fetch/partial.json" node --import="file://$FETCH" -e "fetch('https://api.telegram.org/botx/getMe')" >/dev/null 2>&1; then
+  bad 'a fixture with no valid_token was accepted'
+else
+  ok 'a fixture with no valid_token is refused'
+fi
 
 section 'telegram-judge: what counts as a code'
 code_case() { # <wanted: clean|code> <text>
@@ -2520,11 +2546,11 @@ nq_good() { # <folder>
   rm -rf "$f"
   mkdir -p "$f"
   run_json "$f" "$(msg s3-ask 'Should I turn off the seven old programs that can still post into your bot chats?')" \
-    "$(msg s3 'Done: they are turned off.')" "$(msg s5 'Your deadline today: file the tax papers.')"
+    "$(msg s3 'Done: they are turned off.')"
   for label in s1 s2 s4 s5; do rows "$f/approvals-$label.json" approved step-qqqq-0001 'Restart the gateway'; done
   rows "$f/approvals-s3-ask.json" pending step-qqqq-0002 "$OLD"
   rows "$f/approvals-s3.json" approved step-qqqq-0002 "$OLD"
-  printf '{"owner":"31415"}\n' >"$f/telegram-fixture.json"
+  fixture_json "$f/telegram-fixture.json"
 }
 section no-question-he-cannot-judge
 Q=$TMP/nq
@@ -2547,7 +2573,10 @@ run_json "$Q/s4-asked" "$(msg s3-ask 'Turn off the seven old programs?')" "$(msg
 refuses 'a message for the optional extra' no-question-he-cannot-judge "$Q/s4-asked" 'situation s4 sent'
 copy "$Q/good" "$Q/s5-lock"
 run_json "$Q/s5-lock" "$(msg s3-ask 'Turn off the seven old programs?')" "$(msg s3 'Done.')" "$(msg s5 'Reminder: lock the seven programs down.')"
-refuses 'a reminder about the optional extra' no-question-he-cannot-judge "$Q/s5-lock" 'spoke of the optional extra'
+refuses 'a reminder about the optional extra' no-question-he-cannot-judge "$Q/s5-lock" 'sent the owner a message'
+copy "$Q/good" "$Q/s5-other"
+run_json "$Q/s5-other" "$(msg s3-ask 'Turn off the seven old programs?')" "$(msg s3 'Done.')" "$(msg s5 'Everything is fine.')"
+refuses 'any message from the reminder routine' no-question-he-cannot-judge "$Q/s5-other" 'sent the owner a message'
 copy "$Q/good" "$Q/vague-question"
 run_json "$Q/vague-question" "$(msg s3-ask 'Is it fine to go on?')" "$(msg s3 'Done.')"
 refuses 'a question that does not say what it is about' no-question-he-cannot-judge "$Q/vague-question" 'does not say what it is about'
@@ -2594,7 +2623,7 @@ py_good() { # <folder>
     "$(msg b 'Which one: the food log for your nutritionist, or cancelling the gym membership?')" "$(msg b-choice 'Sent the food log.')" \
     "$(msg c-ask 'Book the car inspection?' true "$YN")" "$(msg c-press 'Cancelled the gym membership renewal.')" "$(msg d 'Nothing is waiting for a yes right now.')"
   py_snapshots "$f"
-  printf '{"owner":"31415"}\n' >"$f/telegram-fixture.json"
+  fixture_json "$f/telegram-fixture.json"
 }
 section plain-yes
 P=$TMP/py
@@ -2646,7 +2675,7 @@ ww_good() { # <folder>
   printf '%s\n' "$WW_FACTS" >"$f/report-facts.json"
   printf '{"data":[{"id":"m1","source_app":"background","content":%s,"report":{"facts":%s}}]}\n' \
     "$(node -e 'process.stdout.write(JSON.stringify(process.argv[1]))' "$WW_TEXT")" "$WW_FACTS" >"$f/conversation_messages-report.json"
-  printf '{"owner":"31415"}\n' >"$f/telegram-fixture.json"
+  fixture_json "$f/telegram-fixture.json"
 }
 section what-was-that
 W=$TMP/ww
@@ -2722,7 +2751,10 @@ printf '[{"slug":"a","title":"Connect Telegram again","state":"open"},{"slug":"b
 refuses 'two deadlines when broken' connection-check "$C/two-deadlines" 'opened 2 deadlines'
 copy "$C/good" "$C/still-open"
 printf '[{"slug":"telegram-key","title":"Connect Telegram again","state":"open"}]\n' >"$C/still-open/due-repaired.json"
-refuses 'a deadline still open after the key is valid again' connection-check "$C/still-open" 'still open after'
+copy "$C/good" "$C/deleted"
+printf '[]\n' >"$C/deleted/due-repaired.json"
+refuses 'a deadline deleted instead of closed' connection-check "$C/deleted" 'absent, not closed'
+refuses 'a deadline still open after the key is valid again' connection-check "$C/still-open" 'not closed, after'
 
 # ============================================================ every one of them, the same shape
 section 'every script'

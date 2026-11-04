@@ -113,10 +113,11 @@ check() { # <evidence folder>
   [ "$count" = 1 ] || fail "a refused Telegram key opened $count deadlines about Telegram, not one"
 
   # repaired: the deadline is closed.
-  title=$("$NODE" "$HERE/telegram-judge.mjs" deadlines "$folder/due-broken.json" "$folder/due-before.json" | awk -F'\t' 'tolower($2) ~ /telegram/ {print $2}')
-  if "$NODE" "$HERE/telegram-judge.mjs" deadlines "$folder/due-repaired.json" "$folder/due-before.json" | awk -F'\t' -v t="$title" '$1=="open" && $2==t' | grep -q .; then
-    fail "the deadline about Telegram (\"$title\") is still open after the key was valid again"
-  fi
+  deadline=$("$NODE" "$HERE/telegram-judge.mjs" deadlines "$folder/due-broken.json" "$folder/due-before.json" | awk -F'\t' 'tolower($2) ~ /telegram/ {print $2 "\t" $3}')
+  title=${deadline%%$'\t'*}
+  slug=${deadline##*$'\t'}
+  state=$("$NODE" "$HERE/telegram-judge.mjs" state "$folder/due-repaired.json" "$slug")
+  [ "$state" = closed ] || fail "the deadline about Telegram (\"$title\") is $state, not closed, after the key was valid again"
   no_code_in "$folder/run.json"
   pass "with Telegram's key valid the connection check sent nothing, opened no deadline and rang no connection bell; with the key refused it told the owner once (one text about Telegram) and opened one deadline (\"$title\"); with the key valid again the next run closed it"
 }

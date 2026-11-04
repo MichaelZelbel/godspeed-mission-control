@@ -15,7 +15,9 @@
 //        whether the report sent in <label> is recorded as a background message of the chat, with the
 //        facts it was written from: "ok", "not-sent", "not-recorded" or "facts-differ"
 //   node telegram-judge.mjs deadlines <due.json> [<due before.json>]
-//        "<state><TAB><title>" of each deadline (by slug) that the earlier snapshot did not hold
+//        "<state><TAB><title><TAB><slug>" of each deadline (by slug) that the earlier snapshot did not hold
+//   node telegram-judge.mjs state <due.json> <slug>
+//        the state of the deadline with that slug, or "absent"
 //   node telegram-judge.mjs bell <notifications.json> <notifications before.json> [connection]
 //        one JSON-quoted text per line of each bell record the earlier snapshot did not hold; with
 //        "connection", only how many of them are connection-* records
@@ -29,7 +31,16 @@ const rows = (name) => {
   const data = read(name);
   return Array.isArray(data) ? data : data.data ?? [];
 };
-const outbox = () => read(file).outbox ?? [];
+const outbox = () => {
+  const { outbox: sent } = read(file);
+  if (!Array.isArray(sent)) throw new Error(`${file} has no outbox: it is not a run.json written by owner-on-telegram.py`);
+  return sent;
+};
+const requiredSteps = () => {
+  const { steps } = read(file);
+  if (!Array.isArray(steps)) throw new Error(`${file} has no steps: it is not a run.json written by owner-on-telegram.py`);
+  return steps;
+};
 const labelled = (labels) => outbox().filter((m) => labels.split(',').includes(m.label));
 
 // "approve 59f1d506", "reject aad2598f", "/approve x1": a command word, then an id with a digit.
@@ -61,7 +72,7 @@ if (command === 'codes') {
   const [label, needle] = rest;
   console.log(labelled(label).filter((m) => m.buttons.length && m.text.toLowerCase().includes(needle.toLowerCase())).length);
 } else if (command === 'failed') {
-  const step = (read(file).steps ?? []).find((s) => !s.success);
+  const step = requiredSteps().find((s) => !s.success);
   if (step) {
     console.log(`${step.label}: ${step.kind}: ${String(step.error ?? '').replace(/\s+/g, ' ').slice(0, 300)}`);
     process.exit(1);
@@ -79,7 +90,9 @@ if (command === 'codes') {
 } else if (command === 'deadlines') {
   const key = (r) => r?.slug ?? r?.id;
   const known = new Set(rest[0] ? rows(rest[0]).map(key) : []);
-  for (const r of rows(file)) if (!known.has(key(r))) console.log(`${r.state ?? ''}\t${r.title ?? ''}`);
+  for (const r of rows(file)) if (!known.has(key(r))) console.log(`${r.state ?? ''}\t${r.title ?? ''}\t${key(r) ?? ''}`);
+} else if (command === 'state') {
+  console.log(rows(file).find((r) => (r?.slug ?? r?.id) === rest[0])?.state ?? 'absent');
 } else if (command === 'bell') {
   const known = new Set(rows(rest[0]).map((r) => r?.id));
   const fresh = rows(file).filter((r) => !known.has(r?.id));

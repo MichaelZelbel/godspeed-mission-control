@@ -103,8 +103,8 @@ check() { # <evidence folder>
     [ "$("$NODE" "$HERE/telegram-judge.mjs" waiting "$folder/approvals-$label.json")" = 0 ] ||
       fail "situation $label left a step waiting for the owner's yes, which he was never asked and cannot give"
   done
-  text=$(messages_of s5 | grep -i 'lock' | head -n 1)
-  [ -z "$text" ] || fail "a reminder routine spoke of the optional extra (situation 5): $text"
+  text=$(messages_of s5 | head -n 1)
+  [ -z "$text" ] || fail "a reminder routine sent the owner a message about something he never needs to answer (situation 5): $text"
 
   # 3. One question that carries what the step is about, and one reply to "approve" that only confirms.
   count=$(messages_of s3-ask | grep -c . || true)

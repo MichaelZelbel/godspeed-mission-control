@@ -21,6 +21,9 @@ globalThis.fetch = async function (input, init) {
   if (!match || !fixtureFile) return realFetch(input, init);
   const [, token, method] = match;
   const fixture = JSON.parse(fs.readFileSync(fixtureFile, 'utf8'));
+  if (typeof fixture.valid_token !== 'string' || !fixture.valid_token) {
+    throw new Error(`${fixtureFile} has no valid_token: it is not a telegram-fixture.json written by scenario-lib.sh`);
+  }
   const valid = token === fixture.valid_token;
   if (process.env.GODSPEED_SCENARIO_CALLS) {
     fs.appendFileSync(process.env.GODSPEED_SCENARIO_CALLS, `${method} ${valid ? 'valid' : 'invalid'}\n`);
