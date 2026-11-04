@@ -154,7 +154,7 @@ export async function checkConnections({store,day,probes,due=runDue,now=()=>new 
     const made=due(store,day,['add',slug,'--title',`Connect ${label} again`,'--target',day,'--to',addDays(day,DEADLINE_DAYS),
      '--done-when',`The daily connection check reaches ${label} again; it closes this itself.`,'--cost',`Until then ${CONNECTIONS[name].stops}.`,
      '--self-check','file-newer','--self-check-arg',`.godspeed/${WORKED_FOLDER}/${name}.worked`,'--addon','connection-check','--addon-key',key]);
-    // The owner is told only once the deadline exists, so a connection that works again before then leaves nothing queued to be said late; queueNotice keeps a retry from telling twice.
+    // The owner is told only once the deadline exists, so a run with nothing left over from a failed delivery queues no sign-in notice for a connection that works again. A notice kept after a failed delivery may still be said on a later run even if its connection has recovered; queueNotice keeps a retry from telling twice.
     if(made.status===0){entry.deadline={slug,key};tellOwner(store,{id:`${CONNECTION_NOTICE_PREFIX}${name}-${since}`,text:CONNECTIONS[name].signIn});}else failures.push(name);
    }
   }
