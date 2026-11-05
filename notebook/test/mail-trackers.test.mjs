@@ -1,7 +1,7 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import http from 'node:http';import {execFile} from 'node:child_process';import {promisify} from 'node:util';import {fileURLToPath} from 'node:url';
 import {Store} from '../core/records/store.mjs';import {QueryService} from '../core/query.mjs';import {Domains} from '../core/domains.mjs';
 import {trackerOperation} from '../core/tracker-operations.mjs';import {trackers,entries,proposalState} from '../core/trackers.mjs';
-import {runMailCount} from '../scripts/mail-count.mjs';
+import {mailId} from '../core/mail-trackers.mjs';import {runMailCount} from '../scripts/mail-count.mjs';
 
 for(const key of Object.keys(process.env))if(/^(GODSPEED_|HERMES_|AGENTMAIL_)/.test(key))delete process.env[key];
 
@@ -29,8 +29,14 @@ const MAILS=[
  mail('u3','Bank <bank@bank.example.invalid>','Statement','2026-11-01T14:00:00Z'),
 ];
 const requests=[];let status=200;
+// With a barrier set, the first page of a list is answered only once that many searches have asked.
+let barrier=0;const waiting=[];
 const server=http.createServer((req,res)=>{
  const url=new URL(req.url,'http://x');requests.push(url.pathname+url.search);
+ if(barrier&&!url.searchParams.get('page_token')){waiting.push(()=>answer(url,res));if(waiting.length>=barrier)waiting.splice(0).forEach(go=>go());return;}
+ answer(url,res);
+});
+function answer(url,res){
  if(status!==200){res.statusCode=status;res.end('{}');return;}
  res.setHeader('content-type','application/json');
  const one=url.pathname.match(/\/messages\/([^/]+)$/);
@@ -38,7 +44,7 @@ const server=http.createServer((req,res)=>{
  const from=url.searchParams.get('from')||'',after=Date.parse(url.searchParams.get('after')||'1970-01-01'),offset=Number(url.searchParams.get('page_token')||0);
  const all=MAILS.filter(m=>m.from.includes(from)&&Date.parse(m.timestamp)>=after),page=all.slice(offset,offset+2);
  res.end(JSON.stringify({messages:page,next_page_token:offset+2<all.length?String(offset+2):undefined}));
-});
+}
 await new Promise(r=>server.listen(0,'127.0.0.1',r));
 const home=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-mail-home-'));
 Object.assign(process.env,{GODSPEED_MAIL_AGENTMAIL_API:'http://127.0.0.1:'+server.address().port,GODSPEED_MAIL_AGENTMAIL_INBOX:'me@agentmail.example.invalid',AGENTMAIL_READ_KEY:'am_read_invented',GODSPEED_MAIL_HOME:home,GODSPEED_NOW:'2026-11-04T10:00:00Z'});
@@ -47,7 +53,7 @@ test.after(()=>{server.close();fs.rmSync(home,{recursive:true,force:true});});
 // Async: the stand-in answers from this process, which a blocking spawn would stop.
 const script=root=>promisify(execFile)(process.execPath,[fileURLToPath(new URL('../scripts/mail-count.mjs',import.meta.url))],{env:{...process.env,GODSPEED_WORKSPACE:root}}).then(r=>({status:0,...r}),e=>({status:e.code,stdout:e.stdout,stderr:e.stderr}));
 const NOW=new Date('2026-11-04T10:00:00Z');
-const fixture=t=>{const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-mail-trackers-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));const store=new Store(root),query=new QueryService(store);store.save('settings',{id:'installation',timezone:'Europe/Berlin'});requests.length=0;status=200;return {root,store,query,domains:new Domains(query)};};
+const fixture=t=>{const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-mail-trackers-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));const store=new Store(root),query=new QueryService(store);store.save('settings',{id:'installation',timezone:'Europe/Berlin'});requests.length=0;status=200;barrier=0;return {root,store,query,domains:new Domains(query)};};
 const ORDERS={senders:['shop.example.invalid'],subjects:['new order','You made a sale'],mailbox:'godspeed'};
 const APPLICATIONS={senders:['alpha.example.invalid','beta.example.invalid'],subjects:['application'],mailbox:'godspeed'};
 // The sentence, their yes, and the saved card, the way the recipe runs them.
@@ -96,6 +102,25 @@ test('a second run adds nothing, and neither does a window that overlaps the las
  assert.deepEqual(await runMailCount({root,now:NOW}),{added:0});
  assert.equal(count(store,'Shop orders').length,5);
  assert.match(requests.find(r=>r.includes('after='))||'',/after=2026-10-04/,'the first run reaches back 30 days, a day early for the zone');
+});
+
+test('a run whose search finished while another process writes waits for it and counts each mail once',async t=>{
+ const {root,domains}=fixture(t);await setUp(domains,ORDERS,{name:'Shop orders'});
+ // The script runs on the real clock, so one mail is made an hour old now.
+ const live=mail('live','Shop <orders@shop.example.invalid>','New order #live',new Date(Date.now()-3600e3).toISOString());MAILS.push(live);t.after(()=>MAILS.splice(MAILS.indexOf(live),1));
+ const c=trackers(new Store(root)).find(x=>x.name==='Shop orders'),liveId=mailId('godspeed','live');
+ // The other process: holds the workspace for a second and, inside it, enters the same mail.
+ const other=`import {Store} from ${JSON.stringify(new URL('../core/records/store.mjs',import.meta.url).href)};import {QueryService} from ${JSON.stringify(new URL('../core/query.mjs',import.meta.url).href)};
+const store=new Store(${JSON.stringify(root)});
+store.withLock(()=>{console.log('held');new QueryService(store).execute({table:'collection_items',operation:'insert',holdingLock:true,values:{collection_id:${JSON.stringify(c.id)},data:{when:'2026-11-05 00:00',value:1,mail_id:${JSON.stringify(liveId)}}}});Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,1000);});`;
+ barrier=99;
+ const ran=script(root);while(!waiting.length)await new Promise(r=>setTimeout(r,20));
+ const holder=execFile(process.execPath,['--input-type=module','-e',other]);
+ await new Promise(r=>holder.stdout.on('data',r));
+ waiting.splice(0).forEach(go=>go());
+ assert.equal((await ran).status,0);
+ const ids=count(new Store(root),'Shop orders').map(i=>i.data.mail_id);
+ assert.equal(ids.filter(id=>id===liveId).length,1);assert.equal(new Set(ids).size,ids.length);
 });
 
 test('a mail is entered on its local date, with its own minute',async t=>{

@@ -105,8 +105,8 @@ export async function countMail({store,query,search,now=new Date(),tz}){
   const column=mailColumn(c);if(column===false)continue;
   let messages;
   try{messages=await searchFrom(run,rule,windowFor(state,c.id,rule,today),tz);}catch{continue;}
-  // The check and the writes are one step, so a second run at the same moment counts nothing twice.
-  store.withLock(()=>{
+  // The check and the writes are one step, and a second run at the same moment waits its turn (withLockAsync), so nothing is counted twice.
+  await store.withLockAsync(()=>{
    const have=countedIds(store,c,store.list('collection_items'));
    for(const m of mailMatches(rule,messages)){
     const id=mailId(rule.mailbox,m.message_id),when=whenOf(m.date,now,tz);
