@@ -490,6 +490,11 @@ test('an adopted mission control gets the notice sender, keeps the notices queue
  assert.equal(runScript('godspeed-notices.py'),'A new notice.');
  assert.equal(runScript('godspeed-notices.py'),'','the old ones are never said');
  assert.equal(readNotices(store).length,3,'and are kept');
+ // A producer that read the queue before the first start and wrote it back after brings the old notice back unmarked.
+ const file=path.join(store.state,'notices.json'),queued=JSON.parse(fs.readFileSync(file,'utf8'));
+ queued.notices=queued.notices.map(({not_sent,...n})=>n).filter(n=>n.id==='before-1'||n.id==='after-1');
+ fs.writeFileSync(file,JSON.stringify(queued));queueNotice(store,{id:'later-1',text:'A later notice.'});
+ assert.equal(runScript('godspeed-notices.py'),'A later notice.','the old one is not sent, though nothing marks it');
 });
 
 test('Settings lists the routines of an adopted mission control, all off, and a starter-born one has no switches',async t=>{
