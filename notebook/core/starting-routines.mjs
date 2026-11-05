@@ -136,14 +136,15 @@ export function telegramInHermes(home){try{return /^\s*TELEGRAM_BOT_TOKEN\s*=\s*
 // The assistant's own terminal and desktop app are routed the same way, as agent:main:local:dm:<id>,
 // and are no chat app: until 27 October 2026 one conversation in the terminal counted as one
 // (godspeed_routines.py, CHAT_KEY, says what that did to the routine).
-export const OWNER_CHAT_KEY_LIKE='agent:main:%:dm:%',OWN_SURFACES_LIKE='agent:main:local:%';
+// The assistant's own surfaces and its non-chat entry points (cli, tui, cron, webhook, api_server) are no chat app; the same six are refused by godspeed_routines.py and the godspeed-chat-tidy plugin.
+export const OWNER_CHAT_KEY_LIKE='agent:main:%:dm:%',OWNER_CHAT_KEY=/^agent:main:(?!(?:local|cli|tui|cron|webhook|api_server):)[^:]+:dm:.+$/;
 export function routedOwnerChats(home){
  const file=path.join(home,'state.db');if(!fs.existsSync(file))return [];
  let db;
  try{
   db=new DatabaseSync(file,{readOnly:true});
-  return db.prepare('select session_key from gateway_routing where scope = ? and session_key like ? and session_key not like ?')
-   .all(path.join(home,'sessions'),OWNER_CHAT_KEY_LIKE,OWN_SURFACES_LIKE).map(row=>row.session_key);
+  return db.prepare('select session_key from gateway_routing where scope = ? and session_key like ?')
+   .all(path.join(home,'sessions'),OWNER_CHAT_KEY_LIKE).map(row=>row.session_key).filter(key=>OWNER_CHAT_KEY.test(key));
  }catch{return [];}finally{try{db?.close();}catch{}}
 }
 export function chatAppInHermes(home){return telegramInHermes(home)||routedOwnerChats(home).length>0;}

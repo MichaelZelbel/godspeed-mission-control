@@ -871,7 +871,7 @@ def journal_tick(c):
 # the routine found two chats beside a Telegram one and refused every night ("found 2"), and with no
 # chat app at all it would have summarised a terminal conversation.
 CHAT_KEY_LIKE = "agent:main:%:dm:%"
-CHAT_KEY = re.compile(r"^agent:main:(?!local:)[^:]+:dm:.+$")
+CHAT_KEY = re.compile(r"^agent:main:(?!(?:local|cli|tui|cron|webhook|api_server):)[^:]+:dm:.+$")
 
 
 def chat_log(line):

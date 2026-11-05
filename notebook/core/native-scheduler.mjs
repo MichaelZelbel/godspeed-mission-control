@@ -427,14 +427,14 @@ export class NativeScheduler{
   if(this.ticking){if(raise){await this.current?.catch(()=>null);await this.followConnectionCheck();}return records;}
   if(Date.now()-(this.lastTick||0)<60000){this.onProgress?.();if(raise)await this.followConnectionCheck();return records;}
   this.ticking=true;this.lastTick=Date.now();
-  let failure=null,finish;
+  let failure=null,finish;const failures=[];
   this.current=new Promise(r=>{finish=r;});
   try{
    await this.startRoutines().catch(()=>null);
    await this.addNewStartingRoutines().catch(()=>null);
    await this.followJournal().catch(()=>null);
-   await this.followConnectionCheck().catch(e=>{failure=e;});
-   await this.followChatTidy().catch(e=>{failure=failure||e;});
+   await this.followConnectionCheck().catch(e=>{failure=e;failures.push(e);});
+   await this.followChatTidy().catch(e=>{failure=failure||e;failures.push(e);});
    await this.followBrief().catch(()=>null);
    await this.followDelivery().catch(()=>null);
    try{moveSettingsDeadlines(this.store);}catch{}
@@ -443,7 +443,7 @@ export class NativeScheduler{
   }
   finally{this.ticking=false;finish();}
   // The setup that asked for this tick hears that a routine could not be made; the periodic tick logs it (onFailure) and keeps going.
-  if(failure){if(raise)throw failure;try{this.onFailure?.(failure);}catch{}}
+  if(failure){if(raise)throw failure;for(const error of failures)try{this.onFailure?.(error);}catch{}}
   return records;
  }
  // A routine lives in the Hermes of the machine that runs routines; added or

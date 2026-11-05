@@ -227,6 +227,34 @@ test('a failed creation of the night chat tidy-up reaches the setup tick, and a 
  await assert.rejects(failing.tick({raise:true}),/could not create it/);
 });
 
+test('two periodic creation failures in one tick are both reported',async t=>{
+ const {store,home,hermes,scheduler,job}=await withGoal(t);
+ scheduler.lastTick=0;await scheduler.tick();
+ fs.writeFileSync(path.join(home,'.env'),'TELEGRAM_BOT_TOKEN=123:abc\nTELEGRAM_HOME_CHANNEL=42\n');
+ hermes.write(hermes.jobs().filter(j=>j.name!==CONNECTION_JOB));writeNotebookRoutines(store,{...readNotebookRoutines(store),jobs:readNotebookRoutines(store).jobs.filter(j=>j.key!=='connection-check')});
+ const failing=new NativeScheduler(store,{home,executable:'hermes',device:'pc',run:async(exe,args,options)=>{if(args[1]==='create'&&(args.includes(CONNECTION_JOB)||args.includes(CHAT_TIDY_JOB)))throw Error('could not create '+(args.includes(CHAT_TIDY_JOB)?'chat-tidy':'connection'));return hermes.run(exe,args,options);}});
+ const reported=[];failing.onFailure=error=>reported.push(error.message);
+ await failing.tick();
+ assert.deepEqual(reported.sort(),['could not create chat-tidy','could not create connection']);
+});
+
+test('the running service logs a routine that could not be created, and its tick still ends',async t=>{
+ const root=temporary(t),home=path.join(root,'.hermes-home');installStarter(root);fs.mkdirSync(home,{recursive:true});fs.writeFileSync(path.join(home,'config.yaml'),'model:\n  default: x\n');
+ const assistant=path.join(root,'assistant-test.json');fs.writeFileSync(assistant,JSON.stringify({verified:true,executable:'hermes',home}));
+ const saved={runtime:process.env.GODSPEED_ORIGINAL_RUNTIME,config:process.env.GODSPEED_ASSISTANT_CONFIG};
+ process.env.GODSPEED_ORIGINAL_RUNTIME='on';process.env.GODSPEED_ASSISTANT_CONFIG=assistant;
+ t.after(()=>{for(const [name,value] of [['GODSPEED_ORIGINAL_RUNTIME',saved.runtime],['GODSPEED_ASSISTANT_CONFIG',saved.config]])if(value===undefined)delete process.env[name];else process.env[name]=value;});
+ const {createService}=await import('../server/main.mjs');
+ const service=await createService({root,port:0});t.after(()=>service.close());
+ const hermes=fakeHermes(home);
+ service.scheduler.run=async(exe,args,options)=>{if(args[1]==='create'&&args.includes(CHAT_TIDY_JOB))throw Error('Hermes could not create it');return hermes.run(exe,args,options);};
+ await service.scheduler.configure({goal:'Run a fictional 10k',timezone:'Europe/Berlin'});
+ fs.writeFileSync(path.join(home,'.env'),'TELEGRAM_BOT_TOKEN=123:abc\nTELEGRAM_HOME_CHANNEL=42\n');
+ const logged=[],original=console.error;console.error=(...line)=>{logged.push(line.join(' '));};
+ try{service.scheduler.lastTick=0;await service.scheduler.tick();}finally{console.error=original;}
+ assert.ok(logged.some(line=>/could not be created, the next tick tries again.*could not create it/.test(line)),logged.join('\n'));
+});
+
 test('a setup that overlaps the running periodic tick still hears its failed connection-check creation',async t=>{
  noMail(t);
  const {store,home,hermes,job}=await withGoal(t);
@@ -327,6 +355,8 @@ test("a chat app is any app the gateway routes the owner's own chat through, nev
  assert.equal(chatAppInHermes(home),false,"a group chat is not the owner's own chat");
  route('agent:main:local:dm:local-1','a-conversation-in-the-terminal');
  assert.equal(chatAppInHermes(home),false,"the assistant's own terminal is no chat app");
+ for(const own of ['cli','tui','cron','webhook','api_server'])route('agent:main:'+own+':dm:1','not-a-chat-'+own);
+ assert.equal(chatAppInHermes(home),false,'the five non-chat entry points are no chat app');
  route('agent:main:signal:dm:7','the-owners-chat');
  db.close();
  assert.equal(telegramInHermes(home),false,'still no Telegram bot in Hermes');

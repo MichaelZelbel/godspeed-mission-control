@@ -23,7 +23,7 @@ import re
 COMMAND = "godspeed-chat-tidy"
 # The owner's private chat in a chat app, as godspeed_routines.py (CHAT_KEY) finds it: a group or
 # channel route and the assistant's own terminal ("local") are refused. A test holds the two equal.
-CHAT_KEY = r"^agent:main:(?!local:)[^:]+:dm:.+$"
+CHAT_KEY = r"^agent:main:(?!(?:local|cli|tui|cron|webhook|api_server):)[^:]+:dm:.+$"
 NOT_A_CHAT_APP = ("local", "cli", "tui", "cron", "webhook", "api_server")
 
 
