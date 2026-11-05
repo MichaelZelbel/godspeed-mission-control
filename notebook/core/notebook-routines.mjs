@@ -68,7 +68,7 @@ export function journalWanted(root){
 // THE DAILY CONNECTION CHECK (4 November 2026, #200; core/connection-check.mjs). A script routine at
 // 05:00 (earlier when an early Morning brief needs it first), before the morning briefing, made once on a machine that made its starting routines (one
 // that kept the reader's own routines never gets Godspeed's beside them). It starts on when this
-// install has Telegram or Gmail connected and paused when it has neither; the Routines list's
+// install has Telegram or Gmail connected or a tracker with a mail rule, and paused when it has none; the Routines list's
 // Pause and Resume is its switch.
 export const CONNECTION_JOB='Daily connection check';
 export const CONNECTION_SCRIPT='godspeed-connection-check.py';

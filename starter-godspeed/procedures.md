@@ -121,8 +121,8 @@ the first morning the connection works again. Any other failure is reported only
 two mornings in a row. When everything works, it sends nothing. It runs no AI of its own.
 Rhythm: it joins the other seven at the notebook's next scheduling round after your first goal.
 Every day at 05:00 your time, earlier when a morning brief set before 05:30 needs it first.
-It starts running when Telegram or Gmail is connected, and waits paused while neither is; once one
-of them is connected, it resumes by itself, unless you paused or resumed it yourself.
+It starts running when Telegram or Gmail is connected or a tracker has a mail rule, and waits paused
+while none is; once one of them is in place, it resumes by itself, unless you paused or resumed it yourself.
 Lands: in your Telegram chat when your assistant has Telegram connected, otherwise in your notebook.
 Lives: Hermes' schedule on the computer that runs your routines.
 May: make one harmless call to each connection and set or close the deadline that goes with it.

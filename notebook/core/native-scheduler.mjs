@@ -296,8 +296,8 @@ export class NativeScheduler{
  // Made once, only on a machine that made its starting routines (on a mission control not made from the
  // starter: once its switch is on, #225), at 05:00 on the install's clock (earlier when
  // a Morning brief set before 05:30 needs it first; connectionCheckTime). It
- // is made enabled when Telegram or Gmail is connected and paused when neither is; the notebook later
- // resumes it only if it paused it itself and one of them has since been connected. A routine the
+ // is made enabled when Telegram or Gmail is connected or a tracker has a mail rule, and paused when none is; the notebook later
+ // resumes it only if it paused it itself and one of them has since been in place. A routine the
  // person paused or resumed, or removed, is theirs from then on.
  async followConnectionCheck(){
   const root=this.store.root;

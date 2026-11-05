@@ -641,6 +641,23 @@ test('a switch that the assistant cannot set up yet is saved and the answer says
  const {switchedOn}=await import('../core/routine-switches.mjs');assert.equal(switchedOn(service.store,'connection-check'),true);
 });
 
+test('switching Mail counts on in an adopted mission control follows it at once',async t=>{
+ const root=temporary(t);fs.mkdirSync(path.join(root,'rules'),{recursive:true});fs.writeFileSync(path.join(root,'AGENTS.md'),'# My own mission control\n');installStarter(root);
+ const was=process.env.GODSPEED_ORIGINAL_RUNTIME;process.env.GODSPEED_ORIGINAL_RUNTIME='on';
+ const {createService}=await import('../server/main.mjs');
+ const assistant=path.join(root,'assistant.json');fs.writeFileSync(assistant,JSON.stringify({verified:true,executable:'hermes',home:path.join(root,'.hermes-home')}));
+ const was2=process.env.GODSPEED_ASSISTANT_CONFIG;process.env.GODSPEED_ASSISTANT_CONFIG=assistant;
+ t.after(()=>{if(was2===undefined)delete process.env.GODSPEED_ASSISTANT_CONFIG;else process.env.GODSPEED_ASSISTANT_CONFIG=was2;});
+ const service=await createService({root,device:'pc',port:0});
+ t.after(async()=>{await service.close();if(was===undefined)delete process.env.GODSPEED_ORIGINAL_RUNTIME;else process.env.GODSPEED_ORIGINAL_RUNTIME=was;});
+ service.store.save('settings',{id:'installation',owner:'pc',timezone:'Europe/Berlin',delivery:'notebook'});
+ let followed=0;
+ for(const name of ['followNoticeSender','followSwitches','followJournal','followConnectionCheck'])service.scheduler[name]=async()=>{};
+ service.scheduler.followMailCount=async()=>{followed++;};
+ const response=await fetch('http://127.0.0.1:'+service.address.port+'/api/routines/switch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:'mail-count',on:true})});
+ assert.equal(response.status,200);assert.equal(followed,1);
+});
+
 test('the first enabled connection check says the failure notice it queued itself, and a routine that fails to be made does not stop the next one',{skip:!havePython&&'needs Python'},async t=>{
  noMail(t);
  const {root,home,store,hermes,tick,job,runScript}=await adoptedFixture(t),{setRoutineSwitch}=await import('../core/routine-switches.mjs'),{queueNotice}=await import('../core/notices.mjs');
