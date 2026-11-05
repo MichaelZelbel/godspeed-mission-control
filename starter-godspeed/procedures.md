@@ -114,7 +114,7 @@ model is still to be watched.
 ### Daily connection check
 
 Does: early every morning it makes one harmless call to each connection you set up: the AI your
-routines and chat use, Telegram, the GitHub sync and Gmail. An AI you connected for the notebook
+routines and chat use, Telegram, the GitHub sync, Gmail, and the mission control's own mailbox when a tracker rule uses it. An AI you connected for the notebook
 alone, with "Use it for the daily routines and the chat too" unticked, is not called. When a
 sign-in or key is refused, it tells you once and sets a deadline, and that deadline closes itself
 the first morning the connection works again. Any other failure is reported only when it happens

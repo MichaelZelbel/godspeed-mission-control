@@ -651,11 +651,12 @@ test('switching Mail counts on in an adopted mission control follows it at once'
  const service=await createService({root,device:'pc',port:0});
  t.after(async()=>{await service.close();if(was===undefined)delete process.env.GODSPEED_ORIGINAL_RUNTIME;else process.env.GODSPEED_ORIGINAL_RUNTIME=was;});
  service.store.save('settings',{id:'installation',owner:'pc',timezone:'Europe/Berlin',delivery:'notebook'});
- let followed=0;
- for(const name of ['followNoticeSender','followSwitches','followJournal','followConnectionCheck'])service.scheduler[name]=async()=>{};
- service.scheduler.followMailCount=async()=>{followed++;};
+ const hermes=fakeHermes(path.join(root,'.hermes-home'));service.scheduler.run=hermes.run;
+ service.store.save('collections',{name:'Orders',field_schema:[],tracker:{names:['Orders'],cadence:'any',talks:[],specialist:null,mail:{senders:['shop.example.invalid'],subjects:['order'],mailbox:'gmail'}}});
  const response=await fetch('http://127.0.0.1:'+service.address.port+'/api/routines/switch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:'mail-count',on:true})});
- assert.equal(response.status,200);assert.equal(followed,1);
+ assert.equal(response.status,200);
+ const made=hermes.jobs().find(j=>j.name==='Mail counts');
+ assert.ok(made,'the job exists as soon as the answer does');assert.notEqual(made.enabled,false);assert.equal(made.deliver,'local');
 });
 
 test('the first enabled connection check says the failure notice it queued itself, and a routine that fails to be made does not stop the next one',{skip:!havePython&&'needs Python'},async t=>{
