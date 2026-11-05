@@ -684,18 +684,6 @@ def release(path):
         pass
 
 
-def started_at(c):
-    """When the notice sender first started on this machine (the marker's content), or "" when it has
-    not or the marker is not a time. Notices queued before that are never said, even when a producer's
-    stale write of the whole queue brought one back without its not_sent mark."""
-    try:
-        with open(os.path.join(c["home"], NOTICES_STARTED), encoding="utf-8") as f:
-            text = f.read().strip()
-    except OSError:
-        return ""
-    return text if re.fullmatch(r"\d{4}-\d\d-\d\dT[\d:.]+Z", text) else ""
-
-
 def notice(c, only=""):
     """The oldest thing the notebook queued for the person (core/notices.mjs) that this machine has
     not said and no other run is saying, claimed, as (notice, said file, claim); or None. One a run:
@@ -712,8 +700,7 @@ def notice(c, only=""):
         with open(queued, encoding="utf-8") as f:
             text = f.read()
         if text.strip():
-            start = started_at(c)
-            waiting = [n for n in json.loads(text).get("notices", []) if isinstance(n, dict) and isinstance(n.get("id"), str) and n["id"].startswith(only) and not n.get("not_sent") and not (start and isinstance(n.get("at"), str) and n["at"] <= start)]
+            waiting = [n for n in json.loads(text).get("notices", []) if isinstance(n, dict) and isinstance(n.get("id"), str) and n["id"].startswith(only) and not n.get("not_sent")]
     except FileNotFoundError:
         return None
     except Exception:
@@ -834,35 +821,46 @@ def now_ms():
 
 
 def hold_queued(c):
-    """The first run of the notice sender marks every notice already queued as not_sent, before its
-    first claim, so none queued earlier is ever said (#225). Done once: the marker file, holding the time
-    the time the queue was held, is written after it; notice() refuses anything stamped at or before that. A queue that cannot be read raises, so the run fails and says nothing."""
+    """The first run of the notice sender marks every notice already queued as not_sent and as said,
+    before its first claim, so none queued earlier is ever said (#225). The ids in the said file are
+    what keeps one out when a producer's stale write of the whole queue brings it back unmarked; a notice
+    queued later has a new id, so it is never held. The marker file is published whole, under the same lock
+    that holds the queue, so a run that sees it sees a finished hold. A queue that cannot be read raises,
+    so the run fails and says nothing."""
     marker = os.path.join(c["home"], NOTICES_STARTED)
     queued = c.get("notices")
     if os.path.exists(marker) or not queued:
         return
-    at = now_ms()
-    try:
-        with open(queued, encoding="utf-8") as f:
-            data = json.loads(f.read())
-    except FileNotFoundError:
-        data = None
-    if data is not None:
-        if not isinstance(data, dict) or not isinstance(data.get("notices"), list):
-            raise ValueError("the queued notices cannot be read")
-        held = [dict(n, not_sent={"reason": NOT_SENT_BEFORE_SENDER, "at": at}) if isinstance(n, dict) and not n.get("not_sent") else n for n in data["notices"]]
-        if held != data["notices"]:
-            tmp = "%s.%d.tmp" % (queued, os.getpid())
-            with open(tmp, "w", encoding="utf-8") as f:
-                f.write(json.dumps(dict(data, notices=held), indent=2) + "\n")
-            os.replace(tmp, queued)
-    # The marker is the cutoff: a notice stamped at or before it was queued before the sender started. Waiting out the
-    # millisecond makes every later notice strictly later, so the cutoff needs no lock with the queue's writers.
-    began = now_ms()
-    while now_ms() <= began:
-        time.sleep(0.001)
-    with open(marker, "w", encoding="utf-8") as f:
-        f.write(began)
+    said_file = os.path.join(c["home"], NOTICES_SAID)
+    with one_at_a_time(said_file + ".lock"):
+        if os.path.exists(marker):
+            return
+        at = now_ms()
+        try:
+            with open(queued, encoding="utf-8") as f:
+                data = json.loads(f.read())
+        except FileNotFoundError:
+            data = None
+        if data is not None:
+            if not isinstance(data, dict) or not isinstance(data.get("notices"), list):
+                raise ValueError("the queued notices cannot be read")
+            ids = [n["id"] for n in data["notices"] if isinstance(n, dict) and isinstance(n.get("id"), str)]
+            if ids:
+                keep = (said_ids(said_file) + [i for i in ids if i not in said_ids(said_file)])[-200:]
+                tmp = "%s.%d.tmp" % (said_file, os.getpid())
+                with open(tmp, "w", encoding="utf-8") as f:
+                    json.dump({"ids": keep}, f)
+                os.replace(tmp, said_file)
+            held = [dict(n, not_sent={"reason": NOT_SENT_BEFORE_SENDER, "at": at}) if isinstance(n, dict) and not n.get("not_sent") else n for n in data["notices"]]
+            if held != data["notices"]:
+                tmp = "%s.%d.tmp" % (queued, os.getpid())
+                with open(tmp, "w", encoding="utf-8") as f:
+                    f.write(json.dumps(dict(data, notices=held), indent=2) + "\n")
+                os.replace(tmp, queued)
+        tmp = "%s.%d.tmp" % (marker, os.getpid())
+        with open(tmp, "w", encoding="utf-8") as f:
+            f.write(at)
+        os.replace(tmp, marker)
 
 
 def notices(c):
