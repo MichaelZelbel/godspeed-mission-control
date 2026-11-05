@@ -119,8 +119,8 @@ alone, with "Use it for the daily routines and the chat too" unticked, is not ca
 sign-in or key is refused, it tells you once and sets a deadline, and that deadline closes itself
 the first morning the connection works again. Any other failure is reported only when it happens
 two mornings in a row. When everything works, it sends nothing. It runs no AI of its own.
-Rhythm: it is added within a minute of the other seven, when the notebook next looks at its
-routines. Every day at 05:00 your time, earlier when a morning brief set before 05:30 needs it first.
+Rhythm: it joins the other seven at the notebook's next scheduling round after your first goal.
+Every day at 05:00 your time, earlier when a morning brief set before 05:30 needs it first.
 It starts running when Telegram or Gmail is connected, and waits paused while neither is; once one
 of them is connected, it resumes by itself, unless you paused or resumed it yourself.
 Lands: in your Telegram chat when your assistant has Telegram connected, otherwise in your notebook.
