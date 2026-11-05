@@ -1,7 +1,7 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import http from 'node:http';import {execFile} from 'node:child_process';import {promisify} from 'node:util';import {fileURLToPath} from 'node:url';
 import {Store} from '../core/records/store.mjs';import {QueryService} from '../core/query.mjs';import {Domains} from '../core/domains.mjs';
 import {trackerOperation} from '../core/tracker-operations.mjs';import {trackers,entries,proposalState} from '../core/trackers.mjs';
-import {mailId,whenOf} from '../core/mail-trackers.mjs';import {runMailCount} from '../scripts/mail-count.mjs';
+import {mailId} from '../core/mail-trackers.mjs';import {runMailCount} from '../scripts/mail-count.mjs';
 
 for(const key of Object.keys(process.env))if(/^(GODSPEED_|HERMES_|AGENTMAIL_)/.test(key))delete process.env[key];
 
@@ -214,8 +214,22 @@ test('no sender, shop or phrase is built into the code',()=>{
  for(const file of ['core/mail-trackers.mjs','scripts/mail-count.mjs'])assert.doesNotMatch(fs.readFileSync(new URL('../'+file,import.meta.url),'utf8'),/etsy|amazon|shopify|gumroad|bewerbung/i,file);
 });
 
-test('a mail dated after now is entered on its own local date',()=>{
- assert.equal(whenOf('2026-11-06T12:34:00Z','Europe/Berlin'),'2026-11-06 13:34');
+test('a mail dated after now is stored under its own later local date',async t=>{
+ const {root,store,domains}=fixture(t);await setUp(domains,ORDERS,{name:'Shop orders'});
+ const search=async()=>({messages:[{message_id:'f1',from:'orders@shop.example.invalid',subject:'New order #1005',date:'2026-11-06T12:34:00Z'}]});
+ assert.deepEqual(await runMailCount({root,now:NOW,search}),{added:1});
+ assert.deepEqual(count(store,'Shop orders').map(i=>i.data.when),['2026-11-06 13:34']);
+});
+
+test('an existing tracker whose number range leaves out 1 takes no rule and no mail',async t=>{
+ const {root,store,domains}=fixture(t);
+ for(const [name,range] of [['Low',{min:2,max:9}],['High',{min:-5,max:0}]]){
+  trackerOperation(domains,{type:'tracker-create',name,cadence:'any',fields:[{label:'Count',type:'number',...range}]});
+  await assert.rejects(setUp(domains,ORDERS,{tracker:name}),/range leaves out 1/,name);
+ }
+ const c=trackers(store).find(x=>x.name==='Low');
+ store.save('collections',{...c,tracker:{...c.tracker,mail:ORDERS}});
+ assert.deepEqual(await runMailCount({root,now:NOW}),{added:0});
 });
 test('an existing tracker with one number column can take a rule',async t=>{
  const {domains}=fixture(t);

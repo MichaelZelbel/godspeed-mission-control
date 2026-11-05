@@ -45,15 +45,16 @@ export const ruleDigest=rule=>hash({senders:[...rule.senders].sort(),subjects:ru
 export const ruleSentence=(rule,name,isNew)=>'Count each mail from '+list(rule.senders)+' whose subject says '+list(rule.subjects.map(s=>'"'+s+'"'))+', in '+MAILBOX[rule.mailbox].words+', as one in '+(isNew?'a new tracker called ':'')+name+'?';
 
 // Which trackers can take a rule. A daily tracker keeps one entry a day, which is not one entry per mail,
-// and a tracker with more than one column, or a column that is not a number, has nothing to put in them; a specialist keeps its own rows. Such a
+// and a tracker with more than one column, or a column that is not a number or whose range leaves out 1, has nothing to put in them; a specialist keeps its own rows. Such a
 // tracker is left as it is. Returns the column that gets the 1 (null for a counting tracker), or false.
 export function mailColumn(c){
  if(c.tracker?.cadence!=='any'||c.tracker?.specialist)return false;
  const mine=own(c);
  if(!mine.length)return null;
- return mine.length===1&&mine[0].type==='number'?mine[0].key:false;
+ const one=mine[0];
+ return mine.length===1&&one.type==='number'&&(one.min===undefined||one.min<=1)&&(one.max===undefined||one.max>=1)?one.key:false;
 }
-export const NOT_FITTING=name=>name+' keeps one entry a day, or has more than one column or one that is not a number, and a mail count needs one entry for each mail. Say a new name and I will start a tracker for the mails.';
+export const NOT_FITTING=name=>name+' keeps one entry a day, or has more than one column, or one that is not a number or whose range leaves out 1, and a mail count needs one entry for each mail. Say a new name and I will start a tracker for the mails.';
 // Only a digest is kept: a Message-ID is written by the sender and may carry an address that is no named sender's.
 export const mailId=(mailbox,id)=>mailbox+':'+hash(mailbox+'\0'+id).slice(0,32);
 export const mailTrackers=store=>trackers(store).map(c=>({c,rule:cardRule(c)})).filter(t=>t.rule);

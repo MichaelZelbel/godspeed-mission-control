@@ -119,7 +119,7 @@ A routine does the counting every morning once they said yes. Setting it up is t
 2. **Ask:** `{"type":"tracker-mail","action":"ask","tracker":"<id or name>" or "name":"<new name>","senders":["<address or domain>"],"subjects":["<phrase>","<phrase>"],"mailbox":"gmail","words":"<their message>"}`.
    Its `reply` is one sentence that says what will be counted and how many mails that is in the last
    30 days. Give it exactly as it came (as in 8 above). A tracker that keeps one entry a day, or has
-   more than one column or one that is not a number, cannot count mails; the reply says so, and a new name starts a tracker for them.
+   more than one column or one that is not a number or whose range leaves out 1, cannot count mails; the reply says so, and a new name starts a tracker for them.
 3. **Their yes** comes in a later message: `{"type":"tracker-create","proposal_id":"<id>","words":"<their answer>"}`,
    with `"expected":{"collections/<id>":"<hash>"}` from `tracker-list` when it extends a tracker.
 4. **Changing the rule** is asking again for the same tracker and their yes. **Stopping** is
