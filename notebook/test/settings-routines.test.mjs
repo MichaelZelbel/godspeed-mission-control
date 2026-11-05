@@ -1,4 +1,4 @@
-import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import {fileURLToPath} from 'node:url';import {execFileSync,spawnSync,spawn} from 'node:child_process';
+import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import {fileURLToPath} from 'node:url';import {execFileSync,execFile,spawnSync,spawn} from 'node:child_process';
 import {NativeScheduler,nativeJobs} from '../core/native-scheduler.mjs';import {Store} from '../core/records/store.mjs';import {QueryService} from '../core/query.mjs';import {Domains} from '../core/domains.mjs';
 import {installStarter} from '../core/starter-workspace.mjs';import {readMachineRecord,telegramInHermes,chatAppInHermes} from '../core/starting-routines.mjs';import {runCommand} from '../core/child-process.mjs';
 import {DatabaseSync} from 'node:sqlite';import {CONNECTION_NOTICE_PREFIX,ROUTINES_LABEL} from '../core/connection-names.mjs';
@@ -492,4 +492,188 @@ test('the daily connection check the notebook paused is resumed in any of its th
   const check=job(CONNECTION_JOB);assert.equal(check.enabled,true);assert.ok(!check.paused_at&&check.state!=='paused');
   assert.equal(readNotebookRoutines(store).jobs.find(j=>j.key==='connection-check').paused_by_notebook,false);
  }
+});
+
+// AN ADOPTED MISSION CONTROL (4 November 2026, #225): the one Godspeed did not make from the starter gets
+// the notice sender, and each of its routines is a switch that is off until switched on in Settings.
+const havePython=['python','python3'].some(p=>{try{execFileSync(p,['--version'],{stdio:'ignore'});return true;}catch{return false;}});
+async function adoptedFixture(t,{device='pc'}={}){
+ const root=temporary(t),home=path.join(root,'.hermes-home');
+ fs.mkdirSync(path.join(root,'rules'),{recursive:true});fs.writeFileSync(path.join(root,'AGENTS.md'),'# My own mission control\n');fs.writeFileSync(path.join(root,'rules','my-own-rule.md'),'Mine.\n');
+ installStarter(root);fs.mkdirSync(home,{recursive:true});fs.writeFileSync(path.join(home,'config.yaml'),'model:\n  default: x\n');
+ const store=new Store(root,{device}),hermes=fakeHermes(home),scheduler=new NativeScheduler(store,{home,executable:'hermes',device,run:hermes.run});
+ await store.saveAsync('settings',{id:'installation',owner:device,timezone:'Europe/Berlin',delivery:'notebook'});
+ const tick=async()=>{scheduler.lastTick=0;await scheduler.tick();};
+ const job=name=>hermes.jobs().find(j=>j.name===name);
+ const python=['python3','python'].find(p=>{try{execFileSync(p,['--version'],{stdio:'ignore'});return true;}catch{return false;}});
+ const runScript=name=>execFileSync(python,[path.join(home,'scripts',name)],{cwd:path.join(home,'scripts'),encoding:'utf8',env:{...process.env,PYTHONIOENCODING:'utf-8'},windowsHide:true}).trim();
+ return {root,home,store,hermes,scheduler,tick,job,runScript};
+}
+
+test('an adopted mission control gets the notice sender, keeps the notices queued before it, and says only later ones',{skip:!havePython&&'needs Python'},async t=>{
+ const {root,home,store,hermes,tick,job,runScript}=await adoptedFixture(t),{queueNotice,readNotices}=await import('../core/notices.mjs');
+ queueNotice(store,{id:'before-1',text:'An old notice.'});
+ await tick();
+ assert.deepEqual(hermes.calls.filter(c=>c[1]==='create').map(c=>c[c.indexOf('--name')+1]),['Godspeed notices'],'one job, the sender');
+ const sender=job('Godspeed notices');assert.equal(sender.schedule.expr,'*/15 * * * *');assert.equal(sender.no_agent,true);assert.equal(sender.script,'godspeed-notices.py');assert.equal(sender.workdir,root);assert.equal(sender.enabled,true);
+ assert.ok(!store.get('settings','starting-routines'));assert.equal(fs.existsSync(path.join(root,'coach','weekly-check-in')),false);
+ const old=readNotices(store).find(n=>n.id==='before-1');assert.match(old.not_sent.reason,/before Godspeed began sending/);
+ await tick();assert.equal(hermes.calls.filter(c=>c[1]==='create').length,1,'made once');
+ queueNotice(store,{id:'between-1',text:'Queued after the job was made, before it first ran.'});
+ assert.equal(runScript('godspeed-notices.py'),'','the first run says nothing that was queued before it');
+ assert.match(readNotices(store).find(n=>n.id==='between-1').not_sent.reason,/before Godspeed began sending/);
+ queueNotice(store,{id:'after-1',text:'A new notice.'});
+ assert.equal(runScript('godspeed-notices.py'),'A new notice.');
+ assert.equal(runScript('godspeed-notices.py'),'','the old ones are never said');
+ assert.equal(readNotices(store).length,3,'and are kept');
+ // A producer that read the queue before the first start and wrote it back after brings the old notice back unmarked.
+ const file=path.join(store.state,'notices.json'),queued=JSON.parse(fs.readFileSync(file,'utf8'));
+ queued.notices=queued.notices.map(({not_sent,...n})=>n.id==='before-1'?{...n,at:new Date(Date.now()+60000).toISOString()}:n).filter(n=>n.id==='before-1'||n.id==='after-1');
+ fs.writeFileSync(file,JSON.stringify(queued));queueNotice(store,{id:'later-1',text:'A later notice.'});
+ assert.equal(runScript('godspeed-notices.py'),'A later notice.','the old one is not sent though nothing marks it and its stamp is no older than the start');
+});
+
+test('a notice sender its owner removed from Hermes is not made again',{skip:!havePython&&'needs Python'},async t=>{
+ const {hermes,tick,job}=await adoptedFixture(t),made=()=>hermes.calls.filter(c=>c[1]==='create').length;
+ await tick();assert.equal(made(),1);
+ hermes.write(hermes.jobs().filter(j=>j.name!=='Godspeed notices'));
+ await tick();await tick();
+ assert.equal(job('Godspeed notices'),undefined,'it stays removed');assert.equal(made(),1,'and no create is attempted');
+});
+
+test('a notice queued before the first start stays held after more than 200 later deliveries, and a restored unmarked copy is not sent',{skip:!havePython&&'needs Python'},async t=>{
+ const {store,home,tick,runScript}=await adoptedFixture(t),{queueNotice,readNotices}=await import('../core/notices.mjs');
+ queueNotice(store,{id:'before-1',text:'An old notice.'});await tick();
+ const file=path.join(store.state,'notices.json'),old=JSON.parse(fs.readFileSync(file,'utf8')).notices.map(({not_sent,...n})=>n);
+ assert.equal(runScript('godspeed-notices.py'),'');
+ fs.writeFileSync(path.join(home,'godspeed-notices-said.json'),JSON.stringify({ids:Array.from({length:250},(_,i)=>'later-'+i)}));
+ const queued=JSON.parse(fs.readFileSync(file,'utf8'));queued.notices=old;fs.writeFileSync(file,JSON.stringify(queued));
+ assert.equal(runScript('godspeed-notices.py'),'','the held id is in its own set, which the bounded history never trims');
+ assert.equal(readNotices(store).length,1);
+});
+
+test('a reader that runs while the first-start hold is in progress says no old notice',{skip:!havePython&&'needs Python'},async t=>{
+ const {store,home,tick,runScript}=await adoptedFixture(t),{queueNotice}=await import('../core/notices.mjs'),{setRoutineSwitch}=await import('../core/routine-switches.mjs');
+ queueNotice(store,{id:'before-1',text:'An old notice.'});await tick();
+ await setRoutineSwitch(store,{key:'coach-tick',on:true});await tick();
+ // Many readers start together on the first start: the hold is under one lock, so each one sees it finished.
+ const run=name=>new Promise(resolve=>{const python=['python3','python'].find(p=>{try{execFileSync(p,['--version'],{stdio:'ignore'});return true;}catch{return false;}});execFile(python,[path.join(home,'scripts',name)],{cwd:path.join(home,'scripts'),encoding:'utf8',env:{...process.env,PYTHONIOENCODING:'utf-8'},windowsHide:true},(e,out)=>resolve(out.trim()));});
+ const outs=await Promise.all(['godspeed-notices.py','godspeed-coach-reminders.py','godspeed-notices.py','godspeed-coach-reminders.py'].map(run));
+ assert.deepEqual(outs,['','','','']);
+ assert.equal(runScript('godspeed-notices.py'),'');
+});
+
+test('Settings lists the routines of an adopted mission control, all off, and a starter-born one has no switches',async t=>{
+ const {store,hermes,home}=await adoptedFixture(t),{routineSwitches,setRoutineSwitch,ADOPTED_NOTE,PROVIDER_NOTE}=await import('../core/routine-switches.mjs');
+ const listed=routineSwitches(store,{jobs:hermes.jobs()});
+ assert.equal(listed.note,ADOPTED_NOTE);assert.equal(listed.routines.length,9);
+ assert.ok(listed.routines.every(r=>r.on===false&&r.state==='off'&&r.what));
+ await setRoutineSwitch(store,{key:'connection-check',on:true});
+ assert.equal(routineSwitches(store,{jobs:[]}).routines.find(r=>r.key==='connection-check').state,'waiting');
+ await assert.rejects(setRoutineSwitch(store,{key:'nope',on:true}),/Choose one of the routines/);
+ await assert.rejects(setRoutineSwitch(store,{key:'research',on:'yes'}),/switch it on or off/);
+ assert.equal(routineSwitches(store,{jobs:[],home}).providerNote,null,'no provider set: the wrapper is active, no note');
+ fs.appendFileSync(path.join(home,'config.yaml'),'cron:\n  provider: owners_own\n');
+ assert.equal(routineSwitches(store,{jobs:[],home}).providerNote,PROVIDER_NOTE,'the owner\'s provider stays and the note says what is not delivered');
+ const born=await withGoal(t);
+ assert.equal(routineSwitches(born.store,{jobs:born.hermes.jobs()}),null);
+ await assert.rejects(setRoutineSwitch(born.store,{key:'research',on:true}),/did not make from its starter/);
+});
+
+test('a routine switched on in an adopted mission control is made as on a starter-born one, paused when switched off, and no update switches it off',async t=>{
+ noMail(t);
+ const {root,home,store,hermes,scheduler,tick,job}=await adoptedFixture(t),{setRoutineSwitch,switchedOn}=await import('../core/routine-switches.mjs');
+ await tick();assert.equal(hermes.jobs().length,1,'before any switch only the sender');
+ // The daily connection check, with a messenger connected.
+ fs.writeFileSync(path.join(home,'.env'),'TELEGRAM_BOT_TOKEN=123:abc\n');
+ await tick();assert.equal(job(CONNECTION_JOB),undefined,'off: not made');
+ await setRoutineSwitch(store,{key:'connection-check',on:true});await tick();
+ const check=job(CONNECTION_JOB);assert.equal(check.schedule.expr,'0 5 * * *');assert.equal(check.script,'godspeed-connection-check.py');assert.equal(check.enabled,true);assert.equal(check.workdir,root);
+ // An update puts the starter files again; the switch and the job stay.
+ installStarter(root);
+ const later=new NativeScheduler(store,{home,executable:'hermes',device:'pc',run:hermes.run});later.lastTick=0;await later.tick();
+ assert.equal(switchedOn(store,'connection-check'),true);assert.equal(job(CONNECTION_JOB).enabled,true);
+ await setRoutineSwitch(store,{key:'connection-check',on:false});await tick();assert.equal(job(CONNECTION_JOB).enabled,false,'off pauses it');
+ await setRoutineSwitch(store,{key:'connection-check',on:true});await tick();assert.equal(job(CONNECTION_JOB).enabled,true,'on again resumes it');
+ // A starting routine: the coach's reminders, made with the weekly check-in's clock.
+ await setRoutineSwitch(store,{key:'coach-tick',on:true});await tick();
+ const reminders=job('Coach reminders and habit check');assert.ok(reminders,'made');assert.equal(reminders.script,'godspeed-coach-reminders.py');assert.equal(reminders.deliver,'telegram');assert.equal(reminders.enabled,true);
+ assert.ok(fs.existsSync(path.join(root,'coach','weekly-check-in')));
+ await setRoutineSwitch(store,{key:'coach-tick',on:false});await tick();assert.equal(job('Coach reminders and habit check').enabled,false);
+ await setRoutineSwitch(store,{key:'coach-tick',on:true});await tick();assert.equal(job('Coach reminders and habit check').enabled,true);
+ // A routine the person removed in Hermes stays removed while its switch stays on.
+ hermes.write(hermes.jobs().filter(j=>j.name!=='Coach reminders and habit check'));await tick();assert.equal(job('Coach reminders and habit check'),undefined);
+ assert.equal(hermes.jobs().filter(j=>j.name==='Godspeed notices').length,1);
+ void scheduler;
+});
+
+test('a switched-on coach routine never says a notice queued before the sender started',{skip:!havePython&&'needs Python'},async t=>{
+ const {store,tick,runScript,home}=await adoptedFixture(t),{setRoutineSwitch}=await import('../core/routine-switches.mjs'),{queueNotice}=await import('../core/notices.mjs');
+ queueNotice(store,{id:'before-1',text:'An old notice.'});
+ await setRoutineSwitch(store,{key:'coach-tick',on:true});
+ await tick();
+ assert.ok(fs.existsSync(path.join(home,'scripts','godspeed-coach-reminders.py')));
+ assert.equal(runScript('godspeed-coach-reminders.py'),'','the first reader holds what was queued before it, and says none of it');
+ queueNotice(store,{id:'after-1',text:'A new notice.'});
+ const said=[runScript('godspeed-coach-reminders.py'),runScript('godspeed-notices.py')].filter(Boolean);
+ assert.deepEqual(said,['A new notice.'],'the new one once, the old one never');
+});
+
+test('a switch that the assistant cannot set up yet is saved and the answer says so',async t=>{
+ const root=temporary(t);fs.mkdirSync(path.join(root,'rules'),{recursive:true});fs.writeFileSync(path.join(root,'AGENTS.md'),'# My own mission control\n');installStarter(root);
+ const was=process.env.GODSPEED_ORIGINAL_RUNTIME;process.env.GODSPEED_ORIGINAL_RUNTIME='on';
+ const {createService}=await import('../server/main.mjs');
+ const assistant=path.join(root,'assistant.json');fs.writeFileSync(assistant,JSON.stringify({verified:true,executable:'hermes',home:path.join(root,'.hermes-home')}));
+ const was2=process.env.GODSPEED_ASSISTANT_CONFIG;process.env.GODSPEED_ASSISTANT_CONFIG=assistant;
+ t.after(()=>{if(was2===undefined)delete process.env.GODSPEED_ASSISTANT_CONFIG;else process.env.GODSPEED_ASSISTANT_CONFIG=was2;});
+ const service=await createService({root,device:'pc',port:0});
+ t.after(async()=>{await service.close();if(was===undefined)delete process.env.GODSPEED_ORIGINAL_RUNTIME;else process.env.GODSPEED_ORIGINAL_RUNTIME=was;});
+ service.store.save('settings',{id:'installation',owner:'pc',timezone:'Europe/Berlin',delivery:'notebook'});
+ service.scheduler.followNoticeSender=async()=>{throw Error('Hermes refused the job');};
+ const response=await fetch('http://127.0.0.1:'+service.address.port+'/api/routines/switch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:'connection-check',on:true})});
+ assert.notEqual(response.status,200);
+ const {error}=await response.json();assert.match(error,/Your switch is saved/);assert.match(error,/Hermes refused the job/);
+ const {switchedOn}=await import('../core/routine-switches.mjs');assert.equal(switchedOn(service.store,'connection-check'),true);
+});
+
+test('the first enabled connection check says the failure notice it queued itself, and a routine that fails to be made does not stop the next one',{skip:!havePython&&'needs Python'},async t=>{
+ noMail(t);
+ const {root,home,store,hermes,tick,job,runScript}=await adoptedFixture(t),{setRoutineSwitch}=await import('../core/routine-switches.mjs'),{queueNotice}=await import('../core/notices.mjs');
+ await tick();
+ fs.writeFileSync(path.join(home,'.env'),'TELEGRAM_BOT_TOKEN=123:abc\n');
+ await setRoutineSwitch(store,{key:'connection-check',on:true});await tick();
+ queueNotice(store,{id:'old-1',text:'An old notice.'});
+ const stand=path.join(root,'stand-in-check.mjs');
+ fs.writeFileSync(stand,"import {Store} from '"+new URL('../core/records/store.mjs',import.meta.url).href+"';import {queueNotice} from '"+new URL('../core/notices.mjs',import.meta.url).href+"';queueNotice(new Store(process.env.GODSPEED_WORKSPACE,{device:'pc'}),{id:'"+CONNECTION_NOTICE_PREFIX+"telegram-2026-11-05',text:'Telegram refused your bot key.'});");
+ const file=path.join(home,'scripts','godspeed-routines.json');fs.writeFileSync(file,JSON.stringify({...JSON.parse(fs.readFileSync(file,'utf8')),connection_check:stand}));
+ assert.equal(runScript('godspeed-connection-check.py'),'Telegram refused your bot key.','the first run says its own notice and not the old one');
+ // Two routines switched on, the earlier one refused by Hermes: the later one is still made.
+ const refusing=new NativeScheduler(store,{home,executable:'hermes',device:'pc',run:(...a)=>{const args=a.find(Array.isArray)||[];if(args.includes('create')&&args.includes('godspeed-daily-round-choose.py'))return Promise.reject(Error('refused'));return hermes.run(...a);}});
+ await setRoutineSwitch(store,{key:'decide',on:true});await setRoutineSwitch(store,{key:'due',on:true});
+ const quiet=console.error;console.error=()=>{};
+ try{await assert.rejects(refusing.followSwitches(),/refused/);}finally{console.error=quiet;}
+ assert.ok(job('Deadline reminders'),'the later routine was made');
+});
+
+// Two languages share these: the wrapper files the notebook writes name a routine that the Python
+// runner must dispatch, and both write the same reason into the queue the sender reads.
+test('every routine wrapper names a routine the Python runner dispatches, and both languages write the same not-sent reason',async t=>{
+ const {routineFiles}=await import('../core/starting-routines.mjs'),{NOT_SENT_BEFORE_SENDER}=await import('../core/notices.mjs');
+ const runner=fs.readFileSync(fileURLToPath(new URL('../core/routine-scripts/godspeed_routines.py',import.meta.url)),'utf8');
+ const table=runner.match(/^ROUTINES = \{([\s\S]*?)\}$/m)[1],dispatched=[...table.matchAll(/"([a-z-]+)":/g)].map(m=>m[1]).sort();
+ const root=temporary(t),files=routineFiles({root,home:path.join(root,'.hermes-home'),state:path.join(root,'.godspeed')});
+ const emitted=Object.entries(files).filter(([name])=>name!=='godspeed_routines.py'&&name.endsWith('.py')).map(([,text])=>text.match(/^main\("([a-z-]+)"\)$/m)[1]).sort();
+ assert.deepEqual([...new Set(emitted)],dispatched);
+ assert.equal(runner.match(/^NOT_SENT_BEFORE_SENDER = "(.*)"$/m)[1],NOT_SENT_BEFORE_SENDER);
+});
+
+test('both languages write the same not_sent object: exactly a reason and an ISO time',{skip:!havePython&&'needs Python'},async t=>{
+ const {store,tick,runScript}=await adoptedFixture(t),{queueNotice,readNotices,holdQueuedNotices}=await import('../core/notices.mjs');
+ const shape=n=>{assert.deepEqual(Object.keys(n.not_sent).sort(),['at','reason']);assert.equal(typeof n.not_sent.reason,'string');assert.match(n.not_sent.at,/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/);};
+ await tick();
+ queueNotice(store,{id:'node-1',text:'One.'});holdQueuedNotices(store);
+ const fromNode=readNotices(store)[0];shape(fromNode);
+ queueNotice(store,{id:'python-1',text:'Two.'});runScript('godspeed-notices.py');
+ const py=readNotices(store).find(n=>n.id==='python-1');shape(py);
+ assert.equal(py.not_sent.reason,fromNode.not_sent.reason);
 });

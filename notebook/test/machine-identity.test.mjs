@@ -47,7 +47,10 @@ const shared=(root,device,owner='local')=>{
  if(!store.get('notes','knee'))store.save('notes',{id:'knee',title:'Knee appointment',content:'Orthopaedist on Monday at 9, bring the MRI.'});
  const cron=[];const scheduler=new NativeScheduler(store,{executable:'hermes',home:root,device,run:async(e,a)=>{cron.push(a.join(' '));return {stdout:''};}});
  let calls=0;const processing=new NoteProcessing({store,query:new QueryService(store),domains:{provider:()=>{},invoke:async()=>{calls++;return {processed:1};}},device});
- return {store,scheduler,processing,cron,calls:()=>calls,backup:new BackupSchedule({store,runner:{run:async()=>({})},device})};
+ // ticks: Hermes' own tick, which runs the routines. These folders have no manual of their own, so they
+ // are not starter-made, and the machine that runs the routines also asks Hermes to make the notice
+ // sender (#225); that call is in `cron` too, so the machine that does not must make no call at all.
+ return {store,scheduler,processing,cron,ticks:()=>cron.filter(c=>c==='cron tick').length,calls:()=>calls,backup:new BackupSchedule({store,runner:{run:async()=>({})},device})};
 };
 
 test('one PC upgrading takes over the routines the old shared name ran',async t=>{
@@ -56,7 +59,7 @@ test('one PC upgrading takes over the routines the old shared name ran',async t=
  assert.equal(await claimLegacyOwner(desktop.store,{id:'desktop-3f9a1c2e',generated:true}),true);
  assert.equal(desktop.store.get('settings','installation').owner,'desktop-3f9a1c2e');assert.equal(desktop.store.get('jobs','goal-work').owner,'desktop-3f9a1c2e');
  await desktop.scheduler.tick();await desktop.processing.tick({now:Date.now()+1000});
- assert.equal(desktop.cron.length,1);assert.equal(desktop.calls(),1);
+ assert.equal(desktop.ticks(),1);assert.equal(desktop.calls(),1);
  const at3=Date.parse(new Date().toISOString().slice(0,10)+'T12:00:00Z');assert.equal(desktop.backup.due(at3),true);
 });
 
@@ -65,7 +68,7 @@ test('with two PCs, the first to start runs the routines and the other does not'
  assert.equal(await claimLegacyOwner(desktop.store,{id:'desktop-3f9a1c2e',generated:true}),true);
  assert.equal(await claimLegacyOwner(laptop.store,{id:'laptop-77aa01bc',generated:true}),false,'the second machine sees an owner that is not its own');
  for(const m of [desktop,laptop]){await m.scheduler.tick();await m.processing.tick({now:Date.now()+1000});}
- assert.equal(desktop.cron.length,1);assert.equal(laptop.cron.length,0);
+ assert.equal(desktop.ticks(),1);assert.equal(laptop.cron.length,0,'the other machine asks its Hermes for nothing');
  assert.equal(desktop.calls(),1);assert.equal(laptop.calls(),0,'the note is processed once');
  const noon=Date.parse(new Date().toISOString().slice(0,10)+'T12:00:00Z');assert.equal(laptop.backup.due(noon),false);
 });
