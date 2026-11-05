@@ -162,6 +162,9 @@ fs.cpSync(path.join(kit,'notebook','assistant-files','godspeed-buttons'),path.jo
 fs.cpSync(path.join(kit,'notebook','assistant-files','godspeed-reply'),path.join(home,'plugins','godspeed-reply'),{recursive:true,filter:source=>!/__pycache__/.test(source)});
 atomic(path.join(home,'plugins','godspeed-reply','mission-control.txt'),root+'\n');
 atomic(path.join(home,'plugins','godspeed-reply','model-command.txt'),modelCommand.command+'\n');
+// THE NIGHT CHAT TIDY-UP'S COMMAND (assistant-files/godspeed-chat-tidy): /godspeed-chat-tidy runs the
+// gateway's own /compress for the owner's chat, which the night routine dispatches.
+fs.cpSync(path.join(kit,'notebook','assistant-files','godspeed-chat-tidy'),path.join(home,'plugins','godspeed-chat-tidy'),{recursive:true,filter:source=>!/__pycache__/.test(source)});
 let text=fs.existsSync(file)?fs.readFileSync(file,'utf8').replace(/^\uFEFF/,''):`terminal:\n  cwd: ${JSON.stringify(root)}\nskills:\n  external_dirs: [${JSON.stringify(path.join(root,'skills'))}]\nmemory:\n  memory_enabled: false\n`;
 // WHERE A SKILL THE OWNER ASKS FOR IN A CHAT IS MADE. external_dirs above only lets Hermes read the
 // mission control's skills; it creates a new one in its own home unless skills.create_dir names
@@ -171,11 +174,11 @@ let text=fs.existsSync(file)?fs.readFileSync(file,'utf8').replace(/^\uFEFF/,''):
 // only when this file is made: an install that already had a config.yaml would never get it
 // otherwise, and an update runs this.
 text=setConfigValue(text,['skills','create_dir'],JSON.stringify(path.join(root,'skills')));
-if(!/^plugins:/m.test(text))text+='\nplugins:\n  enabled: ["godspeed-coach", "godspeed-journal", "godspeed-headache", "godspeed-charm", "godspeed-context", "godspeed-reply"]\n';
+if(!/^plugins:/m.test(text))text+='\nplugins:\n  enabled: ["godspeed-coach", "godspeed-journal", "godspeed-headache", "godspeed-charm", "godspeed-context", "godspeed-reply", "godspeed-chat-tidy"]\n';
 else{
  const block=text.match(/^plugins:[^\n]*\n(?:[ \t]+[^\n]*\n|\n)*/m)?.[0]||'';
  const disabled=block.match(/  disabled:\s*\[([^\]]*)\]/)?.[1]||'';
- const names=['godspeed-coach','godspeed-journal','godspeed-headache','godspeed-charm','godspeed-context','godspeed-reply'].filter(n=>!disabled.includes(n));
+ const names=['godspeed-coach','godspeed-journal','godspeed-headache','godspeed-charm','godspeed-context','godspeed-reply','godspeed-chat-tidy'].filter(n=>!disabled.includes(n));
  let updated=block;
  if(/  enabled:\s*\[([^\]]*)\]/.test(block))updated=block.replace(/  enabled:\s*\[([^\]]*)\]/,(_m,old)=>'  enabled: ['+[old.trim(),...names.filter(n=>!old.includes(n)).map(n=>JSON.stringify(n))].filter(Boolean).join(', ')+']');
  else if(/^  enabled:\s*\n/m.test(block))updated=block.replace(/^  enabled:\s*\n((?:    - [^\n]*\n)*)/m,(_m,old)=>'  enabled:\n'+old+names.filter(n=>!old.includes(n)).map(n=>'    - '+JSON.stringify(n)+'\n').join(''));

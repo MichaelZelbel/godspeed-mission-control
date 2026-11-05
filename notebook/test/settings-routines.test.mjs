@@ -279,39 +279,31 @@ test('the daily connection check\'s script says what the check queued, once',{sk
  assert.equal(run().trim(),'','said once');
 });
 
-// THE NIGHT CHAT TIDY-UP IS MADE FOR NO INSTALL (27 October 2026, notebook-routines.mjs says why).
-test('no install gets the night chat tidy-up, and one the notebook made before is taken off again',async t=>{
+// THE NIGHT CHAT TIDY-UP IS GIVEN TO EVERY INSTALL WITH A CHAT APP (notebook-routines.mjs).
+test('an install with a chat app connected gets the night chat tidy-up at 01:30, once; one without gets none',async t=>{
  const {store,home,hermes,scheduler}=await withGoal(t);
  const mine=()=>hermes.jobs().filter(j=>j.name===CHAT_TIDY_JOB);
- fs.writeFileSync(path.join(home,'.env'),'TELEGRAM_BOT_TOKEN=123:abc\nTELEGRAM_HOME_CHANNEL=42\n');
- assert.equal(chatAppInHermes(home),true,'a chat app is connected');
  scheduler.lastTick=0;await scheduler.tick().catch(()=>null);
- assert.equal(mine().length,0,'and still no night tidy-up is made');
+ assert.equal(chatAppInHermes(home),false);
+ assert.equal(mine().length,0,'no chat app, no routine');
  assert.ok(!readNotebookRoutines(store).jobs.some(j=>j.key==='chat-tidy'));
- // What the notebook of main between 26 and 27 October 2026 left: the routine, and this machine's
- // record of it. Beside it, a routine of the owner's by the same name under a script of their own.
- const made={id:'tidy-1',name:CHAT_TIDY_JOB,schedule:{kind:'cron',expr:'30 1 * * *'},script:CHAT_TIDY_SCRIPT,no_agent:true,deliver:'local',enabled:true};
- const theirs={id:'theirs-1',name:CHAT_TIDY_JOB,script:'my-own-tidy.py',deliver:'local',enabled:true};
- hermes.write([...hermes.jobs(),made,theirs]);
- rememberNotebookRoutine(store,{id:'tidy-1',key:'chat-tidy',name:CHAT_TIDY_JOB,what:'Every night at 01:30 ...'});
- const others=hermes.jobs().filter(j=>j.name!==CHAT_TIDY_JOB).map(j=>j.id);
+ fs.writeFileSync(path.join(home,'.env'),'TELEGRAM_BOT_TOKEN=123:abc\nTELEGRAM_HOME_CHANNEL=42\n');
  scheduler.lastTick=0;await scheduler.tick().catch(()=>null);
- assert.deepEqual(mine().map(j=>j.id),['theirs-1'],"the notebook's routine is gone, the owner's own stays");
- assert.deepEqual(hermes.jobs().filter(j=>j.name!==CHAT_TIDY_JOB).map(j=>j.id),others,'every other routine stays');
- assert.ok(!readNotebookRoutines(store).jobs.some(j=>j.key==='chat-tidy'),'its record is gone too');
- assert.ok(hermes.calls.some(c=>c[1]==='remove'&&c[2]==='tidy-1'),"removed through Hermes' own command");
- // Found by its name and script alone, when this machine kept no record of it.
- hermes.write([...hermes.jobs(),{...made,id:'tidy-2'}]);
- assert.deepEqual(await scheduler.removeChatTidy(),['tidy-2']);
- assert.deepEqual(await scheduler.removeChatTidy(),[],'nothing left to take off');
- // A record whose routine the person had removed already stays as it is.
- rememberNotebookRoutine(store,{id:'tidy-3',key:'chat-tidy',name:CHAT_TIDY_JOB,what:'x'});
- assert.deepEqual(await scheduler.removeChatTidy(),[]);
- assert.ok(readNotebookRoutines(store).jobs.some(j=>j.id==='tidy-3'));
+ assert.equal(mine().length,1);
+ assert.equal(mine()[0].schedule.expr,'30 1 * * *');
+ assert.equal(mine()[0].script,CHAT_TIDY_SCRIPT);assert.equal(mine()[0].no_agent,true);
+ assert.equal(mine()[0].deliver,'local','its results are never delivered to the chat');
+ assert.ok(readNotebookRoutines(store).jobs.some(j=>j.key==='chat-tidy'&&j.id===mine()[0].id));
+ scheduler.lastTick=0;await scheduler.tick().catch(()=>null);
+ assert.equal(mine().length,1,'made once');
+ assert.equal(mine()[0].deliver,'local','and still not moved to Telegram by the delivery follow-up');
+ // Removed by the person: it stays removed.
+ hermes.write(hermes.jobs().filter(j=>j.name!==CHAT_TIDY_JOB));
+ scheduler.lastTick=0;await scheduler.tick().catch(()=>null);
+ assert.equal(mine().length,0);
 });
 
-// What the night chat tidy-up will count as a chat app (starting-routines.mjs, chatAppInHermes),
-// kept for the release that brings it back.
+// What the night chat tidy-up will count as a chat app (starting-routines.mjs, chatAppInHermes).
 test("a chat app is any app the gateway routes the owner's own chat through, never a group or the terminal",async t=>{
  const {home}=await withGoal(t);
  assert.equal(chatAppInHermes(home),false,'no chat app at all');
