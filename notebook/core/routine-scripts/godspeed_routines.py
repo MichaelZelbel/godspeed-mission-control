@@ -1175,6 +1175,10 @@ def connection_check(c):
     for the next successful run."""
     day = today(c)
     env = environment(c, day)
+    try:
+        held_ids(c)  # the hold must precede the check's own notices, which are not older than the sender
+    except Exception:
+        fail("The daily connection check could not run.")
     args = [c["node"], c["connection_check"]]
     if c.get("hermes"):
         args += ["--hermes", c["hermes"]]

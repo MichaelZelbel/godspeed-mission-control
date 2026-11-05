@@ -226,8 +226,9 @@ export class NativeScheduler{
  // are made by their own follow methods. Off pauses the routine and keeps its record; on again resumes it.
  async followSwitches(){
   if(!this.switchesReady())return [];
-  const root=this.store.root,changed=[];
+  const root=this.store.root,changed=[],failures=[];
   for(const routine of switchable()){
+   try{
    const on=switchedOn(this.store,routine.key),starting=STARTING_ROUTINES.find(r=>r.key===routine.key);
    let entry=readNotebookRoutines(this.store).jobs.find(j=>j.key===routine.key);
    const jobs=hermesJobs(this.home),job=entry&&jobs.find(j=>j.id===entry.id);
@@ -258,7 +259,9 @@ export class NativeScheduler{
    }
    const [made]=await this.createStartingRoutines(delivery,[starting]);
    rememberNotebookRoutine(this.store,made);changed.push(made.id);
+   }catch(error){console.error('Routine '+routine.key+' could not follow its switch: '+(error?.message||error));failures.push(error);}
   }
+  if(failures.length)throw failures[0];
   return changed;
  }
  // THE JOURNAL'S CHECK-INS (notebook-routines.mjs): one routine while the person has any of them

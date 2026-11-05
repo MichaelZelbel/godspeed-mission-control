@@ -592,6 +592,25 @@ test('a switch that the assistant cannot set up yet is saved and the answer says
  const {switchedOn}=await import('../core/routine-switches.mjs');assert.equal(switchedOn(service.store,'connection-check'),true);
 });
 
+test('the first enabled connection check says the failure notice it queued itself, and a routine that fails to be made does not stop the next one',{skip:!havePython&&'needs Python'},async t=>{
+ noMail(t);
+ const {root,home,store,hermes,tick,job,runScript}=await adoptedFixture(t),{setRoutineSwitch}=await import('../core/routine-switches.mjs'),{queueNotice}=await import('../core/notices.mjs');
+ await tick();
+ fs.writeFileSync(path.join(home,'.env'),'TELEGRAM_BOT_TOKEN=123:abc\n');
+ await setRoutineSwitch(store,{key:'connection-check',on:true});await tick();
+ queueNotice(store,{id:'old-1',text:'An old notice.'});
+ const stand=path.join(root,'stand-in-check.mjs');
+ fs.writeFileSync(stand,"import {Store} from '"+new URL('../core/records/store.mjs',import.meta.url).href+"';import {queueNotice} from '"+new URL('../core/notices.mjs',import.meta.url).href+"';queueNotice(new Store(process.env.GODSPEED_WORKSPACE,{device:'pc'}),{id:'"+CONNECTION_NOTICE_PREFIX+"telegram-2026-11-05',text:'Telegram refused your bot key.'});");
+ const file=path.join(home,'scripts','godspeed-routines.json');fs.writeFileSync(file,JSON.stringify({...JSON.parse(fs.readFileSync(file,'utf8')),connection_check:stand}));
+ assert.equal(runScript('godspeed-connection-check.py'),'Telegram refused your bot key.','the first run says its own notice and not the old one');
+ // Two routines switched on, the earlier one refused by Hermes: the later one is still made.
+ const refusing=new NativeScheduler(store,{home,executable:'hermes',device:'pc',run:(...a)=>{const args=a.find(Array.isArray)||[];if(args.includes('create')&&args.includes('godspeed-daily-round-choose.py'))return Promise.reject(Error('refused'));return hermes.run(...a);}});
+ await setRoutineSwitch(store,{key:'decide',on:true});await setRoutineSwitch(store,{key:'due',on:true});
+ const quiet=console.error;console.error=()=>{};
+ try{await assert.rejects(refusing.followSwitches(),/refused/);}finally{console.error=quiet;}
+ assert.ok(job('Deadline reminders'),'the later routine was made');
+});
+
 // Two languages share these: the wrapper files the notebook writes name a routine that the Python
 // runner must dispatch, and both write the same reason into the queue the sender reads.
 test('every routine wrapper names a routine the Python runner dispatches, and both languages write the same not-sent reason',async t=>{
@@ -602,4 +621,15 @@ test('every routine wrapper names a routine the Python runner dispatches, and bo
  const emitted=Object.entries(files).filter(([name])=>name!=='godspeed_routines.py'&&name.endsWith('.py')).map(([,text])=>text.match(/^main\("([a-z-]+)"\)$/m)[1]).sort();
  assert.deepEqual([...new Set(emitted)],dispatched);
  assert.equal(runner.match(/^NOT_SENT_BEFORE_SENDER = "(.*)"$/m)[1],NOT_SENT_BEFORE_SENDER);
+});
+
+test('both languages write the same not_sent object: exactly a reason and an ISO time',{skip:!havePython&&'needs Python'},async t=>{
+ const {store,tick,runScript}=await adoptedFixture(t),{queueNotice,readNotices,holdQueuedNotices}=await import('../core/notices.mjs');
+ const shape=n=>{assert.deepEqual(Object.keys(n.not_sent).sort(),['at','reason']);assert.equal(typeof n.not_sent.reason,'string');assert.match(n.not_sent.at,/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/);};
+ await tick();
+ queueNotice(store,{id:'node-1',text:'One.'});holdQueuedNotices(store);
+ const fromNode=readNotices(store)[0];shape(fromNode);
+ queueNotice(store,{id:'python-1',text:'Two.'});runScript('godspeed-notices.py');
+ const py=readNotices(store).find(n=>n.id==='python-1');shape(py);
+ assert.equal(py.not_sent.reason,fromNode.not_sent.reason);
 });
