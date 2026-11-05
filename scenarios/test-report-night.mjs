@@ -171,12 +171,51 @@ test("the verdict's needs and RESULTS name the same scenarios, and every scenari
 // invoked). They do not interpret shell, so a deliberate rewrite that defeats them is a review
 // matter, not something these tests can see.
 //
-// The workflow is read with the notebook's own YAML module (the one the readable files use), so
-// jobs, steps, `needs`, `run` and `shell` come out as YAML defines them: a folded `>` scalar is
-// joined, a literal `|` scalar is kept. A `run` value is then made one logical script: shell comment
+// The jobs the guards read are parsed with the notebook's own YAML module (the one the readable
+// files use), so jobs, steps, `needs`, `run` and `shell` come out as YAML defines them: a folded
+// `>` scalar is joined, a literal `|` scalar is kept. ACCEPTED SUBSET: that reader takes no
+// anchors, aliases or tags, and it is not given authority over the whole workflow. The text is
+// split into its top-level `jobs:` entries by indentation and ONLY the jobs a guard needs are
+// parsed, each on its own; a job with no scenario invocation (the stage's own scenarios/stage-for-run.sh is not one) is skipped unparsed. An anchor,
+// alias or tag inside a job a guard reads fails that check with a message saying so; elsewhere
+// in the workflow they are fine. A `run` value is then made one logical script: shell comment
 // lines are left out, a backslash at a line end and a pipe at a line end join the next line.
 import { parse as parseYaml } from '../notebook/core/records/yaml.mjs';
-const loadWorkflow = (text) => parseYaml(text);
+function splitJobs(text) {
+  const lines = text.split('\n');
+  const start = lines.findIndex((l) => /^jobs:[ \t]*$/.test(l));
+  const blocks = {};
+  if (start < 0) return blocks;
+  let name = null;
+  for (let i = start + 1; i < lines.length; i++) {
+    const l = lines[i];
+    if (/^\S/.test(l) && !l.startsWith('#')) break;
+    const h = l.match(/^ {2}([A-Za-z0-9_-]+):[ \t]*$/);
+    if (h) { name = h[1]; blocks[name] = []; continue; }
+    if (name && l.trim() !== '' && !l.trim().startsWith('#') && /^ {0,2}\S/.test(l)) { name = null; continue; }
+    if (name) blocks[name].push(l);
+  }
+  return Object.fromEntries(Object.entries(blocks).map(([k, v]) => [k, v.join('\n')]));
+}
+// names: the jobs to parse; omitted: every job whose text invokes a scenario.
+// A scenario invocation: scenarios/<name>.sh, not the stage's own helper scenarios/stage-for-run.sh.
+const SCENARIO_RUN = /scenarios\/(?!stage-for-run\.sh)[A-Za-z0-9_-]+\.sh/;
+const loadWorkflow = (text, names) => {
+  const blocks = splitJobs(text);
+  const jobs = {};
+  for (const [name, body] of Object.entries(blocks)) {
+    if (names ? !names.includes(name) : !SCENARIO_RUN.test(body)) continue;
+    try {
+      jobs[name] = parseYaml(`jobs:
+  ${name}:
+${body}
+`).jobs[name];
+    } catch (e) {
+      assert.fail(`${name}: the workflow guards read job YAML without anchors, aliases or tags (the notebook's YAML reader); expand them in this job or extend the guard (${e.message})`);
+    }
+  }
+  return { jobs };
+};
 const stepsOfJob = (doc, job) => {
   assert.ok(doc.jobs && doc.jobs[job], `job ${job} not found`);
   return doc.jobs[job].steps || [];
@@ -195,7 +234,7 @@ const needsList = (job) => [].concat(job.needs ?? []).map(String);
 // argument of another command such as echo. A job that loses one of these runs another version's
 // scenario, silently.
 function checkStageHandoff(text, job) {
-  const doc = loadWorkflow(text);
+  const doc = loadWorkflow(text, [job]);
   assert.ok(needsList(doc.jobs[job] || {}).includes('stage'), `${job}: needs does not include stage`);
   const steps = stepsOfJob(doc, job);
   const checkout = steps.find((s) => String(s.uses).startsWith('actions/checkout@v4'));
@@ -318,4 +357,18 @@ test('shell-bash fixtures: block, folded and continued pipes without shell: bash
   }
   const commentOnly = fixtureJob({ steps: `      - name: go\n        run: |\n          # bash scenarios/demo.sh | tee x\n          echo hi\n` });
   assert.equal(pipedSteps(loadWorkflow(commentOnly)).length, 0);
+});
+
+// Accepted subset: an anchor in a job the guards do not read does not matter; one inside a job
+// they read fails with a message that says what to do.
+test('anchor fixtures: an anchored stage job beside correct jobs passes; an alias in a read job fails clearly', () => {
+  const anchored = fixtureJob({ steps: ONE }).replace('stage:\n    runs-on: x', 'stage:\n    runs-on: &scenario_runner ubuntu-24.04');
+  assert.ok(anchored.includes('&scenario_runner'));
+  checkStageHandoff(anchored, 'demo');
+  assert.equal(pipedSteps(loadWorkflow(anchored)).length, 1);
+  const aliased = anchored.replace('  demo:\n    needs: stage\n    runs-on: x', '  demo:\n    needs: stage\n    runs-on: *scenario_runner');
+  assert.ok(aliased.includes('*scenario_runner'));
+  const msg = /demo: the workflow guards read job YAML without anchors, aliases or tags \(the notebook's YAML reader\); expand them in this job or extend the guard/;
+  assert.throws(() => checkStageHandoff(aliased, 'demo'), msg);
+  assert.throws(() => pipedSteps(loadWorkflow(aliased)), msg);
 });
