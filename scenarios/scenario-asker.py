@@ -35,6 +35,20 @@ def the_command():
     return shutil.which("godspeed-step", path=os.pathsep.join([os.path.join(home, "bin"), os.environ.get("PATH", "")]))
 
 
+def record(message):
+    """Records the words as the notebook's own routine runner records a script routine's own words
+    (godspeed_routines.py, record): through background-report.mjs. Without that record the delivery
+    that follows has nothing to make answerable, and the question goes out with no buttons."""
+    home = os.environ.get("HERMES_HOME", "")
+    with open(os.path.join(home, "plugins", "godspeed_notebook", "report.json"), encoding="utf-8") as f:
+        wiring = json.load(f)
+    done = subprocess.run([wiring["node"], wiring["script"], "record", "--godspeed", wiring["root"], "--home", home,
+                           "--routine", "Scenario asker", "--delivery", "telegram"],
+                          input=message, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=120)
+    if done.returncode != 0:
+        raise RuntimeError((done.stderr or done.stdout).strip()[:300] or "the notebook refused the record")
+
+
 def main():
     command = the_command()
     if command is None:
@@ -55,6 +69,11 @@ def main():
         except ValueError:
             message = done.stdout.strip()
         if message:
+            try:
+                record(message)
+            except Exception as error:
+                print("the question could not be recorded in the notebook: %s" % error, file=sys.stderr)
+                return 1
             print(message)
     return 0
 

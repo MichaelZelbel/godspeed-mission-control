@@ -2936,6 +2936,28 @@ else
   bad "install_the_line_of_into read: $(cat "$TMP/sfr-asked")"
 fi
 
+# ================================================================ no default AI, never OpenRouter
+# On 5 November 2026 the checks fell back to an OpenRouter model nobody had set and ran out of the
+# owner's credit. A scenario that needs an AI now fails in a plain sentence when the address or the
+# model is missing, and when the address is OpenRouter's.
+section "the AI settings: no default, never OpenRouter"
+ai_run() { # <url> <model>
+  GODSPEED_SCENARIO_AI_KEY=k GODSPEED_SCENARIO_AI_URL=$1 GODSPEED_SCENARIO_AI_MODEL=$2 SCENARIO=ai-settings-test     bash -c '. "$1/scenarios/scenario-lib.sh"; need_the_ai_key "a test"; echo "went-on"' _ "$ROOT" 2>&1
+}
+AI_OUT=$(ai_run '' 'claude-haiku-4-5')
+case $AI_OUT in *GODSPEED_SCENARIO_AI_URL*'is not set'*) ok "no address: FAIL naming GODSPEED_SCENARIO_AI_URL" ;; *) bad "no address was not refused ($AI_OUT)" ;; esac
+AI_OUT=$(ai_run 'https://api.anthropic.com/v1' '')
+case $AI_OUT in *GODSPEED_SCENARIO_AI_MODEL*'is not set'*) ok "no model: FAIL naming GODSPEED_SCENARIO_AI_MODEL" ;; *) bad "no model was not refused ($AI_OUT)" ;; esac
+AI_OUT=$(ai_run 'https://openrouter.ai/api/v1' 'claude-haiku-4-5')
+case $AI_OUT in *openrouter.ai*'must never spend'*) ok "an OpenRouter address: FAIL" ;; *) bad "an OpenRouter address was not refused ($AI_OUT)" ;; esac
+AI_OUT=$(ai_run 'https://api.anthropic.com/v1' 'claude-haiku-4-5')
+case $AI_OUT in *went-on*) ok "Anthropic's address and a model go on" ;; *) bad "a good setting was refused ($AI_OUT)" ;; esac
+if grep -vE '^[[:space:]]*#' "$ROOT/scenarios/scenario-lib.sh" | grep -qE 'sonnet|openrouter\.ai/api'; then
+  bad "scenario-lib.sh still names a default model or an OpenRouter address"
+else
+  ok "scenario-lib.sh names no default model and no OpenRouter address"
+fi
+
 # ================================================================ the night's report
 # report-night.mjs opens, comments on and closes the issues of a failed night; its own tests stand a
 # fake GitHub in for the real one.
