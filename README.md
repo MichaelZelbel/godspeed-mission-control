@@ -348,7 +348,7 @@ The notebook no longer calls every installation a test installation. Its unavail
 
 ## New on 9 October 2026, for the book's second edition
 
-- Your first goal starts five routines by itself: the daily round's two (one picks the day's work, one does it), deadline reminders, and a weekly check-in about the goal on Sundays with the coach's reminders. Later releases added the nightly goal research and the preparation of coaching talks, so a first goal starts seven today.
+- Your first goal starts five routines by itself: the daily round's two (one picks the day's work, one does it), deadline reminders, and a weekly check-in about the goal on Sundays with the coach's reminders. Later releases added the nightly goal research and the preparation of coaching talks, and a nightly cleanup of Godspeed's old working files, so a first goal starts eight today.
 - The notebook keeps the people, facts and events you tell it about, one page per person. Each kind of fact has one fixed name, and a newer value ends the older one.
 - The note graph is back, worked out from your notes when you open it.
 - A computer can connect its own GitHub copy from Settings, and mail works on a computer too.

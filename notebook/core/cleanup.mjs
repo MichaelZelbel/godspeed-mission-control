@@ -92,8 +92,9 @@ export function nightlyCleanup({root,home,now=Date.now(),keepDays=KEEP_DAYS,free
  const cutoff=now-keepDays*86400000,before=free(root),report=[];
  for(const place of places({root,home})){
   const freed={files:0,bytes:0};
-  try{place.sweep(cutoff,freed);}catch{}
-  report.push({place:place.name,...freed});
+  let failed=false;
+  try{place.sweep(cutoff,freed);}catch{failed=true;}
+  report.push({place:place.name,...freed,failed});
  }
  return {places:report,disk_before:before,disk_after:free(root)};
 }
@@ -101,7 +102,7 @@ export function nightlyCleanup({root,home,now=Date.now(),keepDays=KEEP_DAYS,free
 const megabytes=bytes=>bytes===null?'unknown':(bytes/1048576).toFixed(1)+' MB';
 export function cleanupLog(result){
  return [
-  ...result.places.map(p=>`${p.place}: freed ${megabytes(p.bytes)} in ${p.files} file${p.files===1?'':'s'}`),
+  ...result.places.map(p=>`${p.place}: freed ${megabytes(p.bytes)} in ${p.files} file${p.files===1?'':'s'}${p.failed?' (stopped early: a file or folder could not be read)':''}`),
   `disk free: ${megabytes(result.disk_before)} before, ${megabytes(result.disk_after)} after`,
  ].join('\n');
 }

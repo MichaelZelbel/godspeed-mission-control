@@ -3,11 +3,11 @@
 ## The routines your first goal starts
 
 The first time you give your mission control a goal, in the notebook's "Start with one goal" form
-or in the chat, it starts seven routines on the computer that runs your routines, on your own
+or in the chat, it starts eight routines on the computer that runs your routines, on your own
 clock: the nightly goal research, the daily round's two, deadline reminders, the weekly check-in
-and the coach's reminders, and the coaching talk preparation. It does this once on each computer
+and the coach's reminders, the coaching talk preparation, and the nightly cleanup. It does this once on each computer
 that runs your routines: if you add a server later and let it run the routines, the server gets
-the same seven, and your computer's stop. A routine you
+the same eight, and your computer's stop. A routine you
 later remove stays removed. A computer whose assistant already ran routines of its own before this
 mission control came, or for another folder, gets none of these; a one-time reminder, and a
 routine you asked for here, such as a morning brief, do not count.
@@ -111,13 +111,27 @@ Last checked: 2026-10-09, both schedules run once by a real Hermes on a test com
 so both stayed quiet); the talk waiting in the chat tested without Telegram. A talk opened by a
 model is still to be watched.
 
+### Nightly cleanup
+
+Does: removes the assistant's old request dumps and session transcripts (except those still listed in
+its sessions.json) and the old run files of your routines (routines/research, work, next-action and
+coach-prep), once they have not been touched for 30 days. It never follows a link or leaves the
+file system, and touches nothing else: no database, configuration, skill, note or backup.
+Rhythm: every day at 02:45 your time. It runs on every installation.
+Lands: nowhere; it says nothing and only writes what it freed, per place, and the disk before and
+after to the routine's log.
+Lives: Hermes' schedule on the computer that runs your routines.
+Off-switch: Pause "Nightly cleanup" under Settings > Routines.
+Last checked: 2026-11-05, its script run by Python against a throwaway mission control in the
+notebook's tests; not yet watched on a real server.
+
 ## Notebook service and private file synchronization
 
 The installer can start a separate notebook service at sign-in on Windows or through the isolated Docker Compose project on a server. Its supervisor checks the notebook identity and scheduler progress, restarts only its own unhealthy notebook process, and stops retrying after five failed restarts. The installed stop command or stopping the separate Compose project turns it off.
 
 Once private file synchronization is explicitly configured, the notebook checks it once a minute and after a durable file change. Automatic, manual and notebook connector requests share one synchronization worker. Slow Git network requests run in that worker without holding the local writer lock. Local commits and incoming changes retain the lock, and edits made during upload remain pending for the next cycle. Stopping the notebook terminates the synchronization process tree. File conflicts keep the original and both edited versions; a binary file retains exact bytes and can be resolved by choosing a saved version.
 
-These are installation mechanisms, not adopted personal goals. Personal routines are the seven above, which your first goal starts, and the ones you add in the chat or under Settings > Routines; their owner, next run, last run and pause state remain visible there. No routine is claimed tested merely because this description is packaged.
+These are installation mechanisms, not adopted personal goals. Personal routines are the eight above, which your first goal starts, and the ones you add in the chat or under Settings > Routines; their owner, next run, last run and pause state remain visible there. No routine is claimed tested merely because this description is packaged.
 
 ## Goal decisions and approved local work
 

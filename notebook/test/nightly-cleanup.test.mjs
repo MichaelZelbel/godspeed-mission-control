@@ -50,3 +50,14 @@ test('a link is never followed, and a damaged sessions.json leaves its folder al
  assert.ok(!gone(outside));assert.ok(!gone(old));assert.ok(fs.lstatSync(path.join(sessions,'session_20260101_link.json')).isSymbolicLink());
  assert.ok(!gone(dump));
 });
+
+test('a place that cannot be read is reported as stopped early, and the other places are still cleaned',t=>{
+ const {root,home}=fixture(t);
+ const old=make(path.join(root,'routines','work','2026-01-01','a.txt'),40);
+ const real=fs.readdirSync;
+ t.mock.method(fs,'readdirSync',(p,...rest)=>{if(String(p).endsWith(path.join('routines','research')))throw Object.assign(new Error('io'),{code:'EIO'});return real(p,...rest);});
+ make(path.join(root,'routines','research','2026-01-01','b.txt'),40);
+ const result=nightlyCleanup({root,home,now:NOW});
+ assert.ok(gone(old));
+ assert.match(cleanupLog(result),/routines\/research: freed .*stopped early/);
+});
