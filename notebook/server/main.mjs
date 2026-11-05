@@ -256,6 +256,8 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         try{
           if(menerioImport.mutating)return send(res,503,{error:'Try again soon'});
           let upload;try{upload=JSON.parse(await body(req,UPLOAD_LIMIT));}catch(error){return send(res,error.message==='Request is too large'?413:400,{error:error.message==='Request is too large'?'Too large':'Not JSON'});}
+          // A renewal while the body was on its way revokes this address at once, so the token is checked again before anything is stored.
+          if(!tokenMatches(store.state,route.slice(8)))return send(res,404,{error:'Not found'});
           const data=upload?.data;
           if(!data||typeof data!=='object'||Array.isArray(data)||[data.metrics,data.workouts].some(x=>x!==undefined&&!Array.isArray(x)))return send(res,400,{error:'Not a Health Auto Export upload'});
           acceptUpload(store,data);return send(res,200,{ok:true});

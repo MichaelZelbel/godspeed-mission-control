@@ -323,3 +323,29 @@ test('an import whose records cannot be written keeps none of its raw lines, and
  assert.deepEqual(files(),before,'the raw folder is exactly as it was');
  assert.equal(importFolder(store,folder,{now:at('2026-11-05T10:00:00Z')}).lines,2,'the same folder imports once the failure is gone');
 });
+
+test('an address renewed while its upload is still arriving stores nothing',async t=>{
+ const root=serverRoot('godspeed-phone-inflight-'),service=await createService({root,port:0,webPort:0});
+ t.after(async()=>{await service.close();fs.rmSync(root,{recursive:true,force:true});});
+ const token=fs.readFileSync(tokenFile(service.store.state),'utf8').trim(),body=JSON.stringify({data:upload([metric('step_count','count',[D+' 08:00:00 +0100',123])])}),half=Math.floor(body.length/2);
+ const outcome=new Promise((resolve,reject)=>{
+  const req=http.request({host:'127.0.0.1',port:service.address.port,path:'/ingest/'+token,method:'POST',headers:{'Content-Type':'application/json','Content-Length':Buffer.byteLength(body)}},res=>{res.resume();res.on('end',()=>resolve(res.statusCode));});
+  req.on('error',reject);
+  req.write(body.slice(0,half));
+  setTimeout(()=>{renewToken(service.store.state);req.end(body.slice(half));},200);
+ });
+ assert.equal(await outcome,404);
+ assert.deepEqual(days(service.store),{});
+ assert.equal(fs.existsSync(rawFolder(service.store.state)),false,'nothing was kept in the raw files either');
+});
+
+test('starting the service removes raw uploads that are past their 30 days, before any upload arrives',async t=>{
+ const root=serverRoot('godspeed-phone-startup-'),state=new Store(root).state,folder=rawFolder(state);
+ fs.mkdirSync(folder,{recursive:true});
+ const old=path.join(folder,'2020-01-01.jsonl'),recent=path.join(folder,new Date().toISOString().slice(0,10)+'.jsonl');
+ for(const file of [old,recent])fs.writeFileSync(file,JSON.stringify({received_at:'2020-01-01T10:00:00Z',data:upload([])})+'\n');
+ const service=await createService({root,port:0,webPort:0});
+ t.after(async()=>{await service.close();fs.rmSync(root,{recursive:true,force:true});});
+ assert.equal(fs.existsSync(old),false,'the expired file is gone at startup');
+ assert.equal(fs.existsSync(recent),true,'a current file stays');
+});
