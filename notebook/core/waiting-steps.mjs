@@ -260,18 +260,17 @@ export function heard(store,{chat,words,at=new Date().toISOString(),scheduled=fa
 const answeredContext=(step,answer)=>'[godspeed-step] Your owner answered '+answer+' to "'+step.about+'" and the program has recorded it. Confirm in one plain sentence what happens now: '+(answer==='yes'?step.on_yes:step.on_no)+' Do not ask anything else about it.';
 
 const PRESS_WORDS={
- en:{yes:'Yes',no:'No',already:answer=>'This was already answered ('+answer+'). Nothing changed.',closed:'This question is no longer open. Nothing changed.'},
- de:{yes:'Ja',no:'Nein',already:answer=>'Das war schon beantwortet ('+(answer==='yes'?'ja':'nein')+'). Es hat sich nichts geändert.',closed:'Diese Frage ist nicht mehr offen. Es hat sich nichts geändert.'}};
+ en:{yes:'Yes',no:'No',already:answer=>'This was already answered ('+answer+'). Nothing changed.',closed:'This question is no longer open. Nothing changed.'}};
 
 // A press on the Yes or No button under one step's own message (godspeed-context's step_buttons.py).
 // It answers that step id and no other, once, exactly as a typed answer does (answerStep); a step
 // that is not a sent Telegram question has no button to press.
-export function pressStep(store,{id,answer,language='en',scheduled=false,at=new Date().toISOString()}){
+export function pressStep(store,{id,answer,scheduled=false,at=new Date().toISOString()}){
  if(scheduled)throw Error('A scheduled run cannot answer for your owner.');
  if(answer!=='yes'&&answer!=='no')throw Error('Say yes or no.');
  const record=store.get('approvals',id);
  if(!record||record.asked_in!=='telegram'||!record.sent_at)throw Error('That button belongs to no question it can answer.');
- const words=PRESS_WORDS[language]||PRESS_WORDS.en,text=record.about+' '+record.question+'\n\n';
+ const words=PRESS_WORDS.en,text=record.about+' '+record.question+'\n\n';
  const unchanged=(status,step)=>({changed:false,step,reply:text+(status==='approved'||status==='rejected'?words.already(status==='approved'?'yes':'no'):words.closed)});
  if(record.status!=='pending'||(record.expires_at&&record.expires_at<=at))return unchanged(record.status,readStep(record));
  const done=answerStep(store,id,answer,{chat:'telegram',words:'(button)'});

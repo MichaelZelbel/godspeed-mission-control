@@ -49,14 +49,11 @@ QUEUE = "step-questions"
 EVERY = 5            # seconds between looks at the hand-off folder
 SENT_WITHIN = 60     # seconds to wait for the scheduled send before keeping the file for the next look
 STEP_ID = re.compile(r"^step-[0-9a-f-]{36}$")
-GENERIC = {"en": "A question is waiting for your answer.", "de": "Eine Frage wartet auf deine Antwort."}
+GENERIC = {"en": "A question is waiting for your answer."}
 WORDS = {
     "en": {"buttonYes": "Yes", "buttonNo": "No",
            "noOpenQuestion": "This question has already been answered. Nothing changed.",
            "buttonFailed": "That did not go through. Try again in a moment."},
-    "de": {"buttonYes": "Ja", "buttonNo": "Nein",
-           "noOpenQuestion": "Diese Frage ist schon beantwortet. Es hat sich nichts geändert.",
-           "buttonFailed": "Das hat nicht geklappt. Versuch es gleich noch einmal."},
 }
 
 
@@ -151,7 +148,7 @@ class StepButtons(buttons.YesNoButtons):
         command = self.command()
         if not command:
             raise RuntimeError("No godspeed-step command")
-        run = subprocess.run(command[:2] + ["press", token["step"], token["answer"], "--language", token["language"]] + command[2:],
+        run = subprocess.run(command[:2] + ["press", token["step"], token["answer"]] + command[2:],
                              capture_output=True, text=True, encoding="utf-8", errors="replace",
                              stdin=subprocess.DEVNULL, timeout=25)
         if run.returncode not in (0, 2):

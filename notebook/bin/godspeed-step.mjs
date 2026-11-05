@@ -26,7 +26,7 @@ const HELP=`godspeed-step: ask your owner for a yes, and read the answer.
       Only the chat plugin uses this: the owner's words on standard input.
   answer <id> --chat telegram|notebook
       Only the assistant, right after its owner chose a step you asked about in words.
-  press <id> yes|no [--language en|de]
+  press <id> yes|no
       Only the Telegram buttons use this: a press on a waiting step's own message.
 `;
 const args=process.argv.slice(2),option=name=>{const at=args.indexOf(name);return at<0?undefined:args[at+1];};
@@ -57,6 +57,6 @@ if(verb==='open'){
 }else if(verb==='answer'){
  const done=answerChosen(store,{chat:chatOption(),id:args[1],scheduled});print({status:done.step.status,already:done.already});
 }else if(verb==='press'){
- const done=pressStep(store,{id:args[1],answer:args[2],language:option('--language'),scheduled});
+ const done=pressStep(store,{id:args[1],answer:args[2],scheduled});
  print({reply:done.reply,changed:done.changed});process.exit(done.changed?0:2);
 }else throw Error('Unknown verb. '+HELP);
