@@ -59,6 +59,10 @@ done
 check "each of the three kit-bootstrap pins is present and a full 40-hex commit" "$PINS_HEX" "111"
 check "and the three pins (windows-setup.yml, install.sh, open-the-door.sh) are the same commit" \
   "$([ -n "$PIN_WIN" ] && [ "$PIN_WIN" = "$PIN_SRV" ] && [ "$PIN_SRV" = "$PIN_DOOR" ] && echo equal || echo "differ: [$PIN_WIN] [$PIN_SRV] [$PIN_DOOR]")" "equal"
+# This release's kit-bootstrap commit. Each release step moves it together with the three pins
+# (.github/workflows/windows-setup.yml, server/install.sh, server/open-the-door.sh).
+EXPECTED_KB_PIN=7ae7d664c0a3864216190c6c06aa7d895bcec0fc
+check "and that common pin is this release's expected kit-bootstrap commit" "$PIN_WIN" "$EXPECTED_KB_PIN"
 
 # --- A server set up before 27 October 2026 loses the job on its next run -------------------
 FN="$(sed -n '/^retire_install_count() {$/,/^}$/p' "$ROOT/server/install.sh")"

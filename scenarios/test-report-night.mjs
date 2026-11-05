@@ -165,3 +165,45 @@ test("the verdict's needs and RESULTS name the same scenarios, and every scenari
     assert.ok(pairs.includes(j), `scenario job ${j} is not in RESULTS`);
   }
 });
+
+// The four beta.17 jobs run the stage's own copy of their scenario: the checkout takes the stage
+// ref when one is given, the stage artifact is downloaded when none is, and the scenario gets the
+// stage ref. A job that loses one of the three runs another version's scenario, silently.
+for (const job of ['no-question-he-cannot-judge', 'plain-yes', 'what-was-that', 'connection-check']) {
+  test(`the ${job} job takes the stage handoff: checkout ref, stage download, scenario run`, async () => {
+    const { readFileSync } = await import('node:fs');
+    const text = readFileSync(WORKFLOW, 'utf8').replace(/\r\n/g, '\n');
+    const start = text.search(new RegExp(`^ {2}${job}:[ \t]*$`, 'm'));
+    assert.ok(start >= 0, `job ${job} not found`);
+    const rest = text.slice(start + 1);
+    const next = rest.search(/^ {2}[A-Za-z0-9_-]+:[ \t]*$/m);
+    const body = next >= 0 ? rest.slice(0, next) : rest;
+    const steps = body.split(/^ {6}- /m).slice(1);
+    const checkout = steps.find((s) => s.startsWith('uses: actions/checkout@v4'));
+    assert.ok(checkout, `${job} has no actions/checkout@v4 step`);
+    assert.match(checkout, /^ {10}ref: \$\{\{ inputs\.stage \|\| github\.sha \}\}$/m, `${job}: checkout ref`);
+    const download = steps.find((s) => s.startsWith('uses: actions/download-artifact@v4'));
+    assert.ok(download, `${job} has no actions/download-artifact@v4 step`);
+    assert.match(download, /^ {8}if: \$\{\{ !inputs\.stage \}\}$/m, `${job}: download condition`);
+    assert.match(download, /^ {10}name: run-stage$/m, `${job}: download name`);
+    assert.match(download, /^ {10}path: \$\{\{ runner\.temp \}\}\/run-stage$/m, `${job}: download path`);
+    assert.ok(body.includes(`bash scenarios/${job}.sh "$STAGE_REF"`), `${job} does not run its scenario with "$STAGE_REF"`);
+  });
+}
+
+// A failing scenario fails its job: a step that pipes a scenario into tee must declare
+// `shell: bash`, because only an explicit shell runs as `bash --noprofile --norc -e -o pipefail`
+// (seen in scenarios run 41871435090: the Charm Challenge step ended with exit code 1 and its job
+// and the verdict failed). A step with no `shell:` runs as `bash -e {0}`, without pipefail, and
+// tee would hide the scenario's exit code.
+test('every step that pipes a scenario into tee declares shell: bash (pipefail)', async () => {
+  const { readFileSync } = await import('node:fs');
+  const text = readFileSync(WORKFLOW, 'utf8').replace(/\r\n/g, '\n');
+  const steps = text.slice(text.indexOf('\njobs:\n')).split(/^ {6}- /m).slice(1);
+  const piped = steps.filter((s) => /^ {8}run: .*bash scenarios\/\S+.*\|\s*tee\b/m.test(s));
+  assert.ok(piped.length > 10, `too few scenario pipes found (${piped.length})`);
+  for (const s of piped) {
+    const name = (s.match(/run: .*?(scenarios\/\S+)/) || [])[1];
+    assert.match(s, /^ {8}shell: bash$/m, `the step running ${name} pipes into tee without an explicit shell: bash`);
+  }
+});
