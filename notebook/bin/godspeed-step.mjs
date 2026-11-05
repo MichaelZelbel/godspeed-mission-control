@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {Store} from '../core/records/store.mjs';
 import {machineDevice} from '../core/device-id.mjs';
-import {openStep,ASKER_KINDS,answerChosen,heard,quietMessage,readStep,CHATS} from '../core/waiting-steps.mjs';
+import {openStep,pressStep,ASKER_KINDS,answerChosen,heard,quietMessage,readStep,CHATS} from '../core/waiting-steps.mjs';
 
 // The one way to ask the owner for a yes (core/waiting-steps.mjs). A refusal reads as one plain line.
 const fail=error=>{process.stderr.write('Error: '+(error?.message||String(error))+'\n'+(process.env.GODSPEED_DEBUG?String(error?.stack||'')+'\n':''));process.exit(1);};
@@ -26,6 +26,8 @@ const HELP=`godspeed-step: ask your owner for a yes, and read the answer.
       Only the chat plugin uses this: the owner's words on standard input.
   answer <id> --chat telegram|notebook
       Only the assistant, right after its owner chose a step you asked about in words.
+  press <id> yes|no
+      Only the Telegram buttons use this: a press on a waiting step's own message.
 `;
 const args=process.argv.slice(2),option=name=>{const at=args.indexOf(name);return at<0?undefined:args[at+1];};
 const root=option('--godspeed')||process.env.GODSPEED_WORKSPACE,verb=args[0];
@@ -54,4 +56,7 @@ if(verb==='open'){
  const record=store.get('approvals',args[1]);if(!record)throw Error('That step does not exist.');print(readStep(record));
 }else if(verb==='answer'){
  const done=answerChosen(store,{chat:chatOption(),id:args[1],scheduled});print({status:done.step.status,already:done.already});
+}else if(verb==='press'){
+ const done=pressStep(store,{id:args[1],answer:args[2],scheduled});
+ print({reply:done.reply,changed:done.changed});process.exit(done.changed?0:2);
 }else throw Error('Unknown verb. '+HELP);
