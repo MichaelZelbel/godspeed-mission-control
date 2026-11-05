@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import {CONNECTION_NAMES,ROUTINES_NAME} from './connection-names.mjs';
+import {CONNECTION_NAMES,ROUTINES_LABEL} from './connection-names.mjs';
 import {atomic} from './records/store.mjs';
 import {loadSettings as journalSettings,saveSettings as saveJournal,DEFAULTS as JOURNAL_DEFAULTS} from '../../third-party/addons/godspeed-journal/lib/settings.mjs';
 
@@ -73,7 +73,7 @@ export function journalWanted(root){
 // reads Hermes' jobs list for a routine that did not run or keeps failing.
 export const CONNECTION_JOB='Daily connection check';
 export const CONNECTION_SCRIPT='godspeed-connection-check.py';
-export const CONNECTION_WHAT=`Early every morning, before your morning brief, it makes one harmless call to each connection you set up (${Object.values(CONNECTION_NAMES).map(c=>c.label).join(', ')}) and tells you only when one needs your sign-in or key, or failed two mornings in a row. It also reads the list of ${ROUTINES_NAME.label}, without any call, and tells you once when one did not run when it was due or failed twice in a row. It sends nothing else.`;
+export const CONNECTION_WHAT=`Early every morning, before your morning brief, it makes one harmless call to each connection you set up (${Object.values(CONNECTION_NAMES).map(c=>c.label).join(', ')}) and tells you only when one needs your sign-in or key, or failed two mornings in a row. It also reads the list of ${ROUTINES_LABEL}, without any call, and tells you once when one did not run when it was due or failed twice in a row. It sends nothing else.`;
 // THE NIGHT CHAT TIDY-UP (26 October 2026). The assistant keeps a chat app's chat as one long
 // conversation and summarises its older part once it passes its threshold, and it does that before
 // answering the message that crossed the line: a real message waited 4 minutes 9 seconds while 348

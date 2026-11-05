@@ -10,4 +10,4 @@ export const CONNECTION_NAMES={
  mail:{label:'Gmail',stops:'your assistants cannot search your mail or save drafts'},
 };
 // The check's other source (routine-check.mjs): the owner's routines, read from Hermes' jobs list with no call. Not a connection, so not in CONNECTION_NAMES.
-export const ROUTINES_NAME={label:'your routines'};
+export const ROUTINES_LABEL='your routines';
