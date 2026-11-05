@@ -127,18 +127,14 @@ class ChatTidy(unittest.TestCase):
         # the routine's control process (no runner) and the gateway process (the runner) are two
         # loads of the plugin that share only the assistant's home
         runner = Runner({KEY: Entry("chat-1")})
-        gateway = load(runner)
         control = load(None)
+        gateway = load(runner)
         gateway._runner, control._runner = (lambda: runner), (lambda: None)
-        control.POLL = 0.05
+        gateway.POLL = control.POLL = 0.05
+        gateway.register(Ctx())  # registration alone starts the worker that serves the control copy
         answers = []
         asking = threading.Thread(target=lambda: answers.append(control.tidy(KEY + " chat-1")))
         asking.start()
-        for _ in range(100):
-            gateway._answer_requests()
-            if not asking.is_alive():
-                break
-            asking.join(0.05)
         asking.join(5)
         self.assertEqual(answers, ["ok: chat-1"])
         self.assertEqual(len(runner.events), 1)

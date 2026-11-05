@@ -20,6 +20,7 @@ godspeed-chat-tidy-requests, which this plugin's thread in the gateway process a
 answer goes to the caller only: ok: <session id>, or refused: <why>; it answers refused: route moved when the key routes to another session after the summary.
 """
 import asyncio
+import dataclasses
 import json
 import os
 import re
@@ -41,6 +42,21 @@ NOT_A_CHAT_APP = ("local", "cli", "tui", "cron", "webhook", "api_server")
 CLAIM_WAIT = 20
 ANSWER_WAIT = 880
 POLL = 0.5
+
+
+@dataclasses.dataclass(frozen=True)
+class TidyRequest:
+    """The request a runner-less process leaves for the gateway: the one owner of its stored shape."""
+    key: str
+    session_id: str
+
+    def dump(self, handle):
+        json.dump(dataclasses.asdict(self), handle)
+
+    @classmethod
+    def load(cls, handle):
+        asked = json.load(handle)
+        return cls(**{field.name: asked[field.name] for field in dataclasses.fields(cls)})
 
 
 def _requests():
@@ -85,7 +101,7 @@ def _ask_the_gateway(key, session_id):
     try:
         os.makedirs(folder, exist_ok=True)
         with open(request + ".tmp", "w", encoding="utf-8") as handle:
-            json.dump({"key": key, "session_id": session_id}, handle)
+            TidyRequest(key, session_id).dump(handle)
         os.replace(request + ".tmp", request)
     except OSError as error:
         return "refused: the gateway could not be asked (%s)" % error
@@ -131,8 +147,8 @@ def _answer_requests():
             continue
         try:
             with open(work, encoding="utf-8") as handle:
-                asked = json.load(handle)
-            answer = tidy("%s %s" % (asked["key"], asked["session_id"]))
+                asked = TidyRequest.load(handle)
+            answer = tidy("%s %s" % (asked.key, asked.session_id))
         except Exception as error:
             answer = "refused: the request could not be read (%s)" % error
         out = work[:-len(".work")] + ".out"
