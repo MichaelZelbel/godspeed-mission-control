@@ -696,11 +696,12 @@ def notice(c, only=""):
     if not queued:
         return None
     waiting = []
+    before_sender = held_ids(c)
     try:
         with open(queued, encoding="utf-8") as f:
             text = f.read()
         if text.strip():
-            waiting = [n for n in json.loads(text).get("notices", []) if isinstance(n, dict) and isinstance(n.get("id"), str) and n["id"].startswith(only) and not n.get("not_sent")]
+            waiting = [n for n in json.loads(text).get("notices", []) if isinstance(n, dict) and isinstance(n.get("id"), str) and n["id"].startswith(only) and n["id"] not in before_sender and not n.get("not_sent")]
     except FileNotFoundError:
         return None
     except Exception:
@@ -820,53 +821,52 @@ def now_ms():
     return datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
 
-def hold_queued(c):
-    """The first run of the notice sender marks every notice already queued as not_sent and as said,
-    before its first claim, so none queued earlier is ever said (#225). The ids in the said file are
-    what keeps one out when a producer's stale write of the whole queue brings it back unmarked; a notice
-    queued later has a new id, so it is never held. The marker file is published whole, under the same lock
-    that holds the queue, so a run that sees it sees a finished hold. A queue that cannot be read raises,
-    so the run fails and says nothing."""
-    marker = os.path.join(c["home"], NOTICES_STARTED)
+def held_ids(c):
+    """The ids of every notice queued before the notice sender first started, in a mission control not
+    made from the starter (#225); empty in any other. The first call there marks all queued notices
+    not_sent and records their ids in the marker file, a permanent set kept apart from the bounded
+    said history, and notice() refuses every id in it. That also covers a producer's stale write of the
+    whole queue that brings one back unmarked; a notice queued later has a new id. It all happens under
+    the lock every delivery path takes, and the marker is published whole, so a run that sees it sees a
+    finished hold. A queue that cannot be read raises, so the run fails and says nothing."""
     queued = c.get("notices")
-    if os.path.exists(marker) or not queued:
-        return
+    if not c.get("adopted") or not queued:
+        return set()
+    marker = os.path.join(c["home"], NOTICES_STARTED)
     said_file = os.path.join(c["home"], NOTICES_SAID)
     with one_at_a_time(said_file + ".lock"):
-        if os.path.exists(marker):
-            return
-        at = now_ms()
+        if not os.path.exists(marker):
+            at = now_ms()
+            ids = []
+            try:
+                with open(queued, encoding="utf-8") as f:
+                    data = json.loads(f.read())
+            except FileNotFoundError:
+                data = None
+            if data is not None:
+                if not isinstance(data, dict) or not isinstance(data.get("notices"), list):
+                    raise ValueError("the queued notices cannot be read")
+                ids = [n["id"] for n in data["notices"] if isinstance(n, dict) and isinstance(n.get("id"), str)]
+                held = [dict(n, not_sent={"reason": NOT_SENT_BEFORE_SENDER, "at": at}) if isinstance(n, dict) and not n.get("not_sent") else n for n in data["notices"]]
+                if held != data["notices"]:
+                    tmp = "%s.%d.tmp" % (queued, os.getpid())
+                    with open(tmp, "w", encoding="utf-8") as f:
+                        f.write(json.dumps(dict(data, notices=held), indent=2) + "\n")
+                    os.replace(tmp, queued)
+            tmp = "%s.%d.tmp" % (marker, os.getpid())
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump({"at": at, "ids": ids}, f)
+            os.replace(tmp, marker)
         try:
-            with open(queued, encoding="utf-8") as f:
-                data = json.loads(f.read())
-        except FileNotFoundError:
-            data = None
-        if data is not None:
-            if not isinstance(data, dict) or not isinstance(data.get("notices"), list):
-                raise ValueError("the queued notices cannot be read")
-            ids = [n["id"] for n in data["notices"] if isinstance(n, dict) and isinstance(n.get("id"), str)]
-            if ids:
-                keep = (said_ids(said_file) + [i for i in ids if i not in said_ids(said_file)])[-200:]
-                tmp = "%s.%d.tmp" % (said_file, os.getpid())
-                with open(tmp, "w", encoding="utf-8") as f:
-                    json.dump({"ids": keep}, f)
-                os.replace(tmp, said_file)
-            held = [dict(n, not_sent={"reason": NOT_SENT_BEFORE_SENDER, "at": at}) if isinstance(n, dict) and not n.get("not_sent") else n for n in data["notices"]]
-            if held != data["notices"]:
-                tmp = "%s.%d.tmp" % (queued, os.getpid())
-                with open(tmp, "w", encoding="utf-8") as f:
-                    f.write(json.dumps(dict(data, notices=held), indent=2) + "\n")
-                os.replace(tmp, queued)
-        tmp = "%s.%d.tmp" % (marker, os.getpid())
-        with open(tmp, "w", encoding="utf-8") as f:
-            f.write(at)
-        os.replace(tmp, marker)
+            with open(marker, encoding="utf-8") as f:
+                return set(json.load(f).get("ids", []))
+        except Exception:
+            return set()
 
 
 def notices(c):
     """The notice sender of a mission control not made from the starter (#225): it says the oldest queued
     notice and nothing else."""
-    hold_queued(c)
     env = environment(c, today(c))
     found = notice(c)
     return (say_claimed(c, env, found), True) if found else ("", True)

@@ -1,4 +1,4 @@
-import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import {fileURLToPath} from 'node:url';import {execFileSync,spawnSync,spawn} from 'node:child_process';
+import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import {fileURLToPath} from 'node:url';import {execFileSync,execFile,spawnSync,spawn} from 'node:child_process';
 import {NativeScheduler,nativeJobs} from '../core/native-scheduler.mjs';import {Store} from '../core/records/store.mjs';import {QueryService} from '../core/query.mjs';import {Domains} from '../core/domains.mjs';
 import {installStarter} from '../core/starter-workspace.mjs';import {readMachineRecord,telegramInHermes,chatAppInHermes} from '../core/starting-routines.mjs';import {runCommand} from '../core/child-process.mjs';
 import {DatabaseSync} from 'node:sqlite';import {CONNECTION_NOTICE_PREFIX} from '../core/connection-names.mjs';
@@ -497,6 +497,28 @@ test('an adopted mission control gets the notice sender, keeps the notices queue
  assert.equal(runScript('godspeed-notices.py'),'A later notice.','the old one is not sent though nothing marks it and its stamp is no older than the start');
 });
 
+test('a notice queued before the first start stays held after more than 200 later deliveries, and a restored unmarked copy is not sent',{skip:!havePython&&'needs Python'},async t=>{
+ const {store,home,tick,runScript}=await adoptedFixture(t),{queueNotice,readNotices}=await import('../core/notices.mjs');
+ queueNotice(store,{id:'before-1',text:'An old notice.'});await tick();
+ const file=path.join(store.state,'notices.json'),old=JSON.parse(fs.readFileSync(file,'utf8')).notices.map(({not_sent,...n})=>n);
+ assert.equal(runScript('godspeed-notices.py'),'');
+ fs.writeFileSync(path.join(home,'godspeed-notices-said.json'),JSON.stringify({ids:Array.from({length:250},(_,i)=>'later-'+i)}));
+ const queued=JSON.parse(fs.readFileSync(file,'utf8'));queued.notices=old;fs.writeFileSync(file,JSON.stringify(queued));
+ assert.equal(runScript('godspeed-notices.py'),'','the held id is in its own set, which the bounded history never trims');
+ assert.equal(readNotices(store).length,1);
+});
+
+test('a reader that runs while the first-start hold is in progress says no old notice',{skip:!havePython&&'needs Python'},async t=>{
+ const {store,home,tick,runScript}=await adoptedFixture(t),{queueNotice}=await import('../core/notices.mjs'),{setRoutineSwitch}=await import('../core/routine-switches.mjs');
+ queueNotice(store,{id:'before-1',text:'An old notice.'});await tick();
+ await setRoutineSwitch(store,{key:'coach-tick',on:true});await tick();
+ // Many readers start together on the first start: the hold is under one lock, so each one sees it finished.
+ const run=name=>new Promise(resolve=>{const python=['python3','python'].find(p=>{try{execFileSync(p,['--version'],{stdio:'ignore'});return true;}catch{return false;}});execFile(python,[path.join(home,'scripts',name)],{cwd:path.join(home,'scripts'),encoding:'utf8',env:{...process.env,PYTHONIOENCODING:'utf-8'},windowsHide:true},(e,out)=>resolve(out.trim()));});
+ const outs=await Promise.all(['godspeed-notices.py','godspeed-coach-reminders.py','godspeed-notices.py','godspeed-coach-reminders.py'].map(run));
+ assert.deepEqual(outs,['','','','']);
+ assert.equal(runScript('godspeed-notices.py'),'');
+});
+
 test('Settings lists the routines of an adopted mission control, all off, and a starter-born one has no switches',async t=>{
  const {store,hermes,home}=await adoptedFixture(t),{routineSwitches,setRoutineSwitch,ADOPTED_NOTE,PROVIDER_NOTE}=await import('../core/routine-switches.mjs');
  const listed=routineSwitches(store,{jobs:hermes.jobs()});
@@ -547,6 +569,7 @@ test('a switched-on coach routine never says a notice queued before the sender s
  await setRoutineSwitch(store,{key:'coach-tick',on:true});
  await tick();
  assert.ok(fs.existsSync(path.join(home,'scripts','godspeed-coach-reminders.py')));
+ assert.equal(runScript('godspeed-coach-reminders.py'),'','the first reader holds what was queued before it, and says none of it');
  queueNotice(store,{id:'after-1',text:'A new notice.'});
  const said=[runScript('godspeed-coach-reminders.py'),runScript('godspeed-notices.py')].filter(Boolean);
  assert.deepEqual(said,['A new notice.'],'the new one once, the old one never');
