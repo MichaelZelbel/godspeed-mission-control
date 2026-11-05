@@ -42,25 +42,66 @@ const stepTime=record=>record.sent_at||record.asked_at||record.created_at||'';
 export const waitingSteps=(store,at=new Date().toISOString())=>store.list('approvals')
  .filter(r=>r.status==='pending'&&delivered(r)&&!(r.expires_at&&r.expires_at<=at)).sort((a,b)=>stepTime(a).localeCompare(stepTime(b)));
 
-export function openStep(store,{about,question,yes,no,by,chat,job}){
+// What the system may do by itself without asking, declared by the asking code from this fixed list.
+// The model never judges it, and an outward step (sending, paying, deleting, publishing) is never on it.
+export const QUIET_KINDS=['restart','reload','retry'];
+const MEMORY_CHARS=100;
+
+// The owner's latest answer about a subject. A decision has no expiry unless the owner gave one.
+const decisionAbout=(store,subject,at)=>store.list('approvals')
+ .filter(r=>r.subject===subject&&['approved','rejected'].includes(r.status)&&r.answered_at&&!(r.expires_at&&r.expires_at<=at))
+ .sort((a,b)=>a.answered_at.localeCompare(b.answered_at)).pop()||null;
+const remembered=record=>({about:record.about,user_words:record.user_words,answered_at:record.answered_at});
+
+// Every waiting step passes three checks, in order, before anything is asked (issue #220):
+//  1. `quietly` (one of QUIET_KINDS): the system does it; nothing is recorded or asked.
+//  2. `subject` (a stable key the asker gives): an earlier answer about the same subject answers it.
+//     A "no" is reused only while the thing is unchanged, otherwise the question says what changed.
+//     A "yes" never approves an outward step: that is asked every time.
+//  3. `extra` ({instruction,within}): an optional follow-up to an instruction the owner gave is done
+//     when it is clearly within it and an outward step is never "within"; otherwise it is dropped.
+// Returns {outcome:'quiet'|'decided'|'do'|'dropped'} with nothing asked, or {outcome:'asked',id,message}.
+export function openStep(store,{about,question,yes,no,by,chat,job,quietly,subject,outward=false,extra}){
  const id='step-'+randomUUID();
  for(const [label,text] of [['reason',about],['question',question],['yes outcome',yes],['no outcome',no]])checkStepText(label,text,id);
  if(!CHATS.includes(chat))throw Error('Say where to ask: telegram or notebook.');
  const [kind,name='']=String(by||'').split(':');
  if(!ASKER_KINDS.includes(kind))throw Error('Say who asks: '+ASKER_KINDS.map(kind=>kind+':<name>').join(', ')+'.');
- const step=store.withLock(()=>{
+ if(quietly!==undefined&&!QUIET_KINDS.includes(quietly))throw Error('Quietly is one of '+QUIET_KINDS.join(', ')+'.');
+ if(extra&&(typeof extra.instruction!=='string'||!extra.instruction.trim()))throw Error('Say which instruction the extra step follows.');
+ if(subject!==undefined&&(typeof subject!=='string'||!subject.trim()))throw Error('Say the subject as a short key.');
+ let asked=about;
+ const result=store.withLock(()=>{
   const owned=job?store.get('jobs',job):null;
   if(job&&!owned)throw Error('That routine does not exist.');
-  const record=store.prepare('approvals',{id,status:'pending',title:about,about,question,on_yes:yes,on_no:no,asked_by:{kind,name},asked_in:chat,asked_at:new Date().toISOString(),...(owned?{job_id:owned.id,payload_hash:hash(owned.payload)}:{})});
+  const reach=outward||Boolean(owned?.outward);
+  const fingerprint=hash([about,owned?hash(owned.payload):'']);
+  const at=new Date().toISOString();
+  if(quietly){
+   if(reach)throw Error('An outward step is never done quietly.');
+   return {outcome:'quiet',quietly,about};
+  }
+  const earlier=subject?decisionAbout(store,subject,at):null;
+  if(earlier&&(earlier.status==='rejected'||!reach)){
+   const answer=earlier.status==='approved'?'yes':'no';
+   if(answer==='yes'||earlier.fingerprint===fingerprint)return {outcome:'decided',answer,reply:answer==='yes'?yes:no,decision:remembered(earlier)};
+   asked='You said no to "'+earlier.about.slice(0,MEMORY_CHARS)+'" before. What changed: '+about;
+   checkStepText('reason',asked,id);
+  }
+  if(extra){
+   return extra.within&&!reach?{outcome:'do',about,instruction:extra.instruction}:{outcome:'dropped',about,instruction:extra.instruction};
+  }
+  const record=store.prepare('approvals',{id,status:'pending',title:asked,about:asked,question,on_yes:yes,on_no:no,asked_by:{kind,name},asked_in:chat,asked_at:at,fingerprint,...(subject?{subject}:{}),...(owned?{job_id:owned.id,payload_hash:hash(owned.payload)}:{})});
   store.commit([record]);
-  return record;
+  return {outcome:'asked'};
  });
- const message=about+' '+question;
+ if(result.outcome!=='asked')return result;
+ const message=asked+' '+question;
  if(chat==='notebook'){
   try{appendAssistantMessage(store,'general',message);stamp(store,id);}
   catch(error){withdrawStep(store,id);throw error;}
  }
- return {id,message};
+ return {outcome:'asked',id,message};
 }
 
 // A step is answerable once the code that sent its question has said so (`sent_at`). Three senders do:
@@ -82,17 +123,42 @@ export const saveReached=(store,value)=>store.withLockAsync(()=>store.saveUnderL
 // none of them answerable, never a prefix of a multi-question message. Each gets its own position.
 const stampAll=(store,ids,{chat,messageId,receipt}={})=>store.withLock(()=>{
  const base=Date.parse(deliveryClock(store));let n=0;
- const changes=[];
+ const changes=[],stamped=[];
  for(const id of ids){
   const record=store.get('approvals',id);
-  if(record?.asked_in&&(!chat||record.asked_in===chat)&&record.status==='pending'&&!record.sent_at)changes.push(store.prepare('approvals',{sent_at:new Date(base+n++).toISOString(),...(messageId?{sent_message_id:messageId}:{})},record));
+  if(record?.asked_in&&(!chat||record.asked_in===chat)&&record.status==='pending'&&!record.sent_at){
+   changes.push(store.prepare('approvals',{sent_at:new Date(base+n++).toISOString(),...(messageId?{sent_message_id:messageId}:{})},record));
+   stamped.push(id);
+  }
  }
  const stored=receipt&&store.get('conversation_messages',receipt.id);
  if(stored)changes.push(store.prepare('conversation_messages',{delivered_at:new Date(base+n++).toISOString()},stored));
  if(changes.length)store.commit(changes);
+ return stamped;
 });
 const stamp=(store,id)=>stampAll(store,[id]);
-export const stampDelivered=(store,ids,receipt)=>stampAll(store,ids,{chat:'telegram',receipt});
+export const stampDelivered=(store,ids,receipt)=>{
+ const stamped=stampAll(store,ids,{chat:'telegram',receipt});
+ try{handOffButtons(store,stamped);}catch{}
+};
+// The process that delivers a report usually has no Telegram client (the notebook's own `hermes cron
+// tick`), so the Yes/No buttons are sent by the gateway's godspeed-context plugin (step_buttons.py),
+// which watches this folder: one file per Telegram step that has just become answerable.
+export const STEP_QUESTIONS='step-questions',STEP_QUESTION_MAX_AGE_MS=24*3600000;
+const STEP_ID=/^step-[0-9a-f-]{36}$/;
+function handOffButtons(store,ids){
+ if(!ids.length)return;
+ const dir=path.join(store.state,STEP_QUESTIONS);
+ fs.mkdirSync(dir,{recursive:true,mode:0o700});
+ for(const name of fs.readdirSync(dir)){
+  const file=path.join(dir,name);
+  try{if(Date.now()-fs.statSync(file).mtimeMs>STEP_QUESTION_MAX_AGE_MS)fs.rmSync(file);}catch{}
+ }
+ for(const id of ids){
+  const record=store.get('approvals',id);
+  if(record&&STEP_ID.test(id))atomic(path.join(dir,id+'.json'),JSON.stringify({id,text:record.about+' '+record.question,expires_at:new Date(Date.now()+STEP_QUESTION_MAX_AGE_MS).toISOString()})+'\n');
+ }
+}
 // The pending, unsent Telegram steps whose questions a routine printed in full, oldest first; a
 // question printed once names one step, however many steps ask the same words.
 export function stepsForWords(store,text,since=''){
@@ -106,7 +172,9 @@ export function stepsForWords(store,text,since=''){
 }
 export function stampReply(store,{words,since,messageId}){
  const ids=stepsForWords(store,words,since);
- if(ids.length)stampAll(store,ids,{messageId});
+ if(!ids.length)return;
+ const stamped=stampAll(store,ids,{messageId});
+ try{handOffButtons(store,stamped);}catch{}
 }
 function withdrawStep(store,id){
  try{store.withLock(()=>{const record=store.get('approvals',id);if(record?.status==='pending'&&!record.sent_at)store.commit([store.prepare('approvals',{status:'withdrawn'},record)]);});}catch{}
@@ -190,6 +258,25 @@ export function heard(store,{chat,words,at=new Date().toISOString(),scheduled=fa
  return {kind:'ask',steps,answer,context:askContext(steps,answer)};
 }
 const answeredContext=(step,answer)=>'[godspeed-step] Your owner answered '+answer+' to "'+step.about+'" and the program has recorded it. Confirm in one plain sentence what happens now: '+(answer==='yes'?step.on_yes:step.on_no)+' Do not ask anything else about it.';
+
+const PRESS_WORDS={
+ en:{yes:'Yes',no:'No',already:answer=>'This was already answered ('+answer+'). Nothing changed.',closed:'This question is no longer open. Nothing changed.'}};
+
+// A press on the Yes or No button under one step's own message (godspeed-context's step_buttons.py).
+// It answers that step id and no other, once, exactly as a typed answer does (answerStep); a step
+// that is not a sent Telegram question has no button to press.
+export function pressStep(store,{id,answer,scheduled=false,at=new Date().toISOString()}){
+ if(scheduled)throw Error('A scheduled run cannot answer for your owner.');
+ if(answer!=='yes'&&answer!=='no')throw Error('Say yes or no.');
+ const record=store.get('approvals',id);
+ if(!record||record.asked_in!=='telegram'||!record.sent_at)throw Error('That button belongs to no question it can answer.');
+ const words=PRESS_WORDS.en,text=record.about+' '+record.question+'\n\n';
+ const unchanged=(status,step)=>({changed:false,step,reply:text+(status==='approved'||status==='rejected'?words.already(status==='approved'?'yes':'no'):words.closed)});
+ if(record.status!=='pending'||(record.expires_at&&record.expires_at<=at))return unchanged(record.status,readStep(record));
+ const done=answerStep(store,id,answer,{chat:'telegram',words:'(button)'});
+ if(done.already)return unchanged(store.get('approvals',id).status,done.step);
+ return {changed:true,step:done.step,reply:text+words[answer]+': '+(answer==='yes'?done.step.on_yes:done.step.on_no)};
+}
 
 // The model's read-back after "which one?": only the step id comes from the model. The yes or no is
 // the one the owner gave, and only a step the open question listed, in the turn that answered it.
