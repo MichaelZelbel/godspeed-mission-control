@@ -1,7 +1,7 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';
 import {Store} from '../core/records/store.mjs';import {installStarter} from '../core/starter-workspace.mjs';
 import {readNotices} from '../core/notices.mjs';import {addonDeadlines} from '../core/addon-deadlines.mjs';
-import {CONNECTION_NAMES} from '../core/connection-names.mjs';import {runDue} from '../core/connection-check.mjs';import {CONNECTIONS,defaultProbes,checkConnections,nextState,telegramProbe,githubProbe,mailProbe,aiProbe,gitKind,aiKind,telegramKind,mailKind,connectionCheckWanted,diskProbe,RECORD_FILE} from '../core/connection-check.mjs';
+import {CONNECTION_NAMES} from '../core/connection-names.mjs';import {runConnectionCheck} from '../scripts/connection-check.mjs';import {runDue} from '../core/connection-check.mjs';import {CONNECTIONS,defaultProbes,checkConnections,nextState,telegramProbe,githubProbe,mailProbe,aiProbe,gitKind,aiKind,telegramKind,mailKind,connectionCheckWanted,diskProbe,RECORD_FILE} from '../core/connection-check.mjs';
 
 for(const key of Object.keys(process.env))if(/^(GODSPEED_|HERMES_)/.test(key))delete process.env[key];
 
@@ -335,4 +335,11 @@ test('a desktop install has no disk source',async t=>{
  assert.equal(typeof defaultProbes({store,home:'/h',server:true}).disk,'function');
  const record=await checkConnections({store,day:D1,probes:stubs()});
  assert.equal(record.connections.disk,undefined);
+});
+test('the routine entry point includes the disk only on a server install',async t=>{
+ const {root,store}=fixture(t);const home=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-connection-home-'));t.after(()=>fs.rmSync(home,{recursive:true,force:true}));
+ const desktop=await runConnectionCheck({root,home,env:{GODSPEED_TODAY:D1}});
+ assert.equal(desktop.connections.disk,undefined);
+ const server=await runConnectionCheck({root,home,env:{GODSPEED_TODAY:D2,GODSPEED_WEB_ADDRESS:'https://godspeed.example'}});
+ assert.equal(typeof server.connections.disk?.set_up,'boolean');
 });

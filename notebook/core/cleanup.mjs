@@ -42,7 +42,7 @@ function listedSessions(folder){
 function removeIfOld(file,dev,cutoff,freed){
  const stat=lstat(file);
  if(!stat||!stat.isFile()||stat.dev!==dev||stat.mtimeMs>=cutoff)return;
- try{fs.unlinkSync(file);freed.files++;freed.bytes+=stat.size;}catch{}
+ try{fs.unlinkSync(file);freed.files++;freed.bytes+=stat.size;}catch{freed.failed=true;}
 }
 
 function sweepSessions(folder,cutoff,freed){
@@ -94,7 +94,7 @@ export function nightlyCleanup({root,home,now=Date.now(),keepDays=KEEP_DAYS,free
   const freed={files:0,bytes:0};
   let failed=false;
   try{place.sweep(cutoff,freed);}catch{failed=true;}
-  report.push({place:place.name,...freed,failed});
+  report.push({place:place.name,files:freed.files,bytes:freed.bytes,failed:failed||freed.failed===true});
  }
  return {places:report,disk_before:before,disk_after:free(root)};
 }
