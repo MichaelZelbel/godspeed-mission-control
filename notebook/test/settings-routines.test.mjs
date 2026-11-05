@@ -483,10 +483,13 @@ test('an adopted mission control gets the notice sender, keeps the notices queue
  assert.ok(!store.get('settings','starting-routines'));assert.equal(fs.existsSync(path.join(root,'coach','weekly-check-in')),false);
  const old=readNotices(store).find(n=>n.id==='before-1');assert.match(old.not_sent.reason,/before Godspeed began sending/);
  await tick();assert.equal(hermes.calls.filter(c=>c[1]==='create').length,1,'made once');
+ queueNotice(store,{id:'between-1',text:'Queued after the job was made, before it first ran.'});
+ assert.equal(runScript('godspeed-notices.py'),'','the first run says nothing that was queued before it');
+ assert.match(readNotices(store).find(n=>n.id==='between-1').not_sent.reason,/before Godspeed began sending/);
  queueNotice(store,{id:'after-1',text:'A new notice.'});
  assert.equal(runScript('godspeed-notices.py'),'A new notice.');
- assert.equal(runScript('godspeed-notices.py'),'','the old one is never said');
- assert.equal(readNotices(store).length,2,'and is kept');
+ assert.equal(runScript('godspeed-notices.py'),'','the old ones are never said');
+ assert.equal(readNotices(store).length,3,'and are kept');
 });
 
 test('Settings lists the routines of an adopted mission control, all off, and a starter-born one has no switches',async t=>{

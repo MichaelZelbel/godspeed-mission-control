@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {starterBorn} from './starter-workspace.mjs';
 import {STARTING_ROUTINES} from './starting-routines.mjs';
-import {readNotebookRoutines,JOURNAL_JOB,JOURNAL_WHAT,CONNECTION_JOB,CONNECTION_WHAT} from './notebook-routines.mjs';
+import {readNotebookRoutines,SWITCHABLE_NOTEBOOK_ROUTINES} from './notebook-routines.mjs';
 
 // THE ROUTINES OF A MISSION CONTROL NOT MADE FROM THE STARTER ARE SWITCHES (4 November 2026, #225). Godspeed
 // calls such a mission control adopted: its owner has jobs of their own that may already do what Godspeed's
@@ -13,8 +13,7 @@ import {readNotebookRoutines,JOURNAL_JOB,JOURNAL_WHAT,CONNECTION_JOB,CONNECTION_
 // A function, since this file is loaded in the middle of starting-routines.mjs's own imports (through query.mjs).
 export const switchable=()=>[
  ...STARTING_ROUTINES.map(({key,name,what,needs})=>({key,name,what,needs})),
- {key:'journal-tick',name:JOURNAL_JOB,what:JOURNAL_WHAT},
- {key:'connection-check',name:CONNECTION_JOB,what:CONNECTION_WHAT},
+ ...SWITCHABLE_NOTEBOOK_ROUTINES.map(({key,name,what})=>({key,name,what})),
 ];
 export const ADOPTED_NOTE='Godspeed did not make this mission control from its starter (it was adopted), so its own jobs may already do what these routines do. Each stays off until you switch it on.';
 export const switchId=key=>'routine-switch-'+key;

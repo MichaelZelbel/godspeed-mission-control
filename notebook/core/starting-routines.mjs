@@ -8,7 +8,7 @@ import {addArea,findArea,listAreas,rhythmWords,nextTalkDay} from '../../third-pa
 import {loadSettings as coachSettings,saveSettings as saveCoach} from '../../third-party/addons/godspeed-coach/lib/settings.mjs';
 import {localParts,addDays,zonedToUtc} from '../../third-party/addons/godspeed-coach/lib/clock.mjs';
 import {TALK_PROMPT,NOTEBOOK_TALK_JOB,NOTEBOOK_TICK_JOB,TALK_JOB,TICK_JOB} from '../../third-party/addons/godspeed-coach/lib/setup.mjs';
-import {JOURNAL_JOB,JOURNAL_SCRIPT,CHAT_TIDY_JOB,CHAT_TIDY_SCRIPT,BRIEF_JOB,BRIEF_SCRIPT,CONNECTION_JOB,CONNECTION_SCRIPT,NOTICES_JOB,NOTICES_SCRIPT} from './notebook-routines.mjs';
+import {SWITCHABLE_NOTEBOOK_ROUTINES,CHAT_TIDY_JOB,CHAT_TIDY_SCRIPT,BRIEF_JOB,BRIEF_SCRIPT,NOTICES_JOB,NOTICES_SCRIPT} from './notebook-routines.mjs';
 import {CONNECTION_NOTICE_PREFIX} from './connection-names.mjs';
 import {NOTICES_FILE} from './notices.mjs';
 import {hermesPython} from './runtime.mjs';
@@ -175,7 +175,7 @@ export function routineFiles({root,home,state,timezone,node=process.execPath,her
  // assistant's command folder, first on the path for the recipes they run.
  const config={root,home,bin:path.join(home,'bin'),tools:path.join(kit,'tools'),node,hermes:hermes&&path.isAbsolute(hermes)?hermes:null,...hermesRuntime({home,state,hermes}),brief:path.join(kit,'notebook','scripts','morning-brief.mjs'),reports:path.join(kit,'notebook','scripts','background-report.mjs'),connection_check:path.join(kit,'notebook','scripts','connection-check.mjs'),connection_notice_prefix:CONNECTION_NOTICE_PREFIX,coach:path.join(kit,'third-party','addons','godspeed-coach','bin','godspeed-coach.mjs'),coach_app:path.join(state,'coach-app'),journal:path.join(kit,'third-party','addons','godspeed-journal','bin','godspeed-journal.mjs'),journal_app:path.join(state,'journal-app'),notices:path.join(state,NOTICES_FILE),timezone};
  const files={'godspeed_routines.py':fs.readFileSync(runner,'utf8').replace(/\r\n/g,'\n'),'godspeed-routines.json':JSON.stringify(config,null,2)+'\n'};
- for(const routine of [...STARTING_ROUTINES,{key:'journal-tick',name:JOURNAL_JOB,script:JOURNAL_SCRIPT},{key:'chat-tidy',name:CHAT_TIDY_JOB,script:CHAT_TIDY_SCRIPT},{key:'brief',name:BRIEF_JOB,script:BRIEF_SCRIPT},{key:'connection-check',name:CONNECTION_JOB,script:CONNECTION_SCRIPT},{key:'notices',name:NOTICES_JOB,script:NOTICES_SCRIPT}])files[routine.script]='# Written by the Godspeed Mission Control notebook for the routine "'+routine.name+'".\n# The notebook writes it again when its own folders change; the work is in godspeed_routines.py.\nfrom godspeed_routines import main\n\nmain('+JSON.stringify(routine.key)+')\n';
+ for(const routine of [...STARTING_ROUTINES,...SWITCHABLE_NOTEBOOK_ROUTINES,{key:'chat-tidy',name:CHAT_TIDY_JOB,script:CHAT_TIDY_SCRIPT},{key:'brief',name:BRIEF_JOB,script:BRIEF_SCRIPT},{key:'notices',name:NOTICES_JOB,script:NOTICES_SCRIPT}])files[routine.script]='# Written by the Godspeed Mission Control notebook for the routine "'+routine.name+'".\n# The notebook writes it again when its own folders change; the work is in godspeed_routines.py.\nfrom godspeed_routines import main\n\nmain('+JSON.stringify(routine.key)+')\n';
  return files;
 }
 export function writeRoutineFiles(home,files){

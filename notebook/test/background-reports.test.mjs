@@ -271,8 +271,10 @@ test('on an adopted mission control a waiting step\'s question is delivered by t
  execFileSync(process.execPath,[wire,home],{env:{...process.env,GODSPEED_WORKSPACE:root,GODSPEED_PORT:'41992',GODSPEED_DEVICE:'local',GODSPEED_ORIGINAL_RUNTIME:'on'},windowsHide:true});
  assert.match(fs.readFileSync(path.join(home,'config.yaml'),'utf8'),/provider: "?godspeed_notebook"?/);
  writeRoutineFiles(home,routineFiles({root,home,state:store.state,timezone:'Europe/Berlin'}));
+ const send=()=>execFileSync(python,[path.join(home,'scripts','godspeed-notices.py')],{cwd:path.join(home,'scripts'),encoding:'utf8',env:{...process.env,PYTHONIOENCODING:'utf-8'}}).trim();
+ assert.equal(send(),'','the sender has started, with nothing queued');
  const opened=openAsk(store,'The bot stopped.');queueNotice(store,{id:'step-question',text:opened.message,step:opened.id});
- const words=execFileSync(python,[path.join(home,'scripts','godspeed-notices.py')],{cwd:path.join(home,'scripts'),encoding:'utf8',env:{...process.env,PYTHONIOENCODING:'utf-8'}}).trim();
+ const words=send();
  assert.match(words,/Shall I go on\?/);
  const dir=path.join(home,'plugins','godspeed_notebook');
  const out=JSON.parse(execFileSync(python,['-I','-c',CRON_STUB,path.join(dir,'__init__.py'),JSON.stringify([[{...TELEGRAM_JOB,name:'Godspeed notices',script:'godspeed-notices.py'},words,false]])],{encoding:'utf8'}));

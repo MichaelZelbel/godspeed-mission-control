@@ -73,6 +73,13 @@ export function journalWanted(root){
 export const CONNECTION_JOB='Daily connection check';
 export const CONNECTION_SCRIPT='godspeed-connection-check.py';
 export const CONNECTION_WHAT=`Early every morning, before your morning brief, it makes one harmless call to each connection you set up (${Object.values(CONNECTION_NAMES).map(c=>c.label).join(', ')}) and tells you only when one needs your sign-in or key, or failed two mornings in a row. It sends nothing else.`;
+// The routines beside the starting ones that are a switch on a mission control not made from the starter
+// (4 November 2026, #225). The one owner of each one's switch (routine-switches.mjs) and its wrapper script
+// (routineFiles in starting-routines.mjs).
+export const SWITCHABLE_NOTEBOOK_ROUTINES=[
+ {key:'journal-tick',name:JOURNAL_JOB,what:JOURNAL_WHAT,script:JOURNAL_SCRIPT},
+ {key:'connection-check',name:CONNECTION_JOB,what:CONNECTION_WHAT,script:CONNECTION_SCRIPT},
+];
 // THE NOTICE SENDER OF A MISSION CONTROL NOT MADE FROM THE STARTER (4 November 2026, #225). On a starter-born
 // install the coach's reminders and the journal's check-ins say the notices in .godspeed/notices.json. An
 // adopted mission control runs neither unasked, so it gets this one routine instead: every 15 minutes it says

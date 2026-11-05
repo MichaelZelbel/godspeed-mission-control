@@ -812,9 +812,41 @@ def tick(c, env, kind, r):
     return "", True
 
 
+NOTICES_STARTED = "godspeed-notices-started"
+NOT_SENT_BEFORE_SENDER = "Queued before Godspeed began sending notices on this machine, so it was kept and not sent."
+
+
+def hold_queued(c):
+    """The first run of the notice sender marks every notice already queued as not_sent, before its
+    first claim, so none queued earlier is ever said (#225). Done once: the marker file is written after the
+    queue. A queue that cannot be read raises, so the run fails and says nothing."""
+    marker = os.path.join(c["home"], NOTICES_STARTED)
+    queued = c.get("notices")
+    if os.path.exists(marker) or not queued:
+        return
+    try:
+        with open(queued, encoding="utf-8") as f:
+            data = json.loads(f.read())
+    except FileNotFoundError:
+        data = None
+    if data is not None:
+        if not isinstance(data, dict) or not isinstance(data.get("notices"), list):
+            raise ValueError("the queued notices cannot be read")
+        at = datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+        held = [dict(n, not_sent={"reason": NOT_SENT_BEFORE_SENDER, "at": at}) if isinstance(n, dict) and not n.get("not_sent") else n for n in data["notices"]]
+        if held != data["notices"]:
+            tmp = "%s.%d.tmp" % (queued, os.getpid())
+            with open(tmp, "w", encoding="utf-8") as f:
+                f.write(json.dumps(dict(data, notices=held), indent=2) + "\n")
+            os.replace(tmp, queued)
+    with open(marker, "w", encoding="utf-8") as f:
+        f.write(NOTICES_STARTED)
+
+
 def notices(c):
     """The notice sender of a mission control not made from the starter (#225): it says the oldest queued
     notice and nothing else."""
+    hold_queued(c)
     env = environment(c, today(c))
     found = notice(c)
     return (say_claimed(c, env, found), True) if found else ("", True)

@@ -32,6 +32,8 @@ export function nativeJobs(home,device='local'){
  return hermesJobs(home).map(j=>({id:j.id,title:j.name||j.id,kind:j.skill||j.name||'Hermes task',owner:device,paused:j.enabled===false,state:j.state||j.last_status||'pending',next_run:j.next_run_at,last_run_at:j.last_run_at||null,last_status:j.last_status||null,last_error:typeof j.last_error==='string'?j.last_error.slice(0,500):null,...routineStatus(home,j),schedule:j.schedule_display||null,...(cronCalendar(cronOf(j))&&!isTalkGate(j)&&!isCoachTick(j)?{calendar:cronCalendar(cronOf(j))}:{}),deliver:j.deliver||null,created_at:j.created_at,interval_ms:j.schedule?.seconds?j.schedule.seconds*1000:null,native:true,_hash:hash(j)}));
 }
 const RETRY_STARTING=3600000;
+// A step of the routine check that fails is tried again at the next one; this says why (to the server's log).
+const logged=what=>error=>{console.error('Godspeed Mission Control: '+what+': '+String(error?.message||error));return null;};
 // "05:16": once a day at that time in the owner's timezone.
 // The daily connection check runs at 05:00; a morning brief set before 05:30 pulls it half an hour ahead of it
 // (a brief at 00:10 is preceded by the check at 23:40 the evening before).
@@ -503,8 +505,8 @@ export class NativeScheduler{
   this.current=new Promise(r=>{finish=r;});
   try{
    await this.startRoutines().catch(()=>null);
-   await this.followNoticeSender().catch(()=>null);
-   await this.followSwitches().catch(()=>null);
+   await this.followNoticeSender().catch(logged('the notice sender could not be set up'));
+   await this.followSwitches().catch(logged('a routine switched on could not be set up'));
    await this.addNewStartingRoutines().catch(()=>null);
    await this.followJournal().catch(()=>null);
    await this.followConnectionCheck().catch(e=>{failure=e;});

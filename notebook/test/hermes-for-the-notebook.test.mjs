@@ -131,6 +131,7 @@ test('an adopted mission control keeps its assistant as it was, apart from the d
  // A scheduler the owner chose stays.
  const other=path.join(base,'other');fs.mkdirSync(other);fs.writeFileSync(path.join(other,'config.yaml'),'cron:\n  provider: owners_own\n');
  wire(root,other);assert.equal(readConfigValue(fs.readFileSync(path.join(other,'config.yaml'),'utf8'),['cron','provider']),'owners_own');
+ assert.ok(fs.existsSync(path.join(other,'plugins','godspeed_notebook','__init__.py')));assert.ok(fs.existsSync(path.join(other,'plugins','godspeed_notebook','report.json')),'the wrapper is installed beside a provider the owner chose');
 });
 
 // "Run now" waited for the whole run (a live run's fetch gave up after 300 seconds).
