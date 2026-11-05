@@ -50,8 +50,8 @@ const home=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-mail-home-'));
 Object.assign(process.env,{GODSPEED_MAIL_AGENTMAIL_API:'http://127.0.0.1:'+server.address().port,GODSPEED_MAIL_AGENTMAIL_INBOX:'me@agentmail.example.invalid',AGENTMAIL_READ_KEY:'am_read_invented',GODSPEED_MAIL_HOME:home,GODSPEED_NOW:'2026-11-04T10:00:00Z'});
 test.after(()=>{server.close();fs.rmSync(home,{recursive:true,force:true});});
 
-// Async: the stand-in answers from this process, which a blocking spawn would stop.
-const script=root=>promisify(execFile)(process.execPath,[fileURLToPath(new URL('../scripts/mail-count.mjs',import.meta.url))],{env:{...process.env,GODSPEED_WORKSPACE:root}}).then(r=>({status:0,...r}),e=>({status:e.code,stdout:e.stdout,stderr:e.stderr}));
+// Async: the stand-in answers from this process, which a blocking spawn would stop. Node's own experimental-feature warning (node:sqlite, printed by the Node 22 of the installed image, not by Node 24) is not the script's output, which these tests assert is empty.
+const script=root=>promisify(execFile)(process.execPath,[fileURLToPath(new URL('../scripts/mail-count.mjs',import.meta.url))],{env:{...process.env,GODSPEED_WORKSPACE:root,NODE_NO_WARNINGS:'1'}}).then(r=>({status:0,...r}),e=>({status:e.code,stdout:e.stdout,stderr:e.stderr}));
 const NOW=new Date('2026-11-04T10:00:00Z');
 const fixture=t=>{const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-mail-trackers-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));const store=new Store(root),query=new QueryService(store);store.save('settings',{id:'installation',timezone:'Europe/Berlin'});requests.length=0;status=200;barrier=0;return {root,store,query,domains:new Domains(query)};};
 const ORDERS={senders:['shop.example.invalid'],subjects:['new order','You made a sale'],mailbox:'godspeed'};
