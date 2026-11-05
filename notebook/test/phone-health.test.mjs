@@ -303,3 +303,23 @@ test('a day of raw uploads is kept for 30 UTC calendar days after receipt and re
  assert.equal(pruneRaw(store.state,at('2026-11-01T00:00:00Z')),1,'day 31 after receipt: removed');
  assert.equal(files().length,0);
 });
+
+test('equal metric and date points from two sources are both counted in a summed metric',()=>{
+ const point=(qty,source)=>({date:D+' 08:00:00 +0100',qty,source});
+ const built=buildDays([{received_at:'2026-11-04T09:00:00Z',data:upload([{name:'step_count',units:'count',data:[point(100,'Fictional Phone'),point(200,'Fictional Watch')]}])}]);
+ assert.equal(built.get(D).get('steps'),300);
+ const again=buildDays([{received_at:'2026-11-04T09:00:00Z',data:upload([{name:'step_count',units:'count',data:[point(100,'Fictional Phone'),point(200,'Fictional Watch')]}])},{received_at:'2026-11-04T10:00:00Z',data:upload([{name:'step_count',units:'count',data:[point(100,'Fictional Phone')]}])}]);
+ assert.equal(again.get(D).get('steps'),300,'a re-sent point of one source still counts once');
+});
+
+test('an import whose records cannot be written keeps none of its raw lines, and leaves the lines it found alone',()=>{
+ const store=setup(),folder=tmp('godspeed-phone-import-fail-'),line=(received_at,qty)=>({received_at,data:upload([metric('step_count','count',[D+' 08:00:00 +0100',qty])])});
+ acceptUpload(store,line('2026-11-04T08:00:00Z',1).data,{now:at('2026-11-04T08:00:00Z')});
+ const files=()=>Object.fromEntries(fs.readdirSync(rawFolder(store.state)).map(f=>[f,fs.readFileSync(path.join(rawFolder(store.state),f),'utf8')]));
+ const before=files();
+ fs.writeFileSync(path.join(folder,'old.jsonl'),[line('2026-11-04T09:00:00Z',2),line('2026-11-05T09:00:00Z',3)].map(l=>JSON.stringify(l)).join('\n')+'\n');
+ const commit=store.commit;store.commit=()=>{throw new Error('disk full');};
+ try{assert.throws(()=>importFolder(store,folder,{now:at('2026-11-05T10:00:00Z')}),/disk full/);}finally{store.commit=commit;}
+ assert.deepEqual(files(),before,'the raw folder is exactly as it was');
+ assert.equal(importFolder(store,folder,{now:at('2026-11-05T10:00:00Z')}).lines,2,'the same folder imports once the failure is gone');
+});

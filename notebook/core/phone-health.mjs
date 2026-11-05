@@ -208,13 +208,20 @@ export function importFolder(store,folder,{now=clockNow()}={}){
   lines.push({received_at:line.received_at,data:line.data});
  }
  return store.withLock(()=>{
-  const oldest=addDays(utcDay(now),-KEEP_DAYS),pool=new Map(readRaw(store.state,'0000-00-00').map(l=>[JSON.stringify(l),l]));
-  for(const line of lines){
-   const key=JSON.stringify(line);if(pool.has(key))continue;
-   pool.set(key,line);if(utcDay(new Date(instantOf(line.received_at)))>=oldest)appendRaw(store.state,line);
+  const oldest=addDays(utcDay(now),-KEEP_DAYS),pool=new Map(readRaw(store.state,'0000-00-00').map(l=>[JSON.stringify(l),l])),undos=[];
+  // Like the live receiver: an import that could not become day records keeps none of its lines, so
+  // a later upload cannot publish what the command reported as failed. Taken back newest first.
+  try{
+   for(const line of lines){
+    const key=JSON.stringify(line);if(pool.has(key))continue;
+    pool.set(key,line);if(utcDay(new Date(instantOf(line.received_at)))>=oldest)undos.push(appendRaw(store.state,line));
+   }
+   const touched=[...new Set(lines.flatMap(l=>touchedDays(l.data)))].sort(),wanted=new Set(touched),built=buildDays(inReceiveOrder([...pool.values()]));
+   for(const day of [...built.keys()])if(!wanted.has(day))built.delete(day);
+   return {lines:total,skipped,days:touched.length,...writeDays(store,built,{now})};
+  }catch(error){
+   try{for(const undo of undos.reverse())undo();}catch(rollback){throw Object.assign(error,{retained:true,rollbackMessage:rollback.message});}
+   throw error;
   }
-  const touched=[...new Set(lines.flatMap(l=>touchedDays(l.data)))].sort(),wanted=new Set(touched),built=buildDays(inReceiveOrder([...pool.values()]));
-  for(const day of [...built.keys()])if(!wanted.has(day))built.delete(day);
-  return {lines:total,skipped,days:touched.length,...writeDays(store,built,{now})};
  });
 }
