@@ -112,6 +112,9 @@ test('every wiring of a mission control made from the starter gives its Hermes t
  // The add-ons' context plugins are enabled, the Charm Challenge's too (spec 2026-10-21), each with
  // its mission control, its recipe and its command.
  assert.deepEqual(configList(readConfigValue(text,['plugins','enabled'])),['godspeed-coach','godspeed-journal','godspeed-headache','godspeed-charm','godspeed-context','godspeed-reply','godspeed-chat-tidy']);
+ // The night chat tidy-up's command is copied into the home, not only named as enabled.
+ assert.match(fs.readFileSync(path.join(home,'plugins','godspeed-chat-tidy','plugin.yaml'),'utf8'),/^name: godspeed-chat-tidy$/m);
+ assert.match(fs.readFileSync(path.join(home,'plugins','godspeed-chat-tidy','__init__.py'),'utf8'),/COMMAND = "godspeed-chat-tidy"[\s\S]*def register\(ctx\):\n[\s\S]*ctx\.register_command\(COMMAND, tidy/);
  assert.equal(fs.readFileSync(path.join(home,'plugins','godspeed-charm','mission-control.txt'),'utf8'),root+'\n');
  assert.match(fs.readFileSync(path.join(home,'plugins','godspeed-charm','__init__.py'),'utf8'),/GODSPEED_CHARM_SCRIPT/);
  assert.match(fs.readFileSync(path.join(home,'skills','charm-challenge','SKILL.md'),'utf8'),/^---\nname: charm-challenge\n/);

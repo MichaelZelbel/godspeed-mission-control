@@ -4,12 +4,15 @@ import importlib.util
 import os
 import re
 import sys
+import tempfile
+import threading
 import types
 import unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 FILE = os.path.join(HERE, "..", "assistant-files", "godspeed-chat-tidy", "__init__.py")
 KEY = "agent:main:telegram:dm:4242"
+os.environ["HERMES_HOME"] = tempfile.mkdtemp(prefix="chat-tidy-plugin-")
 
 
 class Platform:
@@ -115,7 +118,32 @@ class ChatTidy(unittest.TestCase):
         self.assertEqual(runner.events, [])
 
     def test_a_missing_runner_is_refused(self):
-        self.assertTrue(load(None).tidy(KEY + " chat-1").startswith("refused:"))
+        plugin = load(None)
+        plugin.CLAIM_WAIT, plugin.POLL = 0.2, 0.05
+        self.assertEqual(plugin.tidy(KEY + " chat-1"), "refused: the gateway runner is not running")
+        self.assertEqual(os.listdir(plugin._requests()), [])
+
+    def test_a_process_without_a_runner_gets_its_answer_from_the_gateways_copy(self):
+        # the routine's control process (no runner) and the gateway process (the runner) are two
+        # loads of the plugin that share only the assistant's home
+        runner = Runner({KEY: Entry("chat-1")})
+        gateway = load(runner)
+        control = load(None)
+        gateway._runner, control._runner = (lambda: runner), (lambda: None)
+        control.POLL = 0.05
+        answers = []
+        asking = threading.Thread(target=lambda: answers.append(control.tidy(KEY + " chat-1")))
+        asking.start()
+        for _ in range(100):
+            gateway._answer_requests()
+            if not asking.is_alive():
+                break
+            asking.join(0.05)
+        asking.join(5)
+        self.assertEqual(answers, ["ok: chat-1"])
+        self.assertEqual(len(runner.events), 1)
+        self.assertEqual(runner.events[0].text, "/compress")
+        self.assertEqual(os.listdir(control._requests()), [])
 
     def test_an_unknown_key_and_bad_arguments_are_refused(self):
         plugin = load(Runner({}))

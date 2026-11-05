@@ -14,17 +14,38 @@ the gateway.
     /godspeed-chat-tidy <chat session key> <session id>
 
 It acts only on the owner's private chat key (agent:main:<chat app>:dm:<id>), when the runner's routing entry for the key routes to exactly that session id, the
-entry's origin is a chat app's platform, and no turn for that chat runs or is being set up. Its
+entry's origin is a chat app's platform, and no turn for that chat runs or is being set up. The routine's
+control process has no runner: there the command leaves the request in HERMES_HOME/
+godspeed-chat-tidy-requests, which this plugin's thread in the gateway process answers. Its
 answer goes to the caller only: ok: <session id>, or refused: <why>; it answers refused: route moved when the key routes to another session after the summary.
 """
 import asyncio
+import json
+import os
 import re
+import threading
+import time
+import uuid
 
 COMMAND = "godspeed-chat-tidy"
 # The owner's private chat in a chat app, as godspeed_routines.py (CHAT_KEY) finds it: a group or
 # channel route and the assistant's own terminal ("local") are refused. A test holds the two equal.
 CHAT_KEY = r"^agent:main:(?!(?:local|cli|tui|cron|webhook|api_server):)[^:]+:dm:.+$"
 NOT_A_CHAT_APP = ("local", "cli", "tui", "cron", "webhook", "api_server")
+
+
+# The command runs in whichever process dispatches it. The night routine dispatches it in its own
+# control process, where there is no gateway runner; the gateway process (which loads this plugin
+# too) is the only one that has one. So a process without a runner leaves the request in a folder
+# of the assistant's home and the gateway's copy of this plugin answers it.
+CLAIM_WAIT = 20
+ANSWER_WAIT = 880
+POLL = 0.5
+
+
+def _requests():
+    home = os.environ.get("HERMES_HOME") or os.path.join(os.path.expanduser("~"), ".hermes")
+    return os.path.join(home, "godspeed-chat-tidy-requests")
 
 
 def _runner():
@@ -53,8 +74,80 @@ def tidy(raw_args="", **_context):
     if not re.match(CHAT_KEY, key):
         return "refused: %s is not the owner's private chat in a chat app" % key
     runner = _runner()
-    if runner is None:
-        return "refused: the gateway runner is not running"
+    if runner is not None:
+        return _tidy_with(runner, key, session_id)
+    return _ask_the_gateway(key, session_id)
+
+
+def _ask_the_gateway(key, session_id):
+    folder, name = _requests(), uuid.uuid4().hex
+    request, claimed, answer = (os.path.join(folder, name + ext) for ext in (".json", ".work", ".out"))
+    try:
+        os.makedirs(folder, exist_ok=True)
+        with open(request + ".tmp", "w", encoding="utf-8") as handle:
+            json.dump({"key": key, "session_id": session_id}, handle)
+        os.replace(request + ".tmp", request)
+    except OSError as error:
+        return "refused: the gateway could not be asked (%s)" % error
+    try:
+        end = time.time() + CLAIM_WAIT
+        while os.path.exists(request):
+            if time.time() > end:
+                try:
+                    os.remove(request)
+                except OSError:
+                    continue  # the gateway claimed it just now
+                return "refused: the gateway runner is not running"
+            time.sleep(POLL)
+        end = time.time() + ANSWER_WAIT
+        while not os.path.exists(answer):
+            if time.time() > end:
+                return "refused: the gateway gave no answer"
+            time.sleep(POLL)
+        with open(answer, encoding="utf-8") as handle:
+            return handle.read().strip() or "refused: the gateway gave an empty answer"
+    finally:
+        for leftover in (request, claimed, answer):
+            try:
+                os.remove(leftover)
+            except OSError:
+                pass
+
+
+def _answer_requests():
+    """One pass: answer each request left in the folder. Only a process with a gateway runner does."""
+    if _runner() is None:
+        return
+    try:
+        names = [n for n in os.listdir(_requests()) if n.endswith(".json")]
+    except OSError:
+        return
+    for name in names:
+        path = os.path.join(_requests(), name)
+        work = path[:-len(".json")] + ".work"
+        try:
+            os.rename(path, work)
+        except OSError:
+            continue
+        try:
+            with open(work, encoding="utf-8") as handle:
+                asked = json.load(handle)
+            answer = tidy("%s %s" % (asked["key"], asked["session_id"]))
+        except Exception as error:
+            answer = "refused: the request could not be read (%s)" % error
+        out = work[:-len(".work")] + ".out"
+        with open(out + ".tmp", "w", encoding="utf-8") as handle:
+            handle.write(answer)
+        os.replace(out + ".tmp", out)
+
+
+def _serve_requests():
+    while True:
+        time.sleep(POLL)
+        _answer_requests()
+
+
+def _tidy_with(runner, key, session_id):
     try:
         entry = runner.session_store.lookup_by_session_key(key)
     except Exception as error:
@@ -78,5 +171,6 @@ def tidy(raw_args="", **_context):
 
 
 def register(ctx):
+    threading.Thread(target=_serve_requests, daemon=True, name=COMMAND).start()
     ctx.register_command(COMMAND, tidy, description="Summarise the owner's chat (night routine only)",
                          args_hint="<chat session key> <session id>")

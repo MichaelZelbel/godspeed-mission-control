@@ -839,7 +839,9 @@ def journal_tick(c):
 # (assistant-files/godspeed-chat-tidy) registers /godspeed-chat-tidy <chat session key> <session id>.
 # This routine opens its own hidden local session over the assistant's control channel (python -m
 # tui_gateway.entry), dispatches that command on it, and then checks in the database that the
-# chat's conversation really got shorter. Only that check makes a run "tidied".
+# chat's conversation really got shorter. Only that check makes a run "tidied". The control channel
+# is a separate process from the running gateway, so the plugin there hands the request to its copy
+# in the gateway through a folder in the assistant's home and returns that copy's answer.
 #
 # RULES IT HOLDS ITSELF TO
 #   - It only ever summarises the conversation the gateway's routing table names for the owner's
