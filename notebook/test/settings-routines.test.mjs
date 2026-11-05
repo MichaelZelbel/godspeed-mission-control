@@ -146,17 +146,16 @@ test('the mail counts are scheduled while a tracker has a mail rule, stay on thi
  hermes.write(hermes.jobs().filter(j=>j.name!=='Mail counts'));await scheduler.followMailCount();assert.equal(mine(),undefined,'removed by the person: not made again');
 });
 
-test('a mail-count routine Hermes cannot make is a pending notice on the periodic path, resolved once it is made',async t=>{
+test('a mail-count routine Hermes cannot make is a pending notice after a periodic tick, resolved once it is made',async t=>{
  const {store,scheduler}=await withGoal(t);
  store.save('collections',{name:'Orders',field_schema:[],tracker:{names:['Orders'],cadence:'any',talks:[],specialist:null,mail:{senders:['shop.example.invalid'],subjects:['order'],mailbox:'gmail'}}});
  const command=scheduler.command.bind(scheduler);
- scheduler.command=async()=>{throw Error('hermes is down');};
- await assert.rejects(scheduler.followMailCountVisibly(),/hermes is down/);
- await assert.rejects(scheduler.followMailCountVisibly(),/hermes is down/);
- const open=store.list('notifications').filter(n=>n.id==='mail-count-routine'&&n.status==='pending');
- assert.equal(open.length,1);assert.match(open[0].body,/mail rules are not counting/);
- scheduler.command=command;
- await scheduler.followMailCountVisibly();
+ scheduler.command=async(args,...rest)=>{if(args[0]==='create')throw Error('hermes is down');return command(args,...rest);};
+ const pending=()=>store.list('notifications').filter(n=>n.id==='mail-count-routine'&&n.status==='pending');
+ scheduler.lastTick=0;await scheduler.tick();
+ scheduler.lastTick=0;await scheduler.tick();
+ assert.equal(pending().length,1);assert.match(pending()[0].body,/mail rules are not counting/);
+ scheduler.command=command;scheduler.lastTick=0;await scheduler.tick();
  assert.equal(store.get('notifications','mail-count-routine').status,'resolved');
 });
 
