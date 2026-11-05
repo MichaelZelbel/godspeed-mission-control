@@ -49,8 +49,7 @@ export function routineFinding(job,prev={},{now,day,timezone}){
  const ranAt=time(job.last_run_at),good=job.last_status==='ok'&&ranAt!==null,errored=job.last_status==='error';
  if(good){entry.ok_at=job.last_run_at;delete entry.error_run;}
  if(entry.spell&&good&&ranAt>(time(entry.spell.run)??0))delete entry.spell;
- const hermesStreak=errored&&job.hermes_status==='error'&&Number.isInteger(job.failure_streak);
- const twice=errored&&(hermesStreak?job.failure_streak>=2:!!prev.error_run&&prev.error_run!==job.last_run_at);
+ const twice=errored&&job.hermes_status==='error'&&job.failure_streak>=2;
  if(errored)entry.error_run=job.last_run_at;
  if(entry.spell)return {entry,found:null};
  let kind=null;

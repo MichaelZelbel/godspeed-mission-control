@@ -30,10 +30,10 @@ test('one failure says nothing; two are told once with the error in plain words'
  check(f,[failing('a',3,{last_run_at:ago(3)})]);assert.equal(said(f).length,1,'the next check is silent');
 });
 
-test('without a failure streak, a second errored run seen at a later check is the second failure',t=>{
+test('without a failure streak, two errored runs seen at different checks are not taken for consecutive',t=>{
  const f=fixture(t),bare=over=>{const j=failing('a',0,over);delete j.failure_streak;return j;};
- check(f,[bare()]);check(f,[bare()]);assert.equal(said(f).length,0,'the same run twice is one failure');
- check(f,[bare({last_run_at:ago(1)})]);assert.equal(said(f).length,1);
+ check(f,[bare()]);check(f,[bare({last_run_at:ago(1)})]);
+ assert.equal(said(f).length,0,'a good run may have come between them');
 });
 
 test('a good run closes the spell and a later failure is told again',t=>{
@@ -67,4 +67,11 @@ test('runConnectionCheck tells the routines even when the connections fail, and 
  fs.mkdirSync(path.join(f.store.state,'connection-check.json'),{recursive:true});
  await assert.rejects(runConnectionCheck({root:f.root,home:f.home,env:{GODSPEED_TODAY:DAY},probes:{},jobs:[daily('late',{last_run_at:new Date(Date.now()-30*3600000).toISOString(),next_run_at:new Date(Date.now()-6*3600000).toISOString()})]}));
  assert.equal(readNotices(f.store).filter(n=>/routines-/.test(n.id)).length,1);
+});
+
+test('the check reads Hermes\' own jobs list from the home when none is given',async t=>{
+ const f=fixture(t);
+ fs.mkdirSync(path.join(f.home,'cron'));fs.writeFileSync(path.join(f.home,'cron','jobs.json'),JSON.stringify({jobs:[daily('late',{last_run_at:new Date(Date.now()-30*3600000).toISOString(),next_run_at:new Date(Date.now()-6*3600000).toISOString()})]}));
+ await runConnectionCheck({root:f.root,home:f.home,env:{GODSPEED_TODAY:DAY},probes:{}});
+ const [n,...rest]=said(f);assert.equal(rest.length,0);assert.match(n.text,/"Routine late" did not run when it was due/);
 });

@@ -223,7 +223,7 @@ export class NativeScheduler{
  // THE DAILY CONNECTION CHECK (4 November 2026, #200; notebook-routines.mjs, core/connection-check.mjs).
  // Made once, only on a machine that made its starting routines, at 05:00 on the install's clock (earlier when
  // a Morning brief set before 05:30 needs it first; connectionCheckTime). It
- // is made enabled when Telegram or Gmail is connected and paused when neither is; the notebook later
+ // is made enabled when Telegram or Gmail is connected or another routine is switched on (its "your routines" source needs no connection), and paused otherwise; the notebook later
  // resumes it only if it paused it itself and one of them has since been connected. A routine the
  // person paused or resumed, or removed, is theirs from then on.
  async followConnectionCheck(){
@@ -233,7 +233,7 @@ export class NativeScheduler{
   if(entry&&!job)return null;
   // The sentence Settings shows for it is the notebook's, so an install made before a source was added learns the new one.
   if(entry&&entry.what!==CONNECTION_WHAT)entry=rememberNotebookRoutine(this.store,{...entry,what:CONNECTION_WHAT});
-  const installation=this.store.get('settings','installation'),timezone=installation?.timezone||Intl.DateTimeFormat().resolvedOptions().timeZone,wanted=connectionCheckWanted(this.home);
+  const installation=this.store.get('settings','installation'),timezone=installation?.timezone||Intl.DateTimeFormat().resolvedOptions().timeZone,wanted=connectionCheckWanted(this.home)||jobs.some(j=>j.id&&j.enabled!==false&&j.id!==job?.id&&j.script!==CONNECTION_SCRIPT);
   writeRoutineFiles(this.home,routineFiles({root,home:this.home,state:this.store.state,timezone,hermes:this.executable}));
   if(job){
    if(!entry)return job.id;

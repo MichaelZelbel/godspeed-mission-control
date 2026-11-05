@@ -170,20 +170,23 @@ test('two queued notices are said one in each run',{skip:!['python','python3'].s
 // THE DAILY CONNECTION CHECK (#200, 4 November 2026): a script routine at 05:00 (earlier before an early Morning brief), on when Telegram or
 // Gmail is connected and paused when neither is; Settings > Routines lists it with its switch.
 const noMail=t=>{const was=process.env.GODSPEED_MAIL_HOME,dir=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-no-mail-'));process.env.GODSPEED_MAIL_HOME=dir;t.after(()=>{if(was===undefined)delete process.env.GODSPEED_MAIL_HOME;else process.env.GODSPEED_MAIL_HOME=was;fs.rmSync(dir,{recursive:true,force:true});});};
-test('the daily connection check is listed with its switch, paused until Telegram or Gmail is connected',async t=>{
+const quiet=hermes=>hermes.write(hermes.jobs().map(j=>j.name===CONNECTION_JOB?j:{...j,enabled:false}));
+test('the daily connection check is listed with its switch, on while any routine is on or a connection exists, paused otherwise',async t=>{
  noMail(t);
  const {root,home,store,hermes,scheduler,job}=await withGoal(t);
  scheduler.lastTick=0;await scheduler.tick();
  const made=job(CONNECTION_JOB);assert.ok(made,'made beside the starting routines');
- assert.equal(made.schedule.expr,'0 5 * * *');assert.equal(made.script,'godspeed-connection-check.py');assert.equal(made.no_agent,true);assert.equal(made.workdir,root);assert.equal(made.enabled,false,'neither is connected: made paused');
+ assert.equal(made.schedule.expr,'0 5 * * *');assert.equal(made.script,'godspeed-connection-check.py');assert.equal(made.no_agent,true);assert.equal(made.workdir,root);assert.equal(made.enabled,true,'no connection, but the starting routines are on: its routines source has work');
  assert.match(fs.readFileSync(path.join(home,'scripts','godspeed-connection-check.py'),'utf8'),/main\("connection-check"\)/);
  assert.ok(JSON.parse(fs.readFileSync(path.join(home,'scripts','godspeed-routines.json'),'utf8')).connection_check.endsWith('connection-check.mjs'));
  const q=new QueryService(store);q.nativeHermesHome=home;
- const row=q.rows('jobs').find(j=>j.title===CONNECTION_JOB);assert.match(row.what,/one harmless call to each connection/);assert.ok(row.what.includes(ROUTINES_NAME.label));assert.equal(row.paused,true);
+ const row=q.rows('jobs').find(j=>j.title===CONNECTION_JOB);assert.match(row.what,/one harmless call to each connection/);assert.ok(row.what.includes(ROUTINES_NAME.label));assert.equal(row.paused,false);
  // An install made before "your routines" was a source keeps the old sentence until the next tick refreshes it.
  writeNotebookRoutines(store,{...readNotebookRoutines(store),jobs:readNotebookRoutines(store).jobs.map(j=>j.key==='connection-check'?{...j,what:'An older sentence.'}:j)});
  scheduler.lastTick=0;await scheduler.tick();
  assert.ok(q.rows('jobs').find(j=>j.title===CONNECTION_JOB).what.includes(ROUTINES_NAME.label));
+ // Every other routine switched off and no connection: the notebook pauses it.
+ quiet(hermes);scheduler.lastTick=0;await scheduler.tick();assert.equal(job(CONNECTION_JOB).enabled,false);
  // Telegram connected later: the notebook, which paused it, resumes it.
  fs.writeFileSync(path.join(home,'.env'),'TELEGRAM_BOT_TOKEN=123:abc\n');
  scheduler.lastTick=0;await scheduler.tick();assert.equal(job(CONNECTION_JOB).enabled,true);
@@ -255,8 +258,8 @@ test('Gmail alone, read through the real mail adapter, starts the daily connecti
 
 test('a person who resumes the daily connection check keeps it on, and one with Telegram from the start gets it on',async t=>{
  noMail(t);
- const {home,store,scheduler,job}=await withGoal(t);
- scheduler.lastTick=0;await scheduler.tick();assert.equal(job(CONNECTION_JOB).enabled,false);
+ const {home,store,hermes,scheduler,job}=await withGoal(t);
+ scheduler.lastTick=0;await scheduler.tick();quiet(hermes);scheduler.lastTick=0;await scheduler.tick();assert.equal(job(CONNECTION_JOB).enabled,false);
  const q=new QueryService(store);q.nativeHermesHome=home;const domains=new Domains(q);domains.nativeScheduler=scheduler;
  await personalOperation(domains,{type:'routine-change',id:job(CONNECTION_JOB).id,paused:false});assert.equal(job(CONNECTION_JOB).enabled,true);
  scheduler.lastTick=0;await scheduler.tick();assert.equal(job(CONNECTION_JOB).enabled,true);
@@ -266,7 +269,7 @@ test('a person who resumes the daily connection check keeps it on, and one with 
  const otherStore=new Store(other,{device:'pc'}),otherHermes=fakeHermes(otherHome),otherScheduler=new NativeScheduler(otherStore,{home:otherHome,executable:'hermes',device:'pc',run:otherHermes.run});
  await otherScheduler.configure({goal:'Run a fictional 10k',timezone:'Europe/Berlin'});otherScheduler.lastTick=0;await otherScheduler.tick();
  const made=otherHermes.jobs().find(j=>j.name===CONNECTION_JOB);assert.ok(made);assert.notEqual(made.enabled,false,'Telegram connected: on from the start');assert.equal(made.deliver,'telegram');
- fs.writeFileSync(path.join(otherHome,'.env'),'');otherScheduler.lastTick=0;await otherScheduler.tick();
+ fs.writeFileSync(path.join(otherHome,'.env'),'');quiet(otherHermes);otherScheduler.lastTick=0;await otherScheduler.tick();
  assert.equal(otherHermes.jobs().find(j=>j.name===CONNECTION_JOB).enabled,false,'made running by the notebook, it goes off with the last connection');
 });
 
