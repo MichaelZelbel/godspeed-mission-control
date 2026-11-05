@@ -10,6 +10,7 @@ import {Store,hash} from '../core/records/store.mjs';
 import {QueryService} from '../core/query.mjs';
 import {currentHealth} from '../core/health-inputs.mjs';
 import {healthFeedId} from '../core/health-feed-id.mjs';
+import {backup} from '../core/archives.mjs';
 import {createService} from '../server/main.mjs';
 import {appendRaw,encodeRawLine,parseRawLine,readRaw,acceptUpload,importFolder,buildDays,instantOf,pruneRaw,rawFolder,tokenFile,ensureToken,renewToken,tokenMatches,SOURCE} from '../core/phone-health.mjs';
 
@@ -466,4 +467,17 @@ test('a point with no usable number makes no summed metric, a tie in sleep goes 
  fs.writeFileSync(path.join(folder,'old.jsonl'),[line('2026-10-31T12:00:00Z'),line('2026-10-30T12:00:00Z')].join('\n')+'\n');
  importFolder(store,folder,{now});
  assert.deepEqual(fs.readdirSync(rawFolder(store.state)),['2026-10-31.jsonl'],'day 30 back is kept, day 31 back is not');
+});
+
+test('the raw uploads stay on this machine: a backup holds neither a metric nobody lists nor a raw upload file',()=>{
+ const store=setup(),media=tmp('godspeed-phone-backup-media-'),destination=path.join(tmp('godspeed-phone-backup-'),'copy');
+ const unlisted='987654.321';
+ acceptUpload(store,upload([metric('step_count','count',[D+' 08:00:00 +0100',11]),metric('fictional_unlisted_metric','x',[D+' 08:00:00 +0100',Number(unlisted)])]),{now:at('2026-11-04T09:00:00Z')});
+ const raw=fs.readdirSync(rawFolder(store.state));
+ assert.equal(raw.length,1);assert.match(fs.readFileSync(path.join(rawFolder(store.state),raw[0]),'utf8'),/987654\.321/,'the raw file does hold it');
+ assert.equal(days(store)[D+' steps'],11);
+ backup(store,media,destination);
+ const files=[];const walk=folder=>{for(const entry of fs.readdirSync(folder,{withFileTypes:true})){const full=path.join(folder,entry.name);if(entry.isDirectory())walk(full);else files.push(full);}};walk(destination);
+ assert.ok(files.length>0);
+ for(const file of files){assert.ok(!file.includes('health-uploads')&&!/\.jsonl$/.test(file)&&!path.basename(file).includes(raw[0]),file);assert.ok(!fs.readFileSync(file).includes(unlisted),'the unlisted value is in '+file);}
 });

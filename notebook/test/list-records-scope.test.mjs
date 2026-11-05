@@ -33,3 +33,15 @@ test('list_records still returns the owner\'s own visible content',async t=>{
  assert.ok(rows.some(r=>r.title==='Groceries'),'visible note returned');
  assert.ok(!rows.some(r=>r.id===hidden.id),'hidden note filtered');
 });
+
+test('list_records gives one value per day and metric when the phone and a CSV both gave one, and keeps the other sources\' rows',async t=>{
+ const ctx=fixture(t),{store}=ctx;
+ const row=(id,source,value)=>store.save('health_observations',{id,metric:'steps',value,source,observed_on:'2026-11-04',date_precision:'day',observed_at:'2026-11-04T00:00:00Z'});
+ row('phone','Health Auto Export',100);await new Promise(r=>setTimeout(r,5));row('csv','Selected CSV',250);
+ assert.deepEqual(JSON.parse(await call(ctx,'health_observations')).map(r=>r.id),['csv'],'the one written last');
+ await new Promise(r=>setTimeout(r,5));row('phone','Health Auto Export',300);
+ assert.deepEqual(JSON.parse(await call(ctx,'health_observations')).map(r=>r.id),['phone'],'and the phone again once it is the newest');
+ assert.equal(store.list('health_observations').length,2,'both rows stay stored');
+ store.save('health_observations',{id:'older',metric:'steps',value:5,source:'Fictional watch',observed_on:'2026-11-03',date_precision:'day',observed_at:'2026-11-03T00:00:00Z'});
+ assert.deepEqual(JSON.parse(await call(ctx,'health_observations')).map(r=>r.id).sort(),['older','phone'],'another day is another record');
+});

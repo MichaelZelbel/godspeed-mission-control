@@ -8,6 +8,7 @@ import {notebookAddress} from '../core/notebook-address.mjs';
 import {VERSION} from '../core/version.mjs';
 import {contextStatus,markContext,setTimezone,keepAbout} from '../core/context-setup.mjs';
 import {linkTargets} from '../core/graph.mjs';
+import {latestPerDayMetric} from '../core/health-inputs.mjs';
 import {recordType,existingPerson,samePersonAnswer,collectionShape} from './save-record.mjs';
 const schema={type:'object',properties:{},additionalProperties:true};
 // A tool's object and list arguments are declared, so a client sends them as objects and lists.
@@ -184,7 +185,7 @@ export async function mcp(input,{store,query,index,domains,scopes,delegated=fals
       else if(name==='retrieve_memory')value=await domains.invoke('retrieve-memory',a);
       else if(name==='search_knowledge'){value=query.withSnapshot(()=>index.search(a.query).filter(r=>listableTypes.has(r.type)&&(!scopes||scopes.includes(toolScope('list_records',{type:r.type})))&&visibleRows(query,r.type).some(v=>v.id===r.id)));}
       // Hidden records leave first, then the limit counts (until 6 October 2026 five hidden notes ahead of three visible ones made a limit of 5 return none).
-      else if(name==='list_records'){if(!listableTypes.has(String(a.type)))throw Error('list_records reads the owner\'s own content, not '+a.type+' records. Use the tool made for them.');const allowed=new Set(visibleRows(query,a.type).map(r=>r.id));value=query.execute({table:a.type,filters:a.filters||[]}).data.filter(r=>allowed.has(r.id)).slice(0,Math.max(0,Number(a.limit)||100));if(a.type==='notes')seen(value);}
+      else if(name==='list_records'){if(!listableTypes.has(String(a.type)))throw Error('list_records reads the owner\'s own content, not '+a.type+' records. Use the tool made for them.');const allowed=new Set(visibleRows(query,a.type).map(r=>r.id));value=query.execute({table:a.type,filters:a.filters||[]}).data.filter(r=>allowed.has(r.id));if(a.type==='health_observations')value=latestPerDayMetric(value);value=value.slice(0,Math.max(0,Number(a.limit)||100));if(a.type==='notes')seen(value);}
       // A note moved to Trash or removed is public no more, as on the screens'
       // paths. Until 7 October 2026 an assistant's did stay public.
       else if(name==='save_record'){
