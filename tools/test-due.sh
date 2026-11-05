@@ -487,6 +487,9 @@ rec 2026-10-12 '{"set_up":true,"ok":false,"kind":"sign-in","failing_since":"2026
 out="$(GODSPEED_TODAY=2026-10-12 s check reconnect)"; contains "a failing record: not yet" "$out" "not working"
 rec 2026-10-09 '{"set_up":true,"ok":true}'
 out="$(GODSPEED_TODAY=2026-10-12 s check reconnect)"; contains "a working record from before the window: not yet" "$out" "before this window opened"
+s add reconnect-opening --title "Reconnect on opening day" --from 2026-10-10 --to 2026-10-30 --done-when "works" --cost "no messages" --self-check connection-ok --self-check-arg telegram >/dev/null
+rec 2026-10-10 '{"set_up":true,"ok":true}'
+out="$(GODSPEED_TODAY=2026-10-12 s check reconnect-opening)"; contains "a working record from the day the window opens closes it" "$out" "closed itself: Reconnect on opening day"
 rec 2026-10-13 '{"set_up":true,"ok":true}'
 out="$(GODSPEED_TODAY=2026-10-13 s check reconnect)"; contains "a working record from inside the window closes it" "$out" "closed itself: Reconnect Telegram"
 

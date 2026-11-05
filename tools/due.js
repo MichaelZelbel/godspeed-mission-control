@@ -667,9 +667,10 @@ function help() {
           you would like it done. --to is the last day before it costs you, and needs --cost.
           At least one of --target and --to.
           --self-check says how it can close itself, and --self-check-arg what it looks at:
-            secret-changed  a key of that name in your key store is replaced
-            connection-ok   the daily connection check finds that connection (your AI, Telegram,
-                            GitHub, Gmail) working
+            secret-changed  a key of that name in your key store is replaced after the first check
+                            inside the window, which only remembers a one-way fingerprint
+            connection-ok   the daily connection check, on a day inside the window, finds that
+                            connection (your AI, Telegram, GitHub, Gmail) working
             file-newer      that file is written inside the window
             none            only your word closes it
   mc-due target <name> YYYY-MM-DD   a new day you would like it done
