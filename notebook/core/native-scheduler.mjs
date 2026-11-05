@@ -11,7 +11,7 @@ import {starterBorn} from './starter-workspace.mjs';
 import {setHermesTimezone} from './hermes-config.mjs';
 import {FLAG,STARTING_ROUTINES,routineFiles,writeRoutineFiles,prepareCheckIn,saveRoutineResults,readMachineRecord,writeMachineRecord,telegramInHermes,routineStatus,ownRoutines,metAt,noteHermesMet,cityFiledFirst,OWN_ROUTINES_RULE} from './starting-routines.mjs';
 import {cronOf,cronCalendar,calendarCron,retimeWhat,isTalkGate,isCoachTick,talkArea,moveTalk} from './routine-times.mjs';
-import {SWITCHABLE_NOTEBOOK_ROUTINES,readNotebookRoutines,rememberNotebookRoutine,enableKind,deliveryFor,journalWanted,journalOnTheClock,JOURNAL_JOB,JOURNAL_SCRIPT,JOURNAL_WHAT,CHAT_TIDY_JOB,CHAT_TIDY_SCRIPT,writeNotebookRoutines,BRIEF_JOB,BRIEF_SCRIPT,isBriefJob,CONNECTION_JOB,CONNECTION_SCRIPT,CONNECTION_WHAT,MAIL_COUNT_JOB,MAIL_COUNT_SCRIPT,MAIL_COUNT_WHAT,NOTICES_JOB,NOTICES_SCRIPT,NOTICES_WHAT} from './notebook-routines.mjs';
+import {readNotebookRoutines,rememberNotebookRoutine,enableKind,deliveryFor,journalWanted,journalOnTheClock,JOURNAL_JOB,JOURNAL_SCRIPT,JOURNAL_WHAT,CHAT_TIDY_JOB,CHAT_TIDY_SCRIPT,writeNotebookRoutines,BRIEF_JOB,BRIEF_SCRIPT,isBriefJob,CONNECTION_JOB,CONNECTION_SCRIPT,CONNECTION_WHAT,MAIL_COUNT_JOB,MAIL_COUNT_SCRIPT,MAIL_COUNT_WHAT,NOTICES_JOB,NOTICES_SCRIPT,NOTICES_WHAT} from './notebook-routines.mjs';
 import {holdQueuedNotices} from './notices.mjs';
 import {switchable,switchedOn} from './routine-switches.mjs';
 import {connectionCheckWanted} from './connection-check.mjs';
@@ -264,11 +264,6 @@ export class NativeScheduler{
   }
   if(failures.length)throw failures[0];
   return changed;
- }
- // Every routine Settings can switch (SWITCHABLE_NOTEBOOK_ROUTINES) follows its switch now, not at the next tick.
- async followNotebookSwitches(){
-  const followers={'journal-tick':()=>this.followJournal(),'connection-check':()=>this.followConnectionCheck(),'mail-count':()=>this.followMailCount()};
-  await Promise.all(SWITCHABLE_NOTEBOOK_ROUTINES.map(r=>{if(!followers[r.key])throw Error('No follower for the switchable routine "'+r.key+'"');return followers[r.key]();}));
  }
  // THE JOURNAL'S CHECK-INS (notebook-routines.mjs): one routine while the person has any of them
  // switched on, paused when all are off, made again by nothing once the person removed it.
