@@ -543,3 +543,32 @@ test('a switched-on coach routine never says a notice queued before the sender s
  const said=[runScript('godspeed-coach-reminders.py'),runScript('godspeed-notices.py')].filter(Boolean);
  assert.deepEqual(said,['A new notice.'],'the new one once, the old one never');
 });
+
+test('a switch that the assistant cannot set up yet is saved and the answer says so',async t=>{
+ const root=temporary(t);fs.mkdirSync(path.join(root,'rules'),{recursive:true});fs.writeFileSync(path.join(root,'AGENTS.md'),'# My own mission control\n');installStarter(root);
+ const was=process.env.GODSPEED_ORIGINAL_RUNTIME;process.env.GODSPEED_ORIGINAL_RUNTIME='on';
+ const {createService}=await import('../server/main.mjs');
+ const assistant=path.join(root,'assistant.json');fs.writeFileSync(assistant,JSON.stringify({verified:true,executable:'hermes',home:path.join(root,'.hermes-home')}));
+ const was2=process.env.GODSPEED_ASSISTANT_CONFIG;process.env.GODSPEED_ASSISTANT_CONFIG=assistant;
+ t.after(()=>{if(was2===undefined)delete process.env.GODSPEED_ASSISTANT_CONFIG;else process.env.GODSPEED_ASSISTANT_CONFIG=was2;});
+ const service=await createService({root,device:'pc',port:0});
+ t.after(async()=>{await service.close();if(was===undefined)delete process.env.GODSPEED_ORIGINAL_RUNTIME;else process.env.GODSPEED_ORIGINAL_RUNTIME=was;});
+ service.store.save('settings',{id:'installation',owner:'pc',timezone:'Europe/Berlin',delivery:'notebook'});
+ service.scheduler.followNoticeSender=async()=>{throw Error('Hermes refused the job');};
+ const response=await fetch('http://127.0.0.1:'+service.address.port+'/api/routines/switch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:'connection-check',on:true})});
+ assert.notEqual(response.status,200);
+ const {error}=await response.json();assert.match(error,/Your switch is saved/);assert.match(error,/Hermes refused the job/);
+ const {switchedOn}=await import('../core/routine-switches.mjs');assert.equal(switchedOn(service.store,'connection-check'),true);
+});
+
+// Two languages share these: the wrapper files the notebook writes name a routine that the Python
+// runner must dispatch, and both write the same reason into the queue the sender reads.
+test('every routine wrapper names a routine the Python runner dispatches, and both languages write the same not-sent reason',async t=>{
+ const {routineFiles}=await import('../core/starting-routines.mjs'),{NOT_SENT_BEFORE_SENDER}=await import('../core/notices.mjs');
+ const runner=fs.readFileSync(fileURLToPath(new URL('../core/routine-scripts/godspeed_routines.py',import.meta.url)),'utf8');
+ const table=runner.match(/^ROUTINES = \{([\s\S]*?)\}$/m)[1],dispatched=[...table.matchAll(/"([a-z-]+)":/g)].map(m=>m[1]).sort();
+ const root=temporary(t),files=routineFiles({root,home:path.join(root,'.hermes-home'),state:path.join(root,'.godspeed')});
+ const emitted=Object.entries(files).filter(([name])=>name!=='godspeed_routines.py'&&name.endsWith('.py')).map(([,text])=>text.match(/^main\("([a-z-]+)"\)$/m)[1]).sort();
+ assert.deepEqual([...new Set(emitted)],dispatched);
+ assert.equal(runner.match(/^NOT_SENT_BEFORE_SENDER = "(.*)"$/m)[1],NOT_SENT_BEFORE_SENDER);
+});
