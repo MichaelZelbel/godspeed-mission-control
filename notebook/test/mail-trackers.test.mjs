@@ -119,7 +119,8 @@ store.withLock(()=>{console.log('held');${inside(liveId,c)};Atomics.wait(new Int
  await new Promise(r=>holder.stdout.on('data',r));
  waiting.splice(0).forEach(go=>go());
  assert.equal((await ran).status,0);
- return {ids:count(new Store(root),'Shop orders').map(i=>i.data.mail_id),liveId};
+ const file=path.join(new Store(root).state,'mail-counts.json');
+ return {ids:count(new Store(root),'Shop orders').map(i=>i.data.mail_id),liveId,saved:fs.existsSync(file)?JSON.parse(fs.readFileSync(file,'utf8')).rules?.[c.id]:undefined};
 }
 const insertLive=liveId=>`execute({table:'collection_items',operation:'insert',values:{collection_id:card.id,data:{when:'2026-11-05 00:00',value:1,mail_id:${JSON.stringify(liveId)}}}})`;
 const updateRule=mail=>`{const {mail:_,...rest}=card.tracker;execute({table:'collections',operation:'update',values:{tracker:${mail?`{...rest,mail:{...card.tracker.mail,senders:['other.example.invalid']}}`:'rest'}},filters:[['eq','id',card.id]]});}`;
@@ -131,8 +132,9 @@ test('a run whose search finished while another process writes waits for it and 
 
 test('a run that waited while the rule was removed or changed adds nothing',async t=>{
  for(const mail of [false,true]){
-  const {ids}=await overlapped(t,()=>updateRule(mail));
+  const {ids,saved}=await overlapped(t,()=>updateRule(mail));
   assert.deepEqual(ids,[],mail?'changed rule':'removed rule');
+  assert.equal(saved,undefined,'the old rule keeps no cursor');
  }
 });
 
