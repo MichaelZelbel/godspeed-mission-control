@@ -26,6 +26,19 @@ A new release comes out most weeks. I write about what my AI does for me and wha
 
 Version 2 is the current edition. The install lines on this page install the current public version, which is the branch `beta` of this repository; `main` is where the work goes on, and a change merged into it reaches nobody until the next version is released. The installers set up a new, separate folder. They do not move an existing version 1 Godspeed folder or your Menerio account.
 
+## New in 2.0.0-beta.17
+
+A plain yes is enough, and Godspeed tells you when a connection needs your sign-in.
+
+- **Answer a waiting step with yes or no.** When something your assistant started in the background needs your say-so, it asks one question in plain words. Reply "yes" or "no", in the notebook chat or in your private Telegram chat, and that is the answer. You no longer type a command or copy a code, and `/approve` is gone. With two questions waiting, your assistant asks in words which one you mean. With nothing waiting, "yes" approves nothing.
+- **Yes and No buttons on Telegram.** The question of a waiting step arrives with Yes and No buttons. A press answers only that question. A second press, or a press after you already typed your answer, changes nothing and says so.
+- **Fewer questions to begin with.** Before it asks, Godspeed checks the question. A step it can simply do, such as restarting its own gateway, is done quietly. A question you already answered is answered from your earlier decision, unless you gave that decision an end date and it has passed, or the step changed since. An optional extra step that clearly fits what you allowed is done, or dropped, and never asked. Anything that reaches outside, such as sending or buying, is always asked.
+- **A daily connection check.** Early every morning, before your briefing, Godspeed makes one harmless call to each connection you set up: your AI, Telegram, the GitHub sync and Gmail. If a sign-in or key is refused, you get one message and a deadline, and the deadline closes itself the first day the connection works again. Any other failure is reported only when it happens two mornings in a row. When everything works, nothing is sent. It is a new routine in **Settings**, **Routines**, on when Telegram or Gmail is connected and paused when neither is. Because of it, a first goal now starts eight routines.
+- **A mission control that Godspeed did not create can use the routines too.** If you adopted a mission control that was not made from Godspeed's starter, it now gets Godspeed's own notice sender, so a waiting step's question and a connection notice reach you. Its routines are listed in **Settings**, **Routines**, all off, under a line saying the mission control was adopted. Switch on the ones you want. An update never switches one off.
+- **A talk you ask for on a talk day opens that day's talk.** When you ask for an area's talk in the chat on its talk day, and an earlier talk of that area is still open with no reply from you, the earlier talk is closed as not held and today's prepared talk opens. The opening says so in one sentence. A talk you replied to is never closed this way. On a day that is not a talk day, an open talk is still continued.
+
+Updating keeps your folder, notes and settings.
+
 ## New in 2.0.0-beta.16
 
 Coaching talks arrive prepared, and a talk that is not prepared says so.
@@ -348,7 +361,7 @@ The notebook no longer calls every installation a test installation. Its unavail
 
 ## New on 9 October 2026, for the book's second edition
 
-- Your first goal starts five routines by itself: the daily round's two (one picks the day's work, one does it), deadline reminders, and a weekly check-in about the goal on Sundays with the coach's reminders. Later releases added the nightly goal research and the preparation of coaching talks, so a first goal starts seven today.
+- Your first goal starts five routines by itself: the daily round's two (one picks the day's work, one does it), deadline reminders, and a weekly check-in about the goal on Sundays with the coach's reminders. Later releases added the nightly goal research and the preparation of coaching talks, so a first goal started seven by beta.16. The daily connection check of beta.17 makes it eight.
 - The notebook keeps the people, facts and events you tell it about, one page per person. Each kind of fact has one fixed name, and a newer value ends the older one.
 - The note graph is back, worked out from your notes when you open it.
 - A computer can connect its own GitHub copy from Settings, and mail works on a computer too.
