@@ -56,9 +56,16 @@ Plus: does it repeat, and how often.
 mc-due add <slug> --title "<in their words>" [--from YYYY-MM-DD] \
   --target YYYY-MM-DD and/or --to YYYY-MM-DD \
   --done-when "<answer 1>" [--cost "<answer 3>, needed with --to"] \
-  --self-check none|secret-changed|file-newer [--self-check-arg X] \
+  --self-check none|secret-changed|connection-ok|file-newer [--self-check-arg X] \
   [--repeats monthly|yearly|"every N days"] [--link <https url>]
 ```
+
+The self checks, and the one line on when to use each:
+
+- `none`: nothing in your mission control can see it happen, so only the person's word closes it.
+- `secret-changed` with `--self-check-arg <key name>`: use it for "renew the key"; it closes when that key in the key store is replaced, without ever reading the key.
+- `connection-ok` with `--self-check-arg <your AI|Telegram|GitHub|Gmail>`: use it for "reconnect that service"; it closes when the daily connection check finds the connection working.
+- `file-newer` with `--self-check-arg <path>`: use it when a file is written as proof; it closes when that file is written inside the window.
 
 **Ask question four every single time, even when you already know the answer is "it cannot".**
 Knowing which kind of obligation this is changes what gets built around it, and an obligation that
