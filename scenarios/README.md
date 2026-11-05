@@ -12,6 +12,11 @@ which a step written inside a workflow file cannot be. They live in a folder of 
 same reason `stage/` does: everything in `tools/` is copied onto every user's computer as a program,
 and these are not programs for users.
 
+`chat-tidy-at-night`, `disk-filling`, `missed-routine` and `deadline-closes-itself` are not yet jobs of
+that workflow: their jobs are written in the pull request that added them and are applied in the
+release step. Until then they are run by hand, with the environment their rows below name. Remove this
+paragraph when the jobs are in `.github/workflows/scenarios.yml`.
+
 | script | what it proves |
 | --- | --- |
 | `settings-on-install.sh` | a fresh install carries the faster-chat settings, and a value the owner set stays theirs |
@@ -88,7 +93,7 @@ checking itself.
 
 ## The keys three of them need
 
-Named by the job, never in a file here:
+Named by the job, never in a file here (for the four scenarios above that await their jobs, set them by hand):
 
 | scenario | environment | what it is |
 | --- | --- | --- |

@@ -59,14 +59,19 @@ look() { # <label>: the deadlines as they are after a step
 
 # The paths (never the contents) of the files that hold a key, outside the places keys are kept in.
 scan_for_keys() { # <file for the answer> <key>...
-  local out=$1 found='' key
+  local out=$1 found='' key hits code
   shift
   for key in "$@"; do
-    found+=$(grep -rlF --exclude-dir=integrated-runtime --exclude-dir=node_modules --exclude-dir=.git \
+    hits=$(grep -rlF --exclude-dir=integrated-runtime --exclude-dir=node_modules --exclude-dir=.git \
       --exclude=config.yaml --exclude=.env --exclude=auth.json --exclude=provider.json \
-      -- "$key" "$HERMES" "$STATE" "$ROOT" "$EVIDENCE" 2>/dev/null || true)
-    found+=$'\n'
+      -- "$key" "$HERMES" "$STATE" "$ROOT" "$EVIDENCE" 2>"$EVIDENCE/key-scan.err")
+    code=$?
+    # grep ends 1 for "no file holds it"; any other end means some file was not looked at.
+    [ "$code" -le 1 ] && [ ! -s "$EVIDENCE/key-scan.err" ] ||
+      fail "the scan for the keys' values could not look at every file (grep ended $code): $(head -n 1 "$EVIDENCE/key-scan.err")"
+    found+=$hits$'\n'
   done
+  rm -f "$EVIDENCE/key-scan.err"
   found=$(sed '/^$/d' <<<"$found" | sort -u)
   if [ -z "$found" ]; then printf 'clean\n' >"$out"; else printf '%s\n' "$found" >"$out"; fi
 }

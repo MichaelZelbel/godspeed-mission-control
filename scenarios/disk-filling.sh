@@ -214,6 +214,21 @@ act() {
 }
 
 # ------------------------------------------------------------------------------ what it judges
+# The percent a disk-reading file says the disk was at, within two points of the one wanted.
+disk_was_at() { # <file> <wanted percent>
+  local used size percent
+  used=$(sed -n 's/^used=\([0-9]*\) size=.*/\1/p' "$1")
+  size=$(sed -n 's/^used=[0-9]* size=\([0-9]*\)$/\1/p' "$1")
+  case $used$size in
+    '' | *[!0-9]*) fail "$1 does not say how much of the disk was used and how big it was: $(cat "$1")" ;;
+  esac
+  [ -n "$used" ] && [ -n "$size" ] || fail "$1 does not say how much of the disk was used and how big it was: $(cat "$1")"
+  [ "$size" -gt 0 ] || fail "$1 says the disk was 0 bytes big: $(cat "$1")"
+  percent=$(( used * 100 / size ))
+  [ "$percent" -ge $(( $2 - 2 )) ] && [ "$percent" -le $(( $2 + 2 )) ] ||
+    fail "the disk read $percent% ($(cat "$1")) when the connection check ran, not the $2% this part of the scenario is about"
+}
+
 check() { # <evidence folder>
   local folder=$1 label name text opened slug title state entry kind before
   [ -d "$folder" ] || fail "there is nothing at $folder, so this scenario kept no evidence of a disk"
@@ -225,6 +240,9 @@ check() { # <evidence folder>
     [ "$(cat "$folder/$label-exit" 2>/dev/null)" = 0 ] ||
       fail "the connection check ended $(cat "$folder/$label-exit" 2>/dev/null || echo '(never)') in the run $label: $(head -1 "$folder/$label-log" 2>/dev/null)"
   done
+
+  disk_was_at "$folder/df-86.txt" 86
+  disk_was_at "$folder/df-75.txt" 75
 
   # 86%: one message naming the three biggest places, one deadline.
   [ "$(grep -c . "$folder/biggest.txt")" = 3 ] || fail "biggest.txt does not name three places, so the scenario could not tell which are the biggest"

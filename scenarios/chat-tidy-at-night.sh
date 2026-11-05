@@ -26,6 +26,7 @@
 # What it keeps for its checking part:
 #   short-before.txt / short-after.txt   the under-limit conversation's own rows around its run
 #   short-log / -exit                    that run
+#   short-count.txt                      messages=<n> tokens=<n> of the short conversation
 #   long-before.txt / long-after.txt     messages=<n> tokens=<n> of the long conversation around its run
 #   long-log / -exit / -said             that run
 #   next-reply.txt / next-exit           what the assistant answered to the next message
@@ -35,6 +36,7 @@ SCENARIO=chat-tidy-at-night
 scenario_arguments "$@"
 
 ROUTINE='Night chat tidy-up'
+LIMIT_TOKENS=60000 # the product's limit on recorded prompt tokens (night-tidy-chat.mjs)
 SCRIPT=godspeed-chat-tidy.py
 LONG=scenario-chat-1
 SHORT=scenario-short-3
@@ -83,6 +85,7 @@ act() {
   chat_store seed --session "$SHORT" --tokens 20000 --quiet-minutes 60 --messages 12 >&2 ||
     fail "a conversation under the limit could not be seeded into the assistant's chat store"
   chat_store dump --session "$SHORT" >"$EVIDENCE/short-before.txt"
+  chat_store count --session "$SHORT" >"$EVIDENCE/short-count.txt"
   run_the_routine short
   chat_store dump --session "$SHORT" >"$EVIDENCE/short-after.txt"
 
@@ -113,7 +116,7 @@ number() { # <value> <what it was supposed to be>
 check() { # <evidence folder>
   local folder=$1 file
   [ -d "$folder" ] || fail "there is nothing at $folder, so this scenario kept no evidence of a night"
-  for file in short-before.txt short-after.txt short-log short-exit long-before.txt long-after.txt \
+  for file in short-before.txt short-after.txt short-log short-exit short-count.txt long-before.txt long-after.txt \
     long-log long-exit next-reply.txt next-exit; do
     kept "$folder" "$file" "what the night routine did and what the chats looked like around it"
   done
@@ -122,9 +125,17 @@ check() { # <evidence folder>
   # The long conversation: shorter in the database, and the log says it was tidied.
   [ "$(cat "$folder/long-exit")" = 0 ] ||
     fail "the night routine ended $(cat "$folder/long-exit") on the long conversation: $(head -1 "$folder/long-log")"
-  local before after
+  local before after tokens
   before=$(sed -n 's/^messages=\([0-9]*\).*/\1/p' "$folder/long-before.txt")
   after=$(sed -n 's/^messages=\([0-9]*\).*/\1/p' "$folder/long-after.txt")
+  tokens=$(sed -n 's/^messages=[0-9]* tokens=\([0-9]*\)$/\1/p' "$folder/long-before.txt")
+  number "$tokens" "long-before.txt does not say how many tokens the conversation had recorded: $(cat "$folder/long-before.txt")"
+  [ "$tokens" -ge "$LIMIT_TOKENS" ] ||
+    fail "the long conversation had $tokens recorded tokens before the night routine, under the limit of $LIMIT_TOKENS, so tidying it proves nothing"
+  tokens=$(sed -n 's/^messages=[0-9]* tokens=\([0-9]*\)$/\1/p' "$folder/short-count.txt")
+  number "$tokens" "short-count.txt does not say how many tokens the short conversation had recorded: $(cat "$folder/short-count.txt")"
+  [ "$tokens" -lt "$LIMIT_TOKENS" ] ||
+    fail "the short conversation had $tokens recorded tokens, not under the limit of $LIMIT_TOKENS"
   number "$before" "long-before.txt does not say how many messages the conversation had: $(cat "$folder/long-before.txt")"
   number "$after" "long-after.txt does not say how many messages the conversation has: $(cat "$folder/long-after.txt")"
   [ "$after" -lt "$before" ] ||

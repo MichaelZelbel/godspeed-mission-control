@@ -2845,7 +2845,17 @@ printf '{"id":"scenario-short-3"}\n{"role":"user","content":"x"}\n' >"$CT/good/s
 cp "$CT/good/short-before.txt" "$CT/good/short-after.txt"
 printf 'skip: under the limit\n' >"$CT/good/short-log"
 printf '0\n' >"$CT/good/short-exit"
+printf 'messages=12 tokens=20000\n' >"$CT/good/short-count.txt"
 passes 'a long chat shortened and logged, the next message plain, a short chat untouched' chat-tidy-at-night "$CT/good" 'the long conversation went from 40 to 9 messages'
+copy "$CT/good" "$CT/long-under-limit"
+printf 'messages=40 tokens=1\n' >"$CT/long-under-limit/long-before.txt"
+refuses 'a long chat that was never over the limit' chat-tidy-at-night "$CT/long-under-limit" 'under the limit of 60000'
+copy "$CT/good" "$CT/long-tokens-missing"
+printf 'messages=40 tokens=none\n' >"$CT/long-tokens-missing/long-before.txt"
+refuses 'a long chat with no recorded tokens' chat-tidy-at-night "$CT/long-tokens-missing" 'how many tokens the conversation had recorded'
+copy "$CT/good" "$CT/short-over-limit"
+printf 'messages=12 tokens=90000\n' >"$CT/short-over-limit/short-count.txt"
+refuses 'a short chat that was over the limit' chat-tidy-at-night "$CT/short-over-limit" 'not under the limit of 60000'
 copy "$CT/good" "$CT/not-shortened"
 printf 'messages=40 tokens=174000\n' >"$CT/not-shortened/long-after.txt"
 refuses 'a long chat that is not shorter' chat-tidy-at-night "$CT/not-shortened" 'nothing was shortened'
@@ -2989,6 +2999,15 @@ df_good() { # <folder>
 }
 df_good "$DF/good"
 passes 'one message naming the three biggest, nothing again, closed at 75%, only the old taken' disk-filling "$DF/good" 'at 86% the connection check said one message'
+copy "$DF/good" "$DF/wrong-86"
+printf 'used=500 size=1000\n' >"$DF/wrong-86/df-86.txt"
+refuses 'a disk that read 50% at the first run' disk-filling "$DF/wrong-86" 'read 50%'
+copy "$DF/good" "$DF/wrong-75"
+printf 'used=860 size=1000\n' >"$DF/wrong-75/df-75.txt"
+refuses 'a disk that read 86% at the low run' disk-filling "$DF/wrong-75" 'read 86%'
+copy "$DF/good" "$DF/df-malformed"
+printf 'used=x size=1000\n' >"$DF/df-malformed/df-86.txt"
+refuses 'a disk reading that is not numbers' disk-filling "$DF/df-malformed" 'does not say how much of the disk'
 copy "$DF/good" "$DF/silent"
 : >"$DF/silent/first-said"
 refuses 'nothing said at 86%' disk-filling "$DF/silent" 'said nothing with the disk at 86%'
@@ -3029,25 +3048,20 @@ refuses 'an old file that was never there' disk-filling "$DF/never-planted" 'was
 
 # ============================================================ every one of them, the same shape
 section 'every script'
-for file in scenario-lib.sh settings-on-install.sh night-tidy.sh voice.sh update-keeps-everything.sh \
-  reminder-closed-elsewhere.sh reminders-move-keeps-everything.sh two-machines-move-at-once.sh \
-  late-reminder-file.sh closed-offline-on-both.sh reminder-from-settings.sh \
-  charm-challenge.sh no-video-skills-by-default.sh update-removes-only-unchanged-skills.sh \
-  briefing-breaks-a-rule.sh telegram-language.sh brief-asked-in-chat.sh talk-prep-honest.sh \
-  no-question-he-cannot-judge.sh plain-yes.sh what-was-that.sh connection-check.sh \
-  chat-tidy-at-night.sh disk-filling.sh missed-routine.sh deadline-closes-itself.sh test-scenarios.sh; do
+BASH_SCENARIOS=(settings-on-install night-tidy voice update-keeps-everything
+  reminder-closed-elsewhere reminders-move-keeps-everything two-machines-move-at-once
+  late-reminder-file closed-offline-on-both reminder-from-settings charm-challenge
+  no-video-skills-by-default update-removes-only-unchanged-skills briefing-breaks-a-rule telegram-language
+  brief-asked-in-chat talk-prep-honest no-question-he-cannot-judge plain-yes what-was-that connection-check
+  chat-tidy-at-night disk-filling missed-routine deadline-closes-itself)
+for file in scenario-lib.sh "${BASH_SCENARIOS[@]/%/.sh}" test-scenarios.sh; do
   if bash -n "$ROOT/scenarios/$file" 2>/dev/null; then
     ok "bash reads scenarios/$file"
   else
     bad "bash cannot read scenarios/$file"
   fi
 done
-for scenario in settings-on-install night-tidy voice update-keeps-everything \
-  reminder-closed-elsewhere reminders-move-keeps-everything two-machines-move-at-once \
-  late-reminder-file closed-offline-on-both reminder-from-settings charm-challenge \
-  no-video-skills-by-default update-removes-only-unchanged-skills briefing-breaks-a-rule telegram-language \
-  brief-asked-in-chat talk-prep-honest no-question-he-cannot-judge plain-yes what-was-that connection-check \
-  chat-tidy-at-night disk-filling missed-routine deadline-closes-itself; do
+for scenario in "${BASH_SCENARIOS[@]}"; do
   refuses "$scenario on a folder that is not there" "$scenario" "$TMP/no-such-folder" \
     "there is nothing at"
   run "$scenario"
