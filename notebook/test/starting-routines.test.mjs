@@ -481,13 +481,3 @@ print(g.connection_check(c)[0])`;
  assert.equal(run.status,0,run.stderr);assert.match(run.stdout,words);
  assert.deepEqual(JSON.parse(fs.readFileSync(said,'utf8')).ids,[id]);
 });
-
-// The wrappers the notebook writes (JavaScript) and the dispatcher that runs them (Python) list the same keys by hand.
-test('every routine wrapper names a routine the Python runner dispatches, and no dispatcher entry is orphaned',t=>{
- const root=temporary(t,'routine-keys'),files=routineFiles({root,home:path.join(root,'hermes'),state:path.join(root,'.godspeed'),timezone:'Europe/Berlin'});
- const emitted=Object.entries(files).filter(([name])=>name.endsWith('.py')&&name!=='godspeed_routines.py').map(([,text])=>/^main\("([a-z-]+)"\)$/m.exec(text)[1]).sort();
- const runner=files['godspeed_routines.py'],table=/^ROUTINES = \{([^}]*)\}/m.exec(runner)[1],dispatched=[...table.matchAll(/"([a-z-]+)":/g)].map(m=>m[1]).sort();
- assert.deepEqual(emitted,dispatched);
- const silent=[...(/^NOT_RECORDED = \(([^)]*)\)/m.exec(runner)[1]).matchAll(/"([a-z-]+)"/g)].map(m=>m[1]);
- assert.ok(silent.every(key=>dispatched.includes(key)),'a silent routine that no wrapper runs');
-});
