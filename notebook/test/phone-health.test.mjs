@@ -292,3 +292,14 @@ test('the command line imports a folder of legacy uploads: godspeed health impor
  assert.equal(days(new Store(root))[D+' steps'],321);
  assert.notEqual(run(['health','import']).status,0,'a missing folder is an error');
 });
+
+test('a day of raw uploads is kept for 30 UTC calendar days after receipt and removed one day later',()=>{
+ const store=setup(),received=at('2026-10-01T12:00:00Z');
+ acceptUpload(store,upload([metric('step_count','count',['2026-10-01 08:00:00 +0000',10])]),{now:received});
+ const files=()=>fs.readdirSync(rawFolder(store.state));
+ assert.equal(files().length,1);
+ assert.equal(pruneRaw(store.state,at('2026-10-31T23:59:59Z')),0,'day 30 after receipt: still kept');
+ assert.equal(files().length,1);
+ assert.equal(pruneRaw(store.state,at('2026-11-01T00:00:00Z')),1,'day 31 after receipt: removed');
+ assert.equal(files().length,0);
+});
