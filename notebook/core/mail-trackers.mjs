@@ -12,9 +12,8 @@
 // An install where no tracker has a rule makes no mail call and does not even load mc-mail.
 import fs from 'node:fs';
 import path from 'node:path';
-import crypto from 'node:crypto';
 import {createRequire} from 'node:module';
-import {atomic} from './records/store.mjs';
+import {atomic,hash} from './records/store.mjs';
 import {norm,own,trackers,entries} from './trackers.mjs';
 import {addDays,localParts} from '../../third-party/addons/godspeed-coach/lib/clock.mjs';
 
@@ -42,7 +41,7 @@ export function mailRule(input){
 }
 // The rule on a card, or null: a hand-edited card with a broken rule counts nothing.
 export function cardRule(c){try{return c?.tracker?.mail?mailRule(c.tracker.mail):null;}catch{return null;}}
-export const ruleDigest=rule=>crypto.createHash('sha256').update(JSON.stringify({senders:[...rule.senders].sort(),subjects:rule.subjects.map(norm).sort(),mailbox:rule.mailbox})).digest('hex');
+export const ruleDigest=rule=>hash({senders:[...rule.senders].sort(),subjects:rule.subjects.map(norm).sort(),mailbox:rule.mailbox});
 export const ruleSentence=(rule,name,isNew)=>'Count each mail from '+list(rule.senders)+' whose subject says '+list(rule.subjects.map(s=>'"'+s+'"'))+', in '+MAILBOX[rule.mailbox].words+', as one in '+(isNew?'a new tracker called ':'')+name+'?';
 
 // Which trackers can take a rule. A daily tracker keeps one entry a day, which is not one entry per mail,
@@ -56,7 +55,7 @@ export function mailColumn(c){
 }
 export const NOT_FITTING=name=>name+' keeps one entry a day or its own columns, and a mail count needs one entry for each mail. Say a new name and I will start a tracker for the mails.';
 // Only a digest is kept: a Message-ID is written by the sender and may carry an address that is no named sender's.
-export const mailId=(mailbox,id)=>mailbox+':'+crypto.createHash('sha256').update(mailbox+'\0'+id).digest('hex').slice(0,32);
+export const mailId=(mailbox,id)=>mailbox+':'+hash(mailbox+'\0'+id).slice(0,32);
 export const mailTrackers=store=>trackers(store).map(c=>({c,rule:cardRule(c)})).filter(t=>t.rule);
 // Whether a rule counts in the mailbox that this connection of the connection check reports.
 export const mailboxInUse=(store,connection)=>mailTrackers(store).some(t=>MAILBOX[t.rule.mailbox].connection===connection);
