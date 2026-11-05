@@ -28,6 +28,8 @@ Each routine runs the original programs of the mission control, never a copy of 
   connection-check  the Daily connection check (notebook/scripts/connection-check.mjs): one harmless call
               to each connection that is set up; prints only the notices it queued (a login or key
               refused, or a second failed morning in a row).
+  notices     the notice sender of a mission control not made from the starter (#225): every 15
+              minutes it says the oldest queued notice, and never one marked not_sent.
   coach-gate  godspeed-coach gate: the talk brief when a talk is due, else {"wakeAgent": false}.
   coach-prep  mc-coach-prep, every night at 03:00: each coaching talk of the next day is prepared
               with the coach-prep recipe, within two hours. It prints nothing: a talk it could not
@@ -46,7 +48,8 @@ The two that run every 15 minutes, coach-tick and journal-tick, also say once wh
 needs the person to hear and could not send itself, such as a nightly backup that failed: the
 notebook queues it in notices.json in its own state, and each one is said once (notice), one a
 run and only when the routine has no line of its own. The notebook writes it with the guidance the
-chat reads. Every message a routine sends is recorded in the notebook's conversation_messages, so
+chat reads. A mission control not made from the starter has a third one, notices, that says only notices; a
+notice marked not_sent (queued before that routine first started) is never said. Every message a routine sends is recorded in the notebook's conversation_messages, so
 the chat can tell what a message was about (core/background-reports.mjs).
 
 Printing nothing is Hermes' silence: nothing is sent and no note is saved. A failure exits non-zero
@@ -693,11 +696,12 @@ def notice(c, only=""):
     if not queued:
         return None
     waiting = []
+    before_sender = held_ids(c)
     try:
         with open(queued, encoding="utf-8") as f:
             text = f.read()
         if text.strip():
-            waiting = [n for n in json.loads(text).get("notices", []) if isinstance(n, dict) and isinstance(n.get("id"), str) and n["id"].startswith(only)]
+            waiting = [n for n in json.loads(text).get("notices", []) if isinstance(n, dict) and isinstance(n.get("id"), str) and n["id"].startswith(only) and n["id"] not in before_sender and not n.get("not_sent")]
     except FileNotFoundError:
         return None
     except Exception:
@@ -807,6 +811,65 @@ def tick(c, env, kind, r):
     if found:
         return say_claimed(c, env, found), True
     return "", True
+
+
+NOTICES_STARTED = "godspeed-notices-started"
+NOT_SENT_BEFORE_SENDER = "Queued before Godspeed began sending notices on this machine, so it was kept and not sent."
+
+
+def now_ms():
+    return datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+
+
+def held_ids(c):
+    """The ids of every notice queued before the notice sender first started, in a mission control not
+    made from the starter (#225); empty in any other. The first call there marks all queued notices
+    not_sent and records their ids in the marker file, a permanent set kept apart from the bounded
+    said history, and notice() refuses every id in it. That also covers a producer's stale write of the
+    whole queue that brings one back unmarked; a notice queued later has a new id. It all happens under
+    the lock every delivery path takes, and the marker is published whole, so a run that sees it sees a
+    finished hold. A queue that cannot be read raises, so the run fails and says nothing."""
+    queued = c.get("notices")
+    if not c.get("adopted") or not queued:
+        return set()
+    marker = os.path.join(c["home"], NOTICES_STARTED)
+    said_file = os.path.join(c["home"], NOTICES_SAID)
+    with one_at_a_time(said_file + ".lock"):
+        if not os.path.exists(marker):
+            at = now_ms()
+            ids = []
+            try:
+                with open(queued, encoding="utf-8") as f:
+                    data = json.loads(f.read())
+            except FileNotFoundError:
+                data = None
+            if data is not None:
+                if not isinstance(data, dict) or not isinstance(data.get("notices"), list):
+                    raise ValueError("the queued notices cannot be read")
+                ids = [n["id"] for n in data["notices"] if isinstance(n, dict) and isinstance(n.get("id"), str)]
+                held = [dict(n, not_sent={"reason": NOT_SENT_BEFORE_SENDER, "at": at}) if isinstance(n, dict) and not n.get("not_sent") else n for n in data["notices"]]
+                if held != data["notices"]:
+                    tmp = "%s.%d.tmp" % (queued, os.getpid())
+                    with open(tmp, "w", encoding="utf-8") as f:
+                        f.write(json.dumps(dict(data, notices=held), indent=2) + "\n")
+                    os.replace(tmp, queued)
+            tmp = "%s.%d.tmp" % (marker, os.getpid())
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump({"at": at, "ids": ids}, f)
+            os.replace(tmp, marker)
+        try:
+            with open(marker, encoding="utf-8") as f:
+                return set(json.load(f).get("ids", []))
+        except Exception:
+            return set()
+
+
+def notices(c):
+    """The notice sender of a mission control not made from the starter (#225): it says the oldest queued
+    notice and nothing else."""
+    env = environment(c, today(c))
+    found = notice(c)
+    return (say_claimed(c, env, found), True) if found else ("", True)
 
 
 def journal_tick(c):
@@ -1112,6 +1175,10 @@ def connection_check(c):
     for the next successful run."""
     day = today(c)
     env = environment(c, day)
+    try:
+        held_ids(c)  # the hold must precede the check's own notices, which are not older than the sender
+    except Exception:
+        fail("The daily connection check could not run.")
     args = [c["node"], c["connection_check"]]
     if c.get("hermes"):
         args += ["--hermes", c["hermes"]]
@@ -1149,7 +1216,7 @@ def connection_check(c):
 # Every routine wrapper the notebook writes (routineFiles in starting-routines.mjs) names one of these.
 ROUTINES = {"research": research, "decide": decide, "work": work, "due": due, "brief": brief, "coach-prep": coach_prep,
             "coach-gate": lambda c: coach(c, "gate"), "coach-tick": lambda c: coach(c, "tick"),
-            "journal-tick": journal_tick, "chat-tidy": chat_tidy, "connection-check": connection_check}
+            "journal-tick": journal_tick, "notices": notices, "chat-tidy": chat_tidy, "connection-check": connection_check}
 
 
 def main(kind):
