@@ -51,6 +51,13 @@ describe("Health data from your phone in Settings", () => {
     expect(screen.queryByRole("button")).toBeNull();
   });
 
+  it("shows the error when the first status request fails", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ error: "The notebook could not read its health setup" }), { status: 500, headers: { "Content-Type": "application/json" } })));
+    show();
+    expect(await screen.findByRole("alert")).toHaveTextContent("The notebook could not read its health setup");
+    expect(screen.queryByRole("button")).toBeNull();
+  });
+
   it("says on Windows that the phone needs the server install, with no button", async () => {
     serve({ "phone-health": () => ({ available: false }) });
     show();

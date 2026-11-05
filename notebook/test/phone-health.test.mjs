@@ -7,6 +7,7 @@ import http from 'node:http';
 import {Store,hash} from '../core/records/store.mjs';
 import {QueryService} from '../core/query.mjs';
 import {currentHealth} from '../core/health-inputs.mjs';
+import {healthFeedId} from '../core/health-feed-id.mjs';
 import {createService} from '../server/main.mjs';
 import {acceptUpload,importFolder,buildDays,instantOf,pruneRaw,rawFolder,tokenFile,ensureToken,renewToken,tokenMatches,SOURCE} from '../core/phone-health.mjs';
 
@@ -46,7 +47,7 @@ test('records are day records in the CSV feed\'s id scheme, on the date in the p
  const store=setup();
  acceptUpload(store,upload([metric('step_count','count',['2026-11-04 00:09:00 +0100',40])]),{now:at('2026-11-03T23:30:00Z')});
  const [row]=store.list('health_observations');
- assert.equal(row.id,'health-feed-'+hash([SOURCE,D,'steps']));
+ assert.equal(row.id,healthFeedId(SOURCE,D,'steps'));
  assert.deepEqual([row.source,row.date_precision,row.observed_on,row.value],['Health Auto Export','day',D,40]);
 });
 
@@ -260,4 +261,19 @@ test('Settings shows an https address only, a new address replaces the old one a
  assert.equal((await request(computer.address.port,'/api/phone-health/renew',{method:'POST',body:{}})).status,404);
  assert.equal(fs.existsSync(tokenFile(computer.store.state)),false);
  assert.notEqual(JSON.parse((await request(computer.address.port,'/ingest/health')).text||'null')?.ok,true);
+});
+
+test('Settings and the server share one protocol: the panel calls the declared routes and reads only the declared fields',async()=>{
+ const {PHONE_HEALTH_STATUS,PHONE_HEALTH_RENEW,PHONE_HEALTH_FIELDS}=await import('../core/phone-health-protocol.mjs');
+ const panel=fs.readFileSync(new URL('../ui/src/local/PhoneHealth.tsx',import.meta.url),'utf8'),server=fs.readFileSync(new URL('../server/main.mjs',import.meta.url),'utf8');
+ assert.ok(panel.includes("call('"+PHONE_HEALTH_STATUS+"')"),'the panel asks for the status route');
+ assert.ok(panel.includes("call('"+PHONE_HEALTH_RENEW+"',"),'the panel renews on the renew route');
+ const status=panel.match(/type Status=\{([^}]*)\}/)[1].split(';').map(f=>f.split(/[?:]/)[0].trim()).filter(Boolean);
+ assert.deepEqual(status.sort(),[...PHONE_HEALTH_FIELDS].sort(),'the panel reads exactly the declared fields');
+ assert.ok(server.includes('PHONE_HEALTH_STATUS')&&server.includes('PHONE_HEALTH_RENEW')&&!/'\/api\/phone-health/.test(server),'the server routes come from the declaration');
+ const root=serverRoot('godspeed-phone-protocol-'),service=await createService({root,port:0,webPort:0});
+ try{
+  const state=JSON.parse((await request(service.address.port,'/api/'+PHONE_HEALTH_STATUS)).text);
+  for(const key of Object.keys(state))assert.ok(PHONE_HEALTH_FIELDS.includes(key),key+' is declared');
+ }finally{await service.close();fs.rmSync(root,{recursive:true,force:true});}
 });

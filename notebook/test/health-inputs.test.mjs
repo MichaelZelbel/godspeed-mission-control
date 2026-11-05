@@ -6,7 +6,9 @@ import path from 'node:path';
 import {Store} from '../core/records/store.mjs';
 import {QueryService} from '../core/query.mjs';
 import {personalOperation} from '../core/personal-operations.mjs';
-import {currentHealth} from '../core/health-inputs.mjs';
+import {currentHealth,PHONE_SOURCE} from '../core/health-inputs.mjs';
+import {healthFeedId} from '../core/health-feed-id.mjs';
+import {acceptUpload} from '../core/phone-health.mjs';
 import {jobExecutor} from '../core/runtime.mjs';
 
 const setup=()=>{
@@ -51,4 +53,16 @@ test('selected CSV corrections keep source history, reject impossible and future
  assert.equal(seen.health.length,1);assert.equal(seen.health[0].value,3);
  assert.equal(seen.health_freshness.has_fresh_measurements,true);
  assert.equal(query.rows('coach_talks')[0].sources.includes('fictional_software_checks'),true);
+});
+test('the phone and the selected CSV keep a day under the same id, so a CSV correction replaces the phone record',()=>{
+ const {store,query}=setup(),operation=input=>personalOperation({store,query},input);
+ const day=new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Berlin',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+ acceptUpload(store,{metrics:[{name:'step_count',units:'count',data:[{date:day+' 08:00:00 +0100',qty:100,source:'Fictional Phone'}]}],workouts:[]},{now:new Date()});
+ const phone=store.list('health_observations');assert.equal(phone.length,1);
+ assert.equal(phone[0].id,healthFeedId(PHONE_SOURCE,day,'steps'));
+ operation({type:'health-import-csv',source:PHONE_SOURCE,content:'date,steps\n'+day+',250\n'});
+ const all=store.list('health_observations');assert.equal(all.length,1,'one record, corrected in place');
+ assert.equal(all[0].id,phone[0].id);assert.equal(all[0].value,250);
+ operation({type:'health-import-csv',source:'Fictional other feed',content:'date,steps\n'+day+',7\n'});
+ assert.notEqual(store.list('health_observations').find(r=>r.value===7).id,phone[0].id);
 });

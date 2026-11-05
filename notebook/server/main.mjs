@@ -50,6 +50,7 @@ import {enableKinds} from '../core/notebook-routines.mjs';
 import {routineSwitches,setRoutineSwitch} from '../core/routine-switches.mjs';
 import {notebookAddress} from '../core/notebook-address.mjs';
 import {latestPerDayMetric} from '../core/health-inputs.mjs';
+import {PHONE_HEALTH_STATUS,PHONE_HEALTH_RENEW} from '../core/phone-health-protocol.mjs';
 import {BODY_LIMIT as UPLOAD_LIMIT,ensureToken,renewToken,tokenMatches,pruneRaw,acceptUpload} from '../core/phone-health.mjs';
 import {about} from '../core/about.mjs';
 import {showCard as showContextCard,readContext,markContext} from '../core/context-setup.mjs';
@@ -399,13 +400,13 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
       if(route==='/api/backup-ai/remove'&&req.method==='POST')return send(res,200,{hermes:!!backupHome,...removeBackupAI({home:backupHome,state:store.state})});
       // VOICE REPLIES (core/voice-replies.mjs, discussion #41): the voice the assistant answers voice
       // notes with, kept in Hermes' own home. An ElevenLabs voice is kept only after a sample worked.
-      if(route==='/api/phone-health'||route==='/api/phone-health/renew'){
-        if(!phoneUploads){if(route==='/api/phone-health')return send(res,200,{available:false});return send(res,404,{error:'Unknown operation'});}
-        if(route==='/api/phone-health/renew'&&req.method!=='POST')return send(res,405,{error:'Use POST'});
+      if(route==='/api/'+PHONE_HEALTH_STATUS||route==='/api/'+PHONE_HEALTH_RENEW){
+        if(!phoneUploads){if(route==='/api/'+PHONE_HEALTH_STATUS)return send(res,200,{available:false});return send(res,404,{error:'Unknown operation'});}
+        if(route==='/api/'+PHONE_HEALTH_RENEW&&req.method!=='POST')return send(res,405,{error:'Use POST'});
         const link=notebookAddress({port:server.address().port}).link;
         // The token travels only inside an https address: over http a network observer would read the phone's credential.
-        if(!link?.startsWith('https://')){if(route==='/api/phone-health/renew')return send(res,409,{error:'A new address needs this server\'s https web address'});return send(res,200,{available:true,address:null});}
-        const token=route==='/api/phone-health/renew'?renewToken(store.state):ensureToken(store.state);
+        if(!link?.startsWith('https://')){if(route==='/api/'+PHONE_HEALTH_RENEW)return send(res,409,{error:'A new address needs this server\'s https web address'});return send(res,200,{available:true,address:null});}
+        const token=route==='/api/'+PHONE_HEALTH_RENEW?renewToken(store.state):ensureToken(store.state);
         return send(res,200,{available:true,address:link.replace(/\/dashboard$/,'')+'/ingest/'+token});
       }
       if(route==='/api/voice'&&req.method==='GET')return send(res,200,backupHome?voiceStatus({home:backupHome,state:store.state}):{available:false});

@@ -1,6 +1,7 @@
 import fs from 'node:fs';import path from 'node:path';
 import {randomBytes,createHash,timingSafeEqual} from 'node:crypto';
 import {hash,atomic} from './records/store.mjs';
+import {healthFeedId} from './health-feed-id.mjs';
 import {PHONE_SOURCE} from './health-inputs.mjs';
 import {addDays,zonedToUtc,now as clockNow} from '../../third-party/addons/godspeed-coach/lib/clock.mjs';
 
@@ -160,7 +161,7 @@ export function writeDays(store,built,{now=clockNow()}={}){
  const timezone=store.get('settings','installation')?.timezone||'UTC',oldestCovered=addDays(utcDay(now),-(KEEP_DAYS-1)),rows=[];
  for(const [day,metrics] of [...built].sort()){
   for(const [metric,value] of metrics){
-   const id='health-feed-'+hash([SOURCE,day,metric]),previous=store.get('health_observations',id);
+   const id=healthFeedId(SOURCE,day,metric),previous=store.get('health_observations',id);
    if(previous&&(day<oldestCovered||!previous.removed_at&&previous.value===value&&previous.date_precision==='day'))continue;
    rows.push(store.prepare('health_observations',{id,metric,value,source:SOURCE,observed_on:day,date_precision:'day',observed_at:zonedToUtc(day,'00:00',timezone).toISOString()},previous));
   }

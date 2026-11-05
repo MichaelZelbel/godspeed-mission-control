@@ -14,7 +14,8 @@ async function call(route:string,body?:unknown):Promise<Status>{
 
 export function PhoneHealth(){
   const client=useQueryClient(),[error,setError]=useState('');
-  const {data}=useQuery({queryKey:['phone-health'],queryFn:()=>call('phone-health')});
+  const {data,error:loadError}=useQuery({queryKey:['phone-health'],queryFn:()=>call('phone-health')});
+  if(loadError)return <p role="alert" className="text-red-400">{(loadError as Error).message||'The health data setup could not be loaded'}</p>;
   if(!data)return null;
   if(!data.available)return <p>Health data from your phone (Health Auto Export) needs the server install of Godspeed Mission Control.</p>;
   const renew=async()=>{
