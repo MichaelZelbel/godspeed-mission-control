@@ -111,7 +111,7 @@ test('with Telegram the starting routines deliver there, and the coach talks the
  assert.equal(JSON.parse(fs.readFileSync(path.join(root,'coach','settings.json'),'utf8')).talk_delivery,'messenger');
 });
 
-test('nothing is started for a mission control set up before, one whose Hermes has routines, or one not made from the starter',async t=>{
+test('nothing is started for a mission control set up before or one whose Hermes has routines, and one not made from the starter gets only the notice sender',async t=>{
  // Set up before this change: an installation record and no record of starting routines.
  {const {root,home}=starterFixture(t),store=new Store(root,{device:'pc'}),hermes=fakeHermes(home);store.save('settings',{id:'installation',owner:'pc',timezone:'Europe/Berlin',delivery:'notebook'});
   const scheduler=new NativeScheduler(store,{home,executable:'hermes',device:'pc',run:hermes.run});
@@ -122,15 +122,16 @@ test('nothing is started for a mission control set up before, one whose Hermes h
   await new NativeScheduler(store,{home,executable:'hermes',device:'pc',run:hermes.run}).configure({goal:'Fictional goal',timezone:'Europe/Berlin'});
   assert.deepEqual(hermes.jobs().map(j=>j.id),['mine']);assert.equal(store.get('settings','starting-routines').state,'skipped');}
  // An adopted mission control: the owner's own manual and rules, the owner's own recipes, live
- // routines on several machines. The developer's own machines are this case; they get nothing new.
+ // routines on several machines. The developer's own machines are this case; since #225 they get the
+ // notice sender and nothing else, until a routine is switched on in Settings.
  {const root=fixture(t),home=path.join(root,'.hermes-home');fs.mkdirSync(path.join(root,'rules'),{recursive:true});fs.writeFileSync(path.join(root,'AGENTS.md'),'# My own mission control\n');fs.writeFileSync(path.join(root,'rules','my-own-rule.md'),'Mine.\n');
   for(const skill of ['next-action','work-item'])fs.mkdirSync(path.join(root,'skills',skill),{recursive:true}),fs.writeFileSync(path.join(root,'skills',skill,'SKILL.md'),'My own '+skill);
   installStarter(root);assert.equal(adoptedMissionControl(root),true);
   const store=new Store(root,{device:'pc'}),hermes=fakeHermes(home),scheduler=new NativeScheduler(store,{home,executable:'hermes',device:'pc',run:hermes.run});
   await scheduler.configure({goal:'Fictional adopted goal',timezone:'Europe/Berlin'});
   fileGoal(root,'--status','adopted','--title','Another fictional goal');scheduler.lastTick=0;await scheduler.tick();
-  assert.equal(hermes.calls.filter(c=>c.args[1]==='create').length,0,'no new job');assert.ok(!store.get('settings','starting-routines'));
-  assert.equal(fs.existsSync(path.join(home,'scripts')),false);assert.equal(fs.existsSync(path.join(root,'coach','weekly-check-in')),false);}
+  assert.deepEqual(hermes.calls.filter(c=>c.args[1]==='create').map(c=>c.args[c.args.indexOf('--name')+1]),['Godspeed notices'],'only the notice sender');assert.ok(!store.get('settings','starting-routines'));
+  assert.equal(fs.existsSync(path.join(root,'coach','weekly-check-in')),false);}
 });
 
 test('a goal told in the chat starts the same routines at the next tick, on this computer\'s clock',async t=>{

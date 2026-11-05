@@ -44,6 +44,26 @@ check "the server installer runs the shared setup at its pin" \
 check "and that pin is past the removal of the question (no tag from before it)" \
   "$(sed -n 's/^KB_PIN="\(.*\)"$/\1/p' "$ROOT/server/install.sh" "$ROOT/server/open-the-door.sh" | grep -c -E '^v2\.([0-9]|1[0-8])$')" "0"
 
+# --- The three kit-bootstrap pins stay one commit --------------------------------------------
+# windows-setup.yml, server/install.sh and server/open-the-door.sh each declare the commit of
+# kit-bootstrap they run; docker/Dockerfile takes its value from server/install.sh. A bump that
+# misses one leaves a computer, a server and the door script on different setups.
+PIN_WIN="$(sed -n 's/^ *KIT_BOOTSTRAP_COMMIT: *\([^ #]*\).*$/\1/p' "$ROOT/.github/workflows/windows-setup.yml" | tr -d '\r')"
+PIN_SRV="$(sed -n 's/^KB_PIN="\(.*\)"$/\1/p' "$ROOT/server/install.sh" | tr -d '\r')"
+PIN_DOOR="$(sed -n 's/^KB_PIN="\(.*\)"$/\1/p' "$ROOT/server/open-the-door.sh" | tr -d '\r')"
+HEX40='^[0-9a-f]{40}$'
+PINS_HEX=""
+for v in "$PIN_WIN" "$PIN_SRV" "$PIN_DOOR"; do
+  if printf '%s' "$v" | grep -q -E "$HEX40"; then PINS_HEX="${PINS_HEX}1"; else PINS_HEX="${PINS_HEX}0"; fi
+done
+check "each of the three kit-bootstrap pins is present and a full 40-hex commit" "$PINS_HEX" "111"
+check "and the three pins (windows-setup.yml, install.sh, open-the-door.sh) are the same commit" \
+  "$([ -n "$PIN_WIN" ] && [ "$PIN_WIN" = "$PIN_SRV" ] && [ "$PIN_SRV" = "$PIN_DOOR" ] && echo equal || echo "differ: [$PIN_WIN] [$PIN_SRV] [$PIN_DOOR]")" "equal"
+# This release's kit-bootstrap commit. Each release step moves it together with the three pins
+# (.github/workflows/windows-setup.yml, server/install.sh, server/open-the-door.sh).
+EXPECTED_KB_PIN=7ae7d664c0a3864216190c6c06aa7d895bcec0fc
+check "and that common pin is this release's expected kit-bootstrap commit" "$PIN_WIN" "$EXPECTED_KB_PIN"
+
 # --- A server set up before 27 October 2026 loses the job on its next run -------------------
 FN="$(sed -n '/^retire_install_count() {$/,/^}$/p' "$ROOT/server/install.sh")"
 check "server/install.sh has retire_install_count" "$([ -n "$FN" ] && echo yes || echo no)" "yes"
