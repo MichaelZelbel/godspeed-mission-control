@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {atomic,hash} from './records/store.mjs';
-import {hermesJobs} from './native-scheduler.mjs';
+import {hermesJobs,pausedJob} from './native-scheduler.mjs';
 import {routineStatus} from './starting-routines.mjs';
 import {readNotebookRoutines,CONNECTION_SCRIPT} from './notebook-routines.mjs';
 import {tellOwner} from './connection-check.mjs';
@@ -22,7 +22,6 @@ import {AI_SIGN_IN,scrubCredentials} from './runtime.mjs';
 export const ROUTINES_RECORD_FILE='connection-check-routines.json';
 const HOUR=3600000,DAY=24*HOUR;
 
-const pausedJob=job=>job.enabled===false||job.state==='paused'||!!job.paused_at;
 const time=value=>{const at=Date.parse(value);return Number.isFinite(at)?at:null;};
 const errorWords=text=>{const said=/\bstderr:\s*\n\s*(\S[^\n]*)/.exec(String(text||''));return scrubCredentials((said?said[1]:String(text||'').split(/\r?\n/).find(l=>l.trim())||'').trim()).slice(0,200);};
 

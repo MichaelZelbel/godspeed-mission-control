@@ -23,6 +23,8 @@ export function hermesJobs(home){
  const data=JSON.parse(fs.readFileSync(file,'utf8')),jobs=Array.isArray(data)?data:data.jobs||[];
  return jobs.filter(j=>j&&typeof j==='object');
 }
+// A job Hermes holds paused is written as enabled:false, state:'paused' or a paused_at time.
+export const pausedJob=job=>job.enabled===false||job.state==='paused'||!!job.paused_at;
 // When a routine last ran and how it went is Hermes' own record (last_run_at, last_status,
 // last_error); until 8 October 2026 the Routines list showed neither. A daily round that told the
 // person it went wrong is shown as failed (starting-routines.mjs, routineStatus).
@@ -223,8 +225,8 @@ export class NativeScheduler{
  // THE DAILY CONNECTION CHECK (4 November 2026, #200; notebook-routines.mjs, core/connection-check.mjs).
  // Made once, only on a machine that made its starting routines, at 05:00 on the install's clock (earlier when
  // a Morning brief set before 05:30 needs it first; connectionCheckTime). It
- // is made enabled when Telegram or Gmail is connected or another routine is switched on (its "your routines" source needs no connection), and paused otherwise; the notebook later
- // resumes it only if it paused it itself and one of them has since been connected. A routine the
+ // is made enabled when Telegram or Gmail is connected or another routine is active (its "your routines" source needs no connection), and paused otherwise; the notebook later
+ // resumes it only if it paused it itself and one of them has since come about. A routine the
  // person paused or resumed, or removed, is theirs from then on.
  async followConnectionCheck(){
   const root=this.store.root;if(!starterBorn(root)||readMachineRecord(this.store)?.state!=='created')return null;
@@ -233,12 +235,12 @@ export class NativeScheduler{
   if(entry&&!job)return null;
   // The sentence Settings shows for it is the notebook's, so an install made before a source was added learns the new one.
   if(entry&&entry.what!==CONNECTION_WHAT)entry=rememberNotebookRoutine(this.store,{...entry,what:CONNECTION_WHAT});
-  const installation=this.store.get('settings','installation'),timezone=installation?.timezone||Intl.DateTimeFormat().resolvedOptions().timeZone,wanted=connectionCheckWanted(this.home)||jobs.some(j=>j.id&&j.enabled!==false&&j.id!==job?.id&&j.script!==CONNECTION_SCRIPT);
+  const installation=this.store.get('settings','installation'),timezone=installation?.timezone||Intl.DateTimeFormat().resolvedOptions().timeZone,wanted=connectionCheckWanted(this.home)||jobs.some(j=>j.id&&!pausedJob(j)&&j.id!==job?.id&&j.script!==CONNECTION_SCRIPT);
   writeRoutineFiles(this.home,routineFiles({root,home:this.home,state:this.store.state,timezone,hermes:this.executable}));
   if(job){
    if(!entry)return job.id;
    if(!entry.paused_by_notebook){
-    // Still running as the notebook left it: it goes off with the last connection. A person's pause ends that ownership.
+    // Still running as the notebook left it: it goes off when no connection and no active routine wants it. A person's pause ends that ownership.
     if(job.enabled===false&&entry.running_by_notebook)rememberNotebookRoutine(this.store,{...entry,running_by_notebook:false});
     else if(job.enabled!==false&&entry.running_by_notebook&&!wanted){await this.command(['pause',job.id]);rememberNotebookRoutine(this.store,{...entry,paused_by_notebook:true,running_by_notebook:false});}
     return job.id;

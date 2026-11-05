@@ -168,7 +168,7 @@ test('two queued notices are said one in each run',{skip:!['python','python3'].s
 });
 
 // THE DAILY CONNECTION CHECK (#200, 4 November 2026): a script routine at 05:00 (earlier before an early Morning brief), on when Telegram or
-// Gmail is connected and paused when neither is; Settings > Routines lists it with its switch.
+// Gmail is connected or another routine is active, and paused when none is; Settings > Routines lists it with its switch.
 const noMail=t=>{const was=process.env.GODSPEED_MAIL_HOME,dir=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-no-mail-'));process.env.GODSPEED_MAIL_HOME=dir;t.after(()=>{if(was===undefined)delete process.env.GODSPEED_MAIL_HOME;else process.env.GODSPEED_MAIL_HOME=was;fs.rmSync(dir,{recursive:true,force:true});});};
 const quiet=hermes=>hermes.write(hermes.jobs().map(j=>j.name===CONNECTION_JOB?j:{...j,enabled:false}));
 test('the daily connection check is listed with its switch, on while any routine is on or a connection exists, paused otherwise',async t=>{
@@ -190,6 +190,12 @@ test('the daily connection check is listed with its switch, on while any routine
  // Telegram connected later: the notebook, which paused it, resumes it.
  fs.writeFileSync(path.join(home,'.env'),'TELEGRAM_BOT_TOKEN=123:abc\n');
  scheduler.lastTick=0;await scheduler.tick();assert.equal(job(CONNECTION_JOB).enabled,true);
+ // Routines paused in either other form Hermes writes do not keep it on without a connection.
+ for(const paused of [{state:'paused'},{paused_at:'2026-11-01T00:00:00Z'}]){
+  fs.writeFileSync(path.join(home,'.env'),'TELEGRAM_BOT_TOKEN=123:abc\n');hermes.write(hermes.jobs().map(j=>j.name===CONNECTION_JOB?j:{...j,enabled:true,state:'scheduled',paused_at:null}));scheduler.lastTick=0;await scheduler.tick();assert.equal(job(CONNECTION_JOB).enabled,true);
+  fs.writeFileSync(path.join(home,'.env'),'');hermes.write(hermes.jobs().map(j=>j.name===CONNECTION_JOB?j:{...j,...paused}));scheduler.lastTick=0;await scheduler.tick();assert.equal(job(CONNECTION_JOB).enabled,false);
+ }
+ fs.writeFileSync(path.join(home,'.env'),'TELEGRAM_BOT_TOKEN=123:abc\n');scheduler.lastTick=0;await scheduler.tick();
  // The last connection removed while it still runs as the notebook left it: the notebook pauses it, and resumes it when one returns.
  fs.writeFileSync(path.join(home,'.env'),'');
  scheduler.lastTick=0;await scheduler.tick();assert.equal(job(CONNECTION_JOB).enabled,false);
