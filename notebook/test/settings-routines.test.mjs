@@ -497,6 +497,14 @@ test('an adopted mission control gets the notice sender, keeps the notices queue
  assert.equal(runScript('godspeed-notices.py'),'A later notice.','the old one is not sent though nothing marks it and its stamp is no older than the start');
 });
 
+test('a notice sender its owner removed from Hermes is not made again',{skip:!havePython&&'needs Python'},async t=>{
+ const {hermes,tick,job}=await adoptedFixture(t),made=()=>hermes.calls.filter(c=>c[1]==='create').length;
+ await tick();assert.equal(made(),1);
+ hermes.write(hermes.jobs().filter(j=>j.name!=='Godspeed notices'));
+ await tick();await tick();
+ assert.equal(job('Godspeed notices'),undefined,'it stays removed');assert.equal(made(),1,'and no create is attempted');
+});
+
 test('a notice queued before the first start stays held after more than 200 later deliveries, and a restored unmarked copy is not sent',{skip:!havePython&&'needs Python'},async t=>{
  const {store,home,tick,runScript}=await adoptedFixture(t),{queueNotice,readNotices}=await import('../core/notices.mjs');
  queueNotice(store,{id:'before-1',text:'An old notice.'});await tick();
