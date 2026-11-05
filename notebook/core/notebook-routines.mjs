@@ -72,7 +72,7 @@ export function journalWanted(root){
 // Pause and Resume is its switch.
 export const CONNECTION_JOB='Daily connection check';
 export const CONNECTION_SCRIPT='godspeed-connection-check.py';
-export const CONNECTION_WHAT=`Early every morning, before your morning brief, it makes one harmless call to each connection you set up (${Object.values(CONNECTION_NAMES).map(c=>c.label).join(', ')}) and tells you only when one needs your sign-in or key, or failed two mornings in a row. It sends nothing else.`;
+export const CONNECTION_WHAT=`Early every morning, before your morning brief, it makes one harmless call to each connection you set up (${Object.entries(CONNECTION_NAMES).filter(([name])=>name!=='disk').map(([,c])=>c.label).join(', ')}) and tells you only when one needs your sign-in or key, or failed two mornings in a row. On a server it also looks how full the disk is and tells you once when it passes 85%. It sends nothing else.`;
 // THE NIGHT CHAT TIDY-UP (26 October 2026). The assistant keeps a chat app's chat as one long
 // conversation and summarises its older part once it passes its threshold, and it does that before
 // answering the message that crossed the line: a real message waited 4 minutes 9 seconds while 348

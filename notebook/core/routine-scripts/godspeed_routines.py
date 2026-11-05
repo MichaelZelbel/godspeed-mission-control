@@ -28,6 +28,9 @@ Each routine runs the original programs of the mission control, never a copy of 
   connection-check  the Daily connection check (notebook/scripts/connection-check.mjs): one harmless call
               to each connection that is set up; prints only the notices it queued (a login or key
               refused, or a second failed morning in a row).
+  cleanup     the nightly cleanup (notebook/scripts/nightly-cleanup.mjs): files untouched for 30 days
+              are removed from a fixed list of places (core/cleanup.mjs). It prints nothing for the
+              person; what it freed and the disk before and after go to the error stream.
   coach-gate  godspeed-coach gate: the talk brief when a talk is due, else {"wakeAgent": false}.
   coach-prep  mc-coach-prep, every night at 03:00: each coaching talk of the next day is prepared
               with the coach-prep recipe, within two hours. It prints nothing: a talk it could not
@@ -1103,7 +1106,7 @@ def coach(c, command):
 
 # Every other routine's words are recorded as printed (record); the two 15-minute routines record a
 # notice themselves, when it is written (tick). These print nothing for the person or feed an agent job.
-NOT_RECORDED = ("research", "coach-gate", "coach-prep", "chat-tidy")
+NOT_RECORDED = ("research", "coach-gate", "coach-prep", "chat-tidy", "cleanup")
 
 
 def connection_check(c):
@@ -1117,6 +1120,8 @@ def connection_check(c):
         args += ["--hermes", c["hermes"]]
     if c.get("hermes_source"):
         args += ["--hermes-source", c["hermes_source"]]
+    if c.get("server"):
+        args += ["--server"]
     try:
         r = run(args, c, env, timeout=900)
     except subprocess.TimeoutExpired:
@@ -1146,10 +1151,22 @@ def connection_check(c):
     return "\n\n".join(said), True
 
 
+def cleanup(c):
+    """The nightly cleanup (core/cleanup.mjs): its log is its output."""
+    try:
+        r = run([c["node"], c["cleanup"]], c, environment(c, today(c)), timeout=900)
+    except subprocess.TimeoutExpired:
+        r = None
+    if r is None or r.returncode != 0:
+        fail("The nightly cleanup could not run.", r)
+    sys.stderr.write(r.stderr)
+    return ""
+
+
 # Every routine wrapper the notebook writes (routineFiles in starting-routines.mjs) names one of these.
 ROUTINES = {"research": research, "decide": decide, "work": work, "due": due, "brief": brief, "coach-prep": coach_prep,
             "coach-gate": lambda c: coach(c, "gate"), "coach-tick": lambda c: coach(c, "tick"),
-            "journal-tick": journal_tick, "chat-tidy": chat_tidy, "connection-check": connection_check}
+            "journal-tick": journal_tick, "chat-tidy": chat_tidy, "connection-check": connection_check, "cleanup": cleanup}
 
 
 def main(kind):

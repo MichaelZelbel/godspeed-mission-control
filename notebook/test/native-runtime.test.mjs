@@ -61,7 +61,7 @@ function starterFixture(t,{config=true}={}){
  return {root,home};
 }
 // Seven since 18 October 2026: each coaching talk is prepared the night before it, at 03:00.
-const STARTING=[['Nightly goal research','15 0 * * *','godspeed-goal-research.py'],['Daily round: choose today\'s work','30 5 * * *','godspeed-daily-round-choose.py'],['Daily round: do the work','0 10,16 * * *','godspeed-daily-round-work.py'],['Deadline reminders','0 8 * * *','godspeed-deadline-reminders.py'],['Weekly check-in','*/15 * * * *','godspeed-coach-talks.py'],['Coach reminders and habit check','*/15 * * * *','godspeed-coach-reminders.py'],['Coaching talk preparation','0 3 * * *','godspeed-coach-prep.py']],CONNECTION=['Daily connection check','0 5 * * *','godspeed-connection-check.py'];
+const STARTING=[['Nightly goal research','15 0 * * *','godspeed-goal-research.py'],['Daily round: choose today\'s work','30 5 * * *','godspeed-daily-round-choose.py'],['Daily round: do the work','0 10,16 * * *','godspeed-daily-round-work.py'],['Deadline reminders','0 8 * * *','godspeed-deadline-reminders.py'],['Weekly check-in','*/15 * * * *','godspeed-coach-talks.py'],['Coach reminders and habit check','*/15 * * * *','godspeed-coach-reminders.py'],['Coaching talk preparation','0 3 * * *','godspeed-coach-prep.py'],['Nightly cleanup','45 2 * * *','godspeed-nightly-cleanup.py']],CONNECTION=['Daily connection check','0 5 * * *','godspeed-connection-check.py'];
 // What a machine has in Hermes once it has ticked: the starting routines the first goal made, and the daily connection check (4 November 2026) the next tick adds beside them.
 const TICKED=[...STARTING,CONNECTION];
 

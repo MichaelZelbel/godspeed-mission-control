@@ -8,4 +8,6 @@ export const CONNECTION_NAMES={
  telegram:{label:'Telegram',stops:'nothing from your mission control reaches you on Telegram and your messages there go unanswered'},
  github:{label:'GitHub',stops:'your notebook stops syncing with your other computers'},
  mail:{label:'Gmail',stops:'your assistants cannot search your mail or save drafts'},
+ // Only on a server (#238): the disk is not a connection, but it is the one other thing the check tells the owner about.
+ disk:{label:'your server\'s disk',stops:'your notebook, your backups and your assistant will stop'},
 };
