@@ -104,23 +104,36 @@ test('a second run adds nothing, and neither does a window that overlaps the las
  assert.match(requests.find(r=>r.includes('after='))||'',/after=2026-10-04/,'the first run reaches back 30 days, a day early for the zone');
 });
 
-test('a run whose search finished while another process writes waits for it and counts each mail once',async t=>{
+// The script finishes its header search at a barrier while another process holds the workspace and, inside it, does `inside`.
+async function overlapped(t,inside){
  const {root,domains}=fixture(t);await setUp(domains,ORDERS,{name:'Shop orders'});
  // The script runs on the real clock, so one mail is made an hour old now.
  const live=mail('live','Shop <orders@shop.example.invalid>','New order #live',new Date(Date.now()-3600e3).toISOString());MAILS.push(live);t.after(()=>MAILS.splice(MAILS.indexOf(live),1));
  const c=trackers(new Store(root)).find(x=>x.name==='Shop orders'),liveId=mailId('godspeed','live');
- // The other process: holds the workspace for a second and, inside it, enters the same mail.
  const other=`import {Store} from ${JSON.stringify(new URL('../core/records/store.mjs',import.meta.url).href)};import {QueryService} from ${JSON.stringify(new URL('../core/query.mjs',import.meta.url).href)};
-const store=new Store(${JSON.stringify(root)});
-store.withLock(()=>{console.log('held');new QueryService(store).execute({table:'collection_items',operation:'insert',holdingLock:true,values:{collection_id:${JSON.stringify(c.id)},data:{when:'2026-11-05 00:00',value:1,mail_id:${JSON.stringify(liveId)}}}});Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,1000);});`;
+const store=new Store(${JSON.stringify(root)}),query=new QueryService(store),card=${JSON.stringify(c)},execute=args=>query.execute({...args,holdingLock:true});
+store.withLock(()=>{console.log('held');${inside(liveId,c)};Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,1000);});`;
  barrier=99;
  const ran=script(root);while(!waiting.length)await new Promise(r=>setTimeout(r,20));
  const holder=execFile(process.execPath,['--input-type=module','-e',other]);
  await new Promise(r=>holder.stdout.on('data',r));
  waiting.splice(0).forEach(go=>go());
  assert.equal((await ran).status,0);
- const ids=count(new Store(root),'Shop orders').map(i=>i.data.mail_id);
+ return {ids:count(new Store(root),'Shop orders').map(i=>i.data.mail_id),liveId};
+}
+const insertLive=liveId=>`execute({table:'collection_items',operation:'insert',values:{collection_id:card.id,data:{when:'2026-11-05 00:00',value:1,mail_id:${JSON.stringify(liveId)}}}})`;
+const updateRule=mail=>`{const {mail:_,...rest}=card.tracker;execute({table:'collections',operation:'update',values:{tracker:${mail?`{...rest,mail:{...card.tracker.mail,senders:['other.example.invalid']}}`:'rest'}},filters:[['eq','id',card.id]]});}`;
+
+test('a run whose search finished while another process writes waits for it and counts each mail once',async t=>{
+ const {ids,liveId}=await overlapped(t,insertLive);
  assert.equal(ids.filter(id=>id===liveId).length,1);assert.equal(new Set(ids).size,ids.length);
+});
+
+test('a run that waited while the rule was removed or changed adds nothing',async t=>{
+ for(const mail of [false,true]){
+  const {ids}=await overlapped(t,()=>updateRule(mail));
+  assert.deepEqual(ids,[],mail?'changed rule':'removed rule');
+ }
 });
 
 test('a mail is entered on its local date, with its own minute',async t=>{

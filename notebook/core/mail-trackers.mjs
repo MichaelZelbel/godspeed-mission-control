@@ -105,8 +105,12 @@ export async function countMail({store,query,search,now=new Date(),tz}){
   const column=mailColumn(c);if(column===false)continue;
   let messages;
   try{messages=await searchFrom(run,rule,windowFor(state,c.id,rule,today),tz);}catch{continue;}
-  // The check and the writes are one step, and a second run at the same moment waits its turn (withLockAsync), so nothing is counted twice.
-  await store.withLockAsync(()=>{
+  // The check and the writes are one step, and a second run at the same moment waits its turn (withLockAsync),
+  // so nothing is counted twice. The rule is read again inside it: one removed or changed while this run
+  // waited counts nothing and leaves its place alone.
+  const counted=await store.withLockAsync(()=>{
+   const current=mailTrackers(store).find(t=>t.c.id===c.id);
+   if(!current||ruleDigest(current.rule)!==ruleDigest(rule)||mailColumn(current.c)!==column)return false;
    const have=countedIds(store,c,store.list('collection_items'));
    for(const m of mailMatches(rule,messages)){
     const id=mailId(rule.mailbox,m.message_id),when=whenOf(m.date,now,tz);
@@ -114,8 +118,9 @@ export async function countMail({store,query,search,now=new Date(),tz}){
     have.add(id);
     query.execute({table:'collection_items',operation:'insert',holdingLock:true,values:{collection_id:c.id,data:{when,[column||'value']:1,mail_id:id}}});added++;
    }
+   return true;
   });
-  state.rules[c.id]={digest:ruleDigest(rule),last_day:today};
+  if(counted)state.rules[c.id]={digest:ruleDigest(rule),last_day:today};
  }
  atomic(stateFile(store),JSON.stringify(state,null,2)+'\n');
  return {added};
