@@ -36,6 +36,31 @@ test('without a failure streak, two errored runs seen at different checks are no
  assert.equal(said(f).length,0,'a good run may have come between them');
 });
 
+// A daily-round routine: Hermes records the run as good and godspeed-routines-status.json says it failed.
+const round=(f,now,failed)=>{
+ const job=daily('round',{script:'godspeed-daily-round-choose.py',last_run_at:new Date(now-5*3600000).toISOString(),next_run_at:new Date(now+19*3600000).toISOString()});
+ fs.writeFileSync(path.join(f.home,'godspeed-routines-status.json'),JSON.stringify(failed?{decide:{failed:'the goal file is damaged',at:job.last_run_at}}:{}));
+ return job;
+};
+
+test('a failure only the status record shows is told at its second run, once, across days',t=>{
+ const f=fixture(t),on=(day,now,failed)=>checkRoutines({store:f.store,home:f.home,day,timezone:'UTC',now:()=>new Date(now),jobs:[round(f,now,failed)]});
+ const next=NOW+24*3600000,after=NOW+48*3600000,later=NOW+72*3600000;
+ on(DAY,NOW,true);assert.equal(said(f).length,0,'one failed run says nothing');
+ on('2026-11-06',next,true);assert.equal(said(f).length,1);assert.match(said(f)[0].text,/failed its last two runs: the goal file is damaged/);
+ on('2026-11-07',after,true);assert.equal(said(f).length,1,'the same spell is not told on a later day');
+ on('2026-11-08',later,false);assert.equal(said(f).length,1,'a good run closes it');
+ on('2026-11-09',later+24*3600000,true);assert.equal(said(f).length,1,'a first failure after the good run says nothing');
+ on('2026-11-10',later+48*3600000,true);assert.equal(said(f).length,2,'the second failure of a new spell is told');
+});
+
+test('the same missed routine is told once on the first day, and not again on the next',t=>{
+ const f=fixture(t);
+ check(f,[daily('late')]);
+ checkRoutines({store:f.store,home:f.home,day:'2026-11-06',timezone:'UTC',now:()=>new Date(NOW+24*3600000),jobs:[daily('late')]});
+ assert.equal(said(f).length,1);
+});
+
 test('a good run closes the spell and a later failure is told again',t=>{
  const f=fixture(t);
  check(f,[failing('a',2)]);assert.equal(said(f).length,1);

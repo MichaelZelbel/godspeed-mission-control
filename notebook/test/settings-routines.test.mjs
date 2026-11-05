@@ -20,7 +20,7 @@ function fakeHermes(home){
   const jobs=read();
   if(verb==='create'){const noAgent=rest.includes('--no-agent');jobs.push({id:'job'+(++serial),name:flag('--name'),schedule:{kind:'cron',expr:rest[0]},schedule_display:rest[0],prompt:noAgent?null:rest[1],script:flag('--script'),skill:flag('--skill'),no_agent:noAgent,deliver:flag('--deliver'),workdir:flag('--workdir'),enabled:true,state:'scheduled',created_at:new Date().toISOString()});write(jobs);}
   if(verb==='edit'){const job=jobs.find(j=>j.id===rest[0]);if(!job)throw Error('Job not found');if(flag('--schedule'))Object.assign(job,{schedule:{kind:'cron',expr:flag('--schedule')},schedule_display:flag('--schedule')});if(flag('--deliver'))job.deliver=flag('--deliver');write(jobs);}
-  if(verb==='pause'||verb==='resume'){const job=jobs.find(j=>j.id===rest[0]);job.enabled=verb==='resume';write(jobs);}
+  if(verb==='pause'||verb==='resume'){const job=jobs.find(j=>j.id===rest[0]);job.enabled=verb==='resume';if(job.enabled)Object.assign(job,{state:'scheduled',paused_at:null});write(jobs);}
   if(verb==='remove')write(jobs.filter(j=>j.id!==rest[0]));
   return {stdout:''};
  };
@@ -478,4 +478,18 @@ test('two routines running at once say two queued notices once each, and a third
  assert.equal((await start()).out,'','both are remembered');
  assert.equal(store.list('conversation_messages').filter(m=>m.source_app==='background').length,2,'and recorded once each');
  assert.deepEqual(fs.readdirSync(home).filter(f=>f.endsWith('.claim')),[],'no claim left behind');
+});
+
+test('the daily connection check the notebook paused is resumed in any of its three paused forms once a routine is active',async t=>{
+ noMail(t);
+ const {store,hermes,scheduler,job}=await withGoal(t);
+ scheduler.lastTick=0;await scheduler.tick();
+ for(const paused of [{enabled:false},{enabled:true,state:'paused'},{enabled:true,paused_at:'2026-11-01T00:00:00Z'}]){
+  quiet(hermes);scheduler.lastTick=0;await scheduler.tick();assert.equal(job(CONNECTION_JOB).enabled,false);
+  assert.equal(readNotebookRoutines(store).jobs.find(j=>j.key==='connection-check').paused_by_notebook,true);
+  hermes.write(hermes.jobs().map(j=>j.name===CONNECTION_JOB?{...j,enabled:true,state:'scheduled',paused_at:null,...paused}:{...j,enabled:true,state:'scheduled',paused_at:null}));
+  scheduler.lastTick=0;await scheduler.tick();
+  const check=job(CONNECTION_JOB);assert.equal(check.enabled,true);assert.ok(!check.paused_at&&check.state!=='paused');
+  assert.equal(readNotebookRoutines(store).jobs.find(j=>j.key==='connection-check').paused_by_notebook,false);
+ }
 });

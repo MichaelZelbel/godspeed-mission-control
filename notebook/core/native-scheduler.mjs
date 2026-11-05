@@ -245,8 +245,8 @@ export class NativeScheduler{
     else if(job.enabled!==false&&entry.running_by_notebook&&!wanted){await this.command(['pause',job.id]);rememberNotebookRoutine(this.store,{...entry,paused_by_notebook:true,running_by_notebook:false});}
     return job.id;
    }
-   if(job.enabled===false&&!wanted)return job.id;
-   const resumed=job.enabled===false;
+   const resumed=pausedJob(job);
+   if(resumed&&!wanted)return job.id;
    if(resumed)await this.command(['resume',job.id]);
    rememberNotebookRoutine(this.store,{...entry,paused_by_notebook:false,running_by_notebook:resumed});
    return job.id;
