@@ -231,6 +231,13 @@ test('an existing tracker whose number range leaves out 1 takes no rule and no m
  store.save('collections',{...c,tracker:{...c.tracker,mail:ORDERS}});
  assert.deepEqual(await runMailCount({root,now:NOW}),{added:0});
 });
+test('a number range that ends at 1 still takes a rule',async t=>{
+ const {domains}=fixture(t);
+ for(const [name,range] of [['Min',{min:1}],['Max',{max:1}],['Both',{min:1,max:1}]]){
+  trackerOperation(domains,{type:'tracker-create',name,cadence:'any',fields:[{label:'Count',type:'number',...range}]});
+  const {asked}=await setUp(domains,ORDERS,{tracker:name});assert.match(asked.reply,new RegExp('as one in '+name+'\\?'),name);
+ }
+});
 test('an existing tracker with one number column can take a rule',async t=>{
  const {domains}=fixture(t);
  trackerOperation(domains,{type:'tracker-create',name:'Parcels',cadence:'any',fields:[{label:'Count',type:'number'}]});
