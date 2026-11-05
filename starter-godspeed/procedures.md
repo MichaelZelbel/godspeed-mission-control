@@ -113,12 +113,14 @@ model is still to be watched.
 
 ### Daily connection check
 
-Does: early every morning it makes one harmless call to each connection you set up: your AI,
-Telegram, the GitHub sync and Gmail. When a sign-in or key is refused, it tells you once and sets a
-deadline, and that deadline closes itself the first morning the connection works again. Any other
-failure is reported only when it happens two mornings in a row. When everything works, it sends
-nothing. It runs no AI of its own.
-Rhythm: every day at 05:00 your time, earlier when a morning brief set before 05:30 needs it first.
+Does: early every morning it makes one harmless call to each connection you set up: the AI your
+routines and chat use, Telegram, the GitHub sync and Gmail. An AI you connected for the notebook
+alone, with "Use it for the daily routines and the chat too" unticked, is not called. When a
+sign-in or key is refused, it tells you once and sets a deadline, and that deadline closes itself
+the first morning the connection works again. Any other failure is reported only when it happens
+two mornings in a row. When everything works, it sends nothing. It runs no AI of its own.
+Rhythm: it is added within a minute of the other seven, when the notebook next looks at its
+routines. Every day at 05:00 your time, earlier when a morning brief set before 05:30 needs it first.
 It starts running when Telegram or Gmail is connected, and waits paused while neither is; once one
 of them is connected, it resumes by itself, unless you paused or resumed it yourself.
 Lands: in your Telegram chat when your assistant has Telegram connected, otherwise in your notebook.
