@@ -166,60 +166,48 @@ test("the verdict's needs and RESULTS name the same scenarios, and every scenari
   }
 });
 
-// Reading a workflow as text, once, for the two checks below. A job body is split into its steps
-// (each begins at a `      - ` line); a step's `run:` value is the one-line value, or the lines of
-// a `|` / `>` block scalar, with YAML comment lines left out, so a comment or another step that
-// merely contains a command can never stand in for the step that runs it.
-function jobBody(text, job) {
-  const start = text.search(new RegExp(`^ {2}${job}:[ \t]*$`, 'm'));
-  assert.ok(start >= 0, `job ${job} not found`);
-  const rest = text.slice(start + 1);
-  const next = rest.search(/^ {2}[A-Za-z0-9_-]+:[ \t]*$/m);
-  return next >= 0 ? rest.slice(0, next) : rest;
-}
-function stepsOf(body) {
-  return body.split(/^ {6}- /m).slice(1).map((s) => ' '.repeat(8) + s);
-}
-function runValue(step) {
-  const lines = step.split('\n');
-  const at = lines.findIndex((l) => /^ {8}run:(\s|$)/.test(l));
-  if (at < 0) return null;
-  const head = lines[at].replace(/^ {8}run:\s*/, '');
-  if (/^[|>][+-]?\d*\s*(#.*)?$/.test(head)) {
-    const out = [];
-    for (let i = at + 1; i < lines.length; i++) {
-      const l = lines[i];
-      if (l.trim() !== '' && !/^ {10}/.test(l)) break;
-      if (l.trim().startsWith('#')) continue;
-      out.push(l.trim());
-    }
-    return out.join('\n');
-  }
-  return /^['"]/.test(head) ? head : head.replace(/\s+#.*$/, '');
-}
-const needsOf = (body) => {
-  const m = body.match(/^ {4}needs:[ \t]*(?:\[([^\]]*)\]|(\S+))/m);
-  return m ? (m[1] !== undefined ? m[1] : m[2]).split(',').map((x) => x.trim()).filter(Boolean) : [];
+// WHAT THE TWO GUARDS BELOW ARE FOR: they catch an omitted, renamed or reformatted step in the
+// workflow (a dropped `needs: stage`, a dropped download or `shell: bash`, a scenario no longer
+// invoked). They do not interpret shell, so a deliberate rewrite that defeats them is a review
+// matter, not something these tests can see.
+//
+// The workflow is read with the notebook's own YAML module (the one the readable files use), so
+// jobs, steps, `needs`, `run` and `shell` come out as YAML defines them: a folded `>` scalar is
+// joined, a literal `|` scalar is kept. A `run` value is then made one logical script: shell comment
+// lines are left out, a backslash at a line end and a pipe at a line end join the next line.
+import { parse as parseYaml } from '../notebook/core/records/yaml.mjs';
+const loadWorkflow = (text) => parseYaml(text);
+const stepsOfJob = (doc, job) => {
+  assert.ok(doc.jobs && doc.jobs[job], `job ${job} not found`);
+  return doc.jobs[job].steps || [];
 };
+const logicalRun = (step) => {
+  if (typeof step.run !== 'string') return null;
+  return step.run.split('\n').filter((l) => !l.trim().startsWith('#')).join('\n')
+    .replace(/\\\n\s*/g, ' ').replace(/\|[ \t]*\n\s*/g, '| ');
+};
+const needsList = (job) => [].concat(job.needs ?? []).map(String);
 
 // The four beta.17 jobs run the stage's own copy of their scenario: the job waits for the stage,
 // the checkout takes the stage ref when one is given, the stage artifact is downloaded when none
-// is, and the step that runs the scenario gives it the stage ref. A job that loses one of these
-// runs another version's scenario, silently.
+// is, and the step that runs the scenario gives it the stage ref, as a command (at the start of
+// the script or of a line, or right after ; && || | or an opening parenthesis), never as the
+// argument of another command such as echo. A job that loses one of these runs another version's
+// scenario, silently.
 function checkStageHandoff(text, job) {
-  const body = jobBody(text, job);
-  assert.ok(needsOf(body).includes('stage'), `${job}: needs does not include stage`);
-  const steps = stepsOf(body).map((s) => s.slice(8));
-  const checkout = steps.find((s) => s.startsWith('uses: actions/checkout@v4'));
+  const doc = loadWorkflow(text);
+  assert.ok(needsList(doc.jobs[job] || {}).includes('stage'), `${job}: needs does not include stage`);
+  const steps = stepsOfJob(doc, job);
+  const checkout = steps.find((s) => String(s.uses).startsWith('actions/checkout@v4'));
   assert.ok(checkout, `${job} has no actions/checkout@v4 step`);
-  assert.match(checkout, /^ {10}ref: \$\{\{ inputs\.stage \|\| github\.sha \}\}$/m, `${job}: checkout ref`);
-  const download = steps.find((s) => s.startsWith('uses: actions/download-artifact@v4'));
+  assert.equal(checkout.with?.ref, '${{ inputs.stage || github.sha }}', `${job}: checkout ref`);
+  const download = steps.find((s) => String(s.uses).startsWith('actions/download-artifact@v4'));
   assert.ok(download, `${job} has no actions/download-artifact@v4 step`);
-  assert.match(download, /^ {8}if: \$\{\{ !inputs\.stage \}\}$/m, `${job}: download condition`);
-  assert.match(download, /^ {10}name: run-stage$/m, `${job}: download name`);
-  assert.match(download, /^ {10}path: \$\{\{ runner\.temp \}\}\/run-stage$/m, `${job}: download path`);
-  const runs = stepsOf(body).map(runValue).filter((v) => v !== null);
-  assert.ok(runs.some((v) => v.includes(`bash scenarios/${job}.sh "$STAGE_REF"`)), `${job}: no step's run: value executes its scenario with "$STAGE_REF"`);
+  assert.equal(download.if, '${{ !inputs.stage }}', `${job}: download condition`);
+  assert.equal(download.with?.name, 'run-stage', `${job}: download name`);
+  assert.equal(download.with?.path, '${{ runner.temp }}/run-stage', `${job}: download path`);
+  const call = new RegExp(`(?:^|[\\n;&|(])[ \\t]*bash scenarios/${job}\\.sh "\\$STAGE_REF"`);
+  assert.ok(steps.map(logicalRun).some((v) => v !== null && call.test(v)), `${job}: no step's run: value executes its scenario with "$STAGE_REF" in command position`);
 }
 
 for (const job of ['no-question-he-cannot-judge', 'plain-yes', 'what-was-that', 'connection-check']) {
@@ -259,10 +247,12 @@ const BLOCK = `      - name: go
           set -e
           bash scenarios/demo.sh "$STAGE_REF" | tee "$RUNNER_TEMP/verdict"
 `;
-test('stage-handoff fixtures: a correct one-line and block-scalar job pass, three broken ones are rejected', () => {
+test('stage-handoff fixtures: a correct one-line and block-scalar job pass, broken ones are rejected', () => {
   checkStageHandoff(fixtureJob({ steps: ONE }), 'demo');
   checkStageHandoff(fixtureJob({ steps: BLOCK }), 'demo');
   checkStageHandoff(fixtureJob({ needs: 'needs: [stage, other]', steps: ONE }), 'demo');
+  checkStageHandoff(fixtureJob({ steps: `      - name: go\n        run: set -e; bash scenarios/demo.sh "$STAGE_REF"\n` }), 'demo');
+  checkStageHandoff(fixtureJob({ steps: `      - name: go\n        run: cd x && bash scenarios/demo.sh "$STAGE_REF"\n` }), 'demo');
   assert.throws(() => checkStageHandoff(fixtureJob({ needs: 'needs: other', steps: ONE }), 'demo'), /needs does not include stage/);
   assert.throws(() => checkStageHandoff(fixtureJob({ needs: '', steps: ONE }), 'demo'), /needs does not include stage/);
   const commentOnly = `      - name: go
@@ -281,34 +271,51 @@ test('stage-handoff fixtures: a correct one-line and block-scalar job pass, thre
           bash scenarios/not-demo.sh "$STAGE_REF" | tee "$RUNNER_TEMP/verdict"
 `;
   assert.throws(() => checkStageHandoff(fixtureJob({ steps: otherScenario }), 'demo'), /no step's run: value executes/);
+  const asArgument = `      - name: go\n        shell: bash\n        run: echo bash scenarios/demo.sh "$STAGE_REF"\n`;
+  assert.throws(() => checkStageHandoff(fixtureJob({ steps: asArgument }), 'demo'), /command position/);
 });
 
 // A failing scenario fails its job: a step that pipes a scenario into tee must declare
 // `shell: bash`, because only an explicit shell runs as `bash --noprofile --norc -e -o pipefail`
 // (seen in scenarios run 41871435090: the Charm Challenge step ended with exit code 1 and its job
 // and the verdict failed). A step with no `shell:` runs as `bash -e {0}`, without pipefail, and
-// tee would hide the scenario's exit code. Steps are picked by their run: value (one line or a
-// block scalar, comments left out).
-const pipedSteps = (text) =>
-  stepsOf(text).filter((s) => /bash scenarios\/\S+\.sh[^\n]*\|\s*tee\b/.test(runValue(s) || ''));
-const missingShell = (steps) => steps.filter((s) => !/^ {8}shell: bash$/m.test(s));
+// tee would hide the scenario's exit code. Steps are picked by their whole run value after
+// continuation lines are joined, so the pipe may sit on a later line than the command.
+const pipedSteps = (doc) =>
+  Object.values(doc.jobs).flatMap((j) => j.steps || []).filter((s) => /bash scenarios\/\S+\.sh[^\n]*\|\s*tee\b/.test(logicalRun(s) || ''));
+const missingShell = (steps) => steps.filter((s) => s.shell !== 'bash');
 test('every step that pipes a scenario into tee declares shell: bash (pipefail)', async () => {
   const { readFileSync } = await import('node:fs');
-  const text = readFileSync(WORKFLOW, 'utf8').replace(/\r\n/g, '\n');
-  const piped = pipedSteps(text);
+  const piped = pipedSteps(loadWorkflow(readFileSync(WORKFLOW, 'utf8').replace(/\r\n/g, '\n')));
   assert.ok(piped.length > 10, `too few scenario pipes found (${piped.length})`);
   for (const s of missingShell(piped)) {
-    const name = (runValue(s).match(/(scenarios\/\S+)/) || [])[1];
+    const name = (logicalRun(s).match(/(scenarios\/\S+)/) || [])[1];
     assert.fail(`the step running ${name} pipes into tee without an explicit shell: bash`);
   }
 });
-test('shell-bash fixtures: a block-scalar pipe without shell: bash is rejected, with it accepted', () => {
-  const without = fixtureJob({ steps: BLOCK.replace('        shell: bash\n', '') });
-  const withShell = fixtureJob({ steps: BLOCK });
-  assert.equal(pipedSteps(without).length, 1);
-  assert.equal(missingShell(pipedSteps(without)).length, 1);
-  assert.equal(pipedSteps(withShell).length, 1);
-  assert.equal(missingShell(pipedSteps(withShell)).length, 0);
+test('shell-bash fixtures: block, folded and continued pipes without shell: bash are rejected, with it accepted', () => {
+  const FOLDED = `      - name: go
+        run: >
+          bash scenarios/demo.sh "$STAGE_REF"
+          | tee "$RUNNER_TEMP/verdict"
+`;
+  const CONT = `      - name: go
+        run: |
+          bash scenarios/demo.sh "$STAGE_REF" \\
+            | tee "$RUNNER_TEMP/verdict"
+`;
+  const strip = (y) => y.replace('        shell: bash\n', '');
+  const withShell = (y) => y.replace('      - name: go\n', '      - name: go\n        shell: bash\n');
+  for (const base of [BLOCK, FOLDED, CONT]) {
+    const without = base.includes('shell: bash') ? strip(base) : base;
+    const w = base.includes('shell: bash') ? base : withShell(base);
+    const a = pipedSteps(loadWorkflow(fixtureJob({ steps: without })));
+    assert.equal(a.length, 1);
+    assert.equal(missingShell(a).length, 1);
+    const b = pipedSteps(loadWorkflow(fixtureJob({ steps: w })));
+    assert.equal(b.length, 1);
+    assert.equal(missingShell(b).length, 0);
+  }
   const commentOnly = fixtureJob({ steps: `      - name: go\n        run: |\n          # bash scenarios/demo.sh | tee x\n          echo hi\n` });
-  assert.equal(pipedSteps(commentOnly).length, 0);
+  assert.equal(pipedSteps(loadWorkflow(commentOnly)).length, 0);
 });
