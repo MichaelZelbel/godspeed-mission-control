@@ -6,7 +6,7 @@ These are the **proving scenarios** a candidate runs before the maintainer is as
 (godspeed-dev, `releases/godspeed-2.0.0-beta.8-faster-chat/plan.md`,
 `releases/godspeed-2.0.0-beta.12-reminders-in-the-notebook/plan.md` and
 `releases/godspeed-2.0.0-beta.13-charm-video-notebook/plan.md`, "Proving scenarios"). Each one
-is one job of `.github/workflows/scenarios.yml` on a fresh `ubuntu-24.04` machine, and each is one
+is one job of `.github/workflows/scenarios.yml` on a fresh `ubuntu-24.04` machine (all but `phone-health-days`, `incomplete-day`, `phone-goes-quiet`, `mail-count` and `talk-on-talk-day`: those five are staged for beta.18, and their jobs and verdict entries are added to the workflow at the release step, as the pull request body that added them describes), and each is one
 script here, so that what a scenario does can be read, run by hand and held to its own tests —
 which a step written inside a workflow file cannot be. They live in a folder of their own for the
 same reason `stage/` does: everything in `tools/` is copied onto every user's computer as a program,
@@ -32,6 +32,11 @@ and these are not programs for users.
 | `telegram-language.sh` | through the installed assistant's own outgoing hook and Telegram send path, a reply written in the other language than the message it answers is sent in the message's language (three English journal messages with a German draft, English, German, English in one chat, a cron delivery left alone); the builder's copy runs it with `GODSPEED_SCENARIO_PRODUCT` and a Hermes it can run |
 | `brief-asked-in-chat.sh` | with the Charm Challenge running and the Morning brief routine run, "today's brief" asked in the notebook's chat is answered with the saved briefing's Charm line word for word, a seeded sentence that breaks a writing rule is absent from the briefing and the answer and its repair item is listed, and asking again saves no second briefing note |
 | `talk-prep-honest.sh` | a fixture person with one health area serving three goals and naming research domains: a preparation whose review leaves a goal uncovered is refused by the real seal and the installed gate, and the talk opens with the one sentence naming what is missing and no line claiming a research duration; a preparation covering all three goals, routes recorded in full, with a passing review sealed by the real seal opens the talk from its own opening |
+| `phone-health-days.sh` | on the Docker server install, made-up Health Auto Export uploads (overlapping windows, a day re-sent, a workout sent twice, a run and a slow "run") leave exact day records, a second paired notebook shows the same days after a sync, and a wrong token answers 404 and stores nothing |
+| `incomplete-day.sh` | a day whose last point is 19:55 is briefed as stopping at 19:55, with no short-day wording and its protein count unknown; after a protein number is given by hand the next briefing counts it |
+| `phone-goes-quiet.sh` | 37 hours past the last upload the connection check sends one message and files one deadline, a second run sends nothing, an upload closes the deadline |
+| `mail-count.sh` | a tracker rule set up in the chat ("count the mails from <sender> that say new order") is counted by the daily routine from headers only: exactly the orders, once each, the marker in every body nowhere, and no mail call on an install with no rule |
+| `talk-on-talk-day.sh` | on a talk day, with last week's talk open and unanswered, asking for the talk opens today's from its sealed preparation, names last week's once and closes it as not held |
 | `no-question-he-cannot-judge.sh` | on an install whose owner is on a fixture Telegram, five situations are replayed by a fixture asker: a quiet restart, a bundle of questions, an optional extra and the reminders afterwards send the owner nothing and leave nothing waiting; the one real yes is a single question in words, and his plain "approve" is approved with one reply that only confirms; no message tells him to type `approve <id>` or shows a hex id of six or more |
 | `plain-yes.sh` | on the same fixture: with one step waiting a plain "yes" approves it; with two waiting it gets one question naming both and approves neither, and the answer naming one approves only that one; a Yes button approves its own step and No rejects its own; a "yes" with nothing waiting approves nothing |
 | `what-was-that.sh` | on the same fixture: a queued notice said by its routine is recorded where the chat reads it, with the facts it was written from, and "what is this about?" asked in a new conversation is answered with what the report was about |
@@ -95,6 +100,9 @@ Named by the job, never in a file here:
 | `charm-challenge` | `GODSPEED_SCENARIO_AI_KEY` | the owner's own chat has to be answered by a model, because that is where a vent is noticed; the same two say which |
 | `brief-asked-in-chat` | `GODSPEED_SCENARIO_AI_KEY` | the Morning brief is written by a model and the chat that is asked for it is answered by one; the same two say which |
 | `talk-prep-honest` | `GODSPEED_SCENARIO_AI_KEY` | the talk the owner asks for in the chat is opened by a model; the same two say which. Coverage is never judged by it: the preparations, the run records and the reviews are fixtures sealed by the coach's own commands |
+| `incomplete-day` | `GODSPEED_SCENARIO_AI_KEY` | a model writes the briefings the scenario reads; it judges only what a briefing says of a day, never the numbers |
+| `mail-count` | `GODSPEED_SCENARIO_AI_KEY` | the chat that sets the rule up is the real assistant, so it needs a model |
+| `talk-on-talk-day` | `GODSPEED_SCENARIO_AI_KEY` | the talk the owner asks for is opened by a model; the preparations are fixtures sealed by the coach's own commands |
 | `no-question-he-cannot-judge`, `plain-yes`, `what-was-that` | `GODSPEED_SCENARIO_AI_KEY` | the install's assistant answers the owner on the fixture Telegram through a model; the same two say which. The Telegram account and bot key are the fixture's, never a real one |
 
 The six reminder scenarios need no key at all: everything they do is this machine's own. "Two
