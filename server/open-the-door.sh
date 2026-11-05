@@ -32,7 +32,7 @@ KB_TAG="door"
 export KB_TAG
 # The same pin as server/install.sh's KB_PIN line (a full commit or a tag; the raw address takes
 # either), moved together with it.
-KB_PIN="15c666da8ef37dd80c56feef0f7d508131ac34f8"
+KB_PIN="7ae7d664c0a3864216190c6c06aa7d895bcec0fc"
 LIB_URL="https://raw.githubusercontent.com/MichaelZelbel/kit-bootstrap/$KB_PIN/lib.sh"
 AI_USER="${AI_USER:-ai}"
 PORT=9119

@@ -131,3 +131,37 @@ test('a report that cannot be made fails loudly', async () => {
   const r = await night('voice=failure', {}, { GITHUB_RUN_ID: '' });
   assert.notEqual(r.code, 0);
 });
+
+// The verdict job lists its scenarios twice: `needs:` (so it waits for them) and `RESULTS` (the
+// only place a failure becomes a failed verdict). A scenario added to one list and not the other
+// would be waited for and never judged, or judged and never waited for. No YAML parser is a
+// dependency of this test, so the needed parts are read as text.
+test("the verdict's needs and RESULTS name the same scenarios, and every scenario job is in both", async () => {
+  const { readFileSync } = await import('node:fs');
+  const text = readFileSync(WORKFLOW, 'utf8').replace(/\r\n/g, '\n');
+  const jobsText = text.slice(text.indexOf('\njobs:\n'));
+  assert.ok(jobsText.length > 10, 'no jobs: section found');
+  const jobs = [...jobsText.matchAll(/^ {2}([A-Za-z0-9_-]+):[ \t]*$/gm)].map((m) => m[1]);
+  assert.ok(jobs.includes('stage') && jobs.includes('verdict'), 'stage and verdict jobs not found');
+  const body = jobsText.slice(jobsText.search(/^ {2}verdict:[ \t]*$/m));
+  const needsLine = body.match(/^ {4}needs:\s*\[([^\]]*)\]/m);
+  assert.ok(needsLine, 'verdict has no needs: [ ... ] list');
+  const needs = needsLine[1].split(',').map((x) => x.trim()).filter(Boolean).filter((x) => x !== 'stage');
+  const res = body.match(/^ {6}RESULTS: >-\n((?: {8}.*\n)+)/m);
+  assert.ok(res, 'verdict has no RESULTS block');
+  const pairs = res[1].trim().split('\n').map((l) => l.trim()).map((p) => {
+    const m = p.match(/^([A-Za-z0-9_-]+)=\$\{\{ *needs\.([A-Za-z0-9_-]+)\.result *\}\}$/);
+    assert.ok(m, `RESULTS entry is not <job>=\${{ needs.<job>.result }}: ${p}`);
+    assert.equal(m[2], m[1], `RESULTS key ${m[1]} reads the result of ${m[2]}`);
+    return m[1];
+  });
+  assert.equal(new Set(needs).size, needs.length, 'duplicate in needs');
+  assert.equal(new Set(pairs).size, pairs.length, 'duplicate in RESULTS');
+  assert.deepEqual([...pairs].sort(), [...needs].sort(), 'needs (minus stage) and RESULTS differ');
+  const scenarios = jobs.filter((j) => j !== 'stage' && j !== 'verdict');
+  assert.ok(scenarios.length > 5, 'too few scenario jobs found');
+  for (const j of scenarios) {
+    assert.ok(needs.includes(j), `scenario job ${j} is not in the verdict's needs`);
+    assert.ok(pairs.includes(j), `scenario job ${j} is not in RESULTS`);
+  }
+});
