@@ -84,12 +84,11 @@ export const MAIL_COUNT_SCRIPT='godspeed-mail-count.py';
 export const MAIL_COUNT_WHAT='Once a day, early in the morning, it counts the mails your trackers\' mail rules name, from each mail\'s sender, subject and date only, and adds them to those trackers. It never reads a mail\'s text and sends nothing.';
 // The routines beside the starting ones that are a switch on a mission control not made from the starter
 // (4 November 2026, #225). The one owner of each one's switch (routine-switches.mjs) and its wrapper script
-// (routineFiles in starting-routines.mjs) and the NativeScheduler method that follows it at once
-// (followNotebookSwitches), so a new routine cannot be switchable without being followed.
+// (routineFiles in starting-routines.mjs) (the NativeScheduler follows each at once by its key, followNotebookSwitches, which refuses a key it has no follower for).
 export const SWITCHABLE_NOTEBOOK_ROUTINES=[
- {key:'journal-tick',name:JOURNAL_JOB,what:JOURNAL_WHAT,script:JOURNAL_SCRIPT,follower:'followJournal'},
- {key:'connection-check',name:CONNECTION_JOB,what:CONNECTION_WHAT,script:CONNECTION_SCRIPT,follower:'followConnectionCheck'},
- {key:'mail-count',name:MAIL_COUNT_JOB,what:MAIL_COUNT_WHAT,script:MAIL_COUNT_SCRIPT,follower:'followMailCount'},
+ {key:'journal-tick',name:JOURNAL_JOB,what:JOURNAL_WHAT,script:JOURNAL_SCRIPT},
+ {key:'connection-check',name:CONNECTION_JOB,what:CONNECTION_WHAT,script:CONNECTION_SCRIPT},
+ {key:'mail-count',name:MAIL_COUNT_JOB,what:MAIL_COUNT_WHAT,script:MAIL_COUNT_SCRIPT},
 ];
 // THE NOTICE SENDER OF A MISSION CONTROL NOT MADE FROM THE STARTER (4 November 2026, #225). On a starter-born
 // install the coach's reminders and the journal's check-ins say the notices in .godspeed/notices.json. An

@@ -266,7 +266,10 @@ export class NativeScheduler{
   return changed;
  }
  // Every routine Settings can switch (SWITCHABLE_NOTEBOOK_ROUTINES) follows its switch now, not at the next tick.
- async followNotebookSwitches(){await Promise.all(SWITCHABLE_NOTEBOOK_ROUTINES.map(r=>this[r.follower]()));}
+ async followNotebookSwitches(){
+  const followers={'journal-tick':()=>this.followJournal(),'connection-check':()=>this.followConnectionCheck(),'mail-count':()=>this.followMailCount()};
+  await Promise.all(SWITCHABLE_NOTEBOOK_ROUTINES.map(r=>{if(!followers[r.key])throw Error('No follower for the switchable routine "'+r.key+'"');return followers[r.key]();}));
+ }
  // THE JOURNAL'S CHECK-INS (notebook-routines.mjs): one routine while the person has any of them
  // switched on, paused when all are off, made again by nothing once the person removed it.
  async followJournal(){

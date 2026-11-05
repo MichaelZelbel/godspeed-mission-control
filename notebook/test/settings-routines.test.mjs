@@ -700,3 +700,16 @@ test('both languages write the same not_sent object: exactly a reason and an ISO
  const py=readNotices(store).find(n=>n.id==='python-1');shape(py);
  assert.equal(py.not_sent.reason,fromNode.not_sent.reason);
 });
+
+test('every switchable notebook routine is followed by its own follower',async()=>{
+ const {SWITCHABLE_NOTEBOOK_ROUTINES}=await import('../core/notebook-routines.mjs');
+ const expected={'journal-tick':'followJournal','connection-check':'followConnectionCheck','mail-count':'followMailCount'};
+ assert.deepEqual(SWITCHABLE_NOTEBOOK_ROUTINES.map(r=>r.key).sort(),Object.keys(expected).sort());
+ for(const [key,method] of Object.entries(expected)){
+  const called=[],fake=Object.create(NativeScheduler.prototype);
+  for(const m of Object.values(expected))fake[m]=async()=>{called.push(m);};
+  await fake.followNotebookSwitches();
+  assert.ok(called.includes(method),key+' is followed by '+method);
+  assert.equal(called.length,SWITCHABLE_NOTEBOOK_ROUTINES.length);
+ }
+});
