@@ -27,6 +27,7 @@ assistant has no <name> to ...", which the scenario turns into its FAIL line.
 """
 import argparse
 import asyncio
+import threading
 import importlib
 import importlib.util
 import json
@@ -136,11 +137,24 @@ def main(args):
 
     discover_plugins()
     manager = get_plugin_manager()
-    for factory in getattr(manager, "get_telegram_handler_factories", lambda: [])():
+    # One event loop that keeps running in its own thread for the whole run: a plugin's factory starts
+    # background work on the running loop (step_buttons' watch() posts the buttons of a waiting step
+    # every few seconds), and that work only happens while the loop runs between the steps.
+    loop = asyncio.new_event_loop()
+    threading.Thread(target=loop.run_forever, daemon=True).start()
+
+    def on_loop(coroutine, timeout=600):
+        return asyncio.run_coroutine_threadsafe(coroutine, loop).result(timeout)
+
+    async def register(factory, native, adapter):
+        factory(native, adapter)
+
+    # The manager hands over (factory, plugin name) pairs, not bare factories.
+    for factory, name in getattr(manager, "get_telegram_handler_factories", lambda: [])():
         try:
-            factory(native, adapter)
+            on_loop(register(factory, native, adapter))
         except Exception as error:
-            print("a Telegram plugin would not register its handlers: %s" % error, file=sys.stderr)
+            print("the Telegram plugin %s would not register its handlers: %s" % (name, error), file=sys.stderr)
     loaded = sorted(n for n, p in manager._plugins.items() if getattr(p, "enabled", True))
 
     db = SessionDB()
@@ -170,10 +184,9 @@ def main(args):
         silent = getattr(scheduler, "_is_cron_silence_response", lambda t: "[SILENT]" in t)
         delivered = None
         if success and final and not silent(final):
-            deliver = need("routine delivery (cron.scheduler_delivery._deliver_result)", lambda:
-                           importlib.import_module("cron.scheduler_delivery")._deliver_result)
+            deliver = need("routine delivery (cron.scheduler._deliver_result)", lambda: scheduler._deliver_result)
             delivered = deliver(job, final)
-        return {"success": bool(success), "error": error or delivered or "", "sent": delivered is None and bool(final)}
+        return {"success": bool(success) and delivered is None, "error": error or delivered or "", "sent": delivered is None and bool(final)}
 
     def say(step):
         from gateway.session_context import set_session_vars
@@ -205,8 +218,16 @@ def main(args):
     async def press(step):
         index = step["message"]
         if index == "last-with-buttons":
-            candidates = [i for i, m in enumerate(outbox) if m["buttons"]
-                          and step.get("contains", "").lower() in m["text"].lower()]
+            # The buttons of a waiting step are posted by the plugin's watcher a few seconds after the
+            # notebook hands the question over, so wait for them instead of looking once.
+            waited = 0
+            while True:
+                candidates = [i for i, m in enumerate(outbox) if m["buttons"]
+                              and step.get("contains", "").lower() in m["text"].lower()]
+                if candidates or waited >= 30:
+                    break
+                await asyncio.sleep(1)
+                waited += 1
             if not candidates:
                 return {"success": False, "error": "no message with buttons to press"}
             index = candidates[-1]
@@ -262,8 +283,6 @@ def main(args):
             f.write(body)
         return {"success": True}
 
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
     for step in json.load(open(args.steps, encoding="utf-8")):
         state["label"] = step.get("label", "")
         kind = step["kind"]
@@ -274,9 +293,9 @@ def main(args):
                 outcome = say(step)
                 reply = outcome.pop("_send", "")
                 if reply:
-                    loop.run_until_complete(adapter.send(owner, reply))
+                    on_loop(adapter.send(owner, reply))
             elif kind == "press":
-                outcome = loop.run_until_complete(press(step))
+                outcome = on_loop(press(step))
             elif kind == "run":
                 outcome = run_command(step)
             elif kind == "query":
