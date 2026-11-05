@@ -4,6 +4,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import http from 'node:http';
+import {spawnSync} from 'node:child_process';
+import {fileURLToPath} from 'node:url';
 import {Store,hash} from '../core/records/store.mjs';
 import {QueryService} from '../core/query.mjs';
 import {currentHealth} from '../core/health-inputs.mjs';
@@ -276,4 +278,17 @@ test('Settings and the server share one protocol: the panel calls the declared r
   const state=JSON.parse((await request(service.address.port,'/api/'+PHONE_HEALTH_STATUS)).text);
   for(const key of Object.keys(state))assert.ok(PHONE_HEALTH_FIELDS.includes(key),key+' is declared');
  }finally{await service.close();fs.rmSync(root,{recursive:true,force:true});}
+});
+
+test('the command line imports a folder of legacy uploads: godspeed health import FOLDER prints the result and fills the notebook',()=>{
+ const root=tmp('godspeed-phone-cli-'),folder=tmp('godspeed-phone-cli-import-'),store=new Store(root);
+ store.save('settings',{id:'installation',owner:'local',timezone:'Europe/Berlin'});
+ fs.writeFileSync(path.join(folder,'old.jsonl'),JSON.stringify({received_at:'2026-11-04T09:00:00Z',data:upload([metric('step_count','count',[D+' 08:00:00 +0100',321])])})+'\n');
+ const run=args=>spawnSync(process.execPath,[fileURLToPath(new URL('../bin/godspeed.mjs',import.meta.url)),...args],{encoding:'utf8',env:{...process.env,GODSPEED_WORKSPACE:root,GODSPEED_NOW:'2026-11-05T08:00:00Z'}});
+ const done=run(['health','import',folder]);
+ assert.equal(done.status,0,done.stderr);
+ const result=JSON.parse(done.stdout);
+ assert.equal(result.lines,1);assert.ok(result.written>=1);
+ assert.equal(days(new Store(root))[D+' steps'],321);
+ assert.notEqual(run(['health','import']).status,0,'a missing folder is an error');
 });
