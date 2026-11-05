@@ -87,7 +87,7 @@ export function checkRoutines({store,home,day,timezone,now=()=>new Date(),jobs=h
   const sentences=found.map(f=>f.words),text=found.length>1?'Some of your routines did not run right: '+sentences.join(' '):sentences[0];
   const id=`${CONNECTION_NOTICE_PREFIX}routines-${day}-${hash(found.map(f=>f.id+f.spell.since+f.spell.run).sort().join('|')).slice(0,12)}`;
   try{tellOwner(store,{id,text,about:'Routines of yours that did not run right',facts:sentences});for(const f of found)routines[f.id].spell=f.spell;}
-  catch{failed=true;for(const f of found){if(before[f.id])routines[f.id]=before[f.id];else delete routines[f.id];}}
+  catch{failed=true;for(const f of found){if(before[f.id]){const {error_run:_legacy,...prior}=before[f.id];routines[f.id]=prior;}else delete routines[f.id];}}
  }
  atomic(path.join(store.state,ROUTINES_RECORD_FILE),JSON.stringify({routines},null,2)+'\n');
  if(failed)throw new Error('The routines notice could not be queued');

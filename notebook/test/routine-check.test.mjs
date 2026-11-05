@@ -64,6 +64,15 @@ test('a notice that could not be queued is told at the next check, also for a fa
  on('2026-11-06',next);assert.equal(said(f).length,1);
 });
 
+test('a notice that could not be queued does not write a legacy error_run back',t=>{
+ const f=fixture(t),late=daily('late');
+ fs.writeFileSync(path.join(f.store.state,'connection-check-routines.json'),JSON.stringify({routines:{[late.id]:{ok_at:'2026-11-03T00:00:00Z',error_run:'obsolete'}}}));
+ fs.mkdirSync(path.join(f.store.state,'notices.json'),{recursive:true});
+ assert.throws(()=>check(f,[late]),/could not be queued/);
+ const saved=JSON.parse(fs.readFileSync(path.join(f.store.state,'connection-check-routines.json'),'utf8')).routines[late.id];
+ assert.equal('error_run' in saved,false);assert.equal(saved.ok_at,'2026-11-03T00:00:00Z');
+});
+
 test('the same missed routine is told once on the first day, and not again on the next',t=>{
  const f=fixture(t);
  check(f,[daily('late')]);
