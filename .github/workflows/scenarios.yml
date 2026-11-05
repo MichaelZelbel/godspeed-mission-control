@@ -699,10 +699,140 @@ jobs:
         if: failure()
         run: 'grep -qE "^(PASS|FAIL) talk-prep-honest:" "$RUNNER_TEMP/verdict" 2>/dev/null || echo "FAIL talk-prep-honest: it stopped before its own verdict (its step log says how)" | tee -a "$GITHUB_STEP_SUMMARY"'
 
+  # The scenarios of 2.0.0-beta.17 (releases/godspeed-2.0.0-beta.17-a-plain-yes/plan.md, "Proving
+  # scenarios" 2, 3, 4 and 7), through the installed Hermes with a stand-in Telegram account.
+  no-question-he-cannot-judge:
+    name: background work asks nothing the owner cannot judge, and never for a code
+    needs: stage
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      GODSPEED_SCENARIO_AI_KEY: ${{ secrets.GODSPEED_SCENARIO_AI_KEY }}
+      GODSPEED_SCENARIO_AI_URL: ${{ vars.GODSPEED_SCENARIO_AI_URL }}
+      GODSPEED_SCENARIO_AI_MODEL: ${{ vars.GODSPEED_SCENARIO_AI_MODEL }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.stage || github.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        if: ${{ !inputs.stage }}
+        with:
+          name: run-stage
+          path: ${{ runner.temp }}/run-stage
+      - name: The scenario, the stage's own copy of it
+        shell: bash
+        run: bash scenarios/no-question-he-cannot-judge.sh "$STAGE_REF" | tee "$RUNNER_TEMP/verdict"
+      - name: Keep what the scenario saw (every message sent, the waiting steps after each situation)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: no-question-he-cannot-judge-evidence
+          path: ${{ runner.temp }}/no-question-he-cannot-judge
+          if-no-files-found: ignore
+      - name: Say so when it stopped before its own verdict
+        if: failure()
+        run: 'grep -qE "^(PASS|FAIL) no-question-he-cannot-judge:" "$RUNNER_TEMP/verdict" 2>/dev/null || echo "FAIL no-question-he-cannot-judge: it stopped before its own verdict (its step log says how)" | tee -a "$GITHUB_STEP_SUMMARY"'
+
+  plain-yes:
+    name: a plain yes or a button answers the right waiting step
+    needs: stage
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      GODSPEED_SCENARIO_AI_KEY: ${{ secrets.GODSPEED_SCENARIO_AI_KEY }}
+      GODSPEED_SCENARIO_AI_URL: ${{ vars.GODSPEED_SCENARIO_AI_URL }}
+      GODSPEED_SCENARIO_AI_MODEL: ${{ vars.GODSPEED_SCENARIO_AI_MODEL }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.stage || github.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        if: ${{ !inputs.stage }}
+        with:
+          name: run-stage
+          path: ${{ runner.temp }}/run-stage
+      - name: The scenario, the stage's own copy of it
+        shell: bash
+        run: bash scenarios/plain-yes.sh "$STAGE_REF" | tee "$RUNNER_TEMP/verdict"
+      - name: Keep what the scenario saw (every message sent, the waiting steps after each answer)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: plain-yes-evidence
+          path: ${{ runner.temp }}/plain-yes
+          if-no-files-found: ignore
+      - name: Say so when it stopped before its own verdict
+        if: failure()
+        run: 'grep -qE "^(PASS|FAIL) plain-yes:" "$RUNNER_TEMP/verdict" 2>/dev/null || echo "FAIL plain-yes: it stopped before its own verdict (its step log says how)" | tee -a "$GITHUB_STEP_SUMMARY"'
+
+  what-was-that:
+    name: right after a background report, "what is this about?" is answered from what was sent
+    needs: stage
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      GODSPEED_SCENARIO_AI_KEY: ${{ secrets.GODSPEED_SCENARIO_AI_KEY }}
+      GODSPEED_SCENARIO_AI_URL: ${{ vars.GODSPEED_SCENARIO_AI_URL }}
+      GODSPEED_SCENARIO_AI_MODEL: ${{ vars.GODSPEED_SCENARIO_AI_MODEL }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.stage || github.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        if: ${{ !inputs.stage }}
+        with:
+          name: run-stage
+          path: ${{ runner.temp }}/run-stage
+      - name: The scenario, the stage's own copy of it
+        shell: bash
+        run: bash scenarios/what-was-that.sh "$STAGE_REF" | tee "$RUNNER_TEMP/verdict"
+      - name: Keep what the scenario saw (the report, its record, the answer)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: what-was-that-evidence
+          path: ${{ runner.temp }}/what-was-that
+          if-no-files-found: ignore
+      - name: Say so when it stopped before its own verdict
+        if: failure()
+        run: 'grep -qE "^(PASS|FAIL) what-was-that:" "$RUNNER_TEMP/verdict" 2>/dev/null || echo "FAIL what-was-that: it stopped before its own verdict (its step log says how)" | tee -a "$GITHUB_STEP_SUMMARY"'
+
+  connection-check:
+    name: the daily connection check is silent while all work, and speaks once when Telegram's key is refused
+    needs: stage
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.stage || github.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        if: ${{ !inputs.stage }}
+        with:
+          name: run-stage
+          path: ${{ runner.temp }}/run-stage
+      - name: The scenario, the stage's own copy of it
+        shell: bash
+        run: bash scenarios/connection-check.sh "$STAGE_REF" | tee "$RUNNER_TEMP/verdict"
+      - name: Keep what the scenario saw (every message, the deadlines and the bell after each run)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: connection-check-evidence
+          path: ${{ runner.temp }}/connection-check
+          if-no-files-found: ignore
+      - name: Say so when it stopped before its own verdict
+        if: failure()
+        run: 'grep -qE "^(PASS|FAIL) connection-check:" "$RUNNER_TEMP/verdict" 2>/dev/null || echo "FAIL connection-check: it stopped before its own verdict (its step log says how)" | tee -a "$GITHUB_STEP_SUMMARY"'
+
   verdict:
     name: the verdict
     if: always()
-    needs: [stage, linux-install, mac-install, docker-server, linux-update, settings-on-install, voice, update-keeps-everything, reminder-closed-elsewhere, reminders-move-keeps-everything, two-machines-move-at-once, late-reminder-file, closed-offline-on-both, reminder-from-settings, charm-challenge, no-video-skills-by-default, update-removes-only-unchanged-skills, briefing-breaks-a-rule, windows-old-names-move, telegram-language, brief-asked-in-chat, talk-prep-honest]
+    needs: [stage, linux-install, mac-install, docker-server, linux-update, settings-on-install, voice, update-keeps-everything, reminder-closed-elsewhere, reminders-move-keeps-everything, two-machines-move-at-once, late-reminder-file, closed-offline-on-both, reminder-from-settings, charm-challenge, no-video-skills-by-default, update-removes-only-unchanged-skills, briefing-breaks-a-rule, windows-old-names-move, telegram-language, brief-asked-in-chat, talk-prep-honest, no-question-he-cannot-judge, plain-yes, what-was-that, connection-check]
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -736,6 +866,10 @@ jobs:
         telegram-language=${{ needs.telegram-language.result }}
         brief-asked-in-chat=${{ needs.brief-asked-in-chat.result }}
         talk-prep-honest=${{ needs.talk-prep-honest.result }}
+        no-question-he-cannot-judge=${{ needs.no-question-he-cannot-judge.result }}
+        plain-yes=${{ needs.plain-yes.result }}
+        what-was-that=${{ needs.what-was-that.result }}
+        connection-check=${{ needs.connection-check.result }}
     steps:
       - uses: actions/checkout@v4
         if: github.event_name == 'schedule'

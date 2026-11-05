@@ -82,6 +82,21 @@ export const CONNECTION_WHAT=`Early every morning, before your morning brief, it
 export const MAIL_COUNT_JOB='Mail counts';
 export const MAIL_COUNT_SCRIPT='godspeed-mail-count.py';
 export const MAIL_COUNT_WHAT='Once a day, early in the morning, it counts the mails your trackers\' mail rules name, from each mail\'s sender, subject and date only, and adds them to those trackers. It never reads a mail\'s text and sends nothing.';
+// The routines beside the starting ones that are a switch on a mission control not made from the starter
+// (4 November 2026, #225). The one owner of each one's switch (routine-switches.mjs) and its wrapper script
+// (routineFiles in starting-routines.mjs).
+export const SWITCHABLE_NOTEBOOK_ROUTINES=[
+ {key:'journal-tick',name:JOURNAL_JOB,what:JOURNAL_WHAT,script:JOURNAL_SCRIPT},
+ {key:'connection-check',name:CONNECTION_JOB,what:CONNECTION_WHAT,script:CONNECTION_SCRIPT},
+ {key:'mail-count',name:MAIL_COUNT_JOB,what:MAIL_COUNT_WHAT,script:MAIL_COUNT_SCRIPT},
+];
+// THE NOTICE SENDER OF A MISSION CONTROL NOT MADE FROM THE STARTER (4 November 2026, #225). On a starter-born
+// install the coach's reminders and the journal's check-ins say the notices in .godspeed/notices.json. An
+// adopted mission control runs neither unasked, so it gets this one routine instead: every 15 minutes it says
+// only the notices Godspeed itself queued, and nothing else (NativeScheduler.followNoticeSender).
+export const NOTICES_JOB='Godspeed notices';
+export const NOTICES_SCRIPT='godspeed-notices.py';
+export const NOTICES_WHAT='Every 15 minutes it says what Godspeed itself queued for you, such as a backup that failed or a question waiting for your yes, one at a time. It sends nothing else.';
 // THE NIGHT CHAT TIDY-UP (26 October 2026). The assistant keeps a chat app's chat as one long
 // conversation and summarises its older part once it passes its threshold, and it does that before
 // answering the message that crossed the line: a real message waited 4 minutes 9 seconds while 348
