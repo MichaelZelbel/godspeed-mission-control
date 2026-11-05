@@ -713,7 +713,7 @@ def notice(c, only=""):
             text = f.read()
         if text.strip():
             start = started_at(c)
-            waiting = [n for n in json.loads(text).get("notices", []) if isinstance(n, dict) and isinstance(n.get("id"), str) and n["id"].startswith(only) and not n.get("not_sent") and not (start and isinstance(n.get("at"), str) and n["at"] < start)]
+            waiting = [n for n in json.loads(text).get("notices", []) if isinstance(n, dict) and isinstance(n.get("id"), str) and n["id"].startswith(only) and not n.get("not_sent") and not (start and isinstance(n.get("at"), str) and n["at"] <= start)]
     except FileNotFoundError:
         return None
     except Exception:
@@ -829,15 +829,19 @@ NOTICES_STARTED = "godspeed-notices-started"
 NOT_SENT_BEFORE_SENDER = "Queued before Godspeed began sending notices on this machine, so it was kept and not sent."
 
 
+def now_ms():
+    return datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+
+
 def hold_queued(c):
     """The first run of the notice sender marks every notice already queued as not_sent, before its
     first claim, so none queued earlier is ever said (#225). Done once: the marker file, holding the time
-    this run began, is written after the queue; notice() refuses anything older than that. A queue that cannot be read raises, so the run fails and says nothing."""
+    the time the queue was held, is written after it; notice() refuses anything stamped at or before that. A queue that cannot be read raises, so the run fails and says nothing."""
     marker = os.path.join(c["home"], NOTICES_STARTED)
     queued = c.get("notices")
     if os.path.exists(marker) or not queued:
         return
-    at = datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+    at = now_ms()
     try:
         with open(queued, encoding="utf-8") as f:
             data = json.loads(f.read())
@@ -852,8 +856,13 @@ def hold_queued(c):
             with open(tmp, "w", encoding="utf-8") as f:
                 f.write(json.dumps(dict(data, notices=held), indent=2) + "\n")
             os.replace(tmp, queued)
+    # The marker is the cutoff: a notice stamped at or before it was queued before the sender started. Waiting out the
+    # millisecond makes every later notice strictly later, so the cutoff needs no lock with the queue's writers.
+    began = now_ms()
+    while now_ms() <= began:
+        time.sleep(0.001)
     with open(marker, "w", encoding="utf-8") as f:
-        f.write(at)
+        f.write(began)
 
 
 def notices(c):
