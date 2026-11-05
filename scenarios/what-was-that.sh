@@ -35,7 +35,7 @@ NOTICE_ABOUT='The nightly backup of your notebook to GitHub stopped'
 FACTS='["At 03:00 GitHub refused the sign-in this computer uses for the backup","Your notes are safe on this computer; the copy on GitHub is from the day before"]'
 QUEUE_NOTICE='
 import {pathToFileURL} from "node:url";
-const [notices,records,device,root,text,about,facts]=process.argv.slice(1);
+const [notices,records,device,root,text,about,facts]=process.argv.slice(2);
 const {queueNotice}=await import(pathToFileURL(notices).href);
 const {Store}=await import(pathToFileURL(records).href);
 const {machineDevice}=await import(pathToFileURL(device).href);
@@ -63,7 +63,7 @@ act() {
   printf '%s' "$QUEUE_NOTICE" >"$EVIDENCE/queue-notice.mjs"
   steps_file "$EVIDENCE/steps.json" \
     "$(step_of run queue "\"argv\":[\"$NODE\",$(quoted_json "$EVIDENCE/queue-notice.mjs"),$(quoted_json "$(product_script "$ROOT" notebook/core/notices.mjs)"),$(quoted_json "$(product_script "$ROOT" notebook/core/records/store.mjs)"),$(quoted_json "$(product_script "$ROOT" notebook/core/device-id.mjs)"),$(quoted_json "$ROOT"),$(quoted_json "$NOTICE_TEXT"),$(quoted_json "$NOTICE_ABOUT"),$(quoted_json "$FACTS")]")" \
-    "$(step_of cron report '"job":"Journal check-ins"')" "$(snapshot_step report conversation_messages)" \
+    "$(step_of cron report '"job":"Coach reminders and habit check"')" "$(snapshot_step report conversation_messages)" \
     "$(step_of say question '"text":"what is this about?","session":"scenario-owner-new"')"
   owner_on_telegram "$EVIDENCE/steps.json" "$EVIDENCE/run.json"
   rm -f "$EVIDENCE"/.[a-z]*
