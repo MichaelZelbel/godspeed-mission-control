@@ -92,13 +92,13 @@ export async function previewCount({store,rule,c=null,search=defaultSearch,now,t
 // but its id on the entry it made. A search that fails (no connection, refused, the network) counts
 // nothing for that rule and leaves its place where it was: the daily connection check tells the person.
 export async function countMail({store,query,search,now=new Date(),tz}){
- const found=mailTrackers(store);let added=0,failed=0;
- if(!found.length)return {added,failed};
+ const found=mailTrackers(store);let added=0;
+ if(!found.length)return {added};
  const run=search||defaultSearch,today=localParts(now,tz).date,state=readState(store);
  for(const {c,rule} of found){
-  const column=mailColumn(c);if(column===false){failed++;continue;}
+  const column=mailColumn(c);if(column===false)continue;
   let result;
-  try{result=await run({account:rule.mailbox,senders:rule.senders,after:windowFor(state,c.id,rule,today)});}catch{failed++;continue;}
+  try{result=await run({account:rule.mailbox,senders:rule.senders,after:windowFor(state,c.id,rule,today)});}catch{continue;}
   // The check and the writes are one step, so a second run at the same moment counts nothing twice.
   store.withLock(()=>{
    const have=countedIds(store,c,store.list('collection_items'));
@@ -112,5 +112,5 @@ export async function countMail({store,query,search,now=new Date(),tz}){
   state.rules[c.id]={digest:ruleDigest(rule),last_day:today};
  }
  atomic(stateFile(store),JSON.stringify(state,null,2)+'\n');
- return {added,failed};
+ return {added};
 }

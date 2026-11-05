@@ -85,12 +85,12 @@ test('an address and its domain named together count each mail once',async t=>{
 });
 test('a second run adds nothing, and neither does a window that overlaps the last',async t=>{
  const {root,store,domains}=fixture(t);await setUp(domains,ORDERS,{name:'Shop orders'});
- assert.deepEqual(await runMailCount({root,now:NOW}),{added:4,failed:0});
- assert.deepEqual(await runMailCount({root,now:NOW}),{added:0,failed:0});
+ assert.deepEqual(await runMailCount({root,now:NOW}),{added:4});
+ assert.deepEqual(await runMailCount({root,now:NOW}),{added:0});
  const file=path.join(root,'.godspeed','mail-counts.json'),state=JSON.parse(fs.readFileSync(file,'utf8'));
  for(const r of Object.values(state.rules))r.last_day='2026-10-24';
  fs.writeFileSync(file,JSON.stringify(state));
- assert.deepEqual(await runMailCount({root,now:NOW}),{added:0,failed:0});
+ assert.deepEqual(await runMailCount({root,now:NOW}),{added:0});
  assert.equal(count(store,'Shop orders').length,4);
  assert.match(requests.find(r=>r.includes('after='))||'',/after=2026-10-05/,'the first run reaches back 30 days');
 });
@@ -109,7 +109,7 @@ test('how many this week: the entries are the tracker\'s, as any tracker\'s',asy
 test('no rule: no mail call at all, from the script too',async t=>{
  const {root,store}=fixture(t);
  store.save('collections',{name:'Belly',field_schema:[],tracker:{names:['Belly'],cadence:'daily',talks:[],specialist:null}});
- assert.deepEqual(await runMailCount({root,now:NOW}),{added:0,failed:0});
+ assert.deepEqual(await runMailCount({root,now:NOW}),{added:0});
  const ran=await script(root);
  assert.equal(ran.status,0);assert.equal(ran.stdout+ran.stderr,'');assert.deepEqual(requests,[]);
 });
@@ -121,7 +121,7 @@ test('a connection that does not answer counts nothing, says nothing and keeps i
  assert.equal(ran.status,0);assert.equal(ran.stdout+ran.stderr,'');
  assert.equal(count(store,'Shop orders').length,0);assert.ok(!fs.existsSync(path.join(root,'.godspeed','notices.json')));
  assert.ok(!fs.existsSync(path.join(root,'.godspeed','mail-counts.json'))||!Object.keys(JSON.parse(fs.readFileSync(path.join(root,'.godspeed','mail-counts.json'),'utf8')).rules).length);
- status=200;assert.deepEqual(await runMailCount({root,now:NOW}),{added:4,failed:0},'the next morning counts the whole window');
+ status=200;assert.deepEqual(await runMailCount({root,now:NOW}),{added:4},'the next morning counts the whole window');
  status=401;
  const asked=await trackerOperation(domains,{type:'tracker-mail',action:'ask',name:'Apps',...APPLICATIONS,words:'count'});
  assert.equal(asked.proposal_id,undefined);assert.match(asked.reply,/nothing was saved/);assert.ok(!asked.reply.includes(MARKER));
@@ -148,7 +148,7 @@ test('changing and removing a rule: the old question is dropped, and the counted
  assert.deepEqual(trackers(store)[0].tracker.mail.subjects,['sale']);assert.equal(proposalState(store,store.get('tracker_proposals',asked.proposal_id),NOW),'created');
  const removed=trackerOperation(domains,{type:'tracker-mail',action:'remove',tracker:'Shop orders',expected:{[trackers(store)[0].id]:trackers(store)[0]._hash}});
  assert.match(removed.reply,/no longer counts mails\. The 4 mails it counted stay\.$/);assert.equal(trackers(store)[0].tracker.mail,undefined);assert.equal(count(store,'Shop orders').length,4);
- requests.length=0;assert.deepEqual(await runMailCount({root,now:NOW}),{added:0,failed:0});assert.deepEqual(requests,[]);
+ requests.length=0;assert.deepEqual(await runMailCount({root,now:NOW}),{added:0});assert.deepEqual(requests,[]);
 });
 
 test('a Gmail rule previews and counts the Gmail mailbox, and a godspeed rule the other',async t=>{
@@ -161,7 +161,7 @@ test('a Gmail rule previews and counts the Gmail mailbox, and a godspeed rule th
  assert.deepEqual(accounts,['gmail']);
  await setUp(domains,ORDERS,{name:'Shop orders'});
  accounts.length=0;
- assert.deepEqual(await runMailCount({root,now:NOW,search}),{added:1,failed:0});
+ assert.deepEqual(await runMailCount({root,now:NOW,search}),{added:1});
  assert.deepEqual([...accounts].sort(),['gmail','godspeed']);
  assert.equal(count(store,'Gmail orders').length,1);assert.equal(count(store,'Shop orders').length,0);
  assert.match(count(store,'Gmail orders')[0].data.mail_id,/^gmail:/);
