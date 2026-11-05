@@ -493,7 +493,7 @@ test('an adopted mission control gets the notice sender, keeps the notices queue
 });
 
 test('Settings lists the routines of an adopted mission control, all off, and a starter-born one has no switches',async t=>{
- const {store,hermes}=await adoptedFixture(t),{routineSwitches,setRoutineSwitch,ADOPTED_NOTE}=await import('../core/routine-switches.mjs');
+ const {store,hermes,home}=await adoptedFixture(t),{routineSwitches,setRoutineSwitch,ADOPTED_NOTE,PROVIDER_NOTE}=await import('../core/routine-switches.mjs');
  const listed=routineSwitches(store,{jobs:hermes.jobs()});
  assert.equal(listed.note,ADOPTED_NOTE);assert.equal(listed.routines.length,9);
  assert.ok(listed.routines.every(r=>r.on===false&&r.state==='off'&&r.what));
@@ -501,6 +501,9 @@ test('Settings lists the routines of an adopted mission control, all off, and a 
  assert.equal(routineSwitches(store,{jobs:[]}).routines.find(r=>r.key==='connection-check').state,'waiting');
  await assert.rejects(setRoutineSwitch(store,{key:'nope',on:true}),/Choose one of the routines/);
  await assert.rejects(setRoutineSwitch(store,{key:'research',on:'yes'}),/switch it on or off/);
+ assert.equal(routineSwitches(store,{jobs:[],home}).providerNote,null,'no provider set: the wrapper is active, no note');
+ fs.appendFileSync(path.join(home,'config.yaml'),'cron:\n  provider: owners_own\n');
+ assert.equal(routineSwitches(store,{jobs:[],home}).providerNote,PROVIDER_NOTE,'the owner\'s provider stays and the note says what is not delivered');
  const born=await withGoal(t);
  assert.equal(routineSwitches(born.store,{jobs:born.hermes.jobs()}),null);
  await assert.rejects(setRoutineSwitch(born.store,{key:'research',on:true}),/did not make from its starter/);
