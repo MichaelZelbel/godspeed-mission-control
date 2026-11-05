@@ -228,9 +228,11 @@ export class NativeScheduler{
  // person paused or resumed, or removed, is theirs from then on.
  async followConnectionCheck(){
   const root=this.store.root;if(!starterBorn(root)||readMachineRecord(this.store)?.state!=='created')return null;
-  const entry=readNotebookRoutines(this.store).jobs.find(j=>j.key==='connection-check'),jobs=hermesJobs(this.home);
+  let entry=readNotebookRoutines(this.store).jobs.find(j=>j.key==='connection-check');const jobs=hermesJobs(this.home);
   const job=(entry&&jobs.find(j=>j.id===entry.id))||jobs.find(j=>j.name===CONNECTION_JOB&&j.script===CONNECTION_SCRIPT);
   if(entry&&!job)return null;
+  // The sentence Settings shows for it is the notebook's, so an install made before a source was added learns the new one.
+  if(entry&&entry.what!==CONNECTION_WHAT)entry=rememberNotebookRoutine(this.store,{...entry,what:CONNECTION_WHAT});
   const installation=this.store.get('settings','installation'),timezone=installation?.timezone||Intl.DateTimeFormat().resolvedOptions().timeZone,wanted=connectionCheckWanted(this.home);
   writeRoutineFiles(this.home,routineFiles({root,home:this.home,state:this.store.state,timezone,hermes:this.executable}));
   if(job){

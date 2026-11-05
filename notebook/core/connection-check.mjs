@@ -25,6 +25,8 @@ import {addDays} from '../../third-party/addons/godspeed-coach/lib/clock.mjs';
 // go through the notebook's notices (tellOwner, the one place to change) and the GitHub read uses
 // the sync's own settings, which already refuse to ask for a sign-in (FileSync.gitBytes).
 //
+// The owner's routines are a second source, read from Hermes' jobs list with no call (routine-check.mjs, #239).
+//
 // A probe answers only {set_up, ok, kind}; kind is 'sign-in' (login or key refused) or 'other'. No
 // service text, address or key ever leaves a probe, so none can reach a record, a message or a log.
 export const CONNECTIONS={
@@ -115,7 +117,7 @@ export function nextState(prev={},result,day){
 }
 
 // The one place the owner is told; #198's report in the chat's voice replaces this body.
-export function tellOwner(store,{id,text}){return queueNotice(store,{id,text});}
+export function tellOwner(store,{id,text,about,facts}){return queueNotice(store,{id,text,about,facts});}
 
 // tools/due.js as its own process, as every other deadline change is made: it takes the
 // workspace lock itself, so nothing here may hold it (addon-deadlines.mjs, due).

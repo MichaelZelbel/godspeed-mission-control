@@ -1,7 +1,7 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import {fileURLToPath} from 'node:url';import {execFileSync,spawnSync,spawn} from 'node:child_process';
 import {NativeScheduler,nativeJobs} from '../core/native-scheduler.mjs';import {Store} from '../core/records/store.mjs';import {QueryService} from '../core/query.mjs';import {Domains} from '../core/domains.mjs';
 import {installStarter} from '../core/starter-workspace.mjs';import {readMachineRecord,telegramInHermes,chatAppInHermes} from '../core/starting-routines.mjs';import {runCommand} from '../core/child-process.mjs';
-import {DatabaseSync} from 'node:sqlite';import {CONNECTION_NOTICE_PREFIX} from '../core/connection-names.mjs';
+import {DatabaseSync} from 'node:sqlite';import {CONNECTION_NOTICE_PREFIX,ROUTINES_NAME} from '../core/connection-names.mjs';
 import {cronCalendar,calendarCron,retimeWhat} from '../core/routine-times.mjs';import {enableKinds,readNotebookRoutines,rememberNotebookRoutine,writeNotebookRoutines,JOURNAL_JOB,CHAT_TIDY_JOB,CHAT_TIDY_SCRIPT,BRIEF_SCRIPT,deliveryFor,CONNECTION_JOB} from '../core/notebook-routines.mjs';
 import {personalOperation} from '../core/personal-operations.mjs';import {readArea} from '../../third-party/addons/godspeed-coach/lib/areas.mjs';
 
@@ -179,7 +179,11 @@ test('the daily connection check is listed with its switch, paused until Telegra
  assert.match(fs.readFileSync(path.join(home,'scripts','godspeed-connection-check.py'),'utf8'),/main\("connection-check"\)/);
  assert.ok(JSON.parse(fs.readFileSync(path.join(home,'scripts','godspeed-routines.json'),'utf8')).connection_check.endsWith('connection-check.mjs'));
  const q=new QueryService(store);q.nativeHermesHome=home;
- const row=q.rows('jobs').find(j=>j.title===CONNECTION_JOB);assert.match(row.what,/one harmless call to each connection/);assert.equal(row.paused,true);
+ const row=q.rows('jobs').find(j=>j.title===CONNECTION_JOB);assert.match(row.what,/one harmless call to each connection/);assert.ok(row.what.includes(ROUTINES_NAME.label));assert.equal(row.paused,true);
+ // An install made before "your routines" was a source keeps the old sentence until the next tick refreshes it.
+ writeNotebookRoutines(store,{...readNotebookRoutines(store),jobs:readNotebookRoutines(store).jobs.map(j=>j.key==='connection-check'?{...j,what:'An older sentence.'}:j)});
+ scheduler.lastTick=0;await scheduler.tick();
+ assert.ok(q.rows('jobs').find(j=>j.title===CONNECTION_JOB).what.includes(ROUTINES_NAME.label));
  // Telegram connected later: the notebook, which paused it, resumes it.
  fs.writeFileSync(path.join(home,'.env'),'TELEGRAM_BOT_TOKEN=123:abc\n');
  scheduler.lastTick=0;await scheduler.tick();assert.equal(job(CONNECTION_JOB).enabled,true);

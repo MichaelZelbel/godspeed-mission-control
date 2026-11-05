@@ -121,10 +121,12 @@ export function hermesResponse(output){
   return output.replace(/\x1b\[[0-9;]*m/g,'').replace(/^Warning: Unknown toolsets: none\r?\n\s*/,'').replace(/^\s*⚠ tirith security scanner enabled but not available[^\n]*\r?\n\s*/,'')
     .split(/\r?\n/).filter(line=>!waitingLine(line)).join('\n').trim();
 }
+// What the AI program prints when the account needs its sign-in; the daily connection check's routines source leaves such a failure to the AI's own message.
+export const AI_SIGN_IN=/authenticationerror|invalid_api_key|incorrect api key|token expired|unauthorized|authentication failed/i;
 export function hermesFailureMessage(diagnostic,secrets=[]){
   if(/context length exceeded|context_length_exceeded|maximum context length|cannot compress further|(?:model )?input exceeds (?:the )?context (?:window|limit)/i.test(diagnostic))return 'The AI request exceeded the model context limit. Reduce the selected source scope before retrying.';
   if(/rate_limit_exceeded|rate limit exceeded|too many requests|usage limit reached|quota exceeded|insufficient_quota/i.test(diagnostic))return 'The connected AI account reached a usage limit. Retry after its limit resets.';
-  if(/authenticationerror|invalid_api_key|incorrect api key|token expired|unauthorized|authentication failed/i.test(diagnostic))return 'The connected AI account needs sign-in. Check the account in Settings before retrying.';
+  if(AI_SIGN_IN.test(diagnostic))return 'The connected AI account needs sign-in. Check the account in Settings before retrying.';
   // Issue #127: a reader met only "The AI request failed" and could do nothing with it. The provider's own
   // one-line reason (an HTTP status and its message) is said too, with anything key-shaped taken out, and
   // the sentence ends on what to do next. The private diagnosis itself is never shown: the notebook keeps

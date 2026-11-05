@@ -1,4 +1,4 @@
-// The connections the daily connection check looks at, in the order it lists them: the one list
+// The connections the daily connection check probes, in the order it lists them: the one list
 // behind both its probes (connection-check.mjs) and the Settings text of its routine
 // (notebook-routines.mjs). It imports nothing, so both can read it without an import cycle.
 // Every notice the check queues for the owner starts with this; the routine runner says only notices that do (it is written into godspeed-routines.json).
@@ -9,3 +9,5 @@ export const CONNECTION_NAMES={
  github:{label:'GitHub',stops:'your notebook stops syncing with your other computers'},
  mail:{label:'Gmail',stops:'your assistants cannot search your mail or save drafts'},
 };
+// The check's other source (routine-check.mjs): the owner's routines, read from Hermes' jobs list with no call. Not a connection, so not in CONNECTION_NAMES.
+export const ROUTINES_NAME={label:'your routines'};
