@@ -2817,6 +2817,216 @@ printf '[{"slug":"the-open-deadline","title":"Connect Telegram again","state":"o
 refuses 'another closed Telegram deadline standing in for the open one' connection-check "$C/decoy-closed" 'not closed, after'
 refuses 'a deadline still open after the key is valid again' connection-check "$C/still-open" 'not closed, after'
 
+# ======================================================= the scenarios of 2.0.0-beta.19
+# chat-tidy-at-night, disk-filling, missed-routine and deadline-closes-itself: each case is a folder of
+# what one run saw, with one thing changed.
+steps_json() { # <folder> <label=ok|bad>... : a run.json with these steps and the messages given in $OUTBOX
+  local folder=$1 joined='' pair
+  shift
+  for pair in "$@"; do
+    joined=${joined:+$joined,}$(printf '{"label":"%s","kind":"cron","success":%s}' "${pair%=*}" "$([ "${pair#*=}" = ok ] && echo true || echo false)")
+  done
+  printf '{"outbox":[%s],"steps":[%s],"_plugins":[],"hermes":"test"}\n' "${OUTBOX:-}" "$joined" >"$folder/run.json"
+}
+
+# ---------------------------------------------------------------------------- chat-tidy-at-night
+section chat-tidy-at-night
+CT=$TMP/ct
+rm -rf "$CT/good"
+mkdir -p "$CT/good"
+printf 'messages=40 tokens=174000\n' >"$CT/good/long-before.txt"
+printf 'messages=9 tokens=3100\n' >"$CT/good/long-after.txt"
+printf 'summarised in 6s: status compressed, messages 40 -> 9, about 174000 -> 3100 tokens (tidied)\n' >"$CT/good/long-log"
+printf '0\n' >"$CT/good/long-exit"
+: >"$CT/good/long-said"
+printf 'session_id: scenario-chat-1\nHello\n' >"$CT/good/next-reply.txt"
+printf '0\n' >"$CT/good/next-exit"
+printf '{"id":"scenario-short-3"}\n{"role":"user","content":"x"}\n' >"$CT/good/short-before.txt"
+cp "$CT/good/short-before.txt" "$CT/good/short-after.txt"
+printf 'skip: under the limit\n' >"$CT/good/short-log"
+printf '0\n' >"$CT/good/short-exit"
+passes 'a long chat shortened and logged, the next message plain, a short chat untouched' chat-tidy-at-night "$CT/good" 'the long conversation went from 40 to 9 messages'
+copy "$CT/good" "$CT/not-shortened"
+printf 'messages=40 tokens=174000\n' >"$CT/not-shortened/long-after.txt"
+refuses 'a long chat that is not shorter' chat-tidy-at-night "$CT/not-shortened" 'nothing was shortened'
+copy "$CT/good" "$CT/not-logged"
+printf 'nothing to report\n' >"$CT/not-logged/long-log"
+refuses 'a tidy-up its log does not mention' chat-tidy-at-night "$CT/not-logged" 'does not say it tidied'
+copy "$CT/good" "$CT/routine-fails"
+printf '1\n' >"$CT/routine-fails/long-exit"
+refuses 'a routine that ends 1 on the long chat' chat-tidy-at-night "$CT/routine-fails" 'ended 1 on the long conversation'
+copy "$CT/good" "$CT/summary-in-front"
+printf 'Summary of our earlier conversation: you asked about sleep.\nHello\n' >"$CT/summary-in-front/next-reply.txt"
+refuses 'an answer with a summary in front' chat-tidy-at-night "$CT/summary-in-front" 'has a summary in front'
+copy "$CT/good" "$CT/wrong-answer"
+printf 'Bonjour\n' >"$CT/wrong-answer/next-reply.txt"
+refuses 'an answer that is not the one asked for' chat-tidy-at-night "$CT/wrong-answer" 'not the answer asked for'
+copy "$CT/good" "$CT/no-answer"
+printf '2\n' >"$CT/no-answer/next-exit"
+refuses 'an assistant that fails the next message' chat-tidy-at-night "$CT/no-answer" 'ended 2 on the next message'
+copy "$CT/good" "$CT/short-changed"
+printf '{"id":"scenario-short-3"}\n{"role":"user","content":"shortened"}\n' >"$CT/short-changed/short-after.txt"
+refuses 'a chat under the limit that changed' chat-tidy-at-night "$CT/short-changed" 'under the limit is not byte-for-byte'
+copy "$CT/good" "$CT/short-tidied"
+printf 'summarised in 2s: status compressed, messages 12 -> 4\n' >"$CT/short-tidied/short-log"
+refuses 'a chat under the limit that the log says was tidied' chat-tidy-at-night "$CT/short-tidied" 'tidied a conversation that was under the limit'
+
+# ---------------------------------------------------------------------------------- missed-routine
+section missed-routine
+MR=$TMP/mr
+MR_TEXT='Two of your routines need a look: Scenario missed has not run since it was due, and Scenario failing twice failed on its last two runs. Open Settings to see them.'
+mr_good() { # <folder>
+  local f=$1
+  rm -rf "$f"
+  mkdir -p "$f"
+  OUTBOX=$(msg check-1 "$MR_TEXT") steps_json "$f" fail-twice-1=bad fail-twice-2=bad fail-once-1=bad move-the-clock=ok check-1=ok check-2=ok good-missed=ok good-failing=ok check-3=ok
+  printf '[{"name":"Daily connection check"},{"name":"Scenario missed"},{"name":"Scenario failing twice"},{"name":"Scenario failing once"}]\n' >"$f/routines.json"
+  printf '[]\n' >"$f/due-before.json"
+  printf '[{"slug":"routine-missed","title":"Scenario missed did not run","state":"open"},{"slug":"routine-failing","title":"Scenario failing twice keeps failing","state":"open"}]\n' >"$f/due-check-1.json"
+  cp "$f/due-check-1.json" "$f/due-check-2.json"
+  printf '[{"slug":"routine-missed","title":"Scenario missed did not run","state":"closed"},{"slug":"routine-failing","title":"Scenario failing twice keeps failing","state":"closed"}]\n' >"$f/due-check-3.json"
+  printf 'getMe valid\n' >"$f/telegram-fixture-calls.log"
+}
+mr_good "$MR/good"
+passes 'one message naming both, nothing the second time, both closed by good runs' missed-routine "$MR/good" 'sent one message naming the first two'
+copy "$MR/good" "$MR/missing-routine"
+printf '[{"name":"Daily connection check"},{"name":"Scenario missed"}]\n' >"$MR/missing-routine/routines.json"
+refuses 'a scenario whose routines were not made' missed-routine "$MR/missing-routine" 'has no routine named'
+copy "$MR/good" "$MR/does-not-fail"
+OUTBOX=$(msg check-1 "$MR_TEXT") steps_json "$MR/does-not-fail" fail-twice-1=bad fail-twice-2=ok fail-once-1=bad check-1=ok
+refuses 'a failing routine that did not fail' missed-routine "$MR/does-not-fail" 'did not fail'
+copy "$MR/good" "$MR/step-broke"
+OUTBOX=$(msg check-1 "$MR_TEXT") steps_json "$MR/step-broke" fail-twice-1=bad fail-twice-2=bad fail-once-1=bad check-1=bad
+refuses 'a step of the run that broke' missed-routine "$MR/step-broke" 'step check-1 of the run did not work'
+copy "$MR/good" "$MR/silent"
+OUTBOX='' steps_json "$MR/silent" fail-twice-1=bad fail-twice-2=bad fail-once-1=bad check-1=ok
+refuses 'a check that says nothing' missed-routine "$MR/silent" 'in 0 messages'
+copy "$MR/good" "$MR/two-messages"
+OUTBOX="$(msg check-1 "$MR_TEXT"),$(msg check-1 'Scenario failing twice failed.')" steps_json "$MR/two-messages" fail-twice-1=bad fail-twice-2=bad fail-once-1=bad check-1=ok
+refuses 'two messages' missed-routine "$MR/two-messages" 'in 2 messages'
+copy "$MR/good" "$MR/names-one"
+OUTBOX=$(msg check-1 'Scenario missed has not run.') steps_json "$MR/names-one" fail-twice-1=bad fail-twice-2=bad fail-once-1=bad check-1=ok
+refuses 'a message that names only the missed routine' missed-routine "$MR/names-one" 'does not name the routine that failed twice'
+copy "$MR/good" "$MR/names-three"
+OUTBOX=$(msg check-1 "$MR_TEXT Scenario failing once failed too.") steps_json "$MR/names-three" fail-twice-1=bad fail-twice-2=bad fail-once-1=bad check-1=ok
+refuses 'a message that also names the routine that failed once' missed-routine "$MR/names-three" 'failed only once'
+copy "$MR/good" "$MR/speaks-again"
+OUTBOX="$(msg check-1 "$MR_TEXT"),$(msg check-2 "$MR_TEXT")" steps_json "$MR/speaks-again" fail-twice-1=bad fail-twice-2=bad fail-once-1=bad check-1=ok check-2=ok
+refuses 'a second run that says it again' missed-routine "$MR/speaks-again" 'sent a message again'
+copy "$MR/good" "$MR/no-deadline"
+printf '[]\n' >"$MR/no-deadline/due-check-1.json"
+refuses 'no deadline opened' missed-routine "$MR/no-deadline" 'opened no deadline'
+copy "$MR/good" "$MR/more-deadlines"
+printf '[{"slug":"routine-missed","title":"Scenario missed did not run","state":"open"},{"slug":"routine-failing","title":"Scenario failing twice keeps failing","state":"open"},{"slug":"c","title":"again","state":"open"}]\n' >"$MR/more-deadlines/due-check-2.json"
+refuses 'a second run that opens another deadline' missed-routine "$MR/more-deadlines" 'opened 1 more deadlines'
+copy "$MR/good" "$MR/still-open"
+printf '[{"slug":"routine-missed","title":"Scenario missed did not run","state":"closed"},{"slug":"routine-failing","title":"x","state":"open"}]\n' >"$MR/still-open/due-check-3.json"
+refuses 'a deadline still open after the good runs' missed-routine "$MR/still-open" 'not closed, after each routine had a good run'
+copy "$MR/good" "$MR/deadline-for-once"
+printf '[{"slug":"routine-missed","title":"Scenario missed","state":"open"},{"slug":"x","title":"Scenario failing once failed","state":"open"}]\n' >"$MR/deadline-for-once/due-check-1.json"
+refuses 'a deadline about the routine that failed once' missed-routine "$MR/deadline-for-once" 'about the routine that failed only once'
+
+# ------------------------------------------------------------------------- deadline-closes-itself
+section deadline-closes-itself
+DC=$TMP/dc
+dc_good() { # <folder>
+  local f=$1
+  rm -rf "$f"
+  mkdir -p "$f"
+  OUTBOX='' steps_json "$f" broken=ok both-open=ok replace=ok checked=ok key-replaced=ok repaired=ok
+  printf '[{"slug":"key-ai-key","title":"The key your AI thinks with needs replacing","state":"open"}]\n' >"$f/due-before.json"
+  printf '[{"slug":"key-ai-key","title":"The key","state":"open"},{"slug":"connection-telegram-2026-11-05","title":"Connect Telegram again","state":"open"}]\n' >"$f/due-both-open.json"
+  printf '[{"slug":"key-ai-key","title":"The key","state":"closed"},{"slug":"connection-telegram-2026-11-05","title":"Connect Telegram again","state":"open"}]\n' >"$f/due-key-replaced.json"
+  printf '[{"slug":"key-ai-key","title":"The key","state":"closed"},{"slug":"connection-telegram-2026-11-05","title":"Connect Telegram again","state":"closed"}]\n' >"$f/due-repaired.json"
+  printf 'clean\n' >"$f/key-scan.txt"
+  printf 'getMe invalid\ngetMe valid\n' >"$f/telegram-fixture-calls.log"
+}
+dc_good "$DC/good"
+passes 'the key deadline closed by the replaced key, the connection one by the check, no key in any file' deadline-closes-itself "$DC/good" 'the deadline on the key closed on the deadline run'
+copy "$DC/good" "$DC/not-open-before"
+printf '[]\n' >"$DC/not-open-before/due-before.json"
+refuses 'a key that has no deadline to begin with' deadline-closes-itself "$DC/not-open-before" 'absent, not open, before anything ran'
+copy "$DC/good" "$DC/key-stays-open"
+sed -i 's/"key-ai-key","title":"The key","state":"closed"/"key-ai-key","title":"The key","state":"open"/' "$DC/key-stays-open/due-key-replaced.json"
+refuses 'a key deadline that the replaced key does not close' deadline-closes-itself "$DC/key-stays-open" 'is open, not closed, after the key was replaced'
+copy "$DC/good" "$DC/telegram-closed-early"
+sed -i 's/"connection-telegram-2026-11-05","title":"Connect Telegram again","state":"open"/"connection-telegram-2026-11-05","title":"Connect Telegram again","state":"closed"/' "$DC/telegram-closed-early/due-key-replaced.json"
+refuses 'the connection deadline closed by the key' deadline-closes-itself "$DC/telegram-closed-early" 'was closed by replacing the AI'"'"'s key'
+copy "$DC/good" "$DC/telegram-stays-open"
+sed -i 's/"connection-telegram-2026-11-05","title":"Connect Telegram again","state":"closed"/"connection-telegram-2026-11-05","title":"Connect Telegram again","state":"open"/' "$DC/telegram-stays-open/due-repaired.json"
+refuses 'a connection deadline the passing check does not close' deadline-closes-itself "$DC/telegram-stays-open" 'is open, not closed, after the connection check passed'
+copy "$DC/good" "$DC/no-telegram-deadline"
+cp "$DC/good/due-before.json" "$DC/no-telegram-deadline/due-both-open.json"
+refuses 'no deadline about the connection' deadline-closes-itself "$DC/no-telegram-deadline" 'opened 0 deadlines about Telegram'
+copy "$DC/good" "$DC/key-leaked"
+printf '/home/runner/godspeed-v2/.godspeed/ai-failures.log\n' >"$DC/key-leaked/key-scan.txt"
+refuses 'a key in a log' deadline-closes-itself "$DC/key-leaked" 'a key'"'"'s value is in 1 file'
+copy "$DC/good" "$DC/step-broke"
+OUTBOX='' steps_json "$DC/step-broke" broken=ok replace=bad
+refuses 'a step that broke' deadline-closes-itself "$DC/step-broke" 'a step of the run did not work'
+
+# ------------------------------------------------------------------------------------ disk-filling
+section disk-filling
+DF=$TMP/df
+df_good() { # <folder>
+  local f=$1 entry
+  rm -rf "$f"
+  mkdir -p "$f"
+  printf 'scenario-big-1\nscenario-big-2\ngodspeed\n' >"$f/biggest.txt"
+  printf 'used=860 size=1000\n' >"$f/df-86.txt"
+  printf 'used=750 size=1000\n' >"$f/df-75.txt"
+  printf '[]\n' >"$f/due-before.json"
+  printf '[{"slug":"disk-2026-11-05","title":"Free up space: the disk is 86% full","state":"open"}]\n' >"$f/due-first.json"
+  cp "$f/due-first.json" "$f/due-second.json"
+  printf '[{"slug":"disk-2026-11-05","title":"Free up space: the disk is 86% full","state":"closed"}]\n' >"$f/due-low.json"
+  printf 'Your disk is 86%% full. The biggest places are scenario-big-1, scenario-big-2 and godspeed. Free up space.\n' >"$f/first-said"
+  : >"$f/second-said"
+  : >"$f/low-said"
+  for entry in first second low clean; do printf '0\n' >"$f/$entry-exit"; : >"$f/$entry-log"; done
+  : >"$f/clean-said"
+  printf 'request-dump present\nsession-transcript present\nrun-log present\nnote present\narchived-chat present\nunarchived-chat present\nbackup present\nlisted-session-file present\n' >"$f/planted.txt"
+  printf 'request-dump gone\nsession-transcript gone\nrun-log gone\nnote present\narchived-chat present\nunarchived-chat present\nbackup present\nlisted-session-file present\n' >"$f/after-clean.txt"
+}
+df_good "$DF/good"
+passes 'one message naming the three biggest, nothing again, closed at 75%, only the old taken' disk-filling "$DF/good" 'at 86% the connection check said one message'
+copy "$DF/good" "$DF/silent"
+: >"$DF/silent/first-said"
+refuses 'nothing said at 86%' disk-filling "$DF/silent" 'said nothing with the disk at 86%'
+copy "$DF/good" "$DF/names-two"
+printf 'Your disk is 86%% full. The biggest places are scenario-big-1 and scenario-big-2.\n' >"$DF/names-two/first-said"
+refuses 'a message that misses one of the three biggest' disk-filling "$DF/names-two" 'does not name godspeed'
+copy "$DF/good" "$DF/no-deadline"
+printf '[]\n' >"$DF/no-deadline/due-first.json"
+cp "$DF/no-deadline/due-first.json" "$DF/no-deadline/due-second.json"
+refuses 'no deadline at 86%' disk-filling "$DF/no-deadline" 'opened 0 deadlines about the disk'
+copy "$DF/good" "$DF/speaks-again"
+cp "$DF/good/first-said" "$DF/speaks-again/second-said"
+refuses 'a second run that says it again' disk-filling "$DF/speaks-again" 'said something again'
+copy "$DF/good" "$DF/opens-again"
+printf '[{"slug":"disk-2026-11-05","title":"Free up space","state":"open"},{"slug":"disk-b","title":"Free up space again","state":"open"}]\n' >"$DF/opens-again/due-second.json"
+refuses 'a second run that opens another deadline' disk-filling "$DF/opens-again" 'opened another deadline'
+copy "$DF/good" "$DF/stays-open"
+cp "$DF/good/due-first.json" "$DF/stays-open/due-low.json"
+refuses 'a deadline still open at 75%' disk-filling "$DF/stays-open" 'is open, not closed, with the disk at 75%'
+copy "$DF/good" "$DF/check-fails"
+printf '1\n' >"$DF/check-fails/second-exit"
+refuses 'a connection check that ends 1' disk-filling "$DF/check-fails" 'ended 1 in the run second'
+copy "$DF/good" "$DF/transcript-stays"
+sed -i 's/^session-transcript gone/session-transcript present/' "$DF/transcript-stays/after-clean.txt"
+refuses 'an old transcript the cleanup left' disk-filling "$DF/transcript-stays" 'left the 40-day-old session-transcript'
+copy "$DF/good" "$DF/note-goes"
+sed -i 's/^note present/note gone/' "$DF/note-goes/after-clean.txt"
+refuses 'an old note the cleanup took' disk-filling "$DF/note-goes" 'took the 40-day-old note'
+copy "$DF/good" "$DF/listed-goes"
+sed -i 's/^listed-session-file present/listed-session-file gone/' "$DF/listed-goes/after-clean.txt"
+refuses 'the file of a listed session taken' disk-filling "$DF/listed-goes" 'took the 40-day-old listed-session-file'
+copy "$DF/good" "$DF/backup-goes"
+sed -i 's/^backup present/backup gone/' "$DF/backup-goes/after-clean.txt"
+refuses 'a backup taken' disk-filling "$DF/backup-goes" 'took the 40-day-old backup'
+copy "$DF/good" "$DF/never-planted"
+sed -i 's/^run-log present/run-log gone/' "$DF/never-planted/planted.txt"
+refuses 'an old file that was never there' disk-filling "$DF/never-planted" 'was not there before the cleanup'
+
 # ============================================================ every one of them, the same shape
 section 'every script'
 for file in scenario-lib.sh settings-on-install.sh night-tidy.sh voice.sh update-keeps-everything.sh \
@@ -2824,7 +3034,8 @@ for file in scenario-lib.sh settings-on-install.sh night-tidy.sh voice.sh update
   late-reminder-file.sh closed-offline-on-both.sh reminder-from-settings.sh \
   charm-challenge.sh no-video-skills-by-default.sh update-removes-only-unchanged-skills.sh \
   briefing-breaks-a-rule.sh telegram-language.sh brief-asked-in-chat.sh talk-prep-honest.sh \
-  no-question-he-cannot-judge.sh plain-yes.sh what-was-that.sh connection-check.sh test-scenarios.sh; do
+  no-question-he-cannot-judge.sh plain-yes.sh what-was-that.sh connection-check.sh \
+  chat-tidy-at-night.sh disk-filling.sh missed-routine.sh deadline-closes-itself.sh test-scenarios.sh; do
   if bash -n "$ROOT/scenarios/$file" 2>/dev/null; then
     ok "bash reads scenarios/$file"
   else
@@ -2835,7 +3046,8 @@ for scenario in settings-on-install night-tidy voice update-keeps-everything \
   reminder-closed-elsewhere reminders-move-keeps-everything two-machines-move-at-once \
   late-reminder-file closed-offline-on-both reminder-from-settings charm-challenge \
   no-video-skills-by-default update-removes-only-unchanged-skills briefing-breaks-a-rule telegram-language \
-  brief-asked-in-chat talk-prep-honest no-question-he-cannot-judge plain-yes what-was-that connection-check; do
+  brief-asked-in-chat talk-prep-honest no-question-he-cannot-judge plain-yes what-was-that connection-check \
+  chat-tidy-at-night disk-filling missed-routine deadline-closes-itself; do
   refuses "$scenario on a folder that is not there" "$scenario" "$TMP/no-such-folder" \
     "there is nothing at"
   run "$scenario"
