@@ -85,6 +85,13 @@ contains "8 a refused key reads as reconnect needed" "$OUT" 'reconnect needed'
 [ "$RC" = 1 ] && ok "8b and the status exit code says so" || bad "8b exit code" "got $RC"
 OUT="$(GODSPEED_MAIL_AGENTMAIL_API="http://127.0.0.1:1" "$NODE" "$HERE/mc-mail.js" status 2>&1)"
 contains "9 an unreachable service reads as unreachable" "$OUT" 'unreachable'
+# The read key goes only over HTTPS (the loopback stand-in excepted): an http address elsewhere is refused before any request.
+OUT="$(GODSPEED_MAIL_AGENTMAIL_API="http://agentmail.example.invalid" "$NODE" -e '
+let calls = 0; global.fetch = async () => { calls++; throw new Error("fetch called"); };
+require(process.argv[1]).godspeedStatus().then(s => console.log(JSON.stringify(s), "calls=" + calls));' "$HERE/mc-mail.js" 2>&1)"
+contains "10 an http address makes no request" "$OUT" 'calls=0'
+contains "10b and says why" "$OUT" 'must be an https address'
+lacks "10c and no key leaves" "$OUT" 'test-key'
 # A header search over AgentMail: the list call also returns a preview and the body text; none of it leaves.
 OUT="$("$NODE" -e '
 require(process.argv[1]).headerSearch({ account: "godspeed", senders: ["nadia@example.com"], after: "2026-01-01" })
