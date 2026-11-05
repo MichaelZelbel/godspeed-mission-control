@@ -3,11 +3,11 @@
 ## The routines your first goal starts
 
 The first time you give your mission control a goal, in the notebook's "Start with one goal" form
-or in the chat, it starts seven routines on the computer that runs your routines, on your own
+or in the chat, it starts eight routines on the computer that runs your routines, on your own
 clock: the nightly goal research, the daily round's two, deadline reminders, the weekly check-in
-and the coach's reminders, and the coaching talk preparation. It does this once on each computer
-that runs your routines: if you add a server later and let it run the routines, the server gets
-the same seven, and your computer's stop. A routine you
+and the coach's reminders, the coaching talk preparation, and the daily connection check. It does
+this once on each computer that runs your routines: if you add a server later and let it run the
+routines, the server gets the same eight, and your computer's stop. A routine you
 later remove stays removed. A computer whose assistant already ran routines of its own before this
 mission control came, or for another folder, gets none of these; a one-time reminder, and a
 routine you asked for here, such as a morning brief, do not count.
@@ -111,13 +111,30 @@ Last checked: 2026-10-09, both schedules run once by a real Hermes on a test com
 so both stayed quiet); the talk waiting in the chat tested without Telegram. A talk opened by a
 model is still to be watched.
 
+### Daily connection check
+
+Does: early every morning it makes one harmless call to each connection you set up: your AI,
+Telegram, the GitHub sync and Gmail. When a sign-in or key is refused, it tells you once and sets a
+deadline, and that deadline closes itself the first morning the connection works again. Any other
+failure is reported only when it happens two mornings in a row. When everything works, it sends
+nothing. It runs no AI of its own.
+Rhythm: every day at 05:00 your time, earlier when a morning brief set before 05:30 needs it first.
+It starts running when Telegram or Gmail is connected, and waits paused while neither is; once one
+of them is connected, it resumes by itself, unless you paused or resumed it yourself.
+Lands: in your Telegram chat when your assistant has Telegram connected, otherwise in your notebook.
+Lives: Hermes' schedule on the computer that runs your routines.
+May: make one harmless call to each connection and set or close the deadline that goes with it.
+Off-switch: Pause "Daily connection check" under Settings > Routines.
+Last checked: 2026-11-05, source tests (2.0.0-beta.17); its first run on a real install is the
+release's scenario "connection-check".
+
 ## Notebook service and private file synchronization
 
 The installer can start a separate notebook service at sign-in on Windows or through the isolated Docker Compose project on a server. Its supervisor checks the notebook identity and scheduler progress, restarts only its own unhealthy notebook process, and stops retrying after five failed restarts. The installed stop command or stopping the separate Compose project turns it off.
 
 Once private file synchronization is explicitly configured, the notebook checks it once a minute and after a durable file change. Automatic, manual and notebook connector requests share one synchronization worker. Slow Git network requests run in that worker without holding the local writer lock. Local commits and incoming changes retain the lock, and edits made during upload remain pending for the next cycle. Stopping the notebook terminates the synchronization process tree. File conflicts keep the original and both edited versions; a binary file retains exact bytes and can be resolved by choosing a saved version.
 
-These are installation mechanisms, not adopted personal goals. Personal routines are the seven above, which your first goal starts, and the ones you add in the chat or under Settings > Routines; their owner, next run, last run and pause state remain visible there. No routine is claimed tested merely because this description is packaged.
+These are installation mechanisms, not adopted personal goals. Personal routines are the eight above, which your first goal starts, and the ones you add in the chat or under Settings > Routines; their owner, next run, last run and pause state remain visible there. No routine is claimed tested merely because this description is packaged.
 
 ## Goal decisions and approved local work
 
