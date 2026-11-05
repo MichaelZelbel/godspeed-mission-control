@@ -54,6 +54,16 @@ test('a failure only the status record shows is told at its second run, once, ac
  on('2026-11-10',later+48*3600000,true);assert.equal(said(f).length,2,'the second failure of a new spell is told');
 });
 
+test('a notice that could not be queued is told at the next check, also for a failure only the status record shows',t=>{
+ const f=fixture(t),on=(day,now)=>checkRoutines({store:f.store,home:f.home,day,timezone:'UTC',now:()=>new Date(now),jobs:[round(f,now,true)]});
+ const next=NOW+24*3600000,after=NOW+48*3600000,notices=path.join(f.store.state,'notices.json');
+ on(DAY,NOW);
+ fs.mkdirSync(notices,{recursive:true});
+ assert.throws(()=>on('2026-11-06',next),/could not be queued/);
+ fs.rmSync(notices,{recursive:true});
+ on('2026-11-06',next);assert.equal(said(f).length,1);
+});
+
 test('the same missed routine is told once on the first day, and not again on the next',t=>{
  const f=fixture(t);
  check(f,[daily('late')]);
