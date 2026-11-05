@@ -17,7 +17,7 @@ import {AI_SIGN_IN,scrubCredentials} from './runtime.mjs';
 //
 // It is not one of connection-check.mjs's probes: a probe answers {set_up, ok, kind} for one
 // connection and may become a deadline, and this is per routine and gives the owner no task. It keeps
-// its own record, .godspeed/connection-check-routines.json: {routines:{<job id>:{ok_at, error_run, spell}}}.
+// its own record, .godspeed/connection-check-routines.json: {routines:{<job id>:{ok_at, spell}}}.
 // A damaged record reads as empty; the worst effect is one extra message.
 export const ROUTINES_RECORD_FILE='connection-check-routines.json';
 const HOUR=3600000,DAY=24*HOUR;
@@ -41,15 +41,14 @@ const dayOf=(value,timezone)=>time(value)===null?null:new Intl.DateTimeFormat('e
 const when=(value,timezone)=>new Intl.DateTimeFormat('en-GB',{timeZone:timezone,weekday:'long',day:'numeric',month:'long',hour:'2-digit',minute:'2-digit',hour12:false}).format(new Date(value));
 
 // One routine's turn. `job` carries the status Settings shows. Returns the routine's new record and,
-// when the owner is to be told, {kind, name, words, spell}; the spell is kept only once it is told.
+// when the owner is to be told, {words, spell}; the spell is kept only once it is told.
 export function routineFinding(job,prev={},{now,day,timezone}){
  const name=job.name||job.id,entry={...prev};
  if(pausedJob(job))return {entry,found:null};
  const ranAt=time(job.last_run_at),good=job.last_status==='ok'&&ranAt!==null,errored=job.last_status==='error';
- if(good){entry.ok_at=job.last_run_at;delete entry.error_run;}
+ if(good)entry.ok_at=job.last_run_at;
  if(entry.spell&&good&&ranAt>(time(entry.spell.run)??0))delete entry.spell;
  const twice=errored&&job.hermes_status==='error'&&job.failure_streak>=2;
- if(errored)entry.error_run=job.last_run_at;
  if(entry.spell)return {entry,found:null};
  let kind=null;
  if(errored){if(twice&&!AI_SIGN_IN.test(String(job.last_error||'')))kind='failing';}
@@ -58,7 +57,7 @@ export function routineFinding(job,prev={},{now,day,timezone}){
  const sentences=[kind==='missed'?`"${name}" did not run when it was due ${when(job.next_run_at,timezone)}.`:`"${name}" failed its last two runs${errorWords(job.last_error)?': '+errorWords(job.last_error):''}.`];
  if(entry.ok_at)sentences.push(`It last ran right ${when(entry.ok_at,timezone)}.`);
  sentences.push(kind==='missed'?'It runs again at its next time.':'It tries again at its next time.');
- return {entry,found:{kind,name,words:sentences.join(' '),spell:{kind,since:day,run:job.last_run_at||null}}};
+ return {entry,found:{words:sentences.join(' '),spell:{kind,since:day,run:job.last_run_at||null}}};
 }
 
 function readRecord(store){
@@ -84,7 +83,7 @@ export function checkRoutines({store,home,day,timezone,now=()=>new Date(),jobs=h
   try{tellOwner(store,{id,text,about:'Routines of yours that did not run right',facts:sentences});for(const f of found)routines[f.id].spell=f.spell;}
   catch{failed=true;for(const f of found)routines[f.id]=before[f.id]??{};}
  }
- atomic(path.join(store.state,ROUTINES_RECORD_FILE),JSON.stringify({at:now().toISOString(),day,routines},null,2)+'\n');
+ atomic(path.join(store.state,ROUTINES_RECORD_FILE),JSON.stringify({routines},null,2)+'\n');
  if(failed)throw new Error('The routines notice could not be queued');
  return {routines,told:found.map(f=>f.id)};
 }
