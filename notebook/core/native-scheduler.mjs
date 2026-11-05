@@ -29,7 +29,7 @@ export const pausedJob=job=>job.enabled===false||job.state==='paused'||!!job.pau
 // last_error); until 8 October 2026 the Routines list showed neither. A daily round that told the
 // person it went wrong is shown as failed (starting-routines.mjs, routineStatus).
 export function nativeJobs(home,device='local'){
- return hermesJobs(home).map(j=>({id:j.id,title:j.name||j.id,kind:j.skill||j.name||'Hermes task',owner:device,paused:j.enabled===false,state:j.state||j.last_status||'pending',next_run:j.next_run_at,last_run_at:j.last_run_at||null,last_status:j.last_status||null,last_error:typeof j.last_error==='string'?j.last_error.slice(0,500):null,...routineStatus(home,j),schedule:j.schedule_display||null,...(cronCalendar(cronOf(j))&&!isTalkGate(j)&&!isCoachTick(j)?{calendar:cronCalendar(cronOf(j))}:{}),deliver:j.deliver||null,created_at:j.created_at,interval_ms:j.schedule?.seconds?j.schedule.seconds*1000:null,native:true,_hash:hash(j)}));
+ return hermesJobs(home).map(j=>({id:j.id,title:j.name||j.id,kind:j.skill||j.name||'Hermes task',owner:device,paused:pausedJob(j),state:j.state||j.last_status||'pending',next_run:j.next_run_at,last_run_at:j.last_run_at||null,last_status:j.last_status||null,last_error:typeof j.last_error==='string'?j.last_error.slice(0,500):null,...routineStatus(home,j),schedule:j.schedule_display||null,...(cronCalendar(cronOf(j))&&!isTalkGate(j)&&!isCoachTick(j)?{calendar:cronCalendar(cronOf(j))}:{}),deliver:j.deliver||null,created_at:j.created_at,interval_ms:j.schedule?.seconds?j.schedule.seconds*1000:null,native:true,_hash:hash(j)}));
 }
 const RETRY_STARTING=3600000;
 // "05:16": once a day at that time in the owner's timezone.
@@ -472,7 +472,7 @@ export class NativeScheduler{
    this.requireOwner('Add the routine');
    const known=enableKind(input.kind),skill=known?.skill||skills[input.kind]||input.kind;
    if(!/^[a-z0-9-]+$/.test(skill)||!fs.existsSync(path.join(this.store.root,'skills',skill,'SKILL.md')))throw Error('This mission control does not have the recipe for that routine');
-   const running=hermesJobs(this.home).find(j=>j.enabled!==false&&(input.kind==='morning-brief'?isBriefJob(j):[j.skill,...(Array.isArray(j.skills)?j.skills:[])].includes(skill)));
+   const running=hermesJobs(this.home).find(j=>!pausedJob(j)&&(input.kind==='morning-brief'?isBriefJob(j):[j.skill,...(Array.isArray(j.skills)?j.skills:[])].includes(skill)));
    if(running)throw Error('"'+(running.name||skill)+'" already runs this. Change its time under Routine times, or pause it under Routines.');
    const daily=dailyTime(input.at);
    if(!daily&&(!Number.isFinite(input.interval_ms)||input.interval_ms<60000))throw Error('Choose a daily time or a routine interval of at least a minute');

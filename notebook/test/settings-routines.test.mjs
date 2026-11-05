@@ -84,6 +84,15 @@ test('Enable routine offers the mission control\'s own recipes by name, and Herm
  await assert.rejects(scheduler.control({kind:'review',at:'18:00'},{enable:true}),/already runs/);
  await assert.rejects(scheduler.control({kind:'audit',at:'18:00'},{enable:true}),/does not have the recipe/);
 });
+test('a routine Hermes holds paused in any of its three forms is shown paused and can be resumed through enable',async t=>{
+ const {hermes,scheduler}=await withGoal(t);
+ const row=await scheduler.control({kind:'review',at:'17:00'},{enable:true});
+ for(const paused of [{enabled:false},{enabled:true,state:'paused'},{enabled:true,paused_at:'2026-11-01T00:00:00Z'}]){
+  hermes.write(hermes.jobs().map(j=>j.id===row.id?{...j,enabled:true,state:'scheduled',paused_at:null,...paused}:j));
+  assert.equal(nativeJobs(scheduler.home,'pc').find(j=>j.id===row.id).paused,true);
+  await assert.doesNotReject(scheduler.control({kind:'review',at:'18:00'},{enable:true}));hermes.write(hermes.jobs().filter(j=>j.id===row.id));
+ }
+});
 
 test('results go to Telegram whenever Telegram is connected, whatever came first, and Keep results here keeps them here',async t=>{
  const {home,store,hermes,scheduler,job}=await withGoal(t,{device:'vps'});
