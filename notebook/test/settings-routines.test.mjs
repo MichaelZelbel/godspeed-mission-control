@@ -1,6 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import {fileURLToPath} from 'node:url';import {execFileSync,spawnSync,spawn} from 'node:child_process';
 import {NativeScheduler,nativeJobs} from '../core/native-scheduler.mjs';import {Store} from '../core/records/store.mjs';import {QueryService} from '../core/query.mjs';import {Domains} from '../core/domains.mjs';
-import {installStarter} from '../core/starter-workspace.mjs';import {readMachineRecord,telegramInHermes,chatAppInHermes} from '../core/starting-routines.mjs';import {runCommand} from '../core/child-process.mjs';
+import {installStarter} from '../core/starter-workspace.mjs';import {readMachineRecord,telegramInHermes,chatAppInHermes,OWNER_CHAT_KEY} from '../core/starting-routines.mjs';import {runCommand} from '../core/child-process.mjs';
 import {DatabaseSync} from 'node:sqlite';import {CONNECTION_NOTICE_PREFIX} from '../core/connection-names.mjs';
 import {cronCalendar,calendarCron,retimeWhat} from '../core/routine-times.mjs';import {enableKinds,readNotebookRoutines,rememberNotebookRoutine,writeNotebookRoutines,JOURNAL_JOB,CHAT_TIDY_JOB,CHAT_TIDY_SCRIPT,BRIEF_SCRIPT,deliveryFor,CONNECTION_JOB} from '../core/notebook-routines.mjs';
 import {personalOperation} from '../core/personal-operations.mjs';import {readArea} from '../../third-party/addons/godspeed-coach/lib/areas.mjs';
@@ -361,6 +361,16 @@ test("a chat app is any app the gateway routes the owner's own chat through, nev
  db.close();
  assert.equal(telegramInHermes(home),false,'still no Telegram bot in Hermes');
  assert.equal(chatAppInHermes(home),true);
+});
+
+test("the scheduler and the installed godspeed-chat-tidy plugin classify the owner's chat from one vocabulary",()=>{
+ const plugin=fs.readFileSync(fileURLToPath(new URL('../assistant-files/godspeed-chat-tidy/__init__.py',import.meta.url)),'utf8');
+ const pattern=plugin.match(/^CHAT_KEY = r"(.+)"$/m)?.[1];
+ const excluded=plugin.match(/^NOT_A_CHAT_APP = \((.+)\)$/m)?.[1].split(',').map(name=>name.trim().replace(/"/g,''));
+ assert.equal(pattern,OWNER_CHAT_KEY.source,'the plugin and the scheduler declare the same pattern');
+ assert.ok(excluded?.length>0);
+ for(const name of excluded)assert.equal(OWNER_CHAT_KEY.test('agent:main:'+name+':dm:1'),false,name+' is no chat app');
+ assert.equal(OWNER_CHAT_KEY.test('agent:main:signal:dm:1'),true);
 });
 
 test('/radar and /subs are short names for their recipes in Telegram, and an owner\'s own short name stays',async()=>{
