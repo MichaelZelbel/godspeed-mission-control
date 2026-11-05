@@ -66,3 +66,23 @@ test('the phone and the selected CSV keep a day under the same id, so a CSV corr
  operation({type:'health-import-csv',source:'Fictional other feed',content:'date,steps\n'+day+',7\n'});
  assert.notEqual(store.list('health_observations').find(r=>r.value===7).id,phone[0].id);
 });
+test('two same-day records from two sources that are not the phone are both returned',()=>{
+ const {store,query}=setup(),now=Date.parse('2026-10-04T12:00:00Z');
+ for(const [id,source,value] of [['a','Fictional watch',1000],['b','Fictional scale app',2000]])store.save('health_observations',{id,metric:'steps',value,source,observed_on:'2026-10-04',date_precision:'day',observed_at:'2026-10-04T00:00:00Z'});
+ const got=currentHealth(query,{now}).observations;
+ assert.deepEqual(got.map(r=>r.id).sort(),['a','b']);
+ assert.deepEqual(got.map(r=>r.value).sort((x,y)=>x-y),[1000,2000]);
+});
+test('rows that are not day records pass through whole, and the count of excluded rows ignores the ones a newer source replaced',()=>{
+ const {store,query}=setup(),now=Date.parse('2026-10-04T12:00:00Z');
+ const row=(id,source,extra)=>store.save('health_observations',{id,metric:'steps',value:1,source,observed_on:'2026-10-04',observed_at:'2026-10-04T08:00:00Z',...extra});
+ row('t1',PHONE_SOURCE,{});row('t2','Fictional CSV',{});
+ assert.deepEqual(currentHealth(query,{now}).observations.map(r=>r.id).sort(),['t1','t2'],'timestamped rows are never collapsed');
+ row('d1',PHONE_SOURCE,{date_precision:'day',metric:'weight_kg'});row('d2','Fictional CSV',{date_precision:'day',metric:'weight_kg'});
+ const health=currentHealth(query,{now});
+ assert.equal(health.observations.filter(r=>r.metric==='weight_kg').length,1);
+ assert.equal(health.excluded_stale_or_future,0,'a replaced row is not stale or future');
+ // A row that names no day cannot be matched to another on one, whatever its precision says.
+ for(const [id,source] of [['n1',PHONE_SOURCE],['n2','Fictional CSV']])store.save('health_observations',{id,metric:'sleep_total_h',value:7,source,date_precision:'day',observed_at:'2026-10-04T08:00:00Z'});
+ assert.deepEqual(currentHealth(query,{now}).observations.filter(r=>r.metric==='sleep_total_h').map(r=>r.id).sort(),['n1','n2']);
+});

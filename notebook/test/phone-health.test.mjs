@@ -11,7 +11,7 @@ import {QueryService} from '../core/query.mjs';
 import {currentHealth} from '../core/health-inputs.mjs';
 import {healthFeedId} from '../core/health-feed-id.mjs';
 import {createService} from '../server/main.mjs';
-import {acceptUpload,importFolder,buildDays,instantOf,pruneRaw,rawFolder,tokenFile,ensureToken,renewToken,tokenMatches,SOURCE} from '../core/phone-health.mjs';
+import {appendRaw,encodeRawLine,parseRawLine,readRaw,acceptUpload,importFolder,buildDays,instantOf,pruneRaw,rawFolder,tokenFile,ensureToken,renewToken,tokenMatches,SOURCE} from '../core/phone-health.mjs';
 
 for(const key of Object.keys(process.env))if(/^(GODSPEED_|HERMES_)/.test(key))delete process.env[key];
 
@@ -348,4 +348,122 @@ test('starting the service removes raw uploads that are past their 30 days, befo
  t.after(async()=>{await service.close();fs.rmSync(root,{recursive:true,force:true});});
  assert.equal(fs.existsSync(old),false,'the expired file is gone at startup');
  assert.equal(fs.existsSync(recent),true,'a current file stays');
+});
+
+test('a stored raw line parses back to exactly what was written, a legacy receiver line loses its sender, and anything unreadable is null',()=>{
+ const stored={received_at:'2026-11-04T09:00:00Z',data:upload([metric('step_count','count',[D+' 08:00:00 +0100',100])])};
+ assert.deepEqual(parseRawLine(encodeRawLine(stored)),stored);
+ assert.deepEqual(parseRawLine(encodeRawLine({...stored,remote:'203.0.113.9',extra:1})),stored,'only the two fields are stored');
+ assert.deepEqual(parseRawLine(JSON.stringify({...stored,remote:'203.0.113.9'})),stored,'a legacy line keeps no sender');
+ for(const bad of ['not json','null','[]',JSON.stringify({data:{}}),JSON.stringify({received_at:'yesterday',data:{}}),JSON.stringify({received_at:stored.received_at}),JSON.stringify({received_at:stored.received_at,data:[]}),JSON.stringify({received_at:stored.received_at,data:'x'})])assert.equal(parseRawLine(bad),null,bad);
+ const store=setup();acceptUpload(store,stored.data,{now:at(stored.received_at)});
+ assert.deepEqual(readRaw(store.state,'0000-00-00'),[{...stored,received_at:'2026-11-04T09:00:00.000Z'}],'what the receiver wrote is what the reader returns');
+});
+
+// ---- the arithmetic and the choices of buildDays, each pinned by a value that a nearby constant would change
+const build=(...uploads)=>buildDays(uploads.map((data,i)=>({received_at:'2026-11-04T0'+(i+1)+':00:00Z',data})));
+const workout=(name,minutes,km,extra={})=>({name,start:D+' 07:00:00 +0100',duration:minutes*60,distance:{qty:km,units:'km'},...extra});
+
+test('a run at exactly 9 minutes per kilometre is a walk, a faster one is a run, and the numbers are kept to two decimals',()=>{
+ const day=(...w)=>build(upload([],w)).get(D);
+ const fast=day(workout('Running',40,5));assert.equal(fast.get('run_km'),5);assert.equal(fast.get('run_min'),40);assert.equal(fast.has('walk_km'),false);
+ const edge=day(workout('Running',45,5));assert.equal(edge.get('walk_km'),5);assert.equal(edge.get('walk_min'),45);assert.equal(edge.has('run_km'),false);
+ const slow=day(workout('Running',50,5));assert.equal(slow.get('walk_km'),5);
+ const nodistance=day(workout('Running',30,0));assert.equal(nodistance.get('run_min'),30,'no distance is a run, never a walk');
+ assert.equal(build(upload([metric('walking_running_distance','km',[D+' 08:00:00 +0100',1.2345])])).get(D).get('distance_km'),1.23);
+});
+
+test('workout durations count in minutes whatever unit they come in, and metres count as kilometres',()=>{
+ const minutes=duration=>build(upload([],[{name:'Yoga',start:D+' 07:00:00 +0100',duration}])).get(D).get('workout_min');
+ assert.equal(minutes(1800),30,'a plain number is seconds');
+ assert.equal(minutes({qty:1800,units:'sec'}),30);
+ assert.equal(minutes({qty:90,units:'min'}),90);
+ assert.equal(minutes({qty:1.5,units:'hr'}),90);
+ assert.equal(minutes({qty:45}),45,'no unit is minutes');
+ assert.equal(build(upload([],[{name:'Running',start:D+' 07:00:00 +0100',duration:2400,distance:{qty:5000,units:'m'}}])).get(D).get('run_km'),5);
+ const types=build(upload([],[workout('Yoga',30,0),workout('Swim',20,1,{start:D+' 09:00:00 +0100'}),workout('Yoga',10,0,{start:D+' 10:00:00 +0100'})])).get(D);
+ assert.equal(types.get('workout_types'),'Yoga+Swim');assert.equal(types.get('workout_min'),60);
+});
+
+test('of two sources at one instant the later upload wins, and uploads read from the files come back in the order they were received',()=>{
+ const at1=(qty,source)=>upload([{name:'weight_body_mass',units:'kg',data:[{date:D+' 08:00:00 +0100',qty,source}]}]);
+ assert.equal(buildDays([{received_at:'2026-11-04T09:00:00Z',data:at1(70,'Fictional scale')},{received_at:'2026-11-04T10:00:00Z',data:at1(72,'Fictional watch')}]).get(D).get('weight_kg'),72);
+ const store=setup(),folder=rawFolder(store.state);fs.mkdirSync(folder,{recursive:true});
+ const line=(received_at,qty)=>JSON.stringify({received_at,data:at1(qty,'Fictional scale')});
+ fs.writeFileSync(path.join(folder,D+'.jsonl'),[line('2026-11-04T12:00:00Z',3),line('2026-11-04T09:00:00Z',1),line('2026-11-04T09:00:00Z',2)].join('\n')+'\n');
+ assert.deepEqual(readRaw(store.state,'0000-00-00').map(l=>l.data.metrics[0].data[0].qty),[1,2,3],'by receive time, and file order within one instant');
+});
+
+test('a removed day record is written again, and the boundary of the days whose raw files may be gone is the 29th day back',()=>{
+ const store=setup(),now=at('2026-11-30T12:00:00Z');
+ const record=(day,value)=>store.save('health_observations',{id:healthFeedId(SOURCE,day,'steps'),metric:'steps',value,source:SOURCE,observed_on:day,date_precision:'day',observed_at:day+'T00:00:00.000Z'});
+ const send=(day,qty)=>acceptUpload(store,upload([metric('step_count','count',[day+' 08:00:00 +0100',qty])]),{now});
+ // 2026-11-01 is the oldest day whose raw files still exist; 2026-10-31 may already have lost some.
+ record('2026-11-01',1);record('2026-10-31',1);
+ assert.equal(send('2026-11-01',10).written,1,'the oldest covered day is rebuilt');
+ assert.equal(send('2026-10-31',10).written,0,'the day before it keeps what it has');
+ const stored=day=>store.get('health_observations',healthFeedId(SOURCE,day,'steps')).value;
+ assert.deepEqual([stored('2026-11-01'),stored('2026-10-31')],[10,1]);
+ {const id=healthFeedId(SOURCE,'2026-11-01','steps');store.commit([store.prepare('health_observations',{removed_at:new Date().toISOString()},store.get('health_observations',id))]);}
+ assert.equal(send('2026-11-01',10).written,1,'a removed record with the same value is written again');
+ assert.ok(store.list('health_observations').some(r=>r.id===healthFeedId(SOURCE,'2026-11-01','steps')),'and it is no longer removed');
+ assert.equal(send('2026-11-01',10).written,0,'and then left alone');
+});
+
+test('an upload that changes nothing commits nothing, and an upload leaves the other days that the raw files hold alone',()=>{
+ const store=setup(),now=at('2026-11-04T12:00:00Z'),A='2026-11-04',B='2026-11-03';
+ acceptUpload(store,upload([metric('step_count','count',[A+' 08:00:00 +0100',5])]),{now});
+ const commit=store.commit;store.commit=()=>{throw new Error('nothing should be committed');};
+ try{assert.equal(acceptUpload(store,upload([metric('step_count','count',[A+' 08:00:00 +0100',5])]),{now}).written,0);}finally{store.commit=commit;}
+ // The raw files hold a point for another day B; the person's own value for B must not be rebuilt by an upload about A.
+ appendRaw(store.state,{received_at:'2026-11-03T20:00:00.000Z',data:upload([metric('step_count','count',[B+' 08:00:00 +0100',3])])});
+ store.save('health_observations',{id:healthFeedId(SOURCE,B,'steps'),metric:'steps',value:9,source:SOURCE,observed_on:B,date_precision:'day',observed_at:B+'T00:00:00.000Z'});
+ acceptUpload(store,upload([metric('step_count','count',[A+' 09:00:00 +0100',1])]),{now});
+ assert.equal(store.get('health_observations',healthFeedId(SOURCE,B,'steps')).value,9);
+});
+
+test('every listed metric lands under its own name, and a structured sleep record keeps every part',()=>{
+ const one=(name,units,qty)=>metric(name,units,[D+' 08:00:00 +0100',qty]);
+ const got=build(upload([one('step_count','count',10),one('walking_running_distance','km',2),one('active_energy','kcal',300),one('basal_energy_burned','kcal',1500),one('dietary_energy','kcal',2000),one('protein','g',90),one('carbohydrates','g',200),one('total_fat','g',70),one('flights_climbed','count',4),
+  one('weight_body_mass','kg',80),one('body_fat_percentage','%',20),one('lean_body_mass','kg',64),one('waist_circumference','cm',90)])).get(D);
+ assert.deepEqual(Object.fromEntries(got),{steps:10,distance_km:2,active_kcal:300,basal_kcal:1500,food_kcal:2000,protein_g:90,carbs_g:200,fat_g:70,flights:4,weight_kg:80,body_fat_pct:20,lean_kg:64,waist_cm:90});
+ const sleep=build(upload([metric('sleep_analysis','hr',[D+' 06:00:00 +0100',null,{totalSleep:7.5,inBed:8,deep:1.5,rem:2,sleepStart:D+' 23:10:00 +0100',sleepEnd:D+' 06:40:00 +0100'}])])).get(D);
+ assert.deepEqual(Object.fromEntries(sleep),{sleep_in_bed_h:8,sleep_total_h:7.5,sleep_deep_h:1.5,sleep_rem_h:2,sleep_start:'23:10',sleep_end:'06:40'});
+ const plain=build(upload([metric('sleep_analysis','hr',[D+' 06:00:00 +0100',6],[D+' 07:00:00 +0100',7.5])])).get(D);
+ assert.deepEqual(Object.fromEntries(plain),{sleep_total_h:7.5});
+ const longest=build(upload([metric('sleep_analysis','hr',[D+' 06:00:00 +0100',null,{totalSleep:7,sleepStart:'x',sleepEnd:'y'}],[D+' 07:00:00 +0100',null,{totalSleep:5,deep:9}])])).get(D);
+ assert.deepEqual(Object.fromEntries(longest),{sleep_total_h:7},'the longest record wins whole, and a time that is not hh:mm is left out');
+});
+
+test('what is not a Health Auto Export upload is refused with 400 and kept nowhere, and a renewal needs POST',async t=>{
+ const root=serverRoot('godspeed-phone-shape-'),service=await createService({root,port:0,webPort:0});
+ t.after(async()=>{await service.close();fs.rmSync(root,{recursive:true,force:true});});
+ const port=service.address.port,token=fs.readFileSync(tokenFile(service.store.state),'utf8').trim();
+ for(const raw of ['{}','null','[]','{"data":[]}','{"data":"x"}','{"data":null}','{"data":{"metrics":"x"}}','{"data":{"metrics":{}}}','{"data":{"workouts":{}}}'])
+  assert.equal((await request(port,'/ingest/'+token,{method:'POST',raw})).status,400,raw);
+ assert.equal(fs.existsSync(rawFolder(service.store.state)),false);
+ assert.equal((await request(port,'/ingest/health',{method:'POST',body:{data:{}}})).status,404,'the status word is not a token');
+ assert.equal((await request(port,'/api/phone-health/renew')).status,405);
+ assert.equal((await request(port,'/ingest/'+token,{method:'POST',body:{data:{metrics:[],workouts:[]}}})).status,200,'an upload with nothing in it is still an upload');
+});
+
+test('a startup cleanup that fails is logged without the service stopping',async t=>{
+ const root=serverRoot('godspeed-phone-prunefail-'),state=new Store(root).state,logged=[],original=console.error;
+ fs.mkdirSync(state,{recursive:true});fs.writeFileSync(rawFolder(state),'not a folder');
+ console.error=(...args)=>logged.push(args.join(' '));
+ let service;try{service=await createService({root,port:0,webPort:0});}finally{console.error=original;}
+ t.after(async()=>{await service.close();fs.rmSync(root,{recursive:true,force:true});});
+ assert.ok(logged.some(line=>line.includes('expired phone health uploads could not be removed')),logged.join('|'));
+ assert.equal((await request(service.address.port,'/ingest/health')).status,200);
+});
+
+test('a point with no usable number makes no summed metric, a tie in sleep goes to the later upload, and an import keeps only lines inside the 30 days',()=>{
+ for(const qty of [null,'x',' ',''])assert.equal(build(upload([metric('step_count','count',[D+' 08:00:00 +0100',qty])])).has(D),false,JSON.stringify(qty));
+ const sleep=(total,source)=>upload([metric('sleep_analysis','hr',[D+' 06:00:00 +0100',null,{totalSleep:7,deep:total,source}])]);
+ assert.equal(build(sleep(1,'Fictional ring'),sleep(2,'Fictional watch')).get(D).get('sleep_deep_h'),2);
+ const store=setup(),folder=tmp('godspeed-phone-edge-import-'),now=at('2026-11-30T12:00:00Z');
+ const line=received_at=>JSON.stringify({received_at,data:upload([metric('step_count','count',['2026-11-01 08:00:00 +0100',1])])});
+ fs.writeFileSync(path.join(folder,'old.jsonl'),[line('2026-10-31T12:00:00Z'),line('2026-10-30T12:00:00Z')].join('\n')+'\n');
+ importFolder(store,folder,{now});
+ assert.deepEqual(fs.readdirSync(rawFolder(store.state)),['2026-10-31.jsonl'],'day 30 back is kept, day 31 back is not');
 });

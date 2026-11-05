@@ -47,11 +47,20 @@ const dayOf=text=>{const day=String(text??'').slice(0,10);return /^\d{4}-\d{2}-\
 const utcDay=date=>date.toISOString().slice(0,10);
 
 const rawFile=(state,day)=>path.join(rawFolder(state),day+'.jsonl');
+// The stored raw line has one owner: encodeRawLine writes it, parseRawLine reads it back (and reads the
+// legacy receiver's lines too, which also carry the sender: that field is dropped here and never stored).
+// Anything that is not an upload with a readable receive time and an object of data is null.
+export const encodeRawLine=upload=>JSON.stringify({received_at:upload.received_at,data:upload.data});
+export function parseRawLine(text){
+ let line;try{line=JSON.parse(text);}catch{return null;}
+ if(!Number.isFinite(instantOf(line?.received_at))||!line.data||typeof line.data!=='object'||Array.isArray(line.data))return null;
+ return {received_at:line.received_at,data:line.data};
+}
 export function appendRaw(state,upload){
  const folder=rawFolder(state),file=rawFile(state,utcDay(new Date(instantOf(upload.received_at))));
  fs.mkdirSync(folder,{recursive:true,mode:0o700});fs.chmodSync(folder,0o700);
  const size=fs.existsSync(file)?fs.statSync(file).size:0;
- fs.appendFileSync(file,JSON.stringify({received_at:upload.received_at,data:upload.data})+'\n',{mode:0o600});fs.chmodSync(file,0o600);
+ fs.appendFileSync(file,encodeRawLine(upload)+'\n',{mode:0o600});fs.chmodSync(file,0o600);
  // Takes this line back out of the file: only valid while nothing else has appended (under the store lock).
  return ()=>{if(size)fs.truncateSync(file,size);else fs.rmSync(file,{force:true});};
 }
@@ -65,8 +74,7 @@ export function pruneRaw(state,now=clockNow()){
 export function readRaw(state,fromDay){
  const lines=[];
  for(const day of rawDays(state).filter(d=>d>=fromDay).sort())for(const text of fs.readFileSync(rawFile(state,day),'utf8').split('\n')){
-  if(!text)continue;let line;try{line=JSON.parse(text);}catch{continue;}
-  if(Number.isFinite(instantOf(line?.received_at))&&line.data&&typeof line.data==='object')lines.push({received_at:line.received_at,data:line.data});
+  const line=text?parseRawLine(text):null;if(line)lines.push(line);
  }
  return inReceiveOrder(lines);
 }
@@ -77,7 +85,7 @@ const LAST={weight_body_mass:'weight_kg',body_fat_percentage:'body_fat_pct',lean
 const RUNS=new Set(['running','outdoor running','indoor running','run','outdoor run','indoor run']);
 const WALK_PACE=9;
 const round=n=>Math.round(n*100)/100;
-const number=value=>{const n=typeof value==='string'&&value.trim()===''?NaN:Number(value);return Number.isFinite(n)?n:null;};
+const number=value=>{const n=value===null||typeof value==='boolean'||typeof value==='string'&&value.trim()===''?NaN:Number(value);return Number.isFinite(n)?n:null;};
 const hhmm=text=>/^\d{2}:\d{2}$/.test(String(text).slice(11,16))?String(text).slice(11,16):null;
 
 function minutesOf(duration){
@@ -163,7 +171,7 @@ export function writeDays(store,built,{now=clockNow()}={}){
   for(const [metric,value] of metrics){
    const id=healthFeedId(SOURCE,day,metric),previous=store.get('health_observations',id);
    if(previous&&(day<oldestCovered||!previous.removed_at&&previous.value===value&&previous.date_precision==='day'))continue;
-   rows.push(store.prepare('health_observations',{id,metric,value,source:SOURCE,observed_on:day,date_precision:'day',observed_at:zonedToUtc(day,'00:00',timezone).toISOString()},previous));
+   rows.push(store.prepare('health_observations',{id,metric,value,source:SOURCE,observed_on:day,date_precision:'day',observed_at:zonedToUtc(day,'00:00',timezone).toISOString(),...(previous?.removed_at?{removed_at:null}:{})},previous));
   }
  }
  if(rows.length)store.commit(rows);
@@ -203,9 +211,9 @@ export function acceptUpload(store,data,{now=clockNow()}={}){
 export function importFolder(store,folder,{now=clockNow()}={}){
  const lines=[];let total=0,skipped=0;
  for(const name of fs.readdirSync(folder).sort().filter(n=>/\.(jsonl|ndjson|json)$/.test(n)))for(const text of fs.readFileSync(path.join(folder,name),'utf8').split('\n')){
-  if(!text.trim())continue;total++;let line;try{line=JSON.parse(text);}catch{skipped++;continue;}
-  if(!Number.isFinite(instantOf(line?.received_at))||!line.data||typeof line.data!=='object'||Array.isArray(line.data)){skipped++;continue;}
-  lines.push({received_at:line.received_at,data:line.data});
+  if(!text.trim())continue;total++;const line=parseRawLine(text);
+  if(!line){skipped++;continue;}
+  lines.push(line);
  }
  return store.withLock(()=>{
   const oldest=addDays(utcDay(now),-KEEP_DAYS),pool=new Map(readRaw(store.state,'0000-00-00').map(l=>[JSON.stringify(l),l])),undos=[];
