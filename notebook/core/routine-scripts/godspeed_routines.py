@@ -1120,8 +1120,6 @@ def connection_check(c):
         args += ["--hermes", c["hermes"]]
     if c.get("hermes_source"):
         args += ["--hermes-source", c["hermes_source"]]
-    if c.get("server"):
-        args += ["--server"]
     try:
         r = run(args, c, env, timeout=900)
     except subprocess.TimeoutExpired:

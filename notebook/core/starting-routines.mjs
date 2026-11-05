@@ -12,7 +12,6 @@ import {JOURNAL_JOB,JOURNAL_SCRIPT,CHAT_TIDY_JOB,CHAT_TIDY_SCRIPT,BRIEF_JOB,BRIE
 import {CONNECTION_NOTICE_PREFIX} from './connection-names.mjs';
 import {NOTICES_FILE} from './notices.mjs';
 import {hermesPython} from './runtime.mjs';
-import {isServerInstall} from './about.mjs';
 
 // The routines a reader's first goal starts (Teach It Once, Chapters 3, 5, 8, 24, 25 and 30): the
 // nightly goal research, the daily round (two routines: one chooses the day's work, one does it),
@@ -173,10 +172,10 @@ function hermesRuntime({home,state,hermes}){
 }
 
 // Hermes runs only scripts in its own scripts folder, with its own Python on every system.
-export function routineFiles({root,home,state,timezone,node=process.execPath,hermes=null,server=isServerInstall()}){
+export function routineFiles({root,home,state,timezone,node=process.execPath,hermes=null}){
  // tools: the kit's own programs (mc-decide, mc-work-run, due.js), run where they are; bin: the
  // assistant's command folder, first on the path for the recipes they run.
- const config={root,home,bin:path.join(home,'bin'),tools:path.join(kit,'tools'),node,hermes:hermes&&path.isAbsolute(hermes)?hermes:null,...hermesRuntime({home,state,hermes}),brief:path.join(kit,'notebook','scripts','morning-brief.mjs'),reports:path.join(kit,'notebook','scripts','background-report.mjs'),connection_check:path.join(kit,'notebook','scripts','connection-check.mjs'),connection_notice_prefix:CONNECTION_NOTICE_PREFIX,cleanup:path.join(kit,'notebook','scripts','nightly-cleanup.mjs'),server,coach:path.join(kit,'third-party','addons','godspeed-coach','bin','godspeed-coach.mjs'),coach_app:path.join(state,'coach-app'),journal:path.join(kit,'third-party','addons','godspeed-journal','bin','godspeed-journal.mjs'),journal_app:path.join(state,'journal-app'),notices:path.join(state,NOTICES_FILE),timezone};
+ const config={root,home,bin:path.join(home,'bin'),tools:path.join(kit,'tools'),node,hermes:hermes&&path.isAbsolute(hermes)?hermes:null,...hermesRuntime({home,state,hermes}),brief:path.join(kit,'notebook','scripts','morning-brief.mjs'),reports:path.join(kit,'notebook','scripts','background-report.mjs'),connection_check:path.join(kit,'notebook','scripts','connection-check.mjs'),connection_notice_prefix:CONNECTION_NOTICE_PREFIX,cleanup:path.join(kit,'notebook','scripts','nightly-cleanup.mjs'),coach:path.join(kit,'third-party','addons','godspeed-coach','bin','godspeed-coach.mjs'),coach_app:path.join(state,'coach-app'),journal:path.join(kit,'third-party','addons','godspeed-journal','bin','godspeed-journal.mjs'),journal_app:path.join(state,'journal-app'),notices:path.join(state,NOTICES_FILE),timezone};
  const files={'godspeed_routines.py':fs.readFileSync(runner,'utf8').replace(/\r\n/g,'\n'),'godspeed-routines.json':JSON.stringify(config,null,2)+'\n'};
  for(const routine of [...STARTING_ROUTINES,{key:'journal-tick',name:JOURNAL_JOB,script:JOURNAL_SCRIPT},{key:'chat-tidy',name:CHAT_TIDY_JOB,script:CHAT_TIDY_SCRIPT},{key:'brief',name:BRIEF_JOB,script:BRIEF_SCRIPT},{key:'connection-check',name:CONNECTION_JOB,script:CONNECTION_SCRIPT}])files[routine.script]='# Written by the Godspeed Mission Control notebook for the routine "'+routine.name+'".\n# The notebook writes it again when its own folders change; the work is in godspeed_routines.py.\nfrom godspeed_routines import main\n\nmain('+JSON.stringify(routine.key)+')\n';
  return files;
