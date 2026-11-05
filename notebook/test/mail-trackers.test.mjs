@@ -1,7 +1,7 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import http from 'node:http';import {execFile} from 'node:child_process';import {promisify} from 'node:util';import {fileURLToPath} from 'node:url';
 import {Store} from '../core/records/store.mjs';import {QueryService} from '../core/query.mjs';import {Domains} from '../core/domains.mjs';
 import {trackerOperation} from '../core/tracker-operations.mjs';import {trackers,entries,proposalState} from '../core/trackers.mjs';
-import {mailId} from '../core/mail-trackers.mjs';import {runMailCount} from '../scripts/mail-count.mjs';
+import {mailId,whenOf} from '../core/mail-trackers.mjs';import {runMailCount} from '../scripts/mail-count.mjs';
 
 for(const key of Object.keys(process.env))if(/^(GODSPEED_|HERMES_|AGENTMAIL_)/.test(key))delete process.env[key];
 
@@ -212,4 +212,13 @@ test('a Gmail rule previews and counts the Gmail mailbox, and a godspeed rule th
 
 test('no sender, shop or phrase is built into the code',()=>{
  for(const file of ['core/mail-trackers.mjs','scripts/mail-count.mjs'])assert.doesNotMatch(fs.readFileSync(new URL('../'+file,import.meta.url),'utf8'),/etsy|amazon|shopify|gumroad|bewerbung/i,file);
+});
+
+test('a mail dated after now is entered on its own local date',()=>{
+ assert.equal(whenOf('2026-11-06T12:34:00Z','Europe/Berlin'),'2026-11-06 13:34');
+});
+test('an existing tracker with one number column can take a rule',async t=>{
+ const {domains}=fixture(t);
+ trackerOperation(domains,{type:'tracker-create',name:'Parcels',cadence:'any',fields:[{label:'Count',type:'number'}]});
+ const {asked}=await setUp(domains,ORDERS,{tracker:'Parcels'});assert.match(asked.reply,/as one in Parcels\?/);
 });

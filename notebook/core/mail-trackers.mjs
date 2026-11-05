@@ -45,7 +45,7 @@ export const ruleDigest=rule=>hash({senders:[...rule.senders].sort(),subjects:ru
 export const ruleSentence=(rule,name,isNew)=>'Count each mail from '+list(rule.senders)+' whose subject says '+list(rule.subjects.map(s=>'"'+s+'"'))+', in '+MAILBOX[rule.mailbox].words+', as one in '+(isNew?'a new tracker called ':'')+name+'?';
 
 // Which trackers can take a rule. A daily tracker keeps one entry a day, which is not one entry per mail,
-// and a tracker with other columns has nothing to put in them; a specialist keeps its own rows. Such a
+// and a tracker with more than one column, or a column that is not a number, has nothing to put in them; a specialist keeps its own rows. Such a
 // tracker is left as it is. Returns the column that gets the 1 (null for a counting tracker), or false.
 export function mailColumn(c){
  if(c.tracker?.cadence!=='any'||c.tracker?.specialist)return false;
@@ -53,7 +53,7 @@ export function mailColumn(c){
  if(!mine.length)return null;
  return mine.length===1&&mine[0].type==='number'?mine[0].key:false;
 }
-export const NOT_FITTING=name=>name+' keeps one entry a day or its own columns, and a mail count needs one entry for each mail. Say a new name and I will start a tracker for the mails.';
+export const NOT_FITTING=name=>name+' keeps one entry a day, or has more than one column or one that is not a number, and a mail count needs one entry for each mail. Say a new name and I will start a tracker for the mails.';
 // Only a digest is kept: a Message-ID is written by the sender and may carry an address that is no named sender's.
 export const mailId=(mailbox,id)=>mailbox+':'+hash(mailbox+'\0'+id).slice(0,32);
 export const mailTrackers=store=>trackers(store).map(c=>({c,rule:cardRule(c)})).filter(t=>t.rule);
@@ -65,10 +65,10 @@ const countedIds=(store,c,items)=>new Set(entries(store,c,items).map(i=>i.data?.
 // The mails of a search that match the rule's subject words, any of them, whatever the case.
 export const mailMatches=(rule,messages)=>{const words=rule.subjects.map(norm);return messages.filter(m=>{const subject=norm(m.subject);return words.some(w=>subject.includes(w));});};
 // The day and minute a mail is entered under, on the installation's clock; a date that cannot be read is
-// not counted, and one in the future is taken as now.
-export function whenOf(date,now,tz){
+// not counted.
+export function whenOf(date,tz){
  const ms=Date.parse(date);if(!Number.isFinite(ms))return null;
- const p=localParts(new Date(Math.min(ms,now.getTime())),tz);return p.date+' '+p.hm;
+ const p=localParts(new Date(ms),tz);return p.date+' '+p.hm;
 }
 // The mails from a local day on. A mailbox's "since" is a whole day in its own zone (AgentMail's is UTC),
 // so the search starts a day early and the mail's local date, on the installation's clock, decides.
@@ -90,7 +90,7 @@ export const windowFor=(state,id,rule,today)=>{const last=state.rules[id];return
 export async function previewCount({store,rule,c=null,search=defaultSearch,now,tz}){
  const today=localParts(now,tz).date,found=await searchFrom(search,rule,addDays(today,-FIRST_DAYS),tz);
  const have=c?countedIds(store,c,store.list('collection_items')):new Set();
- return mailMatches(rule,found).filter(m=>whenOf(m.date,now,tz)&&!have.has(mailId(rule.mailbox,m.message_id))).length;
+ return mailMatches(rule,found).filter(m=>whenOf(m.date,tz)&&!have.has(mailId(rule.mailbox,m.message_id))).length;
 }
 
 // THE COUNT, once a day. Returns only numbers: nothing of a mail is kept in a result, a record or a log
@@ -112,7 +112,7 @@ export async function countMail({store,query,search,now=new Date(),tz}){
    if(!current||ruleDigest(current.rule)!==ruleDigest(rule)||mailColumn(current.c)!==column)return false;
    const have=countedIds(store,c,store.list('collection_items'));
    for(const m of mailMatches(rule,messages)){
-    const id=mailId(rule.mailbox,m.message_id),when=whenOf(m.date,now,tz);
+    const id=mailId(rule.mailbox,m.message_id),when=whenOf(m.date,tz);
     if(!when||have.has(id))continue;
     have.add(id);
     query.execute({table:'collection_items',operation:'insert',holdingLock:true,values:{collection_id:c.id,data:{when,[column||'value']:1,mail_id:id}}});added++;
