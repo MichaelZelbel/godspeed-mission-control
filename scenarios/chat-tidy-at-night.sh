@@ -81,8 +81,9 @@ act() {
   }
   [ -f "$HERMES/scripts/$SCRIPT" ] || fail "the routine is there but its script is not ($HERMES/scripts/$SCRIPT)"
 
-  # The limit is the installed routine's own, read from its script, so a changed default is followed.
-  sed -n 's/.*"--min-tokens".*default=\([0-9][0-9]*\).*/\1/p' "$HERMES/scripts/$SCRIPT" | head -n 1 >"$EVIDENCE/min-tokens.txt"
+  # The limit is the installed routine's own, read from the runner the routine scripts import, so a changed default is followed.
+  [ -f "$HERMES/scripts/godspeed_routines.py" ] || fail "the routines' runner is not installed ($HERMES/scripts/godspeed_routines.py)"
+  sed -n 's/.*"--min-tokens".*default=\([0-9][0-9]*\).*/\1/p' "$HERMES/scripts/godspeed_routines.py" | head -n 1 >"$EVIDENCE/min-tokens.txt"
   say "The routine's limit: $(cat "$EVIDENCE/min-tokens.txt") recorded tokens"
 
   say "A conversation under the limit (20,000 recorded tokens), quiet for an hour"

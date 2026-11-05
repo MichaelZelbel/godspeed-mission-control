@@ -2848,6 +2848,18 @@ printf '0\n' >"$CT/good/short-exit"
 printf 'messages=12 tokens=20000\n' >"$CT/good/short-count.txt"
 printf '60000\n' >"$CT/good/min-tokens.txt"
 passes 'a long chat shortened and logged, the next message plain, a short chat untouched' chat-tidy-at-night "$CT/good" 'the long conversation went from 40 to 9 messages'
+# The limit is read by the scenario's own extraction from the runner the generated wrapper imports.
+CT_SCRIPT="$ROOT/scenarios/chat-tidy-at-night.sh"
+CT_SED=$(grep -m1 "sed -n 's/.\*\"--min-tokens\"" "$CT_SCRIPT" | sed 's/^ *//; s/ *|.*$//; s#"\$HERMES/scripts/godspeed_routines.py"#"$1"#')
+if grep -q 'godspeed_routines.py" |' "$CT_SCRIPT" && [ -n "$CT_SED" ]; then
+  CT_RUNNER=$(eval "set -- '$ROOT/notebook/core/routine-scripts/godspeed_routines.py'; $CT_SED")
+  CT_WRAPPER_FILE="$TMP/godspeed-chat-tidy.py"
+  printf 'from godspeed_routines import main\nmain("chat-tidy")\n' >"$CT_WRAPPER_FILE"
+  CT_WRAPPER=$(eval "set -- '$CT_WRAPPER_FILE'; $CT_SED")
+  if [[ "$CT_RUNNER" =~ ^[0-9]+$ ]] && [ -z "$CT_WRAPPER" ]; then ok 'the chat limit is read from the runner, which declares it, not the wrapper, which does not'; else bad "chat limit extraction: runner='$CT_RUNNER' wrapper='$CT_WRAPPER'"; fi
+else
+  bad 'the chat scenario no longer reads its limit from godspeed_routines.py'
+fi
 copy "$CT/good" "$CT/long-under-limit"
 printf 'messages=40 tokens=1\n' >"$CT/long-under-limit/long-before.txt"
 refuses 'a long chat that was never over the limit' chat-tidy-at-night "$CT/long-under-limit" 'not past the routine'"'"'s limit of 60000'
