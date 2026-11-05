@@ -97,12 +97,13 @@ export function contextBlock(mcDir, s, now, { scheduled = false } = {}) {
   if (!talks.length && !active.length) return "";
   const L = [`[godspeed-coach] For you, not to pass on (times in ${tz}). The coach sends its own habit check and talk follow-up, so never raise a habit or a talk in a reply about something else${waiting.size ? ", except a talk marked waiting below" : ""}.`];
   for (const { area, ymd, talk } of talks) {
+    const replacedNote = ymd < today && !talk.answered ? ` Exception: if they ask for a talk of this area on one of its talk days, this one has no reply from them, so the recipe's "A talk they start themselves" opens that day's talk instead.` : "";
     const when = talk.opened ? whenSaid(talk.opened, now, tz) : ymd;
     if (waiting.has(talk.file)) {
-      L.push(`- Waiting talk: ${area.title} (id for commands: ${area.slug}), opened ${when}, record coach/${area.slug}/talks/${ymd}.md. There is no messenger, so they have not seen it yet: it waited for this chat. First answer their message; then bring the talk up in a short sentence or two that make sense on their own and end with its question. It opened with: "${clean(talk.sections["The opening"])}". Bring it up once, in this reply only. An answer to it continues it: follow the coach recipe, "Continuing a talk". ${OTHER_TALK}`, ...talkMaterial(talk, area.slug, { opening: false }));
+      L.push(`- Waiting talk: ${area.title} (id for commands: ${area.slug}), opened ${when}, record coach/${area.slug}/talks/${ymd}.md. There is no messenger, so they have not seen it yet: it waited for this chat. First answer their message; then bring the talk up in a short sentence or two that make sense on their own and end with its question. It opened with: "${clean(talk.sections["The opening"])}". Bring it up once, in this reply only. An answer to it continues it: follow the coach recipe, "Continuing a talk".${replacedNote} ${OTHER_TALK}`, ...talkMaterial(talk, area.slug, { opening: false }));
       continue;
     }
-    L.push(`- Open talk: ${area.title} (id for commands: ${area.slug}), opened ${when}, record coach/${area.slug}/talks/${ymd}.md${talk.followUp ? ", follow-up sent" : ""}. A reply to it continues it: follow the coach recipe, "Continuing a talk". ${OTHER_TALK}`, ...talkMaterial(talk, area.slug));
+    L.push(`- Open talk: ${area.title} (id for commands: ${area.slug}), opened ${when}, record coach/${area.slug}/talks/${ymd}.md${talk.followUp ? ", follow-up sent" : ""}. A reply to it continues it: follow the coach recipe, "Continuing a talk".${replacedNote} ${OTHER_TALK}`, ...talkMaterial(talk, area.slug));
   }
   const asked = active.filter((h) => askedOn(h, today) && !answerOn(h, today));
   if (asked.length) L.push(`- Habit check sent tonight, still unanswered, asking in this order: ${asked.map((h) => h.title).join(", ")}. A short yes / no / skip answers it: follow the coach recipe, "Tracking a habit".`);

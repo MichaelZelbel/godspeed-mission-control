@@ -17,7 +17,10 @@ Reports (4 November 2026, #198): for the same reason, every message background w
 recorded by the notebook (core/background-reports.mjs) as a conversation_messages record named
 background-report-*, and the last few of a day are listed before each reply (reports_block), so
 "what is this about?" can be answered from the message itself.
+
+Buttons: a waiting step's question in Telegram also gets Yes and No buttons (step_buttons.py).
 """
+import importlib.util
 import json
 import os
 import re
@@ -264,5 +267,22 @@ def on_pre_llm_call(**kwargs):
         return None
 
 
+def _step_buttons():
+    try:
+        spec = importlib.util.spec_from_file_location("godspeed_context_step_buttons", os.path.join(HERE, "step_buttons.py"))
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module.StepButtons(_mission_control, _step_command)
+    except Exception:
+        return None
+
+
+_buttons = _step_buttons()
+
+
 def register(ctx):
     ctx.register_hook("pre_llm_call", on_pre_llm_call)
+    if _buttons is not None and callable(getattr(ctx, "register_telegram_handler", None)):
+        ctx.register_telegram_handler(_buttons.factory)
+        if callable(getattr(ctx, "on_unload", None)):
+            ctx.on_unload(_buttons.close)

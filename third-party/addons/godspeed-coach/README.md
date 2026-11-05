@@ -55,7 +55,8 @@ something another talk raised in the last seven days.
 - **A talk prepared ahead, when a job of yours writes one.** A minute before a talk is too little
   time to prepare it well. If something writes `coach/<area>/prep/<talk date>.md` ahead of time
   (`STATE: ready`, a section "The opening" and a section "Talk card"), the talk opens with that
-  opening as written, and every interface carries its talk card while the talk is open, with the
+  opening as written (except that a talk asked for on a talk day, replacing an earlier unanswered
+  talk, adds one sentence naming and closing that earlier talk), and every interface carries its talk card while the talk is open, with the
   file behind it for depth. `godspeed-coach prep-due` tells that job which coming talks still need it,
   and which were prepared more than 48 hours before they start and need it again;
   `godspeed-coach prep-check` says whether one talk's file is ready. In Godspeed Mission Control the
