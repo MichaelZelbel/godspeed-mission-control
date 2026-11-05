@@ -235,20 +235,33 @@ if(starterBorn(root))text=withTimezone(text,store.get('settings','installation')
 // stands outside the starter's block below; a mission control with no ElevenLabs voice of Godspeed's
 // is left exactly as it is.
 text=renewElevenLabsCommand(text,{home,state:store.state});
+// The Hermes cron provider that records what a routine sent where the chat reads it, and certifies a delivery.
+function installDeliveryWrapper(){
+ const provider=path.join(home,'plugins',CRON_PROVIDER,'__init__.py'),source=fs.readFileSync(path.join(kit,'notebook','assistant-files','godspeed-cron-provider.py'),'utf8').replace(/\r\n/g,'\n');
+ if(!fs.existsSync(provider)||fs.readFileSync(provider,'utf8')!==source){fs.mkdirSync(path.dirname(provider),{recursive:true});atomic(provider,source);}
+ atomic(path.join(path.dirname(provider),'report.json'),JSON.stringify({node:process.execPath,script:path.join(kit,'notebook','scripts','background-report.mjs'),root})+'\n');
+}
 // What the assistant of a mission control made from the starter needs from Hermes, found by a live
 // run of the book's prompts on 9 October 2026 (hermes-config.mjs says why for each): no Hermes
 // memory beside the notebook, no clarify tool in a chat nobody can answer it in, the notebook's
 // tools offered directly, and a scheduler Hermes knows is running. An adopted mission control is
-// the owner's and keeps its assistant as it was.
+// the owner's and keeps its assistant as it was, except for the delivery wrapper (below).
 if(starterBorn(root)){
  text=godspeedHermesSettings(text);
  // The voice the assistant answers voice notes with (core/voice-replies.mjs): the multilingual free
  // voice where nobody chose one. An ElevenLabs voice was renewed above already, for every mission
  // control, and this writes the same command again without changing anything.
  text=godspeedVoiceSettings(text,{home,state:store.state});
- const provider=path.join(home,'plugins',CRON_PROVIDER,'__init__.py'),source=fs.readFileSync(path.join(kit,'notebook','assistant-files','godspeed-cron-provider.py'),'utf8').replace(/\r\n/g,'\n');
- if(!fs.existsSync(provider)||fs.readFileSync(provider,'utf8')!==source){fs.mkdirSync(path.dirname(provider),{recursive:true});atomic(provider,source);}
- atomic(path.join(path.dirname(provider),'report.json'),JSON.stringify({node:process.execPath,script:path.join(kit,'notebook','scripts','background-report.mjs'),root})+'\n');
+ installDeliveryWrapper();
+}
+else{
+ // The notice sender and the delivery wrapper reach every install (#225, 4 November 2026): what the
+ // sender says, and the chat's record of what was sent, need the wrapper on an adopted mission control
+ // too. Only the wrapper is written, and a scheduler the owner chose stays.
+ installDeliveryWrapper();
+ const provider=String(readConfigValue(text,['cron','provider'])??'').replace(/^["']|["']$/g,'');
+ if(!provider||provider===CRON_PROVIDER)text=setConfigValue(text,['cron','provider'],CRON_PROVIDER);
+ else console.error('Godspeed\'s delivery wrapper is not active: this assistant already uses the "'+provider+'" scheduler (cron.provider), so a waiting step\'s plain yes cannot reach it.');
 }
 // /backupai in Telegram on the one-click server, where its Telegram runner hands the chat to the
 // backup AI setup (hermes-config.mjs, core/backup-ai.mjs); on every other installation a backup AI

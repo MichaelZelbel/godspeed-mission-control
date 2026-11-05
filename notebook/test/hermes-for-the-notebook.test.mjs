@@ -1,5 +1,5 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';
-import {fileURLToPath} from 'node:url';import {execFileSync} from 'node:child_process';
+import {fileURLToPath} from 'node:url';import {execFileSync,spawnSync} from 'node:child_process';
 import {Store} from '../core/records/store.mjs';import {NativeScheduler} from '../core/native-scheduler.mjs';import {installStarter} from '../core/starter-workspace.mjs';
 import {SCRIPT_TIMEOUT_SECONDS,COMPRESSION_THRESHOLD_TOKENS,godspeedHermesSettings,setConfigValue,readConfigValue,configList,CRON_PROVIDER} from '../core/hermes-config.mjs';
 
@@ -123,12 +123,20 @@ test('every wiring of a mission control made from the starter gives its Hermes t
  wire(root,home);assert.equal(fs.readFileSync(path.join(home,'config.yaml'),'utf8'),text);
 });
 
-test('an adopted mission control keeps its assistant as it was',t=>{
+test('an adopted mission control keeps its assistant as it was, apart from the delivery wrapper',t=>{
  const base=temporary(t,'wire-adopted-hermes'),root=path.join(base,'workspace'),home=path.join(base,'assistant');
  fs.mkdirSync(path.join(root,'rules'),{recursive:true});fs.writeFileSync(path.join(root,'AGENTS.md'),'# Mine\n');fs.writeFileSync(path.join(root,'rules','mine.md'),'Mine.\n');installStarter(root);
  wire(root,home);const text=fs.readFileSync(path.join(home,'config.yaml'),'utf8');
- for(const keys of [['memory','user_profile_enabled'],['agent','disabled_toolsets'],['tools','tool_search','enabled'],['cron','provider']])assert.equal(readConfigValue(text,keys),null,keys.join('.'));
- assert.ok(!fs.existsSync(path.join(home,'plugins','godspeed_notebook')));
+ for(const keys of [['memory','user_profile_enabled'],['agent','disabled_toolsets'],['tools','tool_search','enabled']])assert.equal(readConfigValue(text,keys),null,keys.join('.'));
+ assert.equal(readConfigValue(text,['cron','provider']),'godspeed_notebook');
+ assert.ok(fs.existsSync(path.join(home,'plugins','godspeed_notebook','__init__.py')));assert.ok(fs.existsSync(path.join(home,'plugins','godspeed_notebook','report.json')));
+ wire(root,home);assert.equal(fs.readFileSync(path.join(home,'config.yaml'),'utf8'),text,'wiring again changes nothing');
+ // A scheduler the owner chose stays.
+ const other=path.join(base,'other');fs.mkdirSync(other);fs.writeFileSync(path.join(other,'config.yaml'),'cron:\n  provider: owners_own\n');
+ const said=spawnSync(process.execPath,[wireScript,other],{env:{...process.env,GODSPEED_WORKSPACE:root,GODSPEED_PORT:'41991',GODSPEED_DEVICE:'local',GODSPEED_ORIGINAL_RUNTIME:'on'},encoding:'utf8',windowsHide:true});
+ assert.equal(said.status,0);assert.match(said.stderr,/delivery wrapper is not active.*"owners_own".*plain yes cannot reach it/);
+ assert.equal(readConfigValue(fs.readFileSync(path.join(other,'config.yaml'),'utf8'),['cron','provider']),'owners_own');
+ assert.ok(fs.existsSync(path.join(other,'plugins','godspeed_notebook','__init__.py')));assert.ok(fs.existsSync(path.join(other,'plugins','godspeed_notebook','report.json')),'the wrapper is installed beside a provider the owner chose');
 });
 
 // "Run now" waited for the whole run (a live run's fetch gave up after 300 seconds).
