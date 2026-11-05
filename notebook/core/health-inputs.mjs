@@ -1,12 +1,15 @@
 import {visibleRows} from './visibility.mjs';
 
-// Where the phone (Health Auto Export) and another source both give a day's metric, the value
+// Where the phone receiver and another source both give a day's metric, the value
 // written last wins for that day and metric only. A record's updated_at moves only when its value
 // changes, so it is when the value was last written. Every other row passes through.
 export const PHONE_SOURCE='Health Auto Export';
+// The phone receiver marks every record it writes (phone-health.mjs, writeDays). The resolver goes by that
+// mark, never by the source's name, so a CSV someone labelled 'Health Auto Export' is a CSV.
+export const PHONE_VIA='phone-receiver';
 export function latestPerDayMetric(rows){
  const best=new Map(),key=row=>row.date_precision==='day'&&row.observed_on?row.observed_on+'\n'+row.metric:null;
- for(const row of rows){const k=key(row);if(k===null)continue;const group=best.get(k)||best.set(k,{rows:[],phone:false,other:false}).get(k);group.rows.push(row);group[row.source===PHONE_SOURCE?'phone':'other']=true;}
+ for(const row of rows){const k=key(row);if(k===null)continue;const group=best.get(k)||best.set(k,{rows:[],phone:false,other:false}).get(k);group.rows.push(row);group[row.via===PHONE_VIA?'phone':'other']=true;}
  const newest=new Map();
  for(const [k,group] of best)if(group.phone&&group.other)newest.set(k,group.rows.reduce((a,b)=>String(b.updated_at)>String(a.updated_at)?b:a));
  return rows.filter(row=>{const k=key(row);return !newest.has(k)||newest.get(k)===row;});

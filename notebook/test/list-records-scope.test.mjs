@@ -36,7 +36,7 @@ test('list_records still returns the owner\'s own visible content',async t=>{
 
 test('list_records gives one value per day and metric when the phone and a CSV both gave one, and keeps the other sources\' rows',async t=>{
  const ctx=fixture(t),{store}=ctx;
- const row=(id,source,value)=>store.save('health_observations',{id,metric:'steps',value,source,observed_on:'2026-11-04',date_precision:'day',observed_at:'2026-11-04T00:00:00Z'});
+ const row=(id,source,value)=>store.save('health_observations',{id,metric:'steps',value,source,...(source==='Health Auto Export'?{via:'phone-receiver'}:{}),observed_on:'2026-11-04',date_precision:'day',observed_at:'2026-11-04T00:00:00Z'});
  row('phone','Health Auto Export',100);await new Promise(r=>setTimeout(r,5));row('csv','Selected CSV',250);
  assert.deepEqual(JSON.parse(await call(ctx,'health_observations')).map(r=>r.id),['csv'],'the one written last');
  await new Promise(r=>setTimeout(r,5));row('phone','Health Auto Export',300);

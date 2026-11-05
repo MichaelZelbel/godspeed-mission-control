@@ -65,7 +65,7 @@ test('chat retrieves relevant records without sending a thousand notes or hidden
 });
 test('chat is given one health value per day and metric: the one written last',()=>{
   const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-chat-health-')),at=new Date().toISOString();
-  const row=(id,source,value,updated_at)=>({id,source,metric:'steps',value,observed_on:at.slice(0,10),date_precision:'day',observed_at:at,updated_at});
+  const row=(id,source,value,updated_at)=>({id,source,...(source==='Health Auto Export'?{via:'phone-receiver'}:{}),metric:'steps',value,observed_on:at.slice(0,10),date_precision:'day',observed_at:at,updated_at});
   const rows={health_observations:[row('csv','Selected CSV',1000,'2026-11-01T00:00:00Z'),row('phone','Health Auto Export',2000,'2026-11-02T00:00:00Z')]};
   const query={store:{root},withSnapshot:fn=>fn(),rows:type=>rows[type]||[]};
   assert.deepEqual(chatContext(query,{message:'hi'}).personal.health.map(h=>h.value),[2000]);

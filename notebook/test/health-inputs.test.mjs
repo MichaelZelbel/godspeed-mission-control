@@ -62,7 +62,7 @@ test('the phone and the selected CSV keep a day under the same id, so a CSV corr
  assert.equal(phone[0].id,healthFeedId(PHONE_SOURCE,day,'steps'));
  operation({type:'health-import-csv',source:PHONE_SOURCE,content:'date,steps\n'+day+',250\n'});
  const all=store.list('health_observations');assert.equal(all.length,1,'one record, corrected in place');
- assert.equal(all[0].id,phone[0].id);assert.equal(all[0].value,250);
+ assert.equal(all[0].id,phone[0].id);assert.equal(all[0].value,250);assert.equal(phone[0].via,'phone-receiver');assert.ok(!all[0].via,'a CSV correction is not the phone receiver row any more');
  operation({type:'health-import-csv',source:'Fictional other feed',content:'date,steps\n'+day+',7\n'});
  assert.notEqual(store.list('health_observations').find(r=>r.value===7).id,phone[0].id);
 });
@@ -75,7 +75,7 @@ test('two same-day records from two sources that are not the phone are both retu
 });
 test('rows that are not day records pass through whole, and the count of excluded rows ignores the ones a newer source replaced',()=>{
  const {store,query}=setup(),now=Date.parse('2026-10-04T12:00:00Z');
- const row=(id,source,extra)=>store.save('health_observations',{id,metric:'steps',value:1,source,observed_on:'2026-10-04',observed_at:'2026-10-04T08:00:00Z',...extra});
+ const row=(id,source,extra)=>store.save('health_observations',{id,metric:'steps',value:1,source,...(source==='Health Auto Export'?{via:'phone-receiver'}:{}),observed_on:'2026-10-04',observed_at:'2026-10-04T08:00:00Z',...extra});
  row('t1',PHONE_SOURCE,{});row('t2','Fictional CSV',{});
  assert.deepEqual(currentHealth(query,{now}).observations.map(r=>r.id).sort(),['t1','t2'],'timestamped rows are never collapsed');
  row('d1',PHONE_SOURCE,{date_precision:'day',metric:'weight_kg'});row('d2','Fictional CSV',{date_precision:'day',metric:'weight_kg'});
@@ -83,6 +83,21 @@ test('rows that are not day records pass through whole, and the count of exclude
  assert.equal(health.observations.filter(r=>r.metric==='weight_kg').length,1);
  assert.equal(health.excluded_stale_or_future,0,'a replaced row is not stale or future');
  // A row that names no day cannot be matched to another on one, whatever its precision says.
- for(const [id,source] of [['n1',PHONE_SOURCE],['n2','Fictional CSV']])store.save('health_observations',{id,metric:'sleep_total_h',value:7,source,date_precision:'day',observed_at:'2026-10-04T08:00:00Z'});
+ for(const [id,source] of [['n1',PHONE_SOURCE],['n2','Fictional CSV']])store.save('health_observations',{id,metric:'sleep_total_h',value:7,source,...(source===PHONE_SOURCE?{via:'phone-receiver'}:{}),date_precision:'day',observed_at:'2026-10-04T08:00:00Z'});
  assert.deepEqual(currentHealth(query,{now}).observations.filter(r=>r.metric==='sleep_total_h').map(r=>r.id).sort(),['n1','n2']);
+});
+test('a CSV that someone labelled with the phone appname is still a CSV: nothing is collapsed unless the phone receiver wrote one of the rows',()=>{
+ const {store,query}=setup(),operation=input=>personalOperation({store,query},input),now=Date.now();
+ const day=new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Berlin',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(now));
+ operation({type:'health-import-csv',source:PHONE_SOURCE,content:'date,steps\n'+day+',100\n'});
+ operation({type:'health-import-csv',source:'Fictional other CSV',content:'date,steps\n'+day+',200\n'});
+ const rows=store.list('health_observations');
+ assert.equal(rows.length,2);assert.ok(rows.every(r=>!r.via),'a CSV import marks nothing as the phone');
+ assert.deepEqual(currentHealth(query,{now}).observations.map(r=>r.value).sort((a,b)=>a-b),[100,200],'both desktop imports stay');
+ // The phone receiver then writes the same day under its own id: only now is there a phone row to collapse against.
+ acceptUpload(store,{metrics:[{name:'step_count',units:'count',data:[{date:day+' 08:00:00 +0100',qty:300,source:'Fictional Phone'}]}],workouts:[]},{now:new Date(now)});
+ const phoneRow=store.list('health_observations').find(r=>r.via==='phone-receiver');
+ assert.ok(phoneRow);assert.equal(phoneRow.id,healthFeedId(PHONE_SOURCE,day,'steps'),'it replaced the CSV that used the phone appname');
+ assert.equal(store.list('health_observations').length,2);
+ assert.deepEqual(currentHealth(query,{now}).observations.map(r=>r.value),[300],'now the phone row and the other CSV collapse to the newest');
 });

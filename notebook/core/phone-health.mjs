@@ -2,7 +2,7 @@ import fs from 'node:fs';import path from 'node:path';
 import {randomBytes,createHash,timingSafeEqual} from 'node:crypto';
 import {hash,atomic} from './records/store.mjs';
 import {healthFeedId} from './health-feed-id.mjs';
-import {PHONE_SOURCE} from './health-inputs.mjs';
+import {PHONE_SOURCE,PHONE_VIA} from './health-inputs.mjs';
 import {addDays,zonedToUtc,now as clockNow} from '../../third-party/addons/godspeed-coach/lib/clock.mjs';
 
 // A phone's health data (issue #214, 4 November 2026). The iPhone app Health Auto Export posts its
@@ -171,7 +171,7 @@ export function writeDays(store,built,{now=clockNow()}={}){
   for(const [metric,value] of metrics){
    const id=healthFeedId(SOURCE,day,metric),previous=store.get('health_observations',id);
    if(previous&&(day<oldestCovered||!previous.removed_at&&previous.value===value&&previous.date_precision==='day'))continue;
-   rows.push(store.prepare('health_observations',{id,metric,value,source:SOURCE,observed_on:day,date_precision:'day',observed_at:zonedToUtc(day,'00:00',timezone).toISOString(),...(previous?.removed_at?{removed_at:null}:{})},previous));
+   rows.push(store.prepare('health_observations',{id,metric,value,source:SOURCE,via:PHONE_VIA,observed_on:day,date_precision:'day',observed_at:zonedToUtc(day,'00:00',timezone).toISOString(),...(previous?.removed_at?{removed_at:null}:{})},previous));
   }
  }
  if(rows.length)store.commit(rows);

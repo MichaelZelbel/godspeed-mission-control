@@ -44,7 +44,7 @@ test('routines are given no hidden goal, sensitive health reading or hidden dead
 test('routines are given one health value per day and metric: the one written last',async t=>{
  let context;const env=fixture(t),provider=async input=>{context=input.context;return 'A fictional result';},at=new Date().toISOString();
  env.store.save('health_observations',{id:'csv',source:'Selected CSV',metric:'steps',value:1000,observed_on:at.slice(0,10),date_precision:'day',observed_at:at});
- env.store.save('health_observations',{id:'phone',source:'Health Auto Export',metric:'steps',value:2000,observed_on:at.slice(0,10),date_precision:'day',observed_at:at});
+ env.store.save('health_observations',{id:'phone',source:'Health Auto Export',via:'phone-receiver',metric:'steps',value:2000,observed_on:at.slice(0,10),date_precision:'day',observed_at:at});
  await jobExecutor(provider,env.query)({id:'fictional',kind:'fictional-routine'},{settings:{},store:env.store});
  assert.deepEqual(context.health.map(h=>h.value),[2000]);
  env.store.save('health_observations',{id:'csv',value:1500});

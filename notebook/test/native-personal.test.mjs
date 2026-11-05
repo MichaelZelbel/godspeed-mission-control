@@ -33,7 +33,7 @@ test('the native coach tick reads the newest same-day measurement, whichever fee
   const talk=await domains.invoke('personal-operation',{type:'coach-open',area:'health',question:'Fictional weight?'});
   await domains.invoke('personal-operation',{type:'habit-agree',talk_id:talk.id,title:'Fictional light day',agreement:'I agree',auto:'weight_kg < 80',check_at:'2030-01-01T19:00:00Z'});
   const now=new Date();now.setUTCHours(12,0,0,0);const day=now.toISOString().slice(0,10);
-  for(const [source,value,id] of order){store.save('health_observations',{id,metric:'weight_kg',value,source,observed_on:day,date_precision:'day',observed_at:day+'T00:00:00.000Z'});await new Promise(r=>setTimeout(r,5));}
+  for(const [source,value,id] of order){store.save('health_observations',{id,metric:'weight_kg',value,source,...(source==='Health Auto Export'?{via:'phone-receiver'}:{}),observed_on:day,date_precision:'day',observed_at:day+'T00:00:00.000Z'});await new Promise(r=>setTimeout(r,5));}
   nativeTick(store,'coach',now);
   return query.rows('habits')[0].progress.lifetimeCompletedDays;
  };

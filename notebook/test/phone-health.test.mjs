@@ -133,7 +133,7 @@ test('the import builds the same days from the same lines as the receiver, and n
 
 test('a phone value and a CSV value for one day and metric: the one written last wins, the rest are untouched',()=>{
  const store=setup(),query=new QueryService(store),now=Date.parse('2026-11-04T12:00:00Z');
- const row=(id,source,metric,value)=>store.save('health_observations',{id,source,metric,value,observed_on:D,date_precision:'day',observed_at:'2026-11-03T23:00:00.000Z'});
+ const row=(id,source,metric,value)=>store.save('health_observations',{id,source,...(source==='Health Auto Export'?{via:'phone-receiver'}:{}),metric,value,observed_on:D,date_precision:'day',observed_at:'2026-11-03T23:00:00.000Z'});
  row('csv-steps','Selected CSV','steps',1000);row('csv-weight','Selected CSV','weight_kg',80);
  row('health-feed-phone','Health Auto Export','steps',2000);
  let seen=Object.fromEntries(currentHealth(query,{now}).observations.map(r=>[r.metric,r.value]));
@@ -191,7 +191,7 @@ test('an upload that is not kept answers 500 and logs neither its value nor the 
 test('Personal Settings shows one value per day and metric when a phone and a CSV both gave one',async t=>{
  const root=serverRoot('godspeed-phone-personal-'),service=await createService({root,port:0,webPort:0});
  t.after(async()=>{await service.close();fs.rmSync(root,{recursive:true,force:true});});
- const row=(id,source,value)=>service.store.save('health_observations',{id,source,metric:'steps',value,observed_on:D,date_precision:'day',observed_at:'2026-11-03T23:00:00.000Z'});
+ const row=(id,source,value)=>service.store.save('health_observations',{id,source,...(source==='Health Auto Export'?{via:'phone-receiver'}:{}),metric:'steps',value,observed_on:D,date_precision:'day',observed_at:'2026-11-03T23:00:00.000Z'});
  row('csv-steps','Selected CSV',1000);row('health-feed-phone','Health Auto Export',2000);
  const shown=JSON.parse((await request(service.address.port,'/api/personal')).text).health;
  assert.deepEqual(shown.map(r=>r.value),[2000]);

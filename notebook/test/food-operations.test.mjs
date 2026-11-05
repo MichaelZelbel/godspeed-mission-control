@@ -130,7 +130,7 @@ test('the target asks once for what it does not know, with her weight from her h
 test('the target uses the newest same-day weight, whichever feed wrote it: a later CSV correction beats the phone',async()=>{
  const f=await fixture();
  const held=await f.op({type:'food',action:'track',items:[TOFU]});await f.op({type:'tracker-create',proposal_id:held.proposal_id});
- const day='2026-10-10',row=(source,value)=>({id:'w-'+source.split(' ')[0].toLowerCase(),metric:'weight_kg',value,unit:'kg',source,observed_on:day,date_precision:'day',observed_at:day+'T00:00:00Z'});
+ const day='2026-10-10',row=(source,value)=>({id:'w-'+source.split(' ')[0].toLowerCase(),metric:'weight_kg',value,unit:'kg',source,...(source==='Health Auto Export'?{via:'phone-receiver'}:{}),observed_on:day,date_precision:'day',observed_at:day+'T00:00:00Z'});
  f.store.save('health_observations',row('Health Auto Export',90));await new Promise(r=>setTimeout(r,5));
  f.store.save('health_observations',row('Fictional CSV',70));
  const r=await f.op({type:'food',action:'target',sex:'female',age:34,height_cm:168,activity:'light',goal:'lose'});
