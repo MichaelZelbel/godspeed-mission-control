@@ -2846,16 +2846,29 @@ cp "$CT/good/short-before.txt" "$CT/good/short-after.txt"
 printf 'skip: under the limit\n' >"$CT/good/short-log"
 printf '0\n' >"$CT/good/short-exit"
 printf 'messages=12 tokens=20000\n' >"$CT/good/short-count.txt"
+printf '60000\n' >"$CT/good/min-tokens.txt"
 passes 'a long chat shortened and logged, the next message plain, a short chat untouched' chat-tidy-at-night "$CT/good" 'the long conversation went from 40 to 9 messages'
 copy "$CT/good" "$CT/long-under-limit"
 printf 'messages=40 tokens=1\n' >"$CT/long-under-limit/long-before.txt"
-refuses 'a long chat that was never over the limit' chat-tidy-at-night "$CT/long-under-limit" 'under the limit of 60000'
+refuses 'a long chat that was never over the limit' chat-tidy-at-night "$CT/long-under-limit" 'not past the routine'"'"'s limit of 60000'
+copy "$CT/good" "$CT/long-at-limit"
+printf 'messages=40 tokens=60000\n' >"$CT/long-at-limit/long-before.txt"
+refuses 'a long chat exactly at the limit' chat-tidy-at-night "$CT/long-at-limit" 'not past the routine'"'"'s limit of 60000'
+copy "$CT/good" "$CT/limit-moved"
+printf '200000\n' >"$CT/limit-moved/min-tokens.txt"
+refuses 'a long chat under a limit the routine has since raised' chat-tidy-at-night "$CT/limit-moved" 'not past the routine'"'"'s limit of 200000'
+copy "$CT/good" "$CT/limit-malformed"
+printf 'sixty\n' >"$CT/limit-malformed/min-tokens.txt"
+refuses 'evidence that does not say the routine'"'"'s limit' chat-tidy-at-night "$CT/limit-malformed" 'does not say what limit'
+copy "$CT/good" "$CT/limit-missing"
+rm "$CT/limit-missing/min-tokens.txt"
+refuses 'evidence with no limit' chat-tidy-at-night "$CT/limit-missing" 'min-tokens.txt is not in what the scenario kept'
 copy "$CT/good" "$CT/long-tokens-missing"
 printf 'messages=40 tokens=none\n' >"$CT/long-tokens-missing/long-before.txt"
 refuses 'a long chat with no recorded tokens' chat-tidy-at-night "$CT/long-tokens-missing" 'how many tokens the conversation had recorded'
 copy "$CT/good" "$CT/short-over-limit"
 printf 'messages=12 tokens=90000\n' >"$CT/short-over-limit/short-count.txt"
-refuses 'a short chat that was over the limit' chat-tidy-at-night "$CT/short-over-limit" 'not under the limit of 60000'
+refuses 'a short chat that was over the limit' chat-tidy-at-night "$CT/short-over-limit" 'not under the routine'"'"'s limit of 60000'
 copy "$CT/good" "$CT/not-shortened"
 printf 'messages=40 tokens=174000\n' >"$CT/not-shortened/long-after.txt"
 refuses 'a long chat that is not shorter' chat-tidy-at-night "$CT/not-shortened" 'nothing was shortened'
@@ -2974,6 +2987,23 @@ refuses 'a key in a log' deadline-closes-itself "$DC/key-leaked" 'a key'"'"'s va
 copy "$DC/good" "$DC/step-broke"
 OUTBOX='' steps_json "$DC/step-broke" broken=ok replace=bad
 refuses 'a step that broke' deadline-closes-itself "$DC/step-broke" 'a step of the run did not work'
+
+# The key scan itself, with a grep that fails: it must end in the scenario's FAIL line and write no "clean".
+KS=$TMP/ks
+rm -rf "$KS"
+mkdir -p "$KS/bin" "$KS/evidence"
+printf '#!/bin/sh\necho "grep: scan broke" >&2\nexit 2\n' >"$KS/bin/grep"
+chmod +x "$KS/bin/grep"
+KS_OUT=$(PATH="$KS/bin:$PATH" EVIDENCE="$KS/evidence" HERMES="$KS" STATE="$KS" ROOT="$KS" bash -c '
+  fail() { echo "FAIL $*"; exit 1; }
+  eval "$(sed -n "/^scan_for_keys() {/,/^}/p" "$1")"
+  scan_for_keys "$EVIDENCE/key-scan.txt" some-key' _ "$HERE/deadline-closes-itself.sh" 2>&1)
+KS_CODE=$?
+if [ "$KS_CODE" = 1 ] && grep -q 'could not look at every file (grep ended 2)' <<<"$KS_OUT" && [ ! -e "$KS/evidence/key-scan.txt" ]; then
+  ok "a key scan whose grep fails ends in FAIL and writes no clean result"
+else
+  bad "a key scan whose grep fails ends in FAIL and writes no clean result" "ended $KS_CODE: $KS_OUT"
+fi
 
 # ------------------------------------------------------------------------------------ disk-filling
 section disk-filling
