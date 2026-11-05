@@ -2,6 +2,7 @@
 import asyncio
 import importlib.util
 import os
+import re
 import sys
 import types
 import unittest
@@ -89,6 +90,14 @@ class ChatTidy(unittest.TestCase):
         self.assertTrue(handler(KEY + " chat-1").startswith("ok:"))
         self.assertTrue(handler(KEY + " other").startswith("refused:"))
 
+
+    def test_the_origin_exclusions_and_the_key_pattern_name_the_same_platforms(self):
+        plugin = load(Runner({}))
+        encoded = re.search(r"\(\?!\(\?:([^)]+)\):\)", plugin.CHAT_KEY).group(1).split("|")
+        self.assertEqual(sorted(plugin.NOT_A_CHAT_APP), sorted(encoded))
+        self.assertEqual(len(plugin.NOT_A_CHAT_APP), 6)
+        for name in plugin.NOT_A_CHAT_APP:
+            self.assertFalse(re.match(plugin.CHAT_KEY, "agent:main:%s:dm:1" % name), name)
 
     def test_a_route_to_another_session_is_refused(self):
         runner = Runner({KEY: Entry("someone-else")})
