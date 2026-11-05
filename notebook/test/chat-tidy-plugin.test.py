@@ -56,7 +56,40 @@ def load(runner):
     return plugin
 
 
+class Ctx:
+    def __init__(self):
+        self.registered = []
+
+    def register_command(self, name, handler, **kwargs):
+        self.registered.append((name, handler))
+
+
+ROUTINES = os.path.join(HERE, "..", "core", "routine-scripts", "godspeed_routines.py")
+
+
 class ChatTidy(unittest.TestCase):
+    def test_a_group_route_is_refused(self):
+        group = "agent:main:telegram:group:8"
+        runner = Runner({group: Entry("group-1")})
+        self.assertTrue(load(runner).tidy(group + " group-1").startswith("refused:"))
+        self.assertEqual(runner.events, [])
+
+    def test_the_routine_and_the_plugin_agree_on_the_command_the_route_and_the_answers(self):
+        source = open(ROUTINES, encoding="utf-8").read()
+        plugin = load(Runner({KEY: Entry("chat-1")}))
+        ctx = Ctx()
+        plugin.register(ctx)
+        self.assertEqual([name for name, _ in ctx.registered], [plugin.COMMAND])
+        self.assertIn('CHAT_TIDY_COMMAND = "%s"' % plugin.COMMAND, source)
+        self.assertIn('CHAT_KEY = re.compile(r"%s")' % plugin.CHAT_KEY, source)
+        # the routine reads the first line: "ok:" tidied, "refused:" logged, anything else fails
+        self.assertIn('line.startswith("refused:")', source)
+        self.assertIn('line.startswith("ok:")', source)
+        handler = ctx.registered[0][1]
+        self.assertTrue(handler(KEY + " chat-1").startswith("ok:"))
+        self.assertTrue(handler(KEY + " other").startswith("refused:"))
+
+
     def test_a_route_to_another_session_is_refused(self):
         runner = Runner({KEY: Entry("someone-else")})
         self.assertTrue(load(runner).tidy(KEY + " chat-1").startswith("refused:"))

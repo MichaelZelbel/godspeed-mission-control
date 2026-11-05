@@ -13,13 +13,17 @@ the gateway.
 
     /godspeed-chat-tidy <chat session key> <session id>
 
-It acts only when the runner's routing entry for the key routes to exactly that session id, the
+It acts only on the owner's private chat key (agent:main:<chat app>:dm:<id>), when the runner's routing entry for the key routes to exactly that session id, the
 entry's origin is a chat app's platform, and no turn for that chat runs or is being set up. Its
 answer goes to the caller only: ok: <session id>, or refused: <why>; it answers refused: route moved when the key routes to another session after the summary.
 """
 import asyncio
+import re
 
 COMMAND = "godspeed-chat-tidy"
+# The owner's private chat in a chat app, as godspeed_routines.py (CHAT_KEY) finds it: a group or
+# channel route and the assistant's own terminal ("local") are refused. A test holds the two equal.
+CHAT_KEY = r"^agent:main:(?!local:)[^:]+:dm:.+$"
 NOT_A_CHAT_APP = ("local", "cli", "tui", "cron", "webhook", "api_server")
 
 
@@ -46,6 +50,8 @@ def tidy(raw_args="", **_context):
     if len(parts) != 2:
         return "refused: usage /%s <chat session key> <session id>" % COMMAND
     key, session_id = parts
+    if not re.match(CHAT_KEY, key):
+        return "refused: %s is not the owner's private chat in a chat app" % key
     runner = _runner()
     if runner is None:
         return "refused: the gateway runner is not running"

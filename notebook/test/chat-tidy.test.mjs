@@ -40,6 +40,12 @@ for line in sys.stdin:
         con.execute("update gateway_routing set entry_json = ?", (json.dumps({"session_id": answer["move_route_to"]}),))
         con.commit()
         con.close()
+    if msg.get("method") == "session.create" and answer and not (msg.get("params") or {}).get("hidden"):
+        import sqlite3   # the gateway stores a session unless it is hidden and still empty
+        con = sqlite3.connect(os.path.join(os.environ["HERMES_HOME"], "state.db"))
+        con.execute("insert into sessions values (?, ?, null)", (answer["session_id"], "{}"))
+        con.commit()
+        con.close()
     if answer is None:            # a step this channel never answers
         continue
     if answer.get("delete_messages"):   # what the gateway's own /compress does to the chat
@@ -126,14 +132,11 @@ test('the long chat is summarised through the plugin command on the hidden sessi
 
 test('two nights leave no hidden-session row in the assistant\'s database',needs,async t=>{
  const chat=home(t,{plan:{'session.create':created,'command.dispatch':{...ran}}});
- const before=chat.rows('hidden-2');
+ const count=()=>{const db=new DatabaseSync(path.join(chat.hermes,'state.db'),{readOnly:true});
+  const n=db.prepare('select count(*) as n from sessions').get().n;db.close();return n;};
+ const seeded=count();
  for(let night=0;night<2;night++){const {code,log}=chat.run();assert.equal(code,0,log);}
- assert.deepEqual(methods(chat).filter(m=>m==='session.create').length,1,'each run makes one; the stand-in\'s record restarts per run');
- assert.equal(chat.rows('hidden-2'),before,'no row for the hidden session');
- assert.equal(JSON.parse(chat.rows('hidden-2'))[0].length,0);
- const db=new DatabaseSync(path.join(chat.hermes,'state.db'),{readOnly:true});
- const hiddenRows=db.prepare("select count(*) as n from sessions where id in ('hidden-2','hidden-stored-2')").get().n;db.close();
- assert.ok(hiddenRows<=1);
+ assert.equal(count(),seeded,'a session made without hidden:true would add a row each night; the hidden one adds none');
 });
 
 test('a route that moves during the summary is logged and is never tidied',needs,async t=>{

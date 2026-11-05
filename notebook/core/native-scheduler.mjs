@@ -442,8 +442,8 @@ export class NativeScheduler{
    try{this.afterTick();}catch{}
   }
   finally{this.ticking=false;finish();}
-  // The setup that asked for this tick hears that the connection check could not be made; the periodic tick keeps going.
-  if(raise&&failure)throw failure;
+  // The setup that asked for this tick hears that a routine could not be made; the periodic tick logs it (onFailure) and keeps going.
+  if(failure){if(raise)throw failure;try{this.onFailure?.(failure);}catch{}}
   return records;
  }
  // A routine lives in the Hermes of the machine that runs routines; added or
