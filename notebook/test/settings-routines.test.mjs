@@ -216,6 +216,15 @@ test('a Morning brief set early brings the daily connection check ahead of it, a
  await assert.rejects(failing.tick({raise:true}),/could not create it/);
 });
 
+test('a failed creation of the night chat tidy-up reaches the setup tick, and a periodic tick swallows it',async t=>{
+ const {store,home,hermes,scheduler,job}=await withGoal(t);
+ scheduler.lastTick=0;await scheduler.tick();
+ fs.writeFileSync(path.join(home,'.env'),'TELEGRAM_BOT_TOKEN=123:abc\nTELEGRAM_HOME_CHANNEL=42\n');
+ const failing=new NativeScheduler(store,{home,executable:'hermes',device:'pc',run:async(exe,args,options)=>{if(args[1]==='create'&&args.includes(CHAT_TIDY_JOB))throw Error('Hermes could not create it');return hermes.run(exe,args,options);}});
+ await failing.tick();failing.lastTick=0;assert.equal(job(CHAT_TIDY_JOB),undefined,'a periodic tick swallows it');
+ await assert.rejects(failing.tick({raise:true}),/could not create it/);
+});
+
 test('a setup that overlaps the running periodic tick still hears its failed connection-check creation',async t=>{
  noMail(t);
  const {store,home,hermes,job}=await withGoal(t);

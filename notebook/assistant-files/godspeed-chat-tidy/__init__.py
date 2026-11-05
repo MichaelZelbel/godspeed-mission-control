@@ -15,7 +15,7 @@ the gateway.
 
 It acts only when the runner's routing entry for the key routes to exactly that session id, the
 entry's origin is a chat app's platform, and no turn for that chat runs or is being set up. Its
-answer goes to the caller only: ok: <session id the key routes to afterwards>, or refused: <why>.
+answer goes to the caller only: ok: <session id>, or refused: <why>; it answers refused: route moved when the key routes to another session after the summary.
 """
 import asyncio
 
@@ -66,7 +66,9 @@ def tidy(raw_args="", **_context):
         after = runner.session_store.lookup_by_session_key(key)
     except Exception as error:
         return "refused: the summary failed (%s)" % error
-    return "ok: %s" % (getattr(after, "session_id", None) or session_id)
+    if getattr(after, "session_id", None) != session_id:
+        return "refused: route moved"
+    return "ok: %s" % session_id
 
 
 def register(ctx):

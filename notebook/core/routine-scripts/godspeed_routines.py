@@ -1033,11 +1033,9 @@ def chat_route(c):
 
 
 def chat_hidden_session(ch, timeout):
-    """The routine's own hidden local session: found by its title on later nights, made when there is
-    none. It is never the owner's chat, so nothing here can touch a conversation of theirs."""
-    found = ch.call("session.resume", {"session_id": CHAT_TIDY_TITLE}, timeout, soft=True)
-    if found and found.get("session_id"):
-        return found["session_id"]
+    """A fresh hidden local session for this run. The assistant keeps no database row for a hidden
+    session that never receives a message, so nothing piles up night after night. It is never the
+    owner's chat, so nothing here can touch a conversation of theirs."""
     made = ch.call("session.create", {"title": CHAT_TIDY_TITLE, "hidden": True}, timeout)
     if not made.get("session_id"):
         fail("The assistant made no session for the chat tidy-up.")
@@ -1114,12 +1112,12 @@ def chat_tidy(c):
         return ""
     if not line.startswith("ok:"):
         fail("The summary command answered %r." % line[:200])
-    after_route = chat_route(c)
-    if not after_route or after_route[0] != key:
-        fail("The chat moved during the summary; stopping.")
+    if chat_route(c) != (key, target):
+        chat_log("route moved during the summary: not tidied")
+        return ""
     con = chat_db(c)
     try:
-        after = chat_messages(con, after_route[1])
+        after = chat_messages(con, target)
     finally:
         con.close()
     if after < before:

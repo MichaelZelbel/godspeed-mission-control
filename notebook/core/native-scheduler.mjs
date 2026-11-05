@@ -434,7 +434,7 @@ export class NativeScheduler{
    await this.addNewStartingRoutines().catch(()=>null);
    await this.followJournal().catch(()=>null);
    await this.followConnectionCheck().catch(e=>{failure=e;});
-   await this.followChatTidy().catch(()=>null);
+   await this.followChatTidy().catch(e=>{failure=failure||e;});
    await this.followBrief().catch(()=>null);
    await this.followDelivery().catch(()=>null);
    try{moveSettingsDeadlines(this.store);}catch{}

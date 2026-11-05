@@ -101,7 +101,6 @@ function home(t,{plan,seeded={},entry=CHANNEL}={}){
    db.prepare('select * from messages where session_id = ? order by timestamp').all(id)]);db.close();return out;};
  return {root,hermes,run,asked,rows};
 }
-const hidden={session_id:'hidden-1',stored_session_id:'hidden-stored'};
 const created={session_id:'hidden-2',stored_session_id:'hidden-stored-2'};
 const ran={type:'plugin',output:'ok: chat-session-1'};
 const KEY='agent:main:telegram:dm:4242';
@@ -109,7 +108,7 @@ const needs={skip:!python&&'needs Python'};
 const methods=chat=>chat.asked().map(a=>a.method);
 
 test('the long chat is summarised through the plugin command on the hidden session, and tidied only when it got shorter',needs,async t=>{
- const chat=home(t,{plan:{'session.resume':hidden,'command.dispatch':{...ran,delete_messages:2}}});
+ const chat=home(t,{plan:{'session.create':created,'command.dispatch':{...ran,delete_messages:2}}});
  const before=chat.rows(OTHER);
  const {code,said,log}=chat.run();
  // What the pull request quotes: the routine's own log of a tidied chat.
@@ -118,29 +117,40 @@ test('the long chat is summarised through the plugin command on the hidden sessi
  assert.equal(said,'','it says nothing to the person: its output is its log');
  assert.match(log,/chat chat-session-1: last prompt 174000 tokens, last message 60 min ago, open leases 0/);
  assert.match(log,/tidied in \d+ s: ok: chat-session-1; messages 4 -> 2/);
- assert.deepEqual(methods(chat),['session.resume','command.dispatch'],'the hidden session was found by its title, not made again');
- assert.equal(chat.asked()[0].params.session_id,'Godspeed chat tidy');
+ assert.deepEqual(methods(chat),['session.create','command.dispatch']);
+ assert.deepEqual(chat.asked()[0].params,{title:'Godspeed chat tidy',hidden:true});
  const dispatch=chat.asked()[1].params;
- assert.deepEqual(dispatch,{name:'godspeed-chat-tidy',arg:KEY+' '+CHAT,session_id:'hidden-1'});
+ assert.deepEqual(dispatch,{name:'godspeed-chat-tidy',arg:KEY+' '+CHAT,session_id:'hidden-2'});
  assert.equal(chat.rows(OTHER),before,'the second stored conversation is left byte-for-byte alone');
 });
 
-test('the hidden session is made once, with its title, when none is found',needs,async t=>{
- const chat=home(t,{plan:{'session.resume':{error:'no session by that title'},'session.create':created,'command.dispatch':{...ran,delete_messages:1}}});
+test('two nights leave no hidden-session row in the assistant\'s database',needs,async t=>{
+ const chat=home(t,{plan:{'session.create':created,'command.dispatch':{...ran}}});
+ const before=chat.rows('hidden-2');
+ for(let night=0;night<2;night++){const {code,log}=chat.run();assert.equal(code,0,log);}
+ assert.deepEqual(methods(chat).filter(m=>m==='session.create').length,1,'each run makes one; the stand-in\'s record restarts per run');
+ assert.equal(chat.rows('hidden-2'),before,'no row for the hidden session');
+ assert.equal(JSON.parse(chat.rows('hidden-2'))[0].length,0);
+ const db=new DatabaseSync(path.join(chat.hermes,'state.db'),{readOnly:true});
+ const hiddenRows=db.prepare("select count(*) as n from sessions where id in ('hidden-2','hidden-stored-2')").get().n;db.close();
+ assert.ok(hiddenRows<=1);
+});
+
+test('a route that moves during the summary is logged and is never tidied',needs,async t=>{
+ const chat=home(t,{plan:{'session.create':created,'command.dispatch':{...ran,delete_messages:2,move_route_to:OTHER}}});
  const {code,log}=chat.run();
  assert.equal(code,0,log);
- assert.deepEqual(methods(chat),['session.resume','session.create','command.dispatch']);
- assert.deepEqual(chat.asked()[1].params,{title:'Godspeed chat tidy',hidden:true});
- assert.equal(chat.asked()[2].params.session_id,'hidden-2');
+ assert.match(log,/route moved during the summary: not tidied/);
+ assert.doesNotMatch(log,/tidied in/);
 });
 
 test('a refusal, or a chat that did not get shorter, is logged and is no failed run',needs,async t=>{
- const refused=home(t,{plan:{'session.resume':hidden,'command.dispatch':{type:'plugin',output:'refused: a turn for this chat is running'}}});
+ const refused=home(t,{plan:{'session.create':created,'command.dispatch':{type:'plugin',output:'refused: a turn for this chat is running'}}});
  const one=refused.run();
  assert.equal(one.code,0,one.log);
  assert.match(one.log,/not summarised: refused: a turn for this chat is running/);
  assert.doesNotMatch(one.log,/tidied/);
- const same=home(t,{plan:{'session.resume':hidden,'command.dispatch':ran}});
+ const same=home(t,{plan:{'session.create':created,'command.dispatch':ran}});
  const two=same.run();
  assert.equal(two.code,0,two.log);
  assert.match(two.log,/not tidied: ok: chat-session-1; messages 4 -> 4/);
@@ -148,21 +158,21 @@ test('a refusal, or a chat that did not get shorter, is logged and is no failed 
 });
 
 test('an answer that is neither ok nor refused is a failed run',needs,async t=>{
- const chat=home(t,{plan:{'session.resume':hidden,'command.dispatch':{type:'plugin',output:'compressed!'}}});
+ const chat=home(t,{plan:{'session.create':created,'command.dispatch':{type:'plugin',output:'compressed!'}}});
  const {code,log}=chat.run();
  assert.equal(code,1);
  assert.match(log,/The summary command answered 'compressed!'/);
 });
 
 test('a chat in use is left alone: a message five minutes old, or an open turn lease',needs,async t=>{
- const fresh=home(t,{plan:{'session.resume':hidden},seeded:{quietMinutes:5}});
+ const fresh=home(t,{plan:{'session.create':created},seeded:{quietMinutes:5}});
  const fiveMinutes=fresh.run();
  for(const line of fiveMinutes.log.trim().split('\n'))console.log('chat-tidy log: '+line);
  assert.equal(fiveMinutes.code,0,fiveMinutes.log);
  assert.match(fiveMinutes.log,/skip: in use \(quiet for less than 30 min\)/);
  assert.deepEqual(fresh.asked(),[],'the control channel was never started');
  // A turn lease is kept under the lineage root, so it counts for the conversation that continues it.
- const leased=home(t,{plan:{'session.resume':hidden},seeded:{chain:'root-session-0',lease:'root-session-0'}});
+ const leased=home(t,{plan:{'session.create':created},seeded:{chain:'root-session-0',lease:'root-session-0'}});
  const open=leased.run();
  assert.equal(open.code,0,open.log);
  assert.match(open.log,/open leases 1/);assert.match(open.log,/skip: a turn is open/);
@@ -170,12 +180,12 @@ test('a chat in use is left alone: a message five minutes old, or an open turn l
 });
 
 test('a chat that is short, or had no reply since the last summary, is left alone',needs,async t=>{
- const short=home(t,{plan:{'session.resume':hidden},seeded:{tokens:20000}});
+ const short=home(t,{plan:{'session.create':created},seeded:{tokens:20000}});
  const small=short.run();
  assert.equal(small.code,0,small.log);
  assert.match(small.log,/skip: below 60000 tokens/);
  assert.deepEqual(short.asked(),[]);
- const summarised=home(t,{plan:{'session.resume':hidden},seeded:{anchor:false}});
+ const summarised=home(t,{plan:{'session.create':created},seeded:{anchor:false}});
  const again=summarised.run();
  assert.equal(again.code,0,again.log);
  assert.match(again.log,/last prompt unknown tokens/);
@@ -184,7 +194,7 @@ test('a chat that is short, or had no reply since the last summary, is left alon
 });
 
 test('a route that moves while the hidden session is opened stops the run before the command',needs,async t=>{
- const chat=home(t,{plan:{'session.resume':{...hidden,move_route_to:OTHER},'command.dispatch':{...ran,delete_messages:2}}});
+ const chat=home(t,{plan:{'session.create':{...created,move_route_to:OTHER},'command.dispatch':{...ran,delete_messages:2}}});
  const {code,log}=chat.run();
  assert.equal(code,1);
  assert.match(log,/The chat moved before the summary; stopping\./);
@@ -192,7 +202,7 @@ test('a route that moves while the hidden session is opened stops the run before
 });
 
 test('a dry run finds the chat and opens nothing',needs,async t=>{
- const chat=home(t,{plan:{'session.resume':hidden,'command.dispatch':ran}});
+ const chat=home(t,{plan:{'session.create':created,'command.dispatch':ran}});
  const {code,log}=chat.run(['--dry-run']);
  assert.equal(code,0,log);
  assert.match(log,/dry run: would summarise chat-session-1 \(4 messages\)/);
@@ -200,7 +210,7 @@ test('a dry run finds the chat and opens nothing',needs,async t=>{
 });
 
 test('two chats of the owner\'s in the routing table stop it: it could be the wrong one',needs,async t=>{
- const chat=home(t,{plan:{'session.resume':hidden}});
+ const chat=home(t,{plan:{'session.create':created}});
  const db=new DatabaseSync(path.join(chat.hermes,'state.db'));
  db.prepare('insert into gateway_routing values (?,?,?)').run(path.join(chat.hermes,'sessions'),'agent:main:telegram:dm:99',JSON.stringify({session_id:OTHER}));
  db.close();
@@ -213,7 +223,7 @@ test('two chats of the owner\'s in the routing table stop it: it could be the wr
 test('a chat app connected but no message yet: nothing to tidy up, and no failed run',needs,async t=>{
  // The routine is made the moment a chat app is connected, which on a fresh install is before the
  // first message gives the gateway anything to route.
- const chat=home(t,{plan:{'session.resume':hidden}});
+ const chat=home(t,{plan:{'session.create':created}});
  const db=new DatabaseSync(path.join(chat.hermes,'state.db'));
  db.exec('delete from gateway_routing');db.close();
  const {code,said,log}=chat.run();
@@ -224,7 +234,7 @@ test('a chat app connected but no message yet: nothing to tidy up, and no failed
 });
 
 test('the routing table decides which chat app it is, so another one needs no new code',needs,async t=>{
- const chat=home(t,{plan:{'session.resume':hidden,'command.dispatch':{...ran,delete_messages:1}}});
+ const chat=home(t,{plan:{'session.create':created,'command.dispatch':{...ran,delete_messages:1}}});
  const db=new DatabaseSync(path.join(chat.hermes,'state.db'));
  db.exec('delete from gateway_routing');
  db.prepare('insert into gateway_routing values (?,?,?)').run(path.join(chat.hermes,'sessions'),'agent:main:signal:dm:7',JSON.stringify({session_id:CHAT}));
@@ -239,7 +249,7 @@ test('the routing table decides which chat app it is, so another one needs no ne
 });
 
 test('the assistant\'s own terminal is no chat app: its conversations beside the Telegram chat do not count',needs,async t=>{
- const chat=home(t,{plan:{'session.resume':hidden,'command.dispatch':{...ran,delete_messages:1}}});
+ const chat=home(t,{plan:{'session.create':created,'command.dispatch':{...ran,delete_messages:1}}});
  const db=new DatabaseSync(path.join(chat.hermes,'state.db'));
  // How the assistant routes a conversation in its own terminal or desktop app, one key each, in the
  // same scope as the chat app's.
@@ -257,7 +267,7 @@ test('a channel that ends says why, in the assistant\'s own words',needs,async t
  const chat=home(t,{entry:refused,plan:{}});
  const {code,log}=chat.run();
  assert.equal(code,1);
- assert.match(log,/session\.resume: the assistant's control channel exited \(1\): \[gateway-exit\] refused: this home is owned by a running gateway/);
+ assert.match(log,/session\.create: the assistant's control channel exited \(1\): \[gateway-exit\] refused: this home is owned by a running gateway/);
  assert.deepEqual(chat.asked(),[]);
 });
 

@@ -30,12 +30,14 @@ class Store:
 
 
 class Runner:
-    def __init__(self, entries, running=()):
+    def __init__(self, entries, running=(), moves_to=None):
         self.session_store, self._running_agents, self.events = Store(entries), {k: object() for k in running}, []
+        self.moves_to = moves_to
 
     async def _handle_compress_command(self, event):
         self.events.append(event)
-        self.session_store.entries[KEY] = Entry("chat-2")
+        if self.moves_to:
+            self.session_store.entries[KEY] = Entry(self.moves_to)
         return "compressed"
 
 
@@ -78,9 +80,14 @@ class ChatTidy(unittest.TestCase):
         self.assertTrue(plugin.tidy(KEY + " chat-1").startswith("refused:"))
         self.assertTrue(plugin.tidy("only-one").startswith("refused:"))
 
-    def test_the_match_compresses_once_and_names_the_session_afterwards(self):
+    def test_a_route_that_moved_during_the_summary_is_refused(self):
+        runner = Runner({KEY: Entry("chat-1")}, moves_to="chat-2")
+        self.assertEqual(load(runner).tidy(KEY + " chat-1"), "refused: route moved")
+        self.assertEqual(len(runner.events), 1)
+
+    def test_the_match_compresses_once_and_names_the_session(self):
         runner = Runner({KEY: Entry("chat-1")})
-        self.assertEqual(load(runner).tidy(KEY + " chat-1"), "ok: chat-2")
+        self.assertEqual(load(runner).tidy(KEY + " chat-1"), "ok: chat-1")
         self.assertEqual(len(runner.events), 1)
         self.assertEqual(runner.events[0].text, "/compress")
 

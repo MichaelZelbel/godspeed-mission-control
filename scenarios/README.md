@@ -15,7 +15,7 @@ and these are not programs for users.
 | script | what it proves |
 | --- | --- |
 | `settings-on-install.sh` | a fresh install carries the faster-chat settings, and a value the owner set stays theirs |
-| `night-tidy.sh` | the night chat tidy-up summarises the owner's chat and touches nothing else (not run on a candidate since 27 October 2026, when the tidy-up left 2.0.0-beta.8: no install gets it, so there is nothing to prove until the release that brings it back) |
+| `night-tidy.sh` | the night chat tidy-up summarises the owner's chat and touches nothing else (the routine is back for installs with a chat app connected; not run on a candidate between 27 October 2026, when the tidy-up left 2.0.0-beta.8, and its return) |
 | `voice.sh` | a voice note is understood and answered, with the ElevenLabs permission and without it |
 | `update-keeps-everything.sh` | an update from the current public version keeps records, settings and the chat |
 | `reminder-closed-elsewhere.sh` | a reminder closed on one computer is closed on the other, both ways of syncing, with no Git run by anyone |
