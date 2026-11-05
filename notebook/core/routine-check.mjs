@@ -43,7 +43,7 @@ const when=(value,timezone)=>new Intl.DateTimeFormat('en-GB',{timeZone:timezone,
 // One routine's turn. `job` carries the status Settings shows. Returns the routine's new record and,
 // when the owner is to be told, {words, spell}; the spell is kept only once it is told.
 export function routineFinding(job,prev={},{now,day,timezone}){
- const name=job.name||job.id,entry={...prev};
+ const name=job.name||job.id,{error_run:_legacy,...entry}=prev;
  if(pausedJob(job))return {entry,found:null};
  const ranAt=time(job.last_run_at),good=job.last_status==='ok'&&ranAt!==null,errored=job.last_status==='error';
  if(good)entry.ok_at=job.last_run_at;

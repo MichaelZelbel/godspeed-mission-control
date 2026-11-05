@@ -1,7 +1,7 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';
 import {Store} from '../core/records/store.mjs';import {installStarter} from '../core/starter-workspace.mjs';
 import {readNotices} from '../core/notices.mjs';import {CONNECTION_NOTICE_PREFIX} from '../core/connection-names.mjs';
-import {checkRoutines} from '../core/routine-check.mjs';import {runConnectionCheck} from '../scripts/connection-check.mjs';
+import {checkRoutines,routineFinding} from '../core/routine-check.mjs';import {runConnectionCheck} from '../scripts/connection-check.mjs';
 
 for(const key of Object.keys(process.env))if(/^(GODSPEED_|HERMES_)/.test(key))delete process.env[key];
 
@@ -74,4 +74,12 @@ test('the check reads Hermes\' own jobs list from the home when none is given',a
  fs.mkdirSync(path.join(f.home,'cron'));fs.writeFileSync(path.join(f.home,'cron','jobs.json'),JSON.stringify({jobs:[daily('late',{last_run_at:new Date(Date.now()-30*3600000).toISOString(),next_run_at:new Date(Date.now()-6*3600000).toISOString()})]}));
  await runConnectionCheck({root:f.root,home:f.home,env:{GODSPEED_TODAY:DAY},probes:{}});
  const [n,...rest]=said(f);assert.equal(rest.length,0);assert.match(n.text,/"Routine late" did not run when it was due/);
+});
+
+test('an old record with the removed error_run field is written back without it, paused or not',()=>{
+ const prev={ok_at:'2026-01-01T00:00:00Z',error_run:'2026-01-02T00:00:00Z'},ctx={now:Date.parse('2026-01-03T00:00:00Z'),day:'2026-01-03',timezone:'UTC'};
+ for(const job of [{id:'a',last_status:'ok',last_run_at:'2026-01-02T12:00:00Z'},{id:'a',state:'paused'}]){
+  const {entry}=routineFinding(job,prev,ctx);
+  assert.equal('error_run' in entry,false);assert.ok(entry.ok_at);
+ }
 });
