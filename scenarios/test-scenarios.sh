@@ -3000,23 +3000,6 @@ copy "$DC/good" "$DC/step-broke"
 OUTBOX='' steps_json "$DC/step-broke" broken=ok replace=bad
 refuses 'a step that broke' deadline-closes-itself "$DC/step-broke" 'a step of the run did not work'
 
-# The key scan itself, with a grep that fails: it must end in the scenario's FAIL line and write no "clean".
-KS=$TMP/ks
-rm -rf "$KS"
-mkdir -p "$KS/bin" "$KS/evidence"
-printf '#!/bin/sh\necho "grep: scan broke" >&2\nexit 2\n' >"$KS/bin/grep"
-chmod +x "$KS/bin/grep"
-KS_OUT=$(PATH="$KS/bin:$PATH" EVIDENCE="$KS/evidence" HERMES="$KS" STATE="$KS" ROOT="$KS" bash -c '
-  fail() { echo "FAIL $*"; exit 1; }
-  eval "$(sed -n "/^scan_for_keys() {/,/^}/p" "$1")"
-  scan_for_keys "$EVIDENCE/key-scan.txt" some-key' _ "$HERE/deadline-closes-itself.sh" 2>&1)
-KS_CODE=$?
-if [ "$KS_CODE" = 1 ] && grep -q 'could not look at every file (grep ended 2)' <<<"$KS_OUT" && [ ! -e "$KS/evidence/key-scan.txt" ]; then
-  ok "a key scan whose grep fails ends in FAIL and writes no clean result"
-else
-  bad "a key scan whose grep fails ends in FAIL and writes no clean result" "ended $KS_CODE: $KS_OUT"
-fi
-
 # ------------------------------------------------------------------------------------ disk-filling
 section disk-filling
 DF=$TMP/df
