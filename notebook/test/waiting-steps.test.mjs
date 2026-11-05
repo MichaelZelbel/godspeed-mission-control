@@ -449,14 +449,9 @@ test('godspeed-step open carries quiet, subject and optional-extra gates and ref
 test('the scenario asker drives the real godspeed-step open with every flag it emits',async t=>{
  const {root,store}=fixture(t),home=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-asker-'));t.after(()=>fs.rmSync(home,{recursive:true,force:true}));
  fs.mkdirSync(path.join(home,'bin'));
- // The notebook's report wiring, with a recording stand-in for background-report.mjs: it keeps its argv and
- // the words it was given, and refuses a message that says REFUSE so the order of record and print can be seen.
+ // The notebook's own report wiring: the real background-report.mjs, as wire-assistant.mjs writes it.
  fs.mkdirSync(path.join(home,'plugins','godspeed_notebook'),{recursive:true});
- fs.writeFileSync(path.join(home,'recorder.mjs'),`import fs from 'node:fs';const words=fs.readFileSync(0,'utf8');
-fs.appendFileSync(${JSON.stringify(path.join(home,'record.log'))},JSON.stringify({argv:process.argv.slice(2),words})+'\\n');
-if(/REFUSE/.test(words)){console.error('refused');process.exit(1);}
-`);
- fs.writeFileSync(path.join(home,'plugins','godspeed_notebook','report.json'),JSON.stringify({node:process.execPath,script:path.join(home,'recorder.mjs'),root:'the-root'}));
+ fs.writeFileSync(path.join(home,'plugins','godspeed_notebook','report.json'),JSON.stringify({node:process.execPath,script:fileURLToPath(new URL('../scripts/background-report.mjs',import.meta.url)),root}));
  fs.writeFileSync(path.join(home,'bin','godspeed-step'),`#!/bin/sh\nprintf '%s\\n' "$@" >> argv.log\nprintf '@@\\n' >> argv.log\nexec "${process.execPath}" "${script}" "$@" --godspeed "${root}"\n`,{mode:0o755});
  const full={about:'a',question:'q',yes:'y',no:'n'};
  const asks=[{...full,quiet:'restart'},{...full,optional_after:'Stop them'},{...full,subject:'gw'},{...full,about:'-- restart the gateway'}];
@@ -468,21 +463,19 @@ if(/REFUSE/.test(words)){console.error('refused');process.exit(1);}
  assert.ok(calls[1].includes('--extra')&&calls[1].includes('Stop them')&&!calls[1].includes('--within'));
  assert.ok(calls[2].includes('--subject')&&calls[2].includes('gw'));
  assert.equal(store.list('approvals').filter(a=>a.status==='pending').length,2);
- // Every question that is asked is recorded first, for the telegram delivery of the Scenario asker, with its words on stdin.
- const records=fs.readFileSync(path.join(home,'record.log'),'utf8').trim().split('\n').map(l=>JSON.parse(l));
- assert.equal(records.length,2);
- for(const r of records){
-  const a=r.argv;
-  assert.equal(a[0],'record');
-  assert.equal(a[a.indexOf('--godspeed')+1],'the-root');
-  assert.equal(a[a.indexOf('--home')+1],home);
-  assert.equal(a[a.indexOf('--routine')+1],'Scenario asker');
-  assert.equal(a[a.indexOf('--delivery')+1],'telegram');
-  assert.ok(r.words.length>0);
- }
- const printed=done.stdout.trim().split('\n').filter(Boolean);
- assert.equal(printed.length,2);
- assert.deepEqual(records.map(r=>r.words.trim()),printed.map(l=>l.trim()));
+ // One routine run delivers one body: every question asked is recorded once, as printed, before it is
+ // printed, and the delivery of that body makes both waiting steps answerable.
+ const body=done.stdout.trim();
+ assert.equal(body.split('\n').filter(Boolean).length,2);
+ const records=store.list('conversation_messages').filter(r=>r.report?.routine==='Scenario asker');
+ assert.equal(records.length,1);
+ assert.equal(records[0].content,body);
+ assert.equal(records[0].delivered_to,'telegram');
+ assert.equal(records[0].report.steps.length,2);
+ assert.deepEqual(delivered(store,body),[records[0].id]);
+ const pending=store.list('approvals').filter(a=>a.status==='pending');
+ assert.equal(pending.length,2);
+ assert.ok(pending.every(a=>a.sent_at),'both waiting steps are answerable once the body is delivered');
 });
 
 test('the scenario asker records a question before it prints it, and prints nothing when the record is refused',async t=>{
@@ -516,4 +509,10 @@ test('a step finished quietly, answered from an earlier decision or dropped has 
  assert.equal(store.list('approvals').length,0);
  assert.equal(press('step-none').status,1);
  assert.equal(store.list('approvals').length,0);
+});
+
+test('the scenario asker reads the report wiring keys the installer writes',()=>{
+ const writer=fs.readFileSync(new URL('../scripts/wire-assistant.mjs',import.meta.url),'utf8'),asker=fs.readFileSync(new URL('../../scenarios/scenario-asker.py',import.meta.url),'utf8'),cron=fs.readFileSync(new URL('../assistant-files/godspeed-cron-provider.py',import.meta.url),'utf8');
+ assert.match(writer,/JSON\.stringify\(\{node:process\.execPath,script:[^}]*background-report\.mjs'\),root\}\)/);
+ for(const key of ['node','script','root']){assert.ok(asker.includes('wiring["'+key+'"]'),'the asker reads '+key);assert.ok(cron.includes('wiring["'+key+'"]'),'the cron provider reads '+key);}
 });

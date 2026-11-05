@@ -55,6 +55,7 @@ def main():
         print("this install has no godspeed-step, the one way to ask for a yes (ticket 01, #196)", file=sys.stderr)
         return 1
     asks = json.load(open(".scenario-asks.json", encoding="utf-8"))
+    messages = []
     for ask in asks:
         argv = [command, "open", "--by", BY, "--chat", "telegram"]
         for field, flag in FLAGS:
@@ -69,12 +70,17 @@ def main():
         except ValueError:
             message = done.stdout.strip()
         if message:
-            try:
-                record(message)
-            except Exception as error:
-                print("the question could not be recorded in the notebook: %s" % error, file=sys.stderr)
-                return 1
-            print(message)
+            messages.append(message)
+    if messages:
+        # One routine run delivers ONE body, so it is recorded once, exactly as it is printed (the notebook
+        # makes each waiting step whose words it holds answerable when that body is delivered).
+        body = "\n".join(messages)
+        try:
+            record(body)
+        except Exception as error:
+            print("the question could not be recorded in the notebook: %s" % error, file=sys.stderr)
+            return 1
+        print(body)
     return 0
 
 
