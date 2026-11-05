@@ -30,7 +30,7 @@ env:
   # cbe395a88a1cfd366ede8b80c01ec086b34527c3, and 2.0.0-beta.7 and 2.0.0-beta.8 with
   # 5364e82b44ab0b093e04262c680a21d666faf5e1 (their stage files name it as windowsBootstrapCommit). A
   # release that changes it changes it here, together with KB_PIN in server/install.sh.
-  KIT_BOOTSTRAP_COMMIT: 15c666da8ef37dd80c56feef0f7d508131ac34f8
+  KIT_BOOTSTRAP_COMMIT: 7ae7d664c0a3864216190c6c06aa7d895bcec0fc
 jobs:
   setup:
     name: windows setup

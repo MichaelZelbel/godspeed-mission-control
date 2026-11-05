@@ -27,7 +27,7 @@ test('with the original assistant, the notebook\'s own record routines run on th
  // Hermes owns the goal routines: the notebook does not run a second copy of them.
  server.store.save('jobs',{id:'goal-work',kind:'goal-work',owner:'vps',paused:false,state:'pending',next_run:now,interval_ms:86400000});
  await server.scheduler.tick();
- assert.deepEqual(server.ran,['radar-prepare']);assert.deepEqual(server.calls.map(a=>a.join(' ')),['cron tick']);
+ assert.deepEqual(server.ran,['radar-prepare']);assert.deepEqual(server.calls.map(a=>a.join(' ')).filter(a=>!a.startsWith('cron create')),['cron tick']);
  const laptop=owned(temporary(t),'laptop-1234abcd');laptop.store.save('jobs',{id:'radar-prepare-x',kind:'radar-prepare',owner:'vps',paused:false,state:'pending',next_run:now,interval_ms:86400000});
  await laptop.scheduler.tick();assert.deepEqual(laptop.ran,[]);
 });

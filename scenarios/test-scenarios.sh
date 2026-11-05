@@ -2817,6 +2817,227 @@ printf '[{"slug":"the-open-deadline","title":"Connect Telegram again","state":"o
 refuses 'another closed Telegram deadline standing in for the open one' connection-check "$C/decoy-closed" 'not closed, after'
 refuses 'a deadline still open after the key is valid again' connection-check "$C/still-open" 'not closed, after'
 
+# ============================================== the five scenarios of 2.0.0-beta.18 (numbers come in)
+# Each is judged on made-up folders only: one that should pass, and one per failure that is easy to
+# make by a plausible edit of the product or of the scenario.
+section 'phone-health-days'
+P=$TMP/phone
+phone_good() { # <folder>
+  rm -rf "$1"; mkdir -p "$1"
+  node -e '
+const rows=[["2026-11-03","steps",6500],["2026-11-04","steps",40],["2026-11-03","food_kcal",1000],["2026-11-03","active_kcal",300],["2026-11-03","weight_kg",69.5],
+["2026-11-04","sleep_total_h",7.5],["2026-11-04","sleep_in_bed_h",8],["2026-11-04","sleep_deep_h",1.5],["2026-11-04","sleep_rem_h",1.75],["2026-11-04","sleep_start","23:10"],["2026-11-04","sleep_end","06:45"],
+["2026-11-03","run_km",5.5],["2026-11-03","run_min",33],["2026-11-03","walk_km",3],["2026-11-03","walk_min",30],["2026-11-03","workout_min",45],["2026-11-03","workout_types","Traditional Strength Training"]]
+ .map(([d,m,v],i)=>({id:"r"+i,observed_on:d,metric:m,value:v,source:"Health Auto Export"}));
+const fs=require("fs");for(const f of ["server-days","second-days","before-wrong","after-wrong"])fs.writeFileSync(process.argv[1]+"/"+f+".json",JSON.stringify(rows));' "$1"
+  printf 'u1 200\nu2 200\nu3 200\nu3-again 200\n' >"$1/uploads.txt"
+  printf 'wrong 404\nmissing 404\n' >"$1/wrong-token.txt"
+  printf 'abc  /opt/data/ingest/2026-11-04.jsonl\n' | tee "$1/raw-before.txt" >"$1/raw-after.txt"
+}
+phone_good "$P/good"
+passes 'exact day records, a second notebook that agrees, a wrong token that stored nothing' phone-health-days "$P/good" 'a wrong or missing token answered 404 and stored nothing'
+copy "$P/good" "$P/tripled"; sed -i 's/6500/19500/' "$P/tripled/server-days.json"
+refuses 'steps counted once per copy' phone-health-days "$P/tripled" 'steps on 2026-11-03 is 19500, not 6500'
+copy "$P/good" "$P/ok-token"; printf 'wrong 200\nmissing 404\n' >"$P/ok-token/wrong-token.txt"
+refuses 'a wrong token that was taken' phone-health-days "$P/ok-token" 'a wrong token was not answered 404'
+copy "$P/good" "$P/stored"; printf 'zzz  /opt/data/ingest/2026-11-04.jsonl\n' >"$P/stored/raw-after.txt"
+refuses 'a wrong token that wrote a file' phone-health-days "$P/stored" 'wrote or changed a file'
+copy "$P/good" "$P/unsynced"; sed -i 's/"walk_km"/"walk_kmx"/' "$P/unsynced/second-days.json"
+refuses 'a second notebook that does not show the same days' phone-health-days "$P/unsynced" 'differ from the server'
+copy "$P/good" "$P/duplicated"
+node -e 'const fs=require("fs"),f=process.argv[1]+"/server-days.json",r=JSON.parse(fs.readFileSync(f));r.push({...r[0],id:"dup"});fs.writeFileSync(f,JSON.stringify(r))' "$P/duplicated"
+refuses 'a second record of steps on one day' phone-health-days "$P/duplicated" 'more than one record'
+copy "$P/good" "$P/last"; sed -i 's/69.5/70/' "$P/last/server-days.json"
+refuses 'a weight that is not the last of the day' phone-health-days "$P/last" 'weight_kg on 2026-11-03 is 70'
+
+section 'incomplete-day'
+I=$TMP/incomplete
+incomplete_good() {
+  rm -rf "$1"; mkdir -p "$1"
+  printf '{"data":{"metrics":[{"name":"step_count","data":[{"date":"2026-11-03 19:55:00 +0100","qty":500}]}]}}\n' >"$1/upload.json"
+  printf '200\n' >"$1/upload-code.txt"
+  printf 'Your data for yesterday stopped at 19:55, so I cannot say how the day ended.\nProtein days this week: 3 of 6 known, yesterday unknown.\n' >"$1/brief-1.txt"
+  printf 'Protein days this week: 4 of 7; yesterday you gave 118 g.\n' >"$1/brief-2.txt"
+  printf '200\n{"ok":true}\n' >"$1/given.txt"
+}
+incomplete_good "$I/good"
+passes 'a day stopped at 19:55 briefed so, and counted once a protein number is given' incomplete-day "$I/good" 'counted it'
+copy "$I/good" "$I/no-time"; sed -i 's/19:55/the evening/' "$I/no-time/brief-1.txt"
+refuses 'a briefing that never says when the data stopped' incomplete-day "$I/no-time" 'never says the data stopped at 19:55'
+copy "$I/good" "$I/short"; printf 'Yesterday was a short day at 19:55.\nProtein: unknown.\n' >"$I/short/brief-1.txt"
+refuses 'a briefing that calls the day short' incomplete-day "$I/short" 'called the unfinished day short'
+copy "$I/good" "$I/counted"; printf 'Data stopped at 19:55.\nProtein days this week: 3 of 7.\n' >"$I/counted/brief-1.txt"
+refuses 'a day counted although it is unfinished' incomplete-day "$I/counted" 'as unknown'
+copy "$I/good" "$I/no-weekly"; printf 'Data stopped at 19:55.\nProtein is unknown.\n' >"$I/no-weekly/brief-1.txt"; printf 'Protein: you gave 118 g.\n' >"$I/no-weekly/brief-2.txt"
+refuses 'protein wording with no weekly count' incomplete-day "$I/no-weekly" 'as unknown'
+copy "$I/good" "$I/countless"; printf 'Data stopped at 19:55.\nProtein was discussed this week; yesterday remains unknown.\n' >"$I/countless/brief-1.txt"
+refuses 'a weekly protein line with no count' incomplete-day "$I/countless" 'as unknown'
+copy "$I/good" "$I/countless-after"; printf 'Protein was discussed this week; yesterday you gave 118 g.\n' >"$I/countless-after/brief-2.txt"
+refuses 'a weekly protein line with no count after the number is given' incomplete-day "$I/countless-after" 'gives no weekly protein count'
+copy "$I/good" "$I/no-weekly-after"; printf 'Protein: you gave 118 g.\n' >"$I/no-weekly-after/brief-2.txt"
+refuses 'no weekly count after the number is given' incomplete-day "$I/no-weekly-after" 'gives no weekly protein count'
+copy "$I/good" "$I/still"; printf 'Protein days this week: 4 of 7, yesterday still unknown, 118 g never counted.\n' >"$I/still/brief-2.txt"
+refuses 'a number given by hand that is not counted' incomplete-day "$I/still" 'still shows the day as unknown'
+
+copy "$I/good" "$I/given-500"; printf '500\nInternal server failure\n' >"$I/given-500/given.txt"
+refuses 'a manual protein number the server failed on' incomplete-day "$I/given-500" 'was refused'
+
+# given.txt is made by server_post_record from the unterminated code server_post prints and the answer body;
+# the check reads the code as the first line, so the record is made here from a stand-in container.
+printf '{}' >"$I/post.json"
+made=$(bash -c '. "$1"; in_server() { case $1 in curl) cat >/dev/null; printf 200 ;; cat) printf "{\"ok\":true}" ;; esac; }
+  INGEST_PORT=1; server_post_record /x "$2" "$3"' _ "$ROOT/scenarios/numbers-lib.sh" "$I/post.json" "$I/answer" 2>/dev/null)
+copy "$I/good" "$I/made-record"; printf '%s\n' "$made" >"$I/made-record/given.txt"
+passes 'a protein number recorded by the acting step, code on its own line' incomplete-day "$I/made-record" 'counted it'
+
+section 'phone-goes-quiet'
+Q=$TMP/quiet
+quiet_good() {
+  rm -rf "$1"; mkdir -p "$1"
+  printf 'first 200\nafter 200\n' >"$1/upload-code.txt"
+  printf '2026-11-03T08:00:00Z\n' >"$1/last-upload.txt"
+  printf '2026-11-04T21:00:00Z\n' >"$1/now-moved.txt"
+  printf '[]\n' | tee "$1/deadlines-before.json" "$1/bell-before.json" >/dev/null
+  printf '[{"slug":"phone-quiet","title":"Your phone has not sent health data for 37 hours","status":"open"}]\n' | tee "$1/deadlines-first.json" "$1/deadlines-second.json" >/dev/null
+  printf '[{"slug":"phone-quiet","title":"Your phone has not sent health data for 37 hours","status":"closed"}]\n' >"$1/deadlines-upload.json"
+  printf '[{"id":"b1","title":"Your phone stopped sending health data"}]\n' | tee "$1/bell-first.json" "$1/bell-second.json" >/dev/null
+}
+quiet_good "$Q/good"
+passes 'one message and one deadline, none more on a second run, closed by an upload' phone-goes-quiet "$Q/good" 'an upload closed the deadline'
+copy "$Q/good" "$Q/twice"; printf '[{"id":"b1","title":"Your phone stopped sending health data"},{"id":"b2","title":"phone again"}]\n' >"$Q/twice/bell-second.json"
+refuses 'a second message on a second run' phone-goes-quiet "$Q/twice" 'more messages about the phone'
+copy "$Q/good" "$Q/silent"; printf '[]\n' >"$Q/silent/bell-first.json"; cp "$Q/silent/bell-first.json" "$Q/silent/bell-second.json"
+refuses 'no message after 37 hours' phone-goes-quiet "$Q/silent" 'not one'
+copy "$Q/good" "$Q/open"; sed -i 's/closed/open/' "$Q/open/deadlines-upload.json"
+refuses 'a deadline that an upload leaves open' phone-goes-quiet "$Q/open" 'not closed'
+copy "$Q/good" "$Q/early"; printf '2026-11-04T20:00:00Z\n' >"$Q/early/now-moved.txt"
+refuses 'a clock moved less than 37 hours' phone-goes-quiet "$Q/early" 'less than 37 hours'
+
+section 'mail-count'
+M=$TMP/mail
+mail_good() {
+  rm -rf "$1"; mkdir -p "$1"
+  printf 'MAILCOUNT-MARKER-abc\n' >"$1/marker.txt"
+  printf 'Count new orders\t\n' >"$1/routine.txt"
+  printf '["CAPABILITY","UID SEARCH FROM shop"]\n' | tee "$1/commands-connected.json" "$1/commands-norule.json" >/dev/null
+  printf '["CAPABILITY","UID SEARCH FROM shop","UID FETCH 101 (ENVELOPE)","UID FETCH 102 (ENVELOPE BODY.PEEK[HEADER.FIELDS (MESSAGE-ID)])"]\n' >"$1/commands-final.json"
+  printf 'That would count 3 mails from shop in the last 30 days. Save it?\n' >"$1/reply-1.txt"
+  printf 'Saved.\n' >"$1/reply-2.txt"
+  printf '[{"id":"i1","note":"scenario-1@example.invalid"},{"id":"i2","note":"scenario-2@example.invalid"},{"id":"i3","note":"scenario-3@example.invalid"}]\n' | tee "$1/items-1.json" "$1/items-2.json" >/dev/null
+  : >"$1/marker-hits.txt"
+}
+mail_good "$M/good"
+passes 'exactly the orders, once each, headers only, no marker, no call without a rule' mail-count "$M/good" 'counted exactly the 3 orders once each'
+copy "$M/good" "$M/body"; printf '["UID FETCH 101 (BODY.PEEK[TEXT])"]\n' >"$M/body/commands-final.json"
+refuses 'a body fetched' mail-count "$M/body" "asked the mailbox for a mail's body"
+copy "$M/good" "$M/call"; printf '["CAPABILITY","UID SEARCH ALL"]\n' >"$M/call/commands-norule.json"
+refuses 'a mail call with no rule' mail-count "$M/call" 'no tracker has a mail rule'
+copy "$M/good" "$M/extra"; printf '[{"id":"i1","n":"scenario-1@example.invalid"},{"id":"i2","n":"scenario-2@example.invalid"},{"id":"i3","n":"scenario-3@example.invalid"},{"id":"i4","n":"scenario-6@example.invalid"}]\n' >"$M/extra/items-1.json"
+refuses 'an application reply counted' mail-count "$M/extra" 'is not an order from'
+copy "$M/good" "$M/again"; printf '[{"id":"i1","n":"scenario-1@example.invalid"},{"id":"i2","n":"scenario-2@example.invalid"},{"id":"i3","n":"scenario-3@example.invalid"},{"id":"i9","n":"scenario-3@example.invalid"}]\n' >"$M/again/items-2.json"
+refuses 'a second run that counts again' mail-count "$M/again" 'a second run of the routine changed the count'
+copy "$M/good" "$M/leak"; printf '/home/x/godspeed-v2/logs/a.log\n' >"$M/leak/marker-hits.txt"
+refuses 'the marker in a log' mail-count "$M/leak" 'the marker that every mail body carries'
+mkdir -p "$M/bin/root"; printf 'x\0MAILCOUNT-MARKER-abc\0' >"$M/bin/root/state.db"
+if grep -rl -F -- MAILCOUNT-MARKER-abc "$M/bin/root" | grep -q state.db; then ok "the marker scan reports a marker held in a binary store"; else bad "the marker scan misses a marker held in a binary store"; fi
+
+# the mailbox itself, read over IMAP from the stand-in the way the scenario fills it
+FX=$(node -e '
+const net = require("net"), F = require(process.argv[1] + "/tools/test-mc-mail-imap-fixture.js"), { mails, fill } = require(process.argv[1] + "/scenarios/mail-fixture.cjs");
+(async () => {
+  const f = await F.start();
+  fill(F, f, mails("FIXTURE-MARKER-xyz"));
+  const sock = net.connect(f.port, "127.0.0.1"); let buf = "";
+  sock.on("data", d => { buf += d; });
+  const send = async (c, tag) => { sock.write(tag + " " + c + "\r\n"); for (let i = 0; i < 100 && !buf.includes("\r\n" + tag + " OK") && !buf.includes(tag + " OK"); i++) await new Promise(r => setTimeout(r, 20)); };
+  await new Promise(r => setTimeout(r, 100));
+  await send("LOGIN " + F.USER + " " + F.PASSWORD, "a1");
+  const box = async (name, t) => { await send("SELECT \"" + name + "\"", t + "s"); buf = ""; await send("UID FETCH 1:* (BODY.PEEK[])", t + "f"); const got = buf; buf = ""; return got; };
+  const all = await box(F.ALL, "b"); buf = await box("INBOX", "c");
+  const sameBoth = (all.match(/^Subject: .*$/gm) || []).join() === (buf.match(/^Subject: .*$/gm) || []).join();
+  const subjects = [...buf.matchAll(/^Subject: (.*)\r$/gm)].map(m => m[1].split(".")[0]);
+  const froms = [...buf.matchAll(/^From: .*<(.*)>\r$/gm)].map(m => m[1]);
+  const marked = (buf.match(/FIXTURE-MARKER-xyz/g) || []).length;
+  console.log(JSON.stringify({ n: subjects.length, orders: subjects.filter(s => /^new order #/i.test(s)).length,
+    shopOther: froms.filter((a, i) => /^shop@/.test(a) && !/^new order/i.test(subjects[i])).length,
+    replies: subjects.filter(s => /^Re: Your application/.test(s)).length, unrelated: subjects.filter(s => /Lunch|newsletter/.test(s)).length, marked, sameBoth }));
+  sock.destroy(); await f.close(); process.exit(0);
+})();' "$ROOT" 2>&1)
+if [ "$FX" = '{"n":9,"orders":3,"shopOther":2,"replies":2,"unrelated":2,"marked":9,"sameBoth":true}' ]; then
+  ok "mail fixture: 3 orders, 2 same-sender non-orders, 2 application replies, 2 unrelated mails, the marker in all 9, read over IMAP"
+else
+  bad "mail fixture read over IMAP is not the expected population: $FX"
+fi
+
+section 'a failed routine run is not a finished one'
+for status in error failed Error blocked_config delivery_failed skipped; do
+  JOB_OUT=$(SCENARIO=job-test bash -c '. "$1/scenarios/scenario-lib.sh"; the_run_did_not_fail "$2" "the routine"; echo went-on' _ "$ROOT" "$(printf '2026-11-04T10:00:00Z\t%s\tboom' "$status")" 2>/dev/null)
+  case $JOB_OUT in
+    "FAIL job-test: the routine ended its run as \"$status\": boom") ok "a run that ended as \"$status\" fails the scenario with the routine's own error" ;;
+    *) bad "a run that ended as \"$status\" did not fail the scenario ($JOB_OUT)" ;;
+  esac
+done
+JOB_OUT=$(SCENARIO=job-test bash -c '. "$1/scenarios/scenario-lib.sh"; the_run_did_not_fail "$2" "the routine"; echo went-on' _ "$ROOT" "$(printf '2026-11-04T10:00:00Z\tok\t')" 2>/dev/null)
+[ "$JOB_OUT" = went-on ] && ok "a run that ended ok goes on" || bad "a run that ended ok was refused ($JOB_OUT)"
+
+section 'talk-on-talk-day'
+T2=$TMP/talkday
+talkday_good() {
+  rm -rf "$1"; mkdir -p "$1"
+  printf 'old=2026-11-03\nnew=2026-11-10\n' >"$1/days.txt"
+  printf 'AREA: health\n\n## The opening\n\nGood evening. Tonight: your LDL result and one thing to try.\n' >"$1/prep-new.md"
+  printf 'ready: the review passed\n' >"$1/check-new.txt"
+  printf 'Good evening.\n' >"$1/opening-old.txt"
+  printf 'Last Tuesday'"'"'s talk is still open; its points are in today'"'"'s. Good evening. Tonight: your LDL result and one thing to try.\n' >"$1/opening-new.txt"
+  printf 'AREA: health\nSTATE: opened\n\n## The opening\n\nGood evening.\n' >"$1/talk-old.md"
+  printf 'AREA: health\nSTATE: not-held\n\n## The opening\n\nGood evening.\n' >"$1/talk-old-after.md"
+  printf 'AREA: health\n\n## The opening\n\nGood evening. Tonight: your LDL result and one thing to try.\n' >"$1/talk-new.md"
+}
+talkday_good "$T2/good"
+passes 'today'"'"'s talk opened, last week'"'"'s named once and closed as not held' talk-on-talk-day "$T2/good" 'closed as not held'
+copy "$T2/good" "$T2/continued"; : >"$T2/continued/talk-new.md"
+refuses 'last week'"'"'s talk continued instead' talk-on-talk-day "$T2/continued" "opened no talk of 2026-11-10"
+copy "$T2/good" "$T2/unnamed"; printf 'Good evening. Tonight: your LDL result and one thing to try.\n' >"$T2/unnamed/opening-new.txt"
+refuses 'last week'"'"'s talk never named' talk-on-talk-day "$T2/unnamed" "never names last week's talk"
+copy "$T2/good" "$T2/twice"; printf 'Last Tuesday was open. On 2026-11-03 it stayed so. Good evening. Tonight: your LDL result and one thing to try.\n' >"$T2/twice/opening-new.txt"
+refuses 'last week'"'"'s talk named twice' talk-on-talk-day "$T2/twice" 'more than once'
+copy "$T2/good" "$T2/weekday-decoy"; printf 'Today is Tuesday and it was not held. Good evening. Tonight: your LDL result and one thing to try.\n' >"$T2/weekday-decoy/opening-new.txt"
+refuses 'only today'"'"'s weekday, no mention of last week'"'"'s talk' talk-on-talk-day "$T2/weekday-decoy" "never names last week's talk"
+copy "$T2/good" "$T2/split-claim"; printf 'Last Tuesday we had a talk planned. Still open is nothing here. Good evening. Tonight: your LDL result and one thing to try.\n' >"$T2/split-claim/opening-new.txt"
+refuses 'last week'"'"'s talk named in one sentence and its state in another' talk-on-talk-day "$T2/split-claim" 'without saying it is still open'
+copy "$T2/good" "$T2/held"; printf 'AREA: health\nSTATE: held\n\n## The opening\n\nGood evening.\n' >"$T2/held/talk-old.md"
+refuses 'last week'"'"'s talk already held, not open' talk-on-talk-day "$T2/held" 'was not open and unanswered'
+copy "$T2/good" "$T2/still-open"; cp "$T2/good/talk-old.md" "$T2/still-open/talk-old-after.md"
+refuses 'last week'"'"'s talk left open' talk-on-talk-day "$T2/still-open" 'not closed as not held'
+copy "$T2/good" "$T2/open-with-note"; printf 'AREA: health\nSTATE: opened\n\n## The opening\n\nGood evening.\n\n## Note\n\nnot held\n' >"$T2/open-with-note/talk-old-after.md"
+refuses 'last week'"'"'s talk still open with a not-held note' talk-on-talk-day "$T2/open-with-note" 'not closed as not held'
+copy "$T2/good" "$T2/other-opening"; printf 'Last Tuesday'"'"'s talk is still open. Hello there.\n' >"$T2/other-opening/opening-new.txt"
+copy "$T2/good" "$T2/said"; printf 'AREA: health\nSTATE: opened\n\n## The opening\n\nGood evening.\n\n## What you said\n\nMy LDL worries me.\n' >"$T2/said/talk-old.md"
+refuses 'last week'"'"'s talk answered in "What you said"' talk-on-talk-day "$T2/said" 'was answered before'
+copy "$T2/good" "$T2/he-said"; printf 'AREA: health\nSTATE: opened\n\n## The opening\n\nGood evening.\n\n## What he said\n\nMy LDL worries me.\n' >"$T2/he-said/talk-old.md"
+refuses 'last week'"'"'s talk answered in "What he said"' talk-on-talk-day "$T2/he-said" 'was answered before'
+# the scenario's "answered" test and the coach's readTalk(...).answered agree on one corpus
+ANS=$TMP/answered; rm -rf "$ANS"; mkdir -p "$ANS/health/talks"
+i=0
+while IFS= read -r body; do
+  i=$((i + 1)); printf 'AREA: health\nSTATE: opened\n\n## The opening\n\nHi.\n%b' "$body" >"$ANS/health/talks/2026-01-0$i.md"
+done <<'CORPUS'
+\n
+\n## What you said\n
+\n## What you said\n\n \t \n
+\n## What you said\n\nMy LDL.\n
+\n## What he said\n\nMy LDL.\n
+\n## What he said\n \n\n## Note\n\nsomething\n
+\n## Note\n\nWhat you said: nothing\n
+\n## What you said\n\n## What he said\n\nyes\n
+CORPUS
+CORP=$(node --input-type=module -e '
+const { readTalk } = await import(process.argv[1] + "/third-party/addons/godspeed-coach/lib/talks.mjs");
+for (let i = 1; i <= 8; i++) console.log(readTalk({ dir: process.argv[2] + "/health" }, "2026-01-0" + i).answered);' "$ROOT" "$ANS" 2>&1)
+GOT=$(for i in 1 2 3 4 5 6 7 8; do if bash -c '. "$1/scenarios/numbers-lib.sh"; talk_answered "$2"' _ "$ROOT" "$ANS/health/talks/2026-01-0$i.md"; then echo true; else echo false; fi; done)
+if [ -n "$CORP" ] && [ "$CORP" = "$GOT" ]; then ok "the scenario's answered-talk test agrees with readTalk on all 8 records"; else bad "answered-talk test disagrees with readTalk: coach=[$(tr '\n' ' ' <<<"$CORP")] scenario=[$(tr '\n' ' ' <<<"$GOT")]"; fi
+refuses 'an opening that is not the preparation'"'"'s' talk-on-talk-day "$T2/other-opening" "did not open with the preparation's opening"
+
 # ======================================================= the scenarios of 2.0.0-beta.19
 # chat-tidy-at-night, disk-filling, missed-routine and deadline-closes-itself: each case is a folder of
 # what one run saw, with one thing changed.
@@ -3078,8 +3299,9 @@ BASH_SCENARIOS=(settings-on-install night-tidy voice update-keeps-everything
   late-reminder-file closed-offline-on-both reminder-from-settings charm-challenge
   no-video-skills-by-default update-removes-only-unchanged-skills briefing-breaks-a-rule telegram-language
   brief-asked-in-chat talk-prep-honest no-question-he-cannot-judge plain-yes what-was-that connection-check
+  phone-health-days incomplete-day phone-goes-quiet mail-count talk-on-talk-day
   chat-tidy-at-night disk-filling missed-routine deadline-closes-itself)
-for file in scenario-lib.sh "${BASH_SCENARIOS[@]/%/.sh}" test-scenarios.sh; do
+for file in scenario-lib.sh numbers-lib.sh "${BASH_SCENARIOS[@]/%/.sh}" test-scenarios.sh; do
   if bash -n "$ROOT/scenarios/$file" 2>/dev/null; then
     ok "bash reads scenarios/$file"
   else

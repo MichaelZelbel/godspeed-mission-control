@@ -94,6 +94,14 @@ test('a Hermes receipt of two questions certifies both or neither, and a later r
  assert.equal(heard(store,{chat:'telegram',words:'yes'}).kind,'ask');
 });
 
+test('a direct Telegram reply hands each stamped question to the buttons, with its own expiry',async t=>{
+ const {store}=fixture(t),a=open(store,'The bot stopped.');
+ stampReply(store,{words:a.message,since:'',messageId:7});
+ const item=JSON.parse(fs.readFileSync(path.join(store.state,'step-questions',a.id+'.json'),'utf8'));
+ assert.equal(item.text,store.get('approvals',a.id).about+' '+store.get('approvals',a.id).question);
+ assert.ok(Date.parse(item.expires_at)>Date.now());
+});
+
 test('a direct Telegram reply of two questions certifies both or neither',async t=>{
  const {store}=fixture(t),a=open(store,'The bot stopped.'),b=open(store,'The disk is full.');
  const commit=store.commit.bind(store);store.commit=changes=>{if(changes.some(r=>r.id===b.id))throw new Error('disk');return commit(changes);};
@@ -367,6 +375,21 @@ test('a direct reply is stamped with the words actually sent, so a progress phot
  assert.equal(sent.at(-1)[0],'sendPhoto');assert.equal(sent.at(-1)[1],'Nice. '+short.message);assert.ok(store.get('approvals',short.id).sent_at);
 });
 
+test('a button press answers only a Telegram question that has gone out; a delivery that stamps nothing hands nothing to the buttons',async t=>{
+ const {root,store}=fixture(t),notebook=open(store,'The disk is full.','notebook'),unsent=open(store,'The bot stopped.');
+ const press=id=>spawnSync(process.execPath,[script,'press',id,'yes','--godspeed',root],{encoding:'utf8'});
+ for(const {id} of [notebook,unsent]){
+  assert.equal(press(id).status,1);
+  assert.equal(store.get('approvals',id).status,'pending');
+ }
+ delivered(store,'Something nobody asked about.');
+ assert.equal(fs.existsSync(path.join(store.state,'step-questions')),false);
+ await deliver(store,unsent);
+ assert.equal(fs.existsSync(path.join(store.state,'step-questions',unsent.id+'.json')),true);
+ assert.equal(press(unsent.id).status,0);
+ assert.equal(store.get('approvals',unsent.id).status,'approved');
+});
+
 // Issue #220: the gate every waiting step passes before it is asked.
 test('a quiet restart is done and nothing is asked',async t=>{
  const {store}=fixture(t),result=open(store,'The gateway needs a restart.','telegram',{quietly:'restart'});
@@ -443,4 +466,14 @@ test('a bundled report is split and each finding is checked',async t=>{
  const {store}=fixture(t),base={question:'Shall I go on?',yes:'Done.',no:'Left.',by:'routine:test',chat:'notebook'};
  const results=[{...base,about:'The gateway needs a restart.',quietly:'restart'},{...base,about:'The disk is nearly full.'}].map(finding=>openStep(store,finding));
  assert.deepEqual(results.map(r=>r.outcome),['quiet','asked']);
+});
+
+test('a step finished quietly, answered from an earlier decision or dropped has no button to press',async t=>{
+ const {root,store}=fixture(t),press=id=>spawnSync(process.execPath,[script,'press',id,'yes','--godspeed',root],{encoding:'utf8'});
+ const base={question:'Shall I go on?',yes:'Done.',no:'Left.',by:'routine:test',chat:'telegram'};
+ const outcomes=[{about:'The gateway needs a restart.',quietly:'restart'},{about:'Also tidy the shelf.',extra:{instruction:'Tidy',within:false}}].map(f=>openStep(store,{...base,...f}));
+ assert.deepEqual(outcomes.map(r=>r.outcome),['quiet','dropped']);
+ assert.equal(store.list('approvals').length,0);
+ assert.equal(press('step-none').status,1);
+ assert.equal(store.list('approvals').length,0);
 });
