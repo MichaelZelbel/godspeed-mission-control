@@ -11,6 +11,9 @@ for(const key of Object.keys(process.env))if(/^(GODSPEED_|HERMES_|AGENTMAIL_)/.t
 const MARKER='MARKER-7f3c';
 const mail=(id,from,subject,timestamp)=>({message_id:id,from,subject,timestamp,labels:['received'],preview:MARKER+' preview of '+id,extracted_text:MARKER+' body of '+id});
 const MAILS=[
+ // Berlin is two hours ahead on 5 October: o5 is its first local day's 01:30, o6 the last minute-ish of the day before.
+ mail('o5','Shop <orders@shop.example.invalid>','New order #1000','2026-10-04T23:30:00Z'),
+ mail('o6','Shop <orders@shop.example.invalid>','New order #999','2026-10-04T21:30:00Z'),
  mail('o1','Shop <orders@shop.example.invalid>','New order #1001','2026-10-25T10:00:00Z'),
  mail('o2','Shop <orders@shop.example.invalid>','New order #1002','2026-10-30T23:30:00Z'),
  mail('o3','Shop <orders@shop.example.invalid>','You made a sale','2026-11-02T08:00:00Z'),
@@ -60,7 +63,7 @@ const count=(store,name)=>entries(store,trackers(store).find(c=>c.name===name)).
 test('setup asks in one sentence with the 30-day number, saves the rule only on yes, and counts only what the rule names',async t=>{
  const {root,store,domains}=fixture(t);
  const before=trackers(store).length,asked=await trackerOperation(domains,{type:'tracker-mail',action:'ask',name:'Shop orders',...ORDERS,words:'count my mails'});
- assert.equal(asked.reply,'Count each mail from shop.example.invalid whose subject says "new order" or "You made a sale", in your mission control\'s own mailbox, as one in a new tracker called Shop orders? In the last 30 days that is 4 mails.');
+ assert.equal(asked.reply,'Count each mail from shop.example.invalid whose subject says "new order" or "You made a sale", in your mission control\'s own mailbox, as one in a new tracker called Shop orders? In the last 30 days that is 5 mails.');
  assert.equal(trackers(store).length,before,'nothing is saved by the question');
  assert.throws(()=>trackerOperation(domains,{type:'tracker-create',proposal_id:asked.proposal_id,words:'count my mails'}),/message that asked/);
  const p=store.get('tracker_proposals',asked.proposal_id);assert.equal(proposalState(store,p,NOW),'pending');
@@ -71,7 +74,7 @@ test('setup asks in one sentence with the 30-day number, saves the rule only on 
  const [c]=trackers(store);assert.deepEqual({...c.tracker.mail,proposal_id:undefined},{...ORDERS,subjects:['new order','You made a sale'],proposal_id:undefined});
  const apps=await setUp(domains,APPLICATIONS,{name:'Applications'});assert.match(apps.asked.reply,/that is 2 mails\.$/);
  await runMailCount({root,now:NOW});
- assert.equal(count(store,'Shop orders').length,4);assert.equal(count(store,'Applications').length,2);
+ assert.equal(count(store,'Shop orders').length,5);assert.equal(count(store,'Applications').length,2);
  assert.ok(count(store,'Shop orders').every(i=>i.data.value===1));
  assert.deepEqual(leaks(root),[],'no body or preview in any record');
  assert.ok(count(store,'Shop orders').every(i=>/^godspeed:[0-9a-f]{32}$/.test(i.data.mail_id)),'only a digest of the message id is kept');
@@ -81,23 +84,23 @@ test('setup asks in one sentence with the 30-day number, saves the rule only on 
 test('an address and its domain named together count each mail once',async t=>{
  const {domains}=fixture(t);
  const asked=await trackerOperation(domains,{type:'tracker-mail',action:'ask',name:'Both',...ORDERS,senders:['shop.example.invalid','orders@shop.example.invalid'],words:'count my mails'});
- assert.match(asked.reply,/that is 4 mails\.$/);
+ assert.match(asked.reply,/that is 5 mails\.$/);
 });
 test('a second run adds nothing, and neither does a window that overlaps the last',async t=>{
  const {root,store,domains}=fixture(t);await setUp(domains,ORDERS,{name:'Shop orders'});
- assert.deepEqual(await runMailCount({root,now:NOW}),{added:4});
+ assert.deepEqual(await runMailCount({root,now:NOW}),{added:5});
  assert.deepEqual(await runMailCount({root,now:NOW}),{added:0});
  const file=path.join(root,'.godspeed','mail-counts.json'),state=JSON.parse(fs.readFileSync(file,'utf8'));
  for(const r of Object.values(state.rules))r.last_day='2026-10-24';
  fs.writeFileSync(file,JSON.stringify(state));
  assert.deepEqual(await runMailCount({root,now:NOW}),{added:0});
- assert.equal(count(store,'Shop orders').length,4);
- assert.match(requests.find(r=>r.includes('after='))||'',/after=2026-10-05/,'the first run reaches back 30 days');
+ assert.equal(count(store,'Shop orders').length,5);
+ assert.match(requests.find(r=>r.includes('after='))||'',/after=2026-10-04/,'the first run reaches back 30 days, a day early for the zone');
 });
 
 test('a mail is entered on its local date, with its own minute',async t=>{
  const {root,store,domains}=fixture(t);await setUp(domains,ORDERS,{name:'Shop orders'});await runMailCount({root,now:NOW});
- assert.deepEqual(count(store,'Shop orders').map(i=>i.data.when),['2026-10-25 11:00','2026-10-31 00:30','2026-11-02 09:00','2026-11-03 10:00']);
+ assert.deepEqual(count(store,'Shop orders').map(i=>i.data.when),['2026-10-05 01:30','2026-10-25 11:00','2026-10-31 00:30','2026-11-02 09:00','2026-11-03 10:00']);
 });
 
 test('how many this week: the entries are the tracker\'s, as any tracker\'s',async t=>{
@@ -121,7 +124,7 @@ test('a connection that does not answer counts nothing, says nothing and keeps i
  assert.equal(ran.status,0);assert.equal(ran.stdout+ran.stderr,'');
  assert.equal(count(store,'Shop orders').length,0);assert.ok(!fs.existsSync(path.join(root,'.godspeed','notices.json')));
  assert.ok(!fs.existsSync(path.join(root,'.godspeed','mail-counts.json'))||!Object.keys(JSON.parse(fs.readFileSync(path.join(root,'.godspeed','mail-counts.json'),'utf8')).rules).length);
- status=200;assert.deepEqual(await runMailCount({root,now:NOW}),{added:4},'the next morning counts the whole window');
+ status=200;assert.deepEqual(await runMailCount({root,now:NOW}),{added:5},'the next morning counts the whole window');
  status=401;
  const asked=await trackerOperation(domains,{type:'tracker-mail',action:'ask',name:'Apps',...APPLICATIONS,words:'count'});
  assert.equal(asked.proposal_id,undefined);assert.match(asked.reply,/nothing was saved/);assert.ok(!asked.reply.includes(MARKER));
@@ -133,9 +136,9 @@ test('a tracker that keeps one entry a day cannot take a rule, and an existing c
  await assert.rejects(async()=>trackerOperation(domains,{type:'tracker-mail',action:'ask',tracker:'Sales',...ORDERS,words:'x'}),/one entry a day/);
  trackerOperation(domains,{type:'tracker-create',name:'Orders',cadence:'any',fields:[]});
  const orders=trackers(store).find(c=>c.name==='Orders');store.save('collection_items',{collection_id:orders.id,data:{when:'2026-10-01 10:00'}});
- const {asked}=await setUp(domains,ORDERS,{tracker:'Orders'});assert.match(asked.reply,/as one in Orders\? In the last 30 days that is 4 mails\.$/);
+ const {asked}=await setUp(domains,ORDERS,{tracker:'Orders'});assert.match(asked.reply,/as one in Orders\? In the last 30 days that is 5 mails\.$/);
  await runMailCount({root,now:NOW});
- assert.equal(entries(store,store.get('collections',orders.id)).length,5);assert.deepEqual(entries(store,store.get('collections',orders.id))[0].data,{when:'2026-10-01 10:00'});
+ assert.equal(entries(store,store.get('collections',orders.id)).length,6);assert.deepEqual(entries(store,store.get('collections',orders.id))[0].data,{when:'2026-10-01 10:00'});
  assert.ok(entries(store,store.get('collections',orders.id)).slice(1).every(i=>i.data.value===1),'a counting tracker with no column of its own still gets 1 for each mail');
 });
 
@@ -147,7 +150,7 @@ test('changing and removing a rule: the old question is dropped, and the counted
  trackerOperation(domains,{type:'tracker-create',proposal_id:again.proposal_id,words:'yes',expected:{[trackers(store)[0].id]:hash}});
  assert.deepEqual(trackers(store)[0].tracker.mail.subjects,['sale']);assert.equal(proposalState(store,store.get('tracker_proposals',asked.proposal_id),NOW),'created');
  const removed=trackerOperation(domains,{type:'tracker-mail',action:'remove',tracker:'Shop orders',expected:{[trackers(store)[0].id]:trackers(store)[0]._hash}});
- assert.match(removed.reply,/no longer counts mails\. The 4 mails it counted stay\.$/);assert.equal(trackers(store)[0].tracker.mail,undefined);assert.equal(count(store,'Shop orders').length,4);
+ assert.match(removed.reply,/no longer counts mails\. The 5 mails it counted stay\.$/);assert.equal(trackers(store)[0].tracker.mail,undefined);assert.equal(count(store,'Shop orders').length,5);
  requests.length=0;assert.deepEqual(await runMailCount({root,now:NOW}),{added:0});assert.deepEqual(requests,[]);
 });
 

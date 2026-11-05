@@ -15,7 +15,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import {createRequire} from 'node:module';
 import {atomic} from './records/store.mjs';
-import {norm,trackers,entries} from './trackers.mjs';
+import {norm,own,trackers,entries} from './trackers.mjs';
 import {addDays,localParts} from '../../third-party/addons/godspeed-coach/lib/clock.mjs';
 
 // The mailboxes a rule may name: the one owner of the accepted keys, how a sentence says each, and which
@@ -50,9 +50,9 @@ export const ruleSentence=(rule,name,isNew)=>'Count each mail from '+list(rule.s
 // tracker is left as it is. Returns the column that gets the 1 (null for a counting tracker), or false.
 export function mailColumn(c){
  if(c.tracker?.cadence!=='any'||c.tracker?.specialist)return false;
- const own=(c.field_schema||[]).filter(f=>!['when','note'].includes(f.key));
- if(!own.length)return null;
- return own.length===1&&own[0].type==='number'?own[0].key:false;
+ const mine=own(c);
+ if(!mine.length)return null;
+ return mine.length===1&&mine[0].type==='number'?mine[0].key:false;
 }
 export const NOT_FITTING=name=>name+' keeps one entry a day or its own columns, and a mail count needs one entry for each mail. Say a new name and I will start a tracker for the mails.';
 // Only a digest is kept: a Message-ID is written by the sender and may carry an address that is no named sender's.
@@ -71,6 +71,12 @@ export function whenOf(date,now,tz){
  const ms=Date.parse(date);if(!Number.isFinite(ms))return null;
  const p=localParts(new Date(Math.min(ms,now.getTime())),tz);return p.date+' '+p.hm;
 }
+// The mails from a local day on. A mailbox's "since" is a whole day in its own zone (AgentMail's is UTC),
+// so the search starts a day early and the mail's local date, on the installation's clock, decides.
+async function searchFrom(run,rule,from,tz){
+ const found=await run({account:rule.mailbox,senders:rule.senders,after:addDays(from,-1)});
+ return found.messages.filter(m=>{const ms=Date.parse(m.date);return Number.isFinite(ms)&&localParts(new Date(ms),tz).date>=from;});
+}
 const defaultSearch=args=>createRequire(import.meta.url)('../../tools/mc-mail.js').headerSearch(args);
 
 // WHERE EACH RULE HAD GOT TO (machine state, like the routine records: .godspeed, never synced). A
@@ -83,9 +89,9 @@ export const windowFor=(state,id,rule,today)=>{const last=state.rules[id];return
 
 // How many mails the rule would count over the last 30 days, not counting those the tracker has.
 export async function previewCount({store,rule,c=null,search=defaultSearch,now,tz}){
- const today=localParts(now,tz).date,found=await search({account:rule.mailbox,senders:rule.senders,after:addDays(today,-FIRST_DAYS)});
+ const today=localParts(now,tz).date,found=await searchFrom(search,rule,addDays(today,-FIRST_DAYS),tz);
  const have=c?countedIds(store,c,store.list('collection_items')):new Set();
- return mailMatches(rule,found.messages).filter(m=>whenOf(m.date,now,tz)&&!have.has(mailId(rule.mailbox,m.message_id))).length;
+ return mailMatches(rule,found).filter(m=>whenOf(m.date,now,tz)&&!have.has(mailId(rule.mailbox,m.message_id))).length;
 }
 
 // THE COUNT, once a day. Returns only numbers: nothing of a mail is kept in a result, a record or a log
@@ -97,12 +103,12 @@ export async function countMail({store,query,search,now=new Date(),tz}){
  const run=search||defaultSearch,today=localParts(now,tz).date,state=readState(store);
  for(const {c,rule} of found){
   const column=mailColumn(c);if(column===false)continue;
-  let result;
-  try{result=await run({account:rule.mailbox,senders:rule.senders,after:windowFor(state,c.id,rule,today)});}catch{continue;}
+  let messages;
+  try{messages=await searchFrom(run,rule,windowFor(state,c.id,rule,today),tz);}catch{continue;}
   // The check and the writes are one step, so a second run at the same moment counts nothing twice.
   store.withLock(()=>{
    const have=countedIds(store,c,store.list('collection_items'));
-   for(const m of mailMatches(rule,result.messages)){
+   for(const m of mailMatches(rule,messages)){
     const id=mailId(rule.mailbox,m.message_id),when=whenOf(m.date,now,tz);
     if(!when||have.has(id))continue;
     have.add(id);

@@ -1,7 +1,7 @@
 // The tracker operations (D-321), one path for the notebook's chat, MCP and the
 // Telegram bot: personalOperation hands these types here. The rules they share
 // are in trackers.mjs; this file reads and writes.
-import {norm,card,trackers,findTracker,entries,trackerStatus,proposalState,dayOf,whenFor,schemaFor,entryData,holdQuestion,createdReply,instantReply,fmt,unitOf,longDay,entryOn,existingTalk,setUpOnPurpose,entryWords,talkExists,talkWords,talksOf,cardWithTalks,talksWords,assertInstead} from './trackers.mjs';
+import {norm,own,userFields,card,trackers,findTracker,entries,trackerStatus,proposalState,dayOf,whenFor,schemaFor,entryData,holdQuestion,createdReply,instantReply,fmt,unitOf,longDay,entryOn,existingTalk,setUpOnPurpose,entryWords,talkExists,talkWords,talksOf,cardWithTalks,talksWords,assertInstead} from './trackers.mjs';
 import {now as clockNow,addDays} from '../../third-party/addons/godspeed-coach/lib/clock.mjs';
 import {visibleRows} from './visibility.mjs';
 import {habitTrackerList,habitOperation,isHabitRef,findHabits,habitTalkOperation} from './habit-trackers.mjs';
@@ -66,7 +66,7 @@ export function trackerOperation(domains,raw){
   const cadence=input.cadence?(input.cadence==='any'?'any':'daily'):happened?'any':'daily',field_schema=schemaFor({unit:input.unit,fields:happened?[]:input.fields,cadence}),shape={name,field_schema};
   // A tracker with no columns of its own counts each time: "track sauna" is itself the
   // entry, held like a number would be, so the yes counts it (design: nothing he said is lost).
-  const counting=!field_schema.some(f=>!['when','note'].includes(f.key));
+  const counting=!userFields(field_schema).length;
   // Set up on purpose ("I want to track my sleep: hours, and quality from 1 to 5"), nothing has
   // happened yet: no entry is held, unless they gave one.
   const entry=has(input)||counting&&!setUpOnPurpose(input)?{when:whenFor({on:input.on,at:input.at,cadence},now,zone),data:entryData(shape,input)}:null;
@@ -95,7 +95,7 @@ export function trackerOperation(domains,raw){
   const cadence=input.cadence?(input.cadence==='any'?'any':'daily'):p?.cadence||'daily';
   // "Yes, but in inches" or "as often as I like" rebuilds the columns from the
   // question's own; the held number stays the number, checked again.
-  const asked=p?(p.field_schema||[]).filter(f=>!['when','note'].includes(f.key)).map(({indexable,...f})=>f):undefined;
+  const asked=p?userFields(p.field_schema).map(({indexable,...f})=>f):undefined;
   const field_schema=schemaFor(input.fields||input.unit||!p?{unit:input.unit,fields:input.fields,cadence}:{fields:asked,cadence});
   // A new tracker goes to the one talk named, only when it exists; a question kept before 13 October
   // 2026 names it as `talk` (talksOf reads both).
@@ -231,7 +231,6 @@ function resolve(store,ref){
 // The hash the caller read, for query.execute's own check; over MCP the guard
 // asks for it as well (assistant-mutations.mjs reads `expected` the same way).
 const expectedOf=(input,table,id)=>{const v=input.expected?.[table+'/'+id]??input.expected?.[id];return typeof v==='string'?{[id]:v}:{};};
-const own=c=>(c.field_schema||[]).filter(f=>!['when','note'].includes(f.key));
 // A tracker as a reply names it: "sleep tracker" for Sleep; a name with capitals inside ("BP") stays.
 // The headache add-on's tracker, Headaches, is "headache tracker", as people say it.
 const trackerWords=c=>{if(c.tracker?.specialist==='headache')return 'headache tracker';const n=String(c.name||'').trim(),low=n.length>1&&n.slice(1)===n.slice(1).toLocaleLowerCase()?n.charAt(0).toLocaleLowerCase()+n.slice(1):n;return /tracker$/i.test(low)?low:low+' tracker';};

@@ -143,6 +143,10 @@ export function entryOn({on,words,source_quote},today,{assistant=false,entry=tru
 // no entry, since nothing has happened yet. "track sauna" holds the one it names.
 const SETUP=/(?<!\p{L})(?:i\s+(?:want|would\s+like|'d\s+like|wanna)\s+to\s+(?:start\s+)?track|start\s+tracking|set\s+up\s+(?:a\s+)?tracker|new\s+tracker|make\s+a\s+tracker|create\s+a\s+tracker|ich\s+(?:will|möchte|würde\s+gerne?)(?:\s+\S+)*?\s+tracken)(?!\p{L})/iu;
 export const setUpOnPurpose=input=>input.setup===true||SETUP.test(String(input.words??input.source_quote??''));
+// The two columns every tracker has of its own; the rest of a schema is the person's.
+const SYSTEM_FIELDS=['when','note'];
+export const userFields=schema=>(schema||[]).filter(f=>!SYSTEM_FIELDS.includes(f.key));
+export const own=c=>userFields(c.field_schema);
 export const norm=s=>String(s??'').normalize('NFKC').toLocaleLowerCase().replace(/\s+/g,' ').trim();
 export const card=c=>c&&!c.removed_at&&c.tracker&&typeof c.tracker==='object'?c.tracker:null;
 export const trackers=store=>store.list('collections').filter(card);
@@ -198,7 +202,7 @@ const keyOf=label=>String(label??'').normalize('NFKD').replace(/[̀-ͯ]/g,'').re
 function column(f){
  if(!f||typeof f!=='object')throw Error('Give each column as {label, type}');
  const label=String(f.label??'').trim()||String(f.key??'').replace(/_/g,' ').trim(),key=f.key===undefined||f.key===null||f.key===''?keyOf(label):String(f.key);
- if(!/^[a-z][a-z0-9_]{0,39}$/.test(key)||['when','note'].includes(key))throw Error('A tracker column needs a short name, such as "hours"');
+ if(!/^[a-z][a-z0-9_]{0,39}$/.test(key)||SYSTEM_FIELDS.includes(key))throw Error('A tracker column needs a short name, such as "hours"');
  // A label is kept as given ("cm" for a one-number tracker in cm, as before); one made from a key
  // starts with a capital ("hours" is Hours).
  const out={...f,key,label:String(f.label??'').trim()||(label?label.charAt(0).toUpperCase()+label.slice(1):key)};
@@ -223,7 +227,7 @@ export function valueWords(f,v){
  if(f.type==='boolean')return String(f.label||f.key).toLowerCase()+' '+(v===true||v==='true'?'yes':'no');
  return String(f.label||f.key).toLowerCase()+' '+v;
 }
-const own=c=>(c.field_schema||[]).filter(f=>!['when','note'].includes(f.key));
+
 // A column with choices takes only its choices (the cycle tracker's flow and symptoms).
 function choice(f,v){
  if(!Array.isArray(f.options)||!['select','multiselect'].includes(f.type))return v;
@@ -252,7 +256,7 @@ export function holdQuestion(p,today){
  if(p.specialist==='mail')return p.question;
  // The food tracker asks its own question, with the one about an unclear amount (food.mjs).
  if(p.specialist==='food')return foodQuestion(foodLang(p.language),{questions:foodAmounts(foodLang(p.language),p.unclear||[]),kept:!!p.meal?.items?.length});
- const fields=(p.field_schema||[]).filter(f=>!['when','note'].includes(f.key)),one=fields.length===1&&fields[0].type==='number'?fields[0]:null;
+ const fields=userFields(p.field_schema),one=fields.length===1&&fields[0].type==='number'?fields[0]:null;
  const shape=one?'one number'+(one.unit?' in '+one.unit:'')+(one.min!==undefined&&one.max!==undefined?' from '+fmt(one.min)+' to '+fmt(one.max):''):fields.length?'with '+listWords(fields.map(columnWords)):'counting each time';
  const kept=p.entry?(one&&p.entry.data[one.key]!==undefined?" I've kept the "+fmt(p.entry.data[one.key])+' for ':" I've kept this one for ")+(p.entry.when.slice(0,10)===today?'today':longDay(p.entry.when.slice(0,10)))+'.':'';
  return 'Start a new tracker called '+p.name+', '+shape+', '+(p.cadence==='any'?'as often as you like':'once a day')+'?'+kept;
