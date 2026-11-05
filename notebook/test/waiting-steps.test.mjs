@@ -449,6 +449,14 @@ test('godspeed-step open carries quiet, subject and optional-extra gates and ref
 test('the scenario asker drives the real godspeed-step open with every flag it emits',async t=>{
  const {root,store}=fixture(t),home=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-asker-'));t.after(()=>fs.rmSync(home,{recursive:true,force:true}));
  fs.mkdirSync(path.join(home,'bin'));
+ // The notebook's report wiring, with a recording stand-in for background-report.mjs: it keeps its argv and
+ // the words it was given, and refuses a message that says REFUSE so the order of record and print can be seen.
+ fs.mkdirSync(path.join(home,'plugins','godspeed_notebook'),{recursive:true});
+ fs.writeFileSync(path.join(home,'recorder.mjs'),`import fs from 'node:fs';const words=fs.readFileSync(0,'utf8');
+fs.appendFileSync(${JSON.stringify(path.join(home,'record.log'))},JSON.stringify({argv:process.argv.slice(2),words})+'\\n');
+if(/REFUSE/.test(words)){console.error('refused');process.exit(1);}
+`);
+ fs.writeFileSync(path.join(home,'plugins','godspeed_notebook','report.json'),JSON.stringify({node:process.execPath,script:path.join(home,'recorder.mjs'),root:'the-root'}));
  fs.writeFileSync(path.join(home,'bin','godspeed-step'),`#!/bin/sh\nprintf '%s\\n' "$@" >> argv.log\nprintf '@@\\n' >> argv.log\nexec "${process.execPath}" "${script}" "$@" --godspeed "${root}"\n`,{mode:0o755});
  const full={about:'a',question:'q',yes:'y',no:'n'};
  const asks=[{...full,quiet:'restart'},{...full,optional_after:'Stop them'},{...full,subject:'gw'},{...full,about:'-- restart the gateway'}];
@@ -460,6 +468,38 @@ test('the scenario asker drives the real godspeed-step open with every flag it e
  assert.ok(calls[1].includes('--extra')&&calls[1].includes('Stop them')&&!calls[1].includes('--within'));
  assert.ok(calls[2].includes('--subject')&&calls[2].includes('gw'));
  assert.equal(store.list('approvals').filter(a=>a.status==='pending').length,2);
+ // Every question that is asked is recorded first, for the telegram delivery of the Scenario asker, with its words on stdin.
+ const records=fs.readFileSync(path.join(home,'record.log'),'utf8').trim().split('\n').map(l=>JSON.parse(l));
+ assert.equal(records.length,2);
+ for(const r of records){
+  const a=r.argv;
+  assert.equal(a[0],'record');
+  assert.equal(a[a.indexOf('--godspeed')+1],'the-root');
+  assert.equal(a[a.indexOf('--home')+1],home);
+  assert.equal(a[a.indexOf('--routine')+1],'Scenario asker');
+  assert.equal(a[a.indexOf('--delivery')+1],'telegram');
+  assert.ok(r.words.length>0);
+ }
+ const printed=done.stdout.trim().split('\n').filter(Boolean);
+ assert.equal(printed.length,2);
+ assert.deepEqual(records.map(r=>r.words.trim()),printed.map(l=>l.trim()));
+});
+
+test('the scenario asker records a question before it prints it, and prints nothing when the record is refused',async t=>{
+ const {root}=fixture(t),home=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-asker-'));t.after(()=>fs.rmSync(home,{recursive:true,force:true}));
+ fs.mkdirSync(path.join(home,'bin'));fs.mkdirSync(path.join(home,'plugins','godspeed_notebook'),{recursive:true});
+ fs.writeFileSync(path.join(home,'recorder.mjs'),`import fs from 'node:fs';fs.readFileSync(0,'utf8');console.error('refused');process.exit(1);
+`);
+ fs.writeFileSync(path.join(home,'plugins','godspeed_notebook','report.json'),JSON.stringify({node:process.execPath,script:path.join(home,'recorder.mjs'),root}));
+ // A stand-in godspeed-step that says a message, as the real one does for an asked question.
+ fs.writeFileSync(path.join(home,'bin','godspeed-step'),`#!/bin/sh
+printf '{"message":"Shall I restart it?"}\n'
+`,{mode:0o755});
+ fs.writeFileSync(path.join(home,'.scenario-asks.json'),JSON.stringify([{about:'a',question:'q',yes:'y',no:'n'}]));
+ const done=spawnSync('python3',[fileURLToPath(new URL('../../scenarios/scenario-asker.py',import.meta.url))],{cwd:home,encoding:'utf8',env:{...process.env,HERMES_HOME:home}});
+ assert.equal(done.status,1);
+ assert.equal(done.stdout,'');
+ assert.match(done.stderr,/could not be recorded/);
 });
 
 test('a bundled report is split and each finding is checked',async t=>{

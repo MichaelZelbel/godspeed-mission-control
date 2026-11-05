@@ -143,6 +143,10 @@ check_the_ai_settings() {
   [ -n "$AI_URL" ] || fail "GODSPEED_SCENARIO_AI_URL is not set in this job's environment (a repository variable), so the checks do not know which AI service to use"
   [ -n "$AI_MODEL" ] || fail "GODSPEED_SCENARIO_AI_MODEL is not set in this job's environment (a repository variable), so the checks do not know which AI model to use"
   case "$(printf '%s' "$AI_URL" | tr 'A-Z' 'a-z')" in
+    https://*) ;;
+    *) fail "GODSPEED_SCENARIO_AI_URL must be an https address, because the AI key is sent to it; use https://api.anthropic.com/v1" ;;
+  esac
+  case "$(printf '%s' "$AI_URL" | tr 'A-Z' 'a-z')" in
     *openrouter.ai*) fail "GODSPEED_SCENARIO_AI_URL points at openrouter.ai, and the checks must never spend the owner's OpenRouter money; use https://api.anthropic.com/v1" ;;
   esac
 }

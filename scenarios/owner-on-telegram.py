@@ -186,7 +186,7 @@ def main(args):
         if success and final and not silent(final):
             deliver = need("routine delivery (cron.scheduler._deliver_result)", lambda: scheduler._deliver_result)
             delivered = deliver(job, final)
-        return {"success": bool(success), "error": error or delivered or "", "sent": delivered is None and bool(final)}
+        return {"success": bool(success) and delivered is None, "error": error or delivered or "", "sent": delivered is None and bool(final)}
 
     def say(step):
         from gateway.session_context import set_session_vars
