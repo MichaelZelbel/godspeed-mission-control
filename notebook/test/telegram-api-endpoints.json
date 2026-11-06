@@ -1,0 +1,17 @@
+{
+  "accepted": [
+    {"input": "https://api.example.test/telegram/", "output": "https://api.example.test/telegram"},
+    {"input": "https://api.example.test:443/telegram/", "output": "https://api.example.test/telegram"},
+    {"input": "http://127.0.0.1:8081/telegram/", "output": "http://127.0.0.1:8081/telegram"},
+    {"input": "http://[::1]:8081/telegram/", "output": "http://[::1]:8081/telegram"}
+  ],
+  "rejected": [
+    "http://example.test/proxy",
+    "ftp://127.0.0.1",
+    "https://user:pass@example.test",
+    "https://api.example.test/telegram?",
+    "https://api.example.test/telegram#",
+    "https://api.example.test/telegram?key=value",
+    "https://api.example.test/telegram#fragment"
+  ]
+}

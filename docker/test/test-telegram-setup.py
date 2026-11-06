@@ -26,6 +26,7 @@ import urllib.request
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
 PROGRAM = os.path.join(ROOT, "docker", "rootfs", "usr", "local", "bin", "godspeed-telegram-setup")
+ENDPOINT_VECTORS = os.path.join(ROOT, "notebook", "test", "telegram-api-endpoints.json")
 TOKEN = "123456789:TESTtoken_never-logged"
 FAILS = 0
 
@@ -291,22 +292,22 @@ def test_codes():
 def test_telegram_api_endpoint():
     print("== validating the token-bearing Telegram endpoint")
     m = load("tg_setup_endpoint", PROGRAM)
-    check("HTTPS endpoint path prefixes are retained",
-          m.telegram_api("https://api.example.test/telegram/") == "https://api.example.test/telegram")
-    check("a loopback HTTP endpoint path prefix is retained",
-          m.telegram_api("http://127.0.0.1:8081/telegram/") == "http://127.0.0.1:8081/telegram")
-    for endpoint in ("http://example.test/proxy", "ftp://example.test", "https://user:pass@example.test",
-                     "https://api.example.test/?key=value", "https://api.example.test/#fragment"):
+    with open(ENDPOINT_VECTORS, encoding="utf-8") as f:
+        vectors = json.load(f)
+    for case in vectors["accepted"]:
+        check("a safe Telegram endpoint keeps its path prefix: %s" % case["input"],
+              m.telegram_api(case["input"]) == case["output"])
+    for endpoint in vectors["rejected"]:
         try:
             m.telegram_api(endpoint)
             rejected = False
         except ValueError:
             rejected = True
         check("an unsafe Telegram endpoint is rejected: %s" % endpoint, rejected)
-    r = scenario_run("an unsafe Telegram endpoint", {"users": USERS, "start": []},
-                     extra_env={"GODSPEED_TELEGRAM_API": "http://example.test/proxy"}, timeout=5)
-    check("an unsafe endpoint sends no Bot API request",
-          r["rc"] == 0 and not r["fake"].requests and "requires HTTPS or a loopback" in r["log"])
+        r = scenario_run("an unsafe Telegram endpoint", {"users": USERS, "start": []},
+                         extra_env={"GODSPEED_TELEGRAM_API": endpoint}, timeout=5)
+        check("an unsafe endpoint fails setup without a Bot API request: %s" % endpoint,
+              r["rc"] != 0 and not r["fake"].requests and "requires HTTPS or a loopback" in r["log"])
 
 
 def test_happy():

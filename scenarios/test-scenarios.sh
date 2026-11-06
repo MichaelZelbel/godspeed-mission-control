@@ -2822,7 +2822,10 @@ EOF
   for table in "${SERVER_SPARSE_TABLES[@]}"; do sparse=${table//_/-}; printf '{"data":[]}\n' >"$f/sparse-$sparse.json"; done
   printf '{"state":"gateway"}\n' >"$f/runner.json"
   printf '{"requests":[{"method":"getUpdates","authorized":true},{"method":"sendMessage","authorized":true}]}\n' >"$f/telegram-requests.json"
-  run_json "$f" "$(msg scheduled-brief "$(cat "$f/brief.txt")")" "$(msg todays-brief "$(cat "$f/brief.txt")")"
+  printf '[{"id":"scheduled-brief","last_run_at":"2026-11-06T10:01:00Z","last_status":"ok"}]\n' >"$f/job-scheduled-brief.json"
+  printf 'Morning brief: source=builtin\n' >"$f/brief-cron-runs.txt"
+  printf '{"sent":[{"text":%s}]}\n' "$(node -e 'process.stdout.write(JSON.stringify(require("fs").readFileSync(process.argv[1],"utf8")))' "$f/brief.txt")" >"$f/scheduled-telegram-requests.json"
+  run_json "$f" "$(msg todays-brief "$(cat "$f/brief.txt")")"
   printf '[]\n' >"$f/work-items.json"
   printf '{"data":[{"id":"brief-1","content":%s}]}\n' "$(node -e 'process.stdout.write(JSON.stringify(require("fs").readFileSync(process.argv[1],"utf8")))' "$f/brief.txt")" >"$f/notes-before-reply.json"
   cp "$f/notes-before-reply.json" "$f/notes-after-reply.json"
@@ -2861,8 +2864,11 @@ done
     *) bad 'the shared sparse inventory still requires contacts' ;;
   esac
 copy "$FD/good" "$FD/no-send"
-run_json "$FD/no-send" "$(msg todays-brief "$(cat "$FD/no-send/brief.txt")")"
+printf '{"sent":[]}\n' >"$FD/no-send/scheduled-telegram-requests.json"
 refuses 'a brief not delivered on Telegram' first-day "$FD/no-send" 'never delivered'
+copy "$FD/good" "$FD/direct-run"
+printf 'Morning brief: source=direct\n' >"$FD/direct-run/brief-cron-runs.txt"
+refuses 'a direct brief run called scheduled delivery' first-day "$FD/direct-run" 'not triggered by the installed scheduler'
 copy "$FD/good" "$FD/not-gateway"
 printf '{"state":"setting-up"}\n' >"$FD/not-gateway/runner.json"
 refuses 'a bot that never reaches its gateway' first-day "$FD/not-gateway" 'never reached gateway'
@@ -2870,7 +2876,7 @@ copy "$FD/good" "$FD/no-poll"
 printf '{"requests":[{"method":"sendMessage","authorized":true}]}\n' >"$FD/no-poll/telegram-requests.json"
 refuses 'a gateway that never polls Telegram' first-day "$FD/no-poll" 'never polled'
 copy "$FD/good" "$FD/different-reply"
-run_json "$FD/different-reply" "$(msg scheduled-brief "$(cat "$FD/different-reply/brief.txt")")" "$(msg todays-brief 'something else')"
+run_json "$FD/different-reply" "$(msg todays-brief 'something else')"
 refuses 'a reply that differs from the saved brief' first-day "$FD/different-reply" 'differs from the saved note'
 copy "$FD/good" "$FD/second-note"
 node -e 'const fs=require("fs"),p=process.argv[1],d=JSON.parse(fs.readFileSync(p,"utf8"));d.data.push({...d.data[0],id:"brief-2"});fs.writeFileSync(p,JSON.stringify(d))' "$FD/second-note/notes-after-reply.json"

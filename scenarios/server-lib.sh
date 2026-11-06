@@ -83,6 +83,34 @@ server_brief() { # <note file> <seconds>
   rm -f "$notes" "$EVIDENCE"/.brief-*
 }
 
+# This uses the installed scheduler, not Settings' direct "Run now" endpoint. A one-minute
+# interval makes the scheduled proof repeatable without changing the machine clock.
+server_scheduled_brief() { # <note file> <seconds>
+  local id notes=$EVIDENCE/.scheduled-brief-notes.json before waited=0
+  printf '{"kind":"morning-brief","interval_ms":60000}' >"$EVIDENCE/.scheduled-brief-ask.json"
+  [ "$(server_post /api/jobs/add "$EVIDENCE/.scheduled-brief-ask.json" "$EVIDENCE/.scheduled-brief-added.json")" = 200 ] ||
+    fail "the server would not schedule its morning brief: $(tr -d '\n' <"$EVIDENCE/.scheduled-brief-added.json" | cut -c1-200)"
+  id=$(json_value "$EVIDENCE/.scheduled-brief-added.json" data.id) && [ -n "$id" ] ||
+    fail "the server scheduled its morning brief but named no routine"
+  server_table notes "$notes"
+  before=$("$NODE" -e "$BRIEF_NOTES_COUNTER" "$notes")
+  server_scheduled_brief_finished() {
+    server_table notes "$notes" 2>/dev/null || return 1
+    [ "$("$NODE" -e "$BRIEF_NOTES_COUNTER" "$notes")" -gt "$before" ] || return 1
+    in_server_as_hermes hermes cron runs >"$EVIDENCE/brief-cron-runs.txt" 2>/dev/null || return 1
+    grep -Eqi 'source[[:space:]]*[:=][[:space:]]*"?builtin' "$EVIDENCE/brief-cron-runs.txt"
+  }
+  wait_for "$2" 'the installed scheduler to run the morning brief' server_scheduled_brief_finished ||
+    fail "the installed scheduler did not run the morning brief within $2 s"
+  "$NODE" -e "$NEWEST_BRIEFING_NOTE" "$notes" >"$1" 2>/dev/null && [ "$(grep -c . "$1")" -gt 0 ] ||
+    fail 'the scheduled morning brief saved no readable note'
+  server_table jobs "$EVIDENCE/job-scheduled-brief.json"
+  server_telegram_record "$EVIDENCE/scheduled-telegram-requests.json"
+  "$NODE" -e 'const fs=require("fs"),brief=fs.readFileSync(process.argv[1],"utf8").replace(/\r\n?/g,"\n").trim(),record=JSON.parse(fs.readFileSync(process.argv[2],"utf8"));process.exit((record.sent||[]).some(sent=>String(sent.text||"").replace(/\r\n?/g,"\n").trim()===brief)?0:1)' "$1" "$EVIDENCE/scheduled-telegram-requests.json" ||
+    fail 'the scheduler ran the morning brief but it never reached the installed Telegram gateway'
+  rm -f "$notes" "$EVIDENCE"/.scheduled-brief-*
+}
+
 # The advertised Docker Telegram route, driven through the installed notebook setup and
 # supervisor.  Its helper stores a redacted Bot API record, runner state, and the same run.json
 # shape the scenario checkers inspect.  The dedicated AI key is handed to the setup chat only;
@@ -130,6 +158,10 @@ server_telegram_press() { # <label> <callback data>
 server_telegram_snapshot() {
   "$NODE" "$HERE/server-telegram.mjs" snapshot --server "$(server_container)" --evidence "$EVIDENCE" ||
     fail 'the installed Telegram gateway left no current evidence'
+}
+server_telegram_record() { # <target file>
+  in_server cat /tmp/godspeed-scenario-telegram-record.json >"$1" 2>/dev/null ||
+    fail 'the installed fake Telegram API wrote no request record'
 }
 server_telegram_mark() { # <label> [kind]
   if [ $# -eq 2 ]; then

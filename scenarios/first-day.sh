@@ -58,8 +58,7 @@ act() {
   server_run_job work "$WORK" 1800
   step_passed 'installed research, choice, and work routines completed'
   first_day_phase 'installed morning brief and its Telegram delivery'
-  server_brief "$EVIDENCE/brief.txt" 1800
-  server_telegram_mark scheduled-brief cron
+  server_scheduled_brief "$EVIDENCE/brief.txt" 1800
   server_table notes "$EVIDENCE/notes-before-reply.json"
   server_telegram_say todays-brief "today's brief"
   server_telegram_snapshot
@@ -78,13 +77,17 @@ check() { # <evidence folder>
   for table in "${SERVER_SPARSE_TABLES[@]}"; do sparse_files+=("sparse-${table//_/-}.json"); done
   [ -d "$folder" ] || fail "there is nothing at $folder, so this scenario kept no first-day evidence"
   need_node
-  kept_all "$folder" 'the installed first day' setup.json job-research.json job-choice.json job-work.json brief.txt run.json runner.json telegram-requests.json work-items.json notes-before-reply.json notes-after-reply.json "${sparse_files[@]}" manifest.json
+  kept_all "$folder" 'the installed first day' setup.json job-research.json job-choice.json job-work.json job-scheduled-brief.json brief.txt brief-cron-runs.txt scheduled-telegram-requests.json run.json runner.json telegram-requests.json work-items.json notes-before-reply.json notes-after-reply.json "${sparse_files[@]}" manifest.json
   grep -Fqx "$GOAL" <(json_value "$folder/setup.json" results.goal.title 2>/dev/null || true) ||
     grep -Fq "$GOAL" "$folder/setup.json" || fail 'the notebook did not retain the fictional emergency-kit goal'
   for label in research choice work; do
     "$NODE" -e 'const fs=require("fs"),d=JSON.parse(fs.readFileSync(process.argv[1],"utf8")),rows=Array.isArray(d)?d:d.data||[];process.exit(rows.some(j=>j?.last_run_at&&j?.last_status==="ok")?0:1)' "$folder/job-$label.json" ||
       fail "the installed $label routine has no successful recorded run"
   done
+  "$NODE" -e 'const fs=require("fs"),d=JSON.parse(fs.readFileSync(process.argv[1],"utf8")),rows=Array.isArray(d)?d:d.data||[];process.exit(rows.some(j=>j?.last_run_at&&j?.last_status==="ok")?0:1)' "$folder/job-scheduled-brief.json" ||
+    fail 'the installed scheduled morning brief has no successful recorded run'
+  grep -Eqi 'source[[:space:]]*[:=][[:space:]]*"?builtin' "$folder/brief-cron-runs.txt" ||
+    fail 'the morning brief was not triggered by the installed scheduler'
   if ! reason=$("$NODE" - "$folder" "$GOAL" "${sparse_files[@]}" 2>&1 <<'NODE'
 const fs=require('fs'),path=require('path');
 const [folder,goal,...sparseFiles]=process.argv.slice(2),read=file=>fs.readFileSync(path.join(folder,file),'utf8');
@@ -125,8 +128,8 @@ const normal=value=>String(value||'').replace(/\r\n?/g,'\n').trim();
 const fail=message=>{console.error(message);process.exit(1)};
 const run=JSON.parse(read('run.json')),messages=label=>(run.outbox||[]).filter(m=>m.label===label&&m.accepted!==false).map(m=>m.text).join('');
 const saved=normal(read('brief.txt'));
-if(!messages('scheduled-brief'))fail('the installed morning brief was never delivered through Telegram');
-if(normal(messages('scheduled-brief'))!==saved)fail('the scheduled Telegram delivery differs from the saved brief');
+const scheduled=JSON.parse(read('scheduled-telegram-requests.json')).sent||[];
+if(!scheduled.some(message=>normal(message.text)===saved))fail('the installed scheduled morning brief was never delivered through Telegram');
 if(!messages('todays-brief'))fail("the owner received no answer to today's brief through the installed gateway");
 if(normal(messages('todays-brief'))!==saved)fail("today's brief differs from the saved note");
 const rows=file=>{const data=JSON.parse(read(file));return Array.isArray(data)?data:data.data||[]};
