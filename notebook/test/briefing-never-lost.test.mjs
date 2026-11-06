@@ -31,6 +31,42 @@ test('a required line with a banned word is left out and reported, and the brief
  assert.deepEqual(result.left_out,['the Charm Challenge line']);
 });
 
+for(const [name,reason] of [['missing health sentence','No health sentence'],['no actionable next step','No useful next action']])test('a rejected rewrite for '+name+' saves a factual brief',async()=>{
+ const {store,query}=fixture([]);store.save('goals',{title:'Prepare a fictional guide',status:'adopted'});
+ let writes=0;
+ const provider=async input=>input.kind==='brief-verification'?{passed:input.check==='source-facts'&&reason==='No useful next action',reason}:++writes&&'Private unsupported claim: the guide sold 100 copies.';
+ const result=await run(provider,query,store,'brief-failed-'+name.replaceAll(' ','-'));
+ const note=store.get('notes',result.record_id);
+ assert.equal(writes,2);assert.equal(result.fallback,true);assert.match(note.content,/Prepare a fictional guide/);
+ assert.match(note.content,/Ask Godspeed to work on/);assert.match(note.content,/no fresh health observations/i);
+ assert.doesNotMatch(note.content,/Private|100 copies/);
+ const receipt=query.rows('job_receipts').find(r=>r.kind==='brief-factual-fallback');
+ assert.match(receipt.rejected_draft,/100 copies/);assert.ok(receipt.reasons.includes(reason));
+ assert.equal(repairs(query).length,1);assert.equal(query.rows('notifications').filter(n=>n.status==='ready').length,1);
+});
+
+test('a voice rule that rejects the goal title still leaves a useful action',async()=>{
+ const {store,query}=fixture(['BANNED-WORD: guide']);store.save('goals',{title:'Prepare a fictional guide',status:'adopted'});
+ const provider=async input=>input.kind==='brief-verification'?{passed:false,reason:'No useful action'}:'Unsupported draft.';
+ const result=await run(provider,query,store,'brief-voice-action'),content=store.get('notes',result.record_id).content;
+ assert.equal(result.fallback,true);assert.match(content,/Ask Godspeed to complete one goal step/);assert.doesNotMatch(content,/guide/i);
+});
+
+test('a short sentence limit still yields a concrete action',async()=>{
+ const {store,query}=fixture(['MAX-SENTENCE-WORDS: 8']);store.save('goals',{title:'Prepare a fictional guide',status:'adopted'});
+ const provider=async input=>input.kind==='brief-verification'?{passed:false,reason:'No useful action'}:'Unsupported draft.';
+ const result=await run(provider,query,store,'brief-short-action'),content=store.get('notes',result.record_id).content;
+ assert.equal(result.fallback,true);assert.match(content,/Ask Godspeed to complete one goal step/);
+});
+
+test('a rejected draft keeps a separately checked contribution and its exact link',async()=>{
+ const {store,query}=fixture([]),content='Fictional copy ready draft.';
+ const note=store.save('notes',{title:'Fictional contribution',content});store.save('lead_entries',{title:note.title,content,note_id:note.id,status:'ready',delivery_day:'2026-01-01'});
+ const provider=async input=>input.kind==='brief-verification'?{passed:false,reason:'No useful action'}:'Unsupported draft.';
+ const result=await run(provider,query,store,'brief-contribution-fallback'),saved=store.get('notes',result.record_id);
+ assert.equal(result.fallback,true);assert.match(saved.content,/Fictional copy ready draft/);assert.match(saved.content,new RegExp('/dashboard/notes/'+note.id));
+});
+
 test('a required sentence over the length limit is left out and reported, and the briefing is saved',async()=>{
  const {store,query}=fixture(['MAX-SENTENCE-WORDS: 8']);
  const content='This fictional copy ready sentence is far too long for the limit set here.',note=store.save('notes',{title:'Fictional contribution',content}),entry=store.save('lead_entries',{title:note.title,content,note_id:note.id,status:'ready',delivery_day:'2026-01-01'});

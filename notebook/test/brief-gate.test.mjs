@@ -22,11 +22,12 @@ test('the briefing preserves the full ready contribution and link without claimi
  const provider=async input=>{if(input.kind==='brief-verification')return {passed:true,reason:'Fixture current sources and reader checked'};writes++;if(writes===1)return 'No fresh fictional health observations are available. A fictional post is ready.';assert.ok(input.context.check_feedback.some(f=>/complete checked contribution/.test(f)));return 'No fresh fictional health observations are available. Choose a draft to post.\n\n'+input.context.contribution.content+'\n\n'+input.context.contribution.link;};
  const result=await jobExecutor(provider,query)({kind:'morning-brief',id:'fictional-lead-brief'},{store,settings:{}}),saved=store.get('notes',result.record_id),queued=store.get('lead_entries',entry.id);assert.equal(writes,2);assert.ok(saved.content.includes(content));assert.ok(saved.content.includes('/dashboard/notes/'+note.id));assert.equal(queued.status,'queued');assert.equal(queued.shown_at,undefined);assert.equal(queued.posted_at,undefined);assert.equal(queued.delivery_note_id,saved.id);
 });
-test('brief sources are prepared before writing and failed judgment prevents delivery',async()=>{
+test('brief sources are prepared before writing and a failed judgment delivers checked facts only',async()=>{
  const store=new Store(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-brief-'))),query=new QueryService(store),calls=[];
  store.save('health_observations',{metric:'Fictional energy',value:6,observed_at:new Date().toISOString()});
  const provider=async i=>{calls.push(i);return i.kind==='brief-verification'?JSON.stringify({passed:false,reason:'Invented result absent from sources'}):'Fictional energy improved to 10.';};
- await assert.rejects(jobExecutor(provider,query)({kind:'morning-brief',id:'brief'},{store,settings:{}}),/Invented/);assert.equal(query.rows('notes').filter(n=>n.source_app==='morning-brief').length,0);
+ const result=await jobExecutor(provider,query)({kind:'morning-brief',id:'brief'},{store,settings:{}});
+ const note=store.get('notes',result.record_id);assert.equal(result.fallback,true);assert.match(note.content,/Fictional energy: 6/);assert.doesNotMatch(note.content,/improved to 10/);
  assert.ok(calls.find(i=>i.kind==='morning-brief').context.health.some(h=>h.value===6));assert.ok(query.rows('job_receipts').some(r=>r.kind==='brief-verification'&&r.state==='failed'));
 });
 
