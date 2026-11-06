@@ -13,7 +13,7 @@ import {readNotebookRoutines,SWITCHABLE_NOTEBOOK_ROUTINES} from './notebook-rout
 // scheduler only read them, so a routine switched on is never switched off by one.
 // A function, since this file is loaded in the middle of starting-routines.mjs's own imports (through query.mjs).
 export const switchable=()=>[
- ...STARTING_ROUTINES.map(({key,name,what,needs})=>({key,name,what,needs})),
+ ...STARTING_ROUTINES.filter(({key})=>key!=='cleanup').map(({key,name,what,needs})=>({key,name,what,needs})),
  ...SWITCHABLE_NOTEBOOK_ROUTINES.map(({key,name,what})=>({key,name,what})),
 ];
 export const ADOPTED_NOTE='Godspeed did not make this mission control from its starter (it was adopted), so its own jobs may already do what these routines do. Each stays off until you switch it on.';

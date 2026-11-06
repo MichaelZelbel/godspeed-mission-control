@@ -376,6 +376,15 @@ test('a recovery marker that cannot be written does not stop the connections aft
 
 // THE DISK ON A SERVER (#238). The file-system reading is a stub; the notices and deadlines are real.
 const diskStubs=(percent,over={})=>stubs({disk:diskProbe({store:{root:'/srv/godspeed'},home:'/srv/hermes',used:()=>percent(),biggest:()=>[{folder:'/srv/hermes/sessions',bytes:5*1024**3},{folder:'/srv/godspeed/media',bytes:3*1024**3},{folder:'/srv/godspeed/routines',bytes:512*1024**2}],...over})});
+test('the disk warning names the actual three largest direct folders in descending order',async t=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-disk-folders-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ const folders=[['small',1000],['second',2000],['largest',4000],['third',3000]].map(([name,bytes])=>{const folder=path.join(root,name);fs.mkdirSync(folder);fs.writeFileSync(path.join(folder,'data'),'.'.repeat(bytes));return folder;});
+ const result=await diskProbe({store:{root},used:()=>86})();
+ const largest=[folders[2],folders[3],folders[1]];
+ assert.deepEqual(largest.map(folder=>result.words.indexOf(folder+' (')),[...largest.map(folder=>result.words.indexOf(folder+' ('))].sort((a,b)=>a-b));
+ for(const folder of largest)assert.match(result.words,new RegExp(folder.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
+ assert.equal(result.words.includes(folders[0]+' ('),false);
+});
 test('the disk: 70% and 82% say nothing, 86% says it once with the three biggest folders and one deadline, 78% closes it',async t=>{
  const {store}=fixture(t);let percent=70;
  const probes=diskStubs(()=>percent);

@@ -51,6 +51,14 @@ test('a link is never followed, and a damaged sessions.json leaves its folder al
  assert.ok(!gone(dump));
 });
 
+test('a session or run-log folder on another file system is left alone',t=>{
+ const {root,home}=fixture(t),session=make(path.join(home,'sessions','session_20260101_old.json'),40),logs=make(path.join(root,'routines','work','2026-01-01','answer.txt'),40),real=fs.lstatSync;
+ const otherDevice=stat=>Object.create(stat,{dev:{value:stat.dev+1}});
+ t.mock.method(fs,'lstatSync',p=>{const stat=real(p);return [path.join(home,'sessions'),path.join(root,'routines','work')].includes(String(p))?otherDevice(stat):stat;});
+ nightlyCleanup({root,home,now:NOW});
+ assert.ok(!gone(session),'a mounted sessions folder is not entered');assert.ok(!gone(logs),'a mounted run-log folder is not entered');
+});
+
 test('a place that cannot be read is reported as stopped early, and the other places are still cleaned',t=>{
  const {root,home}=fixture(t);
  const old=make(path.join(root,'routines','work','2026-01-01','a.txt'),40);

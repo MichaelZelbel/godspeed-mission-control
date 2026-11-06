@@ -45,9 +45,9 @@ function removeIfOld(file,dev,cutoff,freed){
  try{fs.unlinkSync(file);freed.files++;freed.bytes+=stat.size;}catch{freed.failed=true;}
 }
 
-function sweepSessions(folder,cutoff,freed){
+function sweepSessions(folder,dev,cutoff,freed){
  const stat=lstat(folder);
- if(!stat||!stat.isDirectory())return;
+ if(!stat||!stat.isDirectory()||stat.dev!==dev)return;
  const listed=listedSessions(folder);
  if(!listed)return;
  for(const name of fs.readdirSync(folder)){
@@ -65,23 +65,24 @@ function sweepDay(folder,dev,cutoff,freed){
  try{fs.rmdirSync(folder);}catch{}
 }
 
-function sweepRunLogs(folder,cutoff,freed){
+function sweepRunLogs(folder,dev,cutoff,freed){
  const stat=lstat(folder);
- if(!stat||!stat.isDirectory())return;
+ if(!stat||!stat.isDirectory()||stat.dev!==dev)return;
  for(const name of fs.readdirSync(folder)){
   const day=path.join(folder,name);
   if(DAY_FOLDER.test(name)&&realFolder(day,stat.dev))sweepDay(day,stat.dev,cutoff,freed);
  }
 }
 
-const subfolders=folder=>{try{return fs.readdirSync(folder).map(name=>path.join(folder,name)).filter(p=>realFolder(p));}catch{return [];}};
+const subfolders=(folder,dev)=>{if(!realFolder(folder,dev))return [];try{return fs.readdirSync(folder).map(name=>path.join(folder,name)).filter(p=>realFolder(p,dev));}catch{return [];}};
 
 // What the cleanup looks at: [{name, sweep(cutoff, freed)}], one entry per place.
 export function places({root,home}){
- const homes=[{name:'assistant sessions',folder:home},...subfolders(path.join(home,'profiles')).map(p=>({name:'profile '+path.basename(p)+' sessions',folder:p}))];
+ const homeStat=lstat(home),rootStat=lstat(root),homeDev=homeStat?.isDirectory()?homeStat.dev:undefined,rootDev=rootStat?.isDirectory()?rootStat.dev:undefined;
+ const homes=homeDev===undefined?[]:[{name:'assistant sessions',folder:home},...subfolders(path.join(home,'profiles'),homeDev).map(p=>({name:'profile '+path.basename(p)+' sessions',folder:p}))];
  return [
-  ...homes.map(h=>({name:h.name,sweep:(cutoff,freed)=>sweepSessions(path.join(h.folder,'sessions'),cutoff,freed)})),
-  ...RUN_LOG_FOLDERS.map(relative=>({name:relative,sweep:(cutoff,freed)=>sweepRunLogs(path.join(root,...relative.split('/')),cutoff,freed)})),
+  ...homes.map(h=>({name:h.name,sweep:(cutoff,freed)=>sweepSessions(path.join(h.folder,'sessions'),homeDev,cutoff,freed)})),
+  ...RUN_LOG_FOLDERS.map(relative=>({name:relative,sweep:(cutoff,freed)=>sweepRunLogs(path.join(root,...relative.split('/')),rootDev,cutoff,freed)})),
  ];
 }
 
