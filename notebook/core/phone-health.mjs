@@ -55,15 +55,26 @@ export function tokenMatches(state,presented){
 // "2026-10-25 02:30:00.250 +0200" as a moment. Compared as text it is wrong across the repeated
 // hour when daylight saving ends: 02:30 +0200 is earlier than 02:10 +0100.
 const INSTANT=/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2})(\.\d+)?)?\s*(Z|[+-]\d{2}:?\d{2})?$/;
+function timestampOf(text){
+ const m=INSTANT.exec(String(text||'').trim());if(!m)return null;
+ const [,year,month,day,hour,minute,second='00',fraction='',zone='Z']=m;
+ const [y,mo,d,h,mi,s]=[year,month,day,hour,minute,second].map(Number);
+ if(mo<1||mo>12||d<1||h>23||mi>59||s>59)return null;
+ let offset=0;
+ if(zone!=='Z'){
+  const digits=zone.slice(1).replace(':',''),offsetHours=Number(digits.slice(0,2)),offsetMinutes=Number(digits.slice(2));
+  if(offsetHours>23||offsetMinutes>59)return null;
+  offset=(zone[0]==='-'?-1:1)*(offsetHours*60+offsetMinutes);
+ }
+ const date=new Date(0);date.setUTCFullYear(y,mo-1,d);date.setUTCHours(h,mi,s,Math.floor(Number(fraction||0)*1000));
+ if(date.getUTCFullYear()!==y||date.getUTCMonth()!==mo-1||date.getUTCDate()!==d)return null;
+ return {day:year+'-'+month+'-'+day,hms:hour+':'+minute+':'+second,instant:date.getTime()-offset*60000};
+}
 export function instantOf(text){
- const m=INSTANT.exec(String(text||'').trim());if(!m)return NaN;
- const [,y,mo,d,h,mi,s='0',fraction='',zone='Z']=m;let offset=0;
- if(zone!=='Z'){const digits=zone.slice(1).replace(':','');offset=(zone[0]==='-'?-1:1)*(Number(digits.slice(0,2))*60+Number(digits.slice(2)));}
- return Date.UTC(+y,+mo-1,+d,+h,+mi,+s)+(fraction?Number(fraction)*1000:0)-offset*60000;
+ return timestampOf(text)?.instant??NaN;
 }
 // A date without a time sorts before any moment.
 const when=text=>{const t=instantOf(text);return Number.isNaN(t)?-Infinity:t;};
-const dayOf=text=>{const day=String(text??'').slice(0,10);return /^\d{4}-\d{2}-\d{2}$/.test(day)&&new Date(day+'T00:00:00Z').toISOString().slice(0,10)===day?day:null;};
 const utcDay=date=>date.toISOString().slice(0,10);
 
 const rawFile=(state,day)=>path.join(rawFolder(state),day+'.jsonl');
@@ -120,7 +131,6 @@ const WALK_PACE=9;
 const round=n=>Math.round(n*100)/100;
 const number=value=>{const n=value===null||typeof value==='boolean'||typeof value==='string'&&value.trim()===''?NaN:Number(value);return Number.isFinite(n)?n:null;};
 const hhmm=text=>/^\d{2}:\d{2}$/.test(String(text).slice(11,16))?String(text).slice(11,16):null;
-const hms=text=>{const m=/^\d{4}-\d{2}-\d{2}[ T](\d{2}):(\d{2})(?::(\d{2}))?/.exec(String(text||''));return m?m[1]+':'+m[2]+':'+(m[3]||'00'):null;};
 
 function minutesOf(duration){
  if(duration&&typeof duration==='object'){
@@ -139,8 +149,8 @@ function kilometresOf(distance){
 function pointsOf(uploads){
  const seen=new Map();let at=0;
  for(const {data} of uploads)for(const metric of Array.isArray(data?.metrics)?data.metrics:[])for(const point of Array.isArray(metric?.data)?metric.data:[]){
-  const day=dayOf(point?.date);if(!day)continue;
-  seen.set(JSON.stringify([metric.name,point.date,point.source]),{name:metric.name,units:metric.units,point,day,instant:when(point.date),at:at++});
+  const timestamp=timestampOf(point?.date);if(!timestamp)continue;
+  seen.set(JSON.stringify([metric.name,point.date,point.source]),{name:metric.name,units:metric.units,point,day:timestamp.day,instant:timestamp.instant,hms:timestamp.hms,at:at++});
  }
  return [...seen.values()];
 }
@@ -148,7 +158,7 @@ function pointsOf(uploads){
 function workoutsOf(uploads){
  let kept=[];
  for(const {data} of uploads)for(const workout of Array.isArray(data?.workouts)?data.workouts:[]){
-  if(!workout||!dayOf(workout.start))continue;
+  if(!workout||!timestampOf(workout.start))continue;
   kept=kept.filter(old=>!(workout.id!==undefined&&old.id===workout.id)&&old.start!==workout.start);kept.push(workout);
  }
  return kept;
@@ -188,14 +198,14 @@ export function buildDays(uploads){
  }
  const totals=new Map();
  for(const workout of workoutsOf(uploads).sort((a,b)=>(when(a.start)>when(b.start))-(when(a.start)<when(b.start)))){
-  const day=dayOf(workout.start),minutes=minutesOf(workout.duration),km=kilometresOf(workout.distance),sum=totals.get(day)||totals.set(day,{}).get(day);
+  const day=timestampOf(workout.start).day,minutes=minutesOf(workout.duration),km=kilometresOf(workout.distance),sum=totals.get(day)||totals.set(day,{}).get(day);
   const add=(metric,value)=>{sum[metric]=(sum[metric]||0)+value;};
   if(RUNS.has(String(workout.name).trim().toLowerCase())){
    const walk=km>0&&minutes/km>=WALK_PACE;add(walk?'walk_km':'run_km',km);add(walk?'walk_min':'run_min',minutes);
   }else{add('workout_min',minutes);(sum.types||=[]);if(!sum.types.includes(workout.name))sum.types.push(workout.name);}
  }
  for(const [day,{types,...numbers}] of totals){for(const [metric,value] of Object.entries(numbers))put(day,metric,value);if(types)put(day,'workout_types',types.join('+'));}
- Object.defineProperty(days,'dataUntil',{value:new Map([...dataUntil].map(([day,point])=>[day,hms(point.point.date)]).filter(([,value])=>value))});
+ Object.defineProperty(days,'dataUntil',{value:new Map([...dataUntil].map(([day,point])=>[day,point.hms]))});
  return days;
 }
 
@@ -219,8 +229,8 @@ export function writeDays(store,built,{now=clockNow()}={}){
 
 export function touchedDays(data){
  const days=new Set();
- for(const metric of Array.isArray(data?.metrics)?data.metrics:[])for(const point of Array.isArray(metric?.data)?metric.data:[]){const day=dayOf(point?.date);if(day)days.add(day);}
- for(const workout of Array.isArray(data?.workouts)?data.workouts:[]){const day=dayOf(workout?.start);if(day)days.add(day);}
+ for(const metric of Array.isArray(data?.metrics)?data.metrics:[])for(const point of Array.isArray(metric?.data)?metric.data:[]){const day=timestampOf(point?.date)?.day;if(day)days.add(day);}
+ for(const workout of Array.isArray(data?.workouts)?data.workouts:[]){const day=timestampOf(workout?.start)?.day;if(day)days.add(day);}
  return [...days].sort();
 }
 

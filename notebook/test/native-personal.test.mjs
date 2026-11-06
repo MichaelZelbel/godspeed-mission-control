@@ -27,6 +27,16 @@ test('scheduled health habit review uses fresh selected measurements without tur
  const retained=query.rows('habits').find(h=>h.id===habit.id);assert.equal(retained.observations[0].answer,'no');assert.equal(retained.agreement,habit.agreement);
 });
 
+test('scheduled health habit review refuses a current phone column as a weekly-miss source',async()=>{
+ const store=new Store(temp()),query=new QueryService(store),domains=new Domains(query),day=new Date().toISOString().slice(0,10);store.save('settings',{id:'installation',timezone:'UTC'});
+ const talk=await domains.invoke('personal-operation',{type:'coach-open',area:'health',question:'Fictional current health source'}),habit=await domains.invoke('personal-operation',{type:'habit-agree',talk_id:talk.id,title:'Fictional current health habit',agreement:'I agree',check_at:new Date(Date.now()+60000).toISOString()});
+ store.save('health_observations',{metric:'protein_g',value:20,source:'Health Auto Export',via:'phone-receiver',observed_on:day,date_precision:'day',observed_at:day+'T00:00:00Z',data_until:'09:00:00'});
+ const unsafe=jobExecutor(async input=>{assert.equal(input.kind,'habit-review');assert.match(input.contract,/may_be_incomplete and not_judged/);return {question:'Did you miss your protein target?',health_claims:[{date:day,column:'protein_g',use:'weekly_miss'}]};},query);
+ await assert.rejects(unsafe({id:'current-health-habit-review',kind:'habit-check',habit_id:habit.id},{settings:{},store}),/Unknown phone health cannot support weekly miss/);assert.equal(query.rows('notes').filter(note=>note.source_app==='habit-check').length,0);
+ const safe=jobExecutor(async input=>{assert.equal(input.kind,'habit-review');return {question:'What would help you check in later today?',health_claims:[]};},query);
+ await safe({id:'current-health-habit-review-safe',kind:'habit-check',habit_id:habit.id},{settings:{},store});assert.equal(query.rows('notes').filter(note=>note.source_app==='habit-check').length,1);
+});
+
 test('the native coach tick reads the newest same-day measurement, whichever feed wrote it',async()=>{
  const run=async order=>{
   const store=new Store(temp()),query=new QueryService(store),domains=new Domains(query);store.save('settings',{id:'installation',timezone:'UTC'});

@@ -35,13 +35,14 @@ test('a briefing treats a short phone day as unknown until a manual settlement a
  const store=new Store(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-brief-incomplete-health-'))),query=new QueryService(store),day='2026-11-04';
  store.save('settings',{id:'installation',timezone:'UTC'});store.save('health_observations',{metric:'protein_g',value:50,source:'Health Auto Export',via:'phone-receiver',observed_on:day,date_precision:'day',observed_at:day+'T00:00:00Z',data_until:'19:55:00'});
  let writes=0;const provider=async input=>{
-  if(input.kind==='brief-verification'){assert.match(input.contract,/may_be_incomplete/);return {passed:true,reason:'Fixture checked the incomplete phone day.'};}
-  writes++;assert.match(input.contract,/may_be_incomplete/);const freshness=input.context.health_freshness,protein=freshness.days.find(row=>row.date===day).columns.protein_g;
-  if(writes===1){assert.equal(protein.state,'may_be_incomplete');return 'Protein was 50 g so far; data stopped at 19:55:00. Weekly protein: 0 known days and 1 unknown day.';}
+  if(input.kind==='brief-verification'){assert.match(input.contract,/health_claims/);return {passed:true,reason:'Fixture checked the incomplete phone day.'};}
+  writes++;const freshness=input.context.health_freshness,protein=freshness.days.find(row=>row.date===day)?.columns.protein_g;
+  if(writes===1){assert.match(input.contract,/health_claims/);assert.deepEqual(input.context.health_summary,['On 2026-11-04, protein_g was 50 so far; phone data stopped at 19:55:00.']);return {text:'Have a protein shake to reach your target.',health_claims:[{date:day,column:'protein_g',use:'gap_advice'}]};}
+  if(writes===2){assert.ok(input.context.check_feedback.some(reason=>/cannot support gap advice/.test(reason)));return {text:'Weekly protein: 0 known days and 1 unknown day.',health_claims:[]};}
   assert.deepEqual(protein,{value:80,source:'manual',state:'settled'});return 'Protein was 80 g. Weekly protein: 1 known day and 0 unknown days.';
  };
  const first=await briefing({id:'brief-incomplete-one'},{store,query,provider,now:new Date('2026-11-05T08:00:00Z')}),firstNote=store.get('notes',first.record_id).content;
- assert.match(firstNote,/so far/);assert.match(firstNote,/19:55:00/);assert.doesNotMatch(firstNote,/short day|fully logged|gap advice/i);
+ assert.match(firstNote,/protein_g was 50 so far/);assert.match(firstNote,/19:55:00/);assert.match(firstNote,/1 unknown day/);assert.doesNotMatch(firstNote,/protein shake/);assert.equal(query.rows('job_receipts').filter(row=>row.kind==='brief-code-gate'&&row.state==='failed').length,1);
  personalOperation({store,query},{type:'health-add',metric:'protein_g',value:80,unit:'g',observed_at:day+'T12:00:00Z'});
  const second=await briefing({id:'brief-incomplete-two'},{store,query,provider,now:new Date('2026-11-06T08:00:00Z')});assert.match(store.get('notes',second.record_id).content,/1 known day and 0 unknown days/);
 });
@@ -148,16 +149,16 @@ test('a briefing never judges today\'s phone day: it is unknown, while a settled
  personalOperation({store,query},{type:'health-add',metric:'protein_g',value:80,unit:'g',observed_at:today+'T06:00:00Z'});
  let writes=0;const feedback=[];
  const provider=async input=>{
-  if(input.kind==='brief-verification'){assert.match(input.contract,/not_judged/);return {passed:true,reason:'Fixture checked the unknown day.'};}
-  writes++;assert.match(input.contract,/not_judged/);assert.match(input.contract,/settled/);
-  const days=input.context.health_freshness.days,day=days.find(row=>row.date===today);
-  assert.equal(day.columns.steps.state,'not_judged','today\'s phone column is not judged');assert.equal(day.columns.protein_g.state,'settled','the manual column is usable');
-  if(writes===1)return 'Steps were 4200, a short day, and you missed the target. Protein was 80 g.';
+  if(input.kind==='brief-verification'){assert.match(input.contract,/health_claims/);return {passed:true,reason:'Fixture checked the unknown day.'};}
+  writes++;assert.match(input.contract,/health_claims/);assert.match(input.contract,/settled/);
+  const day=input.context.health_freshness.days.find(row=>row.date===today);
+  assert.equal(day.columns.steps,undefined,'today\'s unknown phone column is rendered by code');assert.equal(day.columns.protein_g.state,'settled','the manual column is usable');
+  if(writes===1){assert.deepEqual(input.context.health_summary,['On '+today+', steps was 4200 so far; phone data stopped at 07:40:00.']);return {text:'Steps were 4200, a short day, and you missed the target. Protein was 80 g.',health_claims:[{date:today,column:'steps',use:'weekly_miss'}]};}
   feedback.push(...(input.context.check_feedback||[]));
-  return 'Steps are 4200 so far; data stopped at 07:40:00, and today is not over. Protein was 80 g.';
+  return {text:'Protein was 80 g.',health_claims:[]};
  };
  const result=await briefing({id:'brief-today-unknown'},{store,query,provider,now:new Date('2026-11-05T08:00:00Z')}),saved=store.get('notes',result.record_id).content;
- assert.equal(writes,2,'the first draft judged today and was sent back by the mechanical gate');
- assert.ok(feedback.some(reason=>/not over or may be incomplete is unknown/.test(reason)));
+ assert.equal(writes,2,'the first draft used an unknown day as a weekly miss and was sent back by the structured gate');
+ assert.ok(feedback.some(reason=>/cannot support weekly miss/.test(reason)));
  assert.match(saved,/so far/);assert.match(saved,/07:40:00/);assert.match(saved,/Protein was 80 g/);assert.doesNotMatch(saved,/short day|missed/i);
 });

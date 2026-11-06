@@ -54,11 +54,22 @@ test('a day re-sent the next morning adds only its new points and rewrites nothi
 test('a phone day keeps the latest quantitative point time, not its upload time or sleep',()=>{
  const short=buildDays([{received_at:'2026-11-05T07:00:00Z',data:upload([metric('step_count','count',[D+' 19:55:00 +0100',100]),metric('sleep_analysis','hr',[D+' 23:59:00 +0100',8])])}]);
  assert.equal(short.dataUntil.get(D),'19:55:00');
- for(const [time,expected] of [['21:00:00','21:00:00'],['21:00:30','21:00:30']]){
+ for(const [time,expected] of [['19:55','19:55:00'],['21:00:00','21:00:00'],['21:00:30','21:00:30']]){
   const built=buildDays([{received_at:'2026-11-05T08:00:00Z',data:upload([metric('step_count','count',[D+' '+time+' +0100',100])])}]);assert.equal(built.dataUntil.get(D),expected);
  }
  const store=setup();acceptUpload(store,upload([metric('step_count','count',[D+' 19:55:00 +0100',100])]),{now:at('2026-11-05T08:00:00Z')});
  assert.equal(store.list('health_observations')[0].data_until,'19:55:00');
+});
+
+test('invalid point timestamps are ignored by every phone metric and cannot create a complete day',()=>{
+ const metrics=['step_count','walking_running_distance','active_energy','basal_energy_burned','dietary_energy','protein','carbohydrates','total_fat','flights_climbed','weight_body_mass','body_fat_percentage','lean_body_mass','waist_circumference'];
+ const invalid=['2026-11-04 24:00:00 +0100','2026-11-04 12:60:00 +0100','2026-11-04 12:00:60 +0100','2026-11-04 12:00:00 +24:00','2026-02-29 12:00:00 +0100'];
+ for(const timestamp of invalid){
+  assert.ok(Number.isNaN(instantOf(timestamp)),timestamp);
+  const data=upload(metrics.map(name=>metric(name,'count',[timestamp,1]))),built=buildDays([{received_at:'2026-11-05T08:00:00Z',data}]);
+  assert.equal(built.size,0,timestamp);assert.equal(built.dataUntil.size,0,timestamp);
+  const store=setup();acceptUpload(store,data,{now:at('2026-11-05T08:00:00Z')});assert.deepEqual(currentHealth(new QueryService(store),{now:Date.parse('2026-11-06T08:00:00Z')}).days,[],timestamp);
+ }
 });
 
 test('a numeric weight later than the steps sets the day\'s data time, and a still later sleep point does not',()=>{
