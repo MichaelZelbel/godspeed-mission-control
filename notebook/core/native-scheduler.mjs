@@ -39,7 +39,7 @@ const setupFailureFile=store=>path.join(store.state,SETUP_FAILURES);
 const readSetupFailures=store=>{try{const saved=JSON.parse(fs.readFileSync(setupFailureFile(store),'utf8'));return saved&&typeof saved==='object'&&saved.steps&&typeof saved.steps==='object'?saved:{steps:{}};}catch{return {steps:{}};}};
 const writeSetupFailures=(store,failures)=>atomic(setupFailureFile(store),JSON.stringify(failures,null,2)+'\n');
 const diagnostic=error=>String(error?.stderr||'').replace(/\x1b\[[0-?]*[ -/]*[@-~]/g,'').split(/\r?\n/).map(line=>scrubCredentials(line).trimEnd()).filter(Boolean).slice(-10).join('\n').slice(-2000);
-const errorLine=record=>{const lines=String(record.stderr||'').split(/\r?\n/).map(line=>line.trim()).filter(Boolean),trace=lines.findIndex(line=>/^Traceback \(most recent call last\):$/i.test(line)),exception=lines.filter(line=>/^[A-Za-z_][\w.]*(?:Error|Exception|Warning)(?::|$)/.test(line)).at(-1);return (trace>=0?lines.at(-1):exception||lines[0])||'exit code '+(record.exit_code??'unknown');};
+const errorLine=record=>{const lines=String(record.stderr||'').split(/\r?\n/).map(line=>line.trim()).filter(Boolean),trace=lines.findIndex(line=>/^Traceback \(most recent call last\):$/i.test(line));return (trace>=0?lines.at(-1):lines[0])||'exit code '+(record.exit_code??'unknown');};
 const setupName=step=>step==='cleanup'?'Nightly cleanup':step==='notice-sender'?'Notice sender':switchable().find(routine=>routine.key===step)?.name||step;
 const setupEffect=step=>step==='notice-sender'?'no notices and no routine switch takes effect':step==='cleanup'?'nightly cleanup does not run':'that routine does not run';
 // "05:16": once a day at that time in the owner's timezone.
@@ -76,11 +76,13 @@ export class NativeScheduler{
  get executor(){return this.records?.executor||null;}
  async command(args,{timeout=120000}={}){const timezone=this.store.get('settings','installation')?.timezone,env=assistantEnvironment({home:this.home,workspace:this.store.root});if(timezone)env.HERMES_TIMEZONE=timezone;const result=await this.run(this.executable,['cron',...args],{cwd:this.store.root,windowsHide:true,shell:false,env,maxBuffer:1024*1024,timeout});return result.stdout;}
  setupNotice(failures,now){
-  const steps=Object.values(failures.steps),notice=this.store.get('notifications',SETUP_NOTICE);
-  if(!steps.length){if(notice?.status==='pending')this.store.save('notifications',{id:SETUP_NOTICE,status:'resolved',resolved_at:new Date(now).toISOString()});return;}
-  if(notice?.status!=='pending'&&!steps.some(step=>step.attempts>=3))return;
-  const detail=steps.map(step=>setupName(step.step)+': '+setupEffect(step.step)+'. '+errorLine(step)+'.').join(' ');
-  this.store.save('notifications',{id:SETUP_NOTICE,status:'pending',title:'Some routines could not be set up',body:'Godspeed could not set up '+steps.map(step=>setupName(step.step)).join(', ')+' on this machine. '+detail+' It tries again by itself. Open Settings > Routines.',link:'/dashboard/settings#routines',steps:steps.map(step=>step.step),error:steps.map(errorLine).join('\n')});
+  try{
+   const steps=Object.values(failures.steps),notice=this.store.get('notifications',SETUP_NOTICE);
+   if(!steps.length){if(notice?.status==='pending')this.store.save('notifications',{id:SETUP_NOTICE,status:'resolved',resolved_at:new Date(now).toISOString()});return;}
+   if(notice?.status!=='pending'&&!steps.some(step=>step.attempts>=3))return;
+   const detail=steps.map(step=>setupName(step.step)+': '+setupEffect(step.step)+'. '+errorLine(step)+'.').join(' ');
+   this.store.save('notifications',{id:SETUP_NOTICE,status:'pending',title:'Some routines could not be set up',body:'Godspeed could not set up '+steps.map(step=>setupName(step.step)).join(', ')+' on this machine. '+detail+' It tries again by itself. Open Settings > Routines.',link:'/dashboard/settings#routines',steps:steps.map(step=>step.step),error:steps.map(errorLine).join('\n')});
+  }catch{console.error('Godspeed Mission Control: routine setup notice could not be saved.');}
  }
  async followSetup(step,action,{retry=false}={}){
   const failures=readSetupFailures(this.store),previous=failures.steps[step],now=this.now(),changedExecutable=previous&&previous.executable!==String(this.executable),after=Date.parse(previous?.retry_after||'');
