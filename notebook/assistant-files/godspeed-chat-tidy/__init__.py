@@ -90,8 +90,8 @@ def _message_event(origin):
 
 def _owner_chat_key():
     """The one chat the night routine may tidy, as the assistant routes it now."""
-    database = Path(_home()) / "state.db"
     try:
+        database = (Path(_home()) / "state.db").resolve()
         with sqlite3.connect(database.as_uri() + "?mode=ro", uri=True, timeout=2) as connection:
             rows = connection.execute(
                 "select session_key from gateway_routing where scope = ? and session_key like ?",

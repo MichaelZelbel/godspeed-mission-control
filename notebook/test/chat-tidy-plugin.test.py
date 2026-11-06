@@ -81,10 +81,11 @@ class ChatTidy(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.home)
 
-    def owner_routes(self, *keys):
-        database = sqlite3.connect(os.path.join(self.home, "state.db"))
+    def owner_routes(self, *keys, home=None, scope=None):
+        home = home or self.home
+        database = sqlite3.connect(os.path.join(home, "state.db"))
         database.execute("create table gateway_routing(scope text, session_key text, entry_json text)")
-        scope = os.path.join(self.home, "sessions")
+        scope = scope or os.path.join(home, "sessions")
         database.executemany("insert into gateway_routing values (?, ?, ?)",
                              [(scope, key, "{}") for key in keys])
         database.commit()
@@ -132,6 +133,26 @@ class ChatTidy(unittest.TestCase):
         runner = Runner({KEY: Entry("chat-1"), other: Entry("other-chat")})
         self.assertTrue(load(runner).tidy(other + " other-chat").startswith("refused:"))
         self.assertEqual(runner.events, [])
+
+    def test_a_private_chat_from_another_hermes_home_is_refused(self):
+        os.remove(os.path.join(self.home, "state.db"))
+        self.owner_routes(KEY, scope="/another-profile/sessions")
+        runner = Runner({KEY: Entry("chat-1")})
+        self.assertTrue(load(runner).tidy(KEY + " chat-1").startswith("refused:"))
+        self.assertEqual(runner.events, [])
+
+    def test_a_relative_hermes_home_compresses_the_matching_chat(self):
+        absolute_home = tempfile.mkdtemp(prefix="chat-tidy-relative-", dir=os.getcwd())
+        relative_home = os.path.relpath(absolute_home)
+        try:
+            self.owner_routes(KEY, home=relative_home)
+            os.environ["HERMES_HOME"] = relative_home
+            runner = Runner({KEY: Entry("chat-1")})
+            self.assertEqual(load(runner).tidy(KEY + " chat-1"), "ok: chat-1")
+            self.assertEqual(len(runner.events), 1)
+        finally:
+            os.environ["HERMES_HOME"] = self.home
+            shutil.rmtree(absolute_home)
 
     def test_a_non_chat_app_origin_is_refused(self):
         runner = Runner({KEY: Entry("chat-1", "local")})
