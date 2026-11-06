@@ -26,11 +26,15 @@ Each routine runs the original programs of the mission control, never a copy of 
   due         mc-due check and mc-due today. Prints the reminders that need saying today, or
               nothing, and nothing at all on a day a morning brief carries them.
   connection-check  the Daily connection check (notebook/scripts/connection-check.mjs): one harmless call
-              to each connection that is set up; prints only the notices it queued (a login or key
-              refused, or a second failed morning in a row).
+               to each connection that is set up and, on a server, its local disk; prints only the
+               notices it queued (a login or key refused, a quiet phone, a full disk, or a second
+               failed morning in a row).
   cleanup     the nightly cleanup (notebook/scripts/nightly-cleanup.mjs): files untouched for 30 days
               are removed from a fixed list of places (core/cleanup.mjs). It prints nothing for the
               person; what it freed and the disk before and after go to the error stream.
+  mail-count  the Mail counts (notebook/scripts/mail-count.mjs): counts the mails a tracker's mail rule names,
+              from their headers only, and adds them to that tracker. It prints nothing, and a mail
+              connection that does not answer is left to the daily connection check.
   notices     the notice sender of a mission control not made from the starter (#225): every 15
               minutes it says the oldest queued notice, and never one marked not_sent.
   coach-gate  godspeed-coach gate: the talk brief when a talk is due, else {"wakeAgent": false}.
@@ -1169,7 +1173,7 @@ def coach(c, command):
 
 # Every other routine's words are recorded as printed (record); the two 15-minute routines record a
 # notice themselves, when it is written (tick). These print nothing for the person or feed an agent job.
-NOT_RECORDED = ("research", "coach-gate", "coach-prep", "chat-tidy", "cleanup")
+NOT_RECORDED = ("research", "coach-gate", "coach-prep", "chat-tidy", "cleanup", "mail-count")
 
 
 def connection_check(c):
@@ -1225,13 +1229,24 @@ def cleanup(c):
     if r is None or r.returncode != 0:
         fail("The nightly cleanup could not run.", r)
     sys.stderr.write(r.stderr)
+
+def mail_count(c):
+    """The Mail counts (core/mail-trackers.mjs). Silent whatever happens to the mail connection: only a
+    failure of the notebook's own files fails the run, with a sentence that carries no mail data."""
+    try:
+        r = run([c["node"], c["mail_count"]], c, environment(c, today(c)), timeout=900)
+    except subprocess.TimeoutExpired:
+        r = None
+    if r is None or r.returncode != 0:
+        fail("The mail counts could not be updated.")
     return ""
 
 
 # Every routine wrapper the notebook writes (routineFiles in starting-routines.mjs) names one of these.
 ROUTINES = {"research": research, "decide": decide, "work": work, "due": due, "brief": brief, "coach-prep": coach_prep,
             "coach-gate": lambda c: coach(c, "gate"), "coach-tick": lambda c: coach(c, "tick"),
-            "journal-tick": journal_tick, "notices": notices, "chat-tidy": chat_tidy, "connection-check": connection_check, "cleanup": cleanup}
+            "journal-tick": journal_tick, "notices": notices, "chat-tidy": chat_tidy, "connection-check": connection_check,
+             "cleanup": cleanup, "mail-count": mail_count}
 
 
 def main(kind):

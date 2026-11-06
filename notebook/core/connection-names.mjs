@@ -10,4 +10,6 @@ export const CONNECTION_NAMES={
  mail:{label:'Gmail',stops:'your assistants cannot search your mail or save drafts'},
  // Only on a server (#238): the disk is not a connection, but it is the one other thing the check tells the owner about.
  disk:{label:'your server\'s disk',stops:'your notebook, your backups and your assistant will stop'},
+ agentmail:{label:"your mission control's own mailbox",stops:'a tracker that counts its mail cannot read it'},
+ phone:{label:"the phone's health data",stops:"your briefing's health numbers stop"},
 };

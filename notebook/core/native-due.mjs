@@ -21,7 +21,7 @@ export function dueCommand(store,args,{copy:alsoCopy=true}={}){
  if(args[0]==='help')args=['--help',...args.slice(1)];
  if(['add','done','target','drop','marker'].includes(args[0])&&!(args[0]==='marker'&&['--needed','--stale'].includes(args[1]))&&!/^[a-z0-9][a-z0-9-]{0,59}$/.test(args[1]||''))throw Error('Choose an obligation slug inside the isolated workspace');
  const marker=args.indexOf('--set');if(marker>=0&&(!args[marker+1]||/[\r\n\t]/.test(args[marker+1])))throw Error('Calendar event identity must be a single line');
- const selfCheck=args.indexOf('--self-check-arg');if(selfCheck>=0)localPath(store.root,args[selfCheck+1]||'');
+ const selfCheck=args.indexOf('--self-check');if(selfCheck>=0&&String(args[selfCheck+1]||'').trim().toLowerCase()==='file-newer'){const arg=args.indexOf('--self-check-arg');if(arg>=0)localPath(store.root,args[arg+1]||'');}
  const timezone=store.get('settings','installation')?.timezone||'UTC',day=new Intl.DateTimeFormat('en-CA',{timeZone:timezone,year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date()),script=fileURLToPath(new URL('../../tools/due.js',import.meta.url));
  // Historical self-check paths are never allowed to inspect another installation. Every one of
  // them is in the notebook's own records now (#90): what an older version left in due/ is taken
@@ -30,7 +30,7 @@ export function dueCommand(store,args,{copy:alsoCopy=true}={}){
  // a reminder it cannot read before it gets there).
  if(args[0]==='check'){
   if(alsoCopy&&writable(store))copy(store,day);
-  for(const record of store.list('deadlines'))if(record.self_check_arg)localPath(store.root,String(record.self_check_arg));
+  for(const record of store.list('deadlines'))if(record.self_check_arg&&String(record.self_check||'').trim().toLowerCase()==='file-newer')localPath(store.root,String(record.self_check_arg));
  }
  // THE CHILD TAKES THE WORKSPACE LOCK ITSELF, AND THIS DOES NOT HOLD IT (30 October 2026, #90).
  // tools/due.js writes the notebook's own records now, so it opens the workspace; the lock is one
