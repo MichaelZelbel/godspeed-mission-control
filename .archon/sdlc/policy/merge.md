@@ -7,11 +7,3 @@ This adds to the SDLC pack's default merge policy.
 Each release is planned in godspeed-dev (`releases/<id>/plan.md`), and its candidate is frozen from
 main as the tag `candidate/<version>`. A pull request of a later release must not reach an earlier
 release's candidate.
-
-- While the tag `candidate/2.0.0-beta.18.1` does not exist on the remote (`git ls-remote --tags
-  origin refs/tags/candidate/2.0.0-beta.18.1` prints nothing), a pull request whose linked issue's body
-  names `releases/godspeed-2.0.0-beta.19-looks-after-itself` is neither merged nor asked: its action
-  is `wait`, and its reason says it waits for 2.0.0-beta.18.1's correction candidate. Review, fixes and CI go on
-  as usual. Once the tag exists, this line no longer applies and the pull request is decided like
-  any other. The already published `candidate/2.0.0-beta.18` does not open the queue for beta.19.
-- This line is removed in 2.0.0-beta.19's release step.
