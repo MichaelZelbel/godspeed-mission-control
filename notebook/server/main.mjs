@@ -50,7 +50,7 @@ import {enableKinds} from '../core/notebook-routines.mjs';
 import {routineSwitches,setRoutineSwitch} from '../core/routine-switches.mjs';
 import {notebookAddress} from '../core/notebook-address.mjs';
 import {latestPerDayMetric} from '../core/health-inputs.mjs';
-import {PHONE_HEALTH_STATUS,PHONE_HEALTH_RENEW} from '../core/phone-health-protocol.mjs';
+import {PHONE_HEALTH_STATUS,PHONE_HEALTH_RENEW,phoneHealthAnswer} from '../core/phone-health-protocol.mjs';
 import {BODY_LIMIT as UPLOAD_LIMIT,ensureToken,renewToken,tokenMatches,tokenDamaged,isUploadShape,pruneRaw,acceptUpload} from '../core/phone-health.mjs';
 import {about} from '../core/about.mjs';
 import {showCard as showContextCard,readContext,markContext} from '../core/context-setup.mjs';
@@ -404,14 +404,14 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
       // notes with, kept in Hermes' own home. An ElevenLabs voice is kept only after a sample worked.
       if(route==='/api/'+PHONE_HEALTH_STATUS||route==='/api/'+PHONE_HEALTH_RENEW){
         // The address carries the phone's credential, so Settings shows or renews it only through the signed-in web door, never on a door that is open or plain http.
-        if(!phoneUploads||!onWebDoor){if(route==='/api/'+PHONE_HEALTH_STATUS)return send(res,200,{available:false});return send(res,404,{error:'Unknown operation'});}
+        if(!phoneUploads||!onWebDoor){if(route==='/api/'+PHONE_HEALTH_STATUS)return send(res,200,phoneHealthAnswer({available:false}));return send(res,404,{error:'Unknown operation'});}
         if(route==='/api/'+PHONE_HEALTH_RENEW&&req.method!=='POST')return send(res,405,{error:'Use POST'});
         const link=notebookAddress({port:server.address().port}).link;
         // The token travels only inside an https address: over http a network observer would read the phone's credential.
-        if(!link?.startsWith('https://')){if(route==='/api/'+PHONE_HEALTH_RENEW)return send(res,409,{error:'A new address needs this server\'s https web address'});return send(res,200,{available:true,address:null});}
+        if(!link?.startsWith('https://')){if(route==='/api/'+PHONE_HEALTH_RENEW)return send(res,409,{error:'A new address needs this server\'s https web address'});return send(res,200,phoneHealthAnswer({available:true,address:null}));}
         const token=route==='/api/'+PHONE_HEALTH_RENEW?renewToken(store.state):ensureToken(store.state);
-        if(!token)return send(res,200,{available:true,address:null,damaged:true});
-        return send(res,200,{available:true,address:link.replace(/\/dashboard$/,'')+'/ingest/'+token});
+        if(!token)return send(res,200,phoneHealthAnswer({available:true,address:null,damaged:true}));
+        return send(res,200,phoneHealthAnswer({available:true,address:link.replace(/\/dashboard$/,'')+'/ingest/'+token}));
       }
       if(route==='/api/voice'&&req.method==='GET')return send(res,200,backupHome?voiceStatus({home:backupHome,state:store.state}):{available:false});
       if(route==='/api/voice'&&req.method==='POST'){

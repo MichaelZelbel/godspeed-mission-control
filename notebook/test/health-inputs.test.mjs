@@ -75,8 +75,7 @@ test('the phone receiver and a CSV that carries the app name keep their own rows
  assert.deepEqual(currentHealth(query,{now}).observations.map(r=>r.value),[160],'the phone row, written last, is shown');
  operation({type:'health-import-csv',source:'Fictional other feed',content:'date,steps'+String.fromCharCode(10)+day+',7'+String.fromCharCode(10)});
  assert.notEqual(store.list('health_observations').find(r=>r.value===7).id,phone[0].id);
- // A CSV cannot take over the phone's own row by choosing its name.
- assert.throws(()=>operation({type:'health-import-csv',source:PHONE_SOURCE+' (phone)',content:'date,steps'+String.fromCharCode(10)+day+',1'+String.fromCharCode(10)}),/belongs to the phone receiver/);
+ // Imitating the phone's name changes nothing about ids: see the next test.
 });
 test('two same-day records from two sources that are not the phone are both returned',()=>{
  const {store,query}=setup(),now=Date.parse('2026-10-04T12:00:00Z');
@@ -109,4 +108,16 @@ test('a CSV that someone labelled with the phone appname is still a CSV: nothing
  operation({type:'health-import-csv',source:'Fictional other CSV',content:'date,steps'+String.fromCharCode(10)+day+',210'+String.fromCharCode(10)});
  assert.ok(store.list('health_observations').every(r=>!Object.hasOwn(r,'via')),'a CSV correction adds no via property either');
  assert.ok(store.list('health_observations').some(r=>r.value===210));
+});
+test('a CSV named like the phone row, imported first, and then a phone upload: both rows survive with their own values',()=>{
+ const now=Date.now(),day=new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Berlin',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(now)),nl=String.fromCharCode(10);
+ for(const source of [PHONE_SOURCE+' (phone)',PHONE_SOURCE,'phone-receiver',PHONE_SOURCE+' phone-receiver']){
+  const {store,query}=setup();personalOperation({store,query},{type:'health-import-csv',source,content:'date,steps'+nl+day+',250'+nl});
+  acceptUpload(store,{metrics:[{name:'step_count',units:'count',data:[{date:day+' 08:00:00 +0100',qty:100,source:'Fictional Phone'}]}],workouts:[]},{now:new Date(now)});
+  const rows=store.list('health_observations');
+  assert.equal(rows.length,2,source);
+  assert.equal(rows.find(r=>r.source===source).value,250,source+': the CSV row keeps its value');
+  assert.equal(rows.find(r=>r.via==='phone-receiver').value,100,source+': the phone row has its own');
+  assert.equal(new Set(rows.map(r=>r.id)).size,2);
+ }
 });

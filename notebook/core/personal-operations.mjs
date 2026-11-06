@@ -22,7 +22,6 @@ import {CYCLE_WORDS,PERIOD_WORDS,OVER_WORDS,FLOW_WORDS,WHERE_WORDS,SYMPTOMS} fro
 import {nextCalendarRun} from './jobs/calendar.mjs';
 import {expectedHash} from './expected-hash.mjs';
 import {healthFeedId} from './health-feed-id.mjs';
-import {PHONE_VIA} from './health-inputs.mjs';
 import {resumeChanges} from './jobs/routine-control.mjs';
 import {readTable} from '../../third-party/addons/godspeed-coach/lib/auto.mjs';
 import {visibleRows} from './visibility.mjs';
@@ -185,7 +184,7 @@ export function personalOperation(domains,input){
   const timezone=store.get('settings','installation')?.timezone||'UTC',today=localParts(new Date(),timezone).date;let measurements=0;
   for(const [day,values] of Object.entries(table)){
    const parsed=Date.parse(day+'T00:00:00Z');if(!Number.isFinite(parsed)||new Date(parsed).toISOString().slice(0,10)!==day||day>today)throw Error('Health CSV needs actual current or earlier calendar dates');
-   for(const [metric,raw] of Object.entries(values)){if(metric==='date'||!raw||!Number.isFinite(Number(raw)))continue;if(!/^[a-zA-Z][a-zA-Z0-9_ -]{0,79}$/.test(metric))throw Error('Health column needs a clear measurement name');measurements++;const id=healthFeedId(input.source||'selected-csv',day,metric),previous=store.get('health_observations',id);if(previous?.via===PHONE_VIA)throw Error('That source name belongs to the phone receiver; give the CSV another source name');if(previous?.value===Number(raw)&&previous?.date_precision==='day')continue;rows.push(store.prepare('health_observations',{id,metric,value:Number(raw),source:input.source||'Selected CSV',source_file:path.relative(store.root,file).replaceAll('\\','/'),observed_on:day,date_precision:'day',observed_at:zonedToUtc(day,'00:00',timezone).toISOString()},previous));}
+   for(const [metric,raw] of Object.entries(values)){if(metric==='date'||!raw||!Number.isFinite(Number(raw)))continue;if(!/^[a-zA-Z][a-zA-Z0-9_ -]{0,79}$/.test(metric))throw Error('Health column needs a clear measurement name');measurements++;const id=healthFeedId(input.source||'selected-csv',day,metric),previous=store.get('health_observations',id);if(previous?.value===Number(raw)&&previous?.date_precision==='day')continue;rows.push(store.prepare('health_observations',{id,metric,value:Number(raw),source:input.source||'Selected CSV',source_file:path.relative(store.root,file).replaceAll('\\','/'),observed_on:day,date_precision:'day',observed_at:zonedToUtc(day,'00:00',timezone).toISOString()},previous));}
   }
   if(!Object.keys(table).length||!measurements)throw Error('CSV needs a date column with YYYY-MM-DD dates and numeric measurement columns');store.withLock(()=>store.commit(rows));return {imported:rows.length,source_file:path.relative(store.root,file)};
  }

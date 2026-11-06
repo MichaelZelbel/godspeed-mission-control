@@ -288,19 +288,46 @@ test('Settings shows an https address only, through the signed-in web door; a ne
  assert.notEqual(JSON.parse((await request(computer.address.port,'/ingest/health')).text||'null')?.ok,true);
 });
 
-test('Settings and the server share one protocol: the panel calls the declared routes and reads only the declared fields',async()=>{
- const {PHONE_HEALTH_STATUS,PHONE_HEALTH_RENEW,PHONE_HEALTH_FIELDS}=await import('../core/phone-health-protocol.mjs');
+test('Settings and the server share one protocol: every answer, from every branch, has exactly the declared shape, and the panel reads the same fields',async t=>{
+ const {PHONE_HEALTH_STATUS,PHONE_HEALTH_RENEW,PHONE_HEALTH_FIELDS,PHONE_HEALTH_SHAPE,phoneHealthAnswer}=await import('../core/phone-health-protocol.mjs');
  const panel=fs.readFileSync(new URL('../ui/src/local/PhoneHealth.tsx',import.meta.url),'utf8'),server=fs.readFileSync(new URL('../server/main.mjs',import.meta.url),'utf8');
  assert.ok(panel.includes("call('"+PHONE_HEALTH_STATUS+"')"),'the panel asks for the status route');
  assert.ok(panel.includes("call('"+PHONE_HEALTH_RENEW+"',"),'the panel renews on the renew route');
  const status=panel.match(/type Status=\{([^}]*)\}/)[1].split(';').map(f=>f.split(/[?:]/)[0].trim()).filter(Boolean);
  assert.deepEqual(status.sort(),[...PHONE_HEALTH_FIELDS].sort(),'the panel reads exactly the declared fields');
+ for(const [key,rule] of Object.entries(PHONE_HEALTH_SHAPE)){
+  const declared=panel.match(new RegExp('type Status=\\{[^}]*\\b'+key+'(\\??):([^;}]*)'));
+  assert.ok(declared,key+' is in the panel type');
+  assert.equal(declared[1]==='',!!rule.required,key+(rule.required?' is required':' is optional')+' in the panel too');
+  assert.ok(declared[2].includes(rule.type),key+' has the declared type in the panel');
+  assert.equal(declared[2].includes('null'),!!rule.nullable,key+' nullability agrees');
+ }
  assert.ok(server.includes('PHONE_HEALTH_STATUS')&&server.includes('PHONE_HEALTH_RENEW')&&!/'\/api\/phone-health/.test(server),'the server routes come from the declaration');
- const root=serverRoot('godspeed-phone-protocol-'),service=await createService({root,port:0,webPort:0});
- try{
-  const state=JSON.parse((await request(service.address.port,'/api/'+PHONE_HEALTH_STATUS)).text);
-  for(const key of Object.keys(state))assert.ok(PHONE_HEALTH_FIELDS.includes(key),key+' is declared');
- }finally{await service.close();fs.rmSync(root,{recursive:true,force:true});}
+ // The checker itself refuses what drifts.
+ for(const bad of [{},{available:'yes'},{available:true,address:5},{available:true,damaged:'x'},{available:true,extra:1},null,[]])assert.throws(()=>phoneHealthAnswer(bad),JSON.stringify(bad));
+ // Every branch of the server, with exact keys and value types.
+ const exact=(text,keys,what)=>{
+  const answer=JSON.parse(text);
+  assert.deepEqual(Object.keys(answer).sort(),[...keys].sort(),what+': exact keys');
+  phoneHealthAnswer(answer);
+  for(const [key,rule] of Object.entries(PHONE_HEALTH_SHAPE))if(key in answer)assert.ok(answer[key]===null&&rule.nullable||typeof answer[key]===rule.type,what+': '+key+' is a '+rule.type);
+  return answer;
+ };
+ const root=serverRoot('godspeed-phone-protocol-'),service=await createService({root,port:0,webPort:0,token:SETUP_CODE}),computerRoot=serverRoot('godspeed-phone-protocol-computer-'),computer=await createService({root:computerRoot,port:0});
+ t.after(async()=>{delete process.env.GODSPEED_WEB_ADDRESS;await service.close();await computer.close();fs.rmSync(root,{recursive:true,force:true});fs.rmSync(computerRoot,{recursive:true,force:true});});
+ const web=await webDoor(service),state=service.store.state;
+ exact((await request(computer.address.port,'/api/'+PHONE_HEALTH_STATUS)).text,['available'],'a computer');
+ exact((await request(service.address.port,'/api/'+PHONE_HEALTH_STATUS)).text,['available'],'the local door of a server');
+ const noHttps=exact((await web('/api/'+PHONE_HEALTH_STATUS)).text,['available','address'],'a server without an https address');
+ assert.deepEqual([noHttps.available,noHttps.address],[true,null]);
+ process.env.GODSPEED_WEB_ADDRESS='https://notes.example.test';
+ const shown=exact((await web('/api/'+PHONE_HEALTH_STATUS)).text,['available','address'],'a server with an https address');
+ assert.equal(shown.available,true);assert.match(shown.address,/^https:\/\/notes\.example\.test\/ingest\/[A-Za-z0-9_-]{43}$/);
+ const renewed=exact((await web('/api/'+PHONE_HEALTH_RENEW,{method:'POST',body:{}})).text,['available','address'],'a renewal');
+ assert.notEqual(renewed.address,shown.address);
+ fs.rmSync(tokenFile(state),{force:true});fs.mkdirSync(tokenFile(state));
+ const damaged=exact((await web('/api/'+PHONE_HEALTH_STATUS)).text,['available','address','damaged'],'a damaged token');
+ assert.deepEqual([damaged.available,damaged.address,damaged.damaged],[true,null,true]);
 });
 
 test('the command line imports a folder of legacy uploads: godspeed health import FOLDER prints the result and fills the notebook',()=>{
