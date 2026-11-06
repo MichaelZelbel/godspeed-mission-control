@@ -163,6 +163,32 @@ test('a mail-count routine Hermes cannot make is a pending notice after a period
  assert.equal(store.get('notifications','mail-count-routine').status,'resolved');
 });
 
+test('routine setup failures keep scrubbed diagnostics, back off, and share one recovering bell notice',async t=>{
+ const {store,hermes,scheduler,tick}=await adoptedFixture(t),{setRoutineSwitch}=await import('../core/routine-switches.mjs');
+ await setRoutineSwitch(store,{key:'decide',on:true});let now=Date.parse('2030-01-01T00:00:00Z'),mode='fail',commands=[],logged=[];scheduler.now=()=>now;
+ const command=scheduler.run;scheduler.run=async(executable,args,options)=>{
+  commands.push(args.join(' '));const name=args[args.indexOf('--name')+1],fails=args[1]==='create'&&(mode==='fail'||mode==='recover'&&name==='Daily round: choose today\'s work'||mode==='new-fail'&&name==='Nightly cleanup');
+  if(fails)throw Object.assign(new Error('Command failed with exit code 1'),{code:1,stderr:'\u001b[31mtoken=tok_0123456789abcdef\u001b[0m\nTraceback (most recent call last):\n  File "routine.py", line 1\nModuleNotFoundError: No module named \'ruamel\'\n'});
+  return command(executable,args,options);
+ };
+ const original=console.error;console.error=(...line)=>logged.push(line.join(' '));t.after(()=>{console.error=original;});
+ const run=async minutes=>{now+=minutes*60000;scheduler.lastTick=0;await tick();};
+ await run(0);await run(1);await run(2);await run(1);
+ const state=()=>JSON.parse(fs.readFileSync(path.join(store.state,'routine-setup-failures.json'),'utf8')).steps,notice=()=>store.get('notifications','routine-setup-failures');
+ assert.equal(state().cleanup.attempts,3);assert.equal(state()['notice-sender'].attempts,3);
+ assert.equal(commands.filter(command=>command.includes('cron create')&&command.includes('Nightly cleanup')).length,3,'1, 2 and then 4 minutes, never every tick');
+ assert.equal(commands.filter(command=>command==='cron tick').length,4,'Hermes still ticks every time');
+ assert.match(state().cleanup.stderr,/ModuleNotFoundError/);assert.ok(!state().cleanup.stderr.includes('tok_0123456789abcdef'));assert.ok(!logged.join('\n').includes('tok_0123456789abcdef'));assert.match(logged.join('\n'),/Nightly cleanup.*ModuleNotFoundError/);
+ assert.equal(notice().status,'pending');assert.match(notice().body,/Notice sender/);assert.match(notice().body,/ModuleNotFoundError: No module named 'ruamel'/);assert.equal(store.list('notifications').filter(n=>n.id==='routine-setup-failures'&&n.status==='pending').length,1);
+ mode='recover';await run(3);
+ assert.equal(notice().status,'pending');assert.deepEqual(notice().steps,['decide']);assert.match(notice().body,/Daily round: choose today's work/);
+ mode='ok';await run(1);assert.equal(store.get('notifications','routine-setup-failures').status,'resolved');assert.equal(Object.keys(state()).length,0);
+ const removeCleanup=()=>{hermes.write(hermes.jobs().filter(job=>job.name!=='Nightly cleanup'));const routines=readNotebookRoutines(store);writeNotebookRoutines(store,{...routines,jobs:routines.jobs.filter(job=>job.key!=='cleanup')});};
+ removeCleanup();mode='new-fail';await assert.rejects(scheduler.followCleanup(),/exit code 1/);await assert.rejects(scheduler.followCleanup(),/exit code 1/);assert.equal(notice().status,'resolved','two failures followed by recovery tell nothing');
+ mode='ok';await scheduler.followCleanup();assert.equal(Object.keys(state()).length,0);
+ removeCleanup();mode='new-fail';await assert.rejects(scheduler.followCleanup(),/exit code 1/);await assert.rejects(scheduler.followCleanup(),/exit code 1/);await assert.rejects(scheduler.followCleanup(),/exit code 1/);assert.equal(notice().status,'pending','a new failure spell tells again after three attempts');
+});
+
 test('the routine scripts run the journal\'s tick and say a queued notice once',{skip:!['python','python3'].some(p=>{try{execFileSync(p,['--version'],{stdio:'ignore'});return true;}catch{return false;}})&&'needs Python'},async t=>{
  const {root,home,store,scheduler}=await withGoal(t);
  const journal=fileURLToPath(new URL('../../third-party/addons/godspeed-journal/bin/godspeed-journal.mjs',import.meta.url));
