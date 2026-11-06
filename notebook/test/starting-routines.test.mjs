@@ -1,6 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';
 import {fileURLToPath} from 'node:url';import {execFileSync,spawnSync} from 'node:child_process';
-import {Store} from '../core/records/store.mjs';import {checkConnections} from '../core/connection-check.mjs';import {NativeScheduler} from '../core/native-scheduler.mjs';import {installStarter} from '../core/starter-workspace.mjs';
+import {Store} from '../core/records/store.mjs';import {checkConnections,CONNECTIONS} from '../core/connection-check.mjs';import {NativeScheduler} from '../core/native-scheduler.mjs';import {installStarter} from '../core/starter-workspace.mjs';
 import {finalReply,saveRoutineResults,RESULTS_FOLDER,routineFiles,prepareCheckIn,coachRoutineTimes} from '../core/starting-routines.mjs';import {QueryService} from '../core/query.mjs';
 import {withTimezone} from '../core/hermes-config.mjs';
 import {routineRow,scheduleWords} from '../ui/src/local/routine-row.mjs';
@@ -470,7 +470,9 @@ test('every routine wrapper the notebook writes names a routine the Python runne
 for(const [kind,days,words] of [['sign-in',['2026-11-04'],/Telegram/],['other',['2026-11-04','2026-11-05'],/Telegram/]])test(`the daily connection check says the ${kind} notice the connection check really queued`,{skip:!havePython&&'no Python here'},async t=>{
  const {root,home}=scriptFixture(t),store=new Store(root,{device:'pc'}),said=path.join(home,'godspeed-notices-said.json');
  const ok=async()=>({set_up:true,ok:true});
- for(const day of days)await checkConnections({store,day,probes:{ai:ok,telegram:async()=>({set_up:true,ok:false,kind}),github:ok,mail:ok,agentmail:ok}});
+ // Every source the check has gets a probe (taken from the check itself, so a new source cannot be missing here): all fine, except Telegram, which fails as the case says, and the phone, which this install does not have set up.
+ const probes=Object.fromEntries(Object.keys(CONNECTIONS).map(name=>[name,name==='telegram'?async()=>({set_up:true,ok:false,kind}):name==='phone'?async()=>({set_up:false}):ok]));
+ for(const day of days)await checkConnections({store,day,probes});
  const queued=path.join(store.state,'notices.json'),id=JSON.parse(fs.readFileSync(queued,'utf8')).notices[0].id;
  const code=`import sys,types;sys.path.insert(0,${JSON.stringify(path.join(home,'scripts'))})
 import godspeed_routines as g
