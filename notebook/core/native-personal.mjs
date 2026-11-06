@@ -20,7 +20,7 @@ import {readEntries as headacheEntries} from '../../third-party/addons/godspeed-
 import {episodesFrom} from '../../third-party/addons/godspeed-headache/lib/episodes.mjs';
 import {logFromRows} from '../../third-party/addons/godspeed-headache/lib/rows.mjs';
 import {visibleRows} from './visibility.mjs';
-import {currentHealth} from './health-inputs.mjs';
+import {currentHealth,isAutomaticHealthColumn} from './health-inputs.mjs';
 import {QueryService} from './query.mjs';
 import {loadSettings as headacheSettings,saveSettings as saveHeadache} from '../../third-party/addons/godspeed-headache/lib/settings.mjs';
 import {loadSettings as charmSettings,saveSettings as saveCharm} from '../../third-party/addons/godspeed-charm/lib/settings.mjs';
@@ -120,14 +120,13 @@ export function retainHabitReview(store,habit,question,sources){
   const note=store.prepare('notes',{title:'Review '+current.title,content:question,source_app:'habit-check',habit_ids:[current.id],observation_day:localParts(new Date(),store.get('settings','installation')?.timezone||'UTC').date});store.commit([note],{files:[{file:current.native_file,text},{file:'coach/history/'+hash(file)+'-'+hash(previous)+'.txt',text:previous}]});return note;
  });
 }
-const automaticHealthColumn=column=>['settled','complete','legacy'].includes(column.state);
 const coachColumn=metric=>metric.replaceAll(' ','_');
 export function nativeTick(store,addon,now=new Date(),query){
  let messages=[],writes=[];
  const timezone=store.get('settings','installation')?.timezone||'UTC';
  if(addon==='coach'){
   const settings={...coachSettings(store.root),timezone},table={},health=currentHealth(query||new QueryService(store),{now:now.getTime()}),resolvedColumns=new Set(health.days.flatMap(day=>Object.keys(day.columns).map(metric=>day.date+'\n'+coachColumn(metric)))),put=(day,metric,value)=>{(table[day]||={date:day})[coachColumn(metric)]=String(value);};
-  for(const day of health.days)for(const [metric,column] of Object.entries(day.columns))if(automaticHealthColumn(column))put(day.date,metric,column.value);
+  for(const day of health.days)for(const [metric,column] of Object.entries(day.columns))if(isAutomaticHealthColumn(column))put(day.date,metric,column.value);
   for(const observation of health.observations.filter(row=>row.date_precision!=='day'||!row.observed_on).sort((a,b)=>String(a.observed_at).localeCompare(String(b.observed_at)))){const date=localParts(new Date(observation.observed_at),timezone).date;if(!resolvedColumns.has(date+'\n'+coachColumn(observation.metric)))put(date,observation.metric,observation.value);}
   ({messages,writes}=dueTick(store.root,settings,now,table));
  }else{

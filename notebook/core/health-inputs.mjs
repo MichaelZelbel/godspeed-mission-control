@@ -21,32 +21,19 @@ export function latestPerDayMetric(rows){
 const newest=rows=>rows.reduce((a,b)=>String(b.updated_at)>String(a.updated_at)?b:a);
 const validDay=day=>/^\d{4}-\d{2}-\d{2}$/.test(day)&&new Date(day+'T00:00:00Z').toISOString().slice(0,10)===day;
 const UNKNOWN_STATES=new Set(['may_be_incomplete','not_judged']);
+const AUTOMATIC_STATES=new Set(['settled','complete','legacy']);
+
+export const isAutomaticHealthColumn=column=>AUTOMATIC_STATES.has(column?.state);
 
 export function unknownHealthColumns(health){
  return (health?.days||[]).flatMap(day=>Object.entries(day.columns||{}).flatMap(([column,value])=>UNKNOWN_STATES.has(value.state)?[{date:day.date,column,...value,...(day.data_until?{data_until:day.data_until}:{})}]:[]));
 }
 
-// Unknown phone totals are rendered by code, not interpreted from a model's prose. A model that uses
-// health facts identifies their resolved day and column, so the caller can reject an unknown source.
 export function healthSafeReply(raw,field,health){
- const unknown=unknownHealthColumns(health);
- if(!unknown.length){
-  const value=typeof raw==='string'?raw:raw?.[field];
-  if(typeof value!=='string'||!value.trim())throw Error('Assistant returned no '+field);
-  return value;
- }
- let reply=raw;
- if(typeof raw==='string'){try{reply=JSON.parse(raw);}catch{throw Error('Assistant must return '+field+' and health_claims while phone health is unknown');}}
- if(!reply||typeof reply!=='object'||Array.isArray(reply)||typeof reply[field]!=='string'||!reply[field].trim()||!Array.isArray(reply.health_claims))throw Error('Assistant must return '+field+' and health_claims while phone health is unknown');
- const columns=new Map((health?.days||[]).flatMap(day=>Object.keys(day.columns||{}).map(column=>[day.date+'\n'+column,day.columns[column]])));
- const unknownKeys=new Set(unknown.map(claim=>claim.date+'\n'+claim.column));
- for(const claim of reply.health_claims){
-  if(!claim||typeof claim!=='object'||Array.isArray(claim)||typeof claim.date!=='string'||typeof claim.column!=='string'||!['report','gap_advice','weekly_miss'].includes(claim.use))throw Error('Health claims must name a resolved day, column and use');
-  const key=claim.date+'\n'+claim.column;
-  if(!columns.has(key))throw Error('Health claim does not name a resolved health column');
-  if(unknownKeys.has(key))throw Error('Unknown phone health cannot support '+claim.use.replace('_',' ')+' for '+claim.column+' on '+claim.date);
- }
- return reply[field];
+ if(unknownHealthColumns(health).length)throw Error('Assistant output cannot be used while phone health is unknown');
+ const value=typeof raw==='string'?raw:raw?.[field];
+ if(typeof value!=='string'||!value.trim())throw Error('Assistant returned no '+field);
+ return value;
 }
 
 // A CSV day is a day, not a manufactured precise observation time.

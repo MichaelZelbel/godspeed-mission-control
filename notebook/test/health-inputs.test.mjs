@@ -54,13 +54,11 @@ test('selected CSV corrections keep source history, reject impossible and future
  assert.equal(seen.health_freshness.has_fresh_measurements,true);
  assert.equal(query.rows('coach_talks')[0].sources.includes('fictional_software_checks'),true);
 });
-test('health coaching refuses a current phone column as a gap or weekly-miss source',async()=>{
+test('health coaching refuses all provider prose while a phone column is unknown',async()=>{
  const {store,query}=setup(),day=new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Berlin',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
  store.save('health_observations',{metric:'protein_g',value:20,source:PHONE_SOURCE,via:'phone-receiver',observed_on:day,date_precision:'day',observed_at:day+'T00:00:00Z',data_until:'09:00:00'});
- const run=jobExecutor(async input=>{assert.equal(input.kind,'coaching');assert.match(input.contract,/may_be_incomplete and not_judged/);return {question:'Make up the protein gap now.',health_claims:[{date:day,column:'protein_g',use:'gap_advice'}]};},query);
- await assert.rejects(run({id:'unknown-health-coach',kind:'coaching',area:'health'},{store,settings:store.get('settings','installation')}),/Unknown phone health cannot support gap advice/);assert.equal(query.rows('coach_talks').length,0);
- const safe=jobExecutor(async input=>{assert.equal(input.kind,'coaching');return {question:'What would help you check in later today?',health_claims:[]};},query);
- await safe({id:'unknown-health-coach-safe',kind:'coaching',area:'health'},{store,settings:store.get('settings','installation')});assert.equal(query.rows('coach_talks').length,1);
+ const run=jobExecutor(async input=>{assert.equal(input.kind,'coaching');assert.match(input.contract,/may_be_incomplete and not_judged/);return {question:'Make up the protein gap now.',health_claims:[]};},query);
+ await assert.rejects(run({id:'unknown-health-coach',kind:'coaching',area:'health'},{store,settings:store.get('settings','installation')}),/Assistant output cannot be used while phone health is unknown/);assert.equal(query.rows('coach_talks').length,0);
 });
 test('the phone receiver and a CSV that carries the app name keep their own rows; the reader shows the newest of the two',()=>{
  const {store,query}=setup(),operation=input=>personalOperation({store,query},input);
