@@ -492,6 +492,11 @@ rec 2026-10-10 '{"set_up":true,"ok":true}'
 out="$(GODSPEED_TODAY=2026-10-12 s check reconnect-opening)"; contains "a working record from the day the window opens closes it" "$out" "closed itself: Reconnect on opening day"
 rec 2026-10-13 '{"set_up":true,"ok":true}'
 out="$(GODSPEED_TODAY=2026-10-13 s check reconnect)"; contains "a working record from inside the window closes it" "$out" "closed itself: Reconnect Telegram"
+s add reconnect-mailbox --title "Reconnect the mailbox" --from 2026-10-10 --to 2026-10-30 --done-when "works" --cost "no mail" --self-check connection-ok --self-check-arg agentmail >/dev/null
+s add reconnect-phone --title "Reconnect phone health" --from 2026-10-10 --to 2026-10-30 --done-when "works" --cost "no health data" --self-check connection-ok --self-check-arg "the phone's health data" >/dev/null
+printf '{"day":"2026-10-13","connections":{"agentmail":{"set_up":true,"ok":true},"phone":{"set_up":true,"ok":true}}}' > "$SC/.godspeed/connection-check.json"
+out="$(GODSPEED_TODAY=2026-10-13 s check reconnect-mailbox)"; contains "the own mailbox connection closes from its daily check" "$out" "closed itself: Reconnect the mailbox"
+out="$(GODSPEED_TODAY=2026-10-13 s check reconnect-phone)"; contains "the phone health connection closes from its daily check" "$out" "closed itself: Reconnect phone health"
 
 # --- the deadlines text the kit ships, kept in step with the one inside due.js ----------------------
 # Until 30 October 2026 this text was a README the kit put in the old folder, and due.js brought an
