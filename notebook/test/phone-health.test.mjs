@@ -593,7 +593,8 @@ test('an oversized upload whose body never ends gets a real 413 with Connection:
   const chunk=Buffer.alloc(64*1024,'x');
   let sent=0;
   while(!received.includes('\r\n\r\n')&&sent<22*1024*1024&&!closed){
-   if(!socket.write(chunk))await new Promise(r=>socket.once('drain',r));
+   // The server may answer and close while this still waits for room: a closed socket never drains, so closing ends the wait too.
+   if(!socket.write(chunk))await new Promise(r=>{socket.once('drain',r);socket.once('close',r);});
    sent+=chunk.length;
   }
   await until(()=>received.includes('\r\n\r\n'),'the answer to the oversized upload');
