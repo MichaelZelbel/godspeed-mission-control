@@ -2868,7 +2868,7 @@ first_day_good() { # <folder>
   rm -rf "$f"; mkdir -p "$f/work"
   printf '{"results":{"goal":{"title":"Prepare a practical household emergency-kit checklist by Sunday."}}}\n' >"$f/setup.json"
   for label in research choice work; do printf '[{"id":"%s","last_run_at":"2026-11-06T10:00:00Z","last_status":"ok"}]\n' "$label" >"$f/job-$label.json"; done
-  printf 'WHAT: Prepare a practical household emergency-kit checklist\nSTATUS: verified\nRESULT: Wrote emergency-kit-checklist.md with practical supplies.\n\n- 2026-11-06 VERIFIED check passed (test -s emergency-kit-checklist.md)\n' >"$f/work/W-1.md"
+  printf 'WHAT: Prepare a practical household emergency-kit checklist\nSTATUS: verified\nCHECK: test -s work/emergency-kit-checklist.md\nRESULT: Wrote emergency-kit-checklist.md with practical supplies.\n\n- 2026-11-06 VERIFIED check passed (test -s work/emergency-kit-checklist.md)\n' >"$f/work/W-1.md"
   cat >"$f/work/emergency-kit-checklist.md" <<'EOF'
 - [ ] Water: 12 litres for 3 days
 - [ ] Food: 3 days of shelf-stable meals
@@ -2909,6 +2909,11 @@ refuses 'a first day without a practical artifact' first-day "$FD/no-artifact" '
 copy "$FD/good" "$FD/placeholder"
 printf '%s\n' '- [ ] TODO: outline only' >"$FD/placeholder/work/emergency-kit-checklist.md"
 refuses 'a placeholder checklist' first-day "$FD/placeholder" 'not a practical emergency-kit checklist'
+copy "$FD/good" "$FD/mismatched-checked-work"
+printf 'WHAT: Tidy the desk drawer\nSTATUS: verified\nCHECK: test -s work/desk-drawer.md\nRESULT: Wrote desk-drawer.md with drawer contents.\n\n- 2026-11-06 VERIFIED check passed (test -s work/desk-drawer.md)\n' >"$FD/mismatched-checked-work/work/W-1.md"
+printf '%s\n' '- [ ] Pens: 12' >"$FD/mismatched-checked-work/work/desk-drawer.md"
+sed -i 's/Prepare a practical household emergency-kit checklist — Wrote emergency-kit-checklist.md with practical supplies/Tidy the desk drawer — Wrote desk-drawer.md with drawer contents/' "$FD/mismatched-checked-work/brief.txt"
+refuses 'an emergency checklist unrelated to the checked work' first-day "$FD/mismatched-checked-work" 'not a practical emergency-kit checklist'
 for table in "${SERVER_SPARSE_TABLES[@]}"; do
   sparse=${table//_/-}
   copy "$FD/good" "$FD/populated-$sparse"
@@ -2950,7 +2955,7 @@ copy "$FD/good" "$FD/no-poll"
 printf '{"requests":[{"method":"sendMessage","authorized":true}]}\n' >"$FD/no-poll/telegram-requests.json"
 refuses 'a gateway that never polls Telegram' first-day "$FD/no-poll" 'never polled'
 copy "$FD/good" "$FD/different-reply"
-run_json "$FD/different-reply" "$(msg todays-brief 'something else')"
+run_json "$FD/different-reply" "$(msg scheduled-brief "$(cat "$FD/different-reply/brief.txt")")" "$(msg todays-brief 'something else')"
 refuses 'a reply that differs from the saved brief' first-day "$FD/different-reply" 'differs from the saved note'
 copy "$FD/good" "$FD/vague-next-action"
 sed -i 's/^Next today: buy the water and first-aid supplies\.$/Next: continue./' "$FD/vague-next-action/brief.txt"
