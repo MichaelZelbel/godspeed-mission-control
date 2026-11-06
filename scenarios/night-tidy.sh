@@ -24,8 +24,8 @@
 # its own chat store (scenario-lib.sh, assistant_keeps_a_conversation), so the job hands this
 # scenario a key:
 #   GODSPEED_SCENARIO_AI_KEY    (the release step names the repository secret; without it: FAIL)
-#   GODSPEED_SCENARIO_AI_URL    the service's address, OpenRouter by default
-#   GODSPEED_SCENARIO_AI_MODEL  the model the summary is written with
+#   GODSPEED_SCENARIO_AI_URL    the service's address (a repository variable; no default)
+#   GODSPEED_SCENARIO_AI_MODEL  the model the summary is written with (a repository variable; no default)
 #
 #   bash scenarios/night-tidy.sh candidate/2.0.0-beta.8
 #   bash scenarios/night-tidy.sh --check <folder>

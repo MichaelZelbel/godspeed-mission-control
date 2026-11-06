@@ -79,6 +79,7 @@ local_hermes() { # sets PYTHON and SOURCE
 connect_the_local_ai() {
   local url key model
   if [ -n "${GODSPEED_SCENARIO_AI_KEY:-}" ]; then
+    check_the_ai_settings
     url="${AI_URL%/}/chat/completions" key=$GODSPEED_SCENARIO_AI_KEY model=$AI_MODEL
     echo "the connected AI ($AI_MODEL)" >"$EVIDENCE/ai.txt"
   else

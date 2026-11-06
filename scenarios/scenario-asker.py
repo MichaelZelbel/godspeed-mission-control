@@ -35,12 +35,27 @@ def the_command():
     return shutil.which("godspeed-step", path=os.pathsep.join([os.path.join(home, "bin"), os.environ.get("PATH", "")]))
 
 
+def record(message):
+    """Records the words as the notebook's own routine runner records a script routine's own words
+    (godspeed_routines.py, record): through background-report.mjs. Without that record the delivery
+    that follows has nothing to make answerable, and the question goes out with no buttons."""
+    home = os.environ.get("HERMES_HOME", "")
+    with open(os.path.join(home, "plugins", "godspeed_notebook", "report.json"), encoding="utf-8") as f:
+        wiring = json.load(f)
+    done = subprocess.run([wiring["node"], wiring["script"], "record", "--godspeed", wiring["root"], "--home", home,
+                           "--routine", "Scenario asker", "--delivery", "telegram"],
+                          input=message, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=120)
+    if done.returncode != 0:
+        raise RuntimeError((done.stderr or done.stdout).strip()[:300] or "the notebook refused the record")
+
+
 def main():
     command = the_command()
     if command is None:
         print("this install has no godspeed-step, the one way to ask for a yes (ticket 01, #196)", file=sys.stderr)
         return 1
     asks = json.load(open(".scenario-asks.json", encoding="utf-8"))
+    messages = []
     for ask in asks:
         argv = [command, "open", "--by", BY, "--chat", "telegram"]
         for field, flag in FLAGS:
@@ -55,7 +70,17 @@ def main():
         except ValueError:
             message = done.stdout.strip()
         if message:
-            print(message)
+            messages.append(message)
+    if messages:
+        # One routine run delivers ONE body, so it is recorded once, exactly as it is printed (the notebook
+        # makes each waiting step whose words it holds answerable when that body is delivered).
+        body = "\n".join(messages)
+        try:
+            record(body)
+        except Exception as error:
+            print("the question could not be recorded in the notebook: %s" % error, file=sys.stderr)
+            return 1
+        print(body)
     return 0
 
 

@@ -1,7 +1,8 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';
 import {Store} from '../core/records/store.mjs';import {installStarter} from '../core/starter-workspace.mjs';
 import {readNotices} from '../core/notices.mjs';import {addonDeadlines} from '../core/addon-deadlines.mjs';
-import {CONNECTION_NAMES} from '../core/connection-names.mjs';import {runDue} from '../core/connection-check.mjs';import {CONNECTIONS,defaultProbes,checkConnections,nextState,telegramProbe,githubProbe,mailProbe,aiProbe,gitKind,aiKind,telegramKind,mailKind,connectionCheckWanted,RECORD_FILE} from '../core/connection-check.mjs';
+import {CONNECTION_NAMES} from '../core/connection-names.mjs';import {runDue} from '../core/connection-check.mjs';import {CONNECTIONS,defaultProbes,checkConnections,nextState,recoverPhoneConnection,telegramProbe,githubProbe,mailProbe,agentmailProbe,aiProbe,phoneProbe,gitKind,aiKind,telegramKind,mailKind,connectionCheckWanted,RECORD_FILE} from '../core/connection-check.mjs';
+import {acceptUpload,importFolder,pruneRaw,readRaw} from '../core/phone-health.mjs';
 
 for(const key of Object.keys(process.env))if(/^(GODSPEED_|HERMES_)/.test(key))delete process.env[key];
 
@@ -9,7 +10,10 @@ for(const key of Object.keys(process.env))if(/^(GODSPEED_|HERMES_)/.test(key))de
 // deadlines (the real tools/due.js) and the records are real. Everything here is made up.
 const TOKEN='123456789:AAHinventedtokeninventedtokeninvented';
 const fixture=t=>{const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-connection-check-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));installStarter(root);return {root,store:new Store(root,{device:'pc'})};};
-const stubs=(over={})=>({ai:async()=>({set_up:true,ok:true}),telegram:async()=>({set_up:true,ok:true}),github:async()=>({set_up:true,ok:true}),mail:async()=>({set_up:true,ok:true}),...over});
+// One probe for every source the check really has, so a newly added source can never be missing from a fixture: all fine, except the phone, which is not set up.
+const SOURCES=Object.keys(CONNECTIONS);
+const probesFor=make=>Object.fromEntries(SOURCES.map(name=>[name,make(name)]));
+const stubs=(over={})=>({...probesFor(name=>name==='phone'?async()=>({set_up:false}):async()=>({set_up:true,ok:true})),...over});
 const refused=async()=>({set_up:true,ok:false,kind:'sign-in'}),down=async()=>({set_up:true,ok:false,kind:'other'});
 const deadlines=store=>addonDeadlines(store,{addon:'connection-check',action:'list'}).deadlines;
 const bell=(store,name)=>store.get('notifications','connection-'+name);
@@ -20,15 +24,56 @@ test('all connections working: nothing is said and no deadline is made',async t=
  const record=await checkConnections({store,day:D1,probes:stubs()});
  assert.deepEqual(readNotices(store),[]);assert.deepEqual(deadlines(store),[]);
  assert.equal(bell(store,'telegram'),undefined);
- assert.deepEqual(Object.values(record.connections).map(c=>[c.set_up,c.ok]),[[true,true],[true,true],[true,true],[true,true]]);
+ assert.deepEqual(Object.values(record.connections).map(c=>[c.set_up,c.ok]),[[true,true],[true,true],[true,true],[true,true],[true,true],[false,undefined]]);
  assert.ok(!fs.existsSync(path.join(root,'.godspeed','connection-check')),'no marker file on an ordinary day');
 });
 
 test('a connection that is not set up is not called and not mentioned',async t=>{
  const {store}=fixture(t);
- const record=await checkConnections({store,day:D1,probes:{ai:async()=>({set_up:false}),telegram:async()=>({set_up:false}),github:async()=>({set_up:false}),mail:async()=>({set_up:false})}});
- assert.deepEqual(Object.values(record.connections),[{set_up:false},{set_up:false},{set_up:false},{set_up:false}]);
+ const record=await checkConnections({store,day:D1,probes:probesFor(()=>async()=>({set_up:false}))});
+ assert.deepEqual(Object.values(record.connections),[{set_up:false},{set_up:false},{set_up:false},{set_up:false},{set_up:false},{set_up:false}]);
  assert.deepEqual(readNotices(store),[]);
+});
+
+test('phone health starts its connection after an accepted upload, then speaks once after 36 quiet hours and recovers on the next upload',async t=>{
+ const {store,root}=fixture(t),home=path.join(root,'hermes-home'),none=()=>({status:()=>({state:'not connected'})}),legacy=()=>({credentials:()=>({})});fs.mkdirSync(home);
+ const at=moment=>phoneProbe({store,now:()=>new Date(moment)});
+ assert.deepEqual(await at('2026-11-04T10:00:00Z')(),{set_up:false});
+ assert.equal(connectionCheckWanted(home,none,store,legacy),false,'an install with no upload has no phone connection to check');
+ acceptUpload(store,{metrics:[]},{now:new Date('2026-11-04T10:00:00Z')});
+ assert.equal(connectionCheckWanted(home,none,store,legacy),true,'the first accepted upload starts the daily check');
+ await checkConnections({store,day:D1,probes:stubs({phone:at('2026-11-04T20:00:00Z')}),now:()=>new Date('2026-11-04T20:00:00Z')});
+ assert.deepEqual(readNotices(store),[]);assert.deepEqual(deadlines(store),[],'an upload ten hours ago is working');
+ assert.deepEqual(await at('2026-11-05T22:00:00Z')(),{set_up:true,ok:false,kind:'quiet'},'36 quiet hours need the owner');
+ await checkConnections({store,day:D2,probes:stubs({phone:at('2026-11-05T23:00:00Z')}),now:()=>new Date('2026-11-05T23:00:00Z')});
+ assert.equal(readNotices(store).length,1);assert.match(readNotices(store)[0].text,/phone has sent no health data since/i);assert.match(readNotices(store)[0].text,/Health Auto Export/);assert.match(readNotices(store)[0].text,/briefing's health numbers stop/i);
+ assert.equal(deadlines(store).length,1);assert.equal(deadlines(store)[0].key,'phone:'+D2);assert.equal(deadlines(store)[0].state,'open');
+ await checkConnections({store,day:D3,probes:stubs({phone:at('2026-11-06T10:00:00Z')}),now:()=>new Date('2026-11-06T10:00:00Z')});
+ assert.equal(readNotices(store).length,1,'the quiet spell is said once');assert.equal(deadlines(store).length,1,'the quiet spell has one deadline');
+ acceptUpload(store,{metrics:[]},{now:new Date('2026-11-06T11:00:00Z')});
+ await recoverPhoneConnection({store,day:D3,now:()=>new Date('2026-11-06T11:00:00Z')});
+ assert.equal(deadlines(store)[0].state,'closed','the accepted upload closes it without another daily check');
+});
+
+test('the phone remains a connection after its raw upload expires',async t=>{
+ const {store,root}=fixture(t),home=path.join(root,'hermes-home'),none=()=>({status:()=>({state:'not connected'})}),legacy=()=>({credentials:()=>({})});fs.mkdirSync(home);
+ acceptUpload(store,{metrics:[]},{now:new Date('2026-10-04T10:00:00Z')});
+ pruneRaw(store.state,new Date('2026-11-05T10:00:00Z'));
+ assert.deepEqual(readRaw(store.state,'0000-00-00'),[],'the health payload has left after its retention period');
+ assert.equal(connectionCheckWanted(home,none,store,legacy),true,'its accepted receipt keeps the daily check running');
+ const phone=phoneProbe({store,now:()=>new Date('2026-11-05T10:00:00Z')});
+ await checkConnections({store,day:D2,probes:stubs({phone}),now:()=>new Date('2026-11-05T10:00:00Z')});
+ assert.equal(readNotices(store).length,1);assert.equal(deadlines(store).length,1);
+});
+
+test('imported health data does not establish a phone connection',async t=>{
+ const {store,root}=fixture(t),home=path.join(root,'hermes-home'),none=()=>({status:()=>({state:'not connected'})}),legacy=()=>({credentials:()=>({})}),folder=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-phone-import-'));fs.mkdirSync(home);t.after(()=>fs.rmSync(folder,{recursive:true,force:true}));
+ fs.writeFileSync(path.join(folder,'old.jsonl'),JSON.stringify({received_at:'2026-11-04T10:00:00Z',data:{metrics:[]}})+'\n');
+ importFolder(store,folder,{now:new Date('2026-11-05T10:00:00Z')});
+ assert.deepEqual(await phoneProbe({store,now:()=>new Date('2026-11-06T10:00:00Z')})(),{set_up:false});
+ assert.equal(connectionCheckWanted(home,none,store,legacy),false,'legacy raw data is not a receiver upload');
+ const record=await checkConnections({store,day:D3,probes:stubs()});
+ assert.deepEqual(record.connections.phone,{set_up:false});assert.deepEqual(readNotices(store),[]);assert.deepEqual(deadlines(store),[]);
 });
 
 test('a refused Telegram key: one message and one deadline, closed by the routine the day it works again',async t=>{
@@ -119,7 +164,23 @@ test('each probe is set up only when its connection is, and asks only once',asyn
  const {store,root}=fixture(t),home=path.join(root,'hermes-home');fs.mkdirSync(home);
  assert.deepEqual(await telegramProbe({home,fetcher:async()=>{throw Error('called');}})(),{set_up:false});
  assert.deepEqual(await githubProbe({store,run:()=>{throw Error('called');}})(),{set_up:false});
- assert.deepEqual(await mailProbe({imap:()=>({status:()=>({state:'not connected'}),check:async()=>{throw Error('called');}})})(),{set_up:false});
+ const noLegacy=()=>({credentials:()=>({}),status:async()=>{throw Error('called');}});
+ assert.deepEqual(await mailProbe({imap:()=>({status:()=>({state:'not connected'}),check:async()=>{throw Error('called');}}),legacy:noLegacy})(),{set_up:false});
+ store.save('collections',{id:'gm',name:'Gm',field_schema:[],tracker:{names:['Gm'],cadence:'any',talks:[],specialist:null,mail:{senders:['shop.example.invalid'],subjects:['order'],mailbox:'gmail'}}});
+ assert.deepEqual(await mailProbe({imap:()=>({status:()=>({state:'not connected'})}),legacy:noLegacy,store})(),{set_up:true,ok:false,kind:'sign-in'},'a saved Gmail rule with nothing connected is a sign-in');
+ // Gmail connected the older way is checked when the app-password one is not there.
+ const notImap=()=>({status:()=>({state:'not connected'})}),older=state=>()=>({credentials:()=>({GMAIL_REFRESH_TOKEN:'x'}),status:async()=>({state})});
+ assert.deepEqual(await mailProbe({imap:notImap,legacy:older('connected')})(),{set_up:true,ok:true});
+ assert.deepEqual(await mailProbe({imap:notImap,legacy:older('reconnect needed')})(),{set_up:true,ok:false,kind:'sign-in'});
+ assert.deepEqual(await mailProbe({imap:notImap,legacy:older('unreachable')})(),{set_up:true,ok:false,kind:'other'});
+ // The mission control's own mailbox is probed only while a mail rule names it.
+ const godspeed=state=>async()=>({state});
+ assert.deepEqual(await agentmailProbe({store,godspeed:godspeed('connected')})(),{set_up:false},'no rule names it');
+ store.save('collections',{id:'shop',name:'Shop',field_schema:[],tracker:{names:['Shop'],cadence:'any',talks:[],specialist:null,mail:{senders:['shop.example.invalid'],subjects:['order'],mailbox:'godspeed'}}});
+ assert.deepEqual(await agentmailProbe({store,godspeed:godspeed('connected')})(),{set_up:true,ok:true});
+ assert.deepEqual(await agentmailProbe({store,godspeed:godspeed('reconnect needed')})(),{set_up:true,ok:false,kind:'sign-in'});
+ assert.deepEqual(await agentmailProbe({store,godspeed:godspeed('not connected')})(),{set_up:true,ok:false,kind:'sign-in'});
+ assert.deepEqual(await agentmailProbe({store,godspeed:godspeed('unreachable')})(),{set_up:true,ok:false,kind:'other'});
  assert.deepEqual(await aiProbe({store,home,hermes:'hermes',ask:async()=>{throw Error('called');}})(),{set_up:false},'no Hermes path');
  const imap=state=>()=>({status:()=>({state:'connected'}),check:async()=>({state})});
  assert.deepEqual(await mailProbe({imap:imap('connected')})(),{set_up:true,ok:true});
@@ -292,8 +353,8 @@ test('a notice that cannot be stored does not stop the connections after it, and
  const file=path.join(store.state,'notices.json');
  fs.rmSync(file,{force:true});fs.mkdirSync(file);
  const called=[],spy=name=>async()=>{called.push(name);return {set_up:true,ok:true};};
- await assert.rejects(checkConnections({store,day:D2,probes:{ai:async()=>{called.push('ai');return {set_up:true,ok:false,kind:'other'};},telegram:spy('telegram'),github:spy('github'),mail:spy('mail')}}));
- assert.deepEqual(called,['ai','telegram','github','mail']);
+ await assert.rejects(checkConnections({store,day:D2,probes:{...probesFor(spy),ai:async()=>{called.push('ai');return {set_up:true,ok:false,kind:'other'};}}}));
+ assert.deepEqual(called,SOURCES);
  fs.rmSync(file,{recursive:true});
  await checkConnections({store,day:D2,probes:stubs({ai:down,telegram:refused})});
  assert.equal(readNotices(store).filter(n=>/ai-other/.test(n.id)).length,1);
@@ -304,8 +365,8 @@ test('a recovery marker that cannot be written does not stop the connections aft
  await checkConnections({store,day:D1,probes:stubs({ai:refused})});
  fs.writeFileSync(path.join(root,'.godspeed','connection-check'),'');
  const called=[],spy=name=>async()=>{called.push(name);return {set_up:true,ok:true};};
- await assert.rejects(checkConnections({store,day:D2,probes:{ai:spy('ai'),telegram:spy('telegram'),github:spy('github'),mail:spy('mail')}}),/ai/);
- assert.deepEqual(called,['ai','telegram','github','mail']);
+ await assert.rejects(checkConnections({store,day:D2,probes:probesFor(spy)}),/ai/);
+ assert.deepEqual(called,SOURCES);
  fs.rmSync(path.join(root,'.godspeed','connection-check'));
  await checkConnections({store,day:D3,probes:stubs()});
  assert.equal(deadlines(store).find(d=>/^ai:/.test(d.key)).state,'closed','the deadline is still pending after the failed day, so the next working day closes it');

@@ -11,10 +11,11 @@ import {starterBorn} from './starter-workspace.mjs';
 import {setHermesTimezone} from './hermes-config.mjs';
 import {FLAG,STARTING_ROUTINES,routineFiles,writeRoutineFiles,prepareCheckIn,saveRoutineResults,readMachineRecord,writeMachineRecord,telegramInHermes,chatAppInHermes,routineStatus,ownRoutines,metAt,noteHermesMet,cityFiledFirst,OWN_ROUTINES_RULE} from './starting-routines.mjs';
 import {cronOf,cronCalendar,calendarCron,retimeWhat,isTalkGate,isCoachTick,talkArea,moveTalk} from './routine-times.mjs';
-import {readNotebookRoutines,rememberNotebookRoutine,enableKind,deliveryFor,journalWanted,journalOnTheClock,JOURNAL_JOB,JOURNAL_SCRIPT,JOURNAL_WHAT,CHAT_TIDY_JOB,CHAT_TIDY_SCRIPT,CHAT_TIDY_SCHEDULE,CHAT_TIDY_WHAT,writeNotebookRoutines,BRIEF_JOB,BRIEF_SCRIPT,isBriefJob,CONNECTION_JOB,CONNECTION_SCRIPT,CONNECTION_WHAT,NOTICES_JOB,NOTICES_SCRIPT,NOTICES_WHAT} from './notebook-routines.mjs';
+import {readNotebookRoutines,rememberNotebookRoutine,enableKind,deliveryFor,journalWanted,journalOnTheClock,JOURNAL_JOB,JOURNAL_SCRIPT,JOURNAL_WHAT,CHAT_TIDY_JOB,CHAT_TIDY_SCRIPT,CHAT_TIDY_SCHEDULE,CHAT_TIDY_WHAT,writeNotebookRoutines,BRIEF_JOB,BRIEF_SCRIPT,isBriefJob,CONNECTION_JOB,CONNECTION_SCRIPT,CONNECTION_WHAT,MAIL_COUNT_JOB,MAIL_COUNT_SCRIPT,MAIL_COUNT_WHAT,NOTICES_JOB,NOTICES_SCRIPT,NOTICES_WHAT} from './notebook-routines.mjs';
 import {holdQueuedNotices} from './notices.mjs';
 import {switchable,switchedOn} from './routine-switches.mjs';
 import {connectionCheckWanted} from './connection-check.mjs';
+import {mailCountWanted} from './mail-trackers.mjs';
 import {loadSettings as coachSettings,saveSettings as saveCoach} from '../../third-party/addons/godspeed-coach/lib/settings.mjs';
 import {rhythmWords} from '../../third-party/addons/godspeed-coach/lib/areas.mjs';
 import {moveSettingsDeadlines} from './native-due.mjs';
@@ -191,8 +192,8 @@ export class NativeScheduler{
   const here=readMachineRecord(this.store),mine=readNotebookRoutines(this.store),created=here?.state==='created'&&Array.isArray(here.jobs);
   // The night chat tidy-up is the one routine whose results are never delivered: its output is its
   // log, and it exists only where a chat app is connected, which is where this would send it to the
-  // chat. It stays "local" (notebook-routines.mjs, CHAT_TIDY_JOB).
-  const ids=new Set([...(created?here.jobs.map(j=>j.id):[]),...mine.jobs.filter(j=>j.key!=='chat-tidy').map(j=>j.id)]);if(!ids.size)return [];
+  // chat. It stays "local" (notebook-routines.mjs, CHAT_TIDY_JOB), and so do the mail counts, which send nothing.
+  const ids=new Set([...(created?here.jobs.map(j=>j.id):[]),...mine.jobs.filter(j=>!['chat-tidy','mail-count'].includes(j.key)).map(j=>j.id)]);if(!ids.size)return [];
   const moved=[];
   for(const job of hermesJobs(this.home).filter(j=>ids.has(j.id)&&['local','telegram'].includes(String(j.deliver||''))&&j.deliver!==want)){await this.command(['edit',job.id,'--deliver',want]);moved.push(job.id);}
   if(created&&here.delivery!==want)writeMachineRecord(this.store,{...here,delivery:want});
@@ -295,8 +296,8 @@ export class NativeScheduler{
  // Made once, only on a machine that made its starting routines (on a mission control not made from the
  // starter: once its switch is on, #225), at 05:00 on the install's clock (earlier when
  // a Morning brief set before 05:30 needs it first; connectionCheckTime). It
- // is made enabled when Telegram or Gmail is connected and paused when neither is; the notebook later
- // resumes it only if it paused it itself and one of them has since been connected. A routine the
+ // is made enabled when Telegram or Gmail is connected, a tracker has a mail rule, or a phone upload arrived, and paused when none is; the notebook later
+ // resumes it only if it paused it itself and one of them has since been in place. A routine the
  // person paused or resumed, or removed, is theirs from then on.
  async followConnectionCheck(){
   const root=this.store.root;
@@ -305,20 +306,21 @@ export class NativeScheduler{
   if(entry?.switched_off)return null;
   const job=(entry&&jobs.find(j=>j.id===entry.id))||jobs.find(j=>j.name===CONNECTION_JOB&&j.script===CONNECTION_SCRIPT);
   if(entry&&!job)return null;
-  const installation=this.store.get('settings','installation'),timezone=installation?.timezone||Intl.DateTimeFormat().resolvedOptions().timeZone,wanted=connectionCheckWanted(this.home);
+  const installation=this.store.get('settings','installation'),timezone=installation?.timezone||Intl.DateTimeFormat().resolvedOptions().timeZone,wanted=connectionCheckWanted(this.home,undefined,this.store);
   writeRoutineFiles(this.home,routineFiles({root,home:this.home,state:this.store.state,timezone,hermes:this.executable}));
   if(job){
    if(!entry)return job.id;
-   if(!entry.paused_by_notebook){
+   const current=entry.what===CONNECTION_WHAT?entry:rememberNotebookRoutine(this.store,{...entry,what:CONNECTION_WHAT});
+   if(!current.paused_by_notebook){
     // Still running as the notebook left it: it goes off with the last connection. A person's pause ends that ownership.
-    if(job.enabled===false&&entry.running_by_notebook)rememberNotebookRoutine(this.store,{...entry,running_by_notebook:false});
-    else if(job.enabled!==false&&entry.running_by_notebook&&!wanted){await this.command(['pause',job.id]);rememberNotebookRoutine(this.store,{...entry,paused_by_notebook:true,running_by_notebook:false});}
+    if(job.enabled===false&&current.running_by_notebook)rememberNotebookRoutine(this.store,{...current,running_by_notebook:false});
+    else if(job.enabled!==false&&current.running_by_notebook&&!wanted){await this.command(['pause',job.id]);rememberNotebookRoutine(this.store,{...current,paused_by_notebook:true,running_by_notebook:false});}
     return job.id;
    }
    if(job.enabled===false&&!wanted)return job.id;
    const resumed=job.enabled===false;
    if(resumed)await this.command(['resume',job.id]);
-   rememberNotebookRoutine(this.store,{...entry,paused_by_notebook:false,running_by_notebook:resumed});
+   rememberNotebookRoutine(this.store,{...current,paused_by_notebook:false,running_by_notebook:resumed});
    return job.id;
   }
   const before=new Set(jobs.map(j=>j.id));
@@ -329,6 +331,44 @@ export class NativeScheduler{
   if(!wanted)try{await this.command(['pause',made.id]);}catch(error){await this.command(['remove',made.id]).catch(()=>{});throw error;}
   rememberNotebookRoutine(this.store,{id:made.id,key:'connection-check',name:CONNECTION_JOB,what:CONNECTION_WHAT,paused_by_notebook:!wanted,running_by_notebook:wanted});
   return made.id;
+ }
+ // THE MAIL COUNTS (notebook-routines.mjs, core/mail-trackers.mjs): one routine while a tracker has a
+ // mail rule, paused when none has, made again by nothing once the person removed it.
+ async followMailCount(){
+  const root=this.store.root;if(!(starterBorn(root)||this.switchesReady()&&switchedOn(this.store,'mail-count')))return null;
+  const mine=readNotebookRoutines(this.store),entry=mine.jobs.find(j=>j.key==='mail-count'),jobs=hermesJobs(this.home);
+  if(entry?.switched_off)return null;
+  const job=(entry&&jobs.find(j=>j.id===entry.id))||jobs.find(j=>j.name===MAIL_COUNT_JOB&&j.script===MAIL_COUNT_SCRIPT);
+  if(!mailCountWanted(this.store)){
+   if(job&&entry&&job.enabled!==false){await this.command(['pause',job.id]);rememberNotebookRoutine(this.store,{...entry,paused_by_notebook:true});}
+   return null;
+  }
+  if(entry&&!job)return null;
+  const installation=this.store.get('settings','installation'),timezone=installation?.timezone||Intl.DateTimeFormat().resolvedOptions().timeZone;
+  writeRoutineFiles(this.home,routineFiles({root,home:this.home,state:this.store.state,timezone,hermes:this.executable}));
+  if(job){
+   if(entry&&job.enabled===false&&entry.paused_by_notebook){await this.command(['resume',job.id]);rememberNotebookRoutine(this.store,{...entry,paused_by_notebook:false});}
+   return job.id;
+  }
+  const before=new Set(jobs.map(j=>j.id));
+  await this.command(['create','30 4 * * *','--no-agent','--name',MAIL_COUNT_JOB,'--script',MAIL_COUNT_SCRIPT,'--deliver','local','--failure-deliver','local','--workdir',root]);
+  const made=hermesJobs(this.home).find(j=>!before.has(j.id)&&j.name===MAIL_COUNT_JOB);
+  if(!made)throw Error('Hermes did not keep the routine "'+MAIL_COUNT_JOB+'"');
+  rememberNotebookRoutine(this.store,{id:made.id,key:'mail-count',name:MAIL_COUNT_JOB,what:MAIL_COUNT_WHAT});
+  return made.id;
+ }
+ // A routine that could not be made or resumed is a pending notice for the owner (like a blind watch
+ // in procedures.mjs), resolved when a later tick manages; the periodic tick has no caller to throw to.
+ async followMailCountVisibly(){
+  const id='mail-count-routine',open=()=>this.store.get('notifications',id)?.status==='pending';
+  try{
+   const done=await this.followMailCount();
+   if(open())this.store.save('notifications',{id,status:'resolved',resolved_at:new Date().toISOString()});
+   return done;
+  }catch(error){
+   if(!open())this.store.save('notifications',{id,status:'pending',body:'The daily mail counts could not be scheduled in Hermes, so your mail rules are not counting yet. It tries again on the next check.',error:String(error?.message||error).slice(0,500)});
+   throw error;
+  }
  }
  // THE MORNING BRIEF AS THE NOTEBOOK'S OWN BRIEFING (3 November 2026, #160; notebook-routines.mjs
  // says why). A script routine like the deadline reminders, whose script runs core/briefing.mjs
@@ -518,6 +558,7 @@ export class NativeScheduler{
    await this.addNewStartingRoutines().catch(()=>null);
    await this.followJournal().catch(()=>null);
    await this.followConnectionCheck().catch(e=>{failure=e;failures.push(e);});
+   await this.followMailCountVisibly().catch(e=>{failure||=e;});
    await this.followChatTidy().catch(e=>{failure=failure||e;failures.push(e);});
    await this.followBrief().catch(()=>null);
    await this.followDelivery().catch(()=>null);

@@ -25,7 +25,7 @@ export const HEAD_FIELDS = Object.freeze({
   'TITLE': 'title',                       // what it is
   'DONE-WHEN': 'done_when',               // what is true when it is finished
   'COST-IF-MISSED': 'cost_if_missed',     // what slipping past the last day costs
-  'SELF-CHECK': 'self_check',             // none, or file-newer
+  'SELF-CHECK': 'self_check',             // none, secret-changed, connection-ok or file-newer
   'SELF-CHECK-ARG': 'self_check_arg',     // what the self check looks at
   'REPEATS': 'repeats',                   // the word as written: no, weekly, every 10 days, ...
   'LINK': 'link',
