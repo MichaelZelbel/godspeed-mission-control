@@ -492,6 +492,23 @@ rec 2026-10-10 '{"set_up":true,"ok":true}'
 out="$(GODSPEED_TODAY=2026-10-12 s check reconnect-opening)"; contains "a working record from the day the window opens closes it" "$out" "closed itself: Reconnect on opening day"
 rec 2026-10-13 '{"set_up":true,"ok":true}'
 out="$(GODSPEED_TODAY=2026-10-13 s check reconnect)"; contains "a working record from inside the window closes it" "$out" "closed itself: Reconnect Telegram"
+# The mission control's own mailbox and the phone's health data are connections of the daily check too: each, by its id and by
+# its name, is accepted, waits for a working record dated inside the window, and closes on one.
+recx() { printf '{"at":"x","day":"%s","connections":{"%s":%s}}' "$1" "$2" "$3" > "$SC/.godspeed/connection-check.json"; }
+for pair in "agentmail|your mission control's own mailbox" "phone|the phone's health data"; do
+  cid="${pair%%|*}"; clabel="${pair#*|}"
+  for kind in id name; do
+    if [ "$kind" = id ]; then how="$cid"; else how="$clabel"; fi
+    slug="reconnect-$cid-$kind"
+    rm -f "$SC/.godspeed/connection-check.json"
+    s add "$slug" --title "Reconnect $cid ($how)" --from 2026-10-10 --to 2026-10-30 --done-when "works" --cost "nothing arrives" --self-check connection-ok --self-check-arg "$how" >/dev/null
+    out="$(GODSPEED_TODAY=2026-10-12 s check "$slug")"; contains "$cid by '$how': no record yet is not yet, with why" "$out" "has not looked at $clabel yet"
+    recx 2026-10-12 "$cid" '{"set_up":true,"ok":false,"kind":"other"}'
+    out="$(GODSPEED_TODAY=2026-10-12 s check "$slug")"; contains "$cid by '$how': a failing record is not yet" "$out" "not working"
+    recx 2026-10-13 "$cid" '{"set_up":true,"ok":true}'
+    out="$(GODSPEED_TODAY=2026-10-13 s check "$slug")"; contains "$cid by '$how': a working record inside the window closes it" "$out" "closed itself: Reconnect $cid ($how)"
+  done
+done
 
 # --- the deadlines text the kit ships, kept in step with the one inside due.js ----------------------
 # Until 30 October 2026 this text was a README the kit put in the old folder, and due.js brought an
