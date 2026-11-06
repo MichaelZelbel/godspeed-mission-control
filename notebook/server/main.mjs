@@ -66,6 +66,7 @@ import {IdentityShelf} from '../core/identity-shelf.mjs';
 import {VERSION} from '../core/version.mjs';
 import {recordRunningNotebook} from '../core/running-notebook.mjs';
 import {HermesUpdate,updateStatus} from '../core/hermes-update.mjs';
+import {HermesLifecycle} from '../core/hermes-lifecycle.mjs';
 
 // A backup AI is another service than the main AI, in Settings and in /backupai alike: when one
 // service fails, its other models and keys usually fail with it, and Hermes counts the same service
@@ -129,8 +130,8 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   const originalRuntime=process.env.GODSPEED_ORIGINAL_RUNTIME==='on';
   const descriptor=originalRuntime&&fs.existsSync(assistantPath)?JSON.parse(fs.readFileSync(assistantPath,'utf8').replace(/^\uFEFF/,'')):null;
   if(originalRuntime&&!descriptor?.verified)throw Error('Connect the original Godspeed assistant before starting the integrated notebook');
-  const domains=new Domains(query,{provider}),scheduler=originalRuntime?new NativeScheduler(store,{...descriptor,device,records:new Scheduler(store,{device,executor:jobExecutor(provider,query),only:NativeScheduler.recordKinds,delivery:'notebook'})}):new Scheduler(store,{device,query,executor:jobExecutor(provider,query)});scheduler.onProgress=beat;scheduler.onFailure=error=>console.error('Godspeed Mission Control: a routine could not be created, the next tick tries again:',error.message);
-  if(originalRuntime){domains.nativeAgent=nativeAgent({...descriptor,cwd:store.root,providerFile:providerPath,keptFile:path.join(store.state,KEPT_FILE)});const updater=new HermesUpdate({store,descriptor,ask:askDirectly,isBusy:()=>!!scheduler.running||domains.nativeAgent?.busy});scheduler.updater=updater;domains.hermesUpdate=updater;domains.nativeScheduler=scheduler;query.nativeHermesHome=descriptor.home;}
+  const lifecycle=originalRuntime?new HermesLifecycle():null,domains=new Domains(query,{provider}),scheduler=originalRuntime?new NativeScheduler(store,{...descriptor,device,lifecycle,records:new Scheduler(store,{device,executor:jobExecutor(provider,query),only:NativeScheduler.recordKinds,delivery:'notebook'})}):new Scheduler(store,{device,query,executor:jobExecutor(provider,query)});scheduler.onProgress=beat;scheduler.onFailure=error=>console.error('Godspeed Mission Control: a routine could not be created, the next tick tries again:',error.message);
+  if(originalRuntime){domains.nativeAgent=nativeAgent({...descriptor,cwd:store.root,providerFile:providerPath,keptFile:path.join(store.state,KEPT_FILE),lifecycle});const updater=new HermesUpdate({store,descriptor,ask:askDirectly,lifecycle,isBusy:()=>scheduler.ticking||!!scheduler.running||domains.nativeAgent?.busy});scheduler.updater=updater;domains.hermesUpdate=updater;domains.nativeScheduler=scheduler;query.nativeHermesHome=descriptor.home;}
   // Where the routines' AI is set: the Hermes home the routines run in (core/routine-ai.mjs).
   const routineAI=originalRuntime&&descriptor?.verified&&descriptor.home?{home:descriptor.home,state:store.state}:null;
   // A CHATGPT PLAN SIGNED IN FROM SETTINGS (core/plan-signin.mjs), one sign-in for the main AI and the

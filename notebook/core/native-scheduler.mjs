@@ -19,6 +19,7 @@ import {mailCountWanted} from './mail-trackers.mjs';
 import {loadSettings as coachSettings,saveSettings as saveCoach} from '../../third-party/addons/godspeed-coach/lib/settings.mjs';
 import {rhythmWords} from '../../third-party/addons/godspeed-coach/lib/areas.mjs';
 import {moveSettingsDeadlines} from './native-due.mjs';
+import {HermesLifecycle} from './hermes-lifecycle.mjs';
 const skills={'morning-brief':'morning-brief',coaching:'coach','habit-check':'coach',journal:'interstitial-journal',headache:'headache-tracker'};
 // Hermes' own record of its jobs, as it wrote it.
 export function hermesJobs(home){
@@ -60,8 +61,8 @@ export class NativeScheduler{
  // assistant: a watch topic was never read again, and radar work stayed
  // "preparing" for ever. They run on the machine that runs the routines.
  static recordKinds=['watch','domain-watch','radar-prepare','radar-work'];
- constructor(store,{executable,home,device=store.device,run=runCommand,records=null,tickLimit=TICK_LIMIT,beatEvery=HEARTBEAT_EVERY,updater=null}){
-  Object.assign(this,{store,executable,home,device,run,records,tickLimit,beatEvery,updater});
+ constructor(store,{executable,home,device=store.device,run=runCommand,records=null,tickLimit=TICK_LIMIT,beatEvery=HEARTBEAT_EVERY,updater=null,lifecycle=new HermesLifecycle()}){
+  Object.assign(this,{store,executable,home,device,run,records,tickLimit,beatEvery,updater,lifecycle});
   if(records)records.onProgress=()=>this.onProgress?.();
  }
  // A connected provider reaches the record routines too (/api/provider).
@@ -565,11 +566,12 @@ export class NativeScheduler{
   // A setup asking inside a running tick or the cooldown still hears whether the connection check could be made.
   if(this.ticking){if(raise){await this.current?.catch(()=>null);await this.followConnectionCheck();}return records;}
   if(Date.now()-(this.lastTick||0)<60000){this.onProgress?.();if(raise)await this.followConnectionCheck();return records;}
+  await this.updater?.tick(this.store.get('settings','installation')?.timezone).catch(logged('the Hermes update could not be checked'));
+  const release=this.lifecycle.acquire('routine tick');if(!release)return records;
   this.ticking=true;this.lastTick=Date.now();
   let failure=null,finish;const failures=[];
   this.current=new Promise(r=>{finish=r;});
   try{
-   await this.updater?.tick(this.store.get('settings','installation')?.timezone).catch(logged('the Hermes update could not be checked'));
    records=this.records?.tick().catch(()=>[])||Promise.resolve([]);
    await this.startRoutines().catch(()=>null);
    await this.followCleanup().catch(logged('the nightly cleanup could not be set up'));
@@ -586,7 +588,7 @@ export class NativeScheduler{
    await beatWhile(this.command(['tick'],{timeout:this.tickLimit}),()=>this.onProgress?.(),{limitMs:this.tickLimit+60000,every:this.beatEvery});
    try{this.afterTick();}catch{}
   }
-  finally{this.ticking=false;finish();}
+  finally{this.ticking=false;finish();release();}
   // The setup that asked for this tick hears that a routine could not be made; the periodic tick logs it (onFailure) and keeps going.
   if(failure){if(raise)throw failure;for(const error of failures)try{this.onFailure?.(error);}catch{}}
   return records;
@@ -603,7 +605,8 @@ export class NativeScheduler{
  startRun(id){
   this.requireOwner('Run the routine');
   if(id&&!nativeJobs(this.home,this.device).some(j=>j.id===id))throw Error('Choose an existing Hermes task');
-  const run=this.runNow(id);this.running=run;run.catch(()=>{}).finally(()=>{if(this.running===run)this.running=null;});
+  const release=this.lifecycle.acquire('routine run');if(!release)throw Error('The assistant is updating or another routine is already running.');
+  const run=this.runNow(id);this.running=run;run.catch(()=>{}).finally(()=>{if(this.running===run)this.running=null;release();});
   return {started:true,...(id?{id}:{})};
  }
  async runNow(id){
