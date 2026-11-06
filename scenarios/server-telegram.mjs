@@ -1,0 +1,140 @@
+#!/usr/bin/env node
+// Drive Telegram from outside an installed Docker server.  The only substitute is the Bot API
+// process started in that server; all setup, gateway, and assistant work remains in the image.
+import fs from 'node:fs';
+import path from 'node:path';
+import {execFileSync} from 'node:child_process';
+
+const [, , command, ...args] = process.argv;
+const option = name => {
+  const at=args.indexOf(name);
+  if(at<0 || !args[at+1]) throw Error(`server-telegram: ${name} is required`);
+  return args[at+1];
+};
+const optional = name => {
+  const at=args.indexOf(name);
+  return at < 0 ? undefined : args[at+1];
+};
+const server=optional('--server') ?? 'godspeed';
+const evidence=optional('--evidence');
+const token=optional('--token');
+const owner=Number(optional('--owner') ?? '31415');
+const docker=(arguments_,input) => execFileSync('sudo',['docker',...arguments_],{input,encoding:'utf8',stdio:['pipe','pipe','pipe']});
+const inServer=(arguments_,input) => docker(['exec','-i',server,...arguments_],input);
+const sleep=ms => new Promise(resolve=>setTimeout(resolve,ms));
+const json=value => JSON.stringify(value);
+const write=(file,value) => fs.writeFileSync(file,JSON.stringify(value,null,2)+'\n',{mode:0o600});
+const read=file => JSON.parse(fs.readFileSync(file,'utf8'));
+
+function requireEvidence(){
+  if(!evidence) throw Error('server-telegram: --evidence is required');
+  fs.mkdirSync(evidence,{recursive:true,mode:0o700});
+}
+function stateFile(){ return path.join(evidence,'telegram-run.json'); }
+function fakeRecord(){ return path.join(evidence,'telegram-requests.json'); }
+function copyRecord(){
+  try { fs.writeFileSync(fakeRecord(),inServer(['cat','/tmp/godspeed-scenario-telegram-record.json']),{mode:0o600}); }
+  catch { throw Error('the installed fake Telegram API wrote no request record'); }
+  return read(fakeRecord());
+}
+function runner(){
+  try { fs.writeFileSync(path.join(evidence,'runner.json'),inServer(['cat','/opt/data/full-candidate/telegram/runner.json']),{mode:0o600}); }
+  catch { throw Error('the installed Telegram runner wrote no runner.json'); }
+  return read(path.join(evidence,'runner.json'));
+}
+function loadState(){
+  try { return read(stateFile()); }
+  catch { return {steps:[],outbox:[],sent:0}; }
+}
+function saveState(value){ write(stateFile(),value); write(path.join(evidence,'run.json'),{steps:value.steps,outbox:value.outbox}); }
+async function capture(label,kind,action){
+  const state=loadState();
+  try {
+    const started=copyRecord(), before=state.sent, requestStart=(started.requests ?? []).length;
+    action();
+    // The gateway's long poll is allowed two seconds in fake-telegram; leave one complete turn
+    // before claiming the installed route did not answer.
+    await sleep(2500);
+    const record=copyRecord();
+    for(const sent of (record.sent ?? []).slice(before)) state.outbox.push({label,kind:'sendMessage',chat_id:sent.chat_id,text:sent.text,buttons:sent.buttons ?? [],accepted:true});
+    state.sent=(record.sent ?? []).length;
+    state.steps.push({label,kind,success:true,request_start:requestStart,request_end:(record.requests ?? []).length});
+    saveState(state);
+  } catch(error) {
+    state.steps.push({label,kind,success:false,error:String(error.message ?? error)});
+    saveState(state);
+    throw error;
+  }
+}
+function act(value){
+  const request=Buffer.from(json(value));
+  inServer(['curl','-fsS','--max-time','30','-X','POST','-H','Content-Type: application/json','--data-binary','@-','http://127.0.0.1:8081/__act'],request);
+}
+function post(pathname,body){
+  const result=inServer(['curl','-fsS','--max-time','300','-X','POST','-H','Content-Type: application/json','--data-binary','@-',`http://127.0.0.1:47831${pathname}`],Buffer.from(json(body)));
+  return JSON.parse(result);
+}
+async function waitFor(description,readValue,predicate,seconds=90){
+  const end=Date.now()+seconds*1000;
+  while(Date.now()<end){
+    try { const value=readValue(); if(predicate(value)) return value; } catch {}
+    await sleep(1000);
+  }
+  throw Error(`the installed Telegram ${description} did not appear within ${seconds} seconds`);
+}
+
+async function setup(){
+  requireEvidence();
+  if(!token) throw Error('server-telegram: --token is required for setup');
+  const scenario={users:{[owner]:{first_name:'Scenario owner',username:'scenario_owner'}},start:[],rules:[]};
+  const scenarioFile=path.join(evidence,'telegram-scenario.json');
+  write(scenarioFile,scenario);
+  docker(['cp',scenarioFile,`${server}:/tmp/godspeed-scenario-telegram.json`]);
+  // It is deliberately the stage image's copy, just as the full-candidate proof does.
+  inServer(['sh','-c','pkill -f godspeed-scenario-telegram.py 2>/dev/null || true']);
+  inServer(['cp','/opt/godspeed/kit/docker/test/fake-telegram.py','/tmp/godspeed-scenario-telegram.py']);
+  inServer(['sh','-c',`python3 /tmp/godspeed-scenario-telegram.py --port 8081 --token ${JSON.stringify(token)} --scenario /tmp/godspeed-scenario-telegram.json --record /tmp/godspeed-scenario-telegram-record.json >/tmp/godspeed-scenario-telegram.log 2>&1 &`]);
+  await waitFor('API',copyRecord,record=>Array.isArray(record.requests),15);
+  const connected=post('/api/telegram/connect',{token,timezone:'Etc/UTC',address:'https://example.invalid'});
+  if(!connected?.start_message) throw Error('Settings connected the bot but supplied no one-time /start message');
+  await capture('setup-start','setup',()=>act({from:owner,text:connected.start_message}));
+  await waitFor('setup question',copyRecord,record=>(record.sent ?? []).some(message=>(message.buttons ?? []).includes('anthropic')));
+  await capture('setup-provider','press',()=>act({from:owner,press:'anthropic'}));
+  const key=optional('--ai-key');
+  if(!key) throw Error('server-telegram: --ai-key is required because the setup path checks the dedicated AI account');
+  await capture('setup-key','say',()=>act({from:owner,text:key}));
+  await waitFor('first-install question',copyRecord,record=>(record.sent ?? []).some(message=>(message.buttons ?? []).includes('have:no')),180);
+  await capture('setup-first-install','press',()=>act({from:owner,press:'have:no'}));
+  await waitFor('gateway handoff',runner,value=>value.state==='gateway',180);
+  const setupState=JSON.parse(inServer(['cat','/opt/data/full-candidate/telegram/setup.json']));
+  if(!setupState.done) throw Error('the Telegram setup ended without marking its handoff done');
+  copyRecord();
+  runner();
+}
+
+async function say(){
+  requireEvidence();
+  const label=option('--label'), text=option('--text');
+  await capture(label,'say',()=>act({from:owner,text}));
+}
+async function press(){
+  requireEvidence();
+  const label=option('--label'), button=option('--button');
+  await capture(label,'press',()=>act({from:owner,press:button}));
+}
+async function snapshot(){
+  requireEvidence();
+  copyRecord(); runner();
+  const state=loadState(); saveState(state);
+}
+
+try {
+  if(command==='setup') await setup();
+  else if(command==='say') await say();
+  else if(command==='press') await press();
+  else if(command==='snapshot') await snapshot();
+  else throw Error('usage: server-telegram.mjs <setup|say|press|snapshot> --server NAME --evidence DIR [...]');
+} catch(error) {
+  process.stderr.write(`server-telegram: ${error.message}\n`);
+  process.exitCode=1;
+}
