@@ -9,15 +9,13 @@
 #             deadline about Telegram opens
 #   repaired  the key is valid again: the next run closes that deadline
 #
-# THE TELEGRAM IS A FIXTURE. The check asks Telegram's servers itself, from Node, so the stand-in for
-# them is loaded into every Node program the driver starts (telegram-fixture-fetch.mjs): it answers
-# getMe for the valid token and refuses any other with 401, and logs every call it answered. A check
-# that never reached it is a FAIL, not a quiet pass.
+# The local Bot API fixture answers the installed server's real HTTP calls: getMe with the valid key
+# and 401 with the refused one. A check that never reaches it is a FAIL, not a quiet pass.
 #
 # THE ROUTINE is matched by its name and the deadline by its title and its being new, so this does not
 # depend on the slugs ticket 06 (#200) chose.
 #
-# No AI is connected: nothing in this scenario talks to a model.
+# The installed Telegram setup verifies the dedicated test AI account before handing the bot to its gateway.
 #
 #   bash scenarios/connection-check.sh candidate/2.0.0-beta.17
 #   bash scenarios/connection-check.sh --check <folder>
@@ -27,11 +25,11 @@
 #   routines.json                    the routines the install made
 #   due-before.json, due-<label>.json   the deadlines before and after each run: fine, broken, repaired
 #   notifications-before.json, notifications-<label>.json   the notebook's bell
-#   telegram-fixture-calls.log       one line per call the stand-in answered
-#   telegram-fixture.json, driver.log, config.yaml, plugins.txt
+#   telegram-requests.json, runner.json  redacted local Bot API traffic and installed gateway state
 SCENARIO=connection-check
 # shellcheck source=scenarios/scenario-lib.sh
 . "$(dirname "$0")/scenario-lib.sh"
+. "$HERE/server-lib.sh"
 scenario_arguments "$@"
 
 ROUTINE='Daily connection check'
@@ -39,36 +37,38 @@ ROUTINE='Daily connection check'
 has_the_routine() { grep -qF "\"$ROUTINE\"" "$1/routines.json" 2>/dev/null; }
 no_routine() { fail "this install has no $ROUTINE (ticket 06, #200)"; }
 
-run_and_look() { # <label>: the routine, then the deadlines and the bell as they are afterwards
-  step_of cron "$1" "\"job\":\"$ROUTINE\""
-  printf ','
-  step_of run "$1" "\"argv\":[\"$NODE\",$(quoted_json "$(product_script "$ROOT" notebook/bin/personal-command.mjs)"),\"due\",\"state\",\"--json\"],\"env\":{\"GODSPEED_WORKSPACE\":$(quoted_json "$ROOT")},\"stdout_file\":$(quoted_json "$EVIDENCE/due-$1.json")"
-  printf ','
-  snapshot_step "$1" notifications
+run_and_look() { # <label>: the installed routine, then its visible records
+  server_run_job "$1" "$ROUTINE" 300
+  server_telegram_mark "$1" cron
+  server_snapshot_table "$1" deadlines
+  server_snapshot_table "$1" notifications
 }
 
 act() {
   fresh_evidence
   install_paths
-  install_the_stage_line "$EVIDENCE/.install.log"
   need_node
-  wait_for 180 "the notebook to answer after the install" notebook_is_up ||
-    fail "the notebook does not answer after the install"
-  read_version "$ROOT"
-  assistant_home
-  phase 'the owner on a fixture Telegram'
-  owner_on_telegram_install no
+  need_the_ai_key 'the installed Telegram setup chat'
+  server_install
+  server_connects_the_model
+  phase 'the owner on the installed Docker Telegram gateway'
+  server_telegram_setup
+  printf '{"goal":"Sleep eight hours a night","timezone":"Etc/UTC","delivery":"telegram"}\n' >"$EVIDENCE/.setup.json"
+  [ "$(server_post /api/setup "$EVIDENCE/.setup.json" "$EVIDENCE/setup.json")" = 200 ] || fail 'the installed notebook would not make routines for the fixture goal'
+  server_pause_all_jobs
+  server_table jobs "$EVIDENCE/routines.json"
   has_the_routine "$EVIDENCE" || no_routine
-  due_on "$ROOT" state --json >"$EVIDENCE/due-before.json" ||
-    fail "the install's deadlines could not be read before the connection check ran"
+  server_table deadlines "$EVIDENCE/due-before.json"
+  server_table notifications "$EVIDENCE/notifications-before.json"
 
   phase 'the connection check: fine, broken, repaired'
-  steps_file "$EVIDENCE/steps.json" \
-    "$(snapshot_step before notifications)" \
-    "$(run_and_look fine)" \
-    "$(step_of token broken '"valid":false')" "$(run_and_look broken)" \
-    "$(step_of token repaired '"valid":true')" "$(run_and_look repaired)"
-  owner_on_telegram "$EVIDENCE/steps.json" "$EVIDENCE/run.json"
+  run_and_look fine
+  server_set_telegram_token '5550001111:SCENARIO-revoked-bbbbbbbbbbbbbbbbbbbbbbbb'
+  run_and_look broken
+  server_set_telegram_token "$SERVER_TELEGRAM_TOKEN"
+  run_and_look repaired
+  server_telegram_snapshot
+  server_manifest
   rm -f "$EVIDENCE"/.[a-z]*
 }
 
@@ -77,7 +77,7 @@ check() { # <evidence folder>
   local folder=$1 label text count title
   [ -d "$folder" ] || fail "there is nothing at $folder, so this scenario kept no evidence of a connection check"
   need_node
-  kept_all "$folder" 'what was sent, opened and rung' run.json routines.json due-before.json notifications-before.json telegram-fixture-calls.log
+  kept_all "$folder" 'what was sent, opened and rung' run.json routines.json due-before.json notifications-before.json telegram-requests.json runner.json manifest.json
   for label in fine broken repaired; do
     kept "$folder" "due-$label.json" "the deadlines after the run of $label"
     kept "$folder" "notifications-$label.json" "the bell after the run of $label"
@@ -87,9 +87,8 @@ check() { # <evidence folder>
   [ -z "$text" ] || fail "a step of the run did not work, so the connection check could not be tried: $text"
 
   # The check's own calls reached the stand-in: two answered, one refused.
-  [ "$(grep -c '^getMe valid$' "$folder/telegram-fixture-calls.log" || true)" -ge 2 ] &&
-    [ "$(grep -c '^getMe invalid$' "$folder/telegram-fixture-calls.log" || true)" -ge 1 ] ||
-    fail "the connection check never asked the stand-in for Telegram's servers (getMe: $(sort "$folder/telegram-fixture-calls.log" | uniq -c | tr '\n' ' ')), so its runs prove nothing"
+  "$NODE" -e 'const r=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).requests||[];const good=r.filter(x=>x.method==="getMe"&&x.authorized).length,bad=r.filter(x=>x.method==="getMe"&&!x.authorized).length;process.exit(good>=2&&bad>=1?0:1)' "$folder/telegram-requests.json" ||
+    fail 'the connection check never asked the fake Telegram API twice with its valid key and once with the refused key, so its runs prove nothing'
 
   # fine: it says nothing.
   text=$(outbox_between "$folder/run.json" fine | head -n 1)

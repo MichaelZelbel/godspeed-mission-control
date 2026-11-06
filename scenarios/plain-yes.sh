@@ -11,8 +11,9 @@
 #   d  nothing waits: a "yes" approves nothing (a button's No rejected the last one before)
 # and no message tells the owner to type a code.
 #
-# THE TELEGRAM IS A FIXTURE (owner-on-telegram.py): only Telegram's servers are stood in for. THE BUTTONS
-# are ticket 02's (#197); until they are wired to the waiting steps, a question without them is a FAIL.
+# The advertised Docker Telegram route supplies the installed gateway; only its local Bot API is a
+# fixture. THE BUTTONS are ticket 02's (#197); until they are wired to the waiting steps, a question
+# without them is a FAIL.
 #
 #   GODSPEED_SCENARIO_AI_KEY    the model that reads the owner's "yes" (without it: FAIL), with
 #                               GODSPEED_SCENARIO_AI_URL and GODSPEED_SCENARIO_AI_MODEL.
@@ -23,10 +24,11 @@
 # What it keeps for its checking part:
 #   run.json                 every message sent (with its step's label and buttons) and each step's outcome
 #   approvals-<label>.json   the waiting steps after each step: a-ask a b-ask b b-choice c-ask c-press d-no d
-#   telegram-fixture.json, driver.log, ai.txt, routines.json, config.yaml, plugins.txt
+#   telegram-requests.json, runner.json, routines.json
 SCENARIO=plain-yes
 # shellcheck source=scenarios/scenario-lib.sh
 . "$(dirname "$0")/scenario-lib.sh"
+. "$HERE/server-lib.sh"
 scenario_arguments "$@"
 
 
@@ -44,16 +46,16 @@ act() {
   need_the_ai_key "the owner's plain \"yes\" read in the chat"
   fresh_evidence
   install_paths
-  install_the_stage_line "$EVIDENCE/.install.log"
   need_node
-  wait_for 180 "the notebook to answer after the install" notebook_is_up ||
-    fail "the notebook does not answer after the install"
-  read_version "$ROOT"
-  assistant_home
-  connect_the_ai
-  echo "the connected AI ($AI_MODEL)" >"$EVIDENCE/ai.txt"
-  phase 'the owner on a fixture Telegram, and the fixture asker'
-  owner_on_telegram_install yes
+  server_install
+  server_connects_the_model
+  phase 'the owner on the installed Docker Telegram gateway, and the fixture asker'
+  server_telegram_setup
+  printf '{"goal":"Sleep eight hours a night","timezone":"Etc/UTC","delivery":"telegram"}\n' >"$EVIDENCE/.setup.json"
+  [ "$(server_post /api/setup "$EVIDENCE/.setup.json" "$EVIDENCE/setup.json")" = 200 ] || fail 'the installed notebook would not make routines for the fixture goal'
+  server_pause_all_jobs
+  server_install_asker
+  server_table jobs "$EVIDENCE/routines.json"
 
   phase 'a plain yes, two waiting, a button, and nothing waiting'
   ask_file a-ask "Share this week's food log with your nutritionist" \
@@ -62,17 +64,17 @@ act() {
     "Send this week's food log to your nutritionist?" 'The log is sent' 'Nothing is sent' \
     'Cancel the renewal of your gym membership' 'Cancel the renewal of your gym membership?' 'The renewal is cancelled' 'The membership renews'
   ask_file c-ask "Book the car's yearly inspection" "Book the car's yearly inspection?" 'The inspection is booked' 'Nothing is booked'
-  steps_file "$EVIDENCE/steps.json" \
-    "$(asker_steps a-ask "$EVIDENCE/asks-a-ask.json")" "$(snapshot_step a-ask approvals)" \
-    "$(step_of say a '"text":"yes","session":"scenario-owner-a"')" "$(snapshot_step a approvals)" \
-    "$(asker_steps b-ask "$EVIDENCE/asks-b-ask.json")" "$(snapshot_step b-ask approvals)" \
-    "$(step_of say b '"text":"yes","session":"scenario-owner-b"')" "$(snapshot_step b approvals)" \
-    "$(step_of say b-choice '"text":"the food log one","session":"scenario-owner-b"')" "$(snapshot_step b-choice approvals)" \
-    "$(asker_steps c-ask "$EVIDENCE/asks-c-ask.json")" "$(snapshot_step c-ask approvals)" \
-    "$(step_of press c-press '"message":"last-with-buttons","contains":"gym","button":"Yes"')" "$(snapshot_step c-press approvals)" \
-    "$(step_of press d-no '"message":"last-with-buttons","contains":"inspection","button":"No"')" "$(snapshot_step d-no approvals)" \
-    "$(step_of say d '"text":"yes","session":"scenario-owner-d"')" "$(snapshot_step d approvals)"
-  owner_on_telegram "$EVIDENCE/steps.json" "$EVIDENCE/run.json"
+  server_set_asks "$EVIDENCE/asks-a-ask.json"; server_run_asker a-ask; server_snapshot_table a-ask approvals
+  server_telegram_say a yes; server_snapshot_table a approvals
+  server_set_asks "$EVIDENCE/asks-b-ask.json"; server_run_asker b-ask; server_snapshot_table b-ask approvals
+  server_telegram_say b yes; server_snapshot_table b approvals
+  server_telegram_say b-choice 'the food log one'; server_snapshot_table b-choice approvals
+  server_set_asks "$EVIDENCE/asks-c-ask.json"; server_run_asker c-ask; server_snapshot_table c-ask approvals
+  server_telegram_press c-press Yes; server_snapshot_table c-press approvals
+  server_telegram_press d-no No; server_snapshot_table d-no approvals
+  server_telegram_say d yes; server_snapshot_table d approvals
+  server_telegram_snapshot
+  server_manifest
   rm -f "$EVIDENCE"/.[a-z]*
 }
 
@@ -86,7 +88,7 @@ check() { # <evidence folder>
   FOLDER=$folder
   [ -d "$folder" ] || fail "there is nothing at $folder, so this scenario kept no evidence of a plain yes"
   need_node
-  kept_all "$folder" 'what was sent to the owner and what waited' run.json telegram-fixture.json
+  kept_all "$folder" 'what was sent to the owner and what waited' run.json telegram-requests.json runner.json manifest.json
   for label in a-ask a b-ask b b-choice c-ask c-press d-no d; do
     kept "$folder" "approvals-$label.json" "the waiting steps after $label"
   done

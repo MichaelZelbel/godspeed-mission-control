@@ -127,12 +127,22 @@ async function snapshot(){
   copyRecord(); runner();
   const state=loadState(); saveState(state);
 }
+async function mark(){
+  requireEvidence();
+  const label=option('--label'), kind=optional('--kind') ?? 'run';
+  const state=loadState(), record=copyRecord(), start=state.sent;
+  for(const sent of (record.sent ?? []).slice(start)) state.outbox.push({label,kind:'sendMessage',chat_id:sent.chat_id,text:sent.text,buttons:sent.buttons ?? [],accepted:true});
+  state.sent=(record.sent ?? []).length;
+  state.steps.push({label,kind,success:true,request_end:(record.requests ?? []).length});
+  saveState(state);
+}
 
 try {
   if(command==='setup') await setup();
   else if(command==='say') await say();
   else if(command==='press') await press();
   else if(command==='snapshot') await snapshot();
+  else if(command==='mark') await mark();
   else throw Error('usage: server-telegram.mjs <setup|say|press|snapshot> --server NAME --evidence DIR [...]');
 } catch(error) {
   process.stderr.write(`server-telegram: ${error.message}\n`);

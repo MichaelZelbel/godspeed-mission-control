@@ -37,10 +37,11 @@ and these are not programs for users.
 | `phone-goes-quiet.sh` | 37 hours past the last upload the connection check sends one message and files one deadline, a second run sends nothing, an upload closes the deadline |
 | `mail-count.sh` | a tracker rule set up in the chat ("count the mails from <sender> that say new order") is counted by the daily routine from headers only: exactly the orders, once each, the marker in every body nowhere, and no mail call on an install with no rule |
 | `talk-on-talk-day.sh` | on a talk day, with last week's talk open and unanswered, asking for the talk opens today's from its sealed preparation, names last week's once and closes it as not held |
-| `no-question-he-cannot-judge.sh` | on an install whose owner is on a fixture Telegram, five situations are replayed by a fixture asker: a quiet restart, a bundle of questions, an optional extra and the reminders afterwards send the owner nothing and leave nothing waiting; the one real yes is a single question in words, and his plain "approve" is approved with one reply that only confirms; no message tells him to type `approve <id>` or shows a hex id of six or more |
-| `plain-yes.sh` | on the same fixture: with one step waiting a plain "yes" approves it; with two waiting it gets one question naming both and approves neither, and the answer naming one approves only that one; a Yes button approves its own step and No rejects its own; a "yes" with nothing waiting approves nothing |
-| `what-was-that.sh` | on the same fixture: a queued notice said by its routine is recorded where the chat reads it, with the facts it was written from, and "what is this about?" asked in a new conversation is answered with what the report was about |
-| `connection-check.sh` | on the same fixture: the Daily connection check sends nothing, opens no deadline and rings no bell while Telegram's key is valid, tells the owner once and opens one deadline when Telegram refuses it, and closes the deadline when the key is valid again |
+| `first-day.sh` | on a fresh Docker server with the dedicated test AI and made-up emergency-kit goal, the installed research, choice and work routines make one verified practical checklist; its sparse-data morning brief is saved, delivered through the installed Telegram gateway and returned word-for-word to `today's brief` |
+| `no-question-he-cannot-judge.sh` | through the advertised Docker Telegram route, five situations are replayed by a fixture asker: a quiet restart, a bundle of questions, an optional extra and the reminders afterwards send the owner nothing and leave nothing waiting; the one real yes is a single question in words, and his plain "approve" is approved with one reply that only confirms; no message tells him to type `approve <id>` or shows a hex id of six or more |
+| `plain-yes.sh` | through the same installed Docker gateway: with one step waiting a plain "yes" approves it; with two waiting it gets one question naming both and approves neither, and the answer naming one approves only that one; a Yes button approves its own step and No rejects its own; a "yes" with nothing waiting approves nothing |
+| `what-was-that.sh` | through the same installed Docker gateway: a queued notice said by its routine is recorded where the chat reads it, with the facts it was written from, and "what is this about?" asked in a new conversation is answered with what the report was about |
+| `connection-check.sh` | through the same installed Docker gateway: the Daily connection check sends nothing, opens no deadline and rings no bell while Telegram's key is valid, tells the owner once and opens one deadline when Telegram refuses it, and closes the deadline when the key is valid again |
 
 ## Where there is no network
 
@@ -104,7 +105,7 @@ Named by the job, never in a file here:
 | `incomplete-day` | `GODSPEED_SCENARIO_AI_KEY` | a model writes the briefings the scenario reads; it judges only what a briefing says of a day, never the numbers |
 | `mail-count` | `GODSPEED_SCENARIO_AI_KEY` | the chat that sets the rule up is the real assistant, so it needs a model |
 | `talk-on-talk-day` | `GODSPEED_SCENARIO_AI_KEY` | the talk the owner asks for is opened by a model; the preparations are fixtures sealed by the coach's own commands |
-| `no-question-he-cannot-judge`, `plain-yes`, `what-was-that` | `GODSPEED_SCENARIO_AI_KEY` | the install's assistant answers the owner on the fixture Telegram through a model; the same two say which. The Telegram account and bot key are the fixture's, never a real one |
+| `first-day`, `no-question-he-cannot-judge`, `plain-yes`, `what-was-that`, `connection-check` | `GODSPEED_SCENARIO_AI_KEY` | the installed Docker Telegram setup checks the dedicated test account before its supervised gateway receives the made-up owner messages; the same two variables select it. The bot and recipient stay local fixtures. |
 
 `GODSPEED_SCENARIO_AI_URL` and `GODSPEED_SCENARIO_AI_MODEL` have no default: a scenario that needs an AI fails with a plain sentence naming whichever is missing, and it also fails if the URL is on openrouter.ai, so the checks can never spend OpenRouter money. They run on `https://api.anthropic.com/v1` with `claude-haiku-4-5`, set as repository variables, and the key is the secret `GODSPEED_SCENARIO_AI_KEY`.
 
@@ -197,16 +198,14 @@ Only the stage's own ref is read from that folder. A scenario that first install
 (`BEFORE_THE_MOVE`, `WITH_THE_VIDEO_SKILLS`) reads it from GitHub, as it always has
 (`install_the_line_of_into` in `scenario-lib.sh`).
 
-## The fixture Telegram of the beta.17 scenarios
+## Docker Telegram evidence
 
-Four scenarios put the owner on a Telegram that is a fixture. `owner-on-telegram.py` runs inside the
-installed Hermes' own Python, as `telegram-through-hermes.py` does, but as a whole emulated gateway:
-Hermes loads the install's plugins, runs a routine by name and delivers what it prints, runs one turn
-of its own agent for an owner message, and takes a button press. What is stood in for is Telegram's
-servers: every call lands in an outbox, and a call with a token other than the fixture's valid one
-is refused as Telegram refuses a revoked key. `telegram-fixture-fetch.mjs` stands in for them for the
-one program that asks them straight from Node, the daily connection check, and `scenario-asker.py` is
-the routine that opens waiting steps through the product's one way to ask (`godspeed-step`); its flag
-table is the only place that names the flags of tickets 01 and 04. `telegram-judge.mjs` reads what
-was sent. Before the installed Hermes has run them for real, the entry points the driver calls are
-read from Hermes' source, not exercised: a first real run is what settles them.
+`server-lib.sh` installs the frozen `/server` stage and `server-telegram.mjs` drives the installed
+notebook setup, `godspeed-telegram-setup`, supervised Hermes gateway and routine APIs. The only stand-in
+is the candidate image's local `fake-telegram.py` Bot API. It records ordered, redacted requests and
+messages; `run.json` brackets each inbound owner action or routine run, `runner.json` proves the gateway
+state, and the scenario keeps its notebook snapshots plus a manifest. The four former Linux emulator
+scenarios and `first-day.sh` therefore fail when the packaged Telegram dependency, setup or gateway is
+missing rather than installing one after the fact. `scenario-asker.py` remains the installed fixture
+routine that opens waiting steps through `godspeed-step`; its flag table is the only place that names
+the flags of tickets 01 and 04.

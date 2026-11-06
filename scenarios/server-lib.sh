@@ -6,6 +6,7 @@ SERVER_DIR=${GODSPEED_SCENARIO_SERVER_DIR:-/opt/godspeed-mission-control}
 INGEST_PORT=${GODSPEED_SCENARIO_INGEST_PORT:-47831}
 
 in_server() { sudo docker exec -i "$SERVER_NAME" "$@"; }
+in_server_as_hermes() { sudo docker exec -i --user hermes "$SERVER_NAME" "$@"; }
 
 server_install() {
   say "The /server line, against the stage: $STAGE_REF"
@@ -107,6 +108,29 @@ server_telegram_snapshot() {
   "$NODE" "$HERE/server-telegram.mjs" snapshot --server "$SERVER_NAME" --evidence "$EVIDENCE" ||
     fail 'the installed Telegram gateway left no current evidence'
 }
+server_telegram_mark() { # <label> [kind]
+  if [ $# -eq 2 ]; then
+    "$NODE" "$HERE/server-telegram.mjs" mark --server "$SERVER_NAME" --evidence "$EVIDENCE" --label "$1" --kind "$2"
+  else
+    "$NODE" "$HERE/server-telegram.mjs" mark --server "$SERVER_NAME" --evidence "$EVIDENCE" --label "$1"
+  fi || fail "the installed Telegram gateway left no evidence for $1"
+}
+
+server_copy_evidence() {
+  # These folders are the installed mission-control's records and routine outputs, not host fixtures.
+  # Neither contains the provider key, which remains under the separate Telegram connection directory.
+  local source=$1 target=$2
+  sudo docker cp "$SERVER_NAME:$source" "$target" 2>/dev/null ||
+    fail "the installed server did not retain $source as evidence"
+}
+server_manifest() {
+  "$NODE" -e '
+const crypto=require("crypto"),fs=require("fs"),path=require("path");
+const [root,out]=process.argv.slice(1),files=[];
+for(const walk=d=>{for(const entry of fs.readdirSync(d,{withFileTypes:true})){const file=path.join(d,entry.name);if(entry.isDirectory())walk(file);else if(entry.isFile()){const data=fs.readFileSync(file);files.push({file:path.relative(root,file),bytes:data.length,sha256:crypto.createHash("sha256").update(data).digest("hex")});}}})(root);
+fs.writeFileSync(out,JSON.stringify({files},null,2)+"\\n");
+' "$EVIDENCE" "$EVIDENCE/manifest.json" || fail 'the scenario could not write its evidence manifest'
+}
 
 server_job_id() { # <job name> <jobs JSON>
   "$NODE" -e 'const fs=require("fs"),d=JSON.parse(fs.readFileSync(process.argv[1],"utf8")),rows=Array.isArray(d)?d:d.data||[],j=rows.find(v=>v&&(v.name===process.argv[2]||v.title===process.argv[2]));process.stdout.write(j?String(j.id):"")' "$2" "$1"
@@ -121,10 +145,11 @@ server_pause_all_jobs() {
   done
 }
 server_run_job() { # <label> <job name> <seconds>
-  local jobs=$EVIDENCE/jobs-$1.json id
+  local jobs=$EVIDENCE/jobs-$1.json id before
   server_table jobs "$jobs"
   id=$(server_job_id "$2" "$jobs")
   [ -n "$id" ] || fail "the installed server has no routine called \"$2\""
+  before=$("$NODE" -e 'const fs=require("fs"),d=JSON.parse(fs.readFileSync(process.argv[1],"utf8")),rows=Array.isArray(d)?d:d.data||[],j=rows.find(v=>v?.id===process.argv[2]);process.stdout.write(String(j?.last_run_at||""))' "$jobs" "$id")
   printf '{"id":%s}' "$(quoted_json "$id")" >"$EVIDENCE/.job-run.json"
   case $(server_post /api/jobs/run "$EVIDENCE/.job-run.json" "$EVIDENCE/job-$1-start.json") in
     200|202) ;;
@@ -132,9 +157,40 @@ server_run_job() { # <label> <job name> <seconds>
   esac
   server_job_finished() {
     server_table jobs "$jobs" 2>/dev/null &&
-      "$NODE" -e 'const fs=require("fs"),d=JSON.parse(fs.readFileSync(process.argv[1],"utf8")),rows=Array.isArray(d)?d:d.data||[],j=rows.find(v=>v?.id===process.argv[2]);process.exit(j?.last_run_at&&j?.last_status==="ok"?0:1)' "$jobs" "$id"
+      "$NODE" -e 'const fs=require("fs"),d=JSON.parse(fs.readFileSync(process.argv[1],"utf8")),rows=Array.isArray(d)?d:d.data||[],j=rows.find(v=>v?.id===process.argv[2]);process.exit(j?.last_run_at&&j.last_run_at!==process.argv[3]&&j?.last_status==="ok"?0:1)' "$jobs" "$id" "$before"
   }
   wait_for "$3" "the installed routine $2" server_job_finished ||
     fail "the installed routine \"$2\" did not finish successfully within $3 s"
   cp "$jobs" "$EVIDENCE/job-$1.json"
+}
+
+server_snapshot_table() { # <label> <table>
+  server_table "$2" "$EVIDENCE/$2-$1.json"
+}
+server_install_asker() {
+  sudo docker cp "$HERE/scenario-asker.py" "$SERVER_NAME:/tmp/scenario-asker.py" ||
+    fail 'the fixture asker could not reach the installed server'
+  in_server_as_hermes sh -c 'mkdir -p "$HERMES_HOME/scripts" && cp /tmp/scenario-asker.py "$HERMES_HOME/scripts/scenario-asker.py" && /opt/hermes/bin/hermes cron create "0 0 1 1 *" --no-agent --name "Scenario asker" --script scenario-asker.py --deliver telegram --failure-deliver local --workdir "$GODSPEED_WORKSPACE"' >&2 ||
+    fail 'the installed Hermes could not create the fixture asker routine'
+}
+server_set_asks() { # <file>
+  sudo docker cp "$1" "$SERVER_NAME:/opt/data/full-candidate/workspace/.scenario-asks.json" ||
+    fail 'the installed server could not receive the fixture questions'
+}
+server_run_asker() { # <label>
+  server_run_job "$1" 'Scenario asker' 300
+  server_telegram_mark "$1" cron
+}
+server_set_telegram_token() { # <token>
+  in_server_as_hermes sh -c 'key=$1; f="$HERMES_HOME/.env"; test -f "$f" && sed -i "s|^TELEGRAM_BOT_TOKEN=.*|TELEGRAM_BOT_TOKEN=$key|" "$f"' sh "$1" ||
+    fail 'the installed Hermes Telegram key could not be changed for the connection check'
+}
+server_queue_notice() { # <text> <about> <facts JSON>
+  in_server_as_hermes env NOTICE_TEXT="$1" NOTICE_ABOUT="$2" NOTICE_FACTS="$3" node --input-type=module -e '
+import {queueNotice} from "/opt/godspeed/kit/notebook/core/notices.mjs";
+import {Store} from "/opt/godspeed/kit/notebook/core/records/store.mjs";
+import {machineDevice} from "/opt/godspeed/kit/notebook/core/device-id.mjs";
+const root=process.env.GODSPEED_WORKSPACE,store=new Store(root,{device:machineDevice(root).id});
+if(!queueNotice(store,{id:"scenario-backup-1",text:process.env.NOTICE_TEXT,about:process.env.NOTICE_ABOUT,facts:JSON.parse(process.env.NOTICE_FACTS)}))throw Error("the notice was already queued");
+' || fail 'the installed notice queue would not retain the scenario report'
 }
