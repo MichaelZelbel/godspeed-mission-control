@@ -3,6 +3,7 @@ import {randomBytes,createHash,timingSafeEqual} from 'node:crypto';
 import {hash,atomic} from './records/store.mjs';
 import {phoneFeedId} from './health-feed-id.mjs';
 import {PHONE_SOURCE,PHONE_VIA} from './health-inputs.mjs';
+import {PHONE_SUM_METRICS} from './phone-health-columns.mjs';
 import {addDays,zonedToUtc,now as clockNow} from '../../third-party/addons/godspeed-coach/lib/clock.mjs';
 
 // A phone's health data (issue #214, 4 November 2026). The iPhone app Health Auto Export posts its
@@ -54,15 +55,26 @@ export function tokenMatches(state,presented){
 // "2026-10-25 02:30:00.250 +0200" as a moment. Compared as text it is wrong across the repeated
 // hour when daylight saving ends: 02:30 +0200 is earlier than 02:10 +0100.
 const INSTANT=/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2})(\.\d+)?)?\s*(Z|[+-]\d{2}:?\d{2})?$/;
+function timestampOf(text){
+ const m=INSTANT.exec(String(text||'').trim());if(!m)return null;
+ const [,year,month,day,hour,minute,second='00',fraction='',zone='Z']=m;
+ const [y,mo,d,h,mi,s]=[year,month,day,hour,minute,second].map(Number);
+ if(mo<1||mo>12||d<1||h>23||mi>59||s>59)return null;
+ let offset=0;
+ if(zone!=='Z'){
+  const digits=zone.slice(1).replace(':',''),offsetHours=Number(digits.slice(0,2)),offsetMinutes=Number(digits.slice(2));
+  if(offsetHours>23||offsetMinutes>59)return null;
+  offset=(zone[0]==='-'?-1:1)*(offsetHours*60+offsetMinutes);
+ }
+ const date=new Date(0);date.setUTCFullYear(y,mo-1,d);date.setUTCHours(h,mi,s,Math.floor(Number(fraction||0)*1000));
+ if(date.getUTCFullYear()!==y||date.getUTCMonth()!==mo-1||date.getUTCDate()!==d)return null;
+ return {day:year+'-'+month+'-'+day,hms:hour+':'+minute+':'+second,instant:date.getTime()-offset*60000};
+}
 export function instantOf(text){
- const m=INSTANT.exec(String(text||'').trim());if(!m)return NaN;
- const [,y,mo,d,h,mi,s='0',fraction='',zone='Z']=m;let offset=0;
- if(zone!=='Z'){const digits=zone.slice(1).replace(':','');offset=(zone[0]==='-'?-1:1)*(Number(digits.slice(0,2))*60+Number(digits.slice(2)));}
- return Date.UTC(+y,+mo-1,+d,+h,+mi,+s)+(fraction?Number(fraction)*1000:0)-offset*60000;
+ return timestampOf(text)?.instant??NaN;
 }
 // A date without a time sorts before any moment.
 const when=text=>{const t=instantOf(text);return Number.isNaN(t)?-Infinity:t;};
-const dayOf=text=>{const day=String(text??'').slice(0,10);return /^\d{4}-\d{2}-\d{2}$/.test(day)&&new Date(day+'T00:00:00Z').toISOString().slice(0,10)===day?day:null;};
 const utcDay=date=>date.toISOString().slice(0,10);
 
 const rawFile=(state,day)=>path.join(rawFolder(state),day+'.jsonl');
@@ -113,7 +125,6 @@ function rememberAcceptedUpload(state,received){
  atomic(lastUploadFile(state),received+'\n');fs.chmodSync(lastUploadFile(state),0o600);
 }
 
-const SUMS={step_count:'steps',walking_running_distance:'distance_km',active_energy:'active_kcal',basal_energy_burned:'basal_kcal',dietary_energy:'food_kcal',protein:'protein_g',carbohydrates:'carbs_g',total_fat:'fat_g',flights_climbed:'flights'};
 const LAST={weight_body_mass:'weight_kg',body_fat_percentage:'body_fat_pct',lean_body_mass:'lean_kg',waist_circumference:'waist_cm'};
 const RUNS=new Set(['running','outdoor running','indoor running','run','outdoor run','indoor run']);
 const WALK_PACE=9;
@@ -138,8 +149,8 @@ function kilometresOf(distance){
 function pointsOf(uploads){
  const seen=new Map();let at=0;
  for(const {data} of uploads)for(const metric of Array.isArray(data?.metrics)?data.metrics:[])for(const point of Array.isArray(metric?.data)?metric.data:[]){
-  const day=dayOf(point?.date);if(!day)continue;
-  seen.set(JSON.stringify([metric.name,point.date,point.source]),{name:metric.name,units:metric.units,point,day,instant:when(point.date),at:at++});
+  const timestamp=timestampOf(point?.date);if(!timestamp)continue;
+  seen.set(JSON.stringify([metric.name,point.date,point.source]),{name:metric.name,units:metric.units,point,day:timestamp.day,instant:timestamp.instant,hms:timestamp.hms,at:at++});
  }
  return [...seen.values()];
 }
@@ -147,7 +158,7 @@ function pointsOf(uploads){
 function workoutsOf(uploads){
  let kept=[];
  for(const {data} of uploads)for(const workout of Array.isArray(data?.workouts)?data.workouts:[]){
-  if(!workout||!dayOf(workout.start))continue;
+  if(!workout||!timestampOf(workout.start))continue;
   kept=kept.filter(old=>!(workout.id!==undefined&&old.id===workout.id)&&old.start!==workout.start);kept.push(workout);
  }
  return kept;
@@ -156,15 +167,18 @@ const later=(a,b)=>b.instant>a.instant||b.instant===a.instant&&b.at>a.at?b:a;
 
 // uploads: [{received_at,data}] in receive order. Returns Map(day -> Map(metric -> value)).
 export function buildDays(uploads){
- const days=new Map(),put=(day,metric,value)=>{if(!days.has(day))days.set(day,new Map());days.get(day).set(metric,typeof value==='number'?round(value):value);};
- const groups=new Map();
- for(const p of pointsOf(uploads)){const key=p.name+'\n'+p.day;(groups.get(key)||groups.set(key,[]).get(key)).push(p);}
+ const days=new Map(),dataUntil=new Map(),put=(day,metric,value)=>{if(!days.has(day))days.set(day,new Map());days.get(day).set(metric,typeof value==='number'?round(value):value);};
+ const groups=new Map(),points=pointsOf(uploads);
+ for(const p of points){const key=p.name+'\n'+p.day;(groups.get(key)||groups.set(key,[]).get(key)).push(p);}
+ for(const point of points)if(point.name!=='sleep_analysis'&&number(point.point.qty)!==null&&Number.isFinite(point.instant)){
+  const previous=dataUntil.get(point.day);if(!previous||later(previous,point)===point)dataUntil.set(point.day,point);
+ }
  for(const group of groups.values()){
   const {name,day}=group[0];
-  if(SUMS[name]){
+  if(PHONE_SUM_METRICS[name]){
    let sum=0,any=false;
    for(const p of group){const qty=number(p.point.qty);if(qty===null)continue;any=true;sum+=String(p.units).toLowerCase()==='kj'?qty/4.184:qty;}
-   if(any)put(day,SUMS[name],sum);
+   if(any)put(day,PHONE_SUM_METRICS[name],sum);
   }else if(LAST[name]){
    const winner=group.filter(p=>number(p.point.qty)!==null).reduce((a,b)=>a?later(a,b):b,null);
    if(winner)put(day,LAST[name],number(winner.point.qty));
@@ -184,13 +198,14 @@ export function buildDays(uploads){
  }
  const totals=new Map();
  for(const workout of workoutsOf(uploads).sort((a,b)=>(when(a.start)>when(b.start))-(when(a.start)<when(b.start)))){
-  const day=dayOf(workout.start),minutes=minutesOf(workout.duration),km=kilometresOf(workout.distance),sum=totals.get(day)||totals.set(day,{}).get(day);
+  const day=timestampOf(workout.start).day,minutes=minutesOf(workout.duration),km=kilometresOf(workout.distance),sum=totals.get(day)||totals.set(day,{}).get(day);
   const add=(metric,value)=>{sum[metric]=(sum[metric]||0)+value;};
   if(RUNS.has(String(workout.name).trim().toLowerCase())){
    const walk=km>0&&minutes/km>=WALK_PACE;add(walk?'walk_km':'run_km',km);add(walk?'walk_min':'run_min',minutes);
   }else{add('workout_min',minutes);(sum.types||=[]);if(!sum.types.includes(workout.name))sum.types.push(workout.name);}
  }
  for(const [day,{types,...numbers}] of totals){for(const [metric,value] of Object.entries(numbers))put(day,metric,value);if(types)put(day,'workout_types',types.join('+'));}
+ Object.defineProperty(days,'dataUntil',{value:new Map([...dataUntil].map(([day,point])=>[day,point.hms]))});
  return days;
 }
 
@@ -203,8 +218,9 @@ export function writeDays(store,built,{now=clockNow()}={}){
  for(const [day,metrics] of [...built].sort()){
   for(const [metric,value] of metrics){
    const id=phoneFeedId(SOURCE,day,metric),previous=store.get('health_observations',id);
-   if(previous&&(day<oldestCovered||!previous.removed_at&&previous.value===value&&previous.date_precision==='day'))continue;
-   rows.push(store.prepare('health_observations',{id,metric,value,source:SOURCE,via:PHONE_VIA,observed_on:day,date_precision:'day',observed_at:zonedToUtc(day,'00:00',timezone).toISOString(),...(previous?.removed_at?{removed_at:null}:{})},previous));
+   const data_until=built.dataUntil?.get(day);
+   if(previous&&(day<oldestCovered||!previous.removed_at&&previous.value===value&&previous.date_precision==='day'&&previous.data_until===data_until))continue;
+   rows.push(store.prepare('health_observations',{id,metric,value,source:SOURCE,via:PHONE_VIA,observed_on:day,date_precision:'day',observed_at:zonedToUtc(day,'00:00',timezone).toISOString(),...(data_until?{data_until}:{}),...(previous?.removed_at?{removed_at:null}:{})},previous));
   }
  }
  if(rows.length)store.commit(rows);
@@ -213,8 +229,8 @@ export function writeDays(store,built,{now=clockNow()}={}){
 
 export function touchedDays(data){
  const days=new Set();
- for(const metric of Array.isArray(data?.metrics)?data.metrics:[])for(const point of Array.isArray(metric?.data)?metric.data:[]){const day=dayOf(point?.date);if(day)days.add(day);}
- for(const workout of Array.isArray(data?.workouts)?data.workouts:[]){const day=dayOf(workout?.start);if(day)days.add(day);}
+ for(const metric of Array.isArray(data?.metrics)?data.metrics:[])for(const point of Array.isArray(metric?.data)?metric.data:[]){const day=timestampOf(point?.date)?.day;if(day)days.add(day);}
+ for(const workout of Array.isArray(data?.workouts)?data.workouts:[]){const day=timestampOf(workout?.start)?.day;if(day)days.add(day);}
  return [...days].sort();
 }
 

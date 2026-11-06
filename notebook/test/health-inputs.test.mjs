@@ -54,6 +54,19 @@ test('selected CSV corrections keep source history, reject impossible and future
  assert.equal(seen.health_freshness.has_fresh_measurements,true);
  assert.equal(query.rows('coach_talks')[0].sources.includes('fictional_software_checks'),true);
 });
+test('health coaching refuses all provider prose while a phone column is unknown',async()=>{
+ const {store,query}=setup(),day=new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Berlin',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+ store.save('health_observations',{metric:'protein_g',value:20,source:PHONE_SOURCE,via:'phone-receiver',observed_on:day,date_precision:'day',observed_at:day+'T00:00:00Z',data_until:'09:00:00'});
+ const run=jobExecutor(async input=>{assert.equal(input.kind,'coaching');assert.match(input.contract,/may_be_incomplete and not_judged/);return {question:'Make up the protein gap now.',health_claims:[]};},query);
+ await assert.rejects(run({id:'unknown-health-coach',kind:'coaching',area:'health'},{store,settings:store.get('settings','installation')}),/Assistant output cannot be used while phone health is unknown/);assert.equal(query.rows('coach_talks').length,0);
+});
+test('unknown phone health does not block non-health coaching',async()=>{
+ const {store,query}=setup(),day=new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Berlin',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+ store.save('health_observations',{metric:'protein_g',value:20,source:PHONE_SOURCE,via:'phone-receiver',observed_on:day,date_precision:'day',observed_at:day+'T00:00:00Z',data_until:'09:00:00'});
+ const run=jobExecutor(async input=>{assert.equal(input.kind,'coaching');assert.notEqual(input.context.area,'health');return {question:'What is one fictional next step for '+input.context.area+'?'};},query);
+ for(const area of ['work-money','relationships'])await run({id:'unknown-non-health-coach-'+area,kind:'coaching',area},{store,settings:store.get('settings','installation')});
+ assert.deepEqual(query.rows('coach_talks').map(talk=>talk.area).sort(),['relationships','work-money']);
+});
 test('the phone receiver and a CSV that carries the app name keep their own rows; the reader shows the newest of the two',()=>{
  const {store,query}=setup(),operation=input=>personalOperation({store,query},input);
  const now=Date.now(),day=new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Berlin',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(now));
@@ -119,5 +132,52 @@ test('a CSV named like the phone row, imported first, and then a phone upload: b
   assert.equal(rows.find(r=>r.source===source).value,250,source+': the CSV row keeps its value');
   assert.equal(rows.find(r=>r.via==='phone-receiver').value,100,source+': the phone row has its own');
   assert.equal(new Set(rows.map(r=>r.id)).size,2);
+ }
+});
+
+test('phone day state uses its strict cutoff, while manual and food entries settle only their columns',async()=>{
+ const {store,query}=setup(),now=Date.parse('2026-11-05T10:00:00Z'),day='2026-11-04',phone=(metric,value,data_until='19:55:00')=>store.save('health_observations',{metric,value,source:PHONE_SOURCE,via:'phone-receiver',observed_on:day,date_precision:'day',observed_at:day+'T00:00:00Z',data_until});
+ phone('steps',100);phone('protein_g',20);phone('active_kcal',400,'21:00:00');
+ const short=currentHealth(query,{now}).days[0];
+ assert.equal(short.columns.steps.state,'may_be_incomplete');assert.equal(short.columns.active_kcal.state,'may_be_incomplete','21:00:00 is not past the cutoff');
+ store.save('collections',{id:'food',tracker:{specialist:'food'}});const item=store.save('collection_items',{collection_id:'food',data:{when:day+' 12:00',kcal:700,protein_g:30,carbs_g:90,fat_g:20}});
+ let state=currentHealth(query,{now}).days[0];assert.deepEqual(state.columns.steps,{value:100,source:'phone',state:'may_be_incomplete'});assert.deepEqual(Object.fromEntries(['food_kcal','protein_g','carbs_g','fat_g'].map(metric=>[metric,state.columns[metric]])),{food_kcal:{value:700,source:'food_tracker',state:'settled'},protein_g:{value:30,source:'food_tracker',state:'settled'},carbs_g:{value:90,source:'food_tracker',state:'settled'},fat_g:{value:20,source:'food_tracker',state:'settled'}});
+ store.save('health_observations',{metric:'distance_km',value:3,source:PHONE_SOURCE,via:'phone-receiver',observed_on:day,date_precision:'day',observed_at:day+'T00:00:00Z',data_until:'21:00:30'});
+ assert.equal(currentHealth(query,{now}).days[0].columns.distance_km.state,'complete');
+ const operation=input=>personalOperation({store,query},input);operation({type:'health-add',metric:'protein_g',value:80,unit:'g',observed_at:day+'T12:00:00Z'});
+ phone('protein_g',5,'19:55:00');
+ state=currentHealth(query,{now}).days[0];assert.deepEqual(state.columns.protein_g,{value:80,source:'manual',state:'settled'});assert.equal(state.columns.steps.state,'complete');
+ store.save('collection_items',{id:item.id,data:{when:day+' 12:00',kcal:750,protein_g:30,carbs_g:90,fat_g:20}});assert.equal(currentHealth(query,{now}).days[0].columns.food_kcal.value,750,'a tracker correction is the next read');
+ const today='2026-11-05';store.save('health_observations',{metric:'steps',value:200,source:PHONE_SOURCE,via:'phone-receiver',observed_on:today,date_precision:'day',observed_at:today+'T00:00:00Z',data_until:'09:00:00'});
+ assert.equal(currentHealth(query,{now}).days.find(row=>row.date===today).columns.steps.state,'not_judged');
+ store.save('health_observations',{metric:'steps',value:300,source:'Fictional CSV',observed_on:'2026-11-03',date_precision:'day',observed_at:'2026-11-03T00:00:00Z'});
+ assert.equal(currentHealth(query,{now}).days.find(row=>row.date==='2026-11-03').columns.steps.state,'legacy');
+});
+
+test('pre-phone health-add rows settle the oldest local day ahead of later phone uploads',()=>{
+ const {store,query}=setup(),now=Date.parse('2026-11-05T10:00:00Z'),day='2026-10-29';
+ for(const [metric,value,source_id] of [['protein_g',80,null],['carbs_g',90,'historical-message']]){
+  store.save('health_observations',{metric,value,unit:'g',observed_at:'2026-10-28T23:30:00Z',source_id});
+  store.save('health_observations',{metric,value:5,source:PHONE_SOURCE,via:'phone-receiver',observed_on:day,date_precision:'day',observed_at:day+'T00:00:00Z',data_until:'19:55:00'});
+ }
+ const columns=currentHealth(query,{now}).days.find(entry=>entry.date===day).columns;
+ assert.deepEqual(columns.protein_g,{value:80,source:'manual',state:'settled'});
+ assert.deepEqual(columns.carbs_g,{value:90,source:'manual',state:'settled'});
+});
+
+test('the installation timezone leaves its current phone day unjudged',()=>{
+ const store=new Store(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-health-timezone-'))),query=new QueryService(store),now=Date.parse('2026-11-06T01:00:00Z');
+ store.save('settings',{id:'installation',timezone:'America/Los_Angeles'});
+ store.save('health_observations',{metric:'steps',value:100,source:PHONE_SOURCE,via:'phone-receiver',observed_on:'2026-11-05',date_precision:'day',observed_at:'2026-11-05T00:00:00Z',data_until:'09:00:00'});
+ const health=currentHealth(query,{now});
+ assert.equal(health.timezone,'America/Los_Angeles');assert.equal(health.days[0].columns.steps.state,'not_judged');
+});
+
+test('the Food settlement mapping points at number fields the Food schema really declares, for health columns the phone also fills',async()=>{
+ const {foodSchema,FOOD_TOTAL_COLUMNS}=await import('../core/food.mjs'),{PHONE_SUM_METRICS}=await import('../core/phone-health-columns.mjs');
+ const fields=new Map(foodSchema().map(field=>[field.key,field]));
+ for(const [healthColumn,foodField] of Object.entries(FOOD_TOTAL_COLUMNS)){
+  assert.equal(fields.get(foodField)?.type,'number',healthColumn+' settles from Food field '+foodField+', which must be a number field of the Food schema');
+  assert.ok(Object.values(PHONE_SUM_METRICS).includes(healthColumn),healthColumn+' is a day column the phone also fills');
  }
 });
