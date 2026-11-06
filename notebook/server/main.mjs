@@ -210,7 +210,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   }
   uiRoot = path.resolve(uiRoot || fileURLToPath(new URL('../ui/dist', import.meta.url)));
   // One handler for both doors; `remote` and `auth` are the door's own.
-  const handle = (remote, auth) => async (req, res) => {
+  const handle = (remote, auth, onWebDoor = false) => async (req, res) => {
     const authorized = (req, route) => auth.authorized(req) || pairedMedia(req, route);
     try {
       const url = new URL(req.url, 'http://localhost'), route = url.pathname;
@@ -403,7 +403,8 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
       // VOICE REPLIES (core/voice-replies.mjs, discussion #41): the voice the assistant answers voice
       // notes with, kept in Hermes' own home. An ElevenLabs voice is kept only after a sample worked.
       if(route==='/api/'+PHONE_HEALTH_STATUS||route==='/api/'+PHONE_HEALTH_RENEW){
-        if(!phoneUploads){if(route==='/api/'+PHONE_HEALTH_STATUS)return send(res,200,{available:false});return send(res,404,{error:'Unknown operation'});}
+        // The address carries the phone's credential, so Settings shows or renews it only through the signed-in web door, never on a door that is open or plain http.
+        if(!phoneUploads||!onWebDoor){if(route==='/api/'+PHONE_HEALTH_STATUS)return send(res,200,{available:false});return send(res,404,{error:'Unknown operation'});}
         if(route==='/api/'+PHONE_HEALTH_RENEW&&req.method!=='POST')return send(res,405,{error:'Use POST'});
         const link=notebookAddress({port:server.address().port}).link;
         // The token travels only inside an https address: over http a network observer would read the phone's credential.
@@ -664,7 +665,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   // installer's check of the web address then says so.
   let webServer = null;
   if (web) {
-    webServer = http.createServer(handle(true, web.auth));
+    webServer = http.createServer(handle(true, web.auth, true));
     try { await listen(webServer, web.port, '127.0.0.1'); }
     catch (error) { console.error('Godspeed Mission Control: the web address\'s door on port ' + web.port + ' could not open: ' + error.message); webServer = null; }
   }

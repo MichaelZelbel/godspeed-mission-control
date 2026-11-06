@@ -9,7 +9,7 @@ import {fileURLToPath} from 'node:url';
 import {Store,hash} from '../core/records/store.mjs';
 import {QueryService} from '../core/query.mjs';
 import {currentHealth} from '../core/health-inputs.mjs';
-import {healthFeedId} from '../core/health-feed-id.mjs';
+import {healthFeedId,phoneFeedId} from '../core/health-feed-id.mjs';
 import {backup} from '../core/archives.mjs';
 import {createService} from '../server/main.mjs';
 import {tokenState,tokenDamaged,isUploadShape,appendRaw,encodeRawLine,parseRawLine,readRaw,acceptUpload,importFolder,buildDays,instantOf,pruneRaw,rawFolder,tokenFile,ensureToken,renewToken,tokenMatches,SOURCE} from '../core/phone-health.mjs';
@@ -50,7 +50,7 @@ test('records are day records in the CSV feed\'s id scheme, on the date in the p
  const store=setup();
  acceptUpload(store,upload([metric('step_count','count',['2026-11-04 00:09:00 +0100',40])]),{now:at('2026-11-03T23:30:00Z')});
  const [row]=store.list('health_observations');
- assert.equal(row.id,healthFeedId(SOURCE,D,'steps'));
+ assert.equal(row.id,phoneFeedId(SOURCE,D,'steps'));
  assert.deepEqual([row.source,row.date_precision,row.observed_on,row.value],['Health Auto Export','day',D,40]);
 });
 
@@ -216,6 +216,20 @@ function request(port,route,{method='GET',body,raw}={}){
 }
 const serverRoot=prefix=>{const root=tmp(prefix);process.env.GODSPEED_ASSISTANT_CONFIG=path.join(root,'no-assistant.json');return root;};
 
+// Settings reaches the phone address only through the signed-in web door. The service is made with a setup code, which
+// signs the test in on that door; the plain local door is open, so it must never be asked for the token.
+const SETUP_CODE='fictional-setup-code';
+async function webDoor(service){
+ const base='http://127.0.0.1:'+service.webAddress.port;
+ const login=await fetch(base+'/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:SETUP_CODE})});
+ assert.equal(login.status,200);
+ const cookie=login.headers.get('set-cookie').split(';')[0];
+ return async(route,{method='GET',body,signedIn=true}={})=>{
+  const answer=await fetch(base+route,{method,headers:{'Content-Type':'application/json',...(signedIn?{cookie}:{})},body:body===undefined?undefined:JSON.stringify(body)});
+  return {status:answer.status,text:await answer.text()};
+ };
+}
+
 test('the receiver on a server: a wrong token stores nothing, the right one keeps the day, nothing logs the token or the sender',async t=>{
  const root=serverRoot('godspeed-phone-server-'),service=await createService({root,port:0,webPort:0}),logged=[];
  const originals={error:console.error,log:console.log,warn:console.warn};
@@ -241,24 +255,32 @@ test('the receiver on a server: a wrong token stores nothing, the right one keep
  assert.ok(!logged.some(line=>line.includes(token)||line.includes('127.0.0.1')||line.includes('123')),logged.join('\n'));
 });
 
-test('Settings shows an https address only, a new address replaces the old one at once, and a computer offers nothing',async t=>{
- const root=serverRoot('godspeed-phone-settings-'),service=await createService({root,port:0,webPort:0}),computerRoot=serverRoot('godspeed-phone-computer-'),computer=await createService({root:computerRoot,port:0});
+test('Settings shows an https address only, through the signed-in web door; a new address replaces the old one at once, and a computer offers nothing',async t=>{
+ const root=serverRoot('godspeed-phone-settings-'),service=await createService({root,port:0,webPort:0,token:SETUP_CODE}),computerRoot=serverRoot('godspeed-phone-computer-'),computer=await createService({root:computerRoot,port:0});
  t.after(async()=>{delete process.env.GODSPEED_WEB_ADDRESS;await service.close();await computer.close();fs.rmSync(root,{recursive:true,force:true});fs.rmSync(computerRoot,{recursive:true,force:true});});
- const port=service.address.port,token=fs.readFileSync(tokenFile(service.store.state),'utf8').trim();
- for(const route of ['/api/phone-health','/api/phone-health/renew']){
-  const over=await request(port,route,{method:route.endsWith('renew')?'POST':'GET',body:route.endsWith('renew')?{}:undefined});
-  assert.ok(!over.text.includes(token),'no token over http: '+route);
- }
- assert.deepEqual(JSON.parse((await request(port,'/api/phone-health')).text),{available:true,address:null});
- assert.equal(fs.readFileSync(tokenFile(service.store.state),'utf8').trim(),token,'renew over http changed nothing');
+ const port=service.address.port,token=fs.readFileSync(tokenFile(service.store.state),'utf8').trim(),web=await webDoor(service);
  process.env.GODSPEED_WEB_ADDRESS='https://notes.example.test';
- const first=JSON.parse((await request(port,'/api/phone-health')).text);
+ // The ordinary local door is open to anything on this machine: it shows nothing and renews nothing, whatever the web address is.
+ for(const [route,method] of [['/api/phone-health','GET'],['/api/phone-health/renew','POST']]){
+  const local=await request(port,route,{method,body:method==='POST'?{}:undefined});
+  assert.ok(!local.text.includes(token)&&!local.text.includes('/ingest/'),'no token on the local door: '+route);
+  assert.equal(local.status,route.endsWith('renew')?404:200,route);
+ }
+ assert.deepEqual(JSON.parse((await request(port,'/api/phone-health')).text),{available:false});
+ assert.equal(fs.readFileSync(tokenFile(service.store.state),'utf8').trim(),token,'renew on the local door changed nothing');
+ // The web door asks for a signed-in session first.
+ assert.equal((await web('/api/phone-health',{signedIn:false})).status,401);
+ assert.equal((await web('/api/phone-health/renew',{method:'POST',body:{},signedIn:false})).status,401);
+ assert.equal(fs.readFileSync(tokenFile(service.store.state),'utf8').trim(),token,'an unsigned renew changed nothing');
+ const first=JSON.parse((await web('/api/phone-health')).text);
  assert.equal(first.address,'https://notes.example.test/ingest/'+token);
- const second=JSON.parse((await request(port,'/api/phone-health/renew',{method:'POST',body:{}})).text);
+ const second=JSON.parse((await web('/api/phone-health/renew',{method:'POST',body:{}})).text);
  assert.notEqual(second.address,first.address);
  const route=address=>new URL(address).pathname;
  assert.equal((await request(port,route(first.address),{method:'POST',body:{data:{}}})).status,404);
  assert.equal((await request(port,route(second.address),{method:'POST',body:{data:{}}})).status,200);
+ delete process.env.GODSPEED_WEB_ADDRESS;
+ assert.deepEqual(JSON.parse((await web('/api/phone-health')).text),{available:true,address:null},'without an https address the web door shows none');
 
  assert.deepEqual(JSON.parse((await request(computer.address.port,'/api/phone-health')).text),{available:false});
  assert.equal((await request(computer.address.port,'/api/phone-health/renew',{method:'POST',body:{}})).status,404);
@@ -397,17 +419,17 @@ test('of two sources at one instant the later upload wins, and uploads read from
 
 test('a removed day record is written again, and the boundary of the days whose raw files may be gone is the 29th day back',()=>{
  const store=setup(),now=at('2026-11-30T12:00:00Z');
- const record=(day,value)=>store.save('health_observations',{id:healthFeedId(SOURCE,day,'steps'),metric:'steps',value,source:SOURCE,observed_on:day,date_precision:'day',observed_at:day+'T00:00:00.000Z'});
+ const record=(day,value)=>store.save('health_observations',{id:phoneFeedId(SOURCE,day,'steps'),metric:'steps',value,source:SOURCE,observed_on:day,date_precision:'day',observed_at:day+'T00:00:00.000Z'});
  const send=(day,qty)=>acceptUpload(store,upload([metric('step_count','count',[day+' 08:00:00 +0100',qty])]),{now});
  // 2026-11-01 is the oldest day whose raw files still exist; 2026-10-31 may already have lost some.
  record('2026-11-01',1);record('2026-10-31',1);
  assert.equal(send('2026-11-01',10).written,1,'the oldest covered day is rebuilt');
  assert.equal(send('2026-10-31',10).written,0,'the day before it keeps what it has');
- const stored=day=>store.get('health_observations',healthFeedId(SOURCE,day,'steps')).value;
+ const stored=day=>store.get('health_observations',phoneFeedId(SOURCE,day,'steps')).value;
  assert.deepEqual([stored('2026-11-01'),stored('2026-10-31')],[10,1]);
- {const id=healthFeedId(SOURCE,'2026-11-01','steps');store.commit([store.prepare('health_observations',{removed_at:new Date().toISOString()},store.get('health_observations',id))]);}
+ {const id=phoneFeedId(SOURCE,'2026-11-01','steps');store.commit([store.prepare('health_observations',{removed_at:new Date().toISOString()},store.get('health_observations',id))]);}
  assert.equal(send('2026-11-01',10).written,1,'a removed record with the same value is written again');
- assert.ok(store.list('health_observations').some(r=>r.id===healthFeedId(SOURCE,'2026-11-01','steps')),'and it is no longer removed');
+ assert.ok(store.list('health_observations').some(r=>r.id===phoneFeedId(SOURCE,'2026-11-01','steps')),'and it is no longer removed');
  assert.equal(send('2026-11-01',10).written,0,'and then left alone');
 });
 
@@ -418,9 +440,9 @@ test('an upload that changes nothing commits nothing, and an upload leaves the o
  try{assert.equal(acceptUpload(store,upload([metric('step_count','count',[A+' 08:00:00 +0100',5])]),{now}).written,0);}finally{store.commit=commit;}
  // The raw files hold a point for another day B; the person's own value for B must not be rebuilt by an upload about A.
  appendRaw(store.state,{received_at:'2026-11-03T20:00:00.000Z',data:upload([metric('step_count','count',[B+' 08:00:00 +0100',3])])});
- store.save('health_observations',{id:healthFeedId(SOURCE,B,'steps'),metric:'steps',value:9,source:SOURCE,observed_on:B,date_precision:'day',observed_at:B+'T00:00:00.000Z'});
+ store.save('health_observations',{id:phoneFeedId(SOURCE,B,'steps'),metric:'steps',value:9,source:SOURCE,observed_on:B,date_precision:'day',observed_at:B+'T00:00:00.000Z'});
  acceptUpload(store,upload([metric('step_count','count',[A+' 09:00:00 +0100',1])]),{now});
- assert.equal(store.get('health_observations',healthFeedId(SOURCE,B,'steps')).value,9);
+ assert.equal(store.get('health_observations',phoneFeedId(SOURCE,B,'steps')).value,9);
 });
 
 test('every listed metric lands under its own name, and a structured sleep record keeps every part',()=>{
@@ -437,14 +459,16 @@ test('every listed metric lands under its own name, and a structured sleep recor
 });
 
 test('what is not a Health Auto Export upload is refused with 400 and kept nowhere, and a renewal needs POST',async t=>{
- const root=serverRoot('godspeed-phone-shape-'),service=await createService({root,port:0,webPort:0});
+ const root=serverRoot('godspeed-phone-shape-'),service=await createService({root,port:0,webPort:0,token:SETUP_CODE});
  t.after(async()=>{await service.close();fs.rmSync(root,{recursive:true,force:true});});
  const port=service.address.port,token=fs.readFileSync(tokenFile(service.store.state),'utf8').trim();
  for(const raw of ['{}','null','[]','{"data":[]}','{"data":"x"}','{"data":null}','{"data":{"metrics":"x"}}','{"data":{"metrics":{}}}','{"data":{"workouts":{}}}'])
   assert.equal((await request(port,'/ingest/'+token,{method:'POST',raw})).status,400,raw);
  assert.equal(fs.existsSync(rawFolder(service.store.state)),false);
  assert.equal((await request(port,'/ingest/health',{method:'POST',body:{data:{}}})).status,404,'the status word is not a token');
- assert.equal((await request(port,'/api/phone-health/renew')).status,405);
+ process.env.GODSPEED_WEB_ADDRESS='https://notes.example.test';
+ assert.equal((await (await webDoor(service))('/api/phone-health/renew')).status,405);
+ delete process.env.GODSPEED_WEB_ADDRESS;
  assert.equal((await request(port,'/ingest/'+token,{method:'POST',body:{data:{metrics:[],workouts:[]}}})).status,200,'an upload with nothing in it is still an upload');
 });
 
@@ -501,17 +525,17 @@ test('a damaged ingest token: the server still starts and answers the monitor, u
  t.after(()=>{delete process.env.GODSPEED_WEB_ADDRESS;});
  for(const [what,damage] of cases){
   const root=serverRoot('godspeed-phone-damaged-'),state=new Store(root).state;fs.mkdirSync(state,{recursive:true});damage(state);
-  const service=await createService({root,port:0,webPort:0});
+  const service=await createService({root,port:0,webPort:0,token:SETUP_CODE});
   try{
-   const port=service.address.port;
+   const port=service.address.port,web=await webDoor(service);
    assert.equal((await request(port,'/ingest/health')).status,200,what+': the monitor answers');
    assert.equal((await request(port,'/ingest/madeUpTokenLongEnoughToLookReal',{method:'POST',body:{data:{}}})).status,404,what+': no upload');
    assert.equal(fs.existsSync(rawFolder(state)),false,what+': nothing written');
-   assert.deepEqual(JSON.parse((await request(port,'/api/phone-health')).text),{available:true,address:null,damaged:true},what);
-   const renewed=JSON.parse((await request(port,'/api/phone-health/renew',{method:'POST',body:{}})).text);
+   assert.deepEqual(JSON.parse((await web('/api/phone-health')).text),{available:true,address:null,damaged:true},what);
+   const renewed=JSON.parse((await web('/api/phone-health/renew',{method:'POST',body:{}})).text);
    assert.match(renewed.address,/^https:\/\/notes\.example\.test\/ingest\/[A-Za-z0-9_-]{43}$/,what);
    assert.equal((await request(port,new URL(renewed.address).pathname,{method:'POST',body:{data:upload([metric('step_count','count',[D+' 08:00:00 +0100',5])])}})).status,200,what+': the new address works');
-   assert.deepEqual(JSON.parse((await request(port,'/api/phone-health')).text).damaged,undefined);
+   assert.deepEqual(JSON.parse((await web('/api/phone-health')).text).damaged,undefined);
   }finally{await service.close();fs.rmSync(root,{recursive:true,force:true});}
  }
 });

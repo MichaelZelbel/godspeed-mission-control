@@ -7,7 +7,7 @@ import {Store} from '../core/records/store.mjs';
 import {QueryService} from '../core/query.mjs';
 import {personalOperation} from '../core/personal-operations.mjs';
 import {currentHealth,PHONE_SOURCE} from '../core/health-inputs.mjs';
-import {healthFeedId} from '../core/health-feed-id.mjs';
+import {healthFeedId,phoneFeedId} from '../core/health-feed-id.mjs';
 import {acceptUpload} from '../core/phone-health.mjs';
 import {jobExecutor} from '../core/runtime.mjs';
 
@@ -54,17 +54,29 @@ test('selected CSV corrections keep source history, reject impossible and future
  assert.equal(seen.health_freshness.has_fresh_measurements,true);
  assert.equal(query.rows('coach_talks')[0].sources.includes('fictional_software_checks'),true);
 });
-test('the phone and the selected CSV keep a day under the same id, so a CSV correction replaces the phone record',()=>{
+test('the phone receiver and a CSV that carries the app name keep their own rows; the reader shows the newest of the two',()=>{
  const {store,query}=setup(),operation=input=>personalOperation({store,query},input);
- const day=new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Berlin',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
- acceptUpload(store,{metrics:[{name:'step_count',units:'count',data:[{date:day+' 08:00:00 +0100',qty:100,source:'Fictional Phone'}]}],workouts:[]},{now:new Date()});
+ const now=Date.now(),day=new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Berlin',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(now));
+ acceptUpload(store,{metrics:[{name:'step_count',units:'count',data:[{date:day+' 08:00:00 +0100',qty:100,source:'Fictional Phone'}]}],workouts:[]},{now:new Date(now)});
  const phone=store.list('health_observations');assert.equal(phone.length,1);
- assert.equal(phone[0].id,healthFeedId(PHONE_SOURCE,day,'steps'));
- operation({type:'health-import-csv',source:PHONE_SOURCE,content:'date,steps\n'+day+',250\n'});
- const all=store.list('health_observations');assert.equal(all.length,1,'one record, corrected in place');
- assert.equal(all[0].id,phone[0].id);assert.equal(all[0].value,250);assert.equal(phone[0].via,'phone-receiver');assert.ok(!all[0].via,'a CSV correction is not the phone receiver row any more');assert.equal(Object.hasOwn(all[0],'via')?all[0].via:null,null);
- operation({type:'health-import-csv',source:'Fictional other feed',content:'date,steps\n'+day+',7\n'});
+ assert.equal(phone[0].id,phoneFeedId(PHONE_SOURCE,day,'steps'));assert.equal(phone[0].via,'phone-receiver');
+ assert.notEqual(phone[0].id,healthFeedId(PHONE_SOURCE,day,'steps'),'the phone has an id of its own inside the same scheme');
+ operation({type:'health-import-csv',source:PHONE_SOURCE,content:'date,steps'+String.fromCharCode(10)+day+',250'+String.fromCharCode(10)});
+ const all=store.list('health_observations');
+ assert.equal(all.length,2,'both rows exist');
+ const csv=all.find(r=>r.id===healthFeedId(PHONE_SOURCE,day,'steps')),phoneRow=all.find(r=>r.id===phone[0].id);
+ assert.equal(csv.value,250);assert.equal(Object.hasOwn(csv,'via'),false,'the CSV row is not marked as the phone');
+ assert.equal(phoneRow.value,100);assert.equal(phoneRow.via,'phone-receiver');
+ assert.deepEqual(currentHealth(query,{now}).observations.map(r=>r.value),[250],'the CSV was written last, so it is shown');
+ // The phone sends a changed value later: its own row changes, the CSV row keeps its value, and the phone row is now the newest.
+ acceptUpload(store,{metrics:[{name:'step_count',units:'count',data:[{date:day+' 09:00:00 +0100',qty:60,source:'Fictional Phone'}]}],workouts:[]},{now:new Date(now+1000)});
+ assert.equal(store.list('health_observations').find(r=>r.id===healthFeedId(PHONE_SOURCE,day,'steps')).value,250,'the CSV row kept its value');
+ assert.equal(store.list('health_observations').length,2);
+ assert.deepEqual(currentHealth(query,{now}).observations.map(r=>r.value),[160],'the phone row, written last, is shown');
+ operation({type:'health-import-csv',source:'Fictional other feed',content:'date,steps'+String.fromCharCode(10)+day+',7'+String.fromCharCode(10)});
  assert.notEqual(store.list('health_observations').find(r=>r.value===7).id,phone[0].id);
+ // A CSV cannot take over the phone's own row by choosing its name.
+ assert.throws(()=>operation({type:'health-import-csv',source:PHONE_SOURCE+' (phone)',content:'date,steps'+String.fromCharCode(10)+day+',1'+String.fromCharCode(10)}),/belongs to the phone receiver/);
 });
 test('two same-day records from two sources that are not the phone are both returned',()=>{
  const {store,query}=setup(),now=Date.parse('2026-10-04T12:00:00Z');
@@ -97,10 +109,4 @@ test('a CSV that someone labelled with the phone appname is still a CSV: nothing
  operation({type:'health-import-csv',source:'Fictional other CSV',content:'date,steps'+String.fromCharCode(10)+day+',210'+String.fromCharCode(10)});
  assert.ok(store.list('health_observations').every(r=>!Object.hasOwn(r,'via')),'a CSV correction adds no via property either');
  assert.ok(store.list('health_observations').some(r=>r.value===210));
- // The phone receiver then writes the same day under its own id: only now is there a phone row to collapse against.
- acceptUpload(store,{metrics:[{name:'step_count',units:'count',data:[{date:day+' 08:00:00 +0100',qty:300,source:'Fictional Phone'}]}],workouts:[]},{now:new Date(now)});
- const phoneRow=store.list('health_observations').find(r=>r.via==='phone-receiver');
- assert.ok(phoneRow);assert.equal(phoneRow.id,healthFeedId(PHONE_SOURCE,day,'steps'),'it replaced the CSV that used the phone appname');
- assert.equal(store.list('health_observations').length,2);
- assert.deepEqual(currentHealth(query,{now}).observations.map(r=>r.value),[300],'now the phone row and the other CSV collapse to the newest');
 });
