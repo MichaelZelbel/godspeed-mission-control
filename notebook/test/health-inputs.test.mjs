@@ -148,3 +148,12 @@ test('the installation timezone leaves its current phone day unjudged',()=>{
  const health=currentHealth(query,{now});
  assert.equal(health.timezone,'America/Los_Angeles');assert.equal(health.days[0].columns.steps.state,'not_judged');
 });
+
+test('the Food settlement mapping points at number fields the Food schema really declares, for health columns the phone also fills',async()=>{
+ const {foodSchema,FOOD_TOTAL_COLUMNS}=await import('../core/food.mjs'),{PHONE_SUM_METRICS}=await import('../core/phone-health-columns.mjs');
+ const fields=new Map(foodSchema().map(field=>[field.key,field]));
+ for(const [healthColumn,foodField] of Object.entries(FOOD_TOTAL_COLUMNS)){
+  assert.equal(fields.get(foodField)?.type,'number',healthColumn+' settles from Food field '+foodField+', which must be a number field of the Food schema');
+  assert.ok(Object.values(PHONE_SUM_METRICS).includes(healthColumn),healthColumn+' is a day column the phone also fills');
+ }
+});

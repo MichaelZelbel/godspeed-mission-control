@@ -140,3 +140,24 @@ test('a changed briefing method or already-delivered selected finding invalidate
   await assert.rejects(jobExecutor(provider,query)({kind:'morning-brief',id:'brief-scope-'+change},{store,settings:{}}),/sources changed/);assert.equal(store.list('notes').filter(n=>n.source_app==='morning-brief').length,0);assert.equal(store.list('notifications').length,0);
  }
 });
+
+test('a briefing never judges today\'s phone day: it is unknown, while a settled manual column stays usable',async()=>{
+ const store=new Store(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-brief-today-'))),query=new QueryService(store),today='2026-11-05';
+ store.save('settings',{id:'installation',timezone:'UTC'});
+ store.save('health_observations',{metric:'steps',value:4200,source:'Health Auto Export',via:'phone-receiver',observed_on:today,date_precision:'day',observed_at:today+'T00:00:00Z',data_until:'07:40:00'});
+ personalOperation({store,query},{type:'health-add',metric:'protein_g',value:80,unit:'g',observed_at:today+'T06:00:00Z'});
+ let writes=0;const feedback=[];
+ const provider=async input=>{
+  if(input.kind==='brief-verification'){assert.match(input.contract,/not_judged/);return {passed:true,reason:'Fixture checked the unknown day.'};}
+  writes++;assert.match(input.contract,/not_judged/);assert.match(input.contract,/settled/);
+  const days=input.context.health_freshness.days,day=days.find(row=>row.date===today);
+  assert.equal(day.columns.steps.state,'not_judged','today\'s phone column is not judged');assert.equal(day.columns.protein_g.state,'settled','the manual column is usable');
+  if(writes===1)return 'Steps were 4200, a short day, and you missed the target. Protein was 80 g.';
+  feedback.push(...(input.context.check_feedback||[]));
+  return 'Steps are 4200 so far; data stopped at 07:40:00, and today is not over. Protein was 80 g.';
+ };
+ const result=await briefing({id:'brief-today-unknown'},{store,query,provider,now:new Date('2026-11-05T08:00:00Z')}),saved=store.get('notes',result.record_id).content;
+ assert.equal(writes,2,'the first draft judged today and was sent back by the mechanical gate');
+ assert.ok(feedback.some(reason=>/not over or may be incomplete is unknown/.test(reason)));
+ assert.match(saved,/so far/);assert.match(saved,/07:40:00/);assert.match(saved,/Protein was 80 g/);assert.doesNotMatch(saved,/short day|missed/i);
+});
