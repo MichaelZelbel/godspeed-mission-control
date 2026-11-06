@@ -138,7 +138,7 @@ function createDueCommands({root,commandArgs=process.argv.slice(2),date,copy=tru
 const raw = root ? ['--godspeed',root,...commandArgs] : commandArgs;
 // The connections the daily check lists (notebook/core/connection-names.mjs): the id its record is
 // kept under, and the name Settings shows. Kept here because this tool ships without the notebook.
-const CONNECTIONS = { ai: "your AI", telegram: "Telegram", github: "GitHub", mail: "Gmail", agentmail: "your mission control's own mailbox", phone: "the phone's health data" };
+const CONNECTIONS = { ai: "your AI", telegram: "Telegram", github: "GitHub", mail: "Gmail", agentmail: "your mission control's own mailbox", phone: "the phone's health data", disk: "your server's disk" };
 const args = [];
 let godspeed = "";
 for (let i = 0; i < raw.length; i++) {
