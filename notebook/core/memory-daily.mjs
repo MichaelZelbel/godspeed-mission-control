@@ -79,12 +79,17 @@ const subjectKey=name=>normal(name);
 const safeName=(name,terms=[])=>typeof name==='string'&&name.trim()&&name.length<=160&&!CREDENTIAL.test(name)&&!FORBIDDEN.test(name)&&!/\b(?:employer|client)\b/i.test(name)&&!redacted(name,terms);
 const credential=(...values)=>values.some(value=>CREDENTIAL.test(String(value||'')));
 const COMPLETION_GRAMMAR=new Set(['a','an','the','i','we','have','has','had','am','is','are','was','were','be','been','being']);
+const INCOMPLETE_ASSERTION=new Set(['will','shall','plan','plans','planned','planning','promise','promises','promised','promising','intend','intends','intended','intending','expect','expects','expected','expecting']);
 const completionAssertion=value=>words(value).filter(word=>!COMPLETION_GRAMMAR.has(word));
 const sameCompletionAssertion=(left,right)=>{const a=completionAssertion(left),b=completionAssertion(right);return a.length>0&&a.length===b.length&&a.every((word,index)=>word===b[index]);};
 const quotedAssertion=(source,quote)=>String(source||'').split(/[.!?;]+/).some(assertion=>normal(assertion)===normal(quote));
+const completedAssertion=value=>{
+ const assertion=words(value);
+ return assertion.length>0&&!assertion.some(word=>INCOMPLETE_ASSERTION.has(word))&&!assertion.some((word,index)=>word==='going'&&assertion[index+1]==='to');
+};
 const completionEvidence=(deadline,item,citation,messages)=>{
  const source=messages.find(message=>message.id===citation?.id);
- return item?.deadline_complete===true&&typeof deadline?.doneWhen==='string'&&source&&quotedAssertion(source.text,citation.quote)&&sameCompletionAssertion(citation.quote,deadline.doneWhen);
+ return item?.deadline_complete===true&&typeof deadline?.doneWhen==='string'&&source&&quotedAssertion(source.text,citation.quote)&&completedAssertion(citation.quote)&&sameCompletionAssertion(citation.quote,deadline.doneWhen);
 };
 function knownSubjects(query,newPeople,newThings,terms){
  const out=new Map([['self',{type:'self',id:null,name:'self'}]]);
