@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # PROVING SCENARIO: a local pretend Hevy imports made-up workouts on both supported installs.
-# Kept: setup.json, docker.json, native.json, fixture.log and key-scan.txt. The checker reads only
+# Kept: setup.json, docker.json, native.json, fixture.log and key-scan.json. The checker reads only
 # these files so a future add-on change cannot make its own proof pass.
 SCENARIO=workouts-from-hevy
 . "$(dirname "$0")/scenario-lib.sh"
@@ -12,18 +12,48 @@ check() {
   local folder=$1
   [ -d "$folder" ] || fail "there is nothing at $folder, so this scenario kept no import evidence"
   need_node
-  kept_all "$folder" 'the local fake and both installations' setup.json docker.json native.json fixture.log key-scan.txt
-  "$NODE" - "$folder" <<'NODE' || fail "the kept import evidence is malformed or does not prove both initial workouts, the hourly routine, the update and deletion"
+  kept_all "$folder" 'the local fake and both installations' setup.json docker.json native.json fixture.log key-scan.json
+  local why
+  why=$("$NODE" - "$folder" <<'NODE'
 const fs=require('fs'), p=process.argv[2];
 const read=n=>JSON.parse(fs.readFileSync(`${p}/${n}`,'utf8'));
-const setup=read('setup.json'); if(setup.fixture!=='local-hevy'||setup.refused!==true)throw Error();
-for(const name of ['docker.json','native.json']){
- const x=read(name); if(x.refusedKeyRetained||x.routine?.name!=='Workouts from Hevy'||!Number.isInteger(x.routine?.minute)||x.routine.minute<1||x.routine.minute>59)throw Error();
- const ids=x.initial?.map(r=>r.id).sort().join(','); if(ids!=='canal-pull,harbor-strength')throw Error();
- const after=x.after||[]; if(after.length!==1||after[0].id!=='harbor-strength'||after[0].weight_kg!==45)throw Error();
-}
-if(fs.readFileSync(`${p}/key-scan.txt`,'utf8').trim()!=='clean')throw Error();
+const same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
+const expected={
+  'harbor-strength':{title:'Harbor Strength',exercise:'Scenario Squat',weight_kg:42,reps:8},
+  'canal-pull':{title:'Canal Pull',exercise:'Scenario Row',weight_kg:31,reps:10},
+};
+const changed={title:'Harbor Strength',exercise:'Scenario Squat',weight_kg:45,reps:8};
+const fail=message=>{throw new Error(message)};
+try {
+ const setup=read('setup.json');
+ if(setup.fixture!=='local-hevy'||setup.health!==true||setup.refused!==true)fail('the local Hevy fixture was not healthy and shown to refuse a key');
+ const scan=read('key-scan.json');
+ if(scan.clean!==true||!Array.isArray(scan.paths)||scan.paths.some(path=>typeof path!=='string'))fail('the key scan is not a clean path-only scan');
+ for(const name of ['docker','native']){
+  const x=read(`${name}.json`);
+  if(x.platform!==name)fail(`${name} evidence does not identify its installation`);
+  if(x.settings?.refused?.accepted!==false||x.settings?.refused?.retained!==false)fail(`${name} retained or accepted the refused key`);
+  if(x.settings?.accepted?.accepted!==true)fail(`${name} did not accept the fixture key through Settings`);
+  if(x.collection?.name!=='Workouts')fail(`${name} did not create one Workouts collection`);
+  const rows=x.collection.rows;
+  if(!Array.isArray(rows)||rows.length!==2)fail(`${name} did not retain exactly the two initial workouts`);
+  const found=Object.fromEntries(rows.map(row=>[row.source_id,row]));
+  if(Object.keys(found).sort().join(',')!=='canal-pull,harbor-strength')fail(`${name} initial workouts have the wrong source ids`);
+  for(const [id,want] of Object.entries(expected)){
+   const row=found[id];
+   if(!row||row.title!==want.title||row.exercise!==want.exercise||!same(row.set,{weight_kg:want.weight_kg,reps:want.reps}))fail(`${name} did not keep every exercise and set of ${id}`);
+  }
+  const routine=x.routine;
+  if(routine?.name!=='Workouts from Hevy'||!Number.isInteger(routine.minute)||routine.minute<1||routine.minute>59||typeof routine.script!=='string'||!routine.script)fail(`${name} has no one hourly Workouts from Hevy routine at a non-zero minute`);
+  if(routine.count!==1||x.manual_run?.exit!==0)fail(`${name} did not run its one recorded import routine successfully`);
+  const after=x.after?.rows;
+  if(!Array.isArray(after)||after.length!==1||after[0].source_id!=='harbor-strength')fail(`${name} retained the deleted workout or did not keep the changed source row`);
+  const row=after[0];
+  if(row.title!==changed.title||row.exercise!==changed.exercise||!same(row.set,{weight_kg:changed.weight_kg,reps:changed.reps}))fail(`${name} did not update Harbor Strength's changed set`);
+ }
+} catch(error) { process.stdout.write(error.message); process.exit(1); }
 NODE
+  ) || fail "$why"
   grep -q '"accepted":false' "$folder/fixture.log" || fail "the fixture log has no refused-key request"
   pass "the local Hevy fixture refused the made-up bad key; Docker and Linux each kept Harbor Strength updated, removed Canal Pull, and recorded one hourly Workouts from Hevy routine"
 }
@@ -40,7 +70,7 @@ act() {
   curl -sS -H 'api-key: refused-scenario-key' "http://127.0.0.1:$port/v1/workouts" >/dev/null || true
   # Use distinct ports so the native installation and Docker server are independently real installs.
   server_install
-  printf '{"api_key":"refused-scenario-key"}\n' >"$EVIDENCE/refused-key.json"
+  printf '{"api_key":"refused-scenario-key","hevy_url":"http://127.0.0.1:%s"}\n' "$port" >"$EVIDENCE/refused-key.json"
   server_post /api/workouts "$EVIDENCE/refused-key.json" "$EVIDENCE/docker-settings.json" >"$EVIDENCE/docker-settings.code"
   export GODSPEED_PORT=47832
   install_paths

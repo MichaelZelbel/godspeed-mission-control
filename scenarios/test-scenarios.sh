@@ -3346,60 +3346,86 @@ WH=$TMP/wh
 wh_good() {
   local f=$1
   rm -rf "$f"; mkdir -p "$f"
-  printf '{"fixture":"local-hevy","refused":true}\n' >"$f/setup.json"
+  printf '{"fixture":"local-hevy","health":true,"refused":true}\n' >"$f/setup.json"
   printf '{"accepted":false}\n{"accepted":true}\n' >"$f/fixture.log"
-  printf 'clean\n' >"$f/key-scan.txt"
+  printf '{"clean":true,"paths":[]}\n' >"$f/key-scan.json"
   for platform in docker native; do
-    printf '{"refusedKeyRetained":false,"routine":{"name":"Workouts from Hevy","minute":17},"initial":[{"id":"harbor-strength"},{"id":"canal-pull"}],"after":[{"id":"harbor-strength","weight_kg":45}]}\n' >"$f/$platform.json"
+    printf '{"platform":"%s","settings":{"refused":{"accepted":false,"retained":false},"accepted":{"accepted":true}},"collection":{"name":"Workouts","rows":[{"source_id":"harbor-strength","title":"Harbor Strength","exercise":"Scenario Squat","set":{"weight_kg":42,"reps":8}},{"source_id":"canal-pull","title":"Canal Pull","exercise":"Scenario Row","set":{"weight_kg":31,"reps":10}}]},"routine":{"name":"Workouts from Hevy","minute":17,"script":"scenario-import","count":1},"manual_run":{"exit":0},"after":{"rows":[{"source_id":"harbor-strength","title":"Harbor Strength","exercise":"Scenario Squat","set":{"weight_kg":45,"reps":8}}]}}\n' "$platform" >"$f/$platform.json"
   done
 }
 wh_good "$WH/good"
 passes 'both installs import, update and delete made-up Hevy workouts' workouts-from-hevy "$WH/good" 'Docker and Linux each kept Harbor Strength updated'
+copy "$WH/good" "$WH/refused-kept"; sed -i 's/"retained":false/"retained":true/' "$WH/refused-kept/native.json"
+refuses 'a refused key retained' workouts-from-hevy "$WH/refused-kept" 'native retained or accepted'
+copy "$WH/good" "$WH/no-workout"; sed -i 's/"source_id":"canal-pull"/"source_id":"missing-row"/' "$WH/no-workout/docker.json"
+refuses 'a malformed initial workout' workouts-from-hevy "$WH/no-workout" 'initial workouts have the wrong source ids'
 copy "$WH/good" "$WH/no-routine"; sed -i 's/"minute":17/"minute":0/' "$WH/no-routine/native.json"
-refuses 'a zero-minute import routine' workouts-from-hevy "$WH/no-routine" 'does not prove both initial workouts'
-copy "$WH/good" "$WH/deleted-stays"; sed -i 's/"after":\[.*\]/"after":[{"id":"harbor-strength","weight_kg":45},{"id":"canal-pull"}]}/' "$WH/deleted-stays/docker.json"
-refuses 'a deleted workout retained' workouts-from-hevy "$WH/deleted-stays" 'does not prove both initial workouts'
-copy "$WH/good" "$WH/key-leaked"; printf '/tmp/leak\n' >"$WH/key-leaked/key-scan.txt"
-refuses 'a key outside its permitted setting' workouts-from-hevy "$WH/key-leaked" 'does not prove both initial workouts'
+refuses 'a zero-minute import routine' workouts-from-hevy "$WH/no-routine" 'non-zero minute'
+copy "$WH/good" "$WH/two-routines"; sed -i 's/"count":1/"count":2/' "$WH/two-routines/native.json"
+refuses 'two import routines' workouts-from-hevy "$WH/two-routines" 'did not run its one recorded'
+copy "$WH/good" "$WH/not-updated"; sed -i 's/"weight_kg":45/"weight_kg":42/' "$WH/not-updated/docker.json"
+refuses 'a changed workout not updated' workouts-from-hevy "$WH/not-updated" 'did not update Harbor Strength'
+copy "$WH/good" "$WH/deleted-stays"; sed -i 's/"source_id":"harbor-strength","title":"Harbor Strength","exercise":"Scenario Squat","set":{"weight_kg":45,"reps":8}/"source_id":"harbor-strength","title":"Harbor Strength","exercise":"Scenario Squat","set":{"weight_kg":45,"reps":8}},{"source_id":"canal-pull"/' "$WH/deleted-stays/docker.json"
+refuses 'a deleted workout retained' workouts-from-hevy "$WH/deleted-stays" 'retained the deleted workout'
+copy "$WH/good" "$WH/key-leaked"; printf '{"clean":false,"paths":["/tmp/leak"]}\n' >"$WH/key-leaked/key-scan.json"
+refuses 'a key outside its permitted setting' workouts-from-hevy "$WH/key-leaked" 'key scan is not a clean'
+copy "$WH/good" "$WH/no-native"; rm "$WH/no-native/native.json"
+refuses 'a platform with no evidence' workouts-from-hevy "$WH/no-native" 'native.json is not in what'
 
 section 'day becomes facts'
 DF2=$TMP/df2
 facts_good() {
   local f=$1
   rm -rf "$f"; mkdir -p "$f"
-  printf '{"messages":["move-1","doctor-1","machine-1","track-1"]}\n' >"$f/archive.json"
-  printf '{"claims":[{"value":"Berlin"}]}\n' >"$f/before.json"
-  printf '{"name":"Remember what you said","cron":"40 3 * * *","exit":0}\n' >"$f/routine.json"
-  printf '{"claims":[{"value":"Berlin","valid_to":"2026-11-01"},{"value":"Hamburg","valid_from":"2026-11-01","source_id":"move-1"},{"value":"Dr. Lang","valid_from":"2026-11-01","source_id":"doctor-1"}],"fact_slots":[],"contacts":[],"entities":[],"moments":[]}\n' >"$f/after.json"
+  printf '{"messages":[{"id":"move-1","text":"I moved to Hamburg on 1 November"},{"id":"doctor-1","text":"my new doctor is Dr. Lang"},{"id":"machine-1","text":"[IMPORTANT: You are running as a scheduled job]"},{"id":"track-1","text":"track this"}]}\n' >"$f/archive.json"
+  printf '{"claims":[{"value":"Berlin"}],"fact_slots":[],"contacts":[],"entities":[],"moments":[]}\n' >"$f/before.json"
+  printf '{"name":"Remember what you said","cron":"40 3 * * *","script":"scenario-facts","exit":0}\n' >"$f/routine.json"
+  printf '{"claims":[{"value":"Berlin","valid_to":"2026-11-01"},{"value":"Hamburg","valid_from":"2026-11-01","quote":"I moved to Hamburg on 1 November","source_id":"move-1"},{"value":"Dr. Lang","valid_from":"2026-11-01","quote":"my new doctor is Dr. Lang","source_id":"doctor-1"}],"fact_slots":[],"contacts":[],"entities":[],"moments":[]}\n' >"$f/after.json"
   cp "$f/after.json" "$f/second.json"
 }
 facts_good "$DF2/good"
 passes 'dated facts are filed once and excluded messages file nothing' day-becomes-facts "$DF2/good" 'Berlin was closed'
 copy "$DF2/good" "$DF2/wrong-time"; sed -i 's/40 3/41 3/' "$DF2/wrong-time/routine.json"
-refuses 'a remembered-facts routine at the wrong time' day-becomes-facts "$DF2/wrong-time" 'kept facts do not show'
+refuses 'a remembered-facts routine at the wrong time' day-becomes-facts "$DF2/wrong-time" 'successful 03:40'
+copy "$DF2/good" "$DF2/no-date"; sed -i 's/"valid_from":"2026-11-01",//' "$DF2/no-date/after.json"; cp "$DF2/no-date/after.json" "$DF2/no-date/second.json"
+refuses 'an undated Hamburg fact' day-becomes-facts "$DF2/no-date" 'Hamburg is not a dated'
+copy "$DF2/good" "$DF2/no-quote"; sed -i 's/I moved to Hamburg on 1 November/I moved somewhere/' "$DF2/no-quote/after.json"; cp "$DF2/no-quote/after.json" "$DF2/no-quote/second.json"
+refuses 'a fact without the exact move quote' day-becomes-facts "$DF2/no-quote" 'Hamburg is not a dated'
+copy "$DF2/good" "$DF2/berlin-current"; sed -i 's/,"valid_to":"2026-11-01"//' "$DF2/berlin-current/after.json"; cp "$DF2/berlin-current/after.json" "$DF2/berlin-current/second.json"
+refuses 'an older city left current' day-becomes-facts "$DF2/berlin-current" 'Berlin was deleted or left current'
+copy "$DF2/good" "$DF2/no-doctor"; sed -i 's/,{"value":"Dr. Lang"[^}]*}//' "$DF2/no-doctor/after.json"; cp "$DF2/no-doctor/after.json" "$DF2/no-doctor/second.json"
+refuses 'an absent doctor fact' day-becomes-facts "$DF2/no-doctor" 'Dr. Lang is not a dated'
 copy "$DF2/good" "$DF2/second-changed"; sed -i 's/"moments":\[\]/"moments":[{"source_id":"later"}]/' "$DF2/second-changed/second.json"
-refuses 'a second run that writes another record' day-becomes-facts "$DF2/second-changed" 'kept facts do not show'
+refuses 'a second run that writes another record' day-becomes-facts "$DF2/second-changed" 'second run changed'
 copy "$DF2/good" "$DF2/excluded"; sed -i 's/"entities":\[\]/"entities":[{"source_id":"machine-1"}]/' "$DF2/excluded/after.json"; cp "$DF2/excluded/after.json" "$DF2/excluded/second.json"
-refuses 'a machine prompt filed as a fact' day-becomes-facts "$DF2/excluded" 'kept facts do not show'
+refuses 'a machine prompt filed as a fact' day-becomes-facts "$DF2/excluded" 'excluded message'
+copy "$DF2/good" "$DF2/routine-failed"; sed -i 's/"exit":0/"exit":1/' "$DF2/routine-failed/routine.json"
+refuses 'a failed remembered-facts routine' day-becomes-facts "$DF2/routine-failed" 'successful 03:40'
 
 section 'Hermes update rollback'
 HU=$TMP/hu
 hermes_good() {
   local f=$1
   rm -rf "$f"; mkdir -p "$f"
-  printf '["1.0.0","1.1.0","1.2.0","1.3.0"]\n' >"$f/releases.json"
-  printf '[{"version":"1.1.0","chat":true},{"attempt":"1.2.0","failed_check":"cron list","version":"1.1.0","restarts":2,"chat":true},{"version":"1.1.0","attempted":false}]\n' >"$f/nights.json"
-  printf '[{"version":"1.2.0"}]\n' >"$f/notifications.json"
+  printf '[{"version":"1.0.0","healthy":true,"age_days":14},{"version":"1.1.0","healthy":true,"age_days":8},{"version":"1.2.0","healthy":false,"age_days":7},{"version":"1.3.0","healthy":true,"age_days":3}]\n' >"$f/releases.json"
+  printf '[{"attempt":"1.1.0","version":"1.1.0","commit":"good-commit","chat":true,"failure_bell":false},{"attempt":"1.2.0","failed_check":"cron list","version":"1.1.0","commit":"good-commit","restarts":2,"chat":true},{"version":"1.1.0","commit":"good-commit","attempted":false,"notification_count":1}]\n' >"$f/nights.json"
+  printf '[{"version":"1.2.0","pending":true}]\n' >"$f/notifications.json"
   printf 'fixture releases are local\n' >"$f/fixture.log"
 }
 hermes_good "$HU/good"
 passes 'the good release stays, broken release rolls back, and a recent release stays put' hermes-update-rollback "$HU/good" 'kept 1.1.0'
-copy "$HU/good" "$HU/no-rollback"; sed -i 's/"version":"1.1.0","restarts":2/"version":"1.2.0","restarts":2/' "$HU/no-rollback/nights.json"
-refuses 'a broken release left checked out' hermes-update-rollback "$HU/no-rollback" 'does not keep 1.1.0'
+copy "$HU/good" "$HU/no-rollback"; sed -i 's/"version":"1.1.0","commit":"good-commit","restarts":2/"version":"1.2.0","commit":"good-commit","restarts":2/' "$HU/no-rollback/nights.json"
+refuses 'a broken release left checked out' hermes-update-rollback "$HU/no-rollback" 'not restored to the exact'
+copy "$HU/good" "$HU/chat-failed"; sed -i '0,/"chat":true/s//"chat":false/' "$HU/chat-failed/nights.json"
+refuses 'a good release whose chat failed' hermes-update-rollback "$HU/chat-failed" 'working chat'
+copy "$HU/good" "$HU/no-restart"; sed -i 's/"restarts":2/"restarts":1/' "$HU/no-restart/nights.json"
+refuses 'a rollback with no second gateway restart' hermes-update-rollback "$HU/no-restart" 'not restored to the exact'
+copy "$HU/good" "$HU/wrong-check"; sed -i 's/cron list/plugin load/' "$HU/wrong-check/nights.json"
+refuses 'a rollback with the wrong failed check' hermes-update-rollback "$HU/wrong-check" 'not restored to the exact'
 copy "$HU/good" "$HU/two-bells"; printf '[{"version":"1.2.0"},{"version":"1.2.0"}]\n' >"$HU/two-bells/notifications.json"
-refuses 'two update failure notifications' hermes-update-rollback "$HU/two-bells" 'does not keep 1.1.0'
+refuses 'two update failure notifications' hermes-update-rollback "$HU/two-bells" 'exactly one pending bell'
 copy "$HU/good" "$HU/recent-taken"; sed -i 's/"attempted":false/"attempted":true/' "$HU/recent-taken/nights.json"
-refuses 'a three-day-old release taken' hermes-update-rollback "$HU/recent-taken" 'does not keep 1.1.0'
+refuses 'a three-day-old release taken' hermes-update-rollback "$HU/recent-taken" 'three-day 1.3.0 release was taken'
 
 # The two local fixtures are useful without an installation. Their logs must never contain keys.
 HF=$TMP/hevy-fixture; mkdir -p "$HF"; : >"$HF/log"
@@ -3413,7 +3439,23 @@ HF_EVENTS=$(curl -s -H 'api-key: 00000000-0000-4000-8000-000000000001' "http://1
 kill "$HF_PID" 2>/dev/null || true
 if [ "$HF_BAD" = 401 ] && grep -q 'harbor-strength' <<<"$HF_GOOD" && grep -q 'canal-pull' <<<"$HF_EVENTS" && ! grep -q '00000000-0000-4000-8000-000000000001' "$HF/log"; then ok 'the local Hevy fixture refuses, changes and redacts'; else bad 'the local Hevy fixture does not refuse, change and redact'; fi
 HFD=$TMP/hermes-fixture
-if node "$ROOT/scenarios/hermes-update-fixture.mjs" --dir "$HFD" >/dev/null && [ "$(git -C "$HFD" tag | wc -l | tr -d '[:space:]')" = 4 ] && grep -q '"healthy":true' "$HFD/release.json"; then ok 'the local Hermes fixture creates four tagged releases'; else bad 'the local Hermes fixture did not create four tagged releases'; fi
+HFD_LOG=$TMP/hermes-fixture.log
+if node "$ROOT/scenarios/hermes-update-fixture.mjs" --dir "$HFD" >/dev/null \
+  && [ "$(git -C "$HFD" tag | wc -l | tr -d '[:space:]')" = 4 ] \
+  && [ "$(HERMES_FIXTURE_LOG=$HFD_LOG "$HFD/bin/hermes" --version)" = 1.0.0 ] \
+  && [ "$(HERMES_FIXTURE_LOG=$HFD_LOG "$HFD/bin/hermes" update --check)" = 1.1.0 ] \
+  && HERMES_FIXTURE_LOG=$HFD_LOG "$HFD/bin/hermes" update 1.2.0 \
+  && ! HERMES_FIXTURE_LOG=$HFD_LOG "$HFD/bin/hermes" cron list >/dev/null 2>&1 \
+  && git -C "$HFD" checkout -q v1.1.0 \
+  && HERMES_FIXTURE_LOG=$HFD_LOG "$HFD/bin/hermes" cron list >/dev/null \
+  && [ "$(HERMES_FIXTURE_LOG=$HFD_LOG "$HFD/bin/hermes" chat)" = 'Scenario answer' ] \
+  && node "$ROOT/scenarios/hermes-update-fixture.mjs" --dir "$HFD" --reveal 1.3.0 >/dev/null \
+  && [ "$(HERMES_FIXTURE_LOG=$HFD_LOG "$HFD/bin/hermes" update --check)" = 1.3.0 ] \
+  && ! grep -qE 'key|token|secret' "$HFD_LOG"; then
+  ok 'the local Hermes fixture versions, checks, breaks, answers, reveals and redacts'
+else
+  bad 'the local Hermes fixture does not control its local releases and harmless command'
+fi
 
 # ============================================================ every one of them, the same shape
 section 'every script'
