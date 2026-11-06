@@ -8,7 +8,7 @@ import {sameValue as sameThing} from './same-thing.mjs';
 export const ROUTINE_FOLDER='routines/remember-what-you-said';
 const MACHINE_BANNER=/^\[(?:[A-Z][A-Z0-9 ]{2,}|(?:Cron|Webhook) delivery\b)/;
 const ISO_DAY=/^\d{4}-\d{2}-\d{2}$/;
-const CREDENTIAL=/(?:password|passphrase|\bkey\b|secret|token|credential)/i;
+const CREDENTIAL=/(?:password|passphrase|api[ _-]?key|private[ _-]?key|\bkey\b|secret|token|credential)/i;
 const FORBIDDEN=/(?:\b(?:file name|filename|software setting|bug)\b|\b(?:employer|client)\s+(?:company|name)\b)/i;
 const normal=s=>String(s??'').normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').trim();
 const words=s=>normal(s).split(' ').filter(Boolean);
@@ -78,9 +78,13 @@ const itemCitation=(item,messages)=>{const c=item?.citation;if(!c||typeof c.id!=
 const subjectKey=name=>normal(name);
 const safeName=(name,terms=[])=>typeof name==='string'&&name.trim()&&name.length<=160&&!CREDENTIAL.test(name)&&!FORBIDDEN.test(name)&&!/\b(?:employer|client)\b/i.test(name)&&!redacted(name,terms);
 const credential=(...values)=>values.some(value=>CREDENTIAL.test(String(value||'')));
-const completionEvidence=(deadline,item,quote)=>{
- const condition=typeof deadline?.doneWhen==='string'?normal(deadline.doneWhen):'';
- return item?.deadline_complete===true&&!!condition&&normal(quote)===condition;
+const COMPLETION_GRAMMAR=new Set(['a','an','the','i','we','have','has','had','am','is','are','was','were','be','been','being']);
+const completionAssertion=value=>words(value).filter(word=>!COMPLETION_GRAMMAR.has(word));
+const sameCompletionAssertion=(left,right)=>{const a=completionAssertion(left),b=completionAssertion(right);return a.length>0&&a.length===b.length&&a.every((word,index)=>word===b[index]);};
+const quotedAssertion=(source,quote)=>String(source||'').split(/[.!?;]+/).some(assertion=>normal(assertion)===normal(quote));
+const completionEvidence=(deadline,item,citation,messages)=>{
+ const source=messages.find(message=>message.id===citation?.id);
+ return item?.deadline_complete===true&&typeof deadline?.doneWhen==='string'&&source&&quotedAssertion(source.text,citation.quote)&&sameCompletionAssertion(citation.quote,deadline.doneWhen);
 };
 function knownSubjects(query,newPeople,newThings,terms){
  const out=new Map([['self',{type:'self',id:null,name:'self'}]]);
@@ -115,7 +119,7 @@ export function validateResponse(answer,{messages,query,root,terms=[],deadlines=
   if(currentFact(query,root,subject,fact.kind,value,fields)){refusals.push({reason:'duplicate',item,citation});continue;}accepted.push(fact);
  }
  for(const item of events){const citation=itemCitation(item,messages),day=item?.day,what=typeof item?.what==='string'?item.what.trim():'',participants=Array.isArray(item.participants)?item.participants:[];if(!citation){refusals.push({reason:'quote',item});continue;}if(!what||!calendarDay(day)||credential(what,citation.quote)||FORBIDDEN.test(what)||redacted(what+' '+citation.quote,terms)||participants.some(name=>!safeName(name,terms))){refusals.push({reason:'private-or-invalid',item,citation});continue;}
-  const requested=typeof item.deadline_id==='string'?item.deadline_id:null,deadline=deadlines.find(d=>d?.slug===requested),deadline_id=completionEvidence(deadline,item,citation.quote)?requested:null;if(requested&&!deadline){refusals.push({reason:'unknown-deadline',item,citation});continue;}if(requested&&!deadline_id){refusals.push({reason:'deadline-evidence',item,citation});continue;}
+  const requested=typeof item.deadline_id==='string'?item.deadline_id:null,deadline=deadlines.find(d=>d?.slug===requested),deadline_id=completionEvidence(deadline,item,citation,messages)?requested:null;if(requested&&!deadline){refusals.push({reason:'unknown-deadline',item,citation});continue;}if(requested&&!deadline_id){refusals.push({reason:'deadline-evidence',item,citation});continue;}
   const event={type:'event',what,day,participants:participants.map(s=>s.trim()),citation,deadline_id};if(sameEvent(query,root,event)){refusals.push({reason:'duplicate',item,citation});continue;}accepted.push(event);
  }
  const used=new Set(accepted.flatMap(effect=>effect.type==='fact'?[effect.subject.name]:effect.participants).map(subjectKey));
