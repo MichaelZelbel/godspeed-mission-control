@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import http from 'node:http';
 import net from 'node:net';
+import {EventEmitter} from 'node:events';
 import {spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {Store,hash} from '../core/records/store.mjs';
@@ -580,6 +581,36 @@ test('the token is read in one place: ensureToken leaves a damaged token alone, 
  const next=renewToken(state);assert.notEqual(next,token);assert.equal(tokenMatches(state,next),true);assert.equal(tokenDamaged(state),false);
 });
 
+// Writes a chunk; when the socket is full, waits for room or for the socket to close, whichever comes first. A closed
+// socket never drains, so a drain-only wait would never end when the peer answers and closes while this is waiting.
+const writeOrClose=(socket,chunk)=>socket.write(chunk)?Promise.resolve():new Promise(resolve=>{socket.once('drain',resolve);socket.once('close',resolve);});
+const within=(promise,ms)=>Promise.race([promise.then(()=>true),new Promise(r=>setTimeout(()=>r(false),ms))]);
+
+test('a write that backpressures and then sees the socket close without draining ends the wait',async()=>{
+ const fake=new EventEmitter();fake.write=()=>false;
+ setImmediate(()=>fake.emit('close'));
+ assert.equal(await within(writeOrClose(fake,Buffer.alloc(1)),2000),true,'close ends the wait');
+ const roomy=new EventEmitter();roomy.write=()=>true;
+ assert.equal(await within(writeOrClose(roomy,Buffer.alloc(1)),2000),true,'no wait when there is room');
+ const slow=new EventEmitter();slow.write=()=>false;
+ setImmediate(()=>slow.emit('drain'));
+ assert.equal(await within(writeOrClose(slow,Buffer.alloc(1)),2000),true,'drain still ends it');
+});
+
+test('against a real local peer that stops reading and then closes, a writer that fills its buffer is not left waiting',async t=>{
+ const peer=net.createServer(socket=>{socket.pause();setTimeout(()=>socket.destroy(),150);});
+ await new Promise(r=>peer.listen(0,'127.0.0.1',r));
+ const client=net.connect(peer.address().port,'127.0.0.1');
+ client.on('error',()=>{});
+ t.after(()=>{client.destroy();peer.close();});
+ await new Promise(r=>client.once('connect',r));
+ const chunk=Buffer.alloc(256*1024,'x');
+ const writer=(async()=>{let blocked=false;for(let i=0;i<4000&&!client.destroyed;i++){const full=!client.write(chunk);if(full){blocked=true;await new Promise(r=>{client.once('drain',r);client.once('close',r);});}}return blocked;})();
+ const outcome=await Promise.race([writer.then(blocked=>({blocked})),new Promise(r=>setTimeout(()=>r({timeout:true}),8000))]);
+ assert.equal(outcome.timeout,undefined,'the writer finished: the close ended its wait');
+ assert.equal(outcome.blocked,true,'it really did backpressure first');
+});
+
 test('an oversized upload whose body never ends gets a real 413 with Connection: close, the peer is closed, and the service shuts down',async t=>{
  const root=serverRoot('godspeed-phone-oversize-'),service=await createService({root,port:0,webPort:0});
  const token=fs.readFileSync(tokenFile(service.store.state),'utf8').trim(),socket=net.connect(service.address.port,'127.0.0.1');
@@ -593,8 +624,7 @@ test('an oversized upload whose body never ends gets a real 413 with Connection:
   const chunk=Buffer.alloc(64*1024,'x');
   let sent=0;
   while(!received.includes('\r\n\r\n')&&sent<22*1024*1024&&!closed){
-   // The server may answer and close while this still waits for room: a closed socket never drains, so closing ends the wait too.
-   if(!socket.write(chunk))await new Promise(r=>{socket.once('drain',r);socket.once('close',r);});
+   await writeOrClose(socket,chunk);
    sent+=chunk.length;
   }
   await until(()=>received.includes('\r\n\r\n'),'the answer to the oversized upload');

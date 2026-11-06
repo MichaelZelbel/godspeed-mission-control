@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+. "$(dirname "${BASH_SOURCE[0]}")/test-progress.sh"
 image=${1:?Supply the freshly built image}
 name=godspeed-image-verification
 volume=godspeed-image-verification-data
@@ -96,7 +97,7 @@ echo "The mail tool answers, and Gmail is connected from the server's own termin
 # A failure names its tests in the build log; the whole log stays in the evidence.
 # Each test (and each file) has a time limit, so a hang fails with its name in minutes instead of silently eating the job
 # (the 6 November 2026 run printed nothing for 35 minutes); the progress lines show as they come, the whole log stays in the evidence.
-docker exec -e GODSPEED_ORIGINAL_RUNTIME=off -w /opt/godspeed/kit/notebook "$name" sh -c 'timeout 1800 node scripts/run-tests.mjs --test-timeout=180000 test/*.test.mjs' 2>&1 | tee "$evidence/server-tests.log" | grep -E '^not ok|^# (tests|pass|fail|cancelled)' || { grep -E '^not ok|^# (tests|pass|fail)' "$evidence/server-tests.log"; grep -E -A12 '^not ok' "$evidence/server-tests.log" | grep -E 'error|expected|actual|Error|FAIL|assert' | head -60; exit 1; }
+docker exec -e GODSPEED_ORIGINAL_RUNTIME=off -w /opt/godspeed/kit/notebook "$name" sh -c 'timeout 1800 node scripts/run-tests.mjs --test-timeout=180000 test/*.test.mjs' 2>&1 | server_test_progress "$evidence/server-tests.log" || { grep -E '^not ok|^# (tests|pass|fail)' "$evidence/server-tests.log"; grep -E -A12 '^not ok' "$evidence/server-tests.log" | grep -E 'error|expected|actual|Error|FAIL|assert' | head -60; exit 1; }
 # The hourly conversation archive, run every few seconds here: a Telegram exchange reaches the
 # archive with its answer, the backup and a second machine (test-prompt-archive.sh).
 bash docker/full-candidate/test-prompt-archive.sh "$name" | tee "$evidence/prompt-archive.log"; [ "${PIPESTATUS[0]}" -eq 0 ] || exit 1
