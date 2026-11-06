@@ -97,7 +97,8 @@ export class NativeScheduler{
  // Two records. The mission control's own, in its settings (it travels with the folder): its first
  // goal started the routines, or why not. This machine's own, beside its Hermes (it never
  // travels): this Hermes got them, or why not; a reader who removes one does not get it back.
- startRoutines(options={}){const next=(this.starting||Promise.resolve()).then(()=>this.startRoutinesNow(options));this.starting=next.catch(()=>{});return next;}
+ queueStarting(action){const next=(this.starting||Promise.resolve()).then(action);this.starting=next.catch(()=>{});return next;}
+ startRoutines(options={}){return this.queueStarting(()=>this.startRoutinesNow(options));}
  async startRoutinesNow({goal=null,setup=false}={}){
   const root=this.store.root,flag=this.store.get('settings',FLAG),here=readMachineRecord(this.store),now=Date.now();
   let installation=this.store.get('settings','installation');
@@ -158,7 +159,8 @@ export class NativeScheduler{
   if(flag?.state!=='created')await record({state:'created',first_device:this.device,created_at:at,...unskip});
   return {state:'created',jobs};
  }
- async followCleanup(){
+ followCleanup(){return this.queueStarting(()=>this.followCleanupNow());}
+ async followCleanupNow(){
   const root=this.store.root,routine=STARTING_ROUTINES.find(entry=>entry.key==='cleanup');
   if(!routine||!(starterBorn(root)||adoptedMissionControl(root)))return null;
   const installation=this.store.get('settings','installation'),timezone=installation?.timezone||Intl.DateTimeFormat().resolvedOptions().timeZone;

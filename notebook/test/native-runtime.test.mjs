@@ -140,6 +140,17 @@ test('a fresh mission control schedules its nightly cleanup before its first goa
  assert.deepEqual(hermes.jobs().map(job=>[job.name,job.schedule_display,job.script]),[['Nightly cleanup','45 2 * * *','godspeed-nightly-cleanup.py']]);
 });
 
+test('overlapping setup and tick admit the nightly cleanup once',async t=>{
+ const {root,home}=starterFixture(t),store=new Store(root,{device:'pc-1'}),hermes=fakeHermes(home);store.save('settings',{id:'installation',owner:'pc-1',timezone:'Europe/Berlin',delivery:'notebook'});
+ let release,admitted,creates=0;const gate=new Promise(resolve=>{release=resolve;}),firstAdmission=new Promise(resolve=>{admitted=resolve;});
+ const run=async(executable,args,options)=>{if(args[1]==='create'&&args.includes('Nightly cleanup')){creates++;if(creates===1){admitted();await gate;}}return hermes.run(executable,args,options);};
+ const scheduler=new NativeScheduler(store,{home,executable:'hermes',device:'pc-1',run}),setup=scheduler.configure({goal:'Fictional later goal',timezone:'Europe/Berlin'});
+ await firstAdmission;scheduler.lastTick=0;const tick=scheduler.tick();await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(creates,1,'the second caller waits to inspect the job after the first creates it');
+ release();await Promise.all([setup,tick]);
+ assert.equal(hermes.jobs().filter(job=>job.name==='Nightly cleanup').length,1);
+});
+
 test('a goal told in the chat starts the same routines at the next tick, on this computer\'s clock',async t=>{
  const {root,home}=starterFixture(t),store=new Store(root,{device:'pc-1'}),hermes=fakeHermes(home);
  const scheduler=new NativeScheduler(store,{home,executable:'hermes',device:'pc-1',run:hermes.run});
