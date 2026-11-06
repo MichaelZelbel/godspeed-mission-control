@@ -4,6 +4,7 @@ import {installStarter} from '../core/starter-workspace.mjs';import {readMachine
 import {DatabaseSync} from 'node:sqlite';import {CONNECTION_NOTICE_PREFIX} from '../core/connection-names.mjs';
 import {cronCalendar,calendarCron,retimeWhat} from '../core/routine-times.mjs';import {enableKinds,readNotebookRoutines,rememberNotebookRoutine,writeNotebookRoutines,JOURNAL_JOB,CHAT_TIDY_JOB,CHAT_TIDY_SCRIPT,BRIEF_SCRIPT,deliveryFor,CONNECTION_JOB} from '../core/notebook-routines.mjs';
 import {personalOperation} from '../core/personal-operations.mjs';import {readArea} from '../../third-party/addons/godspeed-coach/lib/areas.mjs';
+import {acceptUpload} from '../core/phone-health.mjs';
 
 // THE SETTINGS CONTROLS FOR HERMES' ROUTINES, 18 October 2026. Routine times was refused for every
 // Hermes routine, Enable routine refused most kinds with "Choose an installed Godspeed skill", Routine
@@ -200,10 +201,10 @@ test('two queued notices are said one in each run',{skip:!['python','python3'].s
  assert.deepEqual([run(),run(),run()],['First thing.','Second thing.','']);
 });
 
-// THE DAILY CONNECTION CHECK (#200, 4 November 2026): a script routine at 05:00 (earlier before an early Morning brief), on when Telegram or
-// Gmail is connected and paused when neither is; Settings > Routines lists it with its switch.
+// THE DAILY CONNECTION CHECK (#200, 4 November 2026): a script routine at 05:00 (earlier before an early Morning brief), on when Telegram,
+// Gmail, a mail rule or phone health data is present and paused when none is; Settings > Routines lists it with its switch.
 const noMail=t=>{const was=process.env.GODSPEED_MAIL_HOME,dir=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-no-mail-'));process.env.GODSPEED_MAIL_HOME=dir;t.after(()=>{if(was===undefined)delete process.env.GODSPEED_MAIL_HOME;else process.env.GODSPEED_MAIL_HOME=was;fs.rmSync(dir,{recursive:true,force:true});});};
-test('the daily connection check is listed with its switch, paused until Telegram or Gmail is connected',async t=>{
+test('the daily connection check is listed with its switch, paused until a connection is set up',async t=>{
  noMail(t);
  const {root,home,store,hermes,scheduler,job}=await withGoal(t);
  scheduler.lastTick=0;await scheduler.tick();
@@ -212,7 +213,7 @@ test('the daily connection check is listed with its switch, paused until Telegra
  assert.match(fs.readFileSync(path.join(home,'scripts','godspeed-connection-check.py'),'utf8'),/main\("connection-check"\)/);
  assert.ok(JSON.parse(fs.readFileSync(path.join(home,'scripts','godspeed-routines.json'),'utf8')).connection_check.endsWith('connection-check.mjs'));
  const q=new QueryService(store);q.nativeHermesHome=home;
- const row=q.rows('jobs').find(j=>j.title===CONNECTION_JOB);assert.match(row.what,/one harmless call to each connection/);assert.equal(row.paused,true);
+ const row=q.rows('jobs').find(j=>j.title===CONNECTION_JOB);assert.match(row.what,/phone has not sent health data for 36 hours/);assert.equal(row.paused,true);
  // Telegram connected later: the notebook, which paused it, resumes it.
  fs.writeFileSync(path.join(home,'.env'),'TELEGRAM_BOT_TOKEN=123:abc\n');
  scheduler.lastTick=0;await scheduler.tick();assert.equal(job(CONNECTION_JOB).enabled,true);
@@ -235,6 +236,14 @@ test('a mail rule alone starts the daily connection check on, so its failed sear
  const {store,scheduler,job}=await withGoal(t);
  scheduler.lastTick=0;await scheduler.tick();assert.equal(job(CONNECTION_JOB).enabled,false);
  store.save('collections',{name:'Orders',field_schema:[],tracker:{names:['Orders'],cadence:'any',talks:[],specialist:null,mail:{senders:['shop.example.invalid'],subjects:['order'],mailbox:'godspeed'}}});
+ scheduler.lastTick=0;await scheduler.tick();assert.equal(job(CONNECTION_JOB).enabled,true);
+});
+
+test('an accepted phone upload alone starts the daily connection check',async t=>{
+ noMail(t);
+ const {store,scheduler,job}=await withGoal(t);
+ scheduler.lastTick=0;await scheduler.tick();assert.equal(job(CONNECTION_JOB).enabled,false);
+ acceptUpload(store,{metrics:[]},{now:new Date('2026-11-04T10:00:00Z')});
  scheduler.lastTick=0;await scheduler.tick();assert.equal(job(CONNECTION_JOB).enabled,true);
 });
 
