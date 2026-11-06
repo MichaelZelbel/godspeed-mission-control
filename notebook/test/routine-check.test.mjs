@@ -136,7 +136,7 @@ test('a notice that could not be queued does not write a legacy error_run back',
  fs.mkdirSync(path.join(f.store.state,'notices.json'),{recursive:true});
  assert.throws(()=>check(f,[late]),/could not be queued/);
  const saved=JSON.parse(fs.readFileSync(path.join(f.store.state,'connection-check-routines.json'),'utf8')).routines[late.id];
- assert.equal('error_run' in saved,false);assert.equal(saved.ok_at,'2026-11-03T00:00:00Z');
+ assert.equal('error_run' in saved,false);assert.equal('ok_at' in saved,false);
 });
 
 test('the same missed routine is told once on the first day, and not again on the next',t=>{
@@ -151,7 +151,7 @@ test('a good run closes the spell and a later failure is told again',t=>{
  check(f,[failing('a',2)]);assert.equal(said(f).length,1);
  check(f,[daily('a',{last_run_at:ago(1),next_run_at:ahead(22)})]);
  check(f,[failing('a',2,{last_run_at:ahead(0.001)})]);
- assert.equal(said(f).length,2);assert.match(said(f)[1].text,/last ran right/);
+ assert.equal(said(f).length,2);
 });
 
 test('paused, switched off and made-today routines say nothing',t=>{
@@ -200,6 +200,6 @@ test('an old record with the removed error_run field is written back without it,
  const prev={ok_at:'2026-01-01T00:00:00Z',error_run:'2026-01-02T00:00:00Z'},ctx={now:Date.parse('2026-01-03T00:00:00Z'),day:'2026-01-03',timezone:'UTC'};
  for(const job of [{id:'a',last_status:'ok',last_run_at:'2026-01-02T12:00:00Z'},{id:'a',state:'paused'}]){
   const {entry}=routineFinding(job,prev,ctx);
-  assert.equal('error_run' in entry,false);assert.ok(entry.ok_at);
+  assert.equal('error_run' in entry,false);assert.equal('ok_at' in entry,false);
  }
 });

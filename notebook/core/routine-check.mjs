@@ -18,7 +18,7 @@ import {AI_SIGN_IN,scrubCredentials} from './runtime.mjs';
 //
 // It is not one of connection-check.mjs's probes: a probe answers {set_up, ok, kind} for one
 // connection and may become a deadline, and this is per routine and gives the owner no task. It keeps
-// its own record, .godspeed/connection-check-routines.json: {routines:{<job id>:{ok_at, failed_at, spell}}}.
+// its own record, .godspeed/connection-check-routines.json: {routines:{<job id>:{failed_at, spell}}}.
 // failed_at is the run of a failure only the status record shows (see twice, below). A damaged record reads as empty; the worst effect is one extra message.
 export const ROUTINES_RECORD_FILE='connection-check-routines.json';
 const HOUR=3600000,DAY=24*HOUR;
@@ -100,10 +100,9 @@ const when=(value,timezone)=>new Intl.DateTimeFormat('en-GB',{timeZone:timezone,
 // One routine's turn. `job` carries the status Settings shows. Returns the routine's new record and,
 // when the owner is to be told, {words, spell}; the spell is kept only once it is told.
 export function routineFinding(job,prev={},{now,day,timezone}){
- const name=job.name||job.id,{error_run:_legacy,...entry}=prev;
+ const name=job.name||job.id,{error_run:_legacy,ok_at:_oldOk,...entry}=prev;
  if(pausedJob(job))return {entry,found:null};
  const ranAt=time(job.last_run_at),good=job.last_status==='ok'&&ranAt!==null,errored=job.last_status==='error';
- if(good)entry.ok_at=job.last_run_at;
  if(entry.spell&&good&&ranAt>(time(entry.spell.run)??0))delete entry.spell;
  // Hermes counts the failures it recorded itself. A starting routine's failure is recorded as a good run
  // and shown from its status record (routineStatus), so Hermes' count is 0 and two such failures are
@@ -118,7 +117,6 @@ export function routineFinding(job,prev={},{now,day,timezone}){
  else if((missedAt=missed(job,{now,day,timezone}))!==null)kind='missed';
  if(!kind)return {entry,found:null};
  const sentences=[kind==='missed'?`"${name}" did not run when it was due ${when(missedAt,timezone)}.`:`"${name}" failed its last two runs${errorWords(job.last_error)?': '+errorWords(job.last_error):''}.`];
- if(entry.ok_at)sentences.push(`It last ran right ${when(entry.ok_at,timezone)}.`);
  sentences.push(kind==='missed'?'It runs again at its next time.':'It tries again at its next time.');
  return {entry,found:{words:sentences.join(' '),spell:{kind,since:day,run:job.last_run_at||null}}};
 }
@@ -144,7 +142,7 @@ export function checkRoutines({store,home,day,timezone,now=()=>new Date(),jobs=h
   const sentences=found.map(f=>f.words),text=found.length>1?'Some of your routines did not run right: '+sentences.join(' '):sentences[0];
   const id=`${CONNECTION_NOTICE_PREFIX}routines-${day}-${hash(found.map(f=>f.id+f.spell.since+f.spell.run).sort().join('|')).slice(0,12)}`;
   try{tellOwner(store,{id,text,about:'Routines of yours that did not run right',facts:sentences});for(const f of found)routines[f.id].spell=f.spell;}
-  catch{failed=true;for(const f of found){if(before[f.id]){const {error_run:_legacy,...prior}=before[f.id];routines[f.id]=prior;}else delete routines[f.id];}}
+  catch{failed=true;for(const f of found){if(before[f.id]){const {error_run:_legacy,ok_at:_oldOk,...prior}=before[f.id];routines[f.id]=prior;}else delete routines[f.id];}}
  }
  atomic(path.join(store.state,ROUTINES_RECORD_FILE),JSON.stringify({routines},null,2)+'\n');
  if(failed)throw new Error('The routines notice could not be queued');
