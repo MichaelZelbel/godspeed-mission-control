@@ -1,8 +1,9 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';
 import {Store} from '../core/records/store.mjs';import {installStarter} from '../core/starter-workspace.mjs';
 import {readNotices} from '../core/notices.mjs';import {addonDeadlines} from '../core/addon-deadlines.mjs';
-import {CONNECTION_NAMES} from '../core/connection-names.mjs';import {runDue} from '../core/connection-check.mjs';import {CONNECTIONS,defaultProbes,checkConnections,nextState,recoverPhoneConnection,telegramProbe,githubProbe,mailProbe,agentmailProbe,aiProbe,phoneProbe,gitKind,aiKind,telegramKind,mailKind,connectionCheckWanted,RECORD_FILE} from '../core/connection-check.mjs';
+import {CONNECTION_NAMES} from '../core/connection-names.mjs';import {CONNECTIONS,defaultProbes,checkConnections,nextState,recoverPhoneConnection,telegramProbe,githubProbe,mailProbe,agentmailProbe,aiProbe,phoneProbe,gitKind,aiKind,telegramKind,mailKind,connectionCheckWanted,diskProbe,RECORD_FILE,runDue} from '../core/connection-check.mjs';
 import {acceptUpload,importFolder,pruneRaw,readRaw} from '../core/phone-health.mjs';
+import {runConnectionCheck} from '../scripts/connection-check.mjs';
 
 for(const key of Object.keys(process.env))if(/^(GODSPEED_|HERMES_)/.test(key))delete process.env[key];
 
@@ -24,14 +25,14 @@ test('all connections working: nothing is said and no deadline is made',async t=
  const record=await checkConnections({store,day:D1,probes:stubs()});
  assert.deepEqual(readNotices(store),[]);assert.deepEqual(deadlines(store),[]);
  assert.equal(bell(store,'telegram'),undefined);
- assert.deepEqual(Object.values(record.connections).map(c=>[c.set_up,c.ok]),[[true,true],[true,true],[true,true],[true,true],[true,true],[false,undefined]]);
+ assert.deepEqual(Object.values(record.connections).map(c=>[c.set_up,c.ok]),[[true,true],[true,true],[true,true],[true,true],[true,true],[true,true],[false,undefined]]);
  assert.ok(!fs.existsSync(path.join(root,'.godspeed','connection-check')),'no marker file on an ordinary day');
 });
 
 test('a connection that is not set up is not called and not mentioned',async t=>{
  const {store}=fixture(t);
  const record=await checkConnections({store,day:D1,probes:probesFor(()=>async()=>({set_up:false}))});
- assert.deepEqual(Object.values(record.connections),[{set_up:false},{set_up:false},{set_up:false},{set_up:false},{set_up:false},{set_up:false}]);
+ assert.deepEqual(Object.values(record.connections),[{set_up:false},{set_up:false},{set_up:false},{set_up:false},{set_up:false},{set_up:false},{set_up:false}]);
  assert.deepEqual(readNotices(store),[]);
 });
 
@@ -198,10 +199,11 @@ test('each probe is set up only when its connection is, and asks only once',asyn
  assert.deepEqual(await aiProbe({store,home,hermes:'/bin/hermes',ask:async()=>{throw Object.assign(Error('x'),{reason:'sign-in'});}})(),{set_up:true,ok:false,kind:'sign-in'});
 });
 
-test('the check is wanted when Telegram or Gmail is connected',t=>{
+test('the check is wanted when Telegram or Gmail is connected, and on a server',t=>{
  const home=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-connection-home-'));t.after(()=>fs.rmSync(home,{recursive:true,force:true}));
  const none=()=>({status:()=>({state:'not connected'})}),mail=()=>({status:()=>({state:'connected'})});
  assert.equal(connectionCheckWanted(home,none),false);assert.equal(connectionCheckWanted(home,mail),true);
+ assert.equal(connectionCheckWanted(home,none,undefined,undefined,()=>true),true);
  fs.writeFileSync(path.join(home,'.env'),'TELEGRAM_BOT_TOKEN='+TOKEN+'\n');
  assert.equal(connectionCheckWanted(home,none),true);
  assert.equal(connectionCheckWanted(home,()=>{throw Error('no mail tool');}),true);
@@ -237,7 +239,7 @@ test('a deadline that could not be made or closed fails the routine and is retri
 });
 
 test('every connection owns its probe, and mail reaches its own check',async()=>{
- assert.deepEqual(Object.keys(defaultProbes({store:{},home:'x'})),Object.keys(CONNECTIONS));
+ assert.deepEqual(Object.keys(defaultProbes({store:{},home:'x',server:true})),Object.keys(CONNECTIONS));
  let checks=0;
  const imap=()=>({status:()=>({state:'connected'}),check:async()=>{checks++;return {state:'disconnected'};}});
  assert.deepEqual(await defaultProbes({store:{},home:'x',imap}).mail(),{set_up:true,ok:false,kind:'sign-in'});
@@ -288,7 +290,7 @@ test('the GitHub probe only reads the remote',async t=>{
 
 test('the probes cover exactly the connections Settings names, in the same order',()=>{
  assert.deepEqual(Object.keys(CONNECTIONS),Object.keys(CONNECTION_NAMES));
- assert.deepEqual(Object.keys(defaultProbes({store:{},home:'x'})),Object.keys(CONNECTION_NAMES));
+ assert.deepEqual(Object.keys(defaultProbes({store:{},home:'x',server:true})),Object.keys(CONNECTION_NAMES));
 });
 
 test('a recovery closes only its own connection\'s deadline, never another that closes itself',async t=>{
@@ -370,4 +372,47 @@ test('a recovery marker that cannot be written does not stop the connections aft
  fs.rmSync(path.join(root,'.godspeed','connection-check'));
  await checkConnections({store,day:D3,probes:stubs()});
  assert.equal(deadlines(store).find(d=>/^ai:/.test(d.key)).state,'closed','the deadline is still pending after the failed day, so the next working day closes it');
+});
+
+// THE DISK ON A SERVER (#238). The file-system reading is a stub; the notices and deadlines are real.
+const diskStubs=(percent,over={})=>stubs({disk:diskProbe({store:{root:'/srv/godspeed'},home:'/srv/hermes',used:()=>percent(),biggest:()=>[{folder:'/srv/hermes/sessions',bytes:5*1024**3},{folder:'/srv/godspeed/media',bytes:3*1024**3},{folder:'/srv/godspeed/routines',bytes:512*1024**2}],...over})});
+test('the disk warning names the actual three largest direct folders in descending order',async t=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-disk-folders-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ const folders=[['small',1000],['second',2000],['largest',4000],['third',3000]].map(([name,bytes])=>{const folder=path.join(root,name);fs.mkdirSync(folder);fs.writeFileSync(path.join(folder,'data'),'.'.repeat(bytes));return folder;});
+ const result=await diskProbe({store:{root},used:()=>86})();
+ const largest=[folders[2],folders[3],folders[1]];
+ assert.deepEqual(largest.map(folder=>result.words.indexOf(folder+' (')),[...largest.map(folder=>result.words.indexOf(folder+' ('))].sort((a,b)=>a-b));
+ for(const folder of largest)assert.match(result.words,new RegExp(folder.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
+ assert.equal(result.words.includes(folders[0]+' ('),false);
+});
+test('the disk: 70% and 82% say nothing, 86% says it once with the three biggest folders and one deadline, 78% closes it',async t=>{
+ const {store}=fixture(t);let percent=70;
+ const probes=diskStubs(()=>percent);
+ await checkConnections({store,day:D1,probes});percent=82;await checkConnections({store,day:D1,probes});
+ assert.deepEqual(readNotices(store),[]);assert.deepEqual(deadlines(store),[]);
+ percent=86;await checkConnections({store,day:D2,probes});
+ const told=readNotices(store);assert.equal(told.length,1);
+ assert.match(told[0].text,/86% full/);for(const folder of ['/srv/hermes/sessions (5.0 GB)','/srv/godspeed/media (3.0 GB)','/srv/godspeed/routines (512 MB)'])assert.ok(told[0].text.includes(folder),folder);
+ assert.equal(deadlines(store).length,1);assert.equal(deadlines(store)[0].state,'open');
+ await checkConnections({store,day:D3,probes});
+ assert.equal(readNotices(store).length,1,'the next run at 86% says nothing more');assert.equal(deadlines(store).length,1);
+ percent=82;await checkConnections({store,day:D3,probes});
+ assert.equal(deadlines(store)[0].state,'open','between 80% and 85% nothing changes');
+ percent=78;await checkConnections({store,day:D3,probes});
+ assert.equal(deadlines(store)[0].state,'closed');assert.equal(readNotices(store).length,1);
+});
+test('a desktop install has no disk source',async t=>{
+ const {store}=fixture(t);
+ assert.equal(defaultProbes({store,home:'/h',server:false}).disk,undefined);
+ assert.equal(typeof defaultProbes({store,home:'/h',server:true}).disk,'function');
+ const {disk,...desktopProbes}=stubs();
+ const record=await checkConnections({store,day:D1,probes:desktopProbes});
+ assert.equal(record.connections.disk,undefined);
+});
+test('the routine entry point includes the disk only on a server install',async t=>{
+ const {root,store}=fixture(t);const home=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-connection-home-'));t.after(()=>fs.rmSync(home,{recursive:true,force:true}));
+ const desktop=await runConnectionCheck({root,home,env:{GODSPEED_TODAY:D1}});
+ assert.equal(desktop.connections.disk,undefined);
+ const server=await runConnectionCheck({root,home,env:{GODSPEED_TODAY:D2,GODSPEED_WEB_ADDRESS:'https://godspeed.example'}});
+ assert.equal(typeof server.connections.disk?.set_up,'boolean');
 });

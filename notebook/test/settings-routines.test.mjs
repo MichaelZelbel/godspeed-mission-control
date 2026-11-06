@@ -586,11 +586,11 @@ test('an adopted mission control gets the notice sender, keeps the notices queue
  const {root,home,store,hermes,tick,job,runScript}=await adoptedFixture(t),{queueNotice,readNotices}=await import('../core/notices.mjs');
  queueNotice(store,{id:'before-1',text:'An old notice.'});
  await tick();
- assert.deepEqual(hermes.calls.filter(c=>c[1]==='create').map(c=>c[c.indexOf('--name')+1]),['Godspeed notices'],'one job, the sender');
+ assert.deepEqual(hermes.calls.filter(c=>c[1]==='create').map(c=>c[c.indexOf('--name')+1]),['Nightly cleanup','Godspeed notices'],'the cleanup and sender');
  const sender=job('Godspeed notices');assert.equal(sender.schedule.expr,'*/15 * * * *');assert.equal(sender.no_agent,true);assert.equal(sender.script,'godspeed-notices.py');assert.equal(sender.workdir,root);assert.equal(sender.enabled,true);
  assert.ok(!store.get('settings','starting-routines'));assert.equal(fs.existsSync(path.join(root,'coach','weekly-check-in')),false);
  const old=readNotices(store).find(n=>n.id==='before-1');assert.match(old.not_sent.reason,/before Godspeed began sending/);
- await tick();assert.equal(hermes.calls.filter(c=>c[1]==='create').length,1,'made once');
+ await tick();assert.equal(hermes.calls.filter(c=>c[1]==='create').length,2,'made once');
  queueNotice(store,{id:'between-1',text:'Queued after the job was made, before it first ran.'});
  assert.equal(runScript('godspeed-notices.py'),'','the first run says nothing that was queued before it');
  assert.match(readNotices(store).find(n=>n.id==='between-1').not_sent.reason,/before Godspeed began sending/);
@@ -607,10 +607,10 @@ test('an adopted mission control gets the notice sender, keeps the notices queue
 
 test('a notice sender its owner removed from Hermes is not made again',{skip:!havePython&&'needs Python'},async t=>{
  const {hermes,tick,job}=await adoptedFixture(t),made=()=>hermes.calls.filter(c=>c[1]==='create').length;
- await tick();assert.equal(made(),1);
+ await tick();assert.equal(made(),2);
  hermes.write(hermes.jobs().filter(j=>j.name!=='Godspeed notices'));
  await tick();await tick();
- assert.equal(job('Godspeed notices'),undefined,'it stays removed');assert.equal(made(),1,'and no create is attempted');
+ assert.equal(job('Godspeed notices'),undefined,'it stays removed');assert.equal(made(),2,'and no create is attempted');
 });
 
 test('a notice queued before the first start stays held after more than 200 later deliveries, and a restored unmarked copy is not sent',{skip:!havePython&&'needs Python'},async t=>{
@@ -655,7 +655,7 @@ test('Settings lists the routines of an adopted mission control, all off, and a 
 test('a routine switched on in an adopted mission control is made as on a starter-born one, paused when switched off, and no update switches it off',async t=>{
  noMail(t);
  const {root,home,store,hermes,scheduler,tick,job}=await adoptedFixture(t),{setRoutineSwitch,switchedOn}=await import('../core/routine-switches.mjs');
- await tick();assert.equal(hermes.jobs().length,1,'before any switch only the sender');
+ await tick();assert.equal(hermes.jobs().length,2,'before any switch the cleanup and sender run');
  // The daily connection check, with a messenger connected.
  fs.writeFileSync(path.join(home,'.env'),'TELEGRAM_BOT_TOKEN=123:abc\n');
  await tick();assert.equal(job(CONNECTION_JOB),undefined,'off: not made');

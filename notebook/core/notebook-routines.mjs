@@ -68,12 +68,12 @@ export function journalWanted(root){
 // THE DAILY CONNECTION CHECK (4 November 2026, #200; core/connection-check.mjs). A script routine at
 // 05:00 (earlier when an early Morning brief needs it first), before the morning briefing, made once on a machine that made its starting routines (one
 // that kept the reader's own routines never gets Godspeed's beside them). It starts on when this
-// install has Telegram or Gmail connected, a tracker with a mail rule, or a phone upload, and paused when it has none; the Routines list's
+// install has Telegram or Gmail connected, a tracker with a mail rule, a phone upload, an active routine, or a server install, and paused when it has none; the Routines list's
 // Pause and Resume is its switch. A second source, "your routines" (core/routine-check.mjs, #239),
 // reads Hermes' jobs list for a routine that did not run or keeps failing.
 export const CONNECTION_JOB='Daily connection check';
 export const CONNECTION_SCRIPT='godspeed-connection-check.py';
-export const CONNECTION_WHAT=`Early every morning, before your morning brief, it checks each connection you set up (${Object.values(CONNECTION_NAMES).map(c=>c.label).join(', ')}). It tells you only when one needs your sign-in or key, failed two mornings in a row, or your phone has not sent health data for 36 hours. It also reads the list of ${ROUTINES_LABEL}, without any call, and tells you once when one on an interval or cron schedule Godspeed creates did not run when it was due, or failed twice in a row. Other Hermes cron schedules do not create a missed-run notice, though their repeated failures still do. It sends nothing else.`;
+export const CONNECTION_WHAT=`Early every morning, before your morning brief, it checks each connection you set up (${Object.entries(CONNECTION_NAMES).filter(([name])=>name!=='disk').map(([,c])=>c.label).join(', ')}). It tells you only when one needs your sign-in or key, failed two mornings in a row, or your phone has not sent health data for 36 hours. On a server it also looks how full the disk is and tells you once when it passes 85%. It also reads the list of ${ROUTINES_LABEL}, without any call, and tells you once when one on an interval or cron schedule Godspeed creates did not run when it was due, or failed twice in a row. Other Hermes cron schedules do not create a missed-run notice, though their repeated failures still do. It sends nothing else.`;
 // THE MAIL COUNTS (4 November 2026, #215; core/mail-trackers.mjs). A script routine every morning at
 // 04:30 that counts the mails a tracker's mail rule names, from each mail's sender, subject and date
 // and never its text, and adds them to that tracker. It is made when a tracker has a mail rule and

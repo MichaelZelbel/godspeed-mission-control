@@ -2,20 +2,22 @@
 
 ## The routines your first goal starts
 
-The first time you give your mission control a goal, in the notebook's "Start with one goal" form
-or in the chat, it starts eight routines on the computer that runs your routines, on your own
-clock: the nightly goal research, the daily round's two, deadline reminders, the weekly check-in
-and the coach's reminders, the coaching talk preparation, and the daily connection check. It does
-this once on each computer that runs your routines: if you add a server later and let it run the
-routines, the server gets the same eight, and your computer's stop. A routine you
+Every installation schedules the nightly cleanup before any goal. The first time you give your
+mission control a goal, in the notebook's "Start with one goal" form or in the chat, it starts
+eight other routines on the computer that runs your routines, on your own clock: the nightly goal
+research, the daily round's two, deadline reminders, the weekly check-in and the coach's
+reminders, the coaching talk preparation and the daily connection check. It does this once on each
+computer that runs your routines: if you add a server later and let it run the routines, the server
+gets the same eight, and your computer's stop. A routine you
 later remove stays removed. A computer whose assistant already ran routines of its own before this
 mission control came, or for another folder, gets none of these; a one-time reminder, and a
 routine you asked for here, such as a morning brief, do not count.
 
-All of them are listed in your notebook under Settings > Routines, each with what it does, when it
-runs next, when it last ran and whether that worked. "Pause" there stops one until you press
-"Resume". You can also ask in the chat: "Pause the deadline reminders", "Move the weekly check-in
-to Saturday at six".
+All eight are listed in your notebook under Settings > Routines, each with what it does, when it
+runs next, when it last ran and whether that worked. The nightly cleanup is listed there too;
+pause "Nightly cleanup" directly there, rather than through an adopted mission control's routine
+switches. "Pause" stops one until you press "Resume". You can also ask in the chat: "Pause the
+deadline reminders", "Move the weekly check-in to Saturday at six".
 
 Where the results go: on a server with Telegram, to your Telegram chat. On your own computer, to
 your notebook, in the folder "From your routines", one note per run; a run with nothing to say
@@ -111,6 +113,20 @@ Last checked: 2026-10-09, both schedules run once by a real Hermes on a test com
 so both stayed quiet); the talk waiting in the chat tested without Telegram. A talk opened by a
 model is still to be watched.
 
+### Nightly cleanup
+
+Does: removes the assistant's old request dumps and session transcripts (except those still listed in
+its sessions.json) and the old run files of your routines (routines/research, work, next-action and
+coach-prep), once they have not been touched for 30 days. It never follows a link or leaves the
+file system, and touches nothing else: no database, configuration, skill, note or backup.
+Rhythm: every day at 02:45 your time. It runs on every installation.
+Lands: nowhere; it says nothing and only writes what it freed, per place, and the disk before and
+after to the routine's log.
+Lives: Hermes' schedule on the computer that runs your routines.
+Off-switch: Pause "Nightly cleanup" under Settings > Routines.
+Last checked: 2026-11-05, its script run by Python against a throwaway mission control in the
+notebook's tests; not yet watched on a real server.
+
 ### Daily connection check
 
 Does: early every morning it makes one harmless call to each network connection you set up: the AI
@@ -125,16 +141,19 @@ when it happens two mornings in a row. It also reads Hermes' local jobs list and
 when an enabled routine on an interval or a cron schedule Godspeed creates missed its time, or
 failed twice in a row; a successful run closes that notice. Other Hermes cron schedules do not
 create a missed-run notice, though their repeated failures still do. When everything works, it
-sends nothing. It runs no AI of its own.
-Rhythm: it joins the other seven at the notebook's next scheduling round after your first goal.
+sends nothing. It runs no AI of its own. On a server it also reads how full the local disk is; at
+85% full it tells you once and sets a deadline, which closes itself below 80%.
+Rhythm: it joins the other eight at the notebook's next scheduling round after your first goal.
 Every day at 05:00 your time, earlier when a morning brief set before 05:30 needs it first.
 It starts running when Telegram or Gmail is connected, a tracker has a mail rule, Health Auto
-Export has sent an accepted upload, or another routine is active, and waits paused while none is;
-once one of them is in place, it resumes by itself, unless you paused or resumed it yourself.
+Export has sent an accepted upload, another routine is active, or this is a server install, and
+waits paused while none is; once one of them is in place, it resumes by itself, unless you paused
+or resumed it yourself.
 Lands: in your Telegram chat when your assistant has Telegram connected, otherwise in your notebook.
 Lives: Hermes' schedule on the computer that runs your routines.
 May: make one harmless call to each network connection, read the phone's local accepted-upload
-receipt and Hermes' local jobs list, and set or close the deadline that goes with it.
+receipt, Hermes' local jobs list, or the server disk's local fullness, and set or close the deadline
+that goes with it.
 Off-switch: Pause "Daily connection check" under Settings > Routines.
 Last checked: 2026-11-05, source tests (2.0.0-beta.17); its first run on a real install is the
 release's scenario "connection-check".
@@ -145,7 +164,7 @@ The installer can start a separate notebook service at sign-in on Windows or thr
 
 Once private file synchronization is explicitly configured, the notebook checks it once a minute and after a durable file change. Automatic, manual and notebook connector requests share one synchronization worker. Slow Git network requests run in that worker without holding the local writer lock. Local commits and incoming changes retain the lock, and edits made during upload remain pending for the next cycle. Stopping the notebook terminates the synchronization process tree. File conflicts keep the original and both edited versions; a binary file retains exact bytes and can be resolved by choosing a saved version.
 
-These are installation mechanisms, not adopted personal goals. Personal routines are the eight above, which your first goal starts, and the ones you add in the chat or under Settings > Routines; their owner, next run, last run and pause state remain visible there. No routine is claimed tested merely because this description is packaged.
+These are installation mechanisms, not adopted personal goals. Personal routines are the eight first-goal routines above, the nightly cleanup scheduled before a goal, and the ones you add in the chat or under Settings > Routines; their owner, next run, last run and pause state remain visible there. No routine is claimed tested merely because this description is packaged.
 
 ## Goal decisions and approved local work
 
