@@ -104,6 +104,15 @@ test('the native coach keeps resolved spaced metrics ahead of timestamp-only ali
  nativeTick(store,'coach',now,query);assert.equal(query.rows('habits')[0].progress.lifetimeCompletedDays,1);
 });
 
+test('the native coach keeps resolved underscored metrics ahead of timestamp-only aliases',async()=>{
+ const store=new Store(temp()),query=new QueryService(store),domains=new Domains(query);store.save('settings',{id:'installation',timezone:'UTC'});
+ const talk=await domains.invoke('personal-operation',{type:'coach-open',area:'health',question:'Fictional heart rate?'});await domains.invoke('personal-operation',{type:'habit-agree',talk_id:talk.id,title:'Fictional steady heart rate',agreement:'I agree',auto:'resting_heart_rate >= 10',check_at:'2030-01-01T19:00:00Z'});
+ const now=new Date(Date.now()+86400000);now.setUTCHours(12,0,0,0);const day=new Date(now.getTime()-86400000).toISOString().slice(0,10);
+ store.save('health_observations',{metric:'resting_heart_rate',value:20,source:'Fictional manual',via:'manual',observed_on:day,date_precision:'day',observed_at:day+'T12:00:00.000Z'});
+ store.save('health_observations',{metric:'resting heart rate',value:5,source:'Fictional timestamp',observed_at:day+'T13:00:00.000Z'});
+ nativeTick(store,'coach',now,query);assert.equal(query.rows('habits')[0].progress.lifetimeCompletedDays,1);
+});
+
 test('the native coach uses a complete phone day as automatic evidence',async()=>{
  const store=new Store(temp()),query=new QueryService(store),domains=new Domains(query);store.save('settings',{id:'installation',timezone:'UTC'});
  const talk=await domains.invoke('personal-operation',{type:'coach-open',area:'health',question:'Fictional complete protein?'});await domains.invoke('personal-operation',{type:'habit-agree',talk_id:talk.id,title:'Fictional complete protein day',agreement:'I agree',auto:'protein_g >= 10',check_at:'2030-01-01T19:00:00Z'});
