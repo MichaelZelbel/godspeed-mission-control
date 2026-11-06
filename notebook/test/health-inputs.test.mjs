@@ -154,12 +154,15 @@ test('phone day state uses its strict cutoff, while manual and food entries sett
  assert.equal(currentHealth(query,{now}).days.find(row=>row.date==='2026-11-03').columns.steps.state,'legacy');
 });
 
-test('a pre-phone health-add row settles its local day ahead of a later phone upload',()=>{
- const {store,query}=setup(),now=Date.parse('2026-11-05T10:00:00Z'),day='2026-11-04';
- store.save('health_observations',{metric:'protein_g',value:80,unit:'g',observed_at:'2026-11-03T23:30:00Z',source_id:null});
- store.save('health_observations',{metric:'protein_g',value:5,source:PHONE_SOURCE,via:'phone-receiver',observed_on:day,date_precision:'day',observed_at:day+'T00:00:00Z',data_until:'19:55:00'});
- const protein=currentHealth(query,{now}).days[0].columns.protein_g;
- assert.deepEqual(protein,{value:80,source:'manual',state:'settled'});
+test('pre-phone health-add rows settle the oldest local day ahead of later phone uploads',()=>{
+ const {store,query}=setup(),now=Date.parse('2026-11-05T10:00:00Z'),day='2026-10-29';
+ for(const [metric,value,source_id] of [['protein_g',80,null],['carbs_g',90,'historical-message']]){
+  store.save('health_observations',{metric,value,unit:'g',observed_at:'2026-10-28T23:30:00Z',source_id});
+  store.save('health_observations',{metric,value:5,source:PHONE_SOURCE,via:'phone-receiver',observed_on:day,date_precision:'day',observed_at:day+'T00:00:00Z',data_until:'19:55:00'});
+ }
+ const columns=currentHealth(query,{now}).days.find(entry=>entry.date===day).columns;
+ assert.deepEqual(columns.protein_g,{value:80,source:'manual',state:'settled'});
+ assert.deepEqual(columns.carbs_g,{value:90,source:'manual',state:'settled'});
 });
 
 test('the installation timezone leaves its current phone day unjudged',()=>{
