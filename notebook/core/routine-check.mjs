@@ -4,7 +4,7 @@ import {atomic,hash} from './records/store.mjs';
 import {hermesJobs,pausedJob} from './native-scheduler.mjs';
 import {routineStatus} from './starting-routines.mjs';
 import {readNotebookRoutines,CONNECTION_SCRIPT} from './notebook-routines.mjs';
-import {cronOf} from './routine-times.mjs';
+import {cronOf,cronCalendar} from './routine-times.mjs';
 import {tellOwner} from './connection-check.mjs';
 import {CONNECTION_NOTICE_PREFIX} from './connection-names.mjs';
 import {AI_SIGN_IN,scrubCredentials} from './runtime.mjs';
@@ -24,6 +24,7 @@ export const ROUTINES_RECORD_FILE='connection-check-routines.json';
 const HOUR=3600000,DAY=24*HOUR;
 
 const time=value=>{const at=Date.parse(value);return Number.isFinite(at)?at:null;};
+const all=(count,from=0)=>new Set(Array.from({length:count},(_,index)=>index+from));
 const errorWords=text=>{const said=/\bstderr:\s*\n\s*(\S[^\n]*)/.exec(String(text||''));return scrubCredentials((said?said[1]:String(text||'').split(/\r?\n/).find(l=>l.trim())||'').trim()).slice(0,200);};
 
 // The time Hermes gives a late tick before a run counts as missed: half the period, between 2 minutes and 2 hours (Hermes' own catch-up grace).
@@ -36,31 +37,16 @@ const localParts=(at,timezone)=>{
  let formatter=datePartsFormatters.get(timezone);if(!formatter){formatter=new Intl.DateTimeFormat('en-GB',{timeZone:timezone,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'});datePartsFormatters.set(timezone,formatter);}
  return Object.fromEntries(formatter.formatToParts(new Date(at)).filter(p=>p.type!=='literal').map(p=>[p.type,Number(p.value)]));
 };
-const CRON_NAMES={month:{jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12},weekday:{sun:0,mon:1,tue:2,wed:3,thu:4,fri:5,sat:6}};
-function cronPart(words,min,max,names={}){
- const values=new Set(),number=value=>{const named=names[String(value).toLowerCase()];const n=named===undefined?Number(value):named;return Number.isInteger(n)&&n>=min&&n<=max?n:null;};
- for(const word of words.split(',')){
-  const [range,by='1',...rest]=word.split('/'),step=Number(by);if(rest.length||!Number.isInteger(step)||step<1) return null;
-  let start=min,end=max;
-  if(range!=='*'){
-   const [first,last,...more]=range.split('-');if(more.length)return null;
-   start=number(first);end=last===undefined?start:number(last);if(start===null||end===null||end<start)return null;
-  }
-  for(let n=start;n<=end;n+=step)values.add(n);
- }
- return values;
-}
 function cronSchedule(job){
- const [minute,hour,monthDay,month,weekday,second,...rest]=cronOf(job).trim().split(/\s+/);if(rest.length||!minute||!hour||!monthDay||!month||!weekday)return null;
- const fields=[[minute,0,59],[hour,0,23],[monthDay,1,31],[month,1,12,CRON_NAMES.month],[weekday,0,7,CRON_NAMES.weekday],[second||'0',0,59]].map(([words,min,max,names])=>cronPart(words==='?'?'*':words,min,max,names));
- if(fields.some(f=>f===null))return null;
- const [minutes,hours,days,months,weekdays,seconds]=fields;if(weekdays.has(7)){weekdays.delete(7);weekdays.add(0);}
- const daysAny=days.size===31,weekdaysAny=weekdays.size===7;
- // Missed-run checks recognize the calendar forms Settings and the starting routines create: every
- // month, every day or one day of the month, and optional weekdays. Other Hermes cron forms stay
- // quiet for missed runs; their recorded failures are still checked below.
- if(months.size!==12||!daysAny&&days.size!==1)return null;
- return {minutes,hours,days,months,weekdays,seconds,daysAny,weekdaysAny};
+ const fields=cronOf(job).split(/\s+/);
+ if(fields.join(' ')==='*/15 * * * *')return {minutes:new Set([0,15,30,45]),hours:all(24),days:all(31,1),months:all(12,1),weekdays:all(7),seconds:new Set([0]),daysAny:true,weekdaysAny:true};
+ const [minute,hour,monthDay,month,weekday,second,...rest]=fields;if(rest.length||!minute||!hour||!monthDay||!month||!weekday||(second!==undefined&&(!/^\d{1,2}$/.test(second)||Number(second)>59)))return null;
+ const calendar=cronCalendar([minute,hour,monthDay,month,weekday].join(' '));
+ if(calendar){
+  const times=calendar.times.map(t=>t.split(':').map(Number)),daysAny=calendar.month_day===null,weekdays=new Set(calendar.weekdays);
+  return {minutes:new Set(times.map(([,minute])=>minute)),hours:new Set(times.map(([hour])=>hour)),days:new Set(daysAny?all(31,1):[calendar.month_day]),months:all(12,1),weekdays,seconds:new Set([Number(second||0)]),daysAny,weekdaysAny:weekdays.size===7};
+ }
+ return null;
 }
 function cronMinuteDue(schedule,local){
  const weekday=new Date(Date.UTC(local.year,local.month-1,local.day)).getUTCDay(),dayMatches=schedule.days.has(local.day),weekdayMatches=schedule.weekdays.has(weekday);

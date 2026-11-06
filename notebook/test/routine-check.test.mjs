@@ -30,10 +30,15 @@ test('a first run is quiet until an occurrence after it was made is overdue',()=
  }
 });
 
-test('an advanced stepped-cron next run still reports its latest missed occurrence',()=>{
+test('a quarter-hourly starting routine reports its latest missed occurrence',()=>{
  const job=daily('stepped',{schedule:{kind:'cron',expr:'*/15 * * * *'},last_run_at:'2026-11-05T03:30:00Z',next_run_at:'2026-11-05T05:15:00Z'});
  const {found}=routineFinding(job,{},{now:NOW,day:DAY,timezone:'UTC'});
  assert.match(found.words,/Thursday 5 November at 04:45/);
+});
+
+test('an unsupported Hermes cron does not create a missed-run notice',()=>{
+ const job=daily('custom-month',{schedule:{kind:'cron',expr:'0 9 * 1 *'},last_run_at:'2025-01-09T09:00:00Z',next_run_at:'2027-01-09T09:00:00Z'});
+ assert.equal(routineFinding(job,{},{now:NOW,day:DAY,timezone:'UTC'}).found,null);
 });
 
 test('an interval routine uses its own recurrence',()=>{
