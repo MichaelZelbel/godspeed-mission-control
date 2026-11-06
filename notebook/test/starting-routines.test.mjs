@@ -470,7 +470,8 @@ test('every routine wrapper the notebook writes names a routine the Python runne
 for(const [kind,days,words] of [['sign-in',['2026-11-04'],/Telegram/],['other',['2026-11-04','2026-11-05'],/Telegram/]])test(`the daily connection check says the ${kind} notice the connection check really queued`,{skip:!havePython&&'no Python here'},async t=>{
  const {root,home}=scriptFixture(t),store=new Store(root,{device:'pc'}),said=path.join(home,'godspeed-notices-said.json');
  const ok=async()=>({set_up:true,ok:true});
- for(const day of days)await checkConnections({store,day,probes:{ai:ok,telegram:async()=>({set_up:true,ok:false,kind}),github:ok,mail:ok,agentmail:ok}});
+ // Every source has a probe, as the daily check gives them; this install has no phone set up, so the phone raises nothing.
+ for(const day of days)await checkConnections({store,day,probes:{ai:ok,telegram:async()=>({set_up:true,ok:false,kind}),github:ok,mail:ok,agentmail:ok,phone:async()=>({set_up:false})}});
  const queued=path.join(store.state,'notices.json'),id=JSON.parse(fs.readFileSync(queued,'utf8')).notices[0].id;
  const code=`import sys,types;sys.path.insert(0,${JSON.stringify(path.join(home,'scripts'))})
 import godspeed_routines as g
