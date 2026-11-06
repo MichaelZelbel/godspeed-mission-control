@@ -2613,6 +2613,9 @@ section no-question-he-cannot-judge
 Q=$TMP/nq
 nq_good "$Q/good"
 passes 'five situations: nothing for 1, 2, 4, 5, one question and one confirming reply for 3' no-question-he-cannot-judge "$Q/good" 'none holds a code'
+copy "$Q/good" "$Q/driver-malformed"
+printf '{\n' >"$Q/driver-malformed/run.json"
+refuses 'no-question: an unreadable owner-driver record' no-question-he-cannot-judge "$Q/driver-malformed" 'owner-driver record cannot be read'
 copy "$Q/good" "$Q/asker-failed"
 printf '{"outbox":[],"steps":[{"label":"s1","kind":"cron","success":false,"error":"this install has no godspeed-step, the one way to ask for a yes (ticket 01, #196)"}]}\n' >"$Q/asker-failed/run.json"
 refuses 'an asker that cannot ask (no godspeed-step)' no-question-he-cannot-judge "$Q/asker-failed" 'no godspeed-step'
@@ -2686,6 +2689,9 @@ section plain-yes
 P=$TMP/py
 py_good "$P/good"
 passes 'plain yes, two waiting, a button, and nothing waiting' plain-yes "$P/good" 'approved nothing'
+copy "$P/good" "$P/driver-malformed"
+printf '{\n' >"$P/driver-malformed/run.json"
+refuses 'plain yes: an unreadable owner-driver record' plain-yes "$P/driver-malformed" 'owner-driver record cannot be read'
 copy "$P/good" "$P/a-open"
 rows "$P/a-open/approvals-a.json" pending a1 "$PA"
 refuses 'a yes to one waiting step that approved nothing' plain-yes "$P/a-open" 'did not approve it'
@@ -2738,6 +2744,9 @@ section what-was-that
 W=$TMP/ww
 ww_good "$W/good"
 passes 'a report recorded with its facts and explained afterwards' what-was-that "$W/good" 'was answered with the backup and GitHub'
+copy "$W/good" "$W/driver-malformed"
+printf '{\n' >"$W/driver-malformed/run.json"
+refuses 'what was that: an unreadable owner-driver record' what-was-that "$W/driver-malformed" 'owner-driver record cannot be read'
 copy "$W/good" "$W/not-recorded"
 printf '{"data":[]}\n' >"$W/not-recorded/conversation_messages-report.json"
 refuses 'a report that was not recorded in the chat' what-was-that "$W/not-recorded" 'not recorded where the chat reads it'
@@ -2777,6 +2786,9 @@ section connection-check
 C=$TMP/cc
 cc_good "$C/good"
 passes 'silent while fine, one message and one deadline when broken, closed when repaired' connection-check "$C/good" 'told the owner once'
+copy "$C/good" "$C/driver-malformed"
+printf '{\n' >"$C/driver-malformed/run.json"
+refuses 'connection check: an unreadable owner-driver record' connection-check "$C/driver-malformed" 'owner-driver record cannot be read'
 copy "$C/good" "$C/no-routine"
 printf '[{"id":"r1","name":"Journal check-ins"}]\n' >"$C/no-routine/routines.json"
 refuses 'an install with no Daily connection check' connection-check "$C/no-routine" 'has no Daily connection check'
@@ -3114,6 +3126,9 @@ refuses 'a routine that ends 1 on the long chat' chat-tidy-at-night "$CT/routine
 copy "$CT/good" "$CT/summary-in-front"
 printf 'Summary of our earlier conversation: you asked about sleep.\nHello\n' >"$CT/summary-in-front/next-reply.txt"
 refuses 'an answer with a summary in front' chat-tidy-at-night "$CT/summary-in-front" 'has a summary in front'
+copy "$CT/good" "$CT/context-in-front"
+printf 'Context: the earlier exchange was about sleep.\nHello\n' >"$CT/context-in-front/next-reply.txt"
+refuses 'an answer with context in front' chat-tidy-at-night "$CT/context-in-front" 'has a summary in front'
 copy "$CT/good" "$CT/wrong-answer"
 printf 'Bonjour\n' >"$CT/wrong-answer/next-reply.txt"
 refuses 'an answer that is not the one asked for' chat-tidy-at-night "$CT/wrong-answer" 'not the answer asked for'
@@ -3190,7 +3205,7 @@ dc_good() { # <folder>
   rm -rf "$f"
   mkdir -p "$f"
   OUTBOX='' steps_json "$f" broken=ok both-open=ok replace=ok checked=ok key-replaced=ok repaired=ok
-  printf '[{"slug":"key-ai-key","title":"The key your AI thinks with needs replacing","state":"open"}]\n' >"$f/due-before.json"
+  printf '[{"slug":"key-ai-key","title":"The key your AI thinks with needs replacing","state":"open","selfCheck":"the date in secrets/expires.txt moves forward"}]\n' >"$f/due-before.json"
   printf '[{"slug":"key-ai-key","title":"The key","state":"open"},{"slug":"connection-telegram-2026-11-05","title":"Connect Telegram again","state":"open"}]\n' >"$f/due-both-open.json"
   printf '[{"slug":"key-ai-key","title":"The key","state":"closed"},{"slug":"connection-telegram-2026-11-05","title":"Connect Telegram again","state":"open"}]\n' >"$f/due-key-replaced.json"
   printf '[{"slug":"key-ai-key","title":"The key","state":"closed"},{"slug":"connection-telegram-2026-11-05","title":"Connect Telegram again","state":"closed"}]\n' >"$f/due-repaired.json"
@@ -3199,6 +3214,9 @@ dc_good() { # <folder>
 }
 dc_good "$DC/good"
 passes 'the key deadline closed by the replaced key, the connection one by the check, no key in any file' deadline-closes-itself "$DC/good" 'the deadline on the key closed on the deadline run'
+copy "$DC/good" "$DC/installed-key-slug"
+sed -i 's/key-ai-key/installed-key-record/g' "$DC/installed-key-slug"/due-*.json
+passes 'the installed key deadline slug, rather than a derived copy, is followed' deadline-closes-itself "$DC/installed-key-slug" 'the deadline on the key closed on the deadline run'
 copy "$DC/good" "$DC/not-open-before"
 printf '[]\n' >"$DC/not-open-before/due-before.json"
 refuses 'a key that has no deadline to begin with' deadline-closes-itself "$DC/not-open-before" 'absent, not open, before anything ran'
@@ -3220,6 +3238,9 @@ refuses 'a key in a log' deadline-closes-itself "$DC/key-leaked" 'a key'"'"'s va
 copy "$DC/good" "$DC/step-broke"
 OUTBOX='' steps_json "$DC/step-broke" broken=ok replace=bad
 refuses 'a step that broke' deadline-closes-itself "$DC/step-broke" 'a step of the run did not work'
+copy "$DC/good" "$DC/driver-malformed"
+printf '{\n' >"$DC/driver-malformed/run.json"
+refuses 'an unreadable owner-driver record' deadline-closes-itself "$DC/driver-malformed" 'owner-driver record cannot be read'
 
 # ------------------------------------------------------------------------------------ disk-filling
 section disk-filling

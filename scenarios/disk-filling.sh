@@ -46,7 +46,7 @@ scenario_arguments "$@"
 HOME_IN=/opt/data
 WORKSPACE_IN=/opt/data/godspeed
 KIT_IN=/opt/godspeed/kit
-CHECK_SCRIPT=godspeed-connection-check.py
+CHECK_ROUTINE='Daily connection check'
 CLEAN_PATTERN='clean'
 
 dx() { sudo docker exec -u hermes -e HOME="$HOME_IN" godspeed "$@"; }
@@ -181,6 +181,15 @@ let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{
 });' "$CLEAN_PATTERN"
 }
 
+routine_script() { # <routine name>
+  dx cat "$HOME_IN/cron/jobs.json" | "$NODE" -e '
+let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{
+ try{const d=JSON.parse(s);const jobs=Array.isArray(d)?d:d.jobs||[];
+  const job=jobs.find(j=>j&&j.name===process.argv[1]&&j.script);
+  if(job)process.stdout.write(String(job.script));}catch{}
+});' "$1"
+}
+
 act() {
   fresh_evidence
   need_node
@@ -191,18 +200,21 @@ act() {
     fail "the server line for $STAGE_REF failed before this scenario could do anything (its words are in the step log)"
   wait_for 300 "the server to be healthy" container_is_healthy || fail "the server is not healthy after its install"
   dx test -f "$KIT_IN/notebook/bin/personal-command.mjs" || fail "the server image carries no notebook ($KIT_IN/notebook/bin/personal-command.mjs), so it has no connection check"
-  dx test -f "$HOME_IN/scripts/$CHECK_SCRIPT" || fail "the server has no $CHECK_SCRIPT among its routines' scripts ($HOME_IN/scripts), so it has no daily connection check"
+  local check_script
+  check_script=$(routine_script "$CHECK_ROUTINE")
+  [ -n "$check_script" ] || fail "the server has no installed routine named \"$CHECK_ROUTINE\" with a script"
+  dx test -f "$HOME_IN/scripts/$check_script" || fail "the installed $CHECK_ROUTINE script is not in $HOME_IN/scripts ($check_script)"
   small_disk_over_the_volume
 
   deadlines_now before
   disk_reads 86 86
   sudo du -xB1 --max-depth=1 "$VOLUME" | sort -rn | sed '1d;4q' | cut -f2 | xargs -n1 basename >"$EVIDENCE/biggest.txt"
-  run_in_the_server "$CHECK_SCRIPT" first
+  run_in_the_server "$check_script" first
   deadlines_now first
-  run_in_the_server "$CHECK_SCRIPT" second
+  run_in_the_server "$check_script" second
   deadlines_now second
   disk_reads 75 75
-  run_in_the_server "$CHECK_SCRIPT" low
+  run_in_the_server "$check_script" low
   deadlines_now low
 
   plant_the_old_files
@@ -273,10 +285,8 @@ check() { # <evidence folder>
   # The cleanup routine: what was old and nobody's went, the rest stayed.
   [ "$(cat "$folder/clean-exit" 2>/dev/null)" = 0 ] ||
     fail "the cleanup routine ended $(cat "$folder/clean-exit" 2>/dev/null || echo '(never)'): $(head -1 "$folder/clean-log" 2>/dev/null)"
-  for entry in "request-dump go" "session-transcript go" "run-log go" "note stay" "archived-chat stay" \
-    "unarchived-chat stay" "backup stay" "listed-session-file stay"; do
-    label=${entry% *}
-    kind=${entry#* }
+  for entry in "${OLD_FILES[@]}"; do
+    IFS='|' read -r label _ kind <<<"$entry"
     state=$(sed -n "s/^$label \\(present\\|gone\\)\$/\\1/p" "$folder/after-clean.txt")
     before=$(sed -n "s/^$label \\(present\\|gone\\)\$/\\1/p" "$folder/planted.txt")
     [ "$before" = present ] || fail "the old file $label was not there before the cleanup routine ran"

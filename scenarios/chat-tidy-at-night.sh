@@ -37,7 +37,6 @@ SCENARIO=chat-tidy-at-night
 scenario_arguments "$@"
 
 ROUTINE='Night chat tidy-up'
-SCRIPT=godspeed-chat-tidy.py
 LONG=scenario-chat-1
 SHORT=scenario-short-3
 NEXT_MESSAGE='Reply with the single word Hello.'
@@ -48,16 +47,28 @@ routine_is_there() { grep -qF "$ROUTINE" "$HERMES/cron/jobs.json" 2>/dev/null; }
 # shellcheck disable=SC2329
 chat_store_is_ready() { chat_store count --session "$LONG" >/dev/null 2>&1; }
 
+routine_script() {
+  "$NODE" -e '
+const fs=require("fs");
+try {
+ const data=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));
+ const jobs=Array.isArray(data)?data:data.jobs||[];
+ const job=jobs.find(job=>job&&job.name===process.argv[2]&&job.script);
+ if(job)process.stdout.write(String(job.script));
+} catch {}
+' "$HERMES/cron/jobs.json" "$ROUTINE"
+}
+
 # The routine, started by hand the way the routine runs it: the script file the notebook wrote, from
 # the assistant's own scripts folder, with the assistant's own Python.
-run_the_routine() { # <name for the evidence>
-  local scripts=$HERMES/scripts name=$1 python code
+run_the_routine() { # <script> <name for the evidence>
+  local scripts=$HERMES/scripts script=$1 name=$2 python code
   python=$(json_value "$scripts/godspeed-routines.json" hermes_python) ||
     fail "the routine's own settings name no Python for the assistant, so the night routine could not be run"
   [ -n "$python" ] && [ "$python" != null ] ||
     fail "the install found no Python of the assistant's own, so the night routine cannot run at all"
-  say "Running the routine ($name): $python $scripts/$SCRIPT"
-  (cd "$scripts" && "$python" "$scripts/$SCRIPT") >"$EVIDENCE/$name-said" 2>"$EVIDENCE/$name-log"
+  say "Running the routine ($name): $python $scripts/$script"
+  (cd "$scripts" && "$python" "$scripts/$script") >"$EVIDENCE/$name-said" 2>"$EVIDENCE/$name-log"
   code=$?
   printf '%s\n' "$code" >"$EVIDENCE/$name-exit"
   say "  it ended $code; its log:"
@@ -79,7 +90,10 @@ act() {
     show_assistant_home
     fail "the notebook never made the routine \"$ROUTINE\" on this install, although the assistant has a chat app"
   }
-  [ -f "$HERMES/scripts/$SCRIPT" ] || fail "the routine is there but its script is not ($HERMES/scripts/$SCRIPT)"
+  local script
+  script=$(routine_script)
+  [ -n "$script" ] || fail "the installed routine named \"$ROUTINE\" has no script in $HERMES/cron/jobs.json"
+  [ -f "$HERMES/scripts/$script" ] || fail "the routine is there but its installed script is not ($HERMES/scripts/$script)"
 
   # The limit is the installed routine's own, read from the runner the routine scripts import, so a changed default is followed.
   [ -f "$HERMES/scripts/godspeed_routines.py" ] || fail "the routines' runner is not installed ($HERMES/scripts/godspeed_routines.py)"
@@ -91,14 +105,14 @@ act() {
     fail "a conversation under the limit could not be seeded into the assistant's chat store"
   chat_store dump --session "$SHORT" >"$EVIDENCE/short-before.txt"
   chat_store count --session "$SHORT" >"$EVIDENCE/short-count.txt"
-  run_the_routine short
+  run_the_routine "$script" short
   chat_store dump --session "$SHORT" >"$EVIDENCE/short-after.txt"
 
   say "A conversation past the limit (174,000 recorded tokens), quiet for an hour, in the same place"
   chat_store seed --session "$LONG" --tokens 174000 --quiet-minutes 60 --messages 40 >&2 ||
     fail "a conversation past the limit could not be seeded into the assistant's chat store"
   chat_store count --session "$LONG" >"$EVIDENCE/long-before.txt"
-  run_the_routine long
+  run_the_routine "$script" long
   chat_store count --session "$LONG" >"$EVIDENCE/long-after.txt"
 
   local executable code
@@ -150,17 +164,14 @@ check() { # <evidence folder>
   grep -qiE 'tidied|summaris|compress' "$folder/long-log" ||
     fail "the night routine's log does not say it tidied the conversation: $(tail -1 "$folder/long-log")"
 
-  # The next message: answered, and nothing summary-like in front of the answer.
+  # The next message: answered with exactly the one word requested, after its metadata.
   [ "$(cat "$folder/next-exit")" = 0 ] ||
     fail "the assistant ended $(cat "$folder/next-exit") on the next message to the tidied conversation: $(head -c 300 "$folder/next-reply.txt" | tr '\n' ' ')"
   local reply
   reply=$(grep -vE '^[[:space:]]*(session_id|Session|Resumed)[: ]' "$folder/next-reply.txt" | sed '/^[[:space:]]*$/d')
   [ -n "$reply" ] || fail "the assistant answered the next message with nothing"
-  grep -qi 'hello' <<<"$reply" || fail "the answer to the next message is not the answer asked for: $(head -c 300 <<<"$reply" | tr '\n' ' ')"
-  if grep -qiE 'summary|summari[sz]ed|earlier (part of )?(our|the) conversation|context (compaction|was compacted)|previous conversation' <<<"$reply" ||
-    [ "$(wc -c <<<"$reply")" -gt 600 ]; then
-    fail "the answer to the next message has a summary in front of it or is far longer than asked: $(head -c 300 <<<"$reply" | tr '\n' ' ')"
-  fi
+  [ "$reply" = Hello ] ||
+    fail "the answer to the next message has a summary in front of it or is not the answer asked for: $(head -c 300 <<<"$reply" | tr '\n' ' ')"
 
   # The conversation under the limit: left exactly as it was.
   [ "$(cat "$folder/short-exit")" = 0 ] ||

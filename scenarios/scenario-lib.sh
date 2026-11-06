@@ -1250,7 +1250,8 @@ owner_on_telegram() { # <steps file> <run file>
 # --- what the checking part asks of what was kept
 # The first step of a run that did not succeed, as one sentence for FAIL, or nothing.
 step_failure() { # <run.json>
-  "$NODE" "$HERE/telegram-judge.mjs" failed "$1" || true
+  "$NODE" "$HERE/telegram-judge.mjs" failed "$1" ||
+    fail "the owner-driver record cannot be read, so the run cannot prove what happened: $1"
 }
 # FAILs when any message sent in the run holds a code the owner would have to type or hold (what a
 # code is: telegram-judge.mjs). Waiting-step snapshots add their ids to the codes to look for.

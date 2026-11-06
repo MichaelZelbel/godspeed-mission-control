@@ -37,7 +37,6 @@ scenario_arguments "$@"
 
 CHECK_ROUTINE='Daily connection check'
 KEY_NAME=ai-key
-KEY_SLUG=key-ai-key
 FIRST_KEY='sk-scenario-first-key-0000000000000000'
 
 # The first key, connected the way connect_the_ai connects the real one.
@@ -121,8 +120,20 @@ state_of() { # <due file> <slug>
   "$NODE" "$HERE/telegram-judge.mjs" state "$1" "$2"
 }
 
+key_deadline_slug() { # <due state file>
+  "$NODE" -e '
+const fs=require("fs");
+try {
+ const data=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));
+ const rows=Array.isArray(data)?data:data.data||[];
+ const keys=rows.filter(row=>row&&row.selfCheck==="the date in secrets/expires.txt moves forward"&&row.slug);
+ if(keys.length===1)process.stdout.write(String(keys[0].slug));
+} catch {}
+' "$1"
+}
+
 check() { # <evidence folder>
-  local folder=$1 label text opened title slug state
+  local folder=$1 label text opened title slug key_slug state
   [ -d "$folder" ] || fail "there is nothing at $folder, so this scenario kept no evidence of a night"
   need_node
   kept_all "$folder" 'what was opened, closed and sent' run.json due-before.json key-scan.txt telegram-fixture-calls.log
@@ -131,9 +142,11 @@ check() { # <evidence folder>
   [ -z "$text" ] || fail "a step of the run did not work, so the deadlines could not be tried: $text"
 
   # The deadline on the key, and the one on Telegram, both open.
-  state=$(state_of "$folder/due-before.json" "$KEY_SLUG")
-  [ "$state" = open ] || fail "the deadline on the key ($KEY_SLUG) is $state, not open, before anything ran: secrets/expires.txt names the key"
-  [ "$(state_of "$folder/due-both-open.json" "$KEY_SLUG")" = open ] ||
+  key_slug=$(key_deadline_slug "$folder/due-before.json")
+  [ -n "$key_slug" ] || fail "the produced deadline state has no unique key deadline from secrets/expires.txt"
+  state=$(state_of "$folder/due-before.json" "$key_slug")
+  [ "$state" = open ] || fail "the deadline on the key ($key_slug) is $state, not open, before anything ran: secrets/expires.txt names the key"
+  [ "$(state_of "$folder/due-both-open.json" "$key_slug")" = open ] ||
     fail "the deadline on the key is not open when the connection check has run"
   opened=$("$NODE" "$HERE/telegram-judge.mjs" deadlines "$folder/due-both-open.json" "$folder/due-before.json" |
     awk -F'\t' '$1=="open" && tolower($2 $3) ~ /telegram/')
@@ -143,7 +156,7 @@ check() { # <evidence folder>
   slug=$(cut -f3 <<<"$opened")
 
   # The key replaced in Settings closes the key's deadline on the next deadline run, and only that one.
-  state=$(state_of "$folder/due-key-replaced.json" "$KEY_SLUG")
+  state=$(state_of "$folder/due-key-replaced.json" "$key_slug")
   [ "$state" = closed ] || fail "the deadline on the key is $state, not closed, after the key was replaced in Settings and the deadline run went on"
   [ "$(state_of "$folder/due-key-replaced.json" "$slug")" = open ] ||
     fail "the deadline about Telegram (\"$title\") was closed by replacing the AI's key"
