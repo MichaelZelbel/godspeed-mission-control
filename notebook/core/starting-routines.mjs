@@ -47,6 +47,9 @@ export const STARTING_ROUTINES=[
  // control that already had its routines gets it once, when it has the coach-prep recipe
  // (NativeScheduler.addNewStartingRoutines).
  {key:'coach-prep',name:'Coaching talk preparation',schedule:'0 3 * * *',script:'godspeed-coach-prep.py',needs:'coach-prep',what:'Every night at 03:00 it prepares each coaching talk of the next day, such as your weekly check-in: it reads your goal and its research, what changed and what you said, and writes the opening of the talk and the notes it carries. It contacts nobody and says nothing; the talk opens with what it prepared.'},
+ // Since 5 November 2026 (#238): every install clears out the assistant's and the routines' own old
+ // working files at night (core/cleanup.mjs), after the nightly research (00:15, up to two hours).
+ {key:'cleanup',name:'Nightly cleanup',schedule:'45 2 * * *',script:'godspeed-nightly-cleanup.py',what:'Every night at 02:45 it removes the assistant\'s old request dumps and session transcripts, and the old run files of your routines, once they have not been touched for 30 days. It touches nothing else, says nothing, and logs what it freed.'},
 ];
 
 // This machine's own record of the starting routines in its Hermes, beside the notebook's other
@@ -138,16 +141,15 @@ export function telegramInHermes(home){try{return /^\s*TELEGRAM_BOT_TOKEN\s*=\s*
 // The assistant's own terminal and desktop app are routed the same way, as agent:main:local:dm:<id>,
 // and are no chat app: until 27 October 2026 one conversation in the terminal counted as one
 // (godspeed_routines.py, CHAT_KEY, says what that did to the routine).
-// Since 27 October 2026 the night chat tidy-up is made for no install (notebook-routines.mjs), so
-// nothing asks this until the release that brings it back.
-export const OWNER_CHAT_KEY_LIKE='agent:main:%:dm:%',OWN_SURFACES_LIKE='agent:main:local:%';
+// The assistant's own surfaces and its non-chat entry points (cli, tui, cron, webhook, api_server) are no chat app; the same six are refused by godspeed_routines.py and the godspeed-chat-tidy plugin.
+export const OWNER_CHAT_KEY_LIKE='agent:main:%:dm:%',OWNER_CHAT_KEY=/^agent:main:(?!(?:local|cli|tui|cron|webhook|api_server):)[^:]+:dm:.+$/;
 export function routedOwnerChats(home){
  const file=path.join(home,'state.db');if(!fs.existsSync(file))return [];
  let db;
  try{
   db=new DatabaseSync(file,{readOnly:true});
-  return db.prepare('select session_key from gateway_routing where scope = ? and session_key like ? and session_key not like ?')
-   .all(path.join(home,'sessions'),OWNER_CHAT_KEY_LIKE,OWN_SURFACES_LIKE).map(row=>row.session_key);
+  return db.prepare('select session_key from gateway_routing where scope = ? and session_key like ?')
+   .all(path.join(home,'sessions'),OWNER_CHAT_KEY_LIKE).map(row=>row.session_key).filter(key=>OWNER_CHAT_KEY.test(key));
  }catch{return [];}finally{try{db?.close();}catch{}}
 }
 export function chatAppInHermes(home){return telegramInHermes(home)||routedOwnerChats(home).length>0;}
@@ -174,7 +176,7 @@ function hermesRuntime({home,state,hermes}){
 export function routineFiles({root,home,state,timezone,node=process.execPath,hermes=null}){
  // tools: the kit's own programs (mc-decide, mc-work-run, due.js), run where they are; bin: the
  // assistant's command folder, first on the path for the recipes they run.
- const config={root,home,bin:path.join(home,'bin'),tools:path.join(kit,'tools'),node,hermes:hermes&&path.isAbsolute(hermes)?hermes:null,...hermesRuntime({home,state,hermes}),brief:path.join(kit,'notebook','scripts','morning-brief.mjs'),reports:path.join(kit,'notebook','scripts','background-report.mjs'),connection_check:path.join(kit,'notebook','scripts','connection-check.mjs'),mail_count:path.join(kit,'notebook','scripts','mail-count.mjs'),connection_notice_prefix:CONNECTION_NOTICE_PREFIX,coach:path.join(kit,'third-party','addons','godspeed-coach','bin','godspeed-coach.mjs'),coach_app:path.join(state,'coach-app'),journal:path.join(kit,'third-party','addons','godspeed-journal','bin','godspeed-journal.mjs'),journal_app:path.join(state,'journal-app'),notices:path.join(state,NOTICES_FILE),adopted:adoptedMissionControl(root),timezone};
+ const config={root,home,bin:path.join(home,'bin'),tools:path.join(kit,'tools'),node,hermes:hermes&&path.isAbsolute(hermes)?hermes:null,...hermesRuntime({home,state,hermes}),brief:path.join(kit,'notebook','scripts','morning-brief.mjs'),reports:path.join(kit,'notebook','scripts','background-report.mjs'),connection_check:path.join(kit,'notebook','scripts','connection-check.mjs'),mail_count:path.join(kit,'notebook','scripts','mail-count.mjs'),connection_notice_prefix:CONNECTION_NOTICE_PREFIX,cleanup:path.join(kit,'notebook','scripts','nightly-cleanup.mjs'),coach:path.join(kit,'third-party','addons','godspeed-coach','bin','godspeed-coach.mjs'),coach_app:path.join(state,'coach-app'),journal:path.join(kit,'third-party','addons','godspeed-journal','bin','godspeed-journal.mjs'),journal_app:path.join(state,'journal-app'),notices:path.join(state,NOTICES_FILE),adopted:adoptedMissionControl(root),timezone};
  const files={'godspeed_routines.py':fs.readFileSync(runner,'utf8').replace(/\r\n/g,'\n'),'godspeed-routines.json':JSON.stringify(config,null,2)+'\n'};
  for(const routine of [...STARTING_ROUTINES,...SWITCHABLE_NOTEBOOK_ROUTINES,{key:'chat-tidy',name:CHAT_TIDY_JOB,script:CHAT_TIDY_SCRIPT},{key:'brief',name:BRIEF_JOB,script:BRIEF_SCRIPT},{key:'notices',name:NOTICES_JOB,script:NOTICES_SCRIPT}])files[routine.script]='# Written by the Godspeed Mission Control notebook for the routine "'+routine.name+'".\n# The notebook writes it again when its own folders change; the work is in godspeed_routines.py.\nfrom godspeed_routines import main\n\nmain('+JSON.stringify(routine.key)+')\n';
  return files;

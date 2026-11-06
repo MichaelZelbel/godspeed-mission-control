@@ -72,7 +72,7 @@ export function journalWanted(root){
 // Pause and Resume is its switch.
 export const CONNECTION_JOB='Daily connection check';
 export const CONNECTION_SCRIPT='godspeed-connection-check.py';
-export const CONNECTION_WHAT=`Early every morning, before your morning brief, it checks each connection you set up (${Object.values(CONNECTION_NAMES).map(c=>c.label).join(', ')}). It tells you only when one needs your sign-in or key, failed two mornings in a row, or your phone has not sent health data for 36 hours. It sends nothing else.`;
+export const CONNECTION_WHAT=`Early every morning, before your morning brief, it checks each connection you set up (${Object.entries(CONNECTION_NAMES).filter(([name])=>name!=='disk').map(([,c])=>c.label).join(', ')}). It tells you only when one needs your sign-in or key, failed two mornings in a row, or your phone has not sent health data for 36 hours. On a server it also looks how full the disk is and tells you once when it passes 85%. It sends nothing else.`;
 // THE MAIL COUNTS (4 November 2026, #215; core/mail-trackers.mjs). A script routine every morning at
 // 04:30 that counts the mails a tracker's mail rule names, from each mail's sender, subject and date
 // and never its text, and adds them to that tracker. It is made when a tracker has a mail rule and
@@ -108,14 +108,14 @@ export const NOTICES_WHAT='Every 15 minutes it says what Godspeed itself queued 
 // chat is long enough to be worth it (godspeed_routines.py, chat_tidy). It sends nothing to the
 // chat: its output is its log, which is why its results are kept here and never delivered
 // (followDelivery leaves this one alone).
-// MADE FOR NO INSTALL SINCE 27 OCTOBER 2026 (godspeed-dev,
-// releases/godspeed-2.0.0-beta.8-faster-chat/plan.md): on Hermes 0.22.5, which a new install gets,
-// the control channel it speaks is refused while the gateway runs, so it would fail every night. It
-// comes back in a release of its own. Its script is still written (starting-routines.mjs,
-// routineFiles), and the routine is taken off an install that already has it
-// (native-scheduler.mjs, removeChatTidy).
+// The gateway refuses an outside summary of a chat app's chat (Hermes 0.22.5), so the script has the
+// gateway's own /compress run through the godspeed-chat-tidy plugin command and checks in the
+// database that the chat got shorter (assistant-files/godspeed-chat-tidy). Made again for every
+// install with a chat app connected from 2.0.0-beta.19 (native-scheduler.mjs, followChatTidy).
 export const CHAT_TIDY_JOB='Night chat tidy-up';
 export const CHAT_TIDY_SCRIPT='godspeed-chat-tidy.py';
+export const CHAT_TIDY_SCHEDULE='30 1 * * *';
+export const CHAT_TIDY_WHAT='Every night at 01:30, while nobody waits for an answer, it has the assistant summarise the long chat with it, so your first reply of the day is not held up. It sends nothing to the chat.';
 // The journal reads its times on its own clock, which starts as UTC until its setup writes the
 // person's; the installation's zone is the person's, so it becomes the journal's when the journal
 // still has the default one.

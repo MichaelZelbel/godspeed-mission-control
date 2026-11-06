@@ -112,6 +112,21 @@ missing "incident: once an event closes them, the brief carries neither" "$AFTER
 missing "incident: nor does the full list" "$(GODSPEED_TODAY=2026-09-28 d)" "RUNNING OUT"
 contains "incident: state names the event" "$(GODSPEED_TODAY=2026-09-28 d state)" "CLOSED   post-publish  (world/events/2026-09-23-post-approved-and-published.md)"
 
+# --- an expiry deadline's state carries the key identity the expiry reader owns ------------------------
+wipe "$G"
+mkdir -p "$G/secrets"
+printf 'other-key  2026-11-20  https://example.invalid/keys  # Another made-up key.\nai-key  2026-11-10  https://example.invalid/keys  # The key your AI thinks with.\n' > "$G/secrets/expires.txt"
+EXPIRY_STATE="$(GODSPEED_TODAY=2026-10-23 d state --json)"
+expiry_arg() { printf '%s' "$1" | node -e '
+let text="";process.stdin.on("data",part=>text+=part).on("end",()=>{
+ const row=JSON.parse(text).find(row=>row.slug===process.argv[1]);
+ process.stdout.write(row ? String(row.selfCheckArg) : "");
+});' "$2"; }
+check "expiry state binds other-key to its own self check" "$(expiry_arg "$EXPIRY_STATE" key-other-key)" "other-key"
+check "expiry state binds ai-key to its own self check" "$(expiry_arg "$EXPIRY_STATE" key-ai-key)" "ai-key"
+rm -f "$G/secrets/expires.txt"
+rmdir "$G/secrets" 2>/dev/null || :
+
 # --- no evidence, no closing -----------------------------------------------------------------
 wipe "$G"
 d add chore --title "CHORE" --from 2026-01-01 --to 2026-01-10 --done-when x --cost y >/dev/null
@@ -163,8 +178,7 @@ check "then the word goes" "$(strips "$G" old)" "STRIP: 2026-01-01 2026-01-10"
 GODSPEED_TODAY=2026-01-06 d >/dev/null
 check "moving twice makes one closing" "$(grep -rl 'deadline_id: due-old' "$G/notebook/Timeline" 2>/dev/null | wc -l | tr -d ' ')" "1"
 
-# =================================================================================================
-# THREE DATES: the day you can start, the day you would like it done (a target, soft) and the day
+# ==========================================================================================# THREE DATES: the day you can start, the day you would like it done (a target, soft) and the day
 # it starts costing you (a deadline, hard). At least one of the last two.
 # =================================================================================================
 fresh() { wipe "$G"; }
@@ -497,6 +511,23 @@ s add reconnect-phone --title "Reconnect phone health" --from 2026-10-10 --to 20
 printf '{"day":"2026-10-13","connections":{"agentmail":{"set_up":true,"ok":true},"phone":{"set_up":true,"ok":true}}}' > "$SC/.godspeed/connection-check.json"
 out="$(GODSPEED_TODAY=2026-10-13 s check reconnect-mailbox)"; contains "the own mailbox connection closes from its daily check" "$out" "closed itself: Reconnect the mailbox"
 out="$(GODSPEED_TODAY=2026-10-13 s check reconnect-phone)"; contains "the phone health connection closes from its daily check" "$out" "closed itself: Reconnect phone health"
+# The mission control's own mailbox, the phone's health data and the server's disk are connections of the daily check too: each, by its id and by
+# its name, is accepted, waits for a working record dated inside the window, and closes on one.
+recx() { printf '{"at":"x","day":"%s","connections":{"%s":%s}}' "$1" "$2" "$3" > "$SC/.godspeed/connection-check.json"; }
+for pair in "agentmail|your mission control's own mailbox" "phone|the phone's health data" "disk|your server's disk"; do
+  cid="${pair%%|*}"; clabel="${pair#*|}"
+  for kind in id name; do
+    if [ "$kind" = id ]; then how="$cid"; else how="$clabel"; fi
+    slug="reconnect-$cid-$kind"
+    rm -f "$SC/.godspeed/connection-check.json"
+    s add "$slug" --title "Reconnect $cid ($how)" --from 2026-10-10 --to 2026-10-30 --done-when "works" --cost "nothing arrives" --self-check connection-ok --self-check-arg "$how" >/dev/null
+    out="$(GODSPEED_TODAY=2026-10-12 s check "$slug")"; contains "$cid by '$how': no record yet is not yet, with why" "$out" "has not looked at $clabel yet"
+    recx 2026-10-12 "$cid" '{"set_up":true,"ok":false,"kind":"other"}'
+    out="$(GODSPEED_TODAY=2026-10-12 s check "$slug")"; contains "$cid by '$how': a failing record is not yet" "$out" "not working"
+    recx 2026-10-13 "$cid" '{"set_up":true,"ok":true}'
+    out="$(GODSPEED_TODAY=2026-10-13 s check "$slug")"; contains "$cid by '$how': a working record inside the window closes it" "$out" "closed itself: Reconnect $cid ($how)"
+  done
+done
 
 # --- the deadlines text the kit ships, kept in step with the one inside due.js ----------------------
 # Until 30 October 2026 this text was a README the kit put in the old folder, and due.js brought an

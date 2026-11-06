@@ -1,0 +1,9 @@
+name: godspeed-chat-tidy
+version: "0.1.0"
+description: >-
+  Registers /godspeed-chat-tidy <chat session key> <session id>, which the night chat tidy-up
+  routine dispatches on its own hidden session: inside the gateway it runs the same summary the
+  owner's /compress runs, for the owner's chat only, and answers the caller one line starting "ok:"
+  or "refused:". Nothing is sent to the chat app. Installed by the Godspeed Mission Control notebook.
+author: godspeed-mission-control
+kind: standalone
