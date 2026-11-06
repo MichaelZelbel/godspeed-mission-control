@@ -26,11 +26,13 @@ export function hermesJobs(home){
  const data=JSON.parse(fs.readFileSync(file,'utf8')),jobs=Array.isArray(data)?data:data.jobs||[];
  return jobs.filter(j=>j&&typeof j==='object');
 }
+// A job Hermes holds paused is written as enabled:false, state:'paused' or a paused_at time.
+export const pausedJob=job=>job.enabled===false||job.state==='paused'||!!job.paused_at;
 // When a routine last ran and how it went is Hermes' own record (last_run_at, last_status,
 // last_error); until 8 October 2026 the Routines list showed neither. A daily round that told the
 // person it went wrong is shown as failed (starting-routines.mjs, routineStatus).
 export function nativeJobs(home,device='local'){
- return hermesJobs(home).map(j=>({id:j.id,title:j.name||j.id,kind:j.skill||j.name||'Hermes task',owner:device,paused:j.enabled===false,state:j.state||j.last_status||'pending',next_run:j.next_run_at,last_run_at:j.last_run_at||null,last_status:j.last_status||null,last_error:typeof j.last_error==='string'?j.last_error.slice(0,500):null,...routineStatus(home,j),schedule:j.schedule_display||null,...(cronCalendar(cronOf(j))&&!isTalkGate(j)&&!isCoachTick(j)?{calendar:cronCalendar(cronOf(j))}:{}),deliver:j.deliver||null,created_at:j.created_at,interval_ms:j.schedule?.seconds?j.schedule.seconds*1000:null,native:true,_hash:hash(j)}));
+ return hermesJobs(home).map(j=>({id:j.id,title:j.name||j.id,kind:j.skill||j.name||'Hermes task',owner:device,paused:pausedJob(j),state:j.state||j.last_status||'pending',next_run:j.next_run_at,last_run_at:j.last_run_at||null,last_status:j.last_status||null,last_error:typeof j.last_error==='string'?j.last_error.slice(0,500):null,...routineStatus(home,j),schedule:j.schedule_display||null,...(cronCalendar(cronOf(j))&&!isTalkGate(j)&&!isCoachTick(j)?{calendar:cronCalendar(cronOf(j))}:{}),deliver:j.deliver||null,created_at:j.created_at,interval_ms:j.schedule?.seconds?j.schedule.seconds*1000:null,native:true,_hash:hash(j)}));
 }
 const RETRY_STARTING=3600000;
 // A step of the routine check that fails is tried again at the next one; this says why (to the server's log).
@@ -313,29 +315,29 @@ export class NativeScheduler{
  // Made once, only on a machine that made its starting routines (on a mission control not made from the
  // starter: once its switch is on, #225), at 05:00 on the install's clock (earlier when
  // a Morning brief set before 05:30 needs it first; connectionCheckTime). It
- // is made enabled when Telegram or Gmail is connected, a tracker has a mail rule, or a phone upload arrived, and paused when none is; the notebook later
- // resumes it only if it paused it itself and one of them has since been in place. A routine the
+ // is made enabled when Telegram or Gmail is connected, a tracker has a mail rule, a phone upload arrived, or another routine is active (its "your routines" source needs no connection), and paused otherwise; the notebook later
+ // resumes it only if it paused it itself and one of them has since come about. A routine the
  // person paused or resumed, or removed, is theirs from then on.
  async followConnectionCheck(){
   const root=this.store.root;
   if(!(starterBorn(root)?readMachineRecord(this.store)?.state==='created':this.switchesReady()&&switchedOn(this.store,'connection-check')))return null;
-  const entry=readNotebookRoutines(this.store).jobs.find(j=>j.key==='connection-check'),jobs=hermesJobs(this.home);
+  let entry=readNotebookRoutines(this.store).jobs.find(j=>j.key==='connection-check'),jobs=hermesJobs(this.home);
   if(entry?.switched_off)return null;
   const job=(entry&&jobs.find(j=>j.id===entry.id))||jobs.find(j=>j.name===CONNECTION_JOB&&j.script===CONNECTION_SCRIPT);
   if(entry&&!job)return null;
-  const installation=this.store.get('settings','installation'),timezone=installation?.timezone||Intl.DateTimeFormat().resolvedOptions().timeZone,wanted=connectionCheckWanted(this.home,undefined,this.store);
+  const installation=this.store.get('settings','installation'),timezone=installation?.timezone||Intl.DateTimeFormat().resolvedOptions().timeZone,wanted=connectionCheckWanted(this.home,undefined,this.store)||jobs.some(j=>j.id&&!pausedJob(j)&&j.id!==job?.id&&j.script!==CONNECTION_SCRIPT);
   writeRoutineFiles(this.home,routineFiles({root,home:this.home,state:this.store.state,timezone,hermes:this.executable}));
   if(job){
    if(!entry)return job.id;
    const current=entry.what===CONNECTION_WHAT?entry:rememberNotebookRoutine(this.store,{...entry,what:CONNECTION_WHAT});
    if(!current.paused_by_notebook){
-    // Still running as the notebook left it: it goes off with the last connection. A person's pause ends that ownership.
+    // Still running as the notebook left it: it goes off when no connection or active routine wants it. A person's pause ends that ownership.
     if(job.enabled===false&&current.running_by_notebook)rememberNotebookRoutine(this.store,{...current,running_by_notebook:false});
     else if(job.enabled!==false&&current.running_by_notebook&&!wanted){await this.command(['pause',job.id]);rememberNotebookRoutine(this.store,{...current,paused_by_notebook:true,running_by_notebook:false});}
     return job.id;
    }
-   if(job.enabled===false&&!wanted)return job.id;
-   const resumed=job.enabled===false;
+   const resumed=pausedJob(job);
+   if(resumed&&!wanted)return job.id;
    if(resumed)await this.command(['resume',job.id]);
    rememberNotebookRoutine(this.store,{...current,paused_by_notebook:false,running_by_notebook:resumed});
    return job.id;
@@ -616,7 +618,7 @@ export class NativeScheduler{
    this.requireOwner('Add the routine');
    const known=enableKind(input.kind),skill=known?.skill||skills[input.kind]||input.kind;
    if(!/^[a-z0-9-]+$/.test(skill)||!fs.existsSync(path.join(this.store.root,'skills',skill,'SKILL.md')))throw Error('This mission control does not have the recipe for that routine');
-   const running=hermesJobs(this.home).find(j=>j.enabled!==false&&(input.kind==='morning-brief'?isBriefJob(j):[j.skill,...(Array.isArray(j.skills)?j.skills:[])].includes(skill)));
+   const running=hermesJobs(this.home).find(j=>!pausedJob(j)&&(input.kind==='morning-brief'?isBriefJob(j):[j.skill,...(Array.isArray(j.skills)?j.skills:[])].includes(skill)));
    if(running)throw Error('"'+(running.name||skill)+'" already runs this. Change its time under Routine times, or pause it under Routines.');
    const daily=dailyTime(input.at);
    if(!daily&&(!Number.isFinite(input.interval_ms)||input.interval_ms<60000))throw Error('Choose a daily time or a routine interval of at least a minute');
