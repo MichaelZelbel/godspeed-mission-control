@@ -7,7 +7,7 @@ import {nativeCardRows} from './card-commands.mjs';
 import {runCommand} from './child-process.mjs';
 import {beatWhile,HEARTBEAT_EVERY} from './supervisor-health.mjs';
 import {LEGACY_DEVICE} from './device-id.mjs';
-import {starterBorn} from './starter-workspace.mjs';
+import {starterBorn,adoptedMissionControl} from './starter-workspace.mjs';
 import {setHermesTimezone} from './hermes-config.mjs';
 import {FLAG,STARTING_ROUTINES,routineFiles,writeRoutineFiles,prepareCheckIn,saveRoutineResults,readMachineRecord,writeMachineRecord,telegramInHermes,routineStatus,ownRoutines,metAt,noteHermesMet,cityFiledFirst,OWN_ROUTINES_RULE} from './starting-routines.mjs';
 import {cronOf,cronCalendar,calendarCron,retimeWhat,isTalkGate,isCoachTick,talkArea,moveTalk} from './routine-times.mjs';
@@ -44,6 +44,7 @@ export function connectionCheckTime(briefAt){
  return dailyTime(Math.floor(minutes/60)+':'+String(minutes%60).padStart(2,'0')).time;
 }
 export function dailyTime(at){const m=/^([01]?\d|2[0-3]):([0-5]\d)$/.exec(String(at||'').trim());return m?{hour:Number(m[1]),minute:Number(m[2]),time:m[1].padStart(2,'0')+':'+m[2]}:null;}
+const installedRoutine=(home,root,routine)=>hermesJobs(home).find(job=>job.name===routine.name&&job.script===routine.script&&typeof job.workdir==='string'&&path.resolve(job.workdir)===path.resolve(root));
 // `hermes cron tick` runs every due job to the end before it returns (and has
 // already moved each job's next run on, so a killed run is lost for the day).
 // Hermes stops a job that goes quiet for ten minutes and gives a job's own
@@ -78,12 +79,13 @@ export class NativeScheduler{
    const script=new URL('../../tools/goals.js',import.meta.url);
    await this.run(process.execPath,[fileURLToPath(script),'file','--kind','outcome','--status','adopted','--title',goal.trim(),'--source','Notebook setup, '+new Date().toISOString(),'--godspeed',this.store.root],{cwd:this.store.root,windowsHide:true,env:assistantEnvironment({home:this.home,workspace:this.store.root}),timeout:120000});
   }
-  // The first goal starts the routines: at the first setup, and when the mission control is still
+  // The first goal starts the routines other than the nightly cleanup: at the first setup, and when the mission control is still
   // waiting for its first goal (the getting-to-know-you chat filed the city before it). An
   // installation set up before 8 October 2026 is left as it is (startRoutinesNow). Until
   // 17 October 2026 this asked only whether an installation record was there, so a first goal
   // given here after the chat's city started nothing.
   const routines=await this.startRoutines({goal:nativeCardRows(this.store,'goals').find(g=>g.title===goal?.trim())?.id,setup:!old});
+  if(this.owns())await this.followCleanup();
   return {configured:true,preserved:!!old,firstWorkPending:false,scheduler:'hermes',...(routines?{routines}:{})};
  }
  // The starting routines (starting-routines.mjs), made once per machine that runs them: at the
@@ -95,7 +97,8 @@ export class NativeScheduler{
  // Two records. The mission control's own, in its settings (it travels with the folder): its first
  // goal started the routines, or why not. This machine's own, beside its Hermes (it never
  // travels): this Hermes got them, or why not; a reader who removes one does not get it back.
- startRoutines(options={}){const next=(this.starting||Promise.resolve()).then(()=>this.startRoutinesNow(options));this.starting=next.catch(()=>{});return next;}
+ queueStarting(action){const next=(this.starting||Promise.resolve()).then(action);this.starting=next.catch(()=>{});return next;}
+ startRoutines(options={}){return this.queueStarting(()=>this.startRoutinesNow(options));}
  async startRoutinesNow({goal=null,setup=false}={}){
   const root=this.store.root,flag=this.store.get('settings',FLAG),here=readMachineRecord(this.store),now=Date.now();
   let installation=this.store.get('settings','installation');
@@ -144,7 +147,8 @@ export class NativeScheduler{
   try{
    writeRoutineFiles(this.home,routineFiles({root,home:this.home,state:this.store.state,timezone,hermes:this.executable}));
    prepareCheckIn(root,{timezone,delivery,goal:serves});
-   jobs=await this.createStartingRoutines(delivery);
+   const cleanup=STARTING_ROUTINES.find(routine=>routine.key==='cleanup'),existing=cleanup&&installedRoutine(this.home,root,cleanup);
+   jobs=[...(existing?[{id:existing.id,key:cleanup.key,name:cleanup.name,what:cleanup.what}]:[]),...await this.createStartingRoutines(delivery,existing?STARTING_ROUTINES.filter(routine=>routine!==cleanup):STARTING_ROUTINES)];
   }catch(error){
    const message=String(error?.message||error).slice(0,300);
    writeMachineRecord(this.store,{state:'pending',device:this.device,error:message,retry_after:new Date(now+RETRY_STARTING).toISOString()});
@@ -154,6 +158,19 @@ export class NativeScheduler{
   writeMachineRecord(this.store,{state:'created',device:this.device,created_at:at,timezone,delivery,jobs});
   if(flag?.state!=='created')await record({state:'created',first_device:this.device,created_at:at,...unskip});
   return {state:'created',jobs};
+ }
+ followCleanup(){return this.queueStarting(()=>this.followCleanupNow());}
+ async followCleanupNow(){
+  const root=this.store.root,routine=STARTING_ROUTINES.find(entry=>entry.key==='cleanup');
+  if(!routine||!(starterBorn(root)||adoptedMissionControl(root)))return null;
+  const installation=this.store.get('settings','installation'),timezone=installation?.timezone||Intl.DateTimeFormat().resolvedOptions().timeZone;
+  writeRoutineFiles(this.home,routineFiles({root,home:this.home,state:this.store.state,timezone,hermes:this.executable}));
+  const existing=installedRoutine(this.home,root,routine);
+  const entry=readNotebookRoutines(this.store).jobs.find(job=>job.key===routine.key);
+  if(existing){if(!entry)rememberNotebookRoutine(this.store,{id:existing.id,key:routine.key,name:routine.name,what:routine.what});return existing.id;}
+  if(entry)return null;
+  const delivery=deliveryFor(installation,{telegram:telegramInHermes(this.home)}),[made]=await this.createStartingRoutines(delivery,[routine]);
+  rememberNotebookRoutine(this.store,made);return made.id;
  }
  async createStartingRoutines(delivery,routines=STARTING_ROUTINES){
   const made=[];
@@ -175,7 +192,7 @@ export class NativeScheduler{
  async addNewStartingRoutines(){
   const root=this.store.root,here=readMachineRecord(this.store),installation=this.store.get('settings','installation');
   if(here?.state!=='created'||!Array.isArray(here.jobs)||!installation?.timezone||!starterBorn(root))return [];
-  const offered=new Set(here.jobs.map(j=>j.key)),missing=STARTING_ROUTINES.filter(r=>!offered.has(r.key)&&(!r.needs||fs.existsSync(path.join(root,'skills',r.needs,'SKILL.md'))));
+  const offered=new Set(here.jobs.map(j=>j.key)),missing=STARTING_ROUTINES.filter(r=>!offered.has(r.key)&&(r.key!=='cleanup'||!installedRoutine(this.home,root,r))&&(!r.needs||fs.existsSync(path.join(root,'skills',r.needs,'SKILL.md'))));
   if(!missing.length)return [];
   writeRoutineFiles(this.home,routineFiles({root,home:this.home,state:this.store.state,timezone:installation.timezone,hermes:this.executable}));
   const made=await this.createStartingRoutines(here.delivery||'local',missing);
@@ -548,6 +565,7 @@ export class NativeScheduler{
   this.current=new Promise(r=>{finish=r;});
   try{
    await this.startRoutines().catch(()=>null);
+   await this.followCleanup().catch(logged('the nightly cleanup could not be set up'));
    await this.followNoticeSender().catch(logged('the notice sender could not be set up'));
    await this.followSwitches().catch(logged('a routine switched on could not be set up'));
    await this.addNewStartingRoutines().catch(()=>null);

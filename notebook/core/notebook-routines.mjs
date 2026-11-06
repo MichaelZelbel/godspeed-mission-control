@@ -72,7 +72,7 @@ export function journalWanted(root){
 // Pause and Resume is its switch.
 export const CONNECTION_JOB='Daily connection check';
 export const CONNECTION_SCRIPT='godspeed-connection-check.py';
-export const CONNECTION_WHAT=`Early every morning, before your morning brief, it checks each connection you set up (${Object.values(CONNECTION_NAMES).map(c=>c.label).join(', ')}). It tells you only when one needs your sign-in or key, failed two mornings in a row, or your phone has not sent health data for 36 hours. It sends nothing else.`;
+export const CONNECTION_WHAT=`Early every morning, before your morning brief, it checks each connection you set up (${Object.entries(CONNECTION_NAMES).filter(([name])=>name!=='disk').map(([,c])=>c.label).join(', ')}). It tells you only when one needs your sign-in or key, failed two mornings in a row, or your phone has not sent health data for 36 hours. On a server it also looks how full the disk is and tells you once when it passes 85%. It sends nothing else.`;
 // THE MAIL COUNTS (4 November 2026, #215; core/mail-trackers.mjs). A script routine every morning at
 // 04:30 that counts the mails a tracker's mail rule names, from each mail's sender, subject and date
 // and never its text, and adds them to that tracker. It is made when a tracker has a mail rule and
