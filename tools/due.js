@@ -575,7 +575,7 @@ function sayable(r, day) {
 const SELF_CHECKS = ["none", "secret-changed", "connection-ok", "file-newer"];
 // The connections the daily check lists (notebook/core/connection-names.mjs): the id its record is
 // kept under, and the name Settings shows. Kept here because this tool ships without the notebook.
-const CONNECTIONS = { ai: "your AI", telegram: "Telegram", github: "GitHub", mail: "Gmail" };
+const CONNECTIONS = { ai: "your AI", telegram: "Telegram", github: "GitHub", mail: "Gmail", agentmail: "your mission control's own mailbox", phone: "the phone's health data" };
 const connectionId = (arg) => {
   const a = String(arg || "").trim().toLowerCase();
   return Object.keys(CONNECTIONS).find((id) => id === a || CONNECTIONS[id].toLowerCase() === a) || "";
@@ -670,7 +670,7 @@ function help() {
             secret-changed  a key of that name in your key store is replaced after the first check
                             inside the window, which only remembers a one-way fingerprint
             connection-ok   the daily connection check, on a day inside the window, finds that
-                            connection (your AI, Telegram, GitHub, Gmail) working
+                            connection (your AI, Telegram, GitHub, Gmail, your mission control's own mailbox, the phone's health data) working
             file-newer      that file is written inside the window
             none            only your word closes it
   mc-due target <name> YYYY-MM-DD   a new day you would like it done
