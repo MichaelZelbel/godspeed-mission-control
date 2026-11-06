@@ -107,9 +107,9 @@ if(!card)fail('no Godspeed-owned work card is verified by its recorded check and
 const title=(card.text.match(/^WHAT:\s*(.+)$/mi)||[])[1]?.trim()||'';
 const result=(card.text.match(/^RESULT:\s*(.+)$/mi)||[])[1]?.trim()||'';
 if(!title||!result)fail('the verified work card lacks its title or result');
-const checked=(card.text.match(/^CHECK:\s*test\s+-(?:f|s)\s+(work\/(?:[A-Za-z0-9][A-Za-z0-9._-]*\/)*[A-Za-z0-9][A-Za-z0-9._-]*\.(?:md|txt))\s*$/mi)||[])[1];
-if(!checked)fail('the verified work card has no supported checked work artifact');
-const artifact=path.join(folder,checked);
+const declared=(card.text.match(/^ARTIFACT:\s*(work\/(?:[A-Za-z0-9][A-Za-z0-9._-]*\/)*[A-Za-z0-9][A-Za-z0-9._-]*\.(?:md|txt))\s*$/mi)||[])[1];
+if(!declared)fail('the verified work card has no declared result artifact');
+const artifact=path.join(folder,declared);
 if(!fs.existsSync(artifact)||!fs.statSync(artifact).isFile())fail('the result artifact is not a practical emergency-kit checklist');
 const practical=fs.readFileSync(artifact,'utf8');
 if(!/[-*]\s*(?:\[[ xX]\]|\d+[.)])/.test(practical)||!/\b(?:\d+\s*(?:lit(?:re|er)s?|days?|hours?|batter(?:y|ies)|ml|kg)|at least \d+)\b/i.test(practical)||!['water','food','first aid|medication','light|power','communication|document'].every(group=>new RegExp(group,'i').test(practical))||/\b(?:TODO|TBD|placeholder|outline only)\b/i.test(practical))fail('the result artifact is not a practical emergency-kit checklist');

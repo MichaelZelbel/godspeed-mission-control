@@ -2868,7 +2868,7 @@ first_day_good() { # <folder>
   rm -rf "$f"; mkdir -p "$f/work"
   printf '{"results":{"goal":{"title":"Prepare a practical household emergency-kit checklist by Sunday."}}}\n' >"$f/setup.json"
   for label in research choice work; do printf '[{"id":"%s","last_run_at":"2026-11-06T10:00:00Z","last_status":"ok"}]\n' "$label" >"$f/job-$label.json"; done
-  printf 'WHAT: Prepare a practical household emergency-kit checklist\nSTATUS: verified\nCHECK: test -s work/emergency-kit-checklist.md\nRESULT: Wrote emergency-kit-checklist.md with practical supplies.\n\n- 2026-11-06 VERIFIED check passed (test -s work/emergency-kit-checklist.md)\n' >"$f/work/W-1.md"
+  printf 'WHAT: Prepare a practical household emergency-kit checklist\nSTATUS: verified\nCHECK: test -s work/emergency-kit-checklist.md\nARTIFACT: work/emergency-kit-checklist.md\nRESULT: Wrote emergency-kit-checklist.md with practical supplies.\n\n- 2026-11-06 VERIFIED check passed (test -s work/emergency-kit-checklist.md)\n' >"$f/work/W-1.md"
   cat >"$f/work/emergency-kit-checklist.md" <<'EOF'
 - [ ] Water: 12 litres for 3 days
 - [ ] Food: 3 days of shelf-stable meals
@@ -2897,6 +2897,12 @@ section first-day
 FD=$TMP/first-day
 first_day_good "$FD/good"
 passes 'fresh Docker first day makes useful verified work, a sparse-data brief, and matching Telegram delivery and reply' first-day "$FD/good" 'answered today'
+copy "$FD/good" "$FD/file-checked-artifact"
+sed -i 's/test -s work\/emergency-kit-checklist.md/test -f work\/emergency-kit-checklist.md/g' "$FD/file-checked-artifact/work/W-1.md"
+passes 'a first day accepts a selected artifact checked with test -f' first-day "$FD/file-checked-artifact" 'answered today'
+copy "$FD/good" "$FD/compound-checked-artifact"
+sed -i 's#CHECK: test -s work/emergency-kit-checklist.md#CHECK: test -s work/emergency-kit-checklist.md \&\& grep -qi water work/emergency-kit-checklist.md#' "$FD/compound-checked-artifact/work/W-1.md"
+passes 'a first day accepts a selected artifact with a compound valid check' first-day "$FD/compound-checked-artifact" 'answered today'
 copy "$FD/good" "$FD/no-research"
 printf '[]\n' >"$FD/no-research/job-research.json"
 refuses 'a first day without research' first-day "$FD/no-research" 'research routine has no successful'
@@ -2910,7 +2916,7 @@ copy "$FD/good" "$FD/placeholder"
 printf '%s\n' '- [ ] TODO: outline only' >"$FD/placeholder/work/emergency-kit-checklist.md"
 refuses 'a placeholder checklist' first-day "$FD/placeholder" 'not a practical emergency-kit checklist'
 copy "$FD/good" "$FD/mismatched-checked-work"
-printf 'WHAT: Tidy the desk drawer\nSTATUS: verified\nCHECK: test -s work/desk-drawer.md\nRESULT: Wrote desk-drawer.md with drawer contents.\n\n- 2026-11-06 VERIFIED check passed (test -s work/desk-drawer.md)\n' >"$FD/mismatched-checked-work/work/W-1.md"
+printf 'WHAT: Tidy the desk drawer\nSTATUS: verified\nCHECK: test -s work/desk-drawer.md\nARTIFACT: work/desk-drawer.md\nRESULT: Wrote desk-drawer.md with drawer contents.\n\n- 2026-11-06 VERIFIED check passed (test -s work/desk-drawer.md)\n' >"$FD/mismatched-checked-work/work/W-1.md"
 printf '%s\n' '- [ ] Pens: 12' >"$FD/mismatched-checked-work/work/desk-drawer.md"
 sed -i 's/Prepare a practical household emergency-kit checklist — Wrote emergency-kit-checklist.md with practical supplies/Tidy the desk drawer — Wrote desk-drawer.md with drawer contents/' "$FD/mismatched-checked-work/brief.txt"
 refuses 'an emergency checklist unrelated to the checked work' first-day "$FD/mismatched-checked-work" 'not a practical emergency-kit checklist'

@@ -34,6 +34,7 @@ GOAL: lead            CARD: M017
 WHAT: Redraft the three lines
 DONE WHEN: a new draft exists with the three lines in it
 CHECK: test -f drafts/lines-v2.md      one shell line that exits 0 when it is done
+ARTIFACT: drafts/lines-v2.md           the one file this work leaves for a reader; set it with --artifact, or the register keeps the sole test -f or test -s path in CHECK
 OWNER: mission control            mission control, person, or company:<slug>
 NEEDS: none           none, person, authorization, or capability:<what is missing>
 OUTWARD: no           a send, a spend, a post, a listing: never on its own
@@ -100,7 +101,7 @@ is worth more than one that quietly does something adjacent and reports success.
 ## The commands
 
 ```
-mc-work file --what "..." --done-when "..." [--check "..."] [--goal G] [--key K]
+mc-work file --what "..." --done-when "..." [--check "..."] [--artifact file] [--goal G] [--key K]
 mc-work take <id> --runner <name> [--approved-by "<your words>"]
 mc-work attempt <id> --runner <name> --ok --result "..." | --failed "why"
 mc-work verify <id> [--evidence "what was observed, where"]
