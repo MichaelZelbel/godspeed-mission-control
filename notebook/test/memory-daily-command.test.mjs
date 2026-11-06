@@ -31,9 +31,9 @@ test('the command files a quoted notebook fact once through its model-command bo
 });
 
 test('the command refuses invalid evidence, redacted names, unknown subjects, and machine prompts',async t=>{
- const root=workspace(t),row={id:'human',at:'2026-11-02T12:00:00Z',text:'I moved to Hamburg on 1 November'},machine={id:'machine',at:'2026-11-02T13:00:00Z',text:'[CRON RUN] never save this'};archive(root,[row,machine]);
+ const root=workspace(t),row={id:'human',at:'2026-11-02T12:00:00Z',text:'I moved to Hamburg on 1 November'},machine={id:'machine',at:'2026-11-02T13:00:00Z',text:'[CRON RUN] never save this'};fs.writeFileSync(path.join(root,'NOTEBOOK.md'),notebookNoteText);new Store(root).save('contacts',{id:'acme',name:'Acme Corp'});archive(root,[row,machine]);
  const answer={people:[{name:'Acme Corp'}],facts:[{subject:'Acme Corp',kind:'home-city',value:'Hamburg',citation:{id:row.id,quote:row.text}},{subject:'nobody-known',kind:'home-city',value:'Hamburg',citation:{id:row.id,quote:row.text}},{subject:'self',kind:'home-city',value:'Acme Corp',citation:{id:row.id,quote:row.text}},{subject:'self',kind:'home-city',value:'Hamburg',citation:{id:row.id,quote:'invented'}}],events:[{what:'Visited the park',day:'2026-11-02',participants:['Acme Corp'],citation:{id:row.id,quote:row.text}}]};
- const result=await run(root,{env:{GODSPEED_REDACT_TERMS:'Acme Corp',FIXTURE_MEMORY_MODEL_RESPONSE:response(answer)}});assert.equal(result.completed,1);assert.ok(!fs.existsSync(path.join(root,'world','entities','acme-corp.md')));assert.ok(!fs.existsSync(path.join(root,'world','claims')));assert.ok(!fs.existsSync(path.join(root,'world','events')));
+ const result=await run(root,{env:{GODSPEED_REDACT_TERMS:'Acme Corp',FIXTURE_MEMORY_MODEL_RESPONSE:response(answer)}});assert.equal(result.completed,1);const query=new QueryService(new Store(root));assert.equal(query.rows('claims').length,0);assert.equal(query.rows('moments').length,0);
  const runs=path.join(root,'routines','remember-what-you-said','runs'),receipts=fs.readdirSync(runs).flatMap(day=>fs.readdirSync(path.join(runs,day)).map(name=>fs.readFileSync(path.join(runs,day,name),'utf8'))).join('\n');assert.match(receipts,/machine-prompt/);assert.match(receipts,/unknown-subject/);assert.match(receipts,/private-or-invalid/);assert.match(receipts,/quote/);
 });
 
