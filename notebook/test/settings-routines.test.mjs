@@ -257,6 +257,18 @@ test('an existing daily connection check refreshes its Settings description',asy
  const q=new QueryService(store);q.nativeHermesHome=home;assert.equal(q.rows('jobs').find(j=>j.title===CONNECTION_JOB).what,CONNECTION_WHAT);assert.equal(job(CONNECTION_JOB).enabled,false);
 });
 
+test('an active notebook-owned daily connection check refreshes its Settings description',async t=>{
+ noMail(t);
+ const {home,store,scheduler,job}=await withGoal(t);
+ acceptUpload(store,{metrics:[]},{now:new Date('2026-11-04T10:00:00Z')});
+ scheduler.lastTick=0;await scheduler.tick();
+ const existing=readNotebookRoutines(store).jobs.find(j=>j.key==='connection-check');assert.equal(existing.paused_by_notebook,false);assert.equal(existing.running_by_notebook,true);assert.equal(job(CONNECTION_JOB).enabled,true);
+ rememberNotebookRoutine(store,{...existing,what:'Checks the connections you set up.'});
+ scheduler.lastTick=0;await scheduler.tick();
+ const refreshed=readNotebookRoutines(store).jobs.find(j=>j.key==='connection-check');assert.equal(refreshed.what,CONNECTION_WHAT);assert.equal(refreshed.paused_by_notebook,false,'the upgrade keeps the notebook-owned active state');assert.equal(refreshed.running_by_notebook,true);
+ const q=new QueryService(store);q.nativeHermesHome=home;assert.equal(q.rows('jobs').find(j=>j.title===CONNECTION_JOB).what,CONNECTION_WHAT);assert.equal(job(CONNECTION_JOB).enabled,true);
+});
+
 test('a Morning brief set early brings the daily connection check ahead of it, and a failed creation reaches the setup tick',async t=>{
  noMail(t);
  const {store,home,hermes,scheduler,job}=await withGoal(t);
