@@ -67,6 +67,22 @@ test('a rejected draft keeps a separately checked contribution and its exact lin
  assert.equal(result.fallback,true);assert.match(saved.content,/Fictional copy ready draft/);assert.match(saved.content,new RegExp('/dashboard/notes/'+note.id));
 });
 
+test('a refused required line stays left out of the factual fallback',async()=>{
+ const {store,query}=fixture(['BANNED-WORD: Challenge'],{charm:true});store.save('goals',{title:'Prepare a fictional guide',status:'adopted'});
+ const provider=async input=>input.kind==='brief-verification'?{passed:false,reason:'No useful action'}:'Unsupported draft.';
+ const result=await run(provider,query,store,'brief-required-line-fallback'),content=store.get('notes',result.record_id).content;
+ assert.equal(result.fallback,true);assert.doesNotMatch(content,/Challenge/);
+ assert.ok(repairs(query).some(w=>w.line_name==='the Charm Challenge line'));
+});
+
+test('a checked contribution survives a length restricted factual fallback',async()=>{
+ const {store,query}=fixture(['MAX-SENTENCE-WORDS: 8']),content='Fictional checked draft.';
+ const note=store.save('notes',{title:'Fictional contribution',content});store.save('lead_entries',{title:note.title,content,note_id:note.id,status:'ready',delivery_day:'2026-01-01'});
+ const provider=async input=>input.kind==='brief-verification'?{passed:false,reason:'No useful action'}:'Unsupported draft.';
+ const result=await run(provider,query,store,'brief-short-contribution'),saved=store.get('notes',result.record_id).content;
+ assert.equal(result.fallback,true);assert.match(saved,/Fictional checked draft/);assert.match(saved,new RegExp('/dashboard/notes/'+note.id));
+});
+
 test('a required sentence over the length limit is left out and reported, and the briefing is saved',async()=>{
  const {store,query}=fixture(['MAX-SENTENCE-WORDS: 8']);
  const content='This fictional copy ready sentence is far too long for the limit set here.',note=store.save('notes',{title:'Fictional contribution',content}),entry=store.save('lead_entries',{title:note.title,content,note_id:note.id,status:'ready',delivery_day:'2026-01-01'});
