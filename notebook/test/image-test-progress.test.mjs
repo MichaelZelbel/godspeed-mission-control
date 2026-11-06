@@ -47,3 +47,49 @@ test('the failure summary of the fallback shows a non-zero cancelled count, the 
  const live=await run("cat "+log,path.join(dir,'copy.log').split(path.sep).join('/'),{limitMs:15000});
  assert.deepEqual(live.seen.map(s=>s.line),['not ok 2 - test/some.test.mjs','# tests 3','# pass 1','# fail 1','# cancelled 1']);
 });
+
+// ---- the real invocation, with a stand-in `docker` that runs the command the way the container would
+const fakeDocker=(dir,body)=>{
+ const bin=path.join(dir,'bin');fs.mkdirSync(bin,{recursive:true});
+ // `docker exec ... <name> sh -c "<command>"`: run the command here, with a `node` that is the stand-in for the test run.
+ fs.writeFileSync(path.join(bin,'docker'),'#!/bin/sh\nshift\nwhile [ "$1" != sh ]; do shift; done\nshift\nPATH="'+bin.split(path.sep).join('/')+':$PATH"; export PATH\nexec sh "$@"\n',{mode:0o755});
+ fs.writeFileSync(path.join(bin,'node'),'#!/bin/sh\n'+body,{mode:0o755});
+ return bin.split(path.sep).join('/');
+};
+const callRun=(dir,env,{limitMs=30000}={})=>new Promise(resolve=>{
+ const started=Date.now(),seen=[],log=path.join(dir,'server-tests.log').split(path.sep).join('/');
+ const child=spawn(bash,['-c','set -o pipefail; . "$1"; run_server_tests godspeed-image-verification "$2"','x',helper,log],{stdio:['ignore','pipe','pipe'],env:{...process.env,SERVER_TEST_DOCKER:path.join(dir,'bin','docker').split(path.sep).join('/'),...env}});
+ child.stdout.on('data',chunk=>{for(const line of chunk.toString().split('\n').filter(Boolean))seen.push({line,at:Date.now()-started});});
+ const timer=setTimeout(()=>child.kill('SIGKILL'),limitMs);
+ child.on('close',code=>{clearTimeout(timer);resolve({code,seen,ended:Date.now()-started,log});});
+});
+
+test('the real server-test call: a failure shown at once, the hang cut at the bound, the whole log kept, a non-zero exit',async t=>{
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-image-run-'));t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
+ fakeDocker(dir,"echo 'ok 1 - fine'\necho 'not ok 2 - test/hangs.test.mjs'\necho '# a comment'\nsleep 60\n");
+ const result=await callRun(dir,{SERVER_TEST_OVERALL_LIMIT:'3',SERVER_TEST_EACH_LIMIT_MS:'1000'});
+ const failure=result.seen.find(s=>/^not ok 2 - test\/hangs\.test\.mjs/.test(s.line));
+ assert.ok(failure,'the failure is shown: '+JSON.stringify(result.seen));
+ assert.ok(failure.at<2000,'shown at '+failure.at+' ms, before the bound');
+ assert.ok(result.ended>=2500&&result.ended<10000,'cut at the bound (3 s), took '+result.ended+' ms');
+ assert.notEqual(result.code,0,'the call fails');
+ const kept=fs.readFileSync(result.log,'utf8');
+ for(const text of ['ok 1 - fine','not ok 2 - test/hangs.test.mjs','# a comment'])assert.ok(kept.includes(text),text+' is in the kept log');
+});
+
+test('the real server-test call asks for exactly 1800 seconds overall and 180000 ms per test, and test.sh uses it',async t=>{
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-image-run-'));t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
+ const argv=path.join(dir,'argv.txt').split(path.sep).join('/');
+ // The stand-in node records how it was called; `timeout` runs it, so the overall limit is the first thing it sees.
+ fakeDocker(dir,"echo \"$@\" > "+argv+"\necho '# tests 1'\necho '# pass 1'\necho '# fail 0'\necho '# cancelled 0'\n");
+ const result=await callRun(dir,{SERVER_TEST_OVERALL_LIMIT:'',SERVER_TEST_EACH_LIMIT_MS:''});
+ assert.equal(result.code,0);
+ // The glob is expanded by the shell, so what the runner gets is the test files in this folder.
+ assert.ok(fs.readFileSync(argv,'utf8').startsWith('scripts/run-tests.mjs --test-timeout=180000 test/'),'the per-test limit is 180000 ms by default');
+ const helperText=fs.readFileSync(helper,'utf8');
+ assert.ok(helperText.includes('timeout ${SERVER_TEST_OVERALL_LIMIT:-1800} node'),'the overall limit defaults to 1800 seconds');
+ assert.ok(helperText.includes('--test-timeout=${SERVER_TEST_EACH_LIMIT_MS:-180000}'),'the per-test limit defaults to 180000 ms');
+ const script=fs.readFileSync(fileURLToPath(new URL('../../docker/full-candidate/test.sh',import.meta.url)),'utf8');
+ assert.match(script,/run_server_tests "\$name" "\$evidence\/server-tests\.log" \|\| \{ server_test_failure_summary/,'test.sh makes this call and falls back to the summary');
+ assert.ok(!script.includes('run-tests.mjs'),'test.sh holds no second copy of the invocation');
+});
