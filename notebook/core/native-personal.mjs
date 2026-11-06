@@ -126,9 +126,9 @@ export function nativeTick(store,addon,now=new Date(),query){
  let messages=[],writes=[];
  const timezone=store.get('settings','installation')?.timezone||'UTC';
  if(addon==='coach'){
-  const settings={...coachSettings(store.root),timezone},table={},health=currentHealth(query||new QueryService(store),{now:now.getTime()}),resolvedColumns=new Set(health.days.flatMap(day=>Object.keys(day.columns).map(metric=>day.date+'\n'+metric))),put=(day,metric,value)=>{(table[day]||={date:day})[coachColumn(metric)]=String(value);};
+  const settings={...coachSettings(store.root),timezone},table={},health=currentHealth(query||new QueryService(store),{now:now.getTime()}),resolvedColumns=new Set(health.days.flatMap(day=>Object.keys(day.columns).map(metric=>day.date+'\n'+coachColumn(metric)))),put=(day,metric,value)=>{(table[day]||={date:day})[coachColumn(metric)]=String(value);};
   for(const day of health.days)for(const [metric,column] of Object.entries(day.columns))if(automaticHealthColumn(column))put(day.date,metric,column.value);
-  for(const observation of health.observations.filter(row=>row.date_precision!=='day'||!row.observed_on).sort((a,b)=>String(a.observed_at).localeCompare(String(b.observed_at)))){const date=localParts(new Date(observation.observed_at),timezone).date;if(!resolvedColumns.has(date+'\n'+observation.metric))put(date,observation.metric,observation.value);}
+  for(const observation of health.observations.filter(row=>row.date_precision!=='day'||!row.observed_on).sort((a,b)=>String(a.observed_at).localeCompare(String(b.observed_at)))){const date=localParts(new Date(observation.observed_at),timezone).date;if(!resolvedColumns.has(date+'\n'+coachColumn(observation.metric)))put(date,observation.metric,observation.value);}
   ({messages,writes}=dueTick(store.root,settings,now,table));
  }else{
   const settings={...journalSettings(store.root),timezone};if(settings.capture_enabled===false)return {verified:true,silent:true};
