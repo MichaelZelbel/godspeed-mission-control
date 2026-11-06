@@ -162,6 +162,15 @@ test('asked for in the chat, a saved briefing of today is printed unchanged and 
  assert.equal(asked.text,text);assert.equal(JSON.stringify(briefNotes(root)),before);
 });
 
+test('asking in chat returns the saved factual fallback exactly once',async t=>{
+ const {root,store}=workspace(t);store.save('goals',{title:'Prepare a fictional guide',status:'adopted'});
+ const provider=async input=>input.kind==='brief-verification'?{passed:false,reason:'No actionable next step'}:'Unsupported private outcome.';
+ const first=await runMorningBrief({root,provider});
+ assert.equal(first.result.fallback,true);assert.equal(briefNotes(root).length,1);
+ const again=await runMorningBrief({root,provider:async()=>{throw Error('the AI must not be asked');}});
+ assert.equal(again.text,first.text);assert.equal(briefNotes(root).length,1);
+});
+
 test('a saved briefing keeps its boundary whitespace when asked for in the chat',async t=>{
  const {root}=workspace(t);
  const provider=async input=>verifies(input)||OK;
