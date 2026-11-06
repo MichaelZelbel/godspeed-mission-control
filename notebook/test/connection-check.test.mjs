@@ -1,7 +1,8 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';
 import {Store} from '../core/records/store.mjs';import {installStarter} from '../core/starter-workspace.mjs';
 import {readNotices} from '../core/notices.mjs';import {addonDeadlines} from '../core/addon-deadlines.mjs';
-import {CONNECTION_NAMES} from '../core/connection-names.mjs';import {runDue} from '../core/connection-check.mjs';import {CONNECTIONS,defaultProbes,checkConnections,nextState,telegramProbe,githubProbe,mailProbe,agentmailProbe,aiProbe,gitKind,aiKind,telegramKind,mailKind,connectionCheckWanted,RECORD_FILE} from '../core/connection-check.mjs';
+import {CONNECTION_NAMES} from '../core/connection-names.mjs';import {runDue} from '../core/connection-check.mjs';import {CONNECTIONS,defaultProbes,checkConnections,nextState,recoverPhoneConnection,telegramProbe,githubProbe,mailProbe,agentmailProbe,aiProbe,phoneProbe,gitKind,aiKind,telegramKind,mailKind,connectionCheckWanted,RECORD_FILE} from '../core/connection-check.mjs';
+import {acceptUpload} from '../core/phone-health.mjs';
 
 for(const key of Object.keys(process.env))if(/^(GODSPEED_|HERMES_)/.test(key))delete process.env[key];
 
@@ -9,7 +10,7 @@ for(const key of Object.keys(process.env))if(/^(GODSPEED_|HERMES_)/.test(key))de
 // deadlines (the real tools/due.js) and the records are real. Everything here is made up.
 const TOKEN='123456789:AAHinventedtokeninventedtokeninvented';
 const fixture=t=>{const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-connection-check-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));installStarter(root);return {root,store:new Store(root,{device:'pc'})};};
-const stubs=(over={})=>({ai:async()=>({set_up:true,ok:true}),telegram:async()=>({set_up:true,ok:true}),github:async()=>({set_up:true,ok:true}),mail:async()=>({set_up:true,ok:true}),agentmail:async()=>({set_up:true,ok:true}),...over});
+const stubs=(over={})=>({ai:async()=>({set_up:true,ok:true}),telegram:async()=>({set_up:true,ok:true}),github:async()=>({set_up:true,ok:true}),mail:async()=>({set_up:true,ok:true}),agentmail:async()=>({set_up:true,ok:true}),phone:async()=>({set_up:false}),...over});
 const refused=async()=>({set_up:true,ok:false,kind:'sign-in'}),down=async()=>({set_up:true,ok:false,kind:'other'});
 const deadlines=store=>addonDeadlines(store,{addon:'connection-check',action:'list'}).deadlines;
 const bell=(store,name)=>store.get('notifications','connection-'+name);
@@ -20,15 +21,35 @@ test('all connections working: nothing is said and no deadline is made',async t=
  const record=await checkConnections({store,day:D1,probes:stubs()});
  assert.deepEqual(readNotices(store),[]);assert.deepEqual(deadlines(store),[]);
  assert.equal(bell(store,'telegram'),undefined);
- assert.deepEqual(Object.values(record.connections).map(c=>[c.set_up,c.ok]),[[true,true],[true,true],[true,true],[true,true],[true,true]]);
+ assert.deepEqual(Object.values(record.connections).map(c=>[c.set_up,c.ok]),[[true,true],[true,true],[true,true],[true,true],[true,true],[false,undefined]]);
  assert.ok(!fs.existsSync(path.join(root,'.godspeed','connection-check')),'no marker file on an ordinary day');
 });
 
 test('a connection that is not set up is not called and not mentioned',async t=>{
  const {store}=fixture(t);
- const record=await checkConnections({store,day:D1,probes:{ai:async()=>({set_up:false}),telegram:async()=>({set_up:false}),github:async()=>({set_up:false}),mail:async()=>({set_up:false}),agentmail:async()=>({set_up:false})}});
- assert.deepEqual(Object.values(record.connections),[{set_up:false},{set_up:false},{set_up:false},{set_up:false},{set_up:false}]);
+ const record=await checkConnections({store,day:D1,probes:{ai:async()=>({set_up:false}),telegram:async()=>({set_up:false}),github:async()=>({set_up:false}),mail:async()=>({set_up:false}),agentmail:async()=>({set_up:false}),phone:async()=>({set_up:false})}});
+ assert.deepEqual(Object.values(record.connections),[{set_up:false},{set_up:false},{set_up:false},{set_up:false},{set_up:false},{set_up:false}]);
  assert.deepEqual(readNotices(store),[]);
+});
+
+test('phone health starts its connection after an accepted upload, then speaks once after 36 quiet hours and recovers on the next upload',async t=>{
+ const {store,root}=fixture(t),home=path.join(root,'hermes-home'),none=()=>({status:()=>({state:'not connected'})}),legacy=()=>({credentials:()=>({})});fs.mkdirSync(home);
+ const at=moment=>phoneProbe({store,now:()=>new Date(moment)});
+ assert.deepEqual(await at('2026-11-04T10:00:00Z')(),{set_up:false});
+ assert.equal(connectionCheckWanted(home,none,store,legacy),false,'an install with no upload has no phone connection to check');
+ acceptUpload(store,{metrics:[]},{now:new Date('2026-11-04T10:00:00Z')});
+ assert.equal(connectionCheckWanted(home,none,store,legacy),true,'the first accepted upload starts the daily check');
+ await checkConnections({store,day:D1,probes:stubs({phone:at('2026-11-04T20:00:00Z')}),now:()=>new Date('2026-11-04T20:00:00Z')});
+ assert.deepEqual(readNotices(store),[]);assert.deepEqual(deadlines(store),[],'an upload ten hours ago is working');
+ assert.deepEqual(await at('2026-11-05T22:00:00Z')(),{set_up:true,ok:false,kind:'quiet'},'36 quiet hours need the owner');
+ await checkConnections({store,day:D2,probes:stubs({phone:at('2026-11-05T23:00:00Z')}),now:()=>new Date('2026-11-05T23:00:00Z')});
+ assert.equal(readNotices(store).length,1);assert.match(readNotices(store)[0].text,/phone has sent no health data since/i);assert.match(readNotices(store)[0].text,/Health Auto Export/);assert.match(readNotices(store)[0].text,/briefing's health numbers stop/i);
+ assert.equal(deadlines(store).length,1);assert.equal(deadlines(store)[0].key,'phone:'+D2);assert.equal(deadlines(store)[0].state,'open');
+ await checkConnections({store,day:D2,probes:stubs({phone:at('2026-11-05T23:00:00Z')}),now:()=>new Date('2026-11-05T23:00:00Z')});
+ assert.equal(readNotices(store).length,1,'the quiet spell is said once');assert.equal(deadlines(store).length,1,'the quiet spell has one deadline');
+ acceptUpload(store,{metrics:[]},{now:new Date('2026-11-06T00:00:00Z')});
+ await recoverPhoneConnection({store,day:D3,now:()=>new Date('2026-11-06T00:00:00Z')});
+ assert.equal(deadlines(store)[0].state,'closed','the accepted upload closes it without another daily check');
 });
 
 test('a refused Telegram key: one message and one deadline, closed by the routine the day it works again',async t=>{

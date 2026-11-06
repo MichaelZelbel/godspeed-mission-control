@@ -52,6 +52,8 @@ import {notebookAddress} from '../core/notebook-address.mjs';
 import {latestPerDayMetric} from '../core/health-inputs.mjs';
 import {PHONE_HEALTH_STATUS,PHONE_HEALTH_RENEW,phoneHealthAnswer} from '../core/phone-health-protocol.mjs';
 import {BODY_LIMIT as UPLOAD_LIMIT,ensureToken,renewToken,tokenMatches,tokenDamaged,isUploadShape,pruneRaw,acceptUpload} from '../core/phone-health.mjs';
+import {recoverPhoneConnection} from '../core/connection-check.mjs';
+import {now as clockNow} from '../../third-party/addons/godspeed-coach/lib/clock.mjs';
 import {about} from '../core/about.mjs';
 import {showCard as showContextCard,readContext,markContext} from '../core/context-setup.mjs';
 import {visibleRows} from '../core/visibility.mjs';
@@ -260,7 +262,10 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
           if(!tokenMatches(store.state,route.slice(8)))return send(res,404,{error:'Not found'});
           const data=upload?.data;
           if(!isUploadShape(data))return send(res,400,{error:'Not a Health Auto Export upload'});
-          acceptUpload(store,data);return send(res,200,{ok:true});
+          acceptUpload(store,data);
+          const now=clockNow(),timezone=store.get('settings','installation')?.timezone||'UTC',day=new Intl.DateTimeFormat('en-CA',{timeZone:timezone,year:'numeric',month:'2-digit',day:'2-digit'}).format(now);
+          try{await recoverPhoneConnection({store,day,now:()=>now});}catch{console.error('Godspeed Mission Control: the phone health connection could not be marked recovered; the daily check will try again');}
+          return send(res,200,{ok:true});
         }catch(error){
           if(error.retained){console.error('Godspeed Mission Control: a phone upload is kept but could not be turned into day records: '+error.message+'; the rollback also failed: '+error.rollbackMessage);return send(res,202,{ok:true,pending:true});}console.error('Godspeed Mission Control: a phone upload was not kept: '+error.message);return send(res,500,{error:'Not kept'});}
       }
