@@ -59,6 +59,7 @@ act() {
   step_passed 'installed research, choice, and work routines completed'
   first_day_phase 'installed morning brief and its Telegram delivery'
   server_scheduled_brief "$EVIDENCE/brief.txt" 1800
+  server_telegram_mark scheduled-brief cron
   server_table notes "$EVIDENCE/notes-before-reply.json"
   server_telegram_say todays-brief "today's brief"
   server_telegram_snapshot
@@ -106,7 +107,7 @@ if(!card)fail('no Godspeed-owned work card is verified by its recorded check and
 const title=(card.text.match(/^WHAT:\s*(.+)$/mi)||[])[1]?.trim()||'';
 const result=(card.text.match(/^RESULT:\s*(.+)$/mi)||[])[1]?.trim()||'';
 if(!title||!result)fail('the verified work card lacks its title or result');
-const artifacts=walk(folder).filter(file=>/\.(?:md|txt)$/i.test(file)&&!file.includes(`${path.sep}work${path.sep}`)&&path.basename(file)!=='brief.txt').map(file=>fs.readFileSync(file,'utf8'));
+const artifacts=walk(folder).filter(file=>/\.(?:md|txt)$/i.test(file)&&path.basename(file)!=='brief.txt').map(file=>fs.readFileSync(file,'utf8'));
 const practical=artifacts.find(text=>/[-*]\s*(?:\[[ xX]\]|\d+[.)])/.test(text)&&/\b(?:\d+\s*(?:lit(?:re|er)s?|days?|hours?|batter(?:y|ies)|ml|kg)|at least \d+)\b/i.test(text)&&['water','food','first aid|medication','light|power','communication|document'].every(group=>new RegExp(group,'i').test(text))&&!/\b(?:TODO|TBD|placeholder|outline only)\b/i.test(text));
 if(!practical)fail('the result artifact is not a practical emergency-kit checklist');
 const brief=normalized(read('brief.txt'));
@@ -132,12 +133,13 @@ NODE
 const fs=require('fs'),path=require('path'),folder=process.argv[2],read=file=>fs.readFileSync(path.join(folder,file),'utf8');
 const normal=value=>String(value||'').replace(/\r\n?/g,'\n').trim();
 const fail=message=>{console.error(message);process.exit(1)};
-const run=JSON.parse(read('run.json')),messages=label=>(run.outbox||[]).filter(m=>m.label===label&&m.accepted!==false).map(m=>m.text).join('');
+const run=JSON.parse(read('run.json')),messages=label=>(run.outbox||[]).filter(m=>m.label===label&&m.accepted!==false).map(m=>m.text);
 const saved=normal(read('brief.txt'));
 const scheduled=JSON.parse(read('scheduled-telegram-requests.json')).sent||[];
 if(!scheduled.some(message=>normal(message.text)===saved))fail('the installed scheduled morning brief was never delivered through Telegram');
-if(!messages('todays-brief'))fail("the owner received no answer to today's brief through the installed gateway");
-if(normal(messages('todays-brief'))!==saved)fail("today's brief differs from the saved note");
+if(messages('scheduled-brief').length!==1||normal(messages('scheduled-brief')[0])!==saved)fail('the scheduled brief was not retained as its own Telegram interaction');
+if(messages('todays-brief').length!==1)fail("the owner received no single answer to today's brief through the installed gateway");
+if(normal(messages('todays-brief')[0])!==saved)fail("today's brief differs from the saved note");
 const rows=file=>{const data=JSON.parse(read(file));return Array.isArray(data)?data:data.data||[]};
 const count=items=>items.filter(note=>normal(note.content||note.body||'')===saved).length;
 if(count(rows('notes-after-reply.json'))!==count(rows('notes-before-reply.json')))fail("today's brief created a second saved brief");

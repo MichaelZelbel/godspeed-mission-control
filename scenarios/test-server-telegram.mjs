@@ -36,6 +36,22 @@ test('actions and marked routines keep complete Telegram records',()=>{
   assert.equal(routine.sent,1);
 });
 
+test('marking a scheduled delivery leaves only the later reply for its chat action',()=>{
+  const state={sent:1,outbox:[{label:'setup-first-install',text:'Setup question'}]};
+  const scheduled={chat_id:31415,text:'Scheduled morning brief',buttons:[]};
+  const reply={chat_id:31415,text:'Scheduled morning brief',buttons:[]};
+
+  captureSent(state,{sent:[{text:'Setup question'},scheduled]},'scheduled-brief');
+  captureSent(state,{sent:[{text:'Setup question'},scheduled,reply]},'todays-brief');
+
+  assert.deepEqual(state.outbox,[
+    {label:'setup-first-install',text:'Setup question'},
+    {label:'scheduled-brief',kind:'sendMessage',chat_id:31415,text:'Scheduled morning brief',buttons:[],accepted:true},
+    {label:'todays-brief',kind:'sendMessage',chat_id:31415,text:'Scheduled morning brief',buttons:[],accepted:true},
+  ]);
+  assert.equal(state.sent,3);
+});
+
 test('mark saves complete sent records through its command boundary',()=>{
   const folder=fs.mkdtempSync(path.join(os.tmpdir(),'server-telegram-mark-'));
   const bin=path.join(folder,'bin');

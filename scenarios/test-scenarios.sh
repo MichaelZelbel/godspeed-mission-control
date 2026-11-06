@@ -2869,7 +2869,7 @@ first_day_good() { # <folder>
   printf '{"results":{"goal":{"title":"Prepare a practical household emergency-kit checklist by Sunday."}}}\n' >"$f/setup.json"
   for label in research choice work; do printf '[{"id":"%s","last_run_at":"2026-11-06T10:00:00Z","last_status":"ok"}]\n' "$label" >"$f/job-$label.json"; done
   printf 'WHAT: Prepare a practical household emergency-kit checklist\nSTATUS: verified\nRESULT: Wrote emergency-kit-checklist.md with practical supplies.\n\n- 2026-11-06 VERIFIED check passed (test -s emergency-kit-checklist.md)\n' >"$f/work/W-1.md"
-  cat >"$f/emergency-kit-checklist.md" <<'EOF'
+  cat >"$f/work/emergency-kit-checklist.md" <<'EOF'
 - [ ] Water: 12 litres for 3 days
 - [ ] Food: 3 days of shelf-stable meals
 - [ ] First aid and medication: 7 days
@@ -2887,7 +2887,7 @@ EOF
   printf '{"id":"scheduled-brief","before_last_run_at":null,"data":[{"id":"scheduled-brief","last_run_at":"2026-11-06T10:01:00Z","last_status":"ok"}]}\n' >"$f/job-scheduled-brief.json"
   printf 'Morning brief: source=builtin\n' >"$f/brief-cron-runs.txt"
   printf '{"sent":[{"text":%s}]}\n' "$(node -e 'process.stdout.write(JSON.stringify(require("fs").readFileSync(process.argv[1],"utf8")))' "$f/brief.txt")" >"$f/scheduled-telegram-requests.json"
-  run_json "$f" "$(msg todays-brief "$(cat "$f/brief.txt")")"
+  run_json "$f" "$(msg scheduled-brief "$(cat "$f/brief.txt")")" "$(msg todays-brief "$(cat "$f/brief.txt")")"
   printf '[]\n' >"$f/work-items.json"
   printf '{"data":[{"id":"brief-1","content":%s}]}\n' "$(node -e 'process.stdout.write(JSON.stringify(require("fs").readFileSync(process.argv[1],"utf8")))' "$f/brief.txt")" >"$f/notes-before-reply.json"
   cp "$f/notes-before-reply.json" "$f/notes-after-reply.json"
@@ -2904,10 +2904,10 @@ copy "$FD/good" "$FD/unverified"
 sed -i 's/STATUS: verified/STATUS: pending/' "$FD/unverified/work/W-1.md"
 refuses 'a first day without checked work' first-day "$FD/unverified" 'no Godspeed-owned work card'
 copy "$FD/good" "$FD/no-artifact"
-rm "$FD/no-artifact/emergency-kit-checklist.md"
+rm "$FD/no-artifact/work/emergency-kit-checklist.md"
 refuses 'a first day without a practical artifact' first-day "$FD/no-artifact" 'not a practical emergency-kit checklist'
 copy "$FD/good" "$FD/placeholder"
-printf '%s\n' '- [ ] TODO: outline only' >"$FD/placeholder/emergency-kit-checklist.md"
+printf '%s\n' '- [ ] TODO: outline only' >"$FD/placeholder/work/emergency-kit-checklist.md"
 refuses 'a placeholder checklist' first-day "$FD/placeholder" 'not a practical emergency-kit checklist'
 for table in "${SERVER_SPARSE_TABLES[@]}"; do
   sparse=${table//_/-}
@@ -2928,6 +2928,9 @@ done
 copy "$FD/good" "$FD/no-send"
 printf '{"sent":[]}\n' >"$FD/no-send/scheduled-telegram-requests.json"
 refuses 'a brief not delivered on Telegram' first-day "$FD/no-send" 'never delivered'
+copy "$FD/good" "$FD/unmarked-scheduled-delivery"
+run_json "$FD/unmarked-scheduled-delivery" "$(msg todays-brief "$(cat "$FD/unmarked-scheduled-delivery/brief.txt")")"
+refuses 'a scheduled delivery captured as the later chat reply' first-day "$FD/unmarked-scheduled-delivery" 'not retained as its own Telegram interaction'
 copy "$FD/good" "$FD/direct-run"
 printf 'Morning brief: source=direct\n' >"$FD/direct-run/brief-cron-runs.txt"
 refuses 'a direct brief run called scheduled delivery' first-day "$FD/direct-run" 'not triggered by the installed scheduler'
