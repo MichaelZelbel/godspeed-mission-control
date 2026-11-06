@@ -219,7 +219,7 @@ export function jobExecutor(configuredProvider,query) {
       if(prior.some(t=>t.id.endsWith(today)&&t.status==='closed'))return {verified:true,silent:true,reason:'Today\'s coaching conversation is already closed'};
       const health=currentHealth(query),sources={preparation:nativeCoachContext(store,area),previous:prior.slice(-3),habits:visibleRows(query,'habits').filter(h=>h.area===area),health:health.observations,health_freshness:health,journal:visibleRows(query,'journal').slice(-7)};
       const raw=await provider({kind:'coaching',context:{area,...sources},contract:'Open one short coaching question using prior words and actual habit observations. health_freshness.days is authoritative: may_be_incomplete and not_judged columns are unknown, never misses or evidence of a gap. A habit day answered skip does not count either way: it is neither done nor missed. Never open with something the preparation lists under Raised in other talks this week: another talk already raised it, so pick another. Respect the configured area boundaries. Missing health observations are missing; do not diagnose. Never invent agreement.'});
-      const question=healthSafeReply(raw,'question',health);
+      const question=healthSafeReply(raw,'question',area==='health'?health:null);
       const talk=personalOperation({store,query},{type:'coach-open',area,question,sources});
       const note=store.save('notes',{title:'Your '+area+' coaching conversation',content:question,talk_id:talk.id,source_app:'coaching'});
       return {verified:true,record_id:note.id,talk_id:talk.id,delivery:'notebook'};

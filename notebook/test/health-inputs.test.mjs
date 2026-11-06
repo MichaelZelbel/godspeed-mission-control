@@ -60,6 +60,13 @@ test('health coaching refuses all provider prose while a phone column is unknown
  const run=jobExecutor(async input=>{assert.equal(input.kind,'coaching');assert.match(input.contract,/may_be_incomplete and not_judged/);return {question:'Make up the protein gap now.',health_claims:[]};},query);
  await assert.rejects(run({id:'unknown-health-coach',kind:'coaching',area:'health'},{store,settings:store.get('settings','installation')}),/Assistant output cannot be used while phone health is unknown/);assert.equal(query.rows('coach_talks').length,0);
 });
+test('unknown phone health does not block non-health coaching',async()=>{
+ const {store,query}=setup(),day=new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Berlin',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+ store.save('health_observations',{metric:'protein_g',value:20,source:PHONE_SOURCE,via:'phone-receiver',observed_on:day,date_precision:'day',observed_at:day+'T00:00:00Z',data_until:'09:00:00'});
+ const run=jobExecutor(async input=>{assert.equal(input.kind,'coaching');assert.notEqual(input.context.area,'health');return {question:'What is one fictional next step for '+input.context.area+'?'};},query);
+ for(const area of ['work-money','relationships'])await run({id:'unknown-non-health-coach-'+area,kind:'coaching',area},{store,settings:store.get('settings','installation')});
+ assert.deepEqual(query.rows('coach_talks').map(talk=>talk.area).sort(),['relationships','work-money']);
+});
 test('the phone receiver and a CSV that carries the app name keep their own rows; the reader shows the newest of the two',()=>{
  const {store,query}=setup(),operation=input=>personalOperation({store,query},input);
  const now=Date.now(),day=new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Berlin',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(now));

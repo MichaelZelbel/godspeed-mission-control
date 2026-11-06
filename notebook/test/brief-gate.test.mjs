@@ -46,6 +46,17 @@ test('a briefing treats a short phone day as unknown until a manual settlement a
  personalOperation({store,query},{type:'health-add',metric:'protein_g',value:80,unit:'g',observed_at:day+'T12:00:00Z'});
  const second=await briefing({id:'brief-incomplete-two'},{store,query,provider,now:new Date('2026-11-06T08:00:00Z')});assert.match(store.get('notes',second.record_id).content,/1 known day and 0 unknown days/);
 });
+test('a briefing counts several unknown phone columns on one day once',async()=>{
+ const store=new Store(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-brief-unknown-day-count-'))),query=new QueryService(store),day='2026-11-04';
+ store.save('settings',{id:'installation',timezone:'UTC'});
+ for(const [metric,value] of [['steps',4200],['protein_g',50]])store.save('health_observations',{metric,value,source:'Health Auto Export',via:'phone-receiver',observed_on:day,date_precision:'day',observed_at:day+'T00:00:00Z',data_until:'19:55:00'});
+ const provider=async input=>{
+  if(input.kind==='brief-verification')return {passed:true,reason:'Fixture checked the incomplete phone day count.'};
+  assert.equal(input.context.health_summary.length,2);return 'Do not use this fictional health advice.';
+ };
+ const result=await briefing({id:'brief-unknown-day-count'},{store,query,provider,now:new Date('2026-11-05T08:00:00Z')});
+ assert.match(store.get('notes',result.record_id).content,/This week has 1 unknown phone-health day\./);
+});
 
 test('a mechanical briefing failure gets one evidence-led rewrite and only the checked bytes are saved',async()=>{
  const store=new Store(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-brief-rewrite-'))),query=new QueryService(store);let writes=0;
