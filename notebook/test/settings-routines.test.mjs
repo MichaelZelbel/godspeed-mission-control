@@ -172,6 +172,49 @@ test('a mail-count routine Hermes cannot make is a pending notice after a period
  assert.equal(store.get('notifications','mail-count-routine').status,'resolved');
 });
 
+test('routine setup failures keep scrubbed diagnostics, back off, and share one recovering bell notice',async t=>{
+ const {store,hermes,scheduler,tick}=await adoptedFixture(t),{setRoutineSwitch}=await import('../core/routine-switches.mjs');
+ await setRoutineSwitch(store,{key:'decide',on:true});let now=Date.parse('2030-01-01T00:00:00Z'),mode='verbose',commands=[],logged=[];scheduler.now=()=>now;
+ const details=Array.from({length:7},(_,index)=>Array.from({length:35},()=>`detail-${index}`).join(' '));details[6]+=' \u001b[31mtoken=tok_0123456789abcdef\u001b[0m';
+ const verbose=[...details,'Traceback (most recent call last):','  File "routine.py", line 1',"ModuleNotFoundError: No module named 'ruamel'"].join('\n'),plain='connection to Hermes failed\nError: retry exhausted\n';
+ const command=scheduler.run;scheduler.run=async(executable,args,options)=>{
+  commands.push(args.join(' '));const name=args[args.indexOf('--name')+1],fails=args[1]==='create'&&(mode==='verbose'||mode==='recover'&&name==='Daily round: choose today\'s work'||mode==='plain'&&name==='Nightly cleanup');
+  if(fails)throw Object.assign(new Error('Command failed with exit code 1'),{code:1,stderr:mode==='plain'?plain:verbose});
+  return command('hermes',args,options);
+ };
+ const original=console.error;console.error=(...line)=>logged.push(line.join(' '));t.after(()=>{console.error=original;});
+ const run=async minutes=>{now+=minutes*60000;scheduler.lastTick=0;await tick();};
+ const cleanupCreates=()=>commands.filter(command=>command.includes('cron create')&&command.includes('Nightly cleanup')).length;
+ await run(0);await run(1);await run(2);await run(1);await run(2);assert.equal(cleanupCreates(),3,'the fourth try waits the full four minutes');await run(1);await run(7);assert.equal(cleanupCreates(),4,'the fifth try waits the full eight minutes');await run(1);
+ const state=()=>JSON.parse(fs.readFileSync(path.join(store.state,'routine-setup-failures.json'),'utf8')).steps,notice=()=>store.get('notifications','routine-setup-failures');
+ const failure=state().cleanup;
+ assert.equal(failure.step,'cleanup');assert.equal(failure.exit_code,1);assert.equal(failure.attempts,5);assert.equal(failure.stderr.length,2000);assert.ok(failure.stderr.split(/\r?\n/).length<=10);assert.doesNotMatch(failure.stderr,/\x1b\[/);assert.match(failure.stderr,/ModuleNotFoundError/);assert.ok(!failure.stderr.includes('tok_0123456789abcdef'));assert.ok(!logged.join('\n').includes('tok_0123456789abcdef'));assert.match(logged.join('\n'),/Nightly cleanup.*ModuleNotFoundError/);
+ assert.equal(cleanupCreates(),5,'it retries after 1, 2, 4 and 8 minutes, never before');
+ assert.equal(commands.filter(command=>command==='cron tick').length,8,'Hermes still ticks every time');
+ assert.equal(notice().status,'pending');assert.match(notice().body,/Notice sender/);assert.match(notice().body,/ModuleNotFoundError: No module named 'ruamel'/);assert.equal(store.list('notifications').filter(n=>n.id==='routine-setup-failures'&&n.status==='pending').length,1);
+ mode='recover';await run(16);
+ assert.equal(notice().status,'pending');assert.deepEqual(notice().steps,['decide']);assert.match(notice().body,/Daily round: choose today's work/);
+ mode='ok';await run(1);assert.equal(store.get('notifications','routine-setup-failures').status,'resolved');assert.equal(Object.keys(state()).length,0);
+ const removeCleanup=()=>{hermes.write(hermes.jobs().filter(job=>job.name!=='Nightly cleanup'));const routines=readNotebookRoutines(store);writeNotebookRoutines(store,{...routines,jobs:routines.jobs.filter(job=>job.key!=='cleanup')});};
+ removeCleanup();mode='plain';await assert.rejects(scheduler.followCleanup(),/exit code 1/);await assert.rejects(scheduler.followCleanup(),/exit code 1/);assert.equal(notice().status,'resolved','two failures followed by recovery tell nothing');
+ mode='ok';await scheduler.followCleanup();assert.equal(Object.keys(state()).length,0);
+ removeCleanup();mode='plain';await run(0);const fresh=new NativeScheduler(store,{home:scheduler.home,executable:'hermes',device:'pc',run:scheduler.run,now:()=>now});await assert.rejects(fresh.followCleanup({retry:true}),/exit code 1/);fresh.executable='hermes-replaced';await assert.rejects(fresh.followCleanup({retry:true}),/exit code 1/);
+ assert.equal(state().cleanup.attempts,3);assert.equal(state().cleanup.executable,'hermes-replaced');assert.equal(state().cleanup.error_line,undefined);assert.match(logged.at(-1),/Nightly cleanup could not be set up: connection to Hermes failed/);assert.doesNotMatch(logged.at(-1),/retry exhausted/);assert.equal(notice().status,'pending','a new failure spell tells again after three attempts');assert.match(notice().body,/connection to Hermes failed/);assert.doesNotMatch(notice().body,/retry exhausted/);
+});
+
+test('a busy setup notice store does not stop Hermes ticks',async t=>{
+ const {store,scheduler,tick}=await adoptedFixture(t);let now=Date.parse('2030-01-01T00:00:00Z'),mode='fail',commands=[],blocked=false,logged=[];scheduler.now=()=>now;
+ const command=scheduler.run,save=store.save.bind(store);scheduler.run=async(executable,args,options)=>{commands.push(args.join(' '));if(args[1]==='create'&&mode==='fail')throw Object.assign(new Error('Command failed with exit code 1'),{code:1,stderr:'Hermes is unavailable\n'});return command('hermes',args,options);};
+ store.save=(type,value,...rest)=>{if(blocked&&type==='notifications'&&value.id==='routine-setup-failures')throw Object.assign(new Error('Workspace is being written by another process'),{code:'WRITER_BUSY'});return save(type,value,...rest);};
+ const original=console.error;console.error=(...line)=>logged.push(line.join(' '));t.after(()=>{console.error=original;});
+ const run=async minutes=>{now+=minutes*60000;scheduler.lastTick=0;await tick();};
+ await run(0);await run(1);blocked=true;await run(2);assert.equal(store.get('notifications','routine-setup-failures'),undefined,'a busy store can refuse the pending notice');
+ blocked=false;await run(4);assert.equal(store.get('notifications','routine-setup-failures').status,'pending');
+ blocked=true;mode='ok';await run(8);assert.equal(store.get('notifications','routine-setup-failures').status,'pending','a busy store can refuse the resolution too');
+ blocked=false;await run(1);assert.equal(store.get('notifications','routine-setup-failures').status,'resolved');
+ assert.equal(commands.filter(command=>command==='cron tick').length,6);assert.equal(logged.filter(line=>line.includes('routine setup notice could not be saved')).length,2);
+});
+
 test('the routine scripts run the journal\'s tick and say a queued notice once',{skip:!['python','python3'].some(p=>{try{execFileSync(p,['--version'],{stdio:'ignore'});return true;}catch{return false;}})&&'needs Python'},async t=>{
  const {root,home,store,scheduler}=await withGoal(t);
  const journal=fileURLToPath(new URL('../../third-party/addons/godspeed-journal/bin/godspeed-journal.mjs',import.meta.url));
@@ -755,7 +798,7 @@ test('a switch that the assistant cannot set up yet is saved and the answer says
  service.scheduler.followNoticeSender=async()=>{throw Error('Hermes refused the job');};
  const response=await fetch('http://127.0.0.1:'+service.address.port+'/api/routines/switch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:'connection-check',on:true})});
  assert.notEqual(response.status,200);
- const {error}=await response.json();assert.match(error,/Your switch is saved/);assert.match(error,/Hermes refused the job/);
+ const {error}=await response.json();assert.match(error,/Your switch is saved/);assert.match(error,/Hermes refused the job/);assert.match(error,/longer waits after repeated failures/);assert.doesNotMatch(error,/every minute/);
  const {switchedOn}=await import('../core/routine-switches.mjs');assert.equal(switchedOn(service.store,'connection-check'),true);
 });
 
