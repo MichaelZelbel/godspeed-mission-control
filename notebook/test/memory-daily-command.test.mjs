@@ -9,6 +9,7 @@ import {QueryService} from '../core/query.mjs';
 import {Domains} from '../core/domains.mjs';
 import {notebookNoteText} from '../core/notebook-note.mjs';
 import {STARTING_ROUTINES} from '../core/starting-routines.mjs';
+import {recordRunningNotebook} from '../core/running-notebook.mjs';
 import {main} from '../scripts/memory-daily.mjs';
 
 const model=fileURLToPath(new URL('./fixtures/memory-daily-model.mjs',import.meta.url));
@@ -58,4 +59,18 @@ test('failed model and deadline-state commands do not consume archive rows, whil
  await assert.rejects(run(root,{env:{FIXTURE_MEMORY_DUE_STATE_FAIL:'1',FIXTURE_MEMORY_MODEL_LOG:log}}),/deadline state/);assert.equal(fs.readFileSync(log,'utf8').trim().split('\n').length,3);
  const noAi=workspace(t);archive(noAi,[row]);const skipped=await run(noAi,{env:{FIXTURE_MEMORY_MODEL_CHECK_FAIL:'1'}});assert.equal(skipped.skipped,true);assert.ok(!fs.existsSync(path.join(noAi,'routines','remember-what-you-said','state.json')));
  fs.mkdirSync(path.join(noAi,'.godspeed'),{recursive:true});fs.writeFileSync(path.join(noAi,'.godspeed','provider.json'),'{}');await assert.rejects(run(noAi,{env:{FIXTURE_MEMORY_MODEL_CHECK_FAIL:'1'}}),/configured Godspeed model/);
+});
+
+test('a Windows external assistant configuration is checked instead of silently skipped',async t=>{
+ const root=workspace(t),external=path.join(root,'notebook-state'),config=path.join(external,'assistant.json'),row={id:'external',at:'2026-11-02T12:00:00Z',text:'I moved to Hamburg on 1 November'},log=path.join(root,'model.log');fs.mkdirSync(external);fs.writeFileSync(config,'{}');recordRunningNotebook({root,assistantConfig:config,platform:'win32'});archive(root,[row]);
+ await assert.rejects(run(root,{env:{FIXTURE_MEMORY_MODEL_CHECK_FAIL:'1'}}),/configured Godspeed model/);
+ const result=await run(root,{env:{FIXTURE_MEMORY_MODEL_LOG:log,FIXTURE_MEMORY_MODEL_RESPONSE:response(fact(row.id,row.text))}});assert.equal(result.completed,1);assert.equal(fs.readFileSync(log,'utf8').trim().split('\n').length,1);
+});
+
+test('malformed successful deadline state stops before a model request or cursor write',async t=>{
+ for(const state of ['{}','not json']){
+  const root=workspace(t),row={id:'deadline-'+state,at:'2026-11-02T12:00:00Z',text:'I moved to Hamburg on 1 November'},log=path.join(root,'model.log');archive(root,[row]);
+  await assert.rejects(run(root,{env:{FIXTURE_MEMORY_DUE_STATE:state,FIXTURE_MEMORY_MODEL_LOG:log}}),/deadline state/);
+  assert.ok(!fs.existsSync(log));assert.ok(!fs.existsSync(path.join(root,'routines','remember-what-you-said','state.json')));
+ }
 });

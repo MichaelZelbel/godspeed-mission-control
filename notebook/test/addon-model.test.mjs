@@ -8,6 +8,7 @@ import {EventEmitter} from 'node:events';
 import {PassThrough} from 'node:stream';
 import {execFileSync,spawn} from 'node:child_process';
 import {addonModel,modelInput,modelConnection,assistantCheck} from '../core/addon-model.mjs';
+import {assistantConfiguration,recordRunningNotebook} from '../core/running-notebook.mjs';
 import {installModelCommand} from '../scripts/install-model-command.mjs';
 import {chooseAssistant} from '../scripts/choose-assistant.mjs';
 
@@ -19,6 +20,19 @@ function fixture(t){
  return {root,state,home,runtime};
 }
 const input={system:'Evaluate only this fictional profile.',prompt:'Invented person who likes sailing.'};
+test('assistant configuration follows the environment, Windows pointer, then workspace state',t=>{
+ const f=fixture(t),external=path.join(f.root,'external'),pointer=path.join(external,'pointer-assistant.json'),selected=path.join(external,'selected-assistant.json');fs.mkdirSync(external);fs.writeFileSync(pointer,'{}');fs.writeFileSync(selected,'{}');
+ recordRunningNotebook({root:f.root,assistantConfig:pointer,platform:'win32'});
+ assert.equal(assistantConfiguration(f.root,{env:{GODSPEED_ASSISTANT_CONFIG:selected}}).assistantFile,selected);
+ assert.equal(assistantConfiguration(f.root,{env:{}}).assistantFile,pointer);
+ fs.writeFileSync(path.join(f.state,'running-notebook.json'),JSON.stringify({format:1,assistantConfig:pointer,stateFolder:external,workspace:external}));
+ assert.equal(assistantConfiguration(f.root,{env:{}}).assistantFile,path.join(f.state,'assistant.json'));
+});
+test('an add-on uses the assistant state named by the Windows notebook pointer',t=>{
+ const f=fixture(t),external=path.join(f.root,'external'),runtime=path.join(external,'runtime'),home=path.join(external,'home'),config=path.join(external,'assistant.json');fs.mkdirSync(runtime,{recursive:true});fs.mkdirSync(home);fs.writeFileSync(path.join(runtime,'hermes'),'');fs.writeFileSync(path.join(runtime,'python3'),'');fs.writeFileSync(config,JSON.stringify({verified:true,executable:path.join(runtime,'hermes'),home,sourceRoot:runtime}));
+ recordRunningNotebook({root:f.root,assistantConfig:config,platform:'win32'});
+ const connection=modelConnection(f.root);assert.equal(connection.descriptor.executable,path.join(runtime,'hermes'));assert.equal(connection.state,external);
+});
 test('the packaged server runtime uses its own virtual environment and source root',t=>{
  const f=fixture(t),bin=path.join(f.runtime,'bin'),venv=path.join(f.runtime,'.venv','bin');fs.mkdirSync(bin,{recursive:true});fs.mkdirSync(venv,{recursive:true});fs.writeFileSync(path.join(venv,'python3'),'');
  fs.writeFileSync(path.join(f.state,'assistant.json'),JSON.stringify({verified:true,home:f.home,executable:path.join(bin,'hermes')}));const connection=modelConnection(f.root);assert.equal(connection.python,path.join(venv,'python3'));assert.equal(connection.sourceRoot,f.runtime);

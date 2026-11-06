@@ -1,6 +1,5 @@
 #!/usr/bin/env node
 import fs from 'node:fs';
-import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {runChild} from '../core/child-process.mjs';
 import {Store} from '../core/records/store.mjs';
@@ -8,12 +7,13 @@ import {QueryService} from '../core/query.mjs';
 import {Domains} from '../core/domains.mjs';
 import {hasNotebookNote} from '../core/notebook-note.mjs';
 import {rememberWhatYouSaid} from '../core/memory-daily.mjs';
+import {assistantConfiguration} from '../core/running-notebook.mjs';
 
 const root=process.env.GODSPEED_WORKSPACE||process.env.GODSPEED_ROOT||process.cwd();
 const model=fileURLToPath(new URL('../bin/godspeed-model.mjs',import.meta.url));
 const due=fileURLToPath(new URL('../../tools/due.js',import.meta.url));
 
-const configuredModel=root=>fs.existsSync(path.join(root,'.godspeed','assistant.json'))||fs.existsSync(path.join(root,'.godspeed','provider.json'));
+const configuredModel=(root,env=process.env)=>{const {assistantFile,providerFile}=assistantConfiguration(root,{env});return !!assistantFile||fs.existsSync(providerFile);};
 
 export async function main({root:workspace=root,modelCommand=model,dueCommand=due}={}){
  const check=await runChild(process.execPath,[modelCommand,'--workspace',workspace,'--check'],{cwd:workspace,env:process.env,timeoutMs:60000,maxBytes:65536});
