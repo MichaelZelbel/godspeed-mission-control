@@ -3365,11 +3365,12 @@ mkdir -p "$RFS/root/.godspeed" "$RFS/assistant"
 printf '{"home":"%s"}\n' "$RFS/assistant" >"$RFS/root/.godspeed/assistant.json"
 printf 'refused-scenario-key\n' >"$RFS/assistant/settings.json"
 REFUSED_SCAN=$(GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy bash -c '
-  . "$0"
+  cd "$3"
+  . "$1"
   install_paths
-  EVIDENCE=$1
+  EVIDENCE=$2
   refused_not_retained native
-' "$ROOT/scenarios/workouts-from-hevy.sh" "$RFS" 2>&1)
+'refused-scan' "$ROOT/scenarios/workouts-from-hevy.sh" "$RFS" "$ROOT/scenarios" 2>&1)
 REFUSED_SCAN_CODE=$?
 case "$REFUSED_SCAN_CODE $REFUSED_SCAN" in
   "1 "*"native kept the refused Hevy key in $RFS/assistant/settings.json"*) ok "a refused key in the recorded native assistant home fails with its path" ;;

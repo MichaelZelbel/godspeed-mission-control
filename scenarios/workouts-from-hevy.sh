@@ -105,13 +105,19 @@ settings_post() { # <docker|native> <json file> <answer file>
   esac
 }
 
+persistence_roots() {
+  assistant_home
+  DOCKER_PERSISTENCE_ROOTS=(/opt/data /root/.hermes)
+  NATIVE_PERSISTENCE_ROOTS=("$ROOT" "$STATE" "$HERMES")
+}
+
 refused_not_retained() { # <docker|native>
   local platform=$1 key='refused-scenario-key' found paths=$EVIDENCE/.$1-refused-key-paths
+  persistence_roots
   case $platform in
-    docker) found=$(in_server sh -c "grep -rlF -- '$key' /opt/data /root/.hermes 2>/dev/null || true" 2>/dev/null || true) ;;
+    docker) found=$(in_server sh -c "grep -rlF -- '$key' ${DOCKER_PERSISTENCE_ROOTS[*]} 2>/dev/null || true" 2>/dev/null || true) ;;
     native)
-      assistant_home
-      found=$(grep -rlF -- "$key" "$ROOT" "$STATE" "$HERMES" 2>/dev/null || true)
+      found=$(grep -rlF -- "$key" "${NATIVE_PERSISTENCE_ROOTS[@]}" 2>/dev/null || true)
       ;;
   esac
   printf '%s\n' "$found" | sed '/^$/d' | sort -u >"$paths"
@@ -197,8 +203,9 @@ NODE
 
 scan_fixture_key() {
   local key='00000000-0000-4000-8000-000000000001' native_hits docker_hits
-  native_hits=$(grep -rlF --exclude-dir=.git --exclude-dir=node_modules -- "$key" "$ROOT" "$STATE" "$HERMES" 2>/dev/null || true)
-  docker_hits=$(in_server sh -c "grep -rlF --exclude-dir=node_modules -- '$key' /opt/data /root/.hermes 2>/dev/null || true" 2>/dev/null || true)
+  persistence_roots
+  native_hits=$(grep -rlF --exclude-dir=.git --exclude-dir=node_modules -- "$key" "${NATIVE_PERSISTENCE_ROOTS[@]}" 2>/dev/null || true)
+  docker_hits=$(in_server sh -c "grep -rlF --exclude-dir=node_modules -- '$key' ${DOCKER_PERSISTENCE_ROOTS[*]} 2>/dev/null || true" 2>/dev/null || true)
   printf '%s\n%s\n' "$native_hits" "$docker_hits" | sed '/^$/d' | grep -vE '/hevy\.json$' | sort -u >"$EVIDENCE/.key-hits"
   "$NODE" - "$EVIDENCE/.key-hits" >"$EVIDENCE/key-scan.json" <<'NODE'
 const fs=require('fs'),paths=fs.readFileSync(process.argv[2],'utf8').trim().split(/\r?\n/).filter(Boolean);
