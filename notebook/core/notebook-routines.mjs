@@ -68,11 +68,11 @@ export function journalWanted(root){
 // THE DAILY CONNECTION CHECK (4 November 2026, #200; core/connection-check.mjs). A script routine at
 // 05:00 (earlier when an early Morning brief needs it first), before the morning briefing, made once on a machine that made its starting routines (one
 // that kept the reader's own routines never gets Godspeed's beside them). It starts on when this
-// install has Telegram or Gmail connected or a tracker with a mail rule, and paused when it has none; the Routines list's
+// install has Telegram or Gmail connected, a tracker with a mail rule, or a phone upload, and paused when it has none; the Routines list's
 // Pause and Resume is its switch.
 export const CONNECTION_JOB='Daily connection check';
 export const CONNECTION_SCRIPT='godspeed-connection-check.py';
-export const CONNECTION_WHAT=`Early every morning, before your morning brief, it makes one harmless call to each connection you set up (${Object.values(CONNECTION_NAMES).map(c=>c.label).join(', ')}) and tells you only when one needs your sign-in or key, or failed two mornings in a row. It sends nothing else.`;
+export const CONNECTION_WHAT=`Early every morning, before your morning brief, it checks each connection you set up (${Object.values(CONNECTION_NAMES).map(c=>c.label).join(', ')}). It tells you only when one needs your sign-in or key, failed two mornings in a row, or your phone has not sent health data for 36 hours. It sends nothing else.`;
 // THE MAIL COUNTS (4 November 2026, #215; core/mail-trackers.mjs). A script routine every morning at
 // 04:30 that counts the mails a tracker's mail rule names, from each mail's sender, subject and date
 // and never its text, and adds them to that tracker. It is made when a tracker has a mail rule and

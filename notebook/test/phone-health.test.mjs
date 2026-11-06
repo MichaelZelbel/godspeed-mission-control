@@ -14,6 +14,8 @@ import {healthFeedId,phoneFeedId} from '../core/health-feed-id.mjs';
 import {backup} from '../core/archives.mjs';
 import {createService} from '../server/main.mjs';
 import {tokenState,tokenDamaged,isUploadShape,appendRaw,encodeRawLine,parseRawLine,readRaw,acceptUpload,importFolder,buildDays,instantOf,pruneRaw,rawFolder,tokenFile,ensureToken,renewToken,tokenMatches,SOURCE} from '../core/phone-health.mjs';
+import {checkConnections,phoneProbe} from '../core/connection-check.mjs';
+import {addonDeadlines} from '../core/addon-deadlines.mjs';
 
 for(const key of Object.keys(process.env))if(/^(GODSPEED_|HERMES_)/.test(key))delete process.env[key];
 
@@ -254,6 +256,18 @@ test('the receiver on a server: a wrong token stores nothing, the right one keep
  assert.equal((await request(port,'/ingest/'+token,{method:'POST',raw:'{"data":{"pad":"'+'x'.repeat(21*1024*1024)+'"}}'})).status,413);
  assert.deepEqual(fs.readdirSync(raw).map(f=>fs.readFileSync(path.join(raw,f),'utf8')),before);
  assert.ok(!logged.some(line=>line.includes(token)||line.includes('127.0.0.1')||line.includes('123')),logged.join('\n'));
+});
+
+test('the next accepted upload closes the quiet-phone deadline before another daily check',async t=>{
+ const root=serverRoot('godspeed-phone-recovery-'),service=await createService({root,port:0,webPort:0}),now='2026-11-05T23:00:00Z';process.env.GODSPEED_NOW=now;
+ t.after(async()=>{delete process.env.GODSPEED_NOW;await service.close();fs.rmSync(root,{recursive:true,force:true});});
+ const store=service.store,working=async()=>({set_up:true,ok:true}),phone=phoneProbe({store}),probes={ai:working,telegram:working,github:working,mail:working,agentmail:working,phone};
+ acceptUpload(store,upload(),{now:at('2026-11-04T10:00:00Z')});
+ await checkConnections({store,day:'2026-11-05',probes,now:()=>new Date(now)});
+ const [deadline]=addonDeadlines(store,{addon:'connection-check',action:'list'}).deadlines;assert.equal(deadline.state,'open');
+ const token=fs.readFileSync(tokenFile(store.state),'utf8').trim();
+ assert.equal((await request(service.address.port,'/ingest/'+token,{method:'POST',body:{data:upload()}})).status,200);
+ assert.equal(addonDeadlines(store,{addon:'connection-check',action:'list'}).deadlines[0].state,'closed');
 });
 
 test('Settings shows an https address only, through the signed-in web door; a new address replaces the old one at once, and a computer offers nothing',async t=>{
