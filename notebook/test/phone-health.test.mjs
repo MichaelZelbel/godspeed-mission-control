@@ -301,7 +301,8 @@ test('Settings shows an https address only, through the signed-in web door; a ne
  assert.deepEqual(JSON.parse((await request(computer.address.port,'/api/phone-health')).text),{available:false});
  assert.equal((await request(computer.address.port,'/api/phone-health/renew',{method:'POST',body:{}})).status,404);
  assert.equal(fs.existsSync(tokenFile(computer.store.state)),false);
- assert.notEqual(JSON.parse((await request(computer.address.port,'/ingest/health')).text||'null')?.ok,true);
+ // A computer has no phone monitor: the path is what it was before (the page of a built UI, or nothing), never {ok:true}.
+ assert.ok(!/"ok"\s*:\s*true/.test((await request(computer.address.port,'/ingest/health')).text),'no phone monitor on a computer');
 });
 
 test('Settings and the server share one protocol: every answer, from every branch, has exactly the declared shape, and the panel reads the same fields',async t=>{
