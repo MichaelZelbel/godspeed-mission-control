@@ -35,6 +35,18 @@ test('an advanced stepped-cron next run still reports its latest missed occurren
  assert.match(found.words,/Thursday 5 November at 04:45/);
 });
 
+test('weekday, month-day, and six-field Hermes schedules use only their own occurrences',()=>{
+ const now=Date.parse('2026-11-05T12:00:00Z'),nextMonday='2026-11-09T09:00:00Z';
+ const jobs=[
+  daily('weekday',{schedule:{kind:'cron',expr:'0 9 * * 1'},last_run_at:'2026-11-02T09:00:00Z',next_run_at:nextMonday}),
+  daily('month-day',{schedule:{kind:'cron',expr:'0 9 1 * *'},last_run_at:'2026-11-01T09:00:00Z',next_run_at:'2026-12-01T09:00:00Z'}),
+  daily('seconds',{schedule:{kind:'cron',expr:'0 9 * * 1 30'},last_run_at:'2026-11-02T09:00:30Z',next_run_at:'2026-11-09T09:00:30Z'}),
+ ];
+ for(const job of jobs)assert.equal(routineFinding(job,{},{now,day:DAY,timezone:'UTC'}).found,null,job.id);
+ const missed=daily('seconds-late',{schedule:{kind:'cron',expr:'0 9 * * 1 30'},last_run_at:'2026-10-26T09:00:30Z',next_run_at:'2026-11-09T09:00:30Z'});
+ assert.match(routineFinding(missed,{},{now,day:DAY,timezone:'UTC'}).found.words,/Monday 2 November at 09:00/);
+});
+
 test("a prior cron occurrence keeps the owner's non-UTC clock",()=>{
  const job=daily('berlin',{last_run_at:'2026-11-03T22:00:00Z',next_run_at:'2026-11-05T22:00:00Z'});
  const {found}=routineFinding(job,{},{now:NOW,day:DAY,timezone:'Europe/Berlin'});

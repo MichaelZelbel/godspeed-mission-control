@@ -31,7 +31,11 @@ function slackFor(job,interval=DAY){
  interval=job.schedule?.kind==='interval'&&job.schedule.minutes>0?job.schedule.minutes*60000:interval;
  return Math.min(2*HOUR,Math.max(120000,interval/2));
 }
-const localParts=(at,timezone)=>Object.fromEntries(new Intl.DateTimeFormat('en-GB',{timeZone:timezone,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(new Date(at)).filter(p=>p.type!=='literal').map(p=>[p.type,Number(p.value)]));
+const datePartsFormatters=new Map();
+const localParts=(at,timezone)=>{
+ let formatter=datePartsFormatters.get(timezone);if(!formatter){formatter=new Intl.DateTimeFormat('en-GB',{timeZone:timezone,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'});datePartsFormatters.set(timezone,formatter);}
+ return Object.fromEntries(formatter.formatToParts(new Date(at)).filter(p=>p.type!=='literal').map(p=>[p.type,Number(p.value)]));
+};
 const CRON_NAMES={month:{jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12},weekday:{sun:0,mon:1,tue:2,wed:3,thu:4,fri:5,sat:6}};
 function cronPart(words,min,max,names={}){
  const values=new Set(),number=value=>{const named=names[String(value).toLowerCase()];const n=named===undefined?Number(value):named;return Number.isInteger(n)&&n>=min&&n<=max?n:null;};
@@ -47,19 +51,20 @@ function cronPart(words,min,max,names={}){
  return values;
 }
 function cronSchedule(job){
- const [minute,hour,monthDay,month,weekday,...rest]=cronOf(job).trim().split(/\s+/);if(rest.length||!minute||!hour||!monthDay||!month||!weekday)return null;
- const fields=[[minute,0,59],[hour,0,23],[monthDay,1,31],[month,1,12,CRON_NAMES.month],[weekday,0,7,CRON_NAMES.weekday]].map(([words,min,max,names])=>cronPart(words==='?'?'*':words,min,max,names));
+ const [minute,hour,monthDay,month,weekday,second,...rest]=cronOf(job).trim().split(/\s+/);if(rest.length||!minute||!hour||!monthDay||!month||!weekday)return null;
+ const fields=[[minute,0,59],[hour,0,23],[monthDay,1,31],[month,1,12,CRON_NAMES.month],[weekday,0,7,CRON_NAMES.weekday],[second||'0',0,59]].map(([words,min,max,names])=>cronPart(words==='?'?'*':words,min,max,names));
  if(fields.some(f=>f===null))return null;
- const [minutes,hours,days,months,weekdays]=fields;if(weekdays.has(7)){weekdays.delete(7);weekdays.add(0);}
- return {minutes,hours,days,months,weekdays,daysAny:days.size===31,weekdaysAny:weekdays.size===7};
+ const [minutes,hours,days,months,weekdays,seconds]=fields;if(weekdays.has(7)){weekdays.delete(7);weekdays.add(0);}
+ return {minutes,hours,days,months,weekdays,seconds,daysAny:days.size===31,weekdaysAny:weekdays.size===7};
 }
 function cronDue(schedule,at,timezone){
  const local=localParts(at,timezone),weekday=new Date(Date.UTC(local.year,local.month-1,local.day)).getUTCDay(),dayMatches=schedule.days.has(local.day),weekdayMatches=schedule.weekdays.has(weekday);
- return schedule.minutes.has(local.minute)&&schedule.hours.has(local.hour)&&schedule.months.has(local.month)&&(schedule.daysAny&&schedule.weekdaysAny||schedule.daysAny&&weekdayMatches||schedule.weekdaysAny&&dayMatches||dayMatches||weekdayMatches);
+ const dayDue=schedule.daysAny&&schedule.weekdaysAny||schedule.daysAny?weekdayMatches:schedule.weekdaysAny?dayMatches:dayMatches||weekdayMatches;
+ return schedule.seconds.has(local.second)&&schedule.minutes.has(local.minute)&&schedule.hours.has(local.hour)&&schedule.months.has(local.month)&&dayDue;
 }
 function previousCronDue(job,before,timezone){
  const schedule=cronSchedule(job);if(!schedule)return null;
- for(let at=Math.floor((before-1)/60000)*60000,stop=at-400*DAY;at>=stop;at-=60000)if(cronDue(schedule,at,timezone))return at;
+ for(let at=Math.floor((before-1)/60000)*60000,stop=at-400*DAY;at>=stop;at-=60000)for(const second of [...schedule.seconds].sort((a,b)=>b-a)){const due=at+second*1000;if(due<before&&cronDue(schedule,due,timezone))return due;}
  return null;
 }
 function missed(job,{now,day,timezone}){
