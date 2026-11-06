@@ -6,11 +6,12 @@ import path from 'node:path';
 // leave a folder of run files for every day they ran. Nothing read them again and nothing removed
 // them, so on a small server they filled the disk within months.
 //
-// THE ONE LIST OF PLACES is here, and only age decides inside it: a file goes when it has not been
-// touched for 30 days. Nothing outside the list is ever looked at, so a database, a .env, a
-// configuration, a skill, the notebook, the chat archive, a backup or an upgrade copy cannot be
-// reached. A link is never followed (every entry is read with lstat, and only a regular file is
-// removed) and a folder on another file system is never entered.
+// THE ONE LIST OF PLACES is here. Disposable files inside it go when they have not been touched
+// for 30 days; the work runner's fixed-depth before.txt undo backup stays. Nothing outside the
+// list is ever looked at, so a database, a .env, a configuration, a skill, the notebook, the chat
+// archive, a backup or an upgrade copy cannot be reached. A link is never followed (every entry is
+// read with lstat, and only a regular file is removed) and a folder on another file system is never
+// entered.
 export const KEEP_DAYS=30;
 
 // In the assistant's home and every profile of it: sessions/<these>, except every file of a session
@@ -20,6 +21,7 @@ const SESSION_FILES=[/^request_dump_.*\.json$/,/^session_.*\.json$/,/\.jsonl$/];
 // (mc-research), work (mc-work-run), next-action (mc-decide) and coach-prep (mc-coach-prep).
 export const RUN_LOG_FOLDERS=['routines/research','routines/work','routines/next-action','routines/coach-prep'];
 const DAY_FOLDER=/^\d{4}-\d{2}-\d{2}$/;
+const isWorkUndoBackup=(name,depth)=>depth===1&&name==='before.txt';
 // Shorter strings in sessions.json are words (a platform, a mode), not ids a file name could carry.
 const MIN_ID=8;
 
@@ -56,21 +58,21 @@ function sweepSessions(folder,dev,cutoff,freed){
  }
 }
 
-function sweepDay(folder,dev,cutoff,freed){
+function sweepDay(folder,dev,cutoff,freed,keep=(name,depth)=>false,depth=0){
  for(const name of fs.readdirSync(folder)){
   const entry=path.join(folder,name),stat=lstat(entry);
-  if(stat?.isDirectory()&&stat.dev===dev)sweepDay(entry,dev,cutoff,freed);
-  else removeIfOld(entry,dev,cutoff,freed);
+  if(stat?.isDirectory()&&stat.dev===dev)sweepDay(entry,dev,cutoff,freed,keep,depth+1);
+  else if(!keep(name,depth))removeIfOld(entry,dev,cutoff,freed);
  }
  try{fs.rmdirSync(folder);}catch{}
 }
 
-function sweepRunLogs(folder,dev,cutoff,freed){
+function sweepRunLogs(folder,dev,cutoff,freed,keep){
  const stat=lstat(folder);
  if(!stat||!stat.isDirectory()||stat.dev!==dev)return;
  for(const name of fs.readdirSync(folder)){
   const day=path.join(folder,name);
-  if(DAY_FOLDER.test(name)&&realFolder(day,stat.dev))sweepDay(day,stat.dev,cutoff,freed);
+  if(DAY_FOLDER.test(name)&&realFolder(day,stat.dev))sweepDay(day,stat.dev,cutoff,freed,keep);
  }
 }
 
@@ -82,7 +84,7 @@ export function places({root,home}){
  const homes=homeDev===undefined?[]:[{name:'assistant sessions',folder:home},...subfolders(path.join(home,'profiles'),homeDev).map(p=>({name:'profile '+path.basename(p)+' sessions',folder:p}))];
  return [
   ...homes.map(h=>({name:h.name,sweep:(cutoff,freed)=>sweepSessions(path.join(h.folder,'sessions'),homeDev,cutoff,freed)})),
-  ...RUN_LOG_FOLDERS.map(relative=>({name:relative,sweep:(cutoff,freed)=>sweepRunLogs(path.join(root,...relative.split('/')),rootDev,cutoff,freed)})),
+  ...RUN_LOG_FOLDERS.map(relative=>({name:relative,sweep:(cutoff,freed)=>sweepRunLogs(path.join(root,...relative.split('/')),rootDev,cutoff,freed,relative==='routines/work'?isWorkUndoBackup:undefined)})),
  ];
 }
 

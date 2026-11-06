@@ -10,7 +10,7 @@ const fixture=t=>{
 };
 const gone=file=>!fs.existsSync(file);
 
-test('old dumps, transcripts and run files go; recent files, listed sessions and everything off the list stay',t=>{
+test('old dumps, transcripts and run files go; recent files, listed sessions, undo backups and everything off the list stay',t=>{
  const {base,root,home}=fixture(t),keep=[],drop=[];
  const sessions=path.join(home,'sessions'),profile=path.join(home,'profiles','work','sessions');
  for(const folder of [sessions,profile]){
@@ -25,6 +25,7 @@ test('old dumps, transcripts and run files go; recent files, listed sessions and
   drop.push(make(path.join(root,'routines',kind,'2026-09-25','answer.txt'),40),make(path.join(root,'routines',kind,'2026-09-25','item','log.txt'),40));
   keep.push(make(path.join(root,'routines',kind,'2026-10-25','answer.txt'),10));
  }
+ keep.push(make(path.join(root,'routines','work','2026-09-25','W-20260925-01','before.txt'),40));
  keep.push(make(path.join(root,'notebook','page.md'),400),make(path.join(root,'routines','journal','settings.json'),400),make(path.join(root,'archives','chat','2026-01.jsonl'),400),make(path.join(root,'.godspeed','backups','b1.tar'),400),make(path.join(root,'.godspeed','state.db'),400),make(path.join(root,'.godspeed','before-update-20261015-093000','x.json'),400));
  const result=nightlyCleanup({root,home,now:NOW});
  for(const file of drop)assert.ok(gone(file),file);
