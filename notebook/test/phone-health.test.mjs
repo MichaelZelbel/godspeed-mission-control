@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import http from 'node:http';
 import net from 'node:net';
+import {EventEmitter} from 'node:events';
 import {spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {Store,hash} from '../core/records/store.mjs';
@@ -594,6 +595,49 @@ test('the token is read in one place: ensureToken leaves a damaged token alone, 
  const next=renewToken(state);assert.notEqual(next,token);assert.equal(tokenMatches(state,next),true);assert.equal(tokenDamaged(state),false);
 });
 
+// Writes a chunk; when the socket is full, waits for room or for the socket to close, whichever comes first. A closed
+// socket never drains, so a drain-only wait would never end when the peer answers and closes while this is waiting.
+const writeOrClose=(socket,chunk)=>socket.write(chunk)?Promise.resolve():new Promise(resolve=>{
+ // One handler for both events, and neither listener outlives the wait.
+ const done=()=>{socket.off('drain',done);socket.off('close',done);resolve();};
+ socket.on('drain',done);socket.on('close',done);
+});
+// true when the promise settles within ms, false when the time is up first; the timer never outlives the call.
+const within=async(promise,ms)=>{let timer;try{return await Promise.race([promise.then(()=>true),new Promise(r=>{timer=setTimeout(()=>r(false),ms);})]);}finally{clearTimeout(timer);}};
+
+test('a write that backpressures and then sees the socket close without draining ends the wait',async()=>{
+ const fake=new EventEmitter();fake.write=()=>false;
+ setImmediate(()=>fake.emit('close'));
+ assert.equal(await within(writeOrClose(fake,Buffer.alloc(1)),2000),true,'close ends the wait');
+ const roomy=new EventEmitter();roomy.write=()=>true;
+ assert.equal(await within(writeOrClose(roomy,Buffer.alloc(1)),2000),true,'no wait when there is room');
+ const slow=new EventEmitter();slow.write=()=>false;
+ setImmediate(()=>slow.emit('drain'));
+ assert.equal(await within(writeOrClose(slow,Buffer.alloc(1)),2000),true,'drain still ends it');
+ // Repeated waits leave no listener behind, whichever event ended them.
+ const again=new EventEmitter();again.write=()=>false;
+ for(let i=0;i<5;i++){setImmediate(()=>again.emit('drain'));assert.equal(await within(writeOrClose(again,Buffer.alloc(1)),2000),true);}
+ assert.deepEqual([again.listenerCount('drain'),again.listenerCount('close')],[0,0],'no listener left after five drains');
+ setImmediate(()=>again.emit('close'));
+ assert.equal(await within(writeOrClose(again,Buffer.alloc(1)),2000),true);
+ assert.deepEqual([again.listenerCount('drain'),again.listenerCount('close')],[0,0],'none left after a close either');
+ assert.deepEqual([fake.listenerCount('drain'),fake.listenerCount('close')],[0,0]);
+});
+
+test('against a real local peer that stops reading and then closes, a writer that fills its buffer is not left waiting',async t=>{
+ const peer=net.createServer(socket=>{socket.pause();setTimeout(()=>socket.destroy(),150);});
+ await new Promise(r=>peer.listen(0,'127.0.0.1',r));
+ const client=net.connect(peer.address().port,'127.0.0.1');
+ client.on('error',()=>{});
+ t.after(()=>{client.destroy();peer.close();});
+ await new Promise(r=>client.once('connect',r));
+ const chunk=Buffer.alloc(256*1024,'x');
+ const writer=(async()=>{let blocked=false;for(let i=0;i<4000&&!client.destroyed;i++){const wait=writeOrClose(client,chunk);if(client.writableNeedDrain)blocked=true;await wait;}return blocked;})();
+ let blocked;
+ assert.equal(await within(writer.then(b=>{blocked=b;}),8000),true,'the writer finished: the close ended its wait');
+ assert.equal(blocked,true,'it really did backpressure first');
+});
+
 test('an oversized upload whose body never ends gets a real 413 with Connection: close, the peer is closed, and the service shuts down',async t=>{
  const root=serverRoot('godspeed-phone-oversize-'),service=await createService({root,port:0,webPort:0});
  const token=fs.readFileSync(tokenFile(service.store.state),'utf8').trim(),socket=net.connect(service.address.port,'127.0.0.1');
@@ -607,7 +651,7 @@ test('an oversized upload whose body never ends gets a real 413 with Connection:
   const chunk=Buffer.alloc(64*1024,'x');
   let sent=0;
   while(!received.includes('\r\n\r\n')&&sent<22*1024*1024&&!closed){
-   if(!socket.write(chunk))await new Promise(r=>socket.once('drain',r));
+   await writeOrClose(socket,chunk);
    sent+=chunk.length;
   }
   await until(()=>received.includes('\r\n\r\n'),'the answer to the oversized upload');
@@ -619,12 +663,12 @@ test('an oversized upload whose body never ends gets a real 413 with Connection:
   await until(()=>closed,'the server to close its side');
   assert.equal(service.store.list('health_observations').length,0);
   assert.equal(fs.existsSync(rawFolder(service.store.state)),false,'nothing was kept');
-  const stopped=await Promise.race([service.close().then(()=>true),new Promise(r=>setTimeout(()=>r(false),5000))]);
+  const stopped=await within(service.close(),5000);
   closedService=stopped;
   assert.equal(stopped,true,'the service shuts down: no connection is left open');
  }finally{
   socket.destroy();
-  if(!closedService)await Promise.race([service.close().catch(()=>{}),new Promise(r=>setTimeout(r,3000))]);
+  if(!closedService)await within(service.close().catch(()=>{}),3000);
   fs.rmSync(root,{recursive:true,force:true});
  }
 });
