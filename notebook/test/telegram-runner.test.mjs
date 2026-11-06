@@ -63,6 +63,14 @@ test('a chat that stops is started again after a pause; once done, the gateway t
  assert.equal(f.started.length,4,'a gateway that stopped comes back, and nothing else stops with it');
 });
 
+test('the gateway uses the configured local Bot API after setup',async()=>{
+ const f=fixture(),home=path.join(f.dir,'hermes');fs.mkdirSync(home);fs.writeFileSync(path.join(home,'config.yaml'),'model:\n  provider: openrouter\n');
+ Object.assign(f.runner.env,{HERMES_HOME:home,GODSPEED_TELEGRAM_API:'http://127.0.0.1:8081'});
+ f.write('connection.json',connection);f.write('setup.json',{bot_id:4242,owner_id:111,chat_id:111,done:true});await tick(f.runner);
+ assert.match(fs.readFileSync(path.join(home,'config.yaml'),'utf8'),/platforms:\n  telegram:\n    extra:\n      base_url: "http:\/\/127\.0\.0\.1:8081\/bot"\n      base_file_url: "http:\/\/127\.0\.0\.1:8081\/file\/bot"/);
+ assert.equal(f.started[0].options.env.TELEGRAM_BOT_TOKEN,connection.token);
+});
+
 test('a new key or a disconnect stops what runs; a finished chat of another bot does not count',async()=>{
  const f=fixture();f.write('connection.json',connection);f.write('setup.json',{bot_id:9999,owner_id:5,chat_id:5,done:true});
  await tick(f.runner);assert.deepEqual(f.started[0].args,['/kit/godspeed-telegram-setup']);

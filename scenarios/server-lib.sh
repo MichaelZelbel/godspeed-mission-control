@@ -3,7 +3,7 @@
 
 SERVER_DIR=${GODSPEED_SCENARIO_SERVER_DIR:-/opt/godspeed-mission-control}
 INGEST_PORT=${GODSPEED_SCENARIO_INGEST_PORT:-47831}
-SERVER_SPARSE_TABLES=(profile_facts goals decisions work_items deadlines health_observations health_episodes medications notes job_receipts watch_topics watch_observations lead_entries contacts moments)
+SERVER_SPARSE_TABLES=(profile_facts goals decisions work_items deadlines health_observations health_episodes medications notes job_receipts watch_topics watch_observations watch_findings lead_entries contacts moments)
 
 # The /server installer owns the Compose project and its generated container names. Resolve the
 # current service container through that exact invocation each time because a scenario may recreate
@@ -18,9 +18,11 @@ in_server() { local container; container=$(server_container) && [ -n "$container
 in_server_as_hermes() { local container; container=$(server_container) && [ -n "$container" ] && sudo docker exec -i --user hermes "$container" "$@"; }
 
 server_install() {
+  local installer=$EVIDENCE/.server-installer.sh
   say "The /server line, against the stage: $STAGE_REF"
-  curl -fsSL https://godspeedmissioncontrol.com/server |
-    sudo GODSPEED_STAGE_REF="$STAGE_REF" GODSPEED_STAGE_RAW="$RAW" GODSPEED_HOST=localhost bash >&2 ||
+  curl -fsSL https://godspeedmissioncontrol.com/server >"$installer" ||
+    fail "the /server download for $STAGE_REF failed before this scenario could do anything (its output is in the step log)"
+  sudo GODSPEED_STAGE_REF="$STAGE_REF" GODSPEED_STAGE_RAW="$RAW" GODSPEED_HOST=localhost bash "$installer" >&2 ||
     fail "the /server line for $STAGE_REF failed before this scenario could do anything (its output is in the step log)"
   server_healthy 300 || fail "the Docker server is not healthy after the /server line"
 }

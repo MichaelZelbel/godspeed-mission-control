@@ -93,3 +93,28 @@ printf '%s\\n' '{"sent":[{"chat_id":31415,"text":"Yesterday\\u0027s report.","bu
     fs.rmSync(folder,{recursive:true,force:true});
   }
 });
+
+test('say reaches the fake Bot API through its command boundary',()=>{
+  const folder=fs.mkdtempSync(path.join(os.tmpdir(),'server-telegram-say-'));
+  const bin=path.join(folder,'bin'),trace=path.join(folder,'trace');
+  fs.mkdirSync(bin);
+  fs.writeFileSync(path.join(bin,'sudo'),`#!/bin/sh
+input=$(cat)
+printf '%s %s\\n' "$*" "$input" >> "$TRACE"
+printf '%s\\n' '{"sent":[],"requests":[]}'
+`);
+  fs.chmodSync(path.join(bin,'sudo'),0o755);
+
+  try {
+    execFileSync(process.execPath,['server-telegram.mjs','say','--server','fixture','--evidence',folder,'--label','question','--text','What now?'],{
+      cwd:path.dirname(new URL(import.meta.url).pathname),
+      env:{...process.env,PATH:`${bin}:${process.env.PATH}`,TRACE:trace},
+      stdio:'pipe',
+    });
+
+    assert.match(fs.readFileSync(trace,'utf8'),/http:\/\/127\.0\.0\.1:8081\/__act/);
+    assert.deepEqual(JSON.parse(fs.readFileSync(path.join(folder,'run.json'),'utf8')),{steps:[{label:'question',kind:'say',success:true,request_start:0,request_end:0}],outbox:[],sent:0});
+  } finally {
+    fs.rmSync(folder,{recursive:true,force:true});
+  }
+});

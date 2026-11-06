@@ -92,6 +92,22 @@ interaction_failure_verdict() { # <scenario> <folder> <label>
   fi
 }
 
+server_download_failure() {
+  local bin=$TMP/server-download-bin output code
+  mkdir -p "$bin"
+  printf '#!/bin/sh\nexit 22\n' >"$bin/curl"
+  chmod +x "$bin/curl"
+  PATH="$bin:$PATH" EVIDENCE="$TMP" STAGE_REF='candidate/test' RAW='https://example.invalid' \
+    bash -c 'say(){ :; }; fail(){ printf "%s\\n" "$*"; exit 42; }; . "$1"; server_install' bash "$HERE/server-lib.sh" >"$TMP/server-download.out" 2>&1
+  code=$?
+  output=$(<"$TMP/server-download.out")
+  if [ "$code" = 42 ] && [[ $output == *'/server download for candidate/test failed'* ]]; then
+    ok 'a failed /server download fails before the installer runs'
+  else
+    bad "a failed /server download fails before the installer runs (exit $code: $output)"
+  fi
+}
+
 # A folder that should pass, so a case for one failure is that folder with one thing changed.
 copy() { # <good folder> <new folder>
   rm -rf "$2"
@@ -119,6 +135,9 @@ printf '{"jobs":[{"id":"owner","name":"Daily connection check","script":"my-own-
 printf '{"jobs":[]}\n' >"$IR/no-notebook-record.json"
 routine_script_is 'a jobs envelope falls back to the product script, not its same-named owner routine' \
   "$(installed_routine_script "$IR/envelope.json" "$IR/no-notebook-record.json" connection-check 'Daily connection check' godspeed-connection-check.py)" godspeed-connection-check.py
+
+section 'server installer download'
+server_download_failure
 
 # =============================================================== 1. settings-on-install
 # A settings file as a wiring leaves it: Hermes' own keys, and the five of ticket 1.
@@ -2921,16 +2940,19 @@ for table in "${SERVER_SPARSE_TABLES[@]}"; do
   printf '{"data":[{"id":"seeded-%s"}]}\n' "$sparse" >"$FD/populated-$sparse/sparse-$sparse.json"
   refuses "a brief with seeded $sparse context" first-day "$FD/populated-$sparse" 'required sparse installed state'
 done
-  # The shared inventory remains the only runtime vocabulary; this fixture guards the one
-  # personal-input class that must not silently disappear from it.
-  case " ${SERVER_SPARSE_TABLES[*]} " in
-    *' contacts '*)
-      copy "$FD/good" "$FD/populated-contacts-fixed"
-      printf '{"data":[{"id":"seeded-contact"}]}\n' >"$FD/populated-contacts-fixed/sparse-contacts.json"
-      refuses 'a brief with seeded contacts context after an inventory edit' first-day "$FD/populated-contacts-fixed" 'required sparse installed state'
-      ;;
-    *) bad 'the shared sparse inventory still requires contacts' ;;
-  esac
+  # The shared inventory remains the only runtime vocabulary; these fixtures guard the personal
+  # inputs and briefing source class that must not silently disappear from it.
+  for table in contacts watch_findings; do
+    sparse=${table//_/-}
+    case " ${SERVER_SPARSE_TABLES[*]} " in
+      *" $table "*)
+        copy "$FD/good" "$FD/populated-$sparse-fixed"
+        printf '{"data":[{"id":"seeded-%s"}]}\n' "$sparse" >"$FD/populated-$sparse-fixed/sparse-$sparse.json"
+        refuses "a brief with seeded $sparse context after an inventory edit" first-day "$FD/populated-$sparse-fixed" 'required sparse installed state'
+        ;;
+      *) bad "the shared sparse inventory still requires $sparse" ;;
+    esac
+  done
 copy "$FD/good" "$FD/no-send"
 printf '{"sent":[]}\n' >"$FD/no-send/scheduled-telegram-requests.json"
 refuses 'a brief not delivered on Telegram' first-day "$FD/no-send" 'never delivered'
