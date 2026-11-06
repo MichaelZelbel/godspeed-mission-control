@@ -73,25 +73,27 @@ act() {
 }
 
 check() { # <evidence folder>
-  local folder=$1 reason
+  local folder=$1 reason table
+  local -a sparse_files=()
+  for table in "${SERVER_SPARSE_TABLES[@]}"; do sparse_files+=("sparse-${table//_/-}.json"); done
   [ -d "$folder" ] || fail "there is nothing at $folder, so this scenario kept no first-day evidence"
   need_node
-  kept_all "$folder" 'the installed first day' setup.json job-research.json job-choice.json job-work.json brief.txt run.json runner.json telegram-requests.json work-items.json notes-before-reply.json notes-after-reply.json sparse-profile-facts.json sparse-goals.json sparse-decisions.json sparse-work-items.json sparse-deadlines.json sparse-health-observations.json sparse-health-episodes.json sparse-medications.json sparse-notes.json sparse-job-receipts.json sparse-watch-topics.json sparse-watch-observations.json sparse-lead-entries.json sparse-contacts.json sparse-moments.json manifest.json
+  kept_all "$folder" 'the installed first day' setup.json job-research.json job-choice.json job-work.json brief.txt run.json runner.json telegram-requests.json work-items.json notes-before-reply.json notes-after-reply.json "${sparse_files[@]}" manifest.json
   grep -Fqx "$GOAL" <(json_value "$folder/setup.json" results.goal.title 2>/dev/null || true) ||
     grep -Fq "$GOAL" "$folder/setup.json" || fail 'the notebook did not retain the fictional emergency-kit goal'
   for label in research choice work; do
     "$NODE" -e 'const fs=require("fs"),d=JSON.parse(fs.readFileSync(process.argv[1],"utf8")),rows=Array.isArray(d)?d:d.data||[];process.exit(rows.some(j=>j?.last_run_at&&j?.last_status==="ok")?0:1)' "$folder/job-$label.json" ||
       fail "the installed $label routine has no successful recorded run"
   done
-  if ! reason=$("$NODE" - "$folder" "$GOAL" 2>&1 <<'NODE'
+  if ! reason=$("$NODE" - "$folder" "$GOAL" "${sparse_files[@]}" 2>&1 <<'NODE'
 const fs=require('fs'),path=require('path');
-const [folder,goal]=process.argv.slice(2),read=file=>fs.readFileSync(path.join(folder,file),'utf8');
+const [folder,goal,...sparseFiles]=process.argv.slice(2),read=file=>fs.readFileSync(path.join(folder,file),'utf8');
 const rows=file=>{const d=JSON.parse(read(file));return Array.isArray(d)?d:d.data||[]};
 const fail=message=>{console.error(message);process.exit(1)};
 const walk=dir=>fs.existsSync(dir)?fs.readdirSync(dir,{withFileTypes:true}).flatMap(e=>e.isDirectory()?walk(path.join(dir,e.name)):[path.join(dir,e.name)]):[];
 const normalized=value=>String(value||'').replace(/\r\n?/g,'\n').trim();
 if(!normalized(read('brief.txt')))fail('the installed morning brief saved no readable text');
-for(const file of ['sparse-profile-facts.json','sparse-goals.json','sparse-decisions.json','sparse-work-items.json','sparse-deadlines.json','sparse-health-observations.json','sparse-health-episodes.json','sparse-medications.json','sparse-notes.json','sparse-job-receipts.json','sparse-watch-topics.json','sparse-watch-observations.json','sparse-lead-entries.json','sparse-contacts.json','sparse-moments.json']){
+for(const file of sparseFiles){
  const state=JSON.parse(read(file)),rows=Array.isArray(state)?state:state.data||[];
  if(!Array.isArray(rows)||rows.length)fail('the brief was not run with the required sparse installed state');
 }

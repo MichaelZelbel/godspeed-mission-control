@@ -3,6 +3,7 @@
 
 SERVER_DIR=${GODSPEED_SCENARIO_SERVER_DIR:-/opt/godspeed-mission-control}
 INGEST_PORT=${GODSPEED_SCENARIO_INGEST_PORT:-47831}
+SERVER_SPARSE_TABLES=(profile_facts goals decisions work_items deadlines health_observations health_episodes medications notes job_receipts watch_topics watch_observations lead_entries contacts moments)
 
 # The /server installer owns the Compose project and its generated container names. Resolve the
 # current service container through that exact invocation each time because a scenario may recreate
@@ -194,7 +195,7 @@ server_sparse_state() {
   # Query the installed notebook before the first goal, rather than asserting what a fresh install
   # ought to contain. These are the personal inputs a morning brief can otherwise draw on.
   local table
-  for table in profile_facts goals decisions work_items deadlines health_observations health_episodes medications notes job_receipts watch_topics watch_observations lead_entries contacts moments; do
+  for table in "${SERVER_SPARSE_TABLES[@]}"; do
     server_table "$table" "$EVIDENCE/sparse-${table//_/-}.json"
   done
 }

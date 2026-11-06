@@ -18,6 +18,8 @@ set -u
 
 HERE=$(cd "$(dirname "$0")" && pwd)
 ROOT=$(cd "$HERE/.." && pwd)
+# shellcheck source=scenarios/server-lib.sh
+. "$HERE/server-lib.sh"
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP" "$TEST_GUARD_HOME"' EXIT
 
@@ -2800,7 +2802,7 @@ refuses 'a deadline still open after the key is valid again' connection-check "$
 
 # ---------------------------------------------------------------------------------------- first-day
 first_day_good() { # <folder>
-  local f=$1 label
+  local f=$1 label table sparse
   rm -rf "$f"; mkdir -p "$f/work"
   printf '{"results":{"goal":{"title":"Prepare a practical household emergency-kit checklist by Sunday."}}}\n' >"$f/setup.json"
   for label in research choice work; do printf '[{"id":"%s","last_run_at":"2026-11-06T10:00:00Z","last_status":"ok"}]\n' "$label" >"$f/job-$label.json"; done
@@ -2817,7 +2819,7 @@ Prepare a practical household emergency-kit checklist by Sunday.
 Verified work: Prepare a practical household emergency-kit checklist — Wrote emergency-kit-checklist.md with practical supplies.
 Next today: buy the water and first-aid supplies.
 EOF
-  for table in profile-facts goals decisions work-items deadlines health-observations health-episodes medications notes job-receipts watch-topics watch-observations lead-entries contacts moments; do printf '{"data":[]}\n' >"$f/sparse-$table.json"; done
+  for table in "${SERVER_SPARSE_TABLES[@]}"; do sparse=${table//_/-}; printf '{"data":[]}\n' >"$f/sparse-$sparse.json"; done
   printf '{"state":"gateway"}\n' >"$f/runner.json"
   printf '{"requests":[{"method":"getUpdates","authorized":true},{"method":"sendMessage","authorized":true}]}\n' >"$f/telegram-requests.json"
   run_json "$f" "$(msg scheduled-brief "$(cat "$f/brief.txt")")" "$(msg todays-brief "$(cat "$f/brief.txt")")"
@@ -2842,10 +2844,11 @@ refuses 'a first day without a practical artifact' first-day "$FD/no-artifact" '
 copy "$FD/good" "$FD/placeholder"
 printf '%s\n' '- [ ] TODO: outline only' >"$FD/placeholder/emergency-kit-checklist.md"
 refuses 'a placeholder checklist' first-day "$FD/placeholder" 'not a practical emergency-kit checklist'
-for table in profile-facts goals decisions work-items deadlines health-observations health-episodes medications notes job-receipts watch-topics watch-observations lead-entries contacts moments; do
-  copy "$FD/good" "$FD/populated-$table"
-  printf '{"data":[{"id":"seeded-%s"}]}\n' "$table" >"$FD/populated-$table/sparse-$table.json"
-  refuses "a brief with seeded $table context" first-day "$FD/populated-$table" 'required sparse installed state'
+for table in "${SERVER_SPARSE_TABLES[@]}"; do
+  sparse=${table//_/-}
+  copy "$FD/good" "$FD/populated-$sparse"
+  printf '{"data":[{"id":"seeded-%s"}]}\n' "$sparse" >"$FD/populated-$sparse/sparse-$sparse.json"
+  refuses "a brief with seeded $sparse context" first-day "$FD/populated-$sparse" 'required sparse installed state'
 done
 copy "$FD/good" "$FD/no-send"
 run_json "$FD/no-send" "$(msg todays-brief "$(cat "$FD/no-send/brief.txt")")"

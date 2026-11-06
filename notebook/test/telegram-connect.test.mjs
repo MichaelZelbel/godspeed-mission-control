@@ -18,10 +18,10 @@ function standIn({bots={[KEY]:{id:4242,is_bot:true,first_name:'Fictional Godspee
   return new Response(JSON.stringify({ok:true,result:method==='getMe'?bot:{url:webhook,pending_update_count:0}}),{status:200});
  }};
 }
-function fixture(options={}){
+function fixture({api='https://telegram.invalid',...options}={}){
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-telegram-connect-')),dir=path.join(root,'telegram'),hermesHome=path.join(root,'hermes');
  fs.mkdirSync(hermesHome);const telegram=standIn(options);
- const connection=new TelegramConnection({dir,mode:'web',environmentBot:false,originalRuntime:true,hermesHome,api:'https://telegram.invalid',fetcher:telegram.fetcher});
+ const connection=new TelegramConnection({dir,mode:'web',environmentBot:false,originalRuntime:true,hermesHome,api,fetcher:telegram.fetcher});
  return {root,dir,hermesHome,connection,telegram,setup:value=>fs.writeFileSync(path.join(dir,'setup.json'),JSON.stringify(value))};
 }
 
@@ -69,6 +69,17 @@ test('a wrong key, a key-shaped typo and an unreachable Telegram each say what t
  const hooked=fixture({webhook:'https://elsewhere.invalid/hook'});
  await assert.rejects(hooked.connection.connect(KEY),{message:/still connected to another service/});
  for(const x of [f,offline,hooked])assert.equal(fs.existsSync(path.join(x.dir,'connection.json')),false);
+});
+
+test('Settings sends a bot key only to an HTTPS or loopback Telegram API',async()=>{
+ const prefixed=fixture({api:'https://telegram.invalid/proxy/'});
+ await prefixed.connection.connect(KEY);
+ assert.deepEqual(prefixed.telegram.calls.map(url=>url.replace(KEY,'<key>')),['https://telegram.invalid/proxy/bot<key>/getMe','https://telegram.invalid/proxy/bot<key>/getWebhookInfo']);
+ for(const api of ['http://telegram.example.test','http://192.0.2.1','ftp://127.0.0.1','https://user:password@api.example.test','https://api.example.test/telegram?','https://api.example.test/telegram#']){
+  const f=fixture({api});
+  await assert.rejects(f.connection.connect(KEY),{message:'Telegram API requires HTTPS or a loopback HTTP endpoint'});
+  assert.equal(f.telegram.calls.length,0,api+' never receives the bot key');
+ }
 });
 
 test('the page follows the chat: waiting for Start, setting up, ready; a refused key is said',async()=>{

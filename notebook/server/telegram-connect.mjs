@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {randomBytes} from 'node:crypto';
+import {telegramAPI} from '../core/telegram-api.mjs';
 
 // Telegram for the one-click server, connected from the web page after the account is made.
 // The bot's key goes from the owner's browser to this server and nowhere else: it is checked
@@ -29,7 +30,7 @@ export function browserAddress(value){
 
 export class TelegramConnection{
   constructor({dir=process.env.GODSPEED_TELEGRAM_DIR,mode=process.env.GODSPEED_TELEGRAM,environmentBot=!!process.env.GODSPEED_CANDIDATE_BOT_TOKEN,originalRuntime=process.env.GODSPEED_ORIGINAL_RUNTIME==='on',hermesHome=process.env.HERMES_HOME,api=process.env.GODSPEED_TELEGRAM_API||'https://api.telegram.org',fetcher=fetch}={}){
-    Object.assign(this,{dir,mode,environmentBot,originalRuntime,hermesHome,api:api.replace(/\/+$/,''),fetcher});
+    Object.assign(this,{dir,mode,environmentBot,originalRuntime,hermesHome,api,fetcher});
   }
   // On a server whose operator set the bot in its environment, or switched Telegram off,
   // the page has nothing to connect. So does any install the supervisor does not run.
@@ -52,8 +53,9 @@ export class TelegramConnection{
       connected_at:connection.connected_at};
   }
   async telegram(token,method){
-    let response;
-    try{response=await this.fetcher(`${this.api}/bot${token}/${method}`,{method:'POST',headers:{'Content-Type':'application/json'},body:'{}',signal:AbortSignal.timeout(15000)});}
+    let api,response;
+    try{api=telegramAPI(this.api);}catch{throw fail('Telegram API requires HTTPS or a loopback HTTP endpoint');}
+    try{response=await this.fetcher(`${api}/bot${token}/${method}`,{method:'POST',headers:{'Content-Type':'application/json'},body:'{}',signal:AbortSignal.timeout(15000)});}
     catch{throw fail('Your server could not reach Telegram. Try again in a minute.',502);}
     const data=await response.json().catch(()=>({}));
     if([401,404].includes(response.status)||data.error_code===401)throw fail('Telegram does not know this key. Copy the whole key from BotFather\'s last message and try again.');

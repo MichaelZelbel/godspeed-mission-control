@@ -11,6 +11,7 @@ import {FileSync,readSyncConfig} from './sync/git.mjs';
 import {telegramInHermes} from './starting-routines.mjs';
 import {mailboxInUse,mailCountWanted} from './mail-trackers.mjs';
 import {lastAcceptedUpload} from './phone-health.mjs';
+import {telegramAPI} from './telegram-api.mjs';
 import {addDays,now as clockNow,whenSaid} from '../../third-party/addons/godspeed-coach/lib/clock.mjs';
 
 // THE DAILY CONNECTION CHECK (4 November 2026, #200). Godspeed only noticed a broken connection (the
@@ -68,15 +69,7 @@ export const gitKind=stderr=>GIT_SIGN_IN.test(String(stderr||''))?'sign-in':'oth
 export const aiKind=error=>error?.reason==='sign-in'?'sign-in':'other';
 export const mailKind=state=>state==='disconnected'||state==='reconnect needed'?'sign-in':'other';
 
-// A bot token is part of every Telegram request path. The configured endpoint is normally
-// Telegram's HTTPS origin; scenarios alone use the loopback stand-in over HTTP.
-export function telegramAPI(value='https://api.telegram.org'){
- let url;try{url=new URL(value);}catch{throw new Error('Telegram API requires HTTPS or a loopback HTTP endpoint');}
- const parts=url.hostname.split('.'),loopback=url.hostname==='localhost'||url.hostname==='[::1]'||url.hostname==='::1'||parts.length===4&&parts[0]==='127'&&parts.every(part=>/^\d+$/.test(part)&&Number(part)<=255);
- if((url.protocol!=='https:'&&!(url.protocol==='http:'&&loopback))||url.username||url.password||url.href.includes('?')||url.href.includes('#'))
-  throw new Error('Telegram API requires HTTPS or a loopback HTTP endpoint');
- return `${url.origin}${url.pathname.replace(/\/+$/,'')}`;
-}
+export {telegramAPI};
 
 const outcome=(ok,kind)=>ok?{set_up:true,ok:true}:{set_up:true,ok:false,kind};
 const NOT_SET_UP={set_up:false};
