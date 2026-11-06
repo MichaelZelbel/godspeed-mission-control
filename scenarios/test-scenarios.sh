@@ -78,6 +78,28 @@ copy() { # <good folder> <new folder>
   cp -r "$1" "$2"
 }
 
+# The installed-job reader accepts both Hermes envelopes and follows the notebook's remembered id,
+# before the scheduler's exact name-and-product-script fallback can see a same-named owner routine.
+installed_routine_script() {
+  SCENARIO=installed-routine NODE="${NODE:-node}" bash -c '. "$1"; installed_routine_script "$2" "$3" "$4" "$5" "$6"' \
+    bash "$ROOT/scenarios/scenario-lib.sh" "$@"
+}
+routine_script_is() {
+  if [ "$2" = "$3" ]; then ok "$1"; else bad "$1 (wanted $3, got $2)"; fi
+}
+
+section 'installed routine records'
+IR=$TMP/installed-routines
+mkdir -p "$IR"
+printf '[{"id":"owner","name":"Daily connection check","script":"my-own-check.py"},{"id":"product","name":"Daily connection check","script":"godspeed-connection-check.py"}]\n' >"$IR/array.json"
+printf '{"jobs":[{"id":"product","key":"connection-check"}]}\n' >"$IR/notebook-routines.json"
+routine_script_is 'an array of jobs follows the notebook-owned id past an owner routine of the same name' \
+  "$(installed_routine_script "$IR/array.json" "$IR/notebook-routines.json" connection-check 'Daily connection check' godspeed-connection-check.py)" godspeed-connection-check.py
+printf '{"jobs":[{"id":"owner","name":"Daily connection check","script":"my-own-check.py"},{"id":"product","name":"Daily connection check","script":"godspeed-connection-check.py"}]}\n' >"$IR/envelope.json"
+printf '{"jobs":[]}\n' >"$IR/no-notebook-record.json"
+routine_script_is 'a jobs envelope falls back to the product script, not its same-named owner routine' \
+  "$(installed_routine_script "$IR/envelope.json" "$IR/no-notebook-record.json" connection-check 'Daily connection check' godspeed-connection-check.py)" godspeed-connection-check.py
+
 # =============================================================== 1. settings-on-install
 # A settings file as a wiring leaves it: Hermes' own keys, and the five of ticket 1.
 settings_good() { # <folder>
@@ -3205,7 +3227,7 @@ dc_good() { # <folder>
   rm -rf "$f"
   mkdir -p "$f"
   OUTBOX='' steps_json "$f" broken=ok both-open=ok replace=ok checked=ok key-replaced=ok repaired=ok
-  printf '[{"slug":"key-ai-key","title":"The key your AI thinks with needs replacing","state":"open","selfCheck":"the date in secrets/expires.txt moves forward"}]\n' >"$f/due-before.json"
+  printf '[{"slug":"key-other-key","title":"Another key","state":"open","selfCheck":"the date in secrets/expires.txt moves forward","selfCheckArg":"other-key"},{"slug":"key-ai-key","title":"The key your AI thinks with needs replacing","state":"open","selfCheck":"the date in secrets/expires.txt moves forward","selfCheckArg":"ai-key"}]\n' >"$f/due-before.json"
   printf '[{"slug":"key-ai-key","title":"The key","state":"open"},{"slug":"connection-telegram-2026-11-05","title":"Connect Telegram again","state":"open"}]\n' >"$f/due-both-open.json"
   printf '[{"slug":"key-ai-key","title":"The key","state":"closed"},{"slug":"connection-telegram-2026-11-05","title":"Connect Telegram again","state":"open"}]\n' >"$f/due-key-replaced.json"
   printf '[{"slug":"key-ai-key","title":"The key","state":"closed"},{"slug":"connection-telegram-2026-11-05","title":"Connect Telegram again","state":"closed"}]\n' >"$f/due-repaired.json"

@@ -47,6 +47,8 @@ HOME_IN=/opt/data
 WORKSPACE_IN=/opt/data/godspeed
 KIT_IN=/opt/godspeed/kit
 CHECK_ROUTINE='Daily connection check'
+CHECK_ROUTINE_KEY=connection-check
+CHECK_SCRIPT=godspeed-connection-check.py
 CLEAN_PATTERN='clean'
 
 dx() { sudo docker exec -u hermes -e HOME="$HOME_IN" godspeed "$@"; }
@@ -171,23 +173,28 @@ record_files() { # <file in the evidence>
   done
 }
 
-# The routine that cleans, by its name in the server's list of routines.
-cleanup_script() {
-  dx cat "$HOME_IN/cron/jobs.json" | "$NODE" -e '
-let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{
- try{const d=JSON.parse(s);const jobs=Array.isArray(d)?d:d.jobs||[];
-  const job=jobs.find(j=>j&&new RegExp(process.argv[1],"i").test(String(j.name||""))&&j.script);
-  if(job)process.stdout.write(String(job.script));}catch{}
-});' "$CLEAN_PATTERN"
+# The installed records are copied out once, so the shared reader can use the same job envelope on
+# this Docker install as it uses on a local one. Older installs that did not remember a notebook
+# routine still take the reader's name-and-product-script fallback.
+installed_routines() {
+  INSTALLED_JOBS=$EVIDENCE/installed-jobs.json
+  INSTALLED_ROUTINES=$EVIDENCE/notebook-routines.json
+  dx cat "$HOME_IN/cron/jobs.json" >"$INSTALLED_JOBS" || return 1
+  if dx test -f "$WORKSPACE_IN/.godspeed/notebook-routines.json"; then
+    dx cat "$WORKSPACE_IN/.godspeed/notebook-routines.json" >"$INSTALLED_ROUTINES" || return 1
+  else
+    printf '{"jobs":[]}\n' >"$INSTALLED_ROUTINES"
+  fi
 }
 
-routine_script() { # <routine name>
-  dx cat "$HOME_IN/cron/jobs.json" | "$NODE" -e '
-let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{
- try{const d=JSON.parse(s);const jobs=Array.isArray(d)?d:d.jobs||[];
-  const job=jobs.find(j=>j&&j.name===process.argv[1]&&j.script);
-  if(job)process.stdout.write(String(job.script));}catch{}
-});' "$1"
+routine_script() { # <notebook key|-> <routine name or pattern> <product script|->
+  installed_routine_script "$INSTALLED_JOBS" "$INSTALLED_ROUTINES" "$1" "$2" "$3"
+}
+
+# The cleanup job has no product script contract yet; its visible fixture-limit is specifically
+# that its name is the available identity. It still uses the one jobs decoder above.
+cleanup_script() {
+  routine_script - "$CLEAN_PATTERN" -
 }
 
 act() {
@@ -200,8 +207,9 @@ act() {
     fail "the server line for $STAGE_REF failed before this scenario could do anything (its words are in the step log)"
   wait_for 300 "the server to be healthy" container_is_healthy || fail "the server is not healthy after its install"
   dx test -f "$KIT_IN/notebook/bin/personal-command.mjs" || fail "the server image carries no notebook ($KIT_IN/notebook/bin/personal-command.mjs), so it has no connection check"
+  installed_routines || fail "the server's installed routine records could not be read"
   local check_script
-  check_script=$(routine_script "$CHECK_ROUTINE")
+  check_script=$(routine_script "$CHECK_ROUTINE_KEY" "$CHECK_ROUTINE" "$CHECK_SCRIPT")
   [ -n "$check_script" ] || fail "the server has no installed routine named \"$CHECK_ROUTINE\" with a script"
   dx test -f "$HOME_IN/scripts/$check_script" || fail "the installed $CHECK_ROUTINE script is not in $HOME_IN/scripts ($check_script)"
   small_disk_over_the_volume

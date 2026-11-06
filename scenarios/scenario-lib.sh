@@ -305,6 +305,28 @@ json_value() { # <file> <dotted path>
   "$NODE" -e "$JSON_READER" "$1" "$2"
 }
 
+# The notebook remembers the id of a routine it made; Hermes keeps the jobs themselves. Read both
+# of those records through this one boundary, since Hermes has used both a bare array and {jobs:[]}
+# for its job file. With no remembered job, this follows the scheduler's name-and-script fallback,
+# which leaves an owner's same-named routine alone.
+installed_routine_script() { # <jobs json> <notebook routines json> <notebook key|-> <name or pattern> <product script|->
+  "$NODE" -e '
+const fs=require("fs");
+const read=file=>{try{return JSON.parse(fs.readFileSync(file,"utf8"));}catch{return null;}};
+const rows=data=>Array.isArray(data)?data:(data&&Array.isArray(data.jobs)?data.jobs:[]);
+const [jobsFile,routinesFile,key,name,productScript]=process.argv.slice(1);
+const jobs=rows(read(jobsFile)).filter(job=>job&&typeof job==="object"&&typeof job.script==="string"&&job.script);
+const routines=rows(read(routinesFile)).filter(job=>job&&typeof job==="object");
+const remembered=key==="-"?null:routines.find(job=>job.key===key&&typeof job.id==="string"&&job.id);
+const owned=remembered&&jobs.find(job=>job.id===remembered.id);
+let fallback;
+if(productScript==="-")try{const pattern=new RegExp(name,"i");fallback=jobs.find(job=>pattern.test(String(job.name||"")));}catch{}
+else fallback=jobs.find(job=>job.name===name&&job.script===productScript);
+const job=owned||fallback;
+if(job)process.stdout.write(job.script);
+' "$1" "$2" "$3" "$4" "$5"
+}
+
 # The file the evidence folder has to hold, or one plain sentence about what is missing.
 kept() { # <folder> <file> <what it should have been>
   [ -s "$1/$2" ] || fail "$2 is not in what the scenario kept: $3"

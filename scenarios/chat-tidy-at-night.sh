@@ -37,6 +37,8 @@ SCENARIO=chat-tidy-at-night
 scenario_arguments "$@"
 
 ROUTINE='Night chat tidy-up'
+ROUTINE_KEY=chat-tidy
+ROUTINE_SCRIPT=godspeed-chat-tidy.py
 LONG=scenario-chat-1
 SHORT=scenario-short-3
 NEXT_MESSAGE='Reply with the single word Hello.'
@@ -48,15 +50,8 @@ routine_is_there() { grep -qF "$ROUTINE" "$HERMES/cron/jobs.json" 2>/dev/null; }
 chat_store_is_ready() { chat_store count --session "$LONG" >/dev/null 2>&1; }
 
 routine_script() {
-  "$NODE" -e '
-const fs=require("fs");
-try {
- const data=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));
- const jobs=Array.isArray(data)?data:data.jobs||[];
- const job=jobs.find(job=>job&&job.name===process.argv[2]&&job.script);
- if(job)process.stdout.write(String(job.script));
-} catch {}
-' "$HERMES/cron/jobs.json" "$ROUTINE"
+  installed_routine_script "$HERMES/cron/jobs.json" "$STATE/notebook-routines.json" \
+    "$ROUTINE_KEY" "$ROUTINE" "$ROUTINE_SCRIPT"
 }
 
 # The routine, started by hand the way the routine runs it: the script file the notebook wrote, from

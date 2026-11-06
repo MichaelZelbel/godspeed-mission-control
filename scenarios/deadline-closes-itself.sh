@@ -37,6 +37,7 @@ scenario_arguments "$@"
 
 CHECK_ROUTINE='Daily connection check'
 KEY_NAME=ai-key
+OTHER_KEY_NAME=other-key
 FIRST_KEY='sk-scenario-first-key-0000000000000000'
 
 # The first key, connected the way connect_the_ai connects the real one.
@@ -89,8 +90,8 @@ act() {
   owner_on_telegram_install no
   connect_the_first_key
   mkdir -p "$ROOT/secrets"
-  printf '%s  %s  https://example.invalid/keys  # The key your AI thinks with.\n' \
-    "$KEY_NAME" "$(date -u -d '+20 days' +%F)" >"$ROOT/secrets/expires.txt"
+  printf '%s  %s  https://example.invalid/keys  # Another made-up key.\n%s  %s  https://example.invalid/keys  # The key your AI thinks with.\n' \
+    "$OTHER_KEY_NAME" "$(date -u -d '+30 days' +%F)" "$KEY_NAME" "$(date -u -d '+20 days' +%F)" >"$ROOT/secrets/expires.txt"
   due_on "$ROOT" state --json >"$EVIDENCE/due-before.json" ||
     fail "the install's deadlines could not be read before anything ran"
 
@@ -126,10 +127,10 @@ const fs=require("fs");
 try {
  const data=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));
  const rows=Array.isArray(data)?data:data.data||[];
- const keys=rows.filter(row=>row&&row.selfCheck==="the date in secrets/expires.txt moves forward"&&row.slug);
+ const keys=rows.filter(row=>row&&row.selfCheckArg===process.argv[2]&&row.slug);
  if(keys.length===1)process.stdout.write(String(keys[0].slug));
 } catch {}
-' "$1"
+' "$1" "$KEY_NAME"
 }
 
 check() { # <evidence folder>
