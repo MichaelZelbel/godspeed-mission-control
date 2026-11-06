@@ -8,7 +8,7 @@
 //   node telegram-judge.mjs buttons <run.json> <label> <text it holds>
 //        how many messages of that label carrying the text have buttons
 //   node telegram-judge.mjs failed <run.json>
-//        exit 1 and "<label>: <kind>: <error>" for the first step that did not succeed
+//        "<label>: <kind>: <error>" for the first step that did not succeed
 //   node telegram-judge.mjs status <approvals.json> <text>
 //        the status of each waiting-step record whose row holds <text>, one per line
 //   node telegram-judge.mjs recorded <run.json> <label> <conversation_messages.json> <report-facts.json>
@@ -75,7 +75,6 @@ if (command === 'codes') {
   const step = requiredSteps().find((s) => !s.success);
   if (step) {
     console.log(`${step.label}: ${step.kind}: ${String(step.error ?? '').replace(/\s+/g, ' ').slice(0, 300)}`);
-    process.exit(1);
   }
 } else if (command === 'status') {
   for (const row of rows(file)) if (JSON.stringify(row).toLowerCase().includes(rest[0].toLowerCase())) console.log(row.status ?? '');

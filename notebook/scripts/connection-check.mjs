@@ -12,6 +12,7 @@ import {pathToFileURL} from 'node:url';
 import {Store} from '../core/records/store.mjs';
 import {machineDevice} from '../core/device-id.mjs';
 import {checkConnections,defaultProbes} from '../core/connection-check.mjs';
+import {isServerInstall} from '../core/about.mjs';
 
 const option=name=>{const i=process.argv.indexOf(name);return i>=0?process.argv[i+1]:undefined;};
 const dayIn=(timezone,env=process.env)=>/^\d{4}-\d{2}-\d{2}$/.test(env.GODSPEED_TODAY||'')?env.GODSPEED_TODAY:new Intl.DateTimeFormat('en-CA',{timeZone:timezone||'UTC',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
@@ -19,7 +20,7 @@ const dayIn=(timezone,env=process.env)=>/^\d{4}-\d{2}-\d{2}$/.test(env.GODSPEED_
 export async function runConnectionCheck({root,home=process.env.HERMES_HOME,hermes,hermesSource,env=process.env,probes}){
  const store=new Store(root,{device:machineDevice(root).id});
  const day=dayIn(store.get('settings','installation')?.timezone,env);
- return checkConnections({store,day,probes:probes||defaultProbes({store,home,hermes,hermesSource,api:env.GODSPEED_TELEGRAM_API||undefined})});
+ return checkConnections({store,day,probes:probes||defaultProbes({store,home,hermes,hermesSource,api:env.GODSPEED_TELEGRAM_API||undefined,server:isServerInstall({env})})});
 }
 
 if(import.meta.url===pathToFileURL(process.argv[1]||'').href){

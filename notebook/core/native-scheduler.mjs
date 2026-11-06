@@ -7,11 +7,11 @@ import {nativeCardRows} from './card-commands.mjs';
 import {runCommand} from './child-process.mjs';
 import {beatWhile,HEARTBEAT_EVERY} from './supervisor-health.mjs';
 import {LEGACY_DEVICE} from './device-id.mjs';
-import {starterBorn} from './starter-workspace.mjs';
+import {starterBorn,adoptedMissionControl} from './starter-workspace.mjs';
 import {setHermesTimezone} from './hermes-config.mjs';
-import {FLAG,STARTING_ROUTINES,routineFiles,writeRoutineFiles,prepareCheckIn,saveRoutineResults,readMachineRecord,writeMachineRecord,telegramInHermes,routineStatus,ownRoutines,metAt,noteHermesMet,cityFiledFirst,OWN_ROUTINES_RULE} from './starting-routines.mjs';
+import {FLAG,STARTING_ROUTINES,routineFiles,writeRoutineFiles,prepareCheckIn,saveRoutineResults,readMachineRecord,writeMachineRecord,telegramInHermes,chatAppInHermes,routineStatus,ownRoutines,metAt,noteHermesMet,cityFiledFirst,OWN_ROUTINES_RULE} from './starting-routines.mjs';
 import {cronOf,cronCalendar,calendarCron,retimeWhat,isTalkGate,isCoachTick,talkArea,moveTalk} from './routine-times.mjs';
-import {readNotebookRoutines,rememberNotebookRoutine,enableKind,deliveryFor,journalWanted,journalOnTheClock,JOURNAL_JOB,JOURNAL_SCRIPT,JOURNAL_WHAT,CHAT_TIDY_JOB,CHAT_TIDY_SCRIPT,writeNotebookRoutines,BRIEF_JOB,BRIEF_SCRIPT,isBriefJob,CONNECTION_JOB,CONNECTION_SCRIPT,CONNECTION_WHAT,MAIL_COUNT_JOB,MAIL_COUNT_SCRIPT,MAIL_COUNT_WHAT,NOTICES_JOB,NOTICES_SCRIPT,NOTICES_WHAT} from './notebook-routines.mjs';
+import {readNotebookRoutines,rememberNotebookRoutine,enableKind,deliveryFor,journalWanted,journalOnTheClock,JOURNAL_JOB,JOURNAL_SCRIPT,JOURNAL_WHAT,CHAT_TIDY_JOB,CHAT_TIDY_SCRIPT,CHAT_TIDY_SCHEDULE,CHAT_TIDY_WHAT,writeNotebookRoutines,BRIEF_JOB,BRIEF_SCRIPT,isBriefJob,CONNECTION_JOB,CONNECTION_SCRIPT,CONNECTION_WHAT,MAIL_COUNT_JOB,MAIL_COUNT_SCRIPT,MAIL_COUNT_WHAT,NOTICES_JOB,NOTICES_SCRIPT,NOTICES_WHAT} from './notebook-routines.mjs';
 import {holdQueuedNotices} from './notices.mjs';
 import {switchable,switchedOn} from './routine-switches.mjs';
 import {connectionCheckWanted} from './connection-check.mjs';
@@ -44,6 +44,7 @@ export function connectionCheckTime(briefAt){
  return dailyTime(Math.floor(minutes/60)+':'+String(minutes%60).padStart(2,'0')).time;
 }
 export function dailyTime(at){const m=/^([01]?\d|2[0-3]):([0-5]\d)$/.exec(String(at||'').trim());return m?{hour:Number(m[1]),minute:Number(m[2]),time:m[1].padStart(2,'0')+':'+m[2]}:null;}
+const installedRoutine=(home,root,routine)=>hermesJobs(home).find(job=>job.name===routine.name&&job.script===routine.script&&typeof job.workdir==='string'&&path.resolve(job.workdir)===path.resolve(root));
 // `hermes cron tick` runs every due job to the end before it returns (and has
 // already moved each job's next run on, so a killed run is lost for the day).
 // Hermes stops a job that goes quiet for ten minutes and gives a job's own
@@ -78,12 +79,13 @@ export class NativeScheduler{
    const script=new URL('../../tools/goals.js',import.meta.url);
    await this.run(process.execPath,[fileURLToPath(script),'file','--kind','outcome','--status','adopted','--title',goal.trim(),'--source','Notebook setup, '+new Date().toISOString(),'--godspeed',this.store.root],{cwd:this.store.root,windowsHide:true,env:assistantEnvironment({home:this.home,workspace:this.store.root}),timeout:120000});
   }
-  // The first goal starts the routines: at the first setup, and when the mission control is still
+  // The first goal starts the routines other than the nightly cleanup: at the first setup, and when the mission control is still
   // waiting for its first goal (the getting-to-know-you chat filed the city before it). An
   // installation set up before 8 October 2026 is left as it is (startRoutinesNow). Until
   // 17 October 2026 this asked only whether an installation record was there, so a first goal
   // given here after the chat's city started nothing.
   const routines=await this.startRoutines({goal:nativeCardRows(this.store,'goals').find(g=>g.title===goal?.trim())?.id,setup:!old});
+  if(this.owns())await this.followCleanup();
   return {configured:true,preserved:!!old,firstWorkPending:false,scheduler:'hermes',...(routines?{routines}:{})};
  }
  // The starting routines (starting-routines.mjs), made once per machine that runs them: at the
@@ -95,7 +97,8 @@ export class NativeScheduler{
  // Two records. The mission control's own, in its settings (it travels with the folder): its first
  // goal started the routines, or why not. This machine's own, beside its Hermes (it never
  // travels): this Hermes got them, or why not; a reader who removes one does not get it back.
- startRoutines(options={}){const next=(this.starting||Promise.resolve()).then(()=>this.startRoutinesNow(options));this.starting=next.catch(()=>{});return next;}
+ queueStarting(action){const next=(this.starting||Promise.resolve()).then(action);this.starting=next.catch(()=>{});return next;}
+ startRoutines(options={}){return this.queueStarting(()=>this.startRoutinesNow(options));}
  async startRoutinesNow({goal=null,setup=false}={}){
   const root=this.store.root,flag=this.store.get('settings',FLAG),here=readMachineRecord(this.store),now=Date.now();
   let installation=this.store.get('settings','installation');
@@ -144,7 +147,8 @@ export class NativeScheduler{
   try{
    writeRoutineFiles(this.home,routineFiles({root,home:this.home,state:this.store.state,timezone,hermes:this.executable}));
    prepareCheckIn(root,{timezone,delivery,goal:serves});
-   jobs=await this.createStartingRoutines(delivery);
+   const cleanup=STARTING_ROUTINES.find(routine=>routine.key==='cleanup'),existing=cleanup&&installedRoutine(this.home,root,cleanup);
+   jobs=[...(existing?[{id:existing.id,key:cleanup.key,name:cleanup.name,what:cleanup.what}]:[]),...await this.createStartingRoutines(delivery,existing?STARTING_ROUTINES.filter(routine=>routine!==cleanup):STARTING_ROUTINES)];
   }catch(error){
    const message=String(error?.message||error).slice(0,300);
    writeMachineRecord(this.store,{state:'pending',device:this.device,error:message,retry_after:new Date(now+RETRY_STARTING).toISOString()});
@@ -154,6 +158,19 @@ export class NativeScheduler{
   writeMachineRecord(this.store,{state:'created',device:this.device,created_at:at,timezone,delivery,jobs});
   if(flag?.state!=='created')await record({state:'created',first_device:this.device,created_at:at,...unskip});
   return {state:'created',jobs};
+ }
+ followCleanup(){return this.queueStarting(()=>this.followCleanupNow());}
+ async followCleanupNow(){
+  const root=this.store.root,routine=STARTING_ROUTINES.find(entry=>entry.key==='cleanup');
+  if(!routine||!(starterBorn(root)||adoptedMissionControl(root)))return null;
+  const installation=this.store.get('settings','installation'),timezone=installation?.timezone||Intl.DateTimeFormat().resolvedOptions().timeZone;
+  writeRoutineFiles(this.home,routineFiles({root,home:this.home,state:this.store.state,timezone,hermes:this.executable}));
+  const existing=installedRoutine(this.home,root,routine);
+  const entry=readNotebookRoutines(this.store).jobs.find(job=>job.key===routine.key);
+  if(existing){if(!entry)rememberNotebookRoutine(this.store,{id:existing.id,key:routine.key,name:routine.name,what:routine.what});return existing.id;}
+  if(entry)return null;
+  const delivery=deliveryFor(installation,{telegram:telegramInHermes(this.home)}),[made]=await this.createStartingRoutines(delivery,[routine]);
+  rememberNotebookRoutine(this.store,made);return made.id;
  }
  async createStartingRoutines(delivery,routines=STARTING_ROUTINES){
   const made=[];
@@ -175,7 +192,7 @@ export class NativeScheduler{
  async addNewStartingRoutines(){
   const root=this.store.root,here=readMachineRecord(this.store),installation=this.store.get('settings','installation');
   if(here?.state!=='created'||!Array.isArray(here.jobs)||!installation?.timezone||!starterBorn(root))return [];
-  const offered=new Set(here.jobs.map(j=>j.key)),missing=STARTING_ROUTINES.filter(r=>!offered.has(r.key)&&(!r.needs||fs.existsSync(path.join(root,'skills',r.needs,'SKILL.md'))));
+  const offered=new Set(here.jobs.map(j=>j.key)),missing=STARTING_ROUTINES.filter(r=>!offered.has(r.key)&&(r.key!=='cleanup'||!installedRoutine(this.home,root,r))&&(!r.needs||fs.existsSync(path.join(root,'skills',r.needs,'SKILL.md'))));
   if(!missing.length)return [];
   writeRoutineFiles(this.home,routineFiles({root,home:this.home,state:this.store.state,timezone:installation.timezone,hermes:this.executable}));
   const made=await this.createStartingRoutines(here.delivery||'local',missing);
@@ -426,18 +443,23 @@ export class NativeScheduler{
   }
   return moved;
  }
- // THE NIGHT CHAT TIDY-UP IS MADE FOR NO INSTALL (27 October 2026, notebook-routines.mjs says why).
- // An install whose notebook already made it (main between 26 and 27 October 2026) has it taken
- // off on the next tick, found by the id this machine remembers or by its name and script, and this
- // machine's record of it goes with it, so the release that brings it back makes it again. A routine
- // of the owner's under another script, and a record whose routine the person removed, stay.
- async removeChatTidy(){
-  const mine=readNotebookRoutines(this.store),entry=mine.jobs.find(j=>j.key==='chat-tidy');
-  const made=hermesJobs(this.home).filter(j=>(entry&&j.id===entry.id)||(j.name===CHAT_TIDY_JOB&&j.script===CHAT_TIDY_SCRIPT));
-  if(!made.length)return [];
-  for(const job of made)await this.command(['remove',job.id]);
-  writeNotebookRoutines(this.store,{...mine,jobs:mine.jobs.filter(j=>j.key!=='chat-tidy')});
-  return made.map(j=>j.id);
+ // THE NIGHT CHAT TIDY-UP (notebook-routines.mjs): made once, at 01:30 on the install's clock, on a
+ // machine that made its starting routines and whose Hermes has a chat app connected; an install
+ // without one gets none. A routine the person removed, paused or changed is theirs from then on.
+ async followChatTidy(){
+  const root=this.store.root;if(!starterBorn(root)||readMachineRecord(this.store)?.state!=='created'||!chatAppInHermes(this.home))return null;
+  const entry=readNotebookRoutines(this.store).jobs.find(j=>j.key==='chat-tidy'),jobs=hermesJobs(this.home);
+  const job=(entry&&jobs.find(j=>j.id===entry.id))||jobs.find(j=>j.name===CHAT_TIDY_JOB&&j.script===CHAT_TIDY_SCRIPT);
+  if(job)return job.id;
+  if(entry)return null;
+  const installation=this.store.get('settings','installation'),timezone=installation?.timezone||Intl.DateTimeFormat().resolvedOptions().timeZone;
+  writeRoutineFiles(this.home,routineFiles({root,home:this.home,state:this.store.state,timezone,hermes:this.executable}));
+  const before=new Set(jobs.map(j=>j.id));
+  await this.command(['create',CHAT_TIDY_SCHEDULE,'--no-agent','--name',CHAT_TIDY_JOB,'--script',CHAT_TIDY_SCRIPT,'--deliver','local','--failure-deliver','local','--workdir',root]);
+  const made=hermesJobs(this.home).find(j=>!before.has(j.id)&&j.name===CHAT_TIDY_JOB);
+  if(!made)throw Error('Hermes did not keep the routine "'+CHAT_TIDY_JOB+'"');
+  rememberNotebookRoutine(this.store,{id:made.id,key:'chat-tidy',name:CHAT_TIDY_JOB,what:CHAT_TIDY_WHAT});
+  return made.id;
  }
  // SETTINGS > NOTIFICATIONS (18 October 2026). Its switches came from the hosted notebook (a daily
  // digest by email, stale action items, contact follow-ups, patterns, a Friday reminder) and nothing
@@ -544,17 +566,18 @@ export class NativeScheduler{
   if(this.ticking){if(raise){await this.current?.catch(()=>null);await this.followConnectionCheck();}return records;}
   if(Date.now()-(this.lastTick||0)<60000){this.onProgress?.();if(raise)await this.followConnectionCheck();return records;}
   this.ticking=true;this.lastTick=Date.now();
-  let failure=null,finish;
+  let failure=null,finish;const failures=[];
   this.current=new Promise(r=>{finish=r;});
   try{
    await this.startRoutines().catch(()=>null);
+   await this.followCleanup().catch(logged('the nightly cleanup could not be set up'));
    await this.followNoticeSender().catch(logged('the notice sender could not be set up'));
    await this.followSwitches().catch(logged('a routine switched on could not be set up'));
    await this.addNewStartingRoutines().catch(()=>null);
    await this.followJournal().catch(()=>null);
-   await this.followConnectionCheck().catch(e=>{failure=e;});
+   await this.followConnectionCheck().catch(e=>{failure=e;failures.push(e);});
    await this.followMailCountVisibly().catch(e=>{failure||=e;});
-   await this.removeChatTidy().catch(()=>null);
+   await this.followChatTidy().catch(e=>{failure=failure||e;failures.push(e);});
    await this.followBrief().catch(()=>null);
    await this.followDelivery().catch(()=>null);
    try{moveSettingsDeadlines(this.store);}catch{}
@@ -562,8 +585,8 @@ export class NativeScheduler{
    try{this.afterTick();}catch{}
   }
   finally{this.ticking=false;finish();}
-  // The setup that asked for this tick hears that the connection check could not be made; the periodic tick keeps going.
-  if(raise&&failure)throw failure;
+  // The setup that asked for this tick hears that a routine could not be made; the periodic tick logs it (onFailure) and keeps going.
+  if(failure){if(raise)throw failure;for(const error of failures)try{this.onFailure?.(error);}catch{}}
   return records;
  }
  // A routine lives in the Hermes of the machine that runs routines; added or

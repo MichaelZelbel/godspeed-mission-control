@@ -268,6 +268,16 @@ hw announce "$C3" >/dev/null 2>&1   # the morning message showed it
 OUT="$(GODSPEED_NOW=2026-09-15T18:02:00.000Z FAKE_BEFORE="the thread before my reply" run --only "$C3" 2>&1)"
 check "a standing step that kept its UNDO copy is verified by its live check" "$(status_of "$C3")" "verified"
 contains "  by the check, not the runner" "$(cat "$TMP/work/$C3.md")" "VERIFIED check passed (test -f research/circle-three.md)"
+UNDO="$TMP/routines/work/2026-09-15/$C3/before.txt"
+"$NODE" --input-type=module -e '
+import fs from "node:fs";
+const {nightlyCleanup}=await import(process.argv[1]);
+const [undo,root,home]=process.argv.slice(2),now=Date.parse("2026-11-05T02:45:00Z");
+fs.utimesSync(undo,new Date(now-40*86400000),new Date(now-40*86400000));
+nightlyCleanup({root,home,now});
+process.exitCode=fs.existsSync(undo)?0:1;
+' "$HERE/../notebook/core/cleanup.mjs" "$UNDO" "$TMP" "$TMP/hermes"
+check "an old undo copy the work runner wrote survives nightly cleanup" "$?" "0"
 # The runner never runs a step nobody was shown (Rulings 19 and 21, 2026-10-13): the person can stop only what they saw.
 hw file --what "Answer the fourth reply" --done-when "research/circle-four.md exists" --goal five-friends --outward yes --may circle-replies --check "test -f research/circle-four.md" --goes-out 2026-09-15T18:30 --key circle4 --source test >/dev/null
 C4="$(grep -l 'KEY: circle4$' "$TMP/work"/W-*.md | head -1 | xargs basename | sed 's/.md$//')"

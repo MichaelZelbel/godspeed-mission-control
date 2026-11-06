@@ -38,6 +38,12 @@ export function installedRelease({root=productRoot,env=process.env}={}){
   if(commit.test(revision))return {code:revision,date:null,installed_by:'server'};
   return null;
 }
+// Whether the installer made this a server: the Docker image (it carries its revision), or the Linux
+// installer, which gives a server its web address (install-native-notebook.sh) and a computer none.
+// Read from the notebook's own environment, so a routine is told it rather than finding it.
+export function isServerInstall({root=productRoot,env=process.env}={}){
+  return installedRelease({root,env})?.installed_by==='server'||String(env.GODSPEED_WEB_ADDRESS||'').trim()!=='';
+}
 // The day of a Mac or Linux release, from its own Git copy; asked once, and never longer than
 // three seconds. Without Git or the copy the release simply shows no date.
 const dates=new Map();

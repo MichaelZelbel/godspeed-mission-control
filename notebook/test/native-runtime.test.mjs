@@ -61,7 +61,7 @@ function starterFixture(t,{config=true}={}){
  return {root,home};
 }
 // Seven since 18 October 2026: each coaching talk is prepared the night before it, at 03:00.
-const STARTING=[['Nightly goal research','15 0 * * *','godspeed-goal-research.py'],['Daily round: choose today\'s work','30 5 * * *','godspeed-daily-round-choose.py'],['Daily round: do the work','0 10,16 * * *','godspeed-daily-round-work.py'],['Deadline reminders','0 8 * * *','godspeed-deadline-reminders.py'],['Weekly check-in','*/15 * * * *','godspeed-coach-talks.py'],['Coach reminders and habit check','*/15 * * * *','godspeed-coach-reminders.py'],['Coaching talk preparation','0 3 * * *','godspeed-coach-prep.py']],CONNECTION=['Daily connection check','0 5 * * *','godspeed-connection-check.py'];
+const STARTING=[['Nightly goal research','15 0 * * *','godspeed-goal-research.py'],['Daily round: choose today\'s work','30 5 * * *','godspeed-daily-round-choose.py'],['Daily round: do the work','0 10,16 * * *','godspeed-daily-round-work.py'],['Deadline reminders','0 8 * * *','godspeed-deadline-reminders.py'],['Weekly check-in','*/15 * * * *','godspeed-coach-talks.py'],['Coach reminders and habit check','*/15 * * * *','godspeed-coach-reminders.py'],['Coaching talk preparation','0 3 * * *','godspeed-coach-prep.py'],['Nightly cleanup','45 2 * * *','godspeed-nightly-cleanup.py']],CONNECTION=['Daily connection check','0 5 * * *','godspeed-connection-check.py'];
 // What a machine has in Hermes once it has ticked: the starting routines the first goal made, and the daily connection check (4 November 2026) the next tick adds beside them.
 const TICKED=[...STARTING,CONNECTION];
 
@@ -111,47 +111,64 @@ test('with Telegram the starting routines deliver there, and the coach talks the
  assert.equal(JSON.parse(fs.readFileSync(path.join(root,'coach','settings.json'),'utf8')).talk_delivery,'messenger');
 });
 
-test('nothing is started for a mission control set up before or one whose Hermes has routines, and one not made from the starter gets only the notice sender',async t=>{
+test('every installation gets cleanup while starting routines still respect existing routines and adopted controls',async t=>{
  // Set up before this change: an installation record and no record of starting routines.
  {const {root,home}=starterFixture(t),store=new Store(root,{device:'pc'}),hermes=fakeHermes(home);store.save('settings',{id:'installation',owner:'pc',timezone:'Europe/Berlin',delivery:'notebook'});
   const scheduler=new NativeScheduler(store,{home,executable:'hermes',device:'pc',run:hermes.run});
   await scheduler.configure({goal:'Fictional later goal'});await scheduler.tick();
-  assert.equal(hermes.jobs().length,0);assert.ok(!store.get('settings','starting-routines'));}
+  assert.deepEqual(hermes.jobs().map(job=>job.name),['Nightly cleanup']);assert.ok(!store.get('settings','starting-routines'));}
  // Hermes already has routines of its own.
  {const {root,home}=starterFixture(t),store=new Store(root,{device:'pc'}),hermes=fakeHermes(home);hermes.write([{id:'mine',name:'My own brief',enabled:true}]);
   await new NativeScheduler(store,{home,executable:'hermes',device:'pc',run:hermes.run}).configure({goal:'Fictional goal',timezone:'Europe/Berlin'});
-  assert.deepEqual(hermes.jobs().map(j=>j.id),['mine']);assert.equal(store.get('settings','starting-routines').state,'skipped');}
+  assert.deepEqual(hermes.jobs().map(j=>j.name),['My own brief','Nightly cleanup']);assert.equal(store.get('settings','starting-routines').state,'skipped');}
  // An adopted mission control: the owner's own manual and rules, the owner's own recipes, live
  // routines on several machines. The developer's own machines are this case; since #225 they get the
- // notice sender and nothing else, until a routine is switched on in Settings.
+ // notice sender, while the fixed nightly cleanup runs everywhere, and any other routine waits for its switch.
  {const root=fixture(t),home=path.join(root,'.hermes-home');fs.mkdirSync(path.join(root,'rules'),{recursive:true});fs.writeFileSync(path.join(root,'AGENTS.md'),'# My own mission control\n');fs.writeFileSync(path.join(root,'rules','my-own-rule.md'),'Mine.\n');
   for(const skill of ['next-action','work-item'])fs.mkdirSync(path.join(root,'skills',skill),{recursive:true}),fs.writeFileSync(path.join(root,'skills',skill,'SKILL.md'),'My own '+skill);
   installStarter(root);assert.equal(adoptedMissionControl(root),true);
   const store=new Store(root,{device:'pc'}),hermes=fakeHermes(home),scheduler=new NativeScheduler(store,{home,executable:'hermes',device:'pc',run:hermes.run});
   await scheduler.configure({goal:'Fictional adopted goal',timezone:'Europe/Berlin'});
   fileGoal(root,'--status','adopted','--title','Another fictional goal');scheduler.lastTick=0;await scheduler.tick();
-  assert.deepEqual(hermes.calls.filter(c=>c.args[1]==='create').map(c=>c.args[c.args.indexOf('--name')+1]),['Godspeed notices'],'only the notice sender');assert.ok(!store.get('settings','starting-routines'));
+  assert.deepEqual(hermes.calls.filter(c=>c.args[1]==='create').map(c=>c.args[c.args.indexOf('--name')+1]),['Nightly cleanup','Godspeed notices'],'the cleanup and notice sender');assert.ok(!store.get('settings','starting-routines'));
   assert.equal(fs.existsSync(path.join(root,'coach','weekly-check-in')),false);}
+});
+
+test('a fresh mission control schedules its nightly cleanup before its first goal',async t=>{
+ const {root,home}=starterFixture(t),store=new Store(root,{device:'pc-1'}),hermes=fakeHermes(home),scheduler=new NativeScheduler(store,{home,executable:'hermes',device:'pc-1',run:hermes.run});
+ await scheduler.tick();
+ assert.deepEqual(hermes.jobs().map(job=>[job.name,job.schedule_display,job.script]),[['Nightly cleanup','45 2 * * *','godspeed-nightly-cleanup.py']]);
+});
+
+test('overlapping setup and tick admit the nightly cleanup once',async t=>{
+ const {root,home}=starterFixture(t),store=new Store(root,{device:'pc-1'}),hermes=fakeHermes(home);store.save('settings',{id:'installation',owner:'pc-1',timezone:'Europe/Berlin',delivery:'notebook'});
+ let release,admitted,creates=0;const gate=new Promise(resolve=>{release=resolve;}),firstAdmission=new Promise(resolve=>{admitted=resolve;});
+ const run=async(executable,args,options)=>{if(args[1]==='create'&&args.includes('Nightly cleanup')){creates++;if(creates===1){admitted();await gate;}}return hermes.run(executable,args,options);};
+ const scheduler=new NativeScheduler(store,{home,executable:'hermes',device:'pc-1',run}),setup=scheduler.configure({goal:'Fictional later goal',timezone:'Europe/Berlin'});
+ await firstAdmission;scheduler.lastTick=0;const tick=scheduler.tick();await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(creates,1,'the second caller waits to inspect the job after the first creates it');
+ release();await Promise.all([setup,tick]);
+ assert.equal(hermes.jobs().filter(job=>job.name==='Nightly cleanup').length,1);
 });
 
 test('a goal told in the chat starts the same routines at the next tick, on this computer\'s clock',async t=>{
  const {root,home}=starterFixture(t),store=new Store(root,{device:'pc-1'}),hermes=fakeHermes(home);
  const scheduler=new NativeScheduler(store,{home,executable:'hermes',device:'pc-1',run:hermes.run});
- await scheduler.tick();assert.equal(hermes.calls.filter(c=>c.args[1]==='create').length,0,'no goal yet, nothing started');
+ await scheduler.tick();assert.equal(hermes.calls.filter(c=>c.args[1]==='create').length,1,'the cleanup starts before a goal');
  assert.ok(!store.get('settings','installation'));
  // The chat files the goal with the original tool (starter AGENTS.md: "make this a goal").
  fileGoal(root,'--status','adopted','--title','Fictional chat goal');
  scheduler.lastTick=0;await scheduler.tick();
  const zone=Intl.DateTimeFormat().resolvedOptions().timeZone;
- assert.deepEqual(hermes.jobs().map(j=>[j.name,j.schedule_display,j.script]),TICKED);
+ assert.deepEqual(hermes.jobs().map(j=>[j.name,j.schedule_display,j.script]),[STARTING.at(-1),...TICKED.filter(([name])=>name!=='Nightly cleanup')]);
  assert.equal(store.get('settings','installation').owner,'pc-1');assert.equal(store.get('settings','installation').timezone,zone);
- assert.equal(hermes.calls.find(c=>c.args[1]==='create').timezone,zone);
+ assert.equal(hermes.calls.find(c=>c.args.includes('Nightly goal research')).timezone,zone);
  assert.match(fs.readFileSync(path.join(root,'coach','weekly-check-in','area.md'),'utf8'),/^SERVES: fictional-chat-goal$/m);
  scheduler.lastTick=0;await scheduler.tick();assert.equal(hermes.jobs().length,TICKED.length,'and only once');
  // A provisional idea is not a goal: it starts nothing.
  const other=starterFixture(t),otherStore=new Store(other.root,{device:'pc-2'}),otherHermes=fakeHermes(other.home);
  fileGoal(other.root,'--title','Only an idea');
- await new NativeScheduler(otherStore,{home:other.home,executable:'hermes',device:'pc-2',run:otherHermes.run}).tick();assert.equal(otherHermes.jobs().length,0);
+ await new NativeScheduler(otherStore,{home:other.home,executable:'hermes',device:'pc-2',run:otherHermes.run}).tick();assert.deepEqual(otherHermes.jobs().map(job=>job.name),['Nightly cleanup']);
 });
 
 // A reader starts on a computer, later orders a server that joins the same mission control from
@@ -181,10 +198,9 @@ test('a server that joins later and takes the routines over gets the starting ro
  serverScheduler.lastTick=0;await serverScheduler.tick();
  const named=serverHermes.calls.filter(c=>c.args[1]==='create').map(c=>c.args[c.args.indexOf('--name')+1]);
  assert.equal(named.filter(n=>STARTING.some(([name])=>name===n)).length,STARTING.length,'once');
- // This server has a chat app, and still the tick makes nothing else: the night chat tidy-up is
- // made for no install since 27 October 2026 (notebook-routines.mjs, CHAT_TIDY_JOB).
- assert.deepEqual(named.filter(n=>!TICKED.some(([name])=>name===n)),[]);
- assert.equal(serverHermes.jobs().some(j=>j.name===CHAT_TIDY_JOB),false);
+ // This server has a chat app, so the tick adds the night chat tidy-up, once, and nothing else.
+ assert.deepEqual(named.filter(n=>!TICKED.some(([name])=>name===n)),[CHAT_TIDY_JOB]);
+ assert.equal(serverHermes.jobs().filter(j=>j.name===CHAT_TIDY_JOB).length,1);
  // The computer no longer runs them: its Hermes is not ticked.
  pc.save('settings',{id:'installation',owner:'vps'});pcScheduler.lastTick=0;const before=pcHermes.calls.length;await pcScheduler.tick();
  assert.equal(pcHermes.calls.length,before);
@@ -205,7 +221,7 @@ test('the routines are made on the machine that runs them, and a failed start is
  // Hermes refusing one: the ones made are taken back, and the start waits an hour.
  const next=starterFixture(t),nextStore=new Store(next.root,{device:'pc'}),broken=fakeHermes(next.home,{fail:'Deadline reminders'});
  const failed=await new NativeScheduler(nextStore,{home:next.home,executable:'hermes',device:'pc',run:broken.run}).configure({goal:'Fictional goal',timezone:'Europe/Berlin'});
- assert.equal(failed.routines.state,'pending');assert.equal(broken.jobs().length,0);assert.ok(Date.parse(readMachineRecord(nextStore).retry_after)>Date.now()+3500000);
+ assert.equal(failed.routines.state,'pending');assert.deepEqual(names(broken.jobs()),['Nightly cleanup']);assert.ok(Date.parse(readMachineRecord(nextStore).retry_after)>Date.now()+3500000);
 });
 // THE FIRST GOAL AFTER THE GETTING-TO-KNOW-YOU CHAT (17 October 2026, found while the user guide was
 // checked against the release of 16 October): on a server the invitation that chat sends is a
@@ -228,12 +244,11 @@ for(const [label,sent] of [['still waits to be sent',false],['went out, and Herm
   if(sent){const [invite]=hermes.jobs();hermes.write([{...invite,enabled:false,state:'completed',next_run_at:null,last_run_at:new Date().toISOString(),last_status:'ok',repeat:{times:1,completed:1}}]);}
   fileGoal(root,'--status','adopted','--title','Fictional first goal');
   scheduler.lastTick=0;await scheduler.tick();
-  // The seven, beside the invitation, and no night chat tidy-up although this server has a chat
-  // app (made for no install since 27 October 2026, notebook-routines.mjs, CHAT_TIDY_JOB).
-  assert.deepEqual(names(hermes.jobs()),[INVITE_JOB,...STARTING_NAMES]);
+  // The seven, beside the invitation, and the night chat tidy-up because this server has a chat app.
+  assert.deepEqual(names(hermes.jobs()),[INVITE_JOB,...STARTING_NAMES,CHAT_TIDY_JOB]);
   assert.equal(store.get('settings',FLAG).state,'created');assert.equal(readMachineRecord(store).state,'created');
-  assert.deepEqual([...new Set(hermes.jobs().filter(j=>j.name!==INVITE_JOB).map(j=>j.deliver))],['telegram']);
-  assert.equal(hermes.jobs().some(j=>j.name===CHAT_TIDY_JOB),false);
+  assert.deepEqual([...new Set(hermes.jobs().filter(j=>j.name!==INVITE_JOB&&j.name!==CHAT_TIDY_JOB).map(j=>j.deliver))],['telegram']);
+  assert.equal(hermes.jobs().find(j=>j.name===CHAT_TIDY_JOB).deliver,'local');
  });
 }
 
@@ -301,10 +316,10 @@ test('routines the reader had in this Hermes before the mission control came, or
   const scheduler=new NativeScheduler(store,{home,executable:'hermes',device:'pc',run:hermes.run});
   if(what.startsWith('made before'))hermes.write([make(root)]);
   await scheduler.tick();
-  if(!what.startsWith('made before'))hermes.write([make(root)]);
+  if(!what.startsWith('made before'))hermes.write([...hermes.jobs(),make(root)]);
   fileGoal(root,'--status','adopted','--title','Fictional first goal');
   scheduler.lastTick=0;await scheduler.tick();
-  assert.equal(hermes.jobs().length,1,what+': nothing added beside the reader\'s own');
+  assert.equal(hermes.jobs().length,2,what+': only the cleanup is added beside the reader\'s own');
   assert.equal(store.get('settings',FLAG).state,'skipped',what);assert.equal(readMachineRecord(store).state,'skipped',what);
   assert.deepEqual(readMachineRecord(store).because.map(j=>j.name),[make(root).name],what+': the record names the routine that decided it');
  }
@@ -349,10 +364,10 @@ test('after the update, a machine whose routines were kept away only by jobs mad
   hermes.write([chatJob({name:'My own brief',schedule:{kind:'cron',expr:'0 6 * * *'},prompt:'My own morning.',workdir:null},{created_at:'2026-09-01T07:00:00+02:00'})]);
   fileGoal(root,'--status','adopted','--title','Fictional first goal');before(store);
   const scheduler=new NativeScheduler(store,{home,executable:'hermes',device:'pc',run:hermes.run});await scheduler.tick();
-  assert.deepEqual(names(hermes.jobs()),['My own brief']);assert.equal(store.get('settings',FLAG).state,'skipped');
+  assert.deepEqual(names(hermes.jobs()),['My own brief','Nightly cleanup']);assert.equal(store.get('settings',FLAG).state,'skipped');
   assert.equal(readMachineRecord(store).state,'skipped');assert.ok(readMachineRecord(store).rule,'decided by today\'s rule');
   hermes.write([]);scheduler.lastTick=0;await scheduler.tick();
-  assert.equal(hermes.calls.filter(c=>c.args[1]==='create').length,0,'decided once');}
+  assert.deepEqual(names(hermes.jobs()),[]);assert.equal(hermes.calls.filter(c=>c.args[1]==='create').length,1,'decided once');}
  // Set up before 8 October 2026: its owner answering the city after the update changes nothing.
  {const {root,home}=starterFixture(t),store=new Store(root,{device:'pc'}),hermes=fakeHermes(home);
   store.save('settings',{id:'installation',owner:'pc',timezone:'Europe/Berlin',delivery:'notebook',created_at:'2026-10-01T08:00:00.000Z'});
@@ -360,7 +375,7 @@ test('after the update, a machine whose routines were kept away only by jobs mad
   fileGoal(root,'--status','adopted','--title','Fictional later goal');
   const scheduler=new NativeScheduler(store,{home,executable:'hermes',device:'pc',run:hermes.run});await scheduler.tick();
   await scheduler.configure({goal:'Another fictional goal'});
-  assert.equal(hermes.jobs().length,0,'an installation set up before stays as it was');assert.ok(!store.get('settings',FLAG));}
+  assert.deepEqual(names(hermes.jobs()),['Nightly cleanup'],'an installation set up before gets only its cleanup');assert.ok(!store.get('settings',FLAG));}
 });
 
 test('notebook schedule controls call Hermes cron and reflect its job file',async t=>{

@@ -47,7 +47,7 @@
  *   mc-due today              at most three, for your morning brief to read
  *   mc-due add <name> --title "..." [--from YYYY-MM-DD] --target YYYY-MM-DD and/or --to YYYY-MM-DD
  *          --done-when "..." [--cost "..."] [--repeats monthly|yearly|"every N days"]
- *          [--self-check none|file-newer] [--self-check-arg PATH] [--link URL]
+ *          [--self-check none|secret-changed|connection-ok|file-newer] [--self-check-arg ARG] [--link URL]
  *   mc-due target <name> YYYY-MM-DD|asap    a new day you would like it done, or as soon as you can
  *   mc-due done <name> [--evidence "..."]   you did it: writes the event that closes it
  *   mc-due drop <name> --yes  call it off: an event too, and nothing is deleted
@@ -136,6 +136,9 @@ function createDueCommands({root,commandArgs=process.argv.slice(2),date,copy=tru
 // very first thing a person types (mc-due --godspeed /somewhere check) reads "--godspeed" as the command
 // and quietly runs the list instead, which looks like it worked.
 const raw = root ? ['--godspeed',root,...commandArgs] : commandArgs;
+// The connections the daily check lists (notebook/core/connection-names.mjs): the id its record is
+// kept under, and the name Settings shows. Kept here because this tool ships without the notebook.
+const CONNECTIONS = { ai: "your AI", telegram: "Telegram", github: "GitHub", mail: "Gmail", agentmail: "your mission control's own mailbox", phone: "the phone's health data", disk: "your server's disk" };
 const args = [];
 let godspeed = "";
 for (let i = 0; i < raw.length; i++) {
@@ -568,11 +571,67 @@ function sayable(r, day) {
 }
 
 // ---------------------------------------------------------------- the self checks
-// How your mission control could tell this was done WITHOUT asking you. Only one is possible without help from
-// somebody else's website, and it is the cheapest thing there is: did a file change inside the
-// window. `none` is the honest answer for most obligations and it is not second best.
+// How your mission control could tell this was done WITHOUT asking you, from what it already holds
+// and never from somebody else's website: a file written inside the window, a key of its own key
+// store replaced, a connection the daily connection check found working. `none` is the honest
+// answer for most obligations and it is not second best.
+const SELF_CHECKS = ["none", "secret-changed", "connection-ok", "file-newer"];
+const connectionId = (arg) => {
+  const a = String(arg || "").trim().toLowerCase();
+  return Object.keys(CONNECTIONS).find((id) => id === a || CONNECTIONS[id].toLowerCase() === a) || "";
+};
+const stateDir = () => path.join(godspeed, ".godspeed");
+const readJson = (file) => { try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch (e) { return null; } };
+const sha = (text) => require("crypto").createHash("sha256").update(text).digest("hex");
+
+// What it says it does, in words, for the person who just made it.
+function selfCheckWords(kind, arg) {
+  if (kind === "secret-changed") return "the key called " + arg + " is replaced";
+  if (kind === "connection-ok") return "the daily connection check finds " + (CONNECTIONS[connectionId(arg)] || arg) + " working";
+  return arg + " changes inside the window";
+}
+
+// A one-way fingerprint of the active keys of that name in the key store. The store keeps only a
+// hash of each key (notebook/core/api-keys.mjs), never the key, and this hashes it again, so no
+// value that opens anything is ever read here.
+function keyFingerprint(name) {
+  const rows = readJson(path.join(stateDir(), "api-keys.json"));
+  const mine = (Array.isArray(rows) ? rows : []).filter((k) => k && k.is_active !== false && String(k.name || "").trim().toLowerCase() === name.toLowerCase());
+  return mine.length ? sha(mine.map((k) => String(k.hash || k.id || "")).sort().join("\n")).slice(0, 16) : "";
+}
+
+function secretChanged(o, strip) {
+  const name = (o.head["SELF-CHECK-ARG"] || "").trim();
+  if (!name) return { error: "it says to watch a key but does not say which one" };
+  const now = keyFingerprint(name);
+  if (!now) return { done: false, why: "your key store has no key called " + name + " yet" };
+  const kept = String(o.head["SELF-CHECK-STATE"] || "").trim();
+  const [window, before] = kept.split(":");
+  // The first look in a window only remembers; a repeating deadline looks afresh in each window.
+  if (window !== strip.from || !before) return { done: false, state: strip.from + ":" + now, why: "noted what the key called " + name + " is now; it closes when that key is replaced" };
+  if (before === now) return { done: false, why: "the key called " + name + " has not been replaced yet" };
+  return { done: true, why: "the key called " + name + " was replaced inside this window" };
+}
+
+function connectionOk(o, strip) {
+  const arg = (o.head["SELF-CHECK-ARG"] || "").trim();
+  const id = connectionId(arg);
+  if (!id) return { error: "it says to watch a connection but \"" + arg + "\" is not one of: " + Object.values(CONNECTIONS).join(", ") };
+  const label = CONNECTIONS[id];
+  const record = readJson(path.join(stateDir(), "connection-check.json"));
+  const entry = record && record.connections && record.connections[id];
+  if (!entry) return { done: false, why: "the daily connection check has not looked at " + label + " yet" };
+  if (!entry.set_up) return { done: false, why: label + " is not set up, so the daily connection check did not try it" };
+  if (entry.ok !== true) return { done: false, why: "the daily connection check last found " + label + " not working" };
+  const day = String(record.day || "");
+  if (!day || day < strip.from) return { done: false, why: "the daily connection check last found " + label + " working on " + day + ", before this window opened" };
+  return { done: true, why: "the daily connection check found " + label + " working on " + day + ", inside this window" };
+}
+
 function selfCheck(o, strip) {
   const kind = (o.head["SELF-CHECK"] || "none").trim().toLowerCase();
+  if (kind === "secret-changed") return secretChanged(o, strip);
+  if (kind === "connection-ok") return connectionOk(o, strip);
   if (kind === "file-newer") {
     const rel = (o.head["SELF-CHECK-ARG"] || "").trim();
     if (!rel) return { error: "it says to look at a file but does not say which one" };
@@ -603,10 +662,17 @@ function help() {
           --target YYYY-MM-DD and/or --to YYYY-MM-DD
           --done-when "..." [--cost "..."]
           [--repeats monthly|yearly|"every N days"]
-          [--self-check none|file-newer] [--self-check-arg PATH] [--link URL]
+          [--self-check none|secret-changed|connection-ok|file-newer] [--self-check-arg ARG] [--link URL]
           --from is the day you can start (today if you leave it out). --target is the day
           you would like it done. --to is the last day before it costs you, and needs --cost.
           At least one of --target and --to.
+          --self-check says how it can close itself, and --self-check-arg what it looks at:
+            secret-changed  a key of that name in your key store is replaced after the first check
+                            inside the window, which only remembers a one-way fingerprint
+            connection-ok   the daily connection check, on a day inside the window, finds that
+                            connection (${Object.values(CONNECTIONS).join(", ")}) working
+            file-newer      that file is written inside the window
+            none            only your word closes it
   mc-due target <name> YYYY-MM-DD   a new day you would like it done
   mc-due target <name> asap         as soon as you can (it stays, mentioned about weekly)
   mc-due done <name> [--evidence "..."]   you did it (written down as a moment on your timeline)
@@ -698,7 +764,8 @@ function cmdList(day, capped) {
       const c = (r.o.head["SELF-CHECK"] || "none").toLowerCase();
       console.log("               " + (c === "none"
         ? "only your word closes this one:  mc-due done " + r.slug
-        : "closes itself when " + (r.o.head["SELF-CHECK"] || "")));
+        : "closes itself when " + (c === "secret-changed" || c === "connection-ok"
+          ? selfCheckWords(c, (r.o.head["SELF-CHECK-ARG"] || "").trim()) : (r.o.head["SELF-CHECK"] || ""))));
     }
   }
   return 0;
@@ -763,11 +830,17 @@ function cmdAdd(day) {
     return 1;
   }
   const sc = (argOf("--self-check", "none") || "none").toLowerCase();
-  if (sc !== "none" && sc !== "file-newer") { console.log("--self-check must be none or file-newer."); return 1; }
+  const scArg = argOf("--self-check-arg", "");
+  if (!SELF_CHECKS.includes(sc)) { console.log("--self-check must be " + SELF_CHECKS.join(", ") + "."); return 1; }
+  if ((sc === "secret-changed" || sc === "connection-ok") && !scArg.trim()) {
+    console.log("--self-check " + sc + " needs --self-check-arg " + (sc === "connection-ok" ? "(" + Object.values(CONNECTIONS).join(", ") + ")" : "(the name of the key)") + ".");
+    return 1;
+  }
+  if (sc === "connection-ok" && !connectionId(scArg)) { console.log("--self-check-arg must name a connection: " + Object.values(CONNECTIONS).join(", ") + "."); return 1; }
   const o = { slug, path: filePath(slug), strips: [{ from, to, target, moved: "", extra: [], state: "open", closed: "", legacy: "" }], log: [], said: [],
     head: {
       "TITLE": argOf("--title", slug), "DONE-WHEN": doneWhen, "COST-IF-MISSED": cost,
-      "SELF-CHECK": sc, "SELF-CHECK-ARG": argOf("--self-check-arg", ""),
+      "SELF-CHECK": sc, "SELF-CHECK-ARG": scArg,
       "REPEATS": repeats, "LINK": argOf("--link", ""), "SOURCE": (addon ? addon : "you") + ", " + day,
     } };
   if (addon) {
@@ -796,7 +869,7 @@ function cmdAdd(day) {
   }
   console.log(sc === "none"
     ? "It cannot tell by itself that you did it, so it waits for your word:  mc-due done " + slug
-    : "It closes itself when " + argOf("--self-check-arg", "that file") + " changes inside the window.");
+    : "It closes itself when " + selfCheckWords(sc, scArg || "that file") + ".");
   return 0;
 }
 
@@ -957,6 +1030,8 @@ function cmdCheck(day) {
     if (!cur) continue;
     const r = selfCheck(o, cur.strip);
     if (r.error) { console.log("  due/" + slug + ".md: " + r.error); problems++; continue; }
+    if (r.state) { o.head["SELF-CHECK-STATE"] = r.state; save(o); }
+    if (!r.done && r.why) console.log("  not yet: " + (o.head["TITLE"] || slug) + " (" + r.why + ")");
     if (r.done) {
       const rel = writeEvent(day, {
         closes: ["due/" + slug + "#" + cur.strip.from], evidence: "self check: " + r.why, source: "mc-due check",
@@ -994,6 +1069,7 @@ function stateRows(day=today(),mutate=false) {
       doneWhen: (r.o.head["DONE-WHEN"] || "").trim(), closedOn: last ? last.closed : "", closedBy: last ? last.by : "",
       // Anything but "none" closes itself in `mc-due check`, so the stop check never guesses at it.
       selfCheck: (r.o.head["SELF-CHECK"] || "").trim().toLowerCase() || "none",
+      selfCheckArg: (r.o.head["SELF-CHECK-ARG"] || "").trim(),
       ...(addon ? { addon } : {}),
     };
   });
