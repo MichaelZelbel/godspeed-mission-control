@@ -12,6 +12,9 @@ GOAL='Prepare a practical household emergency-kit checklist by Sunday.'
 RESEARCH='Nightly goal research'
 CHOOSE="Daily round: choose today's work"
 WORK='Daily round: do the work'
+WORK_ID='W-000-first-day-emergency-kit'
+WORK_KEY='first-day-emergency-kit'
+RESULT_FILE='work/emergency-kit-checklist.md'
 CURRENT_STEP='fresh Docker server installation'
 
 fail() {
@@ -24,6 +27,15 @@ fail() {
 
 rows_with() { # <file> <needle>
   "$NODE" -e 'const fs=require("fs"),d=JSON.parse(fs.readFileSync(process.argv[1],"utf8")),rows=Array.isArray(d)?d:d.data||[];process.stdout.write(String(rows.filter(r=>JSON.stringify(r).includes(process.argv[2])).length))' "$1" "$2"
+}
+file_first_day_work() {
+  in_server_as_hermes env GODSPEED_ROOT=/opt/data/full-candidate/workspace /usr/local/bin/node /opt/godspeed/kit/tools/work.js file \
+    --id "$WORK_ID" --key "$WORK_KEY" --what "Write a practical household emergency-kit checklist at $RESULT_FILE" \
+    --done-when "A practical household emergency-kit checklist is written at $RESULT_FILE and ready for a reader" \
+    --check "test -s $RESULT_FILE" --source first-day-scenario >"$EVIDENCE/first-day-work-filed.txt" 2>&1 ||
+    fail "the scenario could not file its emergency-kit work: $(tr -d '\n' <"$EVIDENCE/first-day-work-filed.txt" | cut -c1-200)"
+  grep -Fqx "$WORK_ID: planned" "$EVIDENCE/first-day-work-filed.txt" ||
+    fail 'the scenario-filed emergency-kit work was not planned'
 }
 step_passed() { # <name>
   printf 'PASS %s: %s\n' "$SCENARIO" "$1" | tee -a "$EVIDENCE/steps.tsv" >&2
@@ -52,9 +64,13 @@ act() {
     fail "the installed notebook would not file the emergency-kit goal: $(tr -d '\n' <"$EVIDENCE/setup.json" | cut -c1-200)"
   server_pause_all_jobs
   step_passed 'fictional emergency-kit goal filed through the notebook'
-  first_day_phase 'installed research, choice, and work routines'
+  first_day_phase 'installed research routine'
   server_run_job research "$RESEARCH" 1800
+  first_day_phase 'installed choice routine'
   server_run_job choice "$CHOOSE" 1800
+  first_day_phase 'scenario files the emergency-kit work for the installed daily round'
+  file_first_day_work
+  first_day_phase 'installed work routine'
   server_run_job work "$WORK" 1800
   step_passed 'installed research, choice, and work routines completed'
   first_day_phase 'installed morning brief and its Telegram delivery'
@@ -78,9 +94,11 @@ check() { # <evidence folder>
   for table in "${SERVER_SPARSE_TABLES[@]}"; do sparse_files+=("sparse-${table//_/-}.json"); done
   [ -d "$folder" ] || fail "there is nothing at $folder, so this scenario kept no first-day evidence"
   need_node
-  kept_all "$folder" 'the installed first day' setup.json job-research.json job-choice.json job-work.json job-scheduled-brief.json brief.txt brief-cron-runs.txt scheduled-telegram-requests.json run.json runner.json telegram-requests.json work-items.json notes-before-reply.json notes-after-reply.json "${sparse_files[@]}" manifest.json
+  kept_all "$folder" 'the installed first day' setup.json job-research.json job-choice.json job-work.json first-day-work-filed.txt job-scheduled-brief.json brief.txt brief-cron-runs.txt scheduled-telegram-requests.json run.json runner.json telegram-requests.json work-items.json notes-before-reply.json notes-after-reply.json "${sparse_files[@]}" manifest.json
   grep -Fqx "$GOAL" <(json_value "$folder/setup.json" results.goal.title 2>/dev/null || true) ||
     grep -Fq "$GOAL" "$folder/setup.json" || fail 'the notebook did not retain the fictional emergency-kit goal'
+  grep -Fqx "$WORK_ID: planned" "$folder/first-day-work-filed.txt" ||
+    fail 'the scenario did not retain its emergency-kit work filing'
   for label in research choice work; do
     "$NODE" -e 'const fs=require("fs"),d=JSON.parse(fs.readFileSync(process.argv[1],"utf8")),rows=Array.isArray(d)?d:d.data||[];process.exit(rows.some(j=>j?.last_run_at&&j?.last_status==="ok")?0:1)' "$folder/job-$label.json" ||
       fail "the installed $label routine has no successful recorded run"
@@ -89,26 +107,27 @@ check() { # <evidence folder>
     fail 'the installed scheduled morning brief has no successful recorded run'
   grep -Eqi 'source[[:space:]]*[:=][[:space:]]*"?builtin' "$folder/brief-cron-runs.txt" ||
     fail 'the morning brief was not triggered by the installed scheduler'
-  if ! reason=$("$NODE" - "$folder" "$GOAL" "${sparse_files[@]}" 2>&1 <<'NODE'
+  if ! reason=$("$NODE" - "$folder" "$GOAL" "$WORK_ID" "$WORK_KEY" "$RESULT_FILE" "${sparse_files[@]}" 2>&1 <<'NODE'
 const fs=require('fs'),path=require('path');
-const [folder,goal,...sparseFiles]=process.argv.slice(2),read=file=>fs.readFileSync(path.join(folder,file),'utf8');
+const [folder,goal,workId,workKey,resultFile,...sparseFiles]=process.argv.slice(2),read=file=>fs.readFileSync(path.join(folder,file),'utf8');
 const rows=file=>{const d=JSON.parse(read(file));return Array.isArray(d)?d:d.data||[]};
 const fail=message=>{console.error(message);process.exit(1)};
-const walk=dir=>fs.existsSync(dir)?fs.readdirSync(dir,{withFileTypes:true}).flatMap(e=>e.isDirectory()?walk(path.join(dir,e.name)):[path.join(dir,e.name)]):[];
 const normalized=value=>String(value||'').replace(/\r\n?/g,'\n').trim();
 if(!normalized(read('brief.txt')))fail('the installed morning brief saved no readable text');
 for(const file of sparseFiles){
  const state=JSON.parse(read(file)),rows=Array.isArray(state)?state:state.data||[];
  if(!Array.isArray(rows)||rows.length)fail('the brief was not run with the required sparse installed state');
 }
-const cards=walk(path.join(folder,'work')).filter(file=>/\.md$/i.test(file)).map(file=>({file,text:fs.readFileSync(file,'utf8')}));
-const card=cards.find(({text})=>/^STATUS:\s*verified\s*$/mi.test(text)&&/VERIFIED check passed/i.test(text)&&/^RESULT:\s*\S/m.test(text));
-if(!card)fail('no Godspeed-owned work card is verified by its recorded check and result');
-const title=(card.text.match(/^WHAT:\s*(.+)$/mi)||[])[1]?.trim()||'';
-const result=(card.text.match(/^RESULT:\s*(.+)$/mi)||[])[1]?.trim()||'';
+const cardFile=path.join(folder,'work',`${workId}.md`);
+if(!fs.existsSync(cardFile)||!fs.statSync(cardFile).isFile())fail('the scenario-filed emergency-kit work card is missing');
+const text=fs.readFileSync(cardFile,'utf8');
+const field=name=>(text.match(new RegExp(`^${name}:\\s*(.+)$`,'mi'))||[])[1]?.trim()||'';
+if(field('ID')!==workId||field('KEY')!==workKey||field('SOURCE')!=='first-day-scenario')fail('the selected emergency-kit work card does not retain the scenario filing');
+if(field('STATUS')!=='verified'||!/VERIFIED check passed/i.test(text))fail('the selected emergency-kit work card is not verified by its recorded check');
+const title=field('WHAT'),result=field('RESULT');
 if(!title||!result)fail('the verified work card lacks its title or result');
-const declared=(card.text.match(/^ARTIFACT:\s*(work\/(?:[A-Za-z0-9][A-Za-z0-9._-]*\/)*[A-Za-z0-9][A-Za-z0-9._-]*\.(?:md|txt))\s*$/mi)||[])[1];
-if(!declared)fail('the verified work card has no declared result artifact');
+const declared=(text.match(/^DONE WHEN:\s*A practical household emergency-kit checklist is written at (work\/(?:[A-Za-z0-9][A-Za-z0-9._-]*\/)*[A-Za-z0-9][A-Za-z0-9._-]*\.md) and ready for a reader\s*$/mi)||[])[1];
+if(!declared||declared!==resultFile)fail('the selected emergency-kit work card does not name its result file');
 const artifact=path.join(folder,declared);
 if(!fs.existsSync(artifact)||!fs.statSync(artifact).isFile())fail('the result artifact is not a practical emergency-kit checklist');
 const practical=fs.readFileSync(artifact,'utf8');

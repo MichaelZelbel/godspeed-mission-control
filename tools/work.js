@@ -75,7 +75,7 @@ const KINDS = ['do', 'learn', 'repair'];
 // slash in it, ending in .md, .csv, .json or .txt, trailing punctuation ignored.
 const namesFile = (s) => String(s || '').split(/\s+/).map(t => t.replace(/[.,;:)"'\]]+$/, ''))
   .some(t => t.includes('/') && /\.(md|csv|json|txt)$/i.test(t));
-const ORDER = ['ID', 'STATUS', 'KIND', 'KEY', 'GOAL', 'CARD', 'WHAT', 'DONE WHEN', 'CHECK', 'ARTIFACT', 'OWNER', 'NEEDS', 'OUTWARD', 'ATTEMPTS', 'MAX ATTEMPTS',
+const ORDER = ['ID', 'STATUS', 'KIND', 'KEY', 'GOAL', 'CARD', 'WHAT', 'DONE WHEN', 'CHECK', 'OWNER', 'NEEDS', 'OUTWARD', 'ATTEMPTS', 'MAX ATTEMPTS',
   'LEASE', 'NEXT TRY', 'STALE AFTER', 'FILED', 'SOURCE', 'RESULT', 'LINK', 'APPROVED', 'MAY', 'GOES OUT', 'ANNOUNCED'];
 const S = L.store(DIR, ORDER);
 const { die, say, oneLine, flag, today, q } = L;
@@ -346,38 +346,6 @@ function leaseOf(c) {
 function leaseLive(c) { const l = leaseOf(c); return l && l.until > now() ? l : null; }
 function attemptsOf(c) { return parseInt(c.f.ATTEMPTS || '0', 10) || 0; }
 function maxOf(c) { return parseInt(c.f['MAX ATTEMPTS'] || '3', 10) || 3; }
-function relativeArtifact(value) {
-  const artifact = oneLine(value);
-  if (!artifact) return '';
-  if (path.isAbsolute(artifact)) return '';
-  const full = path.resolve(GODSPEED, artifact), relative = path.relative(GODSPEED, full);
-  if (!relative || relative === '..' || relative.startsWith(`..${path.sep}`)) return '';
-  return relative.split(path.sep).join('/');
-}
-function artifactPath(value) {
-  const artifact = oneLine(value), relative = relativeArtifact(artifact);
-  if (artifact && !relative) die('--artifact must name a file below this mission control');
-  return relative;
-}
-function artifactFromCheck(check) {
-  const artifacts = new Set();
-  for (let words of shellCommands(check)) {
-    while (words.length && !words[0].exp && (LEADING.has(words[0].text) || /^[A-Za-z_][A-Za-z0-9_]*=/.test(words[0].text))) words = words.slice(1);
-    if (!words.length || words[0].exp || !['test', '['].includes(words[0].text)) continue;
-    for (let i = 1; i < words.length - 1; i++) {
-      if (words[i].exp || !['-f', '-s'].includes(words[i].text) || words[i + 1].exp) continue;
-      const artifact = relativeArtifact(words[i + 1].text);
-      if (artifact) artifacts.add(artifact);
-    }
-  }
-  return artifacts.size === 1 ? [...artifacts][0] : '';
-}
-function artifactFile(c) {
-  const artifact = c.f.ARTIFACT || '';
-  if (!artifact) return '';
-  const full = path.resolve(GODSPEED, artifact), relative = path.relative(GODSPEED, full);
-  return (!relative || relative === '..' || relative.startsWith(`..${path.sep}`)) ? '' : full;
-}
 
 cmds.file = (a) => {
   if (a.learn === 'true') die('--learn needs the question, in quotes');
@@ -408,7 +376,6 @@ cmds.file = (a) => {
     const why = checkProblem(oneLine(a.check));
     if (why) die(`--check "${oneLine(a.check)}" cannot verify this step: ${why}. Write one shell line that exits 0 only when the step is done, for example: ${CHECK_EXAMPLE}`);
   }
-  const artifact = artifactPath(a.artifact) || artifactFromCheck(oneLine(a.check));
   // UNDER A STANDING PERMISSION (2026-10-12): the goal card's MAY line for this kind is the yes,
   // up to its weekly limit. Counted are the steps filed on that permission in the seven days to
   // this one, not the ones stopped; past the limit the step waits for a fresh yes like any other.
@@ -454,7 +421,7 @@ cmds.file = (a) => {
   if (S.exists(id)) die(`${id} already exists`);
   const f = {
     ID: id, STATUS: needs === 'none' ? 'planned' : 'blocked', KIND: kind, KEY: key, GOAL: oneLine(a.goal), CARD: oneLine(a.card), WHAT: what, 'DONE WHEN': done,
-    CHECK: oneLine(a.check), ARTIFACT: artifact, OWNER: owner, NEEDS: needs, OUTWARD: outward, ATTEMPTS: '0', 'MAX ATTEMPTS': String(parseInt(a['max-attempts'] || '3', 10) || 3),
+    CHECK: oneLine(a.check), OWNER: owner, NEEDS: needs, OUTWARD: outward, ATTEMPTS: '0', 'MAX ATTEMPTS': String(parseInt(a['max-attempts'] || '3', 10) || 3),
     'STALE AFTER': String(parseInt(a['stale-after'] || '7', 10) || 7), FILED: d, SOURCE: oneLine(a.source || 'unknown'),
     APPROVED: standingWords, MAY: may ? may.kind : '', 'GOES OUT': goesOut,
   };
@@ -537,10 +504,6 @@ cmds.verify = (a) => {
   if (!['attempted', 'dispatched', 'planned'].includes(c.f.STATUS)) die(`${c.id} is ${c.f.STATUS}`);
   const d = a.date || today();
   const ev = oneLine(a.evidence);
-  if (c.f.ARTIFACT) {
-    const artifact = artifactFile(c);
-    if (!artifact || !fs.existsSync(artifact) || !fs.statSync(artifact).isFile()) die(`${c.id} declares artifact "${c.f.ARTIFACT}", but that file is not present`);
-  }
   if (c.f.CHECK) {
     const r = spawnSync(CHECK_SHELL, ['-c', c.f.CHECK], { cwd: GODSPEED, encoding: 'utf8', timeout: 120000, env: Object.assign({}, process.env, { GODSPEED_ROOT: GODSPEED }) });
     if (r.status === 0) {
@@ -814,7 +777,7 @@ cmds.check = () => {
 };
 cmds.help = () => say(`mc-work: dispatched, attempted and verified are three different things
 
-  file --what "..." --done-when "..." [--key K] [--goal G] [--card C] [--check "<shell, exit 0 when done>"] [--artifact <file>]
+  file --what "..." --done-when "..." [--key K] [--goal G] [--card C] [--check "<shell, exit 0 when done>"]
        [--owner godspeed|person|company:<slug>] [--needs none|person|authorization|capability:<x>] [--outward yes|no]
        [--max-attempts 3] [--stale-after 7] [--source "..."]       a second file with the same open KEY files nothing
        [--kind do|learn|repair]         a learn item is a question; its DONE WHEN must name a file the answer is written in.
