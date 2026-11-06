@@ -24,14 +24,17 @@ import dataclasses
 import json
 import os
 import re
+import sqlite3
 import threading
 import time
 import uuid
+from pathlib import Path
 
 COMMAND = "godspeed-chat-tidy"
 # The owner's private chat in a chat app, as godspeed_routines.py (CHAT_KEY) finds it: a group or
 # channel route and the assistant's own terminal ("local") are refused. A test holds the two equal.
 CHAT_KEY = r"^agent:main:(?!(?:local|cli|tui|cron|webhook|api_server):)[^:]+:dm:.+$"
+CHAT_KEY_LIKE = "agent:main:%:dm:%"
 NOT_A_CHAT_APP = ("local", "cli", "tui", "cron", "webhook", "api_server")
 
 
@@ -59,9 +62,12 @@ class TidyRequest:
         return cls(**{field.name: asked[field.name] for field in dataclasses.fields(cls)})
 
 
+def _home():
+    return os.environ.get("HERMES_HOME") or os.path.join(os.path.expanduser("~"), ".hermes")
+
+
 def _requests():
-    home = os.environ.get("HERMES_HOME") or os.path.join(os.path.expanduser("~"), ".hermes")
-    return os.path.join(home, "godspeed-chat-tidy-requests")
+    return os.path.join(_home(), "godspeed-chat-tidy-requests")
 
 
 def _runner():
@@ -80,6 +86,20 @@ def _platform(origin):
 def _message_event(origin):
     from gateway.platforms.event import MessageEvent
     return MessageEvent(text="/compress", source=origin)
+
+
+def _owner_chat_key():
+    """The one chat the night routine may tidy, as the assistant routes it now."""
+    database = Path(_home()) / "state.db"
+    try:
+        with sqlite3.connect(database.as_uri() + "?mode=ro", uri=True, timeout=2) as connection:
+            rows = connection.execute(
+                "select session_key from gateway_routing where scope = ? and session_key like ?",
+                (str(Path(_home()) / "sessions"), CHAT_KEY_LIKE)).fetchall()
+    except (OSError, sqlite3.Error):
+        return None
+    keys = [row[0] for row in rows if re.match(CHAT_KEY, row[0] or "")]
+    return keys[0] if len(keys) == 1 else None
 
 
 def tidy(raw_args="", **_context):
@@ -164,6 +184,8 @@ def _serve_requests():
 
 
 def _tidy_with(runner, key, session_id):
+    if _owner_chat_key() != key:
+        return "refused: %s is not the one chat of the owner" % key
     try:
         entry = runner.session_store.lookup_by_session_key(key)
     except Exception as error:

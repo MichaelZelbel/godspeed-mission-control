@@ -19,7 +19,7 @@ function fakeHermes(home){
   if(exe!=='hermes')return runCommand(exe,args,options);
   calls.push(args);const [,verb,...rest]=args,flag=name=>{const i=rest.indexOf(name);return i===-1?null:rest[i+1];};
   const jobs=read();
-  if(verb==='create'){const noAgent=rest.includes('--no-agent');jobs.push({id:'job'+(++serial),name:flag('--name'),schedule:{kind:'cron',expr:rest[0]},schedule_display:rest[0],prompt:noAgent?null:rest[1],script:flag('--script'),skill:flag('--skill'),no_agent:noAgent,deliver:flag('--deliver'),workdir:flag('--workdir'),enabled:true,state:'scheduled',created_at:new Date().toISOString()});write(jobs);}
+  if(verb==='create'){const noAgent=rest.includes('--no-agent');jobs.push({id:'job'+(++serial),name:flag('--name'),schedule:{kind:'cron',expr:rest[0]},schedule_display:rest[0],prompt:noAgent?null:rest[1],script:flag('--script'),skill:flag('--skill'),no_agent:noAgent,deliver:flag('--deliver'),failure_deliver:flag('--failure-deliver'),workdir:flag('--workdir'),enabled:true,state:'scheduled',created_at:new Date().toISOString()});write(jobs);}
   if(verb==='edit'){const job=jobs.find(j=>j.id===rest[0]);if(!job)throw Error('Job not found');if(flag('--schedule'))Object.assign(job,{schedule:{kind:'cron',expr:flag('--schedule')},schedule_display:flag('--schedule')});if(flag('--deliver'))job.deliver=flag('--deliver');write(jobs);}
   if(verb==='pause'||verb==='resume'){const job=jobs.find(j=>j.id===rest[0]);job.enabled=verb==='resume';write(jobs);}
   if(verb==='remove')write(jobs.filter(j=>j.id!==rest[0]));
@@ -404,10 +404,12 @@ test('an install with a chat app connected gets the night chat tidy-up at 01:30,
  assert.equal(mine()[0].schedule.expr,'30 1 * * *');
  assert.equal(mine()[0].script,CHAT_TIDY_SCRIPT);assert.equal(mine()[0].no_agent,true);
  assert.equal(mine()[0].deliver,'local','its results are never delivered to the chat');
+ assert.equal(mine()[0].failure_deliver,'local','a failed tidy-up is never delivered to the chat');
  assert.ok(readNotebookRoutines(store).jobs.some(j=>j.key==='chat-tidy'&&j.id===mine()[0].id));
  scheduler.lastTick=0;await scheduler.tick().catch(()=>null);
  assert.equal(mine().length,1,'made once');
  assert.equal(mine()[0].deliver,'local','and still not moved to Telegram by the delivery follow-up');
+ assert.equal(mine()[0].failure_deliver,'local','and neither is a later failure');
  // Removed by the person: it stays removed.
  hermes.write(hermes.jobs().filter(j=>j.name!==CHAT_TIDY_JOB));
  scheduler.lastTick=0;await scheduler.tick().catch(()=>null);

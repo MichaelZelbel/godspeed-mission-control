@@ -3,6 +3,8 @@ import asyncio
 import importlib.util
 import os
 import re
+import shutil
+import sqlite3
 import sys
 import tempfile
 import threading
@@ -12,7 +14,6 @@ import unittest
 HERE = os.path.dirname(os.path.abspath(__file__))
 FILE = os.path.join(HERE, "..", "assistant-files", "godspeed-chat-tidy", "__init__.py")
 KEY = "agent:main:telegram:dm:4242"
-os.environ["HERMES_HOME"] = tempfile.mkdtemp(prefix="chat-tidy-plugin-")
 
 
 class Platform:
@@ -72,6 +73,23 @@ ROUTINES = os.path.join(HERE, "..", "core", "routine-scripts", "godspeed_routine
 
 
 class ChatTidy(unittest.TestCase):
+    def setUp(self):
+        self.home = tempfile.mkdtemp(prefix="chat-tidy-plugin-")
+        os.environ["HERMES_HOME"] = self.home
+        self.owner_routes(KEY)
+
+    def tearDown(self):
+        shutil.rmtree(self.home)
+
+    def owner_routes(self, *keys):
+        database = sqlite3.connect(os.path.join(self.home, "state.db"))
+        database.execute("create table gateway_routing(scope text, session_key text, entry_json text)")
+        scope = os.path.join(self.home, "sessions")
+        database.executemany("insert into gateway_routing values (?, ?, ?)",
+                             [(scope, key, "{}") for key in keys])
+        database.commit()
+        database.close()
+
     def test_a_group_route_is_refused(self):
         group = "agent:main:telegram:group:8"
         runner = Runner({group: Entry("group-1")})
@@ -105,6 +123,14 @@ class ChatTidy(unittest.TestCase):
     def test_a_route_to_another_session_is_refused(self):
         runner = Runner({KEY: Entry("someone-else")})
         self.assertTrue(load(runner).tidy(KEY + " chat-1").startswith("refused:"))
+        self.assertEqual(runner.events, [])
+
+    def test_a_second_private_chat_is_refused_even_when_its_route_matches(self):
+        other = "agent:main:telegram:dm:999"
+        os.remove(os.path.join(self.home, "state.db"))
+        self.owner_routes(KEY, other)
+        runner = Runner({KEY: Entry("chat-1"), other: Entry("other-chat")})
+        self.assertTrue(load(runner).tidy(other + " other-chat").startswith("refused:"))
         self.assertEqual(runner.events, [])
 
     def test_a_non_chat_app_origin_is_refused(self):
