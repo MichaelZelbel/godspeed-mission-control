@@ -203,7 +203,16 @@ def remember(c, kind, failed=None):
             status = {}
     except Exception:
         status = {}
-    status[kind] = {"at": datetime.now(timezone.utc).isoformat(), "failed": failed}
+    previous = status.get(kind)
+    if not isinstance(previous, dict):
+        previous = {}
+    # Old records have no count, but their one retained outcome is still the immediately preceding
+    # run. Count it so an upgrade does not overlook the next consecutive failure.
+    streak = previous.get("failure_streak")
+    if not isinstance(streak, int) or streak < 0:
+        streak = 1 if previous.get("failed") else 0
+    status[kind] = {"at": datetime.now(timezone.utc).isoformat(), "failed": failed,
+                    "failure_streak": streak + 1 if failed else 0}
     try:
         tmp = path + ".tmp"
         with open(tmp, "w", encoding="utf-8") as f:
