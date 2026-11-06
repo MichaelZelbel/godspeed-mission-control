@@ -55,12 +55,15 @@ export function tokenMatches(state,presented){
 // "2026-10-25 02:30:00.250 +0200" as a moment. Compared as text it is wrong across the repeated
 // hour when daylight saving ends: 02:30 +0200 is earlier than 02:10 +0100.
 const INSTANT=/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2})(\.\d+)?)?\s*(Z|[+-]\d{2}:?\d{2})?$/;
-export function instantOf(text){
- const m=INSTANT.exec(String(text||'').trim());if(!m)return NaN;
+function parsedInstant(text){
+ const m=INSTANT.exec(String(text||'').trim());if(!m)return null;
  const [,y,mo,d,h,mi,s='0',fraction='',zone='Z']=m;let offset=0;
- if(zone!=='Z'){const digits=zone.slice(1).replace(':','');offset=(zone[0]==='-'?-1:1)*(Number(digits.slice(0,2))*60+Number(digits.slice(2)));}
- return Date.UTC(+y,+mo-1,+d,+h,+mi,+s)+(fraction?Number(fraction)*1000:0)-offset*60000;
+ const day=y+'-'+mo+'-'+d,calendar=new Date(day+'T00:00:00Z');
+ if(!Number.isFinite(calendar.getTime())||calendar.toISOString().slice(0,10)!==day||+h>23||+mi>59||+s>59)return null;
+ if(zone!=='Z'){const digits=zone.slice(1).replace(':',''),hours=Number(digits.slice(0,2)),minutes=Number(digits.slice(2));if(hours>23||minutes>59)return null;offset=(zone[0]==='-'?-1:1)*(hours*60+minutes);}
+ return {instant:calendar.getTime()+(+h*3600+ +mi*60+ +s)*1000+(fraction?Number(fraction)*1000:0)-offset*60000,clock:h+':'+mi+':'+s.padStart(2,'0')};
 }
+export function instantOf(text){return parsedInstant(text)?.instant??NaN;}
 // A date without a time sorts before any moment.
 const when=text=>{const t=instantOf(text);return Number.isNaN(t)?-Infinity:t;};
 const dayOf=text=>{const day=String(text??'').slice(0,10);return /^\d{4}-\d{2}-\d{2}$/.test(day)&&new Date(day+'T00:00:00Z').toISOString().slice(0,10)===day?day:null;};
@@ -120,7 +123,6 @@ const WALK_PACE=9;
 const round=n=>Math.round(n*100)/100;
 const number=value=>{const n=value===null||typeof value==='boolean'||typeof value==='string'&&value.trim()===''?NaN:Number(value);return Number.isFinite(n)?n:null;};
 const hhmm=text=>/^\d{2}:\d{2}$/.test(String(text).slice(11,16))?String(text).slice(11,16):null;
-const hms=text=>{const m=/^\d{4}-\d{2}-\d{2}[ T](\d{2}):(\d{2})(?::(\d{2}))?/.exec(String(text||''));return m?m[1]+':'+m[2]+':'+(m[3]||'00'):null;};
 
 function minutesOf(duration){
  if(duration&&typeof duration==='object'){
@@ -139,8 +141,9 @@ function kilometresOf(distance){
 function pointsOf(uploads){
  const seen=new Map();let at=0;
  for(const {data} of uploads)for(const metric of Array.isArray(data?.metrics)?data.metrics:[])for(const point of Array.isArray(metric?.data)?metric.data:[]){
-  const day=dayOf(point?.date);if(!day)continue;
-  seen.set(JSON.stringify([metric.name,point.date,point.source]),{name:metric.name,units:metric.units,point,day,instant:when(point.date),at:at++});
+  const parsed=parsedInstant(point?.date);if(!parsed)continue;
+  const day=dayOf(point.date);
+  seen.set(JSON.stringify([metric.name,point.date,point.source]),{name:metric.name,units:metric.units,point,day,instant:parsed.instant,clock:parsed.clock,at:at++});
  }
  return [...seen.values()];
 }
@@ -195,7 +198,7 @@ export function buildDays(uploads){
   }else{add('workout_min',minutes);(sum.types||=[]);if(!sum.types.includes(workout.name))sum.types.push(workout.name);}
  }
  for(const [day,{types,...numbers}] of totals){for(const [metric,value] of Object.entries(numbers))put(day,metric,value);if(types)put(day,'workout_types',types.join('+'));}
- Object.defineProperty(days,'dataUntil',{value:new Map([...dataUntil].map(([day,point])=>[day,hms(point.point.date)]).filter(([,value])=>value))});
+ Object.defineProperty(days,'dataUntil',{value:new Map([...dataUntil].map(([day,point])=>[day,point.clock]))});
  return days;
 }
 

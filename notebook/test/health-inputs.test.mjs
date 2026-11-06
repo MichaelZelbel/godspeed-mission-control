@@ -149,6 +149,24 @@ test('the installation timezone leaves its current phone day unjudged',()=>{
  assert.equal(health.timezone,'America/Los_Angeles');assert.equal(health.days[0].columns.steps.state,'not_judged');
 });
 
+test('health coaching and habit review cannot save model shortfall advice from an unknown phone day',async()=>{
+ const day=offset=>new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Berlin',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(Date.now()+offset*86400000));
+ for(const [date,state] of [[day(0),'not_judged'],[day(-1),'may_be_incomplete']]){
+  const {store,query}=setup();
+  store.save('health_observations',{metric:'steps',value:100,source:PHONE_SOURCE,via:'phone-receiver',observed_on:date,date_precision:'day',observed_at:date+'T00:00:00Z',data_until:'19:55:00'});
+  assert.equal(currentHealth(query).days[0].columns.steps.state,state);
+  const unsafe=async()=>{throw Error('The model must not write a shortfall question from an unknown phone day');};
+  const run=jobExecutor(unsafe,query),coach=await run({id:'fixture-unknown-coach',kind:'coaching',area:'health'},{store,settings:store.get('settings','installation')});
+  assert.equal(store.get('notes',coach.record_id).content,'What part of your health routine needs your attention today?');
+  const {store:habitStore,query:habitQuery}=setup();
+  habitStore.save('health_observations',{metric:'steps',value:100,source:PHONE_SOURCE,via:'phone-receiver',observed_on:date,date_precision:'day',observed_at:date+'T00:00:00Z',data_until:'19:55:00'});
+  const talk=personalOperation({store:habitStore,query:habitQuery},{type:'coach-open',area:'health',question:'Fictional habit?'});
+  const habit=personalOperation({store:habitStore,query:habitQuery},{type:'habit-agree',talk_id:talk.id,title:'Fictional walk',agreement:'I agree to walk',check_at:new Date(Date.now()+60000).toISOString()});
+  const review=await jobExecutor(unsafe,habitQuery)({id:'fixture-unknown-habit',kind:'habit-check',habit_id:habit.id},{store:habitStore,settings:habitStore.get('settings','installation')});
+  assert.equal(habitStore.get('notes',review.record_id).content,'What made this habit easier or harder this time?');
+ }
+});
+
 test('the Food settlement mapping points at number fields the Food schema really declares, for health columns the phone also fills',async()=>{
  const {foodSchema,FOOD_TOTAL_COLUMNS}=await import('../core/food.mjs'),{PHONE_SUM_METRICS}=await import('../core/phone-health-columns.mjs');
  const fields=new Map(foodSchema().map(field=>[field.key,field]));
