@@ -90,6 +90,12 @@ test('one failure says nothing; two are told once with the error in plain words'
  check(f,[failing('a',3,{last_run_at:ago(3)})]);assert.equal(said(f).length,1,'the next check is silent');
 });
 
+test('an unsupported cron still reports two failed runs',t=>{
+ const f=fixture(t);
+ check(f,[failing('unsupported',2,{schedule:{kind:'cron',expr:'0 9 * 1 *'}})]);
+ assert.equal(said(f).length,1);assert.match(said(f)[0].text,/"Routine unsupported" failed its last two runs/);
+});
+
 test('without a failure streak, two errored runs seen at different checks are not taken for consecutive',t=>{
  const f=fixture(t),bare=over=>{const j=failing('a',0,over);delete j.failure_streak;return j;};
  check(f,[bare()]);check(f,[bare({last_run_at:ago(1)})]);

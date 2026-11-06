@@ -122,7 +122,7 @@ key is refused, it tells you once and sets a deadline, and that deadline closes 
 morning the connection works again. If the phone has sent no health data for 36 hours, it tells you
 once and sets a deadline; the next accepted upload closes it. Any other failure is reported only
 when it happens two mornings in a row. It also reads Hermes' local jobs list and tells you once
-when an enabled routine on an interval or a calendar schedule Godspeed creates missed its time, or
+when an enabled routine on an interval or a cron schedule Godspeed creates missed its time, or
 failed twice in a row; a successful run closes that notice. Other Hermes cron schedules do not
 create a missed-run notice, though their repeated failures still do. When everything works, it
 sends nothing. It runs no AI of its own.
