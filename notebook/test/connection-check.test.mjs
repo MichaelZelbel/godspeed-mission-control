@@ -45,10 +45,10 @@ test('phone health starts its connection after an accepted upload, then speaks o
  await checkConnections({store,day:D2,probes:stubs({phone:at('2026-11-05T23:00:00Z')}),now:()=>new Date('2026-11-05T23:00:00Z')});
  assert.equal(readNotices(store).length,1);assert.match(readNotices(store)[0].text,/phone has sent no health data since/i);assert.match(readNotices(store)[0].text,/Health Auto Export/);assert.match(readNotices(store)[0].text,/briefing's health numbers stop/i);
  assert.equal(deadlines(store).length,1);assert.equal(deadlines(store)[0].key,'phone:'+D2);assert.equal(deadlines(store)[0].state,'open');
- await checkConnections({store,day:D2,probes:stubs({phone:at('2026-11-05T23:00:00Z')}),now:()=>new Date('2026-11-05T23:00:00Z')});
+ await checkConnections({store,day:D3,probes:stubs({phone:at('2026-11-06T10:00:00Z')}),now:()=>new Date('2026-11-06T10:00:00Z')});
  assert.equal(readNotices(store).length,1,'the quiet spell is said once');assert.equal(deadlines(store).length,1,'the quiet spell has one deadline');
- acceptUpload(store,{metrics:[]},{now:new Date('2026-11-06T00:00:00Z')});
- await recoverPhoneConnection({store,day:D3,now:()=>new Date('2026-11-06T00:00:00Z')});
+ acceptUpload(store,{metrics:[]},{now:new Date('2026-11-06T11:00:00Z')});
+ await recoverPhoneConnection({store,day:D3,now:()=>new Date('2026-11-06T11:00:00Z')});
  assert.equal(deadlines(store)[0].state,'closed','the accepted upload closes it without another daily check');
 });
 
