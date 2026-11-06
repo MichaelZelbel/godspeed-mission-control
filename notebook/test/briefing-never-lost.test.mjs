@@ -243,11 +243,31 @@ test('a draft where every sentence breaks a rule sends the short fallback and op
  assert.ok(items[0].refusals.some(e=>/voice check failed: realm/.test(e)));
 });
 
-test('the existing cut fallback still saves when its explanation breaks a voice rule',async()=>{
+test('the existing cut fallback is not sent when its explanation breaks a voice rule',async()=>{
  const {store,query}=fixture(['BANNED-WORD: realm','BANNED-WORD: briefing']);
  const provider=async input=>verifies(input)||'The realm is here.';
- const result=await run(provider,query,store,'brief-old-cut-voice');
- assert.equal(result.fallback,true);assert.ok(store.get('notes',result.record_id));
+ await assert.rejects(run(provider,query,store,'brief-old-cut-voice'),/Final exact briefing check failed: .*briefing/);
+ assert.equal(query.rows('notes').filter(n=>n.source_app==='morning-brief').length,0);
+ assert.equal(query.rows('notifications').filter(n=>n.status==='ready').length,0);
+ const receipt=query.rows('job_receipts').find(r=>r.kind==='brief-cut');assert.equal(receipt.state,'failed');
+ assert.ok(receipt.fallback_errors.some(e=>/voice check failed: briefing/.test(e)));
+ const items=repairs(query);assert.equal(items.length,1);assert.equal(items[0].state,'needs_review');
+});
+
+test('the factual fallback names only visible facts, never hidden or sensitive ones',async()=>{
+ const {store,query}=fixture([]);const now=Date.now();
+ store.save('goals',{title:'Prepare a fictional guide',status:'adopted'});
+ store.save('goals',{title:'Fictional hidden goal',status:'adopted',ai_visibility:'hidden'});
+ store.save('health_observations',{metric:'Fictional visible energy',value:6,observed_at:new Date(now-60000).toISOString()});
+ store.save('health_observations',{metric:'Fictional hidden mood',value:3,observed_at:new Date(now-1000).toISOString(),ai_visibility:'hidden'});
+ store.save('health_observations',{metric:'Fictional sensitive symptom',value:4,observed_at:new Date(now).toISOString(),is_sensitive:true});
+ store.save('work_items',{kind:'draft',title:'Fictional hidden work',state:'verified',ai_visibility:'hidden',verification:{at:new Date(now).toISOString()}});
+ store.save('deadlines',{title:'Fictional sensitive filing',status:'open',due_at:'2027-01-01T00:00:00Z',is_sensitive:true});
+ const provider=async input=>input.kind==='brief-verification'?{passed:false,reason:'No useful action'}:'Unsupported draft.';
+ const result=await run(provider,query,store,'brief-visible-only'),content=store.get('notes',result.record_id).content;
+ assert.equal(result.fallback,true);
+ assert.match(content,/Prepare a fictional guide/);assert.match(content,/Fictional visible energy: 6/);
+ assert.doesNotMatch(content,/hidden|sensitive/i);
 });
 
 test('a repeated checked draft does not create a second briefing',async()=>{

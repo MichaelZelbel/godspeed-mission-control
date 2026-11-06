@@ -184,11 +184,20 @@ async function runBriefing(job,{store,query,provider,now}){
    const day=new Date().toISOString().slice(0,10),own_lines=[...required,...(c?[c.content,c.link]:[])];
    const refusals=[...code,...remaining.filter(e=>!code.includes(e))];
    const fallbackText=['Your full morning briefing for '+day+' could not be written today, because what was drafted broke your writing rules. A repair item has been opened for it.',...own_lines].join('\n\n');
+   // The short note passes the same final gate as every other note. When the voice rules refuse even
+   // that, nothing is sent: the receipt and a repair item keep the evidence and the job fails.
+   const fallbackErrors=codeGate(fallbackText);
+   if(fallbackErrors.length){
+    await store.saveAsync('job_receipts',{kind:'brief-cut',job_id:job.id,state:'failed',errors:code,cut:cut.cut,restored:missing,draft_hash:hash(draft),fallback_errors:fallbackErrors,finished_at:new Date().toISOString()});
+    const repairId='repair-brief-fallback-'+hash([job.id,day]);
+    if(!store.get('work_items',repairId))await store.saveAsync('work_items',{id:repairId,kind:'repair',title:'Repair the morning briefing of '+day+': nothing went out, because even the short fallback breaks your writing rules',state:'needs_review',job_id:job.id,refusals:[...refusals,...fallbackErrors],cut:cut.cut,draft_hash:hash(draft),error:[...refusals,...fallbackErrors].join('; '),check:'The next morning briefing is written in full',allowed_action:'inspect-and-retry',dependencies:[],max_attempts:3});
+    throw Error('Final exact briefing check failed: '+fallbackErrors.join('; '));
+   }
    cutReceipt=await store.saveAsync('job_receipts',{kind:'brief-cut',job_id:job.id,state:'fallback',errors:code,cut:cut.cut,restored:missing,draft_hash:hash(draft),kept_hash:hash(fallbackText),finished_at:new Date().toISOString()});
    fallback={day,refusals,cut:cut.cut,draft_hash:hash(draft)};draft=fallbackText;break;
   }
  }
-  const finalErrors=fallback&&!fallback.checked?[]:codeGate(draft);if(finalErrors.length)throw Error('Final exact briefing check failed: '+finalErrors.join('; '));
+  const finalErrors=codeGate(draft);if(finalErrors.length)throw Error('Final exact briefing check failed: '+finalErrors.join('; '));
  if(job.rehearsal){checkCurrentSources();return {verified:true,silent:true,rehearsal:true,source_hash:hash(context),draft_hash:hash(draft),verification_ids:[check.id,deliveryCheck.id],...(fallback?{fallback:true}:{}),...(cutReceipt&&!fallback?{cut:true}:{}),...(leftOut.length?{left_out:leftOut.map(o=>o.name)}:{})};}
  const key='brief-'+hash([today,draft]);if(store.get('notifications',key))return {verified:true,silent:true};
  const note=store.prepare('notes',{title:'Your morning briefing',content:draft,source_app:'morning-brief',brief_day:today,verification_id:check.id,delivery_verification_id:deliveryCheck.id,...(cutReceipt?{cut_receipt_id:cutReceipt.id}:{}),...(fallback?{fallback:true}:{}),sources:context.source_receipts.map(s=>s.id),evidence:context});
