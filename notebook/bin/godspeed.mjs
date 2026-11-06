@@ -140,6 +140,7 @@ else if(command==='validate')result={problems:store.scan()&&store.problems};
 // checksum, offline after that (core/food-table.mjs).
 else if(command==='food-table'&&verb==='install')result=await (await import('../core/food-table.mjs')).installFoodTable(store.state,{force:rest.includes('--force')});
 else if(command==='food-table'&&verb==='status')result=(await import('../core/food-table.mjs')).tableStatus(store.state);
+else if(command==='health'&&verb==='import'){if(!rest[0])throw new Error('Name the folder of uploads to import: health import FOLDER');result=(await import('../core/phone-health.mjs')).importFolder(store,path.resolve(rest[0]));}
 else if(command==='menerio'&&verb==='chunks')result=(await import('../core/menerio-chunks.mjs')).importOrphanChunks(store,path.resolve(rest[0]));
 // Named paths: folder mode with those paths. None (what the installers run when they
 // join a computer to a mission control already on GitHub): joinRepository decides.
@@ -152,5 +153,5 @@ else if(command==='convert-notebook'){
   const {renamed=[],rewritten=[],problems,...summary}=outcome;
   result={...summary,renamed:renamed.length,rewritten:rewritten.length,...(problems?{problems}:{}),first_renames:renamed.slice(0,10).map(r=>r.from+' -> '+r.to),full_list:list};
 }
-else throw new Error('Commands: init, record list/get/save/merge/remove/display-name, memory search/lookup, world claim/event/close [--dry-run], backup FOLDER [--before-update], prune-backups FOLDER --made COPY [--keep 1], restore FOLDER [--repository PATH], import FILE, export [FILE], validate, sync folder [PATH...], menerio chunks ARCHIVE_SOURCE_DIR, convert-notebook [--dry-run]');
+else throw new Error('Commands: init, record list/get/save/merge/remove/display-name, memory search/lookup, world claim/event/close [--dry-run], backup FOLDER [--before-update], prune-backups FOLDER --made COPY [--keep 1], restore FOLDER [--repository PATH], import FILE, export [FILE], validate, sync folder [PATH...], health import FOLDER, menerio chunks ARCHIVE_SOURCE_DIR, convert-notebook [--dry-run]');
 console.log(JSON.stringify(result,null,2));

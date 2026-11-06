@@ -49,6 +49,9 @@ import {NativeScheduler,hermesJobs} from '../core/native-scheduler.mjs';
 import {enableKinds} from '../core/notebook-routines.mjs';
 import {routineSwitches,setRoutineSwitch} from '../core/routine-switches.mjs';
 import {notebookAddress} from '../core/notebook-address.mjs';
+import {latestPerDayMetric} from '../core/health-inputs.mjs';
+import {PHONE_HEALTH_STATUS,PHONE_HEALTH_RENEW,phoneHealthAnswer} from '../core/phone-health-protocol.mjs';
+import {BODY_LIMIT as UPLOAD_LIMIT,ensureToken,renewToken,tokenMatches,tokenDamaged,isUploadShape,pruneRaw,acceptUpload} from '../core/phone-health.mjs';
 import {about} from '../core/about.mjs';
 import {showCard as showContextCard,readContext,markContext} from '../core/context-setup.mjs';
 import {visibleRows} from '../core/visibility.mjs';
@@ -161,6 +164,12 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   // account is made through a private setup link the installer asks the local door for
   // (/api/login-link), so without a token nothing typed into the web door creates one.
   const web = webPort === undefined || webPort === null ? null : { port: Number(webPort), auth: new WebAuth(store.state, { token, remote: true, now: authNow }) };
+  // Health Auto Export uploads (core/phone-health.mjs, issue #214) are taken only where a phone can
+  // reach this notebook: a door that faces outside. A Windows or Mac notebook on 127.0.0.1 with no
+  // web door offers nothing, and /ingest there is what it was before.
+  const phoneUploads=remote||!!web,pruneFailed=()=>console.error('Godspeed Mission Control: expired phone health uploads could not be removed');
+  if(phoneUploads){try{ensureToken(store.state);if(tokenDamaged(store.state))console.error('Godspeed Mission Control: the phone health token is damaged, so uploads are off until the address is renewed in Settings');}catch{console.error('Godspeed Mission Control: the phone health token could not be prepared, so uploads are off until the address is renewed in Settings');}try{pruneRaw(store.state);}catch{pruneFailed();}}
+  const pruneTimer=phoneUploads?setInterval(()=>{try{pruneRaw(store.state);}catch{pruneFailed();}},3600000):null;pruneTimer?.unref?.();
   // What is no longer true ends on its own (core/fact-closing.mjs): once a day
   // on the machine that runs the routines, and soon after a Menerio import,
   // which copies old values under their old names beside the new ones.
@@ -201,7 +210,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   }
   uiRoot = path.resolve(uiRoot || fileURLToPath(new URL('../ui/dist', import.meta.url)));
   // One handler for both doors; `remote` and `auth` are the door's own.
-  const handle = (remote, auth) => async (req, res) => {
+  const handle = (remote, auth, onWebDoor = false) => async (req, res) => {
     const authorized = (req, route) => auth.authorized(req) || pairedMedia(req, route);
     try {
       const url = new URL(req.url, 'http://localhost'), route = url.pathname;
@@ -238,6 +247,23 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         pairCodes.delete(input.code);const key=randomBytes(32).toString('hex');pairKeys.push({id:randomBytes(8).toString('hex'),hash:hash(key),created_at:new Date().toISOString()});savePairKeys();return send(res,200,{key,device});
       }
       if (route === '/health') return send(res, 200, { ok: true, format: 1, version: VERSION,instance,scheduler_heartbeat:schedulerHeartbeat });
+      // The token in this address is the phone's credential, so nothing on this path reaches the
+      // generic catch below, which logs the address; no line here carries the token, a health
+      // value or the sender's address.
+      if(phoneUploads&&(route==='/ingest'||route.startsWith('/ingest/'))){
+        if(route==='/ingest/health'&&req.method==='GET')return send(res,200,{ok:true});
+        if(req.method!=='POST'||route.slice(8).includes('/')||!tokenMatches(store.state,route.slice(8)))return send(res,404,{error:'Not found'});
+        try{
+          if(menerioImport.mutating)return send(res,503,{error:'Try again soon'});
+          let upload;try{upload=JSON.parse(await body(req,UPLOAD_LIMIT));}catch(error){return send(res,error.message==='Request is too large'?413:400,{error:error.message==='Request is too large'?'Too large':'Not JSON'});}
+          // A renewal while the body was on its way revokes this address at once, so the token is checked again before anything is stored.
+          if(!tokenMatches(store.state,route.slice(8)))return send(res,404,{error:'Not found'});
+          const data=upload?.data;
+          if(!isUploadShape(data))return send(res,400,{error:'Not a Health Auto Export upload'});
+          acceptUpload(store,data);return send(res,200,{ok:true});
+        }catch(error){
+          if(error.retained){console.error('Godspeed Mission Control: a phone upload is kept but could not be turned into day records: '+error.message+'; the rollback also failed: '+error.rollbackMessage);return send(res,202,{ok:true,pending:true});}console.error('Godspeed Mission Control: a phone upload was not kept: '+error.message);return send(res,500,{error:'Not kept'});}
+      }
       if(route==='/api/shared-note'&&req.method==='GET'){const share=query.rows('shared_notes').find(s=>s.share_token===url.searchParams.get('token')&&s.is_active),note=share&&store.get('notes',share.note_id);if(!note||note.removed_at||note.is_trashed)return send(res,404,{error:'This share is unavailable'});return send(res,200,{title:note.title,content:note.content,tags:note.tags,entity_type:note.entity_type,created_at:note.created_at,updated_at:note.updated_at});}
       if (route.startsWith('/api/') && !authorized(req, route)) return send(res, 401, { error: 'Sign in to continue.', code: auth.cookie(req)?'SESSION_EXPIRED':'SIGN_IN_REQUIRED' });
       if(route==='/api/menerio/import'){
@@ -319,7 +345,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
       // Settings, About: the version and release, this installation's folders, the food table's licence (core/about.mjs).
       if(route==='/api/about'&&req.method==='GET')return send(res,200,await about({store,mediaRoot,device}));
       if (route === '/api/status') return query.withSnapshot(()=>{const installation=query.rows('settings').find(row=>row.id==='installation');return send(res, 200, { configured:!!installation,goalSetupComplete:query.rows('goals').some(g=>['active','adopted','paused','achieved','completed'].includes(g.status)),goals:query.rows('goals'),work:query.rows('work_items'),decisions:query.rows('decisions'),owner:installation?.owner,device,server:mediaSync.server()||(device==='vps'?device:null),platform:process.platform,runtimeConfigured:!!domains.provider,sync:sync.last,mediaSync:mediaSync.last,kinds:originalRuntime?enableKinds(store.root):kinds,problems: store.problems, lastScan: store.lastScan, lastIndex: index.lastRebuild, records: store.records.size, schedules: query.rows('jobs'), routineSwitches: originalRuntime?routineSwitches(store,{jobs:hermesJobs(scheduler.home),home:scheduler.home}):null, conflicts: sync.pendingConflicts().map(name=>{try{const c=JSON.parse(fs.readFileSync(path.join(store.root,'conflicts',name),'utf8'));return {id:c.id,kind:c.kind,path:c.path||c.type+'/'+c.record_id};}catch{return {id:name.replace(/\.json$/,''),kind:null,path:null,degraded:true};}}) });});
-      if(route==='/api/personal')return query.withSnapshot(()=>send(res,200,{goals:query.rows('goals'),work:query.rows('work_items'),deadlines:query.rows('deadlines'),talks:query.rows('coach_talks'),habits:query.rows('habits'),journal:query.rows('journal'),health:query.rows('health_observations'),forecasts:query.rows('forecasts'),watch:query.rows('watch_topics'),jobs:query.rows('jobs')}));
+      if(route==='/api/personal')return query.withSnapshot(()=>send(res,200,{goals:query.rows('goals'),work:query.rows('work_items'),deadlines:query.rows('deadlines'),talks:query.rows('coach_talks'),habits:query.rows('habits'),journal:query.rows('journal'),health:latestPerDayMetric(query.rows('health_observations')),forecasts:query.rows('forecasts'),watch:query.rows('watch_topics'),jobs:query.rows('jobs')}));
       // The AI the person connects in Settings serves the notebook and, unless they untick it,
       // the routines and the chat too: it is written into Hermes' own home (core/routine-ai.mjs),
       // and one short request through Hermes shows whether the routines can reach it.
@@ -376,6 +402,17 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
       if(route==='/api/backup-ai/remove'&&req.method==='POST')return send(res,200,{hermes:!!backupHome,...removeBackupAI({home:backupHome,state:store.state})});
       // VOICE REPLIES (core/voice-replies.mjs, discussion #41): the voice the assistant answers voice
       // notes with, kept in Hermes' own home. An ElevenLabs voice is kept only after a sample worked.
+      if(route==='/api/'+PHONE_HEALTH_STATUS||route==='/api/'+PHONE_HEALTH_RENEW){
+        // The address carries the phone's credential, so Settings shows or renews it only through the signed-in web door, never on a door that is open or plain http.
+        if(!phoneUploads||!onWebDoor){if(route==='/api/'+PHONE_HEALTH_STATUS)return send(res,200,phoneHealthAnswer({available:false}));return send(res,404,{error:'Unknown operation'});}
+        if(route==='/api/'+PHONE_HEALTH_RENEW&&req.method!=='POST')return send(res,405,{error:'Use POST'});
+        const link=notebookAddress({port:server.address().port}).link;
+        // The token travels only inside an https address: over http a network observer would read the phone's credential.
+        if(!link?.startsWith('https://')){if(route==='/api/'+PHONE_HEALTH_RENEW)return send(res,409,{error:'A new address needs this server\'s https web address'});return send(res,200,phoneHealthAnswer({available:true,address:null}));}
+        const token=route==='/api/'+PHONE_HEALTH_RENEW?renewToken(store.state):ensureToken(store.state);
+        if(!token)return send(res,200,phoneHealthAnswer({available:true,address:null,damaged:true}));
+        return send(res,200,phoneHealthAnswer({available:true,address:link.replace(/\/dashboard$/,'')+'/ingest/'+token}));
+      }
       if(route==='/api/voice'&&req.method==='GET')return send(res,200,backupHome?voiceStatus({home:backupHome,state:store.state}):{available:false});
       if(route==='/api/voice'&&req.method==='POST'){
         if(!backupHome)throw new Error('Voice replies are made where Hermes runs your assistant; this notebook has none.');
@@ -628,7 +665,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   // installer's check of the web address then says so.
   let webServer = null;
   if (web) {
-    webServer = http.createServer(handle(true, web.auth));
+    webServer = http.createServer(handle(true, web.auth, true));
     try { await listen(webServer, web.port, '127.0.0.1'); }
     catch (error) { console.error('Godspeed Mission Control: the web address\'s door on port ' + web.port + ' could not open: ' + error.message); webServer = null; }
   }
@@ -677,7 +714,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   let soulDebounce;const followPersona=()=>{clearTimeout(soulDebounce);soulDebounce=setTimeout(()=>{try{shelf.followPersona();}catch{}},2000);soulDebounce.unref?.();};
   const rootWatcher=fs.watch(store.root,(event,name)=>{if(durableRoots.includes(name)){watchRoot(name);changed(name)(event,null);}else if(durableFiles.includes(name)){changed('')(event,name);if(name==='AGENTS.md')followPersona();}});
   let localServer = null;
-  const close = async () => { await stopTimelineRepair(); index.meaning?.close(); index.expansionWorker?.close(); if (localServer) await new Promise(resolve => localServer.close(resolve)); if (webServer) await new Promise(resolve => webServer.close(resolve)); clearInterval(meaningTimer);clearInterval(processingTimer);clearInterval(backupTimer);clearInterval(factTimer);stopIndexing();store.unwatch();githubSignIn.close();planSignIn?.cancel();clearTimeout(soulDebounce);await syncRunner.close();await menerioImport.close();rootWatcher.close();for(const watcher of watchers.values())watcher.close();clearTimeout(debounce);clearTimeout(indexDebounce);clearInterval(telegramTimer);clearInterval(interval);clearInterval(jobs);clearInterval(syncTimer);clearInterval(mediaTimer); await new Promise(resolve => server.close(resolve)); await index.close(); };
+  const close = async () => { await stopTimelineRepair(); index.meaning?.close(); index.expansionWorker?.close(); if (localServer) await new Promise(resolve => localServer.close(resolve)); if (webServer) await new Promise(resolve => webServer.close(resolve)); clearInterval(meaningTimer);clearInterval(processingTimer);clearInterval(backupTimer);clearInterval(factTimer);clearInterval(pruneTimer);stopIndexing();store.unwatch();githubSignIn.close();planSignIn?.cancel();clearTimeout(soulDebounce);await syncRunner.close();await menerioImport.close();rootWatcher.close();for(const watcher of watchers.values())watcher.close();clearTimeout(debounce);clearTimeout(indexDebounce);clearInterval(telegramTimer);clearInterval(interval);clearInterval(jobs);clearInterval(syncTimer);clearInterval(mediaTimer); await new Promise(resolve => server.close(resolve)); await index.close(); };
   // A container's main door listens on its network interface and always needs sign-in.
   // Add-ons and tools in that same container may use this opt-in, loopback-only door,
   // with the exact Host/Origin guards and API contract of a native local installation.

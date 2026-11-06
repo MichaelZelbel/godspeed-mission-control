@@ -10,7 +10,7 @@ import {remind} from './deadline-reminders.mjs';
 import {personalOperation} from './personal-operations.mjs';
 import {nativeCoachContext,nativeTick,dueCoachAreas,retainHabitReview} from './native-personal.mjs';
 import {briefing} from './briefing.mjs';
-import {currentHealth} from './health-inputs.mjs';
+import {currentHealth,latestPerDayMetric} from './health-inputs.mjs';
 // A chat may take ten minutes; Stop ends it sooner. Until 6 October 2026 it was
 // cut off after two, which long answers over many notes regularly needed.
 export function providerTimeBudget(input){
@@ -232,7 +232,7 @@ export function jobExecutor(configuredProvider,query) {
     if(!provider)throw new Error('Connect a supported assistant or model provider to run this routine');
     // Only what may leave the owner's view (visibility.mjs). Until 6 October
     // 2026 hidden goals, sensitive health readings and hidden deadlines went too.
-    const context={...fileContext(store),...knowledgeContext(query),goals:visibleRows(query,'goals'),notes:visibleRows(query,'notes'),facts:visibleRows(query,'profile_facts').filter(f=>f.is_current&&f.show_to_agent),health:visibleRows(query,'health_observations'),habits:visibleRows(query,'habits'),deadlines:visibleRows(query,'deadlines'),previous:query.rows('job_receipts').filter(r=>r.kind===job.kind&&r.state==='verified').slice(-3)};
+    const context={...fileContext(store),...knowledgeContext(query),goals:visibleRows(query,'goals'),notes:visibleRows(query,'notes'),facts:visibleRows(query,'profile_facts').filter(f=>f.is_current&&f.show_to_agent),health:latestPerDayMetric(visibleRows(query,'health_observations')),habits:visibleRows(query,'habits'),deadlines:visibleRows(query,'deadlines'),previous:query.rows('job_receipts').filter(r=>r.kind===job.kind&&r.state==='verified').slice(-3)};
     const instructions={
       coaching:'Open a short coaching conversation using the previous check-in and recent facts. Ask one relevant question.',
       profiling:'Propose profile updates supported by source quotes. Output JSON suggestions. Do not replace confirmed facts.',
