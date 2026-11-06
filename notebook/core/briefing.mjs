@@ -1,7 +1,7 @@
 import {visibleRows} from './visibility.mjs';
 import {hash} from './records/store.mjs';
 import {procedure} from './procedures.mjs';
-import {remind} from './deadline-reminders.mjs';
+import {remind,deadlineLive} from './deadline-reminders.mjs';
 import {watchCommand} from './watch-commands.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -124,8 +124,8 @@ async function runBriefing(job,{store,query,provider,now}){
    addFirst(context.goals,g=>safe(g.title,500)?'One of your saved goals is '+safe(g.title,500)+'.':null);
    const verified=context.work.filter(w=>w.state==='verified'&&w.kind!=='repair').sort((a,b)=>String(b.verification?.at||b.updated_at||'').localeCompare(String(a.verification?.at||a.updated_at||'')));
    addFirst(verified,w=>safe(w.title)?'Godspeed has verified this work: '+safe(w.title)+'.':null);
-   const due=context.deadlines.filter(d=>d.due_at&&Number.isFinite(Date.parse(d.due_at))&&Date.parse(d.due_at)>=now.getTime()&&!['closed','completed'].includes(d.status)&&(!d.start_at||Date.parse(d.start_at)<=now.getTime())&&(!d.snoozed_until||Date.parse(d.snoozed_until)<=now.getTime())).sort((a,b)=>Date.parse(a.due_at)-Date.parse(b.due_at));
-   addFirst(due,d=>safe(d.title)?'A dated obligation is '+safe(d.title)+', due '+String(d.due_at).slice(0,10)+'.':null);
+   const due=context.deadlines.filter(d=>d.due_at&&Number.isFinite(Date.parse(d.due_at))&&Date.parse(d.due_at)>=now.getTime()&&deadlineLive(d,now.getTime())).sort((a,b)=>Date.parse(a.due_at)-Date.parse(b.due_at));
+   addFirst(due,d=>safe(d.title)?'A dated obligation is '+safe(d.title)+', due '+(d.native_file?String(d.due_at).slice(0,10):dayOf(new Date(d.due_at),d.timezone||zone))+'.':null);
    const observedAt=h=>h.date_precision==='day'&&h.observed_on?String(h.observed_on)+'T00:00:00Z':h.observed_at||h.created_at||'';
    const observations=[...context.health].sort((a,b)=>String(observedAt(b)).localeCompare(String(observedAt(a))));
    const healthAdded=addFirst(observations,h=>{const metric=safe(h.metric,60),value=h.value;return metric&&(typeof value==='number'||typeof value==='string'&&safe(value,30))?'A recorded health observation is '+metric+': '+value+'.':null;});
@@ -153,8 +153,9 @@ async function runBriefing(job,{store,query,provider,now}){
   await store.saveAsync('job_receipts',{kind:'brief-code-gate',job_id:job.id,attempt,state:code.length?'failed':'verified',source_hash:hash(context),draft_hash:hash(draft),errors:code,finished_at:new Date().toISOString()});
   if(!feedback.length){check=facts.receipt;deliveryCheck=reader.receipt;break;}
    if(attempt===1){
-   // A model check that still fails names no sentence, and a note repeated word for word has none to
-   // cut: those stop the job as they always did. What is left is a refusal of the code checks, and
+   // A note repeated word for word has nothing to cut, so it still ends the job. A model check that
+   // still fails names no sentence to cut, so it gets the checked factual fallback above instead of
+   // silence. What reaches the cut below is a code-check refusal with both model checks passing, and
    // each of those names the sentence or line that carries it (issue #117).
     if(code.some(e=>/already saved today/.test(e)))throw Error('The same note was already saved today');
     if([facts,reader].some(r=>r.verdict.passed!==true)){

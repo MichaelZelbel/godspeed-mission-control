@@ -117,6 +117,15 @@ test('fallback names verified user work and the next future obligation only',asy
  assert.doesNotMatch(content,/Private unapproved|Recheck internal|Old fictional bill|Plan fictional travel/);
 });
 
+test('fallback names an obligation by the installation day, not the UTC day',async()=>{
+ const {store,query}=fixture([]);store.save('settings',{id:'installation',timezone:'America/Los_Angeles'});
+ store.save('goals',{title:'Prepare a fictional guide',status:'adopted'});
+ store.save('deadlines',{title:'Pay the fictional rent',status:'open',due_at:'2027-11-08T04:00:00.000Z'});
+ const provider=async input=>input.kind==='brief-verification'?{passed:false,reason:'No useful action'}:'Unsupported draft.';
+ const result=await run(provider,query,store,'brief-local-day'),content=store.get('notes',result.record_id).content;
+ assert.match(content,/Pay the fictional rent, due 2027-11-07\./);
+});
+
 test('fallback chooses the latest verified work and fresh health by their recorded times',async()=>{
  const {store,query}=fixture([]);store.save('goals',{title:'Prepare a fictional guide',status:'adopted'});
  store.save('work_items',{kind:'draft',title:'Newer fictional approval',state:'verified',verification:{at:'2026-11-06T12:00:00Z'}});
