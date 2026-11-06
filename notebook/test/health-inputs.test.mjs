@@ -127,13 +127,13 @@ test('phone day state uses its strict cutoff, while manual and food entries sett
  phone('steps',100);phone('protein_g',20);phone('active_kcal',400,'21:00:00');
  const short=currentHealth(query,{now}).days[0];
  assert.equal(short.columns.steps.state,'may_be_incomplete');assert.equal(short.columns.active_kcal.state,'may_be_incomplete','21:00:00 is not past the cutoff');assert.deepEqual(short.may_be_incomplete_columns,['steps','active_kcal','protein_g']);
+ store.save('collections',{id:'food',tracker:{specialist:'food'}});const item=store.save('collection_items',{collection_id:'food',data:{when:day+' 12:00',kcal:700,protein_g:30,carbs_g:90,fat_g:20}});
+ let state=currentHealth(query,{now}).days[0];assert.deepEqual(state.columns.steps,{value:100,source:'phone',state:'may_be_incomplete'});assert.deepEqual(Object.fromEntries(['food_kcal','protein_g','carbs_g','fat_g'].map(metric=>[metric,state.columns[metric].source])),{food_kcal:'food_tracker',protein_g:'food_tracker',carbs_g:'food_tracker',fat_g:'food_tracker'});assert.equal(state.columns.food_kcal.value,700);
  store.save('health_observations',{metric:'distance_km',value:3,source:PHONE_SOURCE,via:'phone-receiver',observed_on:day,date_precision:'day',observed_at:day+'T00:00:00Z',data_until:'21:00:30'});
  assert.equal(currentHealth(query,{now}).days[0].columns.distance_km.state,'complete');
  const operation=input=>personalOperation({store,query},input);operation({type:'health-add',metric:'protein_g',value:80,unit:'g',observed_at:day+'T12:00:00Z'});
  phone('protein_g',5,'19:55:00');
- let state=currentHealth(query,{now}).days[0];assert.deepEqual(state.columns.protein_g,{value:80,source:'manual',state:'settled'});assert.equal(state.columns.steps.state,'complete');
- store.save('collections',{id:'food',tracker:{specialist:'food'}});const item=store.save('collection_items',{collection_id:'food',data:{when:day+' 12:00',kcal:700,protein_g:30,carbs_g:90,fat_g:20}});
- state=currentHealth(query,{now}).days[0];assert.deepEqual(Object.fromEntries(['food_kcal','protein_g','carbs_g','fat_g'].map(metric=>[metric,state.columns[metric].source])),{food_kcal:'food_tracker',protein_g:'manual',carbs_g:'food_tracker',fat_g:'food_tracker'});assert.equal(state.columns.food_kcal.value,700);
+ state=currentHealth(query,{now}).days[0];assert.deepEqual(state.columns.protein_g,{value:80,source:'manual',state:'settled'});assert.equal(state.columns.steps.state,'complete');
  store.save('collection_items',{id:item.id,data:{when:day+' 12:00',kcal:750,protein_g:30,carbs_g:90,fat_g:20}});assert.equal(currentHealth(query,{now}).days[0].columns.food_kcal.value,750,'a tracker correction is the next read');
  const today='2026-11-05';store.save('health_observations',{metric:'steps',value:200,source:PHONE_SOURCE,via:'phone-receiver',observed_on:today,date_precision:'day',observed_at:today+'T00:00:00Z',data_until:'09:00:00'});
  assert.equal(currentHealth(query,{now}).days.find(row=>row.date===today).columns.steps.state,'not_judged');

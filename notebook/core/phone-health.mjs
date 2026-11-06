@@ -3,6 +3,7 @@ import {randomBytes,createHash,timingSafeEqual} from 'node:crypto';
 import {hash,atomic} from './records/store.mjs';
 import {phoneFeedId} from './health-feed-id.mjs';
 import {PHONE_SOURCE,PHONE_VIA} from './health-inputs.mjs';
+import {PHONE_SUM_METRICS} from './phone-health-columns.mjs';
 import {addDays,zonedToUtc,now as clockNow} from '../../third-party/addons/godspeed-coach/lib/clock.mjs';
 
 // A phone's health data (issue #214, 4 November 2026). The iPhone app Health Auto Export posts its
@@ -101,7 +102,6 @@ export function readRaw(state,fromDay){
 }
 const inReceiveOrder=lines=>lines.map((line,at)=>({line,at,when:instantOf(line.received_at)})).sort((a,b)=>a.when-b.when||a.at-b.at).map(x=>x.line);
 
-const SUMS={step_count:'steps',walking_running_distance:'distance_km',active_energy:'active_kcal',basal_energy_burned:'basal_kcal',dietary_energy:'food_kcal',protein:'protein_g',carbohydrates:'carbs_g',total_fat:'fat_g',flights_climbed:'flights'};
 const LAST={weight_body_mass:'weight_kg',body_fat_percentage:'body_fat_pct',lean_body_mass:'lean_kg',waist_circumference:'waist_cm'};
 const RUNS=new Set(['running','outdoor running','indoor running','run','outdoor run','indoor run']);
 const WALK_PACE=9;
@@ -153,10 +153,10 @@ export function buildDays(uploads){
  }
  for(const group of groups.values()){
   const {name,day}=group[0];
-  if(SUMS[name]){
+  if(PHONE_SUM_METRICS[name]){
    let sum=0,any=false;
    for(const p of group){const qty=number(p.point.qty);if(qty===null)continue;any=true;sum+=String(p.units).toLowerCase()==='kj'?qty/4.184:qty;}
-   if(any)put(day,SUMS[name],sum);
+   if(any)put(day,PHONE_SUM_METRICS[name],sum);
   }else if(LAST[name]){
    const winner=group.filter(p=>number(p.point.qty)!==null).reduce((a,b)=>a?later(a,b):b,null);
    if(winner)put(day,LAST[name],number(winner.point.qty));

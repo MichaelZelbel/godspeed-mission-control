@@ -50,3 +50,17 @@ test('the native coach leaves a short phone day unknown until its manual value s
  store.save('health_observations',{metric:'protein_g',value:20,source:'Health Auto Export',via:'phone-receiver',observed_on:day,date_precision:'day',observed_at:day+'T00:00:00.000Z',data_until:'19:55:00'});nativeTick(store,'coach',now,query);assert.equal(query.rows('habits')[0].progress.lifetimeCompletedDays,0);
  store.save('health_observations',{metric:'protein_g',value:20,source:'Fictional manual',via:'manual',observed_on:day,date_precision:'day',observed_at:day+'T12:00:00.000Z'});nativeTick(store,'coach',now,query);assert.equal(query.rows('habits')[0].progress.lifetimeCompletedDays,1);
 });
+
+test('the native coach leaves a current phone day unjudged',async()=>{
+ const store=new Store(temp()),query=new QueryService(store),domains=new Domains(query);store.save('settings',{id:'installation',timezone:'UTC'});
+ const talk=await domains.invoke('personal-operation',{type:'coach-open',area:'health',question:'Fictional current protein?'});await domains.invoke('personal-operation',{type:'habit-agree',talk_id:talk.id,title:'Fictional current protein day',agreement:'I agree',auto:'protein_g >= 10',check_at:'2030-01-01T19:00:00Z'});
+ const now=new Date();now.setUTCHours(12,0,0,0);const day=now.toISOString().slice(0,10);
+ store.save('health_observations',{metric:'protein_g',value:20,source:'Health Auto Export',via:'phone-receiver',observed_on:day,date_precision:'day',observed_at:day+'T00:00:00.000Z',data_until:'09:00:00'});nativeTick(store,'coach',now,query);assert.equal(query.rows('habits')[0].progress.lifetimeCompletedDays,0);
+});
+
+test('the native coach retains timestamp-only health observations',async()=>{
+ const store=new Store(temp()),query=new QueryService(store),domains=new Domains(query);store.save('settings',{id:'installation',timezone:'UTC'});
+ const talk=await domains.invoke('personal-operation',{type:'coach-open',area:'health',question:'Fictional historical protein?'});await domains.invoke('personal-operation',{type:'habit-agree',talk_id:talk.id,title:'Fictional historical protein day',agreement:'I agree',auto:'protein_g >= 10',check_at:'2030-01-01T19:00:00Z'});
+ const now=new Date(Date.now()+86400000);now.setUTCHours(12,0,0,0);const yesterday=new Date(now.getTime()-86400000).toISOString().slice(0,10);
+ store.save('health_observations',{metric:'protein_g',value:20,source:'Fictional manual',observed_at:yesterday+'T12:00:00.000Z'});nativeTick(store,'coach',now,query);assert.equal(query.rows('habits')[0].progress.lifetimeCompletedDays,1);
+});

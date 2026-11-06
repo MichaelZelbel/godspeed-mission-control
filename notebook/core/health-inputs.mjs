@@ -1,5 +1,6 @@
 import {visibleRows} from './visibility.mjs';
 import {totalsOf} from './food.mjs';
+import {PHONE_DAY_COLUMNS} from './phone-health-columns.mjs';
 
 // Where the phone receiver and another source both give a day's metric, the value
 // written last wins for that day and metric only. A record's updated_at moves only when its value
@@ -17,7 +18,6 @@ export function latestPerDayMetric(rows){
  return rows.filter(row=>{const k=key(row);return !newest.has(k)||newest.get(k)===row;});
 }
 
-const COLUMNS=['steps','distance_km','active_kcal','basal_kcal','food_kcal','protein_g','carbs_g','fat_g','flights'];
 const FOOD_COLUMNS=['food_kcal','protein_g','carbs_g','fat_g'];
 const newest=rows=>rows.reduce((a,b)=>String(b.updated_at)>String(a.updated_at)?b:a);
 const validDay=day=>/^\d{4}-\d{2}-\d{2}$/.test(day)&&new Date(day+'T00:00:00Z').toISOString().slice(0,10)===day;
@@ -48,7 +48,7 @@ export function currentHealth(query,{now=Date.now(),days=7}={}){
   const dayKeys=new Set([...healthByDay.keys(),...foodByDay.keys()]);
   const state=[...dayKeys].sort().map(date=>{
    const columns={},metrics=healthByDay.get(date),food=foodByDay.get(date);
-   for(const metric of [...new Set([...COLUMNS,...(metrics?.keys()||[])])]){
+   for(const metric of [...new Set([...PHONE_DAY_COLUMNS,...(metrics?.keys()||[])])]){
     const rows=metrics?.get(metric)||[],manual=rows.filter(row=>row.via===MANUAL_VIA);
     if(manual.length){const row=newest(manual);columns[metric]={value:row.value,source:'manual',state:'settled'};continue;}
     if(food&&FOOD_COLUMNS.includes(metric)){const totals=totalsOf(food),key=metric==='food_kcal'?'kcal':metric;columns[metric]={value:totals[key],source:'food_tracker',state:'settled'};continue;}
@@ -57,7 +57,7 @@ export function currentHealth(query,{now=Date.now(),days=7}={}){
     if(row.via===PHONE_VIA){const data_until=phoneUntil.get(date),status=date===today?'not_judged':data_until>'21:00:00'?'complete':'may_be_incomplete';columns[metric]={value:row.value,source:'phone',state:status};}
     else columns[metric]={value:row.value,source:'legacy',state:'legacy'};
    }
-   const incomplete=COLUMNS.filter(metric=>columns[metric]?.state==='may_be_incomplete');
+   const incomplete=PHONE_DAY_COLUMNS.filter(metric=>columns[metric]?.state==='may_be_incomplete');
    return {date,...(phoneUntil.has(date)?{data_until:phoneUntil.get(date)}:{}),columns,may_be_incomplete_columns:incomplete};
   });
   return {observations,days:state,has_fresh_measurements:!!observations.length||!!state.length,as_of:new Date(now).toISOString(),timezone,window_days:days,excluded_stale_or_future:all.length-current.length};

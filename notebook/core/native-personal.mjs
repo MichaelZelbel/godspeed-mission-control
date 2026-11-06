@@ -120,11 +120,16 @@ export function retainHabitReview(store,habit,question,sources){
   const note=store.prepare('notes',{title:'Review '+current.title,content:question,source_app:'habit-check',habit_ids:[current.id],observation_day:localParts(new Date(),store.get('settings','installation')?.timezone||'UTC').date});store.commit([note],{files:[{file:current.native_file,text},{file:'coach/history/'+hash(file)+'-'+hash(previous)+'.txt',text:previous}]});return note;
  });
 }
+const automaticHealthColumn=column=>['settled','complete','legacy'].includes(column.state);
+const coachColumn=metric=>metric.replaceAll(' ','_');
 export function nativeTick(store,addon,now=new Date(),query){
  let messages=[],writes=[];
  const timezone=store.get('settings','installation')?.timezone||'UTC';
  if(addon==='coach'){
-  const settings={...coachSettings(store.root),timezone},table={},health=currentHealth(query||new QueryService(store),{now:now.getTime()});for(const day of health.days)for(const [metric,column] of Object.entries(day.columns))if(column.state!=='may_be_incomplete')(table[day.date]||={date:day.date})[metric]=String(column.value);({messages,writes}=dueTick(store.root,settings,now,table));
+  const settings={...coachSettings(store.root),timezone},table={},health=currentHealth(query||new QueryService(store),{now:now.getTime()}),put=(day,metric,value)=>{(table[day]||={date:day})[coachColumn(metric)]=String(value);};
+  for(const day of health.days)for(const [metric,column] of Object.entries(day.columns))if(automaticHealthColumn(column))put(day.date,metric,column.value);
+  for(const observation of health.observations.filter(row=>row.date_precision!=='day'||!row.observed_on).sort((a,b)=>String(a.observed_at).localeCompare(String(b.observed_at))))put(localParts(new Date(observation.observed_at),timezone).date,observation.metric,observation.value);
+  ({messages,writes}=dueTick(store.root,settings,now,table));
  }else{
   const settings={...journalSettings(store.root),timezone};if(settings.capture_enabled===false)return {verified:true,silent:true};
   // The integrated worker reads record evidence. Executable evidence hooks are
