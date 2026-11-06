@@ -78,8 +78,7 @@ export function currentHealth(query,{now=Date.now(),days=7}={}){
     if(row.via===PHONE_VIA){const data_until=phoneUntil.get(date),status=date===today?'not_judged':data_until>'21:00:00'?'complete':'may_be_incomplete';columns[metric]={value:row.value,source:'phone',state:status};}
     else columns[metric]={value:row.value,source:'legacy',state:'legacy'};
    }
-   const incomplete=Object.values(PHONE_SUM_METRICS).filter(metric=>columns[metric]?.state==='may_be_incomplete');
-   return {date,...(phoneUntil.has(date)?{data_until:phoneUntil.get(date)}:{}),columns,may_be_incomplete_columns:incomplete};
+   return {date,...(phoneUntil.has(date)?{data_until:phoneUntil.get(date)}:{}),columns};
   });
   return {observations,days:state,has_fresh_measurements:!!observations.length||!!state.length,as_of:new Date(now).toISOString(),timezone,window_days:days,excluded_stale_or_future:all.length-current.length};
  });
