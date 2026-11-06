@@ -127,6 +127,7 @@ server_telegram_setup() { # [without-ai]
     setup=(--without-ai)
   else
     need_the_ai_key 'the Telegram setup chat'
+    setup+=(--ai-key "$GODSPEED_SCENARIO_AI_KEY")
   fi
   # Keep this separate from compose.override.yaml: a scenario may already use that file to set its
   # clock, and the server's normal compose file must remain exactly what the /server installer made.
@@ -139,15 +140,9 @@ server_telegram_setup() { # [without-ai]
   server_compose -f "$SERVER_DIR/compose.scenario-telegram.yaml" up -d --force-recreate >&2 ||
     fail 'the server could not restart with its Telegram API endpoint set to the local stand-in'
   server_healthy 300 || fail 'the Docker server is not healthy after its Telegram endpoint was set'
-  if [ "${1:-}" = without-ai ]; then
-    "$NODE" "$HERE/server-telegram.mjs" setup --server "$(server_container)" --evidence "$EVIDENCE" \
-      --token "$SERVER_TELEGRAM_TOKEN" --owner "$SERVER_TELEGRAM_OWNER" "${setup[@]}" ||
-      fail 'the installed Docker Telegram setup did not hand the bot to its gateway'
-  else
-    "$NODE" "$HERE/server-telegram.mjs" setup --server "$(server_container)" --evidence "$EVIDENCE" \
-      --token "$SERVER_TELEGRAM_TOKEN" --owner "$SERVER_TELEGRAM_OWNER" --ai-key "$GODSPEED_SCENARIO_AI_KEY" ||
-      fail 'the installed Docker Telegram setup did not hand the bot to its gateway'
-  fi
+  "$NODE" "$HERE/server-telegram.mjs" setup --server "$(server_container)" --evidence "$EVIDENCE" \
+    --token "$SERVER_TELEGRAM_TOKEN" --owner "$SERVER_TELEGRAM_OWNER" "${setup[@]}" ||
+    fail 'the installed Docker Telegram setup did not hand the bot to its gateway'
 }
 server_telegram_say() { # <label> <text>
   "$NODE" "$HERE/server-telegram.mjs" say --server "$(server_container)" --evidence "$EVIDENCE" \
