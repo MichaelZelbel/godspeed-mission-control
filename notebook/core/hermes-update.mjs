@@ -115,7 +115,7 @@ export class HermesUpdate{
  }
  async tick(timezone){
   const now=this.now(),parts=Object.fromEntries(new Intl.DateTimeFormat('en-GB',{timeZone:timezone||'UTC',hour:'2-digit',minute:'2-digit',year:'numeric',month:'2-digit',day:'2-digit',hourCycle:'h23'}).formatToParts(now).filter(part=>part.type!=='literal').map(part=>[part.type,part.value])),day=`${parts.year}-${parts.month}-${parts.day}`;
-  if(parts.hour!=='04'||parts.minute!=='15'||this.state().last?.day===day)return null;
+  if(parts.hour<'04'||parts.hour==='04'&&parts.minute<'15'||this.state().last?.day===day)return null;
   const result=await this.runNow(),state=this.state(),last=state.last||{at:now.toISOString(),result:result?.result||'skipped',reason:result?.reason||null,output:null};this.save({...state,last:{...last,day}});return result;
  }
  async runTransaction(state){
@@ -136,7 +136,7 @@ export class HermesUpdate{
   if(checked.ok){this.removeOlderBackup(state.backup,backup.file);this.settle();return this.record(state,{result:'updated',version:target.version,backup:backup.file});}
   const rolledBack=await this.rollback(eligible,eligible.head,backup.file);
   if(rolledBack){const restored=await this.validate({expect:installed,ai:checked.step!=='AI probe'});if(restored.ok){this.removeOlderBackup(state.backup,backup.file);this.notice({version:target.version,step:checked.step,rollback:true});return this.record(state,{result:'rolled-back',version:installed,failed:target.version,reason:checked.step,detail:checked.output,backup:backup.file});}}
-  this.notice({version:target.version,step:checked.step,rollback:false});return this.record(state,{result:'rollback-failed',version:target.version,failed:target.version,reason:checked.step,detail:checked.output,backup:backup.file});
+  this.removeOlderBackup(state.backup,backup.file);this.notice({version:target.version,step:checked.step,rollback:false});return this.record(state,{result:'rollback-failed',version:target.version,failed:target.version,reason:checked.step,detail:checked.output,backup:backup.file});
  }
  record(state,{result,version,failed,reason,detail,backup}){const at=this.now().toISOString(),next={...state,...(backup?{backup}:{}),last:{at,result,version,reason:reason||null,output:detail||null},...(failed?{failed:{...(state.failed||{}),[failed]:at}}:{})};this.save(next);return next.last;}
 }

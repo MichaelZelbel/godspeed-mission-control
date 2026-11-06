@@ -1,4 +1,4 @@
-import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';
+import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import {EventEmitter} from 'node:events';import {PassThrough} from 'node:stream';
 import {Store} from '../core/records/store.mjs';
 import {HermesUpdate,eligibleRelease,readHermesUpdate} from '../core/hermes-update.mjs';
 import {HermesLifecycle} from '../core/hermes-lifecycle.mjs';
@@ -68,6 +68,12 @@ test('the newest Godspeed backup replaces its recorded predecessor',async t=>{
  await f.updater.runNow();const second=readHermesUpdate(f.store).backup;assert.notEqual(second,first);assert.equal(fs.existsSync(first),false);assert.equal(fs.existsSync(second),true);
 });
 
+test('an unrecovered later update still replaces its recorded predecessor backup',async t=>{
+ const f=fixture(t);await f.updater.runNow();const first=readHermesUpdate(f.store).backup;f.updater.fetcher=async()=>({ok:true,json:async()=>releases(['1.2.0'])});
+ const original=f.updater.command.bind(f.updater);f.updater.command=async(executable,args,options)=>args.join(' ')==='gateway stop'&&f.calls.filter(call=>call[1]==='update'&&call[2]==='--no-backup').length>=2?{code:1,stdout:'',stderr:'stop failed'}:original(executable,args,options);
+ const result=await f.updater.runNow(),second=readHermesUpdate(f.store).backup;assert.equal(result.result,'rollback-failed');assert.notEqual(second,first);assert.equal(fs.existsSync(first),false);assert.equal(fs.existsSync(second),true);
+});
+
 test('a later nightly pass closes a rollback notice and release lookup failures say so',async t=>{
  const f=fixture(t,{breaks:'cron list'});await f.updater.runNow();const result=await f.updater.runNow();assert.equal(result.result,'checked');assert.equal(f.store.get('notifications','hermes-update-1.1.0').status,'resolved');assert.equal(f.asked(),2);assert.equal((await f.updater.runNow()).result,'skipped');assert.equal(f.calls.filter(call=>call[1]==='update'&&call[2]==='--no-backup').length,1,'a failed release waits thirty days');
  const failed=fixture(t);failed.updater.fetcher=async()=>{throw Object.assign(Error('token=sk-secret-token-value-123456789'),{stderr:'token=sk-secret-token-value-123456789'});};const discovery=await failed.updater.runNow();assert.equal(discovery.result,'failed');assert.equal(discovery.reason,'Hermes release discovery failed.');assert.doesNotMatch(JSON.stringify(readHermesUpdate(failed.store)),/sk-secret-token/);
@@ -78,9 +84,18 @@ test('dirty, foreign, Docker, and Windows installations do not mutate',async t=>
  for(const [name,change,reason,docker] of cases){const f=fixture(t,{isDocker:docker});change(f);const result=await f.updater.runNow();assert.equal(result.reason,reason,name);assert.equal(f.calls.some(call=>call[1]==='update'),false,name);}
 });
 
-test('04:15 runs once in the installation timezone and lifecycle holders defer updates and manual routines',async t=>{
- const f=fixture(t);f.setClock('2026-11-06T03:14:00Z');assert.equal(await f.updater.tick('Europe/Berlin'),null);f.setClock(at);await f.updater.tick('UTC');assert.equal(await f.updater.tick('UTC'),null);
- const lifecycle=new HermesLifecycle(),release=lifecycle.acquire('assistant update'),scheduler=new NativeScheduler(f.store,{home:f.updater.descriptor.home,executable:f.updater.descriptor.executable,run:f.updater.run,lifecycle}),agent=nativeAgent({executable:f.updater.descriptor.executable,home:f.updater.descriptor.home,cwd:f.store.root,lifecycle});f.updater.lifecycle=lifecycle;assert.deepEqual(await f.updater.runNow(),{result:'skipped',reason:'Godspeed is still handling a chat or routine.'});assert.throws(()=>scheduler.startRun(),/updating/);await assert.rejects(agent({message:'later'}),/updating/);release();
+test('the first scheduler pass at or after 04:15 runs once in the installation timezone',async t=>{
+ const f=fixture(t);f.setClock('2026-11-06T03:14:00Z');assert.equal(await f.updater.tick('Europe/Berlin'),null);f.setClock('2026-11-06T04:16:01Z');assert.equal((await f.updater.tick('UTC')).result,'updated');assert.equal(await f.updater.tick('UTC'),null);
+});
+
+test('active chats, scheduler ticks, and manual routines defer updates for their whole lifetime',async t=>{
+ const busy='Godspeed is still handling a chat or routine.';
+ const cases=[
+  ['chat reply',async(f,lifecycle)=>{let child;const agent=nativeAgent({executable:f.updater.descriptor.executable,home:f.updater.descriptor.home,cwd:f.store.root,lifecycle,spawnProcess:()=>{child=new EventEmitter();child.stdin=new PassThrough();child.stdout=new PassThrough();child.stderr=new PassThrough();return child;}}),pending=agent({message:'hold'});await new Promise(resolve=>setImmediate(resolve));return async()=>{child.emit('close',1);await assert.rejects(pending);};}],
+  ['routine tick',async(f,lifecycle)=>{let entered,finish;const started=new Promise(resolve=>{entered=resolve;}),gate=new Promise(resolve=>{finish=resolve;}),scheduler=new NativeScheduler(f.store,{home:f.updater.descriptor.home,executable:f.updater.descriptor.executable,lifecycle,run:async()=>{entered();await gate;return {stdout:''};}}),pending=scheduler.tick();await started;return async()=>{finish();await pending;};}],
+  ['manual routine',async(f,lifecycle)=>{const jobs=path.join(f.updater.descriptor.home,'cron');fs.mkdirSync(jobs,{recursive:true});fs.writeFileSync(path.join(jobs,'jobs.json'),JSON.stringify({jobs:[{id:'brief',name:'Brief'}]}));let entered,finish;const started=new Promise(resolve=>{entered=resolve;}),gate=new Promise(resolve=>{finish=resolve;}),scheduler=new NativeScheduler(f.store,{home:f.updater.descriptor.home,executable:f.updater.descriptor.executable,lifecycle,run:async()=>{entered();await gate;return {stdout:''};}});scheduler.startRun('brief');await started;return async()=>{finish();await scheduler.running;};}]
+ ];
+ for(const [name,enter] of cases){const f=fixture(t),lifecycle=new HermesLifecycle();f.updater.lifecycle=lifecycle;const leave=await enter(f,lifecycle);assert.equal(lifecycle.busy,true,name);assert.deepEqual(await f.updater.runNow(),{result:'skipped',reason:busy},name);assert.equal(f.calls.some(call=>call[1]==='update'&&call[2]==='--no-backup'),false,name);await leave();assert.equal(lifecycle.busy,false,name);}
 });
 
 test('a busy scheduled update records its visible deferral reason before marking the day',async t=>{
