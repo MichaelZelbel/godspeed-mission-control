@@ -34,3 +34,16 @@ test('a clean run shows the summary and exits 0',async t=>{
  assert.deepEqual(result.seen.map(s=>s.line),['# tests 1','# pass 1','# fail 0','# cancelled 0']);
  assert.equal(result.code,0);
 });
+
+test('the failure summary of the fallback shows a non-zero cancelled count, the failures and their error lines, from the kept log',async t=>{
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-image-progress-'));t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
+ const log=path.join(dir,'server-tests.log').split(path.sep).join('/');
+ fs.writeFileSync(log,['ok 1 - fine','not ok 2 - test/some.test.mjs','  ---','  error: |-','    expected 1 but got 2','  ...','# tests 3','# pass 1','# fail 1','# cancelled 1',''].join(String.fromCharCode(10)));
+ const out=await new Promise(resolve=>{const child=spawn(bash,['-c','. "$1"; server_test_failure_summary "$2"','x',helper,log],{stdio:['ignore','pipe','pipe']});let text='';child.stdout.on('data',c=>{text+=c;});child.on('close',code=>resolve({text,code}));});
+ assert.equal(out.code,0);
+ for(const line of ['not ok 2 - test/some.test.mjs','# cancelled 1','# fail 1','# tests 3','error: |-','expected 1 but got 2'])assert.ok(out.text.includes(line),line+' in '+JSON.stringify(out.text));
+ assert.ok(!out.text.includes('ok 1 - fine'),'passing tests are not repeated');
+ // One selector for both stages: the live stage shows exactly what the fallback selects.
+ const live=await run("cat "+log,path.join(dir,'copy.log').split(path.sep).join('/'),{limitMs:15000});
+ assert.deepEqual(live.seen.map(s=>s.line),['not ok 2 - test/some.test.mjs','# tests 3','# pass 1','# fail 1','# cancelled 1']);
+});
