@@ -605,7 +605,7 @@ test('against a real local peer that stops reading and then closes, a writer tha
  t.after(()=>{client.destroy();peer.close();});
  await new Promise(r=>client.once('connect',r));
  const chunk=Buffer.alloc(256*1024,'x');
- const writer=(async()=>{let blocked=false;for(let i=0;i<4000&&!client.destroyed;i++){const full=!client.write(chunk);if(full){blocked=true;await new Promise(r=>{client.once('drain',r);client.once('close',r);});}}return blocked;})();
+ const writer=(async()=>{let blocked=false;for(let i=0;i<4000&&!client.destroyed;i++){const wait=writeOrClose(client,chunk);if(client.writableNeedDrain)blocked=true;await wait;}return blocked;})();
  const outcome=await Promise.race([writer.then(blocked=>({blocked})),new Promise(r=>setTimeout(()=>r({timeout:true}),8000))]);
  assert.equal(outcome.timeout,undefined,'the writer finished: the close ended its wait');
  assert.equal(outcome.blocked,true,'it really did backpressure first');
