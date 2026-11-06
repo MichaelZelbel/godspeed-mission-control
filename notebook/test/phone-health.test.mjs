@@ -61,6 +61,16 @@ test('a phone day keeps the latest quantitative point time, not its upload time 
  assert.equal(store.list('health_observations')[0].data_until,'19:55:00');
 });
 
+test('a numeric weight later than the steps sets the day\'s data time, and a still later sleep point does not',()=>{
+const upload1=upload([metric('step_count','count',[D+' 19:55:00 +0100',100]),metric('weight_body_mass','kg',[D+' 21:30:00 +0100',79.5]),metric('sleep_analysis','hr',[D+' 23:59:00 +0100',8])]);
+ assert.equal(buildDays([{received_at:'2026-11-05T07:00:00Z',data:upload1}]).dataUntil.get(D),'21:30:00','the weight point, not the steps or the sleep');
+ const store=setup();acceptUpload(store,upload1,{now:at('2026-11-05T08:00:00Z')});
+ const rows=Object.fromEntries(store.list('health_observations').map(r=>[r.metric,r]));
+ assert.equal(rows.steps.data_until,'21:30:00','the emitted day record carries the weight time');
+ assert.equal(rows.weight_kg.data_until,'21:30:00');
+ assert.equal(rows.weight_kg.value,79.5);
+});
+
 test('records are day records in the CSV feed\'s id scheme, on the date in the point\'s own string',()=>{
  const store=setup();
  acceptUpload(store,upload([metric('step_count','count',['2026-11-04 00:09:00 +0100',40])]),{now:at('2026-11-03T23:30:00Z')});
