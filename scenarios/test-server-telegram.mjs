@@ -21,16 +21,16 @@ test('the first action after setup ignores the setup handoff message',()=>{
 test('actions and marked routines keep complete Telegram records',()=>{
   const action={sent:0,outbox:[]};
   const routine={sent:0,outbox:[]};
-  const record={sent:[{chat_id:31415,text:'The report is ready.',buttons:[{text:'Open'}]}]};
+  const record={sent:[{chat_id:31415,text:'The report is ready.',buttons:['open:report']}]};
 
   captureSent(action,record,'owner-question');
   captureSent(routine,record,'report');
 
   assert.deepEqual(action.outbox,[{
-    label:'owner-question',kind:'sendMessage',chat_id:31415,text:'The report is ready.',buttons:[{text:'Open'}],accepted:true,
+    label:'owner-question',kind:'sendMessage',chat_id:31415,text:'The report is ready.',buttons:['open:report'],accepted:true,
   }]);
   assert.deepEqual(routine.outbox,[{
-    label:'report',kind:'sendMessage',chat_id:31415,text:'The report is ready.',buttons:[{text:'Open'}],accepted:true,
+    label:'report',kind:'sendMessage',chat_id:31415,text:'The report is ready.',buttons:['open:report'],accepted:true,
   }]);
   assert.equal(action.sent,1);
   assert.equal(routine.sent,1);
@@ -41,9 +41,15 @@ test('mark saves complete sent records through its command boundary',()=>{
   const bin=path.join(folder,'bin');
   fs.mkdirSync(bin);
   fs.writeFileSync(path.join(bin,'sudo'),`#!/bin/sh
-printf '%s\\n' '{"sent":[{"chat_id":31415,"text":"The report is ready.","buttons":[{"text":"Open"}]}],"requests":[{"method":"sendMessage"}]}'
+printf '%s\\n' '{"sent":[{"chat_id":31415,"text":"Yesterday\\u0027s report.","buttons":["open:yesterday"]},{"chat_id":31415,"text":"The report is ready.","buttons":["open:report"]}],"requests":[{"method":"sendMessage"},{"method":"sendMessage"}]}'
 `);
   fs.chmodSync(path.join(bin,'sudo'),0o755);
+  const old={
+    label:'yesterday-report',kind:'sendMessage',chat_id:31415,text:"Yesterday's report.",buttons:['open:yesterday'],accepted:true,
+  };
+  fs.writeFileSync(path.join(folder,'telegram-run.json'),JSON.stringify({
+    steps:[{label:'yesterday-report',kind:'routine',success:true,request_end:1}],outbox:[old],sent:1,
+  }));
 
   try {
     execFileSync(process.execPath,['server-telegram.mjs','mark','--server','fixture','--evidence',folder,'--label','report','--kind','routine'],{
@@ -53,13 +59,19 @@ printf '%s\\n' '{"sent":[{"chat_id":31415,"text":"The report is ready.","buttons
     });
 
     const expected={
-      label:'report',kind:'sendMessage',chat_id:31415,text:'The report is ready.',buttons:[{text:'Open'}],accepted:true,
+      label:'report',kind:'sendMessage',chat_id:31415,text:'The report is ready.',buttons:['open:report'],accepted:true,
     };
     assert.deepEqual(JSON.parse(fs.readFileSync(path.join(folder,'run.json'),'utf8')),{
-      steps:[{label:'report',kind:'routine',success:true,request_end:1}],outbox:[expected],
+      steps:[
+        {label:'yesterday-report',kind:'routine',success:true,request_end:1},
+        {label:'report',kind:'routine',success:true,request_end:2},
+      ],outbox:[old,expected],sent:2,
     });
     assert.deepEqual(JSON.parse(fs.readFileSync(path.join(folder,'telegram-run.json'),'utf8')),{
-      steps:[{label:'report',kind:'routine',success:true,request_end:1}],outbox:[expected],sent:1,
+      steps:[
+        {label:'yesterday-report',kind:'routine',success:true,request_end:1},
+        {label:'report',kind:'routine',success:true,request_end:2},
+      ],outbox:[old,expected],sent:2,
     });
   } finally {
     fs.rmSync(folder,{recursive:true,force:true});

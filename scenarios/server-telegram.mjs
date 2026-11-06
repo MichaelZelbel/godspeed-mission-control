@@ -47,7 +47,7 @@ function loadState(){
   try { return read(stateFile()); }
   catch { return {steps:[],outbox:[],sent:0}; }
 }
-function saveState(value){ write(stateFile(),value); write(path.join(evidence,'run.json'),{steps:value.steps,outbox:value.outbox}); }
+function saveState(value){ write(stateFile(),value); write(path.join(evidence,'run.json'),{steps:value.steps,outbox:value.outbox,sent:value.sent}); }
 export function captureSent(state,record,label,before=state.sent){
   for(const sent of (record.sent ?? []).slice(before)) state.outbox.push({label,kind:'sendMessage',chat_id:sent.chat_id,text:sent.text,buttons:sent.buttons ?? [],accepted:true});
   state.sent=(record.sent ?? []).length;
