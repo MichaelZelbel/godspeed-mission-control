@@ -28,6 +28,9 @@ function fakeHermes(home){
  return {run,calls,jobs:read,write};
 }
 async function withGoal(t,{device='pc'}={}){
+ // These tests are about a computer. The check's server source (the disk) must not come from the environment the tests run in:
+ // the installed image sets GODSPEED_REVISION, which makes every install a server and the daily connection check always wanted.
+ for(const name of ['GODSPEED_REVISION','GODSPEED_WEB_ADDRESS']){const was=process.env[name];delete process.env[name];t.after(()=>{if(was===undefined)delete process.env[name];else process.env[name]=was;});}
  const root=temporary(t),home=path.join(root,'.hermes-home');installStarter(root);fs.mkdirSync(home,{recursive:true});fs.writeFileSync(path.join(home,'config.yaml'),'model:\n  default: x\n');
  const store=new Store(root,{device}),hermes=fakeHermes(home),scheduler=new NativeScheduler(store,{home,executable:'hermes',device,run:hermes.run});
  await scheduler.configure({goal:'Run a fictional 10k',timezone:'Europe/Berlin'});

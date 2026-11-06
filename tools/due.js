@@ -575,7 +575,7 @@ function sayable(r, day) {
 const SELF_CHECKS = ["none", "secret-changed", "connection-ok", "file-newer"];
 // The connections the daily check lists (notebook/core/connection-names.mjs): the id its record is
 // kept under, and the name Settings shows. Kept here because this tool ships without the notebook.
-const CONNECTIONS = { ai: "your AI", telegram: "Telegram", github: "GitHub", mail: "Gmail", agentmail: "your mission control's own mailbox", phone: "the phone's health data" };
+const CONNECTIONS = { ai: "your AI", telegram: "Telegram", github: "GitHub", mail: "Gmail", agentmail: "your mission control's own mailbox", phone: "the phone's health data", disk: "your server's disk" };
 const connectionId = (arg) => {
   const a = String(arg || "").trim().toLowerCase();
   return Object.keys(CONNECTIONS).find((id) => id === a || CONNECTIONS[id].toLowerCase() === a) || "";
