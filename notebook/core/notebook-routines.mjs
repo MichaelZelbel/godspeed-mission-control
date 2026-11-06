@@ -68,17 +68,27 @@ export function journalWanted(root){
 // THE DAILY CONNECTION CHECK (4 November 2026, #200; core/connection-check.mjs). A script routine at
 // 05:00 (earlier when an early Morning brief needs it first), before the morning briefing, made once on a machine that made its starting routines (one
 // that kept the reader's own routines never gets Godspeed's beside them). It starts on when this
-// install has Telegram or Gmail connected and paused when it has neither; the Routines list's
+// install has Telegram or Gmail connected or a tracker with a mail rule, and paused when it has none; the Routines list's
 // Pause and Resume is its switch.
 export const CONNECTION_JOB='Daily connection check';
 export const CONNECTION_SCRIPT='godspeed-connection-check.py';
 export const CONNECTION_WHAT=`Early every morning, before your morning brief, it makes one harmless call to each connection you set up (${Object.values(CONNECTION_NAMES).map(c=>c.label).join(', ')}) and tells you only when one needs your sign-in or key, or failed two mornings in a row. It sends nothing else.`;
+// THE MAIL COUNTS (4 November 2026, #215; core/mail-trackers.mjs). A script routine every morning at
+// 04:30 that counts the mails a tracker's mail rule names, from each mail's sender, subject and date
+// and never its text, and adds them to that tracker. It is made when a tracker has a mail rule and
+// paused when none has; the Routines list's Pause and Resume is its switch. It is kept on "local":
+// it never sends a message (followDelivery leaves it alone), and a mail connection that does not
+// answer is the daily connection check's to report.
+export const MAIL_COUNT_JOB='Mail counts';
+export const MAIL_COUNT_SCRIPT='godspeed-mail-count.py';
+export const MAIL_COUNT_WHAT='Once a day, early in the morning, it counts the mails your trackers\' mail rules name, from each mail\'s sender, subject and date only, and adds them to those trackers. It never reads a mail\'s text and sends nothing.';
 // The routines beside the starting ones that are a switch on a mission control not made from the starter
 // (4 November 2026, #225). The one owner of each one's switch (routine-switches.mjs) and its wrapper script
 // (routineFiles in starting-routines.mjs).
 export const SWITCHABLE_NOTEBOOK_ROUTINES=[
  {key:'journal-tick',name:JOURNAL_JOB,what:JOURNAL_WHAT,script:JOURNAL_SCRIPT},
  {key:'connection-check',name:CONNECTION_JOB,what:CONNECTION_WHAT,script:CONNECTION_SCRIPT},
+ {key:'mail-count',name:MAIL_COUNT_JOB,what:MAIL_COUNT_WHAT,script:MAIL_COUNT_SCRIPT},
 ];
 // THE NOTICE SENDER OF A MISSION CONTROL NOT MADE FROM THE STARTER (4 November 2026, #225). On a starter-born
 // install the coach's reminders and the journal's check-ins say the notices in .godspeed/notices.json. An

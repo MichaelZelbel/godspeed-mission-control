@@ -1,7 +1,7 @@
 // The tracker operations (D-321), one path for the notebook's chat, MCP and the
 // Telegram bot: personalOperation hands these types here. The rules they share
 // are in trackers.mjs; this file reads and writes.
-import {norm,card,trackers,findTracker,entries,trackerStatus,proposalState,dayOf,whenFor,schemaFor,entryData,holdQuestion,createdReply,instantReply,fmt,unitOf,longDay,entryOn,existingTalk,setUpOnPurpose,entryWords,talkExists,talkWords,talksOf,cardWithTalks,talksWords,assertInstead} from './trackers.mjs';
+import {norm,own,userFields,card,trackers,findTracker,entries,trackerStatus,proposalState,dayOf,whenFor,schemaFor,entryData,holdQuestion,createdReply,instantReply,fmt,unitOf,longDay,entryOn,existingTalk,setUpOnPurpose,entryWords,talkExists,talkWords,talksOf,cardWithTalks,talksWords,assertInstead} from './trackers.mjs';
 import {now as clockNow,addDays} from '../../third-party/addons/godspeed-coach/lib/clock.mjs';
 import {visibleRows} from './visibility.mjs';
 import {habitTrackerList,habitOperation,isHabitRef,findHabits,habitTalkOperation} from './habit-trackers.mjs';
@@ -10,7 +10,8 @@ import {CYCLE_WORDS} from './cycle.mjs';
 import {foodOperation,foodCreate,foodSummary} from './food-operations.mjs';
 import {FOOD_WORDS} from './food.mjs';
 import {charmCard} from './charm-operation.mjs';
-export const TRACKER_OPERATIONS=['tracker-hold','tracker-create','track','tracker-correct','tracker-list','tracker-talk','habit-progress'];
+import {mailRule,mailColumn,MAILBOX,NOT_FITTING,ruleSentence,previewCount,cardRule,FIRST_DAYS} from './mail-trackers.mjs';
+export const TRACKER_OPERATIONS=['tracker-hold','tracker-create','track','tracker-correct','tracker-list','tracker-talk','tracker-mail','habit-progress'];
 const tz=store=>store.get('settings','installation')?.timezone||'UTC';
 // The coaching talk that reads a tracker, by its area's name (coach/<area>/: health, work,
 // relationships, or one the person added), or none.
@@ -65,7 +66,7 @@ export function trackerOperation(domains,raw){
   const cadence=input.cadence?(input.cadence==='any'?'any':'daily'):happened?'any':'daily',field_schema=schemaFor({unit:input.unit,fields:happened?[]:input.fields,cadence}),shape={name,field_schema};
   // A tracker with no columns of its own counts each time: "track sauna" is itself the
   // entry, held like a number would be, so the yes counts it (design: nothing he said is lost).
-  const counting=!field_schema.some(f=>!['when','note'].includes(f.key));
+  const counting=!userFields(field_schema).length;
   // Set up on purpose ("I want to track my sleep: hours, and quality from 1 to 5"), nothing has
   // happened yet: no entry is held, unless they gave one.
   const entry=has(input)||counting&&!setUpOnPurpose(input)?{when:whenFor({on:input.on,at:input.at,cadence},now,zone),data:entryData(shape,input)}:null;
@@ -86,6 +87,7 @@ export function trackerOperation(domains,raw){
   // Their yes is a message of its own, after the question (the capture run of 12 October 2026: the
   // bot asked and created in one turn, and a first entry was made that nobody said yes to).
   if(p){const said=wordsOf(input);if(assistant&&!said)throw Error("Pass the person's answer as words: only their yes to the question creates the tracker.");if(said&&p.words&&norm(said)===norm(p.words))throw Error('That is the message that asked for the tracker. Ask the question, and create it only when they answer yes.');}
+  if(p?.specialist==='mail')return mailCreate(domains,p,input);
   const name=titleOf(input.name||p?.name);if(!name)throw Error('Say what the tracker is called');
   if(JOURNAL_NAME.test(name))throw Error(JOURNAL_ENTRY);
   if(CHARM_NAME.test(name))throw Error(CHARM);
@@ -93,7 +95,7 @@ export function trackerOperation(domains,raw){
   const cadence=input.cadence?(input.cadence==='any'?'any':'daily'):p?.cadence||'daily';
   // "Yes, but in inches" or "as often as I like" rebuilds the columns from the
   // question's own; the held number stays the number, checked again.
-  const asked=p?(p.field_schema||[]).filter(f=>!['when','note'].includes(f.key)).map(({indexable,...f})=>f):undefined;
+  const asked=p?userFields(p.field_schema).map(({indexable,...f})=>f):undefined;
   const field_schema=schemaFor(input.fields||input.unit||!p?{unit:input.unit,fields:input.fields,cadence}:{fields:asked,cadence});
   // A new tracker goes to the one talk named, only when it exists; a question kept before 13 October
   // 2026 names it as `talk` (talksOf reads both).
@@ -140,6 +142,13 @@ export function trackerOperation(domains,raw){
   const updated=store.get('collections',c.id);
   const reply=remove?the+' no longer looks at '+yours+'.':the+' may now look at '+yours+(!others.length?'':instead?', instead of the '+talksWords(others):', along with the '+talksWords(others))+'.';
   return {collection_id:c.id,talks,changed:true,tracker_hash:updated._hash,reply};
+ }
+ // A tracker that counts a kind of mail (mail-trackers.mjs). Asking searches the mailbox, so it is
+ // the one tracker operation that answers later; the yes is tracker-create, as for the cycle tracker.
+ if(type==='tracker-mail'){
+  if(input.action==='remove')return mailRemove(domains,input);
+  if(input.action!=='ask')throw Error('Say whether to ask about a mail rule or remove it');
+  return mailAsk(domains,input,{now,zone,assistant});
  }
  // A habit's day is the coach's: its own track() on its own file (habit-trackers.mjs).
  if(type==='habit-progress'||['track','tracker-correct'].includes(type)&&isHabitRef(store,input.tracker))return habitOperation(store,input,{now,zone,today:dayOf(now,zone),assistant:domains.assistant===true});
@@ -203,6 +212,7 @@ export function trackerOperation(domains,raw){
     ...(from?{recent:all.filter(i=>String(i.data?.when).slice(0,10)>=from).map(i=>({id:i.id,when:i.data?.when,data:i.data,hash:i._hash}))}:{}),
     // The food tracker adds its days' totals and the target's last change, the one line its talk hears.
     ...(c.tracker.specialist==='food'?{food:foodSummary(domains,c,{from,today})}:{}),
+    ...(cardRule(c)?{mail:(({senders,subjects,mailbox})=>({senders,subjects,mailbox}))(cardRule(c))}:{}),
     ...(charm?{charm:charm.charm,brief:charm.brief}:{})};
   }).concat(habitTrackerList(store,{today,from,now,zone,calendarDays:input.calendarDays===undefined?14:Number(input.calendarDays)})).filter(t=>!talk||t.talks.includes(talk)&&t.status==='active');
   const pending=store.list('tracker_proposals').filter(p=>proposalState(store,p,now)==='pending').map(p=>({id:p.id,name:p.name,created_at:p.created_at,question:holdQuestion(p,today)}));
@@ -221,7 +231,6 @@ function resolve(store,ref){
 // The hash the caller read, for query.execute's own check; over MCP the guard
 // asks for it as well (assistant-mutations.mjs reads `expected` the same way).
 const expectedOf=(input,table,id)=>{const v=input.expected?.[table+'/'+id]??input.expected?.[id];return typeof v==='string'?{[id]:v}:{};};
-const own=c=>(c.field_schema||[]).filter(f=>!['when','note'].includes(f.key));
 // A tracker as a reply names it: "sleep tracker" for Sleep; a name with capitals inside ("BP") stays.
 // The headache add-on's tracker, Headaches, is "headache tracker", as people say it.
 const trackerWords=c=>{if(c.tracker?.specialist==='headache')return 'headache tracker';const n=String(c.name||'').trim(),low=n.length>1&&n.slice(1)===n.slice(1).toLocaleLowerCase()?n.charAt(0).toLocaleLowerCase()+n.slice(1):n;return /tracker$/i.test(low)?low:low+' tracker';};
@@ -233,3 +242,42 @@ function describe(c,entry){
 }
 // "Tracked: Belly 90 cm." under "Tracked under Belly: " reads "90 cm."
 const withoutName=(c,reply)=>{const rest=reply.replace(/^Tracked: /,'');return rest.startsWith(c.name+', ')?rest.slice(c.name.length+2):rest.startsWith(c.name+' ')?rest.slice(c.name.length+1):rest;};
+
+// THE MAIL RULE'S QUESTION: what would be counted, in a sentence, and how many mails that is over the last
+// 30 days, before anything is saved. The mailbox is searched by headers only (mail-trackers.mjs).
+async function mailAsk(domains,input,{now,zone,assistant}){
+ const {store}=domains,rule=mailRule(input),words=wordsOf(input);
+ if(assistant&&!words)throw Error("Pass the person's own message as words: a mail rule needs their yes in a later message.");
+ let c=null,name=titleOf(input.name);
+ if(input.tracker){c=resolve(store,input.tracker);if(mailColumn(c)===false)throw Error(NOT_FITTING(c.name));name=c.name;}
+ else if(!name)throw Error('Say which tracker counts the mails, or a name for a new one');
+ else if(findTracker(store,name).candidates.length)throw Error('There is already a tracker called '+name+'; name it as the tracker that counts the mails');
+ const sentence=ruleSentence(rule,name,!c);
+ let count;
+ try{count=await previewCount({store,rule,c,search:domains.mailSearch,now,tz:zone});}
+ catch{return {reply:'I could not search '+MAILBOX[rule.mailbox].words+' just now, so nothing was saved. Ask me again in a little while.'};}
+ const question=sentence+' In the last '+FIRST_DAYS+' days that is '+count+(count===1?' mail.':' mails.');
+ const replaces=store.list('tracker_proposals').filter(o=>o.specialist==='mail'&&proposalState(store,o,now)==='pending'&&(c?o.tracker_id===c.id:!o.tracker_id&&norm(o.name)===norm(name))).map(o=>o.id);
+ const p=store.save('tracker_proposals',{specialist:'mail',name,...(c?{tracker_id:c.id}:{field_schema:schemaFor({fields:[{key:'value',label:'Mails',type:'number'}],cadence:'any'})}),mail:rule,count,question,replaces,...(words?{words}:{}),created_at:now.toISOString()});
+ return {proposal_id:p.id,count,reply:question};
+}
+// Their yes: the rule goes on the card of the tracker it extends, or on a new tracker made for the mails.
+function mailCreate(domains,p,input){
+ const {store,query}=domains,rule=mailRule(p.mail),card={...rule,proposal_id:p.id};
+ if(p.tracker_id){
+  const c=store.get('collections',p.tracker_id);if(!c||c.removed_at||!c.tracker||mailColumn(c)===false)throw Error('That tracker has changed. Ask for the mail rule again.');
+  query.execute({table:'collections',operation:'update',values:{tracker:cardWithTalks({...c.tracker,mail:card})},filters:[['eq','id',c.id]],expected:expectedOf(input,'collections',c.id)});
+  return {collection_id:c.id,tracker_hash:store.get('collections',c.id)._hash,reply:'Saved. '+c.name+' now counts these mails every morning, starting with the last '+FIRST_DAYS+' days.'};
+ }
+ if(findTracker(store,p.name).candidates.length)throw Error('There is already a tracker called '+p.name);
+ const collection=query.execute({table:'collections',operation:'insert',values:{name:p.name,icon:'📈',description:'Tracker',visibility:'personal',field_schema:p.field_schema,tracker:{names:[p.name],cadence:'any',talks:[],specialist:null,proposal_id:p.id,mail:card}}}).data[0];
+ return {collection_id:collection.id,reply:'Saved. '+p.name+' now counts these mails every morning, starting with the last '+FIRST_DAYS+' days.'};
+}
+// Stopping the count keeps what it counted: the entries stay, and nothing adds to them.
+function mailRemove(domains,input){
+ const {store,query}=domains,c=resolve(store,input.tracker);
+ if(!c.tracker.mail)return {collection_id:c.id,changed:false,reply:c.name+' does not count mails.'};
+ const {mail,...rest}=c.tracker,counted=entries(store,c).filter(i=>i.data?.mail_id).length;
+ query.execute({table:'collections',operation:'update',values:{tracker:cardWithTalks(rest)},filters:[['eq','id',c.id]],expected:expectedOf(input,'collections',c.id)});
+ return {collection_id:c.id,changed:true,tracker_hash:store.get('collections',c.id)._hash,reply:c.name+' no longer counts mails. The '+counted+(counted===1?' mail':' mails')+' it counted stay.'};
+}
