@@ -112,6 +112,21 @@ missing "incident: once an event closes them, the brief carries neither" "$AFTER
 missing "incident: nor does the full list" "$(GODSPEED_TODAY=2026-09-28 d)" "RUNNING OUT"
 contains "incident: state names the event" "$(GODSPEED_TODAY=2026-09-28 d state)" "CLOSED   post-publish  (world/events/2026-09-23-post-approved-and-published.md)"
 
+# --- an expiry deadline's state carries the key identity the expiry reader owns ------------------------
+wipe "$G"
+mkdir -p "$G/secrets"
+printf 'other-key  2026-11-20  https://example.invalid/keys  # Another made-up key.\nai-key  2026-11-10  https://example.invalid/keys  # The key your AI thinks with.\n' > "$G/secrets/expires.txt"
+EXPIRY_STATE="$(GODSPEED_TODAY=2026-10-23 d state --json)"
+expiry_arg() { printf '%s' "$1" | node -e '
+let text="";process.stdin.on("data",part=>text+=part).on("end",()=>{
+ const row=JSON.parse(text).find(row=>row.slug===process.argv[1]);
+ process.stdout.write(row ? String(row.selfCheckArg) : "");
+});' "$2"; }
+check "expiry state binds other-key to its own self check" "$(expiry_arg "$EXPIRY_STATE" key-other-key)" "other-key"
+check "expiry state binds ai-key to its own self check" "$(expiry_arg "$EXPIRY_STATE" key-ai-key)" "ai-key"
+rm -f "$G/secrets/expires.txt"
+rmdir "$G/secrets" 2>/dev/null || :
+
 # --- no evidence, no closing -----------------------------------------------------------------
 wipe "$G"
 d add chore --title "CHORE" --from 2026-01-01 --to 2026-01-10 --done-when x --cost y >/dev/null

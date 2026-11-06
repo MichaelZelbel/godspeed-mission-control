@@ -1070,6 +1070,7 @@ function stateRows(day=today(),mutate=false) {
       doneWhen: (r.o.head["DONE-WHEN"] || "").trim(), closedOn: last ? last.closed : "", closedBy: last ? last.by : "",
       // Anything but "none" closes itself in `mc-due check`, so the stop check never guesses at it.
       selfCheck: (r.o.head["SELF-CHECK"] || "").trim().toLowerCase() || "none",
+      selfCheckArg: (r.o.head["SELF-CHECK-ARG"] || "").trim(),
       ...(addon ? { addon } : {}),
     };
   });

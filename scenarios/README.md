@@ -12,6 +12,11 @@ which a step written inside a workflow file cannot be. They live in a folder of 
 same reason `stage/` does: everything in `tools/` is copied onto every user's computer as a program,
 and these are not programs for users.
 
+`chat-tidy-at-night`, `disk-filling`, `missed-routine` and `deadline-closes-itself` are not yet jobs of
+that workflow: their jobs are written in the pull request that added them and are applied in the
+release step. Until then they are run by hand, with the environment their rows below name. Remove this
+paragraph when the jobs are in `.github/workflows/scenarios.yml`.
+
 | script | what it proves |
 | --- | --- |
 | `settings-on-install.sh` | a fresh install carries the faster-chat settings, and a value the owner set stays theirs |
@@ -41,6 +46,10 @@ and these are not programs for users.
 | `plain-yes.sh` | on the same fixture: with one step waiting a plain "yes" approves it; with two waiting it gets one question naming both and approves neither, and the answer naming one approves only that one; a Yes button approves its own step and No rejects its own; a "yes" with nothing waiting approves nothing |
 | `what-was-that.sh` | on the same fixture: a queued notice said by its routine is recorded where the chat reads it, with the facts it was written from, and "what is this about?" asked in a new conversation is answered with what the report was about |
 | `connection-check.sh` | on the same fixture: the Daily connection check sends nothing, opens no deadline and rings no bell while Telegram's key is valid, tells the owner once and opens one deadline when Telegram refuses it, and closes the deadline when the key is valid again |
+| `chat-tidy-at-night.sh` | a made-up conversation past the limit is made shorter in the assistant's database by the Night chat tidy-up, started by hand, and its log says tidied; the next message is answered with no summary in front; a conversation under the limit is byte-for-byte as it was |
+| `disk-filling.sh` | on the Docker server install, with a small file system over the data folder made to read 86%: the daily connection check says one message naming the three biggest places and opens one deadline, a second run says and opens nothing, at 75% the deadline closes; the cleanup routine then takes the 40-day-old request dump, session transcript and run log and leaves the note, both chats, the backup and the file of a listed session |
+| `missed-routine.sh` | on the fixture Telegram: with one routine whose time passed without a run, one that failed twice and one that failed once, the daily connection check sends one message naming the first two and not the third, a second run sends nothing, and a good run of each closes what was opened |
+| `deadline-closes-itself.sh` | a deadline on the AI's key closes on the next deadline run after the key is replaced in Settings, a deadline about Telegram closes when the connection check passes, and neither key's value is in any log, record or evidence file |
 
 ## Where there is no network
 
@@ -89,7 +98,7 @@ checking itself.
 
 ## The keys three of them need
 
-Named by the job, never in a file here:
+Named by the job, never in a file here (for the four scenarios above that await their jobs, set them by hand):
 
 | scenario | environment | what it is |
 | --- | --- | --- |
@@ -105,6 +114,7 @@ Named by the job, never in a file here:
 | `mail-count` | `GODSPEED_SCENARIO_AI_KEY` | the chat that sets the rule up is the real assistant, so it needs a model |
 | `talk-on-talk-day` | `GODSPEED_SCENARIO_AI_KEY` | the talk the owner asks for is opened by a model; the preparations are fixtures sealed by the coach's own commands |
 | `no-question-he-cannot-judge`, `plain-yes`, `what-was-that` | `GODSPEED_SCENARIO_AI_KEY` | the install's assistant answers the owner on the fixture Telegram through a model; the same two say which. The Telegram account and bot key are the fixture's, never a real one |
+| `chat-tidy-at-night`, `deadline-closes-itself` | `GODSPEED_SCENARIO_AI_KEY` | the tidied chat and the next message need a model; Settings' own replacement of a key tests the new key with one; the same two say which. `missed-routine` and `disk-filling` need none |
 
 `GODSPEED_SCENARIO_AI_URL` and `GODSPEED_SCENARIO_AI_MODEL` have no default: a scenario that needs an AI fails with a plain sentence naming whichever is missing, and it also fails if the URL is on openrouter.ai, so the checks can never spend OpenRouter money. They run on `https://api.anthropic.com/v1` with `claude-haiku-4-5`, set as repository variables, and the key is the secret `GODSPEED_SCENARIO_AI_KEY`.
 
