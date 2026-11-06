@@ -46,6 +46,11 @@ test('a Settings opt-out during an update survives its completion',async t=>{
  const updating=f.updater.runNow();await started;f.updater.setEnabled(false);release();assert.equal((await updating).result,'updated');assert.equal(readHermesUpdate(f.store).enabled,false);assert.deepEqual(await f.updater.runNow(),{result:'skipped',reason:'Keeping the assistant up to date is switched off.'});
 });
 
+test('a Settings opt-out during the nightly update survives its day marker',async t=>{
+ const f=fixture(t);let entered,release;const started=new Promise(resolve=>{entered=resolve;}),held=new Promise(resolve=>{release=resolve;});f.updater.fetcher=async()=>{entered();await held;return {ok:true,json:async()=>releases(['1.1.0','1.2.0-rc.1','2.0.0','1.0.1'])};};
+ const ticking=f.updater.tick('UTC');await started;f.updater.setEnabled(false);release();assert.equal((await ticking).result,'updated');assert.equal(readHermesUpdate(f.store).enabled,false);assert.deepEqual(await f.updater.runNow(),{result:'skipped',reason:'Keeping the assistant up to date is switched off.'});
+});
+
 test('every validation veto rolls back, restores the backup, restarts, and never asks AI twice',async t=>{
  for(const breaks of ['--version','cron list','plugins doctor '+path.join(os.tmpdir(),'unused'),'gateway status']){
   const f=fixture(t,{breaks:breaks==='plugins doctor '+path.join(os.tmpdir(),'unused')?'plugins doctor '+path.join(fixture.name,'unused'):breaks});
