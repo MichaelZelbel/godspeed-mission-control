@@ -653,8 +653,9 @@ test('a reader that runs while the first-start hold is in progress says no old n
 test('Settings lists the routines of an adopted mission control, all off, and a starter-born one has no switches',async t=>{
  const {store,hermes,home}=await adoptedFixture(t),{routineSwitches,setRoutineSwitch,ADOPTED_NOTE,PROVIDER_NOTE}=await import('../core/routine-switches.mjs');
  const listed=routineSwitches(store,{jobs:hermes.jobs()});
- assert.equal(listed.note,ADOPTED_NOTE);assert.equal(listed.routines.length,10);
+ assert.equal(listed.note,ADOPTED_NOTE);assert.equal(listed.routines.length,11);
  assert.ok(listed.routines.every(r=>r.on===false&&r.state==='off'&&r.what));
+ assert.equal(listed.routines.find(r=>r.key==='memory-daily').name,'Remember what you said');
  await setRoutineSwitch(store,{key:'connection-check',on:true});
  assert.equal(routineSwitches(store,{jobs:[]}).routines.find(r=>r.key==='connection-check').state,'waiting');
  await assert.rejects(setRoutineSwitch(store,{key:'nope',on:true}),/Choose one of the routines/);

@@ -197,7 +197,7 @@ export class Domains {
       // many. An assistant ends one it was not asked to correct only when it read that version.
       const changed = all.filter(c => current(c) && (slot.cardinality!=='many'||c.id===input.replaces_claim_id) && (!this.assistant||c.id===input.replaces_claim_id||this.mayChange?.('claims',c)))
         .map(c => this.store.prepare('claims', { valid_to: asOf,closure_evidence }, c));
-      const claim = this.store.prepare('claims', { subject_type, subject_id, attribute, value, valid_from, recorded_on: today, valid_to: null, confidence: 'confirmed', cardinality: slot.cardinality, source_type: input.source_type || 'manual', source_id: input.source_id || null, evidence_quote: input.evidence_quote || null, origin: input.origin || 'user_manual' });
+      const claim = this.store.prepare('claims', { subject_type, subject_id, attribute, value, valid_from, recorded_on: today, valid_to: null, confidence: input.origin === 'remember-what-you-said' && input.confidence === 'likely' ? 'likely' : 'confirmed', cardinality: slot.cardinality, source_type: input.source_type || 'manual', source_id: input.source_id || null, evidence_quote: input.evidence_quote || null, origin: input.origin || 'user_manual' });
       for (const r of [slot, claim]) r.references = this.query.references(r.type, r);
       this.store.commit([...changed, slot, claim]); return { ok: true, facts: [{ attribute, outcome: 'inserted', claimId: claim.id, closed: changed.length }] };
     });

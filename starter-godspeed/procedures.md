@@ -4,16 +4,16 @@
 
 Every installation schedules the nightly cleanup before any goal. The first time you give your
 mission control a goal, in the notebook's "Start with one goal" form or in the chat, it starts
-eight other routines on the computer that runs your routines, on your own clock: the nightly goal
+nine other routines on the computer that runs your routines, on your own clock: the nightly goal
 research, the daily round's two, deadline reminders, the weekly check-in and the coach's
-reminders, the coaching talk preparation and the daily connection check. It does this once on each
+reminders, the coaching talk preparation, Remember what you said and the daily connection check. It does this once on each
 computer that runs your routines: if you add a server later and let it run the routines, the server
-gets the same eight, and your computer's stop. A routine you
+gets the same nine, and your computer's stop. A routine you
 later remove stays removed. A computer whose assistant already ran routines of its own before this
 mission control came, or for another folder, gets none of these; a one-time reminder, and a
 routine you asked for here, such as a morning brief, do not count.
 
-All eight are listed in your notebook under Settings > Routines, each with what it does, when it
+All nine are listed in your notebook under Settings > Routines, each with what it does, when it
 runs next, when it last ran and whether that worked. The nightly cleanup is listed there too;
 pause "Nightly cleanup" directly there, rather than through an adopted mission control's routine
 switches. "Pause" stops one until you press "Resume". You can also ask in the chat: "Pause the
@@ -59,6 +59,21 @@ Off-switch: Pause "Coaching talk preparation" under Settings > Routines.
 Last checked: 2026-10-18, on a fresh Linux installation: the first goal made the routine at 03:00
 and Hermes ran it, and the weekly check-in was prepared the day before, with a stand-in for the
 model. A night prepared by a real model is still to be watched.
+
+### Remember what you said
+
+Does: reads only qualifying messages you typed in prompts/archive/, never their answers, notes or
+mail. At most seven days are read on its first run. It asks the AI you connected to Godspeed to
+return quote-backed facts and events as JSON, then checks every quote against the archived message,
+refuses redacted or private material, and files only evidenced items. It never sends a request when
+you have not connected an AI.
+Rhythm: every day at 03:40, your time zone, after prompt harvesting and before the daily fact
+closing. It says nothing to you.
+Lands: in your notebook as dated facts and timeline events, or in world/ when the notebook is not
+connected. Its portable read position, pending work and dated receipts live under
+routines/remember-what-you-said/ so another computer that runs your routines continues safely.
+Facts and events retain the exact supporting quote and archive source.
+Off-switch: Pause "Remember what you said" under Settings > Routines.
 
 ### Daily round
 
