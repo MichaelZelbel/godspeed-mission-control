@@ -10,7 +10,10 @@ for(const key of Object.keys(process.env))if(/^(GODSPEED_|HERMES_)/.test(key))de
 // deadlines (the real tools/due.js) and the records are real. Everything here is made up.
 const TOKEN='123456789:AAHinventedtokeninventedtokeninvented';
 const fixture=t=>{const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-connection-check-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));installStarter(root);return {root,store:new Store(root,{device:'pc'})};};
-const stubs=(over={})=>({ai:async()=>({set_up:true,ok:true}),telegram:async()=>({set_up:true,ok:true}),github:async()=>({set_up:true,ok:true}),mail:async()=>({set_up:true,ok:true}),agentmail:async()=>({set_up:true,ok:true}),phone:async()=>({set_up:false}),...over});
+// One probe for every source the check really has, so a newly added source can never be missing from a fixture: all fine, except the phone, which is not set up.
+const SOURCES=Object.keys(CONNECTIONS);
+const probesFor=make=>Object.fromEntries(SOURCES.map(name=>[name,make(name)]));
+const stubs=(over={})=>({...probesFor(name=>name==='phone'?async()=>({set_up:false}):async()=>({set_up:true,ok:true})),...over});
 const refused=async()=>({set_up:true,ok:false,kind:'sign-in'}),down=async()=>({set_up:true,ok:false,kind:'other'});
 const deadlines=store=>addonDeadlines(store,{addon:'connection-check',action:'list'}).deadlines;
 const bell=(store,name)=>store.get('notifications','connection-'+name);
@@ -27,7 +30,7 @@ test('all connections working: nothing is said and no deadline is made',async t=
 
 test('a connection that is not set up is not called and not mentioned',async t=>{
  const {store}=fixture(t);
- const record=await checkConnections({store,day:D1,probes:{ai:async()=>({set_up:false}),telegram:async()=>({set_up:false}),github:async()=>({set_up:false}),mail:async()=>({set_up:false}),agentmail:async()=>({set_up:false}),phone:async()=>({set_up:false})}});
+ const record=await checkConnections({store,day:D1,probes:probesFor(()=>async()=>({set_up:false}))});
  assert.deepEqual(Object.values(record.connections),[{set_up:false},{set_up:false},{set_up:false},{set_up:false},{set_up:false},{set_up:false}]);
  assert.deepEqual(readNotices(store),[]);
 });
@@ -350,8 +353,8 @@ test('a notice that cannot be stored does not stop the connections after it, and
  const file=path.join(store.state,'notices.json');
  fs.rmSync(file,{force:true});fs.mkdirSync(file);
  const called=[],spy=name=>async()=>{called.push(name);return {set_up:true,ok:true};};
- await assert.rejects(checkConnections({store,day:D2,probes:{ai:async()=>{called.push('ai');return {set_up:true,ok:false,kind:'other'};},telegram:spy('telegram'),github:spy('github'),mail:spy('mail')}}));
- assert.deepEqual(called,['ai','telegram','github','mail']);
+ await assert.rejects(checkConnections({store,day:D2,probes:{...probesFor(spy),ai:async()=>{called.push('ai');return {set_up:true,ok:false,kind:'other'};}}}));
+ assert.deepEqual(called,SOURCES);
  fs.rmSync(file,{recursive:true});
  await checkConnections({store,day:D2,probes:stubs({ai:down,telegram:refused})});
  assert.equal(readNotices(store).filter(n=>/ai-other/.test(n.id)).length,1);
@@ -362,8 +365,8 @@ test('a recovery marker that cannot be written does not stop the connections aft
  await checkConnections({store,day:D1,probes:stubs({ai:refused})});
  fs.writeFileSync(path.join(root,'.godspeed','connection-check'),'');
  const called=[],spy=name=>async()=>{called.push(name);return {set_up:true,ok:true};};
- await assert.rejects(checkConnections({store,day:D2,probes:{ai:spy('ai'),telegram:spy('telegram'),github:spy('github'),mail:spy('mail')}}),/ai/);
- assert.deepEqual(called,['ai','telegram','github','mail']);
+ await assert.rejects(checkConnections({store,day:D2,probes:probesFor(spy)}),/ai/);
+ assert.deepEqual(called,SOURCES);
  fs.rmSync(path.join(root,'.godspeed','connection-check'));
  await checkConnections({store,day:D3,probes:stubs()});
  assert.equal(deadlines(store).find(d=>/^ai:/.test(d.key)).state,'closed','the deadline is still pending after the failed day, so the next working day closes it');
