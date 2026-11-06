@@ -73,13 +73,7 @@ restart_notebook() {
 }
 
 record_releases() {
-  "$NODE" - "$EVIDENCE/releases" >"$EVIDENCE/releases.json" <<'NODE'
-const {execFileSync}=require('child_process');const dir=process.argv[2];
-const healthy={"1.0.0":true,"1.1.0":true,"1.2.0":false,"1.3.0":true};
-const now=Date.parse('2026-11-07T04:15:30Z');
-const lines=execFileSync('git',['-C',dir,'for-each-ref','--format=%(refname:short)\t%(creatordate:iso-strict)','refs/tags'],{encoding:'utf8'}).trim().split(/\r?\n/);
-console.log(JSON.stringify(lines.map(line=>{const [tag,published]=line.split('\t'),version=tag.replace(/^v/,'');return {version,healthy:healthy[version],age_days:Math.floor((now-Date.parse(published))/86400000)};})));
-NODE
+  node "$HERE/hermes-update-fixture.mjs" --dir "$EVIDENCE/releases" --metadata >"$EVIDENCE/releases.json"
 }
 
 night_ready() { # <day>

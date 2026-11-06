@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # PROVING SCENARIO: a local pretend Hevy imports made-up workouts on both supported installs.
-# Kept: setup.json, fixture-health.json, docker.json, native.json, fixture.log and key-scan.json. The checker reads only
-# these files so a future add-on change cannot make its own proof pass.
+# Kept: setup.json, fixture-health.json, docker.json, native.json, fixture.log and key-scan.json. The platform records
+# retain refused-key scan paths as well, so the checker reads only durable observations a future add-on cannot make pass.
 SCENARIO=workouts-from-hevy
 . "$(dirname "$0")/scenario-lib.sh"
 # shellcheck source=scenarios/numbers-lib.sh
@@ -35,7 +35,8 @@ try {
  for(const name of ['docker','native']){
   const x=read(`${name}.json`);
   if(x.platform!==name)fail(`${name} evidence does not identify its installation`);
-  if(x.settings?.refused?.accepted!==false||x.settings?.refused?.retained!==false)fail(`${name} retained or accepted the refused key`);
+  const refused=x.settings?.refused;
+  if(refused?.accepted!==false||refused?.retained!==false||!Array.isArray(refused?.paths)||refused.paths.some(path=>typeof path!=='string')||refused.paths.length)fail(`${name} retained or accepted the refused key`);
   if(x.settings?.accepted?.accepted!==true)fail(`${name} did not accept the fixture key through Settings`);
   if(x.collection?.name!=='Workouts')fail(`${name} did not create one Workouts collection`);
   const rows=x.collection.rows;
@@ -106,13 +107,13 @@ settings_post() { # <docker|native> <json file> <answer file>
 }
 
 refused_not_retained() { # <docker|native>
-  local platform=$1 found
+  local platform=$1 key='refused-scenario-key' found paths=$EVIDENCE/.$1-refused-key-paths
   case $platform in
-    docker) found=$(in_server sh -c 'find /opt/data /root/.hermes -type f -name hevy.json -print 2>/dev/null' 2>/dev/null || true) ;;
-    native) found=$(find "$ROOT" "$STATE" "$HERMES" -type f -name hevy.json -print 2>/dev/null || true) ;;
+    docker) found=$(in_server sh -c "grep -rlF -- '$key' /opt/data /root/.hermes 2>/dev/null || true" 2>/dev/null || true) ;;
+    native) found=$(grep -rlF -- "$key" "$ROOT" "$STATE" "$HERMES" 2>/dev/null || true) ;;
   esac
-  [ -z "$found" ] || fail "$platform kept the refused Hevy key in $(head -n 1 <<<"$found")"
-  printf 'absent\n' >"$EVIDENCE/.$platform-refused-retained"
+  printf '%s\n' "$found" | sed '/^$/d' | sort -u >"$paths"
+  [ ! -s "$paths" ] || fail "$platform kept the refused Hevy key in $(head -n 1 "$paths")"
 }
 
 workout_snapshot() { # <docker|native> <file> <routine file> <exit file>
@@ -182,12 +183,13 @@ platform_before() { # <docker|native> <accepted settings json>
 }
 
 platform_after() { # <docker|native>
-  local platform=$1 response=$EVIDENCE/$platform-accepted.json before=$EVIDENCE/.$platform-before.json after=$EVIDENCE/.$platform-after.json routine=$EVIDENCE/.$platform-routine retained=$EVIDENCE/.$platform-refused-retained
+  local platform=$1 response=$EVIDENCE/$platform-accepted.json before=$EVIDENCE/.$platform-before.json after=$EVIDENCE/.$platform-after.json routine=$EVIDENCE/.$platform-routine refused_paths=$EVIDENCE/.$platform-refused-key-paths
   workout_snapshot "$platform" "$after" "$routine" "$EVIDENCE/.$platform-manual-exit"
-  "$NODE" - "$before" "$after" "$response" "$EVIDENCE/.$platform-manual-exit" "$retained" "$EVIDENCE/$platform.json" <<'NODE'
+  "$NODE" - "$before" "$after" "$response" "$EVIDENCE/.$platform-manual-exit" "$refused_paths" "$EVIDENCE/$platform.json" <<'NODE'
 const fs=require('fs');const read=file=>JSON.parse(fs.readFileSync(file,'utf8'));
 const before=read(process.argv[2]),after=read(process.argv[3]);
-fs.writeFileSync(process.argv[7],JSON.stringify({...before,settings:{refused:{accepted:false,retained:fs.readFileSync(process.argv[6],'utf8').trim()!=='absent'},accepted:{accepted:true}},manual_run:{exit:Number(fs.readFileSync(process.argv[5],'utf8'))},after:{rows:after.collection?.rows||[]}})+'\n');
+const paths=fs.readFileSync(process.argv[6],'utf8').trim().split(/\r?\n/).filter(Boolean);
+fs.writeFileSync(process.argv[7],JSON.stringify({...before,settings:{refused:{accepted:false,retained:paths.length!==0,paths},accepted:{accepted:true}},manual_run:{exit:Number(fs.readFileSync(process.argv[5],'utf8'))},after:{rows:after.collection?.rows||[]}})+'\n');
 NODE
 }
 

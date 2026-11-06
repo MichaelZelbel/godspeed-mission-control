@@ -3351,13 +3351,15 @@ wh_good() {
   printf '{"method":"GET","path":"/v1/workouts","status":401,"accepted":false}\n{"method":"GET","path":"/v1/workouts","status":200,"accepted":true}\n' >"$f/fixture.log"
   printf '{"clean":true,"paths":[]}\n' >"$f/key-scan.json"
   for platform in docker native; do
-    printf '{"platform":"%s","settings":{"refused":{"accepted":false,"retained":false},"accepted":{"accepted":true}},"collection":{"name":"Workouts","rows":[{"source_id":"harbor-strength","title":"Harbor Strength","exercise":"Scenario Squat","set":{"weight_kg":42,"reps":8}},{"source_id":"canal-pull","title":"Canal Pull","exercise":"Scenario Row","set":{"weight_kg":31,"reps":10}}]},"routine":{"name":"Workouts from Hevy","minute":17,"script":"scenario-import","count":1},"manual_run":{"exit":0},"after":{"rows":[{"source_id":"harbor-strength","title":"Harbor Strength","exercise":"Scenario Squat","set":{"weight_kg":45,"reps":8}}]}}\n' "$platform" >"$f/$platform.json"
+    printf '{"platform":"%s","settings":{"refused":{"accepted":false,"retained":false,"paths":[]},"accepted":{"accepted":true}},"collection":{"name":"Workouts","rows":[{"source_id":"harbor-strength","title":"Harbor Strength","exercise":"Scenario Squat","set":{"weight_kg":42,"reps":8}},{"source_id":"canal-pull","title":"Canal Pull","exercise":"Scenario Row","set":{"weight_kg":31,"reps":10}}]},"routine":{"name":"Workouts from Hevy","minute":17,"script":"scenario-import","count":1},"manual_run":{"exit":0},"after":{"rows":[{"source_id":"harbor-strength","title":"Harbor Strength","exercise":"Scenario Squat","set":{"weight_kg":45,"reps":8}}]}}\n' "$platform" >"$f/$platform.json"
   done
 }
 wh_good "$WH/good"
 passes 'both installs import, update and delete made-up Hevy workouts' workouts-from-hevy "$WH/good" 'Docker and Linux each kept Harbor Strength updated'
 copy "$WH/good" "$WH/refused-kept"; sed -i 's/"retained":false/"retained":true/' "$WH/refused-kept/native.json"
 refuses 'a refused key retained' workouts-from-hevy "$WH/refused-kept" 'native retained or accepted'
+copy "$WH/good" "$WH/refused-in-settings"; sed -i 's/"paths":\[\]/"paths":["\/opt\/data\/settings.json"]/' "$WH/refused-in-settings/docker.json"
+refuses 'a refused key kept outside hevy.json' workouts-from-hevy "$WH/refused-in-settings" 'docker retained or accepted'
 copy "$WH/good" "$WH/no-workout"; sed -i 's/"source_id":"canal-pull"/"source_id":"missing-row"/' "$WH/no-workout/docker.json"
 refuses 'a malformed initial workout' workouts-from-hevy "$WH/no-workout" 'initial workouts have the wrong source ids'
 copy "$WH/good" "$WH/no-routine"; sed -i 's/"minute":17/"minute":0/' "$WH/no-routine/native.json"
@@ -3376,6 +3378,10 @@ copy "$WH/good" "$WH/unhealthy-fixture"; printf '{"ok":false}\n' >"$WH/unhealthy
 refuses 'an unhealthy retained Hevy health response' workouts-from-hevy "$WH/unhealthy-fixture" 'health response is not healthy'
 copy "$WH/good" "$WH/status-less-refusal"; sed -i 's/"status":401,//' "$WH/status-less-refusal/fixture.log"
 refuses 'a refusal without its observed HTTP 401' workouts-from-hevy "$WH/status-less-refusal" 'HTTP 401 observation'
+copy "$WH/good" "$WH/wrong-path-refusal"; printf '{"method":"GET","path":"/v1/user/info","status":401,"accepted":false}\n{"method":"GET","path":"/v1/workouts","status":200,"accepted":true}\n' >"$WH/wrong-path-refusal/fixture.log"
+refuses 'a 401 from another fixture path' workouts-from-hevy "$WH/wrong-path-refusal" 'refused GET /v1/workouts HTTP 401 observation'
+copy "$WH/good" "$WH/accepted-refusal"; printf '{"method":"GET","path":"/v1/workouts","status":401,"accepted":true}\n{"method":"GET","path":"/v1/workouts","status":200,"accepted":true}\n' >"$WH/accepted-refusal/fixture.log"
+refuses 'a 401 accepted by the fixture' workouts-from-hevy "$WH/accepted-refusal" 'refused GET /v1/workouts HTTP 401 observation'
 
 section 'day becomes facts'
 DF2=$TMP/df2
@@ -3450,12 +3456,16 @@ if node "$ROOT/scenarios/hermes-update-fixture.mjs" --dir "$HFD" >/dev/null \
   && [ "$(HERMES_FIXTURE_LOG=$HFD_LOG "$HFD/bin/hermes" --version)" = 1.0.0 ] \
   && [ "$(HERMES_FIXTURE_LOG=$HFD_LOG "$HFD/bin/hermes" update --check)" = 1.1.0 ] \
   && HERMES_FIXTURE_LOG=$HFD_LOG "$HFD/bin/hermes" update 1.2.0 \
+  && [ "$(git -C "$HFD" describe --exact-match --tags HEAD)" = v1.2.0 ] \
   && ! HERMES_FIXTURE_LOG=$HFD_LOG "$HFD/bin/hermes" cron list >/dev/null 2>&1 \
   && git -C "$HFD" checkout -q v1.1.0 \
+  && HERMES_FIXTURE_LOG=$HFD_LOG "$HFD/bin/hermes" update --backup \
+  && [ "$(git -C "$HFD" describe --exact-match --tags HEAD)" = v1.1.0 ] \
   && HERMES_FIXTURE_LOG=$HFD_LOG "$HFD/bin/hermes" cron list >/dev/null \
   && [ "$(HERMES_FIXTURE_LOG=$HFD_LOG "$HFD/bin/hermes" chat)" = 'Scenario answer' ] \
   && node "$ROOT/scenarios/hermes-update-fixture.mjs" --dir "$HFD" --reveal 1.3.0 >/dev/null \
   && [ "$(HERMES_FIXTURE_LOG=$HFD_LOG "$HFD/bin/hermes" update --check)" = 1.3.0 ] \
+  && [ "$(node "$ROOT/scenarios/hermes-update-fixture.mjs" --dir "$HFD" --metadata)" = '[{"version":"1.0.0","healthy":true,"age_days":18},{"version":"1.1.0","healthy":true,"age_days":9},{"version":"1.2.0","healthy":false,"age_days":8},{"version":"1.3.0","healthy":true,"age_days":3}]' ] \
   && ! grep -qE 'key|token|secret' "$HFD_LOG"; then
   ok 'the local Hermes fixture versions, checks, breaks, answers, reveals and redacts'
 else

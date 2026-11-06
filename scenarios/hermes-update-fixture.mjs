@@ -11,8 +11,20 @@ const option = name => {
 const dir = option('--dir');
 const reveal = option('--reveal');
 const log = option('--log');
+const metadata = process.argv.includes('--metadata');
 if (!dir) throw new Error('usage: hermes-update-fixture.mjs --dir <folder> [--reveal <version>]');
 const git = (...args) => execFileSync('git', ['-C', dir, ...args], { stdio: 'ignore' });
+
+if (metadata) {
+  const now = Date.parse('2026-11-07T04:15:30Z');
+  const tags = execFileSync('git', ['-C', dir, 'tag', '--list', '--sort=v:refname'], { encoding: 'utf8' }).trim().split(/\r?\n/).filter(Boolean);
+  const releases = tags.map(tag => {
+    const release = JSON.parse(execFileSync('git', ['-C', dir, 'show', `${tag}:release.json`], { encoding: 'utf8' }));
+    return { version: release.version, healthy: release.healthy, age_days: Math.floor((now - Date.parse(release.published)) / 86400000) };
+  });
+  process.stdout.write(`${JSON.stringify(releases)}\n`);
+  process.exit(0);
+}
 
 if (reveal) {
   const state = JSON.parse(await readFile(join(dir, 'fixture-state.json'), 'utf8'));
@@ -28,8 +40,8 @@ git('init', '-q'); git('config', 'user.name', 'Scenario'); git('config', 'user.e
 const command = `#!/bin/sh
 set -eu
 root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
-logfile=$(node -p "try{require('$root/fixture-state.json').log||''}catch(e){''}")
-log() { target=\${HERMES_FIXTURE_LOG:-\$logfile}; [ -z "\$target" ] || printf '%s\\n' "$*" >>"\$target"; }
+fixture_log=$(node -p "try{require('$root/fixture-state.json').log||''}catch(e){''}")
+log() { destination=\${HERMES_FIXTURE_LOG:-\$fixture_log}; [ -z "\$destination" ] || printf '%s\\n' "$*" >>"\$destination"; }
 version=$(node -p "require('$root/release.json').version")
 healthy=$(node -p "require('$root/release.json').healthy")
 case "\${1:-}" in
@@ -39,7 +51,7 @@ case "\${1:-}" in
       --check)
         reveal=$(node -p "try{require('$root/fixture-state.json').reveal}catch(e){'1.1.0'}")
         log "update-check $reveal"; printf '%s\\n' "$reveal" ;;
-      *) if [ "\${2:-}" = --backup ]; then target=$(node -p "try{require('$root/fixture-state.json').reveal}catch(e){'1.1.0'}"); else target=\${2#v}; fi; log "update $target"; git -C "$root" checkout -q "v$target" ;;
+      *) if [ "\${2:-}" = --backup ]; then release=$(node -p "try{require('$root/fixture-state.json').reveal}catch(e){'1.1.0'}"); else release=\${2#v}; fi; log "update $release"; git -C "$root" checkout -q "v$release" ;;
     esac ;;
   backup) log "backup $version" ;;
   cron)
