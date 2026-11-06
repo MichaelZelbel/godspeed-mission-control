@@ -3360,6 +3360,21 @@ copy "$WH/good" "$WH/refused-kept"; sed -i 's/"retained":false/"retained":true/'
 refuses 'a refused key retained' workouts-from-hevy "$WH/refused-kept" 'native retained or accepted'
 copy "$WH/good" "$WH/refused-in-settings"; sed -i 's/"paths":\[\]/"paths":["\/opt\/data\/settings.json"]/' "$WH/refused-in-settings/docker.json"
 refuses 'a refused key kept outside hevy.json' workouts-from-hevy "$WH/refused-in-settings" 'docker retained or accepted'
+RFS=$WH/refused-scan
+mkdir -p "$RFS/root/.godspeed" "$RFS/assistant"
+printf '{"home":"%s"}\n' "$RFS/assistant" >"$RFS/root/.godspeed/assistant.json"
+printf 'refused-scenario-key\n' >"$RFS/assistant/settings.json"
+REFUSED_SCAN=$(GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy bash -c '
+  . "$0"
+  install_paths
+  EVIDENCE=$1
+  refused_not_retained native
+' "$ROOT/scenarios/workouts-from-hevy.sh" "$RFS" 2>&1)
+REFUSED_SCAN_CODE=$?
+case "$REFUSED_SCAN_CODE $REFUSED_SCAN" in
+  "1 "*"native kept the refused Hevy key in $RFS/assistant/settings.json"*) ok "a refused key in the recorded native assistant home fails with its path" ;;
+  *) bad "a refused key in the recorded native assistant home was not refused (exit $REFUSED_SCAN_CODE: $REFUSED_SCAN)" ;;
+esac
 copy "$WH/good" "$WH/no-workout"; sed -i 's/"source_id":"canal-pull"/"source_id":"missing-row"/' "$WH/no-workout/docker.json"
 refuses 'a malformed initial workout' workouts-from-hevy "$WH/no-workout" 'initial workouts have the wrong source ids'
 copy "$WH/good" "$WH/no-routine"; sed -i 's/"minute":17/"minute":0/' "$WH/no-routine/native.json"

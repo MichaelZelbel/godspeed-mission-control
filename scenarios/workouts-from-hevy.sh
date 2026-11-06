@@ -6,7 +6,6 @@ SCENARIO=workouts-from-hevy
 . "$(dirname "$0")/scenario-lib.sh"
 # shellcheck source=scenarios/numbers-lib.sh
 . "$(dirname "$0")/numbers-lib.sh"
-scenario_arguments "$@"
 
 check() {
   local folder=$1
@@ -110,7 +109,10 @@ refused_not_retained() { # <docker|native>
   local platform=$1 key='refused-scenario-key' found paths=$EVIDENCE/.$1-refused-key-paths
   case $platform in
     docker) found=$(in_server sh -c "grep -rlF -- '$key' /opt/data /root/.hermes 2>/dev/null || true" 2>/dev/null || true) ;;
-    native) found=$(grep -rlF -- "$key" "$ROOT" "$STATE" "$HERMES" 2>/dev/null || true) ;;
+    native)
+      assistant_home
+      found=$(grep -rlF -- "$key" "$ROOT" "$STATE" "$HERMES" 2>/dev/null || true)
+      ;;
   esac
   printf '%s\n' "$found" | sed '/^$/d' | sort -u >"$paths"
   [ ! -s "$paths" ] || fail "$platform kept the refused Hevy key in $(head -n 1 "$paths")"
@@ -249,4 +251,7 @@ act() {
   check "$EVIDENCE"
 }
 
-if [ "$CHECK_ONLY" = yes ]; then install_paths; check "$EVIDENCE"; else act; fi
+if [ "${BASH_SOURCE[0]}" = "$0" ]; then
+  scenario_arguments "$@"
+  if [ "$CHECK_ONLY" = yes ]; then install_paths; check "$EVIDENCE"; else act; fi
+fi
