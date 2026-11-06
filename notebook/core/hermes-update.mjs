@@ -108,6 +108,12 @@ export class HermesUpdate{
   const restored=await this.command(eligible.executable,['import',backup,'--force'],{cwd:eligible.source,timeoutMs:UPDATE_LIMIT});if(restored.code!==0)return false;
   const restart=await this.command(eligible.executable,['gateway','restart'],{cwd:eligible.source,timeoutMs:120000});return restart.code===0;
  }
+ async applyRelease(eligible,target){
+  const fetched=await this.git(['fetch','origin','tag',target.tag],eligible.source);if(fetched.code!==0)return {ok:false,...failure({step:'Hermes release fetch',result:fetched})};
+  const reset=await this.git(['reset','--hard','FETCH_HEAD'],eligible.source);if(reset.code!==0)return {ok:false,...failure({step:'Hermes release checkout',result:reset})};
+  const {python}=hermesPython({executable:eligible.executable,sourceRoot:eligible.source,home:this.descriptor.home});if(!python)return {ok:false,step:'Hermes dependencies',output:'Hermes Python could not be found.'};
+  const dependencies=await this.command(python,['-m','uv','pip','install','-e','.[all]'],{cwd:eligible.source,timeoutMs:UPDATE_LIMIT});return dependencies.code===0?{ok:true}:{ok:false,...failure({step:'Hermes dependencies',result:dependencies})};
+ }
  async runNow(){
   if(this.running)return {result:'skipped',reason:'A Hermes update is already running.'};
   if(this.isBusy())return {result:'skipped',reason:'Godspeed is still handling a chat or routine.'};
@@ -116,9 +122,7 @@ export class HermesUpdate{
   const release=this.lifecycle?.acquire('assistant update');if(this.lifecycle&&!release)return {result:'skipped',reason:'Godspeed is still handling a chat or routine.'};
   const lock=path.join(this.store.state,'hermes-update.lock');let fd;
   try{fd=fs.openSync(lock,'wx');fs.writeFileSync(fd,String(process.pid));}catch{
-   let stale=false;try{stale=Date.now()-fs.statSync(lock).mtimeMs>UPDATE_TRANSACTION_LIMIT;}catch{}
-   if(!stale){release?.();return {result:'skipped',reason:'A Hermes update is already running.'};}
-   try{fs.unlinkSync(lock);fd=fs.openSync(lock,'wx');fs.writeFileSync(fd,String(process.pid));}catch{release?.();return {result:'skipped',reason:'A Hermes update is already running.'};}
+   release?.();return {result:'skipped',reason:'A Hermes update is already running.'};
   }
   this.running=this.runTransaction().catch(error=>this.record({result:'failed',reason:'Hermes update could not finish.',detail:scrubCredentials(errorText({error})).trim().slice(-2000)}));
   try{return await this.running;}finally{this.running=null;try{fs.closeSync(fd);}catch{}try{fs.unlinkSync(lock);}catch{}release?.();}
@@ -145,8 +149,8 @@ export class HermesUpdate{
    const restart=await this.command(eligible.executable,['gateway','restart'],{cwd:eligible.source});
    return this.record(restart.code===0?{result:'failed',version:installed,reason:'Hermes could not make its pre-update backup.',detail:backup.error.output}:{result:'failed',version:installed,reason:'Hermes could not restart its chat gateway.',detail:failure({step:'chat gateway restart',result:restart}).output});
   }
-  const updated=await this.command(eligible.executable,['update','--no-backup','--yes'],{cwd:eligible.source,timeoutMs:UPDATE_LIMIT});
-  let checked=updated.code===0?null:{ok:false,...failure({step:'Hermes update',result:updated})};
+  const updated=await this.applyRelease(eligible,target);
+  let checked=updated.ok?null:updated;
   if(!checked){const restart=await this.command(eligible.executable,['gateway','restart'],{cwd:eligible.source});checked=restart.code===0?await this.validate({expect:target.version}):{ok:false,...failure({step:'chat gateway restart',result:restart})};}
   if(checked.ok){this.removeOlderBackup(this.state().backup,backup.file);this.settle();return this.record({result:'updated',version:target.version,backup:backup.file});}
   const rolledBack=await this.rollback(eligible,eligible.head,backup.file);
