@@ -121,17 +121,18 @@ accepted upload, it also reads that local receipt; it does not call your phone. 
 key is refused, it tells you once and sets a deadline, and that deadline closes itself the first
 morning the connection works again. If the phone has sent no health data for 36 hours, it tells you
 once and sets a deadline; the next accepted upload closes it. Any other failure is reported only
-when it happens two mornings in a row. When everything works, it sends nothing. It runs no AI of
-its own.
+when it happens two mornings in a row. It also reads Hermes' local jobs list and tells you once
+when an enabled routine missed its time or failed twice in a row; a successful run closes that
+notice. When everything works, it sends nothing. It runs no AI of its own.
 Rhythm: it joins the other seven at the notebook's next scheduling round after your first goal.
 Every day at 05:00 your time, earlier when a morning brief set before 05:30 needs it first.
-It starts running when Telegram or Gmail is connected, a tracker has a mail rule, or Health Auto
-Export has sent an accepted upload, and waits paused while none is; once one of them is in place,
-it resumes by itself, unless you paused or resumed it yourself.
+It starts running when Telegram or Gmail is connected, a tracker has a mail rule, Health Auto
+Export has sent an accepted upload, or another routine is active, and waits paused while none is;
+once one of them is in place, it resumes by itself, unless you paused or resumed it yourself.
 Lands: in your Telegram chat when your assistant has Telegram connected, otherwise in your notebook.
 Lives: Hermes' schedule on the computer that runs your routines.
 May: make one harmless call to each network connection, read the phone's local accepted-upload
-receipt, and set or close the deadline that goes with it.
+receipt and Hermes' local jobs list, and set or close the deadline that goes with it.
 Off-switch: Pause "Daily connection check" under Settings > Routines.
 Last checked: 2026-11-05, source tests (2.0.0-beta.17); its first run on a real install is the
 release's scenario "connection-check".

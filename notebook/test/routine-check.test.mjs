@@ -22,6 +22,25 @@ test('a daily routine last run 30 hours ago is told once, and 20 hours ago says 
  check(f,[daily('late'),daily('fine',{schedule:{kind:'cron',expr:'0 9 * * *'},last_run_at:ago(20),next_run_at:ahead(4)})]);assert.equal(said(f).length,1,'the same spell is not told again');
 });
 
+test('a first run is quiet until an occurrence after it was made is overdue',()=>{
+ for(const schedule of [{kind:'cron',expr:'0 23 * * *'},{kind:'interval',minutes:1440}]){
+  const job=daily('first',{schedule,created_at:'2026-11-04T23:30:00Z',last_run_at:null,last_status:null,next_run_at:'2026-11-05T23:00:00Z'});
+  assert.equal(routineFinding(job,{},{now:NOW,day:DAY,timezone:'UTC'}).found,null);
+ }
+});
+
+test('an advanced stepped-cron next run still reports its latest missed occurrence',()=>{
+ const job=daily('stepped',{schedule:{kind:'cron',expr:'*/15 * * * *'},last_run_at:'2026-11-05T03:30:00Z',next_run_at:'2026-11-05T05:15:00Z'});
+ const {found}=routineFinding(job,{},{now:NOW,day:DAY,timezone:'UTC'});
+ assert.match(found.words,/Thursday 5 November at 04:45/);
+});
+
+test("a prior cron occurrence keeps the owner's non-UTC clock",()=>{
+ const job=daily('berlin',{last_run_at:'2026-11-03T22:00:00Z',next_run_at:'2026-11-05T22:00:00Z'});
+ const {found}=routineFinding(job,{},{now:NOW,day:DAY,timezone:'Europe/Berlin'});
+ assert.match(found.words,/Wednesday 4 November at 23:00/);
+});
+
 test('one failure says nothing; two are told once with the error in plain words',t=>{
  const f=fixture(t);
  check(f,[failing('a',1)]);assert.equal(said(f).length,0);
