@@ -31,7 +31,8 @@ describe("Health data from your phone in Settings", () => {
     expect(await screen.findByLabelText("Address for Health Auto Export")).toHaveValue("https://notes.example.test/ingest/madeUpTokenOne");
     fireEvent.click(screen.getByRole("button", { name: "Make a new address" }));
     await waitFor(() => expect(screen.getByLabelText("Address for Health Auto Export")).toHaveValue("https://notes.example.test/ingest/madeUpTokenTwo"));
-    expect(calls.filter(c => c.route === "phone-health/renew")).toHaveLength(1);
+    expect(calls.filter(c => c.route === "phone-health/renew")).toEqual([{ route: "phone-health/renew", method: "POST" }]);
+    expect(calls.find(c => c.route === "phone-health")?.method).toBe("GET");
   });
 
   it("keeps the old address when the new one is not confirmed", async () => {
@@ -65,7 +66,7 @@ describe("Health data from your phone in Settings", () => {
     expect(await screen.findByText(/uploads from your phone are switched off/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Make a new address" }));
     await waitFor(() => expect(screen.getByLabelText("Address for Health Auto Export")).toHaveValue("https://notes.example.test/ingest/madeUpTokenTwo"));
-    expect(calls.filter(c => c.route === "phone-health/renew")).toHaveLength(1);
+    expect(calls.filter(c => c.route === "phone-health/renew")).toEqual([{ route: "phone-health/renew", method: "POST" }]);
   });
 
   it("says on Windows that the phone needs the server install, with no button", async () => {
