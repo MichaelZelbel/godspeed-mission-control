@@ -19,6 +19,8 @@ import subprocess
 import sys
 import tempfile
 import time
+import urllib.error
+import urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
@@ -831,6 +833,33 @@ def test_nothing_to_do():
           and "stays out of its way" in r["log"])
 
 
+def test_fake_api_evidence():
+    token = "123:record-token"
+    fk = fake_telegram.Fake(token, {"users": USERS})
+    srv = fake_telegram.serve(fk)
+    api = "http://127.0.0.1:%d" % srv.server_address[1]
+    try:
+        def call(path, body):
+            req = urllib.request.Request(api + path, data=json.dumps(body).encode(), headers={"Content-Type": "application/json"})
+            return urllib.request.urlopen(req).read()
+        call("/bot%s/sendMessage" % token, {"chat_id": 111, "text": "private setup key", "reply_markup": {"inline_keyboard": [[{"text": "Yes", "callback_data": "yes"}]]}})
+        with fk.cv:
+            fk.act({"from": 111, "press": "yes"})
+        call("/bot%s/getUpdates" % token, {"offset": 1})
+        try:
+            call("/botwrong/getMe", {})
+        except urllib.error.HTTPError as error:
+            check("the fake API refuses a wrong token", error.code == 401)
+        record = json.dumps({"requests": fk.requests, "sent": fk.sent})
+        check("the fake API records ordered authorized and refused requests without token or text",
+              [r["method"] for r in fk.requests] == ["sendMessage", "getUpdates", "getMe"]
+              and [r["authorized"] for r in fk.requests] == [True, True, False]
+              and token not in record and "private setup key" not in json.dumps(fk.requests))
+        check("the fake API keeps callback updates and message buttons", fk.updates and fk.sent[0]["buttons"] == ["yes"])
+    finally:
+        srv.shutdown()
+
+
 if __name__ == "__main__":
     test_codes()
     test_happy()
@@ -847,6 +876,7 @@ if __name__ == "__main__":
     test_backup_chatgpt_and_remove()
     test_backup_time_up()
     test_nothing_to_do()
+    test_fake_api_evidence()
     print()
     if FAILS:
         print("%d FAILED" % FAILS)

@@ -29,7 +29,7 @@ class Fake:
     def __init__(self, token, scenario, record=None):
         self.token = token
         self.cv = threading.Condition()
-        self.updates, self.sent, self.edits, self.calls, self.deleted = [], [], [], {}, []
+        self.updates, self.sent, self.edits, self.calls, self.deleted, self.requests = [], [], [], {}, [], []
         self.actions = []   # sendChatAction: {"t": time, "chat_id": ..., "action": "typing"}
         self.files = {}
         self.next_update, self.next_msg = 1, 100
@@ -108,6 +108,13 @@ class Fake:
                             self.act(a)
                 self.save()
                 return {"message_id": m["message_id"], "chat": {"id": m["chat_id"]}, "text": m["text"]}
+            if method == "sendDocument":
+                m = {"chat_id": p.get("chat_id"), "text": p.get("caption", ""), "message_id": self.next_msg,
+                     "buttons": [], "labels": [], "t": time.time()}
+                self.next_msg += 1
+                self.sent.append(m)
+                self.save()
+                return {"message_id": m["message_id"], "chat": {"id": m["chat_id"]}}
             if method == "sendChatAction":
                 self.actions.append({"t": time.time(), "chat_id": p.get("chat_id"), "action": p.get("action")})
             if method == "deleteMessage":
@@ -117,11 +124,24 @@ class Fake:
                 self.save()
             return True
 
+    def request(self, method, authorized, p):
+        # Evidence names the API operation and safe message metadata only.  In particular it never
+        # retains the path token or inbound text, which can carry a provider key during setup.
+        safe = {"method": method, "authorized": authorized, "t": time.time()}
+        if "chat_id" in p:
+            safe["chat_id"] = p["chat_id"]
+        if "message_id" in p:
+            safe["message_id"] = p["message_id"]
+        if method == "sendMessage":
+            safe["buttons"] = sum(len(row) for row in ((p.get("reply_markup") or {}).get("inline_keyboard") or []))
+        self.requests.append(safe)
+        self.save()
+
     def save(self):
         if self.record:
             with open(self.record, "w", encoding="utf-8") as f:
                 json.dump({"sent": self.sent, "edits": self.edits, "calls": self.calls, "deleted": self.deleted,
-                           "actions": self.actions}, f, indent=1)
+                           "actions": self.actions, "requests": self.requests}, f, indent=1)
 
 
 def serve(fake, port=0):
@@ -159,10 +179,13 @@ def serve(fake, port=0):
                 p = json.loads(self.rfile.read(n).decode() or "{}") if n else {}
             except ValueError:
                 p = {}
-            if not m or m.group(1) != fake.token:
+            method = m.group(2) if m else "invalid"
+            authorized = bool(m and m.group(1) == fake.token)
+            fake.request(method, authorized, p)
+            if not authorized:
                 code, body = 401, {"ok": False, "error_code": 401, "description": "Unauthorized"}
             else:
-                code, body = 200, {"ok": True, "result": fake.handle(m.group(2), p)}
+                code, body = 200, {"ok": True, "result": fake.handle(method, p)}
             data = json.dumps(body).encode()
             self.send_response(code)
             self.send_header("Content-Type", "application/json")

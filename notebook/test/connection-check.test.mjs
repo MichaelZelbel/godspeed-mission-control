@@ -1,8 +1,9 @@
-import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';
+import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import http from 'node:http';
 import {Store} from '../core/records/store.mjs';import {installStarter} from '../core/starter-workspace.mjs';
 import {readNotices} from '../core/notices.mjs';import {addonDeadlines} from '../core/addon-deadlines.mjs';
 import {CONNECTION_NAMES} from '../core/connection-names.mjs';import {runDue} from '../core/connection-check.mjs';import {CONNECTIONS,defaultProbes,checkConnections,nextState,recoverPhoneConnection,telegramProbe,githubProbe,mailProbe,agentmailProbe,aiProbe,phoneProbe,gitKind,aiKind,telegramKind,mailKind,connectionCheckWanted,RECORD_FILE} from '../core/connection-check.mjs';
 import {acceptUpload,importFolder,pruneRaw,readRaw} from '../core/phone-health.mjs';
+import {runConnectionCheck} from '../scripts/connection-check.mjs';
 
 for(const key of Object.keys(process.env))if(/^(GODSPEED_|HERMES_)/.test(key))delete process.env[key];
 
@@ -149,6 +150,20 @@ test('no key, token or password reaches a record, a message, a deadline or a log
  walk(root);
  assert.ok(everything.length>0);
  assert.ok(!everything.join('\n').includes(TOKEN.split(':')[1])&&!everything.join('\n').includes(TOKEN),'no file of the mission control holds the key');
+});
+
+test('the daily routine sends Telegram probes to its configured API without retaining the token',async t=>{
+ const seen=[];const server=http.createServer((req,res)=>{seen.push(req.url);const refused=req.url.includes('refused');res.writeHead(refused?401:200,{'Content-Type':'application/json'});res.end(JSON.stringify(refused?{ok:false,error_code:401}:{ok:true,result:{id:42}}));});
+ await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));t.after(()=>server.close());
+ const api='http://127.0.0.1:'+server.address().port;
+ for(const [token,expected] of [[TOKEN,true],['refused-token',false]]){
+  const {root,store}=fixture(t),home=path.join(root,'hermes-home');fs.mkdirSync(home);fs.writeFileSync(path.join(home,'.env'),'TELEGRAM_BOT_TOKEN='+token+'\n');
+  const record=await runConnectionCheck({root,home,env:{GODSPEED_TODAY:D1,GODSPEED_TELEGRAM_API:api}});
+  assert.equal(record.connections.telegram.ok,expected);
+  assert.ok(!JSON.stringify(record).includes(token));
+  assert.ok(!fs.readFileSync(path.join(store.state,RECORD_FILE),'utf8').includes(token));
+ }
+ assert.deepEqual(seen,[`/bot${TOKEN}/getMe`,'/botrefused-token/getMe']);
 });
 
 test('the classifiers sort sign-in failures from the rest',()=>{

@@ -19,7 +19,7 @@ const dayIn=(timezone,env=process.env)=>/^\d{4}-\d{2}-\d{2}$/.test(env.GODSPEED_
 export async function runConnectionCheck({root,home=process.env.HERMES_HOME,hermes,hermesSource,env=process.env,probes}){
  const store=new Store(root,{device:machineDevice(root).id});
  const day=dayIn(store.get('settings','installation')?.timezone,env);
- return checkConnections({store,day,probes:probes||defaultProbes({store,home,hermes,hermesSource})});
+ return checkConnections({store,day,probes:probes||defaultProbes({store,home,hermes,hermesSource,api:env.GODSPEED_TELEGRAM_API||undefined})});
 }
 
 if(import.meta.url===pathToFileURL(process.argv[1]||'').href){
