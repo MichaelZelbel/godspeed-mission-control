@@ -3346,8 +3346,9 @@ WH=$TMP/wh
 wh_good() {
   local f=$1
   rm -rf "$f"; mkdir -p "$f"
-  printf '{"fixture":"local-hevy","health":true,"refused":true}\n' >"$f/setup.json"
-  printf '{"accepted":false}\n{"accepted":true}\n' >"$f/fixture.log"
+  printf '{"fixture":"local-hevy"}\n' >"$f/setup.json"
+  printf '{"ok":true}\n' >"$f/fixture-health.json"
+  printf '{"method":"GET","path":"/v1/workouts","status":401,"accepted":false}\n{"method":"GET","path":"/v1/workouts","status":200,"accepted":true}\n' >"$f/fixture.log"
   printf '{"clean":true,"paths":[]}\n' >"$f/key-scan.json"
   for platform in docker native; do
     printf '{"platform":"%s","settings":{"refused":{"accepted":false,"retained":false},"accepted":{"accepted":true}},"collection":{"name":"Workouts","rows":[{"source_id":"harbor-strength","title":"Harbor Strength","exercise":"Scenario Squat","set":{"weight_kg":42,"reps":8}},{"source_id":"canal-pull","title":"Canal Pull","exercise":"Scenario Row","set":{"weight_kg":31,"reps":10}}]},"routine":{"name":"Workouts from Hevy","minute":17,"script":"scenario-import","count":1},"manual_run":{"exit":0},"after":{"rows":[{"source_id":"harbor-strength","title":"Harbor Strength","exercise":"Scenario Squat","set":{"weight_kg":45,"reps":8}}]}}\n' "$platform" >"$f/$platform.json"
@@ -3371,6 +3372,10 @@ copy "$WH/good" "$WH/key-leaked"; printf '{"clean":false,"paths":["/tmp/leak"]}\
 refuses 'a key outside its permitted setting' workouts-from-hevy "$WH/key-leaked" 'key scan is not a clean'
 copy "$WH/good" "$WH/no-native"; rm "$WH/no-native/native.json"
 refuses 'a platform with no evidence' workouts-from-hevy "$WH/no-native" 'native.json is not in what'
+copy "$WH/good" "$WH/unhealthy-fixture"; printf '{"ok":false}\n' >"$WH/unhealthy-fixture/fixture-health.json"
+refuses 'an unhealthy retained Hevy health response' workouts-from-hevy "$WH/unhealthy-fixture" 'health response is not healthy'
+copy "$WH/good" "$WH/status-less-refusal"; sed -i 's/"status":401,//' "$WH/status-less-refusal/fixture.log"
+refuses 'a refusal without its observed HTTP 401' workouts-from-hevy "$WH/status-less-refusal" 'HTTP 401 observation'
 
 section 'day becomes facts'
 DF2=$TMP/df2
@@ -3408,7 +3413,7 @@ hermes_good() {
   local f=$1
   rm -rf "$f"; mkdir -p "$f"
   printf '[{"version":"1.0.0","healthy":true,"age_days":14},{"version":"1.1.0","healthy":true,"age_days":8},{"version":"1.2.0","healthy":false,"age_days":7},{"version":"1.3.0","healthy":true,"age_days":3}]\n' >"$f/releases.json"
-  printf '[{"attempt":"1.1.0","version":"1.1.0","commit":"good-commit","chat":true,"failure_bell":false},{"attempt":"1.2.0","failed_check":"cron list","version":"1.1.0","commit":"good-commit","restarts":2,"chat":true},{"version":"1.1.0","commit":"good-commit","attempted":false,"notification_count":1}]\n' >"$f/nights.json"
+  printf '[{"attempt":"1.1.0","version":"1.1.0","commit":"good-commit","chat":true,"failure_bell":false},{"attempt":"1.2.0","failed_check":"Hermes cron","version":"1.1.0","commit":"good-commit","restarts":2,"chat":true},{"version":"1.1.0","commit":"good-commit","attempted":false,"notification_count":1}]\n' >"$f/nights.json"
   printf '[{"version":"1.2.0","pending":true}]\n' >"$f/notifications.json"
   printf 'fixture releases are local\n' >"$f/fixture.log"
 }
@@ -3420,7 +3425,7 @@ copy "$HU/good" "$HU/chat-failed"; sed -i '0,/"chat":true/s//"chat":false/' "$HU
 refuses 'a good release whose chat failed' hermes-update-rollback "$HU/chat-failed" 'working chat'
 copy "$HU/good" "$HU/no-restart"; sed -i 's/"restarts":2/"restarts":1/' "$HU/no-restart/nights.json"
 refuses 'a rollback with no second gateway restart' hermes-update-rollback "$HU/no-restart" 'not restored to the exact'
-copy "$HU/good" "$HU/wrong-check"; sed -i 's/cron list/plugin load/' "$HU/wrong-check/nights.json"
+copy "$HU/good" "$HU/wrong-check"; sed -i 's/Hermes cron/Godspeed plugins/' "$HU/wrong-check/nights.json"
 refuses 'a rollback with the wrong failed check' hermes-update-rollback "$HU/wrong-check" 'not restored to the exact'
 copy "$HU/good" "$HU/two-bells"; printf '[{"version":"1.2.0"},{"version":"1.2.0"}]\n' >"$HU/two-bells/notifications.json"
 refuses 'two update failure notifications' hermes-update-rollback "$HU/two-bells" 'exactly one pending bell'
