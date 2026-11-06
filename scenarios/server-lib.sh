@@ -86,17 +86,21 @@ server_brief() { # <note file> <seconds>
 # This uses the installed scheduler, not Settings' direct "Run now" endpoint. A one-minute
 # interval makes the scheduled proof repeatable without changing the machine clock.
 server_scheduled_brief() { # <note file> <seconds>
-  local id notes=$EVIDENCE/.scheduled-brief-notes.json before waited=0
+  local id jobs=$EVIDENCE/.scheduled-brief-jobs.json notes=$EVIDENCE/.scheduled-brief-notes.json before_notes before_run waited=0
   printf '{"kind":"morning-brief","interval_ms":60000}' >"$EVIDENCE/.scheduled-brief-ask.json"
   [ "$(server_post /api/jobs/add "$EVIDENCE/.scheduled-brief-ask.json" "$EVIDENCE/.scheduled-brief-added.json")" = 200 ] ||
     fail "the server would not schedule its morning brief: $(tr -d '\n' <"$EVIDENCE/.scheduled-brief-added.json" | cut -c1-200)"
   id=$(json_value "$EVIDENCE/.scheduled-brief-added.json" data.id) && [ -n "$id" ] ||
     fail "the server scheduled its morning brief but named no routine"
+  server_table jobs "$jobs"
+  before_run=$("$NODE" -e 'const fs=require("fs"),d=JSON.parse(fs.readFileSync(process.argv[1],"utf8")),rows=Array.isArray(d)?d:d.data||[],j=rows.find(v=>v?.id===process.argv[2]);process.stdout.write(JSON.stringify(j?.last_run_at??null))' "$jobs" "$id")
   server_table notes "$notes"
-  before=$("$NODE" -e "$BRIEF_NOTES_COUNTER" "$notes")
+  before_notes=$("$NODE" -e "$BRIEF_NOTES_COUNTER" "$notes")
   server_scheduled_brief_finished() {
+    server_table jobs "$jobs" 2>/dev/null || return 1
+    "$NODE" -e 'const fs=require("fs"),d=JSON.parse(fs.readFileSync(process.argv[1],"utf8")),rows=Array.isArray(d)?d:d.data||[],j=rows.find(v=>v?.id===process.argv[2]),before=JSON.parse(process.argv[3]);process.exit(j?.last_run_at&&j.last_run_at!==before&&j?.last_status==="ok"?0:1)' "$jobs" "$id" "$before_run" || return 1
     server_table notes "$notes" 2>/dev/null || return 1
-    [ "$("$NODE" -e "$BRIEF_NOTES_COUNTER" "$notes")" -gt "$before" ] || return 1
+    [ "$("$NODE" -e "$BRIEF_NOTES_COUNTER" "$notes")" -gt "$before_notes" ] || return 1
     in_server_as_hermes hermes cron runs >"$EVIDENCE/brief-cron-runs.txt" 2>/dev/null || return 1
     grep -Eqi 'source[[:space:]]*[:=][[:space:]]*"?builtin' "$EVIDENCE/brief-cron-runs.txt"
   }
@@ -104,11 +108,11 @@ server_scheduled_brief() { # <note file> <seconds>
     fail "the installed scheduler did not run the morning brief within $2 s"
   "$NODE" -e "$NEWEST_BRIEFING_NOTE" "$notes" >"$1" 2>/dev/null && [ "$(grep -c . "$1")" -gt 0 ] ||
     fail 'the scheduled morning brief saved no readable note'
-  server_table jobs "$EVIDENCE/job-scheduled-brief.json"
+  "$NODE" -e 'const fs=require("fs"),source=JSON.parse(fs.readFileSync(process.argv[1],"utf8")),rows=Array.isArray(source)?source:source.data||[],before=JSON.parse(process.argv[4]);fs.writeFileSync(process.argv[2],JSON.stringify({id:process.argv[3],before_last_run_at:before,data:rows},null,2)+"\n")' "$jobs" "$EVIDENCE/job-scheduled-brief.json" "$id" "$before_run"
   server_telegram_record "$EVIDENCE/scheduled-telegram-requests.json"
   "$NODE" -e 'const fs=require("fs"),brief=fs.readFileSync(process.argv[1],"utf8").replace(/\r\n?/g,"\n").trim(),record=JSON.parse(fs.readFileSync(process.argv[2],"utf8"));process.exit((record.sent||[]).some(sent=>String(sent.text||"").replace(/\r\n?/g,"\n").trim()===brief)?0:1)' "$1" "$EVIDENCE/scheduled-telegram-requests.json" ||
     fail 'the scheduler ran the morning brief but it never reached the installed Telegram gateway'
-  rm -f "$notes" "$EVIDENCE"/.scheduled-brief-*
+  rm -f "$jobs" "$notes" "$EVIDENCE"/.scheduled-brief-*
 }
 
 # The advertised Docker Telegram route, driven through the installed notebook setup and

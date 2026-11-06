@@ -84,7 +84,7 @@ check() { # <evidence folder>
     "$NODE" -e 'const fs=require("fs"),d=JSON.parse(fs.readFileSync(process.argv[1],"utf8")),rows=Array.isArray(d)?d:d.data||[];process.exit(rows.some(j=>j?.last_run_at&&j?.last_status==="ok")?0:1)' "$folder/job-$label.json" ||
       fail "the installed $label routine has no successful recorded run"
   done
-  "$NODE" -e 'const fs=require("fs"),d=JSON.parse(fs.readFileSync(process.argv[1],"utf8")),rows=Array.isArray(d)?d:d.data||[];process.exit(rows.some(j=>j?.last_run_at&&j?.last_status==="ok")?0:1)' "$folder/job-scheduled-brief.json" ||
+  "$NODE" -e 'const fs=require("fs"),d=JSON.parse(fs.readFileSync(process.argv[1],"utf8")),rows=Array.isArray(d)?d:d.data||[],job=rows.find(j=>j?.id===d.id);process.exit(d.id&&job?.last_run_at&&job.last_run_at!==d.before_last_run_at&&job?.last_status==="ok"?0:1)' "$folder/job-scheduled-brief.json" ||
     fail 'the installed scheduled morning brief has no successful recorded run'
   grep -Eqi 'source[[:space:]]*[:=][[:space:]]*"?builtin' "$folder/brief-cron-runs.txt" ||
     fail 'the morning brief was not triggered by the installed scheduler'

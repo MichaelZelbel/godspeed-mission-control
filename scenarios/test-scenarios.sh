@@ -2822,7 +2822,7 @@ EOF
   for table in "${SERVER_SPARSE_TABLES[@]}"; do sparse=${table//_/-}; printf '{"data":[]}\n' >"$f/sparse-$sparse.json"; done
   printf '{"state":"gateway"}\n' >"$f/runner.json"
   printf '{"requests":[{"method":"getUpdates","authorized":true},{"method":"sendMessage","authorized":true}]}\n' >"$f/telegram-requests.json"
-  printf '[{"id":"scheduled-brief","last_run_at":"2026-11-06T10:01:00Z","last_status":"ok"}]\n' >"$f/job-scheduled-brief.json"
+  printf '{"id":"scheduled-brief","before_last_run_at":null,"data":[{"id":"scheduled-brief","last_run_at":"2026-11-06T10:01:00Z","last_status":"ok"}]}\n' >"$f/job-scheduled-brief.json"
   printf 'Morning brief: source=builtin\n' >"$f/brief-cron-runs.txt"
   printf '{"sent":[{"text":%s}]}\n' "$(node -e 'process.stdout.write(JSON.stringify(require("fs").readFileSync(process.argv[1],"utf8")))' "$f/brief.txt")" >"$f/scheduled-telegram-requests.json"
   run_json "$f" "$(msg todays-brief "$(cat "$f/brief.txt")")"
@@ -2869,6 +2869,12 @@ refuses 'a brief not delivered on Telegram' first-day "$FD/no-send" 'never deliv
 copy "$FD/good" "$FD/direct-run"
 printf 'Morning brief: source=direct\n' >"$FD/direct-run/brief-cron-runs.txt"
 refuses 'a direct brief run called scheduled delivery' first-day "$FD/direct-run" 'not triggered by the installed scheduler'
+copy "$FD/good" "$FD/failed-scheduled-sibling"
+node -e 'const fs=require("fs"),p=process.argv[1],d=JSON.parse(fs.readFileSync(p,"utf8"));d.data[0].last_status="error";d.data.push({id:"research",last_run_at:"2026-11-06T10:02:00Z",last_status:"ok"});fs.writeFileSync(p,JSON.stringify(d))' "$FD/failed-scheduled-sibling/job-scheduled-brief.json"
+refuses 'a failed scheduled brief standing beside a successful sibling' first-day "$FD/failed-scheduled-sibling" 'scheduled morning brief has no successful'
+copy "$FD/good" "$FD/unchanged-scheduled-run"
+node -e 'const fs=require("fs"),p=process.argv[1],d=JSON.parse(fs.readFileSync(p,"utf8"));d.before_last_run_at=d.data[0].last_run_at;fs.writeFileSync(p,JSON.stringify(d))' "$FD/unchanged-scheduled-run/job-scheduled-brief.json"
+refuses 'a scheduled brief with no new completed run' first-day "$FD/unchanged-scheduled-run" 'scheduled morning brief has no successful'
 copy "$FD/good" "$FD/not-gateway"
 printf '{"state":"setting-up"}\n' >"$FD/not-gateway/runner.json"
 refuses 'a bot that never reaches its gateway' first-day "$FD/not-gateway" 'never reached gateway'
