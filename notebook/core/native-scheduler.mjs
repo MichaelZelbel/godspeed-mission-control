@@ -60,8 +60,8 @@ export class NativeScheduler{
  // assistant: a watch topic was never read again, and radar work stayed
  // "preparing" for ever. They run on the machine that runs the routines.
  static recordKinds=['watch','domain-watch','radar-prepare','radar-work'];
- constructor(store,{executable,home,device=store.device,run=runCommand,records=null,tickLimit=TICK_LIMIT,beatEvery=HEARTBEAT_EVERY}){
-  Object.assign(this,{store,executable,home,device,run,records,tickLimit,beatEvery});
+ constructor(store,{executable,home,device=store.device,run=runCommand,records=null,tickLimit=TICK_LIMIT,beatEvery=HEARTBEAT_EVERY,updater=null}){
+  Object.assign(this,{store,executable,home,device,run,records,tickLimit,beatEvery,updater});
   if(records)records.onProgress=()=>this.onProgress?.();
  }
  // A connected provider reaches the record routines too (/api/provider).
@@ -561,7 +561,7 @@ export class NativeScheduler{
   // A notebook still owned by the old shared name is taken over (device-id.mjs).
   if(this.owner()===LEGACY_DEVICE&&this.claimLegacy)try{await this.claimLegacy();}catch{}
   if(!this.owns()){this.onProgress?.();return [];}
-  const records=this.records?.tick().catch(()=>[])||Promise.resolve([]);
+  let records=Promise.resolve([]);
   // A setup asking inside a running tick or the cooldown still hears whether the connection check could be made.
   if(this.ticking){if(raise){await this.current?.catch(()=>null);await this.followConnectionCheck();}return records;}
   if(Date.now()-(this.lastTick||0)<60000){this.onProgress?.();if(raise)await this.followConnectionCheck();return records;}
@@ -569,6 +569,8 @@ export class NativeScheduler{
   let failure=null,finish;const failures=[];
   this.current=new Promise(r=>{finish=r;});
   try{
+   await this.updater?.tick(this.store.get('settings','installation')?.timezone).catch(logged('the Hermes update could not be checked'));
+   records=this.records?.tick().catch(()=>[])||Promise.resolve([]);
    await this.startRoutines().catch(()=>null);
    await this.followCleanup().catch(logged('the nightly cleanup could not be set up'));
    await this.followNoticeSender().catch(logged('the notice sender could not be set up'));

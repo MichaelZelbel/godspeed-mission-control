@@ -22,7 +22,7 @@ export const NO_MODEL_IN_HOME='The assistant has no AI to think with: the AI con
 // A chat has the same ten minutes as one through hermesProvider; until
 // 6 October 2026 it had none, and only Stop ended one that never answered.
 export function nativeAgent({executable,home,cwd,providerFile,spawnProcess=spawn,timeLimit,keptFile}){
- return async input=>{
+ let active=0;const agent=async input=>{active++;try{
   const args=['chat','--query-file','-','--quiet','--oneshot','--in',cwd,'--continue','godspeed-notebook-'+hash(input.conversation_id||input.note_id||'general').slice(0,24),'--create-if-missing','--no-restore-cwd'];
   // The chat answers with the model the assistant's own home is set to, as the
   // Telegram bot does: one Mission Control, one brain. The model Settings
@@ -66,5 +66,6 @@ export function nativeAgent({executable,home,cwd,providerFile,spawnProcess=spawn
    throw new Error(said);
   }
   return {reply};
- };
+ }finally{active--;}};
+ Object.defineProperty(agent,'busy',{get:()=>active>0});return agent;
 }
