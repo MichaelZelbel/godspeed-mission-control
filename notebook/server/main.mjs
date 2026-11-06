@@ -255,7 +255,10 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         if(req.method!=='POST'||route.slice(8).includes('/')||!tokenMatches(store.state,route.slice(8)))return send(res,404,{error:'Not found'});
         try{
           if(menerioImport.mutating)return send(res,503,{error:'Try again soon'});
-          let upload;try{upload=JSON.parse(await body(req,UPLOAD_LIMIT));}catch(error){return send(res,error.message==='Request is too large'?413:400,{error:error.message==='Request is too large'?'Too large':'Not JSON'});}
+          let upload;try{upload=JSON.parse(await body(req,UPLOAD_LIMIT));}catch(error){const tooLarge=error.message==='Request is too large';
+            // The rest of an oversized body is never read, so the connection is closed once the answer is out; left open it would stay for good (and hold the server open at shutdown).
+            if(tooLarge){res.setHeader('Connection','close');res.once('finish',()=>req.socket?.destroy());}
+            return send(res,tooLarge?413:400,{error:tooLarge?'Too large':'Not JSON'});}
           // A renewal while the body was on its way revokes this address at once, so the token is checked again before anything is stored.
           if(!tokenMatches(store.state,route.slice(8)))return send(res,404,{error:'Not found'});
           const data=upload?.data;

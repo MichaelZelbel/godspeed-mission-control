@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import http from 'node:http';
+import net from 'node:net';
 import {spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {Store,hash} from '../core/records/store.mjs';
@@ -577,4 +578,39 @@ test('the token is read in one place: ensureToken leaves a damaged token alone, 
   assert.equal(ensureToken(state),null);assert.equal(fs.statSync(tokenFile(state)).mode&0o777,0o644,'it is not rewritten behind the owner');
  }
  const next=renewToken(state);assert.notEqual(next,token);assert.equal(tokenMatches(state,next),true);assert.equal(tokenDamaged(state),false);
+});
+
+test('an oversized upload whose body never ends gets a real 413 with Connection: close, the peer is closed, and the service shuts down',async t=>{
+ const root=serverRoot('godspeed-phone-oversize-'),service=await createService({root,port:0,webPort:0});
+ const token=fs.readFileSync(tokenFile(service.store.state),'utf8').trim(),socket=net.connect(service.address.port,'127.0.0.1');
+ let received='',closed=false,closedService=false;
+ socket.on('data',chunk=>{received+=chunk.toString('latin1');});socket.on('close',()=>{closed=true;});socket.on('error',()=>{});
+ const until=async(condition,what,ms=15000)=>{const end=Date.now()+ms;while(!condition()){if(Date.now()>end)throw new Error('timed out waiting for '+what);await new Promise(r=>setTimeout(r,20));}};
+ try{
+  await new Promise((resolve,reject)=>{socket.once('connect',resolve);socket.once('error',reject);});
+  // Valid headers that promise more than the limit, then a little over the limit, and never the rest.
+  socket.write('POST /ingest/'+token+' HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Type: application/json\r\nContent-Length: '+(40*1024*1024)+'\r\n\r\n');
+  const chunk=Buffer.alloc(64*1024,'x');
+  let sent=0;
+  while(!received.includes('\r\n\r\n')&&sent<22*1024*1024&&!closed){
+   if(!socket.write(chunk))await new Promise(r=>socket.once('drain',r));
+   sent+=chunk.length;
+  }
+  await until(()=>received.includes('\r\n\r\n'),'the answer to the oversized upload');
+  const [head]=received.split('\r\n\r\n');
+  assert.match(head,/^HTTP\/1\.1 413 /,'a real 413 answer, not a reset');
+  assert.match(head,/^connection: close$/mi,'the answer says the connection ends');
+  await until(()=>/"error":"Too large"/.test(received),'the answer body');
+  assert.ok(sent>=20*1024*1024&&sent<40*1024*1024,'it answered after the limit and before the body was complete');
+  await until(()=>closed,'the server to close its side');
+  assert.equal(service.store.list('health_observations').length,0);
+  assert.equal(fs.existsSync(rawFolder(service.store.state)),false,'nothing was kept');
+  const stopped=await Promise.race([service.close().then(()=>true),new Promise(r=>setTimeout(()=>r(false),5000))]);
+  closedService=stopped;
+  assert.equal(stopped,true,'the service shuts down: no connection is left open');
+ }finally{
+  socket.destroy();
+  if(!closedService)await Promise.race([service.close().catch(()=>{}),new Promise(r=>setTimeout(r,3000))]);
+  fs.rmSync(root,{recursive:true,force:true});
+ }
 });
