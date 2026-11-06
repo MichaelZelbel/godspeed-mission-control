@@ -2850,6 +2850,16 @@ for table in "${SERVER_SPARSE_TABLES[@]}"; do
   printf '{"data":[{"id":"seeded-%s"}]}\n' "$sparse" >"$FD/populated-$sparse/sparse-$sparse.json"
   refuses "a brief with seeded $sparse context" first-day "$FD/populated-$sparse" 'required sparse installed state'
 done
+  # The shared inventory remains the only runtime vocabulary; this fixture guards the one
+  # personal-input class that must not silently disappear from it.
+  case " ${SERVER_SPARSE_TABLES[*]} " in
+    *' contacts '*)
+      copy "$FD/good" "$FD/populated-contacts-fixed"
+      printf '{"data":[{"id":"seeded-contact"}]}\n' >"$FD/populated-contacts-fixed/sparse-contacts.json"
+      refuses 'a brief with seeded contacts context after an inventory edit' first-day "$FD/populated-contacts-fixed" 'required sparse installed state'
+      ;;
+    *) bad 'the shared sparse inventory still requires contacts' ;;
+  esac
 copy "$FD/good" "$FD/no-send"
 run_json "$FD/no-send" "$(msg todays-brief "$(cat "$FD/no-send/brief.txt")")"
 refuses 'a brief not delivered on Telegram' first-day "$FD/no-send" 'never delivered'

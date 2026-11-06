@@ -288,6 +288,27 @@ def test_codes():
         print("NOTE  no time zone database on this computer (pip install tzdata), so city names are not checked here")
 
 
+def test_telegram_api_endpoint():
+    print("== validating the token-bearing Telegram endpoint")
+    m = load("tg_setup_endpoint", PROGRAM)
+    check("HTTPS endpoint path prefixes are retained",
+          m.telegram_api("https://api.example.test/telegram/") == "https://api.example.test/telegram")
+    check("a loopback HTTP endpoint path prefix is retained",
+          m.telegram_api("http://127.0.0.1:8081/telegram/") == "http://127.0.0.1:8081/telegram")
+    for endpoint in ("http://example.test/proxy", "ftp://example.test", "https://user:pass@example.test",
+                     "https://api.example.test/?key=value", "https://api.example.test/#fragment"):
+        try:
+            m.telegram_api(endpoint)
+            rejected = False
+        except ValueError:
+            rejected = True
+        check("an unsafe Telegram endpoint is rejected: %s" % endpoint, rejected)
+    r = scenario_run("an unsafe Telegram endpoint", {"users": USERS, "start": []},
+                     extra_env={"GODSPEED_TELEGRAM_API": "http://example.test/proxy"}, timeout=5)
+    check("an unsafe endpoint sends no Bot API request",
+          r["rc"] == 0 and not r["fake"].requests and "requires HTTPS or a loopback" in r["log"])
+
+
 def test_happy():
     r = scenario_run("the happy path: Start, two codes, three answers, set up", {
         "users": USERS,
@@ -889,6 +910,7 @@ def test_fake_api_record_is_atomic():
 
 if __name__ == "__main__":
     test_codes()
+    test_telegram_api_endpoint()
     test_happy()
     test_snags()
     test_found_repo()

@@ -64,6 +64,7 @@ import sys
 import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 
 try:
@@ -78,7 +79,30 @@ START_CODE = os.environ.get("GODSPEED_TELEGRAM_START_CODE", "").strip()
 FLOW = os.environ.get("GODSPEED_TG_FLOW", "installer")
 WORKSPACE = os.environ.get("GODSPEED_WORKSPACE", "")
 FINISH = shlex.split(os.environ.get("GODSPEED_TG_FINISH", ""))
-API = os.environ.get("GODSPEED_TELEGRAM_API", "https://api.telegram.org").rstrip("/")
+def telegram_api(value):
+    """Return the token-safe Bot API endpoint, retaining an optional path prefix."""
+    try:
+        endpoint = urllib.parse.urlsplit(value)
+        port = endpoint.port
+    except ValueError:
+        raise ValueError("Telegram API requires HTTPS or a loopback HTTP endpoint")
+    host = endpoint.hostname
+    loopback = host == "localhost" or host == "::1" or (
+        host and re.fullmatch(r"127(?:\.\d{1,3}){3}", host)
+        and all(int(part) <= 255 for part in host.split(".")))
+    if (not host or (endpoint.scheme.lower() != "https" and not (endpoint.scheme.lower() == "http" and loopback))
+            or endpoint.username or endpoint.password or endpoint.query or endpoint.fragment):
+        raise ValueError("Telegram API requires HTTPS or a loopback HTTP endpoint")
+    authority = endpoint.netloc.rsplit("@", 1)[-1]
+    if port is not None and endpoint.hostname == "::1":
+        authority = "[::1]:%d" % port
+    return "%s://%s%s" % (endpoint.scheme.lower(), authority, endpoint.path.rstrip("/"))
+
+
+try:
+    API = telegram_api(os.environ.get("GODSPEED_TELEGRAM_API", "https://api.telegram.org"))
+except ValueError:
+    API = None
 STATE_FILE = os.environ.get("GODSPEED_TG_STATE", os.path.join(HOME, ".godspeed", "telegram-setup.json"))
 LOG_FILE = os.environ.get("GODSPEED_TG_LOG", os.path.join(HOME, "logs", "godspeed-telegram-setup.log"))
 HERMES = shlex.split(os.environ.get("GODSPEED_TG_HERMES", "hermes"))
@@ -1464,6 +1488,9 @@ def main():
         return backup_main()
     if not TOKEN:
         log("no GODSPEED_TELEGRAM_TOKEN: nothing to do (setup by terminal: docker compose exec godspeed godspeed-setup)")
+        return 0
+    if not API:
+        log("GODSPEED_TELEGRAM_API requires HTTPS or a loopback HTTP endpoint; fix it in the server's settings and restart the container.")
         return 0
     st = load_state()
     if st.get("done"):
