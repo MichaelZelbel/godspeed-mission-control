@@ -108,6 +108,7 @@ const WALK_PACE=9;
 const round=n=>Math.round(n*100)/100;
 const number=value=>{const n=value===null||typeof value==='boolean'||typeof value==='string'&&value.trim()===''?NaN:Number(value);return Number.isFinite(n)?n:null;};
 const hhmm=text=>/^\d{2}:\d{2}$/.test(String(text).slice(11,16))?String(text).slice(11,16):null;
+const hms=text=>{const m=/^\d{4}-\d{2}-\d{2}[ T](\d{2}):(\d{2})(?::(\d{2}))?/.exec(String(text||''));return m?m[1]+':'+m[2]+':'+(m[3]||'00'):null;};
 
 function minutesOf(duration){
  if(duration&&typeof duration==='object'){
@@ -144,9 +145,12 @@ const later=(a,b)=>b.instant>a.instant||b.instant===a.instant&&b.at>a.at?b:a;
 
 // uploads: [{received_at,data}] in receive order. Returns Map(day -> Map(metric -> value)).
 export function buildDays(uploads){
- const days=new Map(),put=(day,metric,value)=>{if(!days.has(day))days.set(day,new Map());days.get(day).set(metric,typeof value==='number'?round(value):value);};
- const groups=new Map();
- for(const p of pointsOf(uploads)){const key=p.name+'\n'+p.day;(groups.get(key)||groups.set(key,[]).get(key)).push(p);}
+ const days=new Map(),dataUntil=new Map(),put=(day,metric,value)=>{if(!days.has(day))days.set(day,new Map());days.get(day).set(metric,typeof value==='number'?round(value):value);};
+ const groups=new Map(),points=pointsOf(uploads);
+ for(const p of points){const key=p.name+'\n'+p.day;(groups.get(key)||groups.set(key,[]).get(key)).push(p);}
+ for(const point of points)if(point.name!=='sleep_analysis'&&number(point.point.qty)!==null&&Number.isFinite(point.instant)){
+  const previous=dataUntil.get(point.day);if(!previous||later(previous,point)===point)dataUntil.set(point.day,point);
+ }
  for(const group of groups.values()){
   const {name,day}=group[0];
   if(SUMS[name]){
@@ -179,6 +183,7 @@ export function buildDays(uploads){
   }else{add('workout_min',minutes);(sum.types||=[]);if(!sum.types.includes(workout.name))sum.types.push(workout.name);}
  }
  for(const [day,{types,...numbers}] of totals){for(const [metric,value] of Object.entries(numbers))put(day,metric,value);if(types)put(day,'workout_types',types.join('+'));}
+ Object.defineProperty(days,'dataUntil',{value:new Map([...dataUntil].map(([day,point])=>[day,hms(point.point.date)]).filter(([,value])=>value))});
  return days;
 }
 
@@ -191,8 +196,9 @@ export function writeDays(store,built,{now=clockNow()}={}){
  for(const [day,metrics] of [...built].sort()){
   for(const [metric,value] of metrics){
    const id=phoneFeedId(SOURCE,day,metric),previous=store.get('health_observations',id);
-   if(previous&&(day<oldestCovered||!previous.removed_at&&previous.value===value&&previous.date_precision==='day'))continue;
-   rows.push(store.prepare('health_observations',{id,metric,value,source:SOURCE,via:PHONE_VIA,observed_on:day,date_precision:'day',observed_at:zonedToUtc(day,'00:00',timezone).toISOString(),...(previous?.removed_at?{removed_at:null}:{})},previous));
+   const data_until=built.dataUntil?.get(day);
+   if(previous&&(day<oldestCovered||!previous.removed_at&&previous.value===value&&previous.date_precision==='day'&&previous.data_until===data_until))continue;
+   rows.push(store.prepare('health_observations',{id,metric,value,source:SOURCE,via:PHONE_VIA,observed_on:day,date_precision:'day',observed_at:zonedToUtc(day,'00:00',timezone).toISOString(),...(data_until?{data_until}:{}),...(previous?.removed_at?{removed_at:null}:{})},previous));
   }
  }
  if(rows.length)store.commit(rows);

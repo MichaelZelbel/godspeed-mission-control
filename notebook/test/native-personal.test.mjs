@@ -42,3 +42,11 @@ test('the native coach tick reads the newest same-day measurement, whichever fee
  // The phone row is written again after the CSV (91): it is the newest, so the rule fails.
  assert.equal(await run([['Health Auto Export',90,'a-phone'],['Fictional CSV',70,'b-csv'],['Health Auto Export',91,'a-phone']]),0);
 });
+
+test('the native coach leaves a short phone day unknown until its manual value settles',async()=>{
+ const store=new Store(temp()),query=new QueryService(store),domains=new Domains(query);store.save('settings',{id:'installation',timezone:'UTC'});
+ const talk=await domains.invoke('personal-operation',{type:'coach-open',area:'health',question:'Fictional protein?'});await domains.invoke('personal-operation',{type:'habit-agree',talk_id:talk.id,title:'Fictional protein day',agreement:'I agree',auto:'protein_g >= 10',check_at:'2030-01-01T19:00:00Z'});
+ const now=new Date(Date.now()+86400000);now.setUTCHours(12,0,0,0);const day=new Date(now.getTime()-86400000).toISOString().slice(0,10);
+ store.save('health_observations',{metric:'protein_g',value:20,source:'Health Auto Export',via:'phone-receiver',observed_on:day,date_precision:'day',observed_at:day+'T00:00:00.000Z',data_until:'19:55:00'});nativeTick(store,'coach',now,query);assert.equal(query.rows('habits')[0].progress.lifetimeCompletedDays,0);
+ store.save('health_observations',{metric:'protein_g',value:20,source:'Fictional manual',via:'manual',observed_on:day,date_precision:'day',observed_at:day+'T12:00:00.000Z'});nativeTick(store,'coach',now,query);assert.equal(query.rows('habits')[0].progress.lifetimeCompletedDays,1);
+});

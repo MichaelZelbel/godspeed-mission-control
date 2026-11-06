@@ -20,7 +20,8 @@ import {readEntries as headacheEntries} from '../../third-party/addons/godspeed-
 import {episodesFrom} from '../../third-party/addons/godspeed-headache/lib/episodes.mjs';
 import {logFromRows} from '../../third-party/addons/godspeed-headache/lib/rows.mjs';
 import {visibleRows} from './visibility.mjs';
-import {currentHealth,latestPerDayMetric} from './health-inputs.mjs';
+import {currentHealth} from './health-inputs.mjs';
+import {QueryService} from './query.mjs';
 import {loadSettings as headacheSettings,saveSettings as saveHeadache} from '../../third-party/addons/godspeed-headache/lib/settings.mjs';
 import {loadSettings as charmSettings,saveSettings as saveCharm} from '../../third-party/addons/godspeed-charm/lib/settings.mjs';
 const iso=()=>new Date().toISOString();
@@ -123,7 +124,7 @@ export function nativeTick(store,addon,now=new Date(),query){
  let messages=[],writes=[];
  const timezone=store.get('settings','installation')?.timezone||'UTC';
  if(addon==='coach'){
-  const settings={...coachSettings(store.root),timezone},table={};for(const observation of (query?currentHealth(query,{now:now.getTime()}).observations:latestPerDayMetric(store.list('health_observations').filter(r=>r.ai_visibility!=='hidden'&&!r.is_sensitive&&Date.parse(r.observed_at)<=now.getTime()&&Date.parse(r.observed_at)>=now.getTime()-7*86400000))).sort((a,b)=>a.observed_at.localeCompare(b.observed_at))){const day=observation.observed_on||localParts(new Date(observation.observed_at),timezone).date;(table[day]||={date:day})[observation.metric.replaceAll(' ','_')]=String(observation.value);}({messages,writes}=dueTick(store.root,settings,now,table));
+  const settings={...coachSettings(store.root),timezone},table={},health=currentHealth(query||new QueryService(store),{now:now.getTime()});for(const day of health.days)for(const [metric,column] of Object.entries(day.columns))if(column.state!=='may_be_incomplete')(table[day.date]||={date:day.date})[metric]=String(column.value);({messages,writes}=dueTick(store.root,settings,now,table));
  }else{
   const settings={...journalSettings(store.root),timezone};if(settings.capture_enabled===false)return {verified:true,silent:true};
   // The integrated worker reads record evidence. Executable evidence hooks are

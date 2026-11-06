@@ -40,11 +40,22 @@ test('a day re-sent the next morning adds only its new points and rewrites nothi
  acceptUpload(store,upload([metric('step_count','count',[D+' 08:00:00 +0100',100]),metric('flights_climbed','count',[D+' 08:00:00 +0100',3])]),{now:at('2026-11-04T20:00:00Z')});
  const before=Object.fromEntries(store.list('health_observations').map(r=>[r.metric,r]));
  const result=acceptUpload(store,upload([metric('step_count','count',[D+' 08:00:00 +0100',100],[D+' 23:30:00 +0100',50])]),{now:at('2026-11-05T07:00:00Z')});
- assert.equal(result.written,1);
+ assert.equal(result.written,2);
  const after=Object.fromEntries(store.list('health_observations').map(r=>[r.metric,r]));
  assert.equal(after.steps.value,150);
- assert.equal(after.flights.revision,before.flights.revision);
- assert.equal(after.flights.updated_at,before.flights.updated_at);
+ assert.equal(after.steps.data_until,'23:30:00');
+ assert.equal(after.flights.data_until,'23:30:00');
+ assert.equal(after.flights.revision,before.flights.revision+1);
+});
+
+test('a phone day keeps the latest quantitative point time, not its upload time or sleep',()=>{
+ const short=buildDays([{received_at:'2026-11-05T07:00:00Z',data:upload([metric('step_count','count',[D+' 19:55:00 +0100',100]),metric('sleep_analysis','hr',[D+' 23:59:00 +0100',8])])}]);
+ assert.equal(short.dataUntil.get(D),'19:55:00');
+ for(const [time,expected] of [['21:00:00','21:00:00'],['21:00:30','21:00:30']]){
+  const built=buildDays([{received_at:'2026-11-05T08:00:00Z',data:upload([metric('step_count','count',[D+' '+time+' +0100',100])])}]);assert.equal(built.dataUntil.get(D),expected);
+ }
+ const store=setup();acceptUpload(store,upload([metric('step_count','count',[D+' 19:55:00 +0100',100])]),{now:at('2026-11-05T08:00:00Z')});
+ assert.equal(store.list('health_observations')[0].data_until,'19:55:00');
 });
 
 test('records are day records in the CSV feed\'s id scheme, on the date in the point\'s own string',()=>{

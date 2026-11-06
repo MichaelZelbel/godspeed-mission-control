@@ -1,6 +1,7 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';
-import {Store} from '../core/records/store.mjs';import {QueryService} from '../core/query.mjs';import {jobExecutor} from '../core/runtime.mjs';
+import {Store} from '../core/records/store.mjs';import {QueryService} from '../core/query.mjs';import {jobExecutor} from '../core/runtime.mjs';import {briefing} from '../core/briefing.mjs';
 import {dueCommand} from '../core/native-due.mjs';
+import {personalOperation} from '../core/personal-operations.mjs';
 // Where one reminder is kept: its page under notebook/Deadlines/, which is what a rehearsal must
 // leave exactly as it was (since 30 October 2026 a reminder is a record, not a file in due/).
 const page=(store,slug)=>store.file(store.list('deadlines').find(r=>r.native_slug===slug));
@@ -28,6 +29,21 @@ test('brief sources are prepared before writing and failed judgment prevents del
  const provider=async i=>{calls.push(i);return i.kind==='brief-verification'?JSON.stringify({passed:false,reason:'Invented result absent from sources'}):'Fictional energy improved to 10.';};
  await assert.rejects(jobExecutor(provider,query)({kind:'morning-brief',id:'brief'},{store,settings:{}}),/Invented/);assert.equal(query.rows('notes').filter(n=>n.source_app==='morning-brief').length,0);
  assert.ok(calls.find(i=>i.kind==='morning-brief').context.health.some(h=>h.value===6));assert.ok(query.rows('job_receipts').some(r=>r.kind==='brief-verification'&&r.state==='failed'));
+});
+
+test('a briefing treats a short phone day as unknown until a manual settlement arrives',async()=>{
+ const store=new Store(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-brief-incomplete-health-'))),query=new QueryService(store),day='2026-11-04';
+ store.save('settings',{id:'installation',timezone:'UTC'});store.save('health_observations',{metric:'protein_g',value:50,source:'Health Auto Export',via:'phone-receiver',observed_on:day,date_precision:'day',observed_at:day+'T00:00:00Z',data_until:'19:55:00'});
+ let writes=0;const provider=async input=>{
+  if(input.kind==='brief-verification'){assert.match(input.contract,/may_be_incomplete/);return {passed:true,reason:'Fixture checked the incomplete phone day.'};}
+  writes++;assert.match(input.contract,/may_be_incomplete/);const freshness=input.context.health_freshness,protein=freshness.days.find(row=>row.date===day).columns.protein_g;
+  if(writes===1){assert.equal(protein.state,'may_be_incomplete');return 'Protein was 50 g so far; data stopped at 19:55:00. Weekly protein: 0 known days and 1 unknown day.';}
+  assert.deepEqual(protein,{value:80,source:'manual',state:'settled'});return 'Protein was 80 g. Weekly protein: 1 known day and 0 unknown days.';
+ };
+ const first=await briefing({id:'brief-incomplete-one'},{store,query,provider,now:new Date('2026-11-05T08:00:00Z')}),firstNote=store.get('notes',first.record_id).content;
+ assert.match(firstNote,/so far/);assert.match(firstNote,/19:55:00/);assert.doesNotMatch(firstNote,/short day|fully logged|gap advice/i);
+ personalOperation({store,query},{type:'health-add',metric:'protein_g',value:80,unit:'g',observed_at:day+'T12:00:00Z'});
+ const second=await briefing({id:'brief-incomplete-two'},{store,query,provider,now:new Date('2026-11-06T08:00:00Z')});assert.match(store.get('notes',second.record_id).content,/1 known day and 0 unknown days/);
 });
 
 test('a mechanical briefing failure gets one evidence-led rewrite and only the checked bytes are saved',async()=>{
