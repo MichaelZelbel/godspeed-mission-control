@@ -82,6 +82,12 @@ test("a prior cron occurrence keeps the owner's non-UTC clock",()=>{
  assert.match(found.words,/Wednesday 4 November at 23:00/);
 });
 
+test('a daily local cron keeps its grace boundary through Berlin spring daylight saving',()=>{
+ const job=daily('berlin-spring',{schedule:{kind:'cron',expr:'0 9 * * *'},last_run_at:'2026-03-28T08:00:00Z',next_run_at:'2026-03-30T07:00:00Z'}),ctx={day:'2026-03-29',timezone:'Europe/Berlin'};
+ assert.equal(routineFinding(job,{},{...ctx,now:Date.parse('2026-03-29T09:00:00Z')}).found,null);
+ assert.match(routineFinding(job,{},{...ctx,now:Date.parse('2026-03-29T09:00:01Z')}).found.words,/Sunday 29 March at 09:00/);
+});
+
 test('one failure says nothing; two are told once with the error in plain words',t=>{
  const f=fixture(t);
  check(f,[failing('a',1)]);assert.equal(said(f).length,0);
@@ -103,31 +109,38 @@ test('without a failure streak, two errored runs seen at different checks are no
 });
 
 // A daily-round routine: Hermes records the run as good and godspeed-routines-status.json says it failed.
-const round=(f,now,failed)=>{
+const round=(f,now,failed,failure_streak=failed?1:0)=>{
  const job=daily('round',{script:'godspeed-daily-round-choose.py',last_run_at:new Date(now-5*3600000).toISOString(),next_run_at:new Date(now+19*3600000).toISOString()});
- fs.writeFileSync(path.join(f.home,'godspeed-routines-status.json'),JSON.stringify(failed?{decide:{failed:'the goal file is damaged',at:job.last_run_at}}:{}));
+ fs.writeFileSync(path.join(f.home,'godspeed-routines-status.json'),JSON.stringify(failed?{decide:{failed:'the goal file is damaged',at:job.last_run_at,failure_streak}}:{}));
  return job;
 };
 
+test('two sidecar failures before one daily check are told together',t=>{
+ const f=fixture(t),job=daily('work',{script:'godspeed-daily-round-work.py',last_run_at:'2026-11-04T16:00:00Z',next_run_at:'2026-11-05T10:00:00Z'});
+ fs.writeFileSync(path.join(f.home,'godspeed-routines-status.json'),JSON.stringify({work:{failed:'the work item did not pass its check',at:job.last_run_at,failure_streak:2}}));
+ check(f,[job]);
+ assert.equal(said(f).length,1);assert.match(said(f)[0].text,/"Routine work" failed its last two runs: the work item did not pass its check/);
+});
+
 test('a failure only the status record shows is told at its second run, once, across days',t=>{
- const f=fixture(t),on=(day,now,failed)=>checkRoutines({store:f.store,home:f.home,day,timezone:'UTC',now:()=>new Date(now),jobs:[round(f,now,failed)]});
+ const f=fixture(t),on=(day,now,failed,failure_streak)=>checkRoutines({store:f.store,home:f.home,day,timezone:'UTC',now:()=>new Date(now),jobs:[round(f,now,failed,failure_streak)]});
  const next=NOW+24*3600000,after=NOW+48*3600000,later=NOW+72*3600000;
- on(DAY,NOW,true);assert.equal(said(f).length,0,'one failed run says nothing');
- on('2026-11-06',next,true);assert.equal(said(f).length,1);assert.match(said(f)[0].text,/failed its last two runs: the goal file is damaged/);
- on('2026-11-07',after,true);assert.equal(said(f).length,1,'the same spell is not told on a later day');
+ on(DAY,NOW,true,1);assert.equal(said(f).length,0,'one failed run says nothing');
+ on('2026-11-06',next,true,2);assert.equal(said(f).length,1);assert.match(said(f)[0].text,/failed its last two runs: the goal file is damaged/);
+ on('2026-11-07',after,true,3);assert.equal(said(f).length,1,'the same spell is not told on a later day');
  on('2026-11-08',later,false);assert.equal(said(f).length,1,'a good run closes it');
- on('2026-11-09',later+24*3600000,true);assert.equal(said(f).length,1,'a first failure after the good run says nothing');
- on('2026-11-10',later+48*3600000,true);assert.equal(said(f).length,2,'the second failure of a new spell is told');
+ on('2026-11-09',later+24*3600000,true,1);assert.equal(said(f).length,1,'a first failure after the good run says nothing');
+ on('2026-11-10',later+48*3600000,true,2);assert.equal(said(f).length,2,'the second failure of a new spell is told');
 });
 
 test('a notice that could not be queued is told at the next check, also for a failure only the status record shows',t=>{
- const f=fixture(t),on=(day,now)=>checkRoutines({store:f.store,home:f.home,day,timezone:'UTC',now:()=>new Date(now),jobs:[round(f,now,true)]});
+ const f=fixture(t),on=(day,now,failure_streak)=>checkRoutines({store:f.store,home:f.home,day,timezone:'UTC',now:()=>new Date(now),jobs:[round(f,now,true,failure_streak)]});
  const next=NOW+24*3600000,after=NOW+48*3600000,notices=path.join(f.store.state,'notices.json');
- on(DAY,NOW);
+ on(DAY,NOW,1);
  fs.mkdirSync(notices,{recursive:true});
- assert.throws(()=>on('2026-11-06',next),/could not be queued/);
+ assert.throws(()=>on('2026-11-06',next,2),/could not be queued/);
  fs.rmSync(notices,{recursive:true});
- on('2026-11-06',next);assert.equal(said(f).length,1);
+ on('2026-11-06',next,2);assert.equal(said(f).length,1);
 });
 
 test('a notice that could not be queued does not write a legacy error_run back',t=>{

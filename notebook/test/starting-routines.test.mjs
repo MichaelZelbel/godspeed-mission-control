@@ -331,10 +331,13 @@ print(json.dumps(g.work(g.config())))`;
  const run=spawnSync(python,['-c',code],{cwd:path.join(home,'scripts'),input:log,encoding:'utf8',env:{...process.env,PYTHONIOENCODING:'utf-8'}});
  assert.equal(run.status,0,run.stderr);
  assert.deepEqual(JSON.parse(run.stdout).split('\n'),['Today\'s work did not pass its check, so it is not done yet: "How do people who reached two new clients get there?".','Today\'s work could not be finished, so it is not done yet: "Draft the pitch email".']);
- const status=JSON.parse(fs.readFileSync(path.join(home,'godspeed-routines-status.json'),'utf8'));assert.match(status.work.failed,/did not pass its check/);
+ const status=JSON.parse(fs.readFileSync(path.join(home,'godspeed-routines-status.json'),'utf8'));assert.match(status.work.failed,/did not pass its check/);assert.equal(status.work.failure_streak,1);
  // Exit 1 to 3 is a run that never started, and says only that.
  const never=spawnSync(python,['-c',code.replace('returncode=4','returncode=1')],{cwd:path.join(home,'scripts'),input:'',encoding:'utf8',env:{...process.env,PYTHONIOENCODING:'utf-8'}});
  assert.equal(never.status,0,never.stderr);assert.equal(JSON.parse(never.stdout),'The daily round\'s work could not start today.');
+ assert.equal(JSON.parse(fs.readFileSync(path.join(home,'godspeed-routines-status.json'),'utf8')).work.failure_streak,2);
+ const recovered=spawnSync(python,['-c',code.replace('returncode=4','returncode=0')],{cwd:path.join(home,'scripts'),input:'',encoding:'utf8',env:{...process.env,PYTHONIOENCODING:'utf-8'}});
+ assert.equal(recovered.status,0,recovered.stderr);assert.equal(JSON.parse(fs.readFileSync(path.join(home,'godspeed-routines-status.json'),'utf8')).work.failure_streak,0);
 });
 
 test('a failed daily connection check leaves what it queued unsaid, and a timeout is a failure too',{skip:!havePython&&'no Python here'},t=>{
