@@ -120,7 +120,7 @@ async function runBriefing(job,{store,query,provider,now}){
    const safe=(value,max=100)=>typeof value==='string'&&value.trim()&&value.length<=max&&!/[\r\n\u0000-\u001f]/.test(value)?value.trim():null;
    const add=line=>{if(!line)return false;const candidate=[...parts,line].join('\n\n');if(codeGate(candidate).some(e=>!e.startsWith('Include ')))return false;parts.push(line);return true;};
    const goal=context.goals.at(0),goalTitle=safe(goal?.title,500);
-   if(goalTitle)add('Your current goal is '+goalTitle+'.');
+   if(goalTitle)add('One of your saved goals is '+goalTitle+'.');
    const done=context.work.filter(w=>w.state==='verified'&&w.kind!=='repair').at(-1),doneTitle=safe(done?.title);
    if(doneTitle)add('Godspeed has verified this work: '+doneTitle+'.');
    const due=context.deadlines.filter(d=>d.due_at&&Number.isFinite(Date.parse(d.due_at))&&Date.parse(d.due_at)>=now.getTime()).sort((a,b)=>Date.parse(a.due_at)-Date.parse(b.due_at))[0],dueTitle=safe(due?.title);

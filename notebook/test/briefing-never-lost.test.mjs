@@ -74,6 +74,21 @@ test('a long saved goal is not mistaken for missing setup',async()=>{
  assert.equal(result.fallback,true);assert.match(content,/Prepare the fictional field guide/);assert.doesNotMatch(content,/Tell Godspeed one goal/);
 });
 
+test('an empty first install gets one setup action without an invented goal',async()=>{
+ const {store,query}=fixture([]);
+ const provider=async input=>input.kind==='brief-verification'?{passed:false,reason:'No useful action'}:'Unsupported draft.';
+ const result=await run(provider,query,store,'brief-zero-goal'),content=store.get('notes',result.record_id).content;
+ assert.equal(result.fallback,true);assert.match(content,/Tell Godspeed one goal to work on today/);
+ assert.doesNotMatch(content,/saved goal|current goal/i);
+});
+
+test('several saved goals are not presented as one selected current goal',async()=>{
+ const {store,query}=fixture([]);store.save('goals',{title:'Fictional first goal',status:'adopted'});store.save('goals',{title:'Fictional second goal',status:'adopted'});
+ const provider=async input=>input.kind==='brief-verification'?{passed:false,reason:'No useful action'}:'Unsupported draft.';
+ const result=await run(provider,query,store,'brief-many-goals'),content=store.get('notes',result.record_id).content;
+ assert.equal(result.fallback,true);assert.match(content,/One of your saved goals is/);assert.doesNotMatch(content,/Your current goal/);
+});
+
 test('fallback names verified user work and the next future obligation only',async()=>{
  const {store,query}=fixture([]);store.save('goals',{title:'Prepare a fictional guide',status:'adopted'});
  store.save('work_items',{kind:'draft',title:'Checked fictional outline',state:'verified'});
@@ -120,6 +135,13 @@ test('a refused required line stays left out of the factual fallback',async()=>{
  const result=await run(provider,query,store,'brief-required-line-fallback'),content=store.get('notes',result.record_id).content;
  assert.equal(result.fallback,true);assert.doesNotMatch(content,/Challenge/);
  assert.ok(repairs(query).some(w=>w.line_name==='the Charm Challenge line'));
+});
+
+test('a live Charm line survives a rejected draft in the factual fallback',async()=>{
+ const {store,query}=fixture([],{charm:true});let line=null;
+ const provider=async input=>{if(input.kind==='brief-verification')return {passed:false,reason:'No useful action'};line=input.context.charm_line;return 'Unsupported draft.';};
+ const result=await run(provider,query,store,'brief-live-charm'),content=store.get('notes',result.record_id).content;
+ assert.equal(result.fallback,true);assert.ok(line);assert.ok(content.split(/\r?\n/).includes(line));
 });
 
 test('a checked contribution survives a length restricted factual fallback',async()=>{
