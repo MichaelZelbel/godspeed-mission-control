@@ -66,8 +66,10 @@ act() {
   trap 'kill "$pid" 2>/dev/null || true' EXIT
   wait_for 20 'the local Hevy fixture to name its port' test -s "$EVIDENCE/fixture-port" || fail "the local Hevy fixture did not start"
   port=$(cat "$EVIDENCE/fixture-port")
-  curl -fsS "http://127.0.0.1:$port/health" >"$EVIDENCE/setup.json" || fail "the local Hevy fixture did not answer health"
+  curl -fsS "http://127.0.0.1:$port/health" >"$EVIDENCE/fixture-health.json" || fail "the local Hevy fixture did not answer health"
+  grep -q '"ok":true' "$EVIDENCE/fixture-health.json" || fail "the local Hevy fixture returned an unhealthy health record"
   curl -sS -H 'api-key: refused-scenario-key' "http://127.0.0.1:$port/v1/workouts" >/dev/null || true
+  printf '{"fixture":"local-hevy","health":true,"refused":true}\n' >"$EVIDENCE/setup.json"
   # Use distinct ports so the native installation and Docker server are independently real installs.
   server_install
   printf '{"api_key":"refused-scenario-key","hevy_url":"http://127.0.0.1:%s"}\n' "$port" >"$EVIDENCE/refused-key.json"
