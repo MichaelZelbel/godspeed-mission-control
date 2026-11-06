@@ -21,6 +21,7 @@ import {rhythmWords} from '../../third-party/addons/godspeed-coach/lib/areas.mjs
 import {moveSettingsDeadlines} from './native-due.mjs';
 import {scrubCredentials} from './runtime.mjs';
 import {HermesLifecycle} from './hermes-lifecycle.mjs';
+import {UPDATE_TRANSACTION_LIMIT} from './hermes-update.mjs';
 const skills={'morning-brief':'morning-brief',coaching:'coach','habit-check':'coach',journal:'interstitial-journal',headache:'headache-tracker'};
 // Hermes' own record of its jobs, as it wrote it.
 export function hermesJobs(home){
@@ -70,8 +71,8 @@ export class NativeScheduler{
  // assistant: a watch topic was never read again, and radar work stayed
  // "preparing" for ever. They run on the machine that runs the routines.
  static recordKinds=['watch','domain-watch','radar-prepare','radar-work'];
- constructor(store,{executable,home,device=store.device,run=runCommand,records=null,tickLimit=TICK_LIMIT,beatEvery=HEARTBEAT_EVERY,now=Date.now,updater=null,lifecycle=new HermesLifecycle()}){
-  Object.assign(this,{store,executable,home,device,run,records,tickLimit,beatEvery,now,updater,lifecycle,setupAttempts:new Set()});
+ constructor(store,{executable,home,device=store.device,run=runCommand,records=null,tickLimit=TICK_LIMIT,beatEvery=HEARTBEAT_EVERY,updateLimit=UPDATE_TRANSACTION_LIMIT,now=Date.now,updater=null,lifecycle=new HermesLifecycle()}){
+  Object.assign(this,{store,executable,home,device,run,records,tickLimit,beatEvery,updateLimit,now,updater,lifecycle,setupAttempts:new Set()});
   if(records)records.onProgress=()=>this.onProgress?.();
  }
  // A connected provider reaches the record routines too (/api/provider).
@@ -603,7 +604,7 @@ export class NativeScheduler{
   // A setup asking inside a running tick or the cooldown still hears whether the connection check could be made.
   if(this.ticking){if(raise){await this.current?.catch(()=>null);await this.followConnectionCheck();}return records;}
   const now=this.now();if(now-(this.lastTick||0)<60000){this.onProgress?.();if(raise)await this.followConnectionCheck();return records;}
-  await this.updater?.tick(this.store.get('settings','installation')?.timezone).catch(error=>console.error('Godspeed Mission Control: the Hermes update could not be checked: '+String(error?.message||error)));
+  if(this.updater)await beatWhile(this.updater.tick(this.store.get('settings','installation')?.timezone),()=>this.onProgress?.(),{limitMs:this.updateLimit,every:this.beatEvery}).catch(error=>console.error('Godspeed Mission Control: the Hermes update could not be checked: '+String(error?.message||error)));
   const release=this.lifecycle.acquire('routine tick');if(!release)return records;
   this.ticking=true;this.lastTick=now;
   let failure=null,finish;const failures=[];

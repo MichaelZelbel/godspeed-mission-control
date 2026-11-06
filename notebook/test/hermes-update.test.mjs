@@ -1,6 +1,7 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import {EventEmitter} from 'node:events';import {PassThrough} from 'node:stream';
+import {execFileSync} from 'node:child_process';
 import {Store} from '../core/records/store.mjs';
-import {HermesUpdate,eligibleRelease,readHermesUpdate} from '../core/hermes-update.mjs';
+import {HermesUpdate,UPDATE_TRANSACTION_LIMIT,eligibleRelease,readHermesUpdate} from '../core/hermes-update.mjs';
 import {HermesLifecycle} from '../core/hermes-lifecycle.mjs';
 import {NativeScheduler} from '../core/native-scheduler.mjs';
 import {nativeAgent} from '../core/native-agent.mjs';
@@ -27,27 +28,63 @@ function fixture(t,{breaks,rejects,isDocker=false,aiFails=false}={}){
  }
  return {code:0,stdout:'',stderr:''};
  };
- const fetcher=async()=>({ok:true,json:async()=>releases(['1.1.0','1.2.0-rc.1','2.0.0','1.0.1'])});
+ const fetcher=async()=>({ok:true,json:async()=>releases(['1.1.0','1.2.0-rc.1','1.0.1'])});
  const store=new Store(root),updater=new HermesUpdate({store,descriptor:{verified:true,executable,home,sourceRoot:source},run,now:()=>clock,ask:async()=>{asked++;if(aiFails)throw Error('provider unavailable');},fetcher,isDocker:()=>isDocker});
  return {store,updater,calls,asked:()=>asked,setClock:value=>{clock=new Date(value);}};
 }
 
+function taggedFixture(t){
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-hermes-update-tagged-')),source=path.join(root,'hermes-agent'),home=path.join(root,'.hermes'),executable=path.join(root,'bin','hermes'),git=args=>execFileSync('git',['-C',source,...args],{encoding:'utf8'}).trim();fs.mkdirSync(path.join(source,'hermes_cli'),{recursive:true});fs.mkdirSync(path.join(source,'venv','bin'),{recursive:true});fs.mkdirSync(path.dirname(executable),{recursive:true});fs.mkdirSync(home,{recursive:true});fs.writeFileSync(path.join(source,'hermes_cli','__init__.py'),'');fs.writeFileSync(path.join(source,'venv','bin','python3'),'#!/bin/sh\nexit 0\n',{mode:0o755});execFileSync('git',['-C',source,'init','-q']);execFileSync('git',['-C',source,'config','user.email','test@example.com']);execFileSync('git',['-C',source,'config','user.name','Test']);
+ for(const version of ['1.0.0','1.1.0','1.2.0']){fs.writeFileSync(path.join(source,'VERSION'),version+'\n');git(['add','.']);git(['commit','-qm','release '+version]);git(['tag','v'+version]);}git(['reset','--hard','v1.0.0']);
+ fs.writeFileSync(executable,[
+  '#!/usr/bin/env node',"import fs from 'node:fs';","import path from 'node:path';","import {execFileSync} from 'node:child_process';",
+  "const args=process.argv.slice(2),root=path.dirname(path.dirname(process.argv[1])),source=path.join(root,'hermes-agent'),flag=name=>fs.existsSync(path.join(root,name)),run=args=>execFileSync('git',args,{encoding:'utf8'}).trim(),version=()=>run(['-C',source,'describe','--tags','--exact-match']).replace(/^v/,''),available=()=>flag('available')?fs.readFileSync(path.join(root,'available'),'utf8').trim():run(['-C',source,'tag','--sort=-v:refname']).split(/\\r?\\n/)[0].replace(/^v/,'');",
+  "if(args[0]==='--version'){console.log('Hermes '+version());process.exit(0);}",
+  "if(args[0]==='update'&&args[1]==='--check'){console.log('v'+available()+' is ready');process.exit(0);}",
+  "if(args[0]==='update'){if(flag('fail-update')){console.error('token=sk-secret-token-value-123456789');process.exit(1);}execFileSync('git',['-C',source,'reset','--hard','v'+available()],{stdio:'ignore'});process.exit(0);}",
+  "if(args[0]==='backup'){fs.mkdirSync(path.dirname(args[2]),{recursive:true});fs.writeFileSync(args[2],'backup');process.exit(0);}",
+  "if(args[0]==='plugins'&&flag('fail-plugin')&&version()!=='1.0.0'){console.error('plugin import failed');process.exit(1);}",
+  "if(args[0]==='gateway'&&args[1]==='restart'&&flag('fail-restored-restart')&&version()==='1.0.0'){console.error('restart failed');process.exit(1);}",
+  'process.exit(0);'
+ ].join('\n'),{mode:0o755});t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ const store=new Store(root),updater=new HermesUpdate({store,descriptor:{verified:true,executable,home,sourceRoot:source},now:()=>new Date(at),ask:async()=>{}}),rows=versions=>versions.map(version=>({tag_name:'v'+version,published_at:old,prerelease:version.includes('-')}));
+ return {root,source,store,updater,rows,head:()=>git(['describe','--tags','--exact-match']),setAvailable:version=>fs.writeFileSync(path.join(root,'available'),version)};
+}
+
 test('only published stable, week-old releases in the installed major are eligible',()=>{
- assert.deepEqual(eligibleRelease(releases(['1.1.0','1.2.0-rc.1','2.0.0','1.0.1']),'1.0.0',Date.parse(at)),{tag:'v1.1.0',version:'1.1.0',at:Date.parse(old),prerelease:false});
+ assert.deepEqual(eligibleRelease(releases(['1.1.0','1.2.0-rc.1','1.0.1']),'1.0.0',Date.parse(at)),{tag:'v1.1.0',version:'1.1.0',at:Date.parse(old),prerelease:false});
  assert.equal(eligibleRelease([{tag_name:'v1.1.0',published_at:old},{tag_name:'v1.2.0',published_at:recent}],'1.0.0',Date.parse(at)),null,'the updater cannot use an old release while Hermes would select a newer, young stable release');
 });
 
 test('a passing published release is backed up, updated, restarted, checked, and visible in Settings',async t=>{
- const f=fixture(t),result=await f.updater.runNow(),state=readHermesUpdate(f.store);assert.equal(result.result,'updated');assert.equal(result.version,'1.1.0');assert.equal(f.asked(),1);assert.ok(f.calls.some(call=>call.join(' ')==='hermes update --no-backup --yes'));assert.ok(f.calls.some(call=>call.join(' ')==='hermes gateway restart'));for(const name of ['godspeed-reply','godspeed-context','godspeed-chat-tidy'])assert.ok(f.calls.some(call=>call.join(' ').includes('plugins doctor')&&call.join(' ').includes(name)));assert.ok(fs.existsSync(state.backup));assert.deepEqual(f.store.list('notifications'),[]);
+ const f=fixture(t),result=await f.updater.runNow(),state=readHermesUpdate(f.store),stop=f.calls.findIndex(call=>call.join(' ')==='hermes gateway stop'),backup=f.calls.findIndex(call=>call[1]==='backup');assert.equal(result.result,'updated');assert.equal(result.version,'1.1.0');assert.equal(f.asked(),1);assert.ok(f.calls.some(call=>call.join(' ')==='hermes update --no-backup --yes'));assert.ok(f.calls.some(call=>call.join(' ')==='hermes gateway restart'));assert.ok(stop>=0&&stop<backup,'the gateway is paused before the restorable snapshot');for(const name of ['godspeed-reply','godspeed-context','godspeed-chat-tidy'])assert.ok(f.calls.some(call=>call.join(' ').includes('plugins doctor')&&call.join(' ').includes(name)));assert.ok(fs.existsSync(state.backup));assert.deepEqual(f.store.list('notifications'),[]);
+});
+
+test('a newer major release and a mismatched Hermes preview never mutate the checkout',async t=>{
+ const major=fixture(t);major.updater.fetcher=async()=>({ok:true,json:async()=>releases(['1.1.0','2.0.0'])});assert.equal((await major.updater.runNow()).result,'skipped');assert.equal(major.calls.some(call=>call[1]==='update'),false);
+ const preview=fixture(t),command=preview.updater.command.bind(preview.updater);preview.updater.command=async(executable,args,options)=>args.join(' ')==='update --check'?{code:0,stdout:'v2.0.0 is ready\n',stderr:''}:command(executable,args,options);const result=await preview.updater.runNow();assert.equal(result.reason,'Hermes did not offer the eligible stable release.');assert.equal(preview.calls.some(call=>call.join(' ')==='hermes gateway stop'),false);assert.equal(preview.calls.some(call=>call.join(' ')==='hermes update --no-backup --yes'),false);
+});
+
+test('a pre-update backup failure resumes the paused chat gateway',async t=>{
+ const f=fixture(t),command=f.updater.command.bind(f.updater);f.updater.command=async(executable,args,options)=>args[0]==='backup'?{code:1,stdout:'',stderr:'backup failed'}:command(executable,args,options);const result=await f.updater.runNow();assert.equal(result.reason,'Hermes could not make its pre-update backup.');assert.ok(f.calls.some(call=>call.join(' ')==='hermes gateway stop'));assert.ok(f.calls.some(call=>call.join(' ')==='hermes gateway restart'));assert.equal(f.calls.some(call=>call.join(' ')==='hermes update --no-backup --yes'),false);
+});
+
+test('a tagged checkout and fake Hermes executable cover the update acceptance cases',async t=>{
+ await t.test('keeps an eligible stable release',async t=>{const f=taggedFixture(t);f.setAvailable('1.1.0');f.updater.fetcher=async()=>({ok:true,json:async()=>f.rows(['1.1.0'])});assert.equal((await f.updater.runNow()).result,'updated');assert.equal(f.head(),'v1.1.0');assert.ok(fs.existsSync(readHermesUpdate(f.store).backup));assert.deepEqual(f.store.list('notifications'),[]);});
+ await t.test('leaves young, prerelease, and major releases alone',async t=>{const cases=[['young',[{tag_name:'v1.1.0',published_at:recent,prerelease:false}]],['pre-release',[{tag_name:'v1.1.0-rc.1',published_at:old,prerelease:true}]],['major',[{tag_name:'v1.1.0',published_at:old,prerelease:false},{tag_name:'v2.0.0',published_at:old,prerelease:false}]]];for(const [name,releases] of cases){const f=taggedFixture(t);f.setAvailable('1.1.0');f.updater.fetcher=async()=>({ok:true,json:async()=>releases});assert.equal((await f.updater.runNow()).result,'skipped',name);assert.equal(f.head(),'v1.0.0',name);}});
+ await t.test('rolls back a failed plugin import and queues one notice',async t=>{const f=taggedFixture(t);f.setAvailable('1.1.0');fs.writeFileSync(path.join(f.root,'fail-plugin'),'');f.updater.fetcher=async()=>({ok:true,json:async()=>f.rows(['1.1.0'])});assert.equal((await f.updater.runNow()).result,'rolled-back');assert.equal(f.head(),'v1.0.0');assert.equal(f.store.list('notifications').length,1);assert.equal(readNotices(f.store).length,1);});
+ await t.test('reports only the installer bell when rollback cannot restart',async t=>{const f=taggedFixture(t);f.setAvailable('1.1.0');fs.writeFileSync(path.join(f.root,'fail-plugin'),'');fs.writeFileSync(path.join(f.root,'fail-restored-restart'),'');f.updater.fetcher=async()=>({ok:true,json:async()=>f.rows(['1.1.0'])});assert.equal((await f.updater.runNow()).result,'rollback-failed');assert.equal(f.head(),'v1.0.0');assert.equal(f.store.list('notifications').length,1);assert.equal(readNotices(f.store).length,0);});
+ await t.test('refuses dirty, foreign, and Docker installations',async t=>{const dirty=taggedFixture(t);fs.writeFileSync(path.join(dirty.source,'local-change'),'x');dirty.updater.fetcher=async()=>({ok:true,json:async()=>dirty.rows(['1.1.0'])});assert.match((await dirty.updater.runNow()).reason,/uncommitted changes/);assert.equal(dirty.head(),'v1.0.0');const foreign=taggedFixture(t);foreign.updater.getuid=()=>-1;assert.match((await foreign.updater.runNow()).reason,/another user/);const docker=taggedFixture(t);docker.updater.isDocker=()=>true;assert.match((await docker.updater.runNow()).reason,/Docker/);});
+ await t.test('retains one backup after two updates and scrubs a failed command',async t=>{const f=taggedFixture(t);f.setAvailable('1.1.0');f.updater.fetcher=async()=>({ok:true,json:async()=>f.rows(['1.1.0'])});await f.updater.runNow();const first=readHermesUpdate(f.store).backup;f.setAvailable('1.2.0');f.updater.fetcher=async()=>({ok:true,json:async()=>f.rows(['1.2.0'])});await f.updater.runNow();const second=readHermesUpdate(f.store).backup;assert.equal(f.head(),'v1.2.0');assert.notEqual(first,second);assert.equal(fs.existsSync(first),false);assert.equal(fs.existsSync(second),true);const failed=taggedFixture(t);failed.setAvailable('1.1.0');fs.writeFileSync(path.join(failed.root,'fail-update'),'');failed.updater.fetcher=async()=>({ok:true,json:async()=>failed.rows(['1.1.0'])});await failed.updater.runNow();assert.doesNotMatch(JSON.stringify(readHermesUpdate(failed.store)),/sk-secret-token/);});
 });
 
 test('a Settings opt-out during an update survives its completion',async t=>{
- const f=fixture(t);let entered,release;const started=new Promise(resolve=>{entered=resolve;}),held=new Promise(resolve=>{release=resolve;});f.updater.fetcher=async()=>{entered();await held;return {ok:true,json:async()=>releases(['1.1.0','1.2.0-rc.1','2.0.0','1.0.1'])};};
+ const f=fixture(t);let entered,release;const started=new Promise(resolve=>{entered=resolve;}),held=new Promise(resolve=>{release=resolve;});f.updater.fetcher=async()=>{entered();await held;return {ok:true,json:async()=>releases(['1.1.0','1.2.0-rc.1','1.0.1'])};};
  const updating=f.updater.runNow();await started;f.updater.setEnabled(false);release();assert.equal((await updating).result,'updated');assert.equal(readHermesUpdate(f.store).enabled,false);assert.deepEqual(await f.updater.runNow(),{result:'skipped',reason:'Keeping the assistant up to date is switched off.'});
 });
 
 test('a Settings opt-out during the nightly update survives its day marker',async t=>{
- const f=fixture(t);let entered,release;const started=new Promise(resolve=>{entered=resolve;}),held=new Promise(resolve=>{release=resolve;});f.updater.fetcher=async()=>{entered();await held;return {ok:true,json:async()=>releases(['1.1.0','1.2.0-rc.1','2.0.0','1.0.1'])};};
+ const f=fixture(t);let entered,release;const started=new Promise(resolve=>{entered=resolve;}),held=new Promise(resolve=>{release=resolve;});f.updater.fetcher=async()=>{entered();await held;return {ok:true,json:async()=>releases(['1.1.0','1.2.0-rc.1','1.0.1'])};};
  const ticking=f.updater.tick('UTC');await started;f.updater.setEnabled(false);release();assert.equal((await ticking).result,'updated');assert.equal(readHermesUpdate(f.store).enabled,false);assert.deepEqual(await f.updater.runNow(),{result:'skipped',reason:'Keeping the assistant up to date is switched off.'});
 });
 
@@ -58,6 +95,27 @@ test('every validation veto rolls back, restores the backup, restarts, and never
   if(breaks==='--version'){const base=f.updater.command.bind(f.updater);f.updater.command=async(executable,args,options)=>args[0]==='--version'&&f.calls.some(call=>call[1]==='update'&&call[2]==='--no-backup')&&!f.calls.some(call=>call.join(' ')==='git reset --hard old-commit')?{code:1,stdout:'',stderr:'wrong version'}:base(executable,args,options);}
   const result=await f.updater.runNow();assert.equal(result.result,'rolled-back',breaks);assert.equal(f.asked(),1,breaks);assert.ok(f.calls.some(call=>call.join(' ')==='git reset --hard old-commit'),breaks);assert.ok(f.calls.some(call=>call[1]==='import'&&call.at(-1)==='--force'),breaks);assert.equal(readNotices(f.store).length,1,breaks);
  }
+});
+
+test('rollback validates the restored checkout and treats a restored-check failure as unrecovered',async t=>{
+ const f=fixture(t,{breaks:'gateway status'}),base=f.updater.command.bind(f.updater);let restoredCron=false;f.updater.command=async(executable,args,options)=>args.join(' ')==='cron list'&&f.calls.some(call=>call.join(' ')==='git reset --hard old-commit')?(restoredCron=true,{code:1,stdout:'',stderr:'restored cron failed'}):base(executable,args,options);
+ const result=await f.updater.runNow(),reset=f.calls.findIndex(call=>call.join(' ')==='git reset --hard old-commit'),after=f.calls.slice(reset+1).map(call=>call.join(' '));assert.equal(result.result,'rollback-failed');assert.ok(after.some(call=>call==='hermes --version'));assert.equal(restoredCron,true);assert.equal(readNotices(f.store).length,0);assert.match(f.store.get('notifications','hermes-update-1.1.0').body,/Run the Hermes installer again/);
+});
+
+test('a restored checkout repeats every local check before recovery is reported',async t=>{
+ const f=fixture(t,{breaks:'gateway status'});assert.equal((await f.updater.runNow()).result,'rolled-back');const reset=f.calls.findIndex(call=>call.join(' ')==='git reset --hard old-commit'),after=f.calls.slice(reset+1).map(call=>call.join(' '));assert.ok(after.includes('hermes --version'));assert.ok(after.includes('hermes cron list'));for(const plugin of ['godspeed-reply','godspeed-context','godspeed-chat-tidy'])assert.ok(after.some(call=>call.includes('plugins doctor')&&call.includes(plugin)));assert.ok(after.includes('hermes gateway status'));
+});
+
+test('rollback pauses the gateway again before importing the earlier Hermes home',async t=>{
+ const f=fixture(t,{breaks:'cron list'});assert.equal((await f.updater.runNow()).result,'rolled-back');const imported=f.calls.findIndex(call=>call[1]==='import'),stops=f.calls.map((call,index)=>call.join(' ')==='hermes gateway stop'?index:-1).filter(index=>index>=0);assert.ok(stops.length>=2);assert.ok(stops.at(-1)<imported);
+});
+
+test('a held updater lock defers another process without an update command',async t=>{
+ const f=fixture(t),lock=path.join(f.store.state,'hermes-update.lock');fs.writeFileSync(lock,'other process');assert.deepEqual(await f.updater.runNow(),{result:'skipped',reason:'A Hermes update is already running.'});assert.equal(f.calls.some(call=>call[1]==='update'),false);
+});
+
+test('an expired updater lock from an interrupted process is recovered',async t=>{
+ const f=fixture(t),lock=path.join(f.store.state,'hermes-update.lock'),expired=new Date(Date.now()-UPDATE_TRANSACTION_LIMIT-1);fs.writeFileSync(lock,'interrupted process');fs.utimesSync(lock,expired,expired);assert.equal((await f.updater.runNow()).result,'updated');assert.equal(fs.existsSync(lock),false);
 });
 
 test('a rejected update command follows rollback and keeps its diagnostics scrubbed',async t=>{
@@ -74,13 +132,13 @@ test('a rollback failure leaves only the installer bell',async t=>{
 
 test('the newest Godspeed backup replaces its recorded predecessor',async t=>{
  const f=fixture(t);await f.updater.runNow();const first=readHermesUpdate(f.store).backup;f.updater.fetcher=async()=>({ok:true,json:async()=>releases(['1.2.0'])});
- const original=f.updater.command.bind(f.updater);f.updater.command=async(executable,args,options)=>{const result=await original(executable,args,options);if(args[0]==='--version'&&f.calls.filter(call=>call[1]==='update'&&call[2]==='--no-backup').length>=2)return {code:0,stdout:'Hermes 1.2.0\n',stderr:''};return result;};
+ const original=f.updater.command.bind(f.updater);f.updater.command=async(executable,args,options)=>{if(args.join(' ')==='update --check'&&f.calls.filter(call=>call[1]==='update'&&call[2]==='--no-backup').length>=1)return {code:0,stdout:'v1.2.0 is ready\n',stderr:''};const result=await original(executable,args,options);if(args[0]==='--version'&&f.calls.filter(call=>call[1]==='update'&&call[2]==='--no-backup').length>=2)return {code:0,stdout:'Hermes 1.2.0\n',stderr:''};return result;};
  await f.updater.runNow();const second=readHermesUpdate(f.store).backup;assert.notEqual(second,first);assert.equal(fs.existsSync(first),false);assert.equal(fs.existsSync(second),true);
 });
 
 test('an unrecovered later update still replaces its recorded predecessor backup',async t=>{
  const f=fixture(t);await f.updater.runNow();const first=readHermesUpdate(f.store).backup;f.updater.fetcher=async()=>({ok:true,json:async()=>releases(['1.2.0'])});
- const original=f.updater.command.bind(f.updater);f.updater.command=async(executable,args,options)=>args.join(' ')==='gateway stop'&&f.calls.filter(call=>call[1]==='update'&&call[2]==='--no-backup').length>=2?{code:1,stdout:'',stderr:'stop failed'}:original(executable,args,options);
+ const original=f.updater.command.bind(f.updater);f.updater.command=async(executable,args,options)=>args.join(' ')==='update --check'&&f.calls.filter(call=>call[1]==='update'&&call[2]==='--no-backup').length>=1?{code:0,stdout:'v1.2.0 is ready\n',stderr:''}:args.join(' ')==='gateway restart'&&f.calls.some(call=>call.join(' ')==='git reset --hard old-commit')&&f.calls.filter(call=>call[1]==='update'&&call[2]==='--no-backup').length>=2?{code:1,stdout:'',stderr:'restart failed'}:original(executable,args,options);
  const result=await f.updater.runNow(),second=readHermesUpdate(f.store).backup;assert.equal(result.result,'rollback-failed');assert.notEqual(second,first);assert.equal(fs.existsSync(first),false);assert.equal(fs.existsSync(second),true);
 });
 
@@ -110,4 +168,8 @@ test('active chats, scheduler ticks, and manual routines defer updates for their
 
 test('a busy scheduled update records its visible deferral reason before marking the day',async t=>{
  const f=fixture(t);f.updater.isBusy=()=>true;const result=await f.updater.tick('UTC'),last=readHermesUpdate(f.store).last;assert.equal(result.result,'skipped');assert.equal(last.result,'skipped');assert.equal(last.reason,'Godspeed is still handling a chat or routine.');assert.equal(last.day,'2026-11-06');
+});
+
+test('the scheduler heartbeats while a bounded Hermes update is running',async t=>{
+ const f=fixture(t);let entered,release,beats=0;const started=new Promise(resolve=>{entered=resolve;}),held=new Promise(resolve=>{release=resolve;});const updater={tick:async()=>{entered();await held;}};const scheduler=new NativeScheduler(f.store,{home:f.updater.descriptor.home,executable:f.updater.descriptor.executable,updater,beatEvery:10,updateLimit:1000,run:async()=>({stdout:''})});scheduler.onProgress=()=>beats++;const ticking=scheduler.tick();await started;await new Promise(resolve=>setTimeout(resolve,35));assert.ok(beats>=2);release();await ticking;
 });

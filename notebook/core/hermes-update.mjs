@@ -10,6 +10,7 @@ import {queueNotice} from './notices.mjs';
 
 export const UPDATE_FILE='hermes-update.json';
 const DAY=24*60*60*1000,WAIT=7*DAY,RETRY=30*DAY,UPDATE_LIMIT=40*60*1000;
+export const UPDATE_TRANSACTION_LIMIT=5*UPDATE_LIMIT+10*60*1000;
 const PLUGINS=['godspeed-reply','godspeed-context','godspeed-chat-tidy'];
 const versionOf=value=>{const found=/(?:^|[^0-9])(\d+)\.(\d+)\.(\d+)(?:$|[^0-9])/.exec(String(value||''));return found?[+found[1],+found[2],+found[3]].join('.'):null;};
 const compare=(a,b)=>a.split('.').map(Number).reduce((result,n,index)=>result||n-b.split('.').map(Number)[index],0);
@@ -39,8 +40,8 @@ export function releaseCandidates(releases){
 
 export function eligibleRelease(releases,installed,now=Date.now(),failed={}){
  const current=versionOf(installed);if(!current)return null;
- const newest=releaseCandidates(releases).filter(item=>item.version.split('.')[0]===current.split('.')[0]&&compare(item.version,current)>0).sort((a,b)=>compare(b.version,a.version))[0];
- if(!newest||now-newest.at<WAIT||failed[newest.version]&&now-Date.parse(failed[newest.version])<RETRY)return null;
+ const newest=releaseCandidates(releases).filter(item=>!item.prerelease).sort((a,b)=>compare(b.version,a.version))[0];
+ if(!newest||newest.version.split('.')[0]!==current.split('.')[0]||compare(newest.version,current)<=0||now-newest.at<WAIT||failed[newest.version]&&now-Date.parse(failed[newest.version])<RETRY)return null;
  return newest;
 }
 
@@ -114,7 +115,11 @@ export class HermesUpdate{
   if(fs.existsSync(path.join(this.store.state,'workspace.lock')))return {result:'skipped',reason:'Another Godspeed process is using this workspace.'};
   const release=this.lifecycle?.acquire('assistant update');if(this.lifecycle&&!release)return {result:'skipped',reason:'Godspeed is still handling a chat or routine.'};
   const lock=path.join(this.store.state,'hermes-update.lock');let fd;
-  try{fd=fs.openSync(lock,'wx');fs.writeFileSync(fd,String(process.pid));}catch{release?.();return {result:'skipped',reason:'A Hermes update is already running.'};}
+  try{fd=fs.openSync(lock,'wx');fs.writeFileSync(fd,String(process.pid));}catch{
+   let stale=false;try{stale=Date.now()-fs.statSync(lock).mtimeMs>UPDATE_TRANSACTION_LIMIT;}catch{}
+   if(!stale){release?.();return {result:'skipped',reason:'A Hermes update is already running.'};}
+   try{fs.unlinkSync(lock);fd=fs.openSync(lock,'wx');fs.writeFileSync(fd,String(process.pid));}catch{release?.();return {result:'skipped',reason:'A Hermes update is already running.'};}
+  }
   this.running=this.runTransaction().catch(error=>this.record({result:'failed',reason:'Hermes update could not finish.',detail:scrubCredentials(errorText({error})).trim().slice(-2000)}));
   try{return await this.running;}finally{this.running=null;try{fs.closeSync(fd);}catch{}try{fs.unlinkSync(lock);}catch{}release?.();}
  }
@@ -134,7 +139,12 @@ export class HermesUpdate{
   let target;try{target=eligibleRelease(listed.releases,installed,this.now().getTime(),this.state().failed);}catch(error){return this.record({result:'failed',version:installed,reason:'Hermes release discovery failed.',detail:failure({step:'release discovery',result:{error}}).output});}
   if(!target)return this.record({result:'skipped',version:installed,reason:'No eligible stable Hermes release is ready.'});
   const preview=await this.command(eligible.executable,['update','--check'],{cwd:eligible.source});if(preview.code!==0)return this.record({result:'failed',version:installed,reason:'Hermes could not check its stable release.',detail:failure({step:'update check',result:preview}).output});
-  const backup=await this.backup();if(backup.error)return this.record({result:'failed',version:installed,reason:'Hermes could not make its pre-update backup.',detail:backup.error.output});
+  if(versionOf(preview.stdout)!==target.version)return this.record({result:'skipped',version:installed,reason:'Hermes did not offer the eligible stable release.'});
+  const stopped=await this.command(eligible.executable,['gateway','stop'],{cwd:eligible.source});if(stopped.code!==0)return this.record({result:'failed',version:installed,reason:'Hermes could not pause its chat gateway.',detail:failure({step:'chat gateway stop',result:stopped}).output});
+  const backup=await this.backup();if(backup.error){
+   const restart=await this.command(eligible.executable,['gateway','restart'],{cwd:eligible.source});
+   return this.record(restart.code===0?{result:'failed',version:installed,reason:'Hermes could not make its pre-update backup.',detail:backup.error.output}:{result:'failed',version:installed,reason:'Hermes could not restart its chat gateway.',detail:failure({step:'chat gateway restart',result:restart}).output});
+  }
   const updated=await this.command(eligible.executable,['update','--no-backup','--yes'],{cwd:eligible.source,timeoutMs:UPDATE_LIMIT});
   let checked=updated.code===0?null:{ok:false,...failure({step:'Hermes update',result:updated})};
   if(!checked){const restart=await this.command(eligible.executable,['gateway','restart'],{cwd:eligible.source});checked=restart.code===0?await this.validate({expect:target.version}):{ok:false,...failure({step:'chat gateway restart',result:restart})};}
