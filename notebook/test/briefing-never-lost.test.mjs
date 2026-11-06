@@ -88,6 +88,24 @@ test('fallback names verified user work and the next future obligation only',asy
  assert.doesNotMatch(content,/Private unapproved|Recheck internal|Old fictional bill|Plan fictional travel/);
 });
 
+test('an unrenderable health value is omitted without claiming no observation exists',async()=>{
+ const {store,query}=fixture([]);store.save('goals',{title:'Prepare a fictional guide',status:'adopted'});
+ store.save('health_observations',{metric:'Fictional headache',value:{description:'Mild and improving'},observed_at:new Date().toISOString()});
+ const provider=async input=>input.kind==='brief-verification'?{passed:false,reason:'No useful action'}:'Unsupported draft.';
+ const result=await run(provider,query,store,'brief-complex-health'),content=store.get('notes',result.record_id).content;
+ assert.equal(result.fallback,true);assert.doesNotMatch(content,/no fresh health observations|\[object Object\]/i);assert.match(content,/goal step|concrete result/);
+});
+
+test('an impossible checked fallback retains the rejected draft and reasons for repair',async()=>{
+ const {store,query}=fixture(['MAX-SENTENCE-WORDS: 1']);store.save('goals',{title:'Prepare a fictional guide',status:'adopted'});
+ const provider=async input=>input.kind==='brief-verification'?{passed:false,reason:'Missing actionable next step'}:'Unsupported private draft.';
+ await assert.rejects(run(provider,query,store,'brief-impossible-fallback'),/Could not make a checked factual fallback/);
+ const receipt=query.rows('job_receipts').find(r=>r.kind==='brief-factual-fallback');
+ assert.equal(receipt.state,'failed');assert.equal(receipt.rejected_draft,'Unsupported private draft.');
+ assert.ok(receipt.reasons.includes('Missing actionable next step'));assert.match(receipt.fallback_error,/checked factual fallback/);
+ assert.equal(query.rows('notes').filter(n=>n.source_app==='morning-brief').length,0);
+});
+
 test('a rejected draft keeps a separately checked contribution and its exact link',async()=>{
  const {store,query}=fixture([]),content='Fictional copy ready draft.';
  const note=store.save('notes',{title:'Fictional contribution',content});store.save('lead_entries',{title:note.title,content,note_id:note.id,status:'ready',delivery_day:'2026-01-01'});

@@ -127,7 +127,7 @@ async function runBriefing(job,{store,query,provider,now}){
    if(dueTitle)add('A dated obligation is '+dueTitle+', due '+String(due.due_at).slice(0,10)+'.');
    const observed=context.health.at(-1),metric=safe(observed?.metric,60),value=observed?.value;
    if(metric&&(typeof value==='number'||typeof value==='string'&&safe(value,30)))add('A recorded health observation is '+metric+': '+value+'.');
-   else add('There are no fresh health observations to report.');
+   else if(!context.health.length)add('There are no fresh health observations to report.');
    const action=add(goalTitle?'Ask Godspeed to work on '+goalTitle+' and show you one concrete result today.':goal?'Ask Godspeed to complete one goal step.':'Tell Godspeed one goal to work on today, then ask it for the first concrete step.')||add(goal?'Ask Godspeed to complete one goal step.':'Tell Godspeed one goal.')||add(goal?'Work on one goal step today.':'Name one goal today.');
    for(const line of required)add(line);
    if(context.contribution){add(context.contribution.content);add(context.contribution.link);}
@@ -154,7 +154,8 @@ async function runBriefing(job,{store,query,provider,now}){
    // each of those names the sentence or line that carries it (issue #117).
     if(code.some(e=>/already saved today/.test(e)))throw Error('The same note was already saved today');
     if([facts,reader].some(r=>r.verdict.passed!==true)){
-     const rejected=draft,reasons=[...feedback];draft=factualFallback();
+     const rejected=draft,reasons=[...feedback];
+     try{draft=factualFallback();}catch(error){await store.saveAsync('job_receipts',{kind:'brief-factual-fallback',job_id:job.id,state:'failed',source_hash:hash(context),rejected_draft:rejected,rejected_hash:hash(rejected),reasons,fallback_error:error.message,finished_at:new Date().toISOString()});throw error;}
      const receipt=await store.saveAsync('job_receipts',{kind:'brief-factual-fallback',job_id:job.id,state:'verified',source_hash:hash(context),draft_hash:hash(draft),rejected_draft:rejected,rejected_hash:hash(rejected),reasons,checks:['visible sources','voice','required lines','duplicate','length'],finished_at:new Date().toISOString()});
      check=receipt;deliveryCheck=receipt;fallback={day:today,refusals:reasons,cut:[],draft_hash:hash(rejected),checked:true};cutReceipt=receipt;break;
     }
