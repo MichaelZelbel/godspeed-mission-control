@@ -8,18 +8,18 @@ for(const key of Object.keys(process.env))if(/^(GODSPEED_|HERMES_)/.test(key))de
 // "YOUR ROUTINES" IN THE DAILY CONNECTION CHECK (#239). The clock and the jobs list are made up.
 const NOW=Date.parse('2026-11-05T05:00:00Z'),DAY='2026-11-05',ago=h=>new Date(NOW-h*3600000).toISOString(),ahead=h=>ago(-h);
 const fixture=t=>{const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-routine-check-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));installStarter(root);const home=path.join(root,'hermes');fs.mkdirSync(home);return {root,home,store:new Store(root,{device:'pc'})};};
-const daily=(id,over={})=>({id,name:'Routine '+id,enabled:true,schedule:{kind:'cron',expr:'0 23 * * *'},created_at:ago(500),last_run_at:ago(30),last_status:'ok',next_run_at:ago(6),...over});
+const daily=(id,over={})=>({id,name:'Routine '+id,enabled:true,schedule:{kind:'cron',expr:'0 23 * * *'},created_at:ago(500),last_run_at:ago(30),last_status:'ok',next_run_at:ahead(18),...over});
 const failing=(id,streak,over={})=>daily(id,{last_run_at:ago(5),last_status:'error',last_error:'Traceback\nstderr:\nthe backup disk is full',next_run_at:ahead(19),failure_streak:streak,...over});
 const check=(f,jobs)=>checkRoutines({store:f.store,home:f.home,day:DAY,timezone:'UTC',now:()=>new Date(NOW),jobs});
 const said=f=>readNotices(f.store);
 
 test('a daily routine last run 30 hours ago is told once, and 20 hours ago says nothing',t=>{
  const f=fixture(t);
- check(f,[daily('late'),daily('fine',{last_run_at:ago(20),next_run_at:ahead(4)})]);
+ check(f,[daily('late'),daily('fine',{schedule:{kind:'cron',expr:'0 9 * * *'},last_run_at:ago(20),next_run_at:ahead(4)})]);
  const [n,...rest]=said(f);assert.equal(rest.length,0);
- assert.ok(n.id.startsWith(CONNECTION_NOTICE_PREFIX));assert.match(n.text,/"Routine late" did not run when it was due/);assert.ok(!/Routine fine/.test(n.text));
+ assert.ok(n.id.startsWith(CONNECTION_NOTICE_PREFIX));assert.match(n.text,/"Routine late" did not run when it was due Wednesday 4 November at 23:00/);assert.ok(!/Routine fine/.test(n.text));
  assert.ok(n.about&&n.facts.length===1);
- check(f,[daily('late'),daily('fine',{last_run_at:ago(20),next_run_at:ahead(4)})]);assert.equal(said(f).length,1,'the same spell is not told again');
+ check(f,[daily('late'),daily('fine',{schedule:{kind:'cron',expr:'0 9 * * *'},last_run_at:ago(20),next_run_at:ahead(4)})]);assert.equal(said(f).length,1,'the same spell is not told again');
 });
 
 test('one failure says nothing; two are told once with the error in plain words',t=>{
@@ -111,6 +111,16 @@ test('runConnectionCheck tells the routines even when the connections fail, and 
  fs.mkdirSync(path.join(f.store.state,'connection-check.json'),{recursive:true});
  await assert.rejects(runConnectionCheck({root:f.root,home:f.home,env:{GODSPEED_TODAY:DAY},probes:{},jobs:[daily('late',{last_run_at:new Date(Date.now()-30*3600000).toISOString(),next_run_at:new Date(Date.now()-6*3600000).toISOString()})]}));
  assert.equal(readNotices(f.store).filter(n=>/routines-/.test(n.id)).length,1);
+});
+
+test('runConnectionCheck records a refused connection when the routine notice cannot be queued',async t=>{
+ const f=fixture(t),notices=path.join(f.store.state,'notices.json');
+ const jobs={*[Symbol.iterator](){fs.rmSync(notices);fs.mkdirSync(notices);yield daily('late');}};
+ const probes={ai:async()=>({set_up:false}),telegram:async()=>({set_up:true,ok:false,kind:'sign-in'}),github:async()=>({set_up:false}),mail:async()=>({set_up:false}),agentmail:async()=>({set_up:false}),phone:async()=>({set_up:false})};
+ await assert.rejects(runConnectionCheck({root:f.root,home:f.home,env:{GODSPEED_TODAY:DAY},probes,jobs}),/routines notice could not be queued/);
+ assert.equal(f.store.get('notifications','connection-telegram').status,'pending');
+ const record=JSON.parse(fs.readFileSync(path.join(f.store.state,'connection-check.json'),'utf8'));
+ assert.equal(record.connections.telegram.kind,'sign-in');assert.equal(record.day,DAY);
 });
 
 test('the check reads Hermes\' own jobs list from the home when none is given',async t=>{

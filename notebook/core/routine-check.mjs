@@ -4,6 +4,7 @@ import {atomic,hash} from './records/store.mjs';
 import {hermesJobs,pausedJob} from './native-scheduler.mjs';
 import {routineStatus} from './starting-routines.mjs';
 import {readNotebookRoutines,CONNECTION_SCRIPT} from './notebook-routines.mjs';
+import {cronCalendar,cronOf} from './routine-times.mjs';
 import {tellOwner} from './connection-check.mjs';
 import {CONNECTION_NOTICE_PREFIX} from './connection-names.mjs';
 import {AI_SIGN_IN,scrubCredentials} from './runtime.mjs';
@@ -26,16 +27,38 @@ const time=value=>{const at=Date.parse(value);return Number.isFinite(at)?at:null
 const errorWords=text=>{const said=/\bstderr:\s*\n\s*(\S[^\n]*)/.exec(String(text||''));return scrubCredentials((said?said[1]:String(text||'').split(/\r?\n/).find(l=>l.trim())||'').trim()).slice(0,200);};
 
 // The time Hermes gives a late tick before a run counts as missed: half the period, between 2 minutes and 2 hours (Hermes' own catch-up grace).
-function slackFor(job,dueAt){
- const interval=job.schedule?.kind==='interval'&&job.schedule.minutes>0?job.schedule.minutes*60000:(time(job.last_run_at)!==null&&dueAt>time(job.last_run_at)?dueAt-time(job.last_run_at):DAY);
+function slackFor(job,interval=DAY){
+ interval=job.schedule?.kind==='interval'&&job.schedule.minutes>0?job.schedule.minutes*60000:interval;
  return Math.min(2*HOUR,Math.max(120000,interval/2));
 }
+const localParts=(at,timezone)=>Object.fromEntries(new Intl.DateTimeFormat('en-GB',{timeZone:timezone,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(new Date(at)).filter(p=>p.type!=='literal').map(p=>[p.type,Number(p.value)]));
+const offsetAt=(at,timezone)=>{const words=new Intl.DateTimeFormat('en-US',{timeZone:timezone,timeZoneName:'longOffset'}).formatToParts(new Date(at)).find(p=>p.type==='timeZoneName')?.value;const match=/GMT([+-])(\d\d):(\d\d)/.exec(words||'');return match?(match[1]==='-'?-1:1)*(Number(match[2])*60+Number(match[3]))*60000:0;};
+function timeIn(timezone,year,month,day,hour,minute){
+ const guess=Date.UTC(year,month-1,day,hour,minute),at=guess-offsetAt(guess,timezone);
+ return guess-offsetAt(at,timezone);
+}
+function previousCronDue(job,dueAt,now,timezone){
+ const calendar=cronCalendar(cronOf(job));if(!calendar)return null;
+ const next=localParts(dueAt,timezone),times=[...calendar.times].sort().reverse();
+ for(let days=0;days<63;days++){
+  const date=new Date(Date.UTC(next.year,next.month-1,next.day-days)),year=date.getUTCFullYear(),month=date.getUTCMonth()+1,day=date.getUTCDate();
+  if(calendar.month_day!==null?day!==calendar.month_day:!calendar.weekdays.includes(date.getUTCDay()))continue;
+  for(const clock of times){
+   const [hour,minute]=clock.split(':').map(Number),at=timeIn(timezone,year,month,day,hour,minute);
+   if(at<dueAt&&at<=now)return at;
+  }
+ }
+ return null;
+}
 function missed(job,{now,day,timezone}){
- if(job.schedule?.kind==='once'||job.state==='completed')return false;
+ if(job.schedule?.kind==='once'||job.state==='completed')return null;
  const dueAt=time(job.next_run_at),ranAt=time(job.last_run_at);
- if(dueAt===null||now<=dueAt+slackFor(job,dueAt))return false;
- if(ranAt===null)return dayOf(job.created_at,timezone)!==day;
- return ranAt<dueAt;
+ if(dueAt===null)return null;
+ if(ranAt===null)return dayOf(job.created_at,timezone)!==day?dueAt:null;
+ const interval=job.schedule?.kind==='interval'&&job.schedule.minutes>0?job.schedule.minutes*60000:null;
+ const prior=interval?dueAt-interval:previousCronDue(job,dueAt,dueAt<=now?dueAt-1:now,timezone);
+ const expected=dueAt<=now?dueAt:prior;
+ return expected!==null&&ranAt<expected&&now>expected+slackFor(job,interval||dueAt-prior)?expected:null;
 }
 const dayOf=(value,timezone)=>time(value)===null?null:new Intl.DateTimeFormat('en-CA',{timeZone:timezone,year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(value));
 const when=(value,timezone)=>new Intl.DateTimeFormat('en-GB',{timeZone:timezone,weekday:'long',day:'numeric',month:'long',hour:'2-digit',minute:'2-digit',hour12:false}).format(new Date(value));
@@ -56,11 +79,11 @@ export function routineFinding(job,prev={},{now,day,timezone}){
  if(sidecar&&ranAt!==null)entry.failed_at=job.last_run_at;
  const twice=errored&&(sidecar?seen!==null&&ranAt!==null&&seen<ranAt:job.failure_streak>=2);
  if(entry.spell)return {entry,found:null};
- let kind=null;
+ let kind=null,missedAt=null;
  if(errored){if(twice&&!AI_SIGN_IN.test(String(job.last_error||'')))kind='failing';}
- else if(missed(job,{now,day,timezone}))kind='missed';
+ else if((missedAt=missed(job,{now,day,timezone}))!==null)kind='missed';
  if(!kind)return {entry,found:null};
- const sentences=[kind==='missed'?`"${name}" did not run when it was due ${when(job.next_run_at,timezone)}.`:`"${name}" failed its last two runs${errorWords(job.last_error)?': '+errorWords(job.last_error):''}.`];
+ const sentences=[kind==='missed'?`"${name}" did not run when it was due ${when(missedAt,timezone)}.`:`"${name}" failed its last two runs${errorWords(job.last_error)?': '+errorWords(job.last_error):''}.`];
  if(entry.ok_at)sentences.push(`It last ran right ${when(entry.ok_at,timezone)}.`);
  sentences.push(kind==='missed'?'It runs again at its next time.':'It tries again at its next time.');
  return {entry,found:{words:sentences.join(' '),spell:{kind,since:day,run:job.last_run_at||null}}};
