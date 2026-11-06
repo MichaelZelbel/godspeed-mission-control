@@ -128,7 +128,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   const originalRuntime=process.env.GODSPEED_ORIGINAL_RUNTIME==='on';
   const descriptor=originalRuntime&&fs.existsSync(assistantPath)?JSON.parse(fs.readFileSync(assistantPath,'utf8').replace(/^\uFEFF/,'')):null;
   if(originalRuntime&&!descriptor?.verified)throw Error('Connect the original Godspeed assistant before starting the integrated notebook');
-  const domains=new Domains(query,{provider}),scheduler=originalRuntime?new NativeScheduler(store,{...descriptor,device,records:new Scheduler(store,{device,executor:jobExecutor(provider,query),only:NativeScheduler.recordKinds,delivery:'notebook'})}):new Scheduler(store,{device,query,executor:jobExecutor(provider,query)});scheduler.onProgress=beat;
+  const domains=new Domains(query,{provider}),scheduler=originalRuntime?new NativeScheduler(store,{...descriptor,device,records:new Scheduler(store,{device,executor:jobExecutor(provider,query),only:NativeScheduler.recordKinds,delivery:'notebook'})}):new Scheduler(store,{device,query,executor:jobExecutor(provider,query)});scheduler.onProgress=beat;scheduler.onFailure=error=>console.error('Godspeed Mission Control: a routine could not be created, the next tick tries again:',error.message);
   if(originalRuntime){domains.nativeAgent=nativeAgent({...descriptor,cwd:store.root,providerFile:providerPath,keptFile:path.join(store.state,KEPT_FILE)});domains.nativeScheduler=scheduler;query.nativeHermesHome=descriptor.home;}
   // Where the routines' AI is set: the Hermes home the routines run in (core/routine-ai.mjs).
   const routineAI=originalRuntime&&descriptor?.verified&&descriptor.home?{home:descriptor.home,state:store.state}:null;

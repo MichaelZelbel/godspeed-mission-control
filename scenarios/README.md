@@ -6,7 +6,7 @@ These are the **proving scenarios** a candidate runs before the maintainer is as
 (godspeed-dev, `releases/godspeed-2.0.0-beta.8-faster-chat/plan.md`,
 `releases/godspeed-2.0.0-beta.12-reminders-in-the-notebook/plan.md` and
 `releases/godspeed-2.0.0-beta.13-charm-video-notebook/plan.md`, "Proving scenarios"). Each one
-is one job of `.github/workflows/scenarios.yml` on a fresh `ubuntu-24.04` machine (all but `phone-health-days`, `incomplete-day`, `phone-goes-quiet`, `mail-count` and `talk-on-talk-day`: those five are staged for beta.18, and their jobs and verdict entries are added to the workflow at the release step, as the pull request body that added them describes), and each is one
+is one job of `.github/workflows/scenarios.yml` on a fresh `ubuntu-24.04` machine (all but `phone-health-days`, `incomplete-day`, `phone-goes-quiet`, `mail-count` and `talk-on-talk-day`: those five are staged for beta.18, and their jobs and verdict entries are added to the workflow at the release step, as the pull request body that added them describes; and except `night-tidy.sh`, which has no job until it is restored there), and each is one
 script here, so that what a scenario does can be read, run by hand and held to its own tests —
 which a step written inside a workflow file cannot be. They live in a folder of their own for the
 same reason `stage/` does: everything in `tools/` is copied onto every user's computer as a program,
@@ -20,7 +20,7 @@ paragraph when the jobs are in `.github/workflows/scenarios.yml`.
 | script | what it proves |
 | --- | --- |
 | `settings-on-install.sh` | a fresh install carries the faster-chat settings, and a value the owner set stays theirs |
-| `night-tidy.sh` | the night chat tidy-up summarises the owner's chat and touches nothing else (not run on a candidate since 27 October 2026, when the tidy-up left 2.0.0-beta.8: no install gets it, so there is nothing to prove until the release that brings it back) |
+| `night-tidy.sh` (no workflow job yet) | the night chat tidy-up summarises the owner's chat and touches nothing else (the routine is back for installs with a chat app connected; not run on a candidate between 27 October 2026, when the tidy-up left 2.0.0-beta.8, and its return) |
 | `voice.sh` | a voice note is understood and answered, with the ElevenLabs permission and without it |
 | `update-keeps-everything.sh` | an update from the current public version keeps records, settings and the chat |
 | `reminder-closed-elsewhere.sh` | a reminder closed on one computer is closed on the other, both ways of syncing, with no Git run by anyone |

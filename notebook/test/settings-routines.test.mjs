@@ -1,6 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import {fileURLToPath} from 'node:url';import {execFileSync,execFile,spawnSync,spawn} from 'node:child_process';
 import {NativeScheduler,nativeJobs} from '../core/native-scheduler.mjs';import {Store} from '../core/records/store.mjs';import {QueryService} from '../core/query.mjs';import {Domains} from '../core/domains.mjs';
-import {installStarter} from '../core/starter-workspace.mjs';import {readMachineRecord,telegramInHermes,chatAppInHermes} from '../core/starting-routines.mjs';import {runCommand} from '../core/child-process.mjs';
+import {installStarter} from '../core/starter-workspace.mjs';import {readMachineRecord,telegramInHermes,chatAppInHermes,OWNER_CHAT_KEY} from '../core/starting-routines.mjs';import {runCommand} from '../core/child-process.mjs';
 import {DatabaseSync} from 'node:sqlite';import {CONNECTION_NOTICE_PREFIX,ROUTINES_LABEL} from '../core/connection-names.mjs';
 import {cronCalendar,calendarCron,retimeWhat} from '../core/routine-times.mjs';import {enableKinds,readNotebookRoutines,rememberNotebookRoutine,writeNotebookRoutines,JOURNAL_JOB,CHAT_TIDY_JOB,CHAT_TIDY_SCRIPT,BRIEF_SCRIPT,deliveryFor,CONNECTION_JOB,CONNECTION_WHAT} from '../core/notebook-routines.mjs';
 import {personalOperation} from '../core/personal-operations.mjs';import {readArea} from '../../third-party/addons/godspeed-coach/lib/areas.mjs';
@@ -19,7 +19,7 @@ function fakeHermes(home){
   if(exe!=='hermes')return runCommand(exe,args,options);
   calls.push(args);const [,verb,...rest]=args,flag=name=>{const i=rest.indexOf(name);return i===-1?null:rest[i+1];};
   const jobs=read();
-  if(verb==='create'){const noAgent=rest.includes('--no-agent');jobs.push({id:'job'+(++serial),name:flag('--name'),schedule:{kind:'cron',expr:rest[0]},schedule_display:rest[0],prompt:noAgent?null:rest[1],script:flag('--script'),skill:flag('--skill'),no_agent:noAgent,deliver:flag('--deliver'),workdir:flag('--workdir'),enabled:true,state:'scheduled',created_at:new Date().toISOString()});write(jobs);}
+  if(verb==='create'){const noAgent=rest.includes('--no-agent');jobs.push({id:'job'+(++serial),name:flag('--name'),schedule:{kind:'cron',expr:rest[0]},schedule_display:rest[0],prompt:noAgent?null:rest[1],script:flag('--script'),skill:flag('--skill'),no_agent:noAgent,deliver:flag('--deliver'),failure_deliver:flag('--failure-deliver'),workdir:flag('--workdir'),enabled:true,state:'scheduled',created_at:new Date().toISOString()});write(jobs);}
   if(verb==='edit'){const job=jobs.find(j=>j.id===rest[0]);if(!job)throw Error('Job not found');if(flag('--schedule'))Object.assign(job,{schedule:{kind:'cron',expr:flag('--schedule')},schedule_display:flag('--schedule')});if(flag('--deliver'))job.deliver=flag('--deliver');write(jobs);}
   if(verb==='pause'||verb==='resume'){const job=jobs.find(j=>j.id===rest[0]);job.enabled=verb==='resume';if(job.enabled)Object.assign(job,{state:'scheduled',paused_at:null});write(jobs);}
   if(verb==='remove')write(jobs.filter(j=>j.id!==rest[0]));
@@ -28,6 +28,9 @@ function fakeHermes(home){
  return {run,calls,jobs:read,write};
 }
 async function withGoal(t,{device='pc'}={}){
+ // These tests are about a computer. The check's server source (the disk) must not come from the environment the tests run in:
+ // the installed image sets GODSPEED_REVISION, which makes every install a server and the daily connection check always wanted.
+ for(const name of ['GODSPEED_REVISION','GODSPEED_WEB_ADDRESS']){const was=process.env[name];delete process.env[name];t.after(()=>{if(was===undefined)delete process.env[name];else process.env[name]=was;});}
  const root=temporary(t),home=path.join(root,'.hermes-home');installStarter(root);fs.mkdirSync(home,{recursive:true});fs.writeFileSync(path.join(home,'config.yaml'),'model:\n  default: x\n');
  const store=new Store(root,{device}),hermes=fakeHermes(home),scheduler=new NativeScheduler(store,{home,executable:'hermes',device,run:hermes.run});
  await scheduler.configure({goal:'Run a fictional 10k',timezone:'Europe/Berlin'});
@@ -216,6 +219,9 @@ const noMail=t=>{const was=process.env.GODSPEED_MAIL_HOME,dir=fs.mkdtempSync(pat
 const quiet=hermes=>hermes.write(hermes.jobs().map(j=>j.name===CONNECTION_JOB?j:{...j,enabled:false}));
 test('the daily connection check is listed with its switch, on while any routine is on or a connection exists, paused otherwise',async t=>{
  noMail(t);
+ // Run as the installed image runs: its environment says this is a server. withGoal must take that away, because this test is about a computer.
+ const restore=[];for(const [name,value] of [['GODSPEED_REVISION','0123456789abcdef0123456789abcdef01234567'],['GODSPEED_WEB_ADDRESS','https://notes.example.test']]){restore.push([name,process.env[name]]);process.env[name]=value;}
+ t.after(()=>{for(const [name,was] of restore){if(was===undefined)delete process.env[name];else process.env[name]=was;}});
  const {root,home,store,hermes,scheduler,job}=await withGoal(t);
  scheduler.lastTick=0;await scheduler.tick();
  const made=job(CONNECTION_JOB);assert.ok(made,'made beside the starting routines');
@@ -310,6 +316,45 @@ test('a Morning brief set early brings the daily connection check ahead of it, a
  await assert.rejects(failing.tick({raise:true}),/could not create it/);
 });
 
+test('a failed creation of the night chat tidy-up reaches the setup tick, and a periodic tick reports it',async t=>{
+ const {store,home,hermes,scheduler,job}=await withGoal(t);
+ scheduler.lastTick=0;await scheduler.tick();
+ fs.writeFileSync(path.join(home,'.env'),'TELEGRAM_BOT_TOKEN=123:abc\nTELEGRAM_HOME_CHANNEL=42\n');
+ const failing=new NativeScheduler(store,{home,executable:'hermes',device:'pc',run:async(exe,args,options)=>{if(args[1]==='create'&&args.includes(CHAT_TIDY_JOB))throw Error('Hermes could not create it');return hermes.run(exe,args,options);}});
+ const reported=[];failing.onFailure=error=>reported.push(error.message);
+ await failing.tick();failing.lastTick=0;assert.equal(job(CHAT_TIDY_JOB),undefined);
+ assert.match(reported.join(),/could not create it/,'a periodic tick reports it');
+ await assert.rejects(failing.tick({raise:true}),/could not create it/);
+});
+
+test('two periodic creation failures in one tick are both reported',async t=>{
+ const {store,home,hermes,scheduler,job}=await withGoal(t);
+ scheduler.lastTick=0;await scheduler.tick();
+ fs.writeFileSync(path.join(home,'.env'),'TELEGRAM_BOT_TOKEN=123:abc\nTELEGRAM_HOME_CHANNEL=42\n');
+ hermes.write(hermes.jobs().filter(j=>j.name!==CONNECTION_JOB));writeNotebookRoutines(store,{...readNotebookRoutines(store),jobs:readNotebookRoutines(store).jobs.filter(j=>j.key!=='connection-check')});
+ const failing=new NativeScheduler(store,{home,executable:'hermes',device:'pc',run:async(exe,args,options)=>{if(args[1]==='create'&&(args.includes(CONNECTION_JOB)||args.includes(CHAT_TIDY_JOB)))throw Error('could not create '+(args.includes(CHAT_TIDY_JOB)?'chat-tidy':'connection'));return hermes.run(exe,args,options);}});
+ const reported=[];failing.onFailure=error=>reported.push(error.message);
+ await failing.tick();
+ assert.deepEqual(reported.sort(),['could not create chat-tidy','could not create connection']);
+});
+
+test('the running service logs a routine that could not be created, and its tick still ends',async t=>{
+ const root=temporary(t),home=path.join(root,'.hermes-home');installStarter(root);fs.mkdirSync(home,{recursive:true});fs.writeFileSync(path.join(home,'config.yaml'),'model:\n  default: x\n');
+ const assistant=path.join(root,'assistant-test.json');fs.writeFileSync(assistant,JSON.stringify({verified:true,executable:'hermes',home}));
+ const saved={runtime:process.env.GODSPEED_ORIGINAL_RUNTIME,config:process.env.GODSPEED_ASSISTANT_CONFIG};
+ process.env.GODSPEED_ORIGINAL_RUNTIME='on';process.env.GODSPEED_ASSISTANT_CONFIG=assistant;
+ t.after(()=>{for(const [name,value] of [['GODSPEED_ORIGINAL_RUNTIME',saved.runtime],['GODSPEED_ASSISTANT_CONFIG',saved.config]])if(value===undefined)delete process.env[name];else process.env[name]=value;});
+ const {createService}=await import('../server/main.mjs');
+ const service=await createService({root,port:0});t.after(()=>service.close());
+ const hermes=fakeHermes(home);
+ service.scheduler.run=async(exe,args,options)=>{if(args[1]==='create'&&args.includes(CHAT_TIDY_JOB))throw Error('Hermes could not create it');return hermes.run(exe,args,options);};
+ await service.scheduler.configure({goal:'Run a fictional 10k',timezone:'Europe/Berlin'});
+ fs.writeFileSync(path.join(home,'.env'),'TELEGRAM_BOT_TOKEN=123:abc\nTELEGRAM_HOME_CHANNEL=42\n');
+ const logged=[],original=console.error;console.error=(...line)=>{logged.push(line.join(' '));};
+ try{service.scheduler.lastTick=0;await service.scheduler.tick();}finally{console.error=original;}
+ assert.ok(logged.some(line=>/could not be created, the next tick tries again.*could not create it/.test(line)),logged.join('\n'));
+});
+
 test('a setup that overlaps the running periodic tick still hears its failed connection-check creation',async t=>{
  noMail(t);
  const {store,home,hermes,job}=await withGoal(t);
@@ -373,39 +418,33 @@ test('the daily connection check\'s script says what the check queued, once',{sk
  assert.equal(run().trim(),'','said once');
 });
 
-// THE NIGHT CHAT TIDY-UP IS MADE FOR NO INSTALL (27 October 2026, notebook-routines.mjs says why).
-test('no install gets the night chat tidy-up, and one the notebook made before is taken off again',async t=>{
+// THE NIGHT CHAT TIDY-UP IS GIVEN TO EVERY INSTALL WITH A CHAT APP (notebook-routines.mjs).
+test('an install with a chat app connected gets the night chat tidy-up at 01:30, once; one without gets none',async t=>{
  const {store,home,hermes,scheduler}=await withGoal(t);
  const mine=()=>hermes.jobs().filter(j=>j.name===CHAT_TIDY_JOB);
- fs.writeFileSync(path.join(home,'.env'),'TELEGRAM_BOT_TOKEN=123:abc\nTELEGRAM_HOME_CHANNEL=42\n');
- assert.equal(chatAppInHermes(home),true,'a chat app is connected');
  scheduler.lastTick=0;await scheduler.tick().catch(()=>null);
- assert.equal(mine().length,0,'and still no night tidy-up is made');
+ assert.equal(chatAppInHermes(home),false);
+ assert.equal(mine().length,0,'no chat app, no routine');
  assert.ok(!readNotebookRoutines(store).jobs.some(j=>j.key==='chat-tidy'));
- // What the notebook of main between 26 and 27 October 2026 left: the routine, and this machine's
- // record of it. Beside it, a routine of the owner's by the same name under a script of their own.
- const made={id:'tidy-1',name:CHAT_TIDY_JOB,schedule:{kind:'cron',expr:'30 1 * * *'},script:CHAT_TIDY_SCRIPT,no_agent:true,deliver:'local',enabled:true};
- const theirs={id:'theirs-1',name:CHAT_TIDY_JOB,script:'my-own-tidy.py',deliver:'local',enabled:true};
- hermes.write([...hermes.jobs(),made,theirs]);
- rememberNotebookRoutine(store,{id:'tidy-1',key:'chat-tidy',name:CHAT_TIDY_JOB,what:'Every night at 01:30 ...'});
- const others=hermes.jobs().filter(j=>j.name!==CHAT_TIDY_JOB).map(j=>j.id);
+ fs.writeFileSync(path.join(home,'.env'),'TELEGRAM_BOT_TOKEN=123:abc\nTELEGRAM_HOME_CHANNEL=42\n');
  scheduler.lastTick=0;await scheduler.tick().catch(()=>null);
- assert.deepEqual(mine().map(j=>j.id),['theirs-1'],"the notebook's routine is gone, the owner's own stays");
- assert.deepEqual(hermes.jobs().filter(j=>j.name!==CHAT_TIDY_JOB).map(j=>j.id),others,'every other routine stays');
- assert.ok(!readNotebookRoutines(store).jobs.some(j=>j.key==='chat-tidy'),'its record is gone too');
- assert.ok(hermes.calls.some(c=>c[1]==='remove'&&c[2]==='tidy-1'),"removed through Hermes' own command");
- // Found by its name and script alone, when this machine kept no record of it.
- hermes.write([...hermes.jobs(),{...made,id:'tidy-2'}]);
- assert.deepEqual(await scheduler.removeChatTidy(),['tidy-2']);
- assert.deepEqual(await scheduler.removeChatTidy(),[],'nothing left to take off');
- // A record whose routine the person had removed already stays as it is.
- rememberNotebookRoutine(store,{id:'tidy-3',key:'chat-tidy',name:CHAT_TIDY_JOB,what:'x'});
- assert.deepEqual(await scheduler.removeChatTidy(),[]);
- assert.ok(readNotebookRoutines(store).jobs.some(j=>j.id==='tidy-3'));
+ assert.equal(mine().length,1);
+ assert.equal(mine()[0].schedule.expr,'30 1 * * *');
+ assert.equal(mine()[0].script,CHAT_TIDY_SCRIPT);assert.equal(mine()[0].no_agent,true);
+ assert.equal(mine()[0].deliver,'local','its results are never delivered to the chat');
+ assert.equal(mine()[0].failure_deliver,'local','a failed tidy-up is never delivered to the chat');
+ assert.ok(readNotebookRoutines(store).jobs.some(j=>j.key==='chat-tidy'&&j.id===mine()[0].id));
+ scheduler.lastTick=0;await scheduler.tick().catch(()=>null);
+ assert.equal(mine().length,1,'made once');
+ assert.equal(mine()[0].deliver,'local','and still not moved to Telegram by the delivery follow-up');
+ assert.equal(mine()[0].failure_deliver,'local','and neither is a later failure');
+ // Removed by the person: it stays removed.
+ hermes.write(hermes.jobs().filter(j=>j.name!==CHAT_TIDY_JOB));
+ scheduler.lastTick=0;await scheduler.tick().catch(()=>null);
+ assert.equal(mine().length,0);
 });
 
-// What the night chat tidy-up will count as a chat app (starting-routines.mjs, chatAppInHermes),
-// kept for the release that brings it back.
+// What the night chat tidy-up will count as a chat app (starting-routines.mjs, chatAppInHermes).
 test("a chat app is any app the gateway routes the owner's own chat through, never a group or the terminal",async t=>{
  const {home}=await withGoal(t);
  assert.equal(chatAppInHermes(home),false,'no chat app at all');
@@ -418,10 +457,22 @@ test("a chat app is any app the gateway routes the owner's own chat through, nev
  assert.equal(chatAppInHermes(home),false,"a group chat is not the owner's own chat");
  route('agent:main:local:dm:local-1','a-conversation-in-the-terminal');
  assert.equal(chatAppInHermes(home),false,"the assistant's own terminal is no chat app");
+ for(const own of ['cli','tui','cron','webhook','api_server'])route('agent:main:'+own+':dm:1','not-a-chat-'+own);
+ assert.equal(chatAppInHermes(home),false,'the five non-chat entry points are no chat app');
  route('agent:main:signal:dm:7','the-owners-chat');
  db.close();
  assert.equal(telegramInHermes(home),false,'still no Telegram bot in Hermes');
  assert.equal(chatAppInHermes(home),true);
+});
+
+test("the scheduler and the installed godspeed-chat-tidy plugin classify the owner's chat from one vocabulary",()=>{
+ const plugin=fs.readFileSync(fileURLToPath(new URL('../assistant-files/godspeed-chat-tidy/__init__.py',import.meta.url)),'utf8');
+ const pattern=plugin.match(/^CHAT_KEY = r"(.+)"$/m)?.[1];
+ const excluded=plugin.match(/^NOT_A_CHAT_APP = \((.+)\)$/m)?.[1].split(',').map(name=>name.trim().replace(/"/g,''));
+ assert.equal(pattern,OWNER_CHAT_KEY.source,'the plugin and the scheduler declare the same pattern');
+ assert.ok(excluded?.length>0);
+ for(const name of excluded)assert.equal(OWNER_CHAT_KEY.test('agent:main:'+name+':dm:1'),false,name+' is no chat app');
+ assert.equal(OWNER_CHAT_KEY.test('agent:main:signal:dm:1'),true);
 });
 
 test('/radar and /subs are short names for their recipes in Telegram, and an owner\'s own short name stays',async()=>{

@@ -109,14 +109,14 @@ export const NOTICES_WHAT='Every 15 minutes it says what Godspeed itself queued 
 // chat is long enough to be worth it (godspeed_routines.py, chat_tidy). It sends nothing to the
 // chat: its output is its log, which is why its results are kept here and never delivered
 // (followDelivery leaves this one alone).
-// MADE FOR NO INSTALL SINCE 27 OCTOBER 2026 (godspeed-dev,
-// releases/godspeed-2.0.0-beta.8-faster-chat/plan.md): on Hermes 0.22.5, which a new install gets,
-// the control channel it speaks is refused while the gateway runs, so it would fail every night. It
-// comes back in a release of its own. Its script is still written (starting-routines.mjs,
-// routineFiles), and the routine is taken off an install that already has it
-// (native-scheduler.mjs, removeChatTidy).
+// The gateway refuses an outside summary of a chat app's chat (Hermes 0.22.5), so the script has the
+// gateway's own /compress run through the godspeed-chat-tidy plugin command and checks in the
+// database that the chat got shorter (assistant-files/godspeed-chat-tidy). Made again for every
+// install with a chat app connected from 2.0.0-beta.19 (native-scheduler.mjs, followChatTidy).
 export const CHAT_TIDY_JOB='Night chat tidy-up';
 export const CHAT_TIDY_SCRIPT='godspeed-chat-tidy.py';
+export const CHAT_TIDY_SCHEDULE='30 1 * * *';
+export const CHAT_TIDY_WHAT='Every night at 01:30, while nobody waits for an answer, it has the assistant summarise the long chat with it, so your first reply of the day is not held up. It sends nothing to the chat.';
 // The journal reads its times on its own clock, which starts as UTC until its setup writes the
 // person's; the installation's zone is the person's, so it becomes the journal's when the journal
 // still has the default one.

@@ -48,8 +48,8 @@ Each routine runs the original programs of the mission control, never a copy of 
               while nobody waits for an answer, through the assistant's own control channel. It is
               the one routine that runs no program of the mission control's; its rules and reasons
               are in its own block below (chat_tidy). It prints nothing for the person: its log is
-              its output and goes to the error stream, and it sends nothing to the chat. No
-              install is given this routine since 27 October 2026 (notebook-routines.mjs).
+              its output and goes to the error stream, and it sends nothing to the chat. Every
+              install with a chat app connected has it (notebook-routines.mjs).
 
 The two that run every 15 minutes, coach-tick and journal-tick, also say once what the notebook
 needs the person to hear and could not send itself, such as a nightly backup that failed: the
@@ -902,23 +902,28 @@ def journal_tick(c):
 # assistant has no idle-time summarising of its own (idle_compact_after_seconds also runs before the
 # next reply) and no compress command.
 #
-# What it does have is its own control channel, the stdio JSON-RPC its terminal and desktop apps use
-# (python -m tui_gateway.entry): session.resume opens a stored conversation and session.compress
-# summarises it under the assistant's own compression lock. The gateway reloads the chat from the
-# database on every message, so a summary written here at night is what the next morning's message
-# starts from.
+# The gateway refuses an outside summary of a chat app's chat (Hermes 0.22.5: session.compress,
+# session.mutate compress and command.dispatch /compress all answer that the gateway owns it). What
+# it runs itself is the handler behind the owner's own /compress in the chat app, and a plugin
+# command is the supported way to run code in the gateway: the godspeed-chat-tidy plugin
+# (assistant-files/godspeed-chat-tidy) registers /godspeed-chat-tidy <chat session key> <session id>.
+# This routine opens its own hidden local session over the assistant's control channel (python -m
+# tui_gateway.entry), dispatches that command on it, and then checks in the database that the
+# chat's conversation really got shorter. Only that check makes a run "tidied". The control channel
+# is a separate process from the running gateway, so the plugin there hands the request to its copy
+# in the gateway through a folder in the assistant's home and returns that copy's answer.
 #
 # RULES IT HOLDS ITSELF TO
 #   - It only ever summarises the conversation the gateway's routing table names for the owner's
-#     chat, and only after session.resume confirms that exact conversation. Any other answer stops
-#     it. (On 26 October 2026 a hand test whose copy step failed went on to summarise the live chat
-#     instead of the copy; every step here is checked before the next one runs.)
+#     chat: it names that key and session id to the plugin, which refuses anything else, and it
+#     reads the routing table again before the command; a moved route stops the run.
 #   - It does nothing while the chat is in use: last message less than --idle-minutes ago, an open
-#     turn lease on any conversation of its chain, or the conversation reported running.
+#     turn lease on any conversation of its chain (the plugin also refuses while a turn runs).
 #   - It does nothing below --min-tokens (the last real prompt size the gateway recorded), because
 #     summarising an already short chat only rewrites the summary.
-#   - It talks to the assistant only through that control channel, checks every answer before the
-#     next step, always closes what it opened, and opens the database read-only.
+#   - It talks to the assistant only through that control channel and the plugin command, checks
+#     every answer before the next step, and opens the database read-only. A refusal or a chat that
+#     did not get shorter is logged as such and is not a failed run.
 #   - It sends nothing to the chat. Its output is its log, which goes to the error stream so that
 #     what the routine prints for the person stays empty: the assistant's silence, so nothing is
 #     sent and no note is saved. A run that went wrong says one sentence and exits non-zero.
@@ -927,9 +932,8 @@ def journal_tick(c):
 # (godspeed-routines.json, written by starting-routines.mjs), never from a path written by hand.
 #
 # By hand, from the assistant's scripts folder:
-#   godspeed-chat-tidy.py --dry-run             find the chat, open and close it, say what it would do
-#   godspeed-chat-tidy.py --session ID --force  summarise one named stored conversation whatever its
-#                                               size (for a test on a copy; a chat in use is refused)
+#   godspeed-chat-tidy.py --dry-run   find the chat and say what it would do
+#   godspeed-chat-tidy.py --force     summarise whatever its size (a chat in use is still left alone)
 #
 # The routing key of the owner's own chat in a chat app. The app's name is the routing table's, so a
 # chat app the gateway routes the same way needs no new code here (today: telegram, a private chat).
@@ -939,7 +943,7 @@ def journal_tick(c):
 # the routine found two chats beside a Telegram one and refused every night ("found 2"), and with no
 # chat app at all it would have summarised a terminal conversation.
 CHAT_KEY_LIKE = "agent:main:%:dm:%"
-CHAT_KEY = re.compile(r"^agent:main:(?!local:)[^:]+:dm:.+$")
+CHAT_KEY = re.compile(r"^agent:main:(?!(?:local|cli|tui|cron|webhook|api_server):)[^:]+:dm:.+$")
 
 
 def chat_log(line):
@@ -960,10 +964,9 @@ def chat_db(c):
 
 
 def chat_session(c, con):
-    """The stored conversation the gateway currently routes the owner's chat to, or None while it
+    """The (session key, stored conversation) the gateway currently routes the owner's chat to, or None while it
     routes none: the routine is made from the moment a chat app is connected, and a chat app
-    connected today has nothing routed until the first message (made for no install since 27
-    October 2026, notebook-routines.mjs says why). Nothing to tidy up is not a failure. More than
+    connected today has nothing routed until the first message. Nothing to tidy up is not a failure. More than
     one chat is: acting then could summarise the wrong conversation, which is the one thing this
     must never do."""
     scope = os.path.join(c["home"], "sessions")
@@ -983,7 +986,7 @@ def chat_session(c, con):
         entry = {}
     if not entry.get("session_id"):
         fail("The assistant's routing table names no stored conversation for %s." % rows[0][0])
-    return entry["session_id"]
+    return rows[0][0], entry["session_id"]
 
 
 def chat_state(con, session_id):
@@ -1049,7 +1052,7 @@ class Channel:
         time.sleep(0.2)  # the reader thread takes the last line just after the exit
         return (": " + self.said[-1]) if self.said else ""
 
-    def call(self, method, params, timeout):
+    def call(self, method, params, timeout, soft=False):
         self.n += 1
         try:
             self.p.stdin.write(json.dumps({"jsonrpc": "2.0", "id": self.n, "method": method, "params": params}) + "\n")
@@ -1070,6 +1073,8 @@ class Channel:
                 continue
             if msg.get("id") == self.n:
                 if msg.get("error"):
+                    if soft:
+                        return None
                     fail("%s refused: %s" % (method, msg["error"]))
                 return msg.get("result") or {}
         fail("%s: no answer within %d s." % (method, timeout))
@@ -1082,12 +1087,38 @@ class Channel:
             self.p.kill()
 
 
+CHAT_TIDY_TITLE = "Godspeed chat tidy"
+CHAT_TIDY_COMMAND = "godspeed-chat-tidy"
+
+
+def chat_messages(con, session_id):
+    return con.execute("select count(*) from messages where session_id = ?", (session_id,)).fetchone()[0]
+
+
+def chat_route(c):
+    """The owner's chat as the routing table has it right now: (session key, session id) or None."""
+    con = chat_db(c)
+    try:
+        return chat_session(c, con)
+    finally:
+        con.close()
+
+
+def chat_hidden_session(ch, timeout):
+    """A fresh hidden local session for this run. The assistant keeps no database row for a hidden
+    session that never receives a message, so nothing piles up night after night. It is never the
+    owner's chat, so nothing here can touch a conversation of theirs."""
+    made = ch.call("session.create", {"title": CHAT_TIDY_TITLE, "hidden": True}, timeout)
+    if not made.get("session_id"):
+        fail("The assistant made no session for the chat tidy-up.")
+    return made["session_id"]
+
+
 def chat_tidy(c):
     ap = argparse.ArgumentParser(prog="godspeed-chat-tidy",
                                  description="Summarise the long chat with the assistant at night.")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--force", action="store_true", help="ignore --min-tokens")
-    ap.add_argument("--session", help="a stored conversation id instead of the owner's chat")
     ap.add_argument("--min-tokens", type=int, default=60000)
     ap.add_argument("--idle-minutes", type=int, default=30)
     ap.add_argument("--resume-timeout", type=int, default=180)
@@ -1096,16 +1127,18 @@ def chat_tidy(c):
 
     con = chat_db(c)
     try:
-        target = a.session or chat_session(c, con)
-        state = chat_state(con, target) if target else None
+        route = chat_session(c, con)
+        state = chat_state(con, route[1]) if route else None
+        before = chat_messages(con, route[1]) if route else None
     finally:
         try:
             con.close()
         except sqlite3.Error:
             pass
-    if not target:
+    if not route:
         chat_log("skip: the assistant routes no chat of the owner's yet")
         return ""
+    key, target = route
     tokens, last, leases = state
     idle_min = (time.time() - last) / 60 if last else None
     if idle_min is None:
@@ -1126,34 +1159,44 @@ def chat_tidy(c):
     if not a.force and tokens < a.min_tokens:
         chat_log("skip: below %d tokens" % a.min_tokens)
         return ""
-
-    ch, sid = Channel(c), None
-    try:
-        res = ch.call("session.resume", {"session_id": target}, a.resume_timeout)
-        sid = res.get("session_id")
-        if res.get("resumed") != target or not sid:
-            fail("Resume opened %r, not %r; stopping." % (res.get("resumed"), target))
-        if res.get("running") or res.get("inflight") or res.get("status") != "idle":
-            chat_log("skip: conversation busy (status %s)" % res.get("status"))
-            return ""
-        if a.dry_run:
-            chat_log("dry run: would summarise %s (%s messages loaded)" % (target, res.get("message_count")))
-            return ""
-        started = time.time()
-        out = ch.call("session.compress", {"session_id": sid}, a.compress_timeout)
-        chat_log("summarised in %.0f s: status %s, messages %s -> %s, about %s -> %s tokens"
-                 % (time.time() - started, out.get("status"), out.get("before_messages"),
-                    out.get("after_messages"), out.get("before_tokens"), out.get("after_tokens")))
-        if out.get("status") != "compressed":
-            fail("The summary ended with status %r." % out.get("status"))
+    if a.dry_run:
+        chat_log("dry run: would summarise %s (%d messages)" % (target, before))
         return ""
+
+    def still_routed(step):
+        now = chat_route(c)
+        if now != (key, target):
+            fail("The chat moved before %s; stopping." % step)
+
+    ch = Channel(c)
+    try:
+        sid = chat_hidden_session(ch, a.resume_timeout)
+        still_routed("the summary")
+        started = time.time()
+        out = ch.call("command.dispatch", {"name": CHAT_TIDY_COMMAND, "arg": "%s %s" % (key, target),
+                                           "session_id": sid}, a.compress_timeout)
     finally:
-        if sid:
-            try:
-                ch.call("session.close", {"session_id": sid}, 30)
-            except SystemExit as error:
-                chat_log("close: %s" % error)
         ch.close()
+    said = str(out.get("output") or "").strip().splitlines()
+    line = said[0].strip() if said else ""
+    if line.startswith("refused:"):
+        chat_log("not summarised: %s" % line)
+        return ""
+    if not line.startswith("ok:"):
+        fail("The summary command answered %r." % line[:200])
+    if chat_route(c) != (key, target):
+        chat_log("route moved during the summary: not tidied")
+        return ""
+    con = chat_db(c)
+    try:
+        after = chat_messages(con, target)
+    finally:
+        con.close()
+    if after < before:
+        chat_log("tidied in %.0f s: %s; messages %d -> %d" % (time.time() - started, line, before, after))
+    else:
+        chat_log("not tidied: %s; messages %d -> %d" % (line, before, after))
+    return ""
 
 
 def coach(c, command):
