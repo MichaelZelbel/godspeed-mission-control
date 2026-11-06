@@ -145,14 +145,18 @@ server_telegram_setup() { # [without-ai]
     fail 'the installed Docker Telegram setup did not hand the bot to its gateway'
 }
 server_telegram_say() { # <label> <text>
+  interaction_begin "$1"
   "$NODE" "$HERE/server-telegram.mjs" say --server "$(server_container)" --evidence "$EVIDENCE" \
     --owner "$SERVER_TELEGRAM_OWNER" --label "$1" --text "$2" ||
     fail "the installed Telegram gateway did not accept $1"
+  SCENARIO_INTERACTION=''
 }
 server_telegram_press() { # <label> <callback data>
+  interaction_begin "$1"
   "$NODE" "$HERE/server-telegram.mjs" press --server "$(server_container)" --evidence "$EVIDENCE" \
     --owner "$SERVER_TELEGRAM_OWNER" --label "$1" --button "$2" ||
     fail "the installed Telegram gateway did not accept $1"
+  SCENARIO_INTERACTION=''
 }
 server_telegram_snapshot() {
   "$NODE" "$HERE/server-telegram.mjs" snapshot --server "$(server_container)" --evidence "$EVIDENCE" ||
@@ -163,11 +167,13 @@ server_telegram_record() { # <target file>
     fail 'the installed fake Telegram API wrote no request record'
 }
 server_telegram_mark() { # <label> [kind]
+  interaction_begin "$1"
   if [ $# -eq 2 ]; then
     "$NODE" "$HERE/server-telegram.mjs" mark --server "$(server_container)" --evidence "$EVIDENCE" --label "$1" --kind "$2"
   else
     "$NODE" "$HERE/server-telegram.mjs" mark --server "$(server_container)" --evidence "$EVIDENCE" --label "$1"
   fi || fail "the installed Telegram gateway left no evidence for $1"
+  SCENARIO_INTERACTION=''
 }
 
 server_copy_evidence() {

@@ -99,21 +99,28 @@ check() { # <evidence folder>
 
   # 1, 2, 4. Nothing is sent, accepted or refused, and nothing waits.
   for label in s1 s2 s4; do
+    interaction_begin "$label"
     text=$(messages_of "$label" | head -n 1)
     [ -z "$text" ] || fail "situation $label sent the owner a message although there was nothing he could judge: $text"
     [ "$("$NODE" "$HERE/telegram-judge.mjs" waiting "$folder/approvals-$label.json")" = 0 ] ||
       fail "situation $label left a step waiting for the owner's yes, which he was never asked and cannot give"
+    interaction_passed "$label"
   done
+  interaction_begin s5
   text=$(messages_of s5 | head -n 1)
   [ -z "$text" ] || fail "a reminder routine sent the owner a message about something he never needs to answer (situation 5): $text"
+  interaction_passed s5
 
   # 3. One question that carries what the step is about, and one reply to "approve" that only confirms.
+  interaction_begin s3-ask
   count=$(messages_of s3-ask | grep -c . || true)
   [ "$count" = 1 ] || fail "the real yes was asked in $count messages, not one"
   messages_of s3-ask | grep -qi 'seven' && messages_of s3-ask | grep -qi 'programs' ||
     fail "the question for the real yes does not say what it is about (the seven old programs): $(messages_of s3-ask | head -n 1)"
   [ "$("$NODE" "$HERE/telegram-judge.mjs" waiting "$folder/approvals-s3-ask.json")" = 1 ] ||
     fail "after the question for the real yes, not exactly one step waited"
+  interaction_passed s3-ask
+  interaction_begin s3
   count=$(messages_of s3 accepted | grep -c . || true)
   [ "$count" = 1 ] || fail "the owner's \"approve\" was answered with $count messages, not one"
   text=$(messages_of s3 accepted)
@@ -121,6 +128,7 @@ check() { # <evidence folder>
   if grep -qiE 'restart|gateway|lock' <<<"$text"; then fail "the answer to \"approve\" speaks of another situation: $text"; fi
   "$NODE" "$HERE/telegram-judge.mjs" status "$folder/approvals-s3.json" 'seven old programs' | grep -qx approved ||
     fail "the owner's \"approve\" did not approve the step about the seven old programs"
+  interaction_passed s3
 
   # Every message of the run: nothing to type.
   no_code_in "$folder/run.json" "$folder"/approvals-*.json

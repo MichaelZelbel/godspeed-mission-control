@@ -215,7 +215,9 @@ Only the stage's own ref is read from that folder. A scenario that first install
 notebook setup, `godspeed-telegram-setup`, supervised Hermes gateway and routine APIs. The only stand-in
 is the candidate image's local `fake-telegram.py` Bot API. It records ordered, redacted requests and
 messages; `run.json` brackets each inbound owner action or routine run, `runner.json` proves the gateway
-state, and the scenario keeps its notebook snapshots plus a manifest. The four former Linux emulator
+state, and the scenario keeps its notebook snapshots plus a manifest. The four repaired Telegram
+scenarios also retain `steps.tsv`, with a short PASS or FAIL verdict for each visible interaction. The
+four former Linux emulator
 scenarios and `first-day.sh` therefore fail when the packaged Telegram dependency, setup or gateway is
 missing rather than installing one after the fact. `scenario-asker.py` remains the installed fixture
 routine that opens waiting steps through `godspeed-step`; its flag table is the only place that names

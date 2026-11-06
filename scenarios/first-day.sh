@@ -112,7 +112,13 @@ if(!practical)fail('the result artifact is not a practical emergency-kit checkli
 const brief=normalized(read('brief.txt'));
 if(!brief.includes(goal))fail('the saved brief does not name the emergency-kit goal');
 if(!brief.includes(title)&&!brief.includes(result))fail('the saved brief does not identify the verified work');
-if(!/\b(?:next|today|do|start|prepare)\b/i.test(brief))fail('the saved brief has no specific next action');
+const nextLine=brief.split('\n').map(line=>line.trim()).find(line=>/^(?:next|today)(?:\s+(?:today|step|action))?\s*:/i.test(line));
+const nextTask=nextLine?.replace(/^[^:]*:\s*/,'')||'';
+const words=nextTask.toLowerCase().match(/[a-z]+/g)||[];
+const verbs=new Set(['add','arrange','book','buy','call','check','collect','complete','create','gather','make','organize','pack','prepare','replace','review','schedule','set','store','test','update','write']);
+const filler=new Set(['a','an','and','at','for','in','it','more','next','now','on','the','this','that','them','to','today','with','your']);
+const verb=words.findIndex(word=>verbs.has(word));
+if(!nextLine||verb<0||!words.slice(verb+1).some(word=>!filler.has(word)))fail('the saved brief has no concrete next action');
 const manifest=JSON.parse(read('manifest.json'));
 if(!Array.isArray(manifest.files)||!manifest.files.length)fail('the evidence manifest names no retained files');
 NODE

@@ -40,7 +40,18 @@ verdict() {
   [ -z "${GITHUB_STEP_SUMMARY:-}" ] || printf '%s\n' "$1" >>"$GITHUB_STEP_SUMMARY"
 }
 pass() { verdict "PASS $SCENARIO: $*"; exit 0; }
-fail() { verdict "FAIL $SCENARIO: $*"; exit 1; }
+fail() {
+  if [ -n "${SCENARIO_INTERACTION:-}" ] && [ -n "${EVIDENCE:-}" ]; then
+    printf 'FAIL %s: %s: %s\n' "$SCENARIO" "$SCENARIO_INTERACTION" "$*" | tee -a "$EVIDENCE/steps.tsv" >&2
+  fi
+  verdict "FAIL $SCENARIO: $*"
+  exit 1
+}
+interaction_begin() { SCENARIO_INTERACTION=$1; }
+interaction_passed() {
+  printf 'PASS %s: %s\n' "$SCENARIO" "$1" | tee -a "$EVIDENCE/steps.tsv" >&2
+  SCENARIO_INTERACTION=''
+}
 usage() {
   {
     printf 'usage: bash scenarios/%s.sh <stage ref>       the whole scenario, on a throwaway machine\n' "$SCENARIO"

@@ -90,14 +90,17 @@ check() { # <evidence folder>
     fail 'the connection check never asked the fake Telegram API twice with its valid key and once with the refused key, so its runs prove nothing'
 
   # fine: it says nothing.
+  interaction_begin fine
   text=$(outbox_between "$folder/run.json" fine | head -n 1)
   [ -z "$text" ] || fail "the connection check sent a message although everything was fine: $text"
   [ -z "$("$NODE" "$HERE/telegram-judge.mjs" deadlines "$folder/due-fine.json" "$folder/due-before.json")" ] ||
     fail "the connection check opened a deadline although everything was fine: $("$NODE" "$HERE/telegram-judge.mjs" deadlines "$folder/due-fine.json" "$folder/due-before.json" | tr '\t\n' ' ')"
   [ "$("$NODE" "$HERE/telegram-judge.mjs" bell "$folder/notifications-fine.json" "$folder/notifications-before.json" connection)" = 0 ] ||
     fail "the connection check put a connection record in the bell although everything was fine"
+  interaction_passed fine
 
   # broken: one message, one deadline.
+  interaction_begin broken
   text=$({ outbox_between "$folder/run.json" broken | grep -i 'telegram' || true
     "$NODE" "$HERE/telegram-judge.mjs" bell "$folder/notifications-broken.json" "$folder/notifications-fine.json"; } | sort -u)
   count=$(grep -c . <<<"$text" || true)
@@ -105,13 +108,16 @@ check() { # <evidence folder>
   grep -qi 'telegram' <<<"$text" || fail "the one message about the refused key does not say it is Telegram: $text"
   count=$("$NODE" "$HERE/telegram-judge.mjs" deadlines "$folder/due-broken.json" "$folder/due-before.json" | awk -F'\t' '$1=="open" && tolower($2) ~ /telegram/' | grep -c . || true)
   [ "$count" = 1 ] || fail "a refused Telegram key opened $count deadlines about Telegram, not one"
+  interaction_passed broken
 
   # repaired: the deadline is closed.
+  interaction_begin repaired
   deadline=$("$NODE" "$HERE/telegram-judge.mjs" deadlines "$folder/due-broken.json" "$folder/due-before.json" | awk -F'\t' '$1=="open" && tolower($2) ~ /telegram/ {print $2 "\t" $3}')
   title=${deadline%%$'\t'*}
   slug=${deadline##*$'\t'}
   state=$("$NODE" "$HERE/telegram-judge.mjs" state "$folder/due-repaired.json" "$slug")
   [ "$state" = closed ] || fail "the deadline about Telegram (\"$title\") is $state, not closed, after the key was valid again"
+  interaction_passed repaired
   no_code_in "$folder/run.json"
   pass "with Telegram's key valid the connection check sent nothing, opened no deadline and rang no connection bell; with the key refused it told the owner once (one text about Telegram) and opened one deadline (\"$title\"); with the key valid again the next run closed it"
 }

@@ -96,11 +96,17 @@ check() { # <evidence folder>
   [ -z "$text" ] || fail "a step of the run did not work, so a plain yes could not be tried: $text"
 
   # a. One step waits and a plain yes approves it.
+  interaction_begin a-ask
+  [ "$(status_after a-ask 'Share this week')" = pending ] || fail 'the one waiting step was not offered to the owner'
+  interaction_passed a-ask
+  interaction_begin a
   [ "$(status_after a 'Share this week')" = approved ] || fail "one step waited and the owner's \"yes\" did not approve it (it is \"$(status_after a 'Share this week')\")"
   count=$(messages_of a accepted | grep -c . || true)
   [ "$count" = 1 ] || fail "the owner's \"yes\" to the one waiting step was answered with $count messages, not one"
+  interaction_passed a
 
   # b. Two wait: one question in words naming both, nothing approved by "yes", and the named one by the answer.
+  interaction_begin b
   count=$(messages_of b accepted | grep -c . || true)
   [ "$count" = 1 ] || fail "the owner's \"yes\" with two steps waiting got $count messages, not one question"
   text=$(messages_of b accepted)
@@ -109,28 +115,39 @@ check() { # <evidence folder>
   fi
   [ "$(status_after b 'Send this week')" = pending ] && [ "$(status_after b 'gym')" = pending ] ||
     fail "a \"yes\" with two steps waiting approved one of them (food log: \"$(status_after b 'Send this week')\", gym: \"$(status_after b 'gym')\")"
+  interaction_passed b
+  interaction_begin b-choice
   [ "$(status_after b-choice 'Send this week')" = approved ] ||
     fail "the answer \"the food log one\" did not approve the food log step (it is \"$(status_after b-choice 'Send this week')\")"
   [ "$(status_after b-choice 'gym')" = pending ] ||
     fail "the answer \"the food log one\" approved the gym step too (it is \"$(status_after b-choice 'gym')\")"
+  interaction_passed b-choice
 
   # c. A button approves its own step and no other.
   for label in b-ask c-ask; do
+    interaction_begin "$label"
     count=$("$NODE" "$HERE/telegram-judge.mjs" buttons "$folder/run.json" "$label" "$([ "$label" = b-ask ] && echo gym || echo inspection)")
     [ "$count" -ge 1 ] || fail "the question went out without Yes/No buttons ($label; ticket 02, #197)"
+    interaction_passed "$label"
   done
+  interaction_begin c-press
   [ "$(status_after c-press 'gym')" = approved ] ||
     fail "pressing Yes under the gym membership question did not approve it (it is \"$(status_after c-press 'gym')\")"
   [ "$(status_after c-press 'inspection')" = pending ] ||
     fail "pressing Yes under the gym membership question changed the car inspection step (it is \"$(status_after c-press 'inspection')\")"
+  interaction_passed c-press
+  interaction_begin d-no
   [ "$(status_after d-no 'inspection')" = rejected ] ||
     fail "pressing No under the car inspection question did not reject it (it is \"$(status_after d-no 'inspection')\")"
+  interaction_passed d-no
 
   # d. Nothing waits: a "yes" approves nothing and gets an ordinary answer.
+  interaction_begin d
   [ "$("$NODE" "$HERE/telegram-judge.mjs" waiting "$folder/approvals-d.json")" = 0 ] || fail "steps waited when nothing should have"
   cmp -s <("$NODE" "$HERE/telegram-judge.mjs" status "$folder/approvals-d-no.json" '') <("$NODE" "$HERE/telegram-judge.mjs" status "$folder/approvals-d.json" '') ||
     fail "a \"yes\" with nothing waiting changed the status of a step"
   [ "$(messages_of d accepted | grep -c . || true)" -ge 1 ] || fail "a \"yes\" with nothing waiting got no answer at all"
+  interaction_passed d
 
   no_code_in "$folder/run.json" "$folder"/approvals-*.json
   pass "one waiting step took a plain \"yes\" with one reply; two waiting got one question naming both and the answer approved only the one named; Yes under a question approved only its own step and No rejected the other; a \"yes\" with nothing waiting approved nothing; no message holds a code"

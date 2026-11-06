@@ -3,6 +3,7 @@
 // process started in that server; all setup, gateway, and assistant work remains in the image.
 import fs from 'node:fs';
 import path from 'node:path';
+import {fileURLToPath} from 'node:url';
 import {execFileSync} from 'node:child_process';
 
 const [, , command, ...args] = process.argv;
@@ -47,6 +48,11 @@ function loadState(){
   catch { return {steps:[],outbox:[],sent:0}; }
 }
 function saveState(value){ write(stateFile(),value); write(path.join(evidence,'run.json'),{steps:value.steps,outbox:value.outbox}); }
+export function captureSent(state,record,label,kind,before=state.sent){
+  for(const sent of (record.sent ?? []).slice(before)) state.outbox.push({label,kind:'sendMessage',chat_id:sent.chat_id,text:sent.text,buttons:sent.buttons ?? [],accepted:true});
+  state.sent=(record.sent ?? []).length;
+}
+export function baselineSent(state,record){ state.sent=(record.sent ?? []).length; }
 async function capture(label,kind,action){
   const state=loadState();
   try {
@@ -56,8 +62,7 @@ async function capture(label,kind,action){
     // before claiming the installed route did not answer.
     await sleep(2500);
     const record=copyRecord();
-    for(const sent of (record.sent ?? []).slice(before)) state.outbox.push({label,kind:'sendMessage',chat_id:sent.chat_id,text:sent.text,buttons:sent.buttons ?? [],accepted:true});
-    state.sent=(record.sent ?? []).length;
+    captureSent(state,record,label,kind,before);
     state.steps.push({label,kind,success:true,request_start:requestStart,request_end:(record.requests ?? []).length});
     saveState(state);
   } catch(error) {
@@ -111,7 +116,10 @@ async function setup(){
   await waitFor('gateway handoff',runner,value=>value.state==='gateway',180);
   const setupState=JSON.parse(inServer(['cat','/opt/data/full-candidate/telegram/setup.json']));
   if(!setupState.done) throw Error('the Telegram setup ended without marking its handoff done');
-  copyRecord();
+  const handoff=copyRecord();
+  const state=loadState();
+  baselineSent(state,handoff);
+  saveState(state);
   runner();
 }
 
@@ -140,14 +148,16 @@ async function mark(){
   saveState(state);
 }
 
-try {
-  if(command==='setup') await setup();
-  else if(command==='say') await say();
-  else if(command==='press') await press();
-  else if(command==='snapshot') await snapshot();
-  else if(command==='mark') await mark();
-  else throw Error('usage: server-telegram.mjs <setup|say|press|snapshot> --server NAME --evidence DIR [...]');
-} catch(error) {
-  process.stderr.write(`server-telegram: ${error.message}\n`);
-  process.exitCode=1;
+if(process.argv[1] && path.resolve(process.argv[1])===fileURLToPath(import.meta.url)) {
+  try {
+    if(command==='setup') await setup();
+    else if(command==='say') await say();
+    else if(command==='press') await press();
+    else if(command==='snapshot') await snapshot();
+    else if(command==='mark') await mark();
+    else throw Error('usage: server-telegram.mjs <setup|say|press|snapshot> --server NAME --evidence DIR [...]');
+  } catch(error) {
+    process.stderr.write(`server-telegram: ${error.message}\n`);
+    process.exitCode=1;
+  }
 }

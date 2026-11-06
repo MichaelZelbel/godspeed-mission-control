@@ -73,6 +73,17 @@ answers() { # <case> <scenario> <folder> <PASS|FAIL> <code> <words it has to say
 }
 passes() { answers "$1" "$2" "$3" PASS 0 "$4"; }
 refuses() { answers "$1" "$2" "$3" FAIL 1 "$4"; }
+interaction_verdicts() { # <scenario> <folder> <label...>
+  local scenario=$1 folder=$2 label
+  shift 2
+  for label in "$@"; do
+    if grep -Fqx "PASS $scenario: $label" "$folder/steps.tsv"; then
+      ok "$scenario records PASS for $label"
+    else
+      bad "$scenario records no PASS for $label"
+    fi
+  done
+}
 
 # A folder that should pass, so a case for one failure is that folder with one thing changed.
 copy() { # <good folder> <new folder>
@@ -2621,6 +2632,7 @@ section no-question-he-cannot-judge
 Q=$TMP/nq
 nq_good "$Q/good"
 passes 'five situations: nothing for 1, 2, 4, 5, one question and one confirming reply for 3' no-question-he-cannot-judge "$Q/good" 'none holds a code'
+interaction_verdicts no-question-he-cannot-judge "$Q/good" s1 s2 s3-ask s3 s4 s5
 copy "$Q/good" "$Q/driver-malformed"
 printf '{\n' >"$Q/driver-malformed/run.json"
 refuses 'no-question: an unreadable owner-driver record' no-question-he-cannot-judge "$Q/driver-malformed" 'owner-driver record cannot be read'
@@ -2697,6 +2709,7 @@ section plain-yes
 P=$TMP/py
 py_good "$P/good"
 passes 'plain yes, two waiting, a button, and nothing waiting' plain-yes "$P/good" 'approved nothing'
+interaction_verdicts plain-yes "$P/good" a-ask a b-ask b b-choice c-ask c-press d-no d
 copy "$P/good" "$P/driver-malformed"
 printf '{\n' >"$P/driver-malformed/run.json"
 refuses 'plain yes: an unreadable owner-driver record' plain-yes "$P/driver-malformed" 'owner-driver record cannot be read'
@@ -2752,6 +2765,7 @@ section what-was-that
 W=$TMP/ww
 ww_good "$W/good"
 passes 'a report recorded with its facts and explained afterwards' what-was-that "$W/good" 'was answered with the backup and GitHub'
+interaction_verdicts what-was-that "$W/good" report question
 copy "$W/good" "$W/driver-malformed"
 printf '{\n' >"$W/driver-malformed/run.json"
 refuses 'what was that: an unreadable owner-driver record' what-was-that "$W/driver-malformed" 'owner-driver record cannot be read'
@@ -2796,6 +2810,7 @@ section connection-check
 C=$TMP/cc
 cc_good "$C/good"
 passes 'silent while fine, one message and one deadline when broken, closed when repaired' connection-check "$C/good" 'told the owner once'
+interaction_verdicts connection-check "$C/good" fine broken repaired
 copy "$C/good" "$C/driver-malformed"
 printf '{\n' >"$C/driver-malformed/run.json"
 refuses 'connection check: an unreadable owner-driver record' connection-check "$C/driver-malformed" 'owner-driver record cannot be read'
@@ -2926,6 +2941,9 @@ refuses 'a gateway that never polls Telegram' first-day "$FD/no-poll" 'never pol
 copy "$FD/good" "$FD/different-reply"
 run_json "$FD/different-reply" "$(msg todays-brief 'something else')"
 refuses 'a reply that differs from the saved brief' first-day "$FD/different-reply" 'differs from the saved note'
+copy "$FD/good" "$FD/vague-next-action"
+sed -i 's/^Next today: buy the water and first-aid supplies\.$/Next: continue./' "$FD/vague-next-action/brief.txt"
+refuses 'a brief whose next step is vague' first-day "$FD/vague-next-action" 'no concrete next action'
 copy "$FD/good" "$FD/second-note"
 node -e 'const fs=require("fs"),p=process.argv[1],d=JSON.parse(fs.readFileSync(p,"utf8"));d.data.push({...d.data[0],id:"brief-2"});fs.writeFileSync(p,JSON.stringify(d))' "$FD/second-note/notes-after-reply.json"
 refuses 'asking today’s brief creates another note' first-day "$FD/second-note" 'second saved brief'

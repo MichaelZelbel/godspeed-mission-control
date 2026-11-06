@@ -69,18 +69,22 @@ check() { # <evidence folder>
   text=$(step_failure "$folder/run.json")
   [ -z "$text" ] || fail "a step of the run did not work, so the report could not be asked about: $text"
 
+  interaction_begin report
   case $("$NODE" "$HERE/telegram-judge.mjs" recorded "$folder/run.json" report "$folder/conversation_messages-report.json" "$folder/report-facts.json") in
     ok) ;;
     not-sent) fail "the routine that says notices did not send exactly one message to the owner" ;;
     not-recorded) fail "the report was not recorded where the chat reads it (ticket 03, #198): the chat holds no background message with the words that were sent" ;;
     *) fail "the recorded report does not carry the facts it was written from ($(tr -d '\n' <"$folder/report-facts.json" | cut -c1-200))" ;;
   esac
+  interaction_passed report
 
+  interaction_begin question
   answer=$(outbox_between "$folder/run.json" question accepted)
   [ -n "$answer" ] || fail "the owner's \"what is this about?\" got no answer"
   if ! grep -qi 'backup' <<<"$answer" || ! grep -qi 'github' <<<"$answer"; then
     fail "the answer did not name what the report was about (the backup to GitHub): $answer"
   fi
+  interaction_passed question
   no_code_in "$folder/run.json"
   pass "the report about the backup to GitHub was sent once, is recorded in the chat with the facts it was written from, and \"what is this about?\" asked in a new conversation was answered with the backup and GitHub; no message holds a code"
 }
