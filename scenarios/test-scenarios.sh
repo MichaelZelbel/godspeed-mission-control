@@ -3241,7 +3241,7 @@ sed -i 's/key-ai-key/installed-key-record/g' "$DC/installed-key-slug"/due-*.json
 passes 'the installed key deadline slug, rather than a derived copy, is followed' deadline-closes-itself "$DC/installed-key-slug" 'the deadline on the key closed on the deadline run'
 copy "$DC/good" "$DC/not-open-before"
 printf '[]\n' >"$DC/not-open-before/due-before.json"
-refuses 'a key that has no deadline to begin with' deadline-closes-itself "$DC/not-open-before" 'absent, not open, before anything ran'
+refuses 'a key that has no deadline to begin with' deadline-closes-itself "$DC/not-open-before" 'no unique key deadline from secrets/expires.txt'
 copy "$DC/good" "$DC/key-stays-open"
 sed -i 's/"key-ai-key","title":"The key","state":"closed"/"key-ai-key","title":"The key","state":"open"/' "$DC/key-stays-open/due-key-replaced.json"
 refuses 'a key deadline that the replaced key does not close' deadline-closes-itself "$DC/key-stays-open" 'is open, not closed, after the key was replaced'
