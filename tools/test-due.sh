@@ -511,7 +511,6 @@ s add reconnect-phone --title "Reconnect phone health" --from 2026-10-10 --to 20
 printf '{"day":"2026-10-13","connections":{"agentmail":{"set_up":true,"ok":true},"phone":{"set_up":true,"ok":true}}}' > "$SC/.godspeed/connection-check.json"
 out="$(GODSPEED_TODAY=2026-10-13 s check reconnect-mailbox)"; contains "the own mailbox connection closes from its daily check" "$out" "closed itself: Reconnect the mailbox"
 out="$(GODSPEED_TODAY=2026-10-13 s check reconnect-phone)"; contains "the phone health connection closes from its daily check" "$out" "closed itself: Reconnect phone health"
-=======
 # The mission control's own mailbox, the phone's health data and the server's disk are connections of the daily check too: each, by its id and by
 # its name, is accepted, waits for a working record dated inside the window, and closes on one.
 recx() { printf '{"at":"x","day":"%s","connections":{"%s":%s}}' "$1" "$2" "$3" > "$SC/.godspeed/connection-check.json"; }
