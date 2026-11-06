@@ -55,17 +55,32 @@ function cronSchedule(job){
  const fields=[[minute,0,59],[hour,0,23],[monthDay,1,31],[month,1,12,CRON_NAMES.month],[weekday,0,7,CRON_NAMES.weekday],[second||'0',0,59]].map(([words,min,max,names])=>cronPart(words==='?'?'*':words,min,max,names));
  if(fields.some(f=>f===null))return null;
  const [minutes,hours,days,months,weekdays,seconds]=fields;if(weekdays.has(7)){weekdays.delete(7);weekdays.add(0);}
- return {minutes,hours,days,months,weekdays,seconds,daysAny:days.size===31,weekdaysAny:weekdays.size===7};
+ const daysAny=days.size===31,weekdaysAny=weekdays.size===7;
+ // Missed-run checks recognize the calendar forms Settings and the starting routines create: every
+ // month, every day or one day of the month, and optional weekdays. Other Hermes cron forms stay
+ // quiet for missed runs; their recorded failures are still checked below.
+ if(months.size!==12||!daysAny&&days.size!==1)return null;
+ return {minutes,hours,days,months,weekdays,seconds,daysAny,weekdaysAny};
 }
-function cronDue(schedule,at,timezone){
- const local=localParts(at,timezone),weekday=new Date(Date.UTC(local.year,local.month-1,local.day)).getUTCDay(),dayMatches=schedule.days.has(local.day),weekdayMatches=schedule.weekdays.has(weekday);
+function cronMinuteDue(schedule,local){
+ const weekday=new Date(Date.UTC(local.year,local.month-1,local.day)).getUTCDay(),dayMatches=schedule.days.has(local.day),weekdayMatches=schedule.weekdays.has(weekday);
  const dayDue=schedule.daysAny&&schedule.weekdaysAny||schedule.daysAny?weekdayMatches:schedule.weekdaysAny?dayMatches:dayMatches||weekdayMatches;
- return schedule.seconds.has(local.second)&&schedule.minutes.has(local.minute)&&schedule.hours.has(local.hour)&&schedule.months.has(local.month)&&dayDue;
+ return schedule.minutes.has(local.minute)&&schedule.hours.has(local.hour)&&schedule.months.has(local.month)&&dayDue;
+}
+function cronGapDays(schedule){
+ if(schedule.daysAny)return schedule.weekdaysAny?1:7;
+ if(!schedule.weekdaysAny)return 7;
+ const day=[...schedule.days][0];return day<=28?31:day+30;
 }
 function previousCronDue(job,before,timezone){
  const schedule=cronSchedule(job);if(!schedule)return null;
- for(let at=Math.floor((before-1)/60000)*60000,stop=at-400*DAY;at>=stop;at-=60000)for(const second of [...schedule.seconds].sort((a,b)=>b-a)){const due=at+second*1000;if(due<before&&cronDue(schedule,due,timezone))return due;}
- return null;
+ const seconds=[...schedule.seconds].sort((a,b)=>b-a),gap=cronGapDays(schedule);let days=0,previousDay=null;
+ for(let at=Math.floor((before-1)/60000)*60000;;at-=60000){
+  const local=localParts(at,timezone),day=`${local.year}-${local.month}-${local.day}`;
+  if(day!==previousDay){if(previousDay!==null&&++days>gap)return null;previousDay=day;}
+  if(!cronMinuteDue(schedule,local))continue;
+  for(const second of seconds){const due=at+second*1000;if(due<before)return due;}
+ }
 }
 function missed(job,{now,day,timezone}){
  if(job.schedule?.kind==='once'||job.state==='completed')return null;

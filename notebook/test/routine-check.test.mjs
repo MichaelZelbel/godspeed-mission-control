@@ -2,6 +2,7 @@ import test from 'node:test';import assert from 'node:assert/strict';import fs f
 import {Store} from '../core/records/store.mjs';import {installStarter} from '../core/starter-workspace.mjs';
 import {readNotices} from '../core/notices.mjs';import {CONNECTION_NOTICE_PREFIX} from '../core/connection-names.mjs';
 import {checkRoutines,routineFinding} from '../core/routine-check.mjs';import {runConnectionCheck} from '../scripts/connection-check.mjs';
+import {STARTING_ROUTINES} from '../core/starting-routines.mjs';import {calendarCron} from '../core/routine-times.mjs';
 
 for(const key of Object.keys(process.env))if(/^(GODSPEED_|HERMES_)/.test(key))delete process.env[key];
 
@@ -35,6 +36,23 @@ test('an advanced stepped-cron next run still reports its latest missed occurren
  assert.match(found.words,/Thursday 5 November at 04:45/);
 });
 
+test('an interval routine uses its own recurrence',()=>{
+ const job=daily('interval',{schedule:{kind:'interval',minutes:15},last_run_at:'2026-11-05T04:30:00Z',next_run_at:'2026-11-05T05:15:00Z'});
+ assert.match(routineFinding(job,{},{now:NOW,day:DAY,timezone:'UTC'}).found.words,/Thursday 5 November at 04:45/);
+});
+
+test('every cron schedule Godspeed emits has a prior occurrence',()=>{
+ const settings=[
+  {times:['09:00','16:00']},
+  {times:['09:00'],weekdays:[1,3,5]},
+  {times:['09:00'],month_day:31},
+ ];
+ for(const [index,expr] of [...STARTING_ROUTINES.map(r=>r.schedule),...settings.map(calendarCron)].entries()){
+  const job=daily('emitted-'+index,{schedule:{kind:'cron',expr},last_run_at:ago(500),next_run_at:ahead(1)});
+  assert.ok(routineFinding(job,{},{now:NOW+8*60000,day:DAY,timezone:'UTC'}).found,expr);
+ }
+});
+
 test('weekday, month-day, and six-field Hermes schedules use only their own occurrences',()=>{
  const now=Date.parse('2026-11-05T12:00:00Z'),nextMonday='2026-11-09T09:00:00Z';
  const jobs=[
@@ -45,6 +63,17 @@ test('weekday, month-day, and six-field Hermes schedules use only their own occu
  for(const job of jobs)assert.equal(routineFinding(job,{},{now,day:DAY,timezone:'UTC'}).found,null,job.id);
  const missed=daily('seconds-late',{schedule:{kind:'cron',expr:'0 9 * * 1 30'},last_run_at:'2026-10-26T09:00:30Z',next_run_at:'2026-11-09T09:00:30Z'});
  assert.match(routineFinding(missed,{},{now,day:DAY,timezone:'UTC'}).found.words,/Monday 2 November at 09:00/);
+});
+
+test('a selected seconds field stays quiet through its grace boundary',()=>{
+ const job=daily('seconds-grace',{schedule:{kind:'cron',expr:'0 9 * * 1 30'},last_run_at:'2026-10-26T09:00:30Z',next_run_at:'2026-11-09T09:00:30Z'});
+ assert.equal(routineFinding(job,{},{now:Date.parse('2026-11-02T11:00:30Z'),day:'2026-11-02',timezone:'UTC'}).found,null);
+ assert.match(routineFinding(job,{},{now:Date.parse('2026-11-02T11:00:31Z'),day:'2026-11-02',timezone:'UTC'}).found.words,/Monday 2 November at 09:00/);
+});
+
+test('a month-day schedule finds its previous date across a month without it',()=>{
+ const job=daily('month-end',{schedule:{kind:'cron',expr:'0 9 31 * *'},last_run_at:'2025-12-31T09:00:00Z',next_run_at:'2026-03-31T09:00:00Z'});
+ assert.match(routineFinding(job,{},{now:Date.parse('2026-03-01T12:00:00Z'),day:'2026-03-01',timezone:'UTC'}).found.words,/Saturday 31 January at 09:00/);
 });
 
 test("a prior cron occurrence keeps the owner's non-UTC clock",()=>{
