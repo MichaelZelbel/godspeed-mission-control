@@ -103,11 +103,11 @@ export function readRaw(state,fromDay){
 const inReceiveOrder=lines=>lines.map((line,at)=>({line,at,when:instantOf(line.received_at)})).sort((a,b)=>a.when-b.when||a.at-b.at).map(x=>x.line);
 
 // Raw uploads leave after 30 days, but the connection check needs the time of the last accepted one
-// for as long as the receiver exists. Older receivers have only raw lines, so use their latest line
-// until the next accepted upload creates this small receipt.
+// for as long as the receiver exists. Imported raw lines never passed the receiver, so they cannot
+// establish this receipt.
 export function lastAcceptedUpload(state){
- let received;try{received=fs.readFileSync(lastUploadFile(state),'utf8').trim();}catch(error){if(error.code==='ENOENT')return readRaw(state,'0000-00-00').at(-1)?.received_at;return undefined;}
- return Number.isFinite(instantOf(received))?received:readRaw(state,'0000-00-00').at(-1)?.received_at;
+ let received;try{received=fs.readFileSync(lastUploadFile(state),'utf8').trim();}catch{return undefined;}
+ return Number.isFinite(instantOf(received))?received:undefined;
 }
 function rememberAcceptedUpload(state,received){
  atomic(lastUploadFile(state),received+'\n');fs.chmodSync(lastUploadFile(state),0o600);

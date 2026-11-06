@@ -2,7 +2,7 @@ import test from 'node:test';import assert from 'node:assert/strict';import fs f
 import {NativeScheduler,nativeJobs} from '../core/native-scheduler.mjs';import {Store} from '../core/records/store.mjs';import {QueryService} from '../core/query.mjs';import {Domains} from '../core/domains.mjs';
 import {installStarter} from '../core/starter-workspace.mjs';import {readMachineRecord,telegramInHermes,chatAppInHermes} from '../core/starting-routines.mjs';import {runCommand} from '../core/child-process.mjs';
 import {DatabaseSync} from 'node:sqlite';import {CONNECTION_NOTICE_PREFIX} from '../core/connection-names.mjs';
-import {cronCalendar,calendarCron,retimeWhat} from '../core/routine-times.mjs';import {enableKinds,readNotebookRoutines,rememberNotebookRoutine,writeNotebookRoutines,JOURNAL_JOB,CHAT_TIDY_JOB,CHAT_TIDY_SCRIPT,BRIEF_SCRIPT,deliveryFor,CONNECTION_JOB} from '../core/notebook-routines.mjs';
+import {cronCalendar,calendarCron,retimeWhat} from '../core/routine-times.mjs';import {enableKinds,readNotebookRoutines,rememberNotebookRoutine,writeNotebookRoutines,JOURNAL_JOB,CHAT_TIDY_JOB,CHAT_TIDY_SCRIPT,BRIEF_SCRIPT,deliveryFor,CONNECTION_JOB,CONNECTION_WHAT} from '../core/notebook-routines.mjs';
 import {personalOperation} from '../core/personal-operations.mjs';import {readArea} from '../../third-party/addons/godspeed-coach/lib/areas.mjs';
 import {acceptUpload} from '../core/phone-health.mjs';
 
@@ -245,6 +245,16 @@ test('an accepted phone upload alone starts the daily connection check',async t=
  scheduler.lastTick=0;await scheduler.tick();assert.equal(job(CONNECTION_JOB).enabled,false);
  acceptUpload(store,{metrics:[]},{now:new Date('2026-11-04T10:00:00Z')});
  scheduler.lastTick=0;await scheduler.tick();assert.equal(job(CONNECTION_JOB).enabled,true);
+});
+
+test('an existing daily connection check refreshes its Settings description',async t=>{
+ noMail(t);
+ const {home,store,scheduler,job}=await withGoal(t);
+ scheduler.lastTick=0;await scheduler.tick();
+ const existing=readNotebookRoutines(store).jobs.find(j=>j.key==='connection-check');rememberNotebookRoutine(store,{...existing,what:'Checks the connections you set up.'});
+ scheduler.lastTick=0;await scheduler.tick();
+ const refreshed=readNotebookRoutines(store).jobs.find(j=>j.key==='connection-check');assert.equal(refreshed.what,CONNECTION_WHAT);assert.equal(refreshed.paused_by_notebook,true,'the upgrade keeps the notebook-owned pause');
+ const q=new QueryService(store);q.nativeHermesHome=home;assert.equal(q.rows('jobs').find(j=>j.title===CONNECTION_JOB).what,CONNECTION_WHAT);assert.equal(job(CONNECTION_JOB).enabled,false);
 });
 
 test('a Morning brief set early brings the daily connection check ahead of it, and a failed creation reaches the setup tick',async t=>{

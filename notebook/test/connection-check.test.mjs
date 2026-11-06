@@ -2,7 +2,7 @@ import test from 'node:test';import assert from 'node:assert/strict';import fs f
 import {Store} from '../core/records/store.mjs';import {installStarter} from '../core/starter-workspace.mjs';
 import {readNotices} from '../core/notices.mjs';import {addonDeadlines} from '../core/addon-deadlines.mjs';
 import {CONNECTION_NAMES} from '../core/connection-names.mjs';import {runDue} from '../core/connection-check.mjs';import {CONNECTIONS,defaultProbes,checkConnections,nextState,recoverPhoneConnection,telegramProbe,githubProbe,mailProbe,agentmailProbe,aiProbe,phoneProbe,gitKind,aiKind,telegramKind,mailKind,connectionCheckWanted,RECORD_FILE} from '../core/connection-check.mjs';
-import {acceptUpload,pruneRaw,readRaw} from '../core/phone-health.mjs';
+import {acceptUpload,importFolder,pruneRaw,readRaw} from '../core/phone-health.mjs';
 
 for(const key of Object.keys(process.env))if(/^(GODSPEED_|HERMES_)/.test(key))delete process.env[key];
 
@@ -61,6 +61,16 @@ test('the phone remains a connection after its raw upload expires',async t=>{
  const phone=phoneProbe({store,now:()=>new Date('2026-11-05T10:00:00Z')});
  await checkConnections({store,day:D2,probes:stubs({phone}),now:()=>new Date('2026-11-05T10:00:00Z')});
  assert.equal(readNotices(store).length,1);assert.equal(deadlines(store).length,1);
+});
+
+test('imported health data does not establish a phone connection',async t=>{
+ const {store,root}=fixture(t),home=path.join(root,'hermes-home'),none=()=>({status:()=>({state:'not connected'})}),legacy=()=>({credentials:()=>({})}),folder=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-phone-import-'));fs.mkdirSync(home);t.after(()=>fs.rmSync(folder,{recursive:true,force:true}));
+ fs.writeFileSync(path.join(folder,'old.jsonl'),JSON.stringify({received_at:'2026-11-04T10:00:00Z',data:{metrics:[]}})+'\n');
+ importFolder(store,folder,{now:new Date('2026-11-05T10:00:00Z')});
+ assert.deepEqual(await phoneProbe({store,now:()=>new Date('2026-11-06T10:00:00Z')})(),{set_up:false});
+ assert.equal(connectionCheckWanted(home,none,store,legacy),false,'legacy raw data is not a receiver upload');
+ const record=await checkConnections({store,day:D3,probes:stubs()});
+ assert.deepEqual(record.connections.phone,{set_up:false});assert.deepEqual(readNotices(store),[]);assert.deepEqual(deadlines(store),[]);
 });
 
 test('a refused Telegram key: one message and one deadline, closed by the routine the day it works again',async t=>{
