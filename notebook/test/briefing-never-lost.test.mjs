@@ -59,6 +59,13 @@ test('a short sentence limit still yields a concrete action',async()=>{
  assert.equal(result.fallback,true);assert.match(content,/Ask Godspeed to complete one goal step/);
 });
 
+test('a five-word sentence limit still yields an action with a saved goal',async()=>{
+ const {store,query}=fixture(['MAX-SENTENCE-WORDS: 5']);store.save('goals',{title:'Prepare a fictional guide',status:'adopted'});
+ const provider=async input=>input.kind==='brief-verification'?{passed:false,reason:'No useful action'}:'Unsupported draft.';
+ const result=await run(provider,query,store,'brief-five-word-action'),content=store.get('notes',result.record_id).content;
+ assert.equal(result.fallback,true);assert.match(content,/Do one goal step\./);
+});
+
 test('a voice rule against the product name still leaves a goal action',async()=>{
  const {store,query}=fixture(['BANNED-WORD: Godspeed']);store.save('goals',{title:'Prepare a fictional guide',status:'adopted'});
  const provider=async input=>input.kind==='brief-verification'?{passed:false,reason:'No useful action'}:'Unsupported draft.';
@@ -82,6 +89,13 @@ test('an empty first install gets one setup action without an invented goal',asy
  assert.doesNotMatch(content,/saved goal|current goal/i);
 });
 
+test('an empty first install still gets a setup action when the product name is banned',async()=>{
+ const {store,query}=fixture(['BANNED-WORD: Godspeed']);
+ const provider=async input=>input.kind==='brief-verification'?{passed:false,reason:'No useful action'}:'Unsupported draft.';
+ const result=await run(provider,query,store,'brief-zero-goal-no-name'),content=store.get('notes',result.record_id).content;
+ assert.equal(result.fallback,true);assert.match(content,/Name one goal today\./);assert.doesNotMatch(content,/Godspeed|saved goal/i);
+});
+
 test('several saved goals are not presented as one selected current goal',async()=>{
  const {store,query}=fixture([]);store.save('goals',{title:'Fictional first goal',status:'adopted'});store.save('goals',{title:'Fictional second goal',status:'adopted'});
  const provider=async input=>input.kind==='brief-verification'?{passed:false,reason:'No useful action'}:'Unsupported draft.';
@@ -101,6 +115,37 @@ test('fallback names verified user work and the next future obligation only',asy
  const result=await run(provider,query,store,'brief-work-date'),content=store.get('notes',result.record_id).content;
  assert.match(content,/Checked fictional outline/);assert.match(content,/Submit fictional application, due 2027-01-01/);
  assert.doesNotMatch(content,/Private unapproved|Recheck internal|Old fictional bill|Plan fictional travel/);
+});
+
+test('fallback chooses the latest verified work and fresh health by their recorded times',async()=>{
+ const {store,query}=fixture([]);store.save('goals',{title:'Prepare a fictional guide',status:'adopted'});
+ store.save('work_items',{kind:'draft',title:'Newer fictional approval',state:'verified',verification:{at:'2026-11-06T12:00:00Z'}});
+ store.save('work_items',{kind:'draft',title:'Older fictional outline',state:'verified',verification:{at:'2026-11-05T12:00:00Z'}});
+ const now=Date.now();store.save('health_observations',{metric:'Fictional energy',value:7,observed_at:new Date(now).toISOString()});
+ store.save('health_observations',{metric:'Fictional headache',value:2,observed_at:new Date(now-86400000).toISOString()});
+ const provider=async input=>input.kind==='brief-verification'?{passed:false,reason:'No useful action'}:'Unsupported draft.';
+ const result=await run(provider,query,store,'brief-time-order'),content=store.get('notes',result.record_id).content;
+ assert.match(content,/Newer fictional approval/);assert.doesNotMatch(content,/Older fictional outline/);
+ assert.match(content,/Fictional energy: 7/);assert.doesNotMatch(content,/Fictional headache/);
+});
+
+test('fallback skips an unrenderable latest health value for a checked fresh observation',async()=>{
+ const {store,query}=fixture([]);store.save('goals',{title:'Prepare a fictional guide',status:'adopted'});
+ const now=Date.now();store.save('health_observations',{metric:'Fictional energy',value:7,observed_at:new Date(now-1000).toISOString()});
+ store.save('health_observations',{metric:'Fictional headache',value:'Moderate in the fictional afternoon, then improving',observed_at:new Date(now).toISOString()});
+ const provider=async input=>input.kind==='brief-verification'?{passed:false,reason:'No useful action'}:'Unsupported draft.';
+ const result=await run(provider,query,store,'brief-usable-health'),content=store.get('notes',result.record_id).content;
+ assert.match(content,/Fictional energy: 7/);assert.doesNotMatch(content,/Fictional headache/);
+});
+
+test('fallback omits snoozed and not-yet-started obligations',async()=>{
+ const {store,query}=fixture([]);store.save('goals',{title:'Prepare a fictional guide',status:'adopted'});
+ store.save('deadlines',{title:'Fictional snoozed filing',status:'open',due_at:'2027-01-01T00:00:00Z',snoozed_until:'2027-01-01T00:00:00Z'});
+ store.save('deadlines',{title:'Fictional future project',status:'open',start_at:'2027-01-01T00:00:00Z',due_at:'2027-02-01T00:00:00Z'});
+ store.save('deadlines',{title:'Fictional current task',status:'open',due_at:'2027-03-01T00:00:00Z'});
+ const provider=async input=>input.kind==='brief-verification'?{passed:false,reason:'No useful action'}:'Unsupported draft.';
+ const result=await run(provider,query,store,'brief-obligation-window'),content=store.get('notes',result.record_id).content;
+ assert.match(content,/Fictional current task/);assert.doesNotMatch(content,/Fictional snoozed filing|Fictional future project/);
 });
 
 test('an unrenderable health value is omitted without claiming no observation exists',async()=>{
@@ -127,6 +172,7 @@ test('a rejected draft keeps a separately checked contribution and its exact lin
  const provider=async input=>input.kind==='brief-verification'?{passed:false,reason:'No useful action'}:'Unsupported draft.';
  const result=await run(provider,query,store,'brief-contribution-fallback'),saved=store.get('notes',result.record_id);
  assert.equal(result.fallback,true);assert.match(saved.content,/Fictional copy ready draft/);assert.match(saved.content,new RegExp('/dashboard/notes/'+note.id));
+ assert.match(saved.content,/Review this checked draft before deciding\. It has not been sent\./);
 });
 
 test('a refused required line stays left out of the factual fallback',async()=>{

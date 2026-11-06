@@ -119,16 +119,20 @@ async function runBriefing(job,{store,query,provider,now}){
    const required=[context.cycle_heads_up,context.charm_line].filter(Boolean),parts=[];
    const safe=(value,max=100)=>typeof value==='string'&&value.trim()&&value.length<=max&&!/[\r\n\u0000-\u001f]/.test(value)?value.trim():null;
    const add=line=>{if(!line)return false;const candidate=[...parts,line].join('\n\n');if(codeGate(candidate).some(e=>!e.startsWith('Include ')))return false;parts.push(line);return true;};
+   const addFirst=(rows,line)=>rows.some(row=>add(line(row)));
    const goal=context.goals.at(0),goalTitle=safe(goal?.title,500);
-   if(goalTitle)add('One of your saved goals is '+goalTitle+'.');
-   const done=context.work.filter(w=>w.state==='verified'&&w.kind!=='repair').at(-1),doneTitle=safe(done?.title);
-   if(doneTitle)add('Godspeed has verified this work: '+doneTitle+'.');
-   const due=context.deadlines.filter(d=>d.due_at&&Number.isFinite(Date.parse(d.due_at))&&Date.parse(d.due_at)>=now.getTime()).sort((a,b)=>Date.parse(a.due_at)-Date.parse(b.due_at))[0],dueTitle=safe(due?.title);
-   if(dueTitle)add('A dated obligation is '+dueTitle+', due '+String(due.due_at).slice(0,10)+'.');
-   const observed=context.health.at(-1),metric=safe(observed?.metric,60),value=observed?.value;
-   if(metric&&(typeof value==='number'||typeof value==='string'&&safe(value,30)))add('A recorded health observation is '+metric+': '+value+'.');
-   else if(!context.health.length)add('There are no fresh health observations to report.');
-   const action=add(goalTitle?'Ask Godspeed to work on '+goalTitle+' and show you one concrete result today.':goal?'Ask Godspeed to complete one goal step.':'Tell Godspeed one goal to work on today, then ask it for the first concrete step.')||add(goal?'Ask Godspeed to complete one goal step.':'Tell Godspeed one goal.')||add(goal?'Work on one goal step today.':'Name one goal today.');
+   addFirst(context.goals,g=>safe(g.title,500)?'One of your saved goals is '+safe(g.title,500)+'.':null);
+   const verified=context.work.filter(w=>w.state==='verified'&&w.kind!=='repair').sort((a,b)=>String(b.verification?.at||b.updated_at||'').localeCompare(String(a.verification?.at||a.updated_at||'')));
+   addFirst(verified,w=>safe(w.title)?'Godspeed has verified this work: '+safe(w.title)+'.':null);
+   const due=context.deadlines.filter(d=>d.due_at&&Number.isFinite(Date.parse(d.due_at))&&Date.parse(d.due_at)>=now.getTime()&&!['closed','completed'].includes(d.status)&&(!d.start_at||Date.parse(d.start_at)<=now.getTime())&&(!d.snoozed_until||Date.parse(d.snoozed_until)<=now.getTime())).sort((a,b)=>Date.parse(a.due_at)-Date.parse(b.due_at));
+   addFirst(due,d=>safe(d.title)?'A dated obligation is '+safe(d.title)+', due '+String(d.due_at).slice(0,10)+'.':null);
+   const observedAt=h=>h.date_precision==='day'&&h.observed_on?String(h.observed_on)+'T00:00:00Z':h.observed_at||h.created_at||'';
+   const observations=[...context.health].sort((a,b)=>String(observedAt(b)).localeCompare(String(observedAt(a))));
+   const healthAdded=addFirst(observations,h=>{const metric=safe(h.metric,60),value=h.value;return metric&&(typeof value==='number'||typeof value==='string'&&safe(value,30))?'A recorded health observation is '+metric+': '+value+'.':null;});
+   if(!healthAdded&&!context.health.length)add('There are no fresh health observations to report.');
+   const action=context.contribution
+    ?add('Review this checked draft before deciding. It has not been sent.')||add('Review this unsent draft.')
+    :add(goalTitle?'Ask Godspeed to work on '+goalTitle+' and show you one concrete result today.':goal?'Ask Godspeed to complete one goal step.':'Tell Godspeed one goal to work on today, then ask it for the first concrete step.')||add(goal?'Ask Godspeed to complete one goal step.':'Tell Godspeed one goal.')||add(goal?'Work on one goal step today.':'Name one goal today.')||add(goal?'Do one goal step.':'Name one goal.');
    for(const line of required)add(line);
    if(context.contribution){add(context.contribution.content);add(context.contribution.link);}
    const result=parts.join('\n\n');
