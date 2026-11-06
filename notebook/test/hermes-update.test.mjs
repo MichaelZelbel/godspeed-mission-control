@@ -41,6 +41,11 @@ test('a passing published release is backed up, updated, restarted, checked, and
  const f=fixture(t),result=await f.updater.runNow(),state=readHermesUpdate(f.store);assert.equal(result.result,'updated');assert.equal(result.version,'1.1.0');assert.equal(f.asked(),1);assert.ok(f.calls.some(call=>call.join(' ')==='hermes update --no-backup --yes'));assert.ok(f.calls.some(call=>call.join(' ')==='hermes gateway restart'));for(const name of ['godspeed-reply','godspeed-context','godspeed-chat-tidy'])assert.ok(f.calls.some(call=>call.join(' ').includes('plugins doctor')&&call.join(' ').includes(name)));assert.ok(fs.existsSync(state.backup));assert.deepEqual(f.store.list('notifications'),[]);
 });
 
+test('a Settings opt-out during an update survives its completion',async t=>{
+ const f=fixture(t);let entered,release;const started=new Promise(resolve=>{entered=resolve;}),held=new Promise(resolve=>{release=resolve;});f.updater.fetcher=async()=>{entered();await held;return {ok:true,json:async()=>releases(['1.1.0','1.2.0-rc.1','2.0.0','1.0.1'])};};
+ const updating=f.updater.runNow();await started;f.updater.setEnabled(false);release();assert.equal((await updating).result,'updated');assert.equal(readHermesUpdate(f.store).enabled,false);assert.deepEqual(await f.updater.runNow(),{result:'skipped',reason:'Keeping the assistant up to date is switched off.'});
+});
+
 test('every validation veto rolls back, restores the backup, restarts, and never asks AI twice',async t=>{
  for(const breaks of ['--version','cron list','plugins doctor '+path.join(os.tmpdir(),'unused'),'gateway status']){
   const f=fixture(t,{breaks:breaks==='plugins doctor '+path.join(os.tmpdir(),'unused')?'plugins doctor '+path.join(fixture.name,'unused'):breaks});

@@ -26,6 +26,9 @@ export function updateStatus(store){
  return {enabled:state.enabled!==false,reason:state.reason||last?.reason||null,last:last?{at:last.at,result:last.result,version:last.version,reason:last.reason}:null};
 }
 
+const settingsState=state=>typeof state.enabled==='boolean'?{enabled:state.enabled}:{};
+const transactionState=state=>{const {enabled,...transaction}=state;return transaction;};
+
 // GitHub's release record, rather than a local tag timestamp, is the authority
 // for when a stable Hermes release became available to an installation.
 export function releaseCandidates(releases){
@@ -45,6 +48,8 @@ export class HermesUpdate{
  constructor({store,descriptor,ask,run=runChild,now=()=>new Date(),platform=process.platform,getuid=()=>process.getuid?.(),isDocker=()=>false,isBusy=()=>false,fetcher=globalThis.fetch,lifecycle=null}={}){Object.assign(this,{store,descriptor,ask,run,now,platform,getuid,isDocker,isBusy,fetcher,lifecycle});this.running=null;}
  state(){return readHermesUpdate(this.store);}
  save(next){atomic(path.join(this.store.state,UPDATE_FILE),JSON.stringify(next,null,2)+'\n');return next;}
+ setEnabled(enabled){return this.save({...transactionState(this.state()),enabled});}
+ commit(change){const state=this.state();return this.save({...change(transactionState(state)),...settingsState(state)});}
  async command(executable,args,{cwd,timeoutMs=120000}={}){
   try{return await this.run(executable,args,{cwd:cwd||this.store.root,timeoutMs,maxBytes:1024*1024,windowsHide:true,shell:false,env:assistantEnvironment({home:this.descriptor?.home,workspace:this.store.root})})||{code:0,stdout:'',stderr:''};}
   catch(error){return {code:typeof error?.code==='number'?error.code:1,stdout:error?.stdout||'',stderr:error?.stderr||'',error};}
@@ -110,33 +115,33 @@ export class HermesUpdate{
   const release=this.lifecycle?.acquire('assistant update');if(this.lifecycle&&!release)return {result:'skipped',reason:'Godspeed is still handling a chat or routine.'};
   const lock=path.join(this.store.state,'hermes-update.lock');let fd;
   try{fd=fs.openSync(lock,'wx');fs.writeFileSync(fd,String(process.pid));}catch{release?.();return {result:'skipped',reason:'A Hermes update is already running.'};}
-  this.running=this.runTransaction(state).catch(error=>this.record(state,{result:'failed',reason:'Hermes update could not finish.',detail:scrubCredentials(errorText({error})).trim().slice(-2000)}));
+  this.running=this.runTransaction().catch(error=>this.record({result:'failed',reason:'Hermes update could not finish.',detail:scrubCredentials(errorText({error})).trim().slice(-2000)}));
   try{return await this.running;}finally{this.running=null;try{fs.closeSync(fd);}catch{}try{fs.unlinkSync(lock);}catch{}release?.();}
  }
  async tick(timezone){
   const now=this.now(),parts=Object.fromEntries(new Intl.DateTimeFormat('en-GB',{timeZone:timezone||'UTC',hour:'2-digit',minute:'2-digit',year:'numeric',month:'2-digit',day:'2-digit',hourCycle:'h23'}).formatToParts(now).filter(part=>part.type!=='literal').map(part=>[part.type,part.value])),day=`${parts.year}-${parts.month}-${parts.day}`;
   if(parts.hour<'04'||parts.hour==='04'&&parts.minute<'15'||this.state().last?.day===day)return null;
-  const result=await this.runNow(),state=this.state(),last=state.last||{at:now.toISOString(),result:result?.result||'skipped',reason:result?.reason||null,output:null};this.save({...state,last:{...last,day}});return result;
+  const result=await this.runNow();this.commit(state=>{const last=state.last||{at:now.toISOString(),result:result?.result||'skipped',reason:result?.reason||null,output:null};return {...state,last:{...last,day}};});return result;
  }
- async runTransaction(state){
-  const eligible=await this.eligibility();if(eligible.reason)return this.record(state,{result:'skipped',reason:eligible.reason});
-  const before=await this.command(eligible.executable,['--version']);const installed=versionOf(before.stdout);if(before.code!==0||!installed)return this.record(state,{result:'skipped',reason:'Hermes did not report its installed version.'});
+ async runTransaction(){
+  const eligible=await this.eligibility();if(eligible.reason)return this.record({result:'skipped',reason:eligible.reason});
+  const before=await this.command(eligible.executable,['--version']);const installed=versionOf(before.stdout);if(before.code!==0||!installed)return this.record({result:'skipped',reason:'Hermes did not report its installed version.'});
   if(this.store.list('notifications').some(entry=>entry.id.startsWith('hermes-update-')&&entry.status==='pending')){
-   const checked=await this.validate({expect:installed});if(checked.ok){this.settle();return this.record(state,{result:'checked',version:installed});}
-   return this.record(state,{result:'check-failed',version:installed,reason:checked.step,detail:checked.output});
+   const checked=await this.validate({expect:installed});if(checked.ok){this.settle();return this.record({result:'checked',version:installed});}
+   return this.record({result:'check-failed',version:installed,reason:checked.step,detail:checked.output});
   }
-  const listed=await this.releases();if(listed.error)return this.record(state,{result:'failed',version:installed,reason:'Hermes release discovery failed.',detail:failure({step:'release discovery',result:{error:listed.error}}).output});
-  let target;try{target=eligibleRelease(listed.releases,installed,this.now().getTime(),state.failed);}catch(error){return this.record(state,{result:'failed',version:installed,reason:'Hermes release discovery failed.',detail:failure({step:'release discovery',result:{error}}).output});}
-  if(!target)return this.record(state,{result:'skipped',version:installed,reason:'No eligible stable Hermes release is ready.'});
-  const preview=await this.command(eligible.executable,['update','--check'],{cwd:eligible.source});if(preview.code!==0)return this.record(state,{result:'failed',version:installed,reason:'Hermes could not check its stable release.',detail:failure({step:'update check',result:preview}).output});
-  const backup=await this.backup();if(backup.error)return this.record(state,{result:'failed',version:installed,reason:'Hermes could not make its pre-update backup.',detail:backup.error.output});
+  const listed=await this.releases();if(listed.error)return this.record({result:'failed',version:installed,reason:'Hermes release discovery failed.',detail:failure({step:'release discovery',result:{error:listed.error}}).output});
+  let target;try{target=eligibleRelease(listed.releases,installed,this.now().getTime(),this.state().failed);}catch(error){return this.record({result:'failed',version:installed,reason:'Hermes release discovery failed.',detail:failure({step:'release discovery',result:{error}}).output});}
+  if(!target)return this.record({result:'skipped',version:installed,reason:'No eligible stable Hermes release is ready.'});
+  const preview=await this.command(eligible.executable,['update','--check'],{cwd:eligible.source});if(preview.code!==0)return this.record({result:'failed',version:installed,reason:'Hermes could not check its stable release.',detail:failure({step:'update check',result:preview}).output});
+  const backup=await this.backup();if(backup.error)return this.record({result:'failed',version:installed,reason:'Hermes could not make its pre-update backup.',detail:backup.error.output});
   const updated=await this.command(eligible.executable,['update','--no-backup','--yes'],{cwd:eligible.source,timeoutMs:UPDATE_LIMIT});
   let checked=updated.code===0?null:{ok:false,...failure({step:'Hermes update',result:updated})};
   if(!checked){const restart=await this.command(eligible.executable,['gateway','restart'],{cwd:eligible.source});checked=restart.code===0?await this.validate({expect:target.version}):{ok:false,...failure({step:'chat gateway restart',result:restart})};}
-  if(checked.ok){this.removeOlderBackup(state.backup,backup.file);this.settle();return this.record(state,{result:'updated',version:target.version,backup:backup.file});}
+  if(checked.ok){this.removeOlderBackup(this.state().backup,backup.file);this.settle();return this.record({result:'updated',version:target.version,backup:backup.file});}
   const rolledBack=await this.rollback(eligible,eligible.head,backup.file);
-  if(rolledBack){const restored=await this.validate({expect:installed,ai:checked.step!=='AI probe'});if(restored.ok){this.removeOlderBackup(state.backup,backup.file);this.notice({version:target.version,step:checked.step,rollback:true});return this.record(state,{result:'rolled-back',version:installed,failed:target.version,reason:checked.step,detail:checked.output,backup:backup.file});}}
-  this.removeOlderBackup(state.backup,backup.file);this.notice({version:target.version,step:checked.step,rollback:false});return this.record(state,{result:'rollback-failed',version:target.version,failed:target.version,reason:checked.step,detail:checked.output,backup:backup.file});
+  if(rolledBack){const restored=await this.validate({expect:installed,ai:checked.step!=='AI probe'});if(restored.ok){this.removeOlderBackup(this.state().backup,backup.file);this.notice({version:target.version,step:checked.step,rollback:true});return this.record({result:'rolled-back',version:installed,failed:target.version,reason:checked.step,detail:checked.output,backup:backup.file});}}
+  this.removeOlderBackup(this.state().backup,backup.file);this.notice({version:target.version,step:checked.step,rollback:false});return this.record({result:'rollback-failed',version:target.version,failed:target.version,reason:checked.step,detail:checked.output,backup:backup.file});
  }
- record(state,{result,version,failed,reason,detail,backup}){const at=this.now().toISOString(),next={...state,...(backup?{backup}:{}),last:{at,result,version,reason:reason||null,output:detail||null},...(failed?{failed:{...(state.failed||{}),[failed]:at}}:{})};this.save(next);return next.last;}
+ record({result,version,failed,reason,detail,backup}){const at=this.now().toISOString(),next=this.commit(state=>({...state,...(backup?{backup}:{}),last:{at,result,version,reason:reason||null,output:detail||null},...(failed?{failed:{...(state.failed||{}),[failed]:at}}:{})}));return next.last;}
 }
