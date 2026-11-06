@@ -1,6 +1,6 @@
 import {visibleRows} from './visibility.mjs';
 import {FOOD_TOTAL_COLUMNS,totalsOf} from './food.mjs';
-import {PHONE_DAY_COLUMNS} from './phone-health-columns.mjs';
+import {PHONE_SUM_METRICS} from './phone-health-columns.mjs';
 
 // Where the phone receiver and another source both give a day's metric, the value
 // written last wins for that day and metric only. A record's updated_at moves only when its value
@@ -47,7 +47,7 @@ export function currentHealth(query,{now=Date.now(),days=7}={}){
   const dayKeys=new Set([...healthByDay.keys(),...foodByDay.keys()]);
   const state=[...dayKeys].sort().map(date=>{
    const columns={},metrics=healthByDay.get(date),food=foodByDay.get(date);
-   for(const metric of [...new Set([...PHONE_DAY_COLUMNS,...(metrics?.keys()||[])])]){
+   for(const metric of [...new Set([...Object.values(PHONE_SUM_METRICS),...(metrics?.keys()||[])])]){
     const rows=metrics?.get(metric)||[],manual=rows.filter(row=>row.via===MANUAL_VIA);
     if(manual.length){const row=newest(manual);columns[metric]={value:row.value,source:'manual',state:'settled'};continue;}
     if(food&&Object.hasOwn(FOOD_TOTAL_COLUMNS,metric)){const totals=totalsOf(food);columns[metric]={value:totals[FOOD_TOTAL_COLUMNS[metric]],source:'food_tracker',state:'settled'};continue;}
@@ -56,7 +56,7 @@ export function currentHealth(query,{now=Date.now(),days=7}={}){
     if(row.via===PHONE_VIA){const data_until=phoneUntil.get(date),status=date===today?'not_judged':data_until>'21:00:00'?'complete':'may_be_incomplete';columns[metric]={value:row.value,source:'phone',state:status};}
     else columns[metric]={value:row.value,source:'legacy',state:'legacy'};
    }
-   const incomplete=PHONE_DAY_COLUMNS.filter(metric=>columns[metric]?.state==='may_be_incomplete');
+   const incomplete=Object.values(PHONE_SUM_METRICS).filter(metric=>columns[metric]?.state==='may_be_incomplete');
    return {date,...(phoneUntil.has(date)?{data_until:phoneUntil.get(date)}:{}),columns,may_be_incomplete_columns:incomplete};
   });
   return {observations,days:state,has_fresh_measurements:!!observations.length||!!state.length,as_of:new Date(now).toISOString(),timezone,window_days:days,excluded_stale_or_future:all.length-current.length};

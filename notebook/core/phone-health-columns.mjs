@@ -1,2 +1,1 @@
 export const PHONE_SUM_METRICS=Object.freeze({step_count:'steps',walking_running_distance:'distance_km',active_energy:'active_kcal',basal_energy_burned:'basal_kcal',dietary_energy:'food_kcal',protein:'protein_g',carbohydrates:'carbs_g',total_fat:'fat_g',flights_climbed:'flights'});
-export const PHONE_DAY_COLUMNS=Object.freeze(Object.values(PHONE_SUM_METRICS));
