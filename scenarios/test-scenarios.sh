@@ -2817,7 +2817,7 @@ Prepare a practical household emergency-kit checklist by Sunday.
 Verified work: Prepare a practical household emergency-kit checklist — Wrote emergency-kit-checklist.md with practical supplies.
 Next today: buy the water and first-aid supplies.
 EOF
-  printf '{"personal_profile":false,"health_history":false,"seeded_records":0}\n' >"$f/sparse-context.json"
+  for table in profile-facts goals decisions work-items deadlines health-observations health-episodes medications notes job-receipts watch-topics watch-observations lead-entries contacts moments; do printf '{"data":[]}\n' >"$f/sparse-$table.json"; done
   printf '{"state":"gateway"}\n' >"$f/runner.json"
   printf '{"requests":[{"method":"getUpdates","authorized":true},{"method":"sendMessage","authorized":true}]}\n' >"$f/telegram-requests.json"
   run_json "$f" "$(msg scheduled-brief "$(cat "$f/brief.txt")")" "$(msg todays-brief "$(cat "$f/brief.txt")")"
@@ -2843,8 +2843,8 @@ copy "$FD/good" "$FD/placeholder"
 printf '%s\n' '- [ ] TODO: outline only' >"$FD/placeholder/emergency-kit-checklist.md"
 refuses 'a placeholder checklist' first-day "$FD/placeholder" 'not a practical emergency-kit checklist'
 copy "$FD/good" "$FD/no-sparse"
-printf '{"personal_profile":true,"health_history":false,"seeded_records":0}\n' >"$FD/no-sparse/sparse-context.json"
-refuses 'a brief with seeded profile context' first-day "$FD/no-sparse" 'required sparse fixture'
+printf '{"data":[{"id":"personal-history"}]}\n' >"$FD/no-sparse/sparse-profile-facts.json"
+refuses 'a brief with seeded profile context' first-day "$FD/no-sparse" 'required sparse installed state'
 copy "$FD/good" "$FD/no-send"
 run_json "$FD/no-send" "$(msg todays-brief "$(cat "$FD/no-send/brief.txt")")"
 refuses 'a brief not delivered on Telegram' first-day "$FD/no-send" 'never delivered'

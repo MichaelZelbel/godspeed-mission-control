@@ -6,7 +6,7 @@ These are the **proving scenarios** a candidate runs before the maintainer is as
 (godspeed-dev, `releases/godspeed-2.0.0-beta.8-faster-chat/plan.md`,
 `releases/godspeed-2.0.0-beta.12-reminders-in-the-notebook/plan.md` and
 `releases/godspeed-2.0.0-beta.13-charm-video-notebook/plan.md`, "Proving scenarios"). Each one
-is one job of `.github/workflows/scenarios.yml` on a fresh `ubuntu-24.04` machine (all but `phone-health-days`, `incomplete-day`, `phone-goes-quiet`, `mail-count` and `talk-on-talk-day`: those five are staged for beta.18, and their jobs and verdict entries are added to the workflow at the release step, as the pull request body that added them describes), and each is one
+is one job of `.github/workflows/scenarios.yml` on a fresh `ubuntu-24.04` machine (all but `phone-health-days`, `incomplete-day`, `phone-goes-quiet`, `mail-count`, `talk-on-talk-day` and `first-day`: those six are staged for beta.18, and their jobs and verdict entries are added to the workflow at the release step, as the pull request body that added them describes), and each is one
 script here, so that what a scenario does can be read, run by hand and held to its own tests —
 which a step written inside a workflow file cannot be. They live in a folder of their own for the
 same reason `stage/` does: everything in `tools/` is copied onto every user's computer as a program,
@@ -105,7 +105,8 @@ Named by the job, never in a file here:
 | `incomplete-day` | `GODSPEED_SCENARIO_AI_KEY` | a model writes the briefings the scenario reads; it judges only what a briefing says of a day, never the numbers |
 | `mail-count` | `GODSPEED_SCENARIO_AI_KEY` | the chat that sets the rule up is the real assistant, so it needs a model |
 | `talk-on-talk-day` | `GODSPEED_SCENARIO_AI_KEY` | the talk the owner asks for is opened by a model; the preparations are fixtures sealed by the coach's own commands |
-| `first-day`, `no-question-he-cannot-judge`, `plain-yes`, `what-was-that`, `connection-check` | `GODSPEED_SCENARIO_AI_KEY` | the installed Docker Telegram setup checks the dedicated test account before its supervised gateway receives the made-up owner messages; the same two variables select it. The bot and recipient stay local fixtures. |
+| `first-day`, `no-question-he-cannot-judge`, `plain-yes`, `what-was-that` | `GODSPEED_SCENARIO_AI_KEY` | the installed Docker Telegram setup checks the dedicated test account before its supervised gateway receives the made-up owner messages; the same two variables select it. The bot and recipient stay local fixtures. |
+| `connection-check` | none | it proves the installed daily connection routine and gateway with the setup's existing no-sign-in branch; it does not ask the assistant for a model answer. |
 
 `GODSPEED_SCENARIO_AI_URL` and `GODSPEED_SCENARIO_AI_MODEL` have no default: a scenario that needs an AI fails with a plain sentence naming whichever is missing, and it also fails if the URL is on openrouter.ai, so the checks can never spend OpenRouter money. They run on `https://api.anthropic.com/v1` with `claude-haiku-4-5`, set as repository variables, and the key is the secret `GODSPEED_SCENARIO_AI_KEY`.
 

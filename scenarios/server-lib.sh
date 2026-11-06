@@ -1,12 +1,20 @@
 #!/usr/bin/env bash
 # Shared Docker-server scenario helpers.  scenario-lib.sh must be sourced first.
 
-SERVER_NAME=${GODSPEED_SCENARIO_SERVER_NAME:-godspeed}
 SERVER_DIR=${GODSPEED_SCENARIO_SERVER_DIR:-/opt/godspeed-mission-control}
 INGEST_PORT=${GODSPEED_SCENARIO_INGEST_PORT:-47831}
 
-in_server() { sudo docker exec -i "$SERVER_NAME" "$@"; }
-in_server_as_hermes() { sudo docker exec -i --user hermes "$SERVER_NAME" "$@"; }
+# The /server installer owns the Compose project and its generated container names. Resolve the
+# current service container through that exact invocation each time because a scenario may recreate
+# it to add its local Bot API.
+server_compose() {
+  sudo docker compose -p godspeed-mission-control --project-directory "$SERVER_DIR" -f "$SERVER_DIR/compose.yaml" --env-file "$SERVER_DIR/.env" "$@"
+}
+server_container() {
+  server_compose ps -q godspeed 2>/dev/null | head -n 1
+}
+in_server() { local container; container=$(server_container) && [ -n "$container" ] && sudo docker exec -i "$container" "$@"; }
+in_server_as_hermes() { local container; container=$(server_container) && [ -n "$container" ] && sudo docker exec -i --user hermes "$container" "$@"; }
 
 server_install() {
   say "The /server line, against the stage: $STAGE_REF"
@@ -16,7 +24,7 @@ server_install() {
   server_healthy 300 || fail "the Docker server is not healthy after the /server line"
 }
 # shellcheck disable=SC2317,SC2329  # asked by wait_for
-server_is_healthy() { [ "$(sudo docker inspect -f '{{.State.Health.Status}}' "$SERVER_NAME" 2>/dev/null)" = healthy ]; }
+server_is_healthy() { local container; container=$(server_container) && [ -n "$container" ] && [ "$(sudo docker inspect -f '{{.State.Health.Status}}' "$container" 2>/dev/null)" = healthy ]; }
 server_healthy() { wait_for "$1" "the server container to be healthy" server_is_healthy; }
 
 server_post() { # <path> <json file> <answer file>
@@ -35,7 +43,7 @@ server_clock_at() { # <moment, ISO with Z>
   say "The server notebook's own clock is set to $1"
   printf 'services:\n  godspeed:\n    environment:\n      GODSPEED_NOW: "%s"\n' "$1" |
     sudo tee "$SERVER_DIR/compose.override.yaml" >/dev/null || fail "the server's clock could not be moved"
-  (cd "$SERVER_DIR" && sudo docker compose up -d --force-recreate) >&2 ||
+  server_compose up -d --force-recreate >&2 ||
     fail "the server could not be started again with its clock moved to $1"
   server_healthy 300 || fail "the server is not healthy after its clock was moved to $1"
 }
@@ -80,39 +88,53 @@ server_brief() { # <note file> <seconds>
 # fake-telegram.py deliberately records neither inbound text nor Bot API path tokens.
 SERVER_TELEGRAM_TOKEN='5550001111:SCENARIO-valid-aaaaaaaaaaaaaaaaaaaaaaaaaaaa'
 SERVER_TELEGRAM_OWNER=31415
-server_telegram_setup() {
-  need_the_ai_key 'the Telegram setup chat'
+server_telegram_setup() { # [without-ai]
+  local setup=()
+  if [ "${1:-}" = without-ai ]; then
+    setup=(--without-ai)
+  else
+    need_the_ai_key 'the Telegram setup chat'
+  fi
   # Keep this separate from compose.override.yaml: a scenario may already use that file to set its
   # clock, and the server's normal compose file must remain exactly what the /server installer made.
-  printf 'services:\n  godspeed:\n    environment:\n      GODSPEED_TELEGRAM_API: "http://127.0.0.1:8081"\n' |
-    sudo tee "$SERVER_DIR/compose.scenario-telegram.yaml" >/dev/null ||
+  printf 'services:\n  godspeed:\n    environment:\n      GODSPEED_TELEGRAM_API: "http://127.0.0.1:8081"\n' >"$EVIDENCE/.scenario-telegram-compose.yaml"
+  if [ "${1:-}" = without-ai ]; then
+    printf '      KB_SIGNIN_SKIP: "1"\n' >>"$EVIDENCE/.scenario-telegram-compose.yaml"
+  fi
+  sudo tee "$SERVER_DIR/compose.scenario-telegram.yaml" <"$EVIDENCE/.scenario-telegram-compose.yaml" >/dev/null ||
     fail 'the server could not direct its installed Telegram client to the local stand-in'
-  (cd "$SERVER_DIR" && sudo docker compose -f compose.yaml -f compose.scenario-telegram.yaml up -d --force-recreate) >&2 ||
+  server_compose -f "$SERVER_DIR/compose.scenario-telegram.yaml" up -d --force-recreate >&2 ||
     fail 'the server could not restart with its Telegram API endpoint set to the local stand-in'
   server_healthy 300 || fail 'the Docker server is not healthy after its Telegram endpoint was set'
-  "$NODE" "$HERE/server-telegram.mjs" setup --server "$SERVER_NAME" --evidence "$EVIDENCE" \
-    --token "$SERVER_TELEGRAM_TOKEN" --owner "$SERVER_TELEGRAM_OWNER" --ai-key "$GODSPEED_SCENARIO_AI_KEY" ||
-    fail 'the installed Docker Telegram setup did not hand the bot to its gateway'
+  if [ "${1:-}" = without-ai ]; then
+    "$NODE" "$HERE/server-telegram.mjs" setup --server "$(server_container)" --evidence "$EVIDENCE" \
+      --token "$SERVER_TELEGRAM_TOKEN" --owner "$SERVER_TELEGRAM_OWNER" "${setup[@]}" ||
+      fail 'the installed Docker Telegram setup did not hand the bot to its gateway'
+  else
+    "$NODE" "$HERE/server-telegram.mjs" setup --server "$(server_container)" --evidence "$EVIDENCE" \
+      --token "$SERVER_TELEGRAM_TOKEN" --owner "$SERVER_TELEGRAM_OWNER" --ai-key "$GODSPEED_SCENARIO_AI_KEY" ||
+      fail 'the installed Docker Telegram setup did not hand the bot to its gateway'
+  fi
 }
 server_telegram_say() { # <label> <text>
-  "$NODE" "$HERE/server-telegram.mjs" say --server "$SERVER_NAME" --evidence "$EVIDENCE" \
+  "$NODE" "$HERE/server-telegram.mjs" say --server "$(server_container)" --evidence "$EVIDENCE" \
     --owner "$SERVER_TELEGRAM_OWNER" --label "$1" --text "$2" ||
     fail "the installed Telegram gateway did not accept $1"
 }
 server_telegram_press() { # <label> <callback data>
-  "$NODE" "$HERE/server-telegram.mjs" press --server "$SERVER_NAME" --evidence "$EVIDENCE" \
+  "$NODE" "$HERE/server-telegram.mjs" press --server "$(server_container)" --evidence "$EVIDENCE" \
     --owner "$SERVER_TELEGRAM_OWNER" --label "$1" --button "$2" ||
     fail "the installed Telegram gateway did not accept $1"
 }
 server_telegram_snapshot() {
-  "$NODE" "$HERE/server-telegram.mjs" snapshot --server "$SERVER_NAME" --evidence "$EVIDENCE" ||
+  "$NODE" "$HERE/server-telegram.mjs" snapshot --server "$(server_container)" --evidence "$EVIDENCE" ||
     fail 'the installed Telegram gateway left no current evidence'
 }
 server_telegram_mark() { # <label> [kind]
   if [ $# -eq 2 ]; then
-    "$NODE" "$HERE/server-telegram.mjs" mark --server "$SERVER_NAME" --evidence "$EVIDENCE" --label "$1" --kind "$2"
+    "$NODE" "$HERE/server-telegram.mjs" mark --server "$(server_container)" --evidence "$EVIDENCE" --label "$1" --kind "$2"
   else
-    "$NODE" "$HERE/server-telegram.mjs" mark --server "$SERVER_NAME" --evidence "$EVIDENCE" --label "$1"
+    "$NODE" "$HERE/server-telegram.mjs" mark --server "$(server_container)" --evidence "$EVIDENCE" --label "$1"
   fi || fail "the installed Telegram gateway left no evidence for $1"
 }
 
@@ -120,7 +142,8 @@ server_copy_evidence() {
   # These folders are the installed mission-control's records and routine outputs, not host fixtures.
   # Neither contains the provider key, which remains under the separate Telegram connection directory.
   local source=$1 target=$2
-  sudo docker cp "$SERVER_NAME:$source" "$target" 2>/dev/null ||
+  local container; container=$(server_container)
+  [ -n "$container" ] && sudo docker cp "$container:$source" "$target" 2>/dev/null ||
     fail "the installed server did not retain $source as evidence"
 }
 server_manifest() {
@@ -167,14 +190,24 @@ server_run_job() { # <label> <job name> <seconds>
 server_snapshot_table() { # <label> <table>
   server_table "$2" "$EVIDENCE/$2-$1.json"
 }
+server_sparse_state() {
+  # Query the installed notebook before the first goal, rather than asserting what a fresh install
+  # ought to contain. These are the personal inputs a morning brief can otherwise draw on.
+  local table
+  for table in profile_facts goals decisions work_items deadlines health_observations health_episodes medications notes job_receipts watch_topics watch_observations lead_entries contacts moments; do
+    server_table "$table" "$EVIDENCE/sparse-${table//_/-}.json"
+  done
+}
 server_install_asker() {
-  sudo docker cp "$HERE/scenario-asker.py" "$SERVER_NAME:/tmp/scenario-asker.py" ||
+  local container; container=$(server_container)
+  [ -n "$container" ] && sudo docker cp "$HERE/scenario-asker.py" "$container:/tmp/scenario-asker.py" ||
     fail 'the fixture asker could not reach the installed server'
   in_server_as_hermes sh -c 'mkdir -p "$HERMES_HOME/scripts" && cp /tmp/scenario-asker.py "$HERMES_HOME/scripts/scenario-asker.py" && /opt/hermes/bin/hermes cron create "0 0 1 1 *" --no-agent --name "Scenario asker" --script scenario-asker.py --deliver telegram --failure-deliver local --workdir "$GODSPEED_WORKSPACE"' >&2 ||
     fail 'the installed Hermes could not create the fixture asker routine'
 }
 server_set_asks() { # <file>
-  sudo docker cp "$1" "$SERVER_NAME:/opt/data/full-candidate/workspace/.scenario-asks.json" ||
+  local container; container=$(server_container)
+  [ -n "$container" ] && sudo docker cp "$1" "$container:/opt/data/full-candidate/workspace/.scenario-asks.json" ||
     fail 'the installed server could not receive the fixture questions'
 }
 server_run_asker() { # <label>

@@ -15,7 +15,8 @@
 # THE ROUTINE is matched by its name and the deadline by its title and its being new, so this does not
 # depend on the slugs ticket 06 (#200) chose.
 #
-# The installed Telegram setup verifies the dedicated test AI account before handing the bot to its gateway.
+# This scenario exercises only the connection routine: the installed setup's supported no-sign-in
+# branch leaves AI unconfigured, so the current workflow can run it without an AI credential.
 #
 #   bash scenarios/connection-check.sh candidate/2.0.0-beta.17
 #   bash scenarios/connection-check.sh --check <folder>
@@ -48,11 +49,9 @@ act() {
   fresh_evidence
   install_paths
   need_node
-  need_the_ai_key 'the installed Telegram setup chat'
   server_install
-  server_connects_the_model
   phase 'the owner on the installed Docker Telegram gateway'
-  server_telegram_setup
+  server_telegram_setup without-ai
   printf '{"goal":"Sleep eight hours a night","timezone":"Etc/UTC","delivery":"telegram"}\n' >"$EVIDENCE/.setup.json"
   [ "$(server_post /api/setup "$EVIDENCE/.setup.json" "$EVIDENCE/setup.json")" = 200 ] || fail 'the installed notebook would not make routines for the fixture goal'
   server_pause_all_jobs

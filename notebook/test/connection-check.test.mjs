@@ -1,7 +1,7 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import http from 'node:http';
 import {Store} from '../core/records/store.mjs';import {installStarter} from '../core/starter-workspace.mjs';
 import {readNotices} from '../core/notices.mjs';import {addonDeadlines} from '../core/addon-deadlines.mjs';
-import {CONNECTION_NAMES} from '../core/connection-names.mjs';import {runDue} from '../core/connection-check.mjs';import {CONNECTIONS,defaultProbes,checkConnections,nextState,recoverPhoneConnection,telegramProbe,githubProbe,mailProbe,agentmailProbe,aiProbe,phoneProbe,gitKind,aiKind,telegramKind,mailKind,connectionCheckWanted,RECORD_FILE} from '../core/connection-check.mjs';
+import {CONNECTION_NAMES} from '../core/connection-names.mjs';import {runDue} from '../core/connection-check.mjs';import {CONNECTIONS,defaultProbes,checkConnections,nextState,recoverPhoneConnection,telegramProbe,telegramAPI,githubProbe,mailProbe,agentmailProbe,aiProbe,phoneProbe,gitKind,aiKind,telegramKind,mailKind,connectionCheckWanted,RECORD_FILE} from '../core/connection-check.mjs';
 import {acceptUpload,importFolder,pruneRaw,readRaw} from '../core/phone-health.mjs';
 import {runConnectionCheck} from '../scripts/connection-check.mjs';
 
@@ -164,6 +164,18 @@ test('the daily routine sends Telegram probes to its configured API without reta
   assert.ok(!fs.readFileSync(path.join(store.state,RECORD_FILE),'utf8').includes(token));
  }
  assert.deepEqual(seen,[`/bot${TOKEN}/getMe`,'/botrefused-token/getMe']);
+});
+
+test('a Telegram probe sends its token only to HTTPS or a loopback stand-in',async t=>{
+ const {root}=fixture(t),home=path.join(root,'hermes-home');fs.mkdirSync(home);fs.writeFileSync(path.join(home,'.env'),'TELEGRAM_BOT_TOKEN='+TOKEN+'\n');
+ assert.equal(telegramAPI('https://api.example.test/'),'https://api.example.test');
+ assert.equal(telegramAPI('http://127.0.0.1:8081'),'http://127.0.0.1:8081');
+ assert.equal(telegramAPI('http://[::1]:8081'),'http://[::1]:8081');
+ for(const api of ['http://telegram.example.test','http://192.0.2.1','ftp://127.0.0.1','https://user:password@api.example.test','https://api.example.test/proxy']){
+  let called=false;
+  assert.deepEqual(await telegramProbe({home,api,fetcher:async()=>{called=true;throw Error('called');}})(),{set_up:true,ok:false,kind:'other'},api);
+  assert.equal(called,false,api+' never receives the token');
+ }
 });
 
 test('the classifiers sort sign-in failures from the rest',()=>{

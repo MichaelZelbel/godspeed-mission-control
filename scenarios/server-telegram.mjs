@@ -86,6 +86,7 @@ async function waitFor(description,readValue,predicate,seconds=90){
 async function setup(){
   requireEvidence();
   if(!token) throw Error('server-telegram: --token is required for setup');
+  const withoutAI=args.includes('--without-ai');
   const scenario={users:{[owner]:{first_name:'Scenario owner',username:'scenario_owner'}},start:[],rules:[]};
   const scenarioFile=path.join(evidence,'telegram-scenario.json');
   write(scenarioFile,scenario);
@@ -98,11 +99,13 @@ async function setup(){
   const connected=post('/api/telegram/connect',{token,timezone:'Etc/UTC',address:'https://example.invalid'});
   if(!connected?.start_message) throw Error('Settings connected the bot but supplied no one-time /start message');
   await capture('setup-start','setup',()=>act({from:owner,text:connected.start_message}));
-  await waitFor('setup question',copyRecord,record=>(record.sent ?? []).some(message=>(message.buttons ?? []).includes('anthropic')));
-  await capture('setup-provider','press',()=>act({from:owner,press:'anthropic'}));
-  const key=optional('--ai-key');
-  if(!key) throw Error('server-telegram: --ai-key is required because the setup path checks the dedicated AI account');
-  await capture('setup-key','say',()=>act({from:owner,text:key}));
+  if(!withoutAI){
+    await waitFor('setup question',copyRecord,record=>(record.sent ?? []).some(message=>(message.buttons ?? []).includes('anthropic')));
+    await capture('setup-provider','press',()=>act({from:owner,press:'anthropic'}));
+    const key=optional('--ai-key');
+    if(!key) throw Error('server-telegram: --ai-key is required because the setup path checks the dedicated AI account');
+    await capture('setup-key','say',()=>act({from:owner,text:key}));
+  }
   await waitFor('first-install question',copyRecord,record=>(record.sent ?? []).some(message=>(message.buttons ?? []).includes('have:no')),180);
   await capture('setup-first-install','press',()=>act({from:owner,press:'have:no'}));
   await waitFor('gateway handoff',runner,value=>value.state==='gateway',180);

@@ -68,6 +68,16 @@ export const gitKind=stderr=>GIT_SIGN_IN.test(String(stderr||''))?'sign-in':'oth
 export const aiKind=error=>error?.reason==='sign-in'?'sign-in':'other';
 export const mailKind=state=>state==='disconnected'||state==='reconnect needed'?'sign-in':'other';
 
+// A bot token is part of every Telegram request path. The configured endpoint is normally
+// Telegram's HTTPS origin; scenarios alone use the loopback stand-in over HTTP.
+export function telegramAPI(value='https://api.telegram.org'){
+ let url;try{url=new URL(value);}catch{throw new Error('Telegram API requires HTTPS or a loopback HTTP endpoint');}
+ const parts=url.hostname.split('.'),loopback=url.hostname==='localhost'||url.hostname==='[::1]'||url.hostname==='::1'||parts.length===4&&parts[0]==='127'&&parts.every(part=>/^\d+$/.test(part)&&Number(part)<=255);
+ if((url.protocol!=='https:'&&!(url.protocol==='http:'&&loopback))||url.username||url.password||url.pathname!=='/'||url.search||url.hash)
+  throw new Error('Telegram API requires HTTPS or a loopback HTTP endpoint');
+ return url.origin;
+}
+
 const outcome=(ok,kind)=>ok?{set_up:true,ok:true}:{set_up:true,ok:false,kind};
 const NOT_SET_UP={set_up:false};
 
@@ -80,7 +90,7 @@ export const telegramProbe=({home,fetcher=fetch,api='https://api.telegram.org'})
  let token;try{token=ENV_TOKEN.exec(fs.readFileSync(path.join(home,'.env'),'utf8'))?.[1]?.replace(/^["']|["']$/g,'');}catch{}
  if(!token)return NOT_SET_UP;
  try{
-  const response=await fetcher(`${api}/bot${token}/getMe`,{method:'POST',headers:{'Content-Type':'application/json'},body:'{}',signal:AbortSignal.timeout(15000)});
+  const response=await fetcher(`${telegramAPI(api)}/bot${token}/getMe`,{method:'POST',headers:{'Content-Type':'application/json'},body:'{}',signal:AbortSignal.timeout(15000)});
   const body=await response.json().catch(()=>({}));
   return response.ok&&body.ok?outcome(true):outcome(false,telegramKind(response.status,body));
  }catch{return outcome(false,'other');}

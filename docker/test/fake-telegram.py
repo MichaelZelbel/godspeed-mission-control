@@ -19,7 +19,9 @@
 # library, so it runs anywhere.
 import argparse
 import json
+import os
 import re
+import tempfile
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -106,14 +108,12 @@ class Fake:
                         r["fired"] = r.get("fired", 0) + 1
                         for a in r["do"]:
                             self.act(a)
-                self.save()
                 return {"message_id": m["message_id"], "chat": {"id": m["chat_id"]}, "text": m["text"]}
             if method == "sendDocument":
                 m = {"chat_id": p.get("chat_id"), "text": p.get("caption", ""), "message_id": self.next_msg,
                      "buttons": [], "labels": [], "t": time.time()}
                 self.next_msg += 1
                 self.sent.append(m)
-                self.save()
                 return {"message_id": m["message_id"], "chat": {"id": m["chat_id"]}}
             if method == "sendChatAction":
                 self.actions.append({"t": time.time(), "chat_id": p.get("chat_id"), "action": p.get("action")})
@@ -121,27 +121,37 @@ class Fake:
                 self.deleted.append(p.get("message_id"))
             if method == "editMessageText":
                 self.edits.append(p.get("text", ""))
-                self.save()
             return True
 
     def request(self, method, authorized, p):
         # Evidence names the API operation and safe message metadata only.  In particular it never
         # retains the path token or inbound text, which can carry a provider key during setup.
-        safe = {"method": method, "authorized": authorized, "t": time.time()}
-        if "chat_id" in p:
-            safe["chat_id"] = p["chat_id"]
-        if "message_id" in p:
-            safe["message_id"] = p["message_id"]
-        if method == "sendMessage":
-            safe["buttons"] = sum(len(row) for row in ((p.get("reply_markup") or {}).get("inline_keyboard") or []))
-        self.requests.append(safe)
-        self.save()
+        with self.cv:
+            safe = {"method": method, "authorized": authorized, "t": time.time()}
+            if "chat_id" in p:
+                safe["chat_id"] = p["chat_id"]
+            if "message_id" in p:
+                safe["message_id"] = p["message_id"]
+            if method == "sendMessage":
+                safe["buttons"] = sum(len(row) for row in ((p.get("reply_markup") or {}).get("inline_keyboard") or []))
+            self.requests.append(safe)
 
     def save(self):
         if self.record:
-            with open(self.record, "w", encoding="utf-8") as f:
-                json.dump({"sent": self.sent, "edits": self.edits, "calls": self.calls, "deleted": self.deleted,
-                           "actions": self.actions, "requests": self.requests}, f, indent=1)
+            with self.cv:
+                snapshot = {"sent": self.sent, "edits": self.edits, "calls": self.calls, "deleted": self.deleted,
+                            "actions": self.actions, "requests": self.requests}
+                directory = os.path.dirname(os.path.abspath(self.record))
+                fd, temporary = tempfile.mkstemp(prefix=".fake-telegram-", dir=directory)
+                try:
+                    with os.fdopen(fd, "w", encoding="utf-8") as f:
+                        json.dump(snapshot, f, indent=1)
+                        f.flush()
+                        os.fsync(f.fileno())
+                    os.replace(temporary, self.record)
+                finally:
+                    if os.path.exists(temporary):
+                        os.unlink(temporary)
 
 
 def serve(fake, port=0):
@@ -181,11 +191,13 @@ def serve(fake, port=0):
                 p = {}
             method = m.group(2) if m else "invalid"
             authorized = bool(m and m.group(1) == fake.token)
-            fake.request(method, authorized, p)
-            if not authorized:
-                code, body = 401, {"ok": False, "error_code": 401, "description": "Unauthorized"}
-            else:
-                code, body = 200, {"ok": True, "result": fake.handle(method, p)}
+            with fake.cv:
+                fake.request(method, authorized, p)
+                if not authorized:
+                    code, body = 401, {"ok": False, "error_code": 401, "description": "Unauthorized"}
+                else:
+                    code, body = 200, {"ok": True, "result": fake.handle(method, p)}
+                fake.save()
             data = json.dumps(body).encode()
             self.send_response(code)
             self.send_header("Content-Type", "application/json")

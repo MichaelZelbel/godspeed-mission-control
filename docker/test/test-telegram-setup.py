@@ -12,6 +12,7 @@
 # PASS or FAIL per check and exits 1 when any check failed.
 import importlib.machinery
 import importlib.util
+import concurrent.futures
 import json
 import os
 import shlex
@@ -860,6 +861,32 @@ def test_fake_api_evidence():
         srv.shutdown()
 
 
+def test_fake_api_record_is_atomic():
+    token = "123:atomic-record-token"
+    with tempfile.TemporaryDirectory() as d:
+        record = os.path.join(d, "record.json")
+        fk = fake_telegram.Fake(token, {"users": USERS}, record)
+        fk.save()
+        srv = fake_telegram.serve(fk)
+        api = "http://127.0.0.1:%d" % srv.server_address[1]
+        try:
+            def call():
+                req = urllib.request.Request(api + "/bot%s/getMe" % token, data=b"{}", headers={"Content-Type": "application/json"})
+                return urllib.request.urlopen(req).read()
+            with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+                futures = [pool.submit(call) for _ in range(80)]
+                while any(not future.done() for future in futures):
+                    with open(record, encoding="utf-8") as f:
+                        json.load(f)
+                for future in futures:
+                    future.result()
+            with open(record, encoding="utf-8") as f:
+                saved = json.load(f)
+            check("the fake API atomically publishes every concurrent request", len(saved["requests"]) == 80)
+        finally:
+            srv.shutdown()
+
+
 if __name__ == "__main__":
     test_codes()
     test_happy()
@@ -877,6 +904,7 @@ if __name__ == "__main__":
     test_backup_time_up()
     test_nothing_to_do()
     test_fake_api_evidence()
+    test_fake_api_record_is_atomic()
     print()
     if FAILS:
         print("%d FAILED" % FAILS)

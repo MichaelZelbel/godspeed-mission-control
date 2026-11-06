@@ -46,10 +46,10 @@ act() {
   server_telegram_setup
   step_passed 'fictional bot reached the installed Telegram gateway'
   first_day_phase 'fictional emergency-kit goal is filed through the installed notebook'
+  server_sparse_state
   printf '{"goal":%s,"timezone":"Etc/UTC","delivery":"telegram"}\n' "$(quoted_json "$GOAL")" >"$EVIDENCE/.setup.json"
   [ "$(server_post /api/setup "$EVIDENCE/.setup.json" "$EVIDENCE/setup.json")" = 200 ] ||
     fail "the installed notebook would not file the emergency-kit goal: $(tr -d '\n' <"$EVIDENCE/setup.json" | cut -c1-200)"
-  printf '{"personal_profile":false,"health_history":false,"seeded_records":0}\n' >"$EVIDENCE/sparse-context.json"
   server_pause_all_jobs
   step_passed 'fictional emergency-kit goal filed through the notebook'
   first_day_phase 'installed research, choice, and work routines'
@@ -76,7 +76,7 @@ check() { # <evidence folder>
   local folder=$1 reason
   [ -d "$folder" ] || fail "there is nothing at $folder, so this scenario kept no first-day evidence"
   need_node
-  kept_all "$folder" 'the installed first day' setup.json job-research.json job-choice.json job-work.json brief.txt run.json runner.json telegram-requests.json work-items.json notes-before-reply.json notes-after-reply.json sparse-context.json manifest.json
+  kept_all "$folder" 'the installed first day' setup.json job-research.json job-choice.json job-work.json brief.txt run.json runner.json telegram-requests.json work-items.json notes-before-reply.json notes-after-reply.json sparse-profile-facts.json sparse-goals.json sparse-decisions.json sparse-work-items.json sparse-deadlines.json sparse-health-observations.json sparse-health-episodes.json sparse-medications.json sparse-notes.json sparse-job-receipts.json sparse-watch-topics.json sparse-watch-observations.json sparse-lead-entries.json sparse-contacts.json sparse-moments.json manifest.json
   grep -Fqx "$GOAL" <(json_value "$folder/setup.json" results.goal.title 2>/dev/null || true) ||
     grep -Fq "$GOAL" "$folder/setup.json" || fail 'the notebook did not retain the fictional emergency-kit goal'
   for label in research choice work; do
@@ -91,8 +91,10 @@ const fail=message=>{console.error(message);process.exit(1)};
 const walk=dir=>fs.existsSync(dir)?fs.readdirSync(dir,{withFileTypes:true}).flatMap(e=>e.isDirectory()?walk(path.join(dir,e.name)):[path.join(dir,e.name)]):[];
 const normalized=value=>String(value||'').replace(/\r\n?/g,'\n').trim();
 if(!normalized(read('brief.txt')))fail('the installed morning brief saved no readable text');
-const sparse=JSON.parse(read('sparse-context.json'));
-if(sparse.personal_profile!==false||sparse.health_history!==false||sparse.seeded_records!==0)fail('the brief was not run with the required sparse fixture');
+for(const file of ['sparse-profile-facts.json','sparse-goals.json','sparse-decisions.json','sparse-work-items.json','sparse-deadlines.json','sparse-health-observations.json','sparse-health-episodes.json','sparse-medications.json','sparse-notes.json','sparse-job-receipts.json','sparse-watch-topics.json','sparse-watch-observations.json','sparse-lead-entries.json','sparse-contacts.json','sparse-moments.json']){
+ const state=JSON.parse(read(file)),rows=Array.isArray(state)?state:state.data||[];
+ if(!Array.isArray(rows)||rows.length)fail('the brief was not run with the required sparse installed state');
+}
 const cards=walk(path.join(folder,'work')).filter(file=>/\.md$/i.test(file)).map(file=>({file,text:fs.readFileSync(file,'utf8')}));
 const card=cards.find(({text})=>/^STATUS:\s*verified\s*$/mi.test(text)&&/VERIFIED check passed/i.test(text)&&/^RESULT:\s*\S/m.test(text));
 if(!card)fail('no Godspeed-owned work card is verified by its recorded check and result');
@@ -118,15 +120,16 @@ NODE
   if ! reason=$("$NODE" - "$folder" 2>&1 <<'NODE'
 const fs=require('fs'),path=require('path'),folder=process.argv[2],read=file=>fs.readFileSync(path.join(folder,file),'utf8');
 const normal=value=>String(value||'').replace(/\r\n?/g,'\n').trim();
+const fail=message=>{console.error(message);process.exit(1)};
 const run=JSON.parse(read('run.json')),messages=label=>(run.outbox||[]).filter(m=>m.label===label&&m.accepted!==false).map(m=>m.text).join('');
 const saved=normal(read('brief.txt'));
-if(!messages('scheduled-brief'))throw Error('the installed morning brief was never delivered through Telegram');
-if(normal(messages('scheduled-brief'))!==saved)throw Error('the scheduled Telegram delivery differs from the saved brief');
-if(!messages('todays-brief'))throw Error("the owner received no answer to today's brief through the installed gateway");
-if(normal(messages('todays-brief'))!==saved)throw Error("today's brief differs from the saved note");
+if(!messages('scheduled-brief'))fail('the installed morning brief was never delivered through Telegram');
+if(normal(messages('scheduled-brief'))!==saved)fail('the scheduled Telegram delivery differs from the saved brief');
+if(!messages('todays-brief'))fail("the owner received no answer to today's brief through the installed gateway");
+if(normal(messages('todays-brief'))!==saved)fail("today's brief differs from the saved note");
 const rows=file=>{const data=JSON.parse(read(file));return Array.isArray(data)?data:data.data||[]};
 const count=items=>items.filter(note=>normal(note.content||note.body||'')===saved).length;
-if(count(rows('notes-after-reply.json'))!==count(rows('notes-before-reply.json')))throw Error("today's brief created a second saved brief");
+if(count(rows('notes-after-reply.json'))!==count(rows('notes-before-reply.json')))fail("today's brief created a second saved brief");
 NODE
 ); then
     fail "$reason"
