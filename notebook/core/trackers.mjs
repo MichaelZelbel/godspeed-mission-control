@@ -143,6 +143,10 @@ export function entryOn({on,words,source_quote},today,{assistant=false,entry=tru
 // no entry, since nothing has happened yet. "track sauna" holds the one it names.
 const SETUP=/(?<!\p{L})(?:i\s+(?:want|would\s+like|'d\s+like|wanna)\s+to\s+(?:start\s+)?track|start\s+tracking|set\s+up\s+(?:a\s+)?tracker|new\s+tracker|make\s+a\s+tracker|create\s+a\s+tracker|ich\s+(?:will|möchte|würde\s+gerne?)(?:\s+\S+)*?\s+tracken)(?!\p{L})/iu;
 export const setUpOnPurpose=input=>input.setup===true||SETUP.test(String(input.words??input.source_quote??''));
+// The two columns every tracker has of its own; the rest of a schema is the person's.
+const SYSTEM_FIELDS=['when','note'];
+export const userFields=schema=>(schema||[]).filter(f=>!SYSTEM_FIELDS.includes(f.key));
+export const own=c=>userFields(c.field_schema);
 export const norm=s=>String(s??'').normalize('NFKC').toLocaleLowerCase().replace(/\s+/g,' ').trim();
 export const card=c=>c&&!c.removed_at&&c.tracker&&typeof c.tracker==='object'?c.tracker:null;
 export const trackers=store=>store.list('collections').filter(card);
@@ -158,7 +162,16 @@ export function findTracker(store,name){const n=norm(name),candidates=trackers(s
 // that name made another way.
 export function proposalState(store,p,now=new Date()){
  if(!p||p.removed_at)return 'missing';
- const all=trackers(store);if(all.some(c=>c.tracker.proposal_id===p.id))return 'created';
+ const all=trackers(store);
+ // A question about a mail rule is answered by the card that holds the rule: its name is the tracker's,
+ // which exists already when the rule extends one, so the name check below would drop it at once.
+ if(p.specialist==='mail'){
+  // A later rule for the same tracker has taken the card over: this question was answered, then changed.
+  const answered=o=>all.some(c=>c.tracker.proposal_id===o.id||c.tracker.mail?.proposal_id===o.id);
+  if(answered(p)||store.list('tracker_proposals').some(o=>o.specialist==='mail'&&o.id!==p.id&&o.created_at>p.created_at&&(p.tracker_id?o.tracker_id===p.tracker_id:!o.tracker_id&&norm(o.name)===norm(p.name))&&answered(o)))return 'created';
+  if(store.list('tracker_proposals').some(o=>o.id!==p.id&&(o.replaces||[]).includes(p.id)))return 'dropped';
+  return now-Date.parse(p.created_at)<=HOLD_MS?'pending':'expired';
+ }if(all.some(c=>c.tracker.proposal_id===p.id))return 'created';
  if(store.list('tracker_proposals').some(o=>o.id!==p.id&&(o.replaces||[]).includes(p.id)))return 'dropped';
  if(!(now-Date.parse(p.created_at)<=HOLD_MS))return 'expired';
  if(all.some(c=>[c.name,...(c.tracker.names||[])].some(x=>norm(x)===norm(p.name))))return 'dropped';
@@ -189,7 +202,7 @@ const keyOf=label=>String(label??'').normalize('NFKD').replace(/[̀-ͯ]/g,'').re
 function column(f){
  if(!f||typeof f!=='object')throw Error('Give each column as {label, type}');
  const label=String(f.label??'').trim()||String(f.key??'').replace(/_/g,' ').trim(),key=f.key===undefined||f.key===null||f.key===''?keyOf(label):String(f.key);
- if(!/^[a-z][a-z0-9_]{0,39}$/.test(key)||['when','note'].includes(key))throw Error('A tracker column needs a short name, such as "hours"');
+ if(!/^[a-z][a-z0-9_]{0,39}$/.test(key)||SYSTEM_FIELDS.includes(key))throw Error('A tracker column needs a short name, such as "hours"');
  // A label is kept as given ("cm" for a one-number tracker in cm, as before); one made from a key
  // starts with a capital ("hours" is Hours).
  const out={...f,key,label:String(f.label??'').trim()||(label?label.charAt(0).toUpperCase()+label.slice(1):key)};
@@ -214,7 +227,7 @@ export function valueWords(f,v){
  if(f.type==='boolean')return String(f.label||f.key).toLowerCase()+' '+(v===true||v==='true'?'yes':'no');
  return String(f.label||f.key).toLowerCase()+' '+v;
 }
-const own=c=>(c.field_schema||[]).filter(f=>!['when','note'].includes(f.key));
+
 // A column with choices takes only its choices (the cycle tracker's flow and symptoms).
 function choice(f,v){
  if(!Array.isArray(f.options)||!['select','multiselect'].includes(f.type))return v;
@@ -239,9 +252,11 @@ const ordinal=n=>n+(n%100>=11&&n%100<=13?'th':['th','st','nd','rd'][n%10]||'th')
 export function holdQuestion(p,today){
  // The cycle tracker asks its own question, the design's words (cycle.mjs).
  if(p.specialist==='cycle')return setupQuestion(lang(p.language),p.entry?{day:p.entry.when,period:PERIOD_FLOWS.has(p.entry.data?.flow),symptoms:p.entry.data?.symptoms||[]}:null,today);
+ // A mail rule's question was worded when it was asked (tracker-operations.mjs, tracker-mail).
+ if(p.specialist==='mail')return p.question;
  // The food tracker asks its own question, with the one about an unclear amount (food.mjs).
  if(p.specialist==='food')return foodQuestion(foodLang(p.language),{questions:foodAmounts(foodLang(p.language),p.unclear||[]),kept:!!p.meal?.items?.length});
- const fields=(p.field_schema||[]).filter(f=>!['when','note'].includes(f.key)),one=fields.length===1&&fields[0].type==='number'?fields[0]:null;
+ const fields=userFields(p.field_schema),one=fields.length===1&&fields[0].type==='number'?fields[0]:null;
  const shape=one?'one number'+(one.unit?' in '+one.unit:'')+(one.min!==undefined&&one.max!==undefined?' from '+fmt(one.min)+' to '+fmt(one.max):''):fields.length?'with '+listWords(fields.map(columnWords)):'counting each time';
  const kept=p.entry?(one&&p.entry.data[one.key]!==undefined?" I've kept the "+fmt(p.entry.data[one.key])+' for ':" I've kept this one for ")+(p.entry.when.slice(0,10)===today?'today':longDay(p.entry.when.slice(0,10)))+'.':'';
  return 'Start a new tracker called '+p.name+', '+shape+', '+(p.cadence==='any'?'as often as you like':'once a day')+'?'+kept;

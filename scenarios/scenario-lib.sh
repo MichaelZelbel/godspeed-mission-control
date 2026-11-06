@@ -132,11 +132,26 @@ show_assistant_home() {
 # ------------------------------------------------------------- the AI, and the assistant's chat
 # The two scenarios that need the assistant's chat store need an AI as well, named by the job:
 #   GODSPEED_SCENARIO_AI_KEY    the key (the release step names the repository secret; without it: FAIL)
-#   GODSPEED_SCENARIO_AI_URL    the service's address, OpenRouter by default
-#   GODSPEED_SCENARIO_AI_MODEL  the model
-AI_URL=${GODSPEED_SCENARIO_AI_URL:-https://openrouter.ai/api/v1}
-AI_MODEL=${GODSPEED_SCENARIO_AI_MODEL:-anthropic/claude-sonnet-4.5}
+#   GODSPEED_SCENARIO_AI_URL    the service's address (a repository variable; no default)
+#   GODSPEED_SCENARIO_AI_MODEL  the model (a repository variable; no default)
+# There is no default for either on purpose: a default once sent the checks to a paid model on the
+# owner's OpenRouter account. The checks use https://api.anthropic.com/v1 and claude-haiku-4-5, and
+# they refuse openrouter.ai altogether.
+AI_URL=${GODSPEED_SCENARIO_AI_URL:-}
+AI_MODEL=${GODSPEED_SCENARIO_AI_MODEL:-}
+check_the_ai_settings() {
+  [ -n "$AI_URL" ] || fail "GODSPEED_SCENARIO_AI_URL is not set in this job's environment (a repository variable), so the checks do not know which AI service to use"
+  [ -n "$AI_MODEL" ] || fail "GODSPEED_SCENARIO_AI_MODEL is not set in this job's environment (a repository variable), so the checks do not know which AI model to use"
+  case "$(printf '%s' "$AI_URL" | tr 'A-Z' 'a-z')" in
+    https://*) ;;
+    *) fail "GODSPEED_SCENARIO_AI_URL must be an https address, because the AI key is sent to it; use https://api.anthropic.com/v1" ;;
+  esac
+  case "$(printf '%s' "$AI_URL" | tr 'A-Z' 'a-z')" in
+    *openrouter.ai*) fail "GODSPEED_SCENARIO_AI_URL points at openrouter.ai, and the checks must never spend the owner's OpenRouter money; use https://api.anthropic.com/v1" ;;
+  esac
+}
 need_the_ai_key() { # <what it is needed for>
+  check_the_ai_settings
   [ -n "${GODSPEED_SCENARIO_AI_KEY:-}" ] ||
     fail "GODSPEED_SCENARIO_AI_KEY is not in this job's environment, and $1 needs an AI model, so this scenario cannot run"
 }
@@ -1234,9 +1249,26 @@ snapshot_step() { # <label> <table>
 
 # The driver, with the stand-in for Telegram's servers loaded into every Node program it starts.
 # Its own words go to driver.log; a driver that ended before its steps did is one FAIL.
+# The runner's Hermes comes without python-telegram-bot (a person who connects Telegram gets it with
+# "hermes pm install --extra telegram"), and without it Hermes cannot deliver the first message
+# ("python-telegram-bot not installed", 5 November 2026). The library is added to the assistant's own
+# Python, the way that person would add it.
+ensure_telegram_library() {
+  local executable
+  "$HERMES_PYTHON" -c 'import telegram' 2>/dev/null && return 0
+  say "Adding python-telegram-bot to the assistant's own Python, as a person who connects Telegram does"
+  "$HERMES_PYTHON" -m pip install --quiet python-telegram-bot >&2 2>&1 ||
+    { command -v uv >/dev/null 2>&1 && uv pip install --quiet --python "$HERMES_PYTHON" python-telegram-bot >&2 2>&1; } ||
+    { executable=$(json_value "$STATE/assistant.json" executable) &&
+      HERMES_HOME="$HERMES" "$executable" pm install --extra telegram >&2 2>&1; } || :
+  "$HERMES_PYTHON" -c 'import telegram' 2>/dev/null ||
+    fail "python-telegram-bot could not be added to the assistant's own Python ($HERMES_PYTHON), so it cannot deliver a message to Telegram"
+}
+
 owner_on_telegram() { # <steps file> <run file>
   local log=$EVIDENCE/driver.log
   installed_hermes_python
+  ensure_telegram_library
   say "The owner on Telegram, through the installed Hermes: $HERMES_PYTHON (source ${HERMES_SOURCE:-none})"
   NODE_OPTIONS="${NODE_OPTIONS:+$NODE_OPTIONS }--import=file://$HERE/telegram-fixture-fetch.mjs" \
     GODSPEED_SCENARIO_FIXTURE="$EVIDENCE/telegram-fixture.json" \

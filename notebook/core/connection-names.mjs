@@ -8,6 +8,8 @@ export const CONNECTION_NAMES={
  telegram:{label:'Telegram',stops:'nothing from your mission control reaches you on Telegram and your messages there go unanswered'},
  github:{label:'GitHub',stops:'your notebook stops syncing with your other computers'},
  mail:{label:'Gmail',stops:'your assistants cannot search your mail or save drafts'},
+ agentmail:{label:"your mission control's own mailbox",stops:'a tracker that counts its mail cannot read it'},
+ phone:{label:"the phone's health data",stops:"your briefing's health numbers stop"},
 };
 // The check's other source (routine-check.mjs): the owner's routines, read from Hermes' jobs list with no call. Not a connection, so not in CONNECTION_NAMES.
 export const ROUTINES_LABEL='your routines';

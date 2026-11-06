@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {hash} from './records/store.mjs';
 import {visibleRows} from './visibility.mjs';
+import {latestPerDayMetric} from './health-inputs.mjs';
 import {fileContext} from './context.mjs';
 import {retrieveNoteWindows} from './retrieval-windows.mjs';
 import {explicitNoteCapture} from './chat-intent.mjs';
@@ -45,7 +46,7 @@ function buildChatContext(query,input){
     return {rows:ranked.slice(0,limit).map(({r})=>compact(r,5000)),total:rows.length};
   };
   const context={...fileContext(query.store,10000),retrieval:{method:'keyword selection; only supplied records are available',counts:{}}};
-  context.personal={goals:visibleRows(query,'goals').slice(-20),work:visibleRows(query,'work_items').slice(-20),deadlines:visibleRows(query,'deadlines').filter(d=>d.status!=='closed').slice(-20),talks:visibleRows(query,'coach_talks').slice(-5),habits:visibleRows(query,'habits').slice(-10),journal:visibleRows(query,'journal').slice(-5),health:visibleRows(query,'health_observations').filter(h=>Date.parse(h.observed_at)>=Date.now()-7*86400000).slice(-10),forecasts:visibleRows(query,'forecasts').slice(-10),jobs:query.rows('jobs')};
+  context.personal={goals:visibleRows(query,'goals').slice(-20),work:visibleRows(query,'work_items').slice(-20),deadlines:visibleRows(query,'deadlines').filter(d=>d.status!=='closed').slice(-20),talks:visibleRows(query,'coach_talks').slice(-5),habits:visibleRows(query,'habits').slice(-10),journal:visibleRows(query,'journal').slice(-5),health:latestPerDayMetric(visibleRows(query,'health_observations')).filter(h=>Date.parse(h.observed_at)>=Date.now()-7*86400000).slice(-10),forecasts:visibleRows(query,'forecasts').slice(-10),jobs:query.rows('jobs')};
   // Every tracker and every open tracker question, with their ids: without them
   // the model cannot name a tracker or answer a question's yes (D-321). Read
   // through query.rows, so from this context's one snapshot of the vault.
