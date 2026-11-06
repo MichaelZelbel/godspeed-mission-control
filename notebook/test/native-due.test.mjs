@@ -51,3 +51,10 @@ test('a due file without readable dates needs a look and is never closed',()=>{
  assert.match(store.get('notes',reminded.record_id).content,/due\/present\.md/);
  assert.equal(fs.readFileSync(file,'utf8'),text,'the hand-written file is left as it was');
 });
+test('a key named like a path can still be asked for as a secret-changed deadline, while file-newer stays inside the workspace',async()=>{
+ const {domains}=fixture(),run=args=>domains.invoke('personal-operation',{type:'due-command',args}),day=dayFrom(0),base=['--title','Fictional key','--from',day,'--to',dayFrom(5),'--done-when','Replaced','--cost','Fictional'];
+ await run(['add','fictional-key',...base,'--self-check','secret-changed','--self-check-arg','../production']);
+ await run(['check']);
+ await assert.rejects(run(['add','fictional-file',...base,'--self-check','file-newer','--self-check-arg','../outside.txt']),/inside/i);
+ await assert.rejects(run(['add','fictional-upper',...base,'--self-check','FILE-NEWER','--self-check-arg','../outside.txt']),/inside/i);
+});
