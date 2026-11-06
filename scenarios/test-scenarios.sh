@@ -2875,6 +2875,9 @@ refuses 'a failed scheduled brief standing beside a successful sibling' first-da
 copy "$FD/good" "$FD/unchanged-scheduled-run"
 node -e 'const fs=require("fs"),p=process.argv[1],d=JSON.parse(fs.readFileSync(p,"utf8"));d.before_last_run_at=d.data[0].last_run_at;fs.writeFileSync(p,JSON.stringify(d))' "$FD/unchanged-scheduled-run/job-scheduled-brief.json"
 refuses 'a scheduled brief with no new completed run' first-day "$FD/unchanged-scheduled-run" 'scheduled morning brief has no successful'
+copy "$FD/good" "$FD/missing-scheduled-baseline"
+node -e 'const fs=require("fs"),p=process.argv[1],d=JSON.parse(fs.readFileSync(p,"utf8"));delete d.before_last_run_at;fs.writeFileSync(p,JSON.stringify(d))' "$FD/missing-scheduled-baseline/job-scheduled-brief.json"
+refuses 'a scheduled brief without its completion baseline' first-day "$FD/missing-scheduled-baseline" 'scheduled morning brief has no successful'
 copy "$FD/good" "$FD/not-gateway"
 printf '{"state":"setting-up"}\n' >"$FD/not-gateway/runner.json"
 refuses 'a bot that never reaches its gateway' first-day "$FD/not-gateway" 'never reached gateway'
