@@ -1,5 +1,5 @@
 import {visibleRows} from './visibility.mjs';
-import {totalsOf} from './food.mjs';
+import {FOOD_TOTAL_COLUMNS,totalsOf} from './food.mjs';
 import {PHONE_DAY_COLUMNS} from './phone-health-columns.mjs';
 
 // Where the phone receiver and another source both give a day's metric, the value
@@ -18,14 +18,13 @@ export function latestPerDayMetric(rows){
  return rows.filter(row=>{const k=key(row);return !newest.has(k)||newest.get(k)===row;});
 }
 
-const FOOD_COLUMNS=['food_kcal','protein_g','carbs_g','fat_g'];
 const newest=rows=>rows.reduce((a,b)=>String(b.updated_at)>String(a.updated_at)?b:a);
 const validDay=day=>/^\d{4}-\d{2}-\d{2}$/.test(day)&&new Date(day+'T00:00:00Z').toISOString().slice(0,10)===day;
 
 // A CSV day is a day, not a manufactured precise observation time.
 export function currentHealth(query,{now=Date.now(),days=7}={}){
  return query.withSnapshot(()=>{
-  const timezone=query.rows('profiles')[0]?.timezone||'UTC';
+  const timezone=query.rows('settings').find(row=>row.id==='installation')?.timezone||'UTC';
   const today=new Intl.DateTimeFormat('en-CA',{timeZone:timezone,year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(now));
   const oldestDay=new Date(Date.parse(today+'T00:00:00Z')-days*86400000).toISOString().slice(0,10);
   const fresh=row=>{
@@ -51,7 +50,7 @@ export function currentHealth(query,{now=Date.now(),days=7}={}){
    for(const metric of [...new Set([...PHONE_DAY_COLUMNS,...(metrics?.keys()||[])])]){
     const rows=metrics?.get(metric)||[],manual=rows.filter(row=>row.via===MANUAL_VIA);
     if(manual.length){const row=newest(manual);columns[metric]={value:row.value,source:'manual',state:'settled'};continue;}
-    if(food&&FOOD_COLUMNS.includes(metric)){const totals=totalsOf(food),key=metric==='food_kcal'?'kcal':metric;columns[metric]={value:totals[key],source:'food_tracker',state:'settled'};continue;}
+    if(food&&Object.hasOwn(FOOD_TOTAL_COLUMNS,metric)){const totals=totalsOf(food);columns[metric]={value:totals[FOOD_TOTAL_COLUMNS[metric]],source:'food_tracker',state:'settled'};continue;}
     if(!rows.length)continue;
     const row=newest(rows);
     if(row.via===PHONE_VIA){const data_until=phoneUntil.get(date),status=date===today?'not_judged':data_until>'21:00:00'?'complete':'may_be_incomplete';columns[metric]={value:row.value,source:'phone',state:status};}

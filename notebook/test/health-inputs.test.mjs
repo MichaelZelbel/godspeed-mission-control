@@ -128,7 +128,7 @@ test('phone day state uses its strict cutoff, while manual and food entries sett
  const short=currentHealth(query,{now}).days[0];
  assert.equal(short.columns.steps.state,'may_be_incomplete');assert.equal(short.columns.active_kcal.state,'may_be_incomplete','21:00:00 is not past the cutoff');assert.deepEqual(short.may_be_incomplete_columns,['steps','active_kcal','protein_g']);
  store.save('collections',{id:'food',tracker:{specialist:'food'}});const item=store.save('collection_items',{collection_id:'food',data:{when:day+' 12:00',kcal:700,protein_g:30,carbs_g:90,fat_g:20}});
- let state=currentHealth(query,{now}).days[0];assert.deepEqual(state.columns.steps,{value:100,source:'phone',state:'may_be_incomplete'});assert.deepEqual(Object.fromEntries(['food_kcal','protein_g','carbs_g','fat_g'].map(metric=>[metric,state.columns[metric].source])),{food_kcal:'food_tracker',protein_g:'food_tracker',carbs_g:'food_tracker',fat_g:'food_tracker'});assert.equal(state.columns.food_kcal.value,700);
+ let state=currentHealth(query,{now}).days[0];assert.deepEqual(state.columns.steps,{value:100,source:'phone',state:'may_be_incomplete'});assert.deepEqual(Object.fromEntries(['food_kcal','protein_g','carbs_g','fat_g'].map(metric=>[metric,state.columns[metric]])),{food_kcal:{value:700,source:'food_tracker',state:'settled'},protein_g:{value:30,source:'food_tracker',state:'settled'},carbs_g:{value:90,source:'food_tracker',state:'settled'},fat_g:{value:20,source:'food_tracker',state:'settled'}});
  store.save('health_observations',{metric:'distance_km',value:3,source:PHONE_SOURCE,via:'phone-receiver',observed_on:day,date_precision:'day',observed_at:day+'T00:00:00Z',data_until:'21:00:30'});
  assert.equal(currentHealth(query,{now}).days[0].columns.distance_km.state,'complete');
  const operation=input=>personalOperation({store,query},input);operation({type:'health-add',metric:'protein_g',value:80,unit:'g',observed_at:day+'T12:00:00Z'});
@@ -139,4 +139,12 @@ test('phone day state uses its strict cutoff, while manual and food entries sett
  assert.equal(currentHealth(query,{now}).days.find(row=>row.date===today).columns.steps.state,'not_judged');
  store.save('health_observations',{metric:'steps',value:300,source:'Fictional CSV',observed_on:'2026-11-03',date_precision:'day',observed_at:'2026-11-03T00:00:00Z'});
  assert.equal(currentHealth(query,{now}).days.find(row=>row.date==='2026-11-03').columns.steps.state,'legacy');
+});
+
+test('the installation timezone leaves its current phone day unjudged',()=>{
+ const store=new Store(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-health-timezone-'))),query=new QueryService(store),now=Date.parse('2026-11-06T01:00:00Z');
+ store.save('settings',{id:'installation',timezone:'America/Los_Angeles'});
+ store.save('health_observations',{metric:'steps',value:100,source:PHONE_SOURCE,via:'phone-receiver',observed_on:'2026-11-05',date_precision:'day',observed_at:'2026-11-05T00:00:00Z',data_until:'09:00:00'});
+ const health=currentHealth(query,{now});
+ assert.equal(health.timezone,'America/Los_Angeles');assert.equal(health.days[0].columns.steps.state,'not_judged');
 });
