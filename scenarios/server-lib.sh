@@ -43,7 +43,7 @@ server_clock_at() { # <moment, ISO with Z>
   say "The server notebook's own clock is set to $1"
   printf 'services:\n  godspeed:\n    environment:\n      GODSPEED_NOW: "%s"\n' "$1" |
     sudo tee "$SERVER_DIR/compose.override.yaml" >/dev/null || fail "the server's clock could not be moved"
-  server_compose up -d --force-recreate >&2 ||
+  server_compose -f "$SERVER_DIR/compose.override.yaml" up -d --force-recreate >&2 ||
     fail "the server could not be started again with its clock moved to $1"
   server_healthy 300 || fail "the server is not healthy after its clock was moved to $1"
 }

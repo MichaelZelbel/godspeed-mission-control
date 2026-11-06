@@ -73,9 +73,9 @@ export const mailKind=state=>state==='disconnected'||state==='reconnect needed'?
 export function telegramAPI(value='https://api.telegram.org'){
  let url;try{url=new URL(value);}catch{throw new Error('Telegram API requires HTTPS or a loopback HTTP endpoint');}
  const parts=url.hostname.split('.'),loopback=url.hostname==='localhost'||url.hostname==='[::1]'||url.hostname==='::1'||parts.length===4&&parts[0]==='127'&&parts.every(part=>/^\d+$/.test(part)&&Number(part)<=255);
- if((url.protocol!=='https:'&&!(url.protocol==='http:'&&loopback))||url.username||url.password||url.pathname!=='/'||url.search||url.hash)
+ if((url.protocol!=='https:'&&!(url.protocol==='http:'&&loopback))||url.username||url.password||url.href.includes('?')||url.href.includes('#'))
   throw new Error('Telegram API requires HTTPS or a loopback HTTP endpoint');
- return url.origin;
+ return `${url.origin}${url.pathname.replace(/\/+$/,'')}`;
 }
 
 const outcome=(ok,kind)=>ok?{set_up:true,ok:true}:{set_up:true,ok:false,kind};

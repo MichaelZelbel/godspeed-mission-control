@@ -2842,9 +2842,11 @@ refuses 'a first day without a practical artifact' first-day "$FD/no-artifact" '
 copy "$FD/good" "$FD/placeholder"
 printf '%s\n' '- [ ] TODO: outline only' >"$FD/placeholder/emergency-kit-checklist.md"
 refuses 'a placeholder checklist' first-day "$FD/placeholder" 'not a practical emergency-kit checklist'
-copy "$FD/good" "$FD/no-sparse"
-printf '{"data":[{"id":"personal-history"}]}\n' >"$FD/no-sparse/sparse-profile-facts.json"
-refuses 'a brief with seeded profile context' first-day "$FD/no-sparse" 'required sparse installed state'
+for table in profile-facts goals decisions work-items deadlines health-observations health-episodes medications notes job-receipts watch-topics watch-observations lead-entries contacts moments; do
+  copy "$FD/good" "$FD/populated-$table"
+  printf '{"data":[{"id":"seeded-%s"}]}\n' "$table" >"$FD/populated-$table/sparse-$table.json"
+  refuses "a brief with seeded $table context" first-day "$FD/populated-$table" 'required sparse installed state'
+done
 copy "$FD/good" "$FD/no-send"
 run_json "$FD/no-send" "$(msg todays-brief "$(cat "$FD/no-send/brief.txt")")"
 refuses 'a brief not delivered on Telegram' first-day "$FD/no-send" 'never delivered'
@@ -3227,10 +3229,10 @@ else
   ok "scenario-lib.sh names no default model and no OpenRouter address"
 fi
 
-# ================================================================ the corrected seams of the Telegram scenarios
-# Cheap source checks: the live driver remains the only Telegram path, and what-was-that runs the
-# routine a fresh install has.
-section "the corrected seams of the Telegram scenarios"
+# ================================================================ the corrected scenario seams
+# Cheap source checks: the live driver remains the only Telegram path, what-was-that runs the
+# routine a fresh install has, and a clock recreate includes both Compose layers.
+section "the corrected scenario seams"
 if ! rg -q 'owner-on-telegram|telegram-fixture-fetch|ensure_telegram_library' "$ROOT/scenarios" --glob '!README.md' --glob '!test-scenarios.sh'; then
   ok "the Telegram scenarios have no in-process or post-install Telegram driver"
 else
@@ -3240,6 +3242,32 @@ if grep -q "server_run_job report 'Coach reminders and habit check'" "$ROOT/scen
   ok "what-was-that.sh: its report step runs Coach reminders and habit check"
 else
   bad "what-was-that.sh: its report step does not run Coach reminders and habit check"
+fi
+CLOCK_DIR=$TMP/server-clock
+mkdir -p "$CLOCK_DIR"
+if (
+  GODSPEED_SCENARIO_SERVER_DIR=$CLOCK_DIR
+  export GODSPEED_SCENARIO_SERVER_DIR
+  . "$ROOT/scenarios/server-lib.sh"
+  sudo() {
+    case $1 in
+      tee) shift; command tee "$@" ;;
+      docker) printf '%s\n' "$@" >"$TMP/clock-compose-command" ;;
+      *) return 1 ;;
+    esac
+  }
+  say() { :; }
+  server_healthy() { :; }
+  server_clock_at '2026-11-07T07:00:00Z'
+  [ "$(cat "$TMP/clock-compose-command")" = "$(printf '%s\n' \
+    docker compose -p godspeed-mission-control --project-directory "$CLOCK_DIR" \
+    -f "$CLOCK_DIR/compose.yaml" --env-file "$CLOCK_DIR/.env" \
+    -f "$CLOCK_DIR/compose.override.yaml" up -d --force-recreate)" ] && \
+    grep -Fqx '      GODSPEED_NOW: "2026-11-07T07:00:00Z"' "$CLOCK_DIR/compose.override.yaml"
+); then
+  ok "a clock recreate passes the generated Compose override after the installed base layer"
+else
+  bad "a clock recreate did not pass both Compose layers"
 fi
 
 # ================================================================ the night's report

@@ -169,9 +169,13 @@ test('the daily routine sends Telegram probes to its configured API without reta
 test('a Telegram probe sends its token only to HTTPS or a loopback stand-in',async t=>{
  const {root}=fixture(t),home=path.join(root,'hermes-home');fs.mkdirSync(home);fs.writeFileSync(path.join(home,'.env'),'TELEGRAM_BOT_TOKEN='+TOKEN+'\n');
  assert.equal(telegramAPI('https://api.example.test/'),'https://api.example.test');
+ assert.equal(telegramAPI('https://api.example.test/telegram/'),'https://api.example.test/telegram');
  assert.equal(telegramAPI('http://127.0.0.1:8081'),'http://127.0.0.1:8081');
  assert.equal(telegramAPI('http://[::1]:8081'),'http://[::1]:8081');
- for(const api of ['http://telegram.example.test','http://192.0.2.1','ftp://127.0.0.1','https://user:password@api.example.test','https://api.example.test/proxy']){
+ let request;
+ assert.deepEqual(await telegramProbe({home,api:'https://api.example.test/telegram/',fetcher:async url=>{request=url;return {ok:true,json:async()=>({ok:true})};}})(),{set_up:true,ok:true});
+ assert.equal(request,`https://api.example.test/telegram/bot${TOKEN}/getMe`);
+ for(const api of ['http://telegram.example.test','http://192.0.2.1','ftp://127.0.0.1','https://user:password@api.example.test','https://api.example.test/telegram?','https://api.example.test/telegram#','https://api.example.test/telegram?token=secret','https://api.example.test/telegram#secret']){
   let called=false;
   assert.deepEqual(await telegramProbe({home,api,fetcher:async()=>{called=true;throw Error('called');}})(),{set_up:true,ok:false,kind:'other'},api);
   assert.equal(called,false,api+' never receives the token');
