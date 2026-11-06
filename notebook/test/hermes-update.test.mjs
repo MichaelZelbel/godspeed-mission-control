@@ -16,6 +16,7 @@ function fixture(t,{breaks,rejects,isDocker=false,aiFails=false}={}){
  const run=async(exe,args)=>{calls.push([path.basename(exe),...args]);if(exe==='git'){
   if(args[0]==='rev-parse')return {code:0,stdout:args[1]==='--is-inside-work-tree'?'true\n':'old-commit\n',stderr:''};
   if(args[0]==='status')return {code:0,stdout:'',stderr:''};
+  if(args[0]==='remote')return {code:0,stdout:'https://github.com/NousResearch/hermes-agent.git\n',stderr:''};
   if(args[0]==='fetch'){if(rejects==='update')throw Object.assign(Error('token=sk-secret-token-value-123456789'),{code:'TIMEOUT',stderr:'token=sk-secret-token-value-123456789'});fetchedVersion=args[3].replace(/^v/,'');return {code:0,stdout:'',stderr:''};}
   if(args[0]==='reset'){version=args[2]==='FETCH_HEAD'?fetchedVersion:'1.0.0';updated=version!=='1.0.0';return {code:0,stdout:'',stderr:''};}
  }
@@ -35,12 +36,12 @@ function fixture(t,{breaks,rejects,isDocker=false,aiFails=false}={}){
 }
 
 function taggedFixture(t){
- const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-hermes-update-tagged-')),source=path.join(root,'hermes-agent'),home=path.join(root,'.hermes'),executable=path.join(root,'bin','hermes'),git=args=>execFileSync('git',['-C',source,...args],{encoding:'utf8'}).trim();fs.mkdirSync(path.join(source,'hermes_cli'),{recursive:true});fs.mkdirSync(path.join(source,'venv','bin'),{recursive:true});fs.mkdirSync(path.dirname(executable),{recursive:true});fs.mkdirSync(home,{recursive:true});fs.writeFileSync(path.join(source,'hermes_cli','__init__.py'),'');fs.writeFileSync(path.join(source,'venv','bin','python3'),'#!/bin/sh\nexit 0\n',{mode:0o755});execFileSync('git',['-C',source,'init','-q']);execFileSync('git',['-C',source,'config','user.email','test@example.com']);execFileSync('git',['-C',source,'config','user.name','Test']);
- for(const version of ['1.0.0','1.1.0','1.2.0']){fs.writeFileSync(path.join(source,'VERSION'),version+'\n');git(['add','.']);git(['commit','-qm','release '+version]);git(['tag','v'+version]);}git(['reset','--hard','v1.0.0']);git(['remote','add','origin',source]);
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-hermes-update-tagged-')),source=path.join(root,'hermes-agent'),home=path.join(root,'.hermes'),executable=path.join(root,'bin','hermes'),git=args=>execFileSync('git',['-C',source,...args],{encoding:'utf8'}).trim();fs.mkdirSync(path.join(source,'hermes_cli'),{recursive:true});fs.mkdirSync(path.join(source,'venv','bin'),{recursive:true});fs.mkdirSync(path.dirname(executable),{recursive:true});fs.mkdirSync(home,{recursive:true});fs.writeFileSync(path.join(source,'hermes_cli','__init__.py'),'');fs.writeFileSync(path.join(source,'venv','bin','python3'),'#!/bin/sh\ntouch "$(dirname "$(dirname "$(dirname "$(dirname "$0")")")")/dependencies-installed"\n',{mode:0o755});execFileSync('git',['-C',source,'init','-q']);execFileSync('git',['-C',source,'config','user.email','test@example.com']);execFileSync('git',['-C',source,'config','user.name','Test']);
+ for(const version of ['1.0.0','1.1.0','1.2.0']){fs.writeFileSync(path.join(source,'VERSION'),version+'\n');git(['add','.']);git(['commit','-qm','release '+version]);git(['tag','v'+version]);}git(['reset','--hard','v1.0.0']);git(['remote','add','origin','https://github.com/NousResearch/hermes-agent.git']);
  fs.writeFileSync(executable,[
   '#!/usr/bin/env node',"import fs from 'node:fs';","import path from 'node:path';","import {execFileSync} from 'node:child_process';",
   "const args=process.argv.slice(2),root=path.dirname(path.dirname(process.argv[1])),source=path.join(root,'hermes-agent'),flag=name=>fs.existsSync(path.join(root,name)),run=args=>execFileSync('git',args,{encoding:'utf8'}).trim(),version=()=>run(['-C',source,'describe','--tags','--exact-match']).replace(/^v/,''),available=()=>flag('available')?fs.readFileSync(path.join(root,'available'),'utf8').trim():run(['-C',source,'tag','--sort=-v:refname']).split(/\\r?\\n/)[0].replace(/^v/,'');",
-  "if(args[0]==='--version'){console.log('Hermes '+version());process.exit(0);}",
+  "if(args[0]==='--version'){if(version()!=='1.0.0'&&!flag('dependencies-installed')){console.log('Hermes dependencies are missing');process.exit(0);}console.log('Hermes '+version());process.exit(0);}",
   "if(args[0]==='update'&&args[1]==='--check'){console.log('v'+available()+' is ready');process.exit(0);}",
   "if(args[0]==='update'&&flag('fail-update')){console.error('token=sk-secret-token-value-123456789');process.exit(1);}",
   "if(args[0]==='backup'){fs.mkdirSync(path.dirname(args[2]),{recursive:true});fs.writeFileSync(args[2],'backup');process.exit(0);}",
@@ -48,7 +49,7 @@ function taggedFixture(t){
   "if(args[0]==='gateway'&&args[1]==='restart'&&flag('fail-restored-restart')&&version()==='1.0.0'){console.error('restart failed');process.exit(1);}",
   'process.exit(0);'
  ].join('\n'),{mode:0o755});t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
- const store=new Store(root),updater=new HermesUpdate({store,descriptor:{verified:true,executable,home,sourceRoot:source},now:()=>new Date(at),ask:async()=>{}}),rows=versions=>versions.map(version=>({tag_name:'v'+version,published_at:old,prerelease:version.includes('-')}));
+ const store=new Store(root),updater=new HermesUpdate({store,descriptor:{verified:true,executable,home,sourceRoot:source},now:()=>new Date(at),ask:async()=>{}}),runGit=updater.git.bind(updater),rows=versions=>versions.map(version=>({tag_name:'v'+version,published_at:old,prerelease:version.includes('-')}));updater.git=async(args,cwd)=>{if(args[0]==='fetch'){git(['fetch','.',...args.slice(2)]);return {code:0,stdout:'',stderr:''};}return runGit(args,cwd);};
  return {root,source,store,updater,rows,head:()=>git(['describe','--tags','--exact-match']),setAvailable:version=>fs.writeFileSync(path.join(root,'available'),version)};
 }
 
@@ -70,6 +71,10 @@ test('a later Hermes offer cannot change the selected release checkout',async t=
  const f=fixture(t),git=f.updater.git.bind(f.updater);let previewed=false;const command=f.updater.command.bind(f.updater);f.updater.command=async(executable,args,options)=>{const result=await command(executable,args,options);if(args.join(' ')==='update --check'){previewed=true;f.setOffer('2.0.0');}return result;};f.updater.git=async(args,cwd)=>{if(args[0]==='fetch'){assert.equal(previewed,true);assert.deepEqual(args,['fetch','origin','tag','v1.1.0']);}return git(args,cwd);};const result=await f.updater.runNow();assert.equal(result.result,'updated');assert.ok(f.calls.some(call=>call.join(' ')==='git reset --hard FETCH_HEAD'));assert.equal(f.calls.some(call=>call.join(' ')==='hermes update --no-backup --yes'),false);
 });
 
+test('a checkout with a fork origin is skipped before release lookup or mutation',async t=>{
+ for(const invoke of [updater=>updater.runNow(),updater=>updater.tick('UTC')]){const f=fixture(t),git=f.updater.git.bind(f.updater);let releasesCalled=false;f.updater.fetcher=async()=>{releasesCalled=true;return {ok:true,json:async()=>releases(['1.1.0'])};};f.updater.git=async(args,cwd)=>args.join(' ')==='remote get-url --all origin'?{code:0,stdout:'https://github.com/example/hermes-agent.git\n',stderr:''}:git(args,cwd);const result=await invoke(f.updater);assert.equal(result.result,'skipped');assert.equal(result.reason,'This Hermes checkout does not use the official Hermes source.');assert.equal(releasesCalled,false);assert.equal(f.calls.some(call=>call[1]==='backup'),false);assert.equal(f.calls.some(call=>call.join(' ')==='git fetch origin tag v1.1.0'),false);}
+});
+
 test('a pre-update backup failure resumes the paused chat gateway',async t=>{
  const f=fixture(t),command=f.updater.command.bind(f.updater);f.updater.command=async(executable,args,options)=>args[0]==='backup'?{code:1,stdout:'',stderr:'backup failed'}:command(executable,args,options);const result=await f.updater.runNow();assert.equal(result.reason,'Hermes could not make its pre-update backup.');assert.ok(f.calls.some(call=>call.join(' ')==='hermes gateway stop'));assert.ok(f.calls.some(call=>call.join(' ')==='hermes gateway restart'));assert.equal(f.calls.some(call=>call.join(' ')==='hermes update --no-backup --yes'),false);
 });
@@ -79,7 +84,7 @@ test('a gateway-stop failure records the pause failure without backing up or cha
 });
 
 test('a tagged checkout and fake Hermes executable cover the update acceptance cases',async t=>{
- await t.test('keeps an eligible stable release',async t=>{const f=taggedFixture(t);f.setAvailable('1.1.0');f.updater.fetcher=async()=>({ok:true,json:async()=>f.rows(['1.1.0'])});assert.equal((await f.updater.runNow()).result,'updated');assert.equal(f.head(),'v1.1.0');assert.ok(fs.existsSync(readHermesUpdate(f.store).backup));assert.deepEqual(f.store.list('notifications'),[]);});
+ await t.test('keeps an eligible stable release after installing its dependencies',async t=>{const f=taggedFixture(t);f.setAvailable('1.1.0');f.updater.fetcher=async()=>({ok:true,json:async()=>f.rows(['1.1.0'])});assert.equal((await f.updater.runNow()).result,'updated');assert.equal(f.head(),'v1.1.0');assert.ok(fs.existsSync(path.join(f.root,'dependencies-installed')));assert.ok(fs.existsSync(readHermesUpdate(f.store).backup));assert.deepEqual(f.store.list('notifications'),[]);});
  await t.test('leaves young, prerelease, and major releases alone',async t=>{const cases=[['young',[{tag_name:'v1.1.0',published_at:recent,prerelease:false}]],['pre-release',[{tag_name:'v1.1.0-rc.1',published_at:old,prerelease:true}]],['major',[{tag_name:'v1.1.0',published_at:old,prerelease:false},{tag_name:'v2.0.0',published_at:old,prerelease:false}]]];for(const [name,releases] of cases){const f=taggedFixture(t);f.setAvailable('1.1.0');f.updater.fetcher=async()=>({ok:true,json:async()=>releases});assert.equal((await f.updater.runNow()).result,'skipped',name);assert.equal(f.head(),'v1.0.0',name);}});
  await t.test('rolls back a failed plugin import and queues one notice',async t=>{const f=taggedFixture(t);f.setAvailable('1.1.0');fs.writeFileSync(path.join(f.root,'fail-plugin'),'');f.updater.fetcher=async()=>({ok:true,json:async()=>f.rows(['1.1.0'])});assert.equal((await f.updater.runNow()).result,'rolled-back');assert.equal(f.head(),'v1.0.0');assert.equal(f.store.list('notifications').length,1);assert.equal(readNotices(f.store).length,1);});
  await t.test('reports only the installer bell when rollback cannot restart',async t=>{const f=taggedFixture(t);f.setAvailable('1.1.0');fs.writeFileSync(path.join(f.root,'fail-plugin'),'');fs.writeFileSync(path.join(f.root,'fail-restored-restart'),'');f.updater.fetcher=async()=>({ok:true,json:async()=>f.rows(['1.1.0'])});assert.equal((await f.updater.runNow()).result,'rollback-failed');assert.equal(f.head(),'v1.0.0');assert.equal(f.store.list('notifications').length,1);assert.equal(readNotices(f.store).length,0);});
@@ -127,8 +132,8 @@ test('an old updater lock still defers an update without changing Hermes',async 
  for(const invoke of [updater=>updater.runNow(),updater=>updater.tick('UTC')]){const f=fixture(t),lock=path.join(f.store.state,'hermes-update.lock'),old=new Date(Date.now()-24*60*60*1000);fs.writeFileSync(lock,'interrupted process');fs.utimesSync(lock,old,old);const result=await invoke(f.updater);assert.equal(result.result,'skipped');assert.equal(result.reason,'A Hermes update is already running.');assert.equal(f.calls.some(call=>call.join(' ')==='git fetch origin tag v1.1.0'),false);assert.equal(fs.existsSync(lock),true);}
 });
 
-test('a rejected update command follows rollback and keeps its diagnostics scrubbed',async t=>{
- const f=fixture(t,{rejects:'update'}),result=await f.updater.runNow();assert.equal(result.result,'rolled-back');assert.equal(f.store.get('notifications','hermes-update-1.1.0').status,'pending');assert.equal(readNotices(f.store).length,1);assert.doesNotMatch(JSON.stringify(readHermesUpdate(f.store)),/sk-secret-token/);
+test('a failed release fetch restarts the gateway without a false rollback',async t=>{
+ const f=fixture(t,{rejects:'update'}),result=await f.updater.runNow();assert.equal(result.result,'failed');assert.equal(result.reason,'Hermes could not fetch its selected release.');assert.ok(f.calls.some(call=>call.join(' ')==='hermes gateway restart'));assert.equal(f.calls.some(call=>call.join(' ')==='git reset --hard FETCH_HEAD'),false);assert.equal(f.calls.some(call=>call.join(' ')==='git reset --hard old-commit'),false);assert.deepEqual(f.store.list('notifications'),[]);assert.equal(readNotices(f.store).length,0);assert.doesNotMatch(JSON.stringify(readHermesUpdate(f.store)),/sk-secret-token/);
 });
 
 test('a non-sign-in AI failure rolls back and does not ask a second question',async t=>{
