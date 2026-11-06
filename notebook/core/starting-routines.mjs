@@ -251,14 +251,15 @@ export function finalReply(text){
 // A daily-round routine that went wrong prints its one sentence for the person like any other line
 // (godspeed_routines.py, tell), so Hermes records the run as having worked. Its own record beside
 // Hermes' says it failed, and Settings > Routines says so: {last_status, last_error} for the row
-// of that run, {} otherwise. Only the record written by that very run counts.
+// of that run, with its consecutive-failure count for the daily connection check, {} otherwise.
+// Only the record written by that very run counts.
 export const ROUTINE_STATUS='godspeed-routines-status.json';
 export function routineStatus(home,job){
  const routine=STARTING_ROUTINES.find(r=>r.script===job?.script);if(!routine||!job.last_run_at)return {};
  let status;try{status=JSON.parse(fs.readFileSync(path.join(home,ROUTINE_STATUS),'utf8'))?.[routine.key];}catch{return {};}
  const ran=Date.parse(job.last_run_at),at=Date.parse(status?.at);
  if(!status?.failed||!Number.isFinite(ran)||!Number.isFinite(at)||Math.abs(ran-at)>10*60000)return {};
- return {last_status:'error',last_error:String(status.failed).slice(0,500)};
+ return {last_status:'error',last_error:String(status.failed).slice(0,500),failure_streak:Number.isInteger(status.failure_streak)&&status.failure_streak>0?status.failure_streak:0};
 }
 const runWords=(day,time)=>new Intl.DateTimeFormat('en-GB',{day:'numeric',month:'long',year:'numeric',timeZone:'UTC'}).format(new Date(day+'T00:00:00Z'))+', '+time.slice(0,5).replace('-',':');
 

@@ -10,7 +10,7 @@ import {remind} from './deadline-reminders.mjs';
 import {personalOperation} from './personal-operations.mjs';
 import {nativeCoachContext,nativeTick,dueCoachAreas,retainHabitReview} from './native-personal.mjs';
 import {briefing} from './briefing.mjs';
-import {currentHealth,latestPerDayMetric} from './health-inputs.mjs';
+import {currentHealth,healthSafeReply,latestPerDayMetric} from './health-inputs.mjs';
 // A chat may take ten minutes; Stop ends it sooner. Until 6 October 2026 it was
 // cut off after two, which long answers over many notes regularly needed.
 export function providerTimeBudget(input){
@@ -121,10 +121,12 @@ export function hermesResponse(output){
   return output.replace(/\x1b\[[0-9;]*m/g,'').replace(/^Warning: Unknown toolsets: none\r?\n\s*/,'').replace(/^\s*⚠ tirith security scanner enabled but not available[^\n]*\r?\n\s*/,'')
     .split(/\r?\n/).filter(line=>!waitingLine(line)).join('\n').trim();
 }
+// What the AI program prints when the account needs its sign-in; the daily connection check's routines source leaves such a failure to the AI's own message.
+export const AI_SIGN_IN=/authenticationerror|invalid_api_key|incorrect api key|token expired|unauthorized|authentication failed/i;
 export function hermesFailureMessage(diagnostic,secrets=[]){
   if(/context length exceeded|context_length_exceeded|maximum context length|cannot compress further|(?:model )?input exceeds (?:the )?context (?:window|limit)/i.test(diagnostic))return 'The AI request exceeded the model context limit. Reduce the selected source scope before retrying.';
   if(/rate_limit_exceeded|rate limit exceeded|too many requests|usage limit reached|quota exceeded|insufficient_quota/i.test(diagnostic))return 'The connected AI account reached a usage limit. Retry after its limit resets.';
-  if(/authenticationerror|invalid_api_key|incorrect api key|token expired|unauthorized|authentication failed/i.test(diagnostic))return 'The connected AI account needs sign-in. Check the account in Settings before retrying.';
+  if(AI_SIGN_IN.test(diagnostic))return 'The connected AI account needs sign-in. Check the account in Settings before retrying.';
   // Issue #127: a reader met only "The AI request failed" and could do nothing with it. The provider's own
   // one-line reason (an HTTP status and its message) is said too, with anything key-shaped taken out, and
   // the sentence ends on what to do next. The private diagnosis itself is never shown: the notebook keeps
@@ -198,8 +200,8 @@ export function jobExecutor(configuredProvider,query) {
       const habit=visibleRows(query,'habits').find(h=>h.id===job.habit_id&&h.status==='active');if(!habit)return {verified:true,silent:true};
       if(!provider)throw Error('Connect an assistant before reviewing a habit');
       const sources={agreement:habit.agreement,observations:habit.observations,previous:visibleRows(query,'coach_talks').filter(t=>t.area===habit.area).slice(-3),...(habit.area==='health'?{health:currentHealth(query)}:{})};
-      const question=await provider({kind:'habit-review',context:sources,contract:'Ask one short question about this agreed habit using its actual observations. Missing observations mean unknown. A day answered skip does not count either way: it is neither done nor missed. Dated health measurements are source observations, never proof that this newly agreed habit happened. Do not invent success, change the agreement, or diagnose.'});
-      if(typeof question!=='string'||!question.trim())throw Error('Habit review returned no question');
+      const raw=await provider({kind:'habit-review',context:sources,contract:'Ask one short question about this agreed habit using its actual observations. Missing observations mean unknown. health.days is authoritative: may_be_incomplete and not_judged columns are unknown, never misses or evidence of a gap. A day answered skip does not count either way: it is neither done nor missed. Dated health measurements are source observations, never proof that this newly agreed habit happened. Do not invent success, change the agreement, or diagnose.'});
+      const question=healthSafeReply(raw,'question',sources.health);
       const note=retainHabitReview(store,habit,question,sources);return {verified:true,record_id:note.id,delivery:'notebook'};
     }
     if(['coach-tick','journal-tick'].includes(job.kind))return nativeTick(store,job.kind.split('-')[0],new Date(),query);
@@ -218,7 +220,8 @@ export function jobExecutor(configuredProvider,query) {
       const today=new Intl.DateTimeFormat('en-CA',{timeZone:settings.timezone||'UTC',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
       if(prior.some(t=>t.id.endsWith(today)&&t.status==='closed'))return {verified:true,silent:true,reason:'Today\'s coaching conversation is already closed'};
       const health=currentHealth(query),sources={preparation:nativeCoachContext(store,area),previous:prior.slice(-3),habits:visibleRows(query,'habits').filter(h=>h.area===area),health:health.observations,health_freshness:health,journal:visibleRows(query,'journal').slice(-7)};
-      const question=await provider({kind:'coaching',context:{area,...sources},contract:'Open one short coaching question using prior words and actual habit observations. A habit day answered skip does not count either way: it is neither done nor missed. Never open with something the preparation lists under Raised in other talks this week: another talk already raised it, so pick another. Respect the configured area boundaries. Missing health observations are missing; do not diagnose. Never invent agreement.'});
+      const raw=await provider({kind:'coaching',context:{area,...sources},contract:'Open one short coaching question using prior words and actual habit observations. health_freshness.days is authoritative: may_be_incomplete and not_judged columns are unknown, never misses or evidence of a gap. A habit day answered skip does not count either way: it is neither done nor missed. Never open with something the preparation lists under Raised in other talks this week: another talk already raised it, so pick another. Respect the configured area boundaries. Missing health observations are missing; do not diagnose. Never invent agreement.'});
+      const question=healthSafeReply(raw,'question',area==='health'?health:null);
       const talk=personalOperation({store,query},{type:'coach-open',area,question,sources});
       const note=store.save('notes',{title:'Your '+area+' coaching conversation',content:question,talk_id:talk.id,source_app:'coaching'});
       return {verified:true,record_id:note.id,talk_id:talk.id,delivery:'notebook'};
