@@ -209,6 +209,9 @@ test('two queued notices are said one in each run',{skip:!['python','python3'].s
 const noMail=t=>{const was=process.env.GODSPEED_MAIL_HOME,dir=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-no-mail-'));process.env.GODSPEED_MAIL_HOME=dir;t.after(()=>{if(was===undefined)delete process.env.GODSPEED_MAIL_HOME;else process.env.GODSPEED_MAIL_HOME=was;fs.rmSync(dir,{recursive:true,force:true});});};
 test('the daily connection check is listed with its switch, paused until a connection is set up',async t=>{
  noMail(t);
+ // Run as the installed image runs: its environment says this is a server. withGoal must take that away, because this test is about a computer.
+ const restore=[];for(const [name,value] of [['GODSPEED_REVISION','0123456789abcdef0123456789abcdef01234567'],['GODSPEED_WEB_ADDRESS','https://notes.example.test']]){restore.push([name,process.env[name]]);process.env[name]=value;}
+ t.after(()=>{for(const [name,was] of restore){if(was===undefined)delete process.env[name];else process.env[name]=was;}});
  const {root,home,store,hermes,scheduler,job}=await withGoal(t);
  scheduler.lastTick=0;await scheduler.tick();
  const made=job(CONNECTION_JOB);assert.ok(made,'made beside the starting routines');
