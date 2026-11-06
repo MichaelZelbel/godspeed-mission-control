@@ -19,16 +19,34 @@ export const BODY_LIMIT=20*1024*1024;
 export const tokenFile=state=>path.join(state,'ingest-token');
 export const rawFolder=state=>path.join(state,'health-uploads');
 
-function writeToken(state,token){const file=tokenFile(state);atomic(file,token);fs.chmodSync(file,0o600);return token;}
+// The token file is valid when it is a regular, readable, non-empty file that only the server's user can read
+// (0600 where the platform has modes). Anything else is a damaged token: no upload is accepted with it, and only a
+// renewal replaces it. The one place that decides is readToken: null for a missing or damaged token.
+export function tokenState(state){
+ const file=tokenFile(state);let stat;
+ try{stat=fs.lstatSync(file);}catch(error){if(error.code==='ENOENT')return {token:null,damaged:false};return {token:null,damaged:true};}
+ if(!stat.isFile()||process.platform!=='win32'&&(stat.mode&0o777)!==0o600)return {token:null,damaged:true};
+ let token;try{token=fs.readFileSync(file,'utf8').trim();}catch{return {token:null,damaged:true};}
+ return token?{token,damaged:false}:{token:null,damaged:true};
+}
+export const readToken=state=>tokenState(state).token;
+export const tokenDamaged=state=>tokenState(state).damaged;
+function writeToken(state,token){
+ const file=tokenFile(state);
+ try{if(!fs.lstatSync(file).isFile())fs.rmSync(file,{recursive:true,force:true});}catch{}
+ atomic(file,token);fs.chmodSync(file,0o600);return token;
+}
+// The token, made once if there is none. A damaged one is left alone (null): renewToken replaces it.
 export function ensureToken(state){
- try{const token=fs.readFileSync(tokenFile(state),'utf8').trim();if(token)return token;}catch(error){if(error.code!=='ENOENT')throw error;}
+ const {token,damaged}=tokenState(state);
+ if(token||damaged)return token;
  return writeToken(state,randomBytes(32).toString('base64url'));
 }
 export const renewToken=state=>writeToken(state,randomBytes(32).toString('base64url'));
 const digest=text=>createHash('sha256').update(String(text)).digest();
 export function tokenMatches(state,presented){
  if(!presented)return false;
- let token;try{token=fs.readFileSync(tokenFile(state),'utf8').trim();}catch{return false;}
+ const token=readToken(state);
  return !!token&&timingSafeEqual(digest(token),digest(presented));
 }
 
@@ -51,9 +69,12 @@ const rawFile=(state,day)=>path.join(rawFolder(state),day+'.jsonl');
 // legacy receiver's lines too, which also carry the sender: that field is dropped here and never stored).
 // Anything that is not an upload with a readable receive time and an object of data is null.
 export const encodeRawLine=upload=>JSON.stringify({received_at:upload.received_at,data:upload.data});
+// What an upload's data must look like to be kept at all, wherever it arrives from: an object whose metrics and
+// workouts, when present, are lists. The receiver and the raw-line parser (so the importer) both use this.
+export const isUploadShape=data=>!!data&&typeof data==='object'&&!Array.isArray(data)&&[data.metrics,data.workouts].every(x=>x===undefined||Array.isArray(x));
 export function parseRawLine(text){
  let line;try{line=JSON.parse(text);}catch{return null;}
- if(!Number.isFinite(instantOf(line?.received_at))||!line.data||typeof line.data!=='object'||Array.isArray(line.data))return null;
+ if(!Number.isFinite(instantOf(line?.received_at))||!isUploadShape(line.data))return null;
  return {received_at:line.received_at,data:line.data};
 }
 export function appendRaw(state,upload){

@@ -6,7 +6,7 @@ import {Input} from '@/components/ui/input';
 // Settings > Health data from your phone (issue #214, notebook/core/phone-health.mjs). A server
 // install takes the uploads of the iPhone app Health Auto Export at a private address; a Windows or
 // Mac notebook cannot be reached by the phone and says so in one line.
-type Status={available:boolean;address?:string|null};
+type Status={available:boolean;address?:string|null;damaged?:boolean};
 async function call(route:string,body?:unknown):Promise<Status>{
   const r=await fetch('/api/'+route,{method:body?'POST':'GET',headers:{'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});
   const data=await r.json();if(!r.ok)throw new Error(data.error||'Something went wrong');return data;
@@ -25,7 +25,10 @@ export function PhoneHealth(){
   return <section className="border rounded p-4 space-y-2">
     <h2 className="text-lg font-semibold">Health data from your phone</h2>
     <p>In Health Auto Export, open Automations, add a REST API automation, choose the JSON format, and paste this address. Your phone then sends its health data here every hour, and your morning briefing and health talks use it.</p>
-    {data.address?<>
+    {data.damaged?<>
+      <p>The private key file for this address is damaged, so uploads from your phone are switched off. Make a new address to switch them on again, then paste it into Health Auto Export.</p>
+      <Button variant="outline" onClick={()=>void renew()}>Make a new address</Button>
+    </>:data.address?<>
       <Input readOnly aria-label="Address for Health Auto Export" value={data.address} onFocus={e=>e.currentTarget.select()}/>
       <p>Anyone with this address can send health data to your notebook, so keep it private.</p>
       <Button variant="outline" onClick={()=>void renew()}>Make a new address</Button>

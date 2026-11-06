@@ -5,4 +5,5 @@
 // null until the server has an https web address); a computer answers {available:false}.
 export const PHONE_HEALTH_STATUS='phone-health';
 export const PHONE_HEALTH_RENEW='phone-health/renew';
-export const PHONE_HEALTH_FIELDS=['available','address'];
+// damaged: the server's token file is unusable, so uploads are off until the address is renewed.
+export const PHONE_HEALTH_FIELDS=['available','address','damaged'];

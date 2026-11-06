@@ -12,7 +12,7 @@ import {currentHealth} from '../core/health-inputs.mjs';
 import {healthFeedId} from '../core/health-feed-id.mjs';
 import {backup} from '../core/archives.mjs';
 import {createService} from '../server/main.mjs';
-import {appendRaw,encodeRawLine,parseRawLine,readRaw,acceptUpload,importFolder,buildDays,instantOf,pruneRaw,rawFolder,tokenFile,ensureToken,renewToken,tokenMatches,SOURCE} from '../core/phone-health.mjs';
+import {tokenState,tokenDamaged,isUploadShape,appendRaw,encodeRawLine,parseRawLine,readRaw,acceptUpload,importFolder,buildDays,instantOf,pruneRaw,rawFolder,tokenFile,ensureToken,renewToken,tokenMatches,SOURCE} from '../core/phone-health.mjs';
 
 for(const key of Object.keys(process.env))if(/^(GODSPEED_|HERMES_)/.test(key))delete process.env[key];
 
@@ -480,4 +480,50 @@ test('the raw uploads stay on this machine: a backup holds neither a metric nobo
  const files=[];const walk=folder=>{for(const entry of fs.readdirSync(folder,{withFileTypes:true})){const full=path.join(folder,entry.name);if(entry.isDirectory())walk(full);else files.push(full);}};walk(destination);
  assert.ok(files.length>0);
  for(const file of files){assert.ok(!file.includes('health-uploads')&&!/\.jsonl$/.test(file)&&!path.basename(file).includes(raw[0]),file);assert.ok(!fs.readFileSync(file).includes(unlisted),'the unlisted value is in '+file);}
+});
+
+test('one shape decides what an upload may be: the receiver and the importer keep the same lines',()=>{
+ for(const good of [{},{metrics:[]},{workouts:[]},{metrics:[],workouts:[]}])assert.equal(isUploadShape(good),true,JSON.stringify(good));
+ for(const bad of [null,undefined,'x',5,[],{metrics:{}},{metrics:'x'},{workouts:{}},{metrics:null},{workouts:null}])assert.equal(isUploadShape(bad),false,JSON.stringify(bad));
+ const store=setup(),folder=tmp('godspeed-phone-shape-import-'),line=(data,received_at='2026-11-04T10:00:00Z')=>JSON.stringify({received_at,data});
+ fs.writeFileSync(path.join(folder,'old.jsonl'),[line({metrics:{}}),line({workouts:'x'}),line([]),line({metrics:[]}),'not json'].join('\n')+'\n');
+ const result=importFolder(store,folder,{now:at('2026-11-05T08:00:00Z')});
+ assert.deepEqual([result.lines,result.skipped],[5,4],'the malformed legacy lines are skipped and counted');
+ const kept=fs.readdirSync(rawFolder(store.state)).flatMap(f=>fs.readFileSync(path.join(rawFolder(store.state),f),'utf8').trim().split('\n'));
+ assert.deepEqual(kept.map(l=>JSON.parse(l).data),[{metrics:[]}],'only the well-formed one is retained');
+ assert.equal(parseRawLine(line({metrics:{}})),null);
+});
+
+test('a damaged ingest token: the server still starts and answers the monitor, uploads get 404 and write nothing, and a renewal replaces it',async t=>{
+ const cases=[['a folder in place of the file',state=>fs.mkdirSync(tokenFile(state),{recursive:true})],['an empty file',state=>fs.writeFileSync(tokenFile(state),'',{mode:0o600})]];
+ if(process.platform!=='win32')cases.push(['a file other users can read',state=>{fs.writeFileSync(tokenFile(state),'madeUpTokenLongEnoughToLookReal');fs.chmodSync(tokenFile(state),0o644);}]);
+ process.env.GODSPEED_WEB_ADDRESS='https://notes.example.test';
+ t.after(()=>{delete process.env.GODSPEED_WEB_ADDRESS;});
+ for(const [what,damage] of cases){
+  const root=serverRoot('godspeed-phone-damaged-'),state=new Store(root).state;fs.mkdirSync(state,{recursive:true});damage(state);
+  const service=await createService({root,port:0,webPort:0});
+  try{
+   const port=service.address.port;
+   assert.equal((await request(port,'/ingest/health')).status,200,what+': the monitor answers');
+   assert.equal((await request(port,'/ingest/madeUpTokenLongEnoughToLookReal',{method:'POST',body:{data:{}}})).status,404,what+': no upload');
+   assert.equal(fs.existsSync(rawFolder(state)),false,what+': nothing written');
+   assert.deepEqual(JSON.parse((await request(port,'/api/phone-health')).text),{available:true,address:null,damaged:true},what);
+   const renewed=JSON.parse((await request(port,'/api/phone-health/renew',{method:'POST',body:{}})).text);
+   assert.match(renewed.address,/^https:\/\/notes\.example\.test\/ingest\/[A-Za-z0-9_-]{43}$/,what);
+   assert.equal((await request(port,new URL(renewed.address).pathname,{method:'POST',body:{data:upload([metric('step_count','count',[D+' 08:00:00 +0100',5])])}})).status,200,what+': the new address works');
+   assert.deepEqual(JSON.parse((await request(port,'/api/phone-health')).text).damaged,undefined);
+  }finally{await service.close();fs.rmSync(root,{recursive:true,force:true});}
+ }
+});
+
+test('the token is read in one place: ensureToken leaves a damaged token alone, and only a private regular file authenticates',()=>{
+ const store=setup(),state=store.state;
+ assert.deepEqual(tokenState(state),{token:null,damaged:false});
+ const token=ensureToken(state);assert.equal(tokenState(state).token,token);assert.equal(tokenMatches(state,token),true);
+ if(process.platform!=='win32'){
+  fs.chmodSync(tokenFile(state),0o644);
+  assert.deepEqual(tokenState(state),{token:null,damaged:true});assert.equal(tokenMatches(state,token),false,'a readable-by-others token authenticates nothing');
+  assert.equal(ensureToken(state),null);assert.equal(fs.statSync(tokenFile(state)).mode&0o777,0o644,'it is not rewritten behind the owner');
+ }
+ const next=renewToken(state);assert.notEqual(next,token);assert.equal(tokenMatches(state,next),true);assert.equal(tokenDamaged(state),false);
 });

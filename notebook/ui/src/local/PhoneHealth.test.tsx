@@ -58,6 +58,16 @@ describe("Health data from your phone in Settings", () => {
     expect(screen.queryByRole("button")).toBeNull();
   });
 
+  it("offers a new address when the server says its key file is damaged", async () => {
+    const calls = serve({ "phone-health": () => ({ available: true, address: null, damaged: true }), "phone-health/renew": () => ({ available: true, address: "https://notes.example.test/ingest/madeUpTokenTwo" }) });
+    vi.stubGlobal("confirm", vi.fn(() => true));
+    show();
+    expect(await screen.findByText(/uploads from your phone are switched off/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Make a new address" }));
+    await waitFor(() => expect(screen.getByLabelText("Address for Health Auto Export")).toHaveValue("https://notes.example.test/ingest/madeUpTokenTwo"));
+    expect(calls.filter(c => c.route === "phone-health/renew")).toHaveLength(1);
+  });
+
   it("says on Windows that the phone needs the server install, with no button", async () => {
     serve({ "phone-health": () => ({ available: false }) });
     show();

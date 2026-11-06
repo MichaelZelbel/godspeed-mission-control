@@ -51,7 +51,7 @@ import {routineSwitches,setRoutineSwitch} from '../core/routine-switches.mjs';
 import {notebookAddress} from '../core/notebook-address.mjs';
 import {latestPerDayMetric} from '../core/health-inputs.mjs';
 import {PHONE_HEALTH_STATUS,PHONE_HEALTH_RENEW} from '../core/phone-health-protocol.mjs';
-import {BODY_LIMIT as UPLOAD_LIMIT,ensureToken,renewToken,tokenMatches,pruneRaw,acceptUpload} from '../core/phone-health.mjs';
+import {BODY_LIMIT as UPLOAD_LIMIT,ensureToken,renewToken,tokenMatches,tokenDamaged,isUploadShape,pruneRaw,acceptUpload} from '../core/phone-health.mjs';
 import {about} from '../core/about.mjs';
 import {showCard as showContextCard,readContext,markContext} from '../core/context-setup.mjs';
 import {visibleRows} from '../core/visibility.mjs';
@@ -168,7 +168,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   // reach this notebook: a door that faces outside. A Windows or Mac notebook on 127.0.0.1 with no
   // web door offers nothing, and /ingest there is what it was before.
   const phoneUploads=remote||!!web,pruneFailed=()=>console.error('Godspeed Mission Control: expired phone health uploads could not be removed');
-  if(phoneUploads){ensureToken(store.state);try{pruneRaw(store.state);}catch{pruneFailed();}}
+  if(phoneUploads){try{ensureToken(store.state);if(tokenDamaged(store.state))console.error('Godspeed Mission Control: the phone health token is damaged, so uploads are off until the address is renewed in Settings');}catch{console.error('Godspeed Mission Control: the phone health token could not be prepared, so uploads are off until the address is renewed in Settings');}try{pruneRaw(store.state);}catch{pruneFailed();}}
   const pruneTimer=phoneUploads?setInterval(()=>{try{pruneRaw(store.state);}catch{pruneFailed();}},3600000):null;pruneTimer?.unref?.();
   // What is no longer true ends on its own (core/fact-closing.mjs): once a day
   // on the machine that runs the routines, and soon after a Menerio import,
@@ -259,7 +259,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
           // A renewal while the body was on its way revokes this address at once, so the token is checked again before anything is stored.
           if(!tokenMatches(store.state,route.slice(8)))return send(res,404,{error:'Not found'});
           const data=upload?.data;
-          if(!data||typeof data!=='object'||Array.isArray(data)||[data.metrics,data.workouts].some(x=>x!==undefined&&!Array.isArray(x)))return send(res,400,{error:'Not a Health Auto Export upload'});
+          if(!isUploadShape(data))return send(res,400,{error:'Not a Health Auto Export upload'});
           acceptUpload(store,data);return send(res,200,{ok:true});
         }catch(error){
           if(error.retained){console.error('Godspeed Mission Control: a phone upload is kept but could not be turned into day records: '+error.message+'; the rollback also failed: '+error.rollbackMessage);return send(res,202,{ok:true,pending:true});}console.error('Godspeed Mission Control: a phone upload was not kept: '+error.message);return send(res,500,{error:'Not kept'});}
@@ -409,6 +409,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         // The token travels only inside an https address: over http a network observer would read the phone's credential.
         if(!link?.startsWith('https://')){if(route==='/api/'+PHONE_HEALTH_RENEW)return send(res,409,{error:'A new address needs this server\'s https web address'});return send(res,200,{available:true,address:null});}
         const token=route==='/api/'+PHONE_HEALTH_RENEW?renewToken(store.state):ensureToken(store.state);
+        if(!token)return send(res,200,{available:true,address:null,damaged:true});
         return send(res,200,{available:true,address:link.replace(/\/dashboard$/,'')+'/ingest/'+token});
       }
       if(route==='/api/voice'&&req.method==='GET')return send(res,200,backupHome?voiceStatus({home:backupHome,state:store.state}):{available:false});
