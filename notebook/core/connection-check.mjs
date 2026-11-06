@@ -43,7 +43,7 @@ export const CONNECTIONS={
  agentmail:{...CONNECTION_NAMES.agentmail,probe:deps=>agentmailProbe(deps),
   signIn:'Your mission control\'s own mailbox did not accept its key this morning, so the trackers that count its mail cannot read it. To fix it, ask your assistant: Connect the mission control\'s own address.'},
  phone:{...CONNECTION_NAMES.phone,probe:deps=>phoneProbe(deps),attention:'Your phone health data needs attention',
-  notice:({store,now})=>{const received=lastPhoneUpload(store),timezone=store.get('settings','installation')?.timezone||'UTC';return `Your phone has sent no health data since ${whenSaid(received,now(),timezone)}. Your briefing's health numbers stop until it does. To fix it, open Health Auto Export and check its automation sends to the address in Settings.`;}},
+  notice:({store,now})=>{const received=lastAcceptedUpload(store.state),timezone=store.get('settings','installation')?.timezone||'UTC';return `Your phone has sent no health data since ${whenSaid(received,now(),timezone)}. Your briefing's health numbers stop until it does. To fix it, open Health Auto Export and check its automation sends to the address in Settings.`;}},
 };
 const NAMES=Object.keys(CONNECTIONS);
 export const RECORD_FILE='connection-check.json';
@@ -61,8 +61,7 @@ export function mailLegacy(){return createRequire(import.meta.url)('../../tools/
 export function mailGodspeedStatus(){return createRequire(import.meta.url)('../../tools/mc-mail.js').godspeedStatus();}
 const legacyConnected=legacy=>{try{return !!legacy().credentials().GMAIL_REFRESH_TOKEN;}catch{return false;}};
 export function mailConnected(imap=mailImap,legacy=mailLegacy){try{if(imap().status().state!=='not connected')return true;}catch{}return legacyConnected(legacy);}
-export const lastPhoneUpload=store=>lastAcceptedUpload(store.state);
-export const connectionCheckWanted=(home,imap,store,legacy)=>telegramInHermes(home)||mailConnected(imap,legacy)||!!store&&(mailCountWanted(store)||!!lastPhoneUpload(store));
+export const connectionCheckWanted=(home,imap,store,legacy)=>telegramInHermes(home)||mailConnected(imap,legacy)||!!store&&(mailCountWanted(store)||!!lastAcceptedUpload(store.state));
 
 export const telegramKind=(status,body)=>[401,404].includes(status)||body?.error_code===401?'sign-in':'other';
 export const gitKind=stderr=>GIT_SIGN_IN.test(String(stderr||''))?'sign-in':'other';
@@ -113,7 +112,7 @@ export const agentmailProbe=({store,godspeed=mailGodspeedStatus})=>async()=>{
  catch{return outcome(false,'other');}
 };
 export const phoneProbe=({store,now=clockNow})=>async()=>{
- const received=lastPhoneUpload(store);if(!received)return NOT_SET_UP;
+ const received=lastAcceptedUpload(store.state);if(!received)return NOT_SET_UP;
  return now().getTime()-new Date(received).getTime()>=36*60*60*1000?outcome(false,'quiet'):outcome(true);
 };
 export const defaultProbes=deps=>Object.fromEntries(NAMES.map(name=>[name,CONNECTIONS[name].probe(deps)]));
