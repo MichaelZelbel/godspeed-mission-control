@@ -136,6 +136,9 @@ function createDueCommands({root,commandArgs=process.argv.slice(2),date,copy=tru
 // very first thing a person types (mc-due --godspeed /somewhere check) reads "--godspeed" as the command
 // and quietly runs the list instead, which looks like it worked.
 const raw = root ? ['--godspeed',root,...commandArgs] : commandArgs;
+// The connections the daily check lists (notebook/core/connection-names.mjs): the id its record is
+// kept under, and the name Settings shows. Kept here because this tool ships without the notebook.
+const CONNECTIONS = { ai: "your AI", telegram: "Telegram", github: "GitHub", mail: "Gmail", agentmail: "your mission control's own mailbox", phone: "the phone's health data" };
 const args = [];
 let godspeed = "";
 for (let i = 0; i < raw.length; i++) {
@@ -573,9 +576,6 @@ function sayable(r, day) {
 // store replaced, a connection the daily connection check found working. `none` is the honest
 // answer for most obligations and it is not second best.
 const SELF_CHECKS = ["none", "secret-changed", "connection-ok", "file-newer"];
-// The connections the daily check lists (notebook/core/connection-names.mjs): the id its record is
-// kept under, and the name Settings shows. Kept here because this tool ships without the notebook.
-const CONNECTIONS = { ai: "your AI", telegram: "Telegram", github: "GitHub", mail: "Gmail", agentmail: "your mission control's own mailbox", phone: "the phone's health data" };
 const connectionId = (arg) => {
   const a = String(arg || "").trim().toLowerCase();
   return Object.keys(CONNECTIONS).find((id) => id === a || CONNECTIONS[id].toLowerCase() === a) || "";
@@ -670,7 +670,7 @@ function help() {
             secret-changed  a key of that name in your key store is replaced after the first check
                             inside the window, which only remembers a one-way fingerprint
             connection-ok   the daily connection check, on a day inside the window, finds that
-                            connection (your AI, Telegram, GitHub, Gmail, your mission control's own mailbox, the phone's health data) working
+                            connection (${Object.values(CONNECTIONS).join(", ")}) working
             file-newer      that file is written inside the window
             none            only your word closes it
   mc-due target <name> YYYY-MM-DD   a new day you would like it done
