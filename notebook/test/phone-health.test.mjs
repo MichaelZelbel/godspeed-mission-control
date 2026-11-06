@@ -43,11 +43,49 @@ test('a day re-sent the next morning adds only its new points and rewrites nothi
  acceptUpload(store,upload([metric('step_count','count',[D+' 08:00:00 +0100',100]),metric('flights_climbed','count',[D+' 08:00:00 +0100',3])]),{now:at('2026-11-04T20:00:00Z')});
  const before=Object.fromEntries(store.list('health_observations').map(r=>[r.metric,r]));
  const result=acceptUpload(store,upload([metric('step_count','count',[D+' 08:00:00 +0100',100],[D+' 23:30:00 +0100',50])]),{now:at('2026-11-05T07:00:00Z')});
- assert.equal(result.written,1);
+ assert.equal(result.written,2);
  const after=Object.fromEntries(store.list('health_observations').map(r=>[r.metric,r]));
  assert.equal(after.steps.value,150);
- assert.equal(after.flights.revision,before.flights.revision);
- assert.equal(after.flights.updated_at,before.flights.updated_at);
+ assert.equal(after.steps.data_until,'23:30:00');
+ assert.equal(after.flights.data_until,'23:30:00');
+ assert.equal(after.flights.revision,before.flights.revision+1);
+});
+
+test('a phone day keeps the latest quantitative point time, not its upload time or sleep',()=>{
+ const short=buildDays([{received_at:'2026-11-05T07:00:00Z',data:upload([metric('step_count','count',[D+' 19:55:00 +0100',100]),metric('sleep_analysis','hr',[D+' 23:59:00 +0100',8])])}]);
+ assert.equal(short.dataUntil.get(D),'19:55:00');
+ for(const [time,expected] of [['21:00:00','21:00:00'],['21:00:30','21:00:30']]){
+  const built=buildDays([{received_at:'2026-11-05T08:00:00Z',data:upload([metric('step_count','count',[D+' '+time+' +0100',100])])}]);assert.equal(built.dataUntil.get(D),expected);
+ }
+ const store=setup();acceptUpload(store,upload([metric('step_count','count',[D+' 19:55:00 +0100',100])]),{now:at('2026-11-05T08:00:00Z')});
+ assert.equal(store.list('health_observations')[0].data_until,'19:55:00');
+});
+
+test('invalid phone clocks, offsets and dates cannot make an early day complete',()=>{
+ const invalid=['99:00:00 +0100','20:99:00 +0100','20:00:99 +0100','22:00:00 +2460','22:00:00 +0199'];
+ for(const clock of invalid){
+  const date=D+' '+clock;assert.ok(Number.isNaN(instantOf(date)),date);
+  const built=buildDays([{data:upload([metric('step_count','count',[D+' 19:55:00 +0100',100],[date,200])])}]);
+  assert.equal(built.get(D).get('steps'),100,date);
+  assert.equal(built.dataUntil.get(D),'19:55:00',date);
+ }
+ const invalidDay='2026-02-30 22:00:00 +0100';
+ assert.ok(Number.isNaN(instantOf(invalidDay)));
+ assert.equal(buildDays([{data:upload([metric('step_count','count',[invalidDay,200])])}]).size,0);
+ const store=setup();acceptUpload(store,upload([metric('step_count','count',[D+' 19:55:00 +0100',100],[D+' 99:00:00 +0100',200])]),{now:at('2026-11-05T08:00:00Z')});
+ const day=currentHealth(new QueryService(store),{now:at('2026-11-05T08:00:00Z').getTime()}).days.find(row=>row.date===D);
+ assert.equal(day.data_until,'19:55:00');
+ assert.equal(day.columns.steps.state,'may_be_incomplete');
+});
+
+test('a numeric weight later than the steps sets the day\'s data time, and a still later sleep point does not',()=>{
+const upload1=upload([metric('step_count','count',[D+' 19:55:00 +0100',100]),metric('weight_body_mass','kg',[D+' 21:30:00 +0100',79.5]),metric('sleep_analysis','hr',[D+' 23:59:00 +0100',8])]);
+ assert.equal(buildDays([{received_at:'2026-11-05T07:00:00Z',data:upload1}]).dataUntil.get(D),'21:30:00','the weight point, not the steps or the sleep');
+ const store=setup();acceptUpload(store,upload1,{now:at('2026-11-05T08:00:00Z')});
+ const rows=Object.fromEntries(store.list('health_observations').map(r=>[r.metric,r]));
+ assert.equal(rows.steps.data_until,'21:30:00','the emitted day record carries the weight time');
+ assert.equal(rows.weight_kg.data_until,'21:30:00');
+ assert.equal(rows.weight_kg.value,79.5);
 });
 
 test('records are day records in the CSV feed\'s id scheme, on the date in the point\'s own string',()=>{

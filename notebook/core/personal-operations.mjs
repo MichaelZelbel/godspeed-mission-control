@@ -25,6 +25,7 @@ import {healthFeedId} from './health-feed-id.mjs';
 import {resumeChanges} from './jobs/routine-control.mjs';
 import {readTable} from '../../third-party/addons/godspeed-coach/lib/auto.mjs';
 import {visibleRows} from './visibility.mjs';
+import {MANUAL_VIA} from './health-inputs.mjs';
 import {screenSuggestions,knownRecords} from './suggestion-filter.mjs';
 import {fieldList} from './fields.mjs';
 import {checkOutboundURL} from './outbound-fetch.mjs';
@@ -260,7 +261,7 @@ export function personalOperation(domains,input){
  if(type==='habit-observe'){const h=old('habits');return store.save('habits',{id:h.id,observations:[...(h.observations||[]),{content:required(input.observation,'Observation'),at:new Date().toISOString()}]},h._hash);}
  if(type==='journal-add'){if(store.get('settings','journal')?.enabled===false)throw Error('Journaling is switched off');return store.save('journal',{content:required(input.content,'Journal entry'),source_id:input.source_id||null,at:new Date().toISOString()});}
  if(type==='journal-switch'){if(typeof input.enabled!=='boolean')throw Error('Choose enabled or disabled');return store.save('settings',{id:'journal',enabled:input.enabled});}
- if(type==='health-add'){if(input.value===undefined||input.value===null)throw Error('Health observation value is required');return store.save('health_observations',{metric:required(input.metric,'Health metric'),value:input.value,unit:input.unit||null,observed_at:date(input.observed_at,'Observation time'),source_id:input.source_id||null});}
+ if(type==='health-add'){if(input.value===undefined||input.value===null)throw Error('Health observation value is required');const observed_at=date(input.observed_at,'Observation time'),timezone=store.get('settings','installation')?.timezone||'UTC';return store.save('health_observations',{metric:required(input.metric,'Health metric'),value:input.value,unit:input.unit||null,observed_at,observed_on:localParts(new Date(observed_at),timezone).date,date_precision:'day',via:MANUAL_VIA,source_id:input.source_id||null});}
  if(['memory-confirm','memory-propose'].includes(type)){
   required(input.evidence_quote,'Source quote');
   const subject=memorySubject(domains,input);

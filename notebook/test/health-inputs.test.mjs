@@ -121,3 +121,57 @@ test('a CSV named like the phone row, imported first, and then a phone upload: b
   assert.equal(new Set(rows.map(r=>r.id)).size,2);
  }
 });
+
+test('phone day state uses its strict cutoff, while manual and food entries settle only their columns',async()=>{
+ const {store,query}=setup(),now=Date.parse('2026-11-05T10:00:00Z'),day='2026-11-04',phone=(metric,value,data_until='19:55:00')=>store.save('health_observations',{metric,value,source:PHONE_SOURCE,via:'phone-receiver',observed_on:day,date_precision:'day',observed_at:day+'T00:00:00Z',data_until});
+ phone('steps',100);phone('protein_g',20);phone('active_kcal',400,'21:00:00');
+ const short=currentHealth(query,{now}).days[0];
+ assert.equal(short.columns.steps.state,'may_be_incomplete');assert.equal(short.columns.active_kcal.state,'may_be_incomplete','21:00:00 is not past the cutoff');assert.deepEqual(short.may_be_incomplete_columns,['steps','active_kcal','protein_g']);
+ store.save('collections',{id:'food',tracker:{specialist:'food'}});const item=store.save('collection_items',{collection_id:'food',data:{when:day+' 12:00',kcal:700,protein_g:30,carbs_g:90,fat_g:20}});
+ let state=currentHealth(query,{now}).days[0];assert.deepEqual(state.columns.steps,{value:100,source:'phone',state:'may_be_incomplete'});assert.deepEqual(Object.fromEntries(['food_kcal','protein_g','carbs_g','fat_g'].map(metric=>[metric,state.columns[metric]])),{food_kcal:{value:700,source:'food_tracker',state:'settled'},protein_g:{value:30,source:'food_tracker',state:'settled'},carbs_g:{value:90,source:'food_tracker',state:'settled'},fat_g:{value:20,source:'food_tracker',state:'settled'}});
+ store.save('health_observations',{metric:'distance_km',value:3,source:PHONE_SOURCE,via:'phone-receiver',observed_on:day,date_precision:'day',observed_at:day+'T00:00:00Z',data_until:'21:00:30'});
+ assert.equal(currentHealth(query,{now}).days[0].columns.distance_km.state,'complete');
+ const operation=input=>personalOperation({store,query},input);operation({type:'health-add',metric:'protein_g',value:80,unit:'g',observed_at:day+'T12:00:00Z'});
+ phone('protein_g',5,'19:55:00');
+ state=currentHealth(query,{now}).days[0];assert.deepEqual(state.columns.protein_g,{value:80,source:'manual',state:'settled'});assert.equal(state.columns.steps.state,'complete');
+ store.save('collection_items',{id:item.id,data:{when:day+' 12:00',kcal:750,protein_g:30,carbs_g:90,fat_g:20}});assert.equal(currentHealth(query,{now}).days[0].columns.food_kcal.value,750,'a tracker correction is the next read');
+ const today='2026-11-05';store.save('health_observations',{metric:'steps',value:200,source:PHONE_SOURCE,via:'phone-receiver',observed_on:today,date_precision:'day',observed_at:today+'T00:00:00Z',data_until:'09:00:00'});
+ assert.equal(currentHealth(query,{now}).days.find(row=>row.date===today).columns.steps.state,'not_judged');
+ store.save('health_observations',{metric:'steps',value:300,source:'Fictional CSV',observed_on:'2026-11-03',date_precision:'day',observed_at:'2026-11-03T00:00:00Z'});
+ assert.equal(currentHealth(query,{now}).days.find(row=>row.date==='2026-11-03').columns.steps.state,'legacy');
+});
+
+test('the installation timezone leaves its current phone day unjudged',()=>{
+ const store=new Store(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-health-timezone-'))),query=new QueryService(store),now=Date.parse('2026-11-06T01:00:00Z');
+ store.save('settings',{id:'installation',timezone:'America/Los_Angeles'});
+ store.save('health_observations',{metric:'steps',value:100,source:PHONE_SOURCE,via:'phone-receiver',observed_on:'2026-11-05',date_precision:'day',observed_at:'2026-11-05T00:00:00Z',data_until:'09:00:00'});
+ const health=currentHealth(query,{now});
+ assert.equal(health.timezone,'America/Los_Angeles');assert.equal(health.days[0].columns.steps.state,'not_judged');
+});
+
+test('health coaching and habit review cannot save model shortfall advice from an unknown phone day',async()=>{
+ const day=offset=>new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Berlin',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(Date.now()+offset*86400000));
+ for(const [date,state] of [[day(0),'not_judged'],[day(-1),'may_be_incomplete']]){
+  const {store,query}=setup();
+  store.save('health_observations',{metric:'steps',value:100,source:PHONE_SOURCE,via:'phone-receiver',observed_on:date,date_precision:'day',observed_at:date+'T00:00:00Z',data_until:'19:55:00'});
+  assert.equal(currentHealth(query).days[0].columns.steps.state,state);
+  const unsafe=async()=>{throw Error('The model must not write a shortfall question from an unknown phone day');};
+  const run=jobExecutor(unsafe,query),coach=await run({id:'fixture-unknown-coach',kind:'coaching',area:'health'},{store,settings:store.get('settings','installation')});
+  assert.equal(store.get('notes',coach.record_id).content,'What part of your health routine needs your attention today?');
+  const {store:habitStore,query:habitQuery}=setup();
+  habitStore.save('health_observations',{metric:'steps',value:100,source:PHONE_SOURCE,via:'phone-receiver',observed_on:date,date_precision:'day',observed_at:date+'T00:00:00Z',data_until:'19:55:00'});
+  const talk=personalOperation({store:habitStore,query:habitQuery},{type:'coach-open',area:'health',question:'Fictional habit?'});
+  const habit=personalOperation({store:habitStore,query:habitQuery},{type:'habit-agree',talk_id:talk.id,title:'Fictional walk',agreement:'I agree to walk',check_at:new Date(Date.now()+60000).toISOString()});
+  const review=await jobExecutor(unsafe,habitQuery)({id:'fixture-unknown-habit',kind:'habit-check',habit_id:habit.id},{store:habitStore,settings:habitStore.get('settings','installation')});
+  assert.equal(habitStore.get('notes',review.record_id).content,'What made this habit easier or harder this time?');
+ }
+});
+
+test('the Food settlement mapping points at number fields the Food schema really declares, for health columns the phone also fills',async()=>{
+ const {foodSchema,FOOD_TOTAL_COLUMNS}=await import('../core/food.mjs'),{PHONE_SUM_METRICS}=await import('../core/phone-health-columns.mjs');
+ const fields=new Map(foodSchema().map(field=>[field.key,field]));
+ for(const [healthColumn,foodField] of Object.entries(FOOD_TOTAL_COLUMNS)){
+  assert.equal(fields.get(foodField)?.type,'number',healthColumn+' settles from Food field '+foodField+', which must be a number field of the Food schema');
+  assert.ok(Object.values(PHONE_SUM_METRICS).includes(healthColumn),healthColumn+' is a day column the phone also fills');
+ }
+});

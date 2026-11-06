@@ -1,6 +1,7 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';
-import {Store} from '../core/records/store.mjs';import {QueryService} from '../core/query.mjs';import {jobExecutor} from '../core/runtime.mjs';
+import {Store} from '../core/records/store.mjs';import {QueryService} from '../core/query.mjs';import {jobExecutor} from '../core/runtime.mjs';import {briefing} from '../core/briefing.mjs';
 import {dueCommand} from '../core/native-due.mjs';
+import {personalOperation} from '../core/personal-operations.mjs';
 // Where one reminder is kept: its page under notebook/Deadlines/, which is what a rehearsal must
 // leave exactly as it was (since 30 October 2026 a reminder is a record, not a file in due/).
 const page=(store,slug)=>store.file(store.list('deadlines').find(r=>r.native_slug===slug));
@@ -29,6 +30,20 @@ test('brief sources are prepared before writing and a failed judgment delivers c
  const result=await jobExecutor(provider,query)({kind:'morning-brief',id:'brief'},{store,settings:{}});
  const note=store.get('notes',result.record_id);assert.equal(result.fallback,true);assert.match(note.content,/Fictional energy: 6/);assert.doesNotMatch(note.content,/improved to 10/);
  assert.ok(calls.find(i=>i.kind==='morning-brief').context.health.some(h=>h.value===6));assert.ok(query.rows('job_receipts').some(r=>r.kind==='brief-verification'&&r.state==='failed'));
+});
+
+test('a briefing treats a short phone day as unknown until a manual settlement arrives',async()=>{
+ const store=new Store(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-brief-incomplete-health-'))),query=new QueryService(store),day='2026-11-04';
+ store.save('settings',{id:'installation',timezone:'UTC'});store.save('health_observations',{metric:'protein_g',value:50,source:'Health Auto Export',via:'phone-receiver',observed_on:day,date_precision:'day',observed_at:day+'T00:00:00Z',data_until:'19:55:00'});
+ let writes=0;const provider=async input=>{
+  if(input.kind==='brief-verification'){assert.match(input.contract,/may_be_incomplete/);return {passed:true,reason:'Fixture checked the incomplete phone day.'};}
+  writes++;assert.match(input.contract,/may_be_incomplete/);const freshness=input.context.health_freshness,protein=freshness.days.find(row=>row.date===day).columns.protein_g;
+  assert.deepEqual(protein,{value:80,source:'manual',state:'settled'});return 'Protein was 80 g. Weekly protein: 1 known day and 0 unknown days.';
+ };
+ const first=await briefing({id:'brief-incomplete-one'},{store,query,provider,now:new Date('2026-11-05T08:00:00Z')}),firstNote=store.get('notes',first.record_id).content;
+ assert.equal(writes,0,'the model receives no partial phone value');assert.match(firstNote,/so far/);assert.match(firstNote,/19:55:00/);assert.match(firstNote,/unknown/);assert.doesNotMatch(firstNote,/50|short day|fully logged|gap advice/i);
+ personalOperation({store,query},{type:'health-add',metric:'protein_g',value:80,unit:'g',observed_at:day+'T12:00:00Z'});
+ const second=await briefing({id:'brief-incomplete-two'},{store,query,provider,now:new Date('2026-11-06T08:00:00Z')});assert.equal(writes,1);assert.match(store.get('notes',second.record_id).content,/1 known day and 0 unknown days/);
 });
 
 test('a mechanical briefing failure gets one evidence-led rewrite and only the checked bytes are saved',async()=>{
@@ -124,4 +139,18 @@ test('a changed briefing method or already-delivered selected finding invalidate
   const provider=async input=>{if(input.kind==='brief-verification'){if(++checks===2){if(change==='method')fs.appendFileSync(path.join(folder,'SKILL.md'),'The user changed the fictional method.\n');else store.save('watch_findings',{id:finding.id,status:'shown'});}return {passed:true,reason:'Fictional checker accepted the previous selected method'};}return 'No fresh fictional health observations are available. Fictional source changed: https://fictional.invalid/source';};
   await assert.rejects(jobExecutor(provider,query)({kind:'morning-brief',id:'brief-scope-'+change},{store,settings:{}}),/sources changed/);assert.equal(store.list('notes').filter(n=>n.source_app==='morning-brief').length,0);assert.equal(store.list('notifications').length,0);
  }
+});
+
+test('a briefing never judges today\'s phone day: it is unknown, while a settled manual column stays usable',async()=>{
+ const store=new Store(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-brief-today-'))),query=new QueryService(store),today='2026-11-05';
+ store.save('settings',{id:'installation',timezone:'UTC'});
+ store.save('health_observations',{metric:'steps',value:4200,source:'Health Auto Export',via:'phone-receiver',observed_on:today,date_precision:'day',observed_at:today+'T00:00:00Z',data_until:'07:40:00'});
+ personalOperation({store,query},{type:'health-add',metric:'protein_g',value:80,unit:'g',observed_at:today+'T06:00:00Z'});
+ let writes=0;
+ const provider=async input=>{
+  writes++;return input.kind==='brief-verification'?{passed:true,reason:'A falsely approving verifier'}:'Have a protein shake to reach your target; you missed your steps.';
+ };
+ const result=await briefing({id:'brief-today-unknown'},{store,query,provider,now:new Date('2026-11-05T08:00:00Z')}),saved=store.get('notes',result.record_id).content;
+ assert.equal(writes,0,'neither a writer nor an approving verifier sees an unknown phone number');
+ assert.match(saved,/so far/);assert.match(saved,/07:40:00/);assert.match(saved,/manual entry recorded protein 80 g/);assert.match(saved,/unknown/);assert.doesNotMatch(saved,/4200|short day|missed|protein shake/i);
 });
