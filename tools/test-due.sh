@@ -458,6 +458,46 @@ check "  and fails" "$rc" "1"
 out="$(w "$W" sh "$HERE/mc-due" today)"
 contains "the mc-due launcher, run inside a mission control, reads it" "$out" "Reader own deadline"
 
+# --- two more ways to close itself: a key replaced, a connection working (#240) -----------------------
+SC="$TMP/selfcheck"; mkdir -p "$SC/.godspeed" "$SC/rules" "$SC/due"; : > "$SC/AGENTS.md"
+s() { GODSPEED_ROOT="$SC" node "$HERE/due.js" --godspeed "$SC" "$@"; }
+SECRET="godspeed_0123456789abcdefSECRETVALUE"
+keys() { printf '[{"id":"%s","name":"Backup key","hash":"%s","is_active":true}]' "$1" "$2" > "$SC/.godspeed/api-keys.json"; }
+out="$(s add renew-key --title "Renew the backup key" --from 2026-10-01 --to 2026-10-20 --done-when "new key" --cost "backups stop" --self-check secret-changed 2>&1)"
+contains "secret-changed needs the key's name" "$out" "needs --self-check-arg"
+out="$(s add renew-key --title "Renew the backup key" --from 2026-10-01 --to 2026-10-20 --done-when "new key" --cost "backups stop" --self-check secret-changed --self-check-arg "Backup key" 2>&1)"
+contains "secret-changed is accepted and says what closes it" "$out" "the key called Backup key is replaced"
+out="$(GODSPEED_TODAY=2026-10-05 s check renew-key)"; contains "no such key in the store: not yet, with why" "$out" "has no key called Backup key"
+keys k1 aaaa1111
+out="$(GODSPEED_TODAY=2026-10-06 s check renew-key)"; contains "first look only remembers" "$out" "0 closed"
+out="$(GODSPEED_TODAY=2026-10-07 s check renew-key)"; contains "unchanged key stays open" "$out" "has not been replaced yet"
+contains "  and still open" "$(GODSPEED_TODAY=2026-10-07 s state)" "OPEN"
+keys k2 bbbb2222
+out="$(GODSPEED_TODAY=2026-10-08 s check renew-key)"; contains "a replaced key closes it" "$out" "closed itself: Renew the backup key"
+contains "  and state says closed" "$(GODSPEED_TODAY=2026-10-08 s state)" "CLOSED   renew-key"
+LEAK="$( { cat "$SC"/notebook/Deadlines/*.md "$SC"/notebook/Timeline/*.md 2>/dev/null; GODSPEED_TODAY=2026-10-08 s state; } | grep -c -e "$SECRET" -e aaaa1111 -e bbbb2222 )"
+check "no key value or stored hash is in a page, a moment or the output" "$LEAK" "0"
+
+out="$(s add reconnect --title "Reconnect Telegram" --from 2026-10-10 --to 2026-10-30 --done-when "works" --cost "no messages" --self-check connection-ok --self-check-arg Slack 2>&1)"
+contains "connection-ok refuses a name the check does not list" "$out" "must name a connection"
+s add reconnect --title "Reconnect Telegram" --from 2026-10-10 --to 2026-10-30 --done-when "works" --cost "no messages" --self-check connection-ok --self-check-arg telegram >/dev/null
+rec() { printf '{"at":"x","day":"%s","connections":{"telegram":%s}}' "$1" "$2" > "$SC/.godspeed/connection-check.json"; }
+out="$(GODSPEED_TODAY=2026-10-12 s check reconnect)"; contains "no record yet: not yet, with why" "$out" "has not looked at Telegram yet"
+rec 2026-10-12 '{"set_up":true,"ok":false,"kind":"sign-in","failing_since":"2026-10-12","told":true}'
+out="$(GODSPEED_TODAY=2026-10-12 s check reconnect)"; contains "a failing record: not yet" "$out" "not working"
+rec 2026-10-09 '{"set_up":true,"ok":true}'
+out="$(GODSPEED_TODAY=2026-10-12 s check reconnect)"; contains "a working record from before the window: not yet" "$out" "before this window opened"
+s add reconnect-opening --title "Reconnect on opening day" --from 2026-10-10 --to 2026-10-30 --done-when "works" --cost "no messages" --self-check connection-ok --self-check-arg telegram >/dev/null
+rec 2026-10-10 '{"set_up":true,"ok":true}'
+out="$(GODSPEED_TODAY=2026-10-12 s check reconnect-opening)"; contains "a working record from the day the window opens closes it" "$out" "closed itself: Reconnect on opening day"
+rec 2026-10-13 '{"set_up":true,"ok":true}'
+out="$(GODSPEED_TODAY=2026-10-13 s check reconnect)"; contains "a working record from inside the window closes it" "$out" "closed itself: Reconnect Telegram"
+s add reconnect-mailbox --title "Reconnect the mailbox" --from 2026-10-10 --to 2026-10-30 --done-when "works" --cost "no mail" --self-check connection-ok --self-check-arg agentmail >/dev/null
+s add reconnect-phone --title "Reconnect phone health" --from 2026-10-10 --to 2026-10-30 --done-when "works" --cost "no health data" --self-check connection-ok --self-check-arg "the phone's health data" >/dev/null
+printf '{"day":"2026-10-13","connections":{"agentmail":{"set_up":true,"ok":true},"phone":{"set_up":true,"ok":true}}}' > "$SC/.godspeed/connection-check.json"
+out="$(GODSPEED_TODAY=2026-10-13 s check reconnect-mailbox)"; contains "the own mailbox connection closes from its daily check" "$out" "closed itself: Reconnect the mailbox"
+out="$(GODSPEED_TODAY=2026-10-13 s check reconnect-phone)"; contains "the phone health connection closes from its daily check" "$out" "closed itself: Reconnect phone health"
+
 # --- the deadlines text the kit ships, kept in step with the one inside due.js ----------------------
 # Until 30 October 2026 this text was a README the kit put in the old folder, and due.js brought an
 # unchanged older copy of it in a person's own mission control up to date. It writes nothing there

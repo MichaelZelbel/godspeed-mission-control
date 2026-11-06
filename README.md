@@ -26,6 +26,18 @@ A new release comes out most weeks. I write about what my AI does for me and wha
 
 Version 2 is the current edition. The install lines on this page install the current public version, which is the branch `beta` of this repository; `main` is where the work goes on, and a change merged into it reaches nobody until the next version is released. The installers set up a new, separate folder. They do not move an existing version 1 Godspeed folder or your Menerio account.
 
+## New in 2.0.0-beta.18
+
+Your phone's health data reaches your server, and a tracker can count a kind of mail.
+
+- **Health data from your phone, on a server install.** Set the iPhone app Health Auto Export to send its data to a private address (a REST API automation, JSON format) and your server keeps it as day records: steps, distance, energy, food, sleep, weight and workouts. Your morning briefing and your health talks read them. In **Settings**, **Health data from your phone** shows the address to paste into the app, once you are signed in on your server's https web address, and a button that makes a new address and stops the old one at once. A server without an https address says it needs one first, and a Windows or Mac notebook says the phone needs the server install. Where a phone value and a CSV value exist for the same day and measurement, the one written last is used. The raw uploads stay on the server for 30 days, are never synced or backed up, and neither the address nor your health values appear in the logs.
+- **Bring history over from another receiver.** `health import FOLDER` builds the same day records from the old lines of a receiver you used before. On Docker, copy the folder into the volume and run `docker exec -it --user hermes godspeed node /opt/godspeed/kit/notebook/bin/godspeed.mjs health import <folder>`.
+- **The daily connection check watches the phone.** After the first upload has arrived, the check reads when the last one came. If your phone has sent no health data for 36 hours, you get one message and a deadline that closes itself with the next upload. It reads a note kept on the server and never calls your phone.
+- **A tracker can count a kind of mail.** Tell your assistant in the chat which senders and subject words to count, for example shop orders or replies to applications. It asks once, with the number from the last 30 days, and saves the rule when you say yes. From then on a daily routine, **Mail counts** (04:30, listed in **Settings**, **Routines** with its own Pause switch), adds one entry for each matching mail on the day it arrived, and never counts one twice. It reads only the sender, the subject and the date, never the text of a mail. You can change or remove the rule by asking again; entries already counted stay. If the mail connection is missing or refused, nothing is counted and the daily connection check tells you.
+- **A refused oversized phone upload no longer leaves a connection open on the server.**
+
+Updating keeps your folder, notes and settings.
+
 ## New in 2.0.0-beta.17
 
 A plain yes is enough, and Godspeed tells you when a connection needs your sign-in.
