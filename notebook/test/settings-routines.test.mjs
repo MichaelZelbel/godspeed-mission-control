@@ -28,6 +28,9 @@ function fakeHermes(home){
  return {run,calls,jobs:read,write};
 }
 async function withGoal(t,{device='pc'}={}){
+ // These tests are about a computer. The check's server source (the disk) must not come from the environment the tests run in:
+ // the installed image sets GODSPEED_REVISION, which makes every install a server and the daily connection check always wanted.
+ for(const name of ['GODSPEED_REVISION','GODSPEED_WEB_ADDRESS']){const was=process.env[name];delete process.env[name];t.after(()=>{if(was===undefined)delete process.env[name];else process.env[name]=was;});}
  const root=temporary(t),home=path.join(root,'.hermes-home');installStarter(root);fs.mkdirSync(home,{recursive:true});fs.writeFileSync(path.join(home,'config.yaml'),'model:\n  default: x\n');
  const store=new Store(root,{device}),hermes=fakeHermes(home),scheduler=new NativeScheduler(store,{home,executable:'hermes',device,run:hermes.run});
  await scheduler.configure({goal:'Run a fictional 10k',timezone:'Europe/Berlin'});
@@ -206,6 +209,9 @@ test('two queued notices are said one in each run',{skip:!['python','python3'].s
 const noMail=t=>{const was=process.env.GODSPEED_MAIL_HOME,dir=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-no-mail-'));process.env.GODSPEED_MAIL_HOME=dir;t.after(()=>{if(was===undefined)delete process.env.GODSPEED_MAIL_HOME;else process.env.GODSPEED_MAIL_HOME=was;fs.rmSync(dir,{recursive:true,force:true});});};
 test('the daily connection check is listed with its switch, paused until a connection is set up',async t=>{
  noMail(t);
+ // Run as the installed image runs: its environment says this is a server. withGoal must take that away, because this test is about a computer.
+ const restore=[];for(const [name,value] of [['GODSPEED_REVISION','0123456789abcdef0123456789abcdef01234567'],['GODSPEED_WEB_ADDRESS','https://notes.example.test']]){restore.push([name,process.env[name]]);process.env[name]=value;}
+ t.after(()=>{for(const [name,was] of restore){if(was===undefined)delete process.env[name];else process.env[name]=was;}});
  const {root,home,store,hermes,scheduler,job}=await withGoal(t);
  scheduler.lastTick=0;await scheduler.tick();
  const made=job(CONNECTION_JOB);assert.ok(made,'made beside the starting routines');
