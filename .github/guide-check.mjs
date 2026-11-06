@@ -180,7 +180,7 @@ function selfTest() {
     const mapFile = join(repo, ".github", "guide-map.json");
     const writeMap = (start) => put(".github/guide-map.json", JSON.stringify({ guide: "https://example.invalid/guide/", since: start, ignore: ["**/*.test.*", "docs/**", ".github/**"], pages: { alpha: ["app/**"], beta: ["skill/x/**"] } }));
     writeMap(since);
-    const run = () => check({ repo, mapFile });
+    const run = () => check({ repo, mapFile, eventName: "push" });
     const open = () => run().open.map((o) => o.slug);
 
     expect("nothing changed since the start: no page is open", open(), []);
