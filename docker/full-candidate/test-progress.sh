@@ -21,9 +21,9 @@ server_test_failure_summary() {
 
 # The image's server-test run: every test has SERVER_TEST_EACH_LIMIT_MS and the whole run SERVER_TEST_OVERALL_LIMIT seconds, so a hang
 # ends with the test's name instead of silently using up the job (6 November 2026: 35 minutes of nothing). The limits are variables
-# only so that a test can use short ones; the defaults are the real ones. SERVER_TEST_DOCKER is the docker command (a test's stand-in).
+# only so that a test can use short ones; the TAP reporter is asked for by name because Node's default is the spec reporter on a terminal; the defaults are the real ones. SERVER_TEST_DOCKER is the docker command (a test's stand-in).
 run_server_tests() { # <container> <evidence log>
   "${SERVER_TEST_DOCKER:-docker}" exec -e GODSPEED_ORIGINAL_RUNTIME=off -w /opt/godspeed/kit/notebook "$1" \
-    sh -c "timeout ${SERVER_TEST_OVERALL_LIMIT:-1800} node scripts/run-tests.mjs --test-timeout=${SERVER_TEST_EACH_LIMIT_MS:-180000} test/*.test.mjs" 2>&1 \
+    sh -c "timeout ${SERVER_TEST_OVERALL_LIMIT:-1800} node scripts/run-tests.mjs --test-reporter=tap --test-timeout=${SERVER_TEST_EACH_LIMIT_MS:-180000} test/*.test.mjs" 2>&1 \
     | server_test_progress "$2"
 }

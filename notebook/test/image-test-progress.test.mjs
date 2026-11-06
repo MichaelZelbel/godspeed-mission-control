@@ -1,4 +1,4 @@
-import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import {spawn} from 'node:child_process';import {fileURLToPath} from 'node:url';
+import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import {spawn,spawnSync} from 'node:child_process';import {fileURLToPath} from 'node:url';
 
 // The image's server-test step (docker/full-candidate/test.sh) shows each failure at the moment it is printed, so a test that
 // fails and is followed by a hang still names itself. A stand-in for `docker exec` prints a TAP failure and then hangs.
@@ -85,7 +85,7 @@ test('the real server-test call asks for exactly 1800 seconds overall and 180000
  const result=await callRun(dir,{SERVER_TEST_OVERALL_LIMIT:'',SERVER_TEST_EACH_LIMIT_MS:''});
  assert.equal(result.code,0);
  // The glob is expanded by the shell, so what the runner gets is the test files in this folder.
- assert.ok(fs.readFileSync(argv,'utf8').startsWith('scripts/run-tests.mjs --test-timeout=180000 test/'),'the per-test limit is 180000 ms by default');
+ assert.ok(fs.readFileSync(argv,'utf8').startsWith('scripts/run-tests.mjs --test-reporter=tap --test-timeout=180000 test/'),'TAP is asked for by name and the per-test limit is 180000 ms by default');
  const helperText=fs.readFileSync(helper,'utf8');
  assert.ok(helperText.includes('timeout ${SERVER_TEST_OVERALL_LIMIT:-1800} node'),'the overall limit defaults to 1800 seconds');
  assert.ok(helperText.includes('--test-timeout=${SERVER_TEST_EACH_LIMIT_MS:-180000}'),'the per-test limit defaults to 180000 ms');
@@ -116,4 +116,29 @@ test('a run that fails before any test result (docker exec: the container is not
  // An empty or missing kept log still says something.
  const empty=await step('server_test_failure_summary "$2.missing"');
  assert.match(empty.out,/no output was kept/);
+});
+
+test('the real runner on one tiny test, through the real progress stage, shows its summary and exits 0, also when Node thinks it is on a terminal',async t=>{
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-image-real-'));t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
+ // The container's notebook folder in miniature: the real runner script and one tiny passing test.
+ fs.mkdirSync(path.join(dir,'scripts'));fs.mkdirSync(path.join(dir,'test'));fs.mkdirSync(path.join(dir,'bin'));
+ fs.copyFileSync(fileURLToPath(new URL('../scripts/run-tests.mjs',import.meta.url)),path.join(dir,'scripts','run-tests.mjs'));
+ fs.writeFileSync(path.join(dir,'test','tiny.test.mjs'),"import test from 'node:test';import assert from 'node:assert/strict';test('tiny',()=>{assert.equal(1,1);});\n");
+ fs.writeFileSync(path.join(dir,'bin','docker'),'#!/bin/sh\nshift\nwhile [ "$1" != sh ]; do shift; done\nshift\nexec sh "$@"\n',{mode:0o755});
+ const slash=value=>value.split(path.sep).join('/'),log=slash(path.join(dir,'server-tests.log'));
+ const command='cd '+slash(dir)+' && set -o pipefail && . '+helper+' && run_server_tests godspeed-image-verification '+log;
+ const env={...process.env,SERVER_TEST_DOCKER:slash(path.join(dir,'bin','docker'))};
+ const piped=spawnSync(bash,['-c',command],{encoding:'utf8',env});
+ assert.equal(piped.status,0,piped.stdout+piped.stderr);
+ for(const line of ['# tests 1','# pass 1','# fail 0'])assert.ok(piped.stdout.includes(line),line+' in '+piped.stdout);
+ assert.match(fs.readFileSync(log,'utf8'),/^ok 1 - /m,'the whole TAP output is kept');
+ // The same with a pseudo-terminal as the test run's stdout (what `docker exec -t` gives), where Node's default reporter is spec:
+ // only the named TAP reporter keeps the summary lines. util-linux `script` makes the terminal.
+ const hasScript=spawnSync('script',['--version'],{encoding:'utf8'}).status===0;
+ if(hasScript){
+  fs.writeFileSync(path.join(dir,'bin','docker-tty'),['#!/bin/sh','shift','while [ "$1" != sh ]; do shift; done','shift','exec script -qefc "$2" /dev/null',''].join(String.fromCharCode(10)),{mode:0o755});
+  const tty=spawnSync(bash,['-c',command],{encoding:'utf8',env:{...env,SERVER_TEST_DOCKER:slash(path.join(dir,'bin','docker-tty'))}});
+  assert.equal(tty.status,0,tty.stdout+tty.stderr);
+  for(const line of ['# tests 1','# pass 1','# fail 0'])assert.ok(tty.stdout.includes(line),line+' on a terminal in '+tty.stdout);
+ }
 });
