@@ -9,6 +9,7 @@ export const ROUTINE_FOLDER='routines/remember-what-you-said';
 const MACHINE_BANNER=/^\[(?:[A-Z][A-Z0-9 ]{2,}|(?:Cron|Webhook) delivery\b)/;
 const ISO_DAY=/^\d{4}-\d{2}-\d{2}$/;
 const CREDENTIAL=/(?:password|passphrase|api[ _-]?key|secret|token|private[ _-]?key|credential)/i;
+const INCOMPLETE=/\b(?:plan(?:ning)?|promise(?:d)?|intend(?:ing)?|aim(?:ing)?|hop(?:e|ing)|want|need|try(?:ing)?|going|will|tomorrow|later)\b|\bnext\s+(?:week|month|year)\b/i;
 const FORBIDDEN=/(?:\b(?:file name|filename|software setting|bug)\b|\b(?:employer|client)\s+(?:company|name)\b)/i;
 const normal=s=>String(s??'').normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').trim();
 const words=s=>normal(s).split(' ').filter(Boolean);
@@ -24,6 +25,11 @@ export function redactionTerms({home=os.homedir(),env=process.env}={}){
  return [...new Set(terms.filter(t=>t.length>=3).map(t=>t.toLowerCase()))];
 }
 const redacted=(text,terms)=>terms.some(term=>String(text).toLowerCase().includes(term));
+const calendarDay=value=>{
+ if(typeof value!=='string'||!ISO_DAY.test(value))return false;
+ const date=new Date(value+'T00:00:00.000Z');
+ return !Number.isNaN(date.getTime())&&date.toISOString().slice(0,10)===value;
+};
 export function qualifiesMessage(row,{notBefore,consumed=new Set()}={}){
  if(!row||typeof row.id!=='string'||typeof row.text!=='string'||consumed.has(row.id))return {ok:false,reason:'already-read-or-invalid'};
  const text=row.text.trim(),at=String(row.at||'');
@@ -72,6 +78,8 @@ export function modelRequest({messages,query,root,terms=[],deadlines=[]}){
 const itemCitation=(item,messages)=>{const c=item?.citation;if(!c||typeof c.id!=='string'||typeof c.quote!=='string'||!c.quote)return null;const source=messages.find(m=>m.id===c.id);return source&&source.text.includes(c.quote)?{id:c.id,quote:c.quote,day:source.at.slice(0,10)}:null;};
 const subjectKey=name=>normal(name);
 const safeName=(name,terms=[])=>typeof name==='string'&&name.trim()&&name.length<=160&&!CREDENTIAL.test(name)&&!FORBIDDEN.test(name)&&!/\b(?:employer|client)\b/i.test(name)&&!redacted(name,terms);
+const credential=(...values)=>values.some(value=>CREDENTIAL.test(String(value||'')));
+const completionEvidence=(deadline,quote)=>typeof deadline?.doneWhen==='string'&&normal(deadline.doneWhen)&&normal(quote).includes(normal(deadline.doneWhen))&&!INCOMPLETE.test(quote);
 function knownSubjects(query,newPeople,newThings,terms){
  const out=new Map([['self',{type:'self',id:null,name:'self'}]]);
  for(const row of query?query.rows('contacts'):[])if(safeName(row.name,terms))out.set(subjectKey(row.name),{type:'contact',id:row.id,name:row.name});
@@ -100,12 +108,12 @@ export function validateResponse(answer,{messages,query,root,terms=[],deadlines=
  for(const [items,target] of [[people,newPeople],[things,newThings]])for(const item of items){if(safeName(item?.name,terms))target.push({name:item.name.trim()});else refusals.push({reason:'private-or-invalid'});}
  const subjects=knownSubjects(query,newPeople,newThings,terms),fields=fieldList(root);
  for(const item of facts){const citation=itemCitation(item,messages),subject=subjects.get(subjectKey(item?.subject));const kind=typeof item?.kind==='string'?item.kind.trim():'';const value=typeof item?.value==='string'?item.value.trim():'';const date=item?.date||citation?.day;
-  if(!citation){refusals.push({reason:'quote',item});continue;}if(!subject){refusals.push({reason:'unknown-subject',item,citation});continue;}if(!safeName(item.subject,terms)||!safeName(subject.name,terms)||!kind||!value||!ISO_DAY.test(date)||CREDENTIAL.test(value)||FORBIDDEN.test(value)||/\b(?:employer|client)\b/i.test(kind)||redacted(value+' '+citation.quote,terms)){refusals.push({reason:'private-or-invalid',item,citation});continue;}
+  if(!citation){refusals.push({reason:'quote',item});continue;}if(!subject){refusals.push({reason:'unknown-subject',item,citation});continue;}if(!safeName(item.subject,terms)||!safeName(subject.name,terms)||!kind||!value||!calendarDay(date)||credential(kind,value,citation.quote)||FORBIDDEN.test(value)||/\b(?:employer|client)\b/i.test(kind)||redacted(value+' '+citation.quote,terms)){refusals.push({reason:'private-or-invalid',item,citation});continue;}
   const fact={type:'fact',subject,kind:fields.canonical(kind),value,date,cardinality:item.one_or_many==='one'?'one':'many',confidence:item.confidence==='likely'?'likely':'certain',citation};
   if(currentFact(query,root,subject,fact.kind,value,fields)){refusals.push({reason:'duplicate',item,citation});continue;}accepted.push(fact);
  }
- for(const item of events){const citation=itemCitation(item,messages),day=item?.day,what=typeof item?.what==='string'?item.what.trim():'',participants=Array.isArray(item.participants)?item.participants:[];if(!citation){refusals.push({reason:'quote',item});continue;}if(!what||!ISO_DAY.test(day)||CREDENTIAL.test(what)||FORBIDDEN.test(what)||redacted(what+' '+citation.quote,terms)||participants.some(name=>!safeName(name,terms))){refusals.push({reason:'private-or-invalid',item,citation});continue;}
-  const requested=typeof item.deadline_id==='string'?item.deadline_id:null,deadline=deadlines.find(d=>d?.slug===requested),deadline_id=deadline&&typeof deadline.doneWhen==='string'&&normal(deadline.doneWhen)&&normal(citation.quote).includes(normal(deadline.doneWhen))?requested:null;if(requested&&!deadline){refusals.push({reason:'unknown-deadline',item,citation});continue;}if(requested&&!deadline_id){refusals.push({reason:'deadline-evidence',item,citation});continue;}
+ for(const item of events){const citation=itemCitation(item,messages),day=item?.day,what=typeof item?.what==='string'?item.what.trim():'',participants=Array.isArray(item.participants)?item.participants:[];if(!citation){refusals.push({reason:'quote',item});continue;}if(!what||!calendarDay(day)||credential(what,citation.quote)||FORBIDDEN.test(what)||redacted(what+' '+citation.quote,terms)||participants.some(name=>!safeName(name,terms))){refusals.push({reason:'private-or-invalid',item,citation});continue;}
+  const requested=typeof item.deadline_id==='string'?item.deadline_id:null,deadline=deadlines.find(d=>d?.slug===requested),deadline_id=completionEvidence(deadline,citation.quote)?requested:null;if(requested&&!deadline){refusals.push({reason:'unknown-deadline',item,citation});continue;}if(requested&&!deadline_id){refusals.push({reason:'deadline-evidence',item,citation});continue;}
   const event={type:'event',what,day,participants:participants.map(s=>s.trim()),citation,deadline_id};if(sameEvent(query,root,event)){refusals.push({reason:'duplicate',item,citation});continue;}accepted.push(event);
  }
  const used=new Set(accepted.flatMap(effect=>effect.type==='fact'?[effect.subject.name]:effect.participants).map(subjectKey));
@@ -144,7 +152,11 @@ function consume(root,state,piece,receipt,now){const log=logFile(root,piece,now)
 function receiptMessages(receipt){return Array.isArray(receipt.message_ids)?receipt.message_ids.filter(id=>typeof id==='string').map(id=>({id})):[];}
 function completedReceipts(root){const runs=rootPath(root,'runs');let days=[];try{days=fs.readdirSync(runs);}catch{}return days.flatMap(day=>{try{return fs.readdirSync(path.join(runs,day)).filter(n=>n.endsWith('.json')).map(n=>safeJson(path.join(runs,day,n),null)).filter(r=>r?.id&&receiptMessages(r).length&&r.plan);}catch{return [];}});}
 function refusalReceipt(root,row,now){const file=rootPath(root,'runs',dayOf(now),'refused-'+hash([row.id,row.reason]).slice(0,18)+'.json');mkdir(file);if(!fs.existsSync(file))writeJson(file,{at:now.toISOString(),message_id:row.id,reason:row.reason});}
-const safeRefusals=refusals=>refusals.map(({reason,citation})=>({reason,...(citation?{message_id:citation.id,quote:citation.quote}:{})}));
+const safeRefusals=refusals=>refusals.map(({reason,citation})=>{
+ const receipt={reason};
+ if(citation){receipt.message_id=citation.id;if(!credential(citation.quote))receipt.quote=citation.quote;}
+ return receipt;
+});
 
 export async function rememberWhatYouSaid({root,store=null,query=null,domains=null,model,due=async()=>true,now=new Date(),terms=redactionTerms(),deadlines=[],notebook=!!store}={}){
  if(!root||typeof model!=='function')throw Error('A workspace and model request are required');
