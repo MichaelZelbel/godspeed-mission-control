@@ -122,8 +122,10 @@ key is refused, it tells you once and sets a deadline, and that deadline closes 
 morning the connection works again. If the phone has sent no health data for 36 hours, it tells you
 once and sets a deadline; the next accepted upload closes it. Any other failure is reported only
 when it happens two mornings in a row. It also reads Hermes' local jobs list and tells you once
-when an enabled routine missed its time or failed twice in a row; a successful run closes that
-notice. When everything works, it sends nothing. It runs no AI of its own.
+when an enabled routine on an interval or a calendar schedule Godspeed creates missed its time, or
+failed twice in a row; a successful run closes that notice. Other Hermes cron schedules do not
+create a missed-run notice, though their repeated failures still do. When everything works, it
+sends nothing. It runs no AI of its own.
 Rhythm: it joins the other seven at the notebook's next scheduling round after your first goal.
 Every day at 05:00 your time, earlier when a morning brief set before 05:30 needs it first.
 It starts running when Telegram or Gmail is connected, a tracker has a mail rule, Health Auto

@@ -150,7 +150,7 @@ test('a good run closes the spell and a later failure is told again',t=>{
 
 test('paused, switched off and made-today routines say nothing',t=>{
  const f=fixture(t);
- check(f,[daily('off',{enabled:false}),daily('paused',{paused_at:ago(9)}),daily('new',{last_run_at:null,last_status:null,created_at:ago(2)}),failing('offfail',2,{enabled:false})]);
+ check(f,[daily('off',{enabled:false}),daily('paused',{paused_at:ago(9)}),failing('state-paused',2,{state:'paused',paused_at:null}),daily('new',{last_run_at:null,last_status:null,created_at:ago(2)}),failing('offfail',2,{enabled:false})]);
  assert.equal(said(f).length,0);
 });
 
