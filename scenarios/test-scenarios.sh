@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The gate for the four proving scenarios (scenarios/README.md).
+# The gate for the proving scenarios (scenarios/README.md).
 #
 # A scenario's acting part needs a throwaway machine, a stage to install and, for two of them, a key
 # of its own; its CHECKING part needs nothing but files, and that is where its judgement lives. So
@@ -3340,6 +3340,81 @@ copy "$DF/good" "$DF/never-planted"
 sed -i 's/^run-log present/run-log gone/' "$DF/never-planted/planted.txt"
 refuses 'an old file that was never there' disk-filling "$DF/never-planted" 'was not there before the cleanup'
 
+# =========================================================== the scenarios of beta.20
+section 'workouts from Hevy'
+WH=$TMP/wh
+wh_good() {
+  local f=$1
+  rm -rf "$f"; mkdir -p "$f"
+  printf '{"fixture":"local-hevy","refused":true}\n' >"$f/setup.json"
+  printf '{"accepted":false}\n{"accepted":true}\n' >"$f/fixture.log"
+  printf 'clean\n' >"$f/key-scan.txt"
+  for platform in docker native; do
+    printf '{"refusedKeyRetained":false,"routine":{"name":"Workouts from Hevy","minute":17},"initial":[{"id":"harbor-strength"},{"id":"canal-pull"}],"after":[{"id":"harbor-strength","weight_kg":45}]}\n' >"$f/$platform.json"
+  done
+}
+wh_good "$WH/good"
+passes 'both installs import, update and delete made-up Hevy workouts' workouts-from-hevy "$WH/good" 'Docker and Linux each kept Harbor Strength updated'
+copy "$WH/good" "$WH/no-routine"; sed -i 's/"minute":17/"minute":0/' "$WH/no-routine/native.json"
+refuses 'a zero-minute import routine' workouts-from-hevy "$WH/no-routine" 'does not prove both initial workouts'
+copy "$WH/good" "$WH/deleted-stays"; sed -i 's/"after":\[.*\]/"after":[{"id":"harbor-strength","weight_kg":45},{"id":"canal-pull"}]}/' "$WH/deleted-stays/docker.json"
+refuses 'a deleted workout retained' workouts-from-hevy "$WH/deleted-stays" 'does not prove both initial workouts'
+copy "$WH/good" "$WH/key-leaked"; printf '/tmp/leak\n' >"$WH/key-leaked/key-scan.txt"
+refuses 'a key outside its permitted setting' workouts-from-hevy "$WH/key-leaked" 'does not prove both initial workouts'
+
+section 'day becomes facts'
+DF2=$TMP/df2
+facts_good() {
+  local f=$1
+  rm -rf "$f"; mkdir -p "$f"
+  printf '{"messages":["move-1","doctor-1","machine-1","track-1"]}\n' >"$f/archive.json"
+  printf '{"claims":[{"value":"Berlin"}]}\n' >"$f/before.json"
+  printf '{"name":"Remember what you said","cron":"40 3 * * *","exit":0}\n' >"$f/routine.json"
+  printf '{"claims":[{"value":"Berlin","valid_to":"2026-11-01"},{"value":"Hamburg","valid_from":"2026-11-01","source_id":"move-1"},{"value":"Dr. Lang","valid_from":"2026-11-01","source_id":"doctor-1"}],"fact_slots":[],"contacts":[],"entities":[],"moments":[]}\n' >"$f/after.json"
+  cp "$f/after.json" "$f/second.json"
+}
+facts_good "$DF2/good"
+passes 'dated facts are filed once and excluded messages file nothing' day-becomes-facts "$DF2/good" 'Berlin was closed'
+copy "$DF2/good" "$DF2/wrong-time"; sed -i 's/40 3/41 3/' "$DF2/wrong-time/routine.json"
+refuses 'a remembered-facts routine at the wrong time' day-becomes-facts "$DF2/wrong-time" 'kept facts do not show'
+copy "$DF2/good" "$DF2/second-changed"; sed -i 's/"moments":\[\]/"moments":[{"source_id":"later"}]/' "$DF2/second-changed/second.json"
+refuses 'a second run that writes another record' day-becomes-facts "$DF2/second-changed" 'kept facts do not show'
+copy "$DF2/good" "$DF2/excluded"; sed -i 's/"entities":\[\]/"entities":[{"source_id":"machine-1"}]/' "$DF2/excluded/after.json"; cp "$DF2/excluded/after.json" "$DF2/excluded/second.json"
+refuses 'a machine prompt filed as a fact' day-becomes-facts "$DF2/excluded" 'kept facts do not show'
+
+section 'Hermes update rollback'
+HU=$TMP/hu
+hermes_good() {
+  local f=$1
+  rm -rf "$f"; mkdir -p "$f"
+  printf '["1.0.0","1.1.0","1.2.0","1.3.0"]\n' >"$f/releases.json"
+  printf '[{"version":"1.1.0","chat":true},{"attempt":"1.2.0","failed_check":"cron list","version":"1.1.0","restarts":2,"chat":true},{"version":"1.1.0","attempted":false}]\n' >"$f/nights.json"
+  printf '[{"version":"1.2.0"}]\n' >"$f/notifications.json"
+  printf 'fixture releases are local\n' >"$f/fixture.log"
+}
+hermes_good "$HU/good"
+passes 'the good release stays, broken release rolls back, and a recent release stays put' hermes-update-rollback "$HU/good" 'kept 1.1.0'
+copy "$HU/good" "$HU/no-rollback"; sed -i 's/"version":"1.1.0","restarts":2/"version":"1.2.0","restarts":2/' "$HU/no-rollback/nights.json"
+refuses 'a broken release left checked out' hermes-update-rollback "$HU/no-rollback" 'does not keep 1.1.0'
+copy "$HU/good" "$HU/two-bells"; printf '[{"version":"1.2.0"},{"version":"1.2.0"}]\n' >"$HU/two-bells/notifications.json"
+refuses 'two update failure notifications' hermes-update-rollback "$HU/two-bells" 'does not keep 1.1.0'
+copy "$HU/good" "$HU/recent-taken"; sed -i 's/"attempted":false/"attempted":true/' "$HU/recent-taken/nights.json"
+refuses 'a three-day-old release taken' hermes-update-rollback "$HU/recent-taken" 'does not keep 1.1.0'
+
+# The two local fixtures are useful without an installation. Their logs must never contain keys.
+HF=$TMP/hevy-fixture; mkdir -p "$HF"; : >"$HF/log"
+node "$ROOT/scenarios/hevy-fixture.mjs" --state "$HF/state" --log "$HF/log" >"$HF/port" & HF_PID=$!
+for _ in $(seq 1 20); do [ -s "$HF/port" ] && break; sleep 0.1; done
+HF_PORT=$(cat "$HF/port")
+HF_BAD=$(curl -s -o /dev/null -w '%{http_code}' -H 'api-key: not-the-key' "http://127.0.0.1:$HF_PORT/v1/workouts")
+HF_GOOD=$(curl -s -H 'api-key: 00000000-0000-4000-8000-000000000001' "http://127.0.0.1:$HF_PORT/v1/workouts")
+node "$ROOT/scenarios/hevy-fixture.mjs" --state "$HF/state" --log "$HF/log" --mutate
+HF_EVENTS=$(curl -s -H 'api-key: 00000000-0000-4000-8000-000000000001' "http://127.0.0.1:$HF_PORT/v1/workouts/events")
+kill "$HF_PID" 2>/dev/null || true
+if [ "$HF_BAD" = 401 ] && grep -q 'harbor-strength' <<<"$HF_GOOD" && grep -q 'canal-pull' <<<"$HF_EVENTS" && ! grep -q '00000000-0000-4000-8000-000000000001' "$HF/log"; then ok 'the local Hevy fixture refuses, changes and redacts'; else bad 'the local Hevy fixture does not refuse, change and redact'; fi
+HFD=$TMP/hermes-fixture
+if node "$ROOT/scenarios/hermes-update-fixture.mjs" --dir "$HFD" >/dev/null && [ "$(git -C "$HFD" tag | wc -l | tr -d '[:space:]')" = 4 ] && grep -q '"healthy":true' "$HFD/release.json"; then ok 'the local Hermes fixture creates four tagged releases'; else bad 'the local Hermes fixture did not create four tagged releases'; fi
+
 # ============================================================ every one of them, the same shape
 section 'every script'
 BASH_SCENARIOS=(settings-on-install night-tidy voice update-keeps-everything
@@ -3348,7 +3423,8 @@ BASH_SCENARIOS=(settings-on-install night-tidy voice update-keeps-everything
   no-video-skills-by-default update-removes-only-unchanged-skills briefing-breaks-a-rule telegram-language
   brief-asked-in-chat talk-prep-honest no-question-he-cannot-judge plain-yes what-was-that connection-check
   phone-health-days incomplete-day phone-goes-quiet mail-count talk-on-talk-day
-  chat-tidy-at-night disk-filling missed-routine deadline-closes-itself)
+  chat-tidy-at-night disk-filling missed-routine deadline-closes-itself
+  workouts-from-hevy day-becomes-facts hermes-update-rollback)
 for file in scenario-lib.sh numbers-lib.sh "${BASH_SCENARIOS[@]/%/.sh}" test-scenarios.sh; do
   if bash -n "$ROOT/scenarios/$file" 2>/dev/null; then
     ok "bash reads scenarios/$file"
