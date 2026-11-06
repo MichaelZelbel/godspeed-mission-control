@@ -20,6 +20,12 @@ export function latestPerDayMetric(rows){
 
 const newest=rows=>rows.reduce((a,b)=>String(b.updated_at)>String(a.updated_at)?b:a);
 const validDay=day=>/^\d{4}-\d{2}-\d{2}$/.test(day)&&new Date(day+'T00:00:00Z').toISOString().slice(0,10)===day;
+const legacyManualDay=(row,timezone)=>{
+ if(row.via!==undefined||row.date_precision!==undefined||row.observed_on!==undefined||Object.hasOwn(row,'source'))return row;
+ const at=new Date(row.observed_at);if(!Number.isFinite(at.getTime()))return row;
+ const observed_on=new Intl.DateTimeFormat('en-CA',{timeZone:timezone,year:'numeric',month:'2-digit',day:'2-digit'}).format(at);
+ return {...row,via:MANUAL_VIA,observed_on,date_precision:'day'};
+};
 const UNKNOWN_STATES=new Set(['may_be_incomplete','not_judged']);
 const AUTOMATIC_STATES=new Set(['settled','complete','legacy']);
 
@@ -47,7 +53,7 @@ export function currentHealth(query,{now=Date.now(),days=7}={}){
    const at=Date.parse(row.observed_at||row.created_at);
    return Number.isFinite(at)&&at<=now&&at>=now-days*86400000;
   };
-  const all=visibleRows(query,'health_observations'),current=all.filter(fresh),observations=latestPerDayMetric(current);
+  const all=visibleRows(query,'health_observations'),current=all.filter(fresh).map(row=>legacyManualDay(row,timezone)),observations=latestPerDayMetric(current);
   const healthByDay=new Map(),phoneUntil=new Map();
   for(const row of observations){
    const day=row.date_precision==='day'&&validDay(row.observed_on)?row.observed_on:null;if(!day)continue;
