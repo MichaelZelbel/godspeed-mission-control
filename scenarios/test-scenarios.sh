@@ -84,6 +84,13 @@ interaction_verdicts() { # <scenario> <folder> <label...>
     fi
   done
 }
+interaction_failure_verdict() { # <scenario> <folder> <label>
+  if grep -Fq "FAIL $1: $3:" "$2/steps.tsv"; then
+    ok "$1 records FAIL for $3"
+  else
+    bad "$1 records no FAIL for $3"
+  fi
+}
 
 # A folder that should pass, so a case for one failure is that folder with one thing changed.
 copy() { # <good folder> <new folder>
@@ -2833,6 +2840,7 @@ refuses 'a connection record in the bell although everything is fine' connection
 copy "$C/good" "$C/two-texts"
 run_json "$C/two-texts" "$(msg broken 'Telegram refused your bot key.')"
 refuses 'two different texts when broken' connection-check "$C/two-texts" 'in 2 different texts'
+interaction_failure_verdict connection-check "$C/two-texts" broken
 copy "$C/good" "$C/silent-when-broken"
 run_json "$C/silent-when-broken"
 printf '{"data":[]}\n' >"$C/silent-when-broken/notifications-broken.json"

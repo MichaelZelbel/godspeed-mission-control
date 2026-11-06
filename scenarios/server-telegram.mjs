@@ -48,7 +48,7 @@ function loadState(){
   catch { return {steps:[],outbox:[],sent:0}; }
 }
 function saveState(value){ write(stateFile(),value); write(path.join(evidence,'run.json'),{steps:value.steps,outbox:value.outbox}); }
-export function captureSent(state,record,label,kind,before=state.sent){
+export function captureSent(state,record,label,before=state.sent){
   for(const sent of (record.sent ?? []).slice(before)) state.outbox.push({label,kind:'sendMessage',chat_id:sent.chat_id,text:sent.text,buttons:sent.buttons ?? [],accepted:true});
   state.sent=(record.sent ?? []).length;
 }
@@ -62,7 +62,7 @@ async function capture(label,kind,action){
     // before claiming the installed route did not answer.
     await sleep(2500);
     const record=copyRecord();
-    captureSent(state,record,label,kind,before);
+    captureSent(state,record,label,before);
     state.steps.push({label,kind,success:true,request_start:requestStart,request_end:(record.requests ?? []).length});
     saveState(state);
   } catch(error) {
@@ -142,8 +142,7 @@ async function mark(){
   requireEvidence();
   const label=option('--label'), kind=optional('--kind') ?? 'run';
   const state=loadState(), record=copyRecord(), start=state.sent;
-  for(const sent of (record.sent ?? []).slice(start)) state.outbox.push({label,kind:'sendMessage',chat_id:sent.chat_id,text:sent.text,buttons:sent.buttons ?? [],accepted:true});
-  state.sent=(record.sent ?? []).length;
+  captureSent(state,record,label,start);
   state.steps.push({label,kind,success:true,request_end:(record.requests ?? []).length});
   saveState(state);
 }
