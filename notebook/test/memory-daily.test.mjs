@@ -36,9 +36,9 @@ test('a failed model piece remains eligible for the next night',async t=>{
 test('a refused deadline leaves its prepared piece unread and recovery does not ask the model again',async t=>{
  const root=workspace(t),store=new Store(root),query=new QueryService(store),domains=new Domains(query),row={id:'done',at:'2026-11-02T12:00:00Z',text:'I filed the tax return today; keep this private detail out of the receipt'};archive(root,[row]);
  const reply={facts:[{subject:'self',kind:'home-city',value:'Hamburg',date:'2026-11-02',citation:{id:'done',quote:'I filed the tax return today'}}],events:[{what:'Filed the tax return',day:'2026-11-02',deadline_id:'tax',citation:{id:'done',quote:'I filed the tax return today'}}]};let calls=0;
- const first=await rememberWhatYouSaid({root,store,query,domains,notebook:true,now,deadlines:[{slug:'tax',title:'Tax return',doneWhen:'It is filed'}],model:async()=>{calls++;return reply;},due:async()=>false});
+ const first=await rememberWhatYouSaid({root,store,query,domains,notebook:true,now,deadlines:[{slug:'tax',title:'Tax return',doneWhen:'I filed the tax return today'}],model:async()=>{calls++;return reply;},due:async()=>false});
  assert.equal(first.completed,0);assert.equal(query.rows('claims').length,0);assert.deepEqual(JSON.parse(fs.readFileSync(path.join(root,'routines','remember-what-you-said','state.json'))).consumed,[]);
  assert.doesNotMatch(fs.readFileSync(path.join(root,'routines','remember-what-you-said','pending',fs.readdirSync(path.join(root,'routines','remember-what-you-said','pending'))[0]),'utf8'),/private detail/,'the pending receipt retains IDs and quotes only');
- const second=await rememberWhatYouSaid({root,store,query,domains,notebook:true,now,deadlines:[{slug:'tax',title:'Tax return',doneWhen:'It is filed'}],model:async()=>{calls++;return reply;},due:async()=>true});
+ const second=await rememberWhatYouSaid({root,store,query,domains,notebook:true,now,deadlines:[{slug:'tax',title:'Tax return',doneWhen:'I filed the tax return today'}],model:async()=>{calls++;return reply;},due:async()=>true});
  assert.equal(second.completed,1);assert.equal(calls,1);assert.equal(query.rows('claims').length,1);
 });

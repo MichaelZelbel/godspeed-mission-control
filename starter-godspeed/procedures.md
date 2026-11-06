@@ -175,7 +175,7 @@ The installer can start a separate notebook service at sign-in on Windows or thr
 
 Once private file synchronization is explicitly configured, the notebook checks it once a minute and after a durable file change. Automatic, manual and notebook connector requests share one synchronization worker. Slow Git network requests run in that worker without holding the local writer lock. Local commits and incoming changes retain the lock, and edits made during upload remain pending for the next cycle. Stopping the notebook terminates the synchronization process tree. File conflicts keep the original and both edited versions; a binary file retains exact bytes and can be resolved by choosing a saved version.
 
-These are installation mechanisms, not adopted personal goals. Personal routines are the eight first-goal routines above, the nightly cleanup scheduled before a goal, and the ones you add in the chat or under Settings > Routines; their owner, next run, last run and pause state remain visible there. No routine is claimed tested merely because this description is packaged.
+These are installation mechanisms, not adopted personal goals. Personal routines are the nine first-goal routines above, the nightly cleanup scheduled before a goal, and the ones you add in the chat or under Settings > Routines; their owner, next run, last run and pause state remain visible there. No routine is claimed tested merely because this description is packaged.
 
 ## Goal decisions and approved local work
 

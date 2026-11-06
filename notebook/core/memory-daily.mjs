@@ -71,11 +71,11 @@ export function modelRequest({messages,query,root,terms=[],deadlines=[]}){
 }
 const itemCitation=(item,messages)=>{const c=item?.citation;if(!c||typeof c.id!=='string'||typeof c.quote!=='string'||!c.quote)return null;const source=messages.find(m=>m.id===c.id);return source&&source.text.includes(c.quote)?{id:c.id,quote:c.quote,day:source.at.slice(0,10)}:null;};
 const subjectKey=name=>normal(name);
-const safeName=name=>typeof name==='string'&&name.trim()&&name.length<=160&&!CREDENTIAL.test(name)&&!FORBIDDEN.test(name);
-function knownSubjects(query,newPeople,newThings){
+const safeName=(name,terms=[])=>typeof name==='string'&&name.trim()&&name.length<=160&&!CREDENTIAL.test(name)&&!FORBIDDEN.test(name)&&!/\b(?:employer|client)\b/i.test(name)&&!redacted(name,terms);
+function knownSubjects(query,newPeople,newThings,terms){
  const out=new Map([['self',{type:'self',id:null,name:'self'}]]);
- for(const row of query?query.rows('contacts'):[])if(row.name)out.set(subjectKey(row.name),{type:'contact',id:row.id,name:row.name});
- for(const row of query?query.rows('entities'):[])if(row.name)out.set(subjectKey(row.name),{type:'entity',id:row.id,name:row.name});
+ for(const row of query?query.rows('contacts'):[])if(safeName(row.name,terms))out.set(subjectKey(row.name),{type:'contact',id:row.id,name:row.name});
+ for(const row of query?query.rows('entities'):[])if(safeName(row.name,terms))out.set(subjectKey(row.name),{type:'entity',id:row.id,name:row.name});
  for(const row of newPeople)out.set(subjectKey(row.name),{type:'new-person',name:row.name});
  for(const row of newThings)out.set(subjectKey(row.name),{type:'new-thing',name:row.name});
  return out;
@@ -96,18 +96,20 @@ export function validateResponse(answer,{messages,query,root,terms=[],deadlines=
  if(['people','things','facts','events'].some(key=>data[key]!==undefined&&!Array.isArray(data[key])))return {plan:null,refusals:[{reason:'model-shape'}]};
  const people=data.people||[],things=data.things||[],facts=data.facts||[],events=data.events||[];
  if([people,things,facts,events].some(a=>a.length>100))return {plan:null,refusals:[{reason:'model-shape'}]};
- const newPeople=people.filter(x=>safeName(x?.name)).map(x=>({name:x.name.trim()})),newThings=things.filter(x=>safeName(x?.name)).map(x=>({name:x.name.trim()}));
- const subjects=knownSubjects(query,newPeople,newThings),fields=fieldList(root),accepted=[],refusals=[];
+ const accepted=[],refusals=[],newPeople=[],newThings=[];
+ for(const [items,target] of [[people,newPeople],[things,newThings]])for(const item of items){if(safeName(item?.name,terms))target.push({name:item.name.trim()});else refusals.push({reason:'private-or-invalid'});}
+ const subjects=knownSubjects(query,newPeople,newThings,terms),fields=fieldList(root);
  for(const item of facts){const citation=itemCitation(item,messages),subject=subjects.get(subjectKey(item?.subject));const kind=typeof item?.kind==='string'?item.kind.trim():'';const value=typeof item?.value==='string'?item.value.trim():'';const date=item?.date||citation?.day;
-  if(!citation){refusals.push({reason:'quote',item});continue;}if(!subject){refusals.push({reason:'unknown-subject',item,citation});continue;}if(!kind||!value||!ISO_DAY.test(date)||CREDENTIAL.test(value)||FORBIDDEN.test(value)||/\b(?:employer|client)\b/i.test(kind)||redacted(value+' '+citation.quote,terms)){refusals.push({reason:'private-or-invalid',item,citation});continue;}
+  if(!citation){refusals.push({reason:'quote',item});continue;}if(!subject){refusals.push({reason:'unknown-subject',item,citation});continue;}if(!safeName(item.subject,terms)||!safeName(subject.name,terms)||!kind||!value||!ISO_DAY.test(date)||CREDENTIAL.test(value)||FORBIDDEN.test(value)||/\b(?:employer|client)\b/i.test(kind)||redacted(value+' '+citation.quote,terms)){refusals.push({reason:'private-or-invalid',item,citation});continue;}
   const fact={type:'fact',subject,kind:fields.canonical(kind),value,date,cardinality:item.one_or_many==='one'?'one':'many',confidence:item.confidence==='likely'?'likely':'certain',citation};
   if(currentFact(query,root,subject,fact.kind,value,fields)){refusals.push({reason:'duplicate',item,citation});continue;}accepted.push(fact);
  }
- for(const item of events){const citation=itemCitation(item,messages),day=item?.day,what=typeof item?.what==='string'?item.what.trim():'';if(!citation){refusals.push({reason:'quote',item});continue;}if(!what||!ISO_DAY.test(day)||CREDENTIAL.test(what)||FORBIDDEN.test(what)||redacted(what+' '+citation.quote,terms)){refusals.push({reason:'private-or-invalid',item,citation});continue;}
-  const requested=typeof item.deadline_id==='string'?item.deadline_id:null,deadline_id=deadlines.some(d=>d?.slug===requested)?requested:null;if(requested&&!deadline_id)refusals.push({reason:'unknown-deadline',item,citation});
-  const event={type:'event',what,day,participants:Array.isArray(item.participants)?item.participants.filter(safeName).map(s=>s.trim()):[],citation,deadline_id};if(sameEvent(query,root,event)){refusals.push({reason:'duplicate',item,citation});continue;}accepted.push(event);
+ for(const item of events){const citation=itemCitation(item,messages),day=item?.day,what=typeof item?.what==='string'?item.what.trim():'',participants=Array.isArray(item.participants)?item.participants:[];if(!citation){refusals.push({reason:'quote',item});continue;}if(!what||!ISO_DAY.test(day)||CREDENTIAL.test(what)||FORBIDDEN.test(what)||redacted(what+' '+citation.quote,terms)||participants.some(name=>!safeName(name,terms))){refusals.push({reason:'private-or-invalid',item,citation});continue;}
+  const requested=typeof item.deadline_id==='string'?item.deadline_id:null,deadline=deadlines.find(d=>d?.slug===requested),deadline_id=deadline&&typeof deadline.doneWhen==='string'&&normal(deadline.doneWhen)&&normal(citation.quote).includes(normal(deadline.doneWhen))?requested:null;if(requested&&!deadline){refusals.push({reason:'unknown-deadline',item,citation});continue;}if(requested&&!deadline_id){refusals.push({reason:'deadline-evidence',item,citation});continue;}
+  const event={type:'event',what,day,participants:participants.map(s=>s.trim()),citation,deadline_id};if(sameEvent(query,root,event)){refusals.push({reason:'duplicate',item,citation});continue;}accepted.push(event);
  }
- return {plan:{people:newPeople,things:newThings,effects:accepted},refusals};
+ const used=new Set(accepted.flatMap(effect=>effect.type==='fact'?[effect.subject.name]:effect.participants).map(subjectKey));
+ return {plan:{people:newPeople.filter(row=>used.has(subjectKey(row.name))),things:newThings.filter(row=>used.has(subjectKey(row.name))),effects:accepted},refusals};
 }
 function yaml(value){return /^[\w .,:/-]+$/.test(String(value))?String(value):JSON.stringify(String(value));}
 function worldFile(file,fields,body){mkdir(file);atomic(file,'---\n'+Object.entries(fields).filter(([,v])=>v!==null&&v!==undefined&&v!=='').map(([k,v])=>k+': '+(Array.isArray(v)?'['+v.map(yaml).join(', ')+']':yaml(v))).join('\n')+'\n---\n'+(body||'')+'\n');}
