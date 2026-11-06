@@ -93,3 +93,27 @@ test('the real server-test call asks for exactly 1800 seconds overall and 180000
  assert.match(script,/run_server_tests "\$name" "\$evidence\/server-tests\.log" \|\| \{ server_test_failure_summary/,'test.sh makes this call and falls back to the summary');
  assert.ok(!script.includes('run-tests.mjs'),'test.sh holds no second copy of the invocation');
 });
+
+test('a run that fails before any test result (docker exec: the container is not running) shows the last lines of its output and exits non-zero; a normal run stays TAP-only',async t=>{
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-image-run-'));t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
+ const bin=path.join(dir,'bin');fs.mkdirSync(bin,{recursive:true});
+ const lines=Array.from({length:60},(_,i)=>'docker noise line '+(i+1));
+ fs.writeFileSync(path.join(bin,'docker'),'#!/bin/sh\n'+lines.map(l=>"echo '"+l+"' >&2").join('\n')+"\necho 'Error response from daemon: container godspeed-image-verification is not running' >&2\nexit 1\n",{mode:0o755});
+ const log=path.join(dir,'server-tests.log').split(path.sep).join('/');
+ const step=(script)=>new Promise(resolve=>{
+  const child=spawn(bash,['-c','set -o pipefail; . "$1"; '+script,'x',helper,log],{stdio:['ignore','pipe','pipe'],env:{...process.env,SERVER_TEST_DOCKER:path.join(bin,'docker').split(path.sep).join('/')}});
+  let out='';child.stdout.on('data',c=>{out+=c;});child.on('close',code=>resolve({out,code}));
+ });
+ // What test.sh does: run, and on failure show the summary and exit non-zero.
+ const failed=await step('run_server_tests c "$2" || { server_test_failure_summary "$2"; exit 1; }');
+ assert.equal(failed.code,1);
+ assert.ok(failed.out.includes('Error response from daemon: container godspeed-image-verification is not running'),'the reason is shown: '+failed.out);
+ assert.ok(failed.out.includes('docker noise line 60')&&failed.out.includes('docker noise line 22\n'),'the last 40 lines are shown');
+ assert.ok(!failed.out.includes('docker noise line 20\n')&&!failed.out.includes('docker noise line 1\n'),'and no more than the last 40 lines');
+ // The live stage alone prints nothing for such output.
+ const live=await step('run_server_tests c "$2"');
+ assert.notEqual(live.code,0);assert.equal(live.out,'','a normal run is TAP-only: docker\'s own lines are not echoed');
+ // An empty or missing kept log still says something.
+ const empty=await step('server_test_failure_summary "$2.missing"');
+ assert.match(empty.out,/no output was kept/);
+});

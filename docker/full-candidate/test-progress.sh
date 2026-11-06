@@ -6,10 +6,17 @@ TAP_SELECT='^not ok|^# (tests|pass|fail|cancelled)'
 server_test_progress() {
   tee "$1" | grep --line-buffered -E "$TAP_SELECT"
 }
-# When the run failed: the failures and the summary again from the kept log, then the error lines under each failure.
+# When the run failed: the failures and the summary again from the kept log, then the error lines under each failure. A run that
+# failed before it printed any test result (docker exec: "container is not running") has none of those, so the last lines of its output
+# are shown instead; the live stage stays TAP-only for normal runs.
 server_test_failure_summary() {
-  grep -E "$TAP_SELECT" "$1" || true
-  grep -E -A12 '^not ok' "$1" | grep -E 'error|expected|actual|Error|FAIL|assert' | head -60 || true
+  if grep -qE "$TAP_SELECT" "$1" 2>/dev/null; then
+    grep -E "$TAP_SELECT" "$1" || true
+    grep -E -A12 '^not ok' "$1" | grep -E 'error|expected|actual|Error|FAIL|assert' | head -60 || true
+  else
+    echo "The server tests printed no test results. The last lines of their output:"
+    tail -n 40 "$1" 2>/dev/null || echo "(no output was kept)"
+  fi
 }
 
 # The image's server-test run: every test has SERVER_TEST_EACH_LIMIT_MS and the whole run SERVER_TEST_OVERALL_LIMIT seconds, so a hang
