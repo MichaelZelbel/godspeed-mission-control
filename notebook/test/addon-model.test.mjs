@@ -33,6 +33,15 @@ test('an add-on uses the assistant state named by the Windows notebook pointer',
  recordRunningNotebook({root:f.root,assistantConfig:config,platform:'win32'});
  const connection=modelConnection(f.root);assert.equal(connection.descriptor.executable,path.join(runtime,'hermes'));assert.equal(connection.state,external);
 });
+test('an add-on honors the selected assistant configuration over pointer and workspace state',t=>{
+ const f=fixture(t),assistant=state=>{
+  const runtime=path.join(state,'runtime'),home=path.join(state,'home'),config=path.join(state,'assistant.json'),descriptor={verified:true,executable:path.join(runtime,'hermes'),home,sourceRoot:runtime};
+  fs.mkdirSync(runtime,{recursive:true});fs.mkdirSync(home);fs.writeFileSync(path.join(runtime,'hermes'),'');fs.writeFileSync(path.join(runtime,'python3'),'');fs.writeFileSync(config,JSON.stringify(descriptor));return {config,descriptor};
+ },pointer=assistant(path.join(f.root,'pointer-state')),selected=assistant(path.join(f.root,'selected-state'));
+ recordRunningNotebook({root:f.root,assistantConfig:pointer.config,platform:'win32'});
+ const connection=modelConnection(f.root,{env:{GODSPEED_ASSISTANT_CONFIG:selected.config}});
+ assert.deepEqual(connection.descriptor,selected.descriptor);assert.equal(connection.state,path.dirname(selected.config));
+});
 test('the packaged server runtime uses its own virtual environment and source root',t=>{
  const f=fixture(t),bin=path.join(f.runtime,'bin'),venv=path.join(f.runtime,'.venv','bin');fs.mkdirSync(bin,{recursive:true});fs.mkdirSync(venv,{recursive:true});fs.writeFileSync(path.join(venv,'python3'),'');
  fs.writeFileSync(path.join(f.state,'assistant.json'),JSON.stringify({verified:true,home:f.home,executable:path.join(bin,'hermes')}));const connection=modelConnection(f.root);assert.equal(connection.python,path.join(venv,'python3'));assert.equal(connection.sourceRoot,f.runtime);
