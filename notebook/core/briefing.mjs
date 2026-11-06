@@ -14,6 +14,7 @@ import {recipeContext} from './recipe-context.mjs';
 import {fileContext} from './context.mjs';
 import {localPath} from './local-path.mjs';
 import {currentHealth} from './health-inputs.mjs';
+import {unknownPhoneHealthLine} from './brief-health-line.mjs';
 import {cycleOperation} from './cycle-operations.mjs';
 import {addonCommand} from './native-personal.mjs';
 import {dayOf} from './trackers.mjs';
@@ -75,7 +76,7 @@ async function runBriefing(job,{store,query,provider,now}){
  const watch=visibleRows(query,'watch_topics').filter(t=>!t.paused&&t.include_in_brief);
  if(watch.length)await procedure({id:job.id+'-sources',kind:'watch',topic_ids:watch.map(t=>t.id)},{store,query,provider});
  const context={goals:visibleRows(query,'goals').filter(g=>['active','adopted'].includes(g.status)),decisions:visibleRows(query,'decisions').slice(-10),work:visibleRows(query,'work_items').slice(-20),deadlines:visibleRows(query,'deadlines').filter(d=>d.status!=='closed'),health:visibleRows(query,'health_observations').filter(h=>Date.parse(h.observed_at)>=Date.now()-7*86400000),episodes:visibleRows(query,'health_episodes').filter(h=>Date.parse(h.onset_at)>=Date.now()-30*86400000),medications:visibleRows(query,'medications').filter(h=>Date.parse(h.taken_at)>=Date.now()-30*86400000),source_receipts:[],previous:visibleRows(query,'notes').filter(n=>n.source_app==='morning-brief').slice(-3).map(n=>({id:n.id,title:n.title,content:n.content,created_at:n.created_at,verification_id:n.verification_id,delivery_verification_id:n.delivery_verification_id})),rehearsals:visibleRows(query,'job_receipts').filter(r=>r.kind==='brief-rehearsal').slice(-2).map(r=>({id:r.id,state:r.state,error:r.error,result:r.result,finished_at:r.finished_at}))};
- const health=currentHealth(query);context.health=health.observations;context.health_freshness=health;
+ const health=currentHealth(query,{now:now.getTime()});context.health=health.observations;context.health_freshness=health;
  context.episodes=context.episodes.filter(row=>Date.parse(row.onset_at)<=Date.now());context.medications=context.medications.filter(row=>Date.parse(row.taken_at)<=Date.now());
  context.watch_findings=JSON.parse(watchCommand({store,query},['pull','--channel','brief','--dry-run']).result);
  // Selected feeds and the actual selected finding need their latest evidence,
@@ -108,11 +109,12 @@ async function runBriefing(job,{store,query,provider,now}){
  const ids=rows=>rows.map(r=>r.id).sort();
  const checkCurrentSources=()=>query.withSnapshot(()=>{
   for(const [type,selected] of Object.entries(sourceRefs)){const current=new Map(visibleRows(query,type).map(r=>[r.id,r]));if(selected.some(r=>current.get(r.id)?._hash!==r._hash))throw Error('Briefing sources changed during judgment; retain its checks and prepare a new draft');}
-  if(hash(ids(context.goals))!==hash(ids(visibleRows(query,'goals').filter(g=>['active','adopted'].includes(g.status))))||hash(ids(context.deadlines))!==hash(ids(visibleRows(query,'deadlines').filter(d=>d.status!=='closed')))||hash(ids(context.health))!==hash(ids(currentHealth(query).observations))||hash(context.workspace_sources)!==hash(fileContext(store,20000))||hash(context.workflow)!==hash(recipeContext(store,'morning-note')))throw Error('Briefing sources changed during judgment; retain its checks and prepare a new draft');
+  if(hash(ids(context.goals))!==hash(ids(visibleRows(query,'goals').filter(g=>['active','adopted'].includes(g.status))))||hash(ids(context.deadlines))!==hash(ids(visibleRows(query,'deadlines').filter(d=>d.status!=='closed')))||hash(context.health_freshness)!==hash(currentHealth(query,{now:now.getTime()}))||hash(context.workspace_sources)!==hash(fileContext(store,20000))||hash(context.workflow)!==hash(recipeContext(store,'morning-note')))throw Error('Briefing sources changed during judgment; retain its checks and prepare a new draft');
  });
  const writerContract='Write only the short useful morning note from these actual sources. Use concise everyday language and the configured voice, without em dashes, headings or machinery chatter. Include one factual health sentence using only fresh recorded inputs, or honestly say fresh observations are missing. Explain the useful next action and the goal it serves in everyday words. User decisions must refer to an actual action_artifacts item with its exact link and reviewed content; an unprepared work item or a goal is not a finished proposal to approve. When contribution is present, make reviewing that checked contribution the main user action; include its complete copy-ready content unchanged and exactly its usable notebook link. Do not confuse that choice with approval for a different unprepared workflow. It is a draft awaiting the user’s choice, not a posted result. When no prepared artifact needs a decision, do not invent an approval request. Retain uncertainty. Do not repeat unchanged prior advice or claim a draft caused real-world progress. No unsupported figures, invented links, medical diagnosis or requests for self-management. When cycle_heads_up is a line, put it in word for word as one line of its own, and say nothing else about the cycle. When charm_line is a line, put it in word for word as one line of its own, and say nothing else about the Charm Challenge.';
  // The same words may open a later day's briefing; within one day they are a repeat (#195).
  const zone=installationZone(store),today=dayOf(now,zone),savedToday=visibleRows(query,'notes').filter(n=>briefedOn(n,zone)===today);
+ const unknownHealthLine=unknownPhoneHealthLine(context.health_freshness);
  const codeGate=text=>{const errors=[];if(typeof text!=='string'||!text.trim())errors.push('Briefing produced no text');else{if(context.cycle_heads_up&&!text.split(/\r?\n/).some(line=>line.trim()===context.cycle_heads_up))errors.push('Include the cycle heads-up line word for word, as one line of its own');if(context.charm_line&&!text.split(/\r?\n/).some(line=>line.trim()===context.charm_line))errors.push('Include the Charm Challenge line word for word, as one line of its own');if(text.includes('\u2014'))errors.push('Use the configured plain writing style');if(context.contribution&&(!text.includes(context.contribution.content)||!text.includes(context.contribution.link)))errors.push('Include the complete checked contribution and its usable link');if(voice){const checked=checkVoice(text,voice);if(checked.configured&&!checked.passed)errors.push('Configured voice check failed: '+checked.hits.map(h=>h.value).join(', '));}if(savedToday.some(n=>n.content.trim()===text.trim()))errors.push('The same note was already saved today; do not repeat it');}return errors;};
   // Compose only from visible records in this snapshot. A failed model draft contributes no words.
   const factualFallback=()=>{
@@ -125,9 +127,10 @@ async function runBriefing(job,{store,query,provider,now}){
    if(doneTitle)add('Godspeed has verified this work: '+doneTitle+'.');
    const due=context.deadlines.filter(d=>d.due_at&&Number.isFinite(Date.parse(d.due_at))).sort((a,b)=>Date.parse(a.due_at)-Date.parse(b.due_at))[0],dueTitle=safe(due?.title);
    if(dueTitle)add('A dated obligation is '+dueTitle+', due '+String(due.due_at).slice(0,10)+'.');
-   const observed=context.health.at(-1),metric=safe(observed?.metric,60),value=observed?.value;
-   if(metric&&(typeof value==='number'||typeof value==='string'&&safe(value,30)))add('A recorded health observation is '+metric+': '+value+'.');
-   else add('There are no fresh health observations to report.');
+   if(unknownHealthLine){if(!add(unknownHealthLine))throw Error('Could not include the checked partial phone health state');}
+   else {const observed=context.health.at(-1),metric=safe(observed?.metric,60),value=observed?.value;
+    if(metric&&(typeof value==='number'||typeof value==='string'&&safe(value,30)))add('A recorded health observation is '+metric+': '+value+'.');
+    else add('There are no fresh health observations to report.');}
    const action=add(goalTitle?'Ask Godspeed to work on '+goalTitle+' and show you one concrete result today.':'Tell Godspeed one goal to work on today, then ask it for the first concrete step.')||add(goal?'Ask Godspeed to complete one goal step.':'Tell Godspeed one goal.');
    for(const line of required)add(line);
    if(context.contribution){add(context.contribution.content);add(context.contribution.link);}
@@ -141,6 +144,13 @@ async function runBriefing(job,{store,query,provider,now}){
  const ownLines=context.charm_line?' The line "'+context.charm_line+'" is the person\'s own Charm Challenge count: they started it themselves, the program writes it and checks it word for word. Never fail the draft because of that line; judge the rest of the note.':'';
  const verify=async(text,check)=>{const raw=await provider({kind:'brief-verification',check,context:{sources:context,draft:text},contract:(check==='source-facts'?'Check this exact draft against its actual dated sources and previous notes. Return JSON {passed:boolean,reason:string}. Fail unsupported claims, stale health, invented outcomes, absent health sentence and unchanged advice. Do not rewrite or send.':'Independently read this as a tired person seeing none of the work. Check clear meaning, usefulness, actual reachable decision artifacts, one current health sentence, no jargon or internal codes, and no repeated unanswered advice. Return JSON {passed:boolean,reason:string}. Do not rewrite or send.')+ownLines});let verdict;try{verdict=typeof raw==='string'?JSON.parse(raw.replace(/^```(?:json)?\s*|\s*```$/g,'')):raw;}catch{verdict={passed:false,reason:'Briefing check returned no valid verdict'};}if(!verdict||typeof verdict!=='object')verdict={passed:false,reason:'Briefing check returned no verdict'};const receipt=await store.saveAsync('job_receipts',{kind:check==='source-facts'?'brief-verification':'brief-delivery-verification',check,job_id:job.id,state:verdict.passed===true?'verified':'failed',source_hash:hash(context),draft_hash:hash(text),verdict,finished_at:new Date().toISOString()});return {verdict,receipt};};
  let draft,check,deliveryCheck,feedback=[],cutReceipt=null,fallback=null;
+ if(unknownHealthLine){
+  // A model never sees a partial phone number and contributes no words to this note.
+  // The deterministic note keeps the usual goal, verified work, deadline, and prepared artifact.
+  draft=factualFallback();
+  const receipt=await store.saveAsync('job_receipts',{kind:'brief-source-formed',job_id:job.id,state:'verified',source_hash:hash(context),draft_hash:hash(draft),checks:['visible sources','unknown phone day','voice','required lines','duplicate'],finished_at:new Date().toISOString()});
+  check=receipt;deliveryCheck=receipt;
+ }else{
  for(let attempt=0;attempt<2;attempt++){
   draft=await provider({kind:'morning-brief',phase:attempt?'one-rewrite':'write',context:{...context,...(attempt?{rejected_draft:draft,check_feedback:feedback}:{})},contract:writerContract+(attempt?' Correct the rejected note using these exact failure reasons. This is the single permitted rewrite.':'')});
   if(typeof draft!=='string'||!draft.trim())throw Error('Briefing produced no text');
@@ -176,6 +186,7 @@ async function runBriefing(job,{store,query,provider,now}){
    cutReceipt=await store.saveAsync('job_receipts',{kind:'brief-cut',job_id:job.id,state:'fallback',errors:code,cut:cut.cut,restored:missing,draft_hash:hash(draft),kept_hash:hash(fallbackText),finished_at:new Date().toISOString()});
    fallback={day,refusals,cut:cut.cut,draft_hash:hash(draft)};draft=fallbackText;break;
   }
+ }
  }
   const finalErrors=codeGate(draft);if(finalErrors.length)throw Error('Final exact briefing check failed: '+finalErrors.join('; '));
  if(job.rehearsal){checkCurrentSources();return {verified:true,silent:true,rehearsal:true,source_hash:hash(context),draft_hash:hash(draft),verification_ids:[check.id,deliveryCheck.id],...(fallback?{fallback:true}:{}),...(cutReceipt&&!fallback?{cut:true}:{}),...(leftOut.length?{left_out:leftOut.map(o=>o.name)}:{})};}
