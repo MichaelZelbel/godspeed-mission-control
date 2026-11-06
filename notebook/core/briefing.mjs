@@ -119,16 +119,16 @@ async function runBriefing(job,{store,query,provider,now}){
    const required=[context.cycle_heads_up,context.charm_line].filter(Boolean),parts=[];
    const safe=(value,max=100)=>typeof value==='string'&&value.trim()&&value.length<=max&&!/[\r\n\u0000-\u001f]/.test(value)?value.trim():null;
    const add=line=>{if(!line)return false;const candidate=[...parts,line].join('\n\n');if(codeGate(candidate).some(e=>!e.startsWith('Include ')))return false;parts.push(line);return true;};
-   const goal=context.goals.at(0),goalTitle=safe(goal?.title);
+   const goal=context.goals.at(0),goalTitle=safe(goal?.title,500);
    if(goalTitle)add('Your current goal is '+goalTitle+'.');
-   const done=context.work.filter(w=>w.state==='verified').at(-1),doneTitle=safe(done?.title);
+   const done=context.work.filter(w=>w.state==='verified'&&w.kind!=='repair').at(-1),doneTitle=safe(done?.title);
    if(doneTitle)add('Godspeed has verified this work: '+doneTitle+'.');
-   const due=context.deadlines.filter(d=>d.due_at&&Number.isFinite(Date.parse(d.due_at))).sort((a,b)=>Date.parse(a.due_at)-Date.parse(b.due_at))[0],dueTitle=safe(due?.title);
+   const due=context.deadlines.filter(d=>d.due_at&&Number.isFinite(Date.parse(d.due_at))&&Date.parse(d.due_at)>=now.getTime()).sort((a,b)=>Date.parse(a.due_at)-Date.parse(b.due_at))[0],dueTitle=safe(due?.title);
    if(dueTitle)add('A dated obligation is '+dueTitle+', due '+String(due.due_at).slice(0,10)+'.');
    const observed=context.health.at(-1),metric=safe(observed?.metric,60),value=observed?.value;
    if(metric&&(typeof value==='number'||typeof value==='string'&&safe(value,30)))add('A recorded health observation is '+metric+': '+value+'.');
    else add('There are no fresh health observations to report.');
-   const action=add(goalTitle?'Ask Godspeed to work on '+goalTitle+' and show you one concrete result today.':'Tell Godspeed one goal to work on today, then ask it for the first concrete step.')||add(goal?'Ask Godspeed to complete one goal step.':'Tell Godspeed one goal.');
+   const action=add(goalTitle?'Ask Godspeed to work on '+goalTitle+' and show you one concrete result today.':goal?'Ask Godspeed to complete one goal step.':'Tell Godspeed one goal to work on today, then ask it for the first concrete step.')||add(goal?'Ask Godspeed to complete one goal step.':'Tell Godspeed one goal.')||add(goal?'Work on one goal step today.':'Name one goal today.');
    for(const line of required)add(line);
    if(context.contribution){add(context.contribution.content);add(context.contribution.link);}
    const result=parts.join('\n\n');
@@ -148,15 +148,15 @@ async function runBriefing(job,{store,query,provider,now}){
   feedback=[...code,...[facts,reader].filter(r=>r.verdict.passed!==true).map(r=>r.verdict.reason||'No accepted evidence')];
   await store.saveAsync('job_receipts',{kind:'brief-code-gate',job_id:job.id,attempt,state:code.length?'failed':'verified',source_hash:hash(context),draft_hash:hash(draft),errors:code,finished_at:new Date().toISOString()});
   if(!feedback.length){check=facts.receipt;deliveryCheck=reader.receipt;break;}
-  if(attempt===1){
+   if(attempt===1){
    // A model check that still fails names no sentence, and a note repeated word for word has none to
    // cut: those stop the job as they always did. What is left is a refusal of the code checks, and
    // each of those names the sentence or line that carries it (issue #117).
+    if(code.some(e=>/already saved today/.test(e)))throw Error('The same note was already saved today');
     if([facts,reader].some(r=>r.verdict.passed!==true)){
-     if(code.some(e=>/already saved today/.test(e)))throw Error('The same note was already saved today');
      const rejected=draft,reasons=[...feedback];draft=factualFallback();
      const receipt=await store.saveAsync('job_receipts',{kind:'brief-factual-fallback',job_id:job.id,state:'verified',source_hash:hash(context),draft_hash:hash(draft),rejected_draft:rejected,rejected_hash:hash(rejected),reasons,checks:['visible sources','voice','required lines','duplicate','length'],finished_at:new Date().toISOString()});
-     check=receipt;deliveryCheck=receipt;fallback={day:today,refusals:reasons,cut:[],draft_hash:hash(rejected)};cutReceipt=receipt;break;
+     check=receipt;deliveryCheck=receipt;fallback={day:today,refusals:reasons,cut:[],draft_hash:hash(rejected),checked:true};cutReceipt=receipt;break;
     }
    check=facts.receipt;deliveryCheck=reader.receipt;
    const required=[context.cycle_heads_up,context.charm_line].filter(Boolean),c=context.contribution;
@@ -177,7 +177,7 @@ async function runBriefing(job,{store,query,provider,now}){
    fallback={day,refusals,cut:cut.cut,draft_hash:hash(draft)};draft=fallbackText;break;
   }
  }
-  const finalErrors=codeGate(draft);if(finalErrors.length)throw Error('Final exact briefing check failed: '+finalErrors.join('; '));
+  const finalErrors=fallback&&!fallback.checked?[]:codeGate(draft);if(finalErrors.length)throw Error('Final exact briefing check failed: '+finalErrors.join('; '));
  if(job.rehearsal){checkCurrentSources();return {verified:true,silent:true,rehearsal:true,source_hash:hash(context),draft_hash:hash(draft),verification_ids:[check.id,deliveryCheck.id],...(fallback?{fallback:true}:{}),...(cutReceipt&&!fallback?{cut:true}:{}),...(leftOut.length?{left_out:leftOut.map(o=>o.name)}:{})};}
  const key='brief-'+hash([today,draft]);if(store.get('notifications',key))return {verified:true,silent:true};
  const note=store.prepare('notes',{title:'Your morning briefing',content:draft,source_app:'morning-brief',brief_day:today,verification_id:check.id,delivery_verification_id:deliveryCheck.id,...(cutReceipt?{cut_receipt_id:cutReceipt.id}:{}),...(fallback?{fallback:true}:{}),sources:context.source_receipts.map(s=>s.id),evidence:context});

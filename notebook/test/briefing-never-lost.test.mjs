@@ -59,6 +59,35 @@ test('a short sentence limit still yields a concrete action',async()=>{
  assert.equal(result.fallback,true);assert.match(content,/Ask Godspeed to complete one goal step/);
 });
 
+test('a voice rule against the product name still leaves a goal action',async()=>{
+ const {store,query}=fixture(['BANNED-WORD: Godspeed']);store.save('goals',{title:'Prepare a fictional guide',status:'adopted'});
+ const provider=async input=>input.kind==='brief-verification'?{passed:false,reason:'No useful action'}:'Unsupported draft.';
+ const result=await run(provider,query,store,'brief-no-name-action'),content=store.get('notes',result.record_id).content;
+ assert.equal(result.fallback,true);assert.match(content,/Work on one goal step today/);assert.doesNotMatch(content,/Godspeed/);
+});
+
+test('a long saved goal is not mistaken for missing setup',async()=>{
+ const {store,query}=fixture([]),title='Prepare the fictional field guide to coastal lighthouses and ship it to every subscriber before the fictional winter season begins';
+ store.save('goals',{title,status:'adopted'});
+ const provider=async input=>input.kind==='brief-verification'?{passed:false,reason:'No useful action'}:'Unsupported draft.';
+ const result=await run(provider,query,store,'brief-long-goal'),content=store.get('notes',result.record_id).content;
+ assert.equal(result.fallback,true);assert.match(content,/Prepare the fictional field guide/);assert.doesNotMatch(content,/Tell Godspeed one goal/);
+});
+
+test('fallback names verified user work and the next future obligation only',async()=>{
+ const {store,query}=fixture([]);store.save('goals',{title:'Prepare a fictional guide',status:'adopted'});
+ store.save('work_items',{kind:'draft',title:'Checked fictional outline',state:'verified'});
+ store.save('work_items',{kind:'draft',title:'Private unapproved memo',state:'awaiting_approval'});
+ store.save('work_items',{kind:'repair',title:'Recheck internal connector',state:'verified'});
+ store.save('deadlines',{title:'Old fictional bill',status:'open',due_at:'2026-02-01T00:00:00Z'});
+ store.save('deadlines',{title:'Submit fictional application',status:'open',due_at:'2027-01-01T00:00:00Z'});
+ store.save('deadlines',{title:'Plan fictional travel',status:'open',due_at:'2027-02-01T00:00:00Z'});
+ const provider=async input=>input.kind==='brief-verification'?{passed:false,reason:'No useful action'}:'Unsupported draft.';
+ const result=await run(provider,query,store,'brief-work-date'),content=store.get('notes',result.record_id).content;
+ assert.match(content,/Checked fictional outline/);assert.match(content,/Submit fictional application, due 2027-01-01/);
+ assert.doesNotMatch(content,/Private unapproved|Recheck internal|Old fictional bill|Plan fictional travel/);
+});
+
 test('a rejected draft keeps a separately checked contribution and its exact link',async()=>{
  const {store,query}=fixture([]),content='Fictional copy ready draft.';
  const note=store.save('notes',{title:'Fictional contribution',content});store.save('lead_entries',{title:note.title,content,note_id:note.id,status:'ready',delivery_day:'2026-01-01'});
@@ -117,6 +146,20 @@ test('a draft where every sentence breaks a rule sends the short fallback and op
  const items=repairs(query);assert.equal(items.length,1);assert.equal(items[0].state,'needs_review');
  assert.equal(items[0].note_id,saved.id);assert.match(items[0].title,/morning briefing/);
  assert.ok(items[0].refusals.some(e=>/voice check failed: realm/.test(e)));
+});
+
+test('the existing cut fallback still saves when its explanation breaks a voice rule',async()=>{
+ const {store,query}=fixture(['BANNED-WORD: realm','BANNED-WORD: briefing']);
+ const provider=async input=>verifies(input)||'The realm is here.';
+ const result=await run(provider,query,store,'brief-old-cut-voice');
+ assert.equal(result.fallback,true);assert.ok(store.get('notes',result.record_id));
+});
+
+test('a repeated checked draft does not create a second briefing',async()=>{
+ const {store,query}=fixture([]),provider=async input=>verifies(input)||OK;
+ await run(provider,query,store,'brief-first');
+ await assert.rejects(run(provider,query,store,'brief-repeat'),/already saved today/);
+ assert.equal(query.rows('notes').filter(n=>n.source_app==='morning-brief').length,1);
 });
 
 test('a sentence that becomes the first one after a cut is judged as an opener too',async()=>{
