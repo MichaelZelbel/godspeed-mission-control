@@ -1,5 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {execFileSync} from 'node:child_process';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import {baselineSent,captureSent} from './server-telegram.mjs';
 
 test('the first action after setup ignores the setup handoff message',()=>{
@@ -30,4 +34,34 @@ test('actions and marked routines keep complete Telegram records',()=>{
   }]);
   assert.equal(action.sent,1);
   assert.equal(routine.sent,1);
+});
+
+test('mark saves complete sent records through its command boundary',()=>{
+  const folder=fs.mkdtempSync(path.join(os.tmpdir(),'server-telegram-mark-'));
+  const bin=path.join(folder,'bin');
+  fs.mkdirSync(bin);
+  fs.writeFileSync(path.join(bin,'sudo'),`#!/bin/sh
+printf '%s\\n' '{"sent":[{"chat_id":31415,"text":"The report is ready.","buttons":[{"text":"Open"}]}],"requests":[{"method":"sendMessage"}]}'
+`);
+  fs.chmodSync(path.join(bin,'sudo'),0o755);
+
+  try {
+    execFileSync(process.execPath,['server-telegram.mjs','mark','--server','fixture','--evidence',folder,'--label','report','--kind','routine'],{
+      cwd:path.dirname(new URL(import.meta.url).pathname),
+      env:{...process.env,PATH:`${bin}:${process.env.PATH}`},
+      stdio:'pipe',
+    });
+
+    const expected={
+      label:'report',kind:'sendMessage',chat_id:31415,text:'The report is ready.',buttons:[{text:'Open'}],accepted:true,
+    };
+    assert.deepEqual(JSON.parse(fs.readFileSync(path.join(folder,'run.json'),'utf8')),{
+      steps:[{label:'report',kind:'routine',success:true,request_end:1}],outbox:[expected],
+    });
+    assert.deepEqual(JSON.parse(fs.readFileSync(path.join(folder,'telegram-run.json'),'utf8')),{
+      steps:[{label:'report',kind:'routine',success:true,request_end:1}],outbox:[expected],sent:1,
+    });
+  } finally {
+    fs.rmSync(folder,{recursive:true,force:true});
+  }
 });
