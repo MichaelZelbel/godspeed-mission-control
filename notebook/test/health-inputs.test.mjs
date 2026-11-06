@@ -62,7 +62,7 @@ test('the phone and the selected CSV keep a day under the same id, so a CSV corr
  assert.equal(phone[0].id,healthFeedId(PHONE_SOURCE,day,'steps'));
  operation({type:'health-import-csv',source:PHONE_SOURCE,content:'date,steps\n'+day+',250\n'});
  const all=store.list('health_observations');assert.equal(all.length,1,'one record, corrected in place');
- assert.equal(all[0].id,phone[0].id);assert.equal(all[0].value,250);assert.equal(phone[0].via,'phone-receiver');assert.ok(!all[0].via,'a CSV correction is not the phone receiver row any more');
+ assert.equal(all[0].id,phone[0].id);assert.equal(all[0].value,250);assert.equal(phone[0].via,'phone-receiver');assert.ok(!all[0].via,'a CSV correction is not the phone receiver row any more');assert.equal(Object.hasOwn(all[0],'via')?all[0].via:null,null);
  operation({type:'health-import-csv',source:'Fictional other feed',content:'date,steps\n'+day+',7\n'});
  assert.notEqual(store.list('health_observations').find(r=>r.value===7).id,phone[0].id);
 });
@@ -92,8 +92,11 @@ test('a CSV that someone labelled with the phone appname is still a CSV: nothing
  operation({type:'health-import-csv',source:PHONE_SOURCE,content:'date,steps\n'+day+',100\n'});
  operation({type:'health-import-csv',source:'Fictional other CSV',content:'date,steps\n'+day+',200\n'});
  const rows=store.list('health_observations');
- assert.equal(rows.length,2);assert.ok(rows.every(r=>!r.via),'a CSV import marks nothing as the phone');
+ assert.equal(rows.length,2);assert.ok(rows.every(r=>!r.via),'a CSV import marks nothing as the phone');assert.ok(rows.every(r=>!Object.hasOwn(r,'via')),'an ordinary CSV row has no via property at all');
  assert.deepEqual(currentHealth(query,{now}).observations.map(r=>r.value).sort((a,b)=>a-b),[100,200],'both desktop imports stay');
+ operation({type:'health-import-csv',source:'Fictional other CSV',content:'date,steps'+String.fromCharCode(10)+day+',210'+String.fromCharCode(10)});
+ assert.ok(store.list('health_observations').every(r=>!Object.hasOwn(r,'via')),'a CSV correction adds no via property either');
+ assert.ok(store.list('health_observations').some(r=>r.value===210));
  // The phone receiver then writes the same day under its own id: only now is there a phone row to collapse against.
  acceptUpload(store,{metrics:[{name:'step_count',units:'count',data:[{date:day+' 08:00:00 +0100',qty:300,source:'Fictional Phone'}]}],workouts:[]},{now:new Date(now)});
  const phoneRow=store.list('health_observations').find(r=>r.via==='phone-receiver');
