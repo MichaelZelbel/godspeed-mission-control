@@ -6,6 +6,9 @@ const listed=text=>text.match(/--self-check ((?:none|secret-changed|connection-o
 test('the due recipe lists exactly the self checks the tool takes, and the connections are the check\'s',()=>{
   const help=spawnSync(process.execPath,[fileURLToPath(new URL('../../tools/due.js',import.meta.url)),'--help'],{encoding:'utf8'}).stdout;
   const tool=listed(help).sort();
+  // The help line for connection-ok names every connection the daily check lists, by the name Settings shows.
+  const connectionHelp=help.match(/connection-ok\s+([\s\S]*?)\n\s+file-newer/)[1].replace(/\s+/g,' ');
+  for(const c of Object.values(CONNECTION_NAMES))assert.ok(connectionHelp.includes(c.label),'the --help text of connection-ok names '+c.label);
   for(const p of ['../recipes/due/SKILL.md','../reusable-recipes/due/SKILL.md']){
     const recipe=read(p);
     assert.deepEqual(listed(recipe).sort(),tool,p);
