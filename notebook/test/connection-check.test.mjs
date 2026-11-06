@@ -2,7 +2,7 @@ import test from 'node:test';import assert from 'node:assert/strict';import fs f
 import {Store} from '../core/records/store.mjs';import {installStarter} from '../core/starter-workspace.mjs';
 import {readNotices} from '../core/notices.mjs';import {addonDeadlines} from '../core/addon-deadlines.mjs';
 import {CONNECTION_NAMES} from '../core/connection-names.mjs';import {runDue} from '../core/connection-check.mjs';import {CONNECTIONS,defaultProbes,checkConnections,nextState,recoverPhoneConnection,telegramProbe,githubProbe,mailProbe,agentmailProbe,aiProbe,phoneProbe,gitKind,aiKind,telegramKind,mailKind,connectionCheckWanted,RECORD_FILE} from '../core/connection-check.mjs';
-import {acceptUpload} from '../core/phone-health.mjs';
+import {acceptUpload,pruneRaw,readRaw} from '../core/phone-health.mjs';
 
 for(const key of Object.keys(process.env))if(/^(GODSPEED_|HERMES_)/.test(key))delete process.env[key];
 
@@ -50,6 +50,17 @@ test('phone health starts its connection after an accepted upload, then speaks o
  acceptUpload(store,{metrics:[]},{now:new Date('2026-11-06T11:00:00Z')});
  await recoverPhoneConnection({store,day:D3,now:()=>new Date('2026-11-06T11:00:00Z')});
  assert.equal(deadlines(store)[0].state,'closed','the accepted upload closes it without another daily check');
+});
+
+test('the phone remains a connection after its raw upload expires',async t=>{
+ const {store,root}=fixture(t),home=path.join(root,'hermes-home'),none=()=>({status:()=>({state:'not connected'})}),legacy=()=>({credentials:()=>({})});fs.mkdirSync(home);
+ acceptUpload(store,{metrics:[]},{now:new Date('2026-10-04T10:00:00Z')});
+ pruneRaw(store.state,new Date('2026-11-05T10:00:00Z'));
+ assert.deepEqual(readRaw(store.state,'0000-00-00'),[],'the health payload has left after its retention period');
+ assert.equal(connectionCheckWanted(home,none,store,legacy),true,'its accepted receipt keeps the daily check running');
+ const phone=phoneProbe({store,now:()=>new Date('2026-11-05T10:00:00Z')});
+ await checkConnections({store,day:D2,probes:stubs({phone}),now:()=>new Date('2026-11-05T10:00:00Z')});
+ assert.equal(readNotices(store).length,1);assert.equal(deadlines(store).length,1);
 });
 
 test('a refused Telegram key: one message and one deadline, closed by the routine the day it works again',async t=>{

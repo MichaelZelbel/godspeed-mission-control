@@ -18,6 +18,7 @@ export const BODY_LIMIT=20*1024*1024;
 // (file-policy.mjs), so neither is ever synced, indexed or backed up.
 export const tokenFile=state=>path.join(state,'ingest-token');
 export const rawFolder=state=>path.join(state,'health-uploads');
+export const lastUploadFile=state=>path.join(state,'phone-health-last-upload');
 
 // The token file is valid when it is a regular, readable, non-empty file that only the server's user can read
 // (0600 where the platform has modes). Anything else is a damaged token: no upload is accepted with it, and only a
@@ -100,6 +101,17 @@ export function readRaw(state,fromDay){
  return inReceiveOrder(lines);
 }
 const inReceiveOrder=lines=>lines.map((line,at)=>({line,at,when:instantOf(line.received_at)})).sort((a,b)=>a.when-b.when||a.at-b.at).map(x=>x.line);
+
+// Raw uploads leave after 30 days, but the connection check needs the time of the last accepted one
+// for as long as the receiver exists. Older receivers have only raw lines, so use their latest line
+// until the next accepted upload creates this small receipt.
+export function lastAcceptedUpload(state){
+ let received;try{received=fs.readFileSync(lastUploadFile(state),'utf8').trim();}catch(error){if(error.code==='ENOENT')return readRaw(state,'0000-00-00').at(-1)?.received_at;return undefined;}
+ return Number.isFinite(instantOf(received))?received:readRaw(state,'0000-00-00').at(-1)?.received_at;
+}
+function rememberAcceptedUpload(state,received){
+ atomic(lastUploadFile(state),received+'\n');fs.chmodSync(lastUploadFile(state),0o600);
+}
 
 const SUMS={step_count:'steps',walking_running_distance:'distance_km',active_energy:'active_kcal',basal_energy_burned:'basal_kcal',dietary_energy:'food_kcal',protein:'protein_g',carbohydrates:'carbs_g',total_fat:'fat_g',flights_climbed:'flights'};
 const LAST={weight_body_mass:'weight_kg',body_fat_percentage:'body_fat_pct',lean_body_mass:'lean_kg',waist_circumference:'waist_cm'};
@@ -219,7 +231,12 @@ export function acceptUpload(store,data,{now=clockNow()}={}){
  return store.withLock(()=>{
   const undo=appendRaw(store.state,{received_at:now.toISOString(),data});
   // An upload that could not become day records is not kept either, so the phone's retry is the only copy.
-  try{pruneRaw(store.state,now);return rebuild(store,touchedDays(data),{now});}catch(error){
+  try{
+   pruneRaw(store.state,now);const result=rebuild(store,touchedDays(data),{now});
+   try{rememberAcceptedUpload(store.state,now.toISOString());}catch(error){throw Object.assign(error,{retained:true,receiptFailed:true});}
+   return result;
+  }catch(error){
+   if(error.retained)throw error;
    try{undo();}catch(rollback){throw Object.assign(error,{retained:true,rollbackMessage:rollback.message});}
    throw error;
   }

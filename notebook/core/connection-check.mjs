@@ -10,7 +10,7 @@ import {routineAIStatus,askDirectly} from './routine-ai.mjs';
 import {FileSync,readSyncConfig} from './sync/git.mjs';
 import {telegramInHermes} from './starting-routines.mjs';
 import {mailboxInUse,mailCountWanted} from './mail-trackers.mjs';
-import {readRaw} from './phone-health.mjs';
+import {lastAcceptedUpload} from './phone-health.mjs';
 import {addDays,now as clockNow,whenSaid} from '../../third-party/addons/godspeed-coach/lib/clock.mjs';
 
 // THE DAILY CONNECTION CHECK (4 November 2026, #200). Godspeed only noticed a broken connection (the
@@ -60,7 +60,7 @@ export function mailLegacy(){return createRequire(import.meta.url)('../../tools/
 export function mailGodspeedStatus(){return createRequire(import.meta.url)('../../tools/mc-mail.js').godspeedStatus();}
 const legacyConnected=legacy=>{try{return !!legacy().credentials().GMAIL_REFRESH_TOKEN;}catch{return false;}};
 export function mailConnected(imap=mailImap,legacy=mailLegacy){try{if(imap().status().state!=='not connected')return true;}catch{}return legacyConnected(legacy);}
-export const lastPhoneUpload=store=>readRaw(store.state,'0000-00-00').at(-1)?.received_at;
+export const lastPhoneUpload=store=>lastAcceptedUpload(store.state);
 export const connectionCheckWanted=(home,imap,store,legacy)=>telegramInHermes(home)||mailConnected(imap,legacy)||!!store&&(mailCountWanted(store)||!!lastPhoneUpload(store));
 
 export const telegramKind=(status,body)=>[401,404].includes(status)||body?.error_code===401?'sign-in':'other';
