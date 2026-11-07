@@ -15,3 +15,25 @@ release's candidate.
   as usual. Once the tag exists, this line no longer applies and the pull request is decided like
   any other.
 - This line is removed in 2.0.0-beta.20's release step.
+
+## A pull request of an approved release is merged without asking
+
+The maintainer hears only decisions that are his. Release promotion (making a candidate public)
+is his own go, decided in godspeed-dev and unchanged by this section. Merging a pull request that
+belongs to a release he has already approved is not a new decision, and the queue does not ask it.
+
+- A pull request whose linked issue's body names a release directory
+  `releases/godspeed-<version>-<slug>` in godspeed-dev whose plan is approved, or says the item was
+  carried into such a release, is merged without asking once the gate passes: a trusted Ready
+  verdict at its exact head, CI green there, the default branch's CI not red, and a clean merge.
+  Its size label does not matter, so an `archon-size-l` pull request of an approved release is
+  `clear`, and neither size nor being one part of that release's plan makes it `unclear`.
+- The other lines of the default's "Unclear" list still apply: a persisted schema, migration or
+  wire format, authentication, credentials or permissions, and a review that lists contract items
+  as not yet met are still asked.
+- The wait rule above still wins: a pull request that waits for an earlier release's candidate
+  stays `wait`, approved release or not.
+- Every other pull request keeps the pack's default.
+- Reason: Michael, 2 November 2026, after two pull requests sat unmerged for hours: "why does it
+  not just do its job". Nearly every factory ticket is sized large, so the default asked about
+  almost all of them, and the answer was always "merge".
