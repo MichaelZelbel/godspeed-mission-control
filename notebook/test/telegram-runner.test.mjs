@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {EventEmitter} from 'node:events';
 import {TelegramRunner,notebookLink} from '../../docker/full-candidate/telegram-runner.mjs';
+import {rejectedTelegramAPIEndpoints} from './telegram-api-endpoints.mjs';
 
 // The one-click container's Telegram: the setup chat while the owner answers it, then Hermes'
 // gateway, never both, started again after a pause when one stops, all without a redeploy.
@@ -61,6 +62,51 @@ test('a chat that stops is started again after a pause; once done, the gateway t
  assert.equal(gateway.options.env.GODSPEED_ACCESS_TOKEN,undefined);assert.equal(gateway.options.env.GODSPEED_CANDIDATE_BOT_TOKEN,undefined);assert.equal(gateway.options.env.HOME,'/fictional');
  gateway.emit('exit',1);await tick(f.runner);assert.equal(f.started.length,3);f.advance(5001);await tick(f.runner);
  assert.equal(f.started.length,4,'a gateway that stopped comes back, and nothing else stops with it');
+});
+
+test('the gateway uses the configured local Bot API after setup',async()=>{
+ const f=fixture(),home=path.join(f.dir,'hermes');fs.mkdirSync(home);fs.writeFileSync(path.join(home,'config.yaml'),'model:\n  provider: openrouter\n');
+ Object.assign(f.runner.env,{HERMES_HOME:home,GODSPEED_TELEGRAM_API:'http://127.0.0.1:8081'});
+ f.write('connection.json',connection);f.write('setup.json',{bot_id:4242,owner_id:111,chat_id:111,done:true});await tick(f.runner);
+ const routed=fs.readFileSync(path.join(home,'config.yaml'),'utf8');assert.match(routed,/platforms:\n  telegram:\n    extra:\n      base_url: "http:\/\/127\.0\.0\.1:8081\/bot"\n      base_file_url: "http:\/\/127\.0\.0\.1:8081\/file\/bot"/);
+ assert.equal(f.started[0].options.env.TELEGRAM_BOT_TOKEN,connection.token);
+ const again=fixture(),againHome=path.join(again.dir,'hermes');fs.mkdirSync(againHome);fs.writeFileSync(path.join(againHome,'config.yaml'),routed);
+ Object.assign(again.runner.env,{HERMES_HOME:againHome,GODSPEED_TELEGRAM_API:'http://127.0.0.1:8081'});
+ again.write('connection.json',connection);again.write('setup.json',{bot_id:4242,owner_id:111,chat_id:111,done:true});await tick(again.runner);
+ assert.equal(again.started.length,1,'an already routed endpoint still starts the gateway');
+});
+
+test('an unsafe configured Bot API does not start the gateway or change its config',async()=>{
+ for(const api of [...rejectedTelegramAPIEndpoints,'http://192.0.2.1']){
+  const f=fixture(),home=path.join(f.dir,'hermes'),config=path.join(home,'config.yaml'),original='model:\n  provider: openrouter\n';fs.mkdirSync(home);fs.writeFileSync(config,original);
+  Object.assign(f.runner.env,{HERMES_HOME:home,GODSPEED_TELEGRAM_API:api});
+  f.write('connection.json',connection);f.write('setup.json',{bot_id:4242,owner_id:111,chat_id:111,done:true});await tick(f.runner);
+  assert.equal(f.started.length,0,api);assert.equal(f.state().state,'gateway-route-failed',api);assert.equal(fs.readFileSync(config,'utf8'),original,api);
+ }
+ const unreadable=fixture(),unreadableHome=path.join(unreadable.dir,'hermes');fs.mkdirSync(unreadableHome);
+ Object.assign(unreadable.runner.env,{HERMES_HOME:unreadableHome,GODSPEED_TELEGRAM_API:'http://127.0.0.1:8081'});
+ unreadable.write('connection.json',connection);unreadable.write('setup.json',{bot_id:4242,owner_id:111,chat_id:111,done:true});await tick(unreadable.runner);
+ assert.equal(unreadable.started.length,0);assert.equal(unreadable.state().state,'gateway-route-failed');
+});
+
+test('a failed gateway config replacement or permission update is reported without starting Hermes',async()=>{
+ for(const operation of ['replace','chmod']){
+  const f=fixture(),home=path.join(f.dir,'hermes'),config=path.join(home,'config.yaml'),original='model:\n  provider: openrouter\n';fs.mkdirSync(home);fs.writeFileSync(config,original);
+  Object.assign(f.runner.env,{HERMES_HOME:home,GODSPEED_TELEGRAM_API:'http://127.0.0.1:8081'});
+  const originalOperation=operation==='replace'?fs.renameSync:fs.chmodSync;
+  if(operation==='replace')fs.renameSync=(from,to)=>{if(to===config)throw Error('replacement refused');return originalOperation(from,to);};
+  else fs.chmodSync=(file,mode)=>{if(file===config)throw Error('permission update refused');return originalOperation(file,mode);};
+  try{
+   f.write('connection.json',connection);f.write('setup.json',{bot_id:4242,owner_id:111,chat_id:111,done:true});await tick(f.runner);
+   assert.equal(f.started.length,0,operation);assert.equal(f.state().state,'gateway-route-failed',operation);
+   if(operation==='replace')assert.equal(fs.readFileSync(config,'utf8'),original);
+   if(operation==='chmod'){
+    await tick(f.runner);
+    assert.equal(f.started.length,0,'a persistent permission failure must not be bypassed on the next tick');
+    assert.equal(f.state().state,'gateway-route-failed');
+   }
+  }finally{if(operation==='replace')fs.renameSync=originalOperation;else fs.chmodSync=originalOperation;}
+ }
 });
 
 test('a new key or a disconnect stops what runs; a finished chat of another bot does not count',async()=>{

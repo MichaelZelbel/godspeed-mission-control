@@ -33,12 +33,12 @@ const rows = (name) => {
 };
 const outbox = () => {
   const { outbox: sent } = read(file);
-  if (!Array.isArray(sent)) throw new Error(`${file} has no outbox: it is not a run.json written by owner-on-telegram.py`);
+  if (!Array.isArray(sent)) throw new Error(`${file} has no outbox from the live Telegram driver`);
   return sent;
 };
 const requiredSteps = () => {
   const { steps } = read(file);
-  if (!Array.isArray(steps)) throw new Error(`${file} has no steps: it is not a run.json written by owner-on-telegram.py`);
+  if (!Array.isArray(steps)) throw new Error(`${file} has no steps from the live Telegram driver`);
   return steps;
 };
 const labelled = (labels) => outbox().filter((m) => labels.split(',').includes(m.label));

@@ -13,9 +13,9 @@
 #
 # THE FIRST KEY is a made-up one connected the way Settings connects it (core/routine-ai.mjs); the
 # scenario's real key (GODSPEED_SCENARIO_AI_KEY) is the one Settings replaces it with, which is what makes
-# it a replacement and is also the one call that needs a model. THE TELEGRAM IS A FIXTURE
-# (telegram-fixture-fetch.mjs), as in connection-check.sh. Until ticket 04 is on the stage the first
-# deadline stays open and this ends in its FAIL line.
+# it a replacement and is also the one call that needs a model. THE TELEGRAM PATH is the installed
+# server's (server-lib.sh, server-telegram.mjs); until this scenario is moved onto it, acting ends at once
+# in a FAIL line that says so.
 #
 # WHERE A KEY MAY BE KEPT is not scanned: the assistant's config.yaml, .env and auth.json and the
 # notebook's provider.json are where Settings puts it. Everything else under the assistant's home, the
@@ -77,6 +77,7 @@ scan_for_keys() { # <file for the answer> <key>...
 }
 
 act() {
+  fail "deadline-closes-itself needs a Telegram path on the installed server (server-lib.sh and server-telegram.mjs), which it has not been moved onto yet; the retired in-process Telegram driver is not brought back"
   need_the_ai_key "replacing the key in Settings"
   fresh_evidence
   install_paths

@@ -6,7 +6,7 @@ These are the **proving scenarios** a candidate runs before the maintainer is as
 (godspeed-dev, `releases/godspeed-2.0.0-beta.8-faster-chat/plan.md`,
 `releases/godspeed-2.0.0-beta.12-reminders-in-the-notebook/plan.md` and
 `releases/godspeed-2.0.0-beta.13-charm-video-notebook/plan.md`, "Proving scenarios"). Each one
-is one job of `.github/workflows/scenarios.yml` on a fresh `ubuntu-24.04` machine (all but `phone-health-days`, `incomplete-day`, `phone-goes-quiet`, `mail-count` and `talk-on-talk-day`: those five are staged for beta.18, and their jobs and verdict entries are added to the workflow at the release step, as the pull request body that added them describes; and except `night-tidy.sh`, which has no job until it is restored there), and each is one
+is one job of `.github/workflows/scenarios.yml` on a fresh `ubuntu-24.04` machine (all but `phone-health-days`, `incomplete-day`, `phone-goes-quiet`, `mail-count`, `talk-on-talk-day` and `first-day`: those six are staged for beta.18, and their jobs and verdict entries are added to the workflow at the release step, as the pull request body that added them describes; and except `night-tidy.sh`, which has no job until it is restored there), and each is one
 script here, so that what a scenario does can be read, run by hand and held to its own tests —
 which a step written inside a workflow file cannot be. They live in a folder of their own for the
 same reason `stage/` does: everything in `tools/` is copied onto every user's computer as a program,
@@ -48,14 +48,15 @@ expected ticket FAIL until they land.
 | `phone-goes-quiet.sh` | 37 hours past the last upload the connection check sends one message and files one deadline, a second run sends nothing, an upload closes the deadline |
 | `mail-count.sh` | a tracker rule set up in the chat ("count the mails from <sender> that say new order") is counted by the daily routine from headers only: exactly the orders, once each, the marker in every body nowhere, and no mail call on an install with no rule |
 | `talk-on-talk-day.sh` | on a talk day, with last week's talk open and unanswered, asking for the talk opens today's from its sealed preparation, names last week's once and closes it as not held |
-| `no-question-he-cannot-judge.sh` | on an install whose owner is on a fixture Telegram, five situations are replayed by a fixture asker: a quiet restart, a bundle of questions, an optional extra and the reminders afterwards send the owner nothing and leave nothing waiting; the one real yes is a single question in words, and his plain "approve" is approved with one reply that only confirms; no message tells him to type `approve <id>` or shows a hex id of six or more |
-| `plain-yes.sh` | on the same fixture: with one step waiting a plain "yes" approves it; with two waiting it gets one question naming both and approves neither, and the answer naming one approves only that one; a Yes button approves its own step and No rejects its own; a "yes" with nothing waiting approves nothing |
-| `what-was-that.sh` | on the same fixture: a queued notice said by its routine is recorded where the chat reads it, with the facts it was written from, and "what is this about?" asked in a new conversation is answered with what the report was about |
-| `connection-check.sh` | on the same fixture: the Daily connection check sends nothing, opens no deadline and rings no bell while Telegram's key is valid, tells the owner once and opens one deadline when Telegram refuses it, and closes the deadline when the key is valid again |
+| `first-day.sh` | on a fresh Docker server with the dedicated test AI and made-up emergency-kit goal, the installed research, choice and work routines make one verified practical checklist; its sparse-data morning brief is saved, delivered through the installed Telegram gateway and returned word-for-word to `today's brief` |
+| `no-question-he-cannot-judge.sh` | through the advertised Docker Telegram route, five situations are replayed by a fixture asker: a quiet restart, a bundle of questions, an optional extra and the reminders afterwards send the owner nothing and leave nothing waiting; the one real yes is a single question in words, and his plain "approve" is approved with one reply that only confirms; no message tells him to type `approve <id>` or shows a hex id of six or more |
+| `plain-yes.sh` | through the same installed Docker gateway: with one step waiting a plain "yes" approves it; with two waiting it gets one question naming both and approves neither, and the answer naming one approves only that one; a Yes button approves its own step and No rejects its own; a "yes" with nothing waiting approves nothing |
+| `what-was-that.sh` | through the same installed Docker gateway: a queued notice said by its routine is recorded where the chat reads it, with the facts it was written from, and "what is this about?" asked in a new conversation is answered with what the report was about |
+| `connection-check.sh` | through the same installed Docker gateway: the Daily connection check sends nothing, opens no deadline and rings no bell while Telegram's key is valid, tells the owner once and opens one deadline when Telegram refuses it, and closes the deadline when the key is valid again |
 | `chat-tidy-at-night.sh` | a made-up conversation past the limit is made shorter in the assistant's database by the Night chat tidy-up, started by hand, and its log says tidied; the next message is answered with no summary in front; a conversation under the limit is byte-for-byte as it was |
 | `disk-filling.sh` | on the Docker server install, with a small file system over the data folder made to read 86%: the daily connection check says one message naming the three biggest places and opens one deadline, a second run says and opens nothing, at 75% the deadline closes; the cleanup routine then takes the 40-day-old request dump, session transcript and run log and leaves the note, both chats, the backup and the file of a listed session |
-| `missed-routine.sh` | on the fixture Telegram: with one routine whose time passed without a run, one that failed twice and one that failed once, the daily connection check sends one message naming the first two and not the third, a second run sends nothing, and a good run of each closes what was opened |
-| `deadline-closes-itself.sh` | a deadline on the AI's key closes on the next deadline run after the key is replaced in Settings, a deadline about Telegram closes when the connection check passes, and neither key's value is in any log, record or evidence file |
+| `missed-routine.sh` | not yet on the installed server's Telegram path, so acting ends at once in a FAIL line that says so; its checking part is held by `test-scenarios.sh`. Once moved: with one routine whose time passed without a run, one that failed twice and one that failed once, the daily connection check sends one message naming the first two and not the third, a second run sends nothing, and a good run of each closes what was opened |
+| `deadline-closes-itself.sh` | not yet on the installed server's Telegram path, so acting ends at once in a FAIL line that says so; its checking part is held by `test-scenarios.sh`. Once moved: a deadline on the AI's key closes on the next deadline run after the key is replaced in Settings, a deadline about Telegram closes when the connection check passes, and neither key's value is in any log, record or evidence file |
 | `workouts-from-hevy.sh` (no workflow job yet) | Docker and Linux installs reject a made-up Hevy key, then import made-up workouts through Settings; their one hourly routine updates a changed workout and removes a deleted one without keeping the key elsewhere |
 | `day-becomes-facts.sh` (no workflow job yet; expected ticket-03 FAIL until it lands) | the nightly remembered-facts routine turns an invented day's move and doctor into dated source-linked facts, closes the older city, ignores machine/`track` messages, and makes no second-copy records |
 | `hermes-update-rollback.sh` (no workflow job yet; expected ticket-04 FAIL until it lands) | the notebook's 04:15 path keeps a good local Hermes release, rolls a broken one back with one notice, and leaves a three-day-old local release alone |
@@ -122,7 +123,8 @@ Named by the job, never in a file here (for the scenarios above that await their
 | `incomplete-day` | `GODSPEED_SCENARIO_AI_KEY` | a model writes the briefings the scenario reads; it judges only what a briefing says of a day, never the numbers |
 | `mail-count` | `GODSPEED_SCENARIO_AI_KEY` | the chat that sets the rule up is the real assistant, so it needs a model |
 | `talk-on-talk-day` | `GODSPEED_SCENARIO_AI_KEY` | the talk the owner asks for is opened by a model; the preparations are fixtures sealed by the coach's own commands |
-| `no-question-he-cannot-judge`, `plain-yes`, `what-was-that` | `GODSPEED_SCENARIO_AI_KEY` | the install's assistant answers the owner on the fixture Telegram through a model; the same two say which. The Telegram account and bot key are the fixture's, never a real one |
+| `first-day`, `no-question-he-cannot-judge`, `plain-yes`, `what-was-that` | `GODSPEED_SCENARIO_AI_KEY` | the installed Docker Telegram setup checks the dedicated test account before its supervised gateway receives the made-up owner messages; the same two variables select it. The bot and recipient stay local fixtures. |
+| `connection-check` | none | it proves the installed daily connection routine and gateway with the setup's existing no-sign-in branch; it does not ask the assistant for a model answer. |
 | `chat-tidy-at-night`, `deadline-closes-itself` | `GODSPEED_SCENARIO_AI_KEY` | the tidied chat and the next message need a model; Settings' own replacement of a key tests the new key with one; the same two say which. `missed-routine` and `disk-filling` need none |
 | `day-becomes-facts` | `GODSPEED_SCENARIO_AI_KEY` | the installed remembered-facts routine extracts from the invented archive with the scenario AI; the same URL and model variables say which. The workouts and Hermes fixtures need no real account or key. |
 
@@ -217,16 +219,16 @@ Only the stage's own ref is read from that folder. A scenario that first install
 (`BEFORE_THE_MOVE`, `WITH_THE_VIDEO_SKILLS`) reads it from GitHub, as it always has
 (`install_the_line_of_into` in `scenario-lib.sh`).
 
-## The fixture Telegram of the beta.17 scenarios
+## Docker Telegram evidence
 
-Four scenarios put the owner on a Telegram that is a fixture. `owner-on-telegram.py` runs inside the
-installed Hermes' own Python, as `telegram-through-hermes.py` does, but as a whole emulated gateway:
-Hermes loads the install's plugins, runs a routine by name and delivers what it prints, runs one turn
-of its own agent for an owner message, and takes a button press. What is stood in for is Telegram's
-servers: every call lands in an outbox, and a call with a token other than the fixture's valid one
-is refused as Telegram refuses a revoked key. `telegram-fixture-fetch.mjs` stands in for them for the
-one program that asks them straight from Node, the daily connection check, and `scenario-asker.py` is
-the routine that opens waiting steps through the product's one way to ask (`godspeed-step`); its flag
-table is the only place that names the flags of tickets 01 and 04. `telegram-judge.mjs` reads what
-was sent. Before the installed Hermes has run them for real, the entry points the driver calls are
-read from Hermes' source, not exercised: a first real run is what settles them.
+`server-lib.sh` installs the frozen `/server` stage and `server-telegram.mjs` drives the installed
+notebook setup, `godspeed-telegram-setup`, supervised Hermes gateway and routine APIs. The only stand-in
+is the candidate image's local `fake-telegram.py` Bot API. It records ordered, redacted requests and
+messages; `run.json` brackets each inbound owner action or routine run, `runner.json` proves the gateway
+state, and the scenario keeps its notebook snapshots plus a manifest. The four repaired Telegram
+scenarios also retain `steps.tsv`, with a short PASS or FAIL verdict for each visible interaction. The
+four former Linux emulator
+scenarios and `first-day.sh` therefore fail when the packaged Telegram dependency, setup or gateway is
+missing rather than installing one after the fact. `scenario-asker.py` remains the image's installed fixture
+routine that opens waiting steps through `godspeed-step`; its flag table is the only place that names
+the flags of tickets 01 and 04.
