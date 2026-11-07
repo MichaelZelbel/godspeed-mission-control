@@ -127,6 +127,17 @@ test('a briefing cannot deliver after its adopted goal or health source changes 
  }
 });
 
+test('a briefing cannot deliver after its rehearsal receipt or ready contribution changes during judgment',async()=>{
+ for(const change of ['receipt','contribution']){
+  const store=new Store(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-brief-added-source-stale-'))),query=new QueryService(store);let source,content,note,checks=0;
+  if(change==='receipt')source=store.save('job_receipts',{kind:'brief-rehearsal',state:'verified',result:'Fictional rehearsal completed'});
+  else {content='Fictional copy-ready contribution.';note=store.save('notes',{title:'Fictional contribution',content});source=store.save('lead_entries',{title:note.title,content,note_id:note.id,status:'ready',delivery_day:'2026-01-01'});}
+  const provider=async input=>{if(input.kind==='brief-verification'){if(++checks===2)store.save(change==='receipt'?'job_receipts':'lead_entries',{id:source.id,state:change==='receipt'?'failed':undefined,status:change==='contribution'?'queued':undefined});return {passed:true,reason:'Fictional checker accepted the old snapshot'};}return change==='receipt'?'No fresh fictional health observations are available. The fictional rehearsal is complete.':'No fresh fictional health observations are available. Review this fictional contribution.\n\n'+content+'\n\n/dashboard/notes/'+note.id;};
+  await assert.rejects(jobExecutor(provider,query)({kind:'morning-brief',id:'brief-added-source-'+change},{store,settings:{}}),/sources changed/);
+  assert.equal(store.list('notes').filter(n=>n.source_app==='morning-brief').length,0);assert.equal(store.list('notifications').length,0);assert.equal(checks,2);
+ }
+});
+
 test('overlapping checked briefings file identical content only once',async()=>{
  const store=new Store(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-brief-overlap-'))),query=new QueryService(store),provider=async input=>input.kind==='brief-verification'?{passed:true,reason:'Fictional sources checked'}:'No fresh fictional health observations are available. Inspect the fictional source.';
  const run=jobExecutor(provider,query),results=await Promise.all([run({kind:'morning-brief',id:'brief-one'},{store,settings:{}}),run({kind:'morning-brief',id:'brief-two'},{store,settings:{}})]);
