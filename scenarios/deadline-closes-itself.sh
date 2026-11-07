@@ -14,7 +14,7 @@
 # THE FIRST KEY is a made-up one connected the way Settings connects it (core/routine-ai.mjs); the
 # scenario's real key (GODSPEED_SCENARIO_AI_KEY) is the one Settings replaces it with, which is what makes
 # it a replacement and is also the one call that needs a model. THE TELEGRAM IS A FIXTURE
-# (telegram-fixture-fetch.mjs), as in connection-check.sh. Until ticket 04 is on the stage the first
+# fixture, as in connection-check.sh. Until ticket 04 is on the stage the first
 # deadline stays open and this ends in its FAIL line.
 #
 # WHERE A KEY MAY BE KEPT is not scanned: the assistant's config.yaml, .env and auth.json and the

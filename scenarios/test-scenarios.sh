@@ -2973,7 +2973,7 @@ for table in "${SERVER_SPARSE_TABLES[@]}"; do
 done
 copy "$FD/good" "$FD/no-brief-sources"
 : >"$FD/no-brief-sources/briefing-source-tables.txt"
-refuses 'a first day whose installed product names no briefing sources' first-day "$FD/no-brief-sources" 'named no morning-brief source records'
+refuses 'a first day whose installed product names no briefing sources' first-day "$FD/no-brief-sources" 'briefing-source-tables.txt is not in what the scenario kept'
 copy "$FD/good" "$FD/no-send"
 printf '{"sent":[]}\n' >"$FD/no-send/scheduled-telegram-requests.json"
 refuses 'a brief not delivered on Telegram' first-day "$FD/no-send" 'never delivered'
