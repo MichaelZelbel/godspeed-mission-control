@@ -3637,7 +3637,7 @@ fi
 # Cheap source checks: the live driver remains the only Telegram path, what-was-that runs the
 # routine a fresh install has, and a clock recreate includes both Compose layers.
 section "the corrected scenario seams"
-if ! rg -q 'owner-on-telegram|telegram-fixture-fetch|ensure_telegram_library' "$ROOT/scenarios" --glob '!README.md' --glob '!test-scenarios.sh'; then
+if ! grep -rEq --exclude=README.md --exclude=test-scenarios.sh 'owner-on-telegram|telegram-fixture-fetch|ensure_telegram_library' "$ROOT/scenarios"; then
   ok "the Telegram scenarios have no in-process or post-install Telegram driver"
 else
   bad "the Telegram scenarios still name the old in-process or post-install Telegram driver"
