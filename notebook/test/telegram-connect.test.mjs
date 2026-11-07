@@ -90,21 +90,8 @@ test('the page follows the chat: waiting for Start, setting up, ready; a refused
  f.setup({bot_id:4242});assert.equal(f.connection.status().phase,'waiting');
  f.setup({bot_id:4242,owner_id:111,chat_id:111,owner_name:'Anna'});
  let status=f.connection.status();assert.equal(status.phase,'setting-up');assert.equal(status.owner,'Anna');assert.equal(status.link,undefined,'the link is gone once used');
- f.setup({bot_id:4242,owner_id:111,chat_id:111,owner_name:'Anna',done:true});assert.equal(f.connection.status().phase,'starting');
- fs.writeFileSync(path.join(f.dir,'runner.json'),JSON.stringify({state:'gateway'}));assert.equal(f.connection.status().phase,'ready');
+ f.setup({bot_id:4242,owner_id:111,chat_id:111,owner_name:'Anna',done:true});assert.equal(f.connection.status().phase,'ready');
  f.setup({bot_id:4242,problem:'refused'});assert.equal(f.connection.status().phase,'refused');
-});
-
-test('a completed setup is ready only while the runner reports a gateway',async()=>{
- const f=fixture();await f.connection.connect(KEY);
- f.setup({bot_id:4242,owner_id:111,chat_id:111,owner_name:'Anna',done:true});
- for(const state of [null,'idle','setup','backup','waiting-to-retry','stopped']){
-  if(state===null)fs.rmSync(path.join(f.dir,'runner.json'),{force:true});
-  else fs.writeFileSync(path.join(f.dir,'runner.json'),JSON.stringify({state}));
-  assert.equal(f.connection.status().phase,'starting',state||'no status');
- }
- fs.writeFileSync(path.join(f.dir,'runner.json'),JSON.stringify({state:'gateway'}));
- assert.equal(f.connection.status().phase,'ready');
 });
 
 test('the signed-in Telegram status says when its completed gateway cannot route its endpoint',async()=>{
@@ -129,7 +116,6 @@ test('another bot starts over; the same bot keeps its owner; a revoked key reach
  const other='987654321:AAHanotherFictionalKeyForTests_9876543210',revoked='123456789:AAHtheSameBotAfterRevokeInBotFather_012';
  const f=fixture({bots:{[KEY]:{id:4242,is_bot:true,username:'fictional_godspeed_bot'},[revoked]:{id:4242,is_bot:true,username:'fictional_godspeed_bot'},[other]:{id:77,is_bot:true,username:'other_fictional_bot'}}});
  await f.connection.connect(KEY);f.setup({bot_id:4242,owner_id:111,chat_id:111,done:true});
- fs.writeFileSync(path.join(f.dir,'runner.json'),JSON.stringify({state:'gateway'}));
  fs.writeFileSync(path.join(f.hermesHome,'.env'),`OPENAI_KEY=kept\nTELEGRAM_BOT_TOKEN=${KEY}\nTELEGRAM_ALLOWED_USERS=111\nTELEGRAM_HOME_CHANNEL=111\n`);
  assert.equal((await f.connection.connect(revoked)).phase,'ready');
  assert.match(fs.readFileSync(path.join(f.hermesHome,'.env'),'utf8'),new RegExp('TELEGRAM_BOT_TOKEN='+revoked+'\nTELEGRAM_ALLOWED_USERS=111'));

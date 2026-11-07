@@ -45,13 +45,13 @@ export class TelegramConnection{
     if(!connection?.token)return {available:true,managed:'web',connected:false,phase:telegramPhase.none};
     const setup=this.read('setup.json')||{},mine=String(setup.bot_id||'')===String(connection.bot_id),runner=this.read('runner.json');
     let endpointSafe=true;try{telegramAPI(this.api);}catch{endpointSafe=false;}
-    const phase=mine&&setup.problem==='refused'?telegramPhase.refused:mine&&setup.done&&(!endpointSafe||runner?.state==='gateway-route-failed')?telegramPhase.gatewayRouteFailed:mine&&setup.done&&runner?.state==='gateway'?telegramPhase.ready:mine&&setup.done?telegramPhase.starting:mine&&setup.owner_id?telegramPhase.settingUp:telegramPhase.waiting;
+    const phase=mine&&setup.problem==='refused'?telegramPhase.refused:mine&&setup.done&&(!endpointSafe||runner?.state==='gateway-route-failed')?telegramPhase.gatewayRouteFailed:mine&&setup.done?telegramPhase.ready:mine&&setup.owner_id?telegramPhase.settingUp:telegramPhase.waiting;
     // The message itself too, to copy: a bot its owner has chatted with before shows no Start
     // button, and only "/start <code>" makes its sender the owner (godspeed-telegram-setup). The
     // link already carries the code, so this shows the signed-in owner nothing new.
     return {available:true,managed:'web',connected:true,phase,bot:{username:connection.username,name:connection.name},
       ...(phase===telegramPhase.waiting?{link:`https://t.me/${connection.username}?start=${connection.start_code}`,start_message:'/start '+connection.start_code}:{}),
-      ...([telegramPhase.settingUp,telegramPhase.starting,telegramPhase.ready].includes(phase)?{owner:setup.owner_name||null}:{}),
+      ...([telegramPhase.settingUp,telegramPhase.ready].includes(phase)?{owner:setup.owner_name||null}:{}),
       connected_at:connection.connected_at};
   }
   async telegram(token,method){

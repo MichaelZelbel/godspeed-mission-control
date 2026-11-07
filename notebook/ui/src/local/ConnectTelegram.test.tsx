@@ -55,11 +55,6 @@ describe("TelegramConnect", () => {
     expect(await screen.findByText(/Telegram is connected/,{}, {timeout:4500})).toBeInTheDocument();
     expect(reads).toBe(2);
   },5000);
-  it("keeps polling while the completed setup waits for its gateway", async () => {
-    show({ telegram: { available: true, managed: "web", connected: true, phase: "starting", bot: { username: "fictional_bot", name: "Fictional" } } });
-    expect(await screen.findByText(/Telegram is starting on your server\./)).toBeInTheDocument();
-    expect(screen.queryByText(/Telegram is connected/)).not.toBeInTheDocument();
-  });
   it("treats a server phase it does not know as an error", async () => {
     show({ telegram: { available: true, managed: "web", connected: true, phase: "later", bot: { username: "fictional_bot", name: "Fictional" } } });
     expect(await screen.findByRole("alert")).toHaveTextContent("Telegram returned a status this page does not understand.");
