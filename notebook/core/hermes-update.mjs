@@ -17,7 +17,9 @@ const compare=(a,b)=>a.split('.').map(Number).reduce((result,n,index)=>result||n
 const errorText=result=>[result?.stderr,result?.stdout,result?.error?.message].filter(Boolean).join('\n');
 const failure=({step,result})=>({step,output:scrubCredentials(errorText(result)).trim().slice(-2000)});
 const backupName=file=>/^godspeed-pre-update-[0-9a-f-]+\.zip$/.test(file);
-const officialHermesRemote=value=>/^(?:https:\/\/github\.com\/|git@github\.com:|ssh:\/\/git@github\.com\/)NousResearch\/hermes-agent(?:\.git)?\/?$/i.test(String(value||'').trim());
+const HERMES_REPOSITORY={owner:'NousResearch',name:'hermes-agent'};
+const hermesRepositoryPath=`${HERMES_REPOSITORY.owner}/${HERMES_REPOSITORY.name}`.toLowerCase();
+const officialHermesRemote=value=>['https://github.com/','git@github.com:','ssh://git@github.com/'].some(prefix=>String(value||'').trim().replace(/\/+$/,'').replace(/\.git$/i,'').toLowerCase()===prefix+hermesRepositoryPath);
 
 export function readHermesUpdate(store){
  try{const value=JSON.parse(fs.readFileSync(path.join(store.state,UPDATE_FILE),'utf8'));return value&&typeof value==='object'&&!Array.isArray(value)?value:{};}catch{return {};}
@@ -68,12 +70,12 @@ export class HermesUpdate{
   const dirty=await this.git(['status','--porcelain'],source);if(dirty.code!==0)return {reason:'The Hermes checkout could not be checked.'};
   if(dirty.stdout.trim())return {reason:'The Hermes checkout has uncommitted changes.'};
   const head=await this.git(['rev-parse','HEAD'],source);if(head.code!==0)return {reason:'The Hermes checkout has no recoverable commit.'};
-  const origin=await this.git(['remote','get-url','--all','origin'],source),urls=origin.stdout.trim().split(/\r?\n/).filter(Boolean);if(origin.code!==0||!urls.length||urls.some(url=>!officialHermesRemote(url)))return {reason:'This Hermes checkout does not use the official Hermes source.'};
+  const origin=await this.git(['remote','get-url','--all','origin'],source),urls=origin.stdout.trim().split(/\r?\n/).filter(Boolean);if(origin.code!==0||urls.length!==1||!officialHermesRemote(urls[0]))return {reason:"This Hermes checkout's origin is not the official Hermes repository."};
   return {source,head:head.stdout.trim(),executable};
  }
  async releases(){
   try{
-   const response=await this.fetcher('https://api.github.com/repos/NousResearch/hermes-agent/releases?per_page=100',{headers:{Accept:'application/vnd.github+json','User-Agent':'godspeed-mission-control'}});
+   const response=await this.fetcher(`https://api.github.com/repos/${HERMES_REPOSITORY.owner}/${HERMES_REPOSITORY.name}/releases?per_page=100`,{headers:{Accept:'application/vnd.github+json','User-Agent':'godspeed-mission-control'}});
    if(!response?.ok)throw Object.assign(Error('Hermes releases request failed ('+(response?.status||'unknown')+').'),{stderr:await response?.text?.().catch(()=>''),code:response?.status||1});
    return {releases:await response.json()};
   }catch(error){return {error};}
