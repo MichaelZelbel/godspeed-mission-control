@@ -138,6 +138,13 @@ test('a briefing cannot deliver after its rehearsal receipt or ready contributio
  }
 });
 
+test('a briefing cannot deliver after a previous briefing changes during judgment',async()=>{
+ const store=new Store(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-brief-prior-stale-'))),query=new QueryService(store),prior=store.save('notes',{title:'Previous fictional briefing',content:'Old fictional advice.',source_app:'morning-brief'});let checks=0;
+ const provider=async input=>{if(input.kind==='brief-verification'){if(++checks===2)store.save('notes',{id:prior.id,content:'Changed fictional advice.'});return {passed:true,reason:'Fixture checked the old previous briefing'};}return 'No fresh fictional health observations are available. Inspect the fictional source.';};
+ await assert.rejects(jobExecutor(provider,query)({kind:'morning-brief',id:'brief-prior-stale'},{store,settings:{}}),/sources changed/);
+ assert.equal(store.list('notes').filter(n=>n.source_app==='morning-brief').length,1);assert.equal(store.list('notifications').length,0);assert.equal(checks,2);
+});
+
 test('overlapping checked briefings file identical content only once',async()=>{
  const store=new Store(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-brief-overlap-'))),query=new QueryService(store),provider=async input=>input.kind==='brief-verification'?{passed:true,reason:'Fictional sources checked'}:'No fresh fictional health observations are available. Inspect the fictional source.';
  const run=jobExecutor(provider,query),results=await Promise.all([run({kind:'morning-brief',id:'brief-one'},{store,settings:{}}),run({kind:'morning-brief',id:'brief-two'},{store,settings:{}})]);
