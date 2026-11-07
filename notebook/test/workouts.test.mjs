@@ -7,6 +7,7 @@ import {NativeScheduler} from '../core/native-scheduler.mjs';
 import {Store} from '../core/records/store.mjs';
 import {readNotebookRoutines} from '../core/notebook-routines.mjs';
 import {WorkoutsAddon} from '../core/workouts.mjs';
+import {createService} from '../server/main.mjs';
 import {startFakeHevy,KEY,workout} from '../../third-party/addons/godspeed-workouts/test/fakes/hevy.mjs';
 import {startFakeNotebook} from '../../third-party/addons/godspeed-workouts/test/fakes/notebook.mjs';
 import {readKey} from '../../third-party/addons/godspeed-workouts/lib/keys.mjs';
@@ -20,7 +21,7 @@ function fakeHermes(home){
 }
 function handoverFixture(t,{mode='fresh'}={}){
  const root=temporary(t),home=path.join(root,'.hermes'),store=new Store(root,{device:'pc'}),hermes=fakeHermes(home),events=hermes.events;let now=Date.parse('2030-01-01T00:00:00Z'),last=null;
- const scheduler=new NativeScheduler(store,{home,executable:'hermes',device:'pc',run:hermes.run,now:()=>now}),addon={hasKey:()=>true,routineConfig:()=>({}),status:async()=>{events.push('status');return {minute:17,last_run:last};},uninstall:async()=>{events.push('uninstall');}};
+ const scheduler=new NativeScheduler(store,{home,executable:'hermes',device:'pc',run:hermes.run,now:()=>now}),addon={hasKey:()=>true,routineConfig:()=>({}),status:async()=>{events.push('status');return {minute:17,last_run:last};},uninstall:async()=>{events.push('uninstall');if(mode==='uninstall-fails')throw Error('legacy timer remains');}};
  fs.writeFileSync(path.join(root,'AGENTS.md'),'# test');scheduler.setWorkouts(addon);
  hermes.setRun(async()=>{if(mode==='run-fails')throw Object.assign(Error('first import failed'),{stderr:'first import failed\ntoken=sk-secret-token-value-123456789'});last=mode==='stale'?{ok:true,at:new Date(now-1).toISOString()}:mode==='failed'?{ok:false,at:new Date(now).toISOString()}:{ok:true,at:new Date(now).toISOString()};});
  return {store,hermes,scheduler,events,advance:ms=>{now+=ms;}};
@@ -67,6 +68,26 @@ test('a failed Workouts handover retains the standalone timer, reports a safe re
   const next=handoverFixture(t,{mode});await assert.rejects(next.scheduler.followWorkouts(),/first import failed|did not complete/);
   assert.equal(next.events.includes('uninstall'),false,mode);assert.equal(next.hermes.jobs().length,0,mode);assert.equal(readNotebookRoutines(next.store).jobs.length,0,mode);assert.equal(next.scheduler.workoutsRoutineStatus().state,'pending',mode);
  }
+ const removal=handoverFixture(t,{mode:'uninstall-fails'});await assert.rejects(removal.scheduler.followWorkouts(),/legacy timer remains/);
+ assert.deepEqual(removal.events,['status','create','run:job1','status','uninstall','remove']);assert.equal(removal.hermes.jobs().length,0);assert.equal(readNotebookRoutines(removal.store).jobs.length,0);assert.equal(removal.scheduler.workoutsRoutineStatus().state,'pending');
+});
+
+test('a Workouts handover does not retire either importer when recording ownership fails',async t=>{
+ const {store,hermes,scheduler,events}=handoverFixture(t),state=store.state;
+ const open=fs.openSync;
+ fs.openSync=(file,...args)=>{if(String(file).startsWith(path.join(state,'notebook-routines.json.'))&&String(file).endsWith('.tmp'))throw Object.assign(Error('No space left'),{code:'ENOSPC'});return open(file,...args);};
+ try{await assert.rejects(scheduler.followWorkouts(),/No space left/);}finally{fs.openSync=open;}
+ assert.equal(events.includes('uninstall'),false);assert.equal(hermes.jobs().length,0);assert.equal(readNotebookRoutines(store).jobs.length,0);
+});
+
+test('the Workouts API projects a pending handover reason and retry time',async t=>{
+ const root=temporary(t),home=path.join(root,'.hermes'),assistant=path.join(root,'assistant.json'),saved={runtime:process.env.GODSPEED_ORIGINAL_RUNTIME,config:process.env.GODSPEED_ASSISTANT_CONFIG};
+ fs.mkdirSync(home,{recursive:true});fs.writeFileSync(assistant,JSON.stringify({verified:true,executable:'hermes',home}));process.env.GODSPEED_ORIGINAL_RUNTIME='on';process.env.GODSPEED_ASSISTANT_CONFIG=assistant;
+ t.after(()=>{for(const [name,value] of Object.entries(saved))if(value===undefined)delete process.env[name==='runtime'?'GODSPEED_ORIGINAL_RUNTIME':'GODSPEED_ASSISTANT_CONFIG'];else process.env[name==='runtime'?'GODSPEED_ORIGINAL_RUNTIME':'GODSPEED_ASSISTANT_CONFIG']=value;});
+ const service=await createService({root,device:'pc',port:0});t.after(()=>service.close());
+ fs.writeFileSync(path.join(service.store.state,'routine-setup-failures.json'),JSON.stringify({steps:{workouts:{stderr:'Hermes could not create the routine',retry_after:'2030-01-01T00:01:00.000Z'}}}));
+ const response=await fetch('http://127.0.0.1:'+service.address.port+'/api/workouts'),status=await response.json();
+ assert.equal(response.status,200);assert.deepEqual(status.routine,{state:'pending',reason:'Hermes could not create the routine',retry_after:'2030-01-01T00:01:00.000Z'});
 });
 
 test('the carried command accepts its key only on stdin and its projected status never exposes it',async t=>{

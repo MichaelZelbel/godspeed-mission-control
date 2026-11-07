@@ -480,15 +480,17 @@ export class NativeScheduler{
  }
  async completeWorkoutsHandover(candidate){
   const started=this.now();
+  const routine={id:candidate.id,key:'workouts',name:WORKOUTS_JOB,what:WORKOUTS_WHAT};let remembered=false;
   try{
    await this.runNow(candidate.id);
    const last=(await this.workouts.status()).last_run,at=Date.parse(last?.at||'');
    if(!last?.ok||!Number.isFinite(at)||at<started)throw Error('Workouts from Hevy did not complete its first import');
-   // The carried job has proved it can import before the add-on retires its own timer.
+   // Persisting ownership cannot be allowed to fail after retiring the old timer.
+   rememberNotebookRoutine(this.store,routine);remembered=true;
    await this.workouts.uninstall();
-   rememberNotebookRoutine(this.store,{id:candidate.id,key:'workouts',name:WORKOUTS_JOB,what:WORKOUTS_WHAT});
    return candidate.id;
   }catch(error){
+   if(remembered){const routines=readNotebookRoutines(this.store);writeNotebookRoutines(this.store,{...routines,jobs:routines.jobs.filter(job=>job.id!==candidate.id)});}
    await this.command(['remove',candidate.id]).catch(()=>{});
    throw error;
   }
