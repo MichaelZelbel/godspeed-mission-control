@@ -25,6 +25,15 @@
     "http://127.0010:8081/telegram/",
     "http://127.000.000.010:8081/telegram/",
     "http://127.000.000.0010:8081/telegram/",
-    "http://127.0.0010:8081/telegram/"
+    "http://127.0.0010:8081/telegram/",
+    "https://2130706433:8081/telegram/",
+    "https://127.0.0.0x1:8081/telegram/",
+    "https://0177.0.0.1:8081/telegram/",
+    "https://127.008:8081/telegram/",
+    "https://127.010:8081/telegram/",
+    "https://127.0010:8081/telegram/",
+    "https://127.000.000.010:8081/telegram/",
+    "https://127.000.000.0010:8081/telegram/",
+    "https://127.0.0010:8081/telegram/"
   ]
 }

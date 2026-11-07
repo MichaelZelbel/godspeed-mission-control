@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {TelegramConnection,browserZone,browserAddress} from '../server/telegram-connect.mjs';
 import {createService} from '../server/main.mjs';
+const TELEGRAM_API_VECTORS=JSON.parse(fs.readFileSync(new URL('./telegram-api-endpoints.json',import.meta.url),'utf8'));
 
 // Telegram connected from the web page on the one-click server: the key is checked with
 // Telegram (a stand-in here), kept only on this server, and the page offers a one-time link.
@@ -75,7 +76,7 @@ test('Settings sends a bot key only to an HTTPS or loopback Telegram API',async(
  const prefixed=fixture({api:'https://telegram.invalid/proxy/'});
  await prefixed.connection.connect(KEY);
  assert.deepEqual(prefixed.telegram.calls.map(url=>url.replace(KEY,'<key>')),['https://telegram.invalid/proxy/bot<key>/getMe','https://telegram.invalid/proxy/bot<key>/getWebhookInfo']);
- for(const api of ['http://telegram.example.test','http://192.0.2.1','ftp://127.0.0.1','https://user:password@api.example.test','https://api.example.test/telegram?','https://api.example.test/telegram#']){
+ for(const api of [...TELEGRAM_API_VECTORS.rejected,'http://telegram.example.test','http://192.0.2.1','https://user:password@api.example.test']){
   const f=fixture({api});
   await assert.rejects(f.connection.connect(KEY),{message:'Telegram API requires HTTPS or a loopback HTTP endpoint'});
   assert.equal(f.telegram.calls.length,0,api+' never receives the bot key');
