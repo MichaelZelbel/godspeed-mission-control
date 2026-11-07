@@ -144,6 +144,34 @@ server_post_uses_local_door() { # <port> <expected URL>
 server_post_uses_local_door '' 'http://127.0.0.1:47832/api/provider'
 server_post_uses_local_door 49999 'http://127.0.0.1:49999/api/provider'
 
+server_telegram_setup_uses_local_door() { # <port>
+  local port server_dir node log
+  port=$1
+  server_dir=$TMP/server-telegram-setup-$port
+  node=$TMP/server-telegram-node-$port
+  log=$TMP/server-telegram-node-$port.log
+  mkdir -p "$server_dir" "$TMP/server-telegram-evidence-$port"
+  printf '#!/bin/sh\nprintf "%%s\\n" "$@" >"$SERVER_TELEGRAM_NODE_LOG"\n' >"$node"
+  chmod +x "$node"
+  GODSPEED_SCENARIO_INGEST_PORT="$port" GODSPEED_SCENARIO_SERVER_DIR="$server_dir" EVIDENCE="$TMP/server-telegram-evidence-$port" HERE="$HERE" \
+    NODE="$node" SERVER_TELEGRAM_NODE_LOG="$log" bash -c '
+      . "$1"
+      sudo() { shift; cat >"$1"; }
+      server_compose() { :; }
+      server_healthy() { :; }
+      server_container() { printf fixture; }
+      server_telegram_setup without-ai
+    ' bash "$HERE/server-lib.sh" 2>/dev/null
+  if grep -Fqx -- '--notebook-port' "$log" && grep -Fqx "$port" "$log"; then
+    ok "server_telegram_setup passes $port to the Telegram driver"
+  else
+    bad "server_telegram_setup did not pass $port to the Telegram driver ($(cat "$log" 2>/dev/null))"
+  fi
+}
+
+server_telegram_setup_uses_local_door 47832
+server_telegram_setup_uses_local_door 49999
+
 server_sparse_inventory() {
   local output
   mkdir -p "$TMP/server-sparse"

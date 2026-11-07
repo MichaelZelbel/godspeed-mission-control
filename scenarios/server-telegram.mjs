@@ -20,6 +20,7 @@ const server=optional('--server') ?? 'godspeed';
 const evidence=optional('--evidence');
 const token=optional('--token');
 const owner=Number(optional('--owner') ?? '31415');
+const notebookPort=optional('--notebook-port') ?? '47832';
 const docker=(arguments_,input) => execFileSync('sudo',['docker',...arguments_],{input,encoding:'utf8',stdio:['pipe','pipe','pipe']});
 const inServer=(arguments_,input) => docker(['exec','-i',server,...arguments_],input);
 const sleep=ms => new Promise(resolve=>setTimeout(resolve,ms));
@@ -78,7 +79,7 @@ function act(value){
   inServer(['curl','-fsS','--max-time','30','-X','POST','-H','Content-Type: application/json','--data-binary','@-','http://127.0.0.1:8081/__act'],request);
 }
 function post(pathname,body){
-  const result=inServer(['curl','-fsS','--max-time','300','-X','POST','-H','Content-Type: application/json','--data-binary','@-',`http://127.0.0.1:47831${pathname}`],Buffer.from(json(body)));
+  const result=inServer(['curl','-fsS','--max-time','300','-X','POST','-H','Content-Type: application/json','--data-binary','@-',`http://127.0.0.1:${notebookPort}${pathname}`],Buffer.from(json(body)));
   return JSON.parse(result);
 }
 async function waitFor(description,readValue,predicate,seconds=90){

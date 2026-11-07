@@ -143,7 +143,7 @@ server_telegram_setup() { # [without-ai]
     fail 'the server could not restart with its Telegram API endpoint set to the local stand-in'
   server_healthy 300 || fail 'the Docker server is not healthy after its Telegram endpoint was set'
   "$NODE" "$HERE/server-telegram.mjs" setup --server "$(server_container)" --evidence "$EVIDENCE" \
-    --token "$SERVER_TELEGRAM_TOKEN" --owner "$SERVER_TELEGRAM_OWNER" "${setup[@]}" ||
+    --token "$SERVER_TELEGRAM_TOKEN" --owner "$SERVER_TELEGRAM_OWNER" --notebook-port "$INGEST_PORT" "${setup[@]}" ||
     fail 'the installed Docker Telegram setup did not hand the bot to its gateway'
 }
 server_telegram_say() { # <label> <text>
