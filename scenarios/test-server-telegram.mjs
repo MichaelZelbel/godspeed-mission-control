@@ -172,6 +172,15 @@ function fixture(name,script){
 }
 const seed=(folder,sent)=>fs.writeFileSync(path.join(folder,'telegram-run.json'),JSON.stringify({steps:[],outbox:[],sent}));
 
+test('setup requires the selected notebook port',()=>{
+  const {folder,run}=fixture('setup-port',`#!/bin/sh
+exit 1
+`);
+  try {
+    assert.throws(()=>run('setup','--token','t'),/--notebook-port is required/);
+  } finally { fs.rmSync(folder,{recursive:true,force:true}); }
+});
+
 test('say waits for a reply that arrives after the old fixed delay',()=>{
   const {folder,run}=fixture('late',`#!/bin/sh
 cat >/dev/null
@@ -222,7 +231,7 @@ input=$(cat)
 case "$*" in
   *'pkill -f '*) sh -c "$7"; exit $?;;
   *__act*) echo act >> "$TRACE"; exit 0;;
-  *47831*) echo '{"start_message":"/start abc"}'; exit 0;;
+  *49999*) echo "$*" >> "$TRACE"; echo '{"start_message":"/start abc"}'; exit 0;;
   *runner.json*) echo '{"state":"gateway"}'; exit 0;;
   *setup.json*) echo '{"done":true}'; exit 0;;
   *record.json*) ;;
@@ -240,7 +249,8 @@ reads=$(grep -c read "$COUNT" 2>/dev/null)
 printf '{"sent":[%s],"requests":[]}\\n' "$sent"
 `);
   try {
-    run('setup','--token','t','--ai-key','k');
+    run('setup','--token','t','--ai-key','k','--notebook-port','49999');
+    assert.match(fs.readFileSync(path.join(folder,'trace'),'utf8'),/http:\/\/127\.0\.0\.1:49999\/api\/telegram\/connect/);
     const saved=JSON.parse(fs.readFileSync(path.join(folder,'run.json'),'utf8'));
     assert.deepEqual(saved.steps.map(step=>step.success),[true,true,true,true]);
     assert.equal(saved.outbox.length,saved.sent);

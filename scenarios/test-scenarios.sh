@@ -120,6 +120,58 @@ server_installed_asker() {
 }
 server_installed_asker
 
+server_post_uses_local_door() { # <port> <expected URL>
+  local port=$1 expected=$2 log request answer output
+  log=$TMP/server-post-$port.log
+  request=$TMP/server-post-$port.json
+  answer=$TMP/server-post-$port.answer
+  printf '{}' >"$request"
+  output=$(GODSPEED_SCENARIO_INGEST_PORT="$port" EVIDENCE="$TMP" SERVER_POST_LOG="$log" bash -c '
+    . "$1"
+    in_server() {
+      printf "%s\\n" "$*" >>"$SERVER_POST_LOG"
+      if [ "$1" = curl ]; then printf 200; else printf "{}"; fi
+    }
+    server_post /api/provider "$3" "$4"
+  ' bash "$HERE/server-lib.sh" "$log" "$request" "$answer" 2>/dev/null)
+  if [ "$output" = 200 ] && grep -Fqx "curl -sS -o /tmp/answer -w %{http_code} --max-time 300 -X POST -H Content-Type: application/json --data-binary @- $expected" "$log"; then
+    ok "server_post uses $expected"
+  else
+    bad "server_post did not use $expected ($output: $(cat "$log" 2>/dev/null))"
+  fi
+}
+
+server_post_uses_local_door '' 'http://127.0.0.1:47832/api/provider'
+server_post_uses_local_door 49999 'http://127.0.0.1:49999/api/provider'
+
+server_telegram_setup_uses_local_door() { # <port>
+  local port server_dir node log
+  port=$1
+  server_dir=$TMP/server-telegram-setup-$port
+  node=$TMP/server-telegram-node-$port
+  log=$TMP/server-telegram-node-$port.log
+  mkdir -p "$server_dir" "$TMP/server-telegram-evidence-$port"
+  printf '#!/bin/sh\nprintf "%%s\\n" "$@" >"$SERVER_TELEGRAM_NODE_LOG"\n' >"$node"
+  chmod +x "$node"
+  GODSPEED_SCENARIO_INGEST_PORT="$port" GODSPEED_SCENARIO_SERVER_DIR="$server_dir" EVIDENCE="$TMP/server-telegram-evidence-$port" HERE="$HERE" \
+    NODE="$node" SERVER_TELEGRAM_NODE_LOG="$log" bash -c '
+      . "$1"
+      sudo() { shift; cat >"$1"; }
+      server_compose() { :; }
+      server_healthy() { :; }
+      server_container() { printf fixture; }
+      server_telegram_setup without-ai
+    ' bash "$HERE/server-lib.sh" 2>/dev/null
+  if grep -Fqx -- '--notebook-port' "$log" && grep -Fqx "$port" "$log"; then
+    ok "server_telegram_setup passes $port to the Telegram driver"
+  else
+    bad "server_telegram_setup did not pass $port to the Telegram driver ($(cat "$log" 2>/dev/null))"
+  fi
+}
+
+server_telegram_setup_uses_local_door 47832
+server_telegram_setup_uses_local_door 49999
+
 server_sparse_inventory() {
   local output
   mkdir -p "$TMP/server-sparse"
