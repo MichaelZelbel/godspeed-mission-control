@@ -3386,7 +3386,7 @@ ACCEPTED_SCAN=$(GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy N
     case $1 in
       find) printf '%s\n' /opt/data/.godspeed/assistant.json ;;
       node) printf '%s' /root/.hermes ;;
-      grep) printf '%s\n' /root/.hermes/hevy.json ;;
+      grep) printf "%s\n" /root/.hermes/hevy.json ;;
     esac
   }
   scan_fixture_key
