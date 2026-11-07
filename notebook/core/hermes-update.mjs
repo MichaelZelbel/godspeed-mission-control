@@ -50,7 +50,7 @@ export function eligibleRelease(releases,installed,now=Date.now(),failed={}){
 }
 
 export class HermesUpdate{
- constructor({store,descriptor,ask,run=runChild,now=()=>new Date(),platform=process.platform,getuid=()=>process.getuid?.(),isDocker=()=>false,isBusy=()=>false,fetcher=globalThis.fetch,lifecycle=null,releaseLimit=RELEASE_LIMIT}={}){Object.assign(this,{store,descriptor,ask,run,now,platform,getuid,isDocker,isBusy,fetcher,lifecycle,releaseLimit});this.running=null;}
+ constructor({store,descriptor,ask,run=runChild,now=()=>new Date(),platform=process.platform,getuid=()=>process.getuid?.(),isDocker=()=>false,fetcher=globalThis.fetch,lifecycle=null,releaseLimit=RELEASE_LIMIT}={}){Object.assign(this,{store,descriptor,ask,run,now,platform,getuid,isDocker,fetcher,lifecycle,releaseLimit});this.running=null;}
  state(){return readHermesUpdate(this.store);}
  save(next){atomic(path.join(this.store.state,UPDATE_FILE),JSON.stringify(next,null,2)+'\n');return next;}
  setEnabled(enabled){return this.save({...transactionState(this.state()),enabled});}
@@ -128,7 +128,6 @@ export class HermesUpdate{
  }
  async runNow(){
   if(this.running)return {result:'skipped',reason:'A Hermes update is already running.'};
-  if(this.isBusy())return {result:'skipped',reason:'Godspeed is still handling a chat or routine.'};
   const state=this.state();if(state.enabled===false)return {result:'skipped',reason:'Keeping the assistant up to date is switched off.'};
   if(fs.existsSync(path.join(this.store.state,'workspace.lock')))return {result:'skipped',reason:'Another Godspeed process is using this workspace.'};
   const release=this.lifecycle?.acquire('assistant update');if(this.lifecycle&&!release)return {result:'skipped',reason:'Godspeed is still handling a chat or routine.'};

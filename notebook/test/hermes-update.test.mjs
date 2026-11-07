@@ -202,7 +202,7 @@ test('active chats, scheduler ticks, and manual routines defer updates for their
 });
 
 test('a busy scheduled update records its visible deferral reason before marking the day',async t=>{
- const f=fixture(t);f.updater.isBusy=()=>true;const result=await f.updater.tick('UTC'),last=readHermesUpdate(f.store).last;assert.equal(result.result,'skipped');assert.equal(last.result,'skipped');assert.equal(last.reason,'Godspeed is still handling a chat or routine.');assert.equal(last.day,'2026-11-06');
+ const f=fixture(t),lifecycle=new HermesLifecycle(),release=lifecycle.acquire('routine tick');f.updater.lifecycle=lifecycle;const result=await f.updater.tick('UTC'),last=readHermesUpdate(f.store).last;assert.equal(result.result,'skipped');assert.equal(last.result,'skipped');assert.equal(last.reason,'Godspeed is still handling a chat or routine.');assert.equal(last.day,'2026-11-06');release();
 });
 
 test('the scheduler heartbeats while a bounded Hermes update is running',async t=>{
