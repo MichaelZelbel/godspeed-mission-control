@@ -20,8 +20,8 @@ paragraph when the jobs are in `.github/workflows/scenarios.yml`.
 `workouts-from-hevy`, `day-becomes-facts` and `hermes-update-rollback` are likewise waiting for
 the beta.20 release step. Their ready-to-paste jobs and verdict wiring travel in the pull request
 that added them; their fixtures are loopback-only and contain only made-up people, workouts and
-messages. Until tickets 02, 03 and 04 land, each completes its fixture and install setup, then
-reports its named expected ticket FAIL rather than claiming its described proof passed.
+messages. Workouts is now ready for its live proof; tickets 03 and 04 still report their named
+expected ticket FAIL until they land.
 
 | script | what it proves |
 | --- | --- |
@@ -56,7 +56,7 @@ reports its named expected ticket FAIL rather than claiming its described proof 
 | `disk-filling.sh` | on the Docker server install, with a small file system over the data folder made to read 86%: the daily connection check says one message naming the three biggest places and opens one deadline, a second run says and opens nothing, at 75% the deadline closes; the cleanup routine then takes the 40-day-old request dump, session transcript and run log and leaves the note, both chats, the backup and the file of a listed session |
 | `missed-routine.sh` | on the fixture Telegram: with one routine whose time passed without a run, one that failed twice and one that failed once, the daily connection check sends one message naming the first two and not the third, a second run sends nothing, and a good run of each closes what was opened |
 | `deadline-closes-itself.sh` | a deadline on the AI's key closes on the next deadline run after the key is replaced in Settings, a deadline about Telegram closes when the connection check passes, and neither key's value is in any log, record or evidence file |
-| `workouts-from-hevy.sh` (no workflow job yet; expected ticket-02 FAIL until it lands) | Docker and Linux installs reject a made-up Hevy key, then import made-up workouts through Settings; their one hourly routine updates a changed workout and removes a deleted one without keeping the key elsewhere |
+| `workouts-from-hevy.sh` (no workflow job yet) | Docker and Linux installs reject a made-up Hevy key, then import made-up workouts through Settings; their one hourly routine updates a changed workout and removes a deleted one without keeping the key elsewhere |
 | `day-becomes-facts.sh` (no workflow job yet; expected ticket-03 FAIL until it lands) | the nightly remembered-facts routine turns an invented day's move and doctor into dated source-linked facts, closes the older city, ignores machine/`track` messages, and makes no second-copy records |
 | `hermes-update-rollback.sh` (no workflow job yet; expected ticket-04 FAIL until it lands) | the notebook's 04:15 path keeps a good local Hermes release, rolls a broken one back with one notice, and leaves a three-day-old local release alone |
 
