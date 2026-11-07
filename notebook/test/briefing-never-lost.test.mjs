@@ -295,3 +295,25 @@ test('a required line that opens with a banned opener is left out and reported, 
  const items=repairs(query);assert.equal(items.length,1);assert.equal(items[0].line_name,'the Charm Challenge line');
  assert.ok(items[0].refusals.some(r=>r.rule==='BANNED-OPENER'));
 });
+
+// Archon R1: a claim the fact check rejected never comes back in the factual fallback, for every
+// kind of source the fallback can name (goal, verified work, dated obligation, health value).
+for(const [kind,save,claim,reason] of [
+ ['goal',store=>store.save('goals',{title:'Prepare a fictional guide',status:'adopted'}),/fictional guide/i,'Prepare a fictional guide is unsupported'],
+ ['verified work',store=>store.save('work_items',{kind:'draft',title:'Checked fictional outline',state:'verified'}),/fictional outline/i,'The claim that the checked fictional outline was verified is unsupported'],
+ ['obligation',store=>store.save('deadlines',{title:'Submit fictional application',status:'open',due_at:'2027-01-01T00:00:00Z'}),/fictional application/i,'Submit fictional application is not a current obligation'],
+ ['health value',store=>store.save('health_observations',{metric:'Fictional energy',value:6,observed_at:new Date().toISOString()}),/Fictional energy/i,'Fictional energy: 6 is stale'],
+])test('the '+kind+' the fact check rejected is not repeated by the factual fallback',async()=>{
+ const {store,query}=fixture([]);save(store);
+ const provider=async input=>input.kind==='brief-verification'?{passed:false,reason}:'Unsupported draft.';
+ const result=await run(provider,query,store,'brief-rejected-'+kind.replaceAll(' ','-')),content=store.get('notes',result.record_id).content;
+ assert.equal(result.fallback,true);assert.doesNotMatch(content,claim);assert.match(content,/goal/i);
+ assert.ok(query.rows('job_receipts').find(r=>r.kind==='brief-factual-fallback').reasons.includes(reason));
+});
+
+test('a rejected goal is left out while another saved goal still gives the action',async()=>{
+ const {store,query}=fixture([]);store.save('goals',{title:'Prepare a fictional guide',status:'adopted'});store.save('goals',{title:'Plant the fictional garden',status:'adopted'});
+ const provider=async input=>input.kind==='brief-verification'?{passed:false,reason:'Prepare a fictional guide is unsupported'}:'Unsupported draft.';
+ const result=await run(provider,query,store,'brief-rejected-one-goal'),content=store.get('notes',result.record_id).content;
+ assert.doesNotMatch(content,/fictional guide/i);assert.match(content,/Ask Godspeed to work on Plant the fictional garden/);
+});

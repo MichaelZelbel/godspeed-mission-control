@@ -174,3 +174,15 @@ test('a briefing never judges today\'s phone day: it is unknown, while a settled
  assert.ok(feedback.some(reason=>/Assistant output cannot be used/.test(reason)));
  assert.match(saved,/so far/);assert.match(saved,/07:40:00/);assert.doesNotMatch(saved,/Protein was 80 g|short day|missed/i);
 });
+
+// Archon R2: the factual fallback never states an unfinished phone total as settled. Today's phone
+// value and an earlier day that stopped before 21:00 are said "so far" with their stopped time.
+for(const [name,offset,until] of [['today\'s phone day',0,'07:40:00'],['an earlier incomplete phone day',2,'19:55:00']])test('the factual fallback says '+name+' only as "so far"',async()=>{
+ const store=new Store(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-brief-fallback-phone-'))),query=new QueryService(store),day=new Date(Date.now()-offset*86400000).toISOString().slice(0,10);
+ store.save('settings',{id:'installation',timezone:'UTC'});store.save('goals',{title:'Prepare a fictional guide',status:'adopted'});
+ store.save('health_observations',{metric:'steps',value:4200,source:'Health Auto Export',via:'phone-receiver',observed_on:day,date_precision:'day',observed_at:day+'T00:00:00Z',data_until:until});
+ const provider=async input=>input.kind==='brief-verification'?{passed:false,reason:'No useful action'}:'Unsupported draft.';
+ const result=await jobExecutor(provider,query)({kind:'morning-brief',id:'brief-fallback-phone-'+offset},{store,settings:{}}),content=store.get('notes',result.record_id).content;
+ assert.equal(result.fallback,true);assert.doesNotMatch(content,/observation is steps: 4200/);
+ assert.ok(content.includes('On '+day+', steps was 4200 so far; phone data stopped at '+until+'.'),content);
+});
