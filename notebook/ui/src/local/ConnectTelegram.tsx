@@ -85,6 +85,10 @@ export function TelegramConnect({welcome=false,onContinue}:{welcome?:boolean;onC
     <p>{data.owner?data.owner+', setup':'Setup'} is running in your chat with <strong>@{username}</strong>. Answer its questions there; this page follows along.</p>
     {continueButton}
   </div>;
+  else if(phase==='starting')body=<div className="space-y-4" role="status">
+    <p>Telegram is starting on your server. This page follows along.</p>
+    {continueButton}
+  </div>;
   else if(phase==='ready')body=<div className="space-y-4">
     <p className="flex items-center gap-2" role="status"><CheckCircle2 className="h-5 w-5 text-green-500" aria-hidden="true"/>Telegram is connected. Write to <a className="underline" href={'https://t.me/'+username} target="_blank" rel="noopener noreferrer">@{username}</a> from any phone or computer, and your mission control writes to you there.</p>
     {welcome?continueButton:leaving?<div className="flex flex-wrap gap-3 items-center"><span>Your mission control stops answering in Telegram. Disconnect?</span><Button variant="destructive" className="min-h-11" disabled={busy} onClick={disconnect}>Disconnect</Button><Button variant="ghost" className="min-h-11" onClick={()=>setLeaving(false)}>Keep it</Button></div>:<div className="flex flex-wrap gap-3"><Button variant="outline" className="min-h-11" onClick={()=>setReplacing(true)}>Use a different bot</Button><Button variant="ghost" className="min-h-11" onClick={()=>setLeaving(true)}>Disconnect Telegram</Button></div>}
