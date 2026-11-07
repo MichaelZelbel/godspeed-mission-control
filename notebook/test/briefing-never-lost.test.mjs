@@ -406,6 +406,16 @@ test('a phone total rejected by id leaves its so-far line and its weekly count o
  const receipt=query.rows('job_receipts').find(r=>r.kind==='brief-factual-fallback');assert.deepEqual(receipt.rejected_source_ids,[String(bad.id)]);
 });
 
+test('a rejected later phone metric removes another metric that supplied its day stopped time',async()=>{
+ const {store,query}=fixture([]);store.save('goals',{title:'Plant the fictional garden',status:'adopted'});
+ const phone=(metric,value,until)=>store.save('health_observations',{metric,value,source:'Health Auto Export',via:'phone-receiver',observed_on:daysAgo(2),date_precision:'day',observed_at:daysAgo(2)+'T00:00:00Z',data_until:until});
+ phone('steps',4200,'08:00:00');const rejected=phone('weight_kg',70,'09:30:00');
+ const provider=async input=>input.kind==='brief-verification'?{passed:false,reason:'One claim is unsupported',rejected_source_ids:input.check==='source-facts'?[rejected.id]:[]}:'Unsupported draft.';
+ const result=await run(provider,query,store,'brief-rejected-cross-metric-phone-total'),saved=store.get('notes',result.record_id).content;
+ assert.equal(result.fallback,true);assert.doesNotMatch(saved,/4200|70|09:30:00|unknown phone-health/);assert.match(saved,/Ask Godspeed to work on Plant the fictional garden/);
+ const receipt=query.rows('job_receipts').find(r=>r.kind==='brief-factual-fallback');assert.deepEqual(receipt.rejected_source_ids,[String(rejected.id)]);
+});
+
 test('when every phone total is rejected by id, the factual fallback carries no so-far line and no weekly count',async()=>{
  const {store,query}=fixture([]);store.save('goals',{title:'Plant the fictional garden',status:'adopted'});
  const bad=store.save('health_observations',{metric:'steps',value:4200,source:'Health Auto Export',via:'phone-receiver',observed_on:daysAgo(2),date_precision:'day',observed_at:daysAgo(2)+'T00:00:00Z',data_until:'08:00:00'});
