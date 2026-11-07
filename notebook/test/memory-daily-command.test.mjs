@@ -10,7 +10,7 @@ import {Domains} from '../core/domains.mjs';
 import {notebookNoteText} from '../core/notebook-note.mjs';
 import {STARTING_ROUTINES} from '../core/starting-routines.mjs';
 import {recordRunningNotebook} from '../core/running-notebook.mjs';
-import {main} from '../scripts/memory-daily.mjs';
+import {main,resultExitCode} from '../scripts/memory-daily.mjs';
 
 const model=fileURLToPath(new URL('./fixtures/memory-daily-model.mjs',import.meta.url));
 const due=fileURLToPath(new URL('./fixtures/memory-daily-due.mjs',import.meta.url));
@@ -51,6 +51,21 @@ test('the starter fallback deduplicates current facts and events',async t=>{
  await run(root,{env:{FIXTURE_MEMORY_MODEL_RESPONSE:response(answer(first))}});archive(root,[first,second]);await run(root,{env:{FIXTURE_MEMORY_MODEL_RESPONSE:response(answer(second))}});assert.ok(fs.existsSync(path.join(root,'world','entities','alex.md')));assert.equal(fs.readdirSync(path.join(root,'world','claims')).length,1);assert.equal(fs.readdirSync(path.join(root,'world','events')).length,1);
 });
 
+test('the starter fallback files equivalent facts and events from one response once',async t=>{
+ const root=workspace(t),first={id:'first',at:'2026-11-02T12:00:00Z',text:'I moved to Hamburg on 1 November and visited the park'},second={id:'second',at:'2026-11-02T12:01:00Z',text:'I now live in Hamburg and went to the park'};archive(root,[first,second]);
+ const answer={facts:[{subject:self,kind:'home-city',value:'Hamburg',citation:{id:first.id,quote:'I moved to Hamburg on 1 November'}},{subject:self,kind:'home-city',value:'Hamburg',citation:{id:second.id,quote:'I now live in Hamburg'}}],events:[{what:'Visited the park',day:'2026-11-02',participants:[],citation:{id:first.id,quote:'visited the park'}},{what:'Visited the park',day:'2026-11-02',participants:[],citation:{id:second.id,quote:'went to the park'}}]};
+ await run(root,{env:{FIXTURE_MEMORY_MODEL_RESPONSE:response(answer)}});
+ assert.equal(fs.readdirSync(path.join(root,'world','claims')).length,1);assert.equal(fs.readdirSync(path.join(root,'world','events')).length,1);
+});
+
+test('the starter fallback keeps same-named people and things distinct',async t=>{
+ const root=workspace(t),row={id:'robin',at:'2026-11-02T12:00:00Z',text:'Robin lives in Kiel and the Robin project moved to Hamburg'};archive(root,[row]);
+ const answer={people:[{id:'person-robin',name:'Robin'}],things:[{id:'thing-robin',name:'Robin'}],facts:[{subject:{kind:'new-person',id:'person-robin'},kind:'home-city',value:'Kiel',citation:{id:row.id,quote:row.text}},{subject:{kind:'new-thing',id:'thing-robin'},kind:'home-city',value:'Hamburg',citation:{id:row.id,quote:row.text}}],events:[{what:'Robin project moved to Hamburg',day:'2026-11-02',participants:[{kind:'new-thing',id:'thing-robin'}],citation:{id:row.id,quote:row.text}}]};
+ await run(root,{env:{FIXTURE_MEMORY_MODEL_RESPONSE:response(answer)}});
+ assert.ok(fs.existsSync(path.join(root,'world','entities','robin.md')));assert.ok(fs.existsSync(path.join(root,'world','entities','thing-robin.md')));
+ assert.match(fs.readdirSync(path.join(root,'world','claims')).map(name=>fs.readFileSync(path.join(root,'world','claims',name),'utf8')).join('\n'),/subject: thing-robin/);assert.match(fs.readFileSync(path.join(root,'world','events',fs.readdirSync(path.join(root,'world','events'))[0]),'utf8'),/participants: \[thing-robin\]/);
+});
+
 test('deadline evidence closes only a complete assertion of the stated done-when and refusal keeps its row unread',async t=>{
  const root=workspace(t),modelLog=path.join(root,'model.log'),dueLog=path.join(root,'due.log'),row={id:'tax',at:'2026-11-02T12:00:00Z',text:'I have filed the tax return today.'};archive(root,[row]);
  const state=JSON.stringify([{slug:'tax',state:'open',title:'Tax return',doneWhen:'I filed the tax return today'}]),answer={events:[{what:'Filed the tax return',day:'2026-11-02',participants:[],deadline_id:'tax',deadline_complete:true,citation:{id:row.id,quote:row.text}}]};
@@ -70,6 +85,12 @@ test('failed model and deadline-state commands do not consume archive rows, whil
  await assert.rejects(run(root,{env:{FIXTURE_MEMORY_DUE_STATE_FAIL:'1',FIXTURE_MEMORY_MODEL_LOG:log}}),/deadline state/);assert.equal(fs.readFileSync(log,'utf8').trim().split('\n').length,3);
  const noAi=workspace(t);archive(noAi,[row]);const skipped=await run(noAi,{env:{FIXTURE_MEMORY_MODEL_CHECK_FAIL:'1'}});assert.equal(skipped.skipped,true);assert.ok(!fs.existsSync(path.join(noAi,'routines','remember-what-you-said','state.json')));
  fs.mkdirSync(path.join(noAi,'.godspeed'),{recursive:true});fs.writeFileSync(path.join(noAi,'.godspeed','assistant.json'),'{}');const unconfigured=await run(noAi,{env:{FIXTURE_MEMORY_MODEL_UNCONFIGURED:'1'}});assert.equal(unconfigured.skipped,true);assert.ok(!fs.existsSync(path.join(noAi,'routines','remember-what-you-said','state.json')));
+});
+
+test('the command reports a failed archive piece when later pieces complete',async t=>{
+ const root=workspace(t),rows=Array.from({length:16},(_,index)=>({id:'piece-'+String(index).padStart(2,'0'),at:'2026-11-02T12:'+String(index).padStart(2,'0')+':00Z',text:'I recorded item '+index+' '+'.'.repeat(2900)}));archive(root,rows);
+ const result=await run(root,{env:{FIXTURE_MEMORY_MODEL_FAIL_CONTAINING:'piece-00',FIXTURE_MEMORY_MODEL_RESPONSE:response({facts:[],events:[]})}});
+ assert.equal(result.failed,1);assert.ok(result.completed>0);assert.equal(resultExitCode(result),1);assert.equal(resultExitCode({failed:0}),0);
 });
 
 test('a Windows external assistant configuration is checked instead of silently skipped',async t=>{

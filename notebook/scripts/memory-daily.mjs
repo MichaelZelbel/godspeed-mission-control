@@ -15,6 +15,7 @@ const due=fileURLToPath(new URL('../../tools/due.js',import.meta.url));
 
 const configuredModel=(root,env=process.env)=>{const {assistantFile,providerFile}=assistantConfiguration(root,{env});return !!assistantFile||fs.existsSync(providerFile);};
 const modelStatus=result=>{try{const status=JSON.parse(result.stdout);return status&&typeof status==='object'?status:null;}catch{return null;}};
+export const resultExitCode=result=>result.failed?1:0;
 
 export async function main({root:workspace=root,modelCommand=model,dueCommand=due}={}){
  const check=await runChild(process.execPath,[modelCommand,'--workspace',workspace,'--check'],{cwd:workspace,env:process.env,timeoutMs:60000,maxBytes:65536});
@@ -28,4 +29,4 @@ export async function main({root:workspace=root,modelCommand=model,dueCommand=du
  const close=async(slug,evidence)=>{const result=await runChild(process.execPath,[dueCommand,'done',slug,'--evidence',evidence,'--godspeed',workspace],{cwd:workspace,env:process.env,timeoutMs:120000,maxBytes:65536});return result.code===0;};
  return rememberWhatYouSaid({root:workspace,store,query,domains,model:request,due:close,deadlines,notebook});
 }
-if(process.argv[1]===fileURLToPath(import.meta.url))main().then(result=>{if(result.failed&&result.completed===0)process.exitCode=1;}).catch(()=>{process.exitCode=1;});
+if(process.argv[1]===fileURLToPath(import.meta.url))main().then(result=>{process.exitCode=resultExitCode(result);}).catch(()=>{process.exitCode=1;});
