@@ -12,7 +12,7 @@ const ISO_DAY=/^\d{4}-\d{2}-\d{2}$/;
 const CREDENTIAL=/(?:password|passphrase|api[ _-]?key|private[ _-]?key|\bkey\b|secret|token|credential)/i;
 const FORBIDDEN=/(?:\b(?:file name|filename|software setting|bug)\b|\b(?:employer|client)\s+(?:company|name)\b)/i;
 const EMPLOYER_NAME=/\b(?:[A-Z][\p{L}\p{N}&.-]*\s+){0,4}(?:Corp(?:oration)?|Incorporated|Inc|LLC|Ltd|Limited|GmbH|AG|PLC|LLP)\b/u;
-const EMPLOYER_REFERENCE=/\b(?:work(?:ed|ing)?|job|career|employment|employed|start(?:ed|ing)?|begin(?:ning|ning|s)?)\b(?:\s+\p{L}+){0,4}\s+(?:at|for|with)\s+((?:[A-Z][\p{L}\p{N}&.-]*)(?:\s+[A-Z][\p{L}\p{N}&.-]*){0,4})/gu;
+const EMPLOYER_REFERENCE=/\b(?:(?:work(?:ed|ing)?|job|career|employment|employed|start(?:ed|ing)?|begin(?:ning|ning|s)?)\b(?:\s+\p{L}+){0,4}\s+(?:at|for|with)|joined)\s+((?:[A-Z][\p{L}\p{N}&.-]*)(?:\s+[A-Z][\p{L}\p{N}&.-]*){0,4})/gu;
 const normal=s=>String(s??'').normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').trim();
 const words=s=>normal(s).split(' ').filter(Boolean);
 const safeJson=(file,fallback)=>{try{return JSON.parse(fs.readFileSync(file,'utf8'));}catch{return fallback;}};

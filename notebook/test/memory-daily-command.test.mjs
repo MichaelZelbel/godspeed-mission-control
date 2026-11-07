@@ -42,9 +42,11 @@ test('the command refuses invalid evidence, redacted names, unknown subjects, an
 });
 
 test('the command refuses ordinary employer material in every filed field and receipt',async t=>{
- const root=workspace(t),ordinary={id:'ordinary',at:'2026-11-02T12:00:00Z',text:'I visited the park today.'},employer={id:'employer',at:'2026-11-02T12:01:00Z',text:'I started working at Google today.'};fs.writeFileSync(path.join(root,'NOTEBOOK.md'),notebookNoteText);archive(root,[ordinary,employer]);
+ for(const employerText of ['I started working at Google today.','I joined Google today.']){
+ const root=workspace(t),ordinary={id:'ordinary',at:'2026-11-02T12:00:00Z',text:'I visited the park today.'},employer={id:'employer',at:'2026-11-02T12:01:00Z',text:employerText};fs.writeFileSync(path.join(root,'NOTEBOOK.md'),notebookNoteText);archive(root,[ordinary,employer]);
  const answer={people:[{id:'person',name:'Google'}],things:[{id:'thing',name:'Google'}],facts:[{subject:self,kind:'employer',value:'a project',citation:{id:ordinary.id,quote:ordinary.text}},{subject:self,kind:'home-city',value:'Google',citation:{id:ordinary.id,quote:ordinary.text}},{subject:self,kind:'home-city',value:'Hamburg',citation:{id:employer.id,quote:employer.text}}],events:[{what:'Met Google about a project',day:'2026-11-02',participants:[],citation:{id:ordinary.id,quote:ordinary.text}},{what:'Visited the park',day:'2026-11-02',participants:[],citation:{id:employer.id,quote:employer.text}},{what:'Visited the park',day:'2026-11-02',participants:[{kind:'new-person',id:'person'},{kind:'new-thing',id:'thing'}],citation:{id:ordinary.id,quote:ordinary.text}}]};await run(root,{env:{FIXTURE_MEMORY_MODEL_RESPONSE:response(answer)}});
  const query=new QueryService(new Store(root));assert.equal(query.rows('claims').length,0);assert.equal(query.rows('moments').length,0);assert.equal(query.rows('contacts').length,0);assert.equal(query.rows('entities').length,0);const runs=path.join(root,'routines','remember-what-you-said','runs'),receipt=fs.readdirSync(runs).flatMap(day=>fs.readdirSync(path.join(runs,day)).map(name=>fs.readFileSync(path.join(runs,day,name),'utf8'))).join('\n');assert.match(receipt,/private-or-invalid/);assert.doesNotMatch(receipt,/Google/);
+ }
 });
 
 test('the command reads the harvest redaction file before requesting a model',async t=>{
