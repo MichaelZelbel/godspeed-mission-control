@@ -57,9 +57,8 @@ async function capture(label,kind,action){
   try {
     const started=copyRecord(), before=state.sent, requestStart=(started.requests ?? []).length;
     action();
-    // The gateway's long poll is allowed two seconds in fake-telegram; leave one complete turn
-    // before claiming the installed route did not answer.
-    await sleep(2500);
+    // The reply is the evidence the installed route answered; a send already recorded before the action does not count.
+    await waitFor('reply to the owner',copyRecord,record=>(record.sent ?? []).slice(before).some(message=>message.chat_id===owner),30);
     const record=copyRecord();
     captureSent(state,record,label,before);
     state.steps.push({label,kind,success:true,request_start:requestStart,request_end:(record.requests ?? []).length});
@@ -141,8 +140,10 @@ async function press(){
 }
 async function snapshot(){
   requireEvidence();
-  copyRecord(); runner();
-  const state=loadState(); saveState(state);
+  const record=copyRecord(); runner();
+  const state=loadState();
+  captureSent(state,record,'snapshot',state.sent);
+  saveState(state);
 }
 async function mark(){
   requireEvidence();

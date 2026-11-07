@@ -3,7 +3,7 @@
 # not run or kept failing, once, and closes that when the routine runs well again.
 #
 # What it proves (godspeed-dev, releases/godspeed-2.0.0-beta.19-looks-after-itself/tickets/05-scenarios.md,
-# scenario 3), on an install whose owner is on a fixture Telegram (the way connection-check.sh has it):
+# scenario 3), on an install whose owner is on a fixture Telegram:
 #   one routine whose time passed without a run, and one that failed twice, and a third that failed once
 #   check 1   the "Daily connection check" sends one message, which names the first two and not the third
 #   check 2   the second run sends nothing
@@ -74,6 +74,7 @@ check_and_look() { # <label>
 }
 
 act() {
+  fail "missed-routine needs a Telegram path on the installed server (server-lib.sh and server-telegram.mjs), which it has not been moved onto yet; the retired in-process Telegram driver is not brought back"
   fresh_evidence
   install_paths
   install_the_stage_line "$EVIDENCE/.install.log"

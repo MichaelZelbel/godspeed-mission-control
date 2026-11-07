@@ -101,7 +101,9 @@ test('say reaches the fake Bot API through its command boundary',()=>{
   fs.writeFileSync(path.join(bin,'sudo'),`#!/bin/sh
 input=$(cat)
 printf '%s %s\\n' "$*" "$input" >> "$TRACE"
-printf '%s\\n' '{"sent":[],"requests":[]}'
+n=$(grep -c __act "$TRACE" 2>/dev/null); replies=''; i=0
+while [ "$i" -lt "\${n:-0}" ]; do replies="$replies,{\\"chat_id\\":31415,\\"text\\":\\"Answered.\\"}"; i=$((i+1)); done
+printf '{"sent":[%s],"requests":[]}\\n' "\${replies#,}"
 `);
   fs.chmodSync(path.join(bin,'sudo'),0o755);
 
@@ -113,7 +115,7 @@ printf '%s\\n' '{"sent":[],"requests":[]}'
     });
 
     assert.match(fs.readFileSync(trace,'utf8'),/http:\/\/127\.0\.0\.1:8081\/__act/);
-    assert.deepEqual(JSON.parse(fs.readFileSync(path.join(folder,'run.json'),'utf8')),{steps:[{label:'question',kind:'say',success:true,request_start:0,request_end:0}],outbox:[],sent:0});
+    assert.deepEqual(JSON.parse(fs.readFileSync(path.join(folder,'run.json'),'utf8')),{steps:[{label:'question',kind:'say',success:true,request_start:0,request_end:0}],outbox:[{label:'question',kind:'sendMessage',chat_id:31415,text:'Answered.',buttons:[],accepted:true}],sent:1});
   } finally {
     fs.rmSync(folder,{recursive:true,force:true});
   }
@@ -126,7 +128,9 @@ test('press resolves each visible button label to its installed callback token',
   fs.writeFileSync(path.join(bin,'sudo'),`#!/bin/sh
 input=$(cat)
 printf '%s %s\\n' "$*" "$input" >> "$TRACE"
-printf '%s\\n' '{"sent":[{"chat_id":31415,"text":"Cancel the renewal of your gym membership?","buttons":[{"label":"No","callback":"gss1:gym-no"},{"label":"Yes","callback":"gss1:gym-yes"}]},{"chat_id":31415,"text":"Book the car inspection?","buttons":[{"label":"Yes","callback":"gss1:car-yes"},{"label":"No","callback":"gss1:car-no"}]}],"requests":[]}'
+n=$(grep -c __act "$TRACE" 2>/dev/null); replies=''; i=0
+while [ "$i" -lt "\${n:-0}" ]; do replies="$replies,{\\"chat_id\\":31415,\\"text\\":\\"Answered.\\"}"; i=$((i+1)); done
+printf '{"sent":[{"chat_id":31415,"text":"Cancel the renewal of your gym membership?","buttons":[{"label":"No","callback":"gss1:gym-no"},{"label":"Yes","callback":"gss1:gym-yes"}]},{"chat_id":31415,"text":"Book the car inspection?","buttons":[{"label":"Yes","callback":"gss1:car-yes"},{"label":"No","callback":"gss1:car-no"}]}%s],"requests":[]}\\n' "$replies"
 `);
   fs.chmodSync(path.join(bin,'sudo'),0o755);
 

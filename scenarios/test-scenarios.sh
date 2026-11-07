@@ -3008,6 +3008,24 @@ copy "$FD/good" "$FD/second-note"
 node -e 'const fs=require("fs"),p=process.argv[1],d=JSON.parse(fs.readFileSync(p,"utf8"));d.data.push({...d.data[0],id:"brief-2"});fs.writeFileSync(p,JSON.stringify(d))' "$FD/second-note/notes-after-reply.json"
 refuses 'asking today’s brief creates another note' first-day "$FD/second-note" 'second saved brief'
 
+# A brief the scenario kept consistently everywhere (file, scheduled send, chat reply, notes), so only the
+# brief's own content is what the case refuses.
+first_day_brief() { # <folder> <brief text>
+  local f=$1 json
+  printf '%s\n' "$2" >"$f/brief.txt"
+  json=$(node -e 'process.stdout.write(JSON.stringify(require("fs").readFileSync(process.argv[1],"utf8")))' "$f/brief.txt")
+  printf '{"sent":[{"text":%s}]}\n' "$json" >"$f/scheduled-telegram-requests.json"
+  run_json "$f" "$(msg scheduled-brief "$(cat "$f/brief.txt")")" "$(msg todays-brief "$(cat "$f/brief.txt")")"
+  printf '{"data":[{"id":"brief-1","content":%s}]}\n' "$json" >"$f/notes-before-reply.json"
+  cp "$f/notes-before-reply.json" "$f/notes-after-reply.json"
+}
+copy "$FD/good" "$FD/brief-without-goal"
+first_day_brief "$FD/brief-without-goal" "$(sed 1d "$FD/good/brief.txt")"
+refuses 'a brief that does not name the goal' first-day "$FD/brief-without-goal" 'does not name the emergency-kit goal'
+copy "$FD/good" "$FD/brief-without-work"
+first_day_brief "$FD/brief-without-work" "$(sed -n '1p;3p' "$FD/good/brief.txt")"
+refuses 'a brief that does not identify the verified work' first-day "$FD/brief-without-work" 'does not identify the verified work'
+
 # ============================================== the five scenarios of 2.0.0-beta.18 (numbers come in)
 # Each is judged on made-up folders only: one that should pass, and one per failure that is easy to
 # make by a plausible edit of the product or of the scenario.
@@ -4087,6 +4105,14 @@ if node --test "$ROOT/scenarios/test-report-night.mjs" >"$TMP/report-night.log" 
 else
   cat "$TMP/report-night.log"
   bad "report-night.mjs: its node --test cases fail"
+fi
+
+section "server-telegram.mjs: its node --test cases"
+if node --test "$ROOT/scenarios/test-server-telegram.mjs" >"$TMP/server-telegram.log" 2>&1; then
+  ok "server-telegram.mjs: its node --test cases pass"
+else
+  cat "$TMP/server-telegram.log"
+  bad "server-telegram.mjs: its node --test cases fail"
 fi
 
 printf '\n%s of %s pass.\n' "$PASS" "$((PASS + FAIL))"
