@@ -42,10 +42,10 @@ const SETUP_FAILURES='routine-setup-failures.json',SETUP_NOTICE='routine-setup-f
 const setupFailureFile=store=>path.join(store.state,SETUP_FAILURES);
 const readSetupFailures=store=>{try{const saved=JSON.parse(fs.readFileSync(setupFailureFile(store),'utf8'));return saved&&typeof saved==='object'&&saved.steps&&typeof saved.steps==='object'?saved:{steps:{}};}catch{return {steps:{}};}};
 const writeSetupFailures=(store,failures)=>atomic(setupFailureFile(store),JSON.stringify(failures,null,2)+'\n');
-const diagnostic=error=>String(error?.stderr||'').replace(/\x1b\[[0-?]*[ -/]*[@-~]/g,'').split(/\r?\n/).map(line=>scrubCredentials(line).trimEnd()).filter(Boolean).slice(-10).join('\n').slice(-2000);
+const diagnostic=error=>{const lines=String(error?.stderr||error?.message||'').replace(/\x1b\[[0-?]*[ -/]*[@-~]/g,'').split(/\r?\n/).map(line=>scrubCredentials(line).trimEnd()).filter(Boolean);return lines.slice(-10).join('\n').slice(-2000);};
 const errorLine=record=>{const lines=String(record.stderr||'').split(/\r?\n/).map(line=>line.trim()).filter(Boolean),trace=lines.findIndex(line=>/^Traceback \(most recent call last\):$/i.test(line));return (trace>=0?lines.at(-1):lines[0])||'exit code '+(record.exit_code??'unknown');};
-const setupName=step=>step==='cleanup'?'Nightly cleanup':step==='notice-sender'?'Notice sender':switchable().find(routine=>routine.key===step)?.name||step;
-const setupEffect=step=>step==='notice-sender'?'no notices and no routine switch takes effect':step==='cleanup'?'nightly cleanup does not run':'that routine does not run';
+const setupName=step=>step==='cleanup'?'Nightly cleanup':step==='notice-sender'?'Notice sender':step==='workouts'?'Workouts from Hevy':switchable().find(routine=>routine.key===step)?.name||step;
+const setupEffect=step=>step==='notice-sender'?'no notices and no routine switch takes effect':step==='cleanup'?'nightly cleanup does not run':step==='workouts'?'the hourly Workouts import has not taken over':'that routine does not run';
 // "05:16": once a day at that time in the owner's timezone.
 // The daily connection check runs at 05:00; a morning brief set before 05:30 pulls it half an hour ahead of it
 // (a brief at 00:10 is preceded by the check at 23:40 the evening before).
@@ -107,6 +107,12 @@ export class NativeScheduler{
    console.error('Godspeed Mission Control: '+setupName(step)+' could not be set up: '+errorLine(record));
    throw error;
   }
+ }
+ workoutsSetupFailure(){const record=readSetupFailures(this.store).steps.workouts;return record?{reason:errorLine(record),retry_after:record.retry_after}:null;}
+ workoutsRoutineStatus(){
+  const entry=readNotebookRoutines(this.store).jobs.find(job=>job.key==='workouts');
+  if(entry)return {state:entry.switched_off?'disconnected':hermesJobs(this.home).some(job=>job.id===entry.id)?'scheduled':'removed'};
+  const failure=this.workoutsSetupFailure();return failure?{state:'pending',...failure}:null;
  }
  async configure({goal,timezone,owner=this.device,delivery='notebook'}){
   timezone||=Intl.DateTimeFormat().resolvedOptions().timeZone;new Intl.DateTimeFormat('en',{timeZone:timezone});
@@ -433,9 +439,9 @@ export class NativeScheduler{
  }
  // Workouts has a private, add-on-owned key.  A remembered missing job is intentional removal,
  // while switched_off is the explicit Disconnect tombstone and may be cleared only by reconnect.
- async followWorkouts({reconnect=false}={}){
+ async followWorkouts({reconnect=false,retry=false}={}){
   if(this.workoutsFollowing)return this.workoutsFollowing;
-  this.workoutsFollowing=this.followWorkoutsNow({reconnect}).finally(()=>{this.workoutsFollowing=null;});
+  this.workoutsFollowing=this.followSetup('workouts',()=>this.followWorkoutsNow({reconnect}),{retry}).finally(()=>{this.workoutsFollowing=null;});
   return this.workoutsFollowing;
  }
  async followWorkoutsNow({reconnect=false}={}){
@@ -461,20 +467,31 @@ export class NativeScheduler{
   if(matching.length){
    const keep=current?matching.find(j=>j.id===current.id)||matching[0]:matching[0];
    for(const duplicate of matching.filter(j=>j.id!==keep.id))await this.command(['remove',duplicate.id]);
-   if(!current)rememberNotebookRoutine(this.store,{id:keep.id,key:'workouts',name:WORKOUTS_JOB,what:WORKOUTS_WHAT});
+   if(!current)return this.completeWorkoutsHandover(keep);
    else if(keep.enabled===false&&current.paused_by_notebook){await this.command(['resume',keep.id]);rememberNotebookRoutine(this.store,{...current,paused_by_notebook:false,running_by_notebook:true});}
    return keep.id;
   }
-  // A carried standalone add-on can have left its OS timer behind; only its own uninstall
-  // command knows how to remove it without touching rows or the private key.
-  await this.workouts.uninstall();
   const installation=this.store.get('settings','installation'),before=new Set(jobs.map(j=>j.id));
   writeRoutineFiles(this.home,this.workoutsFiles({root,timezone:installation?.timezone||Intl.DateTimeFormat().resolvedOptions().timeZone}));
   await this.command(['create',minute+' * * * *','--no-agent','--name',WORKOUTS_JOB,'--script',WORKOUTS_SCRIPT,'--deliver','local','--failure-deliver','local','--workdir',root]);
   const made=hermesJobs(this.home).find(j=>!before.has(j.id)&&j.name===WORKOUTS_JOB&&j.script===WORKOUTS_SCRIPT);
   if(!made)throw Error('Hermes did not keep the routine "'+WORKOUTS_JOB+'"');
-  rememberNotebookRoutine(this.store,{id:made.id,key:'workouts',name:WORKOUTS_JOB,what:WORKOUTS_WHAT});
-  return made.id;
+  return this.completeWorkoutsHandover(made);
+ }
+ async completeWorkoutsHandover(candidate){
+  const started=this.now();
+  try{
+   await this.runNow(candidate.id);
+   const last=(await this.workouts.status()).last_run,at=Date.parse(last?.at||'');
+   if(!last?.ok||!Number.isFinite(at)||at<started)throw Error('Workouts from Hevy did not complete its first import');
+   // The carried job has proved it can import before the add-on retires its own timer.
+   await this.workouts.uninstall();
+   rememberNotebookRoutine(this.store,{id:candidate.id,key:'workouts',name:WORKOUTS_JOB,what:WORKOUTS_WHAT});
+   return candidate.id;
+  }catch(error){
+   await this.command(['remove',candidate.id]).catch(()=>{});
+   throw error;
+  }
  }
  async disconnectWorkouts(){
   this.requireOwner('Disconnect Workouts from Hevy');
@@ -483,6 +500,7 @@ export class NativeScheduler{
   if(!starterBorn(this.store.root))await setRoutineSwitch(this.store,{key:'workouts',on:false},{workouts:true});
   for(const job of hermesJobs(this.home).filter(j=>j.name===WORKOUTS_JOB&&j.script===WORKOUTS_SCRIPT&&typeof j.workdir==='string'&&path.resolve(j.workdir)===path.resolve(this.store.root)))await this.command(['remove',job.id]);
   if(this.workouts)await this.workouts.uninstall();
+  const failures=readSetupFailures(this.store);if(failures.steps.workouts){delete failures.steps.workouts;writeSetupFailures(this.store,failures);this.setupNotice(failures,this.now());}
  }
  // THE MORNING BRIEF AS THE NOTEBOOK'S OWN BRIEFING (3 November 2026, #160; notebook-routines.mjs
  // says why). A script routine like the deadline reminders, whose script runs core/briefing.mjs
@@ -680,7 +698,7 @@ export class NativeScheduler{
    await this.followJournal().catch(()=>null);
    await this.followConnectionCheck().catch(e=>{failure=e;failures.push(e);});
    await this.followMailCountVisibly().catch(e=>{failure||=e;});
-   await this.followWorkouts().catch(e=>{failure||=e;failures.push(e);});
+   await this.followWorkouts({retry:!raise}).catch(e=>{failure||=e;failures.push(e);});
    await this.followChatTidy().catch(e=>{failure=failure||e;failures.push(e);});
    await this.followBrief().catch(()=>null);
    await this.followDelivery().catch(()=>null);

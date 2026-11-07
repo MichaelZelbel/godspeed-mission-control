@@ -14,9 +14,16 @@ import {readKey} from '../../third-party/addons/godspeed-workouts/lib/keys.mjs';
 const temporary=t=>{const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-workouts-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));return root;};
 const REPLACEMENT_KEY='66666666-7777-4888-8999-aaaaaaaaaaaa';
 function fakeHermes(home){
- let serial=0;const file=path.join(home,'cron','jobs.json'),read=()=>fs.existsSync(file)?JSON.parse(fs.readFileSync(file)).jobs:[],write=jobs=>{fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file,JSON.stringify({jobs}));};
- const run=async(_exe,args)=>{const [,verb,...rest]=args,flag=name=>rest[rest.indexOf(name)+1];if(verb==='create'){const jobs=read();jobs.push({id:'job'+(++serial),name:flag('--name'),script:flag('--script'),workdir:flag('--workdir'),schedule:{expr:rest[0]},enabled:true});write(jobs);}if(verb==='remove')write(read().filter(job=>job.id!==rest[0]));return {stdout:''};};
- return {run,jobs:read};
+ let serial=0,onRun=async()=>{};const events=[],file=path.join(home,'cron','jobs.json'),read=()=>fs.existsSync(file)?JSON.parse(fs.readFileSync(file)).jobs:[],write=jobs=>{fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file,JSON.stringify({jobs}));};
+ const run=async(_exe,args)=>{const [,verb,...rest]=args,flag=name=>rest[rest.indexOf(name)+1];events.push(verb+(verb==='run'?':'+rest[0]:''));if(verb==='create'){const jobs=read();jobs.push({id:'job'+(++serial),name:flag('--name'),script:flag('--script'),workdir:flag('--workdir'),schedule:{expr:rest[0]},enabled:true});write(jobs);}if(verb==='run')await onRun(rest[0]);if(verb==='remove')write(read().filter(job=>job.id!==rest[0]));return {stdout:''};};
+ return {run,jobs:read,events,setRun:handler=>{onRun=handler;}};
+}
+function handoverFixture(t,{mode='fresh'}={}){
+ const root=temporary(t),home=path.join(root,'.hermes'),store=new Store(root,{device:'pc'}),hermes=fakeHermes(home),events=hermes.events;let now=Date.parse('2030-01-01T00:00:00Z'),last=null;
+ const scheduler=new NativeScheduler(store,{home,executable:'hermes',device:'pc',run:hermes.run,now:()=>now}),addon={hasKey:()=>true,routineConfig:()=>({}),status:async()=>{events.push('status');return {minute:17,last_run:last};},uninstall:async()=>{events.push('uninstall');}};
+ fs.writeFileSync(path.join(root,'AGENTS.md'),'# test');scheduler.setWorkouts(addon);
+ hermes.setRun(async()=>{if(mode==='run-fails')throw Object.assign(Error('first import failed'),{stderr:'first import failed\ntoken=sk-secret-token-value-123456789'});last=mode==='stale'?{ok:true,at:new Date(now-1).toISOString()}:mode==='failed'?{ok:false,at:new Date(now).toISOString()}:{ok:true,at:new Date(now).toISOString()};});
+ return {store,hermes,scheduler,events,advance:ms=>{now+=ms;}};
 }
 
 test('the notebook owns one Workouts routine, replaces its key, and disconnects without touching the add-on state',async t=>{
@@ -27,6 +34,7 @@ test('the notebook owns one Workouts routine, replaces its key, and disconnects 
  await scheduler.followWorkouts();assert.equal(hermes.jobs().length,0,'no key makes no routine');assert.equal(hevy.calls.length,0,'no key makes no Hevy call');
  await assert.rejects(addon.connect('aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee'),/Hevy refused that key/);assert.equal(fs.existsSync(path.join(state,'hevy.json')),false);
  await addon.connect(KEY);
+ hermes.setRun(async()=>{const result=await addon.command(['run','--scheduled']);assert.equal(result.code,0,result.stderr);});
  await Promise.all([scheduler.followWorkouts(),scheduler.followWorkouts()]);
  assert.equal(hermes.jobs().filter(job=>job.name==='Workouts from Hevy').length,1);
  const minute=(await addon.status()).minute;assert.equal(hermes.jobs()[0].schedule.expr,minute+' * * * *');
@@ -38,6 +46,27 @@ test('the notebook owns one Workouts routine, replaces its key, and disconnects 
  assert.equal(JSON.stringify(await addon.status()).includes(REPLACEMENT_KEY),false,'status does not return the replacement key');
  const removed=hermes.jobs()[0];await hermes.run('hermes',['cron','remove',removed.id]);await scheduler.followWorkouts();assert.equal(hermes.jobs().length,0,'a routine a person removed stays removed');
  await scheduler.disconnectWorkouts();assert.equal(hermes.jobs().length,0);assert.equal(readNotebookRoutines(store).jobs.find(job=>job.key==='workouts')?.switched_off,true);assert.equal(readKey(addon.paths),REPLACEMENT_KEY,'Disconnect retains the add-on key');assert.equal(notebook.rows().length,1,'Disconnect retains imported rows');
+});
+
+test('a carried Workouts routine proves its first import before replacing the standalone timer',async t=>{
+ const {store,hermes,scheduler,events}=handoverFixture(t);
+ await scheduler.followWorkouts();
+ assert.deepEqual(events,['status','create','run:job1','status','uninstall']);
+ assert.deepEqual(readNotebookRoutines(store).jobs.map(job=>job.id),['job1']);assert.equal(hermes.jobs().length,1);
+});
+
+test('a failed Workouts handover retains the standalone timer, reports a safe retry, and recovers',async t=>{
+ const {store,hermes,scheduler,events,advance}=handoverFixture(t),command=scheduler.command.bind(scheduler);let createFails=true;
+ scheduler.command=async(args,...rest)=>{if(createFails&&args[0]==='create')throw Object.assign(Error('Hermes could not create the routine'),{code:1,stderr:'Hermes could not create the routine\ntoken=sk-secret-token-value-123456789'});return command(args,...rest);};
+ await assert.rejects(scheduler.followWorkouts(),/could not create/);
+ assert.equal(events.includes('uninstall'),false);assert.equal(hermes.jobs().length,0);assert.equal(readNotebookRoutines(store).jobs.length,0);
+ assert.deepEqual(scheduler.workoutsRoutineStatus(),{state:'pending',reason:'Hermes could not create the routine',retry_after:'2030-01-01T00:01:00.000Z'});assert.doesNotMatch(JSON.stringify(scheduler.workoutsRoutineStatus()),/sk-secret-token/);
+ createFails=false;advance(60000);await scheduler.followWorkouts({retry:true});
+ assert.equal(events.filter(event=>event==='uninstall').length,1);assert.equal(scheduler.workoutsRoutineStatus().state,'scheduled');assert.equal(scheduler.workoutsSetupFailure(),null);assert.equal(readNotebookRoutines(store).jobs.length,1);
+ for(const mode of ['run-fails','stale','failed']){
+  const next=handoverFixture(t,{mode});await assert.rejects(next.scheduler.followWorkouts(),/first import failed|did not complete/);
+  assert.equal(next.events.includes('uninstall'),false,mode);assert.equal(next.hermes.jobs().length,0,mode);assert.equal(readNotebookRoutines(next.store).jobs.length,0,mode);assert.equal(next.scheduler.workoutsRoutineStatus().state,'pending',mode);
+ }
 });
 
 test('the carried command accepts its key only on stdin and its projected status never exposes it',async t=>{
