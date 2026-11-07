@@ -219,6 +219,6 @@ state, and the scenario keeps its notebook snapshots plus a manifest. The four r
 scenarios also retain `steps.tsv`, with a short PASS or FAIL verdict for each visible interaction. The
 four former Linux emulator
 scenarios and `first-day.sh` therefore fail when the packaged Telegram dependency, setup or gateway is
-missing rather than installing one after the fact. `scenario-asker.py` remains the installed fixture
+missing rather than installing one after the fact. `scenario-asker.py` remains the image's installed fixture
 routine that opens waiting steps through `godspeed-step`; its flag table is the only place that names
 the flags of tickets 01 and 04.

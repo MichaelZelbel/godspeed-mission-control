@@ -91,10 +91,13 @@ act() {
 check() { # <evidence folder>
   local folder=$1 reason table
   local -a sparse_files=()
-  for table in "${SERVER_SPARSE_TABLES[@]}"; do sparse_files+=("sparse-${table//_/-}.json"); done
   [ -d "$folder" ] || fail "there is nothing at $folder, so this scenario kept no first-day evidence"
   need_node
-  kept_all "$folder" 'the installed first day' setup.json job-research.json job-choice.json job-work.json first-day-work-filed.txt job-scheduled-brief.json brief.txt brief-cron-runs.txt scheduled-telegram-requests.json run.json runner.json telegram-requests.json work-items.json notes-before-reply.json notes-after-reply.json "${sparse_files[@]}" manifest.json
+  kept_all "$folder" 'the installed first day' setup.json job-research.json job-choice.json job-work.json first-day-work-filed.txt job-scheduled-brief.json brief.txt brief-cron-runs.txt scheduled-telegram-requests.json run.json runner.json telegram-requests.json work-items.json notes-before-reply.json notes-after-reply.json briefing-source-tables.txt manifest.json
+  mapfile -t SERVER_SPARSE_TABLES <"$folder/briefing-source-tables.txt"
+  [ "${#SERVER_SPARSE_TABLES[@]}" -gt 0 ] || fail 'the installed server named no morning-brief source records'
+  for table in "${SERVER_SPARSE_TABLES[@]}"; do sparse_files+=("sparse-${table//_/-}.json"); done
+  kept_all "$folder" 'the installed first day' "${sparse_files[@]}"
   grep -Fqx "$GOAL" <(json_value "$folder/setup.json" results.goal.title 2>/dev/null || true) ||
     grep -Fq "$GOAL" "$folder/setup.json" || fail 'the notebook did not retain the fictional emergency-kit goal'
   grep -Fqx "$WORK_ID: planned" "$folder/first-day-work-filed.txt" ||

@@ -17,6 +17,20 @@ import {currentHealth,healthSafeReply,unknownHealthColumns} from './health-input
 import {cycleOperation} from './cycle-operations.mjs';
 import {addonCommand} from './native-personal.mjs';
 import {dayOf} from './trackers.mjs';
+const BRIEFING_SOURCE_SELECTORS=Object.freeze({
+ notes:({actionSources})=>actionSources,
+ watch_topics:({query,selectedTopics})=>visibleRows(query,'watch_topics').filter(t=>selectedTopics.has(t.id)),
+ watch_findings:({context})=>context.watch_findings,
+ goals:({context})=>context.goals,
+ decisions:({context})=>context.decisions,
+ work_items:({context})=>context.work,
+ deadlines:({context})=>context.deadlines,
+ health_observations:({context})=>context.health,
+ health_episodes:({context})=>context.episodes,
+ medications:({context})=>context.medications,
+ watch_observations:({context})=>context.source_receipts,
+});
+export const BRIEFING_SOURCE_TABLES=Object.freeze(Object.keys(BRIEFING_SOURCE_SELECTORS));
 // The day a briefing note belongs to is the day it was asked for (brief_day), which a write that
 // commits after local midnight must not move; notes saved before that field have only created_at.
 const briefedOn=(note,zone)=>note.source_app==='morning-brief'&&(note.brief_day||(note.created_at&&dayOf(new Date(note.created_at),zone)));
@@ -107,7 +121,7 @@ async function runBriefing(job,{store,query,provider,now}){
  for(const out of leftOut){const id='repair-brief-line-'+hash([out.name,out.line]),old=store.get('work_items',id);if(old&&old.state!=='verified')continue;store.save('work_items',{id,kind:'repair',title:'The morning briefing left out '+out.name+', because it breaks your writing rules',state:'needs_review',job_id:job.id,line_name:out.name,line:out.line,refusals:out.refusals,error:out.refusals.map(describeRefusal).join('; '),check:'The line passes the writing rules in profile/voice.md, or the rule is changed',allowed_action:'inspect-and-retry',dependencies:[],max_attempts:3});}
  context.workflow=recipeContext(store,'morning-note');
  context.workspace_sources=fileContext(store,20000);
- const sourceRefs={notes:actionSources,watch_topics:visibleRows(query,'watch_topics').filter(t=>selectedTopics.has(t.id)),watch_findings:context.watch_findings,goals:context.goals,decisions:context.decisions,work_items:context.work,deadlines:context.deadlines,health_observations:context.health,health_episodes:context.episodes,medications:context.medications,watch_observations:context.source_receipts};
+ const sourceRefs=Object.fromEntries(Object.entries(BRIEFING_SOURCE_SELECTORS).map(([table,select])=>[table,select({actionSources,context,query,selectedTopics})]));
  const ids=rows=>rows.map(r=>r.id).sort();
  const checkCurrentSources=()=>query.withSnapshot(()=>{
   for(const [type,selected] of Object.entries(sourceRefs)){const current=new Map(visibleRows(query,type).map(r=>[r.id,r]));if(selected.some(r=>current.get(r.id)?._hash!==r._hash))throw Error('Briefing sources changed during judgment; retain its checks and prepare a new draft');}

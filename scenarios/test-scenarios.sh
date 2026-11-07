@@ -20,6 +20,7 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 ROOT=$(cd "$HERE/.." && pwd)
 # shellcheck source=scenarios/server-lib.sh
 . "$HERE/server-lib.sh"
+mapfile -t SERVER_SPARSE_TABLES < <(node "$ROOT/notebook/scripts/briefing-source-tables.mjs")
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP" "$TEST_GUARD_HOME"' EXIT
 
@@ -107,6 +108,17 @@ server_download_failure() {
     bad "a failed /server download fails before the installer runs (exit $code: $output)"
   fi
 }
+
+server_installed_asker() {
+  local output
+  output=$(bash -c '. "$1"; in_server_as_hermes(){ printf "%s\\n" "$*"; }; server_install_asker' bash "$HERE/server-lib.sh" 2>&1)
+  if [[ $output == *'test -f /opt/godspeed/kit/scenarios/scenario-asker.py'* && $output == *'ln -sfn /opt/godspeed/kit/scenarios/scenario-asker.py'* && $output != *'docker cp'* ]]; then
+    ok 'the fixture asker is linked from the installed candidate, not copied from the scenario host'
+  else
+    bad "the fixture asker is linked from the installed candidate, not copied from the scenario host ($output)"
+  fi
+}
+server_installed_asker
 
 # A folder that should pass, so a case for one failure is that folder with one thing changed.
 copy() { # <good folder> <new folder>
@@ -2900,6 +2912,7 @@ Prepare a practical household emergency-kit checklist by Sunday.
 Verified work: Prepare a practical household emergency-kit checklist — Wrote emergency-kit-checklist.md with practical supplies.
 Next today: buy the water and first-aid supplies.
 EOF
+  printf '%s\n' "${SERVER_SPARSE_TABLES[@]}" >"$f/briefing-source-tables.txt"
   for table in "${SERVER_SPARSE_TABLES[@]}"; do sparse=${table//_/-}; printf '{"data":[]}\n' >"$f/sparse-$sparse.json"; done
   printf 'W-000-first-day-emergency-kit: planned\n' >"$f/first-day-work-filed.txt"
   printf '{"state":"gateway"}\n' >"$f/runner.json"
@@ -2940,19 +2953,9 @@ for table in "${SERVER_SPARSE_TABLES[@]}"; do
   printf '{"data":[{"id":"seeded-%s"}]}\n' "$sparse" >"$FD/populated-$sparse/sparse-$sparse.json"
   refuses "a brief with seeded $sparse context" first-day "$FD/populated-$sparse" 'required sparse installed state'
 done
-  # The shared inventory remains the only runtime vocabulary; these fixtures guard the personal
-  # inputs and briefing source class that must not silently disappear from it.
-  for table in contacts watch_findings; do
-    sparse=${table//_/-}
-    case " ${SERVER_SPARSE_TABLES[*]} " in
-      *" $table "*)
-        copy "$FD/good" "$FD/populated-$sparse-fixed"
-        printf '{"data":[{"id":"seeded-%s"}]}\n' "$sparse" >"$FD/populated-$sparse-fixed/sparse-$sparse.json"
-        refuses "a brief with seeded $sparse context after an inventory edit" first-day "$FD/populated-$sparse-fixed" 'required sparse installed state'
-        ;;
-      *) bad "the shared sparse inventory still requires $sparse" ;;
-    esac
-  done
+copy "$FD/good" "$FD/no-brief-sources"
+: >"$FD/no-brief-sources/briefing-source-tables.txt"
+refuses 'a first day whose installed product names no briefing sources' first-day "$FD/no-brief-sources" 'named no morning-brief source records'
 copy "$FD/good" "$FD/no-send"
 printf '{"sent":[]}\n' >"$FD/no-send/scheduled-telegram-requests.json"
 refuses 'a brief not delivered on Telegram' first-day "$FD/no-send" 'never delivered'

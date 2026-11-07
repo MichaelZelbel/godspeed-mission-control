@@ -3,7 +3,7 @@
 
 SERVER_DIR=${GODSPEED_SCENARIO_SERVER_DIR:-/opt/godspeed-mission-control}
 INGEST_PORT=${GODSPEED_SCENARIO_INGEST_PORT:-47831}
-SERVER_SPARSE_TABLES=(profile_facts goals decisions work_items deadlines health_observations health_episodes medications notes job_receipts watch_topics watch_observations watch_findings lead_entries contacts moments)
+SERVER_SPARSE_TABLES=()
 
 # The /server installer owns the Compose project and its generated container names. Resolve the
 # current service container through that exact invocation each time because a scenario may recreate
@@ -231,18 +231,19 @@ server_snapshot_table() { # <label> <table>
   server_table "$2" "$EVIDENCE/$2-$1.json"
 }
 server_sparse_state() {
-  # Query the installed notebook before the first goal, rather than asserting what a fresh install
-  # ought to contain. These are the personal inputs a morning brief can otherwise draw on.
+  # Query the installed product's own source inventory before the first goal, rather than asserting
+  # what a fresh install ought to contain. These are the personal inputs a morning brief can draw on.
   local table
+  in_server /usr/local/bin/node /opt/godspeed/kit/notebook/scripts/briefing-source-tables.mjs >"$EVIDENCE/briefing-source-tables.txt" ||
+    fail 'the installed server could not name the records its morning brief reads'
+  mapfile -t SERVER_SPARSE_TABLES <"$EVIDENCE/briefing-source-tables.txt"
+  [ "${#SERVER_SPARSE_TABLES[@]}" -gt 0 ] || fail 'the installed server named no morning-brief source records'
   for table in "${SERVER_SPARSE_TABLES[@]}"; do
     server_table "$table" "$EVIDENCE/sparse-${table//_/-}.json"
   done
 }
 server_install_asker() {
-  local container; container=$(server_container)
-  [ -n "$container" ] && sudo docker cp "$HERE/scenario-asker.py" "$container:/tmp/scenario-asker.py" ||
-    fail 'the fixture asker could not reach the installed server'
-  in_server_as_hermes sh -c 'mkdir -p "$HERMES_HOME/scripts" && cp /tmp/scenario-asker.py "$HERMES_HOME/scripts/scenario-asker.py" && /opt/hermes/bin/hermes cron create "0 0 1 1 *" --no-agent --name "Scenario asker" --script scenario-asker.py --deliver telegram --failure-deliver local --workdir "$GODSPEED_WORKSPACE"' >&2 ||
+  in_server_as_hermes sh -c 'test -f /opt/godspeed/kit/scenarios/scenario-asker.py && mkdir -p "$HERMES_HOME/scripts" && ln -sfn /opt/godspeed/kit/scenarios/scenario-asker.py "$HERMES_HOME/scripts/scenario-asker.py" && /opt/hermes/bin/hermes cron create "0 0 1 1 *" --no-agent --name "Scenario asker" --script scenario-asker.py --deliver telegram --failure-deliver local --workdir "$GODSPEED_WORKSPACE"' >&2 ||
     fail 'the installed Hermes could not create the fixture asker routine'
 }
 server_set_asks() { # <file>
