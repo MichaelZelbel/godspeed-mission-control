@@ -4,11 +4,11 @@ import {execFileSync} from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import {baselineSent,captureSent} from './server-telegram.mjs';
+import {captureSent} from './server-telegram.mjs';
 
 test('the first action after setup ignores the setup handoff message',()=>{
   const state={sent:2,outbox:[{label:'setup-first-install',text:'Setup question'}]};
-  baselineSent(state,{sent:[{text:'Start'},{text:'Setup question'},{text:'Gateway ready'}]});
+  state.sent=3;
   captureSent(state,{sent:[{text:'Start'},{text:'Setup question'},{text:'Gateway ready'},{text:'Today\'s brief'}]},'todays-brief');
 
   assert.deepEqual(state.outbox,[

@@ -52,7 +52,6 @@ export function captureSent(state,record,label,before=state.sent){
   for(const sent of (record.sent ?? []).slice(before)) state.outbox.push({label,kind:'sendMessage',chat_id:sent.chat_id,text:sent.text,buttons:(sent.buttons ?? []).map(button=>button.callback),accepted:true});
   state.sent=(record.sent ?? []).length;
 }
-export function baselineSent(state,record){ state.sent=(record.sent ?? []).length; }
 async function capture(label,kind,action){
   const state=loadState();
   try {
@@ -118,7 +117,7 @@ async function setup(){
   if(!setupState.done) throw Error('the Telegram setup ended without marking its handoff done');
   const handoff=copyRecord();
   const state=loadState();
-  baselineSent(state,handoff);
+  state.sent=(handoff.sent ?? []).length;
   saveState(state);
   runner();
 }
