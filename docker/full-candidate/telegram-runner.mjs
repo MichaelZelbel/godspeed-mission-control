@@ -41,7 +41,7 @@ export function routeTelegramGateway(home,api){
  let endpoint,text;try{endpoint=telegramAPI(api);text=fs.readFileSync(path.join(home,'config.yaml'),'utf8');}catch{return false;}
  let next=setConfigValue(text,['platforms','telegram','extra','base_url'],JSON.stringify(endpoint+'/bot'));
  next=setConfigValue(next,['platforms','telegram','extra','base_file_url'],JSON.stringify(endpoint+'/file/bot'));
- if(next===text)return false;
+ if(next===text)return true;
  atomic(path.join(home,'config.yaml'),next);if(process.platform!=='win32')fs.chmodSync(path.join(home,'config.yaml'),0o600);return true;
 }
 
@@ -119,7 +119,9 @@ export class TelegramRunner{
     try{if(starterBorn(root))chatVoiceDefaults({home,chats:[String(chat)]});}catch{}
   }
   start(plan){
-    if(plan.kind==='gateway')routeTelegramGateway(this.env.HERMES_HOME,this.env.GODSPEED_TELEGRAM_API);
+    if(plan.kind==='gateway'&&this.env.GODSPEED_TELEGRAM_API&&!routeTelegramGateway(this.env.HERMES_HOME,this.env.GODSPEED_TELEGRAM_API)){
+      this.report('gateway-route-failed');return;
+    }
     if(plan.kind==='gateway')this.voiceDefaults(plan.env.TELEGRAM_HOME_CHANNEL);
     const started=this.now(),child=this.spawnProcess(plan.command,plan.args,{env:plan.env,stdio:'inherit',detached:true});
     this.child={key:plan.key,kind:plan.kind,process:child,started,stopping:false,zone:plan.kind==='gateway'&&this.env.HERMES_HOME?hermesZone(this.env.HERMES_HOME):undefined};this.lastKey=plan.key;

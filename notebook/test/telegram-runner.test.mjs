@@ -67,8 +67,23 @@ test('the gateway uses the configured local Bot API after setup',async()=>{
  const f=fixture(),home=path.join(f.dir,'hermes');fs.mkdirSync(home);fs.writeFileSync(path.join(home,'config.yaml'),'model:\n  provider: openrouter\n');
  Object.assign(f.runner.env,{HERMES_HOME:home,GODSPEED_TELEGRAM_API:'http://127.0.0.1:8081'});
  f.write('connection.json',connection);f.write('setup.json',{bot_id:4242,owner_id:111,chat_id:111,done:true});await tick(f.runner);
- assert.match(fs.readFileSync(path.join(home,'config.yaml'),'utf8'),/platforms:\n  telegram:\n    extra:\n      base_url: "http:\/\/127\.0\.0\.1:8081\/bot"\n      base_file_url: "http:\/\/127\.0\.0\.1:8081\/file\/bot"/);
+ const routed=fs.readFileSync(path.join(home,'config.yaml'),'utf8');assert.match(routed,/platforms:\n  telegram:\n    extra:\n      base_url: "http:\/\/127\.0\.0\.1:8081\/bot"\n      base_file_url: "http:\/\/127\.0\.0\.1:8081\/file\/bot"/);
  assert.equal(f.started[0].options.env.TELEGRAM_BOT_TOKEN,connection.token);
+ const again=fixture(),againHome=path.join(again.dir,'hermes');fs.mkdirSync(againHome);fs.writeFileSync(path.join(againHome,'config.yaml'),routed);
+ Object.assign(again.runner.env,{HERMES_HOME:againHome,GODSPEED_TELEGRAM_API:'http://127.0.0.1:8081'});
+ again.write('connection.json',connection);again.write('setup.json',{bot_id:4242,owner_id:111,chat_id:111,done:true});await tick(again.runner);
+ assert.equal(again.started.length,1,'an already routed endpoint still starts the gateway');
+});
+
+test('an unsafe configured Bot API does not start the gateway or change its config',async()=>{
+ const f=fixture(),home=path.join(f.dir,'hermes'),config=path.join(home,'config.yaml'),original='model:\n  provider: openrouter\n';fs.mkdirSync(home);fs.writeFileSync(config,original);
+ Object.assign(f.runner.env,{HERMES_HOME:home,GODSPEED_TELEGRAM_API:'http://192.0.2.1:8081'});
+ f.write('connection.json',connection);f.write('setup.json',{bot_id:4242,owner_id:111,chat_id:111,done:true});await tick(f.runner);
+ assert.equal(f.started.length,0);assert.equal(f.state().state,'gateway-route-failed');assert.equal(fs.readFileSync(config,'utf8'),original);
+ const unreadable=fixture(),unreadableHome=path.join(unreadable.dir,'hermes');fs.mkdirSync(unreadableHome);
+ Object.assign(unreadable.runner.env,{HERMES_HOME:unreadableHome,GODSPEED_TELEGRAM_API:'http://127.0.0.1:8081'});
+ unreadable.write('connection.json',connection);unreadable.write('setup.json',{bot_id:4242,owner_id:111,chat_id:111,done:true});await tick(unreadable.runner);
+ assert.equal(unreadable.started.length,0);assert.equal(unreadable.state().state,'gateway-route-failed');
 });
 
 test('a new key or a disconnect stops what runs; a finished chat of another bot does not count',async()=>{
