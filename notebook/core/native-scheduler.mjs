@@ -448,7 +448,7 @@ export class NativeScheduler{
   const root=this.store.root,mine=readNotebookRoutines(this.store),entry=mine.jobs.find(j=>j.key==='workouts'),jobs=hermesJobs(this.home);
   if(!starterBorn(root)&&this.switchesReady()&&!switchedOn(this.store,'workouts')){
    // A carried standalone key is prior opt-in; a saved switch-off remains the person's choice.
-   if(reconnect||!this.store.get('settings',switchId('workouts')))await setRoutineSwitch(this.store,{key:'workouts',on:true});
+   if(reconnect||!this.store.get('settings',switchId('workouts')))await setRoutineSwitch(this.store,{key:'workouts',on:true},{workouts:true});
    else return null;
   }
   const matching=jobs.filter(j=>j.name===WORKOUTS_JOB&&j.script===WORKOUTS_SCRIPT&&typeof j.workdir==='string'&&path.resolve(j.workdir)===path.resolve(root));
@@ -480,7 +480,7 @@ export class NativeScheduler{
   this.requireOwner('Disconnect Workouts from Hevy');
   const mine=readNotebookRoutines(this.store),entry=mine.jobs.find(j=>j.key==='workouts');
   rememberNotebookRoutine(this.store,{...(entry||{id:'workouts-disconnected',key:'workouts',name:WORKOUTS_JOB,what:WORKOUTS_WHAT}),switched_off:true});
-  if(!starterBorn(this.store.root))await setRoutineSwitch(this.store,{key:'workouts',on:false});
+  if(!starterBorn(this.store.root))await setRoutineSwitch(this.store,{key:'workouts',on:false},{workouts:true});
   for(const job of hermesJobs(this.home).filter(j=>j.name===WORKOUTS_JOB&&j.script===WORKOUTS_SCRIPT&&typeof j.workdir==='string'&&path.resolve(j.workdir)===path.resolve(this.store.root)))await this.command(['remove',job.id]);
   if(this.workouts)await this.workouts.uninstall();
  }

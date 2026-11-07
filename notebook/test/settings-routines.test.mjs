@@ -5,6 +5,7 @@ import {DatabaseSync} from 'node:sqlite';import {CONNECTION_NOTICE_PREFIX,ROUTIN
 import {cronCalendar,calendarCron,retimeWhat} from '../core/routine-times.mjs';import {enableKinds,readNotebookRoutines,rememberNotebookRoutine,writeNotebookRoutines,JOURNAL_JOB,CHAT_TIDY_JOB,CHAT_TIDY_SCRIPT,BRIEF_SCRIPT,deliveryFor,CONNECTION_JOB,CONNECTION_WHAT} from '../core/notebook-routines.mjs';
 import {personalOperation} from '../core/personal-operations.mjs';import {readArea} from '../../third-party/addons/godspeed-coach/lib/areas.mjs';
 import {acceptUpload} from '../core/phone-health.mjs';
+import {stateDir,statePaths} from '../../third-party/addons/godspeed-workouts/lib/paths.mjs';import {saveKey} from '../../third-party/addons/godspeed-workouts/lib/keys.mjs';
 
 // THE SETTINGS CONTROLS FOR HERMES' ROUTINES, 18 October 2026. Routine times was refused for every
 // Hermes routine, Enable routine refused most kinds with "Choose an installed Godspeed skill", Routine
@@ -732,10 +733,14 @@ test('a reader that runs while the first-start hold is in progress says no old n
 test('Settings lists the routines of an adopted mission control, all off, and a starter-born one has no switches',async t=>{
  const {store,hermes,home}=await adoptedFixture(t),{routineSwitches,setRoutineSwitch,ADOPTED_NOTE,PROVIDER_NOTE}=await import('../core/routine-switches.mjs');
  const listed=routineSwitches(store,{jobs:hermes.jobs()});
- assert.equal(listed.note,ADOPTED_NOTE);assert.equal(listed.routines.length,12);
+ assert.equal(listed.note,ADOPTED_NOTE);assert.equal(listed.routines.length,11);
  assert.ok(listed.routines.every(r=>r.on===false&&r.state==='off'&&r.what));
  assert.equal(listed.routines.find(r=>r.key==='memory-daily').name,'Remember what you said');
- assert.equal(listed.routines.find(r=>r.key==='workouts').name,'Workouts from Hevy');
+ assert.equal(listed.routines.find(r=>r.key==='workouts'),undefined,'a no-key install has no unusable Workouts switch');
+ const prior=process.env.GODSPEED_WORKOUTS_STATE;process.env.GODSPEED_WORKOUTS_STATE=path.join(store.state,'workouts');t.after(()=>{if(prior===undefined)delete process.env.GODSPEED_WORKOUTS_STATE;else process.env.GODSPEED_WORKOUTS_STATE=prior;});
+ saveKey(statePaths(stateDir()),'11111111-2222-4333-8444-555555555555');
+ assert.equal(routineSwitches(store,{jobs:[]}).routines.find(r=>r.key==='workouts').name,'Workouts from Hevy','a connected add-on exposes its adopted switch');
+ await setRoutineSwitch(store,{key:'workouts',on:true});assert.equal(routineSwitches(store,{jobs:[]}).routines.find(r=>r.key==='workouts').state,'waiting');
  await setRoutineSwitch(store,{key:'connection-check',on:true});
  assert.equal(routineSwitches(store,{jobs:[]}).routines.find(r=>r.key==='connection-check').state,'waiting');
  await assert.rejects(setRoutineSwitch(store,{key:'nope',on:true}),/Choose one of the routines/);
