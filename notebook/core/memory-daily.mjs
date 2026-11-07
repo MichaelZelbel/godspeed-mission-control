@@ -193,7 +193,6 @@ function writeWorld(root,plan){
   else worldFile(path.join(root,'world','events',effect.day+'-'+slug(effect.what)+'-'+index+'.md'),{date:effect.day,origin:'remember-what-you-said',participants:effect.participants.map(subject=>ensureWorldSubject(root,subject,created)),source:'conversation_archive:'+effect.citation.id},effect.what+'\n\n'+effect.citation.quote);
  }
 }
-async function callDue(due,effect){if(!effect.deadline_id)return true;return due(effect.deadline_id,effect.citation.quote);}
 function stateFile(root){return rootPath(root,'state.json');}
 function readState(root,now){const state=safeJson(stateFile(root),null);return state&&Array.isArray(state.consumed)?state:{version:1,not_before:dayOf(new Date(now.getTime()-6*86400000)),consumed:[]};}
 function receiptFile(root,piece){return rootPath(root,'pending',piece.id+'.json');}
@@ -222,8 +221,8 @@ async function rememberUnderLock({root,store,query,domains,model,due,now,terms,d
  const pieces=[...recovered,...archivePieces(all)];const seen=new Set;
  for(const piece of pieces){if(seen.has(piece.id)||piece.messages.some(m=>state.consumed.includes(m.id)))continue;seen.add(piece.id);let receipt=piece.pending?piece:null;
   if(!receipt){let valid=null;for(let attempt=0;attempt<3&&!valid;attempt++)try{const reply=await model(modelRequest({messages:piece.messages,query,root,terms,deadlines}));valid=validateResponse(reply?.text??reply,{messages:piece.messages,query,root,terms,deadlines});if(!valid.plan)valid=null;}catch{}
-   const plan=valid&&decodeDailyMemoryPlan(valid.plan);if(!plan){failed++;continue;}receipt={id:piece.id,message_ids:piece.messages.map(m=>m.id),plan,refusals:safeRefusals(valid.refusals,piece.messages,[...terms,...employerTerms(piece.messages)]),prepared_at:now.toISOString(),applied:false};const file=receiptFile(root,piece);mkdir(file);writeJson(file,receipt);}
-  try{const plan=decodeDailyMemoryPlan(receipt.plan);if(!plan)throw Error('invalid-daily-memory-plan');if(!receipt.applied){for(const effect of plan.effects.filter(x=>x.type==='event'&&x.deadline_id)){const done=await callDue(due,effect);if(done!==true)throw Error('deadline-refused');}
+   const plan=valid?.plan;if(!plan){failed++;continue;}receipt={id:piece.id,message_ids:piece.messages.map(m=>m.id),plan,refusals:safeRefusals(valid.refusals,piece.messages,[...terms,...employerTerms(piece.messages)]),prepared_at:now.toISOString(),applied:false};const file=receiptFile(root,piece);mkdir(file);writeJson(file,receipt);}
+  try{const plan=receipt.plan;if(!receipt.applied){for(const effect of plan.effects.filter(x=>x.type==='event'&&x.deadline_id)){const done=await due(effect.deadline_id,effect.citation.quote);if(done!==true)throw Error('deadline-refused');}
     if(notebook)domains.writeDailyMemory(plan);else writeWorld(root,plan);receipt={...receipt,plan,applied:true};}
    archiveReceipt(root,piece,receipt,now);newlyConsumed.push(...piece.messages.map(message=>message.id));completed++;
   }catch(error){failed++;if(String(error.message)==='deadline-refused'){deadlineRefused=true;break;}}

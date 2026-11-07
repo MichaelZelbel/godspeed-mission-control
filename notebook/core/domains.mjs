@@ -17,7 +17,7 @@ import {noteConnections,linkSuggestions} from './related.mjs';
 import {graphData} from './graph.mjs';
 import { slug, hash } from './records/store.mjs';
 import {dailyMemorySubjectId,normalName} from './memory-daily-identity.mjs';
-import {decodeDailyMemoryPlan,day as isDay} from './daily-memory-plan.mjs';
+import {decodeDailyMemoryPlan} from './daily-memory-plan.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { Review,factSubject,factSuppressed } from './review.mjs';
@@ -209,23 +209,20 @@ export class Domains {
     const memoryKey=(type,id)=>type+':'+(id||''),sameName=(left,right)=>normalName(left)===normalName(right);
     return this.store.transaction(view=>{
       const query=new QueryService(view),staged=new Domains(query),subjects=new Map([[memoryKey('self'),{type:'self',id:null,name:'self'}]]),addSubject=(type,row)=>subjects.set(memoryKey(type,row.id),{type,id:row.id,name:row.name}),create=(type,item)=>{
-        if(!item||typeof item.id!=='string'||typeof item.name!=='string'||!item.name.trim())throw Error('Daily memory has an invalid subject');
         const table=type==='contact'?'contacts':'entities',existing=query.rows(table).find(row=>sameName(row.name,item.name)),row=existing||view.prepare(table,{id:dailyMemorySubjectId(type,item.name),name:item.name.trim(),origin:'remember-what-you-said'});
         if(!existing)view.commit([row]);addSubject(type,row);subjects.set(memoryKey(type==='contact'?'new-person':'new-thing',item.id),{type,id:row.id,name:row.name});
       };
-      for(const person of plan.people||[])create('contact',person);
-      for(const thing of plan.things||[])create('entity',thing);
+      for(const person of plan.people)create('contact',person);
+      for(const thing of plan.things)create('entity',thing);
       for(const row of query.rows('contacts'))addSubject('contact',row);
       for(const row of query.rows('entities'))addSubject('entity',row);
-      for(const effect of plan.effects||[]){
-        if(effect?.type==='fact'){
-          const subject=subjects.get(memoryKey(effect.subject?.type,effect.subject?.id))||effect.subject;
-          if(!subject||!effect.citation)throw Error('Daily memory has an invalid fact');
+      for(const effect of plan.effects){
+        if(effect.type==='fact'){
+          const subject=subjects.get(memoryKey(effect.subject.type,effect.subject.id))||effect.subject;
           staged.writeFact({subject_type:subject.type,subject_id:subject.id,contact_id:subject.type==='contact'?subject.id:null,entity_id:subject.type==='entity'?subject.id:null,label:effect.kind,attribute:effect.kind,value:effect.value,valid_from:effect.date,cardinality:effect.cardinality,confidence:effect.confidence==='likely'?'likely':'confirmed',source_type:'conversation_archive',source_id:effect.citation.id,evidence_quote:effect.citation.quote,origin:'remember-what-you-said'});
           continue;
         }
-        if(effect?.type!=='event'||typeof effect.what!=='string'||!effect.what.trim()||!isDay(effect.day)||!effect.citation)throw Error('Daily memory has an invalid event');
-        const participants=(effect.participants||[]).map(reference=>subjects.get(memoryKey(reference?.type,reference?.id))||reference),keys=[...new Set(participants.filter(person=>person?.type==='contact'||person?.type==='entity').map(person=>memoryKey(person.type,person.id)))].sort(),id='memory-'+hash(['event',effect.citation.id,effect.what,effect.day,keys]).slice(0,20),records=[];
+        const participants=effect.participants.map(reference=>subjects.get(memoryKey(reference.type,reference.id))||reference),keys=[...new Set(participants.filter(person=>person?.type==='contact'||person?.type==='entity').map(person=>memoryKey(person.type,person.id)))].sort(),id='memory-'+hash(['event',effect.citation.id,effect.what,effect.day,keys]).slice(0,20),records=[];
         if(!view.get('moments',id))records.push(view.prepare('moments',{id,title:effect.what,description:effect.citation.quote,happened_at:effect.day,status:'past_fact',evidence_quote:effect.citation.quote,source_type:'conversation_archive',source_id:effect.citation.id,origin:'remember-what-you-said'}));
         for(const [index,person] of participants.entries()){
           if(person?.type==='contact'&&person.id&&!query.rows('moment_participants').some(row=>row.moment_id===id&&(row.person_id||row.contact_id)===person.id))records.push(view.prepare('moment_participants',{id:id+'-person-'+index,moment_id:id,person_id:person.id}));
