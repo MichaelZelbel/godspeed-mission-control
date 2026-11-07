@@ -47,6 +47,7 @@ export default function Control(){
     <p role="alert" className="text-red-400">{error}</p>
     <Button asChild className="min-h-11 gap-2"><Link to="/dashboard/settings/import"><Download className="h-4 w-4" aria-hidden="true"/>Import from Menerio</Link></Button>
     <ConnectAI/>
+    {data?.assistantUpdate&&<section id="assistant-update" className="border rounded p-4 space-y-2"><h2 className="text-xl">Assistant updates</h2><label className="flex gap-2 items-center"><input type="checkbox" checked={data.assistantUpdate.enabled!==false} onChange={e=>action('hermes-update',{enabled:e.target.checked})}/>Keep the assistant program up to date</label><p>The notebook checks eligible stable Hermes releases nightly at 04:15, after seven days. Major releases wait for you. It updates only a clean checkout it owns and checks the program, routines, plugins, gateway, and one connected AI question.</p>{data.assistantUpdate.reason&&<p className="text-sm text-muted-foreground">{data.assistantUpdate.reason}</p>}{data.assistantUpdate.last&&<p className="text-sm text-muted-foreground">Last check: {data.assistantUpdate.last.result}{data.assistantUpdate.last.version?' ('+data.assistantUpdate.last.version+')':''}{data.assistantUpdate.last.reason?': '+data.assistantUpdate.last.reason:''}.</p>}</section>}
     <TelegramSettings/>
     <VoiceReplies/>
     <PhoneHealth/>
