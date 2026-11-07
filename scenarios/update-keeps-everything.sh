@@ -39,6 +39,7 @@ scenario_arguments "$@"
 ROUTINE='Night chat tidy-up'
 CHAT=scenario-chat-1
 OWNER_VALUE=150000
+FIRST_GOAL='Keep the scenario ready'
 
 # One line per notebook record, so "every record is still there" is a comparison and not a count.
 # The same key the linux-update job of .github/workflows/scenarios.yml compares them by.
@@ -77,8 +78,7 @@ act() {
   say "The machine starts on $(cat "$EVIDENCE/version-before")"
 
   say "The owner's first goal, so the notebook starts this install's routines"
-  printf '{"goal":"Keep the scenario ready","timezone":"Etc/UTC","delivery":"notebook"}\n' \
-    >"$EVIDENCE/setup-request.json"
+  printf '{"goal":"%s","timezone":"Etc/UTC","delivery":"notebook"}\n' "$FIRST_GOAL" >"$EVIDENCE/setup-request.json"
   local setup_status
   setup_status=$(curl -sS -o "$EVIDENCE/setup.json" -w '%{http_code}' --max-time 300 -X POST \
     -H 'Content-Type: application/json' --data-binary @"$EVIDENCE/setup-request.json" \
@@ -186,6 +186,11 @@ check() { # <evidence folder>
     fail "the owner's own setting is $owner_after after the update and was $owner_before"
   cmp -s "$folder/chat-before.txt" "$folder/chat-after.txt" ||
     fail "the chat history is not the same after the update"
+  local setup_goal
+  setup_goal=$(json_value "$folder/setup-request.json" goal) ||
+    fail "the setup request kept no first goal"
+  [ "$setup_goal" = "$FIRST_GOAL" ] ||
+    fail "the setup request's first goal is $setup_goal, not $FIRST_GOAL"
   [ "$(json_value "$folder/setup.json" configured)" = true ] ||
     fail "the notebook did not say the install was configured after the owner's first goal"
 

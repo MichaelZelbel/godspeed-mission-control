@@ -497,6 +497,11 @@ rm "$U/no-setup/setup.json"
 refuses "a run that kept no proof that the first goal configured the install" update-keeps-everything "$U/no-setup" \
   "setup.json is not in what the scenario kept"
 
+copy "$U/good" "$U/no-first-goal"
+printf '{"timezone":"Etc/UTC","delivery":"notebook"}\n' >"$U/no-first-goal/setup-request.json"
+refuses "a run that kept no first goal" update-keeps-everything "$U/no-first-goal" \
+  "the setup request kept no first goal"
+
 copy "$U/good" "$U/setup-failed"
 printf '{"configured":false}\n' >"$U/setup-failed/setup.json"
 refuses "a first goal that did not configure the install" update-keeps-everything "$U/setup-failed" \
