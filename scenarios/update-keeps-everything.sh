@@ -6,7 +6,9 @@
 # line against the stage twice, ends on the stage's own commits with everything of the owner's still
 # there: every notebook record, the setting they made in the assistant's own settings file, their
 # chat history - and one night chat tidy-up, restored by this release after it had left on 27
-# October 2026 although the notebook of main made it for a while.
+# October 2026 although the notebook of main made it for a while. The owner gives the installed
+# notebook its first goal first: that is when it makes its starting routines, including a tidy-up
+# once a chat app is connected.
 #
 # Twice, because an update that is run again is what a person does when they are not sure the first
 # one finished, and because nothing of theirs may be doubled or lost by it.
@@ -26,6 +28,7 @@
 #   records-before.txt / -after.txt   one line per notebook record, from the notebook's own export
 #   owner-setting-before.txt / -after.txt  the value the owner set in the assistant's settings
 #   chat-before.txt / -after.txt      the chat history's own rows
+#   setup-request.json / setup.json   the owner's first goal, and the notebook's configured answer
 #   routines-after.txt                the names of the assistant's routines after the update
 #   health.txt                        what the notebook answered on its own address
 SCENARIO=update-keeps-everything
@@ -72,6 +75,19 @@ act() {
   cp "$RUNTIME/version" "$EVIDENCE/version-before" ||
     fail "the public install left no version file, so what it was cannot be said"
   say "The machine starts on $(cat "$EVIDENCE/version-before")"
+
+  say "The owner's first goal, so the notebook starts this install's routines"
+  printf '{"goal":"Keep the scenario ready","timezone":"Etc/UTC","delivery":"notebook"}\n' \
+    >"$EVIDENCE/setup-request.json"
+  local setup_status
+  setup_status=$(curl -sS -o "$EVIDENCE/setup.json" -w '%{http_code}' --max-time 300 -X POST \
+    -H 'Content-Type: application/json' --data-binary @"$EVIDENCE/setup-request.json" \
+    "http://127.0.0.1:$NOTEBOOK_PORT/api/setup") ||
+    fail "the notebook could not be reached to give the owner their first goal"
+  [ "$setup_status" = 200 ] ||
+    fail "the notebook refused the owner's first goal with HTTP $setup_status: $(tr -d '\n' <"$EVIDENCE/setup.json" | cut -c1-200)"
+  [ "$(json_value "$EVIDENCE/setup.json" configured)" = true ] ||
+    fail "the notebook accepted the owner's first-goal request but did not say the install is configured"
 
   say "Something of the owner's: a notebook record, a setting of their own, and a chat history"
   printf '%s\n' '{"title":"Scenario four","content":"A note the owner wrote before the update"}' >"$EVIDENCE/note.json"
@@ -130,7 +146,8 @@ check() { # <evidence folder>
   need_node
   for file in version-before version-after stage.json kept-stage.json trace-1.log trace-2.log \
     records-before.txt records-after.txt export-after.json owner-setting-before.txt \
-    owner-setting-after.txt chat-before.txt chat-after.txt routines-after.txt health.txt; do
+    owner-setting-after.txt chat-before.txt chat-after.txt setup-request.json setup.json \
+    routines-after.txt health.txt; do
     kept "$folder" "$file" "what the machine looked like before the update and after it"
   done
 
@@ -169,6 +186,8 @@ check() { # <evidence folder>
     fail "the owner's own setting is $owner_after after the update and was $owner_before"
   cmp -s "$folder/chat-before.txt" "$folder/chat-after.txt" ||
     fail "the chat history is not the same after the update"
+  [ "$(json_value "$folder/setup.json" configured)" = true ] ||
+    fail "the notebook did not say the install was configured after the owner's first goal"
 
   # The notebook answers, and the connected chat app has one night routine.
   [ "$(tr -d ' \n\r' <"$folder/health.txt")" = 200 ] ||
