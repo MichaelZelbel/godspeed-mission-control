@@ -105,22 +105,31 @@ settings_post() { # <docker|native> <json file> <answer file>
   esac
 }
 
-persistence_roots() {
-  assistant_home
+persistence_roots() { # <scan name>
+  assistant_home "$1"
   DOCKER_PERSISTENCE_ROOTS=(/opt/data /root/.hermes)
   NATIVE_PERSISTENCE_ROOTS=("$ROOT" "$STATE" "$HERMES")
 }
 
 refused_not_retained() { # <docker|native>
-  local platform=$1 key='refused-scenario-key' found paths=$EVIDENCE/.$1-refused-key-paths
-  persistence_roots
+  local platform=$1 key='refused-scenario-key' paths=$EVIDENCE/.$1-refused-key-paths code
+  persistence_roots "$platform refused-key scan"
   case $platform in
-    docker) found=$(in_server sh -c "grep -rlF -- '$key' ${DOCKER_PERSISTENCE_ROOTS[*]} 2>/dev/null || true" 2>/dev/null || true) ;;
+    docker)
+      if in_server sh -c "grep -rlF -- '$key' ${DOCKER_PERSISTENCE_ROOTS[*]}; code=\$?; [ \"\$code\" -le 1 ] || exit \"\$code\"" >"$paths"; then :; else
+        code=$?
+        fail "$platform refused-key scan could not run (server grep ended $code)"
+      fi
+      ;;
     native)
-      found=$(grep -rlF -- "$key" "${NATIVE_PERSISTENCE_ROOTS[@]}" 2>/dev/null || true)
+      if grep -rlF -- "$key" "${NATIVE_PERSISTENCE_ROOTS[@]}" >"$paths"; then :; else
+        code=$?
+        [ "$code" -eq 1 ] || fail "$platform refused-key scan could not run (grep ended $code)"
+      fi
       ;;
   esac
-  printf '%s\n' "$found" | sed '/^$/d' | sort -u >"$paths"
+  [ -f "$paths" ] || fail "$platform refused-key scan produced no path record"
+  sort -u -o "$paths" "$paths" || fail "$platform refused-key scan could not collect its path record"
   [ ! -s "$paths" ] || fail "$platform kept the refused Hevy key in $(head -n 1 "$paths")"
 }
 
@@ -202,16 +211,35 @@ NODE
 }
 
 scan_fixture_key() {
-  local key='00000000-0000-4000-8000-000000000001' native_hits docker_hits
-  persistence_roots
-  native_hits=$(grep -rlF --exclude-dir=.git --exclude-dir=node_modules -- "$key" "${NATIVE_PERSISTENCE_ROOTS[@]}" 2>/dev/null || true)
-  docker_hits=$(in_server sh -c "grep -rlF --exclude-dir=node_modules -- '$key' ${DOCKER_PERSISTENCE_ROOTS[*]} 2>/dev/null || true" 2>/dev/null || true)
-  printf '%s\n%s\n' "$native_hits" "$docker_hits" | sed '/^$/d' | grep -vE '/hevy\.json$' | sort -u >"$EVIDENCE/.key-hits"
-  "$NODE" - "$EVIDENCE/.key-hits" >"$EVIDENCE/key-scan.json" <<'NODE'
+  local key='00000000-0000-4000-8000-000000000001' code native_paths=$EVIDENCE/.native-key-hits docker_paths=$EVIDENCE/.docker-key-hits all_paths=$EVIDENCE/.all-key-hits
+  persistence_roots 'accepted-key scan'
+  if grep -rlF --exclude-dir=.git --exclude-dir=node_modules -- "$key" "${NATIVE_PERSISTENCE_ROOTS[@]}" >"$native_paths"; then :; else
+    code=$?
+    [ "$code" -eq 1 ] || fail "native accepted-key scan could not run (grep ended $code)"
+  fi
+  [ -f "$native_paths" ] || fail "native accepted-key scan produced no path record"
+  if in_server sh -c "grep -rlF --exclude-dir=node_modules -- '$key' ${DOCKER_PERSISTENCE_ROOTS[*]}; code=\$?; [ \"\$code\" -le 1 ] || exit \"\$code\"" >"$docker_paths"; then :; else
+    code=$?
+    fail "docker accepted-key scan could not run (server grep ended $code)"
+  fi
+  [ -f "$docker_paths" ] || fail "docker accepted-key scan produced no path record"
+  cat "$native_paths" "$docker_paths" >"$all_paths" ||
+    fail 'accepted-key scan could not collect its path records'
+  if grep -vE '/hevy\.json$' "$all_paths" >"$EVIDENCE/.key-hits"; then :; else
+    code=$?
+    [ "$code" -eq 1 ] || fail "accepted-key scan could not filter its path records (grep ended $code)"
+  fi
+  sort -u -o "$EVIDENCE/.key-hits" "$EVIDENCE/.key-hits" ||
+    fail 'accepted-key scan could not sort its path records'
+  if "$NODE" - "$EVIDENCE/.key-hits" >"$EVIDENCE/key-scan.json" <<'NODE'
 const fs=require('fs'),paths=fs.readFileSync(process.argv[2],'utf8').trim().split(/\r?\n/).filter(Boolean);
 console.log(JSON.stringify({clean:paths.length===0,paths}));
 NODE
-  rm -f "$EVIDENCE/.key-hits"
+  then :; else
+    fail 'accepted-key scan could not write its record'
+  fi
+  [ -s "$EVIDENCE/key-scan.json" ] || fail 'accepted-key scan produced no record'
+  rm -f "$native_paths" "$docker_paths" "$all_paths" "$EVIDENCE/.key-hits"
 }
 
 act() {

@@ -3382,6 +3382,7 @@ ACCEPTED_SCAN=$(GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy N
   . "$1"
   install_paths
   EVIDENCE=$2
+  in_server() { return 0; }
   scan_fixture_key
   cat "$EVIDENCE/key-scan.json"
 ' accepted-scan "$ROOT/scenarios/workouts-from-hevy.sh" "$RFS" "$ROOT/scenarios" 2>/dev/null)
@@ -3395,12 +3396,85 @@ ACCEPTED_SCAN=$(GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy N
   . "$1"
   install_paths
   EVIDENCE=$2
+  in_server() { return 0; }
   scan_fixture_key
   cat "$EVIDENCE/key-scan.json"
 ' accepted-scan "$ROOT/scenarios/workouts-from-hevy.sh" "$RFS" "$ROOT/scenarios" 2>/dev/null)
 case "$ACCEPTED_SCAN" in
   '{"clean":false,"paths":["'"$RFS"'/assistant/settings.json"]}') ok "the accepted-key scan finds a leak in the recorded native assistant home" ;;
   *) bad "the accepted-key scan missed a recorded native assistant-home leak ($ACCEPTED_SCAN)" ;;
+esac
+rm -rf "$RFS/assistant"
+MISSING_HOME_SCAN=$(GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy NODE="$(command -v node)" bash -c '
+  cd "$3"
+  . "$1"
+  install_paths
+  EVIDENCE=$2
+  refused_not_retained native
+' refused-scan "$ROOT/scenarios/workouts-from-hevy.sh" "$RFS" "$ROOT/scenarios" 2>&1)
+MISSING_HOME_SCAN_CODE=$?
+case "$MISSING_HOME_SCAN_CODE $MISSING_HOME_SCAN" in
+  "1 "*"FAIL workouts-from-hevy: native refused-key scan: the install recorded '"*"' as its assistant's home, and there is no such folder"*) ok "a refused-key scan with no recorded assistant home fails by name" ;;
+  *) bad "a refused-key scan with no recorded assistant home did not fail by name (exit $MISSING_HOME_SCAN_CODE: $MISSING_HOME_SCAN)" ;;
+esac
+mkdir -p "$RFS/assistant"
+printf 'refused-scenario-key\n' >"$RFS/assistant/settings.json"
+mkdir -p "$RFS/failing-grep"
+cat >"$RFS/failing-grep/grep" <<'SH'
+#!/bin/sh
+exit 2
+SH
+chmod +x "$RFS/failing-grep/grep"
+SCENARIO_NODE=$(command -v node)
+FAILED_REFUSED_SCAN=$(PATH="$RFS/failing-grep:$PATH" GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy NODE="$SCENARIO_NODE" bash -c '
+  cd "$3"
+  . "$1"
+  install_paths
+  EVIDENCE=$2
+  refused_not_retained native
+' refused-scan "$ROOT/scenarios/workouts-from-hevy.sh" "$RFS" "$ROOT/scenarios" 2>&1)
+FAILED_REFUSED_SCAN_CODE=$?
+case "$FAILED_REFUSED_SCAN_CODE $FAILED_REFUSED_SCAN" in
+  "1 "*"FAIL workouts-from-hevy: native refused-key scan could not run (grep ended 2)"*) ok "a failed native refused-key scanner fails closed" ;;
+  *) bad "a failed native refused-key scanner did not fail closed (exit $FAILED_REFUSED_SCAN_CODE: $FAILED_REFUSED_SCAN)" ;;
+esac
+FAILED_ACCEPTED_SCAN=$(PATH="$RFS/failing-grep:$PATH" GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy NODE="$SCENARIO_NODE" bash -c '
+  cd "$3"
+  . "$1"
+  install_paths
+  EVIDENCE=$2
+  scan_fixture_key
+' accepted-scan "$ROOT/scenarios/workouts-from-hevy.sh" "$RFS" "$ROOT/scenarios" 2>&1)
+FAILED_ACCEPTED_SCAN_CODE=$?
+case "$FAILED_ACCEPTED_SCAN_CODE $FAILED_ACCEPTED_SCAN" in
+  "1 "*"FAIL workouts-from-hevy: native accepted-key scan could not run (grep ended 2)"*) ok "a failed native accepted-key scanner fails closed" ;;
+  *) bad "a failed native accepted-key scanner did not fail closed (exit $FAILED_ACCEPTED_SCAN_CODE: $FAILED_ACCEPTED_SCAN)" ;;
+esac
+FAILED_DOCKER_REFUSED_SCAN=$(GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy NODE="$SCENARIO_NODE" bash -c '
+  cd "$3"
+  . "$1"
+  install_paths
+  EVIDENCE=$2
+  in_server() { return 73; }
+  refused_not_retained docker
+' refused-scan "$ROOT/scenarios/workouts-from-hevy.sh" "$RFS" "$ROOT/scenarios" 2>&1)
+FAILED_DOCKER_REFUSED_SCAN_CODE=$?
+case "$FAILED_DOCKER_REFUSED_SCAN_CODE $FAILED_DOCKER_REFUSED_SCAN" in
+  "1 "*"FAIL workouts-from-hevy: docker refused-key scan could not run (server grep ended 73)"*) ok "a failed Docker refused-key scanner fails closed" ;;
+  *) bad "a failed Docker refused-key scanner did not fail closed (exit $FAILED_DOCKER_REFUSED_SCAN_CODE: $FAILED_DOCKER_REFUSED_SCAN)" ;;
+esac
+FAILED_DOCKER_ACCEPTED_SCAN=$(GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy NODE="$SCENARIO_NODE" bash -c '
+  cd "$3"
+  . "$1"
+  install_paths
+  EVIDENCE=$2
+  in_server() { return 73; }
+  scan_fixture_key
+' accepted-scan "$ROOT/scenarios/workouts-from-hevy.sh" "$RFS" "$ROOT/scenarios" 2>&1)
+FAILED_DOCKER_ACCEPTED_SCAN_CODE=$?
+case "$FAILED_DOCKER_ACCEPTED_SCAN_CODE $FAILED_DOCKER_ACCEPTED_SCAN" in
+  "1 "*"FAIL workouts-from-hevy: docker accepted-key scan could not run (server grep ended 73)"*) ok "a failed Docker accepted-key scanner fails closed" ;;
+  *) bad "a failed Docker accepted-key scanner did not fail closed (exit $FAILED_DOCKER_ACCEPTED_SCAN_CODE: $FAILED_DOCKER_ACCEPTED_SCAN)" ;;
 esac
 copy "$WH/good" "$WH/no-workout"; sed -i 's/"source_id":"canal-pull"/"source_id":"missing-row"/' "$WH/no-workout/docker.json"
 refuses 'a malformed initial workout' workouts-from-hevy "$WH/no-workout" 'initial workouts have the wrong source ids'
