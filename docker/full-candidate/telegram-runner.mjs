@@ -5,6 +5,9 @@ import {createHash} from 'node:crypto';
 import {fileURLToPath} from 'node:url';
 import {passedEnvironment} from '../../notebook/core/assistant-files.mjs';
 import {notebookAddress} from '../../notebook/core/notebook-address.mjs';
+import {telegramAPI} from '../../notebook/core/telegram-api.mjs';
+import {setConfigValue} from '../../notebook/core/hermes-config.mjs';
+import {atomic} from '../../notebook/core/records/store.mjs';
 import {REQUEST_FILE,REQUEST_MINUTES,FLOW_STATE as BACKUP_STATE} from '../../notebook/core/backup-request.mjs';
 import {chatVoiceDefaults} from '../../notebook/core/voice-replies.mjs';
 import {starterBorn} from '../../notebook/core/starter-workspace.mjs';
@@ -32,6 +35,16 @@ export function notebookLink(env,connection,address=notebookAddress){
   if(own&&!loopback(own))return own;
   const seen=connection?.web_address?connection.web_address.replace(/\/+$/,'')+'/dashboard':null;
   return seen&&!loopback(seen)?seen:'';
+}
+export function routeTelegramGateway(home,api){
+ if(!home||!api)return false;
+ try{
+  const endpoint=telegramAPI(api),config=path.join(home,'config.yaml'),text=fs.readFileSync(config,'utf8');
+  let next=setConfigValue(text,['platforms','telegram','extra','base_url'],JSON.stringify(endpoint+'/bot'));
+  next=setConfigValue(next,['platforms','telegram','extra','base_file_url'],JSON.stringify(endpoint+'/file/bot'));
+  if(next!==text)atomic(config,next);
+  if(process.platform!=='win32')fs.chmodSync(config,0o600);return true;
+ }catch{return false;}
 }
 
 export class TelegramRunner{
@@ -108,6 +121,9 @@ export class TelegramRunner{
     try{if(starterBorn(root))chatVoiceDefaults({home,chats:[String(chat)]});}catch{}
   }
   start(plan){
+    if(plan.kind==='gateway'&&this.env.GODSPEED_TELEGRAM_API&&!routeTelegramGateway(this.env.HERMES_HOME,this.env.GODSPEED_TELEGRAM_API)){
+      this.report('gateway-route-failed');return;
+    }
     if(plan.kind==='gateway')this.voiceDefaults(plan.env.TELEGRAM_HOME_CHANNEL);
     const started=this.now(),child=this.spawnProcess(plan.command,plan.args,{env:plan.env,stdio:'inherit',detached:true});
     this.child={key:plan.key,kind:plan.kind,process:child,started,stopping:false,zone:plan.kind==='gateway'&&this.env.HERMES_HOME?hermesZone(this.env.HERMES_HOME):undefined};this.lastKey=plan.key;

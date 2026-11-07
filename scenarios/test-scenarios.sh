@@ -18,6 +18,9 @@ set -u
 
 HERE=$(cd "$(dirname "$0")" && pwd)
 ROOT=$(cd "$HERE/.." && pwd)
+# shellcheck source=scenarios/server-lib.sh
+. "$HERE/server-lib.sh"
+mapfile -t SERVER_SPARSE_TABLES < <(node "$ROOT/notebook/scripts/briefing-source-tables.mjs")
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP" "$TEST_GUARD_HOME"' EXIT
 
@@ -71,6 +74,69 @@ answers() { # <case> <scenario> <folder> <PASS|FAIL> <code> <words it has to say
 }
 passes() { answers "$1" "$2" "$3" PASS 0 "$4"; }
 refuses() { answers "$1" "$2" "$3" FAIL 1 "$4"; }
+interaction_verdicts() { # <scenario> <folder> <label...>
+  local scenario=$1 folder=$2 label
+  shift 2
+  for label in "$@"; do
+    if grep -Fqx "PASS $scenario: $label" "$folder/steps.tsv"; then
+      ok "$scenario records PASS for $label"
+    else
+      bad "$scenario records no PASS for $label"
+    fi
+  done
+}
+interaction_failure_verdict() { # <scenario> <folder> <label>
+  if grep -Fq "FAIL $1: $3:" "$2/steps.tsv"; then
+    ok "$1 records FAIL for $3"
+  else
+    bad "$1 records no FAIL for $3"
+  fi
+}
+
+server_download_failure() {
+  local bin=$TMP/server-download-bin output code
+  mkdir -p "$bin"
+  printf '#!/bin/sh\nexit 22\n' >"$bin/curl"
+  chmod +x "$bin/curl"
+  PATH="$bin:$PATH" EVIDENCE="$TMP" STAGE_REF='candidate/test' RAW='https://example.invalid' \
+    bash -c 'say(){ :; }; fail(){ printf "%s\\n" "$*"; exit 42; }; . "$1"; server_install' bash "$HERE/server-lib.sh" >"$TMP/server-download.out" 2>&1
+  code=$?
+  output=$(<"$TMP/server-download.out")
+  if [ "$code" = 42 ] && [[ $output == *'/server download for candidate/test failed'* ]]; then
+    ok 'a failed /server download fails before the installer runs'
+  else
+    bad "a failed /server download fails before the installer runs (exit $code: $output)"
+  fi
+}
+
+server_installed_asker() {
+  local output
+  output=$(bash -c '. "$1"; in_server_as_hermes(){ printf "%s\\n" "$*"; }; server_install_asker' bash "$HERE/server-lib.sh" 2>&1)
+  if [[ $output == *'test -f /opt/godspeed/kit/scenarios/scenario-asker.py'* && $output == *'ln -sfn /opt/godspeed/kit/scenarios/scenario-asker.py'* && $output != *'docker cp'* ]]; then
+    ok 'the fixture asker is linked from the installed candidate, not copied from the scenario host'
+  else
+    bad "the fixture asker is linked from the installed candidate, not copied from the scenario host ($output)"
+  fi
+}
+server_installed_asker
+
+server_sparse_inventory() {
+  local output
+  mkdir -p "$TMP/server-sparse"
+  output=$(EVIDENCE="$TMP/server-sparse" bash -c '
+    . "$1"
+    fail(){ printf "%s\\n" "$*" >&2; exit 42; }
+    in_server(){ printf "%s\\n" "$*" >&2; printf "notes\\njob_receipts\\nlead_entries\\n"; }
+    server_table(){ printf "%s %s\\n" "$1" "$2" >&2; }
+    server_sparse_state
+  ' bash "$HERE/server-lib.sh" 2>&1)
+  if [[ $output == *'/usr/local/bin/node /opt/godspeed/kit/notebook/scripts/briefing-source-tables.mjs'* && $output == *"job_receipts $TMP/server-sparse/sparse-job-receipts.json"* && $output == *"lead_entries $TMP/server-sparse/sparse-lead-entries.json"* ]]; then
+    ok 'the sparse-state proof asks the installed briefing inventory and snapshots every named table'
+  else
+    bad "the sparse-state proof asks the installed briefing inventory and snapshots every named table ($output)"
+  fi
+}
+server_sparse_inventory
 
 # A folder that should pass, so a case for one failure is that folder with one thing changed.
 copy() { # <good folder> <new folder>
@@ -99,6 +165,9 @@ printf '{"jobs":[{"id":"owner","name":"Daily connection check","script":"my-own-
 printf '{"jobs":[]}\n' >"$IR/no-notebook-record.json"
 routine_script_is 'a jobs envelope falls back to the product script, not its same-named owner routine' \
   "$(installed_routine_script "$IR/envelope.json" "$IR/no-notebook-record.json" connection-check 'Daily connection check' godspeed-connection-check.py)" godspeed-connection-check.py
+
+section 'server installer download'
+server_download_failure
 
 # =============================================================== 1. settings-on-install
 # A settings file as a wiring leaves it: Hermes' own keys, and the five of ticket 1.
@@ -2570,12 +2639,10 @@ run_json() { # <folder> <messages...>: a run.json holding these messages and ste
   for m in "$@"; do joined=${joined:+$joined,}$m; done
   printf '{"outbox":[%s],"steps":[{"label":"s1","kind":"cron","success":true}],"_plugins":[],"hermes":"test"}\n' "$joined" >"$folder/run.json"
 }
-FIXTURE_OWNER=31415
-FIXTURE_VALID_TOKEN='5550001111:SCENARIO-valid-aaaaaaaaaaaaaaaaaaaaaaaaaaaa'
-FIXTURE_OTHER_TOKEN='5550001111:SCENARIO-revoked-bbbbbbbbbbbbbbbbbbbbbbbb'
-fixture_json() { # <file>: a telegram-fixture.json as scenario-lib.sh writes it
-  printf '{"owner":"%s","valid_token":"%s","other_token":"%s","bot_id":5550001111}\n' \
-    "$FIXTURE_OWNER" "$FIXTURE_VALID_TOKEN" "$FIXTURE_OTHER_TOKEN" >"$1"
+live_telegram_evidence() { # <folder>: the redacted record and gateway state the live driver keeps
+  printf '{"requests":[]}\n' >"$1/telegram-requests.json"
+  printf '{"state":"gateway"}\n' >"$1/runner.json"
+  printf '{"files":[{"file":"run.json"}]}\n' >"$1/manifest.json"
 }
 rows() { # <file> <status|id|text>...: waiting-step records
   local file=$1 joined='' status id text
@@ -2588,25 +2655,6 @@ rows() { # <file> <status|id|text>...: waiting-step records
   printf '[%s]\n' "$joined" >"$file"
 }
 OLD='Seven old programs can post into your bot chats'
-
-section 'telegram-fixture-fetch: revoked tokens are refused'
-FETCH="$ROOT/scenarios/telegram-fixture-fetch.mjs"
-mkdir -p "$TMP/fetch"
-fixture_json "$TMP/fetch/fixture.json"
-: >"$TMP/fetch/calls.log"
-fetched() { # <token>: the HTTP status the preload answers getMe with
-  GODSPEED_SCENARIO_FIXTURE="$TMP/fetch/fixture.json" GODSPEED_SCENARIO_CALLS="$TMP/fetch/calls.log" \
-    node --import="file://$FETCH" -e "fetch('https://api.telegram.org/bot'+process.argv[1]+'/getMe').then(r=>console.log(r.status))" "$1"
-}
-[ "$(fetched "$FIXTURE_VALID_TOKEN")" = 200 ] && ok 'the valid token is answered 200' || bad 'the valid token was not answered 200'
-[ "$(fetched "$FIXTURE_OTHER_TOKEN")" = 401 ] && ok 'the revoked token is answered 401' || bad 'the revoked token was not answered 401'
-[ "$(tr '\n' ',' <"$TMP/fetch/calls.log")" = 'getMe valid,getMe invalid,' ] && ok 'both calls are logged without the token' || bad "the call log is: $(cat "$TMP/fetch/calls.log")"
-printf '{"owner":"31415"}\n' >"$TMP/fetch/partial.json"
-if GODSPEED_SCENARIO_FIXTURE="$TMP/fetch/partial.json" node --import="file://$FETCH" -e "fetch('https://api.telegram.org/botx/getMe')" >/dev/null 2>&1; then
-  bad 'a fixture with no valid_token was accepted'
-else
-  ok 'a fixture with no valid_token is refused'
-fi
 
 section 'telegram-judge: what counts as a code'
 code_case() { # <wanted: clean|code> <text>
@@ -2634,12 +2682,13 @@ nq_good() { # <folder>
   for label in s1 s2 s4 s5; do rows "$f/approvals-$label.json" approved step-qqqq-0001 'Restart the gateway'; done
   rows "$f/approvals-s3-ask.json" pending step-qqqq-0002 "$OLD"
   rows "$f/approvals-s3.json" approved step-qqqq-0002 "$OLD"
-  fixture_json "$f/telegram-fixture.json"
+  live_telegram_evidence "$f"
 }
 section no-question-he-cannot-judge
 Q=$TMP/nq
 nq_good "$Q/good"
 passes 'five situations: nothing for 1, 2, 4, 5, one question and one confirming reply for 3' no-question-he-cannot-judge "$Q/good" 'none holds a code'
+interaction_verdicts no-question-he-cannot-judge "$Q/good" s1 s2 s3-ask s3 s4 s5
 copy "$Q/good" "$Q/driver-malformed"
 printf '{\n' >"$Q/driver-malformed/run.json"
 refuses 'no-question: an unreadable owner-driver record' no-question-he-cannot-judge "$Q/driver-malformed" 'owner-driver record cannot be read'
@@ -2710,12 +2759,13 @@ py_good() { # <folder>
     "$(msg b 'Which one: the food log for your nutritionist, or cancelling the gym membership?')" "$(msg b-choice 'Sent the food log.')" \
     "$(msg c-ask 'Book the car inspection?' true "$YN")" "$(msg c-press 'Cancelled the gym membership renewal.')" "$(msg d 'Nothing is waiting for a yes right now.')"
   py_snapshots "$f"
-  fixture_json "$f/telegram-fixture.json"
+  live_telegram_evidence "$f"
 }
 section plain-yes
 P=$TMP/py
 py_good "$P/good"
 passes 'plain yes, two waiting, a button, and nothing waiting' plain-yes "$P/good" 'approved nothing'
+interaction_verdicts plain-yes "$P/good" a-ask a b-ask b b-choice c-ask c-press d-no d
 copy "$P/good" "$P/driver-malformed"
 printf '{\n' >"$P/driver-malformed/run.json"
 refuses 'plain yes: an unreadable owner-driver record' plain-yes "$P/driver-malformed" 'owner-driver record cannot be read'
@@ -2765,12 +2815,13 @@ ww_good() { # <folder>
   printf '%s\n' "$WW_FACTS" >"$f/report-facts.json"
   printf '{"data":[{"id":"m1","source_app":"background","content":%s,"report":{"facts":%s}}]}\n' \
     "$(node -e 'process.stdout.write(JSON.stringify(process.argv[1]))' "$WW_TEXT")" "$WW_FACTS" >"$f/conversation_messages-report.json"
-  fixture_json "$f/telegram-fixture.json"
+  live_telegram_evidence "$f"
 }
 section what-was-that
 W=$TMP/ww
 ww_good "$W/good"
 passes 'a report recorded with its facts and explained afterwards' what-was-that "$W/good" 'was answered with the backup and GitHub'
+interaction_verdicts what-was-that "$W/good" report question
 copy "$W/good" "$W/driver-malformed"
 printf '{\n' >"$W/driver-malformed/run.json"
 refuses 'what was that: an unreadable owner-driver record' what-was-that "$W/driver-malformed" 'owner-driver record cannot be read'
@@ -2807,12 +2858,15 @@ cc_good() { # <folder>
   printf '{"data":[{"id":"n1","kind":"connection-telegram","body":"Telegram refused your bot key, so I cannot reach you there. Open Settings to connect it again."}]}\n' >"$f/notifications-broken.json"
   printf '[{"slug":"telegram-key","title":"Connect Telegram again","state":"closed"}]\n' >"$f/due-repaired.json"
   printf '{"data":[]}\n' >"$f/notifications-repaired.json"
-  printf 'getMe valid\ngetMe invalid\ngetMe valid\n' >"$f/telegram-fixture-calls.log"
+  printf '{"requests":[{"method":"getMe","authorized":true},{"method":"getMe","authorized":false},{"method":"getMe","authorized":true}]}\n' >"$f/telegram-requests.json"
+  printf '{"state":"gateway"}\n' >"$f/runner.json"
+  printf '{"files":[{"file":"run.json"}]}\n' >"$f/manifest.json"
 }
 section connection-check
 C=$TMP/cc
 cc_good "$C/good"
 passes 'silent while fine, one message and one deadline when broken, closed when repaired' connection-check "$C/good" 'told the owner once'
+interaction_verdicts connection-check "$C/good" fine broken repaired
 copy "$C/good" "$C/driver-malformed"
 printf '{\n' >"$C/driver-malformed/run.json"
 refuses 'connection check: an unreadable owner-driver record' connection-check "$C/driver-malformed" 'owner-driver record cannot be read'
@@ -2820,8 +2874,8 @@ copy "$C/good" "$C/no-routine"
 printf '[{"id":"r1","name":"Journal check-ins"}]\n' >"$C/no-routine/routines.json"
 refuses 'an install with no Daily connection check' connection-check "$C/no-routine" 'has no Daily connection check'
 copy "$C/good" "$C/never-reached"
-printf 'getMe valid\n' >"$C/never-reached/telegram-fixture-calls.log"
-refuses 'a check that never reached the stand-in' connection-check "$C/never-reached" 'never asked the stand-in'
+printf '{"requests":[{"method":"getMe","authorized":true}]}\n' >"$C/never-reached/telegram-requests.json"
+refuses 'a check that never reached the stand-in' connection-check "$C/never-reached" 'never asked the fake Telegram API'
 copy "$C/good" "$C/speaks-when-fine"
 run_json "$C/speaks-when-fine" "$(msg fine 'All is well.')" "$(msg broken 'Telegram refused your bot key.')"
 refuses 'a message although everything is fine' connection-check "$C/speaks-when-fine" 'although everything was fine'
@@ -2835,6 +2889,7 @@ refuses 'a connection record in the bell although everything is fine' connection
 copy "$C/good" "$C/two-texts"
 run_json "$C/two-texts" "$(msg broken 'Telegram refused your bot key.')"
 refuses 'two different texts when broken' connection-check "$C/two-texts" 'in 2 different texts'
+interaction_failure_verdict connection-check "$C/two-texts" broken
 copy "$C/good" "$C/silent-when-broken"
 run_json "$C/silent-when-broken"
 printf '{"data":[]}\n' >"$C/silent-when-broken/notifications-broken.json"
@@ -2855,6 +2910,110 @@ printf '[{"slug":"the-open-deadline","title":"Connect Telegram again","state":"o
 printf '[{"slug":"the-open-deadline","title":"Connect Telegram again","state":"open"},{"slug":"the-decoy","title":"Telegram old","state":"closed"}]\n' >"$C/decoy-closed/due-repaired.json"
 refuses 'another closed Telegram deadline standing in for the open one' connection-check "$C/decoy-closed" 'not closed, after'
 refuses 'a deadline still open after the key is valid again' connection-check "$C/still-open" 'not closed, after'
+
+# ---------------------------------------------------------------------------------------- first-day
+first_day_good() { # <folder>
+  local f=$1 label table sparse
+  rm -rf "$f"; mkdir -p "$f/work"
+  printf '{"results":{"goal":{"title":"Prepare a practical household emergency-kit checklist by Sunday."}}}\n' >"$f/setup.json"
+  for label in research choice work; do printf '[{"id":"%s","last_run_at":"2026-11-06T10:00:00Z","last_status":"ok"}]\n' "$label" >"$f/job-$label.json"; done
+  printf 'ID: W-000-first-day-emergency-kit\nSTATUS: verified\nKEY: first-day-emergency-kit\nWHAT: Write a practical household emergency-kit checklist at work/emergency-kit-checklist.md\nDONE WHEN: A practical household emergency-kit checklist is written at work/emergency-kit-checklist.md and ready for a reader\nCHECK: test -s work/emergency-kit-checklist.md\nSOURCE: first-day-scenario\nRESULT: Wrote emergency-kit-checklist.md with practical supplies.\n\n- 2026-11-06 VERIFIED check passed (test -s work/emergency-kit-checklist.md)\n' >"$f/work/W-000-first-day-emergency-kit.md"
+  cat >"$f/work/emergency-kit-checklist.md" <<'EOF'
+- [ ] Water: 12 litres for 3 days
+- [ ] Food: 3 days of shelf-stable meals
+- [ ] First aid and medication: 7 days
+- [ ] Light and power: 2 battery torches
+- [ ] Communication and documents: copies in a waterproof pouch
+EOF
+  cat >"$f/brief.txt" <<'EOF'
+Prepare a practical household emergency-kit checklist by Sunday.
+Verified work: Prepare a practical household emergency-kit checklist — Wrote emergency-kit-checklist.md with practical supplies.
+Next today: buy the water and first-aid supplies.
+EOF
+  printf '%s\n' "${SERVER_SPARSE_TABLES[@]}" >"$f/briefing-source-tables.txt"
+  for table in "${SERVER_SPARSE_TABLES[@]}"; do sparse=${table//_/-}; printf '{"data":[]}\n' >"$f/sparse-$sparse.json"; done
+  printf 'W-000-first-day-emergency-kit: planned\n' >"$f/first-day-work-filed.txt"
+  printf '{"state":"gateway"}\n' >"$f/runner.json"
+  printf '{"requests":[{"method":"getUpdates","authorized":true},{"method":"sendMessage","authorized":true}]}\n' >"$f/telegram-requests.json"
+  printf '{"id":"scheduled-brief","before_last_run_at":null,"data":[{"id":"scheduled-brief","last_run_at":"2026-11-06T10:01:00Z","last_status":"ok"}]}\n' >"$f/job-scheduled-brief.json"
+  printf 'Morning brief: source=builtin\n' >"$f/brief-cron-runs.txt"
+  printf '{"sent":[{"text":%s}]}\n' "$(node -e 'process.stdout.write(JSON.stringify(require("fs").readFileSync(process.argv[1],"utf8")))' "$f/brief.txt")" >"$f/scheduled-telegram-requests.json"
+  run_json "$f" "$(msg scheduled-brief "$(cat "$f/brief.txt")")" "$(msg todays-brief "$(cat "$f/brief.txt")")"
+  printf '[]\n' >"$f/work-items.json"
+  printf '{"data":[{"id":"brief-1","content":%s}]}\n' "$(node -e 'process.stdout.write(JSON.stringify(require("fs").readFileSync(process.argv[1],"utf8")))' "$f/brief.txt")" >"$f/notes-before-reply.json"
+  cp "$f/notes-before-reply.json" "$f/notes-after-reply.json"
+  printf '{"files":[{"file":"brief.txt","bytes":1,"sha256":"test"}]}\n' >"$f/manifest.json"
+}
+section first-day
+FD=$TMP/first-day
+first_day_good "$FD/good"
+passes 'fresh Docker first day makes useful verified work, a sparse-data brief, and matching Telegram delivery and reply' first-day "$FD/good" 'answered today'
+copy "$FD/good" "$FD/no-research"
+printf '[]\n' >"$FD/no-research/job-research.json"
+refuses 'a first day without research' first-day "$FD/no-research" 'research routine has no successful'
+copy "$FD/good" "$FD/unverified"
+sed -i 's/STATUS: verified/STATUS: planned/' "$FD/unverified/work/W-000-first-day-emergency-kit.md"
+cp "$FD/good/work/W-000-first-day-emergency-kit.md" "$FD/unverified/work/W-other-verified.md"
+refuses 'a first day without its selected checked work' first-day "$FD/unverified" 'selected emergency-kit work card is not verified'
+copy "$FD/good" "$FD/no-artifact"
+rm "$FD/no-artifact/work/emergency-kit-checklist.md"
+refuses 'a first day without a practical artifact' first-day "$FD/no-artifact" 'not a practical emergency-kit checklist'
+copy "$FD/good" "$FD/placeholder"
+printf '%s\n' '- [ ] TODO: outline only' >"$FD/placeholder/work/emergency-kit-checklist.md"
+refuses 'a placeholder checklist' first-day "$FD/placeholder" 'not a practical emergency-kit checklist'
+copy "$FD/good" "$FD/wrong-result-file"
+sed -i '/^DONE WHEN:/s#work/emergency-kit-checklist.md#work/desk-drawer.md#' "$FD/wrong-result-file/work/W-000-first-day-emergency-kit.md"
+printf '%s\n' '- [ ] Pens: 12' >"$FD/wrong-result-file/work/desk-drawer.md"
+refuses 'a selected work card that names another result file' first-day "$FD/wrong-result-file" 'does not name its result file'
+for table in "${SERVER_SPARSE_TABLES[@]}"; do
+  sparse=${table//_/-}
+  copy "$FD/good" "$FD/populated-$sparse"
+  printf '{"data":[{"id":"seeded-%s"}]}\n' "$sparse" >"$FD/populated-$sparse/sparse-$sparse.json"
+  refuses "a brief with seeded $sparse context" first-day "$FD/populated-$sparse" 'required sparse installed state'
+done
+copy "$FD/good" "$FD/no-brief-sources"
+: >"$FD/no-brief-sources/briefing-source-tables.txt"
+refuses 'a first day whose installed product names no briefing sources' first-day "$FD/no-brief-sources" 'briefing-source-tables.txt is not in what the scenario kept'
+copy "$FD/good" "$FD/no-send"
+printf '{"sent":[]}\n' >"$FD/no-send/scheduled-telegram-requests.json"
+refuses 'a brief not delivered on Telegram' first-day "$FD/no-send" 'never delivered'
+copy "$FD/good" "$FD/unmarked-scheduled-delivery"
+run_json "$FD/unmarked-scheduled-delivery" "$(msg todays-brief "$(cat "$FD/unmarked-scheduled-delivery/brief.txt")")"
+refuses 'a scheduled delivery captured as the later chat reply' first-day "$FD/unmarked-scheduled-delivery" 'not retained as its own Telegram interaction'
+copy "$FD/good" "$FD/direct-run"
+printf 'Morning brief: source=direct\n' >"$FD/direct-run/brief-cron-runs.txt"
+refuses 'a direct brief run called scheduled delivery' first-day "$FD/direct-run" 'not triggered by the installed scheduler'
+copy "$FD/good" "$FD/failed-scheduled-sibling"
+node -e 'const fs=require("fs"),p=process.argv[1],d=JSON.parse(fs.readFileSync(p,"utf8"));d.data[0].last_status="error";d.data.push({id:"research",last_run_at:"2026-11-06T10:02:00Z",last_status:"ok"});fs.writeFileSync(p,JSON.stringify(d))' "$FD/failed-scheduled-sibling/job-scheduled-brief.json"
+refuses 'a failed scheduled brief standing beside a successful sibling' first-day "$FD/failed-scheduled-sibling" 'scheduled morning brief has no successful'
+copy "$FD/good" "$FD/unchanged-scheduled-run"
+node -e 'const fs=require("fs"),p=process.argv[1],d=JSON.parse(fs.readFileSync(p,"utf8"));d.before_last_run_at=d.data[0].last_run_at;fs.writeFileSync(p,JSON.stringify(d))' "$FD/unchanged-scheduled-run/job-scheduled-brief.json"
+refuses 'a scheduled brief with no new completed run' first-day "$FD/unchanged-scheduled-run" 'scheduled morning brief has no successful'
+copy "$FD/good" "$FD/missing-scheduled-baseline"
+node -e 'const fs=require("fs"),p=process.argv[1],d=JSON.parse(fs.readFileSync(p,"utf8"));delete d.before_last_run_at;fs.writeFileSync(p,JSON.stringify(d))' "$FD/missing-scheduled-baseline/job-scheduled-brief.json"
+refuses 'a scheduled brief without its completion baseline' first-day "$FD/missing-scheduled-baseline" 'scheduled morning brief has no successful'
+copy "$FD/good" "$FD/not-gateway"
+printf '{"state":"setting-up"}\n' >"$FD/not-gateway/runner.json"
+refuses 'a bot that never reaches its gateway' first-day "$FD/not-gateway" 'never reached gateway'
+copy "$FD/good" "$FD/no-poll"
+printf '{"requests":[{"method":"sendMessage","authorized":true}]}\n' >"$FD/no-poll/telegram-requests.json"
+refuses 'a gateway that never polls Telegram' first-day "$FD/no-poll" 'never polled'
+copy "$FD/good" "$FD/different-reply"
+run_json "$FD/different-reply" "$(msg scheduled-brief "$(cat "$FD/different-reply/brief.txt")")" "$(msg todays-brief 'something else')"
+refuses 'a reply that differs from the saved brief' first-day "$FD/different-reply" 'differs from the saved note'
+copy "$FD/good" "$FD/vague-next-action"
+sed -i 's/^Next today: buy the water and first-aid supplies\.$/Next: continue./' "$FD/vague-next-action/brief.txt"
+refuses 'a brief whose next step is vague' first-day "$FD/vague-next-action" 'no concrete next action'
+copy "$FD/good" "$FD/second-note"
+node -e 'const fs=require("fs"),p=process.argv[1],d=JSON.parse(fs.readFileSync(p,"utf8"));d.data.push({...d.data[0],id:"brief-2"});fs.writeFileSync(p,JSON.stringify(d))' "$FD/second-note/notes-after-reply.json"
+refuses 'asking today’s brief creates another note' first-day "$FD/second-note" 'second saved brief'
+
+copy "$FD/good" "$FD/brief-without-goal"
+sed -i 1d "$FD/brief-without-goal/brief.txt"
+refuses 'a brief that does not name the goal' first-day "$FD/brief-without-goal" 'does not name the emergency-kit goal'
+copy "$FD/good" "$FD/brief-without-work"
+sed -i 2d "$FD/brief-without-work/brief.txt"
+refuses 'a brief that does not identify the verified work' first-day "$FD/brief-without-work" 'does not identify the verified work'
 
 # ============================================== the five scenarios of 2.0.0-beta.18 (numbers come in)
 # Each is judged on made-up folders only: one that should pass, and one per failure that is easy to
@@ -3750,10 +3909,10 @@ BASH_SCENARIOS=(settings-on-install night-tidy voice update-keeps-everything
   late-reminder-file closed-offline-on-both reminder-from-settings charm-challenge
   no-video-skills-by-default update-removes-only-unchanged-skills briefing-breaks-a-rule telegram-language
   brief-asked-in-chat talk-prep-honest no-question-he-cannot-judge plain-yes what-was-that connection-check
-  phone-health-days incomplete-day phone-goes-quiet mail-count talk-on-talk-day
+  first-day phone-health-days incomplete-day phone-goes-quiet mail-count talk-on-talk-day
   chat-tidy-at-night disk-filling missed-routine deadline-closes-itself
   workouts-from-hevy day-becomes-facts hermes-update-rollback)
-for file in scenario-lib.sh numbers-lib.sh "${BASH_SCENARIOS[@]/%/.sh}" test-scenarios.sh; do
+for file in scenario-lib.sh numbers-lib.sh server-lib.sh "${BASH_SCENARIOS[@]/%/.sh}" test-scenarios.sh; do
   if bash -n "$ROOT/scenarios/$file" 2>/dev/null; then
     ok "bash reads scenarios/$file"
   else
@@ -3885,25 +4044,45 @@ else
   ok "scenario-lib.sh names no default model and no OpenRouter address"
 fi
 
-# ================================================================ the corrected seams of the Telegram scenarios
-# Cheap source checks (the real Hermes paths run in the scenarios job): a failed routine delivery is a
-# failed step, the queue notice reads its arguments after the script's own two, and what-was-that runs
-# the routine a fresh install has.
-section "the corrected seams of the Telegram scenarios"
-if grep -q '"success": bool(success) and delivered is None' "$ROOT/scenarios/owner-on-telegram.py"; then
-  ok "owner-on-telegram.py: a failed delivery is a failed step"
+# ================================================================ the corrected scenario seams
+# Cheap source checks: the live driver remains the only Telegram path, what-was-that runs the
+# routine a fresh install has, and a clock recreate includes both Compose layers.
+section "the corrected scenario seams"
+if ! grep -rEq --exclude=README.md --exclude=test-scenarios.sh 'owner-on-telegram|telegram-fixture-fetch|ensure_telegram_library' "$ROOT/scenarios"; then
+  ok "the Telegram scenarios have no in-process or post-install Telegram driver"
 else
-  bad "owner-on-telegram.py: a failed delivery is no longer a failed step"
+  bad "the Telegram scenarios still name the old in-process or post-install Telegram driver"
 fi
-if grep -q 'process.argv.slice(2)' "$ROOT/scenarios/what-was-that.sh" && ! grep -q 'process.argv.slice(1)' "$ROOT/scenarios/what-was-that.sh"; then
-  ok "what-was-that.sh: the queue program reads process.argv.slice(2)"
-else
-  bad "what-was-that.sh: the queue program does not read process.argv.slice(2)"
-fi
-if grep -q 'Coach reminders and habit check' "$ROOT/scenarios/what-was-that.sh"; then
+if grep -q "server_run_job report 'Coach reminders and habit check'" "$ROOT/scenarios/what-was-that.sh"; then
   ok "what-was-that.sh: its report step runs Coach reminders and habit check"
 else
   bad "what-was-that.sh: its report step does not run Coach reminders and habit check"
+fi
+CLOCK_DIR=$TMP/server-clock
+mkdir -p "$CLOCK_DIR"
+if (
+  GODSPEED_SCENARIO_SERVER_DIR=$CLOCK_DIR
+  export GODSPEED_SCENARIO_SERVER_DIR
+  . "$ROOT/scenarios/server-lib.sh"
+  sudo() {
+    case $1 in
+      tee) shift; command tee "$@" ;;
+      docker) printf '%s\n' "$@" >"$TMP/clock-compose-command" ;;
+      *) return 1 ;;
+    esac
+  }
+  say() { :; }
+  server_healthy() { :; }
+  server_clock_at '2026-11-07T07:00:00Z'
+  [ "$(cat "$TMP/clock-compose-command")" = "$(printf '%s\n' \
+    docker compose -p godspeed-mission-control --project-directory "$CLOCK_DIR" \
+    -f "$CLOCK_DIR/compose.yaml" --env-file "$CLOCK_DIR/.env" \
+    -f "$CLOCK_DIR/compose.override.yaml" up -d --force-recreate)" ] && \
+    grep -Fqx '      GODSPEED_NOW: "2026-11-07T07:00:00Z"' "$CLOCK_DIR/compose.override.yaml"
+); then
+  ok "a clock recreate passes the generated Compose override after the installed base layer"
+else
+  bad "a clock recreate did not pass both Compose layers"
 fi
 
 # ================================================================ the night's report
@@ -3915,6 +4094,14 @@ if node --test "$ROOT/scenarios/test-report-night.mjs" >"$TMP/report-night.log" 
 else
   cat "$TMP/report-night.log"
   bad "report-night.mjs: its node --test cases fail"
+fi
+
+section "server-telegram.mjs: its node --test cases"
+if node --test "$ROOT/scenarios/test-server-telegram.mjs" >"$TMP/server-telegram.log" 2>&1; then
+  ok "server-telegram.mjs: its node --test cases pass"
+else
+  cat "$TMP/server-telegram.log"
+  bad "server-telegram.mjs: its node --test cases fail"
 fi
 
 printf '\n%s of %s pass.\n' "$PASS" "$((PASS + FAIL))"

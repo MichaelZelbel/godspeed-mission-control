@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {TelegramConnection,browserZone,browserAddress} from '../server/telegram-connect.mjs';
 import {createService} from '../server/main.mjs';
+import {rejectedTelegramAPIEndpoints} from './telegram-api-endpoints.mjs';
 
 // Telegram connected from the web page on the one-click server: the key is checked with
 // Telegram (a stand-in here), kept only on this server, and the page offers a one-time link.
@@ -18,10 +19,10 @@ function standIn({bots={[KEY]:{id:4242,is_bot:true,first_name:'Fictional Godspee
   return new Response(JSON.stringify({ok:true,result:method==='getMe'?bot:{url:webhook,pending_update_count:0}}),{status:200});
  }};
 }
-function fixture(options={}){
+function fixture({api='https://telegram.invalid',...options}={}){
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-telegram-connect-')),dir=path.join(root,'telegram'),hermesHome=path.join(root,'hermes');
  fs.mkdirSync(hermesHome);const telegram=standIn(options);
- const connection=new TelegramConnection({dir,mode:'web',environmentBot:false,originalRuntime:true,hermesHome,api:'https://telegram.invalid',fetcher:telegram.fetcher});
+ const connection=new TelegramConnection({dir,mode:'web',environmentBot:false,originalRuntime:true,hermesHome,api,fetcher:telegram.fetcher});
  return {root,dir,hermesHome,connection,telegram,setup:value=>fs.writeFileSync(path.join(dir,'setup.json'),JSON.stringify(value))};
 }
 
@@ -71,6 +72,17 @@ test('a wrong key, a key-shaped typo and an unreachable Telegram each say what t
  for(const x of [f,offline,hooked])assert.equal(fs.existsSync(path.join(x.dir,'connection.json')),false);
 });
 
+test('Settings sends a bot key only to an HTTPS or loopback Telegram API',async()=>{
+ const prefixed=fixture({api:'https://telegram.invalid/proxy/'});
+ await prefixed.connection.connect(KEY);
+ assert.deepEqual(prefixed.telegram.calls.map(url=>url.replace(KEY,'<key>')),['https://telegram.invalid/proxy/bot<key>/getMe','https://telegram.invalid/proxy/bot<key>/getWebhookInfo']);
+ for(const api of [...rejectedTelegramAPIEndpoints,'http://telegram.example.test','http://192.0.2.1','https://user:password@api.example.test']){
+  const f=fixture({api});
+  await assert.rejects(f.connection.connect(KEY),{message:'Telegram API requires HTTPS or a loopback HTTP endpoint'});
+  assert.equal(f.telegram.calls.length,0,api+' never receives the bot key');
+ }
+});
+
 test('the page follows the chat: waiting for Start, setting up, ready; a refused key is said',async()=>{
  const f=fixture();await f.connection.connect(KEY);
  f.setup({bot_id:999,owner_id:1,done:true});
@@ -80,6 +92,24 @@ test('the page follows the chat: waiting for Start, setting up, ready; a refused
  let status=f.connection.status();assert.equal(status.phase,'setting-up');assert.equal(status.owner,'Anna');assert.equal(status.link,undefined,'the link is gone once used');
  f.setup({bot_id:4242,owner_id:111,chat_id:111,owner_name:'Anna',done:true});assert.equal(f.connection.status().phase,'ready');
  f.setup({bot_id:4242,problem:'refused'});assert.equal(f.connection.status().phase,'refused');
+});
+
+test('the signed-in Telegram status says when its completed gateway cannot route its endpoint',async()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-telegram-status-')),dir=path.join(root,'telegram'),home=path.join(root,'hermes'),saved={...process.env};
+ fs.mkdirSync(dir,{recursive:true});fs.mkdirSync(home);fs.mkdirSync(path.join(root,'.godspeed'));
+ const bin=path.join(root,'bin');fs.mkdirSync(bin);const executable=path.join(bin,'hermes');fs.writeFileSync(executable,'#!/bin/sh\nexit 0\n',{mode:0o755});
+ fs.writeFileSync(path.join(root,'.godspeed','assistant.json'),JSON.stringify({verified:true,executable,home,sourceRoot:root}));
+ fs.writeFileSync(path.join(dir,'connection.json'),JSON.stringify({token:KEY,bot_id:4242,username:'fictional_godspeed_bot',name:'Fictional Godspeed',start_code:'fictionalStartCode0123456789abcd'}));
+ fs.writeFileSync(path.join(dir,'setup.json'),JSON.stringify({bot_id:4242,owner_id:111,chat_id:111,owner_name:'Anna',done:true}));
+ fs.writeFileSync(path.join(dir,'runner.json'),JSON.stringify({state:'gateway-route-failed'}));
+ Object.assign(process.env,{GODSPEED_TELEGRAM_DIR:dir,GODSPEED_TELEGRAM:'web',GODSPEED_ORIGINAL_RUNTIME:'on',GODSPEED_TELEGRAM_API:'http://192.0.2.1'});
+ let service;
+ try{
+  service=await createService({root,port:0});const base='http://127.0.0.1:'+service.address.port;
+  const response=await fetch(base+'/api/telegram');
+  assert.equal(response.status,200);
+  assert.equal((await response.json()).phase,'gateway-route-failed');
+ }finally{await service?.close();process.env=saved;}
 });
 
 test('another bot starts over; the same bot keeps its owner; a revoked key reaches Hermes; disconnect removes it all',async()=>{

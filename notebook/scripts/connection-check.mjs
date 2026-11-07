@@ -23,7 +23,7 @@ export async function runConnectionCheck({root,home=process.env.HERMES_HOME,herm
  const store=new Store(root,{device:machineDevice(root).id});
  const timezone=store.get('settings','installation')?.timezone||'UTC',day=dayIn(timezone,env);
  const failures=[];let record;
- try{record=await checkConnections({store,day,probes:probes||defaultProbes({store,home,hermes,hermesSource,server:isServerInstall({env})})});}catch(error){failures.push(error);}
+ try{record=await checkConnections({store,day,probes:probes||defaultProbes({store,home,hermes,hermesSource,api:env.GODSPEED_TELEGRAM_API||undefined,server:isServerInstall({env})})});}catch(error){failures.push(error);}
  try{checkRoutines({store,home,day,timezone,...(jobs?{jobs}:{})});}catch(error){failures.push(error);}
  if(failures.length)throw failures[0];
  return record;
