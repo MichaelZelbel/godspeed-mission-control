@@ -157,7 +157,7 @@ async function runBriefing(job,{store,query,provider,now}){
   const observedAt=row=>row.date_precision==='day'&&row.observed_on?String(row.observed_on)+'T00:00:00Z':row.observed_at||row.created_at||'';
   const settled=row=>row.via!==PHONE_VIA||context.health_freshness?.days?.find(day=>day.date===row.observed_on)?.columns?.[row.metric]?.state==='complete';
   const healthAdded=addFirst(context.health.filter(row=>!excluded(row)&&settled(row)).sort((a,b)=>String(observedAt(b)).localeCompare(String(observedAt(a)))),row=>{const metric=text(row.metric,60),value=row.value;return metric&&(typeof value==='number'||typeof value==='string'&&text(value,30))?'A recorded health observation is '+metric+': '+value+'.':null;})||unknownAdded;
-  if(!healthAdded&&!context.health.length)add('There are no fresh health observations to report.');
+  if(!healthAdded)add('There are no fresh health observations to report.');
   const action=context.contribution
    ?add('Review this checked draft before deciding. It has not been sent.')
    :add(goal?'Ask Godspeed to work on '+text(goal.title)+' and show you one concrete result today.':'Tell Godspeed one goal to work on today, then ask it for the first concrete step.');
@@ -185,8 +185,8 @@ async function runBriefing(job,{store,query,provider,now}){
   for(const review of [facts,reader]){
    if(review.verdict.passed===true)continue;
    const {rejection_scope:scope,rejected_source_ids:ids=[]}=review.verdict;
-   if(!['source-claims','non-source'].includes(scope)||!Array.isArray(ids)||(scope==='source-claims'&&!ids.length)||(scope==='non-source'&&ids.length)){invalidReviews.push(review.receipt.check);continue;}
-   for(const id of ids){if(knownIds.has(String(id)))rejectedIds.add(String(id));else invalidReviews.push('unknown source id '+String(id));}
+   if(!['source-claims','non-source'].includes(scope)||!Array.isArray(ids)||(scope==='source-claims'&&!ids.length)||(scope==='non-source'&&ids.length)){invalidReviews.push({check:review.receipt.check,reason:review.verdict.reason||'No accepted evidence'});continue;}
+   for(const id of ids){if(knownIds.has(String(id)))rejectedIds.add(String(id));else invalidReviews.push({check:review.receipt.check,reason:'Unknown source id '+String(id)});}
   }
   await store.saveAsync('job_receipts',{kind:'brief-code-gate',job_id:job.id,attempt,state:code.length?'failed':'verified',source_hash:hash(context),draft_hash:hash(draft),errors:code,finished_at:new Date().toISOString()});
   if(!feedback.length){check=facts.receipt;deliveryCheck=reader.receipt;break;}
@@ -195,7 +195,7 @@ async function runBriefing(job,{store,query,provider,now}){
    if([facts,reader].some(r=>r.verdict.passed!==true)){
     const rejected=draft,reasons=[...feedback];
     try{
-     if(invalidReviews.length)throw Error('Could not make a checked factual fallback: a failed review did not identify its rejected source claims ('+[...new Set(invalidReviews)].join(', ')+')');
+     if(invalidReviews.length)throw Error('Could not make a checked factual fallback: '+[...new Map(invalidReviews.map(review=>[review.check,review.reason])).entries()].map(([check,reason])=>check+': '+reason).join('; '));
      draft=factualFallback(rejectedIds);
     }catch(error){
      await store.saveAsync('job_receipts',{kind:'brief-factual-fallback',job_id:job.id,state:'failed',source_hash:hash(context),rejected_draft:rejected,rejected_hash:hash(rejected),reasons,all_reasons:allReasons,fallback_error:error.message,finished_at:new Date().toISOString()});

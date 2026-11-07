@@ -47,6 +47,24 @@ test('a source claim rejected by id is absent from the factual fallback',async()
  const receipt=query.rows('job_receipts').find(row=>row.kind==='brief-factual-fallback');assert.deepEqual(receipt.rejected_source_ids,[goal.id]);
 });
 
+test('a factual fallback honestly reports absent health when every health source is rejected',async()=>{
+ for(const phone of [false,true]){
+  const {store,query}=fixture([]),now=new Date(),observation=store.save('health_observations',phone?{metric:'steps',value:4200,source:'Health Auto Export',via:'phone-receiver',observed_on:now.toISOString().slice(0,10),date_precision:'day',observed_at:now.toISOString(),data_until:'08:00:00'}:{metric:'Fictional energy',value:6,observed_at:now.toISOString()});
+  const provider=async input=>input.kind==='brief-verification'?input.check==='source-facts'?{passed:false,reason:'This health source is not current.',rejection_scope:'source-claims',rejected_source_ids:[observation.id]}:{passed:false,reason:'The draft is not useful enough.',rejection_scope:'non-source',rejected_source_ids:[]}:'Rejected private model prose.';
+  const result=await run(provider,query,store,'brief-factual-rejected-health-'+phone),saved=store.get('notes',result.record_id).content;
+  assert.match(saved,/There are no fresh health observations to report/);
+  assert.doesNotMatch(saved,/Fictional energy|steps: 4200|4200 so far/);
+ }
+});
+
+test('a source-rejected checked contribution is absent and remains ready',async()=>{
+ const {store,query}=fixture([]),content='Fictional checked contribution to exclude.',note=store.save('notes',{title:'Fictional contribution',content}),entry=store.save('lead_entries',{title:note.title,content,note_id:note.id,status:'ready',delivery_day:'2026-01-01'});
+ const provider=async input=>input.kind==='brief-verification'?input.check==='source-facts'?{passed:false,reason:'This contribution is not current.',rejection_scope:'source-claims',rejected_source_ids:[entry.id]}:{passed:false,reason:'The draft is not useful enough.',rejection_scope:'non-source',rejected_source_ids:[]}:'Rejected private model prose.';
+ const result=await run(provider,query,store,'brief-factual-rejected-contribution'),saved=store.get('notes',result.record_id).content;
+ assert.doesNotMatch(saved,/Fictional checked contribution to exclude|\/dashboard\/notes\//);
+ assert.equal(store.get('lead_entries',entry.id).status,'ready');
+});
+
 for(const check of ['source-facts','plain-words-and-delivery'])test('a '+check+' source-claim rejection excludes its record',async()=>{
  const {store,query}=fixture([]);const goal=store.save('goals',{title:'Prepare a fictional guide',status:'adopted'});
  const provider=async input=>input.kind==='brief-verification'?(input.check===check?{passed:false,reason:'This goal is not current.',rejection_scope:'source-claims',rejected_source_ids:[goal.id]}:{passed:true,reason:'Fictional review passed.'}):'Rejected private model prose.';
