@@ -105,20 +105,36 @@ settings_post() { # <docker|native> <json file> <answer file>
   esac
 }
 
-persistence_roots() { # <scan name>
-  assistant_home "$1"
-  DOCKER_PERSISTENCE_ROOTS=(/opt/data /root/.hermes)
-  NATIVE_PERSISTENCE_ROOTS=("$ROOT" "$STATE" "$HERMES")
+persistence_roots() { # <docker|native> <scan name>
+  local platform=$1 scan=$2 descriptor home
+  case $platform in
+    native)
+      assistant_home "$scan"
+      NATIVE_PERSISTENCE_ROOTS=("$ROOT" "$STATE" "$HERMES")
+      NATIVE_PERMITTED_HEVY_SETTINGS=$HERMES/hevy.json
+      ;;
+    docker)
+      descriptor=$(in_server find /opt/data -path '*/.godspeed/assistant.json' -type f -print -quit) ||
+        fail "$scan could not find the Docker assistant descriptor"
+      [ -n "$descriptor" ] || fail "$scan found no Docker assistant descriptor"
+      home=$(in_server node -e 'const fs=require("fs");process.stdout.write(JSON.parse(fs.readFileSync(process.argv[1])).home||"")' "$descriptor") ||
+        fail "$scan could not read the Docker assistant home from $descriptor"
+      [ -n "$home" ] || fail "$scan found no Docker assistant home in $descriptor"
+      DOCKER_PERSISTENCE_ROOTS=(/opt/data "$home")
+      DOCKER_PERMITTED_HEVY_SETTINGS=$home/hevy.json
+      ;;
+    *) fail "unknown $platform persistence scan" ;;
+  esac
 }
 
 refused_not_retained() { # <docker|native>
   local platform=$1 key='refused-scenario-key' paths=$EVIDENCE/.$1-refused-key-paths code
-  persistence_roots "$platform refused-key scan"
+  persistence_roots "$platform" "$platform refused-key scan"
   case $platform in
     docker)
-      if in_server sh -c "grep -rlF -- '$key' ${DOCKER_PERSISTENCE_ROOTS[*]}; code=\$?; [ \"\$code\" -le 1 ] || exit \"\$code\"" >"$paths"; then :; else
+      if in_server grep -rlF -- "$key" "${DOCKER_PERSISTENCE_ROOTS[@]}" >"$paths"; then :; else
         code=$?
-        fail "$platform refused-key scan could not run (server grep ended $code)"
+        [ "$code" -eq 1 ] || fail "$platform refused-key scan could not run (server grep ended $code)"
       fi
       ;;
     native)
@@ -212,22 +228,28 @@ NODE
 
 scan_fixture_key() {
   local key='00000000-0000-4000-8000-000000000001' code native_paths=$EVIDENCE/.native-key-hits docker_paths=$EVIDENCE/.docker-key-hits all_paths=$EVIDENCE/.all-key-hits
-  persistence_roots 'accepted-key scan'
+  persistence_roots native 'native accepted-key scan'
   if grep -rlF --exclude-dir=.git --exclude-dir=node_modules -- "$key" "${NATIVE_PERSISTENCE_ROOTS[@]}" >"$native_paths"; then :; else
     code=$?
     [ "$code" -eq 1 ] || fail "native accepted-key scan could not run (grep ended $code)"
   fi
   [ -f "$native_paths" ] || fail "native accepted-key scan produced no path record"
-  if in_server sh -c "grep -rlF --exclude-dir=node_modules -- '$key' ${DOCKER_PERSISTENCE_ROOTS[*]}; code=\$?; [ \"\$code\" -le 1 ] || exit \"\$code\"" >"$docker_paths"; then :; else
+  persistence_roots docker 'docker accepted-key scan'
+  if in_server grep -rlF --exclude-dir=node_modules -- "$key" "${DOCKER_PERSISTENCE_ROOTS[@]}" >"$docker_paths"; then :; else
     code=$?
-    fail "docker accepted-key scan could not run (server grep ended $code)"
+    [ "$code" -eq 1 ] || fail "docker accepted-key scan could not run (server grep ended $code)"
   fi
   [ -f "$docker_paths" ] || fail "docker accepted-key scan produced no path record"
   cat "$native_paths" "$docker_paths" >"$all_paths" ||
     fail 'accepted-key scan could not collect its path records'
-  if grep -vE '/hevy\.json$' "$all_paths" >"$EVIDENCE/.key-hits"; then :; else
-    code=$?
-    [ "$code" -eq 1 ] || fail "accepted-key scan could not filter its path records (grep ended $code)"
+  if "$NODE" - "$all_paths" "$NATIVE_PERMITTED_HEVY_SETTINGS" "$DOCKER_PERMITTED_HEVY_SETTINGS" >"$EVIDENCE/.key-hits" <<'NODE'
+const fs=require('fs'),[pathsFile,...permitted]=process.argv.slice(2);
+for (const path of fs.readFileSync(pathsFile,'utf8').trim().split(/\r?\n/).filter(Boolean)) {
+  if (!permitted.includes(path)) console.log(path);
+}
+NODE
+  then :; else
+    fail 'accepted-key scan could not filter its path records'
   fi
   sort -u -o "$EVIDENCE/.key-hits" "$EVIDENCE/.key-hits" ||
     fail 'accepted-key scan could not sort its path records'

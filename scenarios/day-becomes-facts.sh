@@ -4,6 +4,7 @@
 # the four invented messages; all five record families are retained after each run.
 SCENARIO=day-becomes-facts
 . "$(dirname "$0")/scenario-lib.sh"
+. "$(dirname "$0")/facts-lib.sh"
 scenario_arguments "$@"
 
 facts_routine_is_there() { grep -qF 'Remember what you said' "$HERMES/cron/jobs.json" 2>/dev/null; }
@@ -22,13 +23,13 @@ run_facts_routine() { # <script> <label>
 }
 facts_snapshot() { # <destination>
   local destination=$1 table
-  for table in claims fact_slots contacts entities moments; do
+  for table in "${FACT_FAMILIES[@]}"; do
     curl -fsS --max-time 60 -X POST -H 'Content-Type: application/json' --data "{\"table\":\"$table\"}" \
       "http://127.0.0.1:$NOTEBOOK_PORT/api/query" >"$EVIDENCE/.$(basename "$destination")-$table.json" ||
       fail "the notebook could not read $table after the remembered-facts routine"
   done
-  "$NODE" - "$EVIDENCE" "$destination" <<'NODE'
-const fs=require('fs'),dir=process.argv[2],out=process.argv[3],families=['claims','fact_slots','contacts','entities','moments'];
+  FACT_FAMILIES=$(IFS=,; echo "${FACT_FAMILIES[*]}") "$NODE" - "$EVIDENCE" "$destination" <<'NODE'
+const fs=require('fs'),dir=process.argv[2],out=process.argv[3],families=process.env.FACT_FAMILIES.split(',');
 const rows=file=>{const d=JSON.parse(fs.readFileSync(file));return Array.isArray(d)?d:(d.data||[])};
 const name=require('path').basename(out);
 fs.writeFileSync(out,JSON.stringify(Object.fromEntries(families.map(f=>[f,rows(`${dir}/.${name}-${f}.json`)])))+'\n');
@@ -41,9 +42,9 @@ check() {
   need_node
   kept_all "$folder" 'the seeded archive, routine and before/after snapshots' archive.json before.json after.json second.json routine.json
   local why
-  why=$("$NODE" - "$folder" <<'NODE'
+  why=$(FACT_FAMILIES=$(IFS=,; echo "${FACT_FAMILIES[*]}") "$NODE" - "$folder" <<'NODE'
 const fs=require('fs'), p=process.argv[2], r=n=>JSON.parse(fs.readFileSync(`${p}/${n}`));
-const families=['claims','fact_slots','contacts','entities','moments'];
+const families=process.env.FACT_FAMILIES.split(',');
 const stable=value=>Array.isArray(value)?value.map(stable).sort((a,b)=>JSON.stringify(a).localeCompare(JSON.stringify(b))):value&&typeof value==='object'?Object.fromEntries(Object.keys(value).sort().map(k=>[k,stable(value[k])])):value;
 const has=(rows,value)=>rows.find(row=>row&&row.value===value);
 const quote=(row,text,id)=>row&&row.quote===text&&row.source_id===id;
