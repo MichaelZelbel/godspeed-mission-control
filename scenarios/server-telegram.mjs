@@ -55,12 +55,16 @@ export function captureSent(state,record,label,before=state.sent){
 async function capture(label,kind,action){
   const state=loadState();
   try {
-    const started=copyRecord(), before=state.sent, requestStart=(started.requests ?? []).length;
+    const started=copyRecord(), requestStart=(started.requests ?? []).length;
+    const unattributed=(started.sent ?? []).length-state.sent;
+    if(unattributed>0) throw Error(`the installed Telegram sent ${unattributed} message(s) that no step accounts for before ${label}`);
     action();
-    // The reply is the evidence the installed route answered; a send already recorded before the action does not count.
-    await waitFor('reply to the owner',copyRecord,record=>(record.sent ?? []).slice(before).some(message=>message.chat_id===owner),30);
+    // A reply is a new message to the owner after this action began; a button press may instead edit its message.
+    const answered=record=>(record.sent ?? []).slice(state.sent).some(message=>message.chat_id===owner)
+      || (kind==='press' && (record.edits ?? []).length>(started.edits ?? []).length);
+    await waitFor('reply to the owner',copyRecord,answered,30);
     const record=copyRecord();
-    captureSent(state,record,label,before);
+    captureSent(state,record,label);
     state.steps.push({label,kind,success:true,request_start:requestStart,request_end:(record.requests ?? []).length});
     saveState(state);
   } catch(error) {
@@ -144,6 +148,8 @@ async function snapshot(){
   const state=loadState();
   captureSent(state,record,'snapshot',state.sent);
   saveState(state);
+  const trailing=state.outbox.filter(message=>message.label==='snapshot'&&message.chat_id===owner).length;
+  if(trailing>0) throw Error(`the installed Telegram sent ${trailing} message(s) after the last step`);
 }
 async function mark(){
   requireEvidence();

@@ -73,7 +73,9 @@ class Fake:
             msg = next((m for m in reversed(self.sent) if m["chat_id"] == uid
                         and any(button["callback"] == a["press"] for button in m["buttons"])), None)
             upd = {"callback_query": {"id": "cq%d" % self.next_update, "from": user, "data": a["press"],
-                                      "message": {"message_id": msg["message_id"] if msg else 0, "chat": chat}}}
+                                      "message": {"message_id": msg["message_id"] if msg else 0, "chat": chat,
+                                                  "from": {"id": 42, "is_bot": True, "first_name": "Godspeed"},
+                                                  "text": msg["text"] if msg else ""}}}
         upd["update_id"] = self.next_update
         self.next_update += 1
         self.updates.append(upd)

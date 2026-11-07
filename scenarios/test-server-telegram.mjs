@@ -128,13 +128,15 @@ test('press resolves each visible button label to its installed callback token',
   fs.writeFileSync(path.join(bin,'sudo'),`#!/bin/sh
 input=$(cat)
 printf '%s %s\\n' "$*" "$input" >> "$TRACE"
-n=$(grep -c __act "$TRACE" 2>/dev/null); replies=''; i=0
-while [ "$i" -lt "\${n:-0}" ]; do replies="$replies,{\\"chat_id\\":31415,\\"text\\":\\"Answered.\\"}"; i=$((i+1)); done
-printf '{"sent":[{"chat_id":31415,"text":"Cancel the renewal of your gym membership?","buttons":[{"label":"No","callback":"gss1:gym-no"},{"label":"Yes","callback":"gss1:gym-yes"}]},{"chat_id":31415,"text":"Book the car inspection?","buttons":[{"label":"Yes","callback":"gss1:car-yes"},{"label":"No","callback":"gss1:car-no"}]}%s],"requests":[]}\\n' "$replies"
+n=$(grep -c __act "$TRACE" 2>/dev/null)
+edits=''; i=0
+while [ "$i" -lt "\${n:-0}" ]; do edits="$edits,\\"Approved.\\""; i=$((i+1)); done
+printf '{"sent":[{"chat_id":31415,"text":"Cancel the renewal of your gym membership?","buttons":[{"label":"No","callback":"gss1:gym-no"},{"label":"Yes","callback":"gss1:gym-yes"}]},{"chat_id":31415,"text":"Book the car inspection?","buttons":[{"label":"Yes","callback":"gss1:car-yes"},{"label":"No","callback":"gss1:car-no"}]}],"edits":[%s],"requests":[]}\\n' "\${edits#,}"
 `);
   fs.chmodSync(path.join(bin,'sudo'),0o755);
 
   try {
+    fs.writeFileSync(path.join(folder,'telegram-run.json'),JSON.stringify({steps:[],outbox:[],sent:2}));
     execFileSync(process.execPath,['server-telegram.mjs','press','--server','fixture','--evidence',folder,'--label','gym','--question','gym membership','--button','Yes'],{
       cwd:path.dirname(new URL(import.meta.url).pathname),
       env:{...process.env,PATH:`${bin}:${process.env.PATH}`,TRACE:trace},
@@ -153,4 +155,62 @@ printf '{"sent":[{"chat_id":31415,"text":"Cancel the renewal of your gym members
   } finally {
     fs.rmSync(folder,{recursive:true,force:true});
   }
+});
+
+function fixture(name,script){
+  const folder=fs.mkdtempSync(path.join(os.tmpdir(),`server-telegram-${name}-`));
+  const bin=path.join(folder,'bin');
+  fs.mkdirSync(bin);
+  fs.writeFileSync(path.join(bin,'sudo'),script);
+  fs.chmodSync(path.join(bin,'sudo'),0o755);
+  const run=(...args)=>execFileSync(process.execPath,['server-telegram.mjs',...args,'--server','fixture','--evidence',folder],{
+    cwd:path.dirname(new URL(import.meta.url).pathname),
+    env:{...process.env,PATH:`${bin}:${process.env.PATH}`,TRACE:path.join(folder,'trace'),COUNT:path.join(folder,'reads')},
+    stdio:'pipe',
+  });
+  return {folder,run};
+}
+const seed=(folder,sent)=>fs.writeFileSync(path.join(folder,'telegram-run.json'),JSON.stringify({steps:[],outbox:[],sent}));
+
+test('say waits for a reply that arrives after the old fixed delay',()=>{
+  const {folder,run}=fixture('late',`#!/bin/sh
+cat >/dev/null
+if grep -q __act "$TRACE" 2>/dev/null; then :; fi
+case "$*" in *__act*) echo act >> "$TRACE";; *) if [ -f "$TRACE" ]; then echo read >> "$COUNT"; fi;; esac
+reads=$(grep -c read "$COUNT" 2>/dev/null)
+if [ "\${reads:-0}" -ge 4 ]; then late=',{"chat_id":31415,"text":"Late answer."}'; else late=''; fi
+printf '{"sent":[{"chat_id":31415,"text":"Earlier."}%s],"requests":[]}\n' "$late"
+`);
+  try {
+    seed(folder,1);
+    run('say','--label','question','--text','What now?');
+    assert.deepEqual(JSON.parse(fs.readFileSync(path.join(folder,'run.json'),'utf8')).outbox.map(message=>message.text),['Late answer.']);
+  } finally { fs.rmSync(folder,{recursive:true,force:true}); }
+});
+
+test('an owner message nobody accounts for fails the next step',()=>{
+  const {folder,run}=fixture('stray',`#!/bin/sh
+cat >/dev/null
+printf '{"sent":[{"chat_id":31415,"text":"Stray."}],"requests":[]}\n'
+`);
+  try {
+    assert.throws(()=>run('say','--label','question','--text','What now?'));
+    const steps=JSON.parse(fs.readFileSync(path.join(folder,'run.json'),'utf8')).steps;
+    assert.equal(steps[0].success,false);
+    assert.match(steps[0].error,/no step accounts for/);
+  } finally { fs.rmSync(folder,{recursive:true,force:true}); }
+});
+
+test('snapshot labels and rejects a message sent after the last step',()=>{
+  const {folder,run}=fixture('snapshot',`#!/bin/sh
+cat >/dev/null
+printf '{"sent":[{"chat_id":31415,"text":"First."},{"chat_id":31415,"text":"Second."}],"requests":[],"state":"gateway"}\n'
+`);
+  try {
+    seed(folder,1);
+    assert.throws(()=>run('snapshot'));
+    const saved=JSON.parse(fs.readFileSync(path.join(folder,'run.json'),'utf8'));
+    assert.deepEqual(saved.outbox.map(message=>[message.label,message.text]),[['snapshot','Second.']]);
+    assert.equal(saved.sent,2);
+  } finally { fs.rmSync(folder,{recursive:true,force:true}); }
 });
