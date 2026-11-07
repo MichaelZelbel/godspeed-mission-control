@@ -5,6 +5,8 @@ import {personalOperation} from '../core/personal-operations.mjs';
 // Where one reminder is kept: its page under notebook/Deadlines/, which is what a rehearsal must
 // leave exactly as it was (since 30 October 2026 a reminder is a record, not a file in due/).
 const page=(store,slug)=>store.file(store.list('deadlines').find(r=>r.native_slug===slug));
+// A failed fact check must name the records it rejects (Archon R1, round 3); these fixtures fail only the reader check.
+const readerFails=(input,reason)=>input.check==='source-facts'?{passed:true,reason:'Fictional sources checked.'}:{passed:false,reason};
 test('a briefing cannot request a decision on a prepared artifact changed during judgment',async()=>{
  const store=new Store(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-brief-action-stale-'))),query=new QueryService(store),goal=store.save('goals',{title:'Fictional inspect sources',status:'adopted'}),draft=store.save('notes',{title:'Fictional exact proposed change',content:'Original fictional proposal.'});
  store.save('work_items',{title:'Fictional source review',state:'awaiting_approval',goal_id:goal.id,draft_id:draft.id});let checks=0;
@@ -26,10 +28,10 @@ test('the briefing preserves the full ready contribution and link without claimi
 test('brief sources are prepared before writing and a failed judgment delivers checked facts only',async()=>{
  const store=new Store(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-brief-'))),query=new QueryService(store),calls=[];
  store.save('health_observations',{metric:'Fictional energy',value:6,observed_at:new Date().toISOString()});
- const provider=async i=>{calls.push(i);return i.kind==='brief-verification'?JSON.stringify({passed:false,reason:'Invented result absent from sources'}):'Fictional energy improved to 10.';};
+ const provider=async i=>{calls.push(i);return i.kind==='brief-verification'?JSON.stringify(readerFails(i,'Invented result absent from sources')):'Fictional energy improved to 10.';};
  const result=await jobExecutor(provider,query)({kind:'morning-brief',id:'brief'},{store,settings:{}});
  const note=store.get('notes',result.record_id);assert.equal(result.fallback,true);assert.match(note.content,/Fictional energy: 6/);assert.doesNotMatch(note.content,/improved to 10/);
- assert.ok(calls.find(i=>i.kind==='morning-brief').context.health.some(h=>h.value===6));assert.ok(query.rows('job_receipts').some(r=>r.kind==='brief-verification'&&r.state==='failed'));
+ assert.ok(calls.find(i=>i.kind==='morning-brief').context.health.some(h=>h.value===6));assert.ok(query.rows('job_receipts').some(r=>r.kind==='brief-delivery-verification'&&r.state==='failed'));
 });
 
 test('a briefing treats a short phone day as unknown until a manual settlement arrives',async()=>{
@@ -181,7 +183,7 @@ for(const [name,offset,until] of [['today\'s phone day',0,'07:40:00'],['an earli
  const store=new Store(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-brief-fallback-phone-'))),query=new QueryService(store),day=new Date(Date.now()-offset*86400000).toISOString().slice(0,10);
  store.save('settings',{id:'installation',timezone:'UTC'});store.save('goals',{title:'Prepare a fictional guide',status:'adopted'});
  store.save('health_observations',{metric:'steps',value:4200,source:'Health Auto Export',via:'phone-receiver',observed_on:day,date_precision:'day',observed_at:day+'T00:00:00Z',data_until:until});
- const provider=async input=>input.kind==='brief-verification'?{passed:false,reason:'No useful action'}:'Unsupported draft.';
+ const provider=async input=>input.kind==='brief-verification'?readerFails(input,'No useful action'):'Unsupported draft.';
  const result=await jobExecutor(provider,query)({kind:'morning-brief',id:'brief-fallback-phone-'+offset},{store,settings:{}}),content=store.get('notes',result.record_id).content;
  assert.equal(result.fallback,true);assert.doesNotMatch(content,/observation is steps: 4200/);
  assert.ok(content.includes('On '+day+', steps was 4200 so far; phone data stopped at '+until+'.'),content);

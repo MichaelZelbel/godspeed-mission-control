@@ -89,7 +89,7 @@ async function runBriefing(job,{store,query,provider,now}){
 
  let contribution=visibleRows(query,'lead_entries').filter(e=>e.status==='ready'&&e.note_id&&e.content).sort((a,b)=>String(b.delivery_day).localeCompare(String(a.delivery_day))).find(e=>visibleRows(query,'notes').some(n=>n.id===e.note_id&&n.content===e.content));
  if(contribution){const refusals=ruleRefusals(contribution.content+'\n/dashboard/notes/'+encodeURIComponent(contribution.note_id),voice);if(refusals.length){leftOut.push({name:'the checked contribution',line:contribution.title||contribution.id,refusals});contribution=null;}}
- context.contribution=contribution?{id:contribution.id,title:contribution.title,content:contribution.content,link:'/dashboard/notes/'+encodeURIComponent(contribution.note_id),state:'draft',source_ids:contribution.evidence?.map(e=>e.source_id)||[]}:null;
+ context.contribution=contribution?{id:contribution.id,note_id:contribution.note_id,title:contribution.title,content:contribution.content,link:'/dashboard/notes/'+encodeURIComponent(contribution.note_id),state:'draft',source_ids:contribution.evidence?.map(e=>e.source_id)||[]}:null;
  const actionSources=[],actionArtifacts=[];
  if(contribution){const source=visibleRows(query,'notes').find(n=>n.id===contribution.note_id);actionSources.push(source);actionArtifacts.push({kind:'review-checked-contribution',record_id:contribution.id,title:contribution.title,goal:context.goals.find(g=>g.id===contribution.goal_id)?.title||null,link:context.contribution.link,next_step:'Review this exact checked draft and decide whether to use it. It has not been sent or published.'});}
  for(const item of context.work.filter(w=>w.state==='awaiting_approval'&&w.draft_id)){
@@ -123,9 +123,15 @@ async function runBriefing(job,{store,query,provider,now}){
   // rejected when any reason from either attempt holds it word for word, or holds every one of its
   // longer words. Punctuation is ignored on both sides, so "notes." matches "notes is".
   const factualFallback=(reasons=[],rejectedIds=new Set())=>{
-   const required=[context.cycle_heads_up,context.charm_line].filter(Boolean),parts=[];
+   const parts=[];
    const norm=v=>String(v??'').toLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').trim(),said=' '+norm(reasons.join(' \n '))+' ',saidWords=new Set(said.split(' '));
    const rejected=(row,...values)=>(row?.id!=null&&rejectedIds.has(String(row.id)))||values.some(v=>{const n=norm(v);if(!n)return false;if(said.includes(' '+n+' '))return true;const words=[...new Set(n.split(' ').filter(w=>w.length>=4))];return words.length>=2&&words.every(w=>saidWords.has(w));});
+   // A contribution a review rejected, by its lead-entry id, its backing note id or one of its
+   // evidence ids, or by the reasons quoting it, is unavailable: the fallback neither repeats nor
+   // requires it, and takes the ordinary goal action instead (Archon R2, round 3).
+   const c=context.contribution;
+   if(c&&(rejected(c,c.title,c.content)||[c.note_id,...c.source_ids].some(id=>id!=null&&rejectedIds.has(String(id)))))context.contribution=null;
+   const required=[context.cycle_heads_up,context.charm_line].filter(Boolean);
    const safe=(value,max=100)=>typeof value==='string'&&value.trim()&&value.length<=max&&!/[\r\n\u0000-\u001f]/.test(value)?value.trim():null;
    const add=line=>{if(!line)return false;const candidate=[...parts,line].join('\n\n');if(codeGate(candidate).some(e=>!e.startsWith('Include ')))return false;parts.push(line);return true;};
    const addFirst=(rows,line)=>rows.some(row=>add(line(row)));
@@ -157,8 +163,9 @@ async function runBriefing(job,{store,query,provider,now}){
  // by the gate above. Without this the plain-words check, with a real model, failed every brief while a
  // challenge ran, calling the line unexplained jargon (walk-through, 26 October 2026).
  const ownLines=context.charm_line?' The line "'+context.charm_line+'" is the person\'s own Charm Challenge count: they started it themselves, the program writes it and checks it word for word. Never fail the draft because of that line; judge the rest of the note.':'';
- const verify=async(text,check)=>{const freshness=' health_freshness.days is authoritative. Code rendered every unknown phone column as “so far” with its stopped time. A settled manual or Food-tracker column is known and may be used.';const raw=await provider({kind:'brief-verification',check,context:{sources:context,draft:text},contract:(check==='source-facts'?'Check this exact draft against its actual dated sources and previous notes. Return JSON {passed:boolean,reason:string,rejected_source_ids:string[]}, listing in rejected_source_ids the id of every source record whose claim you reject. Fail unsupported claims, stale health, invented outcomes, absent health sentence and unchanged advice. Do not rewrite or send.':'Independently read this as a tired person seeing none of the work. Check clear meaning, usefulness, actual reachable decision artifacts, one current health sentence, no jargon or internal codes, and no repeated unanswered advice. Return JSON {passed:boolean,reason:string,rejected_source_ids:string[]}, listing in rejected_source_ids the id of every source record whose claim you reject. Do not rewrite or send.')+freshness+ownLines});let verdict;try{verdict=typeof raw==='string'?JSON.parse(raw.replace(/^```(?:json)?\s*|\s*```$/g,'')):raw;}catch{verdict={passed:false,reason:'Briefing check returned no valid verdict'};}if(!verdict||typeof verdict!=='object')verdict={passed:false,reason:'Briefing check returned no verdict'};const receipt=await store.saveAsync('job_receipts',{kind:check==='source-facts'?'brief-verification':'brief-delivery-verification',check,job_id:job.id,state:verdict.passed===true?'verified':'failed',source_hash:hash(context),draft_hash:hash(text),verdict,finished_at:new Date().toISOString()});return {verdict,receipt};};
- let draft,modelDraft,check,deliveryCheck,feedback=[],cutReceipt=null,fallback=null;const allReasons=[],rejectedIds=new Set();
+ const verify=async(text,check)=>{const freshness=' health_freshness.days is authoritative. Code rendered every unknown phone column as “so far” with its stopped time. A settled manual or Food-tracker column is known and may be used.';const raw=await provider({kind:'brief-verification',check,context:{sources:context,draft:text},contract:(check==='source-facts'?'Check this exact draft against its actual dated sources and previous notes. Return JSON {passed:boolean,reason:string,rejected_source_ids:string[]}, listing in rejected_source_ids the exact id of every source record whose claim you reject; when passed is false, name at least one. Fail unsupported claims, stale health, invented outcomes, absent health sentence and unchanged advice. Do not rewrite or send.':'Independently read this as a tired person seeing none of the work. Check clear meaning, usefulness, actual reachable decision artifacts, one current health sentence, no jargon or internal codes, and no repeated unanswered advice. Return JSON {passed:boolean,reason:string,rejected_source_ids:string[]}, listing in rejected_source_ids the exact id of every source record whose claim you reject. Do not rewrite or send.')+freshness+ownLines});let verdict;try{verdict=typeof raw==='string'?JSON.parse(raw.replace(/^```(?:json)?\s*|\s*```$/g,'')):raw;}catch{verdict={passed:false,reason:'Briefing check returned no valid verdict'};}if(!verdict||typeof verdict!=='object')verdict={passed:false,reason:'Briefing check returned no verdict'};const receipt=await store.saveAsync('job_receipts',{kind:check==='source-facts'?'brief-verification':'brief-delivery-verification',check,job_id:job.id,state:verdict.passed===true?'verified':'failed',source_hash:hash(context),draft_hash:hash(text),verdict,finished_at:new Date().toISOString()});return {verdict,receipt};};
+ let draft,modelDraft,check,deliveryCheck,feedback=[],cutReceipt=null,fallback=null;const allReasons=[],rejectedIds=new Set(),unidentified=[];
+ const knownIds=new Set([...Object.values(sourceRefs).flat(),...context.action_artifacts.map(a=>({id:a.record_id})),...(context.contribution?[{id:context.contribution.id},{id:context.contribution.note_id},...context.contribution.source_ids.map(id=>({id}))]:[])].filter(r=>r?.id!=null).map(r=>String(r.id)));
  for(let attempt=0;attempt<2;attempt++){
   const raw=await provider({kind:'morning-brief',phase:attempt?'one-rewrite':'write',context:{...context,...(attempt?{rejected_draft:modelDraft,check_feedback:feedback}:{})},contract:writerContract+(attempt?' Correct the rejected note using these exact failure reasons. This is the single permitted rewrite.':'')});
   let healthError=null;
@@ -168,7 +175,14 @@ async function runBriefing(job,{store,query,provider,now}){
   feedback=[...code,...[facts,reader].filter(r=>r.verdict.passed!==true).map(r=>r.verdict.reason||'No accepted evidence')];
   // Kept across both attempts, so a source rejected by the first review stays out of the fallback
   // even when the rewrite fails for another reason (Archon R1).
-  allReasons.push(...feedback);for(const r of [facts,reader])if(r.verdict.passed!==true&&Array.isArray(r.verdict.rejected_source_ids))for(const id of r.verdict.rejected_source_ids)if(id!=null)rejectedIds.add(String(id));
+  // A failed fact check must name, by id, at least one record of this snapshot it rejects; any id
+  // either review names must be one of them. Otherwise nothing tells which saved fact is safe to
+  // repeat, so the factual fallback is refused and the job fails with the evidence kept (Archon R1,
+  // round 3). Reasons still exclude what they quote, but they never clear a fact.
+  allReasons.push(...feedback);
+  for(const [r,needed] of [[facts,true],[reader,false]]){if(r.verdict.passed===true)continue;const named=r.verdict.rejected_source_ids;
+   if(named!=null&&!Array.isArray(named)||needed&&!(Array.isArray(named)&&named.length))unidentified.push(r.receipt.check);
+   else for(const id of named||[]){if(knownIds.has(String(id)))rejectedIds.add(String(id));else unidentified.push('unknown source id '+String(id));}}
   await store.saveAsync('job_receipts',{kind:'brief-code-gate',job_id:job.id,attempt,state:code.length?'failed':'verified',source_hash:hash(context),draft_hash:hash(draft),errors:code,finished_at:new Date().toISOString()});
   if(!feedback.length){check=facts.receipt;deliveryCheck=reader.receipt;break;}
    if(attempt===1){
@@ -179,7 +193,7 @@ async function runBriefing(job,{store,query,provider,now}){
     if(code.some(e=>/already saved today/.test(e)))throw Error('The same note was already saved today');
     if([facts,reader].some(r=>r.verdict.passed!==true)){
      const rejected=draft,reasons=[...feedback];
-     try{draft=factualFallback(allReasons,rejectedIds);}catch(error){await store.saveAsync('job_receipts',{kind:'brief-factual-fallback',job_id:job.id,state:'failed',source_hash:hash(context),rejected_draft:rejected,rejected_hash:hash(rejected),reasons,fallback_error:error.message,finished_at:new Date().toISOString()});throw error;}
+     try{if(unidentified.length)throw Error('Could not make a checked factual fallback: a failed review did not identify the source records it rejected ('+[...new Set(unidentified)].join(', ')+')');draft=factualFallback(allReasons,rejectedIds);}catch(error){await store.saveAsync('job_receipts',{kind:'brief-factual-fallback',job_id:job.id,state:'failed',source_hash:hash(context),rejected_draft:rejected,rejected_hash:hash(rejected),reasons,fallback_error:error.message,finished_at:new Date().toISOString()});throw error;}
      const receipt=await store.saveAsync('job_receipts',{kind:'brief-factual-fallback',job_id:job.id,state:'verified',source_hash:hash(context),draft_hash:hash(draft),rejected_draft:rejected,rejected_hash:hash(rejected),reasons,all_reasons:allReasons,rejected_source_ids:[...rejectedIds],checks:['visible sources','voice','required lines','duplicate','length'],finished_at:new Date().toISOString()});
      check=receipt;deliveryCheck=receipt;fallback={day:today,refusals:reasons,cut:[],draft_hash:hash(rejected),checked:true};cutReceipt=receipt;break;
     }

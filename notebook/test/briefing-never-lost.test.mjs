@@ -13,6 +13,8 @@ function fixture(rules,{charm=false}={}){
  if(charm)addonCommand(store,{addon:'charm',args:['start']});
  return {store,query};
 }
+// A failed fact check must name the records it rejects (Archon R1, round 3); these fixtures fail only the reader check.
+const readerFails=(input,reason)=>input.check==='source-facts'?{passed:true,reason:'Fictional sources checked.'}:{passed:false,reason};
 const verifies=input=>input.kind==='brief-verification'?{passed:true,reason:'Fictional sources checked.'}:null;
 const run=(provider,query,store,id)=>jobExecutor(provider,query)({kind:'morning-brief',id},{store,settings:{}});
 const repairs=query=>query.rows('work_items').filter(w=>w.kind==='repair');
@@ -34,7 +36,7 @@ test('a required line with a banned word is left out and reported, and the brief
 for(const [name,reason] of [['missing health sentence','No health sentence'],['no actionable next step','No useful next action']])test('a rejected rewrite for '+name+' saves a factual brief',async()=>{
  const {store,query}=fixture([]);store.save('goals',{title:'Prepare a fictional guide',status:'adopted'});
  let writes=0;
- const provider=async input=>input.kind==='brief-verification'?{passed:input.check==='source-facts'&&reason==='No useful next action',reason}:++writes&&'Private unsupported claim: the guide sold 100 copies.';
+ const provider=async input=>input.kind==='brief-verification'?readerFails(input,reason):++writes&&'Private unsupported claim: the guide sold 100 copies.';
  const result=await run(provider,query,store,'brief-failed-'+name.replaceAll(' ','-'));
  const note=store.get('notes',result.record_id);
  assert.equal(writes,2);assert.equal(result.fallback,true);assert.match(note.content,/Prepare a fictional guide/);
@@ -47,28 +49,28 @@ for(const [name,reason] of [['missing health sentence','No health sentence'],['n
 
 test('a voice rule that rejects the goal title still leaves a useful action',async()=>{
  const {store,query}=fixture(['BANNED-WORD: guide']);store.save('goals',{title:'Prepare a fictional guide',status:'adopted'});
- const provider=async input=>input.kind==='brief-verification'?{passed:false,reason:'No useful action'}:'Unsupported draft.';
+ const provider=async input=>input.kind==='brief-verification'?readerFails(input,'No useful action'):'Unsupported draft.';
  const result=await run(provider,query,store,'brief-voice-action'),content=store.get('notes',result.record_id).content;
  assert.equal(result.fallback,true);assert.match(content,/Ask Godspeed to complete one goal step/);assert.doesNotMatch(content,/guide/i);
 });
 
 test('a short sentence limit still yields a concrete action',async()=>{
  const {store,query}=fixture(['MAX-SENTENCE-WORDS: 8']);store.save('goals',{title:'Prepare a fictional guide',status:'adopted'});
- const provider=async input=>input.kind==='brief-verification'?{passed:false,reason:'No useful action'}:'Unsupported draft.';
+ const provider=async input=>input.kind==='brief-verification'?readerFails(input,'No useful action'):'Unsupported draft.';
  const result=await run(provider,query,store,'brief-short-action'),content=store.get('notes',result.record_id).content;
  assert.equal(result.fallback,true);assert.match(content,/Ask Godspeed to complete one goal step/);
 });
 
 test('a five-word sentence limit still yields an action with a saved goal',async()=>{
  const {store,query}=fixture(['MAX-SENTENCE-WORDS: 5']);store.save('goals',{title:'Prepare a fictional guide',status:'adopted'});
- const provider=async input=>input.kind==='brief-verification'?{passed:false,reason:'No useful action'}:'Unsupported draft.';
+ const provider=async input=>input.kind==='brief-verification'?readerFails(input,'No useful action'):'Unsupported draft.';
  const result=await run(provider,query,store,'brief-five-word-action'),content=store.get('notes',result.record_id).content;
  assert.equal(result.fallback,true);assert.match(content,/Do one goal step\./);
 });
 
 test('a voice rule against the product name still leaves a goal action',async()=>{
  const {store,query}=fixture(['BANNED-WORD: Godspeed']);store.save('goals',{title:'Prepare a fictional guide',status:'adopted'});
- const provider=async input=>input.kind==='brief-verification'?{passed:false,reason:'No useful action'}:'Unsupported draft.';
+ const provider=async input=>input.kind==='brief-verification'?readerFails(input,'No useful action'):'Unsupported draft.';
  const result=await run(provider,query,store,'brief-no-name-action'),content=store.get('notes',result.record_id).content;
  assert.equal(result.fallback,true);assert.match(content,/Work on one goal step today/);assert.doesNotMatch(content,/Godspeed/);
 });
@@ -76,14 +78,14 @@ test('a voice rule against the product name still leaves a goal action',async()=
 test('a long saved goal is not mistaken for missing setup',async()=>{
  const {store,query}=fixture([]),title='Prepare the fictional field guide to coastal lighthouses and ship it to every subscriber before the fictional winter season begins';
  store.save('goals',{title,status:'adopted'});
- const provider=async input=>input.kind==='brief-verification'?{passed:false,reason:'No useful action'}:'Unsupported draft.';
+ const provider=async input=>input.kind==='brief-verification'?readerFails(input,'No useful action'):'Unsupported draft.';
  const result=await run(provider,query,store,'brief-long-goal'),content=store.get('notes',result.record_id).content;
  assert.equal(result.fallback,true);assert.match(content,/Prepare the fictional field guide/);assert.doesNotMatch(content,/Tell Godspeed one goal/);
 });
 
 test('an empty first install gets one setup action without an invented goal',async()=>{
  const {store,query}=fixture([]);
- const provider=async input=>input.kind==='brief-verification'?{passed:false,reason:'No useful action'}:'Unsupported draft.';
+ const provider=async input=>input.kind==='brief-verification'?readerFails(input,'No useful action'):'Unsupported draft.';
  const result=await run(provider,query,store,'brief-zero-goal'),content=store.get('notes',result.record_id).content;
  assert.equal(result.fallback,true);assert.match(content,/Tell Godspeed one goal to work on today/);
  assert.doesNotMatch(content,/saved goal|current goal/i);
@@ -91,14 +93,14 @@ test('an empty first install gets one setup action without an invented goal',asy
 
 test('an empty first install still gets a setup action when the product name is banned',async()=>{
  const {store,query}=fixture(['BANNED-WORD: Godspeed']);
- const provider=async input=>input.kind==='brief-verification'?{passed:false,reason:'No useful action'}:'Unsupported draft.';
+ const provider=async input=>input.kind==='brief-verification'?readerFails(input,'No useful action'):'Unsupported draft.';
  const result=await run(provider,query,store,'brief-zero-goal-no-name'),content=store.get('notes',result.record_id).content;
  assert.equal(result.fallback,true);assert.match(content,/Name one goal today\./);assert.doesNotMatch(content,/Godspeed|saved goal/i);
 });
 
 test('several saved goals are not presented as one selected current goal',async()=>{
  const {store,query}=fixture([]);store.save('goals',{title:'Fictional first goal',status:'adopted'});store.save('goals',{title:'Fictional second goal',status:'adopted'});
- const provider=async input=>input.kind==='brief-verification'?{passed:false,reason:'No useful action'}:'Unsupported draft.';
+ const provider=async input=>input.kind==='brief-verification'?readerFails(input,'No useful action'):'Unsupported draft.';
  const result=await run(provider,query,store,'brief-many-goals'),content=store.get('notes',result.record_id).content;
  assert.equal(result.fallback,true);assert.match(content,/One of your saved goals is/);assert.doesNotMatch(content,/Your current goal/);
 });
@@ -111,7 +113,7 @@ test('fallback names verified user work and the next future obligation only',asy
  store.save('deadlines',{title:'Old fictional bill',status:'open',due_at:'2026-02-01T00:00:00Z'});
  store.save('deadlines',{title:'Submit fictional application',status:'open',due_at:'2027-01-01T00:00:00Z'});
  store.save('deadlines',{title:'Plan fictional travel',status:'open',due_at:'2027-02-01T00:00:00Z'});
- const provider=async input=>input.kind==='brief-verification'?{passed:false,reason:'No useful action'}:'Unsupported draft.';
+ const provider=async input=>input.kind==='brief-verification'?readerFails(input,'No useful action'):'Unsupported draft.';
  const result=await run(provider,query,store,'brief-work-date'),content=store.get('notes',result.record_id).content;
  assert.match(content,/Checked fictional outline/);assert.match(content,/Submit fictional application, due 2027-01-01/);
  assert.doesNotMatch(content,/Private unapproved|Recheck internal|Old fictional bill|Plan fictional travel/);
@@ -121,7 +123,7 @@ test('fallback names an obligation by the installation day, not the UTC day',asy
  const {store,query}=fixture([]);store.save('settings',{id:'installation',timezone:'America/Los_Angeles'});
  store.save('goals',{title:'Prepare a fictional guide',status:'adopted'});
  store.save('deadlines',{title:'Pay the fictional rent',status:'open',due_at:'2027-11-08T04:00:00.000Z'});
- const provider=async input=>input.kind==='brief-verification'?{passed:false,reason:'No useful action'}:'Unsupported draft.';
+ const provider=async input=>input.kind==='brief-verification'?readerFails(input,'No useful action'):'Unsupported draft.';
  const result=await run(provider,query,store,'brief-local-day'),content=store.get('notes',result.record_id).content;
  assert.match(content,/Pay the fictional rent, due 2027-11-07\./);
 });
@@ -132,7 +134,7 @@ test('fallback chooses the latest verified work and fresh health by their record
  store.save('work_items',{kind:'draft',title:'Older fictional outline',state:'verified',verification:{at:'2026-11-05T12:00:00Z'}});
  const now=Date.now();store.save('health_observations',{metric:'Fictional energy',value:7,observed_at:new Date(now).toISOString()});
  store.save('health_observations',{metric:'Fictional headache',value:2,observed_at:new Date(now-86400000).toISOString()});
- const provider=async input=>input.kind==='brief-verification'?{passed:false,reason:'No useful action'}:'Unsupported draft.';
+ const provider=async input=>input.kind==='brief-verification'?readerFails(input,'No useful action'):'Unsupported draft.';
  const result=await run(provider,query,store,'brief-time-order'),content=store.get('notes',result.record_id).content;
  assert.match(content,/Newer fictional approval/);assert.doesNotMatch(content,/Older fictional outline/);
  assert.match(content,/Fictional energy: 7/);assert.doesNotMatch(content,/Fictional headache/);
@@ -142,7 +144,7 @@ test('fallback skips an unrenderable latest health value for a checked fresh obs
  const {store,query}=fixture([]);store.save('goals',{title:'Prepare a fictional guide',status:'adopted'});
  const now=Date.now();store.save('health_observations',{metric:'Fictional energy',value:7,observed_at:new Date(now-1000).toISOString()});
  store.save('health_observations',{metric:'Fictional headache',value:'Moderate in the fictional afternoon, then improving',observed_at:new Date(now).toISOString()});
- const provider=async input=>input.kind==='brief-verification'?{passed:false,reason:'No useful action'}:'Unsupported draft.';
+ const provider=async input=>input.kind==='brief-verification'?readerFails(input,'No useful action'):'Unsupported draft.';
  const result=await run(provider,query,store,'brief-usable-health'),content=store.get('notes',result.record_id).content;
  assert.match(content,/Fictional energy: 7/);assert.doesNotMatch(content,/Fictional headache/);
 });
@@ -152,7 +154,7 @@ test('fallback omits snoozed and not-yet-started obligations',async()=>{
  store.save('deadlines',{title:'Fictional snoozed filing',status:'open',due_at:'2027-01-01T00:00:00Z',snoozed_until:'2027-01-01T00:00:00Z'});
  store.save('deadlines',{title:'Fictional future project',status:'open',start_at:'2027-01-01T00:00:00Z',due_at:'2027-02-01T00:00:00Z'});
  store.save('deadlines',{title:'Fictional current task',status:'open',due_at:'2027-03-01T00:00:00Z'});
- const provider=async input=>input.kind==='brief-verification'?{passed:false,reason:'No useful action'}:'Unsupported draft.';
+ const provider=async input=>input.kind==='brief-verification'?readerFails(input,'No useful action'):'Unsupported draft.';
  const result=await run(provider,query,store,'brief-obligation-window'),content=store.get('notes',result.record_id).content;
  assert.match(content,/Fictional current task/);assert.doesNotMatch(content,/Fictional snoozed filing|Fictional future project/);
 });
@@ -160,14 +162,14 @@ test('fallback omits snoozed and not-yet-started obligations',async()=>{
 test('an unrenderable health value is omitted without claiming no observation exists',async()=>{
  const {store,query}=fixture([]);store.save('goals',{title:'Prepare a fictional guide',status:'adopted'});
  store.save('health_observations',{metric:'Fictional headache',value:{description:'Mild and improving'},observed_at:new Date().toISOString()});
- const provider=async input=>input.kind==='brief-verification'?{passed:false,reason:'No useful action'}:'Unsupported draft.';
+ const provider=async input=>input.kind==='brief-verification'?readerFails(input,'No useful action'):'Unsupported draft.';
  const result=await run(provider,query,store,'brief-complex-health'),content=store.get('notes',result.record_id).content;
  assert.equal(result.fallback,true);assert.doesNotMatch(content,/no fresh health observations|\[object Object\]/i);assert.match(content,/goal step|concrete result/);
 });
 
 test('an impossible checked fallback retains the rejected draft and reasons for repair',async()=>{
  const {store,query}=fixture(['MAX-SENTENCE-WORDS: 1']);store.save('goals',{title:'Prepare a fictional guide',status:'adopted'});
- const provider=async input=>input.kind==='brief-verification'?{passed:false,reason:'Missing actionable next step'}:'Unsupported private draft.';
+ const provider=async input=>input.kind==='brief-verification'?readerFails(input,'Missing actionable next step'):'Unsupported private draft.';
  await assert.rejects(run(provider,query,store,'brief-impossible-fallback'),/Could not make a checked factual fallback/);
  const receipt=query.rows('job_receipts').find(r=>r.kind==='brief-factual-fallback');
  assert.equal(receipt.state,'failed');assert.equal(receipt.rejected_draft,'Unsupported private draft.');
@@ -178,7 +180,7 @@ test('an impossible checked fallback retains the rejected draft and reasons for 
 test('a rejected draft keeps a separately checked contribution and its exact link',async()=>{
  const {store,query}=fixture([]),content='Fictional copy ready draft.';
  const note=store.save('notes',{title:'Fictional contribution',content});store.save('lead_entries',{title:note.title,content,note_id:note.id,status:'ready',delivery_day:'2026-01-01'});
- const provider=async input=>input.kind==='brief-verification'?{passed:false,reason:'No useful action'}:'Unsupported draft.';
+ const provider=async input=>input.kind==='brief-verification'?readerFails(input,'No useful action'):'Unsupported draft.';
  const result=await run(provider,query,store,'brief-contribution-fallback'),saved=store.get('notes',result.record_id);
  assert.equal(result.fallback,true);assert.match(saved.content,/Fictional copy ready draft/);assert.match(saved.content,new RegExp('/dashboard/notes/'+note.id));
  assert.match(saved.content,/Review this checked draft before deciding\. It has not been sent\./);
@@ -186,7 +188,7 @@ test('a rejected draft keeps a separately checked contribution and its exact lin
 
 test('a refused required line stays left out of the factual fallback',async()=>{
  const {store,query}=fixture(['BANNED-WORD: Challenge'],{charm:true});store.save('goals',{title:'Prepare a fictional guide',status:'adopted'});
- const provider=async input=>input.kind==='brief-verification'?{passed:false,reason:'No useful action'}:'Unsupported draft.';
+ const provider=async input=>input.kind==='brief-verification'?readerFails(input,'No useful action'):'Unsupported draft.';
  const result=await run(provider,query,store,'brief-required-line-fallback'),content=store.get('notes',result.record_id).content;
  assert.equal(result.fallback,true);assert.doesNotMatch(content,/Challenge/);
  assert.ok(repairs(query).some(w=>w.line_name==='the Charm Challenge line'));
@@ -194,7 +196,7 @@ test('a refused required line stays left out of the factual fallback',async()=>{
 
 test('a live Charm line survives a rejected draft in the factual fallback',async()=>{
  const {store,query}=fixture([],{charm:true});let line=null;
- const provider=async input=>{if(input.kind==='brief-verification')return {passed:false,reason:'No useful action'};line=input.context.charm_line;return 'Unsupported draft.';};
+ const provider=async input=>{if(input.kind==='brief-verification')return readerFails(input,'No useful action');line=input.context.charm_line;return 'Unsupported draft.';};
  const result=await run(provider,query,store,'brief-live-charm'),content=store.get('notes',result.record_id).content;
  assert.equal(result.fallback,true);assert.ok(line);assert.ok(content.split(/\r?\n/).includes(line));
 });
@@ -202,7 +204,7 @@ test('a live Charm line survives a rejected draft in the factual fallback',async
 test('a checked contribution survives a length restricted factual fallback',async()=>{
  const {store,query}=fixture(['MAX-SENTENCE-WORDS: 8']),content='Fictional checked draft.';
  const note=store.save('notes',{title:'Fictional contribution',content});store.save('lead_entries',{title:note.title,content,note_id:note.id,status:'ready',delivery_day:'2026-01-01'});
- const provider=async input=>input.kind==='brief-verification'?{passed:false,reason:'No useful action'}:'Unsupported draft.';
+ const provider=async input=>input.kind==='brief-verification'?readerFails(input,'No useful action'):'Unsupported draft.';
  const result=await run(provider,query,store,'brief-short-contribution'),saved=store.get('notes',result.record_id).content;
  assert.equal(result.fallback,true);assert.match(saved,/Fictional checked draft/);assert.match(saved,new RegExp('/dashboard/notes/'+note.id));
 });
@@ -263,7 +265,7 @@ test('the factual fallback names only visible facts, never hidden or sensitive o
  store.save('health_observations',{metric:'Fictional sensitive symptom',value:4,observed_at:new Date(now).toISOString(),is_sensitive:true});
  store.save('work_items',{kind:'draft',title:'Fictional hidden work',state:'verified',ai_visibility:'hidden',verification:{at:new Date(now).toISOString()}});
  store.save('deadlines',{title:'Fictional sensitive filing',status:'open',due_at:'2027-01-01T00:00:00Z',is_sensitive:true});
- const provider=async input=>input.kind==='brief-verification'?{passed:false,reason:'No useful action'}:'Unsupported draft.';
+ const provider=async input=>input.kind==='brief-verification'?readerFails(input,'No useful action'):'Unsupported draft.';
  const result=await run(provider,query,store,'brief-visible-only'),content=store.get('notes',result.record_id).content;
  assert.equal(result.fallback,true);
  assert.match(content,/Prepare a fictional guide/);assert.match(content,/Fictional visible energy: 6/);
@@ -305,7 +307,7 @@ for(const [kind,save,claim,reason] of [
  ['health value',store=>store.save('health_observations',{metric:'Fictional energy',value:6,observed_at:new Date().toISOString()}),/Fictional energy/i,'Fictional energy: 6 is stale'],
 ])test('the '+kind+' the fact check rejected is not repeated by the factual fallback',async()=>{
  const {store,query}=fixture([]);save(store);
- const provider=async input=>input.kind==='brief-verification'?{passed:false,reason}:'Unsupported draft.';
+ const provider=async input=>input.kind==='brief-verification'?readerFails(input,reason):'Unsupported draft.';
  const result=await run(provider,query,store,'brief-rejected-'+kind.replaceAll(' ','-')),content=store.get('notes',result.record_id).content;
  assert.equal(result.fallback,true);assert.doesNotMatch(content,claim);assert.match(content,/goal/i);
  assert.ok(query.rows('job_receipts').find(r=>r.kind==='brief-factual-fallback').reasons.includes(reason));
@@ -313,7 +315,7 @@ for(const [kind,save,claim,reason] of [
 
 test('a rejected goal is left out while another saved goal still gives the action',async()=>{
  const {store,query}=fixture([]);store.save('goals',{title:'Prepare a fictional guide',status:'adopted'});store.save('goals',{title:'Plant the fictional garden',status:'adopted'});
- const provider=async input=>input.kind==='brief-verification'?{passed:false,reason:'Prepare a fictional guide is unsupported'}:'Unsupported draft.';
+ const provider=async input=>input.kind==='brief-verification'?readerFails(input,'Prepare a fictional guide is unsupported'):'Unsupported draft.';
  const result=await run(provider,query,store,'brief-rejected-one-goal'),content=store.get('notes',result.record_id).content;
  assert.doesNotMatch(content,/fictional guide/i);assert.match(content,/Ask Godspeed to work on Plant the fictional garden/);
 });
@@ -329,7 +331,7 @@ for(const [kind,save,claim] of [
 ])test('the '+kind+' rejected by id in the first attempt stays out when the rewrite fails for another reason',async()=>{
  const {store,query}=fixture([]);const row=save(store);assert.ok(row?.id);let checks=0;
  const provider=async input=>{if(input.kind!=='brief-verification')return 'Unsupported draft.';checks++;
-  return checks<=2?{passed:false,reason:'One claim in the draft is unsupported',rejected_source_ids:input.check==='source-facts'?[row.id]:[]}:{passed:false,reason:'The rewrite is too vague'};};
+  return checks<=2?{passed:false,reason:'One claim in the draft is unsupported',rejected_source_ids:input.check==='source-facts'?[row.id]:[]}:{passed:input.check==='source-facts',reason:'The rewrite is too vague'};};
  const result=await run(provider,query,store,'brief-first-attempt-'+kind.replaceAll(' ','-')),content=store.get('notes',result.record_id).content;
  assert.equal(checks,4);assert.equal(result.fallback,true);assert.doesNotMatch(content,claim);assert.match(content,/goal/i);
  const receipt=query.rows('job_receipts').find(r=>r.kind==='brief-factual-fallback');
@@ -339,7 +341,7 @@ for(const [kind,save,claim] of [
 test('a first-attempt reason naming a source still holds after a differently rejected rewrite',async()=>{
  const {store,query}=fixture([]);store.save('goals',{title:'Prepare release notes.',status:'adopted'});let checks=0;
  const provider=async input=>{if(input.kind!=='brief-verification')return 'Unsupported draft.';checks++;
-  return checks<=2?{passed:false,reason:'Prepare release notes is unsupported'}:{passed:false,reason:'The rewrite is too vague'};};
+  return checks<=2?readerFails(input,'Prepare release notes is unsupported'):{passed:input.check==='source-facts',reason:'The rewrite is too vague'};};
  const result=await run(provider,query,store,'brief-first-attempt-reason'),content=store.get('notes',result.record_id).content;
  assert.equal(result.fallback,true);assert.doesNotMatch(content,/release notes/i);
 });
@@ -351,7 +353,37 @@ for(const [kind,save,claim,reason] of [
  ['health value',store=>store.save('health_observations',{metric:'Fictional energy.',value:6,observed_at:new Date().toISOString()}),/Fictional energy/i,'Fictional energy 6 is stale'],
 ])test('the '+kind+' whose title ends in punctuation is still excluded by the reason that names it',async()=>{
  const {store,query}=fixture([]);save(store);
- const provider=async input=>input.kind==='brief-verification'?{passed:false,reason}:'Unsupported draft.';
+ const provider=async input=>input.kind==='brief-verification'?readerFails(input,reason):'Unsupported draft.';
  const result=await run(provider,query,store,'brief-punctuated-'+kind.replaceAll(' ','-')),content=store.get('notes',result.record_id).content;
  assert.equal(result.fallback,true);assert.doesNotMatch(content,claim);
+});
+
+// Archon R1, round 3: a failed fact check that does not name, by id, the records it rejects leaves no
+// way to tell which saved fact is safe to repeat. The fallback is refused, the rejected draft and the
+// reasons stay in the failed receipt, and nothing is sent. Reasons never clear a fact.
+for(const [name,verdict] of [
+ ['an empty id list',{passed:false,reason:'The only saved goal is no longer an active commitment.',rejected_source_ids:[]}],
+ ['no id list',{passed:false,reason:'The only saved goal is no longer an active commitment.'}],
+ ['an id list that is not a list',{passed:false,reason:'The only saved goal is no longer an active commitment.',rejected_source_ids:'the goal'}],
+ ['an id that is not one of its sources',{passed:false,reason:'The only saved goal is no longer an active commitment.',rejected_source_ids:['fictional-unknown-id']}],
+])test('a failed fact check with '+name+' sends no fallback and keeps the evidence',async()=>{
+ const {store,query}=fixture([]);store.save('goals',{title:'Cancel the fictional contract',status:'adopted'});
+ const provider=async input=>input.kind==='brief-verification'?(input.check==='source-facts'?verdict:{passed:false,reason:'Unclear'}):'Unsupported private draft.';
+ await assert.rejects(run(provider,query,store,'brief-unidentified-'+name.replaceAll(' ','-')),/did not identify the source records it rejected/);
+ const receipt=query.rows('job_receipts').find(r=>r.kind==='brief-factual-fallback');
+ assert.equal(receipt.state,'failed');assert.equal(receipt.rejected_draft,'Unsupported private draft.');assert.ok(receipt.reasons.includes(verdict.reason));
+ assert.equal(query.rows('notes').filter(n=>n.source_app==='morning-brief').length,0);assert.equal(query.rows('notifications').length,0);
+});
+
+// Archon R2, round 3: a contribution the review rejected by id is neither repeated nor required; the
+// fallback takes the ordinary goal action and the contribution stays ready, never marked as shown.
+for(const which of ['lead entry','backing note'])test('a contribution rejected by its '+which+' id stays out of the factual fallback',async()=>{
+ const {store,query}=fixture([]),content='Unverified fictional contribution.';store.save('goals',{title:'Plant the fictional garden',status:'adopted'});
+ const note=store.save('notes',{title:'Fictional contribution',content}),entry=store.save('lead_entries',{title:note.title,content,note_id:note.id,status:'ready',delivery_day:'2026-01-01'});
+ const id=which==='lead entry'?entry.id:note.id;
+ const provider=async input=>input.kind==='brief-verification'?{passed:false,reason:'One claim is unsupported',rejected_source_ids:input.check==='source-facts'?[id]:[]}:'Unsupported draft.';
+ const result=await run(provider,query,store,'brief-rejected-contribution-'+which.replaceAll(' ','-')),saved=store.get('notes',result.record_id).content;
+ assert.equal(result.fallback,true);assert.doesNotMatch(saved,/Unverified fictional contribution/);assert.doesNotMatch(saved,new RegExp('/dashboard/notes/'+note.id));
+ assert.doesNotMatch(saved,/Review this/);assert.match(saved,/Ask Godspeed to work on Plant the fictional garden/);
+ assert.equal(store.get('lead_entries',entry.id).status,'ready');
 });

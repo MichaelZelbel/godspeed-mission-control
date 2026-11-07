@@ -24,6 +24,8 @@ import {runMorningBrief} from '../scripts/morning-brief.mjs';
 const python=process.env.GODSPEED_TEST_PYTHON||(process.platform==='win32'?'python':'python3');
 const havePython=spawnSync(python,['--version']).status===0;
 const OK='No fresh health observations are recorded. Review the fictional list today.';
+// A failed fact check must name the records it rejects (Archon R1, round 3); these fixtures fail only the reader check.
+const readerFails=(input,reason)=>input.check==='source-facts'?{passed:true,reason:'Fictional sources checked.'}:{passed:false,reason};
 const verifies=input=>input.kind==='brief-verification'?{passed:true,reason:'Fictional sources checked.'}:null;
 
 function workspace(t,{charm=false,rules=[]}={}){
@@ -164,7 +166,7 @@ test('asked for in the chat, a saved briefing of today is printed unchanged and 
 
 test('asking in chat returns the saved factual fallback exactly once',async t=>{
  const {root,store}=workspace(t);store.save('goals',{title:'Prepare a fictional guide',status:'adopted'});
- const provider=async input=>input.kind==='brief-verification'?{passed:false,reason:'No actionable next step'}:'Unsupported private outcome.';
+ const provider=async input=>input.kind==='brief-verification'?readerFails(input,'No actionable next step'):'Unsupported private outcome.';
  const first=await runMorningBrief({root,provider});
  assert.equal(first.result.fallback,true);assert.equal(briefNotes(root).length,1);
  const again=await runMorningBrief({root,provider:async()=>{throw Error('the AI must not be asked');}});
