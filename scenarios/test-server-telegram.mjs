@@ -118,3 +118,28 @@ printf '%s\\n' '{"sent":[],"requests":[]}'
     fs.rmSync(folder,{recursive:true,force:true});
   }
 });
+
+test('press resolves a visible button label to the installed callback token',()=>{
+  const folder=fs.mkdtempSync(path.join(os.tmpdir(),'server-telegram-press-'));
+  const bin=path.join(folder,'bin'),trace=path.join(folder,'trace');
+  fs.mkdirSync(bin);
+  fs.writeFileSync(path.join(bin,'sudo'),`#!/bin/sh
+input=$(cat)
+printf '%s %s\\n' "$*" "$input" >> "$TRACE"
+printf '%s\\n' '{"sent":[{"chat_id":31415,"text":"Book the car inspection?","buttons":["gss1:opaque-token"],"labels":["Yes"]}],"requests":[]}'
+`);
+  fs.chmodSync(path.join(bin,'sudo'),0o755);
+
+  try {
+    execFileSync(process.execPath,['server-telegram.mjs','press','--server','fixture','--evidence',folder,'--label','inspection','--question','car inspection','--button','Yes'],{
+      cwd:path.dirname(new URL(import.meta.url).pathname),
+      env:{...process.env,PATH:`${bin}:${process.env.PATH}`,TRACE:trace},
+      stdio:'pipe',
+    });
+
+    assert.match(fs.readFileSync(trace,'utf8'),/"press":"gss1:opaque-token"/);
+    assert.doesNotMatch(fs.readFileSync(trace,'utf8'),/"press":"Yes"/);
+  } finally {
+    fs.rmSync(folder,{recursive:true,force:true});
+  }
+});

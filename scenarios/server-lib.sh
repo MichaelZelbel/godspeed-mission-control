@@ -153,10 +153,10 @@ server_telegram_say() { # <label> <text>
     fail "the installed Telegram gateway did not accept $1"
   SCENARIO_INTERACTION=''
 }
-server_telegram_press() { # <label> <callback data>
+server_telegram_press() { # <label> <question text> <button label>
   interaction_begin "$1"
   "$NODE" "$HERE/server-telegram.mjs" press --server "$(server_container)" --evidence "$EVIDENCE" \
-    --owner "$SERVER_TELEGRAM_OWNER" --label "$1" --button "$2" ||
+    --owner "$SERVER_TELEGRAM_OWNER" --label "$1" --question "$2" --button "$3" ||
     fail "the installed Telegram gateway did not accept $1"
   SCENARIO_INTERACTION=''
 }

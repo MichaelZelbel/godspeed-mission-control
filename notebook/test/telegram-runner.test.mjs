@@ -89,6 +89,21 @@ test('an unsafe configured Bot API does not start the gateway or change its conf
  assert.equal(unreadable.started.length,0);assert.equal(unreadable.state().state,'gateway-route-failed');
 });
 
+test('a failed gateway config replacement or permission update is reported without starting Hermes',async()=>{
+ for(const operation of ['replace','chmod']){
+  const f=fixture(),home=path.join(f.dir,'hermes'),config=path.join(home,'config.yaml'),original='model:\n  provider: openrouter\n';fs.mkdirSync(home);fs.writeFileSync(config,original);
+  Object.assign(f.runner.env,{HERMES_HOME:home,GODSPEED_TELEGRAM_API:'http://127.0.0.1:8081'});
+  const originalOperation=operation==='replace'?fs.renameSync:fs.chmodSync;
+  if(operation==='replace')fs.renameSync=(from,to)=>{if(to===config)throw Error('replacement refused');return originalOperation(from,to);};
+  else fs.chmodSync=(file,mode)=>{if(file===config)throw Error('permission update refused');return originalOperation(file,mode);};
+  try{
+   f.write('connection.json',connection);f.write('setup.json',{bot_id:4242,owner_id:111,chat_id:111,done:true});await tick(f.runner);
+   assert.equal(f.started.length,0,operation);assert.equal(f.state().state,'gateway-route-failed',operation);
+   if(operation==='replace')assert.equal(fs.readFileSync(config,'utf8'),original);
+  }finally{if(operation==='replace')fs.renameSync=originalOperation;else fs.chmodSync=originalOperation;}
+ }
+});
+
 test('a new key or a disconnect stops what runs; a finished chat of another bot does not count',async()=>{
  const f=fixture();f.write('connection.json',connection);f.write('setup.json',{bot_id:9999,owner_id:5,chat_id:5,done:true});
  await tick(f.runner);assert.deepEqual(f.started[0].args,['/kit/godspeed-telegram-setup']);

@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {randomBytes} from 'node:crypto';
 import {telegramAPI} from '../core/telegram-api.mjs';
+import {telegramPhase} from '../shared/telegram-status.mjs';
 
 // Telegram for the one-click server, connected from the web page after the account is made.
 // The bot's key goes from the owner's browser to this server and nowhere else: it is checked
@@ -38,19 +39,19 @@ export class TelegramConnection{
   file(name){return path.join(this.dir,name);}
   read(name){try{return JSON.parse(fs.readFileSync(this.file(name),'utf8'));}catch{return null;}}
   status(){
-    if(this.mode==='on'&&this.environmentBot)return {available:false,managed:'environment',connected:true,phase:'ready'};
-    if(!this.available)return {available:false,managed:null,connected:false,phase:'none'};
+    if(this.mode==='on'&&this.environmentBot)return {available:false,managed:'environment',connected:true,phase:telegramPhase.ready};
+    if(!this.available)return {available:false,managed:null,connected:false,phase:telegramPhase.none};
     const connection=this.read('connection.json');
-    if(!connection?.token)return {available:true,managed:'web',connected:false,phase:'none'};
+    if(!connection?.token)return {available:true,managed:'web',connected:false,phase:telegramPhase.none};
     const setup=this.read('setup.json')||{},mine=String(setup.bot_id||'')===String(connection.bot_id),runner=this.read('runner.json');
     let endpointSafe=true;try{telegramAPI(this.api);}catch{endpointSafe=false;}
-    const phase=mine&&setup.problem==='refused'?'refused':mine&&setup.done&&(!endpointSafe||runner?.state==='gateway-route-failed')?'gateway-route-failed':mine&&setup.done?'ready':mine&&setup.owner_id?'setting-up':'waiting';
+    const phase=mine&&setup.problem==='refused'?telegramPhase.refused:mine&&setup.done&&(!endpointSafe||runner?.state==='gateway-route-failed')?telegramPhase.gatewayRouteFailed:mine&&setup.done?telegramPhase.ready:mine&&setup.owner_id?telegramPhase.settingUp:telegramPhase.waiting;
     // The message itself too, to copy: a bot its owner has chatted with before shows no Start
     // button, and only "/start <code>" makes its sender the owner (godspeed-telegram-setup). The
     // link already carries the code, so this shows the signed-in owner nothing new.
     return {available:true,managed:'web',connected:true,phase,bot:{username:connection.username,name:connection.name},
-      ...(phase==='waiting'?{link:`https://t.me/${connection.username}?start=${connection.start_code}`,start_message:'/start '+connection.start_code}:{}),
-      ...(['setting-up','ready'].includes(phase)?{owner:setup.owner_name||null}:{}),
+      ...(phase===telegramPhase.waiting?{link:`https://t.me/${connection.username}?start=${connection.start_code}`,start_message:'/start '+connection.start_code}:{}),
+      ...([telegramPhase.settingUp,telegramPhase.ready].includes(phase)?{owner:setup.owner_name||null}:{}),
       connected_at:connection.connected_at};
   }
   async telegram(token,method){

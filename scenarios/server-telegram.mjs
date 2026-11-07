@@ -128,10 +128,17 @@ async function say(){
   const label=option('--label'), text=option('--text');
   await capture(label,'say',()=>act({from:owner,text}));
 }
+export function callbackData(record,owner,question,label){
+ const message=[...(record.sent??[])].reverse().find(sent=>sent.chat_id===owner&&String(sent.text??'').toLowerCase().includes(question.toLowerCase())&&Array.isArray(sent.labels)&&Array.isArray(sent.buttons)&&sent.labels.includes(label));
+ if(!message)throw Error(`the installed Telegram question ${JSON.stringify(question)} has no ${JSON.stringify(label)} button`);
+ const callback=message.buttons[message.labels.indexOf(label)];
+ if(typeof callback!=='string'||!callback)throw Error(`the installed Telegram ${JSON.stringify(label)} button has no callback data`);
+ return callback;
+}
 async function press(){
   requireEvidence();
-  const label=option('--label'), button=option('--button');
-  await capture(label,'press',()=>act({from:owner,press:button}));
+  const label=option('--label'), question=option('--question'), button=option('--button');
+  await capture(label,'press',()=>act({from:owner,press:callbackData(copyRecord(),owner,question,button)}));
 }
 async function snapshot(){
   requireEvidence();

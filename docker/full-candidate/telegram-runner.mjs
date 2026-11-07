@@ -38,11 +38,13 @@ export function notebookLink(env,connection,address=notebookAddress){
 }
 export function routeTelegramGateway(home,api){
  if(!home||!api)return false;
- let endpoint,text;try{endpoint=telegramAPI(api);text=fs.readFileSync(path.join(home,'config.yaml'),'utf8');}catch{return false;}
- let next=setConfigValue(text,['platforms','telegram','extra','base_url'],JSON.stringify(endpoint+'/bot'));
- next=setConfigValue(next,['platforms','telegram','extra','base_file_url'],JSON.stringify(endpoint+'/file/bot'));
- if(next===text)return true;
- atomic(path.join(home,'config.yaml'),next);if(process.platform!=='win32')fs.chmodSync(path.join(home,'config.yaml'),0o600);return true;
+ try{
+  const endpoint=telegramAPI(api),config=path.join(home,'config.yaml'),text=fs.readFileSync(config,'utf8');
+  let next=setConfigValue(text,['platforms','telegram','extra','base_url'],JSON.stringify(endpoint+'/bot'));
+  next=setConfigValue(next,['platforms','telegram','extra','base_file_url'],JSON.stringify(endpoint+'/file/bot'));
+  if(next===text)return true;
+  atomic(config,next);if(process.platform!=='win32')fs.chmodSync(config,0o600);return true;
+ }catch{return false;}
 }
 
 export class TelegramRunner{
