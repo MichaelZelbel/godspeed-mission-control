@@ -70,7 +70,7 @@ act() {
   server_telegram_say b yes; server_snapshot_table b approvals
   server_telegram_say b-choice 'the food log one'; server_snapshot_table b-choice approvals
   server_set_asks "$EVIDENCE/asks-c-ask.json"; server_run_asker c-ask; server_snapshot_table c-ask approvals
-  server_telegram_press c-press inspection Yes; server_snapshot_table c-press approvals
+  server_telegram_press c-press gym Yes; server_snapshot_table c-press approvals
   server_telegram_press d-no inspection No; server_snapshot_table d-no approvals
   server_telegram_say d yes; server_snapshot_table d approvals
   server_telegram_snapshot

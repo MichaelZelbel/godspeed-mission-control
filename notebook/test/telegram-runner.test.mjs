@@ -100,6 +100,11 @@ test('a failed gateway config replacement or permission update is reported witho
    f.write('connection.json',connection);f.write('setup.json',{bot_id:4242,owner_id:111,chat_id:111,done:true});await tick(f.runner);
    assert.equal(f.started.length,0,operation);assert.equal(f.state().state,'gateway-route-failed',operation);
    if(operation==='replace')assert.equal(fs.readFileSync(config,'utf8'),original);
+   if(operation==='chmod'){
+    await tick(f.runner);
+    assert.equal(f.started.length,0,'a persistent permission failure must not be bypassed on the next tick');
+    assert.equal(f.state().state,'gateway-route-failed');
+   }
   }finally{if(operation==='replace')fs.renameSync=originalOperation;else fs.chmodSync=originalOperation;}
  }
 });

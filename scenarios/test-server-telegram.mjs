@@ -119,26 +119,33 @@ printf '%s\\n' '{"sent":[],"requests":[]}'
   }
 });
 
-test('press resolves a visible button label to the installed callback token',()=>{
+test('press resolves each visible button label to its installed callback token',()=>{
   const folder=fs.mkdtempSync(path.join(os.tmpdir(),'server-telegram-press-'));
   const bin=path.join(folder,'bin'),trace=path.join(folder,'trace');
   fs.mkdirSync(bin);
   fs.writeFileSync(path.join(bin,'sudo'),`#!/bin/sh
 input=$(cat)
 printf '%s %s\\n' "$*" "$input" >> "$TRACE"
-printf '%s\\n' '{"sent":[{"chat_id":31415,"text":"Book the car inspection?","buttons":["gss1:opaque-token"],"labels":["Yes"]}],"requests":[]}'
+printf '%s\\n' '{"sent":[{"chat_id":31415,"text":"Cancel the renewal of your gym membership?","buttons":["gss1:gym-yes","gss1:gym-no"],"labels":["Yes","No"]},{"chat_id":31415,"text":"Book the car inspection?","buttons":["gss1:car-yes","gss1:car-no"],"labels":["Yes","No"]}],"requests":[]}'
 `);
   fs.chmodSync(path.join(bin,'sudo'),0o755);
 
   try {
-    execFileSync(process.execPath,['server-telegram.mjs','press','--server','fixture','--evidence',folder,'--label','inspection','--question','car inspection','--button','Yes'],{
+    execFileSync(process.execPath,['server-telegram.mjs','press','--server','fixture','--evidence',folder,'--label','gym','--question','gym membership','--button','Yes'],{
+      cwd:path.dirname(new URL(import.meta.url).pathname),
+      env:{...process.env,PATH:`${bin}:${process.env.PATH}`,TRACE:trace},
+      stdio:'pipe',
+    });
+    execFileSync(process.execPath,['server-telegram.mjs','press','--server','fixture','--evidence',folder,'--label','inspection','--question','car inspection','--button','No'],{
       cwd:path.dirname(new URL(import.meta.url).pathname),
       env:{...process.env,PATH:`${bin}:${process.env.PATH}`,TRACE:trace},
       stdio:'pipe',
     });
 
-    assert.match(fs.readFileSync(trace,'utf8'),/"press":"gss1:opaque-token"/);
-    assert.doesNotMatch(fs.readFileSync(trace,'utf8'),/"press":"Yes"/);
+    const requests=fs.readFileSync(trace,'utf8');
+    assert.match(requests,/"press":"gss1:gym-yes"/);
+    assert.match(requests,/"press":"gss1:car-no"/);
+    assert.doesNotMatch(requests,/"press":"Yes"|"press":"No"/);
   } finally {
     fs.rmSync(folder,{recursive:true,force:true});
   }

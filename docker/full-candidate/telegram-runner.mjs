@@ -42,8 +42,8 @@ export function routeTelegramGateway(home,api){
   const endpoint=telegramAPI(api),config=path.join(home,'config.yaml'),text=fs.readFileSync(config,'utf8');
   let next=setConfigValue(text,['platforms','telegram','extra','base_url'],JSON.stringify(endpoint+'/bot'));
   next=setConfigValue(next,['platforms','telegram','extra','base_file_url'],JSON.stringify(endpoint+'/file/bot'));
-  if(next===text)return true;
-  atomic(config,next);if(process.platform!=='win32')fs.chmodSync(config,0o600);return true;
+  if(next!==text)atomic(config,next);
+  if(process.platform!=='win32')fs.chmodSync(config,0o600);return true;
  }catch{return false;}
 }
 
