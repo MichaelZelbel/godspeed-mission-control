@@ -64,7 +64,7 @@ A current-world claim checked earlier carries its verification day instead of a 
 
 Keep uncertainty and the difference between preparation, permission, execution, verification and measured outcome visible in ordinary words. An exact local edit already approved by the user must not ask for approval again after it happened.
 
-The pipeline checks voice, sources, dates, numbers, links, repeated advice and exact choices, then gives the writer one rewrite with actual reasons. Final judges may cut; they do not manufacture facts. A failing gate stays undelivered, with a concrete authorized repair or an honest necessary user action.
+The pipeline checks voice, sources, dates, numbers, links, repeated advice and exact choices, then gives the writer one rewrite with actual reasons. Final judges may cut; they do not manufacture facts. If both drafts fail review, the installed routine may save a shorter note built only from visible checked records after its mechanical checks pass; otherwise a failing gate stays undelivered, with a concrete authorized repair or an honest necessary user action.
 
 ## Retain the actual result
 
