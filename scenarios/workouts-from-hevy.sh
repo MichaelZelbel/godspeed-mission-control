@@ -227,25 +227,29 @@ NODE
 }
 
 scan_fixture_key() {
-  local key='00000000-0000-4000-8000-000000000001' code native_paths=$EVIDENCE/.native-key-hits docker_paths=$EVIDENCE/.docker-key-hits all_paths=$EVIDENCE/.all-key-hits
+  local key='00000000-0000-4000-8000-000000000001' code native_paths=$EVIDENCE/.native-key-hits docker_paths=$EVIDENCE/.docker-key-hits
   persistence_roots native 'native accepted-key scan'
-  if grep -rlF --exclude-dir=.git --exclude-dir=node_modules -- "$key" "${NATIVE_PERSISTENCE_ROOTS[@]}" >"$native_paths"; then :; else
+  if grep -rlF --exclude-dir=.git --exclude-dir=node_modules -- "$key" "${NATIVE_PERSISTENCE_ROOTS[@]}" >"$native_paths"; then
+    [ -s "$native_paths" ] || fail 'native accepted-key scan completed with no path output after a match'
+  else
     code=$?
     [ "$code" -eq 1 ] || fail "native accepted-key scan could not run (grep ended $code)"
   fi
   [ -f "$native_paths" ] || fail "native accepted-key scan produced no path record"
   persistence_roots docker 'docker accepted-key scan'
-  if in_server grep -rlF --exclude-dir=node_modules -- "$key" "${DOCKER_PERSISTENCE_ROOTS[@]}" >"$docker_paths"; then :; else
+  if in_server grep -rlF --exclude-dir=node_modules -- "$key" "${DOCKER_PERSISTENCE_ROOTS[@]}" >"$docker_paths"; then
+    [ -s "$docker_paths" ] || fail 'docker accepted-key scan completed with no path output after a match'
+  else
     code=$?
     [ "$code" -eq 1 ] || fail "docker accepted-key scan could not run (server grep ended $code)"
   fi
   [ -f "$docker_paths" ] || fail "docker accepted-key scan produced no path record"
-  cat "$native_paths" "$docker_paths" >"$all_paths" ||
-    fail 'accepted-key scan could not collect its path records'
-  if "$NODE" - "$all_paths" "$NATIVE_PERMITTED_HEVY_SETTINGS" "$DOCKER_PERMITTED_HEVY_SETTINGS" >"$EVIDENCE/.key-hits" <<'NODE'
-const fs=require('fs'),[pathsFile,...permitted]=process.argv.slice(2);
-for (const path of fs.readFileSync(pathsFile,'utf8').trim().split(/\r?\n/).filter(Boolean)) {
-  if (!permitted.includes(path)) console.log(path);
+  if "$NODE" - "$native_paths" "$NATIVE_PERMITTED_HEVY_SETTINGS" "$docker_paths" "$DOCKER_PERMITTED_HEVY_SETTINGS" >"$EVIDENCE/.key-hits" <<'NODE'
+const fs=require('fs'),[nativePaths,nativePermitted,dockerPaths,dockerPermitted]=process.argv.slice(2);
+for (const [pathsFile,permitted] of [[nativePaths,nativePermitted],[dockerPaths,dockerPermitted]]) {
+  for (const path of fs.readFileSync(pathsFile,'utf8').trim().split(/\r?\n/).filter(Boolean)) {
+    if (path!==permitted) console.log(path);
+  }
 }
 NODE
   then :; else
@@ -261,7 +265,7 @@ NODE
     fail 'accepted-key scan could not write its record'
   fi
   [ -s "$EVIDENCE/key-scan.json" ] || fail 'accepted-key scan produced no record'
-  rm -f "$native_paths" "$docker_paths" "$all_paths" "$EVIDENCE/.key-hits"
+  rm -f "$native_paths" "$docker_paths" "$EVIDENCE/.key-hits"
 }
 
 act() {

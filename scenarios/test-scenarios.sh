@@ -3386,15 +3386,15 @@ ACCEPTED_SCAN=$(GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy N
     case $1 in
       find) printf '%s\n' /opt/data/.godspeed/assistant.json ;;
       node) printf '%s' /root/.hermes ;;
-      grep) return 1 ;;
+      grep) printf '%s\n' /root/.hermes/hevy.json ;;
     esac
   }
   scan_fixture_key
   cat "$EVIDENCE/key-scan.json"
 ' accepted-scan "$ROOT/scenarios/workouts-from-hevy.sh" "$RFS" "$ROOT/scenarios" 2>/dev/null)
 case "$ACCEPTED_SCAN" in
-  '{"clean":true,"paths":[]}') ok "the accepted key's permitted recorded assistant-home setting is ignored" ;;
-  *) bad "the accepted key's permitted recorded assistant-home setting was not ignored ($ACCEPTED_SCAN)" ;;
+  '{"clean":true,"paths":[]}') ok "the accepted key's permitted native and Docker Settings records are ignored" ;;
+  *) bad "the accepted key's permitted native or Docker Settings record was not ignored ($ACCEPTED_SCAN)" ;;
 esac
 printf '00000000-0000-4000-8000-000000000001\n' >"$RFS/assistant/settings.json"
 ACCEPTED_SCAN=$(GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy NODE="$(command -v node)" bash -c '
@@ -3459,6 +3459,47 @@ case "$ACCEPTED_SCAN" in
   '{"clean":false,"paths":["/srv/non-default-hermes/retained.json"]}') ok "the accepted-key scan finds a leak in the recorded non-default Docker assistant home" ;;
   *) bad "the accepted-key scan missed a recorded non-default Docker assistant-home leak ($ACCEPTED_SCAN)" ;;
 esac
+mkdir -p "$RFS/root/dockerhome"
+printf '00000000-0000-4000-8000-000000000001\n' >"$RFS/root/dockerhome/hevy.json"
+ACCEPTED_SCAN=$(GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy NODE="$(command -v node)" bash -c '
+  cd "$3"
+  . "$1"
+  install_paths
+  EVIDENCE=$2
+  in_server() {
+    case $1 in
+      find) printf "%s\\n" /opt/data/.godspeed/assistant.json ;;
+      node) printf "%s" "'$RFS'/root/dockerhome" ;;
+      grep) return 1 ;;
+    esac
+  }
+  scan_fixture_key
+  cat "$EVIDENCE/key-scan.json"
+' accepted-scan "$ROOT/scenarios/workouts-from-hevy.sh" "$RFS" "$ROOT/scenarios" 2>/dev/null)
+case "$ACCEPTED_SCAN" in
+  '{"clean":false,"paths":["'"$RFS"'/root/dockerhome/hevy.json"]}') ok "a native retained key matching the Docker Settings pathname is kept" ;;
+  *) bad "a native retained key matching the Docker Settings pathname was ignored ($ACCEPTED_SCAN)" ;;
+esac
+rm -f "$RFS/root/dockerhome/hevy.json"
+ACCEPTED_SCAN=$(GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy NODE="$(command -v node)" bash -c '
+  cd "$3"
+  . "$1"
+  install_paths
+  EVIDENCE=$2
+  in_server() {
+    case $1 in
+      find) printf "%s\\n" /opt/data/.godspeed/assistant.json ;;
+      node) printf "%s" /srv/non-default-hermes ;;
+      grep) printf "%s\\n" "'$RFS'/assistant/hevy.json" ;;
+    esac
+  }
+  scan_fixture_key
+  cat "$EVIDENCE/key-scan.json"
+' accepted-scan "$ROOT/scenarios/workouts-from-hevy.sh" "$RFS" "$ROOT/scenarios" 2>/dev/null)
+case "$ACCEPTED_SCAN" in
+  '{"clean":false,"paths":["'"$RFS"'/assistant/hevy.json"]}') ok "a Docker retained key matching the native Settings pathname is kept" ;;
+  *) bad "a Docker retained key matching the native Settings pathname was ignored ($ACCEPTED_SCAN)" ;;
+esac
 rm -rf "$RFS/assistant"
 MISSING_HOME_SCAN=$(GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy NODE="$(command -v node)" bash -c '
   cd "$3"
@@ -3505,6 +3546,24 @@ case "$FAILED_ACCEPTED_SCAN_CODE $FAILED_ACCEPTED_SCAN" in
   "1 "*"FAIL workouts-from-hevy: native accepted-key scan could not run (grep ended 2)"*) ok "a failed native accepted-key scanner fails closed" ;;
   *) bad "a failed native accepted-key scanner did not fail closed (exit $FAILED_ACCEPTED_SCAN_CODE: $FAILED_ACCEPTED_SCAN)" ;;
 esac
+mkdir -p "$RFS/silent-grep"
+cat >"$RFS/silent-grep/grep" <<'SH'
+#!/bin/sh
+exit 0
+SH
+chmod +x "$RFS/silent-grep/grep"
+SILENT_NATIVE_ACCEPTED_SCAN=$(PATH="$RFS/silent-grep:$PATH" GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy NODE="$SCENARIO_NODE" bash -c '
+  cd "$3"
+  . "$1"
+  install_paths
+  EVIDENCE=$2
+  scan_fixture_key
+' accepted-scan "$ROOT/scenarios/workouts-from-hevy.sh" "$RFS" "$ROOT/scenarios" 2>&1)
+SILENT_NATIVE_ACCEPTED_SCAN_CODE=$?
+case "$SILENT_NATIVE_ACCEPTED_SCAN_CODE $SILENT_NATIVE_ACCEPTED_SCAN" in
+  "1 "*"FAIL workouts-from-hevy: native accepted-key scan completed with no path output after a match"*) ok "a silent native accepted-key scanner fails closed" ;;
+  *) bad "a silent native accepted-key scanner did not fail closed (exit $SILENT_NATIVE_ACCEPTED_SCAN_CODE: $SILENT_NATIVE_ACCEPTED_SCAN)" ;;
+esac
 FAILED_DOCKER_REFUSED_SCAN=$(GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy NODE="$SCENARIO_NODE" bash -c '
   cd "$3"
   . "$1"
@@ -3542,6 +3601,25 @@ FAILED_DOCKER_ACCEPTED_SCAN_CODE=$?
 case "$FAILED_DOCKER_ACCEPTED_SCAN_CODE $FAILED_DOCKER_ACCEPTED_SCAN" in
   "1 "*"FAIL workouts-from-hevy: docker accepted-key scan could not run (server grep ended 73)"*) ok "a failed Docker accepted-key scanner fails closed" ;;
   *) bad "a failed Docker accepted-key scanner did not fail closed (exit $FAILED_DOCKER_ACCEPTED_SCAN_CODE: $FAILED_DOCKER_ACCEPTED_SCAN)" ;;
+esac
+SILENT_DOCKER_ACCEPTED_SCAN=$(GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy NODE="$SCENARIO_NODE" bash -c '
+  cd "$3"
+  . "$1"
+  install_paths
+  EVIDENCE=$2
+  in_server() {
+    case $1 in
+      find) printf "%s\\n" /opt/data/.godspeed/assistant.json ;;
+      node) printf "%s" /root/.hermes ;;
+      grep) return 0 ;;
+    esac
+  }
+  scan_fixture_key
+' accepted-scan "$ROOT/scenarios/workouts-from-hevy.sh" "$RFS" "$ROOT/scenarios" 2>&1)
+SILENT_DOCKER_ACCEPTED_SCAN_CODE=$?
+case "$SILENT_DOCKER_ACCEPTED_SCAN_CODE $SILENT_DOCKER_ACCEPTED_SCAN" in
+  "1 "*"FAIL workouts-from-hevy: docker accepted-key scan completed with no path output after a match"*) ok "a silent Docker accepted-key scanner fails closed" ;;
+  *) bad "a silent Docker accepted-key scanner did not fail closed (exit $SILENT_DOCKER_ACCEPTED_SCAN_CODE: $SILENT_DOCKER_ACCEPTED_SCAN)" ;;
 esac
 copy "$WH/good" "$WH/no-workout"; sed -i 's/"source_id":"canal-pull"/"source_id":"missing-row"/' "$WH/no-workout/docker.json"
 refuses 'a malformed initial workout' workouts-from-hevy "$WH/no-workout" 'initial workouts have the wrong source ids'
