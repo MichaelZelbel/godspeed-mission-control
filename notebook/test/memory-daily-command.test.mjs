@@ -178,11 +178,11 @@ test('malformed successful deadline state stops before a model request or cursor
 
 test('the command closes an older world home city without a notebook and keeps its words',async t=>{
  const root=workspace(t),row={id:'hamburg',at:'2026-11-01T12:00:00Z',text:'I moved to Hamburg on 1 November'},claims=path.join(root,'world','claims');fs.mkdirSync(claims,{recursive:true});
- fs.writeFileSync(path.join(claims,'me--lives-in--2026-01-01.md'),'---\nsubject: me\nattribute: lives-in\nvalue: "Kiel"\nvalid_from: 2026-01-01\n---\nI live in Kiel.\n');archive(root,[row]);
+ fs.writeFileSync(path.join(claims,'me--lives-in--2026-01-01.md'),'---\nsubject: me\nattribute: lives-in\nvalue: "Kiel"\nvalid_from: 2026-01-01\nmenerio_id: 12345\n# kept\nnotes:\n  - a\n---\nI live in Kiel.\n');archive(root,[row]);
  const result=await run(root,{env:{FIXTURE_MEMORY_MODEL_RESPONSE:response(fact(row.id,row.text))}});assert.equal(result.completed,1);
  const files=fs.readdirSync(claims).map(name=>fs.readFileSync(path.join(claims,name),'utf8'));assert.equal(files.length,2);
  const kiel=files.find(text=>/Kiel/.test(text)),hamburg=files.find(text=>/Hamburg/.test(text));
- assert.match(kiel,/valid_to: 2026-11-01/);assert.match(kiel,/I live in Kiel\./);assert.doesNotMatch(hamburg,/valid_to/);assert.match(hamburg,/I moved to Hamburg on 1 November/);
+ assert.match(kiel,/valid_to: 2026-11-01/);assert.match(kiel,/I live in Kiel\./);assert.match(kiel,/menerio_id: 12345\n# kept\nnotes:\n  - a\n/,'lines the routine does not own stay as written');assert.doesNotMatch(hamburg,/valid_to/);assert.match(hamburg,/I moved to Hamburg on 1 November/);
 });
 
 test('the command refuses a fact naming a redacted term the cited message does not contain',async t=>{

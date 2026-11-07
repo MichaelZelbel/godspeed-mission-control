@@ -141,10 +141,34 @@ test('a starter entity file is reused, not rewritten, when the routine names the
  for(const [name,id] of [['Peter Mueller','a'],['Pete','b']]){await rememberWhatYouSaid({root,now,model:async()=>({people:[{id,name}],facts:[{subject:{kind:'new-person',id},kind:'home-city',value:'Hamburg',date:'2026-11-02',one_or_many:'one',citation:{id:'peter',quote:'Pete just moved to Hamburg'}}]})});
   fs.rmSync(path.join(root,'routines'),{recursive:true,force:true});}
  assert.equal(fs.readFileSync(entity,'utf8'),original);assert.deepEqual(fs.readdirSync(path.join(root,'world','entities')),['peter-mueller.md']);
- assert.match(fs.readdirSync(path.join(root,'world','claims'))[0],/^peter-mueller--/);
+ assert.deepEqual(fs.readdirSync(path.join(root,'world','claims')).map(n=>n.split('--')[0]),['peter-mueller'],'an alias fact already filed is not filed twice');
 });
 
 test('a world file the starter formats allow is read the way it was written',()=>{
  const text='---\nsubject: me\nattribute: lives-in\nvalue: "you" said it\nnickname: *Bear*\nproject: [draft] memoir\npriority: #1 priority\nowner: null\naliases: [Peter, "Pete"]\n---\nbody\n',{fields,body}=frontMatter(text);
  assert.deepEqual({value:fields.value,nickname:fields.nickname,project:fields.project,priority:fields.priority,owner:fields.owner,aliases:fields.aliases,body},{value:'"you" said it',nickname:'*Bear*',project:'[draft] memoir',priority:'#1 priority',owner:'',aliases:["Peter","Pete"],body:'body'});
+});
+
+test('a hand-written entity of any other type is reused for a thing of that name',async t=>{
+ const root=workspace(t),dir=path.join(root,'world','entities');fs.mkdirSync(dir,{recursive:true});fs.writeFileSync(path.join(dir,'bluebird-garden.md'),'---\nslug: bluebird-garden\nname: Bluebird Garden\ntype: project\n---\n');
+ const row={id:'garden',at:'2026-11-02T12:00:00Z',text:'The Bluebird Garden opened in Hamburg today'};archive(root,[row]);
+ await rememberWhatYouSaid({root,now,model:async()=>({things:[{id:'g',name:'Bluebird Garden'}],facts:[{subject:{kind:'new-thing',id:'g'},kind:'city',value:'Hamburg',date:'2026-11-02',one_or_many:'one',citation:{id:'garden',quote:'Bluebird Garden opened in Hamburg'}}]})});
+ assert.deepEqual(fs.readdirSync(dir),['bluebird-garden.md']);assert.match(fs.readdirSync(path.join(root,'world','claims'))[0],/^bluebird-garden--/);
+});
+
+test('an impossible model date refuses that item and files the rest',async t=>{
+ const root=workspace(t),row={id:'dates',at:'2026-11-02T12:00:00Z',text:'I moved to Hamburg on 1 November'};archive(root,[row]);
+ const good=answer(row).facts[0],bad={...good,kind:'work-city',value:'Berlin',date:'2026-13-01'};
+ const result=await rememberWhatYouSaid({root,now,model:async()=>({facts:[bad,good]})});
+ assert.equal(result.completed,1);assert.equal(result.failed,0);assert.equal(fs.readdirSync(path.join(root,'world','claims')).length,1);
+ const logs=fs.readdirSync(path.join(root,'routines','remember-what-you-said','runs','2026-11-07')).map(n=>fs.readFileSync(path.join(root,'routines','remember-what-you-said','runs','2026-11-07',n),'utf8')).join('');assert.match(logs,/private-or-invalid/);
+});
+
+test('messages of an applied receipt whose deadline piece was refused are not sent again',async t=>{
+ const root=workspace(t),store=new Store(root),query=new QueryService(store),domains=new Domains(query),rows=Array.from({length:16},(_,index)=>({id:'p-'+String(index).padStart(2,'0'),at:'2026-11-02T12:'+String(index).padStart(2,'0')+':00Z',text:index===15?'I filed the tax return today. '+'.'.repeat(2870):'I recorded item '+index+' '+'.'.repeat(2900)}));archive(root,rows);const sent=[];
+ const model=async input=>{const ids=JSON.parse(input.prompt).messages.map(m=>m.id);sent.push(ids);return ids.includes('p-15')?{events:[{what:'Filed the tax return',day:'2026-11-02',participants:[],deadline_id:'tax',deadline_complete:true,citation:{id:'p-15',quote:'I filed the tax return today'}}]}:{events:[]};};
+ const deadline={slug:'tax',title:'Tax return',doneWhen:'I filed the tax return today'},go=due=>rememberWhatYouSaid({root,store,query,domains,notebook:true,now,deadlines:[deadline],model,due});
+ await go(async()=>false);const earlier=sent.length;
+ archive(root,[...rows,{id:'p-new',at:'2026-11-03T12:00:00Z',text:'A new note today'}]);await go(async()=>true);
+ assert.deepEqual(sent.slice(earlier),[['p-new']]);
 });

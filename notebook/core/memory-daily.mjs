@@ -8,6 +8,7 @@ import {sameValue as sameThing} from './same-thing.mjs';
 import {MACHINE_BANNER} from '../../tools/prompt-machine-openers.mjs';
 import {stringify as stringifyYaml} from './records/yaml.mjs';
 import {frontMatter} from './world-facts.mjs';
+import {setValidTo} from './fact-closing.mjs';
 import {dailyMemorySubjectId,normalName as normal} from './memory-daily-identity.mjs';
 import {decodeDailyMemoryPlan,day as calendarDay,id as referenceId,name as planName} from './daily-memory-plan.mjs';
 
@@ -118,7 +119,7 @@ function newSubjects(items,target,terms,refusals){
 const slug=value=>normal(value).replace(/ /g,'-').slice(0,80)||'item';
 const worldSubjectId=subject=>subject.type==='self'?'me':(subject.type==='new-thing'?'thing-':'')+slug(subject.name);
 function currentFact(query,root,subject,kind,value,fields){
- if(!query){const expected=worldSubjectId(subject);try{return fs.readdirSync(path.join(root,'world','claims')).filter(n=>n.endsWith('.md')).some(name=>{const document=frontMatter(fs.readFileSync(path.join(root,'world','claims',name),'utf8')),item=document?.fields;if(!item)return false;return item.subject===expected&&fields.canonical(item.attribute)===fields.canonical(kind)&&!item.valid_to&&(String(item.value).toLowerCase()===String(value).toLowerCase()||sameThing(item.value,value));});}catch{return false;}}
+ if(!query){const expected=existingWorldEntity(root,subject)||worldSubjectId(subject);try{return fs.readdirSync(path.join(root,'world','claims')).filter(n=>n.endsWith('.md')).some(name=>{const document=frontMatter(fs.readFileSync(path.join(root,'world','claims',name),'utf8')),item=document?.fields;if(!item)return false;return item.subject===expected&&fields.canonical(item.attribute)===fields.canonical(kind)&&!item.valid_to&&(String(item.value).toLowerCase()===String(value).toLowerCase()||sameThing(item.value,value));});}catch{return false;}}
  const canonical=fields.canonical(kind);
  return query.rows('claims').some(f=>!f.valid_to&&f.subject_type===subject.type&&(f.subject_id||null)===(subject.id||null)&&fields.canonical(f.attribute)===canonical&&(String(f.value).toLowerCase()===String(value).toLowerCase()||sameThing(f.value,value)));
 }
@@ -169,22 +170,26 @@ export function validateResponse(answer,{messages,query,root,terms=[],deadlines=
 }
 const yamlScalar=value=>stringifyYaml({value}).trim().slice('value: '.length);
 function worldFile(file,fields,body){const front=Object.entries(fields).filter(([,v])=>v!==null&&v!==undefined&&v!=='').map(([key,value])=>Array.isArray(value)?key+': ['+value.map(yamlScalar).join(', ')+']':stringifyYaml({[key]:value}).trim()).join('\n');mkdir(file);atomic(file,'---\n'+front+'\n---\n'+(body||'')+'\n');}
-function existingWorldEntity(root,id,name,type){
- const folder=path.join(root,'world','entities');let names=[];try{names=fs.readdirSync(folder).filter(n=>n.endsWith('.md'));}catch{return null;}
- const wanted=normal(name);
- for(const file of names){const fields=frontMatter(fs.readFileSync(path.join(folder,file),'utf8'))?.fields,slugName=fields?.slug||file.replace(/\.md$/,'');
-  if(slugName===id||file===id+'.md'||(!fields?.type||fields.type===type)&&[fields?.name,...(Array.isArray(fields?.aliases)?fields.aliases:[])].some(n=>typeof n==='string'&&normal(n)===wanted))return slugName;}
+// The one rule that maps a named subject to a world entity: slug or file name,
+// then name or alias; `type` only keeps a person from matching a non-person.
+function existingWorldEntity(root,subject){
+ if(subject.type==='self')return 'me';
+ const id=worldSubjectId(subject),wantPerson=subject.type==='new-person'||subject.type==='contact',wanted=normal(subject.name);
+ let names=[];try{names=fs.readdirSync(path.join(root,'world','entities')).filter(n=>n.endsWith('.md'));}catch{return null;}
+ for(const file of names){const fields=frontMatter(fs.readFileSync(path.join(root,'world','entities',file),'utf8'))?.fields,slugName=fields?.slug||file.replace(/\.md$/,'');
+  if(slugName===id||file===id+'.md')return slugName;
+  if((!fields?.type||(fields.type==='person')===wantPerson)&&[fields?.name,...(Array.isArray(fields?.aliases)?fields.aliases:[])].some(n=>typeof n==='string'&&normal(n)===wanted))return slugName;}
  return null;
 }
 function ensureWorldSubject(root,subject,created){
  if(subject.type==='self')return 'me';const key=referenceKey(subject.type,subject.id),found=created.get(key);if(found)return found;
- const id=worldSubjectId(subject),existing=existingWorldEntity(root,id,subject.name,subject.type==='new-person'?'person':'thing');if(existing){created.set(key,existing);return existing;}
+ const id=worldSubjectId(subject),existing=existingWorldEntity(root,subject);if(existing){created.set(key,existing);return existing;}
  worldFile(path.join(root,'world','entities',id+'.md'),{slug:id,origin:'remember-what-you-said',name:subject.name,type:subject.type==='new-person'?'person':'thing'},'');created.set(key,id);return id;
 }
 function writeWorld(root,plan){
  const created=new Map;for(const p of plan.people)ensureWorldSubject(root,{type:'new-person',id:p.id,name:p.name},created);for(const t of plan.things)ensureWorldSubject(root,{type:'new-thing',id:t.id,name:t.name},created);
  for(const effect of plan.effects){const index=hash([effect.citation.id,effect.type,effect.type==='fact'?[effect.subject.type,effect.subject.id,effect.kind,effect.value]:[effect.day,effect.what]]).slice(0,16);
-  if(effect.type==='fact'){const subject=ensureWorldSubject(root,effect.subject,created),file=path.join(root,'world','claims',subject+'--'+slug(effect.kind)+'--'+effect.date+'-'+index+'.md'),fields=fieldList(root);if(fields.one(effect.kind))for(const name of (()=>{try{return fs.readdirSync(path.join(root,'world','claims')).filter(n=>n.endsWith('.md'));}catch{return [];}})()){const old=path.join(root,'world','claims',name),document=frontMatter(fs.readFileSync(old,'utf8')),front=document?.fields;if(!front)continue;if(front.subject===subject&&fields.canonical(front.attribute)===fields.canonical(effect.kind)&&!front.valid_to&&front.value!==effect.value)worldFile(old,{...front,valid_to:effect.date},document.body.trim());}worldFile(file,{subject,origin:'remember-what-you-said',attribute:effect.kind,value:effect.value,valid_from:effect.date,confidence:effect.confidence,source:'conversation_archive:'+effect.citation.id},effect.citation.quote);}
+  if(effect.type==='fact'){const subject=ensureWorldSubject(root,effect.subject,created),file=path.join(root,'world','claims',subject+'--'+slug(effect.kind)+'--'+effect.date+'-'+index+'.md'),fields=fieldList(root);if(fields.one(effect.kind))for(const name of (()=>{try{return fs.readdirSync(path.join(root,'world','claims')).filter(n=>n.endsWith('.md'));}catch{return [];}})()){const old=path.join(root,'world','claims',name),document=frontMatter(fs.readFileSync(old,'utf8')),front=document?.fields;if(!front)continue;if(front.subject===subject&&fields.canonical(front.attribute)===fields.canonical(effect.kind)&&!front.valid_to&&front.value!==effect.value)setValidTo(old,effect.date);}worldFile(file,{subject,origin:'remember-what-you-said',attribute:effect.kind,value:effect.value,valid_from:effect.date,confidence:effect.confidence,source:'conversation_archive:'+effect.citation.id},effect.citation.quote);}
   else worldFile(path.join(root,'world','events',effect.day+'-'+slug(effect.what)+'-'+index+'.md'),{date:effect.day,origin:'remember-what-you-said',participants:effect.participants.map(subject=>ensureWorldSubject(root,subject,created)),source:'conversation_archive:'+effect.citation.id},effect.what+'\n\n'+effect.citation.quote);
  }
 }
