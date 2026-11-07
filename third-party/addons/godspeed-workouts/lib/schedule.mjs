@@ -205,11 +205,14 @@ export function installSchedule(p) {
 }
 
 const commandFailure = (what, r) => ({ ok: false, text: `${what}: ${(r.stderr || r.stdout || r.error?.message || "the system command failed").trim()}` });
+const missingWindowsTask = (r) => /the system cannot find the file specified\.?/i.test(`${r.stderr || ""}\n${r.stdout || ""}`);
 
 export function removeSchedule(p, { runCommand = run } = {}) {
   if (p.kind === "windows-task") {
     const r = runCommand("schtasks", ["/Delete", "/TN", TASK, "/F"]);
-    return r.status === 0 ? { ok: true, text: `scheduled task "${TASK}" removed` } : commandFailure(`the scheduled task "${TASK}" was not removed`, r);
+    if (r.status === 0) return { ok: true, text: `scheduled task "${TASK}" removed` };
+    if (missingWindowsTask(r)) return { ok: true, text: `no scheduled task "${TASK}" to remove` };
+    return commandFailure(`the scheduled task "${TASK}" was not removed`, r);
   }
   const files = scheduleFiles(p).filter((f) => fs.existsSync(f));
   if (!files.length) return { ok: true, text: "no hourly run to remove" };

@@ -44,6 +44,7 @@ const readSetupFailures=store=>{try{const saved=JSON.parse(fs.readFileSync(setup
 const writeSetupFailures=(store,failures)=>atomic(setupFailureFile(store),JSON.stringify(failures,null,2)+'\n');
 const diagnostic=error=>{const lines=String(error?.stderr||error?.message||'').replace(/\x1b\[[0-?]*[ -/]*[@-~]/g,'').split(/\r?\n/).map(line=>scrubCredentials(line).trimEnd()).filter(Boolean);return lines.slice(-10).join('\n').slice(-2000);};
 const errorLine=record=>{const lines=String(record.stderr||'').split(/\r?\n/).map(line=>line.trim()).filter(Boolean),trace=lines.findIndex(line=>/^Traceback \(most recent call last\):$/i.test(line));return (trace>=0?lines.at(-1):lines[0])||'exit code '+(record.exit_code??'unknown');};
+const cleanupFailure=(error,cleanup)=>Object.assign(Error(errorLine({stderr:diagnostic(error),exit_code:error?.code})+'; carried routine cleanup failed: '+errorLine({stderr:diagnostic(cleanup),exit_code:cleanup?.code})),{code:error?.code,cause:error});
 const setupName=step=>step==='cleanup'?'Nightly cleanup':step==='notice-sender'?'Notice sender':step==='workouts'?'Workouts from Hevy':switchable().find(routine=>routine.key===step)?.name||step;
 const setupEffect=step=>step==='notice-sender'?'no notices and no routine switch takes effect':step==='cleanup'?'nightly cleanup does not run':step==='workouts'?'the hourly Workouts import has not taken over':'that routine does not run';
 // "05:16": once a day at that time in the owner's timezone.
@@ -497,7 +498,7 @@ export class NativeScheduler{
    return candidate.id;
   }catch(error){
    if(remembered)try{const routines=readNotebookRoutines(this.store);writeNotebookRoutines(this.store,{...routines,jobs:routines.jobs.filter(job=>job.id!==candidate.id)});}catch{}
-   await this.command(['remove',candidate.id]).catch(()=>{});
+   try{await this.command(['remove',candidate.id]);}catch(cleanup){throw cleanupFailure(error,cleanup);}
    throw error;
   }
  }

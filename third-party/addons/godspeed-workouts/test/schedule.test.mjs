@@ -61,3 +61,8 @@ test("removing a schedule reports every platform command refusal", () => {
     }
   } finally { fs.rmSync(home, { recursive: true, force: true }); }
 });
+
+test("removing an already absent Windows task succeeds", () => {
+  const result = removeSchedule({ ...p, kind: "windows-task" }, { runCommand: () => ({ status: 1, stderr: "ERROR: The system cannot find the file specified." }) });
+  assert.deepEqual(result, { ok: true, text: 'no scheduled task "Godspeed Workouts" to remove' });
+});
