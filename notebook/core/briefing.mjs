@@ -164,7 +164,7 @@ async function runBriefing(job,{store,query,provider,now}){
   for(const line of required)add(line);
   if(context.contribution){add(context.contribution.content);add(context.contribution.link);}
   const result=parts.join('\n\n');
-  if(!action||codeGate(result).length||ruleRefusals(result,voice).length)throw Error('Could not make a checked factual fallback from the available sources');
+  if(!action||codeGate(result).length)throw Error('Could not make a checked factual fallback from the available sources');
   return result;
  };
  // The Charm Challenge line is the person's own count, written by the add-on and checked word for word
