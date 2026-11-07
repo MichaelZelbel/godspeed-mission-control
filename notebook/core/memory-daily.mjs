@@ -9,6 +9,7 @@ import {MACHINE_BANNER} from '../../tools/prompt-machine-openers.mjs';
 import {stringify as stringifyYaml} from './records/yaml.mjs';
 import {frontMatter} from './world-facts.mjs';
 import {dailyMemorySubjectId} from './memory-daily-identity.mjs';
+import {decodeDailyMemoryPlan} from './daily-memory-plan.mjs';
 
 export const ROUTINE_FOLDER=rememberWhatYouSaidRoot;
 const ISO_DAY=/^\d{4}-\d{2}-\d{2}$/;
@@ -83,6 +84,7 @@ export function modelRequest({messages,query,root,terms=[],deadlines=[]}){
  return {system,prompt,timeout_ms:120000,max_tokens:8192};
 }
 const itemCitation=(item,messages)=>{const c=item?.citation;if(!c||typeof c.id!=='string'||typeof c.quote!=='string'||!c.quote)return null;const source=messages.find(m=>m.id===c.id);return source&&source.text.includes(c.quote)?{id:c.id,quote:c.quote,day:source.at.slice(0,10)}:null;};
+const citationContext=(citation,messages)=>messages.find(message=>message.id===citation?.id)?.text.split(/[.!?;]+/).filter(sentence=>sentence.includes(citation.quote))||[];
 const referenceKey=(kind,id='')=>kind+':'+id;
 const referenceId=value=>typeof value==='string'&&/^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$/.test(value)?value:null;
 const privateMaterial=(values,terms=[])=>values.some(value=>{const text=String(value||'');return CREDENTIAL.test(text)||FORBIDDEN.test(text)||/\b(?:employer|client)\b/i.test(text)||EMPLOYER_NAME.test(text)||redacted(text,terms);});
@@ -159,16 +161,16 @@ export function validateResponse(answer,{messages,query,root,terms=[],deadlines=
  newSubjects(people,newPeople,responseTerms,refusals);newSubjects(things,newThings,responseTerms,refusals);
  const subjects=knownSubjects(query,newPeople,newThings,responseTerms),fields=fieldList(root);
  for(const item of facts){const citation=itemCitation(item,messages),subject=subjectReference(item?.subject,subjects);const kind=typeof item?.kind==='string'?item.kind.trim():'';const value=typeof item?.value==='string'?item.value.trim():'';const date=item?.date||citation?.day;
-  if(!citation){refusals.push({reason:'quote',item});continue;}if(!subject){refusals.push({reason:'unknown-subject',item,citation});continue;}if(!safeName(subject.name,responseTerms)||!kind||!value||!calendarDay(date)||privateMaterial([kind,value,citation.quote],responseTerms)){refusals.push({reason:'private-or-invalid',item,citation});continue;}
+  if(!citation){refusals.push({reason:'quote',item});continue;}if(!subject){refusals.push({reason:'unknown-subject',item,citation});continue;}if(!safeName(subject.name,responseTerms)||!kind||!value||!calendarDay(date)||privateMaterial([kind,value,citation.quote,...citationContext(citation,messages)],responseTerms)){refusals.push({reason:'private-or-invalid',item,citation});continue;}
   const fact={type:'fact',subject,kind:fields.canonical(kind),value,date,cardinality:item.one_or_many==='one'?'one':'many',confidence:item.confidence==='likely'?'likely':'certain',citation};
   if(currentFact(query,root,subject,fact.kind,value,fields)||accepted.some(effect=>sameFact(subject,fact.kind,value,effect))){refusals.push({reason:'duplicate',item,citation});continue;}accepted.push(fact);
  }
- for(const item of events){const citation=itemCitation(item,messages),day=item?.day,what=typeof item?.what==='string'?item.what.trim():'',participantReferences=Array.isArray(item.participants)?item.participants:null,participants=participantReferences?.map(reference=>subjectReference(reference,subjects));if(!citation){refusals.push({reason:'quote',item});continue;}if(!participantReferences||participants.some(subject=>!subject)){refusals.push({reason:'unknown-subject',item,citation});continue;}if(!what||!calendarDay(day)||privateMaterial([what,citation.quote,...participants.map(subject=>subject.name)],responseTerms)){refusals.push({reason:'private-or-invalid',item,citation});continue;}
+ for(const item of events){const citation=itemCitation(item,messages),day=item?.day,what=typeof item?.what==='string'?item.what.trim():'',participantReferences=Array.isArray(item.participants)?item.participants:null,participants=participantReferences?.map(reference=>subjectReference(reference,subjects));if(!citation){refusals.push({reason:'quote',item});continue;}if(!participantReferences||participants.some(subject=>!subject)){refusals.push({reason:'unknown-subject',item,citation});continue;}if(!what||!calendarDay(day)||privateMaterial([what,citation.quote,...participants.map(subject=>subject.name),...citationContext(citation,messages)],responseTerms)){refusals.push({reason:'private-or-invalid',item,citation});continue;}
   const requested=typeof item.deadline_id==='string'?item.deadline_id:null,deadline=deadlines.find(d=>d?.slug===requested),deadline_id=completionEvidence(deadline,item,citation,messages)?requested:null;if(requested&&!deadline){refusals.push({reason:'unknown-deadline',item,citation});continue;}if(requested&&!deadline_id){refusals.push({reason:'deadline-evidence',item,citation});continue;}
   const event={type:'event',what,day,participants,citation,deadline_id};if(sameEvent(query,root,event)||accepted.some(effect=>sameAcceptedEvent(query,event,effect,!!query))){refusals.push({reason:'duplicate',item,citation});continue;}accepted.push(event);
  }
  const used=new Set(accepted.flatMap(effect=>effect.type==='fact'?[effect.subject]:effect.participants).map(subject=>referenceKey(subject.type,subject.id||'')));
- return {plan:{people:newPeople.filter(row=>used.has(referenceKey('new-person',row.id))),things:newThings.filter(row=>used.has(referenceKey('new-thing',row.id))),effects:accepted},refusals};
+ return {plan:decodeDailyMemoryPlan({people:newPeople.filter(row=>used.has(referenceKey('new-person',row.id))),things:newThings.filter(row=>used.has(referenceKey('new-thing',row.id))),effects:accepted}),refusals};
 }
 const yamlScalar=value=>stringifyYaml({value}).trim().slice('value: '.length);
 function worldFile(file,fields,body){const front=Object.entries(fields).filter(([,v])=>v!==null&&v!==undefined&&v!=='').map(([key,value])=>Array.isArray(value)?key+': ['+value.map(yamlScalar).join(', ')+']':stringifyYaml({[key]:value}).trim()).join('\n');mkdir(file);atomic(file,'---\n'+front+'\n---\n'+(body||'')+'\n');}
@@ -188,13 +190,14 @@ function stateFile(root){return rootPath(root,'state.json');}
 function readState(root,now){const state=safeJson(stateFile(root),null);return state&&Array.isArray(state.consumed)?state:{version:1,not_before:dayOf(new Date(now.getTime()-6*86400000)),consumed:[]};}
 function receiptFile(root,piece){return rootPath(root,'pending',piece.id+'.json');}
 function logFile(root,piece,now){return rootPath(root,'runs',dayOf(now),piece.id+'.json');}
-function consume(root,state,piece,receipt,now){const log=logFile(root,piece,now);mkdir(log);if(!fs.existsSync(log))fs.renameSync(receipt,log);else if(receipt!==log)fs.rmSync(receipt,{force:true});state.consumed=[...new Set([...state.consumed,...piece.messages.map(m=>m.id)])];mkdir(stateFile(root));writeJson(stateFile(root),state);}
+function archiveReceipt(root,piece,receipt,now){const file=receiptFile(root,piece),log=logFile(root,piece,now);mkdir(file);writeJson(file,receipt);mkdir(log);if(!fs.existsSync(log))fs.renameSync(file,log);else fs.rmSync(file,{force:true});}
 function receiptMessages(receipt){return Array.isArray(receipt.message_ids)?receipt.message_ids.filter(id=>typeof id==='string').map(id=>({id})):[];}
-function completedReceipts(root){const runs=rootPath(root,'runs');let days=[];try{days=fs.readdirSync(runs);}catch{}return days.flatMap(day=>{try{return fs.readdirSync(path.join(runs,day)).filter(n=>n.endsWith('.json')).map(n=>safeJson(path.join(runs,day,n),null)).filter(r=>r?.id&&receiptMessages(r).length&&r.plan);}catch{return [];}});}
+function decodedReceipt(value,{applied=false}={}){const plan=decodeDailyMemoryPlan(value?.plan);return typeof value?.id==='string'&&receiptMessages(value).length&&plan?{...value,plan,applied:value.applied===true||applied}:null;}
+function completedReceipts(root){const runs=rootPath(root,'runs');let days=[];try{days=fs.readdirSync(runs);}catch{}return days.flatMap(day=>{try{return fs.readdirSync(path.join(runs,day)).filter(n=>n.endsWith('.json')).map(n=>decodedReceipt(safeJson(path.join(runs,day,n),null),{applied:true})).filter(Boolean);}catch{return [];}});}
 function refusalReceipt(root,row,now){const file=rootPath(root,'runs',dayOf(now),'refused-'+hash([row.id,row.reason]).slice(0,18)+'.json');mkdir(file);if(!fs.existsSync(file))writeJson(file,{at:now.toISOString(),message_id:row.id,reason:row.reason});}
-const safeRefusals=(refusals,terms=[])=>refusals.map(({reason,citation})=>{
+const safeRefusals=(refusals,messages,terms=[])=>refusals.map(({reason,citation})=>{
  const receipt={reason};
- if(citation){receipt.message_id=citation.id;if(!privateMaterial([citation.quote],terms))receipt.quote=citation.quote;}
+ if(citation){receipt.message_id=citation.id;if(!privateMaterial([citation.quote,...citationContext(citation,messages)],terms))receipt.quote=citation.quote;}
  return receipt;
 });
 
@@ -204,18 +207,18 @@ export async function rememberWhatYouSaid({root,store=null,query=null,domains=nu
  return withFileLockAsync(lock,()=>rememberUnderLock({root,store,query,domains,model,due,now,terms,deadlines,notebook}),{timeoutMs:Infinity});
 }
 async function rememberUnderLock({root,store,query,domains,model,due,now,terms,deadlines,notebook}){
- const state=readState(root,now);if(!fs.existsSync(stateFile(root))){mkdir(stateFile(root));writeJson(stateFile(root),state);}const all=archivedMessages(root,{state,now});for(const row of all)if(row.ok&&redacted(row.text,terms)){row.ok=false;row.reason='redacted-message';}let completed=0,failed=0,refused=0;
- for(const row of all.filter(r=>!r.ok)){if(row.reason!=='already-read-or-invalid'&&!state.consumed.includes(row.id)){refusalReceipt(root,row,now);state.consumed.push(row.id);refused++;}}
- if(refused)writeJson(stateFile(root),state);
- const pending=(()=>{try{return fs.readdirSync(rootPath(root,'pending')).filter(n=>n.endsWith('.json')).sort().map(n=>safeJson(rootPath(root,'pending',n),null)).filter(r=>r?.id&&receiptMessages(r).length&&r.plan);}catch{return [];}})();
+ const state=readState(root,now);if(!fs.existsSync(stateFile(root))){mkdir(stateFile(root));writeJson(stateFile(root),state);}const all=archivedMessages(root,{state,now});for(const row of all)if(row.ok&&redacted(row.text,terms)){row.ok=false;row.reason='redacted-message';}let completed=0,failed=0,refused=0,deadlineRefused=false;const newlyConsumed=[];
+ for(const row of all.filter(r=>!r.ok)){if(row.reason!=='already-read-or-invalid'&&!state.consumed.includes(row.id)){refusalReceipt(root,row,now);newlyConsumed.push(row.id);refused++;}}
+ const pending=(()=>{try{return fs.readdirSync(rootPath(root,'pending')).filter(n=>n.endsWith('.json')).sort().map(n=>decodedReceipt(safeJson(rootPath(root,'pending',n),null))).filter(Boolean);}catch{return [];}})();
  const pieces=[...pending.map(r=>({...r,pending:true,messages:receiptMessages(r)})),...completedReceipts(root).map(r=>({...r,pending:true,messages:receiptMessages(r)})),...archivePieces(all)];const seen=new Set;
  for(const piece of pieces){if(seen.has(piece.id)||piece.messages.some(m=>state.consumed.includes(m.id)))continue;seen.add(piece.id);let receipt=piece.pending?piece:null;
   if(!receipt){let valid=null;for(let attempt=0;attempt<3&&!valid;attempt++)try{const reply=await model(modelRequest({messages:piece.messages,query,root,terms,deadlines}));valid=validateResponse(reply?.text??reply,{messages:piece.messages,query,root,terms,deadlines});if(!valid.plan)valid=null;}catch{}
-   if(!valid){failed++;continue;}receipt={id:piece.id,message_ids:piece.messages.map(m=>m.id),plan:valid.plan,refusals:safeRefusals(valid.refusals,[...terms,...employerTerms(piece.messages)]),prepared_at:now.toISOString()};const file=receiptFile(root,piece);mkdir(file);writeJson(file,receipt);}
-  try{for(const effect of receipt.plan.effects.filter(x=>x.type==='event'&&x.deadline_id)){const done=await callDue(due,effect);if(done!==true)throw Error('deadline-refused');}
-   if(notebook)domains.writeDailyMemory(receipt.plan);else writeWorld(root,receipt.plan);
-   const file=receiptFile(root,piece);if(!fs.existsSync(file)){mkdir(file);writeJson(file,receipt);}consume(root,state,piece,file,now);completed++;
-  }catch(error){failed++;if(String(error.message)==='deadline-refused')break;}
+   const plan=valid&&decodeDailyMemoryPlan(valid.plan);if(!plan){failed++;continue;}receipt={id:piece.id,message_ids:piece.messages.map(m=>m.id),plan,refusals:safeRefusals(valid.refusals,piece.messages,[...terms,...employerTerms(piece.messages)]),prepared_at:now.toISOString(),applied:false};const file=receiptFile(root,piece);mkdir(file);writeJson(file,receipt);}
+  try{const plan=decodeDailyMemoryPlan(receipt.plan);if(!plan)throw Error('invalid-daily-memory-plan');if(!receipt.applied){for(const effect of plan.effects.filter(x=>x.type==='event'&&x.deadline_id)){const done=await callDue(due,effect);if(done!==true)throw Error('deadline-refused');}
+    if(notebook)domains.writeDailyMemory(plan);else writeWorld(root,plan);receipt={...receipt,plan,applied:true};}
+   archiveReceipt(root,piece,receipt,now);newlyConsumed.push(...piece.messages.map(message=>message.id));completed++;
+  }catch(error){failed++;if(String(error.message)==='deadline-refused'){deadlineRefused=true;break;}}
  }
+ if(!deadlineRefused&&newlyConsumed.length){state.consumed=[...new Set([...state.consumed,...newlyConsumed])];writeJson(stateFile(root),state);}
  return {completed,failed,refused,success:completed>0||(!failed&&all.every(r=>!r.ok)),state};
 }

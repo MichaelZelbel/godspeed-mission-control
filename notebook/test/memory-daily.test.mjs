@@ -8,7 +8,7 @@ import {fileURLToPath} from 'node:url';
 import {Store} from '../core/records/store.mjs';
 import {QueryService} from '../core/query.mjs';
 import {Domains} from '../core/domains.mjs';
-import {qualifiesMessage,rememberWhatYouSaid} from '../core/memory-daily.mjs';
+import {archivePieces,qualifiesMessage,rememberWhatYouSaid} from '../core/memory-daily.mjs';
 
 const now=new Date('2026-11-07T04:00:00Z');
 const workspace=t=>{const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-memory-daily-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));fs.mkdirSync(path.join(root,'prompts','archive'),{recursive:true});return root;};
@@ -45,6 +45,12 @@ test('the daily memory refuses credential fields and impossible dates without re
  const root=workspace(t),store=new Store(root),query=new QueryService(store),domains=new Domains(query),ordinary='I moved to Hamburg on 1 November',secret='My password is swordfish',key='My key is swordfish, for the front door',spellings=['api_key','apikey','private_key','privatekey'],credentialFacts=spellings.map(kind=>{const quote=`My ${kind} is swordfish`;return {subject:'self',kind,value:'swordfish',date:'2026-11-02',citation:{id:'private',quote}};}),row={id:'private',at:'2026-11-02T12:00:00Z',text:[ordinary,secret,key,...credentialFacts.map(({citation})=>citation.quote)].join('. ')+'.'};archive(root,[row]);
  const result=await rememberWhatYouSaid({root,store,query,domains,notebook:true,now,model:async()=>({people:[{id:'person-key',name:'Key'}],things:[{id:'thing-key',name:'Key'}],facts:[{subject:self,kind:'password',value:'swordfish',date:'2026-11-02',citation:{id:row.id,quote:ordinary}},{subject:self,kind:'home-city',value:'api key',date:'2026-11-02',citation:{id:row.id,quote:ordinary}},{subject:self,kind:'home-city',value:'key',date:'2026-11-02',citation:{id:row.id,quote:ordinary}},{subject:self,kind:'key',value:'swordfish',date:'2026-11-02',citation:{id:row.id,quote:key}},{subject:self,kind:'home-city',value:'Hamburg',date:'2026-11-02',citation:{id:row.id,quote:secret}},{subject:self,kind:'home-city',value:'Hamburg',date:'2026-02-31',citation:{id:row.id,quote:ordinary}},...credentialFacts.map(item=>({...item,subject:self}))],events:[{what:'Updated my password',day:'2026-11-02',participants:[],citation:{id:row.id,quote:ordinary}},{what:'My key is swordfish',day:'2026-11-02',participants:[{kind:'new-person',id:'person-key'}],citation:{id:row.id,quote:key}},{what:'Moved to Hamburg',day:'2026-11-02',participants:[],citation:{id:row.id,quote:secret}},{what:'Moved to Hamburg',day:'2026-02-31',participants:[],citation:{id:row.id,quote:ordinary}}]})});
  assert.equal(result.completed,1);assert.equal(query.rows('claims').length,0);assert.equal(query.rows('moments').length,0);const receipt=fs.readFileSync(path.join(root,'routines','remember-what-you-said','runs','2026-11-07',fs.readdirSync(path.join(root,'routines','remember-what-you-said','runs','2026-11-07'))[0]),'utf8');assert.doesNotMatch(receipt,/swordfish|password|api key|My key|api_key|apikey|private_key|privatekey/);
+});
+
+test('the daily memory refuses relabeled credentials and employer names from their cited source context',async t=>{
+ const root=workspace(t),store=new Store(root),query=new QueryService(store),domains=new Domains(query),row={id:'relabeled-private',at:'2026-11-02T12:00:00Z',text:'My password is swordfish. My employer is Acme.'};archive(root,[row]);
+ const result=await rememberWhatYouSaid({root,store,query,domains,notebook:true,now,model:async()=>({facts:[{subject:self,kind:'home-city',value:'swordfish',date:'2026-11-02',citation:{id:row.id,quote:'swordfish'}},{subject:self,kind:'home-city',value:'Acme',date:'2026-11-02',citation:{id:row.id,quote:'Acme'}}]})});
+ assert.equal(result.completed,1);assert.equal(query.rows('claims').length,0);const receipt=fs.readFileSync(path.join(root,'routines','remember-what-you-said','runs','2026-11-07',fs.readdirSync(path.join(root,'routines','remember-what-you-said','runs','2026-11-07'))[0]),'utf8');assert.doesNotMatch(receipt,/swordfish|Acme|password|employer/);
 });
 
 test('the daily memory preserves likely confidence in notebook claims',async t=>{
@@ -97,4 +103,19 @@ test('a refused deadline leaves its prepared piece unread and recovery does not 
  assert.doesNotMatch(fs.readFileSync(path.join(root,'routines','remember-what-you-said','pending',fs.readdirSync(path.join(root,'routines','remember-what-you-said','pending'))[0]),'utf8'),/private detail/,'the pending receipt retains IDs and quotes only');
  const second=await rememberWhatYouSaid({root,store,query,domains,notebook:true,now,deadlines:[{slug:'tax',title:'Tax return',doneWhen:'I filed the tax return today'}],model:async()=>{calls++;return reply;},due:async()=>true});
  assert.equal(second.completed,1);assert.equal(calls,1);assert.equal(query.rows('claims').length,1);
+});
+
+test('a later deadline refusal leaves every selected piece unconsumed until recovery',async t=>{
+ const root=workspace(t),store=new Store(root),query=new QueryService(store),domains=new Domains(query),rows=Array.from({length:16},(_,index)=>({id:'deadline-piece-'+String(index).padStart(2,'0'),at:'2026-11-02T12:'+String(index).padStart(2,'0')+':00Z',text:index===15?'I filed the tax return today. '+'.'.repeat(2870):'I recorded item '+index+' '+'.'.repeat(2900)}));archive(root,rows);let calls=0,dueCalls=0;
+ const model=async input=>{calls++;const ids=JSON.parse(input.prompt).messages.map(message=>message.id);return ids.includes(rows[15].id)?{events:[{what:'Filed the tax return',day:'2026-11-02',participants:[],deadline_id:'tax',deadline_complete:true,citation:{id:rows[15].id,quote:'I filed the tax return today'}}]}:{facts:[],events:[]};};
+ const deadline={slug:'tax',title:'Tax return',doneWhen:'I filed the tax return today'},first=await rememberWhatYouSaid({root,store,query,domains,notebook:true,now,deadlines:[deadline],model,due:async()=>{dueCalls++;return false;}});
+ assert.equal(first.completed,1);assert.equal(first.failed,1);assert.equal(calls,2);assert.deepEqual(JSON.parse(fs.readFileSync(path.join(root,'routines','remember-what-you-said','state.json'))).consumed,[]);
+ const second=await rememberWhatYouSaid({root,store,query,domains,notebook:true,now,deadlines:[deadline],model,due:async()=>{dueCalls++;return true;}});
+ assert.equal(second.completed,2);assert.equal(calls,2,'recovery uses both prepared receipts');assert.equal(dueCalls,2);assert.deepEqual(JSON.parse(fs.readFileSync(path.join(root,'routines','remember-what-you-said','state.json'))).consumed.sort(),rows.map(row=>row.id).sort());
+});
+
+test('a malformed persisted plan is never passed to daily-memory recovery',async t=>{
+ const root=workspace(t),store=new Store(root),query=new QueryService(store),domains=new Domains(query),row={id:'malformed-recovery',at:'2026-11-02T12:00:00Z',text:'I moved to Hamburg on 1 November'},piece=archivePieces([{...row,ok:true}])[0];archive(root,[row]);const pending=path.join(root,'routines','remember-what-you-said','pending');fs.mkdirSync(pending,{recursive:true});fs.writeFileSync(path.join(pending,piece.id+'.json'),JSON.stringify({id:piece.id,message_ids:[row.id],plan:{people:[],things:[],effects:[{type:'fact'}]}}));
+ await rememberWhatYouSaid({root,store,query,domains,notebook:true,now,model:async()=>answer(row)});
+ assert.equal(query.rows('claims').length,1);assert.throws(()=>domains.writeDailyMemory({people:[],things:[],effects:[{type:'fact'}]}),/invalid plan/);
 });

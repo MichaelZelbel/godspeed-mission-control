@@ -17,6 +17,7 @@ import {noteConnections,linkSuggestions} from './related.mjs';
 import {graphData} from './graph.mjs';
 import { slug, hash } from './records/store.mjs';
 import {dailyMemorySubjectId} from './memory-daily-identity.mjs';
+import {decodeDailyMemoryPlan} from './daily-memory-plan.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { Review,factSubject,factSuppressed } from './review.mjs';
@@ -204,6 +205,7 @@ export class Domains {
     });
   }
   writeDailyMemory(plan){
+    plan=decodeDailyMemoryPlan(plan);if(!plan)throw Error('Daily memory has an invalid plan');
     const memoryKey=(type,id)=>type+':'+(id||''),sameName=(left,right)=>String(left||'').normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').trim()===String(right||'').normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').trim();
     return this.store.transaction(view=>{
       const query=new QueryService(view),staged=new Domains(query),subjects=new Map([[memoryKey('self'),{type:'self',id:null,name:'self'}]]),addSubject=(type,row)=>subjects.set(memoryKey(type,row.id),{type,id:row.id,name:row.name}),create=(type,item)=>{
