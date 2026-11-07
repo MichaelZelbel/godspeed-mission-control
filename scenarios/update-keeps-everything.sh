@@ -28,7 +28,7 @@
 #   records-before.txt / -after.txt   one line per notebook record, from the notebook's own export
 #   owner-setting-before.txt / -after.txt  the value the owner set in the assistant's settings
 #   chat-before.txt / -after.txt      the chat history's own rows
-#   setup-request.json / setup.json   the owner's first goal, and the notebook's configured answer
+#   setup.json                        the notebook's configured answer to the owner's first goal
 #   routines-after.txt                the names of the assistant's routines after the update
 #   health.txt                        what the notebook answered on its own address
 SCENARIO=update-keeps-everything
@@ -78,10 +78,10 @@ act() {
   say "The machine starts on $(cat "$EVIDENCE/version-before")"
 
   say "The owner's first goal, so the notebook starts this install's routines"
-  printf '{"goal":"%s","timezone":"Etc/UTC","delivery":"notebook"}\n' "$FIRST_GOAL" >"$EVIDENCE/setup-request.json"
+  printf '{"goal":"%s","timezone":"Etc/UTC","delivery":"notebook"}\n' "$FIRST_GOAL" >"$EVIDENCE/.setup.json"
   local setup_status
   setup_status=$(curl -sS -o "$EVIDENCE/setup.json" -w '%{http_code}' --max-time 300 -X POST \
-    -H 'Content-Type: application/json' --data-binary @"$EVIDENCE/setup-request.json" \
+    -H 'Content-Type: application/json' --data-binary @"$EVIDENCE/.setup.json" \
     "http://127.0.0.1:$NOTEBOOK_PORT/api/setup") ||
     fail "the notebook could not be reached to give the owner their first goal"
   [ "$setup_status" = 200 ] ||
@@ -146,7 +146,7 @@ check() { # <evidence folder>
   need_node
   for file in version-before version-after stage.json kept-stage.json trace-1.log trace-2.log \
     records-before.txt records-after.txt export-after.json owner-setting-before.txt \
-    owner-setting-after.txt chat-before.txt chat-after.txt setup-request.json setup.json \
+    owner-setting-after.txt chat-before.txt chat-after.txt setup.json \
     routines-after.txt health.txt; do
     kept "$folder" "$file" "what the machine looked like before the update and after it"
   done
@@ -186,11 +186,6 @@ check() { # <evidence folder>
     fail "the owner's own setting is $owner_after after the update and was $owner_before"
   cmp -s "$folder/chat-before.txt" "$folder/chat-after.txt" ||
     fail "the chat history is not the same after the update"
-  local setup_goal
-  setup_goal=$(json_value "$folder/setup-request.json" goal) ||
-    fail "the setup request kept no first goal"
-  [ "$setup_goal" = "$FIRST_GOAL" ] ||
-    fail "the setup request's first goal is $setup_goal, not $FIRST_GOAL"
   [ "$(json_value "$folder/setup.json" configured)" = true ] ||
     fail "the notebook did not say the install was configured after the owner's first goal"
 

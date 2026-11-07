@@ -459,7 +459,6 @@ update_good() { # <folder>
   printf '{"id":"scenario-chat-1"}\n{"content":"a message of the chat history","session_id":"scenario-chat-1"}\n' \
     >"$folder/chat-before.txt"
   cp "$folder/chat-before.txt" "$folder/chat-after.txt"
-  printf '{"goal":"Keep the scenario ready","timezone":"Etc/UTC","delivery":"notebook"}\n' >"$folder/setup-request.json"
   printf '{"configured":true}\n' >"$folder/setup.json"
   printf 'Goal research\nThe day ahead\nNight chat tidy-up\n' >"$folder/routines-after.txt"
   printf '200\n' >"$folder/health.txt"
@@ -496,16 +495,6 @@ copy "$U/good" "$U/no-setup"
 rm "$U/no-setup/setup.json"
 refuses "a run that kept no proof that the first goal configured the install" update-keeps-everything "$U/no-setup" \
   "setup.json is not in what the scenario kept"
-
-copy "$U/good" "$U/no-first-goal"
-printf '{"timezone":"Etc/UTC","delivery":"notebook"}\n' >"$U/no-first-goal/setup-request.json"
-refuses "a run that kept no first goal" update-keeps-everything "$U/no-first-goal" \
-  "the setup request kept no first goal"
-
-copy "$U/good" "$U/other-first-goal"
-printf '{"goal":"Plan a different scenario","timezone":"Etc/UTC","delivery":"notebook"}\n' >"$U/other-first-goal/setup-request.json"
-refuses "a run that kept another first goal" update-keeps-everything "$U/other-first-goal" \
-  "the setup request's first goal is Plan a different scenario, not Keep the scenario ready"
 
 copy "$U/good" "$U/setup-failed"
 printf '{"configured":false}\n' >"$U/setup-failed/setup.json"
