@@ -212,5 +212,37 @@ printf '{"sent":[{"chat_id":31415,"text":"First."},{"chat_id":31415,"text":"Seco
     const saved=JSON.parse(fs.readFileSync(path.join(folder,'run.json'),'utf8'));
     assert.deepEqual(saved.outbox.map(message=>[message.label,message.text]),[['snapshot','Second.']]);
     assert.equal(saved.sent,2);
+    assert.match(execFileSync(process.execPath,['telegram-judge.mjs','failed',path.join(folder,'run.json')],{cwd:path.dirname(new URL(import.meta.url).pathname),encoding:'utf8'}),/snapshot/);
+  } finally { fs.rmSync(folder,{recursive:true,force:true}); }
+});
+
+test('setup attributes every message of a multi-part reply to the step before it',()=>{
+  const {folder,run}=fixture('setup',`#!/bin/sh
+input=$(cat)
+case "$*" in
+  *__act*) echo act >> "$TRACE"; exit 0;;
+  *47831*) echo '{"start_message":"/start abc"}'; exit 0;;
+  *runner.json*) echo '{"state":"gateway"}'; exit 0;;
+  *setup.json*) echo '{"done":true}'; exit 0;;
+  *record.json*) ;;
+  *) exit 0;;
+esac
+n=$(grep -c act "$TRACE" 2>/dev/null); n=\${n:-0}
+sent=''
+[ "$n" -ge 1 ] && sent='{"chat_id":31415,"text":"Hi","buttons":[]},{"chat_id":31415,"text":"Which?","buttons":[{"label":"A","callback":"anthropic"}]}'
+[ "$n" -ge 2 ] && sent="$sent"',{"chat_id":31415,"text":"Key?","buttons":[]}'
+[ "$n" -eq 3 ] && echo read >> "$COUNT"
+[ "$n" -ge 3 ] && sent="$sent"',{"chat_id":31415,"text":"Thanks","buttons":[]}'
+reads=$(grep -c read "$COUNT" 2>/dev/null)
+[ "$n" -ge 3 ] && { [ "$n" -gt 3 ] || [ "\${reads:-0}" -ge 3 ]; } && sent="$sent"',{"chat_id":31415,"text":"Connected","buttons":[]},{"chat_id":31415,"text":"First?","buttons":[{"label":"No","callback":"have:no"}]}'
+[ "$n" -ge 4 ] && sent="$sent"',{"chat_id":31415,"text":"Done","buttons":[]}'
+printf '{"sent":[%s],"requests":[]}\\n' "$sent"
+`);
+  try {
+    run('setup','--token','t','--ai-key','k');
+    const saved=JSON.parse(fs.readFileSync(path.join(folder,'run.json'),'utf8'));
+    assert.deepEqual(saved.steps.map(step=>step.success),[true,true,true,true]);
+    assert.equal(saved.outbox.length,saved.sent);
+    assert.deepEqual(saved.outbox.map(message=>message.label),['setup-start','setup-start','setup-provider','setup-key','setup-key','setup-key','setup-first-install']);
   } finally { fs.rmSync(folder,{recursive:true,force:true}); }
 });

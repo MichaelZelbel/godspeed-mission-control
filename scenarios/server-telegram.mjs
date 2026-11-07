@@ -90,6 +90,13 @@ async function waitFor(description,readValue,predicate,seconds=90){
   throw Error(`the installed Telegram ${description} did not appear within ${seconds} seconds`);
 }
 
+// The setup chat answers one owner action in several messages; the ones a wait lets pass belong to the step before it.
+function attributeSent(label){
+  const state=loadState();
+  captureSent(state,copyRecord(),label);
+  saveState(state);
+}
+
 async function setup(){
   requireEvidence();
   if(!token) throw Error('server-telegram: --token is required for setup');
@@ -108,12 +115,14 @@ async function setup(){
   await capture('setup-start','setup',()=>act({from:owner,text:connected.start_message}));
   if(!withoutAI){
     await waitFor('setup question',copyRecord,record=>(record.sent ?? []).some(message=>(message.buttons ?? []).some(button=>button.callback==='anthropic')));
+    attributeSent('setup-start');
     await capture('setup-provider','press',()=>act({from:owner,press:'anthropic'}));
     const key=optional('--ai-key');
     if(!key) throw Error('server-telegram: --ai-key is required because the setup path checks the dedicated AI account');
     await capture('setup-key','say',()=>act({from:owner,text:key}));
   }
   await waitFor('first-install question',copyRecord,record=>(record.sent ?? []).some(message=>(message.buttons ?? []).some(button=>button.callback==='have:no')),180);
+  attributeSent(withoutAI ? 'setup-start' : 'setup-key');
   await capture('setup-first-install','press',()=>act({from:owner,press:'have:no'}));
   await waitFor('gateway handoff',runner,value=>value.state==='gateway',180);
   const setupState=JSON.parse(inServer(['cat','/opt/data/full-candidate/telegram/setup.json']));
@@ -147,9 +156,14 @@ async function snapshot(){
   const record=copyRecord(); runner();
   const state=loadState();
   captureSent(state,record,'snapshot',state.sent);
-  saveState(state);
   const trailing=state.outbox.filter(message=>message.label==='snapshot'&&message.chat_id===owner).length;
-  if(trailing>0) throw Error(`the installed Telegram sent ${trailing} message(s) after the last step`);
+  if(trailing>0) {
+    const error=`the installed Telegram sent ${trailing} message(s) after the last step`;
+    state.steps.push({label:'snapshot',kind:'snapshot',success:false,error});
+    saveState(state);
+    throw Error(error);
+  }
+  saveState(state);
 }
 async function mark(){
   requireEvidence();

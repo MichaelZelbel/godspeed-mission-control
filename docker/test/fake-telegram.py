@@ -26,6 +26,9 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+# buttons.py drops a tap unless the message it edits was sent by getMe's bot, so both must be this one record.
+BOT = {"id": 42, "is_bot": True, "first_name": "Godspeed"}
+
 
 class Fake:
     def __init__(self, token, scenario, record=None):
@@ -74,7 +77,7 @@ class Fake:
                         and any(button["callback"] == a["press"] for button in m["buttons"])), None)
             upd = {"callback_query": {"id": "cq%d" % self.next_update, "from": user, "data": a["press"],
                                       "message": {"message_id": msg["message_id"] if msg else 0, "chat": chat,
-                                                  "from": {"id": 42, "is_bot": True, "first_name": "Godspeed"},
+                                                  "from": BOT,
                                                   "text": msg["text"] if msg else ""}}}
         upd["update_id"] = self.next_update
         self.next_update += 1
@@ -88,7 +91,7 @@ class Fake:
                 fid = p.get("file_id")
                 return {"file_id": fid, "file_size": len(self.files.get(fid, b"")), "file_path": "documents/%s" % fid}
             if method == "getMe":
-                return {"id": 42, "is_bot": True, "first_name": "Godspeed", "username": "test_godspeed_bot"}
+                return dict(BOT, username="test_godspeed_bot")
             if method == "getUpdates":
                 off = p.get("offset") or 0
                 self.updates = [u for u in self.updates if u["update_id"] >= off]
