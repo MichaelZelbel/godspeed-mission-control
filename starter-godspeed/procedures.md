@@ -6,7 +6,7 @@ Every installation schedules the nightly cleanup before any goal. The first time
 mission control a goal, in the notebook's "Start with one goal" form or in the chat, it starts
 eight other routines on the computer that runs your routines, on your own clock: the nightly goal
 research, the daily round's two, deadline reminders, the weekly check-in and the coach's
-reminders, the coaching talk preparation and the daily connection check. It does this once on each
+reminders, the coaching talk preparation and Remember what you said. It does this once on each
 computer that runs your routines: if you add a server later and let it run the routines, the server
 gets the same eight, and your computer's stop. A routine you
 later remove stays removed. A computer whose assistant already ran routines of its own before this
@@ -14,8 +14,10 @@ mission control came, or for another folder, gets none of these; a one-time remi
 routine you asked for here, such as a morning brief, do not count.
 
 All eight are listed in your notebook under Settings > Routines, each with what it does, when it
-runs next, when it last ran and whether that worked. The nightly cleanup is listed there too;
-pause "Nightly cleanup" directly there, rather than through an adopted mission control's routine
+runs next, when it last ran and whether that worked. The nightly cleanup is listed there too; the
+separate daily connection check is listed too and runs only while a connection or another routine
+makes it useful. Pause "Nightly cleanup" or the connection check directly there, rather
+than through an adopted mission control's routine
 switches. "Pause" stops one until you press "Resume". You can also ask in the chat: "Pause the
 deadline reminders", "Move the weekly check-in to Saturday at six".
 
@@ -59,6 +61,21 @@ Off-switch: Pause "Coaching talk preparation" under Settings > Routines.
 Last checked: 2026-10-18, on a fresh Linux installation: the first goal made the routine at 03:00
 and Hermes ran it, and the weekly check-in was prepared the day before, with a stand-in for the
 model. A night prepared by a real model is still to be watched.
+
+### Remember what you said
+
+Does: reads only qualifying messages you typed in prompts/archive/, never their answers, notes or
+mail. At most seven days are read on its first run. It asks the AI you connected to Godspeed to
+return quote-backed facts and events as JSON, then checks every quote against the archived message,
+refuses redacted or private material, and files only evidenced items. It never sends a request when
+you have not connected an AI.
+Rhythm: every day at 03:40, your time zone, after prompt harvesting and before the daily fact
+closing. It says nothing to you.
+Lands: in your notebook as dated facts and timeline events, or in world/ when the notebook is not
+connected. Its portable read position, pending work and dated receipts live under
+routines/remember-what-you-said/ so another computer that runs your routines continues safely.
+Facts and events retain the exact supporting quote and archive source.
+Off-switch: Pause "Remember what you said" under Settings > Routines.
 
 ### Daily round
 
@@ -143,7 +160,7 @@ failed twice in a row; a successful run closes that notice. Other Hermes cron sc
 create a missed-run notice, though their repeated failures still do. When everything works, it
 sends nothing. It runs no AI of its own. On a server it also reads how full the local disk is; at
 85% full it tells you once and sets a deadline, which closes itself below 80%.
-Rhythm: it joins the other eight at the notebook's next scheduling round after your first goal.
+Rhythm: it joins the eight starting routines and the nightly cleanup at the notebook's next scheduling round after your first goal.
 Every day at 05:00 your time, earlier when a morning brief set before 05:30 needs it first.
 It starts running when Telegram or Gmail is connected, a tracker has a mail rule, Health Auto
 Export has sent an accepted upload, another routine is active, or this is a server install, and

@@ -13,6 +13,35 @@ import path from 'node:path';
 
 export const RUNNING_NOTEBOOK_FILE = 'running-notebook.json';
 
+const regularFile = file => {
+  try { return fs.statSync(file).isFile(); } catch { return false; }
+};
+const samePath = (left, right) => {
+  const normalize = value => {
+    const resolved = path.resolve(value).replace(/[\\/]+$/, '');
+    return process.platform === 'win32' ? resolved.toLowerCase() : resolved;
+  };
+  return normalize(left) === normalize(right);
+};
+const configuredFile = (root, value) => {
+  if (typeof value !== 'string' || !value.trim()) return null;
+  const file = path.resolve(root, value);
+  return regularFile(file) ? file : null;
+};
+const recordedAssistantConfig = root => {
+  let record;
+  try { record = JSON.parse(fs.readFileSync(path.join(root, '.godspeed', RUNNING_NOTEBOOK_FILE), 'utf8')); } catch { return null; }
+  if (!record || record.format !== 1 || typeof record.assistantConfig !== 'string' || typeof record.stateFolder !== 'string' || typeof record.workspace !== 'string' || !samePath(record.workspace, root)) return null;
+  const file = configuredFile(root, record.assistantConfig);
+  return file && samePath(record.stateFolder, path.dirname(file)) ? file : null;
+};
+
+export function assistantConfiguration(root, {env = process.env} = {}) {
+  const workspace = path.resolve(root), state = path.join(workspace, '.godspeed');
+  const assistantFile = configuredFile(workspace, env.GODSPEED_ASSISTANT_CONFIG) || recordedAssistantConfig(workspace) || configuredFile(workspace, path.join('.godspeed', 'assistant.json'));
+  return {assistantFile, state: assistantFile ? path.dirname(assistantFile) : state, providerFile: path.join(state, 'provider.json')};
+}
+
 export function recordRunningNotebook({root, assistantConfig, platform = process.platform}) {
   if (platform !== 'win32') return {written: false, reason: 'not windows'};
   const dir = path.join(path.resolve(root), '.godspeed');

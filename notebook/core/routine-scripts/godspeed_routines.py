@@ -1294,11 +1294,23 @@ def mail_count(c):
     return ""
 
 
+def memory_daily(c):
+    """File dated, evidenced memories from the prompt archive; it never speaks."""
+    try:
+        r = run([c["node"], c["memory_daily"]], c, environment(c, today(c)), timeout=900)
+    except subprocess.TimeoutExpired:
+        r = None
+    if r is None or r.returncode != 0:
+        fail("Remember what you said could not finish.", r)
+    sys.stderr.write(r.stderr)
+    return ""
+
+
 # Every routine wrapper the notebook writes (routineFiles in starting-routines.mjs) names one of these.
 ROUTINES = {"research": research, "decide": decide, "work": work, "due": due, "brief": brief, "coach-prep": coach_prep,
             "coach-gate": lambda c: coach(c, "gate"), "coach-tick": lambda c: coach(c, "tick"),
             "journal-tick": journal_tick, "notices": notices, "chat-tidy": chat_tidy, "connection-check": connection_check,
-             "cleanup": cleanup, "mail-count": mail_count}
+             "cleanup": cleanup, "mail-count": mail_count, "memory-daily": memory_daily}
 
 
 def main(kind):

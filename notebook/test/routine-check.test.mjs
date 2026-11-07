@@ -54,7 +54,7 @@ test('every cron schedule Godspeed emits has a prior occurrence',()=>{
  ];
  for(const [index,expr] of [...STARTING_ROUTINES.map(r=>r.schedule),...settings.map(calendarCron)].entries()){
   const job=daily('emitted-'+index,{schedule:{kind:'cron',expr},last_run_at:ago(500),next_run_at:ahead(1)});
-  assert.ok(routineFinding(job,{},{now:NOW+8*60000,day:DAY,timezone:'UTC'}).found,expr);
+  assert.ok(routineFinding(job,{},{now:Date.parse('2026-11-05T00:10:00Z'),day:DAY,timezone:'UTC'}).found,expr);
  }
 });
 
