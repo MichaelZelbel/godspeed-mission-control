@@ -172,6 +172,15 @@ function fixture(name,script){
 }
 const seed=(folder,sent)=>fs.writeFileSync(path.join(folder,'telegram-run.json'),JSON.stringify({steps:[],outbox:[],sent}));
 
+test('setup requires the selected notebook port',()=>{
+  const {folder,run}=fixture('setup-port',`#!/bin/sh
+exit 1
+`);
+  try {
+    assert.throws(()=>run('setup','--token','t'),/--notebook-port is required/);
+  } finally { fs.rmSync(folder,{recursive:true,force:true}); }
+});
+
 test('say waits for a reply that arrives after the old fixed delay',()=>{
   const {folder,run}=fixture('late',`#!/bin/sh
 cat >/dev/null
@@ -216,13 +225,15 @@ printf '{"sent":[{"chat_id":31415,"text":"First."},{"chat_id":31415,"text":"Seco
   } finally { fs.rmSync(folder,{recursive:true,force:true}); }
 });
 
-test('setup cleanup finishes before it attributes every message of a multi-part reply',()=>{
-  const {folder,run}=fixture('setup',`#!/bin/sh
+// 47832 is the normal private listener every installed setup uses; 49672 stands for the override.
+// The fixture answers only the expected port, so a driver that ignores --notebook-port fails one of them.
+for(const port of ['47832','49672']) test(`setup cleanup finishes before it attributes every message of a multi-part reply (notebook port ${port})`,()=>{
+  const {folder,run}=fixture(`setup-${port}`,`#!/bin/sh
 input=$(cat)
 case "$*" in
   *'pkill -f '*) sh -c "$7"; exit $?;;
   *__act*) echo act >> "$TRACE"; exit 0;;
-  *http://127.0.0.1:49672/api/telegram/connect*) echo '{"start_message":"/start abc"}'; exit 0;;
+  *http://127.0.0.1:${port}/api/telegram/connect*) echo "$*" >> "$TRACE"; echo '{"start_message":"/start abc"}'; exit 0;;
   *runner.json*) echo '{"state":"gateway"}'; exit 0;;
   *setup.json*) echo '{"done":true}'; exit 0;;
   *record.json*) ;;
@@ -241,7 +252,8 @@ printf '{"sent":[%s],"requests":[]}\\n' "$sent"
 `);
   try {
     assert.throws(()=>run('setup','--token','t','--ai-key','k'),/--notebook-port is required/);
-    run('setup','--token','t','--ai-key','k','--notebook-port','49672');
+    run('setup','--token','t','--ai-key','k','--notebook-port',port);
+    assert.ok(fs.readFileSync(path.join(folder,'trace'),'utf8').includes(`http://127.0.0.1:${port}/api/telegram/connect`));
     const saved=JSON.parse(fs.readFileSync(path.join(folder,'run.json'),'utf8'));
     assert.deepEqual(saved.steps.map(step=>step.success),[true,true,true,true]);
     assert.equal(saved.outbox.length,saved.sent);
