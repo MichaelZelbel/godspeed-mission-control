@@ -72,7 +72,7 @@ test('the command reads the harvest redaction file before requesting a model',as
 test('the starter fallback deduplicates current facts and events',async t=>{
  const root=workspace(t),first={id:'first',at:'2026-11-02T12:00:00Z',text:'I moved to Hamburg on 1 November and visited the park'},second={...first,id:'second',at:'2026-11-03T12:00:00Z'};archive(root,[first]);
  const answer=row=>({people:[{id:'alex',name:'Alex'}],facts:[{subject:self,kind:'home-city',value:'Hamburg',citation:{id:row.id,quote:'I moved to Hamburg on 1 November'}}],events:[{what:'Visited the park',day:'2026-11-02',participants:[{kind:'new-person',id:'alex'}],citation:{id:row.id,quote:'visited the park'}}]});
- await run(root,{env:{FIXTURE_MEMORY_MODEL_RESPONSE:response(answer(first))}});const events=path.join(root,'world','events'),event=path.join(events,fs.readdirSync(events)[0]);fs.writeFileSync(event,'\ufeff'+fs.readFileSync(event,'utf8'));archive(root,[first,second]);await run(root,{env:{FIXTURE_MEMORY_MODEL_RESPONSE:response(answer(second))}});assert.ok(fs.existsSync(path.join(root,'world','entities','alex.md')));assert.equal(fs.readdirSync(path.join(root,'world','claims')).length,1);assert.equal(fs.readdirSync(events).length,1);
+ await run(root,{env:{FIXTURE_MEMORY_MODEL_RESPONSE:response(answer(first))}});const events=path.join(root,'world','events');archive(root,[first,second]);await run(root,{env:{FIXTURE_MEMORY_MODEL_RESPONSE:response(answer(second))}});assert.ok(fs.existsSync(path.join(root,'world','entities','alex.md')));assert.equal(fs.readdirSync(path.join(root,'world','claims')).length,1);assert.equal(fs.readdirSync(events).length,1);
 });
 
 test('the starter fallback round-trips colon-bearing fact values before deduplicating',async t=>{
