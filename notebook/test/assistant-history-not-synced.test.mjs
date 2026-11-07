@@ -6,7 +6,7 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { Store } from '../core/records/store.mjs';
 import { FileSync } from '../core/sync/git.mjs';
-import { durable, shared } from '../core/file-policy.mjs';
+import { durable, shared, inUpdateCopy } from '../core/file-policy.mjs';
 const git=(cwd,...args)=>execFileSync('git',args,{cwd,encoding:'utf8',windowsHide:true,stdio:['ignore','pipe','pipe']}).trim();
 
 function workspace(){
@@ -95,9 +95,15 @@ test('a durable root inside another folder can actually be synced',()=>{
   fs.writeFileSync(path.join(dir,'routines','journal','2026-10-04.md'),'A journal day that has to travel\n');
   fs.mkdirSync(path.join(dir,'routines','briefing'),{recursive:true});
   fs.writeFileSync(path.join(dir,'routines','briefing','run.log'),'machine noise that must stay here\n');
+  for(const relative of ['routines/remember-what-you-said/state.json','routines/remember-what-you-said/pending/piece.json','routines/remember-what-you-said/runs/2026-11-01/piece.json']){
+    fs.mkdirSync(path.join(dir,path.dirname(relative)),{recursive:true});fs.writeFileSync(path.join(dir,relative),'{}\n');
+  }
   store.save('notes',{title:'Alongside',content:'Also synced'});
   sync.commitLocal();
   const tracked=sync.gitBytes(['ls-files','-z']).toString('utf8').split('\0').filter(Boolean);
   assert.ok(tracked.includes('routines/journal/2026-10-04.md'),'the nested durable root must be synced: '+tracked.join(' '));
+  for(const relative of ['routines/remember-what-you-said/state.json','routines/remember-what-you-said/pending/piece.json','routines/remember-what-you-said/runs/2026-11-01/piece.json']){
+    assert.ok(tracked.includes(relative),'memory state must travel: '+relative);assert.equal(durable(relative),true);assert.equal(shared(relative),true);assert.equal(inUpdateCopy(relative),true);
+  }
   assert.deepEqual(tracked.filter(n=>n.startsWith('routines/briefing/')),[],'a sibling that is not a durable root stays out');
 });

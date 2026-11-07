@@ -12,6 +12,7 @@ import {telegramInHermes} from './starting-routines.mjs';
 import {isServerInstall} from './about.mjs';
 import {mailboxInUse,mailCountWanted} from './mail-trackers.mjs';
 import {lastAcceptedUpload} from './phone-health.mjs';
+import {telegramAPI} from './telegram-api.mjs';
 import {addDays,now as clockNow,whenSaid} from '../../third-party/addons/godspeed-coach/lib/clock.mjs';
 
 // THE DAILY CONNECTION CHECK (4 November 2026, #200). Godspeed only noticed a broken connection (the
@@ -28,6 +29,8 @@ import {addDays,now as clockNow,whenSaid} from '../../third-party/addons/godspee
 // Until #198 (reports in the chat's voice) and #199 (a no-sign-in Git helper) are on main, the words
 // go through the notebook's notices (tellOwner, the one place to change) and the GitHub read uses
 // the sync's own settings, which already refuse to ask for a sign-in (FileSync.gitBytes).
+//
+// The owner's routines are a second source, read from Hermes' jobs list with no call (routine-check.mjs, #239).
 //
 // A probe answers only {set_up, ok, kind}; kind is 'sign-in' (login or key refused), 'quiet'
 // (the phone has not uploaded), or 'other'. No service text, address or key ever leaves a probe,
@@ -72,6 +75,8 @@ export const gitKind=stderr=>GIT_SIGN_IN.test(String(stderr||''))?'sign-in':'oth
 export const aiKind=error=>error?.reason==='sign-in'?'sign-in':'other';
 export const mailKind=state=>state==='disconnected'||state==='reconnect needed'?'sign-in':'other';
 
+export {telegramAPI};
+
 const outcome=(ok,kind)=>ok?{set_up:true,ok:true}:{set_up:true,ok:false,kind};
 const NOT_SET_UP={set_up:false};
 
@@ -84,7 +89,7 @@ export const telegramProbe=({home,fetcher=fetch,api='https://api.telegram.org'})
  let token;try{token=ENV_TOKEN.exec(fs.readFileSync(path.join(home,'.env'),'utf8'))?.[1]?.replace(/^["']|["']$/g,'');}catch{}
  if(!token)return NOT_SET_UP;
  try{
-  const response=await fetcher(`${api}/bot${token}/getMe`,{method:'POST',headers:{'Content-Type':'application/json'},body:'{}',signal:AbortSignal.timeout(15000)});
+  const response=await fetcher(`${telegramAPI(api)}/bot${token}/getMe`,{method:'POST',headers:{'Content-Type':'application/json'},body:'{}',signal:AbortSignal.timeout(15000)});
   const body=await response.json().catch(()=>({}));
   return response.ok&&body.ok?outcome(true):outcome(false,telegramKind(response.status,body));
  }catch{return outcome(false,'other');}
@@ -190,7 +195,7 @@ export function nextState(prev={},result,day){
 }
 
 // The one place the owner is told; #198's report in the chat's voice replaces this body.
-export function tellOwner(store,{id,text}){return queueNotice(store,{id,text});}
+export function tellOwner(store,{id,text,about,facts}){return queueNotice(store,{id,text,about,facts});}
 
 // tools/due.js as its own process, as every other deadline change is made: it takes the
 // workspace lock itself, so nothing here may hold it (addon-deadlines.mjs, due).

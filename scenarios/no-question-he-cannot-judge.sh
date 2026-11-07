@@ -15,9 +15,9 @@
 #   5  the reminder routines run afterwards         nothing about the optional extra
 # and in every message the install sent: no "approve <id>" or "reject <id>", no hex id of six or more.
 #
-# THE TELEGRAM IS A FIXTURE (owner-on-telegram.py): the plugins, the routine runner, the agent and the
-# delivery are the install's own; only Telegram's servers are stood in for. THE ASKER'S FLAGS for ticket
-# 04 (quiet, subject, optional) are provisional: they live in one table in scenario-asker.py.
+# The advertised Docker Telegram route supplies the installed gateway, routine runner, agent and
+# delivery; only its local Bot API is a fixture. THE ASKER'S FLAGS for ticket 04 (quiet, subject,
+# optional) are provisional: they live in one table in scenario-asker.py.
 #
 #   GODSPEED_SCENARIO_AI_KEY    the model that answers "approve" (without it: FAIL), with
 #                               GODSPEED_SCENARIO_AI_URL and GODSPEED_SCENARIO_AI_MODEL.
@@ -28,10 +28,11 @@
 # What it keeps for its checking part:
 #   run.json                 every message sent (accepted or refused, with its step's label), and each step's outcome
 #   approvals-<label>.json   the waiting steps after each situation: s1, s3-ask, s3, s2, s4, s5
-#   telegram-fixture.json, driver.log, ai.txt, routines.json, config.yaml, plugins.txt
+#   telegram-requests.json, runner.json, routines.json
 SCENARIO=no-question-he-cannot-judge
 # shellcheck source=scenarios/scenario-lib.sh
 . "$(dirname "$0")/scenario-lib.sh"
+. "$HERE/server-lib.sh"
 scenario_arguments "$@"
 
 LABELS='s1 s3-ask s3 s2 s4 s5'
@@ -40,16 +41,16 @@ act() {
   need_the_ai_key "the owner's plain \"approve\" answered in the chat"
   fresh_evidence
   install_paths
-  install_the_stage_line "$EVIDENCE/.install.log"
   need_node
-  wait_for 180 "the notebook to answer after the install" notebook_is_up ||
-    fail "the notebook does not answer after the install"
-  read_version "$ROOT"
-  assistant_home
-  connect_the_ai
-  echo "the connected AI ($AI_MODEL)" >"$EVIDENCE/ai.txt"
-  phase 'the owner on a fixture Telegram, and the fixture asker'
-  owner_on_telegram_install yes
+  server_install
+  server_connects_the_model
+  phase 'the owner on the installed Docker Telegram gateway, and the fixture asker'
+  server_telegram_setup
+  printf '{"goal":"Sleep eight hours a night","timezone":"Etc/UTC","delivery":"telegram"}\n' >"$EVIDENCE/.setup.json"
+  [ "$(server_post /api/setup "$EVIDENCE/.setup.json" "$EVIDENCE/setup.json")" = 200 ] || fail 'the installed notebook would not make routines for the fixture goal'
+  server_pause_all_jobs
+  server_install_asker
+  server_table jobs "$EVIDENCE/routines.json"
 
   phase 'the five situations'
   cat >"$EVIDENCE/asks-s1.json" <<'JSON'
@@ -67,16 +68,16 @@ JSON
   next_ask='const fs=require("fs");const d=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));const rows=Array.isArray(d)?d:d.data||[];'
   next_ask+='const row=rows.find(r=>JSON.stringify(r).includes("seven old programs")||JSON.stringify(r).includes("Seven old programs"));'
   next_ask+='fs.writeFileSync(process.argv[2],JSON.stringify([{about:"The seven old programs are stopped; they could also be locked down",question:"Lock the seven stopped programs down too?",yes:"They are locked down",no:"They stay stopped",optional_after:row?String(row.id):""}]));'
-  steps_file "$EVIDENCE/steps.json" \
-    "$(asker_steps s1 "$EVIDENCE/asks-s1.json")" "$(snapshot_step s1 approvals)" \
-    "$(asker_steps s3-ask "$EVIDENCE/asks-s3-ask.json")" "$(snapshot_step s3-ask approvals)" \
-    "$(step_of say s3 '"text":"approve","session":"scenario-owner-1"')" "$(snapshot_step s3 approvals)" \
-    "$(asker_steps s2 "$EVIDENCE/asks-s2.json")" "$(snapshot_step s2 approvals)" \
-    "$(step_of run s4 "\"argv\":[\"$NODE\",\"-e\",$(quoted_json "$next_ask"),$(quoted_json "$EVIDENCE/approvals-s3.json"),$(quoted_json "$ROOT/.scenario-asks.json")]")" \
-    "$(step_of cron s4 '"job":"Scenario asker"')" "$(snapshot_step s4 approvals)" \
-    "$(step_of cron s5 '"job":"Journal check-ins","optional":true')" \
-    "$(step_of cron s5 '"job":"Deadline reminders","optional":true')" "$(snapshot_step s5 approvals)"
-  owner_on_telegram "$EVIDENCE/steps.json" "$EVIDENCE/run.json"
+  server_set_asks "$EVIDENCE/asks-s1.json"; server_run_asker s1; server_snapshot_table s1 approvals
+  server_set_asks "$EVIDENCE/asks-s3-ask.json"; server_run_asker s3-ask; server_snapshot_table s3-ask approvals
+  server_telegram_say s3 approve; server_snapshot_table s3 approvals
+  server_set_asks "$EVIDENCE/asks-s2.json"; server_run_asker s2; server_snapshot_table s2 approvals
+  "$NODE" -e "$next_ask" "$EVIDENCE/approvals-s3.json" "$EVIDENCE/asks-s4.json"
+  server_set_asks "$EVIDENCE/asks-s4.json"; server_run_asker s4; server_snapshot_table s4 approvals
+  server_run_job s5-journal 'Journal check-ins' 300; server_telegram_mark s5 cron
+  server_run_job s5-deadlines 'Deadline reminders' 300; server_telegram_mark s5 cron; server_snapshot_table s5 approvals
+  server_telegram_snapshot
+  server_manifest
   rm -f "$EVIDENCE"/.[a-z]*
 }
 
@@ -87,7 +88,7 @@ check() { # <evidence folder>
   FOLDER=$folder
   [ -d "$folder" ] || fail "there is nothing at $folder, so this scenario kept no evidence of what the owner was asked"
   need_node
-  kept_all "$folder" 'what was sent to the owner and what waited' run.json telegram-fixture.json
+  kept_all "$folder" 'what was sent to the owner and what waited' run.json telegram-requests.json runner.json manifest.json
   for label in $LABELS; do
     kept "$folder" "approvals-$label.json" "the waiting steps after situation $label"
   done
@@ -98,21 +99,28 @@ check() { # <evidence folder>
 
   # 1, 2, 4. Nothing is sent, accepted or refused, and nothing waits.
   for label in s1 s2 s4; do
+    interaction_begin "$label"
     text=$(messages_of "$label" | head -n 1)
     [ -z "$text" ] || fail "situation $label sent the owner a message although there was nothing he could judge: $text"
     [ "$("$NODE" "$HERE/telegram-judge.mjs" waiting "$folder/approvals-$label.json")" = 0 ] ||
       fail "situation $label left a step waiting for the owner's yes, which he was never asked and cannot give"
+    interaction_passed "$label"
   done
+  interaction_begin s5
   text=$(messages_of s5 | head -n 1)
   [ -z "$text" ] || fail "a reminder routine sent the owner a message about something he never needs to answer (situation 5): $text"
+  interaction_passed s5
 
   # 3. One question that carries what the step is about, and one reply to "approve" that only confirms.
+  interaction_begin s3-ask
   count=$(messages_of s3-ask | grep -c . || true)
   [ "$count" = 1 ] || fail "the real yes was asked in $count messages, not one"
   messages_of s3-ask | grep -qi 'seven' && messages_of s3-ask | grep -qi 'programs' ||
     fail "the question for the real yes does not say what it is about (the seven old programs): $(messages_of s3-ask | head -n 1)"
   [ "$("$NODE" "$HERE/telegram-judge.mjs" waiting "$folder/approvals-s3-ask.json")" = 1 ] ||
     fail "after the question for the real yes, not exactly one step waited"
+  interaction_passed s3-ask
+  interaction_begin s3
   count=$(messages_of s3 accepted | grep -c . || true)
   [ "$count" = 1 ] || fail "the owner's \"approve\" was answered with $count messages, not one"
   text=$(messages_of s3 accepted)
@@ -120,6 +128,7 @@ check() { # <evidence folder>
   if grep -qiE 'restart|gateway|lock' <<<"$text"; then fail "the answer to \"approve\" speaks of another situation: $text"; fi
   "$NODE" "$HERE/telegram-judge.mjs" status "$folder/approvals-s3.json" 'seven old programs' | grep -qx approved ||
     fail "the owner's \"approve\" did not approve the step about the seven old programs"
+  interaction_passed s3
 
   # Every message of the run: nothing to type.
   no_code_in "$folder/run.json" "$folder"/approvals-*.json

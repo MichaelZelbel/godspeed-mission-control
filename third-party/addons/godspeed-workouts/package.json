@@ -1,0 +1,17 @@
+{
+  "name": "godspeed-workouts",
+  "version": "0.1.2",
+  "description": "Workouts, an add-on for Godspeed Mission Control: every workout you log in Hevy lands in your Godspeed notebook as one row of the Workouts tracker, with every set, within the hour.",
+  "keywords": [ "godspeed-mission-control", "godspeed", "personal-ai", "hevy", "workouts", "strength-training", "tracker", "add-on" ],
+  "homepage": "https://github.com/MichaelZelbel/godspeed-workouts#readme",
+  "bugs": { "url": "https://github.com/MichaelZelbel/godspeed-workouts/issues" },
+  "repository": { "type": "git", "url": "git+https://github.com/MichaelZelbel/godspeed-workouts.git" },
+  "license": "MIT",
+  "author": "Michael Zelbel",
+  "private": true,
+  "type": "module",
+  "bin": { "godspeed-workouts": "bin/godspeed-workouts.mjs" },
+  "files": [ "bin", "lib", "install.sh", "install.ps1", "INSTALL-FOR-ASSISTANTS.md", "README.md", "CHANGELOG.md", "LICENSE" ],
+  "engines": { "node": ">=22" },
+  "scripts": { "test": "node --test \"test/*.test.mjs\"" }
+}

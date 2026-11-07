@@ -12,6 +12,7 @@
 # PASS or FAIL per check and exits 1 when any check failed.
 import importlib.machinery
 import importlib.util
+import concurrent.futures
 import json
 import os
 import shlex
@@ -19,10 +20,13 @@ import subprocess
 import sys
 import tempfile
 import time
+import urllib.error
+import urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
 PROGRAM = os.path.join(ROOT, "docker", "rootfs", "usr", "local", "bin", "godspeed-telegram-setup")
+ENDPOINT_VECTORS = os.path.join(ROOT, "notebook", "test", "telegram-api-endpoints.json")
 TOKEN = "123456789:TESTtoken_never-logged"
 FAILS = 0
 
@@ -285,6 +289,32 @@ def test_codes():
         print("NOTE  no time zone database on this computer (pip install tzdata), so city names are not checked here")
 
 
+def test_telegram_api_endpoint():
+    print("== validating the token-bearing Telegram endpoint")
+    m = load("tg_setup_endpoint", PROGRAM)
+    with open(ENDPOINT_VECTORS, encoding="utf-8") as f:
+        vectors = json.load(f)
+    for case in vectors["accepted"]:
+        check("a safe Telegram endpoint keeps its path prefix: %s" % case["input"],
+              m.telegram_api(case["input"]) == case["output"])
+    rejected = vectors["rejected"] + [
+        "%s://%s:8081/telegram/" % (scheme, host)
+        for scheme in vectors["ambiguous_numeric_ipv4"]["schemes"]
+        for host in vectors["ambiguous_numeric_ipv4"]["hosts"]
+    ]
+    for endpoint in rejected:
+        try:
+            m.telegram_api(endpoint)
+            rejected = False
+        except ValueError:
+            rejected = True
+        check("an unsafe Telegram endpoint is rejected: %s" % endpoint, rejected)
+        r = scenario_run("an unsafe Telegram endpoint", {"users": USERS, "start": []},
+                         extra_env={"GODSPEED_TELEGRAM_API": endpoint}, timeout=5)
+        check("an unsafe endpoint fails setup without a Bot API request: %s" % endpoint,
+              r["rc"] != 0 and not r["fake"].requests and "requires HTTPS or a loopback" in r["log"])
+
+
 def test_happy():
     r = scenario_run("the happy path: Start, two codes, three answers, set up", {
         "users": USERS,
@@ -306,7 +336,7 @@ def test_happy():
     check("a stranger is told it is taken, and nothing else", to_eve == ["This assistant belongs to someone else."])
     check("the ChatGPT address and code arrive", any_has(to_anna, "https://auth.openai.com/codex/device", "<code>ABCD-12345</code>"))
     check("the AI question offers ChatGPT, OpenRouter, Claude, OpenAI, Gemini and the rest",
-          any(m["buttons"] == ["openai-codex", "openrouter", "anthropic", "openai-api", "gemini", "more"]
+          any([button["callback"] for button in m["buttons"]] == ["openai-codex", "openrouter", "anthropic", "openai-api", "gemini", "more"]
               and "I need an AI service to do my thinking" in m["text"] for m in r["fake"].sent))
     check("the city question has no button for the server's own clock",
           any("Your morning brief comes at 06:00" in m["text"] and m["buttons"] == [] for m in r["fake"].sent))
@@ -505,7 +535,7 @@ def test_one_click_happy():
     check("a first Mission Control never signs in to GitHub, and nothing asks it", gh_untouched(r) and r["connect"] == [])
     first_q = next((m for m in r["fake"].sent if FIRST_ASK in m["text"]), {})
     check("the one question after the AI is one tap: first, or bring in the one on GitHub",
-          first_q.get("labels") == ["Yes, it is my first", "No, bring in the one I have on GitHub"])
+          [button["label"] for button in first_q.get("buttons", [])] == ["Yes, it is my first", "No, bring in the one I have on GitHub"])
     at = next((i for i, t in enumerate(to_anna) if FIRST_ASK in t), -2)
     check("right after the last answer it says it is setting everything up", to_anna[at + 1:at + 2] == [SETTING_UP])
     fin = r["finish"]
@@ -771,11 +801,11 @@ def test_backup_key():
     check("it finishes and says the chat is done for this request", r["rc"] == 0 and r["state"].get("done") is True
           and r["state"].get("request") == "fictional0request")
     check("it explains what a backup is, naming the main AI", any_has(to_anna, "<b>Backup AI.</b>", "your main AI, ChatGPT, fails"))
-    asked = next((m for m in r["fake"].sent if BACKUP_ASK in m["text"]), {"buttons": [], "labels": []})
+    asked = next((m for m in r["fake"].sent if BACKUP_ASK in m["text"]), {"buttons": []})
     main_setup = load("tg_setup_backup_list", PROGRAM)
     check("it offers exactly the main setup's choices, with their labels, and Not now",
-          asked["buttons"] == [s for s, _ in main_setup.TOP_BRAINS] + ["more", "backup:none"]
-          and asked["labels"] == [l for _, l in main_setup.TOP_BRAINS] + ["Another provider", "Not now"])
+          [button["callback"] for button in asked["buttons"]] == [s for s, _ in main_setup.TOP_BRAINS] + ["more", "backup:none"]
+          and [button["label"] for button in asked["buttons"]] == [l for _, l in main_setup.TOP_BRAINS] + ["Another provider", "Not now"])
     check("the main AI's own service is answered in plain words, and asked again",
           any_has(to_anna, "That is the service your main AI uses already. A backup steps in when the main AI fails"))
     check("the /backupai the gateway had read is not taken for an answer", not any_has(to_anna, "Tap one of the buttons"))
@@ -831,8 +861,63 @@ def test_nothing_to_do():
           and "stays out of its way" in r["log"])
 
 
+def test_fake_api_evidence():
+    token = "123:record-token"
+    fk = fake_telegram.Fake(token, {"users": USERS})
+    srv = fake_telegram.serve(fk)
+    api = "http://127.0.0.1:%d" % srv.server_address[1]
+    try:
+        def call(path, body):
+            req = urllib.request.Request(api + path, data=json.dumps(body).encode(), headers={"Content-Type": "application/json"})
+            return urllib.request.urlopen(req).read()
+        call("/bot%s/sendMessage" % token, {"chat_id": 111, "text": "private setup key", "reply_markup": {"inline_keyboard": [[{"text": "No", "callback_data": "no"}, {"text": "Yes", "callback_data": "yes"}]]}})
+        with fk.cv:
+            fk.act({"from": 111, "press": "yes"})
+        call("/bot%s/getUpdates" % token, {"offset": 1})
+        try:
+            call("/botwrong/getMe", {})
+        except urllib.error.HTTPError as error:
+            check("the fake API refuses a wrong token", error.code == 401)
+        record = json.dumps({"requests": fk.requests, "sent": fk.sent})
+        check("the fake API records ordered authorized and refused requests without token or text",
+              [r["method"] for r in fk.requests] == ["sendMessage", "getUpdates", "getMe"]
+              and [r["authorized"] for r in fk.requests] == [True, True, False]
+              and token not in record and "private setup key" not in json.dumps(fk.requests))
+        check("the fake API keeps callback updates and each message button's label with its callback",
+              fk.updates and fk.sent[0]["buttons"] == [{"label": "No", "callback": "no"}, {"label": "Yes", "callback": "yes"}])
+    finally:
+        srv.shutdown()
+
+
+def test_fake_api_record_is_atomic():
+    token = "123:atomic-record-token"
+    with tempfile.TemporaryDirectory() as d:
+        record = os.path.join(d, "record.json")
+        fk = fake_telegram.Fake(token, {"users": USERS}, record)
+        fk.save()
+        srv = fake_telegram.serve(fk)
+        api = "http://127.0.0.1:%d" % srv.server_address[1]
+        try:
+            def call():
+                req = urllib.request.Request(api + "/bot%s/getMe" % token, data=b"{}", headers={"Content-Type": "application/json"})
+                return urllib.request.urlopen(req).read()
+            with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+                futures = [pool.submit(call) for _ in range(80)]
+                while any(not future.done() for future in futures):
+                    with open(record, encoding="utf-8") as f:
+                        json.load(f)
+                for future in futures:
+                    future.result()
+            with open(record, encoding="utf-8") as f:
+                saved = json.load(f)
+            check("the fake API atomically publishes every concurrent request", len(saved["requests"]) == 80)
+        finally:
+            srv.shutdown()
+
+
 if __name__ == "__main__":
     test_codes()
+    test_telegram_api_endpoint()
     test_happy()
     test_snags()
     test_found_repo()
@@ -847,6 +932,8 @@ if __name__ == "__main__":
     test_backup_chatgpt_and_remove()
     test_backup_time_up()
     test_nothing_to_do()
+    test_fake_api_evidence()
+    test_fake_api_record_is_atomic()
     print()
     if FAILS:
         print("%d FAILED" % FAILS)

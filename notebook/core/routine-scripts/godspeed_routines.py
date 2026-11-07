@@ -203,7 +203,16 @@ def remember(c, kind, failed=None):
             status = {}
     except Exception:
         status = {}
-    status[kind] = {"at": datetime.now(timezone.utc).isoformat(), "failed": failed}
+    previous = status.get(kind)
+    if not isinstance(previous, dict):
+        previous = {}
+    # Old records have no count, but their one retained outcome is still the immediately preceding
+    # run. Count it so an upgrade does not overlook the next consecutive failure.
+    streak = previous.get("failure_streak")
+    if not isinstance(streak, int) or streak < 0:
+        streak = 1 if previous.get("failed") else 0
+    status[kind] = {"at": datetime.now(timezone.utc).isoformat(), "failed": failed,
+                    "failure_streak": streak + 1 if failed else 0}
     try:
         tmp = path + ".tmp"
         with open(tmp, "w", encoding="utf-8") as f:
@@ -1285,11 +1294,37 @@ def mail_count(c):
     return ""
 
 
+def workouts(c):
+    """The carried Workouts importer owns its key and its normal notification channels."""
+    env = environment(c, today(c))
+    if c.get("workouts_notebook"):
+        env["GODSPEED_WORKOUTS_NOTEBOOK"] = c["workouts_notebook"]
+    try:
+        r = run([c["node"], c["workouts"], "run", "--scheduled"], c, env, timeout=900)
+    except subprocess.TimeoutExpired:
+        r = None
+    if r is None or r.returncode != 0:
+        fail("Workouts from Hevy could not run.")
+    return ""
+
+
+def memory_daily(c):
+    """File dated, evidenced memories from the prompt archive; it never speaks."""
+    try:
+        r = run([c["node"], c["memory_daily"]], c, environment(c, today(c)), timeout=900)
+    except subprocess.TimeoutExpired:
+        r = None
+    if r is None or r.returncode != 0:
+        fail("Remember what you said could not finish.", r)
+    sys.stderr.write(r.stderr)
+    return ""
+
+
 # Every routine wrapper the notebook writes (routineFiles in starting-routines.mjs) names one of these.
 ROUTINES = {"research": research, "decide": decide, "work": work, "due": due, "brief": brief, "coach-prep": coach_prep,
             "coach-gate": lambda c: coach(c, "gate"), "coach-tick": lambda c: coach(c, "tick"),
             "journal-tick": journal_tick, "notices": notices, "chat-tidy": chat_tidy, "connection-check": connection_check,
-             "cleanup": cleanup, "mail-count": mail_count}
+             "cleanup": cleanup, "mail-count": mail_count, "workouts": workouts, "memory-daily": memory_daily}
 
 
 def main(kind):

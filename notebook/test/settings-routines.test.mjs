@@ -1,10 +1,11 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import {fileURLToPath} from 'node:url';import {execFileSync,execFile,spawnSync,spawn} from 'node:child_process';
 import {NativeScheduler,nativeJobs} from '../core/native-scheduler.mjs';import {Store} from '../core/records/store.mjs';import {QueryService} from '../core/query.mjs';import {Domains} from '../core/domains.mjs';
 import {installStarter} from '../core/starter-workspace.mjs';import {readMachineRecord,telegramInHermes,chatAppInHermes,OWNER_CHAT_KEY} from '../core/starting-routines.mjs';import {runCommand} from '../core/child-process.mjs';
-import {DatabaseSync} from 'node:sqlite';import {CONNECTION_NOTICE_PREFIX} from '../core/connection-names.mjs';
+import {DatabaseSync} from 'node:sqlite';import {CONNECTION_NOTICE_PREFIX,ROUTINES_LABEL} from '../core/connection-names.mjs';
 import {cronCalendar,calendarCron,retimeWhat} from '../core/routine-times.mjs';import {enableKinds,readNotebookRoutines,rememberNotebookRoutine,writeNotebookRoutines,JOURNAL_JOB,CHAT_TIDY_JOB,CHAT_TIDY_SCRIPT,BRIEF_SCRIPT,deliveryFor,CONNECTION_JOB,CONNECTION_WHAT} from '../core/notebook-routines.mjs';
 import {personalOperation} from '../core/personal-operations.mjs';import {readArea} from '../../third-party/addons/godspeed-coach/lib/areas.mjs';
 import {acceptUpload} from '../core/phone-health.mjs';
+import {stateDir,statePaths} from '../../third-party/addons/godspeed-workouts/lib/paths.mjs';import {saveKey} from '../../third-party/addons/godspeed-workouts/lib/keys.mjs';
 
 // THE SETTINGS CONTROLS FOR HERMES' ROUTINES, 18 October 2026. Routine times was refused for every
 // Hermes routine, Enable routine refused most kinds with "Choose an installed Godspeed skill", Routine
@@ -21,7 +22,7 @@ function fakeHermes(home){
   const jobs=read();
   if(verb==='create'){const noAgent=rest.includes('--no-agent');jobs.push({id:'job'+(++serial),name:flag('--name'),schedule:{kind:'cron',expr:rest[0]},schedule_display:rest[0],prompt:noAgent?null:rest[1],script:flag('--script'),skill:flag('--skill'),no_agent:noAgent,deliver:flag('--deliver'),failure_deliver:flag('--failure-deliver'),workdir:flag('--workdir'),enabled:true,state:'scheduled',created_at:new Date().toISOString()});write(jobs);}
   if(verb==='edit'){const job=jobs.find(j=>j.id===rest[0]);if(!job)throw Error('Job not found');if(flag('--schedule'))Object.assign(job,{schedule:{kind:'cron',expr:flag('--schedule')},schedule_display:flag('--schedule')});if(flag('--deliver'))job.deliver=flag('--deliver');write(jobs);}
-  if(verb==='pause'||verb==='resume'){const job=jobs.find(j=>j.id===rest[0]);job.enabled=verb==='resume';write(jobs);}
+  if(verb==='pause'||verb==='resume'){const job=jobs.find(j=>j.id===rest[0]);job.enabled=verb==='resume';if(job.enabled)Object.assign(job,{state:'scheduled',paused_at:null});write(jobs);}
   if(verb==='remove')write(jobs.filter(j=>j.id!==rest[0]));
   return {stdout:''};
  };
@@ -87,6 +88,15 @@ test('Enable routine offers the mission control\'s own recipes by name, and Herm
  assert.ok(readNotebookRoutines(store).jobs.some(j=>j.id===made.id&&j.what),'its row says what it does');
  await assert.rejects(scheduler.control({kind:'review',at:'18:00'},{enable:true}),/already runs/);
  await assert.rejects(scheduler.control({kind:'audit',at:'18:00'},{enable:true}),/does not have the recipe/);
+});
+test('a routine Hermes holds paused in any of its three forms is shown paused and can be resumed through enable',async t=>{
+ const {hermes,scheduler}=await withGoal(t);
+ const row=await scheduler.control({kind:'review',at:'17:00'},{enable:true});
+ for(const paused of [{enabled:false},{enabled:true,state:'paused'},{enabled:true,paused_at:'2026-11-01T00:00:00Z'}]){
+  hermes.write(hermes.jobs().map(j=>j.id===row.id?{...j,enabled:true,state:'scheduled',paused_at:null,...paused}:j));
+  assert.equal(nativeJobs(scheduler.home,'pc').find(j=>j.id===row.id).paused,true);
+  await assert.doesNotReject(scheduler.control({kind:'review',at:'18:00'},{enable:true}));hermes.write(hermes.jobs().filter(j=>j.id===row.id));
+ }
 });
 
 test('results go to Telegram whenever Telegram is connected, whatever came first, and Keep results here keeps them here',async t=>{
@@ -163,6 +173,49 @@ test('a mail-count routine Hermes cannot make is a pending notice after a period
  assert.equal(store.get('notifications','mail-count-routine').status,'resolved');
 });
 
+test('routine setup failures keep scrubbed diagnostics, back off, and share one recovering bell notice',async t=>{
+ const {store,hermes,scheduler,tick}=await adoptedFixture(t),{setRoutineSwitch}=await import('../core/routine-switches.mjs');
+ await setRoutineSwitch(store,{key:'decide',on:true});let now=Date.parse('2030-01-01T00:00:00Z'),mode='verbose',commands=[],logged=[];scheduler.now=()=>now;
+ const details=Array.from({length:7},(_,index)=>Array.from({length:35},()=>`detail-${index}`).join(' '));details[6]+=' \u001b[31mtoken=tok_0123456789abcdef\u001b[0m';
+ const verbose=[...details,'Traceback (most recent call last):','  File "routine.py", line 1',"ModuleNotFoundError: No module named 'ruamel'"].join('\n'),plain='connection to Hermes failed\nError: retry exhausted\n';
+ const command=scheduler.run;scheduler.run=async(executable,args,options)=>{
+  commands.push(args.join(' '));const name=args[args.indexOf('--name')+1],fails=args[1]==='create'&&(mode==='verbose'||mode==='recover'&&name==='Daily round: choose today\'s work'||mode==='plain'&&name==='Nightly cleanup');
+  if(fails)throw Object.assign(new Error('Command failed with exit code 1'),{code:1,stderr:mode==='plain'?plain:verbose});
+  return command('hermes',args,options);
+ };
+ const original=console.error;console.error=(...line)=>logged.push(line.join(' '));t.after(()=>{console.error=original;});
+ const run=async minutes=>{now+=minutes*60000;scheduler.lastTick=0;await tick();};
+ const cleanupCreates=()=>commands.filter(command=>command.includes('cron create')&&command.includes('Nightly cleanup')).length;
+ await run(0);await run(1);await run(2);await run(1);await run(2);assert.equal(cleanupCreates(),3,'the fourth try waits the full four minutes');await run(1);await run(7);assert.equal(cleanupCreates(),4,'the fifth try waits the full eight minutes');await run(1);
+ const state=()=>JSON.parse(fs.readFileSync(path.join(store.state,'routine-setup-failures.json'),'utf8')).steps,notice=()=>store.get('notifications','routine-setup-failures');
+ const failure=state().cleanup;
+ assert.equal(failure.step,'cleanup');assert.equal(failure.exit_code,1);assert.equal(failure.attempts,5);assert.equal(failure.stderr.length,2000);assert.ok(failure.stderr.split(/\r?\n/).length<=10);assert.doesNotMatch(failure.stderr,/\x1b\[/);assert.match(failure.stderr,/ModuleNotFoundError/);assert.ok(!failure.stderr.includes('tok_0123456789abcdef'));assert.ok(!logged.join('\n').includes('tok_0123456789abcdef'));assert.match(logged.join('\n'),/Nightly cleanup.*ModuleNotFoundError/);
+ assert.equal(cleanupCreates(),5,'it retries after 1, 2, 4 and 8 minutes, never before');
+ assert.equal(commands.filter(command=>command==='cron tick').length,8,'Hermes still ticks every time');
+ assert.equal(notice().status,'pending');assert.match(notice().body,/Notice sender/);assert.match(notice().body,/ModuleNotFoundError: No module named 'ruamel'/);assert.equal(store.list('notifications').filter(n=>n.id==='routine-setup-failures'&&n.status==='pending').length,1);
+ mode='recover';await run(16);
+ assert.equal(notice().status,'pending');assert.deepEqual(notice().steps,['decide']);assert.match(notice().body,/Daily round: choose today's work/);
+ mode='ok';await run(1);assert.equal(store.get('notifications','routine-setup-failures').status,'resolved');assert.equal(Object.keys(state()).length,0);
+ const removeCleanup=()=>{hermes.write(hermes.jobs().filter(job=>job.name!=='Nightly cleanup'));const routines=readNotebookRoutines(store);writeNotebookRoutines(store,{...routines,jobs:routines.jobs.filter(job=>job.key!=='cleanup')});};
+ removeCleanup();mode='plain';await assert.rejects(scheduler.followCleanup(),/exit code 1/);await assert.rejects(scheduler.followCleanup(),/exit code 1/);assert.equal(notice().status,'resolved','two failures followed by recovery tell nothing');
+ mode='ok';await scheduler.followCleanup();assert.equal(Object.keys(state()).length,0);
+ removeCleanup();mode='plain';await run(0);const fresh=new NativeScheduler(store,{home:scheduler.home,executable:'hermes',device:'pc',run:scheduler.run,now:()=>now});await assert.rejects(fresh.followCleanup({retry:true}),/exit code 1/);fresh.executable='hermes-replaced';await assert.rejects(fresh.followCleanup({retry:true}),/exit code 1/);
+ assert.equal(state().cleanup.attempts,3);assert.equal(state().cleanup.executable,'hermes-replaced');assert.equal(state().cleanup.error_line,undefined);assert.match(logged.at(-1),/Nightly cleanup could not be set up: connection to Hermes failed/);assert.doesNotMatch(logged.at(-1),/retry exhausted/);assert.equal(notice().status,'pending','a new failure spell tells again after three attempts');assert.match(notice().body,/connection to Hermes failed/);assert.doesNotMatch(notice().body,/retry exhausted/);
+});
+
+test('a busy setup notice store does not stop Hermes ticks',async t=>{
+ const {store,scheduler,tick}=await adoptedFixture(t);let now=Date.parse('2030-01-01T00:00:00Z'),mode='fail',commands=[],blocked=false,logged=[];scheduler.now=()=>now;
+ const command=scheduler.run,save=store.save.bind(store);scheduler.run=async(executable,args,options)=>{commands.push(args.join(' '));if(args[1]==='create'&&mode==='fail')throw Object.assign(new Error('Command failed with exit code 1'),{code:1,stderr:'Hermes is unavailable\n'});return command('hermes',args,options);};
+ store.save=(type,value,...rest)=>{if(blocked&&type==='notifications'&&value.id==='routine-setup-failures')throw Object.assign(new Error('Workspace is being written by another process'),{code:'WRITER_BUSY'});return save(type,value,...rest);};
+ const original=console.error;console.error=(...line)=>logged.push(line.join(' '));t.after(()=>{console.error=original;});
+ const run=async minutes=>{now+=minutes*60000;scheduler.lastTick=0;await tick();};
+ await run(0);await run(1);blocked=true;await run(2);assert.equal(store.get('notifications','routine-setup-failures'),undefined,'a busy store can refuse the pending notice');
+ blocked=false;await run(4);assert.equal(store.get('notifications','routine-setup-failures').status,'pending');
+ blocked=true;mode='ok';await run(8);assert.equal(store.get('notifications','routine-setup-failures').status,'pending','a busy store can refuse the resolution too');
+ blocked=false;await run(1);assert.equal(store.get('notifications','routine-setup-failures').status,'resolved');
+ assert.equal(commands.filter(command=>command==='cron tick').length,6);assert.equal(logged.filter(line=>line.includes('routine setup notice could not be saved')).length,2);
+});
+
 test('the routine scripts run the journal\'s tick and say a queued notice once',{skip:!['python','python3'].some(p=>{try{execFileSync(p,['--version'],{stdio:'ignore'});return true;}catch{return false;}})&&'needs Python'},async t=>{
  const {root,home,store,scheduler}=await withGoal(t);
  const journal=fileURLToPath(new URL('../../third-party/addons/godspeed-journal/bin/godspeed-journal.mjs',import.meta.url));
@@ -205,9 +258,10 @@ test('two queued notices are said one in each run',{skip:!['python','python3'].s
 });
 
 // THE DAILY CONNECTION CHECK (#200, 4 November 2026): a script routine at 05:00 (earlier before an early Morning brief), on when Telegram,
-// Gmail, a mail rule or phone health data is present and paused when none is; Settings > Routines lists it with its switch.
+// Gmail, a mail rule, phone health data, or another routine is active, and paused when none is; Settings > Routines lists it with its switch.
 const noMail=t=>{const was=process.env.GODSPEED_MAIL_HOME,dir=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-no-mail-'));process.env.GODSPEED_MAIL_HOME=dir;t.after(()=>{if(was===undefined)delete process.env.GODSPEED_MAIL_HOME;else process.env.GODSPEED_MAIL_HOME=was;fs.rmSync(dir,{recursive:true,force:true});});};
-test('the daily connection check is listed with its switch, paused until a connection is set up',async t=>{
+const quiet=hermes=>hermes.write(hermes.jobs().map(j=>j.name===CONNECTION_JOB?j:{...j,enabled:false}));
+test('the daily connection check is listed with its switch, on while any routine is on or a connection exists, paused otherwise',async t=>{
  noMail(t);
  // Run as the installed image runs: its environment says this is a server. withGoal must take that away, because this test is about a computer.
  const restore=[];for(const [name,value] of [['GODSPEED_REVISION','0123456789abcdef0123456789abcdef01234567'],['GODSPEED_WEB_ADDRESS','https://notes.example.test']]){restore.push([name,process.env[name]]);process.env[name]=value;}
@@ -215,14 +269,26 @@ test('the daily connection check is listed with its switch, paused until a conne
  const {root,home,store,hermes,scheduler,job}=await withGoal(t);
  scheduler.lastTick=0;await scheduler.tick();
  const made=job(CONNECTION_JOB);assert.ok(made,'made beside the starting routines');
- assert.equal(made.schedule.expr,'0 5 * * *');assert.equal(made.script,'godspeed-connection-check.py');assert.equal(made.no_agent,true);assert.equal(made.workdir,root);assert.equal(made.enabled,false,'neither is connected: made paused');
+ assert.equal(made.schedule.expr,'0 5 * * *');assert.equal(made.script,'godspeed-connection-check.py');assert.equal(made.no_agent,true);assert.equal(made.workdir,root);assert.equal(made.enabled,true,'no connection, but the starting routines are on: its routines source has work');
  assert.match(fs.readFileSync(path.join(home,'scripts','godspeed-connection-check.py'),'utf8'),/main\("connection-check"\)/);
  assert.ok(JSON.parse(fs.readFileSync(path.join(home,'scripts','godspeed-routines.json'),'utf8')).connection_check.endsWith('connection-check.mjs'));
  const q=new QueryService(store);q.nativeHermesHome=home;
- const row=q.rows('jobs').find(j=>j.title===CONNECTION_JOB);assert.match(row.what,/phone has not sent health data for 36 hours/);assert.equal(row.paused,true);
+ const row=q.rows('jobs').find(j=>j.title===CONNECTION_JOB);assert.match(row.what,/phone has not sent health data for 36 hours/);assert.ok(row.what.includes(ROUTINES_LABEL));assert.equal(row.paused,false);
+ // An install made before "your routines" was a source keeps the old sentence until the next tick refreshes it.
+ writeNotebookRoutines(store,{...readNotebookRoutines(store),jobs:readNotebookRoutines(store).jobs.map(j=>j.key==='connection-check'?{...j,what:'An older sentence.'}:j)});
+ scheduler.lastTick=0;await scheduler.tick();
+ assert.equal(q.rows('jobs').find(j=>j.title===CONNECTION_JOB).what,CONNECTION_WHAT);
+ // Every other routine switched off and no connection: the notebook pauses it.
+ quiet(hermes);scheduler.lastTick=0;await scheduler.tick();assert.equal(job(CONNECTION_JOB).enabled,false);
  // Telegram connected later: the notebook, which paused it, resumes it.
  fs.writeFileSync(path.join(home,'.env'),'TELEGRAM_BOT_TOKEN=123:abc\n');
  scheduler.lastTick=0;await scheduler.tick();assert.equal(job(CONNECTION_JOB).enabled,true);
+ // Routines paused in either other form Hermes writes do not keep it on without a connection.
+ for(const paused of [{state:'paused'},{paused_at:'2026-11-01T00:00:00Z'}]){
+  fs.writeFileSync(path.join(home,'.env'),'TELEGRAM_BOT_TOKEN=123:abc\n');hermes.write(hermes.jobs().map(j=>j.name===CONNECTION_JOB?j:{...j,enabled:true,state:'scheduled',paused_at:null}));scheduler.lastTick=0;await scheduler.tick();assert.equal(job(CONNECTION_JOB).enabled,true);
+  fs.writeFileSync(path.join(home,'.env'),'');hermes.write(hermes.jobs().map(j=>j.name===CONNECTION_JOB?j:{...j,...paused}));scheduler.lastTick=0;await scheduler.tick();assert.equal(job(CONNECTION_JOB).enabled,false);
+ }
+ fs.writeFileSync(path.join(home,'.env'),'TELEGRAM_BOT_TOKEN=123:abc\n');scheduler.lastTick=0;await scheduler.tick();
  // The last connection removed while it still runs as the notebook left it: the notebook pauses it, and resumes it when one returns.
  fs.writeFileSync(path.join(home,'.env'),'');
  scheduler.lastTick=0;await scheduler.tick();assert.equal(job(CONNECTION_JOB).enabled,false);
@@ -239,24 +305,24 @@ test('the daily connection check is listed with its switch, paused until a conne
 
 test('a mail rule alone starts the daily connection check on, so its failed searches reach the owner',async t=>{
  noMail(t);
- const {store,scheduler,job}=await withGoal(t);
- scheduler.lastTick=0;await scheduler.tick();assert.equal(job(CONNECTION_JOB).enabled,false);
+ const {store,hermes,scheduler,job}=await withGoal(t);
+ scheduler.lastTick=0;await scheduler.tick();quiet(hermes);scheduler.lastTick=0;await scheduler.tick();assert.equal(job(CONNECTION_JOB).enabled,false);
  store.save('collections',{name:'Orders',field_schema:[],tracker:{names:['Orders'],cadence:'any',talks:[],specialist:null,mail:{senders:['shop.example.invalid'],subjects:['order'],mailbox:'godspeed'}}});
  scheduler.lastTick=0;await scheduler.tick();assert.equal(job(CONNECTION_JOB).enabled,true);
 });
 
 test('an accepted phone upload alone starts the daily connection check',async t=>{
  noMail(t);
- const {store,scheduler,job}=await withGoal(t);
- scheduler.lastTick=0;await scheduler.tick();assert.equal(job(CONNECTION_JOB).enabled,false);
+ const {store,hermes,scheduler,job}=await withGoal(t);
+ scheduler.lastTick=0;await scheduler.tick();quiet(hermes);scheduler.lastTick=0;await scheduler.tick();assert.equal(job(CONNECTION_JOB).enabled,false);
  acceptUpload(store,{metrics:[]},{now:new Date('2026-11-04T10:00:00Z')});
  scheduler.lastTick=0;await scheduler.tick();assert.equal(job(CONNECTION_JOB).enabled,true);
 });
 
 test('an existing daily connection check refreshes its Settings description',async t=>{
  noMail(t);
- const {home,store,scheduler,job}=await withGoal(t);
- scheduler.lastTick=0;await scheduler.tick();
+ const {home,store,hermes,scheduler,job}=await withGoal(t);
+ scheduler.lastTick=0;await scheduler.tick();quiet(hermes);scheduler.lastTick=0;await scheduler.tick();
  const existing=readNotebookRoutines(store).jobs.find(j=>j.key==='connection-check');rememberNotebookRoutine(store,{...existing,what:'Checks the connections you set up.'});
  scheduler.lastTick=0;await scheduler.tick();
  const refreshed=readNotebookRoutines(store).jobs.find(j=>j.key==='connection-check');assert.equal(refreshed.what,CONNECTION_WHAT);assert.equal(refreshed.paused_by_notebook,true,'the upgrade keeps the notebook-owned pause');
@@ -368,8 +434,8 @@ test('Gmail alone, read through the real mail adapter, starts the daily connecti
 
 test('a person who resumes the daily connection check keeps it on, and one with Telegram from the start gets it on',async t=>{
  noMail(t);
- const {home,store,scheduler,job}=await withGoal(t);
- scheduler.lastTick=0;await scheduler.tick();assert.equal(job(CONNECTION_JOB).enabled,false);
+ const {home,store,hermes,scheduler,job}=await withGoal(t);
+ scheduler.lastTick=0;await scheduler.tick();quiet(hermes);scheduler.lastTick=0;await scheduler.tick();assert.equal(job(CONNECTION_JOB).enabled,false);
  const q=new QueryService(store);q.nativeHermesHome=home;const domains=new Domains(q);domains.nativeScheduler=scheduler;
  await personalOperation(domains,{type:'routine-change',id:job(CONNECTION_JOB).id,paused:false});assert.equal(job(CONNECTION_JOB).enabled,true);
  scheduler.lastTick=0;await scheduler.tick();assert.equal(job(CONNECTION_JOB).enabled,true);
@@ -379,7 +445,7 @@ test('a person who resumes the daily connection check keeps it on, and one with 
  const otherStore=new Store(other,{device:'pc'}),otherHermes=fakeHermes(otherHome),otherScheduler=new NativeScheduler(otherStore,{home:otherHome,executable:'hermes',device:'pc',run:otherHermes.run});
  await otherScheduler.configure({goal:'Run a fictional 10k',timezone:'Europe/Berlin'});otherScheduler.lastTick=0;await otherScheduler.tick();
  const made=otherHermes.jobs().find(j=>j.name===CONNECTION_JOB);assert.ok(made);assert.notEqual(made.enabled,false,'Telegram connected: on from the start');assert.equal(made.deliver,'telegram');
- fs.writeFileSync(path.join(otherHome,'.env'),'');otherScheduler.lastTick=0;await otherScheduler.tick();
+ fs.writeFileSync(path.join(otherHome,'.env'),'');quiet(otherHermes);otherScheduler.lastTick=0;await otherScheduler.tick();
  assert.equal(otherHermes.jobs().find(j=>j.name===CONNECTION_JOB).enabled,false,'made running by the notebook, it goes off with the last connection');
 });
 
@@ -581,6 +647,20 @@ test('two routines running at once say two queued notices once each, and a third
  assert.deepEqual(fs.readdirSync(home).filter(f=>f.endsWith('.claim')),[],'no claim left behind');
 });
 
+test('the daily connection check the notebook paused is resumed in any of its three paused forms once a routine is active',async t=>{
+ noMail(t);
+ const {store,hermes,scheduler,job}=await withGoal(t);
+ scheduler.lastTick=0;await scheduler.tick();
+ for(const paused of [{enabled:false},{enabled:true,state:'paused'},{enabled:true,paused_at:'2026-11-01T00:00:00Z'}]){
+  quiet(hermes);scheduler.lastTick=0;await scheduler.tick();assert.equal(job(CONNECTION_JOB).enabled,false);
+  assert.equal(readNotebookRoutines(store).jobs.find(j=>j.key==='connection-check').paused_by_notebook,true);
+  hermes.write(hermes.jobs().map(j=>j.name===CONNECTION_JOB?{...j,enabled:true,state:'scheduled',paused_at:null,...paused}:{...j,enabled:true,state:'scheduled',paused_at:null}));
+  scheduler.lastTick=0;await scheduler.tick();
+  const check=job(CONNECTION_JOB);assert.equal(check.enabled,true);assert.ok(!check.paused_at&&check.state!=='paused');
+  assert.equal(readNotebookRoutines(store).jobs.find(j=>j.key==='connection-check').paused_by_notebook,false);
+ }
+});
+
 // AN ADOPTED MISSION CONTROL (4 November 2026, #225): the one Godspeed did not make from the starter gets
 // the notice sender, and each of its routines is a switch that is off until switched on in Settings.
 const havePython=['python','python3'].some(p=>{try{execFileSync(p,['--version'],{stdio:'ignore'});return true;}catch{return false;}});
@@ -653,8 +733,14 @@ test('a reader that runs while the first-start hold is in progress says no old n
 test('Settings lists the routines of an adopted mission control, all off, and a starter-born one has no switches',async t=>{
  const {store,hermes,home}=await adoptedFixture(t),{routineSwitches,setRoutineSwitch,ADOPTED_NOTE,PROVIDER_NOTE}=await import('../core/routine-switches.mjs');
  const listed=routineSwitches(store,{jobs:hermes.jobs()});
- assert.equal(listed.note,ADOPTED_NOTE);assert.equal(listed.routines.length,10);
+ assert.equal(listed.note,ADOPTED_NOTE);assert.equal(listed.routines.length,11);
  assert.ok(listed.routines.every(r=>r.on===false&&r.state==='off'&&r.what));
+ assert.equal(listed.routines.find(r=>r.key==='memory-daily').name,'Remember what you said');
+ assert.equal(listed.routines.find(r=>r.key==='workouts'),undefined,'a no-key install has no unusable Workouts switch');
+ const prior=process.env.GODSPEED_WORKOUTS_STATE;process.env.GODSPEED_WORKOUTS_STATE=path.join(store.state,'workouts');t.after(()=>{if(prior===undefined)delete process.env.GODSPEED_WORKOUTS_STATE;else process.env.GODSPEED_WORKOUTS_STATE=prior;});
+ saveKey(statePaths(stateDir()),'11111111-2222-4333-8444-555555555555');
+ assert.equal(routineSwitches(store,{jobs:[]}).routines.find(r=>r.key==='workouts').name,'Workouts from Hevy','a connected add-on exposes its adopted switch');
+ await setRoutineSwitch(store,{key:'workouts',on:true});assert.equal(routineSwitches(store,{jobs:[]}).routines.find(r=>r.key==='workouts').state,'waiting');
  await setRoutineSwitch(store,{key:'connection-check',on:true});
  assert.equal(routineSwitches(store,{jobs:[]}).routines.find(r=>r.key==='connection-check').state,'waiting');
  await assert.rejects(setRoutineSwitch(store,{key:'nope',on:true}),/Choose one of the routines/);
@@ -719,7 +805,7 @@ test('a switch that the assistant cannot set up yet is saved and the answer says
  service.scheduler.followNoticeSender=async()=>{throw Error('Hermes refused the job');};
  const response=await fetch('http://127.0.0.1:'+service.address.port+'/api/routines/switch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:'connection-check',on:true})});
  assert.notEqual(response.status,200);
- const {error}=await response.json();assert.match(error,/Your switch is saved/);assert.match(error,/Hermes refused the job/);
+ const {error}=await response.json();assert.match(error,/Your switch is saved/);assert.match(error,/Hermes refused the job/);assert.match(error,/longer waits after repeated failures/);assert.doesNotMatch(error,/every minute/);
  const {switchedOn}=await import('../core/routine-switches.mjs');assert.equal(switchedOn(service.store,'connection-check'),true);
 });
 

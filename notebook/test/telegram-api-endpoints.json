@@ -1,0 +1,35 @@
+{
+  "accepted": [
+    {"input": "https://api.example.test/telegram/", "output": "https://api.example.test/telegram"},
+    {"input": "https://api.example.test:443/telegram/", "output": "https://api.example.test/telegram"},
+    {"input": "http://127.0.0.1:8081/telegram/", "output": "http://127.0.0.1:8081/telegram"},
+    {"input": "http://127.1:8081/telegram/", "output": "http://127.0.0.1:8081/telegram"},
+    {"input": "http://127.0.1:8081/telegram/", "output": "http://127.0.0.1:8081/telegram"},
+    {"input": "http://127.000.000.001:8081/telegram/", "output": "http://127.0.0.1:8081/telegram"},
+    {"input": "HTTP://LOCALHOST:8081/telegram/", "output": "http://localhost:8081/telegram"},
+    {"input": "http://[::1]:8081/telegram/", "output": "http://[::1]:8081/telegram"}
+  ],
+  "rejected": [
+    "http://example.test/proxy",
+    "ftp://127.0.0.1",
+    "https://user:pass@example.test",
+    "https://api.example.test/telegram?",
+    "https://api.example.test/telegram#",
+    "https://api.example.test/telegram?key=value",
+    "https://api.example.test/telegram#fragment"
+  ],
+  "ambiguous_numeric_ipv4": {
+    "schemes": ["http", "https"],
+    "hosts": [
+      "2130706433",
+      "127.0.0.0x1",
+      "0177.0.0.1",
+      "127.008",
+      "127.010",
+      "127.0010",
+      "127.000.000.010",
+      "127.000.000.0010",
+      "127.0.0010"
+    ]
+  }
+}

@@ -4,6 +4,8 @@ import {starterBorn} from './starter-workspace.mjs';
 import {STARTING_ROUTINES} from './starting-routines.mjs';
 import {readConfigValue,CRON_PROVIDER} from './hermes-config.mjs';
 import {readNotebookRoutines,SWITCHABLE_NOTEBOOK_ROUTINES} from './notebook-routines.mjs';
+import {stateDir,statePaths} from '../../third-party/addons/godspeed-workouts/lib/paths.mjs';
+import {readKey} from '../../third-party/addons/godspeed-workouts/lib/keys.mjs';
 
 // THE ROUTINES OF A MISSION CONTROL NOT MADE FROM THE STARTER ARE SWITCHES (4 November 2026, #225). Godspeed
 // calls such a mission control adopted: its owner has jobs of their own that may already do what Godspeed's
@@ -12,9 +14,10 @@ import {readNotebookRoutines,SWITCHABLE_NOTEBOOK_ROUTINES} from './notebook-rout
 // routines never collide. Only Settings writes them (setRoutineSwitch): an update, the install and the
 // scheduler only read them, so a routine switched on is never switched off by one.
 // A function, since this file is loaded in the middle of starting-routines.mjs's own imports (through query.mjs).
-export const switchable=()=>[
+const workoutsConnected=()=>!!readKey(statePaths(stateDir()));
+export const switchable=({workouts=workoutsConnected()}={})=>[
  ...STARTING_ROUTINES.filter(({key})=>key!=='cleanup').map(({key,name,what,needs})=>({key,name,what,needs})),
- ...SWITCHABLE_NOTEBOOK_ROUTINES.map(({key,name,what})=>({key,name,what})),
+ ...SWITCHABLE_NOTEBOOK_ROUTINES.filter(({key})=>key!=='workouts'||workouts).map(({key,name,what})=>({key,name,what})),
 ];
 export const ADOPTED_NOTE='Godspeed did not make this mission control from its starter (it was adopted), so its own jobs may already do what these routines do. Each stays off until you switch it on.';
 export const PROVIDER_NOTE='Questions from waiting steps are not delivered while this assistant uses another scheduler (cron.provider). Switch the provider to godspeed_notebook in Hermes\' config to have them delivered.';
@@ -26,8 +29,8 @@ function providerNote(home){
 }
 export const switchId=key=>'routine-switch-'+key;
 export const switchedOn=(store,key)=>store.get('settings',switchId(key))?.on===true;
-export async function setRoutineSwitch(store,{key,on}){
- if(!switchable().some(r=>r.key===key))throw Error('Choose one of the routines listed');
+export async function setRoutineSwitch(store,{key,on},{workouts}={}){
+ if(!switchable({workouts}).some(r=>r.key===key))throw Error('Choose one of the routines listed');
  if(typeof on!=='boolean')throw Error('Choose whether to switch it on or off');
  if(starterBorn(store.root))throw Error('These switches are for a mission control Godspeed did not make from its starter.');
  return store.saveAsync('settings',{id:switchId(key),routine:key,on,switched_at:new Date().toISOString()});

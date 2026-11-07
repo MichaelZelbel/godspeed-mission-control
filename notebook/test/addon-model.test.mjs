@@ -8,6 +8,7 @@ import {EventEmitter} from 'node:events';
 import {PassThrough} from 'node:stream';
 import {execFileSync,spawn} from 'node:child_process';
 import {addonModel,modelInput,modelConnection,assistantCheck} from '../core/addon-model.mjs';
+import {assistantConfiguration,recordRunningNotebook} from '../core/running-notebook.mjs';
 import {installModelCommand} from '../scripts/install-model-command.mjs';
 import {chooseAssistant} from '../scripts/choose-assistant.mjs';
 
@@ -19,6 +20,28 @@ function fixture(t){
  return {root,state,home,runtime};
 }
 const input={system:'Evaluate only this fictional profile.',prompt:'Invented person who likes sailing.'};
+test('assistant configuration follows the environment, Windows pointer, then workspace state',t=>{
+ const f=fixture(t),external=path.join(f.root,'external'),pointer=path.join(external,'pointer-assistant.json'),selected=path.join(external,'selected-assistant.json');fs.mkdirSync(external);fs.writeFileSync(pointer,'{}');fs.writeFileSync(selected,'{}');
+ recordRunningNotebook({root:f.root,assistantConfig:pointer,platform:'win32'});
+ assert.equal(assistantConfiguration(f.root,{env:{GODSPEED_ASSISTANT_CONFIG:selected}}).assistantFile,selected);
+ assert.equal(assistantConfiguration(f.root,{env:{}}).assistantFile,pointer);
+ fs.writeFileSync(path.join(f.state,'running-notebook.json'),JSON.stringify({format:1,assistantConfig:pointer,stateFolder:external,workspace:external}));
+ assert.equal(assistantConfiguration(f.root,{env:{}}).assistantFile,path.join(f.state,'assistant.json'));
+});
+test('an add-on uses the assistant state named by the Windows notebook pointer',t=>{
+ const f=fixture(t),external=path.join(f.root,'external'),runtime=path.join(external,'runtime'),home=path.join(external,'home'),config=path.join(external,'assistant.json');fs.mkdirSync(runtime,{recursive:true});fs.mkdirSync(home);fs.writeFileSync(path.join(runtime,'hermes'),'');fs.writeFileSync(path.join(runtime,'python3'),'');fs.writeFileSync(config,JSON.stringify({verified:true,executable:path.join(runtime,'hermes'),home,sourceRoot:runtime}));
+ recordRunningNotebook({root:f.root,assistantConfig:config,platform:'win32'});
+ const connection=modelConnection(f.root);assert.equal(connection.descriptor.executable,path.join(runtime,'hermes'));assert.equal(connection.state,external);
+});
+test('an add-on honors the selected assistant configuration over pointer and workspace state',t=>{
+ const f=fixture(t),assistant=state=>{
+  const runtime=path.join(state,'runtime'),home=path.join(state,'home'),config=path.join(state,'assistant.json'),descriptor={verified:true,executable:path.join(runtime,'hermes'),home,sourceRoot:runtime};
+  fs.mkdirSync(runtime,{recursive:true});fs.mkdirSync(home);fs.writeFileSync(path.join(runtime,'hermes'),'');fs.writeFileSync(path.join(runtime,'python3'),'');fs.writeFileSync(config,JSON.stringify(descriptor));return {config,descriptor};
+ },pointer=assistant(path.join(f.root,'pointer-state')),selected=assistant(path.join(f.root,'selected-state'));
+ recordRunningNotebook({root:f.root,assistantConfig:pointer.config,platform:'win32'});
+ const connection=modelConnection(f.root,{env:{GODSPEED_ASSISTANT_CONFIG:selected.config}});
+ assert.deepEqual(connection.descriptor,selected.descriptor);assert.equal(connection.state,path.dirname(selected.config));
+});
 test('the packaged server runtime uses its own virtual environment and source root',t=>{
  const f=fixture(t),bin=path.join(f.runtime,'bin'),venv=path.join(f.runtime,'.venv','bin');fs.mkdirSync(bin,{recursive:true});fs.mkdirSync(venv,{recursive:true});fs.writeFileSync(path.join(venv,'python3'),'');
  fs.writeFileSync(path.join(f.state,'assistant.json'),JSON.stringify({verified:true,home:f.home,executable:path.join(bin,'hermes')}));const connection=modelConnection(f.root);assert.equal(connection.python,path.join(venv,'python3'));assert.equal(connection.sourceRoot,f.runtime);
@@ -210,6 +233,7 @@ test('the installer\'s check says whether Hermes loads, through its own Python o
  assert.deepEqual(await check({[f.managed]:described}),{loads:true,direct:true,configured:true,calls:[f.managed]});
  assert.deepEqual(await check({[f.managed]:notLoaded,[f.venv]:described}),{loads:true,direct:false,configured:true,calls:[f.managed,f.venv]});
  assert.deepEqual(await check({[f.managed]:unchosen}),{loads:true,direct:true,configured:false,calls:[f.managed]},'no model chosen yet is no broken Hermes');
+ assert.deepEqual(await addonModel({root:f.root,describe:true,spawnProcess:spawnBy({[f.managed]:unchosen},[])}),{configured:false},'an unconfigured Hermes is described without being treated as a broken connection');
  assert.deepEqual(await check({[f.managed]:notLoaded,[f.venv]:notLoaded}),{loads:false,why:'the Python module ruamel is missing',calls:[f.managed,f.venv]});
  const asked=[];await assistantCheck({root:f.root,executable:f.executable,home:f.home,spawnProcess:fakeSpawn(described[1],{onSpawn:c=>asked.push(c.input)})});
  assert.deepEqual(asked,[{describe:true}]);

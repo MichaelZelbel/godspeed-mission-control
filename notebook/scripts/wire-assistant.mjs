@@ -14,6 +14,7 @@ import {installModelCommand} from './install-model-command.mjs';
 import {noteHermesMet} from '../core/starting-routines.mjs';
 import {keepOutOfGit} from '../core/first-commit.mjs';
 import {godspeedVoiceSettings,renewElevenLabsCommand,chatVoiceDefaults,ownerChats} from '../core/voice-replies.mjs';
+import {GODSPEED_PLUGINS,enabledGodspeedPlugins} from '../core/godspeed-plugins.mjs';
 const root=process.env.GODSPEED_WORKSPACE,home=process.argv[2];if(!root||!home)throw new Error("Set GODSPEED_WORKSPACE to your mission control folder and name your assistant's home folder");
 // The notebook is opened only where its records are needed (a starter-made mission control, or a
 // server's key): opening it reads every one of its files, and this runs at every install and every
@@ -174,11 +175,10 @@ let text=fs.existsSync(file)?fs.readFileSync(file,'utf8').replace(/^\uFEFF/,''):
 // only when this file is made: an install that already had a config.yaml would never get it
 // otherwise, and an update runs this.
 text=setConfigValue(text,['skills','create_dir'],JSON.stringify(path.join(root,'skills')));
-if(!/^plugins:/m.test(text))text+='\nplugins:\n  enabled: ["godspeed-coach", "godspeed-journal", "godspeed-headache", "godspeed-charm", "godspeed-context", "godspeed-reply", "godspeed-chat-tidy"]\n';
+if(!/^plugins:/m.test(text))text+='\nplugins:\n  enabled: ['+GODSPEED_PLUGINS.map(JSON.stringify).join(', ')+']\n';
 else{
  const block=text.match(/^plugins:[^\n]*\n(?:[ \t]+[^\n]*\n|\n)*/m)?.[0]||'';
- const disabled=block.match(/  disabled:\s*\[([^\]]*)\]/)?.[1]||'';
- const names=['godspeed-coach','godspeed-journal','godspeed-headache','godspeed-charm','godspeed-context','godspeed-reply','godspeed-chat-tidy'].filter(n=>!disabled.includes(n));
+ const names=enabledGodspeedPlugins(configList(readConfigValue(text,['plugins','disabled'])));
  let updated=block;
  if(/  enabled:\s*\[([^\]]*)\]/.test(block))updated=block.replace(/  enabled:\s*\[([^\]]*)\]/,(_m,old)=>'  enabled: ['+[old.trim(),...names.filter(n=>!old.includes(n)).map(n=>JSON.stringify(n))].filter(Boolean).join(', ')+']');
  else if(/^  enabled:\s*\n/m.test(block))updated=block.replace(/^  enabled:\s*\n((?:    - [^\n]*\n)*)/m,(_m,old)=>'  enabled:\n'+old+names.filter(n=>!old.includes(n)).map(n=>'    - '+JSON.stringify(n)+'\n').join(''));

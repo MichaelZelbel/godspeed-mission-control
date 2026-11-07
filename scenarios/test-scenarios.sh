@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The gate for the four proving scenarios (scenarios/README.md).
+# The gate for the proving scenarios (scenarios/README.md).
 #
 # A scenario's acting part needs a throwaway machine, a stage to install and, for two of them, a key
 # of its own; its CHECKING part needs nothing but files, and that is where its judgement lives. So
@@ -18,6 +18,9 @@ set -u
 
 HERE=$(cd "$(dirname "$0")" && pwd)
 ROOT=$(cd "$HERE/.." && pwd)
+# shellcheck source=scenarios/server-lib.sh
+. "$HERE/server-lib.sh"
+mapfile -t SERVER_SPARSE_TABLES < <(node "$ROOT/notebook/scripts/briefing-source-tables.mjs")
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP" "$TEST_GUARD_HOME"' EXIT
 
@@ -71,6 +74,159 @@ answers() { # <case> <scenario> <folder> <PASS|FAIL> <code> <words it has to say
 }
 passes() { answers "$1" "$2" "$3" PASS 0 "$4"; }
 refuses() { answers "$1" "$2" "$3" FAIL 1 "$4"; }
+interaction_verdicts() { # <scenario> <folder> <label...>
+  local scenario=$1 folder=$2 label
+  shift 2
+  for label in "$@"; do
+    if grep -Fqx "PASS $scenario: $label" "$folder/steps.tsv"; then
+      ok "$scenario records PASS for $label"
+    else
+      bad "$scenario records no PASS for $label"
+    fi
+  done
+}
+interaction_failure_verdict() { # <scenario> <folder> <label>
+  if grep -Fq "FAIL $1: $3:" "$2/steps.tsv"; then
+    ok "$1 records FAIL for $3"
+  else
+    bad "$1 records no FAIL for $3"
+  fi
+}
+
+server_download_failure() {
+  local bin=$TMP/server-download-bin output code
+  mkdir -p "$bin"
+  printf '#!/bin/sh\nexit 22\n' >"$bin/curl"
+  chmod +x "$bin/curl"
+  PATH="$bin:$PATH" EVIDENCE="$TMP" STAGE_REF='candidate/test' RAW='https://example.invalid' \
+    bash -c 'say(){ :; }; fail(){ printf "%s\\n" "$*"; exit 42; }; . "$1"; server_install' bash "$HERE/server-lib.sh" >"$TMP/server-download.out" 2>&1
+  code=$?
+  output=$(<"$TMP/server-download.out")
+  if [ "$code" = 42 ] && [[ $output == *'/server download for candidate/test failed'* ]]; then
+    ok 'a failed /server download fails before the installer runs'
+  else
+    bad "a failed /server download fails before the installer runs (exit $code: $output)"
+  fi
+}
+
+server_installed_asker() {
+  local output
+  output=$(bash -c '. "$1"; in_server_as_hermes(){ printf "%s\\n" "$*"; }; server_install_asker' bash "$HERE/server-lib.sh" 2>&1)
+  if [[ $output == *'test -f /opt/godspeed/kit/scenarios/scenario-asker.py'* && $output == *'ln -sfn /opt/godspeed/kit/scenarios/scenario-asker.py'* && $output != *'docker cp'* ]]; then
+    ok 'the fixture asker is linked from the installed candidate, not copied from the scenario host'
+  else
+    bad "the fixture asker is linked from the installed candidate, not copied from the scenario host ($output)"
+  fi
+}
+server_installed_asker
+
+server_post_uses_local_door() { # <port> <expected URL>
+  local port=$1 expected=$2 log request answer output
+  log=$TMP/server-post-$port.log
+  request=$TMP/server-post-$port.json
+  answer=$TMP/server-post-$port.answer
+  printf '{}' >"$request"
+  output=$(GODSPEED_SCENARIO_INGEST_PORT="$port" EVIDENCE="$TMP" SERVER_POST_LOG="$log" bash -c '
+    . "$1"
+    in_server() {
+      printf "%s\\n" "$*" >>"$SERVER_POST_LOG"
+      if [ "$1" = curl ]; then printf 200; else printf "{}"; fi
+    }
+    server_post /api/provider "$3" "$4"
+  ' bash "$HERE/server-lib.sh" "$log" "$request" "$answer" 2>/dev/null)
+  if [ "$output" = 200 ] && grep -Fqx "curl -sS -o /tmp/answer -w %{http_code} --max-time 300 -X POST -H Content-Type: application/json --data-binary @- $expected" "$log"; then
+    ok "server_post uses $expected"
+  else
+    bad "server_post did not use $expected ($output: $(cat "$log" 2>/dev/null))"
+  fi
+}
+
+server_post_uses_local_door '' 'http://127.0.0.1:47832/api/provider'
+server_post_uses_local_door 49999 'http://127.0.0.1:49999/api/provider'
+
+server_telegram_setup_uses_local_door() { # <port>
+  local port server_dir node log
+  port=$1
+  server_dir=$TMP/server-telegram-setup-$port
+  node=$TMP/server-telegram-node-$port
+  log=$TMP/server-telegram-node-$port.log
+  mkdir -p "$server_dir" "$TMP/server-telegram-evidence-$port"
+  printf '#!/bin/sh\nprintf "%%s\\n" "$@" >"$SERVER_TELEGRAM_NODE_LOG"\n' >"$node"
+  chmod +x "$node"
+  GODSPEED_SCENARIO_INGEST_PORT="$port" GODSPEED_SCENARIO_SERVER_DIR="$server_dir" EVIDENCE="$TMP/server-telegram-evidence-$port" HERE="$HERE" \
+    NODE="$node" SERVER_TELEGRAM_NODE_LOG="$log" bash -c '
+      . "$1"
+      sudo() { shift; cat >"$1"; }
+      server_compose() { :; }
+      server_healthy() { :; }
+      server_container() { printf fixture; }
+      server_telegram_setup without-ai
+    ' bash "$HERE/server-lib.sh" 2>/dev/null
+  if grep -Fqx -- '--notebook-port' "$log" && grep -Fqx "$port" "$log"; then
+    ok "server_telegram_setup passes $port to the Telegram driver"
+  else
+    bad "server_telegram_setup did not pass $port to the Telegram driver ($(cat "$log" 2>/dev/null))"
+  fi
+}
+
+server_telegram_setup_uses_local_door 47832
+server_telegram_setup_uses_local_door 49999
+
+server_sparse_inventory() {
+  local output
+  mkdir -p "$TMP/server-sparse"
+  output=$(EVIDENCE="$TMP/server-sparse" bash -c '
+    . "$1"
+    fail(){ printf "%s\\n" "$*" >&2; exit 42; }
+    in_server(){ printf "%s\\n" "$*" >&2; printf "notes\\njob_receipts\\nlead_entries\\n"; }
+    server_table(){ printf "%s %s\\n" "$1" "$2" >&2; }
+    server_sparse_state
+  ' bash "$HERE/server-lib.sh" 2>&1)
+  if [[ $output == *'/usr/local/bin/node /opt/godspeed/kit/notebook/scripts/briefing-source-tables.mjs'* && $output == *"job_receipts $TMP/server-sparse/sparse-job-receipts.json"* && $output == *"lead_entries $TMP/server-sparse/sparse-lead-entries.json"* ]]; then
+    ok 'the sparse-state proof asks the installed briefing inventory and snapshots every named table'
+  else
+    bad "the sparse-state proof asks the installed briefing inventory and snapshots every named table ($output)"
+  fi
+}
+server_sparse_inventory
+
+server_local_listener_port() {
+  local default overridden
+  default=$(bash -c '. "$1"; printf "%s" "$INGEST_PORT"' bash "$HERE/server-lib.sh")
+  overridden=$(GODSPEED_SCENARIO_INGEST_PORT=49672 bash -c '. "$1"; printf "%s" "$INGEST_PORT"' bash "$HERE/server-lib.sh")
+  if [ "$default" = 47832 ] && [ "$overridden" = 49672 ]; then
+    ok 'the Docker scenario helpers use the loopback listener unless an override selects another port'
+  else
+    bad "the Docker scenario helpers select the expected listener ports (default $default, override $overridden)"
+  fi
+}
+server_local_listener_port
+
+server_telegram_setup_override() {
+  local bin=$TMP/server-telegram-override-bin trace=$TMP/server-telegram-override.trace output port
+  mkdir -p "$bin" "$TMP/server-telegram-override-evidence"
+  printf '%s\n' '#!/bin/sh' 'printf "%s\n" "$@" >"$NODE_TRACE"' >"$bin/node"
+  chmod +x "$bin/node"
+  if output=$(PATH="$bin:$PATH" NODE="$bin/node" NODE_TRACE="$trace" GODSPEED_SCENARIO_INGEST_PORT=49672 \
+    EVIDENCE="$TMP/server-telegram-override-evidence" SERVER_DIR="$TMP/server-telegram-override-server" bash -c '
+      . "$1"
+      sudo(){ [ "$1" = tee ] && cat >/dev/null; }
+      server_compose(){ :; }
+      server_healthy(){ :; }
+      server_container(){ printf fixture; }
+      server_telegram_setup without-ai
+    ' bash "$HERE/server-lib.sh" 2>&1); then
+    port=$(awk 'found { print; exit } $0 == "--notebook-port" { found=1 }' "$trace")
+    if [ "$port" = 49672 ]; then
+      ok 'the Telegram setup hands an overridden notebook port to its driver'
+    else
+      bad "the Telegram setup hands an overridden notebook port to its driver (got ${port:-none})"
+    fi
+  else
+    bad "the Telegram setup hands an overridden notebook port to its driver ($output)"
+  fi
+}
+server_telegram_setup_override
 
 # A folder that should pass, so a case for one failure is that folder with one thing changed.
 copy() { # <good folder> <new folder>
@@ -99,6 +255,9 @@ printf '{"jobs":[{"id":"owner","name":"Daily connection check","script":"my-own-
 printf '{"jobs":[]}\n' >"$IR/no-notebook-record.json"
 routine_script_is 'a jobs envelope falls back to the product script, not its same-named owner routine' \
   "$(installed_routine_script "$IR/envelope.json" "$IR/no-notebook-record.json" connection-check 'Daily connection check' godspeed-connection-check.py)" godspeed-connection-check.py
+
+section 'server installer download'
+server_download_failure
 
 # =============================================================== 1. settings-on-install
 # A settings file as a wiring leaves it: Hermes' own keys, and the five of ticket 1.
@@ -380,7 +539,7 @@ update_good() { # <folder>
   printf '+ curl -fsSL https://raw.githubusercontent.com/x/kit-bootstrap/%s/setup-godspeed.sh\n+ KB_BRANCH=%s\n+ GODSPEED_STARTER_REF=%s\n' \
     "$ENGINE" "$ENGINE" "$NEW" >"$folder/trace-1.log"
   cp "$folder/trace-1.log" "$folder/trace-2.log"
-  printf '["notes","scenario-four"]\n["settings","installation"]\n' >"$folder/records-before.txt"
+  printf '["goals","the-first-goal"]\n["notes","scenario-four"]\n["settings","installation"]\n' >"$folder/records-before.txt"
   printf '["goals","the-first-goal"]\n["notes","scenario-four"]\n["settings","installation"]\n' \
     >"$folder/records-after.txt"
   printf '{"records":[{"type":"notes","id":"scenario-four","content":"A note the owner wrote before the update"}]}\n' \
@@ -390,6 +549,7 @@ update_good() { # <folder>
   printf '{"id":"scenario-chat-1"}\n{"content":"a message of the chat history","session_id":"scenario-chat-1"}\n' \
     >"$folder/chat-before.txt"
   cp "$folder/chat-before.txt" "$folder/chat-after.txt"
+  printf '{"configured":true}\n' >"$folder/setup.json"
   printf 'Goal research\nThe day ahead\nNight chat tidy-up\n' >"$folder/routines-after.txt"
   printf '200\n' >"$folder/health.txt"
 }
@@ -420,6 +580,16 @@ copy "$U/good" "$U/record-gone"
 printf '["settings","installation"]\n' >"$U/record-gone/records-after.txt"
 refuses "an update that lost a notebook record" update-keeps-everything "$U/record-gone" \
   "notebook records of the owner's are gone"
+
+copy "$U/good" "$U/no-setup"
+rm "$U/no-setup/setup.json"
+refuses "a run that kept no proof that the first goal configured the install" update-keeps-everything "$U/no-setup" \
+  "setup.json is not in what the scenario kept"
+
+copy "$U/good" "$U/setup-failed"
+printf '{"configured":false}\n' >"$U/setup-failed/setup.json"
+refuses "a first goal that did not configure the install" update-keeps-everything "$U/setup-failed" \
+  "did not say the install was configured"
 
 copy "$U/good" "$U/setting-gone"
 printf '100000\n' >"$U/setting-gone/owner-setting-after.txt"
@@ -2570,12 +2740,10 @@ run_json() { # <folder> <messages...>: a run.json holding these messages and ste
   for m in "$@"; do joined=${joined:+$joined,}$m; done
   printf '{"outbox":[%s],"steps":[{"label":"s1","kind":"cron","success":true}],"_plugins":[],"hermes":"test"}\n' "$joined" >"$folder/run.json"
 }
-FIXTURE_OWNER=31415
-FIXTURE_VALID_TOKEN='5550001111:SCENARIO-valid-aaaaaaaaaaaaaaaaaaaaaaaaaaaa'
-FIXTURE_OTHER_TOKEN='5550001111:SCENARIO-revoked-bbbbbbbbbbbbbbbbbbbbbbbb'
-fixture_json() { # <file>: a telegram-fixture.json as scenario-lib.sh writes it
-  printf '{"owner":"%s","valid_token":"%s","other_token":"%s","bot_id":5550001111}\n' \
-    "$FIXTURE_OWNER" "$FIXTURE_VALID_TOKEN" "$FIXTURE_OTHER_TOKEN" >"$1"
+live_telegram_evidence() { # <folder>: the redacted record and gateway state the live driver keeps
+  printf '{"requests":[]}\n' >"$1/telegram-requests.json"
+  printf '{"state":"gateway"}\n' >"$1/runner.json"
+  printf '{"files":[{"file":"run.json"}]}\n' >"$1/manifest.json"
 }
 rows() { # <file> <status|id|text>...: waiting-step records
   local file=$1 joined='' status id text
@@ -2588,25 +2756,6 @@ rows() { # <file> <status|id|text>...: waiting-step records
   printf '[%s]\n' "$joined" >"$file"
 }
 OLD='Seven old programs can post into your bot chats'
-
-section 'telegram-fixture-fetch: revoked tokens are refused'
-FETCH="$ROOT/scenarios/telegram-fixture-fetch.mjs"
-mkdir -p "$TMP/fetch"
-fixture_json "$TMP/fetch/fixture.json"
-: >"$TMP/fetch/calls.log"
-fetched() { # <token>: the HTTP status the preload answers getMe with
-  GODSPEED_SCENARIO_FIXTURE="$TMP/fetch/fixture.json" GODSPEED_SCENARIO_CALLS="$TMP/fetch/calls.log" \
-    node --import="file://$FETCH" -e "fetch('https://api.telegram.org/bot'+process.argv[1]+'/getMe').then(r=>console.log(r.status))" "$1"
-}
-[ "$(fetched "$FIXTURE_VALID_TOKEN")" = 200 ] && ok 'the valid token is answered 200' || bad 'the valid token was not answered 200'
-[ "$(fetched "$FIXTURE_OTHER_TOKEN")" = 401 ] && ok 'the revoked token is answered 401' || bad 'the revoked token was not answered 401'
-[ "$(tr '\n' ',' <"$TMP/fetch/calls.log")" = 'getMe valid,getMe invalid,' ] && ok 'both calls are logged without the token' || bad "the call log is: $(cat "$TMP/fetch/calls.log")"
-printf '{"owner":"31415"}\n' >"$TMP/fetch/partial.json"
-if GODSPEED_SCENARIO_FIXTURE="$TMP/fetch/partial.json" node --import="file://$FETCH" -e "fetch('https://api.telegram.org/botx/getMe')" >/dev/null 2>&1; then
-  bad 'a fixture with no valid_token was accepted'
-else
-  ok 'a fixture with no valid_token is refused'
-fi
 
 section 'telegram-judge: what counts as a code'
 code_case() { # <wanted: clean|code> <text>
@@ -2634,12 +2783,13 @@ nq_good() { # <folder>
   for label in s1 s2 s4 s5; do rows "$f/approvals-$label.json" approved step-qqqq-0001 'Restart the gateway'; done
   rows "$f/approvals-s3-ask.json" pending step-qqqq-0002 "$OLD"
   rows "$f/approvals-s3.json" approved step-qqqq-0002 "$OLD"
-  fixture_json "$f/telegram-fixture.json"
+  live_telegram_evidence "$f"
 }
 section no-question-he-cannot-judge
 Q=$TMP/nq
 nq_good "$Q/good"
 passes 'five situations: nothing for 1, 2, 4, 5, one question and one confirming reply for 3' no-question-he-cannot-judge "$Q/good" 'none holds a code'
+interaction_verdicts no-question-he-cannot-judge "$Q/good" s1 s2 s3-ask s3 s4 s5
 copy "$Q/good" "$Q/driver-malformed"
 printf '{\n' >"$Q/driver-malformed/run.json"
 refuses 'no-question: an unreadable owner-driver record' no-question-he-cannot-judge "$Q/driver-malformed" 'owner-driver record cannot be read'
@@ -2710,12 +2860,13 @@ py_good() { # <folder>
     "$(msg b 'Which one: the food log for your nutritionist, or cancelling the gym membership?')" "$(msg b-choice 'Sent the food log.')" \
     "$(msg c-ask 'Book the car inspection?' true "$YN")" "$(msg c-press 'Cancelled the gym membership renewal.')" "$(msg d 'Nothing is waiting for a yes right now.')"
   py_snapshots "$f"
-  fixture_json "$f/telegram-fixture.json"
+  live_telegram_evidence "$f"
 }
 section plain-yes
 P=$TMP/py
 py_good "$P/good"
 passes 'plain yes, two waiting, a button, and nothing waiting' plain-yes "$P/good" 'approved nothing'
+interaction_verdicts plain-yes "$P/good" a-ask a b-ask b b-choice c-ask c-press d-no d
 copy "$P/good" "$P/driver-malformed"
 printf '{\n' >"$P/driver-malformed/run.json"
 refuses 'plain yes: an unreadable owner-driver record' plain-yes "$P/driver-malformed" 'owner-driver record cannot be read'
@@ -2765,12 +2916,13 @@ ww_good() { # <folder>
   printf '%s\n' "$WW_FACTS" >"$f/report-facts.json"
   printf '{"data":[{"id":"m1","source_app":"background","content":%s,"report":{"facts":%s}}]}\n' \
     "$(node -e 'process.stdout.write(JSON.stringify(process.argv[1]))' "$WW_TEXT")" "$WW_FACTS" >"$f/conversation_messages-report.json"
-  fixture_json "$f/telegram-fixture.json"
+  live_telegram_evidence "$f"
 }
 section what-was-that
 W=$TMP/ww
 ww_good "$W/good"
 passes 'a report recorded with its facts and explained afterwards' what-was-that "$W/good" 'was answered with the backup and GitHub'
+interaction_verdicts what-was-that "$W/good" report question
 copy "$W/good" "$W/driver-malformed"
 printf '{\n' >"$W/driver-malformed/run.json"
 refuses 'what was that: an unreadable owner-driver record' what-was-that "$W/driver-malformed" 'owner-driver record cannot be read'
@@ -2807,12 +2959,15 @@ cc_good() { # <folder>
   printf '{"data":[{"id":"n1","kind":"connection-telegram","body":"Telegram refused your bot key, so I cannot reach you there. Open Settings to connect it again."}]}\n' >"$f/notifications-broken.json"
   printf '[{"slug":"telegram-key","title":"Connect Telegram again","state":"closed"}]\n' >"$f/due-repaired.json"
   printf '{"data":[]}\n' >"$f/notifications-repaired.json"
-  printf 'getMe valid\ngetMe invalid\ngetMe valid\n' >"$f/telegram-fixture-calls.log"
+  printf '{"requests":[{"method":"getMe","authorized":true},{"method":"getMe","authorized":false},{"method":"getMe","authorized":true}]}\n' >"$f/telegram-requests.json"
+  printf '{"state":"gateway"}\n' >"$f/runner.json"
+  printf '{"files":[{"file":"run.json"}]}\n' >"$f/manifest.json"
 }
 section connection-check
 C=$TMP/cc
 cc_good "$C/good"
 passes 'silent while fine, one message and one deadline when broken, closed when repaired' connection-check "$C/good" 'told the owner once'
+interaction_verdicts connection-check "$C/good" fine broken repaired
 copy "$C/good" "$C/driver-malformed"
 printf '{\n' >"$C/driver-malformed/run.json"
 refuses 'connection check: an unreadable owner-driver record' connection-check "$C/driver-malformed" 'owner-driver record cannot be read'
@@ -2820,8 +2975,8 @@ copy "$C/good" "$C/no-routine"
 printf '[{"id":"r1","name":"Journal check-ins"}]\n' >"$C/no-routine/routines.json"
 refuses 'an install with no Daily connection check' connection-check "$C/no-routine" 'has no Daily connection check'
 copy "$C/good" "$C/never-reached"
-printf 'getMe valid\n' >"$C/never-reached/telegram-fixture-calls.log"
-refuses 'a check that never reached the stand-in' connection-check "$C/never-reached" 'never asked the stand-in'
+printf '{"requests":[{"method":"getMe","authorized":true}]}\n' >"$C/never-reached/telegram-requests.json"
+refuses 'a check that never reached the stand-in' connection-check "$C/never-reached" 'never asked the fake Telegram API'
 copy "$C/good" "$C/speaks-when-fine"
 run_json "$C/speaks-when-fine" "$(msg fine 'All is well.')" "$(msg broken 'Telegram refused your bot key.')"
 refuses 'a message although everything is fine' connection-check "$C/speaks-when-fine" 'although everything was fine'
@@ -2835,6 +2990,7 @@ refuses 'a connection record in the bell although everything is fine' connection
 copy "$C/good" "$C/two-texts"
 run_json "$C/two-texts" "$(msg broken 'Telegram refused your bot key.')"
 refuses 'two different texts when broken' connection-check "$C/two-texts" 'in 2 different texts'
+interaction_failure_verdict connection-check "$C/two-texts" broken
 copy "$C/good" "$C/silent-when-broken"
 run_json "$C/silent-when-broken"
 printf '{"data":[]}\n' >"$C/silent-when-broken/notifications-broken.json"
@@ -2855,6 +3011,110 @@ printf '[{"slug":"the-open-deadline","title":"Connect Telegram again","state":"o
 printf '[{"slug":"the-open-deadline","title":"Connect Telegram again","state":"open"},{"slug":"the-decoy","title":"Telegram old","state":"closed"}]\n' >"$C/decoy-closed/due-repaired.json"
 refuses 'another closed Telegram deadline standing in for the open one' connection-check "$C/decoy-closed" 'not closed, after'
 refuses 'a deadline still open after the key is valid again' connection-check "$C/still-open" 'not closed, after'
+
+# ---------------------------------------------------------------------------------------- first-day
+first_day_good() { # <folder>
+  local f=$1 label table sparse
+  rm -rf "$f"; mkdir -p "$f/work"
+  printf '{"results":{"goal":{"title":"Prepare a practical household emergency-kit checklist by Sunday."}}}\n' >"$f/setup.json"
+  for label in research choice work; do printf '[{"id":"%s","last_run_at":"2026-11-06T10:00:00Z","last_status":"ok"}]\n' "$label" >"$f/job-$label.json"; done
+  printf 'ID: W-000-first-day-emergency-kit\nSTATUS: verified\nKEY: first-day-emergency-kit\nWHAT: Write a practical household emergency-kit checklist at work/emergency-kit-checklist.md\nDONE WHEN: A practical household emergency-kit checklist is written at work/emergency-kit-checklist.md and ready for a reader\nCHECK: test -s work/emergency-kit-checklist.md\nSOURCE: first-day-scenario\nRESULT: Wrote emergency-kit-checklist.md with practical supplies.\n\n- 2026-11-06 VERIFIED check passed (test -s work/emergency-kit-checklist.md)\n' >"$f/work/W-000-first-day-emergency-kit.md"
+  cat >"$f/work/emergency-kit-checklist.md" <<'EOF'
+- [ ] Water: 12 litres for 3 days
+- [ ] Food: 3 days of shelf-stable meals
+- [ ] First aid and medication: 7 days
+- [ ] Light and power: 2 battery torches
+- [ ] Communication and documents: copies in a waterproof pouch
+EOF
+  cat >"$f/brief.txt" <<'EOF'
+Prepare a practical household emergency-kit checklist by Sunday.
+Verified work: Prepare a practical household emergency-kit checklist — Wrote emergency-kit-checklist.md with practical supplies.
+Next today: buy the water and first-aid supplies.
+EOF
+  printf '%s\n' "${SERVER_SPARSE_TABLES[@]}" >"$f/briefing-source-tables.txt"
+  for table in "${SERVER_SPARSE_TABLES[@]}"; do sparse=${table//_/-}; printf '{"data":[]}\n' >"$f/sparse-$sparse.json"; done
+  printf 'W-000-first-day-emergency-kit: planned\n' >"$f/first-day-work-filed.txt"
+  printf '{"state":"gateway"}\n' >"$f/runner.json"
+  printf '{"requests":[{"method":"getUpdates","authorized":true},{"method":"sendMessage","authorized":true}]}\n' >"$f/telegram-requests.json"
+  printf '{"id":"scheduled-brief","before_last_run_at":null,"data":[{"id":"scheduled-brief","last_run_at":"2026-11-06T10:01:00Z","last_status":"ok"}]}\n' >"$f/job-scheduled-brief.json"
+  printf 'Morning brief: source=builtin\n' >"$f/brief-cron-runs.txt"
+  printf '{"sent":[{"text":%s}]}\n' "$(node -e 'process.stdout.write(JSON.stringify(require("fs").readFileSync(process.argv[1],"utf8")))' "$f/brief.txt")" >"$f/scheduled-telegram-requests.json"
+  run_json "$f" "$(msg scheduled-brief "$(cat "$f/brief.txt")")" "$(msg todays-brief "$(cat "$f/brief.txt")")"
+  printf '[]\n' >"$f/work-items.json"
+  printf '{"data":[{"id":"brief-1","content":%s}]}\n' "$(node -e 'process.stdout.write(JSON.stringify(require("fs").readFileSync(process.argv[1],"utf8")))' "$f/brief.txt")" >"$f/notes-before-reply.json"
+  cp "$f/notes-before-reply.json" "$f/notes-after-reply.json"
+  printf '{"files":[{"file":"brief.txt","bytes":1,"sha256":"test"}]}\n' >"$f/manifest.json"
+}
+section first-day
+FD=$TMP/first-day
+first_day_good "$FD/good"
+passes 'fresh Docker first day makes useful verified work, a sparse-data brief, and matching Telegram delivery and reply' first-day "$FD/good" 'answered today'
+copy "$FD/good" "$FD/no-research"
+printf '[]\n' >"$FD/no-research/job-research.json"
+refuses 'a first day without research' first-day "$FD/no-research" 'research routine has no successful'
+copy "$FD/good" "$FD/unverified"
+sed -i 's/STATUS: verified/STATUS: planned/' "$FD/unverified/work/W-000-first-day-emergency-kit.md"
+cp "$FD/good/work/W-000-first-day-emergency-kit.md" "$FD/unverified/work/W-other-verified.md"
+refuses 'a first day without its selected checked work' first-day "$FD/unverified" 'selected emergency-kit work card is not verified'
+copy "$FD/good" "$FD/no-artifact"
+rm "$FD/no-artifact/work/emergency-kit-checklist.md"
+refuses 'a first day without a practical artifact' first-day "$FD/no-artifact" 'not a practical emergency-kit checklist'
+copy "$FD/good" "$FD/placeholder"
+printf '%s\n' '- [ ] TODO: outline only' >"$FD/placeholder/work/emergency-kit-checklist.md"
+refuses 'a placeholder checklist' first-day "$FD/placeholder" 'not a practical emergency-kit checklist'
+copy "$FD/good" "$FD/wrong-result-file"
+sed -i '/^DONE WHEN:/s#work/emergency-kit-checklist.md#work/desk-drawer.md#' "$FD/wrong-result-file/work/W-000-first-day-emergency-kit.md"
+printf '%s\n' '- [ ] Pens: 12' >"$FD/wrong-result-file/work/desk-drawer.md"
+refuses 'a selected work card that names another result file' first-day "$FD/wrong-result-file" 'does not name its result file'
+for table in "${SERVER_SPARSE_TABLES[@]}"; do
+  sparse=${table//_/-}
+  copy "$FD/good" "$FD/populated-$sparse"
+  printf '{"data":[{"id":"seeded-%s"}]}\n' "$sparse" >"$FD/populated-$sparse/sparse-$sparse.json"
+  refuses "a brief with seeded $sparse context" first-day "$FD/populated-$sparse" 'required sparse installed state'
+done
+copy "$FD/good" "$FD/no-brief-sources"
+: >"$FD/no-brief-sources/briefing-source-tables.txt"
+refuses 'a first day whose installed product names no briefing sources' first-day "$FD/no-brief-sources" 'briefing-source-tables.txt is not in what the scenario kept'
+copy "$FD/good" "$FD/no-send"
+printf '{"sent":[]}\n' >"$FD/no-send/scheduled-telegram-requests.json"
+refuses 'a brief not delivered on Telegram' first-day "$FD/no-send" 'never delivered'
+copy "$FD/good" "$FD/unmarked-scheduled-delivery"
+run_json "$FD/unmarked-scheduled-delivery" "$(msg todays-brief "$(cat "$FD/unmarked-scheduled-delivery/brief.txt")")"
+refuses 'a scheduled delivery captured as the later chat reply' first-day "$FD/unmarked-scheduled-delivery" 'not retained as its own Telegram interaction'
+copy "$FD/good" "$FD/direct-run"
+printf 'Morning brief: source=direct\n' >"$FD/direct-run/brief-cron-runs.txt"
+refuses 'a direct brief run called scheduled delivery' first-day "$FD/direct-run" 'not triggered by the installed scheduler'
+copy "$FD/good" "$FD/failed-scheduled-sibling"
+node -e 'const fs=require("fs"),p=process.argv[1],d=JSON.parse(fs.readFileSync(p,"utf8"));d.data[0].last_status="error";d.data.push({id:"research",last_run_at:"2026-11-06T10:02:00Z",last_status:"ok"});fs.writeFileSync(p,JSON.stringify(d))' "$FD/failed-scheduled-sibling/job-scheduled-brief.json"
+refuses 'a failed scheduled brief standing beside a successful sibling' first-day "$FD/failed-scheduled-sibling" 'scheduled morning brief has no successful'
+copy "$FD/good" "$FD/unchanged-scheduled-run"
+node -e 'const fs=require("fs"),p=process.argv[1],d=JSON.parse(fs.readFileSync(p,"utf8"));d.before_last_run_at=d.data[0].last_run_at;fs.writeFileSync(p,JSON.stringify(d))' "$FD/unchanged-scheduled-run/job-scheduled-brief.json"
+refuses 'a scheduled brief with no new completed run' first-day "$FD/unchanged-scheduled-run" 'scheduled morning brief has no successful'
+copy "$FD/good" "$FD/missing-scheduled-baseline"
+node -e 'const fs=require("fs"),p=process.argv[1],d=JSON.parse(fs.readFileSync(p,"utf8"));delete d.before_last_run_at;fs.writeFileSync(p,JSON.stringify(d))' "$FD/missing-scheduled-baseline/job-scheduled-brief.json"
+refuses 'a scheduled brief without its completion baseline' first-day "$FD/missing-scheduled-baseline" 'scheduled morning brief has no successful'
+copy "$FD/good" "$FD/not-gateway"
+printf '{"state":"setting-up"}\n' >"$FD/not-gateway/runner.json"
+refuses 'a bot that never reaches its gateway' first-day "$FD/not-gateway" 'never reached gateway'
+copy "$FD/good" "$FD/no-poll"
+printf '{"requests":[{"method":"sendMessage","authorized":true}]}\n' >"$FD/no-poll/telegram-requests.json"
+refuses 'a gateway that never polls Telegram' first-day "$FD/no-poll" 'never polled'
+copy "$FD/good" "$FD/different-reply"
+run_json "$FD/different-reply" "$(msg scheduled-brief "$(cat "$FD/different-reply/brief.txt")")" "$(msg todays-brief 'something else')"
+refuses 'a reply that differs from the saved brief' first-day "$FD/different-reply" 'differs from the saved note'
+copy "$FD/good" "$FD/vague-next-action"
+sed -i 's/^Next today: buy the water and first-aid supplies\.$/Next: continue./' "$FD/vague-next-action/brief.txt"
+refuses 'a brief whose next step is vague' first-day "$FD/vague-next-action" 'no concrete next action'
+copy "$FD/good" "$FD/second-note"
+node -e 'const fs=require("fs"),p=process.argv[1],d=JSON.parse(fs.readFileSync(p,"utf8"));d.data.push({...d.data[0],id:"brief-2"});fs.writeFileSync(p,JSON.stringify(d))' "$FD/second-note/notes-after-reply.json"
+refuses 'asking today’s brief creates another note' first-day "$FD/second-note" 'second saved brief'
+
+copy "$FD/good" "$FD/brief-without-goal"
+sed -i 1d "$FD/brief-without-goal/brief.txt"
+refuses 'a brief that does not name the goal' first-day "$FD/brief-without-goal" 'does not name the emergency-kit goal'
+copy "$FD/good" "$FD/brief-without-work"
+sed -i 2d "$FD/brief-without-work/brief.txt"
+refuses 'a brief that does not identify the verified work' first-day "$FD/brief-without-work" 'does not identify the verified work'
 
 # ============================================== the five scenarios of 2.0.0-beta.18 (numbers come in)
 # Each is judged on made-up folders only: one that should pass, and one per failure that is easy to
@@ -3340,6 +3600,409 @@ copy "$DF/good" "$DF/never-planted"
 sed -i 's/^run-log present/run-log gone/' "$DF/never-planted/planted.txt"
 refuses 'an old file that was never there' disk-filling "$DF/never-planted" 'was not there before the cleanup'
 
+# =========================================================== the scenarios of beta.20
+section 'workouts from Hevy'
+WH=$TMP/wh
+wh_good() {
+  local f=$1
+  rm -rf "$f"; mkdir -p "$f"
+  printf '{"fixture":"local-hevy"}\n' >"$f/setup.json"
+  printf '{"ok":true}\n' >"$f/fixture-health.json"
+  printf '{"method":"GET","path":"/v1/workouts","status":401,"accepted":false}\n{"method":"GET","path":"/v1/workouts","status":200,"accepted":true}\n' >"$f/fixture.log"
+  printf '{"clean":true,"paths":[]}\n' >"$f/key-scan.json"
+  for platform in docker native; do
+    printf '{"platform":"%s","settings":{"refused":{"accepted":false,"retained":false,"paths":[]},"accepted":{"accepted":true}},"collection":{"name":"Workouts","rows":[{"source_id":"harbor-strength","title":"Harbor Strength","exercise":"Scenario Squat","set":{"weight_kg":42,"reps":8}},{"source_id":"canal-pull","title":"Canal Pull","exercise":"Scenario Row","set":{"weight_kg":31,"reps":10}}]},"routine":{"name":"Workouts from Hevy","minute":17,"script":"scenario-import","count":1},"manual_run":{"exit":0},"after":{"rows":[{"source_id":"harbor-strength","title":"Harbor Strength","exercise":"Scenario Squat","set":{"weight_kg":45,"reps":8}}]}}\n' "$platform" >"$f/$platform.json"
+  done
+}
+wh_good "$WH/good"
+passes 'both installs import, update and delete made-up Hevy workouts' workouts-from-hevy "$WH/good" 'Docker and Linux each kept Harbor Strength updated'
+copy "$WH/good" "$WH/refused-kept"; sed -i 's/"retained":false/"retained":true/' "$WH/refused-kept/native.json"
+refuses 'a refused key retained' workouts-from-hevy "$WH/refused-kept" 'native retained or accepted'
+copy "$WH/good" "$WH/refused-in-settings"; sed -i 's/"paths":\[\]/"paths":["\/opt\/data\/settings.json"]/' "$WH/refused-in-settings/docker.json"
+refuses 'a refused key kept outside hevy.json' workouts-from-hevy "$WH/refused-in-settings" 'docker retained or accepted'
+RFS=$WH/refused-scan
+mkdir -p "$RFS/root/.godspeed" "$RFS/assistant"
+printf '{"home":"%s"}\n' "$RFS/assistant" >"$RFS/root/.godspeed/assistant.json"
+printf 'refused-scenario-key\n' >"$RFS/assistant/settings.json"
+REFUSED_SCAN=$(GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy NODE="$(command -v node)" bash -c '
+  cd "$3"
+  . "$1"
+  install_paths
+  EVIDENCE=$2
+  refused_not_retained native
+' refused-scan "$ROOT/scenarios/workouts-from-hevy.sh" "$RFS" "$ROOT/scenarios" 2>&1)
+REFUSED_SCAN_CODE=$?
+case "$REFUSED_SCAN_CODE $REFUSED_SCAN" in
+  "1 "*"native kept the refused Hevy key in $RFS/assistant/settings.json"*) ok "a refused key in the recorded native assistant home fails with its path" ;;
+  *) bad "a refused key in the recorded native assistant home was not refused (exit $REFUSED_SCAN_CODE: $REFUSED_SCAN)" ;;
+esac
+printf '00000000-0000-4000-8000-000000000001\n' >"$RFS/assistant/hevy.json"
+ACCEPTED_SCAN=$(GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy NODE="$(command -v node)" bash -c '
+  cd "$3"
+  . "$1"
+  install_paths
+  EVIDENCE=$2
+  in_server() {
+    case $1 in
+      find) printf '%s\n' /opt/data/.godspeed/assistant.json ;;
+      node) printf '%s' /root/.hermes ;;
+      grep) printf "%s\n" /root/.hermes/hevy.json ;;
+    esac
+  }
+  scan_fixture_key
+  cat "$EVIDENCE/key-scan.json"
+' accepted-scan "$ROOT/scenarios/workouts-from-hevy.sh" "$RFS" "$ROOT/scenarios" 2>/dev/null)
+case "$ACCEPTED_SCAN" in
+  '{"clean":true,"paths":[]}') ok "the accepted key's permitted native and Docker Settings records are ignored" ;;
+  *) bad "the accepted key's permitted native or Docker Settings record was not ignored ($ACCEPTED_SCAN)" ;;
+esac
+printf '00000000-0000-4000-8000-000000000001\n' >"$RFS/assistant/settings.json"
+ACCEPTED_SCAN=$(GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy NODE="$(command -v node)" bash -c '
+  cd "$3"
+  . "$1"
+  install_paths
+  EVIDENCE=$2
+  in_server() {
+    case $1 in
+      find) printf '%s\n' /opt/data/.godspeed/assistant.json ;;
+      node) printf '%s' /root/.hermes ;;
+      grep) return 1 ;;
+    esac
+  }
+  scan_fixture_key
+  cat "$EVIDENCE/key-scan.json"
+' accepted-scan "$ROOT/scenarios/workouts-from-hevy.sh" "$RFS" "$ROOT/scenarios" 2>/dev/null)
+case "$ACCEPTED_SCAN" in
+  '{"clean":false,"paths":["'"$RFS"'/assistant/settings.json"]}') ok "the accepted-key scan finds a leak in the recorded native assistant home" ;;
+  *) bad "the accepted-key scan missed a recorded native assistant-home leak ($ACCEPTED_SCAN)" ;;
+esac
+rm -f "$RFS/assistant/settings.json"
+mkdir -p "$RFS/root/logs"
+printf '00000000-0000-4000-8000-000000000001\n' >"$RFS/root/logs/hevy.json"
+ACCEPTED_SCAN=$(GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy NODE="$(command -v node)" bash -c '
+  cd "$3"
+  . "$1"
+  install_paths
+  EVIDENCE=$2
+  in_server() {
+    case $1 in
+      find) printf "%s\\n" /opt/data/.godspeed/assistant.json ;;
+      node) printf "%s" /root/.hermes ;;
+      grep) return 1 ;;
+    esac
+  }
+  scan_fixture_key
+  cat "$EVIDENCE/key-scan.json"
+' accepted-scan "$ROOT/scenarios/workouts-from-hevy.sh" "$RFS" "$ROOT/scenarios" 2>/dev/null)
+case "$ACCEPTED_SCAN" in
+  '{"clean":false,"paths":["'"$RFS"'/root/logs/hevy.json"]}') ok "the accepted-key scan finds a hevy.json leak outside the recorded setting" ;;
+  *) bad "the accepted-key scan missed a hevy.json leak outside the recorded setting ($ACCEPTED_SCAN)" ;;
+esac
+rm -f "$RFS/root/logs/hevy.json"
+mkdir -p "$RFS/assistant"
+ACCEPTED_SCAN=$(GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy NODE="$(command -v node)" bash -c '
+  cd "$3"
+  . "$1"
+  install_paths
+  EVIDENCE=$2
+  in_server() {
+    case $1 in
+      find) printf "%s\\n" /opt/data/.godspeed/assistant.json ;;
+      node) printf "%s" /srv/non-default-hermes ;;
+      grep) printf "%s\\n" /srv/non-default-hermes/retained.json ;;
+    esac
+  }
+  scan_fixture_key
+  cat "$EVIDENCE/key-scan.json"
+' accepted-scan "$ROOT/scenarios/workouts-from-hevy.sh" "$RFS" "$ROOT/scenarios" 2>/dev/null)
+case "$ACCEPTED_SCAN" in
+  '{"clean":false,"paths":["/srv/non-default-hermes/retained.json"]}') ok "the accepted-key scan finds a leak in the recorded non-default Docker assistant home" ;;
+  *) bad "the accepted-key scan missed a recorded non-default Docker assistant-home leak ($ACCEPTED_SCAN)" ;;
+esac
+mkdir -p "$RFS/root/dockerhome"
+printf '00000000-0000-4000-8000-000000000001\n' >"$RFS/root/dockerhome/hevy.json"
+ACCEPTED_SCAN=$(GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy NODE="$(command -v node)" bash -c '
+  cd "$3"
+  . "$1"
+  install_paths
+  EVIDENCE=$2
+  in_server() {
+    case $1 in
+      find) printf "%s\\n" /opt/data/.godspeed/assistant.json ;;
+      node) printf "%s" "'$RFS'/root/dockerhome" ;;
+      grep) return 1 ;;
+    esac
+  }
+  scan_fixture_key
+  cat "$EVIDENCE/key-scan.json"
+' accepted-scan "$ROOT/scenarios/workouts-from-hevy.sh" "$RFS" "$ROOT/scenarios" 2>/dev/null)
+case "$ACCEPTED_SCAN" in
+  '{"clean":false,"paths":["'"$RFS"'/root/dockerhome/hevy.json"]}') ok "a native retained key matching the Docker Settings pathname is kept" ;;
+  *) bad "a native retained key matching the Docker Settings pathname was ignored ($ACCEPTED_SCAN)" ;;
+esac
+rm -f "$RFS/root/dockerhome/hevy.json"
+ACCEPTED_SCAN=$(GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy NODE="$(command -v node)" bash -c '
+  cd "$3"
+  . "$1"
+  install_paths
+  EVIDENCE=$2
+  in_server() {
+    case $1 in
+      find) printf "%s\\n" /opt/data/.godspeed/assistant.json ;;
+      node) printf "%s" /srv/non-default-hermes ;;
+      grep) printf "%s\\n" "'$RFS'/assistant/hevy.json" ;;
+    esac
+  }
+  scan_fixture_key
+  cat "$EVIDENCE/key-scan.json"
+' accepted-scan "$ROOT/scenarios/workouts-from-hevy.sh" "$RFS" "$ROOT/scenarios" 2>/dev/null)
+case "$ACCEPTED_SCAN" in
+  '{"clean":false,"paths":["'"$RFS"'/assistant/hevy.json"]}') ok "a Docker retained key matching the native Settings pathname is kept" ;;
+  *) bad "a Docker retained key matching the native Settings pathname was ignored ($ACCEPTED_SCAN)" ;;
+esac
+rm -rf "$RFS/assistant"
+MISSING_HOME_SCAN=$(GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy NODE="$(command -v node)" bash -c '
+  cd "$3"
+  . "$1"
+  install_paths
+  EVIDENCE=$2
+  refused_not_retained native
+' refused-scan "$ROOT/scenarios/workouts-from-hevy.sh" "$RFS" "$ROOT/scenarios" 2>&1)
+MISSING_HOME_SCAN_CODE=$?
+case "$MISSING_HOME_SCAN_CODE $MISSING_HOME_SCAN" in
+  "1 "*"FAIL workouts-from-hevy: native refused-key scan: the install recorded '"*"' as its assistant's home, and there is no such folder"*) ok "a refused-key scan with no recorded assistant home fails by name" ;;
+  *) bad "a refused-key scan with no recorded assistant home did not fail by name (exit $MISSING_HOME_SCAN_CODE: $MISSING_HOME_SCAN)" ;;
+esac
+mkdir -p "$RFS/assistant"
+printf 'refused-scenario-key\n' >"$RFS/assistant/settings.json"
+mkdir -p "$RFS/failing-grep"
+cat >"$RFS/failing-grep/grep" <<'SH'
+#!/bin/sh
+exit 2
+SH
+chmod +x "$RFS/failing-grep/grep"
+SCENARIO_NODE=$(command -v node)
+FAILED_REFUSED_SCAN=$(PATH="$RFS/failing-grep:$PATH" GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy NODE="$SCENARIO_NODE" bash -c '
+  cd "$3"
+  . "$1"
+  install_paths
+  EVIDENCE=$2
+  refused_not_retained native
+' refused-scan "$ROOT/scenarios/workouts-from-hevy.sh" "$RFS" "$ROOT/scenarios" 2>&1)
+FAILED_REFUSED_SCAN_CODE=$?
+case "$FAILED_REFUSED_SCAN_CODE $FAILED_REFUSED_SCAN" in
+  "1 "*"FAIL workouts-from-hevy: native refused-key scan could not run (grep ended 2)"*) ok "a failed native refused-key scanner fails closed" ;;
+  *) bad "a failed native refused-key scanner did not fail closed (exit $FAILED_REFUSED_SCAN_CODE: $FAILED_REFUSED_SCAN)" ;;
+esac
+FAILED_ACCEPTED_SCAN=$(PATH="$RFS/failing-grep:$PATH" GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy NODE="$SCENARIO_NODE" bash -c '
+  cd "$3"
+  . "$1"
+  install_paths
+  EVIDENCE=$2
+  scan_fixture_key
+' accepted-scan "$ROOT/scenarios/workouts-from-hevy.sh" "$RFS" "$ROOT/scenarios" 2>&1)
+FAILED_ACCEPTED_SCAN_CODE=$?
+case "$FAILED_ACCEPTED_SCAN_CODE $FAILED_ACCEPTED_SCAN" in
+  "1 "*"FAIL workouts-from-hevy: native accepted-key scan could not run (grep ended 2)"*) ok "a failed native accepted-key scanner fails closed" ;;
+  *) bad "a failed native accepted-key scanner did not fail closed (exit $FAILED_ACCEPTED_SCAN_CODE: $FAILED_ACCEPTED_SCAN)" ;;
+esac
+mkdir -p "$RFS/silent-grep"
+cat >"$RFS/silent-grep/grep" <<'SH'
+#!/bin/sh
+exit 0
+SH
+chmod +x "$RFS/silent-grep/grep"
+SILENT_NATIVE_ACCEPTED_SCAN=$(PATH="$RFS/silent-grep:$PATH" GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy NODE="$SCENARIO_NODE" bash -c '
+  cd "$3"
+  . "$1"
+  install_paths
+  EVIDENCE=$2
+  scan_fixture_key
+' accepted-scan "$ROOT/scenarios/workouts-from-hevy.sh" "$RFS" "$ROOT/scenarios" 2>&1)
+SILENT_NATIVE_ACCEPTED_SCAN_CODE=$?
+case "$SILENT_NATIVE_ACCEPTED_SCAN_CODE $SILENT_NATIVE_ACCEPTED_SCAN" in
+  "1 "*"FAIL workouts-from-hevy: native accepted-key scan completed with no path output after a match"*) ok "a silent native accepted-key scanner fails closed" ;;
+  *) bad "a silent native accepted-key scanner did not fail closed (exit $SILENT_NATIVE_ACCEPTED_SCAN_CODE: $SILENT_NATIVE_ACCEPTED_SCAN)" ;;
+esac
+FAILED_DOCKER_REFUSED_SCAN=$(GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy NODE="$SCENARIO_NODE" bash -c '
+  cd "$3"
+  . "$1"
+  install_paths
+  EVIDENCE=$2
+  in_server() {
+    case $1 in
+      find) printf "%s\\n" /opt/data/.godspeed/assistant.json ;;
+      node) printf "%s" /root/.hermes ;;
+      grep) return 73 ;;
+    esac
+  }
+  refused_not_retained docker
+' refused-scan "$ROOT/scenarios/workouts-from-hevy.sh" "$RFS" "$ROOT/scenarios" 2>&1)
+FAILED_DOCKER_REFUSED_SCAN_CODE=$?
+case "$FAILED_DOCKER_REFUSED_SCAN_CODE $FAILED_DOCKER_REFUSED_SCAN" in
+  "1 "*"FAIL workouts-from-hevy: docker refused-key scan could not run (server grep ended 73)"*) ok "a failed Docker refused-key scanner fails closed" ;;
+  *) bad "a failed Docker refused-key scanner did not fail closed (exit $FAILED_DOCKER_REFUSED_SCAN_CODE: $FAILED_DOCKER_REFUSED_SCAN)" ;;
+esac
+FAILED_DOCKER_ACCEPTED_SCAN=$(GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy NODE="$SCENARIO_NODE" bash -c '
+  cd "$3"
+  . "$1"
+  install_paths
+  EVIDENCE=$2
+  in_server() {
+    case $1 in
+      find) printf "%s\\n" /opt/data/.godspeed/assistant.json ;;
+      node) printf "%s" /root/.hermes ;;
+      grep) return 73 ;;
+    esac
+  }
+  scan_fixture_key
+' accepted-scan "$ROOT/scenarios/workouts-from-hevy.sh" "$RFS" "$ROOT/scenarios" 2>&1)
+FAILED_DOCKER_ACCEPTED_SCAN_CODE=$?
+case "$FAILED_DOCKER_ACCEPTED_SCAN_CODE $FAILED_DOCKER_ACCEPTED_SCAN" in
+  "1 "*"FAIL workouts-from-hevy: docker accepted-key scan could not run (server grep ended 73)"*) ok "a failed Docker accepted-key scanner fails closed" ;;
+  *) bad "a failed Docker accepted-key scanner did not fail closed (exit $FAILED_DOCKER_ACCEPTED_SCAN_CODE: $FAILED_DOCKER_ACCEPTED_SCAN)" ;;
+esac
+SILENT_DOCKER_ACCEPTED_SCAN=$(GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy NODE="$SCENARIO_NODE" bash -c '
+  cd "$3"
+  . "$1"
+  install_paths
+  EVIDENCE=$2
+  in_server() {
+    case $1 in
+      find) printf "%s\\n" /opt/data/.godspeed/assistant.json ;;
+      node) printf "%s" /root/.hermes ;;
+      grep) return 0 ;;
+    esac
+  }
+  scan_fixture_key
+' accepted-scan "$ROOT/scenarios/workouts-from-hevy.sh" "$RFS" "$ROOT/scenarios" 2>&1)
+SILENT_DOCKER_ACCEPTED_SCAN_CODE=$?
+case "$SILENT_DOCKER_ACCEPTED_SCAN_CODE $SILENT_DOCKER_ACCEPTED_SCAN" in
+  "1 "*"FAIL workouts-from-hevy: docker accepted-key scan completed with no path output after a match"*) ok "a silent Docker accepted-key scanner fails closed" ;;
+  *) bad "a silent Docker accepted-key scanner did not fail closed (exit $SILENT_DOCKER_ACCEPTED_SCAN_CODE: $SILENT_DOCKER_ACCEPTED_SCAN)" ;;
+esac
+copy "$WH/good" "$WH/no-workout"; sed -i 's/"source_id":"canal-pull"/"source_id":"missing-row"/' "$WH/no-workout/docker.json"
+refuses 'a malformed initial workout' workouts-from-hevy "$WH/no-workout" 'initial workouts have the wrong source ids'
+copy "$WH/good" "$WH/no-routine"; sed -i 's/"minute":17/"minute":0/' "$WH/no-routine/native.json"
+refuses 'a zero-minute import routine' workouts-from-hevy "$WH/no-routine" 'non-zero minute'
+copy "$WH/good" "$WH/two-routines"; sed -i 's/"count":1/"count":2/' "$WH/two-routines/native.json"
+refuses 'two import routines' workouts-from-hevy "$WH/two-routines" 'did not run its one recorded'
+copy "$WH/good" "$WH/not-updated"; sed -i 's/"weight_kg":45/"weight_kg":42/' "$WH/not-updated/docker.json"
+refuses 'a changed workout not updated' workouts-from-hevy "$WH/not-updated" 'did not update Harbor Strength'
+copy "$WH/good" "$WH/deleted-stays"; sed -i 's/"source_id":"harbor-strength","title":"Harbor Strength","exercise":"Scenario Squat","set":{"weight_kg":45,"reps":8}/"source_id":"harbor-strength","title":"Harbor Strength","exercise":"Scenario Squat","set":{"weight_kg":45,"reps":8}},{"source_id":"canal-pull"/' "$WH/deleted-stays/docker.json"
+refuses 'a deleted workout retained' workouts-from-hevy "$WH/deleted-stays" 'retained the deleted workout'
+copy "$WH/good" "$WH/key-leaked"; printf '{"clean":false,"paths":["/tmp/leak"]}\n' >"$WH/key-leaked/key-scan.json"
+refuses 'a key outside its permitted setting' workouts-from-hevy "$WH/key-leaked" 'key scan is not a clean'
+copy "$WH/good" "$WH/no-native"; rm "$WH/no-native/native.json"
+refuses 'a platform with no evidence' workouts-from-hevy "$WH/no-native" 'native.json is not in what'
+copy "$WH/good" "$WH/unhealthy-fixture"; printf '{"ok":false}\n' >"$WH/unhealthy-fixture/fixture-health.json"
+refuses 'an unhealthy retained Hevy health response' workouts-from-hevy "$WH/unhealthy-fixture" 'health response is not healthy'
+copy "$WH/good" "$WH/status-less-refusal"; sed -i 's/"status":401,//' "$WH/status-less-refusal/fixture.log"
+refuses 'a refusal without its observed HTTP 401' workouts-from-hevy "$WH/status-less-refusal" 'HTTP 401 observation'
+copy "$WH/good" "$WH/wrong-path-refusal"; printf '{"method":"GET","path":"/v1/user/info","status":401,"accepted":false}\n{"method":"GET","path":"/v1/workouts","status":200,"accepted":true}\n' >"$WH/wrong-path-refusal/fixture.log"
+refuses 'a 401 from another fixture path' workouts-from-hevy "$WH/wrong-path-refusal" 'refused GET /v1/workouts HTTP 401 observation'
+copy "$WH/good" "$WH/accepted-refusal"; printf '{"method":"GET","path":"/v1/workouts","status":401,"accepted":true}\n{"method":"GET","path":"/v1/workouts","status":200,"accepted":true}\n' >"$WH/accepted-refusal/fixture.log"
+refuses 'a 401 accepted by the fixture' workouts-from-hevy "$WH/accepted-refusal" 'refused GET /v1/workouts HTTP 401 observation'
+
+section 'day becomes facts'
+DF2=$TMP/df2
+FACT_FAMILY_NAMES=$(bash -c '. "$1"; IFS=,; printf "%s" "${FACT_FAMILIES[*]}"' _ "$ROOT/scenarios/facts-lib.sh") ||
+  bad 'the remembered-facts scenario has no readable fact-family manifest'
+facts_json() { # <claims JSON>
+  node - "$FACT_FAMILY_NAMES" "$1" <<'NODE'
+const [families,claims]=process.argv.slice(2);
+const snapshot=Object.fromEntries(families.split(',').map(family=>[family,[]]));
+snapshot.claims=JSON.parse(claims);
+console.log(JSON.stringify(snapshot));
+NODE
+}
+facts_good() {
+  local f=$1
+  rm -rf "$f"; mkdir -p "$f"
+  printf '{"messages":[{"id":"move-1","text":"I moved to Hamburg on 1 November"},{"id":"doctor-1","text":"my new doctor is Dr. Lang"},{"id":"machine-1","text":"[IMPORTANT: You are running as a scheduled job]"},{"id":"track-1","text":"track this"}]}\n' >"$f/archive.json"
+  facts_json '[{"value":"Berlin"}]' >"$f/before.json"
+  printf '{"name":"Remember what you said","cron":"40 3 * * *","script":"scenario-facts","exit":0}\n' >"$f/routine.json"
+  facts_json '[{"value":"Berlin","valid_to":"2026-11-01"},{"value":"Hamburg","valid_from":"2026-11-01","quote":"I moved to Hamburg on 1 November","source_id":"move-1"},{"value":"Dr. Lang","valid_from":"2026-11-01","quote":"my new doctor is Dr. Lang","source_id":"doctor-1"}]' >"$f/after.json"
+  cp "$f/after.json" "$f/second.json"
+}
+facts_good "$DF2/good"
+passes 'dated facts are filed once and excluded messages file nothing' day-becomes-facts "$DF2/good" 'Berlin was closed'
+copy "$DF2/good" "$DF2/wrong-time"; sed -i 's/40 3/41 3/' "$DF2/wrong-time/routine.json"
+refuses 'a remembered-facts routine at the wrong time' day-becomes-facts "$DF2/wrong-time" 'successful 03:40'
+copy "$DF2/good" "$DF2/no-date"; sed -i 's/"valid_from":"2026-11-01",//' "$DF2/no-date/after.json"; cp "$DF2/no-date/after.json" "$DF2/no-date/second.json"
+refuses 'an undated Hamburg fact' day-becomes-facts "$DF2/no-date" 'Hamburg is not a dated'
+copy "$DF2/good" "$DF2/no-quote"; sed -i 's/I moved to Hamburg on 1 November/I moved somewhere/' "$DF2/no-quote/after.json"; cp "$DF2/no-quote/after.json" "$DF2/no-quote/second.json"
+refuses 'a fact without the exact move quote' day-becomes-facts "$DF2/no-quote" 'Hamburg is not a dated'
+copy "$DF2/good" "$DF2/berlin-current"; sed -i 's/,"valid_to":"2026-11-01"//' "$DF2/berlin-current/after.json"; cp "$DF2/berlin-current/after.json" "$DF2/berlin-current/second.json"
+refuses 'an older city left current' day-becomes-facts "$DF2/berlin-current" 'Berlin was deleted or left current'
+copy "$DF2/good" "$DF2/no-doctor"; sed -i 's/,{"value":"Dr. Lang"[^}]*}//' "$DF2/no-doctor/after.json"; cp "$DF2/no-doctor/after.json" "$DF2/no-doctor/second.json"
+refuses 'an absent doctor fact' day-becomes-facts "$DF2/no-doctor" 'Dr. Lang is not a dated'
+copy "$DF2/good" "$DF2/second-changed"; sed -i 's/"moments":\[\]/"moments":[{"source_id":"later"}]/' "$DF2/second-changed/second.json"
+refuses 'a second run that writes another record' day-becomes-facts "$DF2/second-changed" 'second run changed'
+copy "$DF2/good" "$DF2/excluded"; sed -i 's/"entities":\[\]/"entities":[{"source_id":"machine-1"}]/' "$DF2/excluded/after.json"; cp "$DF2/excluded/after.json" "$DF2/excluded/second.json"
+refuses 'a machine prompt filed as a fact' day-becomes-facts "$DF2/excluded" 'excluded message'
+copy "$DF2/good" "$DF2/routine-failed"; sed -i 's/"exit":0/"exit":1/' "$DF2/routine-failed/routine.json"
+refuses 'a failed remembered-facts routine' day-becomes-facts "$DF2/routine-failed" 'successful 03:40'
+
+section 'Hermes update rollback'
+HU=$TMP/hu
+hermes_good() {
+  local f=$1
+  rm -rf "$f"; mkdir -p "$f"
+  printf '[{"version":"1.0.0","healthy":true,"age_days":14},{"version":"1.1.0","healthy":true,"age_days":8},{"version":"1.2.0","healthy":false,"age_days":7},{"version":"1.3.0","healthy":true,"age_days":3}]\n' >"$f/releases.json"
+  printf '[{"attempt":"1.1.0","version":"1.1.0","commit":"good-commit","chat":true,"failure_bell":false},{"attempt":"1.2.0","failed_check":"Hermes cron","version":"1.1.0","commit":"good-commit","restarts":2,"chat":true},{"version":"1.1.0","commit":"good-commit","attempted":false,"notification_count":1}]\n' >"$f/nights.json"
+  printf '[{"version":"1.2.0","pending":true}]\n' >"$f/notifications.json"
+  printf 'fixture releases are local\n' >"$f/fixture.log"
+}
+hermes_good "$HU/good"
+passes 'the good release stays, broken release rolls back, and a recent release stays put' hermes-update-rollback "$HU/good" 'kept 1.1.0'
+copy "$HU/good" "$HU/no-rollback"; sed -i 's/"version":"1.1.0","commit":"good-commit","restarts":2/"version":"1.2.0","commit":"good-commit","restarts":2/' "$HU/no-rollback/nights.json"
+refuses 'a broken release left checked out' hermes-update-rollback "$HU/no-rollback" 'not restored to the exact'
+copy "$HU/good" "$HU/chat-failed"; sed -i '0,/"chat":true/s//"chat":false/' "$HU/chat-failed/nights.json"
+refuses 'a good release whose chat failed' hermes-update-rollback "$HU/chat-failed" 'working chat'
+copy "$HU/good" "$HU/no-restart"; sed -i 's/"restarts":2/"restarts":1/' "$HU/no-restart/nights.json"
+refuses 'a rollback with no second gateway restart' hermes-update-rollback "$HU/no-restart" 'not restored to the exact'
+copy "$HU/good" "$HU/wrong-check"; sed -i 's/Hermes cron/Godspeed plugins/' "$HU/wrong-check/nights.json"
+refuses 'a rollback with the wrong failed check' hermes-update-rollback "$HU/wrong-check" 'not restored to the exact'
+copy "$HU/good" "$HU/two-bells"; printf '[{"version":"1.2.0"},{"version":"1.2.0"}]\n' >"$HU/two-bells/notifications.json"
+refuses 'two update failure notifications' hermes-update-rollback "$HU/two-bells" 'exactly one pending bell'
+copy "$HU/good" "$HU/recent-taken"; sed -i 's/"attempted":false/"attempted":true/' "$HU/recent-taken/nights.json"
+refuses 'a three-day-old release taken' hermes-update-rollback "$HU/recent-taken" 'three-day 1.3.0 release was taken'
+
+# The two local fixtures are useful without an installation. Their logs must never contain keys.
+HF=$TMP/hevy-fixture; mkdir -p "$HF"; : >"$HF/log"
+node "$ROOT/scenarios/hevy-fixture.mjs" --state "$HF/state" --log "$HF/log" >"$HF/port" & HF_PID=$!
+for _ in $(seq 1 20); do [ -s "$HF/port" ] && break; sleep 0.1; done
+HF_PORT=$(cat "$HF/port")
+HF_BAD=$(curl -s -o /dev/null -w '%{http_code}' -H 'api-key: not-the-key' "http://127.0.0.1:$HF_PORT/v1/workouts")
+HF_GOOD=$(curl -s -H 'api-key: 00000000-0000-4000-8000-000000000001' "http://127.0.0.1:$HF_PORT/v1/workouts")
+node "$ROOT/scenarios/hevy-fixture.mjs" --state "$HF/state" --log "$HF/log" --mutate
+HF_EVENTS=$(curl -s -H 'api-key: 00000000-0000-4000-8000-000000000001' "http://127.0.0.1:$HF_PORT/v1/workouts/events")
+kill "$HF_PID" 2>/dev/null || true
+if [ "$HF_BAD" = 401 ] && grep -q 'harbor-strength' <<<"$HF_GOOD" && grep -q 'canal-pull' <<<"$HF_EVENTS" && ! grep -q '00000000-0000-4000-8000-000000000001' "$HF/log"; then ok 'the local Hevy fixture refuses, changes and redacts'; else bad 'the local Hevy fixture does not refuse, change and redact'; fi
+HFD=$TMP/hermes-fixture
+HFD_LOG=$TMP/hermes-fixture.log
+if node "$ROOT/scenarios/hermes-update-fixture.mjs" --dir "$HFD" >/dev/null \
+  && [ "$(git -C "$HFD" tag | wc -l | tr -d '[:space:]')" = 4 ] \
+  && [ "$(HERMES_FIXTURE_LOG=$HFD_LOG "$HFD/bin/hermes" --version)" = 1.0.0 ] \
+  && [ "$(HERMES_FIXTURE_LOG=$HFD_LOG "$HFD/bin/hermes" update --check)" = 1.1.0 ] \
+  && HERMES_FIXTURE_LOG=$HFD_LOG "$HFD/bin/hermes" update 1.2.0 \
+  && [ "$(git -C "$HFD" describe --exact-match --tags HEAD)" = v1.2.0 ] \
+  && ! HERMES_FIXTURE_LOG=$HFD_LOG "$HFD/bin/hermes" cron list >/dev/null 2>&1 \
+  && git -C "$HFD" checkout -q v1.1.0 \
+  && HERMES_FIXTURE_LOG=$HFD_LOG "$HFD/bin/hermes" update --backup \
+  && [ "$(git -C "$HFD" describe --exact-match --tags HEAD)" = v1.1.0 ] \
+  && HERMES_FIXTURE_LOG=$HFD_LOG "$HFD/bin/hermes" cron list >/dev/null \
+  && [ "$(HERMES_FIXTURE_LOG=$HFD_LOG "$HFD/bin/hermes" chat)" = 'Scenario answer' ] \
+  && node "$ROOT/scenarios/hermes-update-fixture.mjs" --dir "$HFD" --reveal 1.3.0 >/dev/null \
+  && [ "$(HERMES_FIXTURE_LOG=$HFD_LOG "$HFD/bin/hermes" update --check)" = 1.3.0 ] \
+  && [ "$(node "$ROOT/scenarios/hermes-update-fixture.mjs" --dir "$HFD" --metadata)" = '[{"version":"1.0.0","healthy":true,"age_days":18},{"version":"1.1.0","healthy":true,"age_days":9},{"version":"1.2.0","healthy":false,"age_days":8},{"version":"1.3.0","healthy":true,"age_days":3}]' ] \
+  && ! grep -qE 'key|token|secret' "$HFD_LOG"; then
+  ok 'the local Hermes fixture versions, checks, breaks, answers, reveals and redacts'
+else
+  bad 'the local Hermes fixture does not control its local releases and harmless command'
+fi
+
 # ============================================================ every one of them, the same shape
 section 'every script'
 BASH_SCENARIOS=(settings-on-install night-tidy voice update-keeps-everything
@@ -3347,9 +4010,10 @@ BASH_SCENARIOS=(settings-on-install night-tidy voice update-keeps-everything
   late-reminder-file closed-offline-on-both reminder-from-settings charm-challenge
   no-video-skills-by-default update-removes-only-unchanged-skills briefing-breaks-a-rule telegram-language
   brief-asked-in-chat talk-prep-honest no-question-he-cannot-judge plain-yes what-was-that connection-check
-  phone-health-days incomplete-day phone-goes-quiet mail-count talk-on-talk-day
-  chat-tidy-at-night disk-filling missed-routine deadline-closes-itself)
-for file in scenario-lib.sh numbers-lib.sh "${BASH_SCENARIOS[@]/%/.sh}" test-scenarios.sh; do
+  first-day phone-health-days incomplete-day phone-goes-quiet mail-count talk-on-talk-day
+  chat-tidy-at-night disk-filling missed-routine deadline-closes-itself
+  workouts-from-hevy day-becomes-facts hermes-update-rollback)
+for file in scenario-lib.sh numbers-lib.sh server-lib.sh "${BASH_SCENARIOS[@]/%/.sh}" test-scenarios.sh; do
   if bash -n "$ROOT/scenarios/$file" 2>/dev/null; then
     ok "bash reads scenarios/$file"
   else
@@ -3481,25 +4145,86 @@ else
   ok "scenario-lib.sh names no default model and no OpenRouter address"
 fi
 
-# ================================================================ the corrected seams of the Telegram scenarios
-# Cheap source checks (the real Hermes paths run in the scenarios job): a failed routine delivery is a
-# failed step, the queue notice reads its arguments after the script's own two, and what-was-that runs
-# the routine a fresh install has.
-section "the corrected seams of the Telegram scenarios"
-if grep -q '"success": bool(success) and delivered is None' "$ROOT/scenarios/owner-on-telegram.py"; then
-  ok "owner-on-telegram.py: a failed delivery is a failed step"
+# ================================================================ the corrected scenario seams
+# Cheap source checks: the live driver remains the only Telegram path, what-was-that runs the
+# routine a fresh install has, and a clock recreate includes both Compose layers.
+section "the corrected scenario seams"
+if ! grep -rEq --exclude=README.md --exclude=test-scenarios.sh 'owner-on-telegram|telegram-fixture-fetch|ensure_telegram_library' "$ROOT/scenarios"; then
+  ok "the Telegram scenarios have no in-process or post-install Telegram driver"
 else
-  bad "owner-on-telegram.py: a failed delivery is no longer a failed step"
+  bad "the Telegram scenarios still name the old in-process or post-install Telegram driver"
 fi
-if grep -q 'process.argv.slice(2)' "$ROOT/scenarios/what-was-that.sh" && ! grep -q 'process.argv.slice(1)' "$ROOT/scenarios/what-was-that.sh"; then
-  ok "what-was-that.sh: the queue program reads process.argv.slice(2)"
-else
-  bad "what-was-that.sh: the queue program does not read process.argv.slice(2)"
-fi
-if grep -q 'Coach reminders and habit check' "$ROOT/scenarios/what-was-that.sh"; then
+if grep -q "server_run_job report 'Coach reminders and habit check'" "$ROOT/scenarios/what-was-that.sh"; then
   ok "what-was-that.sh: its report step runs Coach reminders and habit check"
 else
   bad "what-was-that.sh: its report step does not run Coach reminders and habit check"
+fi
+CLOCK_DIR=$TMP/server-clock
+mkdir -p "$CLOCK_DIR"
+if (
+  GODSPEED_SCENARIO_SERVER_DIR=$CLOCK_DIR
+  export GODSPEED_SCENARIO_SERVER_DIR
+  . "$ROOT/scenarios/server-lib.sh"
+  sudo() {
+    case $1 in
+      tee) shift; command tee "$@" ;;
+      *) return 1 ;;
+    esac
+  }
+  server_compose() { printf '%s\n' "$@" >"$TMP/clock-compose-command"; }
+  say() { :; }
+  server_healthy() { :; }
+  server_clock_at '2026-11-07T07:00:00Z'
+  [ "$(cat "$TMP/clock-compose-command")" = "$(printf '%s\n' \
+    -f "$CLOCK_DIR/compose.override.yaml" up -d --force-recreate)" ] && \
+    grep -Fqx '      GODSPEED_NOW: "2026-11-07T07:00:00Z"' "$CLOCK_DIR/compose.override.yaml"
+); then
+  ok "a clock recreate passes the generated Compose override after the installed base layer"
+else
+  bad "a clock recreate did not pass both Compose layers"
+fi
+HEVY_DIR=$TMP/server-hevy
+mkdir -p "$HEVY_DIR"
+if (
+  GODSPEED_SCENARIO_SERVER_DIR=$HEVY_DIR
+  export GODSPEED_SCENARIO_SERVER_DIR
+  . "$ROOT/scenarios/workouts-from-hevy.sh"
+  sudo() {
+    case $1 in
+      tee) shift; command tee "$@" ;;
+      *) return 1 ;;
+    esac
+  }
+  server_compose() { printf '%s\n' "$@" >"$TMP/hevy-compose-command"; }
+  server_healthy() { :; }
+  server_hevy_url 47839
+  [ "$(cat "$TMP/hevy-compose-command")" = "$(printf '%s\n' \
+    -f "$HEVY_DIR/compose.override.yaml" up -d --force-recreate)" ] && \
+    grep -Fqx '      GODSPEED_WORKOUTS_HEVY_URL: "http://host.docker.internal:47839"' "$HEVY_DIR/compose.override.yaml"
+); then
+  ok "the Hevy recreate writes its override through sudo and passes it through the installed Compose boundary"
+else
+  bad "the Hevy recreate did not write its override or pass both Compose layers"
+fi
+HEVY_FAILURE_DIR=$TMP/server-hevy-write-failure
+mkdir -p "$HEVY_FAILURE_DIR"
+HEVY_FAILURE_MARKER=$TMP/hevy-compose-after-write-failure
+HEVY_FAILURE_OUTPUT=$(HEVY_FAILURE_MARKER=$HEVY_FAILURE_MARKER GODSPEED_SCENARIO_SERVER_DIR=$HEVY_FAILURE_DIR \
+  bash -c '
+    . "$0"
+    . "$1"
+    sudo() { return 1; }
+    server_compose() { : >"$HEVY_FAILURE_MARKER"; }
+    server_healthy() { :; }
+    server_hevy_url 47840
+  ' "$ROOT/scenarios/server-lib.sh" "$ROOT/scenarios/workouts-from-hevy.sh" 2>&1)
+HEVY_FAILURE_CODE=$?
+if [ "$HEVY_FAILURE_CODE" = 1 ] && \
+  [[ $HEVY_FAILURE_OUTPUT == *'the Docker notebook Hevy override could not be written'* ]] && \
+  [ ! -e "$HEVY_FAILURE_MARKER" ]; then
+  ok "a failed Hevy override write stops before the server recreate"
+else
+  bad "a failed Hevy override write did not stop before the server recreate (exit $HEVY_FAILURE_CODE: $HEVY_FAILURE_OUTPUT)"
 fi
 
 # ================================================================ the night's report
@@ -3511,6 +4236,14 @@ if node --test "$ROOT/scenarios/test-report-night.mjs" >"$TMP/report-night.log" 
 else
   cat "$TMP/report-night.log"
   bad "report-night.mjs: its node --test cases fail"
+fi
+
+section "server-telegram.mjs: its node --test cases"
+if node --test "$ROOT/scenarios/test-server-telegram.mjs" >"$TMP/server-telegram.log" 2>&1; then
+  ok "server-telegram.mjs: its node --test cases pass"
+else
+  cat "$TMP/server-telegram.log"
+  bad "server-telegram.mjs: its node --test cases fail"
 fi
 
 printf '\n%s of %s pass.\n' "$PASS" "$((PASS + FAIL))"

@@ -5,6 +5,7 @@ import {runChild} from './child-process.mjs';
 import {assistantEnvironment} from './assistant-files.mjs';
 import {readBackupEndpoint,noteMainAnswered,noteMainFailed,noteBackupAnswered} from './backup-ai.mjs';
 import {hermesPythons} from './runtime.mjs';
+import {assistantConfiguration} from './running-notebook.mjs';
 
 const read=file=>JSON.parse(fs.readFileSync(file,'utf8').replace(/^﻿/,''));
 const pause=ms=>new Promise(resolve=>setTimeout(resolve,ms));
@@ -62,10 +63,10 @@ function rememberPython(connection,python){
   fs.writeFileSync(temporary,JSON.stringify({executable:descriptor.executable,mtime:fs.statSync(descriptor.executable).mtimeMs,python}),{mode:0o600});fs.renameSync(temporary,file);
  }catch{}
 }
-export function modelConnection(root){
- const state=path.join(path.resolve(root),'.godspeed'),descriptorFile=path.join(state,'assistant.json');
- if(fs.existsSync(descriptorFile))return hermesHelper(read(descriptorFile),state);
- const file=path.join(state,'provider.json');
+export function modelConnection(root,{env=process.env}={}){
+ const {assistantFile,state,providerFile}=assistantConfiguration(root,{env});
+ if(assistantFile)return hermesHelper(read(assistantFile),state);
+ const file=providerFile;
  if(!fs.existsSync(file))throw Error('Connect a model in Godspeed before using an add-on');
  const provider=read(file);
  if(!validEndpoint(provider))throw Error('The Godspeed model connection is incomplete');
@@ -148,7 +149,7 @@ export async function addonModel({root,input,describe=false,spawnProcess}={}){
  const execute=async()=>{
   if(connection.kind==='hermes'){
    // The helper tries the main connection, then the backup the person connected (addon-model.py).
-   const parsed=await runHermesHelper({connection,root,request,deadline,spawnProcess});
+   let parsed;try{parsed=await runHermesHelper({connection,root,request,deadline,spawnProcess});}catch(error){if(describe&&error.loaded&&error.reason==='model')return {configured:false};throw error;}
    if(!describe){if(parsed.backup){noteMainFailed(connection.state,Error('The main connection did not answer an add-on request'));noteBackupAnswered(connection.state,{provider:parsed.provider,model:parsed.model});}else noteMainAnswered(connection.state);}
    return parsed;
   }

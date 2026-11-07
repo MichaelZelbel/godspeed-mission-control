@@ -4,6 +4,7 @@ import {Store} from '../core/records/store.mjs';import {checkConnections,CONNECT
 import {finalReply,saveRoutineResults,RESULTS_FOLDER,routineFiles,prepareCheckIn,coachRoutineTimes} from '../core/starting-routines.mjs';import {QueryService} from '../core/query.mjs';
 import {withTimezone} from '../core/hermes-config.mjs';
 import {routineRow,scheduleWords} from '../ui/src/local/routine-row.mjs';
+import {checkRoutines} from '../core/routine-check.mjs';import {readNotices} from '../core/notices.mjs';
 
 const temporary=(t,name)=>{const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-'+name+'-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));return root;};
 const python=process.env.GODSPEED_TEST_PYTHON||(process.platform==='win32'?'python':'python3');
@@ -331,10 +332,27 @@ print(json.dumps(g.work(g.config())))`;
  const run=spawnSync(python,['-c',code],{cwd:path.join(home,'scripts'),input:log,encoding:'utf8',env:{...process.env,PYTHONIOENCODING:'utf-8'}});
  assert.equal(run.status,0,run.stderr);
  assert.deepEqual(JSON.parse(run.stdout).split('\n'),['Today\'s work did not pass its check, so it is not done yet: "How do people who reached two new clients get there?".','Today\'s work could not be finished, so it is not done yet: "Draft the pitch email".']);
- const status=JSON.parse(fs.readFileSync(path.join(home,'godspeed-routines-status.json'),'utf8'));assert.match(status.work.failed,/did not pass its check/);
+ const status=JSON.parse(fs.readFileSync(path.join(home,'godspeed-routines-status.json'),'utf8'));assert.match(status.work.failed,/did not pass its check/);assert.equal(status.work.failure_streak,1);
  // Exit 1 to 3 is a run that never started, and says only that.
  const never=spawnSync(python,['-c',code.replace('returncode=4','returncode=1')],{cwd:path.join(home,'scripts'),input:'',encoding:'utf8',env:{...process.env,PYTHONIOENCODING:'utf-8'}});
  assert.equal(never.status,0,never.stderr);assert.equal(JSON.parse(never.stdout),'The daily round\'s work could not start today.');
+ assert.equal(JSON.parse(fs.readFileSync(path.join(home,'godspeed-routines-status.json'),'utf8')).work.failure_streak,2);
+ const recovered=spawnSync(python,['-c',code.replace('returncode=4','returncode=0')],{cwd:path.join(home,'scripts'),input:'',encoding:'utf8',env:{...process.env,PYTHONIOENCODING:'utf-8'}});
+ assert.equal(recovered.status,0,recovered.stderr);assert.equal(JSON.parse(fs.readFileSync(path.join(home,'godspeed-routines-status.json'),'utf8')).work.failure_streak,0);
+});
+
+test('an upgraded failed work sidecar reaches the routine-health notice on its next failure',{skip:!havePython&&'no Python here'},t=>{
+ const {root,home}=scriptFixture(t),fake=path.join(root,'.fake-tools');fs.mkdirSync(fake,{recursive:true});
+ fs.writeFileSync(path.join(home,'godspeed-routines-status.json'),JSON.stringify({work:{failed:'The previous work run did not finish.',at:'2026-11-04T16:00:00Z'}}));
+ fs.writeFileSync(path.join(fake,'mc-work-run'),'#!/bin/sh\nexit 1\n',{mode:0o755});
+ const settings=path.join(home,'scripts','godspeed-routines.json');fs.writeFileSync(settings,JSON.stringify({...JSON.parse(fs.readFileSync(settings,'utf8')),tools:fake}));
+ const run=runScript(home,'godspeed-daily-round-work.py',{GODSPEED_TODAY:'2026-11-05'});
+ assert.equal(run.status,0,run.stderr);assert.match(run.stdout,/The daily round's work could not start today/);
+ const status=JSON.parse(fs.readFileSync(path.join(home,'godspeed-routines-status.json'),'utf8')).work;
+ assert.equal(status.failure_streak,2);
+ const store=new Store(root,{device:'pc'}),job={id:'work',name:'Daily round: do the work',enabled:true,script:'godspeed-daily-round-work.py',schedule:{kind:'cron',expr:'0 10,16 * * *'},created_at:'2026-11-01T00:00:00Z',last_run_at:status.at,last_status:'ok',next_run_at:'2026-11-06T10:00:00Z'};
+ checkRoutines({store,home,day:'2026-11-05',timezone:'UTC',now:()=>new Date('2026-11-05T17:00:00Z'),jobs:[job]});
+ assert.match(readNotices(store)[0].text,/"Daily round: do the work" failed its last two runs: The daily round's work could not start today/);
 });
 
 test('a failed daily connection check leaves what it queued unsaid, and a timeout is a failure too',{skip:!havePython&&'no Python here'},t=>{

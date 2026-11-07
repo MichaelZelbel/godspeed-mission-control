@@ -17,7 +17,8 @@ import {adoptedMissionControl} from './starter-workspace.mjs';
 // The routines a reader's first goal starts (Teach It Once, Chapters 3, 5, 8, 24, 25 and 30): the
 // nightly goal research, the daily round (two routines: one chooses the day's work, one does it),
 // deadline reminders, a weekly check-in with the coach's reminders, and since 18 October 2026 the
-// preparation of each coaching talk the night before it: seven routines in all. Until 8 October 2026
+// preparation of each coaching talk the night before it, and since 7 November 2026 (#286) the nightly
+// "Remember what you said": eight routines in all. Until 8 October 2026
 // the first goal started nothing with the original assistant: setup filed the goal and saved the
 // clock, and the book's routines never ran unless a reader built them by hand.
 //
@@ -47,6 +48,7 @@ export const STARTING_ROUTINES=[
  // control that already had its routines gets it once, when it has the coach-prep recipe
  // (NativeScheduler.addNewStartingRoutines).
  {key:'coach-prep',name:'Coaching talk preparation',schedule:'0 3 * * *',script:'godspeed-coach-prep.py',needs:'coach-prep',what:'Every night at 03:00 it prepares each coaching talk of the next day, such as your weekly check-in: it reads your goal and its research, what changed and what you said, and writes the opening of the talk and the notes it carries. It contacts nobody and says nothing; the talk opens with what it prepared.'},
+ {key:'memory-daily',name:'Remember what you said',schedule:'40 3 * * *',script:'godspeed-remember-what-you-said.py',what:'Every night at 03:40 it turns qualifying things you typed into dated, quote-backed facts and events. It uses only your connected AI, says nothing, and you can pause it in Settings > Routines.'},
  // Since 5 November 2026 (#238): every install clears out the assistant's and the routines' own old
  // working files at night (core/cleanup.mjs), after the nightly research (00:15, up to two hours).
  {key:'cleanup',name:'Nightly cleanup',schedule:'45 2 * * *',script:'godspeed-nightly-cleanup.py',what:'Every night at 02:45 it removes the assistant\'s old request dumps and session transcripts, and the old run files of your routines, once they have not been touched for 30 days. It touches nothing else, says nothing, and logs what it freed.'},
@@ -173,10 +175,10 @@ function hermesRuntime({home,state,hermes}){
 }
 
 // Hermes runs only scripts in its own scripts folder, with its own Python on every system.
-export function routineFiles({root,home,state,timezone,node=process.execPath,hermes=null}){
+export function routineFiles({root,home,state,timezone,node=process.execPath,hermes=null,workouts=path.join(kit,'third-party','addons','godspeed-workouts','bin','godspeed-workouts.mjs'),workoutsNotebook=null}){
  // tools: the kit's own programs (mc-decide, mc-work-run, due.js), run where they are; bin: the
  // assistant's command folder, first on the path for the recipes they run.
- const config={root,home,bin:path.join(home,'bin'),tools:path.join(kit,'tools'),node,hermes:hermes&&path.isAbsolute(hermes)?hermes:null,...hermesRuntime({home,state,hermes}),brief:path.join(kit,'notebook','scripts','morning-brief.mjs'),reports:path.join(kit,'notebook','scripts','background-report.mjs'),connection_check:path.join(kit,'notebook','scripts','connection-check.mjs'),mail_count:path.join(kit,'notebook','scripts','mail-count.mjs'),connection_notice_prefix:CONNECTION_NOTICE_PREFIX,cleanup:path.join(kit,'notebook','scripts','nightly-cleanup.mjs'),coach:path.join(kit,'third-party','addons','godspeed-coach','bin','godspeed-coach.mjs'),coach_app:path.join(state,'coach-app'),journal:path.join(kit,'third-party','addons','godspeed-journal','bin','godspeed-journal.mjs'),journal_app:path.join(state,'journal-app'),notices:path.join(state,NOTICES_FILE),adopted:adoptedMissionControl(root),timezone};
+ const config={root,home,bin:path.join(home,'bin'),tools:path.join(kit,'tools'),node,hermes:hermes&&path.isAbsolute(hermes)?hermes:null,...hermesRuntime({home,state,hermes}),brief:path.join(kit,'notebook','scripts','morning-brief.mjs'),reports:path.join(kit,'notebook','scripts','background-report.mjs'),connection_check:path.join(kit,'notebook','scripts','connection-check.mjs'),mail_count:path.join(kit,'notebook','scripts','mail-count.mjs'),memory_daily:path.join(kit,'notebook','scripts','memory-daily.mjs'),connection_notice_prefix:CONNECTION_NOTICE_PREFIX,cleanup:path.join(kit,'notebook','scripts','nightly-cleanup.mjs'),coach:path.join(kit,'third-party','addons','godspeed-coach','bin','godspeed-coach.mjs'),coach_app:path.join(state,'coach-app'),journal:path.join(kit,'third-party','addons','godspeed-journal','bin','godspeed-journal.mjs'),journal_app:path.join(state,'journal-app'),workouts,workouts_notebook:workoutsNotebook,notices:path.join(state,NOTICES_FILE),adopted:adoptedMissionControl(root),timezone};
  const files={'godspeed_routines.py':fs.readFileSync(runner,'utf8').replace(/\r\n/g,'\n'),'godspeed-routines.json':JSON.stringify(config,null,2)+'\n'};
  for(const routine of [...STARTING_ROUTINES,...SWITCHABLE_NOTEBOOK_ROUTINES,{key:'chat-tidy',name:CHAT_TIDY_JOB,script:CHAT_TIDY_SCRIPT},{key:'brief',name:BRIEF_JOB,script:BRIEF_SCRIPT},{key:'notices',name:NOTICES_JOB,script:NOTICES_SCRIPT}])files[routine.script]='# Written by the Godspeed Mission Control notebook for the routine "'+routine.name+'".\n# The notebook writes it again when its own folders change; the work is in godspeed_routines.py.\nfrom godspeed_routines import main\n\nmain('+JSON.stringify(routine.key)+')\n';
  return files;
@@ -251,14 +253,15 @@ export function finalReply(text){
 // A daily-round routine that went wrong prints its one sentence for the person like any other line
 // (godspeed_routines.py, tell), so Hermes records the run as having worked. Its own record beside
 // Hermes' says it failed, and Settings > Routines says so: {last_status, last_error} for the row
-// of that run, {} otherwise. Only the record written by that very run counts.
+// of that run, with its consecutive-failure count for the daily connection check, {} otherwise.
+// Only the record written by that very run counts.
 export const ROUTINE_STATUS='godspeed-routines-status.json';
 export function routineStatus(home,job){
  const routine=STARTING_ROUTINES.find(r=>r.script===job?.script);if(!routine||!job.last_run_at)return {};
  let status;try{status=JSON.parse(fs.readFileSync(path.join(home,ROUTINE_STATUS),'utf8'))?.[routine.key];}catch{return {};}
  const ran=Date.parse(job.last_run_at),at=Date.parse(status?.at);
  if(!status?.failed||!Number.isFinite(ran)||!Number.isFinite(at)||Math.abs(ran-at)>10*60000)return {};
- return {last_status:'error',last_error:String(status.failed).slice(0,500)};
+ return {last_status:'error',last_error:String(status.failed).slice(0,500),failure_streak:Number.isInteger(status.failure_streak)&&status.failure_streak>0?status.failure_streak:0};
 }
 const runWords=(day,time)=>new Intl.DateTimeFormat('en-GB',{day:'numeric',month:'long',year:'numeric',timeZone:'UTC'}).format(new Date(day+'T00:00:00Z'))+', '+time.slice(0,5).replace('-',':');
 

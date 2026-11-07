@@ -25,6 +25,15 @@ function TelegramSettings(){
   if(!status.data?.available&&status.data?.managed!=='environment')return null;
   return <section className="border rounded p-4 space-y-3"><h2 className="text-xl">Telegram</h2><TelegramConnect/></section>;
 }
+function WorkoutsSettings(){
+  const qc=useQueryClient(),status=useQuery({queryKey:['workouts-status'],queryFn:()=>call('workouts')});
+  const [key,setKey]=useState(''),[error,setError]=useState(''),[saving,setSaving]=useState(false);
+  if(!status.data?.available)return null;
+  const save=async(e:any)=>{e.preventDefault();const submitted=key;setKey('');setSaving(true);setError('');try{await call('workouts',{key:submitted});await qc.invalidateQueries({queryKey:['workouts-status']});qc.invalidateQueries({queryKey:['candidate-status']});}catch(e:any){setError(e.message);}finally{setSaving(false);}};
+  const disconnect=async()=>{setSaving(true);setError('');try{await call('workouts/disconnect',{});await qc.invalidateQueries({queryKey:['workouts-status']});qc.invalidateQueries({queryKey:['candidate-status']});}catch(e:any){setError(e.message);}finally{setSaving(false);}};
+  const data=status.data;
+  return <section className="border rounded p-4 space-y-3"><h2 className="text-xl">Workouts from Hevy</h2><p>Hevy Pro is required. Make a key in <a className="underline" href="https://hevy.com/settings?developer" target="_blank" rel="noreferrer">Hevy developer settings</a>.</p>{data.connected?<><p>Connected: {data.rows} workout rows. Hourly routine: {data.routine?.state||'pending'}{data.minute!==null?' at minute '+data.minute:''}.</p>{data.last_run&&<p>Last run: {data.last_run.summary||'not completed yet'}.</p>}{data.problems?.length>0&&<p>Needs attention: {data.problems.map((p:any)=>p.name).join(', ')}.</p>}<button type="button" className="border p-2" disabled={saving} onClick={disconnect}>Disconnect</button></>:<p>Connect a key to bring your workouts into the notebook and run one visible hourly routine.</p>}<form className="space-y-2" onSubmit={save}><label>Hevy API key<input required type="password" autoComplete="off" className="block bg-background border p-2" value={key} onChange={e=>setKey(e.target.value)}/></label><button className="border p-2" disabled={saving}>{saving?'Saving…':data.connected?'Replace key':'Connect Hevy'}</button></form>{error&&<p role="alert" className="text-red-400">{error}</p>}</section>;
+}
 export default function Control(){
   const qc=useQueryClient(),[goal,setGoal]=useState(''),[timezone,setTimezone]=useState(Intl.DateTimeFormat().resolvedOptions().timeZone),[error,setError]=useState(''),[search,setSearch]=useState('');
   const [remote,setRemote]=useState(''),[routine,setRoutine]=useState(''),[hours,setHours]=useState('1440'),[dailyAt,setDailyAt]=useState(''),[origin,setOrigin]=useState(''),[pairCode,setPairCode]=useState(''),[createdCode,setCreatedCode]=useState(''),[offline,setOffline]=useState('all');
@@ -47,7 +56,9 @@ export default function Control(){
     <p role="alert" className="text-red-400">{error}</p>
     <Button asChild className="min-h-11 gap-2"><Link to="/dashboard/settings/import"><Download className="h-4 w-4" aria-hidden="true"/>Import from Menerio</Link></Button>
     <ConnectAI/>
+    {data?.assistantUpdate&&<section id="assistant-update" className="border rounded p-4 space-y-2"><h2 className="text-xl">Assistant updates</h2><label className="flex gap-2 items-center"><input type="checkbox" checked={data.assistantUpdate.enabled!==false} onChange={e=>action('hermes-update',{enabled:e.target.checked})}/>Keep the assistant program up to date</label><p>The notebook checks eligible stable Hermes releases nightly at 04:15, after seven days. Major releases wait for you. It updates only a clean checkout it owns and checks the program, routines, plugins, gateway, and one connected AI question.</p>{data.assistantUpdate.reason&&<p className="text-sm text-muted-foreground">{data.assistantUpdate.reason}</p>}{data.assistantUpdate.last&&<p className="text-sm text-muted-foreground">Last check: {data.assistantUpdate.last.result}{data.assistantUpdate.last.version?' ('+data.assistantUpdate.last.version+')':''}{data.assistantUpdate.last.reason?': '+data.assistantUpdate.last.reason:''}.</p>}</section>}
     <TelegramSettings/>
+    <WorkoutsSettings/>
     <VoiceReplies/>
     <PhoneHealth/>
     <details className="border rounded p-4"><summary>Privacy, suggestions and notifications</summary><AiVisibilitySettings/><AISuggestionPreferences/><Notifications/></details>

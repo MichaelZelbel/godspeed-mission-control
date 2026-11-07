@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import {CONNECTION_NAMES} from './connection-names.mjs';
+import {CONNECTION_NAMES,ROUTINES_LABEL} from './connection-names.mjs';
 import {atomic} from './records/store.mjs';
 import {loadSettings as journalSettings,saveSettings as saveJournal,DEFAULTS as JOURNAL_DEFAULTS} from '../../third-party/addons/godspeed-journal/lib/settings.mjs';
 
@@ -68,11 +68,12 @@ export function journalWanted(root){
 // THE DAILY CONNECTION CHECK (4 November 2026, #200; core/connection-check.mjs). A script routine at
 // 05:00 (earlier when an early Morning brief needs it first), before the morning briefing, made once on a machine that made its starting routines (one
 // that kept the reader's own routines never gets Godspeed's beside them). It starts on when this
-// install has Telegram or Gmail connected, a tracker with a mail rule, or a phone upload, and paused when it has none; the Routines list's
-// Pause and Resume is its switch.
+// install has Telegram or Gmail connected, a tracker with a mail rule, a phone upload, an active routine, or a server install, and paused when it has none; the Routines list's
+// Pause and Resume is its switch. A second source, "your routines" (core/routine-check.mjs, #239),
+// reads Hermes' jobs list for a routine that did not run or keeps failing.
 export const CONNECTION_JOB='Daily connection check';
 export const CONNECTION_SCRIPT='godspeed-connection-check.py';
-export const CONNECTION_WHAT=`Early every morning, before your morning brief, it checks each connection you set up (${Object.entries(CONNECTION_NAMES).filter(([name])=>name!=='disk').map(([,c])=>c.label).join(', ')}). It tells you only when one needs your sign-in or key, failed two mornings in a row, or your phone has not sent health data for 36 hours. On a server it also looks how full the disk is and tells you once when it passes 85%. It sends nothing else.`;
+export const CONNECTION_WHAT=`Early every morning, before your morning brief, it checks each connection you set up (${Object.entries(CONNECTION_NAMES).filter(([name])=>name!=='disk').map(([,c])=>c.label).join(', ')}). It tells you only when one needs your sign-in or key, failed two mornings in a row, or your phone has not sent health data for 36 hours. On a server it also looks how full the disk is and tells you once when it passes 85%. It also reads the list of ${ROUTINES_LABEL}, without any call, and tells you once when one on an interval or cron schedule Godspeed creates did not run when it was due, or failed twice in a row. Other Hermes cron schedules do not create a missed-run notice, though their repeated failures still do. It sends nothing else.`;
 // THE MAIL COUNTS (4 November 2026, #215; core/mail-trackers.mjs). A script routine every morning at
 // 04:30 that counts the mails a tracker's mail rule names, from each mail's sender, subject and date
 // and never its text, and adds them to that tracker. It is made when a tracker has a mail rule and
@@ -82,6 +83,9 @@ export const CONNECTION_WHAT=`Early every morning, before your morning brief, it
 export const MAIL_COUNT_JOB='Mail counts';
 export const MAIL_COUNT_SCRIPT='godspeed-mail-count.py';
 export const MAIL_COUNT_WHAT='Once a day, early in the morning, it counts the mails your trackers\' mail rules name, from each mail\'s sender, subject and date only, and adds them to those trackers. It never reads a mail\'s text and sends nothing.';
+export const WORKOUTS_JOB='Workouts from Hevy';
+export const WORKOUTS_SCRIPT='godspeed-workouts.py';
+export const WORKOUTS_WHAT='Every hour, at the minute Hevy chose, it brings your Workouts tracker level with Hevy. It does not use AI or send a second notification.';
 // The routines beside the starting ones that are a switch on a mission control not made from the starter
 // (4 November 2026, #225). The one owner of each one's switch (routine-switches.mjs) and its wrapper script
 // (routineFiles in starting-routines.mjs).
@@ -89,6 +93,7 @@ export const SWITCHABLE_NOTEBOOK_ROUTINES=[
  {key:'journal-tick',name:JOURNAL_JOB,what:JOURNAL_WHAT,script:JOURNAL_SCRIPT},
  {key:'connection-check',name:CONNECTION_JOB,what:CONNECTION_WHAT,script:CONNECTION_SCRIPT},
  {key:'mail-count',name:MAIL_COUNT_JOB,what:MAIL_COUNT_WHAT,script:MAIL_COUNT_SCRIPT},
+ {key:'workouts',name:WORKOUTS_JOB,what:WORKOUTS_WHAT,script:WORKOUTS_SCRIPT},
 ];
 // THE NOTICE SENDER OF A MISSION CONTROL NOT MADE FROM THE STARTER (4 November 2026, #225). On a starter-born
 // install the coach's reminders and the journal's check-ins say the notices in .godspeed/notices.json. An

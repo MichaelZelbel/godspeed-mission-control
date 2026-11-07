@@ -19,17 +19,22 @@
 # library, so it runs anywhere.
 import argparse
 import json
+import os
 import re
+import tempfile
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+# buttons.py drops a tap unless the message it edits was sent by getMe's bot, so both must be this one record.
+BOT = {"id": 42, "is_bot": True, "first_name": "Godspeed"}
 
 
 class Fake:
     def __init__(self, token, scenario, record=None):
         self.token = token
         self.cv = threading.Condition()
-        self.updates, self.sent, self.edits, self.calls, self.deleted = [], [], [], {}, []
+        self.updates, self.sent, self.edits, self.calls, self.deleted, self.requests = [], [], [], {}, [], []
         self.actions = []   # sendChatAction: {"t": time, "chat_id": ..., "action": "typing"}
         self.files = {}
         self.next_update, self.next_msg = 1, 100
@@ -68,9 +73,12 @@ class Fake:
                                             "file_size": d.get("file_size", len(data))}}}
             self.next_msg += 1
         else:
-            msg = next((m for m in reversed(self.sent) if m["chat_id"] == uid and a["press"] in m["buttons"]), None)
+            msg = next((m for m in reversed(self.sent) if m["chat_id"] == uid
+                        and any(button["callback"] == a["press"] for button in m["buttons"])), None)
             upd = {"callback_query": {"id": "cq%d" % self.next_update, "from": user, "data": a["press"],
-                                      "message": {"message_id": msg["message_id"] if msg else 0, "chat": chat}}}
+                                      "message": {"message_id": msg["message_id"] if msg else 0, "chat": chat,
+                                                  "from": BOT,
+                                                  "text": msg["text"] if msg else ""}}}
         upd["update_id"] = self.next_update
         self.next_update += 1
         self.updates.append(upd)
@@ -83,7 +91,7 @@ class Fake:
                 fid = p.get("file_id")
                 return {"file_id": fid, "file_size": len(self.files.get(fid, b"")), "file_path": "documents/%s" % fid}
             if method == "getMe":
-                return {"id": 42, "is_bot": True, "first_name": "Godspeed", "username": "test_godspeed_bot"}
+                return dict(BOT, username="test_godspeed_bot")
             if method == "getUpdates":
                 off = p.get("offset") or 0
                 self.updates = [u for u in self.updates if u["update_id"] >= off]
@@ -93,8 +101,8 @@ class Fake:
             if method == "sendMessage":
                 kb = (p.get("reply_markup") or {}).get("inline_keyboard") or []
                 m = {"chat_id": p.get("chat_id"), "text": p.get("text", ""), "message_id": self.next_msg,
-                     "buttons": [b.get("callback_data") for row in kb for b in row],
-                     "labels": [b.get("text") for row in kb for b in row], "t": time.time()}
+                     "buttons": [{"label": b.get("text"), "callback": b.get("callback_data")}
+                                 for row in kb for b in row], "t": time.time()}
                 self.next_msg += 1
                 self.sent.append(m)
                 for r in self.rules:
@@ -106,22 +114,50 @@ class Fake:
                         r["fired"] = r.get("fired", 0) + 1
                         for a in r["do"]:
                             self.act(a)
-                self.save()
                 return {"message_id": m["message_id"], "chat": {"id": m["chat_id"]}, "text": m["text"]}
+            if method == "sendDocument":
+                m = {"chat_id": p.get("chat_id"), "text": p.get("caption", ""), "message_id": self.next_msg,
+                     "buttons": [], "t": time.time()}
+                self.next_msg += 1
+                self.sent.append(m)
+                return {"message_id": m["message_id"], "chat": {"id": m["chat_id"]}}
             if method == "sendChatAction":
                 self.actions.append({"t": time.time(), "chat_id": p.get("chat_id"), "action": p.get("action")})
             if method == "deleteMessage":
                 self.deleted.append(p.get("message_id"))
             if method == "editMessageText":
                 self.edits.append(p.get("text", ""))
-                self.save()
             return True
+
+    def request(self, method, authorized, p):
+        # Evidence names the API operation and safe message metadata only.  In particular it never
+        # retains the path token or inbound text, which can carry a provider key during setup.
+        with self.cv:
+            safe = {"method": method, "authorized": authorized, "t": time.time()}
+            if "chat_id" in p:
+                safe["chat_id"] = p["chat_id"]
+            if "message_id" in p:
+                safe["message_id"] = p["message_id"]
+            if method == "sendMessage":
+                safe["buttons"] = sum(len(row) for row in ((p.get("reply_markup") or {}).get("inline_keyboard") or []))
+            self.requests.append(safe)
 
     def save(self):
         if self.record:
-            with open(self.record, "w", encoding="utf-8") as f:
-                json.dump({"sent": self.sent, "edits": self.edits, "calls": self.calls, "deleted": self.deleted,
-                           "actions": self.actions}, f, indent=1)
+            with self.cv:
+                snapshot = {"sent": self.sent, "edits": self.edits, "calls": self.calls, "deleted": self.deleted,
+                            "actions": self.actions, "requests": self.requests}
+                directory = os.path.dirname(os.path.abspath(self.record))
+                fd, temporary = tempfile.mkstemp(prefix=".fake-telegram-", dir=directory)
+                try:
+                    with os.fdopen(fd, "w", encoding="utf-8") as f:
+                        json.dump(snapshot, f, indent=1)
+                        f.flush()
+                        os.fsync(f.fileno())
+                    os.replace(temporary, self.record)
+                finally:
+                    if os.path.exists(temporary):
+                        os.unlink(temporary)
 
 
 def serve(fake, port=0):
@@ -159,10 +195,15 @@ def serve(fake, port=0):
                 p = json.loads(self.rfile.read(n).decode() or "{}") if n else {}
             except ValueError:
                 p = {}
-            if not m or m.group(1) != fake.token:
-                code, body = 401, {"ok": False, "error_code": 401, "description": "Unauthorized"}
-            else:
-                code, body = 200, {"ok": True, "result": fake.handle(m.group(2), p)}
+            method = m.group(2) if m else "invalid"
+            authorized = bool(m and m.group(1) == fake.token)
+            with fake.cv:
+                fake.request(method, authorized, p)
+                if not authorized:
+                    code, body = 401, {"ok": False, "error_code": 401, "description": "Unauthorized"}
+                else:
+                    code, body = 200, {"ok": True, "result": fake.handle(method, p)}
+                fake.save()
             data = json.dumps(body).encode()
             self.send_response(code)
             self.send_header("Content-Type", "application/json")
