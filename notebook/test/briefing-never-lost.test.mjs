@@ -387,3 +387,29 @@ for(const which of ['lead entry','backing note'])test('a contribution rejected b
  assert.doesNotMatch(saved,/Review this/);assert.match(saved,/Ask Godspeed to work on Plant the fictional garden/);
  assert.equal(store.get('lead_entries',entry.id).status,'ready');
 });
+
+// Archon R1, PR #270: an unfinished phone total is rendered by code as a "so far" line plus a weekly
+// count of unknown days. When a review rejects that phone record by id, the line and its share of the
+// weekly count stay out of the factual fallback; another day's unrejected phone total still counts.
+// Health freshness runs on the real clock, so the days are recent real days.
+const daysAgo=n=>new Date(Date.now()-n*86400000).toISOString().slice(0,10);
+test('a phone total rejected by id leaves its so-far line and its weekly count out of the factual fallback',async()=>{
+ const {store,query}=fixture([]);store.save('goals',{title:'Plant the fictional garden',status:'adopted'});
+ const phone=(day,value,until)=>store.save('health_observations',{metric:'steps',value,source:'Health Auto Export',via:'phone-receiver',observed_on:day,date_precision:'day',observed_at:day+'T00:00:00Z',data_until:until});
+ const bad=phone(daysAgo(2),4200,'08:00:00');phone(daysAgo(3),3100,'09:30:00');
+ const provider=async input=>input.kind==='brief-verification'?{passed:false,reason:'One claim is unsupported',rejected_source_ids:input.check==='source-facts'?[bad.id]:[]}:'Unsupported draft.';
+ const result=await run(provider,query,store,'brief-rejected-phone-total'),saved=store.get('notes',result.record_id).content;
+ assert.equal(result.fallback,true);
+ assert.doesNotMatch(saved,/4200/);assert.doesNotMatch(saved,/08:00:00/);assert.doesNotMatch(saved,/2 unknown phone-health days/);
+ assert.ok(saved.includes('On '+daysAgo(3)+', steps was 3100 so far; phone data stopped at 09:30:00.'));
+ assert.match(saved,/This week has 1 unknown phone-health day\./);assert.match(saved,/Ask Godspeed to work on Plant the fictional garden/);
+ const receipt=query.rows('job_receipts').find(r=>r.kind==='brief-factual-fallback');assert.deepEqual(receipt.rejected_source_ids,[String(bad.id)]);
+});
+
+test('when every phone total is rejected by id, the factual fallback carries no so-far line and no weekly count',async()=>{
+ const {store,query}=fixture([]);store.save('goals',{title:'Plant the fictional garden',status:'adopted'});
+ const bad=store.save('health_observations',{metric:'steps',value:4200,source:'Health Auto Export',via:'phone-receiver',observed_on:daysAgo(2),date_precision:'day',observed_at:daysAgo(2)+'T00:00:00Z',data_until:'08:00:00'});
+ const provider=async input=>input.kind==='brief-verification'?{passed:false,reason:'One claim is unsupported',rejected_source_ids:input.check==='source-facts'?[bad.id]:[]}:'Unsupported draft.';
+ const result=await run(provider,query,store,'brief-rejected-only-phone-total'),saved=store.get('notes',result.record_id).content;
+ assert.equal(result.fallback,true);assert.doesNotMatch(saved,/4200|so far|unknown phone-health/);assert.match(saved,/Ask Godspeed to work on Plant the fictional garden/);
+});

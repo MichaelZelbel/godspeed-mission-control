@@ -77,8 +77,14 @@ async function runBriefing(job,{store,query,provider,now}){
  const context={goals:visibleRows(query,'goals').filter(g=>['active','adopted'].includes(g.status)),decisions:visibleRows(query,'decisions').slice(-10),work:visibleRows(query,'work_items').slice(-20),deadlines:visibleRows(query,'deadlines').filter(d=>d.status!=='closed'),health:visibleRows(query,'health_observations').filter(h=>Date.parse(h.observed_at)>=Date.now()-7*86400000),episodes:visibleRows(query,'health_episodes').filter(h=>Date.parse(h.onset_at)>=Date.now()-30*86400000),medications:visibleRows(query,'medications').filter(h=>Date.parse(h.taken_at)>=Date.now()-30*86400000),source_receipts:[],previous:visibleRows(query,'notes').filter(n=>n.source_app==='morning-brief').slice(-3).map(n=>({id:n.id,title:n.title,content:n.content,created_at:n.created_at,verification_id:n.verification_id,delivery_verification_id:n.delivery_verification_id})),rehearsals:visibleRows(query,'job_receipts').filter(r=>r.kind==='brief-rehearsal').slice(-2).map(r=>({id:r.id,state:r.state,error:r.error,result:r.result,finished_at:r.finished_at}))};
  const health=currentHealth(query,{now:now.getTime()});context.health=health.observations;context.health_freshness=health;
  const unknownColumns=unknownHealthColumns(health);
- const healthSummaryLines=unknownColumns.map(column=>'On '+column.date+', '+column.column+' was '+column.value+' so far'+(column.data_until?'; phone data stopped at '+column.data_until:'')+'.');
- const unknownDayCount=new Set(unknownColumns.map(column=>column.date)).size,unknownWeekLine=unknownDayCount?'This week has '+unknownDayCount+' unknown phone-health '+(unknownDayCount===1?'day.':'days.'):'';
+ // Each "so far" line keeps the ids of the phone records it is made from: the column's own records
+ // and the record that gave the day's stopped time. A review that rejects one of them by id takes
+ // the line, and its share of the weekly count, out of the factual fallback (Archon R1, PR #270).
+ const unknownSources=column=>health.observations.filter(h=>h.via===PHONE_VIA&&h.observed_on===column.date&&(h.metric===column.column||column.data_until&&h.data_until===column.data_until)).map(h=>String(h.id));
+ const summaryLine=column=>'On '+column.date+', '+column.column+' was '+column.value+' so far'+(column.data_until?'; phone data stopped at '+column.data_until:'')+'.';
+ const weekLine=columns=>{const days=new Set(columns.map(column=>column.date)).size;return days?'This week has '+days+' unknown phone-health '+(days===1?'day.':'days.'):'';};
+ const unknownSummaries=unknownColumns.map(column=>({date:column.date,line:summaryLine(column),source_ids:unknownSources(column)}));
+ const healthSummaryLines=unknownSummaries.map(s=>s.line),unknownWeekLine=weekLine(unknownSummaries);
  context.episodes=context.episodes.filter(row=>Date.parse(row.onset_at)<=Date.now());context.medications=context.medications.filter(row=>Date.parse(row.taken_at)<=Date.now());
  context.watch_findings=JSON.parse(watchCommand({store,query},['pull','--channel','brief','--dry-run']).result);
  // Selected feeds and the actual selected finding need their latest evidence,
@@ -146,7 +152,9 @@ async function runBriefing(job,{store,query,provider,now}){
    // stopped time (Archon R2). Raw values are used only when their day column is settled or complete.
    const columnState=h=>context.health_freshness?.days?.find(d=>d.date===h.observed_on)?.columns?.[h.metric]?.state;
    const settled=h=>h.via!==PHONE_VIA||columnState(h)==='complete';
-   const unknownAdded=[...healthSummaryLines,unknownWeekLine].filter(Boolean).filter(line=>add(line)).length>0;
+   const keptSummaries=unknownSummaries.filter(s=>!s.source_ids.some(id=>rejectedIds.has(id))&&!rejected(null,s.line));
+   const keptWeekLine=weekLine(keptSummaries);
+   const unknownAdded=[...keptSummaries.map(s=>s.line),rejected(null,keptWeekLine)?'':keptWeekLine].filter(Boolean).filter(line=>add(line)).length>0;
    const observations=context.health.filter(settled).sort((a,b)=>String(observedAt(b)).localeCompare(String(observedAt(a))));
    const healthAdded=addFirst(observations,h=>{const metric=safe(h.metric,60),value=h.value;return metric&&(typeof value==='number'||typeof value==='string'&&safe(value,30))&&!rejected(h,metric+': '+value)?'A recorded health observation is '+metric+': '+value+'.':null;})||unknownAdded;
    if(!healthAdded&&!context.health.length)add('There are no fresh health observations to report.');
