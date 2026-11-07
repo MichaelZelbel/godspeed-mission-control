@@ -317,3 +317,41 @@ test('a rejected goal is left out while another saved goal still gives the actio
  const result=await run(provider,query,store,'brief-rejected-one-goal'),content=store.get('notes',result.record_id).content;
  assert.doesNotMatch(content,/fictional guide/i);assert.match(content,/Ask Godspeed to work on Plant the fictional garden/);
 });
+
+// Archon R1, round 2: a source the review rejects is excluded by its id, gathered from both attempts,
+// so a first-attempt rejection still holds when the rewrite fails for a different reason, and a
+// source whose title ends in punctuation is still matched by the reason that names it.
+for(const [kind,save,claim] of [
+ ['goal',store=>store.save('goals',{title:'Prepare a fictional guide',status:'adopted'}),/fictional guide/i],
+ ['verified work',store=>store.save('work_items',{kind:'draft',title:'Checked fictional outline',state:'verified'}),/fictional outline/i],
+ ['obligation',store=>store.save('deadlines',{title:'Submit fictional application',status:'open',due_at:'2027-01-01T00:00:00Z'}),/fictional application/i],
+ ['health value',store=>store.save('health_observations',{metric:'Fictional energy',value:6,observed_at:new Date().toISOString()}),/Fictional energy/i],
+])test('the '+kind+' rejected by id in the first attempt stays out when the rewrite fails for another reason',async()=>{
+ const {store,query}=fixture([]);const row=save(store);assert.ok(row?.id);let checks=0;
+ const provider=async input=>{if(input.kind!=='brief-verification')return 'Unsupported draft.';checks++;
+  return checks<=2?{passed:false,reason:'One claim in the draft is unsupported',rejected_source_ids:input.check==='source-facts'?[row.id]:[]}:{passed:false,reason:'The rewrite is too vague'};};
+ const result=await run(provider,query,store,'brief-first-attempt-'+kind.replaceAll(' ','-')),content=store.get('notes',result.record_id).content;
+ assert.equal(checks,4);assert.equal(result.fallback,true);assert.doesNotMatch(content,claim);assert.match(content,/goal/i);
+ const receipt=query.rows('job_receipts').find(r=>r.kind==='brief-factual-fallback');
+ assert.deepEqual(receipt.rejected_source_ids,[String(row.id)]);assert.ok(receipt.all_reasons.includes('One claim in the draft is unsupported'));
+});
+
+test('a first-attempt reason naming a source still holds after a differently rejected rewrite',async()=>{
+ const {store,query}=fixture([]);store.save('goals',{title:'Prepare release notes.',status:'adopted'});let checks=0;
+ const provider=async input=>{if(input.kind!=='brief-verification')return 'Unsupported draft.';checks++;
+  return checks<=2?{passed:false,reason:'Prepare release notes is unsupported'}:{passed:false,reason:'The rewrite is too vague'};};
+ const result=await run(provider,query,store,'brief-first-attempt-reason'),content=store.get('notes',result.record_id).content;
+ assert.equal(result.fallback,true);assert.doesNotMatch(content,/release notes/i);
+});
+
+for(const [kind,save,claim,reason] of [
+ ['goal',store=>store.save('goals',{title:'Prepare release notes.',status:'adopted'}),/release notes/i,'Prepare release notes is unsupported'],
+ ['verified work',store=>store.save('work_items',{kind:'draft',title:'Checked fictional outline.',state:'verified'}),/fictional outline/i,'Checked fictional outline is unsupported'],
+ ['obligation',store=>store.save('deadlines',{title:'Submit fictional application.',status:'open',due_at:'2027-01-01T00:00:00Z'}),/fictional application/i,'Submit fictional application is not current'],
+ ['health value',store=>store.save('health_observations',{metric:'Fictional energy.',value:6,observed_at:new Date().toISOString()}),/Fictional energy/i,'Fictional energy 6 is stale'],
+])test('the '+kind+' whose title ends in punctuation is still excluded by the reason that names it',async()=>{
+ const {store,query}=fixture([]);save(store);
+ const provider=async input=>input.kind==='brief-verification'?{passed:false,reason}:'Unsupported draft.';
+ const result=await run(provider,query,store,'brief-punctuated-'+kind.replaceAll(' ','-')),content=store.get('notes',result.record_id).content;
+ assert.equal(result.fallback,true);assert.doesNotMatch(content,claim);
+});
