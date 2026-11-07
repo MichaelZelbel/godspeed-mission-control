@@ -6,7 +6,9 @@ import {fieldList} from './fields.mjs';
 import {rememberWhatYouSaidRoot} from './file-policy.mjs';
 import {sameValue as sameThing} from './same-thing.mjs';
 import {MACHINE_BANNER} from '../../tools/prompt-machine-openers.mjs';
-import {parse as parseYaml,stringify as stringifyYaml} from './records/yaml.mjs';
+import {stringify as stringifyYaml} from './records/yaml.mjs';
+import {frontMatter} from './world-facts.mjs';
+import {dailyMemorySubjectId} from './memory-daily-identity.mjs';
 
 export const ROUTINE_FOLDER=rememberWhatYouSaidRoot;
 const ISO_DAY=/^\d{4}-\d{2}-\d{2}$/;
@@ -118,20 +120,18 @@ function newSubjects(items,target,terms,refusals){
 }
 const slug=value=>normal(value).replace(/ /g,'-').slice(0,80)||'item';
 const worldSubjectId=subject=>subject.type==='self'?'me':(subject.type==='new-thing'?'thing-':'')+slug(subject.name);
-function worldDocument(text){const match=/^---\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n([\s\S]*))?$/.exec(text);if(!match)return null;try{return {fields:parseYaml(match[1]),body:match[2]||''};}catch{return null;}}
 function currentFact(query,root,subject,kind,value,fields){
- if(!query){const expected=worldSubjectId(subject);try{return fs.readdirSync(path.join(root,'world','claims')).filter(n=>n.endsWith('.md')).some(name=>{const document=worldDocument(fs.readFileSync(path.join(root,'world','claims',name),'utf8')),item=document?.fields;if(!item)return false;return item.subject===expected&&fields.canonical(item.attribute)===fields.canonical(kind)&&!item.valid_to&&(String(item.value).toLowerCase()===String(value).toLowerCase()||sameThing(item.value,value));});}catch{return false;}}
+ if(!query){const expected=worldSubjectId(subject);try{return fs.readdirSync(path.join(root,'world','claims')).filter(n=>n.endsWith('.md')).some(name=>{const document=frontMatter(fs.readFileSync(path.join(root,'world','claims',name),'utf8')),item=document?.fields;if(!item)return false;return item.subject===expected&&fields.canonical(item.attribute)===fields.canonical(kind)&&!item.valid_to&&(String(item.value).toLowerCase()===String(value).toLowerCase()||sameThing(item.value,value));});}catch{return false;}}
  const canonical=fields.canonical(kind);
  return query.rows('claims').some(f=>!f.valid_to&&f.subject_type===subject.type&&(f.subject_id||null)===(subject.id||null)&&fields.canonical(f.attribute)===canonical&&(String(f.value).toLowerCase()===String(value).toLowerCase()||sameThing(f.value,value)));
 }
 function findRecord(query,table,name){return query.rows(table).find(r=>normal(r.name)===normal(name));}
-const notebookRecordId=(type,name)=>'memory-'+hash([type==='contact'?'person':'thing',name]).slice(0,20);
 function notebookSubject(query,subject){
  const type=subject.type==='new-person'?'contact':subject.type==='new-thing'?'entity':subject.type;
  if(type!=='contact'&&type!=='entity')return null;
  if(subject.type===type)return subject;
  const row=findRecord(query,type==='contact'?'contacts':'entities',subject.name);
- return {type,id:row?.id||notebookRecordId(type,subject.name),name:row?.name||subject.name};
+ return {type,id:row?.id||dailyMemorySubjectId(type,subject.name),name:row?.name||subject.name};
 }
 const notebookParticipant=(query,subject)=>{
  const resolved=notebookSubject(query,subject);
@@ -144,7 +144,7 @@ const sameNotebookEvent=(query,left,right)=>{
  return have.length===wanted.length&&have.every((id,index)=>id===wanted[index]);
 };
 const sameEvent=(query,root,event)=>{
- if(!query){try{return fs.readdirSync(path.join(root,'world','events')).filter(n=>n.endsWith('.md')).some(name=>{const document=worldDocument(fs.readFileSync(path.join(root,'world','events',name),'utf8'));return document?.fields.date===event.day&&normal(document.body)===normal(event.what+'\n\n'+event.citation.quote);});}catch{return false;}}
+ if(!query){try{return fs.readdirSync(path.join(root,'world','events')).filter(n=>n.endsWith('.md')).some(name=>{const document=frontMatter(fs.readFileSync(path.join(root,'world','events',name),'utf8'));return document?.fields.date===event.day&&normal(document.body)===normal(event.what+'\n\n'+event.citation.quote);});}catch{return false;}}
  return query.rows('moments').some(m=>sameNotebookEvent(query,event,{day:String(m.happened_at||'').slice(0,10),what:m.title||m.description,participants:[...query.rows('moment_participants').filter(p=>p.moment_id===m.id).map(p=>({type:'contact',id:p.person_id||p.contact_id})).filter(p=>p.id),...query.rows('moment_entities').filter(p=>p.moment_id===m.id&&p.entity_id).map(p=>({type:'entity',id:p.entity_id}))]}));
 };
 const sameFact=(subject,kind,value,fact)=>fact.type==='fact'&&fact.subject.type===subject.type&&(fact.subject.id||null)===(subject.id||null)&&fact.kind===kind&&(String(fact.value).toLowerCase()===String(value).toLowerCase()||sameThing(fact.value,value));
@@ -179,7 +179,7 @@ function ensureWorldSubject(root,subject,created){
 function writeWorld(root,plan){
  const created=new Map;for(const p of plan.people)ensureWorldSubject(root,{type:'new-person',id:p.id,name:p.name},created);for(const t of plan.things)ensureWorldSubject(root,{type:'new-thing',id:t.id,name:t.name},created);
  for(const effect of plan.effects){const index=hash([effect.citation.id,effect.type,effect.type==='fact'?[effect.subject.type,effect.subject.id,effect.kind,effect.value]:[effect.day,effect.what]]).slice(0,16);
-  if(effect.type==='fact'){const subject=ensureWorldSubject(root,effect.subject,created),file=path.join(root,'world','claims',subject+'--'+slug(effect.kind)+'--'+effect.date+'-'+index+'.md'),fields=fieldList(root);if(fields.one(effect.kind))for(const name of (()=>{try{return fs.readdirSync(path.join(root,'world','claims')).filter(n=>n.endsWith('.md'));}catch{return [];}})()){const old=path.join(root,'world','claims',name),document=worldDocument(fs.readFileSync(old,'utf8')),front=document?.fields;if(!front)continue;if(front.subject===subject&&fields.canonical(front.attribute)===fields.canonical(effect.kind)&&!front.valid_to&&front.value!==effect.value)worldFile(old,{...front,valid_to:effect.date},document.body.trim());}worldFile(file,{subject,origin:'remember-what-you-said',attribute:effect.kind,value:effect.value,valid_from:effect.date,confidence:effect.confidence,source:'conversation_archive:'+effect.citation.id},effect.citation.quote);}
+  if(effect.type==='fact'){const subject=ensureWorldSubject(root,effect.subject,created),file=path.join(root,'world','claims',subject+'--'+slug(effect.kind)+'--'+effect.date+'-'+index+'.md'),fields=fieldList(root);if(fields.one(effect.kind))for(const name of (()=>{try{return fs.readdirSync(path.join(root,'world','claims')).filter(n=>n.endsWith('.md'));}catch{return [];}})()){const old=path.join(root,'world','claims',name),document=frontMatter(fs.readFileSync(old,'utf8')),front=document?.fields;if(!front)continue;if(front.subject===subject&&fields.canonical(front.attribute)===fields.canonical(effect.kind)&&!front.valid_to&&front.value!==effect.value)worldFile(old,{...front,valid_to:effect.date},document.body.trim());}worldFile(file,{subject,origin:'remember-what-you-said',attribute:effect.kind,value:effect.value,valid_from:effect.date,confidence:effect.confidence,source:'conversation_archive:'+effect.citation.id},effect.citation.quote);}
   else worldFile(path.join(root,'world','events',effect.day+'-'+slug(effect.what)+'-'+index+'.md'),{date:effect.day,origin:'remember-what-you-said',participants:effect.participants.map(subject=>ensureWorldSubject(root,subject,created)),source:'conversation_archive:'+effect.citation.id},effect.what+'\n\n'+effect.citation.quote);
  }
 }

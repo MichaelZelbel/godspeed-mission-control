@@ -16,6 +16,7 @@ import {groupContext} from './group-context.mjs';
 import {noteConnections,linkSuggestions} from './related.mjs';
 import {graphData} from './graph.mjs';
 import { slug, hash } from './records/store.mjs';
+import {dailyMemorySubjectId} from './memory-daily-identity.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { Review,factSubject,factSuppressed } from './review.mjs';
@@ -203,11 +204,11 @@ export class Domains {
     });
   }
   writeDailyMemory(plan){
-    const memoryKey=(type,id)=>type+':'+(id||''),sameName=(left,right)=>String(left||'').normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').trim()===String(right||'').normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').trim(),recordId=(type,name)=>'memory-'+hash([type==='contact'?'person':'thing',name]).slice(0,20);
+    const memoryKey=(type,id)=>type+':'+(id||''),sameName=(left,right)=>String(left||'').normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').trim()===String(right||'').normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').trim();
     return this.store.transaction(view=>{
       const query=new QueryService(view),staged=new Domains(query),subjects=new Map([[memoryKey('self'),{type:'self',id:null,name:'self'}]]),addSubject=(type,row)=>subjects.set(memoryKey(type,row.id),{type,id:row.id,name:row.name}),create=(type,item)=>{
         if(!item||typeof item.id!=='string'||typeof item.name!=='string'||!item.name.trim())throw Error('Daily memory has an invalid subject');
-        const table=type==='contact'?'contacts':'entities',existing=query.rows(table).find(row=>sameName(row.name,item.name)),row=existing||view.prepare(table,{id:recordId(type,item.name),name:item.name.trim(),origin:'remember-what-you-said'});
+        const table=type==='contact'?'contacts':'entities',existing=query.rows(table).find(row=>sameName(row.name,item.name)),row=existing||view.prepare(table,{id:dailyMemorySubjectId(type,item.name),name:item.name.trim(),origin:'remember-what-you-said'});
         if(!existing)view.commit([row]);addSubject(type,row);subjects.set(memoryKey(type==='contact'?'new-person':'new-thing',item.id),{type,id:row.id,name:row.name});
       };
       for(const person of plan.people||[])create('contact',person);

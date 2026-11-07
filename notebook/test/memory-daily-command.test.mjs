@@ -16,6 +16,7 @@ import {main,resultExitCode} from '../scripts/memory-daily.mjs';
 
 const model=fileURLToPath(new URL('./fixtures/memory-daily-model.mjs',import.meta.url));
 const due=fileURLToPath(new URL('./fixtures/memory-daily-due.mjs',import.meta.url));
+const memoryScript=fileURLToPath(new URL('../scripts/memory-daily.mjs',import.meta.url));
 const workspace=t=>{const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-memory-command-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));fs.mkdirSync(path.join(root,'prompts','archive'),{recursive:true});return root;};
 const archive=(root,rows)=>fs.writeFileSync(path.join(root,'prompts','archive','fixture.jsonl'),rows.map(JSON.stringify).join('\n')+'\n');
 const response=value=>JSON.stringify(value);
@@ -24,6 +25,7 @@ const run=async(root,{env={},...options}={})=>{
  const before={};for(const [key,value] of Object.entries(env)){before[key]=process.env[key];if(value===undefined)delete process.env[key];else process.env[key]=value;}
  try{return await main({root,modelCommand:model,dueCommand:due,...options});}finally{for(const [key,value] of Object.entries(before)){if(value===undefined)delete process.env[key];else process.env[key]=value;}}
 };
+const runScript=root=>new Promise((resolve,reject)=>{const child=spawn(process.execPath,[memoryScript],{cwd:root,env:{...process.env,GODSPEED_WORKSPACE:root},stdio:['ignore','ignore','pipe'],windowsHide:true});let stderr='';child.stderr.on('data',chunk=>stderr+=chunk);child.once('error',reject);child.once('close',code=>code===0?resolve():reject(Error(stderr)));});
 const fact=(id,quote,value='Hamburg')=>({facts:[{subject:self,kind:'home-city',value,date:'2026-11-01',one_or_many:'one',citation:{id,quote}}]});
 
 test('the command files a quoted notebook fact once through its model-command boundary',async t=>{
@@ -32,6 +34,13 @@ test('the command files a quoted notebook fact once through its model-command bo
  const env={FIXTURE_MEMORY_MODEL_LOG:log,FIXTURE_MEMORY_MODEL_RESPONSE:response(fact(row.id,row.text))};const first=await run(root,{env});assert.equal(first.completed,1);
  const facts=new QueryService(new Store(root)).rows('claims').filter(item=>item.attribute==='lives-in');assert.equal(facts.find(item=>item.value==='Kiel').valid_to,'2026-11-01');assert.equal(facts.find(item=>item.value==='Hamburg').evidence_quote,row.text);
  await run(root,{env});assert.equal(fs.readFileSync(log,'utf8').trim().split('\n').length,1,'the archive command receives a consumed row only once');
+});
+
+test('two daily-memory command processes submit one archive piece once',async t=>{
+ const root=workspace(t),row={id:'process-once',at:'2026-11-02T12:00:00Z',text:'I moved to Hamburg on 1 November'};archive(root,[row]);let requests=0,firstRequest,secondStarted;const requested=new Promise(resolve=>firstRequest=resolve),second=new Promise(resolve=>secondStarted=resolve);
+ const server=http.createServer(async(req,res)=>{let body='';for await(const chunk of req)body+=chunk;requests++;if(requests===1){firstRequest(JSON.parse(body));await second;await new Promise(resolve=>setTimeout(resolve,300));}res.end(JSON.stringify({choices:[{message:{content:response({facts:[],events:[]})}}]}));});await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));t.after(()=>new Promise(resolve=>server.close(resolve)));
+ fs.mkdirSync(path.join(root,'.godspeed'),{recursive:true});fs.writeFileSync(path.join(root,'.godspeed','provider.json'),JSON.stringify({url:'http://127.0.0.1:'+server.address().port+'/v1/chat/completions',key:'fixture-key',model:'fixture-model'}));
+ const first=runScript(root);const request=await requested;const secondRun=runScript(root);secondStarted();await Promise.all([first,secondRun]);assert.equal(requests,1);assert.deepEqual(JSON.parse(request.messages[1].content).messages.map(message=>message.id),[row.id]);assert.deepEqual(JSON.parse(fs.readFileSync(path.join(root,'routines','remember-what-you-said','state.json'),'utf8')).consumed,[row.id]);
 });
 
 test('the command rejects a later notebook message that repeats a current fact',async t=>{
@@ -68,6 +77,10 @@ test('the starter fallback deduplicates current facts and events',async t=>{
 
 test('the starter fallback round-trips colon-bearing fact values before deduplicating',async t=>{
  const root=workspace(t),first={id:'first-colon',at:'2026-11-02T12:00:00Z',text:'I moved to Hamburg: Germany on 1 November'},second={id:'second-colon',at:'2026-11-03T12:00:00Z',text:'I still live in Hamburg: Germany'};const answer=row=>({facts:[{subject:self,kind:'home-city',value:'Hamburg: Germany',citation:{id:row.id,quote:row.text}}]});archive(root,[first]);await run(root,{env:{FIXTURE_MEMORY_MODEL_RESPONSE:response(answer(first))}});const claims=path.join(root,'world','claims'),written=fs.readFileSync(path.join(claims,fs.readdirSync(claims)[0]),'utf8');assert.match(written,/value: "Hamburg: Germany"/);archive(root,[first,second]);await run(root,{env:{FIXTURE_MEMORY_MODEL_RESPONSE:response(answer(second))}});assert.equal(fs.readdirSync(claims).length,1);
+});
+
+test('the starter fallback recognizes a BOM-marked current claim',async t=>{
+ const root=workspace(t),row={id:'bom-claim',at:'2026-11-02T12:00:00Z',text:'I moved to Hamburg on 1 November'},claims=path.join(root,'world','claims');fs.mkdirSync(claims,{recursive:true});fs.writeFileSync(path.join(claims,'hamburg.md'),'\ufeff---\nsubject: me\nattribute: lives-in\nvalue: Hamburg\nvalid_from: 2026-11-01\n---\nI moved to Hamburg on 1 November\n');archive(root,[row]);await run(root,{env:{FIXTURE_MEMORY_MODEL_RESPONSE:response(fact(row.id,row.text))}});assert.equal(fs.readdirSync(claims).length,1);
 });
 
 test('the starter fallback keeps a current new thing fact across archive runs',async t=>{
