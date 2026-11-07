@@ -1,4 +1,3 @@
-import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {runChild} from './child-process.mjs';
@@ -31,8 +30,7 @@ export class WorkoutsAddon {
  }
  async uninstall(){await this.command(['uninstall']);}
  async status({routine=null}={}){
-  const available=fs.existsSync(bin),saved=this.hasKey();
-  if(!available)return {available:false,connected:false,rows:0,minute:null,last_run:null,problems:[],routine};
+  const saved=this.hasKey();
   let raw={};
   try{const result=await this.command(['status','--json']);if(result.code)throw Error();raw=JSON.parse(result.stdout);}catch{}
   const settings=loadSettings(this.paths),state=raw&&typeof raw.state==='object'?raw.state:{},problems=Object.entries(state.problems||{}).map(([name,value])=>safeProblem({name,...(value&&typeof value==='object'?value:{})}));
