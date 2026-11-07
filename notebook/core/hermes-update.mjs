@@ -7,11 +7,12 @@ import {assistantEnvironment} from './assistant-files.mjs';
 import {hermesPython,scrubCredentials} from './runtime.mjs';
 import {aiProbe} from './connection-check.mjs';
 import {queueNotice} from './notices.mjs';
+import {GODSPEED_PLUGINS,enabledGodspeedPlugins} from './godspeed-plugins.mjs';
+import {configList,readConfigValue} from './hermes-config.mjs';
 
 export const UPDATE_FILE='hermes-update.json';
-const DAY=24*60*60*1000,WAIT=7*DAY,RETRY=30*DAY,UPDATE_LIMIT=40*60*1000;
+const DAY=24*60*60*1000,WAIT=7*DAY,RETRY=30*DAY,UPDATE_LIMIT=40*60*1000,RELEASE_LIMIT=120000;
 export const UPDATE_TRANSACTION_LIMIT=5*UPDATE_LIMIT+10*60*1000;
-const PLUGINS=['godspeed-reply','godspeed-context','godspeed-chat-tidy'];
 const versionOf=value=>{const found=/(?:^|[^0-9])(\d+)\.(\d+)\.(\d+)(?:$|[^0-9])/.exec(String(value||''));return found?[+found[1],+found[2],+found[3]].join('.'):null;};
 const compare=(a,b)=>a.split('.').map(Number).reduce((result,n,index)=>result||n-b.split('.').map(Number)[index],0);
 const errorText=result=>[result?.stderr,result?.stdout,result?.error?.message].filter(Boolean).join('\n');
@@ -49,7 +50,7 @@ export function eligibleRelease(releases,installed,now=Date.now(),failed={}){
 }
 
 export class HermesUpdate{
- constructor({store,descriptor,ask,run=runChild,now=()=>new Date(),platform=process.platform,getuid=()=>process.getuid?.(),isDocker=()=>false,isBusy=()=>false,fetcher=globalThis.fetch,lifecycle=null}={}){Object.assign(this,{store,descriptor,ask,run,now,platform,getuid,isDocker,isBusy,fetcher,lifecycle});this.running=null;}
+ constructor({store,descriptor,ask,run=runChild,now=()=>new Date(),platform=process.platform,getuid=()=>process.getuid?.(),isDocker=()=>false,isBusy=()=>false,fetcher=globalThis.fetch,lifecycle=null,releaseLimit=RELEASE_LIMIT}={}){Object.assign(this,{store,descriptor,ask,run,now,platform,getuid,isDocker,isBusy,fetcher,lifecycle,releaseLimit});this.running=null;}
  state(){return readHermesUpdate(this.store);}
  save(next){atomic(path.join(this.store.state,UPDATE_FILE),JSON.stringify(next,null,2)+'\n');return next;}
  setEnabled(enabled){return this.save({...transactionState(this.state()),enabled});}
@@ -73,27 +74,32 @@ export class HermesUpdate{
   const origin=await this.git(['remote','get-url','--all','origin'],source),urls=origin.stdout.trim().split(/\r?\n/).filter(Boolean);if(origin.code!==0||urls.length!==1||!officialHermesRemote(urls[0]))return {reason:"This Hermes checkout's origin is not the official Hermes repository."};
   return {source,head:head.stdout.trim(),executable};
  }
- async releases(){
-  try{
-   const response=await this.fetcher(`https://api.github.com/repos/${HERMES_REPOSITORY.owner}/${HERMES_REPOSITORY.name}/releases?per_page=100`,{headers:{Accept:'application/vnd.github+json','User-Agent':'godspeed-mission-control'}});
-   if(!response?.ok)throw Object.assign(Error('Hermes releases request failed ('+(response?.status||'unknown')+').'),{stderr:await response?.text?.().catch(()=>''),code:response?.status||1});
-   return {releases:await response.json()};
-  }catch(error){return {error};}
+ async releaseValue(value,abort){
+  let timeout;try{return await Promise.race([value,new Promise((resolve,reject)=>{timeout=setTimeout(()=>{abort.abort();reject(Error('Hermes release discovery timed out.'));},this.releaseLimit);})]);}finally{clearTimeout(timeout);}
  }
+ async releases(){
+  const abort=new AbortController();
+  try{
+   const response=await this.releaseValue(this.fetcher(`https://api.github.com/repos/${HERMES_REPOSITORY.owner}/${HERMES_REPOSITORY.name}/releases?per_page=100`,{headers:{Accept:'application/vnd.github+json','User-Agent':'godspeed-mission-control'},signal:abort.signal}),abort);
+   if(!response?.ok)throw Object.assign(Error('Hermes releases request failed ('+(response?.status||'unknown')+').'),{stderr:await this.releaseValue(response?.text?.()||'',abort),code:response?.status||1});
+   return {releases:await this.releaseValue(response.json(),abort)};
+  }catch(error){return {error};}finally{abort.abort();}
+ }
+ plugins(){try{return enabledGodspeedPlugins(configList(readConfigValue(fs.readFileSync(path.join(this.descriptor.home,'config.yaml'),'utf8'),['plugins','disabled'])));}catch{return GODSPEED_PLUGINS;}}
  async validate({expect,ai=true}={}){
   const version=await this.command(this.descriptor.executable,['--version']);if(version.code!==0||!versionOf(version.stdout)||expect&&versionOf(version.stdout)!==expect)return {ok:false,...failure({step:'program version',result:version})};
   const cron=await this.command(this.descriptor.executable,['cron','list']);if(cron.code!==0)return {ok:false,...failure({step:'Hermes cron',result:cron})};
-  for(const plugin of PLUGINS){const result=await this.command(this.descriptor.executable,['plugins','doctor',path.join(this.descriptor.home,'plugins',plugin),'--ci']);if(result.code!==0)return {ok:false,...failure({step:'Godspeed plugin '+plugin,result})};}
+  for(const plugin of this.plugins()){const result=await this.command(this.descriptor.executable,['plugins','doctor',path.join(this.descriptor.home,'plugins',plugin),'--ci']);if(result.code!==0)return {ok:false,...failure({step:'Godspeed plugin '+plugin,result})};}
   const gateway=await this.command(this.descriptor.executable,['gateway','status']);if(gateway.code!==0)return {ok:false,...failure({step:'chat gateway',result:gateway})};
   if(ai&&this.ask){const result=await aiProbe({store:this.store,home:this.descriptor.home,hermes:this.descriptor.executable,hermesSource:this.descriptor.sourceRoot,ask:this.ask})();if(result.set_up&&!result.ok&&result.kind!=='sign-in')return {ok:false,step:'AI probe',output:''};}
   return {ok:true,version:versionOf(version.stdout)};
  }
  notice({version,step,rollback}){
   const id='hermes-update-'+version;
-  if(rollback){this.store.save('notifications',{id,status:'pending',title:'A Hermes update was undone',body:`Hermes ${version} did not pass its ${step} check. The earlier version is running again.`,link:'/dashboard/settings#assistant-update'});queueNotice(this.store,{id,text:`Hermes ${version} did not pass its ${step} check, so Godspeed put the earlier version back. It is running again.`});}
-  else this.store.save('notifications',{id,status:'pending',title:'A Hermes update may not have recovered',body:`Hermes ${version} did not pass its ${step} check and could not be put back. Run the Hermes installer again.`,link:'/dashboard/settings#assistant-update'});
+  if(rollback){this.store.save('notifications',{id,status:'pending',kind:'hermes-update-rolled-back',title:'A Hermes update was undone',body:`Hermes ${version} did not pass its ${step} check. The earlier version is running again.`,link:'/dashboard/settings#assistant-update'});queueNotice(this.store,{id,text:`Hermes ${version} did not pass its ${step} check, so Godspeed put the earlier version back. It is running again.`});}
+  else this.store.save('notifications',{id,status:'pending',kind:'hermes-update-reinstall',title:'A Hermes update may not have recovered',body:`Hermes ${version} did not pass its ${step} check and could not be put back. Run the Hermes installer again.`,link:'/dashboard/settings#assistant-update'});
  }
- settle(){for(const bell of this.store.list('notifications').filter(entry=>entry.id.startsWith('hermes-update-')&&entry.status==='pending'))this.store.save('notifications',{id:bell.id,status:'resolved',resolved_at:this.now().toISOString()});}
+ settleRestoredUpdates(){for(const bell of this.store.list('notifications').filter(entry=>entry.kind==='hermes-update-rolled-back'&&entry.status==='pending'))this.store.save('notifications',{id:bell.id,status:'resolved',resolved_at:this.now().toISOString()});}
  backupFile(){return path.join(this.descriptor.home,'backups','godspeed-pre-update-'+randomUUID()+'.zip');}
  async backup(){
   const file=this.backupFile();fs.mkdirSync(path.dirname(file),{recursive:true,mode:0o700});
@@ -142,7 +148,7 @@ export class HermesUpdate{
   const eligible=await this.eligibility();if(eligible.reason)return this.record({result:'skipped',reason:eligible.reason});
   const before=await this.command(eligible.executable,['--version']);const installed=versionOf(before.stdout);if(before.code!==0||!installed)return this.record({result:'skipped',reason:'Hermes did not report its installed version.'});
   if(this.store.list('notifications').some(entry=>entry.id.startsWith('hermes-update-')&&entry.status==='pending')){
-   const checked=await this.validate({expect:installed});if(checked.ok){this.settle();return this.record({result:'checked',version:installed});}
+   const checked=await this.validate({expect:installed});if(checked.ok){this.settleRestoredUpdates();return this.record({result:'checked',version:installed});}
    return this.record({result:'check-failed',version:installed,reason:checked.step,detail:checked.output});
   }
   const listed=await this.releases();if(listed.error)return this.record({result:'failed',version:installed,reason:'Hermes release discovery failed.',detail:failure({step:'release discovery',result:{error:listed.error}}).output});
@@ -163,7 +169,7 @@ export class HermesUpdate{
   }
   let checked=updated.ok?null:updated;
   if(!checked){const restart=await this.command(eligible.executable,['gateway','restart'],{cwd:eligible.source});checked=restart.code===0?await this.validate({expect:target.version}):{ok:false,...failure({step:'chat gateway restart',result:restart})};}
-  if(checked.ok){this.removeOlderBackup(this.state().backup,backup.file);this.settle();return this.record({result:'updated',version:target.version,backup:backup.file});}
+  if(checked.ok){this.removeOlderBackup(this.state().backup,backup.file);this.settleRestoredUpdates();return this.record({result:'updated',version:target.version,backup:backup.file});}
   const rolledBack=await this.rollback(eligible,eligible.head,backup.file);
   if(rolledBack){const restored=await this.validate({expect:installed,ai:checked.step!=='AI probe'});if(restored.ok){this.removeOlderBackup(this.state().backup,backup.file);this.notice({version:target.version,step:checked.step,rollback:true});return this.record({result:'rolled-back',version:installed,failed:target.version,reason:checked.step,detail:checked.output,backup:backup.file});}}
   this.removeOlderBackup(this.state().backup,backup.file);this.notice({version:target.version,step:checked.step,rollback:false});return this.record({result:'rollback-failed',version:target.version,failed:target.version,reason:checked.step,detail:checked.output,backup:backup.file});
