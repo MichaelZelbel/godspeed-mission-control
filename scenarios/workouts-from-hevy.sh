@@ -150,12 +150,11 @@ refused_not_retained() { # <docker|native>
 }
 
 workout_snapshot() { # <docker|native> <file> <routine file> <exit file>
-  local platform=$1 output=$2 routine_file=$3 exit_file=$4 query collection items jobs routines script python code docker_home assistant_path
+  local platform=$1 output=$2 routine_file=$3 exit_file=$4 query collection items jobs script python code docker_home assistant_path
   query=$EVIDENCE/.workouts-$platform-query.json
   collection=$EVIDENCE/.workouts-$platform-collections.json
   items=$EVIDENCE/.workouts-$platform-items.json
   jobs=$EVIDENCE/.workouts-$platform-jobs.json
-  routines=$EVIDENCE/.workouts-$platform-routines.json
   case $platform in
     docker)
       server_table collections "$collection"; server_table collection_items "$items"
@@ -165,7 +164,6 @@ workout_snapshot() { # <docker|native> <file> <routine file> <exit file>
       docker_home=$(in_server node -e 'const fs=require("fs");process.stdout.write(JSON.parse(fs.readFileSync(process.argv[1])).home||"")' "$assistant_path" 2>/dev/null || true)
       [ -n "$docker_home" ] || fail "the Docker install recorded no assistant home for the Hevy routine"
       in_server cat "$docker_home/cron/jobs.json" >"$jobs" 2>/dev/null || : >"$jobs"
-      in_server cat /opt/data/.godspeed/notebook-routines.json >"$routines" 2>/dev/null || : >"$routines"
       ;;
     native)
       for query in collections collection_items; do
@@ -175,18 +173,17 @@ workout_snapshot() { # <docker|native> <file> <routine file> <exit file>
       done
       assistant_home
       cp "$HERMES/cron/jobs.json" "$jobs" 2>/dev/null || : >"$jobs"
-      cp "$STATE/notebook-routines.json" "$routines" 2>/dev/null || : >"$routines"
       ;;
   esac
-  "$NODE" - "$platform" "$collection" "$items" "$jobs" "$routines" "$output" "$routine_file" <<'NODE'
-const fs=require('fs');const [platform,collectionsFile,itemsFile,jobsFile,routinesFile,out,routineOut]=process.argv.slice(2);
+  "$NODE" - "$platform" "$collection" "$items" "$jobs" "$output" "$routine_file" <<'NODE'
+const fs=require('fs');const [platform,collectionsFile,itemsFile,jobsFile,out,routineOut]=process.argv.slice(2);
 const read=file=>{try{return JSON.parse(fs.readFileSync(file,'utf8'))}catch{return null}};
 const rows=data=>Array.isArray(data)?data:(Array.isArray(data?.data)?data.data:(Array.isArray(data?.jobs)?data.jobs:[]));
 const collection=rows(read(collectionsFile)).find(row=>row?.name==='Workouts');
 const items=collection?rows(read(itemsFile)).filter(row=>row?.collection_id===collection.id):[];
 const value=(item,...names)=>names.map(name=>item?.[name]??item?.data?.[name]).find(value=>value!==undefined&&value!==null);
-const workoutRows=items.map(item=>({source_id:value(item,'source_id','hevy_id','workout_id','id'),title:value(item,'title','name'),exercise:value(item,'exercise','exercise_name'),set:value(item,'set')||{weight_kg:value(item,'weight_kg'),reps:value(item,'reps')}));
-const jobs=rows(read(jobsFile)), routines=rows(read(routinesFile));
+const workoutRows=items.map(item=>({source_id:value(item,'source_id','hevy_id','workout_id','id'),title:value(item,'title','name'),exercise:value(item,'exercise','exercise_name'),set:value(item,'set')||{weight_kg:value(item,'weight_kg'),reps:value(item,'reps')}}));
+const jobs=rows(read(jobsFile));
 const routine=jobs.filter(job=>job?.name==='Workouts from Hevy');const job=routine[0]||{};
 const cron=String(job.cron||job.schedule?.expr||job.schedule||'');const minute=/^([0-9]+)\s+\*/.exec(cron)?.[1];
 fs.writeFileSync(out,JSON.stringify({platform,collection:collection&&{name:collection.name,rows:workoutRows},routine:{name:job.name,minute:minute===undefined?null:Number(minute),script:job.script||'',count:routine.length}})+'\n');
