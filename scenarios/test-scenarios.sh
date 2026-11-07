@@ -190,6 +190,44 @@ server_sparse_inventory() {
 }
 server_sparse_inventory
 
+server_local_listener_port() {
+  local default overridden
+  default=$(bash -c '. "$1"; printf "%s" "$INGEST_PORT"' bash "$HERE/server-lib.sh")
+  overridden=$(GODSPEED_SCENARIO_INGEST_PORT=49672 bash -c '. "$1"; printf "%s" "$INGEST_PORT"' bash "$HERE/server-lib.sh")
+  if [ "$default" = 47832 ] && [ "$overridden" = 49672 ]; then
+    ok 'the Docker scenario helpers use the loopback listener unless an override selects another port'
+  else
+    bad "the Docker scenario helpers select the expected listener ports (default $default, override $overridden)"
+  fi
+}
+server_local_listener_port
+
+server_telegram_setup_override() {
+  local bin=$TMP/server-telegram-override-bin trace=$TMP/server-telegram-override.trace output port
+  mkdir -p "$bin" "$TMP/server-telegram-override-evidence"
+  printf '%s\n' '#!/bin/sh' 'printf "%s\n" "$@" >"$NODE_TRACE"' >"$bin/node"
+  chmod +x "$bin/node"
+  if output=$(PATH="$bin:$PATH" NODE="$bin/node" NODE_TRACE="$trace" GODSPEED_SCENARIO_INGEST_PORT=49672 \
+    EVIDENCE="$TMP/server-telegram-override-evidence" SERVER_DIR="$TMP/server-telegram-override-server" bash -c '
+      . "$1"
+      sudo(){ [ "$1" = tee ] && cat >/dev/null; }
+      server_compose(){ :; }
+      server_healthy(){ :; }
+      server_container(){ printf fixture; }
+      server_telegram_setup without-ai
+    ' bash "$HERE/server-lib.sh" 2>&1); then
+    port=$(awk 'found { print; exit } $0 == "--notebook-port" { found=1 }' "$trace")
+    if [ "$port" = 49672 ]; then
+      ok 'the Telegram setup hands an overridden notebook port to its driver'
+    else
+      bad "the Telegram setup hands an overridden notebook port to its driver (got ${port:-none})"
+    fi
+  else
+    bad "the Telegram setup hands an overridden notebook port to its driver ($output)"
+  fi
+}
+server_telegram_setup_override
+
 # A folder that should pass, so a case for one failure is that folder with one thing changed.
 copy() { # <good folder> <new folder>
   rm -rf "$2"
@@ -501,7 +539,7 @@ update_good() { # <folder>
   printf '+ curl -fsSL https://raw.githubusercontent.com/x/kit-bootstrap/%s/setup-godspeed.sh\n+ KB_BRANCH=%s\n+ GODSPEED_STARTER_REF=%s\n' \
     "$ENGINE" "$ENGINE" "$NEW" >"$folder/trace-1.log"
   cp "$folder/trace-1.log" "$folder/trace-2.log"
-  printf '["notes","scenario-four"]\n["settings","installation"]\n' >"$folder/records-before.txt"
+  printf '["goals","the-first-goal"]\n["notes","scenario-four"]\n["settings","installation"]\n' >"$folder/records-before.txt"
   printf '["goals","the-first-goal"]\n["notes","scenario-four"]\n["settings","installation"]\n' \
     >"$folder/records-after.txt"
   printf '{"records":[{"type":"notes","id":"scenario-four","content":"A note the owner wrote before the update"}]}\n' \
@@ -511,6 +549,7 @@ update_good() { # <folder>
   printf '{"id":"scenario-chat-1"}\n{"content":"a message of the chat history","session_id":"scenario-chat-1"}\n' \
     >"$folder/chat-before.txt"
   cp "$folder/chat-before.txt" "$folder/chat-after.txt"
+  printf '{"configured":true}\n' >"$folder/setup.json"
   printf 'Goal research\nThe day ahead\nNight chat tidy-up\n' >"$folder/routines-after.txt"
   printf '200\n' >"$folder/health.txt"
 }
@@ -541,6 +580,16 @@ copy "$U/good" "$U/record-gone"
 printf '["settings","installation"]\n' >"$U/record-gone/records-after.txt"
 refuses "an update that lost a notebook record" update-keeps-everything "$U/record-gone" \
   "notebook records of the owner's are gone"
+
+copy "$U/good" "$U/no-setup"
+rm "$U/no-setup/setup.json"
+refuses "a run that kept no proof that the first goal configured the install" update-keeps-everything "$U/no-setup" \
+  "setup.json is not in what the scenario kept"
+
+copy "$U/good" "$U/setup-failed"
+printf '{"configured":false}\n' >"$U/setup-failed/setup.json"
+refuses "a first goal that did not configure the install" update-keeps-everything "$U/setup-failed" \
+  "did not say the install was configured"
 
 copy "$U/good" "$U/setting-gone"
 printf '100000\n' >"$U/setting-gone/owner-setting-after.txt"

@@ -225,12 +225,13 @@ printf '{"sent":[{"chat_id":31415,"text":"First."},{"chat_id":31415,"text":"Seco
   } finally { fs.rmSync(folder,{recursive:true,force:true}); }
 });
 
-test('setup attributes every message of a multi-part reply to the step before it',()=>{
+test('setup cleanup finishes before it attributes every message of a multi-part reply',()=>{
   const {folder,run}=fixture('setup',`#!/bin/sh
 input=$(cat)
 case "$*" in
+  *'pkill -f '*) sh -c "$7"; exit $?;;
   *__act*) echo act >> "$TRACE"; exit 0;;
-  *49999*) echo "$*" >> "$TRACE"; echo '{"start_message":"/start abc"}'; exit 0;;
+  *http://127.0.0.1:49672/api/telegram/connect*) echo "$*" >> "$TRACE"; echo '{"start_message":"/start abc"}'; exit 0;;
   *runner.json*) echo '{"state":"gateway"}'; exit 0;;
   *setup.json*) echo '{"done":true}'; exit 0;;
   *record.json*) ;;
@@ -248,8 +249,9 @@ reads=$(grep -c read "$COUNT" 2>/dev/null)
 printf '{"sent":[%s],"requests":[]}\\n' "$sent"
 `);
   try {
-    run('setup','--token','t','--ai-key','k','--notebook-port','49999');
-    assert.match(fs.readFileSync(path.join(folder,'trace'),'utf8'),/http:\/\/127\.0\.0\.1:49999\/api\/telegram\/connect/);
+    assert.throws(()=>run('setup','--token','t','--ai-key','k'),/--notebook-port is required/);
+    run('setup','--token','t','--ai-key','k','--notebook-port','49672');
+    assert.match(fs.readFileSync(path.join(folder,'trace'),'utf8'),/http:\/\/127\.0\.0\.1:49672\/api\/telegram\/connect/);
     const saved=JSON.parse(fs.readFileSync(path.join(folder,'run.json'),'utf8'));
     assert.deepEqual(saved.steps.map(step=>step.success),[true,true,true,true]);
     assert.equal(saved.outbox.length,saved.sent);
