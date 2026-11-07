@@ -20,6 +20,8 @@ import {loadSettings as coachSettings,saveSettings as saveCoach} from '../../thi
 import {rhythmWords} from '../../third-party/addons/godspeed-coach/lib/areas.mjs';
 import {moveSettingsDeadlines} from './native-due.mjs';
 import {scrubCredentials} from './runtime.mjs';
+import {HermesLifecycle} from './hermes-lifecycle.mjs';
+import {UPDATE_TRANSACTION_LIMIT} from './hermes-update.mjs';
 const skills={'morning-brief':'morning-brief',coaching:'coach','habit-check':'coach',journal:'interstitial-journal',headache:'headache-tracker'};
 // Hermes' own record of its jobs, as it wrote it.
 export function hermesJobs(home){
@@ -69,8 +71,8 @@ export class NativeScheduler{
  // assistant: a watch topic was never read again, and radar work stayed
  // "preparing" for ever. They run on the machine that runs the routines.
  static recordKinds=['watch','domain-watch','radar-prepare','radar-work'];
- constructor(store,{executable,home,device=store.device,run=runCommand,records=null,tickLimit=TICK_LIMIT,beatEvery=HEARTBEAT_EVERY,now=Date.now}){
-  Object.assign(this,{store,executable,home,device,run,records,tickLimit,beatEvery,now,setupAttempts:new Set()});
+ constructor(store,{executable,home,device=store.device,run=runCommand,records=null,tickLimit=TICK_LIMIT,beatEvery=HEARTBEAT_EVERY,updateLimit=UPDATE_TRANSACTION_LIMIT,now=Date.now,updater=null,lifecycle=new HermesLifecycle()}){
+  Object.assign(this,{store,executable,home,device,run,records,tickLimit,beatEvery,updateLimit,now,updater,lifecycle,setupAttempts:new Set()});
   if(records)records.onProgress=()=>this.onProgress?.();
  }
  // A connected provider reaches the record routines too (/api/provider).
@@ -598,14 +600,17 @@ export class NativeScheduler{
   // A notebook still owned by the old shared name is taken over (device-id.mjs).
   if(this.owner()===LEGACY_DEVICE&&this.claimLegacy)try{await this.claimLegacy();}catch{}
   if(!this.owns()){this.onProgress?.();return [];}
-  const records=this.records?.tick().catch(()=>[])||Promise.resolve([]);
+  let records=Promise.resolve([]);
   // A setup asking inside a running tick or the cooldown still hears whether the connection check could be made.
   if(this.ticking){if(raise){await this.current?.catch(()=>null);await this.followConnectionCheck();}return records;}
   const now=this.now();if(now-(this.lastTick||0)<60000){this.onProgress?.();if(raise)await this.followConnectionCheck();return records;}
+  if(this.updater)await beatWhile(this.updater.tick(this.store.get('settings','installation')?.timezone),()=>this.onProgress?.(),{limitMs:this.updateLimit,every:this.beatEvery}).catch(error=>console.error('Godspeed Mission Control: the Hermes update could not be checked: '+String(error?.message||error)));
+  const release=this.lifecycle.acquire('routine tick');if(!release)return records;
   this.ticking=true;this.lastTick=now;
   let failure=null,finish;const failures=[];
   this.current=new Promise(r=>{finish=r;});
   try{
+   records=this.records?.tick().catch(()=>[])||Promise.resolve([]);
    await this.startRoutines().catch(()=>null);
    this.followingSetup=true;
    try{
@@ -624,7 +629,7 @@ export class NativeScheduler{
    await beatWhile(this.command(['tick'],{timeout:this.tickLimit}),()=>this.onProgress?.(),{limitMs:this.tickLimit+60000,every:this.beatEvery});
    try{this.afterTick();}catch{}
   }
-  finally{this.ticking=false;finish();}
+  finally{this.ticking=false;finish();release();}
   // The setup that asked for this tick hears that a routine could not be made; the periodic tick logs it (onFailure) and keeps going.
   if(failure){if(raise)throw failure;for(const error of failures)try{this.onFailure?.(error);}catch{}}
   return records;
@@ -641,7 +646,8 @@ export class NativeScheduler{
  startRun(id){
   this.requireOwner('Run the routine');
   if(id&&!nativeJobs(this.home,this.device).some(j=>j.id===id))throw Error('Choose an existing Hermes task');
-  const run=this.runNow(id);this.running=run;run.catch(()=>{}).finally(()=>{if(this.running===run)this.running=null;});
+  const release=this.lifecycle.acquire('routine run');if(!release)throw Error('The assistant is updating or another routine is already running.');
+  const run=this.runNow(id);this.running=run;run.catch(()=>{}).finally(()=>{if(this.running===run)this.running=null;release();});
   return {started:true,...(id?{id}:{})};
  }
  async runNow(id){

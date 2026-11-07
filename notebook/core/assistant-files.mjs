@@ -31,6 +31,7 @@ export function passedEnvironment(env=process.env){
 // leaves which one a program reads to chance.
 const named=(env,name)=>{const key=Object.keys(env).find(k=>k.toUpperCase()===name);return key===undefined?undefined:env[key];};
 const without=(env,names)=>Object.fromEntries(Object.entries(env).filter(([k])=>!names.includes(k.toUpperCase())));
+export const scrubGitEnvironment=env=>Object.fromEntries(Object.entries(env).filter(([name])=>!name.toUpperCase().startsWith('GIT_')));
 // Mail and video live where a terminal on this computer keeps them, so what the
 // person sets up in a terminal (as the book teaches: a key is never typed into
 // the chat) is what the assistant finds. Until 8 October 2026 the assistant was

@@ -125,12 +125,12 @@ install_paths() {
 # looked for the settings and the chat store where no install of a stranger's puts them, and all
 # four failed on the candidate before they had seen anything. Read after every run of a line,
 # because an update is the one thing that could move it.
-assistant_home() {
-  local home
+assistant_home() { # [failure context]
+  local home context=${1:+$1: }
   home=$(json_value "$STATE/assistant.json" home) ||
-    fail "the install recorded no home for its assistant ($STATE/assistant.json names none), so its settings and its chat store cannot be found"
+    fail "${context}the install recorded no home for its assistant ($STATE/assistant.json names none), so its settings and its chat store cannot be found"
   if [ -z "$home" ] || [ ! -d "$home" ]; then
-    fail "the install recorded '$home' as its assistant's home, and there is no such folder"
+    fail "${context}the install recorded '$home' as its assistant's home, and there is no such folder"
   fi
   HERMES=$home
   say "The assistant's home, as the install recorded it: $HERMES"
