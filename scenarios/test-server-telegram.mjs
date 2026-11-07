@@ -216,10 +216,11 @@ printf '{"sent":[{"chat_id":31415,"text":"First."},{"chat_id":31415,"text":"Seco
   } finally { fs.rmSync(folder,{recursive:true,force:true}); }
 });
 
-test('setup attributes every message of a multi-part reply to the step before it',()=>{
+test('setup cleanup finishes before it attributes every message of a multi-part reply',()=>{
   const {folder,run}=fixture('setup',`#!/bin/sh
 input=$(cat)
 case "$*" in
+  *'pkill -f '*) sh -c "$7"; exit $?;;
   *__act*) echo act >> "$TRACE"; exit 0;;
   *47831*) echo '{"start_message":"/start abc"}'; exit 0;;
   *runner.json*) echo '{"state":"gateway"}'; exit 0;;

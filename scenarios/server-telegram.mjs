@@ -106,7 +106,7 @@ async function setup(){
   write(scenarioFile,scenario);
   docker(['cp',scenarioFile,`${server}:/tmp/godspeed-scenario-telegram.json`]);
   // It is deliberately the stage image's copy, just as the full-candidate proof does.
-  inServer(['sh','-c','pkill -f godspeed-scenario-telegram.py 2>/dev/null || true']);
+  inServer(['sh','-c','pkill -f [g]odspeed-scenario-telegram.py 2>/dev/null || true']);
   inServer(['cp','/opt/godspeed/kit/docker/test/fake-telegram.py','/tmp/godspeed-scenario-telegram.py']);
   inServer(['sh','-c',`python3 /tmp/godspeed-scenario-telegram.py --port 8081 --token ${JSON.stringify(token)} --scenario /tmp/godspeed-scenario-telegram.json --record /tmp/godspeed-scenario-telegram-record.json >/tmp/godspeed-scenario-telegram.log 2>&1 &`]);
   await waitFor('API',copyRecord,record=>Array.isArray(record.requests),15);
