@@ -78,7 +78,8 @@ function act(value){
   inServer(['curl','-fsS','--max-time','30','-X','POST','-H','Content-Type: application/json','--data-binary','@-','http://127.0.0.1:8081/__act'],request);
 }
 function post(pathname,body){
-  const result=inServer(['curl','-fsS','--max-time','300','-X','POST','-H','Content-Type: application/json','--data-binary','@-',`http://127.0.0.1:47831${pathname}`],Buffer.from(json(body)));
+  const notebookPort=option('--notebook-port');
+  const result=inServer(['curl','-fsS','--max-time','300','-X','POST','-H','Content-Type: application/json','--data-binary','@-',`http://127.0.0.1:${notebookPort}${pathname}`],Buffer.from(json(body)));
   return JSON.parse(result);
 }
 async function waitFor(description,readValue,predicate,seconds=90){
