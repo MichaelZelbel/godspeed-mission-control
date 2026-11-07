@@ -20,7 +20,6 @@ const server=optional('--server') ?? 'godspeed';
 const evidence=optional('--evidence');
 const token=optional('--token');
 const owner=Number(optional('--owner') ?? '31415');
-const notebookPort=optional('--notebook-port') ?? '47832';
 const docker=(arguments_,input) => execFileSync('sudo',['docker',...arguments_],{input,encoding:'utf8',stdio:['pipe','pipe','pipe']});
 const inServer=(arguments_,input) => docker(['exec','-i',server,...arguments_],input);
 const sleep=ms => new Promise(resolve=>setTimeout(resolve,ms));
@@ -78,7 +77,7 @@ function act(value){
   const request=Buffer.from(json(value));
   inServer(['curl','-fsS','--max-time','30','-X','POST','-H','Content-Type: application/json','--data-binary','@-','http://127.0.0.1:8081/__act'],request);
 }
-function post(pathname,body){
+function post(notebookPort,pathname,body){
   const result=inServer(['curl','-fsS','--max-time','300','-X','POST','-H','Content-Type: application/json','--data-binary','@-',`http://127.0.0.1:${notebookPort}${pathname}`],Buffer.from(json(body)));
   return JSON.parse(result);
 }
@@ -101,6 +100,7 @@ function attributeSent(label){
 async function setup(){
   requireEvidence();
   if(!token) throw Error('server-telegram: --token is required for setup');
+  const notebookPort=option('--notebook-port');
   const withoutAI=args.includes('--without-ai');
   const scenario={users:{[owner]:{first_name:'Scenario owner',username:'scenario_owner'}},start:[],rules:[]};
   const scenarioFile=path.join(evidence,'telegram-scenario.json');
@@ -111,7 +111,7 @@ async function setup(){
   inServer(['cp','/opt/godspeed/kit/docker/test/fake-telegram.py','/tmp/godspeed-scenario-telegram.py']);
   inServer(['sh','-c',`python3 /tmp/godspeed-scenario-telegram.py --port 8081 --token ${JSON.stringify(token)} --scenario /tmp/godspeed-scenario-telegram.json --record /tmp/godspeed-scenario-telegram-record.json >/tmp/godspeed-scenario-telegram.log 2>&1 &`]);
   await waitFor('API',copyRecord,record=>Array.isArray(record.requests),15);
-  const connected=post('/api/telegram/connect',{token,timezone:'Etc/UTC',address:'https://example.invalid'});
+  const connected=post(notebookPort,'/api/telegram/connect',{token,timezone:'Etc/UTC',address:'https://example.invalid'});
   if(!connected?.start_message) throw Error('Settings connected the bot but supplied no one-time /start message');
   await capture('setup-start','setup',()=>act({from:owner,text:connected.start_message}));
   if(!withoutAI){

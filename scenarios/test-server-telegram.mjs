@@ -172,6 +172,15 @@ function fixture(name,script){
 }
 const seed=(folder,sent)=>fs.writeFileSync(path.join(folder,'telegram-run.json'),JSON.stringify({steps:[],outbox:[],sent}));
 
+test('setup requires the selected notebook port',()=>{
+  const {folder,run}=fixture('setup-port',`#!/bin/sh
+exit 1
+`);
+  try {
+    assert.throws(()=>run('setup','--token','t'),/--notebook-port is required/);
+  } finally { fs.rmSync(folder,{recursive:true,force:true}); }
+});
+
 test('say waits for a reply that arrives after the old fixed delay',()=>{
   const {folder,run}=fixture('late',`#!/bin/sh
 cat >/dev/null
