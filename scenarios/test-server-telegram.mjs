@@ -221,7 +221,7 @@ test('setup attributes every message of a multi-part reply to the step before it
 input=$(cat)
 case "$*" in
   *__act*) echo act >> "$TRACE"; exit 0;;
-  *47831*) echo '{"start_message":"/start abc"}'; exit 0;;
+  *http://127.0.0.1:49672/api/telegram/connect*) echo '{"start_message":"/start abc"}'; exit 0;;
   *runner.json*) echo '{"state":"gateway"}'; exit 0;;
   *setup.json*) echo '{"done":true}'; exit 0;;
   *record.json*) ;;
@@ -239,7 +239,7 @@ reads=$(grep -c read "$COUNT" 2>/dev/null)
 printf '{"sent":[%s],"requests":[]}\\n' "$sent"
 `);
   try {
-    run('setup','--token','t','--ai-key','k');
+    run('setup','--token','t','--ai-key','k','--notebook-port','49672');
     const saved=JSON.parse(fs.readFileSync(path.join(folder,'run.json'),'utf8'));
     assert.deepEqual(saved.steps.map(step=>step.success),[true,true,true,true]);
     assert.equal(saved.outbox.length,saved.sent);

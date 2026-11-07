@@ -138,6 +138,18 @@ server_sparse_inventory() {
 }
 server_sparse_inventory
 
+server_local_listener_port() {
+  local default overridden
+  default=$(bash -c '. "$1"; printf "%s" "$INGEST_PORT"' bash "$HERE/server-lib.sh")
+  overridden=$(GODSPEED_SCENARIO_INGEST_PORT=49672 bash -c '. "$1"; printf "%s" "$INGEST_PORT"' bash "$HERE/server-lib.sh")
+  if [ "$default" = 47832 ] && [ "$overridden" = 49672 ]; then
+    ok 'the Docker scenario helpers use the loopback listener unless an override selects another port'
+  else
+    bad "the Docker scenario helpers select the expected listener ports (default $default, override $overridden)"
+  fi
+}
+server_local_listener_port
+
 # A folder that should pass, so a case for one failure is that folder with one thing changed.
 copy() { # <good folder> <new folder>
   rm -rf "$2"

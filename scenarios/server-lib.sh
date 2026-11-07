@@ -2,7 +2,7 @@
 # Shared Docker-server scenario helpers.  scenario-lib.sh must be sourced first.
 
 SERVER_DIR=${GODSPEED_SCENARIO_SERVER_DIR:-/opt/godspeed-mission-control}
-INGEST_PORT=${GODSPEED_SCENARIO_INGEST_PORT:-47831}
+INGEST_PORT=${GODSPEED_SCENARIO_INGEST_PORT:-47832}
 SERVER_SPARSE_TABLES=()
 
 # The /server installer owns the Compose project and its generated container names. Resolve the
@@ -142,26 +142,26 @@ server_telegram_setup() { # [without-ai]
   server_compose -f "$SERVER_DIR/compose.scenario-telegram.yaml" up -d --force-recreate >&2 ||
     fail 'the server could not restart with its Telegram API endpoint set to the local stand-in'
   server_healthy 300 || fail 'the Docker server is not healthy after its Telegram endpoint was set'
-  "$NODE" "$HERE/server-telegram.mjs" setup --server "$(server_container)" --evidence "$EVIDENCE" \
+  "$NODE" "$HERE/server-telegram.mjs" setup --server "$(server_container)" --evidence "$EVIDENCE" --notebook-port "$INGEST_PORT" \
     --token "$SERVER_TELEGRAM_TOKEN" --owner "$SERVER_TELEGRAM_OWNER" "${setup[@]}" ||
     fail 'the installed Docker Telegram setup did not hand the bot to its gateway'
 }
 server_telegram_say() { # <label> <text>
   interaction_begin "$1"
-  "$NODE" "$HERE/server-telegram.mjs" say --server "$(server_container)" --evidence "$EVIDENCE" \
+  "$NODE" "$HERE/server-telegram.mjs" say --server "$(server_container)" --evidence "$EVIDENCE" --notebook-port "$INGEST_PORT" \
     --owner "$SERVER_TELEGRAM_OWNER" --label "$1" --text "$2" ||
     fail "the installed Telegram gateway did not accept $1"
   SCENARIO_INTERACTION=''
 }
 server_telegram_press() { # <label> <question text> <button label>
   interaction_begin "$1"
-  "$NODE" "$HERE/server-telegram.mjs" press --server "$(server_container)" --evidence "$EVIDENCE" \
+  "$NODE" "$HERE/server-telegram.mjs" press --server "$(server_container)" --evidence "$EVIDENCE" --notebook-port "$INGEST_PORT" \
     --owner "$SERVER_TELEGRAM_OWNER" --label "$1" --question "$2" --button "$3" ||
     fail "the installed Telegram gateway did not accept $1"
   SCENARIO_INTERACTION=''
 }
 server_telegram_snapshot() {
-  "$NODE" "$HERE/server-telegram.mjs" snapshot --server "$(server_container)" --evidence "$EVIDENCE" ||
+  "$NODE" "$HERE/server-telegram.mjs" snapshot --server "$(server_container)" --evidence "$EVIDENCE" --notebook-port "$INGEST_PORT" ||
     fail 'the installed Telegram gateway left no current evidence'
 }
 server_telegram_record() { # <target file>
@@ -171,9 +171,9 @@ server_telegram_record() { # <target file>
 server_telegram_mark() { # <label> [kind]
   interaction_begin "$1"
   if [ $# -eq 2 ]; then
-    "$NODE" "$HERE/server-telegram.mjs" mark --server "$(server_container)" --evidence "$EVIDENCE" --label "$1" --kind "$2"
+    "$NODE" "$HERE/server-telegram.mjs" mark --server "$(server_container)" --evidence "$EVIDENCE" --notebook-port "$INGEST_PORT" --label "$1" --kind "$2"
   else
-    "$NODE" "$HERE/server-telegram.mjs" mark --server "$(server_container)" --evidence "$EVIDENCE" --label "$1"
+    "$NODE" "$HERE/server-telegram.mjs" mark --server "$(server_container)" --evidence "$EVIDENCE" --notebook-port "$INGEST_PORT" --label "$1"
   fi || fail "the installed Telegram gateway left no evidence for $1"
   SCENARIO_INTERACTION=''
 }
