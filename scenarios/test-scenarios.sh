@@ -502,6 +502,11 @@ printf '{"timezone":"Etc/UTC","delivery":"notebook"}\n' >"$U/no-first-goal/setup
 refuses "a run that kept no first goal" update-keeps-everything "$U/no-first-goal" \
   "the setup request kept no first goal"
 
+copy "$U/good" "$U/other-first-goal"
+printf '{"goal":"Plan a different scenario","timezone":"Etc/UTC","delivery":"notebook"}\n' >"$U/other-first-goal/setup-request.json"
+refuses "a run that kept another first goal" update-keeps-everything "$U/other-first-goal" \
+  "the setup request's first goal is Plan a different scenario, not Keep the scenario ready"
+
 copy "$U/good" "$U/setup-failed"
 printf '{"configured":false}\n' >"$U/setup-failed/setup.json"
 refuses "a first goal that did not configure the install" update-keeps-everything "$U/setup-failed" \
