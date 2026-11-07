@@ -4067,16 +4067,14 @@ if (
   sudo() {
     case $1 in
       tee) shift; command tee "$@" ;;
-      docker) printf '%s\n' "$@" >"$TMP/clock-compose-command" ;;
       *) return 1 ;;
     esac
   }
+  server_compose() { printf '%s\n' "$@" >"$TMP/clock-compose-command"; }
   say() { :; }
   server_healthy() { :; }
   server_clock_at '2026-11-07T07:00:00Z'
   [ "$(cat "$TMP/clock-compose-command")" = "$(printf '%s\n' \
-    docker compose -p godspeed-mission-control --project-directory "$CLOCK_DIR" \
-    -f "$CLOCK_DIR/compose.yaml" --env-file "$CLOCK_DIR/.env" \
     -f "$CLOCK_DIR/compose.override.yaml" up -d --force-recreate)" ] && \
     grep -Fqx '      GODSPEED_NOW: "2026-11-07T07:00:00Z"' "$CLOCK_DIR/compose.override.yaml"
 ); then
@@ -4093,21 +4091,39 @@ if (
   sudo() {
     case $1 in
       tee) shift; command tee "$@" ;;
-      docker) printf '%s\n' "$@" >"$TMP/hevy-compose-command" ;;
       *) return 1 ;;
     esac
   }
+  server_compose() { printf '%s\n' "$@" >"$TMP/hevy-compose-command"; }
   server_healthy() { :; }
   server_hevy_url 47839
   [ "$(cat "$TMP/hevy-compose-command")" = "$(printf '%s\n' \
-    docker compose -p godspeed-mission-control --project-directory "$HEVY_DIR" \
-    -f "$HEVY_DIR/compose.yaml" --env-file "$HEVY_DIR/.env" \
     -f "$HEVY_DIR/compose.override.yaml" up -d --force-recreate)" ] && \
     grep -Fqx '      GODSPEED_WORKOUTS_HEVY_URL: "http://host.docker.internal:47839"' "$HEVY_DIR/compose.override.yaml"
 ); then
   ok "the Hevy recreate writes its override through sudo and passes it through the installed Compose boundary"
 else
   bad "the Hevy recreate did not write its override or pass both Compose layers"
+fi
+HEVY_FAILURE_DIR=$TMP/server-hevy-write-failure
+mkdir -p "$HEVY_FAILURE_DIR"
+HEVY_FAILURE_MARKER=$TMP/hevy-compose-after-write-failure
+HEVY_FAILURE_OUTPUT=$(HEVY_FAILURE_MARKER=$HEVY_FAILURE_MARKER GODSPEED_SCENARIO_SERVER_DIR=$HEVY_FAILURE_DIR \
+  bash -c '
+    . "$0"
+    . "$1"
+    sudo() { return 1; }
+    server_compose() { : >"$HEVY_FAILURE_MARKER"; }
+    server_healthy() { :; }
+    server_hevy_url 47840
+  ' "$ROOT/scenarios/server-lib.sh" "$ROOT/scenarios/workouts-from-hevy.sh" 2>&1)
+HEVY_FAILURE_CODE=$?
+if [ "$HEVY_FAILURE_CODE" = 1 ] && \
+  [[ $HEVY_FAILURE_OUTPUT == *'the Docker notebook Hevy override could not be written'* ]] && \
+  [ ! -e "$HEVY_FAILURE_MARKER" ]; then
+  ok "a failed Hevy override write stops before the server recreate"
+else
+  bad "a failed Hevy override write did not stop before the server recreate (exit $HEVY_FAILURE_CODE: $HEVY_FAILURE_OUTPUT)"
 fi
 
 # ================================================================ the night's report
