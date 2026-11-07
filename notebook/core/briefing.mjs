@@ -1,7 +1,7 @@
 import {visibleRows} from './visibility.mjs';
 import {hash} from './records/store.mjs';
 import {procedure} from './procedures.mjs';
-import {remind} from './deadline-reminders.mjs';
+import {remind,deadlineLive} from './deadline-reminders.mjs';
 import {watchCommand} from './watch-commands.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -13,7 +13,7 @@ import {ruleRefusals,describeRefusal,cutRefused} from './briefing-cut.mjs';
 import {recipeContext} from './recipe-context.mjs';
 import {fileContext} from './context.mjs';
 import {localPath} from './local-path.mjs';
-import {currentHealth,healthSafeReply,unknownHealthColumns} from './health-inputs.mjs';
+import {currentHealth,healthSafeReply,unknownHealthColumns,PHONE_VIA} from './health-inputs.mjs';
 import {cycleOperation} from './cycle-operations.mjs';
 import {addonCommand} from './native-personal.mjs';
 import {dayOf} from './trackers.mjs';
@@ -95,8 +95,14 @@ async function runBriefing(job,{store,query,provider,now}){
  const context={goals:visibleRows(query,'goals').filter(g=>['active','adopted'].includes(g.status)),decisions:visibleRows(query,'decisions').slice(-10),work:visibleRows(query,'work_items').slice(-20),deadlines:visibleRows(query,'deadlines').filter(d=>d.status!=='closed'),health:visibleRows(query,'health_observations').filter(h=>Date.parse(h.observed_at)>=Date.now()-7*86400000),episodes:visibleRows(query,'health_episodes').filter(h=>Date.parse(h.onset_at)>=Date.now()-30*86400000),medications:visibleRows(query,'medications').filter(h=>Date.parse(h.taken_at)>=Date.now()-30*86400000),source_receipts:[],previous:previousNotes.map(n=>({id:n.id,title:n.title,content:n.content,created_at:n.created_at,verification_id:n.verification_id,delivery_verification_id:n.delivery_verification_id})),rehearsals:rehearsals.map(r=>({id:r.id,state:r.state,error:r.error,result:r.result,finished_at:r.finished_at}))};
  const health=currentHealth(query,{now:now.getTime()});context.health=health.observations;context.health_freshness=health;
  const unknownColumns=unknownHealthColumns(health);
- const healthSummaryLines=unknownColumns.map(column=>'On '+column.date+', '+column.column+' was '+column.value+' so far'+(column.data_until?'; phone data stopped at '+column.data_until:'')+'.');
- const unknownDayCount=new Set(unknownColumns.map(column=>column.date)).size,unknownWeekLine=unknownDayCount?'This week has '+unknownDayCount+' unknown phone-health '+(unknownDayCount===1?'day.':'days.'):'';
+ // Each "so far" line keeps the ids of the phone records it is made from: the column's own records
+ // and the record that gave the day's stopped time. A review that rejects one of them by id takes
+ // the line, and its share of the weekly count, out of the factual fallback (Archon R1, PR #270).
+ const unknownSources=column=>health.observations.filter(h=>h.via===PHONE_VIA&&h.observed_on===column.date&&(h.metric===column.column||column.data_until&&h.data_until===column.data_until)).map(h=>String(h.id));
+ const summaryLine=column=>'On '+column.date+', '+column.column+' was '+column.value+' so far'+(column.data_until?'; phone data stopped at '+column.data_until:'')+'.';
+ const weekLine=columns=>{const days=new Set(columns.map(column=>column.date)).size;return days?'This week has '+days+' unknown phone-health '+(days===1?'day.':'days.'):'';};
+ const unknownSummaries=unknownColumns.map(column=>({date:column.date,line:summaryLine(column),source_ids:unknownSources(column)}));
+ const healthSummaryLines=unknownSummaries.map(s=>s.line),unknownWeekLine=weekLine(unknownSummaries);
  context.episodes=context.episodes.filter(row=>Date.parse(row.onset_at)<=Date.now());context.medications=context.medications.filter(row=>Date.parse(row.taken_at)<=Date.now());
  context.watch_findings=JSON.parse(watchCommand({store,query},['pull','--channel','brief','--dry-run']).result);
  // Selected feeds and the actual selected finding need their latest evidence,
@@ -107,7 +113,7 @@ async function runBriefing(job,{store,query,provider,now}){
 
  let contribution=visibleRows(query,'lead_entries').filter(e=>e.status==='ready'&&e.note_id&&e.content).sort((a,b)=>String(b.delivery_day).localeCompare(String(a.delivery_day))).find(e=>visibleRows(query,'notes').some(n=>n.id===e.note_id&&n.content===e.content));
  if(contribution){const refusals=ruleRefusals(contribution.content+'\n/dashboard/notes/'+encodeURIComponent(contribution.note_id),voice);if(refusals.length){leftOut.push({name:'the checked contribution',line:contribution.title||contribution.id,refusals});contribution=null;}}
- context.contribution=contribution?{id:contribution.id,title:contribution.title,content:contribution.content,link:'/dashboard/notes/'+encodeURIComponent(contribution.note_id),state:'draft',source_ids:contribution.evidence?.map(e=>e.source_id)||[]}:null;
+ context.contribution=contribution?{id:contribution.id,note_id:contribution.note_id,title:contribution.title,content:contribution.content,link:'/dashboard/notes/'+encodeURIComponent(contribution.note_id),state:'draft',source_ids:contribution.evidence?.map(e=>e.source_id)||[]}:null;
  const actionSources=[],actionArtifacts=[];
  if(contribution){const source=visibleRows(query,'notes').find(n=>n.id===contribution.note_id);actionSources.push(source);actionArtifacts.push({kind:'review-checked-contribution',record_id:contribution.id,title:contribution.title,goal:context.goals.find(g=>g.id===contribution.goal_id)?.title||null,link:context.contribution.link,next_step:'Review this exact checked draft and decide whether to use it. It has not been sent or published.'});}
  for(const item of context.work.filter(w=>w.state==='awaiting_approval'&&w.draft_id)){
@@ -135,12 +141,57 @@ async function runBriefing(job,{store,query,provider,now}){
  // The same words may open a later day's briefing; within one day they are a repeat (#195).
  const zone=installationZone(store),today=dayOf(now,zone),savedToday=visibleRows(query,'notes').filter(n=>briefedOn(n,zone)===today);
  const codeGate=text=>{const errors=[];if(typeof text!=='string'||!text.trim())errors.push('Briefing produced no text');else{if(context.cycle_heads_up&&!text.split(/\r?\n/).some(line=>line.trim()===context.cycle_heads_up))errors.push('Include the cycle heads-up line word for word, as one line of its own');if(context.charm_line&&!text.split(/\r?\n/).some(line=>line.trim()===context.charm_line))errors.push('Include the Charm Challenge line word for word, as one line of its own');if(text.includes('\u2014'))errors.push('Use the configured plain writing style');if(context.contribution&&(!text.includes(context.contribution.content)||!text.includes(context.contribution.link)))errors.push('Include the complete checked contribution and its usable link');if(voice){const checked=checkVoice(text,voice);if(checked.configured&&!checked.passed)errors.push('Configured voice check failed: '+checked.hits.map(h=>h.value).join(', '));}if(savedToday.some(n=>n.content.trim()===text.trim()))errors.push('The same note was already saved today; do not repeat it');}return errors;};
+  // Compose only from visible records in this snapshot. A failed model draft contributes no words.
+  // A source a review rejected is never repeated (Archon R1). The reviews name rejected records by id
+  // (rejected_source_ids), gathered from BOTH attempts; as a second guard, a value also counts as
+  // rejected when any reason from either attempt holds it word for word, or holds every one of its
+  // longer words. Punctuation is ignored on both sides, so "notes." matches "notes is".
+  const factualFallback=(reasons=[],rejectedIds=new Set())=>{
+   const parts=[];
+   const norm=v=>String(v??'').toLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').trim(),said=' '+norm(reasons.join(' \n '))+' ',saidWords=new Set(said.split(' '));
+   const rejected=(row,...values)=>(row?.id!=null&&rejectedIds.has(String(row.id)))||values.some(v=>{const n=norm(v);if(!n)return false;if(said.includes(' '+n+' '))return true;const words=[...new Set(n.split(' ').filter(w=>w.length>=4))];return words.length>=2&&words.every(w=>saidWords.has(w));});
+   // A contribution a review rejected, by its lead-entry id, its backing note id or one of its
+   // evidence ids, or by the reasons quoting it, is unavailable: the fallback neither repeats nor
+   // requires it, and takes the ordinary goal action instead (Archon R2, round 3).
+   const c=context.contribution;
+   if(c&&(rejected(c,c.title,c.content)||[c.note_id,...c.source_ids].some(id=>id!=null&&rejectedIds.has(String(id)))))context.contribution=null;
+   const required=[context.cycle_heads_up,context.charm_line].filter(Boolean);
+   const safe=(value,max=100)=>typeof value==='string'&&value.trim()&&value.length<=max&&!/[\r\n\u0000-\u001f]/.test(value)?value.trim():null;
+   const add=line=>{if(!line)return false;const candidate=[...parts,line].join('\n\n');if(codeGate(candidate).some(e=>!e.startsWith('Include ')))return false;parts.push(line);return true;};
+   const addFirst=(rows,line)=>rows.some(row=>add(line(row)));
+   const goal=context.goals.at(0),goalTitle=safe(context.goals.find(g=>safe(g.title,500)&&!rejected(g,g.title))?.title,500);
+   addFirst(context.goals,g=>safe(g.title,500)&&!rejected(g,g.title)?'One of your saved goals is '+safe(g.title,500)+'.':null);
+   const verified=context.work.filter(w=>w.state==='verified'&&w.kind!=='repair').sort((a,b)=>String(b.verification?.at||b.updated_at||'').localeCompare(String(a.verification?.at||a.updated_at||'')));
+   addFirst(verified,w=>safe(w.title)&&!rejected(w,w.title)?'Godspeed has verified this work: '+safe(w.title)+'.':null);
+   const due=context.deadlines.filter(d=>d.due_at&&Number.isFinite(Date.parse(d.due_at))&&Date.parse(d.due_at)>=now.getTime()&&deadlineLive(d,now.getTime())).sort((a,b)=>Date.parse(a.due_at)-Date.parse(b.due_at));
+   addFirst(due,d=>{const on=d.native_file?String(d.due_at).slice(0,10):dayOf(new Date(d.due_at),d.timezone||zone);return safe(d.title)&&!rejected(d,d.title,on)?'A dated obligation is '+safe(d.title)+', due '+on+'.':null;});
+   const observedAt=h=>h.date_precision==='day'&&h.observed_on?String(h.observed_on)+'T00:00:00Z':h.observed_at||h.created_at||'';
+   // An unfinished phone total is said only the way the normal path says it: "so far", with its
+   // stopped time (Archon R2). Raw values are used only when their day column is settled or complete.
+   const columnState=h=>context.health_freshness?.days?.find(d=>d.date===h.observed_on)?.columns?.[h.metric]?.state;
+   const settled=h=>h.via!==PHONE_VIA||columnState(h)==='complete';
+   const keptSummaries=unknownSummaries.filter(s=>!s.source_ids.some(id=>rejectedIds.has(id))&&!rejected(null,s.line));
+   const keptWeekLine=weekLine(keptSummaries);
+   const unknownAdded=[...keptSummaries.map(s=>s.line),rejected(null,keptWeekLine)?'':keptWeekLine].filter(Boolean).filter(line=>add(line)).length>0;
+   const observations=context.health.filter(settled).sort((a,b)=>String(observedAt(b)).localeCompare(String(observedAt(a))));
+   const healthAdded=addFirst(observations,h=>{const metric=safe(h.metric,60),value=h.value;return metric&&(typeof value==='number'||typeof value==='string'&&safe(value,30))&&!rejected(h,metric+': '+value)?'A recorded health observation is '+metric+': '+value+'.':null;})||unknownAdded;
+   if(!healthAdded&&!context.health.length)add('There are no fresh health observations to report.');
+   const action=context.contribution
+    ?add('Review this checked draft before deciding. It has not been sent.')||add('Review this unsent draft.')
+    :add(goalTitle?'Ask Godspeed to work on '+goalTitle+' and show you one concrete result today.':goal?'Ask Godspeed to complete one goal step.':'Tell Godspeed one goal to work on today, then ask it for the first concrete step.')||add(goal?'Ask Godspeed to complete one goal step.':'Tell Godspeed one goal.')||add(goal?'Work on one goal step today.':'Name one goal today.')||add(goal?'Do one goal step.':'Name one goal.');
+   for(const line of required)add(line);
+   if(context.contribution){add(context.contribution.content);add(context.contribution.link);}
+   const result=parts.join('\n\n');
+   if(!action||codeGate(result).length||ruleRefusals(result,voice).length)throw Error('Could not make a checked factual fallback from the available sources');
+   return result;
+  };
  // The Charm Challenge line is the person's own count, written by the add-on and checked word for word
  // by the gate above. Without this the plain-words check, with a real model, failed every brief while a
  // challenge ran, calling the line unexplained jargon (walk-through, 26 October 2026).
  const ownLines=context.charm_line?' The line "'+context.charm_line+'" is the person\'s own Charm Challenge count: they started it themselves, the program writes it and checks it word for word. Never fail the draft because of that line; judge the rest of the note.':'';
- const verify=async(text,check)=>{const freshness=' health_freshness.days is authoritative. Code rendered every unknown phone column as “so far” with its stopped time. A settled manual or Food-tracker column is known and may be used.';const raw=await provider({kind:'brief-verification',check,context:{sources:context,draft:text},contract:(check==='source-facts'?'Check this exact draft against its actual dated sources and previous notes. Return JSON {passed:boolean,reason:string}. Fail unsupported claims, stale health, invented outcomes, absent health sentence and unchanged advice. Do not rewrite or send.':'Independently read this as a tired person seeing none of the work. Check clear meaning, usefulness, actual reachable decision artifacts, one current health sentence, no jargon or internal codes, and no repeated unanswered advice. Return JSON {passed:boolean,reason:string}. Do not rewrite or send.')+freshness+ownLines});let verdict;try{verdict=typeof raw==='string'?JSON.parse(raw.replace(/^```(?:json)?\s*|\s*```$/g,'')):raw;}catch{verdict={passed:false,reason:'Briefing check returned no valid verdict'};}if(!verdict||typeof verdict!=='object')verdict={passed:false,reason:'Briefing check returned no verdict'};const receipt=await store.saveAsync('job_receipts',{kind:check==='source-facts'?'brief-verification':'brief-delivery-verification',check,job_id:job.id,state:verdict.passed===true?'verified':'failed',source_hash:hash(context),draft_hash:hash(text),verdict,finished_at:new Date().toISOString()});return {verdict,receipt};};
- let draft,modelDraft,check,deliveryCheck,feedback=[],cutReceipt=null,fallback=null;
+ const verify=async(text,check)=>{const freshness=' health_freshness.days is authoritative. Code rendered every unknown phone column as “so far” with its stopped time. A settled manual or Food-tracker column is known and may be used.';const raw=await provider({kind:'brief-verification',check,context:{sources:context,draft:text},contract:(check==='source-facts'?'Check this exact draft against its actual dated sources and previous notes. Return JSON {passed:boolean,reason:string,rejected_source_ids:string[]}, listing in rejected_source_ids the exact id of every source record whose claim you reject; when passed is false, name at least one. Fail unsupported claims, stale health, invented outcomes, absent health sentence and unchanged advice. Do not rewrite or send.':'Independently read this as a tired person seeing none of the work. Check clear meaning, usefulness, actual reachable decision artifacts, one current health sentence, no jargon or internal codes, and no repeated unanswered advice. Return JSON {passed:boolean,reason:string,rejected_source_ids:string[]}, listing in rejected_source_ids the exact id of every source record whose claim you reject. Do not rewrite or send.')+freshness+ownLines});let verdict;try{verdict=typeof raw==='string'?JSON.parse(raw.replace(/^```(?:json)?\s*|\s*```$/g,'')):raw;}catch{verdict={passed:false,reason:'Briefing check returned no valid verdict'};}if(!verdict||typeof verdict!=='object')verdict={passed:false,reason:'Briefing check returned no verdict'};const receipt=await store.saveAsync('job_receipts',{kind:check==='source-facts'?'brief-verification':'brief-delivery-verification',check,job_id:job.id,state:verdict.passed===true?'verified':'failed',source_hash:hash(context),draft_hash:hash(text),verdict,finished_at:new Date().toISOString()});return {verdict,receipt};};
+ let draft,modelDraft,check,deliveryCheck,feedback=[],cutReceipt=null,fallback=null;const allReasons=[],rejectedIds=new Set(),unidentified=[];
+ const knownIds=new Set([...Object.values(sourceRefs).flat(),...context.action_artifacts.map(a=>({id:a.record_id})),...(context.contribution?[{id:context.contribution.id},{id:context.contribution.note_id},...context.contribution.source_ids.map(id=>({id}))]:[])].filter(r=>r?.id!=null).map(r=>String(r.id)));
  for(let attempt=0;attempt<2;attempt++){
   const raw=await provider({kind:'morning-brief',phase:attempt?'one-rewrite':'write',context:{...context,...(attempt?{rejected_draft:modelDraft,check_feedback:feedback}:{})},contract:writerContract+(attempt?' Correct the rejected note using these exact failure reasons. This is the single permitted rewrite.':'')});
   let healthError=null;
@@ -148,13 +199,30 @@ async function runBriefing(job,{store,query,provider,now}){
   draft=[...healthSummaryLines,unknownWeekLine,modelDraft].filter(Boolean).join('\n\n');
   const code=[...(healthError?[healthError]:[]),...codeGate(draft)],facts=await verify(draft,'source-facts'),reader=await verify(draft,'plain-words-and-delivery');
   feedback=[...code,...[facts,reader].filter(r=>r.verdict.passed!==true).map(r=>r.verdict.reason||'No accepted evidence')];
+  // Kept across both attempts, so a source rejected by the first review stays out of the fallback
+  // even when the rewrite fails for another reason (Archon R1).
+  // A failed fact check must name, by id, at least one record of this snapshot it rejects; any id
+  // either review names must be one of them. Otherwise nothing tells which saved fact is safe to
+  // repeat, so the factual fallback is refused and the job fails with the evidence kept (Archon R1,
+  // round 3). Reasons still exclude what they quote, but they never clear a fact.
+  allReasons.push(...feedback);
+  for(const [r,needed] of [[facts,true],[reader,false]]){if(r.verdict.passed===true)continue;const named=r.verdict.rejected_source_ids;
+   if(named!=null&&!Array.isArray(named)||needed&&!(Array.isArray(named)&&named.length))unidentified.push(r.receipt.check);
+   else for(const id of named||[]){if(knownIds.has(String(id)))rejectedIds.add(String(id));else unidentified.push('unknown source id '+String(id));}}
   await store.saveAsync('job_receipts',{kind:'brief-code-gate',job_id:job.id,attempt,state:code.length?'failed':'verified',source_hash:hash(context),draft_hash:hash(draft),errors:code,finished_at:new Date().toISOString()});
   if(!feedback.length){check=facts.receipt;deliveryCheck=reader.receipt;break;}
-  if(attempt===1){
-   // A model check that still fails names no sentence, and a note repeated word for word has none to
-   // cut: those stop the job as they always did. What is left is a refusal of the code checks, and
+   if(attempt===1){
+   // A note repeated word for word has nothing to cut, so it still ends the job. A model check that
+   // still fails names no sentence to cut, so it gets the checked factual fallback above instead of
+   // silence. What reaches the cut below is a code-check refusal with both model checks passing, and
    // each of those names the sentence or line that carries it (issue #117).
-   if([facts,reader].some(r=>r.verdict.passed!==true)||code.some(e=>/already saved today/.test(e)))throw Error('Briefing check failed after one rewrite: '+feedback.join('; '));
+    if(code.some(e=>/already saved today/.test(e)))throw Error('The same note was already saved today');
+    if([facts,reader].some(r=>r.verdict.passed!==true)){
+     const rejected=draft,reasons=[...feedback];
+     try{if(unidentified.length)throw Error('Could not make a checked factual fallback: a failed review did not identify the source records it rejected ('+[...new Set(unidentified)].join(', ')+')');draft=factualFallback(allReasons,rejectedIds);}catch(error){await store.saveAsync('job_receipts',{kind:'brief-factual-fallback',job_id:job.id,state:'failed',source_hash:hash(context),rejected_draft:rejected,rejected_hash:hash(rejected),reasons,fallback_error:error.message,finished_at:new Date().toISOString()});throw error;}
+     const receipt=await store.saveAsync('job_receipts',{kind:'brief-factual-fallback',job_id:job.id,state:'verified',source_hash:hash(context),draft_hash:hash(draft),rejected_draft:rejected,rejected_hash:hash(rejected),reasons,all_reasons:allReasons,rejected_source_ids:[...rejectedIds],checks:['visible sources','voice','required lines','duplicate','length'],finished_at:new Date().toISOString()});
+     check=receipt;deliveryCheck=receipt;fallback={day:today,refusals:reasons,cut:[],draft_hash:hash(rejected),checked:true};cutReceipt=receipt;break;
+    }
    check=facts.receipt;deliveryCheck=reader.receipt;
    const required=[...healthSummaryLines,unknownWeekLine,context.cycle_heads_up,context.charm_line].filter(Boolean),c=context.contribution;
    const protectedLines=[...required,...(c?[...c.content.split(/\r?\n/),c.link]:[])];
@@ -170,11 +238,20 @@ async function runBriefing(job,{store,query,provider,now}){
    const day=new Date().toISOString().slice(0,10),own_lines=[...required,...(c?[c.content,c.link]:[])];
    const refusals=[...code,...remaining.filter(e=>!code.includes(e))];
    const fallbackText=['Your full morning briefing for '+day+' could not be written today, because what was drafted broke your writing rules. A repair item has been opened for it.',...own_lines].join('\n\n');
+   // The short note passes the same final gate as every other note. When the voice rules refuse even
+   // that, nothing is sent: the receipt and a repair item keep the evidence and the job fails.
+   const fallbackErrors=codeGate(fallbackText);
+   if(fallbackErrors.length){
+    await store.saveAsync('job_receipts',{kind:'brief-cut',job_id:job.id,state:'failed',errors:code,cut:cut.cut,restored:missing,draft_hash:hash(draft),fallback_errors:fallbackErrors,finished_at:new Date().toISOString()});
+    const repairId='repair-brief-fallback-'+hash([job.id,day]);
+    if(!store.get('work_items',repairId))await store.saveAsync('work_items',{id:repairId,kind:'repair',title:'Repair the morning briefing of '+day+': nothing went out, because even the short fallback breaks your writing rules',state:'needs_review',job_id:job.id,refusals:[...refusals,...fallbackErrors],cut:cut.cut,draft_hash:hash(draft),error:[...refusals,...fallbackErrors].join('; '),check:'The next morning briefing is written in full',allowed_action:'inspect-and-retry',dependencies:[],max_attempts:3});
+    throw Error('Final exact briefing check failed: '+fallbackErrors.join('; '));
+   }
    cutReceipt=await store.saveAsync('job_receipts',{kind:'brief-cut',job_id:job.id,state:'fallback',errors:code,cut:cut.cut,restored:missing,draft_hash:hash(draft),kept_hash:hash(fallbackText),finished_at:new Date().toISOString()});
    fallback={day,refusals,cut:cut.cut,draft_hash:hash(draft)};draft=fallbackText;break;
   }
  }
- const finalErrors=fallback?[]:codeGate(draft);if(finalErrors.length)throw Error('Final exact briefing check failed: '+finalErrors.join('; '));
+  const finalErrors=codeGate(draft);if(finalErrors.length)throw Error('Final exact briefing check failed: '+finalErrors.join('; '));
  if(job.rehearsal){checkCurrentSources();return {verified:true,silent:true,rehearsal:true,source_hash:hash(context),draft_hash:hash(draft),verification_ids:[check.id,deliveryCheck.id],...(fallback?{fallback:true}:{}),...(cutReceipt&&!fallback?{cut:true}:{}),...(leftOut.length?{left_out:leftOut.map(o=>o.name)}:{})};}
  const key='brief-'+hash([today,draft]);if(store.get('notifications',key))return {verified:true,silent:true};
  const note=store.prepare('notes',{title:'Your morning briefing',content:draft,source_app:'morning-brief',brief_day:today,verification_id:check.id,delivery_verification_id:deliveryCheck.id,...(cutReceipt?{cut_receipt_id:cutReceipt.id}:{}),...(fallback?{fallback:true}:{}),sources:context.source_receipts.map(s=>s.id),evidence:context});

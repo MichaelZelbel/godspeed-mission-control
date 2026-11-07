@@ -11,7 +11,7 @@
 // notebook's own briefing, saved in the notebook as "Your morning briefing", and its text printed,
 // which Hermes delivers the way the routine delivers (Telegram when connected, else the notebook).
 // A briefing the notebook keeps silent prints nothing, which is Hermes' silence; one that cannot be
-// written (no AI, a draft its checks refuse twice) fails the run in one sentence.
+// written (no AI or no safe fallback after checks refuse both drafts) fails the run in one sentence.
 //
 //   GODSPEED_WORKSPACE=<mission control> node notebook/scripts/morning-brief.mjs [--today] [--godspeed <mission control>]
 //
