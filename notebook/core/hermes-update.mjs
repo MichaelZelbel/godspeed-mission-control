@@ -3,7 +3,7 @@ import path from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {atomic} from './records/store.mjs';
 import {runChild} from './child-process.mjs';
-import {assistantEnvironment} from './assistant-files.mjs';
+import {assistantEnvironment,scrubGitEnvironment} from './assistant-files.mjs';
 import {hermesPython,scrubCredentials} from './runtime.mjs';
 import {aiProbe} from './connection-check.mjs';
 import {queueNotice} from './notices.mjs';
@@ -18,7 +18,6 @@ const compare=(a,b)=>a.split('.').map(Number).reduce((result,n,index)=>result||n
 const errorText=result=>[result?.stderr,result?.stdout,result?.error?.message].filter(Boolean).join('\n');
 const failure=({step,result})=>({step,output:scrubCredentials(errorText(result)).trim().slice(-2000)});
 const backupName=file=>/^godspeed-pre-update-[0-9a-f-]+\.zip$/.test(file);
-const gitEnvironment=env=>Object.fromEntries(Object.entries(env).filter(([name])=>!name.toUpperCase().startsWith('GIT_')));
 const HERMES_REPOSITORY={owner:'NousResearch',name:'hermes-agent'};
 const hermesRepositoryPath=`${HERMES_REPOSITORY.owner}/${HERMES_REPOSITORY.name}`.toLowerCase();
 const officialHermesRemote=value=>['https://github.com/','git@github.com:','ssh://git@github.com/'].some(prefix=>String(value||'').trim().replace(/\/+$/,'').replace(/\.git$/i,'').toLowerCase()===prefix+hermesRepositoryPath);
@@ -60,7 +59,7 @@ export class HermesUpdate{
   try{return await this.run(executable,args,{cwd:cwd||this.store.root,timeoutMs,maxBytes:1024*1024,windowsHide:true,shell:false,env})||{code:0,stdout:'',stderr:''};}
   catch(error){return {code:typeof error?.code==='number'?error.code:1,stdout:error?.stdout||'',stderr:error?.stderr||'',error};}
  }
- async git(args,cwd){return this.command('git',args,{cwd,env:gitEnvironment(assistantEnvironment({home:this.descriptor?.home,workspace:this.store.root}))});}
+ async git(args,cwd){return this.command('git',args,{cwd,env:scrubGitEnvironment(assistantEnvironment({home:this.descriptor?.home,workspace:this.store.root}))});}
  async eligibility(){
   if(this.platform==='win32')return {reason:'Windows updates are managed by its installer.'};
   const executable=this.descriptor?.executable,sourceRaw=this.descriptor?.sourceRoot||hermesPython({executable,home:this.descriptor?.home}).source,source=sourceRaw&&path.resolve(sourceRaw);
@@ -111,21 +110,14 @@ export class HermesUpdate{
   if(!old||old===file||path.dirname(old)!==path.join(this.descriptor.home,'backups')||!backupName(path.basename(old)))return;
   try{fs.unlinkSync(old);}catch{}
  }
- async installDependencies(eligible){
-  const {python}=hermesPython({executable:eligible.executable,sourceRoot:eligible.source,home:this.descriptor.home});if(!python)return {ok:false,step:'Hermes dependencies',output:'Hermes Python could not be found.'};
-  const result=await this.command(python,['-m','uv','pip','install','-e','.[all]'],{cwd:eligible.source,timeoutMs:UPDATE_LIMIT});return result.code===0?{ok:true}:{ok:false,...failure({step:'Hermes dependencies',result})};
- }
  async rollback(eligible,head,backup){
   const stop=await this.command(eligible.executable,['gateway','stop'],{cwd:eligible.source});if(stop.code!==0)return false;
   const reset=await this.git(['reset','--hard',head],eligible.source);if(reset.code!==0)return false;
-  if(!(await this.installDependencies(eligible)).ok)return false;
   const restored=await this.command(eligible.executable,['import',backup,'--force'],{cwd:eligible.source,timeoutMs:UPDATE_LIMIT});if(restored.code!==0)return false;
   const restart=await this.command(eligible.executable,['gateway','restart'],{cwd:eligible.source,timeoutMs:120000});return restart.code===0;
  }
- async applyRelease(eligible,target){
-  const fetched=await this.git(['fetch','origin','tag',target.tag],eligible.source);if(fetched.code!==0)return {ok:false,mutated:false,...failure({step:'Hermes release fetch',result:fetched})};
-  const reset=await this.git(['reset','--hard','FETCH_HEAD'],eligible.source);if(reset.code!==0)return {ok:false,...failure({step:'Hermes release checkout',result:reset})};
-  return this.installDependencies(eligible);
+ async applyRelease(eligible){
+  const result=await this.command(eligible.executable,['update','--no-backup','--yes'],{cwd:eligible.source,timeoutMs:UPDATE_LIMIT});return result.code===0?{ok:true}:{ok:false,...failure({step:'Hermes update',result})};
  }
  async runNow(){
   if(this.running)return {result:'skipped',reason:'A Hermes update is already running.'};
@@ -161,12 +153,7 @@ export class HermesUpdate{
    const restart=await this.command(eligible.executable,['gateway','restart'],{cwd:eligible.source});
    return this.record(restart.code===0?{result:'failed',version:installed,reason:'Hermes could not make its pre-update backup.',detail:backup.error.output}:{result:'failed',version:installed,reason:'Hermes could not restart its chat gateway.',detail:failure({step:'chat gateway restart',result:restart}).output});
   }
-  const updated=await this.applyRelease(eligible,target);
-  if(!updated.ok&&updated.mutated===false){
-   try{fs.unlinkSync(backup.file);}catch{}
-   const restart=await this.command(eligible.executable,['gateway','restart'],{cwd:eligible.source});
-   return this.record(restart.code===0?{result:'failed',version:installed,reason:'Hermes could not fetch its selected release.',detail:updated.output}:{result:'failed',version:installed,reason:'Hermes could not restart its chat gateway.',detail:failure({step:'chat gateway restart',result:restart}).output});
-  }
+  const updated=await this.applyRelease(eligible);
   let checked=updated.ok?null:updated;
   if(!checked){const restart=await this.command(eligible.executable,['gateway','restart'],{cwd:eligible.source});checked=restart.code===0?await this.validate({expect:target.version}):{ok:false,...failure({step:'chat gateway restart',result:restart})};}
   if(checked.ok){this.removeOlderBackup(this.state().backup,backup.file);this.settleRestoredUpdates();return this.record({result:'updated',version:target.version,backup:backup.file});}
