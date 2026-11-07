@@ -3,7 +3,7 @@ import {nativeAgent} from '../core/native-agent.mjs';import {NativeScheduler,nat
 import {execFileSync} from 'node:child_process';import {installStarter,adoptedMissionControl} from '../core/starter-workspace.mjs';import {FLAG,readMachineRecord,writeMachineRecord} from '../core/starting-routines.mjs';import {runCommand} from '../core/child-process.mjs';
 import {beginContext,scheduleInvite,setTimezone,writeContext,INVITE_JOB} from '../core/context-setup.mjs';
 import {CHAT_TIDY_JOB,BRIEF_SCRIPT} from '../core/notebook-routines.mjs';
-import {addArea,findArea} from '../../third-party/addons/godspeed-coach/lib/areas.mjs';import {openTalk} from '../../third-party/addons/godspeed-coach/lib/talks.mjs';import {coachTalkRecordProblem} from '../core/coach-chat.mjs';
+import {addArea,findArea} from '../../third-party/addons/godspeed-coach/lib/areas.mjs';import {openTalk} from '../../third-party/addons/godspeed-coach/lib/talks.mjs';import {addDays,localParts,now as coachNow,weekdayOf} from '../../third-party/addons/godspeed-coach/lib/clock.mjs';import {resolvedCoachArea} from '../core/coach-chat.mjs';
 const goalsTool=fileURLToPath(new URL('../../tools/goals.js',import.meta.url));
 // The chat files a goal with the original tool. It finds its mission control from GODSPEED_ROOT or the
 // folder it runs in, never from a flag, so both are this fixture's.
@@ -29,6 +29,9 @@ test('Godspeed chat uses native Hermes rather than the notebook action planner w
 function coachArea(root){
  const area=addArea(root,{slug:'health',title:'Health',rhythm:'weekly sunday',time:'19:00',starts:'2026-01-04'}),text=fs.readFileSync(area.file,'utf8');fs.writeFileSync(area.file,text.replace('SERVES:','RESEARCH DOMAIN: sleep | sleep research\nSERVES:'));return findArea(root,'health');
 }
+function preparedCoachArea(root){
+ const area=addArea(root,{slug:'health',title:'Health',rhythm:'daily',time:'19:00',starts:'2020-01-01'}),day=localParts(coachNow(),'UTC').date,opening='Good evening. Here is the prepared opening.',prepared=new Date(coachNow().getTime()-60000).toISOString();fs.mkdirSync(path.join(area.dir,'prep'),{recursive:true});fs.writeFileSync(path.join(area.dir,'prep',day+'.md'),`AREA: health\nTALK: ${day} 19:00\nPREPARED: ${prepared}\nSTATE: ready\n\n## The opening\n${opening}\n\n## Talk card\n${opening}\n`);return {area:findArea(root,'health'),day,opening};
+}
 test('a native chat refuses an unresolved coach opening instead of saving its unrelated reply',async t=>{
  const root=fixture(t),store=new Store(root),domains=new Domains(new QueryService(store));coachArea(root);
  let attempts=0;domains.nativeAgent=async input=>input.coach_start_resolution?{reply:'{"area":"health"}'}:(attempts++,{reply:'I do not have your profile information or goals yet in the notebook.'});
@@ -45,10 +48,32 @@ test('a native chat accepts only an unprepared opening that its record holds',as
  };
  const result=await domains.invoke('conversation-chat',{message:'Let us have my health talk now.',conversation_id:'fixture'});assert.match(result.reply,/preparation for this talk is not ready/);
 });
-test('the coach postcondition keeps a prepared opening exact in both record and reply',async t=>{
- const root=fixture(t),store=new Store(root),area=coachArea(root),day='2026-11-07',opening='Good evening. Here is the prepared opening.';openTalk(area,day,{opening,shown:'2026-11-07T12:00:00Z'});
- assert.equal(coachTalkRecordProblem(store,{area:'health',day,opening,sentence:null},opening),null);
- assert.match(coachTalkRecordProblem(store,{area:'health',day,opening,sentence:null},'Other words'),/reply did not use/);
+test('a native chat does not start paused or no-talk areas',async t=>{
+ for(const [header,value] of [['RHYTHM','none'],['STATUS','paused']]){
+  const root=fixture(t),store=new Store(root),domains=new Domains(new QueryService(store)),area=coachArea(root),text=fs.readFileSync(area.file,'utf8');fs.writeFileSync(area.file,text.replace(`${header}: ${header==='RHYTHM'?'weekly sunday':'on'}`,`${header}: ${value}`));let replyInput,resolutions=0;
+  domains.nativeAgent=async input=>input.coach_start_resolution?(resolutions++,{reply:'{"area":"health"}'}):(replyInput=input,{reply:'ordinary reply'});
+  assert.equal((await domains.invoke('conversation-chat',{message:'Let us have my health talk now.',conversation_id:'fixture'})).reply,'ordinary reply');assert.equal(resolutions,0);assert.equal(replyInput.coach_talk_start,null);assert.equal(fs.existsSync(path.join(root,'coach','health','talks')),false);
+ }
+});
+test('a native chat continues the earlier unanswered talk on a non-talk day',async t=>{
+ const root=fixture(t),store=new Store(root),domains=new Domains(new QueryService(store)),today=localParts(coachNow(),'UTC').date,day=addDays(today,-1),rhythm=['mon','tue','wed','thu','fri','sat','sun'].find(name=>name!==weekdayOf(today));
+ const area=addArea(root,{slug:'health',title:'Health',rhythm:'weekly '+rhythm,time:'19:00',starts:'2020-01-01'});openTalk(area,day,{opening:'Earlier opening.',shown:new Date().toISOString()});let start;
+ domains.nativeAgent=async input=>{if(input.coach_start_resolution)return {reply:'{"area":"health"}'};start=input.coach_talk_start;return {reply:'Continuing the earlier talk.'};};
+ assert.equal((await domains.invoke('conversation-chat',{message:'Let us have my health talk now.',conversation_id:'fixture'})).reply,'Continuing the earlier talk.');assert.equal(start.day,day);assert.equal(start.continuing,true);assert.equal(fs.existsSync(path.join(area.dir,'talks',today+'.md')),false);assert.equal(store.list('conversation_messages').length,1);
+});
+test('a native chat rejects failed coach-start classification but preserves an explicit no-start',async t=>{
+ const root=fixture(t),store=new Store(root),domains=new Domains(new QueryService(store)),area=coachArea(root);for(const reply of ['not JSON','[]','{}','{"area":"health","extra":true}','{"area":1}','{"area":"unknown"}'])assert.throws(()=>resolvedCoachArea(reply,root),/could not determine whether this starts a coaching talk/);assert.equal(resolvedCoachArea('{"area":null}',root),null);
+ let replies=0;domains.nativeAgent=async input=>input.coach_start_resolution?{reply:'not JSON'}:(replies++,{reply:'ordinary reply'});await assert.rejects(domains.invoke('conversation-chat',{message:'Let us have my health talk now.',conversation_id:'fixture'}),/could not determine whether this starts a coaching talk/);assert.equal(replies,0);assert.equal(store.list('conversation_messages').length,0);
+ domains.nativeAgent=async input=>input.coach_start_resolution?{reply:'{"area":null}'}:{reply:'ordinary reply'};assert.equal((await domains.invoke('conversation-chat',{message:'Fictional question',conversation_id:'fixture'})).reply,'ordinary reply');assert.equal(store.list('conversation_messages').length,1);assert.equal(findArea(root,'health').slug,area.slug);
+});
+test('a native chat retries an invalid coach opening and saves only the valid retry',async t=>{
+ const root=fixture(t),store=new Store(root),domains=new Domains(new QueryService(store));preparedCoachArea(root);let attempts=0;
+ domains.nativeAgent=async input=>{if(input.coach_start_resolution)return {reply:'{"area":"health"}'};const start=input.coach_talk_start;if(++attempts===1)return {reply:'Unrelated reply.'};const area=findArea(root,start.area);openTalk(area,start.day,{opening:start.opening,shown:new Date().toISOString()});return {reply:start.opening};};
+ const result=await domains.invoke('conversation-chat',{message:'Let us have my health talk now.',conversation_id:'fixture'});assert.equal(attempts,2);assert.equal(result.reply,'Good evening. Here is the prepared opening.');assert.deepEqual(store.list('conversation_messages').map(message=>message.content),[result.reply]);
+});
+test('a native chat requires the prepared opening through the production start handoff',async t=>{
+ const validRoot=fixture(t),validStore=new Store(validRoot),validDomains=new Domains(new QueryService(validStore)),valid=preparedCoachArea(validRoot);validDomains.nativeAgent=async input=>{if(input.coach_start_resolution)return {reply:'{"area":"health"}'};const start=input.coach_talk_start;openTalk(findArea(validRoot,start.area),start.day,{opening:start.opening,shown:new Date().toISOString()});return {reply:start.opening};};assert.equal((await validDomains.invoke('conversation-chat',{message:'Let us have my health talk now.',conversation_id:'fixture'})).reply,valid.opening);
+ const mismatchRoot=fixture(t),mismatchStore=new Store(mismatchRoot),mismatchDomains=new Domains(new QueryService(mismatchStore));preparedCoachArea(mismatchRoot);mismatchDomains.nativeAgent=async input=>{if(input.coach_start_resolution)return {reply:'{"area":"health"}'};const start=input.coach_talk_start;openTalk(findArea(mismatchRoot,start.area),start.day,{opening:'Other words.',shown:new Date().toISOString()});return {reply:'Other words.'};};await assert.rejects(mismatchDomains.invoke('conversation-chat',{message:'Let us have my health talk now.',conversation_id:'fixture'}),/did not use its prepared opening/);assert.equal(mismatchStore.list('conversation_messages').length,0);
 });
 test('native setup files the goal using the original main tool and creates no replacement routines',async t=>{
  const root=fixture(t);fs.mkdirSync(path.join(root,'rules'));const store=new Store(root),home=path.join(root,'.hermes'),scheduler=new NativeScheduler(store,{home,executable:'hermes'});

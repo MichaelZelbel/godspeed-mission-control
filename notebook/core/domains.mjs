@@ -42,6 +42,7 @@ import {radarWords} from './radar-lifecycle.mjs';
 import {retrieveNoteWindows} from './retrieval-windows.mjs';
 import {retireShares} from './shares.mjs';
 import {hasCoachAreas,resolvedCoachArea,coachTalkStart,coachTalkRecordProblem} from './coach-chat.mjs';
+import {canStartTalk} from '../../third-party/addons/godspeed-coach/lib/areas.mjs';
 // The note screens' content hash (ui/src/lib/note-ai-edit.ts hashNoteContent,
 // FNV-1a and the length): what a chat request says the owner was looking at.
 export function noteContentHash(content){const s=String(content??'');let h=0x811c9dc5;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,0x01000193)>>>0;}return h.toString(16)+':'+s.length;}
@@ -135,7 +136,7 @@ export class Domains {
   async nativeCoachStart(input){
     if(!hasCoachAreas(this.store.root))return null;
     const reply=await this.nativeAgent({...input,conversation_id:(input.conversation_id||'general')+'-coach-start-resolution',coach_start_resolution:true,message:'Resolve this owner message into JSON only. Return {"area":"<existing coach area slug>"} only when it explicitly asks to start that area\'s coaching talk now; otherwise return {"area":null}. Do not use tools or change files. Owner message: '+JSON.stringify(String(input.message||''))});
-    const area=resolvedCoachArea(reply.reply,this.store.root);return area?coachTalkStart(this.store,area):null;
+    const area=resolvedCoachArea(reply.reply,this.store.root);return area&&canStartTalk(area)?coachTalkStart(this.store,area):null;
   }
   writeFact(input) {
     const subject_type = input.entity_id ? 'entity' : input.contact_id ? 'contact' : input.subject_type||'self', subject_id = input.entity_id || input.contact_id || input.subject_id || null;

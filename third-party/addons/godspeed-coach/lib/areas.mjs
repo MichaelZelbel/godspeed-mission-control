@@ -75,8 +75,10 @@ export function findArea(mcDir, name) {
   return listAreas(mcDir).find((a) => a.slug === n || a.title.toLowerCase() === n) || null;
 }
 
+export const canStartTalk = (area) => Boolean(area && area.on && !area.noTalk && area.rhythm);
+
 export function isTalkDay(area, ymd) {
-  if (!area || !area.on || !area.rhythm || !area.starts || ymd < area.starts) return false;
+  if (!canStartTalk(area) || !area.starts || ymd < area.starts) return false;
   const r = area.rhythm;
   if (r.kind === "daily") return true;
   if (r.kind === "monthly") return Number(ymd.slice(8, 10)) === r.day;
