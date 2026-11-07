@@ -80,6 +80,22 @@ test('a Workouts handover does not retire either importer when recording ownersh
  assert.equal(events.includes('uninstall'),false);assert.equal(hermes.jobs().length,0);assert.equal(readNotebookRoutines(store).jobs.length,0);
 });
 
+test('a failed provisional-record rollback still removes the carried routine and recovers',async t=>{
+ const {store,hermes,scheduler,events,advance}=handoverFixture(t,{mode:'uninstall-fails'}),state=store.state,open=fs.openSync;let writes=0;
+ fs.openSync=(file,...args)=>{if(String(file).startsWith(path.join(state,'notebook-routines.json.'))&&String(file).endsWith('.tmp')&&++writes===2)throw Object.assign(Error('No space left'),{code:'ENOSPC'});return open(file,...args);};
+ try{await assert.rejects(scheduler.followWorkouts(),/legacy timer remains/);}finally{fs.openSync=open;}
+ assert.deepEqual(events,['status','create','run:job1','status','uninstall','remove']);assert.equal(hermes.jobs().length,0);assert.equal(scheduler.workoutsRoutineStatus().state,'pending');assert.deepEqual(readNotebookRoutines(store).jobs.map(job=>job.id),['job1']);
+ scheduler.workouts.uninstall=async()=>{events.push('uninstall');};
+ advance(60000);await scheduler.followWorkouts({retry:true});
+ assert.equal(hermes.jobs().length,1);assert.deepEqual(readNotebookRoutines(store).jobs.map(job=>job.id),['job2']);assert.equal(scheduler.workoutsRoutineStatus().state,'scheduled');
+});
+
+test('the Workouts add-on reports an unsuccessful standalone-timer removal',async t=>{
+ const root=temporary(t),addon=new WorkoutsAddon({root,run:async()=>({code:1,stdout:'scheduler refused removal: token=sk-secret-token-value-123456789'})});
+ await assert.rejects(addon.uninstall(),/Could not remove the standalone Workouts schedule: scheduler refused removal: credential: \*\*\*/);
+ await assert.rejects(addon.uninstall(),error=>!String(error.message).includes('sk-secret-token'));
+});
+
 test('the Workouts API projects a pending handover reason and retry time',async t=>{
  const root=temporary(t),home=path.join(root,'.hermes'),assistant=path.join(root,'assistant.json'),saved={runtime:process.env.GODSPEED_ORIGINAL_RUNTIME,config:process.env.GODSPEED_ASSISTANT_CONFIG};
  fs.mkdirSync(home,{recursive:true});fs.writeFileSync(assistant,JSON.stringify({verified:true,executable:'hermes',home}));process.env.GODSPEED_ORIGINAL_RUNTIME='on';process.env.GODSPEED_ASSISTANT_CONFIG=assistant;

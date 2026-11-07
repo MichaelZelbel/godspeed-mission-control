@@ -220,7 +220,7 @@ function uninstall(ctx) {
   const s = removeSchedule(schedParams(ctx.paths, ctx.settings));
   ctx.print(s.text);
   ctx.print(`The Workouts tracker and its rows stay in your notebook; the state folder (${ctx.paths.root}) with your Hevy key stays too. Delete that folder to forget the key.`);
-  return 0;
+  return s.ok ? 0 : 1;
 }
 
 export async function main(argv, { print = (s) => console.log(s), fail = (s) => console.error(s), env = process.env } = {}) {

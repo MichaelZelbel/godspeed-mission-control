@@ -204,23 +204,29 @@ export function installSchedule(p) {
   return { ok: true, text: `${system ? "" : "user "}timer ${TIMER}: every hour at minute ${p.minute}` };
 }
 
-export function removeSchedule(p) {
+const commandFailure = (what, r) => ({ ok: false, text: `${what}: ${(r.stderr || r.stdout || r.error?.message || "the system command failed").trim()}` });
+
+export function removeSchedule(p, { runCommand = run } = {}) {
   if (p.kind === "windows-task") {
-    const r = run("schtasks", ["/Delete", "/TN", TASK, "/F"]);
-    return { ok: true, text: r.status === 0 ? `scheduled task "${TASK}" removed` : `no scheduled task "${TASK}" to remove` };
+    const r = runCommand("schtasks", ["/Delete", "/TN", TASK, "/F"]);
+    return r.status === 0 ? { ok: true, text: `scheduled task "${TASK}" removed` } : commandFailure(`the scheduled task "${TASK}" was not removed`, r);
   }
   const files = scheduleFiles(p).filter((f) => fs.existsSync(f));
   if (!files.length) return { ok: true, text: "no hourly run to remove" };
   if (p.kind === "launch-agent") {
     const uid = process.getuid?.() ?? 0;
-    const r = run("launchctl", ["bootout", `gui/${uid}/${AGENT}`]);
-    if (r.status !== 0) run("launchctl", ["unload", "-w", files[0]]);
+    const r = runCommand("launchctl", ["bootout", `gui/${uid}/${AGENT}`]);
+    if (r.status !== 0) {
+      const fallback = runCommand("launchctl", ["unload", "-w", files[0]]);
+      if (fallback.status !== 0) return commandFailure(`the LaunchAgent ${AGENT} was not unloaded`, fallback);
+    }
   } else {
-    const sc = (...a) => run("systemctl", p.kind === "systemd-system" ? a : ["--user", ...a]);
-    sc("disable", "--now", TIMER);
+    const sc = (...a) => runCommand("systemctl", p.kind === "systemd-system" ? a : ["--user", ...a]);
+    const r = sc("disable", "--now", TIMER);
+    if (r.status !== 0) return commandFailure(`${TIMER} was not stopped`, r);
   }
   for (const f of files) fs.rmSync(f, { force: true });
-  if (p.kind !== "launch-agent") run("systemctl", p.kind === "systemd-system" ? ["daemon-reload"] : ["--user", "daemon-reload"]);
+  if (p.kind !== "launch-agent") runCommand("systemctl", p.kind === "systemd-system" ? ["daemon-reload"] : ["--user", "daemon-reload"]);
   return { ok: true, text: "the hourly run is removed" };
 }
 

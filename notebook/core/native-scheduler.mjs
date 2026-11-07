@@ -110,9 +110,11 @@ export class NativeScheduler{
  }
  workoutsSetupFailure(){const record=readSetupFailures(this.store).steps.workouts;return record?{reason:errorLine(record),retry_after:record.retry_after}:null;}
  workoutsRoutineStatus(){
+  const failure=this.workoutsSetupFailure();
+  if(failure)return {state:'pending',...failure};
   const entry=readNotebookRoutines(this.store).jobs.find(job=>job.key==='workouts');
   if(entry)return {state:entry.switched_off?'disconnected':hermesJobs(this.home).some(job=>job.id===entry.id)?'scheduled':'removed'};
-  const failure=this.workoutsSetupFailure();return failure?{state:'pending',...failure}:null;
+  return null;
  }
  async configure({goal,timezone,owner=this.device,delivery='notebook'}){
   timezone||=Intl.DateTimeFormat().resolvedOptions().timeZone;new Intl.DateTimeFormat('en',{timeZone:timezone});
@@ -461,7 +463,11 @@ export class NativeScheduler{
   if(entry?.switched_off&&!reconnect)return null;
   if(reconnect&&entry?.switched_off){const {switched_off,...rest}=entry;rememberNotebookRoutine(this.store,rest);}
   const current=readNotebookRoutines(this.store).jobs.find(j=>j.key==='workouts');
-  if(current&&!matching.some(j=>j.id===current.id)&&!reconnect)return null;
+  if(current&&!matching.some(j=>j.id===current.id)&&!reconnect){
+   if(!this.workoutsSetupFailure())return null;
+   const routines=readNotebookRoutines(this.store);
+   writeNotebookRoutines(this.store,{...routines,jobs:routines.jobs.filter(job=>job.id!==current.id)});
+  }
   const minute=Number((await this.workouts.status()).minute);
   if(!Number.isInteger(minute)||minute<1||minute>58)throw Error('Workouts from Hevy has no valid hourly minute yet');
   if(matching.length){
@@ -490,7 +496,7 @@ export class NativeScheduler{
    await this.workouts.uninstall();
    return candidate.id;
   }catch(error){
-   if(remembered){const routines=readNotebookRoutines(this.store);writeNotebookRoutines(this.store,{...routines,jobs:routines.jobs.filter(job=>job.id!==candidate.id)});}
+   if(remembered)try{const routines=readNotebookRoutines(this.store);writeNotebookRoutines(this.store,{...routines,jobs:routines.jobs.filter(job=>job.id!==candidate.id)});}catch{}
    await this.command(['remove',candidate.id]).catch(()=>{});
    throw error;
   }

@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -78,4 +79,27 @@ test("help names every command", async () => {
   const out = [];
   assert.equal(await main(["help"], { print: (s) => out.push(s) }), 0);
   for (const c of ["setup", "connect", "run", "status", "settings", "uninstall"]) assert.match(out.join("\n"), new RegExp(`^  ${c} `, "m"));
+});
+
+test("uninstall returns a failure when the scheduler refuses removal", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "godspeed-workouts-uninstall-"));
+  const bin = path.join(root, "bin");
+  const platform = Object.getOwnPropertyDescriptor(process, "platform");
+  const oldPath = process.env.PATH;
+  try {
+    fs.mkdirSync(bin);
+    const command = path.join(bin, "schtasks");
+    fs.writeFileSync(command, "#!/bin/sh\necho 'scheduler refused removal' >&2\nexit 1\n");
+    fs.chmodSync(command, 0o755);
+    Object.defineProperty(process, "platform", { ...platform, value: "win32" });
+    process.env.PATH = bin + path.delimiter + oldPath;
+    const out = [];
+    const code = await main(["uninstall", "--state", root], { env: { ...process.env, PATH: bin + path.delimiter + process.env.PATH }, print: (line) => out.push(line) });
+    assert.equal(code, 1);
+    assert.match(out.join("\n"), /scheduler refused removal/);
+  } finally {
+    Object.defineProperty(process, "platform", platform);
+    process.env.PATH = oldPath;
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 });

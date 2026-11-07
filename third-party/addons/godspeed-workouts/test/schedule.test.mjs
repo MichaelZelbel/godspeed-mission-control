@@ -1,6 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { systemdService, systemdTimer, launchAgentPlist, windowsTaskXml, scheduleKind, scheduleFiles } from "../lib/schedule.mjs";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { systemdService, systemdTimer, launchAgentPlist, windowsTaskXml, scheduleKind, scheduleFiles, removeSchedule } from "../lib/schedule.mjs";
 import { randomMinute } from "../lib/settings.mjs";
 
 const p = { node: "/usr/bin/node", script: "/usr/local/lib/godspeed-workouts/bin/godspeed-workouts.mjs", stateDir: "/var/lib/godspeed/workouts", version: "0.1.0", minute: 7, second: 42, path: "/usr/bin:/bin", home: "/root" };
@@ -38,4 +41,23 @@ test("macOS: a LaunchAgent at that minute of every hour; Windows: a task every h
   assert.equal(scheduleKind({ platform: "linux", root: false }), "systemd-user");
   assert.equal(scheduleKind({ platform: "darwin" }), "launch-agent");
   assert.equal(scheduleKind({ platform: "win32" }), "windows-task");
+});
+
+test("removing a schedule reports every platform command refusal", () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "godspeed-workouts-schedule-"));
+  try {
+    const refused = () => ({ status: 1, stderr: "scheduler refused removal" });
+    const windows = removeSchedule({ ...p, kind: "windows-task" }, { runCommand: refused });
+    assert.equal(windows.ok, false);
+    assert.match(windows.text, /scheduler refused removal/);
+    for (const kind of ["launch-agent", "systemd-user"]) {
+      const options = { ...p, kind, home };
+      const files = scheduleFiles(options);
+      fs.mkdirSync(path.dirname(files[0]), { recursive: true });
+      for (const file of files) fs.writeFileSync(file, "scheduled");
+      const result = removeSchedule(options, { runCommand: refused });
+      assert.equal(result.ok, false, kind);
+      assert.ok(files.every(fs.existsSync), kind);
+    }
+  } finally { fs.rmSync(home, { recursive: true, force: true }); }
 });
