@@ -3364,17 +3364,43 @@ RFS=$WH/refused-scan
 mkdir -p "$RFS/root/.godspeed" "$RFS/assistant"
 printf '{"home":"%s"}\n' "$RFS/assistant" >"$RFS/root/.godspeed/assistant.json"
 printf 'refused-scenario-key\n' >"$RFS/assistant/settings.json"
-REFUSED_SCAN=$(GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy bash -c '
+REFUSED_SCAN=$(GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy NODE="$(command -v node)" bash -c '
   cd "$3"
   . "$1"
   install_paths
   EVIDENCE=$2
   refused_not_retained native
-'refused-scan' "$ROOT/scenarios/workouts-from-hevy.sh" "$RFS" "$ROOT/scenarios" 2>&1)
+' refused-scan "$ROOT/scenarios/workouts-from-hevy.sh" "$RFS" "$ROOT/scenarios" 2>&1)
 REFUSED_SCAN_CODE=$?
 case "$REFUSED_SCAN_CODE $REFUSED_SCAN" in
   "1 "*"native kept the refused Hevy key in $RFS/assistant/settings.json"*) ok "a refused key in the recorded native assistant home fails with its path" ;;
   *) bad "a refused key in the recorded native assistant home was not refused (exit $REFUSED_SCAN_CODE: $REFUSED_SCAN)" ;;
+esac
+printf '00000000-0000-4000-8000-000000000001\n' >"$RFS/assistant/hevy.json"
+ACCEPTED_SCAN=$(GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy NODE="$(command -v node)" bash -c '
+  cd "$3"
+  . "$1"
+  install_paths
+  EVIDENCE=$2
+  scan_fixture_key
+  cat "$EVIDENCE/key-scan.json"
+' accepted-scan "$ROOT/scenarios/workouts-from-hevy.sh" "$RFS" "$ROOT/scenarios" 2>/dev/null)
+case "$ACCEPTED_SCAN" in
+  '{"clean":true,"paths":[]}') ok "the accepted key's permitted recorded assistant-home setting is ignored" ;;
+  *) bad "the accepted key's permitted recorded assistant-home setting was not ignored ($ACCEPTED_SCAN)" ;;
+esac
+printf '00000000-0000-4000-8000-000000000001\n' >"$RFS/assistant/settings.json"
+ACCEPTED_SCAN=$(GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy NODE="$(command -v node)" bash -c '
+  cd "$3"
+  . "$1"
+  install_paths
+  EVIDENCE=$2
+  scan_fixture_key
+  cat "$EVIDENCE/key-scan.json"
+' accepted-scan "$ROOT/scenarios/workouts-from-hevy.sh" "$RFS" "$ROOT/scenarios" 2>/dev/null)
+case "$ACCEPTED_SCAN" in
+  '{"clean":false,"paths":["'"$RFS"'/assistant/settings.json"]}') ok "the accepted-key scan finds a leak in the recorded native assistant home" ;;
+  *) bad "the accepted-key scan missed a recorded native assistant-home leak ($ACCEPTED_SCAN)" ;;
 esac
 copy "$WH/good" "$WH/no-workout"; sed -i 's/"source_id":"canal-pull"/"source_id":"missing-row"/' "$WH/no-workout/docker.json"
 refuses 'a malformed initial workout' workouts-from-hevy "$WH/no-workout" 'initial workouts have the wrong source ids'
