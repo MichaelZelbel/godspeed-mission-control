@@ -18,6 +18,7 @@ const compare=(a,b)=>a.split('.').map(Number).reduce((result,n,index)=>result||n
 const errorText=result=>[result?.stderr,result?.stdout,result?.error?.message].filter(Boolean).join('\n');
 const failure=({step,result})=>({step,output:scrubCredentials(errorText(result)).trim().slice(-2000)});
 const backupName=file=>/^godspeed-pre-update-[0-9a-f-]+\.zip$/.test(file);
+const gitEnvironment=env=>Object.fromEntries(Object.entries(env).filter(([name])=>!name.toUpperCase().startsWith('GIT_')));
 const HERMES_REPOSITORY={owner:'NousResearch',name:'hermes-agent'};
 const hermesRepositoryPath=`${HERMES_REPOSITORY.owner}/${HERMES_REPOSITORY.name}`.toLowerCase();
 const officialHermesRemote=value=>['https://github.com/','git@github.com:','ssh://git@github.com/'].some(prefix=>String(value||'').trim().replace(/\/+$/,'').replace(/\.git$/i,'').toLowerCase()===prefix+hermesRepositoryPath);
@@ -55,11 +56,11 @@ export class HermesUpdate{
  save(next){atomic(path.join(this.store.state,UPDATE_FILE),JSON.stringify(next,null,2)+'\n');return next;}
  setEnabled(enabled){return this.save({...transactionState(this.state()),enabled});}
  commit(change){const state=this.state();return this.save({...change(transactionState(state)),...settingsState(state)});}
- async command(executable,args,{cwd,timeoutMs=120000}={}){
-  try{return await this.run(executable,args,{cwd:cwd||this.store.root,timeoutMs,maxBytes:1024*1024,windowsHide:true,shell:false,env:assistantEnvironment({home:this.descriptor?.home,workspace:this.store.root})})||{code:0,stdout:'',stderr:''};}
+ async command(executable,args,{cwd,timeoutMs=120000,env=assistantEnvironment({home:this.descriptor?.home,workspace:this.store.root})}={}){
+  try{return await this.run(executable,args,{cwd:cwd||this.store.root,timeoutMs,maxBytes:1024*1024,windowsHide:true,shell:false,env})||{code:0,stdout:'',stderr:''};}
   catch(error){return {code:typeof error?.code==='number'?error.code:1,stdout:error?.stdout||'',stderr:error?.stderr||'',error};}
  }
- async git(args,cwd){return this.command('git',args,{cwd});}
+ async git(args,cwd){return this.command('git',args,{cwd,env:gitEnvironment(assistantEnvironment({home:this.descriptor?.home,workspace:this.store.root}))});}
  async eligibility(){
   if(this.platform==='win32')return {reason:'Windows updates are managed by its installer.'};
   const executable=this.descriptor?.executable,sourceRaw=this.descriptor?.sourceRoot||hermesPython({executable,home:this.descriptor?.home}).source,source=sourceRaw&&path.resolve(sourceRaw);

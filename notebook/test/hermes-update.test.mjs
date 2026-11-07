@@ -12,10 +12,11 @@ import {createService} from '../server/main.mjs';
 const at='2026-11-06T04:15:00Z',old=new Date(Date.parse(at)-8*24*60*60*1000).toISOString(),recent=new Date(Date.parse(at)-3*24*60*60*1000).toISOString();
 const releases=versions=>versions.map((tag,index)=>({tag_name:'v'+tag,published_at:index?recent:old,prerelease:tag.includes('-')}));
 const applied=calls=>calls.some(call=>call.join(' ')==='git reset --hard FETCH_HEAD');
+const gitEnvironment=env=>Object.fromEntries(Object.entries(env).filter(([name])=>!name.toUpperCase().startsWith('GIT_')));
 function fixture(t,{breaks,rejects,isDocker=false,aiFails=false,releaseLimit}={}){
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-hermes-update-')),source=path.join(root,'hermes-agent'),home=path.join(root,'.hermes'),executable=path.join(root,'bin','hermes');fs.mkdirSync(path.join(source,'hermes_cli'),{recursive:true});fs.mkdirSync(path.join(source,'venv','bin'),{recursive:true});fs.mkdirSync(path.dirname(executable),{recursive:true});fs.writeFileSync(path.join(source,'hermes_cli','__init__.py'),'');fs.writeFileSync(path.join(source,'venv','bin','python3'),'');fs.writeFileSync(executable,'');fs.mkdirSync(home,{recursive:true});fs.writeFileSync(path.join(home,'config.yaml'),'model:\n  provider: test\n  default: test\n');t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
- let version='1.0.0',fetchedVersion='1.0.0',offer='1.1.0',updated=false,asked=0,clock=new Date(at);const calls=[];
- const run=async(exe,args)=>{calls.push([path.basename(exe),...args]);if(exe==='git'){
+ let version='1.0.0',fetchedVersion='1.0.0',offer='1.1.0',updated=false,asked=0,clock=new Date(at);const calls=[],callOptions=[];
+ const run=async(exe,args,options)=>{calls.push([path.basename(exe),...args]);callOptions.push(options);if(exe==='git'){
   if(args[0]==='rev-parse')return {code:0,stdout:args[1]==='--is-inside-work-tree'?'true\n':'old-commit\n',stderr:''};
   if(args[0]==='status')return {code:0,stdout:'',stderr:''};
   if(args[0]==='remote')return {code:0,stdout:'https://github.com/NousResearch/hermes-agent.git\n',stderr:''};
@@ -34,15 +35,15 @@ function fixture(t,{breaks,rejects,isDocker=false,aiFails=false,releaseLimit}={}
  };
  const fetcher=async()=>({ok:true,json:async()=>releases(['1.1.0','1.2.0-rc.1','1.0.1'])});
  const store=new Store(root),updater=new HermesUpdate({store,descriptor:{verified:true,executable,home,sourceRoot:source},run,now:()=>clock,ask:async()=>{asked++;if(aiFails)throw Error('provider unavailable');},fetcher,isDocker:()=>isDocker,releaseLimit});
- return {store,updater,calls,asked:()=>asked,setClock:value=>{clock=new Date(value);},setOffer:value=>{offer=value;}};
+ return {store,updater,calls,callOptions,asked:()=>asked,setClock:value=>{clock=new Date(value);},setOffer:value=>{offer=value;}};
 }
 
 function taggedFixture(t){
- const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-hermes-update-tagged-')),source=path.join(root,'hermes-agent'),home=path.join(root,'.hermes'),executable=path.join(root,'bin','hermes'),git=args=>execFileSync('git',['-C',source,...args],{encoding:'utf8'}).trim();fs.mkdirSync(path.join(source,'hermes_cli'),{recursive:true});fs.mkdirSync(path.join(source,'venv','bin'),{recursive:true});fs.mkdirSync(path.dirname(executable),{recursive:true});fs.mkdirSync(home,{recursive:true});fs.writeFileSync(path.join(source,'hermes_cli','__init__.py'),'');fs.writeFileSync(path.join(source,'venv','bin','python3'),'#!/bin/sh\ntouch "$(dirname "$(dirname "$(dirname "$(dirname "$0")")")")/dependencies-installed"\n',{mode:0o755});execFileSync('git',['-C',source,'init','-q']);execFileSync('git',['-C',source,'config','user.email','test@example.com']);execFileSync('git',['-C',source,'config','user.name','Test']);
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-hermes-update-tagged-')),source=path.join(root,'hermes-agent'),home=path.join(root,'.hermes'),executable=path.join(root,'bin','hermes'),git=args=>execFileSync('git',['-C',source,...args],{encoding:'utf8',env:gitEnvironment(process.env)}).trim();fs.mkdirSync(path.join(source,'hermes_cli'),{recursive:true});fs.mkdirSync(path.join(source,'venv','bin'),{recursive:true});fs.mkdirSync(path.dirname(executable),{recursive:true});fs.mkdirSync(home,{recursive:true});fs.writeFileSync(path.join(source,'hermes_cli','__init__.py'),'');fs.writeFileSync(path.join(source,'venv','bin','python3'),'#!/bin/sh\ntouch "$(dirname "$(dirname "$(dirname "$(dirname "$0")")")")/dependencies-installed"\n',{mode:0o755});git(['init','-q']);git(['config','user.email','test@example.com']);git(['config','user.name','Test']);
  for(const version of ['1.0.0','1.1.0','1.2.0']){fs.writeFileSync(path.join(source,'VERSION'),version+'\n');git(['add','.']);git(['commit','-qm','release '+version]);git(['tag','v'+version]);}git(['reset','--hard','v1.0.0']);git(['remote','add','origin','https://github.com/NousResearch/hermes-agent.git']);
  fs.writeFileSync(executable,[
   '#!/usr/bin/env node',"import fs from 'node:fs';","import path from 'node:path';","import {execFileSync} from 'node:child_process';",
-  "const args=process.argv.slice(2),root=path.dirname(path.dirname(process.argv[1])),source=path.join(root,'hermes-agent'),flag=name=>fs.existsSync(path.join(root,name)),run=args=>execFileSync('git',args,{encoding:'utf8'}).trim(),version=()=>run(['-C',source,'describe','--tags','--exact-match']).replace(/^v/,''),available=()=>flag('available')?fs.readFileSync(path.join(root,'available'),'utf8').trim():run(['-C',source,'tag','--sort=-v:refname']).split(/\\r?\\n/)[0].replace(/^v/,'');",
+  "const args=process.argv.slice(2),root=path.dirname(path.dirname(process.argv[1])),source=path.join(root,'hermes-agent'),flag=name=>fs.existsSync(path.join(root,name)),gitEnvironment=Object.fromEntries(Object.entries(process.env).filter(([name])=>!name.toUpperCase().startsWith('GIT_'))),run=args=>execFileSync('git',args,{encoding:'utf8',env:gitEnvironment}).trim(),version=()=>run(['-C',source,'describe','--tags','--exact-match']).replace(/^v/,''),available=()=>flag('available')?fs.readFileSync(path.join(root,'available'),'utf8').trim():run(['-C',source,'tag','--sort=-v:refname']).split(/\\r?\\n/)[0].replace(/^v/,'');",
   "if(args[0]==='--version'){if(version()!=='1.0.0'&&!flag('dependencies-installed')){console.log('Hermes dependencies are missing');process.exit(0);}console.log('Hermes '+version());process.exit(0);}",
   "if(args[0]==='update'&&args[1]==='--check'){console.log('v'+available()+' is ready');process.exit(0);}",
   "if(args[0]==='update'&&flag('fail-update')){console.error('token=sk-secret-token-value-123456789');process.exit(1);}",
@@ -54,6 +55,17 @@ function taggedFixture(t){
  const store=new Store(root),updater=new HermesUpdate({store,descriptor:{verified:true,executable,home,sourceRoot:source},now:()=>new Date(at),ask:async()=>{}}),runGit=updater.git.bind(updater),rows=versions=>versions.map(version=>({tag_name:'v'+version,published_at:old,prerelease:version.includes('-')}));updater.git=async(args,cwd)=>{if(args[0]==='fetch'){git(['fetch','.',...args.slice(2)]);return {code:0,stdout:'',stderr:''};}return runGit(args,cwd);};
  return {root,source,store,updater,rows,head:()=>git(['describe','--tags','--exact-match']),setAvailable:version=>fs.writeFileSync(path.join(root,'available'),version)};
 }
+
+test('the tagged fixture ignores an inherited Git repository location',t=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-hermes-update-scratch-')),scratch=path.join(root,'scratch'),git=args=>execFileSync('git',['-C',scratch,...args],{encoding:'utf8',env:gitEnvironment(process.env)}).trim();fs.mkdirSync(scratch,{recursive:true});git(['init','-q']);git(['config','user.email','test@example.com']);git(['config','user.name','Test']);fs.writeFileSync(path.join(scratch,'keep'),'unchanged\n');git(['add','keep']);git(['commit','-qm','scratch']);const before={head:git(['rev-parse','HEAD']),status:git(['status','--porcelain'])},previous=process.env.GIT_DIR;t.after(()=>fs.rmSync(root,{recursive:true,force:true}));process.env.GIT_DIR=path.join(scratch,'.git');try{assert.equal(taggedFixture(t).head(),'v1.0.0');}finally{if(previous===undefined)delete process.env.GIT_DIR;else process.env.GIT_DIR=previous;}
+ assert.deepEqual({head:git(['rev-parse','HEAD']),status:git(['status','--porcelain'])},before);
+});
+
+test('Hermes Git commands remove inherited Git variables',async t=>{
+ const names=['GIT_DIR','GIT_WORK_TREE','GIT_INDEX_FILE','GIT_COMMON_DIR','GIT_OBJECT_DIRECTORY','GIT_CEILING_DIRECTORIES','GIT_SSH'],previous=Object.fromEntries(names.map(name=>[name,process.env[name]]));for(const name of names)process.env[name]='inherited-'+name;
+ try{const f=fixture(t);await f.updater.eligibility();const gitOptions=f.calls.map((call,index)=>call[0]==='git'?f.callOptions[index]:null).filter(Boolean);assert.ok(gitOptions.length>0);for(const options of gitOptions)assert.equal(Object.keys(options.env).some(name=>name.toUpperCase().startsWith('GIT_')),false);}
+ finally{for(const name of names){if(previous[name]===undefined)delete process.env[name];else process.env[name]=previous[name];}}
+});
 
 test('only published stable, week-old releases in the installed major are eligible',()=>{
  assert.deepEqual(eligibleRelease(releases(['1.1.0','1.2.0-rc.1','1.0.1']),'1.0.0',Date.parse(at)),{tag:'v1.1.0',version:'1.1.0',at:Date.parse(old),prerelease:false});
