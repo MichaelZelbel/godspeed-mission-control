@@ -205,13 +205,22 @@ export function installSchedule(p) {
 }
 
 const commandFailure = (what, r) => ({ ok: false, text: `${what}: ${(r.stderr || r.stdout || r.error?.message || "the system command failed").trim()}` });
-const missingWindowsTask = (r) => /the system cannot find the file specified\.?/i.test(`${r.stderr || ""}\n${r.stdout || ""}`);
+// Task Scheduler reports an absent task as HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND).
+// Preserve that machine-readable result through a private exit status instead of its localized text.
+const WINDOWS_TASK_ABSENT = 42;
+const windowsTaskDeleteScript = [
+  "$ErrorActionPreference='Stop'",
+  "$service=New-Object -ComObject 'Schedule.Service'",
+  "$service.Connect()",
+  "$folder=$service.GetFolder('\\')",
+  `try{$folder.DeleteTask('${TASK}',0)}catch{$hresult=[uint32][System.Runtime.InteropServices.Marshal]::GetHRForException($_.Exception);if($hresult -eq 0x80070002){exit ${WINDOWS_TASK_ABSENT}};throw}`,
+].join(";");
 
 export function removeSchedule(p, { runCommand = run } = {}) {
   if (p.kind === "windows-task") {
-    const r = runCommand("schtasks", ["/Delete", "/TN", TASK, "/F"]);
+    const r = runCommand("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", windowsTaskDeleteScript]);
     if (r.status === 0) return { ok: true, text: `scheduled task "${TASK}" removed` };
-    if (missingWindowsTask(r)) return { ok: true, text: `no scheduled task "${TASK}" to remove` };
+    if (r.status === WINDOWS_TASK_ABSENT) return { ok: true, text: `no scheduled task "${TASK}" to remove` };
     return commandFailure(`the scheduled task "${TASK}" was not removed`, r);
   }
   const files = scheduleFiles(p).filter((f) => fs.existsSync(f));

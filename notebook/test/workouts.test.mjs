@@ -92,10 +92,12 @@ test('a failed provisional-record rollback still removes the carried routine and
 
 test('a failed carried-routine cleanup remains visible with the timer-removal failure',async t=>{
  const {store,hermes,scheduler,events}=handoverFixture(t,{mode:'uninstall-fails'}),command=scheduler.command.bind(scheduler);
- scheduler.command=async(args,...rest)=>{if(args[0]==='remove')throw Object.assign(Error('Hermes refused carried cleanup'),{stderr:'Hermes refused carried cleanup'});return command(args,...rest);};
- await assert.rejects(scheduler.followWorkouts(),/legacy timer remains; carried routine cleanup failed: Hermes refused carried cleanup/);
+ const secret='sk-secret-token-value-123456789';
+ scheduler.command=async(args,...rest)=>{if(args[0]==='remove')throw Object.assign(Error('Hermes refused carried cleanup'),{stderr:'Hermes refused carried cleanup: token='+secret});return command(args,...rest);};
+ await assert.rejects(scheduler.followWorkouts(),/legacy timer remains; carried routine cleanup failed: Hermes refused carried cleanup: credential: \*\*\*/);
  assert.deepEqual(events,['status','create','run:job1','status','uninstall']);assert.equal(hermes.jobs().length,1);assert.equal(readNotebookRoutines(store).jobs.length,0);
- assert.deepEqual(scheduler.workoutsRoutineStatus(),{state:'pending',reason:'legacy timer remains; carried routine cleanup failed: Hermes refused carried cleanup',retry_after:'2030-01-01T00:01:00.000Z'});
+ assert.deepEqual(scheduler.workoutsRoutineStatus(),{state:'pending',reason:'legacy timer remains; carried routine cleanup failed: Hermes refused carried cleanup: credential: ***',retry_after:'2030-01-01T00:01:00.000Z'});
+ assert.doesNotMatch(JSON.stringify(scheduler.workoutsRoutineStatus()),new RegExp(secret));
 });
 
 test('the Workouts add-on reports an unsuccessful standalone-timer removal',async t=>{

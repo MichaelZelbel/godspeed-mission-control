@@ -88,7 +88,7 @@ test("uninstall returns a failure when the scheduler refuses removal", async () 
   const oldPath = process.env.PATH;
   try {
     fs.mkdirSync(bin);
-    const command = path.join(bin, "schtasks");
+    const command = path.join(bin, "powershell.exe");
     fs.writeFileSync(command, "#!/bin/sh\necho 'scheduler refused removal' >&2\nexit 1\n");
     fs.chmodSync(command, 0o755);
     Object.defineProperty(process, "platform", { ...platform, value: "win32" });

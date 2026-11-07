@@ -46,10 +46,10 @@ test("macOS: a LaunchAgent at that minute of every hour; Windows: a task every h
 test("removing a schedule reports every platform command refusal", () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), "godspeed-workouts-schedule-"));
   try {
-    const refused = () => ({ status: 1, stderr: "scheduler refused removal" });
+    const refused = () => ({ status: 1, stderr: "Der Aufgabenplaner verweigert das Entfernen" });
     const windows = removeSchedule({ ...p, kind: "windows-task" }, { runCommand: refused });
     assert.equal(windows.ok, false);
-    assert.match(windows.text, /scheduler refused removal/);
+    assert.match(windows.text, /verweigert das Entfernen/);
     for (const kind of ["launch-agent", "systemd-user"]) {
       const options = { ...p, kind, home };
       const files = scheduleFiles(options);
@@ -63,6 +63,9 @@ test("removing a schedule reports every platform command refusal", () => {
 });
 
 test("removing an already absent Windows task succeeds", () => {
-  const result = removeSchedule({ ...p, kind: "windows-task" }, { runCommand: () => ({ status: 1, stderr: "ERROR: The system cannot find the file specified." }) });
+  let invocation;
+  const result = removeSchedule({ ...p, kind: "windows-task" }, { runCommand: (...args) => { invocation = args; return { status: 42, stderr: "FEHLER: Das System kann die angegebene Datei nicht finden." }; } });
   assert.deepEqual(result, { ok: true, text: 'no scheduled task "Godspeed Workouts" to remove' });
+  assert.equal(invocation[0], "powershell.exe");
+  assert.match(invocation[1].at(-1), /GetHRForException/);
 });
