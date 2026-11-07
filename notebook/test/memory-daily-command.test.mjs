@@ -83,9 +83,11 @@ test('the notebook files response-local equivalent events once',async t=>{
 
 test('the notebook files response-local people and things in equivalent events once',async t=>{
  for(const [type,collection] of [['new-person','people'],['new-thing','things']]){
-  const root=workspace(t),row={id:type,at:'2026-11-02T12:00:00Z',text:'I met Robin at the market to discuss a bright summer project today. I met Robin at the market to discuss a changing winter plan tonight.'};fs.writeFileSync(path.join(root,'NOTEBOOK.md'),notebookNoteText);archive(root,[row]);
-  const participant={kind:type,id:'robin'},answer={[collection]:[{id:'robin',name:'Robin'}],events:[{what:'Met Robin at the market to discuss a bright summer project today',day:'2026-11-02',participants:[participant],citation:{id:row.id,quote:'I met Robin at the market to discuss a bright summer project today'}},{what:'Met Robin at the market to discuss a changing winter plan tonight',day:'2026-11-02',participants:[participant],citation:{id:row.id,quote:'I met Robin at the market to discuss a changing winter plan tonight'}}]};
-  await run(root,{env:{FIXTURE_MEMORY_MODEL_RESPONSE:response(answer)}});assert.equal(new QueryService(new Store(root)).rows('moments').length,1,type);
+  const root=workspace(t),first={id:type+'-first',at:'2026-11-02T12:00:00Z',text:'I met Robin at the market to discuss a bright summer project today.'},second={id:type+'-second',at:'2026-11-02T18:00:00Z',text:'I met Robin at the market to discuss a changing winter plan tonight.'};fs.writeFileSync(path.join(root,'NOTEBOOK.md'),notebookNoteText);archive(root,[first]);
+  const event=(row,id,what)=>({[collection]:[{id,name:'Robin'}],events:[{what,day:'2026-11-02',participants:[{kind:type,id}],citation:{id:row.id,quote:row.text}}]});
+  await run(root,{env:{FIXTURE_MEMORY_MODEL_RESPONSE:response(event(first,'robin-first','Met Robin at the market to discuss a bright summer project today'))}});
+  archive(root,[first,second]);await run(root,{env:{FIXTURE_MEMORY_MODEL_RESPONSE:response(event(second,'robin-second','Met Robin at the market to discuss a changing winter plan tonight'))}});
+  assert.equal(new QueryService(new Store(root)).rows('moments').length,1,type);
  }
 });
 

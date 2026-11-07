@@ -117,23 +117,32 @@ function currentFact(query,root,subject,kind,value,fields){
  const canonical=fields.canonical(kind);
  return query.rows('claims').some(f=>!f.valid_to&&f.subject_type===subject.type&&(f.subject_id||null)===(subject.id||null)&&fields.canonical(f.attribute)===canonical&&(String(f.value).toLowerCase()===String(value).toLowerCase()||sameThing(f.value,value)));
 }
-const notebookParticipant=subject=>{
+function findRecord(query,table,name){return query.rows(table).find(r=>normal(r.name)===normal(name));}
+const notebookRecordId=(type,name)=>'memory-'+hash([type==='contact'?'person':'thing',name]).slice(0,20);
+function notebookSubject(query,subject){
  const type=subject.type==='new-person'?'contact':subject.type==='new-thing'?'entity':subject.type;
- return type==='contact'||type==='entity'?referenceKey(type,subject.id):null;
+ if(type!=='contact'&&type!=='entity')return null;
+ if(subject.type===type)return subject;
+ const row=findRecord(query,type==='contact'?'contacts':'entities',subject.name);
+ return {type,id:row?.id||notebookRecordId(type,subject.name),name:row?.name||subject.name};
+}
+const notebookParticipant=(query,subject)=>{
+ const resolved=notebookSubject(query,subject);
+ return resolved&&referenceKey(resolved.type,resolved.id);
 };
-const notebookParticipants=participants=>[...new Set((participants||[]).map(notebookParticipant).filter(Boolean))].sort();
-const sameNotebookEvent=(left,right)=>{
+const notebookParticipants=(query,participants)=>[...new Set((participants||[]).map(subject=>notebookParticipant(query,subject)).filter(Boolean))].sort();
+const sameNotebookEvent=(query,left,right)=>{
  if(left.day!==right.day)return false;
  if(normal(left.what)===normal(right.what))return true;
- const opening=words(left.what).slice(0,8).join(' '),wanted=notebookParticipants(left.participants),have=notebookParticipants(right.participants);
+ const opening=words(left.what).slice(0,8).join(' '),wanted=notebookParticipants(query,left.participants),have=notebookParticipants(query,right.participants);
  return !!wanted.length&&!!opening&&words(right.what).slice(0,8).join(' ')===opening&&have.length===wanted.length&&have.every((id,index)=>id===wanted[index]);
 };
 const sameEvent=(query,root,event)=>{
  if(!query){try{return fs.readdirSync(path.join(root,'world','events')).filter(n=>n.endsWith('.md')).some(name=>{const text=fs.readFileSync(path.join(root,'world','events',name),'utf8'),front=/^---\n([\s\S]*?)\n---\n([\s\S]*)$/m.exec(text);if(!front)return false;const fields=Object.fromEntries(front[1].split('\n').map(line=>line.split(/:\s*/,2)).filter(([key])=>key));return fields.date===event.day&&normal(front[2])===normal(event.what+'\n\n'+event.citation.quote);});}catch{return false;}}
- return query.rows('moments').some(m=>sameNotebookEvent(event,{day:String(m.happened_at||'').slice(0,10),what:m.title||m.description,participants:[...query.rows('moment_participants').filter(p=>p.moment_id===m.id).map(p=>({type:'contact',id:p.person_id||p.contact_id})).filter(p=>p.id),...query.rows('moment_entities').filter(p=>p.moment_id===m.id&&p.entity_id).map(p=>({type:'entity',id:p.entity_id}))]}));
+ return query.rows('moments').some(m=>sameNotebookEvent(query,event,{day:String(m.happened_at||'').slice(0,10),what:m.title||m.description,participants:[...query.rows('moment_participants').filter(p=>p.moment_id===m.id).map(p=>({type:'contact',id:p.person_id||p.contact_id})).filter(p=>p.id),...query.rows('moment_entities').filter(p=>p.moment_id===m.id&&p.entity_id).map(p=>({type:'entity',id:p.entity_id}))]}));
 };
 const sameFact=(subject,kind,value,fact)=>fact.type==='fact'&&fact.subject.type===subject.type&&(fact.subject.id||null)===(subject.id||null)&&fact.kind===kind&&(String(fact.value).toLowerCase()===String(value).toLowerCase()||sameThing(fact.value,value));
-const sameAcceptedEvent=(event,accepted,notebook)=>accepted.type==='event'&&(notebook?sameNotebookEvent(event,accepted):accepted.day===event.day&&normal(accepted.what)===normal(event.what));
+const sameAcceptedEvent=(query,event,accepted,notebook)=>accepted.type==='event'&&(notebook?sameNotebookEvent(query,event,accepted):accepted.day===event.day&&normal(accepted.what)===normal(event.what));
 export function validateResponse(answer,{messages,query,root,terms=[],deadlines=[]}={}){
  let data=answer;if(typeof data==='string')try{data=JSON.parse(data);}catch{return {plan:null,refusals:[{reason:'model-json'}]};}
  if(!data||typeof data!=='object'||Array.isArray(data))return {plan:null,refusals:[{reason:'model-shape'}]};
@@ -150,7 +159,7 @@ export function validateResponse(answer,{messages,query,root,terms=[],deadlines=
  }
  for(const item of events){const citation=itemCitation(item,messages),day=item?.day,what=typeof item?.what==='string'?item.what.trim():'',participantReferences=Array.isArray(item.participants)?item.participants:null,participants=participantReferences?.map(reference=>subjectReference(reference,subjects));if(!citation){refusals.push({reason:'quote',item});continue;}if(!participantReferences||participants.some(subject=>!subject)){refusals.push({reason:'unknown-subject',item,citation});continue;}if(!what||!calendarDay(day)||credential(what,citation.quote)||FORBIDDEN.test(what)||redacted(what+' '+citation.quote,terms)){refusals.push({reason:'private-or-invalid',item,citation});continue;}
   const requested=typeof item.deadline_id==='string'?item.deadline_id:null,deadline=deadlines.find(d=>d?.slug===requested),deadline_id=completionEvidence(deadline,item,citation,messages)?requested:null;if(requested&&!deadline){refusals.push({reason:'unknown-deadline',item,citation});continue;}if(requested&&!deadline_id){refusals.push({reason:'deadline-evidence',item,citation});continue;}
-  const event={type:'event',what,day,participants,citation,deadline_id};if(sameEvent(query,root,event)||accepted.some(effect=>sameAcceptedEvent(event,effect,!!query))){refusals.push({reason:'duplicate',item,citation});continue;}accepted.push(event);
+  const event={type:'event',what,day,participants,citation,deadline_id};if(sameEvent(query,root,event)||accepted.some(effect=>sameAcceptedEvent(query,event,effect,!!query))){refusals.push({reason:'duplicate',item,citation});continue;}accepted.push(event);
  }
  const used=new Set(accepted.flatMap(effect=>effect.type==='fact'?[effect.subject]:effect.participants).map(subject=>referenceKey(subject.type,subject.id||'')));
  return {plan:{people:newPeople.filter(row=>used.has(referenceKey('new-person',row.id))),things:newThings.filter(row=>used.has(referenceKey('new-thing',row.id))),effects:accepted},refusals};
@@ -168,11 +177,10 @@ function writeWorld(root,plan){
   else worldFile(path.join(root,'world','events',effect.day+'-'+slug(effect.what)+'-'+index+'.md'),{date:effect.day,origin:'remember-what-you-said',participants:effect.participants.map(subject=>ensureWorldSubject(root,subject,created)),source:'conversation_archive:'+effect.citation.id},effect.what+'\n\n'+effect.citation.quote);
  }
 }
-function findRecord(query,table,name){return query.rows(table).find(r=>normal(r.name)===normal(name));}
 function writeNotebook({store,query,domains},plan){
  const subjects=new Map([[referenceKey('self'),{type:'self',id:null,name:'self'}]]);
- for(const p of plan.people){let row=findRecord(query,'contacts',p.name);if(!row)row=store.save('contacts',{id:'memory-'+hash(['person',p.name]).slice(0,20),name:p.name,origin:'remember-what-you-said'});subjects.set(referenceKey('new-person',p.id),{type:'contact',id:row.id,name:row.name});}
- for(const t of plan.things){let row=findRecord(query,'entities',t.name);if(!row)row=store.save('entities',{id:'memory-'+hash(['thing',t.name]).slice(0,20),name:t.name,origin:'remember-what-you-said'});subjects.set(referenceKey('new-thing',t.id),{type:'entity',id:row.id,name:row.name});}
+ for(const p of plan.people){const subject=notebookSubject(query,{type:'new-person',id:p.id,name:p.name});let row=findRecord(query,'contacts',p.name);if(!row)row=store.save('contacts',{id:subject.id,name:p.name,origin:'remember-what-you-said'});subjects.set(referenceKey('new-person',p.id),{type:'contact',id:row.id,name:row.name});}
+ for(const t of plan.things){const subject=notebookSubject(query,{type:'new-thing',id:t.id,name:t.name});let row=findRecord(query,'entities',t.name);if(!row)row=store.save('entities',{id:subject.id,name:t.name,origin:'remember-what-you-said'});subjects.set(referenceKey('new-thing',t.id),{type:'entity',id:row.id,name:row.name});}
  for(const row of query.rows('contacts'))subjects.set(referenceKey('contact',row.id),{type:'contact',id:row.id,name:row.name});for(const row of query.rows('entities'))subjects.set(referenceKey('entity',row.id),{type:'entity',id:row.id,name:row.name});
  for(const effect of plan.effects){if(effect.type==='fact'){const subject=subjects.get(referenceKey(effect.subject.type,effect.subject.id||''))||effect.subject;domains.writeFact({subject_type:subject.type,subject_id:subject.id,contact_id:subject.type==='contact'?subject.id:null,entity_id:subject.type==='entity'?subject.id:null,label:effect.kind,attribute:effect.kind,value:effect.value,valid_from:effect.date,cardinality:effect.cardinality,confidence:effect.confidence==='likely'?'likely':'confirmed',source_type:'conversation_archive',source_id:effect.citation.id,evidence_quote:effect.citation.quote,origin:'remember-what-you-said'});}
   else {const id='memory-'+hash(['event',effect.citation.id,effect.what,effect.day]).slice(0,20);if(!store.get('moments',id)){const moment=store.save('moments',{id,title:effect.what,description:effect.citation.quote,happened_at:effect.day,status:'past_fact',evidence_quote:effect.citation.quote,source_type:'conversation_archive',source_id:effect.citation.id,origin:'remember-what-you-said'});for(const [i,reference] of effect.participants.entries()){const person=subjects.get(referenceKey(reference.type,reference.id||''));if(person?.type==='contact')store.save('moment_participants',{id:id+'-person-'+i,moment_id:moment.id,person_id:person.id});if(person?.type==='entity')store.save('moment_entities',{id:id+'-thing-'+i,moment_id:moment.id,entity_id:person.id});}}}
