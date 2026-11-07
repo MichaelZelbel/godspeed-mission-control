@@ -18,7 +18,7 @@ const behaviors={
  'coaching':['Scheduled talk, reply and agreement','coach, habits','Native commands share history with chat/notebook; later check-in uses replies'],
  'journal':['Start, define, finish, reopen and switches','routines/journal','Native journal checks agreed completion against evidence and retains corrections'],
  'memory':['Remember, infer, correct and retrieve','conversation_messages, claims, review_queue','Source-linked corrections survive restart; hidden/superseded facts excluded; synonym comparison with Menerio'],
- 'briefing':['Selected morning brief','Sources, health, checks and delivery','Collect/check sources; a rejected draft review may deliver only a checked factual fallback; failed final safety gate prevents delivery; useful fresh health line'],
+ 'briefing':['Selected morning brief','Sources, health, checks and delivery','Collect/check sources; after both permitted draft attempts remain rejected, a checked factual fallback may deliver; failed final safety gate prevents delivery; useful fresh health line'],
  'repairs':['Break connection or job','work_items, obligations, receipts','One repair/login item; supported automatic recovery; closure after recheck'],
  'single-owner':['Pair, disconnect and restart','settings, jobs, receipts','No takeover or duplicates; capped calendar catch-up and bounded retries'],
  'recovery':['Fresh, upgrade, offline, reconnect and restore','User files and retained conflicts','Content/links match after rebuild and empty restore; user choices retained'],
