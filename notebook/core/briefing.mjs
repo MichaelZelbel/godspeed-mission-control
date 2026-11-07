@@ -17,6 +17,7 @@ import {currentHealth,healthSafeReply,unknownHealthColumns,PHONE_VIA} from './he
 import {cycleOperation} from './cycle-operations.mjs';
 import {addonCommand} from './native-personal.mjs';
 import {dayOf} from './trackers.mjs';
+import {briefingReviewPolicy,factualFallbackEligible} from './briefing-review-policy.mjs';
 // The day a briefing note belongs to is the day it was asked for (brief_day), which a write that
 // commits after local midnight must not move; notes saved before that field have only created_at.
 const briefedOn=(note,zone)=>note.source_app==='morning-brief'&&(note.brief_day||(note.created_at&&dayOf(new Date(note.created_at),zone)));
@@ -174,7 +175,7 @@ async function runBriefing(job,{store,query,provider,now}){
  const verify=async(text,check)=>{const freshness=' health_freshness.days is authoritative. Code rendered every unknown phone column as “so far” with its stopped time. A settled manual or Food-tracker column is known and may be used.';const raw=await provider({kind:'brief-verification',check,context:{sources:context,draft:text},contract:(check==='source-facts'?'Check this exact draft against its actual dated sources and previous notes. Return JSON {passed:boolean,reason:string,rejected_source_ids:string[]}, listing in rejected_source_ids the exact id of every source record whose claim you reject; when passed is false, name at least one. Fail unsupported claims, stale health, invented outcomes, absent health sentence and unchanged advice. Do not rewrite or send.':'Independently read this as a tired person seeing none of the work. Check clear meaning, usefulness, actual reachable decision artifacts, one current health sentence, no jargon or internal codes, and no repeated unanswered advice. Return JSON {passed:boolean,reason:string,rejected_source_ids:string[]}, listing in rejected_source_ids the exact id of every source record whose claim you reject. Do not rewrite or send.')+freshness+ownLines});let verdict;try{verdict=typeof raw==='string'?JSON.parse(raw.replace(/^```(?:json)?\s*|\s*```$/g,'')):raw;}catch{verdict={passed:false,reason:'Briefing check returned no valid verdict'};}if(!verdict||typeof verdict!=='object')verdict={passed:false,reason:'Briefing check returned no verdict'};const receipt=await store.saveAsync('job_receipts',{kind:check==='source-facts'?'brief-verification':'brief-delivery-verification',check,job_id:job.id,state:verdict.passed===true?'verified':'failed',source_hash:hash(context),draft_hash:hash(text),verdict,finished_at:new Date().toISOString()});return {verdict,receipt};};
  let draft,modelDraft,check,deliveryCheck,feedback=[],cutReceipt=null,fallback=null;const allReasons=[],rejectedIds=new Set(),unidentified=[];
  const knownIds=new Set([...Object.values(sourceRefs).flat(),...context.action_artifacts.map(a=>({id:a.record_id})),...(context.contribution?[{id:context.contribution.id},{id:context.contribution.note_id},...context.contribution.source_ids.map(id=>({id}))]:[])].filter(r=>r?.id!=null).map(r=>String(r.id)));
- for(let attempt=0;attempt<2;attempt++){
+ for(let attempt=0;attempt<briefingReviewPolicy.draftAttempts;attempt++){
   const raw=await provider({kind:'morning-brief',phase:attempt?'one-rewrite':'write',context:{...context,...(attempt?{rejected_draft:modelDraft,check_feedback:feedback}:{})},contract:writerContract+(attempt?' Correct the rejected note using these exact failure reasons. This is the single permitted rewrite.':'')});
   let healthError=null;
   try{modelDraft=healthSafeReply(raw,'text',health);}catch(error){healthError=error.message;modelDraft='';}
@@ -193,13 +194,13 @@ async function runBriefing(job,{store,query,provider,now}){
    else for(const id of named||[]){if(knownIds.has(String(id)))rejectedIds.add(String(id));else unidentified.push('unknown source id '+String(id));}}
   await store.saveAsync('job_receipts',{kind:'brief-code-gate',job_id:job.id,attempt,state:code.length?'failed':'verified',source_hash:hash(context),draft_hash:hash(draft),errors:code,finished_at:new Date().toISOString()});
   if(!feedback.length){check=facts.receipt;deliveryCheck=reader.receipt;break;}
-   if(attempt===1){
+   if(attempt===briefingReviewPolicy.draftAttempts-1){
    // A note repeated word for word has nothing to cut, so it still ends the job. A model check that
    // still fails names no sentence to cut, so it gets the checked factual fallback above instead of
    // silence. What reaches the cut below is a code-check refusal with both model checks passing, and
    // each of those names the sentence or line that carries it (issue #117).
     if(code.some(e=>/already saved today/.test(e)))throw Error('The same note was already saved today');
-    if([facts,reader].some(r=>r.verdict.passed!==true)){
+    if(factualFallbackEligible(attempt,[facts.verdict,reader.verdict])){
      const rejected=draft,reasons=[...feedback];
      try{if(unidentified.length)throw Error('Could not make a checked factual fallback: a failed review did not identify the source records it rejected ('+[...new Set(unidentified)].join(', ')+')');draft=factualFallback(allReasons,rejectedIds);}catch(error){await store.saveAsync('job_receipts',{kind:'brief-factual-fallback',job_id:job.id,state:'failed',source_hash:hash(context),rejected_draft:rejected,rejected_hash:hash(rejected),reasons,fallback_error:error.message,finished_at:new Date().toISOString()});throw error;}
      const receipt=await store.saveAsync('job_receipts',{kind:'brief-factual-fallback',job_id:job.id,state:'verified',source_hash:hash(context),draft_hash:hash(draft),rejected_draft:rejected,rejected_hash:hash(rejected),reasons,all_reasons:allReasons,rejected_source_ids:[...rejectedIds],checks:['visible sources','voice','required lines','duplicate','length'],finished_at:new Date().toISOString()});
