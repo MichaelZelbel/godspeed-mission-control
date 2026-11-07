@@ -150,6 +150,32 @@ server_local_listener_port() {
 }
 server_local_listener_port
 
+server_telegram_setup_override() {
+  local bin=$TMP/server-telegram-override-bin trace=$TMP/server-telegram-override.trace output port
+  mkdir -p "$bin" "$TMP/server-telegram-override-evidence"
+  printf '%s\n' '#!/bin/sh' 'printf "%s\n" "$@" >"$NODE_TRACE"' >"$bin/node"
+  chmod +x "$bin/node"
+  if output=$(PATH="$bin:$PATH" NODE="$bin/node" NODE_TRACE="$trace" GODSPEED_SCENARIO_INGEST_PORT=49672 \
+    EVIDENCE="$TMP/server-telegram-override-evidence" SERVER_DIR="$TMP/server-telegram-override-server" bash -c '
+      . "$1"
+      sudo(){ [ "$1" = tee ] && cat >/dev/null; }
+      server_compose(){ :; }
+      server_healthy(){ :; }
+      server_container(){ printf fixture; }
+      server_telegram_setup without-ai
+    ' bash "$HERE/server-lib.sh" 2>&1); then
+    port=$(awk 'found { print; exit } $0 == "--notebook-port" { found=1 }' "$trace")
+    if [ "$port" = 49672 ]; then
+      ok 'the Telegram setup hands an overridden notebook port to its driver'
+    else
+      bad "the Telegram setup hands an overridden notebook port to its driver (got ${port:-none})"
+    fi
+  else
+    bad "the Telegram setup hands an overridden notebook port to its driver ($output)"
+  fi
+}
+server_telegram_setup_override
+
 # A folder that should pass, so a case for one failure is that folder with one thing changed.
 copy() { # <good folder> <new folder>
   rm -rf "$2"
