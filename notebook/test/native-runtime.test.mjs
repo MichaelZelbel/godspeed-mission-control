@@ -3,6 +3,7 @@ import {nativeAgent} from '../core/native-agent.mjs';import {NativeScheduler,nat
 import {execFileSync} from 'node:child_process';import {installStarter,adoptedMissionControl} from '../core/starter-workspace.mjs';import {FLAG,readMachineRecord,writeMachineRecord} from '../core/starting-routines.mjs';import {runCommand} from '../core/child-process.mjs';
 import {beginContext,scheduleInvite,setTimezone,writeContext,INVITE_JOB} from '../core/context-setup.mjs';
 import {CHAT_TIDY_JOB,BRIEF_SCRIPT} from '../core/notebook-routines.mjs';
+import {addArea,findArea} from '../../third-party/addons/godspeed-coach/lib/areas.mjs';import {openTalk} from '../../third-party/addons/godspeed-coach/lib/talks.mjs';import {coachTalkRecordProblem} from '../core/coach-chat.mjs';
 const goalsTool=fileURLToPath(new URL('../../tools/goals.js',import.meta.url));
 // The chat files a goal with the original tool. It finds its mission control from GODSPEED_ROOT or the
 // folder it runs in, never from a flag, so both are this fixture's.
@@ -24,6 +25,30 @@ test('Godspeed chat uses native Hermes rather than the notebook action planner w
  assert.equal((await domains.invoke('conversation-chat',{message:'Fictional question',conversation_id:'fixture'})).reply,'Original agent Fictional question');
  assert.equal(store.list('conversation_messages').at(-1).source_app,'hermes');
  const note=await store.saveAsync('notes',{title:'Fictional memory',content:'Menerio remains connected'});assert.equal(store.get('notes',note.id).content,'Menerio remains connected');
+});
+function coachArea(root){
+ const area=addArea(root,{slug:'health',title:'Health',rhythm:'weekly sunday',time:'19:00',starts:'2026-01-04'}),text=fs.readFileSync(area.file,'utf8');fs.writeFileSync(area.file,text.replace('SERVES:','RESEARCH DOMAIN: sleep | sleep research\nSERVES:'));return findArea(root,'health');
+}
+test('a native chat refuses an unresolved coach opening instead of saving its unrelated reply',async t=>{
+ const root=fixture(t),store=new Store(root),domains=new Domains(new QueryService(store));coachArea(root);
+ let attempts=0;domains.nativeAgent=async input=>input.coach_start_resolution?{reply:'{"area":"health"}'}:(attempts++,{reply:'I do not have your profile information or goals yet in the notebook.'});
+ await assert.rejects(domains.invoke('conversation-chat',{message:'Let us have my health talk now.',conversation_id:'fixture'}),/talk record .* was not created/);
+ assert.equal(attempts,2);assert.equal(store.list('conversation_messages').length,0);
+ assert.equal(fs.existsSync(path.join(root,'coach','health','talks')),false);
+});
+test('a native chat accepts only an unprepared opening that its record holds',async t=>{
+ const root=fixture(t),store=new Store(root),domains=new Domains(new QueryService(store));coachArea(root);
+ domains.nativeAgent=async input=>{
+  if(input.coach_start_resolution)return {reply:'{"area":"health"}'};
+  const start=input.coach_talk_start;if(!start)return {reply:'ordinary reply'};
+  const opening=start.sentence+' Let us start from your week: how did sleep go?',area=findArea(root,start.area);openTalk(area,start.day,{opening,shown:new Date().toISOString()});return {reply:opening};
+ };
+ const result=await domains.invoke('conversation-chat',{message:'Let us have my health talk now.',conversation_id:'fixture'});assert.match(result.reply,/preparation for this talk is not ready/);
+});
+test('the coach postcondition keeps a prepared opening exact in both record and reply',async t=>{
+ const root=fixture(t),store=new Store(root),area=coachArea(root),day='2026-11-07',opening='Good evening. Here is the prepared opening.';openTalk(area,day,{opening,shown:'2026-11-07T12:00:00Z'});
+ assert.equal(coachTalkRecordProblem(store,{area:'health',day,opening,sentence:null},opening),null);
+ assert.match(coachTalkRecordProblem(store,{area:'health',day,opening,sentence:null},'Other words'),/reply did not use/);
 });
 test('native setup files the goal using the original main tool and creates no replacement routines',async t=>{
  const root=fixture(t);fs.mkdirSync(path.join(root,'rules'));const store=new Store(root),home=path.join(root,'.hermes'),scheduler=new NativeScheduler(store,{home,executable:'hermes'});

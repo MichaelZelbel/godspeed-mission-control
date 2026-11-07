@@ -41,6 +41,7 @@ import {leadWords} from './lead-commands.mjs';
 import {radarWords} from './radar-lifecycle.mjs';
 import {retrieveNoteWindows} from './retrieval-windows.mjs';
 import {retireShares} from './shares.mjs';
+import {hasCoachAreas,resolvedCoachArea,coachTalkStart,coachTalkRecordProblem} from './coach-chat.mjs';
 // The note screens' content hash (ui/src/lib/note-ai-edit.ts hashNoteContent,
 // FNV-1a and the length): what a chat request says the owner was looking at.
 export function noteContentHash(content){const s=String(content??'');let h=0x811c9dc5;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,0x01000193)>>>0;}return h.toString(16)+':'+s.length;}
@@ -131,6 +132,11 @@ export function weekNotes(notes){
 }
 export class Domains {
   constructor(query, { provider = null } = {}) { this.query = query; this.store = query.store; this.provider = provider; }
+  async nativeCoachStart(input){
+    if(!hasCoachAreas(this.store.root))return null;
+    const reply=await this.nativeAgent({...input,conversation_id:(input.conversation_id||'general')+'-coach-start-resolution',coach_start_resolution:true,message:'Resolve this owner message into JSON only. Return {"area":"<existing coach area slug>"} only when it explicitly asks to start that area\'s coaching talk now; otherwise return {"area":null}. Do not use tools or change files. Owner message: '+JSON.stringify(String(input.message||''))});
+    const area=resolvedCoachArea(reply.reply,this.store.root);return area?coachTalkStart(this.store,area):null;
+  }
   writeFact(input) {
     const subject_type = input.entity_id ? 'entity' : input.contact_id ? 'contact' : input.subject_type||'self', subject_id = input.entity_id || input.contact_id || input.subject_id || null;
     // A kind of fact the list names (core/fields.mjs, a workspace's
@@ -281,9 +287,12 @@ export class Domains {
       if(input.contact_id&&!visibleRows(this.query,'contacts').some(p=>p.id===input.contact_id))throw Error('Choose an available person');
       const files=input.uploadedFiles||[];if(files.length)chatAttachments(this.mediaRoot,files);
       const nativeFiles=files.map(item=>{const mapping=JSON.parse(fs.readFileSync(path.join(this.mediaRoot,hash(item.path)+'.mapping.json'),'utf8'));return {name:item.name||item.path,path:path.join(this.mediaRoot,mapping.file)};});
+      const start=await this.nativeCoachStart(input);
       // The Charm Challenge's slip judgement runs while the assistant works (core/charm-judgement.mjs).
       const judged=startCharmJudgement(this,input);
-      const result=await this.nativeAgent({...input,nativeFiles,page_context:input[IDENTITY_PAGE],step_context:input.step_context}).catch(error=>{judged.drop();throw error;});
+      let result=await this.nativeAgent({...input,nativeFiles,page_context:input[IDENTITY_PAGE],step_context:input.step_context,coach_talk_start:start}).catch(error=>{judged.drop();throw error;});
+      if(start&&coachTalkRecordProblem(this.store,start,result.reply))result=await this.nativeAgent({...input,nativeFiles,page_context:input[IDENTITY_PAGE],step_context:input.step_context,coach_talk_start:{...start,retry:true}}).catch(error=>{judged.drop();throw error;});
+      const problem=start&&coachTalkRecordProblem(this.store,start,result.reply);if(problem){judged.drop();throw Error(problem);}
       result.reply=await judged.end(result.reply);
       await this.store.saveAsync('conversation_messages',{role:'assistant',content:result.reply,conversation_id:input.conversation_id||null,contact_id:input.contact_id||null,source_app:'hermes'},undefined,{signal:input.signal});
       return result;

@@ -2579,6 +2579,7 @@ talk_good() { # <folder>
   printf 'Recorded: the Health talk of 2026-11-02 is not-held.\n' >"$folder/close-a.txt"
   printf '# Scheduled\n\n- Open talk: Sleep, since 2026-11-01\n' >"$folder/block-b.txt"
   printf 'AREA: health\n\n## The opening\n\n%s Let us start from your week: how did the sleep go?\n\n## Prepared\n\n- nothing\n' "$TALK_SENTENCE" >"$folder/talk-a.md"
+  printf 'The product created the day A record at coach/health/talks/2026-11-02.md.\n' >"$folder/talk-a-record.txt"
   printf 'AREA: health\n\n## The opening\n\n%s\n\n## Prepared\n\n- the card\n' "$PREP_B_OPENING" >"$folder/talk-b.md"
 }
 section talk-prep-honest
@@ -2670,6 +2671,11 @@ refuses 'an unready talk that opens without the sentence' talk-prep-honest "$T/n
 copy "$T/good" "$T/not-in-record"
 printf 'AREA: health\n\n## The opening\n\nGood evening.\n' >"$T/not-in-record/talk-a.md"
 refuses 'a talk record that lost the sentence' talk-prep-honest "$T/not-in-record" 'talk record of (a) does not hold the sentence'
+
+copy "$T/good" "$T/no-talk-a"
+: >"$T/no-talk-a/talk-a.md"
+printf 'The product did not create the day A record at coach/health/talks/2026-11-02.md.\n' >"$T/no-talk-a/talk-a-record.txt"
+refuses 'a missing first-talk record at the product boundary' talk-prep-honest "$T/no-talk-a" 'product did not create the day A record'
 
 for claim in 'I researched this all week.' 'I spent hours researching your LDL.' 'After 3 hours of research I found a route.' 'I read dozens of studies for you.'; do
   copy "$T/good" "$T/claims"
