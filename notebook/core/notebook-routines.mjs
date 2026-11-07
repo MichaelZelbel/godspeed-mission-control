@@ -83,6 +83,9 @@ export const CONNECTION_WHAT=`Early every morning, before your morning brief, it
 export const MAIL_COUNT_JOB='Mail counts';
 export const MAIL_COUNT_SCRIPT='godspeed-mail-count.py';
 export const MAIL_COUNT_WHAT='Once a day, early in the morning, it counts the mails your trackers\' mail rules name, from each mail\'s sender, subject and date only, and adds them to those trackers. It never reads a mail\'s text and sends nothing.';
+export const WORKOUTS_JOB='Workouts from Hevy';
+export const WORKOUTS_SCRIPT='godspeed-workouts.py';
+export const WORKOUTS_WHAT='Every hour, at the minute Hevy chose, it brings your Workouts tracker level with Hevy. It does not use AI or send a second notification.';
 // The routines beside the starting ones that are a switch on a mission control not made from the starter
 // (4 November 2026, #225). The one owner of each one's switch (routine-switches.mjs) and its wrapper script
 // (routineFiles in starting-routines.mjs).
@@ -90,6 +93,7 @@ export const SWITCHABLE_NOTEBOOK_ROUTINES=[
  {key:'journal-tick',name:JOURNAL_JOB,what:JOURNAL_WHAT,script:JOURNAL_SCRIPT},
  {key:'connection-check',name:CONNECTION_JOB,what:CONNECTION_WHAT,script:CONNECTION_SCRIPT},
  {key:'mail-count',name:MAIL_COUNT_JOB,what:MAIL_COUNT_WHAT,script:MAIL_COUNT_SCRIPT},
+ {key:'workouts',name:WORKOUTS_JOB,what:WORKOUTS_WHAT,script:WORKOUTS_SCRIPT},
 ];
 // THE NOTICE SENDER OF A MISSION CONTROL NOT MADE FROM THE STARTER (4 November 2026, #225). On a starter-born
 // install the coach's reminders and the journal's check-ins say the notices in .godspeed/notices.json. An

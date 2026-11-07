@@ -1294,6 +1294,20 @@ def mail_count(c):
     return ""
 
 
+def workouts(c):
+    """The carried Workouts importer owns its key and its normal notification channels."""
+    env = environment(c, today(c))
+    if c.get("workouts_notebook"):
+        env["GODSPEED_WORKOUTS_NOTEBOOK"] = c["workouts_notebook"]
+    try:
+        r = run([c["node"], c["workouts"], "run", "--scheduled"], c, env, timeout=900)
+    except subprocess.TimeoutExpired:
+        r = None
+    if r is None or r.returncode != 0:
+        fail("Workouts from Hevy could not run.")
+    return ""
+
+
 def memory_daily(c):
     """File dated, evidenced memories from the prompt archive; it never speaks."""
     try:
@@ -1310,7 +1324,7 @@ def memory_daily(c):
 ROUTINES = {"research": research, "decide": decide, "work": work, "due": due, "brief": brief, "coach-prep": coach_prep,
             "coach-gate": lambda c: coach(c, "gate"), "coach-tick": lambda c: coach(c, "tick"),
             "journal-tick": journal_tick, "notices": notices, "chat-tidy": chat_tidy, "connection-check": connection_check,
-             "cleanup": cleanup, "mail-count": mail_count, "memory-daily": memory_daily}
+             "cleanup": cleanup, "mail-count": mail_count, "workouts": workouts, "memory-daily": memory_daily}
 
 
 def main(kind):

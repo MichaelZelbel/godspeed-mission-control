@@ -38,6 +38,10 @@ Your server looks after itself, your deadlines can close themselves, and a day t
 
 Updating keeps your folder, notes and settings.
 
+## Workouts from Hevy
+
+Godspeed carries the Workouts add-on. With Hevy Pro, open **Settings** > **Workouts from Hevy**, make a Hevy developer key, and connect it there. The key stays in the add-on's private state; Settings shows the imported-row count and last run, and the one hourly **Workouts from Hevy** routine appears under **Settings** > **Routines**. Disconnect stops that routine while keeping the tracker and its rows.
+
 ## New in 2.0.0-beta.18
 
 Your phone's health data reaches your server, and a tracker can count a kind of mail.

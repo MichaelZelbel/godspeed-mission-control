@@ -46,7 +46,8 @@ import {voiceStatus,saveVoice} from '../core/voice-replies.mjs';
 import {goalOverview} from '../core/goal-overview.mjs';
 import {nativeAgent} from '../core/native-agent.mjs';
 import {NativeScheduler,hermesJobs} from '../core/native-scheduler.mjs';
-import {enableKinds} from '../core/notebook-routines.mjs';
+import {WorkoutsAddon} from '../core/workouts.mjs';
+import {enableKinds,readNotebookRoutines} from '../core/notebook-routines.mjs';
 import {routineSwitches,setRoutineSwitch} from '../core/routine-switches.mjs';
 import {notebookAddress} from '../core/notebook-address.mjs';
 import {latestPerDayMetric} from '../core/health-inputs.mjs';
@@ -131,6 +132,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   const descriptor=originalRuntime&&fs.existsSync(assistantPath)?JSON.parse(fs.readFileSync(assistantPath,'utf8').replace(/^\uFEFF/,'')):null;
   if(originalRuntime&&!descriptor?.verified)throw Error('Connect the original Godspeed assistant before starting the integrated notebook');
   const lifecycle=originalRuntime?new HermesLifecycle():null,domains=new Domains(query,{provider}),scheduler=originalRuntime?new NativeScheduler(store,{...descriptor,device,lifecycle,records:new Scheduler(store,{device,executor:jobExecutor(provider,query),only:NativeScheduler.recordKinds,delivery:'notebook'})}):new Scheduler(store,{device,query,executor:jobExecutor(provider,query)});scheduler.onProgress=beat;scheduler.onFailure=error=>console.error('Godspeed Mission Control: a routine could not be created, the next tick tries again:',error.message);
+  let workouts=null;
   if(originalRuntime){domains.nativeAgent=nativeAgent({...descriptor,cwd:store.root,providerFile:providerPath,keptFile:path.join(store.state,KEPT_FILE),lifecycle});const updater=new HermesUpdate({store,descriptor,ask:askDirectly,lifecycle});scheduler.updater=updater;domains.hermesUpdate=updater;domains.nativeScheduler=scheduler;query.nativeHermesHome=descriptor.home;}
   // Where the routines' AI is set: the Hermes home the routines run in (core/routine-ai.mjs).
   const routineAI=originalRuntime&&descriptor?.verified&&descriptor.home?{home:descriptor.home,state:store.state}:null;
@@ -453,7 +455,28 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         if(req.method==='POST')return send(res,200,{available:true,...await scheduler.setNotifications(JSON.parse(await body(req,4096)))});
         return send(res,405,{error:'Use GET or POST'});
       }
-      if(route==='/api/routines/switch'&&req.method==='POST'){const input=JSON.parse(await body(req,4096));if(!originalRuntime)throw new Error('Routines need the assistant');await setRoutineSwitch(store,input);if(scheduler.owns()){try{await scheduler.followNoticeSender();await scheduler.followSwitches();await Promise.all([scheduler.followJournal(),scheduler.followConnectionCheck(),scheduler.followMailCount()]);}catch(error){throw new Error('Your switch is saved, but the assistant could not set the routine up yet ('+String(error?.message||error).slice(0,200)+'). It retries by itself, with longer waits after repeated failures.');}}return send(res,200,{data:routineSwitches(store,{jobs:hermesJobs(scheduler.home),home:scheduler.home})});}
+      if(route==='/api/workouts'){
+        if(!originalRuntime||!workouts)return send(res,200,{available:false,connected:false,rows:0,minute:null,last_run:null,problems:[],routine:null});
+        const routine=()=>{const entry=readNotebookRoutines(store).jobs.find(job=>job.key==='workouts');if(!entry)return null;return {state:entry.switched_off?'disconnected':hermesJobs(scheduler.home).some(job=>job.id===entry.id)?'scheduled':'removed'};};
+        if(req.method==='GET')return send(res,200,await workouts.status({routine:routine()}));
+        if(req.method==='POST'){
+          scheduler.requireOwner('Connect Workouts from Hevy');
+          const input=JSON.parse(await body(req,256));
+          if(typeof input.key!=='string'||input.key.length>128)throw Error('Enter a Hevy API key.');
+          await workouts.connect(input.key);
+          try{await scheduler.followWorkouts({reconnect:true});}
+          catch{const status=await workouts.status({routine:routine()});return send(res,202,{...status,pending:true,message:'The key is saved and workouts were imported. The hourly routine will retry shortly.'});}
+          return send(res,200,await workouts.status({routine:routine()}));
+        }
+        return send(res,405,{error:'Use GET or POST'});
+      }
+      if(route==='/api/workouts/disconnect'&&req.method==='POST'){
+        if(!originalRuntime||!workouts)throw Error('Workouts from Hevy needs the assistant');
+        await scheduler.disconnectWorkouts();
+        const entry=readNotebookRoutines(store).jobs.find(job=>job.key==='workouts');
+        return send(res,200,await workouts.status({routine:entry?{state:'disconnected'}:null}));
+      }
+      if(route==='/api/routines/switch'&&req.method==='POST'){const input=JSON.parse(await body(req,4096));if(!originalRuntime)throw new Error('Routines need the assistant');await setRoutineSwitch(store,input);if(scheduler.owns()){try{await scheduler.followNoticeSender();await scheduler.followSwitches();await Promise.all([scheduler.followJournal(),scheduler.followConnectionCheck(),scheduler.followMailCount(),scheduler.followWorkouts()]);}catch(error){throw new Error('Your switch is saved, but the assistant could not set the routine up yet ('+String(error?.message||error).slice(0,200)+'). It retries by itself, with longer waits after repeated failures.');}}return send(res,200,{data:routineSwitches(store,{jobs:hermesJobs(scheduler.home),home:scheduler.home})});}
       if(route==='/api/delivery'&&req.method==='POST'){const input=JSON.parse(await body(req));if(!['notebook','telegram'].includes(input.delivery)||input.delivery==='telegram'&&!originalRuntime&&!scheduler.deliver)throw new Error('Configure Telegram before choosing chat delivery');const settings=store.get('settings','installation');if(!settings)throw new Error('Start with a goal first');await store.saveAsync('settings',{id:settings.id,delivery:input.delivery,delivery_chosen_at:new Date().toISOString()});const moved=originalRuntime?await scheduler.followDelivery():[];return send(res,200,{delivery:input.delivery,moved:moved.length});}
       if(route==='/api/conflicts'&&req.method==='GET')return send(res,200,{data:sync.pendingConflicts().map(name=>{
         // One pending conflict whose record is gone (a stale-write whose record
@@ -739,6 +762,10 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
     localServer = http.createServer(handle(false, new WebAuth(store.state, { token, remote: false, now: authNow })));
     try { await listen(localServer, Number(localPort), '127.0.0.1'); }
     catch (error) { await close(); throw error; }
+  }
+  if(originalRuntime){
+    workouts=new WorkoutsAddon({root:store.root,address:()=>{const address=(localServer||server).address();return address&&typeof address==='object'?'http://127.0.0.1:'+address.port:null;}});
+    scheduler.setWorkouts(workouts);
   }
   return { server, store, index, query, domains, scheduler, sync, mediaSync, timelineRepair, address: server.address(), webAddress: webServer?.address() || null, localAddress: localServer?.address() || null, close };
 }

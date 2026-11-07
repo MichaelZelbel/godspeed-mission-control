@@ -11,9 +11,9 @@ import {starterBorn,adoptedMissionControl} from './starter-workspace.mjs';
 import {setHermesTimezone} from './hermes-config.mjs';
 import {FLAG,STARTING_ROUTINES,routineFiles,writeRoutineFiles,prepareCheckIn,saveRoutineResults,readMachineRecord,writeMachineRecord,telegramInHermes,chatAppInHermes,routineStatus,ownRoutines,metAt,noteHermesMet,cityFiledFirst,OWN_ROUTINES_RULE} from './starting-routines.mjs';
 import {cronOf,cronCalendar,calendarCron,retimeWhat,isTalkGate,isCoachTick,talkArea,moveTalk} from './routine-times.mjs';
-import {readNotebookRoutines,rememberNotebookRoutine,enableKind,deliveryFor,journalWanted,journalOnTheClock,JOURNAL_JOB,JOURNAL_SCRIPT,JOURNAL_WHAT,CHAT_TIDY_JOB,CHAT_TIDY_SCRIPT,CHAT_TIDY_SCHEDULE,CHAT_TIDY_WHAT,writeNotebookRoutines,BRIEF_JOB,BRIEF_SCRIPT,isBriefJob,CONNECTION_JOB,CONNECTION_SCRIPT,CONNECTION_WHAT,MAIL_COUNT_JOB,MAIL_COUNT_SCRIPT,MAIL_COUNT_WHAT,NOTICES_JOB,NOTICES_SCRIPT,NOTICES_WHAT} from './notebook-routines.mjs';
+import {readNotebookRoutines,rememberNotebookRoutine,enableKind,deliveryFor,journalWanted,journalOnTheClock,JOURNAL_JOB,JOURNAL_SCRIPT,JOURNAL_WHAT,CHAT_TIDY_JOB,CHAT_TIDY_SCRIPT,CHAT_TIDY_SCHEDULE,CHAT_TIDY_WHAT,writeNotebookRoutines,BRIEF_JOB,BRIEF_SCRIPT,isBriefJob,CONNECTION_JOB,CONNECTION_SCRIPT,CONNECTION_WHAT,MAIL_COUNT_JOB,MAIL_COUNT_SCRIPT,MAIL_COUNT_WHAT,WORKOUTS_JOB,WORKOUTS_SCRIPT,WORKOUTS_WHAT,NOTICES_JOB,NOTICES_SCRIPT,NOTICES_WHAT} from './notebook-routines.mjs';
 import {holdQueuedNotices} from './notices.mjs';
-import {switchable,switchedOn} from './routine-switches.mjs';
+import {switchable,switchedOn,setRoutineSwitch,switchId} from './routine-switches.mjs';
 import {connectionCheckWanted} from './connection-check.mjs';
 import {mailCountWanted} from './mail-trackers.mjs';
 import {loadSettings as coachSettings,saveSettings as saveCoach} from '../../third-party/addons/godspeed-coach/lib/settings.mjs';
@@ -74,6 +74,11 @@ export class NativeScheduler{
  constructor(store,{executable,home,device=store.device,run=runCommand,records=null,tickLimit=TICK_LIMIT,beatEvery=HEARTBEAT_EVERY,updateLimit=UPDATE_TRANSACTION_LIMIT,now=Date.now,updater=null,lifecycle=new HermesLifecycle()}){
   Object.assign(this,{store,executable,home,device,run,records,tickLimit,beatEvery,updateLimit,now,updater,lifecycle,setupAttempts:new Set()});
   if(records)records.onProgress=()=>this.onProgress?.();
+ }
+ setWorkouts(addon){this.workouts=addon;}
+ workoutsFiles({root=this.store.root,timezone=this.store.get('settings','installation')?.timezone||Intl.DateTimeFormat().resolvedOptions().timeZone}={}){
+  const config=this.workouts?.routineConfig?.()||{};
+  return routineFiles({root,home:this.home,state:this.store.state,timezone,hermes:this.executable,workouts:config.workouts,workoutsNotebook:config.workouts_notebook});
  }
  // A connected provider reaches the record routines too (/api/provider).
  set executor(value){if(this.records)this.records.executor=value;}
@@ -180,7 +185,7 @@ export class NativeScheduler{
   // weekday at seven") is read on their clock; a zone already chosen stays.
   try{setHermesTimezone(this.home,timezone);}catch{}
   try{
-   writeRoutineFiles(this.home,routineFiles({root,home:this.home,state:this.store.state,timezone,hermes:this.executable}));
+   writeRoutineFiles(this.home,this.workoutsFiles({root,timezone}));
    prepareCheckIn(root,{timezone,delivery,goal:serves});
    const cleanup=STARTING_ROUTINES.find(routine=>routine.key==='cleanup'),existing=cleanup&&installedRoutine(this.home,root,cleanup);
    jobs=[...(existing?[{id:existing.id,key:cleanup.key,name:cleanup.name,what:cleanup.what}]:[]),...await this.createStartingRoutines(delivery,existing?STARTING_ROUTINES.filter(routine=>routine!==cleanup):STARTING_ROUTINES)];
@@ -199,7 +204,7 @@ export class NativeScheduler{
   const root=this.store.root,routine=STARTING_ROUTINES.find(entry=>entry.key==='cleanup');
   if(!routine||!(starterBorn(root)||adoptedMissionControl(root)))return null;
   const installation=this.store.get('settings','installation'),timezone=installation?.timezone||Intl.DateTimeFormat().resolvedOptions().timeZone;
-  writeRoutineFiles(this.home,routineFiles({root,home:this.home,state:this.store.state,timezone,hermes:this.executable}));
+  writeRoutineFiles(this.home,this.workoutsFiles({root,timezone}));
   const existing=installedRoutine(this.home,root,routine);
   const entry=readNotebookRoutines(this.store).jobs.find(job=>job.key===routine.key);
   if(existing){if(!entry)rememberNotebookRoutine(this.store,{id:existing.id,key:routine.key,name:routine.name,what:routine.what});return existing.id;}
@@ -229,7 +234,7 @@ export class NativeScheduler{
   if(here?.state!=='created'||!Array.isArray(here.jobs)||!installation?.timezone||!starterBorn(root))return [];
   const offered=new Set(here.jobs.map(j=>j.key)),missing=STARTING_ROUTINES.filter(r=>!offered.has(r.key)&&(r.key!=='cleanup'||!installedRoutine(this.home,root,r))&&(!r.needs||fs.existsSync(path.join(root,'skills',r.needs,'SKILL.md'))));
   if(!missing.length)return [];
-  writeRoutineFiles(this.home,routineFiles({root,home:this.home,state:this.store.state,timezone:installation.timezone,hermes:this.executable}));
+  writeRoutineFiles(this.home,this.workoutsFiles({root,timezone:installation.timezone}));
   const made=await this.createStartingRoutines(here.delivery||'local',missing);
   writeMachineRecord(this.store,{...here,jobs:[...here.jobs,...made]});
   return made;
@@ -264,7 +269,7 @@ export class NativeScheduler{
   if(entry&&!job)return null;
   if(job){if(!entry)rememberNotebookRoutine(this.store,{id:job.id,key:'notices',name:NOTICES_JOB,what:NOTICES_WHAT});return job.id;}
   const installation=this.store.get('settings','installation'),timezone=installation?.timezone||Intl.DateTimeFormat().resolvedOptions().timeZone;
-  writeRoutineFiles(this.home,routineFiles({root,home:this.home,state:this.store.state,timezone,hermes:this.executable}));
+  writeRoutineFiles(this.home,this.workoutsFiles({root,timezone}));
   holdQueuedNotices(this.store);
   const before=new Set(jobs.map(j=>j.id));
   await this.command(['create','*/15 * * * *','--no-agent','--name',NOTICES_JOB,'--script',NOTICES_SCRIPT,'--deliver',deliveryFor(installation,{telegram:telegramInHermes(this.home)}),'--failure-deliver','local','--workdir',root]);
@@ -313,7 +318,7 @@ export class NativeScheduler{
    if(entry||!starting)return;
    if(starting.needs&&!fs.existsSync(path.join(root,'skills',starting.needs,'SKILL.md')))return;
    const installation=this.store.get('settings','installation'),timezone=installation?.timezone||Intl.DateTimeFormat().resolvedOptions().timeZone,delivery=deliveryFor(installation,{telegram:telegramInHermes(this.home)});
-   writeRoutineFiles(this.home,routineFiles({root,home:this.home,state:this.store.state,timezone,hermes:this.executable}));
+   writeRoutineFiles(this.home,this.workoutsFiles({root,timezone}));
    if(['coach-gate','coach-tick'].includes(routine.key)){
     const first=nativeCardRows(this.store,'goals').filter(g=>g.status==='adopted').sort((a,b)=>String(a.created_at).localeCompare(String(b.created_at)))[0];
     prepareCheckIn(root,{timezone,delivery,goal:first?.id||''});
@@ -336,7 +341,7 @@ export class NativeScheduler{
   if(entry&&!job)return null;
   const installation=this.store.get('settings','installation'),timezone=installation?.timezone||Intl.DateTimeFormat().resolvedOptions().timeZone;
   try{journalOnTheClock(root,timezone);}catch{}
-  writeRoutineFiles(this.home,routineFiles({root,home:this.home,state:this.store.state,timezone,hermes:this.executable}));
+  writeRoutineFiles(this.home,this.workoutsFiles({root,timezone}));
   if(job){
    if(entry&&job.enabled===false&&entry.paused_by_notebook){await this.command(['resume',job.id]);rememberNotebookRoutine(this.store,{...entry,paused_by_notebook:false});}
    return job.id;
@@ -363,7 +368,7 @@ export class NativeScheduler{
   const job=(entry&&jobs.find(j=>j.id===entry.id))||jobs.find(j=>j.name===CONNECTION_JOB&&j.script===CONNECTION_SCRIPT);
   if(entry&&!job)return null;
   const installation=this.store.get('settings','installation'),timezone=installation?.timezone||Intl.DateTimeFormat().resolvedOptions().timeZone,wanted=connectionCheckWanted(this.home,undefined,this.store)||jobs.some(j=>j.id&&!pausedJob(j)&&j.id!==job?.id&&j.script!==CONNECTION_SCRIPT);
-  writeRoutineFiles(this.home,routineFiles({root,home:this.home,state:this.store.state,timezone,hermes:this.executable}));
+  writeRoutineFiles(this.home,this.workoutsFiles({root,timezone}));
   if(job){
    if(!entry)return job.id;
    const current=entry.what===CONNECTION_WHAT?entry:rememberNotebookRoutine(this.store,{...entry,what:CONNECTION_WHAT});
@@ -401,7 +406,7 @@ export class NativeScheduler{
   }
   if(entry&&!job)return null;
   const installation=this.store.get('settings','installation'),timezone=installation?.timezone||Intl.DateTimeFormat().resolvedOptions().timeZone;
-  writeRoutineFiles(this.home,routineFiles({root,home:this.home,state:this.store.state,timezone,hermes:this.executable}));
+  writeRoutineFiles(this.home,this.workoutsFiles({root,timezone}));
   if(job){
    if(entry&&job.enabled===false&&entry.paused_by_notebook){await this.command(['resume',job.id]);rememberNotebookRoutine(this.store,{...entry,paused_by_notebook:false});}
    return job.id;
@@ -426,13 +431,66 @@ export class NativeScheduler{
    throw error;
   }
  }
+ // Workouts has a private, add-on-owned key.  A remembered missing job is intentional removal,
+ // while switched_off is the explicit Disconnect tombstone and may be cleared only by reconnect.
+ async followWorkouts({reconnect=false}={}){
+  if(this.workoutsFollowing)return this.workoutsFollowing;
+  this.workoutsFollowing=this.followWorkoutsNow({reconnect}).finally(()=>{this.workoutsFollowing=null;});
+  return this.workoutsFollowing;
+ }
+ async followWorkoutsNow({reconnect=false}={}){
+  if(!this.workouts)return null;
+  if(!this.workouts.hasKey()){
+   for(const job of hermesJobs(this.home).filter(job=>job.name===WORKOUTS_JOB&&job.script===WORKOUTS_SCRIPT&&typeof job.workdir==='string'&&path.resolve(job.workdir)===path.resolve(this.store.root)))await this.command(['remove',job.id]);
+   return null;
+  }
+  this.requireOwner('Connect Workouts from Hevy');
+  const root=this.store.root,mine=readNotebookRoutines(this.store),entry=mine.jobs.find(j=>j.key==='workouts'),jobs=hermesJobs(this.home);
+  if(!starterBorn(root)&&this.switchesReady()&&!switchedOn(this.store,'workouts')){
+   // A carried standalone key is prior opt-in; a saved switch-off remains the person's choice.
+   if(reconnect||!this.store.get('settings',switchId('workouts')))await setRoutineSwitch(this.store,{key:'workouts',on:true},{workouts:true});
+   else return null;
+  }
+  const matching=jobs.filter(j=>j.name===WORKOUTS_JOB&&j.script===WORKOUTS_SCRIPT&&typeof j.workdir==='string'&&path.resolve(j.workdir)===path.resolve(root));
+  if(entry?.switched_off&&!reconnect)return null;
+  if(reconnect&&entry?.switched_off){const {switched_off,...rest}=entry;rememberNotebookRoutine(this.store,rest);}
+  const current=readNotebookRoutines(this.store).jobs.find(j=>j.key==='workouts');
+  if(current&&!matching.some(j=>j.id===current.id)&&!reconnect)return null;
+  const minute=Number((await this.workouts.status()).minute);
+  if(!Number.isInteger(minute)||minute<1||minute>58)throw Error('Workouts from Hevy has no valid hourly minute yet');
+  if(matching.length){
+   const keep=current?matching.find(j=>j.id===current.id)||matching[0]:matching[0];
+   for(const duplicate of matching.filter(j=>j.id!==keep.id))await this.command(['remove',duplicate.id]);
+   if(!current)rememberNotebookRoutine(this.store,{id:keep.id,key:'workouts',name:WORKOUTS_JOB,what:WORKOUTS_WHAT});
+   else if(keep.enabled===false&&current.paused_by_notebook){await this.command(['resume',keep.id]);rememberNotebookRoutine(this.store,{...current,paused_by_notebook:false,running_by_notebook:true});}
+   return keep.id;
+  }
+  // A carried standalone add-on can have left its OS timer behind; only its own uninstall
+  // command knows how to remove it without touching rows or the private key.
+  await this.workouts.uninstall();
+  const installation=this.store.get('settings','installation'),before=new Set(jobs.map(j=>j.id));
+  writeRoutineFiles(this.home,this.workoutsFiles({root,timezone:installation?.timezone||Intl.DateTimeFormat().resolvedOptions().timeZone}));
+  await this.command(['create',minute+' * * * *','--no-agent','--name',WORKOUTS_JOB,'--script',WORKOUTS_SCRIPT,'--deliver','local','--failure-deliver','local','--workdir',root]);
+  const made=hermesJobs(this.home).find(j=>!before.has(j.id)&&j.name===WORKOUTS_JOB&&j.script===WORKOUTS_SCRIPT);
+  if(!made)throw Error('Hermes did not keep the routine "'+WORKOUTS_JOB+'"');
+  rememberNotebookRoutine(this.store,{id:made.id,key:'workouts',name:WORKOUTS_JOB,what:WORKOUTS_WHAT});
+  return made.id;
+ }
+ async disconnectWorkouts(){
+  this.requireOwner('Disconnect Workouts from Hevy');
+  const mine=readNotebookRoutines(this.store),entry=mine.jobs.find(j=>j.key==='workouts');
+  rememberNotebookRoutine(this.store,{...(entry||{id:'workouts-disconnected',key:'workouts',name:WORKOUTS_JOB,what:WORKOUTS_WHAT}),switched_off:true});
+  if(!starterBorn(this.store.root))await setRoutineSwitch(this.store,{key:'workouts',on:false},{workouts:true});
+  for(const job of hermesJobs(this.home).filter(j=>j.name===WORKOUTS_JOB&&j.script===WORKOUTS_SCRIPT&&typeof j.workdir==='string'&&path.resolve(j.workdir)===path.resolve(this.store.root)))await this.command(['remove',job.id]);
+  if(this.workouts)await this.workouts.uninstall();
+ }
  // THE MORNING BRIEF AS THE NOTEBOOK'S OWN BRIEFING (3 November 2026, #160; notebook-routines.mjs
  // says why). A script routine like the deadline reminders, whose script runs core/briefing.mjs
  // (scripts/morning-brief.mjs) and prints the briefing for Hermes to deliver where this machine's
  // routines deliver. Returns the routine's id, or null when Hermes shows no new routine.
  async makeBrief(schedule,title){
   const root=this.store.root,installation=this.store.get('settings','installation'),timezone=installation?.timezone||Intl.DateTimeFormat().resolvedOptions().timeZone;
-  writeRoutineFiles(this.home,routineFiles({root,home:this.home,state:this.store.state,timezone,hermes:this.executable}));
+  writeRoutineFiles(this.home,this.workoutsFiles({root,timezone}));
   const known=enableKind('morning-brief'),name=title||known.label,delivery=deliveryFor(installation,{telegram:telegramInHermes(this.home)}),before=new Set(hermesJobs(this.home).map(j=>j.id));
   await this.command(['create',schedule,'--no-agent','--name',name,'--script',BRIEF_SCRIPT,'--deliver',delivery,'--failure-deliver','local','--workdir',root]);
   const made=hermesJobs(this.home).find(j=>!before.has(j.id));
@@ -492,7 +550,7 @@ export class NativeScheduler{
   if(job)return job.id;
   if(entry)return null;
   const installation=this.store.get('settings','installation'),timezone=installation?.timezone||Intl.DateTimeFormat().resolvedOptions().timeZone;
-  writeRoutineFiles(this.home,routineFiles({root,home:this.home,state:this.store.state,timezone,hermes:this.executable}));
+  writeRoutineFiles(this.home,this.workoutsFiles({root,timezone}));
   const before=new Set(jobs.map(j=>j.id));
   await this.command(['create',CHAT_TIDY_SCHEDULE,'--no-agent','--name',CHAT_TIDY_JOB,'--script',CHAT_TIDY_SCRIPT,'--deliver','local','--failure-deliver','local','--workdir',root]);
   const made=hermesJobs(this.home).find(j=>!before.has(j.id)&&j.name===CHAT_TIDY_JOB);
@@ -576,11 +634,11 @@ export class NativeScheduler{
   if(!starterBorn(this.store.root)){
    const made=new Set(readNotebookRoutines(this.store).jobs.map(j=>j.id));if(!made.size)return [];
    const timezone=this.store.get('settings','installation')?.timezone||Intl.DateTimeFormat().resolvedOptions().timeZone;
-   writeRoutineFiles(this.home,routineFiles({root:this.store.root,home:this.home,state:this.store.state,timezone,hermes:this.executable}));
+   writeRoutineFiles(this.home,this.workoutsFiles({root:this.store.root,timezone}));
    return saveRoutineResults(this.store,{home:this.home,jobs:hermesJobs(this.home).filter(j=>made.has(j.id)),messenger:telegramInHermes(this.home)});
   }
   const here=readMachineRecord(this.store),installation=this.store.get('settings','installation');
-  if(here?.state==='created'&&installation?.timezone)writeRoutineFiles(this.home,routineFiles({root:this.store.root,home:this.home,state:this.store.state,timezone:installation.timezone,hermes:this.executable}));
+  if(here?.state==='created'&&installation?.timezone)writeRoutineFiles(this.home,this.workoutsFiles({root:this.store.root,timezone:installation.timezone}));
   return saveRoutineResults(this.store,{home:this.home,jobs:hermesJobs(this.home),messenger:telegramInHermes(this.home)});
  }
  // The notebook's record routines move with the owner; Hermes' own routines
@@ -622,6 +680,7 @@ export class NativeScheduler{
    await this.followJournal().catch(()=>null);
    await this.followConnectionCheck().catch(e=>{failure=e;failures.push(e);});
    await this.followMailCountVisibly().catch(e=>{failure||=e;});
+   await this.followWorkouts().catch(e=>{failure||=e;failures.push(e);});
    await this.followChatTidy().catch(e=>{failure=failure||e;failures.push(e);});
    await this.followBrief().catch(()=>null);
    await this.followDelivery().catch(()=>null);
