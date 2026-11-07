@@ -17,6 +17,12 @@ that workflow: their jobs are written in the pull request that added them and ar
 release step. Until then they are run by hand, with the environment their rows below name. Remove this
 paragraph when the jobs are in `.github/workflows/scenarios.yml`.
 
+`workouts-from-hevy`, `day-becomes-facts` and `hermes-update-rollback` are likewise waiting for
+the beta.20 release step. Their ready-to-paste jobs and verdict wiring travel in the pull request
+that added them; their fixtures are loopback-only and contain only made-up people, workouts and
+messages. Until tickets 02, 03 and 04 land, each completes its fixture and install setup, then
+reports its named expected ticket FAIL rather than claiming its described proof passed.
+
 | script | what it proves |
 | --- | --- |
 | `settings-on-install.sh` | a fresh install carries the faster-chat settings, and a value the owner set stays theirs |
@@ -50,6 +56,9 @@ paragraph when the jobs are in `.github/workflows/scenarios.yml`.
 | `disk-filling.sh` | on the Docker server install, with a small file system over the data folder made to read 86%: the daily connection check says one message naming the three biggest places and opens one deadline, a second run says and opens nothing, at 75% the deadline closes; the cleanup routine then takes the 40-day-old request dump, session transcript and run log and leaves the note, both chats, the backup and the file of a listed session |
 | `missed-routine.sh` | on the fixture Telegram: with one routine whose time passed without a run, one that failed twice and one that failed once, the daily connection check sends one message naming the first two and not the third, a second run sends nothing, and a good run of each closes what was opened |
 | `deadline-closes-itself.sh` | a deadline on the AI's key closes on the next deadline run after the key is replaced in Settings, a deadline about Telegram closes when the connection check passes, and neither key's value is in any log, record or evidence file |
+| `workouts-from-hevy.sh` (no workflow job yet; expected ticket-02 FAIL until it lands) | Docker and Linux installs reject a made-up Hevy key, then import made-up workouts through Settings; their one hourly routine updates a changed workout and removes a deleted one without keeping the key elsewhere |
+| `day-becomes-facts.sh` (no workflow job yet; expected ticket-03 FAIL until it lands) | the nightly remembered-facts routine turns an invented day's move and doctor into dated source-linked facts, closes the older city, ignores machine/`track` messages, and makes no second-copy records |
+| `hermes-update-rollback.sh` (no workflow job yet; expected ticket-04 FAIL until it lands) | the notebook's 04:15 path keeps a good local Hermes release, rolls a broken one back with one notice, and leaves a three-day-old local release alone |
 
 ## Where there is no network
 
@@ -98,7 +107,7 @@ checking itself.
 
 ## The keys three of them need
 
-Named by the job, never in a file here (for the four scenarios above that await their jobs, set them by hand):
+Named by the job, never in a file here (for the scenarios above that await their jobs, set them by hand):
 
 | scenario | environment | what it is |
 | --- | --- | --- |
@@ -115,6 +124,7 @@ Named by the job, never in a file here (for the four scenarios above that await 
 | `talk-on-talk-day` | `GODSPEED_SCENARIO_AI_KEY` | the talk the owner asks for is opened by a model; the preparations are fixtures sealed by the coach's own commands |
 | `no-question-he-cannot-judge`, `plain-yes`, `what-was-that` | `GODSPEED_SCENARIO_AI_KEY` | the install's assistant answers the owner on the fixture Telegram through a model; the same two say which. The Telegram account and bot key are the fixture's, never a real one |
 | `chat-tidy-at-night`, `deadline-closes-itself` | `GODSPEED_SCENARIO_AI_KEY` | the tidied chat and the next message need a model; Settings' own replacement of a key tests the new key with one; the same two say which. `missed-routine` and `disk-filling` need none |
+| `day-becomes-facts` | `GODSPEED_SCENARIO_AI_KEY` | the installed remembered-facts routine extracts from the invented archive with the scenario AI; the same URL and model variables say which. The workouts and Hermes fixtures need no real account or key. |
 
 `GODSPEED_SCENARIO_AI_URL` and `GODSPEED_SCENARIO_AI_MODEL` have no default: a scenario that needs an AI fails with a plain sentence naming whichever is missing, and it also fails if the URL is on openrouter.ai, so the checks can never spend OpenRouter money. They run on `https://api.anthropic.com/v1` with `claude-haiku-4-5`, set as repository variables, and the key is the secret `GODSPEED_SCENARIO_AI_KEY`.
 
