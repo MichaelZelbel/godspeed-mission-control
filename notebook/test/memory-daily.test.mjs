@@ -53,6 +53,12 @@ test('the daily memory refuses relabeled credentials and employer names from the
  assert.equal(result.completed,1);assert.equal(query.rows('claims').length,0);const receipt=fs.readFileSync(path.join(root,'routines','remember-what-you-said','runs','2026-11-07',fs.readdirSync(path.join(root,'routines','remember-what-you-said','runs','2026-11-07'))[0]),'utf8');assert.doesNotMatch(receipt,/swordfish|Acme|password|employer/);
 });
 
+test('the daily memory refuses citations spanning private sentence punctuation',async t=>{
+ const root=workspace(t),store=new Store(root),query=new QueryService(store),domains=new Domains(query),row={id:'spanning-private',at:'2026-11-02T12:00:00Z',text:'My password is swordfish. I moved to Hamburg on 1 November.'},citation={id:'spanning-private',quote:'swordfish. I moved to Hamburg on 1 November'};archive(root,[row]);
+ const result=await rememberWhatYouSaid({root,store,query,domains,notebook:true,now,model:async()=>({facts:[{subject:self,kind:'home-city',value:'Hamburg',date:'2026-11-01',citation}],events:[{what:'Moved to Hamburg',day:'2026-11-01',participants:[],citation}]})});
+ assert.equal(result.completed,1);assert.equal(query.rows('claims').length,0);assert.equal(query.rows('moments').length,0);const receipt=fs.readFileSync(path.join(root,'routines','remember-what-you-said','runs','2026-11-07',fs.readdirSync(path.join(root,'routines','remember-what-you-said','runs','2026-11-07'))[0]),'utf8');assert.doesNotMatch(receipt,/swordfish|password|Hamburg/);
+});
+
 test('the daily memory preserves likely confidence in notebook claims',async t=>{
  const root=workspace(t),store=new Store(root),query=new QueryService(store),domains=new Domains(query),row={id:'likely',at:'2026-11-02T12:00:00Z',text:'I may have moved to Hamburg on 1 November'};archive(root,[row]);
  await rememberWhatYouSaid({root,store,query,domains,notebook:true,now,model:async()=>({facts:[{subject:self,kind:'home-city',value:'Hamburg',date:'2026-11-01',confidence:'likely',citation:{id:row.id,quote:row.text}}]})});

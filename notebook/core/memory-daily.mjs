@@ -84,7 +84,10 @@ export function modelRequest({messages,query,root,terms=[],deadlines=[]}){
  return {system,prompt,timeout_ms:120000,max_tokens:8192};
 }
 const itemCitation=(item,messages)=>{const c=item?.citation;if(!c||typeof c.id!=='string'||typeof c.quote!=='string'||!c.quote)return null;const source=messages.find(m=>m.id===c.id);return source&&source.text.includes(c.quote)?{id:c.id,quote:c.quote,day:source.at.slice(0,10)}:null;};
-const citationContext=(citation,messages)=>messages.find(message=>message.id===citation?.id)?.text.split(/[.!?;]+/).filter(sentence=>sentence.includes(citation.quote))||[];
+const citationContext=(citation,messages)=>{
+ const source=messages.find(message=>message.id===citation?.id)?.text;
+ return typeof source==='string'?[source]:[];
+};
 const referenceKey=(kind,id='')=>kind+':'+id;
 const referenceId=value=>typeof value==='string'&&/^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$/.test(value)?value:null;
 const privateMaterial=(values,terms=[])=>values.some(value=>{const text=String(value||'');return CREDENTIAL.test(text)||FORBIDDEN.test(text)||/\b(?:employer|client)\b/i.test(text)||EMPLOYER_NAME.test(text)||redacted(text,terms);});
