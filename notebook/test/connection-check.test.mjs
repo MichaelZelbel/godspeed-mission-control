@@ -4,13 +4,13 @@ import {readNotices} from '../core/notices.mjs';import {addonDeadlines} from '..
 import {CONNECTION_NAMES} from '../core/connection-names.mjs';import {CONNECTIONS,defaultProbes,checkConnections,nextState,recoverPhoneConnection,telegramProbe,telegramAPI,githubProbe,mailProbe,agentmailProbe,aiProbe,phoneProbe,gitKind,aiKind,telegramKind,mailKind,connectionCheckWanted,diskProbe,RECORD_FILE,runDue} from '../core/connection-check.mjs';
 import {acceptUpload,importFolder,pruneRaw,readRaw} from '../core/phone-health.mjs';
 import {runConnectionCheck} from '../scripts/connection-check.mjs';
+import {telegramAPIEndpoints,rejectedTelegramAPIEndpoints} from './telegram-api-endpoints.mjs';
 
 for(const key of Object.keys(process.env))if(/^(GODSPEED_|HERMES_)/.test(key))delete process.env[key];
 
 // THE DAILY CONNECTION CHECK (#200, 4 November 2026). The connections are stubs; the notices, the
 // deadlines (the real tools/due.js) and the records are real. Everything here is made up.
 const TOKEN='123456789:AAHinventedtokeninventedtokeninvented';
-const TELEGRAM_API_VECTORS=JSON.parse(fs.readFileSync(new URL('./telegram-api-endpoints.json',import.meta.url),'utf8'));
 const fixture=t=>{const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-connection-check-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));installStarter(root);return {root,store:new Store(root,{device:'pc'})};};
 // One probe for every source the check really has, so a newly added source can never be missing from a fixture: all fine, except the phone, which is not set up.
 const SOURCES=Object.keys(CONNECTIONS);
@@ -169,11 +169,11 @@ test('the daily routine sends Telegram probes to its configured API without reta
 
 test('a Telegram probe sends its token only to HTTPS or a loopback stand-in',async t=>{
  const {root}=fixture(t),home=path.join(root,'hermes-home');fs.mkdirSync(home);fs.writeFileSync(path.join(home,'.env'),'TELEGRAM_BOT_TOKEN='+TOKEN+'\n');
- for(const {input,output} of TELEGRAM_API_VECTORS.accepted)assert.equal(telegramAPI(input),output,input);
+ for(const {input,output} of telegramAPIEndpoints.accepted)assert.equal(telegramAPI(input),output,input);
  let request;
  assert.deepEqual(await telegramProbe({home,api:'https://api.example.test/telegram/',fetcher:async url=>{request=url;return {ok:true,json:async()=>({ok:true})};}})(),{set_up:true,ok:true});
  assert.equal(request,`https://api.example.test/telegram/bot${TOKEN}/getMe`);
- for(const api of TELEGRAM_API_VECTORS.rejected){
+ for(const api of rejectedTelegramAPIEndpoints){
   let called=false;
   assert.deepEqual(await telegramProbe({home,api,fetcher:async()=>{called=true;throw Error('called');}})(),{set_up:true,ok:false,kind:'other'},api);
   assert.equal(called,false,api+' never receives the token');

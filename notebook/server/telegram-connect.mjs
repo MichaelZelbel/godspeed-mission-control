@@ -42,8 +42,9 @@ export class TelegramConnection{
     if(!this.available)return {available:false,managed:null,connected:false,phase:'none'};
     const connection=this.read('connection.json');
     if(!connection?.token)return {available:true,managed:'web',connected:false,phase:'none'};
-    const setup=this.read('setup.json')||{},mine=String(setup.bot_id||'')===String(connection.bot_id);
-    const phase=mine&&setup.problem==='refused'?'refused':mine&&setup.done?'ready':mine&&setup.owner_id?'setting-up':'waiting';
+    const setup=this.read('setup.json')||{},mine=String(setup.bot_id||'')===String(connection.bot_id),runner=this.read('runner.json');
+    let endpointSafe=true;try{telegramAPI(this.api);}catch{endpointSafe=false;}
+    const phase=mine&&setup.problem==='refused'?'refused':mine&&setup.done&&(!endpointSafe||runner?.state==='gateway-route-failed')?'gateway-route-failed':mine&&setup.done?'ready':mine&&setup.owner_id?'setting-up':'waiting';
     // The message itself too, to copy: a bot its owner has chatted with before shows no Start
     // button, and only "/start <code>" makes its sender the owner (godspeed-telegram-setup). The
     // link already carries the code, so this shows the signed-in owner nothing new.

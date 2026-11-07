@@ -297,7 +297,12 @@ def test_telegram_api_endpoint():
     for case in vectors["accepted"]:
         check("a safe Telegram endpoint keeps its path prefix: %s" % case["input"],
               m.telegram_api(case["input"]) == case["output"])
-    for endpoint in vectors["rejected"]:
+    rejected = vectors["rejected"] + [
+        "%s://%s:8081/telegram/" % (scheme, host)
+        for scheme in vectors["ambiguous_numeric_ipv4"]["schemes"]
+        for host in vectors["ambiguous_numeric_ipv4"]["hosts"]
+    ]
+    for endpoint in rejected:
         try:
             m.telegram_api(endpoint)
             rejected = False

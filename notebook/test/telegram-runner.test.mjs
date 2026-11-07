@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {EventEmitter} from 'node:events';
 import {TelegramRunner,notebookLink} from '../../docker/full-candidate/telegram-runner.mjs';
-const TELEGRAM_API_VECTORS=JSON.parse(fs.readFileSync(new URL('./telegram-api-endpoints.json',import.meta.url),'utf8'));
+import {rejectedTelegramAPIEndpoints} from './telegram-api-endpoints.mjs';
 
 // The one-click container's Telegram: the setup chat while the owner answers it, then Hermes'
 // gateway, never both, started again after a pause when one stops, all without a redeploy.
@@ -77,7 +77,7 @@ test('the gateway uses the configured local Bot API after setup',async()=>{
 });
 
 test('an unsafe configured Bot API does not start the gateway or change its config',async()=>{
- for(const api of [...TELEGRAM_API_VECTORS.rejected,'http://192.0.2.1']){
+ for(const api of [...rejectedTelegramAPIEndpoints,'http://192.0.2.1']){
   const f=fixture(),home=path.join(f.dir,'hermes'),config=path.join(home,'config.yaml'),original='model:\n  provider: openrouter\n';fs.mkdirSync(home);fs.writeFileSync(config,original);
   Object.assign(f.runner.env,{HERMES_HOME:home,GODSPEED_TELEGRAM_API:api});
   f.write('connection.json',connection);f.write('setup.json',{bot_id:4242,owner_id:111,chat_id:111,done:true});await tick(f.runner);

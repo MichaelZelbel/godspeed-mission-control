@@ -10,7 +10,7 @@ import {Check, CheckCircle2, Copy, ExternalLink, MessageCircle} from 'lucide-rea
 // Telegram on the one-click server: right after the account is made (/dashboard/telegram?welcome=1)
 // and in Settings. The key goes to this server only (notebook/server/telegram-connect.mjs); the
 // bot's link carries a one-time code, so whoever opens it from this page becomes its owner.
-type Status={available:boolean;managed:'web'|'environment'|null;connected:boolean;phase:'none'|'waiting'|'setting-up'|'ready'|'refused';bot?:{username:string;name:string};link?:string;start_message?:string;owner?:string|null};
+type Status={available:boolean;managed:'web'|'environment'|null;connected:boolean;phase:'none'|'waiting'|'setting-up'|'ready'|'refused'|'gateway-route-failed';bot?:{username:string;name:string};link?:string;start_message?:string;owner?:string|null};
 async function call(route:string,body?:unknown){const r=await fetch('/api/'+route,{method:body?'POST':'GET',headers:{'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});const data=await r.json();if(!r.ok)throw new Error(data.error);return data;}
 export const telegramStatus=()=>call('telegram') as Promise<Status>;
 // What the browser knows that the setup chat cannot (16 October 2026): its own time zone, which the
@@ -34,7 +34,7 @@ function safeNext(value:string|null){
 
 export function TelegramConnect({welcome=false,onContinue}:{welcome?:boolean;onContinue?:()=>void}){
   const qc=useQueryClient();
-  const status=useQuery({queryKey:['telegram-status'],queryFn:telegramStatus,refetchInterval:q=>['waiting','setting-up'].includes(q.state.data?.phase||'')?3000:false});
+  const status=useQuery({queryKey:['telegram-status'],queryFn:telegramStatus,refetchInterval:q=>['waiting','setting-up','gateway-route-failed'].includes(q.state.data?.phase||'')?3000:false});
   const [key,setKey]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState(''),[replacing,setReplacing]=useState(false),[leaving,setLeaving]=useState(false);
   const data=status.data,username=data?.bot?.username;
   const qr=useMemo(()=>data?.link?renderSVG(data.link,{border:2,pixelSize:6}):'',[data?.link]);
@@ -59,6 +59,7 @@ export function TelegramConnect({welcome=false,onContinue}:{welcome?:boolean;onC
   let body;
   if(data.phase==='none'||replacing)body=form;
   else if(data.phase==='refused')body=<><p role="alert">Telegram no longer accepts the key of @{username}. In BotFather, send <code>/token</code> to see its current key, and paste that here.</p>{form}</>;
+  else if(data.phase==='gateway-route-failed')body=<p role="alert">Telegram cannot start because this server cannot apply its Telegram API address. Ask the person who runs this server to use an HTTPS address or a loopback HTTP address for <code>GODSPEED_TELEGRAM_API</code>, then this page will reconnect.</p>;
   else if(data.phase==='waiting')body=<div className="space-y-4">
     <p>Your bot is <strong>@{username}</strong>. Open it in Telegram with the button below and press <strong>Start</strong> at the bottom of the chat.</p>
     <Button asChild className="min-h-11 h-auto max-w-full whitespace-normal py-2 gap-2"><a href={data.link} target="_blank" rel="noopener noreferrer"><MessageCircle className="h-4 w-4" aria-hidden="true"/>Open @{username} in Telegram<ExternalLink className="h-4 w-4" aria-hidden="true"/></a></Button>
