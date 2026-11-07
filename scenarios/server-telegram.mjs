@@ -49,7 +49,7 @@ function loadState(){
 }
 function saveState(value){ write(stateFile(),value); write(path.join(evidence,'run.json'),{steps:value.steps,outbox:value.outbox,sent:value.sent}); }
 export function captureSent(state,record,label,before=state.sent){
-  for(const sent of (record.sent ?? []).slice(before)) state.outbox.push({label,kind:'sendMessage',chat_id:sent.chat_id,text:sent.text,buttons:sent.buttons ?? [],accepted:true});
+  for(const sent of (record.sent ?? []).slice(before)) state.outbox.push({label,kind:'sendMessage',chat_id:sent.chat_id,text:sent.text,buttons:(sent.buttons ?? []).map(button=>button.callback),accepted:true});
   state.sent=(record.sent ?? []).length;
 }
 export function baselineSent(state,record){ state.sent=(record.sent ?? []).length; }
@@ -105,13 +105,13 @@ async function setup(){
   if(!connected?.start_message) throw Error('Settings connected the bot but supplied no one-time /start message');
   await capture('setup-start','setup',()=>act({from:owner,text:connected.start_message}));
   if(!withoutAI){
-    await waitFor('setup question',copyRecord,record=>(record.sent ?? []).some(message=>(message.buttons ?? []).includes('anthropic')));
+    await waitFor('setup question',copyRecord,record=>(record.sent ?? []).some(message=>(message.buttons ?? []).some(button=>button.callback==='anthropic')));
     await capture('setup-provider','press',()=>act({from:owner,press:'anthropic'}));
     const key=optional('--ai-key');
     if(!key) throw Error('server-telegram: --ai-key is required because the setup path checks the dedicated AI account');
     await capture('setup-key','say',()=>act({from:owner,text:key}));
   }
-  await waitFor('first-install question',copyRecord,record=>(record.sent ?? []).some(message=>(message.buttons ?? []).includes('have:no')),180);
+  await waitFor('first-install question',copyRecord,record=>(record.sent ?? []).some(message=>(message.buttons ?? []).some(button=>button.callback==='have:no')),180);
   await capture('setup-first-install','press',()=>act({from:owner,press:'have:no'}));
   await waitFor('gateway handoff',runner,value=>value.state==='gateway',180);
   const setupState=JSON.parse(inServer(['cat','/opt/data/full-candidate/telegram/setup.json']));
@@ -129,9 +129,9 @@ async function say(){
   await capture(label,'say',()=>act({from:owner,text}));
 }
 export function callbackData(record,owner,question,label){
- const message=[...(record.sent??[])].reverse().find(sent=>sent.chat_id===owner&&String(sent.text??'').toLowerCase().includes(question.toLowerCase())&&Array.isArray(sent.labels)&&Array.isArray(sent.buttons)&&sent.labels.includes(label));
+ const message=[...(record.sent??[])].reverse().find(sent=>sent.chat_id===owner&&String(sent.text??'').toLowerCase().includes(question.toLowerCase())&&Array.isArray(sent.buttons)&&sent.buttons.some(button=>button.label===label));
  if(!message)throw Error(`the installed Telegram question ${JSON.stringify(question)} has no ${JSON.stringify(label)} button`);
- const callback=message.buttons[message.labels.indexOf(label)];
+ const callback=message.buttons.find(button=>button.label===label).callback;
  if(typeof callback!=='string'||!callback)throw Error(`the installed Telegram ${JSON.stringify(label)} button has no callback data`);
  return callback;
 }

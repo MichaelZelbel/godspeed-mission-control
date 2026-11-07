@@ -336,7 +336,7 @@ def test_happy():
     check("a stranger is told it is taken, and nothing else", to_eve == ["This assistant belongs to someone else."])
     check("the ChatGPT address and code arrive", any_has(to_anna, "https://auth.openai.com/codex/device", "<code>ABCD-12345</code>"))
     check("the AI question offers ChatGPT, OpenRouter, Claude, OpenAI, Gemini and the rest",
-          any(m["buttons"] == ["openai-codex", "openrouter", "anthropic", "openai-api", "gemini", "more"]
+          any([button["callback"] for button in m["buttons"]] == ["openai-codex", "openrouter", "anthropic", "openai-api", "gemini", "more"]
               and "I need an AI service to do my thinking" in m["text"] for m in r["fake"].sent))
     check("the city question has no button for the server's own clock",
           any("Your morning brief comes at 06:00" in m["text"] and m["buttons"] == [] for m in r["fake"].sent))
@@ -535,7 +535,7 @@ def test_one_click_happy():
     check("a first Mission Control never signs in to GitHub, and nothing asks it", gh_untouched(r) and r["connect"] == [])
     first_q = next((m for m in r["fake"].sent if FIRST_ASK in m["text"]), {})
     check("the one question after the AI is one tap: first, or bring in the one on GitHub",
-          first_q.get("labels") == ["Yes, it is my first", "No, bring in the one I have on GitHub"])
+          [button["label"] for button in first_q.get("buttons", [])] == ["Yes, it is my first", "No, bring in the one I have on GitHub"])
     at = next((i for i, t in enumerate(to_anna) if FIRST_ASK in t), -2)
     check("right after the last answer it says it is setting everything up", to_anna[at + 1:at + 2] == [SETTING_UP])
     fin = r["finish"]
@@ -801,11 +801,11 @@ def test_backup_key():
     check("it finishes and says the chat is done for this request", r["rc"] == 0 and r["state"].get("done") is True
           and r["state"].get("request") == "fictional0request")
     check("it explains what a backup is, naming the main AI", any_has(to_anna, "<b>Backup AI.</b>", "your main AI, ChatGPT, fails"))
-    asked = next((m for m in r["fake"].sent if BACKUP_ASK in m["text"]), {"buttons": [], "labels": []})
+    asked = next((m for m in r["fake"].sent if BACKUP_ASK in m["text"]), {"buttons": []})
     main_setup = load("tg_setup_backup_list", PROGRAM)
     check("it offers exactly the main setup's choices, with their labels, and Not now",
-          asked["buttons"] == [s for s, _ in main_setup.TOP_BRAINS] + ["more", "backup:none"]
-          and asked["labels"] == [l for _, l in main_setup.TOP_BRAINS] + ["Another provider", "Not now"])
+          [button["callback"] for button in asked["buttons"]] == [s for s, _ in main_setup.TOP_BRAINS] + ["more", "backup:none"]
+          and [button["label"] for button in asked["buttons"]] == [l for _, l in main_setup.TOP_BRAINS] + ["Another provider", "Not now"])
     check("the main AI's own service is answered in plain words, and asked again",
           any_has(to_anna, "That is the service your main AI uses already. A backup steps in when the main AI fails"))
     check("the /backupai the gateway had read is not taken for an answer", not any_has(to_anna, "Tap one of the buttons"))
@@ -870,7 +870,7 @@ def test_fake_api_evidence():
         def call(path, body):
             req = urllib.request.Request(api + path, data=json.dumps(body).encode(), headers={"Content-Type": "application/json"})
             return urllib.request.urlopen(req).read()
-        call("/bot%s/sendMessage" % token, {"chat_id": 111, "text": "private setup key", "reply_markup": {"inline_keyboard": [[{"text": "Yes", "callback_data": "yes"}]]}})
+        call("/bot%s/sendMessage" % token, {"chat_id": 111, "text": "private setup key", "reply_markup": {"inline_keyboard": [[{"text": "No", "callback_data": "no"}, {"text": "Yes", "callback_data": "yes"}]]}})
         with fk.cv:
             fk.act({"from": 111, "press": "yes"})
         call("/bot%s/getUpdates" % token, {"offset": 1})
@@ -883,7 +883,8 @@ def test_fake_api_evidence():
               [r["method"] for r in fk.requests] == ["sendMessage", "getUpdates", "getMe"]
               and [r["authorized"] for r in fk.requests] == [True, True, False]
               and token not in record and "private setup key" not in json.dumps(fk.requests))
-        check("the fake API keeps callback updates and message buttons", fk.updates and fk.sent[0]["buttons"] == ["yes"])
+        check("the fake API keeps callback updates and each message button's label with its callback",
+              fk.updates and fk.sent[0]["buttons"] == [{"label": "No", "callback": "no"}, {"label": "Yes", "callback": "yes"}])
     finally:
         srv.shutdown()
 

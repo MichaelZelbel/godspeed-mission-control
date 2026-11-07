@@ -70,7 +70,8 @@ class Fake:
                                             "file_size": d.get("file_size", len(data))}}}
             self.next_msg += 1
         else:
-            msg = next((m for m in reversed(self.sent) if m["chat_id"] == uid and a["press"] in m["buttons"]), None)
+            msg = next((m for m in reversed(self.sent) if m["chat_id"] == uid
+                        and any(button["callback"] == a["press"] for button in m["buttons"])), None)
             upd = {"callback_query": {"id": "cq%d" % self.next_update, "from": user, "data": a["press"],
                                       "message": {"message_id": msg["message_id"] if msg else 0, "chat": chat}}}
         upd["update_id"] = self.next_update
@@ -95,8 +96,8 @@ class Fake:
             if method == "sendMessage":
                 kb = (p.get("reply_markup") or {}).get("inline_keyboard") or []
                 m = {"chat_id": p.get("chat_id"), "text": p.get("text", ""), "message_id": self.next_msg,
-                     "buttons": [b.get("callback_data") for row in kb for b in row],
-                     "labels": [b.get("text") for row in kb for b in row], "t": time.time()}
+                     "buttons": [{"label": b.get("text"), "callback": b.get("callback_data")}
+                                 for row in kb for b in row], "t": time.time()}
                 self.next_msg += 1
                 self.sent.append(m)
                 for r in self.rules:
@@ -111,7 +112,7 @@ class Fake:
                 return {"message_id": m["message_id"], "chat": {"id": m["chat_id"]}, "text": m["text"]}
             if method == "sendDocument":
                 m = {"chat_id": p.get("chat_id"), "text": p.get("caption", ""), "message_id": self.next_msg,
-                     "buttons": [], "labels": [], "t": time.time()}
+                     "buttons": [], "t": time.time()}
                 self.next_msg += 1
                 self.sent.append(m)
                 return {"message_id": m["message_id"], "chat": {"id": m["chat_id"]}}

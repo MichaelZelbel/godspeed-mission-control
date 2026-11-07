@@ -21,7 +21,7 @@ test('the first action after setup ignores the setup handoff message',()=>{
 test('actions and marked routines keep complete Telegram records',()=>{
   const action={sent:0,outbox:[]};
   const routine={sent:0,outbox:[]};
-  const record={sent:[{chat_id:31415,text:'The report is ready.',buttons:['open:report']}]};
+  const record={sent:[{chat_id:31415,text:'The report is ready.',buttons:[{label:'Open',callback:'open:report'}]}]};
 
   captureSent(action,record,'owner-question');
   captureSent(routine,record,'report');
@@ -57,7 +57,7 @@ test('mark saves complete sent records through its command boundary',()=>{
   const bin=path.join(folder,'bin');
   fs.mkdirSync(bin);
   fs.writeFileSync(path.join(bin,'sudo'),`#!/bin/sh
-printf '%s\\n' '{"sent":[{"chat_id":31415,"text":"Yesterday\\u0027s report.","buttons":["open:yesterday"]},{"chat_id":31415,"text":"The report is ready.","buttons":["open:report"]}],"requests":[{"method":"sendMessage"},{"method":"sendMessage"}]}'
+printf '%s\\n' '{"sent":[{"chat_id":31415,"text":"Yesterday\\u0027s report.","buttons":[{"label":"Open","callback":"open:yesterday"}]},{"chat_id":31415,"text":"The report is ready.","buttons":[{"label":"Open","callback":"open:report"}]}],"requests":[{"method":"sendMessage"},{"method":"sendMessage"}]}'
 `);
   fs.chmodSync(path.join(bin,'sudo'),0o755);
   const old={
@@ -126,7 +126,7 @@ test('press resolves each visible button label to its installed callback token',
   fs.writeFileSync(path.join(bin,'sudo'),`#!/bin/sh
 input=$(cat)
 printf '%s %s\\n' "$*" "$input" >> "$TRACE"
-printf '%s\\n' '{"sent":[{"chat_id":31415,"text":"Cancel the renewal of your gym membership?","buttons":["gss1:gym-yes","gss1:gym-no"],"labels":["Yes","No"]},{"chat_id":31415,"text":"Book the car inspection?","buttons":["gss1:car-yes","gss1:car-no"],"labels":["Yes","No"]}],"requests":[]}'
+printf '%s\\n' '{"sent":[{"chat_id":31415,"text":"Cancel the renewal of your gym membership?","buttons":[{"label":"No","callback":"gss1:gym-no"},{"label":"Yes","callback":"gss1:gym-yes"}]},{"chat_id":31415,"text":"Book the car inspection?","buttons":[{"label":"Yes","callback":"gss1:car-yes"},{"label":"No","callback":"gss1:car-no"}]}],"requests":[]}'
 `);
   fs.chmodSync(path.join(bin,'sudo'),0o755);
 
