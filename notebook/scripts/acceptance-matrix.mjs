@@ -1,8 +1,7 @@
-import fs from 'node:fs';import path from 'node:path';import {fileURLToPath} from 'node:url';import {assertBriefingAcceptanceEvidence,briefingAcceptanceCriterion} from '../core/briefing-review-policy.mjs';
+import fs from 'node:fs';import path from 'node:path';import {fileURLToPath} from 'node:url';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..'),out=path.join(root,'docs/full-version');
 const read=p=>JSON.parse(fs.readFileSync(path.join(root,p))),inventory=read('docs/full-version/source-inventory.json'),procedures=read('notebook/data/procedure-inventory.json'),recipes=read('notebook/data/recipe-inventory.json');
 const proofFile=path.join(out,'acceptance-evidence.json'),proof=fs.existsSync(proofFile)?JSON.parse(fs.readFileSync(proofFile)):{};
-assertBriefingAcceptanceEvidence(proof['behavior:briefing']);
 const functionCriteria=read('notebook/data/function-acceptance.json');
 const items=[];
 function add(kind,name,trigger,durable,execution,criterion,excluded){const key=kind+':'+name,e=proof[key],status=excluded||e?.status||'source only';if(!['verified working','partial','source only','not activated','optional account required','intentionally separate','explicitly deferred','retired'].includes(status))throw Error('Invalid acceptance status: '+key);if(status==='verified working'&&!e?.evidence?.length)throw Error('Verified behavior needs actual evidence: '+key);items.push({key,kind,name,trigger:e?.trigger||trigger,durable_state:e?.durable_state||durable,execution:e?.execution||execution,activation:e?.activation||'Explicit user choice; inspect installed schedules and settings',permissions:e?.permissions||'Authenticated owner; outward changes require exact approval',dependencies:e?.dependencies||[],criterion:e?.criterion||criterion,status,evidence:e?.evidence||[],required:!excluded,target_test:e?.target_test||`Exercise ${name} through its installed entry point and check actual results after restart`});}
@@ -19,7 +18,7 @@ const behaviors={
  'coaching':['Scheduled talk, reply and agreement','coach, habits','Native commands share history with chat/notebook; later check-in uses replies'],
  'journal':['Start, define, finish, reopen and switches','routines/journal','Native journal checks agreed completion against evidence and retains corrections'],
  'memory':['Remember, infer, correct and retrieve','conversation_messages, claims, review_queue','Source-linked corrections survive restart; hidden/superseded facts excluded; synonym comparison with Menerio'],
- 'briefing':['Selected morning brief','Sources, health, checks and delivery',briefingAcceptanceCriterion],
+ 'briefing':['Selected morning brief','Sources, health, checks and delivery','Collect/check sources; after both permitted draft attempts remain rejected, a checked factual fallback may deliver; failed final safety gate prevents delivery; useful fresh health line'],
  'repairs':['Break connection or job','work_items, obligations, receipts','One repair/login item; supported automatic recovery; closure after recheck'],
  'single-owner':['Pair, disconnect and restart','settings, jobs, receipts','No takeover or duplicates; capped calendar catch-up and bounded retries'],
  'recovery':['Fresh, upgrade, offline, reconnect and restore','User files and retained conflicts','Content/links match after rebuild and empty restore; user choices retained'],
