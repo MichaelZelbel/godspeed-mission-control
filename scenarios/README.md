@@ -6,7 +6,7 @@ These are the **proving scenarios** a candidate runs before the maintainer is as
 (godspeed-dev, `releases/godspeed-2.0.0-beta.8-faster-chat/plan.md`,
 `releases/godspeed-2.0.0-beta.12-reminders-in-the-notebook/plan.md` and
 `releases/godspeed-2.0.0-beta.13-charm-video-notebook/plan.md`, "Proving scenarios"). Each one
-is one job of `.github/workflows/scenarios.yml` on a fresh `ubuntu-24.04` machine (all but `phone-health-days`, `incomplete-day`, `phone-goes-quiet`, `mail-count`, `talk-on-talk-day` and `first-day`: those six are staged for beta.18, and their jobs and verdict entries are added to the workflow at the release step, as the pull request body that added them describes; and except `night-tidy.sh`, which has no job until it is restored there), and each is one
+is one job of `.github/workflows/scenarios.yml` on a fresh `ubuntu-24.04` machine (all but `phone-health-days`, `incomplete-day`, `phone-goes-quiet`, `mail-count` and `talk-on-talk-day`, which have no job in it yet; `first-day` is a job of it, with the other three of beta.20; and except `night-tidy.sh`, which has no job until it is restored there), and each is one
 script here, so that what a scenario does can be read, run by hand and held to its own tests —
 which a step written inside a workflow file cannot be. They live in a folder of their own for the
 same reason `stage/` does: everything in `tools/` is copied onto every user's computer as a program,
@@ -17,11 +17,7 @@ that workflow: their jobs are written in the pull request that added them and ar
 release step. Until then they are run by hand, with the environment their rows below name. Remove this
 paragraph when the jobs are in `.github/workflows/scenarios.yml`.
 
-`workouts-from-hevy`, `day-becomes-facts` and `hermes-update-rollback` are likewise waiting for
-the beta.20 release step. Their ready-to-paste jobs and verdict wiring travel in the pull request
-that added them; their fixtures are loopback-only and contain only made-up people, workouts and
-messages. Workouts is now ready for its live proof; tickets 03 and 04 still report their named
-expected ticket FAIL until they land.
+`workouts-from-hevy`, `day-becomes-facts`, `hermes-update-rollback` and `first-day` are jobs of that workflow, and the verdict requires all four. Their fixtures are loopback-only and contain only made-up people, workouts and messages.
 
 | script | what it proves |
 | --- | --- |
@@ -57,9 +53,9 @@ expected ticket FAIL until they land.
 | `disk-filling.sh` | on the Docker server install, with a small file system over the data folder made to read 86%: the daily connection check says one message naming the three biggest places and opens one deadline, a second run says and opens nothing, at 75% the deadline closes; the cleanup routine then takes the 40-day-old request dump, session transcript and run log and leaves the note, both chats, the backup and the file of a listed session |
 | `missed-routine.sh` | not yet on the installed server's Telegram path, so acting ends at once in a FAIL line that says so; its checking part is held by `test-scenarios.sh`. Once moved: with one routine whose time passed without a run, one that failed twice and one that failed once, the daily connection check sends one message naming the first two and not the third, a second run sends nothing, and a good run of each closes what was opened |
 | `deadline-closes-itself.sh` | not yet on the installed server's Telegram path, so acting ends at once in a FAIL line that says so; its checking part is held by `test-scenarios.sh`. Once moved: a deadline on the AI's key closes on the next deadline run after the key is replaced in Settings, a deadline about Telegram closes when the connection check passes, and neither key's value is in any log, record or evidence file |
-| `workouts-from-hevy.sh` (no workflow job yet) | Docker and Linux installs reject a made-up Hevy key, then import made-up workouts through Settings; their one hourly routine updates a changed workout and removes a deleted one without keeping the key elsewhere |
-| `day-becomes-facts.sh` (no workflow job yet; expected ticket-03 FAIL until it lands) | the nightly remembered-facts routine turns an invented day's move and doctor into dated source-linked facts, closes the older city, ignores machine/`track` messages, and makes no second-copy records |
-| `hermes-update-rollback.sh` (no workflow job yet; expected ticket-04 FAIL until it lands) | the notebook's 04:15 path keeps a good local Hermes release, rolls a broken one back with one notice, and leaves a three-day-old local release alone |
+| `workouts-from-hevy.sh` (a workflow job) | Docker and Linux installs reject a made-up Hevy key, then import made-up workouts through Settings; their one hourly routine updates a changed workout and removes a deleted one without keeping the key elsewhere |
+| `day-becomes-facts.sh` (a workflow job) | the nightly remembered-facts routine turns an invented day's move and doctor into dated source-linked facts, closes the older city, ignores machine/`track` messages, and makes no second-copy records |
+| `hermes-update-rollback.sh` (a workflow job) | the notebook's 04:15 path keeps a good local Hermes release, rolls a broken one back with one notice, and leaves a three-day-old local release alone |
 
 ## Where there is no network
 

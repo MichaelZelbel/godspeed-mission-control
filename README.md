@@ -26,6 +26,22 @@ A new release comes out most weeks. I write about what my AI does for me and wha
 
 Version 2 is the current edition. The install lines on this page install the current public version, which is the branch `beta` of this repository; `main` is where the work goes on, and a change merged into it reaches nobody until the next version is released. The installers set up a new, separate folder. They do not move an existing version 1 Godspeed folder or your Menerio account.
 
+## Workouts from Hevy
+
+Godspeed carries the Workouts add-on. With Hevy Pro, open **Settings** > **Workouts from Hevy**, make a Hevy developer key, and connect it there. The key stays in the add-on's private state; Settings shows the imported-row count and last run, and the one hourly **Workouts from Hevy** routine appears under **Settings** > **Routines**. Disconnect stops that routine while keeping the tracker and its rows.
+
+## New in 2.0.0-beta.20
+
+Workouts from Hevy come with Godspeed, what you told it during the day is remembered overnight, and Godspeed keeps its assistant program current.
+
+- **Workouts from Hevy, for anyone with Hevy Pro.** Connecting needs Hevy Pro. In **Settings**, **Workouts from Hevy**, paste your own Hevy key. Godspeed checks it with Hevy, says so there if Hevy refuses it (and keeps nothing), keeps it in the add-on's private folder, makes a **Workouts** tracker with one row per workout and every set, brings in your workouts so far and then updates them once an hour as a routine, **Workouts from Hevy**, listed in **Settings**, **Routines**. A workout you change in Hevy changes its row on the next run, and one you delete in Hevy loses its row, unless the row holds something of yours (a comment, a cell you changed): then it stays, and its Workout cell says "(deleted in Hevy)". Disconnecting stops the routine and keeps your tracker, rows and key file. If you used the standalone Workouts add-on before, Godspeed takes its place and removes the add-on's own hourly timer.
+- **What you said becomes what Godspeed remembers.** A new routine, **Remember what you said** (03:40, listed in **Settings**, **Routines** with its own Pause switch), reads the messages you typed to your assistant that day, asks your own connected AI which lasting facts about your life they contain, and files each one as a dated fact or event with your exact words and where you said them as its source. A new fact that replaces an older one closes the older, and nothing is deleted. Anything whose quote is not word for word in your message is refused, machine-written prompts and messages that start with "track" are skipped, and an install with no AI skips the night quietly. On an install that adopted an existing folder it is a switch that starts off.
+- **Godspeed keeps your assistant program current, and safe.** On an install where Godspeed set up the assistant program (Hermes) itself, on Linux and on a Mac, Godspeed checks once a night for a stable release at least 7 days old of the same major version, installs it with Hermes' own updater, and then checks that the chat service came back, the program runs, it can list its routines and your AI answers. If a check fails it goes back to the version before, checks that the program, its routine list, its plugins and the chat service work again (your AI is not asked a second time when its answer was what failed), and tells you once in plain words in the notebook; a failed release is not tried again for 30 days. **Settings**, **Assistant updates** turns it off. The Docker server and Windows are not changed.
+- **A routine that missed its time or keeps failing is told once.** The daily connection check now also looks at your routines. At most once per check you get one grouped message about routines that did not run when due or failed their last two runs, told once per spell and closed by the routine's next good run. Paused routines, routines made today and failures caused by your AI's sign-in say nothing.
+- **A routine that cannot be set up keeps its error and backs off.** When Godspeed cannot set up one of its background routines (such as the nightly cleanup or the notice sender), it keeps the reason on that machine, tries again less often instead of every minute, and after three failures puts one notice in the notebook's bell that names what could not be set up and says what stopped it. The notice closes itself when setup works.
+
+Updating keeps your folder, notes and settings.
+
 ## New in 2.0.0-beta.19
 
 Your server looks after itself, your deadlines can close themselves, and a day that is not over is never judged.
@@ -37,10 +53,6 @@ Your server looks after itself, your deadlines can close themselves, and a day t
 - **A phone day that is not complete is unknown.** The morning briefing and the health talks treat a day built from your phone's data as unknown until its last measurement (not counting sleep) is after 21:00. Until then, totals are given as so-far values with the time the phone stopped, today is never judged, and no shortfall advice or weekly miss is made from them. A value you enter by hand settles that measurement for the day, and so do the Food tracker's totals.
 
 Updating keeps your folder, notes and settings.
-
-## Workouts from Hevy
-
-Godspeed carries the Workouts add-on. With Hevy Pro, open **Settings** > **Workouts from Hevy**, make a Hevy developer key, and connect it there. The key stays in the add-on's private state; Settings shows the imported-row count and last run, and the one hourly **Workouts from Hevy** routine appears under **Settings** > **Routines**. Disconnect stops that routine while keeping the tracker and its rows.
 
 ## New in 2.0.0-beta.18
 

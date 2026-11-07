@@ -165,3 +165,29 @@ test("the verdict's needs and RESULTS name the same scenarios, and every scenari
     assert.ok(pairs.includes(j), `scenario job ${j} is not in RESULTS`);
   }
 });
+
+// Each of beta.20's four jobs runs the scenario its name says, at the stage the run was started for.
+test('the four beta.20 jobs check out the selected stage and run their own scenario', async () => {
+  const { readFileSync } = await import('node:fs');
+  const text = readFileSync(WORKFLOW, 'utf8').replace(/\r\n/g, '\n');
+  for (const j of ['workouts-from-hevy', 'day-becomes-facts', 'hermes-update-rollback', 'first-day']) {
+    const start = text.search(new RegExp(`^ {2}${j}:[ \t]*$`, 'm'));
+    assert.ok(start >= 0, `no job ${j}`);
+    const rest = text.slice(start + 1);
+    const end = rest.search(/^ {2}[A-Za-z0-9_-]+:[ \t]*$/m);
+    const block = end < 0 ? rest : rest.slice(0, end);
+    assert.ok(block.includes('ref: ${{ inputs.stage || github.sha }}'), `${j} does not check out the selected stage`);
+    assert.ok(block.includes(`bash scenarios/${j}.sh "$STAGE_REF"`), `${j} does not run scenarios/${j}.sh at the stage`);
+    assert.equal((block.match(/bash scenarios\/[a-z-]+\.sh/g) || []).length, 1, `${j} runs more than its own scenario`);
+  }
+});
+
+// The product version is owned by notebook/package.json; the README's newest "New in" heading must name it.
+test("the README's newest 'New in' heading is the package version", async () => {
+  const { readFileSync } = await import('node:fs');
+  const pkg = JSON.parse(readFileSync(new URL('../notebook/package.json', import.meta.url), 'utf8'));
+  const readme = readFileSync(new URL('../README.md', import.meta.url), 'utf8');
+  const heading = readme.match(/^## New in (\S+)/m);
+  assert.ok(heading, 'README has no "New in" heading');
+  assert.equal(heading[1], pkg.version);
+});
