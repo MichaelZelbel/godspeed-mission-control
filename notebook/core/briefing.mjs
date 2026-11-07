@@ -29,6 +29,8 @@ const BRIEFING_SOURCE_SELECTORS=Object.freeze({
  health_episodes:({context})=>context.episodes,
  medications:({context})=>context.medications,
  watch_observations:({context})=>context.source_receipts,
+ job_receipts:({rehearsals})=>rehearsals,
+ lead_entries:({contribution})=>contribution?[contribution]:[],
 });
 export const BRIEFING_SOURCE_TABLES=Object.freeze(Object.keys(BRIEFING_SOURCE_SELECTORS));
 // The day a briefing note belongs to is the day it was asked for (brief_day), which a write that
@@ -88,7 +90,8 @@ async function runBriefing(job,{store,query,provider,now}){
  const leftOut=[];
  const watch=visibleRows(query,'watch_topics').filter(t=>!t.paused&&t.include_in_brief);
  if(watch.length)await procedure({id:job.id+'-sources',kind:'watch',topic_ids:watch.map(t=>t.id)},{store,query,provider});
- const context={goals:visibleRows(query,'goals').filter(g=>['active','adopted'].includes(g.status)),decisions:visibleRows(query,'decisions').slice(-10),work:visibleRows(query,'work_items').slice(-20),deadlines:visibleRows(query,'deadlines').filter(d=>d.status!=='closed'),health:visibleRows(query,'health_observations').filter(h=>Date.parse(h.observed_at)>=Date.now()-7*86400000),episodes:visibleRows(query,'health_episodes').filter(h=>Date.parse(h.onset_at)>=Date.now()-30*86400000),medications:visibleRows(query,'medications').filter(h=>Date.parse(h.taken_at)>=Date.now()-30*86400000),source_receipts:[],previous:visibleRows(query,'notes').filter(n=>n.source_app==='morning-brief').slice(-3).map(n=>({id:n.id,title:n.title,content:n.content,created_at:n.created_at,verification_id:n.verification_id,delivery_verification_id:n.delivery_verification_id})),rehearsals:visibleRows(query,'job_receipts').filter(r=>r.kind==='brief-rehearsal').slice(-2).map(r=>({id:r.id,state:r.state,error:r.error,result:r.result,finished_at:r.finished_at}))};
+ const rehearsals=visibleRows(query,'job_receipts').filter(r=>r.kind==='brief-rehearsal').slice(-2);
+ const context={goals:visibleRows(query,'goals').filter(g=>['active','adopted'].includes(g.status)),decisions:visibleRows(query,'decisions').slice(-10),work:visibleRows(query,'work_items').slice(-20),deadlines:visibleRows(query,'deadlines').filter(d=>d.status!=='closed'),health:visibleRows(query,'health_observations').filter(h=>Date.parse(h.observed_at)>=Date.now()-7*86400000),episodes:visibleRows(query,'health_episodes').filter(h=>Date.parse(h.onset_at)>=Date.now()-30*86400000),medications:visibleRows(query,'medications').filter(h=>Date.parse(h.taken_at)>=Date.now()-30*86400000),source_receipts:[],previous:visibleRows(query,'notes').filter(n=>n.source_app==='morning-brief').slice(-3).map(n=>({id:n.id,title:n.title,content:n.content,created_at:n.created_at,verification_id:n.verification_id,delivery_verification_id:n.delivery_verification_id})),rehearsals:rehearsals.map(r=>({id:r.id,state:r.state,error:r.error,result:r.result,finished_at:r.finished_at}))};
  const health=currentHealth(query,{now:now.getTime()});context.health=health.observations;context.health_freshness=health;
  const unknownColumns=unknownHealthColumns(health);
  const healthSummaryLines=unknownColumns.map(column=>'On '+column.date+', '+column.column+' was '+column.value+' so far'+(column.data_until?'; phone data stopped at '+column.data_until:'')+'.');
@@ -121,7 +124,7 @@ async function runBriefing(job,{store,query,provider,now}){
  for(const out of leftOut){const id='repair-brief-line-'+hash([out.name,out.line]),old=store.get('work_items',id);if(old&&old.state!=='verified')continue;store.save('work_items',{id,kind:'repair',title:'The morning briefing left out '+out.name+', because it breaks your writing rules',state:'needs_review',job_id:job.id,line_name:out.name,line:out.line,refusals:out.refusals,error:out.refusals.map(describeRefusal).join('; '),check:'The line passes the writing rules in profile/voice.md, or the rule is changed',allowed_action:'inspect-and-retry',dependencies:[],max_attempts:3});}
  context.workflow=recipeContext(store,'morning-note');
  context.workspace_sources=fileContext(store,20000);
- const sourceRefs=Object.fromEntries(Object.entries(BRIEFING_SOURCE_SELECTORS).map(([table,select])=>[table,select({actionSources,context,query,selectedTopics})]));
+ const sourceRefs=Object.fromEntries(Object.entries(BRIEFING_SOURCE_SELECTORS).map(([table,select])=>[table,select({actionSources,context,contribution,query,rehearsals,selectedTopics})]));
  const ids=rows=>rows.map(r=>r.id).sort();
  const checkCurrentSources=()=>query.withSnapshot(()=>{
   for(const [type,selected] of Object.entries(sourceRefs)){const current=new Map(visibleRows(query,type).map(r=>[r.id,r]));if(selected.some(r=>current.get(r.id)?._hash!==r._hash))throw Error('Briefing sources changed during judgment; retain its checks and prepare a new draft');}

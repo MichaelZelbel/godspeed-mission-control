@@ -120,6 +120,24 @@ server_installed_asker() {
 }
 server_installed_asker
 
+server_sparse_inventory() {
+  local output
+  mkdir -p "$TMP/server-sparse"
+  output=$(EVIDENCE="$TMP/server-sparse" bash -c '
+    . "$1"
+    fail(){ printf "%s\\n" "$*" >&2; exit 42; }
+    in_server(){ printf "%s\\n" "$*" >&2; printf "notes\\njob_receipts\\nlead_entries\\n"; }
+    server_table(){ printf "%s %s\\n" "$1" "$2" >&2; }
+    server_sparse_state
+  ' bash "$HERE/server-lib.sh" 2>&1)
+  if [[ $output == *'/usr/local/bin/node /opt/godspeed/kit/notebook/scripts/briefing-source-tables.mjs'* && $output == *"job_receipts $TMP/server-sparse/sparse-job-receipts.json"* && $output == *"lead_entries $TMP/server-sparse/sparse-lead-entries.json"* ]]; then
+    ok 'the sparse-state proof asks the installed briefing inventory and snapshots every named table'
+  else
+    bad "the sparse-state proof asks the installed briefing inventory and snapshots every named table ($output)"
+  fi
+}
+server_sparse_inventory
+
 # A folder that should pass, so a case for one failure is that folder with one thing changed.
 copy() { # <good folder> <new folder>
   rm -rf "$2"
