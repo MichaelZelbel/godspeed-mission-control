@@ -31,13 +31,15 @@ NODE
 }
 
 act() {
+  local updater
   fresh_evidence
   : >"$EVIDENCE/fixture.log"
   node "$HERE/hermes-update-fixture.mjs" --dir "$EVIDENCE/releases" --log "$EVIDENCE/fixture.log" >"$EVIDENCE/fixture-made.txt" ||
     fail "the local Hermes release fixture could not be made"
   install_paths; install_the_stage_line "$EVIDENCE/install.log"; need_node
   wait_for 180 'the notebook to answer after install' notebook_is_up || fail "the notebook did not answer after install"
-  if ! grep -Rqs '04:15\|04 15\|15 4' "$ROOT/notebook"; then
+  updater=$(product_script "$ROOT" notebook/core/hermes-update.mjs)
+  if ! grep -Fqs "parts.hour<'04'||parts.hour==='04'&&parts.minute<'15'" "$updater"; then
     fail "the installed notebook has no 04:15 Hermes updater (ticket 04 is the expected baseline failure)"
   fi
   install_fixture_hermes
