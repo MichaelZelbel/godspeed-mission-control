@@ -153,7 +153,7 @@ async function runBriefing(job,{store,query,provider,now}){
   const due=context.deadlines.filter(row=>!excluded(row)&&!['closed','completed'].includes(row.status)&&row.due_at&&Number.isFinite(Date.parse(row.due_at))&&Date.parse(row.due_at)>=now.getTime()).sort((a,b)=>Date.parse(a.due_at)-Date.parse(b.due_at));
   addFirst(due,row=>{const on=row.native_file?String(row.due_at).slice(0,10):dayOf(new Date(row.due_at),row.timezone||zone);return text(row.title)?'A dated obligation is '+text(row.title)+', due '+on+'.':null;});
   const keptSummaries=unknownSummaries.filter(summary=>!summary.source_ids.some(id=>rejectedIds.has(id)));
-  const unknownAdded=[...keptSummaries.map(summary=>summary.line),weekLine(keptSummaries)].filter(Boolean).some(add);
+  const unknownAdded=[...keptSummaries.map(summary=>summary.line),weekLine(keptSummaries)].filter(Boolean).filter(line=>add(line)).length>0;
   const observedAt=row=>row.date_precision==='day'&&row.observed_on?String(row.observed_on)+'T00:00:00Z':row.observed_at||row.created_at||'';
   const settled=row=>row.via!==PHONE_VIA||context.health_freshness?.days?.find(day=>day.date===row.observed_on)?.columns?.[row.metric]?.state==='complete';
   const healthAdded=addFirst(context.health.filter(row=>!excluded(row)&&settled(row)).sort((a,b)=>String(observedAt(b)).localeCompare(String(observedAt(a)))),row=>{const metric=text(row.metric,60),value=row.value;return metric&&(typeof value==='number'||typeof value==='string'&&text(value,30))?'A recorded health observation is '+metric+': '+value+'.':null;})||unknownAdded;

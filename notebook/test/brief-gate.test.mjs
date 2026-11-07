@@ -5,8 +5,7 @@ import {personalOperation} from '../core/personal-operations.mjs';
 // Where one reminder is kept: its page under notebook/Deadlines/, which is what a rehearsal must
 // leave exactly as it was (since 30 October 2026 a reminder is a record, not a file in due/).
 const page=(store,slug)=>store.file(store.list('deadlines').find(r=>r.native_slug===slug));
-// A failed fact check must name the records it rejects (Archon R1, round 3); these fixtures fail only the reader check.
-const readerFails=(input,reason)=>input.check==='source-facts'?{passed:true,reason:'Fictional sources checked.'}:{passed:false,reason};
+const readerFails=(input,reason)=>input.check==='source-facts'?{passed:true,reason:'Fictional sources checked.'}:{passed:false,reason,rejection_scope:'non-source',rejected_source_ids:[]};
 test('a briefing cannot request a decision on a prepared artifact changed during judgment',async()=>{
  const store=new Store(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-brief-action-stale-'))),query=new QueryService(store),goal=store.save('goals',{title:'Fictional inspect sources',status:'adopted'}),draft=store.save('notes',{title:'Fictional exact proposed change',content:'Original fictional proposal.'});
  store.save('work_items',{title:'Fictional source review',state:'awaiting_approval',goal_id:goal.id,draft_id:draft.id});let checks=0;

@@ -24,8 +24,7 @@ import {runMorningBrief} from '../scripts/morning-brief.mjs';
 const python=process.env.GODSPEED_TEST_PYTHON||(process.platform==='win32'?'python':'python3');
 const havePython=spawnSync(python,['--version']).status===0;
 const OK='No fresh health observations are recorded. Review the fictional list today.';
-// A failed fact check must name the records it rejects (Archon R1, round 3); these fixtures fail only the reader check.
-const readerFails=(input,reason)=>input.check==='source-facts'?{passed:true,reason:'Fictional sources checked.'}:{passed:false,reason};
+const readerFails=(input,reason)=>input.check==='source-facts'?{passed:true,reason:'Fictional sources checked.'}:{passed:false,reason,rejection_scope:'non-source',rejected_source_ids:[]};
 const verifies=input=>input.kind==='brief-verification'?{passed:true,reason:'Fictional sources checked.'}:null;
 
 function workspace(t,{charm=false,rules=[]}={}){
