@@ -55,11 +55,12 @@ export class HermesUpdate{
  save(next){atomic(path.join(this.store.state,UPDATE_FILE),JSON.stringify(next,null,2)+'\n');return next;}
  setEnabled(enabled){return this.save({...transactionState(this.state()),enabled});}
  commit(change){const state=this.state();return this.save({...change(transactionState(state)),...settingsState(state)});}
- async command(executable,args,{cwd,timeoutMs=120000,env=assistantEnvironment({home:this.descriptor?.home,workspace:this.store.root})}={}){
+ environment(){return scrubGitEnvironment(assistantEnvironment({home:this.descriptor?.home,workspace:this.store.root}));}
+ async command(executable,args,{cwd,timeoutMs=120000,env=this.environment()}={}){
   try{return await this.run(executable,args,{cwd:cwd||this.store.root,timeoutMs,maxBytes:1024*1024,windowsHide:true,shell:false,env})||{code:0,stdout:'',stderr:''};}
   catch(error){return {code:typeof error?.code==='number'?error.code:1,stdout:error?.stdout||'',stderr:error?.stderr||'',error};}
  }
- async git(args,cwd){return this.command('git',args,{cwd,env:scrubGitEnvironment(assistantEnvironment({home:this.descriptor?.home,workspace:this.store.root}))});}
+ async git(args,cwd){return this.command('git',args,{cwd});}
  async eligibility(){
   if(this.platform==='win32')return {reason:'Windows updates are managed by its installer.'};
   const executable=this.descriptor?.executable,sourceRaw=this.descriptor?.sourceRoot||hermesPython({executable,home:this.descriptor?.home}).source,source=sourceRaw&&path.resolve(sourceRaw);
@@ -114,6 +115,7 @@ export class HermesUpdate{
   const stop=await this.command(eligible.executable,['gateway','stop'],{cwd:eligible.source});if(stop.code!==0)return false;
   const reset=await this.git(['reset','--hard',head],eligible.source);if(reset.code!==0)return false;
   const restored=await this.command(eligible.executable,['import',backup,'--force'],{cwd:eligible.source,timeoutMs:UPDATE_LIMIT});if(restored.code!==0)return false;
+  const dependencies=await this.command(eligible.executable,['pm','install'],{cwd:eligible.source,timeoutMs:UPDATE_LIMIT});if(dependencies.code!==0)return false;
   const restart=await this.command(eligible.executable,['gateway','restart'],{cwd:eligible.source,timeoutMs:120000});return restart.code===0;
  }
  async applyRelease(eligible){
