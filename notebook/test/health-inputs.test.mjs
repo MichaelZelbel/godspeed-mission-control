@@ -129,7 +129,7 @@ test('a CSV named like the phone row, imported first, and then a phone upload: b
   acceptUpload(store,{metrics:[{name:'step_count',units:'count',data:[{date:day+' 08:00:00 +0100',qty:100,source:'Fictional Phone'}]}],workouts:[]},{now:new Date(now)});
   const rows=store.list('health_observations');
   assert.equal(rows.length,2,source);
-  assert.equal(rows.find(r=>r.source===source).value,250,source+': the CSV row keeps its value');
+  assert.equal(rows.find(r=>r.source===source&&r.via!=='phone-receiver').value,250,source+': the CSV row keeps its value');
   assert.equal(rows.find(r=>r.via==='phone-receiver').value,100,source+': the phone row has its own');
   assert.equal(new Set(rows.map(r=>r.id)).size,2);
  }
