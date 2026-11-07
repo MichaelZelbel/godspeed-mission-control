@@ -24,6 +24,17 @@ test('the daily memory files a dated quoted fact once and retains the fact it re
  await rememberWhatYouSaid({root,store,query,domains,notebook:true,now,model:async()=>{calls++;return answer(row);}});assert.equal(calls,1,'a consumed archive row is never sent again');
 });
 
+test('concurrent daily-memory runs submit one archive piece once',async t=>{
+ const root=workspace(t),row={id:'once',at:'2026-11-02T12:00:00Z',text:'I moved to Hamburg on 1 November'};archive(root,[row]);let calls=0,entered,release;const started=new Promise(resolve=>entered=resolve),gate=new Promise(resolve=>release=resolve),model=async()=>{calls++;entered();await gate;return answer(row);};
+ const first=rememberWhatYouSaid({root,now,model});await started;const second=rememberWhatYouSaid({root,now,model});await new Promise(resolve=>setTimeout(resolve,30));assert.equal(calls,1,'the waiting run has not sent the same private message');release();const [one,two]=await Promise.all([first,second]);assert.equal(calls,1);assert.equal(one.completed+two.completed,1);
+});
+
+test('an interrupted notebook event recovers every participant before consuming its receipt',async t=>{
+ const root=workspace(t),row={id:'event-recovery',at:'2026-11-02T12:00:00Z',text:'Alex and the project launched today'},reply={people:[{id:'alex',name:'Alex'}],things:[{id:'project',name:'Project'}],events:[{what:'Alex and the project launched',day:'2026-11-02',participants:[{kind:'new-person',id:'alex'},{kind:'new-thing',id:'project'}],citation:{id:'event-recovery',quote:'Alex and the project launched today'}}]};archive(root,[row]);const store=new Store(root),query=new QueryService(store),domains=new Domains(query);let calls=0;store.failAfter=1;
+ const interrupted=await rememberWhatYouSaid({root,store,query,domains,notebook:true,now,model:async()=>{calls++;return reply;}});assert.equal(interrupted.completed,0);assert.equal(interrupted.failed,1);
+ store.failAfter=null;const recoveredStore=new Store(root),recoveredQuery=new QueryService(recoveredStore),recoveredDomains=new Domains(recoveredQuery);const recovered=await rememberWhatYouSaid({root,store:recoveredStore,query:recoveredQuery,domains:recoveredDomains,notebook:true,now,model:async()=>{calls++;return reply;}});assert.equal(recovered.completed,1);assert.equal(calls,1,'receipt recovery does not send the archive piece again');assert.equal(recoveredQuery.rows('moments').length,1);assert.equal(recoveredQuery.rows('moment_participants').length,1);assert.equal(recoveredQuery.rows('moment_entities').length,1);
+});
+
 test('invalid quotes and machine prompts are refused without filing them',async t=>{
  const root=workspace(t),store=new Store(root),query=new QueryService(store),domains=new Domains(query);const human={id:'human',at:'2026-11-02T12:00:00Z',text:'I moved to Hamburg on 1 November'},machine={id:'machine',at:'2026-11-02T13:00:00Z',text:'[CRON RUN] never send this'};archive(root,[human,machine]);
  const result=await rememberWhatYouSaid({root,store,query,domains,notebook:true,now,model:async()=>({facts:[{subject:self,kind:'home-city',value:'Hamburg',date:'2026-11-01',citation:{id:'human',quote:'not in the message'}}]})});

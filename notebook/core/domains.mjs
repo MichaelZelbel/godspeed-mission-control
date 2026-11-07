@@ -19,7 +19,7 @@ import { slug, hash } from './records/store.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { Review,factSubject,factSuppressed } from './review.mjs';
-import {claimHolds} from './query.mjs';
+import {claimHolds,QueryService} from './query.mjs';
 import {fieldList} from './fields.mjs';
 import {titleFromContent} from './note-title.mjs';
 import {assertAssistantRecord} from './assistant-mutations.mjs';
@@ -200,6 +200,36 @@ export class Domains {
       const claim = this.store.prepare('claims', { subject_type, subject_id, attribute, value, valid_from, recorded_on: today, valid_to: null, confidence: input.origin === 'remember-what-you-said' && input.confidence === 'likely' ? 'likely' : 'confirmed', cardinality: slot.cardinality, source_type: input.source_type || 'manual', source_id: input.source_id || null, evidence_quote: input.evidence_quote || null, origin: input.origin || 'user_manual' });
       for (const r of [slot, claim]) r.references = this.query.references(r.type, r);
       this.store.commit([...changed, slot, claim]); return { ok: true, facts: [{ attribute, outcome: 'inserted', claimId: claim.id, closed: changed.length }] };
+    });
+  }
+  writeDailyMemory(plan){
+    const memoryKey=(type,id)=>type+':'+(id||''),sameName=(left,right)=>String(left||'').normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').trim()===String(right||'').normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').trim(),recordId=(type,name)=>'memory-'+hash([type==='contact'?'person':'thing',name]).slice(0,20);
+    return this.store.transaction(view=>{
+      const query=new QueryService(view),staged=new Domains(query),subjects=new Map([[memoryKey('self'),{type:'self',id:null,name:'self'}]]),addSubject=(type,row)=>subjects.set(memoryKey(type,row.id),{type,id:row.id,name:row.name}),create=(type,item)=>{
+        if(!item||typeof item.id!=='string'||typeof item.name!=='string'||!item.name.trim())throw Error('Daily memory has an invalid subject');
+        const table=type==='contact'?'contacts':'entities',existing=query.rows(table).find(row=>sameName(row.name,item.name)),row=existing||view.prepare(table,{id:recordId(type,item.name),name:item.name.trim(),origin:'remember-what-you-said'});
+        if(!existing)view.commit([row]);addSubject(type,row);subjects.set(memoryKey(type==='contact'?'new-person':'new-thing',item.id),{type,id:row.id,name:row.name});
+      };
+      for(const person of plan.people||[])create('contact',person);
+      for(const thing of plan.things||[])create('entity',thing);
+      for(const row of query.rows('contacts'))addSubject('contact',row);
+      for(const row of query.rows('entities'))addSubject('entity',row);
+      for(const effect of plan.effects||[]){
+        if(effect?.type==='fact'){
+          const subject=subjects.get(memoryKey(effect.subject?.type,effect.subject?.id))||effect.subject;
+          if(!subject||!effect.citation)throw Error('Daily memory has an invalid fact');
+          staged.writeFact({subject_type:subject.type,subject_id:subject.id,contact_id:subject.type==='contact'?subject.id:null,entity_id:subject.type==='entity'?subject.id:null,label:effect.kind,attribute:effect.kind,value:effect.value,valid_from:effect.date,cardinality:effect.cardinality,confidence:effect.confidence==='likely'?'likely':'confirmed',source_type:'conversation_archive',source_id:effect.citation.id,evidence_quote:effect.citation.quote,origin:'remember-what-you-said'});
+          continue;
+        }
+        if(effect?.type!=='event'||typeof effect.what!=='string'||!effect.what.trim()||!/^\d{4}-\d{2}-\d{2}$/.test(effect.day)||!effect.citation)throw Error('Daily memory has an invalid event');
+        const participants=(effect.participants||[]).map(reference=>subjects.get(memoryKey(reference?.type,reference?.id))||reference),keys=[...new Set(participants.filter(person=>person?.type==='contact'||person?.type==='entity').map(person=>memoryKey(person.type,person.id)))].sort(),id='memory-'+hash(['event',effect.citation.id,effect.what,effect.day,keys]).slice(0,20),records=[];
+        if(!view.get('moments',id))records.push(view.prepare('moments',{id,title:effect.what,description:effect.citation.quote,happened_at:effect.day,status:'past_fact',evidence_quote:effect.citation.quote,source_type:'conversation_archive',source_id:effect.citation.id,origin:'remember-what-you-said'}));
+        for(const [index,person] of participants.entries()){
+          if(person?.type==='contact'&&person.id&&!query.rows('moment_participants').some(row=>row.moment_id===id&&(row.person_id||row.contact_id)===person.id))records.push(view.prepare('moment_participants',{id:id+'-person-'+index,moment_id:id,person_id:person.id}));
+          if(person?.type==='entity'&&person.id&&!query.rows('moment_entities').some(row=>row.moment_id===id&&row.entity_id===person.id))records.push(view.prepare('moment_entities',{id:id+'-thing-'+index,moment_id:id,entity_id:person.id}));
+        }
+        if(records.length)view.commit(records);
+      }
     });
   }
   // A plain yes or no that belongs to a waiting step is answered here by the program (waiting-steps.mjs).

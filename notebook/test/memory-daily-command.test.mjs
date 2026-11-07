@@ -34,6 +34,11 @@ test('the command files a quoted notebook fact once through its model-command bo
  await run(root,{env});assert.equal(fs.readFileSync(log,'utf8').trim().split('\n').length,1,'the archive command receives a consumed row only once');
 });
 
+test('the command rejects a later notebook message that repeats a current fact',async t=>{
+ const root=workspace(t),first={id:'first-hamburg',at:'2026-11-02T12:00:00Z',text:'I moved to Hamburg on 1 November'},second={id:'second-hamburg',at:'2026-11-03T12:00:00Z',text:'I still live in Hamburg'};fs.writeFileSync(path.join(root,'NOTEBOOK.md'),notebookNoteText);archive(root,[first]);await run(root,{env:{FIXTURE_MEMORY_MODEL_RESPONSE:response(fact(first.id,first.text))}});archive(root,[first,second]);await run(root,{env:{FIXTURE_MEMORY_MODEL_RESPONSE:response(fact(second.id,second.text))}});
+ const query=new QueryService(new Store(root));assert.equal(query.rows('claims').filter(item=>item.value==='Hamburg').length,1);const receipts=fs.readdirSync(path.join(root,'routines','remember-what-you-said','runs')).flatMap(day=>fs.readdirSync(path.join(root,'routines','remember-what-you-said','runs',day)).map(name=>fs.readFileSync(path.join(root,'routines','remember-what-you-said','runs',day,name),'utf8'))).join('\n');assert.match(receipts,/"reason": "duplicate"/);
+});
+
 test('the command refuses invalid evidence, redacted names, unknown subjects, and machine prompts',async t=>{
  const root=workspace(t),row={id:'human',at:'2026-11-02T12:00:00Z',text:'I moved to Hamburg on 1 November'},machine={id:'machine',at:'2026-11-02T13:00:00Z',text:'[CRON RUN] never save this'};fs.writeFileSync(path.join(root,'NOTEBOOK.md'),notebookNoteText);new Store(root).save('contacts',{id:'acme',name:'Acme Corp'});archive(root,[row,machine]);
  const answer={people:[{id:'new-acme',name:'Acme Corp'}],facts:[{subject:{kind:'contact',id:'acme'},kind:'home-city',value:'Hamburg',citation:{id:row.id,quote:row.text}},{subject:{kind:'contact',id:'nobody-known'},kind:'home-city',value:'Hamburg',citation:{id:row.id,quote:row.text}},{subject:self,kind:'home-city',value:'Acme Corp',citation:{id:row.id,quote:row.text}},{subject:self,kind:'home-city',value:'Hamburg',citation:{id:row.id,quote:'invented'}}],events:[{what:'Visited the park',day:'2026-11-02',participants:[{kind:'contact',id:'acme'}],citation:{id:row.id,quote:row.text}}]};
@@ -59,6 +64,10 @@ test('the starter fallback deduplicates current facts and events',async t=>{
  const root=workspace(t),first={id:'first',at:'2026-11-02T12:00:00Z',text:'I moved to Hamburg on 1 November and visited the park'},second={...first,id:'second',at:'2026-11-03T12:00:00Z'};archive(root,[first]);
  const answer=row=>({people:[{id:'alex',name:'Alex'}],facts:[{subject:self,kind:'home-city',value:'Hamburg',citation:{id:row.id,quote:'I moved to Hamburg on 1 November'}}],events:[{what:'Visited the park',day:'2026-11-02',participants:[{kind:'new-person',id:'alex'}],citation:{id:row.id,quote:'visited the park'}}]});
  await run(root,{env:{FIXTURE_MEMORY_MODEL_RESPONSE:response(answer(first))}});archive(root,[first,second]);await run(root,{env:{FIXTURE_MEMORY_MODEL_RESPONSE:response(answer(second))}});assert.ok(fs.existsSync(path.join(root,'world','entities','alex.md')));assert.equal(fs.readdirSync(path.join(root,'world','claims')).length,1);assert.equal(fs.readdirSync(path.join(root,'world','events')).length,1);
+});
+
+test('the starter fallback round-trips colon-bearing fact values before deduplicating',async t=>{
+ const root=workspace(t),first={id:'first-colon',at:'2026-11-02T12:00:00Z',text:'I moved to Hamburg: Germany on 1 November'},second={id:'second-colon',at:'2026-11-03T12:00:00Z',text:'I still live in Hamburg: Germany'};const answer=row=>({facts:[{subject:self,kind:'home-city',value:'Hamburg: Germany',citation:{id:row.id,quote:row.text}}]});archive(root,[first]);await run(root,{env:{FIXTURE_MEMORY_MODEL_RESPONSE:response(answer(first))}});const claims=path.join(root,'world','claims'),written=fs.readFileSync(path.join(claims,fs.readdirSync(claims)[0]),'utf8');assert.match(written,/value: "Hamburg: Germany"/);archive(root,[first,second]);await run(root,{env:{FIXTURE_MEMORY_MODEL_RESPONSE:response(answer(second))}});assert.equal(fs.readdirSync(claims).length,1);
 });
 
 test('the starter fallback keeps a current new thing fact across archive runs',async t=>{

@@ -119,6 +119,45 @@ function release(lock,token,ino){
   if(owner?.token!==token&&!(owner===null&&ino&&stat.ino===ino))return;
   try{retrying(()=>fs.unlinkSync(lock),3000);}catch(error){if(error.code!=='ENOENT')throw error;}
 }
+function acquireLock(lock){
+  const token=randomUUID();let fd;
+  for(let tries=0;;tries++){
+    try{fd=fs.openSync(lock,'wx');break;}catch(error){
+      if(process.platform==='win32'&&['EPERM','EACCES','EBUSY'].includes(error.code))throw busy();
+      if(error.code!=='EEXIST')throw error;
+      if(tries||!takeOver(lock))throw busy();
+    }
+  }
+  let ino;
+  try{ino=fs.fstatSync(fd,{bigint:true}).ino;fs.writeFileSync(fd,JSON.stringify({pid:process.pid,thread:threadId,token,at:new Date().toISOString()}));fs.fsyncSync(fd);}
+  catch(error){try{fs.closeSync(fd);}catch{}try{release(lock,token,ino);}catch{}throw error;}
+  fs.closeSync(fd);heldLocks.add(token);return {token,ino};
+}
+async function waitForLock(lock,{signal,timeoutMs=30000}={}){
+  const until=timeoutMs===Infinity?Infinity:Date.now()+timeoutMs;
+  for(;;){
+    signal?.throwIfAborted();let seen=null;try{seen=lookAt(lock);}catch(error){if(error.code==='ENOENT'){signal?.throwIfAborted();return;}}
+    if(seen&&lockIsStale(seen.text,seen))return 'stale';
+    if(Date.now()>=until)throw Error('Workspace is still being written. Your request has not been repeated.');
+    await new Promise(resolve=>setTimeout(resolve,25));
+  }
+}
+// A durable operation outside the notebook records can use the same stale-safe
+// lock protocol as the workspace writer. Its caller chooses the lock's scope.
+export async function withFileLockAsync(lock,fn,{signal,timeoutMs=30000}={}){
+  const deadline=timeoutMs===Infinity?Infinity:Date.now()+timeoutMs;
+  for(;;){
+    signal?.throwIfAborted();let held;
+    try{held=acquireLock(lock);}catch(error){
+      if(error.code!=='WRITER_BUSY')throw error;
+      const remaining=deadline===Infinity?Infinity:deadline-Date.now();
+      if(remaining<=0)throw Error('Workspace is still being written. Your request has not been repeated.');
+      if(await waitForLock(lock,{signal,timeoutMs:remaining})==='stale')await new Promise(resolve=>setTimeout(resolve,5+Math.random()*20));
+      continue;
+    }
+    try{return await fn();}finally{heldLocks.delete(held.token);release(lock,held.token,held.ino);}
+  }
+}
 // A record's file: readable Markdown with YAML frontmatter for what a person
 // reads, JSON for machine bookkeeping (see layout.mjs). decode() throws an
 // error whose code is NOT_RECORD for an owner's own Markdown page.
@@ -214,40 +253,15 @@ export class Store {
     fs.renameSync(legacy, this.recordsRoot);
   }
   withLock(fn) {
-    const lock = path.join(this.state, 'workspace.lock'), token = randomUUID();
-    let fd;
-    for (let tries = 0; ; tries++) {
-      try { fd = fs.openSync(lock, 'wx'); break; } catch (e) {
-        // Windows answers EPERM while a just-released lock file is still held by a
-        // scanner or another process's handle: a busy workspace, retried by
-        // withLockAsync, not an error the owner sees (until 6 October 2026 it was).
-        if (process.platform === 'win32' && ['EPERM', 'EACCES', 'EBUSY'].includes(e.code)) throw busy();
-        if (e.code !== 'EEXIST') throw e;
-        if (tries || !takeOver(lock)) throw busy();
-      }
-    }
-    // The file is the lock, not its open handle, which is closed at once: a
-    // workspace move renames the folder under the lock, and Windows refuses to
-    // rename a folder that holds an open file.
-    let ino;
-    try { ino = fs.fstatSync(fd, { bigint: true }).ino; fs.writeFileSync(fd, JSON.stringify({ pid: process.pid, thread: threadId, token, at: new Date().toISOString() })); fs.fsyncSync(fd); }
-    catch (error) { try { fs.closeSync(fd); } catch {} try { release(lock, token, ino); } catch {} throw error; }
-    fs.closeSync(fd);
-    heldLocks.add(token); this.holding = (this.holding || 0) + 1;
-    try { return fn(); }
-    finally { this.holding--; heldLocks.delete(token); release(lock, token, ino); }
+    const lock=path.join(this.state,'workspace.lock'),held=acquireLock(lock);
+    this.holding=(this.holding||0)+1;
+    try{return fn();}
+    finally{this.holding--;heldLocks.delete(held.token);release(lock,held.token,held.ino);}
   }
   // Waits until the writer lock is free, or its writer gone ('stale': the next
   // acquisition takes it over).
   async waitForWriter({signal,timeoutMs=30000}={}) {
-    const lock=path.join(this.state,'workspace.lock'),until=Date.now()+timeoutMs;
-    for(;;){
-      signal?.throwIfAborted();
-      let seen=null;try{seen=lookAt(lock);}catch(error){if(error.code==='ENOENT'){signal?.throwIfAborted();return;}}
-      if(seen&&lockIsStale(seen.text,seen))return 'stale';
-      if(Date.now()>=until)throw Error('Workspace is still being written. Your request has not been repeated.');
-      await new Promise(resolve=>setTimeout(resolve,25));
-    }
+    return waitForLock(path.join(this.state,'workspace.lock'),{signal,timeoutMs});
   }
   async withLockAsync(fn,{signal,timeoutMs=30000}={}) {
     const deadline=Date.now()+timeoutMs;

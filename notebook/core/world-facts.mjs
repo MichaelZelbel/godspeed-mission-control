@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {visibleRows} from './visibility.mjs';
 import {fieldList} from './fields.mjs';
+import {parse as parseYaml} from './records/yaml.mjs';
 
 // Facts the notebook holds outside its own claims, as facts: the links between
 // people (contact_relationships) and Mission Control's own world files, one
@@ -16,25 +17,10 @@ const live = rows => rows.filter(r => !r.removed_at && !r.deleted_at);
 const isDay = s => /^\d{4}-\d{2}-\d{2}$/.test(String(s || ''));
 const humanize = attribute => { const t = String(attribute || '').replace(/[-_]+/g, ' ').trim(); return t ? t[0].toUpperCase() + t.slice(1) : t; };
 
-// world/ files are YAML front matter of plain `key: value` lines, a list as
-// `[a, b]`, then a free text (world/README.md). Nothing else is read from them.
-function scalar(value) {
-  const v = value.trim();
-  if (/^".*"$/.test(v)) { try { return JSON.parse(v); } catch { return v.slice(1, -1); } }
-  if (/^'.*'$/.test(v)) return v.slice(1, -1).replace(/''/g, "'");
-  return v === 'null' || v === '~' ? '' : v;
-}
 export function frontMatter(text) {
   const m = /^﻿?---\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n([\s\S]*))?$/.exec(String(text));
   if (!m) return null;
-  const fields = {};
-  for (const line of m[1].split(/\r?\n/)) {
-    const kv = /^([A-Za-z_][\w-]*):[ \t]*(.*)$/.exec(line);
-    if (!kv) continue;
-    const raw = kv[2].trim();
-    fields[kv[1]] = /^\[.*\]$/.test(raw) ? raw.slice(1, -1).split(',').map(scalar).filter(Boolean) : scalar(raw);
-  }
-  return {fields, body: (m[2] || '').trim()};
+  try{return {fields:parseYaml(m[1]),body:(m[2]||'').trim()};}catch{return null;}
 }
 
 // The files are read again only when one of them changed: the folder listing

@@ -1,11 +1,12 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import {hash,atomic} from './records/store.mjs';
+import {hash,atomic,withFileLockAsync} from './records/store.mjs';
 import {fieldList} from './fields.mjs';
 import {rememberWhatYouSaidRoot} from './file-policy.mjs';
 import {sameValue as sameThing} from './same-thing.mjs';
 import {MACHINE_BANNER} from '../../tools/prompt-machine-openers.mjs';
+import {parse as parseYaml,stringify as stringifyYaml} from './records/yaml.mjs';
 
 export const ROUTINE_FOLDER=rememberWhatYouSaidRoot;
 const ISO_DAY=/^\d{4}-\d{2}-\d{2}$/;
@@ -117,8 +118,9 @@ function newSubjects(items,target,terms,refusals){
 }
 const slug=value=>normal(value).replace(/ /g,'-').slice(0,80)||'item';
 const worldSubjectId=subject=>subject.type==='self'?'me':(subject.type==='new-thing'?'thing-':'')+slug(subject.name);
+function worldDocument(text){const match=/^---\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n([\s\S]*))?$/.exec(text);if(!match)return null;try{return {fields:parseYaml(match[1]),body:match[2]||''};}catch{return null;}}
 function currentFact(query,root,subject,kind,value,fields){
- if(!query){const expected=worldSubjectId(subject);try{return fs.readdirSync(path.join(root,'world','claims')).filter(n=>n.endsWith('.md')).some(name=>{const text=fs.readFileSync(path.join(root,'world','claims',name),'utf8'),front=/^---\n([\s\S]*?)\n---/m.exec(text);if(!front)return false;const item=Object.fromEntries(front[1].split('\n').map(line=>line.split(/:\s*/,2)).filter(([key])=>key));return item.subject===expected&&fields.canonical(item.attribute)===fields.canonical(kind)&&!item.valid_to&&(String(item.value).toLowerCase()===String(value).toLowerCase()||sameThing(item.value,value));});}catch{return false;}}
+ if(!query){const expected=worldSubjectId(subject);try{return fs.readdirSync(path.join(root,'world','claims')).filter(n=>n.endsWith('.md')).some(name=>{const document=worldDocument(fs.readFileSync(path.join(root,'world','claims',name),'utf8')),item=document?.fields;if(!item)return false;return item.subject===expected&&fields.canonical(item.attribute)===fields.canonical(kind)&&!item.valid_to&&(String(item.value).toLowerCase()===String(value).toLowerCase()||sameThing(item.value,value));});}catch{return false;}}
  const canonical=fields.canonical(kind);
  return query.rows('claims').some(f=>!f.valid_to&&f.subject_type===subject.type&&(f.subject_id||null)===(subject.id||null)&&fields.canonical(f.attribute)===canonical&&(String(f.value).toLowerCase()===String(value).toLowerCase()||sameThing(f.value,value)));
 }
@@ -142,7 +144,7 @@ const sameNotebookEvent=(query,left,right)=>{
  return have.length===wanted.length&&have.every((id,index)=>id===wanted[index]);
 };
 const sameEvent=(query,root,event)=>{
- if(!query){try{return fs.readdirSync(path.join(root,'world','events')).filter(n=>n.endsWith('.md')).some(name=>{const text=fs.readFileSync(path.join(root,'world','events',name),'utf8'),front=/^---\n([\s\S]*?)\n---\n([\s\S]*)$/m.exec(text);if(!front)return false;const fields=Object.fromEntries(front[1].split('\n').map(line=>line.split(/:\s*/,2)).filter(([key])=>key));return fields.date===event.day&&normal(front[2])===normal(event.what+'\n\n'+event.citation.quote);});}catch{return false;}}
+ if(!query){try{return fs.readdirSync(path.join(root,'world','events')).filter(n=>n.endsWith('.md')).some(name=>{const document=worldDocument(fs.readFileSync(path.join(root,'world','events',name),'utf8'));return document?.fields.date===event.day&&normal(document.body)===normal(event.what+'\n\n'+event.citation.quote);});}catch{return false;}}
  return query.rows('moments').some(m=>sameNotebookEvent(query,event,{day:String(m.happened_at||'').slice(0,10),what:m.title||m.description,participants:[...query.rows('moment_participants').filter(p=>p.moment_id===m.id).map(p=>({type:'contact',id:p.person_id||p.contact_id})).filter(p=>p.id),...query.rows('moment_entities').filter(p=>p.moment_id===m.id&&p.entity_id).map(p=>({type:'entity',id:p.entity_id}))]}));
 };
 const sameFact=(subject,kind,value,fact)=>fact.type==='fact'&&fact.subject.type===subject.type&&(fact.subject.id||null)===(subject.id||null)&&fact.kind===kind&&(String(fact.value).toLowerCase()===String(value).toLowerCase()||sameThing(fact.value,value));
@@ -168,8 +170,8 @@ export function validateResponse(answer,{messages,query,root,terms=[],deadlines=
  const used=new Set(accepted.flatMap(effect=>effect.type==='fact'?[effect.subject]:effect.participants).map(subject=>referenceKey(subject.type,subject.id||'')));
  return {plan:{people:newPeople.filter(row=>used.has(referenceKey('new-person',row.id))),things:newThings.filter(row=>used.has(referenceKey('new-thing',row.id))),effects:accepted},refusals};
 }
-function yaml(value){return /^[\w .,:/-]+$/.test(String(value))?String(value):JSON.stringify(String(value));}
-function worldFile(file,fields,body){mkdir(file);atomic(file,'---\n'+Object.entries(fields).filter(([,v])=>v!==null&&v!==undefined&&v!=='').map(([k,v])=>k+': '+(Array.isArray(v)?'['+v.map(yaml).join(', ')+']':yaml(v))).join('\n')+'\n---\n'+(body||'')+'\n');}
+const yamlScalar=value=>stringifyYaml({value}).trim().slice('value: '.length);
+function worldFile(file,fields,body){const front=Object.entries(fields).filter(([,v])=>v!==null&&v!==undefined&&v!=='').map(([key,value])=>Array.isArray(value)?key+': ['+value.map(yamlScalar).join(', ')+']':stringifyYaml({[key]:value}).trim()).join('\n');mkdir(file);atomic(file,'---\n'+front+'\n---\n'+(body||'')+'\n');}
 function ensureWorldSubject(root,subject,created){
  if(subject.type==='self')return 'me';const key=referenceKey(subject.type,subject.id),found=created.get(key);if(found)return found;
  const id=worldSubjectId(subject);worldFile(path.join(root,'world','entities',id+'.md'),{slug:id,origin:'remember-what-you-said',name:subject.name,type:subject.type==='new-person'?'person':'thing'},'');created.set(key,id);return id;
@@ -177,17 +179,8 @@ function ensureWorldSubject(root,subject,created){
 function writeWorld(root,plan){
  const created=new Map;for(const p of plan.people)ensureWorldSubject(root,{type:'new-person',id:p.id,name:p.name},created);for(const t of plan.things)ensureWorldSubject(root,{type:'new-thing',id:t.id,name:t.name},created);
  for(const effect of plan.effects){const index=hash([effect.citation.id,effect.type,effect.type==='fact'?[effect.subject.type,effect.subject.id,effect.kind,effect.value]:[effect.day,effect.what]]).slice(0,16);
-  if(effect.type==='fact'){const subject=ensureWorldSubject(root,effect.subject,created),file=path.join(root,'world','claims',subject+'--'+slug(effect.kind)+'--'+effect.date+'-'+index+'.md'),fields=fieldList(root);if(fields.one(effect.kind))for(const name of (()=>{try{return fs.readdirSync(path.join(root,'world','claims')).filter(n=>n.endsWith('.md'));}catch{return [];}})()){const old=path.join(root,'world','claims',name),text=fs.readFileSync(old,'utf8'),match=/^---\n([\s\S]*?)\n---\n([\s\S]*)$/m.exec(text);if(!match)continue;const front=Object.fromEntries(match[1].split('\n').map(line=>line.split(/:\s*/,2)).filter(([k])=>k));if(front.subject===subject&&fields.canonical(front.attribute)===fields.canonical(effect.kind)&&!front.valid_to&&front.value!==effect.value)worldFile(old,{...front,valid_to:effect.date},match[2].trim());}worldFile(file,{subject,origin:'remember-what-you-said',attribute:effect.kind,value:effect.value,valid_from:effect.date,confidence:effect.confidence,source:'conversation_archive:'+effect.citation.id},effect.citation.quote);}
+  if(effect.type==='fact'){const subject=ensureWorldSubject(root,effect.subject,created),file=path.join(root,'world','claims',subject+'--'+slug(effect.kind)+'--'+effect.date+'-'+index+'.md'),fields=fieldList(root);if(fields.one(effect.kind))for(const name of (()=>{try{return fs.readdirSync(path.join(root,'world','claims')).filter(n=>n.endsWith('.md'));}catch{return [];}})()){const old=path.join(root,'world','claims',name),document=worldDocument(fs.readFileSync(old,'utf8')),front=document?.fields;if(!front)continue;if(front.subject===subject&&fields.canonical(front.attribute)===fields.canonical(effect.kind)&&!front.valid_to&&front.value!==effect.value)worldFile(old,{...front,valid_to:effect.date},document.body.trim());}worldFile(file,{subject,origin:'remember-what-you-said',attribute:effect.kind,value:effect.value,valid_from:effect.date,confidence:effect.confidence,source:'conversation_archive:'+effect.citation.id},effect.citation.quote);}
   else worldFile(path.join(root,'world','events',effect.day+'-'+slug(effect.what)+'-'+index+'.md'),{date:effect.day,origin:'remember-what-you-said',participants:effect.participants.map(subject=>ensureWorldSubject(root,subject,created)),source:'conversation_archive:'+effect.citation.id},effect.what+'\n\n'+effect.citation.quote);
- }
-}
-function writeNotebook({store,query,domains},plan){
- const subjects=new Map([[referenceKey('self'),{type:'self',id:null,name:'self'}]]);
- for(const p of plan.people){const subject=notebookSubject(query,{type:'new-person',id:p.id,name:p.name});let row=findRecord(query,'contacts',p.name);if(!row)row=store.save('contacts',{id:subject.id,name:p.name,origin:'remember-what-you-said'});subjects.set(referenceKey('new-person',p.id),{type:'contact',id:row.id,name:row.name});}
- for(const t of plan.things){const subject=notebookSubject(query,{type:'new-thing',id:t.id,name:t.name});let row=findRecord(query,'entities',t.name);if(!row)row=store.save('entities',{id:subject.id,name:t.name,origin:'remember-what-you-said'});subjects.set(referenceKey('new-thing',t.id),{type:'entity',id:row.id,name:row.name});}
- for(const row of query.rows('contacts'))subjects.set(referenceKey('contact',row.id),{type:'contact',id:row.id,name:row.name});for(const row of query.rows('entities'))subjects.set(referenceKey('entity',row.id),{type:'entity',id:row.id,name:row.name});
- for(const effect of plan.effects){if(effect.type==='fact'){const subject=subjects.get(referenceKey(effect.subject.type,effect.subject.id||''))||effect.subject;domains.writeFact({subject_type:subject.type,subject_id:subject.id,contact_id:subject.type==='contact'?subject.id:null,entity_id:subject.type==='entity'?subject.id:null,label:effect.kind,attribute:effect.kind,value:effect.value,valid_from:effect.date,cardinality:effect.cardinality,confidence:effect.confidence==='likely'?'likely':'confirmed',source_type:'conversation_archive',source_id:effect.citation.id,evidence_quote:effect.citation.quote,origin:'remember-what-you-said'});}
-  else {const participants=effect.participants.map(reference=>subjects.get(referenceKey(reference.type,reference.id||''))||reference),id='memory-'+hash(['event',effect.citation.id,effect.what,effect.day,notebookParticipants(query,participants)]).slice(0,20);if(!store.get('moments',id)){const moment=store.save('moments',{id,title:effect.what,description:effect.citation.quote,happened_at:effect.day,status:'past_fact',evidence_quote:effect.citation.quote,source_type:'conversation_archive',source_id:effect.citation.id,origin:'remember-what-you-said'});for(const [i,person] of participants.entries()){if(person?.type==='contact')store.save('moment_participants',{id:id+'-person-'+i,moment_id:moment.id,person_id:person.id});if(person?.type==='entity')store.save('moment_entities',{id:id+'-thing-'+i,moment_id:moment.id,entity_id:person.id});}}}
  }
 }
 async function callDue(due,effect){if(!effect.deadline_id)return true;return due(effect.deadline_id,effect.citation.quote);}
@@ -207,6 +200,10 @@ const safeRefusals=(refusals,terms=[])=>refusals.map(({reason,citation})=>{
 
 export async function rememberWhatYouSaid({root,store=null,query=null,domains=null,model,due=async()=>true,now=new Date(),terms=redactionTerms(),deadlines=[],notebook=!!store}={}){
  if(!root||typeof model!=='function')throw Error('A workspace and model request are required');
+ const lock=rootPath(root,'run.lock');mkdir(lock);
+ return withFileLockAsync(lock,()=>rememberUnderLock({root,store,query,domains,model,due,now,terms,deadlines,notebook}),{timeoutMs:Infinity});
+}
+async function rememberUnderLock({root,store,query,domains,model,due,now,terms,deadlines,notebook}){
  const state=readState(root,now);if(!fs.existsSync(stateFile(root))){mkdir(stateFile(root));writeJson(stateFile(root),state);}const all=archivedMessages(root,{state,now});for(const row of all)if(row.ok&&redacted(row.text,terms)){row.ok=false;row.reason='redacted-message';}let completed=0,failed=0,refused=0;
  for(const row of all.filter(r=>!r.ok)){if(row.reason!=='already-read-or-invalid'&&!state.consumed.includes(row.id)){refusalReceipt(root,row,now);state.consumed.push(row.id);refused++;}}
  if(refused)writeJson(stateFile(root),state);
@@ -216,7 +213,7 @@ export async function rememberWhatYouSaid({root,store=null,query=null,domains=nu
   if(!receipt){let valid=null;for(let attempt=0;attempt<3&&!valid;attempt++)try{const reply=await model(modelRequest({messages:piece.messages,query,root,terms,deadlines}));valid=validateResponse(reply?.text??reply,{messages:piece.messages,query,root,terms,deadlines});if(!valid.plan)valid=null;}catch{}
    if(!valid){failed++;continue;}receipt={id:piece.id,message_ids:piece.messages.map(m=>m.id),plan:valid.plan,refusals:safeRefusals(valid.refusals,[...terms,...employerTerms(piece.messages)]),prepared_at:now.toISOString()};const file=receiptFile(root,piece);mkdir(file);writeJson(file,receipt);}
   try{for(const effect of receipt.plan.effects.filter(x=>x.type==='event'&&x.deadline_id)){const done=await callDue(due,effect);if(done!==true)throw Error('deadline-refused');}
-   if(notebook)writeNotebook({store,query,domains},receipt.plan);else writeWorld(root,receipt.plan);
+   if(notebook)domains.writeDailyMemory(receipt.plan);else writeWorld(root,receipt.plan);
    const file=receiptFile(root,piece);if(!fs.existsSync(file)){mkdir(file);writeJson(file,receipt);}consume(root,state,piece,file,now);completed++;
   }catch(error){failed++;if(String(error.message)==='deadline-refused')break;}
  }
