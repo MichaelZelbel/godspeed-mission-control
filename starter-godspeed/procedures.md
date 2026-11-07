@@ -6,7 +6,7 @@ Every installation schedules the nightly cleanup before any goal. The first time
 mission control a goal, in the notebook's "Start with one goal" form or in the chat, it starts
 eight other routines on the computer that runs your routines, on your own clock: the nightly goal
 research, the daily round's two, deadline reminders, the weekly check-in and the coach's
-reminders, the coaching talk preparation, Remember what you said and the daily connection check. It does this once on each
+reminders, the coaching talk preparation and Remember what you said. It does this once on each
 computer that runs your routines: if you add a server later and let it run the routines, the server
 gets the same eight, and your computer's stop. A routine you
 later remove stays removed. A computer whose assistant already ran routines of its own before this
@@ -14,8 +14,10 @@ mission control came, or for another folder, gets none of these; a one-time remi
 routine you asked for here, such as a morning brief, do not count.
 
 All eight are listed in your notebook under Settings > Routines, each with what it does, when it
-runs next, when it last ran and whether that worked. The nightly cleanup is listed there too;
-pause "Nightly cleanup" directly there, rather than through an adopted mission control's routine
+runs next, when it last ran and whether that worked. The nightly cleanup is listed there too; the
+separate daily connection check joins the list only while a connection or another routine makes it
+useful. Pause it directly there when it is present. Pause "Nightly cleanup" directly there, rather
+than through an adopted mission control's routine
 switches. "Pause" stops one until you press "Resume". You can also ask in the chat: "Pause the
 deadline reminders", "Move the weekly check-in to Saturday at six".
 

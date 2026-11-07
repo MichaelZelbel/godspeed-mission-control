@@ -28,3 +28,9 @@ test('the nightly cleanup wrapper removes an old run file and logs it',needs,t=>
  assert.ok(!fs.existsSync(old));
  assert.match(r.stderr,/research: freed .* in 1 file/);
 });
+
+test('the remembered-conversations wrapper dispatches to its configured command in the workspace',needs,t=>{
+ const {root,run}=install(t,{entries:{memory_daily:"import fs from 'node:fs';import path from 'node:path';fs.writeFileSync(path.join(process.cwd(),'memory-daily-wrapper.json'),JSON.stringify({cwd:process.cwd()}));"}});
+ const r=run(STARTING_ROUTINES.find(s=>s.key==='memory-daily').script);
+ assert.equal(r.status,0,r.stderr);assert.deepEqual(JSON.parse(fs.readFileSync(path.join(root,'memory-daily-wrapper.json'),'utf8')),{cwd:root});
+});

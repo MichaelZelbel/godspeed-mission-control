@@ -41,6 +41,12 @@ test('the command refuses invalid evidence, redacted names, unknown subjects, an
  const runs=path.join(root,'routines','remember-what-you-said','runs'),receipts=fs.readdirSync(runs).flatMap(day=>fs.readdirSync(path.join(runs,day)).map(name=>fs.readFileSync(path.join(runs,day,name),'utf8'))).join('\n');assert.match(receipts,/machine-prompt/);assert.match(receipts,/unknown-subject/);assert.match(receipts,/private-or-invalid/);assert.match(receipts,/quote/);
 });
 
+test('the command refuses employer material in every filed field and receipt',async t=>{
+ const root=workspace(t),ordinary={id:'ordinary',at:'2026-11-02T12:00:00Z',text:'I visited the park today.'},employer={id:'employer',at:'2026-11-02T12:01:00Z',text:'I met Acme Corp about a project today.'};fs.writeFileSync(path.join(root,'NOTEBOOK.md'),notebookNoteText);archive(root,[ordinary,employer]);
+ const answer={people:[{id:'person',name:'Acme Corp'}],things:[{id:'thing',name:'Acme Corp'}],facts:[{subject:self,kind:'employer',value:'a project',citation:{id:ordinary.id,quote:ordinary.text}},{subject:self,kind:'home-city',value:'Acme Corp',citation:{id:ordinary.id,quote:ordinary.text}},{subject:self,kind:'home-city',value:'Hamburg',citation:{id:employer.id,quote:employer.text}}],events:[{what:'Met Acme Corp about a project',day:'2026-11-02',participants:[],citation:{id:ordinary.id,quote:ordinary.text}},{what:'Visited the park',day:'2026-11-02',participants:[],citation:{id:employer.id,quote:employer.text}},{what:'Visited the park',day:'2026-11-02',participants:[{kind:'new-person',id:'person'},{kind:'new-thing',id:'thing'}],citation:{id:ordinary.id,quote:ordinary.text}}]};await run(root,{env:{FIXTURE_MEMORY_MODEL_RESPONSE:response(answer)}});
+ const query=new QueryService(new Store(root));assert.equal(query.rows('claims').length,0);assert.equal(query.rows('moments').length,0);assert.equal(query.rows('contacts').length,0);assert.equal(query.rows('entities').length,0);const runs=path.join(root,'routines','remember-what-you-said','runs'),receipt=fs.readdirSync(runs).flatMap(day=>fs.readdirSync(path.join(runs,day)).map(name=>fs.readFileSync(path.join(runs,day,name),'utf8'))).join('\n');assert.match(receipt,/private-or-invalid/);assert.doesNotMatch(receipt,/Acme Corp/);
+});
+
 test('the command reads the harvest redaction file before requesting a model',async t=>{
  const root=workspace(t),home=path.join(root,'home'),log=path.join(root,'model.log'),redacted={id:'redacted',at:'2026-11-02T12:00:00Z',text:'I moved to Hamburg on 1 November'},allowed={id:'allowed',at:'2026-11-02T13:00:00Z',text:'I moved to Berlin on 1 November'};fs.mkdirSync(path.join(home,'.godspeed'),{recursive:true});fs.writeFileSync(path.join(home,'.godspeed','redact.txt'),'Hamburg\n');archive(root,[redacted,allowed]);
  await run(root,{env:{HOME:home,FIXTURE_MEMORY_MODEL_LOG:log,FIXTURE_MEMORY_MODEL_RESPONSE:response({facts:[]})}});
@@ -75,18 +81,18 @@ test('the starter fallback keeps same-named people and things distinct',async t=
  assert.match(fs.readdirSync(path.join(root,'world','claims')).map(name=>fs.readFileSync(path.join(root,'world','claims',name),'utf8')).join('\n'),/subject: thing-robin/);assert.match(fs.readFileSync(path.join(root,'world','events',fs.readdirSync(path.join(root,'world','events'))[0]),'utf8'),/participants: \[thing-robin\]/);
 });
 
-test('the notebook files response-local equivalent events once',async t=>{
+test('the notebook keeps distinct same-day events with the same participants',async t=>{
  const root=workspace(t),row={id:'equivalent-events',at:'2026-11-02T12:00:00Z',text:'I met Robin at the market to discuss a bright summer project today. I met Robin at the market to discuss a changing winter plan tonight.'};fs.writeFileSync(path.join(root,'NOTEBOOK.md'),notebookNoteText);new Store(root).save('contacts',{id:'robin',name:'Robin'});archive(root,[row]);
  const answer={events:[{what:'Met Robin at the market to discuss a bright summer project today',day:'2026-11-02',participants:[{kind:'contact',id:'robin'}],citation:{id:row.id,quote:'I met Robin at the market to discuss a bright summer project today'}},{what:'Met Robin at the market to discuss a changing winter plan tonight',day:'2026-11-02',participants:[{kind:'contact',id:'robin'}],citation:{id:row.id,quote:'I met Robin at the market to discuss a changing winter plan tonight'}}]};
- await run(root,{env:{FIXTURE_MEMORY_MODEL_RESPONSE:response(answer)}});assert.equal(new QueryService(new Store(root)).rows('moments').length,1);
+ await run(root,{env:{FIXTURE_MEMORY_MODEL_RESPONSE:response(answer)}});assert.equal(new QueryService(new Store(root)).rows('moments').length,2);
 });
 
 test('the notebook files response-local people and things in equivalent events once',async t=>{
  for(const [type,collection] of [['new-person','people'],['new-thing','things']]){
-  const root=workspace(t),first={id:type+'-first',at:'2026-11-02T12:00:00Z',text:'I met Robin at the market to discuss a bright summer project today.'},second={id:type+'-second',at:'2026-11-02T18:00:00Z',text:'I met Robin at the market to discuss a changing winter plan tonight.'};fs.writeFileSync(path.join(root,'NOTEBOOK.md'),notebookNoteText);archive(root,[first]);
+  const root=workspace(t),first={id:type+'-first',at:'2026-11-02T12:00:00Z',text:'I met Robin at the market to discuss a bright summer project today.'},second={id:type+'-second',at:'2026-11-02T18:00:00Z',text:'I met Robin at the market to discuss a bright summer project tonight.'};fs.writeFileSync(path.join(root,'NOTEBOOK.md'),notebookNoteText);archive(root,[first]);
   const event=(row,id,what)=>({[collection]:[{id,name:'Robin'}],events:[{what,day:'2026-11-02',participants:[{kind:type,id}],citation:{id:row.id,quote:row.text}}]});
   await run(root,{env:{FIXTURE_MEMORY_MODEL_RESPONSE:response(event(first,'robin-first','Met Robin at the market to discuss a bright summer project today'))}});
-  archive(root,[first,second]);await run(root,{env:{FIXTURE_MEMORY_MODEL_RESPONSE:response(event(second,'robin-second','Met Robin at the market to discuss a changing winter plan tonight'))}});
+  archive(root,[first,second]);await run(root,{env:{FIXTURE_MEMORY_MODEL_RESPONSE:response(event(second,'robin-second','Met Robin at the market to discuss a bright summer project today'))}});
   assert.equal(new QueryService(new Store(root)).rows('moments').length,1,type);
  }
 });

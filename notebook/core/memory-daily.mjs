@@ -3,13 +3,15 @@ import os from 'node:os';
 import path from 'node:path';
 import {hash,atomic} from './records/store.mjs';
 import {fieldList} from './fields.mjs';
+import {rememberWhatYouSaidRoot} from './file-policy.mjs';
 import {sameValue as sameThing} from './same-thing.mjs';
 import {MACHINE_BANNER} from '../../tools/prompt-machine-openers.mjs';
 
-export const ROUTINE_FOLDER='routines/remember-what-you-said';
+export const ROUTINE_FOLDER=rememberWhatYouSaidRoot;
 const ISO_DAY=/^\d{4}-\d{2}-\d{2}$/;
 const CREDENTIAL=/(?:password|passphrase|api[ _-]?key|private[ _-]?key|\bkey\b|secret|token|credential)/i;
 const FORBIDDEN=/(?:\b(?:file name|filename|software setting|bug)\b|\b(?:employer|client)\s+(?:company|name)\b)/i;
+const EMPLOYER_NAME=/\b(?:[A-Z][\p{L}\p{N}&.-]*\s+){0,4}(?:Corp(?:oration)?|Incorporated|Inc|LLC|Ltd|Limited|GmbH|AG|PLC|LLP)\b/u;
 const normal=s=>String(s??'').normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').trim();
 const words=s=>normal(s).split(' ').filter(Boolean);
 const safeJson=(file,fallback)=>{try{return JSON.parse(fs.readFileSync(file,'utf8'));}catch{return fallback;}};
@@ -77,7 +79,8 @@ export function modelRequest({messages,query,root,terms=[],deadlines=[]}){
 const itemCitation=(item,messages)=>{const c=item?.citation;if(!c||typeof c.id!=='string'||typeof c.quote!=='string'||!c.quote)return null;const source=messages.find(m=>m.id===c.id);return source&&source.text.includes(c.quote)?{id:c.id,quote:c.quote,day:source.at.slice(0,10)}:null;};
 const referenceKey=(kind,id='')=>kind+':'+id;
 const referenceId=value=>typeof value==='string'&&/^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$/.test(value)?value:null;
-const safeName=(name,terms=[])=>typeof name==='string'&&name.trim()&&name.length<=160&&!CREDENTIAL.test(name)&&!FORBIDDEN.test(name)&&!/\b(?:employer|client)\b/i.test(name)&&!redacted(name,terms);
+const privateMaterial=(values,terms=[])=>values.some(value=>{const text=String(value||'');return CREDENTIAL.test(text)||FORBIDDEN.test(text)||/\b(?:employer|client)\b/i.test(text)||EMPLOYER_NAME.test(text)||redacted(text,terms);});
+const safeName=(name,terms=[])=>typeof name==='string'&&name.trim()&&name.length<=160&&!privateMaterial([name],terms);
 const credential=(...values)=>values.some(value=>CREDENTIAL.test(String(value||'')));
 const COMPLETION_GRAMMAR=new Set(['a','an','the','i','we','have','has','had','am','is','are','was','were','be','been','being']);
 const INCOMPLETE_ASSERTION=new Set(['will','shall','plan','plans','planned','planning','promise','promises','promised','promising','intend','intends','intended','intending','expect','expects','expected','expecting']);
@@ -132,10 +135,9 @@ const notebookParticipant=(query,subject)=>{
 };
 const notebookParticipants=(query,participants)=>[...new Set((participants||[]).map(subject=>notebookParticipant(query,subject)).filter(Boolean))].sort();
 const sameNotebookEvent=(query,left,right)=>{
- if(left.day!==right.day)return false;
- if(normal(left.what)===normal(right.what))return true;
- const opening=words(left.what).slice(0,8).join(' '),wanted=notebookParticipants(query,left.participants),have=notebookParticipants(query,right.participants);
- return !!wanted.length&&!!opening&&words(right.what).slice(0,8).join(' ')===opening&&have.length===wanted.length&&have.every((id,index)=>id===wanted[index]);
+ if(left.day!==right.day||normal(left.what)!==normal(right.what))return false;
+ const wanted=notebookParticipants(query,left.participants),have=notebookParticipants(query,right.participants);
+ return have.length===wanted.length&&have.every((id,index)=>id===wanted[index]);
 };
 const sameEvent=(query,root,event)=>{
  if(!query){try{return fs.readdirSync(path.join(root,'world','events')).filter(n=>n.endsWith('.md')).some(name=>{const text=fs.readFileSync(path.join(root,'world','events',name),'utf8'),front=/^---\n([\s\S]*?)\n---\n([\s\S]*)$/m.exec(text);if(!front)return false;const fields=Object.fromEntries(front[1].split('\n').map(line=>line.split(/:\s*/,2)).filter(([key])=>key));return fields.date===event.day&&normal(front[2])===normal(event.what+'\n\n'+event.citation.quote);});}catch{return false;}}
@@ -153,11 +155,11 @@ export function validateResponse(answer,{messages,query,root,terms=[],deadlines=
  newSubjects(people,newPeople,terms,refusals);newSubjects(things,newThings,terms,refusals);
  const subjects=knownSubjects(query,newPeople,newThings,terms),fields=fieldList(root);
  for(const item of facts){const citation=itemCitation(item,messages),subject=subjectReference(item?.subject,subjects);const kind=typeof item?.kind==='string'?item.kind.trim():'';const value=typeof item?.value==='string'?item.value.trim():'';const date=item?.date||citation?.day;
-  if(!citation){refusals.push({reason:'quote',item});continue;}if(!subject){refusals.push({reason:'unknown-subject',item,citation});continue;}if(!safeName(subject.name,terms)||!kind||!value||!calendarDay(date)||credential(kind,value,citation.quote)||FORBIDDEN.test(value)||/\b(?:employer|client)\b/i.test(kind)||redacted(value+' '+citation.quote,terms)){refusals.push({reason:'private-or-invalid',item,citation});continue;}
+  if(!citation){refusals.push({reason:'quote',item});continue;}if(!subject){refusals.push({reason:'unknown-subject',item,citation});continue;}if(!safeName(subject.name,terms)||!kind||!value||!calendarDay(date)||privateMaterial([kind,value,citation.quote],terms)){refusals.push({reason:'private-or-invalid',item,citation});continue;}
   const fact={type:'fact',subject,kind:fields.canonical(kind),value,date,cardinality:item.one_or_many==='one'?'one':'many',confidence:item.confidence==='likely'?'likely':'certain',citation};
   if(currentFact(query,root,subject,fact.kind,value,fields)||accepted.some(effect=>sameFact(subject,fact.kind,value,effect))){refusals.push({reason:'duplicate',item,citation});continue;}accepted.push(fact);
  }
- for(const item of events){const citation=itemCitation(item,messages),day=item?.day,what=typeof item?.what==='string'?item.what.trim():'',participantReferences=Array.isArray(item.participants)?item.participants:null,participants=participantReferences?.map(reference=>subjectReference(reference,subjects));if(!citation){refusals.push({reason:'quote',item});continue;}if(!participantReferences||participants.some(subject=>!subject)){refusals.push({reason:'unknown-subject',item,citation});continue;}if(!what||!calendarDay(day)||credential(what,citation.quote)||FORBIDDEN.test(what)||redacted(what+' '+citation.quote,terms)){refusals.push({reason:'private-or-invalid',item,citation});continue;}
+ for(const item of events){const citation=itemCitation(item,messages),day=item?.day,what=typeof item?.what==='string'?item.what.trim():'',participantReferences=Array.isArray(item.participants)?item.participants:null,participants=participantReferences?.map(reference=>subjectReference(reference,subjects));if(!citation){refusals.push({reason:'quote',item});continue;}if(!participantReferences||participants.some(subject=>!subject)){refusals.push({reason:'unknown-subject',item,citation});continue;}if(!what||!calendarDay(day)||privateMaterial([what,citation.quote,...participants.map(subject=>subject.name)],terms)){refusals.push({reason:'private-or-invalid',item,citation});continue;}
   const requested=typeof item.deadline_id==='string'?item.deadline_id:null,deadline=deadlines.find(d=>d?.slug===requested),deadline_id=completionEvidence(deadline,item,citation,messages)?requested:null;if(requested&&!deadline){refusals.push({reason:'unknown-deadline',item,citation});continue;}if(requested&&!deadline_id){refusals.push({reason:'deadline-evidence',item,citation});continue;}
   const event={type:'event',what,day,participants,citation,deadline_id};if(sameEvent(query,root,event)||accepted.some(effect=>sameAcceptedEvent(query,event,effect,!!query))){refusals.push({reason:'duplicate',item,citation});continue;}accepted.push(event);
  }
@@ -195,9 +197,9 @@ function consume(root,state,piece,receipt,now){const log=logFile(root,piece,now)
 function receiptMessages(receipt){return Array.isArray(receipt.message_ids)?receipt.message_ids.filter(id=>typeof id==='string').map(id=>({id})):[];}
 function completedReceipts(root){const runs=rootPath(root,'runs');let days=[];try{days=fs.readdirSync(runs);}catch{}return days.flatMap(day=>{try{return fs.readdirSync(path.join(runs,day)).filter(n=>n.endsWith('.json')).map(n=>safeJson(path.join(runs,day,n),null)).filter(r=>r?.id&&receiptMessages(r).length&&r.plan);}catch{return [];}});}
 function refusalReceipt(root,row,now){const file=rootPath(root,'runs',dayOf(now),'refused-'+hash([row.id,row.reason]).slice(0,18)+'.json');mkdir(file);if(!fs.existsSync(file))writeJson(file,{at:now.toISOString(),message_id:row.id,reason:row.reason});}
-const safeRefusals=refusals=>refusals.map(({reason,citation})=>{
+const safeRefusals=(refusals,terms=[])=>refusals.map(({reason,citation})=>{
  const receipt={reason};
- if(citation){receipt.message_id=citation.id;if(!credential(citation.quote))receipt.quote=citation.quote;}
+ if(citation){receipt.message_id=citation.id;if(!privateMaterial([citation.quote],terms))receipt.quote=citation.quote;}
  return receipt;
 });
 
@@ -210,7 +212,7 @@ export async function rememberWhatYouSaid({root,store=null,query=null,domains=nu
  const pieces=[...pending.map(r=>({...r,pending:true,messages:receiptMessages(r)})),...completedReceipts(root).map(r=>({...r,pending:true,messages:receiptMessages(r)})),...archivePieces(all)];const seen=new Set;
  for(const piece of pieces){if(seen.has(piece.id)||piece.messages.some(m=>state.consumed.includes(m.id)))continue;seen.add(piece.id);let receipt=piece.pending?piece:null;
   if(!receipt){let valid=null;for(let attempt=0;attempt<3&&!valid;attempt++)try{const reply=await model(modelRequest({messages:piece.messages,query,root,terms,deadlines}));valid=validateResponse(reply?.text??reply,{messages:piece.messages,query,root,terms,deadlines});if(!valid.plan)valid=null;}catch{}
-   if(!valid){failed++;continue;}receipt={id:piece.id,message_ids:piece.messages.map(m=>m.id),plan:valid.plan,refusals:safeRefusals(valid.refusals),prepared_at:now.toISOString()};const file=receiptFile(root,piece);mkdir(file);writeJson(file,receipt);}
+   if(!valid){failed++;continue;}receipt={id:piece.id,message_ids:piece.messages.map(m=>m.id),plan:valid.plan,refusals:safeRefusals(valid.refusals,terms),prepared_at:now.toISOString()};const file=receiptFile(root,piece);mkdir(file);writeJson(file,receipt);}
   try{for(const effect of receipt.plan.effects.filter(x=>x.type==='event'&&x.deadline_id)){const done=await callDue(due,effect);if(done!==true)throw Error('deadline-refused');}
    if(notebook)writeNotebook({store,query,domains},receipt.plan);else writeWorld(root,receipt.plan);
    const file=receiptFile(root,piece);if(!fs.existsSync(file)){mkdir(file);writeJson(file,receipt);}consume(root,state,piece,file,now);completed++;
