@@ -239,6 +239,7 @@ reads=$(grep -c read "$COUNT" 2>/dev/null)
 printf '{"sent":[%s],"requests":[]}\\n' "$sent"
 `);
   try {
+    assert.throws(()=>run('setup','--token','t','--ai-key','k'),/--notebook-port is required/);
     run('setup','--token','t','--ai-key','k','--notebook-port','49672');
     const saved=JSON.parse(fs.readFileSync(path.join(folder,'run.json'),'utf8'));
     assert.deepEqual(saved.steps.map(step=>step.success),[true,true,true,true]);

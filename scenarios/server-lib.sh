@@ -148,20 +148,20 @@ server_telegram_setup() { # [without-ai]
 }
 server_telegram_say() { # <label> <text>
   interaction_begin "$1"
-  "$NODE" "$HERE/server-telegram.mjs" say --server "$(server_container)" --evidence "$EVIDENCE" --notebook-port "$INGEST_PORT" \
+  "$NODE" "$HERE/server-telegram.mjs" say --server "$(server_container)" --evidence "$EVIDENCE" \
     --owner "$SERVER_TELEGRAM_OWNER" --label "$1" --text "$2" ||
     fail "the installed Telegram gateway did not accept $1"
   SCENARIO_INTERACTION=''
 }
 server_telegram_press() { # <label> <question text> <button label>
   interaction_begin "$1"
-  "$NODE" "$HERE/server-telegram.mjs" press --server "$(server_container)" --evidence "$EVIDENCE" --notebook-port "$INGEST_PORT" \
+  "$NODE" "$HERE/server-telegram.mjs" press --server "$(server_container)" --evidence "$EVIDENCE" \
     --owner "$SERVER_TELEGRAM_OWNER" --label "$1" --question "$2" --button "$3" ||
     fail "the installed Telegram gateway did not accept $1"
   SCENARIO_INTERACTION=''
 }
 server_telegram_snapshot() {
-  "$NODE" "$HERE/server-telegram.mjs" snapshot --server "$(server_container)" --evidence "$EVIDENCE" --notebook-port "$INGEST_PORT" ||
+  "$NODE" "$HERE/server-telegram.mjs" snapshot --server "$(server_container)" --evidence "$EVIDENCE" ||
     fail 'the installed Telegram gateway left no current evidence'
 }
 server_telegram_record() { # <target file>
@@ -171,9 +171,9 @@ server_telegram_record() { # <target file>
 server_telegram_mark() { # <label> [kind]
   interaction_begin "$1"
   if [ $# -eq 2 ]; then
-    "$NODE" "$HERE/server-telegram.mjs" mark --server "$(server_container)" --evidence "$EVIDENCE" --notebook-port "$INGEST_PORT" --label "$1" --kind "$2"
+    "$NODE" "$HERE/server-telegram.mjs" mark --server "$(server_container)" --evidence "$EVIDENCE" --label "$1" --kind "$2"
   else
-    "$NODE" "$HERE/server-telegram.mjs" mark --server "$(server_container)" --evidence "$EVIDENCE" --notebook-port "$INGEST_PORT" --label "$1"
+    "$NODE" "$HERE/server-telegram.mjs" mark --server "$(server_container)" --evidence "$EVIDENCE" --label "$1"
   fi || fail "the installed Telegram gateway left no evidence for $1"
   SCENARIO_INTERACTION=''
 }
