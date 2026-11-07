@@ -2,7 +2,7 @@
 # Shared Docker-server scenario helpers.  scenario-lib.sh must be sourced first.
 
 SERVER_DIR=${GODSPEED_SCENARIO_SERVER_DIR:-/opt/godspeed-mission-control}
-INGEST_PORT=${GODSPEED_SCENARIO_INGEST_PORT:-47831}
+INGEST_PORT=${GODSPEED_SCENARIO_INGEST_PORT:-47832}
 SERVER_SPARSE_TABLES=()
 
 # The /server installer owns the Compose project and its generated container names. Resolve the
@@ -142,7 +142,7 @@ server_telegram_setup() { # [without-ai]
   server_compose -f "$SERVER_DIR/compose.scenario-telegram.yaml" up -d --force-recreate >&2 ||
     fail 'the server could not restart with its Telegram API endpoint set to the local stand-in'
   server_healthy 300 || fail 'the Docker server is not healthy after its Telegram endpoint was set'
-  "$NODE" "$HERE/server-telegram.mjs" setup --server "$(server_container)" --evidence "$EVIDENCE" \
+  "$NODE" "$HERE/server-telegram.mjs" setup --server "$(server_container)" --evidence "$EVIDENCE" --notebook-port "$INGEST_PORT" \
     --token "$SERVER_TELEGRAM_TOKEN" --owner "$SERVER_TELEGRAM_OWNER" "${setup[@]}" ||
     fail 'the installed Docker Telegram setup did not hand the bot to its gateway'
 }
