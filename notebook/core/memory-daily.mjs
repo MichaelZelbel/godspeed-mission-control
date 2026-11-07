@@ -110,18 +110,26 @@ function newSubjects(items,target,terms,refusals){
  const seen=new Set;
  for(const item of items){const id=referenceId(item?.id);if(id&&safeName(item?.name,terms)&&!seen.has(id)){target.push({id,name:item.name.trim()});seen.add(id);}else refusals.push({reason:'private-or-invalid'});}
 }
+const slug=value=>normal(value).replace(/ /g,'-').slice(0,80)||'item';
+const worldSubjectId=subject=>subject.type==='self'?'me':(subject.type==='new-thing'?'thing-':'')+slug(subject.name);
 function currentFact(query,root,subject,kind,value,fields){
- if(!query){const expected=subject.type==='self'?'me':slug(subject.name);try{return fs.readdirSync(path.join(root,'world','claims')).filter(n=>n.endsWith('.md')).some(name=>{const text=fs.readFileSync(path.join(root,'world','claims',name),'utf8'),front=/^---\n([\s\S]*?)\n---/m.exec(text);if(!front)return false;const item=Object.fromEntries(front[1].split('\n').map(line=>line.split(/:\s*/,2)).filter(([key])=>key));return item.subject===expected&&fields.canonical(item.attribute)===fields.canonical(kind)&&!item.valid_to&&(String(item.value).toLowerCase()===String(value).toLowerCase()||sameThing(item.value,value));});}catch{return false;}}
+ if(!query){const expected=worldSubjectId(subject);try{return fs.readdirSync(path.join(root,'world','claims')).filter(n=>n.endsWith('.md')).some(name=>{const text=fs.readFileSync(path.join(root,'world','claims',name),'utf8'),front=/^---\n([\s\S]*?)\n---/m.exec(text);if(!front)return false;const item=Object.fromEntries(front[1].split('\n').map(line=>line.split(/:\s*/,2)).filter(([key])=>key));return item.subject===expected&&fields.canonical(item.attribute)===fields.canonical(kind)&&!item.valid_to&&(String(item.value).toLowerCase()===String(value).toLowerCase()||sameThing(item.value,value));});}catch{return false;}}
  const canonical=fields.canonical(kind);
  return query.rows('claims').some(f=>!f.valid_to&&f.subject_type===subject.type&&(f.subject_id||null)===(subject.id||null)&&fields.canonical(f.attribute)===canonical&&(String(f.value).toLowerCase()===String(value).toLowerCase()||sameThing(f.value,value)));
 }
+const notebookParticipants=participants=>[...new Set((participants||[]).filter(subject=>subject.type==='contact'||subject.type==='entity').map(subject=>referenceKey(subject.type,subject.id)))].sort();
+const sameNotebookEvent=(left,right)=>{
+ if(left.day!==right.day)return false;
+ if(normal(left.what)===normal(right.what))return true;
+ const opening=words(left.what).slice(0,8).join(' '),wanted=notebookParticipants(left.participants),have=notebookParticipants(right.participants);
+ return !!wanted.length&&!!opening&&words(right.what).slice(0,8).join(' ')===opening&&have.length===wanted.length&&have.every((id,index)=>id===wanted[index]);
+};
 const sameEvent=(query,root,event)=>{
  if(!query){try{return fs.readdirSync(path.join(root,'world','events')).filter(n=>n.endsWith('.md')).some(name=>{const text=fs.readFileSync(path.join(root,'world','events',name),'utf8'),front=/^---\n([\s\S]*?)\n---\n([\s\S]*)$/m.exec(text);if(!front)return false;const fields=Object.fromEntries(front[1].split('\n').map(line=>line.split(/:\s*/,2)).filter(([key])=>key));return fields.date===event.day&&normal(front[2])===normal(event.what+'\n\n'+event.citation.quote);});}catch{return false;}}
- const title=normal(event.what),opening=words(event.what).slice(0,8).join(' '),wanted=[...new Set((event.participants||[]).filter(subject=>subject.type==='contact'||subject.type==='entity').map(subject=>referenceKey(subject.type,subject.id)))].sort();
- return query.rows('moments').some(m=>{if(String(m.happened_at||'').slice(0,10)!==event.day)return false;if(normal(m.title||m.description)===title)return true;if(!wanted.length||!opening||words(m.title||m.description).slice(0,8).join(' ')!==opening)return false;const have=[...query.rows('moment_participants').filter(p=>p.moment_id===m.id).map(p=>p.person_id||p.contact_id).filter(Boolean).map(id=>referenceKey('contact',id)),...query.rows('moment_entities').filter(p=>p.moment_id===m.id&&p.entity_id).map(p=>referenceKey('entity',p.entity_id))].sort();return have.length===wanted.length&&have.every((id,i)=>id===wanted[i]);});
+ return query.rows('moments').some(m=>sameNotebookEvent(event,{day:String(m.happened_at||'').slice(0,10),what:m.title||m.description,participants:[...query.rows('moment_participants').filter(p=>p.moment_id===m.id).map(p=>({type:'contact',id:p.person_id||p.contact_id})).filter(p=>p.id),...query.rows('moment_entities').filter(p=>p.moment_id===m.id&&p.entity_id).map(p=>({type:'entity',id:p.entity_id}))]}));
 };
 const sameFact=(subject,kind,value,fact)=>fact.type==='fact'&&fact.subject.type===subject.type&&(fact.subject.id||null)===(subject.id||null)&&fact.kind===kind&&(String(fact.value).toLowerCase()===String(value).toLowerCase()||sameThing(fact.value,value));
-const sameAcceptedEvent=(event,accepted)=>accepted.type==='event'&&accepted.day===event.day&&normal(accepted.what)===normal(event.what);
+const sameAcceptedEvent=(event,accepted,notebook)=>accepted.type==='event'&&(notebook?sameNotebookEvent(event,accepted):accepted.day===event.day&&normal(accepted.what)===normal(event.what));
 export function validateResponse(answer,{messages,query,root,terms=[],deadlines=[]}={}){
  let data=answer;if(typeof data==='string')try{data=JSON.parse(data);}catch{return {plan:null,refusals:[{reason:'model-json'}]};}
  if(!data||typeof data!=='object'||Array.isArray(data))return {plan:null,refusals:[{reason:'model-shape'}]};
@@ -138,17 +146,16 @@ export function validateResponse(answer,{messages,query,root,terms=[],deadlines=
  }
  for(const item of events){const citation=itemCitation(item,messages),day=item?.day,what=typeof item?.what==='string'?item.what.trim():'',participantReferences=Array.isArray(item.participants)?item.participants:null,participants=participantReferences?.map(reference=>subjectReference(reference,subjects));if(!citation){refusals.push({reason:'quote',item});continue;}if(!participantReferences||participants.some(subject=>!subject)){refusals.push({reason:'unknown-subject',item,citation});continue;}if(!what||!calendarDay(day)||credential(what,citation.quote)||FORBIDDEN.test(what)||redacted(what+' '+citation.quote,terms)){refusals.push({reason:'private-or-invalid',item,citation});continue;}
   const requested=typeof item.deadline_id==='string'?item.deadline_id:null,deadline=deadlines.find(d=>d?.slug===requested),deadline_id=completionEvidence(deadline,item,citation,messages)?requested:null;if(requested&&!deadline){refusals.push({reason:'unknown-deadline',item,citation});continue;}if(requested&&!deadline_id){refusals.push({reason:'deadline-evidence',item,citation});continue;}
-  const event={type:'event',what,day,participants,citation,deadline_id};if(sameEvent(query,root,event)||accepted.some(effect=>sameAcceptedEvent(event,effect))){refusals.push({reason:'duplicate',item,citation});continue;}accepted.push(event);
+  const event={type:'event',what,day,participants,citation,deadline_id};if(sameEvent(query,root,event)||accepted.some(effect=>sameAcceptedEvent(event,effect,!!query))){refusals.push({reason:'duplicate',item,citation});continue;}accepted.push(event);
  }
  const used=new Set(accepted.flatMap(effect=>effect.type==='fact'?[effect.subject]:effect.participants).map(subject=>referenceKey(subject.type,subject.id||'')));
  return {plan:{people:newPeople.filter(row=>used.has(referenceKey('new-person',row.id))),things:newThings.filter(row=>used.has(referenceKey('new-thing',row.id))),effects:accepted},refusals};
 }
 function yaml(value){return /^[\w .,:/-]+$/.test(String(value))?String(value):JSON.stringify(String(value));}
 function worldFile(file,fields,body){mkdir(file);atomic(file,'---\n'+Object.entries(fields).filter(([,v])=>v!==null&&v!==undefined&&v!=='').map(([k,v])=>k+': '+(Array.isArray(v)?'['+v.map(yaml).join(', ')+']':yaml(v))).join('\n')+'\n---\n'+(body||'')+'\n');}
-const slug=value=>normal(value).replace(/ /g,'-').slice(0,80)||'item';
 function ensureWorldSubject(root,subject,created){
  if(subject.type==='self')return 'me';const key=referenceKey(subject.type,subject.id),found=created.get(key);if(found)return found;
- const id=(subject.type==='new-thing'?'thing-':'')+slug(subject.name);worldFile(path.join(root,'world','entities',id+'.md'),{slug:id,origin:'remember-what-you-said',name:subject.name,type:subject.type==='new-person'?'person':'thing'},'');created.set(key,id);return id;
+ const id=worldSubjectId(subject);worldFile(path.join(root,'world','entities',id+'.md'),{slug:id,origin:'remember-what-you-said',name:subject.name,type:subject.type==='new-person'?'person':'thing'},'');created.set(key,id);return id;
 }
 function writeWorld(root,plan){
  const created=new Map;for(const p of plan.people)ensureWorldSubject(root,{type:'new-person',id:p.id,name:p.name},created);for(const t of plan.things)ensureWorldSubject(root,{type:'new-thing',id:t.id,name:t.name},created);

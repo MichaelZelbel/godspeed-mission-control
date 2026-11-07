@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import http from 'node:http';
+import {spawn} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {Store} from '../core/records/store.mjs';
 import {QueryService} from '../core/query.mjs';
@@ -51,6 +53,13 @@ test('the starter fallback deduplicates current facts and events',async t=>{
  await run(root,{env:{FIXTURE_MEMORY_MODEL_RESPONSE:response(answer(first))}});archive(root,[first,second]);await run(root,{env:{FIXTURE_MEMORY_MODEL_RESPONSE:response(answer(second))}});assert.ok(fs.existsSync(path.join(root,'world','entities','alex.md')));assert.equal(fs.readdirSync(path.join(root,'world','claims')).length,1);assert.equal(fs.readdirSync(path.join(root,'world','events')).length,1);
 });
 
+test('the starter fallback keeps a current new thing fact across archive runs',async t=>{
+ const root=workspace(t),first={id:'first-thing',at:'2026-11-02T12:00:00Z',text:'The Robin project moved to Hamburg on 1 November'},second={...first,id:'second-thing',at:'2026-11-03T12:00:00Z'};archive(root,[first]);
+ const answer=row=>({things:[{id:'robin-project',name:'Robin project'}],facts:[{subject:{kind:'new-thing',id:'robin-project'},kind:'home-city',value:'Hamburg',citation:{id:row.id,quote:row.text}}]});
+ await run(root,{env:{FIXTURE_MEMORY_MODEL_RESPONSE:response(answer(first))}});archive(root,[first,second]);await run(root,{env:{FIXTURE_MEMORY_MODEL_RESPONSE:response(answer(second))}});
+ assert.equal(fs.readdirSync(path.join(root,'world','claims')).length,1);
+});
+
 test('the starter fallback files equivalent facts and events from one response once',async t=>{
  const root=workspace(t),first={id:'first',at:'2026-11-02T12:00:00Z',text:'I moved to Hamburg on 1 November and visited the park'},second={id:'second',at:'2026-11-02T12:01:00Z',text:'I now live in Hamburg and went to the park'};archive(root,[first,second]);
  const answer={facts:[{subject:self,kind:'home-city',value:'Hamburg',citation:{id:first.id,quote:'I moved to Hamburg on 1 November'}},{subject:self,kind:'home-city',value:'Hamburg',citation:{id:second.id,quote:'I now live in Hamburg'}}],events:[{what:'Visited the park',day:'2026-11-02',participants:[],citation:{id:first.id,quote:'visited the park'}},{what:'Visited the park',day:'2026-11-02',participants:[],citation:{id:second.id,quote:'went to the park'}}]};
@@ -64,6 +73,12 @@ test('the starter fallback keeps same-named people and things distinct',async t=
  await run(root,{env:{FIXTURE_MEMORY_MODEL_RESPONSE:response(answer)}});
  assert.ok(fs.existsSync(path.join(root,'world','entities','robin.md')));assert.ok(fs.existsSync(path.join(root,'world','entities','thing-robin.md')));
  assert.match(fs.readdirSync(path.join(root,'world','claims')).map(name=>fs.readFileSync(path.join(root,'world','claims',name),'utf8')).join('\n'),/subject: thing-robin/);assert.match(fs.readFileSync(path.join(root,'world','events',fs.readdirSync(path.join(root,'world','events'))[0]),'utf8'),/participants: \[thing-robin\]/);
+});
+
+test('the notebook files response-local equivalent events once',async t=>{
+ const root=workspace(t),row={id:'equivalent-events',at:'2026-11-02T12:00:00Z',text:'I met Robin at the market to discuss a bright summer project today. I met Robin at the market to discuss a changing winter plan tonight.'};fs.writeFileSync(path.join(root,'NOTEBOOK.md'),notebookNoteText);new Store(root).save('contacts',{id:'robin',name:'Robin'});archive(root,[row]);
+ const answer={events:[{what:'Met Robin at the market to discuss a bright summer project today',day:'2026-11-02',participants:[{kind:'contact',id:'robin'}],citation:{id:row.id,quote:'I met Robin at the market to discuss a bright summer project today'}},{what:'Met Robin at the market to discuss a changing winter plan tonight',day:'2026-11-02',participants:[{kind:'contact',id:'robin'}],citation:{id:row.id,quote:'I met Robin at the market to discuss a changing winter plan tonight'}}]};
+ await run(root,{env:{FIXTURE_MEMORY_MODEL_RESPONSE:response(answer)}});assert.equal(new QueryService(new Store(root)).rows('moments').length,1);
 });
 
 test('deadline evidence closes only a complete assertion of the stated done-when and refusal keeps its row unread',async t=>{
@@ -91,6 +106,14 @@ test('the command reports a failed archive piece when later pieces complete',asy
  const root=workspace(t),rows=Array.from({length:16},(_,index)=>({id:'piece-'+String(index).padStart(2,'0'),at:'2026-11-02T12:'+String(index).padStart(2,'0')+':00Z',text:'I recorded item '+index+' '+'.'.repeat(2900)}));archive(root,rows);
  const result=await run(root,{env:{FIXTURE_MEMORY_MODEL_FAIL_CONTAINING:'piece-00',FIXTURE_MEMORY_MODEL_RESPONSE:response({facts:[],events:[]})}});
  assert.equal(result.failed,1);assert.ok(result.completed>0);assert.equal(resultExitCode(result),1);assert.equal(resultExitCode({failed:0}),0);
+});
+
+test('the executable exits unsuccessfully when one archive piece fails',async t=>{
+ const root=workspace(t),rows=Array.from({length:16},(_,index)=>({id:'piece-'+String(index).padStart(2,'0'),at:'2026-11-02T12:'+String(index).padStart(2,'0')+':00Z',text:'I recorded item '+index+' '+'.'.repeat(2900)}));archive(root,rows);
+ const server=http.createServer(async(req,res)=>{let body='';for await(const chunk of req)body+=chunk;const request=JSON.parse(body),failed=request.messages?.[1]?.content?.includes('piece-00');res.statusCode=failed?503:200;res.end(JSON.stringify(failed?{error:{message:'fixture failure'}}:{choices:[{message:{content:response({facts:[],events:[]})}}]}));});await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));t.after(()=>new Promise(resolve=>server.close(resolve)));
+ fs.mkdirSync(path.join(root,'.godspeed'),{recursive:true});fs.writeFileSync(path.join(root,'.godspeed','provider.json'),JSON.stringify({url:'http://127.0.0.1:'+server.address().port+'/v1/chat/completions',key:'fixture-key',model:'fixture-model'}));
+ const script=fileURLToPath(new URL('../scripts/memory-daily.mjs',import.meta.url)),child=spawn(process.execPath,[script],{cwd:root,env:{...process.env,GODSPEED_WORKSPACE:root},stdio:['ignore','ignore','pipe']});let stderr='';child.stderr.on('data',chunk=>stderr+=chunk);const code=await new Promise(resolve=>child.on('close',resolve));
+ assert.equal(code,1,stderr);assert.ok(fs.readdirSync(path.join(root,'routines','remember-what-you-said','runs')).length>0,'later pieces completed');
 });
 
 test('a Windows external assistant configuration is checked instead of silently skipped',async t=>{
