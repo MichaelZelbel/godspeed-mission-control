@@ -27,10 +27,11 @@ belongs to a release he has already approved is not a new decision, and the queu
   carried into such a release, is merged without asking once the gate passes: a trusted Ready
   verdict at its exact head, CI green there, the default branch's CI not red, and a clean merge.
   Its size label does not matter, so an `archon-size-l` pull request of an approved release is
-  `clear`, and neither size nor being one part of that release's plan makes it `unclear`.
-- The other lines of the default's "Unclear" list still apply: a persisted schema, migration or
-  wire format, authentication, credentials or permissions, and a review that lists contract items
-  as not yet met are still asked.
+  `clear`.
+- Only two of the default's "Unclear" reasons are set aside for such a pull request: "Large
+  changes", and "Partial work" for being one part of that release's plan. Every other reason in the
+  default's "Unclear" list still makes it a pull request the queue asks about, including a review
+  that lists contract items as not yet met.
 - The wait rule above still wins: a pull request that waits for an earlier release's candidate
   stays `wait`, approved release or not.
 - Every other pull request keeps the pack's default.
