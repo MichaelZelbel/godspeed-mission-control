@@ -12,6 +12,7 @@ const ISO_DAY=/^\d{4}-\d{2}-\d{2}$/;
 const CREDENTIAL=/(?:password|passphrase|api[ _-]?key|private[ _-]?key|\bkey\b|secret|token|credential)/i;
 const FORBIDDEN=/(?:\b(?:file name|filename|software setting|bug)\b|\b(?:employer|client)\s+(?:company|name)\b)/i;
 const EMPLOYER_NAME=/\b(?:[A-Z][\p{L}\p{N}&.-]*\s+){0,4}(?:Corp(?:oration)?|Incorporated|Inc|LLC|Ltd|Limited|GmbH|AG|PLC|LLP)\b/u;
+const EMPLOYER_REFERENCE=/\b(?:work(?:ed|ing)?|job|career|employment|employed|start(?:ed|ing)?|begin(?:ning|ning|s)?)\b(?:\s+\p{L}+){0,4}\s+(?:at|for|with)\s+((?:[A-Z][\p{L}\p{N}&.-]*)(?:\s+[A-Z][\p{L}\p{N}&.-]*){0,4})/gu;
 const normal=s=>String(s??'').normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').trim();
 const words=s=>normal(s).split(' ').filter(Boolean);
 const safeJson=(file,fallback)=>{try{return JSON.parse(fs.readFileSync(file,'utf8'));}catch{return fallback;}};
@@ -26,6 +27,7 @@ export function redactionTerms({home=os.homedir(),env=process.env}={}){
  return [...new Set(terms.filter(t=>t.length>=3).map(t=>t.toLowerCase()))];
 }
 const redacted=(text,terms)=>terms.some(term=>String(text).toLowerCase().includes(term));
+const employerTerms=messages=>[...new Set(messages.flatMap(({text})=>[...String(text||'').matchAll(EMPLOYER_REFERENCE)].map(([,name])=>name.toLowerCase())))];
 const calendarDay=value=>{
  if(typeof value!=='string'||!ISO_DAY.test(value))return false;
  const date=new Date(value+'T00:00:00.000Z');
@@ -150,15 +152,15 @@ export function validateResponse(answer,{messages,query,root,terms=[],deadlines=
  if(['people','things','facts','events'].some(key=>data[key]!==undefined&&!Array.isArray(data[key])))return {plan:null,refusals:[{reason:'model-shape'}]};
  const people=data.people||[],things=data.things||[],facts=data.facts||[],events=data.events||[];
  if([people,things,facts,events].some(a=>a.length>100))return {plan:null,refusals:[{reason:'model-shape'}]};
- const accepted=[],refusals=[],newPeople=[],newThings=[];
- newSubjects(people,newPeople,terms,refusals);newSubjects(things,newThings,terms,refusals);
- const subjects=knownSubjects(query,newPeople,newThings,terms),fields=fieldList(root);
+ const accepted=[],refusals=[],newPeople=[],newThings=[],responseTerms=[...new Set([...terms,...employerTerms(messages)])];
+ newSubjects(people,newPeople,responseTerms,refusals);newSubjects(things,newThings,responseTerms,refusals);
+ const subjects=knownSubjects(query,newPeople,newThings,responseTerms),fields=fieldList(root);
  for(const item of facts){const citation=itemCitation(item,messages),subject=subjectReference(item?.subject,subjects);const kind=typeof item?.kind==='string'?item.kind.trim():'';const value=typeof item?.value==='string'?item.value.trim():'';const date=item?.date||citation?.day;
-  if(!citation){refusals.push({reason:'quote',item});continue;}if(!subject){refusals.push({reason:'unknown-subject',item,citation});continue;}if(!safeName(subject.name,terms)||!kind||!value||!calendarDay(date)||privateMaterial([kind,value,citation.quote],terms)){refusals.push({reason:'private-or-invalid',item,citation});continue;}
+  if(!citation){refusals.push({reason:'quote',item});continue;}if(!subject){refusals.push({reason:'unknown-subject',item,citation});continue;}if(!safeName(subject.name,responseTerms)||!kind||!value||!calendarDay(date)||privateMaterial([kind,value,citation.quote],responseTerms)){refusals.push({reason:'private-or-invalid',item,citation});continue;}
   const fact={type:'fact',subject,kind:fields.canonical(kind),value,date,cardinality:item.one_or_many==='one'?'one':'many',confidence:item.confidence==='likely'?'likely':'certain',citation};
   if(currentFact(query,root,subject,fact.kind,value,fields)||accepted.some(effect=>sameFact(subject,fact.kind,value,effect))){refusals.push({reason:'duplicate',item,citation});continue;}accepted.push(fact);
  }
- for(const item of events){const citation=itemCitation(item,messages),day=item?.day,what=typeof item?.what==='string'?item.what.trim():'',participantReferences=Array.isArray(item.participants)?item.participants:null,participants=participantReferences?.map(reference=>subjectReference(reference,subjects));if(!citation){refusals.push({reason:'quote',item});continue;}if(!participantReferences||participants.some(subject=>!subject)){refusals.push({reason:'unknown-subject',item,citation});continue;}if(!what||!calendarDay(day)||privateMaterial([what,citation.quote,...participants.map(subject=>subject.name)],terms)){refusals.push({reason:'private-or-invalid',item,citation});continue;}
+ for(const item of events){const citation=itemCitation(item,messages),day=item?.day,what=typeof item?.what==='string'?item.what.trim():'',participantReferences=Array.isArray(item.participants)?item.participants:null,participants=participantReferences?.map(reference=>subjectReference(reference,subjects));if(!citation){refusals.push({reason:'quote',item});continue;}if(!participantReferences||participants.some(subject=>!subject)){refusals.push({reason:'unknown-subject',item,citation});continue;}if(!what||!calendarDay(day)||privateMaterial([what,citation.quote,...participants.map(subject=>subject.name)],responseTerms)){refusals.push({reason:'private-or-invalid',item,citation});continue;}
   const requested=typeof item.deadline_id==='string'?item.deadline_id:null,deadline=deadlines.find(d=>d?.slug===requested),deadline_id=completionEvidence(deadline,item,citation,messages)?requested:null;if(requested&&!deadline){refusals.push({reason:'unknown-deadline',item,citation});continue;}if(requested&&!deadline_id){refusals.push({reason:'deadline-evidence',item,citation});continue;}
   const event={type:'event',what,day,participants,citation,deadline_id};if(sameEvent(query,root,event)||accepted.some(effect=>sameAcceptedEvent(query,event,effect,!!query))){refusals.push({reason:'duplicate',item,citation});continue;}accepted.push(event);
  }
@@ -184,7 +186,7 @@ function writeNotebook({store,query,domains},plan){
  for(const t of plan.things){const subject=notebookSubject(query,{type:'new-thing',id:t.id,name:t.name});let row=findRecord(query,'entities',t.name);if(!row)row=store.save('entities',{id:subject.id,name:t.name,origin:'remember-what-you-said'});subjects.set(referenceKey('new-thing',t.id),{type:'entity',id:row.id,name:row.name});}
  for(const row of query.rows('contacts'))subjects.set(referenceKey('contact',row.id),{type:'contact',id:row.id,name:row.name});for(const row of query.rows('entities'))subjects.set(referenceKey('entity',row.id),{type:'entity',id:row.id,name:row.name});
  for(const effect of plan.effects){if(effect.type==='fact'){const subject=subjects.get(referenceKey(effect.subject.type,effect.subject.id||''))||effect.subject;domains.writeFact({subject_type:subject.type,subject_id:subject.id,contact_id:subject.type==='contact'?subject.id:null,entity_id:subject.type==='entity'?subject.id:null,label:effect.kind,attribute:effect.kind,value:effect.value,valid_from:effect.date,cardinality:effect.cardinality,confidence:effect.confidence==='likely'?'likely':'confirmed',source_type:'conversation_archive',source_id:effect.citation.id,evidence_quote:effect.citation.quote,origin:'remember-what-you-said'});}
-  else {const id='memory-'+hash(['event',effect.citation.id,effect.what,effect.day]).slice(0,20);if(!store.get('moments',id)){const moment=store.save('moments',{id,title:effect.what,description:effect.citation.quote,happened_at:effect.day,status:'past_fact',evidence_quote:effect.citation.quote,source_type:'conversation_archive',source_id:effect.citation.id,origin:'remember-what-you-said'});for(const [i,reference] of effect.participants.entries()){const person=subjects.get(referenceKey(reference.type,reference.id||''));if(person?.type==='contact')store.save('moment_participants',{id:id+'-person-'+i,moment_id:moment.id,person_id:person.id});if(person?.type==='entity')store.save('moment_entities',{id:id+'-thing-'+i,moment_id:moment.id,entity_id:person.id});}}}
+  else {const participants=effect.participants.map(reference=>subjects.get(referenceKey(reference.type,reference.id||''))||reference),id='memory-'+hash(['event',effect.citation.id,effect.what,effect.day,notebookParticipants(query,participants)]).slice(0,20);if(!store.get('moments',id)){const moment=store.save('moments',{id,title:effect.what,description:effect.citation.quote,happened_at:effect.day,status:'past_fact',evidence_quote:effect.citation.quote,source_type:'conversation_archive',source_id:effect.citation.id,origin:'remember-what-you-said'});for(const [i,person] of participants.entries()){if(person?.type==='contact')store.save('moment_participants',{id:id+'-person-'+i,moment_id:moment.id,person_id:person.id});if(person?.type==='entity')store.save('moment_entities',{id:id+'-thing-'+i,moment_id:moment.id,entity_id:person.id});}}}
  }
 }
 async function callDue(due,effect){if(!effect.deadline_id)return true;return due(effect.deadline_id,effect.citation.quote);}
@@ -211,7 +213,7 @@ export async function rememberWhatYouSaid({root,store=null,query=null,domains=nu
  const pieces=[...pending.map(r=>({...r,pending:true,messages:receiptMessages(r)})),...completedReceipts(root).map(r=>({...r,pending:true,messages:receiptMessages(r)})),...archivePieces(all)];const seen=new Set;
  for(const piece of pieces){if(seen.has(piece.id)||piece.messages.some(m=>state.consumed.includes(m.id)))continue;seen.add(piece.id);let receipt=piece.pending?piece:null;
   if(!receipt){let valid=null;for(let attempt=0;attempt<3&&!valid;attempt++)try{const reply=await model(modelRequest({messages:piece.messages,query,root,terms,deadlines}));valid=validateResponse(reply?.text??reply,{messages:piece.messages,query,root,terms,deadlines});if(!valid.plan)valid=null;}catch{}
-   if(!valid){failed++;continue;}receipt={id:piece.id,message_ids:piece.messages.map(m=>m.id),plan:valid.plan,refusals:safeRefusals(valid.refusals,terms),prepared_at:now.toISOString()};const file=receiptFile(root,piece);mkdir(file);writeJson(file,receipt);}
+   if(!valid){failed++;continue;}receipt={id:piece.id,message_ids:piece.messages.map(m=>m.id),plan:valid.plan,refusals:safeRefusals(valid.refusals,[...terms,...employerTerms(piece.messages)]),prepared_at:now.toISOString()};const file=receiptFile(root,piece);mkdir(file);writeJson(file,receipt);}
   try{for(const effect of receipt.plan.effects.filter(x=>x.type==='event'&&x.deadline_id)){const done=await callDue(due,effect);if(done!==true)throw Error('deadline-refused');}
    if(notebook)writeNotebook({store,query,domains},receipt.plan);else writeWorld(root,receipt.plan);
    const file=receiptFile(root,piece);if(!fs.existsSync(file)){mkdir(file);writeJson(file,receipt);}consume(root,state,piece,file,now);completed++;
