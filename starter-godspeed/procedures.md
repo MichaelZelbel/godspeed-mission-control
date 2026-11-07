@@ -15,8 +15,8 @@ routine you asked for here, such as a morning brief, do not count.
 
 All eight are listed in your notebook under Settings > Routines, each with what it does, when it
 runs next, when it last ran and whether that worked. The nightly cleanup is listed there too; the
-separate daily connection check joins the list only while a connection or another routine makes it
-useful. Pause it directly there when it is present. Pause "Nightly cleanup" directly there, rather
+separate daily connection check is listed too and runs only while a connection or another routine
+makes it useful. Pause "Nightly cleanup" or the connection check directly there, rather
 than through an adopted mission control's routine
 switches. "Pause" stops one until you press "Resume". You can also ask in the chat: "Pause the
 deadline reminders", "Move the weekly check-in to Saturday at six".
@@ -160,7 +160,7 @@ failed twice in a row; a successful run closes that notice. Other Hermes cron sc
 create a missed-run notice, though their repeated failures still do. When everything works, it
 sends nothing. It runs no AI of its own. On a server it also reads how full the local disk is; at
 85% full it tells you once and sets a deadline, which closes itself below 80%.
-Rhythm: it joins the other eight at the notebook's next scheduling round after your first goal.
+Rhythm: it joins the eight starting routines and the nightly cleanup at the notebook's next scheduling round after your first goal.
 Every day at 05:00 your time, earlier when a morning brief set before 05:30 needs it first.
 It starts running when Telegram or Gmail is connected, a tracker has a mail rule, Health Auto
 Export has sent an accepted upload, another routine is active, or this is a server install, and

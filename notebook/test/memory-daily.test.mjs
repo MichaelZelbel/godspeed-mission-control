@@ -9,6 +9,7 @@ import {Store} from '../core/records/store.mjs';
 import {QueryService} from '../core/query.mjs';
 import {Domains} from '../core/domains.mjs';
 import {archivePieces,qualifiesMessage,rememberWhatYouSaid} from '../core/memory-daily.mjs';
+import {frontMatter} from '../core/world-facts.mjs';
 
 const now=new Date('2026-11-07T04:00:00Z');
 const workspace=t=>{const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-memory-daily-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));fs.mkdirSync(path.join(root,'prompts','archive'),{recursive:true});return root;};
@@ -124,4 +125,26 @@ test('a malformed persisted plan is never passed to daily-memory recovery',async
  const root=workspace(t),store=new Store(root),query=new QueryService(store),domains=new Domains(query),row={id:'malformed-recovery',at:'2026-11-02T12:00:00Z',text:'I moved to Hamburg on 1 November'},piece=archivePieces([{...row,ok:true}])[0];archive(root,[row]);const pending=path.join(root,'routines','remember-what-you-said','pending');fs.mkdirSync(pending,{recursive:true});fs.writeFileSync(path.join(pending,piece.id+'.json'),JSON.stringify({id:piece.id,message_ids:[row.id],plan:{people:[],things:[],effects:[{type:'fact'}]}}));
  await rememberWhatYouSaid({root,store,query,domains,notebook:true,now,model:async()=>answer(row)});
  assert.equal(query.rows('claims').length,1);assert.throws(()=>domains.writeDailyMemory({people:[],things:[],effects:[{type:'fact'}]}),/invalid plan/);
+});
+
+test('a message read before a refused deadline is not sent again when a newer message arrives',async t=>{
+ const root=workspace(t),store=new Store(root),query=new QueryService(store),domains=new Domains(query),first={id:'read-a',at:'2026-11-02T12:00:00Z',text:'I filed the tax return today. As promised.'},second={id:'read-b',at:'2026-11-03T12:00:00Z',text:'I moved to Hamburg on 1 November'},sent=[];
+ const deadline={slug:'tax',title:'Tax return',doneWhen:'I filed the tax return today'},model=async input=>{const ids=JSON.parse(input.prompt).messages.map(message=>message.id);sent.push(ids);return ids.includes('read-a')&&!sent.some((_,index)=>index>0)?{events:[{what:'Filed the tax return',day:'2026-11-02',participants:[],deadline_id:'tax',deadline_complete:true,citation:{id:'read-a',quote:'I filed the tax return today'}}]}:{events:[]};};
+ archive(root,[first]);const refused=await rememberWhatYouSaid({root,store,query,domains,notebook:true,now,deadlines:[deadline],model,due:async()=>false});assert.equal(refused.completed,0);
+ archive(root,[first,second]);const later=await rememberWhatYouSaid({root,store,query,domains,notebook:true,now,deadlines:[deadline],model,due:async()=>true});
+ assert.deepEqual(sent,[['read-a'],['read-b']],'the recovered message goes to the AI once, and only the new one is sent');assert.equal(later.completed,2);
+});
+
+test('a starter entity file is reused, not rewritten, when the routine names the same person',async t=>{
+ const root=workspace(t),entity=path.join(root,'world','entities','peter-mueller.md'),original='---\nslug: peter-mueller\nname: Peter Mueller\naliases: [Peter, Pete]\nmenerio_id: p-1\n---\nOld friend from school.\n';fs.mkdirSync(path.dirname(entity),{recursive:true});fs.writeFileSync(entity,original);
+ const row={id:'peter',at:'2026-11-02T12:00:00Z',text:'Pete just moved to Hamburg, I heard today'};archive(root,[row]);
+ for(const [name,id] of [['Peter Mueller','a'],['Pete','b']]){await rememberWhatYouSaid({root,now,model:async()=>({people:[{id,name}],facts:[{subject:{kind:'new-person',id},kind:'home-city',value:'Hamburg',date:'2026-11-02',one_or_many:'one',citation:{id:'peter',quote:'Pete just moved to Hamburg'}}]})});
+  fs.rmSync(path.join(root,'routines'),{recursive:true,force:true});}
+ assert.equal(fs.readFileSync(entity,'utf8'),original);assert.deepEqual(fs.readdirSync(path.join(root,'world','entities')),['peter-mueller.md']);
+ assert.match(fs.readdirSync(path.join(root,'world','claims'))[0],/^peter-mueller--/);
+});
+
+test('a world file the starter formats allow is read the way it was written',()=>{
+ const text='---\nsubject: me\nattribute: lives-in\nvalue: "you" said it\nnickname: *Bear*\nproject: [draft] memoir\npriority: #1 priority\nowner: null\naliases: [Peter, "Pete"]\n---\nbody\n',{fields,body}=frontMatter(text);
+ assert.deepEqual({value:fields.value,nickname:fields.nickname,project:fields.project,priority:fields.priority,owner:fields.owner,aliases:fields.aliases,body},{value:'"you" said it',nickname:'*Bear*',project:'[draft] memoir',priority:'#1 priority',owner:'',aliases:["Peter","Pete"],body:'body'});
 });

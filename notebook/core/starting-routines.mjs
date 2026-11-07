@@ -17,7 +17,8 @@ import {adoptedMissionControl} from './starter-workspace.mjs';
 // The routines a reader's first goal starts (Teach It Once, Chapters 3, 5, 8, 24, 25 and 30): the
 // nightly goal research, the daily round (two routines: one chooses the day's work, one does it),
 // deadline reminders, a weekly check-in with the coach's reminders, and since 18 October 2026 the
-// preparation of each coaching talk the night before it: seven routines in all. Until 8 October 2026
+// preparation of each coaching talk the night before it, and since 7 November 2026 (#286) the nightly
+// "Remember what you said": eight routines in all. Until 8 October 2026
 // the first goal started nothing with the original assistant: setup filed the goal and saved the
 // clock, and the book's routines never ran unless a reader built them by hand.
 //

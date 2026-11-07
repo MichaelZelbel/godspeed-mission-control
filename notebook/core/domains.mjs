@@ -16,8 +16,8 @@ import {groupContext} from './group-context.mjs';
 import {noteConnections,linkSuggestions} from './related.mjs';
 import {graphData} from './graph.mjs';
 import { slug, hash } from './records/store.mjs';
-import {dailyMemorySubjectId} from './memory-daily-identity.mjs';
-import {decodeDailyMemoryPlan} from './daily-memory-plan.mjs';
+import {dailyMemorySubjectId,normalName} from './memory-daily-identity.mjs';
+import {decodeDailyMemoryPlan,day as isDay} from './daily-memory-plan.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { Review,factSubject,factSuppressed } from './review.mjs';
@@ -206,7 +206,7 @@ export class Domains {
   }
   writeDailyMemory(plan){
     plan=decodeDailyMemoryPlan(plan);if(!plan)throw Error('Daily memory has an invalid plan');
-    const memoryKey=(type,id)=>type+':'+(id||''),sameName=(left,right)=>String(left||'').normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').trim()===String(right||'').normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').trim();
+    const memoryKey=(type,id)=>type+':'+(id||''),sameName=(left,right)=>normalName(left)===normalName(right);
     return this.store.transaction(view=>{
       const query=new QueryService(view),staged=new Domains(query),subjects=new Map([[memoryKey('self'),{type:'self',id:null,name:'self'}]]),addSubject=(type,row)=>subjects.set(memoryKey(type,row.id),{type,id:row.id,name:row.name}),create=(type,item)=>{
         if(!item||typeof item.id!=='string'||typeof item.name!=='string'||!item.name.trim())throw Error('Daily memory has an invalid subject');
@@ -224,7 +224,7 @@ export class Domains {
           staged.writeFact({subject_type:subject.type,subject_id:subject.id,contact_id:subject.type==='contact'?subject.id:null,entity_id:subject.type==='entity'?subject.id:null,label:effect.kind,attribute:effect.kind,value:effect.value,valid_from:effect.date,cardinality:effect.cardinality,confidence:effect.confidence==='likely'?'likely':'confirmed',source_type:'conversation_archive',source_id:effect.citation.id,evidence_quote:effect.citation.quote,origin:'remember-what-you-said'});
           continue;
         }
-        if(effect?.type!=='event'||typeof effect.what!=='string'||!effect.what.trim()||!/^\d{4}-\d{2}-\d{2}$/.test(effect.day)||!effect.citation)throw Error('Daily memory has an invalid event');
+        if(effect?.type!=='event'||typeof effect.what!=='string'||!effect.what.trim()||!isDay(effect.day)||!effect.citation)throw Error('Daily memory has an invalid event');
         const participants=(effect.participants||[]).map(reference=>subjects.get(memoryKey(reference?.type,reference?.id))||reference),keys=[...new Set(participants.filter(person=>person?.type==='contact'||person?.type==='entity').map(person=>memoryKey(person.type,person.id)))].sort(),id='memory-'+hash(['event',effect.citation.id,effect.what,effect.day,keys]).slice(0,20),records=[];
         if(!view.get('moments',id))records.push(view.prepare('moments',{id,title:effect.what,description:effect.citation.quote,happened_at:effect.day,status:'past_fact',evidence_quote:effect.citation.quote,source_type:'conversation_archive',source_id:effect.citation.id,origin:'remember-what-you-said'}));
         for(const [index,person] of participants.entries()){

@@ -2,10 +2,10 @@ const ISO_DAY=/^\d{4}-\d{2}-\d{2}$/;
 const ID=/^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$/;
 const SUBJECT_TYPES=new Set(['self','contact','entity','new-person','new-thing']);
 const object=value=>value&&typeof value==='object'&&!Array.isArray(value);
-const day=value=>typeof value==='string'&&ISO_DAY.test(value)&&new Date(value+'T00:00:00.000Z').toISOString().slice(0,10)===value;
-const id=value=>typeof value==='string'&&ID.test(value)?value:null;
+export const day=value=>typeof value==='string'&&ISO_DAY.test(value)&&new Date(value+'T00:00:00.000Z').toISOString().slice(0,10)===value;
+export const id=value=>typeof value==='string'&&ID.test(value)?value:null;
 const text=value=>typeof value==='string'&&value.trim()?value.trim():null;
-const name=value=>typeof value==='string'&&value.length<=160&&value.trim()?value.trim():null;
+export const name=value=>typeof value==='string'&&value.length<=160&&value.trim()?value.trim():null;
 
 function citation(value){
  if(!object(value))return null;

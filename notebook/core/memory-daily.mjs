@@ -8,17 +8,15 @@ import {sameValue as sameThing} from './same-thing.mjs';
 import {MACHINE_BANNER} from '../../tools/prompt-machine-openers.mjs';
 import {stringify as stringifyYaml} from './records/yaml.mjs';
 import {frontMatter} from './world-facts.mjs';
-import {dailyMemorySubjectId} from './memory-daily-identity.mjs';
-import {decodeDailyMemoryPlan} from './daily-memory-plan.mjs';
+import {dailyMemorySubjectId,normalName as normal} from './memory-daily-identity.mjs';
+import {decodeDailyMemoryPlan,day as calendarDay,id as referenceId,name as planName} from './daily-memory-plan.mjs';
 
 export const ROUTINE_FOLDER=rememberWhatYouSaidRoot;
-const ISO_DAY=/^\d{4}-\d{2}-\d{2}$/;
 const CREDENTIAL=/(?:password|passphrase|api[ _-]?key|private[ _-]?key|\bkey\b|secret|token|credential)/i;
 const FORBIDDEN=/(?:\b(?:file name|filename|software setting|bug)\b|\b(?:employer|client)\s+(?:company|name)\b)/i;
 const EMPLOYER_NAME=/\b(?:[A-Z][\p{L}\p{N}&.-]*\s+){0,4}(?:Corp(?:oration)?|Incorporated|Inc|LLC|Ltd|Limited|GmbH|AG|PLC|LLP)\b/u;
 const EMPLOYER_REFERENCE=/\b(?:(?:(?:work(?:ed|ing)?|job|career|employment|employed|start(?:ed|ing)?|begin(?:ning|ning|s)?)\b(?:\s+\p{L}+){0,4}\s+(?:at|for|with))|joined)\s+/giu;
 const EMPLOYER_REFERENCE_NAME=/^(?:[A-Z][\p{L}\p{N}&.-]*)(?:\s+[A-Z][\p{L}\p{N}&.-]*){0,4}/u;
-const normal=s=>String(s??'').normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').trim();
 const words=s=>normal(s).split(' ').filter(Boolean);
 const safeJson=(file,fallback)=>{try{return JSON.parse(fs.readFileSync(file,'utf8'));}catch{return fallback;}};
 const dayOf=(date,timeZone='UTC')=>new Intl.DateTimeFormat('en-CA',{timeZone}).format(date);
@@ -33,11 +31,6 @@ export function redactionTerms({home=os.homedir(),env=process.env}={}){
 }
 const redacted=(text,terms)=>terms.some(term=>String(text).toLowerCase().includes(term));
 const employerTerms=messages=>[...new Set(messages.flatMap(({text})=>{const source=String(text||'');return [...source.matchAll(EMPLOYER_REFERENCE)].map(match=>EMPLOYER_REFERENCE_NAME.exec(source.slice(match.index+match[0].length))?.[0]?.toLowerCase()).filter(Boolean);}))];
-const calendarDay=value=>{
- if(typeof value!=='string'||!ISO_DAY.test(value))return false;
- const date=new Date(value+'T00:00:00.000Z');
- return !Number.isNaN(date.getTime())&&date.toISOString().slice(0,10)===value;
-};
 export function qualifiesMessage(row,{notBefore,consumed=new Set()}={}){
  if(!row||typeof row.id!=='string'||typeof row.text!=='string'||consumed.has(row.id))return {ok:false,reason:'already-read-or-invalid'};
  const text=row.text.trim(),at=String(row.at||'');
@@ -89,9 +82,8 @@ const citationContext=(citation,messages)=>{
  return typeof source==='string'?[source]:[];
 };
 const referenceKey=(kind,id='')=>kind+':'+id;
-const referenceId=value=>typeof value==='string'&&/^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$/.test(value)?value:null;
 const privateMaterial=(values,terms=[])=>values.some(value=>{const text=String(value||'');return CREDENTIAL.test(text)||FORBIDDEN.test(text)||/\b(?:employer|client)\b/i.test(text)||EMPLOYER_NAME.test(text)||redacted(text,terms);});
-const safeName=(name,terms=[])=>typeof name==='string'&&name.trim()&&name.length<=160&&!privateMaterial([name],terms);
+const safeName=(value,terms=[])=>planName(value)!==null&&!privateMaterial([value],terms);
 const COMPLETION_GRAMMAR=new Set(['a','an','the','i','we','have','has','had','am','is','are','was','were','be','been','being']);
 const INCOMPLETE_ASSERTION=new Set(['will','shall','plan','plans','planned','planning','promise','promises','promised','promising','intend','intends','intended','intending','expect','expects','expected','expecting']);
 const completionAssertion=value=>words(value).filter(word=>!COMPLETION_GRAMMAR.has(word));
@@ -177,9 +169,17 @@ export function validateResponse(answer,{messages,query,root,terms=[],deadlines=
 }
 const yamlScalar=value=>stringifyYaml({value}).trim().slice('value: '.length);
 function worldFile(file,fields,body){const front=Object.entries(fields).filter(([,v])=>v!==null&&v!==undefined&&v!=='').map(([key,value])=>Array.isArray(value)?key+': ['+value.map(yamlScalar).join(', ')+']':stringifyYaml({[key]:value}).trim()).join('\n');mkdir(file);atomic(file,'---\n'+front+'\n---\n'+(body||'')+'\n');}
+function existingWorldEntity(root,id,name,type){
+ const folder=path.join(root,'world','entities');let names=[];try{names=fs.readdirSync(folder).filter(n=>n.endsWith('.md'));}catch{return null;}
+ const wanted=normal(name);
+ for(const file of names){const fields=frontMatter(fs.readFileSync(path.join(folder,file),'utf8'))?.fields,slugName=fields?.slug||file.replace(/\.md$/,'');
+  if(slugName===id||file===id+'.md'||(!fields?.type||fields.type===type)&&[fields?.name,...(Array.isArray(fields?.aliases)?fields.aliases:[])].some(n=>typeof n==='string'&&normal(n)===wanted))return slugName;}
+ return null;
+}
 function ensureWorldSubject(root,subject,created){
  if(subject.type==='self')return 'me';const key=referenceKey(subject.type,subject.id),found=created.get(key);if(found)return found;
- const id=worldSubjectId(subject);worldFile(path.join(root,'world','entities',id+'.md'),{slug:id,origin:'remember-what-you-said',name:subject.name,type:subject.type==='new-person'?'person':'thing'},'');created.set(key,id);return id;
+ const id=worldSubjectId(subject),existing=existingWorldEntity(root,id,subject.name,subject.type==='new-person'?'person':'thing');if(existing){created.set(key,existing);return existing;}
+ worldFile(path.join(root,'world','entities',id+'.md'),{slug:id,origin:'remember-what-you-said',name:subject.name,type:subject.type==='new-person'?'person':'thing'},'');created.set(key,id);return id;
 }
 function writeWorld(root,plan){
  const created=new Map;for(const p of plan.people)ensureWorldSubject(root,{type:'new-person',id:p.id,name:p.name},created);for(const t of plan.things)ensureWorldSubject(root,{type:'new-thing',id:t.id,name:t.name},created);
@@ -213,7 +213,8 @@ async function rememberUnderLock({root,store,query,domains,model,due,now,terms,d
  const state=readState(root,now);if(!fs.existsSync(stateFile(root))){mkdir(stateFile(root));writeJson(stateFile(root),state);}const all=archivedMessages(root,{state,now});for(const row of all)if(row.ok&&redacted(row.text,terms)){row.ok=false;row.reason='redacted-message';}let completed=0,failed=0,refused=0,deadlineRefused=false;const newlyConsumed=[];
  for(const row of all.filter(r=>!r.ok)){if(row.reason!=='already-read-or-invalid'&&!state.consumed.includes(row.id)){refusalReceipt(root,row,now);newlyConsumed.push(row.id);refused++;}}
  const pending=(()=>{try{return fs.readdirSync(rootPath(root,'pending')).filter(n=>n.endsWith('.json')).sort().map(n=>decodedReceipt(safeJson(rootPath(root,'pending',n),null))).filter(Boolean);}catch{return [];}})();
- const pieces=[...pending.map(r=>({...r,pending:true,messages:receiptMessages(r)})),...completedReceipts(root).map(r=>({...r,pending:true,messages:receiptMessages(r)})),...archivePieces(all)];const seen=new Set;
+ const recovered=[...pending,...completedReceipts(root)].map(r=>({...r,pending:true,messages:receiptMessages(r)})),held=new Set(recovered.flatMap(r=>r.messages.map(m=>m.id)));for(const row of all)if(held.has(row.id))row.ok=false;
+ const pieces=[...recovered,...archivePieces(all)];const seen=new Set;
  for(const piece of pieces){if(seen.has(piece.id)||piece.messages.some(m=>state.consumed.includes(m.id)))continue;seen.add(piece.id);let receipt=piece.pending?piece:null;
   if(!receipt){let valid=null;for(let attempt=0;attempt<3&&!valid;attempt++)try{const reply=await model(modelRequest({messages:piece.messages,query,root,terms,deadlines}));valid=validateResponse(reply?.text??reply,{messages:piece.messages,query,root,terms,deadlines});if(!valid.plan)valid=null;}catch{}
    const plan=valid&&decodeDailyMemoryPlan(valid.plan);if(!plan){failed++;continue;}receipt={id:piece.id,message_ids:piece.messages.map(m=>m.id),plan,refusals:safeRefusals(valid.refusals,piece.messages,[...terms,...employerTerms(piece.messages)]),prepared_at:now.toISOString(),applied:false};const file=receiptFile(root,piece);mkdir(file);writeJson(file,receipt);}

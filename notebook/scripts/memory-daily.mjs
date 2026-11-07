@@ -15,7 +15,7 @@ const due=fileURLToPath(new URL('../../tools/due.js',import.meta.url));
 
 const configuredModel=(root,env=process.env)=>{const {assistantFile,providerFile}=assistantConfiguration(root,{env});return !!assistantFile||fs.existsSync(providerFile);};
 const modelStatus=result=>{try{const status=JSON.parse(result.stdout);return status&&typeof status==='object'?status:null;}catch{return null;}};
-export const resultExitCode=result=>result.failed?1:0;
+export const resultExitCode=result=>result.skipped||result.success?0:1;
 
 export async function main({root:workspace=root,modelCommand=model,dueCommand=due}={}){
  const check=await runChild(process.execPath,[modelCommand,'--workspace',workspace,'--check'],{cwd:workspace,env:process.env,timeoutMs:60000,maxBytes:65536});

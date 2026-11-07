@@ -142,24 +142,24 @@ test('deadline evidence closes only a complete assertion of the stated done-when
 test('failed model and deadline-state commands do not consume archive rows, while no AI remains quiet',async t=>{
  const routine=STARTING_ROUTINES.find(item=>item.key==='memory-daily');assert.deepEqual({name:routine?.name,schedule:routine?.schedule},{name:'Remember what you said',schedule:'40 3 * * *'});
  const root=workspace(t),row={id:'retry',at:'2026-11-02T12:00:00Z',text:'I moved to Hamburg on 1 November'};archive(root,[row]);const log=path.join(root,'model.log');
- const failed=await run(root,{env:{FIXTURE_MEMORY_MODEL_FAIL:'1',FIXTURE_MEMORY_MODEL_LOG:log}});assert.equal(failed.failed,1);assert.equal(fs.readFileSync(log,'utf8').trim().split('\n').length,3);assert.deepEqual(JSON.parse(fs.readFileSync(path.join(root,'routines','remember-what-you-said','state.json'),'utf8')).consumed,[]);
+ const failed=await run(root,{env:{FIXTURE_MEMORY_MODEL_FAIL:'1',FIXTURE_MEMORY_MODEL_LOG:log}});assert.equal(failed.failed,1);assert.equal(resultExitCode(failed),1,'no piece could be read');assert.equal(fs.readFileSync(log,'utf8').trim().split('\n').length,3);assert.deepEqual(JSON.parse(fs.readFileSync(path.join(root,'routines','remember-what-you-said','state.json'),'utf8')).consumed,[]);
  await assert.rejects(run(root,{env:{FIXTURE_MEMORY_DUE_STATE_FAIL:'1',FIXTURE_MEMORY_MODEL_LOG:log}}),/deadline state/);assert.equal(fs.readFileSync(log,'utf8').trim().split('\n').length,3);
  const noAi=workspace(t);archive(noAi,[row]);const skipped=await run(noAi,{env:{FIXTURE_MEMORY_MODEL_CHECK_FAIL:'1'}});assert.equal(skipped.skipped,true);assert.ok(!fs.existsSync(path.join(noAi,'routines','remember-what-you-said','state.json')));
  fs.mkdirSync(path.join(noAi,'.godspeed'),{recursive:true});fs.writeFileSync(path.join(noAi,'.godspeed','assistant.json'),'{}');const unconfigured=await run(noAi,{env:{FIXTURE_MEMORY_MODEL_UNCONFIGURED:'1'}});assert.equal(unconfigured.skipped,true);assert.ok(!fs.existsSync(path.join(noAi,'routines','remember-what-you-said','state.json')));
 });
 
-test('the command reports a failed archive piece when later pieces complete',async t=>{
+test('the command reports success when one archive piece fails and later pieces complete',async t=>{
  const root=workspace(t),rows=Array.from({length:16},(_,index)=>({id:'piece-'+String(index).padStart(2,'0'),at:'2026-11-02T12:'+String(index).padStart(2,'0')+':00Z',text:'I recorded item '+index+' '+'.'.repeat(2900)}));archive(root,rows);
  const result=await run(root,{env:{FIXTURE_MEMORY_MODEL_FAIL_CONTAINING:'piece-00',FIXTURE_MEMORY_MODEL_RESPONSE:response({facts:[],events:[]})}});
- assert.equal(result.failed,1);assert.ok(result.completed>0);assert.equal(resultExitCode(result),1);assert.equal(resultExitCode({failed:0}),0);
+ assert.equal(result.failed,1);assert.ok(result.completed>0);assert.equal(resultExitCode(result),0,'a night that filed some pieces is not reported as failed');assert.equal(resultExitCode({skipped:true}),0);
 });
 
-test('the executable exits unsuccessfully when one archive piece fails',async t=>{
+test('the executable exits successfully when one archive piece fails and later pieces complete',async t=>{
  const root=workspace(t),rows=Array.from({length:16},(_,index)=>({id:'piece-'+String(index).padStart(2,'0'),at:'2026-11-02T12:'+String(index).padStart(2,'0')+':00Z',text:'I recorded item '+index+' '+'.'.repeat(2900)}));archive(root,rows);
  const server=http.createServer(async(req,res)=>{let body='';for await(const chunk of req)body+=chunk;const request=JSON.parse(body),failed=request.messages?.[1]?.content?.includes('piece-00');res.statusCode=failed?503:200;res.end(JSON.stringify(failed?{error:{message:'fixture failure'}}:{choices:[{message:{content:response({facts:[],events:[]})}}]}));});await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));t.after(()=>new Promise(resolve=>server.close(resolve)));
  fs.mkdirSync(path.join(root,'.godspeed'),{recursive:true});fs.writeFileSync(path.join(root,'.godspeed','provider.json'),JSON.stringify({url:'http://127.0.0.1:'+server.address().port+'/v1/chat/completions',key:'fixture-key',model:'fixture-model'}));
  const script=fileURLToPath(new URL('../scripts/memory-daily.mjs',import.meta.url)),child=spawn(process.execPath,[script],{cwd:root,env:{...process.env,GODSPEED_WORKSPACE:root},stdio:['ignore','ignore','pipe']});let stderr='';child.stderr.on('data',chunk=>stderr+=chunk);const code=await new Promise(resolve=>child.on('close',resolve));
- assert.equal(code,1,stderr);assert.ok(fs.readdirSync(path.join(root,'routines','remember-what-you-said','runs')).length>0,'later pieces completed');
+ assert.equal(code,0,stderr);assert.ok(fs.readdirSync(path.join(root,'routines','remember-what-you-said','runs')).length>0,'later pieces completed');
 });
 
 test('a Windows external assistant configuration is checked instead of silently skipped',async t=>{
@@ -174,4 +174,20 @@ test('malformed successful deadline state stops before a model request or cursor
   await assert.rejects(run(root,{env:{FIXTURE_MEMORY_DUE_STATE:state,FIXTURE_MEMORY_MODEL_LOG:log}}),/deadline state/);
   assert.ok(!fs.existsSync(log));assert.ok(!fs.existsSync(path.join(root,'routines','remember-what-you-said','state.json')));
  }
+});
+
+test('the command closes an older world home city without a notebook and keeps its words',async t=>{
+ const root=workspace(t),row={id:'hamburg',at:'2026-11-01T12:00:00Z',text:'I moved to Hamburg on 1 November'},claims=path.join(root,'world','claims');fs.mkdirSync(claims,{recursive:true});
+ fs.writeFileSync(path.join(claims,'me--lives-in--2026-01-01.md'),'---\nsubject: me\nattribute: lives-in\nvalue: "Kiel"\nvalid_from: 2026-01-01\n---\nI live in Kiel.\n');archive(root,[row]);
+ const result=await run(root,{env:{FIXTURE_MEMORY_MODEL_RESPONSE:response(fact(row.id,row.text))}});assert.equal(result.completed,1);
+ const files=fs.readdirSync(claims).map(name=>fs.readFileSync(path.join(claims,name),'utf8'));assert.equal(files.length,2);
+ const kiel=files.find(text=>/Kiel/.test(text)),hamburg=files.find(text=>/Hamburg/.test(text));
+ assert.match(kiel,/valid_to: 2026-11-01/);assert.match(kiel,/I live in Kiel\./);assert.doesNotMatch(hamburg,/valid_to/);assert.match(hamburg,/I moved to Hamburg on 1 November/);
+});
+
+test('the command refuses a fact naming a redacted term the cited message does not contain',async t=>{
+ const root=workspace(t),row={id:'human',at:'2026-11-02T12:00:00Z',text:'I moved to Hamburg on 1 November'};fs.writeFileSync(path.join(root,'NOTEBOOK.md'),notebookNoteText);archive(root,[row]);
+ const result=await run(root,{env:{GODSPEED_REDACT_TERMS:'Bluebird',FIXTURE_MEMORY_MODEL_RESPONSE:response(fact(row.id,row.text,'Bluebird'))}});assert.equal(result.completed,1);
+ assert.equal(new QueryService(new Store(root)).rows('claims').length,0);
+ const runs=path.join(root,'routines','remember-what-you-said','runs'),receipts=fs.readdirSync(runs).flatMap(day=>fs.readdirSync(path.join(runs,day)).map(name=>fs.readFileSync(path.join(runs,day,name),'utf8'))).join('\n');assert.match(receipts,/private-or-invalid/);assert.doesNotMatch(receipts,/Bluebird/i);
 });
