@@ -149,7 +149,7 @@ export async function addonModel({root,input,describe=false,spawnProcess}={}){
  const execute=async()=>{
   if(connection.kind==='hermes'){
    // The helper tries the main connection, then the backup the person connected (addon-model.py).
-   const parsed=await runHermesHelper({connection,root,request,deadline,spawnProcess});
+   let parsed;try{parsed=await runHermesHelper({connection,root,request,deadline,spawnProcess});}catch(error){if(describe&&error.loaded&&error.reason==='model')return {configured:false};throw error;}
    if(!describe){if(parsed.backup){noteMainFailed(connection.state,Error('The main connection did not answer an add-on request'));noteBackupAnswered(connection.state,{provider:parsed.provider,model:parsed.model});}else noteMainAnswered(connection.state);}
    return parsed;
   }

@@ -14,9 +14,11 @@ const model=fileURLToPath(new URL('../bin/godspeed-model.mjs',import.meta.url));
 const due=fileURLToPath(new URL('../../tools/due.js',import.meta.url));
 
 const configuredModel=(root,env=process.env)=>{const {assistantFile,providerFile}=assistantConfiguration(root,{env});return !!assistantFile||fs.existsSync(providerFile);};
+const modelStatus=result=>{try{const status=JSON.parse(result.stdout);return status&&typeof status==='object'?status:null;}catch{return null;}};
 
 export async function main({root:workspace=root,modelCommand=model,dueCommand=due}={}){
  const check=await runChild(process.execPath,[modelCommand,'--workspace',workspace,'--check'],{cwd:workspace,env:process.env,timeoutMs:60000,maxBytes:65536});
+ if(check.code===0&&modelStatus(check)?.configured===false)return {skipped:true};
  if(check.code!==0){if(!configuredModel(workspace))return {skipped:true};throw Error('The configured Godspeed model could not be checked');}
  const notebook=hasNotebookNote(workspace),store=notebook?new Store(workspace):null,query=store?new QueryService(store):null,domains=query?new Domains(query):null;
  const request=async input=>{const result=await runChild(process.execPath,[modelCommand,'--workspace',workspace],{cwd:workspace,env:process.env,input:JSON.stringify(input),timeoutMs:245000,maxBytes:1024*1024});if(result.code!==0)throw Error('model failed');return JSON.parse(result.stdout);};

@@ -1173,7 +1173,7 @@ echo "$A81" | grep -q 'Lupin seed' && ok "82 a Hermes home named in .godspeed/as
 # 83 to 85. The command runs where a reader is: by name through the harvester (which finds a Python
 #     that works, Hermes' own included), and on Windows through its .cmd.
 if command -v node >/dev/null 2>&1; then
-  B83="$W/bin83"; mkdir -p "$B83"; cp "$ARC" "$HERE/prompt-harvest.js" "$HERE/unattended-git.cjs" "$HERE/mc-prompt-archive.cmd" "$B83/"; chmod +x "$B83/mc-prompt-archive"
+  B83="$W/bin83"; mkdir -p "$B83"; cp "$ARC" "$HERE/prompt-machine-openers.json" "$HERE/prompt-harvest.js" "$HERE/unattended-git.cjs" "$HERE/mc-prompt-archive.cmd" "$B83/"; chmod +x "$B83/mc-prompt-archive"
   NODE_DIR83="$(dirname "$(command -v node)")"
   S83="$( unset GODSPEED_DIR GODSPEED_WORKSPACE; export HOME="$H7" GODSPEED_HOME="$H7" USERPROFILE="$H7"
     cd "$G7" && MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' "$B83/mc-prompt-archive" search Larkspur 2>&1 )"

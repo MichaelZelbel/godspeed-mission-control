@@ -4,16 +4,16 @@
 
 Every installation schedules the nightly cleanup before any goal. The first time you give your
 mission control a goal, in the notebook's "Start with one goal" form or in the chat, it starts
-nine other routines on the computer that runs your routines, on your own clock: the nightly goal
+eight other routines on the computer that runs your routines, on your own clock: the nightly goal
 research, the daily round's two, deadline reminders, the weekly check-in and the coach's
 reminders, the coaching talk preparation, Remember what you said and the daily connection check. It does this once on each
 computer that runs your routines: if you add a server later and let it run the routines, the server
-gets the same nine, and your computer's stop. A routine you
+gets the same eight, and your computer's stop. A routine you
 later remove stays removed. A computer whose assistant already ran routines of its own before this
 mission control came, or for another folder, gets none of these; a one-time reminder, and a
 routine you asked for here, such as a morning brief, do not count.
 
-All nine are listed in your notebook under Settings > Routines, each with what it does, when it
+All eight are listed in your notebook under Settings > Routines, each with what it does, when it
 runs next, when it last ran and whether that worked. The nightly cleanup is listed there too;
 pause "Nightly cleanup" directly there, rather than through an adopted mission control's routine
 switches. "Pause" stops one until you press "Resume". You can also ask in the chat: "Pause the
@@ -179,7 +179,7 @@ The installer can start a separate notebook service at sign-in on Windows or thr
 
 Once private file synchronization is explicitly configured, the notebook checks it once a minute and after a durable file change. Automatic, manual and notebook connector requests share one synchronization worker. Slow Git network requests run in that worker without holding the local writer lock. Local commits and incoming changes retain the lock, and edits made during upload remain pending for the next cycle. Stopping the notebook terminates the synchronization process tree. File conflicts keep the original and both edited versions; a binary file retains exact bytes and can be resolved by choosing a saved version.
 
-These are installation mechanisms, not adopted personal goals. Personal routines are the nine first-goal routines above, the nightly cleanup scheduled before a goal, and the ones you add in the chat or under Settings > Routines; their owner, next run, last run and pause state remain visible there. No routine is claimed tested merely because this description is packaged.
+These are installation mechanisms, not adopted personal goals. Personal routines are the eight first-goal routines above, the nightly cleanup scheduled before a goal, and the ones you add in the chat or under Settings > Routines; their owner, next run, last run and pause state remain visible there. No routine is claimed tested merely because this description is packaged.
 
 ## Goal decisions and approved local work
 

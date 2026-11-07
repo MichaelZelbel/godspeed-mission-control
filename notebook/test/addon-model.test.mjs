@@ -233,6 +233,7 @@ test('the installer\'s check says whether Hermes loads, through its own Python o
  assert.deepEqual(await check({[f.managed]:described}),{loads:true,direct:true,configured:true,calls:[f.managed]});
  assert.deepEqual(await check({[f.managed]:notLoaded,[f.venv]:described}),{loads:true,direct:false,configured:true,calls:[f.managed,f.venv]});
  assert.deepEqual(await check({[f.managed]:unchosen}),{loads:true,direct:true,configured:false,calls:[f.managed]},'no model chosen yet is no broken Hermes');
+ assert.deepEqual(await addonModel({root:f.root,describe:true,spawnProcess:spawnBy({[f.managed]:unchosen},[])}),{configured:false},'an unconfigured Hermes is described without being treated as a broken connection');
  assert.deepEqual(await check({[f.managed]:notLoaded,[f.venv]:notLoaded}),{loads:false,why:'the Python module ruamel is missing',calls:[f.managed,f.venv]});
  const asked=[];await assistantCheck({root:f.root,executable:f.executable,home:f.home,spawnProcess:fakeSpawn(described[1],{onSpawn:c=>asked.push(c.input)})});
  assert.deepEqual(asked,[{describe:true}]);
