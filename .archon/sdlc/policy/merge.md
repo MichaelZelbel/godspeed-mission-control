@@ -24,16 +24,12 @@ belongs to a release he has already approved is not a new decision, and the queu
 
 - A pull request whose linked issue's body names a release directory
   `releases/godspeed-<version>-<slug>` in godspeed-dev whose plan is approved, or says the item was
-  carried into such a release, is merged without asking once the gate passes: a trusted Ready
-  verdict at its exact head, CI green there, the default branch's CI not red, and a clean merge.
-  Its size label does not matter.
+  carried into such a release, is merged without asking once the default's gate and its "Before a
+  merge" rules are met. Its size label does not matter.
 - To decide it, take the default's "Unclear" reasons that apply to the pull request and set aside
   exactly two: "Large changes", and "Partial work" for being one part of that release's plan. If
   no reason is left, the pull request is `clear`, so an `archon-size-l` pull request of an approved
-  release merges. If any reason is left, the queue asks, as the default says: a persisted schema,
-  migration or stored or wire format, authentication, credentials or permissions, a review that
-  lists contract items as not yet met, or anything a release or the project's direction depends on
-  without a ruling.
+  release merges. If any reason is left, the queue asks, as the default says.
 - The wait rule above still wins: a pull request that waits for an earlier release's candidate
   stays `wait`, approved release or not.
 - Every other pull request keeps the pack's default.
