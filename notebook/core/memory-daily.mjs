@@ -12,7 +12,8 @@ const ISO_DAY=/^\d{4}-\d{2}-\d{2}$/;
 const CREDENTIAL=/(?:password|passphrase|api[ _-]?key|private[ _-]?key|\bkey\b|secret|token|credential)/i;
 const FORBIDDEN=/(?:\b(?:file name|filename|software setting|bug)\b|\b(?:employer|client)\s+(?:company|name)\b)/i;
 const EMPLOYER_NAME=/\b(?:[A-Z][\p{L}\p{N}&.-]*\s+){0,4}(?:Corp(?:oration)?|Incorporated|Inc|LLC|Ltd|Limited|GmbH|AG|PLC|LLP)\b/u;
-const EMPLOYER_REFERENCE=/\b(?:(?:work(?:ed|ing)?|job|career|employment|employed|start(?:ed|ing)?|begin(?:ning|ning|s)?)\b(?:\s+\p{L}+){0,4}\s+(?:at|for|with)|joined)\s+((?:[A-Z][\p{L}\p{N}&.-]*)(?:\s+[A-Z][\p{L}\p{N}&.-]*){0,4})/gu;
+const EMPLOYER_REFERENCE=/\b(?:(?:(?:work(?:ed|ing)?|job|career|employment|employed|start(?:ed|ing)?|begin(?:ning|ning|s)?)\b(?:\s+\p{L}+){0,4}\s+(?:at|for|with))|joined)\s+/giu;
+const EMPLOYER_REFERENCE_NAME=/^(?:[A-Z][\p{L}\p{N}&.-]*)(?:\s+[A-Z][\p{L}\p{N}&.-]*){0,4}/u;
 const normal=s=>String(s??'').normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').trim();
 const words=s=>normal(s).split(' ').filter(Boolean);
 const safeJson=(file,fallback)=>{try{return JSON.parse(fs.readFileSync(file,'utf8'));}catch{return fallback;}};
@@ -27,7 +28,7 @@ export function redactionTerms({home=os.homedir(),env=process.env}={}){
  return [...new Set(terms.filter(t=>t.length>=3).map(t=>t.toLowerCase()))];
 }
 const redacted=(text,terms)=>terms.some(term=>String(text).toLowerCase().includes(term));
-const employerTerms=messages=>[...new Set(messages.flatMap(({text})=>[...String(text||'').matchAll(EMPLOYER_REFERENCE)].map(([,name])=>name.toLowerCase())))];
+const employerTerms=messages=>[...new Set(messages.flatMap(({text})=>{const source=String(text||'');return [...source.matchAll(EMPLOYER_REFERENCE)].map(match=>EMPLOYER_REFERENCE_NAME.exec(source.slice(match.index+match[0].length))?.[0]?.toLowerCase()).filter(Boolean);}))];
 const calendarDay=value=>{
  if(typeof value!=='string'||!ISO_DAY.test(value))return false;
  const date=new Date(value+'T00:00:00.000Z');
