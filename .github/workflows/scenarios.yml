@@ -829,10 +829,136 @@ jobs:
         if: failure()
         run: 'grep -qE "^(PASS|FAIL) connection-check:" "$RUNNER_TEMP/verdict" 2>/dev/null || echo "FAIL connection-check: it stopped before its own verdict (its step log says how)" | tee -a "$GITHUB_STEP_SUMMARY"'
 
+  # The scenarios of 2.0.0-beta.20 (releases/godspeed-2.0.0-beta.20-nothing-private-left/plan.md,
+  # "Proving scenarios" 2 to 4), and the first-day proof carried over from beta.18.1's plan (#275).
+  workouts-from-hevy:
+    name: Docker and Linux import made-up Hevy workouts
+    needs: stage
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.stage || github.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        if: ${{ !inputs.stage }}
+        with:
+          name: run-stage
+          path: ${{ runner.temp }}/run-stage
+      - name: The scenario, the stage's own copy of it
+        shell: bash
+        run: bash scenarios/workouts-from-hevy.sh "$STAGE_REF" | tee "$RUNNER_TEMP/verdict"
+      - name: Keep what the scenario saw
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: workouts-from-hevy-evidence
+          path: ${{ runner.temp }}/workouts-from-hevy
+          if-no-files-found: ignore
+      - name: Say so when it stopped before its own verdict
+        if: failure()
+        run: 'grep -qE "^(PASS|FAIL) workouts-from-hevy:" "$RUNNER_TEMP/verdict" 2>/dev/null || echo "FAIL workouts-from-hevy: it stopped before its own verdict (its step log says how)" | tee -a "$GITHUB_STEP_SUMMARY"'
+
+  day-becomes-facts:
+    name: an overnight remembered-facts routine files one day once
+    needs: stage
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      GODSPEED_SCENARIO_AI_KEY: ${{ secrets.GODSPEED_SCENARIO_AI_KEY }}
+      GODSPEED_SCENARIO_AI_URL: ${{ vars.GODSPEED_SCENARIO_AI_URL }}
+      GODSPEED_SCENARIO_AI_MODEL: ${{ vars.GODSPEED_SCENARIO_AI_MODEL }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.stage || github.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        if: ${{ !inputs.stage }}
+        with:
+          name: run-stage
+          path: ${{ runner.temp }}/run-stage
+      - name: The scenario, the stage's own copy of it
+        shell: bash
+        run: bash scenarios/day-becomes-facts.sh "$STAGE_REF" | tee "$RUNNER_TEMP/verdict"
+      - name: Keep what the scenario saw
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: day-becomes-facts-evidence
+          path: ${{ runner.temp }}/day-becomes-facts
+          if-no-files-found: ignore
+      - name: Say so when it stopped before its own verdict
+        if: failure()
+        run: 'grep -qE "^(PASS|FAIL) day-becomes-facts:" "$RUNNER_TEMP/verdict" 2>/dev/null || echo "FAIL day-becomes-facts: it stopped before its own verdict (its step log says how)" | tee -a "$GITHUB_STEP_SUMMARY"'
+
+  hermes-update-rollback:
+    name: a Hermes update keeps good and rolls back broken releases
+    needs: stage
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.stage || github.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        if: ${{ !inputs.stage }}
+        with:
+          name: run-stage
+          path: ${{ runner.temp }}/run-stage
+      - name: The scenario, the stage's own copy of it
+        shell: bash
+        run: bash scenarios/hermes-update-rollback.sh "$STAGE_REF" | tee "$RUNNER_TEMP/verdict"
+      - name: Keep what the scenario saw
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hermes-update-rollback-evidence
+          path: ${{ runner.temp }}/hermes-update-rollback
+          if-no-files-found: ignore
+      - name: Say so when it stopped before its own verdict
+        if: failure()
+        run: 'grep -qE "^(PASS|FAIL) hermes-update-rollback:" "$RUNNER_TEMP/verdict" 2>/dev/null || echo "FAIL hermes-update-rollback: it stopped before its own verdict (its step log says how)" | tee -a "$GITHUB_STEP_SUMMARY"'
+
+  first-day:
+    name: a fresh Docker server turns a first goal into useful work and a matching Telegram brief
+    needs: stage
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      GODSPEED_SCENARIO_AI_KEY: ${{ secrets.GODSPEED_SCENARIO_AI_KEY }}
+      GODSPEED_SCENARIO_AI_URL: ${{ vars.GODSPEED_SCENARIO_AI_URL }}
+      GODSPEED_SCENARIO_AI_MODEL: ${{ vars.GODSPEED_SCENARIO_AI_MODEL }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.stage || github.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        if: ${{ !inputs.stage }}
+        with:
+          name: run-stage
+          path: ${{ runner.temp }}/run-stage
+      - name: The scenario, the stage's own copy of it
+        shell: bash
+        run: bash scenarios/first-day.sh "$STAGE_REF" | tee "$RUNNER_TEMP/verdict"
+      - name: Keep what the scenario saw (the work, the brief, every request)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: first-day-evidence
+          path: ${{ runner.temp }}/first-day
+          if-no-files-found: ignore
+      - name: Say so when it stopped before its own verdict
+        if: failure()
+        run: 'grep -qE "^(PASS|FAIL) first-day:" "$RUNNER_TEMP/verdict" 2>/dev/null || echo "FAIL first-day: it stopped before its own verdict (its step log says how)" | tee -a "$GITHUB_STEP_SUMMARY"'
+
   verdict:
     name: the verdict
     if: always()
-    needs: [stage, linux-install, mac-install, docker-server, linux-update, settings-on-install, voice, update-keeps-everything, reminder-closed-elsewhere, reminders-move-keeps-everything, two-machines-move-at-once, late-reminder-file, closed-offline-on-both, reminder-from-settings, charm-challenge, no-video-skills-by-default, update-removes-only-unchanged-skills, briefing-breaks-a-rule, windows-old-names-move, telegram-language, brief-asked-in-chat, talk-prep-honest, no-question-he-cannot-judge, plain-yes, what-was-that, connection-check]
+    needs: [stage, linux-install, mac-install, docker-server, linux-update, settings-on-install, voice, update-keeps-everything, reminder-closed-elsewhere, reminders-move-keeps-everything, two-machines-move-at-once, late-reminder-file, closed-offline-on-both, reminder-from-settings, charm-challenge, no-video-skills-by-default, update-removes-only-unchanged-skills, briefing-breaks-a-rule, windows-old-names-move, telegram-language, brief-asked-in-chat, talk-prep-honest, no-question-he-cannot-judge, plain-yes, what-was-that, connection-check, workouts-from-hevy, day-becomes-facts, hermes-update-rollback, first-day]
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -870,6 +996,10 @@ jobs:
         plain-yes=${{ needs.plain-yes.result }}
         what-was-that=${{ needs.what-was-that.result }}
         connection-check=${{ needs.connection-check.result }}
+        workouts-from-hevy=${{ needs.workouts-from-hevy.result }}
+        day-becomes-facts=${{ needs.day-becomes-facts.result }}
+        hermes-update-rollback=${{ needs.hermes-update-rollback.result }}
+        first-day=${{ needs.first-day.result }}
     steps:
       - uses: actions/checkout@v4
         if: github.event_name == 'schedule'
