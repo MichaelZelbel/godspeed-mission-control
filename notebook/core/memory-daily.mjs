@@ -81,7 +81,6 @@ const referenceKey=(kind,id='')=>kind+':'+id;
 const referenceId=value=>typeof value==='string'&&/^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$/.test(value)?value:null;
 const privateMaterial=(values,terms=[])=>values.some(value=>{const text=String(value||'');return CREDENTIAL.test(text)||FORBIDDEN.test(text)||/\b(?:employer|client)\b/i.test(text)||EMPLOYER_NAME.test(text)||redacted(text,terms);});
 const safeName=(name,terms=[])=>typeof name==='string'&&name.trim()&&name.length<=160&&!privateMaterial([name],terms);
-const credential=(...values)=>values.some(value=>CREDENTIAL.test(String(value||'')));
 const COMPLETION_GRAMMAR=new Set(['a','an','the','i','we','have','has','had','am','is','are','was','were','be','been','being']);
 const INCOMPLETE_ASSERTION=new Set(['will','shall','plan','plans','planned','planning','promise','promises','promised','promising','intend','intends','intended','intending','expect','expects','expected','expecting']);
 const completionAssertion=value=>words(value).filter(word=>!COMPLETION_GRAMMAR.has(word));
