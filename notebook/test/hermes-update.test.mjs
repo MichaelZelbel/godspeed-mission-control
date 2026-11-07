@@ -175,7 +175,11 @@ test('the Settings status and control persist the assistant update choice',async
 });
 
 test('a timed-out release lookup records failure and lets routines continue',{timeout:2000},async t=>{
- const f=fixture(t,{releaseLimit:10});let signal;f.updater.fetcher=async(_url,options)=>{signal=options.signal;return await new Promise(()=>{});};const routineCalls=[],scheduler=new NativeScheduler(f.store,{home:f.updater.descriptor.home,executable:f.updater.descriptor.executable,updater:f.updater,updateLimit:1000,run:async(_executable,args)=>{routineCalls.push(args.join(' '));return {stdout:''};}});await scheduler.tick();assert.equal(readHermesUpdate(f.store).last.result,'failed');assert.equal(readHermesUpdate(f.store).last.reason,'Hermes release discovery failed.');assert.equal(signal.aborted,true);assert.ok(routineCalls.includes('cron tick'));
+ for(const [name,fetcher] of [
+  ['request',async()=>await new Promise(()=>{})],
+  ['successful response body',async()=>({ok:true,json:async()=>await new Promise(()=>{})})],
+  ['failed response body',async()=>({ok:false,status:503,text:async()=>await new Promise(()=>{})})]
+ ]){const f=fixture(t,{releaseLimit:10});let signal;f.updater.fetcher=async(url,options)=>{signal=options.signal;return fetcher(url,options);};const routineCalls=[],scheduler=new NativeScheduler(f.store,{home:f.updater.descriptor.home,executable:f.updater.descriptor.executable,updater:f.updater,updateLimit:1000,run:async(_executable,args)=>{routineCalls.push(args.join(' '));return {stdout:''};}});await scheduler.tick();assert.equal(readHermesUpdate(f.store).last.result,'failed',name);assert.equal(readHermesUpdate(f.store).last.reason,'Hermes release discovery failed.',name);assert.equal(signal.aborted,true,name);assert.ok(routineCalls.includes('cron tick'),name);}
 });
 
 test('dirty, foreign, Docker, and Windows installations do not mutate',async t=>{
