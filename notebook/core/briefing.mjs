@@ -198,7 +198,7 @@ async function runBriefing(job,{store,query,provider,now}){
      if(invalidReviews.length)throw Error('Could not make a checked factual fallback: a failed review did not identify its rejected source claims ('+[...new Set(invalidReviews)].join(', ')+')');
      draft=factualFallback(rejectedIds);
     }catch(error){
-     await store.saveAsync('job_receipts',{kind:'brief-factual-fallback',job_id:job.id,state:'failed',source_hash:hash(context),rejected_draft:rejected,rejected_hash:hash(rejected),reasons,fallback_error:error.message,finished_at:new Date().toISOString()});
+     await store.saveAsync('job_receipts',{kind:'brief-factual-fallback',job_id:job.id,state:'failed',source_hash:hash(context),rejected_draft:rejected,rejected_hash:hash(rejected),reasons,all_reasons:allReasons,fallback_error:error.message,finished_at:new Date().toISOString()});
      throw error;
     }
     const receipt=await store.saveAsync('job_receipts',{kind:'brief-factual-fallback',job_id:job.id,state:'verified',source_hash:hash(context),draft_hash:hash(draft),rejected_draft:rejected,rejected_hash:hash(rejected),reasons,all_reasons:allReasons,rejected_source_ids:[...rejectedIds],checks:['visible sources','voice','required lines','duplicate','length'],finished_at:new Date().toISOString()});

@@ -74,7 +74,7 @@ test('an unsafe factual fallback remains unsent with its rejected draft receipt'
  const provider=async input=>input.kind==='brief-verification'?reviewFailure(input):'Rejected private model prose.';
  await assert.rejects(run(provider,query,store,'brief-factual-unsafe'),/Could not make a checked factual fallback/);
  assert.equal(query.rows('notes').filter(note=>note.source_app==='morning-brief').length,0);
- const receipt=query.rows('job_receipts').find(row=>row.kind==='brief-factual-fallback');assert.equal(receipt.state,'failed');assert.equal(receipt.rejected_draft,'Rejected private model prose.');
+ const receipt=query.rows('job_receipts').find(row=>row.kind==='brief-factual-fallback');assert.equal(receipt.state,'failed');assert.equal(receipt.rejected_draft,'Rejected private model prose.');assert.equal(receipt.all_reasons.length,2);
 });
 
 test('a required line with a banned word is left out and reported, and the briefing is saved',async()=>{
