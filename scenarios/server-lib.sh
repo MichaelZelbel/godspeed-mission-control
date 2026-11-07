@@ -2,7 +2,7 @@
 # Shared Docker-server scenario helpers.  scenario-lib.sh must be sourced first.
 
 SERVER_DIR=${GODSPEED_SCENARIO_SERVER_DIR:-/opt/godspeed-mission-control}
-INGEST_PORT=${GODSPEED_SCENARIO_INGEST_PORT:-47831}
+INGEST_PORT=${GODSPEED_SCENARIO_INGEST_PORT:-47832}
 SERVER_SPARSE_TABLES=()
 
 # The /server installer owns the Compose project and its generated container names. Resolve the
