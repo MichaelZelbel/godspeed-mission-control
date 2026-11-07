@@ -61,15 +61,10 @@ NODE
 }
 
 server_hevy_url() { # <port>
-  cat >"$SERVER_DIR/compose.override.yaml" <<EOF
-services:
-  godspeed:
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    environment:
-      GODSPEED_WORKOUTS_HEVY_URL: "http://host.docker.internal:$1"
-EOF
-  (cd "$SERVER_DIR" && sudo docker compose up -d --force-recreate) >&2 ||
+  printf 'services:\n  godspeed:\n    extra_hosts:\n      - "host.docker.internal:host-gateway"\n    environment:\n      GODSPEED_WORKOUTS_HEVY_URL: "http://host.docker.internal:%s"\n' "$1" |
+    sudo tee "$SERVER_DIR/compose.override.yaml" >/dev/null ||
+    fail "the Docker notebook Hevy override could not be written"
+  server_compose -f "$SERVER_DIR/compose.override.yaml" up -d --force-recreate >&2 ||
     fail "the Docker notebook could not be restarted with the local Hevy address"
   server_healthy 300 || fail "the Docker notebook was not healthy with the local Hevy address"
 }

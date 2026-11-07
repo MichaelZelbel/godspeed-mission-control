@@ -4084,6 +4084,31 @@ if (
 else
   bad "a clock recreate did not pass both Compose layers"
 fi
+HEVY_DIR=$TMP/server-hevy
+mkdir -p "$HEVY_DIR"
+if (
+  GODSPEED_SCENARIO_SERVER_DIR=$HEVY_DIR
+  export GODSPEED_SCENARIO_SERVER_DIR
+  . "$ROOT/scenarios/workouts-from-hevy.sh"
+  sudo() {
+    case $1 in
+      tee) shift; command tee "$@" ;;
+      docker) printf '%s\n' "$@" >"$TMP/hevy-compose-command" ;;
+      *) return 1 ;;
+    esac
+  }
+  server_healthy() { :; }
+  server_hevy_url 47839
+  [ "$(cat "$TMP/hevy-compose-command")" = "$(printf '%s\n' \
+    docker compose -p godspeed-mission-control --project-directory "$HEVY_DIR" \
+    -f "$HEVY_DIR/compose.yaml" --env-file "$HEVY_DIR/.env" \
+    -f "$HEVY_DIR/compose.override.yaml" up -d --force-recreate)" ] && \
+    grep -Fqx '      GODSPEED_WORKOUTS_HEVY_URL: "http://host.docker.internal:47839"' "$HEVY_DIR/compose.override.yaml"
+); then
+  ok "the Hevy recreate writes its override through sudo and passes it through the installed Compose boundary"
+else
+  bad "the Hevy recreate did not write its override or pass both Compose layers"
+fi
 
 # ================================================================ the night's report
 # report-night.mjs opens, comments on and closes the issues of a failed night; its own tests stand a
