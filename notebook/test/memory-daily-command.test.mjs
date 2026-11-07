@@ -81,6 +81,14 @@ test('the notebook files response-local equivalent events once',async t=>{
  await run(root,{env:{FIXTURE_MEMORY_MODEL_RESPONSE:response(answer)}});assert.equal(new QueryService(new Store(root)).rows('moments').length,1);
 });
 
+test('the notebook files response-local people and things in equivalent events once',async t=>{
+ for(const [type,collection] of [['new-person','people'],['new-thing','things']]){
+  const root=workspace(t),row={id:type,at:'2026-11-02T12:00:00Z',text:'I met Robin at the market to discuss a bright summer project today. I met Robin at the market to discuss a changing winter plan tonight.'};fs.writeFileSync(path.join(root,'NOTEBOOK.md'),notebookNoteText);archive(root,[row]);
+  const participant={kind:type,id:'robin'},answer={[collection]:[{id:'robin',name:'Robin'}],events:[{what:'Met Robin at the market to discuss a bright summer project today',day:'2026-11-02',participants:[participant],citation:{id:row.id,quote:'I met Robin at the market to discuss a bright summer project today'}},{what:'Met Robin at the market to discuss a changing winter plan tonight',day:'2026-11-02',participants:[participant],citation:{id:row.id,quote:'I met Robin at the market to discuss a changing winter plan tonight'}}]};
+  await run(root,{env:{FIXTURE_MEMORY_MODEL_RESPONSE:response(answer)}});assert.equal(new QueryService(new Store(root)).rows('moments').length,1,type);
+ }
+});
+
 test('deadline evidence closes only a complete assertion of the stated done-when and refusal keeps its row unread',async t=>{
  const root=workspace(t),modelLog=path.join(root,'model.log'),dueLog=path.join(root,'due.log'),row={id:'tax',at:'2026-11-02T12:00:00Z',text:'I have filed the tax return today.'};archive(root,[row]);
  const state=JSON.stringify([{slug:'tax',state:'open',title:'Tax return',doneWhen:'I filed the tax return today'}]),answer={events:[{what:'Filed the tax return',day:'2026-11-02',participants:[],deadline_id:'tax',deadline_complete:true,citation:{id:row.id,quote:row.text}}]};

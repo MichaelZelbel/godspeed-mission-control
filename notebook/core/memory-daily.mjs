@@ -117,7 +117,11 @@ function currentFact(query,root,subject,kind,value,fields){
  const canonical=fields.canonical(kind);
  return query.rows('claims').some(f=>!f.valid_to&&f.subject_type===subject.type&&(f.subject_id||null)===(subject.id||null)&&fields.canonical(f.attribute)===canonical&&(String(f.value).toLowerCase()===String(value).toLowerCase()||sameThing(f.value,value)));
 }
-const notebookParticipants=participants=>[...new Set((participants||[]).filter(subject=>subject.type==='contact'||subject.type==='entity').map(subject=>referenceKey(subject.type,subject.id)))].sort();
+const notebookParticipant=subject=>{
+ const type=subject.type==='new-person'?'contact':subject.type==='new-thing'?'entity':subject.type;
+ return type==='contact'||type==='entity'?referenceKey(type,subject.id):null;
+};
+const notebookParticipants=participants=>[...new Set((participants||[]).map(notebookParticipant).filter(Boolean))].sort();
 const sameNotebookEvent=(left,right)=>{
  if(left.day!==right.day)return false;
  if(normal(left.what)===normal(right.what))return true;
