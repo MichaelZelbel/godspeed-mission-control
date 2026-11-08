@@ -10,7 +10,7 @@ import {fileURLToPath} from 'node:url';
 import {createService} from '../server/main.mjs';
 import {JUDGE_PROTOCOL} from '../../third-party/addons/godspeed-charm/lib/judge.mjs';
 import {addonInvocation} from '../core/native-personal.mjs';
-import {wordCheckMs} from '../core/charm-judgement.mjs';
+import {wordCheckMs,writeCharmAudit} from '../core/charm-judgement.mjs';
 
 const auditContract=JSON.parse(fs.readFileSync(new URL('../../third-party/addons/godspeed-charm/test/fixtures/audit-log-contract.json',import.meta.url),'utf8'));
 const auditSeed=bytes=>{const line='{"verdict":"old"}\n';return line.repeat(Math.floor(bytes/line.length))+' '.repeat(bytes%line.length);};
@@ -166,6 +166,30 @@ module._log({'conversation':'plugin'},{'verdict':'answer','source':'rule','why':
  const entries=fs.readFileSync(log,'utf8').trim().split('\n').map(JSON.parse);
  assert.deepEqual(entries.map(entry=>entry.conversation).sort(),['native','plugin']);
  assert.equal(fs.existsSync(log+'.lock'),false);
+});
+
+test('both audit writers recover an old lock whose PID is now live',{skip:skip||process.platform==='win32'},()=>{
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-charm-audit-stale-'));try{
+  const home=path.join(dir,'home'),log=path.join(home,auditContract.relativePath),lock=log+'.lock';fs.mkdirSync(path.dirname(log),{recursive:true});
+  // A pre-boot timestamp cannot belong to this live PID; it models a lock left
+  // by the prior process instance after the kernel reused its numeric PID.
+  const oldOwner=()=>JSON.stringify({pid:process.pid,token:'dead-owner',at:new Date(Date.now()-(os.uptime()+120)*1000).toISOString()});
+  fs.writeFileSync(lock,oldOwner());
+  writeCharmAudit(home,{conversation:'native',verdict:'ask',source:'rule',why:null,did:'asked'});
+  assert.equal(fs.existsSync(lock),false);
+  assert.deepEqual(fs.readFileSync(log,'utf8').trim().split('\n').map(JSON.parse).map(entry=>entry.conversation),['native']);
+  fs.writeFileSync(log,'');fs.writeFileSync(lock,oldOwner());
+  const program=`import importlib.util,sys
+spec=importlib.util.spec_from_file_location('charm_plugin_under_test',sys.argv[1])
+module=importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+module._log({'conversation':'plugin'},{'verdict':'answer','source':'rule','why':None},'answered no')`;
+  const plugin=path.join(path.dirname(fileURLToPath(import.meta.url)),'../../third-party/addons/godspeed-charm/hermes/plugin/godspeed-charm/__init__.py');
+  const result=spawnSync(PY,['-c',program,plugin],{encoding:'utf8',env:{...process.env,HERMES_HOME:home,PYTHONDONTWRITEBYTECODE:'1'}});
+  assert.equal(result.status,0,result.stderr);
+  assert.equal(fs.existsSync(lock),false);
+  assert.deepEqual(fs.readFileSync(log,'utf8').trim().split('\n').map(JSON.parse).map(entry=>entry.conversation),['plugin']);
+ }finally{fs.rmSync(dir,{recursive:true,force:true});}
 });
 
 test('the scenario retains the native writer\'s active generation after audit-log rollover',{skip},async t=>{

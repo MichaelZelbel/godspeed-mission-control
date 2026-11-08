@@ -29,6 +29,7 @@ import types
 import hashlib
 import collections
 import uuid
+from datetime import datetime
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 STICKERS = "hermes-telegram-stickers"
@@ -306,14 +307,31 @@ def _audit_lock_snapshot(lock):
     return text, after
 
 
+def _audit_lock_boot_time():
+    try:
+        with open("/proc/uptime", encoding="utf-8") as f:
+            uptime = float(f.read().split()[0])
+    except (OSError, ValueError, IndexError):
+        uptime = time.monotonic()
+    return time.time() - uptime
+
+
 def _audit_lock_is_stale(text, stat):
     try:
         owner = json.loads(text)
         pid = owner["pid"]
-        if not isinstance(pid, int) or pid <= 0:
+        if not isinstance(owner, dict) or not isinstance(pid, int) or pid <= 0:
             raise ValueError
     except (ValueError, TypeError, KeyError, json.JSONDecodeError):
         return time.time() - stat.st_mtime >= 10
+    try:
+        at = datetime.fromisoformat(owner.get("at").replace("Z", "+00:00")).timestamp()
+    except (AttributeError, TypeError, ValueError, OverflowError):
+        at = stat.st_mtime
+    # Match the Node writer's owner rule: a timestamp from before this boot
+    # cannot belong to a live process, even when its numeric PID was reused.
+    if at < _audit_lock_boot_time() - 60:
+        return True
     try:
         os.kill(pid, 0)
     except ProcessLookupError:
