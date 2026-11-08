@@ -457,7 +457,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
       }
       if(route==='/api/workouts'){
         if(!originalRuntime||!workouts)return send(res,200,{available:false,connected:false,rows:0,minute:null,last_run:null,problems:[],routine:null});
-        const routine=()=>{const entry=readNotebookRoutines(store).jobs.find(job=>job.key==='workouts');if(!entry)return null;return {state:entry.switched_off?'disconnected':hermesJobs(scheduler.home).some(job=>job.id===entry.id)?'scheduled':'removed'};};
+        const routine=()=>scheduler.workoutsRoutineStatus();
         if(req.method==='GET')return send(res,200,await workouts.status({routine:routine()}));
         if(req.method==='POST'){
           scheduler.requireOwner('Connect Workouts from Hevy');
@@ -465,7 +465,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
           if(typeof input.key!=='string'||input.key.length>128)throw Error('Enter a Hevy API key.');
           await workouts.connect(input.key);
           try{await scheduler.followWorkouts({reconnect:true});}
-          catch{const status=await workouts.status({routine:routine()});return send(res,202,{...status,pending:true,message:'The key is saved and workouts were imported. The hourly routine will retry shortly.'});}
+          catch{const status=await workouts.status({routine:routine()});const retained=status.routine?.state==='scheduled';return send(res,202,{...status,pending:true,message:retained?'The notebook routine is running, but Godspeed could not remove the standalone schedule. Godspeed will retry automatically.':'The notebook routine could not be set up yet. Godspeed will retry automatically; any existing standalone schedule stays in place.'});}
           return send(res,200,await workouts.status({routine:routine()}));
         }
         return send(res,405,{error:'Use GET or POST'});

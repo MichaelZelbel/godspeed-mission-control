@@ -204,23 +204,49 @@ export function installSchedule(p) {
   return { ok: true, text: `${system ? "" : "user "}timer ${TIMER}: every hour at minute ${p.minute}` };
 }
 
-export function removeSchedule(p) {
+const commandFailure = (what, r) => ({ ok: false, text: `${what}: ${(r.stderr || r.stdout || r.error?.message || "the system command failed").trim()}` });
+// Task Scheduler reports an absent task as HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND).
+// Preserve that machine-readable result through a private exit status instead of its localized text.
+const WINDOWS_TASK_ABSENT = 42;
+const windowsTaskDeleteScript = [
+  "$ErrorActionPreference='Stop'",
+  "$service=New-Object -ComObject 'Schedule.Service'",
+  "$service.Connect()",
+  "$folder=$service.GetFolder('\\')",
+  `try{$folder.DeleteTask('${TASK}',0)}catch{$hresult=[uint32][System.Runtime.InteropServices.Marshal]::GetHRForException($_.Exception);if($hresult -eq 0x80070002){exit ${WINDOWS_TASK_ABSENT}};throw}`,
+].join(";");
+
+export function removeSchedule(p, { runCommand = run, retrySystemdReload = false } = {}) {
   if (p.kind === "windows-task") {
-    const r = run("schtasks", ["/Delete", "/TN", TASK, "/F"]);
-    return { ok: true, text: r.status === 0 ? `scheduled task "${TASK}" removed` : `no scheduled task "${TASK}" to remove` };
+    const r = runCommand("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", windowsTaskDeleteScript]);
+    if (r.status === 0) return { ok: true, text: `scheduled task "${TASK}" removed` };
+    if (r.status === WINDOWS_TASK_ABSENT) return { ok: true, text: `no scheduled task "${TASK}" to remove` };
+    return commandFailure(`the scheduled task "${TASK}" was not removed`, r);
   }
   const files = scheduleFiles(p).filter((f) => fs.existsSync(f));
-  if (!files.length) return { ok: true, text: "no hourly run to remove" };
+  const systemd = p.kind === "systemd-system" || p.kind === "systemd-user";
+  if (!files.length) {
+    if (!retrySystemdReload || !systemd) return { ok: true, text: "no hourly run to remove" };
+    const r = runCommand("systemctl", p.kind === "systemd-system" ? ["daemon-reload"] : ["--user", "daemon-reload"]);
+    return r.status === 0 ? { ok: true, text: "the hourly run is removed" } : { ...commandFailure("systemd did not reload its unit files", r), retrySystemdReload: true };
+  }
   if (p.kind === "launch-agent") {
     const uid = process.getuid?.() ?? 0;
-    const r = run("launchctl", ["bootout", `gui/${uid}/${AGENT}`]);
-    if (r.status !== 0) run("launchctl", ["unload", "-w", files[0]]);
+    const r = runCommand("launchctl", ["bootout", `gui/${uid}/${AGENT}`]);
+    if (r.status !== 0) {
+      const fallback = runCommand("launchctl", ["unload", "-w", files[0]]);
+      if (fallback.status !== 0) return commandFailure(`the LaunchAgent ${AGENT} was not unloaded`, fallback);
+    }
   } else {
-    const sc = (...a) => run("systemctl", p.kind === "systemd-system" ? a : ["--user", ...a]);
-    sc("disable", "--now", TIMER);
+    const sc = (...a) => runCommand("systemctl", p.kind === "systemd-system" ? a : ["--user", ...a]);
+    const r = sc("disable", "--now", TIMER);
+    if (r.status !== 0) return commandFailure(`${TIMER} was not stopped`, r);
   }
   for (const f of files) fs.rmSync(f, { force: true });
-  if (p.kind !== "launch-agent") run("systemctl", p.kind === "systemd-system" ? ["daemon-reload"] : ["--user", "daemon-reload"]);
+  if (systemd) {
+    const r = runCommand("systemctl", p.kind === "systemd-system" ? ["daemon-reload"] : ["--user", "daemon-reload"]);
+    if (r.status !== 0) return { ...commandFailure("systemd did not reload its unit files", r), retrySystemdReload: true };
+  }
   return { ok: true, text: "the hourly run is removed" };
 }
 

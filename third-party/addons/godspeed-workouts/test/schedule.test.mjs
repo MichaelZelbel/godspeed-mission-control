@@ -1,6 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { systemdService, systemdTimer, launchAgentPlist, windowsTaskXml, scheduleKind, scheduleFiles } from "../lib/schedule.mjs";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { systemdService, systemdTimer, launchAgentPlist, windowsTaskXml, scheduleKind, scheduleFiles, removeSchedule } from "../lib/schedule.mjs";
 import { randomMinute } from "../lib/settings.mjs";
 
 const p = { node: "/usr/bin/node", script: "/usr/local/lib/godspeed-workouts/bin/godspeed-workouts.mjs", stateDir: "/var/lib/godspeed/workouts", version: "0.1.0", minute: 7, second: 42, path: "/usr/bin:/bin", home: "/root" };
@@ -38,4 +41,75 @@ test("macOS: a LaunchAgent at that minute of every hour; Windows: a task every h
   assert.equal(scheduleKind({ platform: "linux", root: false }), "systemd-user");
   assert.equal(scheduleKind({ platform: "darwin" }), "launch-agent");
   assert.equal(scheduleKind({ platform: "win32" }), "windows-task");
+});
+
+test("removing a schedule reports every platform command refusal", () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "godspeed-workouts-schedule-"));
+  try {
+    const refused = () => ({ status: 1, stderr: "Der Aufgabenplaner verweigert das Entfernen" });
+    const windows = removeSchedule({ ...p, kind: "windows-task" }, { runCommand: refused });
+    assert.equal(windows.ok, false);
+    assert.match(windows.text, /verweigert das Entfernen/);
+    for (const kind of ["launch-agent", "systemd-user"]) {
+      const options = { ...p, kind, home };
+      const files = scheduleFiles(options);
+      fs.mkdirSync(path.dirname(files[0]), { recursive: true });
+      for (const file of files) fs.writeFileSync(file, "scheduled");
+      const result = removeSchedule(options, { runCommand: refused });
+      assert.equal(result.ok, false, kind);
+      assert.ok(files.every(fs.existsSync), kind);
+    }
+  } finally { fs.rmSync(home, { recursive: true, force: true }); }
+});
+
+test("removing either systemd schedule reports a daemon reload refusal", () => {
+  for (const root of [false, true]) {
+    const kindInput = { platform: "linux", root };
+    const kind = scheduleKind(kindInput);
+    const prefix = kindInput.root ? [] : ["--user"];
+    const options = { ...p, kind, home: "/root" };
+    const files = scheduleFiles(options);
+    const exists = fs.existsSync, remove = fs.rmSync, scheduled = new Set(files);
+    const calls = [];
+    fs.existsSync = file => scheduled.has(file) || exists(file);
+    fs.rmSync = (file, options) => scheduled.has(file) ? scheduled.delete(file) : remove(file, options);
+    try {
+      const result = removeSchedule(options, { runCommand: (command, args) => {
+        calls.push([command, args]);
+        return args.includes("daemon-reload") ? { status: 1, stderr: `systemd ${kind.slice("systemd-".length)} manager refused reload` } : { status: 0 };
+      } });
+      assert.equal(result.ok, false, kind);
+      assert.equal(result.retrySystemdReload, true, kind);
+      assert.match(result.text, new RegExp(`systemd ${kind.slice("systemd-".length)} manager refused reload`));
+      assert.deepEqual(calls, [
+        ["systemctl", [...prefix, "disable", "--now", "godspeed-workouts.timer"]],
+        ["systemctl", [...prefix, "daemon-reload"]],
+      ], kind);
+      assert.equal(scheduled.size, 0, kind);
+      const retried = removeSchedule(options, { retrySystemdReload: true, runCommand: (command, args) => {
+        calls.push([command, args]);
+        return { status: 0 };
+      } });
+      assert.equal(retried.ok, true, kind);
+      assert.deepEqual(calls.at(-1), ["systemctl", [...prefix, "daemon-reload"]], kind);
+    } finally { fs.existsSync = exists; fs.rmSync = remove; }
+  }
+});
+
+test("an absent systemd schedule stays a no-op unless retrying its failed reload", () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "godspeed-workouts-schedule-"));
+  try {
+    const calls = [];
+    const result = removeSchedule({ ...p, kind: "systemd-user", home }, { runCommand: (...args) => { calls.push(args); return { status: 0 }; } });
+    assert.deepEqual(result, { ok: true, text: "no hourly run to remove" });
+    assert.deepEqual(calls, []);
+  } finally { fs.rmSync(home, { recursive: true, force: true }); }
+});
+
+test("removing an already absent Windows task succeeds", () => {
+  let invocation;
+  const result = removeSchedule({ ...p, kind: "windows-task" }, { runCommand: (...args) => { invocation = args; return { status: 42, stderr: "FEHLER: Das System kann die angegebene Datei nicht finden." }; } });
+  assert.deepEqual(result, { ok: true, text: 'no scheduled task "Godspeed Workouts" to remove' });
+  assert.equal(invocation[0], "powershell.exe");
+  assert.match(invocation[1].at(-1), /GetHRForException/);
 });

@@ -19,7 +19,7 @@ const PKG = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 export const VERSION = JSON.parse(fs.readFileSync(path.join(PKG, "package.json"), "utf8")).version;
 
 const VALUE = new Set(["state", "godspeed", "talk", "tracker"]);
-const BOOL = new Set(["help", "no-schedule", "no-run", "full", "scheduled", "json"]);
+const BOOL = new Set(["help", "no-schedule", "no-run", "full", "scheduled", "json", "retry-systemd-reload"]);
 
 export function parse(argv) {
   const flags = {}, rest = [];
@@ -217,10 +217,10 @@ function settingsCmd(ctx) {
 }
 
 function uninstall(ctx) {
-  const s = removeSchedule(schedParams(ctx.paths, ctx.settings));
+  const s = removeSchedule(schedParams(ctx.paths, ctx.settings), { retrySystemdReload: ctx.flags["retry-systemd-reload"] });
   ctx.print(s.text);
   ctx.print(`The Workouts tracker and its rows stay in your notebook; the state folder (${ctx.paths.root}) with your Hevy key stays too. Delete that folder to forget the key.`);
-  return 0;
+  return s.ok ? 0 : s.retrySystemdReload ? 2 : 1;
 }
 
 export async function main(argv, { print = (s) => console.log(s), fail = (s) => console.error(s), env = process.env } = {}) {
