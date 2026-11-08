@@ -58,20 +58,25 @@ The builder key is kept away from `.github/workflows/` by design: a build must n
 the checks that judge it. GitHub refuses any push from it that creates or updates a workflow file.
 
 - No commit of a build round touches a file under `.github/workflows/`, in any round.
-- When the fix needs a workflow change, the round commits everything else and writes the change to
-  `.github/workflow-drafts/<same file name>` as the complete new content of that workflow file, not
-  a fragment. It quotes the change in the pull request description under "Workflow change for the
-  release key", together with a manifest of four lines: the target path under `.github/workflows/`;
-  the operation (create, replace or delete; a delete has no draft content); the git blob hash of the
-  target on the base commit the draft was written against (none for a create) and the blob hash of
-  the draft; and the exact names of the scenario jobs that need the change.
+- When the fix needs a workflow change, the round commits everything else and describes the change
+  in the pull request description under "Workflow change for the release key", as a manifest of
+  these lines: the target path under `.github/workflows/`; the operation; the git blob hash of the
+  target on the base commit the change was written against (none for a create); the exact names of
+  the scenario jobs that need the change.
+  - For a create or a replace, the round also writes the complete new content of the workflow file
+    (not a fragment) to `.github/workflow-drafts/<same file name>`, quotes that content in the same
+    section, and adds the blob hash of the draft to the manifest.
+  - For a delete there is no draft file; the manifest says the result is "absent".
 - Such a pull request is Done when the review says Ready at its head commit and its checks are green,
-  apart from the scenario jobs named in the manifest and no others. The review checks that the
-  manifest matches the draft.
-- Mission Control then applies the draft with the release key to the target path, only after
-  confirming the target's current blob hash equals the manifest's base hash and the draft's hash
-  equals the result hash; on a mismatch it applies nothing and sends the pull request back for a
-  redo. It then removes the draft file.
+  apart from the scenario jobs named in the manifest and no others. Before it says Ready, the review
+  checks that the manifest matches the draft and that the quote in the description is byte for byte
+  the draft at that head commit.
+- Mission Control then applies the change with the release key, after confirming that the target's
+  current blob hash equals the manifest's base hash and, for a create or a replace, that the draft's
+  hash equals the manifest's result hash and the quote in the description still equals the draft. A
+  create or a replace writes the draft to the target path and removes the draft file; a delete
+  removes the target and has no draft file to remove. On any mismatch it applies nothing and sends
+  the pull request back for a redo.
 - A publish refused for this reason is never retried. The round redoes the change the drafted way:
   it drops the workflow hunk from its commits and writes the draft. A new round that repeats the same
   refused push is the mistake this rule prevents.
