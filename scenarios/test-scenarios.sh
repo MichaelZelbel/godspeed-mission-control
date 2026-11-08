@@ -4018,13 +4018,13 @@ facts_good() {
 }
 facts_good "$DF2/good"
 DF_SCRIPT="$ROOT/scenarios/day-becomes-facts.sh"
-day_facts_provider_post_does_not_persist_the_key() {
-  local folder=$TMP/day-facts-provider-action key='day-facts-private-key' code
+day_facts_provider_post_does_not_persist_the_key() { # <HTTP status> <description>
+  local status=$1 description=$2 folder=$TMP/day-facts-provider-action-$status key='day-facts-private-key' code answer
   rm -rf "$folder"
   mkdir -p "$folder/home/cron" "$folder/home/scripts" "$folder/root" "$folder/tmp"
   printf '%s\n' '{"jobs":[{"name":"Remember what you said","script":"scenario-facts","cron":"40 3 * * *"}]}' >"$folder/home/cron/jobs.json"
   : >"$folder/home/scripts/scenario-facts"
-  if ACTION_HOME="$folder/home" ACTION_KEY="$key" ACTION_POSTED="$folder/posted" \
+  if ACTION_HOME="$folder/home" ACTION_KEY="$key" ACTION_POSTED="$folder/posted" ACTION_STATUS="$status" \
     GODSPEED_SCENARIO_ROOT="$folder/root" GODSPEED_SCENARIO_WORK="$folder/work" TMPDIR="$folder/tmp" \
     GODSPEED_SCENARIO_AI_KEY="$key" GODSPEED_SCENARIO_AI_URL='https://api.anthropic.com/v1' \
     GODSPEED_SCENARIO_AI_MODEL='claude-haiku-4-5' bash -c '
@@ -4040,10 +4040,9 @@ day_facts_provider_post_does_not_persist_the_key() {
       facts_snapshot() { :; }
       check() { :; }
       curl() {
-        local data= out= request
+        local data= request
         while [ "$#" -gt 0 ]; do
           case "$1" in
-            -o) out=$2; shift 2 ;;
             --data-binary) data=$2; shift 2 ;;
             *) shift ;;
           esac
@@ -4051,9 +4050,9 @@ day_facts_provider_post_does_not_persist_the_key() {
         if [ "$data" = @- ]; then
           request=$(cat) || return
           case "$request" in *"\"key\":\"$ACTION_KEY\""*) ;; *) return 1 ;; esac
-          printf '{"connected":true}\n' >"$out"
+          printf '{"connected":true,"echo":"%s"}\n' "$ACTION_KEY"
           : >"$ACTION_POSTED"
-          printf 200
+          printf %s "$ACTION_STATUS"
         else
           printf '{}\n'
         fi
@@ -4064,13 +4063,15 @@ day_facts_provider_post_does_not_persist_the_key() {
   else
     code=$?
   fi
-  if [ "$code" = 0 ] && [ -f "$folder/posted" ] && ! rg -F -- "$key" "$folder" >/dev/null 2>&1; then
-    ok 'a remembered-facts Settings POST streams its private key without retaining it'
+  answer=$folder/work/day-becomes-facts/provider-answer.json
+  if { [ "$status" = 200 ] && [ "$code" = 0 ] && [ -f "$answer" ] || [ "$status" != 200 ] && [ "$code" != 0 ] && [ ! -e "$answer" ]; } && [ -f "$folder/posted" ] && ! rg -F -- "$key" "$folder" >/dev/null 2>&1; then
+    ok "$description"
   else
-    bad "a remembered-facts Settings POST retained its private key or did not stream it (exit $code: $(cat "$folder/action.log" 2>/dev/null))"
+    bad "$description (exit $code: $(cat "$folder/action.log" 2>/dev/null))"
   fi
 }
-day_facts_provider_post_does_not_persist_the_key
+day_facts_provider_post_does_not_persist_the_key 200 'a remembered-facts Settings POST streams its private key and redacts a successful response'
+day_facts_provider_post_does_not_persist_the_key 400 'a reflected-key Settings failure is neither retained nor exposed'
 facts_archive_value() { # <message id> <field>
   node - "$DF2/good/archive.json" "$1" "$2" <<'NODE'
 const [file,id,field]=process.argv.slice(2),archive=require(file);
