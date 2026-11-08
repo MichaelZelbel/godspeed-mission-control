@@ -53,6 +53,8 @@ test('connecting writes the model into Hermes\' own home, keeps the rest of it, 
  const anthropic=fs.readFileSync(path.join(h,'config.yaml'),'utf8'),anthropicEnv=fs.readFileSync(path.join(h,'.env'),'utf8');
  assert.match(anthropic,/provider: "anthropic"/);assert.match(anthropic,/api_key: ""/);assert.match(anthropicEnv,/ANTHROPIC_API_KEY=sk-ant-fictional/);
  assert.deepEqual({provider:routineAIStatus({home:h,state}).provider,key:routineAIStatus({home:h,state}).key},{provider:'anthropic',key:true});
+ connectRoutineAI({home:h,state,config:{url:'https://api.openai.com/v1',key:'sk-openai-fictional',model:'gpt-fictional'}});
+ assert.deepEqual({provider:routineAIStatus({home:h,state}).provider,key:routineAIStatus({home:h,state}).key},{provider:'openai-api',key:true});
 });
 
 test('a sign-in Hermes has of its own (the Windows app, hermes model) is named as its own, and a one-line model becomes a section',t=>{
@@ -67,6 +69,8 @@ test('a sign-in Hermes has of its own (the Windows app, hermes model) is named a
  // A key that went missing is said.
  fs.writeFileSync(path.join(h,'.env'),'');
  assert.equal(routineAIStatus({home:h,state}).key,false);
+ fs.writeFileSync(path.join(h,'config.yaml'),'model:\n  provider: gemini\n  default: fictional\n');fs.writeFileSync(path.join(h,'.env'),'GOOGLE_API_KEY=fictional\n');
+ assert.equal(routineAIStatus({home:h,state}).key,true,'the status-only Gemini entry retains its documented Google-key alias');
 });
 
 const fakeHermes=(stdout,code=0,stderr='')=>{const calls=[];const spawnProcess=(command,args)=>{calls.push(args);const child=new EventEmitter();child.stdout=new PassThrough();child.stderr=new PassThrough();child.stdin=new PassThrough();
@@ -98,7 +102,7 @@ test('the Settings form connects the routines\' AI through the server, and leave
  else{executable=path.join(bin,'hermes');fs.writeFileSync(executable,'#!/bin/sh\nscript="$1"; shift\nexec "'+process.execPath+'" "$PWD/$script" "$@"\n',{mode:0o755});}
  fs.writeFileSync(path.join(root,'cron'),'process.exit(0)');
  // `hermes chat ...`: answers from the model Hermes' own config names, or fails when there is none.
- fs.writeFileSync(path.join(root,'chat'),"const fs=require('fs'),path=require('path');process.stdin.resume();process.stdin.on('end',()=>{const c=fs.readFileSync(path.join(process.env.HERMES_HOME,'config.yaml'),'utf8');if(!/provider: \"custom\"/.test(c)){console.error('AuthenticationError: no model');process.exit(1);}console.log('Connected.');});");
+ fs.writeFileSync(path.join(root,'chat'),"const fs=require('fs'),path=require('path');process.stdin.resume();process.stdin.on('end',()=>{const c=fs.readFileSync(path.join(process.env.HERMES_HOME,'config.yaml'),'utf8');if(!/provider: \"(?:custom|anthropic)\"/.test(c)){console.error('AuthenticationError: no model');process.exit(1);}console.log('Connected.');});");
  fs.mkdirSync(path.join(root,'.godspeed'),{recursive:true});fs.writeFileSync(path.join(root,'.godspeed','assistant.json'),JSON.stringify({verified:true,executable,home:hermesHome}));
  const endpoint=http.createServer((req,res)=>{let body='';req.on('data',d=>body+=d).on('end',()=>{res.setHeader('content-type','application/json');res.end(JSON.stringify({choices:[{message:{content:'Connected'}}]}));});});
  await new Promise(r=>endpoint.listen(0,'127.0.0.1',r));t.after(()=>endpoint.close());
@@ -116,6 +120,18 @@ test('the Settings form connects the routines\' AI through the server, and leave
   // The notebook's own copy got the full address, as before.
   assert.equal(JSON.parse(fs.readFileSync(path.join(root,'.godspeed','provider.json'),'utf8')).url,url+'/chat/completions');
   assert.equal((await call('routine-ai/check',{})).data.check.ok,true);
+  let anthropic={status:401,body:{error:{message:'Invalid key'}}},request;
+  const originalFetch=globalThis.fetch;globalThis.fetch=async(resource,options)=>{
+   if(String(resource)==='https://api.anthropic.com/v1/messages'){request={headers:options.headers,body:JSON.parse(options.body)};return new Response(JSON.stringify(anthropic.body),{status:anthropic.status,headers:{'Content-Type':'application/json'}});}
+   return originalFetch(resource,options);
+  };t.after(()=>{globalThis.fetch=originalFetch;});
+  const beforeAnthropic=fs.readFileSync(path.join(hermesHome,'config.yaml'),'utf8');
+  const refusedAnthropic=await call('provider',{url:'https://api.anthropic.com/v1',key:'sk-ant-fictional',model:'claude-haiku-4-5'});
+  assert.notEqual(refusedAnthropic.status,200);assert.equal(fs.readFileSync(path.join(hermesHome,'config.yaml'),'utf8'),beforeAnthropic,'a rejected native connection leaves Hermes unchanged');
+  anthropic={status:200,body:{content:[{type:'text',text:'Connected'}]}};
+  const native=await call('provider',{url:'https://api.anthropic.com/v1',key:'sk-ant-fictional',model:'claude-haiku-4-5'});
+  assert.equal(native.status,200,JSON.stringify(native.data));assert.equal(request.headers['x-api-key'],'sk-ant-fictional');assert.equal(request.headers['anthropic-version'],'2023-06-01');assert.equal(request.body.messages[0].role,'user');assert.equal(request.body.system.includes('Reply with Connected.'),true);
+  assert.match(fs.readFileSync(path.join(hermesHome,'config.yaml'),'utf8'),/provider: "anthropic"/);assert.match(fs.readFileSync(path.join(hermesHome,'.env'),'utf8'),/ANTHROPIC_API_KEY=sk-ant-fictional/);
   // An own sign-in stays when the box is unticked: only the notebook's copy changes.
   fs.writeFileSync(path.join(hermesHome,'config.yaml'),'model:\n  provider: openai-codex\n  default: gpt-fictional\n');
   const kept=await call('provider',{url,key:'other-key',model:'other-model',routines:false});

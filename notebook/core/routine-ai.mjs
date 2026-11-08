@@ -20,6 +20,14 @@ import {fallbackChain,noteMainAnswered,noteMainFailed} from './backup-ai.mjs';
 
 const RECORD='routine-ai.json';
 const unquote=v=>typeof v==='string'?v.replace(/^["']|["']$/g,'').trim():'';
+const providers=[
+ {provider:'openrouter',key:'OPENROUTER_API_KEY',base_url:'https://openrouter.ai/api/v1',matches:host=>host==='openrouter.ai'||host.endsWith('.openrouter.ai')},
+ {provider:'anthropic',key:'ANTHROPIC_API_KEY',base_url:'https://api.anthropic.com/v1',matches:host=>host==='api.anthropic.com'},
+ {provider:'openai-api',key:'OPENAI_API_KEY',base_url:'https://api.openai.com/v1',matches:host=>host==='api.openai.com'},
+ {provider:'gemini',key:'GEMINI_API_KEY',aliases:['GOOGLE_API_KEY']}
+];
+const providerForHost=host=>providers.find(entry=>entry.matches?.(host));
+const providerForName=name=>providers.find(entry=>entry.provider===name);
 // The endpoint's address without /chat/completions, the form Hermes and every OpenAI-compatible
 // library want as their base address.
 export function baseAddress(url){return String(url||'').trim().replace(/\/chat\/completions\/?$/,'').replace(/\/+$/,'');}
@@ -34,9 +42,8 @@ export function hermesSettingsFor({url,key,model}){
  if(!key||/[\s"'\\]/.test(key))throw Error('The key has a space or a quotation mark in it. Copy it again from your AI account.');
  if(!model||!String(model).trim())throw Error('Name the model the routines should use');
  model=String(model).trim();
- if(host==='openrouter.ai'||host.endsWith('.openrouter.ai'))return {provider:'openrouter',base_url:'https://openrouter.ai/api/v1',model,env:{OPENROUTER_API_KEY:key}};
- if(host==='api.anthropic.com')return {provider:'anthropic',base_url:'https://api.anthropic.com/v1',model,env:{ANTHROPIC_API_KEY:key}};
- if(host==='api.openai.com')return {provider:'openai-api',base_url:'https://api.openai.com/v1',model,env:{OPENAI_API_KEY:key}};
+ const provider=providerForHost(host);
+ if(provider)return {provider:provider.provider,base_url:provider.base_url,model,env:{[provider.key]:key}};
  return {provider:'custom',base_url:base,model,api_key:key};
 }
 
@@ -82,8 +89,7 @@ export function routineAIStatus({home,state}){
  const provider=unquote(readConfigValue(config,['model','provider'])||''),model=unquote(readConfigValue(config,['model','default'])||readConfigValue(config,['model','model'])||'');
  const base_url=unquote(readConfigValue(config,['model','base_url'])||'');
  const record=readRecord(state),ours=record.connected&&record.connected.provider===provider&&record.connected.model===model;
- const keyName={openrouter:'OPENROUTER_API_KEY','openai-api':'OPENAI_API_KEY',anthropic:'ANTHROPIC_API_KEY',gemini:'GEMINI_API_KEY'}[provider];
- const key=keyName?!!(envValue(env,keyName)||(keyName==='GEMINI_API_KEY'&&envValue(env,'GOOGLE_API_KEY'))):provider==='custom'?!!unquote(readConfigValue(config,['model','api_key'])||''):null;
+ const specification=providerForName(provider),key=specification?!!([specification.key,...(specification.aliases||[])].some(name=>envValue(env,name))):provider==='custom'?!!unquote(readConfigValue(config,['model','api_key'])||''):null;
  const named=!!model&&!!provider&&provider!=='auto';
  return {provider:provider||null,model:model||null,base_url:base_url||null,source:!named?'none':ours?'settings':'hermes',key,check:record.check||null};
 }
