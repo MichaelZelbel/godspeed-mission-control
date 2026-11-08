@@ -51,3 +51,25 @@ Unlike the candidate-only checks above, a round can read this one at the pull re
   tests, and most still failed on the next candidate (8 November, run 42470722177), because
   scenarios ran only at night and on a candidate. The factory has to be fast and efficient: a fix is
   proved where it is made.
+
+## A build round never changes `.github/workflows/`
+
+The builder key is kept away from `.github/workflows/` by design: a build must not be able to change
+the checks that judge it. GitHub refuses any push from it that creates or updates a workflow file.
+
+- No commit of a build round touches a file under `.github/workflows/`, in any round.
+- When the fix needs a workflow change, the round commits everything else and puts the exact
+  workflow change, unchanged, in `.github/workflow-drafts/<same file name>`. It quotes that change in
+  the pull request description under "Workflow change for the release key", and opens the pull
+  request as usual.
+- Such a pull request is Done when the review says Ready at its head commit and its checks are green,
+  apart from the scenario jobs that need the drafted workflow change. Mission Control then applies
+  the reviewed draft with the release key and removes the draft file.
+- A publish refused for this reason is never retried. The round redoes the change the drafted way:
+  it drops the workflow hunk from its commits and writes the draft. A new round that repeats the same
+  refused push is the mistake this rule prevents.
+- Everything else keeps the default.
+- Reason: Michael, 8 November 2026. Issue #340 was built nine times in three hours with the same
+  refused push, because the queue started another round each time, and #333 stopped to ask for a
+  permission the guard exists to withhold. Drafting the change (as #319 and #321 did) keeps the
+  guard and lets the work finish.
