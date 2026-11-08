@@ -101,8 +101,11 @@ case "\${1:-}" in
     [ "$healthy" = true ] || { printf '%s\\n' 'cron list failed' >&2; exit 1; }
     printf '%s\\n' 'scenario-cron' ;;
   plugins)
-    [ "\${2:-}" = list ] || exit 2
-    log "plugins-list $version"; printf '%s\\n' 'scenario-plugin' ;;
+    case "\${2:-}" in
+      list) log "plugins-list $version"; printf '%s\\n' 'scenario-plugin' ;;
+      doctor) [ -n "\${3:-}" ] && [ "\${4:-}" = --ci ] || exit 2; log "plugins-doctor $version" ;;
+      *) exit 2 ;;
+    esac ;;
   gateway)
     log "gateway \${2:-status} $version"; printf '%s\\n' ok ;;
   chat) log "chat $version"; printf '%s\\n' 'Scenario answer' ;;

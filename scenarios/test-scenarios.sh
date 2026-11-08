@@ -4065,6 +4065,7 @@ if node "$ROOT/scenarios/hermes-update-fixture.mjs" --dir "$HFD" >/dev/null \
   && [ -f "$HFD_BACKUP" ] \
   && HERMES_FIXTURE_LOG=$HFD_LOG "$HFD/bin/hermes" update --no-backup --yes \
   && [ "$(git -C "$HFD" describe --exact-match --tags HEAD)" = v1.1.0 ] \
+  && HERMES_FIXTURE_LOG=$HFD_LOG "$HFD/bin/hermes" plugins doctor "$HFD/plugins/godspeed-coach" --ci \
   && node "$ROOT/scenarios/hermes-update-fixture.mjs" --dir "$HFD" --reveal 1.2.0 >/dev/null \
   && HERMES_FIXTURE_LOG=$HFD_LOG "$HFD/bin/hermes" update --no-backup --yes \
   && [ "$(git -C "$HFD" describe --exact-match --tags HEAD)" = v1.2.0 ] \
@@ -4082,6 +4083,7 @@ if node "$ROOT/scenarios/hermes-update-fixture.mjs" --dir "$HFD" >/dev/null \
   && [ "$(node "$ROOT/scenarios/hermes-update-fixture.mjs" --dir "$HFD" --metadata)" = '[{"version":"1.0.0","healthy":true,"age_days":18},{"version":"1.1.0","healthy":true,"age_days":9},{"version":"1.2.0","healthy":false,"age_days":8},{"version":"1.3.0","healthy":true,"age_days":3}]' ] \
   && grep -qx 'import 1.1.0' "$HFD_LOG" \
   && grep -qx 'pm-install 1.1.0' "$HFD_LOG" \
+  && grep -qx 'plugins-doctor 1.1.0' "$HFD_LOG" \
   && ! grep -qE 'key|token|secret' "$HFD_LOG"; then
   ok 'the local Hermes fixture versions, backs up, checks, breaks, restores, answers, reveals and redacts'
 else
