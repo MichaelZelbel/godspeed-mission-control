@@ -3708,6 +3708,45 @@ case "$REFUSED_SCAN_CODE $REFUSED_SCAN" in
   "1 "*"native kept the refused Hevy key in $RFS/assistant/settings.json"*) ok "a refused key in the recorded native assistant home fails with its path" ;;
   *) bad "a refused key in the recorded native assistant home was not refused (exit $REFUSED_SCAN_CODE: $REFUSED_SCAN)" ;;
 esac
+ACT_NODE_ORDER=$(env -u NODE GODSPEED_SCENARIO_ROOT="$RFS/root" ACTION_EVENTS="$RFS/action-events" bash -c '
+  cd "$3"
+  . "$1"
+  EVIDENCE=$2
+  node() { :; }
+  trap() { :; }
+  need_node() { NODE=/bin/true; printf "need-node\\n" >>"$ACTION_EVENTS"; }
+  fresh_evidence() { mkdir -p "$EVIDENCE"; printf "47832\\n" >"$EVIDENCE/fixture-port"; }
+  wait_for() { :; }
+  curl() { printf "%s\\n" "{\"ok\":true}"; }
+  server_install() { :; }
+  server_hevy_url() { :; }
+  install_paths() { :; }
+  install_the_stage_line() { :; }
+  native_hevy_url() { :; }
+  settings_post() { printf "{}\\n" >"$3"; printf 400; }
+  refused_not_retained() { printf "refused-%s:%s\\n" "$1" "${NODE:+set}" >>"$ACTION_EVENTS"; }
+  platform_before() { :; }
+  platform_after() { :; }
+  scan_fixture_key() { :; }
+  check() { :; }
+  act
+  cat "$ACTION_EVENTS"
+' action-order "$ROOT/scenarios/workouts-from-hevy.sh" "$RFS/action-evidence" "$ROOT/scenarios" 2>&1)
+case "$ACT_NODE_ORDER" in
+  $'need-node\nrefused-docker:set\nrefused-native:set') ok "the Hevy action selects Node before either refused-key scan" ;;
+  *) bad "the Hevy action did not select Node before its refused-key scans ($ACT_NODE_ORDER)" ;;
+esac
+NO_NODE_ACTION=$(env -u NODE GODSPEED_SCENARIO_ROOT="$RFS/root" bash -c '
+  cd "$2"
+  . "$1"
+  node_bin() { return 1; }
+  act
+' node-missing "$ROOT/scenarios/workouts-from-hevy.sh" "$ROOT/scenarios" 2>&1)
+NO_NODE_ACTION_CODE=$?
+case "$NO_NODE_ACTION_CODE $NO_NODE_ACTION" in
+  "1 "*"FAIL workouts-from-hevy: node is not on this machine and the install carries none"*) ok "the Hevy action stops before its fixture when it cannot select Node" ;;
+  *) bad "the Hevy action did not stop before its fixture without Node (exit $NO_NODE_ACTION_CODE: $NO_NODE_ACTION)" ;;
+esac
 printf '00000000-0000-4000-8000-000000000001\n' >"$RFS/assistant/hevy.json"
 ACCEPTED_SCAN=$(GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy NODE="$(command -v node)" bash -c '
   cd "$3"
