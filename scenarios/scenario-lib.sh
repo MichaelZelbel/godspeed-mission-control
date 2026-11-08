@@ -39,6 +39,9 @@ say() { printf '%s\n' "$*" >&2; }
 verdict() {
   printf '%s\n' "$1"
   [ -z "${GITHUB_STEP_SUMMARY:-}" ] || printf '%s\n' "$1" >>"$GITHUB_STEP_SUMMARY"
+  if [ -n "${EVIDENCE:-}" ] && [ -d "$EVIDENCE" ]; then
+    printf '%s\n' "$1" >"$EVIDENCE/.result.tmp" && mv -f "$EVIDENCE/.result.tmp" "$EVIDENCE/result.txt" || return 1
+  fi
   if [ -n "${GODSPEED_SCENARIO_RESULTS:-}" ]; then
     mkdir -p "$GODSPEED_SCENARIO_RESULTS" || return 1
     local result tmp

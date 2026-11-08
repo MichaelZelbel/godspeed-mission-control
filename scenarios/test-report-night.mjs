@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 
 const SCRIPT = fileURLToPath(new URL('./report-night.mjs', import.meta.url));
 const WORKFLOW = fileURLToPath(new URL('../.github/workflows/scenarios.yml', import.meta.url));
+const DRAFT = fileURLToPath(new URL('../.github/workflow-drafts/scenarios.yml', import.meta.url));
 
 // state: { openIssues: [{number,title}], labelExists, logs: {jobName: text}, jobs: [{id,name,conclusion}] }
 async function night(results, state = {}, extra = {}) {
@@ -72,6 +73,16 @@ test('a failed scenario with no issue opens one', async () => {
   assert.equal(r.comments.length, 0);
 });
 
+test('a pooled failure reports its exact scenario verdict before a shared job log', async () => {
+  const r = await night('voice=failure', {
+    jobs: [{ id: 5, name: 'the installed Linux and Docker scenarios', conclusion: 'failure' }],
+    logs: { 'the installed Linux and Docker scenarios': 'shared job log' },
+  }, { SCENARIO_VERDICTS: 'FAIL voice: no sound came back\nPASS plain-yes: approved' });
+  assert.equal(r.code, 0, r.stderr);
+  assert.match(r.created[0].body.body, /FAIL voice: no sound came back/);
+  assert.doesNotMatch(r.created[0].body.body, /shared job log/);
+});
+
 test('a failed scenario with an open issue adds a comment and opens nothing', async () => {
   const r = await night('voice=failure', { openIssues: [{ number: 12, title: T('voice') }] });
   assert.equal(r.code, 0, r.stderr);
@@ -130,6 +141,17 @@ test('a job that only runs for a candidate is left out', async () => {
 test('a report that cannot be made fails loudly', async () => {
   const r = await night('voice=failure', {}, { GITHUB_RUN_ID: '' });
   assert.notEqual(r.code, 0);
+});
+
+test('the protected draft pools candidate systems and leaves the live workflow unchanged', async () => {
+  const { readFileSync } = await import('node:fs');
+  const draft = readFileSync(DRAFT, 'utf8');
+  const live = readFileSync(WORKFLOW, 'utf8');
+  assert.match(draft, /^  pooled:\n    name: the installed Linux and Docker scenarios/m);
+  assert.match(draft, /bash scenarios\/run-installed-scenarios\.sh "\$STAGE_REF"/);
+  assert.match(draft, /scenario-verdict\.mjs --catalog scenarios\/scenario-catalog\.tsv/);
+  assert.doesNotMatch(live, /run-installed-scenarios\.sh/);
+  assert.match(draft, /jobs=\$\(awk -F '\\t'/);
 });
 
 // The verdict job lists its scenarios twice: `needs:` (so it waits for them) and `RESULTS` (the

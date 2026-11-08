@@ -44,9 +44,14 @@ test('uses picked names and candidate-only exclusions', () => {
   assert.deepEqual(out, { lines: ['PASS docker: healthy'], failures: [] });
 });
 
+test('accepts a standalone scenario result retained beside its evidence', () => {
+  const out = collectVerdicts({ catalog, picked: ',native,', directories: [records({ 'result.txt': 'PASS native: healthy\n' })] });
+  assert.deepEqual(out, { lines: ['PASS native: healthy'], failures: [] });
+});
+
 test('requires both Windows move modes and produces one scenario verdict', () => {
   const out = collectVerdicts({ catalog, picked: ',windows-old-names-move,', directories: [records({
-    'windows-old-names-move-open.txt': 'PASS windows-old-names-move: open handles moved\n',
+    'windows-old-names-move-moves.txt': 'PASS windows-old-names-move: open handles moved\n',
     'windows-old-names-move-held.txt': 'PASS windows-old-names-move: held handles moved\n',
   })] });
   assert.deepEqual(out, { lines: ['PASS windows-old-names-move: held handles moved'], failures: [] });

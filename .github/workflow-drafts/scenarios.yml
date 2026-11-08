@@ -9,10 +9,9 @@ run-name: ${{ github.event_name == 'pull_request' && format('scenarios on pull r
 # scripts in scenarios/; its scenario 2, the night chat tidy-up, left the release with the tidy-up
 # on 27 October 2026). Started by hand on the candidate's own tag, with the same tag as the stage
 # to prove: --ref candidate/2.0.0-beta.8 -f stage=candidate/2.0.0-beta.8 (or beta, or main).
-# Each scenario runs on a fresh GitHub machine, installs the way a stranger does, and ends with one
-# line in the run's summary: PASS <name>, or FAIL <name>: <what went wrong>. A scenario that cannot
-# run fails: the verdict job at the end says so for every scenario that did not pass, and fails the
-# run.
+# Candidate and nightly checks share one native and one Docker installation, restoring their mutable
+# state between checks; update and move checks keep isolated installations. Pull requests still run
+# each changed script alone. Every check ends with PASS <name> or FAIL <name>: <what it saw>.
 # Every night on main (process.md section 5): the Linux and Docker jobs. The Mac and Windows jobs
 # are for a candidate (the Mac one only when `inputs.mac` is true, the Windows one only on a
 # candidate's tag), which a scheduled run never is. The verdict job's last step then tells the night
@@ -105,10 +104,9 @@ jobs:
             echo "picked=all" | tee -a "$GITHUB_OUTPUT"
             exit 0
           fi
-          # A pull request: the scenarios whose own files it changed, a job being named like its
-          # script (scenarios/<job>.sh) and owning scenarios/<job>.sh and scenarios/<job>-*.
+          # A pull request owns the script and companion files named by the scenario catalog.
           gh api "repos/$GITHUB_REPOSITORY/pulls/$PR/files" --paginate --jq '.[].filename' > "$RUNNER_TEMP/changed"
-          jobs=$(grep -oE 'bash scenarios/[a-z0-9-]+\.sh "\$STAGE_REF"' .github/workflows/scenarios.yml | sed -E 's|bash scenarios/||; s|\.sh .*||' | sort -u)
+          jobs=$(awk -F '\t' 'NR > 1 && $2 ~ /\.sh$/ { sub(/\.sh$/, "", $2); print $2 }' scenarios/scenario-catalog.tsv)
           picked=','
           for j in $jobs; do
             if grep -qE "^scenarios/$j(\.sh|-[^/]*)$" "$RUNNER_TEMP/changed"; then picked="$picked$j,"; fi
@@ -130,42 +128,43 @@ jobs:
         env:
           INPUT_STAGE: ${{ inputs.stage }}
 
-  linux-install:
-    name: a stranger's Linux install
-    # The install, Docker and update proofs have no script of their own to change: a pull request never runs them.
+  pooled:
+    name: the installed Linux and Docker scenarios
     if: ${{ github.event_name != 'pull_request' }}
     needs: stage
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 180
     env:
-      PRODUCT: ${{ needs.stage.outputs.product }}
-      ENGINE: ${{ needs.stage.outputs.engine }}
+      GODSPEED_SCENARIO_RESULTS: ${{ runner.temp }}/scenario-results
+      GODSPEED_SCENARIO_WORK: ${{ runner.temp }}/scenario-evidence
+      GODSPEED_SCENARIO_AI_KEY: ${{ secrets.GODSPEED_SCENARIO_AI_KEY }}
+      GODSPEED_SCENARIO_AI_URL: ${{ vars.GODSPEED_SCENARIO_AI_URL }}
+      GODSPEED_SCENARIO_AI_MODEL: ${{ vars.GODSPEED_SCENARIO_AI_MODEL }}
+      ELEVENLABS_TEST_KEY_STT: ${{ secrets.ELEVENLABS_TEST_KEY_STT }}
+      ELEVENLABS_TEST_KEY_NO_STT: ${{ secrets.ELEVENLABS_TEST_KEY_NO_STT }}
+      ELEVENLABS_TEST_VOICE_ID: ${{ vars.ELEVENLABS_TEST_VOICE_ID }}
     steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.stage || github.sha }}
+          persist-credentials: false
       - uses: actions/download-artifact@v4
         if: ${{ !inputs.stage }}
         with:
           name: run-stage
           path: ${{ runner.temp }}/run-stage
-      - name: The line, from the stage's own address
-        run: curl -fsSL "$RAW/$STAGE_REF/install-godspeed.sh" | GODSPEED_STAGE_REF="$STAGE_REF" GODSPEED_STAGE_RAW="$RAW" bash -x 2> >(tee "$RUNNER_TEMP/trace.log" >&2)
-      - name: It installed what the stage names
-        run: |
-          fail() { echo "FAIL linux-install: $1" | tee -a "$GITHUB_STEP_SUMMARY" "$RUNNER_TEMP/failed"; exit 1; }
-          root="$HOME/godspeed-v2"
-          got=$(cat "$root/.godspeed/integrated-runtime/version" 2>/dev/null || echo none)
-          [ "$got" = "$PRODUCT" ] || fail "runtime $got, the stage names $PRODUCT"
-          { grep -qF "kit-bootstrap/$ENGINE/setup-godspeed.sh" "$RUNNER_TEMP/trace.log" && grep -qF "KB_BRANCH=$ENGINE" "$RUNNER_TEMP/trace.log"; } \
-            || fail "the installer did not run kit-bootstrap $ENGINE, the stage's"
-          grep -qF "GODSPEED_STARTER_REF=$PRODUCT" "$RUNNER_TEMP/trace.log" \
-            || fail "the installer did not make the mission control from starter $PRODUCT, the stage's"
-          curl -fsSL "$RAW/$STAGE_REF/stage.json" -o expected.json || fail "the stage file could not be read again"
-          cmp -s expected.json "$root/.godspeed/stage.json" || fail "the kept stage file is not the stage's"
-          for _ in $(seq 1 30); do curl -fsS http://127.0.0.1:47831/health >/dev/null 2>&1 && break; sleep 2; done
-          curl -fsS http://127.0.0.1:47831/health >/dev/null || fail "the notebook does not answer"
-          echo "PASS linux-install: runtime and starter $got, kit-bootstrap $ENGINE, stage $STAGE_REF, notebook answers" | tee -a "$GITHUB_STEP_SUMMARY"
-      - name: Say so when it failed before its checks
-        if: failure()
-        run: '[ -s "$RUNNER_TEMP/failed" ] || echo "FAIL linux-install: the install line itself failed (its step log says how)" | tee -a "$GITHUB_STEP_SUMMARY"'
+      - name: Install once and run the compatible checks
+        shell: bash
+        run: bash scenarios/run-installed-scenarios.sh "$STAGE_REF"
+      - name: Keep each result and what each pooled scenario saw
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pooled-scenario-results
+          path: |
+            ${{ runner.temp }}/scenario-results
+            ${{ runner.temp }}/scenario-evidence
+          if-no-files-found: warn
 
   mac-install:
     name: a stranger's Mac install
@@ -191,15 +190,21 @@ jobs:
             || fail "the installer did not make the mission control from starter $PRODUCT, the stage's"
           for _ in $(seq 1 30); do curl -fsS http://127.0.0.1:47831/health >/dev/null 2>&1 && break; sleep 2; done
           curl -fsS http://127.0.0.1:47831/health >/dev/null || fail "the notebook does not answer"
-          echo "PASS mac-install: runtime and starter $got, kit-bootstrap $ENGINE, notebook answers" | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "PASS mac-install: runtime and starter $got, kit-bootstrap $ENGINE, notebook answers" | tee -a "$GITHUB_STEP_SUMMARY" "$RUNNER_TEMP/mac-install.txt"
       - name: Say so when it failed before its checks
         if: failure()
-        run: '[ -s "$RUNNER_TEMP/failed" ] || echo "FAIL mac-install: the install line itself failed (its step log says how)" | tee -a "$GITHUB_STEP_SUMMARY"'
+        run: '[ -s "$RUNNER_TEMP/failed" ] || echo "FAIL mac-install: the install line itself failed (its step log says how)" | tee -a "$GITHUB_STEP_SUMMARY" "$RUNNER_TEMP/mac-install.txt"'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mac-install-results
+          path: ${{ runner.temp }}/mac-install.txt
+          if-no-files-found: warn
 
   docker-server:
     name: a stranger's Docker server
     # The install, Docker and update proofs have no script of their own to change: a pull request never runs them.
-    if: ${{ github.event_name != 'pull_request' }}
+    if: ${{ false }}
     needs: stage
     runs-on: ubuntu-24.04
     timeout-minutes: 45
@@ -300,7 +305,7 @@ jobs:
   settings-on-install:
     name: the faster-chat settings a fresh install carries
     needs: stage
-    if: ${{ needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',settings-on-install,') }}
+    if: ${{ github.event_name == 'pull_request' && (needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',settings-on-install,')) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
@@ -323,7 +328,7 @@ jobs:
   voice:
     name: a voice note, with the permission and without it
     needs: stage
-    if: ${{ needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',voice,') }}
+    if: ${{ github.event_name == 'pull_request' && (needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',voice,')) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     env:
@@ -405,7 +410,7 @@ jobs:
   closed-offline-on-both:
     name: one reminder closed on two computers while they were apart
     needs: stage
-    if: ${{ needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',closed-offline-on-both,') }}
+    if: ${{ github.event_name == 'pull_request' && (needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',closed-offline-on-both,')) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     steps:
@@ -428,7 +433,7 @@ jobs:
   reminder-from-settings:
     name: a reminder saved in Settings on a fresh install
     needs: stage
-    if: ${{ needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',reminder-from-settings,') }}
+    if: ${{ github.event_name == 'pull_request' && (needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',reminder-from-settings,')) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
@@ -451,7 +456,7 @@ jobs:
   reminder-closed-elsewhere:
     name: a reminder closed on the other computer, both ways of syncing
     needs: stage
-    if: ${{ needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',reminder-closed-elsewhere,') }}
+    if: ${{ github.event_name == 'pull_request' && (needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',reminder-closed-elsewhere,')) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     steps:
@@ -530,7 +535,7 @@ jobs:
   charm-challenge:
     name: the Charm Challenge, start to finish
     needs: stage
-    if: ${{ needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',charm-challenge,') }}
+    if: ${{ github.event_name == 'pull_request' && (needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',charm-challenge,')) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 150
     # The owner's own chat is answered by a model, the one update-keeps-everything uses.
@@ -558,7 +563,7 @@ jobs:
   no-video-skills-by-default:
     name: a fresh install has no video skills, the add-on brings them
     needs: stage
-    if: ${{ needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',no-video-skills-by-default,') }}
+    if: ${{ github.event_name == 'pull_request' && (needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',no-video-skills-by-default,')) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     steps:
@@ -608,7 +613,7 @@ jobs:
   briefing-breaks-a-rule:
     name: a briefing that breaks a rule still arrives
     needs: stage
-    if: ${{ needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',briefing-breaks-a-rule,') }}
+    if: ${{ github.event_name == 'pull_request' && (needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',briefing-breaks-a-rule,')) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     env:
@@ -660,6 +665,13 @@ jobs:
           $p.WaitForExit()
           Get-Content "$env:RUNNER_TEMP/scenario-steps.log", "$env:RUNNER_TEMP/verdict" -ErrorAction SilentlyContinue
           exit $p.ExitCode
+      - name: Keep this matrix mode's result
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/windows-old-names-move"
+          grep -E '^(PASS|FAIL) windows-old-names-move:' "$RUNNER_TEMP/verdict" | tail -1 > "$RUNNER_TEMP/windows-old-names-move/windows-old-names-move-${{ matrix.mode }}.txt" ||
+            echo "FAIL windows-old-names-move: the ${{ matrix.mode }} mode stopped before its verdict" > "$RUNNER_TEMP/windows-old-names-move/windows-old-names-move-${{ matrix.mode }}.txt"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -675,7 +687,7 @@ jobs:
   telegram-language:
     name: Telegram answers in the language of the message
     needs: stage
-    if: ${{ needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',telegram-language,') }}
+    if: ${{ github.event_name == 'pull_request' && (needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',telegram-language,')) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     env:
@@ -712,7 +724,7 @@ jobs:
   brief-asked-in-chat:
     name: today's brief asked in the chat is the morning briefing
     needs: stage
-    if: ${{ needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',brief-asked-in-chat,') }}
+    if: ${{ github.event_name == 'pull_request' && (needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',brief-asked-in-chat,')) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     env:
@@ -739,7 +751,7 @@ jobs:
   talk-prep-honest:
     name: a talk says when its preparation did not pass, and opens from one that did
     needs: stage
-    if: ${{ needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',talk-prep-honest,') }}
+    if: ${{ github.event_name == 'pull_request' && (needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',talk-prep-honest,')) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     env:
@@ -775,7 +787,7 @@ jobs:
   no-question-he-cannot-judge:
     name: background work asks nothing the owner cannot judge, and never for a code
     needs: stage
-    if: ${{ needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',no-question-he-cannot-judge,') }}
+    if: ${{ github.event_name == 'pull_request' && (needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',no-question-he-cannot-judge,')) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     env:
@@ -809,7 +821,7 @@ jobs:
   plain-yes:
     name: a plain yes or a button answers the right waiting step
     needs: stage
-    if: ${{ needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',plain-yes,') }}
+    if: ${{ github.event_name == 'pull_request' && (needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',plain-yes,')) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     env:
@@ -843,7 +855,7 @@ jobs:
   what-was-that:
     name: right after a background report, "what is this about?" is answered from what was sent
     needs: stage
-    if: ${{ needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',what-was-that,') }}
+    if: ${{ github.event_name == 'pull_request' && (needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',what-was-that,')) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     env:
@@ -877,7 +889,7 @@ jobs:
   connection-check:
     name: the daily connection check is silent while all work, and speaks once when Telegram's key is refused
     needs: stage
-    if: ${{ needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',connection-check,') }}
+    if: ${{ github.event_name == 'pull_request' && (needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',connection-check,')) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
@@ -909,7 +921,7 @@ jobs:
   workouts-from-hevy:
     name: Docker and Linux import made-up Hevy workouts
     needs: stage
-    if: ${{ needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',workouts-from-hevy,') }}
+    if: ${{ github.event_name == 'pull_request' && (needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',workouts-from-hevy,')) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     steps:
@@ -939,7 +951,7 @@ jobs:
   day-becomes-facts:
     name: an overnight remembered-facts routine files one day once
     needs: stage
-    if: ${{ needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',day-becomes-facts,') }}
+    if: ${{ github.event_name == 'pull_request' && (needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',day-becomes-facts,')) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     env:
@@ -973,7 +985,7 @@ jobs:
   hermes-update-rollback:
     name: a Hermes update keeps good and rolls back broken releases
     needs: stage
-    if: ${{ needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',hermes-update-rollback,') }}
+    if: ${{ github.event_name == 'pull_request' && (needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',hermes-update-rollback,')) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     steps:
@@ -1003,7 +1015,7 @@ jobs:
   first-day:
     name: a fresh Docker server turns a first goal into useful work and a matching Telegram brief
     needs: stage
-    if: ${{ needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',first-day,') }}
+    if: ${{ github.event_name == 'pull_request' && (needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',first-day,')) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     env:
@@ -1037,7 +1049,7 @@ jobs:
   verdict:
     name: the verdict
     if: always()
-    needs: [stage, linux-install, mac-install, docker-server, linux-update, settings-on-install, voice, update-keeps-everything, reminder-closed-elsewhere, reminders-move-keeps-everything, two-machines-move-at-once, late-reminder-file, closed-offline-on-both, reminder-from-settings, charm-challenge, no-video-skills-by-default, update-removes-only-unchanged-skills, briefing-breaks-a-rule, windows-old-names-move, telegram-language, brief-asked-in-chat, talk-prep-honest, no-question-he-cannot-judge, plain-yes, what-was-that, connection-check, workouts-from-hevy, day-becomes-facts, hermes-update-rollback, first-day]
+    needs: [stage, pooled, mac-install, docker-server, linux-update, settings-on-install, voice, update-keeps-everything, reminder-closed-elsewhere, reminders-move-keeps-everything, two-machines-move-at-once, late-reminder-file, closed-offline-on-both, reminder-from-settings, charm-challenge, no-video-skills-by-default, update-removes-only-unchanged-skills, briefing-breaks-a-rule, windows-old-names-move, telegram-language, brief-asked-in-chat, talk-prep-honest, no-question-he-cannot-judge, plain-yes, what-was-that, connection-check, workouts-from-hevy, day-becomes-facts, hermes-update-rollback, first-day]
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -1052,7 +1064,7 @@ jobs:
       PICKED: ${{ needs.stage.outputs.picked }}
       IS_CANDIDATE: ${{ startsWith(inputs.stage, 'candidate/') }}
       RESULTS: >-
-        linux-install=${{ needs.linux-install.result }}
+        pooled=${{ needs.pooled.result }}
         mac-install=${{ needs.mac-install.result }}
         docker-server=${{ needs.docker-server.result }}
         linux-update=${{ needs.linux-update.result }}
@@ -1083,35 +1095,42 @@ jobs:
         first-day=${{ needs.first-day.result }}
     steps:
       - uses: actions/checkout@v4
-        if: github.event_name == 'schedule'
         with:
           persist-credentials: false
       - uses: actions/setup-node@v4
-        if: github.event_name == 'schedule'
         with: { node-version: '22.19.0' }
-      - name: Every scenario passed, or the run fails
+      - uses: actions/download-artifact@v4
+        if: ${{ needs.pooled.result != 'skipped' }}
+        with:
+          path: ${{ runner.temp }}/scenario-results
+          merge-multiple: true
+      - name: Every selected scenario has a verdict, or the run fails
         run: |
-          bad=0
           # A pull request from a fork runs nothing (the stage job is skipped): nothing to judge.
           [ "$EVENT" != pull_request ] || [ "$STAGE" != skipped ] || { echo "No scenario runs on a pull request from a fork." | tee -a "$GITHUB_STEP_SUMMARY"; exit 0; }
-          [ "$STAGE" = success ] || { echo "FAIL stage: the stage file at $STAGE_REF could not be read or is not a stage file" | tee -a "$GITHUB_STEP_SUMMARY"; bad=1; }
+          [ "$STAGE" = success ] || { echo "FAIL stage: the stage file at $STAGE_REF could not be read or is not a stage file" | tee -a "$GITHUB_STEP_SUMMARY"; exit 1; }
+          mkdir -p "$RUNNER_TEMP/scenario-results/fallback"
           for pair in $RESULTS; do
             name=${pair%%=*}; result=${pair#*=}
+            [ "$name" = pooled ] && continue
             [ "$name" != mac-install ] || [ "$WANT_MAC" = true ] || continue
             [ "$name" != windows-old-names-move ] || [ "$IS_CANDIDATE" = true ] || continue
-            case $result in
-              success) ;;
-              failure) bad=1 ;; # its own FAIL line is in the summary already
-              skipped)
-                # On a pull request only the scenarios it changed run; the others are not judged.
-                if [ "$EVENT" = pull_request ] && [ "$STAGE" = success ] && [[ "$PICKED" != *",$name,"* ]]; then continue; fi
-                echo "FAIL $name: it did not run, because the stage file could not be read" | tee -a "$GITHUB_STEP_SUMMARY"; bad=1 ;;
-              *) echo "FAIL $name: it ended $result" | tee -a "$GITHUB_STEP_SUMMARY"; bad=1 ;;
-            esac
+            if [ "$EVENT" = pull_request ] && [[ "$PICKED" != *",$name,"* ]]; then continue; fi
+            find "$RUNNER_TEMP/scenario-results" -name "$name.txt" -o -name result.txt | grep -q . && continue
+            case "$result" in
+              success) printf 'PASS %s: its isolated job passed\n' "$name" ;;
+              *) printf 'FAIL %s: its job ended %s\n' "$name" "${result:-without a result}" ;;
+            esac >"$RUNNER_TEMP/scenario-results/fallback/$name.txt"
           done
-          exit $bad
+          skip=''
+          [ "$WANT_MAC" = true ] || skip='mac-install'
+          [ "$IS_CANDIDATE" = true ] || skip="$skip windows-old-names-move"
+          node scenarios/scenario-verdict.mjs --catalog scenarios/scenario-catalog.tsv --results "$RUNNER_TEMP/scenario-results" --picked "$PICKED" --candidate-only "$skip" | tee "$RUNNER_TEMP/scenario-verdicts.txt" | tee -a "$GITHUB_STEP_SUMMARY"
       - name: Tell the night in issues (one per failing scenario, closed when it passes)
         if: always() && github.event_name == 'schedule'
         env:
           GITHUB_TOKEN: ${{ github.token }}
-        run: node scenarios/report-night.mjs
+        run: |
+          export RESULTS="$(node scenarios/scenario-verdict.mjs --catalog scenarios/scenario-catalog.tsv --results "$RUNNER_TEMP/scenario-results" --picked all --candidate-only 'mac-install windows-old-names-move' --status)"
+          export SCENARIO_VERDICTS="$(cat "$RUNNER_TEMP/scenario-verdicts.txt")"
+          node scenarios/report-night.mjs
