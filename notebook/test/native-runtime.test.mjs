@@ -3,7 +3,7 @@ import {nativeAgent} from '../core/native-agent.mjs';import {NativeScheduler,nat
 import {execFileSync} from 'node:child_process';import {installStarter,adoptedMissionControl} from '../core/starter-workspace.mjs';import {FLAG,readMachineRecord,writeMachineRecord} from '../core/starting-routines.mjs';import {runCommand} from '../core/child-process.mjs';
 import {beginContext,scheduleInvite,setTimezone,writeContext,INVITE_JOB} from '../core/context-setup.mjs';
 import {CHAT_TIDY_JOB,BRIEF_SCRIPT} from '../core/notebook-routines.mjs';
-import {addArea,findArea} from '../../third-party/addons/godspeed-coach/lib/areas.mjs';import {openTalk,readTalk} from '../../third-party/addons/godspeed-coach/lib/talks.mjs';import {addDays,localParts,now as coachNow,weekdayOf} from '../../third-party/addons/godspeed-coach/lib/clock.mjs';import {resolvedCoachArea} from '../core/coach-chat.mjs';
+import {addArea,findArea} from '../../third-party/addons/godspeed-coach/lib/areas.mjs';import {openTalk,readTalk} from '../../third-party/addons/godspeed-coach/lib/talks.mjs';import {addDays,localParts,now as coachNow,weekdayOf} from '../../third-party/addons/godspeed-coach/lib/clock.mjs';import {resolvedCoachArea} from '../core/coach-chat.mjs';import {charmNow} from '../core/charm-operation.mjs';
 const goalsTool=fileURLToPath(new URL('../../tools/goals.js',import.meta.url));
 // The chat files a goal with the original tool. It finds its mission control from GODSPEED_ROOT or the
 // folder it runs in, never from a flag, so both are this fixture's.
@@ -79,10 +79,12 @@ test('a native chat requires the prepared opening through the production start h
 test('a prepared opening remains exact when Charm judges the same native request',async t=>{
  const root=fixture(t),store=new Store(root),domains=new Domains(new QueryService(store)),prepared=preparedCoachArea(root),slip='This is useless, you are garbage and wrong again';
  assert.equal((await domains.invoke('personal-operation',{type:'charm',action:'start',words:'start'})).ok,true);
- let preparedStart=true;domains.nativeAgent=async input=>{if(input.coach_start_resolution)return {reply:preparedStart?'{"area":"health"}':'{"area":null}'};const start=input.coach_talk_start;if(!start)return {reply:'Ordinary reply.'};openTalk(findArea(root,start.area),start.day,{opening:start.opening});return {reply:start.opening};};
+ let preparedStart=true,ordinaryTurns=0;domains.nativeAgent=async input=>{if(input.coach_start_resolution)return {reply:preparedStart?'{"area":"health"}':'{"area":null}'};const start=input.coach_talk_start;if(!start){ordinaryTurns++;return {reply:'Ordinary reply.'};}openTalk(findArea(root,start.area),start.day,{opening:start.opening});return {reply:start.opening};};
  const result=await domains.invoke('conversation-chat',{message:slip+' Let us have my health talk now.',conversation_id:'prepared-proof'});
  assert.equal(result.reply,prepared.opening);assert.equal(store.list('conversation_messages').at(-1).content,prepared.opening);assert.ok(readTalk(prepared.area,prepared.day).shown);
- preparedStart=false;assert.match((await domains.invoke('conversation-chat',{message:slip,conversation_id:'charm-proof'})).reply,/That sounded like a slip/);
+ assert.deepEqual(charmNow(store).state.open,[]);
+ preparedStart=false;assert.equal((await domains.invoke('conversation-chat',{message:'yes',conversation_id:'prepared-proof'})).reply,'Ordinary reply.');assert.equal(ordinaryTurns,1);assert.deepEqual(charmNow(store).state.open,[]);
+ assert.match((await domains.invoke('conversation-chat',{message:slip,conversation_id:'charm-proof'})).reply,/That sounded like a slip/);
 });
 test('a cancelled prepared coach chat leaves its unpersisted opening unshown',async t=>{
  const root=fixture(t),store=new Store(root),domains=new Domains(new QueryService(store)),prepared=preparedCoachArea(root),controller=new AbortController();domains.nativeAgent=async input=>{if(input.coach_start_resolution)return {reply:'{"area":"health"}'};const start=input.coach_talk_start;openTalk(findArea(root,start.area),start.day,{opening:start.opening});controller.abort();return {reply:start.opening};};
