@@ -62,6 +62,8 @@ there.
   unchanged under `.github/workflow-drafts/<same file name>`, and quotes it in the pull request
   description under "Workflow change for the release key". Mission Control applies that draft with
   the release key after the review says Ready, and removes the draft.
+  To delete a workflow the round writes the draft as an empty file with the target's name and says
+  "delete" in the quote; Mission Control then deletes the target and the draft.
 - Such a pull request is Done when the review says Ready at its head commit and its checks are
   green, apart from the scenario jobs that need the drafted change (and `the verdict`, red only
   because of them).
