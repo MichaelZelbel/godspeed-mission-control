@@ -43,7 +43,7 @@ git('remote', 'add', 'origin', HERMES_HTTPS_ORIGIN);
 const command = `#!/bin/sh
 set -eu
 root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
-fixture_state="${root}.fixture-state.json"
+fixture_state="\${root}.fixture-state.json"
 fixture_log=$(node -p "try{require(process.argv[1]).log||''}catch(e){''}" "$fixture_state")
 log() { destination=\${HERMES_FIXTURE_LOG:-\$fixture_log}; [ -z "\$destination" ] || printf '%s\\n' "$*" >>"\$destination"; }
 version=$(node -p "require(process.argv[1]).version" "$root/release.json")
