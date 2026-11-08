@@ -266,7 +266,8 @@ five_vents() {
   local n vent started ended name_vent name_no first_started log log_cursor
   : >"$EVIDENCE/vents.txt"
   log="$HERMES/logs/godspeed-charm.log"
-  log_cursor=$(charm_log_cursor "$log")
+  log_cursor=$(charm_log_cursor "$log") ||
+    fail "the installed panel Charm judgement could not inspect evidence at $log before five vents"
   first_started=$(date +%s)
   for n in 1 2 3 4 5; do
     case $n in

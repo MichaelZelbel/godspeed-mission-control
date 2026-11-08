@@ -1601,7 +1601,7 @@ charm_log_source_boundary() {
 charm_log_source_boundary
 
 charm_five_vents_boundary() {
-  local folder=$TMP/charm-five-vents hermes output code
+  local folder=$TMP/charm-five-vents hermes output code shim marker real_stat
   hermes=$folder/hermes
   mkdir -p "$hermes/logs"
   output=$(cd "$HERE" && EVIDENCE="$folder/missing" HERMES="$hermes" WRITE_AUDIT=no bash -c '
@@ -1619,6 +1619,33 @@ charm_five_vents_boundary() {
     ok 'five vents name the missing Charm source log'
   else
     bad "five vents did not name the missing Charm source log (exit $code: $output)"
+  fi
+  printf '{"verdict":"old"}\n' >"$hermes/logs/godspeed-charm.log"
+  shim=$folder/stat-fails
+  marker=$folder/stat-failed
+  real_stat=$(command -v stat)
+  mkdir -p "$shim"
+  printf '%s\n' '#!/usr/bin/env bash' \
+    '[ ! -e "$CHARM_TEST_STAT_MARKER" ] && { : >"$CHARM_TEST_STAT_MARKER"; exit 1; }' \
+    'exec "$CHARM_TEST_REAL_STAT" "$@"' >"$shim/stat"
+  chmod +x "$shim/stat"
+  output=$(cd "$HERE" && EVIDENCE="$folder/baseline-stat-failure" HERMES="$hermes" WRITE_AUDIT=yes \
+    CHARM_TEST_STAT_MARKER="$marker" CHARM_TEST_REAL_STAT="$real_stat" PATH="$shim:$PATH" bash -c '
+    source <(sed -e "/^scenario_arguments /d" -e "/^if \[ \"\$CHECK_ONLY\" = yes \]; then/,\$d" "$1")
+    fail(){ printf "%s\\n" "$*"; exit 42; }
+    say(){ :; }
+    assistant_commands(){ : >"$1"; }
+    chat_panel_new_conversation(){ : >"$1"; }
+    chat_panel_says(){ : >"$2"; if [ "$WRITE_AUDIT" = yes ] && [ "$1" != no ]; then printf "{\\\"conversation\\\":\\\"vent\\\"}\\n" >>"$HERMES/logs/godspeed-charm.log"; fi; }
+    mkdir -p "$EVIDENCE"
+    five_vents
+  ' bash "$HERE/charm-challenge.sh" 2>&1)
+  code=$?
+  if [ "$code" = 42 ] && [ ! -e "$folder/baseline-stat-failure/charm-log.txt" ] && \
+    [[ $output == *"could not inspect evidence at $hermes/logs/godspeed-charm.log before five vents"* ]]; then
+    ok 'five vents reject a failed baseline Charm log inspection'
+  else
+    bad "five vents accepted a failed baseline Charm log inspection (exit $code: $output)"
   fi
   output=$(cd "$HERE" && EVIDENCE="$folder/written" HERMES="$hermes" WRITE_AUDIT=yes bash -c '
     source <(sed -e "/^scenario_arguments /d" -e "/^if \[ \"\$CHECK_ONLY\" = yes \]; then/,\$d" "$1")
