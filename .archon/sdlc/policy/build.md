@@ -65,6 +65,8 @@ the checks that judge it. GitHub refuses any push from it that creates or update
   IDs (the workflow's own IDs, not display names) that need the change. Each ID must be one the
   workflow selected for this head, listed in `picked` in the `stage file` job's summary; `required`,
   `the stage file`, `the verdict` and any scenario job not picked are never listed.
+  A drafted change that has no picked scenario job lists none, and then no check may be red apart
+  from the ones the default already allows.
   - For a create or a replace, the round also writes the complete new content of the workflow file
     (not a fragment) to `.github/workflow-drafts/<same file name>`, quotes that content in the same
     section, and adds the blob hash of the draft to the manifest.
