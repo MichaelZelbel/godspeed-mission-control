@@ -3891,7 +3891,6 @@ case "$ACCEPTED_RUNTIME_SCAN" in
   *) bad "the accepted-key scan missed retained state below a runtime version ($ACCEPTED_RUNTIME_SCAN)" ;;
 esac
 rm "$RUNTIME_STATE"
-printf '84f3c5d2-9a7e-4b18-8c65-3d7f1a9e6b24\n' >"$RFS/assistant/hevy.json"
 printf '84f3c5d2-9a7e-4b18-8c65-3d7f1a9e6b24\n' >"$RFS/assistant/settings.json"
 ACCEPTED_SCAN=$(HOME="$RFS/root" GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy NODE="$(command -v node)" bash -c '
   cd "$3"
