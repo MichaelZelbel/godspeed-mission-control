@@ -4050,7 +4050,7 @@ day_facts_provider_post_does_not_persist_the_key() { # <HTTP status> <descriptio
         if [ "$data" = @- ]; then
           request=$(cat) || return
           case "$request" in *"\"key\":\"$ACTION_KEY\""*) ;; *) return 1 ;; esac
-          printf '{"connected":true,"echo":"%s"}\n' "$ACTION_KEY"
+          printf "{\"connected\":true,\"echo\":\"%s\"}\\n" "$ACTION_KEY"
           : >"$ACTION_POSTED"
           printf %s "$ACTION_STATUS"
         else
@@ -4064,7 +4064,7 @@ day_facts_provider_post_does_not_persist_the_key() { # <HTTP status> <descriptio
     code=$?
   fi
   answer=$folder/work/day-becomes-facts/provider-answer.json
-  if { [ "$status" = 200 ] && [ "$code" = 0 ] && [ -f "$answer" ] || [ "$status" != 200 ] && [ "$code" != 0 ] && [ ! -e "$answer" ]; } && [ -f "$folder/posted" ] && ! rg -F -- "$key" "$folder" >/dev/null 2>&1; then
+  if { [ "$status" = 200 ] && [ "$code" = 0 ] && [ -f "$answer" ] || [ "$status" != 200 ] && [ "$code" != 0 ] && [ ! -e "$answer" ]; } && [ -f "$folder/posted" ] && ! rg -F -- "$key" "$folder" >/dev/null 2>&1 && { [ "$status" != 200 ] || rg -F '"echo":"[redacted]"' "$answer" >/dev/null; }; then
     ok "$description"
   else
     bad "$description (exit $code: $(cat "$folder/action.log" 2>/dev/null))"

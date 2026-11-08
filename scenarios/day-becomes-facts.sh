@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # PROVING SCENARIO: the installed nightly routine files dated, source-linked facts once.
-# Kept: archive.json, provider.json, provider-answer.json, before.json, after.json, second.json and routine.json.
-# archive.json names the four invented messages; all seven evidence records are retained after each run.
+# Kept: archive.json, provider.json, provider-answer.json, before.json, after.json, second.json, routine.json,
+# install.log, memory-confirm.json, setup.json, first-{said,log,exit}.txt, second-{said,log,exit}.txt, steps.tsv,
+# and .{before,after,second}-{claims,fact_slots,contacts,entities,moments}.json.
 SCENARIO=day-becomes-facts
 . "$(dirname "$0")/scenario-lib.sh"
 . "$(dirname "$0")/facts-lib.sh"
