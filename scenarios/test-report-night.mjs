@@ -229,3 +229,66 @@ test('the pick names the scenarios whose script or owned file changed, and nothi
   assert.equal(r.status, 0, r.stderr);
   assert.equal(r.stdout.trim(), ',plain-yes,voice,');
 });
+
+// A pull request proves its own head commit: GitHub's merge commit is not promised to be fetchable
+// by the installer, which reads the product by commit. Every path that makes or reads the proof
+// (the stage's checkout and its stage file, and the checkout of every scenario job) must say so.
+test("the stage and every scenario job prove the pull request's own head commit", async () => {
+  const { readFileSync } = await import('node:fs');
+  const text = readFileSync(WORKFLOW, 'utf8').replace(/\r\n/g, '\n');
+  const head = 'ref: ${{ inputs.stage || github.event.pull_request.head.sha || github.sha }}';
+  const jobsText = text.slice(text.indexOf('\njobs:\n'));
+  const starts = [...jobsText.matchAll(/^ {2}([A-Za-z0-9_-]+):[ \t]*$/gm)];
+  const blockOf = (name) => {
+    const i = starts.findIndex((m) => m[1] === name);
+    assert.ok(i >= 0, `no job ${name}`);
+    return jobsText.slice(starts[i].index, i + 1 < starts.length ? starts[i + 1].index : undefined);
+  };
+  const stage = blockOf('stage');
+  assert.ok(stage.includes(head), 'the stage job does not check out the pull request head');
+  assert.ok(stage.includes('PROOF_SHA: ${{ github.event.pull_request.head.sha || github.sha }}'), 'the stage job has no PROOF_SHA of the pull request head');
+  assert.ok(stage.includes('scenarios/stage-for-run.sh \'\' "$PROOF_SHA"'), 'the stage file is not made from PROOF_SHA');
+  assert.ok(!stage.includes('"$GITHUB_SHA"'), 'the stage job still reads GITHUB_SHA');
+  let checked = 0;
+  for (const m of starts) {
+    const block = blockOf(m[1]);
+    if (!/bash scenarios\/[a-z0-9-]+\.sh "\$STAGE_REF"/.test(block)) continue;
+    assert.ok(block.includes(head), `${m[1]} does not check out the pull request head`);
+    assert.ok(!/ref: \$\{\{ inputs\.stage \|\| github\.sha \}\}/.test(block), `${m[1]} checks out GitHub's merge commit`);
+    checked++;
+  }
+  assert.ok(checked >= 20, `only ${checked} scenario jobs found`);
+});
+
+// A pull request from a fork has no secrets and may carry hostile scenario code: the stage job is
+// skipped for it, every scenario needs the stage, and the verdict then passes with a plain line.
+test('a pull request from a fork runs nothing, and its verdict passes', async () => {
+  const { readFileSync } = await import('node:fs');
+  const { spawnSync } = await import('node:child_process');
+  const text = readFileSync(WORKFLOW, 'utf8').replace(/\r\n/g, '\n');
+  const jobsText = text.slice(text.indexOf('\njobs:\n'));
+  const starts = [...jobsText.matchAll(/^ {2}([A-Za-z0-9_-]+):[ \t]*$/gm)];
+  const blockOf = (name) => {
+    const i = starts.findIndex((m) => m[1] === name);
+    return jobsText.slice(starts[i].index, i + 1 < starts.length ? starts[i + 1].index : undefined);
+  };
+  assert.ok(blockOf('stage').includes("if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository"), 'the stage job does not skip a fork pull request');
+  for (const m of starts) {
+    const block = blockOf(m[1]);
+    if (!/bash scenarios\/[a-z0-9-]+\.sh "\$STAGE_REF"/.test(block)) continue;
+    assert.match(block, /^ {4}needs: stage$/m, `${m[1]} does not need the stage job, so a fork pull request could run it`);
+  }
+  const verdict = blockOf('verdict');
+  const at = verdict.indexOf('          bad=0\n');
+  const to = verdict.indexOf('      - name: Tell the night in issues');
+  assert.ok(at > 0 && to > at, 'the verdict step was not found');
+  const script = verdict.slice(at, to).replace(/^ {10}/gm, '');
+  const run = (env) => spawnSync('bash', ['-c', script], { encoding: 'utf8', env: { ...process.env, GITHUB_STEP_SUMMARY: '/dev/null', STAGE_REF: 'this-commit', WANT_MAC: 'false', IS_CANDIDATE: 'false', RESULTS: 'voice=skipped plain-yes=skipped', PICKED: '', ...env } });
+  const fork = run({ EVENT: 'pull_request', STAGE: 'skipped' });
+  assert.equal(fork.status, 0, fork.stdout + fork.stderr);
+  assert.match(fork.stdout, /No scenario runs on a pull request from a fork/);
+  // the same skips on a night, or a skipped stage that is not a fork's pull request, still fail
+  assert.equal(run({ EVENT: 'schedule', STAGE: 'skipped' }).status, 1);
+  assert.equal(run({ EVENT: 'pull_request', STAGE: 'success', PICKED: ',voice,' }).status, 1, 'a picked scenario that did not run must fail');
+  assert.equal(run({ EVENT: 'pull_request', STAGE: 'success', PICKED: ',' }).status, 0, 'an unpicked skip must pass');
+});
