@@ -100,7 +100,7 @@ jobs:
         run: |
           docker build --build-arg REVISION="${{ github.event.pull_request.head.sha }}" -f docker/full-candidate/Dockerfile -t "$IMAGE:$TAG" .
           docker push "$IMAGE:$TAG"
-          digest=$(docker buildx imagetools inspect "$IMAGE:$TAG" --format '{{.Digest}}')
+          digest=$(docker buildx imagetools inspect "$IMAGE:$TAG" --format '{{.Manifest.Digest}}')
           [[ $digest =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "the PR-head image has no immutable digest: $digest"; exit 1; }
           echo "image=$IMAGE@$digest" >> "$GITHUB_OUTPUT"
 
