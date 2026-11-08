@@ -77,7 +77,7 @@ check() { # <evidence folder>
   local folder=$1 label text count title
   [ -d "$folder" ] || fail "there is nothing at $folder, so this scenario kept no evidence of a connection check"
   need_node
-  kept_all "$folder" 'what was sent, opened and rung' run.json routines.json due-before.json notifications-before.json telegram-requests.json runner.json manifest.json
+  kept_all "$folder" 'what was sent, opened and rung' routine-diagnostics-fine.json routine-diagnostics-broken.json routine-diagnostics-repaired.json job-fine.json job-broken.json job-repaired.json run.json routines.json due-before.json notifications-before.json telegram-requests.json runner.json manifest.json
   for label in fine broken repaired; do
     kept "$folder" "due-$label.json" "the deadlines after the run of $label"
     kept "$folder" "notifications-$label.json" "the bell after the run of $label"

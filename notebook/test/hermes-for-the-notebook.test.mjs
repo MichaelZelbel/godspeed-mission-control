@@ -159,13 +159,13 @@ test('Run now keeps the admitted Hermes child, and a refusal keeps its real life
  const root=temporary(t,'run-diagnostics'),home=path.join(root,'.hermes'),store=new Store(root,{device:'pc'});
  store.save('settings',{id:'installation',owner:'pc',timezone:'Europe/Berlin',delivery:'notebook'});
  fs.mkdirSync(path.join(home,'cron'),{recursive:true});fs.writeFileSync(path.join(home,'cron','jobs.json'),JSON.stringify({jobs:[{id:'brief',name:'Morning brief'}]}));
- let finish,calls=0;const scheduler=new NativeScheduler(store,{executable:'hermes',home,device:'pc',run:async(executable,args,{onStart}={})=>{calls++;onStart?.({pid:4321});await new Promise(resolve=>{finish=resolve;});return {code:0,signal:null,stdout:'the Hermes run log',stderr:'the Hermes warning'};}});
+ let finish,calls=0;const scheduler=new NativeScheduler(store,{executable:'hermes',home,device:'pc',run:async(executable,args,{onStart}={})=>{calls++;onStart?.({pid:4321,tree:{root:4321,process_group:4321}});await new Promise(resolve=>{finish=resolve;});return {code:0,signal:null,stdout:'the Hermes run log',stderr:'the Hermes warning'};}});
  assert.deepEqual(scheduler.startRun('brief'),{started:true,id:'brief'});
  await new Promise(resolve=>setImmediate(resolve));
  assert.throws(()=>scheduler.startRun('brief'),/updating or another routine is already running/);assert.equal(calls,1,'the refusal did not start a concurrent Hermes command');
  let diagnostics=JSON.parse(fs.readFileSync(path.join(store.state,'routine-run-diagnostics.json'),'utf8')).runs;
  assert.deepEqual(diagnostics.map(run=>({admitted:run.admitted,lifecycle_owner:run.lifecycle_owner})),[{admitted:true,lifecycle_owner:'routine run'},{admitted:false,lifecycle_owner:'routine run'}]);
- assert.deepEqual(diagnostics[0].command,['hermes','cron','run','brief']);assert.deepEqual(diagnostics[0].child,{pid:4321});
+ assert.deepEqual(diagnostics[0].command,['hermes','cron','run','brief']);assert.deepEqual(diagnostics[0].child,{pid:4321,tree:{root:4321,process_group:4321}});
  finish();await scheduler.running;
  diagnostics=JSON.parse(fs.readFileSync(path.join(store.state,'routine-run-diagnostics.json'),'utf8')).runs;
  assert.equal(diagnostics[0].exit_status,0);assert.equal(diagnostics[0].stderr,'the Hermes warning');assert.equal(diagnostics[0].run_log.command_output,'the Hermes run log');assert.equal(diagnostics[0].run_log.path,path.join(home,'cron','output'));
@@ -210,10 +210,10 @@ test('a failed admitted Hermes child retains its exit status and stderr',async t
  const root=temporary(t,'run-diagnostic-failure'),home=path.join(root,'.hermes'),store=new Store(root,{device:'pc'});
  store.save('settings',{id:'installation',owner:'pc',timezone:'Europe/Berlin',delivery:'notebook'});
  fs.mkdirSync(path.join(home,'cron'),{recursive:true});fs.writeFileSync(path.join(home,'cron','jobs.json'),JSON.stringify({jobs:[{id:'brief',name:'Morning brief'}]}));
- const scheduler=new NativeScheduler(store,{executable:'hermes',home,device:'pc',run:async(executable,args,{onStart}={})=>{onStart?.({pid:4321});throw Object.assign(Error('Command failed with exit code 12'),{code:12,stderr:'Hermes routine failure'});}});
+ const scheduler=new NativeScheduler(store,{executable:'hermes',home,device:'pc',run:async(executable,args,{onStart}={})=>{onStart?.({pid:4321,tree:{root:4321,process_group:4321}});throw Object.assign(Error('Command failed with exit code 12'),{code:12,stderr:'Hermes routine failure'});}});
  scheduler.startRun('brief');await scheduler.running.catch(()=>{});
  const run=JSON.parse(fs.readFileSync(path.join(store.state,'routine-run-diagnostics.json'),'utf8')).runs[0];
- assert.equal(run.exit_status,12);assert.equal(run.stderr,'Hermes routine failure');assert.deepEqual(run.child,{pid:4321});
+ assert.equal(run.exit_status,12);assert.equal(run.stderr,'Hermes routine failure');assert.deepEqual(run.child,{pid:4321,tree:{root:4321,process_group:4321}});
 });
 
 test('interrupted Hermes children retain their buffered output in routine diagnostics',async t=>{

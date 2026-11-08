@@ -216,27 +216,45 @@ server_keep_routine_diagnostics() { # <label>
     server_copy_evidence /opt/data/full-candidate/hermes/cron/output "$EVIDENCE/routine-output-$1"
   fi
 }
+server_pause_job() { # <id> <label>
+  printf '{"id":%s,"paused":true}' "$(quoted_json "$1")" >"$EVIDENCE/.job-$2-pause.json"
+  [ "$(server_post /api/jobs/update "$EVIDENCE/.job-$2-pause.json" "$EVIDENCE/job-$2-pause.json")" = 200 ] ||
+    fail "Settings would not pause routine $1 after its run"
+}
 server_run_job() { # <label> <job name> <seconds>
-  local jobs=$EVIDENCE/jobs-$1.json id before
+  local jobs=$EVIDENCE/jobs-$1.json id before retry=0
   server_table jobs "$jobs"
   id=$(server_job_id "$2" "$jobs")
   [ -n "$id" ] || fail "the installed server has no routine called \"$2\""
   before=$("$NODE" -e 'const fs=require("fs"),d=JSON.parse(fs.readFileSync(process.argv[1],"utf8")),rows=Array.isArray(d)?d:d.data||[],j=rows.find(v=>v?.id===process.argv[2]);process.stdout.write(String(j?.last_run_at||""))' "$jobs" "$id")
+  printf '{"id":%s,"paused":false}' "$(quoted_json "$id")" >"$EVIDENCE/.job-$1-resume.json"
+  [ "$(server_post /api/jobs/update "$EVIDENCE/.job-$1-resume.json" "$EVIDENCE/job-$1-resume.json")" = 200 ] ||
+    fail "Settings would not resume routine \"$2\" for its run"
   printf '{"id":%s}' "$(quoted_json "$id")" >"$EVIDENCE/.job-run.json"
-  case $(server_post /api/jobs/run "$EVIDENCE/.job-run.json" "$EVIDENCE/job-$1-start.json") in
-    200|202) ;;
-    *) server_keep_routine_diagnostics "$1"; fail "Settings would not run \"$2\": $(tr -d '\n' <"$EVIDENCE/job-$1-start.json" | cut -c1-200)" ;;
-  esac
+  while :; do
+    case $(server_post /api/jobs/run "$EVIDENCE/.job-run.json" "$EVIDENCE/job-$1-start.json") in
+      200|202) break ;;
+    esac
+    server_keep_routine_diagnostics "$1"
+    if [ "$retry" = 0 ] && "$NODE" -e 'const fs=require("fs"),runs=JSON.parse(fs.readFileSync(process.argv[1],"utf8")).runs||[],last=runs.at(-1);process.exit(last?.admitted===false&&last.lifecycle_owner==="routine tick"?0:1)' "$EVIDENCE/routine-diagnostics-$1.json"; then
+      retry=1; sleep 5
+    else
+      server_pause_job "$id" "$1"
+      fail "Settings would not run \"$2\": $(tr -d '\n' <"$EVIDENCE/job-$1-start.json" | cut -c1-200)"
+    fi
+  done
   server_job_finished() {
     server_table jobs "$jobs" 2>/dev/null &&
       "$NODE" -e 'const fs=require("fs"),d=JSON.parse(fs.readFileSync(process.argv[1],"utf8")),rows=Array.isArray(d)?d:d.data||[],j=rows.find(v=>v?.id===process.argv[2]);process.exit(j?.last_run_at&&j.last_run_at!==process.argv[3]&&j?.last_status==="ok"?0:1)' "$jobs" "$id" "$before"
   }
   if ! wait_for "$3" "the installed routine $2" server_job_finished; then
     server_keep_routine_diagnostics "$1"
+    server_pause_job "$id" "$1"
     fail "the installed routine \"$2\" did not finish successfully within $3 s"
   fi
   server_keep_routine_diagnostics "$1"
   cp "$jobs" "$EVIDENCE/job-$1.json"
+  server_pause_job "$id" "$1"
 }
 
 server_snapshot_table() { # <label> <table>

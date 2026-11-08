@@ -27,7 +27,7 @@ export function runChild(executable,args,{cwd,env,input,timeoutMs=0,maxBytes=4*1
   let child;
   try{child=spawnProcess(executable,args,{cwd,env,windowsHide:true,shell:false,detached:process.platform!=='win32',stdio:[input===undefined?'ignore':'pipe','pipe','pipe']});}
   catch(error){return reject(Object.assign(new Error('The program could not start'),{code:'SPAWN_FAILED',cause:error}));}
-  const started={pid:child.pid};
+  const started={pid:child.pid,tree:process.platform==='win32'?{root:child.pid}:{root:child.pid,process_group:child.pid}};
   try{onStart?.(started);}catch{}
   const out=[],err=[];let bytes=0,errBytes=0,settled=false,timer=null;
   const finish=(error,value)=>{if(settled)return;settled=true;clearTimeout(timer);signal?.removeEventListener('abort',abort);error?reject(error):resolve(value);};

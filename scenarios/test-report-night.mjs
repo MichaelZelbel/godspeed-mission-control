@@ -407,6 +407,9 @@ test('the PR-image job binds its published digest to stage and selects every sha
   // The workflow is read with every line marked, so the checks below read as they did when they proved the draft.
   const text = readFileSync(WORKFLOW, 'utf8').replace(/\r\n/g, '\n').split('\n').map((line) => `+${line}`).join('\n');
   assert.match(text, /^\+    if: github\.event_name == 'pull_request' && github\.event\.pull_request\.head\.repo\.full_name == github\.repository$/m, 'only a same-repository pull request can build the image');
+  assert.match(text, /^\+      TAG: pr-\$\{\{ github\.event\.pull_request\.number \}\}-\$\{\{ github\.event\.pull_request\.head\.sha \}\}$/m, 'the image tag is not unique to this pull request head');
+  assert.match(text, /^\+          ref: \$\{\{ github\.event\.pull_request\.head\.sha \}\}$/m, 'the image builder does not check out the pull request head');
+  assert.match(text, /^\+          docker build --build-arg REVISION="\$\{\{ github\.event\.pull_request\.head\.sha \}\}" -f docker\/full-candidate\/Dockerfile -t "\$IMAGE:\$TAG" \.$/m, 'the image build does not receive the pull request head revision');
   assert.match(text, /^\+      image: \$\{\{ steps\.publish\.outputs\.image \}\}$/m, 'the image job does not publish its immutable image');
   assert.match(text, /^\+          digest=\$\(docker buildx imagetools inspect "\$IMAGE:\$TAG" --format '\{\{\.Manifest\.Digest\}\}'\)$/m, 'the published image is not resolved to a digest');
   assert.match(text, /^\+          \[\[ \$digest =~ \^sha256:\[0-9a-f]\{64\}\$ \]\] \|\|/m, 'the published image digest is not verified');

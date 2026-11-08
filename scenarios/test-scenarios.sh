@@ -228,7 +228,12 @@ server_run_job_keeps_success_evidence() {
       if [ "$tables" = 1 ]; then printf "[{\\\"id\\\":\\\"brief\\\",\\\"name\\\":\\\"Coach reminders and habit check\\\",\\\"last_run_at\\\":null,\\\"last_status\\\":null}]\\n" >"$2";
       else printf "[{\\\"id\\\":\\\"brief\\\",\\\"name\\\":\\\"Coach reminders and habit check\\\",\\\"last_run_at\\\":\\\"later\\\",\\\"last_status\\\":\\\"ok\\\"}]\\n" >"$2"; fi
     }
-    server_post() { printf "{\\\"started\\\":true}\\n" >"$3"; printf 202; }
+    server_post() {
+      case $1 in
+        /api/jobs/update) printf "{}\\n" >"$3"; printf 200 ;;
+        /api/jobs/run) printf "{\\\"started\\\":true}\\n" >"$3"; printf 202 ;;
+      esac
+    }
     wait_for() { "${@:3}"; }
     server_container() { printf fixture; }
     sudo() { return 0; }
@@ -247,6 +252,63 @@ server_run_job_keeps_success_evidence() {
   fi
 }
 server_run_job_keeps_success_evidence
+
+server_run_job_retries_a_tick_refusal() {
+  local evidence=$TMP/server-run-job-tick-retry output
+  mkdir -p "$evidence"
+  if output=$(EVIDENCE="$evidence" SERVER_RUNS="$evidence/runs" bash -c '
+    . "$1"
+    tables=0
+    server_table() {
+      tables=$((tables + 1))
+      if [ "$tables" = 1 ]; then printf "[{\\\"id\\\":\\\"brief\\\",\\\"name\\\":\\\"Coach reminders and habit check\\\",\\\"last_run_at\\\":null,\\\"last_status\\\":null}]\\n" >"$2";
+      else printf "[{\\\"id\\\":\\\"brief\\\",\\\"name\\\":\\\"Coach reminders and habit check\\\",\\\"last_run_at\\\":\\\"later\\\",\\\"last_status\\\":\\\"ok\\\"}]\\n" >"$2"; fi
+    }
+    server_post() {
+      case $1 in
+        /api/jobs/update) printf "{}\\n" >"$3"; printf 200 ;;
+        /api/jobs/run)
+          printf x >>"$SERVER_RUNS"
+          if [ "$(wc -c <"$SERVER_RUNS")" = 1 ]; then printf "{\\\"error\\\":\\\"The assistant is updating or another routine is already running.\\\"}\\n" >"$3"; printf 409;
+          else printf "{\\\"started\\\":true}\\n" >"$3"; printf 202; fi ;;
+      esac
+    }
+    wait_for() { "${@:3}"; }
+    sleep() { :; }
+    server_container() { printf fixture; }
+    sudo() { return 0; }
+    server_copy_evidence() {
+      if [ "$1" = /opt/data/full-candidate/workspace/.godspeed/routine-run-diagnostics.json ]; then
+        printf "{\\\"runs\\\":[{\\\"admitted\\\":false,\\\"lifecycle_owner\\\":\\\"routine tick\\\"}]}\\n" >"$2"
+      else : >"$2"; fi
+    }
+    server_run_job report "Coach reminders and habit check" 10
+  ' bash "$HERE/server-lib.sh" 2>&1); then
+    if [ "$(wc -c <"$evidence/runs")" = 2 ]; then
+      ok 'a routine run retries once after the scheduler tick’s protective refusal'
+    else
+      bad "a routine run retries once after the scheduler tick’s protective refusal ($(wc -c <"$evidence/runs") run requests)"
+    fi
+  else
+    bad "a routine run retries once after the scheduler tick’s protective refusal ($output)"
+  fi
+}
+server_run_job_retries_a_tick_refusal
+
+routine_evidence_is_required() {
+  local scenario=$1 label=$2 folder output code
+  folder=$TMP/required-routine-evidence-$scenario
+  mkdir -p "$folder"
+  output=$(bash "$ROOT/scenarios/$scenario.sh" --check "$folder" 2>&1); code=$?
+  if [ "$code" != 0 ] && [[ $output == *"routine-diagnostics-$label.json"* ]]; then
+    ok "$scenario refuses evidence without its retained routine diagnostic"
+  else
+    bad "$scenario refuses evidence without its retained routine diagnostic (exit $code: $output)"
+  fi
+}
+routine_evidence_is_required what-was-that report
+routine_evidence_is_required connection-check fine
+routine_evidence_is_required first-day research
 
 server_telegram_setup_override() {
   local bin=$TMP/server-telegram-override-bin trace=$TMP/server-telegram-override.trace output port
@@ -4297,8 +4359,8 @@ else
 fi
 if grep -q 'server_keep_routine_diagnostics' "$ROOT/scenarios/server-lib.sh" \
   && grep -q 'routine-diagnostics-report.json' "$ROOT/scenarios/what-was-that.sh" \
-  && grep -q 'routine-diagnostics-<label>.json' "$ROOT/scenarios/connection-check.sh" \
-  && grep -q 'lifecycle admission record' "$ROOT/scenarios/first-day.sh"; then
+  && grep -q 'routine-diagnostics-fine.json' "$ROOT/scenarios/connection-check.sh" \
+  && grep -q 'routine-diagnostics-research.json' "$ROOT/scenarios/first-day.sh"; then
   ok "the three fresh-install routine scenarios retain lifecycle and Hermes run diagnostics"
 else
   bad "the three fresh-install routine scenarios do not retain lifecycle and Hermes run diagnostics"

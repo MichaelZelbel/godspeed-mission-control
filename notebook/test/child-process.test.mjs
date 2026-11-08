@@ -19,7 +19,7 @@ const exitsEarly='process.stderr.write("error: unrecognized arguments\\n");proce
 
 test('a child reports its admitted PID to its caller',async()=>{
  let started;const result=await runChild(process.execPath,['-e','process.exit(0)'],{onStart:child=>{started=child;}});
- assert.equal(result.code,0);assert.equal(result.pid,started.pid);assert.ok(Number.isInteger(started.pid));
+ assert.equal(result.code,0);assert.equal(result.pid,started.pid);assert.ok(Number.isInteger(started.pid));assert.deepEqual(started.tree,process.platform==='win32'?{root:started.pid}:{root:started.pid,process_group:started.pid});
 });
 
 test('a stopped child retains the output it had already written',async()=>{
