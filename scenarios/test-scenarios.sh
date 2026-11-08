@@ -3267,6 +3267,9 @@ passes 'an empty delivery while everything is fine' connection-check "$C/empty-w
 copy "$C/good" "$C/deadline-when-fine"
 printf '[{"slug":"x","title":"Something","status":"open"}]\n' >"$C/deadline-when-fine/due-fine.json"
 refuses 'a deadline although everything is fine' connection-check "$C/deadline-when-fine" 'opened a deadline although'
+copy "$C/good" "$C/fine-deadline-malformed"
+printf '{\n' >"$C/fine-deadline-malformed/due-fine.json"
+refuses 'unreadable fine-run deadline evidence' connection-check "$C/fine-deadline-malformed" 'fine-run deadline evidence cannot be read'
 copy "$C/good" "$C/bell-when-fine"
 printf '{"data":[{"id":"n9","kind":"connection-telegram","body":"x"}]}\n' >"$C/bell-when-fine/notifications-fine.json"
 printf '{"data":[{"id":"n9","kind":"connection-telegram","body":"x"}]}\n' >"$C/bell-when-fine/notifications-broken.json"

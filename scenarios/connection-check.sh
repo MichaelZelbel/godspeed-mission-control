@@ -96,8 +96,10 @@ check() { # <evidence folder>
   interaction_begin fine
   text=$(outbox_between "$folder/run.json" fine | grep -Fvx '""' | head -n 1)
   [ -z "$text" ] || fail "the connection check sent a message although everything was fine: $text"
-  [ -z "$("$NODE" "$HERE/telegram-judge.mjs" deadlines "$folder/due-fine.json" "$folder/due-before.json")" ] ||
-    fail "the connection check opened a deadline although everything was fine: $("$NODE" "$HERE/telegram-judge.mjs" deadlines "$folder/due-fine.json" "$folder/due-before.json" | tr '\t\n' ' ')"
+  deadline=$("$NODE" "$HERE/telegram-judge.mjs" deadlines "$folder/due-fine.json" "$folder/due-before.json") ||
+    fail 'the fine-run deadline evidence cannot be read'
+  [ -z "$deadline" ] ||
+    fail "the connection check opened a deadline although everything was fine: $(tr '\t\n' ' ' <<<"$deadline")"
   [ "$("$NODE" "$HERE/telegram-judge.mjs" bell "$folder/notifications-fine.json" "$folder/notifications-before.json" connection)" = 0 ] ||
     fail "the connection check put a connection record in the bell although everything was fine"
   interaction_passed fine
