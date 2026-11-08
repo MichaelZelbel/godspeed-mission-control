@@ -17,6 +17,7 @@ const PLUGIN = path.join(HERE, "..", "hermes", "plugin", "godspeed-charm");
 const BIN = path.join(HERE, "..", "bin", "godspeed-charm.mjs");
 const DRIVER = path.join(HERE, "telegram_driver.py");
 const auditContract = JSON.parse(fs.readFileSync(path.join(HERE, "fixtures", "audit-log-contract.json"), "utf8"));
+const auditSeed = (bytes) => { const line = '{"verdict":"old"}\n'; return line.repeat(Math.floor(bytes / line.length)) + " ".repeat(bytes % line.length); };
 const PY = ["python3", "python"].find((p) => { const r = spawnSync(p, ["-c", "print(1)"], { encoding: "utf8" }); return r.status === 0 && r.stdout.trim() === "1"; });
 const skip = PY ? false : "no python on this computer";
 
@@ -55,14 +56,14 @@ if (command === "judge" && mode && !(rest.includes("--no-model") && FALLS_BACK.i
 }
 `;
 
-function drive(dir, steps, env = {}) {
+function drive(dir, steps, { seedLog, ...env } = {}) {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), "charm-home-"));
   const stub = path.join(home, "stub.mjs");
   fs.writeFileSync(stub, STUB);
-  if (env.SEED_LOG) {
+  if (seedLog !== undefined) {
     const log = path.join(home, auditContract.relativePath);
     fs.mkdirSync(path.dirname(log), { recursive: true });
-    fs.writeFileSync(log, "x".repeat(auditContract.rotateAfterBytes + 1));
+    fs.writeFileSync(log, seedLog);
   }
   if (env.FIXTURE_MODEL) {
     fs.mkdirSync(path.join(home, "bin"));
@@ -240,11 +241,22 @@ test("the installation's godspeed-model is asked when it is there", { skip: skip
 test("an oversized log is moved to .1 and the active log holds only the new line", { skip }, () => {
   const dir = mission();
   try {
-    const out = drive(dir, [register, pre(VENT), reply("Here.")], { SEED_LOG: "1" });
+    const out = drive(dir, [register, pre(VENT), reply("Here.")], { seedLog: "x".repeat(auditContract.rotateAfterBytes + 1) });
     assert.equal(out.rotated.length, auditContract.rotateAfterBytes + 1);
     assert.equal(out.log.length, 1);
     assert.deepEqual(Object.keys(out.log[0]).sort(), [...auditContract.recordKeys].sort());
     assert.equal(out.log[0].verdict, "ask");
+  } finally { gone(dir); }
+});
+
+test("an audit log at the shared rotation threshold is appended without replacement", { skip }, () => {
+  const dir = mission();
+  try {
+    const seed = auditSeed(auditContract.rotateAfterBytes);
+    const out = drive(dir, [register, pre(VENT), reply("Here.")], { seedLog: seed });
+    assert.equal(out.rotated, null);
+    assert.equal(out.log.length, Math.floor(auditContract.rotateAfterBytes / '{"verdict":"old"}\n'.length) + 1);
+    assert.equal(out.log.at(-1).verdict, "ask");
   } finally { gone(dir); }
 });
 

@@ -263,10 +263,10 @@ the_brief_runs() {
 # exist before, and each conversation gets its own "no". The first one keeps the names the scenario
 # always had (vent-reply.txt, no-reply.txt).
 five_vents() {
-  local n vent started ended name_vent name_no first_started log log_before
+  local n vent started ended name_vent name_no first_started log log_cursor
   : >"$EVIDENCE/vents.txt"
   log="$HERMES/logs/godspeed-charm.log"
-  log_before=$(wc -l <"$log" 2>/dev/null || true)
+  log_cursor=$(charm_log_cursor "$log")
   first_started=$(date +%s)
   for n in 1 2 3 4 5; do
     case $n in
@@ -294,7 +294,7 @@ five_vents() {
   done
   assistant_commands "$EVIDENCE/commands.txt" "$((first_started - 5))"
   sed 's/^/  command | /' "$EVIDENCE/commands.txt" >&2
-  retain_new_charm_log "$log" "${log_before:-0}" "$EVIDENCE/charm-log.txt"
+  retain_new_charm_log "$log" "$log_cursor" "$EVIDENCE/charm-log.txt"
   sed 's/^/  charm-log | /' "$EVIDENCE/charm-log.txt" >&2
 }
 

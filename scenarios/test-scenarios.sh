@@ -1552,12 +1552,14 @@ charm_good() { # <folder>
 section charm-challenge
 C=$TMP/charm
 charm_log_source_boundary() {
-  local folder=$TMP/charm-log-source source=$TMP/charm-log-source/godspeed-charm.log evidence=$TMP/charm-log-source/charm-log.txt output code
+  local folder=$TMP/charm-log-source source=$TMP/charm-log-source/godspeed-charm.log evidence=$TMP/charm-log-source/charm-log.txt output code cursor
   rm -rf "$folder"
   mkdir -p "$folder"
-  printf '{"verdict":"ask"}\n' >"$source"
+  printf '{"verdict":"old"}\n' >"$source"
+  cursor=$(bash -c '. "$1"; charm_log_cursor "$2"' bash "$HERE/charm-log.sh" "$source")
+  printf '{"verdict":"ask"}\n' >>"$source"
   output=$(bash -c '. "$1"; fail(){ printf "%s\\n" "$*"; exit 42; }; retain_new_charm_log "$2" "$3" "$4"' \
-    bash "$HERE/charm-log.sh" "$source" 0 "$evidence" 2>&1)
+    bash "$HERE/charm-log.sh" "$source" "$cursor" "$evidence" 2>&1)
   code=$?
   if [ "$code" = 0 ] && [ "$(<"$evidence")" = '{"verdict":"ask"}' ]; then
     ok 'the Charm log helper retains newly written JSONL evidence'
@@ -1574,22 +1576,37 @@ charm_log_source_boundary() {
     bad "a missing Charm source log did not name the absent panel evidence (exit $code: $output)"
   fi
   printf '{"verdict":"ask"}\n' >"$source"
+  cursor=$(bash -c '. "$1"; charm_log_cursor "$2"' bash "$HERE/charm-log.sh" "$source")
   output=$(bash -c '. "$1"; fail(){ printf "%s\\n" "$*"; exit 42; }; retain_new_charm_log "$2" "$3" "$4"' \
-    bash "$HERE/charm-log.sh" "$source" 1 "$evidence" 2>&1)
+    bash "$HERE/charm-log.sh" "$source" "$cursor" "$evidence" 2>&1)
   code=$?
   if [ "$code" = 42 ] && [[ $output == *"installed panel Charm judgement did not write evidence to $source"* ]]; then
     ok 'an unchanged Charm source log names the absent panel evidence'
   else
     bad "an unchanged Charm source log did not name the absent panel evidence (exit $code: $output)"
   fi
-  printf '{"verdict":"ask"}\n{"verdict":' >"$source"
+  printf '{"verdict":"old"}\n' >"$source"
+  cursor=$(bash -c '. "$1"; charm_log_cursor "$2"' bash "$HERE/charm-log.sh" "$source")
+  printf '{"verdict":' >>"$source"
   output=$(bash -c '. "$1"; fail(){ printf "%s\\n" "$*"; exit 42; }; retain_new_charm_log "$2" "$3" "$4"' \
-    bash "$HERE/charm-log.sh" "$source" 0 "$evidence" 2>&1)
+    bash "$HERE/charm-log.sh" "$source" "$cursor" "$evidence" 2>&1)
   code=$?
   if [ "$code" = 42 ] && [[ $output == *"installed panel Charm judgement wrote invalid JSONL evidence to $source"* ]]; then
     ok 'a malformed newly written Charm log line is refused'
   else
     bad "a malformed newly written Charm log line was not refused (exit $code: $output)"
+  fi
+  "${NODE:-node}" -e 'const fs=require("fs");const line=JSON.stringify({verdict:"old",padding:"x".repeat(100)})+"\\n";fs.writeFileSync(process.argv[1],line.repeat(10000));' "$source"
+  cursor=$(bash -c '. "$1"; charm_log_cursor "$2"' bash "$HERE/charm-log.sh" "$source")
+  mv "$source" "$source.1"
+  printf '{"verdict":"ask"}\n{"verdict":"answer"}\n' >"$source"
+  output=$(bash -c '. "$1"; fail(){ printf "%s\\n" "$*"; exit 42; }; retain_new_charm_log "$2" "$3" "$4"' \
+    bash "$HERE/charm-log.sh" "$source" "$cursor" "$evidence" 2>&1)
+  code=$?
+  if [ "$code" = 0 ] && [ "$(<"$evidence")" = $'{"verdict":"ask"}\n{"verdict":"answer"}' ]; then
+    ok 'the Charm log helper retains the active generation after rollover'
+  else
+    bad "the Charm log helper did not retain the active generation after rollover (exit $code: $output)"
   fi
 }
 charm_log_source_boundary

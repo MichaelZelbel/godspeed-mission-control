@@ -5,12 +5,16 @@ import os from 'node:os';
 import path from 'node:path';
 import {EventEmitter} from 'node:events';
 import {PassThrough} from 'node:stream';
+import {spawnSync} from 'node:child_process';
+import {fileURLToPath} from 'node:url';
 import {createService} from '../server/main.mjs';
 import {JUDGE_PROTOCOL} from '../../third-party/addons/godspeed-charm/lib/judge.mjs';
 import {addonInvocation} from '../core/native-personal.mjs';
 import {wordCheckMs} from '../core/charm-judgement.mjs';
 
 const auditContract=JSON.parse(fs.readFileSync(new URL('../../third-party/addons/godspeed-charm/test/fixtures/audit-log-contract.json',import.meta.url),'utf8'));
+const auditSeed=bytes=>{const line='{"verdict":"old"}\n';return line.repeat(Math.floor(bytes/line.length))+' '.repeat(bytes%line.length);};
+const charmLog=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../../scenarios/charm-log.sh');
 
 // Issue #218: a slip typed in the notebook's chat panel gets the same question the Hermes plugin
 // asks. The panel's route is /api/browser-chat -> domains.nativeAgent (a one-shot assistant run that
@@ -113,6 +117,33 @@ test('the native panel rotates the shared audit log before writing a new redacte
  assert.equal(entries.length,1);
  assert.deepEqual(Object.keys(entries[0]).sort(),[...auditContract.recordKeys].sort());
  assert.doesNotMatch(JSON.stringify(entries),new RegExp(auditContract.redaction.forbiddenText));
+});
+
+test('the native panel appends at the shared audit log rotation threshold',{skip},async t=>{
+ const seed=auditSeed(auditContract.rotateAfterBytes);
+ const {say,op,home}=await panel(t,{seedLog:seed});
+ await op({action:'start',words:'start'});
+ await say(VENT);
+ const log=path.join(home,auditContract.relativePath);
+ assert.equal(fs.existsSync(log+'.1'),false);
+ const entries=fs.readFileSync(log,'utf8').trim().split('\n').map(JSON.parse);
+ assert.equal(entries.length,Math.floor(auditContract.rotateAfterBytes/'{"verdict":"old"}\n'.length)+1);
+ assert.equal(entries.at(-1).verdict,'ask');
+});
+
+test('the scenario retains the native writer\'s active generation after audit-log rollover',{skip},async t=>{
+ const seed=auditSeed(auditContract.rotateAfterBytes+1);
+ const {say,op,home}=await panel(t,{seedLog:seed});
+ const log=path.join(home,auditContract.relativePath),before=fs.statSync(log),cursor=`${before.ino}:${before.size}`;
+ await op({action:'start',words:'start'});
+ await say(VENT);
+ assert.equal(fs.existsSync(log+'.1'),true);
+ const evidence=path.join(home,'charm-log.txt');
+ const retained=spawnSync('bash',['-c','. "$1"; fail(){ printf "%s\\n" "$*" >&2; exit 42; }; retain_new_charm_log "$2" "$3" "$4"','bash',charmLog,log,cursor,evidence],{encoding:'utf8'});
+ assert.equal(retained.status,0,retained.stderr);
+ const entries=fs.readFileSync(evidence,'utf8').trim().split('\n').map(JSON.parse);
+ assert.equal(entries.length,1);
+ assert.equal(entries[0].verdict,'ask');
 });
 
 test('the verdict words the panel accepts are the plugin\'s',()=>{
