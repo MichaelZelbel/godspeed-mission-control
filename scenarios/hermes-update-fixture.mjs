@@ -77,7 +77,24 @@ case "\${1:-}" in
         log "update $release"; git -C "$root" checkout -q "v$release" ;;
       *) if [ "\${2:-}" = --backup ]; then release=$(node -p "try{require(process.argv[1]).reveal}catch(e){'1.1.0'}" "$fixture_state"); else release=\${2#v}; fi; log "update $release"; git -C "$root" checkout -q "v$release" ;;
     esac ;;
-  backup) log "backup $version" ;;
+  backup)
+    output=
+    while [ "$#" -gt 0 ]; do
+      case "$1" in
+        --output) output=\${2:-}; shift 2 ;;
+        *) shift ;;
+      esac
+    done
+    [ -n "$output" ] || exit 2
+    mkdir -p "$(dirname "$output")"
+    : > "$output"
+    log "backup $version" ;;
+  import)
+    [ -f "\${2:-}" ] && [ "\${3:-}" = --force ] || exit 2
+    log "import $version" ;;
+  pm)
+    [ "\${2:-}" = install ] || exit 2
+    log "pm-install $version" ;;
   cron)
     [ "\${2:-}" = list ] || exit 2
     log "cron-list $version"
