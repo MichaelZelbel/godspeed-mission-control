@@ -29,9 +29,9 @@ export class WorkoutsAddon {
   if(result.code){const match=refusal.exec(result.stderr);throw Error(match?match[0]:'Could not connect Workouts from Hevy. Check the key and try again.');}
   return {first};
  }
- async uninstall(){
-  const result=await this.command(['uninstall']);
-  if(result.code){const detail=scrubCredentials(String(result.stderr||result.stdout||'')).split(/\r?\n/).map(line=>line.trim()).filter(Boolean)[0];throw Error(detail?'Could not remove the standalone Workouts schedule: '+detail:'Could not remove the standalone Workouts schedule.');}
+ async uninstall({retrySystemdReload=false}={}){
+  const result=await this.command(['uninstall',...(retrySystemdReload?['--retry-systemd-reload']:[])]);
+  if(result.code){const detail=scrubCredentials(String(result.stderr||result.stdout||'')).split(/\r?\n/).map(line=>line.trim()).filter(Boolean)[0],error=Error(detail?'Could not remove the standalone Workouts schedule: '+detail:'Could not remove the standalone Workouts schedule.');if(result.code===2)error.retrySystemdReload=true;throw error;}
  }
  async status({routine=null}={}){
   const saved=this.hasKey();

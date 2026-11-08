@@ -22,7 +22,7 @@ function fakeHermes(home){
 function handoverFixture(t,{mode='fresh'}={}){
  const root=temporary(t),home=path.join(root,'.hermes'),store=new Store(root,{device:'pc'}),hermes=fakeHermes(home),events=hermes.events;let now=Date.parse('2030-01-01T00:00:00Z'),last=null;
  let retirementError=mode==='uninstall-fails'?'legacy timer remains':null;
- const scheduler=new NativeScheduler(store,{home,executable:'hermes',device:'pc',run:hermes.run,now:()=>now}),addon={hasKey:()=>true,routineConfig:()=>({}),status:async()=>{events.push('status');return {minute:17,last_run:last};},uninstall:async()=>{events.push('uninstall');if(retirementError)throw Error(retirementError);}};
+ const scheduler=new NativeScheduler(store,{home,executable:'hermes',device:'pc',run:hermes.run,now:()=>now}),addon={hasKey:()=>true,routineConfig:()=>({}),status:async()=>{events.push('status');return {minute:17,last_run:last};},uninstall:async({retrySystemdReload=false}={})=>{events.push('uninstall'+(retrySystemdReload?':retry':''));if(retirementError)throw Object.assign(Error(retirementError),{retrySystemdReload:true});}};
  fs.writeFileSync(path.join(root,'AGENTS.md'),'# test');scheduler.setWorkouts(addon);
  hermes.setRun(async()=>{if(mode==='run-fails')throw Object.assign(Error('first import failed'),{stderr:'first import failed\ntoken=sk-secret-token-value-123456789'});last=mode==='stale'?{ok:true,at:new Date(now-1).toISOString()}:mode==='failed'?{ok:false,at:new Date(now).toISOString()}:{ok:true,at:new Date(now).toISOString()};});
  return {store,hermes,scheduler,events,advance:ms=>{now+=ms;},setRetirementError:error=>{retirementError=error;}};
@@ -75,7 +75,7 @@ test('a failed Workouts handover retains the standalone timer, reports a safe re
   assert.deepEqual(removal.events,['status','create','run:job1','status','uninstall'],kind);assert.equal(removal.hermes.jobs().length,1,kind);assert.deepEqual(readNotebookRoutines(removal.store).jobs.map(job=>job.id),['job1'],kind);
   assert.deepEqual(removal.scheduler.workoutsRoutineStatus(),{state:'scheduled',reason,retry_after:'2030-01-01T00:01:00.000Z'},kind);
   removal.setRetirementError(null);removal.advance(60000);await removal.scheduler.followWorkouts({retry:true});
-  assert.deepEqual(removal.events,['status','create','run:job1','status','uninstall','status','uninstall'],kind);assert.equal(removal.hermes.jobs().length,1,kind);assert.deepEqual(removal.scheduler.workoutsRoutineStatus(),{state:'scheduled'},kind);
+  assert.deepEqual(removal.events,['status','create','run:job1','status','uninstall','status','uninstall:retry'],kind);assert.equal(removal.hermes.jobs().length,1,kind);assert.deepEqual(removal.scheduler.workoutsRoutineStatus(),{state:'scheduled'},kind);
  }
 });
 
@@ -101,6 +101,11 @@ test('the Workouts add-on reports an unsuccessful standalone-timer removal',asyn
  const root=temporary(t),addon=new WorkoutsAddon({root,run:async()=>({code:1,stdout:'scheduler refused removal: token=sk-secret-token-value-123456789'})});
  await assert.rejects(addon.uninstall(),/Could not remove the standalone Workouts schedule: scheduler refused removal: credential: \*\*\*/);
  await assert.rejects(addon.uninstall(),error=>!String(error.message).includes('sk-secret-token'));
+});
+
+test('the Workouts add-on marks a failed systemd reload for its retry',async()=>{
+ const addon=new WorkoutsAddon({run:async()=>({code:2,stderr:'systemd did not reload its unit files'})});
+ await assert.rejects(addon.uninstall(),error=>error.retrySystemdReload===true&&/Could not remove the standalone Workouts schedule/.test(error.message));
 });
 
 test('the Workouts API projects pending and retained-routine handover failures',async t=>{

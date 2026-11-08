@@ -216,7 +216,7 @@ const windowsTaskDeleteScript = [
   `try{$folder.DeleteTask('${TASK}',0)}catch{$hresult=[uint32][System.Runtime.InteropServices.Marshal]::GetHRForException($_.Exception);if($hresult -eq 0x80070002){exit ${WINDOWS_TASK_ABSENT}};throw}`,
 ].join(";");
 
-export function removeSchedule(p, { runCommand = run } = {}) {
+export function removeSchedule(p, { runCommand = run, retrySystemdReload = false } = {}) {
   if (p.kind === "windows-task") {
     const r = runCommand("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", windowsTaskDeleteScript]);
     if (r.status === 0) return { ok: true, text: `scheduled task "${TASK}" removed` };
@@ -224,7 +224,12 @@ export function removeSchedule(p, { runCommand = run } = {}) {
     return commandFailure(`the scheduled task "${TASK}" was not removed`, r);
   }
   const files = scheduleFiles(p).filter((f) => fs.existsSync(f));
-  if (!files.length) return { ok: true, text: "no hourly run to remove" };
+  const systemd = p.kind === "systemd-system" || p.kind === "systemd-user";
+  if (!files.length) {
+    if (!retrySystemdReload || !systemd) return { ok: true, text: "no hourly run to remove" };
+    const r = runCommand("systemctl", p.kind === "systemd-system" ? ["daemon-reload"] : ["--user", "daemon-reload"]);
+    return r.status === 0 ? { ok: true, text: "the hourly run is removed" } : { ...commandFailure("systemd did not reload its unit files", r), retrySystemdReload: true };
+  }
   if (p.kind === "launch-agent") {
     const uid = process.getuid?.() ?? 0;
     const r = runCommand("launchctl", ["bootout", `gui/${uid}/${AGENT}`]);
@@ -238,9 +243,9 @@ export function removeSchedule(p, { runCommand = run } = {}) {
     if (r.status !== 0) return commandFailure(`${TIMER} was not stopped`, r);
   }
   for (const f of files) fs.rmSync(f, { force: true });
-  if (p.kind !== "launch-agent") {
+  if (systemd) {
     const r = runCommand("systemctl", p.kind === "systemd-system" ? ["daemon-reload"] : ["--user", "daemon-reload"]);
-    if (r.status !== 0) return commandFailure("systemd did not reload its unit files", r);
+    if (r.status !== 0) return { ...commandFailure("systemd did not reload its unit files", r), retrySystemdReload: true };
   }
   return { ok: true, text: "the hourly run is removed" };
 }

@@ -79,14 +79,31 @@ test("removing either systemd schedule reports a daemon reload refusal", () => {
         return args.includes("daemon-reload") ? { status: 1, stderr: `systemd ${kind.slice("systemd-".length)} manager refused reload` } : { status: 0 };
       } });
       assert.equal(result.ok, false, kind);
+      assert.equal(result.retrySystemdReload, true, kind);
       assert.match(result.text, new RegExp(`systemd ${kind.slice("systemd-".length)} manager refused reload`));
       assert.deepEqual(calls, [
         ["systemctl", [...prefix, "disable", "--now", "godspeed-workouts.timer"]],
         ["systemctl", [...prefix, "daemon-reload"]],
       ], kind);
       assert.equal(scheduled.size, 0, kind);
+      const retried = removeSchedule(options, { retrySystemdReload: true, runCommand: (command, args) => {
+        calls.push([command, args]);
+        return { status: 0 };
+      } });
+      assert.equal(retried.ok, true, kind);
+      assert.deepEqual(calls.at(-1), ["systemctl", [...prefix, "daemon-reload"]], kind);
     } finally { fs.existsSync = exists; fs.rmSync = remove; }
   }
+});
+
+test("an absent systemd schedule stays a no-op unless retrying its failed reload", () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "godspeed-workouts-schedule-"));
+  try {
+    const calls = [];
+    const result = removeSchedule({ ...p, kind: "systemd-user", home }, { runCommand: (...args) => { calls.push(args); return { status: 0 }; } });
+    assert.deepEqual(result, { ok: true, text: "no hourly run to remove" });
+    assert.deepEqual(calls, []);
+  } finally { fs.rmSync(home, { recursive: true, force: true }); }
 });
 
 test("removing an already absent Windows task succeeds", () => {

@@ -103,7 +103,7 @@ export class NativeScheduler{
    return result;
   }catch(error){
    this.setupAttempts.add(step);
-   const attempts=(previous?.attempts||0)+1,stderr=diagnostic(error),record={step,first_failed_at:previous?.first_failed_at||new Date(now).toISOString(),attempts,exit_code:error?.code??null,stderr,last_failed_at:new Date(now).toISOString(),retry_after:new Date(now+RETRY_MINUTES[Math.min(attempts-1,RETRY_MINUTES.length-1)]*60000).toISOString(),executable:String(this.executable)};
+   const attempts=(previous?.attempts||0)+1,stderr=diagnostic(error),record={step,first_failed_at:previous?.first_failed_at||new Date(now).toISOString(),attempts,exit_code:error?.code??null,stderr,last_failed_at:new Date(now).toISOString(),retry_after:new Date(now+RETRY_MINUTES[Math.min(attempts-1,RETRY_MINUTES.length-1)]*60000).toISOString(),executable:String(this.executable),...(error?.retrySystemdReload?{retry_systemd_reload:true}:{})};
    failures.steps[step]=record;writeSetupFailures(this.store,failures);if(!this.followingSetup)this.setupNotice(failures,now);
    console.error('Godspeed Mission Control: '+setupName(step)+' could not be set up: '+errorLine(record));
    throw error;
@@ -476,7 +476,8 @@ export class NativeScheduler{
    const keep=current?matching.find(j=>j.id===current.id)||matching[0]:matching[0];
    for(const duplicate of matching.filter(j=>j.id!==keep.id))await this.command(['remove',duplicate.id]);
    if(!current)return this.completeWorkoutsHandover(keep);
-   if(this.workoutsSetupFailure())await this.workouts.uninstall();
+   const failure=readSetupFailures(this.store).steps.workouts;
+   if(failure)await this.workouts.uninstall({retrySystemdReload:failure.retry_systemd_reload===true});
    else if(keep.enabled===false&&current.paused_by_notebook){await this.command(['resume',keep.id]);rememberNotebookRoutine(this.store,{...current,paused_by_notebook:false,running_by_notebook:true});}
    return keep.id;
   }
