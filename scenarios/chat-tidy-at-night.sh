@@ -34,7 +34,8 @@
 #   setup.json                            the notebook's configured answer to the owner's first goal
 SCENARIO=chat-tidy-at-night
 # shellcheck source=scenarios/scenario-lib.sh
-. "$(dirname "${BASH_SOURCE[0]}")/scenario-lib.sh"
+. "$(dirname "$0")/scenario-lib.sh"
+scenario_arguments "$@"
 
 ROUTINE='Night chat tidy-up'
 ROUTINE_KEY=chat-tidy
@@ -193,14 +194,11 @@ check() { # <evidence folder>
   pass "the long conversation went from $before to $after messages and its log says it was tidied; the next message was answered with no summary in front; the conversation under the limit was byte-for-byte as it was"
 }
 
-if [ "${BASH_SOURCE[0]}" = "$0" ]; then
-  scenario_arguments "$@"
-  if [ "$CHECK_ONLY" = yes ]; then
-    install_paths
-    need_node
-    check "$EVIDENCE"
-  else
-    act
-    check "$EVIDENCE"
-  fi
+if [ "$CHECK_ONLY" = yes ]; then
+  install_paths
+  need_node
+  check "$EVIDENCE"
+else
+  act
+  check "$EVIDENCE"
 fi
