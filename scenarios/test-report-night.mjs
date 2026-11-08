@@ -212,6 +212,8 @@ test('talk-prep-honest always uploads its own evidence folder and fails when it 
   assert.equal(field('name'), `${name}-evidence`, 'artifact name');
   assert.equal(field('path'), `\${{ runner.temp }}/${name}`, "the uploaded folder is not the scenario's own evidence folder");
   assert.equal(field('if-no-files-found'), 'error', 'a missing evidence folder must fail the step');
+  assert.equal(field('continue-on-error'), undefined, 'a failed evidence upload must fail the job, so no continue-on-error');
+  assert.doesNotMatch(block, /^ {4}continue-on-error:/m, 'talk-prep-honest must fail when its evidence upload fails, so no job-level continue-on-error');
 });
 
 // The product version is owned by notebook/package.json; the README's newest "New in" heading must name it.
