@@ -4059,10 +4059,14 @@ if node "$ROOT/scenarios/hermes-update-fixture.mjs" --dir "$HFD" >/dev/null \
   && [ "$(git -C "$HFD" tag | wc -l | tr -d '[:space:]')" = 4 ] \
   && [ "$(HERMES_FIXTURE_LOG=$HFD_LOG "$HFD/bin/hermes" --version)" = 1.0.0 ] \
   && [ "$(HERMES_FIXTURE_LOG=$HFD_LOG "$HFD/bin/hermes" update --check)" = 1.1.0 ] \
-  && HERMES_FIXTURE_LOG=$HFD_LOG "$HFD/bin/hermes" update 1.2.0 \
+  && HERMES_FIXTURE_LOG=$HFD_LOG "$HFD/bin/hermes" update --no-backup --yes \
+  && [ "$(git -C "$HFD" describe --exact-match --tags HEAD)" = v1.1.0 ] \
+  && node "$ROOT/scenarios/hermes-update-fixture.mjs" --dir "$HFD" --reveal 1.2.0 >/dev/null \
+  && HERMES_FIXTURE_LOG=$HFD_LOG "$HFD/bin/hermes" update --no-backup --yes \
   && [ "$(git -C "$HFD" describe --exact-match --tags HEAD)" = v1.2.0 ] \
   && ! HERMES_FIXTURE_LOG=$HFD_LOG "$HFD/bin/hermes" cron list >/dev/null 2>&1 \
   && git -C "$HFD" checkout -q v1.1.0 \
+  && node "$ROOT/scenarios/hermes-update-fixture.mjs" --dir "$HFD" --reveal 1.1.0 >/dev/null \
   && HERMES_FIXTURE_LOG=$HFD_LOG "$HFD/bin/hermes" update --backup \
   && [ "$(git -C "$HFD" describe --exact-match --tags HEAD)" = v1.1.0 ] \
   && HERMES_FIXTURE_LOG=$HFD_LOG "$HFD/bin/hermes" cron list >/dev/null \
