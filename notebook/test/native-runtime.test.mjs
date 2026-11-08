@@ -61,6 +61,12 @@ test('a native chat continues the earlier unanswered talk on a non-talk day',asy
  domains.nativeAgent=async input=>{if(input.coach_start_resolution)return {reply:'{"area":"health"}'};start=input.coach_talk_start;return {reply:'Continuing the earlier talk.'};};
  assert.equal((await domains.invoke('conversation-chat',{message:'Let us have my health talk now.',conversation_id:'fixture'})).reply,'Continuing the earlier talk.');assert.equal(start.day,day);assert.equal(start.continuing,true);assert.equal(fs.existsSync(path.join(area.dir,'talks',today+'.md')),false);assert.equal(store.list('conversation_messages').length,1);
 });
+test('a native chat refuses an unshown earlier continuation',async t=>{
+ const root=fixture(t),store=new Store(root),domains=new Domains(new QueryService(store)),today=localParts(coachNow(),'UTC').date,day=addDays(today,-1),rhythm=['mon','tue','wed','thu','fri','sat','sun'].find(name=>name!==weekdayOf(today));
+ const area=addArea(root,{slug:'health',title:'Health',rhythm:'weekly '+rhythm,time:'19:00',starts:'2020-01-01'});openTalk(area,day,{opening:'Earlier opening.'});let attempts=0;
+ domains.nativeAgent=async input=>input.coach_start_resolution?{reply:'{"area":"health"}'}:(attempts++,{reply:'Continuing the earlier talk.'});
+ await assert.rejects(domains.invoke('conversation-chat',{message:'Let us have my health talk now.',conversation_id:'fixture'}),/was not marked shown in this chat/);assert.equal(attempts,2);assert.equal(store.list('conversation_messages').length,0);assert.equal(fs.existsSync(path.join(area.dir,'talks',today+'.md')),false);
+});
 test('a native chat rejects failed coach-start classification but preserves an explicit no-start',async t=>{
  const root=fixture(t),store=new Store(root),domains=new Domains(new QueryService(store)),area=coachArea(root);for(const reply of ['not JSON','[]','{}','{"area":"health","extra":true}','{"area":1}','{"area":"unknown"}'])assert.throws(()=>resolvedCoachArea(reply,root),/could not determine whether this starts a coaching talk/);assert.equal(resolvedCoachArea('{"area":null}',root),null);
  let replies=0;domains.nativeAgent=async input=>input.coach_start_resolution?{reply:'not JSON'}:(replies++,{reply:'ordinary reply'});await assert.rejects(domains.invoke('conversation-chat',{message:'Let us have my health talk now.',conversation_id:'fixture'}),/could not determine whether this starts a coaching talk/);assert.equal(replies,0);assert.equal(store.list('conversation_messages').length,0);

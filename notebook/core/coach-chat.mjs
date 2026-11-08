@@ -26,7 +26,6 @@ export function coachTalkRecordProblem(store,start,reply){
   if(!talk)return `The ${start.area} talk record for ${start.day} was not created.`;
   if(talk.state!=='opened')return `The ${start.area} talk record for ${start.day} is not open.`;
   if(!opening)return `The ${start.area} talk record for ${start.day} has no opening.`;
-  if(start.continuing)return null;
   if(!talk.shown)return `The ${start.area} talk record for ${start.day} was not marked shown in this chat.`;
   if(start.opening&&opening!==start.opening.trim())return `The ${start.area} talk record did not use its prepared opening.`;
   if(start.sentence&&!opening.includes(start.sentence))return `The ${start.area} talk record does not say why its preparation was not ready.`;
