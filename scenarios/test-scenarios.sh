@@ -3236,9 +3236,9 @@ cc_good() { # <folder>
   printf '[]\n' >"$f/due-before.json"
   printf '{"data":[]}\n' >"$f/notifications-before.json"
   for label in fine; do printf '[]\n' >"$f/due-$label.json"; printf '{"data":[]}\n' >"$f/notifications-$label.json"; done
-  printf '[{"slug":"telegram-key","title":"Connect Telegram again","state":"open"}]\n' >"$f/due-broken.json"
+  printf '[{"slug":"telegram-key","title":"Connect Telegram again","status":"open"}]\n' >"$f/due-broken.json"
   printf '{"data":[{"id":"n1","kind":"connection-telegram","body":"Telegram refused your bot key, so I cannot reach you there. Open Settings to connect it again."}]}\n' >"$f/notifications-broken.json"
-  printf '[{"slug":"telegram-key","title":"Connect Telegram again","state":"closed"}]\n' >"$f/due-repaired.json"
+  printf '[{"slug":"telegram-key","title":"Connect Telegram again","status":"closed"}]\n' >"$f/due-repaired.json"
   printf '{"data":[]}\n' >"$f/notifications-repaired.json"
   printf '{"requests":[{"method":"getMe","authorized":true},{"method":"getMe","authorized":false},{"method":"getMe","authorized":true}]}\n' >"$f/telegram-requests.json"
   printf '{"state":"gateway"}\n' >"$f/runner.json"
@@ -3265,7 +3265,7 @@ copy "$C/good" "$C/empty-when-fine"
 run_json "$C/empty-when-fine" "$(msg fine '')" "$(msg broken 'Telegram refused your bot key.')"
 passes 'an empty delivery while everything is fine' connection-check "$C/empty-when-fine" 'told the owner once'
 copy "$C/good" "$C/deadline-when-fine"
-printf '[{"slug":"x","title":"Something","state":"open"}]\n' >"$C/deadline-when-fine/due-fine.json"
+printf '[{"slug":"x","title":"Something","status":"open"}]\n' >"$C/deadline-when-fine/due-fine.json"
 refuses 'a deadline although everything is fine' connection-check "$C/deadline-when-fine" 'opened a deadline although'
 copy "$C/good" "$C/bell-when-fine"
 printf '{"data":[{"id":"n9","kind":"connection-telegram","body":"x"}]}\n' >"$C/bell-when-fine/notifications-fine.json"
@@ -3283,16 +3283,16 @@ copy "$C/good" "$C/no-deadline"
 printf '[]\n' >"$C/no-deadline/due-broken.json"
 refuses 'no deadline when broken' connection-check "$C/no-deadline" 'opened 0 deadlines'
 copy "$C/good" "$C/two-deadlines"
-printf '[{"slug":"a","title":"Connect Telegram again","state":"open"},{"slug":"b","title":"Telegram again","state":"open"}]\n' >"$C/two-deadlines/due-broken.json"
+printf '[{"slug":"a","title":"Connect Telegram again","status":"open"},{"slug":"b","title":"Telegram again","status":"open"}]\n' >"$C/two-deadlines/due-broken.json"
 refuses 'two deadlines when broken' connection-check "$C/two-deadlines" 'opened 2 deadlines'
 copy "$C/good" "$C/still-open"
-printf '[{"slug":"telegram-key","title":"Connect Telegram again","state":"open"}]\n' >"$C/still-open/due-repaired.json"
+printf '[{"slug":"telegram-key","title":"Connect Telegram again","status":"open"}]\n' >"$C/still-open/due-repaired.json"
 copy "$C/good" "$C/deleted"
 printf '[]\n' >"$C/deleted/due-repaired.json"
 refuses 'a deadline deleted instead of closed' connection-check "$C/deleted" 'absent, not closed'
 copy "$C/good" "$C/decoy-closed"
-printf '[{"slug":"the-open-deadline","title":"Connect Telegram again","state":"open"},{"slug":"the-decoy","title":"Telegram old","state":"closed"}]\n' >"$C/decoy-closed/due-broken.json"
-printf '[{"slug":"the-open-deadline","title":"Connect Telegram again","state":"open"},{"slug":"the-decoy","title":"Telegram old","state":"closed"}]\n' >"$C/decoy-closed/due-repaired.json"
+printf '[{"slug":"the-open-deadline","title":"Connect Telegram again","status":"open"},{"slug":"the-decoy","title":"Telegram old","status":"closed"}]\n' >"$C/decoy-closed/due-broken.json"
+printf '[{"slug":"the-open-deadline","title":"Connect Telegram again","status":"open"},{"slug":"the-decoy","title":"Telegram old","status":"closed"}]\n' >"$C/decoy-closed/due-repaired.json"
 refuses 'another closed Telegram deadline standing in for the open one' connection-check "$C/decoy-closed" 'not closed, after'
 refuses 'a deadline still open after the key is valid again' connection-check "$C/still-open" 'not closed, after'
 
