@@ -4163,6 +4163,7 @@ printf '%s\n' '#!/bin/sh' 'exec "$@"' >"$HRC_FAILURE/bin/sudo"
 chmod +x "$HRC_FAILURE/bin/systemctl" "$HRC_FAILURE/bin/sudo"
 if ROOT="$ROOT" HRC_FAILURE="$HRC_FAILURE" HERMES_RELEASE_FAILURE_DROPIN="$HRC_FAILURE/home/.config/systemd/user/godspeed-integrated-notebook.service.d/scenario-hermes-releases.conf" HERMES_RELEASE_FAILURE_LOG="$HRC_FAILURE/systemctl.log" HERMES_RELEASE_FAILURE_PID="$HRC_FAILURE/fixture.pid" HERMES_RELEASE_FAILURE_READY="$HRC_FAILURE/ready" GODSPEED_SCENARIO_ROOT="$HRC_FAILURE/root" GODSPEED_SCENARIO_WORK="$HRC_FAILURE/work" HOME="$HRC_FAILURE/home" PATH="$HRC_FAILURE/bin:$PATH" bash -c '
   source "$ROOT/scenarios/hermes-update-rollback.sh"
+  scenario_arguments test-stage
   install_the_stage_line() { :; }
   need_node() { NODE=$(command -v node); }
   wait_for() { shift 2; "$@"; }
