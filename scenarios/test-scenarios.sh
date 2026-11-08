@@ -4156,6 +4156,34 @@ if ROOT="$ROOT" HRC="$HRC" HERMES_RELEASE_CLEANUP_ROOT="$HRC" HERMES_RELEASE_CLE
 else
   bad 'the Hermes release-source cleanup cannot remove both temporary service routes'
 fi
+HRC_FAILURE=$TMP/hermes-release-cleanup-failure
+mkdir -p "$HRC_FAILURE/bin" "$HRC_FAILURE/home"
+printf '%s\n' '#!/bin/sh' 'case "$*" in' '  "--user cat godspeed-integrated-notebook.service") exit 0 ;;' '  "--user daemon-reload") [ ! -e "$HERMES_RELEASE_FAILURE_READY" ] && exit 0 ;;' '  "--user restart godspeed-integrated-notebook.service") if [ ! -e "$HERMES_RELEASE_FAILURE_READY" ]; then : >"$HERMES_RELEASE_FAILURE_READY"; exit 0; fi ;;' 'esac' 'if [ -e "$HERMES_RELEASE_FAILURE_DROPIN" ]; then exit 1; fi' 'printf "%s\\n" "$*" >> "$HERMES_RELEASE_FAILURE_LOG"' >"$HRC_FAILURE/bin/systemctl"
+printf '%s\n' '#!/bin/sh' 'exec "$@"' >"$HRC_FAILURE/bin/sudo"
+chmod +x "$HRC_FAILURE/bin/systemctl" "$HRC_FAILURE/bin/sudo"
+if ROOT="$ROOT" HRC_FAILURE="$HRC_FAILURE" HERMES_RELEASE_FAILURE_DROPIN="$HRC_FAILURE/home/.config/systemd/user/godspeed-integrated-notebook.service.d/scenario-hermes-releases.conf" HERMES_RELEASE_FAILURE_LOG="$HRC_FAILURE/systemctl.log" HERMES_RELEASE_FAILURE_PID="$HRC_FAILURE/fixture.pid" HERMES_RELEASE_FAILURE_READY="$HRC_FAILURE/ready" GODSPEED_SCENARIO_ROOT="$HRC_FAILURE/root" GODSPEED_SCENARIO_WORK="$HRC_FAILURE/work" HOME="$HRC_FAILURE/home" PATH="$HRC_FAILURE/bin:$PATH" bash -c '
+  source "$ROOT/scenarios/hermes-update-rollback.sh"
+  install_the_stage_line() { :; }
+  need_node() { NODE=$(command -v node); }
+  wait_for() { shift 2; "$@"; }
+  notebook_is_up() { :; }
+  install_fixture_hermes() { :; }
+  record_releases() { :; }
+  run_night() { fail "the forced post-setup failure"; }
+  kill() { printf "%s\\n" "$1" >"$HERMES_RELEASE_FAILURE_PID"; command kill "$@"; }
+  act
+' >"$HRC_FAILURE/scenario.out" 2>&1; then
+  bad 'a Hermes post-setup failure exits after removing its temporary release source'
+elif [ ! -e "$HRC_FAILURE/home/.config/systemd/user/godspeed-integrated-notebook.service.d/scenario-hermes-releases.conf" ] \
+  && [ -s "$HRC_FAILURE/fixture.pid" ] \
+  && ! kill -0 "$(cat "$HRC_FAILURE/fixture.pid")" 2>/dev/null \
+  && grep -Fqx 'FAIL hermes-update-rollback: the forced post-setup failure' "$HRC_FAILURE/scenario.out" \
+  && [ "$(grep -cx -- '--user daemon-reload' "$HRC_FAILURE/systemctl.log")" = 1 ] \
+  && [ "$(grep -cx -- '--user restart godspeed-integrated-notebook.service' "$HRC_FAILURE/systemctl.log")" = 1 ]; then
+  ok 'a Hermes post-setup failure removes its temporary release source before restarting the service'
+else
+  bad 'a Hermes post-setup failure leaves its temporary release source or skips service restoration'
+fi
 HFD_RELATIVE=hermes-fixture-relative
 if (
   cd "$TMP"
