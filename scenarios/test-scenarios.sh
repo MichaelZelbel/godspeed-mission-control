@@ -109,6 +109,30 @@ server_download_failure() {
   fi
 }
 
+server_manifest_writes_evidence_manifest() {
+  local evidence=$TMP/server-manifest output code
+  mkdir -p "$evidence/nested"
+  printf 'top-level evidence\n' >"$evidence/top.txt"
+  printf 'nested evidence\n' >"$evidence/nested/item.txt"
+  output=$(NODE="${NODE:-node}" EVIDENCE="$evidence" bash -c '
+    . "$1"
+    fail() { printf "%s\\n" "$*" >&2; exit 42; }
+    server_manifest
+  ' bash "$HERE/server-lib.sh" 2>&1)
+  code=$?
+  if [ "$code" = 0 ] && node -e '
+    const fs=require("fs");
+    const files=JSON.parse(fs.readFileSync(process.argv[1],"utf8")).files;
+    process.exit(files.some(file=>file.file==="top.txt"&&file.bytes===19)&&files.some(file=>file.file==="nested/item.txt"&&file.bytes===16)?0:1);
+  ' "$evidence/manifest.json"; then
+    ok 'the real server manifest helper records nested scenario evidence'
+  else
+    bad "the real server manifest helper records nested scenario evidence (exit $code: $output)"
+  fi
+}
+
+server_manifest_writes_evidence_manifest
+
 server_installed_asker() {
   local candidate=$TMP/asker-candidate hermes=$TMP/asker-hermes target=$TMP/asker-home/scripts/scenario-asker.py args=$TMP/asker-args output code
   mkdir -p "$candidate/scenarios" "$TMP/asker-home/scripts" "$TMP/asker-workspace" "$hermes"

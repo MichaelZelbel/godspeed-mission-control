@@ -193,7 +193,17 @@ server_manifest() {
   "$NODE" -e '
 const crypto=require("crypto"),fs=require("fs"),path=require("path");
 const [root,out]=process.argv.slice(1),files=[];
-for(const walk=d=>{for(const entry of fs.readdirSync(d,{withFileTypes:true})){const file=path.join(d,entry.name);if(entry.isDirectory())walk(file);else if(entry.isFile()){const data=fs.readFileSync(file);files.push({file:path.relative(root,file),bytes:data.length,sha256:crypto.createHash("sha256").update(data).digest("hex")});}}})(root);
+const walk=d=>{
+  for(const entry of fs.readdirSync(d,{withFileTypes:true})){
+    const file=path.join(d,entry.name);
+    if(entry.isDirectory())walk(file);
+    else if(entry.isFile()){
+      const data=fs.readFileSync(file);
+      files.push({file:path.relative(root,file),bytes:data.length,sha256:crypto.createHash("sha256").update(data).digest("hex")});
+    }
+  }
+};
+walk(root);
 fs.writeFileSync(out,JSON.stringify({files},null,2)+"\\n");
 ' "$EVIDENCE" "$EVIDENCE/manifest.json" || fail 'the scenario could not write its evidence manifest'
 }

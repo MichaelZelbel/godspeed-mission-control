@@ -11,6 +11,8 @@
 # v2-sha-<commit> (or, when CI built none for it because no image input changed, the newest
 # first-parent ancestor's within 50, named on stderr). A same-repository pull-request scenario gets
 # GODSPEED_SCENARIO_PR_IMAGE, the selected PR-head image's immutable digest; it never falls back.
+# That proof supports exactly one public-stage server edition: a second edition is rejected without
+# fallback.
 # The folder then holds this-commit/ (the commit's files, its stage.json made) and beta/stage.json
 # (the public stage as read), and a line reading raw=file://<folder> lets every installer and
 # scenario read it as it reads GitHub.

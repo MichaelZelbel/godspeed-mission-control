@@ -215,6 +215,8 @@ A selected server scenario on a same-repository pull request is the exception: i
 only `pr-<number>-<head-sha>`, resolves that tag to an immutable `ghcr.io/...@sha256:...` image, and
 passes that opaque digest to its stage job. The stage accepts only that digest for the product's
 server image and does not look for a `v2-sha-*` image or an ancestor if it is absent or malformed.
+That PR-image proof supports exactly one public-stage server edition; a second edition is rejected
+without fallback.
 Every other run keeps the ordinary image policy above. Its cases are in `test-scenarios.sh`.
 
 Only the stage's own ref is read from that folder. A scenario that first installs an older version
