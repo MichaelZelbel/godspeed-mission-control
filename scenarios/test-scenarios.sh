@@ -3712,11 +3712,35 @@ ACT_NODE_ORDER=$(env -u NODE GODSPEED_SCENARIO_ROOT="$RFS/root" ACTION_EVENTS="$
   cd "$3"
   . "$1"
   EVIDENCE=$2
-  node() { :; }
+  node() {
+    case " $* " in
+      *" --mutate "*) printf "ambient-fixture-mutate\\n" >>"$ACTION_EVENTS" ;;
+      *) printf "ambient-fixture-start\\n" >>"$ACTION_EVENTS"; printf "47832\\n" ;;
+    esac
+  }
   trap() { :; }
-  need_node() { NODE=/bin/true; printf "need-node\\n" >>"$ACTION_EVENTS"; }
-  fresh_evidence() { mkdir -p "$EVIDENCE"; printf "47832\\n" >"$EVIDENCE/fixture-port"; }
-  wait_for() { :; }
+  need_node() {
+    NODE=$EVIDENCE/selected-node
+    mkdir -p "$EVIDENCE"
+    cat >"$NODE" <<EOF
+#!/usr/bin/env bash
+case " \$* " in
+  *" --mutate "*) printf "selected-fixture-mutate\\n" >>"\$ACTION_EVENTS" ;;
+  *) printf "selected-fixture-start\\n" >>"\$ACTION_EVENTS"; printf "47832\\n" ;;
+esac
+EOF
+    chmod +x "$NODE"
+    printf "need-node\\n" >>"$ACTION_EVENTS"
+  }
+  fresh_evidence() { mkdir -p "$EVIDENCE"; }
+  wait_for() {
+    local attempts=0
+    until "${@:3}"; do
+      attempts=$((attempts + 1))
+      [ "$attempts" -lt 100 ] || return 1
+      sleep .01
+    done
+  }
   curl() { printf "%s\\n" "{\"ok\":true}"; }
   server_install() { :; }
   server_hevy_url() { :; }
@@ -3733,8 +3757,8 @@ ACT_NODE_ORDER=$(env -u NODE GODSPEED_SCENARIO_ROOT="$RFS/root" ACTION_EVENTS="$
   cat "$ACTION_EVENTS"
 ' action-order "$ROOT/scenarios/workouts-from-hevy.sh" "$RFS/action-evidence" "$ROOT/scenarios" 2>&1)
 case "$ACT_NODE_ORDER" in
-  $'need-node\nrefused-docker:set\nrefused-native:set') ok "the Hevy action selects Node before either refused-key scan" ;;
-  *) bad "the Hevy action did not select Node before its refused-key scans ($ACT_NODE_ORDER)" ;;
+  $'need-node\nselected-fixture-start\nrefused-docker:set\nrefused-native:set\nselected-fixture-mutate') ok "the Hevy action uses its selected Node runtime for both fixture calls and before either refused-key scan" ;;
+  *) bad "the Hevy action did not use its selected Node runtime for both fixture calls before its refused-key scans ($ACT_NODE_ORDER)" ;;
 esac
 NO_NODE_ACTION=$(env -u NODE GODSPEED_SCENARIO_ROOT="$RFS/root" bash -c '
   cd "$2"
