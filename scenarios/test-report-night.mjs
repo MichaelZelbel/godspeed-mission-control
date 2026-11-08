@@ -8,7 +8,6 @@ import { fileURLToPath } from 'node:url';
 
 const SCRIPT = fileURLToPath(new URL('./report-night.mjs', import.meta.url));
 const WORKFLOW = fileURLToPath(new URL('../.github/workflows/scenarios.yml', import.meta.url));
-const WORKFLOW_DRAFT = fileURLToPath(new URL('../.github/workflow-drafts/scenarios.yml', import.meta.url));
 
 // state: { openIssues: [{number,title}], labelExists, logs: {jobName: text}, jobs: [{id,name,conclusion}] }
 async function night(results, state = {}, extra = {}) {
@@ -159,7 +158,7 @@ test("the verdict's needs and RESULTS name the same scenarios, and every scenari
   assert.equal(new Set(needs).size, needs.length, 'duplicate in needs');
   assert.equal(new Set(pairs).size, pairs.length, 'duplicate in RESULTS');
   assert.deepEqual([...pairs].sort(), [...needs].sort(), 'needs (minus stage) and RESULTS differ');
-  const scenarios = jobs.filter((j) => j !== 'stage' && j !== 'verdict');
+  const scenarios = jobs.filter((j) => j !== 'stage' && j !== 'verdict' && j !== 'pr-image');
   assert.ok(scenarios.length > 5, 'too few scenario jobs found');
   for (const j of scenarios) {
     assert.ok(needs.includes(j), `scenario job ${j} is not in the verdict's needs`);
@@ -266,7 +265,7 @@ test('the pick names the scenarios whose script or owned file changed, and nothi
   const { tmpdir } = await import('node:os');
   const { spawnSync } = await import('node:child_process');
   const text = readFileSync(WORKFLOW, 'utf8').replace(/\r\n/g, '\n');
-  const at = text.indexOf('          jobs=$(grep -oE');
+  const at = text.indexOf('          jobs=$(grep -oE', text.indexOf('\n  stage:'));
   const to = text.indexOf('          echo "The pull request changes');
   assert.ok(at > 0 && to > at, 'the pick step was not found');
   const dir = mkdtempSync(`${tmpdir()}/pick-`).replaceAll(String.fromCharCode(92), '/');
@@ -319,7 +318,7 @@ test('a pull request from a fork runs nothing, and its verdict passes', async ()
     const i = starts.findIndex((m) => m[1] === name);
     return jobsText.slice(starts[i].index, i + 1 < starts.length ? starts[i + 1].index : undefined);
   };
-  assert.ok(blockOf('stage').includes("if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository"), 'the stage job does not skip a fork pull request');
+  assert.ok(blockOf('stage').includes("github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && needs.pr-image.result == 'success')"), 'the stage job does not skip a fork pull request');
   for (const m of starts) {
     const block = blockOf(m[1]);
     if (!/bash scenarios\/[a-z0-9-]+\.sh "\$STAGE_REF"/.test(block)) continue;
@@ -343,7 +342,7 @@ test('a pull request from a fork runs nothing, and its verdict passes', async ()
 
 // The workflow's own trigger, concurrency and the pick step as a whole, read as text and run as bash.
 const pickStep = (text) => {
-  const at = text.indexOf('        id: pick\n');
+  const at = text.indexOf('        id: pick\n', text.indexOf('\n  stage:'));
   const run = text.indexOf('        run: |\n', at);
   const to = text.indexOf('      - name: Read and check it', run);
   assert.ok(at > 0 && run > at && to > run, 'the pick step was not found');
@@ -401,11 +400,12 @@ test('the pick on a pull request asks the files endpoint of that pull request, a
   assert.equal(readFileSync(`${dir}/out`, 'utf8'), 'picked=,charm-challenge,\n');
 });
 
-test('the PR-image draft binds its published digest to stage and selects every shared-server helper consumer', async () => {
+test('the PR-image job binds its published digest to stage and selects every shared-server helper consumer', async () => {
   const { readFileSync, writeFileSync, mkdtempSync, mkdirSync, chmodSync } = await import('node:fs');
   const { tmpdir } = await import('node:os');
   const { spawnSync } = await import('node:child_process');
-  const text = readFileSync(WORKFLOW_DRAFT, 'utf8').replace(/\r\n/g, '\n');
+  // The workflow is read with every line marked, so the checks below read as they did when they proved the draft.
+  const text = readFileSync(WORKFLOW, 'utf8').replace(/\r\n/g, '\n').split('\n').map((line) => `+${line}`).join('\n');
   assert.match(text, /^\+    if: github\.event_name == 'pull_request' && github\.event\.pull_request\.head\.repo\.full_name == github\.repository$/m, 'only a same-repository pull request can build the image');
   assert.match(text, /^\+      image: \$\{\{ steps\.publish\.outputs\.image \}\}$/m, 'the image job does not publish its immutable image');
   assert.match(text, /^\+          digest=\$\(docker buildx imagetools inspect "\$IMAGE:\$TAG" --format '\{\{\.Digest\}\}'\)$/m, 'the published image is not resolved to a digest');
@@ -429,7 +429,7 @@ test('the PR-image draft binds its published digest to stage and selects every s
   };
   assert.equal(run('scenarios/server-lib.sh'),'picked=true\n','a shared helper change does not publish the PR image');
   assert.equal(run('scenarios/voice.sh'),'picked=false\n','an unpicked non-server scenario publishes no PR image');
-  const stageAt=text.indexOf('+          jobs=$(grep -oE',text.indexOf('\n   stage:'));
+  const stageAt=text.indexOf('+          jobs=$(grep -oE',text.indexOf('\n+  stage:'));
   const stageTo=text.indexOf('+          done',stageAt);
   assert.ok(stageAt>=0&&stageTo>stageAt,'the stage picker was not found');
   const stageScript=text.slice(stageAt,stageTo+'+          done'.length)
