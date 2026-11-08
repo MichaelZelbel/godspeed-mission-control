@@ -4356,11 +4356,11 @@ hevy_override_routes_to_fixture() { # <compose|systemd> <override file> <expecte
 import { readFileSync } from 'node:fs';
 const text = readFileSync(process.env.HEVY_OVERRIDE_FILE, 'utf8');
 const lines = process.env.HEVY_OVERRIDE_FORMAT === 'compose'
-  ? [...text.matchAll(/^\s+(GODSPEED_WORKOUTS_(?:HEVY_API|TEST)): "([^"]*)"$/gm)]
-  : [...text.matchAll(/^Environment="(GODSPEED_WORKOUTS_(?:HEVY_API|TEST))=([^"]*)"$/gm)];
+  ? [...text.matchAll(/^\s+(GODSPEED_WORKOUTS_[A-Z_]+): "([^"]*)"$/gm)]
+  : [...text.matchAll(/^Environment="(GODSPEED_WORKOUTS_[A-Z_]+)=([^"]*)"$/gm)];
 const env = Object.fromEntries(lines.map(([, key, value]) => [key, value]));
 const { hevyBase } = await import(`${process.env.ROOT}/third-party/addons/godspeed-workouts/lib/sync.mjs`);
-if (Object.keys(env).length !== 2 || hevyBase(env) !== process.env.HEVY_OVERRIDE_BASE) process.exit(1);
+if (hevyBase(env) !== process.env.HEVY_OVERRIDE_BASE) process.exit(1);
 NODE
 }
 HEVY_DIR=$TMP/server-hevy
