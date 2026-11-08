@@ -3696,7 +3696,10 @@ RFS=$WH/refused-scan
 mkdir -p "$RFS/root/.godspeed/integrated-runtime/versions/test/scenarios" "$RFS/assistant"
 printf '{"home":"%s"}\n' "$RFS/assistant" >"$RFS/root/.godspeed/assistant.json"
 RFS_SOURCE=$RFS/root/.godspeed/integrated-runtime/versions/test/scenarios/workouts-from-hevy.sh
+RFS_TEST_SOURCE=$RFS/root/.godspeed/integrated-runtime/versions/test/scenarios/test-scenarios.sh
+RFS_FIXTURE_SOURCE=$RFS/root/.godspeed/integrated-runtime/versions/test/scenarios/hevy-fixture.mjs
 printf 'refused-scenario-key\n' >"$RFS_SOURCE"
+printf 'refused-scenario-key\n' >"$RFS_TEST_SOURCE"
 printf 'refused-scenario-key\n' >"$RFS/assistant/settings.json"
 REFUSED_SCAN=$(GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy NODE="$(command -v node)" bash -c '
   cd "$3"
@@ -3720,8 +3723,8 @@ RUNTIME_SOURCE_SCAN=$(GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-
 ' runtime-source-scan "$ROOT/scenarios/workouts-from-hevy.sh" "$RFS" "$ROOT/scenarios" 2>&1)
 RUNTIME_SOURCE_SCAN_CODE=$?
 case "$RUNTIME_SOURCE_SCAN_CODE" in
-  0) ok "the native refused-key scan ignores immutable installed scenario source" ;;
-  *) bad "the native refused-key scan treated immutable installed scenario source as persisted credentials (exit $RUNTIME_SOURCE_SCAN_CODE: $RUNTIME_SOURCE_SCAN)" ;;
+  0) ok "the native refused-key scan ignores immutable installed scenario sources" ;;
+  *) bad "the native refused-key scan treated immutable installed scenario sources as persisted credentials (exit $RUNTIME_SOURCE_SCAN_CODE: $RUNTIME_SOURCE_SCAN)" ;;
 esac
 mkdir -p "$RFS/root/.godspeed/integrated-runtime/versions/test/state"
 RUNTIME_STATE=$RFS/root/.godspeed/integrated-runtime/versions/test/state/retained-key
@@ -3788,6 +3791,8 @@ case "$NO_NODE_ACTION_CODE $NO_NODE_ACTION" in
 esac
 printf '00000000-0000-4000-8000-000000000001\n' >"$RFS/assistant/hevy.json"
 printf '00000000-0000-4000-8000-000000000001\n' >"$RFS_SOURCE"
+printf '00000000-0000-4000-8000-000000000001\n' >"$RFS_TEST_SOURCE"
+printf '00000000-0000-4000-8000-000000000001\n' >"$RFS_FIXTURE_SOURCE"
 ACCEPTED_SCAN=$(GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy NODE="$(command -v node)" bash -c '
   cd "$3"
   . "$1"
@@ -3824,8 +3829,8 @@ ACCEPTED_SOURCE_SCAN=$(GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from
   cat "$EVIDENCE/key-scan.json"
 ' accepted-source-scan "$ROOT/scenarios/workouts-from-hevy.sh" "$RFS" "$ROOT/scenarios" 2>/dev/null)
 case "$ACCEPTED_SOURCE_SCAN" in
-  '{"clean":true,"paths":[]}') ok "the accepted-key scan ignores immutable installed scenario source" ;;
-  *) bad "the accepted-key scan treated immutable installed scenario source as persisted credentials ($ACCEPTED_SOURCE_SCAN)" ;;
+  '{"clean":true,"paths":[]}') ok "the accepted-key scan ignores immutable installed scenario sources" ;;
+  *) bad "the accepted-key scan treated immutable installed scenario sources as persisted credentials ($ACCEPTED_SOURCE_SCAN)" ;;
 esac
 printf '00000000-0000-4000-8000-000000000001\n' >"$RUNTIME_STATE"
 ACCEPTED_RUNTIME_SCAN=$(GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy NODE="$(command -v node)" bash -c '
