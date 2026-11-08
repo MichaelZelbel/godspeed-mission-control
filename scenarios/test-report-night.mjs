@@ -279,6 +279,7 @@ test('a pull request from a fork runs nothing, and its verdict passes', async ()
     assert.match(block, /^ {4}needs: stage$/m, `${m[1]} does not need the stage job, so a fork pull request could run it`);
   }
   const verdict = blockOf('verdict');
+  assert.match(verdict, /^ {4}if: always\(\)$/m, 'the verdict does not always run, so a fork pull request would get no verdict');
   const at = verdict.indexOf('          bad=0\n');
   const to = verdict.indexOf('      - name: Tell the night in issues');
   assert.ok(at > 0 && to > at, 'the verdict step was not found');
