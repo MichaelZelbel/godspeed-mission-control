@@ -265,7 +265,7 @@ act() {
   fresh_evidence
   local state=$EVIDENCE/fixture-state.json port pid
   : >"$EVIDENCE/fixture.log"
-  "$NODE" "$HERE/hevy-fixture.mjs" --state "$state" --log "$EVIDENCE/fixture.log" >"$EVIDENCE/fixture-port" & pid=$!
+  node "$HERE/hevy-fixture.mjs" --state "$state" --log "$EVIDENCE/fixture.log" >"$EVIDENCE/fixture-port" & pid=$!
   trap 'kill "$pid" 2>/dev/null || true' EXIT
   wait_for 20 'the local Hevy fixture to name its port' test -s "$EVIDENCE/fixture-port" || fail "the local Hevy fixture did not start"
   port=$(cat "$EVIDENCE/fixture-port")
@@ -296,7 +296,7 @@ act() {
   printf '{"api_key":"00000000-0000-4000-8000-000000000001"}\n' >"$EVIDENCE/.accepted-key.json"
   platform_before docker "$EVIDENCE/.accepted-key.json"
   platform_before native "$EVIDENCE/.accepted-key.json"
-  "$NODE" "$HERE/hevy-fixture.mjs" --state "$EVIDENCE/fixture-state.json" --log "$EVIDENCE/fixture.log" --mutate ||
+  node "$HERE/hevy-fixture.mjs" --state "$EVIDENCE/fixture-state.json" --log "$EVIDENCE/fixture.log" --mutate ||
     fail "the local Hevy fixture could not change its made-up workouts"
   platform_after docker
   platform_after native
