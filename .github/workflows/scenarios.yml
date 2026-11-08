@@ -21,7 +21,7 @@ run-name: ${{ github.event_name == 'pull_request' && format('scenarios on pull r
 # code (the job `stage` reads the changed files and says which scenarios to run: `picked`), so a fix
 # to a scenario is proved red or green before it merges instead of on the next night or candidate.
 # Nothing else runs on a pull request: no Mac, no Windows, no scenario whose files the pull request
-# did not touch, no issue in the night's name; a pull request from a fork runs nothing (no secrets).
+# did not touch (and never the install, Docker or update jobs), no issue in the night's name; a pull request from a fork runs nothing (no secrets).
 # A newer commit on the same pull request cancels the older run.
 # A night proves main's own commit: with no `stage` input (the schedule) the stage is made from
 # github.sha by scenarios/stage-for-run.sh and handed to every job as the artifact run-stage, read as
@@ -132,6 +132,8 @@ jobs:
 
   linux-install:
     name: a stranger's Linux install
+    # The install, Docker and update proofs have no script of their own to change: a pull request never runs them.
+    if: ${{ github.event_name != 'pull_request' }}
     needs: stage
     runs-on: ubuntu-24.04
     timeout-minutes: 60
@@ -196,6 +198,8 @@ jobs:
 
   docker-server:
     name: a stranger's Docker server
+    # The install, Docker and update proofs have no script of their own to change: a pull request never runs them.
+    if: ${{ github.event_name != 'pull_request' }}
     needs: stage
     runs-on: ubuntu-24.04
     timeout-minutes: 45
@@ -230,6 +234,8 @@ jobs:
 
   linux-update:
     name: an update from the current public version
+    # The install, Docker and update proofs have no script of their own to change: a pull request never runs them.
+    if: ${{ github.event_name != 'pull_request' }}
     needs: stage
     runs-on: ubuntu-24.04
     timeout-minutes: 90
