@@ -2,7 +2,7 @@ name: scenarios
 # The run's name carries the stage it proved, so a run on a candidate's tag that was left at the
 # default stage (beta) cannot be read as that candidate's pass: GitHub shows the input itself only
 # in the run's logs.
-run-name: scenarios ${{ inputs.stage || 'main, the night' }}
+run-name: ${{ github.event_name == 'pull_request' && format('scenarios on pull request {0}', github.event.pull_request.number) || format('scenarios {0}', inputs.stage || 'main, the night') }}
 # The proving scenarios a candidate runs before the maintainer is asked for "go" (godspeed-dev,
 # releases/godspeed-2.0.0-beta.7-stages/plan.md, "Proving scenarios" 1, 2 and 5, and
 # releases/godspeed-2.0.0-beta.8-faster-chat/plan.md, "Proving scenarios" 1, 3 and 4, which are
@@ -17,12 +17,20 @@ run-name: scenarios ${{ inputs.stage || 'main, the night' }}
 # are for a candidate (the Mac one only when `inputs.mac` is true, the Windows one only on a
 # candidate's tag), which a scheduled run never is. The verdict job's last step then tells the night
 # in issues (scenarios/report-night.mjs, releases/godspeed-2.0.0-beta.15-nightly-proof-six-repairs).
+# A pull request that changes a scenario's own script runs that scenario on the pull request's own
+# code (the job `stage` reads the changed files and says which scenarios to run: `picked`), so a fix
+# to a scenario is proved red or green before it merges instead of on the next night or candidate.
+# Nothing else runs on a pull request: no Mac, no Windows, no scenario whose files the pull request
+# did not touch (and never the install, Docker or update jobs), no issue in the night's name; a pull request from a fork runs nothing (no secrets).
+# A newer commit on the same pull request cancels the older run.
 # A night proves main's own commit: with no `stage` input (the schedule) the stage is made from
 # github.sha by scenarios/stage-for-run.sh and handed to every job as the artifact run-stage, read as
 # file://; main's own stage.json names the last frozen version and is never read.
 on:
   schedule:
     - cron: '30 2 * * *'
+  pull_request:
+    types: [opened, synchronize, reopened]
   workflow_dispatch:
     inputs:
       stage:
@@ -35,6 +43,10 @@ on:
         default: false
 permissions:
   contents: read
+concurrency:
+  # One group per pull request, so a new commit cancels the older run; every other run has its own.
+  group: scenarios-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 env:
   # Without a stage (the night) the stage is this commit's, in a folder every job downloads to
   # $RUNNER_TEMP/run-stage (GitHub's Ubuntu runners keep that at /home/runner/work/_temp).
@@ -44,9 +56,18 @@ env:
 jobs:
   stage:
     name: the stage file
+    # A pull request from a fork has no secrets, so no scenario can run on it: nothing runs.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-24.04
     timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    env:
+      # The commit the run proves: a pull request's own head, otherwise the one the run started on.
+      PROOF_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     outputs:
+      picked: ${{ steps.pick.outputs.picked }}
       version: ${{ steps.read.outputs.version }}
       product: ${{ steps.read.outputs.product }}
       engine: ${{ steps.read.outputs.engine }}
@@ -54,7 +75,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.stage || github.sha }}
+          ref: ${{ inputs.stage || github.event.pull_request.head.sha || github.sha }}
           fetch-depth: ${{ inputs.stage && 1 || 50 }}
           persist-credentials: false
       - uses: actions/setup-node@v4
@@ -63,7 +84,7 @@ jobs:
         if: ${{ !inputs.stage }}
         run: |
           set -e
-          out=$(bash scenarios/stage-for-run.sh '' "$GITHUB_SHA" "$RUNNER_TEMP/run-stage")
+          out=$(bash scenarios/stage-for-run.sh '' "$PROOF_SHA" "$RUNNER_TEMP/run-stage")
           echo "$out"
           [ "$out" = "$(printf 'ref=%s\nraw=%s' "$STAGE_REF" "$RAW")" ] || { echo "the stage is not where the jobs will read it ($RAW)"; exit 1; }
       - uses: actions/upload-artifact@v4
@@ -73,6 +94,27 @@ jobs:
           path: ${{ runner.temp }}/run-stage
           include-hidden-files: true
           retention-days: 3
+      - name: Which scenarios this run proves
+        id: pick
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          set -e
+          if [ "$GITHUB_EVENT_NAME" != pull_request ]; then
+            echo "picked=all" | tee -a "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # A pull request: the scenarios whose own files it changed, a job being named like its
+          # script (scenarios/<job>.sh) and owning scenarios/<job>.sh and scenarios/<job>-*.
+          gh api "repos/$GITHUB_REPOSITORY/pulls/$PR/files" --paginate --jq '.[].filename' > "$RUNNER_TEMP/changed"
+          jobs=$(grep -oE 'bash scenarios/[a-z0-9-]+\.sh "\$STAGE_REF"' .github/workflows/scenarios.yml | sed -E 's|bash scenarios/||; s|\.sh .*||' | sort -u)
+          picked=','
+          for j in $jobs; do
+            if grep -qE "^scenarios/$j(\.sh|-[^/]*)$" "$RUNNER_TEMP/changed"; then picked="$picked$j,"; fi
+          done
+          echo "The pull request changes $(wc -l < "$RUNNER_TEMP/changed") files; scenarios picked:$picked" | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "picked=$picked" | tee -a "$GITHUB_OUTPUT"
       - name: Read and check it
         id: read
         run: |
@@ -90,6 +132,8 @@ jobs:
 
   linux-install:
     name: a stranger's Linux install
+    # The install, Docker and update proofs have no script of their own to change: a pull request never runs them.
+    if: ${{ github.event_name != 'pull_request' }}
     needs: stage
     runs-on: ubuntu-24.04
     timeout-minutes: 60
@@ -154,6 +198,8 @@ jobs:
 
   docker-server:
     name: a stranger's Docker server
+    # The install, Docker and update proofs have no script of their own to change: a pull request never runs them.
+    if: ${{ github.event_name != 'pull_request' }}
     needs: stage
     runs-on: ubuntu-24.04
     timeout-minutes: 45
@@ -188,6 +234,8 @@ jobs:
 
   linux-update:
     name: an update from the current public version
+    # The install, Docker and update proofs have no script of their own to change: a pull request never runs them.
+    if: ${{ github.event_name != 'pull_request' }}
     needs: stage
     runs-on: ubuntu-24.04
     timeout-minutes: 90
@@ -252,12 +300,13 @@ jobs:
   settings-on-install:
     name: the faster-chat settings a fresh install carries
     needs: stage
+    if: ${{ needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',settings-on-install,') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.stage || github.sha }}
+          ref: ${{ inputs.stage || github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
       - uses: actions/download-artifact@v4
         if: ${{ !inputs.stage }}
@@ -274,6 +323,7 @@ jobs:
   voice:
     name: a voice note, with the permission and without it
     needs: stage
+    if: ${{ needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',voice,') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     env:
@@ -283,7 +333,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.stage || github.sha }}
+          ref: ${{ inputs.stage || github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
       - uses: actions/download-artifact@v4
         if: ${{ !inputs.stage }}
@@ -300,6 +350,7 @@ jobs:
   update-keeps-everything:
     name: an update from the current public version keeps everything
     needs: stage
+    if: ${{ needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',update-keeps-everything,') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     # The owner's chat history is a conversation with the assistant, which needs an AI.
@@ -310,7 +361,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.stage || github.sha }}
+          ref: ${{ inputs.stage || github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
       - uses: actions/download-artifact@v4
         if: ${{ !inputs.stage }}
@@ -332,12 +383,13 @@ jobs:
   two-machines-move-at-once:
     name: two computers that move the same reminders at once
     needs: stage
+    if: ${{ needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',two-machines-move-at-once,') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.stage || github.sha }}
+          ref: ${{ inputs.stage || github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
       - uses: actions/download-artifact@v4
         if: ${{ !inputs.stage }}
@@ -353,12 +405,13 @@ jobs:
   closed-offline-on-both:
     name: one reminder closed on two computers while they were apart
     needs: stage
+    if: ${{ needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',closed-offline-on-both,') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.stage || github.sha }}
+          ref: ${{ inputs.stage || github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
       - uses: actions/download-artifact@v4
         if: ${{ !inputs.stage }}
@@ -375,12 +428,13 @@ jobs:
   reminder-from-settings:
     name: a reminder saved in Settings on a fresh install
     needs: stage
+    if: ${{ needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',reminder-from-settings,') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.stage || github.sha }}
+          ref: ${{ inputs.stage || github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
       - uses: actions/download-artifact@v4
         if: ${{ !inputs.stage }}
@@ -397,12 +451,13 @@ jobs:
   reminder-closed-elsewhere:
     name: a reminder closed on the other computer, both ways of syncing
     needs: stage
+    if: ${{ needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',reminder-closed-elsewhere,') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.stage || github.sha }}
+          ref: ${{ inputs.stage || github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
       - uses: actions/download-artifact@v4
         if: ${{ !inputs.stage }}
@@ -426,12 +481,13 @@ jobs:
   reminders-move-keeps-everything:
     name: the move into the notebook keeps every reminder
     needs: stage
+    if: ${{ needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',reminders-move-keeps-everything,') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.stage || github.sha }}
+          ref: ${{ inputs.stage || github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
       - uses: actions/download-artifact@v4
         if: ${{ !inputs.stage }}
@@ -448,12 +504,13 @@ jobs:
   late-reminder-file:
     name: a file written the old way after the move
     needs: stage
+    if: ${{ needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',late-reminder-file,') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.stage || github.sha }}
+          ref: ${{ inputs.stage || github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
       - uses: actions/download-artifact@v4
         if: ${{ !inputs.stage }}
@@ -473,6 +530,7 @@ jobs:
   charm-challenge:
     name: the Charm Challenge, start to finish
     needs: stage
+    if: ${{ needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',charm-challenge,') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 150
     # The owner's own chat is answered by a model, the one update-keeps-everything uses.
@@ -483,7 +541,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.stage || github.sha }}
+          ref: ${{ inputs.stage || github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
       - uses: actions/download-artifact@v4
         if: ${{ !inputs.stage }}
@@ -500,12 +558,13 @@ jobs:
   no-video-skills-by-default:
     name: a fresh install has no video skills, the add-on brings them
     needs: stage
+    if: ${{ needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',no-video-skills-by-default,') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.stage || github.sha }}
+          ref: ${{ inputs.stage || github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
       - uses: actions/download-artifact@v4
         if: ${{ !inputs.stage }}
@@ -522,12 +581,13 @@ jobs:
   update-removes-only-unchanged-skills:
     name: an update removes only the unchanged video skills
     needs: stage
+    if: ${{ needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',update-removes-only-unchanged-skills,') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.stage || github.sha }}
+          ref: ${{ inputs.stage || github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
       - uses: actions/download-artifact@v4
         if: ${{ !inputs.stage }}
@@ -548,6 +608,7 @@ jobs:
   briefing-breaks-a-rule:
     name: a briefing that breaks a rule still arrives
     needs: stage
+    if: ${{ needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',briefing-breaks-a-rule,') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     env:
@@ -557,7 +618,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.stage || github.sha }}
+          ref: ${{ inputs.stage || github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
       - uses: actions/download-artifact@v4
         if: ${{ !inputs.stage }}
@@ -614,6 +675,7 @@ jobs:
   telegram-language:
     name: Telegram answers in the language of the message
     needs: stage
+    if: ${{ needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',telegram-language,') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     env:
@@ -623,7 +685,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.stage || github.sha }}
+          ref: ${{ inputs.stage || github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
       - uses: actions/download-artifact@v4
         if: ${{ !inputs.stage }}
@@ -650,6 +712,7 @@ jobs:
   brief-asked-in-chat:
     name: today's brief asked in the chat is the morning briefing
     needs: stage
+    if: ${{ needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',brief-asked-in-chat,') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     env:
@@ -659,7 +722,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.stage || github.sha }}
+          ref: ${{ inputs.stage || github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
       - uses: actions/download-artifact@v4
         if: ${{ !inputs.stage }}
@@ -676,6 +739,7 @@ jobs:
   talk-prep-honest:
     name: a talk says when its preparation did not pass, and opens from one that did
     needs: stage
+    if: ${{ needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',talk-prep-honest,') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     env:
@@ -685,7 +749,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.stage || github.sha }}
+          ref: ${{ inputs.stage || github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
       - uses: actions/download-artifact@v4
         if: ${{ !inputs.stage }}
@@ -711,6 +775,7 @@ jobs:
   no-question-he-cannot-judge:
     name: background work asks nothing the owner cannot judge, and never for a code
     needs: stage
+    if: ${{ needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',no-question-he-cannot-judge,') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     env:
@@ -720,7 +785,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.stage || github.sha }}
+          ref: ${{ inputs.stage || github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
       - uses: actions/download-artifact@v4
         if: ${{ !inputs.stage }}
@@ -744,6 +809,7 @@ jobs:
   plain-yes:
     name: a plain yes or a button answers the right waiting step
     needs: stage
+    if: ${{ needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',plain-yes,') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     env:
@@ -753,7 +819,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.stage || github.sha }}
+          ref: ${{ inputs.stage || github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
       - uses: actions/download-artifact@v4
         if: ${{ !inputs.stage }}
@@ -777,6 +843,7 @@ jobs:
   what-was-that:
     name: right after a background report, "what is this about?" is answered from what was sent
     needs: stage
+    if: ${{ needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',what-was-that,') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     env:
@@ -786,7 +853,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.stage || github.sha }}
+          ref: ${{ inputs.stage || github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
       - uses: actions/download-artifact@v4
         if: ${{ !inputs.stage }}
@@ -810,12 +877,13 @@ jobs:
   connection-check:
     name: the daily connection check is silent while all work, and speaks once when Telegram's key is refused
     needs: stage
+    if: ${{ needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',connection-check,') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.stage || github.sha }}
+          ref: ${{ inputs.stage || github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
       - uses: actions/download-artifact@v4
         if: ${{ !inputs.stage }}
@@ -841,12 +909,13 @@ jobs:
   workouts-from-hevy:
     name: Docker and Linux import made-up Hevy workouts
     needs: stage
+    if: ${{ needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',workouts-from-hevy,') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.stage || github.sha }}
+          ref: ${{ inputs.stage || github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
       - uses: actions/download-artifact@v4
         if: ${{ !inputs.stage }}
@@ -870,6 +939,7 @@ jobs:
   day-becomes-facts:
     name: an overnight remembered-facts routine files one day once
     needs: stage
+    if: ${{ needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',day-becomes-facts,') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     env:
@@ -879,7 +949,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.stage || github.sha }}
+          ref: ${{ inputs.stage || github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
       - uses: actions/download-artifact@v4
         if: ${{ !inputs.stage }}
@@ -903,12 +973,13 @@ jobs:
   hermes-update-rollback:
     name: a Hermes update keeps good and rolls back broken releases
     needs: stage
+    if: ${{ needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',hermes-update-rollback,') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.stage || github.sha }}
+          ref: ${{ inputs.stage || github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
       - uses: actions/download-artifact@v4
         if: ${{ !inputs.stage }}
@@ -932,6 +1003,7 @@ jobs:
   first-day:
     name: a fresh Docker server turns a first goal into useful work and a matching Telegram brief
     needs: stage
+    if: ${{ needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',first-day,') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     env:
@@ -941,7 +1013,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.stage || github.sha }}
+          ref: ${{ inputs.stage || github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
       - uses: actions/download-artifact@v4
         if: ${{ !inputs.stage }}
@@ -976,6 +1048,8 @@ jobs:
       CANDIDATE_ONLY: mac-install windows-old-names-move
       STAGE: ${{ needs.stage.result }}
       WANT_MAC: ${{ inputs.mac }}
+      EVENT: ${{ github.event_name }}
+      PICKED: ${{ needs.stage.outputs.picked }}
       IS_CANDIDATE: ${{ startsWith(inputs.stage, 'candidate/') }}
       RESULTS: >-
         linux-install=${{ needs.linux-install.result }}
@@ -1018,6 +1092,8 @@ jobs:
       - name: Every scenario passed, or the run fails
         run: |
           bad=0
+          # A pull request from a fork runs nothing (the stage job is skipped): nothing to judge.
+          [ "$EVENT" != pull_request ] || [ "$STAGE" != skipped ] || { echo "No scenario runs on a pull request from a fork." | tee -a "$GITHUB_STEP_SUMMARY"; exit 0; }
           [ "$STAGE" = success ] || { echo "FAIL stage: the stage file at $STAGE_REF could not be read or is not a stage file" | tee -a "$GITHUB_STEP_SUMMARY"; bad=1; }
           for pair in $RESULTS; do
             name=${pair%%=*}; result=${pair#*=}
@@ -1026,7 +1102,10 @@ jobs:
             case $result in
               success) ;;
               failure) bad=1 ;; # its own FAIL line is in the summary already
-              skipped) echo "FAIL $name: it did not run, because the stage file could not be read" | tee -a "$GITHUB_STEP_SUMMARY"; bad=1 ;;
+              skipped)
+                # On a pull request only the scenarios it changed run; the others are not judged.
+                if [ "$EVENT" = pull_request ] && [ "$STAGE" = success ] && [[ "$PICKED" != *",$name,"* ]]; then continue; fi
+                echo "FAIL $name: it did not run, because the stage file could not be read" | tee -a "$GITHUB_STEP_SUMMARY"; bad=1 ;;
               *) echo "FAIL $name: it ended $result" | tee -a "$GITHUB_STEP_SUMMARY"; bad=1 ;;
             esac
           done
