@@ -1,7 +1,7 @@
 import {visibleRows} from './visibility.mjs';
 import {hash} from './records/store.mjs';
 import {procedure} from './procedures.mjs';
-import {remind} from './deadline-reminders.mjs';
+import {deadlineLive,remind} from './deadline-reminders.mjs';
 import {watchCommand} from './watch-commands.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -150,10 +150,10 @@ async function runBriefing(job,{store,query,provider,now}){
   addFirst(context.goals,row=>!excluded(row)&&text(row.title)?'One of your saved goals is '+text(row.title)+'.':null);
   const verified=context.work.filter(row=>row.state==='verified'&&row.kind!=='repair'&&!excluded(row)).sort((a,b)=>String(b.verification?.at||b.updated_at||'').localeCompare(String(a.verification?.at||a.updated_at||'')));
   addFirst(verified,row=>text(row.title)?'Godspeed has verified this work: '+text(row.title)+'.':null);
-  const due=context.deadlines.filter(row=>!excluded(row)&&!['closed','completed'].includes(row.status)&&row.due_at&&Number.isFinite(Date.parse(row.due_at))&&Date.parse(row.due_at)>=now.getTime()).sort((a,b)=>Date.parse(a.due_at)-Date.parse(b.due_at));
+  const due=context.deadlines.filter(row=>!excluded(row)&&deadlineLive(row,now.getTime())&&row.due_at&&Number.isFinite(Date.parse(row.due_at))&&Date.parse(row.due_at)>=now.getTime()).sort((a,b)=>Date.parse(a.due_at)-Date.parse(b.due_at));
   addFirst(due,row=>{const on=row.native_file?String(row.due_at).slice(0,10):dayOf(new Date(row.due_at),row.timezone||zone);return text(row.title)?'A dated obligation is '+text(row.title)+', due '+on+'.':null;});
   const keptSummaries=unknownSummaries.filter(summary=>!summary.source_ids.some(id=>rejectedIds.has(id)));
-  const unknownAdded=[...keptSummaries.map(summary=>summary.line),weekLine(keptSummaries)].filter(Boolean).some(add);
+  const unknownAdded=[...keptSummaries.map(summary=>summary.line),weekLine(keptSummaries)].filter(Boolean).filter(line=>add(line)).length>0;
   const observedAt=row=>row.date_precision==='day'&&row.observed_on?String(row.observed_on)+'T00:00:00Z':row.observed_at||row.created_at||'';
   const settled=row=>row.via!==PHONE_VIA||context.health_freshness?.days?.find(day=>day.date===row.observed_on)?.columns?.[row.metric]?.state==='complete';
   const healthAdded=addFirst(context.health.filter(row=>!excluded(row)&&settled(row)).sort((a,b)=>String(observedAt(b)).localeCompare(String(observedAt(a)))),row=>{const metric=text(row.metric,60),value=row.value;return metric&&(typeof value==='number'||typeof value==='string'&&text(value,30))?'A recorded health observation is '+metric+': '+value+'.':null;})||unknownAdded;
@@ -219,11 +219,18 @@ async function runBriefing(job,{store,query,provider,now}){
    const day=new Date().toISOString().slice(0,10),own_lines=[...required,...(c?[c.content,c.link]:[])];
    const refusals=[...code,...remaining.filter(e=>!code.includes(e))];
    const fallbackText=['Your full morning briefing for '+day+' could not be written today, because what was drafted broke your writing rules. A repair item has been opened for it.',...own_lines].join('\n\n');
+   const fallbackErrors=codeGate(fallbackText);
+   if(fallbackErrors.length){
+    await store.saveAsync('job_receipts',{kind:'brief-cut',job_id:job.id,state:'failed',errors:code,cut:cut.cut,restored:missing,draft_hash:hash(draft),fallback_errors:fallbackErrors,finished_at:new Date().toISOString()});
+    const repairId='repair-brief-fallback-'+hash([job.id,day]);
+    if(!store.get('work_items',repairId))await store.saveAsync('work_items',{id:repairId,kind:'repair',title:'Repair the morning briefing of '+day+': nothing went out, because even the short fallback breaks your writing rules',state:'needs_review',job_id:job.id,refusals:[...refusals,...fallbackErrors],cut:cut.cut,draft_hash:hash(draft),error:[...refusals,...fallbackErrors].join('; '),check:'The next morning briefing is written in full',allowed_action:'inspect-and-retry',dependencies:[],max_attempts:3});
+    throw Error('Final exact briefing check failed: '+fallbackErrors.join('; '));
+   }
    cutReceipt=await store.saveAsync('job_receipts',{kind:'brief-cut',job_id:job.id,state:'fallback',errors:code,cut:cut.cut,restored:missing,draft_hash:hash(draft),kept_hash:hash(fallbackText),finished_at:new Date().toISOString()});
    fallback={day,refusals,cut:cut.cut,draft_hash:hash(draft)};draft=fallbackText;break;
   }
  }
- const finalErrors=fallback?[]:codeGate(draft);if(finalErrors.length)throw Error('Final exact briefing check failed: '+finalErrors.join('; '));
+ const finalErrors=codeGate(draft);if(finalErrors.length)throw Error('Final exact briefing check failed: '+finalErrors.join('; '));
  if(job.rehearsal){checkCurrentSources();return {verified:true,silent:true,rehearsal:true,source_hash:hash(context),draft_hash:hash(draft),verification_ids:[check.id,deliveryCheck.id],...(fallback?{fallback:true}:{}),...(cutReceipt&&!fallback?{cut:true}:{}),...(leftOut.length?{left_out:leftOut.map(o=>o.name)}:{})};}
  const key='brief-'+hash([today,draft]);if(store.get('notifications',key))return {verified:true,silent:true};
  const note=store.prepare('notes',{title:'Your morning briefing',content:draft,source_app:'morning-brief',brief_day:today,verification_id:check.id,delivery_verification_id:deliveryCheck.id,...(cutReceipt?{cut_receipt_id:cutReceipt.id}:{}),...(fallback?{fallback:true}:{}),sources:context.source_receipts.map(s=>s.id),evidence:context});
