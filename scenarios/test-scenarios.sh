@@ -364,30 +364,31 @@ server_run_job_accepts_expected_delivery_status() {
 }
 server_run_job_accepts_expected_delivery_status
 
-connection_check_uses_the_expected_status_for_each_phase() {
-  local evidence=$TMP/connection-check-statuses calls=$TMP/connection-check-calls output
+connection_check_preserves_due_snapshots_and_uses_the_expected_status_for_each_phase() {
+  local evidence=$TMP/connection-check-statuses calls=$TMP/connection-check-calls snapshots=$TMP/connection-check-snapshots output
   mkdir -p "$evidence"
-  if output=$(EVIDENCE="$evidence" CONNECTION_CHECK_CALLS="$calls" bash -c '
+  if output=$(EVIDENCE="$evidence" CONNECTION_CHECK_CALLS="$calls" CONNECTION_CHECK_SNAPSHOTS="$snapshots" bash -c '
     source=$1
     set -- --check "$2"
     . "$source"
     server_run_job() { printf "%s|%s\\n" "$1" "$4" >>"$CONNECTION_CHECK_CALLS"; }
     server_telegram_mark() { :; }
-    server_snapshot_table() { :; }
+    server_table() { printf "%s\\n" "$2" >>"$CONNECTION_CHECK_SNAPSHOTS"; printf "[]\\n" >"$2"; }
     run_and_look fine
     run_and_look broken
     run_and_look repaired
   ' bash "$HERE/connection-check.sh" "$evidence" 2>&1); then
-    if [ "$(<"$calls")" = "$(printf '%s\n%s\n%s' 'fine|ok' 'broken|delivery_failed' 'repaired|ok')" ]; then
-      ok 'connection-check gives only its broken-key routine delivery_failed'
+    if [ "$(<"$calls")" = "$(printf '%s\n%s\n%s' 'fine|ok' 'broken|delivery_failed' 'repaired|ok')" ] \
+      && [ "$(<"$snapshots")" = "$(printf '%s\n%s\n%s\n%s\n%s\n%s' "$evidence/due-fine.json" "$evidence/notifications-fine.json" "$evidence/due-broken.json" "$evidence/notifications-broken.json" "$evidence/due-repaired.json" "$evidence/notifications-repaired.json")" ]; then
+      ok 'connection-check keeps due snapshots and gives only its broken-key routine delivery_failed'
     else
-      bad "connection-check used the wrong routine statuses ($(cat "$calls" 2>/dev/null))"
+      bad "connection-check used the wrong routine statuses or snapshots (statuses: $(cat "$calls" 2>/dev/null); snapshots: $(cat "$snapshots" 2>/dev/null))"
     fi
   else
-    bad "connection-check could not run its routine-status phases ($output)"
+    bad "connection-check could not run its routine-status or snapshot phases ($output)"
   fi
 }
-connection_check_uses_the_expected_status_for_each_phase
+connection_check_preserves_due_snapshots_and_uses_the_expected_status_for_each_phase
 
 server_run_job_restores_pause_after_diagnostic_failure() {
   local mode evidence updates output code

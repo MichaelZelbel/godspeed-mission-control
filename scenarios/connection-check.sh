@@ -44,7 +44,7 @@ run_and_look() { # <label>: the installed routine, then its visible records
   [ "$1" = broken ] && status=delivery_failed
   server_run_job "$1" "$ROUTINE" 300 "$status"
   server_telegram_mark "$1" cron
-  server_snapshot_table "$1" deadlines
+  server_table deadlines "$EVIDENCE/due-$1.json"
   server_snapshot_table "$1" notifications
 }
 
