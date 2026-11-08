@@ -211,6 +211,13 @@ test('talk-prep-honest always uploads its own evidence folder and fails when it 
   const runIdx = steps.findIndex((s) => s.includes(`bash scenarios/${name}.sh`));
   assert.ok(runIdx >= 0, `no step of the job runs scenarios/${name}.sh`);
   assert.ok(runIdx < steps.indexOf(up), 'the evidence upload must come after the scenario that creates the evidence');
+  // The scenario step pipes its verdict through tee. A FAIL must still fail the job: GitHub runs an
+  // explicit `shell: bash` as `bash --noprofile --norc -eo pipefail {0}` (an unset shell is only
+  // `bash -e {0}`, where tee's 0 would win), so the step must name `shell: bash` and must not continue on error.
+  const run = steps[runIdx];
+  assert.equal((run.match(/^ +shell: *(.+?)[ \t]*$/m) || [])[1], 'bash',
+    "the scenario step must say `shell: bash`, so GitHub adds pipefail and a FAIL behind `| tee` still fails the job");
+  assert.doesNotMatch(run, /^ +continue-on-error:/m, 'a failed scenario must fail the job, so no continue-on-error on its step');
   const field = (k) => (up.match(new RegExp(`^ +${k}: *(.+?)[ \\t]*$`, 'm')) || [])[1];
   assert.equal(field('if'), 'always()', 'the evidence upload must run even when the scenario fails');
   assert.equal(field('uses'), 'actions/upload-artifact@v4');
