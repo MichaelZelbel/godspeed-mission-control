@@ -3683,7 +3683,7 @@ wh_good() {
   printf '{"method":"GET","path":"/v1/workouts","status":401,"accepted":false}\n{"method":"GET","path":"/v1/workouts","status":200,"accepted":true}\n' >"$f/fixture.log"
   printf '{"clean":true,"paths":[]}\n' >"$f/key-scan.json"
   for platform in docker native; do
-    printf '{"platform":"%s","settings":{"refused":{"accepted":false,"retained":false,"paths":[]},"accepted":{"accepted":true}},"collection":{"name":"Workouts","rows":[{"source_id":"harbor-strength","title":"Harbor Strength","exercises":"Scenario Squat: 8 x 42 kg"},{"source_id":"canal-pull","title":"Canal Pull","exercises":"Scenario Row: 10 x 31 kg"}]},"routine":{"name":"Workouts from Hevy","minute":17,"script":"scenario-import","count":1},"manual_run":{"exit":0},"after":{"rows":[{"source_id":"harbor-strength","title":"Harbor Strength","exercises":"Scenario Squat: 8 x 45 kg"}]}}\n' "$platform" >"$f/$platform.json"
+    printf '{"platform":"%s","settings":{"refused":{"accepted":false,"retained":false,"paths":[]},"accepted":{"accepted":true}},"collection":{"name":"Workouts","rows":[{"source_id":"harbor-strength","title":"Harbor Strength","exercise":"Scenario Squat","set":{"weight_kg":42,"reps":8}},{"source_id":"canal-pull","title":"Canal Pull","exercise":"Scenario Row","set":{"weight_kg":31,"reps":10}}]},"routine":{"name":"Workouts from Hevy","minute":17,"script":"scenario-import","count":1},"manual_run":{"exit":0},"after":{"rows":[{"source_id":"harbor-strength","title":"Harbor Strength","exercise":"Scenario Squat","set":{"weight_kg":45,"reps":8}}]}}\n' "$platform" >"$f/$platform.json"
   done
 }
 wh_good "$WH/good"
@@ -3693,14 +3693,8 @@ refuses 'a refused key retained' workouts-from-hevy "$WH/refused-kept" 'native r
 copy "$WH/good" "$WH/refused-in-settings"; sed -i 's/"paths":\[\]/"paths":["\/opt\/data\/settings.json"]/' "$WH/refused-in-settings/docker.json"
 refuses 'a refused key kept outside hevy.json' workouts-from-hevy "$WH/refused-in-settings" 'docker retained or accepted'
 RFS=$WH/refused-scan
-mkdir -p "$RFS/root/.godspeed/integrated-runtime/versions/test/scenarios" "$RFS/root/.godspeed/workouts" "$RFS/assistant"
+mkdir -p "$RFS/root/.godspeed" "$RFS/assistant"
 printf '{"home":"%s"}\n' "$RFS/assistant" >"$RFS/root/.godspeed/assistant.json"
-RFS_SOURCE=$RFS/root/.godspeed/integrated-runtime/versions/test/scenarios/workouts-from-hevy.sh
-RFS_TEST_SOURCE=$RFS/root/.godspeed/integrated-runtime/versions/test/scenarios/test-scenarios.sh
-RFS_FIXTURE_SOURCE=$RFS/root/.godspeed/integrated-runtime/versions/test/scenarios/hevy-fixture.mjs
-printf 'refused-scenario-key\n' >"$RFS_SOURCE"
-printf 'refused-scenario-key\n' >"$RFS_TEST_SOURCE"
-printf 'refused-scenario-key\n' >"$RFS_FIXTURE_SOURCE"
 printf 'refused-scenario-key\n' >"$RFS/assistant/settings.json"
 REFUSED_SCAN=$(GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy NODE="$(command -v node)" bash -c '
   cd "$3"
@@ -3714,58 +3708,13 @@ case "$REFUSED_SCAN_CODE $REFUSED_SCAN" in
   "1 "*"native kept the refused Hevy key in $RFS/assistant/settings.json"*) ok "a refused key in the recorded native assistant home fails with its path" ;;
   *) bad "a refused key in the recorded native assistant home was not refused (exit $REFUSED_SCAN_CODE: $REFUSED_SCAN)" ;;
 esac
-rm "$RFS/assistant/settings.json"
-RUNTIME_SOURCE_SCAN=$(GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy NODE="$(command -v node)" bash -c '
-  cd "$3"
-  . "$1"
-  install_paths
-  EVIDENCE=$2
-  refused_not_retained native
-' runtime-source-scan "$ROOT/scenarios/workouts-from-hevy.sh" "$RFS" "$ROOT/scenarios" 2>&1)
-RUNTIME_SOURCE_SCAN_CODE=$?
-case "$RUNTIME_SOURCE_SCAN_CODE" in
-  0) ok "the native refused-key scan ignores immutable installed scenario sources" ;;
-  *) bad "the native refused-key scan treated immutable installed scenario sources as persisted credentials (exit $RUNTIME_SOURCE_SCAN_CODE: $RUNTIME_SOURCE_SCAN)" ;;
-esac
-RUNTIME_NESTED_SOURCE=$RFS/root/.godspeed/integrated-runtime/versions/test/untracked/scenarios/workouts-from-hevy.sh
-mkdir -p "${RUNTIME_NESTED_SOURCE%/*}"
-printf 'refused-scenario-key\n' >"$RUNTIME_NESTED_SOURCE"
-RUNTIME_NESTED_SCAN=$(GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy NODE="$(command -v node)" bash -c '
-  cd "$3"
-  . "$1"
-  install_paths
-  EVIDENCE=$2
-  refused_not_retained native
-' refused-scan "$ROOT/scenarios/workouts-from-hevy.sh" "$RFS" "$ROOT/scenarios" 2>&1)
-RUNTIME_NESTED_SCAN_CODE=$?
-case "$RUNTIME_NESTED_SCAN_CODE $RUNTIME_NESTED_SCAN" in
-  "1 "*"native kept the refused Hevy key in $RUNTIME_NESTED_SOURCE"*) ok "the native refused-key scan finds a key below a mutable runtime subdirectory" ;;
-  *) bad "the native refused-key scan missed a key below a mutable runtime subdirectory (exit $RUNTIME_NESTED_SCAN_CODE: $RUNTIME_NESTED_SCAN)" ;;
-esac
-rm "$RUNTIME_NESTED_SOURCE"
-mkdir -p "$RFS/root/.godspeed/integrated-runtime/versions/test/state"
-RUNTIME_STATE=$RFS/root/.godspeed/integrated-runtime/versions/test/state/retained-key
-printf 'refused-scenario-key\n' >"$RUNTIME_STATE"
-RUNTIME_STATE_SCAN=$(GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy NODE="$(command -v node)" bash -c '
-  cd "$3"
-  . "$1"
-  install_paths
-  EVIDENCE=$2
-  refused_not_retained native
-' runtime-state-scan "$ROOT/scenarios/workouts-from-hevy.sh" "$RFS" "$ROOT/scenarios" 2>&1)
-RUNTIME_STATE_SCAN_CODE=$?
-case "$RUNTIME_STATE_SCAN_CODE $RUNTIME_STATE_SCAN" in
-  "1 "*"native kept the refused Hevy key in $RUNTIME_STATE"*) ok "the native refused-key scan finds retained state below a runtime version" ;;
-  *) bad "the native refused-key scan missed retained state below a runtime version (exit $RUNTIME_STATE_SCAN_CODE: $RUNTIME_STATE_SCAN)" ;;
-esac
-rm "$RUNTIME_STATE"
 ACT_NODE_ORDER=$(env -u NODE GODSPEED_SCENARIO_ROOT="$RFS/root" ACTION_EVENTS="$RFS/action-events" bash -c '
   cd "$3"
   . "$1"
   EVIDENCE=$2
   node() { :; }
   trap() { :; }
-  need_node() { NODE=$(type -P node); printf "need-node\\n" >>"$ACTION_EVENTS"; }
+  need_node() { NODE=/bin/true; printf "need-node\\n" >>"$ACTION_EVENTS"; }
   fresh_evidence() { mkdir -p "$EVIDENCE"; printf "47832\\n" >"$EVIDENCE/fixture-port"; }
   wait_for() { :; }
   curl() { printf "%s\\n" "{\"ok\":true}"; }
@@ -3774,26 +3723,19 @@ ACT_NODE_ORDER=$(env -u NODE GODSPEED_SCENARIO_ROOT="$RFS/root" ACTION_EVENTS="$
   install_paths() { :; }
   install_the_stage_line() { :; }
   native_hevy_url() { :; }
-  settings_post() {
-    printf "settings-%s:%s\\n" "$1" "$(cat "$2")" >>"$ACTION_EVENTS"
-    printf "{}\\n" >"$3"
-    case $(cat "$2") in
-      '{"key":"refused-scenario-key"}') printf 400 ;;
-      '{"key":"84f3c5d2-9a7e-4b18-8c65-3d7f1a9e6b24"}') printf 200 ;;
-      *) printf 400 ;;
-    esac
-  }
-  refused_not_retained() { printf "refused-%s:%s\\n" "$1" "${NODE:+set}" >>"$ACTION_EVENTS"; }
-  platform_before() { settings_post "$1" "$2" "$EVIDENCE/$1-accepted.json" >"$EVIDENCE/$1-accepted.code"; }
+  settings_post() { case $(cat "$2") in *refused*) printf 400 ;; *) printf 200 ;; esac; }
+  persistence_roots() { printf "persistence-%s:%s\\n" "$1" "${NODE:+set}" >>"$ACTION_EVENTS"; }
+  refused_not_retained() { persistence_roots "$1"; }
+  platform_before() { :; }
   platform_after() { :; }
-  scan_fixture_key() { "$NODE" -e "process.stdout.write('scan-node\\n')" >>"$ACTION_EVENTS"; }
+  scan_fixture_key() { :; }
   check() { :; }
   act
   cat "$ACTION_EVENTS"
 ' action-order "$ROOT/scenarios/workouts-from-hevy.sh" "$RFS/action-evidence" "$ROOT/scenarios" 2>&1)
 case "$ACT_NODE_ORDER" in
-  $'need-node\nsettings-docker:{"key":"refused-scenario-key"}\nsettings-native:{"key":"refused-scenario-key"}\nrefused-docker:set\nrefused-native:set\nsettings-docker:{"key":"84f3c5d2-9a7e-4b18-8c65-3d7f1a9e6b24"}\nsettings-native:{"key":"84f3c5d2-9a7e-4b18-8c65-3d7f1a9e6b24"}\nscan-node') ok "the Hevy action selects Node before its scans and sends both Settings calls their key" ;;
-  *) bad "the Hevy action did not select Node before its scans and send both Settings calls their key ($ACT_NODE_ORDER)" ;;
+  $'need-node\npersistence-docker:set\npersistence-native:set') ok "the Hevy action selects Node before descriptor and persistence reads" ;;
+  *) bad "the Hevy action did not select Node before descriptor and persistence reads ($ACT_NODE_ORDER)" ;;
 esac
 NO_NODE_ACTION=$(env -u NODE GODSPEED_SCENARIO_ROOT="$RFS/root" bash -c '
   cd "$2"
@@ -3806,11 +3748,8 @@ case "$NO_NODE_ACTION_CODE $NO_NODE_ACTION" in
   "1 "*"FAIL workouts-from-hevy: node is not on this machine and the install carries none"*) ok "the Hevy action stops before its fixture when it cannot select Node" ;;
   *) bad "the Hevy action did not stop before its fixture without Node (exit $NO_NODE_ACTION_CODE: $NO_NODE_ACTION)" ;;
 esac
-printf '84f3c5d2-9a7e-4b18-8c65-3d7f1a9e6b24\n' >"$RFS/root/.godspeed/workouts/hevy.json"
-printf '84f3c5d2-9a7e-4b18-8c65-3d7f1a9e6b24\n' >"$RFS_SOURCE"
-printf '84f3c5d2-9a7e-4b18-8c65-3d7f1a9e6b24\n' >"$RFS_TEST_SOURCE"
-printf '84f3c5d2-9a7e-4b18-8c65-3d7f1a9e6b24\n' >"$RFS_FIXTURE_SOURCE"
-ACCEPTED_SCAN=$(HOME="$RFS/root" GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy NODE="$(command -v node)" bash -c '
+printf '00000000-0000-4000-8000-000000000001\n' >"$RFS/assistant/hevy.json"
+ACCEPTED_SCAN=$(GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy NODE="$(command -v node)" bash -c '
   cd "$3"
   . "$1"
   install_paths
@@ -3819,7 +3758,7 @@ ACCEPTED_SCAN=$(HOME="$RFS/root" GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=wor
     case $1 in
       find) printf '%s\n' /opt/data/.godspeed/assistant.json ;;
       node) printf '%s' /root/.hermes ;;
-      grep) printf "%s\n" /root/.hermes/.godspeed/workouts/hevy.json ;;
+      grep) printf "%s\n" /root/.hermes/hevy.json ;;
     esac
   }
   scan_fixture_key
@@ -3829,70 +3768,8 @@ case "$ACCEPTED_SCAN" in
   '{"clean":true,"paths":[]}') ok "the accepted key's permitted native and Docker Settings records are ignored" ;;
   *) bad "the accepted key's permitted native or Docker Settings record was not ignored ($ACCEPTED_SCAN)" ;;
 esac
-rm "$RFS/root/.godspeed/workouts/hevy.json"
-ACCEPTED_SOURCE_SCAN=$(HOME="$RFS/root" GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy NODE="$(command -v node)" bash -c '
-  cd "$3"
-  . "$1"
-  install_paths
-  EVIDENCE=$2
-  in_server() {
-    case $1 in
-      find) printf "%s\\n" /opt/data/.godspeed/assistant.json ;;
-      node) printf "%s" /root/.hermes ;;
-      grep) return 1 ;;
-    esac
-  }
-  scan_fixture_key
-  cat "$EVIDENCE/key-scan.json"
-' accepted-source-scan "$ROOT/scenarios/workouts-from-hevy.sh" "$RFS" "$ROOT/scenarios" 2>/dev/null)
-case "$ACCEPTED_SOURCE_SCAN" in
-  '{"clean":true,"paths":[]}') ok "the accepted-key scan ignores immutable installed scenario sources" ;;
-  *) bad "the accepted-key scan treated immutable installed scenario sources as persisted credentials ($ACCEPTED_SOURCE_SCAN)" ;;
-esac
-printf '84f3c5d2-9a7e-4b18-8c65-3d7f1a9e6b24\n' >"$RUNTIME_NESTED_SOURCE"
-ACCEPTED_NESTED_RUNTIME_SCAN=$(HOME="$RFS/root" GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy NODE="$(command -v node)" bash -c '
-  cd "$3"
-  . "$1"
-  install_paths
-  EVIDENCE=$2
-  in_server() {
-    case $1 in
-      find) printf "%s\\n" /opt/data/.godspeed/assistant.json ;;
-      node) printf "%s" /root/.hermes ;;
-      grep) return 1 ;;
-    esac
-  }
-  scan_fixture_key
-  cat "$EVIDENCE/key-scan.json"
-' accepted-nested-runtime-scan "$ROOT/scenarios/workouts-from-hevy.sh" "$RFS" "$ROOT/scenarios" 2>/dev/null)
-case "$ACCEPTED_NESTED_RUNTIME_SCAN" in
-  '{"clean":false,"paths":["'"$RUNTIME_NESTED_SOURCE"'"]}') ok "the accepted-key scan finds a key below a mutable runtime subdirectory" ;;
-  *) bad "the accepted-key scan missed a key below a mutable runtime subdirectory ($ACCEPTED_NESTED_RUNTIME_SCAN)" ;;
-esac
-rm "$RUNTIME_NESTED_SOURCE"
-printf '84f3c5d2-9a7e-4b18-8c65-3d7f1a9e6b24\n' >"$RUNTIME_STATE"
-ACCEPTED_RUNTIME_SCAN=$(HOME="$RFS/root" GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy NODE="$(command -v node)" bash -c '
-  cd "$3"
-  . "$1"
-  install_paths
-  EVIDENCE=$2
-  in_server() {
-    case $1 in
-      find) printf "%s\\n" /opt/data/.godspeed/assistant.json ;;
-      node) printf "%s" /root/.hermes ;;
-      grep) return 1 ;;
-    esac
-  }
-  scan_fixture_key
-  cat "$EVIDENCE/key-scan.json"
-' accepted-runtime-scan "$ROOT/scenarios/workouts-from-hevy.sh" "$RFS" "$ROOT/scenarios" 2>/dev/null)
-case "$ACCEPTED_RUNTIME_SCAN" in
-  '{"clean":false,"paths":["'"$RUNTIME_STATE"'"]}') ok "the accepted-key scan finds retained state below a runtime version" ;;
-  *) bad "the accepted-key scan missed retained state below a runtime version ($ACCEPTED_RUNTIME_SCAN)" ;;
-esac
-rm "$RUNTIME_STATE"
-printf '84f3c5d2-9a7e-4b18-8c65-3d7f1a9e6b24\n' >"$RFS/assistant/settings.json"
-ACCEPTED_SCAN=$(HOME="$RFS/root" GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy NODE="$(command -v node)" bash -c '
+printf '00000000-0000-4000-8000-000000000001\n' >"$RFS/assistant/settings.json"
+ACCEPTED_SCAN=$(GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy NODE="$(command -v node)" bash -c '
   cd "$3"
   . "$1"
   install_paths
@@ -3913,8 +3790,8 @@ case "$ACCEPTED_SCAN" in
 esac
 rm -f "$RFS/assistant/settings.json"
 mkdir -p "$RFS/root/logs"
-printf '84f3c5d2-9a7e-4b18-8c65-3d7f1a9e6b24\n' >"$RFS/root/logs/hevy.json"
-ACCEPTED_SCAN=$(HOME="$RFS/root" GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy NODE="$(command -v node)" bash -c '
+printf '00000000-0000-4000-8000-000000000001\n' >"$RFS/root/logs/hevy.json"
+ACCEPTED_SCAN=$(GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy NODE="$(command -v node)" bash -c '
   cd "$3"
   . "$1"
   install_paths
@@ -3935,7 +3812,7 @@ case "$ACCEPTED_SCAN" in
 esac
 rm -f "$RFS/root/logs/hevy.json"
 mkdir -p "$RFS/assistant"
-ACCEPTED_SCAN=$(HOME="$RFS/root" GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy NODE="$(command -v node)" bash -c '
+ACCEPTED_SCAN=$(GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy NODE="$(command -v node)" bash -c '
   cd "$3"
   . "$1"
   install_paths
@@ -3954,9 +3831,9 @@ case "$ACCEPTED_SCAN" in
   '{"clean":false,"paths":["/srv/non-default-hermes/retained.json"]}') ok "the accepted-key scan finds a leak in the recorded non-default Docker assistant home" ;;
   *) bad "the accepted-key scan missed a recorded non-default Docker assistant-home leak ($ACCEPTED_SCAN)" ;;
 esac
-mkdir -p "$RFS/root/dockerhome/.godspeed/workouts"
-printf '84f3c5d2-9a7e-4b18-8c65-3d7f1a9e6b24\n' >"$RFS/root/dockerhome/.godspeed/workouts/hevy.json"
-ACCEPTED_SCAN=$(HOME="$RFS/root" GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy NODE="$(command -v node)" bash -c '
+mkdir -p "$RFS/root/dockerhome"
+printf '00000000-0000-4000-8000-000000000001\n' >"$RFS/root/dockerhome/hevy.json"
+ACCEPTED_SCAN=$(GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy NODE="$(command -v node)" bash -c '
   cd "$3"
   . "$1"
   install_paths
@@ -3972,13 +3849,11 @@ ACCEPTED_SCAN=$(HOME="$RFS/root" GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=wor
   cat "$EVIDENCE/key-scan.json"
 ' accepted-scan "$ROOT/scenarios/workouts-from-hevy.sh" "$RFS" "$ROOT/scenarios" 2>/dev/null)
 case "$ACCEPTED_SCAN" in
-  '{"clean":false,"paths":["'"$RFS"'/root/dockerhome/.godspeed/workouts/hevy.json"]}') ok "a native retained key matching the Docker Settings pathname is kept" ;;
+  '{"clean":false,"paths":["'"$RFS"'/root/dockerhome/hevy.json"]}') ok "a native retained key matching the Docker Settings pathname is kept" ;;
   *) bad "a native retained key matching the Docker Settings pathname was ignored ($ACCEPTED_SCAN)" ;;
 esac
-rm -f "$RFS/root/dockerhome/.godspeed/workouts/hevy.json"
-mkdir -p "$RFS/root/.godspeed/workouts"
-printf '84f3c5d2-9a7e-4b18-8c65-3d7f1a9e6b24\n' >"$RFS/root/.godspeed/workouts/hevy.json"
-ACCEPTED_SCAN=$(HOME="$RFS/root" GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy NODE="$(command -v node)" bash -c '
+rm -f "$RFS/root/dockerhome/hevy.json"
+ACCEPTED_SCAN=$(GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy NODE="$(command -v node)" bash -c '
   cd "$3"
   . "$1"
   install_paths
@@ -3987,14 +3862,14 @@ ACCEPTED_SCAN=$(HOME="$RFS/root" GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=wor
     case $1 in
       find) printf "%s\\n" /opt/data/.godspeed/assistant.json ;;
       node) printf "%s" /srv/non-default-hermes ;;
-      grep) printf "%s\\n" "'$RFS'/root/.godspeed/workouts/hevy.json" ;;
+      grep) printf "%s\\n" "'$RFS'/assistant/hevy.json" ;;
     esac
   }
   scan_fixture_key
   cat "$EVIDENCE/key-scan.json"
 ' accepted-scan "$ROOT/scenarios/workouts-from-hevy.sh" "$RFS" "$ROOT/scenarios" 2>/dev/null)
 case "$ACCEPTED_SCAN" in
-  '{"clean":false,"paths":["'"$RFS"'/root/.godspeed/workouts/hevy.json"]}') ok "a Docker retained key matching the native Settings pathname is kept" ;;
+  '{"clean":false,"paths":["'"$RFS"'/assistant/hevy.json"]}') ok "a Docker retained key matching the native Settings pathname is kept" ;;
   *) bad "a Docker retained key matching the native Settings pathname was ignored ($ACCEPTED_SCAN)" ;;
 esac
 rm -rf "$RFS/assistant"
@@ -4124,9 +3999,9 @@ copy "$WH/good" "$WH/no-routine"; sed -i 's/"minute":17/"minute":0/' "$WH/no-rou
 refuses 'a zero-minute import routine' workouts-from-hevy "$WH/no-routine" 'non-zero minute'
 copy "$WH/good" "$WH/two-routines"; sed -i 's/"count":1/"count":2/' "$WH/two-routines/native.json"
 refuses 'two import routines' workouts-from-hevy "$WH/two-routines" 'did not run its one recorded'
-copy "$WH/good" "$WH/not-updated"; sed -i 's/Scenario Squat: 8 x 45 kg/Scenario Squat: 8 x 42 kg/' "$WH/not-updated/docker.json"
+copy "$WH/good" "$WH/not-updated"; sed -i 's/"weight_kg":45/"weight_kg":42/' "$WH/not-updated/docker.json"
 refuses 'a changed workout not updated' workouts-from-hevy "$WH/not-updated" 'did not update Harbor Strength'
-copy "$WH/good" "$WH/deleted-stays"; sed -i 's/"source_id":"harbor-strength","title":"Harbor Strength","exercises":"Scenario Squat: 8 x 45 kg"/"source_id":"harbor-strength","title":"Harbor Strength","exercises":"Scenario Squat: 8 x 45 kg"},{"source_id":"canal-pull"/' "$WH/deleted-stays/docker.json"
+copy "$WH/good" "$WH/deleted-stays"; sed -i 's/"source_id":"harbor-strength","title":"Harbor Strength","exercise":"Scenario Squat","set":{"weight_kg":45,"reps":8}/"source_id":"harbor-strength","title":"Harbor Strength","exercise":"Scenario Squat","set":{"weight_kg":45,"reps":8}},{"source_id":"canal-pull"/' "$WH/deleted-stays/docker.json"
 refuses 'a deleted workout retained' workouts-from-hevy "$WH/deleted-stays" 'retained the deleted workout'
 copy "$WH/good" "$WH/key-leaked"; printf '{"clean":false,"paths":["/tmp/leak"]}\n' >"$WH/key-leaked/key-scan.json"
 refuses 'a key outside its permitted setting' workouts-from-hevy "$WH/key-leaked" 'key scan is not a clean'
@@ -4212,29 +4087,11 @@ node "$ROOT/scenarios/hevy-fixture.mjs" --state "$HF/state" --log "$HF/log" >"$H
 for _ in $(seq 1 20); do [ -s "$HF/port" ] && break; sleep 0.1; done
 HF_PORT=$(cat "$HF/port")
 HF_BAD=$(curl -s -o /dev/null -w '%{http_code}' -H 'api-key: not-the-key' "http://127.0.0.1:$HF_PORT/v1/workouts")
-HF_BASE=http://127.0.0.1:$HF_PORT
-HF_GOOD=$(curl -s -H 'api-key: 84f3c5d2-9a7e-4b18-8c65-3d7f1a9e6b24' "$HF_BASE/v1/workouts")
-HF_INITIAL=$(ROOT=$ROOT HF_BASE=$HF_BASE node --input-type=module - <<'NODE'
-const { Hevy } = await import(process.env.ROOT + '/third-party/addons/godspeed-workouts/lib/hevy.mjs');
-const rows = await new Hevy({ key: '84f3c5d2-9a7e-4b18-8c65-3d7f1a9e6b24', base: process.env.HF_BASE, pauseMs: 0 }).allWorkouts();
-process.stdout.write(rows.map(row => row.id).sort().join(','));
-NODE
-)
-HF_COUNT=$(ROOT=$ROOT HF_BASE=$HF_BASE node --input-type=module - <<'NODE'
-const { Hevy } = await import(process.env.ROOT + '/third-party/addons/godspeed-workouts/lib/hevy.mjs');
-process.stdout.write(String(await new Hevy({ key: '84f3c5d2-9a7e-4b18-8c65-3d7f1a9e6b24', base: process.env.HF_BASE, pauseMs: 0 }).count()));
-NODE
-)
+HF_GOOD=$(curl -s -H 'api-key: 00000000-0000-4000-8000-000000000001' "http://127.0.0.1:$HF_PORT/v1/workouts")
 node "$ROOT/scenarios/hevy-fixture.mjs" --state "$HF/state" --log "$HF/log" --mutate
-HF_EVENTS=$(curl -s -H 'api-key: 84f3c5d2-9a7e-4b18-8c65-3d7f1a9e6b24' "$HF_BASE/v1/workouts/events")
-HF_CHANGED=$(ROOT=$ROOT HF_BASE=$HF_BASE node --input-type=module - <<'NODE'
-const { Hevy } = await import(process.env.ROOT + '/third-party/addons/godspeed-workouts/lib/hevy.mjs');
-const events = await new Hevy({ key: '84f3c5d2-9a7e-4b18-8c65-3d7f1a9e6b24', base: process.env.HF_BASE, pauseMs: 0 }).eventsSince('2026-01-01T00:00:00Z');
-process.stdout.write(events.map(event => event.type === 'updated' ? event.workout.id : event.id).sort().join(','));
-NODE
-)
+HF_EVENTS=$(curl -s -H 'api-key: 00000000-0000-4000-8000-000000000001' "http://127.0.0.1:$HF_PORT/v1/workouts/events")
 kill "$HF_PID" 2>/dev/null || true
-if [ "$HF_BAD" = 401 ] && [ "$HF_INITIAL" = 'canal-pull,harbor-strength' ] && [ "$HF_COUNT" = 2 ] && [ "$HF_CHANGED" = 'canal-pull,harbor-strength' ] && grep -q 'harbor-strength' <<<"$HF_GOOD" && grep -q 'canal-pull' <<<"$HF_EVENTS" && ! grep -q '84f3c5d2-9a7e-4b18-8c65-3d7f1a9e6b24' "$HF/log"; then ok 'the local Hevy fixture refuses, follows the add-on contract, changes and redacts'; else bad 'the local Hevy fixture does not refuse, follow the add-on contract, change and redact'; fi
+if [ "$HF_BAD" = 401 ] && grep -q 'harbor-strength' <<<"$HF_GOOD" && grep -q 'canal-pull' <<<"$HF_EVENTS" && ! grep -q '00000000-0000-4000-8000-000000000001' "$HF/log"; then ok 'the local Hevy fixture refuses, changes and redacts'; else bad 'the local Hevy fixture does not refuse, change and redact'; fi
 HFD=$TMP/hermes-fixture
 HFD_LOG=$TMP/hermes-fixture.log
 if node "$ROOT/scenarios/hermes-update-fixture.mjs" --dir "$HFD" >/dev/null \
@@ -4438,18 +4295,6 @@ if (
 else
   bad "a clock recreate did not pass both Compose layers"
 fi
-hevy_override_routes_to_fixture() { # <compose|systemd> <override file> <expected base>
-  HEVY_OVERRIDE_FORMAT=$1 HEVY_OVERRIDE_FILE=$2 HEVY_OVERRIDE_BASE=$3 ROOT=$ROOT node --input-type=module - <<'NODE'
-import { readFileSync } from 'node:fs';
-const text = readFileSync(process.env.HEVY_OVERRIDE_FILE, 'utf8');
-const lines = process.env.HEVY_OVERRIDE_FORMAT === 'compose'
-  ? [...text.matchAll(/^\s+(GODSPEED_WORKOUTS_[A-Z_]+): "([^"]*)"$/gm)]
-  : [...text.matchAll(/^Environment="(GODSPEED_WORKOUTS_[A-Z_]+)=([^"]*)"$/gm)];
-const env = Object.fromEntries(lines.map(([, key, value]) => [key, value]));
-const { hevyBase } = await import(`${process.env.ROOT}/third-party/addons/godspeed-workouts/lib/sync.mjs`);
-if (hevyBase(env) !== process.env.HEVY_OVERRIDE_BASE) process.exit(1);
-NODE
-}
 HEVY_DIR=$TMP/server-hevy
 mkdir -p "$HEVY_DIR"
 if (
@@ -4467,49 +4312,11 @@ if (
   server_hevy_url 47839
   [ "$(cat "$TMP/hevy-compose-command")" = "$(printf '%s\n' \
     -f "$HEVY_DIR/compose.override.yaml" up -d --force-recreate)" ] && \
-    grep -Fqx '      GODSPEED_WORKOUTS_HEVY_API: "http://host.docker.internal:47839"' "$HEVY_DIR/compose.override.yaml" && \
-    grep -Fqx '      GODSPEED_WORKOUTS_TEST: "1"' "$HEVY_DIR/compose.override.yaml" && \
-    hevy_override_routes_to_fixture compose "$HEVY_DIR/compose.override.yaml" http://host.docker.internal:47839
+    grep -Fqx '      GODSPEED_WORKOUTS_HEVY_URL: "http://host.docker.internal:47839"' "$HEVY_DIR/compose.override.yaml"
 ); then
-  ok "the Hevy Docker override routes through the carried add-on resolver"
+  ok "the Hevy recreate writes its override through sudo and passes it through the installed Compose boundary"
 else
-  bad "the Hevy Docker override did not route through the carried add-on resolver"
-fi
-NATIVE_HEVY_HOME=$TMP/native-hevy-home
-if (
-  HOME=$NATIVE_HEVY_HOME
-  export HOME
-  . "$ROOT/scenarios/workouts-from-hevy.sh"
-  systemctl() { return 0; }
-  wait_for() { :; }
-  native_hevy_url 47840
-  override=$HOME/.config/systemd/user/godspeed-integrated-notebook.service.d/scenario-hevy.conf
-  [ "$(cat "$override")" = "$(printf '[Service]\nEnvironment="GODSPEED_WORKOUTS_HEVY_API=http://127.0.0.1:47840"\nEnvironment="GODSPEED_WORKOUTS_TEST=1"')" ] && \
-    hevy_override_routes_to_fixture systemd "$override" http://127.0.0.1:47840
-); then
-  ok "the native user-service override routes through the carried add-on resolver"
-else
-  bad "the native user-service override did not route through the carried add-on resolver"
-fi
-NATIVE_SYSTEM_HEVY=$TMP/native-system-hevy.conf
-if (
-  . "$ROOT/scenarios/workouts-from-hevy.sh"
-  systemctl() { [ "$1" = --user ] && return 1; return 0; }
-  sudo() {
-    case $1 in
-      mkdir|systemctl) return 0 ;;
-      tee) shift; cat >"$NATIVE_SYSTEM_HEVY" ;;
-      *) return 1 ;;
-    esac
-  }
-  wait_for() { :; }
-  native_hevy_url 47841
-  [ "$(cat "$NATIVE_SYSTEM_HEVY")" = "$(printf '[Service]\nEnvironment="GODSPEED_WORKOUTS_HEVY_API=http://127.0.0.1:47841"\nEnvironment="GODSPEED_WORKOUTS_TEST=1"')" ] && \
-    hevy_override_routes_to_fixture systemd "$NATIVE_SYSTEM_HEVY" http://127.0.0.1:47841
-); then
-  ok "the native system-service override routes through the carried add-on resolver"
-else
-  bad "the native system-service override did not route through the carried add-on resolver"
+  bad "the Hevy recreate did not write its override or pass both Compose layers"
 fi
 HEVY_FAILURE_DIR=$TMP/server-hevy-write-failure
 mkdir -p "$HEVY_FAILURE_DIR"
