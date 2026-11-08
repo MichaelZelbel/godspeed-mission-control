@@ -90,7 +90,7 @@ act() {
     fail "the installed notebook did not accept the older Berlin fact through memory-confirm"
   facts_snapshot "$EVIDENCE/before.json"
   printf '{"messages":[{"id":"move-1","at":"%s","text":"%s"},{"id":"doctor-1","at":"%s","text":"%s"},{"id":"machine-1","at":"%s","text":"%s"},{"id":"track-1","at":"%s","text":"%s"}]}\n' "$archive_at" "$move_text" "$archive_at" "$doctor_text" "$archive_at" "$machine_text" "$archive_at" "$track_text" >"$EVIDENCE/archive.json"
-  local provider provider_request script
+  local provider provider_request provider_request_exit_trap provider_request_int_trap provider_request_term_trap script
   curl -fsS --max-time 60 -X POST -H 'Content-Type: application/json' \
     --data '{"goal":"Keep my remembered facts current","timezone":"Etc/UTC"}' \
     "http://127.0.0.1:$NOTEBOOK_PORT/api/setup" >"$EVIDENCE/setup.json" ||
@@ -104,14 +104,32 @@ act() {
   printf '{"url":%s,"model":%s,"routines":true}\n' \
     "$(quoted_json "$AI_URL")" "$(quoted_json "$AI_MODEL")" >"$EVIDENCE/provider.json"
   provider_request=$(mktemp) || fail 'the private Settings request could not be made'
+  provider_request_exit_trap=$(trap -p EXIT || true)
+  provider_request_int_trap=$(trap -p INT || true)
+  provider_request_term_trap=$(trap -p TERM || true)
+  cleanup_provider_request() { rm -f "$provider_request"; }
+  restore_provider_request_traps() {
+    trap - EXIT INT TERM
+    [ -z "$provider_request_exit_trap" ] || eval "$provider_request_exit_trap"
+    [ -z "$provider_request_int_trap" ] || eval "$provider_request_int_trap"
+    [ -z "$provider_request_term_trap" ] || eval "$provider_request_term_trap"
+  }
+  cancel_provider_request() {
+    cleanup_provider_request
+    restore_provider_request_traps
+    exit "$1"
+  }
+  trap cleanup_provider_request EXIT
+  trap 'cancel_provider_request 130' INT
+  trap 'cancel_provider_request 143' TERM
   printf '{"url":%s,"key":%s,"model":%s,"routines":true}\n' \
     "$(quoted_json "$AI_URL")" "$(quoted_json "$GODSPEED_SCENARIO_AI_KEY")" "$(quoted_json "$AI_MODEL")" >"$provider_request"
   if ! provider=$(curl -sS -o "$EVIDENCE/provider-answer.json" -w '%{http_code}' --max-time 300 -X POST -H 'Content-Type: application/json' \
     --data-binary @"$provider_request" "http://127.0.0.1:$NOTEBOOK_PORT/api/provider"); then
-    rm -f "$provider_request"
     fail "Settings could not be reached to connect the remembered-facts model"
   fi
-  rm -f "$provider_request"
+  cleanup_provider_request
+  restore_provider_request_traps
   [ "$provider" = 200 ] || fail "Settings refused the remembered-facts model (HTTP $provider)"
   script=$(facts_routine_script)
   [ -n "$script" ] && [ -f "$HERMES/scripts/$script" ] || fail "the recorded Remember what you said routine has no installed script"

@@ -27,7 +27,7 @@ export function hermesProvider({executable='hermes',home,cwd,model,provider,sour
     const signal=input.signal;
     if(signal?.aborted)throw new Error('Reply stopped');
     if(input.model||input.effort){const options=await run.options();if(signal?.aborted)throw new Error('Reply stopped');const selected=options.models.find(m=>m.id===(input.model||options.current));if(!selected)throw new Error('This model is not available through your connected account');if(input.effort&&!selected.efforts.includes(input.effort))throw new Error('This effort is not supported by the selected model');}
-    const args=['chat','--query-file','-','--quiet','--oneshot','--max-turns','1','--in',cwd,'--source','tool'];
+    const args=['chat','--query-file','-','--quiet','--oneshot','--max-turns','1','--toolsets','','--in',cwd,'--source','tool'];
     if(input.model||model)args.push('--model',input.model||model);if(input.effort)args.push('--reasoning',input.effort);if(provider)args.push('--provider',provider);
     const temporary=[];
     try{

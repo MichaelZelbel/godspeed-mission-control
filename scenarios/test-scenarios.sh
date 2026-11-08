@@ -4024,7 +4024,7 @@ day_facts_provider_request_is_removed() {
   mkdir -p "$folder/home/cron" "$folder/home/scripts" "$folder/root" "$folder/tmp"
   printf '%s\n' '{"jobs":[{"name":"Remember what you said","script":"scenario-facts","cron":"40 3 * * *"}]}' >"$folder/home/cron/jobs.json"
   : >"$folder/home/scripts/scenario-facts"
-  if ACTION_HOME="$folder/home" ACTION_KEY="$key" ACTION_POSTED="$folder/posted" \
+  if ACTION_HOME="$folder/home" ACTION_KEY="$key" ACTION_POSTED="$folder/posted" ACTION_TRAP_RESTORED="$folder/trap-restored" \
     GODSPEED_SCENARIO_ROOT="$folder/root" GODSPEED_SCENARIO_WORK="$folder/work" TMPDIR="$folder/tmp" \
     GODSPEED_SCENARIO_AI_KEY="$key" GODSPEED_SCENARIO_AI_URL='https://api.anthropic.com/v1' \
     GODSPEED_SCENARIO_AI_MODEL='claude-haiku-4-5' bash -c '
@@ -4039,6 +4039,7 @@ day_facts_provider_request_is_removed() {
       run_facts_routine() { :; }
       facts_snapshot() { :; }
       check() { :; }
+      trap ": > \"$ACTION_TRAP_RESTORED\"" EXIT
       curl() {
         local data= out=
         while [ "$#" -gt 0 ]; do
@@ -4063,13 +4064,59 @@ day_facts_provider_request_is_removed() {
   else
     code=$?
   fi
-  if [ "$code" = 0 ] && [ -f "$folder/posted" ] && ! rg -F -- "$key" "$folder/tmp" >/dev/null 2>&1; then
-    ok 'a successful remembered-facts Settings POST removes its private key request'
+  if [ "$code" = 0 ] && [ -f "$folder/posted" ] && [ -f "$folder/trap-restored" ] && ! rg -F -- "$key" "$folder/tmp" >/dev/null 2>&1; then
+    ok 'a successful remembered-facts Settings POST removes its private key request and restores existing cleanup'
   else
     bad "a successful remembered-facts Settings POST did not remove its private key request (exit $code: $(cat "$folder/action.log" 2>/dev/null))"
   fi
 }
 day_facts_provider_request_is_removed
+day_facts_provider_request_is_removed_on_termination() {
+  local folder=$TMP/day-facts-provider-termination key='day-facts-termination-key' code
+  rm -rf "$folder"
+  mkdir -p "$folder/home/cron" "$folder/home/scripts" "$folder/root" "$folder/tmp"
+  printf '%s\n' '{"jobs":[{"name":"Remember what you said","script":"scenario-facts","cron":"40 3 * * *"}]}' >"$folder/home/cron/jobs.json"
+  : >"$folder/home/scripts/scenario-facts"
+  if ACTION_HOME="$folder/home" ACTION_KEY="$key" \
+    GODSPEED_SCENARIO_ROOT="$folder/root" GODSPEED_SCENARIO_WORK="$folder/work" TMPDIR="$folder/tmp" \
+    GODSPEED_SCENARIO_AI_KEY="$key" GODSPEED_SCENARIO_AI_URL='https://api.anthropic.com/v1' \
+    GODSPEED_SCENARIO_AI_MODEL='claude-haiku-4-5' bash -c '
+      scenario_dir=$(dirname "$1")
+      cd "$scenario_dir"
+      . <(sed "\$d" "$(basename "$1")")
+      install_the_stage_line() { :; }
+      need_node() { NODE=$(command -v node); }
+      wait_for() { :; }
+      assistant_home() { HERMES=$ACTION_HOME; }
+      facts_routine_script() { printf scenario-facts; }
+      run_facts_routine() { :; }
+      facts_snapshot() { :; }
+      check() { :; }
+      curl() {
+        local data=
+        while [ "$#" -gt 0 ]; do
+          case "$1" in
+            --data-binary) data=${2#@}; shift 2 ;;
+            *) shift ;;
+          esac
+        done
+        [ -n "$data" ] || { printf "{}\\n"; return; }
+        [ -f "$data" ] && grep -F -- "$ACTION_KEY" "$data" >/dev/null || return 1
+        kill -TERM "$$"
+      }
+      act
+    ' _ "$DF_SCRIPT" >"$folder/action.log" 2>&1; then
+    code=0
+  else
+    code=$?
+  fi
+  if [ "$code" = 143 ] && ! rg -F -- "$key" "$folder/tmp" >/dev/null 2>&1; then
+    ok 'terminating a remembered-facts Settings POST removes its private key request'
+  else
+    bad "terminating a remembered-facts Settings POST left its private key request (exit $code: $(cat "$folder/action.log" 2>/dev/null))"
+  fi
+}
+day_facts_provider_request_is_removed_on_termination
 facts_archive_value() { # <message id> <field>
   node - "$DF2/good/archive.json" "$1" "$2" <<'NODE'
 const [file,id,field]=process.argv.slice(2),archive=require(file);
