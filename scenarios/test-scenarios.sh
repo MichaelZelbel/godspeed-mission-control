@@ -4246,6 +4246,14 @@ if grep -q "server_run_job report 'Coach reminders and habit check'" "$ROOT/scen
 else
   bad "what-was-that.sh: its report step does not run Coach reminders and habit check"
 fi
+if grep -q 'server_keep_routine_diagnostics' "$ROOT/scenarios/server-lib.sh" \
+  && grep -q 'routine-diagnostics-report.json' "$ROOT/scenarios/what-was-that.sh" \
+  && grep -q 'routine-diagnostics-<label>.json' "$ROOT/scenarios/connection-check.sh" \
+  && grep -q 'lifecycle admission record' "$ROOT/scenarios/first-day.sh"; then
+  ok "the three fresh-install routine scenarios retain lifecycle and Hermes run diagnostics"
+else
+  bad "the three fresh-install routine scenarios do not retain lifecycle and Hermes run diagnostics"
+fi
 CLOCK_DIR=$TMP/server-clock
 mkdir -p "$CLOCK_DIR"
 if (

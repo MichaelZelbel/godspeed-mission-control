@@ -207,6 +207,15 @@ server_pause_all_jobs() {
       fail "Settings would not pause routine $id"
   done
 }
+server_keep_routine_diagnostics() { # <label>
+  # The notebook writes the admission record before it starts Hermes, so this is
+  # also available when Settings refuses a second routine run.
+  server_copy_evidence /opt/data/full-candidate/workspace/.godspeed/routine-run-diagnostics.json "$EVIDENCE/routine-diagnostics-$1.json"
+  local container; container=$(server_container)
+  if [ -n "$container" ] && sudo docker exec "$container" test -d /opt/data/full-candidate/hermes/cron/output; then
+    server_copy_evidence /opt/data/full-candidate/hermes/cron/output "$EVIDENCE/routine-output-$1"
+  fi
+}
 server_run_job() { # <label> <job name> <seconds>
   local jobs=$EVIDENCE/jobs-$1.json id before
   server_table jobs "$jobs"
@@ -216,14 +225,17 @@ server_run_job() { # <label> <job name> <seconds>
   printf '{"id":%s}' "$(quoted_json "$id")" >"$EVIDENCE/.job-run.json"
   case $(server_post /api/jobs/run "$EVIDENCE/.job-run.json" "$EVIDENCE/job-$1-start.json") in
     200|202) ;;
-    *) fail "Settings would not run \"$2\": $(tr -d '\n' <"$EVIDENCE/job-$1-start.json" | cut -c1-200)" ;;
+    *) server_keep_routine_diagnostics "$1"; fail "Settings would not run \"$2\": $(tr -d '\n' <"$EVIDENCE/job-$1-start.json" | cut -c1-200)" ;;
   esac
   server_job_finished() {
     server_table jobs "$jobs" 2>/dev/null &&
       "$NODE" -e 'const fs=require("fs"),d=JSON.parse(fs.readFileSync(process.argv[1],"utf8")),rows=Array.isArray(d)?d:d.data||[],j=rows.find(v=>v?.id===process.argv[2]);process.exit(j?.last_run_at&&j.last_run_at!==process.argv[3]&&j?.last_status==="ok"?0:1)' "$jobs" "$id" "$before"
   }
-  wait_for "$3" "the installed routine $2" server_job_finished ||
+  if ! wait_for "$3" "the installed routine $2" server_job_finished; then
+    server_keep_routine_diagnostics "$1"
     fail "the installed routine \"$2\" did not finish successfully within $3 s"
+  fi
+  server_keep_routine_diagnostics "$1"
   cp "$jobs" "$EVIDENCE/job-$1.json"
 }
 

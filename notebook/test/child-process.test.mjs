@@ -17,6 +17,11 @@ export function fakeHermes(t,scripts={}){
 // it stops before it reads the question it was sent.
 const exitsEarly='process.stderr.write("error: unrecognized arguments\\n");process.exit(2);';
 
+test('a child reports the admitted PID and process tree to its caller',async()=>{
+ let started;const result=await runChild(process.execPath,['-e','process.exit(0)'],{onStart:child=>{started=child;}});
+ assert.equal(result.code,0);assert.equal(result.pid,started.pid);assert.ok(Number.isInteger(started.pid));assert.ok(started.tree.some(row=>row.pid===started.pid));
+});
+
 test('an AI program that stops before reading a long prompt fails the request instead of ending the server',async t=>{
  const hermes=fakeHermes(t,{chat:exitsEarly});
  const run=hermesProvider({executable:hermes.executable,home:hermes.home,cwd:hermes.cwd});

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # PROVING SCENARIO: a freshly installed Docker server turns one fictional first goal into useful
-# private work, a saved morning brief, and a matching reply on its installed Telegram gateway.
+# private work, a saved morning brief, and a matching reply on its installed Telegram gateway. Each
+# direct routine run retains its lifecycle admission record and Hermes run log in the evidence folder.
 SCENARIO=first-day
 # shellcheck source=scenarios/scenario-lib.sh
 . "$(dirname "$0")/scenario-lib.sh"

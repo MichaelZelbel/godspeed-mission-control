@@ -39,9 +39,13 @@ export function nativeJobs(home,device='local'){
 }
 const RETRY_STARTING=3600000;
 const SETUP_FAILURES='routine-setup-failures.json',SETUP_NOTICE='routine-setup-failures',RETRY_MINUTES=[1,2,4,8,16,32,60];
+const RUN_DIAGNOSTICS='routine-run-diagnostics.json',MAX_RUN_DIAGNOSTICS=20;
 const setupFailureFile=store=>path.join(store.state,SETUP_FAILURES);
+const runDiagnosticsFile=store=>path.join(store.state,RUN_DIAGNOSTICS);
 const readSetupFailures=store=>{try{const saved=JSON.parse(fs.readFileSync(setupFailureFile(store),'utf8'));return saved&&typeof saved==='object'&&saved.steps&&typeof saved.steps==='object'?saved:{steps:{}};}catch{return {steps:{}};}};
 const writeSetupFailures=(store,failures)=>atomic(setupFailureFile(store),JSON.stringify(failures,null,2)+'\n');
+const readRunDiagnostics=store=>{try{const saved=JSON.parse(fs.readFileSync(runDiagnosticsFile(store),'utf8'));return Array.isArray(saved?.runs)?saved:{runs:[]};}catch{return {runs:[]};}};
+const writeRunDiagnostics=(store,diagnostics)=>atomic(runDiagnosticsFile(store),JSON.stringify(diagnostics,null,2)+'\n');
 const diagnostic=error=>{const lines=String(error?.stderr||error?.message||'').replace(/\x1b\[[0-?]*[ -/]*[@-~]/g,'').split(/\r?\n/).map(line=>scrubCredentials(line).trimEnd()).filter(Boolean);return lines.slice(-10).join('\n').slice(-2000);};
 const errorLine=record=>{const lines=String(record.stderr||'').split(/\r?\n/).map(line=>line.trim()).filter(Boolean),trace=lines.findIndex(line=>/^Traceback \(most recent call last\):$/i.test(line));return (trace>=0?lines.at(-1):lines[0])||'exit code '+(record.exit_code??'unknown');};
 const cleanupFailure=(error,cleanup)=>Object.assign(Error(errorLine({stderr:diagnostic(error),exit_code:error?.code})+'; carried routine cleanup failed: '+errorLine({stderr:diagnostic(cleanup),exit_code:cleanup?.code})),{code:error?.code,cause:error});
@@ -84,7 +88,9 @@ export class NativeScheduler{
  // A connected provider reaches the record routines too (/api/provider).
  set executor(value){if(this.records)this.records.executor=value;}
  get executor(){return this.records?.executor||null;}
- async command(args,{timeout=120000}={}){const timezone=this.store.get('settings','installation')?.timezone,env=assistantEnvironment({home:this.home,workspace:this.store.root});if(timezone)env.HERMES_TIMEZONE=timezone;const result=await this.run(this.executable,['cron',...args],{cwd:this.store.root,windowsHide:true,shell:false,env,maxBuffer:1024*1024,timeout});return result.stdout;}
+ async command(args,{timeout=120000,onStart,detail=false}={}){const timezone=this.store.get('settings','installation')?.timezone,env=assistantEnvironment({home:this.home,workspace:this.store.root});if(timezone)env.HERMES_TIMEZONE=timezone;const result=await this.run(this.executable,['cron',...args],{cwd:this.store.root,windowsHide:true,shell:false,env,maxBuffer:1024*1024,timeout,onStart});return detail?result:result.stdout;}
+ saveRunDiagnostic(entry){const diagnostics=readRunDiagnostics(this.store);diagnostics.runs=[...diagnostics.runs,entry].slice(-MAX_RUN_DIAGNOSTICS);writeRunDiagnostics(this.store,diagnostics);}
+ updateRunDiagnostic(id,fields){const diagnostics=readRunDiagnostics(this.store),index=diagnostics.runs.findIndex(entry=>entry.id===id);if(index<0)return;diagnostics.runs[index]={...diagnostics.runs[index],...fields};writeRunDiagnostics(this.store,diagnostics);}
  setupNotice(failures,now){
   try{
    const steps=Object.values(failures.steps),notice=this.store.get('notifications',SETUP_NOTICE);
@@ -735,16 +741,23 @@ export class NativeScheduler{
  startRun(id){
   this.requireOwner('Run the routine');
   if(id&&!nativeJobs(this.home,this.device).some(j=>j.id===id))throw Error('Choose an existing Hermes task');
-  const release=this.lifecycle.acquire('routine run');if(!release)throw Error('The assistant is updating or another routine is already running.');
-  const run=this.runNow(id);this.running=run;run.catch(()=>{}).finally(()=>{if(this.running===run)this.running=null;release();});
+  const release=this.lifecycle.acquire('routine run');
+  if(!release){this.saveRunDiagnostic({id:'rejected-'+(this.runDiagnosticSerial=(this.runDiagnosticSerial||0)+1),at:new Date(this.now()).toISOString(),admitted:false,lifecycle_owner:this.lifecycle.reason,requested_job:id||null});throw Error('The assistant is updating or another routine is already running.');}
+  const diagnosticId='run-'+(this.runDiagnosticSerial=(this.runDiagnosticSerial||0)+1),command=[this.executable,'cron',id?'run':'tick',...(id?[id]:[])];
+  this.saveRunDiagnostic({id:diagnosticId,at:new Date(this.now()).toISOString(),admitted:true,lifecycle_owner:'routine run',requested_job:id||null,command,child:{pid:null,tree:[]},exit_status:null,signal:null,stderr:'',run_log:{path:path.join(this.home,'cron','output'),command_output:''}});
+  const run=this.runNow(id,{diagnosticId});this.running=run;run.catch(()=>{}).finally(()=>{if(this.running===run)this.running=null;release();});
   return {started:true,...(id?{id}:{})};
  }
- async runNow(id){
+ async runNow(id,{diagnosticId=null}={}){
   this.requireOwner('Run the routine');
-  const work=id?(()=>{if(!nativeJobs(this.home,this.device).some(j=>j.id===id))throw Error('Choose an existing Hermes task');return this.command(['run',id],{timeout:this.tickLimit});})():this.command(['tick'],{timeout:this.tickLimit});
-  const result=await beatWhile(work,()=>this.onProgress?.(),{limitMs:this.tickLimit+60000,every:this.beatEvery});
+  const args=id?['run',id]:['tick'],started=child=>{if(diagnosticId)this.updateRunDiagnostic(diagnosticId,{child:{pid:child?.pid??null,tree:Array.isArray(child?.tree)?child.tree:[]}});};
+  const work=id?(()=>{if(!nativeJobs(this.home,this.device).some(j=>j.id===id))throw Error('Choose an existing Hermes task');return this.command(args,{timeout:this.tickLimit,onStart:started,detail:true});})():this.command(args,{timeout:this.tickLimit,onStart:started,detail:true});
+  let result;
+  try{result=await beatWhile(work,()=>this.onProgress?.(),{limitMs:this.tickLimit+60000,every:this.beatEvery});}
+  catch(error){if(diagnosticId)this.updateRunDiagnostic(diagnosticId,{exit_status:error?.code??null,signal:error?.signal??null,stderr:diagnostic(error),run_log:{path:path.join(this.home,'cron','output'),command_output:diagnostic({stderr:error?.stdout})}});throw error;}
+  if(diagnosticId)this.updateRunDiagnostic(diagnosticId,{exit_status:result?.code??0,signal:result?.signal??null,stderr:diagnostic({stderr:result?.stderr}),run_log:{path:path.join(this.home,'cron','output'),command_output:diagnostic({stderr:result?.stdout})}});
   try{this.afterTick();}catch{}
-  return result;
+  return result?.stdout;
  }
  async control(input,{enable=false}={}){
   if(enable){

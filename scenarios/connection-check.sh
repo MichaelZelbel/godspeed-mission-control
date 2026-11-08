@@ -27,6 +27,7 @@
 #   due-before.json, due-<label>.json   the deadlines before and after each run: fine, broken, repaired
 #   notifications-before.json, notifications-<label>.json   the notebook's bell
 #   telegram-requests.json, runner.json  redacted local Bot API traffic and installed gateway state
+#   routine-diagnostics-<label>.json, routine-output-<label>/  each admitted Hermes child and its run log
 SCENARIO=connection-check
 # shellcheck source=scenarios/scenario-lib.sh
 . "$(dirname "$0")/scenario-lib.sh"

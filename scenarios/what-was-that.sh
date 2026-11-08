@@ -24,6 +24,7 @@
 #   report-facts.json                the facts the report was written from
 #   conversation_messages-report.json  what the notebook's chat held after the report went out
 #   telegram-requests.json, runner.json, routines.json
+#   routine-diagnostics-report.json, routine-output-report/  the admitted Hermes child and its run log
 SCENARIO=what-was-that
 # shellcheck source=scenarios/scenario-lib.sh
 . "$(dirname "$0")/scenario-lib.sh"
