@@ -176,7 +176,7 @@ test('the four beta.20 jobs check out the selected stage and run their own scena
     const rest = text.slice(start + 1);
     const end = rest.search(/^ {2}[A-Za-z0-9_-]+:[ \t]*$/m);
     const block = end < 0 ? rest : rest.slice(0, end);
-    assert.ok(block.includes('ref: ${{ inputs.stage || github.sha }}'), `${j} does not check out the selected stage`);
+    assert.ok(block.includes('ref: ${{ inputs.stage || github.event.pull_request.head.sha || github.sha }}'), `${j} does not check out the selected stage (or a pull request's own head)`);
     assert.ok(block.includes(`bash scenarios/${j}.sh "$STAGE_REF"`), `${j} does not run scenarios/${j}.sh at the stage`);
     assert.equal((block.match(/bash scenarios\/[a-z-]+\.sh/g) || []).length, 1, `${j} runs more than its own scenario`);
   }
@@ -236,4 +236,166 @@ test("the README's newest 'New in' heading is the package version", async () => 
   const heading = readme.match(/^## New in (\S+)/m);
   assert.ok(heading, 'README has no "New in" heading');
   assert.equal(heading[1], pkg.version);
+});
+
+// A pull request runs only the scenarios whose script it changed (the stage job's `picked`). That
+// works only while every job that runs `bash scenarios/<x>.sh "$STAGE_REF"` is the job `<x>` and is
+// gated by `picked` on its own name, so a new scenario cannot silently be left out of the proof.
+test('every scenario job named like its script is gated by the pull request pick, on its own name', async () => {
+  const { readFileSync } = await import('node:fs');
+  const text = readFileSync(WORKFLOW, 'utf8').replace(/\r\n/g, '\n');
+  const jobsText = text.slice(text.indexOf('\njobs:\n'));
+  const starts = [...jobsText.matchAll(/^ {2}([A-Za-z0-9_-]+):[ \t]*$/gm)];
+  let checked = 0;
+  for (let i = 0; i < starts.length; i++) {
+    const name = starts[i][1];
+    const block = jobsText.slice(starts[i].index, i + 1 < starts.length ? starts[i + 1].index : undefined);
+    const scripts = [...block.matchAll(/bash scenarios\/([a-z0-9-]+)\.sh "\$STAGE_REF"/g)].map((m) => m[1]);
+    if (!scripts.length) continue;
+    assert.deepEqual(scripts, [name], `job ${name} runs scenarios/${scripts.join(', ')}.sh: a job runs the script of its own name`);
+    assert.ok(block.includes(`if: \${{ needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',${name},') }}`), `job ${name} is not gated by the pull request pick`);
+    checked++;
+  }
+  assert.ok(checked >= 20, `only ${checked} scenario jobs found`);
+});
+
+// The pick itself, run the way the stage job runs it, on a made-up list of changed files.
+test('the pick names the scenarios whose script or owned file changed, and nothing else', async () => {
+  const { readFileSync, writeFileSync, mkdtempSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { spawnSync } = await import('node:child_process');
+  const text = readFileSync(WORKFLOW, 'utf8').replace(/\r\n/g, '\n');
+  const at = text.indexOf('          jobs=$(grep -oE');
+  const to = text.indexOf('          echo "The pull request changes');
+  assert.ok(at > 0 && to > at, 'the pick step was not found');
+  const dir = mkdtempSync(`${tmpdir()}/pick-`).replaceAll(String.fromCharCode(92), '/');
+  writeFileSync(`${dir}/changed`, ['scenarios/voice.sh', 'scenarios/hevy-fixture.mjs', 'scenarios/plain-yes-extra.py', 'scenarios/scenario-lib.sh', 'scenarios/test-scenarios.sh', 'notebook/voice.sh', 'scenarios/windows-old-names-move.ps1'].join('\n') + '\n');
+  const script = `RUNNER_TEMP='${dir}'\n` + text.slice(at, to).replace(/^ {10}/gm, '') + 'echo "$picked"';
+  const r = spawnSync('bash', ['-c', script], { cwd: fileURLToPath(new URL('..', import.meta.url)), encoding: 'utf8' });
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(r.stdout.trim(), ',plain-yes,voice,');
+});
+
+// A pull request proves its own head commit: GitHub's merge commit is not promised to be fetchable
+// by the installer, which reads the product by commit. Every path that makes or reads the proof
+// (the stage's checkout and its stage file, and the checkout of every scenario job) must say so.
+test("the stage and every scenario job prove the pull request's own head commit", async () => {
+  const { readFileSync } = await import('node:fs');
+  const text = readFileSync(WORKFLOW, 'utf8').replace(/\r\n/g, '\n');
+  const head = 'ref: ${{ inputs.stage || github.event.pull_request.head.sha || github.sha }}';
+  const jobsText = text.slice(text.indexOf('\njobs:\n'));
+  const starts = [...jobsText.matchAll(/^ {2}([A-Za-z0-9_-]+):[ \t]*$/gm)];
+  const blockOf = (name) => {
+    const i = starts.findIndex((m) => m[1] === name);
+    assert.ok(i >= 0, `no job ${name}`);
+    return jobsText.slice(starts[i].index, i + 1 < starts.length ? starts[i + 1].index : undefined);
+  };
+  const stage = blockOf('stage');
+  assert.ok(stage.includes(head), 'the stage job does not check out the pull request head');
+  assert.ok(stage.includes('PROOF_SHA: ${{ github.event.pull_request.head.sha || github.sha }}'), 'the stage job has no PROOF_SHA of the pull request head');
+  assert.ok(stage.includes('scenarios/stage-for-run.sh \'\' "$PROOF_SHA"'), 'the stage file is not made from PROOF_SHA');
+  assert.ok(!stage.includes('"$GITHUB_SHA"'), 'the stage job still reads GITHUB_SHA');
+  let checked = 0;
+  for (const m of starts) {
+    const block = blockOf(m[1]);
+    if (!/bash scenarios\/[a-z0-9-]+\.sh "\$STAGE_REF"/.test(block)) continue;
+    assert.ok(block.includes(head), `${m[1]} does not check out the pull request head`);
+    assert.ok(!/ref: \$\{\{ inputs\.stage \|\| github\.sha \}\}/.test(block), `${m[1]} checks out GitHub's merge commit`);
+    checked++;
+  }
+  assert.ok(checked >= 20, `only ${checked} scenario jobs found`);
+});
+
+// A pull request from a fork has no secrets and may carry hostile scenario code: the stage job is
+// skipped for it, every scenario needs the stage, and the verdict then passes with a plain line.
+test('a pull request from a fork runs nothing, and its verdict passes', async () => {
+  const { readFileSync } = await import('node:fs');
+  const { spawnSync } = await import('node:child_process');
+  const text = readFileSync(WORKFLOW, 'utf8').replace(/\r\n/g, '\n');
+  const jobsText = text.slice(text.indexOf('\njobs:\n'));
+  const starts = [...jobsText.matchAll(/^ {2}([A-Za-z0-9_-]+):[ \t]*$/gm)];
+  const blockOf = (name) => {
+    const i = starts.findIndex((m) => m[1] === name);
+    return jobsText.slice(starts[i].index, i + 1 < starts.length ? starts[i + 1].index : undefined);
+  };
+  assert.ok(blockOf('stage').includes("if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository"), 'the stage job does not skip a fork pull request');
+  for (const m of starts) {
+    const block = blockOf(m[1]);
+    if (!/bash scenarios\/[a-z0-9-]+\.sh "\$STAGE_REF"/.test(block)) continue;
+    assert.match(block, /^ {4}needs: stage$/m, `${m[1]} does not need the stage job, so a fork pull request could run it`);
+  }
+  const verdict = blockOf('verdict');
+  assert.match(verdict, /^ {4}if: always\(\)$/m, 'the verdict does not always run, so a fork pull request would get no verdict');
+  const at = verdict.indexOf('          bad=0\n');
+  const to = verdict.indexOf('      - name: Tell the night in issues');
+  assert.ok(at > 0 && to > at, 'the verdict step was not found');
+  const script = verdict.slice(at, to).replace(/^ {10}/gm, '');
+  const run = (env) => spawnSync('bash', ['-c', script], { encoding: 'utf8', env: { ...process.env, GITHUB_STEP_SUMMARY: '/dev/null', STAGE_REF: 'this-commit', WANT_MAC: 'false', IS_CANDIDATE: 'false', RESULTS: 'voice=skipped plain-yes=skipped', PICKED: '', ...env } });
+  const fork = run({ EVENT: 'pull_request', STAGE: 'skipped' });
+  assert.equal(fork.status, 0, fork.stdout + fork.stderr);
+  assert.match(fork.stdout, /No scenario runs on a pull request from a fork/);
+  // the same skips on a night, or a skipped stage that is not a fork's pull request, still fail
+  assert.equal(run({ EVENT: 'schedule', STAGE: 'skipped' }).status, 1);
+  assert.equal(run({ EVENT: 'pull_request', STAGE: 'success', PICKED: ',voice,' }).status, 1, 'a picked scenario that did not run must fail');
+  assert.equal(run({ EVENT: 'pull_request', STAGE: 'success', PICKED: ',' }).status, 0, 'an unpicked skip must pass');
+});
+
+// The workflow's own trigger, concurrency and the pick step as a whole, read as text and run as bash.
+const pickStep = (text) => {
+  const at = text.indexOf('        id: pick\n');
+  const run = text.indexOf('        run: |\n', at);
+  const to = text.indexOf('      - name: Read and check it', run);
+  assert.ok(at > 0 && run > at && to > run, 'the pick step was not found');
+  return text.slice(run + '        run: |\n'.length, to).replace(/^ {10}/gm, '');
+};
+
+test('the workflow runs on a pull request opened, pushed to or reopened, and one run per pull request is kept', async () => {
+  const { readFileSync } = await import('node:fs');
+  const text = readFileSync(WORKFLOW, 'utf8').replace(/\r\n/g, '\n');
+  const on = text.slice(text.indexOf('\non:\n'), text.indexOf('\npermissions:\n'));
+  assert.match(on, /^ {2}pull_request:\n {4}types: \[opened, synchronize, reopened\]$/m, 'the pull_request trigger (opened, synchronize, reopened) is missing');
+  assert.match(on, /^ {2}schedule:/m);
+  assert.match(on, /^ {2}workflow_dispatch:/m);
+  const conc = text.slice(text.indexOf('\nconcurrency:\n'), text.indexOf('\nenv:\n'));
+  assert.ok(conc.includes('group: scenarios-${{ github.event.pull_request.number || github.run_id }}'), 'the group is not one per pull request (a run id for every other event)');
+  assert.ok(conc.includes("cancel-in-progress: ${{ github.event_name == 'pull_request' }}"), 'only a pull request may cancel its older run');
+});
+
+test('the pick says all on a night, a candidate and a manual run', async () => {
+  const { readFileSync, writeFileSync, mkdtempSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { spawnSync } = await import('node:child_process');
+  const script = pickStep(readFileSync(WORKFLOW, 'utf8').replace(/\r\n/g, '\n'));
+  for (const event of ['schedule', 'workflow_dispatch']) {
+    const dir = mkdtempSync(`${tmpdir()}/pickall-`).replaceAll(String.fromCharCode(92), '/');
+    writeFileSync(`${dir}/out`, '');
+    const r = spawnSync('bash', ['-c', script], { cwd: fileURLToPath(new URL('..', import.meta.url)), encoding: 'utf8', env: { ...process.env, GITHUB_EVENT_NAME: event, GITHUB_OUTPUT: `${dir}/out`, RUNNER_TEMP: dir, GITHUB_STEP_SUMMARY: `${dir}/sum` } });
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(readFileSync(`${dir}/out`, 'utf8'), 'picked=all\n', `${event} does not prove every scenario`);
+  }
+});
+
+// The whole pull request arm with a stand-in `gh` that insists on the pull request's files endpoint,
+// paging through all of it, and a jq filter for names: the way the pick reads a large pull request.
+test('the pick on a pull request asks the files endpoint of that pull request, all pages, and writes picked', async () => {
+  const { readFileSync, writeFileSync, mkdtempSync, mkdirSync, chmodSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { spawnSync } = await import('node:child_process');
+  const script = pickStep(readFileSync(WORKFLOW, 'utf8').replace(/\r\n/g, '\n'));
+  const dir = mkdtempSync(`${tmpdir()}/pickpr-`).replaceAll(String.fromCharCode(92), '/');
+  mkdirSync(`${dir}/bin`);
+  writeFileSync(`${dir}/bin/gh`, [
+    '#!/usr/bin/env bash',
+    'args="$*"',
+    '[[ "$1" = api && "$2" = "repos/me/repo/pulls/42/files" ]] || { echo "unexpected endpoint: $args" >&2; exit 9; }',
+    '[[ " $args " == *" --paginate "* ]] || { echo "not paginated: $args" >&2; exit 9; }',
+    '[[ " $args " == *" --jq "* ]] || { echo "no --jq: $args" >&2; exit 9; }',
+    'printf "%s\n" README.md scenarios/charm-challenge.sh',
+    '',
+  ].join('\n'));
+  chmodSync(`${dir}/bin/gh`, 0o755);
+  writeFileSync(`${dir}/out`, '');
+  const r = spawnSync('bash', ['-c', script], { cwd: fileURLToPath(new URL('..', import.meta.url)), encoding: 'utf8', env: { ...process.env, PATH: `${dir}/bin:${process.env.PATH}`, GITHUB_EVENT_NAME: 'pull_request', GITHUB_REPOSITORY: 'me/repo', PR: '42', GITHUB_OUTPUT: `${dir}/out`, RUNNER_TEMP: dir, GITHUB_STEP_SUMMARY: `${dir}/sum` } });
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  assert.equal(readFileSync(`${dir}/out`, 'utf8'), 'picked=,charm-challenge,\n');
 });
