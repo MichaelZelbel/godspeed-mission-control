@@ -13,8 +13,9 @@ import {homeHasModel} from '../core/native-agent.mjs';
 const temporary=t=>{const dir=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-routine-ai-'));t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));return dir;};
 const home=t=>{const root=temporary(t),h=path.join(root,'hermes'),state=path.join(root,'state');fs.mkdirSync(h,{recursive:true});fs.mkdirSync(state,{recursive:true});return {home:h,state};};
 
-test('an endpoint becomes the Hermes provider that reads it: OpenRouter, OpenAI, or any other address',()=>{
+test('an endpoint becomes the Hermes provider that reads it: OpenRouter, Anthropic, OpenAI, or any other address',()=>{
  assert.deepEqual(hermesSettingsFor({url:'https://openrouter.ai/api/v1/chat/completions',key:'sk-or-fictional',model:'fictional/model'}),{provider:'openrouter',base_url:'https://openrouter.ai/api/v1',model:'fictional/model',env:{OPENROUTER_API_KEY:'sk-or-fictional'}});
+ assert.deepEqual(hermesSettingsFor({url:'https://api.anthropic.com/v1/chat/completions',key:'sk-ant-fictional',model:'claude-haiku-4-5'}),{provider:'anthropic',base_url:'https://api.anthropic.com/v1',model:'claude-haiku-4-5',env:{ANTHROPIC_API_KEY:'sk-ant-fictional'}});
  assert.deepEqual(hermesSettingsFor({url:'https://api.openai.com/v1/chat/completions',key:'sk-fictional',model:'gpt-fictional'}),{provider:'openai-api',base_url:'https://api.openai.com/v1',model:'gpt-fictional',env:{OPENAI_API_KEY:'sk-fictional'}});
  assert.deepEqual(hermesSettingsFor({url:'https://llm.example.org/v1/',key:'k1',model:'m'}),{provider:'custom',base_url:'https://llm.example.org/v1',model:'m',api_key:'k1'});
  assert.throws(()=>hermesSettingsFor({url:'https://openrouter.ai/api/v1',key:'has a space',model:'m'}),/space or a quotation mark/);
@@ -48,6 +49,10 @@ test('connecting writes the model into Hermes\' own home, keeps the rest of it, 
  const custom=fs.readFileSync(path.join(h,'config.yaml'),'utf8');
  assert.match(custom,/provider: "custom"/);assert.match(custom,/api_key: "k-custom"/);assert.match(custom,/base_url: "https:\/\/llm.example.org\/v1"/);
  assert.equal(routineAIStatus({home:h,state}).key,true);
+ connectRoutineAI({home:h,state,config:{url:'https://api.anthropic.com/v1',key:'sk-ant-fictional',model:'claude-haiku-4-5'}});
+ const anthropic=fs.readFileSync(path.join(h,'config.yaml'),'utf8'),anthropicEnv=fs.readFileSync(path.join(h,'.env'),'utf8');
+ assert.match(anthropic,/provider: "anthropic"/);assert.match(anthropic,/api_key: ""/);assert.match(anthropicEnv,/ANTHROPIC_API_KEY=sk-ant-fictional/);
+ assert.deepEqual({provider:routineAIStatus({home:h,state}).provider,key:routineAIStatus({home:h,state}).key},{provider:'anthropic',key:true});
 });
 
 test('a sign-in Hermes has of its own (the Windows app, hermes model) is named as its own, and a one-line model becomes a section',t=>{

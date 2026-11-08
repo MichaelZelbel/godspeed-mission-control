@@ -25,9 +25,9 @@ const unquote=v=>typeof v==='string'?v.replace(/^["']|["']$/g,'').trim():'';
 export function baseAddress(url){return String(url||'').trim().replace(/\/chat\/completions\/?$/,'').replace(/\/+$/,'');}
 
 // What Hermes needs for an endpoint the Settings form connects (Hermes hermes_cli/auth.py and
-// runtime_provider_backends.py): OpenRouter is Hermes' own provider "openrouter" with
-// OPENROUTER_API_KEY; OpenAI's API is "openai-api" with OPENAI_API_KEY; any other
-// OpenAI-compatible address is "custom", whose key Hermes reads from model.api_key.
+// runtime_provider_backends.py): OpenRouter, Anthropic, and OpenAI use their own providers and
+// environment variables; any other OpenAI-compatible address is "custom", whose key Hermes
+// reads from model.api_key.
 export function hermesSettingsFor({url,key,model}){
  const base=baseAddress(url);let host;
  try{host=new URL(base).hostname.toLowerCase();}catch{throw Error('Give the address of an AI service, starting with https://');}
@@ -35,6 +35,7 @@ export function hermesSettingsFor({url,key,model}){
  if(!model||!String(model).trim())throw Error('Name the model the routines should use');
  model=String(model).trim();
  if(host==='openrouter.ai'||host.endsWith('.openrouter.ai'))return {provider:'openrouter',base_url:'https://openrouter.ai/api/v1',model,env:{OPENROUTER_API_KEY:key}};
+ if(host==='api.anthropic.com')return {provider:'anthropic',base_url:'https://api.anthropic.com/v1',model,env:{ANTHROPIC_API_KEY:key}};
  if(host==='api.openai.com')return {provider:'openai-api',base_url:'https://api.openai.com/v1',model,env:{OPENAI_API_KEY:key}};
  return {provider:'custom',base_url:base,model,api_key:key};
 }
