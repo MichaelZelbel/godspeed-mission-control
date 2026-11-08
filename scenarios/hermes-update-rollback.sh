@@ -130,7 +130,8 @@ const read=file=>JSON.parse(fs.readFileSync(file,'utf8')),rows=data=>Array.isArr
 const state=read(stateFile),notices=rows(read(noticesFile)),hermes=source+'/bin/hermes';
 const version=execFileSync(hermes,['--version'],{encoding:'utf8'}).trim(),commit=execFileSync('git',['-C',source,'rev-parse','HEAD'],{encoding:'utf8'}).trim();
 const log=fs.readFileSync(logFile,'utf8').trim().split(/\r?\n/).filter(Boolean);
-console.log(JSON.stringify({label,attempt:revealed,attempted:log.includes('update '+revealed),version,commit,restarts:log.filter(line=>line==='gateway restart 1.2.0'||line==='gateway restart 1.1.0').length,failed_check:state.last?.reason||null,chat:true,failure_bell:notices.some(n=>String(n.id||'').startsWith('hermes-update-')),notification_count:notices.length,notifications:notices.map(n=>({version:String(n.id||'').replace(/^hermes-update-/,''),pending:n.status==='pending'}))}));
+const hermesNotices=notices.filter(n=>String(n.id||'').startsWith('hermes-update-'));
+console.log(JSON.stringify({label,attempt:revealed,attempted:log.includes('update '+revealed),version,commit,restarts:log.filter(line=>line==='gateway restart 1.2.0'||line==='gateway restart 1.1.0').length,failed_check:state.last?.reason||null,chat:true,failure_bell:hermesNotices.length>0,notification_count:hermesNotices.length,notifications:hermesNotices.map(n=>({version:String(n.id||'').replace(/^hermes-update-/,''),pending:n.status==='pending'}))}));
 NODE
 }
 
