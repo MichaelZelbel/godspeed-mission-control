@@ -69,16 +69,22 @@ the checks that judge it. GitHub refuses any push from it that creates or update
     (not a fragment) to `.github/workflow-drafts/<same file name>`, quotes that content in the same
     section, and adds the blob hash of the draft to the manifest.
   - For a delete there is no draft file; the manifest says the result is "absent".
-- Such a pull request is Done when the review says Ready at its head commit and its checks are green,
-  apart from the scenario jobs named in the manifest and no others. Before it says Ready, the review
-  checks that every listed job ID is in `picked` at that head, that the manifest matches the draft
-  and that the quote in the description is byte for byte the draft at that head commit.
-- Mission Control then applies the change with the release key, after confirming that the target's
-  current blob hash equals the manifest's base hash and, for a create or a replace, that the draft's
-  hash equals the manifest's result hash and the quote in the description still equals the draft. A
-  create or a replace writes the draft to the target path and removes the draft file; a delete
-  removes the target and has no draft file to remove. On any mismatch it applies nothing and sends
-  the pull request back for a redo.
+- Such a pull request is Done for the build queue when the review says Ready at its head commit and
+  its checks are green, apart from the scenario jobs listed in the manifest, which need the drafted
+  change and may be red until it is applied. Done means the queue builds no more rounds on it; the
+  merge is not yet allowed, because the required check still fails on any red job. Before it says
+  Ready, the review checks that every listed job ID is in `picked` at that head, that the manifest
+  matches the draft and that the quote in the description is byte for byte the draft at that head
+  commit.
+- Mission Control then applies the change with the release key by committing it to the pull request
+  branch, after confirming that the target's current blob hash equals the manifest's base hash and,
+  for a create or a replace, that the draft's hash equals the manifest's result hash and the quote in
+  the description still equals the draft. The commit writes the draft to the target path and removes
+  the draft file (a delete removes the target and has no draft file). On any mismatch it applies
+  nothing and sends the pull request back for a redo.
+- That commit is a new head: the review runs again on it, the scenario jobs run with the applied
+  change, and the pull request merges when the review says Ready and every check, the listed jobs
+  included, is green. The required check is unchanged and has no exception.
 - A publish refused for this reason is never retried. The round redoes the change the drafted way:
   it drops the workflow hunk from its commits and writes the draft. A new round that repeats the same
   refused push is the mistake this rule prevents.
