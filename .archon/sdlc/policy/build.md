@@ -54,45 +54,18 @@ Unlike the candidate-only checks above, a round can read this one at the pull re
 
 ## A build round never changes `.github/workflows/`
 
-The builder key is kept away from `.github/workflows/` by design: a build must not be able to change
-the checks that judge it. GitHub refuses any push from it that creates or updates a workflow file.
+The builder key is kept away from `.github/workflows/` by design, and GitHub refuses its pushes
+there.
 
-- No commit of a build round touches a file under `.github/workflows/`, in any round.
-- When the fix needs a workflow change, the round commits everything else and describes the change
-  in the pull request description under "Workflow change for the release key", as a manifest of
-  these lines: the target path under `.github/workflows/`; the operation; the git blob hash of the
-  target on the base commit the change was written against (none for a create); the scenario job
-  IDs (the workflow's own IDs, not display names) that need the change. Each ID must be one the
-  workflow selected for this head, listed in `picked` in the `stage file` job's summary; `required`,
-  `the stage file`, `the verdict` and any scenario job not picked are never listed.
-  A drafted change that has no picked scenario job lists none, and then no check may be red apart
-  from the ones the default already allows.
-  - For a create or a replace, the round also writes the complete new content of the workflow file
-    (not a fragment) to `.github/workflow-drafts/<same file name>`, quotes that content in the same
-    section, and adds the blob hash of the draft to the manifest.
-  - For a delete there is no draft file; the manifest says the result is "absent".
-- Such a pull request is Done for the build queue when the review says Ready at its head commit and
-  its checks are green, apart from the scenario jobs listed in the manifest, which need the drafted
-  change and may be red until it is applied, and apart from `the verdict`, which is red only as the
-  sum of those jobs: the review says so only when every other job in the verdict's results passed. Done means the queue builds no more rounds on it; the
-  merge is not yet allowed, because the required check still fails on any red job. Before it says
-  Ready, the review checks that every listed job ID is in `picked` at that head, that the manifest
-  matches the draft and that the quote in the description is byte for byte the draft at that head
-  commit.
-- Mission Control then applies the change with the release key by committing it to the pull request
-  branch, after confirming that the target's current blob hash equals the manifest's base hash and,
-  for a create or a replace, that the draft's hash equals the manifest's result hash and the quote in
-  the description still equals the draft. The commit writes the draft to the target path and removes
-  the draft file (a delete removes the target and has no draft file). On any mismatch it applies
-  nothing and sends the pull request back for a redo.
-- That commit is a new head: the review runs again on it, the scenario jobs run with the applied
-  change, and the pull request merges when the review says Ready and every check, the listed jobs
-  included, is green. The required check is unchanged and has no exception.
-- A publish refused for this reason is never retried. The round redoes the change the drafted way:
-  it drops the workflow hunk from its commits and writes the draft. A new round that repeats the same
-  refused push is the mistake this rule prevents.
+- No commit of a build round touches `.github/workflows/`.
+- When the fix needs a workflow change, the round commits everything else, puts the whole new file
+  unchanged under `.github/workflow-drafts/<same file name>`, and quotes it in the pull request
+  description under "Workflow change for the release key". Mission Control applies that draft with
+  the release key after the review says Ready, and removes the draft.
+- Such a pull request is Done when the review says Ready at its head commit and its checks are
+  green, apart from the scenario jobs that need the drafted change (and `the verdict`, red only
+  because of them).
+- A publish refused for this reason is not retried. The round redoes the change the drafted way.
 - Everything else keeps the default.
 - Reason: Michael, 8 November 2026. Issue #340 was built nine times in three hours with the same
-  refused push, because the queue started another round each time, and #333 stopped to ask for a
-  permission the guard exists to withhold. Drafting the change (as #319 and #321 did) keeps the
-  guard and lets the work finish.
+  refused push.
