@@ -110,12 +110,27 @@ server_download_failure() {
 }
 
 server_installed_asker() {
-  local output
-  output=$(bash -c '. "$1"; in_server_as_hermes(){ printf "%s\\n" "$*"; }; server_install_asker' bash "$HERE/server-lib.sh" 2>&1)
-  if [[ $output == *'test -f /opt/godspeed/kit/scenarios/scenario-asker.py'* && $output == *'ln -sfn /opt/godspeed/kit/scenarios/scenario-asker.py'* && $output != *'docker cp'* ]]; then
-    ok 'the fixture asker is linked from the installed candidate, not copied from the scenario host'
+  local candidate=$TMP/asker-candidate hermes=$TMP/asker-hermes target=$TMP/asker-home/scripts/scenario-asker.py args=$TMP/asker-args output code
+  mkdir -p "$candidate/scenarios" "$TMP/asker-home/scripts" "$TMP/asker-workspace" "$hermes"
+  printf 'the candidate fixture asker\n' >"$candidate/scenarios/scenario-asker.py"
+  printf 'old fixture\n' >"$TMP/asker-outside.py"
+  ln -s "$TMP/asker-outside.py" "$target"
+  printf '#!/bin/sh\nprintf "%%s\n" "$@" >"$SERVER_ASKER_ARGS"\n' >"$hermes/hermes"
+  chmod +x "$hermes/hermes"
+  output=$(SERVER_ASKER_KIT="$candidate" SERVER_ASKER_HERMES="$hermes/hermes" SERVER_ASKER_HOME="$TMP/asker-home" SERVER_ASKER_WORKSPACE="$TMP/asker-workspace" SERVER_ASKER_ARGS="$args" bash -c '
+    . "$1"
+    in_server_as_hermes() {
+      command=${3//\/opt\/godspeed\/kit/$SERVER_ASKER_KIT}
+      command=${command//\/opt\/hermes\/bin\/hermes/$SERVER_ASKER_HERMES}
+      HERMES_HOME="$SERVER_ASKER_HOME" GODSPEED_WORKSPACE="$SERVER_ASKER_WORKSPACE" sh -c "$command"
+    }
+    server_install_asker
+  ' bash "$HERE/server-lib.sh" 2>&1)
+  code=$?
+  if [ "$code" = 0 ] && [ -f "$target" ] && [ ! -L "$target" ] && [ "$(readlink -f "$target")" = "$target" ] && cmp -s "$candidate/scenarios/scenario-asker.py" "$target" && grep -Fx -- '--script' "$args" >/dev/null && grep -Fx -- 'scenario-asker.py' "$args" >/dev/null; then
+    ok 'the fixture asker is copied from the installed candidate into Hermes scripts'
   else
-    bad "the fixture asker is linked from the installed candidate, not copied from the scenario host ($output)"
+    bad "the fixture asker is copied from the installed candidate into Hermes scripts (exit $code: $output)"
   fi
 }
 server_installed_asker

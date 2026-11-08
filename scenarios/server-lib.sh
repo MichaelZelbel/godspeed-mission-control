@@ -243,7 +243,7 @@ server_sparse_state() {
   done
 }
 server_install_asker() {
-  in_server_as_hermes sh -c 'test -f /opt/godspeed/kit/scenarios/scenario-asker.py && mkdir -p "$HERMES_HOME/scripts" && ln -sfn /opt/godspeed/kit/scenarios/scenario-asker.py "$HERMES_HOME/scripts/scenario-asker.py" && /opt/hermes/bin/hermes cron create "0 0 1 1 *" --no-agent --name "Scenario asker" --script scenario-asker.py --deliver telegram --failure-deliver local --workdir "$GODSPEED_WORKSPACE"' >&2 ||
+  in_server_as_hermes sh -c 'source=/opt/godspeed/kit/scenarios/scenario-asker.py; target="$HERMES_HOME/scripts/scenario-asker.py"; test -f "$source" && mkdir -p "$HERMES_HOME/scripts" && rm -f "$target" && cp "$source" "$target" && /opt/hermes/bin/hermes cron create "0 0 1 1 *" --no-agent --name "Scenario asker" --script scenario-asker.py --deliver telegram --failure-deliver local --workdir "$GODSPEED_WORKSPACE"' >&2 ||
     fail 'the installed Hermes could not create the fixture asker routine'
 }
 server_set_asks() { # <file>
