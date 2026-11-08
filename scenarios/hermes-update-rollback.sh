@@ -38,6 +38,7 @@ act() {
   install_paths; install_the_stage_line "$EVIDENCE/install.log"; need_node
   wait_for 180 'the notebook to answer after install' notebook_is_up || fail "the notebook did not answer after install"
   install_fixture_hermes
+  local_release_source
   record_releases
   run_night 2026-11-06 1.1.0 good
   node "$HERE/hermes-update-fixture.mjs" --dir "$EVIDENCE/releases" --reveal 1.2.0 >/dev/null || fail "the broken local Hermes release could not be revealed"
@@ -46,6 +47,28 @@ act() {
   run_night 2026-11-08 1.3.0 recent
   make_nights
   check "$EVIDENCE"
+}
+
+local_release_source() {
+  local url_file=$EVIDENCE/release-source-url.txt unit=${UNIT:-godspeed-integrated-notebook.service} dropin url
+  node "$HERE/hermes-update-fixture.mjs" --dir "$EVIDENCE/releases" --serve >"$url_file" 2>"$EVIDENCE/release-source.log" &
+  wait_for 30 'the local Hermes release source to start' test -s "$url_file" || fail "the local Hermes release source did not start"
+  url=$(cat "$url_file")
+  case $url in http://127.0.0.1:*/releases) ;; *) fail "the local Hermes release source did not report a loopback releases address" ;; esac
+  if systemctl --user cat "$unit" >/dev/null 2>&1; then
+    dropin=$HOME/.config/systemd/user/$unit.d
+    mkdir -p "$dropin" || fail "the notebook release-source override folder could not be made"
+    printf '[Service]\nEnvironment="GODSPEED_SCENARIO_HERMES_UPDATE_RELEASES_URL=%s"\n' "$url" >"$dropin/scenario-hermes-releases.conf" || fail "the notebook release-source override could not be written"
+    systemctl --user daemon-reload && systemctl --user restart "$unit" || fail "the notebook could not be restarted with the local Hermes releases"
+  elif systemctl cat "$unit" >/dev/null 2>&1; then
+    dropin=/etc/systemd/system/$unit.d
+    sudo mkdir -p "$dropin" || fail "the notebook release-source override folder could not be made"
+    printf '[Service]\nEnvironment="GODSPEED_SCENARIO_HERMES_UPDATE_RELEASES_URL=%s"\n' "$url" | sudo tee "$dropin/scenario-hermes-releases.conf" >/dev/null || fail "the notebook release-source override could not be written"
+    sudo systemctl daemon-reload && sudo systemctl restart "$unit" || fail "the notebook could not be restarted with the local Hermes releases"
+  else
+    fail "the native notebook has no service to receive the local Hermes releases"
+  fi
+  wait_for 180 'the notebook to answer with the local Hermes releases' notebook_is_up || fail "the notebook did not answer with the local Hermes releases"
 }
 
 install_fixture_hermes() {

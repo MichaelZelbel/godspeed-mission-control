@@ -4110,6 +4110,21 @@ if node "$ROOT/scenarios/hermes-update-fixture.mjs" --dir "$HFD" >/dev/null \
 else
   bad 'the local Hermes fixture does not control its local releases and harmless command'
 fi
+HFD_URL_FILE=$TMP/hermes-fixture-url
+node "$ROOT/scenarios/hermes-update-fixture.mjs" --dir "$HFD" --serve >"$HFD_URL_FILE" 2>/dev/null &
+HFD_PID=$!
+for _ in $(seq 1 20); do [ -s "$HFD_URL_FILE" ] && break; sleep 0.1; done
+HFD_URL=$(cat "$HFD_URL_FILE" 2>/dev/null || true)
+HFD_ALL=$(curl -fsS "$HFD_URL" 2>/dev/null || true)
+node "$ROOT/scenarios/hermes-update-fixture.mjs" --dir "$HFD" --reveal 1.2.0 >/dev/null
+HFD_REVEALED=$(curl -fsS "$HFD_URL" 2>/dev/null || true)
+kill "$HFD_PID" 2>/dev/null || true
+if [ "$HFD_ALL" = '[{"tag_name":"v1.0.0","published_at":"2026-10-20T00:00:00Z","prerelease":false,"draft":false},{"tag_name":"v1.1.0","published_at":"2026-10-29T00:00:00Z","prerelease":false,"draft":false},{"tag_name":"v1.2.0","published_at":"2026-10-30T00:00:00Z","prerelease":false,"draft":false},{"tag_name":"v1.3.0","published_at":"2026-11-04T00:00:00Z","prerelease":false,"draft":false}]' ] \
+  && [ "$HFD_REVEALED" = '[{"tag_name":"v1.0.0","published_at":"2026-10-20T00:00:00Z","prerelease":false,"draft":false},{"tag_name":"v1.1.0","published_at":"2026-10-29T00:00:00Z","prerelease":false,"draft":false},{"tag_name":"v1.2.0","published_at":"2026-10-30T00:00:00Z","prerelease":false,"draft":false}]' ]; then
+  ok 'the local Hermes fixture serves only its revealed releases on loopback'
+else
+  bad 'the local Hermes fixture does not serve its revealed releases on loopback'
+fi
 HFD_RELATIVE=hermes-fixture-relative
 if (
   cd "$TMP"
