@@ -5,6 +5,7 @@ import {fileURLToPath} from 'node:url';
 import {spawn} from 'node:child_process';
 import {assistantEnvironment} from './assistant-files.mjs';
 import {runChild} from './child-process.mjs';
+import {hermesPython} from './runtime.mjs';
 
 export async function transcribeRecording(descriptor,workspace,audio,type,{spawnProcess=spawn}={}){
   const extension={'audio/webm':'.webm','audio/ogg':'.ogg','audio/mp4':'.mp4','audio/wav':'.wav'}[type.split(';')[0]];
@@ -15,10 +16,10 @@ export async function transcribeRecording(descriptor,workspace,audio,type,{spawn
   const filename=path.join(directory,'recording'+extension);
   try{
     await fs.writeFile(filename,audio,{mode:0o600});
-    const python=process.platform==='win32'?path.join(descriptor.sourceRoot,'venv','Scripts','python.exe'):path.resolve(descriptor.executable,'../../.venv/bin/python3');
+    const {python,source}=hermesPython(descriptor);
     // The transcript is decoded once, whole: decoding each piece of output on
     // its own broke a German letter split between two pieces (until 6 October 2026).
-    const run=await runChild(python,[fileURLToPath(new URL('../assistant-files/dictate.py',import.meta.url)),filename],{cwd:descriptor.sourceRoot||path.resolve(descriptor.executable,'../..'),env:assistantEnvironment({home:descriptor.home,workspace}),timeoutMs:90000,maxBytes:100000,spawnProcess})
+    const run=await runChild(python,[fileURLToPath(new URL('../assistant-files/dictate.py',import.meta.url)),filename],{cwd:source,env:assistantEnvironment({home:descriptor.home,workspace}),timeoutMs:90000,maxBytes:100000,spawnProcess})
       .catch(error=>{throw new Error(error.code==='TIMEOUT'?'Dictation took too long. Try a shorter recording.':error.code==='SPAWN_FAILED'?'Dictation could not start':'Dictation could not transcribe this recording. Please try again.');});
     let result;
     try{if(run.code)throw new Error();result=JSON.parse(run.stdout.trim().split(/\r?\n/).at(-1));if(!result.ok)throw new Error();}catch{throw new Error('Dictation could not transcribe this recording. Please try again.');}
