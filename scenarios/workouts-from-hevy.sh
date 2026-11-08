@@ -6,6 +6,7 @@ SCENARIO=workouts-from-hevy
 . "$(dirname "$0")/scenario-lib.sh"
 # shellcheck source=scenarios/numbers-lib.sh
 . "$(dirname "$0")/numbers-lib.sh"
+REFUSED_HEVY_KEY='refused-'"scenario-key"
 
 check() {
   local folder=$1
@@ -123,7 +124,7 @@ persistence_roots() { # <docker|native> <scan name>
 }
 
 refused_not_retained() { # <docker|native>
-  local platform=$1 key='refused-scenario-key' paths=$EVIDENCE/.$1-refused-key-paths code
+  local platform=$1 key=$REFUSED_HEVY_KEY paths=$EVIDENCE/.$1-refused-key-paths code
   persistence_roots "$platform" "$platform refused-key scan"
   case $platform in
     docker)
@@ -271,11 +272,11 @@ act() {
   port=$(cat "$EVIDENCE/fixture-port")
   curl -fsS "http://127.0.0.1:$port/health" >"$EVIDENCE/fixture-health.json" || fail "the local Hevy fixture did not answer health"
   grep -q '"ok":true' "$EVIDENCE/fixture-health.json" || fail "the local Hevy fixture returned an unhealthy health record"
-  curl -sS -H 'api-key: refused-scenario-key' "http://127.0.0.1:$port/v1/workouts" >/dev/null || true
+  curl -sS -H "api-key: $REFUSED_HEVY_KEY" "http://127.0.0.1:$port/v1/workouts" >/dev/null || true
   printf '{"fixture":"local-hevy"}\n' >"$EVIDENCE/setup.json"
   # Use distinct ports so the native installation and Docker server are independently real installs.
   server_install; server_hevy_url "$port"
-  printf '{"api_key":"refused-scenario-key"}\n' >"$EVIDENCE/.refused-key.json"
+  printf '{"api_key":"%s"}\n' "$REFUSED_HEVY_KEY" >"$EVIDENCE/.refused-key.json"
   settings_post docker "$EVIDENCE/.refused-key.json" "$EVIDENCE/docker-settings.json" >"$EVIDENCE/docker-settings.code"
   export GODSPEED_PORT=47832
   install_paths

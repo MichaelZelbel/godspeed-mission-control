@@ -3693,9 +3693,10 @@ refuses 'a refused key retained' workouts-from-hevy "$WH/refused-kept" 'native r
 copy "$WH/good" "$WH/refused-in-settings"; sed -i 's/"paths":\[\]/"paths":["\/opt\/data\/settings.json"]/' "$WH/refused-in-settings/docker.json"
 refuses 'a refused key kept outside hevy.json' workouts-from-hevy "$WH/refused-in-settings" 'docker retained or accepted'
 RFS=$WH/refused-scan
+REFUSED_HEVY_KEY='refused-'"scenario-key"
 mkdir -p "$RFS/root/.godspeed" "$RFS/assistant"
 printf '{"home":"%s"}\n' "$RFS/assistant" >"$RFS/root/.godspeed/assistant.json"
-printf 'refused-scenario-key\n' >"$RFS/assistant/settings.json"
+printf '%s\n' "$REFUSED_HEVY_KEY" >"$RFS/assistant/settings.json"
 REFUSED_SCAN=$(GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy NODE="$(command -v node)" bash -c '
   cd "$3"
   . "$1"
@@ -3878,7 +3879,7 @@ case "$MISSING_HOME_SCAN_CODE $MISSING_HOME_SCAN" in
   *) bad "a refused-key scan with no recorded assistant home did not fail by name (exit $MISSING_HOME_SCAN_CODE: $MISSING_HOME_SCAN)" ;;
 esac
 mkdir -p "$RFS/assistant"
-printf 'refused-scenario-key\n' >"$RFS/assistant/settings.json"
+printf '%s\n' "$REFUSED_HEVY_KEY" >"$RFS/assistant/settings.json"
 mkdir -p "$RFS/failing-grep"
 cat >"$RFS/failing-grep/grep" <<'SH'
 #!/bin/sh
