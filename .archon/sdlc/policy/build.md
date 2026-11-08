@@ -71,6 +71,10 @@ there.
 - Such a pull request is Done when the review says Ready at its head commit and its checks are
   green, apart from the scenario jobs named in the quote by their workflow job ID, each one in
   `picked` at that head (and `the verdict`, red only because of them).
+  That Done only ends the build rounds; it does not allow the merge. Mission Control applies the draft
+  by committing it to the pull request branch, which makes a new head: review and checks run again
+  there, and the pull request merges only when the review says Ready and every check is green at
+  that new head.
 - A publish refused for this reason is not retried. The round redoes the change the drafted way.
 - Everything else keeps the default.
 - Reason: Michael, 8 November 2026. Issue #340 was built nine times in three hours with the same
