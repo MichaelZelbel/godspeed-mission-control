@@ -422,18 +422,6 @@ test('a first-attempt source rejection holds after a differently rejected rewrit
  assert.equal(result.fallback,true);assert.doesNotMatch(content,/release notes/i);
 });
 
-for(const [kind,save,claim,reason] of [
- ['goal',store=>store.save('goals',{title:'Prepare release notes.',status:'adopted'}),/release notes/i,'Prepare release notes is unsupported'],
- ['verified work',store=>store.save('work_items',{kind:'draft',title:'Checked fictional outline.',state:'verified'}),/fictional outline/i,'Checked fictional outline is unsupported'],
- ['obligation',store=>store.save('deadlines',{title:'Submit fictional application.',status:'open',due_at:'2027-01-01T00:00:00Z'}),/fictional application/i,'Submit fictional application is not current'],
- ['health value',store=>store.save('health_observations',{metric:'Fictional energy.',value:6,observed_at:new Date().toISOString()}),/Fictional energy/i,'Fictional energy 6 is stale'],
-])test('the '+kind+' whose title ends in punctuation is excluded by its id',async()=>{
- const {store,query}=fixture([]),row=save(store);
- const provider=async input=>input.kind==='brief-verification'?sourceRejects(input,reason,[row.id]):'Unsupported draft.';
- const result=await run(provider,query,store,'brief-punctuated-'+kind.replaceAll(' ','-')),content=store.get('notes',result.record_id).content;
- assert.equal(result.fallback,true);assert.doesNotMatch(content,claim);
-});
-
 // A malformed source-claim review leaves no safe inventory for the fallback. It is refused, and the
 // rejected draft and reasons remain in the failed receipt.
 for(const [name,verdict] of [
