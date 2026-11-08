@@ -657,8 +657,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
       if (res.headersSent) { console.error('Godspeed Mission Control: '+req.method+' '+String(req.url).split('?')[0]+' failed after the reply started:', e); res.destroy(); return; }
       const shown = userFacing(e, [store.root, store.state, mediaRoot, uiRoot, os.homedir(), os.tmpdir()]);
       if (!shown || e instanceof SyntaxError) console.error('Godspeed Mission Control: '+req.method+' '+String(req.url).split('?')[0]+' failed:', e);
-      const diagnostic=e?.diagnostic,evidence={...(typeof diagnostic?.request_bytes==='number'?{request_bytes:diagnostic.request_bytes}:{}),...(typeof diagnostic?.model==='string'?{model:diagnostic.model}:{}),...(typeof diagnostic?.provider_error==='string'&&diagnostic.provider_error?{provider_error:diagnostic.provider_error}:{})};
-      send(res, e.status || (e.code === 'CONFLICT' ? 409 : 400), { error: shown || 'Something went wrong on the server. The details are in its log.', ...(shown && e.code ? { code: e.code } : {}),...evidence });
+      send(res, e.status || (e.code === 'CONFLICT' ? 409 : 400), { error: shown || 'Something went wrong on the server. The details are in its log.', ...(shown && e.code ? { code: e.code } : {}) });
     }
   };
   const listen = (server, port, host) => new Promise((resolve, reject) => { server.once('error', reject); server.listen(port, host, resolve); });

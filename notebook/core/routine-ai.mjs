@@ -2,10 +2,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {atomic} from './records/store.mjs';
 import {setConfigValue,readConfigValue,deleteConfigValue} from './hermes-config.mjs';
-import {hermesProvider,hermesSecrets,scrubCredentials} from './runtime.mjs';
+import {hermesProvider} from './runtime.mjs';
 import {hermesHelper,runHermesHelper} from './addon-model.mjs';
 import {fallbackChain,noteMainAnswered,noteMainFailed} from './backup-ai.mjs';
-import {providerForHost,providerForName} from './provider-spec.mjs';
 
 // THE AI THE ROUTINES THINK WITH (18 October 2026). Every installer ends with "connect your own AI
 // account in Settings", and until this change that form powered only the notebook's own small jobs
@@ -26,17 +25,17 @@ const unquote=v=>typeof v==='string'?v.replace(/^["']|["']$/g,'').trim():'';
 export function baseAddress(url){return String(url||'').trim().replace(/\/chat\/completions\/?$/,'').replace(/\/+$/,'');}
 
 // What Hermes needs for an endpoint the Settings form connects (Hermes hermes_cli/auth.py and
-// runtime_provider_backends.py): OpenRouter, Anthropic, and OpenAI use their own providers and
-// environment variables; any other OpenAI-compatible address is "custom", whose key Hermes
-// reads from model.api_key.
+// runtime_provider_backends.py): OpenRouter is Hermes' own provider "openrouter" with
+// OPENROUTER_API_KEY; OpenAI's API is "openai-api" with OPENAI_API_KEY; any other
+// OpenAI-compatible address is "custom", whose key Hermes reads from model.api_key.
 export function hermesSettingsFor({url,key,model}){
  const base=baseAddress(url);let host;
  try{host=new URL(base).hostname.toLowerCase();}catch{throw Error('Give the address of an AI service, starting with https://');}
  if(!key||/[\s"'\\]/.test(key))throw Error('The key has a space or a quotation mark in it. Copy it again from your AI account.');
  if(!model||!String(model).trim())throw Error('Name the model the routines should use');
  model=String(model).trim();
- const provider=providerForHost(host);
- if(provider)return {provider:provider.provider,base_url:provider.base_url,model,env:{[provider.key]:key}};
+ if(host==='openrouter.ai'||host.endsWith('.openrouter.ai'))return {provider:'openrouter',base_url:'https://openrouter.ai/api/v1',model,env:{OPENROUTER_API_KEY:key}};
+ if(host==='api.openai.com')return {provider:'openai-api',base_url:'https://api.openai.com/v1',model,env:{OPENAI_API_KEY:key}};
  return {provider:'custom',base_url:base,model,api_key:key};
 }
 
@@ -82,7 +81,8 @@ export function routineAIStatus({home,state}){
  const provider=unquote(readConfigValue(config,['model','provider'])||''),model=unquote(readConfigValue(config,['model','default'])||readConfigValue(config,['model','model'])||'');
  const base_url=unquote(readConfigValue(config,['model','base_url'])||'');
  const record=readRecord(state),ours=record.connected&&record.connected.provider===provider&&record.connected.model===model;
- const specification=providerForName(provider),key=specification?!!([specification.key,...(specification.aliases||[])].some(name=>envValue(env,name))):provider==='custom'?!!unquote(readConfigValue(config,['model','api_key'])||''):null;
+ const keyName={openrouter:'OPENROUTER_API_KEY','openai-api':'OPENAI_API_KEY',anthropic:'ANTHROPIC_API_KEY',gemini:'GEMINI_API_KEY'}[provider];
+ const key=keyName?!!(envValue(env,keyName)||(keyName==='GEMINI_API_KEY'&&envValue(env,'GOOGLE_API_KEY'))):provider==='custom'?!!unquote(readConfigValue(config,['model','api_key'])||''):null;
  const named=!!model&&!!provider&&provider!=='auto';
  return {provider:provider||null,model:model||null,base_url:base_url||null,source:!named?'none':ours?'settings':'hermes',key,check:record.check||null};
 }
@@ -92,20 +92,16 @@ export function routineAIStatus({home,state}){
 // assumed. Its result is kept beside the notebook's other machine state.
 export async function checkRoutineAI({executable,home,cwd,state,sourceRoot,spawnProcess,now=()=>new Date(),ask=askDirectly}){
  const started=now();let check;
- const failed=error=>{
-  const diagnostic=error?.diagnostic,status=routineAIStatus({home,state});
-  return {ok:false,error:String(error?.message||error).slice(0,300),...(typeof diagnostic?.request_bytes==='number'?{request_bytes:diagnostic.request_bytes}:{}),...(typeof status.model==='string'?{model:status.model}:{}),...(typeof diagnostic?.provider_error==='string'&&diagnostic.provider_error?{provider_error:scrubCredentials(diagnostic.provider_error,hermesSecrets(home)).slice(-6000)}:{} )};
- };
  // WITH A BACKUP AI IN HERMES' CHAIN (core/backup-ai.mjs), a request through Hermes is answered by
  // the backup whenever the main one fails, so "the routines reached it" would hide a main connection
  // that is broken. Then each is asked on its own, through the helper godspeed-model uses (the
  // assistant's own model settings and credentials, no tools, never the other one).
  const backup=fallbackChain(read(path.join(home,'config.yaml')))[0];
  if(backup){
-  const one=async route=>{try{await ask({executable,home,cwd,sourceRoot,spawnProcess,route});return {ok:true};}catch(error){return failed(error);}};
+  const one=async route=>{try{await ask({executable,home,cwd,sourceRoot,spawnProcess,route});return {ok:true};}catch(error){return {ok:false,error:String(error?.message||error).slice(0,300)};}};
   const main=await one('main'),second=await one('backup');
   if(main.ok)noteMainAnswered(state);else noteMainFailed(state,main.error,started);
-  check={at:started.toISOString(),...main,backup:{...second,model:backup.model}};
+  check={at:started.toISOString(),ok:main.ok,...(main.ok?{}:{error:main.error}),backup:{...second,model:backup.model}};
   writeRecord(state,{...readRecord(state),check});
   return {...routineAIStatus({home,state}),check};
  }
@@ -113,7 +109,7 @@ export async function checkRoutineAI({executable,home,cwd,state,sourceRoot,spawn
   const ask=hermesProvider({executable,home,cwd,sourceRoot,spawnProcess});
   const reply=await ask({kind:'connection-test',contract:'Reply with the single word Connected.',timeout_ms:300000});
   check={at:started.toISOString(),ok:true,reply:String(reply).slice(0,80)};
- }catch(error){check={at:started.toISOString(),...failed(error)};}
+ }catch(error){check={at:started.toISOString(),ok:false,error:String(error?.message||error).slice(0,300)};}
  writeRecord(state,{...readRecord(state),check});
  return {...routineAIStatus({home,state}),check};
 }

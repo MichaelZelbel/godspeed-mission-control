@@ -15,7 +15,7 @@ export type RoutineAI={available:boolean;provider?:string|null;model?:string|nul
 async function call(route:string,body?:unknown){const r=await fetch('/api/'+route,{method:body?'POST':'GET',headers:{'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});const data=await r.json();if(!r.ok)throw new Error(data.error);return data;}
 export const routineAIStatus=()=>call('routine-ai') as Promise<RoutineAI>;
 // THE CHOICES, the same for the main AI and the backup (22 October 2026, discussion #20): a key of
-// OpenRouter, OpenAI, Anthropic or another OpenAI-compatible service, and, where Hermes runs the routines, a
+// OpenRouter, OpenAI or another OpenAI-compatible service, and, where Hermes runs the routines, a
 // ChatGPT plan signed in right here (PlanSignIn, core/plan-signin.mjs), as the one-line server's
 // Telegram setup signs it in.
 const SERVICES=[
@@ -79,7 +79,7 @@ export function ConnectAI(){
       <label className="block">Your AI service
         <select className="block border bg-background rounded p-2 min-h-11" value={service} onChange={e=>setService(e.target.value)}>{servicesFor(!!data?.available).map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
       {service==='chatgpt'?<PlanSignIn as="main" onConnected={signedIn=>{setError('');setDone('Connected. Your ChatGPT plan ('+signedIn.model+') now powers the routines, the chat and the notebook.');qc.invalidateQueries({queryKey:['routine-ai']});qc.invalidateQueries({queryKey:['backup-ai']});qc.invalidateQueries({queryKey:['candidate-status']});}}/>:<>
-      {service==='other'&&<label className="block">Its address, as the service gives it (OpenAI-compatible or Anthropic)
+      {service==='other'&&<label className="block">Its address, as the service gives it (OpenAI-compatible)
         <Input required type="url" placeholder="https://…/v1" value={address} onChange={e=>setAddress(e.target.value)}/></label>}
       <label className="block">Model, written the way your service writes it
         <Input required spellCheck={false} placeholder={service==='openrouter'?'for example vendor/model-name':''} value={model} onChange={e=>setModel(e.target.value)}/></label>
@@ -135,7 +135,7 @@ export function BackupAI(){
       <label className="block">Backup AI service
         <select className="block border bg-background rounded p-2 min-h-11" value={service} onChange={e=>setService(e.target.value)}>{servicesFor(!!status.data?.hermes).map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
       {service==='chatgpt'?<PlanSignIn as="backup" onConnected={signedIn=>{setError('');setDone('Connected as your backup: your ChatGPT plan ('+signedIn.model+'). It answered a test just now, and it steps in only when your main AI fails.');qc.invalidateQueries({queryKey:['backup-ai']});qc.invalidateQueries({queryKey:['routine-ai']});}}/>:<>
-      {service==='other'&&<label className="block">Its address, as the service gives it (OpenAI-compatible or Anthropic)
+      {service==='other'&&<label className="block">Its address, as the service gives it (OpenAI-compatible)
         <Input required type="url" placeholder="https://…/v1" value={address} onChange={e=>setAddress(e.target.value)}/></label>}
       <label className="block">Backup model, written the way your service writes it
         <Input required spellCheck={false} placeholder={service==='openrouter'?'for example vendor/model-name':''} value={model} onChange={e=>setModel(e.target.value)}/></label>

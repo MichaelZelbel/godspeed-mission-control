@@ -112,8 +112,8 @@ def plan_models():
     return list(dict.fromkeys(m for m in [first] + list(DEFAULT_CODEX_MODELS) if m))[:8]
 
 
-def request(payload, *, load_config, resolve_runtime, resolve_client, expected_route=None, models_of_plan=plan_models, config=None):
-    config = config if config is not None else load_config()
+def request(payload, *, load_config, resolve_runtime, resolve_client, expected_route=None, models_of_plan=plan_models):
+    config = load_config()
     route = payload.get("route")
     if route == "plan":
         # Settings' ChatGPT plan sign-in (core/plan-signin.mjs), for the main AI or the backup alike:
@@ -228,50 +228,16 @@ def load_hermes():
                 resolve_client=resolve_provider_client, expected_route=expected_route)
 
 
-def secret_values(config):
-    values = []
-    model = config.get("model") if isinstance(config, dict) else None
-    if isinstance(model, dict) and isinstance(model.get("api_key"), str):
-        values.append(model["api_key"])
-    backup = backup_entry(config) if isinstance(config, dict) else None
-    if backup:
-        value = entry_key(backup)
-        if value:
-            values.append(value)
-    for name, value in os.environ.items():
-        if any(word in name.upper() for word in ("API_KEY", "TOKEN", "SECRET", "PASSWORD")) and isinstance(value, str):
-            values.append(value)
-    return values
-
-
-def scrub(text, secrets):
-    import re
-    result = str(text or "")
-    for secret in secrets:
-        if isinstance(secret, str) and secret:
-            result = result.replace(secret, "***")
-    result = re.sub(r"[\w.-]*(?:authorization|api[_-]?key|token|secret|password|passwd)[\w.-]*[\"']?\s*[:=]\s*[\"']?(?:(?:Bearer|Basic|Token)\s+)?[^\s\"',;&}]+", "credential: ***", result, flags=re.I)
-    result = re.sub(r"\b(?:Bearer|Basic)\s+\S+", "***", result, flags=re.I)
-    result = re.sub(r"\b(?:sk|or|key|tok)[-_][A-Za-z0-9_-]{8,}\b", "***", result, flags=re.I)
-    return re.sub(r"\b[A-Za-z0-9_+/=-]{20,}\b", "***", result)
-
-
 def main():
     # The caller controls only text and bounded budgets. Connection settings and
     # credentials come exclusively from the installation's verified Hermes home.
     payload = json.loads(sys.stdin.read(600001))
     hermes = load_hermes()
-    config = hermes["load_config"]()
     # Runtime constructors can print diagnostics. Never mix them into the
     # protocol or preserve them alongside strangers' profiles.
-    try:
-        with contextlib.redirect_stdout(io.StringIO()):
-            result = request(payload, config=config, **hermes)
-    except Exception as error:
-        print(json.dumps(failure(error, secret_values(config))))
-        return 1
+    with contextlib.redirect_stdout(io.StringIO()):
+        result = request(payload, **hermes)
     print(json.dumps(result))
-    return 0
 
 
 def reason(error):
@@ -289,23 +255,20 @@ def reason(error):
     return None
 
 
-def failure(error, secrets=None):
+def failure(error):
     """The one line the caller reads when there is no answer."""
     if isinstance(error, HermesNotLoaded):
         answer = {"error": "Godspeed could not load its AI program (Hermes) on this computer.", "reason": "runtime"}
         if error.missing:
             answer["missing"] = error.missing
         return answer
-    answer = {"error": "The selected Godspeed model could not answer. Check its connection and usage allowance.",
-              "reason": reason(error)}
-    if secrets is not None:
-        answer["provider_error"] = scrub(error, secrets)[-6000:]
-    return answer
+    return {"error": "The selected Godspeed model could not answer. Check its connection and usage allowance.",
+            "reason": reason(error)}
 
 
 if __name__ == "__main__":
     try:
-        sys.exit(main())
+        main()
     except Exception as error:
         print(json.dumps(failure(error)))
         sys.exit(1)
