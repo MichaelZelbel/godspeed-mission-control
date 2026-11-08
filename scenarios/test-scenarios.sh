@@ -4024,7 +4024,7 @@ day_facts_provider_request_is_removed() {
   mkdir -p "$folder/home/cron" "$folder/home/scripts" "$folder/root" "$folder/tmp"
   printf '%s\n' '{"jobs":[{"name":"Remember what you said","script":"scenario-facts","cron":"40 3 * * *"}]}' >"$folder/home/cron/jobs.json"
   : >"$folder/home/scripts/scenario-facts"
-  if ACTION_HOME="$folder/home" ACTION_KEY="$key" ACTION_POSTED="$folder/posted" ACTION_TRAP_RESTORED="$folder/trap-restored" \
+  if ACTION_HOME="$folder/home" ACTION_KEY="$key" ACTION_POSTED="$folder/posted" ACTION_CLEANED="$folder/cleaned" ACTION_TRAP_RESTORED="$folder/trap-restored" \
     GODSPEED_SCENARIO_ROOT="$folder/root" GODSPEED_SCENARIO_WORK="$folder/work" TMPDIR="$folder/tmp" \
     GODSPEED_SCENARIO_AI_KEY="$key" GODSPEED_SCENARIO_AI_URL='https://api.anthropic.com/v1' \
     GODSPEED_SCENARIO_AI_MODEL='claude-haiku-4-5' bash -c '
@@ -4059,18 +4059,123 @@ day_facts_provider_request_is_removed() {
         fi
       }
       act
+      ! rg -F -- "$ACTION_KEY" "$TMPDIR" >/dev/null 2>&1
+      : >"$ACTION_CLEANED"
     ' _ "$DF_SCRIPT" >"$folder/action.log" 2>&1; then
     code=0
   else
     code=$?
   fi
-  if [ "$code" = 0 ] && [ -f "$folder/posted" ] && [ -f "$folder/trap-restored" ] && ! rg -F -- "$key" "$folder/tmp" >/dev/null 2>&1; then
+  if [ "$code" = 0 ] && [ -f "$folder/posted" ] && [ -f "$folder/cleaned" ] && [ -f "$folder/trap-restored" ] && ! rg -F -- "$key" "$folder/tmp" >/dev/null 2>&1; then
     ok 'a successful remembered-facts Settings POST removes its private key request and restores existing cleanup'
   else
     bad "a successful remembered-facts Settings POST did not remove its private key request (exit $code: $(cat "$folder/action.log" 2>/dev/null))"
   fi
 }
 day_facts_provider_request_is_removed
+day_facts_failed_provider_post_preserves_exit_status() {
+  local folder=$TMP/day-facts-provider-transport-failure key='day-facts-transport-key' code
+  rm -rf "$folder"
+  mkdir -p "$folder/home/cron" "$folder/home/scripts" "$folder/root" "$folder/tmp"
+  printf '%s\n' '{"jobs":[{"name":"Remember what you said","script":"scenario-facts","cron":"40 3 * * *"}]}' >"$folder/home/cron/jobs.json"
+  : >"$folder/home/scripts/scenario-facts"
+  if ACTION_HOME="$folder/home" ACTION_KEY="$key" ACTION_EXIT_STATUS="$folder/exit-status" \
+    GODSPEED_SCENARIO_ROOT="$folder/root" GODSPEED_SCENARIO_WORK="$folder/work" TMPDIR="$folder/tmp" \
+    GODSPEED_SCENARIO_AI_KEY="$key" GODSPEED_SCENARIO_AI_URL='https://api.anthropic.com/v1' \
+    GODSPEED_SCENARIO_AI_MODEL='claude-haiku-4-5' bash -c '
+      scenario_dir=$(dirname "$1")
+      cd "$scenario_dir"
+      . <(sed "\$d" "$(basename "$1")")
+      install_the_stage_line() { :; }
+      need_node() { NODE=$(command -v node); }
+      wait_for() { :; }
+      assistant_home() { HERMES=$ACTION_HOME; }
+      facts_routine_script() { printf scenario-facts; }
+      run_facts_routine() { :; }
+      facts_snapshot() { :; }
+      check() { :; }
+      trap "printf \"%s\\n\" \"\\$?\" > \"$ACTION_EXIT_STATUS\"" EXIT
+      curl() {
+        local data=
+        while [ "$#" -gt 0 ]; do
+          case "$1" in
+            --data-binary) data=${2#@}; shift 2 ;;
+            *) shift ;;
+          esac
+        done
+        [ -n "$data" ] || { printf "{}\\n"; return; }
+        [ -f "$data" ] && grep -F -- "$ACTION_KEY" "$data" >/dev/null || return 1
+        return 1
+      }
+      act
+    ' _ "$DF_SCRIPT" >"$folder/action.log" 2>&1; then
+    code=0
+  else
+    code=$?
+  fi
+  if [ "$code" = 1 ] && [ "$(cat "$folder/exit-status" 2>/dev/null)" = 1 ] && ! rg -F -- "$key" "$folder/tmp" >/dev/null 2>&1; then
+    ok 'a failed remembered-facts Settings POST preserves failure for existing EXIT cleanup'
+  else
+    bad "a failed remembered-facts Settings POST did not preserve failure for existing EXIT cleanup (exit $code: $(cat "$folder/action.log" 2>/dev/null))"
+  fi
+}
+day_facts_failed_provider_post_preserves_exit_status
+day_facts_failed_provider_request_removal_fails() {
+  local folder=$TMP/day-facts-provider-removal-failure key='day-facts-removal-key' code
+  rm -rf "$folder"
+  mkdir -p "$folder/home/cron" "$folder/home/scripts" "$folder/root" "$folder/tmp"
+  printf '%s\n' '{"jobs":[{"name":"Remember what you said","script":"scenario-facts","cron":"40 3 * * *"}]}' >"$folder/home/cron/jobs.json"
+  : >"$folder/home/scripts/scenario-facts"
+  if ACTION_HOME="$folder/home" ACTION_KEY="$key" ACTION_POSTED="$folder/posted" \
+    GODSPEED_SCENARIO_ROOT="$folder/root" GODSPEED_SCENARIO_WORK="$folder/work" TMPDIR="$folder/tmp" \
+    GODSPEED_SCENARIO_AI_KEY="$key" GODSPEED_SCENARIO_AI_URL='https://api.anthropic.com/v1' \
+    GODSPEED_SCENARIO_AI_MODEL='claude-haiku-4-5' bash -c '
+      scenario_dir=$(dirname "$1")
+      cd "$scenario_dir"
+      . <(sed "\$d" "$(basename "$1")")
+      install_the_stage_line() { :; }
+      need_node() { NODE=$(command -v node); }
+      wait_for() { :; }
+      assistant_home() { HERMES=$ACTION_HOME; }
+      facts_routine_script() { printf scenario-facts; }
+      run_facts_routine() { :; }
+      facts_snapshot() { :; }
+      check() { :; }
+      rm() {
+        [ "$1" = -f ] && return 1
+        command rm "$@"
+      }
+      curl() {
+        local data= out=
+        while [ "$#" -gt 0 ]; do
+          case "$1" in
+            -o) out=$2; shift 2 ;;
+            --data-binary) data=${2#@}; shift 2 ;;
+            *) shift ;;
+          esac
+        done
+        if [ -n "$data" ]; then
+          [ -f "$data" ] && grep -F -- "$ACTION_KEY" "$data" >/dev/null || return 1
+          printf "{\"connected\":true}\\n" >"$out"
+          : >"$ACTION_POSTED"
+          printf 200
+        else
+          printf "{}\\n"
+        fi
+      }
+      act
+    ' _ "$DF_SCRIPT" >"$folder/action.log" 2>&1; then
+    code=0
+  else
+    code=$?
+  fi
+  if [ "$code" = 1 ] && [ -f "$folder/posted" ] && rg -F -- "$key" "$folder/tmp" >/dev/null 2>&1 && grep -F 'could not be removed' "$folder/action.log" >/dev/null; then
+    ok 'a remembered-facts Settings-request removal failure cannot report PASS'
+  else
+    bad "a remembered-facts Settings-request removal failure did not fail safely (exit $code: $(cat "$folder/action.log" 2>/dev/null))"
+  fi
+}
+day_facts_failed_provider_request_removal_fails
 day_facts_provider_request_is_removed_on_termination() {
   local folder=$TMP/day-facts-provider-termination key='day-facts-termination-key' code
   rm -rf "$folder"

@@ -108,9 +108,10 @@ act() {
   provider_request_int_trap=$(trap -p INT || true)
   provider_request_term_trap=$(trap -p TERM || true)
   cleanup_provider_request() { rm -f "$provider_request"; }
-  run_saved_trap() {
+  run_saved_trap() { # <saved trap> <exit status>
     [ -z "$1" ] && return
     eval "set -- $1"
+    (exit "$2")
     eval "$3"
   }
   restore_provider_request_traps() {
@@ -120,9 +121,11 @@ act() {
     [ -z "$provider_request_term_trap" ] || eval "$provider_request_term_trap"
   }
   finish_provider_request() {
-    cleanup_provider_request
+    local status=$?
+    cleanup_provider_request || :
     trap - EXIT
-    run_saved_trap "$provider_request_exit_trap"
+    run_saved_trap "$provider_request_exit_trap" "$status"
+    return "$status"
   }
   cancel_provider_request() {
     local signal=$1 status=$2
@@ -140,7 +143,7 @@ act() {
     --data-binary @"$provider_request" "http://127.0.0.1:$NOTEBOOK_PORT/api/provider"); then
     fail "Settings could not be reached to connect the remembered-facts model"
   fi
-  cleanup_provider_request
+  cleanup_provider_request || fail 'the private Settings request could not be removed'
   restore_provider_request_traps
   [ "$provider" = 200 ] || fail "Settings refused the remembered-facts model (HTTP $provider)"
   script=$(facts_routine_script)
