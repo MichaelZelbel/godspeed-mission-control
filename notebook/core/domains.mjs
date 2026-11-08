@@ -41,7 +41,7 @@ import {leadWords} from './lead-commands.mjs';
 import {radarWords} from './radar-lifecycle.mjs';
 import {retrieveNoteWindows} from './retrieval-windows.mjs';
 import {retireShares} from './shares.mjs';
-import {hasCoachAreas,resolvedCoachArea,coachTalkStart,coachTalkRecordProblem} from './coach-chat.mjs';
+import {hasCoachAreas,resolvedCoachArea,coachTalkStart,markCoachTalkShown} from './coach-chat.mjs';
 import {canStartTalk} from '../../third-party/addons/godspeed-coach/lib/areas.mjs';
 // The note screens' content hash (ui/src/lib/note-ai-edit.ts hashNoteContent,
 // FNV-1a and the length): what a chat request says the owner was looking at.
@@ -292,7 +292,7 @@ export class Domains {
       // The Charm Challenge's slip judgement runs while the assistant works (core/charm-judgement.mjs).
       const judged=startCharmJudgement(this,input);
       let result=await this.nativeAgent({...input,nativeFiles,page_context:input[IDENTITY_PAGE],step_context:input.step_context,coach_talk_start:start}).catch(error=>{judged.drop();throw error;});
-      const problem=start&&coachTalkRecordProblem(this.store,start,result.reply);if(problem){judged.drop();throw Error(problem);}
+      const problem=start&&markCoachTalkShown(this.store,start,result.reply);if(problem){judged.drop();throw Error(problem);}
       result.reply=await judged.end(result.reply);
       await this.store.saveAsync('conversation_messages',{role:'assistant',content:result.reply,conversation_id:input.conversation_id||null,contact_id:input.contact_id||null,source_app:'hermes'},undefined,{signal:input.signal});
       return result;
