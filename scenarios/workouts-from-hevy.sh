@@ -126,13 +126,19 @@ native_persistence_matches() { # <key> <path record> [grep option...]
   local key=$1 paths=$2 path code
   shift 2
   if grep -rlF "$@" -- "$key" "${NATIVE_PERSISTENCE_ROOTS[@]}" >"$paths"; then
+    [ -s "$paths" ] || return 0
     while IFS= read -r path; do
       case $path in "$RUNTIME"/versions/*) ;; *) printf '%s\n' "$path" ;; esac
     done <"$paths" >"$paths.filtered"
     mv -f "$paths.filtered" "$paths" || return 2
+    [ -s "$paths" ] || return 1
   else
     code=$?
-    [ "$code" -eq 1 ] && : >"$paths" || return "$code"
+    if [ "$code" -eq 1 ]; then
+      : >"$paths"
+      return 1
+    fi
+    return "$code"
   fi
 }
 
@@ -147,7 +153,10 @@ refused_not_retained() { # <docker|native>
       fi
       ;;
     native)
-      native_persistence_matches "$key" "$paths" || { code=$?; fail "$platform refused-key scan could not run (grep ended $code)"; }
+      native_persistence_matches "$key" "$paths" || {
+        code=$?
+        [ "$code" -eq 1 ] || fail "$platform refused-key scan could not run (grep ended $code)"
+      }
       ;;
   esac
   [ -f "$paths" ] || fail "$platform refused-key scan produced no path record"
@@ -232,8 +241,12 @@ NODE
 scan_fixture_key() {
   local key='00000000-0000-4000-8000-000000000001' code native_paths=$EVIDENCE/.native-key-hits docker_paths=$EVIDENCE/.docker-key-hits
   persistence_roots native 'native accepted-key scan'
-  native_persistence_matches "$key" "$native_paths" --exclude-dir=.git --exclude-dir=node_modules || { code=$?; fail "native accepted-key scan could not run (grep ended $code)"; }
-  [ -s "$native_paths" ] || fail 'native accepted-key scan completed with no path output after a match'
+  if native_persistence_matches "$key" "$native_paths" --exclude-dir=.git --exclude-dir=node_modules; then
+    [ -s "$native_paths" ] || fail 'native accepted-key scan completed with no path output after a match'
+  else
+    code=$?
+    [ "$code" -eq 1 ] || fail "native accepted-key scan could not run (grep ended $code)"
+  fi
   [ -f "$native_paths" ] || fail "native accepted-key scan produced no path record"
   persistence_roots docker 'docker accepted-key scan'
   if in_server grep -rlF --exclude-dir=node_modules -- "$key" "${DOCKER_PERSISTENCE_ROOTS[@]}" >"$docker_paths"; then
@@ -282,7 +295,7 @@ act() {
   printf '{"fixture":"local-hevy"}\n' >"$EVIDENCE/setup.json"
   # Use distinct ports so the native installation and Docker server are independently real installs.
   server_install; server_hevy_url "$port"
-  printf '{"api_key":"refused-scenario-key"}\n' >"$EVIDENCE/.refused-key.json"
+  printf '{"key":"refused-scenario-key"}\n' >"$EVIDENCE/.refused-key.json"
   settings_post docker "$EVIDENCE/.refused-key.json" "$EVIDENCE/docker-settings.json" >"$EVIDENCE/docker-settings.code"
   export GODSPEED_PORT=47832
   install_paths
@@ -300,7 +313,7 @@ act() {
       fail "$platform Settings did not reject the made-up Hevy key (HTTP $code)"
     refused_not_retained "$platform"
   done
-  printf '{"api_key":"00000000-0000-4000-8000-000000000001"}\n' >"$EVIDENCE/.accepted-key.json"
+  printf '{"key":"00000000-0000-4000-8000-000000000001"}\n' >"$EVIDENCE/.accepted-key.json"
   platform_before docker "$EVIDENCE/.accepted-key.json"
   platform_before native "$EVIDENCE/.accepted-key.json"
   node "$HERE/hevy-fixture.mjs" --state "$EVIDENCE/fixture-state.json" --log "$EVIDENCE/fixture.log" --mutate ||

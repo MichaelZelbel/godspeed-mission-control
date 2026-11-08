@@ -3737,9 +3737,17 @@ ACT_NODE_ORDER=$(env -u NODE GODSPEED_SCENARIO_ROOT="$RFS/root" ACTION_EVENTS="$
   install_paths() { :; }
   install_the_stage_line() { :; }
   native_hevy_url() { :; }
-  settings_post() { printf "{}\\n" >"$3"; printf 400; }
+  settings_post() {
+    printf "settings-%s:%s\\n" "$1" "$(cat "$2")" >>"$ACTION_EVENTS"
+    printf "{}\\n" >"$3"
+    case $(cat "$2") in
+      '{"key":"refused-scenario-key"}') printf 400 ;;
+      '{"key":"00000000-0000-4000-8000-000000000001"}') printf 200 ;;
+      *) printf 400 ;;
+    esac
+  }
   refused_not_retained() { printf "refused-%s:%s\\n" "$1" "${NODE:+set}" >>"$ACTION_EVENTS"; }
-  platform_before() { :; }
+  platform_before() { settings_post "$1" "$2" "$EVIDENCE/$1-accepted.json" >"$EVIDENCE/$1-accepted.code"; }
   platform_after() { :; }
   scan_fixture_key() { :; }
   check() { :; }
@@ -3747,8 +3755,8 @@ ACT_NODE_ORDER=$(env -u NODE GODSPEED_SCENARIO_ROOT="$RFS/root" ACTION_EVENTS="$
   cat "$ACTION_EVENTS"
 ' action-order "$ROOT/scenarios/workouts-from-hevy.sh" "$RFS/action-evidence" "$ROOT/scenarios" 2>&1)
 case "$ACT_NODE_ORDER" in
-  $'need-node\nrefused-docker:set\nrefused-native:set') ok "the Hevy action selects Node before either refused-key scan" ;;
-  *) bad "the Hevy action did not select Node before its refused-key scans ($ACT_NODE_ORDER)" ;;
+  $'need-node\nsettings-docker:{"key":"refused-scenario-key"}\nsettings-native:{"key":"refused-scenario-key"}\nrefused-docker:set\nrefused-native:set\nsettings-docker:{"key":"00000000-0000-4000-8000-000000000001"}\nsettings-native:{"key":"00000000-0000-4000-8000-000000000001"}') ok "the Hevy action selects Node before its scans and sends both Settings calls their key" ;;
+  *) bad "the Hevy action did not select Node before its scans and send both Settings calls their key ($ACT_NODE_ORDER)" ;;
 esac
 NO_NODE_ACTION=$(env -u NODE GODSPEED_SCENARIO_ROOT="$RFS/root" bash -c '
   cd "$2"
@@ -3782,6 +3790,27 @@ case "$ACCEPTED_SCAN" in
   '{"clean":true,"paths":[]}') ok "the accepted key's permitted native and Docker Settings records are ignored" ;;
   *) bad "the accepted key's permitted native or Docker Settings record was not ignored ($ACCEPTED_SCAN)" ;;
 esac
+rm "$RFS/assistant/hevy.json"
+ACCEPTED_SOURCE_SCAN=$(GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy NODE="$(command -v node)" bash -c '
+  cd "$3"
+  . "$1"
+  install_paths
+  EVIDENCE=$2
+  in_server() {
+    case $1 in
+      find) printf "%s\\n" /opt/data/.godspeed/assistant.json ;;
+      node) printf "%s" /root/.hermes ;;
+      grep) return 1 ;;
+    esac
+  }
+  scan_fixture_key
+  cat "$EVIDENCE/key-scan.json"
+' accepted-source-scan "$ROOT/scenarios/workouts-from-hevy.sh" "$RFS" "$ROOT/scenarios" 2>/dev/null)
+case "$ACCEPTED_SOURCE_SCAN" in
+  '{"clean":true,"paths":[]}') ok "the accepted-key scan ignores immutable installed scenario source" ;;
+  *) bad "the accepted-key scan treated immutable installed scenario source as persisted credentials ($ACCEPTED_SOURCE_SCAN)" ;;
+esac
+printf '00000000-0000-4000-8000-000000000001\n' >"$RFS/assistant/hevy.json"
 printf '00000000-0000-4000-8000-000000000001\n' >"$RFS/assistant/settings.json"
 ACCEPTED_SCAN=$(GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy NODE="$(command -v node)" bash -c '
   cd "$3"
