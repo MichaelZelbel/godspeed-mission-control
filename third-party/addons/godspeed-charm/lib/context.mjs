@@ -79,7 +79,8 @@ export function contextBlock(state, settings = {}, { conversation = "", schedule
 
   const L = [
     `[godspeed-charm] The person is doing the Charm Challenge: day ${state.day} of ${LENGTH}, ${days(state.daysToGo)} to go, ` +
-      `done on ${formatDay(state.end, "en")}. It is about how they talk to AI: charming it into the result instead of arguing. A slip they agree to sends the count back to ${LENGTH}.`,
+      `done on ${formatDay(state.end, "en")}. Longest run so far: ${days(state.longestRun)}. Restarts: ${state.restarts}. ` +
+      `It is about how they talk to AI: charming it into the result instead of arguing. A slip they agree to sends the count back to ${LENGTH}.`,
   ];
   if (state.resetToday) {
     L.push("A reset already happened today: don't ask about slips today.");

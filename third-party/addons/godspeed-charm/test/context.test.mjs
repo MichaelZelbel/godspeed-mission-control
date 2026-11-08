@@ -21,6 +21,7 @@ test("while running: the day, the end date, the rule and how to record the quest
   const b = block(running(), { conversation: "telegram:1" });
   assert.ok(b.startsWith("[godspeed-charm]"));
   assert.match(b, /day 10 of 21, 12 days to go, done on Wednesday 11 November/);
+  assert.match(b, /Longest run so far: 9 days\. Restarts: 0\./);
   assert.match(b, /insults, sarcasm, contempt, "why do you give me this garbage\?"/);
   assert.match(b, /The deadline is wrong\. Check the client's message and fix the draft\./);
   assert.ok(b.includes('"That sounded like a slip. Back to 21? Yes / No."'));
@@ -43,6 +44,14 @@ test("while running: the day, the end date, the rule and how to record the quest
   assert.doesNotMatch(b, /After a godspeed-charm command, reply with its reply/);
   // A story slip: slip refuses, then asked, and the reply ends with asked's reply.
   assert.ok(b.includes('When it refuses, run godspeed-charm asked --words "<their words>" and end your reply with its reply.'));
+});
+
+test("the running context includes the complete count after a restart", () => {
+  const state = charmState([ev("start", "2026-10-21"), ev("reset", "2026-10-25")], "2026-10-30");
+  for (const channel of ["shell", "notebook"]) {
+    const current = contextBlock(state, S, { conversation: "notebook:c1", today: "2026-10-30", channel });
+    assert.match(current, /Longest run so far: 5 days\. Restarts: 1\./);
+  }
 });
 
 test("the open question shows only in its own conversation", () => {
