@@ -22,22 +22,50 @@ trap cleanup EXIT
 # with its manual and rules, and Hermes: a stand-in that answers every cron command, in a source
 # folder with the parts of Hermes the add-on connection loads and a venv whose Python is this
 # machine's, so the installer's check of it (scripts/choose-assistant.mjs) runs for real. One more,
-# whose source needs a module that is not there, plays a Hermes this account cannot load.
+# whose source needs a module that only its venv has, plays the root launcher from #342.
 fake_hermes() {
-  local dir=$1 needs=${2:-}
+  local dir=$1 needs=${2:-} venv_has_need=${3:-}
   mkdir -p "$dir/hermes_cli" "$dir/agent" "$dir/venv/bin"
   : > "$dir/hermes_cli/__init__.py"; : > "$dir/agent/__init__.py"
   { [ -z "$needs" ] || echo "import $needs"; printf 'def load_config_readonly():\n    return {"model": {"provider": "test-provider", "default": "test-model"}}\n'; } > "$dir/hermes_cli/config.py"
   echo 'resolve_runtime_provider = _get_named_custom_provider = expand_direct_api_alias = None' > "$dir/hermes_cli/runtime_provider.py"
   echo 'resolve_provider_client = _normalize_aux_provider = None' > "$dir/agent/auxiliary_client.py"
-  ln -s "$(command -v python3)" "$dir/venv/bin/python3"
+  if [ -n "$venv_has_need" ]; then
+    mkdir -p "$dir/dependencies"; : > "$dir/dependencies/$needs.py"
+    printf '#!/bin/sh\nPYTHONPATH=%q:${PYTHONPATH:-} exec %q "$@"\n' "$dir/dependencies" "$(command -v python3)" > "$dir/venv/bin/python3"; chmod +x "$dir/venv/bin/python3"
+  else
+    ln -s "$(command -v python3)" "$dir/venv/bin/python3"
+  fi
   printf '#!/bin/sh\nexit 0\n' > "$dir/venv/bin/hermes"; chmod +x "$dir/venv/bin/hermes"
+  cat > "$dir/hermes" <<'PYTHON'
+import os
+from pathlib import Path
+import sys
+if sys.argv[1:] == ['--version']:
+    print('OpenAI SDK: installed')
+elif sys.argv[1:3] == ['cron', 'create']:
+    Path(os.environ['HERMES_TEST_CRON']).write_text('created')
+else:
+    raise SystemExit(1)
+PYTHON
 }
-mkdir -p "$root/rules" "$work/bin" "$work/hermes" "$work/broken-bin"
+mkdir -p "$root/rules" "$work/bin" "$work/hermes" "$work/broken-bin" "$work/root-style-bin"
 echo '# Test mission control' > "$root/AGENTS.md"
 fake_hermes "$work/hermes-agent"; ln -s "$work/hermes-agent/venv/bin/hermes" "$work/bin/hermes"
 fake_hermes "$work/broken-hermes" godspeed_test_missing_dependency; ln -s "$work/broken-hermes/venv/bin/hermes" "$work/broken-bin/hermes"
-export PATH="$work/bin:$PATH" HERMES_HOME="$work/hermes"
+fake_hermes "$work/root-style-hermes" godspeed_test_missing_dependency venv_has_need
+managed="$work/root-style-hermes/.hermes/tools/python-3.14/bin/python3"; mkdir -p "$(dirname "$managed")" "$work/root-style-hermes/.hermes/bin"
+printf '#!/bin/sh\nexec %q "$@"\n' "$(command -v python3)" > "$managed"; chmod +x "$managed"
+cat > "$work/root-style-hermes/.hermes/bin/hermes" <<EOF
+#!/bin/sh
+exec "$managed" -I -c 'import sys
+sys.path.insert(0, "$work/root-style-hermes")
+import hermes_bootstrap
+' "\$@"
+EOF
+chmod +x "$work/root-style-hermes/.hermes/bin/hermes"
+printf '#!/bin/sh\nexec %q "$@"\n' "$work/root-style-hermes/.hermes/bin/hermes" > "$work/root-style-bin/hermes"; chmod +x "$work/root-style-bin/hermes"
+export PATH="$work/root-style-bin:$work/bin:$PATH" HERMES_HOME="$work/hermes"
 
 # Two versions with the same files and different names: this commit's tree, and one
 # more commit on top of it. The installer fetches by name from a repository; here a
@@ -64,6 +92,11 @@ grep -qx "User=$(id -un)" "/etc/systemd/system/$service" || fail 'the service do
 grep -q '"GODSPEED_DEVICE":"production"' "$state/start.mjs" || fail 'the machine name was not kept'
 answers || fail 'the notebook does not answer'
 before=$(systemctl show -p MainPID --value "$service")
+wrapper=$(node -e "console.log(JSON.parse(require('fs').readFileSync(process.argv[1], 'utf8')).executable)" "$root/.godspeed/assistant.json")
+[ "$wrapper" = "$root/.godspeed/native-hermes/hermes" ] || fail "the root launcher was recorded instead of a native wrapper: $(cat "$root/.godspeed/assistant.json")"
+"$wrapper" --version | grep -qF 'OpenAI SDK: installed' || fail 'the native wrapper does not use the source venv for Hermes version'
+HERMES_TEST_CRON="$work/root-routine-created" "$wrapper" cron create || fail 'the native wrapper could not create a routine'
+[ "$(cat "$work/root-routine-created")" = created ] || fail 'the native wrapper did not reach the source Hermes routine command'
 
 # Copies earlier updates left (notebook/core/upgrade-copies.mjs): four whole ones, one that
 # stopped part-way, and a folder of the owner's own that no installer made.
@@ -78,7 +111,7 @@ copies() { local n=0 dir; for dir in "$state"/backups/2*/; do [ -f "$dir/backup.
 mv "$root/NOTEBOOK.md" "$root/FULL-ALPHA.md"
 
 echo '== an upgrade that does not name the machine again'
-GODSPEED_SKIP_UI=1 install "$second"
+PATH="$work/bin:$PATH" GODSPEED_SKIP_UI=1 install "$second"
 [ "$(cat "$state/version")" = "$second" ] || fail 'the upgrade did not switch to the new version'
 [ "$(cat "$state/previous-version")" = "$first" ] || fail 'the version before was not kept as the previous one'
 grep -q "versions/$second/" "$state/start.mjs" || fail 'the service still starts the old version'

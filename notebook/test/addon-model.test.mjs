@@ -11,6 +11,7 @@ import {addonModel,modelInput,modelConnection,assistantCheck} from '../core/addo
 import {assistantConfiguration,recordRunningNotebook} from '../core/running-notebook.mjs';
 import {installModelCommand} from '../scripts/install-model-command.mjs';
 import {chooseAssistant} from '../scripts/choose-assistant.mjs';
+import {hermesPythons} from '../core/runtime.mjs';
 
 function fixture(t){
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-addons-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
@@ -288,6 +289,21 @@ test('a Hermes found that starts only through another Python gives way to one th
  assert.equal(same.chosen,f.found);assert.deepEqual(same.said,[]);
  const worse=await choose(f,{[f.found]:onlyThroughAnother,[f.earlier]:broken});
  assert.equal(worse.chosen,f.found);assert.equal(f.descriptor().executable,f.found);
+});
+
+test('a root launcher that reaches a dependency-less Python is replaced by a checked source-venv command',async t=>{
+ const f=installation(t,null),source=path.join(f.root,'opt','hermes-src'),put=(file,text='')=>{fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file,text);return file;},python=execFileSync('sh',['-c','command -v python3'],{encoding:'utf8'}).trim(),dependencies=path.join(source,'dependencies'),venv=path.join(source,'venv','bin','python3');
+ put(path.join(source,'hermes_cli','__init__.py'));put(path.join(source,'hermes_cli','config.py'),"import godspeed_test_missing_dependency\ndef load_config_readonly(): return {'model': {'provider': 'test-provider', 'default': 'test-model'}}\n");
+ put(path.join(source,'hermes_cli','runtime_provider.py'),'resolve_runtime_provider = _get_named_custom_provider = expand_direct_api_alias = None\n');put(path.join(source,'agent','__init__.py'));put(path.join(source,'agent','auxiliary_client.py'),'resolve_provider_client = _normalize_aux_provider = None\n');put(path.join(dependencies,'godspeed_test_missing_dependency.py'));
+ put(venv,'#!/bin/sh\nPYTHONPATH='+dependencies+':${PYTHONPATH:-} exec '+python+' "$@"\n');fs.chmodSync(venv,0o700);
+ const created=path.join(f.root,'routine-created');put(path.join(source,'hermes'),"import pathlib, sys\nif sys.argv[1:] == ['--version']:\n print('OpenAI SDK: installed')\nelif sys.argv[1:3] == ['cron', 'create']:\n pathlib.Path("+JSON.stringify(created)+").write_text('created')\nelse:\n raise SystemExit(1)\n");
+ const managed=put(path.join(source,'.hermes','tools','python-3.14','bin','python3'),'#!/bin/sh\nexec '+python+' "$@"\n');fs.chmodSync(managed,0o700);
+ const inner=put(path.join(source,'.hermes','bin','hermes'),"#!/bin/sh\nexec "+managed+" -I -c 'import sys\nsys.path.insert(0, '\"'\"'"+source+"'\"'\"')\nimport hermes_bootstrap\n' \"$@\"\n"),found=put(path.join(f.root,'root','.local','bin','hermes'),'#!/bin/sh\nexec '+inner+' "$@"\n');fs.chmodSync(inner,0o700);fs.chmodSync(found,0o700);
+ assert.equal(hermesPythons({executable:found,home:f.home}).source,source);
+ assert.deepEqual(await assistantCheck({root:f.root,executable:found,home:f.home}),{loads:true,direct:false,configured:true});
+ const chosen=await chooseAssistant({root:f.root,found,home:f.home});
+ assert.equal(chosen,path.join(f.root,'.godspeed','native-hermes','hermes'));assert.deepEqual(f.descriptor(),{verified:true,executable:chosen,home:f.home,sourceRoot:source});
+ assert.match(execFileSync(chosen,['--version'],{encoding:'utf8'}),/OpenAI SDK: installed/);execFileSync(chosen,['cron','create']);assert.equal(fs.readFileSync(created,'utf8'),'created');
 });
 
 test('when no Hermes loads, the installer says so plainly and goes on with the one found',async t=>{
