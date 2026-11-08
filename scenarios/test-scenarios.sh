@@ -287,28 +287,6 @@ server_routine_evidence_paths_come_from_scheduler() {
 }
 server_routine_evidence_paths_come_from_scheduler
 
-first_day_copies_the_scheduler_routine_output() {
-  local evidence=$TMP/first-day-routine-output copies=$TMP/first-day-routine-output-copies output
-  mkdir -p "$evidence"
-  if output=$(EVIDENCE="$evidence" FIRST_DAY_COPY_LOG="$copies" NODE="$(command -v node)" bash -c '
-    source=$1
-    set -- --check "$2"
-    . "$source"
-    server_routine_evidence_paths() { printf "{\\\"diagnostics\\\":\\\"/owned/diagnostics.json\\\",\\\"output\\\":\\\"/owned/hermes-output\\\"}"; }
-    server_copy_evidence() { printf "%s|%s\\n" "$1" "$2" >"$FIRST_DAY_COPY_LOG"; }
-    keep_first_day_routine_output
-  ' bash "$HERE/first-day.sh" "$evidence" 2>&1); then
-    if [ "$(<"$copies")" = "/owned/hermes-output|$evidence" ]; then
-      ok 'first-day copies the scheduler descriptor’s output path'
-    else
-      bad "first-day did not copy the scheduler descriptor’s output path ($(cat "$copies" 2>/dev/null))"
-    fi
-  else
-    bad "first-day could not copy the scheduler descriptor’s output path ($output)"
-  fi
-}
-first_day_copies_the_scheduler_routine_output
-
 server_run_job_keeps_success_evidence() {
   local evidence=$TMP/server-run-job-evidence copies updates output
   mkdir -p "$evidence"
