@@ -154,8 +154,8 @@ function release(lock, token, ino) {
     }
   }
 }
-export function withNotebookLock(mcDir, work, { timeoutMs = 20000 } = {}) {
-  const lock = path.join(mcDir, ".godspeed", "workspace.lock"), token = randomUUID(), deadline = Date.now() + timeoutMs;
+export function withFileLock(lock, work, { timeoutMs = 20000 } = {}) {
+  const token = randomUUID(), deadline = Date.now() + timeoutMs;
   let fd;
   for (;;) {
     try { fd = fs.openSync(lock, "wx"); break; } catch (error) {
@@ -170,6 +170,9 @@ export function withNotebookLock(mcDir, work, { timeoutMs = 20000 } = {}) {
   catch (error) { try { fs.closeSync(fd); } catch {} try { release(lock, token, ino); } catch {} throw error; }
   fs.closeSync(fd);
   try { return work(); } finally { release(lock, token, ino); }
+}
+export function withNotebookLock(mcDir, work, options) {
+  return withFileLock(path.join(mcDir, ".godspeed", "workspace.lock"), work, options);
 }
 
 // ---- Writing ------------------------------------------------------------------------------------
