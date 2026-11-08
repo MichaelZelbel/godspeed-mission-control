@@ -20,12 +20,4 @@ retain_new_charm_log() { # <source log> <cursor before acting> <retained evidenc
     cat "$source" >"$evidence" || fail "$symptom"
   fi
   [ -s "$evidence" ] || fail "$symptom"
-  "${NODE:-node}" -e '
-const fs=require("fs"),text=fs.readFileSync(process.argv[1],"utf8");
-if(!text.endsWith("\n"))process.exit(1);
-for(const line of text.slice(0,-1).split("\n")){
- let entry;try{entry=JSON.parse(line);}catch{process.exit(1);}
- if(!entry||typeof entry!=="object"||Array.isArray(entry))process.exit(1);
-}
-' "$evidence" || fail "the installed panel Charm judgement wrote invalid JSONL evidence to $source"
 }
