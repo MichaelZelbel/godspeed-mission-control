@@ -15,7 +15,6 @@ const log = option('--log');
 const metadata = process.argv.includes('--metadata');
 if (!dir) throw new Error('usage: hermes-update-fixture.mjs --dir <folder> [--reveal <version>]');
 const stateFile = `${resolve(dir)}.fixture-state.json`;
-const shellQuote = value => `'${value.replaceAll("'", "'\"'\"'")}'`;
 const git = (...args) => execFileSync('git', ['-C', dir, ...args], { stdio: 'ignore' });
 
 if (metadata) {
@@ -44,7 +43,7 @@ git('remote', 'add', 'origin', HERMES_HTTPS_ORIGIN);
 const command = `#!/bin/sh
 set -eu
 root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
-fixture_state=${shellQuote(stateFile)}
+fixture_state="${root}.fixture-state.json"
 fixture_log=$(node -p "try{require(process.argv[1]).log||''}catch(e){''}" "$fixture_state")
 log() { destination=\${HERMES_FIXTURE_LOG:-\$fixture_log}; [ -z "\$destination" ] || printf '%s\\n' "$*" >>"\$destination"; }
 version=$(node -p "require(process.argv[1]).version" "$root/release.json")
