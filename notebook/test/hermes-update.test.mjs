@@ -211,6 +211,11 @@ test('the first scheduler pass at or after 04:15 runs once in the installation t
  const f=fixture(t);f.setClock('2026-11-06T03:14:00Z');assert.equal(await f.updater.tick('Europe/Berlin'),null);f.setClock('2026-11-06T04:16:01Z');assert.equal((await f.updater.tick('UTC')).result,'updated');assert.equal(await f.updater.tick('UTC'),null);
 });
 
+test('the default update clock honors the service rehearsal clock',async t=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-hermes-update-clock-')),previous=process.env.GODSPEED_NOW;process.env.GODSPEED_NOW='2026-11-06T04:15:30Z';t.after(()=>{if(previous===undefined)delete process.env.GODSPEED_NOW;else process.env.GODSPEED_NOW=previous;fs.rmSync(root,{recursive:true,force:true});});
+ const store=new Store(root),updater=new HermesUpdate({store,descriptor:{verified:false},ask:async()=>{}});assert.equal((await updater.tick('UTC')).result,'skipped');assert.equal(readHermesUpdate(store).last.day,'2026-11-06');
+});
+
 test('active chats, scheduler ticks, and manual routines defer updates for their whole lifetime',async t=>{
  const busy='Godspeed is still handling a chat or routine.';
  const cases=[

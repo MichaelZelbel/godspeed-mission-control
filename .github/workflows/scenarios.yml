@@ -105,13 +105,13 @@ jobs:
             echo "picked=all" | tee -a "$GITHUB_OUTPUT"
             exit 0
           fi
-          # A pull request: the scenarios whose own files it changed, a job being named like its
-          # script (scenarios/<job>.sh) and owning scenarios/<job>.sh and scenarios/<job>-*.
+          # A pull request: a job normally owns its script and same-named helpers. The Hermes
+          # rollback proof also owns its service wiring, scheduler, updater and frozen clock.
           gh api "repos/$GITHUB_REPOSITORY/pulls/$PR/files" --paginate --jq '.[].filename' > "$RUNNER_TEMP/changed"
           jobs=$(grep -oE 'bash scenarios/[a-z0-9-]+\.sh "\$STAGE_REF"' .github/workflows/scenarios.yml | sed -E 's|bash scenarios/||; s|\.sh .*||' | sort -u)
           picked=','
           for j in $jobs; do
-            if grep -qE "^scenarios/$j(\.sh|-[^/]*)$" "$RUNNER_TEMP/changed"; then picked="$picked$j,"; fi
+            if grep -qE "^scenarios/$j(\.sh|-[^/]*)$" "$RUNNER_TEMP/changed" || { [ "$j" = hermes-update-rollback ] && grep -qE '^(notebook/server/main\.mjs|notebook/core/native-scheduler\.mjs|notebook/core/hermes-update\.mjs|third-party/addons/godspeed-coach/lib/clock\.mjs)$' "$RUNNER_TEMP/changed"; }; then picked="$picked$j,"; fi
           done
           echo "The pull request changes $(wc -l < "$RUNNER_TEMP/changed") files; scenarios picked:$picked" | tee -a "$GITHUB_STEP_SUMMARY"
           echo "picked=$picked" | tee -a "$GITHUB_OUTPUT"

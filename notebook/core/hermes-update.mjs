@@ -9,6 +9,7 @@ import {aiProbe} from './connection-check.mjs';
 import {queueNotice} from './notices.mjs';
 import {GODSPEED_PLUGINS,enabledGodspeedPlugins} from './godspeed-plugins.mjs';
 import {configList,readConfigValue} from './hermes-config.mjs';
+import {now as clockNow} from '../../third-party/addons/godspeed-coach/lib/clock.mjs';
 
 export const UPDATE_FILE='hermes-update.json';
 const DAY=24*60*60*1000,WAIT=7*DAY,RETRY=30*DAY,UPDATE_LIMIT=40*60*1000,RELEASE_LIMIT=120000;
@@ -50,7 +51,7 @@ export function eligibleRelease(releases,installed,now=Date.now(),failed={}){
 }
 
 export class HermesUpdate{
- constructor({store,descriptor,ask,run=runChild,now=()=>new Date(),platform=process.platform,getuid=()=>process.getuid?.(),isDocker=()=>false,fetcher=globalThis.fetch,lifecycle=null,releaseLimit=RELEASE_LIMIT}={}){Object.assign(this,{store,descriptor,ask,run,now,platform,getuid,isDocker,fetcher,lifecycle,releaseLimit});this.running=null;}
+ constructor({store,descriptor,ask,run=runChild,now=clockNow,platform=process.platform,getuid=()=>process.getuid?.(),isDocker=()=>false,fetcher=globalThis.fetch,lifecycle=null,releaseLimit=RELEASE_LIMIT}={}){Object.assign(this,{store,descriptor,ask,run,now,platform,getuid,isDocker,fetcher,lifecycle,releaseLimit});this.running=null;}
  state(){return readHermesUpdate(this.store);}
  save(next){atomic(path.join(this.store.state,UPDATE_FILE),JSON.stringify(next,null,2)+'\n');return next;}
  setEnabled(enabled){return this.save({...transactionState(this.state()),enabled});}
