@@ -1,7 +1,7 @@
 import {visibleRows} from './visibility.mjs';
 import {hash} from './records/store.mjs';
 import {procedure} from './procedures.mjs';
-import {remind} from './deadline-reminders.mjs';
+import {deadlineLive,remind} from './deadline-reminders.mjs';
 import {watchCommand} from './watch-commands.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -150,7 +150,7 @@ async function runBriefing(job,{store,query,provider,now}){
   addFirst(context.goals,row=>!excluded(row)&&text(row.title)?'One of your saved goals is '+text(row.title)+'.':null);
   const verified=context.work.filter(row=>row.state==='verified'&&row.kind!=='repair'&&!excluded(row)).sort((a,b)=>String(b.verification?.at||b.updated_at||'').localeCompare(String(a.verification?.at||a.updated_at||'')));
   addFirst(verified,row=>text(row.title)?'Godspeed has verified this work: '+text(row.title)+'.':null);
-  const due=context.deadlines.filter(row=>!excluded(row)&&!['closed','completed'].includes(row.status)&&row.due_at&&Number.isFinite(Date.parse(row.due_at))&&Date.parse(row.due_at)>=now.getTime()).sort((a,b)=>Date.parse(a.due_at)-Date.parse(b.due_at));
+  const due=context.deadlines.filter(row=>!excluded(row)&&deadlineLive(row,now.getTime())&&row.due_at&&Number.isFinite(Date.parse(row.due_at))&&Date.parse(row.due_at)>=now.getTime()).sort((a,b)=>Date.parse(a.due_at)-Date.parse(b.due_at));
   addFirst(due,row=>{const on=row.native_file?String(row.due_at).slice(0,10):dayOf(new Date(row.due_at),row.timezone||zone);return text(row.title)?'A dated obligation is '+text(row.title)+', due '+on+'.':null;});
   const keptSummaries=unknownSummaries.filter(summary=>!summary.source_ids.some(id=>rejectedIds.has(id)));
   const unknownAdded=[...keptSummaries.map(summary=>summary.line),weekLine(keptSummaries)].filter(Boolean).filter(line=>add(line)).length>0;
