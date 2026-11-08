@@ -3712,9 +3712,10 @@ ACT_NODE_ORDER=$(env -u NODE GODSPEED_SCENARIO_ROOT="$RFS/root" ACTION_EVENTS="$
   cd "$3"
   . "$1"
   EVIDENCE=$2
-  node() { :; }
+  node() { printf "path-node:%s\\n" "$*" >>"$ACTION_EVENTS"; }
+  selected_node() { printf "selected-node:%s\\n" "$*" >>"$ACTION_EVENTS"; }
   trap() { :; }
-  need_node() { NODE=/bin/true; printf "need-node\\n" >>"$ACTION_EVENTS"; }
+  need_node() { NODE=selected_node; printf "need-node\\n" >>"$ACTION_EVENTS"; }
   fresh_evidence() { mkdir -p "$EVIDENCE"; printf "47832\\n" >"$EVIDENCE/fixture-port"; }
   wait_for() { :; }
   curl() { printf "%s\\n" "{\"ok\":true}"; }
@@ -3734,8 +3735,8 @@ ACT_NODE_ORDER=$(env -u NODE GODSPEED_SCENARIO_ROOT="$RFS/root" ACTION_EVENTS="$
   cat "$ACTION_EVENTS"
 ' action-order "$ROOT/scenarios/workouts-from-hevy.sh" "$RFS/action-evidence" "$ROOT/scenarios" 2>&1)
 case "$ACT_NODE_ORDER" in
-  $'need-node\npersistence-docker:set\npersistence-native:set') ok "the Hevy action selects Node before descriptor and persistence reads" ;;
-  *) bad "the Hevy action did not select Node before descriptor and persistence reads ($ACT_NODE_ORDER)" ;;
+  $'need-node\nselected-node:'"$ROOT"'/scenarios/hevy-fixture.mjs --state '"$RFS"'/action-evidence/fixture-state.json --log '"$RFS"'/action-evidence/fixture.log\npersistence-docker:set\npersistence-native:set\nselected-node:'"$ROOT"'/scenarios/hevy-fixture.mjs --state '"$RFS"'/action-evidence/fixture-state.json --log '"$RFS"'/action-evidence/fixture.log --mutate') ok "the Hevy action uses its selected Node for both fixture launches before descriptor and persistence reads" ;;
+  *) bad "the Hevy action did not use its selected Node for both fixture launches before descriptor and persistence reads ($ACT_NODE_ORDER)" ;;
 esac
 NO_NODE_ACTION=$(env -u NODE GODSPEED_SCENARIO_ROOT="$RFS/root" bash -c '
   cd "$2"
