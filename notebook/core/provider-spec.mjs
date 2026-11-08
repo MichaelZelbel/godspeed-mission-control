@@ -8,4 +8,3 @@ const providers=[
 ];
 export const providerForHost=host=>providers.find(entry=>entry.matches?.(host));
 export const providerForName=name=>providers.find(entry=>entry.provider===name);
-export const messagesProviderForHost=host=>providerForHost(host)?.messages||null;

@@ -7,7 +7,7 @@ import {EventEmitter} from 'node:events';
 import {PassThrough} from 'node:stream';
 import {hermesSettingsFor,setEnvValue,connectRoutineAI,routineAIStatus,checkRoutineAI} from '../core/routine-ai.mjs';
 import {homeHasModel} from '../core/native-agent.mjs';
-import {messagesProviderForHost} from '../core/provider-spec.mjs';
+import {providerForHost} from '../core/provider-spec.mjs';
 
 // What the person connects in Settings powers the routines too (18 October 2026): every installer
 // told them to connect their AI there, and the six routines, which run in Hermes, never got it.
@@ -25,10 +25,10 @@ test('an endpoint becomes the Hermes provider that reads it: OpenRouter, Anthrop
 });
 
 test('one host specification selects both native Messages and Hermes Anthropic',()=>{
- const native=messagesProviderForHost('api.anthropic.com');
+ const native=providerForHost('api.anthropic.com')?.messages||null;
  assert.equal(native,'https://api.anthropic.com/v1/messages');
  assert.equal(hermesSettingsFor({url:'https://API.ANTHROPIC.COM/v1',key:'sk-ant-fictional',model:'claude-haiku-4-5'}).provider,'anthropic');
- assert.equal(messagesProviderForHost('llm.example.org'),null);
+ assert.equal(providerForHost('llm.example.org')?.messages||null,null);
 });
 
 test('one line of Hermes\' .env changes, and every other line stays',()=>{

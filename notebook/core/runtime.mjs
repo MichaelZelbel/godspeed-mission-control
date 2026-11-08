@@ -11,7 +11,7 @@ import {personalOperation} from './personal-operations.mjs';
 import {nativeCoachContext,nativeTick,dueCoachAreas,retainHabitReview} from './native-personal.mjs';
 import {briefing} from './briefing.mjs';
 import {currentHealth,healthSafeReply,latestPerDayMetric} from './health-inputs.mjs';
-import {messagesProviderForHost} from './provider-spec.mjs';
+import {providerForHost} from './provider-spec.mjs';
 // A chat may take ten minutes; Stop ends it sooner. Until 6 October 2026 it was
 // cut off after two, which long answers over many notes regularly needed.
 export function providerTimeBudget(input){
@@ -157,7 +157,7 @@ export function providerReason(diagnostic,secrets=[]){
 const RETRY_STATUS=new Set([429,502,503,504]);
 export function modelProvider({ url, key, model, maxTokens = 4096, retryWaits = [2000,5000] } = {}) {
   if(!url || !key || !model)return null;
-  const parsed=new URL(url),messagesProvider=messagesProviderForHost(parsed.hostname.toLowerCase());if(parsed.protocol!=='https:' && !['127.0.0.1','localhost'].includes(parsed.hostname))throw new Error('Model provider requires HTTPS');
+  const parsed=new URL(url),messagesProvider=providerForHost(parsed.hostname.toLowerCase())?.messages||null;if(parsed.protocol!=='https:' && !['127.0.0.1','localhost'].includes(parsed.hostname))throw new Error('Model provider requires HTTPS');
   const endpoint=messagesProvider||url;
   return async input=>{
     const timeoutMs=providerTimeBudget(input),{attachments=[],signal,timeout_ms:ignoredBudget,max_tokens:answerBudget,...textInput}=input;
