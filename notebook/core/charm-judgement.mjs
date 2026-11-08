@@ -34,7 +34,6 @@ const nativeLog=(home,conversation,verdict,did)=>{
  try{
   const folder=path.join(home,'logs'),file=path.join(folder,'godspeed-charm.log');
   fs.mkdirSync(folder,{recursive:true});
-  if(fs.existsSync(file)&&fs.statSync(file).size>1_000_000)fs.renameSync(file,file+'.1');
   fs.appendFileSync(file,JSON.stringify({at:new Date().toISOString(),conversation,verdict:verdict?.verdict??null,source:verdict?.source??null,why:verdict?.why??null,did})+'\n');
  }catch{}
 };

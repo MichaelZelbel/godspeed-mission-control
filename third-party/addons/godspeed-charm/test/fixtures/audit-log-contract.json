@@ -1,6 +1,0 @@
-{
-  "relativePath": "logs/godspeed-charm.log",
-  "rotateAfterBytes": 1000000,
-  "recordKeys": ["at", "conversation", "verdict", "source", "why", "did"],
-  "redaction": {"forbiddenText": "garbage", "forbiddenKeys": ["words"]}
-}

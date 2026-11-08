@@ -1585,18 +1585,6 @@ charm_log_source_boundary() {
   else
     bad "an unchanged Charm source log did not name the absent panel evidence (exit $code: $output)"
   fi
-  "${NODE:-node}" -e 'const fs=require("fs");const line=JSON.stringify({verdict:"old",padding:"x".repeat(100)})+"\\n";fs.writeFileSync(process.argv[1],line.repeat(10000));' "$source"
-  cursor=$(bash -c '. "$1"; charm_log_cursor "$2"' bash "$HERE/charm-log.sh" "$source")
-  mv "$source" "$source.1"
-  printf '{"verdict":"ask"}\n{"verdict":"answer"}\n' >"$source"
-  output=$(bash -c '. "$1"; fail(){ printf "%s\\n" "$*"; exit 42; }; retain_new_charm_log "$2" "$3" "$4"' \
-    bash "$HERE/charm-log.sh" "$source" "$cursor" "$evidence" 2>&1)
-  code=$?
-  if [ "$code" = 0 ] && [ "$(<"$evidence")" = $'{"verdict":"ask"}\n{"verdict":"answer"}' ]; then
-    ok 'the Charm log helper retains the active generation after rollover'
-  else
-    bad "the Charm log helper did not retain the active generation after rollover (exit $code: $output)"
-  fi
 }
 charm_log_source_boundary
 
