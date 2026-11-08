@@ -429,4 +429,18 @@ test('the PR-image draft binds its published digest to stage and selects every s
   };
   assert.equal(run('scenarios/server-lib.sh'),'picked=true\n','a shared helper change does not publish the PR image');
   assert.equal(run('scenarios/voice.sh'),'picked=false\n','an unpicked non-server scenario publishes no PR image');
+  const stageAt=text.indexOf('+          jobs=$(grep -oE',text.indexOf('\n   stage:'));
+  const stageTo=text.indexOf('+          done',stageAt);
+  assert.ok(stageAt>=0&&stageTo>stageAt,'the stage picker was not found');
+  const stageScript=text.slice(stageAt,stageTo+'+          done'.length)
+    .split('\n').filter((line)=>line.startsWith('+')).map((line)=>line.slice(1).replace(/^ {10}/,'')).join('\n');
+  const runStage=(files)=>{
+    const dir=mkdtempSync(`${tmpdir()}/draft-stage-`).replaceAll(String.fromCharCode(92),'/');
+    writeFileSync(`${dir}/changed`,`${files}\n`);
+    const result=spawnSync('bash',['-c',`${stageScript}\nprintf 'picked=%s\\n' "$picked"`],{cwd:fileURLToPath(new URL('..',import.meta.url)),encoding:'utf8',env:{...process.env,RUNNER_TEMP:dir}});
+    assert.equal(result.status,0,result.stdout+result.stderr);return result.stdout;
+  };
+  const helperStages=runStage('scenarios/server-lib.sh');
+  assert.equal(helperStages,'picked=,connection-check,first-day,no-question-he-cannot-judge,plain-yes,what-was-that,\n','a shared helper change does not stage every direct helper consumer');
+  assert.doesNotMatch(helperStages,/,voice,/,'a shared helper change stages an unrelated scenario');
 });

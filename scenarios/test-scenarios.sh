@@ -4225,6 +4225,13 @@ fi
 SFR_OUT=$(GODSPEED_SCENARIO_REPO=$SFR_REPO GODSPEED_SCENARIO_PUBLIC_RAW=file://$TMP/sfr-public GODSPEED_SCENARIO_PR_IMAGE=$SFR_IMAGE:not-a-digest \
   bash "$SFR" '' "$SFR_TWO" "$TMP/sfr-pr-missing" 2>"$TMP/sfr.err"); SFR_CODE=$?
 if [ "$SFR_CODE" != 0 ]; then ok "an invalid PR-head image does not fall back to an ancestor"; else bad "an invalid PR-head image fell back to an ancestor"; fi
+SFR_OUT=$(GODSPEED_SCENARIO_REPO=$SFR_REPO GODSPEED_SCENARIO_PUBLIC_RAW=file://$TMP/sfr-public GODSPEED_SCENARIO_PR_IMAGE=ghcr.io/another-product/server@$SFR_PC \
+  bash "$SFR" '' "$SFR_TWO" "$TMP/sfr-pr-foreign" 2>"$TMP/sfr.err"); SFR_CODE=$?
+if [ "$SFR_CODE" = 2 ] && [ ! -e "$TMP/sfr-pr-foreign/this-commit/stage.json" ]; then
+  ok "a foreign immutable PR image cannot become this commit's stage"
+else
+  bad "a foreign immutable PR image was not refused before staging (exit $SFR_CODE: $(cat "$TMP/sfr.err"))"
+fi
 sfr_night "$TMP/sfr-images-none" "$TMP/sfr-night3"
 if [ "$SFR_CODE" != 0 ]; then ok "no image within reach fails"; else bad "no image within reach succeeded"; fi
 bash "$SFR" '' notacommit "$TMP/sfr-night4" >/dev/null 2>&1
