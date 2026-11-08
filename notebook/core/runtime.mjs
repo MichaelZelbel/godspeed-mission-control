@@ -149,7 +149,7 @@ export function scrubCredentials(text,secrets=[]){
 // rejected request, so every configured value is a known secret before that output is retained.
 export function hermesSecrets(home){
  const values=[];
- try{for(const line of fs.readFileSync(path.join(home,'.env'),'utf8').split(/\r?\n/)){const match=/^\s*(?:export\s+)?[A-Za-z_][A-Za-z0-9_]*\s*=\s*(.*)\s*$/.exec(line);if(match)values.push(match[1].replace(/^[\"']|[\"']$/g,''));}}catch{}
+ try{for(const line of fs.readFileSync(path.join(home,'.env'),'utf8').split(/\r?\n/)){const match=/^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)\s*$/.exec(line);if(match&&/(?:key|token|secret|password)/i.test(match[1]))values.push(match[2].replace(/^[\"']|[\"']$/g,''));}}catch{}
  try{for(const line of fs.readFileSync(path.join(home,'config.yaml'),'utf8').split(/\r?\n/)){const match=/^\s*api_key\s*:\s*(.*)\s*$/.exec(line);if(match)values.push(match[1].replace(/^[\"']|[\"']$/g,''));}}catch{}
  return values;
 }
