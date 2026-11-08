@@ -292,7 +292,6 @@ NODE
 }
 
 act() {
-  need_node
   fresh_evidence
   local state=$EVIDENCE/fixture-state.json port pid
   : >"$EVIDENCE/fixture.log"
