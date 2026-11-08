@@ -3261,6 +3261,9 @@ refuses 'a check that never reached the stand-in' connection-check "$C/never-rea
 copy "$C/good" "$C/speaks-when-fine"
 run_json "$C/speaks-when-fine" "$(msg fine 'All is well.')" "$(msg broken 'Telegram refused your bot key.')"
 refuses 'a message although everything is fine' connection-check "$C/speaks-when-fine" 'although everything was fine'
+copy "$C/good" "$C/empty-when-fine"
+run_json "$C/empty-when-fine" "$(msg fine '')" "$(msg broken 'Telegram refused your bot key.')"
+passes 'an empty delivery while everything is fine' connection-check "$C/empty-when-fine" 'told the owner once'
 copy "$C/good" "$C/deadline-when-fine"
 printf '[{"slug":"x","title":"Something","state":"open"}]\n' >"$C/deadline-when-fine/due-fine.json"
 refuses 'a deadline although everything is fine' connection-check "$C/deadline-when-fine" 'opened a deadline although'

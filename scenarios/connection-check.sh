@@ -94,7 +94,7 @@ check() { # <evidence folder>
 
   # fine: it says nothing.
   interaction_begin fine
-  text=$(outbox_between "$folder/run.json" fine | head -n 1)
+  text=$(outbox_between "$folder/run.json" fine | grep -Fvx '""' | head -n 1)
   [ -z "$text" ] || fail "the connection check sent a message although everything was fine: $text"
   [ -z "$("$NODE" "$HERE/telegram-judge.mjs" deadlines "$folder/due-fine.json" "$folder/due-before.json")" ] ||
     fail "the connection check opened a deadline although everything was fine: $("$NODE" "$HERE/telegram-judge.mjs" deadlines "$folder/due-fine.json" "$folder/due-before.json" | tr '\t\n' ' ')"
