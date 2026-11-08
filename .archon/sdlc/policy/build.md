@@ -67,8 +67,9 @@ there.
   The quote names the target path, the operation (create, replace or delete), the target's git
   blob hash on the base commit (for a create: that the target does not exist) and the git blob hash
   of the draft. Mission Control applies nothing, and sends the pull request back, if the target no
-  longer matches, if the draft at the reviewed head does not have that hash, or if the draft's file
-  name is not the target's file name.
+  longer matches, if the draft at the reviewed head does not have that hash, or if the target is not a
+  file directly inside `.github/workflows/` (no subfolder, no `..`) or the draft is not the file of the
+  same name directly inside `.github/workflow-drafts/`.
 - Such a pull request is Done when the review says Ready at its head commit and its checks are
   green, apart from the scenario jobs named in the quote by their workflow job ID, each one in
   `picked` at that head (and `the verdict`, red only because of them).
