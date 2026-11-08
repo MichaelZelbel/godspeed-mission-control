@@ -11,6 +11,7 @@ import {createService} from '../server/main.mjs';
 import {startFakeHevy,KEY,workout} from '../../third-party/addons/godspeed-workouts/test/fakes/hevy.mjs';
 import {startFakeNotebook} from '../../third-party/addons/godspeed-workouts/test/fakes/notebook.mjs';
 import {readKey} from '../../third-party/addons/godspeed-workouts/lib/keys.mjs';
+import {scheduleKind} from '../../third-party/addons/godspeed-workouts/lib/schedule.mjs';
 
 const temporary=t=>{const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-workouts-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));return root;};
 const REPLACEMENT_KEY='66666666-7777-4888-8999-aaaaaaaaaaaa';
@@ -69,7 +70,8 @@ test('a failed Workouts handover retains the standalone timer, reports a safe re
   const next=handoverFixture(t,{mode});await assert.rejects(next.scheduler.followWorkouts(),/first import failed|did not complete/);
   assert.equal(next.events.includes('uninstall'),false,mode);assert.equal(next.hermes.jobs().length,0,mode);assert.equal(readNotebookRoutines(next.store).jobs.length,0,mode);assert.equal(next.scheduler.workoutsRoutineStatus().state,'pending',mode);
  }
- for(const kind of ['systemd-user','systemd-system']){
+ for(const kindInput of [{platform:'linux',root:false},{platform:'linux',root:true}]){
+  const kind=scheduleKind(kindInput);
   const removal=handoverFixture(t,{mode:'uninstall-fails'}),reason=`systemd ${kind.slice('systemd-'.length)} manager refused reload`;removal.setRetirementError(reason);
   await assert.rejects(removal.scheduler.followWorkouts(),new RegExp(reason));
   assert.deepEqual(removal.events,['status','create','run:job1','status','uninstall'],kind);assert.equal(removal.hermes.jobs().length,1,kind);assert.deepEqual(readNotebookRoutines(removal.store).jobs.map(job=>job.id),['job1'],kind);
