@@ -30,9 +30,11 @@ child.spawnSync=(cmd,args=[],opts={})=>{
   return {status:0};
  }
  if(cmd==="tar"){fs.mkdirSync(path.join(opts.cwd,"hyperframes","skills"),{recursive:true});return {status:0};}
+ if(cmd==="powershell.exe"||cmd==="pwsh.exe")return {error:{code:"ENOENT"}};
+ if(cmd==="where")return {status:0,stdout:"/stand-in/command\\n",stderr:""};
  if(cmd==="sh"&&args[0]==="-c")return {status:0,stdout:"/stand-in/command\\n",stderr:""};
  if(args.includes("-hide_banner"))return {status:0,stdout:" V....D libx264 H.264\\n ... subtitles Render text subtitles\\n",stderr:""};
- if(args[0]==="venv"){const python=path.join(args[1],"bin","python");fs.mkdirSync(path.dirname(python),{recursive:true});fs.writeFileSync(python,"");return {status:0};}
+ if(args[0]==="venv"){for(const python of [path.join(args[1],"bin","python"),path.join(args[1],"Scripts","python.exe")]){fs.mkdirSync(path.dirname(python),{recursive:true});fs.writeFileSync(python,"");}return {status:0};}
  if(args[0]==="pip"||args[0]==="-c")return {status:0};
  throw new Error("unexpected command: "+cmd+" "+args.join(" "));
 };
