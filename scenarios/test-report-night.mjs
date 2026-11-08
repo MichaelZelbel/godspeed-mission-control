@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 
 const SCRIPT = fileURLToPath(new URL('./report-night.mjs', import.meta.url));
 const WORKFLOW = fileURLToPath(new URL('../.github/workflows/scenarios.yml', import.meta.url));
+const WORKFLOW_DRAFT = fileURLToPath(new URL('../.github/workflow-drafts/scenarios.yml', import.meta.url));
 
 // state: { openIssues: [{number,title}], labelExists, logs: {jobName: text}, jobs: [{id,name,conclusion}] }
 async function night(results, state = {}, extra = {}) {
@@ -398,4 +399,34 @@ test('the pick on a pull request asks the files endpoint of that pull request, a
   const r = spawnSync('bash', ['-c', script], { cwd: fileURLToPath(new URL('..', import.meta.url)), encoding: 'utf8', env: { ...process.env, PATH: `${dir}/bin:${process.env.PATH}`, GITHUB_EVENT_NAME: 'pull_request', GITHUB_REPOSITORY: 'me/repo', PR: '42', GITHUB_OUTPUT: `${dir}/out`, RUNNER_TEMP: dir, GITHUB_STEP_SUMMARY: `${dir}/sum` } });
   assert.equal(r.status, 0, r.stdout + r.stderr);
   assert.equal(readFileSync(`${dir}/out`, 'utf8'), 'picked=,charm-challenge,\n');
+});
+
+test('the PR-image draft binds its published digest to stage and selects every shared-server helper consumer', async () => {
+  const { readFileSync, writeFileSync, mkdtempSync, mkdirSync, chmodSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { spawnSync } = await import('node:child_process');
+  const text = readFileSync(WORKFLOW_DRAFT, 'utf8').replace(/\r\n/g, '\n');
+  assert.match(text, /^\+    if: github\.event_name == 'pull_request' && github\.event\.pull_request\.head\.repo\.full_name == github\.repository$/m, 'only a same-repository pull request can build the image');
+  assert.match(text, /^\+      image: \$\{\{ steps\.publish\.outputs\.image \}\}$/m, 'the image job does not publish its immutable image');
+  assert.match(text, /^\+          digest=\$\(docker buildx imagetools inspect "\$IMAGE:\$TAG" --format '\{\{\.Digest\}\}'\)$/m, 'the published image is not resolved to a digest');
+  assert.match(text, /^\+          \[\[ \$digest =~ \^sha256:\[0-9a-f]\{64\}\$ \]\] \|\|/m, 'the published image digest is not verified');
+  assert.match(text, /^\+      GODSPEED_SCENARIO_PR_IMAGE: \$\{\{ needs\.pr-image\.outputs\.image \}\}$/m, 'stage rebuilds the image reference instead of receiving its output');
+  assert.match(text, /^\+    if: \$\{\{ always\(\) && \(github\.event_name != 'pull_request' \|\| \(github\.event\.pull_request\.head\.repo\.full_name == github\.repository && needs\.pr-image\.result == 'success'\)\) \}\}$/m, 'stage can run after a selected PR image fails');
+  assert.doesNotMatch(text, /GODSPEED_SCENARIO_PR_IMAGE_TAG/, 'stage reconstructs the producer tag');
+  const readers=['connection-check','first-day','no-question-he-cannot-judge','plain-yes','what-was-that'];
+  for(const name of readers)assert.match(readFileSync(fileURLToPath(new URL(`./${name}.sh`, import.meta.url)),'utf8'),/^\. "\$HERE\/server-lib\.sh"$/m,`${name} no longer directly uses the shared server helper`);
+  assert.match(text,/grep -qx 'scenarios\/server-lib\.sh' "\$RUNNER_TEMP\/changed" && grep -qF '\. "\$HERE\/server-lib\.sh"' "scenarios\/\$job\.sh"/,'the PR-image picker misses a server-lib-only change');
+  assert.match(text,/grep -qx 'scenarios\/server-lib\.sh' "\$RUNNER_TEMP\/changed" && grep -qF '\. "\$HERE\/server-lib\.sh"' "scenarios\/\$j\.sh"/,'the stage picker misses a server-lib-only change');
+  const at=text.indexOf('+        run: |\n',text.indexOf('+        id: pick\n'));
+  const to=text.indexOf('+      - uses: docker/login-action@v3',at);
+  assert.ok(at>=0&&to>at,'the PR-image picker was not found');
+  const script=text.slice(at+'+        run: |\n'.length,to).replace(/^\+/gm,'').replace(/^ {10}/gm,'');
+  const run=(files)=>{
+    const dir=mkdtempSync(`${tmpdir()}/draft-pr-image-`).replaceAll(String.fromCharCode(92),'/');
+    mkdirSync(`${dir}/bin`);writeFileSync(`${dir}/bin/gh`,'#!/usr/bin/env bash\nprintf "%s\\n" "$DRAFT_FILES"\n');chmodSync(`${dir}/bin/gh`,0o755);writeFileSync(`${dir}/out`,'');
+    const result=spawnSync('bash',['-c',script],{cwd:fileURLToPath(new URL('..',import.meta.url)),encoding:'utf8',env:{...process.env,PATH:`${dir}/bin:${process.env.PATH}`,DRAFT_FILES:files,GITHUB_REPOSITORY:'me/repo',PR:'42',RUNNER_TEMP:dir,GITHUB_OUTPUT:`${dir}/out`}});
+    assert.equal(result.status,0,result.stdout+result.stderr);return readFileSync(`${dir}/out`,'utf8');
+  };
+  assert.equal(run('scenarios/server-lib.sh'),'picked=true\n','a shared helper change does not publish the PR image');
+  assert.equal(run('scenarios/voice.sh'),'picked=false\n','an unpicked non-server scenario publishes no PR image');
 });

@@ -9,8 +9,8 @@
 # setup and the withdrawn list carried from the public stage (beta), the add-ons pinned as
 # third-party/addons/sources.json holds them at the commit, and the server image the commit's own
 # v2-sha-<commit> (or, when CI built none for it because no image input changed, the newest
-# first-parent ancestor's within 50, named on stderr). A same-repository pull-request scenario may
-# pass GODSPEED_SCENARIO_PR_IMAGE_TAG for its separately named head image; it never falls back.
+# first-parent ancestor's within 50, named on stderr). A same-repository pull-request scenario gets
+# GODSPEED_SCENARIO_PR_IMAGE, the selected PR-head image's immutable digest; it never falls back.
 # The folder then holds this-commit/ (the commit's files, its stage.json made) and beta/stage.json
 # (the public stage as read), and a line reading raw=file://<folder> lets every installer and
 # scenario read it as it reads GitHub.
@@ -31,10 +31,11 @@ usage() { say "usage: bash scenarios/stage-for-run.sh <stage or ''> <commit> <fo
 stage=$1; commit=$2; folder=$3
 case $commit in *[!0-9a-f]* | '') usage ;; esac
 [ ${#commit} -eq 40 ] || usage
-pr_image_tag=${GODSPEED_SCENARIO_PR_IMAGE_TAG:-}
-if [ -n "$pr_image_tag" ]; then
-  [[ $pr_image_tag =~ ^pr-[1-9][0-9]*-[0-9a-f]{40}$ ]] || { say "The PR scenario image tag is not pr-<number>-<commit>: $pr_image_tag"; exit 2; }
-  [ "${pr_image_tag##*-}" = "$commit" ] || { say "The PR scenario image tag is not for $commit: $pr_image_tag"; exit 2; }
+pr_image=${GODSPEED_SCENARIO_PR_IMAGE:-}
+if [ -n "$pr_image" ]; then
+  [[ $pr_image =~ ^ghcr\.io/[a-z0-9][a-z0-9._/-]*@sha256:[0-9a-f]{64}$ ]] || { say "The PR scenario image is not an immutable ghcr.io digest: $pr_image"; exit 2; }
+  pr_image_name=${pr_image%@*}
+  pr_image_digest=${pr_image#*@}
 fi
 
 if [ -n "$stage" ]; then
@@ -69,19 +70,24 @@ editions=$(node "$HERE/../stage/stage.mjs" "$folder/beta/stage.json" json |
   node -e 'const s=JSON.parse(require("fs").readFileSync(0,"utf8"));for(const [k,v] of Object.entries(s.serverEditions))console.log(k+" "+v.image.split("@")[0])')
 chosen=''
 commits=$(git -C "$REPO" rev-list --first-parent -n 50 "$commit")
-[ -z "$pr_image_tag" ] || commits=$commit
+[ -z "$pr_image" ] || commits=$commit
 for c in $commits; do
   all=yes; found=''
   while read -r edition image; do
-    d=$(digest_of "$image" "${pr_image_tag:-v2-sha-$c}")
+    if [ -n "$pr_image" ]; then
+      [ "$image" = "$pr_image_name" ] || { say "The PR scenario image is not the $edition server image: $pr_image"; exit 2; }
+      d=$pr_image_digest
+    else
+      d=$(digest_of "$image" "v2-sha-$c")
+    fi
     if [ -z "$d" ]; then all=no; break; fi
     found="$found$edition $d;"
   done <<<"$editions"
   if [ "$all" = yes ]; then chosen=$c; digests=$found; break; fi
 done
-[ -n "$chosen" ] || { if [ -n "$pr_image_tag" ]; then say "No PR-head server image $pr_image_tag exists for $commit, so this commit cannot be proved on the Docker server."; else say "No server image v2-sha-<commit> exists for $commit or its 49 first-parent ancestors, so this commit cannot be proved on the Docker server."; fi; exit 1; }
-if [ -n "$pr_image_tag" ]; then
-  say "The server image is PR head ${commit:0:7}'s $pr_image_tag."
+[ -n "$chosen" ] || { if [ -n "$pr_image" ]; then say "The PR-head server image is unavailable, so this commit cannot be proved on the Docker server."; else say "No server image v2-sha-<commit> exists for $commit or its 49 first-parent ancestors, so this commit cannot be proved on the Docker server."; fi; exit 1; }
+if [ -n "$pr_image" ]; then
+  say "The server image is PR head ${commit:0:7}'s immutable image."
 elif [ "$chosen" != "$commit" ]; then
   say "CI built no server image for ${commit:0:7} (no image input changed); the server image is ${chosen:0:7}'s, the newest commit before it that has one."
 else

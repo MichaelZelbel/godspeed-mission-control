@@ -209,7 +209,13 @@ withdrawn list carried from `beta`, add-ons pinned as `third-party/addons/source
 the server image the commit's own `v2-sha-<commit>`, or the newest first-parent ancestor's within 50
 when CI built none for it), written with the commit's files into a folder the jobs read as
 `file://`. Main's own `stage.json` is never read by a night, because it names whatever version was
-frozen last. Its cases are in `test-scenarios.sh`.
+frozen last.
+
+A selected scenario on a same-repository pull request is the exception: its `pr-image` job publishes
+only `pr-<number>-<head-sha>`, resolves that tag to an immutable `ghcr.io/...@sha256:...` image, and
+passes that opaque digest to its stage job. The stage accepts only that digest for the product's
+server image and does not look for a `v2-sha-*` image or an ancestor if it is absent or malformed.
+Every other run keeps the ordinary image policy above. Its cases are in `test-scenarios.sh`.
 
 Only the stage's own ref is read from that folder. A scenario that first installs an older version
 (`BEFORE_THE_MOVE`, `WITH_THE_VIDEO_SKILLS`) reads it from GitHub, as it always has

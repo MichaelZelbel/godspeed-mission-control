@@ -13,6 +13,7 @@
 +      pull-requests: read
 +    outputs:
 +      picked: ${{ steps.pick.outputs.picked }}
++      image: ${{ steps.publish.outputs.image }}
 +    env:
 +      IMAGE: ghcr.io/michaelzelbel/godspeed-mission-control
 +      TAG: pr-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}
@@ -32,6 +33,7 @@
 +          jobs=$(grep -oE 'bash scenarios/[a-z0-9-]+\.sh "\$STAGE_REF"' .github/workflows/scenarios.yml | sed -E 's|bash scenarios/||; s|\.sh .*||' | sort -u)
 +          for job in $jobs; do
 +            grep -qE "^scenarios/$job(\\.sh|-[^/]*)$" "$RUNNER_TEMP/changed" && grep -qF server_install "scenarios/$job.sh" && { echo 'picked=true' >> "$GITHUB_OUTPUT"; exit 0; }
++            grep -qx 'scenarios/server-lib.sh' "$RUNNER_TEMP/changed" && grep -qF '. "$HERE/server-lib.sh"' "scenarios/$job.sh" && { echo 'picked=true' >> "$GITHUB_OUTPUT"; exit 0; }
 +          done
 +          echo 'picked=false' >> "$GITHUB_OUTPUT"
 +      - uses: docker/login-action@v3
@@ -41,10 +43,14 @@
 +          username: ${{ github.actor }}
 +          password: ${{ secrets.GITHUB_TOKEN }}
 +      - name: Build and publish the selected PR-head image
++        id: publish
 +        if: steps.pick.outputs.picked == 'true'
 +        run: |
 +          docker build --build-arg REVISION="${{ github.event.pull_request.head.sha }}" -f docker/full-candidate/Dockerfile -t "$IMAGE:$TAG" .
 +          docker push "$IMAGE:$TAG"
++          digest=$(docker buildx imagetools inspect "$IMAGE:$TAG" --format '{{.Digest}}')
++          [[ $digest =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "the PR-head image has no immutable digest: $digest"; exit 1; }
++          echo "image=$IMAGE@$digest" >> "$GITHUB_OUTPUT"
 
    stage:
 +    needs: pr-image
@@ -55,4 +61,12 @@
      env:
        # The commit the run proves: a pull request's own head, otherwise the one the run started on.
        PROOF_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-+      GODSPEED_SCENARIO_PR_IMAGE_TAG: ${{ needs.pr-image.outputs.picked == 'true' && format('pr-{0}-{1}', github.event.pull_request.number, github.event.pull_request.head.sha) || '' }}
++      GODSPEED_SCENARIO_PR_IMAGE: ${{ needs.pr-image.outputs.image }}
+@@
++          jobs=$(grep -oE 'bash scenarios/[a-z0-9-]+\.sh "\$STAGE_REF"' .github/workflows/scenarios.yml | sed -E 's|bash scenarios/||; s|\.sh .*||' | sort -u)
++          picked=','
++          for j in $jobs; do
+-            if grep -qE "^scenarios/$j(\.sh|-[^/]*)$" "$RUNNER_TEMP/changed"; then picked="$picked$j,"; fi
++            if grep -qE "^scenarios/$j(\.sh|-[^/]*)$" "$RUNNER_TEMP/changed" \
++              || { grep -qx 'scenarios/server-lib.sh' "$RUNNER_TEMP/changed" && grep -qF '. "$HERE/server-lib.sh"' "scenarios/$j.sh"; }; then picked="$picked$j,"; fi
++          done
