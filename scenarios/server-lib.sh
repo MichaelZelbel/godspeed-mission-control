@@ -183,8 +183,11 @@ server_copy_evidence() {
   # Neither contains the provider key, which remains under the separate Telegram connection directory.
   local source=$1 target=$2
   local container; container=$(server_container)
-  [ -n "$container" ] && sudo docker cp "$container:$source" "$target" 2>/dev/null ||
+  if [ -n "$container" ] && sudo docker cp "$container:$source" "$target" 2>/dev/null; then
+    sudo chmod -R a+rX "$target" || fail "the copied $source evidence is not readable by the runner"
+  else
     fail "the installed server did not retain $source as evidence"
+  fi
 }
 server_manifest() {
   "$NODE" -e '
@@ -221,6 +224,11 @@ server_pause_job() { # <id> <label>
   [ "$(server_post /api/jobs/update "$EVIDENCE/.job-$2-pause.json" "$EVIDENCE/job-$2-pause.json")" = 200 ] ||
     fail "Settings would not pause routine $1 after its run"
 }
+server_keep_routine_diagnostics_or_pause() { # <label> <id> <job name>
+  if (server_keep_routine_diagnostics "$1"); then return; fi
+  server_pause_job "$2" "$1"
+  fail "the installed server could not retain diagnostics for \"$3\" after its run"
+}
 server_run_job() { # <label> <job name> <seconds>
   local jobs=$EVIDENCE/jobs-$1.json id before retry=0
   server_table jobs "$jobs"
@@ -235,7 +243,7 @@ server_run_job() { # <label> <job name> <seconds>
     case $(server_post /api/jobs/run "$EVIDENCE/.job-run.json" "$EVIDENCE/job-$1-start.json") in
       200|202) break ;;
     esac
-    server_keep_routine_diagnostics "$1"
+    server_keep_routine_diagnostics_or_pause "$1" "$id" "$2"
     if [ "$retry" = 0 ] && "$NODE" -e 'const fs=require("fs"),runs=JSON.parse(fs.readFileSync(process.argv[1],"utf8")).runs||[],last=runs.at(-1);process.exit(last?.admitted===false&&last.lifecycle_owner==="routine tick"?0:1)' "$EVIDENCE/routine-diagnostics-$1.json"; then
       retry=1; sleep 5
     else
@@ -248,11 +256,11 @@ server_run_job() { # <label> <job name> <seconds>
       "$NODE" -e 'const fs=require("fs"),d=JSON.parse(fs.readFileSync(process.argv[1],"utf8")),rows=Array.isArray(d)?d:d.data||[],j=rows.find(v=>v?.id===process.argv[2]);process.exit(j?.last_run_at&&j.last_run_at!==process.argv[3]&&j?.last_status==="ok"?0:1)' "$jobs" "$id" "$before"
   }
   if ! wait_for "$3" "the installed routine $2" server_job_finished; then
-    server_keep_routine_diagnostics "$1"
+    server_keep_routine_diagnostics_or_pause "$1" "$id" "$2"
     server_pause_job "$id" "$1"
     fail "the installed routine \"$2\" did not finish successfully within $3 s"
   fi
-  server_keep_routine_diagnostics "$1"
+  server_keep_routine_diagnostics_or_pause "$1" "$id" "$2"
   cp "$jobs" "$EVIDENCE/job-$1.json"
   server_pause_job "$id" "$1"
 }

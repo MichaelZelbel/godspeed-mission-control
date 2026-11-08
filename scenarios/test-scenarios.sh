@@ -217,6 +217,34 @@ server_local_listener_port() {
 }
 server_local_listener_port
 
+server_copied_evidence_is_runner_readable() {
+  local evidence=$TMP/server-copy-evidence-readable log=$TMP/server-copy-evidence.log output
+  mkdir -p "$evidence"
+  if output=$(EVIDENCE="$evidence" SERVER_COPY_LOG="$log" bash -c '
+    . "$1"
+    fail() { printf "%s\\n" "$*" >&2; exit 42; }
+    server_container() { printf fixture; }
+    sudo() {
+      printf "%s\\n" "$*" >>"$SERVER_COPY_LOG"
+      case $1 in
+        docker) mkdir -p "$4"; : >"$4/run.md" ;;
+        chmod) : ;;
+      esac
+    }
+    server_copy_evidence /opt/data/full-candidate/hermes/cron/output "$EVIDENCE/routine-output-report"
+  ' bash "$HERE/server-lib.sh" 2>&1); then
+    if grep -Fqx "docker cp fixture:/opt/data/full-candidate/hermes/cron/output $evidence/routine-output-report" "$log" \
+      && grep -Fqx "chmod -R a+rX $evidence/routine-output-report" "$log"; then
+      ok 'copied routine output is made readable for the Actions runner'
+    else
+      bad "copied routine output is not made readable for the Actions runner ($(cat "$log" 2>/dev/null))"
+    fi
+  else
+    bad "copied routine output could not be made readable for the Actions runner ($output)"
+  fi
+}
+server_copied_evidence_is_runner_readable
+
 server_run_job_keeps_success_evidence() {
   local evidence=$TMP/server-run-job-evidence copies updates output
   mkdir -p "$evidence"
@@ -255,6 +283,49 @@ server_run_job_keeps_success_evidence() {
   fi
 }
 server_run_job_keeps_success_evidence
+
+server_run_job_restores_pause_after_diagnostic_failure() {
+  local mode evidence updates output code
+  for mode in refused timed-out succeeded; do
+    evidence=$TMP/server-run-job-diagnostic-failure-$mode
+    updates=$evidence/updates
+    mkdir -p "$evidence"
+    output=$(SERVER_MODE="$mode" EVIDENCE="$evidence" SERVER_UPDATES="$updates" NODE="$(command -v node)" bash -c '
+    . "$1"
+    fail() { printf "FAIL: %s\\n" "$*" >&2; exit 42; }
+    quoted_json() { "$NODE" -e "process.stdout.write(JSON.stringify(process.argv[1]))" "$1"; }
+    tables=0
+    server_table() {
+      tables=$((tables + 1))
+      if [ "$tables" = 1 ]; then printf "[{\\\"id\\\":\\\"brief\\\",\\\"name\\\":\\\"Coach reminders and habit check\\\",\\\"last_run_at\\\":null,\\\"last_status\\\":null}]\\n" >"$2";
+      else printf "[{\\\"id\\\":\\\"brief\\\",\\\"name\\\":\\\"Coach reminders and habit check\\\",\\\"last_run_at\\\":\\\"later\\\",\\\"last_status\\\":\\\"ok\\\"}]\\n" >"$2"; fi
+    }
+    server_post() {
+      case $1 in
+        /api/jobs/update) printf "%s\\n" "$(cat "$2")" >>"$SERVER_UPDATES"; printf "{}\\n" >"$3"; printf 200 ;;
+        /api/jobs/run)
+          if [ "$SERVER_MODE" = refused ]; then printf "{\\\"error\\\":\\\"The assistant is updating or another routine is already running.\\\"}\\n" >"$3"; printf 409;
+          else printf "{\\\"started\\\":true}\\n" >"$3"; printf 202; fi ;;
+      esac
+    }
+    wait_for() { if [ "$SERVER_MODE" = timed-out ]; then return 1; fi; "${@:3}"; }
+    server_container() { printf fixture; }
+    sudo() { return 0; }
+    server_copy_evidence() {
+      if [ "$1" = /opt/data/full-candidate/workspace/.godspeed/routine-run-diagnostics.json ]; then : >"$2"; else return 1; fi
+    }
+    server_run_job report "Coach reminders and habit check" 10
+  ' bash "$HERE/server-lib.sh" 2>&1)
+    code=$?
+    if [ "$code" != 42 ] || [ "$(<"$updates")" != "$(printf '%s\n%s' '{"id":"brief","paused":false}' '{"id":"brief","paused":true}')" ] \
+      || [[ $output != *'could not retain diagnostics'* ]]; then
+      bad "a $mode diagnostic-copy failure did not restore the routine’s paused state (exit $code: $output; updates: $(cat "$updates" 2>/dev/null))"
+      return
+    fi
+  done
+  ok 'diagnostic-copy failures restore the routine’s paused state after refusal, timeout, and success'
+}
+server_run_job_restores_pause_after_diagnostic_failure
 
 server_run_job_retries_a_tick_refusal() {
   local evidence=$TMP/server-run-job-tick-retry output

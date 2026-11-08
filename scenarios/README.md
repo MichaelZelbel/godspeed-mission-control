@@ -211,7 +211,7 @@ when CI built none for it), written with the commit's files into a folder the jo
 `file://`. Main's own `stage.json` is never read by a night, because it names whatever version was
 frozen last.
 
-A selected scenario on a same-repository pull request is the exception: its `pr-image` job publishes
+A selected server scenario on a same-repository pull request is the exception: its `pr-image` job publishes
 only `pr-<number>-<head-sha>`, resolves that tag to an immutable `ghcr.io/...@sha256:...` image, and
 passes that opaque digest to its stage job. The stage accepts only that digest for the product's
 server image and does not look for a `v2-sha-*` image or an ancestor if it is absent or malformed.
