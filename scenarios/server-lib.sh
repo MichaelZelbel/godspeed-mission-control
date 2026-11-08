@@ -210,13 +210,23 @@ server_pause_all_jobs() {
       fail "Settings would not pause routine $id"
   done
 }
+server_routine_evidence_paths() {
+  in_server node --input-type=module -e 'import {routineRunEvidencePaths} from "/opt/godspeed/kit/notebook/core/native-scheduler.mjs";process.stdout.write(JSON.stringify(routineRunEvidencePaths({workspace:process.env.GODSPEED_WORKSPACE,home:process.env.HERMES_HOME})));'
+}
+server_routine_evidence_path() { # <descriptor JSON> <diagnostics|output>
+  "$NODE" -e 'const value=JSON.parse(process.argv[1])[process.argv[2]];if(typeof value!=="string"||!value.startsWith("/"))process.exit(1);process.stdout.write(value)' "$1" "$2"
+}
 server_keep_routine_diagnostics() { # <label>
   # The notebook writes the admission record before it starts Hermes, so this is
   # also available when Settings refuses a second routine run.
-  server_copy_evidence /opt/data/full-candidate/workspace/.godspeed/routine-run-diagnostics.json "$EVIDENCE/routine-diagnostics-$1.json"
-  local container; container=$(server_container)
-  if [ -n "$container" ] && sudo docker exec "$container" test -d /opt/data/full-candidate/hermes/cron/output; then
-    server_copy_evidence /opt/data/full-candidate/hermes/cron/output "$EVIDENCE/routine-output-$1"
+  local paths diagnostics output container
+  paths=$(server_routine_evidence_paths) || fail 'the installed server did not name its routine evidence paths'
+  diagnostics=$(server_routine_evidence_path "$paths" diagnostics) || fail 'the installed server named no routine diagnostics path'
+  output=$(server_routine_evidence_path "$paths" output) || fail 'the installed server named no routine output path'
+  server_copy_evidence "$diagnostics" "$EVIDENCE/routine-diagnostics-$1.json"
+  container=$(server_container)
+  if [ -n "$container" ] && sudo docker exec "$container" test -d "$output"; then
+    server_copy_evidence "$output" "$EVIDENCE/routine-output-$1"
   fi
 }
 server_pause_job() { # <id> <label>
@@ -229,8 +239,8 @@ server_keep_routine_diagnostics_or_pause() { # <label> <id> <job name>
   server_pause_job "$2" "$1"
   fail "the installed server could not retain diagnostics for \"$3\" after its run"
 }
-server_run_job() { # <label> <job name> <seconds>
-  local jobs=$EVIDENCE/jobs-$1.json id before retry=0
+server_run_job() { # <label> <job name> <seconds> [expected terminal status]
+  local jobs=$EVIDENCE/jobs-$1.json id before retry=0 expected=${4:-ok}
   server_table jobs "$jobs"
   id=$(server_job_id "$2" "$jobs")
   [ -n "$id" ] || fail "the installed server has no routine called \"$2\""
@@ -253,7 +263,7 @@ server_run_job() { # <label> <job name> <seconds>
   done
   server_job_finished() {
     server_table jobs "$jobs" 2>/dev/null &&
-      "$NODE" -e 'const fs=require("fs"),d=JSON.parse(fs.readFileSync(process.argv[1],"utf8")),rows=Array.isArray(d)?d:d.data||[],j=rows.find(v=>v?.id===process.argv[2]);process.exit(j?.last_run_at&&j.last_run_at!==process.argv[3]&&j?.last_status==="ok"?0:1)' "$jobs" "$id" "$before"
+      "$NODE" -e 'const fs=require("fs"),d=JSON.parse(fs.readFileSync(process.argv[1],"utf8")),rows=Array.isArray(d)?d:d.data||[],j=rows.find(v=>v?.id===process.argv[2]);process.exit(j?.last_run_at&&j.last_run_at!==process.argv[3]&&j?.last_status===process.argv[4]?0:1)' "$jobs" "$id" "$before" "$expected"
   }
   if ! wait_for "$3" "the installed routine $2" server_job_finished; then
     server_keep_routine_diagnostics_or_pause "$1" "$id" "$2"

@@ -1,6 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';
 import {fileURLToPath} from 'node:url';import {execFileSync,spawnSync} from 'node:child_process';
-import {Store} from '../core/records/store.mjs';import {NativeScheduler} from '../core/native-scheduler.mjs';import {runChild} from '../core/child-process.mjs';import {installStarter} from '../core/starter-workspace.mjs';
+import {Store} from '../core/records/store.mjs';import {NativeScheduler,routineRunEvidencePaths} from '../core/native-scheduler.mjs';import {runChild} from '../core/child-process.mjs';import {installStarter} from '../core/starter-workspace.mjs';
 import {SCRIPT_TIMEOUT_SECONDS,COMPRESSION_THRESHOLD_TOKENS,godspeedHermesSettings,setConfigValue,readConfigValue,configList,CRON_PROVIDER} from '../core/hermes-config.mjs';
 
 // What a live run of the book's prompts found on 9 October 2026 (a scratch Windows install, free
@@ -169,6 +169,10 @@ test('Run now keeps the admitted Hermes child, and a refusal keeps its real life
  finish();await scheduler.running;
  diagnostics=JSON.parse(fs.readFileSync(path.join(store.state,'routine-run-diagnostics.json'),'utf8')).runs;
  assert.equal(diagnostics[0].exit_status,0);assert.equal(diagnostics[0].stderr,'the Hermes warning');assert.equal(diagnostics[0].run_log.command_output,'the Hermes run log');assert.equal(diagnostics[0].run_log.path,path.join(home,'cron','output'));
+});
+
+test('routine evidence paths belong to the scheduler workspace and Hermes home',()=>{
+ assert.deepEqual(routineRunEvidencePaths({workspace:'/owned/workspace',home:'/owned/hermes'}),{diagnostics:'/owned/workspace/.godspeed/routine-run-diagnostics.json',output:'/owned/hermes/cron/output'});
 });
 
 test('a failed rejected-run diagnostic keeps the active routine refusal',t=>{

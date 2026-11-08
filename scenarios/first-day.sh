@@ -47,6 +47,7 @@ first_day_phase() { # <step name>
 }
 
 act() {
+  local routine_paths routine_output
   fresh_evidence
   install_paths
   need_node
@@ -83,7 +84,9 @@ act() {
   server_table work_items "$EVIDENCE/work-items.json"
   server_table notes "$EVIDENCE/notes-after-reply.json"
   server_copy_evidence /opt/data/full-candidate/workspace/work "$EVIDENCE"
-  server_copy_evidence /opt/data/full-candidate/hermes/cron/output "$EVIDENCE"
+  routine_paths=$(server_routine_evidence_paths) || fail 'the installed server did not name its routine evidence paths'
+  routine_output=$(server_routine_evidence_path "$routine_paths" output) || fail 'the installed server named no routine output path'
+  server_copy_evidence "$routine_output" "$EVIDENCE"
   server_manifest
   step_passed 'morning brief was saved, delivered, and read back through Telegram'
   rm -f "$EVIDENCE"/.[a-z]*

@@ -37,7 +37,7 @@ export function runChild(executable,args,{cwd,env,input,timeoutMs=0,maxBytes=4*1
   signal?.addEventListener('abort',abort,{once:true});
   if(timeoutMs>0)timer=setTimeout(()=>fail('TIMEOUT','The program did not finish in time'),timeoutMs);
   child.on('error',error=>finish(Object.assign(new Error('The program could not start'),{code:'SPAWN_FAILED',cause:error})));
-  child.stdout?.on('data',chunk=>{bytes+=chunk.length;if(bytes>maxBytes)fail('OUTPUT_LIMIT','The program said more than its limit');else out.push(Buffer.from(chunk));});
+  child.stdout?.on('data',chunk=>{const data=Buffer.from(chunk),remaining=maxBytes-bytes;bytes+=data.length;if(remaining<data.length){if(remaining>0)out.push(data.subarray(0,remaining));fail('OUTPUT_LIMIT','The program said more than its limit');}else out.push(data);});
   // Only the last 32 KB of diagnostics are kept; they can hold credentials, so
   // callers classify them and never store them.
   child.stderr?.on('data',chunk=>{err.push(Buffer.from(chunk));errBytes+=chunk.length;while(errBytes>32768&&err.length>1)errBytes-=err.shift().length;});

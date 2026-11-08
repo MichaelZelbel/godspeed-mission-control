@@ -40,7 +40,9 @@ has_the_routine() { grep -qF "\"$ROUTINE\"" "$1/routines.json" 2>/dev/null; }
 no_routine() { fail "this install has no $ROUTINE (ticket 06, #200)"; }
 
 run_and_look() { # <label>: the installed routine, then its visible records
-  server_run_job "$1" "$ROUTINE" 300
+  local status=ok
+  [ "$1" = broken ] && status=delivery_failed
+  server_run_job "$1" "$ROUTINE" 300 "$status"
   server_telegram_mark "$1" cron
   server_snapshot_table "$1" deadlines
   server_snapshot_table "$1" notifications

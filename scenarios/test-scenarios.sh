@@ -245,6 +245,34 @@ server_copied_evidence_is_runner_readable() {
 }
 server_copied_evidence_is_runner_readable
 
+server_routine_evidence_paths_come_from_scheduler() {
+  local result=$TMP/server-routine-evidence-paths.json command=$TMP/server-routine-evidence-command output
+  if output=$(SERVER_ROUTINE_COMMAND="$command" bash -c '
+    . "$1"
+    in_server() { printf "%s\\n" "$*" >"$SERVER_ROUTINE_COMMAND"; printf "{\\\"diagnostics\\\":\\\"/owned/diagnostics.json\\\",\\\"output\\\":\\\"/owned/output\\\"}"; }
+    server_routine_evidence_paths
+  ' bash "$HERE/server-lib.sh" >"$result" 2>&1); then
+    if [ "$(<"$result")" = '{"diagnostics":"/owned/diagnostics.json","output":"/owned/output"}' ] && grep -Fq 'routineRunEvidencePaths' "$command"; then
+      ok 'routine evidence paths come from the installed scheduler'
+    else
+      bad "routine evidence paths do not come from the installed scheduler ($(cat "$command" 2>/dev/null): $output)"
+    fi
+  else
+    bad "the installed scheduler could not name routine evidence paths ($output)"
+  fi
+}
+server_routine_evidence_paths_come_from_scheduler
+
+first_day_uses_the_scheduler_routine_output_path() {
+  if grep -Fq 'routine_paths=$(server_routine_evidence_paths)' "$HERE/first-day.sh" \
+    && grep -Fq 'server_copy_evidence "$routine_output" "$EVIDENCE"' "$HERE/first-day.sh"; then
+    ok 'first-day copies routine output from the scheduler-owned path'
+  else
+    bad 'first-day names its own routine-output path'
+  fi
+}
+first_day_uses_the_scheduler_routine_output_path
+
 server_run_job_keeps_success_evidence() {
   local evidence=$TMP/server-run-job-evidence copies updates output
   mkdir -p "$evidence"
@@ -266,13 +294,14 @@ server_run_job_keeps_success_evidence() {
     wait_for() { "${@:3}"; }
     server_container() { printf fixture; }
     sudo() { return 0; }
+    server_routine_evidence_paths() { printf "{\\\"diagnostics\\\":\\\"/owned/diagnostics.json\\\",\\\"output\\\":\\\"/owned/output\\\"}"; }
     server_copy_evidence() { printf "%s|%s\\n" "$1" "$2" >>"$SERVER_COPY_LOG"; : >"$2"; }
     server_run_job report "Coach reminders and habit check" 10
   ' bash "$HERE/server-lib.sh" 2>&1); then
     copies=$(<"$evidence/copies")
     updates=$(<"$evidence/updates")
-    if grep -Fqx "/opt/data/full-candidate/workspace/.godspeed/routine-run-diagnostics.json|$evidence/routine-diagnostics-report.json" "$evidence/copies" \
-      && grep -Fqx "/opt/data/full-candidate/hermes/cron/output|$evidence/routine-output-report" "$evidence/copies" \
+    if grep -Fqx "/owned/diagnostics.json|$evidence/routine-diagnostics-report.json" "$evidence/copies" \
+      && grep -Fqx "/owned/output|$evidence/routine-output-report" "$evidence/copies" \
       && [ "$updates" = "$(printf '%s\n%s' '{"id":"brief","paused":false}' '{"id":"brief","paused":true}')" ]; then
       ok 'a successful routine run retains evidence and restores its paused state'
     else
@@ -283,6 +312,53 @@ server_run_job_keeps_success_evidence() {
   fi
 }
 server_run_job_keeps_success_evidence
+
+server_run_job_accepts_expected_delivery_status() {
+  local evidence=$TMP/server-run-job-delivery-failed updates output
+  updates=$evidence/updates
+  mkdir -p "$evidence"
+  if output=$(EVIDENCE="$evidence" SERVER_UPDATES="$updates" NODE="$(command -v node)" bash -c '
+    . "$1"
+    quoted_json() { "$NODE" -e "process.stdout.write(JSON.stringify(process.argv[1]))" "$1"; }
+    tables=0
+    server_table() {
+      tables=$((tables + 1))
+      if [ "$tables" = 1 ]; then printf "[{\\\"id\\\":\\\"connection\\\",\\\"name\\\":\\\"Daily connection check\\\",\\\"last_run_at\\\":null,\\\"last_status\\\":null}]\\n" >"$2";
+      else printf "[{\\\"id\\\":\\\"connection\\\",\\\"name\\\":\\\"Daily connection check\\\",\\\"last_run_at\\\":\\\"later\\\",\\\"last_status\\\":\\\"delivery_failed\\\"}]\\n" >"$2"; fi
+    }
+    server_post() {
+      case $1 in
+        /api/jobs/update) printf "%s\\n" "$(cat "$2")" >>"$SERVER_UPDATES"; printf "{}\\n" >"$3"; printf 200 ;;
+        /api/jobs/run) printf "{\\\"started\\\":true}\\n" >"$3"; printf 202 ;;
+      esac
+    }
+    wait_for() { "${@:3}"; }
+    server_container() { printf fixture; }
+    sudo() { return 0; }
+    server_routine_evidence_paths() { printf "{\\\"diagnostics\\\":\\\"/owned/diagnostics.json\\\",\\\"output\\\":\\\"/owned/output\\\"}"; }
+    server_copy_evidence() { : >"$2"; }
+    server_run_job broken "Daily connection check" 10 delivery_failed
+  ' bash "$HERE/server-lib.sh" 2>&1); then
+    if [ "$(<"$updates")" = "$(printf '%s\n%s' '{"id":"connection","paused":false}' '{"id":"connection","paused":true}')" ]; then
+      ok 'a deliberately refused delivery can complete its routine check'
+    else
+      bad "a deliberately refused delivery did not restore its routine state ($(cat "$updates" 2>/dev/null))"
+    fi
+  else
+    bad "a deliberately refused delivery did not complete its routine check ($output)"
+  fi
+}
+server_run_job_accepts_expected_delivery_status
+
+connection_check_accepts_its_intended_delivery_failure() {
+  if grep -Fq '[ "$1" = broken ] && status=delivery_failed' "$HERE/connection-check.sh" \
+    && grep -Fq 'server_run_job "$1" "$ROUTINE" 300 "$status"' "$HERE/connection-check.sh"; then
+    ok 'connection-check expects delivery_failed only for its broken-key run'
+  else
+    bad 'connection-check does not name its broken-key delivery status'
+  fi
+}
+connection_check_accepts_its_intended_delivery_failure
 
 server_run_job_restores_pause_after_diagnostic_failure() {
   local mode evidence updates output code
@@ -311,8 +387,9 @@ server_run_job_restores_pause_after_diagnostic_failure() {
     wait_for() { if [ "$SERVER_MODE" = timed-out ]; then return 1; fi; "${@:3}"; }
     server_container() { printf fixture; }
     sudo() { return 0; }
+    server_routine_evidence_paths() { printf "{\\\"diagnostics\\\":\\\"/owned/diagnostics.json\\\",\\\"output\\\":\\\"/owned/output\\\"}"; }
     server_copy_evidence() {
-      if [ "$1" = /opt/data/full-candidate/workspace/.godspeed/routine-run-diagnostics.json ]; then : >"$2"; else return 1; fi
+      if [ "$1" = /owned/diagnostics.json ]; then : >"$2"; else return 1; fi
     }
     server_run_job report "Coach reminders and habit check" 10
   ' bash "$HERE/server-lib.sh" 2>&1)
@@ -351,8 +428,9 @@ server_run_job_retries_a_tick_refusal() {
     sleep() { :; }
     server_container() { printf fixture; }
     sudo() { return 0; }
+    server_routine_evidence_paths() { printf "{\\\"diagnostics\\\":\\\"/owned/diagnostics.json\\\",\\\"output\\\":\\\"/owned/output\\\"}"; }
     server_copy_evidence() {
-      if [ "$1" = /opt/data/full-candidate/workspace/.godspeed/routine-run-diagnostics.json ]; then
+      if [ "$1" = /owned/diagnostics.json ]; then
         printf "{\\\"runs\\\":[{\\\"admitted\\\":false,\\\"lifecycle_owner\\\":\\\"routine tick\\\"}]}\\n" >"$2"
       else : >"$2"; fi
     }

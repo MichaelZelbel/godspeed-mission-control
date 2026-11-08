@@ -435,6 +435,7 @@ test('the PR-image job binds its published digest to stage and selects its share
     assert.equal(result.status,0,result.stdout+result.stderr);return readFileSync(`${dir}/out`,'utf8');
   };
   assert.equal(run('scenarios/server-lib.sh'),'picked=true\n','a shared helper change does not publish the PR image');
+  assert.equal(run('scenarios/first-day.sh'),'picked=true\n','a selected server scenario publishes the PR image');
   assert.equal(run('scenarios/voice.sh'),'picked=false\n','an unpicked non-server scenario publishes no PR image');
   const stageAt=text.indexOf('+          jobs=$(grep -oE',text.indexOf('\n+  stage:'));
   const stageTo=text.indexOf('+          done',stageAt);

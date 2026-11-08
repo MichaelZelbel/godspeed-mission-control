@@ -41,8 +41,9 @@ export function nativeJobs(home,device='local'){
 const RETRY_STARTING=3600000;
 const SETUP_FAILURES='routine-setup-failures.json',SETUP_NOTICE='routine-setup-failures',RETRY_MINUTES=[1,2,4,8,16,32,60];
 const RUN_DIAGNOSTICS='routine-run-diagnostics.json',MAX_RUN_DIAGNOSTICS=20;
+export const routineRunEvidencePaths=({workspace,home}={})=>({diagnostics:workspace?path.join(workspace,'.godspeed',RUN_DIAGNOSTICS):null,output:home?path.join(home,'cron','output'):null});
 const setupFailureFile=store=>path.join(store.state,SETUP_FAILURES);
-const runDiagnosticsFile=store=>path.join(store.state,RUN_DIAGNOSTICS);
+const runDiagnosticsFile=store=>routineRunEvidencePaths({workspace:store.root}).diagnostics;
 const readSetupFailures=store=>{try{const saved=JSON.parse(fs.readFileSync(setupFailureFile(store),'utf8'));return saved&&typeof saved==='object'&&saved.steps&&typeof saved.steps==='object'?saved:{steps:{}};}catch{return {steps:{}};}};
 const writeSetupFailures=(store,failures)=>atomic(setupFailureFile(store),JSON.stringify(failures,null,2)+'\n');
 const readRunDiagnostics=store=>{try{const saved=JSON.parse(fs.readFileSync(runDiagnosticsFile(store),'utf8'));return Array.isArray(saved?.runs)?saved:{runs:[]};}catch{return {runs:[]};}};
@@ -747,7 +748,7 @@ export class NativeScheduler{
   const release=this.lifecycle.acquire('routine run');
   if(!release){try{this.saveRunDiagnostic({id:'rejected-'+randomUUID(),at:new Date(this.now()).toISOString(),admitted:false,lifecycle_owner:this.lifecycle.reason,requested_job:id||null});}catch{}throw Error('The assistant is updating or another routine is already running.');}
   const args=id?['run',id]:['tick'],diagnosticId='run-'+randomUUID(),command=this.routineCommand(args);
-  try{this.saveRunDiagnostic({id:diagnosticId,at:new Date(this.now()).toISOString(),admitted:true,lifecycle_owner:'routine run',requested_job:id||null,command:[command.executable,...command.args],child:{pid:null,tree:null},exit_status:null,signal:null,stderr:'',run_log:{path:path.join(this.home,'cron','output'),command_output:''}});}
+  try{this.saveRunDiagnostic({id:diagnosticId,at:new Date(this.now()).toISOString(),admitted:true,lifecycle_owner:'routine run',requested_job:id||null,command:[command.executable,...command.args],child:{pid:null,tree:null},exit_status:null,signal:null,stderr:'',run_log:{path:routineRunEvidencePaths({workspace:this.store.root,home:this.home}).output,command_output:''}});}
   catch(error){release();throw error;}
   const run=this.runNow(id,{diagnosticId,command});this.running=run;run.catch(error=>{try{this.onFailure?.(error);}catch{}}).finally(()=>{if(this.running===run)this.running=null;release();});
   return {started:true,...(id?{id}:{})};

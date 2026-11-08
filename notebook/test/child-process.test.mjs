@@ -23,11 +23,16 @@ test('a child reports its admitted PID to its caller',async()=>{
 });
 
 test('a stopped child retains the output it had already written',async()=>{
- const script='process.stdout.write("before stdout\\n");process.stderr.write("before stderr\\n");process.stdout.write("more stdout\\n");setInterval(()=>{},1000)';
- const stopped=async(options,code)=>await assert.rejects(runChild(process.execPath,['-e',script],options),error=>{assert.equal(error.code,code);assert.match(error.stdout,/before stdout/);assert.match(error.stderr,/before stderr/);return true;});
- await stopped({timeoutMs:100},'TIMEOUT');
- await stopped({maxBytes:15},'OUTPUT_LIMIT');
- const controller=new AbortController(),aborted=stopped({signal:controller.signal},'ABORTED');setTimeout(()=>controller.abort(),100);await aborted;
+ const child=after=>()=>{const fixture=new EventEmitter();fixture.stdout=new EventEmitter();fixture.stderr=new EventEmitter();fixture.stdin=new EventEmitter();process.nextTick(()=>{fixture.stdout.emit('data',Buffer.from('before stdout\\n'));fixture.stderr.emit('data',Buffer.from('before stderr\\n'));fixture.stdout.emit('data',Buffer.from('more stdout\\n'));after?.();});return fixture;};
+ const stopped=async(options,code)=>await assert.rejects(runChild('fixture',[],options),error=>{assert.equal(error.code,code);assert.match(error.stdout,/before stdout/);assert.match(error.stderr,/before stderr/);return true;});
+ await stopped({timeoutMs:100,spawnProcess:child()},'TIMEOUT');
+ await stopped({maxBytes:15,spawnProcess:child()},'OUTPUT_LIMIT');
+ const controller=new AbortController();await stopped({signal:controller.signal,spawnProcess:child(()=>controller.abort())},'ABORTED');
+});
+
+test('an over-limit stdout chunk retains its capped prefix',async()=>{
+ const spawnProcess=()=>{const child=new EventEmitter();child.stdout=new EventEmitter();child.stderr=new EventEmitter();process.nextTick(()=>child.stdout.emit('data',Buffer.from('x'.repeat(64))));return child;};
+ await assert.rejects(runChild('fixture',[],{maxBytes:16,spawnProcess}),error=>{assert.equal(error.code,'OUTPUT_LIMIT');assert.equal(error.stdout,'x'.repeat(16));return true;});
 });
 
 test('an AI program that stops before reading a long prompt fails the request instead of ending the server',async t=>{
