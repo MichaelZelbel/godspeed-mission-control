@@ -98,7 +98,7 @@ class HermesDidNotLoadTests(unittest.TestCase):
     missing), and the answer said "Check its connection and usage allowance". A Hermes that does not
     load is now its own answer, "runtime", given before anything is asked."""
 
-    def run_helper(self, modules, payload='{"describe":true}'):
+    def run_helper(self, modules, payload='{"describe":true}', raw=False):
         with tempfile.TemporaryDirectory() as folder:
             source = Path(folder) / "hermes-source"
             parts = {
@@ -116,7 +116,8 @@ class HermesDidNotLoadTests(unittest.TestCase):
             helper = Path(__file__).parents[1] / "assistant-files" / "addon-model.py"
             env = {**os.environ, "PYTHONPATH": str(source), "HERMES_HOME": str(Path(folder) / "owner-home")}
             done = subprocess.run([sys.executable, str(helper)], input=payload, text=True, capture_output=True, env=env)
-            return done.returncode, json.loads(done.stdout)
+            answer = json.loads(done.stdout)
+            return (done.returncode, answer, done.stdout) if raw else (done.returncode, answer)
 
     def test_a_missing_module_is_named_and_is_no_usage_limit(self):
         code, answer = self.run_helper({"hermes_cli/config.py": "import godspeed_test_missing_dependency\n"})
@@ -135,6 +136,18 @@ class HermesDidNotLoadTests(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertIsNone(answer["reason"])
         self.assertNotIn("missing", answer)
+
+    def test_a_model_failure_returns_a_redacted_provider_error_over_the_subprocess_protocol(self):
+        secret = "abc1234"
+        code, answer, output = self.run_helper({
+            "hermes_cli/config.py": "def load_config_readonly():\n    return {'model': {'provider': 'anthropic', 'default': 'claude-test', 'api_key': 'abc1234'}}\n",
+            "hermes_cli/runtime_provider.py": "def resolve_runtime_provider(**kwargs):\n    return {'provider': kwargs['requested']}\ndef _get_named_custom_provider(provider):\n    return None\ndef expand_direct_api_alias(provider, base_url):\n    return provider, None\n",
+            "agent/auxiliary_client.py": "class Completion:\n    def create(self, **kwargs):\n        raise RuntimeError('HTTP 400: provider rejected abc1234')\nclass Client:\n    chat = type('Chat', (), {'completions': Completion()})()\ndef resolve_provider_client(provider, **kwargs):\n    return Client(), kwargs['model']\ndef _normalize_aux_provider(provider):\n    return provider\n",
+        }, payload='{"system":"test","prompt":"test","timeout_ms":3000,"max_tokens":128}', raw=True)
+        self.assertEqual(code, 1)
+        self.assertIn("provider rejected", answer["provider_error"])
+        self.assertNotIn(secret, answer["provider_error"])
+        self.assertNotIn(secret, output)
 
     def test_only_a_plain_module_name_leaves(self):
         try:
