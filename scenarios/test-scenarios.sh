@@ -4021,13 +4021,16 @@ DF_SCRIPT="$ROOT/scenarios/day-becomes-facts.sh"
 day_facts_provider_request_is_removed() {
   local folder=$TMP/day-facts-provider-action key='day-facts-private-key' code
   rm -rf "$folder"
-  mkdir -p "$folder/home/cron" "$folder/root" "$folder/tmp"
-  printf '%s\n' 'Remember what you said' >"$folder/home/cron/jobs.json"
+  mkdir -p "$folder/home/cron" "$folder/home/scripts" "$folder/root" "$folder/tmp"
+  printf '%s\n' '{"jobs":[{"name":"Remember what you said","script":"scenario-facts","cron":"40 3 * * *"}]}' >"$folder/home/cron/jobs.json"
+  : >"$folder/home/scripts/scenario-facts"
   if ACTION_HOME="$folder/home" ACTION_KEY="$key" ACTION_POSTED="$folder/posted" \
     GODSPEED_SCENARIO_ROOT="$folder/root" GODSPEED_SCENARIO_WORK="$folder/work" TMPDIR="$folder/tmp" \
     GODSPEED_SCENARIO_AI_KEY="$key" GODSPEED_SCENARIO_AI_URL='https://api.anthropic.com/v1' \
     GODSPEED_SCENARIO_AI_MODEL='claude-haiku-4-5' bash -c '
-      . "$1"
+      scenario_dir=$(dirname "$1")
+      cd "$scenario_dir"
+      . <(sed "\$d" "$(basename "$1")")
       install_the_stage_line() { :; }
       need_node() { NODE=$(command -v node); }
       wait_for() { :; }
