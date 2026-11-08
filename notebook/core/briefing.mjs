@@ -146,7 +146,7 @@ async function runBriefing(job,{store,query,provider,now}){
   const contribution=context.contribution;
   if(contribution&&([contribution.id,contribution.note_id,...contribution.source_ids].some(id=>id!=null&&rejectedIds.has(String(id)))))context.contribution=null;
   const required=[context.cycle_heads_up,context.charm_line].filter(Boolean);
-  const goal=context.goals.find(row=>!excluded(row)&&text(row.title)),anyGoal=context.goals.length>0;
+  const goal=context.goals.find(row=>!excluded(row)&&text(row.title)),anyGoal=context.goals.some(row=>!excluded(row));
   addFirst(context.goals,row=>!excluded(row)&&text(row.title)?'One of your saved goals is '+text(row.title)+'.':null);
   const verified=context.work.filter(row=>row.state==='verified'&&row.kind!=='repair'&&!excluded(row)).sort((a,b)=>String(b.verification?.at||b.updated_at||'').localeCompare(String(a.verification?.at||a.updated_at||'')));
   addFirst(verified,row=>text(row.title)?'Godspeed has verified this work: '+text(row.title)+'.':null);

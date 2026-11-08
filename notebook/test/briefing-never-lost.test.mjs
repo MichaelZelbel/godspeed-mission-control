@@ -45,7 +45,7 @@ test('a source claim rejected by id is absent from the factual fallback',async()
  const {store,query}=fixture([]);const goal=store.save('goals',{title:'Prepare a fictional guide',status:'adopted'});
  const provider=async input=>input.kind==='brief-verification'?input.check==='source-facts'?{passed:false,reason:'This goal is not current.',rejection_scope:'source-claims',rejected_source_ids:[goal.id]}:{passed:false,reason:'The draft is not useful enough.',rejection_scope:'non-source',rejected_source_ids:[]}:'Rejected private model prose.';
  const result=await run(provider,query,store,'brief-factual-rejected-source'),saved=store.get('notes',result.record_id).content;
- assert.doesNotMatch(saved,/Prepare a fictional guide/);
+ assert.doesNotMatch(saved,/Prepare a fictional guide|goal step/);assert.match(saved,/Tell Godspeed one goal/);
  const receipt=query.rows('job_receipts').find(row=>row.kind==='brief-factual-fallback');assert.deepEqual(receipt.rejected_source_ids,[goal.id]);
 });
 
