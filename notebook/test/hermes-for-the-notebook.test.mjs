@@ -212,14 +212,16 @@ test('a failed post-admission diagnostic reports without changing a routine resu
  }
 });
 
-test('a failed admitted Hermes child retains its exit status and stderr',async t=>{
+test('a failed admitted Hermes child retains its output path, exit status, and stderr',async t=>{
  const root=temporary(t,'run-diagnostic-failure'),home=path.join(root,'.hermes'),store=new Store(root,{device:'pc'});
  store.save('settings',{id:'installation',owner:'pc',timezone:'Europe/Berlin',delivery:'notebook'});
  fs.mkdirSync(path.join(home,'cron'),{recursive:true});fs.writeFileSync(path.join(home,'cron','jobs.json'),JSON.stringify({jobs:[{id:'brief',name:'Morning brief'}]}));
  const scheduler=new NativeScheduler(store,{executable:'hermes',home,device:'pc',run:async(executable,args,{onStart}={})=>{onStart?.({pid:4321,tree:{root:4321,process_group:4321}});throw Object.assign(Error('Command failed with exit code 12'),{code:12,stderr:'Hermes routine failure'});}});
- scheduler.startRun('brief');await scheduler.running.catch(()=>{});
+ scheduler.startRun('brief');
+ const admitted=JSON.parse(fs.readFileSync(path.join(store.state,'routine-run-diagnostics.json'),'utf8')).runs[0];
+ await scheduler.running.catch(()=>{});
  const run=JSON.parse(fs.readFileSync(path.join(store.state,'routine-run-diagnostics.json'),'utf8')).runs[0];
- assert.equal(run.exit_status,12);assert.equal(run.stderr,'Hermes routine failure');assert.deepEqual(run.child,{pid:4321,tree:{root:4321,process_group:4321}});
+ assert.equal(run.run_log.path,admitted.run_log.path);assert.equal(run.exit_status,12);assert.equal(run.stderr,'Hermes routine failure');assert.deepEqual(run.child,{pid:4321,tree:{root:4321,process_group:4321}});
 });
 
 test('a failed admitted routine reports its error and releases the routine lease',async t=>{
