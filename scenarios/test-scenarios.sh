@@ -1582,6 +1582,15 @@ charm_log_source_boundary() {
   else
     bad "an unchanged Charm source log did not name the absent panel evidence (exit $code: $output)"
   fi
+  printf '{"verdict":"ask"}\n{"verdict":' >"$source"
+  output=$(bash -c '. "$1"; fail(){ printf "%s\\n" "$*"; exit 42; }; retain_new_charm_log "$2" "$3" "$4"' \
+    bash "$HERE/charm-log.sh" "$source" 0 "$evidence" 2>&1)
+  code=$?
+  if [ "$code" = 42 ] && [[ $output == *"installed panel Charm judgement wrote invalid JSONL evidence to $source"* ]]; then
+    ok 'a malformed newly written Charm log line is refused'
+  else
+    bad "a malformed newly written Charm log line was not refused (exit $code: $output)"
+  fi
 }
 charm_log_source_boundary
 charm_good "$C/good"

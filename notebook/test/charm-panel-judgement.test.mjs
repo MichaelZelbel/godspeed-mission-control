@@ -10,6 +10,8 @@ import {JUDGE_PROTOCOL} from '../../third-party/addons/godspeed-charm/lib/judge.
 import {addonInvocation} from '../core/native-personal.mjs';
 import {wordCheckMs} from '../core/charm-judgement.mjs';
 
+const auditContract=JSON.parse(fs.readFileSync(new URL('../../third-party/addons/godspeed-charm/test/fixtures/audit-log-contract.json',import.meta.url),'utf8'));
+
 // Issue #218: a slip typed in the notebook's chat panel gets the same question the Hermes plugin
 // asks. The panel's route is /api/browser-chat -> domains.nativeAgent (a one-shot assistant run that
 // does not pass through the plugin), so the notebook asks the judgement itself. The assistant here
@@ -18,12 +20,13 @@ const START=Date.parse('2026-10-21T08:00:00Z');
 const VENT='This is useless, you are garbage and wrong again';
 const skip=process.platform==='win32';
 
-function setup(t,{judgeSeconds,model=true,answer='Understood.'}={}){
+function setup(t,{judgeSeconds,model=true,answer='Understood.',seedLog}={}){
  process.env.GODSPEED_CHARM_NOW=new Date(START).toISOString();
  if(judgeSeconds)process.env.GODSPEED_CHARM_JUDGE_SECONDS=judgeSeconds;
  t.after(()=>{delete process.env.GODSPEED_CHARM_NOW;delete process.env.GODSPEED_CHARM_JUDGE_SECONDS;});
  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-charm-panel-'));t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
  const home=path.join(dir,'home'),root=path.join(dir,'root');fs.mkdirSync(path.join(home,'bin'),{recursive:true});fs.mkdirSync(root);
+ if(seedLog){const file=path.join(home,auditContract.relativePath);fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file,seedLog);}
  const stub=path.join(home,'bin','godspeed-model');
  // Says "slip" for the vent and "unsure" for "hmm", "not" for anything else.
  fs.writeFileSync(stub,`#!${process.execPath}\nlet s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const p=JSON.parse(s).prompt;const v=/useless/.test(p)?'slip':/hmm/.test(p)?'unsure':'not';setTimeout(()=>console.log(JSON.stringify({text:JSON.stringify({verdict:v,language:'en'})})),Number(process.env.STUB_MODEL_MS||0));});\n`,{mode:0o755});
@@ -87,13 +90,29 @@ test('the native panel records redacted judgement evidence for a vent and its no
  await op({action:'start',words:'start'});
  await say(VENT);
  await say('no');
- const entries=fs.readFileSync(path.join(home,'logs','godspeed-charm.log'),'utf8').trim().split('\n').map(JSON.parse);
+ const entries=fs.readFileSync(path.join(home,auditContract.relativePath),'utf8').trim().split('\n').map(JSON.parse);
  assert.equal(entries.length,2);
+ for(const entry of entries)assert.deepEqual(Object.keys(entry).sort(),[...auditContract.recordKeys].sort());
  assert.deepEqual(entries.map(({conversation,verdict,source,did})=>({conversation,verdict,source,did})),[
   {conversation:'notebook:browser-owner',verdict:'ask',source:'model',did:'asked'},
   {conversation:'notebook:browser-owner',verdict:'answer',source:'rule',did:'answered no'},
  ]);
- assert.doesNotMatch(JSON.stringify(entries),new RegExp(VENT));
+ const evidence=JSON.stringify(entries);
+ assert.doesNotMatch(evidence,new RegExp(auditContract.redaction.forbiddenText));
+ for(const key of auditContract.redaction.forbiddenKeys)assert.ok(!(key in entries[0]));
+});
+
+test('the native panel rotates the shared audit log before writing a new redacted record',{skip},async t=>{
+ const seed='x'.repeat(auditContract.rotateAfterBytes+1);
+ const {say,op,home}=await panel(t,{seedLog:seed});
+ await op({action:'start',words:'start'});
+ await say(VENT);
+ const log=path.join(home,auditContract.relativePath);
+ assert.equal(fs.readFileSync(log+'.1','utf8'),seed);
+ const entries=fs.readFileSync(log,'utf8').trim().split('\n').map(JSON.parse);
+ assert.equal(entries.length,1);
+ assert.deepEqual(Object.keys(entries[0]).sort(),[...auditContract.recordKeys].sort());
+ assert.doesNotMatch(JSON.stringify(entries),new RegExp(auditContract.redaction.forbiddenText));
 });
 
 test('the verdict words the panel accepts are the plugin\'s',()=>{

@@ -16,6 +16,7 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PLUGIN = path.join(HERE, "..", "hermes", "plugin", "godspeed-charm");
 const BIN = path.join(HERE, "..", "bin", "godspeed-charm.mjs");
 const DRIVER = path.join(HERE, "telegram_driver.py");
+const auditContract = JSON.parse(fs.readFileSync(path.join(HERE, "fixtures", "audit-log-contract.json"), "utf8"));
 const PY = ["python3", "python"].find((p) => { const r = spawnSync(p, ["-c", "print(1)"], { encoding: "utf8" }); return r.status === 0 && r.stdout.trim() === "1"; });
 const skip = PY ? false : "no python on this computer";
 
@@ -59,8 +60,9 @@ function drive(dir, steps, env = {}) {
   const stub = path.join(home, "stub.mjs");
   fs.writeFileSync(stub, STUB);
   if (env.SEED_LOG) {
-    fs.mkdirSync(path.join(home, "logs"));
-    fs.writeFileSync(path.join(home, "logs", "godspeed-charm.log"), "x".repeat(1_000_001));
+    const log = path.join(home, auditContract.relativePath);
+    fs.mkdirSync(path.dirname(log), { recursive: true });
+    fs.writeFileSync(log, "x".repeat(auditContract.rotateAfterBytes + 1));
   }
   if (env.FIXTURE_MODEL) {
     fs.mkdirSync(path.join(home, "bin"));
@@ -81,8 +83,9 @@ function drive(dir, steps, env = {}) {
     assert.equal(r.status, 0, r.stderr);
     const out = JSON.parse(r.stdout.trim().split("\n").pop());
     out.turnFiles = fs.readdirSync(scratch).filter((n) => /^godspeed-charm-.*\.txt$/.test(n));
-    out.rotated = (() => { try { return fs.readFileSync(path.join(home, "logs", "godspeed-charm.log.1"), "utf8"); } catch { return null; } })();
-    out.log = (() => { try { return fs.readFileSync(path.join(home, "logs", "godspeed-charm.log"), "utf8").trim().split("\n").map((l) => JSON.parse(l)); } catch { return []; } })();
+    const log = path.join(home, auditContract.relativePath);
+    out.rotated = (() => { try { return fs.readFileSync(log + ".1", "utf8"); } catch { return null; } })();
+    out.log = (() => { try { return fs.readFileSync(log, "utf8").trim().split("\n").map((l) => JSON.parse(l)); } catch { return []; } })();
     return out;
   } finally { gone(home); }
 }
@@ -101,7 +104,9 @@ test("a vent in a notebook chat ends with the exact question, once, also when th
     assert.equal(readEvents(dir)[1].words, VENT);
     assert.equal(out.log.length, 1);
     assert.deepEqual([out.log[0].verdict, out.log[0].source, out.log[0].conversation], ["ask", "words", "api_server:s-1"]);
-    assert.ok(!JSON.stringify(out.log).includes("garbage"));
+    assert.deepEqual(Object.keys(out.log[0]).sort(), [...auditContract.recordKeys].sort());
+    assert.ok(!JSON.stringify(out.log).includes(auditContract.redaction.forbiddenText));
+    for (const key of auditContract.redaction.forbiddenKeys) assert.ok(!(key in out.log[0]));
   } finally { gone(dir); }
 });
 
@@ -236,8 +241,9 @@ test("an oversized log is moved to .1 and the active log holds only the new line
   const dir = mission();
   try {
     const out = drive(dir, [register, pre(VENT), reply("Here.")], { SEED_LOG: "1" });
-    assert.equal(out.rotated.length, 1_000_001);
+    assert.equal(out.rotated.length, auditContract.rotateAfterBytes + 1);
     assert.equal(out.log.length, 1);
+    assert.deepEqual(Object.keys(out.log[0]).sort(), [...auditContract.recordKeys].sort());
     assert.equal(out.log[0].verdict, "ask");
   } finally { gone(dir); }
 });
