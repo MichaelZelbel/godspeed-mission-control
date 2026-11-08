@@ -37,6 +37,7 @@ test("while running: the day, the end date, the rule and how to record the quest
   assert.doesNotMatch(b, /Open question/);
   // A start while it runs opens its question here, so the conversation goes with it.
   assert.ok(b.includes('godspeed-charm start --words "<their words>"'));
+  assert.ok(b.includes('If they ask how their Charm Challenge is going or ask for its status: run godspeed-charm status.'));
   // Only a success is passed on word for word; a refusal's text never reaches the person.
   assert.match(b, /When a godspeed-charm command succeeds, use its reply word for word\. When it refuses, never pass its text on; do what this note says\./);
   assert.doesNotMatch(b, /After a godspeed-charm command, reply with its reply/);
@@ -179,6 +180,7 @@ test("the notebook channel: the same steps as charm operations, never a shell co
   assert.match(b, /in the language of their message, so never write it yourself: "That sounded like a slip/);
   assert.ok(b.includes('a plain "charm slip" or "reset my Charm Challenge" is charm {action:"slip", words:<their message>}'));
   assert.ok(b.includes('a story ("I yelled at Copilot") is charm {action:"asked", words:<their message>}'));
+  assert.ok(b.includes('If they ask how their Charm Challenge is going or ask for its status: charm {action:"status", words:<their message>}.'));
   assert.ok(b.includes('If they ask to start the Charm Challenge while it runs: charm {action:"start", words:<their message>}.'));
   assert.match(b, /The notebook adds each charm operation's reply to your answer itself/);
   // The open question of this conversation, answered with an operation.

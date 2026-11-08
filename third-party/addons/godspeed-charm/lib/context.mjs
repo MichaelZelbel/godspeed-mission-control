@@ -131,6 +131,7 @@ export function contextBlock(state, settings = {}, { conversation = "", schedule
       : 'If they report a slip themselves ("charm slip", "reset my Charm Challenge", "I yelled at Copilot"): run godspeed-charm slip --words "<their words>". ' +
         "When it refuses, end your reply with the sentence above.");
   }
+  L.push(`If they ask how their Charm Challenge is going or ask for its status: ${notebook ? op('action:"status"') : 'run godspeed-charm status'}.`);
   L.push(`If they ask to start the Charm Challenge while it runs: ${notebook ? NOTEBOOK.start : `run ${startCommand()}`}.`);
   const open = conv ? state.open?.find((q) => q.conversation === conv) : null;
   if (open) {
