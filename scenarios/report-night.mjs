@@ -18,7 +18,6 @@ import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 
 const LABEL = 'scenario-failure';
-const TRIAGE_LABEL = 'archon-triage';
 const LAST_LINES = 25;
 const titleOf = (name) => `Nightly scenario failed: ${name}`;
 
@@ -143,7 +142,7 @@ export async function reportNight(env = process.env, log = console.log) {
       await call('POST', `/issues/${number}/comments`, { body });
       log(`commented ${name}: still failing, night added to #${number}`);
     } else {
-      const res = await (await call('POST', '/issues', { title, labels: ['bug', LABEL, TRIAGE_LABEL], body })).json();
+      const res = await (await call('POST', '/issues', { title, labels: ['bug', LABEL, 'archon-triage'], body })).json();
       open.set(title, res.number);
       log(`opened ${name}: issue #${res.number}`);
     }
