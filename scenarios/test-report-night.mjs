@@ -64,7 +64,7 @@ test('a failed scenario with no issue opens one', async () => {
   assert.equal(r.created.length, 1);
   const c = r.created[0].body;
   assert.equal(c.title, T('voice'));
-  assert.deepEqual(c.labels, ['bug', 'scenario-failure']);
+  assert.deepEqual(c.labels, ['bug', 'scenario-failure', 'archon-triage']);
   assert.match(c.body, /2026-11-03/);
   assert.match(c.body, /https:\/\/github\.example\/o\/r\/actions\/runs\/77/);
   assert.match(c.body, /FAIL voice: no sound came back/);

@@ -5,7 +5,7 @@
 // for a week without telling anyone is a fault). For every scenario in RESULTS:
 //   - not "success" (failure, skipped, cancelled, nothing at all): it failed, a scenario that could
 //     not run counts as failed. No open issue "Nightly scenario failed: <name>": open one, labelled
-//     bug and scenario-failure. One is open already: add the night to it as a comment.
+//     bug, scenario-failure, and archon-triage. One is open already: add the night to it as a comment.
 //   - success, with such an issue open: say so in a comment with the run link, and close it.
 // One run never opens more than one issue per scenario. Node built-ins only; GitHub's REST API with
 // the workflow's token.
@@ -142,7 +142,7 @@ export async function reportNight(env = process.env, log = console.log) {
       await call('POST', `/issues/${number}/comments`, { body });
       log(`commented ${name}: still failing, night added to #${number}`);
     } else {
-      const res = await (await call('POST', '/issues', { title, labels: ['bug', LABEL], body })).json();
+      const res = await (await call('POST', '/issues', { title, labels: ['bug', LABEL, 'archon-triage'], body })).json();
       open.set(title, res.number);
       log(`opened ${name}: issue #${res.number}`);
     }
