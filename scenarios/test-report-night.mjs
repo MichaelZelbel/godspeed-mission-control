@@ -146,7 +146,7 @@ test("the verdict's needs and RESULTS name the same scenarios, and every scenari
   const body = jobsText.slice(jobsText.search(/^ {2}verdict:[ \t]*$/m));
   const needsLine = body.match(/^ {4}needs:\s*\[([^\]]*)\]/m);
   assert.ok(needsLine, 'verdict has no needs: [ ... ] list');
-  const needs = needsLine[1].split(',').map((x) => x.trim()).filter(Boolean).filter((x) => x !== 'stage');
+  const needs = needsLine[1].split(',').map((x) => x.trim()).filter(Boolean).filter((x) => x !== 'stage' && x !== 'pr-image');
   const res = body.match(/^ {6}RESULTS: >-\n((?: {8}.*\n)+)/m);
   assert.ok(res, 'verdict has no RESULTS block');
   const pairs = res[1].trim().split('\n').map((l) => l.trim()).map((p) => {
@@ -330,8 +330,11 @@ test('a pull request from a fork runs nothing, and its verdict passes', async ()
   const to = verdict.indexOf('      - name: Tell the night in issues');
   assert.ok(at > 0 && to > at, 'the verdict step was not found');
   const script = verdict.slice(at, to).replace(/^ {10}/gm, '');
-  const run = (env) => spawnSync('bash', ['-c', script], { encoding: 'utf8', env: { ...process.env, GITHUB_STEP_SUMMARY: '/dev/null', STAGE_REF: 'this-commit', WANT_MAC: 'false', IS_CANDIDATE: 'false', RESULTS: 'voice=skipped plain-yes=skipped', PICKED: '', ...env } });
+  const run = (env) => spawnSync('bash', ['-c', script], { encoding: 'utf8', env: { ...process.env, GITHUB_STEP_SUMMARY: '/dev/null', STAGE_REF: 'this-commit', WANT_MAC: 'false', IS_CANDIDATE: 'false', RESULTS: 'voice=skipped plain-yes=skipped', PICKED: '', PR_IMAGE: 'success', ...env } });
   const fork = run({ EVENT: 'pull_request', STAGE: 'skipped' });
+  // a failed or cancelled image job skips the stage too, and that must never read as a fork
+  for (const PR_IMAGE of ['failure', 'cancelled']) assert.equal(run({ EVENT: 'pull_request', STAGE: 'skipped', PR_IMAGE }).status, 1, `an image job that ended ${PR_IMAGE} must fail the verdict`);
+  assert.equal(run({ EVENT: 'pull_request', STAGE: 'skipped', PR_IMAGE: 'skipped' }).status, 0, 'a fork (image job skipped) still passes');
   assert.equal(fork.status, 0, fork.stdout + fork.stderr);
   assert.match(fork.stdout, /No scenario runs on a pull request from a fork/);
   // the same skips on a night, or a skipped stage that is not a fork's pull request, still fail

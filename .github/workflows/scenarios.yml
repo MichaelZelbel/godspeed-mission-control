@@ -1090,7 +1090,7 @@ jobs:
   verdict:
     name: the verdict
     if: always()
-    needs: [stage, linux-install, mac-install, docker-server, linux-update, settings-on-install, voice, update-keeps-everything, reminder-closed-elsewhere, reminders-move-keeps-everything, two-machines-move-at-once, late-reminder-file, closed-offline-on-both, reminder-from-settings, charm-challenge, no-video-skills-by-default, update-removes-only-unchanged-skills, briefing-breaks-a-rule, windows-old-names-move, telegram-language, brief-asked-in-chat, talk-prep-honest, no-question-he-cannot-judge, plain-yes, what-was-that, connection-check, workouts-from-hevy, day-becomes-facts, hermes-update-rollback, first-day]
+    needs: [stage, pr-image, linux-install, mac-install, docker-server, linux-update, settings-on-install, voice, update-keeps-everything, reminder-closed-elsewhere, reminders-move-keeps-everything, two-machines-move-at-once, late-reminder-file, closed-offline-on-both, reminder-from-settings, charm-challenge, no-video-skills-by-default, update-removes-only-unchanged-skills, briefing-breaks-a-rule, windows-old-names-move, telegram-language, brief-asked-in-chat, talk-prep-honest, no-question-he-cannot-judge, plain-yes, what-was-that, connection-check, workouts-from-hevy, day-becomes-facts, hermes-update-rollback, first-day]
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -1100,6 +1100,7 @@ jobs:
     env:
       CANDIDATE_ONLY: mac-install windows-old-names-move
       STAGE: ${{ needs.stage.result }}
+      PR_IMAGE: ${{ needs.pr-image.result }}
       WANT_MAC: ${{ inputs.mac }}
       EVENT: ${{ github.event_name }}
       PICKED: ${{ needs.stage.outputs.picked }}
@@ -1145,6 +1146,8 @@ jobs:
       - name: Every scenario passed, or the run fails
         run: |
           bad=0
+          # A pull request whose image job failed or was cancelled skipped the stage: that is a failure, never a fork.
+          case $PR_IMAGE in failure|cancelled) echo "FAIL pr-image: the pull request's server image job ended $PR_IMAGE, so no scenario ran" | tee -a "$GITHUB_STEP_SUMMARY"; exit 1 ;; esac
           # A pull request from a fork runs nothing (the stage job is skipped): nothing to judge.
           [ "$EVENT" != pull_request ] || [ "$STAGE" != skipped ] || { echo "No scenario runs on a pull request from a fork." | tee -a "$GITHUB_STEP_SUMMARY"; exit 0; }
           [ "$STAGE" = success ] || { echo "FAIL stage: the stage file at $STAGE_REF could not be read or is not a stage file" | tee -a "$GITHUB_STEP_SUMMARY"; bad=1; }
