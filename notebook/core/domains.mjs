@@ -292,7 +292,6 @@ export class Domains {
       // The Charm Challenge's slip judgement runs while the assistant works (core/charm-judgement.mjs).
       const judged=startCharmJudgement(this,input);
       let result=await this.nativeAgent({...input,nativeFiles,page_context:input[IDENTITY_PAGE],step_context:input.step_context,coach_talk_start:start}).catch(error=>{judged.drop();throw error;});
-      if(start&&coachTalkRecordProblem(this.store,start,result.reply))result=await this.nativeAgent({...input,nativeFiles,page_context:input[IDENTITY_PAGE],step_context:input.step_context,coach_talk_start:{...start,retry:true}}).catch(error=>{judged.drop();throw error;});
       const problem=start&&coachTalkRecordProblem(this.store,start,result.reply);if(problem){judged.drop();throw Error(problem);}
       result.reply=await judged.end(result.reply);
       await this.store.saveAsync('conversation_messages',{role:'assistant',content:result.reply,conversation_id:input.conversation_id||null,contact_id:input.contact_id||null,source_app:'hermes'},undefined,{signal:input.signal});

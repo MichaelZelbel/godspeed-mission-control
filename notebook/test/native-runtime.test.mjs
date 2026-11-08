@@ -36,7 +36,7 @@ test('a native chat refuses an unresolved coach opening instead of saving its un
  const root=fixture(t),store=new Store(root),domains=new Domains(new QueryService(store));coachArea(root);
  let attempts=0;domains.nativeAgent=async input=>input.coach_start_resolution?{reply:'{"area":"health"}'}:(attempts++,{reply:'I do not have your profile information or goals yet in the notebook.'});
  await assert.rejects(domains.invoke('conversation-chat',{message:'Let us have my health talk now.',conversation_id:'fixture'}),/talk record .* was not created/);
- assert.equal(attempts,2);assert.equal(store.list('conversation_messages').length,0);
+ assert.equal(attempts,1);assert.equal(store.list('conversation_messages').length,0);
  assert.equal(fs.existsSync(path.join(root,'coach','health','talks')),false);
 });
 test('a native chat accepts only an unprepared opening that its record holds',async t=>{
@@ -65,17 +65,12 @@ test('a native chat refuses an unshown earlier continuation',async t=>{
  const root=fixture(t),store=new Store(root),domains=new Domains(new QueryService(store)),today=localParts(coachNow(),'UTC').date,day=addDays(today,-1),rhythm=['mon','tue','wed','thu','fri','sat','sun'].find(name=>name!==weekdayOf(today));
  const area=addArea(root,{slug:'health',title:'Health',rhythm:'weekly '+rhythm,time:'19:00',starts:'2020-01-01'});openTalk(area,day,{opening:'Earlier opening.'});let attempts=0;
  domains.nativeAgent=async input=>input.coach_start_resolution?{reply:'{"area":"health"}'}:(attempts++,{reply:'Continuing the earlier talk.'});
- await assert.rejects(domains.invoke('conversation-chat',{message:'Let us have my health talk now.',conversation_id:'fixture'}),/was not marked shown in this chat/);assert.equal(attempts,2);assert.equal(store.list('conversation_messages').length,0);assert.equal(fs.existsSync(path.join(area.dir,'talks',today+'.md')),false);
+ await assert.rejects(domains.invoke('conversation-chat',{message:'Let us have my health talk now.',conversation_id:'fixture'}),/was not marked shown in this chat/);assert.equal(attempts,1);assert.equal(store.list('conversation_messages').length,0);assert.equal(fs.existsSync(path.join(area.dir,'talks',today+'.md')),false);
 });
 test('a native chat rejects failed coach-start classification but preserves an explicit no-start',async t=>{
  const root=fixture(t),store=new Store(root),domains=new Domains(new QueryService(store)),area=coachArea(root);for(const reply of ['not JSON','[]','{}','{"area":"health","extra":true}','{"area":1}','{"area":"unknown"}'])assert.throws(()=>resolvedCoachArea(reply,root),/could not determine whether this starts a coaching talk/);assert.equal(resolvedCoachArea('{"area":null}',root),null);
  let replies=0;domains.nativeAgent=async input=>input.coach_start_resolution?{reply:'not JSON'}:(replies++,{reply:'ordinary reply'});await assert.rejects(domains.invoke('conversation-chat',{message:'Let us have my health talk now.',conversation_id:'fixture'}),/could not determine whether this starts a coaching talk/);assert.equal(replies,0);assert.equal(store.list('conversation_messages').length,0);
  domains.nativeAgent=async input=>input.coach_start_resolution?{reply:'{"area":null}'}:{reply:'ordinary reply'};assert.equal((await domains.invoke('conversation-chat',{message:'Fictional question',conversation_id:'fixture'})).reply,'ordinary reply');assert.equal(store.list('conversation_messages').length,1);assert.equal(findArea(root,'health').slug,area.slug);
-});
-test('a native chat retries an invalid coach opening and saves only the valid retry',async t=>{
- const root=fixture(t),store=new Store(root),domains=new Domains(new QueryService(store));preparedCoachArea(root);let attempts=0;
- domains.nativeAgent=async input=>{if(input.coach_start_resolution)return {reply:'{"area":"health"}'};const start=input.coach_talk_start;if(++attempts===1)return {reply:'Unrelated reply.'};const area=findArea(root,start.area);openTalk(area,start.day,{opening:start.opening,shown:new Date().toISOString()});return {reply:start.opening};};
- const result=await domains.invoke('conversation-chat',{message:'Let us have my health talk now.',conversation_id:'fixture'});assert.equal(attempts,2);assert.equal(result.reply,'Good evening. Here is the prepared opening.');assert.deepEqual(store.list('conversation_messages').map(message=>message.content),[result.reply]);
 });
 test('a native chat requires the prepared opening through the production start handoff',async t=>{
  const validRoot=fixture(t),validStore=new Store(validRoot),validDomains=new Domains(new QueryService(validStore)),valid=preparedCoachArea(validRoot);validDomains.nativeAgent=async input=>{if(input.coach_start_resolution)return {reply:'{"area":"health"}'};const start=input.coach_talk_start;openTalk(findArea(validRoot,start.area),start.day,{opening:start.opening,shown:new Date().toISOString()});return {reply:start.opening};};assert.equal((await validDomains.invoke('conversation-chat',{message:'Let us have my health talk now.',conversation_id:'fixture'})).reply,valid.opening);
