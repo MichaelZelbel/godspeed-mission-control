@@ -63,7 +63,7 @@ recipes_in_the_version() { # <file>
 act() {
   fresh_evidence
   install_paths
-  install_the_stage_line "$EVIDENCE/.install.log"
+  require_the_stage_line "$EVIDENCE/.install.log"
   need_node
   wait_for 180 "the notebook to answer after the install" notebook_answers ||
     fail "the notebook does not answer after the install, so this is no install a reader would have"

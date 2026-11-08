@@ -68,7 +68,7 @@ act() {
   } >"$EVIDENCE/what.txt"
 
   say "== the first computer, and the reminder both will close"
-  install_the_stage_line_into "$ROOT" "$NOTEBOOK_PORT" "$EVIDENCE/a-install.log"
+  require_the_stage_line_into "$ROOT" "$NOTEBOOK_PORT" "$EVIDENCE/a-install.log"
   RUNTIME=$(runtime_of "$ROOT")
   need_node
   read_version "$ROOT"
@@ -82,7 +82,7 @@ act() {
     fail "Settings' own way of connecting a repository was refused on the first computer"
   sync_on "$ROOT" >"$EVIDENCE/rounds.txt" || fail "the first sync round failed, so the second computer had nothing to be set up from"
   git clone -q "$address" "$b" || fail "the second computer could not be set up from the copy on GitHub"
-  install_the_stage_line_into "$b" 47841 "$EVIDENCE/b-install.log"
+  require_the_stage_line_into "$b" 47841 "$EVIDENCE/b-install.log"
   read_version "$b"
   notebook_on "$b" sync folder >&2 || fail "godspeed sync folder was refused on the second computer, so it never joined"
   sync_on "$b" >>"$EVIDENCE/rounds.txt" || fail "the sync round that brings the reminder to the second computer failed"

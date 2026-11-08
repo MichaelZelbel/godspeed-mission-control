@@ -70,7 +70,7 @@ NODE
 }
 
 act() {
-  fresh_evidence; install_paths; install_the_stage_line "$EVIDENCE/install.log"; need_node
+  fresh_evidence; install_paths; require_the_stage_line "$EVIDENCE/install.log"; need_node
   wait_for 180 'the notebook to answer after install' notebook_is_up || fail "the notebook did not answer after install"
   mkdir -p "$ROOT/prompts/archive"
   printf '%s\n' '{"id":"move-1","at":"2026-11-01","text":"I moved to Hamburg on 1 November"}' '{"id":"doctor-1","at":"2026-11-01","text":"my new doctor is Dr. Lang"}' '{"id":"machine-1","at":"2026-11-01","text":"[IMPORTANT: You are running as a scheduled job]"}' '{"id":"track-1","at":"2026-11-01","text":"track this"}' >"$ROOT/prompts/archive/scenario-facts.jsonl"

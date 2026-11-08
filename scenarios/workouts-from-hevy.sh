@@ -273,12 +273,12 @@ act() {
   curl -sS -H 'api-key: refused-scenario-key' "http://127.0.0.1:$port/v1/workouts" >/dev/null || true
   printf '{"fixture":"local-hevy"}\n' >"$EVIDENCE/setup.json"
   # Use distinct ports so the native installation and Docker server are independently real installs.
-  server_install; server_hevy_url "$port"
+  require_candidate_server; server_hevy_url "$port"
   printf '{"api_key":"refused-scenario-key"}\n' >"$EVIDENCE/.refused-key.json"
   settings_post docker "$EVIDENCE/.refused-key.json" "$EVIDENCE/docker-settings.json" >"$EVIDENCE/docker-settings.code"
   export GODSPEED_PORT=47832
   install_paths
-  install_the_stage_line "$EVIDENCE/install.log"
+  require_the_stage_line "$EVIDENCE/install.log"
   wait_for 180 'the native notebook to answer after install' notebook_is_up || fail "the native notebook did not answer after install"
   native_hevy_url "$port"
   settings_post native "$EVIDENCE/.refused-key.json" "$EVIDENCE/native-settings.json" >"$EVIDENCE/native-settings.code"

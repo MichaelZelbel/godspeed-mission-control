@@ -300,7 +300,7 @@ act() {
   need_the_ai_key "the owner's own chat with the assistant and the morning brief"
   fresh_evidence
   install_paths
-  install_the_stage_line "$EVIDENCE/.install.log"
+  require_the_stage_line "$EVIDENCE/.install.log"
   need_node
   wait_for 180 "the notebook to answer after the install" notebook_answers ||
     fail "the notebook does not answer after the install, so the owner has no chat to say anything in"

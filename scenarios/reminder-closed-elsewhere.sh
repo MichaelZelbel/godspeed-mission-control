@@ -94,7 +94,7 @@ one_pair() { # <mode> <A root> <A port> <B root> <B port> <stand-in folder>
 
   phase "$mode-install-a"
   rm -rf "$a" "$b"
-  install_the_stage_line_into "$a" "$a_port" "$EVIDENCE/$mode-install-a.log"
+  require_the_stage_line_into "$a" "$a_port" "$EVIDENCE/$mode-install-a.log"
   # This installation's own Node, the one the product itself runs on.
   RUNTIME=$(runtime_of "$a")
   need_node
@@ -128,7 +128,7 @@ one_pair() { # <mode> <A root> <A port> <B root> <B port> <stand-in folder>
   # The second computer, the way a person's installer sets it up: it clones the copy on GitHub and
   # installs into that folder (notebook/test/installer-join-sync.test.mjs).
   git clone -q "$address" "$b" || fail "the second computer could not be set up from the copy on GitHub"
-  install_the_stage_line_into "$b" "$b_port" "$EVIDENCE/$mode-install-b.log"
+  require_the_stage_line_into "$b" "$b_port" "$EVIDENCE/$mode-install-b.log"
   read_version "$b"
   if [ "$mode" = folder ]; then
     notebook_on "$b" sync folder notebook >&2 || fail "godspeed sync folder notebook was refused on the second computer $b"

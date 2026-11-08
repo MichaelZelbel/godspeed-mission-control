@@ -26,6 +26,13 @@ server_install() {
     fail "the /server line for $STAGE_REF failed before this scenario could do anything (its output is in the step log)"
   server_healthy 300 || fail "the Docker server is not healthy after the /server line"
 }
+require_candidate_server() {
+  if [ "${GODSPEED_SCENARIO_REUSE_SERVER:-}" != 1 ]; then
+    server_install
+    return
+  fi
+  server_healthy 300 || fail "the pooled Docker server is not healthy"
+}
 # shellcheck disable=SC2317,SC2329  # asked by wait_for
 server_is_healthy() { local container; container=$(server_container) && [ -n "$container" ] && [ "$(sudo docker inspect -f '{{.State.Health.Status}}' "$container" 2>/dev/null)" = healthy ]; }
 server_healthy() { wait_for "$1" "the server container to be healthy" server_is_healthy; }

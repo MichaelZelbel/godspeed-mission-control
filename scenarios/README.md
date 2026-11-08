@@ -5,12 +5,15 @@ Not for you: nothing here is a program you type, and no installer puts any of it
 These are the **proving scenarios** a candidate runs before the maintainer is asked for "go"
 (godspeed-dev, `releases/godspeed-2.0.0-beta.8-faster-chat/plan.md`,
 `releases/godspeed-2.0.0-beta.12-reminders-in-the-notebook/plan.md` and
-`releases/godspeed-2.0.0-beta.13-charm-video-notebook/plan.md`, "Proving scenarios"). Each one
-is one job of `.github/workflows/scenarios.yml` on a fresh `ubuntu-24.04` machine (all but `phone-health-days`, `incomplete-day`, `phone-goes-quiet`, `mail-count` and `talk-on-talk-day`, which have no job in it yet; `first-day` is a job of it, with the other three of beta.20; and except `night-tidy.sh`, which has no job until it is restored there), and each is one
-script here, so that what a scenario does can be read, run by hand and held to its own tests —
-which a step written inside a workflow file cannot be. They live in a folder of their own for the
-same reason `stage/` does: everything in `tools/` is copied onto every user's computer as a program,
-and these are not programs for users.
+`releases/godspeed-2.0.0-beta.13-charm-video-notebook/plan.md`, "Proving scenarios"). A
+candidate or nightly run installs each native and Docker system once, resets only its mutable
+state between compatible checks, and records one result for every scenario. Update and move
+checks remain isolated because their behaviour is the installation transition itself. A scenario
+run directly or selected on a pull request still installs on its own throwaway machine. Each
+scenario is one script here, so that what it does can be read, run by hand and held to its own
+tests — which a step written inside a workflow file cannot be. They live in a folder of their own
+for the same reason `stage/` does: everything in `tools/` is copied onto every user's computer as
+a program, and these are not programs for users.
 
 `chat-tidy-at-night`, `disk-filling`, `missed-routine` and `deadline-closes-itself` are not yet jobs of
 that workflow: their jobs are written in the pull request that added them and are applied in the

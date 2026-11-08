@@ -31,7 +31,7 @@ compression.threshold_tokens=100000"
 act() {
   fresh_evidence
   install_paths
-  install_the_stage_line "$EVIDENCE/install-trace.log"
+  require_the_stage_line "$EVIDENCE/install-trace.log"
   need_node
   assistant_home
   [ -f "$HERMES/config.yaml" ] || {

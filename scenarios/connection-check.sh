@@ -49,7 +49,7 @@ act() {
   fresh_evidence
   install_paths
   need_node
-  server_install
+  require_candidate_server
   phase 'the owner on the installed Docker Telegram gateway'
   server_telegram_setup without-ai
   printf '{"goal":"Sleep eight hours a night","timezone":"Etc/UTC","delivery":"telegram"}\n' >"$EVIDENCE/.setup.json"

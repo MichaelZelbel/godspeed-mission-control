@@ -105,7 +105,7 @@ act() {
   [ -s "$RECORDING" ] || fail "the recording kept with this script is not there ($RECORDING)"
   fresh_evidence
   install_paths
-  install_the_stage_line "$EVIDENCE/install-trace.log"
+  require_the_stage_line "$EVIDENCE/install-trace.log"
   need_node
   assistant_home
   wait_for 120 "the notebook to answer" notebook_answers ||

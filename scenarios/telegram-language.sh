@@ -123,7 +123,7 @@ act() {
     connect_the_local_ai
   else
     install_paths
-    install_the_stage_line "$EVIDENCE/install-trace.log"
+    require_the_stage_line "$EVIDENCE/install-trace.log"
     need_node
     assistant_home
     need_the_ai_key "the translation of a reply"

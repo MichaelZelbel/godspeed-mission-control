@@ -50,7 +50,7 @@ act() {
   install_paths
   need_node
   first_day_phase 'fresh Docker server installed the frozen stage'
-  server_install
+  require_candidate_server
   step_passed 'fresh Docker server installed the frozen stage'
   server_connects_the_model
   step_passed 'dedicated test AI connected through Settings'
