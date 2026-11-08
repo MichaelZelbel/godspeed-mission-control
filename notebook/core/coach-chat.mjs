@@ -34,9 +34,7 @@ export function coachTalkRecordProblem(store,start,reply,{requireShown=true}={})
   return null;
 }
 
-export function markCoachTalkShown(store,start,reply){
-  const problem=coachTalkRecordProblem(store,start,reply,{requireShown:false});
-  if(problem||start.continuing)return problem||coachTalkRecordProblem(store,start,reply);
+export function markCoachTalkShown(store,start){
+  if(start.continuing)return;
   setShown(findArea(store.root,start.area),start.day,now().toISOString().replace(/\.\d+Z$/,'Z'));
-  return coachTalkRecordProblem(store,start,reply);
 }
