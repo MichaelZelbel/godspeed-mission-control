@@ -192,6 +192,30 @@ module._log({'conversation':'plugin'},{'verdict':'answer','source':'rule','why':
  }finally{fs.rmSync(dir,{recursive:true,force:true});}
 });
 
+test('the plugin audit writer recovers a post-boot lock with its reused PID',{skip:skip||process.platform!=='linux'},()=>{
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-charm-audit-self-pid-'));try{
+  const home=path.join(dir,'home'),log=path.join(home,auditContract.relativePath),lock=log+'.lock';
+  const program=`import datetime,importlib.util,json,os,sys,time
+plugin,lock=sys.argv[1:]
+with open('/proc/uptime',encoding='utf-8') as f: uptime=float(f.read().split()[0])
+with open('/proc/self/stat',encoding='utf-8') as f: fields=f.read().rpartition(')')[2].split()
+started=time.time()-uptime+int(fields[19])/os.sysconf('SC_CLK_TCK')
+at=started-2
+if at <= time.time()-uptime: raise RuntimeError('process started too close to boot')
+os.makedirs(os.path.dirname(lock),exist_ok=True)
+with open(lock,'w',encoding='utf-8') as f: json.dump({'pid':os.getpid(),'token':'dead-owner','at':datetime.datetime.fromtimestamp(at,datetime.timezone.utc).isoformat().replace('+00:00','Z')},f)
+spec=importlib.util.spec_from_file_location('charm_plugin_under_test',plugin)
+module=importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+module._log({'conversation':'plugin'},{'verdict':'answer','source':'rule','why':None},'answered no')`;
+  const plugin=path.join(path.dirname(fileURLToPath(import.meta.url)),'../../third-party/addons/godspeed-charm/hermes/plugin/godspeed-charm/__init__.py');
+  const result=spawnSync(PY,['-c',program,plugin,lock],{encoding:'utf8',env:{...process.env,HERMES_HOME:home,PYTHONDONTWRITEBYTECODE:'1'}});
+  assert.equal(result.status,0,result.stderr);
+  assert.equal(fs.existsSync(lock),false);
+  assert.deepEqual(fs.readFileSync(log,'utf8').trim().split('\n').map(JSON.parse).map(entry=>entry.conversation),['plugin']);
+ }finally{fs.rmSync(dir,{recursive:true,force:true});}
+});
+
 test('the scenario retains the native writer\'s active generation after audit-log rollover',{skip},async t=>{
  const seed=auditSeed(auditContract.rotateAfterBytes+1);
  const {say,op,home}=await panel(t,{seedLog:seed});

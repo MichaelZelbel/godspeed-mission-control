@@ -316,6 +316,22 @@ def _audit_lock_boot_time():
     return time.time() - uptime
 
 
+def _audit_lock_process_start_time():
+    try:
+        with open("/proc/uptime", encoding="utf-8") as f:
+            uptime = float(f.read().split()[0])
+        with open("/proc/self/stat", encoding="utf-8") as f:
+            fields = f.read().rpartition(")")[2].split()
+        started = int(fields[19]) / os.sysconf("SC_CLK_TCK")
+        return time.time() - uptime + started
+    except (OSError, ValueError, IndexError):
+        return _audit_lock_loaded_at
+
+
+_audit_lock_loaded_at = time.time()
+_audit_lock_process_started_at = _audit_lock_process_start_time()
+
+
 def _audit_lock_is_stale(text, stat):
     try:
         owner = json.loads(text)
@@ -331,6 +347,8 @@ def _audit_lock_is_stale(text, stat):
     # Match the Node writer's owner rule: a timestamp from before this boot
     # cannot belong to a live process, even when its numeric PID was reused.
     if at < _audit_lock_boot_time() - 60:
+        return True
+    if pid == os.getpid() and at < _audit_lock_process_started_at - 1:
         return True
     try:
         os.kill(pid, 0)
