@@ -4009,8 +4009,6 @@ facts_good() {
   local archive_day=2026-11-01 archive_at move_text doctor_text
   archive_at="${archive_day}T12:00:00Z"; move_text="I moved to Hamburg on $archive_day"; doctor_text="my new doctor is Dr. Lang as of $archive_day"
   printf '{"messages":[{"id":"move-1","at":"%s","text":"%s"},{"id":"doctor-1","at":"%s","text":"%s"},{"id":"machine-1","at":"%s","text":"[IMPORTANT: You are running as a scheduled job]"},{"id":"track-1","at":"%s","text":"track this"}]}\n' "$archive_at" "$move_text" "$archive_at" "$doctor_text" "$archive_at" >"$f/archive.json"
-  printf '{"url":"https://api.anthropic.com/v1","model":"claude-haiku-4-5","routines":true}\n' >"$f/provider.json"
-  printf '{"connected":true,"routines":{"model":"claude-haiku-4-5","check":{"ok":true}}}\n' >"$f/provider-answer.json"
   facts_json '[{"value":"Berlin"}]' >"$f/before.json"
   printf '{"name":"Remember what you said","cron":"40 3 * * *","script":"scenario-facts","exit":0}\n' >"$f/routine.json"
   facts_json "[{\"value\":\"Berlin\",\"valid_to\":\"$archive_day\"},{\"value\":\"Hamburg\",\"valid_from\":\"$archive_day\",\"quote\":\"$move_text\",\"source_id\":\"move-1\"},{\"value\":\"Dr. Lang\",\"valid_from\":\"$archive_day\",\"quote\":\"$doctor_text\",\"source_id\":\"doctor-1\"}]" >"$f/after.json"
@@ -4019,7 +4017,7 @@ facts_good() {
 facts_good "$DF2/good"
 DF_SCRIPT="$ROOT/scenarios/day-becomes-facts.sh"
 day_facts_provider_post_does_not_persist_the_key() { # <HTTP status> <description>
-  local status=$1 description=$2 folder=$TMP/day-facts-provider-action-$status key='day-facts-private-key' code answer
+  local status=$1 description=$2 folder=$TMP/day-facts-provider-action-$status key='day-facts-private-key' code
   rm -rf "$folder"
   mkdir -p "$folder/home/cron" "$folder/home/scripts" "$folder/root" "$folder/tmp"
   printf '%s\n' '{"jobs":[{"name":"Remember what you said","script":"scenario-facts","cron":"40 3 * * *"}]}' >"$folder/home/cron/jobs.json"
@@ -4040,9 +4038,10 @@ day_facts_provider_post_does_not_persist_the_key() { # <HTTP status> <descriptio
       facts_snapshot() { :; }
       check() { :; }
       curl() {
-        local data= request
+        local data= out= request
         while [ "$#" -gt 0 ]; do
           case "$1" in
+            -o) out=$2; shift 2 ;;
             --data-binary) data=$2; shift 2 ;;
             *) shift ;;
           esac
@@ -4050,7 +4049,7 @@ day_facts_provider_post_does_not_persist_the_key() { # <HTTP status> <descriptio
         if [ "$data" = @- ]; then
           request=$(cat) || return
           case "$request" in *"\"key\":\"$ACTION_KEY\""*) ;; *) return 1 ;; esac
-          printf "{\"connected\":true,\"echo\":\"%s\"}\\n" "$ACTION_KEY"
+          [ "$out" = /dev/null ] || printf "{\"connected\":true,\"echo\":\"%s\"}\\n" "$ACTION_KEY"
           : >"$ACTION_POSTED"
           printf %s "$ACTION_STATUS"
         else
@@ -4063,15 +4062,14 @@ day_facts_provider_post_does_not_persist_the_key() { # <HTTP status> <descriptio
   else
     code=$?
   fi
-  answer=$folder/work/day-becomes-facts/provider-answer.json
-  if { { [ "$status" = 200 ] && [ "$code" = 0 ] && [ -f "$answer" ]; } || { [ "$status" != 200 ] && [ "$code" != 0 ] && [ ! -e "$answer" ]; }; } && [ -f "$folder/posted" ] && ! rg -F -- "$key" "$folder" >/dev/null 2>&1 && { [ "$status" != 200 ] || rg -F '"echo":"[redacted]"' "$answer" >/dev/null; }; then
+  if { { [ "$status" = 200 ] && [ "$code" = 0 ]; } || { [ "$status" != 200 ] && [ "$code" != 0 ]; }; } && [ -f "$folder/posted" ] && ! rg -F -- "$key" "$folder" >/dev/null 2>&1; then
     ok "$description"
   else
     bad "$description (exit $code: $(cat "$folder/action.log" 2>/dev/null))"
   fi
 }
-day_facts_provider_post_does_not_persist_the_key 200 'a remembered-facts Settings POST streams its private key and redacts a successful response'
-day_facts_provider_post_does_not_persist_the_key 400 'a reflected-key Settings failure is neither retained nor exposed'
+day_facts_provider_post_does_not_persist_the_key 200 'a remembered-facts Settings POST streams its private key without persistence'
+day_facts_provider_post_does_not_persist_the_key 400 'a reflected-key Settings failure is neither persisted nor exposed'
 facts_archive_value() { # <message id> <field>
   node - "$DF2/good/archive.json" "$1" "$2" <<'NODE'
 const [file,id,field]=process.argv.slice(2),archive=require(file);
@@ -4087,8 +4085,6 @@ FACTS_WRONG_DAY=$(node -e 'const day=process.argv[1];const date=new Date(`${day}
 passes 'dated facts are filed once and excluded messages file nothing' day-becomes-facts "$DF2/good" 'Berlin was closed'
 copy "$DF2/good" "$DF2/wrong-time"; sed -i 's/40 3/41 3/' "$DF2/wrong-time/routine.json"
 refuses 'a remembered-facts routine at the wrong time' day-becomes-facts "$DF2/wrong-time" 'successful 03:40'
-copy "$DF2/good" "$DF2/provider-key"; sed -i 's/{"url"/{"key":"made-up","url"/' "$DF2/provider-key/provider.json"
-refuses 'retained provider evidence that includes its key' day-becomes-facts "$DF2/provider-key" 'provider evidence is incomplete or includes its key'
 copy "$DF2/good" "$DF2/no-date"; sed -i "s/\"valid_from\":\"$FACTS_ARCHIVE_DAY\",//" "$DF2/no-date/after.json"; cp "$DF2/no-date/after.json" "$DF2/no-date/second.json"
 refuses 'an undated Hamburg fact' day-becomes-facts "$DF2/no-date" 'Hamburg is not a dated'
 copy "$DF2/good" "$DF2/wrong-date"; sed -i "s/\"valid_from\":\"$FACTS_ARCHIVE_DAY\"/\"valid_from\":\"$FACTS_WRONG_DAY\"/g" "$DF2/wrong-date/after.json"; cp "$DF2/wrong-date/after.json" "$DF2/wrong-date/second.json"

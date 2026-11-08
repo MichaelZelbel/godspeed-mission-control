@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 # PROVING SCENARIO: the installed nightly routine files dated, source-linked facts once.
-# Kept: archive.json, provider.json, provider-answer.json, before.json, after.json, second.json, routine.json,
-# install.log, memory-confirm.json, setup.json, first-{said,log,exit}.txt, second-{said,log,exit}.txt, steps.tsv,
-# and .{before,after,second}-{claims,fact_slots,contacts,entities,moments}.json.
+# Kept: archive.json, before.json, after.json, second.json and routine.json. archive.json names
+# the four invented messages; all five record families are retained after each run.
 SCENARIO=day-becomes-facts
 . "$(dirname "$0")/scenario-lib.sh"
 . "$(dirname "$0")/facts-lib.sh"
@@ -41,7 +40,7 @@ check() {
   local folder=$1
   [ -d "$folder" ] || fail "there is nothing at $folder, so this scenario kept no remembered-facts evidence"
   need_node
-  kept_all "$folder" 'the seeded archive, provider connection, routine and before/after snapshots' archive.json provider.json provider-answer.json before.json after.json second.json routine.json
+  kept_all "$folder" 'the seeded archive, routine and before/after snapshots' archive.json before.json after.json second.json routine.json
   local why
   why=$(FACT_FAMILIES=$(IFS=,; echo "${FACT_FAMILIES[*]}") "$NODE" - "$folder" <<'NODE'
 const fs=require('fs'), p=process.argv[2], r=n=>JSON.parse(fs.readFileSync(`${p}/${n}`));
@@ -52,11 +51,9 @@ const quote=(row,text,id)=>row&&row.quote===text&&row.source_id===id;
 const fail=message=>{throw new Error(message)};
 try {
  const archive=r('archive.json');
- const provider=r('provider.json'),providerAnswer=r('provider-answer.json');
  const messages=Object.fromEntries((archive.messages||[]).map(message=>[message.id,message]));
  const move=messages['move-1'],doctorMessage=messages['doctor-1'],archiveDay=move?.at?.slice(0,10);
  if(typeof move?.text!=='string'||typeof doctorMessage?.text!=='string'||!/^\d{4}-\d\d-\d\d$/.test(archiveDay)||doctorMessage.at?.slice(0,10)!==archiveDay||!messages['machine-1']?.text?.startsWith('[IMPORTANT: You are running as a scheduled job]')||!messages['track-1']?.text?.startsWith('track'))fail('the exact invented archive is not retained');
- if(typeof provider?.url!=='string'||!provider.url.startsWith('https://')||typeof provider?.model!=='string'||!provider.model||provider?.routines!==true||Object.hasOwn(provider,'key')||providerAnswer?.connected!==true||providerAnswer?.routines?.model!==provider.model||providerAnswer?.routines?.check?.ok!==true)fail('the retained provider evidence is incomplete or includes its key');
  const before=r('before.json'); if(!has(before.claims||[],'Berlin'))fail('the older Berlin fact was not present before the routine ran');
  const routine=r('routine.json');if(routine.name!=='Remember what you said'||routine.cron!=='40 3 * * *'||routine.exit!==0||typeof routine.script!=='string'||!routine.script)fail('the remembered-facts routine was not the successful 03:40 recorded routine');
  const a=r('after.json'),s=r('second.json');
@@ -91,7 +88,7 @@ act() {
     fail "the installed notebook did not accept the older Berlin fact through memory-confirm"
   facts_snapshot "$EVIDENCE/before.json"
   printf '{"messages":[{"id":"move-1","at":"%s","text":"%s"},{"id":"doctor-1","at":"%s","text":"%s"},{"id":"machine-1","at":"%s","text":"%s"},{"id":"track-1","at":"%s","text":"%s"}]}\n' "$archive_at" "$move_text" "$archive_at" "$doctor_text" "$archive_at" "$machine_text" "$archive_at" "$track_text" >"$EVIDENCE/archive.json"
-  local provider provider_answer script
+  local provider script
   curl -fsS --max-time 60 -X POST -H 'Content-Type: application/json' \
     --data '{"goal":"Keep my remembered facts current","timezone":"Etc/UTC"}' \
     "http://127.0.0.1:$NOTEBOOK_PORT/api/setup" >"$EVIDENCE/setup.json" ||
@@ -102,18 +99,13 @@ act() {
     fail "the installed assistant has no routine named Remember what you said (ticket 03 is the expected baseline failure)"
   fi
   need_the_ai_key "extracting the invented archived facts"
-  printf '{"url":%s,"model":%s,"routines":true}\n' \
-    "$(quoted_json "$AI_URL")" "$(quoted_json "$AI_MODEL")" >"$EVIDENCE/provider.json"
-  if ! provider_answer=$(printf '{"url":%s,"key":%s,"model":%s,"routines":true}\n' \
+  if ! provider=$(printf '{"url":%s,"key":%s,"model":%s,"routines":true}\n' \
     "$(quoted_json "$AI_URL")" "$(quoted_json "$GODSPEED_SCENARIO_AI_KEY")" "$(quoted_json "$AI_MODEL")" |
-    curl -sS -w '%{http_code}' --max-time 300 -X POST -H 'Content-Type: application/json' \
+    curl -sS -o /dev/null -w '%{http_code}' --max-time 300 -X POST -H 'Content-Type: application/json' \
       --data-binary @- "http://127.0.0.1:$NOTEBOOK_PORT/api/provider"); then
     fail "Settings could not be reached to connect the remembered-facts model"
   fi
-  provider=${provider_answer: -3}
   [ "$provider" = 200 ] || fail "Settings refused the remembered-facts model (HTTP $provider)"
-  provider_answer=${provider_answer:: -3}
-  printf '%s' "${provider_answer//"$GODSPEED_SCENARIO_AI_KEY"/[redacted]}" >"$EVIDENCE/provider-answer.json"
   script=$(facts_routine_script)
   [ -n "$script" ] && [ -f "$HERMES/scripts/$script" ] || fail "the recorded Remember what you said routine has no installed script"
   run_facts_routine "$script" first
