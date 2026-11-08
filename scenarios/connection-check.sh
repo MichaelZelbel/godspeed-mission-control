@@ -30,7 +30,7 @@
 #   routine-diagnostics-<label>.json, routine-output-<label>/  each admitted Hermes child and its run log
 SCENARIO=connection-check
 # shellcheck source=scenarios/scenario-lib.sh
-. "$(dirname "$0")/scenario-lib.sh"
+. "$(dirname "${BASH_SOURCE[0]}")/scenario-lib.sh"
 . "$HERE/server-lib.sh"
 scenario_arguments "$@"
 
@@ -125,11 +125,13 @@ check() { # <evidence folder>
   pass "with Telegram's key valid the connection check sent nothing, opened no deadline and rang no connection bell; with the key refused it told the owner once (one text about Telegram) and opened one deadline (\"$title\"); with the key valid again the next run closed it"
 }
 
-if [ "$CHECK_ONLY" = yes ]; then
-  install_paths
-  need_node
-  check "$EVIDENCE"
-else
-  act
-  check "$EVIDENCE"
+if [ "${BASH_SOURCE[0]}" = "$0" ]; then
+  if [ "$CHECK_ONLY" = yes ]; then
+    install_paths
+    need_node
+    check "$EVIDENCE"
+  else
+    act
+    check "$EVIDENCE"
+  fi
 fi

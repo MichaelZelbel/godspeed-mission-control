@@ -166,9 +166,11 @@ test('Run now keeps the admitted Hermes child, and a refusal keeps its real life
  let diagnostics=JSON.parse(fs.readFileSync(path.join(store.state,'routine-run-diagnostics.json'),'utf8')).runs;
  assert.deepEqual(diagnostics.map(run=>({admitted:run.admitted,lifecycle_owner:run.lifecycle_owner})),[{admitted:true,lifecycle_owner:'routine run'},{admitted:false,lifecycle_owner:'routine run'}]);
  assert.deepEqual(diagnostics[0].command,['hermes','cron','run','brief']);assert.deepEqual(diagnostics[0].child,{pid:4321,tree:{root:4321,process_group:4321}});
+  const evidencePath=diagnostics[0].run_log.path;
+  assert.equal(evidencePath,routineRunEvidencePaths({workspace:root,home}).output);
  finish();await scheduler.running;
  diagnostics=JSON.parse(fs.readFileSync(path.join(store.state,'routine-run-diagnostics.json'),'utf8')).runs;
- assert.equal(diagnostics[0].exit_status,0);assert.equal(diagnostics[0].stderr,'the Hermes warning');assert.equal(diagnostics[0].run_log.command_output,'the Hermes run log');assert.equal(diagnostics[0].run_log.path,path.join(home,'cron','output'));
+ assert.equal(diagnostics[0].exit_status,0);assert.equal(diagnostics[0].stderr,'the Hermes warning');assert.equal(diagnostics[0].run_log.command_output,'the Hermes run log');assert.equal(diagnostics[0].run_log.path,evidencePath);
 });
 
 test('routine evidence paths belong to the scheduler workspace and Hermes home',()=>{

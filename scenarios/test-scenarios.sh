@@ -263,15 +263,27 @@ server_routine_evidence_paths_come_from_scheduler() {
 }
 server_routine_evidence_paths_come_from_scheduler
 
-first_day_uses_the_scheduler_routine_output_path() {
-  if grep -Fq 'routine_paths=$(server_routine_evidence_paths)' "$HERE/first-day.sh" \
-    && grep -Fq 'server_copy_evidence "$routine_output" "$EVIDENCE"' "$HERE/first-day.sh"; then
-    ok 'first-day copies routine output from the scheduler-owned path'
+first_day_copies_the_scheduler_routine_output() {
+  local evidence=$TMP/first-day-routine-output copies=$TMP/first-day-routine-output-copies output
+  mkdir -p "$evidence"
+  if output=$(EVIDENCE="$evidence" FIRST_DAY_COPY_LOG="$copies" NODE="$(command -v node)" bash -c '
+    source=$1
+    set -- --check "$2"
+    . "$source"
+    server_routine_evidence_paths() { printf "{\\\"diagnostics\\\":\\\"/owned/diagnostics.json\\\",\\\"output\\\":\\\"/owned/hermes-output\\\"}"; }
+    server_copy_evidence() { printf "%s|%s\\n" "$1" "$2" >"$FIRST_DAY_COPY_LOG"; }
+    keep_first_day_routine_output
+  ' bash "$HERE/first-day.sh" "$evidence" 2>&1); then
+    if [ "$(<"$copies")" = "/owned/hermes-output|$evidence" ]; then
+      ok 'first-day copies the scheduler descriptor’s output path'
+    else
+      bad "first-day did not copy the scheduler descriptor’s output path ($(cat "$copies" 2>/dev/null))"
+    fi
   else
-    bad 'first-day names its own routine-output path'
+    bad "first-day could not copy the scheduler descriptor’s output path ($output)"
   fi
 }
-first_day_uses_the_scheduler_routine_output_path
+first_day_copies_the_scheduler_routine_output
 
 server_run_job_keeps_success_evidence() {
   local evidence=$TMP/server-run-job-evidence copies updates output
@@ -350,15 +362,30 @@ server_run_job_accepts_expected_delivery_status() {
 }
 server_run_job_accepts_expected_delivery_status
 
-connection_check_accepts_its_intended_delivery_failure() {
-  if grep -Fq '[ "$1" = broken ] && status=delivery_failed' "$HERE/connection-check.sh" \
-    && grep -Fq 'server_run_job "$1" "$ROUTINE" 300 "$status"' "$HERE/connection-check.sh"; then
-    ok 'connection-check expects delivery_failed only for its broken-key run'
+connection_check_uses_the_expected_status_for_each_phase() {
+  local evidence=$TMP/connection-check-statuses calls=$TMP/connection-check-calls output
+  mkdir -p "$evidence"
+  if output=$(EVIDENCE="$evidence" CONNECTION_CHECK_CALLS="$calls" bash -c '
+    source=$1
+    set -- --check "$2"
+    . "$source"
+    server_run_job() { printf "%s|%s\\n" "$1" "$4" >>"$CONNECTION_CHECK_CALLS"; }
+    server_telegram_mark() { :; }
+    server_snapshot_table() { :; }
+    run_and_look fine
+    run_and_look broken
+    run_and_look repaired
+  ' bash "$HERE/connection-check.sh" "$evidence" 2>&1); then
+    if [ "$(<"$calls")" = "$(printf '%s\n%s\n%s' 'fine|ok' 'broken|delivery_failed' 'repaired|ok')" ]; then
+      ok 'connection-check gives only its broken-key routine delivery_failed'
+    else
+      bad "connection-check used the wrong routine statuses ($(cat "$calls" 2>/dev/null))"
+    fi
   else
-    bad 'connection-check does not name its broken-key delivery status'
+    bad "connection-check could not run its routine-status phases ($output)"
   fi
 }
-connection_check_accepts_its_intended_delivery_failure
+connection_check_uses_the_expected_status_for_each_phase
 
 server_run_job_restores_pause_after_diagnostic_failure() {
   local mode evidence updates output code

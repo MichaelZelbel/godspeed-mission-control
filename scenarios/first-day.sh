@@ -4,7 +4,7 @@
 # direct routine run retains its lifecycle admission record and Hermes run log in the evidence folder.
 SCENARIO=first-day
 # shellcheck source=scenarios/scenario-lib.sh
-. "$(dirname "$0")/scenario-lib.sh"
+. "$(dirname "${BASH_SOURCE[0]}")/scenario-lib.sh"
 # shellcheck source=scenarios/server-lib.sh
 . "$HERE/server-lib.sh"
 scenario_arguments "$@"
@@ -45,9 +45,14 @@ first_day_phase() { # <step name>
   CURRENT_STEP=$1
   phase "$1"
 }
+keep_first_day_routine_output() {
+  local routine_paths routine_output
+  routine_paths=$(server_routine_evidence_paths) || fail 'the installed server did not name its routine evidence paths'
+  routine_output=$(server_routine_evidence_path "$routine_paths" output) || fail 'the installed server named no routine output path'
+  server_copy_evidence "$routine_output" "$EVIDENCE"
+}
 
 act() {
-  local routine_paths routine_output
   fresh_evidence
   install_paths
   need_node
@@ -84,9 +89,7 @@ act() {
   server_table work_items "$EVIDENCE/work-items.json"
   server_table notes "$EVIDENCE/notes-after-reply.json"
   server_copy_evidence /opt/data/full-candidate/workspace/work "$EVIDENCE"
-  routine_paths=$(server_routine_evidence_paths) || fail 'the installed server did not name its routine evidence paths'
-  routine_output=$(server_routine_evidence_path "$routine_paths" output) || fail 'the installed server named no routine output path'
-  server_copy_evidence "$routine_output" "$EVIDENCE"
+  keep_first_day_routine_output
   server_manifest
   step_passed 'morning brief was saved, delivered, and read back through Telegram'
   rm -f "$EVIDENCE"/.[a-z]*
@@ -179,11 +182,13 @@ NODE
   pass "a fresh Docker install connected its fictional Telegram bot, ran research, choice and work, saved a morning brief, and answered today's brief through the gateway"
 }
 
-if [ "$CHECK_ONLY" = yes ]; then
-  install_paths
-  need_node
-  check "$EVIDENCE"
-else
-  act
-  check "$EVIDENCE"
+if [ "${BASH_SOURCE[0]}" = "$0" ]; then
+  if [ "$CHECK_ONLY" = yes ]; then
+    install_paths
+    need_node
+    check "$EVIDENCE"
+  else
+    act
+    check "$EVIDENCE"
+  fi
 fi

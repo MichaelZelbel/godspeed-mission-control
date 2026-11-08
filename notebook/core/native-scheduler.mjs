@@ -747,21 +747,21 @@ export class NativeScheduler{
   if(id&&!nativeJobs(this.home,this.device).some(j=>j.id===id))throw Error('Choose an existing Hermes task');
   const release=this.lifecycle.acquire('routine run');
   if(!release){try{this.saveRunDiagnostic({id:'rejected-'+randomUUID(),at:new Date(this.now()).toISOString(),admitted:false,lifecycle_owner:this.lifecycle.reason,requested_job:id||null});}catch{}throw Error('The assistant is updating or another routine is already running.');}
-  const args=id?['run',id]:['tick'],diagnosticId='run-'+randomUUID(),command=this.routineCommand(args);
-  try{this.saveRunDiagnostic({id:diagnosticId,at:new Date(this.now()).toISOString(),admitted:true,lifecycle_owner:'routine run',requested_job:id||null,command:[command.executable,...command.args],child:{pid:null,tree:null},exit_status:null,signal:null,stderr:'',run_log:{path:routineRunEvidencePaths({workspace:this.store.root,home:this.home}).output,command_output:''}});}
+  const args=id?['run',id]:['tick'],diagnosticId='run-'+randomUUID(),command=this.routineCommand(args),evidencePaths=routineRunEvidencePaths({workspace:this.store.root,home:this.home});
+  try{this.saveRunDiagnostic({id:diagnosticId,at:new Date(this.now()).toISOString(),admitted:true,lifecycle_owner:'routine run',requested_job:id||null,command:[command.executable,...command.args],child:{pid:null,tree:null},exit_status:null,signal:null,stderr:'',run_log:{path:evidencePaths.output,command_output:''}});}
   catch(error){release();throw error;}
-  const run=this.runNow(id,{diagnosticId,command});this.running=run;run.catch(error=>{try{this.onFailure?.(error);}catch{}}).finally(()=>{if(this.running===run)this.running=null;release();});
+  const run=this.runNow(id,{diagnosticId,command,evidencePaths});this.running=run;run.catch(error=>{try{this.onFailure?.(error);}catch{}}).finally(()=>{if(this.running===run)this.running=null;release();});
   return {started:true,...(id?{id}:{})};
  }
  recordRunDiagnostic(id,fields){if(!id)return;try{this.updateRunDiagnostic(id,fields);}catch(error){try{this.onFailure?.(error);}catch{}}}
- async runNow(id,{diagnosticId=null,command=null}={}){
+ async runNow(id,{diagnosticId=null,command=null,evidencePaths=routineRunEvidencePaths({workspace:this.store.root,home:this.home})}={}){
   this.requireOwner('Run the routine');
   const runCommand=command||this.routineCommand(id?['run',id]:['tick']),started=child=>this.recordRunDiagnostic(diagnosticId,{child:{pid:child?.pid??null,tree:child?.tree??null}});
   const work=id?(()=>{if(!nativeJobs(this.home,this.device).some(j=>j.id===id))throw Error('Choose an existing Hermes task');return this.runRoutineCommand(runCommand,{timeout:this.tickLimit,onStart:started,detail:true});})():this.runRoutineCommand(runCommand,{timeout:this.tickLimit,onStart:started,detail:true});
   let result;
   try{result=await beatWhile(work,()=>this.onProgress?.(),{limitMs:this.tickLimit+60000,every:this.beatEvery});}
-  catch(error){this.recordRunDiagnostic(diagnosticId,{exit_status:error?.code??null,signal:error?.signal??null,stderr:diagnostic(error),run_log:{path:path.join(this.home,'cron','output'),command_output:diagnostic({stderr:error?.stdout})}});throw error;}
-  this.recordRunDiagnostic(diagnosticId,{exit_status:result?.code??0,signal:result?.signal??null,stderr:diagnostic({stderr:result?.stderr}),run_log:{path:path.join(this.home,'cron','output'),command_output:diagnostic({stderr:result?.stdout})}});
+  catch(error){this.recordRunDiagnostic(diagnosticId,{exit_status:error?.code??null,signal:error?.signal??null,stderr:diagnostic(error),run_log:{path:evidencePaths.output,command_output:diagnostic({stderr:error?.stdout})}});throw error;}
+  this.recordRunDiagnostic(diagnosticId,{exit_status:result?.code??0,signal:result?.signal??null,stderr:diagnostic({stderr:result?.stderr}),run_log:{path:evidencePaths.output,command_output:diagnostic({stderr:result?.stdout})}});
   try{this.afterTick();}catch{}
   return result?.stdout;
  }
