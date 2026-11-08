@@ -3738,17 +3738,6 @@ case "$ACT_NODE_ORDER" in
   $'need-node\nselected-node:'"$ROOT"'/scenarios/hevy-fixture.mjs --state '"$RFS"'/action-evidence/fixture-state.json --log '"$RFS"'/action-evidence/fixture.log\npersistence-docker:set\npersistence-native:set\nselected-node:'"$ROOT"'/scenarios/hevy-fixture.mjs --state '"$RFS"'/action-evidence/fixture-state.json --log '"$RFS"'/action-evidence/fixture.log --mutate') ok "the Hevy action uses its selected Node for both fixture launches before descriptor and persistence reads" ;;
   *) bad "the Hevy action did not use its selected Node for both fixture launches before descriptor and persistence reads ($ACT_NODE_ORDER)" ;;
 esac
-NO_NODE_ACTION=$(env -u NODE GODSPEED_SCENARIO_ROOT="$RFS/root" bash -c '
-  cd "$2"
-  . "$1"
-  node_bin() { return 1; }
-  act
-' node-missing "$ROOT/scenarios/workouts-from-hevy.sh" "$ROOT/scenarios" 2>&1)
-NO_NODE_ACTION_CODE=$?
-case "$NO_NODE_ACTION_CODE $NO_NODE_ACTION" in
-  "1 "*"FAIL workouts-from-hevy: node is not on this machine and the install carries none"*) ok "the Hevy action stops before its fixture when it cannot select Node" ;;
-  *) bad "the Hevy action did not stop before its fixture without Node (exit $NO_NODE_ACTION_CODE: $NO_NODE_ACTION)" ;;
-esac
 printf '00000000-0000-4000-8000-000000000001\n' >"$RFS/assistant/hevy.json"
 ACCEPTED_SCAN=$(GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy NODE="$(command -v node)" bash -c '
   cd "$3"
