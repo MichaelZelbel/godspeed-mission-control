@@ -218,10 +218,11 @@ server_local_listener_port() {
 server_local_listener_port
 
 server_run_job_keeps_success_evidence() {
-  local evidence=$TMP/server-run-job-evidence copies output
+  local evidence=$TMP/server-run-job-evidence copies updates output
   mkdir -p "$evidence"
-  if output=$(EVIDENCE="$evidence" SERVER_COPY_LOG="$evidence/copies" bash -c '
+  if output=$(EVIDENCE="$evidence" SERVER_COPY_LOG="$evidence/copies" SERVER_UPDATES="$evidence/updates" NODE="$(command -v node)" bash -c '
     . "$1"
+    quoted_json() { "$NODE" -e "process.stdout.write(JSON.stringify(process.argv[1]))" "$1"; }
     tables=0
     server_table() {
       tables=$((tables + 1))
@@ -230,7 +231,7 @@ server_run_job_keeps_success_evidence() {
     }
     server_post() {
       case $1 in
-        /api/jobs/update) printf "{}\\n" >"$3"; printf 200 ;;
+        /api/jobs/update) printf "%s\\n" "$(cat "$2")" >>"$SERVER_UPDATES"; printf "{}\\n" >"$3"; printf 200 ;;
         /api/jobs/run) printf "{\\\"started\\\":true}\\n" >"$3"; printf 202 ;;
       esac
     }
@@ -241,11 +242,13 @@ server_run_job_keeps_success_evidence() {
     server_run_job report "Coach reminders and habit check" 10
   ' bash "$HERE/server-lib.sh" 2>&1); then
     copies=$(<"$evidence/copies")
+    updates=$(<"$evidence/updates")
     if grep -Fqx "/opt/data/full-candidate/workspace/.godspeed/routine-run-diagnostics.json|$evidence/routine-diagnostics-report.json" "$evidence/copies" \
-      && grep -Fqx "/opt/data/full-candidate/hermes/cron/output|$evidence/routine-output-report" "$evidence/copies"; then
-      ok 'a successful routine run retains its diagnostics and cron output evidence'
+      && grep -Fqx "/opt/data/full-candidate/hermes/cron/output|$evidence/routine-output-report" "$evidence/copies" \
+      && [ "$updates" = "$(printf '%s\n%s' '{"id":"brief","paused":false}' '{"id":"brief","paused":true}')" ]; then
+      ok 'a successful routine run retains evidence and restores its paused state'
     else
-      bad "a successful routine run retains its diagnostics and cron output evidence ($copies)"
+      bad "a successful routine run retains evidence and restores its paused state (copies: $copies; updates: $updates)"
     fi
   else
     bad "a successful routine run retains its diagnostics and cron output evidence ($output)"
@@ -4293,6 +4296,14 @@ if [ "$SFR_CODE" = 2 ] && [ ! -e "$TMP/sfr-pr-foreign/this-commit/stage.json" ];
   ok "a foreign immutable PR image cannot become this commit's stage"
 else
   bad "a foreign immutable PR image was not refused before staging (exit $SFR_CODE: $(cat "$TMP/sfr.err"))"
+fi
+node -e 'const fs=require("fs"),file=process.argv[1],s=JSON.parse(fs.readFileSync(file,"utf8"));s.serverEditions.other={image:"ghcr.io/another-product/server@sha256:"+"d".repeat(64)};fs.writeFileSync(file,JSON.stringify(s));' "$TMP/sfr-public/beta/stage.json"
+SFR_OUT=$(GODSPEED_SCENARIO_REPO=$SFR_REPO GODSPEED_SCENARIO_PUBLIC_RAW=file://$TMP/sfr-public GODSPEED_SCENARIO_PR_IMAGE=$SFR_IMAGE@$SFR_PC \
+  bash "$SFR" '' "$SFR_TWO" "$TMP/sfr-pr-second-edition" 2>"$TMP/sfr.err"); SFR_CODE=$?
+if [ "$SFR_CODE" = 2 ] && grep -qF 'supports one server edition' "$TMP/sfr.err" && [ ! -e "$TMP/sfr-pr-second-edition/this-commit/stage.json" ]; then
+  ok "a PR scenario stage refuses a second server edition with another image repository"
+else
+  bad "a PR scenario stage did not clearly refuse a second server edition (exit $SFR_CODE: $(cat "$TMP/sfr.err"))"
 fi
 sfr_night "$TMP/sfr-images-none" "$TMP/sfr-night3"
 if [ "$SFR_CODE" != 0 ]; then ok "no image within reach fails"; else bad "no image within reach succeeded"; fi

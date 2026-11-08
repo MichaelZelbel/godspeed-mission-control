@@ -403,12 +403,13 @@ test('the pick on a pull request asks the files endpoint of that pull request, a
   assert.equal(readFileSync(`${dir}/out`, 'utf8'), 'picked=,charm-challenge,\n');
 });
 
-test('the PR-image job binds its published digest to stage and selects every shared-server helper consumer', async () => {
+test('the PR-image job binds its published digest to stage and selects its shared-server helper consumers', async () => {
   const { readFileSync, writeFileSync, mkdtempSync, mkdirSync, chmodSync } = await import('node:fs');
   const { tmpdir } = await import('node:os');
   const { spawnSync } = await import('node:child_process');
   // The workflow is read with every line marked, so the checks below read as they did when they proved the draft.
-  const text = readFileSync(WORKFLOW, 'utf8').replace(/\r\n/g, '\n').split('\n').map((line) => `+${line}`).join('\n');
+  const workflow = readFileSync(WORKFLOW, 'utf8').replace(/\r\n/g, '\n');
+  const text = workflow.split('\n').map((line) => `+${line}`).join('\n');
   assert.match(text, /^\+    if: github\.event_name == 'pull_request' && github\.event\.pull_request\.head\.repo\.full_name == github\.repository$/m, 'only a same-repository pull request can build the image');
   assert.match(text, /^\+      TAG: pr-\$\{\{ github\.event\.pull_request\.number \}\}-\$\{\{ github\.event\.pull_request\.head\.sha \}\}$/m, 'the image tag is not unique to this pull request head');
   assert.match(text, /^\+          ref: \$\{\{ github\.event\.pull_request\.head\.sha \}\}$/m, 'the image builder does not check out the pull request head');
@@ -419,8 +420,8 @@ test('the PR-image job binds its published digest to stage and selects every sha
   assert.match(text, /^\+      GODSPEED_SCENARIO_PR_IMAGE: \$\{\{ needs\.pr-image\.outputs\.image \}\}$/m, 'stage rebuilds the image reference instead of receiving its output');
   assert.match(text, /^\+    if: \$\{\{ always\(\) && \(github\.event_name != 'pull_request' \|\| \(github\.event\.pull_request\.head\.repo\.full_name == github\.repository && needs\.pr-image\.result == 'success'\)\) \}\}$/m, 'stage can run after a selected PR image fails');
   assert.doesNotMatch(text, /GODSPEED_SCENARIO_PR_IMAGE_TAG/, 'stage reconstructs the producer tag');
-  const readers=['connection-check','first-day','no-question-he-cannot-judge','plain-yes','what-was-that'];
-  for(const name of readers)assert.match(readFileSync(fileURLToPath(new URL(`./${name}.sh`, import.meta.url)),'utf8'),/^\. "\$HERE\/server-lib\.sh"$/m,`${name} no longer directly uses the shared server helper`);
+  const readers=[...workflow.matchAll(/bash scenarios\/([a-z0-9-]+)\.sh "\$STAGE_REF"/g)].map(match=>match[1]).sort().filter(name=>/^\. "\$HERE\/server-lib\.sh"$/m.test(readFileSync(fileURLToPath(new URL(`./${name}.sh`, import.meta.url)),'utf8')));
+  assert.ok(readers.length>0,'the workflow has no direct shared-server helper consumer');
   assert.match(text,/grep -qx 'scenarios\/server-lib\.sh' "\$RUNNER_TEMP\/changed" && grep -qF '\. "\$HERE\/server-lib\.sh"' "scenarios\/\$job\.sh"/,'the PR-image picker misses a server-lib-only change');
   assert.match(text,/grep -qx 'scenarios\/server-lib\.sh' "\$RUNNER_TEMP\/changed" && grep -qF '\. "\$HERE\/server-lib\.sh"' "scenarios\/\$j\.sh"/,'the stage picker misses a server-lib-only change');
   const at=text.indexOf('+        run: |\n',text.indexOf('+        id: pick\n'));

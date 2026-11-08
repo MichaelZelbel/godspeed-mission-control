@@ -749,7 +749,7 @@ export class NativeScheduler{
   const args=id?['run',id]:['tick'],diagnosticId='run-'+randomUUID(),command=this.routineCommand(args);
   try{this.saveRunDiagnostic({id:diagnosticId,at:new Date(this.now()).toISOString(),admitted:true,lifecycle_owner:'routine run',requested_job:id||null,command:[command.executable,...command.args],child:{pid:null,tree:null},exit_status:null,signal:null,stderr:'',run_log:{path:path.join(this.home,'cron','output'),command_output:''}});}
   catch(error){release();throw error;}
-  const run=this.runNow(id,{diagnosticId,command});this.running=run;run.catch(()=>{}).finally(()=>{if(this.running===run)this.running=null;release();});
+  const run=this.runNow(id,{diagnosticId,command});this.running=run;run.catch(error=>{try{this.onFailure?.(error);}catch{}}).finally(()=>{if(this.running===run)this.running=null;release();});
   return {started:true,...(id?{id}:{})};
  }
  recordRunDiagnostic(id,fields){if(!id)return;try{this.updateRunDiagnostic(id,fields);}catch(error){try{this.onFailure?.(error);}catch{}}}

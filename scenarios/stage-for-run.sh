@@ -69,22 +69,33 @@ digest_of() { # <image name> <tag>: the digest, or nothing
 editions=$(node "$HERE/../stage/stage.mjs" "$folder/beta/stage.json" json |
   node -e 'const s=JSON.parse(require("fs").readFileSync(0,"utf8"));for(const [k,v] of Object.entries(s.serverEditions))console.log(k+" "+v.image.split("@")[0])')
 chosen=''
-commits=$(git -C "$REPO" rev-list --first-parent -n 50 "$commit")
-[ -z "$pr_image" ] || commits=$commit
-for c in $commits; do
-  all=yes; found=''
+if [ -n "$pr_image" ]; then
+  pr_edition=''
   while read -r edition image; do
-    if [ -n "$pr_image" ]; then
-      [ "$image" = "$pr_image_name" ] || { say "The PR scenario image is not the $edition server image: $pr_image"; exit 2; }
-      d=$pr_image_digest
-    else
-      d=$(digest_of "$image" "v2-sha-$c")
+    if [ -n "$pr_edition" ]; then
+      if [ "$image" != "$pr_image_name" ]; then
+        say "The PR-head image path supports one server edition; stage edition $edition uses the different image repository $image."
+      else
+        say "The PR-head image path supports one server edition; stage also names $edition."
+      fi
+      exit 2
     fi
-    if [ -z "$d" ]; then all=no; break; fi
-    found="$found$edition $d;"
+    [ "$image" = "$pr_image_name" ] || { say "The PR scenario image is not the $edition server image: $pr_image"; exit 2; }
+    pr_edition=$edition
   done <<<"$editions"
-  if [ "$all" = yes ]; then chosen=$c; digests=$found; break; fi
-done
+  [ -n "$pr_edition" ] || { say 'The public stage names no server edition for the PR-head image.'; exit 2; }
+  chosen=$commit
+else
+  for c in $(git -C "$REPO" rev-list --first-parent -n 50 "$commit"); do
+    all=yes; found=''
+    while read -r edition image; do
+      d=$(digest_of "$image" "v2-sha-$c")
+      if [ -z "$d" ]; then all=no; break; fi
+      found="$found$edition $d;"
+    done <<<"$editions"
+    if [ "$all" = yes ]; then chosen=$c; digests=$found; break; fi
+  done
+fi
 [ -n "$chosen" ] || { if [ -n "$pr_image" ]; then say "The PR-head server image is unavailable, so this commit cannot be proved on the Docker server."; else say "No server image v2-sha-<commit> exists for $commit or its 49 first-parent ancestors, so this commit cannot be proved on the Docker server."; fi; exit 1; }
 if [ -n "$pr_image" ]; then
   say "The server image is PR head ${commit:0:7}'s immutable image."
@@ -98,19 +109,23 @@ git -C "$REPO" archive "$commit" | tar -x -C "$folder/this-commit"
 git -C "$REPO" show "$commit:third-party/addons/sources.json" >"$folder/sources.json"
 node -e '
 const fs = require("fs");
-const [pub, sources, commit, digests, out] = process.argv.slice(1);
+const [pub, sources, commit, prEdition, prDigest, digests, out] = process.argv.slice(1);
 const s = JSON.parse(fs.readFileSync(pub, "utf8"));
 s.version = `${s.version}.commit.${commit.slice(0, 7)}`;
 s.productCommit = commit;
-for (const pair of digests.split(";").filter(Boolean)) {
-  const [edition, digest] = pair.split(" ");
-  s.serverEditions[edition].image = `${s.serverEditions[edition].image.split("@")[0]}@${digest}`;
+if (prEdition) {
+  s.serverEditions[prEdition].image = `${s.serverEditions[prEdition].image.split("@")[0]}@${prDigest}`;
+} else {
+  for (const pair of digests.split(";").filter(Boolean)) {
+    const [edition, digest] = pair.split(" ");
+    s.serverEditions[edition].image = `${s.serverEditions[edition].image.split("@")[0]}@${digest}`;
+  }
 }
 s.addons = {};
 for (const a of JSON.parse(fs.readFileSync(sources, "utf8"))) s.addons[a.name] = a.commit || commit;
 s.previous = null;
 fs.writeFileSync(out, JSON.stringify(s, null, 2) + "\n");
-' "$folder/beta/stage.json" "$folder/sources.json" "$commit" "$digests" "$folder/this-commit/stage.json"
+' "$folder/beta/stage.json" "$folder/sources.json" "$commit" "${pr_edition:-}" "${pr_image_digest:-}" "${digests:-}" "$folder/this-commit/stage.json"
 rm -f "$folder/sources.json"
 node "$HERE/../stage/stage.mjs" "$folder/this-commit/stage.json" check
 sh "$HERE/../stage/stage.sh" "$folder/this-commit/stage.json" check
