@@ -108,20 +108,32 @@ act() {
   provider_request_int_trap=$(trap -p INT || true)
   provider_request_term_trap=$(trap -p TERM || true)
   cleanup_provider_request() { rm -f "$provider_request"; }
+  run_saved_trap() {
+    [ -z "$1" ] && return
+    eval "set -- $1"
+    eval "$3"
+  }
   restore_provider_request_traps() {
     trap - EXIT INT TERM
     [ -z "$provider_request_exit_trap" ] || eval "$provider_request_exit_trap"
     [ -z "$provider_request_int_trap" ] || eval "$provider_request_int_trap"
     [ -z "$provider_request_term_trap" ] || eval "$provider_request_term_trap"
   }
+  finish_provider_request() {
+    cleanup_provider_request
+    trap - EXIT
+    run_saved_trap "$provider_request_exit_trap"
+  }
   cancel_provider_request() {
+    local signal=$1 status=$2
     cleanup_provider_request
     restore_provider_request_traps
-    exit "$1"
+    kill -s "$signal" "$$"
+    exit "$status"
   }
-  trap cleanup_provider_request EXIT
-  trap 'cancel_provider_request 130' INT
-  trap 'cancel_provider_request 143' TERM
+  trap finish_provider_request EXIT
+  trap 'cancel_provider_request INT 130' INT
+  trap 'cancel_provider_request TERM 143' TERM
   printf '{"url":%s,"key":%s,"model":%s,"routines":true}\n' \
     "$(quoted_json "$AI_URL")" "$(quoted_json "$GODSPEED_SCENARIO_AI_KEY")" "$(quoted_json "$AI_MODEL")" >"$provider_request"
   if ! provider=$(curl -sS -o "$EVIDENCE/provider-answer.json" -w '%{http_code}' --max-time 300 -X POST -H 'Content-Type: application/json' \

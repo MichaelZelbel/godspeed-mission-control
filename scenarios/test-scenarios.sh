@@ -4077,7 +4077,7 @@ day_facts_provider_request_is_removed_on_termination() {
   mkdir -p "$folder/home/cron" "$folder/home/scripts" "$folder/root" "$folder/tmp"
   printf '%s\n' '{"jobs":[{"name":"Remember what you said","script":"scenario-facts","cron":"40 3 * * *"}]}' >"$folder/home/cron/jobs.json"
   : >"$folder/home/scripts/scenario-facts"
-  if ACTION_HOME="$folder/home" ACTION_KEY="$key" \
+  if ACTION_HOME="$folder/home" ACTION_KEY="$key" ACTION_TERM_TRAP_RESTORED="$folder/term-trap-restored" \
     GODSPEED_SCENARIO_ROOT="$folder/root" GODSPEED_SCENARIO_WORK="$folder/work" TMPDIR="$folder/tmp" \
     GODSPEED_SCENARIO_AI_KEY="$key" GODSPEED_SCENARIO_AI_URL='https://api.anthropic.com/v1' \
     GODSPEED_SCENARIO_AI_MODEL='claude-haiku-4-5' bash -c '
@@ -4092,6 +4092,7 @@ day_facts_provider_request_is_removed_on_termination() {
       run_facts_routine() { :; }
       facts_snapshot() { :; }
       check() { :; }
+      trap ": > \"$ACTION_TERM_TRAP_RESTORED\"" TERM
       curl() {
         local data=
         while [ "$#" -gt 0 ]; do
@@ -4110,8 +4111,8 @@ day_facts_provider_request_is_removed_on_termination() {
   else
     code=$?
   fi
-  if [ "$code" = 143 ] && ! rg -F -- "$key" "$folder/tmp" >/dev/null 2>&1; then
-    ok 'terminating a remembered-facts Settings POST removes its private key request'
+  if [ "$code" = 143 ] && [ -f "$folder/term-trap-restored" ] && ! rg -F -- "$key" "$folder/tmp" >/dev/null 2>&1; then
+    ok 'terminating a remembered-facts Settings POST removes its private key request and preserves termination cleanup'
   else
     bad "terminating a remembered-facts Settings POST left its private key request (exit $code: $(cat "$folder/action.log" 2>/dev/null))"
   fi
