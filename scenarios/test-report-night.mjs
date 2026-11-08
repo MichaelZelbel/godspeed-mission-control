@@ -206,6 +206,11 @@ test('talk-prep-honest always uploads its own evidence folder and fails when it 
   const uploads = steps.filter((s) => s.includes('actions/upload-artifact@'));
   assert.equal(uploads.length, 1, 'talk-prep-honest should have exactly one upload step');
   const up = uploads[0];
+  // Steps run in declaration order: an upload placed before the scenario would find no folder yet,
+  // so the scenario's own step must come first and the upload after it.
+  const runIdx = steps.findIndex((s) => s.includes(`bash scenarios/${name}.sh`));
+  assert.ok(runIdx >= 0, `no step of the job runs scenarios/${name}.sh`);
+  assert.ok(runIdx < steps.indexOf(up), 'the evidence upload must come after the scenario that creates the evidence');
   const field = (k) => (up.match(new RegExp(`^ +${k}: *(.+?)[ \\t]*$`, 'm')) || [])[1];
   assert.equal(field('if'), 'always()', 'the evidence upload must run even when the scenario fails');
   assert.equal(field('uses'), 'actions/upload-artifact@v4');
