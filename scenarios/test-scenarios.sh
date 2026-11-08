@@ -4166,7 +4166,6 @@ if ROOT="$ROOT" HRC_FAILURE="$HRC_FAILURE" HERMES_RELEASE_FAILURE_DROPIN="$HRC_F
   scenario_arguments test-stage
   install_the_stage_line() { :; }
   need_node() { NODE=$(command -v node); }
-  wait_for() { shift 2; "$@"; }
   notebook_is_up() { :; }
   install_fixture_hermes() { :; }
   record_releases() { :; }
