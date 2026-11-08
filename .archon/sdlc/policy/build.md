@@ -58,13 +58,20 @@ The builder key is kept away from `.github/workflows/` by design: a build must n
 the checks that judge it. GitHub refuses any push from it that creates or updates a workflow file.
 
 - No commit of a build round touches a file under `.github/workflows/`, in any round.
-- When the fix needs a workflow change, the round commits everything else and puts the exact
-  workflow change, unchanged, in `.github/workflow-drafts/<same file name>`. It quotes that change in
-  the pull request description under "Workflow change for the release key", and opens the pull
-  request as usual.
+- When the fix needs a workflow change, the round commits everything else and writes the change to
+  `.github/workflow-drafts/<same file name>` as the complete new content of that workflow file, not
+  a fragment. It quotes the change in the pull request description under "Workflow change for the
+  release key", together with a manifest of four lines: the target path under `.github/workflows/`;
+  the operation (create, replace or delete; a delete has no draft content); the git blob hash of the
+  target on the base commit the draft was written against (none for a create) and the blob hash of
+  the draft; and the exact names of the scenario jobs that need the change.
 - Such a pull request is Done when the review says Ready at its head commit and its checks are green,
-  apart from the scenario jobs that need the drafted workflow change. Mission Control then applies
-  the reviewed draft with the release key and removes the draft file.
+  apart from the scenario jobs named in the manifest and no others. The review checks that the
+  manifest matches the draft.
+- Mission Control then applies the draft with the release key to the target path, only after
+  confirming the target's current blob hash equals the manifest's base hash and the draft's hash
+  equals the result hash; on a mismatch it applies nothing and sends the pull request back for a
+  redo. It then removes the draft file.
 - A publish refused for this reason is never retried. The round redoes the change the drafted way:
   it drops the workflow hunk from its commits and writes the draft. A new round that repeats the same
   refused push is the mistake this rule prevents.
