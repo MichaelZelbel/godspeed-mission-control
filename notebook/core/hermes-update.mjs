@@ -20,8 +20,9 @@ const errorText=result=>[result?.stderr,result?.stdout,result?.error?.message].f
 const failure=({step,result})=>({step,output:scrubCredentials(errorText(result)).trim().slice(-2000)});
 const backupName=file=>/^godspeed-pre-update-[0-9a-f-]+\.zip$/.test(file);
 const HERMES_REPOSITORY={owner:'NousResearch',name:'hermes-agent'};
+export const HERMES_HTTPS_ORIGIN=`https://github.com/${HERMES_REPOSITORY.owner}/${HERMES_REPOSITORY.name}.git`;
 const hermesRepositoryPath=`${HERMES_REPOSITORY.owner}/${HERMES_REPOSITORY.name}`.toLowerCase();
-const officialHermesRemote=value=>['https://github.com/','git@github.com:','ssh://git@github.com/'].some(prefix=>String(value||'').trim().replace(/\/+$/,'').replace(/\.git$/i,'').toLowerCase()===prefix+hermesRepositoryPath);
+export const officialHermesRemote=value=>['https://github.com/','git@github.com:','ssh://git@github.com/'].some(prefix=>String(value||'').trim().replace(/\/+$/,'').replace(/\.git$/i,'').toLowerCase()===prefix+hermesRepositoryPath);
 
 export function readHermesUpdate(store){
  try{const value=JSON.parse(fs.readFileSync(path.join(store.state,UPDATE_FILE),'utf8'));return value&&typeof value==='object'&&!Array.isArray(value)?value:{};}catch{return {};}

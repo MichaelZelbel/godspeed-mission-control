@@ -3,6 +3,7 @@
 import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import { join, resolve } from 'node:path';
+import { HERMES_HTTPS_ORIGIN } from '../notebook/core/hermes-update.mjs';
 
 const option = name => {
   const at = process.argv.indexOf(name);
@@ -39,7 +40,7 @@ await mkdir(join(dir, 'bin'), { recursive: true });
 await mkdir(join(dir, 'hermes_cli'), { recursive: true });
 await mkdir(join(dir, 'venv', 'bin'), { recursive: true });
 git('init', '-q'); git('config', 'user.name', 'Scenario'); git('config', 'user.email', 'scenario@example.invalid');
-git('remote', 'add', 'origin', 'https://github.com/NousResearch/hermes-agent.git');
+git('remote', 'add', 'origin', HERMES_HTTPS_ORIGIN);
 const command = `#!/bin/sh
 set -eu
 root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)

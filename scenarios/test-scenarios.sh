@@ -4056,7 +4056,7 @@ HFD=$TMP/hermes-fixture
 HFD_LOG=$TMP/hermes-fixture.log
 if node "$ROOT/scenarios/hermes-update-fixture.mjs" --dir "$HFD" >/dev/null \
   && [ -z "$(git -C "$HFD" status --porcelain)" ] \
-  && [ "$(git -C "$HFD" remote get-url origin)" = https://github.com/NousResearch/hermes-agent.git ] \
+  && node --input-type=module -e "import {pathToFileURL} from 'node:url';const {officialHermesRemote}=await import(pathToFileURL(process.argv[1]).href);process.exit(officialHermesRemote(process.argv[2])?0:1)" "$ROOT/notebook/core/hermes-update.mjs" "$(git -C "$HFD" remote get-url origin)" \
   && [ "$(git -C "$HFD" tag | wc -l | tr -d '[:space:]')" = 4 ] \
   && [ "$(HERMES_FIXTURE_LOG=$HFD_LOG "$HFD/bin/hermes" --version)" = 1.0.0 ] \
   && [ "$(HERMES_FIXTURE_LOG=$HFD_LOG "$HFD/bin/hermes" update --check)" = 1.1.0 ] \
