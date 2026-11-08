@@ -441,6 +441,6 @@ test('the PR-image draft binds its published digest to stage and selects every s
     assert.equal(result.status,0,result.stdout+result.stderr);return result.stdout;
   };
   const helperStages=runStage('scenarios/server-lib.sh');
-  assert.equal(helperStages,'picked=,connection-check,first-day,no-question-he-cannot-judge,plain-yes,what-was-that,\n','a shared helper change does not stage every direct helper consumer');
+  assert.equal(helperStages,`picked=,${readers.join(',')},\n`,'a shared helper change does not stage every direct helper consumer');
   assert.doesNotMatch(helperStages,/,voice,/,'a shared helper change stages an unrelated scenario');
 });
