@@ -90,7 +90,6 @@ local_release_source() {
   release_fixture_pid=$!
   wait_for 30 'the local Hermes release source to start' test -s "$url_file" || fail "the local Hermes release source did not start"
   url=$(cat "$url_file")
-  case $url in http://127.0.0.1:*/releases) ;; *) fail "the local Hermes release source did not report a loopback releases address" ;; esac
   if systemctl --user cat "$unit" >/dev/null 2>&1; then
     dropin=$HOME/.config/systemd/user/$unit.d
     release_source_manager=user

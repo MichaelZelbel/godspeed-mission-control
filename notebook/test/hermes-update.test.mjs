@@ -1,7 +1,7 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import {EventEmitter} from 'node:events';import {PassThrough} from 'node:stream';
 import {execFileSync} from 'node:child_process';
 import {Store} from '../core/records/store.mjs';
-import {HERMES_RELEASES_URL,HermesUpdate,eligibleRelease,readHermesUpdate} from '../core/hermes-update.mjs';
+import {HERMES_RELEASES_URL,HermesUpdate,eligibleRelease,readHermesUpdate,scenarioHermesReleaseUrl} from '../core/hermes-update.mjs';
 import {scrubGitEnvironment} from '../core/assistant-files.mjs';
 import {HermesLifecycle} from '../core/hermes-lifecycle.mjs';
 import {NativeScheduler} from '../core/native-scheduler.mjs';
@@ -201,9 +201,9 @@ test('the Settings status and control persist the assistant update choice',async
 });
 
 test('the native service accepts its loopback scenario release fixture',async t=>{
- const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-hermes-update-scenario-')),home=path.join(root,'.hermes'),state=path.join(root,'.godspeed'),previous={runtime:process.env.GODSPEED_ORIGINAL_RUNTIME,config:process.env.GODSPEED_ASSISTANT_CONFIG,scenarioReleaseUrl:process.env.GODSPEED_SCENARIO_HERMES_UPDATE_RELEASES_URL};fs.mkdirSync(home,{recursive:true});fs.mkdirSync(state,{recursive:true});fs.writeFileSync(path.join(state,'assistant.json'),JSON.stringify({verified:true,executable:path.join(root,'bin','hermes'),home,sourceRoot:path.join(root,'source')}));process.env.GODSPEED_ORIGINAL_RUNTIME='on';delete process.env.GODSPEED_ASSISTANT_CONFIG;process.env.GODSPEED_SCENARIO_HERMES_UPDATE_RELEASES_URL='http://127.0.0.1:48123/releases';t.after(async()=>{if(previous.runtime===undefined)delete process.env.GODSPEED_ORIGINAL_RUNTIME;else process.env.GODSPEED_ORIGINAL_RUNTIME=previous.runtime;if(previous.config===undefined)delete process.env.GODSPEED_ASSISTANT_CONFIG;else process.env.GODSPEED_ASSISTANT_CONFIG=previous.config;if(previous.scenarioReleaseUrl===undefined)delete process.env.GODSPEED_SCENARIO_HERMES_UPDATE_RELEASES_URL;else process.env.GODSPEED_SCENARIO_HERMES_UPDATE_RELEASES_URL=previous.scenarioReleaseUrl;fs.rmSync(root,{recursive:true,force:true});});
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-hermes-update-scenario-')),home=path.join(root,'.hermes'),state=path.join(root,'.godspeed'),releaseUrl=scenarioHermesReleaseUrl(48123),previous={runtime:process.env.GODSPEED_ORIGINAL_RUNTIME,config:process.env.GODSPEED_ASSISTANT_CONFIG,scenarioReleaseUrl:process.env.GODSPEED_SCENARIO_HERMES_UPDATE_RELEASES_URL};fs.mkdirSync(home,{recursive:true});fs.mkdirSync(state,{recursive:true});fs.writeFileSync(path.join(state,'assistant.json'),JSON.stringify({verified:true,executable:path.join(root,'bin','hermes'),home,sourceRoot:path.join(root,'source')}));process.env.GODSPEED_ORIGINAL_RUNTIME='on';delete process.env.GODSPEED_ASSISTANT_CONFIG;process.env.GODSPEED_SCENARIO_HERMES_UPDATE_RELEASES_URL=releaseUrl;t.after(async()=>{if(previous.runtime===undefined)delete process.env.GODSPEED_ORIGINAL_RUNTIME;else process.env.GODSPEED_ORIGINAL_RUNTIME=previous.runtime;if(previous.config===undefined)delete process.env.GODSPEED_ASSISTANT_CONFIG;else process.env.GODSPEED_ASSISTANT_CONFIG=previous.config;if(previous.scenarioReleaseUrl===undefined)delete process.env.GODSPEED_SCENARIO_HERMES_UPDATE_RELEASES_URL;else process.env.GODSPEED_SCENARIO_HERMES_UPDATE_RELEASES_URL=previous.scenarioReleaseUrl;fs.rmSync(root,{recursive:true,force:true});});
  const service=await createService({root,port:0});t.after(()=>service.close());
- assert.equal(service.domains.hermesUpdate.releaseUrl,'http://127.0.0.1:48123/releases');
+ assert.equal(service.domains.hermesUpdate.releaseUrl,releaseUrl);
 });
 
 test('a timed-out release lookup records failure and lets routines continue',{timeout:2000},async t=>{

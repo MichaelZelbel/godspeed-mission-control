@@ -22,6 +22,10 @@ const backupName=file=>/^godspeed-pre-update-[0-9a-f-]+\.zip$/.test(file);
 const HERMES_REPOSITORY={owner:'NousResearch',name:'hermes-agent'};
 export const HERMES_HTTPS_ORIGIN=`https://github.com/${HERMES_REPOSITORY.owner}/${HERMES_REPOSITORY.name}.git`;
 export const HERMES_RELEASES_URL=`https://api.github.com/repos/${HERMES_REPOSITORY.owner}/${HERMES_REPOSITORY.name}/releases?per_page=100`;
+export const SCENARIO_HERMES_RELEASES_PATH='/releases';
+export const scenarioHermesReleaseUrl=port=>`http://127.0.0.1:${port}${SCENARIO_HERMES_RELEASES_PATH}`;
+const scenarioHermesReleaseUrlPattern=new RegExp(`^http://127\\.0\\.0\\.1:\\d+${SCENARIO_HERMES_RELEASES_PATH}$`);
+export const isScenarioHermesReleaseUrl=value=>scenarioHermesReleaseUrlPattern.test(value||'');
 const hermesRepositoryPath=`${HERMES_REPOSITORY.owner}/${HERMES_REPOSITORY.name}`.toLowerCase();
 export const officialHermesRemote=value=>['https://github.com/','git@github.com:','ssh://git@github.com/'].some(prefix=>String(value||'').trim().replace(/\/+$/,'').replace(/\.git$/i,'').toLowerCase()===prefix+hermesRepositoryPath);
 

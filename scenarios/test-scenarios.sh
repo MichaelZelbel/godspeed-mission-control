@@ -4204,6 +4204,20 @@ if node "$ROOT/scenarios/hermes-update-fixture.mjs" --dir "$HFD_QUOTED" >/dev/nu
 else
   bad 'the local Hermes fixture does not apply a release from an apostrophe-bearing path'
 fi
+HFD_LINK=$TMP/hermes-fixture-link
+ln -s "$HFD" "$HFD_LINK"
+if node "$ROOT/scenarios/hermes-update-fixture.mjs" --dir "$HFD_LINK" --reveal 1.2.0 >/dev/null \
+  && [ "$("$HFD_LINK/bin/hermes" update --check)" = 1.2.0 ] \
+  && "$HFD_LINK/bin/hermes" update --no-backup --yes \
+  && [ "$(git -C "$HFD" describe --exact-match --tags HEAD)" = v1.2.0 ] \
+  && git -C "$HFD" checkout -q v1.0.0 \
+  && node "$ROOT/scenarios/hermes-update-fixture.mjs" --dir "$HFD_LINK" --reveal 1.3.0 >/dev/null \
+  && "$HFD_LINK/bin/hermes" update --backup \
+  && [ "$(git -C "$HFD" describe --exact-match --tags HEAD)" = v1.3.0 ]; then
+  ok 'the local Hermes fixture keeps revealed releases through a symlink'
+else
+  bad 'the local Hermes fixture loses its revealed release through a symlink'
+fi
 
 # ============================================================ every one of them, the same shape
 section 'every script'

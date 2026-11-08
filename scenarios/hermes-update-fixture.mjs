@@ -3,8 +3,8 @@
 import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import { createServer } from 'node:http';
-import { join, resolve } from 'node:path';
-import { HERMES_HTTPS_ORIGIN } from '../notebook/core/hermes-update.mjs';
+import { join } from 'node:path';
+import { HERMES_HTTPS_ORIGIN, SCENARIO_HERMES_RELEASES_PATH, scenarioHermesReleaseUrl } from '../notebook/core/hermes-update.mjs';
 
 const option = name => {
   const at = process.argv.indexOf(name);
@@ -16,7 +16,7 @@ const log = option('--log');
 const metadata = process.argv.includes('--metadata');
 const serve = process.argv.includes('--serve');
 if (!dir) throw new Error('usage: hermes-update-fixture.mjs --dir <folder> [--reveal <version>]');
-const stateFile = `${resolve(dir)}.fixture-state.json`;
+const stateFile = join(dir, '.fixture-state.json');
 const git = (...args) => execFileSync('git', ['-C', dir, ...args], { stdio: 'ignore' });
 
 const fixtureReleases = () => {
@@ -43,12 +43,12 @@ if (reveal) {
 
 if (serve) {
   const server = createServer(async (request, response) => {
-    if (request.method !== 'GET' || request.url !== '/releases') { response.writeHead(404); response.end(); return; }
+    if (request.method !== 'GET' || request.url !== SCENARIO_HERMES_RELEASES_PATH) { response.writeHead(404); response.end(); return; }
     const { reveal: revealed } = JSON.parse(await readFile(stateFile, 'utf8'));
     const releases = fixtureReleases().filter(release => release.version <= revealed).map(release => ({tag_name:release.tag,published_at:release.published,prerelease:false,draft:false}));
     response.writeHead(200, {'Content-Type':'application/json'}); response.end(JSON.stringify(releases));
   });
-  server.listen(0, '127.0.0.1', () => process.stdout.write(`http://127.0.0.1:${server.address().port}/releases\n`));
+  server.listen(0, '127.0.0.1', () => process.stdout.write(`${scenarioHermesReleaseUrl(server.address().port)}\n`));
   await new Promise(resolve => server.on('close', resolve));
 }
 
@@ -60,9 +60,10 @@ git('remote', 'add', 'origin', HERMES_HTTPS_ORIGIN);
 const command = `#!/bin/sh
 set -eu
 root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
-fixture_state="\${root}.fixture-state.json"
+fixture_state="$root/.fixture-state.json"
 fixture_log=$(node -p "try{require(process.argv[1]).log||''}catch(e){''}" "$fixture_state")
 log() { destination=\${HERMES_FIXTURE_LOG:-\$fixture_log}; [ -z "\$destination" ] || printf '%s\\n' "$*" >>"\$destination"; }
+reveal() { node -p "require(process.argv[1]).reveal" "$fixture_state"; }
 version=$(node -p "require(process.argv[1]).version" "$root/release.json")
 healthy=$(node -p "require(process.argv[1]).healthy" "$root/release.json")
 case "\${1:-}" in
@@ -70,12 +71,12 @@ case "\${1:-}" in
   update)
     case "\${2:-}" in
       --check)
-        reveal=$(node -p "try{require(process.argv[1]).reveal}catch(e){'1.1.0'}" "$fixture_state")
+        reveal=$(reveal)
         log "update-check $reveal"; printf '%s\\n' "$reveal" ;;
       --no-backup)
-        release=$(node -p "try{require(process.argv[1]).reveal}catch(e){'1.1.0'}" "$fixture_state")
+        release=$(reveal)
         log "update $release"; git -C "$root" checkout -q "v$release" ;;
-      *) if [ "\${2:-}" = --backup ]; then release=$(node -p "try{require(process.argv[1]).reveal}catch(e){'1.1.0'}" "$fixture_state"); else release=\${2#v}; fi; log "update $release"; git -C "$root" checkout -q "v$release" ;;
+      *) if [ "\${2:-}" = --backup ]; then release=$(reveal); else release=\${2#v}; fi; log "update $release"; git -C "$root" checkout -q "v$release" ;;
     esac ;;
   backup)
     output=
