@@ -121,16 +121,25 @@ persistence_roots() { # <docker|native> <scan name>
   esac
 }
 
+native_immutable_scenario_source() { # <path>
+  local path=$1 relative version folder source extra
+  relative=${path#"$RUNTIME"/versions/}
+  [ "$relative" != "$path" ] || return 1
+  IFS=/ read -r version folder source extra <<<"$relative"
+  [ -n "$version" ] && [ "$folder" = scenarios ] && [ -z "$extra" ] || return 1
+  case $source in
+    workouts-from-hevy.sh|test-scenarios.sh|hevy-fixture.mjs) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 native_persistence_matches() { # <key> <path record> [grep option...]
   local key=$1 paths=$2 path code
   shift 2
   if grep -rlF "$@" -- "$key" "${NATIVE_PERSISTENCE_ROOTS[@]}" >"$paths"; then
     [ -s "$paths" ] || return 0
     while IFS= read -r path; do
-      case $path in
-        "$RUNTIME"/versions/*/scenarios/workouts-from-hevy.sh|"$RUNTIME"/versions/*/scenarios/test-scenarios.sh|"$RUNTIME"/versions/*/scenarios/hevy-fixture.mjs) ;;
-        *) printf '%s\n' "$path" ;;
-      esac
+      native_immutable_scenario_source "$path" || printf '%s\n' "$path"
     done <"$paths" >"$paths.filtered"
     mv -f "$paths.filtered" "$paths" || return 2
     [ -s "$paths" ] || return 1

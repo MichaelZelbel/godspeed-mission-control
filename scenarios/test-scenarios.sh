@@ -3700,6 +3700,7 @@ RFS_TEST_SOURCE=$RFS/root/.godspeed/integrated-runtime/versions/test/scenarios/t
 RFS_FIXTURE_SOURCE=$RFS/root/.godspeed/integrated-runtime/versions/test/scenarios/hevy-fixture.mjs
 printf 'refused-scenario-key\n' >"$RFS_SOURCE"
 printf 'refused-scenario-key\n' >"$RFS_TEST_SOURCE"
+printf 'refused-scenario-key\n' >"$RFS_FIXTURE_SOURCE"
 printf 'refused-scenario-key\n' >"$RFS/assistant/settings.json"
 REFUSED_SCAN=$(GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy NODE="$(command -v node)" bash -c '
   cd "$3"
@@ -3726,6 +3727,22 @@ case "$RUNTIME_SOURCE_SCAN_CODE" in
   0) ok "the native refused-key scan ignores immutable installed scenario sources" ;;
   *) bad "the native refused-key scan treated immutable installed scenario sources as persisted credentials (exit $RUNTIME_SOURCE_SCAN_CODE: $RUNTIME_SOURCE_SCAN)" ;;
 esac
+RUNTIME_NESTED_SOURCE=$RFS/root/.godspeed/integrated-runtime/versions/test/untracked/scenarios/workouts-from-hevy.sh
+mkdir -p "${RUNTIME_NESTED_SOURCE%/*}"
+printf 'refused-scenario-key\n' >"$RUNTIME_NESTED_SOURCE"
+RUNTIME_NESTED_SCAN=$(GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy NODE="$(command -v node)" bash -c '
+  cd "$3"
+  . "$1"
+  install_paths
+  EVIDENCE=$2
+  refused_not_retained native
+' refused-scan "$ROOT/scenarios/workouts-from-hevy.sh" "$RFS" "$ROOT/scenarios" 2>&1)
+RUNTIME_NESTED_SCAN_CODE=$?
+case "$RUNTIME_NESTED_SCAN_CODE $RUNTIME_NESTED_SCAN" in
+  "1 "*"native kept the refused Hevy key in $RUNTIME_NESTED_SOURCE"*) ok "the native refused-key scan finds a key below a mutable runtime subdirectory" ;;
+  *) bad "the native refused-key scan missed a key below a mutable runtime subdirectory (exit $RUNTIME_NESTED_SCAN_CODE: $RUNTIME_NESTED_SCAN)" ;;
+esac
+rm "$RUNTIME_NESTED_SOURCE"
 mkdir -p "$RFS/root/.godspeed/integrated-runtime/versions/test/state"
 RUNTIME_STATE=$RFS/root/.godspeed/integrated-runtime/versions/test/state/retained-key
 printf 'refused-scenario-key\n' >"$RUNTIME_STATE"
@@ -3832,6 +3849,27 @@ case "$ACCEPTED_SOURCE_SCAN" in
   '{"clean":true,"paths":[]}') ok "the accepted-key scan ignores immutable installed scenario sources" ;;
   *) bad "the accepted-key scan treated immutable installed scenario sources as persisted credentials ($ACCEPTED_SOURCE_SCAN)" ;;
 esac
+printf '84f3c5d2-9a7e-4b18-8c65-3d7f1a9e6b24\n' >"$RUNTIME_NESTED_SOURCE"
+ACCEPTED_NESTED_RUNTIME_SCAN=$(HOME="$RFS/root" GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy NODE="$(command -v node)" bash -c '
+  cd "$3"
+  . "$1"
+  install_paths
+  EVIDENCE=$2
+  in_server() {
+    case $1 in
+      find) printf "%s\\n" /opt/data/.godspeed/assistant.json ;;
+      node) printf "%s" /root/.hermes ;;
+      grep) return 1 ;;
+    esac
+  }
+  scan_fixture_key
+  cat "$EVIDENCE/key-scan.json"
+' accepted-nested-runtime-scan "$ROOT/scenarios/workouts-from-hevy.sh" "$RFS" "$ROOT/scenarios" 2>/dev/null)
+case "$ACCEPTED_NESTED_RUNTIME_SCAN" in
+  '{"clean":false,"paths":["'"$RUNTIME_NESTED_SOURCE"'"]}') ok "the accepted-key scan finds a key below a mutable runtime subdirectory" ;;
+  *) bad "the accepted-key scan missed a key below a mutable runtime subdirectory ($ACCEPTED_NESTED_RUNTIME_SCAN)" ;;
+esac
+rm "$RUNTIME_NESTED_SOURCE"
 printf '84f3c5d2-9a7e-4b18-8c65-3d7f1a9e6b24\n' >"$RUNTIME_STATE"
 ACCEPTED_RUNTIME_SCAN=$(HOME="$RFS/root" GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy NODE="$(command -v node)" bash -c '
   cd "$3"
@@ -4183,6 +4221,11 @@ const rows = await new Hevy({ key: '84f3c5d2-9a7e-4b18-8c65-3d7f1a9e6b24', base:
 process.stdout.write(rows.map(row => row.id).sort().join(','));
 NODE
 )
+HF_COUNT=$(ROOT=$ROOT HF_BASE=$HF_BASE node --input-type=module - <<'NODE'
+const { Hevy } = await import(process.env.ROOT + '/third-party/addons/godspeed-workouts/lib/hevy.mjs');
+process.stdout.write(String(await new Hevy({ key: '84f3c5d2-9a7e-4b18-8c65-3d7f1a9e6b24', base: process.env.HF_BASE, pauseMs: 0 }).count()));
+NODE
+)
 node "$ROOT/scenarios/hevy-fixture.mjs" --state "$HF/state" --log "$HF/log" --mutate
 HF_EVENTS=$(curl -s -H 'api-key: 84f3c5d2-9a7e-4b18-8c65-3d7f1a9e6b24' "$HF_BASE/v1/workouts/events")
 HF_CHANGED=$(ROOT=$ROOT HF_BASE=$HF_BASE node --input-type=module - <<'NODE'
@@ -4192,7 +4235,7 @@ process.stdout.write(events.map(event => event.type === 'updated' ? event.workou
 NODE
 )
 kill "$HF_PID" 2>/dev/null || true
-if [ "$HF_BAD" = 401 ] && [ "$HF_INITIAL" = 'canal-pull,harbor-strength' ] && [ "$HF_CHANGED" = 'canal-pull,harbor-strength' ] && grep -q 'harbor-strength' <<<"$HF_GOOD" && grep -q 'canal-pull' <<<"$HF_EVENTS" && ! grep -q '84f3c5d2-9a7e-4b18-8c65-3d7f1a9e6b24' "$HF/log"; then ok 'the local Hevy fixture refuses, follows the add-on contract, changes and redacts'; else bad 'the local Hevy fixture does not refuse, follow the add-on contract, change and redact'; fi
+if [ "$HF_BAD" = 401 ] && [ "$HF_INITIAL" = 'canal-pull,harbor-strength' ] && [ "$HF_COUNT" = 2 ] && [ "$HF_CHANGED" = 'canal-pull,harbor-strength' ] && grep -q 'harbor-strength' <<<"$HF_GOOD" && grep -q 'canal-pull' <<<"$HF_EVENTS" && ! grep -q '84f3c5d2-9a7e-4b18-8c65-3d7f1a9e6b24' "$HF/log"; then ok 'the local Hevy fixture refuses, follows the add-on contract, changes and redacts'; else bad 'the local Hevy fixture does not refuse, follow the add-on contract, change and redact'; fi
 HFD=$TMP/hermes-fixture
 HFD_LOG=$TMP/hermes-fixture.log
 if node "$ROOT/scenarios/hermes-update-fixture.mjs" --dir "$HFD" >/dev/null \
