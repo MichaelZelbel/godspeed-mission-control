@@ -160,7 +160,7 @@ test('the command reports success when one archive piece fails and later pieces 
 });
 
 test('the executable exits successfully when one archive piece fails and later pieces complete',async t=>{
- const root=workspace(t),rows=Array.from({length:16},(_,index)=>({id:'piece-'+String(index).padStart(2,'0'),at:'2026-11-02T12:'+String(index).padStart(2,'0')+':00Z',text:'I recorded item '+index+' '+'.'.repeat(2900)}));archive(root,rows);
+ const root=workspace(t),rows=Array.from({length:16},(_,index)=>({id:'piece-'+String(index).padStart(2,'0'),at:new Date(realNow-86400000+index*60000).toISOString(),text:'I recorded item '+index+' '+'.'.repeat(2900)}));archive(root,rows);
  const server=http.createServer(async(req,res)=>{let body='';for await(const chunk of req)body+=chunk;const request=JSON.parse(body),failed=request.messages?.[1]?.content?.includes('piece-00');res.statusCode=failed?503:200;res.end(JSON.stringify(failed?{error:{message:'fixture failure'}}:{choices:[{message:{content:response({facts:[],events:[]})}}]}));});await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));t.after(()=>new Promise(resolve=>server.close(resolve)));
  fs.mkdirSync(path.join(root,'.godspeed'),{recursive:true});fs.writeFileSync(path.join(root,'.godspeed','provider.json'),JSON.stringify({url:'http://127.0.0.1:'+server.address().port+'/v1/chat/completions',key:'fixture-key',model:'fixture-model'}));
  const script=fileURLToPath(new URL('../scripts/memory-daily.mjs',import.meta.url)),child=spawn(process.execPath,[script],{cwd:root,env:{...process.env,GODSPEED_WORKSPACE:root},stdio:['ignore','ignore','pipe']});let stderr='';child.stderr.on('data',chunk=>stderr+=chunk);const code=await new Promise(resolve=>child.on('close',resolve));
