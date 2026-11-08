@@ -108,10 +108,11 @@ act() {
   provider_request_int_trap=$(trap -p INT || true)
   provider_request_term_trap=$(trap -p TERM || true)
   cleanup_provider_request() { rm -f "$provider_request"; }
-  run_saved_trap() { # <saved trap> <exit status>
-    [ -z "$1" ] && return
-    eval "set -- $1"
-    (exit "$2")
+  run_saved_trap() {
+    local saved_trap=$1 status=$2
+    [ -z "$saved_trap" ] && return
+    eval "set -- $saved_trap"
+    (exit "$status")
     eval "$3"
   }
   restore_provider_request_traps() {
@@ -122,7 +123,7 @@ act() {
   }
   finish_provider_request() {
     local status=$?
-    cleanup_provider_request || :
+    cleanup_provider_request || say 'the private Settings request could not be removed during EXIT cleanup'
     trap - EXIT
     run_saved_trap "$provider_request_exit_trap" "$status"
     return "$status"
@@ -160,4 +161,6 @@ NODE
   check "$EVIDENCE"
 }
 
-if [ "$CHECK_ONLY" = yes ]; then install_paths; check "$EVIDENCE"; else act; fi
+if [ "${GODSPEED_SCENARIO_SOURCE_ONLY:-no}" != yes ]; then
+  if [ "$CHECK_ONLY" = yes ]; then install_paths; check "$EVIDENCE"; else act; fi
+fi

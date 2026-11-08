@@ -4030,7 +4030,7 @@ day_facts_provider_request_is_removed() {
     GODSPEED_SCENARIO_AI_MODEL='claude-haiku-4-5' bash -c '
       scenario_dir=$(dirname "$1")
       cd "$scenario_dir"
-      . <(sed "\$d" "$(basename "$1")")
+      GODSPEED_SCENARIO_SOURCE_ONLY=yes . "$(basename "$1")"
       install_the_stage_line() { :; }
       need_node() { NODE=$(command -v node); }
       wait_for() { :; }
@@ -4085,7 +4085,7 @@ day_facts_failed_provider_post_preserves_exit_status() {
     GODSPEED_SCENARIO_AI_MODEL='claude-haiku-4-5' bash -c '
       scenario_dir=$(dirname "$1")
       cd "$scenario_dir"
-      . <(sed "\$d" "$(basename "$1")")
+      GODSPEED_SCENARIO_SOURCE_ONLY=yes . "$(basename "$1")"
       install_the_stage_line() { :; }
       need_node() { NODE=$(command -v node); }
       wait_for() { :; }
@@ -4120,6 +4120,57 @@ day_facts_failed_provider_post_preserves_exit_status() {
   fi
 }
 day_facts_failed_provider_post_preserves_exit_status
+day_facts_failed_provider_post_reports_cleanup_failure() {
+  local folder=$TMP/day-facts-provider-transport-cleanup-failure key='day-facts-transport-cleanup-key' code
+  rm -rf "$folder"
+  mkdir -p "$folder/home/cron" "$folder/home/scripts" "$folder/root" "$folder/tmp"
+  printf '%s\n' '{"jobs":[{"name":"Remember what you said","script":"scenario-facts","cron":"40 3 * * *"}]}' >"$folder/home/cron/jobs.json"
+  : >"$folder/home/scripts/scenario-facts"
+  if ACTION_HOME="$folder/home" ACTION_KEY="$key" ACTION_EXIT_STATUS="$folder/exit-status" \
+    GODSPEED_SCENARIO_ROOT="$folder/root" GODSPEED_SCENARIO_WORK="$folder/work" TMPDIR="$folder/tmp" \
+    GODSPEED_SCENARIO_AI_KEY="$key" GODSPEED_SCENARIO_AI_URL='https://api.anthropic.com/v1' \
+    GODSPEED_SCENARIO_AI_MODEL='claude-haiku-4-5' bash -c '
+      scenario_dir=$(dirname "$1")
+      cd "$scenario_dir"
+      GODSPEED_SCENARIO_SOURCE_ONLY=yes . "$(basename "$1")"
+      install_the_stage_line() { :; }
+      need_node() { NODE=$(command -v node); }
+      wait_for() { :; }
+      assistant_home() { HERMES=$ACTION_HOME; }
+      facts_routine_script() { printf scenario-facts; }
+      run_facts_routine() { :; }
+      facts_snapshot() { :; }
+      check() { :; }
+      trap "printf \"%s\\n\" \"\\$?\" > \"$ACTION_EXIT_STATUS\"" EXIT
+      rm() {
+        [ "$1" = -f ] && return 1
+        command rm "$@"
+      }
+      curl() {
+        local data=
+        while [ "$#" -gt 0 ]; do
+          case "$1" in
+            --data-binary) data=${2#@}; shift 2 ;;
+            *) shift ;;
+          esac
+        done
+        [ -n "$data" ] || { printf "{}\\n"; return; }
+        [ -f "$data" ] && grep -F -- "$ACTION_KEY" "$data" >/dev/null || return 1
+        return 1
+      }
+      act
+    ' _ "$DF_SCRIPT" >"$folder/action.log" 2>&1; then
+    code=0
+  else
+    code=$?
+  fi
+  if [ "$code" = 1 ] && [ "$(cat "$folder/exit-status" 2>/dev/null)" = 1 ] && rg -F -- "$key" "$folder/tmp" >/dev/null 2>&1 && grep -F 'could not be removed during EXIT cleanup' "$folder/action.log" >/dev/null; then
+    ok 'a failed remembered-facts Settings POST reports failed private-request cleanup'
+  else
+    bad "a failed remembered-facts Settings POST did not report failed private-request cleanup (exit $code: $(cat "$folder/action.log" 2>/dev/null))"
+  fi
+}
+day_facts_failed_provider_post_reports_cleanup_failure
 day_facts_failed_provider_request_removal_fails() {
   local folder=$TMP/day-facts-provider-removal-failure key='day-facts-removal-key' code
   rm -rf "$folder"
@@ -4132,7 +4183,7 @@ day_facts_failed_provider_request_removal_fails() {
     GODSPEED_SCENARIO_AI_MODEL='claude-haiku-4-5' bash -c '
       scenario_dir=$(dirname "$1")
       cd "$scenario_dir"
-      . <(sed "\$d" "$(basename "$1")")
+      GODSPEED_SCENARIO_SOURCE_ONLY=yes . "$(basename "$1")"
       install_the_stage_line() { :; }
       need_node() { NODE=$(command -v node); }
       wait_for() { :; }
@@ -4188,7 +4239,7 @@ day_facts_provider_request_is_removed_on_termination() {
     GODSPEED_SCENARIO_AI_MODEL='claude-haiku-4-5' bash -c '
       scenario_dir=$(dirname "$1")
       cd "$scenario_dir"
-      . <(sed "\$d" "$(basename "$1")")
+      GODSPEED_SCENARIO_SOURCE_ONLY=yes . "$(basename "$1")"
       install_the_stage_line() { :; }
       need_node() { NODE=$(command -v node); }
       wait_for() { :; }
