@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -28,6 +29,22 @@ test('retains a scenario failure without hiding the other scenario result', () =
   const out = collectVerdicts({ catalog, candidateOnly: 'mac windows-old-names-move', directories: [records({ 'native.txt': 'FAIL native: no health\n', 'docker.txt': 'PASS docker: healthy\n' })] });
   assert.deepEqual(out.lines, ['FAIL native: no health', 'PASS docker: healthy']);
   assert.deepEqual(out.failures, []);
+});
+
+test('the command fails when a complete scenario result is FAIL', () => {
+  const dir = records({ 'native.txt': 'FAIL native: no health\n', 'docker.txt': 'PASS docker: healthy\n' });
+  writeFileSync(join(dir, 'catalog.tsv'), catalog);
+  const run = spawnSync(process.execPath, ['scenarios/scenario-verdict.mjs', '--catalog', join(dir, 'catalog.tsv'), '--results', dir, '--picked', ',native,'], { encoding: 'utf8' });
+  assert.equal(run.status, 1);
+  assert.match(run.stdout, /^FAIL native: no health$/m);
+});
+
+test('status reports a complete failure without preventing nightly reporting', () => {
+  const dir = records({ 'native.txt': 'FAIL native: no health\n', 'docker.txt': 'PASS docker: healthy\n' });
+  writeFileSync(join(dir, 'catalog.tsv'), catalog);
+  const run = spawnSync(process.execPath, ['scenarios/scenario-verdict.mjs', '--catalog', join(dir, 'catalog.tsv'), '--results', dir, '--picked', ',native,', '--status'], { encoding: 'utf8' });
+  assert.equal(run.status, 0);
+  assert.equal(run.stdout.trim(), 'native=failure');
 });
 
 test('fails closed for missing, duplicate, and malformed records', () => {

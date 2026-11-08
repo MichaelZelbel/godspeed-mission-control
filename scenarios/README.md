@@ -129,12 +129,13 @@ Named by the job, never in a file here (for the scenarios above that await their
 
 `GODSPEED_SCENARIO_AI_URL` and `GODSPEED_SCENARIO_AI_MODEL` have no default: a scenario that needs an AI fails with a plain sentence naming whichever is missing, and it also fails if the URL is on openrouter.ai, so the checks can never spend OpenRouter money. They run on `https://api.anthropic.com/v1` with `claude-haiku-4-5`, set as repository variables, and the key is the secret `GODSPEED_SCENARIO_AI_KEY`.
 
-The six reminder scenarios need no key at all: everything they do is this machine's own. "Two
-computers" are two installations on the one machine, each with its own mission control folder, its
-own port (`GODSPEED_PORT`) and its own device identity, joined through one bare Git repository on
-that machine standing in for the private GitHub repository, which Git is told to use for that
-address. The product still checks the address is a private GitHub one, so the one thing they ask of
-the network beyond the install itself is that api.github.com answers 404 for an owner nobody has.
+The six reminder scenarios need no key at all: everything they do is this machine's own. In a
+standalone run, "two computers" are separate installations on the one machine. In a candidate or
+nightly pooled run, they are separate mission-control workspaces and device identities sharing the
+one installed runtime; both forms are joined through one bare Git repository on that machine standing
+in for the private GitHub repository, which Git is told to use for that address. The product still
+checks the address is a private GitHub one, so the one thing they ask of the network beyond the
+install itself is that api.github.com answers 404 for an owner nobody has.
 
 `voice.sh` also takes `ELEVENLABS_TEST_VOICE_ID` (a public ElevenLabs voice by default) and sends
 `voice-note.wav`, the short recording kept beside it. No chat account of any kind is needed: the

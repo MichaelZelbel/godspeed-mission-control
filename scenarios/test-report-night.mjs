@@ -154,6 +154,24 @@ test('the protected draft pools candidate systems and leaves the live workflow u
   assert.match(draft, /jobs=\$\(awk -F '\\t'/);
 });
 
+test('the draft uploads one exact result record for every standalone script job', async () => {
+  const { readFileSync } = await import('node:fs');
+  const draft = readFileSync(DRAFT, 'utf8').replace(/\r\n/g, '\n');
+  const catalog = readFileSync(new URL('./scenario-catalog.tsv', import.meta.url), 'utf8')
+    .split('\n').filter((line) => line && !line.startsWith('#')).map((line) => line.split('\t'))
+    .filter(([, implementation]) => implementation.endsWith('.sh')).map(([id]) => id);
+  for (const id of catalog) {
+    const start = draft.search(new RegExp(`^ {2}${id}:[ \\t]*$`, 'm'));
+    assert.ok(start >= 0, `draft has no ${id} job`);
+    const rest = draft.slice(start + 1);
+    const end = rest.search(/^ {2}[A-Za-z0-9_-]+:[ \t]*$/m);
+    const block = end < 0 ? rest : rest.slice(0, end);
+    assert.match(block, new RegExp(`capture-scenario-result\\.sh ${id} "\\$STAGE_REF"`), `${id} bypasses the exact-result wrapper`);
+    assert.match(block, new RegExp(`scenario-results/${id}\\.txt`), `${id} does not upload its exact result`);
+  }
+  assert.doesNotMatch(draft, /scenario-results\/fallback|its isolated job passed/);
+});
+
 // The verdict job lists its scenarios twice: `needs:` (so it waits for them) and `RESULTS` (the
 // only place a failure becomes a failed verdict). A scenario added to one list and not the other
 // would be waited for and never judged, or judged and never waited for. No YAML parser is a

@@ -260,6 +260,33 @@ NODE
   rm -f "$native_paths" "$docker_paths" "$EVIDENCE/.key-hits"
 }
 
+prepare_platform() { # <docker|native> <fixture port>
+  local platform=$1 port=$2 code
+  case $platform in
+    docker)
+      require_candidate_server
+      server_hevy_url "$port"
+      settings_post docker "$EVIDENCE/.refused-key.json" "$EVIDENCE/docker-settings.json" >"$EVIDENCE/docker-settings.code"
+      ;;
+    native)
+      install_paths
+      require_the_stage_line "$EVIDENCE/install.log"
+      wait_for 180 'the native notebook to answer after install' notebook_is_up || fail "the native notebook did not answer after install"
+      native_hevy_url "$port"
+      settings_post native "$EVIDENCE/.refused-key.json" "$EVIDENCE/native-settings.json" >"$EVIDENCE/native-settings.code"
+      ;;
+    *) fail "unknown Hevy platform $platform" ;;
+  esac
+  code=$(cat "$EVIDENCE/$platform-settings.code")
+  [ "$code" -ge 400 ] 2>/dev/null && [ "$code" -lt 500 ] ||
+    fail "$platform Settings did not reject the made-up Hevy key (HTTP $code)"
+  refused_not_retained "$platform"
+}
+
+finish_platform() { # <docker|native>
+  platform_after "$1"
+}
+
 act() {
   fresh_evidence
   local state=$EVIDENCE/fixture-state.json port pid
@@ -272,33 +299,21 @@ act() {
   grep -q '"ok":true' "$EVIDENCE/fixture-health.json" || fail "the local Hevy fixture returned an unhealthy health record"
   curl -sS -H 'api-key: refused-scenario-key' "http://127.0.0.1:$port/v1/workouts" >/dev/null || true
   printf '{"fixture":"local-hevy"}\n' >"$EVIDENCE/setup.json"
-  # Use distinct ports so the native installation and Docker server are independently real installs.
-  require_candidate_server; server_hevy_url "$port"
   printf '{"api_key":"refused-scenario-key"}\n' >"$EVIDENCE/.refused-key.json"
-  settings_post docker "$EVIDENCE/.refused-key.json" "$EVIDENCE/docker-settings.json" >"$EVIDENCE/docker-settings.code"
-  export GODSPEED_PORT=47832
-  install_paths
-  require_the_stage_line "$EVIDENCE/install.log"
-  wait_for 180 'the native notebook to answer after install' notebook_is_up || fail "the native notebook did not answer after install"
-  native_hevy_url "$port"
-  settings_post native "$EVIDENCE/.refused-key.json" "$EVIDENCE/native-settings.json" >"$EVIDENCE/native-settings.code"
+  # The two phases deliberately share one fixture but each uses the already-selected install.
+  prepare_platform docker "$port"
+  prepare_platform native "$port"
   # The behavior ticket owns this endpoint. Both installations have now reached the same absent seam.
   if [ "$(cat "$EVIDENCE/docker-settings.code")" = 404 ] && [ "$(cat "$EVIDENCE/native-settings.code")" = 404 ]; then
     fail "the Docker and native notebooks have no Workouts Settings integration at /api/workouts yet (ticket 02 is the expected baseline failure)"
   fi
-  for platform in docker native; do
-    code=$(cat "$EVIDENCE/$platform-settings.code")
-    [ "$code" -ge 400 ] 2>/dev/null && [ "$code" -lt 500 ] ||
-      fail "$platform Settings did not reject the made-up Hevy key (HTTP $code)"
-    refused_not_retained "$platform"
-  done
   printf '{"api_key":"00000000-0000-4000-8000-000000000001"}\n' >"$EVIDENCE/.accepted-key.json"
   platform_before docker "$EVIDENCE/.accepted-key.json"
   platform_before native "$EVIDENCE/.accepted-key.json"
   node "$HERE/hevy-fixture.mjs" --state "$EVIDENCE/fixture-state.json" --log "$EVIDENCE/fixture.log" --mutate ||
     fail "the local Hevy fixture could not change its made-up workouts"
-  platform_after docker
-  platform_after native
+  finish_platform docker
+  finish_platform native
   rm -f "$EVIDENCE/.refused-key.json" "$EVIDENCE/.accepted-key.json"
   scan_fixture_key
   check "$EVIDENCE"

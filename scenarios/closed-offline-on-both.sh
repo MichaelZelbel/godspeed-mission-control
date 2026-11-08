@@ -10,9 +10,9 @@
 # exactly why the two do not collapse into one (core/deadline-records.mjs closingUid: `from` is
 # what makes a derived identity safe, and a closing of this moment passes none).
 #
-# The two computers are two installations on this one machine, each with its own mission control
-# folder, its own port and its own device identity, joined through one bare repository standing in
-# for the private GitHub repository, the way Settings connects one.
+# The two computers are separate mission-control workspaces on this one machine, each with its own
+# port and device identity, joined through one bare repository standing in for the private GitHub
+# repository, the way Settings connects one. A pooled run shares the installed runtime bytes.
 #
 #   bash scenarios/closed-offline-on-both.sh candidate/2.0.0-beta.12
 #   bash scenarios/closed-offline-on-both.sh --check <folder>

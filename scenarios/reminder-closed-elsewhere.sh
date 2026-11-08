@@ -16,9 +16,9 @@
 #              `godspeed sync folder` with no paths, core/sync/git.mjs joinRepository)
 #   folder     a mission control that is its own repository, carrying notebook/ only
 #              (`godspeed sync folder notebook`, useFolderRepository) - Michael's own machines
-# Four installations, because the two kinds of repository cannot be one folder: a copy Settings
-# made tracks only what that connection syncs, and an owner's own mission control tracks its
-# programs and settings beside the notebook.
+# Four logical device workspaces, because the two kinds of repository cannot be one folder: a copy
+# Settings made tracks only what that connection syncs, and an owner's own mission control tracks
+# its programs and settings beside the notebook. A pooled run shares one installed runtime.
 #
 # NOBODY RUNS GIT. Between adding the reminder, closing it on the other computer and reading it
 # back, the scenario runs no git of its own: a `git` earlier on the path writes down every call

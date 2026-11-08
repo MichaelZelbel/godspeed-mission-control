@@ -87,8 +87,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     else result.lines.forEach((line) => console.log(line));
     if (result.failures.length) {
       result.failures.forEach((failure) => console.error(`scenario verdict: ${failure}`));
-      process.exitCode = 1;
     }
+    if (!args.status && (result.failures.length || result.lines.some((line) => line.startsWith('FAIL ')))) process.exitCode = 1;
   } catch (error) {
     console.error(`scenario verdict: ${error.message}`);
     process.exitCode = 2;

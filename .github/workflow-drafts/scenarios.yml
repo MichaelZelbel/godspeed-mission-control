@@ -193,7 +193,7 @@ jobs:
           echo "PASS mac-install: runtime and starter $got, kit-bootstrap $ENGINE, notebook answers" | tee -a "$GITHUB_STEP_SUMMARY" "$RUNNER_TEMP/mac-install.txt"
       - name: Say so when it failed before its checks
         if: failure()
-        run: '[ -s "$RUNNER_TEMP/failed" ] || echo "FAIL mac-install: the install line itself failed (its step log says how)" | tee -a "$GITHUB_STEP_SUMMARY" "$RUNNER_TEMP/mac-install.txt"'
+        run: 'if [ -s "$RUNNER_TEMP/failed" ]; then cat "$RUNNER_TEMP/failed" > "$RUNNER_TEMP/mac-install.txt"; else echo "FAIL mac-install: the install line itself failed (its step log says how)" | tee -a "$GITHUB_STEP_SUMMARY" "$RUNNER_TEMP/mac-install.txt"; fi'
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -295,10 +295,16 @@ jobs:
           ' "$RUNNER_TEMP/before.json" "$RUNNER_TEMP/after.json" 2>&1) || fail "${lost:-the two exports could not be compared}"
           for _ in $(seq 1 30); do curl -fsS http://127.0.0.1:47831/health >/dev/null 2>&1 && break; sleep 2; done
           curl -fsS http://127.0.0.1:47831/health >/dev/null || fail "the notebook does not answer"
-          echo "PASS linux-update: $before to $got, the note, every notebook record, the file and the setting kept" | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "PASS linux-update: $before to $got, the note, every notebook record, the file and the setting kept" | tee -a "$GITHUB_STEP_SUMMARY" "$RUNNER_TEMP/linux-update.txt"
       - name: Say so when it failed before its checks
         if: failure()
-        run: '[ -s "$RUNNER_TEMP/failed" ] || echo "FAIL linux-update: a step before the checks failed (its step log says how)" | tee -a "$GITHUB_STEP_SUMMARY"'
+        run: 'if [ -s "$RUNNER_TEMP/failed" ]; then cat "$RUNNER_TEMP/failed" > "$RUNNER_TEMP/linux-update.txt"; else echo "FAIL linux-update: a step before the checks failed (its step log says how)" | tee -a "$GITHUB_STEP_SUMMARY" "$RUNNER_TEMP/linux-update.txt"; fi'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: linux-update-result
+          path: ${{ runner.temp }}/linux-update.txt
+          if-no-files-found: error
 
   # The scenarios of 2.0.0-beta.8 are scripts in scenarios/ (their README says how each one
   # proves what it proves), run from the stage's own copy of them.
@@ -320,10 +326,13 @@ jobs:
           path: ${{ runner.temp }}/run-stage
       - name: The scenario, the stage's own copy of it
         shell: bash
-        run: bash scenarios/settings-on-install.sh "$STAGE_REF" | tee "$RUNNER_TEMP/verdict"
+        run: bash scenarios/capture-scenario-result.sh settings-on-install "$STAGE_REF"
       - name: Say so when it stopped before its own verdict
         if: failure()
         run: 'grep -qE "^(PASS|FAIL) settings-on-install:" "$RUNNER_TEMP/verdict" 2>/dev/null || echo "FAIL settings-on-install: it stopped before its own verdict (its step log says how)" | tee -a "$GITHUB_STEP_SUMMARY"'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: settings-on-install-result, path: '${{ runner.temp }}/scenario-results/settings-on-install.txt', if-no-files-found: error }
 
   voice:
     name: a voice note, with the permission and without it
@@ -347,10 +356,13 @@ jobs:
           path: ${{ runner.temp }}/run-stage
       - name: The scenario, the stage's own copy of it
         shell: bash
-        run: bash scenarios/voice.sh "$STAGE_REF" | tee "$RUNNER_TEMP/verdict"
+        run: bash scenarios/capture-scenario-result.sh voice "$STAGE_REF"
       - name: Say so when it stopped before its own verdict
         if: failure()
         run: 'grep -qE "^(PASS|FAIL) voice:" "$RUNNER_TEMP/verdict" 2>/dev/null || echo "FAIL voice: it stopped before its own verdict (its step log says how)" | tee -a "$GITHUB_STEP_SUMMARY"'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: voice-result, path: '${{ runner.temp }}/scenario-results/voice.txt', if-no-files-found: error }
 
   update-keeps-everything:
     name: an update from the current public version keeps everything
@@ -375,10 +387,13 @@ jobs:
           path: ${{ runner.temp }}/run-stage
       - name: The scenario, the stage's own copy of it
         shell: bash
-        run: bash scenarios/update-keeps-everything.sh "$STAGE_REF" | tee "$RUNNER_TEMP/verdict"
+        run: bash scenarios/capture-scenario-result.sh update-keeps-everything "$STAGE_REF"
       - name: Say so when it stopped before its own verdict
         if: failure()
         run: 'grep -qE "^(PASS|FAIL) update-keeps-everything:" "$RUNNER_TEMP/verdict" 2>/dev/null || echo "FAIL update-keeps-everything: it stopped before its own verdict (its step log says how)" | tee -a "$GITHUB_STEP_SUMMARY"'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: update-keeps-everything-result, path: '${{ runner.temp }}/scenario-results/update-keeps-everything.txt', if-no-files-found: error }
 
   # The scenarios of 2.0.0-beta.12: reminders and their closings live in the notebook. None of them
   # needs a key: two computers are two installations on the one machine, joined through one bare
@@ -403,10 +418,13 @@ jobs:
           path: ${{ runner.temp }}/run-stage
       - name: The scenario, the stage's own copy of it
         shell: bash
-        run: bash scenarios/two-machines-move-at-once.sh "$STAGE_REF" | tee "$RUNNER_TEMP/verdict"
+        run: bash scenarios/capture-scenario-result.sh two-machines-move-at-once "$STAGE_REF"
       - name: Say so when it stopped before its own verdict
         if: failure()
         run: 'grep -qE "^(PASS|FAIL) two-machines-move-at-once:" "$RUNNER_TEMP/verdict" 2>/dev/null || echo "FAIL two-machines-move-at-once: it stopped before its own verdict (its step log says how)" | tee -a "$GITHUB_STEP_SUMMARY"'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: two-machines-move-at-once-result, path: '${{ runner.temp }}/scenario-results/two-machines-move-at-once.txt', if-no-files-found: error }
   closed-offline-on-both:
     name: one reminder closed on two computers while they were apart
     needs: stage
@@ -425,10 +443,13 @@ jobs:
           path: ${{ runner.temp }}/run-stage
       - name: The scenario, the stage's own copy of it
         shell: bash
-        run: bash scenarios/closed-offline-on-both.sh "$STAGE_REF" | tee "$RUNNER_TEMP/verdict"
+        run: bash scenarios/capture-scenario-result.sh closed-offline-on-both "$STAGE_REF"
       - name: Say so when it stopped before its own verdict
         if: failure()
         run: 'grep -qE "^(PASS|FAIL) closed-offline-on-both:" "$RUNNER_TEMP/verdict" 2>/dev/null || echo "FAIL closed-offline-on-both: it stopped before its own verdict (its step log says how)" | tee -a "$GITHUB_STEP_SUMMARY"'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: closed-offline-on-both-result, path: '${{ runner.temp }}/scenario-results/closed-offline-on-both.txt', if-no-files-found: error }
 
   reminder-from-settings:
     name: a reminder saved in Settings on a fresh install
@@ -448,10 +469,13 @@ jobs:
           path: ${{ runner.temp }}/run-stage
       - name: The scenario, the stage's own copy of it
         shell: bash
-        run: bash scenarios/reminder-from-settings.sh "$STAGE_REF" | tee "$RUNNER_TEMP/verdict"
+        run: bash scenarios/capture-scenario-result.sh reminder-from-settings "$STAGE_REF"
       - name: Say so when it stopped before its own verdict
         if: failure()
         run: 'grep -qE "^(PASS|FAIL) reminder-from-settings:" "$RUNNER_TEMP/verdict" 2>/dev/null || echo "FAIL reminder-from-settings: it stopped before its own verdict (its step log says how)" | tee -a "$GITHUB_STEP_SUMMARY"'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: reminder-from-settings-result, path: '${{ runner.temp }}/scenario-results/reminder-from-settings.txt', if-no-files-found: error }
 
   reminder-closed-elsewhere:
     name: a reminder closed on the other computer, both ways of syncing
@@ -471,7 +495,7 @@ jobs:
           path: ${{ runner.temp }}/run-stage
       - name: The scenario, the stage's own copy of it
         shell: bash
-        run: bash scenarios/reminder-closed-elsewhere.sh "$STAGE_REF" | tee "$RUNNER_TEMP/verdict"
+        run: bash scenarios/capture-scenario-result.sh reminder-closed-elsewhere "$STAGE_REF"
       - name: Keep what the scenario saw (the sync rounds' answers among it)
         if: always()
         uses: actions/upload-artifact@v4
@@ -482,6 +506,9 @@ jobs:
       - name: Say so when it stopped before its own verdict
         if: failure()
         run: 'grep -qE "^(PASS|FAIL) reminder-closed-elsewhere:" "$RUNNER_TEMP/verdict" 2>/dev/null || echo "FAIL reminder-closed-elsewhere: it stopped before its own verdict (its step log says how)" | tee -a "$GITHUB_STEP_SUMMARY"'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: reminder-closed-elsewhere-result, path: '${{ runner.temp }}/scenario-results/reminder-closed-elsewhere.txt', if-no-files-found: error }
 
   reminders-move-keeps-everything:
     name: the move into the notebook keeps every reminder
@@ -501,10 +528,13 @@ jobs:
           path: ${{ runner.temp }}/run-stage
       - name: The scenario, the stage's own copy of it
         shell: bash
-        run: bash scenarios/reminders-move-keeps-everything.sh "$STAGE_REF" | tee "$RUNNER_TEMP/verdict"
+        run: bash scenarios/capture-scenario-result.sh reminders-move-keeps-everything "$STAGE_REF"
       - name: Say so when it stopped before its own verdict
         if: failure()
         run: 'grep -qE "^(PASS|FAIL) reminders-move-keeps-everything:" "$RUNNER_TEMP/verdict" 2>/dev/null || echo "FAIL reminders-move-keeps-everything: it stopped before its own verdict (its step log says how)" | tee -a "$GITHUB_STEP_SUMMARY"'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: reminders-move-keeps-everything-result, path: '${{ runner.temp }}/scenario-results/reminders-move-keeps-everything.txt', if-no-files-found: error }
 
   late-reminder-file:
     name: a file written the old way after the move
@@ -524,10 +554,13 @@ jobs:
           path: ${{ runner.temp }}/run-stage
       - name: The scenario, the stage's own copy of it
         shell: bash
-        run: bash scenarios/late-reminder-file.sh "$STAGE_REF" | tee "$RUNNER_TEMP/verdict"
+        run: bash scenarios/capture-scenario-result.sh late-reminder-file "$STAGE_REF"
       - name: Say so when it stopped before its own verdict
         if: failure()
         run: 'grep -qE "^(PASS|FAIL) late-reminder-file:" "$RUNNER_TEMP/verdict" 2>/dev/null || echo "FAIL late-reminder-file: it stopped before its own verdict (its step log says how)" | tee -a "$GITHUB_STEP_SUMMARY"'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: late-reminder-file-result, path: '${{ runner.temp }}/scenario-results/late-reminder-file.txt', if-no-files-found: error }
 
   # The scenarios of 2.0.0-beta.13: the Charm Challenge, the video skills that leave the default
   # set, and an update that removes only the copies nobody changed (releases/
@@ -555,10 +588,13 @@ jobs:
           path: ${{ runner.temp }}/run-stage
       - name: The scenario, the stage's own copy of it
         shell: bash
-        run: bash scenarios/charm-challenge.sh "$STAGE_REF" | tee "$RUNNER_TEMP/verdict"
+        run: bash scenarios/capture-scenario-result.sh charm-challenge "$STAGE_REF"
       - name: Say so when it stopped before its own verdict
         if: failure()
         run: 'grep -qE "^(PASS|FAIL) charm-challenge:" "$RUNNER_TEMP/verdict" 2>/dev/null || echo "FAIL charm-challenge: it stopped before its own verdict (its step log says how)" | tee -a "$GITHUB_STEP_SUMMARY"'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: charm-challenge-result, path: '${{ runner.temp }}/scenario-results/charm-challenge.txt', if-no-files-found: error }
 
   no-video-skills-by-default:
     name: a fresh install has no video skills, the add-on brings them
@@ -578,10 +614,13 @@ jobs:
           path: ${{ runner.temp }}/run-stage
       - name: The scenario, the stage's own copy of it
         shell: bash
-        run: bash scenarios/no-video-skills-by-default.sh "$STAGE_REF" | tee "$RUNNER_TEMP/verdict"
+        run: bash scenarios/capture-scenario-result.sh no-video-skills-by-default "$STAGE_REF"
       - name: Say so when it stopped before its own verdict
         if: failure()
         run: 'grep -qE "^(PASS|FAIL) no-video-skills-by-default:" "$RUNNER_TEMP/verdict" 2>/dev/null || echo "FAIL no-video-skills-by-default: it stopped before its own verdict (its step log says how)" | tee -a "$GITHUB_STEP_SUMMARY"'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: no-video-skills-by-default-result, path: '${{ runner.temp }}/scenario-results/no-video-skills-by-default.txt', if-no-files-found: error }
 
   update-removes-only-unchanged-skills:
     name: an update removes only the unchanged video skills
@@ -601,10 +640,13 @@ jobs:
           path: ${{ runner.temp }}/run-stage
       - name: The scenario, the stage's own copy of it
         shell: bash
-        run: bash scenarios/update-removes-only-unchanged-skills.sh "$STAGE_REF" | tee "$RUNNER_TEMP/verdict"
+        run: bash scenarios/capture-scenario-result.sh update-removes-only-unchanged-skills "$STAGE_REF"
       - name: Say so when it stopped before its own verdict
         if: failure()
         run: 'grep -qE "^(PASS|FAIL) update-removes-only-unchanged-skills:" "$RUNNER_TEMP/verdict" 2>/dev/null || echo "FAIL update-removes-only-unchanged-skills: it stopped before its own verdict (its step log says how)" | tee -a "$GITHUB_STEP_SUMMARY"'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: update-removes-only-unchanged-skills-result, path: '${{ runner.temp }}/scenario-results/update-removes-only-unchanged-skills.txt', if-no-files-found: error }
 
   # The scenario of 2.0.0-beta.14: a morning briefing that breaks one of the reader's writing rules
   # still arrives (releases/godspeed-2.0.0-beta.14-charm-proven-briefing-kept/plan.md, "Proving
@@ -632,10 +674,13 @@ jobs:
           path: ${{ runner.temp }}/run-stage
       - name: The scenario, the stage's own copy of it
         shell: bash
-        run: bash scenarios/briefing-breaks-a-rule.sh "$STAGE_REF" | tee "$RUNNER_TEMP/verdict"
+        run: bash scenarios/capture-scenario-result.sh briefing-breaks-a-rule "$STAGE_REF"
       - name: Say so when it stopped before its own verdict
         if: failure()
         run: 'grep -qE "^(PASS|FAIL) briefing-breaks-a-rule:" "$RUNNER_TEMP/verdict" 2>/dev/null || echo "FAIL briefing-breaks-a-rule: it stopped before its own verdict (its step log says how)" | tee -a "$GITHUB_STEP_SUMMARY"'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: briefing-breaks-a-rule-result, path: '${{ runner.temp }}/scenario-results/briefing-breaks-a-rule.txt', if-no-files-found: error }
 
   # The scenarios of 2.0.0-beta.15 (releases/godspeed-2.0.0-beta.15-nightly-proof-six-repairs/plan.md,
   # "Proving scenarios" 3 and 4); its scenario 1 is the four jobs above that came back fixed with
@@ -706,7 +751,7 @@ jobs:
           path: ${{ runner.temp }}/run-stage
       - name: The scenario, the stage's own copy of it
         shell: bash
-        run: bash scenarios/telegram-language.sh "$STAGE_REF" | tee "$RUNNER_TEMP/verdict"
+        run: bash scenarios/capture-scenario-result.sh telegram-language "$STAGE_REF"
       - name: Keep what the scenario saw (each reply before and after, the plugin's log)
         if: always()
         uses: actions/upload-artifact@v4
@@ -717,6 +762,9 @@ jobs:
       - name: Say so when it stopped before its own verdict
         if: failure()
         run: 'grep -qE "^(PASS|FAIL) telegram-language:" "$RUNNER_TEMP/verdict" 2>/dev/null || echo "FAIL telegram-language: it stopped before its own verdict (its step log says how)" | tee -a "$GITHUB_STEP_SUMMARY"'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: telegram-language-result, path: '${{ runner.temp }}/scenario-results/telegram-language.txt', if-no-files-found: error }
 
   # The scenarios of 2.0.0-beta.16 (releases/godspeed-2.0.0-beta.16-prepared-talks/plan.md,
   # "Proving scenarios" 3 and 4); its scenario 2 is the charm-challenge job above, which now vents
@@ -743,10 +791,13 @@ jobs:
           path: ${{ runner.temp }}/run-stage
       - name: The scenario, the stage's own copy of it
         shell: bash
-        run: bash scenarios/brief-asked-in-chat.sh "$STAGE_REF" | tee "$RUNNER_TEMP/verdict"
+        run: bash scenarios/capture-scenario-result.sh brief-asked-in-chat "$STAGE_REF"
       - name: Say so when it stopped before its own verdict
         if: failure()
         run: 'grep -qE "^(PASS|FAIL) brief-asked-in-chat:" "$RUNNER_TEMP/verdict" 2>/dev/null || echo "FAIL brief-asked-in-chat: it stopped before its own verdict (its step log says how)" | tee -a "$GITHUB_STEP_SUMMARY"'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: brief-asked-in-chat-result, path: '${{ runner.temp }}/scenario-results/brief-asked-in-chat.txt', if-no-files-found: error }
 
   talk-prep-honest:
     name: a talk says when its preparation did not pass, and opens from one that did
@@ -770,10 +821,13 @@ jobs:
           path: ${{ runner.temp }}/run-stage
       - name: The scenario, the stage's own copy of it
         shell: bash
-        run: bash scenarios/talk-prep-honest.sh "$STAGE_REF" | tee "$RUNNER_TEMP/verdict"
+        run: bash scenarios/capture-scenario-result.sh talk-prep-honest "$STAGE_REF"
       - name: Say so when it stopped before its own verdict
         if: failure()
         run: 'grep -qE "^(PASS|FAIL) talk-prep-honest:" "$RUNNER_TEMP/verdict" 2>/dev/null || echo "FAIL talk-prep-honest: it stopped before its own verdict (its step log says how)" | tee -a "$GITHUB_STEP_SUMMARY"'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: talk-prep-honest-result, path: '${{ runner.temp }}/scenario-results/talk-prep-honest.txt', if-no-files-found: error }
       - name: Keep what the scenario saw
         if: always()
         uses: actions/upload-artifact@v4
@@ -806,7 +860,7 @@ jobs:
           path: ${{ runner.temp }}/run-stage
       - name: The scenario, the stage's own copy of it
         shell: bash
-        run: bash scenarios/no-question-he-cannot-judge.sh "$STAGE_REF" | tee "$RUNNER_TEMP/verdict"
+        run: bash scenarios/capture-scenario-result.sh no-question-he-cannot-judge "$STAGE_REF"
       - name: Keep what the scenario saw (every message sent, the waiting steps after each situation)
         if: always()
         uses: actions/upload-artifact@v4
@@ -817,6 +871,9 @@ jobs:
       - name: Say so when it stopped before its own verdict
         if: failure()
         run: 'grep -qE "^(PASS|FAIL) no-question-he-cannot-judge:" "$RUNNER_TEMP/verdict" 2>/dev/null || echo "FAIL no-question-he-cannot-judge: it stopped before its own verdict (its step log says how)" | tee -a "$GITHUB_STEP_SUMMARY"'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: no-question-he-cannot-judge-result, path: '${{ runner.temp }}/scenario-results/no-question-he-cannot-judge.txt', if-no-files-found: error }
 
   plain-yes:
     name: a plain yes or a button answers the right waiting step
@@ -840,7 +897,7 @@ jobs:
           path: ${{ runner.temp }}/run-stage
       - name: The scenario, the stage's own copy of it
         shell: bash
-        run: bash scenarios/plain-yes.sh "$STAGE_REF" | tee "$RUNNER_TEMP/verdict"
+        run: bash scenarios/capture-scenario-result.sh plain-yes "$STAGE_REF"
       - name: Keep what the scenario saw (every message sent, the waiting steps after each answer)
         if: always()
         uses: actions/upload-artifact@v4
@@ -851,6 +908,9 @@ jobs:
       - name: Say so when it stopped before its own verdict
         if: failure()
         run: 'grep -qE "^(PASS|FAIL) plain-yes:" "$RUNNER_TEMP/verdict" 2>/dev/null || echo "FAIL plain-yes: it stopped before its own verdict (its step log says how)" | tee -a "$GITHUB_STEP_SUMMARY"'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: plain-yes-result, path: '${{ runner.temp }}/scenario-results/plain-yes.txt', if-no-files-found: error }
 
   what-was-that:
     name: right after a background report, "what is this about?" is answered from what was sent
@@ -874,7 +934,7 @@ jobs:
           path: ${{ runner.temp }}/run-stage
       - name: The scenario, the stage's own copy of it
         shell: bash
-        run: bash scenarios/what-was-that.sh "$STAGE_REF" | tee "$RUNNER_TEMP/verdict"
+        run: bash scenarios/capture-scenario-result.sh what-was-that "$STAGE_REF"
       - name: Keep what the scenario saw (the report, its record, the answer)
         if: always()
         uses: actions/upload-artifact@v4
@@ -885,6 +945,9 @@ jobs:
       - name: Say so when it stopped before its own verdict
         if: failure()
         run: 'grep -qE "^(PASS|FAIL) what-was-that:" "$RUNNER_TEMP/verdict" 2>/dev/null || echo "FAIL what-was-that: it stopped before its own verdict (its step log says how)" | tee -a "$GITHUB_STEP_SUMMARY"'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: what-was-that-result, path: '${{ runner.temp }}/scenario-results/what-was-that.txt', if-no-files-found: error }
 
   connection-check:
     name: the daily connection check is silent while all work, and speaks once when Telegram's key is refused
@@ -904,7 +967,7 @@ jobs:
           path: ${{ runner.temp }}/run-stage
       - name: The scenario, the stage's own copy of it
         shell: bash
-        run: bash scenarios/connection-check.sh "$STAGE_REF" | tee "$RUNNER_TEMP/verdict"
+        run: bash scenarios/capture-scenario-result.sh connection-check "$STAGE_REF"
       - name: Keep what the scenario saw (every message, the deadlines and the bell after each run)
         if: always()
         uses: actions/upload-artifact@v4
@@ -915,6 +978,9 @@ jobs:
       - name: Say so when it stopped before its own verdict
         if: failure()
         run: 'grep -qE "^(PASS|FAIL) connection-check:" "$RUNNER_TEMP/verdict" 2>/dev/null || echo "FAIL connection-check: it stopped before its own verdict (its step log says how)" | tee -a "$GITHUB_STEP_SUMMARY"'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: connection-check-result, path: '${{ runner.temp }}/scenario-results/connection-check.txt', if-no-files-found: error }
 
   # The scenarios of 2.0.0-beta.20 (releases/godspeed-2.0.0-beta.20-nothing-private-left/plan.md,
   # "Proving scenarios" 2 to 4), and the first-day proof carried over from beta.18.1's plan (#275).
@@ -936,7 +1002,7 @@ jobs:
           path: ${{ runner.temp }}/run-stage
       - name: The scenario, the stage's own copy of it
         shell: bash
-        run: bash scenarios/workouts-from-hevy.sh "$STAGE_REF" | tee "$RUNNER_TEMP/verdict"
+        run: bash scenarios/capture-scenario-result.sh workouts-from-hevy "$STAGE_REF"
       - name: Keep what the scenario saw
         if: always()
         uses: actions/upload-artifact@v4
@@ -947,6 +1013,9 @@ jobs:
       - name: Say so when it stopped before its own verdict
         if: failure()
         run: 'grep -qE "^(PASS|FAIL) workouts-from-hevy:" "$RUNNER_TEMP/verdict" 2>/dev/null || echo "FAIL workouts-from-hevy: it stopped before its own verdict (its step log says how)" | tee -a "$GITHUB_STEP_SUMMARY"'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: workouts-from-hevy-result, path: '${{ runner.temp }}/scenario-results/workouts-from-hevy.txt', if-no-files-found: error }
 
   day-becomes-facts:
     name: an overnight remembered-facts routine files one day once
@@ -970,7 +1039,7 @@ jobs:
           path: ${{ runner.temp }}/run-stage
       - name: The scenario, the stage's own copy of it
         shell: bash
-        run: bash scenarios/day-becomes-facts.sh "$STAGE_REF" | tee "$RUNNER_TEMP/verdict"
+        run: bash scenarios/capture-scenario-result.sh day-becomes-facts "$STAGE_REF"
       - name: Keep what the scenario saw
         if: always()
         uses: actions/upload-artifact@v4
@@ -981,6 +1050,9 @@ jobs:
       - name: Say so when it stopped before its own verdict
         if: failure()
         run: 'grep -qE "^(PASS|FAIL) day-becomes-facts:" "$RUNNER_TEMP/verdict" 2>/dev/null || echo "FAIL day-becomes-facts: it stopped before its own verdict (its step log says how)" | tee -a "$GITHUB_STEP_SUMMARY"'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: day-becomes-facts-result, path: '${{ runner.temp }}/scenario-results/day-becomes-facts.txt', if-no-files-found: error }
 
   hermes-update-rollback:
     name: a Hermes update keeps good and rolls back broken releases
@@ -1000,7 +1072,7 @@ jobs:
           path: ${{ runner.temp }}/run-stage
       - name: The scenario, the stage's own copy of it
         shell: bash
-        run: bash scenarios/hermes-update-rollback.sh "$STAGE_REF" | tee "$RUNNER_TEMP/verdict"
+        run: bash scenarios/capture-scenario-result.sh hermes-update-rollback "$STAGE_REF"
       - name: Keep what the scenario saw
         if: always()
         uses: actions/upload-artifact@v4
@@ -1011,6 +1083,9 @@ jobs:
       - name: Say so when it stopped before its own verdict
         if: failure()
         run: 'grep -qE "^(PASS|FAIL) hermes-update-rollback:" "$RUNNER_TEMP/verdict" 2>/dev/null || echo "FAIL hermes-update-rollback: it stopped before its own verdict (its step log says how)" | tee -a "$GITHUB_STEP_SUMMARY"'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: hermes-update-rollback-result, path: '${{ runner.temp }}/scenario-results/hermes-update-rollback.txt', if-no-files-found: error }
 
   first-day:
     name: a fresh Docker server turns a first goal into useful work and a matching Telegram brief
@@ -1034,7 +1109,7 @@ jobs:
           path: ${{ runner.temp }}/run-stage
       - name: The scenario, the stage's own copy of it
         shell: bash
-        run: bash scenarios/first-day.sh "$STAGE_REF" | tee "$RUNNER_TEMP/verdict"
+        run: bash scenarios/capture-scenario-result.sh first-day "$STAGE_REF"
       - name: Keep what the scenario saw (the work, the brief, every request)
         if: always()
         uses: actions/upload-artifact@v4
@@ -1045,6 +1120,9 @@ jobs:
       - name: Say so when it stopped before its own verdict
         if: failure()
         run: 'grep -qE "^(PASS|FAIL) first-day:" "$RUNNER_TEMP/verdict" 2>/dev/null || echo "FAIL first-day: it stopped before its own verdict (its step log says how)" | tee -a "$GITHUB_STEP_SUMMARY"'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: first-day-result, path: '${{ runner.temp }}/scenario-results/first-day.txt', if-no-files-found: error }
 
   verdict:
     name: the verdict
@@ -1063,36 +1141,6 @@ jobs:
       EVENT: ${{ github.event_name }}
       PICKED: ${{ needs.stage.outputs.picked }}
       IS_CANDIDATE: ${{ startsWith(inputs.stage, 'candidate/') }}
-      RESULTS: >-
-        pooled=${{ needs.pooled.result }}
-        mac-install=${{ needs.mac-install.result }}
-        docker-server=${{ needs.docker-server.result }}
-        linux-update=${{ needs.linux-update.result }}
-        settings-on-install=${{ needs.settings-on-install.result }}
-        voice=${{ needs.voice.result }}
-        update-keeps-everything=${{ needs.update-keeps-everything.result }}
-        reminder-closed-elsewhere=${{ needs.reminder-closed-elsewhere.result }}
-        reminders-move-keeps-everything=${{ needs.reminders-move-keeps-everything.result }}
-        two-machines-move-at-once=${{ needs.two-machines-move-at-once.result }}
-        late-reminder-file=${{ needs.late-reminder-file.result }}
-        closed-offline-on-both=${{ needs.closed-offline-on-both.result }}
-        reminder-from-settings=${{ needs.reminder-from-settings.result }}
-        charm-challenge=${{ needs.charm-challenge.result }}
-        no-video-skills-by-default=${{ needs.no-video-skills-by-default.result }}
-        update-removes-only-unchanged-skills=${{ needs.update-removes-only-unchanged-skills.result }}
-        briefing-breaks-a-rule=${{ needs.briefing-breaks-a-rule.result }}
-        windows-old-names-move=${{ needs.windows-old-names-move.result }}
-        telegram-language=${{ needs.telegram-language.result }}
-        brief-asked-in-chat=${{ needs.brief-asked-in-chat.result }}
-        talk-prep-honest=${{ needs.talk-prep-honest.result }}
-        no-question-he-cannot-judge=${{ needs.no-question-he-cannot-judge.result }}
-        plain-yes=${{ needs.plain-yes.result }}
-        what-was-that=${{ needs.what-was-that.result }}
-        connection-check=${{ needs.connection-check.result }}
-        workouts-from-hevy=${{ needs.workouts-from-hevy.result }}
-        day-becomes-facts=${{ needs.day-becomes-facts.result }}
-        hermes-update-rollback=${{ needs.hermes-update-rollback.result }}
-        first-day=${{ needs.first-day.result }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -1100,7 +1148,7 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: '22.19.0' }
       - uses: actions/download-artifact@v4
-        if: ${{ needs.pooled.result != 'skipped' }}
+        if: ${{ needs.stage.result == 'success' }}
         with:
           path: ${{ runner.temp }}/scenario-results
           merge-multiple: true
@@ -1109,19 +1157,6 @@ jobs:
           # A pull request from a fork runs nothing (the stage job is skipped): nothing to judge.
           [ "$EVENT" != pull_request ] || [ "$STAGE" != skipped ] || { echo "No scenario runs on a pull request from a fork." | tee -a "$GITHUB_STEP_SUMMARY"; exit 0; }
           [ "$STAGE" = success ] || { echo "FAIL stage: the stage file at $STAGE_REF could not be read or is not a stage file" | tee -a "$GITHUB_STEP_SUMMARY"; exit 1; }
-          mkdir -p "$RUNNER_TEMP/scenario-results/fallback"
-          for pair in $RESULTS; do
-            name=${pair%%=*}; result=${pair#*=}
-            [ "$name" = pooled ] && continue
-            [ "$name" != mac-install ] || [ "$WANT_MAC" = true ] || continue
-            [ "$name" != windows-old-names-move ] || [ "$IS_CANDIDATE" = true ] || continue
-            if [ "$EVENT" = pull_request ] && [[ "$PICKED" != *",$name,"* ]]; then continue; fi
-            find "$RUNNER_TEMP/scenario-results" -name "$name.txt" -o -name result.txt | grep -q . && continue
-            case "$result" in
-              success) printf 'PASS %s: its isolated job passed\n' "$name" ;;
-              *) printf 'FAIL %s: its job ended %s\n' "$name" "${result:-without a result}" ;;
-            esac >"$RUNNER_TEMP/scenario-results/fallback/$name.txt"
-          done
           skip=''
           [ "$WANT_MAC" = true ] || skip='mac-install'
           [ "$IS_CANDIDATE" = true ] || skip="$skip windows-old-names-move"

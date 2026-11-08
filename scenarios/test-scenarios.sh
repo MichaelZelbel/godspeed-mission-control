@@ -274,6 +274,69 @@ routine_script_is 'a jobs envelope falls back to the product script, not its sam
 section 'server installer download'
 server_download_failure
 
+# ====================================================== installed-scenario orchestration
+section 'installed scenario orchestration'
+POOL_CATALOG=$TMP/pooled-catalog.tsv
+cat >"$POOL_CATALOG" <<'EOF'
+# id	implementation	class	system	candidate-only	display name
+linux-install	inline	pooled	native	no	Linux
+docker-server	inline	pooled	docker	no	Docker
+native-first	first.sh	shared	native	no	First native
+native-broken	broken.sh	shared	native	no	Broken native
+native-later	later.sh	shared	native	no	Later native
+settings-on-install	settings-on-install.sh	terminal	native	no	Settings
+hermes-update-rollback	hermes-update-rollback.sh	terminal	native	no	Hermes
+EOF
+POOL_RESULTS=$TMP/pooled-results
+POOL_LOG=$TMP/pooled-order
+mkdir -p "$POOL_RESULTS"
+POOL_OUTPUT=$(GODSPEED_SCENARIO_CATALOG="$POOL_CATALOG" GODSPEED_SCENARIO_RESULTS="$POOL_RESULTS" GODSPEED_SCENARIO_POOL_WORK="$TMP/pooled-work" POOL_LOG="$POOL_LOG" bash -c '
+  . "$1" candidate all
+  run_script() {
+    printf "%s\n" "$1" >>"$POOL_LOG"
+    [ "$1" != native-broken ] || return 2
+    printf "PASS %s: checked\n" "$1" >"$RESULTS/$1.txt"
+  }
+  run_system native
+' bash "$ROOT/scenarios/run-installed-scenarios.sh" 2>&1)
+if [ "$(cat "$POOL_LOG")" = "$(printf 'native-first\nnative-broken')" ] && grep -Fxq 'PASS native-first: checked' "$POOL_RESULTS/native-first.txt" && \
+  grep -Fq 'FAIL native-broken: the pooled native system could not be reset' "$POOL_RESULTS/native-broken.txt" && \
+  grep -Fq 'FAIL native-later: the pooled native system could not be reset' "$POOL_RESULTS/native-later.txt"; then
+  ok 'a pooled reset failure retains completed work, fails every remaining native scenario, and stops that sequence'
+else
+  bad "a pooled reset failure does not fan out exactly once ($POOL_OUTPUT; $(cat "$POOL_LOG" 2>/dev/null))"
+fi
+POOL_RESULTS=$TMP/pooled-main-results
+POOL_LOG=$TMP/pooled-main-order
+mkdir -p "$POOL_RESULTS"
+POOL_OUTPUT=$(GODSPEED_SCENARIO_CATALOG="$POOL_CATALOG" GODSPEED_SCENARIO_RESULTS="$POOL_RESULTS" GODSPEED_SCENARIO_POOL_WORK="$TMP/pooled-main-work" POOL_LOG="$POOL_LOG" bash -c '
+  . "$1" candidate all
+  install_native(){ :; }; capture_native(){ :; }; install_server(){ :; }; capture_server(){ :; }
+  run_system(){ :; }
+  run_script(){ printf "%s\n" "$1" >>"$POOL_LOG"; printf "PASS %s: checked\n" "$1" >"$RESULTS/$1.txt"; }
+  main
+' bash "$ROOT/scenarios/run-installed-scenarios.sh" 2>&1)
+if [ "$(tail -n 2 "$POOL_LOG")" = "$(printf 'settings-on-install\nhermes-update-rollback')" ] && grep -Fxq 'PASS linux-install: one native candidate install is ready' "$POOL_RESULTS/linux-install.txt" && \
+  grep -Fxq 'PASS docker-server: one Docker candidate install is ready' "$POOL_RESULTS/docker-server.txt"; then
+  ok 'one native and Docker install precede the terminal native checks in their required order'
+else
+  bad "pooled installs or terminal order are wrong ($POOL_OUTPUT; $(cat "$POOL_LOG" 2>/dev/null))"
+fi
+if grep -q 'require_the_stage_line_into' "$ROOT/scenarios/closed-offline-on-both.sh" && \
+  grep -q 'require_the_stage_line_into' "$ROOT/scenarios/reminder-closed-elsewhere.sh" && \
+  grep -q 'ln -s "$shared" "$root/.godspeed/integrated-runtime"' "$ROOT/scenarios/scenario-lib.sh"; then
+  ok 'two-device reminder scenarios use separate workspaces linked to the pooled runtime'
+else
+  bad 'two-device reminder scenarios do not reuse the pooled runtime'
+fi
+if grep -q 'run_script workouts-from-hevy workouts-from-hevy.sh both' "$ROOT/scenarios/run-installed-scenarios.sh" && \
+  grep -q 'prepare_platform docker' "$ROOT/scenarios/workouts-from-hevy.sh" && \
+  grep -q 'prepare_platform native' "$ROOT/scenarios/workouts-from-hevy.sh"; then
+  ok 'the Hevy proof joins Docker and native phases without a second scenario run'
+else
+  bad 'the Hevy proof can still run both pooled sequences independently'
+fi
+
 # =============================================================== 1. settings-on-install
 # A settings file as a wiring leaves it: Hermes' own keys, and the five of ticket 1.
 settings_good() { # <folder>
