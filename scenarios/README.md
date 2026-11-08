@@ -195,7 +195,8 @@ it (`assistant_keeps_a_conversation`).
 - `test-scenarios.sh` — their gate: `bash scenarios/test-scenarios.sh` from the root of a checkout.
 - `report-night.mjs` — the report after the nightly run of main (02:30 UTC; Linux and Docker jobs only):
   for each scenario that failed or could not run it opens one issue `Nightly scenario failed: <name>`
-  (labels `bug` and `scenario-failure`, made if missing), or adds the night to the one already open;
+  (labels `bug`, `scenario-failure`, and `archon-triage`, made if missing), or adds the night to the
+  one already open;
   for each that passed with an issue open it comments the run link and closes it. Its tests are
   `test-report-night.mjs` (`node --test`, against a stand-in for GitHub), run by `test-scenarios.sh`.
 
