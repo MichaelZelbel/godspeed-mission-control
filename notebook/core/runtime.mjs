@@ -35,14 +35,16 @@ export function hermesProvider({executable='hermes',home,cwd,model,provider,sour
       for(const [i,attachment] of (input.attachments||[]).entries()){
         fs.mkdirSync(path.join(home,'pending'),{recursive:true});const file=path.join(home,'pending','godspeed-'+process.pid+'-'+Date.now()+'-'+i+'.png');fs.writeFileSync(file,Buffer.from(attachment.data,'base64'),{mode:0o600});temporary.push(file);args.push('--image',file);
       }
-      const {attachments,signal:ignoredSignal,timeout_ms:ignoredBudget,...prompt}=input;
-      // Classify known failures without persisting or exposing private diagnostics.
+      const {attachments,signal:ignoredSignal,timeout_ms:ignoredBudget,...prompt}=input,request=JSON.stringify(prompt);
+      // Classify known failures without exposing private diagnostics. Settings keeps the redacted
+      // request details only when this routine-connection check fails.
       // The notebook's own one-turn calls are not a conversation with the person: a coach talk
       // waiting for their chat must not be used up here (godspeed-coach lib/context.mjs).
-      const result=await runChild(executable,args,{cwd,env:{...assistantEnvironment({home,workspace:cwd}),GODSPEED_SCHEDULED_RUN:'1'},input:JSON.stringify(prompt),timeoutMs,maxBytes:1024*1024,signal,spawnProcess}).catch(error=>{throw childFailure(error,timeoutMs,'The AI connection could not start');});
+      const result=await runChild(executable,args,{cwd,env:{...assistantEnvironment({home,workspace:cwd}),GODSPEED_SCHEDULED_RUN:'1'},input:request,timeoutMs,maxBytes:1024*1024,signal,spawnProcess}).catch(error=>{throw childFailure(error,timeoutMs,'The AI connection could not start');});
       const text=hermesResponse(result.stdout);
       if(result.code===0&&text)return text;
-      throw new Error(hermesFailureMessage(result.stderr+'\n'+text));
+      const diagnostic=(result.stderr+'\n'+text).trim();
+      throw Object.assign(new Error(hermesFailureMessage(diagnostic)),{diagnostic:{request_bytes:Buffer.byteLength(request),provider_error:scrubCredentials(diagnostic).slice(-6000)}});
     }finally{for(const file of temporary)try{fs.unlinkSync(file);}catch{}}
   };
   let cached,loadedAt=0;run.options=async()=>{if(cached&&Date.now()-loadedAt<300000)return cached;const {python,source}=hermesPython({executable,sourceRoot,home});if(!python)throw new Error('Model choices could not be loaded');const helper=fileURLToPath(new URL('../assistant-files/chat-options.py',import.meta.url));cached=await runChild(python,['-I',helper,source],{cwd:fs.existsSync(source)?source:home||cwd,env:assistantEnvironment({home,workspace:cwd}),timeoutMs:20000,spawnProcess}).then(result=>{if(result.code)throw Error();return JSON.parse(result.stdout.trim().split(/\r?\n/).at(-1));}).catch(()=>{throw new Error('Model choices could not be loaded');});loadedAt=Date.now();return cached;};return run;

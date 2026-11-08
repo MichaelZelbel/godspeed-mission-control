@@ -92,13 +92,17 @@ export function routineAIStatus({home,state}){
 // assumed. Its result is kept beside the notebook's other machine state.
 export async function checkRoutineAI({executable,home,cwd,state,sourceRoot,spawnProcess,now=()=>new Date(),ask=askDirectly}){
  const started=now();let check;
+ const failed=error=>{
+  const diagnostic=error?.diagnostic,status=routineAIStatus({home,state});
+  return {ok:false,error:String(error?.message||error).slice(0,300),...(typeof diagnostic?.request_bytes==='number'?{request_bytes:diagnostic.request_bytes}:{}),...(typeof status.model==='string'?{model:status.model}:{}),...(typeof diagnostic?.provider_error==='string'&&diagnostic.provider_error?{provider_error:diagnostic.provider_error}:{} )};
+ };
  // WITH A BACKUP AI IN HERMES' CHAIN (core/backup-ai.mjs), a request through Hermes is answered by
  // the backup whenever the main one fails, so "the routines reached it" would hide a main connection
  // that is broken. Then each is asked on its own, through the helper godspeed-model uses (the
  // assistant's own model settings and credentials, no tools, never the other one).
  const backup=fallbackChain(read(path.join(home,'config.yaml')))[0];
  if(backup){
-  const one=async route=>{try{await ask({executable,home,cwd,sourceRoot,spawnProcess,route});return {ok:true};}catch(error){return {ok:false,error:String(error?.message||error).slice(0,300)};}};
+  const one=async route=>{try{await ask({executable,home,cwd,sourceRoot,spawnProcess,route});return {ok:true};}catch(error){return failed(error);}};
   const main=await one('main'),second=await one('backup');
   if(main.ok)noteMainAnswered(state);else noteMainFailed(state,main.error,started);
   check={at:started.toISOString(),ok:main.ok,...(main.ok?{}:{error:main.error}),backup:{...second,model:backup.model}};
@@ -109,7 +113,7 @@ export async function checkRoutineAI({executable,home,cwd,state,sourceRoot,spawn
   const ask=hermesProvider({executable,home,cwd,sourceRoot,spawnProcess});
   const reply=await ask({kind:'connection-test',contract:'Reply with the single word Connected.',timeout_ms:300000});
   check={at:started.toISOString(),ok:true,reply:String(reply).slice(0,80)};
- }catch(error){check={at:started.toISOString(),ok:false,error:String(error?.message||error).slice(0,300)};}
+ }catch(error){check={at:started.toISOString(),...failed(error)};}
  writeRecord(state,{...readRecord(state),check});
  return {...routineAIStatus({home,state}),check};
 }

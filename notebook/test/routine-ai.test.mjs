@@ -95,6 +95,10 @@ test('the check asks Hermes once, the way a routine does, and keeps what it saw'
  const bad=fakeHermes('',1,'AuthenticationError: invalid_api_key');
  const failed=await checkRoutineAI({executable:'hermes',home:h,cwd:h,state,spawnProcess:bad.spawnProcess});
  assert.equal(failed.check.ok,false);assert.match(failed.check.error,/needs sign-in/);
+ const providerFailure=fakeHermes('',1,'HTTP 400: {"error":{"message":"request body was rejected"}} authorization: Bearer sk-ant-test-only');
+ const diagnosed=await checkRoutineAI({executable:'hermes',home:h,cwd:h,state,spawnProcess:providerFailure.spawnProcess});
+ assert.equal(diagnosed.check.model,'fictional/model');assert.ok(diagnosed.check.request_bytes>0);
+ assert.match(diagnosed.check.provider_error,/request body was rejected/);assert.doesNotMatch(diagnosed.check.provider_error,/sk-ant-test-only/);
  // Connecting again clears the old check: it was about another setting.
  connectRoutineAI({home:h,state,config:{url:'https://openrouter.ai/api/v1',key:'sk-or-other',model:'fictional/model'}});
  assert.equal(routineAIStatus({home:h,state}).check,null);
