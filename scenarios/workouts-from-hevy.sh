@@ -16,12 +16,11 @@ check() {
   why=$("$NODE" - "$folder" <<'NODE'
 const fs=require('fs'), p=process.argv[2];
 const read=n=>JSON.parse(fs.readFileSync(`${p}/${n}`,'utf8'));
-const same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
 const expected={
-  'harbor-strength':{title:'Harbor Strength',exercise:'Scenario Squat',weight_kg:42,reps:8},
-  'canal-pull':{title:'Canal Pull',exercise:'Scenario Row',weight_kg:31,reps:10},
+  'harbor-strength':{title:'Harbor Strength',exercises:'Scenario Squat: 8 x 42 kg'},
+  'canal-pull':{title:'Canal Pull',exercises:'Scenario Row: 10 x 31 kg'},
 };
-const changed={title:'Harbor Strength',exercise:'Scenario Squat',weight_kg:45,reps:8};
+const changed={title:'Harbor Strength',exercises:'Scenario Squat: 8 x 45 kg'};
 const fail=message=>{throw new Error(message)};
 try {
  const setup=read('setup.json'), health=read('fixture-health.json');
@@ -44,7 +43,7 @@ try {
   if(Object.keys(found).sort().join(',')!=='canal-pull,harbor-strength')fail(`${name} initial workouts have the wrong source ids`);
   for(const [id,want] of Object.entries(expected)){
    const row=found[id];
-   if(!row||row.title!==want.title||row.exercise!==want.exercise||!same(row.set,{weight_kg:want.weight_kg,reps:want.reps}))fail(`${name} did not keep every exercise and set of ${id}`);
+   if(!row||row.title!==want.title||row.exercises!==want.exercises)fail(`${name} did not keep every exercise and set of ${id}`);
   }
   const routine=x.routine;
   if(routine?.name!=='Workouts from Hevy'||!Number.isInteger(routine.minute)||routine.minute<1||routine.minute>59||typeof routine.script!=='string'||!routine.script)fail(`${name} has no one hourly Workouts from Hevy routine at a non-zero minute`);
@@ -52,7 +51,7 @@ try {
   const after=x.after?.rows;
   if(!Array.isArray(after)||after.length!==1||after[0].source_id!=='harbor-strength')fail(`${name} retained the deleted workout or did not keep the changed source row`);
   const row=after[0];
-  if(row.title!==changed.title||row.exercise!==changed.exercise||!same(row.set,{weight_kg:changed.weight_kg,reps:changed.reps}))fail(`${name} did not update Harbor Strength's changed set`);
+  if(row.title!==changed.title||row.exercises!==changed.exercises)fail(`${name} did not update Harbor Strength's changed set`);
  }
 } catch(error) { process.stdout.write(error.message); process.exit(1); }
 NODE
@@ -61,7 +60,7 @@ NODE
 }
 
 server_hevy_url() { # <port>
-  printf 'services:\n  godspeed:\n    extra_hosts:\n      - "host.docker.internal:host-gateway"\n    environment:\n      GODSPEED_WORKOUTS_HEVY_URL: "http://host.docker.internal:%s"\n' "$1" |
+  printf 'services:\n  godspeed:\n    extra_hosts:\n      - "host.docker.internal:host-gateway"\n    environment:\n      GODSPEED_WORKOUTS_HEVY_API: "http://host.docker.internal:%s"\n      GODSPEED_WORKOUTS_TEST: "1"\n' "$1" |
     sudo tee "$SERVER_DIR/compose.override.yaml" >/dev/null ||
     fail "the Docker notebook Hevy override could not be written"
   server_compose -f "$SERVER_DIR/compose.override.yaml" up -d --force-recreate >&2 ||
@@ -74,14 +73,14 @@ native_hevy_url() { # <port>
   if systemctl --user cat "$unit" >/dev/null 2>&1; then
     dropin=$HOME/.config/systemd/user/$unit.d
     mkdir -p "$dropin" || fail "the native notebook Hevy override folder could not be made"
-    printf '[Service]\nEnvironment="GODSPEED_WORKOUTS_HEVY_URL=http://127.0.0.1:%s"\n' "$1" >"$dropin/scenario-hevy.conf" ||
+    printf '[Service]\nEnvironment="GODSPEED_WORKOUTS_HEVY_API=http://127.0.0.1:%s"\nEnvironment="GODSPEED_WORKOUTS_TEST=1"\n' "$1" >"$dropin/scenario-hevy.conf" ||
       fail "the native notebook Hevy override could not be written"
     systemctl --user daemon-reload && systemctl --user restart "$unit" ||
       fail "the native notebook could not be restarted with the local Hevy address"
   elif systemctl cat "$unit" >/dev/null 2>&1; then
     dropin=/etc/systemd/system/$unit.d
     sudo mkdir -p "$dropin" || fail "the native notebook Hevy override folder could not be made"
-    printf '[Service]\nEnvironment="GODSPEED_WORKOUTS_HEVY_URL=http://127.0.0.1:%s"\n' "$1" | sudo tee "$dropin/scenario-hevy.conf" >/dev/null ||
+    printf '[Service]\nEnvironment="GODSPEED_WORKOUTS_HEVY_API=http://127.0.0.1:%s"\nEnvironment="GODSPEED_WORKOUTS_TEST=1"\n' "$1" | sudo tee "$dropin/scenario-hevy.conf" >/dev/null ||
       fail "the native notebook Hevy override could not be written"
     sudo systemctl daemon-reload && sudo systemctl restart "$unit" ||
       fail "the native notebook could not be restarted with the local Hevy address"
@@ -197,7 +196,7 @@ const rows=data=>Array.isArray(data)?data:(Array.isArray(data?.data)?data.data:(
 const collection=rows(read(collectionsFile)).find(row=>row?.name==='Workouts');
 const items=collection?rows(read(itemsFile)).filter(row=>row?.collection_id===collection.id):[];
 const value=(item,...names)=>names.map(name=>item?.[name]??item?.data?.[name]).find(value=>value!==undefined&&value!==null);
-const workoutRows=items.map(item=>({source_id:value(item,'source_id','hevy_id','workout_id','id'),title:value(item,'title','name'),exercise:value(item,'exercise','exercise_name'),set:value(item,'set')||{weight_kg:value(item,'weight_kg'),reps:value(item,'reps')}}));
+const workoutRows=items.map(item=>({source_id:value(item,'source_id','hevy_id','workout_id','id'),title:value(item,'workout','title','name'),exercises:value(item,'exercises','exercise','exercise_name')}));
 const jobs=rows(read(jobsFile));
 const routine=jobs.filter(job=>job?.name==='Workouts from Hevy');const job=routine[0]||{};
 const cron=String(job.cron||job.schedule?.expr||job.schedule||'');const minute=/^([0-9]+)\s+\*/.exec(cron)?.[1];

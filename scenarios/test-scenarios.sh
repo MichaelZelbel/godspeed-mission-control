@@ -3683,7 +3683,7 @@ wh_good() {
   printf '{"method":"GET","path":"/v1/workouts","status":401,"accepted":false}\n{"method":"GET","path":"/v1/workouts","status":200,"accepted":true}\n' >"$f/fixture.log"
   printf '{"clean":true,"paths":[]}\n' >"$f/key-scan.json"
   for platform in docker native; do
-    printf '{"platform":"%s","settings":{"refused":{"accepted":false,"retained":false,"paths":[]},"accepted":{"accepted":true}},"collection":{"name":"Workouts","rows":[{"source_id":"harbor-strength","title":"Harbor Strength","exercise":"Scenario Squat","set":{"weight_kg":42,"reps":8}},{"source_id":"canal-pull","title":"Canal Pull","exercise":"Scenario Row","set":{"weight_kg":31,"reps":10}}]},"routine":{"name":"Workouts from Hevy","minute":17,"script":"scenario-import","count":1},"manual_run":{"exit":0},"after":{"rows":[{"source_id":"harbor-strength","title":"Harbor Strength","exercise":"Scenario Squat","set":{"weight_kg":45,"reps":8}}]}}\n' "$platform" >"$f/$platform.json"
+    printf '{"platform":"%s","settings":{"refused":{"accepted":false,"retained":false,"paths":[]},"accepted":{"accepted":true}},"collection":{"name":"Workouts","rows":[{"source_id":"harbor-strength","title":"Harbor Strength","exercises":"Scenario Squat: 8 x 42 kg"},{"source_id":"canal-pull","title":"Canal Pull","exercises":"Scenario Row: 10 x 31 kg"}]},"routine":{"name":"Workouts from Hevy","minute":17,"script":"scenario-import","count":1},"manual_run":{"exit":0},"after":{"rows":[{"source_id":"harbor-strength","title":"Harbor Strength","exercises":"Scenario Squat: 8 x 45 kg"}]}}\n' "$platform" >"$f/$platform.json"
   done
 }
 wh_good "$WH/good"
@@ -4042,9 +4042,9 @@ copy "$WH/good" "$WH/no-routine"; sed -i 's/"minute":17/"minute":0/' "$WH/no-rou
 refuses 'a zero-minute import routine' workouts-from-hevy "$WH/no-routine" 'non-zero minute'
 copy "$WH/good" "$WH/two-routines"; sed -i 's/"count":1/"count":2/' "$WH/two-routines/native.json"
 refuses 'two import routines' workouts-from-hevy "$WH/two-routines" 'did not run its one recorded'
-copy "$WH/good" "$WH/not-updated"; sed -i 's/"weight_kg":45/"weight_kg":42/' "$WH/not-updated/docker.json"
+copy "$WH/good" "$WH/not-updated"; sed -i 's/Scenario Squat: 8 x 45 kg/Scenario Squat: 8 x 42 kg/' "$WH/not-updated/docker.json"
 refuses 'a changed workout not updated' workouts-from-hevy "$WH/not-updated" 'did not update Harbor Strength'
-copy "$WH/good" "$WH/deleted-stays"; sed -i 's/"source_id":"harbor-strength","title":"Harbor Strength","exercise":"Scenario Squat","set":{"weight_kg":45,"reps":8}/"source_id":"harbor-strength","title":"Harbor Strength","exercise":"Scenario Squat","set":{"weight_kg":45,"reps":8}},{"source_id":"canal-pull"/' "$WH/deleted-stays/docker.json"
+copy "$WH/good" "$WH/deleted-stays"; sed -i 's/"source_id":"harbor-strength","title":"Harbor Strength","exercises":"Scenario Squat: 8 x 45 kg"/"source_id":"harbor-strength","title":"Harbor Strength","exercises":"Scenario Squat: 8 x 45 kg"},{"source_id":"canal-pull"/' "$WH/deleted-stays/docker.json"
 refuses 'a deleted workout retained' workouts-from-hevy "$WH/deleted-stays" 'retained the deleted workout'
 copy "$WH/good" "$WH/key-leaked"; printf '{"clean":false,"paths":["/tmp/leak"]}\n' >"$WH/key-leaked/key-scan.json"
 refuses 'a key outside its permitted setting' workouts-from-hevy "$WH/key-leaked" 'key scan is not a clean'
@@ -4130,11 +4130,24 @@ node "$ROOT/scenarios/hevy-fixture.mjs" --state "$HF/state" --log "$HF/log" >"$H
 for _ in $(seq 1 20); do [ -s "$HF/port" ] && break; sleep 0.1; done
 HF_PORT=$(cat "$HF/port")
 HF_BAD=$(curl -s -o /dev/null -w '%{http_code}' -H 'api-key: not-the-key' "http://127.0.0.1:$HF_PORT/v1/workouts")
-HF_GOOD=$(curl -s -H 'api-key: 00000000-0000-4000-8000-000000000001' "http://127.0.0.1:$HF_PORT/v1/workouts")
+HF_BASE=http://127.0.0.1:$HF_PORT
+HF_GOOD=$(curl -s -H 'api-key: 00000000-0000-4000-8000-000000000001' "$HF_BASE/v1/workouts")
+HF_INITIAL=$(ROOT=$ROOT HF_BASE=$HF_BASE node --input-type=module - <<'NODE'
+const { Hevy } = await import(process.env.ROOT + '/third-party/addons/godspeed-workouts/lib/hevy.mjs');
+const rows = await new Hevy({ key: '00000000-0000-4000-8000-000000000001', base: process.env.HF_BASE, pauseMs: 0 }).allWorkouts();
+process.stdout.write(rows.map(row => row.id).sort().join(','));
+NODE
+)
 node "$ROOT/scenarios/hevy-fixture.mjs" --state "$HF/state" --log "$HF/log" --mutate
-HF_EVENTS=$(curl -s -H 'api-key: 00000000-0000-4000-8000-000000000001' "http://127.0.0.1:$HF_PORT/v1/workouts/events")
+HF_EVENTS=$(curl -s -H 'api-key: 00000000-0000-4000-8000-000000000001' "$HF_BASE/v1/workouts/events")
+HF_CHANGED=$(ROOT=$ROOT HF_BASE=$HF_BASE node --input-type=module - <<'NODE'
+const { Hevy } = await import(process.env.ROOT + '/third-party/addons/godspeed-workouts/lib/hevy.mjs');
+const events = await new Hevy({ key: '00000000-0000-4000-8000-000000000001', base: process.env.HF_BASE, pauseMs: 0 }).eventsSince('2026-01-01T00:00:00Z');
+process.stdout.write(events.map(event => event.type === 'updated' ? event.workout.id : event.id).sort().join(','));
+NODE
+)
 kill "$HF_PID" 2>/dev/null || true
-if [ "$HF_BAD" = 401 ] && grep -q 'harbor-strength' <<<"$HF_GOOD" && grep -q 'canal-pull' <<<"$HF_EVENTS" && ! grep -q '00000000-0000-4000-8000-000000000001' "$HF/log"; then ok 'the local Hevy fixture refuses, changes and redacts'; else bad 'the local Hevy fixture does not refuse, change and redact'; fi
+if [ "$HF_BAD" = 401 ] && [ "$HF_INITIAL" = 'canal-pull,harbor-strength' ] && [ "$HF_CHANGED" = 'canal-pull,harbor-strength' ] && grep -q 'harbor-strength' <<<"$HF_GOOD" && grep -q 'canal-pull' <<<"$HF_EVENTS" && ! grep -q '00000000-0000-4000-8000-000000000001' "$HF/log"; then ok 'the local Hevy fixture refuses, follows the add-on contract, changes and redacts'; else bad 'the local Hevy fixture does not refuse, follow the add-on contract, change and redact'; fi
 HFD=$TMP/hermes-fixture
 HFD_LOG=$TMP/hermes-fixture.log
 if node "$ROOT/scenarios/hermes-update-fixture.mjs" --dir "$HFD" >/dev/null \
@@ -4355,11 +4368,26 @@ if (
   server_hevy_url 47839
   [ "$(cat "$TMP/hevy-compose-command")" = "$(printf '%s\n' \
     -f "$HEVY_DIR/compose.override.yaml" up -d --force-recreate)" ] && \
-    grep -Fqx '      GODSPEED_WORKOUTS_HEVY_URL: "http://host.docker.internal:47839"' "$HEVY_DIR/compose.override.yaml"
+    grep -Fqx '      GODSPEED_WORKOUTS_HEVY_API: "http://host.docker.internal:47839"' "$HEVY_DIR/compose.override.yaml" && \
+    grep -Fqx '      GODSPEED_WORKOUTS_TEST: "1"' "$HEVY_DIR/compose.override.yaml"
 ); then
   ok "the Hevy recreate writes its override through sudo and passes it through the installed Compose boundary"
 else
   bad "the Hevy recreate did not write its override or pass both Compose layers"
+fi
+NATIVE_HEVY_HOME=$TMP/native-hevy-home
+if (
+  HOME=$NATIVE_HEVY_HOME
+  export HOME
+  . "$ROOT/scenarios/workouts-from-hevy.sh"
+  systemctl() { return 0; }
+  wait_for() { :; }
+  native_hevy_url 47840
+  [ "$(cat "$HOME/.config/systemd/user/godspeed-integrated-notebook.service.d/scenario-hevy.conf")" = "$(printf '[Service]\nEnvironment="GODSPEED_WORKOUTS_HEVY_API=http://127.0.0.1:47840"\nEnvironment="GODSPEED_WORKOUTS_TEST=1"')" ]
+); then
+  ok "the native Hevy override uses the add-on's test-only address contract"
+else
+  bad "the native Hevy override did not use the add-on's test-only address contract"
 fi
 HEVY_FAILURE_DIR=$TMP/server-hevy-write-failure
 mkdir -p "$HEVY_FAILURE_DIR"
