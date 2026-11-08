@@ -62,6 +62,28 @@ test("removing a schedule reports every platform command refusal", () => {
   } finally { fs.rmSync(home, { recursive: true, force: true }); }
 });
 
+test("removing a systemd user schedule reports a daemon reload refusal", () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "godspeed-workouts-schedule-"));
+  try {
+    const options = { ...p, kind: "systemd-user", home };
+    const files = scheduleFiles(options);
+    fs.mkdirSync(path.dirname(files[0]), { recursive: true });
+    for (const file of files) fs.writeFileSync(file, "scheduled");
+    const calls = [];
+    const result = removeSchedule(options, { runCommand: (command, args) => {
+      calls.push([command, args]);
+      return args.includes("daemon-reload") ? { status: 1, stderr: "systemd user manager refused reload" } : { status: 0 };
+    } });
+    assert.equal(result.ok, false);
+    assert.match(result.text, /systemd user manager refused reload/);
+    assert.deepEqual(calls, [
+      ["systemctl", ["--user", "disable", "--now", "godspeed-workouts.timer"]],
+      ["systemctl", ["--user", "daemon-reload"]],
+    ]);
+    assert.ok(files.every((file) => !fs.existsSync(file)));
+  } finally { fs.rmSync(home, { recursive: true, force: true }); }
+});
+
 test("removing an already absent Windows task succeeds", () => {
   let invocation;
   const result = removeSchedule({ ...p, kind: "windows-task" }, { runCommand: (...args) => { invocation = args; return { status: 42, stderr: "FEHLER: Das System kann die angegebene Datei nicht finden." }; } });

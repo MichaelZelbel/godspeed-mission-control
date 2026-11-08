@@ -238,7 +238,10 @@ export function removeSchedule(p, { runCommand = run } = {}) {
     if (r.status !== 0) return commandFailure(`${TIMER} was not stopped`, r);
   }
   for (const f of files) fs.rmSync(f, { force: true });
-  if (p.kind !== "launch-agent") runCommand("systemctl", p.kind === "systemd-system" ? ["daemon-reload"] : ["--user", "daemon-reload"]);
+  if (p.kind !== "launch-agent") {
+    const r = runCommand("systemctl", p.kind === "systemd-system" ? ["daemon-reload"] : ["--user", "daemon-reload"]);
+    if (r.status !== 0) return commandFailure("systemd did not reload its unit files", r);
+  }
   return { ok: true, text: "the hourly run is removed" };
 }
 
