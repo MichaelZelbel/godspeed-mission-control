@@ -68,7 +68,8 @@ the Godspeed notebook and refuses to install without one.
 
 ## Where it works
 
-- The notebook's own chat, through its `charm` operation.
+- The notebook's own chat, through its `charm` operation. Its native judgement writes the same
+  bounded, word-free JSONL audit evidence as Hermes to `<HERMES_HOME>/logs/godspeed-charm.log`.
 - Telegram, through Hermes: the plugin hands the current state to the assistant before every turn.
   Under Hermes the program, not the model, asks the slip question, on every platform it serves: while
   the model works, the plugin runs `godspeed-charm judge` on your message. A yes or no to an open

@@ -1551,6 +1551,39 @@ charm_good() { # <folder>
 
 section charm-challenge
 C=$TMP/charm
+charm_log_source_boundary() {
+  local folder=$TMP/charm-log-source source=$TMP/charm-log-source/godspeed-charm.log evidence=$TMP/charm-log-source/charm-log.txt output code
+  rm -rf "$folder"
+  mkdir -p "$folder"
+  printf '{"verdict":"ask"}\n' >"$source"
+  output=$(bash -c '. "$1"; fail(){ printf "%s\\n" "$*"; exit 42; }; retain_new_charm_log "$2" "$3" "$4"' \
+    bash "$HERE/charm-log.sh" "$source" 0 "$evidence" 2>&1)
+  code=$?
+  if [ "$code" = 0 ] && [ "$(<"$evidence")" = '{"verdict":"ask"}' ]; then
+    ok 'the Charm log helper retains newly written JSONL evidence'
+  else
+    bad "the Charm log helper did not retain newly written JSONL evidence (exit $code: $output)"
+  fi
+  rm -f "$source"
+  output=$(bash -c '. "$1"; fail(){ printf "%s\\n" "$*"; exit 42; }; retain_new_charm_log "$2" "$3" "$4"' \
+    bash "$HERE/charm-log.sh" "$source" 0 "$evidence" 2>&1)
+  code=$?
+  if [ "$code" = 42 ] && [[ $output == *"installed panel Charm judgement did not write evidence to $source"* ]]; then
+    ok 'a missing Charm source log names the absent panel evidence'
+  else
+    bad "a missing Charm source log did not name the absent panel evidence (exit $code: $output)"
+  fi
+  printf '{"verdict":"ask"}\n' >"$source"
+  output=$(bash -c '. "$1"; fail(){ printf "%s\\n" "$*"; exit 42; }; retain_new_charm_log "$2" "$3" "$4"' \
+    bash "$HERE/charm-log.sh" "$source" 1 "$evidence" 2>&1)
+  code=$?
+  if [ "$code" = 42 ] && [[ $output == *"installed panel Charm judgement did not write evidence to $source"* ]]; then
+    ok 'an unchanged Charm source log names the absent panel evidence'
+  else
+    bad "an unchanged Charm source log did not name the absent panel evidence (exit $code: $output)"
+  fi
+}
+charm_log_source_boundary
 charm_good "$C/good"
 passes 'a challenge started, vented at, kept once and started over twice' \
   charm-challenge "$C/good" 'started over with a new end date each and 2 restarts'

@@ -47,7 +47,7 @@ async function panel(t,options){
  let minute=0;const tick=()=>{process.env.GODSPEED_CHARM_NOW=new Date(START+(++minute)*60000).toISOString();};
  const say=async message=>{tick();const r=await fetch(base+'/api/browser-chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message})});assert.equal(r.status,200);return (await r.json()).reply;};
  const op=input=>{tick();return s.domains.invoke('personal-operation',{type:'charm',...input});};
- return {say,op,s};
+ return {say,op,s,home};
 }
 
 test('five vents in five new panel conversations each end with the question and record asked',{skip},async t=>{
@@ -80,6 +80,20 @@ test('a no to the open question records kept, not a reset',{skip},async t=>{
  await say('no');
  const state=(await op({action:'status'})).state;
  assert.equal(state.open.length,0);assert.equal(state.kept,1);assert.equal(state.resetToday,false);
+});
+
+test('the native panel records redacted judgement evidence for a vent and its no',{skip},async t=>{
+ const {say,op,home}=await panel(t);
+ await op({action:'start',words:'start'});
+ await say(VENT);
+ await say('no');
+ const entries=fs.readFileSync(path.join(home,'logs','godspeed-charm.log'),'utf8').trim().split('\n').map(JSON.parse);
+ assert.equal(entries.length,2);
+ assert.deepEqual(entries.map(({conversation,verdict,source,did})=>({conversation,verdict,source,did})),[
+  {conversation:'notebook:browser-owner',verdict:'ask',source:'model',did:'asked'},
+  {conversation:'notebook:browser-owner',verdict:'answer',source:'rule',did:'answered no'},
+ ]);
+ assert.doesNotMatch(JSON.stringify(entries),new RegExp(VENT));
 });
 
 test('the verdict words the panel accepts are the plugin\'s',()=>{

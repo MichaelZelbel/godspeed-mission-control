@@ -72,7 +72,7 @@
 #   vent-2-reply.txt .. vent-5-reply.txt, no-2-reply.txt .. no-5-reply.txt     the other four
 #   vents.txt                    one line per vent and per "no": vent|no<TAB>n<TAB>started<TAB>ended (epoch seconds)
 #   commands.txt                 the assistant's command log since the first vent
-#   charm-log.txt                the Charm plugin's log lines (logs/godspeed-charm.log) since the first vent
+#   charm-log.txt                the Charm judgement's audit log lines (logs/godspeed-charm.log) since the first vent
 #   status-after-no.txt / card-after-no.txt / brief-after-no.txt / shelf-after-no.txt
 #   status-fourth-day.txt / card-fourth-day.txt / brief-fourth-day.txt    three days later
 #   brief-run.json               what the notebook said when it ran its routines that day
@@ -86,6 +86,8 @@
 SCENARIO=charm-challenge
 # shellcheck source=scenarios/scenario-lib.sh
 . "$(dirname "$0")/scenario-lib.sh"
+# shellcheck source=scenarios/charm-log.sh
+. "$(dirname "$0")/charm-log.sh"
 scenario_arguments "$@"
 
 DAYS=21
@@ -292,7 +294,7 @@ five_vents() {
   done
   assistant_commands "$EVIDENCE/commands.txt" "$((first_started - 5))"
   sed 's/^/  command | /' "$EVIDENCE/commands.txt" >&2
-  tail -n "+$((${log_before:-0} + 1))" "$log" >"$EVIDENCE/charm-log.txt" 2>/dev/null || : >"$EVIDENCE/charm-log.txt"
+  retain_new_charm_log "$log" "${log_before:-0}" "$EVIDENCE/charm-log.txt"
   sed 's/^/  charm-log | /' "$EVIDENCE/charm-log.txt" >&2
 }
 

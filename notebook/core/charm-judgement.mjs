@@ -30,6 +30,14 @@ const verdictOf=stdout=>{
  return null;
 };
 const ending=(reply,question)=>reply.trimEnd().endsWith(question)?reply:reply.trimEnd()+'\n\n'+question;
+const nativeLog=(home,conversation,verdict,did)=>{
+ try{
+  const folder=path.join(home,'logs'),file=path.join(folder,'godspeed-charm.log');
+  fs.mkdirSync(folder,{recursive:true});
+  if(fs.existsSync(file)&&fs.statSync(file).size>1_000_000)fs.renameSync(file,file+'.1');
+  fs.appendFileSync(file,JSON.stringify({at:new Date().toISOString(),conversation,verdict:verdict?.verdict??null,source:verdict?.source??null,why:verdict?.why??null,did})+'\n');
+ }catch{}
+};
 
 // Starts the judgement of this message. `end(reply)` says what the reply becomes; `drop()` is for a
 // turn that ends without one.
@@ -51,13 +59,17 @@ export function startCharmJudgement(domains,input){
   verdict=judge(model?['--model-command',model]:['--no-model'],judgeSeconds()*1000).catch(()=>null);
  }catch{drop();return nothing;}
  return {drop,async end(reply){
+  let v,did='no action';
   try{
    // Past the limit, or no answer: the word check alone, as the plugin does.
-   const v=await verdict||await judge(['--no-model'],wordCheckMs()).catch(()=>null);
+   v=await verdict||await judge(['--no-model'],wordCheckMs()).catch(()=>null);
    if(!v||v.verdict==='none')return reply;
    const done=charmOperation(domains,v.verdict==='answer'?{action:'answer',answer:v.answer,conversation,words,language:v.language}:{action:'asked',conversation,words,language:v.language});
-   return done.ok&&done.reply?ending(reply,done.reply):reply;
-  }catch{return reply;}
-  finally{drop();}
+   if(!done.ok){did='refused';return reply;}
+   if(!done.reply)return reply;
+   did=v.verdict==='answer'?'answered '+v.answer:'asked';
+   return ending(reply,done.reply);
+  }catch{did='failed';return reply;}
+  finally{nativeLog(domains.query?.nativeHermesHome,conversation,v,did);drop();}
  }};
 }
