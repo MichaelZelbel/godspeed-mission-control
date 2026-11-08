@@ -95,10 +95,11 @@ test('the check asks Hermes once, the way a routine does, and keeps what it saw'
  const bad=fakeHermes('',1,'AuthenticationError: invalid_api_key');
  const failed=await checkRoutineAI({executable:'hermes',home:h,cwd:h,state,spawnProcess:bad.spawnProcess});
  assert.equal(failed.check.ok,false);assert.match(failed.check.error,/needs sign-in/);
- const providerFailure=fakeHermes('',1,'HTTP 400: {"error":{"message":"request body was rejected"}} authorization: Bearer sk-ant-test-only');
+ connectRoutineAI({home:h,state,config:{url:'https://openrouter.ai/api/v1',key:'abc1234',model:'fictional/model'}});
+ const providerFailure=fakeHermes('',1,'HTTP 400: {"error":{"message":"request body was rejected for abc1234"}}');
  const diagnosed=await checkRoutineAI({executable:'hermes',home:h,cwd:h,state,spawnProcess:providerFailure.spawnProcess});
  assert.equal(diagnosed.check.model,'fictional/model');assert.ok(diagnosed.check.request_bytes>0);
- assert.match(diagnosed.check.provider_error,/request body was rejected/);assert.doesNotMatch(diagnosed.check.provider_error,/sk-ant-test-only/);
+ assert.match(diagnosed.check.provider_error,/request body was rejected/);assert.doesNotMatch(diagnosed.check.provider_error,/abc1234/);
  // Connecting again clears the old check: it was about another setting.
  connectRoutineAI({home:h,state,config:{url:'https://openrouter.ai/api/v1',key:'sk-or-other',model:'fictional/model'}});
  assert.equal(routineAIStatus({home:h,state}).check,null);
@@ -132,14 +133,15 @@ test('the Settings form connects the routines\' AI through the server, and leave
   // The notebook's own copy got the full address, as before.
   assert.equal(JSON.parse(fs.readFileSync(path.join(root,'.godspeed','provider.json'),'utf8')).url,url+'/chat/completions');
   assert.equal((await call('routine-ai/check',{})).data.check.ok,true);
-  let anthropic={status:401,body:{error:{message:'Invalid key'}}},request;
+  let anthropic={status:401,body:{error:{message:'Invalid key abc1234'}}},request;
   const originalFetch=globalThis.fetch;globalThis.fetch=async(resource,options)=>{
    if(String(resource)==='https://api.anthropic.com/v1/messages'){request={headers:options.headers,body:JSON.parse(options.body)};return new Response(JSON.stringify(anthropic.body),{status:anthropic.status,headers:{'Content-Type':'application/json'}});}
    return originalFetch(resource,options);
   };t.after(()=>{globalThis.fetch=originalFetch;});
   const beforeAnthropic=fs.readFileSync(path.join(hermesHome,'config.yaml'),'utf8');
-  const refusedAnthropic=await call('provider',{url:'https://api.anthropic.com/v1',key:'sk-ant-fictional',model:'claude-haiku-4-5'});
+  const refusedAnthropic=await call('provider',{url:'https://api.anthropic.com/v1',key:'abc1234',model:'claude-haiku-4-5'});
   assert.notEqual(refusedAnthropic.status,200);assert.equal(fs.readFileSync(path.join(hermesHome,'config.yaml'),'utf8'),beforeAnthropic,'a rejected native connection leaves Hermes unchanged');
+  assert.equal(refusedAnthropic.data.model,'claude-haiku-4-5');assert.ok(refusedAnthropic.data.request_bytes>0);assert.match(refusedAnthropic.data.provider_error,/Invalid key/);assert.doesNotMatch(JSON.stringify(refusedAnthropic.data),/abc1234/);
   anthropic={status:200,body:{content:[{type:'text',text:'Connected'}]}};
   const native=await call('provider',{url:'https://api.anthropic.com/v1',key:'sk-ant-fictional',model:'claude-haiku-4-5'});
   assert.equal(native.status,200,JSON.stringify(native.data));assert.equal(request.headers['x-api-key'],'sk-ant-fictional');assert.equal(request.headers['anthropic-version'],'2023-06-01');assert.equal(request.body.messages[0].role,'user');assert.equal(request.body.system.includes('Reply with Connected.'),true);
@@ -160,12 +162,12 @@ test('the Settings form connects the routines\' AI through the server, and leave
 test('with a backup connected, the check asks the main one and the backup each on their own',async t=>{
  const {home:h,state}=home(t);
  const {connectBackupAI}=await import('../core/backup-ai.mjs');
- connectRoutineAI({home:h,state,config:{url:'https://openrouter.ai/api/v1',key:'sk-or-fictional',model:'fictional/model'}});
+ connectRoutineAI({home:h,state,config:{url:'https://openrouter.ai/api/v1',key:'abc1234',model:'fictional/model'}});
  connectBackupAI({home:h,state,config:{url:'https://api.openai.com/v1',key:'sk-fictional-backup',model:'gpt-backup'}});
  const asked=[];let mainUp=false;
- const ask=async({route})=>{asked.push(route);if(route==='main'&&!mainUp)throw Error('The AI account reached a usage limit. It answers again once the limit resets.');return {text:'Connected'};};
+ const ask=async({route})=>{asked.push(route);if(route==='main'&&!mainUp)throw Object.assign(Error('The AI account reached a usage limit. It answers again once the limit resets.'),{diagnostic:{request_bytes:47,provider_error:'HTTP 429: abc1234'}});return {text:'Connected'};};
  const down=await checkRoutineAI({executable:'hermes',home:h,cwd:h,state,ask,now:()=>new Date('2026-10-22T10:00:00Z')});
- assert.deepEqual(down.check,{at:'2026-10-22T10:00:00.000Z',ok:false,error:'The AI account reached a usage limit. It answers again once the limit resets.',backup:{ok:true,model:'gpt-backup'}});
+ assert.deepEqual(down.check,{at:'2026-10-22T10:00:00.000Z',ok:false,error:'The AI account reached a usage limit. It answers again once the limit resets.',request_bytes:47,model:'fictional/model',provider_error:'HTTP 429: ***',backup:{ok:true,model:'gpt-backup'}});
  assert.deepEqual(asked,['main','backup']);
  assert.equal(JSON.parse(fs.readFileSync(path.join(state,'backup-ai.json'),'utf8')).main_failing_since,'2026-10-22T10:00:00.000Z');
  mainUp=true;const up=await checkRoutineAI({executable:'hermes',home:h,cwd:h,state,ask});
@@ -179,4 +181,7 @@ test('with a backup connected, the check asks the main one and the backup each o
  const result=await askDirectly({executable:path.join(runtime,'hermes'),home:h,cwd:path.dirname(h),sourceRoot:runtime,spawnProcess,route:'backup'});
  assert.equal(result.backup,true);assert.ok(helper.calls[0][0].endsWith('addon-model.py'));
  const request=JSON.parse(sent);assert.equal(request.route,'backup');assert.equal(request.max_tokens,128);assert.equal(request.tools,undefined);
+ const failedHelper=fakeHermes(JSON.stringify({error:'The selected Godspeed model could not answer. Check its connection and usage allowance.',provider_error:'HTTP 400: abc1234'}),1);
+ const providerFailure=await askDirectly({executable:path.join(runtime,'hermes'),home:h,cwd:path.dirname(h),sourceRoot:runtime,spawnProcess:failedHelper.spawnProcess,route:'main'}).then(()=>null,error=>error);
+ assert.ok(providerFailure);assert.ok(providerFailure.diagnostic.request_bytes>0);assert.match(providerFailure.diagnostic.provider_error,/HTTP 400/);assert.doesNotMatch(providerFailure.diagnostic.provider_error,/abc1234/);
 });

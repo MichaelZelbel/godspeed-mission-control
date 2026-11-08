@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {atomic} from './records/store.mjs';
 import {setConfigValue,readConfigValue,deleteConfigValue} from './hermes-config.mjs';
-import {hermesProvider} from './runtime.mjs';
+import {hermesProvider,hermesSecrets,scrubCredentials} from './runtime.mjs';
 import {hermesHelper,runHermesHelper} from './addon-model.mjs';
 import {fallbackChain,noteMainAnswered,noteMainFailed} from './backup-ai.mjs';
 import {providerForHost,providerForName} from './provider-spec.mjs';
@@ -94,7 +94,7 @@ export async function checkRoutineAI({executable,home,cwd,state,sourceRoot,spawn
  const started=now();let check;
  const failed=error=>{
   const diagnostic=error?.diagnostic,status=routineAIStatus({home,state});
-  return {ok:false,error:String(error?.message||error).slice(0,300),...(typeof diagnostic?.request_bytes==='number'?{request_bytes:diagnostic.request_bytes}:{}),...(typeof status.model==='string'?{model:status.model}:{}),...(typeof diagnostic?.provider_error==='string'&&diagnostic.provider_error?{provider_error:diagnostic.provider_error}:{} )};
+  return {ok:false,error:String(error?.message||error).slice(0,300),...(typeof diagnostic?.request_bytes==='number'?{request_bytes:diagnostic.request_bytes}:{}),...(typeof status.model==='string'?{model:status.model}:{}),...(typeof diagnostic?.provider_error==='string'&&diagnostic.provider_error?{provider_error:scrubCredentials(diagnostic.provider_error,hermesSecrets(home)).slice(-6000)}:{} )};
  };
  // WITH A BACKUP AI IN HERMES' CHAIN (core/backup-ai.mjs), a request through Hermes is answered by
  // the backup whenever the main one fails, so "the routines reached it" would hide a main connection
@@ -105,7 +105,7 @@ export async function checkRoutineAI({executable,home,cwd,state,sourceRoot,spawn
   const one=async route=>{try{await ask({executable,home,cwd,sourceRoot,spawnProcess,route});return {ok:true};}catch(error){return failed(error);}};
   const main=await one('main'),second=await one('backup');
   if(main.ok)noteMainAnswered(state);else noteMainFailed(state,main.error,started);
-  check={at:started.toISOString(),ok:main.ok,...(main.ok?{}:{error:main.error}),backup:{...second,model:backup.model}};
+  check={at:started.toISOString(),...main,backup:{...second,model:backup.model}};
   writeRecord(state,{...readRecord(state),check});
   return {...routineAIStatus({home,state}),check};
  }

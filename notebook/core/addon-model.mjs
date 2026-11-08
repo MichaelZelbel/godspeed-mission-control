@@ -4,7 +4,7 @@ import {fileURLToPath} from 'node:url';
 import {runChild} from './child-process.mjs';
 import {assistantEnvironment} from './assistant-files.mjs';
 import {readBackupEndpoint,noteMainAnswered,noteMainFailed,noteBackupAnswered} from './backup-ai.mjs';
-import {hermesPythons} from './runtime.mjs';
+import {hermesPythons,hermesSecrets,scrubCredentials} from './runtime.mjs';
 import {assistantConfiguration} from './running-notebook.mjs';
 
 const read=file=>JSON.parse(fs.readFileSync(file,'utf8').replace(/^﻿/,''));
@@ -97,7 +97,10 @@ export async function runHermesHelper({connection,root,request,deadline,spawnPro
   if(!parsed||typeof parsed!=='object')throw invalid();
   if(parsed.reason==='runtime'){why=why||missingModule(parsed.missing);continue;}
   rememberPython(connection,python);onLoaded(python);
-  if(result.code||parsed.error)throw Object.assign(Error(parsed.reason==='limit'?'The AI account reached a usage limit. It answers again once the limit resets.':parsed.reason==='sign-in'?'The AI account needs to be signed in again, or its key was refused.':'The selected Godspeed model could not answer. Check its connection and usage allowance.'),{reason:parsed.reason||'model',loaded:true});
+  if(result.code||parsed.error){
+   const secrets=hermesSecrets(descriptor.home),providerError=typeof parsed.provider_error==='string'?scrubCredentials(parsed.provider_error,secrets).slice(-6000):'';
+   throw Object.assign(Error(parsed.reason==='limit'?'The AI account reached a usage limit. It answers again once the limit resets.':parsed.reason==='sign-in'?'The AI account needs to be signed in again, or its key was refused.':'The selected Godspeed model could not answer. Check its connection and usage allowance.'),{reason:parsed.reason||'model',loaded:true,...(providerError?{diagnostic:{request_bytes:Buffer.byteLength(JSON.stringify(request)),provider_error:providerError}}:{})});
+  }
   if(typeof parsed.provider!=='string'||typeof parsed.model!=='string'||(!request.describe&&(typeof parsed.text!=='string'||!parsed.text.trim())))throw invalid();
   return parsed;
  }
