@@ -3360,6 +3360,7 @@ section chat-tidy-at-night
 CT=$TMP/ct
 rm -rf "$CT/good"
 mkdir -p "$CT/good"
+printf '{"configured":true}\n' >"$CT/good/setup.json"
 printf 'messages=40 tokens=174000\n' >"$CT/good/long-before.txt"
 printf 'messages=9 tokens=3100\n' >"$CT/good/long-after.txt"
 printf 'summarised in 6s: status compressed, messages 40 -> 9, about 174000 -> 3100 tokens (tidied)\n' >"$CT/good/long-log"
@@ -3374,8 +3375,73 @@ printf '0\n' >"$CT/good/short-exit"
 printf 'messages=12 tokens=20000\n' >"$CT/good/short-count.txt"
 printf '60000\n' >"$CT/good/min-tokens.txt"
 passes 'a long chat shortened and logged, the next message plain, a short chat untouched' chat-tidy-at-night "$CT/good" 'the long conversation went from 40 to 9 messages'
-# The limit is read by the scenario's own extraction from the runner the generated wrapper imports.
+copy "$CT/good" "$CT/not-configured"
+printf '{"configured":false}\n' >"$CT/not-configured/setup.json"
+refuses 'a first goal that did not configure the install' chat-tidy-at-night "$CT/not-configured" \
+  'did not say the install was configured after the owner'"'"'s first goal'
+
 CT_SCRIPT="$ROOT/scenarios/chat-tidy-at-night.sh"
+chat_tidy_setup_precedes_routine_poll() {
+  local folder=$TMP/chat-tidy-action events=$TMP/chat-tidy-events port_file=$TMP/chat-tidy-port port pid code expected
+  rm -rf "$folder"
+  mkdir -p "$folder/home/cron"
+  printf '%s\n' 'Night chat tidy-up' >"$folder/home/cron/jobs.json"
+  : >"$events"
+  node -e '
+const fs=require("fs"),http=require("http"),file=process.argv[1];
+const server=http.createServer((request,response)=>{
+  let body="";
+  request.setEncoding("utf8");
+  request.on("data",chunk=>body+=chunk);
+  request.on("end",()=>{
+    fs.appendFileSync(file,`setup\t${request.method} ${request.url}\t${body.trimEnd()}\n`);
+    response.writeHead(request.method==="POST"&&request.url==="/api/setup"?200:404,{"content-type":"application/json"});
+    response.end(request.method==="POST"&&request.url==="/api/setup"?"{\"configured\":true}":"{}");
+  });
+});
+server.listen(0,"127.0.0.1",()=>console.log(server.address().port));
+' "$events" >"$port_file" &
+  pid=$!
+  for _ in $(seq 1 50); do
+    [ -s "$port_file" ] && break
+    sleep 0.1
+  done
+  if [ ! -s "$port_file" ]; then
+    kill "$pid" 2>/dev/null || true
+    wait "$pid" 2>/dev/null || true
+    bad 'the chat tidy action seam fake notebook did not start'
+    return
+  fi
+  port=$(<"$port_file")
+  if ACTION_HOME="$folder/home" ACTION_EVENTS="$events" EVIDENCE="$folder/evidence" \
+    GODSPEED_SCENARIO_ROOT="$folder/root" GODSPEED_PORT="$port" bash -c '
+      . "$1"
+      need_the_ai_key() { :; }
+      install_the_stage_line() { :; }
+      need_node() { NODE=$(command -v node); }
+      assistant_home() { HERMES=$ACTION_HOME; }
+      connect_the_ai() { :; }
+      assistant_keeps_a_conversation() { : >"$1"; : >"$HERMES/state.db"; }
+      chat_store_is_ready() { :; }
+      wait_for() { printf "routine-poll\\n" >>"$ACTION_EVENTS"; "${@:3}"; exit 0; }
+      act
+    ' _ "$CT_SCRIPT" >"$folder/action.log" 2>&1; then
+    code=0
+  else
+    code=$?
+  fi
+  kill "$pid" 2>/dev/null || true
+  wait "$pid" 2>/dev/null || true
+  expected=$(printf 'setup\tPOST /api/setup\t{"goal":"Keep the scenario ready","timezone":"Etc/UTC","delivery":"notebook"}\nroutine-poll')
+  if [ "$code" = 0 ] && [ "$(cat "$folder/evidence/setup.json" 2>/dev/null)" = '{"configured":true}' ] && \
+    [ "$(cat "$events")" = "$expected" ]; then
+    ok 'the chat tidy action gives the first goal to the notebook before its first routine poll'
+  else
+    bad "the chat tidy action did not record configured first-goal setup before polling (exit $code: $(cat "$events" 2>/dev/null))"
+  fi
+}
+chat_tidy_setup_precedes_routine_poll
+# The limit is read by the scenario's own extraction from the runner the generated wrapper imports.
 CT_SED=$(grep -m1 "sed -n 's/.\*\"--min-tokens\"" "$CT_SCRIPT" | sed 's/^ *//; s/ *|.*$//; s#"\$HERMES/scripts/godspeed_routines.py"#"$1"#')
 if grep -q 'godspeed_routines.py" |' "$CT_SCRIPT" && [ -n "$CT_SED" ]; then
   CT_RUNNER=$(eval "set -- '$ROOT/notebook/core/routine-scripts/godspeed_routines.py'; $CT_SED")

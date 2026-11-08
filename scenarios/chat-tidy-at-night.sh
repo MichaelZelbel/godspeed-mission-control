@@ -31,10 +31,13 @@
 #   long-before.txt / long-after.txt     messages=<n> tokens=<n> of the long conversation around its run
 #   long-log / -exit / -said             that run
 #   next-reply.txt / next-exit           what the assistant answered to the next message
+#   setup.json                            the notebook's configured answer to the owner's first goal
 SCENARIO=chat-tidy-at-night
 # shellcheck source=scenarios/scenario-lib.sh
-. "$(dirname "$0")/scenario-lib.sh"
-scenario_arguments "$@"
+. "$(dirname "${BASH_SOURCE[0]}")/scenario-lib.sh"
+if [ "${BASH_SOURCE[0]}" = "$0" ]; then
+  scenario_arguments "$@"
+fi
 
 ROUTINE='Night chat tidy-up'
 ROUTINE_KEY=chat-tidy
@@ -42,6 +45,7 @@ ROUTINE_SCRIPT=godspeed-chat-tidy.py
 LONG=scenario-chat-1
 SHORT=scenario-short-3
 NEXT_MESSAGE='Reply with the single word Hello.'
+FIRST_GOAL='Keep the scenario ready'
 
 # Asked by wait_for, which takes the command to try as its arguments.
 # shellcheck disable=SC2329
@@ -81,6 +85,17 @@ act() {
   assistant_keeps_a_conversation "$EVIDENCE/first-conversation.txt"
   chat_store_is_ready ||
     fail "the assistant's own chat store holds no conversations to seed a chat beside ($HERMES/state.db)"
+  say "The owner's first goal, so the notebook starts this install's routines"
+  printf '{"goal":"%s","timezone":"Etc/UTC","delivery":"notebook"}\n' "$FIRST_GOAL" >"$EVIDENCE/.setup.json"
+  local setup_status
+  setup_status=$(curl -sS -o "$EVIDENCE/setup.json" -w '%{http_code}' --max-time 300 -X POST \
+    -H 'Content-Type: application/json' --data-binary @"$EVIDENCE/.setup.json" \
+    "http://127.0.0.1:$NOTEBOOK_PORT/api/setup") ||
+    fail "the notebook could not be reached to give the owner their first goal"
+  [ "$setup_status" = 200 ] ||
+    fail "the notebook refused the owner's first goal with HTTP $setup_status: $(tr -d '\n' <"$EVIDENCE/setup.json" | cut -c1-200)"
+  [ "$(json_value "$EVIDENCE/setup.json" configured)" = true ] ||
+    fail "the notebook accepted the owner's first-goal request but did not say the install is configured"
   wait_for 480 "the notebook to make the routine \"$ROUTINE\"" routine_is_there || {
     show_assistant_home
     fail "the notebook never made the routine \"$ROUTINE\" on this install, although the assistant has a chat app"
@@ -130,11 +145,13 @@ number() { # <value> <what it was supposed to be>
 check() { # <evidence folder>
   local folder=$1 file
   [ -d "$folder" ] || fail "there is nothing at $folder, so this scenario kept no evidence of a night"
-  for file in short-before.txt short-after.txt short-log short-exit short-count.txt min-tokens.txt long-before.txt long-after.txt \
+  for file in setup.json short-before.txt short-after.txt short-log short-exit short-count.txt min-tokens.txt long-before.txt long-after.txt \
     long-log long-exit next-reply.txt next-exit; do
     kept "$folder" "$file" "what the night routine did and what the chats looked like around it"
   done
   [ -f "$folder/long-said" ] || fail "long-said is not in what the scenario kept, so what the routine said is unknown"
+  [ "$(json_value "$folder/setup.json" configured)" = true ] ||
+    fail "the notebook did not say the install was configured after the owner's first goal"
 
   # The long conversation: shorter in the database, and the log says it was tidied.
   [ "$(cat "$folder/long-exit")" = 0 ] ||
@@ -179,11 +196,13 @@ check() { # <evidence folder>
   pass "the long conversation went from $before to $after messages and its log says it was tidied; the next message was answered with no summary in front; the conversation under the limit was byte-for-byte as it was"
 }
 
-if [ "$CHECK_ONLY" = yes ]; then
-  install_paths
-  need_node
-  check "$EVIDENCE"
-else
-  act
-  check "$EVIDENCE"
+if [ "${BASH_SOURCE[0]}" = "$0" ]; then
+  if [ "$CHECK_ONLY" = yes ]; then
+    install_paths
+    need_node
+    check "$EVIDENCE"
+  else
+    act
+    check "$EVIDENCE"
+  fi
 fi
