@@ -64,9 +64,12 @@ there.
   the release key after the review says Ready, and removes the draft.
   To delete a workflow the round writes the draft as an empty file with the target's name and says
   "delete" in the quote; Mission Control then deletes the target and the draft.
+  The quote names the target path, the operation (create, replace or delete) and the target's git
+  blob hash on the base commit; Mission Control applies nothing if the target no longer has that
+  hash, and sends the pull request back instead.
 - Such a pull request is Done when the review says Ready at its head commit and its checks are
-  green, apart from the scenario jobs that need the drafted change (and `the verdict`, red only
-  because of them).
+  green, apart from the scenario jobs named in the quote by their workflow job ID, each one in
+  `picked` at that head (and `the verdict`, red only because of them).
 - A publish refused for this reason is not retried. The round redoes the change the drafted way.
 - Everything else keeps the default.
 - Reason: Michael, 8 November 2026. Issue #340 was built nine times in three hours with the same
