@@ -145,7 +145,7 @@ class HermesDidNotLoadTests(unittest.TestCase):
             "agent/auxiliary_client.py": "class Completion:\n    def create(self, **kwargs):\n        raise RuntimeError('HTTP 400: provider rejected abc1234')\nclass Client:\n    chat = type('Chat', (), {'completions': Completion()})()\ndef resolve_provider_client(provider, **kwargs):\n    return Client(), kwargs['model']\ndef _normalize_aux_provider(provider):\n    return provider\n",
         }, payload='{"system":"test","prompt":"test","timeout_ms":3000,"max_tokens":128}', raw=True)
         self.assertEqual(code, 1)
-        self.assertIn("provider rejected", answer["provider_error"])
+        self.assertEqual(answer["provider_error"], "HTTP 400: provider rejected ***")
         self.assertNotIn(secret, answer["provider_error"])
         self.assertNotIn(secret, output)
 
