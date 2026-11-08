@@ -3693,8 +3693,9 @@ refuses 'a refused key retained' workouts-from-hevy "$WH/refused-kept" 'native r
 copy "$WH/good" "$WH/refused-in-settings"; sed -i 's/"paths":\[\]/"paths":["\/opt\/data\/settings.json"]/' "$WH/refused-in-settings/docker.json"
 refuses 'a refused key kept outside hevy.json' workouts-from-hevy "$WH/refused-in-settings" 'docker retained or accepted'
 RFS=$WH/refused-scan
-mkdir -p "$RFS/root/.godspeed" "$RFS/assistant"
+mkdir -p "$RFS/root/.godspeed/integrated-runtime/versions/test/scenarios" "$RFS/assistant"
 printf '{"home":"%s"}\n' "$RFS/assistant" >"$RFS/root/.godspeed/assistant.json"
+printf 'refused-scenario-key\n' >"$RFS/root/.godspeed/integrated-runtime/versions/test/scenarios/test-source"
 printf 'refused-scenario-key\n' >"$RFS/assistant/settings.json"
 REFUSED_SCAN=$(GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy NODE="$(command -v node)" bash -c '
   cd "$3"
@@ -3707,6 +3708,19 @@ REFUSED_SCAN_CODE=$?
 case "$REFUSED_SCAN_CODE $REFUSED_SCAN" in
   "1 "*"native kept the refused Hevy key in $RFS/assistant/settings.json"*) ok "a refused key in the recorded native assistant home fails with its path" ;;
   *) bad "a refused key in the recorded native assistant home was not refused (exit $REFUSED_SCAN_CODE: $REFUSED_SCAN)" ;;
+esac
+rm "$RFS/assistant/settings.json"
+RUNTIME_SOURCE_SCAN=$(GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy NODE="$(command -v node)" bash -c '
+  cd "$3"
+  . "$1"
+  install_paths
+  EVIDENCE=$2
+  refused_not_retained native
+' runtime-source-scan "$ROOT/scenarios/workouts-from-hevy.sh" "$RFS" "$ROOT/scenarios" 2>&1)
+RUNTIME_SOURCE_SCAN_CODE=$?
+case "$RUNTIME_SOURCE_SCAN_CODE" in
+  0) ok "the native refused-key scan ignores immutable installed scenario source" ;;
+  *) bad "the native refused-key scan treated immutable installed scenario source as persisted credentials (exit $RUNTIME_SOURCE_SCAN_CODE: $RUNTIME_SOURCE_SCAN)" ;;
 esac
 ACT_NODE_ORDER=$(env -u NODE GODSPEED_SCENARIO_ROOT="$RFS/root" ACTION_EVENTS="$RFS/action-events" bash -c '
   cd "$3"
@@ -3748,6 +3762,7 @@ case "$NO_NODE_ACTION_CODE $NO_NODE_ACTION" in
   *) bad "the Hevy action did not stop before its fixture without Node (exit $NO_NODE_ACTION_CODE: $NO_NODE_ACTION)" ;;
 esac
 printf '00000000-0000-4000-8000-000000000001\n' >"$RFS/assistant/hevy.json"
+printf '00000000-0000-4000-8000-000000000001\n' >"$RFS/root/.godspeed/integrated-runtime/versions/test/scenarios/accepted-test-source"
 ACCEPTED_SCAN=$(GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy NODE="$(command -v node)" bash -c '
   cd "$3"
   . "$1"

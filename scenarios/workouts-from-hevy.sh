@@ -122,6 +122,20 @@ persistence_roots() { # <docker|native> <scan name>
   esac
 }
 
+native_persistence_matches() { # <key> <path record> [grep option...]
+  local key=$1 paths=$2 path code
+  shift 2
+  if grep -rlF "$@" -- "$key" "${NATIVE_PERSISTENCE_ROOTS[@]}" >"$paths"; then
+    while IFS= read -r path; do
+      case $path in "$RUNTIME"/versions/*) ;; *) printf '%s\n' "$path" ;; esac
+    done <"$paths" >"$paths.filtered"
+    mv -f "$paths.filtered" "$paths" || return 2
+  else
+    code=$?
+    [ "$code" -eq 1 ] && : >"$paths" || return "$code"
+  fi
+}
+
 refused_not_retained() { # <docker|native>
   local platform=$1 key='refused-scenario-key' paths=$EVIDENCE/.$1-refused-key-paths code
   persistence_roots "$platform" "$platform refused-key scan"
@@ -133,10 +147,7 @@ refused_not_retained() { # <docker|native>
       fi
       ;;
     native)
-      if grep -rlF -- "$key" "${NATIVE_PERSISTENCE_ROOTS[@]}" >"$paths"; then :; else
-        code=$?
-        [ "$code" -eq 1 ] || fail "$platform refused-key scan could not run (grep ended $code)"
-      fi
+      native_persistence_matches "$key" "$paths" || { code=$?; fail "$platform refused-key scan could not run (grep ended $code)"; }
       ;;
   esac
   [ -f "$paths" ] || fail "$platform refused-key scan produced no path record"
@@ -221,12 +232,8 @@ NODE
 scan_fixture_key() {
   local key='00000000-0000-4000-8000-000000000001' code native_paths=$EVIDENCE/.native-key-hits docker_paths=$EVIDENCE/.docker-key-hits
   persistence_roots native 'native accepted-key scan'
-  if grep -rlF --exclude-dir=.git --exclude-dir=node_modules -- "$key" "${NATIVE_PERSISTENCE_ROOTS[@]}" >"$native_paths"; then
-    [ -s "$native_paths" ] || fail 'native accepted-key scan completed with no path output after a match'
-  else
-    code=$?
-    [ "$code" -eq 1 ] || fail "native accepted-key scan could not run (grep ended $code)"
-  fi
+  native_persistence_matches "$key" "$native_paths" --exclude-dir=.git --exclude-dir=node_modules || { code=$?; fail "native accepted-key scan could not run (grep ended $code)"; }
+  [ -s "$native_paths" ] || fail 'native accepted-key scan completed with no path output after a match'
   [ -f "$native_paths" ] || fail "native accepted-key scan produced no path record"
   persistence_roots docker 'docker accepted-key scan'
   if in_server grep -rlF --exclude-dir=node_modules -- "$key" "${DOCKER_PERSISTENCE_ROOTS[@]}" >"$docker_paths"; then
