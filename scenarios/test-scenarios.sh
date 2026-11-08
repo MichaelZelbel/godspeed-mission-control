@@ -4056,6 +4056,7 @@ HFD=$TMP/hermes-fixture
 HFD_LOG=$TMP/hermes-fixture.log
 if node "$ROOT/scenarios/hermes-update-fixture.mjs" --dir "$HFD" >/dev/null \
   && [ -z "$(git -C "$HFD" status --porcelain)" ] \
+  && [ "$(git -C "$HFD" remote get-url origin)" = https://github.com/NousResearch/hermes-agent.git ] \
   && [ "$(git -C "$HFD" tag | wc -l | tr -d '[:space:]')" = 4 ] \
   && [ "$(HERMES_FIXTURE_LOG=$HFD_LOG "$HFD/bin/hermes" --version)" = 1.0.0 ] \
   && [ "$(HERMES_FIXTURE_LOG=$HFD_LOG "$HFD/bin/hermes" update --check)" = 1.1.0 ] \
@@ -4078,6 +4079,26 @@ if node "$ROOT/scenarios/hermes-update-fixture.mjs" --dir "$HFD" >/dev/null \
   ok 'the local Hermes fixture versions, checks, breaks, answers, reveals and redacts'
 else
   bad 'the local Hermes fixture does not control its local releases and harmless command'
+fi
+HFD_RELATIVE=hermes-fixture-relative
+if (
+  cd "$TMP"
+  node "$ROOT/scenarios/hermes-update-fixture.mjs" --dir "$HFD_RELATIVE" >/dev/null \
+    && node "$ROOT/scenarios/hermes-update-fixture.mjs" --dir "$HFD_RELATIVE" --reveal 1.2.0 >/dev/null \
+    && (cd "$HFD_RELATIVE" && ./bin/hermes update --no-backup --yes) \
+    && [ "$(git -C "$HFD_RELATIVE" describe --exact-match --tags HEAD)" = v1.2.0 ]
+); then
+  ok 'the local Hermes fixture applies a revealed release from a relative path'
+else
+  bad 'the local Hermes fixture does not apply a revealed release from a relative path'
+fi
+HFD_QUOTED="$TMP/hermes-fixture's"
+if node "$ROOT/scenarios/hermes-update-fixture.mjs" --dir "$HFD_QUOTED" >/dev/null \
+  && "$HFD_QUOTED/bin/hermes" update --no-backup --yes \
+  && [ "$(git -C "$HFD_QUOTED" describe --exact-match --tags HEAD)" = v1.1.0 ]; then
+  ok 'the local Hermes fixture applies a release from an apostrophe-bearing path'
+else
+  bad 'the local Hermes fixture does not apply a release from an apostrophe-bearing path'
 fi
 
 # ============================================================ every one of them, the same shape

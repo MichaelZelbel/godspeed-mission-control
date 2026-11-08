@@ -2,7 +2,7 @@
 // Creates a local release history and its harmless Hermes command. It never contacts a registry.
 import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 
 const option = name => {
   const at = process.argv.indexOf(name);
@@ -13,7 +13,7 @@ const reveal = option('--reveal');
 const log = option('--log');
 const metadata = process.argv.includes('--metadata');
 if (!dir) throw new Error('usage: hermes-update-fixture.mjs --dir <folder> [--reveal <version>]');
-const stateFile = `${dir}.fixture-state.json`;
+const stateFile = `${resolve(dir)}.fixture-state.json`;
 const shellQuote = value => `'${value.replaceAll("'", "'\"'\"'")}'`;
 const git = (...args) => execFileSync('git', ['-C', dir, ...args], { stdio: 'ignore' });
 
@@ -39,6 +39,7 @@ await mkdir(join(dir, 'bin'), { recursive: true });
 await mkdir(join(dir, 'hermes_cli'), { recursive: true });
 await mkdir(join(dir, 'venv', 'bin'), { recursive: true });
 git('init', '-q'); git('config', 'user.name', 'Scenario'); git('config', 'user.email', 'scenario@example.invalid');
+git('remote', 'add', 'origin', 'https://github.com/NousResearch/hermes-agent.git');
 const command = `#!/bin/sh
 set -eu
 root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
