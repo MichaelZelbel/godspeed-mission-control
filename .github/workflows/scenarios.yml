@@ -2,7 +2,7 @@ name: scenarios
 # The run's name carries the stage it proved, so a run on a candidate's tag that was left at the
 # default stage (beta) cannot be read as that candidate's pass: GitHub shows the input itself only
 # in the run's logs.
-run-name: ${{ github.event_name == 'pull_request' && format('scenarios on pull request {0}', github.event.pull_request.number) || format('scenarios {0}', inputs.stage || 'main, the night') }}
+run-name: ${{ github.event_name == 'pull_request' && format('scenarios on pull request {0}', github.event.pull_request.number) || format('scenarios {0}{1}', inputs.stage || 'main, the night', inputs.only && format(' (only {0})', inputs.only) || '') }}
 # The proving scenarios a candidate runs before the maintainer is asked for "go" (godspeed-dev,
 # releases/godspeed-2.0.0-beta.7-stages/plan.md, "Proving scenarios" 1, 2 and 5, and
 # releases/godspeed-2.0.0-beta.8-faster-chat/plan.md, "Proving scenarios" 1, 3 and 4, which are
@@ -23,6 +23,10 @@ run-name: ${{ github.event_name == 'pull_request' && format('scenarios on pull r
 # Nothing else runs on a pull request: no Mac, no Windows, no scenario whose files the pull request
 # did not touch (and never the install, Docker or update jobs), no issue in the night's name; a pull request from a fork runs nothing (no secrets).
 # A newer commit on the same pull request cancels the older run.
+# A candidate's run can be narrowed by hand: `-f only=first-day,talk-prep-honest` (job names, comma
+# separated) runs only those jobs, plus the stage job and the verdict, which judges only what was
+# picked and fails on a name that is no job; no issue is filed for it. Without `only` every job runs
+# as before (the night, a plain dispatch). The Mac and Windows jobs run on `only` when listed.
 # A night proves main's own commit: with no `stage` input (the schedule) the stage is made from
 # github.sha by scenarios/stage-for-run.sh and handed to every job as the artifact run-stage, read as
 # file://; main's own stage.json names the last frozen version and is never read.
@@ -41,6 +45,10 @@ on:
         description: Also install on a Mac (once per candidate)
         type: boolean
         default: false
+      only:
+        description: 'Only these jobs (comma-separated job names, e.g. first-day,talk-prep-honest); empty runs every job'
+        required: false
+        default: ''
 permissions:
   contents: read
 concurrency:
@@ -99,10 +107,20 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
+          ONLY: ${{ inputs.only }}
         run: |
           set -e
           if [ "$GITHUB_EVENT_NAME" != pull_request ]; then
-            echo "picked=all" | tee -a "$GITHUB_OUTPUT"
+            # A hand-started run may name the jobs to run; empty (or `all`) and every other event run them all.
+            only=$(printf '%s' "${ONLY:-}" | tr -d ' \t\r\n')
+            if [ "$GITHUB_EVENT_NAME" != workflow_dispatch ] || [ -z "$only" ] || [ "$only" = all ]; then
+              echo "picked=all" | tee -a "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            [[ "$only" =~ ^[a-z0-9,-]+$ ]] || { echo "only must be job names separated by commas, not: $only" | tee -a "$GITHUB_STEP_SUMMARY"; exit 1; }
+            picked=$(printf ',%s,' "$only" | tr -s ',')
+            echo "Only these jobs run:$picked" | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "picked=$picked" | tee -a "$GITHUB_OUTPUT"
             exit 0
           fi
           # A pull request: the scenarios whose own files it changed, a job being named like its
@@ -133,7 +151,7 @@ jobs:
   linux-install:
     name: a stranger's Linux install
     # The install, Docker and update proofs have no script of their own to change: a pull request never runs them.
-    if: ${{ github.event_name != 'pull_request' }}
+    if: ${{ github.event_name != 'pull_request' && (needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',linux-install,')) }}
     needs: stage
     runs-on: ubuntu-24.04
     timeout-minutes: 60
@@ -169,7 +187,7 @@ jobs:
 
   mac-install:
     name: a stranger's Mac install
-    if: inputs.mac
+    if: ${{ needs.stage.outputs.picked == 'all' && inputs.mac || contains(needs.stage.outputs.picked, ',mac-install,') }}
     needs: stage
     runs-on: macos-latest
     timeout-minutes: 60
@@ -199,7 +217,7 @@ jobs:
   docker-server:
     name: a stranger's Docker server
     # The install, Docker and update proofs have no script of their own to change: a pull request never runs them.
-    if: ${{ github.event_name != 'pull_request' }}
+    if: ${{ github.event_name != 'pull_request' && (needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',docker-server,')) }}
     needs: stage
     runs-on: ubuntu-24.04
     timeout-minutes: 45
@@ -235,7 +253,7 @@ jobs:
   linux-update:
     name: an update from the current public version
     # The install, Docker and update proofs have no script of their own to change: a pull request never runs them.
-    if: ${{ github.event_name != 'pull_request' }}
+    if: ${{ github.event_name != 'pull_request' && (needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',linux-update,')) }}
     needs: stage
     runs-on: ubuntu-24.04
     timeout-minutes: 90
@@ -639,7 +657,7 @@ jobs:
   # For a candidate only: a Windows machine costs the most, and the night proves main.
   windows-old-names-move:
     name: an old Windows install moves to the new folder names
-    if: startsWith(inputs.stage, 'candidate/')
+    if: ${{ startsWith(inputs.stage, 'candidate/') && (needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',windows-old-names-move,')) }}
     needs: stage
     runs-on: windows-2025
     timeout-minutes: 120
@@ -1095,16 +1113,23 @@ jobs:
           # A pull request from a fork runs nothing (the stage job is skipped): nothing to judge.
           [ "$EVENT" != pull_request ] || [ "$STAGE" != skipped ] || { echo "No scenario runs on a pull request from a fork." | tee -a "$GITHUB_STEP_SUMMARY"; exit 0; }
           [ "$STAGE" = success ] || { echo "FAIL stage: the stage file at $STAGE_REF could not be read or is not a stage file" | tee -a "$GITHUB_STEP_SUMMARY"; bad=1; }
+          # A name in `only` that is no job would run nothing and pass: it fails.
+          if [ "$EVENT" = workflow_dispatch ] && [ "$PICKED" != all ] && [ "$STAGE" = success ]; then
+            for want in ${PICKED//,/ }; do
+              case " $RESULTS " in *" $want="*) ;; *) echo "FAIL $want: there is no job of this name to run" | tee -a "$GITHUB_STEP_SUMMARY"; bad=1 ;; esac
+            done
+          fi
           for pair in $RESULTS; do
             name=${pair%%=*}; result=${pair#*=}
-            [ "$name" != mac-install ] || [ "$WANT_MAC" = true ] || continue
-            [ "$name" != windows-old-names-move ] || [ "$IS_CANDIDATE" = true ] || continue
+            [ "$name" != mac-install ] || [ "$WANT_MAC" = true ] || [[ "$PICKED" == *",mac-install,"* ]] || continue
+            [ "$name" != windows-old-names-move ] || [ "$IS_CANDIDATE" = true ] || [[ "$PICKED" == *",windows-old-names-move,"* ]] || continue
             case $result in
               success) ;;
               failure) bad=1 ;; # its own FAIL line is in the summary already
               skipped)
-                # On a pull request only the scenarios it changed run; the others are not judged.
-                if [ "$EVENT" = pull_request ] && [ "$STAGE" = success ] && [[ "$PICKED" != *",$name,"* ]]; then continue; fi
+                # On a pull request only the scenarios it changed run, on a hand-started run only the ones
+                # named in `only`; the others are not judged.
+                if [ "$PICKED" != all ] && [ "$STAGE" = success ] && [[ "$PICKED" != *",$name,"* ]]; then continue; fi
                 echo "FAIL $name: it did not run, because the stage file could not be read" | tee -a "$GITHUB_STEP_SUMMARY"; bad=1 ;;
               *) echo "FAIL $name: it ended $result" | tee -a "$GITHUB_STEP_SUMMARY"; bad=1 ;;
             esac

@@ -338,6 +338,16 @@ test('a pull request from a fork runs nothing, and its verdict passes', async ()
   assert.equal(run({ EVENT: 'schedule', STAGE: 'skipped' }).status, 1);
   assert.equal(run({ EVENT: 'pull_request', STAGE: 'success', PICKED: ',voice,' }).status, 1, 'a picked scenario that did not run must fail');
   assert.equal(run({ EVENT: 'pull_request', STAGE: 'success', PICKED: ',' }).status, 0, 'an unpicked skip must pass');
+  // a hand-started run narrowed by `only`: the unpicked skip passes, a picked skip fails, a name that is no job fails
+  const names = 'voice=skipped plain-yes=success mac-install=skipped windows-old-names-move=skipped';
+  const dispatch = (env) => run({ EVENT: 'workflow_dispatch', STAGE: 'success', RESULTS: names, ...env });
+  assert.equal(dispatch({ PICKED: ',plain-yes,' }).status, 0, 'only: the jobs not listed are not judged');
+  assert.equal(dispatch({ PICKED: ',plain-yes,voice,' }).status, 1, 'only: a listed job that did not run must fail');
+  assert.equal(dispatch({ PICKED: ',plain-yes,typo-job,' }).status, 1, 'only: a name that is no job must fail');
+  assert.equal(dispatch({ PICKED: ',plain-yes,mac-install,' }).status, 1, 'only: a listed Mac job that did not run must fail');
+  assert.equal(dispatch({ PICKED: ',plain-yes,windows-old-names-move,' }).status, 1, 'only: a listed Windows job that did not run must fail');
+  assert.equal(dispatch({ PICKED: 'all' }).status, 1, 'no only: a skipped job still fails the run, as before');
+  assert.equal(dispatch({ PICKED: ',plain-yes,', STAGE: 'skipped' }).status, 1, 'only: an unreadable stage still fails');
 });
 
 // The workflow's own trigger, concurrency and the pick step as a whole, read as text and run as bash.
@@ -398,4 +408,44 @@ test('the pick on a pull request asks the files endpoint of that pull request, a
   const r = spawnSync('bash', ['-c', script], { cwd: fileURLToPath(new URL('..', import.meta.url)), encoding: 'utf8', env: { ...process.env, PATH: `${dir}/bin:${process.env.PATH}`, GITHUB_EVENT_NAME: 'pull_request', GITHUB_REPOSITORY: 'me/repo', PR: '42', GITHUB_OUTPUT: `${dir}/out`, RUNNER_TEMP: dir, GITHUB_STEP_SUMMARY: `${dir}/sum` } });
   assert.equal(r.status, 0, r.stdout + r.stderr);
   assert.equal(readFileSync(`${dir}/out`, 'utf8'), 'picked=,charm-challenge,\n');
+});
+
+// `only`: a hand-started run names the jobs it runs, and nothing else changes.
+test('the pick on a hand-started run reads `only`, and a night and an empty `only` keep the old pick', async () => {
+  const { readFileSync, writeFileSync, mkdtempSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { spawnSync } = await import('node:child_process');
+  const text = readFileSync(WORKFLOW, 'utf8').replace(/\r\n/g, '\n');
+  const on = text.slice(text.indexOf('\non:\n'), text.indexOf('\npermissions:\n'));
+  assert.match(on, /^ {6}only:\n {8}description: .*\n {8}required: false\n {8}default: ''$/m, 'the workflow_dispatch input `only` (default empty) is missing');
+  assert.ok(text.includes('ONLY: ${{ inputs.only }}'), 'the pick step does not read inputs.only through an env variable');
+  const script = pickStep(text);
+  const pick = (event, only) => {
+    const dir = mkdtempSync(`${tmpdir()}/pickonly-`).replaceAll(String.fromCharCode(92), '/');
+    writeFileSync(`${dir}/out`, '');
+    const env = { ...process.env, GITHUB_EVENT_NAME: event, GITHUB_OUTPUT: `${dir}/out`, RUNNER_TEMP: dir, GITHUB_STEP_SUMMARY: `${dir}/sum` };
+    if (only !== undefined) env.ONLY = only; else delete env.ONLY;
+    const r = spawnSync('bash', ['-c', script], { cwd: fileURLToPath(new URL('..', import.meta.url)), encoding: 'utf8', env });
+    return { status: r.status, out: readFileSync(`${dir}/out`, 'utf8') };
+  };
+  assert.equal(pick('workflow_dispatch', 'first-day,talk-prep-honest').out, 'picked=,first-day,talk-prep-honest,\n');
+  assert.equal(pick('workflow_dispatch', ' first-day , ,hermes-update-rollback,\n').out, 'picked=,first-day,hermes-update-rollback,\n', 'spaces and empty entries are dropped');
+  assert.equal(pick('workflow_dispatch', 'first-day').out, 'picked=,first-day,\n');
+  assert.equal(pick('workflow_dispatch', '').out, 'picked=all\n', 'an empty only runs everything');
+  assert.equal(pick('workflow_dispatch', undefined).out, 'picked=all\n');
+  assert.equal(pick('workflow_dispatch', 'all').out, 'picked=all\n');
+  assert.equal(pick('schedule', 'first-day').out, 'picked=all\n', 'the night ignores only');
+  const bad = pick('workflow_dispatch', 'first-day;echo hi');
+  assert.notEqual(bad.status, 0, 'a value that is not job names must fail');
+  assert.equal(bad.out, '', 'and write no pick');
+  // every job that can be left out of an `only` run is gated by the pick, the Mac and Windows ones too
+  const jobsText = text.slice(text.indexOf('\njobs:\n'));
+  for (const name of ['linux-install', 'mac-install', 'docker-server', 'linux-update', 'windows-old-names-move']) {
+    const at = jobsText.indexOf(`\n  ${name}:\n`);
+    assert.ok(at > 0, `${name} not found`);
+    const block = jobsText.slice(at, jobsText.indexOf('\n    needs: stage', at));
+    assert.ok(block.includes(`contains(needs.stage.outputs.picked, ',${name},')`), `${name} is not gated by the pick`);
+  }
+  // no issue is filed for a run that is not the night's
+  assert.match(text, /Tell the night in issues[\s\S]*?if: always\(\) && github\.event_name == 'schedule'/);
 });
