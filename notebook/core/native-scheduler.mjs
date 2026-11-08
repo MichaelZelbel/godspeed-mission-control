@@ -111,10 +111,11 @@ export class NativeScheduler{
  }
  workoutsSetupFailure(){const record=readSetupFailures(this.store).steps.workouts;return record?{reason:errorLine(record),retry_after:record.retry_after}:null;}
  workoutsRoutineStatus(){
-  const failure=this.workoutsSetupFailure();
-  if(failure)return {state:'pending',...failure};
   const entry=readNotebookRoutines(this.store).jobs.find(job=>job.key==='workouts');
-  if(entry)return {state:entry.switched_off?'disconnected':hermesJobs(this.home).some(job=>job.id===entry.id)?'scheduled':'removed'};
+  const state=entry?(entry.switched_off?'disconnected':hermesJobs(this.home).some(job=>job.id===entry.id)?'scheduled':'removed'):null;
+  const failure=this.workoutsSetupFailure();
+  if(state)return failure?{state,...failure}:{state};
+  if(failure)return {state:'pending',...failure};
   return null;
  }
  async configure({goal,timezone,owner=this.device,delivery='notebook'}){
@@ -475,6 +476,7 @@ export class NativeScheduler{
    const keep=current?matching.find(j=>j.id===current.id)||matching[0]:matching[0];
    for(const duplicate of matching.filter(j=>j.id!==keep.id))await this.command(['remove',duplicate.id]);
    if(!current)return this.completeWorkoutsHandover(keep);
+   if(this.workoutsSetupFailure())await this.workouts.uninstall();
    else if(keep.enabled===false&&current.paused_by_notebook){await this.command(['resume',keep.id]);rememberNotebookRoutine(this.store,{...current,paused_by_notebook:false,running_by_notebook:true});}
    return keep.id;
   }
@@ -497,7 +499,7 @@ export class NativeScheduler{
    await this.workouts.uninstall();
    return candidate.id;
   }catch(error){
-   if(remembered)try{const routines=readNotebookRoutines(this.store);writeNotebookRoutines(this.store,{...routines,jobs:routines.jobs.filter(job=>job.id!==candidate.id)});}catch{}
+   if(remembered)throw error;
    try{await this.command(['remove',candidate.id]);}catch(cleanup){throw cleanupFailure(error,cleanup);}
    throw error;
   }

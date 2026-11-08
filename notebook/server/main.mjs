@@ -465,7 +465,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
           if(typeof input.key!=='string'||input.key.length>128)throw Error('Enter a Hevy API key.');
           await workouts.connect(input.key);
           try{await scheduler.followWorkouts({reconnect:true});}
-          catch{const status=await workouts.status({routine:routine()});return send(res,202,{...status,pending:true,message:'The notebook routine could not be set up yet. Godspeed will retry automatically; any existing standalone schedule stays in place.'});}
+          catch{const status=await workouts.status({routine:routine()});const retained=status.routine?.state==='scheduled';return send(res,202,{...status,pending:true,message:retained?'The notebook routine is running, but Godspeed could not remove the standalone schedule. Godspeed will retry automatically.':'The notebook routine could not be set up yet. Godspeed will retry automatically; any existing standalone schedule stays in place.'});}
           return send(res,200,await workouts.status({routine:routine()}));
         }
         return send(res,405,{error:'Use GET or POST'});

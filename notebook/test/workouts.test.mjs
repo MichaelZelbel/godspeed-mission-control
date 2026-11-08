@@ -21,10 +21,11 @@ function fakeHermes(home){
 }
 function handoverFixture(t,{mode='fresh'}={}){
  const root=temporary(t),home=path.join(root,'.hermes'),store=new Store(root,{device:'pc'}),hermes=fakeHermes(home),events=hermes.events;let now=Date.parse('2030-01-01T00:00:00Z'),last=null;
- const scheduler=new NativeScheduler(store,{home,executable:'hermes',device:'pc',run:hermes.run,now:()=>now}),addon={hasKey:()=>true,routineConfig:()=>({}),status:async()=>{events.push('status');return {minute:17,last_run:last};},uninstall:async()=>{events.push('uninstall');if(mode==='uninstall-fails')throw Error('legacy timer remains');}};
+ let retirementError=mode==='uninstall-fails'?'legacy timer remains':null;
+ const scheduler=new NativeScheduler(store,{home,executable:'hermes',device:'pc',run:hermes.run,now:()=>now}),addon={hasKey:()=>true,routineConfig:()=>({}),status:async()=>{events.push('status');return {minute:17,last_run:last};},uninstall:async()=>{events.push('uninstall');if(retirementError)throw Error(retirementError);}};
  fs.writeFileSync(path.join(root,'AGENTS.md'),'# test');scheduler.setWorkouts(addon);
  hermes.setRun(async()=>{if(mode==='run-fails')throw Object.assign(Error('first import failed'),{stderr:'first import failed\ntoken=sk-secret-token-value-123456789'});last=mode==='stale'?{ok:true,at:new Date(now-1).toISOString()}:mode==='failed'?{ok:false,at:new Date(now).toISOString()}:{ok:true,at:new Date(now).toISOString()};});
- return {store,hermes,scheduler,events,advance:ms=>{now+=ms;}};
+ return {store,hermes,scheduler,events,advance:ms=>{now+=ms;},setRetirementError:error=>{retirementError=error;}};
 }
 
 test('the notebook owns one Workouts routine, replaces its key, and disconnects without touching the add-on state',async t=>{
@@ -68,8 +69,14 @@ test('a failed Workouts handover retains the standalone timer, reports a safe re
   const next=handoverFixture(t,{mode});await assert.rejects(next.scheduler.followWorkouts(),/first import failed|did not complete/);
   assert.equal(next.events.includes('uninstall'),false,mode);assert.equal(next.hermes.jobs().length,0,mode);assert.equal(readNotebookRoutines(next.store).jobs.length,0,mode);assert.equal(next.scheduler.workoutsRoutineStatus().state,'pending',mode);
  }
- const removal=handoverFixture(t,{mode:'uninstall-fails'});await assert.rejects(removal.scheduler.followWorkouts(),/legacy timer remains/);
- assert.deepEqual(removal.events,['status','create','run:job1','status','uninstall','remove']);assert.equal(removal.hermes.jobs().length,0);assert.equal(readNotebookRoutines(removal.store).jobs.length,0);assert.equal(removal.scheduler.workoutsRoutineStatus().state,'pending');
+ for(const kind of ['systemd-user','systemd-system']){
+  const removal=handoverFixture(t,{mode:'uninstall-fails'}),reason=`systemd ${kind.slice('systemd-'.length)} manager refused reload`;removal.setRetirementError(reason);
+  await assert.rejects(removal.scheduler.followWorkouts(),new RegExp(reason));
+  assert.deepEqual(removal.events,['status','create','run:job1','status','uninstall'],kind);assert.equal(removal.hermes.jobs().length,1,kind);assert.deepEqual(readNotebookRoutines(removal.store).jobs.map(job=>job.id),['job1'],kind);
+  assert.deepEqual(removal.scheduler.workoutsRoutineStatus(),{state:'scheduled',reason,retry_after:'2030-01-01T00:01:00.000Z'},kind);
+  removal.setRetirementError(null);removal.advance(60000);await removal.scheduler.followWorkouts({retry:true});
+  assert.deepEqual(removal.events,['status','create','run:job1','status','uninstall','status','uninstall'],kind);assert.equal(removal.hermes.jobs().length,1,kind);assert.deepEqual(removal.scheduler.workoutsRoutineStatus(),{state:'scheduled'},kind);
+ }
 });
 
 test('a Workouts handover does not retire either importer when recording ownership fails',async t=>{
@@ -80,23 +87,13 @@ test('a Workouts handover does not retire either importer when recording ownersh
  assert.equal(events.includes('uninstall'),false);assert.equal(hermes.jobs().length,0);assert.equal(readNotebookRoutines(store).jobs.length,0);
 });
 
-test('a failed provisional-record rollback still removes the carried routine and recovers',async t=>{
- const {store,hermes,scheduler,events,advance}=handoverFixture(t,{mode:'uninstall-fails'}),state=store.state,open=fs.openSync;let writes=0;
- fs.openSync=(file,...args)=>{if(String(file).startsWith(path.join(state,'notebook-routines.json.'))&&String(file).endsWith('.tmp')&&++writes===2)throw Object.assign(Error('No space left'),{code:'ENOSPC'});return open(file,...args);};
- try{await assert.rejects(scheduler.followWorkouts(),/legacy timer remains/);}finally{fs.openSync=open;}
- assert.deepEqual(events,['status','create','run:job1','status','uninstall','remove']);assert.equal(hermes.jobs().length,0);assert.equal(scheduler.workoutsRoutineStatus().state,'pending');assert.deepEqual(readNotebookRoutines(store).jobs.map(job=>job.id),['job1']);
- scheduler.workouts.uninstall=async()=>{events.push('uninstall');};
- advance(60000);await scheduler.followWorkouts({retry:true});
- assert.equal(hermes.jobs().length,1);assert.deepEqual(readNotebookRoutines(store).jobs.map(job=>job.id),['job2']);assert.equal(scheduler.workoutsRoutineStatus().state,'scheduled');
-});
-
-test('a failed carried-routine cleanup remains visible with the timer-removal failure',async t=>{
- const {store,hermes,scheduler,events}=handoverFixture(t,{mode:'uninstall-fails'}),command=scheduler.command.bind(scheduler);
+test('a failed carried-routine cleanup remains visible with an unproved handover failure',async t=>{
+ const {store,hermes,scheduler,events}=handoverFixture(t,{mode:'run-fails'}),command=scheduler.command.bind(scheduler);
  const secret='sk-secret-token-value-123456789';
  scheduler.command=async(args,...rest)=>{if(args[0]==='remove')throw Object.assign(Error('Hermes refused carried cleanup'),{stderr:'Hermes refused carried cleanup: token='+secret});return command(args,...rest);};
- await assert.rejects(scheduler.followWorkouts(),/legacy timer remains; carried routine cleanup failed: Hermes refused carried cleanup: credential: \*\*\*/);
- assert.deepEqual(events,['status','create','run:job1','status','uninstall']);assert.equal(hermes.jobs().length,1);assert.equal(readNotebookRoutines(store).jobs.length,0);
- assert.deepEqual(scheduler.workoutsRoutineStatus(),{state:'pending',reason:'legacy timer remains; carried routine cleanup failed: Hermes refused carried cleanup: credential: ***',retry_after:'2030-01-01T00:01:00.000Z'});
+ await assert.rejects(scheduler.followWorkouts(),/first import failed; carried routine cleanup failed: Hermes refused carried cleanup: credential: \*\*\*/);
+ assert.deepEqual(events,['status','create','run:job1']);assert.equal(hermes.jobs().length,1);assert.equal(readNotebookRoutines(store).jobs.length,0);
+ assert.deepEqual(scheduler.workoutsRoutineStatus(),{state:'pending',reason:'first import failed; carried routine cleanup failed: Hermes refused carried cleanup: credential: ***',retry_after:'2030-01-01T00:01:00.000Z'});
  assert.doesNotMatch(JSON.stringify(scheduler.workoutsRoutineStatus()),new RegExp(secret));
 });
 
@@ -106,7 +103,7 @@ test('the Workouts add-on reports an unsuccessful standalone-timer removal',asyn
  await assert.rejects(addon.uninstall(),error=>!String(error.message).includes('sk-secret-token'));
 });
 
-test('the Workouts API projects a pending handover reason and retry time',async t=>{
+test('the Workouts API projects pending and retained-routine handover failures',async t=>{
  const root=temporary(t),home=path.join(root,'.hermes'),assistant=path.join(root,'assistant.json'),saved={runtime:process.env.GODSPEED_ORIGINAL_RUNTIME,config:process.env.GODSPEED_ASSISTANT_CONFIG};
  fs.mkdirSync(home,{recursive:true});fs.writeFileSync(assistant,JSON.stringify({verified:true,executable:'hermes',home}));process.env.GODSPEED_ORIGINAL_RUNTIME='on';process.env.GODSPEED_ASSISTANT_CONFIG=assistant;
  t.after(()=>{for(const [name,value] of Object.entries(saved))if(value===undefined)delete process.env[name==='runtime'?'GODSPEED_ORIGINAL_RUNTIME':'GODSPEED_ASSISTANT_CONFIG'];else process.env[name==='runtime'?'GODSPEED_ORIGINAL_RUNTIME':'GODSPEED_ASSISTANT_CONFIG']=value;});
@@ -114,6 +111,9 @@ test('the Workouts API projects a pending handover reason and retry time',async 
  fs.writeFileSync(path.join(service.store.state,'routine-setup-failures.json'),JSON.stringify({steps:{workouts:{stderr:'Hermes could not create the routine',retry_after:'2030-01-01T00:01:00.000Z'}}}));
  const response=await fetch('http://127.0.0.1:'+service.address.port+'/api/workouts'),status=await response.json();
  assert.equal(response.status,200);assert.deepEqual(status.routine,{state:'pending',reason:'Hermes could not create the routine',retry_after:'2030-01-01T00:01:00.000Z'});
+ fs.mkdirSync(path.join(home,'cron'),{recursive:true});fs.writeFileSync(path.join(home,'cron','jobs.json'),JSON.stringify({jobs:[{id:'job1'}]}));fs.writeFileSync(path.join(service.store.state,'notebook-routines.json'),JSON.stringify({jobs:[{id:'job1',key:'workouts'}]}));
+ const retained=await fetch('http://127.0.0.1:'+service.address.port+'/api/workouts'),retainedStatus=await retained.json();
+ assert.equal(retained.status,200);assert.deepEqual(retainedStatus.routine,{state:'scheduled',reason:'Hermes could not create the routine',retry_after:'2030-01-01T00:01:00.000Z'});
 });
 
 test('the carried command accepts its key only on stdin and its projected status never exposes it',async t=>{

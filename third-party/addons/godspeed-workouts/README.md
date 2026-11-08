@@ -27,9 +27,10 @@ The notebook gets a tracker called **Workouts**, one row per workout:
 Newer versions of Godspeed Mission Control carry this add-on themselves: paste your Hevy key in
 Godspeed's Settings, and everything below is done for you. Settings owns the connection and, after
 it has successfully taken over, the hourly run: use its **Disconnect** button to stop it while
-keeping the tracker and its rows. While takeover is pending, Settings shows why it is retrying and
-leaves an existing standalone schedule running. The install line and commands below are for people
-whose Godspeed does not carry it, or who want it by hand.
+keeping the tracker and its rows. While initial takeover is pending, Settings shows why it is retrying
+and leaves an existing standalone schedule running. If retiring that schedule fails after takeover
+is proved, the carried routine continues and Settings reports the retry. The install line and commands
+below are for people whose Godspeed does not carry it, or who want it by hand.
 
 You need Godspeed Mission Control, Hevy Pro (Hevy's connection for other apps is part of Pro) and
 Node.js 22 or newer, which Godspeed brings.
@@ -100,9 +101,10 @@ godspeed-workouts uninstall   remove the standalone hourly run; the tracker and 
 ```
 
 On a Godspeed version that carries this add-on, Settings > Workouts from Hevy owns the connection
-and, after successful takeover, the hourly run. While takeover is pending, it shows the reason and
-retry while an existing standalone operating-system schedule stays active. `uninstall` only removes
-a standalone operating-system schedule; it does not stop the notebook-owned run.
+and, after successful takeover, the hourly run. While initial takeover is pending, it shows the reason
+and retry while an existing standalone operating-system schedule stays active. If standalone-schedule
+removal then fails, the notebook-owned run continues while Settings reports the removal retry.
+`uninstall` only removes a standalone operating-system schedule; it does not stop the notebook-owned run.
 
 Manual-install settings: `tracker` and `names` (the tracker's name and other names, when it is made), `talks`
 (coaching talks that read it, when it is made), `minute` (1 to 58), `timezone` (null: the
