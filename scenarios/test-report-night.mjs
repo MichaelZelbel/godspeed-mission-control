@@ -292,3 +292,63 @@ test('a pull request from a fork runs nothing, and its verdict passes', async ()
   assert.equal(run({ EVENT: 'pull_request', STAGE: 'success', PICKED: ',voice,' }).status, 1, 'a picked scenario that did not run must fail');
   assert.equal(run({ EVENT: 'pull_request', STAGE: 'success', PICKED: ',' }).status, 0, 'an unpicked skip must pass');
 });
+
+// The workflow's own trigger, concurrency and the pick step as a whole, read as text and run as bash.
+const pickStep = (text) => {
+  const at = text.indexOf('        id: pick\n');
+  const run = text.indexOf('        run: |\n', at);
+  const to = text.indexOf('      - name: Read and check it', run);
+  assert.ok(at > 0 && run > at && to > run, 'the pick step was not found');
+  return text.slice(run + '        run: |\n'.length, to).replace(/^ {10}/gm, '');
+};
+
+test('the workflow runs on a pull request opened, pushed to or reopened, and one run per pull request is kept', async () => {
+  const { readFileSync } = await import('node:fs');
+  const text = readFileSync(WORKFLOW, 'utf8').replace(/\r\n/g, '\n');
+  const on = text.slice(text.indexOf('\non:\n'), text.indexOf('\npermissions:\n'));
+  assert.match(on, /^ {2}pull_request:\n {4}types: \[opened, synchronize, reopened\]$/m, 'the pull_request trigger (opened, synchronize, reopened) is missing');
+  assert.match(on, /^ {2}schedule:/m);
+  assert.match(on, /^ {2}workflow_dispatch:/m);
+  const conc = text.slice(text.indexOf('\nconcurrency:\n'), text.indexOf('\nenv:\n'));
+  assert.ok(conc.includes('group: scenarios-${{ github.event.pull_request.number || github.run_id }}'), 'the group is not one per pull request (a run id for every other event)');
+  assert.ok(conc.includes("cancel-in-progress: ${{ github.event_name == 'pull_request' }}"), 'only a pull request may cancel its older run');
+});
+
+test('the pick says all on a night, a candidate and a manual run', async () => {
+  const { readFileSync, writeFileSync, mkdtempSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { spawnSync } = await import('node:child_process');
+  const script = pickStep(readFileSync(WORKFLOW, 'utf8').replace(/\r\n/g, '\n'));
+  for (const event of ['schedule', 'workflow_dispatch']) {
+    const dir = mkdtempSync(`${tmpdir()}/pickall-`).replaceAll(String.fromCharCode(92), '/');
+    writeFileSync(`${dir}/out`, '');
+    const r = spawnSync('bash', ['-c', script], { cwd: fileURLToPath(new URL('..', import.meta.url)), encoding: 'utf8', env: { ...process.env, GITHUB_EVENT_NAME: event, GITHUB_OUTPUT: `${dir}/out`, RUNNER_TEMP: dir, GITHUB_STEP_SUMMARY: `${dir}/sum` } });
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(readFileSync(`${dir}/out`, 'utf8'), 'picked=all\n', `${event} does not prove every scenario`);
+  }
+});
+
+// The whole pull request arm with a stand-in `gh` that insists on the pull request's files endpoint,
+// paging through all of it, and a jq filter for names: the way the pick reads a large pull request.
+test('the pick on a pull request asks the files endpoint of that pull request, all pages, and writes picked', async () => {
+  const { readFileSync, writeFileSync, mkdtempSync, mkdirSync, chmodSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { spawnSync } = await import('node:child_process');
+  const script = pickStep(readFileSync(WORKFLOW, 'utf8').replace(/\r\n/g, '\n'));
+  const dir = mkdtempSync(`${tmpdir()}/pickpr-`).replaceAll(String.fromCharCode(92), '/');
+  mkdirSync(`${dir}/bin`);
+  writeFileSync(`${dir}/bin/gh`, [
+    '#!/usr/bin/env bash',
+    'args="$*"',
+    '[[ "$1" = api && "$2" = "repos/me/repo/pulls/42/files" ]] || { echo "unexpected endpoint: $args" >&2; exit 9; }',
+    '[[ " $args " == *" --paginate "* ]] || { echo "not paginated: $args" >&2; exit 9; }',
+    '[[ " $args " == *" --jq "* ]] || { echo "no --jq: $args" >&2; exit 9; }',
+    'printf "%s\n" README.md scenarios/charm-challenge.sh',
+    '',
+  ].join('\n'));
+  chmodSync(`${dir}/bin/gh`, 0o755);
+  writeFileSync(`${dir}/out`, '');
+  const r = spawnSync('bash', ['-c', script], { cwd: fileURLToPath(new URL('..', import.meta.url)), encoding: 'utf8', env: { ...process.env, PATH: `${dir}/bin:${process.env.PATH}`, GITHUB_EVENT_NAME: 'pull_request', GITHUB_REPOSITORY: 'me/repo', PR: '42', GITHUB_OUTPUT: `${dir}/out`, RUNNER_TEMP: dir, GITHUB_STEP_SUMMARY: `${dir}/sum` } });
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  assert.equal(readFileSync(`${dir}/out`, 'utf8'), 'picked=,charm-challenge,\n');
+});
