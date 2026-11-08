@@ -5,6 +5,7 @@ import {setConfigValue,readConfigValue,deleteConfigValue} from './hermes-config.
 import {hermesProvider} from './runtime.mjs';
 import {hermesHelper,runHermesHelper} from './addon-model.mjs';
 import {fallbackChain,noteMainAnswered,noteMainFailed} from './backup-ai.mjs';
+import {providerForHost,providerForName} from './provider-spec.mjs';
 
 // THE AI THE ROUTINES THINK WITH (18 October 2026). Every installer ends with "connect your own AI
 // account in Settings", and until this change that form powered only the notebook's own small jobs
@@ -20,14 +21,6 @@ import {fallbackChain,noteMainAnswered,noteMainFailed} from './backup-ai.mjs';
 
 const RECORD='routine-ai.json';
 const unquote=v=>typeof v==='string'?v.replace(/^["']|["']$/g,'').trim():'';
-const providers=[
- {provider:'openrouter',key:'OPENROUTER_API_KEY',base_url:'https://openrouter.ai/api/v1',matches:host=>host==='openrouter.ai'||host.endsWith('.openrouter.ai')},
- {provider:'anthropic',key:'ANTHROPIC_API_KEY',base_url:'https://api.anthropic.com/v1',matches:host=>host==='api.anthropic.com'},
- {provider:'openai-api',key:'OPENAI_API_KEY',base_url:'https://api.openai.com/v1',matches:host=>host==='api.openai.com'},
- {provider:'gemini',key:'GEMINI_API_KEY',aliases:['GOOGLE_API_KEY']}
-];
-const providerForHost=host=>providers.find(entry=>entry.matches?.(host));
-const providerForName=name=>providers.find(entry=>entry.provider===name);
 // The endpoint's address without /chat/completions, the form Hermes and every OpenAI-compatible
 // library want as their base address.
 export function baseAddress(url){return String(url||'').trim().replace(/\/chat\/completions\/?$/,'').replace(/\/+$/,'');}
