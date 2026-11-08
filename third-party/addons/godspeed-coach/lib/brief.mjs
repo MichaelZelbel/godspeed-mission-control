@@ -139,6 +139,11 @@ export const preparedHint = (from) => `<two to four more things from ${from}, on
 export const fromPrepCommand = (area, home, file) => `godspeed-coach talk open ${area.slug} --godspeed "${home}" --from-prep "${file}"`;
 const FROM_PREP_SAYS = "The opening is written: this command saves it with the talk card and prints it, and your final answer is that opening, exactly as printed.";
 
+export function continuingTalkDay(area, ymd) {
+  if (fs.existsSync(talkFile(area, ymd)) || isTalkDay(area, ymd)) return null;
+  return unansweredBefore(area, ymd).at(-1) || null;
+}
+
 // `inChat`: they asked for this talk in the conversation (`godspeed-coach brief <area>`), so the opening
 // is the reply they read, and the record is made as seen (`--shown`). The scheduled talk's brief, which
 // the gate prints, never is: a talk that waits for the chat must stay waiting.
@@ -151,7 +156,7 @@ export function brief(mcDir, s, area, ymd, { inChat = false } = {}) {
   const prep = prepForBrief(area, ymd);
   L.push(`COACH TALK DUE: ${area.title} (id for commands: ${area.slug}), ${ymd}, ${area.time} ${s.timezone}`);
   const earlier = inChat ? unansweredBefore(area, ymd) : [];
-  const continuing = inChat && !fs.existsSync(talkFile(area, ymd)) && earlier.length > 0 && !isTalkDay(area, ymd);
+  const continuing = inChat && continuingTalkDay(area, ymd);
   if (inChat && fs.existsSync(talkFile(area, ymd))) L.push(`Today's ${area.title} talk is already open: continue it (the coach recipe, "Continuing a talk") and do not run the open command below.`);
   else if (continuing) L.push(`The ${area.title} talk of ${earlier.at(-1)} is still open and today is not a talk day of this area: continue that talk (the coach recipe, "Continuing a talk") and do not run the open command below.`);
   else if (earlier.length) L.push(prep ? `The ${area.title} talk of ${earlier.at(-1)} is still open with no reply from them. Opening today's talk closes it as not held. The open command adds the sentence naming it to the prepared opening: do not add another.` : `The ${area.title} talk of ${earlier.at(-1)} is still open with no reply from them. This talk has no preparation, so the open command leaves it open.`);

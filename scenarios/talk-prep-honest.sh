@@ -46,6 +46,7 @@
 #   block-b.txt          the coach's scheduled block on day B, before the owner asked for the talk
 #   opening-a.txt / opening-b.txt   the reply the owner got when they asked for the talk
 #   talk-a.md / talk-b.md           the talk records the coach holds afterwards
+#   talk-a-record.txt               whether the product created day A's canonical record
 # shellcheck disable=SC2034  # read by scenario-lib.sh, which this file sources
 SCENARIO=talk-prep-honest
 # shellcheck source=scenarios/scenario-lib.sh disable=SC1091 # the library is not an input of the one-file lint
@@ -234,7 +235,14 @@ act() {
   coach brief health --date "$DAY_A" >"$EVIDENCE/brief-a.txt" 2>&1 || true
   chat_panel_new_conversation "$EVIDENCE/.panel-new-a.json"
   chat_panel_says "$ASK" "$EVIDENCE/opening-a.txt"
-  cat "$ROOT"/coach/health/talks/"$DAY_A".md >"$EVIDENCE/talk-a.md" 2>/dev/null || : >"$EVIDENCE/talk-a.md"
+  talk_a=$ROOT/coach/health/talks/"$DAY_A".md
+  if [ -f "$talk_a" ]; then
+    cat "$talk_a" >"$EVIDENCE/talk-a.md"
+    printf 'The product created the day A record at %s.\n' "$talk_a" >"$EVIDENCE/talk-a-record.txt"
+  else
+    : >"$EVIDENCE/talk-a.md"
+    printf 'The product did not create the day A record at %s.\n' "$talk_a" >"$EVIDENCE/talk-a-record.txt"
+  fi
 
   coach talk not-held health --date "$DAY_A" >"$EVIDENCE/close-a.txt" 2>&1 || true
 
@@ -271,9 +279,10 @@ check() { # <evidence folder>
     [ -n "$b" ] || fail "days.txt does not say which two talk days this scenario worked on"
     fail "no talk of day $b was opened when the owner asked for it: $(tr '\n' ' ' <"$folder/opening-b.txt" 2>/dev/null | cut -c1-200)"
   fi
+  [ -s "$folder/talk-a.md" ] || fail "$(cat "$folder/talk-a-record.txt" 2>/dev/null || printf 'The product did not create the day A talk record.')"
   kept_all "$folder" 'what the preparations, the real seal, the gate and the talks held' \
     days.txt area.md prep-a.md prep-b.md review-a.json review-b.json evidence-b.json seal-a.txt seal-a.code \
-    seal-b.txt seal-b.code check-a.txt check-b.txt brief-a.txt close-a.txt opening-a.txt opening-b.txt talk-a.md talk-b.md
+    seal-b.txt seal-b.code check-a.txt check-b.txt brief-a.txt close-a.txt opening-a.txt opening-b.txt talk-a.md talk-b.md talk-a-record.txt
   [ -f "$folder/block-b.txt" ] || fail "block-b.txt is not in what the scenario kept"
   a=$(sed -n 's/^a=//p' "$folder/days.txt")
   if [ -z "$a" ] || [ -z "$b" ]; then fail "days.txt does not say which two talk days this scenario worked on"; fi
