@@ -61,16 +61,18 @@ the checks that judge it. GitHub refuses any push from it that creates or update
 - When the fix needs a workflow change, the round commits everything else and describes the change
   in the pull request description under "Workflow change for the release key", as a manifest of
   these lines: the target path under `.github/workflows/`; the operation; the git blob hash of the
-  target on the base commit the change was written against (none for a create); the exact names of
-  the scenario jobs that need the change.
+  target on the base commit the change was written against (none for a create); the scenario job
+  IDs (the workflow's own IDs, not display names) that need the change. Each ID must be one the
+  workflow selected for this head, listed in `picked` in the `stage file` job's summary; `required`,
+  `the stage file`, `the verdict` and any scenario job not picked are never listed.
   - For a create or a replace, the round also writes the complete new content of the workflow file
     (not a fragment) to `.github/workflow-drafts/<same file name>`, quotes that content in the same
     section, and adds the blob hash of the draft to the manifest.
   - For a delete there is no draft file; the manifest says the result is "absent".
 - Such a pull request is Done when the review says Ready at its head commit and its checks are green,
   apart from the scenario jobs named in the manifest and no others. Before it says Ready, the review
-  checks that the manifest matches the draft and that the quote in the description is byte for byte
-  the draft at that head commit.
+  checks that every listed job ID is in `picked` at that head, that the manifest matches the draft
+  and that the quote in the description is byte for byte the draft at that head commit.
 - Mission Control then applies the change with the release key, after confirming that the target's
   current blob hash equals the manifest's base hash and, for a create or a replace, that the draft's
   hash equals the manifest's result hash and the quote in the description still equals the draft. A
