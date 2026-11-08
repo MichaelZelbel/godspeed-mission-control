@@ -4008,7 +4008,7 @@ facts_good() {
   rm -rf "$f"; mkdir -p "$f"
   local archive_day=2026-11-01 archive_at move_text doctor_text
   archive_at="${archive_day}T12:00:00Z"; move_text="I moved to Hamburg on $archive_day"; doctor_text="my new doctor is Dr. Lang as of $archive_day"
-  printf '{"messages":[{"id":"move-1","at":"%s","text":"%s"},{"id":"doctor-1","at":"%s","text":"%s"},{"id":"machine-1","at":"%s","text":"[IMPORTANT: You are running as a scheduled job]"},{"id":"track-1","at":"%s","text":"track this"}]}\n' "$archive_at" "$move_text" "$archive_at" "$doctor_text" "$archive_at" "$archive_at" >"$f/archive.json"
+  printf '{"messages":[{"id":"move-1","at":"%s","text":"%s"},{"id":"doctor-1","at":"%s","text":"%s"},{"id":"machine-1","at":"%s","text":"[IMPORTANT: You are running as a scheduled job]"},{"id":"track-1","at":"%s","text":"track this"}]}\n' "$archive_at" "$move_text" "$archive_at" "$doctor_text" "$archive_at" >"$f/archive.json"
   facts_json '[{"value":"Berlin"}]' >"$f/before.json"
   printf '{"name":"Remember what you said","cron":"40 3 * * *","script":"scenario-facts","exit":0}\n' >"$f/routine.json"
   facts_json "[{\"value\":\"Berlin\",\"valid_to\":\"$archive_day\"},{\"value\":\"Hamburg\",\"valid_from\":\"$archive_day\",\"quote\":\"$move_text\",\"source_id\":\"move-1\"},{\"value\":\"Dr. Lang\",\"valid_from\":\"$archive_day\",\"quote\":\"$doctor_text\",\"source_id\":\"doctor-1\"}]" >"$f/after.json"
