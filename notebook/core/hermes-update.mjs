@@ -21,6 +21,7 @@ const failure=({step,result})=>({step,output:scrubCredentials(errorText(result))
 const backupName=file=>/^godspeed-pre-update-[0-9a-f-]+\.zip$/.test(file);
 const HERMES_REPOSITORY={owner:'NousResearch',name:'hermes-agent'};
 export const HERMES_HTTPS_ORIGIN=`https://github.com/${HERMES_REPOSITORY.owner}/${HERMES_REPOSITORY.name}.git`;
+export const HERMES_RELEASES_URL=`https://api.github.com/repos/${HERMES_REPOSITORY.owner}/${HERMES_REPOSITORY.name}/releases?per_page=100`;
 const hermesRepositoryPath=`${HERMES_REPOSITORY.owner}/${HERMES_REPOSITORY.name}`.toLowerCase();
 export const officialHermesRemote=value=>['https://github.com/','git@github.com:','ssh://git@github.com/'].some(prefix=>String(value||'').trim().replace(/\/+$/,'').replace(/\.git$/i,'').toLowerCase()===prefix+hermesRepositoryPath);
 
@@ -52,7 +53,7 @@ export function eligibleRelease(releases,installed,now=Date.now(),failed={}){
 }
 
 export class HermesUpdate{
- constructor({store,descriptor,ask,run=runChild,now=clockNow,platform=process.platform,getuid=()=>process.getuid?.(),isDocker=()=>false,fetcher=globalThis.fetch,lifecycle=null,releaseLimit=RELEASE_LIMIT}={}){Object.assign(this,{store,descriptor,ask,run,now,platform,getuid,isDocker,fetcher,lifecycle,releaseLimit});this.running=null;}
+ constructor({store,descriptor,ask,run=runChild,now=clockNow,platform=process.platform,getuid=()=>process.getuid?.(),isDocker=()=>false,fetcher=globalThis.fetch,lifecycle=null,releaseLimit=RELEASE_LIMIT,releaseUrl=HERMES_RELEASES_URL}={}){Object.assign(this,{store,descriptor,ask,run,now,platform,getuid,isDocker,fetcher,lifecycle,releaseLimit,releaseUrl});this.running=null;}
  state(){return readHermesUpdate(this.store);}
  save(next){atomic(path.join(this.store.state,UPDATE_FILE),JSON.stringify(next,null,2)+'\n');return next;}
  setEnabled(enabled){return this.save({...transactionState(this.state()),enabled});}
@@ -83,7 +84,7 @@ export class HermesUpdate{
  async releases(){
   const abort=new AbortController();
   try{
-   const response=await this.releaseValue(this.fetcher(`https://api.github.com/repos/${HERMES_REPOSITORY.owner}/${HERMES_REPOSITORY.name}/releases?per_page=100`,{headers:{Accept:'application/vnd.github+json','User-Agent':'godspeed-mission-control'},signal:abort.signal}),abort);
+   const response=await this.releaseValue(this.fetcher(this.releaseUrl,{headers:{Accept:'application/vnd.github+json','User-Agent':'godspeed-mission-control'},signal:abort.signal}),abort);
    if(!response?.ok)throw Object.assign(Error('Hermes releases request failed ('+(response?.status||'unknown')+').'),{stderr:await this.releaseValue(response?.text?.()||'',abort),code:response?.status||1});
    return {releases:await this.releaseValue(response.json(),abort)};
   }catch(error){return {error};}finally{abort.abort();}

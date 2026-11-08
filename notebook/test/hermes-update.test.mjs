@@ -1,7 +1,7 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import {EventEmitter} from 'node:events';import {PassThrough} from 'node:stream';
 import {execFileSync} from 'node:child_process';
 import {Store} from '../core/records/store.mjs';
-import {HermesUpdate,eligibleRelease,readHermesUpdate} from '../core/hermes-update.mjs';
+import {HERMES_RELEASES_URL,HermesUpdate,eligibleRelease,readHermesUpdate} from '../core/hermes-update.mjs';
 import {scrubGitEnvironment} from '../core/assistant-files.mjs';
 import {HermesLifecycle} from '../core/hermes-lifecycle.mjs';
 import {NativeScheduler} from '../core/native-scheduler.mjs';
@@ -14,9 +14,9 @@ const at='2026-11-06T04:15:00Z',old=new Date(Date.parse(at)-8*24*60*60*1000).toI
 const releases=versions=>versions.map((tag,index)=>({tag_name:'v'+tag,published_at:index?recent:old,prerelease:tag.includes('-')}));
 const isUpdate=call=>call.join(' ')==='hermes update --no-backup --yes';
 const applied=calls=>calls.some(isUpdate);
-function fixture(t,{breaks,rejects,isDocker=false,aiFails=false,releaseLimit}={}){
+function fixture(t,{breaks,rejects,isDocker=false,aiFails=false,releaseLimit,releaseUrl}={}){
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-hermes-update-')),source=path.join(root,'hermes-agent'),home=path.join(root,'.hermes'),executable=path.join(root,'bin','hermes');fs.mkdirSync(path.join(source,'hermes_cli'),{recursive:true});fs.mkdirSync(path.join(source,'venv','bin'),{recursive:true});fs.mkdirSync(path.dirname(executable),{recursive:true});fs.writeFileSync(path.join(source,'hermes_cli','__init__.py'),'');fs.writeFileSync(path.join(source,'venv','bin','python3'),'');fs.writeFileSync(executable,'');fs.mkdirSync(home,{recursive:true});fs.writeFileSync(path.join(home,'config.yaml'),'model:\n  provider: test\n  default: test\n');t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
- let version='1.0.0',offer='1.1.0',updated=false,asked=0,clock=new Date(at);const calls=[],callOptions=[];
+ let version='1.0.0',offer='1.1.0',updated=false,asked=0,clock=new Date(at);const calls=[],callOptions=[],releaseUrls=[];
  const run=async(exe,args,options)=>{calls.push([path.basename(exe),...args]);callOptions.push(options);if(exe==='git'){
   if(args[0]==='rev-parse')return {code:0,stdout:args[1]==='--is-inside-work-tree'?'true\n':'old-commit\n',stderr:''};
   if(args[0]==='status')return {code:0,stdout:'',stderr:''};
@@ -34,9 +34,9 @@ function fixture(t,{breaks,rejects,isDocker=false,aiFails=false,releaseLimit}={}
  }
  return {code:0,stdout:'',stderr:''};
  };
- const fetcher=async()=>({ok:true,json:async()=>releases(['1.1.0','1.2.0-rc.1','1.0.1'])});
- const store=new Store(root),updater=new HermesUpdate({store,descriptor:{verified:true,executable,home,sourceRoot:source},run,now:()=>clock,ask:async()=>{asked++;if(aiFails)throw Error('provider unavailable');},fetcher,isDocker:()=>isDocker,releaseLimit});
- return {store,updater,calls,callOptions,asked:()=>asked,setClock:value=>{clock=new Date(value);},setOffer:value=>{offer=value;}};
+ const fetcher=async url=>{releaseUrls.push(url);return {ok:true,json:async()=>releases(['1.1.0','1.2.0-rc.1','1.0.1'])};};
+ const store=new Store(root),updater=new HermesUpdate({store,descriptor:{verified:true,executable,home,sourceRoot:source},run,now:()=>clock,ask:async()=>{asked++;if(aiFails)throw Error('provider unavailable');},fetcher,isDocker:()=>isDocker,releaseLimit,releaseUrl});
+ return {store,updater,calls,callOptions,releaseUrls,asked:()=>asked,setClock:value=>{clock=new Date(value);},setOffer:value=>{offer=value;}};
 }
 
 function taggedFixture(t){
@@ -74,6 +74,11 @@ test('Hermes children remove inherited Git variables',async t=>{
 test('only published stable, week-old releases in the installed major are eligible',()=>{
  assert.deepEqual(eligibleRelease(releases(['1.1.0','1.2.0-rc.1','1.0.1']),'1.0.0',Date.parse(at)),{tag:'v1.1.0',version:'1.1.0',at:Date.parse(old),prerelease:false});
  assert.equal(eligibleRelease([{tag_name:'v1.1.0',published_at:old},{tag_name:'v1.2.0',published_at:recent}],'1.0.0',Date.parse(at)),null,'the updater cannot use an old release while Hermes would select a newer, young stable release');
+});
+
+test('the production release endpoint remains the default outside an explicit scenario endpoint',async t=>{
+ const production=fixture(t);await production.updater.releases();assert.deepEqual(production.releaseUrls,[HERMES_RELEASES_URL]);
+ const scenario=fixture(t,{releaseUrl:'http://127.0.0.1:48123/releases'});await scenario.updater.releases();assert.deepEqual(scenario.releaseUrls,['http://127.0.0.1:48123/releases']);
 });
 
 test('a passing published release is backed up, updated, restarted, checked, and visible in Settings',async t=>{
@@ -189,8 +194,8 @@ test('a later nightly pass closes only a restored rollback notice and release lo
 });
 
 test('the Settings status and control persist the assistant update choice',async t=>{
- const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-hermes-update-settings-')),home=path.join(root,'.hermes'),state=path.join(root,'.godspeed'),previous={runtime:process.env.GODSPEED_ORIGINAL_RUNTIME,config:process.env.GODSPEED_ASSISTANT_CONFIG};fs.mkdirSync(home,{recursive:true});fs.mkdirSync(state,{recursive:true});fs.writeFileSync(path.join(state,'assistant.json'),JSON.stringify({verified:true,executable:path.join(root,'bin','hermes'),home,sourceRoot:path.join(root,'source')}));process.env.GODSPEED_ORIGINAL_RUNTIME='on';delete process.env.GODSPEED_ASSISTANT_CONFIG;t.after(async()=>{if(previous.runtime===undefined)delete process.env.GODSPEED_ORIGINAL_RUNTIME;else process.env.GODSPEED_ORIGINAL_RUNTIME=previous.runtime;if(previous.config===undefined)delete process.env.GODSPEED_ASSISTANT_CONFIG;else process.env.GODSPEED_ASSISTANT_CONFIG=previous.config;fs.rmSync(root,{recursive:true,force:true});});
- const service=await createService({root,port:0}),base='http://127.0.0.1:'+service.address.port;t.after(()=>service.close());
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-hermes-update-settings-')),home=path.join(root,'.hermes'),state=path.join(root,'.godspeed'),previous={runtime:process.env.GODSPEED_ORIGINAL_RUNTIME,config:process.env.GODSPEED_ASSISTANT_CONFIG,releases:process.env.GODSPEED_SCENARIO_HERMES_RELEASES_URL};fs.mkdirSync(home,{recursive:true});fs.mkdirSync(state,{recursive:true});fs.writeFileSync(path.join(state,'assistant.json'),JSON.stringify({verified:true,executable:path.join(root,'bin','hermes'),home,sourceRoot:path.join(root,'source')}));process.env.GODSPEED_ORIGINAL_RUNTIME='on';delete process.env.GODSPEED_ASSISTANT_CONFIG;delete process.env.GODSPEED_SCENARIO_HERMES_RELEASES_URL;t.after(async()=>{if(previous.runtime===undefined)delete process.env.GODSPEED_ORIGINAL_RUNTIME;else process.env.GODSPEED_ORIGINAL_RUNTIME=previous.runtime;if(previous.config===undefined)delete process.env.GODSPEED_ASSISTANT_CONFIG;else process.env.GODSPEED_ASSISTANT_CONFIG=previous.config;if(previous.releases===undefined)delete process.env.GODSPEED_SCENARIO_HERMES_RELEASES_URL;else process.env.GODSPEED_SCENARIO_HERMES_RELEASES_URL=previous.releases;fs.rmSync(root,{recursive:true,force:true});});
+ const service=await createService({root,port:0}),base='http://127.0.0.1:'+service.address.port;t.after(()=>service.close());assert.equal(service.domains.hermesUpdate.releaseUrl,HERMES_RELEASES_URL);
  const status=async()=>await (await fetch(base+'/api/status')).json(),initial=await status();assert.equal(initial.assistantUpdate.enabled,true);const changed=await fetch(base+'/api/hermes-update',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled:false})});assert.equal(changed.status,200);assert.equal((await changed.json()).enabled,false);assert.equal((await status()).assistantUpdate.enabled,false);
 });
 
