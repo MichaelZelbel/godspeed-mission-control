@@ -4125,6 +4125,37 @@ if [ "$HFD_ALL" = '[{"tag_name":"v1.0.0","published_at":"2026-10-20T00:00:00Z","
 else
   bad 'the local Hermes fixture does not serve its revealed releases on loopback'
 fi
+HRC=$TMP/hermes-release-cleanup
+mkdir -p "$HRC/bin" "$HRC/user" "$HRC/machine"
+printf '%s\n' '#!/bin/sh' 'if [ -e "$HERMES_RELEASE_CLEANUP_ROOT/user/scenario-hermes-releases.conf" ] || [ -e "$HERMES_RELEASE_CLEANUP_ROOT/machine/scenario-hermes-releases.conf" ]; then exit 1; fi' 'printf "%s\\n" "$*" >> "$HERMES_RELEASE_CLEANUP_LOG"' >"$HRC/bin/systemctl"
+printf '%s\n' '#!/bin/sh' 'exec "$@"' >"$HRC/bin/sudo"
+chmod +x "$HRC/bin/systemctl" "$HRC/bin/sudo"
+if ROOT="$ROOT" HRC="$HRC" HERMES_RELEASE_CLEANUP_ROOT="$HRC" HERMES_RELEASE_CLEANUP_LOG="$HRC/systemctl.log" PATH="$HRC/bin:$PATH" bash -c '
+  source "$ROOT/scenarios/hermes-update-rollback.sh"
+  for manager in user machine; do
+    source_file="$HRC/$manager/scenario-hermes-releases.conf"
+    : >"$source_file"
+    sleep 60 & pid=$!
+    release_fixture_pid=$pid
+    release_source_manager=$manager
+    release_source_dropin=$source_file
+    release_source_unit=godspeed-integrated-notebook.service
+    cleanup_release_source
+    [ ! -e "$source_file" ] && ! kill -0 "$pid" 2>/dev/null
+  done
+'; then
+  if [ ! -e "$HRC/user/scenario-hermes-releases.conf" ] && [ ! -e "$HRC/machine/scenario-hermes-releases.conf" ] \
+    && [ "$(grep -cx -- '--user daemon-reload' "$HRC/systemctl.log")" = 1 ] \
+    && [ "$(grep -cx -- '--user restart godspeed-integrated-notebook.service' "$HRC/systemctl.log")" = 1 ] \
+    && [ "$(grep -cx -- 'daemon-reload' "$HRC/systemctl.log")" = 1 ] \
+    && [ "$(grep -cx -- 'restart godspeed-integrated-notebook.service' "$HRC/systemctl.log")" = 1 ]; then
+    ok 'the Hermes release fixture and both temporary service overrides are removed before the service restarts'
+  else
+    bad 'the Hermes release-source cleanup does not reload and restart both service routes'
+  fi
+else
+  bad 'the Hermes release-source cleanup cannot remove both temporary service routes'
+fi
 HFD_RELATIVE=hermes-fixture-relative
 if (
   cd "$TMP"

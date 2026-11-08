@@ -3,8 +3,39 @@
 # Kept: releases.json, nights.json, notifications.json and fixture.log. The three night records
 # include commits, restart evidence and the updater's decision rather than trusting its prose.
 SCENARIO=hermes-update-rollback
-. "$(dirname "$0")/scenario-lib.sh"
-scenario_arguments "$@"
+. "$(dirname "${BASH_SOURCE[0]}")/scenario-lib.sh"
+
+release_fixture_pid=''
+release_source_manager=''
+release_source_dropin=''
+release_source_unit=''
+
+cleanup_release_source() {
+  if [ -n "$release_fixture_pid" ]; then
+    kill "$release_fixture_pid" 2>/dev/null || true
+    wait "$release_fixture_pid" 2>/dev/null || true
+    release_fixture_pid=''
+  fi
+  [ -n "$release_source_dropin" ] || return 0
+  case $release_source_manager in
+    user)
+      rm -f "$release_source_dropin" && systemctl --user daemon-reload && systemctl --user restart "$release_source_unit" || return 1
+      ;;
+    machine)
+      sudo rm -f "$release_source_dropin" && sudo systemctl daemon-reload && sudo systemctl restart "$release_source_unit" || return 1
+      ;;
+  esac
+  release_source_manager=''
+  release_source_dropin=''
+  release_source_unit=''
+}
+
+cleanup_on_exit() {
+  local status=$?
+  trap - EXIT
+  cleanup_release_source || say 'the local Hermes release source could not be removed'
+  exit "$status"
+}
 
 check() {
   local folder=$1
@@ -31,6 +62,9 @@ NODE
 }
 
 act() {
+  trap cleanup_on_exit EXIT
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
   fresh_evidence
   : >"$EVIDENCE/fixture.log"
   node "$HERE/hermes-update-fixture.mjs" --dir "$EVIDENCE/releases" --log "$EVIDENCE/fixture.log" >"$EVIDENCE/fixture-made.txt" ||
@@ -46,24 +80,32 @@ act() {
   node "$HERE/hermes-update-fixture.mjs" --dir "$EVIDENCE/releases" --reveal 1.3.0 >/dev/null || fail "the recent local Hermes release could not be revealed"
   run_night 2026-11-08 1.3.0 recent
   make_nights
+  cleanup_release_source || fail "the local Hermes release source could not be removed"
   check "$EVIDENCE"
 }
 
 local_release_source() {
   local url_file=$EVIDENCE/release-source-url.txt unit=${UNIT:-godspeed-integrated-notebook.service} dropin url
   node "$HERE/hermes-update-fixture.mjs" --dir "$EVIDENCE/releases" --serve >"$url_file" 2>"$EVIDENCE/release-source.log" &
+  release_fixture_pid=$!
   wait_for 30 'the local Hermes release source to start' test -s "$url_file" || fail "the local Hermes release source did not start"
   url=$(cat "$url_file")
   case $url in http://127.0.0.1:*/releases) ;; *) fail "the local Hermes release source did not report a loopback releases address" ;; esac
   if systemctl --user cat "$unit" >/dev/null 2>&1; then
     dropin=$HOME/.config/systemd/user/$unit.d
+    release_source_manager=user
+    release_source_dropin=$dropin/scenario-hermes-releases.conf
+    release_source_unit=$unit
     mkdir -p "$dropin" || fail "the notebook release-source override folder could not be made"
-    printf '[Service]\nEnvironment="GODSPEED_SCENARIO_HERMES_UPDATE_RELEASES_URL=%s"\n' "$url" >"$dropin/scenario-hermes-releases.conf" || fail "the notebook release-source override could not be written"
+    printf '[Service]\nEnvironment="GODSPEED_SCENARIO_HERMES_UPDATE_RELEASES_URL=%s"\n' "$url" >"$release_source_dropin" || fail "the notebook release-source override could not be written"
     systemctl --user daemon-reload && systemctl --user restart "$unit" || fail "the notebook could not be restarted with the local Hermes releases"
   elif systemctl cat "$unit" >/dev/null 2>&1; then
     dropin=/etc/systemd/system/$unit.d
+    release_source_manager=machine
+    release_source_dropin=$dropin/scenario-hermes-releases.conf
+    release_source_unit=$unit
     sudo mkdir -p "$dropin" || fail "the notebook release-source override folder could not be made"
-    printf '[Service]\nEnvironment="GODSPEED_SCENARIO_HERMES_UPDATE_RELEASES_URL=%s"\n' "$url" | sudo tee "$dropin/scenario-hermes-releases.conf" >/dev/null || fail "the notebook release-source override could not be written"
+    printf '[Service]\nEnvironment="GODSPEED_SCENARIO_HERMES_UPDATE_RELEASES_URL=%s"\n' "$url" | sudo tee "$release_source_dropin" >/dev/null || fail "the notebook release-source override could not be written"
     sudo systemctl daemon-reload && sudo systemctl restart "$unit" || fail "the notebook could not be restarted with the local Hermes releases"
   else
     fail "the native notebook has no service to receive the local Hermes releases"
@@ -148,4 +190,7 @@ fs.writeFileSync(`${dir}/notifications.json`,JSON.stringify(broken.notifications
 NODE
 }
 
-if [ "$CHECK_ONLY" = yes ]; then install_paths; check "$EVIDENCE"; else act; fi
+if [ "${BASH_SOURCE[0]}" = "$0" ]; then
+  scenario_arguments "$@"
+  if [ "$CHECK_ONLY" = yes ]; then install_paths; check "$EVIDENCE"; else act; fi
+fi
