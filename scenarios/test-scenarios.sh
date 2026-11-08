@@ -3695,7 +3695,8 @@ refuses 'a refused key kept outside hevy.json' workouts-from-hevy "$WH/refused-i
 RFS=$WH/refused-scan
 mkdir -p "$RFS/root/.godspeed/integrated-runtime/versions/test/scenarios" "$RFS/assistant"
 printf '{"home":"%s"}\n' "$RFS/assistant" >"$RFS/root/.godspeed/assistant.json"
-printf 'refused-scenario-key\n' >"$RFS/root/.godspeed/integrated-runtime/versions/test/scenarios/test-source"
+RFS_SOURCE=$RFS/root/.godspeed/integrated-runtime/versions/test/scenarios/workouts-from-hevy.sh
+printf 'refused-scenario-key\n' >"$RFS_SOURCE"
 printf 'refused-scenario-key\n' >"$RFS/assistant/settings.json"
 REFUSED_SCAN=$(GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy NODE="$(command -v node)" bash -c '
   cd "$3"
@@ -3722,6 +3723,22 @@ case "$RUNTIME_SOURCE_SCAN_CODE" in
   0) ok "the native refused-key scan ignores immutable installed scenario source" ;;
   *) bad "the native refused-key scan treated immutable installed scenario source as persisted credentials (exit $RUNTIME_SOURCE_SCAN_CODE: $RUNTIME_SOURCE_SCAN)" ;;
 esac
+mkdir -p "$RFS/root/.godspeed/integrated-runtime/versions/test/state"
+RUNTIME_STATE=$RFS/root/.godspeed/integrated-runtime/versions/test/state/retained-key
+printf 'refused-scenario-key\n' >"$RUNTIME_STATE"
+RUNTIME_STATE_SCAN=$(GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy NODE="$(command -v node)" bash -c '
+  cd "$3"
+  . "$1"
+  install_paths
+  EVIDENCE=$2
+  refused_not_retained native
+' runtime-state-scan "$ROOT/scenarios/workouts-from-hevy.sh" "$RFS" "$ROOT/scenarios" 2>&1)
+RUNTIME_STATE_SCAN_CODE=$?
+case "$RUNTIME_STATE_SCAN_CODE $RUNTIME_STATE_SCAN" in
+  "1 "*"native kept the refused Hevy key in $RUNTIME_STATE"*) ok "the native refused-key scan finds retained state below a runtime version" ;;
+  *) bad "the native refused-key scan missed retained state below a runtime version (exit $RUNTIME_STATE_SCAN_CODE: $RUNTIME_STATE_SCAN)" ;;
+esac
+rm "$RUNTIME_STATE"
 ACT_NODE_ORDER=$(env -u NODE GODSPEED_SCENARIO_ROOT="$RFS/root" ACTION_EVENTS="$RFS/action-events" bash -c '
   cd "$3"
   . "$1"
@@ -3770,7 +3787,7 @@ case "$NO_NODE_ACTION_CODE $NO_NODE_ACTION" in
   *) bad "the Hevy action did not stop before its fixture without Node (exit $NO_NODE_ACTION_CODE: $NO_NODE_ACTION)" ;;
 esac
 printf '00000000-0000-4000-8000-000000000001\n' >"$RFS/assistant/hevy.json"
-printf '00000000-0000-4000-8000-000000000001\n' >"$RFS/root/.godspeed/integrated-runtime/versions/test/scenarios/accepted-test-source"
+printf '00000000-0000-4000-8000-000000000001\n' >"$RFS_SOURCE"
 ACCEPTED_SCAN=$(GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy NODE="$(command -v node)" bash -c '
   cd "$3"
   . "$1"
@@ -3810,6 +3827,27 @@ case "$ACCEPTED_SOURCE_SCAN" in
   '{"clean":true,"paths":[]}') ok "the accepted-key scan ignores immutable installed scenario source" ;;
   *) bad "the accepted-key scan treated immutable installed scenario source as persisted credentials ($ACCEPTED_SOURCE_SCAN)" ;;
 esac
+printf '00000000-0000-4000-8000-000000000001\n' >"$RUNTIME_STATE"
+ACCEPTED_RUNTIME_SCAN=$(GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy NODE="$(command -v node)" bash -c '
+  cd "$3"
+  . "$1"
+  install_paths
+  EVIDENCE=$2
+  in_server() {
+    case $1 in
+      find) printf "%s\\n" /opt/data/.godspeed/assistant.json ;;
+      node) printf "%s" /root/.hermes ;;
+      grep) return 1 ;;
+    esac
+  }
+  scan_fixture_key
+  cat "$EVIDENCE/key-scan.json"
+' accepted-runtime-scan "$ROOT/scenarios/workouts-from-hevy.sh" "$RFS" "$ROOT/scenarios" 2>/dev/null)
+case "$ACCEPTED_RUNTIME_SCAN" in
+  '{"clean":false,"paths":["'"$RUNTIME_STATE"'"]}') ok "the accepted-key scan finds retained state below a runtime version" ;;
+  *) bad "the accepted-key scan missed retained state below a runtime version ($ACCEPTED_RUNTIME_SCAN)" ;;
+esac
+rm "$RUNTIME_STATE"
 printf '00000000-0000-4000-8000-000000000001\n' >"$RFS/assistant/hevy.json"
 printf '00000000-0000-4000-8000-000000000001\n' >"$RFS/assistant/settings.json"
 ACCEPTED_SCAN=$(GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy NODE="$(command -v node)" bash -c '

@@ -127,7 +127,7 @@ native_persistence_matches() { # <key> <path record> [grep option...]
   if grep -rlF "$@" -- "$key" "${NATIVE_PERSISTENCE_ROOTS[@]}" >"$paths"; then
     [ -s "$paths" ] || return 0
     while IFS= read -r path; do
-      case $path in "$RUNTIME"/versions/*) ;; *) printf '%s\n' "$path" ;; esac
+      case $path in "$RUNTIME"/versions/*/scenarios/workouts-from-hevy.sh) ;; *) printf '%s\n' "$path" ;; esac
     done <"$paths" >"$paths.filtered"
     mv -f "$paths.filtered" "$paths" || return 2
     [ -s "$paths" ] || return 1
