@@ -1,7 +1,0 @@
-      - name: Keep what the scenario saw
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: talk-prep-honest-evidence
-          path: ${{ runner.temp }}/talk-prep-honest
-          if-no-files-found: error

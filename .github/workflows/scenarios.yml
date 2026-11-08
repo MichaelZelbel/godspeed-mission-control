@@ -698,6 +698,13 @@ jobs:
       - name: Say so when it stopped before its own verdict
         if: failure()
         run: 'grep -qE "^(PASS|FAIL) talk-prep-honest:" "$RUNNER_TEMP/verdict" 2>/dev/null || echo "FAIL talk-prep-honest: it stopped before its own verdict (its step log says how)" | tee -a "$GITHUB_STEP_SUMMARY"'
+      - name: Keep what the scenario saw
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: talk-prep-honest-evidence
+          path: ${{ runner.temp }}/talk-prep-honest
+          if-no-files-found: error
 
   # The scenarios of 2.0.0-beta.17 (releases/godspeed-2.0.0-beta.17-a-plain-yes/plan.md, "Proving
   # scenarios" 2, 3, 4 and 7), through the installed Hermes with a stand-in Telegram account.
