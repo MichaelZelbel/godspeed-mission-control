@@ -3,7 +3,6 @@
 import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import { join, resolve } from 'node:path';
-import http from 'node:http';
 import { HERMES_HTTPS_ORIGIN } from '../notebook/core/hermes-update.mjs';
 
 const option = name => {
@@ -14,22 +13,17 @@ const dir = option('--dir');
 const reveal = option('--reveal');
 const log = option('--log');
 const metadata = process.argv.includes('--metadata');
-const serve = process.argv.includes('--serve');
 if (!dir) throw new Error('usage: hermes-update-fixture.mjs --dir <folder> [--reveal <version>]');
 const stateFile = `${resolve(dir)}.fixture-state.json`;
 const git = (...args) => execFileSync('git', ['-C', dir, ...args], { stdio: 'ignore' });
 
-const fixtureReleases = () => {
-  const tags = execFileSync('git', ['-C', dir, 'tag', '--list', '--sort=v:refname'], { encoding: 'utf8' }).trim().split(/\r?\n/).filter(Boolean);
-  return tags.map(tag => {
-    const release = JSON.parse(execFileSync('git', ['-C', dir, 'show', `${tag}:release.json`], { encoding: 'utf8' }));
-    return {tag, ...release};
-  });
-};
-
 if (metadata) {
   const now = Date.parse('2026-11-07T04:15:30Z');
-  const releases = fixtureReleases().map(release => ({ version: release.version, healthy: release.healthy, age_days: Math.floor((now - Date.parse(release.published)) / 86400000) }));
+  const tags = execFileSync('git', ['-C', dir, 'tag', '--list', '--sort=v:refname'], { encoding: 'utf8' }).trim().split(/\r?\n/).filter(Boolean);
+  const releases = tags.map(tag => {
+    const release = JSON.parse(execFileSync('git', ['-C', dir, 'show', `${tag}:release.json`], { encoding: 'utf8' }));
+    return { version: release.version, healthy: release.healthy, age_days: Math.floor((now - Date.parse(release.published)) / 86400000) };
+  });
   process.stdout.write(`${JSON.stringify(releases)}\n`);
   process.exit(0);
 }
@@ -39,17 +33,6 @@ if (reveal) {
   await writeFile(stateFile, JSON.stringify({ ...state, reveal }) + '\n');
   process.stdout.write(`${reveal}\n`);
   process.exit(0);
-}
-
-if (serve) {
-  const server = http.createServer(async (request, response) => {
-    if (request.method !== 'GET' || request.url !== '/releases') { response.writeHead(404); return response.end(); }
-    const {reveal: revealed} = JSON.parse(await readFile(stateFile, 'utf8'));
-    const releases = fixtureReleases().filter(release => release.version <= revealed).map(release => ({tag_name:release.tag,published_at:release.published,prerelease:false,draft:false}));
-    response.writeHead(200, {'Content-Type':'application/json'}); response.end(JSON.stringify(releases));
-  });
-  server.listen(0, '127.0.0.1', () => process.stdout.write(`http://127.0.0.1:${server.address().port}/releases\n`));
-  await new Promise(resolve => server.on('close', resolve));
 }
 
 await mkdir(join(dir, 'bin'), { recursive: true });
