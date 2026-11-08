@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {randomUUID} from 'node:crypto';
 import {hash,atomic} from './records/store.mjs';
 import {assistantEnvironment} from './assistant-files.mjs';
 import {nativeCardRows} from './card-commands.mjs';
@@ -88,7 +89,9 @@ export class NativeScheduler{
  // A connected provider reaches the record routines too (/api/provider).
  set executor(value){if(this.records)this.records.executor=value;}
  get executor(){return this.records?.executor||null;}
- async command(args,{timeout=120000,onStart,detail=false}={}){const timezone=this.store.get('settings','installation')?.timezone,env=assistantEnvironment({home:this.home,workspace:this.store.root});if(timezone)env.HERMES_TIMEZONE=timezone;const result=await this.run(this.executable,['cron',...args],{cwd:this.store.root,windowsHide:true,shell:false,env,maxBuffer:1024*1024,timeout,onStart});return detail?result:result.stdout;}
+ routineCommand(args){return {executable:this.executable,args:['cron',...args]};}
+ async runRoutineCommand(command,{timeout=120000,onStart,detail=false}={}){const timezone=this.store.get('settings','installation')?.timezone,env=assistantEnvironment({home:this.home,workspace:this.store.root});if(timezone)env.HERMES_TIMEZONE=timezone;const result=await this.run(command.executable,command.args,{cwd:this.store.root,windowsHide:true,shell:false,env,maxBuffer:1024*1024,timeout,onStart});return detail?{...result,command:[command.executable,...command.args]}:result.stdout;}
+ async command(args,options={}){return this.runRoutineCommand(this.routineCommand(args),options);}
  saveRunDiagnostic(entry){const diagnostics=readRunDiagnostics(this.store);diagnostics.runs=[...diagnostics.runs,entry].slice(-MAX_RUN_DIAGNOSTICS);writeRunDiagnostics(this.store,diagnostics);}
  updateRunDiagnostic(id,fields){const diagnostics=readRunDiagnostics(this.store),index=diagnostics.runs.findIndex(entry=>entry.id===id);if(index<0)return;diagnostics.runs[index]={...diagnostics.runs[index],...fields};writeRunDiagnostics(this.store,diagnostics);}
  setupNotice(failures,now){
@@ -742,16 +745,16 @@ export class NativeScheduler{
   this.requireOwner('Run the routine');
   if(id&&!nativeJobs(this.home,this.device).some(j=>j.id===id))throw Error('Choose an existing Hermes task');
   const release=this.lifecycle.acquire('routine run');
-  if(!release){this.saveRunDiagnostic({id:'rejected-'+(this.runDiagnosticSerial=(this.runDiagnosticSerial||0)+1),at:new Date(this.now()).toISOString(),admitted:false,lifecycle_owner:this.lifecycle.reason,requested_job:id||null});throw Error('The assistant is updating or another routine is already running.');}
-  const diagnosticId='run-'+(this.runDiagnosticSerial=(this.runDiagnosticSerial||0)+1),command=[this.executable,'cron',id?'run':'tick',...(id?[id]:[])];
-  this.saveRunDiagnostic({id:diagnosticId,at:new Date(this.now()).toISOString(),admitted:true,lifecycle_owner:'routine run',requested_job:id||null,command,child:{pid:null,tree:[]},exit_status:null,signal:null,stderr:'',run_log:{path:path.join(this.home,'cron','output'),command_output:''}});
-  const run=this.runNow(id,{diagnosticId});this.running=run;run.catch(()=>{}).finally(()=>{if(this.running===run)this.running=null;release();});
+  if(!release){this.saveRunDiagnostic({id:'rejected-'+randomUUID(),at:new Date(this.now()).toISOString(),admitted:false,lifecycle_owner:this.lifecycle.reason,requested_job:id||null});throw Error('The assistant is updating or another routine is already running.');}
+  const args=id?['run',id]:['tick'],diagnosticId='run-'+randomUUID(),command=this.routineCommand(args);
+  this.saveRunDiagnostic({id:diagnosticId,at:new Date(this.now()).toISOString(),admitted:true,lifecycle_owner:'routine run',requested_job:id||null,command:[command.executable,...command.args],child:{pid:null,tree:[]},exit_status:null,signal:null,stderr:'',run_log:{path:path.join(this.home,'cron','output'),command_output:''}});
+  const run=this.runNow(id,{diagnosticId,command});this.running=run;run.catch(()=>{}).finally(()=>{if(this.running===run)this.running=null;release();});
   return {started:true,...(id?{id}:{})};
  }
- async runNow(id,{diagnosticId=null}={}){
+ async runNow(id,{diagnosticId=null,command=null}={}){
   this.requireOwner('Run the routine');
-  const args=id?['run',id]:['tick'],started=child=>{if(diagnosticId)this.updateRunDiagnostic(diagnosticId,{child:{pid:child?.pid??null,tree:Array.isArray(child?.tree)?child.tree:[]}});};
-  const work=id?(()=>{if(!nativeJobs(this.home,this.device).some(j=>j.id===id))throw Error('Choose an existing Hermes task');return this.command(args,{timeout:this.tickLimit,onStart:started,detail:true});})():this.command(args,{timeout:this.tickLimit,onStart:started,detail:true});
+  const runCommand=command||this.routineCommand(id?['run',id]:['tick']),started=child=>{if(diagnosticId)this.updateRunDiagnostic(diagnosticId,{child:{pid:child?.pid??null,tree:Array.isArray(child?.tree)?child.tree:[]}});};
+  const work=id?(()=>{if(!nativeJobs(this.home,this.device).some(j=>j.id===id))throw Error('Choose an existing Hermes task');return this.runRoutineCommand(runCommand,{timeout:this.tickLimit,onStart:started,detail:true});})():this.runRoutineCommand(runCommand,{timeout:this.tickLimit,onStart:started,detail:true});
   let result;
   try{result=await beatWhile(work,()=>this.onProgress?.(),{limitMs:this.tickLimit+60000,every:this.beatEvery});}
   catch(error){if(diagnosticId)this.updateRunDiagnostic(diagnosticId,{exit_status:error?.code??null,signal:error?.signal??null,stderr:diagnostic(error),run_log:{path:path.join(this.home,'cron','output'),command_output:diagnostic({stderr:error?.stdout})}});throw error;}

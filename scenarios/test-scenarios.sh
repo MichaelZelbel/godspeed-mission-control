@@ -217,6 +217,37 @@ server_local_listener_port() {
 }
 server_local_listener_port
 
+server_run_job_keeps_success_evidence() {
+  local evidence=$TMP/server-run-job-evidence copies output
+  mkdir -p "$evidence"
+  if output=$(EVIDENCE="$evidence" SERVER_COPY_LOG="$evidence/copies" bash -c '
+    . "$1"
+    tables=0
+    server_table() {
+      tables=$((tables + 1))
+      if [ "$tables" = 1 ]; then printf "[{\\\"id\\\":\\\"brief\\\",\\\"last_run_at\\\":null,\\\"last_status\\\":null}]\\n" >"$2";
+      else printf "[{\\\"id\\\":\\\"brief\\\",\\\"last_run_at\\\":\\\"later\\\",\\\"last_status\\\":\\\"ok\\\"}]\\n" >"$2"; fi
+    }
+    server_post() { printf "{\\\"started\\\":true}\\n" >"$3"; printf 202; }
+    wait_for() { "${@:3}"; }
+    server_container() { printf fixture; }
+    sudo() { return 0; }
+    server_copy_evidence() { printf "%s|%s\\n" "$1" "$2" >>"$SERVER_COPY_LOG"; : >"$2"; }
+    server_run_job report "Coach reminders and habit check" 10
+  ' bash "$HERE/server-lib.sh" 2>&1); then
+    copies=$(<"$evidence/copies")
+    if grep -Fqx "/opt/data/full-candidate/workspace/.godspeed/routine-run-diagnostics.json|$evidence/routine-diagnostics-report.json" "$evidence/copies" \
+      && grep -Fqx "/opt/data/full-candidate/hermes/cron/output|$evidence/routine-output-report" "$evidence/copies"; then
+      ok 'a successful routine run retains its diagnostics and cron output evidence'
+    else
+      bad "a successful routine run retains its diagnostics and cron output evidence ($copies)"
+    fi
+  else
+    bad "a successful routine run retains its diagnostics and cron output evidence ($output)"
+  fi
+}
+server_run_job_keeps_success_evidence
+
 server_telegram_setup_override() {
   local bin=$TMP/server-telegram-override-bin trace=$TMP/server-telegram-override.trace output port
   mkdir -p "$bin" "$TMP/server-telegram-override-evidence"

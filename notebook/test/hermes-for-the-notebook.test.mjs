@@ -1,6 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';
 import {fileURLToPath} from 'node:url';import {execFileSync,spawnSync} from 'node:child_process';
-import {Store} from '../core/records/store.mjs';import {NativeScheduler} from '../core/native-scheduler.mjs';import {installStarter} from '../core/starter-workspace.mjs';
+import {Store} from '../core/records/store.mjs';import {NativeScheduler} from '../core/native-scheduler.mjs';import {runChild} from '../core/child-process.mjs';import {installStarter} from '../core/starter-workspace.mjs';
 import {SCRIPT_TIMEOUT_SECONDS,COMPRESSION_THRESHOLD_TOKENS,godspeedHermesSettings,setConfigValue,readConfigValue,configList,CRON_PROVIDER} from '../core/hermes-config.mjs';
 
 // What a live run of the book's prompts found on 9 October 2026 (a scratch Windows install, free
@@ -179,6 +179,37 @@ test('a failed admitted Hermes child retains its exit status and stderr',async t
  scheduler.startRun('brief');await scheduler.running.catch(()=>{});
  const run=JSON.parse(fs.readFileSync(path.join(store.state,'routine-run-diagnostics.json'),'utf8')).runs[0];
  assert.equal(run.exit_status,12);assert.equal(run.stderr,'Hermes routine failure');assert.deepEqual(run.child,{pid:4321,tree:[{pid:4321,parent:process.pid}]});
+});
+
+test('interrupted Hermes children retain their buffered output in routine diagnostics',async t=>{
+ const root=temporary(t,'interrupted-run-diagnostics'),home=path.join(root,'.hermes'),store=new Store(root,{device:'pc'}),jobs=path.join(home,'cron','jobs.json');
+ store.save('settings',{id:'installation',owner:'pc',timezone:'Europe/Berlin',delivery:'notebook'});fs.mkdirSync(path.dirname(jobs),{recursive:true});fs.writeFileSync(jobs,JSON.stringify({jobs:[{id:'brief',name:'Morning brief'}]}));
+ for(const code of ['TIMEOUT','OUTPUT_LIMIT','ABORTED']){
+  const scheduler=new NativeScheduler(store,{executable:'hermes',home,device:'pc',run:async()=>{throw Object.assign(Error('Hermes stopped'),{code,stdout:'before stdout '+code,stderr:'before stderr '+code});}});
+  scheduler.startRun('brief');await scheduler.running.catch(()=>{});
+  const run=JSON.parse(fs.readFileSync(path.join(store.state,'routine-run-diagnostics.json'),'utf8')).runs.at(-1);
+  assert.equal(run.exit_status,code);assert.match(run.stderr,new RegExp('before stderr '+code));assert.match(run.run_log.command_output,new RegExp('before stdout '+code));
+ }
+});
+
+test('run diagnostics use durable ids, one command specification, and scrubbed output',async t=>{
+ const root=temporary(t,'durable-run-diagnostics'),home=path.join(root,'.hermes'),store=new Store(root,{device:'pc'}),jobs=path.join(home,'cron','jobs.json');
+ store.save('settings',{id:'installation',owner:'pc',timezone:'Europe/Berlin',delivery:'notebook'});fs.mkdirSync(path.dirname(jobs),{recursive:true});fs.writeFileSync(jobs,JSON.stringify({jobs:[{id:'brief',name:'Morning brief'}]}));
+ const failure=Object.assign(Error('Command failed with exit code 12'),{code:12,stderr:'\u001b[31mapi_key=sk-secret-token-12345678\u001b[0m\nkept stderr',stdout:'\u001b[32mBearer secret-token-123456789\u001b[0m\nkept stdout'}),calls=[],run=async(executable,args)=>{calls.push([executable,...args]);throw failure;};
+ const first=new NativeScheduler(store,{executable:'hermes',home,device:'pc',run});first.startRun('brief');await first.running.catch(()=>{});
+ const second=new NativeScheduler(store,{executable:'hermes-renamed',home,device:'pc',run});second.startRun('brief');await second.running.catch(()=>{});
+ const diagnostics=JSON.parse(fs.readFileSync(path.join(store.state,'routine-run-diagnostics.json'),'utf8')).runs.filter(entry=>entry.admitted);
+ assert.equal(new Set(diagnostics.map(entry=>entry.id)).size,2);assert.deepEqual(diagnostics.map(entry=>entry.command),[['hermes','cron','run','brief'],['hermes-renamed','cron','run','brief']]);assert.deepEqual(calls,diagnostics.map(entry=>entry.command));
+ for(const entry of diagnostics){assert.doesNotMatch(entry.stderr,/sk-secret-token|\x1b\[/);assert.doesNotMatch(entry.run_log.command_output,/secret-token|\x1b\[/);assert.match(entry.stderr,/kept stderr/);assert.match(entry.run_log.command_output,/kept stdout/);}
+});
+
+test('a procfs snapshot failure leaves the admitted routine protected by its lease',async t=>{
+ const root=temporary(t,'procfs-routine-lease'),home=path.join(root,'.hermes'),store=new Store(root,{device:'pc'}),jobs=path.join(home,'cron','jobs.json'),readdir=fs.readdirSync;
+ store.save('settings',{id:'installation',owner:'pc',timezone:'Europe/Berlin',delivery:'notebook'});fs.mkdirSync(path.dirname(jobs),{recursive:true});fs.writeFileSync(jobs,JSON.stringify({jobs:[{id:'brief',name:'Morning brief'}]}));
+ fs.readdirSync=(file,...args)=>{if(file==='/proc')throw Object.assign(Error('proc unavailable'),{code:'EACCES'});return readdir(file,...args);};t.after(()=>{fs.readdirSync=readdir;});
+ let calls=0;const scheduler=new NativeScheduler(store,{executable:'hermes',home,device:'pc',tickLimit:500,run:(executable,args,options)=>{calls++;return runChild(process.execPath,['-e','setTimeout(()=>process.exit(0),200)'],{timeoutMs:options.timeout,maxBytes:options.maxBuffer,onStart:options.onStart});}});
+ scheduler.startRun('brief');await new Promise(resolve=>setTimeout(resolve,30));
+ assert.throws(()=>scheduler.startRun('brief'),/updating or another routine is already running/);assert.equal(calls,1);await scheduler.running;
 });
 
 // Hermes stops a cron script at cron.script_timeout_seconds (3600 unless set), one setting for all
