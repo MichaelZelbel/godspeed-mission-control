@@ -1599,6 +1599,45 @@ charm_log_source_boundary() {
   fi
 }
 charm_log_source_boundary
+
+charm_five_vents_boundary() {
+  local folder=$TMP/charm-five-vents hermes output code
+  hermes=$folder/hermes
+  mkdir -p "$hermes/logs"
+  output=$(cd "$HERE" && EVIDENCE="$folder/missing" HERMES="$hermes" WRITE_AUDIT=no bash -c '
+    source <(sed -e "/^scenario_arguments /d" -e "/^if \[ \"\$CHECK_ONLY\" = yes \]; then/,\$d" "$1")
+    fail(){ printf "%s\\n" "$*"; exit 42; }
+    say(){ :; }
+    assistant_commands(){ : >"$1"; }
+    chat_panel_new_conversation(){ : >"$1"; }
+    chat_panel_says(){ : >"$2"; if [ "$WRITE_AUDIT" = yes ] && [ "$1" != no ]; then printf "{\\\"conversation\\\":\\\"vent\\\"}\\n" >>"$HERMES/logs/godspeed-charm.log"; fi; }
+    mkdir -p "$EVIDENCE"
+    five_vents
+  ' bash "$HERE/charm-challenge.sh" 2>&1)
+  code=$?
+  if [ "$code" = 42 ] && [[ $output == *"installed panel Charm judgement did not write evidence to $hermes/logs/godspeed-charm.log"* ]]; then
+    ok 'five vents name the missing Charm source log'
+  else
+    bad "five vents did not name the missing Charm source log (exit $code: $output)"
+  fi
+  output=$(cd "$HERE" && EVIDENCE="$folder/written" HERMES="$hermes" WRITE_AUDIT=yes bash -c '
+    source <(sed -e "/^scenario_arguments /d" -e "/^if \[ \"\$CHECK_ONLY\" = yes \]; then/,\$d" "$1")
+    fail(){ printf "%s\\n" "$*"; exit 42; }
+    say(){ :; }
+    assistant_commands(){ : >"$1"; }
+    chat_panel_new_conversation(){ : >"$1"; }
+    chat_panel_says(){ : >"$2"; if [ "$WRITE_AUDIT" = yes ] && [ "$1" != no ]; then printf "{\\\"conversation\\\":\\\"vent\\\"}\\n" >>"$HERMES/logs/godspeed-charm.log"; fi; }
+    mkdir -p "$EVIDENCE"
+    five_vents
+  ' bash "$HERE/charm-challenge.sh" 2>&1)
+  code=$?
+  if [ "$code" = 0 ] && [ "$(grep -c '^{' "$folder/written/charm-log.txt")" = 5 ]; then
+    ok 'five vents retain the source log their chat actions wrote'
+  else
+    bad "five vents did not retain the source log their chat actions wrote (exit $code: $output)"
+  fi
+}
+charm_five_vents_boundary
 charm_good "$C/good"
 passes 'a challenge started, vented at, kept once and started over twice' \
   charm-challenge "$C/good" 'started over with a new end date each and 2 restarts'
