@@ -3360,6 +3360,7 @@ section chat-tidy-at-night
 CT=$TMP/ct
 rm -rf "$CT/good"
 mkdir -p "$CT/good"
+printf '{"configured":true}\n' >"$CT/good/setup.json"
 printf 'messages=40 tokens=174000\n' >"$CT/good/long-before.txt"
 printf 'messages=9 tokens=3100\n' >"$CT/good/long-after.txt"
 printf 'summarised in 6s: status compressed, messages 40 -> 9, about 174000 -> 3100 tokens (tidied)\n' >"$CT/good/long-log"
@@ -3374,6 +3375,10 @@ printf '0\n' >"$CT/good/short-exit"
 printf 'messages=12 tokens=20000\n' >"$CT/good/short-count.txt"
 printf '60000\n' >"$CT/good/min-tokens.txt"
 passes 'a long chat shortened and logged, the next message plain, a short chat untouched' chat-tidy-at-night "$CT/good" 'the long conversation went from 40 to 9 messages'
+copy "$CT/good" "$CT/not-configured"
+printf '{"configured":false}\n' >"$CT/not-configured/setup.json"
+refuses 'a first goal that did not configure the install' chat-tidy-at-night "$CT/not-configured" \
+  'did not say the install was configured after the owner'"'"'s first goal'
 # The limit is read by the scenario's own extraction from the runner the generated wrapper imports.
 CT_SCRIPT="$ROOT/scenarios/chat-tidy-at-night.sh"
 CT_SED=$(grep -m1 "sed -n 's/.\*\"--min-tokens\"" "$CT_SCRIPT" | sed 's/^ *//; s/ *|.*$//; s#"\$HERMES/scripts/godspeed_routines.py"#"$1"#')
