@@ -4017,6 +4017,56 @@ facts_good() {
   cp "$f/after.json" "$f/second.json"
 }
 facts_good "$DF2/good"
+DF_SCRIPT="$ROOT/scenarios/day-becomes-facts.sh"
+day_facts_provider_request_is_removed() {
+  local folder=$TMP/day-facts-provider-action key='day-facts-private-key' code
+  rm -rf "$folder"
+  mkdir -p "$folder/home/cron" "$folder/root" "$folder/tmp"
+  printf '%s\n' 'Remember what you said' >"$folder/home/cron/jobs.json"
+  if ACTION_HOME="$folder/home" ACTION_KEY="$key" ACTION_POSTED="$folder/posted" \
+    GODSPEED_SCENARIO_ROOT="$folder/root" GODSPEED_SCENARIO_WORK="$folder/work" TMPDIR="$folder/tmp" \
+    GODSPEED_SCENARIO_AI_KEY="$key" GODSPEED_SCENARIO_AI_URL='https://api.anthropic.com/v1' \
+    GODSPEED_SCENARIO_AI_MODEL='claude-haiku-4-5' bash -c '
+      . "$1"
+      install_the_stage_line() { :; }
+      need_node() { NODE=$(command -v node); }
+      wait_for() { :; }
+      assistant_home() { HERMES=$ACTION_HOME; }
+      facts_routine_script() { printf scenario-facts; }
+      run_facts_routine() { :; }
+      facts_snapshot() { :; }
+      check() { :; }
+      curl() {
+        local data= out=
+        while [ "$#" -gt 0 ]; do
+          case "$1" in
+            -o) out=$2; shift 2 ;;
+            --data-binary) data=${2#@}; shift 2 ;;
+            *) shift ;;
+          esac
+        done
+        if [ -n "$data" ]; then
+          [ -f "$data" ] && grep -F -- "$ACTION_KEY" "$data" >/dev/null || return 1
+          printf '{"connected":true}\n' >"$out"
+          : >"$ACTION_POSTED"
+          printf 200
+        else
+          printf '{}\n'
+        fi
+      }
+      act
+    ' _ "$DF_SCRIPT" >"$folder/action.log" 2>&1; then
+    code=0
+  else
+    code=$?
+  fi
+  if [ "$code" = 0 ] && [ -f "$folder/posted" ] && ! rg -F -- "$key" "$folder/tmp" >/dev/null 2>&1; then
+    ok 'a successful remembered-facts Settings POST removes its private key request'
+  else
+    bad "a successful remembered-facts Settings POST did not remove its private key request (exit $code: $(cat "$folder/action.log" 2>/dev/null))"
+  fi
+}
+day_facts_provider_request_is_removed
 facts_archive_value() { # <message id> <field>
   node - "$DF2/good/archive.json" "$1" "$2" <<'NODE'
 const [file,id,field]=process.argv.slice(2),archive=require(file);
