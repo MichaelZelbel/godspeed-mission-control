@@ -1,24 +1,4 @@
-import fs from 'node:fs';
 import {spawn} from 'node:child_process';
-const MAX_CHILD_TREE=100;
-
-function processRow(pid){
- try{
-  const fields=fs.readFileSync('/proc/'+pid+'/stat','utf8').match(/^\d+ \(.*\) (.*)$/s)?.[1].trim().split(/\s+/);
-  return fields?{pid:Number(pid),parent:Number(fields[1])}:null;
- }catch{return null;}
-}
-// A process has gone by the time its close event arrives. Take this bounded
-// snapshot when a caller admits a child so a failed external routine can still
-// say which process tree it actually started.
-export function childTree(pid){
- if(process.platform!=='linux')return Number.isInteger(pid)?[{pid,parent:null}]:[];
- const root=processRow(pid);if(!root)return [];
- let rows;try{rows=fs.readdirSync('/proc').filter(name=>/^\d+$/.test(name)).map(processRow).filter(Boolean);}catch{return [root];}
- const tree=[root];
- for(let index=0;index<tree.length&&tree.length<MAX_CHILD_TREE;index++)for(const row of rows)if(row.parent===tree[index].pid&&!tree.some(entry=>entry.pid===row.pid)){tree.push(row);if(tree.length===MAX_CHILD_TREE)break;}
- return tree;
-}
 
 // One way to run a helper program (Hermes, Python, an assistant CLI) and hear
 // back from it. Until 6 October 2026 each caller wrote its own: a program that
@@ -47,7 +27,7 @@ export function runChild(executable,args,{cwd,env,input,timeoutMs=0,maxBytes=4*1
   let child;
   try{child=spawnProcess(executable,args,{cwd,env,windowsHide:true,shell:false,detached:process.platform!=='win32',stdio:[input===undefined?'ignore':'pipe','pipe','pipe']});}
   catch(error){return reject(Object.assign(new Error('The program could not start'),{code:'SPAWN_FAILED',cause:error}));}
-  const started={pid:child.pid,tree:onStart?childTree(child.pid):[]};
+  const started={pid:child.pid};
   try{onStart?.(started);}catch{}
   const out=[],err=[];let bytes=0,errBytes=0,settled=false,timer=null;
   const finish=(error,value)=>{if(settled)return;settled=true;clearTimeout(timer);signal?.removeEventListener('abort',abort);error?reject(error):resolve(value);};
@@ -75,6 +55,6 @@ export function runChild(executable,args,{cwd,env,input,timeoutMs=0,maxBytes=4*1
 // error naming the exit code otherwise.
 export async function runCommand(executable,args,{timeout,maxBuffer,...options}={}){
  const result=await runChild(executable,args,{...options,timeoutMs:timeout||0,maxBytes:maxBuffer||4*1024*1024});
- if(result.code!==0)throw Object.assign(new Error('Command failed with exit code '+result.code),{code:result.code,signal:result.signal,pid:result.pid,tree:result.tree,stdout:result.stdout,stderr:result.stderr});
+ if(result.code!==0)throw Object.assign(new Error('Command failed with exit code '+result.code),{code:result.code,signal:result.signal,pid:result.pid,stdout:result.stdout,stderr:result.stderr});
  return result;
 }

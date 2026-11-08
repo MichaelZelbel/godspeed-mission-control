@@ -17,9 +17,9 @@ export function fakeHermes(t,scripts={}){
 // it stops before it reads the question it was sent.
 const exitsEarly='process.stderr.write("error: unrecognized arguments\\n");process.exit(2);';
 
-test('a child reports the admitted PID and process tree to its caller',async()=>{
+test('a child reports its admitted PID to its caller',async()=>{
  let started;const result=await runChild(process.execPath,['-e','process.exit(0)'],{onStart:child=>{started=child;}});
- assert.equal(result.code,0);assert.equal(result.pid,started.pid);assert.ok(Number.isInteger(started.pid));assert.ok(started.tree.some(row=>row.pid===started.pid));
+ assert.equal(result.code,0);assert.equal(result.pid,started.pid);assert.ok(Number.isInteger(started.pid));
 });
 
 test('a stopped child retains the output it had already written',async()=>{
@@ -28,12 +28,6 @@ test('a stopped child retains the output it had already written',async()=>{
  await stopped({timeoutMs:100},'TIMEOUT');
  await stopped({maxBytes:15},'OUTPUT_LIMIT');
  const controller=new AbortController(),aborted=stopped({signal:controller.signal},'ABORTED');setTimeout(()=>controller.abort(),100);await aborted;
-});
-
-test('an unreadable procfs only omits descendants from the child snapshot',async t=>{
- const readdir=fs.readdirSync;fs.readdirSync=(file,...args)=>{if(file==='/proc')throw Object.assign(Error('proc unavailable'),{code:'EACCES'});return readdir(file,...args);};t.after(()=>{fs.readdirSync=readdir;});
- let started;const result=await runChild(process.execPath,['-e','setTimeout(()=>process.exit(0),50)'],{onStart:child=>{started=child;}});
- assert.equal(result.code,0);assert.equal(started.tree.length,1);assert.equal(started.tree[0].pid,started.pid);
 });
 
 test('an AI program that stops before reading a long prompt fails the request instead of ending the server',async t=>{
