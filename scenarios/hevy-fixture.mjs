@@ -3,7 +3,7 @@
 import http from 'node:http';
 import { readFile, writeFile } from 'node:fs/promises';
 
-const acceptedKey = '00000000-0000-4000-8000-000000000001';
+const acceptedKey = '84f3c5d2-9a7e-4b18-8c65-3d7f1a9e6b24';
 const workout = (id, title, exercise, weight_kg, reps, start) => ({
   id, title, description: '', start_time: start, end_time: new Date(Date.parse(start) + 3600000).toISOString(),
   exercises: [{ index: 0, title: exercise, notes: null, superset_id: null, sets: [{ index: 0, type: 'normal', weight_kg, reps, distance_meters: null, duration_seconds: null, rpe: null, custom_metric: null }] }],

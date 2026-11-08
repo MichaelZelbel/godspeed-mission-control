@@ -105,7 +105,7 @@ persistence_roots() { # <docker|native> <scan name>
     native)
       assistant_home "$scan"
       NATIVE_PERSISTENCE_ROOTS=("$ROOT" "$STATE" "$HERMES")
-      NATIVE_PERMITTED_HEVY_SETTINGS=$HERMES/hevy.json
+      NATIVE_PERMITTED_HEVY_SETTINGS=$HOME/.godspeed/workouts/hevy.json
       ;;
     docker)
       descriptor=$(in_server find /opt/data -path '*/.godspeed/assistant.json' -type f -print -quit) ||
@@ -115,7 +115,7 @@ persistence_roots() { # <docker|native> <scan name>
         fail "$scan could not read the Docker assistant home from $descriptor"
       [ -n "$home" ] || fail "$scan found no Docker assistant home in $descriptor"
       DOCKER_PERSISTENCE_ROOTS=(/opt/data "$home")
-      DOCKER_PERMITTED_HEVY_SETTINGS=$home/hevy.json
+      DOCKER_PERMITTED_HEVY_SETTINGS=$home/.godspeed/workouts/hevy.json
       ;;
     *) fail "unknown $platform persistence scan" ;;
   esac
@@ -241,7 +241,7 @@ NODE
 }
 
 scan_fixture_key() {
-  local key='00000000-0000-4000-8000-000000000001' code native_paths=$EVIDENCE/.native-key-hits docker_paths=$EVIDENCE/.docker-key-hits
+  local key='84f3c5d2-9a7e-4b18-8c65-3d7f1a9e6b24' code native_paths=$EVIDENCE/.native-key-hits docker_paths=$EVIDENCE/.docker-key-hits
   persistence_roots native 'native accepted-key scan'
   if native_persistence_matches "$key" "$native_paths" --exclude-dir=.git --exclude-dir=node_modules; then
     [ -s "$native_paths" ] || fail 'native accepted-key scan completed with no path output after a match'
@@ -315,7 +315,7 @@ act() {
       fail "$platform Settings did not reject the made-up Hevy key (HTTP $code)"
     refused_not_retained "$platform"
   done
-  printf '{"key":"00000000-0000-4000-8000-000000000001"}\n' >"$EVIDENCE/.accepted-key.json"
+  printf '{"key":"84f3c5d2-9a7e-4b18-8c65-3d7f1a9e6b24"}\n' >"$EVIDENCE/.accepted-key.json"
   platform_before docker "$EVIDENCE/.accepted-key.json"
   platform_before native "$EVIDENCE/.accepted-key.json"
   node "$HERE/hevy-fixture.mjs" --state "$EVIDENCE/fixture-state.json" --log "$EVIDENCE/fixture.log" --mutate ||

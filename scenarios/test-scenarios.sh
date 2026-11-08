@@ -3693,7 +3693,7 @@ refuses 'a refused key retained' workouts-from-hevy "$WH/refused-kept" 'native r
 copy "$WH/good" "$WH/refused-in-settings"; sed -i 's/"paths":\[\]/"paths":["\/opt\/data\/settings.json"]/' "$WH/refused-in-settings/docker.json"
 refuses 'a refused key kept outside hevy.json' workouts-from-hevy "$WH/refused-in-settings" 'docker retained or accepted'
 RFS=$WH/refused-scan
-mkdir -p "$RFS/root/.godspeed/integrated-runtime/versions/test/scenarios" "$RFS/assistant"
+mkdir -p "$RFS/root/.godspeed/integrated-runtime/versions/test/scenarios" "$RFS/root/.godspeed/workouts" "$RFS/assistant"
 printf '{"home":"%s"}\n' "$RFS/assistant" >"$RFS/root/.godspeed/assistant.json"
 RFS_SOURCE=$RFS/root/.godspeed/integrated-runtime/versions/test/scenarios/workouts-from-hevy.sh
 RFS_TEST_SOURCE=$RFS/root/.godspeed/integrated-runtime/versions/test/scenarios/test-scenarios.sh
@@ -3762,7 +3762,7 @@ ACT_NODE_ORDER=$(env -u NODE GODSPEED_SCENARIO_ROOT="$RFS/root" ACTION_EVENTS="$
     printf "{}\\n" >"$3"
     case $(cat "$2") in
       '{"key":"refused-scenario-key"}') printf 400 ;;
-      '{"key":"00000000-0000-4000-8000-000000000001"}') printf 200 ;;
+      '{"key":"84f3c5d2-9a7e-4b18-8c65-3d7f1a9e6b24"}') printf 200 ;;
       *) printf 400 ;;
     esac
   }
@@ -3775,7 +3775,7 @@ ACT_NODE_ORDER=$(env -u NODE GODSPEED_SCENARIO_ROOT="$RFS/root" ACTION_EVENTS="$
   cat "$ACTION_EVENTS"
 ' action-order "$ROOT/scenarios/workouts-from-hevy.sh" "$RFS/action-evidence" "$ROOT/scenarios" 2>&1)
 case "$ACT_NODE_ORDER" in
-  $'need-node\nsettings-docker:{"key":"refused-scenario-key"}\nsettings-native:{"key":"refused-scenario-key"}\nrefused-docker:set\nrefused-native:set\nsettings-docker:{"key":"00000000-0000-4000-8000-000000000001"}\nsettings-native:{"key":"00000000-0000-4000-8000-000000000001"}') ok "the Hevy action selects Node before its scans and sends both Settings calls their key" ;;
+  $'need-node\nsettings-docker:{"key":"refused-scenario-key"}\nsettings-native:{"key":"refused-scenario-key"}\nrefused-docker:set\nrefused-native:set\nsettings-docker:{"key":"84f3c5d2-9a7e-4b18-8c65-3d7f1a9e6b24"}\nsettings-native:{"key":"84f3c5d2-9a7e-4b18-8c65-3d7f1a9e6b24"}') ok "the Hevy action selects Node before its scans and sends both Settings calls their key" ;;
   *) bad "the Hevy action did not select Node before its scans and send both Settings calls their key ($ACT_NODE_ORDER)" ;;
 esac
 NO_NODE_ACTION=$(env -u NODE GODSPEED_SCENARIO_ROOT="$RFS/root" bash -c '
@@ -3789,11 +3789,11 @@ case "$NO_NODE_ACTION_CODE $NO_NODE_ACTION" in
   "1 "*"FAIL workouts-from-hevy: node is not on this machine and the install carries none"*) ok "the Hevy action stops before its fixture when it cannot select Node" ;;
   *) bad "the Hevy action did not stop before its fixture without Node (exit $NO_NODE_ACTION_CODE: $NO_NODE_ACTION)" ;;
 esac
-printf '00000000-0000-4000-8000-000000000001\n' >"$RFS/assistant/hevy.json"
-printf '00000000-0000-4000-8000-000000000001\n' >"$RFS_SOURCE"
-printf '00000000-0000-4000-8000-000000000001\n' >"$RFS_TEST_SOURCE"
-printf '00000000-0000-4000-8000-000000000001\n' >"$RFS_FIXTURE_SOURCE"
-ACCEPTED_SCAN=$(GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy NODE="$(command -v node)" bash -c '
+printf '84f3c5d2-9a7e-4b18-8c65-3d7f1a9e6b24\n' >"$RFS/root/.godspeed/workouts/hevy.json"
+printf '84f3c5d2-9a7e-4b18-8c65-3d7f1a9e6b24\n' >"$RFS_SOURCE"
+printf '84f3c5d2-9a7e-4b18-8c65-3d7f1a9e6b24\n' >"$RFS_TEST_SOURCE"
+printf '84f3c5d2-9a7e-4b18-8c65-3d7f1a9e6b24\n' >"$RFS_FIXTURE_SOURCE"
+ACCEPTED_SCAN=$(HOME="$RFS/root" GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy NODE="$(command -v node)" bash -c '
   cd "$3"
   . "$1"
   install_paths
@@ -3802,7 +3802,7 @@ ACCEPTED_SCAN=$(GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy N
     case $1 in
       find) printf '%s\n' /opt/data/.godspeed/assistant.json ;;
       node) printf '%s' /root/.hermes ;;
-      grep) printf "%s\n" /root/.hermes/hevy.json ;;
+      grep) printf "%s\n" /root/.hermes/.godspeed/workouts/hevy.json ;;
     esac
   }
   scan_fixture_key
@@ -3812,8 +3812,8 @@ case "$ACCEPTED_SCAN" in
   '{"clean":true,"paths":[]}') ok "the accepted key's permitted native and Docker Settings records are ignored" ;;
   *) bad "the accepted key's permitted native or Docker Settings record was not ignored ($ACCEPTED_SCAN)" ;;
 esac
-rm "$RFS/assistant/hevy.json"
-ACCEPTED_SOURCE_SCAN=$(GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy NODE="$(command -v node)" bash -c '
+rm "$RFS/root/.godspeed/workouts/hevy.json"
+ACCEPTED_SOURCE_SCAN=$(HOME="$RFS/root" GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy NODE="$(command -v node)" bash -c '
   cd "$3"
   . "$1"
   install_paths
@@ -3832,8 +3832,8 @@ case "$ACCEPTED_SOURCE_SCAN" in
   '{"clean":true,"paths":[]}') ok "the accepted-key scan ignores immutable installed scenario sources" ;;
   *) bad "the accepted-key scan treated immutable installed scenario sources as persisted credentials ($ACCEPTED_SOURCE_SCAN)" ;;
 esac
-printf '00000000-0000-4000-8000-000000000001\n' >"$RUNTIME_STATE"
-ACCEPTED_RUNTIME_SCAN=$(GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy NODE="$(command -v node)" bash -c '
+printf '84f3c5d2-9a7e-4b18-8c65-3d7f1a9e6b24\n' >"$RUNTIME_STATE"
+ACCEPTED_RUNTIME_SCAN=$(HOME="$RFS/root" GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy NODE="$(command -v node)" bash -c '
   cd "$3"
   . "$1"
   install_paths
@@ -3853,9 +3853,9 @@ case "$ACCEPTED_RUNTIME_SCAN" in
   *) bad "the accepted-key scan missed retained state below a runtime version ($ACCEPTED_RUNTIME_SCAN)" ;;
 esac
 rm "$RUNTIME_STATE"
-printf '00000000-0000-4000-8000-000000000001\n' >"$RFS/assistant/hevy.json"
-printf '00000000-0000-4000-8000-000000000001\n' >"$RFS/assistant/settings.json"
-ACCEPTED_SCAN=$(GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy NODE="$(command -v node)" bash -c '
+printf '84f3c5d2-9a7e-4b18-8c65-3d7f1a9e6b24\n' >"$RFS/assistant/hevy.json"
+printf '84f3c5d2-9a7e-4b18-8c65-3d7f1a9e6b24\n' >"$RFS/assistant/settings.json"
+ACCEPTED_SCAN=$(HOME="$RFS/root" GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy NODE="$(command -v node)" bash -c '
   cd "$3"
   . "$1"
   install_paths
@@ -3876,8 +3876,8 @@ case "$ACCEPTED_SCAN" in
 esac
 rm -f "$RFS/assistant/settings.json"
 mkdir -p "$RFS/root/logs"
-printf '00000000-0000-4000-8000-000000000001\n' >"$RFS/root/logs/hevy.json"
-ACCEPTED_SCAN=$(GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy NODE="$(command -v node)" bash -c '
+printf '84f3c5d2-9a7e-4b18-8c65-3d7f1a9e6b24\n' >"$RFS/root/logs/hevy.json"
+ACCEPTED_SCAN=$(HOME="$RFS/root" GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy NODE="$(command -v node)" bash -c '
   cd "$3"
   . "$1"
   install_paths
@@ -3898,7 +3898,7 @@ case "$ACCEPTED_SCAN" in
 esac
 rm -f "$RFS/root/logs/hevy.json"
 mkdir -p "$RFS/assistant"
-ACCEPTED_SCAN=$(GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy NODE="$(command -v node)" bash -c '
+ACCEPTED_SCAN=$(HOME="$RFS/root" GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy NODE="$(command -v node)" bash -c '
   cd "$3"
   . "$1"
   install_paths
@@ -3917,9 +3917,9 @@ case "$ACCEPTED_SCAN" in
   '{"clean":false,"paths":["/srv/non-default-hermes/retained.json"]}') ok "the accepted-key scan finds a leak in the recorded non-default Docker assistant home" ;;
   *) bad "the accepted-key scan missed a recorded non-default Docker assistant-home leak ($ACCEPTED_SCAN)" ;;
 esac
-mkdir -p "$RFS/root/dockerhome"
-printf '00000000-0000-4000-8000-000000000001\n' >"$RFS/root/dockerhome/hevy.json"
-ACCEPTED_SCAN=$(GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy NODE="$(command -v node)" bash -c '
+mkdir -p "$RFS/root/dockerhome/.godspeed/workouts"
+printf '84f3c5d2-9a7e-4b18-8c65-3d7f1a9e6b24\n' >"$RFS/root/dockerhome/.godspeed/workouts/hevy.json"
+ACCEPTED_SCAN=$(HOME="$RFS/root" GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy NODE="$(command -v node)" bash -c '
   cd "$3"
   . "$1"
   install_paths
@@ -3935,11 +3935,13 @@ ACCEPTED_SCAN=$(GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy N
   cat "$EVIDENCE/key-scan.json"
 ' accepted-scan "$ROOT/scenarios/workouts-from-hevy.sh" "$RFS" "$ROOT/scenarios" 2>/dev/null)
 case "$ACCEPTED_SCAN" in
-  '{"clean":false,"paths":["'"$RFS"'/root/dockerhome/hevy.json"]}') ok "a native retained key matching the Docker Settings pathname is kept" ;;
+  '{"clean":false,"paths":["'"$RFS"'/root/dockerhome/.godspeed/workouts/hevy.json"]}') ok "a native retained key matching the Docker Settings pathname is kept" ;;
   *) bad "a native retained key matching the Docker Settings pathname was ignored ($ACCEPTED_SCAN)" ;;
 esac
-rm -f "$RFS/root/dockerhome/hevy.json"
-ACCEPTED_SCAN=$(GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy NODE="$(command -v node)" bash -c '
+rm -f "$RFS/root/dockerhome/.godspeed/workouts/hevy.json"
+mkdir -p "$RFS/root/.godspeed/workouts"
+printf '84f3c5d2-9a7e-4b18-8c65-3d7f1a9e6b24\n' >"$RFS/root/.godspeed/workouts/hevy.json"
+ACCEPTED_SCAN=$(HOME="$RFS/root" GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy NODE="$(command -v node)" bash -c '
   cd "$3"
   . "$1"
   install_paths
@@ -3948,14 +3950,14 @@ ACCEPTED_SCAN=$(GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy N
     case $1 in
       find) printf "%s\\n" /opt/data/.godspeed/assistant.json ;;
       node) printf "%s" /srv/non-default-hermes ;;
-      grep) printf "%s\\n" "'$RFS'/assistant/hevy.json" ;;
+      grep) printf "%s\\n" "'$RFS'/root/.godspeed/workouts/hevy.json" ;;
     esac
   }
   scan_fixture_key
   cat "$EVIDENCE/key-scan.json"
 ' accepted-scan "$ROOT/scenarios/workouts-from-hevy.sh" "$RFS" "$ROOT/scenarios" 2>/dev/null)
 case "$ACCEPTED_SCAN" in
-  '{"clean":false,"paths":["'"$RFS"'/assistant/hevy.json"]}') ok "a Docker retained key matching the native Settings pathname is kept" ;;
+  '{"clean":false,"paths":["'"$RFS"'/root/.godspeed/workouts/hevy.json"]}') ok "a Docker retained key matching the native Settings pathname is kept" ;;
   *) bad "a Docker retained key matching the native Settings pathname was ignored ($ACCEPTED_SCAN)" ;;
 esac
 rm -rf "$RFS/assistant"
@@ -4174,23 +4176,23 @@ for _ in $(seq 1 20); do [ -s "$HF/port" ] && break; sleep 0.1; done
 HF_PORT=$(cat "$HF/port")
 HF_BAD=$(curl -s -o /dev/null -w '%{http_code}' -H 'api-key: not-the-key' "http://127.0.0.1:$HF_PORT/v1/workouts")
 HF_BASE=http://127.0.0.1:$HF_PORT
-HF_GOOD=$(curl -s -H 'api-key: 00000000-0000-4000-8000-000000000001' "$HF_BASE/v1/workouts")
+HF_GOOD=$(curl -s -H 'api-key: 84f3c5d2-9a7e-4b18-8c65-3d7f1a9e6b24' "$HF_BASE/v1/workouts")
 HF_INITIAL=$(ROOT=$ROOT HF_BASE=$HF_BASE node --input-type=module - <<'NODE'
 const { Hevy } = await import(process.env.ROOT + '/third-party/addons/godspeed-workouts/lib/hevy.mjs');
-const rows = await new Hevy({ key: '00000000-0000-4000-8000-000000000001', base: process.env.HF_BASE, pauseMs: 0 }).allWorkouts();
+const rows = await new Hevy({ key: '84f3c5d2-9a7e-4b18-8c65-3d7f1a9e6b24', base: process.env.HF_BASE, pauseMs: 0 }).allWorkouts();
 process.stdout.write(rows.map(row => row.id).sort().join(','));
 NODE
 )
 node "$ROOT/scenarios/hevy-fixture.mjs" --state "$HF/state" --log "$HF/log" --mutate
-HF_EVENTS=$(curl -s -H 'api-key: 00000000-0000-4000-8000-000000000001' "$HF_BASE/v1/workouts/events")
+HF_EVENTS=$(curl -s -H 'api-key: 84f3c5d2-9a7e-4b18-8c65-3d7f1a9e6b24' "$HF_BASE/v1/workouts/events")
 HF_CHANGED=$(ROOT=$ROOT HF_BASE=$HF_BASE node --input-type=module - <<'NODE'
 const { Hevy } = await import(process.env.ROOT + '/third-party/addons/godspeed-workouts/lib/hevy.mjs');
-const events = await new Hevy({ key: '00000000-0000-4000-8000-000000000001', base: process.env.HF_BASE, pauseMs: 0 }).eventsSince('2026-01-01T00:00:00Z');
+const events = await new Hevy({ key: '84f3c5d2-9a7e-4b18-8c65-3d7f1a9e6b24', base: process.env.HF_BASE, pauseMs: 0 }).eventsSince('2026-01-01T00:00:00Z');
 process.stdout.write(events.map(event => event.type === 'updated' ? event.workout.id : event.id).sort().join(','));
 NODE
 )
 kill "$HF_PID" 2>/dev/null || true
-if [ "$HF_BAD" = 401 ] && [ "$HF_INITIAL" = 'canal-pull,harbor-strength' ] && [ "$HF_CHANGED" = 'canal-pull,harbor-strength' ] && grep -q 'harbor-strength' <<<"$HF_GOOD" && grep -q 'canal-pull' <<<"$HF_EVENTS" && ! grep -q '00000000-0000-4000-8000-000000000001' "$HF/log"; then ok 'the local Hevy fixture refuses, follows the add-on contract, changes and redacts'; else bad 'the local Hevy fixture does not refuse, follow the add-on contract, change and redact'; fi
+if [ "$HF_BAD" = 401 ] && [ "$HF_INITIAL" = 'canal-pull,harbor-strength' ] && [ "$HF_CHANGED" = 'canal-pull,harbor-strength' ] && grep -q 'harbor-strength' <<<"$HF_GOOD" && grep -q 'canal-pull' <<<"$HF_EVENTS" && ! grep -q '84f3c5d2-9a7e-4b18-8c65-3d7f1a9e6b24' "$HF/log"; then ok 'the local Hevy fixture refuses, follows the add-on contract, changes and redacts'; else bad 'the local Hevy fixture does not refuse, follow the add-on contract, change and redact'; fi
 HFD=$TMP/hermes-fixture
 HFD_LOG=$TMP/hermes-fixture.log
 if node "$ROOT/scenarios/hermes-update-fixture.mjs" --dir "$HFD" >/dev/null \
