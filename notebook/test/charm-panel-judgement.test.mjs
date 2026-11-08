@@ -192,7 +192,7 @@ module._log({'conversation':'plugin'},{'verdict':'answer','source':'rule','why':
  }finally{fs.rmSync(dir,{recursive:true,force:true});}
 });
 
-test('the plugin audit writer recovers a post-boot lock with its reused PID',{skip:skip||process.platform!=='linux'},()=>{
+test('the plugin audit writer recovers a post-boot lock with its reused PID and waits for its live owner',{skip:skip||process.platform!=='linux'},()=>{
  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-charm-audit-self-pid-'));try{
   const home=path.join(dir,'home'),log=path.join(home,auditContract.relativePath),lock=log+'.lock';
   const program=`import datetime,importlib.util,json,os,sys,time
@@ -207,12 +207,18 @@ with open(lock,'w',encoding='utf-8') as f: json.dump({'pid':os.getpid(),'token':
 spec=importlib.util.spec_from_file_location('charm_plugin_under_test',plugin)
 module=importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
-module._log({'conversation':'plugin'},{'verdict':'answer','source':'rule','why':None},'answered no')`;
+module._log({'conversation':'plugin'},{'verdict':'answer','source':'rule','why':None},'answered no')
+with open(lock,'w',encoding='utf-8') as f: json.dump({'pid':os.getpid(),'token':'live-owner','at':datetime.datetime.now(datetime.timezone.utc).isoformat().replace('+00:00','Z')},f)
+import threading
+threading.Thread(target=lambda: (time.sleep(.1),os.unlink(lock)),daemon=True).start()
+before=time.monotonic()
+module._log({'conversation':'plugin'},{'verdict':'answer','source':'rule','why':None},'answered no')
+if time.monotonic()-before < .075: raise RuntimeError('live self-PID lock was not waited for')`;
   const plugin=path.join(path.dirname(fileURLToPath(import.meta.url)),'../../third-party/addons/godspeed-charm/hermes/plugin/godspeed-charm/__init__.py');
   const result=spawnSync(PY,['-c',program,plugin,lock],{encoding:'utf8',env:{...process.env,HERMES_HOME:home,PYTHONDONTWRITEBYTECODE:'1'}});
   assert.equal(result.status,0,result.stderr);
   assert.equal(fs.existsSync(lock),false);
-  assert.deepEqual(fs.readFileSync(log,'utf8').trim().split('\n').map(JSON.parse).map(entry=>entry.conversation),['plugin']);
+  assert.deepEqual(fs.readFileSync(log,'utf8').trim().split('\n').map(JSON.parse).map(entry=>entry.conversation),['plugin','plugin']);
  }finally{fs.rmSync(dir,{recursive:true,force:true});}
 });
 
