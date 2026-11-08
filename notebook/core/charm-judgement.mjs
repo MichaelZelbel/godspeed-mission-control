@@ -8,7 +8,6 @@
 import fs from 'node:fs';import path from 'node:path';import {randomUUID} from 'node:crypto';
 import {addonInvocation} from './native-personal.mjs';
 import {JUDGE_PROTOCOL} from '../../third-party/addons/godspeed-charm/lib/judge.mjs';
-import {withFileLock} from '../../third-party/addons/godspeed-charm/lib/notebook.mjs';
 import {runChild} from './child-process.mjs';
 import {charmConversation,charmOperation} from './charm-operation.mjs';
 
@@ -31,17 +30,14 @@ const verdictOf=stdout=>{
  return null;
 };
 const ending=(reply,question)=>reply.trimEnd().endsWith(question)?reply:reply.trimEnd()+'\n\n'+question;
-export const writeCharmAudit=(home,{conversation,verdict,source,why,did})=>{
+const nativeLog=(home,conversation,verdict,did)=>{
  try{
   const folder=path.join(home,'logs'),file=path.join(folder,'godspeed-charm.log');
   fs.mkdirSync(folder,{recursive:true});
-  withFileLock(file+'.lock',()=>{
-   if(fs.existsSync(file)&&fs.statSync(file).size>1_000_000)fs.renameSync(file,file+'.1');
-   fs.appendFileSync(file,JSON.stringify({at:new Date().toISOString(),conversation,verdict:verdict??null,source:source??null,why:why??null,did})+'\n');
-  });
+  if(fs.existsSync(file)&&fs.statSync(file).size>1_000_000)fs.renameSync(file,file+'.1');
+  fs.appendFileSync(file,JSON.stringify({at:new Date().toISOString(),conversation,verdict:verdict?.verdict??null,source:verdict?.source??null,why:verdict?.why??null,did})+'\n');
  }catch{}
 };
-const nativeLog=(home,conversation,verdict,did)=>writeCharmAudit(home,{conversation,verdict:verdict?.verdict,source:verdict?.source,why:verdict?.why,did});
 
 // Starts the judgement of this message. `end(reply)` says what the reply becomes; `drop()` is for a
 // turn that ends without one.

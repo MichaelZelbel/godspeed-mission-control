@@ -21,7 +21,6 @@ test("while running: the day, the end date, the rule and how to record the quest
   const b = block(running(), { conversation: "telegram:1" });
   assert.ok(b.startsWith("[godspeed-charm]"));
   assert.match(b, /day 10 of 21, 12 days to go, done on Wednesday 11 November/);
-  assert.match(b, /Longest run so far: 9 days\. Restarts: 0\./);
   assert.match(b, /insults, sarcasm, contempt, "why do you give me this garbage\?"/);
   assert.match(b, /The deadline is wrong\. Check the client's message and fix the draft\./);
   assert.ok(b.includes('"That sounded like a slip. Back to 21? Yes / No."'));
@@ -38,20 +37,11 @@ test("while running: the day, the end date, the rule and how to record the quest
   assert.doesNotMatch(b, /Open question/);
   // A start while it runs opens its question here, so the conversation goes with it.
   assert.ok(b.includes('godspeed-charm start --words "<their words>"'));
-  assert.ok(b.includes('If they ask how their Charm Challenge is going or ask for its status: run godspeed-charm status.'));
   // Only a success is passed on word for word; a refusal's text never reaches the person.
   assert.match(b, /When a godspeed-charm command succeeds, use its reply word for word\. When it refuses, never pass its text on; do what this note says\./);
   assert.doesNotMatch(b, /After a godspeed-charm command, reply with its reply/);
   // A story slip: slip refuses, then asked, and the reply ends with asked's reply.
   assert.ok(b.includes('When it refuses, run godspeed-charm asked --words "<their words>" and end your reply with its reply.'));
-});
-
-test("the running context includes the complete count after a restart", () => {
-  const state = charmState([ev("start", "2026-10-21"), ev("reset", "2026-10-25")], "2026-10-30");
-  for (const channel of ["shell", "notebook"]) {
-    const current = contextBlock(state, S, { conversation: "notebook:c1", today: "2026-10-30", channel });
-    assert.match(current, /Longest run so far: 5 days\. Restarts: 1\./);
-  }
 });
 
 test("the open question shows only in its own conversation", () => {
@@ -189,7 +179,6 @@ test("the notebook channel: the same steps as charm operations, never a shell co
   assert.match(b, /in the language of their message, so never write it yourself: "That sounded like a slip/);
   assert.ok(b.includes('a plain "charm slip" or "reset my Charm Challenge" is charm {action:"slip", words:<their message>}'));
   assert.ok(b.includes('a story ("I yelled at Copilot") is charm {action:"asked", words:<their message>}'));
-  assert.ok(b.includes('If they ask how their Charm Challenge is going or ask for its status: charm {action:"status", words:<their message>}.'));
   assert.ok(b.includes('If they ask to start the Charm Challenge while it runs: charm {action:"start", words:<their message>}.'));
   assert.match(b, /The notebook adds each charm operation's reply to your answer itself/);
   // The open question of this conversation, answered with an operation.

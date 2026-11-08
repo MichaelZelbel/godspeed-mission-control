@@ -28,8 +28,6 @@ import time
 import types
 import hashlib
 import collections
-import uuid
-from datetime import datetime
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 STICKERS = "hermes-telegram-stickers"
@@ -289,157 +287,15 @@ def _log(turn, verdict, did):
         folder = os.path.join(_home(), "logs")
         os.makedirs(folder, exist_ok=True)
         path = os.path.join(folder, "godspeed-charm.log")
+        if os.path.exists(path) and os.path.getsize(path) > LOG_LIMIT:
+            os.replace(path, path + ".1")
         entry = {"at": time.strftime("%Y-%m-%dT%H:%M:%S%z"), "conversation": turn["conversation"],
                  "verdict": (verdict or {}).get("verdict"), "source": (verdict or {}).get("source"),
                  "why": (verdict or {}).get("why"), "did": did}
-        _with_audit_log_lock(path, lambda: _append_audit_log(path, entry))
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
     except Exception:
         pass
-
-
-def _audit_lock_snapshot(lock):
-    before = os.stat(lock)
-    with open(lock, encoding="utf-8") as f:
-        text = f.read()
-    after = os.stat(lock)
-    if (before.st_ino, before.st_mtime_ns, before.st_size) != (after.st_ino, after.st_mtime_ns, after.st_size):
-        return None
-    return text, after
-
-
-def _audit_lock_boot_time():
-    try:
-        with open("/proc/uptime", encoding="utf-8") as f:
-            uptime = float(f.read().split()[0])
-    except (OSError, ValueError, IndexError):
-        uptime = time.monotonic()
-    return time.time() - uptime
-
-
-def _audit_lock_process_start_time():
-    try:
-        with open("/proc/uptime", encoding="utf-8") as f:
-            uptime = float(f.read().split()[0])
-        with open("/proc/self/stat", encoding="utf-8") as f:
-            fields = f.read().rpartition(")")[2].split()
-        started = int(fields[19]) / os.sysconf("SC_CLK_TCK")
-        return time.time() - uptime + started
-    except (OSError, ValueError, IndexError):
-        return _audit_lock_loaded_at
-
-
-_audit_lock_loaded_at = time.time()
-_audit_lock_process_started_at = _audit_lock_process_start_time()
-
-
-def _audit_lock_is_stale(text, stat):
-    try:
-        owner = json.loads(text)
-        pid = owner["pid"]
-        if not isinstance(owner, dict) or not isinstance(pid, int) or pid <= 0:
-            raise ValueError
-    except (ValueError, TypeError, KeyError, json.JSONDecodeError):
-        return time.time() - stat.st_mtime >= 10
-    try:
-        at = datetime.fromisoformat(owner.get("at").replace("Z", "+00:00")).timestamp()
-    except (AttributeError, TypeError, ValueError, OverflowError):
-        at = stat.st_mtime
-    # Match the Node writer's owner rule: a timestamp from before this boot
-    # cannot belong to a live process, even when its numeric PID was reused.
-    if at < _audit_lock_boot_time() - 60:
-        return True
-    if pid == os.getpid() and at < _audit_lock_process_started_at - 1:
-        return True
-    try:
-        os.kill(pid, 0)
-    except ProcessLookupError:
-        return True
-    except PermissionError:
-        return False
-    return False
-
-
-def _take_over_audit_lock(lock):
-    try:
-        seen = _audit_lock_snapshot(lock)
-    except FileNotFoundError:
-        return True
-    if not seen or not _audit_lock_is_stale(*seen):
-        return False
-    breaker, token = lock + ".break", str(uuid.uuid4())
-    try:
-        fd = os.open(breaker, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-    except FileExistsError:
-        try:
-            if time.time() - os.stat(breaker).st_mtime > 10:
-                os.unlink(breaker)
-        except OSError:
-            pass
-        return False
-    try:
-        os.write(fd, token.encode())
-        try:
-            again = _audit_lock_snapshot(lock)
-        except FileNotFoundError:
-            return True
-        if not again or again[0] != seen[0] or again[1].st_ino != seen[1].st_ino or not _audit_lock_is_stale(*again):
-            return False
-        try:
-            os.unlink(lock)
-        except FileNotFoundError:
-            pass
-        return True
-    finally:
-        os.close(fd)
-        try:
-            with open(breaker, encoding="utf-8") as f:
-                if f.read() == token:
-                    os.unlink(breaker)
-        except OSError:
-            pass
-
-
-def _release_audit_lock(lock, token):
-    try:
-        with open(lock, encoding="utf-8") as f:
-            owner = json.load(f)
-        if owner.get("token") == token:
-            os.unlink(lock)
-    except FileNotFoundError:
-        pass
-
-
-def _with_audit_log_lock(path, work):
-    lock, token, deadline = path + ".lock", str(uuid.uuid4()), time.monotonic() + 20
-    while True:
-        try:
-            fd = os.open(lock, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-            break
-        except FileExistsError:
-            if _take_over_audit_lock(lock):
-                continue
-            if time.monotonic() >= deadline:
-                raise TimeoutError("Charm audit log is busy")
-            time.sleep(0.025)
-    try:
-        os.write(fd, json.dumps({"pid": os.getpid(), "token": token, "at": time.strftime("%Y-%m-%dT%H:%M:%S%z")}).encode())
-        os.fsync(fd)
-    except Exception:
-        os.close(fd)
-        _release_audit_lock(lock, token)
-        raise
-    os.close(fd)
-    try:
-        return work()
-    finally:
-        _release_audit_lock(lock, token)
-
-
-def _append_audit_log(path, entry):
-    if os.path.exists(path) and os.path.getsize(path) > LOG_LIMIT:
-        os.replace(path, path + ".1")
-    with open(path, "a", encoding="utf-8") as f:
-        f.write(json.dumps(entry, ensure_ascii=False) + "\n")
 
 
 def _record(turn, verdict, *args):

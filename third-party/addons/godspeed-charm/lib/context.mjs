@@ -79,8 +79,7 @@ export function contextBlock(state, settings = {}, { conversation = "", schedule
 
   const L = [
     `[godspeed-charm] The person is doing the Charm Challenge: day ${state.day} of ${LENGTH}, ${days(state.daysToGo)} to go, ` +
-      `done on ${formatDay(state.end, "en")}. Longest run so far: ${days(state.longestRun)}. Restarts: ${state.restarts}. ` +
-      `It is about how they talk to AI: charming it into the result instead of arguing. A slip they agree to sends the count back to ${LENGTH}.`,
+      `done on ${formatDay(state.end, "en")}. It is about how they talk to AI: charming it into the result instead of arguing. A slip they agree to sends the count back to ${LENGTH}.`,
   ];
   if (state.resetToday) {
     L.push("A reset already happened today: don't ask about slips today.");
@@ -132,7 +131,6 @@ export function contextBlock(state, settings = {}, { conversation = "", schedule
       : 'If they report a slip themselves ("charm slip", "reset my Charm Challenge", "I yelled at Copilot"): run godspeed-charm slip --words "<their words>". ' +
         "When it refuses, end your reply with the sentence above.");
   }
-  L.push(`If they ask how their Charm Challenge is going or ask for its status: ${notebook ? op('action:"status"') : 'run godspeed-charm status'}.`);
   L.push(`If they ask to start the Charm Challenge while it runs: ${notebook ? NOTEBOOK.start : `run ${startCommand()}`}.`);
   const open = conv ? state.open?.find((q) => q.conversation === conv) : null;
   if (open) {
