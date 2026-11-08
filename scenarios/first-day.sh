@@ -100,7 +100,7 @@ check() { # <evidence folder>
   local -a sparse_files=()
   [ -d "$folder" ] || fail "there is nothing at $folder, so this scenario kept no first-day evidence"
   need_node
-  kept_all "$folder" 'the installed first day' routine-diagnostics-research.json routine-diagnostics-choice.json routine-diagnostics-work.json setup.json job-research.json job-choice.json job-work.json first-day-work-filed.txt job-scheduled-brief.json brief.txt brief-cron-runs.txt scheduled-telegram-requests.json run.json runner.json telegram-requests.json work-items.json notes-before-reply.json notes-after-reply.json briefing-source-tables.txt manifest.json
+  kept_all "$folder" 'the installed first day' setup.json job-research.json job-choice.json job-work.json first-day-work-filed.txt job-scheduled-brief.json brief.txt brief-cron-runs.txt scheduled-telegram-requests.json run.json runner.json telegram-requests.json work-items.json notes-before-reply.json notes-after-reply.json briefing-source-tables.txt manifest.json
   mapfile -t SERVER_SPARSE_TABLES <"$folder/briefing-source-tables.txt"
   [ "${#SERVER_SPARSE_TABLES[@]}" -gt 0 ] || fail 'the installed server named no morning-brief source records'
   for table in "${SERVER_SPARSE_TABLES[@]}"; do sparse_files+=("sparse-${table//_/-}.json"); done

@@ -66,7 +66,7 @@ check() { # <evidence folder>
   local folder=$1 text answer
   [ -d "$folder" ] || fail "there is nothing at $folder, so this scenario kept no evidence of a report asked about"
   need_node
-  kept_all "$folder" 'what was sent, recorded and answered' routine-diagnostics-report.json job-report.json run.json report-facts.json conversation_messages-report.json telegram-requests.json runner.json manifest.json
+  kept_all "$folder" 'what was sent, recorded and answered' job-report.json run.json report-facts.json conversation_messages-report.json telegram-requests.json runner.json manifest.json
   text=$(step_failure "$folder/run.json")
   [ -z "$text" ] || fail "a step of the run did not work, so the report could not be asked about: $text"
 

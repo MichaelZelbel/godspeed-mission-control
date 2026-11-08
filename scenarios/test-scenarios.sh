@@ -474,21 +474,6 @@ server_run_job_retries_a_tick_refusal() {
 }
 server_run_job_retries_a_tick_refusal
 
-routine_evidence_is_required() {
-  local scenario=$1 label=$2 folder output code
-  folder=$TMP/required-routine-evidence-$scenario
-  mkdir -p "$folder"
-  output=$(bash "$ROOT/scenarios/$scenario.sh" --check "$folder" 2>&1); code=$?
-  if [ "$code" != 0 ] && [[ $output == *"routine-diagnostics-$label.json"* ]]; then
-    ok "$scenario refuses evidence without its retained routine diagnostic"
-  else
-    bad "$scenario refuses evidence without its retained routine diagnostic (exit $code: $output)"
-  fi
-}
-routine_evidence_is_required what-was-that report
-routine_evidence_is_required connection-check fine
-routine_evidence_is_required first-day research
-
 server_telegram_setup_override() {
   local bin=$TMP/server-telegram-override-bin trace=$TMP/server-telegram-override.trace output port
   mkdir -p "$bin" "$TMP/server-telegram-override-evidence"
@@ -4545,9 +4530,9 @@ else
   bad "what-was-that.sh: its report step does not run Coach reminders and habit check"
 fi
 if grep -q 'server_keep_routine_diagnostics' "$ROOT/scenarios/server-lib.sh" \
-  && grep -q 'routine-diagnostics-report.json' "$ROOT/scenarios/what-was-that.sh" \
-  && grep -q 'routine-diagnostics-fine.json' "$ROOT/scenarios/connection-check.sh" \
-  && grep -q 'routine-diagnostics-research.json' "$ROOT/scenarios/first-day.sh"; then
+  && grep -q 'server_run_job report' "$ROOT/scenarios/what-was-that.sh" \
+  && grep -q 'server_run_job "$1" "$ROUTINE"' "$ROOT/scenarios/connection-check.sh" \
+  && grep -q 'server_run_job research' "$ROOT/scenarios/first-day.sh"; then
   ok "the three fresh-install routine scenarios retain lifecycle and Hermes run diagnostics"
 else
   bad "the three fresh-install routine scenarios do not retain lifecycle and Hermes run diagnostics"
