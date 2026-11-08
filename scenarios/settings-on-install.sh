@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # PROVING SCENARIO 1: the faster-chat settings a fresh install carries, and the owner's own value.
+# (throwaway proof line for the pull request scenario pick, not merged)
 #
 # What it proves (godspeed-dev, releases/godspeed-2.0.0-beta.8-faster-chat/plan.md, scenario 1):
 # every install and update runs godspeedHermesSettings over the assistant's settings
