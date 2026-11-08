@@ -27,13 +27,12 @@ one.
 
 ## A pull request that changes a scenario is Done only when its scenario check is green
 
-A pull request that changes a proving scenario that has a job in `.github/workflows/scenarios.yml`
-runs that scenario on its own code, as a check of the workflow "scenarios on pull request N": the
-job `the stage file`, one job for each such scenario it changed, and `the verdict`. A scenario has
-such a job when the workflow runs `bash scenarios/<name>.sh "$STAGE_REF"` in a job of that name
-(`scenarios/<name>.sh` or a file named `scenarios/<name>-*` picks it). A proving scenario with no
-such job (the ones `scenarios/README.md` lists as not in the workflow), the install, Docker and
-update jobs, and the candidate-only Windows scenario are not run on a pull request.
+A pull request that changes a proving scenario runs that scenario on its own code, as a check of
+the workflow "scenarios on pull request N": the job `the stage file`, one job for each scenario the
+workflow selected, and `the verdict`. Which scenarios are selected is decided by the workflow alone:
+the `stage file` job's step "Which scenarios this run proves" writes the selection (`picked`) in its
+summary. A scenario the workflow does not select has no job on a pull request, however it is
+documented elsewhere; do not look for one.
 Unlike the candidate-only checks above, a round can read this one at the pull request's head.
 
 - Such a pull request is Done only when the review says Ready at its head commit, CI marked it
@@ -45,9 +44,9 @@ Unlike the candidate-only checks above, a round can read this one at the pull re
 - A pull request from a fork has no secrets, so no scenario job runs on it (the stage is skipped and
   its verdict passes with "No scenario runs on a pull request from a fork"). That passing verdict is
   not scenario proof and the rules above do not apply to it: the default and the required gate decide.
-- A pull request that changes no scenario script has no scenario job (only the stage and the
-  verdict run), and nothing here applies. A change to a shared scenario library or to product code
-  alone picks no scenario; the default and the candidate section above still decide.
+- A pull request for which the workflow selected no scenario has no scenario job (only the stage
+  and the verdict run), and nothing here applies: the default and the candidate section above still
+  decide.
 - Reason: Michael, 8 November 2026. Eight scenario fixes merged on 7 November after review and unit
   tests, and most still failed on the next candidate (8 November, run 42470722177), because
   scenarios ran only at night and on a candidate. The factory has to be fast and efficient: a fix is
