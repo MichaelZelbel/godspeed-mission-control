@@ -204,7 +204,7 @@ const walk=d=>{
   }
 };
 walk(root);
-fs.writeFileSync(out,JSON.stringify({files},null,2)+"\\n");
+fs.writeFileSync(out,JSON.stringify({files},null,2)+"\n");
 ' "$EVIDENCE" "$EVIDENCE/manifest.json" || fail 'the scenario could not write its evidence manifest'
 }
 
