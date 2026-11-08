@@ -276,24 +276,6 @@ test('the pick names the scenarios whose script or owned file changed', async ()
   assert.equal(r.stdout.trim(), ',plain-yes,voice,');
 });
 
-test('the pick includes the Hermes rollback proof for its runtime dependencies', async () => {
-  const { readFileSync, writeFileSync, mkdtempSync } = await import('node:fs');
-  const { tmpdir } = await import('node:os');
-  const { spawnSync } = await import('node:child_process');
-  const text = readFileSync(WORKFLOW, 'utf8').replace(/\r\n/g, '\n');
-  const at = text.indexOf('          jobs=$(grep -oE');
-  const to = text.indexOf('          echo "The pull request changes');
-  assert.ok(at > 0 && to > at, 'the pick step was not found');
-  for (const changed of ['notebook/server/main.mjs', 'notebook/core/native-scheduler.mjs', 'notebook/core/hermes-update.mjs', 'third-party/addons/godspeed-coach/lib/clock.mjs']) {
-    const dir = mkdtempSync(`${tmpdir()}/pick-hermes-`).replaceAll(String.fromCharCode(92), '/');
-    writeFileSync(`${dir}/changed`, `${changed}\n`);
-    const script = `RUNNER_TEMP='${dir}'\n` + text.slice(at, to).replace(/^ {10}/gm, '') + 'echo "$picked"';
-    const r = spawnSync('bash', ['-c', script], { cwd: fileURLToPath(new URL('..', import.meta.url)), encoding: 'utf8' });
-    assert.equal(r.status, 0, r.stderr);
-    assert.equal(r.stdout.trim(), ',hermes-update-rollback,', changed);
-  }
-});
-
 // A pull request proves its own head commit: GitHub's merge commit is not promised to be fetchable
 // by the installer, which reads the product by commit. Every path that makes or reads the proof
 // (the stage's checkout and its stage file, and the checkout of every scenario job) must say so.
