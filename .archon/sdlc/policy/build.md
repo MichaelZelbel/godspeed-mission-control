@@ -42,6 +42,9 @@ Unlike the candidate-only checks above, a round can read this one at the pull re
   item itself, reads the job's log, corrects its own fix and pushes. The next push runs the
   scenario again; an older run of the same pull request is cancelled by it.
 - A scenario job that is still running is waited for, never skipped over.
+- A pull request from a fork has no secrets, so no scenario job runs on it (the stage is skipped and
+  its verdict passes with "No scenario runs on a pull request from a fork"). That passing verdict is
+  not scenario proof and the rules above do not apply to it: the default and the required gate decide.
 - A pull request that changes no scenario script has no scenario job (only the stage and the
   verdict run), and nothing here applies. A change to a shared scenario library or to product code
   alone picks no scenario; the default and the candidate section above still decide.
