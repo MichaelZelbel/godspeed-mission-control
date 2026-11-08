@@ -89,7 +89,7 @@ test('the check asks Hermes once, the way a routine does, and keeps what it saw'
  const good=fakeHermes('Connected.\n');
  const ok=await checkRoutineAI({executable:'hermes',home:h,cwd:h,state,spawnProcess:good.spawnProcess,now:()=>new Date('2026-10-18T10:00:00Z')});
  assert.deepEqual(ok.check,{at:'2026-10-18T10:00:00.000Z',ok:true,reply:'Connected.'});
- assert.ok(good.calls[0].includes('--oneshot')&&good.calls[0].includes('--toolsets'),'one short request, no tools');
+ assert.ok(good.calls[0].includes('--oneshot')&&good.calls[0].includes('--max-turns'),'one short request');assert.equal(good.calls[0].includes('--toolsets'),false,'the routine request uses Hermes\' valid no-tools invocation');
  assert.ok(!good.calls[0].includes('--model'),'the model comes from Hermes\' own home, as for the routines');
  assert.deepEqual(routineAIStatus({home:h,state}).check,ok.check,'kept for Settings');
  const bad=fakeHermes('',1,'AuthenticationError: invalid_api_key');

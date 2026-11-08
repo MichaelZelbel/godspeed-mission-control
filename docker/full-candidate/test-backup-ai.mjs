@@ -62,7 +62,7 @@ try{
  console.log('godspeed-model asked the main AI first and answered with the backup, and said so.');
  // 3. Hermes' own chat, the way the routines and the notebook's one-turn calls run it.
  const before=chats().length;
- const chat=await run(descriptor.executable,['chat','--query-file','-','--quiet','--oneshot','--max-turns','1','--toolsets','none','--source','tool'],'Reply with one short sentence.');
+ const chat=await run(descriptor.executable,['chat','--query-file','-','--quiet','--oneshot','--max-turns','1','--source','tool'],'Reply with one short sentence.');
  assert.equal(chat.code,0,chat.out+chat.err);assert.match(chat.out,/From the backup\./);assert.ok(chats().length>before);
  console.log('Hermes\' own chat used the backup when the main AI refused its key.');
  // 4. The Settings check names each one on its own.
@@ -72,7 +72,7 @@ try{
  // 5. Without a backup, the failure is today's: nothing else is tried.
  assert.equal(clearHermesBackup(home),true);const asked=chats().length;
  await assert.rejects(addonModel({root,input}),/signed in again|could not answer/);
- const alone=await run(descriptor.executable,['chat','--query-file','-','--quiet','--oneshot','--max-turns','1','--toolsets','none','--source','tool'],'Reply with one short sentence.');
+ const alone=await run(descriptor.executable,['chat','--query-file','-','--quiet','--oneshot','--max-turns','1','--source','tool'],'Reply with one short sentence.');
  assert.notEqual(alone.code,0);assert.equal(chats().length,asked,'the removed backup was not asked');
  console.log('Without a backup nothing else is asked, by godspeed-model or by Hermes.');
 }finally{
