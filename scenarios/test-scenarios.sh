@@ -1642,6 +1642,8 @@ charm_five_vents_boundary() {
   ' bash "$HERE/charm-challenge.sh" 2>&1)
   code=$?
   if [ "$code" = 42 ] && [ ! -e "$folder/baseline-stat-failure/charm-log.txt" ] && \
+    [ "$(<"$hermes/logs/godspeed-charm.log")" = '{"verdict":"old"}' ] && \
+    [ ! -e "$folder/baseline-stat-failure/.panel-new-1.json" ] && \
     [[ $output == *"could not inspect evidence at $hermes/logs/godspeed-charm.log before five vents"* ]]; then
     ok 'five vents reject a failed baseline Charm log inspection'
   else
