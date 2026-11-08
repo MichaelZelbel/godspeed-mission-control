@@ -102,6 +102,15 @@ describe("the same choices for the main AI and the backup", () => {
     expect(options(backup)).toEqual(options(main));
   });
 
+  it("describes Anthropic alongside OpenAI-compatible services in both generic address forms", async () => {
+    serve({ "routine-ai": () => [200, { available: true, provider: "openrouter", model: "x/y", source: "settings", key: true, check: { at: new Date().toISOString(), ok: true } }], "backup-ai": () => [200, none], "ai-signin": () => [200, { available: true, state: "idle" }] });
+    settings();
+    await screen.findByText("No backup AI is connected.");
+    fireEvent.change(screen.getByLabelText("Your AI service"), { target: { value: "other" } });
+    fireEvent.change(screen.getByLabelText("Backup AI service"), { target: { value: "other" } });
+    expect(screen.getAllByLabelText("Its address, as the service gives it (OpenAI-compatible or Anthropic)")).toHaveLength(2);
+  });
+
   it("offers no plan sign-in in either form where no Hermes runs the routines", async () => {
     serve({ "routine-ai": () => [200, { available: false }], "backup-ai": () => [200, { ...none, hermes: false }], "ai-signin": () => [200, { available: false, state: "idle" }] });
     settings();
