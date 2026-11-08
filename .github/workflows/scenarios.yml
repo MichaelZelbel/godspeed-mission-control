@@ -118,7 +118,7 @@ jobs:
               echo "picked=all" | tee -a "$GITHUB_OUTPUT"
               exit 0
             fi
-            [[ "$only" =~ ^[a-z0-9,-]+$ ]] || { echo "only must be job names separated by commas, not: $only" | tee -a "$GITHUB_STEP_SUMMARY"; exit 1; }
+            [[ "$only" =~ ^[a-z0-9,-]*[a-z0-9-][a-z0-9,-]*$ ]] || { echo "only must be job names separated by commas, not: $only" | tee -a "$GITHUB_STEP_SUMMARY"; exit 1; }
             picked=$(printf ',%s,' "$only" | tr -s ',')
             echo "Only these jobs run:$picked" | tee -a "$GITHUB_STEP_SUMMARY"
             echo "picked=$picked" | tee -a "$GITHUB_OUTPUT"

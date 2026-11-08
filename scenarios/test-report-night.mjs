@@ -435,17 +435,43 @@ test('the pick on a hand-started run reads `only`, and a night and an empty `onl
   assert.equal(pick('workflow_dispatch', undefined).out, 'picked=all\n');
   assert.equal(pick('workflow_dispatch', 'all').out, 'picked=all\n');
   assert.equal(pick('schedule', 'first-day').out, 'picked=all\n', 'the night ignores only');
+  for (const empty of [',', ',,, ,']) {
+    const none = pick('workflow_dispatch', empty);
+    assert.notEqual(none.status, 0, `only=${JSON.stringify(empty)} names no job and must fail, not pass with nothing run`);
+    assert.equal(none.out, '', 'and write no pick');
+  }
   const bad = pick('workflow_dispatch', 'first-day;echo hi');
   assert.notEqual(bad.status, 0, 'a value that is not job names must fail');
   assert.equal(bad.out, '', 'and write no pick');
-  // every job that can be left out of an `only` run is gated by the pick, the Mac and Windows ones too
+  // the complete condition of each job that is not a script job, exactly: its own pick joined to the
+  // predicate it always had (not a pull request, a candidate tag for Windows, `mac` for the Mac one)
+  const gate = (name) => `needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',${name},')`;
+  const expected = {
+    'linux-install': `\${{ github.event_name != 'pull_request' && (${gate('linux-install')}) }}`,
+    'docker-server': `\${{ github.event_name != 'pull_request' && (${gate('docker-server')}) }}`,
+    'linux-update': `\${{ github.event_name != 'pull_request' && (${gate('linux-update')}) }}`,
+    'windows-old-names-move': `\${{ startsWith(inputs.stage, 'candidate/') && (${gate('windows-old-names-move')}) }}`,
+    'mac-install': "${{ needs.stage.outputs.picked == 'all' && inputs.mac || contains(needs.stage.outputs.picked, ',mac-install,') }}",
+  };
   const jobsText = text.slice(text.indexOf('\njobs:\n'));
-  for (const name of ['linux-install', 'mac-install', 'docker-server', 'linux-update', 'windows-old-names-move']) {
+  for (const [name, cond] of Object.entries(expected)) {
     const at = jobsText.indexOf(`\n  ${name}:\n`);
     assert.ok(at > 0, `${name} not found`);
-    const block = jobsText.slice(at, jobsText.indexOf('\n    needs: stage', at));
-    assert.ok(block.includes(`contains(needs.stage.outputs.picked, ',${name},')`), `${name} is not gated by the pick`);
+    const ifs = [...jobsText.slice(at, jobsText.indexOf('\n    steps:', at)).matchAll(/^ {4}if: (.*)$/gm)].map((m) => m[1]);
+    assert.deepEqual(ifs, [cond], `${name} has not exactly its complete condition`);
   }
+  // and what those conditions come to, evaluated as GitHub does for the cases that matter
+  const evalCond = ({ event, stage, mac, picked }, name) => {
+    const has = picked === 'all' || picked.includes(`,${name},`);
+    if (name === 'mac-install') return (picked === 'all' && !!mac) || picked.includes(',mac-install,');
+    if (name === 'windows-old-names-move') return stage.startsWith('candidate/') && has;
+    return event !== 'pull_request' && has;
+  };
+  assert.equal(evalCond({ event: 'workflow_dispatch', stage: 'candidate/x', picked: ',first-day,' }, 'windows-old-names-move'), false, 'an unrelated pick leaves Windows out');
+  assert.equal(evalCond({ event: 'workflow_dispatch', stage: 'beta', picked: ',windows-old-names-move,' }, 'windows-old-names-move'), false, 'Windows needs a candidate tag even when listed');
+  assert.equal(evalCond({ event: 'workflow_dispatch', stage: 'candidate/x', picked: ',windows-old-names-move,' }, 'windows-old-names-move'), true);
+  assert.equal(evalCond({ event: 'workflow_dispatch', stage: 'candidate/x', picked: 'all', mac: true }, 'mac-install'), true);
+  assert.equal(evalCond({ event: 'workflow_dispatch', stage: 'candidate/x', picked: ',first-day,', mac: true }, 'mac-install'), false, 'mac=true does not add the Mac job to an only run');
   // no issue is filed for a run that is not the night's
   assert.match(text, /Tell the night in issues[\s\S]*?if: always\(\) && github\.event_name == 'schedule'/);
 });
