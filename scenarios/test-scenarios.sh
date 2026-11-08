@@ -3394,9 +3394,9 @@ const server=http.createServer((request,response)=>{
   request.setEncoding("utf8");
   request.on("data",chunk=>body+=chunk);
   request.on("end",()=>{
-    fs.appendFileSync(file,`setup\\t${request.method} ${request.url}\\t${body.trimEnd()}\\n`);
+    fs.appendFileSync(file,`setup\t${request.method} ${request.url}\t${body.trimEnd()}\n`);
     response.writeHead(request.method==="POST"&&request.url==="/api/setup"?200:404,{"content-type":"application/json"});
-    response.end(request.method==="POST"&&request.url==="/api/setup"?"{\\"configured\\":true}":"{}");
+    response.end(request.method==="POST"&&request.url==="/api/setup"?"{\"configured\":true}":"{}");
   });
 });
 server.listen(0,"127.0.0.1",()=>console.log(server.address().port));
