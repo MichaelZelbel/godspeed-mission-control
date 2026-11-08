@@ -3734,8 +3734,10 @@ ACT_NODE_ORDER=$(env -u NODE GODSPEED_SCENARIO_ROOT="$RFS/root" ACTION_EVENTS="$
   act
   cat "$ACTION_EVENTS"
 ' action-order "$ROOT/scenarios/workouts-from-hevy.sh" "$RFS/action-evidence" "$ROOT/scenarios" 2>&1)
+INITIAL_HEVY_FIXTURE="selected-node:$ROOT/scenarios/hevy-fixture.mjs --state $RFS/action-evidence/fixture-state.json --log $RFS/action-evidence/fixture.log"
+MUTATED_HEVY_FIXTURE="$INITIAL_HEVY_FIXTURE --mutate"
 case "$ACT_NODE_ORDER" in
-  $'need-node\nselected-node:'"$ROOT"'/scenarios/hevy-fixture.mjs --state '"$RFS"'/action-evidence/fixture-state.json --log '"$RFS"'/action-evidence/fixture.log\npersistence-docker:set\npersistence-native:set\nselected-node:'"$ROOT"'/scenarios/hevy-fixture.mjs --state '"$RFS"'/action-evidence/fixture-state.json --log '"$RFS"'/action-evidence/fixture.log --mutate') ok "the Hevy action uses its selected Node for both fixture launches before descriptor and persistence reads" ;;
+  $'need-node\n'"$INITIAL_HEVY_FIXTURE"$'\npersistence-docker:set\npersistence-native:set\n'"$MUTATED_HEVY_FIXTURE") ok "the Hevy action uses its selected Node for both fixture launches before descriptor and persistence reads" ;;
   *) bad "the Hevy action did not use its selected Node for both fixture launches before descriptor and persistence reads ($ACT_NODE_ORDER)" ;;
 esac
 printf '00000000-0000-4000-8000-000000000001\n' >"$RFS/assistant/hevy.json"
