@@ -176,7 +176,7 @@ test('the four beta.20 jobs check out the selected stage and run their own scena
     const rest = text.slice(start + 1);
     const end = rest.search(/^ {2}[A-Za-z0-9_-]+:[ \t]*$/m);
     const block = end < 0 ? rest : rest.slice(0, end);
-    assert.ok(block.includes('ref: ${{ inputs.stage || github.sha }}'), `${j} does not check out the selected stage`);
+    assert.ok(block.includes('ref: ${{ inputs.stage || github.event.pull_request.head.sha || github.sha }}'), `${j} does not check out the selected stage (or a pull request's own head)`);
     assert.ok(block.includes(`bash scenarios/${j}.sh "$STAGE_REF"`), `${j} does not run scenarios/${j}.sh at the stage`);
     assert.equal((block.match(/bash scenarios\/[a-z-]+\.sh/g) || []).length, 1, `${j} runs more than its own scenario`);
   }
@@ -190,4 +190,42 @@ test("the README's newest 'New in' heading is the package version", async () => 
   const heading = readme.match(/^## New in (\S+)/m);
   assert.ok(heading, 'README has no "New in" heading');
   assert.equal(heading[1], pkg.version);
+});
+
+// A pull request runs only the scenarios whose script it changed (the stage job's `picked`). That
+// works only while every job that runs `bash scenarios/<x>.sh "$STAGE_REF"` is the job `<x>` and is
+// gated by `picked` on its own name, so a new scenario cannot silently be left out of the proof.
+test('every scenario job named like its script is gated by the pull request pick, on its own name', async () => {
+  const { readFileSync } = await import('node:fs');
+  const text = readFileSync(WORKFLOW, 'utf8').replace(/\r\n/g, '\n');
+  const jobsText = text.slice(text.indexOf('\njobs:\n'));
+  const starts = [...jobsText.matchAll(/^ {2}([A-Za-z0-9_-]+):[ \t]*$/gm)];
+  let checked = 0;
+  for (let i = 0; i < starts.length; i++) {
+    const name = starts[i][1];
+    const block = jobsText.slice(starts[i].index, i + 1 < starts.length ? starts[i + 1].index : undefined);
+    const scripts = [...block.matchAll(/bash scenarios\/([a-z0-9-]+)\.sh "\$STAGE_REF"/g)].map((m) => m[1]);
+    if (!scripts.length) continue;
+    assert.deepEqual(scripts, [name], `job ${name} runs scenarios/${scripts.join(', ')}.sh: a job runs the script of its own name`);
+    assert.ok(block.includes(`if: \${{ needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',${name},') }}`), `job ${name} is not gated by the pull request pick`);
+    checked++;
+  }
+  assert.ok(checked >= 20, `only ${checked} scenario jobs found`);
+});
+
+// The pick itself, run the way the stage job runs it, on a made-up list of changed files.
+test('the pick names the scenarios whose script or owned file changed, and nothing else', async () => {
+  const { readFileSync, writeFileSync, mkdtempSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { spawnSync } = await import('node:child_process');
+  const text = readFileSync(WORKFLOW, 'utf8').replace(/\r\n/g, '\n');
+  const at = text.indexOf('          jobs=$(grep -oE');
+  const to = text.indexOf('          echo "The pull request changes');
+  assert.ok(at > 0 && to > at, 'the pick step was not found');
+  const dir = mkdtempSync(`${tmpdir()}/pick-`).replaceAll(String.fromCharCode(92), '/');
+  writeFileSync(`${dir}/changed`, ['scenarios/voice.sh', 'scenarios/hevy-fixture.mjs', 'scenarios/plain-yes-extra.py', 'scenarios/scenario-lib.sh', 'scenarios/test-scenarios.sh', 'notebook/voice.sh', 'scenarios/windows-old-names-move.ps1'].join('\n') + '\n');
+  const script = `RUNNER_TEMP='${dir}'\n` + text.slice(at, to).replace(/^ {10}/gm, '') + 'echo "$picked"';
+  const r = spawnSync('bash', ['-c', script], { cwd: fileURLToPath(new URL('..', import.meta.url)), encoding: 'utf8' });
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(r.stdout.trim(), ',plain-yes,voice,');
 });
