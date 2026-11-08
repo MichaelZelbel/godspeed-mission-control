@@ -71,7 +71,8 @@ the checks that judge it. GitHub refuses any push from it that creates or update
   - For a delete there is no draft file; the manifest says the result is "absent".
 - Such a pull request is Done for the build queue when the review says Ready at its head commit and
   its checks are green, apart from the scenario jobs listed in the manifest, which need the drafted
-  change and may be red until it is applied. Done means the queue builds no more rounds on it; the
+  change and may be red until it is applied, and apart from `the verdict`, which is red only as the
+  sum of those jobs: the review says so only when every other job in the verdict's results passed. Done means the queue builds no more rounds on it; the
   merge is not yet allowed, because the required check still fails on any red job. Before it says
   Ready, the review checks that every listed job ID is in `picked` at that head, that the manifest
   matches the draft and that the quote in the description is byte for byte the draft at that head
