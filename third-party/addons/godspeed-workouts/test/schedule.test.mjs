@@ -63,7 +63,10 @@ test("removing a schedule reports every platform command refusal", () => {
 });
 
 test("removing either systemd schedule reports a daemon reload refusal", () => {
-  for (const [kind, prefix] of [["systemd-user", ["--user"]], ["systemd-system", []]]) {
+  for (const root of [false, true]) {
+    const kindInput = { platform: "linux", root };
+    const kind = scheduleKind(kindInput);
+    const prefix = kindInput.root ? [] : ["--user"];
     const options = { ...p, kind, home: "/root" };
     const files = scheduleFiles(options);
     const exists = fs.existsSync, remove = fs.rmSync, scheduled = new Set(files);
