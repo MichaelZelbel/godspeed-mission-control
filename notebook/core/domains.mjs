@@ -293,7 +293,7 @@ export class Domains {
       const judged=startCharmJudgement(this,input);
       let result=await this.nativeAgent({...input,nativeFiles,page_context:input[IDENTITY_PAGE],step_context:input.step_context,coach_talk_start:start}).catch(error=>{judged.drop();throw error;});
       const problem=start&&coachTalkRecordProblem(this.store,start,result.reply,{requireShown:start.continuing});if(problem){judged.drop();throw Error(problem);}
-      result.reply=await judged.end(result.reply);
+      if(start?.opening)judged.drop();else result.reply=await judged.end(result.reply);
       await this.store.saveAsync('conversation_messages',{role:'assistant',content:result.reply,conversation_id:input.conversation_id||null,contact_id:input.contact_id||null,source_app:'hermes'},undefined,{signal:input.signal});
       if(start)markCoachTalkShown(this.store,start);
       return result;
