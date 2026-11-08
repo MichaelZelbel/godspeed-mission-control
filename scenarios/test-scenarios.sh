@@ -4351,6 +4351,18 @@ if (
 else
   bad "a clock recreate did not pass both Compose layers"
 fi
+hevy_override_routes_to_fixture() { # <compose|systemd> <override file> <expected base>
+  HEVY_OVERRIDE_FORMAT=$1 HEVY_OVERRIDE_FILE=$2 HEVY_OVERRIDE_BASE=$3 ROOT=$ROOT node --input-type=module - <<'NODE'
+import { readFileSync } from 'node:fs';
+const text = readFileSync(process.env.HEVY_OVERRIDE_FILE, 'utf8');
+const lines = process.env.HEVY_OVERRIDE_FORMAT === 'compose'
+  ? [...text.matchAll(/^\s+(GODSPEED_WORKOUTS_(?:HEVY_API|TEST)): "([^"]*)"$/gm)]
+  : [...text.matchAll(/^Environment="(GODSPEED_WORKOUTS_(?:HEVY_API|TEST))=([^"]*)"$/gm)];
+const env = Object.fromEntries(lines.map(([, key, value]) => [key, value]));
+const { hevyBase } = await import(`${process.env.ROOT}/third-party/addons/godspeed-workouts/lib/sync.mjs`);
+if (Object.keys(env).length !== 2 || hevyBase(env) !== process.env.HEVY_OVERRIDE_BASE) process.exit(1);
+NODE
+}
 HEVY_DIR=$TMP/server-hevy
 mkdir -p "$HEVY_DIR"
 if (
@@ -4369,11 +4381,12 @@ if (
   [ "$(cat "$TMP/hevy-compose-command")" = "$(printf '%s\n' \
     -f "$HEVY_DIR/compose.override.yaml" up -d --force-recreate)" ] && \
     grep -Fqx '      GODSPEED_WORKOUTS_HEVY_API: "http://host.docker.internal:47839"' "$HEVY_DIR/compose.override.yaml" && \
-    grep -Fqx '      GODSPEED_WORKOUTS_TEST: "1"' "$HEVY_DIR/compose.override.yaml"
+    grep -Fqx '      GODSPEED_WORKOUTS_TEST: "1"' "$HEVY_DIR/compose.override.yaml" && \
+    hevy_override_routes_to_fixture compose "$HEVY_DIR/compose.override.yaml" http://host.docker.internal:47839
 ); then
-  ok "the Hevy recreate writes its override through sudo and passes it through the installed Compose boundary"
+  ok "the Hevy Docker override routes through the carried add-on resolver"
 else
-  bad "the Hevy recreate did not write its override or pass both Compose layers"
+  bad "the Hevy Docker override did not route through the carried add-on resolver"
 fi
 NATIVE_HEVY_HOME=$TMP/native-hevy-home
 if (
@@ -4383,11 +4396,33 @@ if (
   systemctl() { return 0; }
   wait_for() { :; }
   native_hevy_url 47840
-  [ "$(cat "$HOME/.config/systemd/user/godspeed-integrated-notebook.service.d/scenario-hevy.conf")" = "$(printf '[Service]\nEnvironment="GODSPEED_WORKOUTS_HEVY_API=http://127.0.0.1:47840"\nEnvironment="GODSPEED_WORKOUTS_TEST=1"')" ]
+  override=$HOME/.config/systemd/user/godspeed-integrated-notebook.service.d/scenario-hevy.conf
+  [ "$(cat "$override")" = "$(printf '[Service]\nEnvironment="GODSPEED_WORKOUTS_HEVY_API=http://127.0.0.1:47840"\nEnvironment="GODSPEED_WORKOUTS_TEST=1"')" ] && \
+    hevy_override_routes_to_fixture systemd "$override" http://127.0.0.1:47840
 ); then
-  ok "the native Hevy override uses the add-on's test-only address contract"
+  ok "the native user-service override routes through the carried add-on resolver"
 else
-  bad "the native Hevy override did not use the add-on's test-only address contract"
+  bad "the native user-service override did not route through the carried add-on resolver"
+fi
+NATIVE_SYSTEM_HEVY=$TMP/native-system-hevy.conf
+if (
+  . "$ROOT/scenarios/workouts-from-hevy.sh"
+  systemctl() { [ "$1" = --user ] && return 1; return 0; }
+  sudo() {
+    case $1 in
+      mkdir|systemctl) return 0 ;;
+      tee) shift; cat >"$NATIVE_SYSTEM_HEVY" ;;
+      *) return 1 ;;
+    esac
+  }
+  wait_for() { :; }
+  native_hevy_url 47841
+  [ "$(cat "$NATIVE_SYSTEM_HEVY")" = "$(printf '[Service]\nEnvironment="GODSPEED_WORKOUTS_HEVY_API=http://127.0.0.1:47841"\nEnvironment="GODSPEED_WORKOUTS_TEST=1"')" ] && \
+    hevy_override_routes_to_fixture systemd "$NATIVE_SYSTEM_HEVY" http://127.0.0.1:47841
+); then
+  ok "the native system-service override routes through the carried add-on resolver"
+else
+  bad "the native system-service override did not route through the carried add-on resolver"
 fi
 HEVY_FAILURE_DIR=$TMP/server-hevy-write-failure
 mkdir -p "$HEVY_FAILURE_DIR"
