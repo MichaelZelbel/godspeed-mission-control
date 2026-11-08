@@ -182,6 +182,38 @@ test('the four beta.20 jobs check out the selected stage and run their own scena
   }
 });
 
+// talk-prep-honest keeps what it saw even when it fails, so a failed candidate can still be judged.
+// The folder it uploads is the scenario's own evidence folder: scenario-lib.sh derives it as
+// $RUNNER_TEMP/$SCENARIO, and SCENARIO is declared in scenarios/talk-prep-honest.sh. The workflow
+// repeats that name, so this test reads it from the scenario and holds the two together.
+test('talk-prep-honest always uploads its own evidence folder and fails when it is missing', async () => {
+  const { readFileSync } = await import('node:fs');
+  const scenarioFile = fileURLToPath(new URL('./talk-prep-honest.sh', import.meta.url));
+  const libFile = fileURLToPath(new URL('./scenario-lib.sh', import.meta.url));
+  const declared = readFileSync(scenarioFile, 'utf8').match(/^SCENARIO=([A-Za-z0-9_-]+)[ \t]*$/m);
+  assert.ok(declared, 'scenarios/talk-prep-honest.sh declares no SCENARIO=');
+  const name = declared[1];
+  assert.match(readFileSync(libFile, 'utf8'), /EVIDENCE=\$\{GODSPEED_SCENARIO_WORK:-\$\{RUNNER_TEMP:-\/tmp\}\}\/\$SCENARIO/,
+    'scenario-lib.sh no longer derives the evidence folder as $RUNNER_TEMP/$SCENARIO');
+  const text = readFileSync(WORKFLOW, 'utf8').replace(/\r\n/g, '\n');
+  const start = text.search(/^ {2}talk-prep-honest:[ \t]*$/m);
+  assert.ok(start >= 0, 'no job talk-prep-honest');
+  const rest = text.slice(start + 1);
+  const end = rest.search(/^ {2}[A-Za-z0-9_-]+:[ \t]*$/m);
+  const block = end < 0 ? rest : rest.slice(0, end);
+  assert.ok(block.includes(`bash scenarios/${name}.sh "$STAGE_REF"`), `the job does not run scenarios/${name}.sh`);
+  const steps = block.split(/\n(?= {6}- )/).filter((s) => /^ {6}- /.test(s));
+  const uploads = steps.filter((s) => s.includes('actions/upload-artifact@'));
+  assert.equal(uploads.length, 1, 'talk-prep-honest should have exactly one upload step');
+  const up = uploads[0];
+  const field = (k) => (up.match(new RegExp(`^ +${k}: *(.+?)[ \\t]*$`, 'm')) || [])[1];
+  assert.equal(field('if'), 'always()', 'the evidence upload must run even when the scenario fails');
+  assert.equal(field('uses'), 'actions/upload-artifact@v4');
+  assert.equal(field('name'), `${name}-evidence`, 'artifact name');
+  assert.equal(field('path'), `\${{ runner.temp }}/${name}`, "the uploaded folder is not the scenario's own evidence folder");
+  assert.equal(field('if-no-files-found'), 'error', 'a missing evidence folder must fail the step');
+});
+
 // The product version is owned by notebook/package.json; the README's newest "New in" heading must name it.
 test("the README's newest 'New in' heading is the package version", async () => {
   const { readFileSync } = await import('node:fs');
