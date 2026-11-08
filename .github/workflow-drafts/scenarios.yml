@@ -1,0 +1,58 @@
+# Apply these changes to .github/workflows/scenarios.yml. This is intentionally a draft: the
+# release key, not the builder key, changes live workflows.
+@@
+ jobs:
++  pr-image:
++    name: the selected pull request server image
++    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
++    runs-on: ubuntu-24.04
++    timeout-minutes: 40
++    permissions:
++      contents: read
++      packages: write
++      pull-requests: read
++    outputs:
++      picked: ${{ steps.pick.outputs.picked }}
++    env:
++      IMAGE: ghcr.io/michaelzelbel/godspeed-mission-control
++      TAG: pr-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}
++    steps:
++      - uses: actions/checkout@v4
++        with:
++          ref: ${{ github.event.pull_request.head.sha }}
++          persist-credentials: false
++      - name: Is a server scenario selected?
++        id: pick
++        env:
++          GH_TOKEN: ${{ github.token }}
++          PR: ${{ github.event.pull_request.number }}
++        run: |
++          set -e
++          gh api "repos/$GITHUB_REPOSITORY/pulls/$PR/files" --paginate --jq '.[].filename' > "$RUNNER_TEMP/changed"
++          jobs=$(grep -oE 'bash scenarios/[a-z0-9-]+\.sh "\$STAGE_REF"' .github/workflows/scenarios.yml | sed -E 's|bash scenarios/||; s|\.sh .*||' | sort -u)
++          for job in $jobs; do
++            grep -qE "^scenarios/$job(\\.sh|-[^/]*)$" "$RUNNER_TEMP/changed" && grep -qF server_install "scenarios/$job.sh" && { echo 'picked=true' >> "$GITHUB_OUTPUT"; exit 0; }
++          done
++          echo 'picked=false' >> "$GITHUB_OUTPUT"
++      - uses: docker/login-action@v3
++        if: steps.pick.outputs.picked == 'true'
++        with:
++          registry: ghcr.io
++          username: ${{ github.actor }}
++          password: ${{ secrets.GITHUB_TOKEN }}
++      - name: Build and publish the selected PR-head image
++        if: steps.pick.outputs.picked == 'true'
++        run: |
++          docker build --build-arg REVISION="${{ github.event.pull_request.head.sha }}" -f docker/full-candidate/Dockerfile -t "$IMAGE:$TAG" .
++          docker push "$IMAGE:$TAG"
+
+   stage:
++    needs: pr-image
+     # A pull request from a fork has no secrets, so no scenario can run on it: nothing runs.
+-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
++    if: ${{ always() && (github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && needs.pr-image.result == 'success')) }}
+@@
+     env:
+       # The commit the run proves: a pull request's own head, otherwise the one the run started on.
+       PROOF_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
++      GODSPEED_SCENARIO_PR_IMAGE_TAG: ${{ needs.pr-image.outputs.picked == 'true' && format('pr-{0}-{1}', github.event.pull_request.number, github.event.pull_request.head.sha) || '' }}

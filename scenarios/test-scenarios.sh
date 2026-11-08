@@ -225,8 +225,8 @@ server_run_job_keeps_success_evidence() {
     tables=0
     server_table() {
       tables=$((tables + 1))
-      if [ "$tables" = 1 ]; then printf "[{\\\"id\\\":\\\"brief\\\",\\\"last_run_at\\\":null,\\\"last_status\\\":null}]\\n" >"$2";
-      else printf "[{\\\"id\\\":\\\"brief\\\",\\\"last_run_at\\\":\\\"later\\\",\\\"last_status\\\":\\\"ok\\\"}]\\n" >"$2"; fi
+      if [ "$tables" = 1 ]; then printf "[{\\\"id\\\":\\\"brief\\\",\\\"name\\\":\\\"Coach reminders and habit check\\\",\\\"last_run_at\\\":null,\\\"last_status\\\":null}]\\n" >"$2";
+      else printf "[{\\\"id\\\":\\\"brief\\\",\\\"name\\\":\\\"Coach reminders and habit check\\\",\\\"last_run_at\\\":\\\"later\\\",\\\"last_status\\\":\\\"ok\\\"}]\\n" >"$2"; fi
     }
     server_post() { printf "{\\\"started\\\":true}\\n" >"$3"; printf 202; }
     wait_for() { "${@:3}"; }
@@ -4176,8 +4176,10 @@ SFR_IMAGE=$(node "$ROOT/stage/stage.mjs" "$ROOT/stage.json" get serverEditions.s
 SFR_IMAGE=${SFR_IMAGE%%@*}
 SFR_DA=sha256:$(printf 'a%.0s' $(seq 64))
 SFR_DB=sha256:$(printf 'b%.0s' $(seq 64))
+SFR_PC=sha256:$(printf 'c%.0s' $(seq 64))
 printf '%s:v2-sha-%s %s\n' "$SFR_IMAGE" "$SFR_TWO" "$SFR_DA" >"$TMP/sfr-images-two"
 printf '%s:v2-sha-%s %s\n' "$SFR_IMAGE" "$SFR_ONE" "$SFR_DB" >"$TMP/sfr-images-one"
+printf '%s:pr-354-%s %s\n' "$SFR_IMAGE" "$SFR_TWO" "$SFR_PC" >"$TMP/sfr-images-pr"
 : >"$TMP/sfr-images-none"
 GH_RAW_ADDR=https://raw.githubusercontent.com/MichaelZelbel/godspeed-mission-control
 sfr() { # <images file> <stage> <commit> <folder>
@@ -4214,6 +4216,16 @@ if [ "$SFR_CODE" = 0 ] && [ "$(node "$ROOT/stage/stage.mjs" "$TMP/sfr-night2/thi
 else
   bad "a commit with no image of its own (exit $SFR_CODE: $(cat "$TMP/sfr.err"))"
 fi
+SFR_OUT=$(GODSPEED_SCENARIO_REPO=$SFR_REPO GODSPEED_SCENARIO_PUBLIC_RAW=file://$TMP/sfr-public GODSPEED_SCENARIO_IMAGES=$TMP/sfr-images-pr GODSPEED_SCENARIO_PR_IMAGE_TAG=pr-354-$SFR_TWO \
+  bash "$SFR" '' "$SFR_TWO" "$TMP/sfr-pr" 2>"$TMP/sfr.err"); SFR_CODE=$?
+if [ "$SFR_CODE" = 0 ] && [ "$(node "$ROOT/stage/stage.mjs" "$TMP/sfr-pr/this-commit/stage.json" get serverEditions.server.image)" = "$SFR_IMAGE@$SFR_PC" ]; then
+  ok "a PR scenario stage uses its head image, never an install or candidate tag"
+else
+  bad "a PR scenario stage did not use its head image (exit $SFR_CODE: $(cat "$TMP/sfr.err"))"
+fi
+SFR_OUT=$(GODSPEED_SCENARIO_REPO=$SFR_REPO GODSPEED_SCENARIO_PUBLIC_RAW=file://$TMP/sfr-public GODSPEED_SCENARIO_IMAGES=$TMP/sfr-images-one GODSPEED_SCENARIO_PR_IMAGE_TAG=pr-354-$SFR_TWO \
+  bash "$SFR" '' "$SFR_TWO" "$TMP/sfr-pr-missing" 2>"$TMP/sfr.err"); SFR_CODE=$?
+if [ "$SFR_CODE" != 0 ]; then ok "a missing PR-head image does not fall back to an ancestor"; else bad "a missing PR-head image fell back to an ancestor"; fi
 sfr_night "$TMP/sfr-images-none" "$TMP/sfr-night3"
 if [ "$SFR_CODE" != 0 ]; then ok "no image within reach fails"; else bad "no image within reach succeeded"; fi
 bash "$SFR" '' notacommit "$TMP/sfr-night4" >/dev/null 2>&1

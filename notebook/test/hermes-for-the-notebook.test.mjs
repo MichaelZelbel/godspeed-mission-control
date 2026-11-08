@@ -171,6 +171,18 @@ test('Run now keeps the admitted Hermes child, and a refusal keeps its real life
  assert.equal(diagnostics[0].exit_status,0);assert.equal(diagnostics[0].stderr,'the Hermes warning');assert.equal(diagnostics[0].run_log.command_output,'the Hermes run log');assert.equal(diagnostics[0].run_log.path,path.join(home,'cron','output'));
 });
 
+test('a failed admission diagnostic does not retain the routine lease',async t=>{
+ const root=temporary(t,'run-diagnostic-admission-failure'),home=path.join(root,'.hermes'),store=new Store(root,{device:'pc'});
+ store.save('settings',{id:'installation',owner:'pc',timezone:'Europe/Berlin',delivery:'notebook'});fs.mkdirSync(path.join(home,'cron'),{recursive:true});fs.writeFileSync(path.join(home,'cron','jobs.json'),JSON.stringify({jobs:[{id:'brief',name:'Morning brief'}]}));
+ const scheduler=new NativeScheduler(store,{executable:'hermes',home,device:'pc',run:async()=>({stdout:''})}),save=scheduler.saveRunDiagnostic;
+ scheduler.saveRunDiagnostic=()=>{throw Error('diagnostic storage is unavailable');};
+ assert.throws(()=>scheduler.startRun('brief'),/diagnostic storage is unavailable/);assert.equal(scheduler.lifecycle.busy,false,'the failed admission released its lease');
+ scheduler.saveRunDiagnostic=save;
+ assert.deepEqual(scheduler.startRun(),{started:true});await scheduler.running;
+ await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(scheduler.lifecycle.busy,false,'the next manual routine completed normally');
+});
+
 test('a failed admitted Hermes child retains its exit status and stderr',async t=>{
  const root=temporary(t,'run-diagnostic-failure'),home=path.join(root,'.hermes'),store=new Store(root,{device:'pc'});
  store.save('settings',{id:'installation',owner:'pc',timezone:'Europe/Berlin',delivery:'notebook'});
