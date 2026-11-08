@@ -4040,6 +4040,27 @@ copy "$HU/good" "$HU/two-bells"; printf '[{"version":"1.2.0"},{"version":"1.2.0"
 refuses 'two update failure notifications' hermes-update-rollback "$HU/two-bells" 'exactly one pending bell'
 copy "$HU/good" "$HU/recent-taken"; sed -i 's/"attempted":false/"attempted":true/' "$HU/recent-taken/nights.json"
 refuses 'a three-day-old release taken' hermes-update-rollback "$HU/recent-taken" 'three-day 1.3.0 release was taken'
+HU_MIXED=$HU/mixed
+mkdir -p "$HU_MIXED/state" "$HU_MIXED/releases/bin"
+printf '{"last":{"reason":"Hermes cron"}}\n' >"$HU_MIXED/state/hermes-update.json"
+printf 'update 1.2.0\ngateway restart 1.2.0\n' >"$HU_MIXED/fixture.log"
+printf '{"data":[{"id":"hermes-update-1.2.0","status":"pending"},{"id":"routine-setup-failures","status":"pending"}]}\n' >"$HU_MIXED/notifications.json"
+printf '#!/bin/sh\nprintf "1.1.0\\n"\n' >"$HU_MIXED/releases/bin/hermes"
+chmod +x "$HU_MIXED/releases/bin/hermes"
+git -C "$HU_MIXED/releases" init -q
+git -C "$HU_MIXED/releases" -c user.name=fixture -c user.email=fixture@example.invalid commit --allow-empty -qm fixture
+# The serializer is embedded in the scenario, so run that exact program without an installation.
+awk '/\$NODE" - "\$STATE\/hermes-update\.json" "\$EVIDENCE\/releases" "\$EVIDENCE\/\$label-notifications\.json"/{serializer=1} serializer&&/^const fs=require/{body=1} body&&/^NODE$/{exit} body{print}' \
+  "$ROOT/scenarios/hermes-update-rollback.sh" >"$HU_MIXED/snapshot.cjs"
+if [ -s "$HU_MIXED/snapshot.cjs" ] \
+  && node "$HU_MIXED/snapshot.cjs" "$HU_MIXED/state/hermes-update.json" "$HU_MIXED/releases" "$HU_MIXED/notifications.json" \
+    "$HU_MIXED/fixture.log" 1.2.0 mixed >"$HU_MIXED/mixed.json" \
+  && node -e 'const n=require("fs").readFileSync(process.argv[1],"utf8"),snapshot=JSON.parse(n);if(snapshot.failure_bell!==true||snapshot.notification_count!==1||snapshot.notifications.length!==1||snapshot.notifications[0].version!=="1.2.0"||snapshot.notifications[0].pending!==true)process.exit(1);' \
+    "$HU_MIXED/mixed.json"; then
+  ok 'the Hermes snapshot ignores an unrelated routine-setup notice'
+else
+  bad 'the Hermes snapshot does not keep only its update notice'
+fi
 
 # The two local fixtures are useful without an installation. Their logs must never contain keys.
 HF=$TMP/hevy-fixture; mkdir -p "$HF"; : >"$HF/log"
