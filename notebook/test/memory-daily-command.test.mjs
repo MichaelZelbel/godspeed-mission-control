@@ -1,4 +1,4 @@
-import test from 'node:test';
+import test,{mock} from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -14,6 +14,11 @@ import {STARTING_ROUTINES} from '../core/starting-routines.mjs';
 import {recordRunningNotebook} from '../core/running-notebook.mjs';
 import {main,resultExitCode} from '../scripts/memory-daily.mjs';
 
+// The command reads only messages from the last six days, and these fixtures are dated 1 to 3 November
+// 2026. The clock of this process stands at 4 November 2026 so the fixtures stay inside that window on
+// any day the suite runs; before this the file failed from 8 November on. The two command processes the
+// first test starts have their own clock, so their message is dated from the real one.
+const realNow=Date.now();mock.timers.enable({apis:['Date'],now:Date.parse('2026-11-04T12:00:00Z')});
 const model=fileURLToPath(new URL('./fixtures/memory-daily-model.mjs',import.meta.url));
 const due=fileURLToPath(new URL('./fixtures/memory-daily-due.mjs',import.meta.url));
 const memoryScript=fileURLToPath(new URL('../scripts/memory-daily.mjs',import.meta.url));
@@ -37,7 +42,7 @@ test('the command files a quoted notebook fact once through its model-command bo
 });
 
 test('two daily-memory command processes submit one archive piece once',async t=>{
- const root=workspace(t),row={id:'process-once',at:'2026-11-02T12:00:00Z',text:'I moved to Hamburg on 1 November'};archive(root,[row]);let requests=0,firstRequest,secondStarted;const requested=new Promise(resolve=>firstRequest=resolve),second=new Promise(resolve=>secondStarted=resolve);
+ const root=workspace(t),row={id:'process-once',at:new Date(realNow-3600000).toISOString(),text:'I moved to Hamburg on 1 November'};archive(root,[row]);let requests=0,firstRequest,secondStarted;const requested=new Promise(resolve=>firstRequest=resolve),second=new Promise(resolve=>secondStarted=resolve);
  const server=http.createServer(async(req,res)=>{let body='';for await(const chunk of req)body+=chunk;requests++;if(requests===1){firstRequest(JSON.parse(body));await second;await new Promise(resolve=>setTimeout(resolve,300));}res.end(JSON.stringify({choices:[{message:{content:response({facts:[],events:[]})}}]}));});await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));t.after(()=>new Promise(resolve=>server.close(resolve)));
  fs.mkdirSync(path.join(root,'.godspeed'),{recursive:true});fs.writeFileSync(path.join(root,'.godspeed','provider.json'),JSON.stringify({url:'http://127.0.0.1:'+server.address().port+'/v1/chat/completions',key:'fixture-key',model:'fixture-model'}));
  const first=runScript(root);const request=await requested;const secondRun=runScript(root);secondStarted();await Promise.all([first,secondRun]);assert.equal(requests,1);assert.deepEqual(JSON.parse(request.messages[1].content).messages.map(message=>message.id),[row.id]);assert.deepEqual(JSON.parse(fs.readFileSync(path.join(root,'routines','remember-what-you-said','state.json'),'utf8')).consumed,[row.id]);

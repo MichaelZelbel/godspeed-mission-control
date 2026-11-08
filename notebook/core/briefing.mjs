@@ -146,7 +146,7 @@ async function runBriefing(job,{store,query,provider,now}){
   const contribution=context.contribution;
   if(contribution&&([contribution.id,contribution.note_id,...contribution.source_ids].some(id=>id!=null&&rejectedIds.has(String(id)))))context.contribution=null;
   const required=[context.cycle_heads_up,context.charm_line].filter(Boolean);
-  const goal=context.goals.find(row=>!excluded(row)&&text(row.title));
+  const goal=context.goals.find(row=>!excluded(row)&&text(row.title)),anyGoal=context.goals.length>0;
   addFirst(context.goals,row=>!excluded(row)&&text(row.title)?'One of your saved goals is '+text(row.title)+'.':null);
   const verified=context.work.filter(row=>row.state==='verified'&&row.kind!=='repair'&&!excluded(row)).sort((a,b)=>String(b.verification?.at||b.updated_at||'').localeCompare(String(a.verification?.at||a.updated_at||'')));
   addFirst(verified,row=>text(row.title)?'Godspeed has verified this work: '+text(row.title)+'.':null);
@@ -157,14 +157,14 @@ async function runBriefing(job,{store,query,provider,now}){
   const observedAt=row=>row.date_precision==='day'&&row.observed_on?String(row.observed_on)+'T00:00:00Z':row.observed_at||row.created_at||'';
   const settled=row=>row.via!==PHONE_VIA||context.health_freshness?.days?.find(day=>day.date===row.observed_on)?.columns?.[row.metric]?.state==='complete';
   const healthAdded=addFirst(context.health.filter(row=>!excluded(row)&&settled(row)).sort((a,b)=>String(observedAt(b)).localeCompare(String(observedAt(a)))),row=>{const metric=text(row.metric,60),value=row.value;return metric&&(typeof value==='number'||typeof value==='string'&&text(value,30))?'A recorded health observation is '+metric+': '+value+'.':null;})||unknownAdded;
-  if(!healthAdded)add('There are no fresh health observations to report.');
+  if(!healthAdded&&!context.health.some(row=>!excluded(row)))add('There are no fresh health observations to report.');
   const action=context.contribution
-   ?add('Review this checked draft before deciding. It has not been sent.')
-   :add(goal?'Ask Godspeed to work on '+text(goal.title)+' and show you one concrete result today.':'Tell Godspeed one goal to work on today, then ask it for the first concrete step.');
+   ?add('Review this checked draft before deciding. It has not been sent.')||add('Review this unsent draft.')
+   :add(goal?'Ask Godspeed to work on '+text(goal.title)+' and show you one concrete result today.':anyGoal?'Ask Godspeed to complete one goal step.':'Tell Godspeed one goal to work on today, then ask it for the first concrete step.')||add(anyGoal?'Ask Godspeed to complete one goal step.':'Tell Godspeed one goal.')||add(anyGoal?'Work on one goal step today.':'Name one goal today.')||add(anyGoal?'Do one goal step.':'Name one goal.');
   for(const line of required)add(line);
   if(context.contribution){add(context.contribution.content);add(context.contribution.link);}
   const result=parts.join('\n\n');
-  if(!action||codeGate(result).length)throw Error('Could not make a checked factual fallback from the available sources');
+  if(!action||codeGate(result).length||ruleRefusals(result,voice).length)throw Error('Could not make a checked factual fallback from the available sources');
   return result;
  };
  // The Charm Challenge line is the person's own count, written by the add-on and checked word for word
