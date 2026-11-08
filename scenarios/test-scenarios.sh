@@ -3765,6 +3765,7 @@ ACT_NODE_ORDER=$(env -u NODE GODSPEED_SCENARIO_ROOT="$RFS/root" ACTION_EVENTS="$
   EVIDENCE=$2
   node() { :; }
   trap() { :; }
+  need_node() { NODE=$(type -P node); printf "need-node\\n" >>"$ACTION_EVENTS"; }
   fresh_evidence() { mkdir -p "$EVIDENCE"; printf "47832\\n" >"$EVIDENCE/fixture-port"; }
   wait_for() { :; }
   curl() { printf "%s\\n" "{\"ok\":true}"; }
@@ -3785,14 +3786,25 @@ ACT_NODE_ORDER=$(env -u NODE GODSPEED_SCENARIO_ROOT="$RFS/root" ACTION_EVENTS="$
   refused_not_retained() { printf "refused-%s:%s\\n" "$1" "${NODE:+set}" >>"$ACTION_EVENTS"; }
   platform_before() { settings_post "$1" "$2" "$EVIDENCE/$1-accepted.json" >"$EVIDENCE/$1-accepted.code"; }
   platform_after() { :; }
-  scan_fixture_key() { :; }
+  scan_fixture_key() { "$NODE" -e "process.stdout.write('scan-node\\n')" >>"$ACTION_EVENTS"; }
   check() { :; }
   act
   cat "$ACTION_EVENTS"
 ' action-order "$ROOT/scenarios/workouts-from-hevy.sh" "$RFS/action-evidence" "$ROOT/scenarios" 2>&1)
 case "$ACT_NODE_ORDER" in
-  $'settings-docker:{"key":"refused-scenario-key"}\nsettings-native:{"key":"refused-scenario-key"}\nrefused-docker:\nrefused-native:\nsettings-docker:{"key":"84f3c5d2-9a7e-4b18-8c65-3d7f1a9e6b24"}\nsettings-native:{"key":"84f3c5d2-9a7e-4b18-8c65-3d7f1a9e6b24"}') ok "the Hevy action sends both Settings calls their key before its scans" ;;
-  *) bad "the Hevy action did not send both Settings calls their key before its scans ($ACT_NODE_ORDER)" ;;
+  $'need-node\nsettings-docker:{"key":"refused-scenario-key"}\nsettings-native:{"key":"refused-scenario-key"}\nrefused-docker:set\nrefused-native:set\nsettings-docker:{"key":"84f3c5d2-9a7e-4b18-8c65-3d7f1a9e6b24"}\nsettings-native:{"key":"84f3c5d2-9a7e-4b18-8c65-3d7f1a9e6b24"}\nscan-node') ok "the Hevy action selects Node before its scans and sends both Settings calls their key" ;;
+  *) bad "the Hevy action did not select Node before its scans and send both Settings calls their key ($ACT_NODE_ORDER)" ;;
+esac
+NO_NODE_ACTION=$(env -u NODE GODSPEED_SCENARIO_ROOT="$RFS/root" bash -c '
+  cd "$2"
+  . "$1"
+  node_bin() { return 1; }
+  act
+' node-missing "$ROOT/scenarios/workouts-from-hevy.sh" "$ROOT/scenarios" 2>&1)
+NO_NODE_ACTION_CODE=$?
+case "$NO_NODE_ACTION_CODE $NO_NODE_ACTION" in
+  "1 "*"FAIL workouts-from-hevy: node is not on this machine and the install carries none"*) ok "the Hevy action stops before its fixture when it cannot select Node" ;;
+  *) bad "the Hevy action did not stop before its fixture without Node (exit $NO_NODE_ACTION_CODE: $NO_NODE_ACTION)" ;;
 esac
 printf '84f3c5d2-9a7e-4b18-8c65-3d7f1a9e6b24\n' >"$RFS/root/.godspeed/workouts/hevy.json"
 printf '84f3c5d2-9a7e-4b18-8c65-3d7f1a9e6b24\n' >"$RFS_SOURCE"
