@@ -2,7 +2,7 @@ name: scenarios
 # The run's name carries the stage it proved, so a run on a candidate's tag that was left at the
 # default stage (beta) cannot be read as that candidate's pass: GitHub shows the input itself only
 # in the run's logs.
-run-name: ${{ github.event_name == 'pull_request' && format('scenarios on pull request {0}', github.event.pull_request.number) || format('scenarios {0}{1}', inputs.stage || 'main, the night', inputs.only && format(' (only {0})', inputs.only) || '') }}
+run-name: ${{ github.event_name == 'pull_request' && format('scenarios on pull request {0}', github.event.pull_request.number) || format('scenarios {0}', inputs.stage || 'main, the night') }}
 # The proving scenarios a candidate runs before the maintainer is asked for "go" (godspeed-dev,
 # releases/godspeed-2.0.0-beta.7-stages/plan.md, "Proving scenarios" 1, 2 and 5, and
 # releases/godspeed-2.0.0-beta.8-faster-chat/plan.md, "Proving scenarios" 1, 3 and 4, which are
@@ -26,7 +26,8 @@ run-name: ${{ github.event_name == 'pull_request' && format('scenarios on pull r
 # A candidate's run can be narrowed by hand: `-f only=first-day,talk-prep-honest` (job names, comma
 # separated) runs only those jobs, plus the stage job and the verdict, which judges only what was
 # picked and fails on a name that is no job; no issue is filed for it. Without `only` every job runs
-# as before (the night, a plain dispatch). The Mac and Windows jobs run on `only` when listed.
+# as before (the night, a plain dispatch). The Mac and Windows jobs run on `only` when listed. The
+# run keeps the title "scenarios <stage>": the release gate counts a run by that title.
 # A night proves main's own commit: with no `stage` input (the schedule) the stage is made from
 # github.sha by scenarios/stage-for-run.sh and handed to every job as the artifact run-stage, read as
 # file://; main's own stage.json names the last frozen version and is never read.
