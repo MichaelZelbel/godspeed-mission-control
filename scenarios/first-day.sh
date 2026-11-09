@@ -63,15 +63,19 @@ act() {
   [ "$(server_post /api/setup "$EVIDENCE/.setup.json" "$EVIDENCE/setup.json")" = 200 ] ||
     fail "the installed notebook would not file the emergency-kit goal: $(tr -d '\n' <"$EVIDENCE/setup.json" | cut -c1-200)"
   server_pause_all_jobs
+  server_settle_gateway
   step_passed 'fictional emergency-kit goal filed through the notebook'
   first_day_phase 'installed research routine'
   server_run_job research "$RESEARCH" 1800
+  server_telegram_mark research cron
   first_day_phase 'installed choice routine'
   server_run_job choice "$CHOOSE" 1800
+  server_telegram_mark choice cron
   first_day_phase 'scenario files the emergency-kit work for the installed daily round'
   file_first_day_work
   first_day_phase 'installed work routine'
   server_run_job work "$WORK" 1800
+  server_telegram_mark work cron
   step_passed 'installed research, choice, and work routines completed'
   first_day_phase 'installed morning brief and its Telegram delivery'
   server_scheduled_brief "$EVIDENCE/brief.txt" 1800

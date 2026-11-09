@@ -147,6 +147,30 @@ server_telegram_setup() { # [without-ai]
   "$NODE" "$HERE/server-telegram.mjs" setup --server "$(server_container)" --evidence "$EVIDENCE" --notebook-port "$INGEST_PORT" \
     --token "$SERVER_TELEGRAM_TOKEN" --owner "$SERVER_TELEGRAM_OWNER" "${setup[@]}" ||
     fail 'the installed Docker Telegram setup did not hand the bot to its gateway'
+  server_remember_gateway
+}
+# The gateway reads Hermes' time zone once, when it starts, so the Telegram runner starts it again
+# half a minute after the zone changes (docker/full-candidate/telegram-runner.mjs), and the gateway
+# tells the owner it is shutting down. A goal filed through /api/setup after the Telegram setup names
+# the zone, so a scenario waits for that restart before its routines run: otherwise the notice lands
+# in the first routine's messages and a delivery made while the gateway drains is lost.
+server_gateway_pid() {
+  in_server cat /opt/data/full-candidate/telegram/runner.json 2>/dev/null |
+    "$NODE" -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{const r=JSON.parse(s);if(r.state==="gateway"&&r.pid)process.stdout.write(String(r.pid))}catch{}})'
+}
+server_gateway_zone() { in_server_as_hermes sh -c 'grep -E "^timezone:" "$HERMES_HOME/config.yaml" 2>/dev/null || true'; }
+server_remember_gateway() {
+  SERVER_GATEWAY_PID=$(server_gateway_pid)
+  SERVER_GATEWAY_ZONE=$(server_gateway_zone)
+}
+# shellcheck disable=SC2317,SC2329  # asked by wait_for
+server_gateway_restarted() { local pid; pid=$(server_gateway_pid); [ -n "$pid" ] && [ "$pid" != "$SERVER_GATEWAY_PID" ]; }
+server_settle_gateway() {
+  [ "$(server_gateway_zone)" = "$SERVER_GATEWAY_ZONE" ] && return 0
+  wait_for 240 'the Telegram gateway to start again on the time zone the goal named' server_gateway_restarted ||
+    fail 'the Telegram gateway did not start again within 240 s after the goal changed its time zone'
+  server_telegram_mark gateway-restart cron
+  server_remember_gateway
 }
 server_telegram_say() { # <label> <text>
   interaction_begin "$1"

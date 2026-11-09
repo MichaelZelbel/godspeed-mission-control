@@ -68,6 +68,37 @@ def parameters(content_type, body):
     return decoded
 
 
+def shown(p, field):
+    """The text as the reader sees it. A MarkdownV2 message (Hermes' gateway sends them) loses its
+    escapes and its formatting marks, and a link shows only its text."""
+    text = p.get(field, "")
+    if not isinstance(text, str) or p.get("parse_mode") != "MarkdownV2":
+        return text
+    out, i, n = [], 0, len(text)
+    while i < n:
+        c = text[i]
+        if c == "\\" and i + 1 < n:
+            out.append(text[i + 1])
+            i += 2
+            continue
+        if c == "]" and text[i + 1:i + 2] == "(":
+            # the end of a link's text: skip its address, up to the unescaped ")"
+            i += 2
+            while i < n and text[i] != ")":
+                i += 2 if text[i] == "\\" else 1
+            i += 1
+            continue
+        if c == ">" and (i == 0 or text[i - 1] == "\n"):
+            i += 2 if text[i + 1:i + 2] == " " else 1
+            continue
+        if c in "*_~`|[":
+            i += 1
+            continue
+        out.append(c)
+        i += 1
+    return "".join(out)
+
+
 def message(m):
     """The Message Telegram answers a send with; python-telegram-bot rejects one without date or chat type."""
     return {"message_id": m["message_id"], "date": int(m["t"]), "from": BOT,
@@ -144,7 +175,7 @@ class Fake:
                 return list(self.updates)
             if method == "sendMessage":
                 kb = (p.get("reply_markup") or {}).get("inline_keyboard") or []
-                m = {"chat_id": p.get("chat_id"), "text": p.get("text", ""), "message_id": self.next_msg,
+                m = {"chat_id": p.get("chat_id"), "text": shown(p, "text"), "message_id": self.next_msg,
                      "buttons": [{"label": b.get("text"), "callback": b.get("callback_data")}
                                  for row in kb for b in row], "t": time.time()}
                 self.next_msg += 1
@@ -160,7 +191,7 @@ class Fake:
                             self.act(a)
                 return message(m)
             if method == "sendDocument":
-                m = {"chat_id": p.get("chat_id"), "text": p.get("caption", ""), "message_id": self.next_msg,
+                m = {"chat_id": p.get("chat_id"), "text": shown(p, "caption"), "message_id": self.next_msg,
                      "buttons": [], "t": time.time()}
                 self.next_msg += 1
                 self.sent.append(m)
@@ -172,7 +203,7 @@ class Fake:
             if method == "deleteMessage":
                 self.deleted.append(p.get("message_id"))
             if method == "editMessageText":
-                self.edits.append(p.get("text", ""))
+                self.edits.append(shown(p, "text"))
             return True
 
     def request(self, method, authorized, p):
