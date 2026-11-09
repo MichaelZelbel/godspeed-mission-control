@@ -112,9 +112,9 @@ jobs:
         run: |
           set -e
           if [ "$GITHUB_EVENT_NAME" != pull_request ]; then
-            # A hand-started run may name the jobs to run; empty (or `all`) and every other event run them all.
+            # A hand-started run may name the jobs to run; an empty value and every other event run them all.
             only=$(printf '%s' "${ONLY:-}" | tr -d ' \t\r\n')
-            if [ "$GITHUB_EVENT_NAME" != workflow_dispatch ] || [ -z "$only" ] || [ "$only" = all ]; then
+            if [ "$GITHUB_EVENT_NAME" != workflow_dispatch ] || [ -z "$only" ]; then
               echo "picked=all" | tee -a "$GITHUB_OUTPUT"
               exit 0
             fi
