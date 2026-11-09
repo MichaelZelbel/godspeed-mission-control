@@ -4055,6 +4055,27 @@ copy "$HU/good" "$HU/two-bells"; printf '[{"version":"1.2.0"},{"version":"1.2.0"
 refuses 'two update failure notifications' hermes-update-rollback "$HU/two-bells" 'exactly one pending bell'
 copy "$HU/good" "$HU/recent-taken"; sed -i 's/"attempted":false/"attempted":true/' "$HU/recent-taken/nights.json"
 refuses 'a three-day-old release taken' hermes-update-rollback "$HU/recent-taken" 'three-day 1.3.0 release was taken'
+HU_MIXED=$HU/mixed
+mkdir -p "$HU_MIXED/state" "$HU_MIXED/releases/bin"
+printf '{"last":{"reason":"Hermes cron"}}\n' >"$HU_MIXED/state/hermes-update.json"
+printf 'update 1.2.0\ngateway restart 1.2.0\n' >"$HU_MIXED/fixture.log"
+printf '{"data":[{"id":"hermes-update-1.2.0","status":"pending"},{"id":"routine-setup-failures","status":"pending"}]}\n' >"$HU_MIXED/notifications.json"
+printf '#!/bin/sh\nprintf "1.1.0\\n"\n' >"$HU_MIXED/releases/bin/hermes"
+chmod +x "$HU_MIXED/releases/bin/hermes"
+git -C "$HU_MIXED/releases" init -q
+git -C "$HU_MIXED/releases" -c user.name=fixture -c user.email=fixture@example.invalid commit --allow-empty -qm fixture
+# The serializer is embedded in the scenario, so run that exact program without an installation.
+awk '/\$NODE" - "\$STATE\/hermes-update\.json" "\$EVIDENCE\/releases" "\$EVIDENCE\/\$label-notifications\.json"/{serializer=1} serializer&&/^const fs=require/{body=1} body&&/^NODE$/{exit} body{print}' \
+  "$ROOT/scenarios/hermes-update-rollback.sh" >"$HU_MIXED/snapshot.cjs"
+if [ -s "$HU_MIXED/snapshot.cjs" ] \
+  && node "$HU_MIXED/snapshot.cjs" "$HU_MIXED/state/hermes-update.json" "$HU_MIXED/releases" "$HU_MIXED/notifications.json" \
+    "$HU_MIXED/fixture.log" 1.2.0 mixed >"$HU_MIXED/mixed.json" \
+  && node -e 'const n=require("fs").readFileSync(process.argv[1],"utf8"),snapshot=JSON.parse(n);if(snapshot.failure_bell!==true||snapshot.notification_count!==1||snapshot.notifications.length!==1||snapshot.notifications[0].version!=="1.2.0"||snapshot.notifications[0].pending!==true)process.exit(1);' \
+    "$HU_MIXED/mixed.json"; then
+  ok 'the Hermes snapshot ignores an unrelated routine-setup notice'
+else
+  bad 'the Hermes snapshot does not keep only its update notice'
+fi
 
 # The two local fixtures are useful without an installation. Their logs must never contain keys.
 HF=$TMP/hevy-fixture; mkdir -p "$HF"; : >"$HF/log"
@@ -4069,14 +4090,26 @@ kill "$HF_PID" 2>/dev/null || true
 if [ "$HF_BAD" = 401 ] && grep -q 'harbor-strength' <<<"$HF_GOOD" && grep -q 'canal-pull' <<<"$HF_EVENTS" && ! grep -q '00000000-0000-4000-8000-000000000001' "$HF/log"; then ok 'the local Hevy fixture refuses, changes and redacts'; else bad 'the local Hevy fixture does not refuse, change and redact'; fi
 HFD=$TMP/hermes-fixture
 HFD_LOG=$TMP/hermes-fixture.log
+HFD_BACKUP=$TMP/hermes-pre-update.zip
 if node "$ROOT/scenarios/hermes-update-fixture.mjs" --dir "$HFD" >/dev/null \
+  && [ -z "$(git -C "$HFD" status --porcelain)" ] \
+  && node --input-type=module -e "import {pathToFileURL} from 'node:url';const {officialHermesRemote}=await import(pathToFileURL(process.argv[1]).href);process.exit(officialHermesRemote(process.argv[2])?0:1)" "$ROOT/notebook/core/hermes-update.mjs" "$(git -C "$HFD" remote get-url origin)" \
   && [ "$(git -C "$HFD" tag | wc -l | tr -d '[:space:]')" = 4 ] \
   && [ "$(HERMES_FIXTURE_LOG=$HFD_LOG "$HFD/bin/hermes" --version)" = 1.0.0 ] \
   && [ "$(HERMES_FIXTURE_LOG=$HFD_LOG "$HFD/bin/hermes" update --check)" = 1.1.0 ] \
-  && HERMES_FIXTURE_LOG=$HFD_LOG "$HFD/bin/hermes" update 1.2.0 \
+  && HERMES_FIXTURE_LOG=$HFD_LOG "$HFD/bin/hermes" backup --output "$HFD_BACKUP" --keep 0 \
+  && [ -f "$HFD_BACKUP" ] \
+  && HERMES_FIXTURE_LOG=$HFD_LOG "$HFD/bin/hermes" update --no-backup --yes \
+  && [ "$(git -C "$HFD" describe --exact-match --tags HEAD)" = v1.1.0 ] \
+  && HERMES_FIXTURE_LOG=$HFD_LOG "$HFD/bin/hermes" plugins doctor "$HFD/plugins/godspeed-coach" --ci \
+  && node "$ROOT/scenarios/hermes-update-fixture.mjs" --dir "$HFD" --reveal 1.2.0 >/dev/null \
+  && HERMES_FIXTURE_LOG=$HFD_LOG "$HFD/bin/hermes" update --no-backup --yes \
   && [ "$(git -C "$HFD" describe --exact-match --tags HEAD)" = v1.2.0 ] \
   && ! HERMES_FIXTURE_LOG=$HFD_LOG "$HFD/bin/hermes" cron list >/dev/null 2>&1 \
   && git -C "$HFD" checkout -q v1.1.0 \
+  && HERMES_FIXTURE_LOG=$HFD_LOG "$HFD/bin/hermes" import "$HFD_BACKUP" --force \
+  && HERMES_FIXTURE_LOG=$HFD_LOG "$HFD/bin/hermes" pm install \
+  && node "$ROOT/scenarios/hermes-update-fixture.mjs" --dir "$HFD" --reveal 1.1.0 >/dev/null \
   && HERMES_FIXTURE_LOG=$HFD_LOG "$HFD/bin/hermes" update --backup \
   && [ "$(git -C "$HFD" describe --exact-match --tags HEAD)" = v1.1.0 ] \
   && HERMES_FIXTURE_LOG=$HFD_LOG "$HFD/bin/hermes" cron list >/dev/null \
@@ -4084,10 +4117,135 @@ if node "$ROOT/scenarios/hermes-update-fixture.mjs" --dir "$HFD" >/dev/null \
   && node "$ROOT/scenarios/hermes-update-fixture.mjs" --dir "$HFD" --reveal 1.3.0 >/dev/null \
   && [ "$(HERMES_FIXTURE_LOG=$HFD_LOG "$HFD/bin/hermes" update --check)" = 1.3.0 ] \
   && [ "$(node "$ROOT/scenarios/hermes-update-fixture.mjs" --dir "$HFD" --metadata)" = '[{"version":"1.0.0","healthy":true,"age_days":18},{"version":"1.1.0","healthy":true,"age_days":9},{"version":"1.2.0","healthy":false,"age_days":8},{"version":"1.3.0","healthy":true,"age_days":3}]' ] \
+  && grep -qx 'import 1.1.0' "$HFD_LOG" \
+  && grep -qx 'pm-install 1.1.0' "$HFD_LOG" \
+  && grep -qx 'plugins-doctor 1.1.0' "$HFD_LOG" \
   && ! grep -qE 'key|token|secret' "$HFD_LOG"; then
-  ok 'the local Hermes fixture versions, checks, breaks, answers, reveals and redacts'
+  ok 'the local Hermes fixture versions, backs up, checks, breaks, restores, answers, reveals and redacts'
 else
   bad 'the local Hermes fixture does not control its local releases and harmless command'
+fi
+HFD_STATE=$HFD/.fixture-state.json
+HFD_MISSING=$TMP/hermes-fixture-state
+HFD_OUTPUT=$TMP/hermes-fixture-missing-state.out
+if mv "$HFD_STATE" "$HFD_MISSING" \
+  && ! HERMES_FIXTURE_LOG=$HFD_LOG "$HFD/bin/hermes" update --check >"$HFD_OUTPUT" 2>&1 \
+  && ! HERMES_FIXTURE_LOG=$HFD_LOG "$HFD/bin/hermes" update --no-backup --yes >>"$HFD_OUTPUT" 2>&1 \
+  && ! HERMES_FIXTURE_LOG=$HFD_LOG "$HFD/bin/hermes" update --backup >>"$HFD_OUTPUT" 2>&1 \
+  && ! grep -q '1.1.0' "$HFD_OUTPUT" \
+  && mv "$HFD_MISSING" "$HFD_STATE"; then
+  ok 'the local Hermes fixture refuses every state-dependent update without fabricating a release'
+else
+  mv "$HFD_MISSING" "$HFD_STATE" 2>/dev/null || true
+  bad 'the local Hermes fixture fabricates a release when its state is missing'
+fi
+HFD_URL_FILE=$TMP/hermes-fixture-url
+node "$ROOT/scenarios/hermes-update-fixture.mjs" --dir "$HFD" --serve >"$HFD_URL_FILE" 2>/dev/null &
+HFD_PID=$!
+for _ in $(seq 1 20); do [ -s "$HFD_URL_FILE" ] && break; sleep 0.1; done
+HFD_URL=$(cat "$HFD_URL_FILE" 2>/dev/null || true)
+HFD_ALL=$(curl -fsS "$HFD_URL" 2>/dev/null || true)
+node "$ROOT/scenarios/hermes-update-fixture.mjs" --dir "$HFD" --reveal 1.2.0 >/dev/null
+HFD_REVEALED=$(curl -fsS "$HFD_URL" 2>/dev/null || true)
+kill "$HFD_PID" 2>/dev/null || true
+if [ "$HFD_ALL" = '[{"tag_name":"v1.0.0","published_at":"2026-10-20T00:00:00Z","prerelease":false,"draft":false},{"tag_name":"v1.1.0","published_at":"2026-10-29T00:00:00Z","prerelease":false,"draft":false},{"tag_name":"v1.2.0","published_at":"2026-10-30T00:00:00Z","prerelease":false,"draft":false},{"tag_name":"v1.3.0","published_at":"2026-11-04T00:00:00Z","prerelease":false,"draft":false}]' ] \
+  && [ "$HFD_REVEALED" = '[{"tag_name":"v1.0.0","published_at":"2026-10-20T00:00:00Z","prerelease":false,"draft":false},{"tag_name":"v1.1.0","published_at":"2026-10-29T00:00:00Z","prerelease":false,"draft":false},{"tag_name":"v1.2.0","published_at":"2026-10-30T00:00:00Z","prerelease":false,"draft":false}]' ]; then
+  ok 'the local Hermes fixture serves only its revealed releases on loopback'
+else
+  bad 'the local Hermes fixture does not serve its revealed releases on loopback'
+fi
+HRC=$TMP/hermes-release-cleanup
+mkdir -p "$HRC/bin" "$HRC/user" "$HRC/machine"
+printf '%s\n' '#!/bin/sh' 'if [ -e "$HERMES_RELEASE_CLEANUP_ROOT/user/scenario-hermes-releases.conf" ] || [ -e "$HERMES_RELEASE_CLEANUP_ROOT/machine/scenario-hermes-releases.conf" ]; then exit 1; fi' 'printf "%s\\n" "$*" >> "$HERMES_RELEASE_CLEANUP_LOG"' >"$HRC/bin/systemctl"
+printf '%s\n' '#!/bin/sh' 'exec "$@"' >"$HRC/bin/sudo"
+chmod +x "$HRC/bin/systemctl" "$HRC/bin/sudo"
+if ROOT="$ROOT" HRC="$HRC" HERMES_RELEASE_CLEANUP_ROOT="$HRC" HERMES_RELEASE_CLEANUP_LOG="$HRC/systemctl.log" PATH="$HRC/bin:$PATH" bash -c '
+  source "$ROOT/scenarios/hermes-update-rollback.sh"
+  for manager in user machine; do
+    source_file="$HRC/$manager/scenario-hermes-releases.conf"
+    : >"$source_file"
+    sleep 60 & pid=$!
+    release_fixture_pid=$pid
+    release_source_manager=$manager
+    release_source_dropin=$source_file
+    release_source_unit=godspeed-integrated-notebook.service
+    cleanup_release_source
+    [ ! -e "$source_file" ] && ! kill -0 "$pid" 2>/dev/null
+  done
+'; then
+  if [ ! -e "$HRC/user/scenario-hermes-releases.conf" ] && [ ! -e "$HRC/machine/scenario-hermes-releases.conf" ] \
+    && [ "$(grep -cx -- '--user daemon-reload' "$HRC/systemctl.log")" = 1 ] \
+    && [ "$(grep -cx -- '--user restart godspeed-integrated-notebook.service' "$HRC/systemctl.log")" = 1 ] \
+    && [ "$(grep -cx -- 'daemon-reload' "$HRC/systemctl.log")" = 1 ] \
+    && [ "$(grep -cx -- 'restart godspeed-integrated-notebook.service' "$HRC/systemctl.log")" = 1 ]; then
+    ok 'the Hermes release fixture and both temporary service overrides are removed before the service restarts'
+  else
+    bad 'the Hermes release-source cleanup does not reload and restart both service routes'
+  fi
+else
+  bad 'the Hermes release-source cleanup cannot remove both temporary service routes'
+fi
+HRC_FAILURE=$TMP/hermes-release-cleanup-failure
+mkdir -p "$HRC_FAILURE/bin" "$HRC_FAILURE/home"
+printf '%s\n' '#!/bin/sh' 'case "$*" in' '  "--user cat godspeed-integrated-notebook.service") exit 0 ;;' '  "--user daemon-reload") [ ! -e "$HERMES_RELEASE_FAILURE_READY" ] && exit 0 ;;' '  "--user restart godspeed-integrated-notebook.service") if [ ! -e "$HERMES_RELEASE_FAILURE_READY" ]; then : >"$HERMES_RELEASE_FAILURE_READY"; exit 0; fi ;;' 'esac' 'if [ -e "$HERMES_RELEASE_FAILURE_DROPIN" ]; then exit 1; fi' 'printf "%s\\n" "$*" >> "$HERMES_RELEASE_FAILURE_LOG"' >"$HRC_FAILURE/bin/systemctl"
+printf '%s\n' '#!/bin/sh' 'exec "$@"' >"$HRC_FAILURE/bin/sudo"
+chmod +x "$HRC_FAILURE/bin/systemctl" "$HRC_FAILURE/bin/sudo"
+if ROOT="$ROOT" HRC_FAILURE="$HRC_FAILURE" HERMES_RELEASE_FAILURE_DROPIN="$HRC_FAILURE/home/.config/systemd/user/godspeed-integrated-notebook.service.d/scenario-hermes-releases.conf" HERMES_RELEASE_FAILURE_LOG="$HRC_FAILURE/systemctl.log" HERMES_RELEASE_FAILURE_PID="$HRC_FAILURE/fixture.pid" HERMES_RELEASE_FAILURE_READY="$HRC_FAILURE/ready" GODSPEED_SCENARIO_ROOT="$HRC_FAILURE/root" GODSPEED_SCENARIO_WORK="$HRC_FAILURE/work" HOME="$HRC_FAILURE/home" PATH="$HRC_FAILURE/bin:$PATH" bash -c '
+  source "$ROOT/scenarios/hermes-update-rollback.sh"
+  scenario_arguments test-stage
+  install_the_stage_line() { :; }
+  need_node() { NODE=$(command -v node); }
+  notebook_is_up() { :; }
+  install_fixture_hermes() { :; }
+  record_releases() { :; }
+  run_night() { fail "the forced post-setup failure"; }
+  kill() { printf "%s\\n" "$1" >"$HERMES_RELEASE_FAILURE_PID"; command kill "$@"; }
+  act
+' >"$HRC_FAILURE/scenario.out" 2>&1; then
+  bad 'a Hermes post-setup failure exits after removing its temporary release source'
+elif [ ! -e "$HRC_FAILURE/home/.config/systemd/user/godspeed-integrated-notebook.service.d/scenario-hermes-releases.conf" ] \
+  && [ -s "$HRC_FAILURE/fixture.pid" ] \
+  && ! kill -0 "$(cat "$HRC_FAILURE/fixture.pid")" 2>/dev/null \
+  && grep -Fqx 'FAIL hermes-update-rollback: the forced post-setup failure' "$HRC_FAILURE/scenario.out" \
+  && [ "$(grep -cx -- '--user daemon-reload' "$HRC_FAILURE/systemctl.log")" = 1 ] \
+  && [ "$(grep -cx -- '--user restart godspeed-integrated-notebook.service' "$HRC_FAILURE/systemctl.log")" = 1 ]; then
+  ok 'a Hermes post-setup failure removes its temporary release source before restarting the service'
+else
+  bad 'a Hermes post-setup failure leaves its temporary release source or skips service restoration'
+fi
+HFD_RELATIVE=hermes-fixture-relative
+if (
+  cd "$TMP"
+  node "$ROOT/scenarios/hermes-update-fixture.mjs" --dir "$HFD_RELATIVE" >/dev/null \
+    && node "$ROOT/scenarios/hermes-update-fixture.mjs" --dir "$HFD_RELATIVE" --reveal 1.2.0 >/dev/null \
+    && (cd "$HFD_RELATIVE" && ./bin/hermes update --no-backup --yes) \
+    && [ "$(git -C "$HFD_RELATIVE" describe --exact-match --tags HEAD)" = v1.2.0 ]
+); then
+  ok 'the local Hermes fixture applies a revealed release from a relative path'
+else
+  bad 'the local Hermes fixture does not apply a revealed release from a relative path'
+fi
+HFD_QUOTED="$TMP/hermes-fixture's"
+if node "$ROOT/scenarios/hermes-update-fixture.mjs" --dir "$HFD_QUOTED" >/dev/null \
+  && "$HFD_QUOTED/bin/hermes" update --no-backup --yes \
+  && [ "$(git -C "$HFD_QUOTED" describe --exact-match --tags HEAD)" = v1.1.0 ]; then
+  ok 'the local Hermes fixture applies a release from an apostrophe-bearing path'
+else
+  bad 'the local Hermes fixture does not apply a release from an apostrophe-bearing path'
+fi
+HFD_LINK=$TMP/hermes-fixture-link
+ln -s "$HFD" "$HFD_LINK"
+if node "$ROOT/scenarios/hermes-update-fixture.mjs" --dir "$HFD_LINK" --reveal 1.2.0 >/dev/null \
+  && [ "$("$HFD_LINK/bin/hermes" update --check)" = 1.2.0 ] \
+  && "$HFD_LINK/bin/hermes" update --no-backup --yes \
+  && [ "$(git -C "$HFD" describe --exact-match --tags HEAD)" = v1.2.0 ] \
+  && git -C "$HFD" checkout -q v1.0.0 \
+  && node "$ROOT/scenarios/hermes-update-fixture.mjs" --dir "$HFD_LINK" --reveal 1.3.0 >/dev/null \
+  && "$HFD_LINK/bin/hermes" update --backup \
+  && [ "$(git -C "$HFD" describe --exact-match --tags HEAD)" = v1.3.0 ]; then
+  ok 'the local Hermes fixture keeps revealed releases through a symlink'
+else
+  bad 'the local Hermes fixture loses its revealed release through a symlink'
 fi
 
 # ============================================================ every one of them, the same shape

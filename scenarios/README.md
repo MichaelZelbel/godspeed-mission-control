@@ -142,7 +142,7 @@ install: the video add-on's own setup fetches HyperFrames' pinned release, ffmpe
 model, because that is what a reader's setup does. They run it from the install's own carried copy
 of the add-on (`mc_video_on`), so what runs is the commit the stage pins.
 
-`charm-challenge.sh` is the one scenario that moves a clock. A twenty-one day count cannot be
+`charm-challenge.sh` moves a clock. A twenty-one day count cannot be
 watched starting over on one machine in one job while every day is today, so it sets `GODSPEED_NOW`
 on the notebook's own service and starts it again, which is the product's own frozen clock for a
 rehearsal (`notebook/core/tracker-operations.mjs`). It counts the days in UTC and says so if the
@@ -152,6 +152,9 @@ chat over the notebook's own chat, the line the morning brief is given through t
 and the notebook's own run of what is due) and the note it wrote, and the Trackers shelf's own list
 and the card's own numbers. The day it runs the brief is the day the clock has moved to, so the
 routine is due whether the install had made it already or not.
+
+`hermes-update-rollback.sh` also moves the installed notebook service clock, to 04:15 for each
+nightly Hermes update decision it rehearses.
 
 ## Where they find the assistant, and its chat store
 

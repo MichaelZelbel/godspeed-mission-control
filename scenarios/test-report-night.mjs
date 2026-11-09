@@ -260,7 +260,7 @@ test('every scenario job named like its script is gated by the pull request pick
 });
 
 // The pick itself, run the way the stage job runs it, on a made-up list of changed files.
-test('the pick names the scenarios whose script or owned file changed, and nothing else', async () => {
+test('the pick names the scenarios whose script or owned file changed', async () => {
   const { readFileSync, writeFileSync, mkdtempSync } = await import('node:fs');
   const { tmpdir } = await import('node:os');
   const { spawnSync } = await import('node:child_process');
