@@ -139,6 +139,21 @@ run_system() { # <native|docker>
   done <"$CATALOG"
 }
 
+run_both_systems() {
+  local id script execution system candidate extra status
+  while IFS=$'\t' read -r id script execution system candidate extra; do
+    [ -n "$id" ] && [ "${id:0:1}" != '#' ] || continue
+    selected "$id" || continue
+    [ "$execution" = shared ] && [ "$system" = both ] || continue
+    ready_for both || { record "$id" FAIL 'a required pooled candidate install was unavailable'; continue; }
+    run_script "$id" "$script" both; status=$?
+    case "$status" in
+      2) record_unavailable native 'the pooled native system could not be reset'; return ;;
+      3) record_unavailable docker 'the pooled Docker system could not be reset'; return ;;
+    esac
+  done <"$CATALOG"
+}
+
 install_native() {
   curl -fsSL "$RAW/$STAGE_REF/install-godspeed.sh" -o "$WORK/install-godspeed.sh" || return 1
   GODSPEED_STAGE_REF="$STAGE_REF" GODSPEED_STAGE_RAW="$RAW" bash -x "$WORK/install-godspeed.sh" 2>"$WORK/native-install-trace.log"
@@ -198,19 +213,7 @@ main() {
   if [ -s "$RESULTS/docker-server.txt" ] && grep -q '^PASS ' "$RESULTS/docker-server.txt"; then run_system docker; fi &
   wait
 
-  # This one proof observes both systems.  It starts one shared local Hevy fixture, runs its Docker
-  # and native phases against the two already-installed systems, and writes one combined verdict.
-  if selected workouts-from-hevy; then
-    if grep -q '^PASS ' "$RESULTS/linux-install.txt" 2>/dev/null && grep -q '^PASS ' "$RESULTS/docker-server.txt" 2>/dev/null; then
-      run_script workouts-from-hevy workouts-from-hevy.sh both
-      case $? in
-        2) record_unavailable native 'the pooled native system could not be reset' ;;
-        3) record_unavailable docker 'the pooled Docker system could not be reset' ;;
-      esac
-    else
-      record workouts-from-hevy FAIL 'a required pooled candidate install was unavailable'
-    fi
-  fi
+  run_both_systems
 
   # Isolated scenarios belong to their separate draft jobs. Terminal rows follow the resettable pool.
   run_terminals
