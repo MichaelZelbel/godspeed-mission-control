@@ -11,6 +11,41 @@ const WORKFLOW = fileURLToPath(new URL('../.github/workflows/scenarios.yml', imp
 const DRAFT = fileURLToPath(new URL('../.github/workflow-drafts/scenarios.yml', import.meta.url));
 const PICKER = fileURLToPath(new URL('./pick-scenarios.sh', import.meta.url));
 
+function candidateOnlyIds(catalog) {
+  return catalog.split(/\r?\n/)
+    .filter((line) => line && !line.startsWith('#'))
+    .filter((line) => line.split('\t')[4] === 'yes')
+    .map((line) => line.split('\t')[0])
+    .sort();
+}
+
+function workflowJobs(draft) {
+  const headers = [...draft.matchAll(/^  ([a-z0-9-]+):\n/gm)];
+  return headers.map((header, index) => ({
+    id: header[1],
+    body: draft.slice(header.index, headers[index + 1]?.index),
+  }));
+}
+
+function candidateJobIds(draft) {
+  return workflowJobs(draft)
+    .filter(({ body }) => /^    if:.*startsWith\(inputs\.stage, 'candidate\/'\)/m.test(body))
+    .map(({ id }) => id)
+    .sort();
+}
+
+function assertCandidateEligibilityConforms(catalog, draft) {
+  assert.deepEqual(candidateJobIds(draft), candidateOnlyIds(catalog));
+
+  const mac = workflowJobs(draft).find(({ id }) => id === 'mac-install');
+  assert.ok(mac, 'mac-install must have a workflow job');
+  assert.match(mac.body, /^    if:.*inputs\.mac/m);
+  assert.deepEqual(
+    workflowJobs(draft).filter(({ body }) => /^    if:.*inputs\.mac/m.test(body)).map(({ id }) => id),
+    ['mac-install'],
+  );
+}
+
 // state: { openIssues: [{number,title}], labelExists, logs: {jobName: text}, jobs: [{id,name,conclusion}] }
 async function night(results, state = {}, extra = {}) {
   const calls = [];
@@ -164,6 +199,24 @@ test('the protected draft pools candidate systems and leaves the live workflow u
   assert.match(verdict, /\[ "\$WANT_MAC" = true \] \|\| args\+=\(--exclude mac-install\)/);
   const mac = draft.slice(draft.indexOf('  mac-install:'), draft.indexOf('\n  docker-server:'));
   assert.match(mac, /if: \$\{\{ inputs\.mac && startsWith\(inputs\.stage, 'candidate\/'\) \}\}/);
+});
+
+test('candidate-only catalog membership and candidate job guards stay conformant', async () => {
+  const { readFileSync } = await import('node:fs');
+  const catalog = readFileSync(new URL('./scenario-catalog.tsv', import.meta.url), 'utf8');
+  const draft = readFileSync(DRAFT, 'utf8');
+  assertCandidateEligibilityConforms(catalog, draft);
+});
+
+test('candidate-only catalog rows without guarded jobs are rejected', async () => {
+  const { readFileSync } = await import('node:fs');
+  const catalog = readFileSync(new URL('./scenario-catalog.tsv', import.meta.url), 'utf8');
+  const draft = readFileSync(DRAFT, 'utf8');
+  const staleCatalog = `${catalog}\nmissing-candidate-job\tmissing.sh\tisolated\tnative\tyes\tMissing candidate job\n`;
+  assert.throws(
+    () => assertCandidateEligibilityConforms(staleCatalog, draft),
+    /Expected values to be strictly deep-equal/,
+  );
 });
 
 test('the verdict collector fails when a scenario verdict fails behind tee', async () => {
