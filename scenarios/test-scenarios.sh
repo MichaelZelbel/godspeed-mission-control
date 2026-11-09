@@ -3714,7 +3714,7 @@ ACT_NODE_ORDER=$(env -u NODE GODSPEED_SCENARIO_ROOT="$RFS/root" ACTION_EVENTS="$
   . "$1"
   EVIDENCE=$2
   node() { printf "path-node:%s\\n" "$*" >>"$ACTION_EVENTS"; }
-  selected_node() { printf "selected-node:%s\\n" "$*" >>"$ACTION_EVENTS"; [ "$1" = -p ] && printf 'fixture-key\\n'; }
+  selected_node() { printf "selected-node:%s\\n" "$*" >>"$ACTION_EVENTS"; [ "$1" = -p ] && printf "fixture-key\\n"; }
   trap() { :; }
   need_node() { NODE=selected_node; printf "need-node\\n" >>"$ACTION_EVENTS"; }
   fresh_evidence() { mkdir -p "$EVIDENCE"; printf "47832\\n" >"$EVIDENCE/fixture-port"; }
