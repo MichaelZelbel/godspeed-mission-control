@@ -213,7 +213,10 @@ NODE
 }
 
 platform_before() { # <docker|native> <accepted settings json>
-  local platform=$1 accepted=$2 response=$EVIDENCE/$platform-accepted.json code routine before=$EVIDENCE/.$platform-before.json after=$EVIDENCE/.$platform-after.json
+  local platform=$1 accepted=$2 response code routine before after
+  response=$EVIDENCE/$platform-accepted.json
+  before=$EVIDENCE/.$platform-before.json
+  after=$EVIDENCE/.$platform-after.json
   code=$(settings_post "$platform" "$accepted" "$response")
   [ "$code" -ge 200 ] 2>/dev/null && [ "$code" -lt 300 ] ||
     fail "$platform Settings did not accept the made-up Hevy key (HTTP $code): $(tr -d '\n' <"$response" | cut -c1-200)"
@@ -301,10 +304,10 @@ prepare_platform() { # <docker|native> <fixture port>
 
 act() {
   fresh_evidence
-  local state=$EVIDENCE/fixture-state.json port pid
+  local state=$EVIDENCE/fixture-state.json port pid=''
   : >"$EVIDENCE/fixture.log"
   node "$HERE/hevy-fixture.mjs" --state "$state" --log "$EVIDENCE/fixture.log" >"$EVIDENCE/fixture-port" & pid=$!
-  trap 'kill "$pid" 2>/dev/null || true' EXIT
+  trap 'kill "${pid:-}" 2>/dev/null || true' EXIT
   wait_for 20 'the local Hevy fixture to name its port' test -s "$EVIDENCE/fixture-port" || fail "the local Hevy fixture did not start"
   port=$(cat "$EVIDENCE/fixture-port")
   curl -fsS "http://127.0.0.1:$port/health" >"$EVIDENCE/fixture-health.json" || fail "the local Hevy fixture did not answer health"

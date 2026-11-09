@@ -4538,6 +4538,40 @@ else
 fi
 HEVY_DIR=$TMP/server-hevy
 mkdir -p "$HEVY_DIR"
+HEVY_PLATFORM_BEFORE_DIR=$TMP/hevy-platform-before
+mkdir -p "$HEVY_PLATFORM_BEFORE_DIR"
+if HEVY_PLATFORM_BEFORE_OUTPUT=$(EVIDENCE=$HEVY_PLATFORM_BEFORE_DIR SCENARIO=workouts-from-hevy bash -uc '
+  . "$1"
+  settings_post() {
+    [ "$1" = docker ] && [ "$2" = "$EVIDENCE/accepted.json" ] && [ "$3" = "$EVIDENCE/docker-accepted.json" ] || return 1
+    printf 204
+  }
+  workout_snapshot() {
+    [ "$1" = docker ] && [ "$2" = "$EVIDENCE/.docker-before.json" ] && [ "$3" = "$EVIDENCE/.docker-routine" ] && [ "$4" = "$EVIDENCE/.docker-manual-exit" ]
+  }
+  platform_before docker "$EVIDENCE/accepted.json"
+' "$ROOT/scenarios/test-scenarios.sh" "$ROOT/scenarios/workouts-from-hevy.sh" 2>&1); then
+  ok "the Hevy accepted-key request names its selected platform under nounset"
+else
+  bad "the Hevy accepted-key request did not name its selected platform under nounset ($HEVY_PLATFORM_BEFORE_OUTPUT)"
+fi
+HEVY_EXIT_CLEANUP_DIR=$TMP/hevy-exit-cleanup
+if HEVY_EXIT_CLEANUP_OUTPUT=$(EVIDENCE=$HEVY_EXIT_CLEANUP_DIR SCENARIO=workouts-from-hevy bash -uc '
+  . "$1"
+  node() { printf "47888\\n"; }
+  wait_for() { :; }
+  curl() { printf "{\\"ok\\":true}\\n"; }
+  prepare_platform() { :; }
+  platform_before() { :; }
+  platform_after() { :; }
+  scan_fixture_key() { :; }
+  check() { :; }
+  act
+' "$ROOT/scenarios/test-scenarios.sh" "$ROOT/scenarios/workouts-from-hevy.sh" 2>&1); then
+  ok "the Hevy fixture cleanup tolerates a completed action under nounset"
+else
+  bad "the Hevy fixture cleanup did not tolerate a completed action under nounset ($HEVY_EXIT_CLEANUP_OUTPUT)"
+fi
 if (
   GODSPEED_SCENARIO_SERVER_DIR=$HEVY_DIR
   export GODSPEED_SCENARIO_SERVER_DIR
