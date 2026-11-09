@@ -3388,6 +3388,23 @@ copy "$FD/product-work" "$FD/product-work-unnamed"
 printf 'One of your saved goals is Prepare a practical household emergency-kit checklist by Sunday..\n\nNext: review the work Godspeed verified and say what it should do with it.\n' >"$FD/product-work-unnamed/brief.txt"
 first_day_brief_records "$FD/product-work-unnamed"
 refuses 'a brief that does not name the product work' first-day "$FD/product-work-unnamed" 'does not identify the verified work'
+# A brief the model wrote: the goal in its own words, and the next steps as a numbered list.
+copy "$FD/product-work" "$FD/own-words"
+printf 'The playbook is finished at goals/playbooks/emergency-kit.md. It explains how households build one.\n\nWhat would help most for having your kit ready by Sunday:\n\n1. Open the checklist and tick what you already own.\n2. Fill in how many people it is for.\n' >"$FD/own-words/brief.txt"
+first_day_brief_records "$FD/own-words"
+passes 'a model-written brief that names the goal and its next steps in its own words' first-day "$FD/own-words" 'answered today'
+copy "$FD/product-work" "$FD/own-words-no-goal"
+printf 'The playbook for your kit is finished. It explains how people start.\n\nWhat would help most today:\n\n1. Open the playbook and read its first section.\n' >"$FD/own-words-no-goal/brief.txt"
+first_day_brief_records "$FD/own-words-no-goal"
+refuses 'a brief with only one word of the goal' first-day "$FD/own-words-no-goal" 'does not name the emergency-kit goal'
+copy "$FD/product-work" "$FD/own-words-no-step"
+printf 'The playbook for your kit by Sunday is finished.\n\nSources:\n\n1. Ready.gov\n2. Red Cross\n' >"$FD/own-words-no-step/brief.txt"
+first_day_brief_records "$FD/own-words-no-step"
+refuses 'a numbered list that is not a next step' first-day "$FD/own-words-no-step" 'no concrete next action'
+copy "$FD/product-work" "$FD/own-words-list-unrelated"
+printf 'The playbook for your kit by Sunday is finished.\n\nThe sources it read:\n\n- Read the Ready.gov page.\n' >"$FD/own-words-list-unrelated/brief.txt"
+first_day_brief_records "$FD/own-words-list-unrelated"
+refuses 'a step under a sentence that is not about next steps' first-day "$FD/own-words-list-unrelated" 'no concrete next action'
 copy "$FD/good" "$FD/goal-in-goals"
 printf '{"configured":true,"preserved":true,"results":[]}\n' >"$FD/goal-in-goals/setup.json"
 printf '{"data":[{"id":"g1","title":"Prepare a practical household emergency-kit checklist by Sunday."}]}\n' >"$FD/goal-in-goals/goals-after-setup.json"

@@ -167,7 +167,12 @@ if(own&&verified(own)){
  named=chosen.map(c=>{const file=kept(c),kind=file.startsWith('goals/playbooks/')?'playbook':file.startsWith('ideas/')?'idea':null;return [c.field('WHAT'),c.field('RESULT'),file,...(kind?[kind]:[])];});
 }
 const brief=normalized(read('brief.txt'));
-if(!brief.includes(goal))fail('the saved brief does not name the emergency-kit goal');
+// A brief the model wrote names the goal in its own words (planner, 9 November 2026): the title, or
+// at least two of its significant words ("kit" and "Sunday").
+const stop=new Set(['a','an','and','at','by','for','from','in','into','it','its','of','on','or','the','to','with','your','my','our','this','that']);
+const goalWords=[...new Set((goal.toLowerCase().match(/[a-z0-9]+/g)||[]).filter(word=>!stop.has(word)))];
+const briefWords=new Set(brief.toLowerCase().match(/[a-z0-9]+/g)||[]);
+if(!brief.includes(goal)&&goalWords.filter(word=>briefWords.has(word)).length<2)fail('the saved brief does not name the emergency-kit goal');
 if(!named.some(names=>names.some(name=>brief.toLowerCase().includes(name.toLowerCase()))))fail('the saved brief does not identify the verified work');
 const nextLine=brief.split('\n').map(line=>line.trim()).find(line=>/^(?:next|today)(?:\s+(?:today|step|action))?\s*:/i.test(line));
 const nextTask=nextLine?.replace(/^[^:]*:\s*/,'')||'';
@@ -175,7 +180,14 @@ const words=nextTask.toLowerCase().match(/[a-z]+/g)||[];
 const verbs=new Set(['add','arrange','book','buy','call','check','collect','complete','create','gather','make','organize','pack','prepare','replace','review','schedule','set','store','test','update','write']);
 const filler=new Set(['a','an','and','at','for','in','it','more','next','now','on','the','this','that','them','to','today','with','your']);
 const verb=words.findIndex(word=>verbs.has(word));
-if(!nextLine||verb<0||!words.slice(verb+1).some(word=>!filler.has(word)))fail('the saved brief has no concrete next action');
+// Or, in a brief the model wrote, a numbered or bulleted step that opens with something to do, under
+// a heading or sentence about the next steps (planner, 9 November 2026).
+const lines=brief.split('\n').map(line=>line.trim());
+const stepVerbs=new Set([...verbs,'open','tick','fill','mark','read','send','tell','answer','choose','decide','pick','count','list','print','sign','save','order','ask','reply','measure','label','put','keep','start','finish','note']);
+const step=line=>{const m=line.match(/^(?:\d+[.)]|[-*\u2022])\s+(.+)$/);if(!m)return false;const w=m[1].toLowerCase().match(/[a-z]+/g)||[];return stepVerbs.has(w[0])&&w.slice(1).some(word=>!filler.has(word));};
+const aboutNext=line=>/\b(?:next|steps?|what would help|to do|do today|today|first|action)\b/i.test(line);
+const listed=lines.some((line,at)=>{if(!step(line))return false;for(let i=at-1;i>=0;i--){if(!lines[i]||/^(?:\d+[.)]|[-*\u2022])\s/.test(lines[i]))continue;return aboutNext(lines[i]);}return false;});
+if(!listed&&(!nextLine||verb<0||!words.slice(verb+1).some(word=>!filler.has(word))))fail('the saved brief has no concrete next action');
 const manifest=JSON.parse(read('manifest.json'));
 if(!Array.isArray(manifest.files)||!manifest.files.length)fail('the evidence manifest names no retained files');
 NODE
