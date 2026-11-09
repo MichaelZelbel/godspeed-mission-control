@@ -159,6 +159,23 @@ test('the protected draft pools candidate systems and leaves the live workflow u
   assert.match(pooled, /IMAGE: \$\{\{ needs\.stage\.outputs\.image \}\}/);
   const verdict = draft.slice(draft.indexOf('  verdict:'));
   assert.match(verdict, /uses: actions\/checkout@v4\n        with:\n          ref: \$\{\{ inputs\.stage \|\| github\.event\.pull_request\.head\.sha \|\| github\.sha \}\}/);
+  assert.doesNotMatch(verdict, /CANDIDATE_ONLY:|--candidate-only/);
+  assert.match(verdict, /\[ "\$IS_CANDIDATE" = true \] && args\+=\(--include-candidate-only\)/);
+  assert.match(verdict, /\[ "\$WANT_MAC" = true \] \|\| args\+=\(--exclude mac-install\)/);
+});
+
+test('the verdict collector fails when a scenario verdict fails behind tee', async () => {
+  const { readFileSync } = await import('node:fs');
+  const draft = readFileSync(DRAFT, 'utf8').replace(/\r\n/g, '\n');
+  const start = draft.indexOf('      - name: Every selected scenario has a verdict, or the run fails\n');
+  assert.ok(start >= 0, 'no scenario verdict step');
+  const rest = draft.slice(start + 1);
+  const end = rest.indexOf('\n      - name: Tell the night in issues');
+  const step = end < 0 ? rest : rest.slice(0, end);
+  assert.match(step, /^        shell: bash$/m,
+    'the verdict pipe must use GitHub Actions bash pipefail semantics');
+  assert.match(step, /scenario-verdict\.mjs "\$\{args\[@\]\}" \| tee/);
+  assert.doesNotMatch(step, /^        continue-on-error:/m);
 });
 
 test('the draft picker selects every standalone scenario for workflow and scenario support changes', async () => {

@@ -12,9 +12,9 @@ export function catalogRows(text) {
   });
 }
 
-const selected = (rows, picked, candidateOnly) => {
+const selected = (rows, picked, includeCandidateOnly, excluded) => {
   const names = picked === 'all' ? null : new Set(String(picked || '').split(',').filter(Boolean));
-  return rows.filter((row) => !candidateOnly.has(row.id) && (!names || names.has(row.id)));
+  return rows.filter((row) => (includeCandidateOnly || !row.candidateOnly) && !excluded.has(row.id) && (!names || names.has(row.id)));
 };
 
 const recordsIn = (dir) => {
@@ -25,9 +25,9 @@ const recordsIn = (dir) => {
   });
 };
 
-export function collectVerdicts({ catalog, picked = 'all', candidateOnly = '', directories = [] }) {
+export function collectVerdicts({ catalog, picked = 'all', includeCandidateOnly = false, excluded = '', directories = [] }) {
   const rows = catalogRows(catalog);
-  const expected = selected(rows, picked, new Set(String(candidateOnly).split(/[\s,]+/).filter(Boolean)));
+  const expected = selected(rows, picked, includeCandidateOnly, new Set(String(excluded).split(/[\s,]+/).filter(Boolean)));
   const all = directories.flatMap(recordsIn);
   const failures = [];
   const lines = new Map();
@@ -71,7 +71,8 @@ function argumentsOf(argv) {
     if (arg === '--results') out.dirs.push(argv[++i]);
     else if (arg === '--catalog') out.catalog = argv[++i];
     else if (arg === '--picked') out.picked = argv[++i];
-    else if (arg === '--candidate-only') out.candidateOnly = argv[++i];
+    else if (arg === '--include-candidate-only') out.includeCandidateOnly = true;
+    else if (arg === '--exclude') out.excluded = argv[++i];
     else if (arg === '--status') out.status = true;
     else throw new Error(`unknown argument ${arg}`);
   }
@@ -82,7 +83,7 @@ function argumentsOf(argv) {
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   try {
     const args = argumentsOf(process.argv);
-    const result = collectVerdicts({ catalog: readFileSync(args.catalog, 'utf8'), picked: args.picked, candidateOnly: args.candidateOnly, directories: args.dirs });
+    const result = collectVerdicts({ catalog: readFileSync(args.catalog, 'utf8'), picked: args.picked, includeCandidateOnly: args.includeCandidateOnly, excluded: args.excluded, directories: args.dirs });
     if (args.status) console.log(result.lines.map((line) => `${line.slice(line.indexOf(' ') + 1, line.indexOf(':'))}=${line.startsWith('PASS ') ? 'success' : 'failure'}`).join(' '));
     else result.lines.forEach((line) => console.log(line));
     if (result.failures.length) {

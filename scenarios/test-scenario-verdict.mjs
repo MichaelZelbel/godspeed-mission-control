@@ -21,12 +21,12 @@ function records(files) {
 }
 
 test('merges every selected PASS line in catalog order', () => {
-  const out = collectVerdicts({ catalog, candidateOnly: 'mac windows-old-names-move', directories: [records({ 'docker.txt': 'PASS docker: healthy\n', 'native.txt': 'PASS native: healthy\n' })] });
+  const out = collectVerdicts({ catalog, directories: [records({ 'docker.txt': 'PASS docker: healthy\n', 'native.txt': 'PASS native: healthy\n' })] });
   assert.deepEqual(out, { lines: ['PASS native: healthy', 'PASS docker: healthy'], failures: [] });
 });
 
 test('retains a scenario failure without hiding the other scenario result', () => {
-  const out = collectVerdicts({ catalog, candidateOnly: 'mac windows-old-names-move', directories: [records({ 'native.txt': 'FAIL native: no health\n', 'docker.txt': 'PASS docker: healthy\n' })] });
+  const out = collectVerdicts({ catalog, directories: [records({ 'native.txt': 'FAIL native: no health\n', 'docker.txt': 'PASS docker: healthy\n' })] });
   assert.deepEqual(out.lines, ['FAIL native: no health', 'PASS docker: healthy']);
   assert.deepEqual(out.failures, []);
 });
@@ -50,15 +50,31 @@ test('status reports a complete failure without preventing nightly reporting', (
 test('fails closed for missing, duplicate, and malformed records', () => {
   const first = records({ 'native.txt': 'PASS native: healthy\n', 'docker.txt': 'not a verdict\n' });
   const second = records({ 'native.txt': 'PASS native: copied\n' });
-  const out = collectVerdicts({ catalog, candidateOnly: 'mac windows-old-names-move', directories: [first, second] });
+  const out = collectVerdicts({ catalog, directories: [first, second] });
   assert.match(out.lines[0], /^FAIL native: expected 1 result record/);
   assert.match(out.lines[1], /^FAIL docker: malformed result record/);
   assert.equal(out.failures.length, 2);
 });
 
-test('uses picked names and candidate-only exclusions', () => {
-  const out = collectVerdicts({ catalog, picked: ',docker,mac,', candidateOnly: 'mac', directories: [records({ 'docker.txt': 'PASS docker: healthy\n' })] });
+test('uses picked names and catalog-owned candidate-only exclusions', () => {
+  const out = collectVerdicts({ catalog, picked: ',docker,mac,', directories: [records({ 'docker.txt': 'PASS docker: healthy\n' })] });
   assert.deepEqual(out, { lines: ['PASS docker: healthy'], failures: [] });
+});
+
+test('includes every catalog candidate-only row only for a candidate run', () => {
+  const out = collectVerdicts({ catalog, includeCandidateOnly: true, directories: [records({
+    'native.txt': 'PASS native: healthy\n',
+    'docker.txt': 'PASS docker: healthy\n',
+    'mac.txt': 'PASS mac: healthy\n',
+    'windows-old-names-move-moves.txt': 'PASS windows-old-names-move: open handles moved\n',
+    'windows-old-names-move-held.txt': 'PASS windows-old-names-move: held handles moved\n',
+  })] });
+  assert.deepEqual(out.lines, [
+    'PASS native: healthy',
+    'PASS docker: healthy',
+    'PASS mac: healthy',
+    'PASS windows-old-names-move: held handles moved',
+  ]);
 });
 
 test('accepts a standalone scenario result retained beside its evidence', () => {
@@ -67,7 +83,7 @@ test('accepts a standalone scenario result retained beside its evidence', () => 
 });
 
 test('requires both Windows move modes and produces one scenario verdict', () => {
-  const out = collectVerdicts({ catalog, picked: ',windows-old-names-move,', directories: [records({
+  const out = collectVerdicts({ catalog, picked: ',windows-old-names-move,', includeCandidateOnly: true, directories: [records({
     'windows-old-names-move-moves.txt': 'PASS windows-old-names-move: open handles moved\n',
     'windows-old-names-move-held.txt': 'PASS windows-old-names-move: held handles moved\n',
   })] });

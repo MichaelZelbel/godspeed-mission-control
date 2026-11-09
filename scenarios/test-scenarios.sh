@@ -342,6 +342,51 @@ if [ "$?" = 0 ] && grep -Fq 'cp /tmp' "$POOL_LOG" 2>/dev/null && grep -Fq 'recre
 else
   bad "a Docker reset cannot restore through the current container after force recreation ($POOL_OUTPUT; $(cat "$POOL_LOG" 2>/dev/null))"
 fi
+POOL_RESET_HOME=$TMP/pooled-reset-home
+POOL_SYSTEMD_DIR=$TMP/pooled-systemd
+POOL_NATIVE_ROOT=$TMP/pooled-reset-native
+POOL_ASSISTANT_HOME=$TMP/pooled-reset-assistant
+POOL_OUTPUT=$(HOME="$POOL_RESET_HOME" GODSPEED_SCENARIO_RESULTS="$POOL_RESULTS" GODSPEED_SCENARIO_POOL_WORK="$TMP/pooled-reset-work" POOL_SYSTEMD_DIR="$POOL_SYSTEMD_DIR" POOL_NATIVE_ROOT="$POOL_NATIVE_ROOT" POOL_ASSISTANT_HOME="$POOL_ASSISTANT_HOME" bash -c '
+  . "$1" candidate all
+  NATIVE_ROOT=$POOL_NATIVE_ROOT
+  native_dropin_dir() {
+    case "$1" in
+      user) printf "%s/.config/systemd/user/godspeed-integrated-notebook.service.d\\n" "$HOME" ;;
+      system) printf "%s/godspeed-integrated-notebook.service.d\\n" "$POOL_SYSTEMD_DIR" ;;
+    esac
+  }
+  mkdir -p "$NATIVE_ROOT/.godspeed/integrated-runtime" "$POOL_ASSISTANT_HOME" "$HOME/.config/systemd/user/godspeed-integrated-notebook.service.d" "$POOL_SYSTEMD_DIR/godspeed-integrated-notebook.service.d"
+  printf "runtime\\n" >"$NATIVE_ROOT/.godspeed/integrated-runtime/version"
+  printf "{\"home\":\"%s\"}\n" "$POOL_ASSISTANT_HOME" >"$NATIVE_ROOT/.godspeed/assistant.json"
+  printf "user baseline\\n" >"$HOME/.config/systemd/user/godspeed-integrated-notebook.service.d/scenario-clock.conf"
+  printf "system baseline\\n" >"$POOL_SYSTEMD_DIR/godspeed-integrated-notebook.service.d/scenario-clock.conf"
+  sudo() {
+    local command=$1 argument
+    shift
+    [ "$command" != systemctl ] || return 0
+    local arguments=()
+    for argument; do arguments+=("${argument//\/etc\/systemd\/system/$POOL_SYSTEMD_DIR}"); done
+    command "$command" "${arguments[@]}"
+  }
+  systemctl() { [ "$1" != --user ]; }
+  curl() { return 0; }
+  capture_native || exit 1
+  printf "user override\\n" >"$HOME/.config/systemd/user/godspeed-integrated-notebook.service.d/scenario-clock.conf"
+  printf "system override\\n" >"$POOL_SYSTEMD_DIR/godspeed-integrated-notebook.service.d/scenario-clock.conf"
+  reset_native && [ "$(cat "$HOME/.config/systemd/user/godspeed-integrated-notebook.service.d/scenario-clock.conf")" = "user baseline" ] && [ "$(cat "$POOL_SYSTEMD_DIR/godspeed-integrated-notebook.service.d/scenario-clock.conf")" = "system baseline" ] || exit 1
+  rm -rf "$HOME/.config/systemd/user/godspeed-integrated-notebook.service.d" "$POOL_SYSTEMD_DIR/godspeed-integrated-notebook.service.d"
+  rm -f "$WORK/native-user-service-config.tar" "$WORK/native-system-service-config.tar"
+  capture_native || exit 1
+  mkdir -p "$HOME/.config/systemd/user/godspeed-integrated-notebook.service.d" "$POOL_SYSTEMD_DIR/godspeed-integrated-notebook.service.d"
+  printf "user override\\n" >"$HOME/.config/systemd/user/godspeed-integrated-notebook.service.d/scenario-clock.conf"
+  printf "system override\\n" >"$POOL_SYSTEMD_DIR/godspeed-integrated-notebook.service.d/scenario-clock.conf"
+  reset_native && [ ! -e "$HOME/.config/systemd/user/godspeed-integrated-notebook.service.d" ] && [ ! -e "$POOL_SYSTEMD_DIR/godspeed-integrated-notebook.service.d" ]
+' bash "$ROOT/scenarios/run-installed-scenarios.sh" 2>&1)
+if [ "$?" = 0 ]; then
+  ok 'a native reset restores or removes both user and system service drop-ins from the install baseline'
+else
+  bad "a native reset leaves a service drop-in changed ($POOL_OUTPUT)"
+fi
 POOL_RESULTS=$TMP/pooled-main-results
 POOL_LOG=$TMP/pooled-main-order
 mkdir -p "$POOL_RESULTS"

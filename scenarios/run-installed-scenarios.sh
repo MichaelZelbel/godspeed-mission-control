@@ -25,8 +25,15 @@ native_assistant_home() {
     "$NATIVE_ROOT/.godspeed/assistant.json" 2>/dev/null
 }
 
+native_dropin_dir() { # <user|system>
+  case "$1" in
+    user) printf '%s\n' "$HOME/.config/systemd/user/godspeed-integrated-notebook.service.d" ;;
+    system) printf '%s\n' /etc/systemd/system/godspeed-integrated-notebook.service.d ;;
+  esac
+}
+
 capture_native() {
-  local assistant
+  local assistant user_service system_service
   NATIVE_FINGERPRINT=$(fingerprint_native)
   [ -n "$NATIVE_FINGERPRINT" ] || return 1
   tar -C "$NATIVE_ROOT" --exclude='./.godspeed/integrated-runtime' -cf "$WORK/native-mutable.tar" . || return 1
@@ -34,14 +41,13 @@ capture_native() {
   [ -n "$assistant" ] && [ -d "$assistant" ] || return 1
   NATIVE_ASSISTANT_HOME=$assistant
   tar -C "$assistant" -cf "$WORK/native-assistant.tar" . || return 1
-  if [ -d "$HOME/.config/systemd/user/godspeed-integrated-notebook.service.d" ]; then
-    tar -C "$HOME/.config/systemd/user" -cf "$WORK/native-service-config.tar" godspeed-integrated-notebook.service.d
-  else
-    : >"$WORK/native-service-config.absent"
-  fi
+  user_service=$(native_dropin_dir user) || return 1
+  system_service=$(native_dropin_dir system) || return 1
+  [ ! -d "$user_service" ] || tar -C "${user_service%/*}" -cf "$WORK/native-user-service-config.tar" "${user_service##*/}" || return 1
+  [ ! -d "$system_service" ] || sudo tar -C "${system_service%/*}" -cf "$WORK/native-system-service-config.tar" "${system_service##*/}" || return 1
 }
 reset_native() {
-  local runtime=$NATIVE_ROOT/.godspeed/integrated-runtime now
+  local runtime=$NATIVE_ROOT/.godspeed/integrated-runtime now user_service system_service
   [ -f "$WORK/native-mutable.tar" ] || return 1
   # The runtime is deliberately left in place: reset is state recovery, never another installation.
   systemctl --user stop godspeed-integrated-notebook.service 2>/dev/null || sudo systemctl stop godspeed-integrated-notebook.service 2>/dev/null || return 1
@@ -51,11 +57,16 @@ reset_native() {
   [ -n "${NATIVE_ASSISTANT_HOME:-}" ] && [ -f "$WORK/native-assistant.tar" ] || return 1
   find "$NATIVE_ASSISTANT_HOME" -mindepth 1 -maxdepth 1 -exec rm -rf {} + || return 1
   tar -C "$NATIVE_ASSISTANT_HOME" -xf "$WORK/native-assistant.tar" || return 1
-  rm -rf "$HOME/.config/systemd/user/godspeed-integrated-notebook.service.d"
-  if [ -f "$WORK/native-service-config.tar" ]; then
-    mkdir -p "$HOME/.config/systemd/user" || return 1
-    tar -C "$HOME/.config/systemd/user" -xf "$WORK/native-service-config.tar" || return 1
-  fi
+  user_service=$(native_dropin_dir user) || return 1
+  system_service=$(native_dropin_dir system) || return 1
+  rm -rf "$user_service" || return 1
+  [ ! -f "$WORK/native-user-service-config.tar" ] || {
+    mkdir -p "${user_service%/*}" && tar -C "${user_service%/*}" -xf "$WORK/native-user-service-config.tar"
+  } || return 1
+  sudo rm -rf "$system_service" || return 1
+  [ ! -f "$WORK/native-system-service-config.tar" ] || {
+    sudo mkdir -p "${system_service%/*}" && sudo tar -C "${system_service%/*}" -xf "$WORK/native-system-service-config.tar"
+  } || return 1
   now=$(fingerprint_native)
   [ "$now" = "$NATIVE_FINGERPRINT" ] || return 1
   systemctl --user daemon-reload 2>/dev/null || sudo systemctl daemon-reload || return 1

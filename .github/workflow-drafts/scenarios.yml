@@ -1059,7 +1059,6 @@ jobs:
       issues: write
       actions: read
     env:
-      CANDIDATE_ONLY: mac-install windows-old-names-move
       STAGE: ${{ needs.stage.result }}
       WANT_MAC: ${{ inputs.mac }}
       EVENT: ${{ github.event_name }}
@@ -1078,19 +1077,20 @@ jobs:
           path: ${{ runner.temp }}/scenario-results
           merge-multiple: true
       - name: Every selected scenario has a verdict, or the run fails
+        shell: bash
         run: |
           # A pull request from a fork runs nothing (the stage job is skipped): nothing to judge.
           [ "$EVENT" != pull_request ] || [ "$STAGE" != skipped ] || { echo "No scenario runs on a pull request from a fork." | tee -a "$GITHUB_STEP_SUMMARY"; exit 0; }
           [ "$STAGE" = success ] || { echo "FAIL stage: the stage file at $STAGE_REF could not be read or is not a stage file" | tee -a "$GITHUB_STEP_SUMMARY"; exit 1; }
-          skip=''
-          [ "$WANT_MAC" = true ] || skip='mac-install'
-          [ "$IS_CANDIDATE" = true ] || skip="$skip windows-old-names-move"
-          node scenarios/scenario-verdict.mjs --catalog scenarios/scenario-catalog.tsv --results "$RUNNER_TEMP/scenario-results" --picked "$PICKED" --candidate-only "$skip" | tee "$RUNNER_TEMP/scenario-verdicts.txt" | tee -a "$GITHUB_STEP_SUMMARY"
+          args=(--catalog scenarios/scenario-catalog.tsv --results "$RUNNER_TEMP/scenario-results" --picked "$PICKED")
+          [ "$IS_CANDIDATE" = true ] && args+=(--include-candidate-only)
+          [ "$WANT_MAC" = true ] || args+=(--exclude mac-install)
+          node scenarios/scenario-verdict.mjs "${args[@]}" | tee "$RUNNER_TEMP/scenario-verdicts.txt" | tee -a "$GITHUB_STEP_SUMMARY"
       - name: Tell the night in issues (one per failing scenario, closed when it passes)
         if: always() && github.event_name == 'schedule'
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
-          export RESULTS="$(node scenarios/scenario-verdict.mjs --catalog scenarios/scenario-catalog.tsv --results "$RUNNER_TEMP/scenario-results" --picked all --candidate-only 'mac-install windows-old-names-move' --status)"
+          export RESULTS="$(node scenarios/scenario-verdict.mjs --catalog scenarios/scenario-catalog.tsv --results "$RUNNER_TEMP/scenario-results" --picked all --status)"
           export SCENARIO_VERDICTS="$(cat "$RUNNER_TEMP/scenario-verdicts.txt")"
           node scenarios/report-night.mjs
