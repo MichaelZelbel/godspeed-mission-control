@@ -78,7 +78,8 @@ class TodaysBrief(unittest.TestCase):
 
     def test_the_hook_sends_it_and_keeps_the_message_from_the_model(self):
         adapter, home = Adapter(), home_with(SAVED)
-        gateway = types.SimpleNamespace(adapters={types.SimpleNamespace(value="telegram"): adapter})
+        platform = type("Platform", (), {"value": "telegram"})()  # hashable, as Hermes' Platform enum is
+        gateway = types.SimpleNamespace(adapters={platform: adapter})
         hook = brief.make_hook(lambda: home)
         result = asyncio.run(hook(event=event("today's brief"), gateway=gateway, session_store=None))
         self.assertEqual(result["action"], "skip")
