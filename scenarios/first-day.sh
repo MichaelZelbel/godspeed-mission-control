@@ -141,12 +141,13 @@ const card=name=>{const text=fs.readFileSync(path.join(folder,'work',name),'utf8
 const verified=c=>c.field('ID')===c.name.replace(/\.md$/,'')&&c.field('STATUS')==='verified'&&/VERIFIED check passed/i.test(c.text);
 const slug=value=>value.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
 const own=cards.includes(`${workId}.md`)?card(`${workId}.md`):null;
-let title,result,names=[];
+let named;
 if(own&&verified(own)){
  const field=own.field,text=own.text;
  if(field('KEY')!==workKey||field('SOURCE')!=='first-day-scenario')fail('the selected emergency-kit work card does not retain the scenario filing');
- title=field('WHAT');result=field('RESULT');
+ const title=field('WHAT'),result=field('RESULT');
  if(!title||!result)fail('the verified work card lacks its title or result');
+ named=[[title,result]];
  const declared=(text.match(/^DONE WHEN:\s*A practical household emergency-kit checklist is written at (work\/(?:[A-Za-z0-9][A-Za-z0-9._-]*\/)*[A-Za-z0-9][A-Za-z0-9._-]*\.md) and ready for a reader\s*$/mi)||[])[1];
  if(!declared||declared!==resultFile)fail('the selected emergency-kit work card does not name its result file');
  const artifact=path.join(folder,declared);
@@ -156,20 +157,18 @@ if(own&&verified(own)){
 }else{
  const goalSlug=slug(goal);
  const kept=c=>(`${c.field('CHECK')} ${c.field('DONE WHEN')}`.match(/\b((?:work|goals|ideas)\/[A-Za-z0-9._\/-]+\.md)\b/)||[])[1];
- const chosen=cards.filter(name=>name!==`${workId}.md`).map(card).filter(c=>verified(c)&&c.field('GOAL').length>=10&&goalSlug.startsWith(c.field('GOAL'))&&c.field('WHAT')&&c.field('RESULT')).find(c=>{
-  const named=kept(c),file=named&&path.join(folder,named);
+ const chosen=cards.filter(name=>name!==`${workId}.md`).map(card).filter(c=>verified(c)&&c.field('GOAL').length>=10&&goalSlug.startsWith(c.field('GOAL'))&&c.field('WHAT')&&c.field('RESULT')).filter(c=>{
+  const relative=kept(c),file=relative&&path.join(folder,relative);
   return file&&fs.existsSync(file)&&fs.statSync(file).isFile()&&fs.readFileSync(file,'utf8').trim().split(/\s+/).length>=50&&!/\b(?:TODO|TBD|placeholder|outline only)\b/i.test(fs.readFileSync(file,'utf8'));
  });
- if(!chosen)fail('the selected emergency-kit work card is not verified by its recorded check, and no other work for the goal was verified with its result kept');
- title=chosen.field('WHAT');result=chosen.field('RESULT');
- // A brief written by the model names the work in its own words: by its title or result, the file
- // it wrote, or what that file is (a goal's playbook, its ideas).
- const file=kept(chosen),kind=file.startsWith('goals/playbooks/')?'playbook':file.startsWith('ideas/')?'idea':null;
- names=[file,...(kind?[kind]:[])];
+ if(!chosen.length)fail('the selected emergency-kit work card is not verified by its recorded check, and no other work for the goal was verified with its result kept');
+ // Any of them may be the work the brief tells: by its title or result, the file it wrote, or what
+ // that file is (a goal's playbook, its ideas), since a brief written by the model uses its own words.
+ named=chosen.map(c=>{const file=kept(c),kind=file.startsWith('goals/playbooks/')?'playbook':file.startsWith('ideas/')?'idea':null;return [c.field('WHAT'),c.field('RESULT'),file,...(kind?[kind]:[])];});
 }
 const brief=normalized(read('brief.txt'));
 if(!brief.includes(goal))fail('the saved brief does not name the emergency-kit goal');
-if(!brief.includes(title)&&!brief.includes(result)&&!names.some(name=>brief.toLowerCase().includes(name.toLowerCase())))fail('the saved brief does not identify the verified work');
+if(!named.some(names=>names.some(name=>brief.toLowerCase().includes(name.toLowerCase()))))fail('the saved brief does not identify the verified work');
 const nextLine=brief.split('\n').map(line=>line.trim()).find(line=>/^(?:next|today)(?:\s+(?:today|step|action))?\s*:/i.test(line));
 const nextTask=nextLine?.replace(/^[^:]*:\s*/,'')||'';
 const words=nextTask.toLowerCase().match(/[a-z]+/g)||[];
