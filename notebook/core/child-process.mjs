@@ -32,7 +32,7 @@ export function runChild(executable,args,{cwd,env,input,timeoutMs=0,maxBytes=4*1
   const out=[],err=[];let bytes=0,errBytes=0,settled=false,timer=null;
   const finish=(error,value)=>{if(settled)return;settled=true;clearTimeout(timer);signal?.removeEventListener('abort',abort);error?reject(error):resolve(value);};
   const output=()=>({stdout:Buffer.concat(out).toString('utf8'),stderr:Buffer.concat(err).toString('utf8').slice(-32768)});
-  const fail=(code,message)=>{stopTree(child,{graceMs,spawnProcess});finish(Object.assign(new Error(message),{code,...started,...output()}));};
+  const fail=(code,message)=>{stopTree(child,{graceMs,spawnProcess});finish(Object.assign(new Error(message),{code,...output()}));};
   const abort=()=>fail('ABORTED','Stopped');
   signal?.addEventListener('abort',abort,{once:true});
   if(timeoutMs>0)timer=setTimeout(()=>fail('TIMEOUT','The program did not finish in time'),timeoutMs);
@@ -41,7 +41,7 @@ export function runChild(executable,args,{cwd,env,input,timeoutMs=0,maxBytes=4*1
   // Only the last 32 KB of diagnostics are kept; they can hold credentials, so
   // callers classify them and never store them.
   child.stderr?.on('data',chunk=>{err.push(Buffer.from(chunk));errBytes+=chunk.length;while(errBytes>32768&&err.length>1)errBytes-=err.shift().length;});
-  child.on('close',(code,exitSignal)=>finish(null,{code,signal:exitSignal,...started,...output()}));
+  child.on('close',(code,exitSignal)=>finish(null,{code,signal:exitSignal,...output()}));
   if(child.stdin){
    // A program that ends before reading its input breaks the pipe (EPIPE, or
    // EOF on Windows). That is its failure to report through 'close', never a
@@ -55,6 +55,6 @@ export function runChild(executable,args,{cwd,env,input,timeoutMs=0,maxBytes=4*1
 // error naming the exit code otherwise.
 export async function runCommand(executable,args,{timeout,maxBuffer,...options}={}){
  const result=await runChild(executable,args,{...options,timeoutMs:timeout||0,maxBytes:maxBuffer||4*1024*1024});
- if(result.code!==0)throw Object.assign(new Error('Command failed with exit code '+result.code),{code:result.code,signal:result.signal,pid:result.pid,stdout:result.stdout,stderr:result.stderr});
+ if(result.code!==0)throw Object.assign(new Error('Command failed with exit code '+result.code),{code:result.code,signal:result.signal,stdout:result.stdout,stderr:result.stderr});
  return result;
 }
