@@ -4110,6 +4110,20 @@ if node "$ROOT/scenarios/hermes-update-fixture.mjs" --dir "$HFD" >/dev/null \
 else
   bad 'the local Hermes fixture does not control its local releases and harmless command'
 fi
+HFD_STATE=$HFD/.fixture-state.json
+HFD_MISSING=$TMP/hermes-fixture-state
+HFD_OUTPUT=$TMP/hermes-fixture-missing-state.out
+if mv "$HFD_STATE" "$HFD_MISSING" \
+  && ! HERMES_FIXTURE_LOG=$HFD_LOG "$HFD/bin/hermes" update --check >"$HFD_OUTPUT" 2>&1 \
+  && ! HERMES_FIXTURE_LOG=$HFD_LOG "$HFD/bin/hermes" update --no-backup --yes >>"$HFD_OUTPUT" 2>&1 \
+  && ! HERMES_FIXTURE_LOG=$HFD_LOG "$HFD/bin/hermes" update --backup >>"$HFD_OUTPUT" 2>&1 \
+  && ! grep -q '1.1.0' "$HFD_OUTPUT" \
+  && mv "$HFD_MISSING" "$HFD_STATE"; then
+  ok 'the local Hermes fixture refuses every state-dependent update without fabricating a release'
+else
+  mv "$HFD_MISSING" "$HFD_STATE" 2>/dev/null || true
+  bad 'the local Hermes fixture fabricates a release when its state is missing'
+fi
 HFD_URL_FILE=$TMP/hermes-fixture-url
 node "$ROOT/scenarios/hermes-update-fixture.mjs" --dir "$HFD" --serve >"$HFD_URL_FILE" 2>/dev/null &
 HFD_PID=$!

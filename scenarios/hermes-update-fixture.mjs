@@ -57,6 +57,7 @@ await mkdir(join(dir, 'hermes_cli'), { recursive: true });
 await mkdir(join(dir, 'venv', 'bin'), { recursive: true });
 git('init', '-q'); git('config', 'user.name', 'Scenario'); git('config', 'user.email', 'scenario@example.invalid');
 git('remote', 'add', 'origin', HERMES_HTTPS_ORIGIN);
+await writeFile(join(dir, '.gitignore'), '.fixture-state.json\n');
 const command = `#!/bin/sh
 set -eu
 root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
@@ -125,7 +126,7 @@ for (const [version, healthy, published] of [
   await writeFile(join(dir, 'venv', 'bin', 'python3'), '#!/bin/sh\nexit 0\n');
   await chmod(join(dir, 'bin', 'hermes'), 0o755);
   await chmod(join(dir, 'venv', 'bin', 'python3'), 0o755);
-  git('add', 'release.json', 'bin/hermes', 'hermes_cli/__init__.py', 'venv/bin/python3');
+  git('add', 'release.json', 'bin/hermes', 'hermes_cli/__init__.py', 'venv/bin/python3', '.gitignore');
   execFileSync('git', ['-C', dir, 'commit', '-q', '-m', version], { env: { ...process.env, GIT_AUTHOR_DATE: published, GIT_COMMITTER_DATE: published } });
   git('tag', `v${version}`);
 }
