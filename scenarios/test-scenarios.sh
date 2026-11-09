@@ -3728,7 +3728,7 @@ ACT_NODE_ORDER=$(env -u NODE GODSPEED_SCENARIO_ROOT="$RFS/root" ACTION_EVENTS="$
   settings_post() { printf "settings:%s:%s\\n" "$1" "$(cat "$2")" >>"$ACTION_EVENTS"; case $(cat "$2") in *refused*) printf 400 ;; *) printf 200 ;; esac; }
   persistence_roots() { printf "persistence-%s:%s\\n" "$1" "${NODE:+set}" >>"$ACTION_EVENTS"; }
   refused_not_retained() { persistence_roots "$1"; }
-  platform_before() { :; }
+  platform_before() { settings_post "$1" "$2" "$EVIDENCE/$1-accepted.json" >/dev/null; }
   platform_after() { :; }
   scan_fixture_key() { :; }
   check() { :; }
