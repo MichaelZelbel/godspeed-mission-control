@@ -4320,13 +4320,19 @@ else
 fi
 HEVY_NATIVE_USER_HOME=$TMP/hevy-native-user-home
 HEVY_NATIVE_SYSTEM_ROOT=$TMP/hevy-native-system
+HEVY_NATIVE_USER_COMMANDS=$TMP/hevy-native-user-commands
+HEVY_NATIVE_SYSTEM_COMMANDS=$TMP/hevy-native-system-commands
 if (
   HOME=$HEVY_NATIVE_USER_HOME
   export HOME
   . "$ROOT/scenarios/workouts-from-hevy.sh"
   systemctl() {
     case "$1:$2" in
-      --user:cat|--user:daemon-reload|--user:restart) return 0 ;;
+      --user:cat) return 0 ;;
+      --user:daemon-reload|--user:restart)
+        printf '%s\n' "$*" >>"$HEVY_NATIVE_USER_COMMANDS"
+        return 0
+        ;;
       *) return 1 ;;
     esac
   }
@@ -4336,7 +4342,10 @@ if (
   [ "$(cat "$HOME/.config/systemd/user/godspeed-integrated-notebook.service.d/scenario-hevy.conf")" = "$(printf '%s\n' \
     '[Service]' \
     'Environment="GODSPEED_WORKOUTS_TEST=1"' \
-    'Environment="GODSPEED_WORKOUTS_HEVY_API=http://127.0.0.1:47841"')" ]
+    'Environment="GODSPEED_WORKOUTS_HEVY_API=http://127.0.0.1:47841"')" ] && \
+  [ "$(cat "$HEVY_NATIVE_USER_COMMANDS")" = "$(printf '%s\n' \
+    '--user daemon-reload' \
+    '--user restart godspeed-integrated-notebook.service')" ]
 ) && (
   . "$ROOT/scenarios/workouts-from-hevy.sh"
   systemctl() {
@@ -4350,7 +4359,10 @@ if (
     case $1 in
       mkdir) mkdir -p "$HEVY_NATIVE_SYSTEM_ROOT/godspeed-integrated-notebook.service.d" ;;
       tee) shift; command tee "$HEVY_NATIVE_SYSTEM_ROOT/godspeed-integrated-notebook.service.d/scenario-hevy.conf" ;;
-      systemctl) return 0 ;;
+      systemctl)
+        printf '%s\n' "$*" >>"$HEVY_NATIVE_SYSTEM_COMMANDS"
+        return 0
+        ;;
       *) return 1 ;;
     esac
   }
@@ -4360,11 +4372,34 @@ if (
   [ "$(cat "$HEVY_NATIVE_SYSTEM_ROOT/godspeed-integrated-notebook.service.d/scenario-hevy.conf")" = "$(printf '%s\n' \
     '[Service]' \
     'Environment="GODSPEED_WORKOUTS_TEST=1"' \
-    'Environment="GODSPEED_WORKOUTS_HEVY_API=http://127.0.0.1:47842"')" ]
+    'Environment="GODSPEED_WORKOUTS_HEVY_API=http://127.0.0.1:47842"')" ] && \
+  [ "$(cat "$HEVY_NATIVE_SYSTEM_COMMANDS")" = "$(printf '%s\n' \
+    'systemctl daemon-reload' \
+    'systemctl restart godspeed-integrated-notebook.service')" ]
 ); then
-  ok "both native Hevy service shapes write the guarded local fixture drop-in"
+  ok "both native Hevy service shapes activate the guarded local fixture drop-in"
 else
-  bad "a native Hevy service shape did not write the guarded local fixture drop-in"
+  bad "a native Hevy service shape did not activate the guarded local fixture drop-in"
+fi
+HEVY_NATIVE_RESTART_FAILURE_OUTPUT=$(HOME=$TMP/hevy-native-restart-failure-home bash -c '
+  . "$0"
+  systemctl() {
+    case "$1:$2" in
+      --user:cat|--user:daemon-reload) return 0 ;;
+      --user:restart) return 1 ;;
+      *) return 1 ;;
+    esac
+  }
+  wait_for() { :; }
+  notebook_is_up() { :; }
+  native_hevy_url 47843
+' "$ROOT/scenarios/workouts-from-hevy.sh" 2>&1)
+HEVY_NATIVE_RESTART_FAILURE_CODE=$?
+if [ "$HEVY_NATIVE_RESTART_FAILURE_CODE" = 1 ] && \
+  [[ $HEVY_NATIVE_RESTART_FAILURE_OUTPUT == *'the native notebook could not be restarted with the local Hevy address'* ]]; then
+  ok "a failed native Hevy restart stops through the scenario error path"
+else
+  bad "a failed native Hevy restart did not stop through the scenario error path (exit $HEVY_NATIVE_RESTART_FAILURE_CODE: $HEVY_NATIVE_RESTART_FAILURE_OUTPUT)"
 fi
 HEVY_FAILURE_DIR=$TMP/server-hevy-write-failure
 mkdir -p "$HEVY_FAILURE_DIR"
