@@ -5,15 +5,17 @@ Not for you: nothing here is a program you type, and no installer puts any of it
 These are the **proving scenarios** a candidate runs before the maintainer is asked for "go"
 (godspeed-dev, `releases/godspeed-2.0.0-beta.8-faster-chat/plan.md`,
 `releases/godspeed-2.0.0-beta.12-reminders-in-the-notebook/plan.md` and
-`releases/godspeed-2.0.0-beta.13-charm-video-notebook/plan.md`, "Proving scenarios"). A
-candidate or nightly run installs each native and Docker system once, resets only its mutable
-state between compatible checks, and records one result for every scenario. Update and move
-checks remain isolated because their behaviour is the installation transition itself. A scenario
-run directly or selected on a pull request still installs on its own throwaway machine. Each
-scenario is one script here, so that what it does can be read, run by hand and held to its own
-tests — which a step written inside a workflow file cannot be. They live in a folder of their own
-for the same reason `stage/` does: everything in `tools/` is copied onto every user's computer as
-a program, and these are not programs for users.
+`releases/godspeed-2.0.0-beta.13-charm-video-notebook/plan.md`, "Proving scenarios"). The live
+workflow currently gives each candidate and nightly scenario its own installation. The release-key
+draft at `.github/workflow-drafts/scenarios.yml` changes that to one native and one Docker install,
+resetting only mutable state between compatible checks and recording one result for every scenario;
+update and move checks remain isolated because their behaviour is the installation transition
+itself. That draft is not live until the release-key holder applies it. A scenario run directly or
+selected on a pull request still installs on its own throwaway machine. Each scenario is one script
+here, so that what it does can be read, run by hand and held to its own tests — which a step written
+inside a workflow file cannot be. They live in a folder of their own for the same reason `stage/`
+does: everything in `tools/` is copied onto every user's computer as a program, and these are not
+programs for users.
 
 `chat-tidy-at-night`, `disk-filling`, `missed-routine` and `deadline-closes-itself` are not yet jobs of
 that workflow: their jobs are written in the pull request that added them and are applied in the
@@ -130,12 +132,12 @@ Named by the job, never in a file here (for the scenarios above that await their
 `GODSPEED_SCENARIO_AI_URL` and `GODSPEED_SCENARIO_AI_MODEL` have no default: a scenario that needs an AI fails with a plain sentence naming whichever is missing, and it also fails if the URL is on openrouter.ai, so the checks can never spend OpenRouter money. They run on `https://api.anthropic.com/v1` with `claude-haiku-4-5`, set as repository variables, and the key is the secret `GODSPEED_SCENARIO_AI_KEY`.
 
 The six reminder scenarios need no key at all: everything they do is this machine's own. In a
-standalone run, "two computers" are separate installations on the one machine. In a candidate or
-nightly pooled run, they are separate mission-control workspaces and device identities sharing the
-one installed runtime; both forms are joined through one bare Git repository on that machine standing
-in for the private GitHub repository, which Git is told to use for that address. The product still
-checks the address is a private GitHub one, so the one thing they ask of the network beyond the
-install itself is that api.github.com answers 404 for an owner nobody has.
+standalone run, "two computers" are separate installations on the one machine. In the release-key
+draft's candidate or nightly pooled run, they are separate mission-control workspaces and device
+identities sharing the one installed runtime; both forms are joined through one bare Git repository
+on that machine standing in for the private GitHub repository, which Git is told to use for that
+address. The product still checks the address is a private GitHub one, so the one thing they ask of
+the network beyond the install itself is that api.github.com answers 404 for an owner nobody has.
 
 `voice.sh` also takes `ELEVENLABS_TEST_VOICE_ID` (a public ElevenLabs voice by default) and sends
 `voice-note.wav`, the short recording kept beside it. No chat account of any kind is needed: the

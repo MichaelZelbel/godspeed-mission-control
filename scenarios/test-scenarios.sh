@@ -322,12 +322,15 @@ if [ "$(tail -n 2 "$POOL_LOG")" = "$(printf 'settings-on-install\nhermes-update-
 else
   bad "pooled installs or terminal order are wrong ($POOL_OUTPUT; $(cat "$POOL_LOG" 2>/dev/null))"
 fi
+REMINDER_FOLDER=$(grep -n 'one_pair folder' "$ROOT/scenarios/reminder-closed-elsewhere.sh" | head -1 | cut -d: -f1)
+REMINDER_CONNECTED=$(grep -n 'one_pair connected' "$ROOT/scenarios/reminder-closed-elsewhere.sh" | head -1 | cut -d: -f1)
 if grep -q 'require_the_stage_line_into' "$ROOT/scenarios/closed-offline-on-both.sh" && \
   grep -q 'require_the_stage_line_into' "$ROOT/scenarios/reminder-closed-elsewhere.sh" && \
-  grep -q 'ln -s "$shared" "$root/.godspeed/integrated-runtime"' "$ROOT/scenarios/scenario-lib.sh"; then
-  ok 'two-device reminder scenarios use separate workspaces linked to the pooled runtime'
+  grep -q 'ln -s "$shared" "$root/.godspeed/integrated-runtime"' "$ROOT/scenarios/scenario-lib.sh" && \
+  [ -n "$REMINDER_FOLDER" ] && [ -n "$REMINDER_CONNECTED" ] && [ "$REMINDER_FOLDER" -lt "$REMINDER_CONNECTED" ]; then
+  ok 'two-device reminder scenarios use separate workspaces linked to the pooled runtime, and folder mode starts from the clean baseline'
 else
-  bad 'two-device reminder scenarios do not reuse the pooled runtime'
+  bad 'two-device reminder scenarios do not reuse the pooled runtime from a clean folder baseline'
 fi
 if grep -q 'run_script workouts-from-hevy workouts-from-hevy.sh both' "$ROOT/scenarios/run-installed-scenarios.sh" && \
   grep -q 'prepare_platform docker' "$ROOT/scenarios/workouts-from-hevy.sh" && \

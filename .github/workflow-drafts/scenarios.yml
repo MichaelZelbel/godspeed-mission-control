@@ -104,13 +104,10 @@ jobs:
             echo "picked=all" | tee -a "$GITHUB_OUTPUT"
             exit 0
           fi
-          # A pull request owns the script and companion files named by the scenario catalog.
+          # A pull request owns script files and their companions; shared pooling inputs prove every
+          # standalone scenario because every one depends on that orchestration.
           gh api "repos/$GITHUB_REPOSITORY/pulls/$PR/files" --paginate --jq '.[].filename' > "$RUNNER_TEMP/changed"
-          jobs=$(awk -F '\t' 'NR > 1 && $2 ~ /\.sh$/ { sub(/\.sh$/, "", $2); print $2 }' scenarios/scenario-catalog.tsv)
-          picked=','
-          for j in $jobs; do
-            if grep -qE "^scenarios/$j(\.sh|-[^/]*)$" "$RUNNER_TEMP/changed"; then picked="$picked$j,"; fi
-          done
+          picked=$(bash scenarios/pick-scenarios.sh "$RUNNER_TEMP/changed")
           echo "The pull request changes $(wc -l < "$RUNNER_TEMP/changed") files; scenarios picked:$picked" | tee -a "$GITHUB_STEP_SUMMARY"
           echo "picked=$picked" | tee -a "$GITHUB_OUTPUT"
       - name: Read and check it

@@ -174,8 +174,9 @@ act() {
     printf 'evidence\t%s\n' "$EVIDENCE_WORDS"
   } >"$EVIDENCE/what.txt"
   local work=${GODSPEED_SCENARIO_WORK:-${RUNNER_TEMP:-/tmp}}
-  case " $MODES " in *" connected "*) one_pair connected "$ROOT" "$NOTEBOOK_PORT" "$work/computer-b" 47841 "$work/github-connected" ;; esac
+  # Folder mode must seed its logical workspace before connected mode configures origin on ROOT.
   case " $MODES " in *" folder "*) one_pair folder "$work/computer-c" 47851 "$work/computer-d" 47861 "$work/github-folder" ;; esac
+  case " $MODES " in *" connected "*) one_pair connected "$ROOT" "$NOTEBOOK_PORT" "$work/computer-b" 47841 "$work/github-connected" ;; esac
   phase finished
 }
 

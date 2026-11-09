@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 const SCRIPT = fileURLToPath(new URL('./report-night.mjs', import.meta.url));
 const WORKFLOW = fileURLToPath(new URL('../.github/workflows/scenarios.yml', import.meta.url));
 const DRAFT = fileURLToPath(new URL('../.github/workflow-drafts/scenarios.yml', import.meta.url));
+const PICKER = fileURLToPath(new URL('./pick-scenarios.sh', import.meta.url));
 
 // state: { openIssues: [{number,title}], labelExists, logs: {jobName: text}, jobs: [{id,name,conclusion}] }
 async function night(results, state = {}, extra = {}) {
@@ -151,7 +152,51 @@ test('the protected draft pools candidate systems and leaves the live workflow u
   assert.match(draft, /bash scenarios\/run-installed-scenarios\.sh "\$STAGE_REF"/);
   assert.match(draft, /scenario-verdict\.mjs --catalog scenarios\/scenario-catalog\.tsv/);
   assert.doesNotMatch(live, /run-installed-scenarios\.sh/);
-  assert.match(draft, /jobs=\$\(awk -F '\\t'/);
+  assert.match(draft, /picked=\$\(bash scenarios\/pick-scenarios\.sh "\$RUNNER_TEMP\/changed"\)/);
+});
+
+test('the draft picker selects every standalone scenario for each shared orchestration input', async () => {
+  const { readFileSync, writeFileSync, mkdtempSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { spawnSync } = await import('node:child_process');
+  const catalog = readFileSync(new URL('./scenario-catalog.tsv', import.meta.url), 'utf8');
+  const allScripts = `,${catalog.split('\n').filter((line) => line && !line.startsWith('#'))
+    .map((line) => line.split('\t')).filter(([, implementation]) => implementation.endsWith('.sh'))
+    .map(([id]) => id).join(',')},`;
+  const pick = (files) => {
+    const dir = mkdtempSync(`${tmpdir()}/draft-pick-`).replaceAll(String.fromCharCode(92), '/');
+    const changed = `${dir}/changed`;
+    writeFileSync(changed, `${files.join('\n')}\n`);
+    const result = spawnSync('bash', [PICKER, changed], { cwd: fileURLToPath(new URL('..', import.meta.url)), encoding: 'utf8' });
+    assert.equal(result.status, 0, result.stderr);
+    return result.stdout.trim();
+  };
+  const sharedInputs = [
+    '.github/workflows/scenarios.yml',
+    '.github/workflow-drafts/scenarios.yml',
+    'scenarios/capture-scenario-result.sh',
+    'scenarios/pick-scenarios.sh',
+    'scenarios/run-installed-scenarios.sh',
+    'scenarios/scenario-catalog.tsv',
+    'scenarios/scenario-lib.sh',
+    'scenarios/scenario-verdict.mjs',
+    'scenarios/server-lib.sh',
+  ];
+  for (const input of sharedInputs) assert.equal(pick([input]), allScripts, `${input} must prove every standalone scenario`);
+  assert.equal(pick(['scenarios/voice.sh']), ',voice,');
+  assert.equal(pick(['scenarios/plain-yes-extra.py']), ',plain-yes,');
+  assert.equal(pick(['README.md']), ',');
+});
+
+test('the draft verdict waits for pooled records and downloads them before collecting verdicts', async () => {
+  const { readFileSync } = await import('node:fs');
+  const draft = readFileSync(DRAFT, 'utf8').replace(/\r\n/g, '\n');
+  const verdict = draft.slice(draft.search(/^ {2}verdict:[ \t]*$/m));
+  assert.match(verdict, /^ {4}needs: \[[^\]]*\bpooled\b[^\]]*\]/m, 'the verdict must wait for the pooled producer');
+  const download = verdict.indexOf('actions/download-artifact@v4');
+  const collector = verdict.indexOf('node scenarios/scenario-verdict.mjs');
+  assert.ok(download >= 0 && download < collector, 'the verdict must download result artifacts before collecting them');
+  assert.match(verdict.slice(download, collector), /merge-multiple: true/, 'the pooled result artifact must be merged into the collector directory');
 });
 
 test('the draft uploads one exact result record for every standalone script job', async () => {
