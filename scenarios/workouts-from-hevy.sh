@@ -110,8 +110,12 @@ persistence_roots() { # <docker|native> <scan name>
   case $platform in
     native)
       assistant_home "$scan"
+      # The carried add-on keeps its key in its own state folder, ~/.godspeed/workouts of the account
+      # the notebook runs as (third-party/addons/godspeed-workouts/lib/paths.mjs): that hevy.json is the
+      # key's one permitted file, and the folder is scanned with the rest once it exists.
       NATIVE_PERSISTENCE_ROOTS=("$ROOT" "$STATE" "$HERMES")
-      NATIVE_PERMITTED_HEVY_SETTINGS=$HERMES/hevy.json
+      [ ! -d "$HOME/.godspeed/workouts" ] || NATIVE_PERSISTENCE_ROOTS+=("$HOME/.godspeed/workouts")
+      NATIVE_PERMITTED_HEVY_SETTINGS=$HOME/.godspeed/workouts/hevy.json
       ;;
     docker)
       descriptor=$(in_server find /opt/data -path '*/.godspeed/assistant.json' -type f -print -quit) ||
@@ -121,7 +125,9 @@ persistence_roots() { # <docker|native> <scan name>
         fail "$scan could not read the Docker assistant home from $descriptor"
       [ -n "$home" ] || fail "$scan found no Docker assistant home in $descriptor"
       DOCKER_PERSISTENCE_ROOTS=(/opt/data "$home")
-      DOCKER_PERMITTED_HEVY_SETTINGS=$home/hevy.json
+      # The image's HOME is the assistant's home (docker/full-candidate/Dockerfile), so the add-on's state
+      # folder is ~/.godspeed/workouts there.
+      DOCKER_PERMITTED_HEVY_SETTINGS=$home/.godspeed/workouts/hevy.json
       ;;
     *) fail "unknown $platform persistence scan" ;;
   esac
@@ -182,7 +188,9 @@ const rows=data=>Array.isArray(data)?data:(Array.isArray(data?.data)?data.data:(
 const collection=rows(read(collectionsFile)).find(row=>row?.name==='Workouts');
 const items=collection?rows(read(itemsFile)).filter(row=>row?.collection_id===collection.id):[];
 const value=(item,...names)=>names.map(name=>item?.[name]??item?.data?.[name]).find(value=>value!==undefined&&value!==null);
-const workoutRows=items.map(item=>({source_id:value(item,'source_id','hevy_id','workout_id','id'),title:value(item,'title','name'),exercise:value(item,'exercise','exercise_name'),set:value(item,'set')||{weight_kg:value(item,'weight_kg'),reps:value(item,'reps')}}));
+// A row as the carried add-on writes it (third-party/addons/godspeed-workouts/lib/rows.mjs): the Hevy id as
+// the item's source_id, the title in "workout", and each exercise with its sets as "Scenario Squat: 8 x 42 kg".
+const workoutRows=items.map(item=>{const logged=/^(.+?): (\d+(?:\.\d+)?) x (\d+(?:\.\d+)?) kg$/.exec(String(value(item,'exercises')||''));return {source_id:value(item,'source_id'),title:value(item,'workout'),exercise:logged?.[1],set:logged?{weight_kg:Number(logged[3]),reps:Number(logged[2])}:null};});
 const jobs=rows(read(jobsFile));
 const routine=jobs.filter(job=>job?.name==='Workouts from Hevy');const job=routine[0]||{};
 const cron=String(job.cron||job.schedule?.expr||job.schedule||'');const minute=/^([0-9]+)\s+\*/.exec(cron)?.[1];
@@ -193,18 +201,21 @@ NODE
   [ -n "$script" ] || { printf '1\n' >"$exit_file"; return; }
   case $platform in
     docker)
-      in_server sh -c "cd \"$docker_home/scripts\" && python3 \"$docker_home/scripts/$script\"" >/dev/null 2>&1; code=$?
+      # As the account the notebook and its routines run as; root would read another state folder.
+      in_server_as_hermes sh -c "cd \"$docker_home/scripts\" && python3 \"$docker_home/scripts/$script\"" >/dev/null 2>&1; code=$?
       ;;
     native)
       python=$(json_value "$HERMES/scripts/godspeed-routines.json" hermes_python) || { printf '1\n' >"$exit_file"; return; }
-      (cd "$HERMES/scripts" && "$python" "$HERMES/scripts/$script") >/dev/null 2>&1; code=$?
+      # With the local Hevy address the notebook's service has (native_hevy_url), as its routines run.
+      (cd "$HERMES/scripts" && GODSPEED_WORKOUTS_TEST=1 GODSPEED_WORKOUTS_HEVY_API="http://127.0.0.1:$HEVY_FIXTURE_PORT" "$python" "$HERMES/scripts/$script") >/dev/null 2>&1; code=$?
       ;;
   esac
   printf '%s\n' "$code" >"$exit_file"
 }
 
 platform_before() { # <docker|native> <accepted settings json>
-  local platform=$1 accepted=$2 response=$EVIDENCE/$platform-accepted.json code routine before=$EVIDENCE/.$platform-before.json after=$EVIDENCE/.$platform-after.json
+  # $1, not $platform: a word of `local` is expanded before the line sets platform, so it would be the caller's.
+  local platform=$1 accepted=$2 response=$EVIDENCE/$1-accepted.json code routine before=$EVIDENCE/.$1-before.json
   code=$(settings_post "$platform" "$accepted" "$response")
   [ "$code" -ge 200 ] 2>/dev/null && [ "$code" -lt 300 ] ||
     fail "$platform Settings did not accept the made-up Hevy key (HTTP $code): $(tr -d '\n' <"$response" | cut -c1-200)"
@@ -213,7 +224,7 @@ platform_before() { # <docker|native> <accepted settings json>
 }
 
 platform_after() { # <docker|native>
-  local platform=$1 response=$EVIDENCE/$platform-accepted.json before=$EVIDENCE/.$platform-before.json after=$EVIDENCE/.$platform-after.json routine=$EVIDENCE/.$platform-routine refused_paths=$EVIDENCE/.$platform-refused-key-paths
+  local platform=$1 response=$EVIDENCE/$1-accepted.json before=$EVIDENCE/.$1-before.json after=$EVIDENCE/.$1-after.json routine=$EVIDENCE/.$1-routine refused_paths=$EVIDENCE/.$1-refused-key-paths
   workout_snapshot "$platform" "$after" "$routine" "$EVIDENCE/.$platform-manual-exit"
   "$NODE" - "$before" "$after" "$response" "$EVIDENCE/.$platform-manual-exit" "$refused_paths" "$EVIDENCE/$platform.json" <<'NODE'
 const fs=require('fs');const read=file=>JSON.parse(fs.readFileSync(file,'utf8'));
@@ -275,6 +286,7 @@ act() {
   trap 'kill "$pid" 2>/dev/null || true' EXIT
   wait_for 20 'the local Hevy fixture to name its port' test -s "$EVIDENCE/fixture-port" || fail "the local Hevy fixture did not start"
   port=$(cat "$EVIDENCE/fixture-port")
+  HEVY_FIXTURE_PORT=$port
   curl -fsS "http://127.0.0.1:$port/health" >"$EVIDENCE/fixture-health.json" || fail "the local Hevy fixture did not answer health"
   grep -q '"ok":true' "$EVIDENCE/fixture-health.json" || fail "the local Hevy fixture returned an unhealthy health record"
   curl -sS -H "api-key: $REFUSED_HEVY_KEY" "http://127.0.0.1:$port/v1/workouts" >/dev/null || true
