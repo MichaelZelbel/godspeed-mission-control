@@ -837,9 +837,14 @@ def codex_models():
 
 
 def use_model(slug, model):
-    run(HERMES + ["config", "set", "model.provider", slug], timeout=60)
+    rc, _ = run(HERMES + ["config", "set", "model.provider", slug], timeout=60)
+    if rc != 0:
+        return False
     if model:
-        run(HERMES + ["config", "set", "model.default", model], timeout=60)
+        rc, _ = run(HERMES + ["config", "set", "model.default", model], timeout=60)
+        if rc != 0:
+            return False
+    return True
 
 
 def proof():
@@ -905,7 +910,9 @@ def brain_chatgpt(chat):
     def find_model():
         why = ""
         for model in codex_models():   # which ones a plan may use differs; the first that answers wins
-            use_model("openai-codex", model)
+            if not use_model("openai-codex", model):
+                why = "the assistant model settings could not be stored"
+                continue
             ok, why = proof()
             log("brain: ChatGPT with %s: %s" % (model, "answers" if ok else why[:200]))
             if ok:
@@ -919,7 +926,7 @@ def brain_chatgpt(chat):
     return a == "brain:retry" and brain_chatgpt(chat)
 
 
-def check_key(slug, key):
+def check_key(slug, key, model=""):
     """(True, "") once Hermes keeps the key and answers a test question with it, else (False, why)."""
     run(HERMES + ["auth", "remove", slug, "godspeed-setup"], timeout=60)   # a key tried before
     # The key goes in on standard input. As --api-key it was on the command line, where
@@ -927,12 +934,16 @@ def check_key(slug, key):
     # Without --api-key Hermes asks for it, and with no terminal it reads the answer there.
     rc, _ = run(HERMES + ["auth", "add", slug, "--type", "api-key", "--label", "godspeed-setup"],
                 timeout=60, stdin_text=key + "\n", new_session=True)
-    use_model(slug, default_model(slug))
-    return proof() if rc == 0 else (False, "the key could not be stored")
+    if rc != 0:
+        return False, "the key could not be stored"
+    if not use_model(slug, model or default_model(slug)):
+        return False, "the assistant model settings could not be stored"
+    return proof()
 
 
 def brain_key(chat, slug):
     name = brain_label(slug)
+    model = os.environ.get("GODSPEED_TG_MODEL", "").strip()
     prompt = ("Send me your %s API key. You make one in your %s account. I delete your message as "
               "soon as I have read it, so the key does not stay in this chat." % (esc(name), esc(name)))
     while True:
@@ -946,7 +957,7 @@ def brain_key(chat, slug):
             continue
         SECRETS.append(key)
         chat.send("Thanks, I deleted your message. Checking the key with %s..." % esc(name))
-        ok, why = chat.working(check_key, slug, key)
+        ok, why = chat.working(check_key, slug, key, model)
         log("brain: %s: %s" % (slug, "answers" if ok else why[:200]))
         if ok:
             return True

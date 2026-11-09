@@ -17,7 +17,7 @@ that workflow: their jobs are written in the pull request that added them and ar
 release step. Until then they are run by hand, with the environment their rows below name. Remove this
 paragraph when the jobs are in `.github/workflows/scenarios.yml`.
 
-`workouts-from-hevy`, `day-becomes-facts`, `hermes-update-rollback` and `first-day` are jobs of that workflow, and the verdict requires all four. Their fixtures are loopback-only and contain only made-up people, workouts and messages.
+`workouts-from-hevy`, `day-becomes-facts`, `hermes-update-rollback` and `first-day` are jobs of that workflow, and the verdict requires all four unless the run was started with `-f only=<job names>`, in which case it judges only the jobs named there. Their fixtures are loopback-only and contain only made-up people, workouts and messages.
 
 | script | what it proves |
 | --- | --- |
@@ -124,7 +124,7 @@ Named by the job, never in a file here (for the scenarios above that await their
 | `chat-tidy-at-night`, `deadline-closes-itself` | `GODSPEED_SCENARIO_AI_KEY` | the tidied chat and the next message need a model; Settings' own replacement of a key tests the new key with one; the same two say which. `missed-routine` and `disk-filling` need none |
 | `day-becomes-facts` | `GODSPEED_SCENARIO_AI_KEY` | the installed remembered-facts routine extracts from the invented archive with the scenario AI; the same URL and model variables say which. The workouts and Hermes fixtures need no real account or key. |
 
-`GODSPEED_SCENARIO_AI_URL` and `GODSPEED_SCENARIO_AI_MODEL` have no default: a scenario that needs an AI fails with a plain sentence naming whichever is missing, and it also fails if the URL is on openrouter.ai, so the checks can never spend OpenRouter money. They run on `https://api.anthropic.com/v1` with `claude-haiku-4-5`, set as repository variables, and the key is the secret `GODSPEED_SCENARIO_AI_KEY`.
+`GODSPEED_SCENARIO_AI_URL` and `GODSPEED_SCENARIO_AI_MODEL` have no default: a scenario that needs an AI fails with a plain sentence naming whichever is missing. The capped OpenRouter test account runs at `https://openrouter.ai/api/v1` with `anthropic/claude-haiku-5.5`, set as repository variables, and the key is the secret `GODSPEED_SCENARIO_AI_KEY`. The scenarios refuse a model that is not a small Claude Haiku model. Their Docker Telegram setup chooses OpenRouter for that URL (or Anthropic for `https://api.anthropic.com/v1`) and verifies that the installed assistant uses the configured model.
 
 The six reminder scenarios need no key at all: everything they do is this machine's own. "Two
 computers" are two installations on the one machine, each with its own mission control folder, its
@@ -142,7 +142,7 @@ install: the video add-on's own setup fetches HyperFrames' pinned release, ffmpe
 model, because that is what a reader's setup does. They run it from the install's own carried copy
 of the add-on (`mc_video_on`), so what runs is the commit the stage pins.
 
-`charm-challenge.sh` is the one scenario that moves a clock. A twenty-one day count cannot be
+`charm-challenge.sh` moves a clock. A twenty-one day count cannot be
 watched starting over on one machine in one job while every day is today, so it sets `GODSPEED_NOW`
 on the notebook's own service and starts it again, which is the product's own frozen clock for a
 rehearsal (`notebook/core/tracker-operations.mjs`). It counts the days in UTC and says so if the
@@ -152,6 +152,9 @@ chat over the notebook's own chat, the line the morning brief is given through t
 and the notebook's own run of what is due) and the note it wrote, and the Trackers shelf's own list
 and the card's own numbers. The day it runs the brief is the day the clock has moved to, so the
 routine is due whether the install had made it already or not.
+
+`hermes-update-rollback.sh` also moves the installed notebook service clock, to 04:15 for each
+nightly Hermes update decision it rehearses.
 
 ## Where they find the assistant, and its chat store
 
@@ -195,7 +198,8 @@ it (`assistant_keeps_a_conversation`).
 - `test-scenarios.sh` — their gate: `bash scenarios/test-scenarios.sh` from the root of a checkout.
 - `report-night.mjs` — the report after the nightly run of main (02:30 UTC; Linux and Docker jobs only):
   for each scenario that failed or could not run it opens one issue `Nightly scenario failed: <name>`
-  (labels `bug` and `scenario-failure`, made if missing), or adds the night to the one already open;
+  (labels `bug`, `scenario-failure` (made if missing), and `archon-triage`), or adds the night to the
+  one already open;
   for each that passed with an issue open it comments the run link and closes it. Its tests are
   `test-report-night.mjs` (`node --test`, against a stand-in for GitHub), run by `test-scenarios.sh`.
 

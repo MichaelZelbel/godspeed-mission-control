@@ -16,6 +16,14 @@ const optional = name => {
   const at=args.indexOf(name);
   return at < 0 ? undefined : args[at+1];
 };
+export function providerForAIURL(value){
+  let hostname;
+  try { hostname=new URL(value).hostname; }
+  catch { throw Error(`the scenario AI URL ${JSON.stringify(value)} names no supported Telegram provider`); }
+  if(hostname==='openrouter.ai') return 'openrouter';
+  if(hostname==='api.anthropic.com') return 'anthropic';
+  throw Error(`the scenario AI URL ${JSON.stringify(value)} names no supported Telegram provider`);
+}
 const server=optional('--server') ?? 'godspeed';
 const evidence=optional('--evidence');
 const token=optional('--token');
@@ -115,9 +123,11 @@ async function setup(){
   if(!connected?.start_message) throw Error('Settings connected the bot but supplied no one-time /start message');
   await capture('setup-start','setup',()=>act({from:owner,text:connected.start_message}));
   if(!withoutAI){
-    await waitFor('setup question',copyRecord,record=>(record.sent ?? []).some(message=>(message.buttons ?? []).some(button=>button.callback==='anthropic')));
+    const provider=providerForAIURL(option('--ai-url'));
+    const model=option('--ai-model');
+    await waitFor('setup question',copyRecord,record=>(record.sent ?? []).some(message=>(message.buttons ?? []).some(button=>button.callback===provider)));
     attributeSent('setup-start');
-    await capture('setup-provider','press',()=>act({from:owner,press:'anthropic'}));
+    await capture('setup-provider','press',()=>act({from:owner,press:provider}));
     const key=optional('--ai-key');
     if(!key) throw Error('server-telegram: --ai-key is required because the setup path checks the dedicated AI account');
     await capture('setup-key','say',()=>act({from:owner,text:key}));
@@ -128,6 +138,11 @@ async function setup(){
   await waitFor('gateway handoff',runner,value=>value.state==='gateway',180);
   const setupState=JSON.parse(inServer(['cat','/opt/data/full-candidate/telegram/setup.json']));
   if(!setupState.done) throw Error('the Telegram setup ended without marking its handoff done');
+  if(!withoutAI){
+    const model=option('--ai-model');
+    const installed=inServer(['/opt/hermes/bin/hermes','config','get','model.default']).trim();
+    if(installed!==model) throw Error(`the installed assistant model.default is ${JSON.stringify(installed)}, not ${JSON.stringify(model)}`);
+  }
   const handoff=copyRecord();
   const state=loadState();
   state.sent=(handoff.sent ?? []).length;
