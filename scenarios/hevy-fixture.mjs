@@ -69,5 +69,7 @@ const server = http.createServer(async (req, res) => {
   if (url.pathname === '/v1/exercise_templates') return json(req, res, 200, { page: 1, page_count: 1, exercise_templates: [{ id: 'scenario-squat', title: 'Scenario Squat' }, { id: 'scenario-row', title: 'Scenario Row' }] });
   return json(req, res, 404, { error: 'missing' });
 });
-server.listen(port, '127.0.0.1', () => process.stdout.write(`${server.address().port}\n`));
+// Loopback unless the scenario names another address: its Docker server reaches the host through
+// host.docker.internal, the bridge's address, which a loopback-only listener never answers.
+server.listen(port, process.env.GODSPEED_HEVY_FIXTURE_HOST || '127.0.0.1', () => process.stdout.write(`${server.address().port}\n`));
 process.on('SIGTERM', () => server.close());

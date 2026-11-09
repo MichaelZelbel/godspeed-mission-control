@@ -185,8 +185,11 @@ workout_snapshot() { # <docker|native> <file> <routine file> <exit file>
 const fs=require('fs');const [platform,collectionsFile,itemsFile,jobsFile,out,routineOut]=process.argv.slice(2);
 const read=file=>{try{return JSON.parse(fs.readFileSync(file,'utf8'))}catch{return null}};
 const rows=data=>Array.isArray(data)?data:(Array.isArray(data?.data)?data.data:(Array.isArray(data?.jobs)?data.jobs:[]));
-const collection=rows(read(collectionsFile)).find(row=>row?.name==='Workouts');
-const items=collection?rows(read(itemsFile)).filter(row=>row?.collection_id===collection.id):[];
+const named=rows(read(collectionsFile)).filter(row=>row?.name==='Workouts'),all=rows(read(itemsFile));
+const collection=named.find(row=>row?.source_app==='godspeed-workouts')||named[0];
+const items=collection?all.filter(row=>row?.collection_id===collection.id):[];
+process.stderr.write(`${platform} snapshot: ${named.length} Workouts collection(s) [${named.map(row=>`${row.id}/${row.source_app||'-'}`).join(' ')}], ${all.length} item(s) [${[...new Set(all.map(row=>row?.collection_id))].join(' ')}], ${items.length} in the one read
+`);
 const value=(item,...names)=>names.map(name=>item?.[name]??item?.data?.[name]).find(value=>value!==undefined&&value!==null);
 // A row as the carried add-on writes it (third-party/addons/godspeed-workouts/lib/rows.mjs): the Hevy id as
 // the item's source_id, the title in "workout", and each exercise with its sets as "Scenario Squat: 8 x 42 kg".
@@ -282,7 +285,7 @@ act() {
   local state=$EVIDENCE/fixture-state.json port pid fixture_key
   fixture_key=$("$NODE" -p 'require("crypto").randomUUID()') || fail "the selected Node could not make the local Hevy fixture key"
   : >"$EVIDENCE/fixture.log"
-  GODSPEED_HEVY_FIXTURE_KEY="$fixture_key" "$NODE" "$HERE/hevy-fixture.mjs" --state "$state" --log "$EVIDENCE/fixture.log" >"$EVIDENCE/fixture-port" & pid=$!
+  GODSPEED_HEVY_FIXTURE_KEY="$fixture_key" GODSPEED_HEVY_FIXTURE_HOST=0.0.0.0 "$NODE" "$HERE/hevy-fixture.mjs" --state "$state" --log "$EVIDENCE/fixture.log" >"$EVIDENCE/fixture-port" & pid=$!
   trap 'kill "$pid" 2>/dev/null || true' EXIT
   wait_for 20 'the local Hevy fixture to name its port' test -s "$EVIDENCE/fixture-port" || fail "the local Hevy fixture did not start"
   port=$(cat "$EVIDENCE/fixture-port")
