@@ -3288,7 +3288,7 @@ copy "$C/good" "$C/speaks-when-fine"
 run_json "$C/speaks-when-fine" "$(msg fine 'All is well.')" "$(msg broken 'Telegram refused your bot key.')"
 refuses 'a message although everything is fine' connection-check "$C/speaks-when-fine" 'although everything was fine'
 copy "$C/good" "$C/empty-when-fine"
-run_json "$C/empty-when-fine" "$(msg fine '')" "$(msg broken 'Telegram refused your bot key.')"
+run_json "$C/empty-when-fine" "$(msg fine '')" "$(msg broken 'Telegram refused your bot key, so I cannot reach you there. Open Settings to connect it again.')"
 passes 'an empty delivery while everything is fine' connection-check "$C/empty-when-fine" 'told the owner once'
 copy "$C/good" "$C/deadline-when-fine"
 printf '[{"slug":"x","title":"Something","status":"open"}]\n' >"$C/deadline-when-fine/due-fine.json"
