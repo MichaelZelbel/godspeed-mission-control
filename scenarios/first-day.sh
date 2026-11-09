@@ -159,7 +159,8 @@ NODE
     fail 'the installed Telegram gateway never polled the fake Bot API'
   if ! reason=$("$NODE" - "$folder" 2>&1 <<'NODE'
 const fs=require('fs'),path=require('path'),folder=process.argv[2],read=file=>fs.readFileSync(path.join(folder,file),'utf8');
-const normal=value=>String(value||'').replace(/\r\n?/g,'\n').trim();
+// The words the owner reads: Telegram shows Markdown marks as formatting, not as characters.
+const normal=value=>String(value||'').replace(/\r\n?/g,'\n').replace(/\[([^\]]*)\]\([^)]*\)/g,'$1').replace(/[*_~`#]/g,'').replace(/^[ \t]*>[ \t]?/gm,'').split('\n').map(line=>line.trim()).join('\n').trim();
 const fail=message=>{console.error(message);process.exit(1)};
 const run=JSON.parse(read('run.json')),messages=label=>(run.outbox||[]).filter(m=>m.label===label&&m.accepted!==false).map(m=>m.text);
 const saved=normal(read('brief.txt'));

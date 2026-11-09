@@ -112,7 +112,7 @@ server_scheduled_brief() { # <note file> <seconds>
     fail 'the scheduled morning brief saved no readable note'
   "$NODE" -e 'const fs=require("fs"),source=JSON.parse(fs.readFileSync(process.argv[1],"utf8")),rows=Array.isArray(source)?source:source.data||[],before=JSON.parse(process.argv[4]);fs.writeFileSync(process.argv[2],JSON.stringify({id:process.argv[3],before_last_run_at:before,data:rows},null,2)+"\n")' "$jobs" "$EVIDENCE/job-scheduled-brief.json" "$id" "$before_run"
   server_telegram_record "$EVIDENCE/scheduled-telegram-requests.json"
-  "$NODE" -e 'const fs=require("fs"),brief=fs.readFileSync(process.argv[1],"utf8").replace(/\r\n?/g,"\n").trim(),record=JSON.parse(fs.readFileSync(process.argv[2],"utf8"));process.exit((record.sent||[]).some(sent=>String(sent.text||"").replace(/\r\n?/g,"\n").trim()===brief)?0:1)' "$1" "$EVIDENCE/scheduled-telegram-requests.json" ||
+  "$NODE" -e 'const fs=require("fs"),shown=value=>String(value||"").replace(/\r\n?/g,"\n").replace(/\[([^\]]*)\]\([^)]*\)/g,"$1").replace(/[*_~`#]/g,"").replace(/^[ \t]*>[ \t]?/gm,"").split("\n").map(line=>line.trim()).join("\n").trim(),brief=shown(fs.readFileSync(process.argv[1],"utf8")),record=JSON.parse(fs.readFileSync(process.argv[2],"utf8"));process.exit((record.sent||[]).some(sent=>shown(sent.text)===brief)?0:1)' "$1" "$EVIDENCE/scheduled-telegram-requests.json" ||
     fail 'the scheduler ran the morning brief but it never reached the installed Telegram gateway'
   rm -f "$jobs" "$notes" "$EVIDENCE"/.scheduled-brief-*
 }
