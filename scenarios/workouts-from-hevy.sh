@@ -223,8 +223,8 @@ fs.writeFileSync(process.argv[7],JSON.stringify({...before,settings:{refused:{ac
 NODE
 }
 
-scan_fixture_key() {
-  local key='00000000-0000-4000-8000-000000000001' code native_paths=$EVIDENCE/.native-key-hits docker_paths=$EVIDENCE/.docker-key-hits
+scan_fixture_key() { # [accepted fixture key]
+  local key=${1:-'00000000-0000-4000-8000-000000000001'} code native_paths=$EVIDENCE/.native-key-hits docker_paths=$EVIDENCE/.docker-key-hits
   persistence_roots native 'native accepted-key scan'
   if grep -rlF --exclude-dir=.git --exclude-dir=node_modules -- "$key" "${NATIVE_PERSISTENCE_ROOTS[@]}" >"$native_paths"; then
     [ -s "$native_paths" ] || fail 'native accepted-key scan completed with no path output after a match'
@@ -268,9 +268,10 @@ NODE
 act() {
   need_node
   fresh_evidence
-  local state=$EVIDENCE/fixture-state.json port pid
+  local state=$EVIDENCE/fixture-state.json port pid fixture_key
+  fixture_key=$("$NODE" -p 'require("crypto").randomUUID()') || fail "the selected Node could not make the local Hevy fixture key"
   : >"$EVIDENCE/fixture.log"
-  "$NODE" "$HERE/hevy-fixture.mjs" --state "$state" --log "$EVIDENCE/fixture.log" >"$EVIDENCE/fixture-port" & pid=$!
+  GODSPEED_HEVY_FIXTURE_KEY="$fixture_key" "$NODE" "$HERE/hevy-fixture.mjs" --state "$state" --log "$EVIDENCE/fixture.log" >"$EVIDENCE/fixture-port" & pid=$!
   trap 'kill "$pid" 2>/dev/null || true' EXIT
   wait_for 20 'the local Hevy fixture to name its port' test -s "$EVIDENCE/fixture-port" || fail "the local Hevy fixture did not start"
   port=$(cat "$EVIDENCE/fixture-port")
@@ -298,7 +299,7 @@ act() {
       fail "$platform Settings did not reject the made-up Hevy key (HTTP $code)"
     refused_not_retained "$platform"
   done
-  printf '{"key":"00000000-0000-4000-8000-000000000001"}\n' >"$EVIDENCE/.accepted-key.json"
+  printf '{"key":"%s"}\n' "$fixture_key" >"$EVIDENCE/.accepted-key.json"
   platform_before docker "$EVIDENCE/.accepted-key.json"
   platform_before native "$EVIDENCE/.accepted-key.json"
   "$NODE" "$HERE/hevy-fixture.mjs" --state "$EVIDENCE/fixture-state.json" --log "$EVIDENCE/fixture.log" --mutate ||
@@ -306,7 +307,7 @@ act() {
   platform_after docker
   platform_after native
   rm -f "$EVIDENCE/.refused-key.json" "$EVIDENCE/.accepted-key.json"
-  scan_fixture_key
+  scan_fixture_key "$fixture_key"
   check "$EVIDENCE"
 }
 

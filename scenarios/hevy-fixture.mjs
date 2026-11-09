@@ -3,7 +3,7 @@
 import http from 'node:http';
 import { readFile, writeFile } from 'node:fs/promises';
 
-const acceptedKey = '00000000-0000-4000-8000-000000000001';
+const acceptedKey = process.env.GODSPEED_HEVY_FIXTURE_KEY || '00000000-0000-4000-8000-000000000001';
 const initial = [
   { id: 'harbor-strength', title: 'Harbor Strength', exercises: [{ title: 'Scenario Squat', sets: [{ weight_kg: 42, reps: 8 }] }] },
   { id: 'canal-pull', title: 'Canal Pull', exercises: [{ title: 'Scenario Row', sets: [{ weight_kg: 31, reps: 10 }] }] },
