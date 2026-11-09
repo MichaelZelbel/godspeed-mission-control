@@ -837,9 +837,14 @@ def codex_models():
 
 
 def use_model(slug, model):
-    run(HERMES + ["config", "set", "model.provider", slug], timeout=60)
+    rc, _ = run(HERMES + ["config", "set", "model.provider", slug], timeout=60)
+    if rc != 0:
+        return False
     if model:
-        run(HERMES + ["config", "set", "model.default", model], timeout=60)
+        rc, _ = run(HERMES + ["config", "set", "model.default", model], timeout=60)
+        if rc != 0:
+            return False
+    return True
 
 
 def proof():
@@ -905,7 +910,9 @@ def brain_chatgpt(chat):
     def find_model():
         why = ""
         for model in codex_models():   # which ones a plan may use differs; the first that answers wins
-            use_model("openai-codex", model)
+            if not use_model("openai-codex", model):
+                why = "the assistant model settings could not be stored"
+                continue
             ok, why = proof()
             log("brain: ChatGPT with %s: %s" % (model, "answers" if ok else why[:200]))
             if ok:
@@ -927,8 +934,11 @@ def check_key(slug, key, model=""):
     # Without --api-key Hermes asks for it, and with no terminal it reads the answer there.
     rc, _ = run(HERMES + ["auth", "add", slug, "--type", "api-key", "--label", "godspeed-setup"],
                 timeout=60, stdin_text=key + "\n", new_session=True)
-    use_model(slug, model or default_model(slug))
-    return proof() if rc == 0 else (False, "the key could not be stored")
+    if rc != 0:
+        return False, "the key could not be stored"
+    if not use_model(slug, model or default_model(slug)):
+        return False, "the assistant model settings could not be stored"
+    return proof()
 
 
 def brain_key(chat, slug):

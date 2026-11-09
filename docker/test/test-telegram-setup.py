@@ -489,6 +489,28 @@ def test_scenario_key_model():
           r["rc"] == 0 and r["hstate"].get("provider") == "openrouter" and r["hstate"].get("model") == model)
 
 
+def test_model_write_failures():
+    for setting in ("model.provider", "model.default"):
+        m = load("tg_setup_model_write_%s" % setting.rsplit(".", 1)[1], PROGRAM)
+        proofs = []
+
+        def fake_run(command, **_):
+            args = command[len(m.HERMES):]
+            if args[:3] == ["config", "set", setting]:
+                return 1, "refused"
+            return 0, ""
+
+        def stale_provider_proof():
+            proofs.append(True)
+            return True, ""
+
+        m.run = fake_run
+        m.proof = stale_provider_proof
+        result = m.check_key("openrouter", "sk-or-good-0123456789abcdef", "anthropic/claude-haiku-5.5")
+        check("a failed %s write stops before a stale provider can prove the key" % setting,
+              result == (False, "the assistant model settings could not be stored") and not proofs)
+
+
 CODE = "fictionalStartCode0123456789abcd"
 ONE_CLICK = {"GODSPEED_TG_FLOW": "notebook", "GODSPEED_TELEGRAM_START_CODE": CODE}
 NOTEBOOK = "https://203-0-113-7.sslip.io/dashboard"
@@ -938,6 +960,7 @@ if __name__ == "__main__":
     test_found_repo()
     test_key_provider()
     test_scenario_key_model()
+    test_model_write_failures()
     test_one_click_names()
     test_one_click_happy()
     test_one_click_snags()
