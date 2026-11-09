@@ -177,6 +177,7 @@ workout_snapshot() { # <docker|native> <file> <routine file> <exit file>
           "http://127.0.0.1:$NOTEBOOK_PORT/api/query" >"$EVIDENCE/.workouts-$platform-$query.json" ||
           fail "the native notebook could not read $query for the Hevy import"
       done
+      collection=$EVIDENCE/.workouts-$platform-collections.json items=$EVIDENCE/.workouts-$platform-collection_items.json
       assistant_home
       cp "$HERMES/cron/jobs.json" "$jobs" 2>/dev/null || : >"$jobs"
       ;;
@@ -228,7 +229,10 @@ platform_before() { # <docker|native> <accepted settings json>
 
 platform_after() { # <docker|native>
   local platform=$1 response=$EVIDENCE/$1-accepted.json before=$EVIDENCE/.$1-before.json after=$EVIDENCE/.$1-after.json routine=$EVIDENCE/.$1-routine refused_paths=$EVIDENCE/.$1-refused-key-paths
-  workout_snapshot "$platform" "$after" "$routine" "$EVIDENCE/.$platform-manual-exit"
+  # A snapshot reads the tables before it runs the routine by hand: the first run brings Hevy's change
+  # in and its exit is the one kept, the second snapshot reads what that run left.
+  workout_snapshot "$platform" "$EVIDENCE/.$1-applied.json" "$routine" "$EVIDENCE/.$platform-manual-exit"
+  workout_snapshot "$platform" "$after" "$routine" "$EVIDENCE/.$platform-reread-exit"
   "$NODE" - "$before" "$after" "$response" "$EVIDENCE/.$platform-manual-exit" "$refused_paths" "$EVIDENCE/$platform.json" <<'NODE'
 const fs=require('fs');const read=file=>JSON.parse(fs.readFileSync(file,'utf8'));
 const before=read(process.argv[2]),after=read(process.argv[3]);
