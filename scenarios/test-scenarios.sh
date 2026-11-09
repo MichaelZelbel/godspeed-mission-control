@@ -4043,7 +4043,8 @@ facts_good() {
 facts_good "$DF2/good"
 DF_SCRIPT="$ROOT/scenarios/day-becomes-facts.sh"
 day_facts_provider_post_does_not_persist_the_key() { # <HTTP status> <description>
-  local status=$1 description=$2 folder=$TMP/day-facts-provider-action-$status key='day-facts-private-key' code
+  local status description folder key='day-facts-private-key' code
+  status=$1; description=$2; folder=$TMP/day-facts-provider-action-$status
   rm -rf "$folder"
   mkdir -p "$folder/home/cron" "$folder/home/scripts" "$folder/root" "$folder/tmp"
   printf '%s\n' '{"jobs":[{"name":"Remember what you said","script":"scenario-facts","cron":"40 3 * * *"}]}' >"$folder/home/cron/jobs.json"
@@ -4088,7 +4089,9 @@ day_facts_provider_post_does_not_persist_the_key() { # <HTTP status> <descriptio
   else
     code=$?
   fi
-  if { { [ "$status" = 200 ] && [ "$code" = 0 ]; } || { [ "$status" != 200 ] && [ "$code" != 0 ]; }; } && [ -f "$folder/posted" ] && ! rg -F -- "$key" "$folder" >/dev/null 2>&1; then
+  if { { [ "$status" = 200 ] && [ "$code" = 0 ] && [ ! -e "$folder/work/day-becomes-facts/provider-error.json" ]; } ||
+       { [ "$status" != 200 ] && [ "$code" != 0 ] && node -e 'const e=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.exit(Number.isInteger(e.request_bytes)&&e.request_bytes>0&&e.model==="claude-haiku-4-5"&&e.provider_response.includes("[redacted]")?0:1)' "$folder/work/day-becomes-facts/provider-error.json"; }; } \
+    && [ -f "$folder/posted" ] && ! rg -F -- "$key" "$folder" >/dev/null 2>&1; then
     ok "$description"
   else
     bad "$description (exit $code: $(cat "$folder/action.log" 2>/dev/null))"
