@@ -187,6 +187,32 @@ server_telegram_setup_uses_local_door() { # <port>
 server_telegram_setup_uses_local_door 47832
 server_telegram_setup_uses_local_door 49999
 
+server_telegram_setup_uses_the_configured_ai() {
+  local compose=$TMP/server-telegram-ai-compose.yaml node=$TMP/server-telegram-ai-node log=$TMP/server-telegram-ai-node.log
+  mkdir -p "$TMP/server-telegram-ai-evidence" "$TMP/server-telegram-ai-server"
+  printf '#!/bin/sh\nif [ "$1" = -e ]; then exec "$SERVER_TELEGRAM_REAL_NODE" "$@"; fi\nprintf "%%s\\n" "$@" >"$SERVER_TELEGRAM_NODE_LOG"\n' >"$node"
+  chmod +x "$node"
+  SCENARIO=server-telegram-ai-test GODSPEED_SCENARIO_AI_KEY=k GODSPEED_SCENARIO_AI_URL=https://openrouter.ai/api/v1 GODSPEED_SCENARIO_AI_MODEL=anthropic/claude-haiku-5.5 \
+    EVIDENCE="$TMP/server-telegram-ai-evidence" HERE="$HERE" NODE="$node" SERVER_TELEGRAM_NODE_LOG="$log" SERVER_TELEGRAM_REAL_NODE="$(command -v node)" bash -c '
+      . "$1/scenarios/scenario-lib.sh"
+      . "$1/scenarios/server-lib.sh"
+      sudo() { [ "$1" = tee ] && cat >"$2"; }
+      server_compose() { :; }
+      server_healthy() { :; }
+      server_container() { printf fixture; }
+      SERVER_DIR="$2" server_telegram_setup
+    ' bash "$ROOT" "$TMP/server-telegram-ai-server" 2>/dev/null
+  compose=$TMP/server-telegram-ai-server/compose.scenario-telegram.yaml
+  if grep -Fqx -- '--ai-key' "$log" && grep -Fqx -- '--ai-url' "$log" && grep -Fqx 'https://openrouter.ai/api/v1' "$log" && \
+    grep -Fqx -- '--ai-model' "$log" && grep -Fqx 'anthropic/claude-haiku-5.5' "$log" && \
+    grep -Fqx '      GODSPEED_TG_MODEL: "anthropic/claude-haiku-5.5"' "$compose"; then
+    ok 'the Telegram setup receives the configured AI key, URL and model before it can test the key'
+  else
+    bad "the Telegram setup did not receive the configured AI key, URL and model ($(cat "$log" 2>/dev/null); $(cat "$compose" 2>/dev/null))"
+  fi
+}
+server_telegram_setup_uses_the_configured_ai
+
 server_sparse_inventory() {
   local output
   mkdir -p "$TMP/server-sparse"
@@ -4366,11 +4392,10 @@ else
   bad "install_the_line_of_into read: $(cat "$TMP/sfr-asked")"
 fi
 
-# ================================================================ no default AI, never OpenRouter
-# On 5 November 2026 the checks fell back to an OpenRouter model nobody had set and ran out of the
-# owner's credit. A scenario that needs an AI now fails in a plain sentence when the address or the
-# model is missing, and when the address is OpenRouter's.
-section "the AI settings: no default, never OpenRouter"
+# =========================================================== explicit, small-model scenario AI
+# A scenario that needs an AI fails in a plain sentence when the address or the model is missing,
+# and only accepts the small Claude Haiku models on the capped test account.
+section "the AI settings: explicit small model"
 ai_run() { # <url> <model>
   GODSPEED_SCENARIO_AI_KEY=k GODSPEED_SCENARIO_AI_URL=$1 GODSPEED_SCENARIO_AI_MODEL=$2 SCENARIO=ai-settings-test     bash -c '. "$1/scenarios/scenario-lib.sh"; need_the_ai_key "a test"; echo "went-on"' _ "$ROOT" 2>&1
 }
@@ -4378,16 +4403,18 @@ AI_OUT=$(ai_run '' 'claude-haiku-4-5')
 case $AI_OUT in *GODSPEED_SCENARIO_AI_URL*'is not set'*) ok "no address: FAIL naming GODSPEED_SCENARIO_AI_URL" ;; *) bad "no address was not refused ($AI_OUT)" ;; esac
 AI_OUT=$(ai_run 'https://api.anthropic.com/v1' '')
 case $AI_OUT in *GODSPEED_SCENARIO_AI_MODEL*'is not set'*) ok "no model: FAIL naming GODSPEED_SCENARIO_AI_MODEL" ;; *) bad "no model was not refused ($AI_OUT)" ;; esac
-AI_OUT=$(ai_run 'https://openrouter.ai/api/v1' 'claude-haiku-4-5')
-case $AI_OUT in *openrouter.ai*'must never spend'*) ok "an OpenRouter address: FAIL" ;; *) bad "an OpenRouter address was not refused ($AI_OUT)" ;; esac
+AI_OUT=$(ai_run 'https://openrouter.ai/api/v1' 'anthropic/claude-haiku-5.5')
+case $AI_OUT in *went-on*) ok "the capped OpenRouter account and its small Haiku model go on" ;; *) bad "the capped OpenRouter account was refused ($AI_OUT)" ;; esac
+AI_OUT=$(ai_run 'https://openrouter.ai/api/v1' 'anthropic/claude-fable-5.1')
+case $AI_OUT in *GODSPEED_SCENARIO_AI_MODEL*'anthropic/claude-fable-5.1'*'small Claude Haiku'*) ok "a non-small model: FAIL naming the model" ;; *) bad "a non-small model was not refused ($AI_OUT)" ;; esac
 AI_OUT=$(ai_run 'http://api.anthropic.com/v1' 'claude-haiku-4-5')
 case $AI_OUT in *went-on*) bad "a clear-text http address was accepted ($AI_OUT)" ;; *https*) ok "a clear-text http address: FAIL" ;; *) bad "an http address was not refused for the right reason ($AI_OUT)" ;; esac
 AI_OUT=$(ai_run 'https://api.anthropic.com/v1' 'claude-haiku-4-5')
 case $AI_OUT in *went-on*) ok "Anthropic's address and a model go on" ;; *) bad "a good setting was refused ($AI_OUT)" ;; esac
-if grep -vE '^[[:space:]]*#' "$ROOT/scenarios/scenario-lib.sh" | grep -qE 'sonnet|openrouter\.ai/api'; then
-  bad "scenario-lib.sh still names a default model or an OpenRouter address"
+if grep -vE '^[[:space:]]*#' "$ROOT/scenarios/scenario-lib.sh" | grep -qE 'sonnet|claude-fable'; then
+  bad "scenario-lib.sh still names a non-small default model"
 else
-  ok "scenario-lib.sh names no default model and no OpenRouter address"
+  ok "scenario-lib.sh names no default or non-small model"
 fi
 
 # ================================================================ the corrected scenario seams

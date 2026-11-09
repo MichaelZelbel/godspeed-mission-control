@@ -820,6 +820,9 @@ def brain_label(slug):
 
 
 def default_model(slug):
+    chosen = os.environ.get("GODSPEED_TG_MODEL", "").strip()
+    if chosen:
+        return chosen
     try:
         from hermes_cli.models import get_default_model_for_provider
         return get_default_model_for_provider(slug) or FALLBACK_MODELS.get(slug, "")

@@ -146,8 +146,8 @@ show_assistant_home() {
 #   GODSPEED_SCENARIO_AI_URL    the service's address (a repository variable; no default)
 #   GODSPEED_SCENARIO_AI_MODEL  the model (a repository variable; no default)
 # There is no default for either on purpose: a default once sent the checks to a paid model on the
-# owner's OpenRouter account. The checks use https://api.anthropic.com/v1 and claude-haiku-4-5, and
-# they refuse openrouter.ai altogether.
+# owner's OpenRouter account. The checks use a capped OpenRouter test account and only a small
+# Claude Haiku model, so the configured model is always explicit and affordable.
 AI_URL=${GODSPEED_SCENARIO_AI_URL:-}
 AI_MODEL=${GODSPEED_SCENARIO_AI_MODEL:-}
 check_the_ai_settings() {
@@ -157,8 +157,9 @@ check_the_ai_settings() {
     https://*) ;;
     *) fail "GODSPEED_SCENARIO_AI_URL must be an https address, because the AI key is sent to it; use https://api.anthropic.com/v1" ;;
   esac
-  case "$(printf '%s' "$AI_URL" | tr 'A-Z' 'a-z')" in
-    *openrouter.ai*) fail "GODSPEED_SCENARIO_AI_URL points at openrouter.ai, and the checks must never spend the owner's OpenRouter money; use https://api.anthropic.com/v1" ;;
+  case "$AI_MODEL" in
+    claude-haiku-*|anthropic/claude-haiku-*) ;;
+    *) fail "GODSPEED_SCENARIO_AI_MODEL is $AI_MODEL, not a small Claude Haiku model, so the scenario cannot use it" ;;
   esac
 }
 need_the_ai_key() { # <what it is needed for>

@@ -4,7 +4,13 @@ import {execFileSync} from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import {captureSent} from './server-telegram.mjs';
+import {captureSent,providerForAIURL} from './server-telegram.mjs';
+
+test('the configured AI URL selects the matching Telegram provider',()=>{
+  assert.equal(providerForAIURL('https://openrouter.ai/api/v1'),'openrouter');
+  assert.equal(providerForAIURL('https://api.anthropic.com/v1'),'anthropic');
+  assert.throws(()=>providerForAIURL('https://api.openai.com/v1'),/no supported Telegram provider/);
+});
 
 test('the first action after setup ignores the setup handoff message',()=>{
   const state={sent:2,outbox:[{label:'setup-first-install',text:'Setup question'}]};
@@ -236,6 +242,7 @@ case "$*" in
   *http://127.0.0.1:${port}/api/telegram/connect*) echo "$*" >> "$TRACE"; echo '{"start_message":"/start abc"}'; exit 0;;
   *runner.json*) echo '{"state":"gateway"}'; exit 0;;
   *setup.json*) echo '{"done":true}'; exit 0;;
+  *'config get model.default'*) echo 'anthropic/claude-haiku-5.5'; exit 0;;
   *record.json*) ;;
   *) exit 0;;
 esac
@@ -252,7 +259,7 @@ printf '{"sent":[%s],"requests":[]}\\n' "$sent"
 `);
   try {
     assert.throws(()=>run('setup','--token','t','--ai-key','k'),/--notebook-port is required/);
-    run('setup','--token','t','--ai-key','k','--notebook-port',port);
+    run('setup','--token','t','--ai-key','k','--ai-url','https://api.anthropic.com/v1','--ai-model','anthropic/claude-haiku-5.5','--notebook-port',port);
     assert.ok(fs.readFileSync(path.join(folder,'trace'),'utf8').includes(`http://127.0.0.1:${port}/api/telegram/connect`));
     const saved=JSON.parse(fs.readFileSync(path.join(folder,'run.json'),'utf8'));
     assert.deepEqual(saved.steps.map(step=>step.success),[true,true,true,true]);
