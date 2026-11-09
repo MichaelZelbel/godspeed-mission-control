@@ -9,7 +9,12 @@ import {captureSent,providerForAIURL} from './server-telegram.mjs';
 test('the configured AI URL selects the matching Telegram provider',()=>{
   assert.equal(providerForAIURL('https://openrouter.ai/api/v1'),'openrouter');
   assert.equal(providerForAIURL('https://api.anthropic.com/v1'),'anthropic');
-  assert.throws(()=>providerForAIURL('https://api.openai.com/v1'),/no supported Telegram provider/);
+  for(const value of [
+    'https://api.openai.com/v1',
+    'https://evil.openrouter.ai/v1',
+    'https://evil.api.anthropic.com/v1',
+    'https://openrouter.ai.attacker.example/v1',
+  ]) assert.throws(()=>providerForAIURL(value),/no supported Telegram provider/);
 });
 
 test('the first action after setup ignores the setup handoff message',()=>{
