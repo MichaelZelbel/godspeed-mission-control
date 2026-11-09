@@ -155,7 +155,7 @@ test('the protected draft pools candidate systems and leaves the live workflow u
   assert.match(draft, /picked=\$\(bash scenarios\/pick-scenarios\.sh "\$RUNNER_TEMP\/changed"\)/);
 });
 
-test('the draft picker selects every standalone scenario for each shared orchestration input', async () => {
+test('the draft picker selects every standalone scenario for workflow and scenario support changes', async () => {
   const { readFileSync, writeFileSync, mkdtempSync } = await import('node:fs');
   const { tmpdir } = await import('node:os');
   const { spawnSync } = await import('node:child_process');
@@ -181,11 +181,62 @@ test('the draft picker selects every standalone scenario for each shared orchest
     'scenarios/scenario-lib.sh',
     'scenarios/scenario-verdict.mjs',
     'scenarios/server-lib.sh',
+    'scenarios/telegram-through-hermes.py',
+    'scenarios/numbers-lib.sh',
+    'scenarios/hevy-fixture.mjs',
+    'scenarios/facts-lib.sh',
+    'scenarios/telegram-judge.mjs',
+    'scenarios/server-telegram.mjs',
+    'scenarios/scenario-asker.py',
   ];
   for (const input of sharedInputs) assert.equal(pick([input]), allScripts, `${input} must prove every standalone scenario`);
+  assert.equal(pick(['scenarios/voice-through-hermes.py']), ',voice,', 'voice-through-hermes.py is voice\'s named companion');
   assert.equal(pick(['scenarios/voice.sh']), ',voice,');
   assert.equal(pick(['scenarios/plain-yes-extra.py']), ',plain-yes,');
   assert.equal(pick(['README.md']), ',');
+});
+
+test('the draft stage handoff writes the complete picker result for a changed support helper', async () => {
+  const { readFileSync, writeFileSync, mkdtempSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { spawnSync } = await import('node:child_process');
+  const draft = readFileSync(DRAFT, 'utf8').replace(/\r\n/g, '\n');
+  const catalog = readFileSync(new URL('./scenario-catalog.tsv', import.meta.url), 'utf8');
+  const allScripts = `,${catalog.split('\n').filter((line) => line && !line.startsWith('#'))
+    .map((line) => line.split('\t')).filter(([, implementation]) => implementation.endsWith('.sh'))
+    .map(([id]) => id).join(',')},`;
+  const stepStart = draft.indexOf('      - name: Which scenarios this run proves\n');
+  const stepEnd = draft.indexOf('\n      - name:', stepStart + 1);
+  assert.ok(stepStart >= 0 && stepEnd > stepStart, 'the draft pick step was not found');
+  const step = draft.slice(stepStart, stepEnd);
+  const runStart = step.indexOf('        run: |\n');
+  assert.ok(runStart >= 0, 'the draft pick step has no shell block');
+  const script = step.slice(runStart + '        run: |\n'.length).split('\n')
+    .filter((line) => line.startsWith('          ')).map((line) => line.slice(10)).join('\n');
+  assert.ok(script.includes('pick-scenarios.sh'), 'the draft pick block does not invoke the picker');
+  const dir = mkdtempSync(`${tmpdir()}/draft-stage-pick-`).replaceAll(String.fromCharCode(92), '/');
+  const bin = `${dir}/bin`;
+  const output = `${dir}/github-output`;
+  const summary = `${dir}/github-summary`;
+  const { mkdirSync } = await import('node:fs');
+  mkdirSync(bin);
+  writeFileSync(`${bin}/gh`, '#!/bin/sh\nprintf "%s\\n" scenarios/numbers-lib.sh\n', { mode: 0o755 });
+  const result = spawnSync('bash', ['-c', script], {
+    cwd: fileURLToPath(new URL('..', import.meta.url)),
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      PATH: `${bin}:${process.env.PATH}`,
+      GITHUB_EVENT_NAME: 'pull_request',
+      GITHUB_OUTPUT: output,
+      GITHUB_STEP_SUMMARY: summary,
+      GITHUB_REPOSITORY: 'o/r',
+      PR: '123',
+      RUNNER_TEMP: dir,
+    },
+  });
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(readFileSync(output, 'utf8'), `picked=${allScripts}\n`);
 });
 
 test('the draft verdict waits for pooled records and downloads them before collecting verdicts', async () => {
