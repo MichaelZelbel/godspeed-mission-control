@@ -29,7 +29,7 @@ test('Hermes one-turn routine requests explicitly select no tools',async()=>{
  const home=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-hermes-one-turn-'));let captured;
  const provider=hermesProvider({home,cwd:home,spawnProcess:(executable,args)=>{captured={executable,args};const child=new EventEmitter();child.stdin=new PassThrough();child.stdout=new PassThrough();child.stderr=new PassThrough();child.stdin.on('data',()=>queueMicrotask(()=>{child.stdout.end('Connected.\n');child.stderr.end();child.emit('close',0);}));return child;}});
  assert.equal(await provider({kind:'connection-test'}),'Connected.');
- assert.equal(captured.executable,'hermes');assert.deepEqual(captured.args,['chat','--query-file','-','--quiet','--oneshot','--max-turns','1','--toolsets','','--in',home,'--source','tool']);
+ assert.equal(captured.executable,'hermes');assert.deepEqual(captured.args,['chat','--query-file','-','--quiet','--oneshot','--max-turns','1','--toolsets','none','--in',home,'--source','tool']);
 });
 test('endpoint control budget is not sent as source text and cancellation remains effective',async()=>{
  let received;const server=http.createServer(async(req,res)=>{let raw='';for await(const chunk of req)raw+=chunk;received=JSON.parse(raw);res.setHeader('Content-Type','application/json');res.end(JSON.stringify({choices:[{message:{content:'Fictional bounded reply'}}]}));});await new Promise(r=>server.listen(0,'127.0.0.1',r));
