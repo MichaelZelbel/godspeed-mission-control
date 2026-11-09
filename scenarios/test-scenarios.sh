@@ -3326,6 +3326,14 @@ refuses 'another closed Telegram deadline standing in for the open one' connecti
 refuses 'a deadline still open after the key is valid again' connection-check "$C/still-open" 'not closed, after'
 
 # ---------------------------------------------------------------------------------------- first-day
+first_day_brief_records() { # <folder>: what the brief in brief.txt leaves in Telegram and the notebook
+  local f=$1
+  printf '{"sent":[{"text":%s}]}\n' "$(node -e 'process.stdout.write(JSON.stringify(require("fs").readFileSync(process.argv[1],"utf8")))' "$f/brief.txt")" >"$f/scheduled-telegram-requests.json"
+  run_json "$f" "$(msg scheduled-brief "$(cat "$f/brief.txt")")" "$(msg todays-brief "$(cat "$f/brief.txt")")"
+  printf '[]\n' >"$f/work-items.json"
+  printf '{"data":[{"id":"brief-1","content":%s}]}\n' "$(node -e 'process.stdout.write(JSON.stringify(require("fs").readFileSync(process.argv[1],"utf8")))' "$f/brief.txt")" >"$f/notes-before-reply.json"
+  cp "$f/notes-before-reply.json" "$f/notes-after-reply.json"
+}
 first_day_good() { # <folder>
   local f=$1 label table sparse
   rm -rf "$f"; mkdir -p "$f/work"
@@ -3351,11 +3359,7 @@ EOF
   printf '{"requests":[{"method":"getUpdates","authorized":true},{"method":"sendMessage","authorized":true}]}\n' >"$f/telegram-requests.json"
   printf '{"id":"scheduled-brief","before_last_run_at":null,"data":[{"id":"scheduled-brief","last_run_at":"2026-11-06T10:01:00Z","last_status":"ok"}]}\n' >"$f/job-scheduled-brief.json"
   printf 'Morning brief: source=builtin\n' >"$f/brief-cron-runs.txt"
-  printf '{"sent":[{"text":%s}]}\n' "$(node -e 'process.stdout.write(JSON.stringify(require("fs").readFileSync(process.argv[1],"utf8")))' "$f/brief.txt")" >"$f/scheduled-telegram-requests.json"
-  run_json "$f" "$(msg scheduled-brief "$(cat "$f/brief.txt")")" "$(msg todays-brief "$(cat "$f/brief.txt")")"
-  printf '[]\n' >"$f/work-items.json"
-  printf '{"data":[{"id":"brief-1","content":%s}]}\n' "$(node -e 'process.stdout.write(JSON.stringify(require("fs").readFileSync(process.argv[1],"utf8")))' "$f/brief.txt")" >"$f/notes-before-reply.json"
-  cp "$f/notes-before-reply.json" "$f/notes-after-reply.json"
+  first_day_brief_records "$f"
   printf '{"files":[{"file":"brief.txt","bytes":1,"sha256":"test"}]}\n' >"$f/manifest.json"
 }
 section first-day
@@ -3365,6 +3369,25 @@ passes 'fresh Docker first day makes useful verified work, a sparse-data brief, 
 copy "$FD/good" "$FD/no-research"
 printf '[]\n' >"$FD/no-research/job-research.json"
 refuses 'a first day without research' first-day "$FD/no-research" 'research routine has no successful'
+# The product's own verified work for the goal, when the daily round did not take the late-filed item.
+copy "$FD/good" "$FD/product-work"
+printf 'ID: W-000-first-day-emergency-kit\nSTATUS: planned\nKEY: first-day-emergency-kit\nWHAT: Write a practical household emergency-kit checklist at work/emergency-kit-checklist.md\nSOURCE: first-day-scenario\n' >"$FD/product-work/work/W-000-first-day-emergency-kit.md"
+printf 'ID: W-20261106-01\nSTATUS: verified\nKIND: learn\nGOAL: prepare-a-practical-household-emergency-kit-checklist-by-sun\nWHAT: How do households build a practical emergency kit?\nCHECK: mc-check-written goals/playbooks/emergency-kit.md --min-words 50\nRESULT: The playbook is at goals/playbooks/emergency-kit.md.\n\n- 2026-11-06 VERIFIED check passed (mc-check-written goals/playbooks/emergency-kit.md)\n' >"$FD/product-work/work/W-20261106-01.md"
+mkdir -p "$FD/product-work/goals/playbooks"
+node -e 'process.stdout.write("## Who we model\n"+"Households that keep water, food, light and documents ready. ".repeat(12))' >"$FD/product-work/goals/playbooks/emergency-kit.md"
+printf 'One of your saved goals is Prepare a practical household emergency-kit checklist by Sunday..\n\nGodspeed has verified this work: How do households build a practical emergency kit?\n\nNext: review the work Godspeed verified and say what it should do with it.\n' >"$FD/product-work/brief.txt"
+first_day_brief_records "$FD/product-work"
+passes "a first day whose round did the product's own verified work for the goal" first-day "$FD/product-work" 'answered today'
+copy "$FD/product-work" "$FD/product-work-no-result"
+rm "$FD/product-work-no-result/goals/playbooks/emergency-kit.md"
+refuses 'verified product work whose result was not kept' first-day "$FD/product-work-no-result" 'no other work for the goal was verified'
+copy "$FD/product-work" "$FD/product-work-other-goal"
+sed -i 's/^GOAL: .*/GOAL: plant-the-fictional-garden/' "$FD/product-work-other-goal/work/W-20261106-01.md"
+refuses 'verified work for another goal' first-day "$FD/product-work-other-goal" 'no other work for the goal was verified'
+copy "$FD/product-work" "$FD/product-work-unnamed"
+printf 'One of your saved goals is Prepare a practical household emergency-kit checklist by Sunday..\n\nNext: review the work Godspeed verified and say what it should do with it.\n' >"$FD/product-work-unnamed/brief.txt"
+first_day_brief_records "$FD/product-work-unnamed"
+refuses 'a brief that does not name the product work' first-day "$FD/product-work-unnamed" 'does not identify the verified work'
 copy "$FD/good" "$FD/goal-in-goals"
 printf '{"configured":true,"preserved":true,"results":[]}\n' >"$FD/goal-in-goals/setup.json"
 printf '{"data":[{"id":"g1","title":"Prepare a practical household emergency-kit checklist by Sunday."}]}\n' >"$FD/goal-in-goals/goals-after-setup.json"
