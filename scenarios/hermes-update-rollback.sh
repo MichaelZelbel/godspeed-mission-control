@@ -35,7 +35,7 @@ act() {
   : >"$EVIDENCE/fixture.log"
   node "$HERE/hermes-update-fixture.mjs" --dir "$EVIDENCE/releases" --log "$EVIDENCE/fixture.log" >"$EVIDENCE/fixture-made.txt" ||
     fail "the local Hermes release fixture could not be made"
-  install_paths; require_the_stage_line "$EVIDENCE/install.log"; need_node
+  install_paths; install_the_stage_line "$EVIDENCE/install.log"; need_node
   wait_for 180 'the notebook to answer after install' notebook_is_up || fail "the notebook did not answer after install"
   install_fixture_hermes
   record_releases

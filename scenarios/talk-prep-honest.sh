@@ -211,7 +211,7 @@ act() {
   need_the_ai_key "the talk the owner asks for"
   fresh_evidence
   install_paths
-  require_the_stage_line "$EVIDENCE/.install.log"
+  install_the_stage_line "$EVIDENCE/.install.log"
   need_node
   wait_for 180 "the notebook to answer after the install" notebook_answers ||
     fail "the notebook does not answer after the install, so there is no chat to ask for a talk in"

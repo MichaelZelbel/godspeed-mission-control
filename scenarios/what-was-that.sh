@@ -39,7 +39,7 @@ act() {
   fresh_evidence
   install_paths
   need_node
-  require_candidate_server
+  server_install
   server_connects_the_model
   phase 'the owner on the installed Docker Telegram gateway'
   server_telegram_setup

@@ -10,9 +10,9 @@
 # exactly why the two do not collapse into one (core/deadline-records.mjs closingUid: `from` is
 # what makes a derived identity safe, and a closing of this moment passes none).
 #
-# The two computers are separate mission-control workspaces on this one machine, each with its own
-# port and device identity, joined through one bare repository standing in for the private GitHub
-# repository, the way Settings connects one. A pooled run shares the installed runtime bytes.
+# The two computers are two installations on this one machine, each with its own mission control
+# folder, its own port and its own device identity, joined through one bare repository standing in
+# for the private GitHub repository, the way Settings connects one.
 #
 #   bash scenarios/closed-offline-on-both.sh candidate/2.0.0-beta.12
 #   bash scenarios/closed-offline-on-both.sh --check <folder>
@@ -68,7 +68,7 @@ act() {
   } >"$EVIDENCE/what.txt"
 
   say "== the first computer, and the reminder both will close"
-  require_the_stage_line_into "$ROOT" "$NOTEBOOK_PORT" "$EVIDENCE/a-install.log"
+  install_the_stage_line_into "$ROOT" "$NOTEBOOK_PORT" "$EVIDENCE/a-install.log"
   RUNTIME=$(runtime_of "$ROOT")
   need_node
   read_version "$ROOT"
@@ -82,7 +82,7 @@ act() {
     fail "Settings' own way of connecting a repository was refused on the first computer"
   sync_on "$ROOT" >"$EVIDENCE/rounds.txt" || fail "the first sync round failed, so the second computer had nothing to be set up from"
   git clone -q "$address" "$b" || fail "the second computer could not be set up from the copy on GitHub"
-  require_the_stage_line_into "$b" 47841 "$EVIDENCE/b-install.log"
+  install_the_stage_line_into "$b" 47841 "$EVIDENCE/b-install.log"
   read_version "$b"
   notebook_on "$b" sync folder >&2 || fail "godspeed sync folder was refused on the second computer, so it never joined"
   sync_on "$b" >>"$EVIDENCE/rounds.txt" || fail "the sync round that brings the reminder to the second computer failed"

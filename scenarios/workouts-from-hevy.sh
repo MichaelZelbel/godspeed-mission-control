@@ -264,13 +264,14 @@ prepare_platform() { # <docker|native> <fixture port>
   local platform=$1 port=$2 code
   case $platform in
     docker)
-      require_candidate_server
+      server_install
       server_hevy_url "$port"
       settings_post docker "$EVIDENCE/.refused-key.json" "$EVIDENCE/docker-settings.json" >"$EVIDENCE/docker-settings.code"
       ;;
     native)
+      [ "${GODSPEED_SCENARIO_REUSE_INSTALL:-}" = 1 ] || export GODSPEED_PORT=47832
       install_paths
-      require_the_stage_line "$EVIDENCE/install.log"
+      install_the_stage_line "$EVIDENCE/install.log"
       wait_for 180 'the native notebook to answer after install' notebook_is_up || fail "the native notebook did not answer after install"
       native_hevy_url "$port"
       settings_post native "$EVIDENCE/.refused-key.json" "$EVIDENCE/native-settings.json" >"$EVIDENCE/native-settings.code"

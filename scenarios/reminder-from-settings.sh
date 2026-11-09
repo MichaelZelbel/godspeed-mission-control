@@ -103,7 +103,7 @@ act() {
   fresh_evidence
   install_paths
   say "== a fresh install, the way a stranger gets one"
-  require_the_stage_line "$EVIDENCE/install.log"
+  install_the_stage_line "$EVIDENCE/install.log"
   need_node
   read_version "$ROOT"
   assistant_home

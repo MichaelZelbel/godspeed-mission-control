@@ -18,6 +18,10 @@ in_server() { local container; container=$(server_container) && [ -n "$container
 in_server_as_hermes() { local container; container=$(server_container) && [ -n "$container" ] && sudo docker exec -i --user hermes "$container" "$@"; }
 
 server_install() {
+  if [ "${GODSPEED_SCENARIO_REUSE_SERVER:-}" = 1 ]; then
+    server_healthy 300 || fail "the pooled Docker server is not healthy"
+    return
+  fi
   local installer=$EVIDENCE/.server-installer.sh
   say "The /server line, against the stage: $STAGE_REF"
   curl -fsSL https://godspeedmissioncontrol.com/server >"$installer" ||
@@ -25,13 +29,6 @@ server_install() {
   sudo GODSPEED_STAGE_REF="$STAGE_REF" GODSPEED_STAGE_RAW="$RAW" GODSPEED_HOST=localhost bash "$installer" >&2 ||
     fail "the /server line for $STAGE_REF failed before this scenario could do anything (its output is in the step log)"
   server_healthy 300 || fail "the Docker server is not healthy after the /server line"
-}
-require_candidate_server() {
-  if [ "${GODSPEED_SCENARIO_REUSE_SERVER:-}" != 1 ]; then
-    server_install
-    return
-  fi
-  server_healthy 300 || fail "the pooled Docker server is not healthy"
 }
 # shellcheck disable=SC2317,SC2329  # asked by wait_for
 server_is_healthy() { local container; container=$(server_container) && [ -n "$container" ] && [ "$(sudo docker inspect -f '{{.State.Health.Status}}' "$container" 2>/dev/null)" = healthy ]; }

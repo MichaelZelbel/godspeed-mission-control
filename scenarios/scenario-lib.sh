@@ -107,23 +107,18 @@ fresh_evidence() {
 # anything while it is the same line: the stage's own copy of the installer, told which stage to
 # install, traced so the checking part can see which kit-bootstrap and which starter it used.
 install_the_stage_line() { # <trace file>
+  if [ "${GODSPEED_SCENARIO_REUSE_INSTALL:-}" = 1 ]; then
+    install_paths
+    [ -s "$RUNTIME/version" ] || fail "the pooled native install has no runtime version"
+    curl -fsS "http://127.0.0.1:$NOTEBOOK_PORT/health" >/dev/null 2>&1 ||
+      fail "the pooled native install does not answer on $NOTEBOOK_PORT"
+    printf 'reused candidate runtime %s\n' "$(cat "$RUNTIME/version")" >"$1" ||
+      fail "the pooled native install trace could not be kept"
+    return
+  fi
   say "The line, from the stage's own address: $STAGE_REF"
   curl -fsSL "$RAW/$STAGE_REF/install-godspeed.sh" | GODSPEED_STAGE_REF="$STAGE_REF" GODSPEED_STAGE_RAW="$RAW" bash -x 2> >(tee "$1" >&2) ||
     fail "the install line for $STAGE_REF failed before this scenario could do anything (its trace is in the step log)"
-}
-# A pooled candidate runner supplies this only after it installed and health-checked the stage.
-# Standalone and pull-request invocations retain the stranger-install boundary above.
-require_the_stage_line() { # <trace file>
-  if [ "${GODSPEED_SCENARIO_REUSE_INSTALL:-}" != 1 ]; then
-    install_the_stage_line "$1"
-    return
-  fi
-  install_paths
-  [ -s "$RUNTIME/version" ] || fail "the pooled native install has no runtime version"
-  curl -fsS "http://127.0.0.1:$NOTEBOOK_PORT/health" >/dev/null 2>&1 ||
-    fail "the pooled native install does not answer on $NOTEBOOK_PORT"
-  printf 'reused candidate runtime %s\n' "$(cat "$RUNTIME/version")" >"$1" ||
-    fail "the pooled native install trace could not be kept"
 }
 # Today's public line, the one a reader copies, which installs the current public version.
 install_the_public_line() {
@@ -565,36 +560,29 @@ install_the_line_of_into() { # <ref> <root> <port> <trace file>
     fail "the install line for $1 into $2 failed before this scenario could do anything (its trace is in the step log)"
 }
 install_the_stage_line_into() { # <root> <port> <trace file>
+  local root=$1 port=$2 trace=$3 shared
+  if [ "${GODSPEED_SCENARIO_REUSE_INSTALL:-}" = 1 ]; then
+    install_paths
+    shared=$RUNTIME
+    [ -s "$shared/version" ] || fail "the pooled native install has no runtime for $root"
+    if [ "$root" = "$ROOT" ]; then
+      install_the_stage_line "$trace"
+      return
+    fi
+    rm -rf "$root"
+    mkdir -p "$root/.godspeed" || fail "the logical workspace $root could not be made"
+    cp -a "$ROOT/." "$root/" || fail "the pooled workspace could not seed logical workspace $root"
+    rm -rf "$root/.godspeed/integrated-runtime"
+    ln -s "$shared" "$root/.godspeed/integrated-runtime" || fail "logical workspace $root could not use the pooled runtime"
+    printf 'reused candidate runtime %s on logical port %s\n' "$(cat "$shared/version")" "$port" >"$trace" ||
+      fail "the logical workspace trace could not be kept"
+    return
+  fi
   if [ -n "${GODSPEED_SCENARIO_PRODUCT:-}" ]; then
     local_install_into "$1" "$2" "$3"
     return
   fi
   install_the_line_of_into "$STAGE_REF" "$@"
-}
-# A two-device scenario may use two mutable workspaces while both execute the single pooled
-# runtime. This is deliberately separate from the update helpers below: those scenarios prove an
-# installation transition and must keep real independent installs.
-require_the_stage_line_into() { # <root> <port> <trace file>
-  local root=$1 port=$2 trace=$3 shared
-  if [ "${GODSPEED_SCENARIO_REUSE_INSTALL:-}" != 1 ]; then
-    install_the_stage_line_into "$root" "$port" "$trace"
-    return
-  fi
-  install_paths
-  shared=$RUNTIME
-  [ -s "$shared/version" ] || fail "the pooled native install has no runtime for $root"
-  if [ "$root" = "$ROOT" ]; then
-    require_the_stage_line "$trace"
-    return
-  fi
-  rm -rf "$root"
-  mkdir -p "$root/.godspeed" || fail "the logical workspace $root could not be made"
-  # The product bytes remain at the pooled path. Only the workspace and device state are copied.
-  cp -a "$ROOT/." "$root/" || fail "the pooled workspace could not seed logical workspace $root"
-  rm -rf "$root/.godspeed/integrated-runtime"
-  ln -s "$shared" "$root/.godspeed/integrated-runtime" || fail "logical workspace $root could not use the pooled runtime"
-  printf 'reused candidate runtime %s on logical port %s\n' "$(cat "$shared/version")" "$port" >"$trace" ||
-    fail "the logical workspace trace could not be kept"
 }
 install_the_public_line_into() { # <root> <port>
   say "Today's public line, into $1 on port $2"

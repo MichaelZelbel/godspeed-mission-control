@@ -190,6 +190,7 @@ test('the draft picker selects every standalone scenario for workflow and scenar
     'scenarios/scenario-asker.py',
   ];
   for (const input of sharedInputs) assert.equal(pick([input]), allScripts, `${input} must prove every standalone scenario`);
+  assert.equal(pick(['scenarios/new-shared-helper.mjs']), allScripts, 'an unowned scenario support path must prove every standalone scenario');
   assert.equal(pick(['scenarios/voice-through-hermes.py']), ',voice,', 'voice-through-hermes.py is voice\'s named companion');
   assert.equal(pick(['scenarios/voice.sh']), ',voice,');
   assert.equal(pick(['scenarios/plain-yes-extra.py']), ',plain-yes,');

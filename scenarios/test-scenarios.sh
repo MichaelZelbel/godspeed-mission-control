@@ -324,8 +324,9 @@ else
 fi
 REMINDER_FOLDER=$(grep -n 'one_pair folder' "$ROOT/scenarios/reminder-closed-elsewhere.sh" | head -1 | cut -d: -f1)
 REMINDER_CONNECTED=$(grep -n 'one_pair connected' "$ROOT/scenarios/reminder-closed-elsewhere.sh" | head -1 | cut -d: -f1)
-if grep -q 'require_the_stage_line_into' "$ROOT/scenarios/closed-offline-on-both.sh" && \
-  grep -q 'require_the_stage_line_into' "$ROOT/scenarios/reminder-closed-elsewhere.sh" && \
+if grep -q 'GODSPEED_SCENARIO_REUSE_INSTALL' "$ROOT/scenarios/scenario-lib.sh" && \
+  grep -q 'install_the_stage_line_into' "$ROOT/scenarios/closed-offline-on-both.sh" && \
+  grep -q 'install_the_stage_line_into' "$ROOT/scenarios/reminder-closed-elsewhere.sh" && \
   grep -q 'ln -s "$shared" "$root/.godspeed/integrated-runtime"' "$ROOT/scenarios/scenario-lib.sh" && \
   [ -n "$REMINDER_FOLDER" ] && [ -n "$REMINDER_CONNECTED" ] && [ "$REMINDER_FOLDER" -lt "$REMINDER_CONNECTED" ]; then
   ok 'two-device reminder scenarios use separate workspaces linked to the pooled runtime, and folder mode starts from the clean baseline'
@@ -338,6 +339,11 @@ if grep -q 'run_script workouts-from-hevy workouts-from-hevy.sh both' "$ROOT/sce
   ok 'the Hevy proof joins Docker and native phases without a second scenario run'
 else
   bad 'the Hevy proof can still run both pooled sequences independently'
+fi
+if grep -q 'GODSPEED_SCENARIO_REUSE_INSTALL= install_the_stage_line' "$ROOT/scenarios/settings-on-install.sh"; then
+  ok 'the owner-setting proof reruns the installer after the pooled observation'
+else
+  bad 'the owner-setting proof reuses the install when it must rerun the installer'
 fi
 
 # =============================================================== 1. settings-on-install
