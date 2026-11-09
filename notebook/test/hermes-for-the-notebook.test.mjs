@@ -254,6 +254,28 @@ test('run diagnostics use durable ids, one command specification, and scrubbed o
  for(const entry of diagnostics){assert.doesNotMatch(entry.stderr,/sk-secret-token|\x1b\[/);assert.doesNotMatch(entry.run_log.command_output,/secret-token|\x1b\[/);assert.match(entry.stderr,/kept stderr/);assert.match(entry.run_log.command_output,/kept stdout/);}
 });
 
+// A server set to its own Bot API (GODSPEED_TELEGRAM_API) routed only the gateway there; a routine
+// delivered by `hermes cron run` builds a Bot with no address and went to api.telegram.org.
+test('a Bot built without an address uses the server\'s own Bot API, and only a safe one',t=>{
+ const root=temporary(t,'telegram-route'),package_=path.join(root,'telegram');fs.mkdirSync(package_);
+ fs.writeFileSync(path.join(package_,'__init__.py'),'from telegram._bot import Bot\n');
+ fs.writeFileSync(path.join(package_,'_bot.py'),"class Bot:\n    def __init__(self, token, base_url='https://api.telegram.org/bot', base_file_url='https://api.telegram.org/file/bot', request=None):\n        self.base_url, self.base_file_url = base_url, base_file_url\n");
+ const hooks=fileURLToPath(new URL('../assistant-files',import.meta.url));
+ const bot=(api,code)=>{const result=spawnSync(process.platform==='win32'?'python':'python3',['-c',code],{encoding:'utf8',env:{...process.env,PYTHONPATH:[hooks,root].join(path.delimiter),GODSPEED_FILE_HERMES:'0',GODSPEED_TELEGRAM_API:api}});assert.equal(result.status,0,result.stderr);return result.stdout.trim();};
+ const plain="from telegram import Bot; b = Bot('t'); print(b.base_url, b.base_file_url)";
+ assert.equal(bot('http://127.0.0.1:8081',plain),'http://127.0.0.1:8081/bot http://127.0.0.1:8081/file/bot');
+ assert.equal(bot('https://bots.example.org/api/',plain),'https://bots.example.org/api/bot https://bots.example.org/api/file/bot');
+ assert.equal(bot('http://127.0.0.1:8081',"from telegram import Bot; print(Bot('t', base_url='https://x.example/bot').base_url)"),'https://x.example/bot','an address given by the caller stays');
+ assert.equal(bot('http://bots.example.org',plain),'https://api.telegram.org/bot https://api.telegram.org/file/bot','plain HTTP off this machine is refused');
+ assert.equal(bot('',plain),'https://api.telegram.org/bot https://api.telegram.org/file/bot','no setting, no change');
+});
+
+test("a routine's message reaches the owner without Hermes' header, job code and footer",()=>{
+ assert.equal(readConfigValue(godspeedHermesSettings(''),['cron','wrap_response']),'false');
+ assert.equal(readConfigValue(godspeedHermesSettings('cron:\n  wrap_response: true\n'),['cron','wrap_response']),'false',"an existing install with Hermes' default gets it too");
+ assert.equal(readConfigValue(godspeedHermesSettings('cron:\n  wrap_response: maybe\n'),['cron','wrap_response']),'maybe','a value the owner wrote stays');
+});
+
 // Hermes stops a cron script at cron.script_timeout_seconds (3600 unless set), one setting for all
 // jobs. The nightly goal research may run 120 minutes plus a fix round, so the order below must hold:
 // the routine's own limit, then Hermes' script limit, then the notebook's limit for a whole tick.
