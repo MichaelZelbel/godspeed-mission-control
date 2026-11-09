@@ -147,6 +147,7 @@ install_paths() {
 # because an update is the one thing that could move it.
 assistant_home() { # [failure context]
   local home context=${1:+$1: }
+  need_node
   home=$(json_value "$STATE/assistant.json" home) ||
     fail "${context}the install recorded no home for its assistant ($STATE/assistant.json names none), so its settings and its chat store cannot be found"
   if [ -z "$home" ] || [ ! -d "$home" ]; then

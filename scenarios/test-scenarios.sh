@@ -711,7 +711,7 @@ refuses "a notebook that does not answer after the update" update-keeps-everythi
 section "the assistant's home"
 H=$TMP/home
 home_of() { # <state folder>: what assistant_home makes of it, its last line and its code
-  OUT=$(SCENARIO=home STATE=$1 NODE=$(command -v node) bash -c '. "$0" && assistant_home && printf "%s\n" "$HERMES"' \
+  OUT=$(env -u NODE SCENARIO=home STATE=$1 bash -c '. "$0" && assistant_home && printf "%s\n" "$HERMES"' \
     "$ROOT/scenarios/scenario-lib.sh" 2>/dev/null)
   CODE=$?
   OUT=$(printf '%s\n' "$OUT" | tail -n 1)
@@ -3783,7 +3783,7 @@ RFS=$WH/refused-scan
 mkdir -p "$RFS/root/.godspeed" "$RFS/assistant"
 printf '{"home":"%s"}\n' "$RFS/assistant" >"$RFS/root/.godspeed/assistant.json"
 printf 'refused-scenario-key\n' >"$RFS/assistant/settings.json"
-REFUSED_SCAN=$(GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy NODE="$(command -v node)" bash -c '
+REFUSED_SCAN=$(env -u NODE GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy bash -c '
   cd "$3"
   . "$1"
   install_paths
