@@ -68,14 +68,15 @@ capture_server() {
   container=$(sudo docker compose -p godspeed-mission-control --project-directory /opt/godspeed-mission-control -f /opt/godspeed-mission-control/compose.yaml --env-file /opt/godspeed-mission-control/.env ps -q godspeed) || return 1
   [ -n "$container" ] || return 1
   sudo docker cp "$container:/opt/data" "$WORK/server-data" || return 1
-  SERVER_IMAGE=$(sudo docker inspect -f '{{.Image}}' "$container")
+  SERVER_CONTAINER=$container
+  SERVER_IMAGE=$(sudo docker inspect -f '{{.Image}}' "$container") || return 1
+  SERVER_STAGE_IMAGE=$(sudo docker inspect -f '{{.Config.Image}}' "$container") || return 1
 }
 reset_server() {
   local container now
+  [ -n "${SERVER_CONTAINER:-}" ] || return 1
   sudo docker compose -p godspeed-mission-control --project-directory /opt/godspeed-mission-control -f /opt/godspeed-mission-control/compose.yaml --env-file /opt/godspeed-mission-control/.env stop >/dev/null || return 1
-  container=$(sudo docker compose -p godspeed-mission-control --project-directory /opt/godspeed-mission-control -f /opt/godspeed-mission-control/compose.yaml --env-file /opt/godspeed-mission-control/.env ps -q godspeed) || return 1
-  [ -n "$container" ] || return 1
-  sudo docker cp "$WORK/server-data/." "$container:/opt/data" || return 1
+  sudo docker cp "$WORK/server-data/." "$SERVER_CONTAINER:/opt/data" || return 1
   sudo docker compose -p godspeed-mission-control --project-directory /opt/godspeed-mission-control -f /opt/godspeed-mission-control/compose.yaml --env-file /opt/godspeed-mission-control/.env up -d >/dev/null || return 1
   container=$(sudo docker compose -p godspeed-mission-control --project-directory /opt/godspeed-mission-control -f /opt/godspeed-mission-control/compose.yaml --env-file /opt/godspeed-mission-control/.env ps -q godspeed) || return 1
   [ -n "$container" ] || return 1
@@ -105,6 +106,7 @@ record_unavailable() { # <native|docker|both> <reason>
   while IFS=$'\t' read -r id script execution system candidate extra; do
     [ -n "$id" ] && [ "${id:0:1}" != '#' ] || continue
     selected "$id" || continue
+    case "$execution" in shared|terminal) ;; *) continue ;; esac
     case "$system" in "$wanted"|both) [ -s "$RESULTS/$id.txt" ] || record "$id" FAIL "$reason" ;; esac
   done <"$CATALOG"
 }
@@ -125,19 +127,59 @@ run_system() { # <native|docker>
 }
 
 install_native() {
-  curl -fsSL "$RAW/$STAGE_REF/install-godspeed.sh" | GODSPEED_STAGE_REF="$STAGE_REF" GODSPEED_STAGE_RAW="$RAW" bash
+  curl -fsSL "$RAW/$STAGE_REF/install-godspeed.sh" -o "$WORK/install-godspeed.sh" || return 1
+  GODSPEED_STAGE_REF="$STAGE_REF" GODSPEED_STAGE_RAW="$RAW" bash -x "$WORK/install-godspeed.sh" 2>"$WORK/native-install-trace.log"
 }
 install_server() {
   SCENARIO=pooled-docker STAGE_REF="$STAGE_REF" EVIDENCE="$WORK/server-install" RAW="$RAW" \
     bash -c '. "$1/scenario-lib.sh"; . "$1/server-lib.sh"; server_install' bash "$HERE"
 }
+verify_native_install() {
+  local got
+  got=$(cat "$NATIVE_ROOT/.godspeed/integrated-runtime/version" 2>/dev/null) || return 1
+  [ "$got" = "${PRODUCT:-}" ] || return 1
+  { grep -qF "kit-bootstrap/$ENGINE/setup-godspeed.sh" "$WORK/native-install-trace.log" && grep -qF "KB_BRANCH=$ENGINE" "$WORK/native-install-trace.log"; } || return 1
+  grep -qF "GODSPEED_STARTER_REF=$PRODUCT" "$WORK/native-install-trace.log" || return 1
+  curl -fsSL "$RAW/$STAGE_REF/stage.json" -o "$WORK/native-expected-stage.json" || return 1
+  cmp -s "$WORK/native-expected-stage.json" "$NATIVE_ROOT/.godspeed/stage.json" || return 1
+  for _ in $(seq 1 30); do curl -fsS "http://127.0.0.1:${GODSPEED_PORT:-47831}/health" >/dev/null 2>&1 && return 0; sleep 2; done
+  return 1
+}
+verify_server_install() {
+  [ "$SERVER_STAGE_IMAGE" = "${IMAGE:-}" ] || return 1
+  for _ in $(seq 1 60); do sudo docker inspect -f '{{.State.Health.Status}}' "$SERVER_CONTAINER" 2>/dev/null | grep -qx healthy && return 0; sleep 5; done
+  return 1
+}
+
+ready_for() { # <native|docker|both>
+  case "$1" in
+    native) grep -q '^PASS ' "$RESULTS/linux-install.txt" 2>/dev/null ;;
+    docker) grep -q '^PASS ' "$RESULTS/docker-server.txt" 2>/dev/null ;;
+    both) ready_for native && ready_for docker ;;
+  esac
+}
+run_terminals() {
+  local id script execution system candidate extra status
+  while IFS=$'\t' read -r id script execution system candidate extra; do
+    [ -n "$id" ] && [ "${id:0:1}" != '#' ] || continue
+    [ "$execution" = terminal ] || continue
+    selected "$id" || continue
+    [ -s "$RESULTS/$id.txt" ] && continue
+    ready_for "$system" || { record "$id" FAIL "the $system candidate install was unavailable"; continue; }
+    run_script "$id" "$script" "$system"; status=$?
+    case "$status:$system" in
+      2:native|2:both) record_unavailable native 'the pooled native system could not be reset'; return ;;
+      3:docker|3:both|2:docker) record_unavailable docker 'the pooled Docker system could not be reset'; return ;;
+    esac
+  done <"$CATALOG"
+}
 
 main() {
   if selected linux-install; then
-    if install_native && capture_native; then record linux-install PASS "one native candidate install is ready"; else record linux-install FAIL "the native candidate install or baseline failed"; record_unavailable native 'the native candidate install or baseline failed'; fi
+    if install_native && verify_native_install && capture_native; then record linux-install PASS "one native candidate install is ready"; else record linux-install FAIL "the native candidate install or baseline failed"; record_unavailable native 'the native candidate install or baseline failed'; fi
   fi
   if selected docker-server; then
-    if install_server && capture_server; then record docker-server PASS "one Docker candidate install is ready"; else record docker-server FAIL "the Docker candidate install or baseline failed"; record_unavailable docker 'the Docker candidate install or baseline failed'; fi
+    if install_server && capture_server && verify_server_install; then record docker-server PASS "one Docker candidate install is ready"; else record docker-server FAIL "the Docker candidate install or baseline failed"; record_unavailable docker 'the Docker candidate install or baseline failed'; fi
   fi
   if [ -s "$RESULTS/linux-install.txt" ] && grep -q '^PASS ' "$RESULTS/linux-install.txt"; then run_system native; fi &
   if [ -s "$RESULTS/docker-server.txt" ] && grep -q '^PASS ' "$RESULTS/docker-server.txt"; then run_system docker; fi &
@@ -157,14 +199,8 @@ main() {
     fi
   fi
 
-  # Install-changing native scenarios are intentionally not in this pool. The draft runs them in
-  # isolated jobs, and terminal checks run after the resettable native sequence.
-  for id in settings-on-install hermes-update-rollback; do
-    selected "$id" || continue
-    [ -s "$RESULTS/$id.txt" ] && continue
-    [ -s "$RESULTS/linux-install.txt" ] && grep -q '^PASS ' "$RESULTS/linux-install.txt" || { record "$id" FAIL 'the native candidate install was unavailable'; continue; }
-    run_script "$id" "$id.sh" native
-  done
+  # Isolated scenarios belong to their separate draft jobs. Terminal rows follow the resettable pool.
+  run_terminals
 }
 
 if [ "${BASH_SOURCE[0]}" = "$0" ]; then main; fi

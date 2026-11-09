@@ -153,6 +153,12 @@ test('the protected draft pools candidate systems and leaves the live workflow u
   assert.match(draft, /scenario-verdict\.mjs --catalog scenarios\/scenario-catalog\.tsv/);
   assert.doesNotMatch(live, /run-installed-scenarios\.sh/);
   assert.match(draft, /picked=\$\(bash scenarios\/pick-scenarios\.sh "\$RUNNER_TEMP\/changed"\)/);
+  const pooled = draft.slice(draft.indexOf('  pooled:'), draft.indexOf('\n  mac-install:'));
+  assert.match(pooled, /PRODUCT: \$\{\{ needs\.stage\.outputs\.product \}\}/);
+  assert.match(pooled, /ENGINE: \$\{\{ needs\.stage\.outputs\.engine \}\}/);
+  assert.match(pooled, /IMAGE: \$\{\{ needs\.stage\.outputs\.image \}\}/);
+  const verdict = draft.slice(draft.indexOf('  verdict:'));
+  assert.match(verdict, /uses: actions\/checkout@v4\n        with:\n          ref: \$\{\{ inputs\.stage \|\| github\.event\.pull_request\.head\.sha \|\| github\.sha \}\}/);
 });
 
 test('the draft picker selects every standalone scenario for workflow and scenario support changes', async () => {

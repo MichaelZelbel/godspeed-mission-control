@@ -140,6 +140,9 @@ jobs:
       ELEVENLABS_TEST_KEY_STT: ${{ secrets.ELEVENLABS_TEST_KEY_STT }}
       ELEVENLABS_TEST_KEY_NO_STT: ${{ secrets.ELEVENLABS_TEST_KEY_NO_STT }}
       ELEVENLABS_TEST_VOICE_ID: ${{ vars.ELEVENLABS_TEST_VOICE_ID }}
+      PRODUCT: ${{ needs.stage.outputs.product }}
+      ENGINE: ${{ needs.stage.outputs.engine }}
+      IMAGE: ${{ needs.stage.outputs.image }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -1141,6 +1144,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ inputs.stage || github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
       - uses: actions/setup-node@v4
         with: { node-version: '22.19.0' }

@@ -284,8 +284,10 @@ docker-server	inline	pooled	docker	no	Docker
 native-first	first.sh	shared	native	no	First native
 native-broken	broken.sh	shared	native	no	Broken native
 native-later	later.sh	shared	native	no	Later native
+native-isolated	isolated.sh	isolated	native	no	Isolated native
 settings-on-install	settings-on-install.sh	terminal	native	no	Settings
 hermes-update-rollback	hermes-update-rollback.sh	terminal	native	no	Hermes
+another-terminal	another-terminal.sh	terminal	native	no	Another terminal
 EOF
 POOL_RESULTS=$TMP/pooled-results
 POOL_LOG=$TMP/pooled-order
@@ -301,26 +303,87 @@ POOL_OUTPUT=$(GODSPEED_SCENARIO_CATALOG="$POOL_CATALOG" GODSPEED_SCENARIO_RESULT
 ' bash "$ROOT/scenarios/run-installed-scenarios.sh" 2>&1)
 if [ "$(cat "$POOL_LOG")" = "$(printf 'native-first\nnative-broken')" ] && grep -Fxq 'PASS native-first: checked' "$POOL_RESULTS/native-first.txt" && \
   grep -Fq 'FAIL native-broken: the pooled native system could not be reset' "$POOL_RESULTS/native-broken.txt" && \
-  grep -Fq 'FAIL native-later: the pooled native system could not be reset' "$POOL_RESULTS/native-later.txt"; then
-  ok 'a pooled reset failure retains completed work, fails every remaining native scenario, and stops that sequence'
+  grep -Fq 'FAIL native-later: the pooled native system could not be reset' "$POOL_RESULTS/native-later.txt" && \
+  [ ! -e "$POOL_RESULTS/native-isolated.txt" ]; then
+  ok 'a pooled reset failure retains completed work without fabricating an isolated result'
 else
-  bad "a pooled reset failure does not fan out exactly once ($POOL_OUTPUT; $(cat "$POOL_LOG" 2>/dev/null))"
+  bad "a pooled reset failure does not retain only pooled ownership ($POOL_OUTPUT; $(cat "$POOL_LOG" 2>/dev/null))"
+fi
+POOL_RESULTS=$TMP/pooled-docker-results
+POOL_LOG=$TMP/pooled-docker.log
+mkdir -p "$POOL_RESULTS" "$TMP/pooled-server-data"
+POOL_OUTPUT=$(GODSPEED_SCENARIO_CATALOG="$POOL_CATALOG" GODSPEED_SCENARIO_RESULTS="$POOL_RESULTS" GODSPEED_SCENARIO_POOL_WORK="$TMP/pooled-work" POOL_LOG="$POOL_LOG" bash -c '
+  . "$1" candidate all
+  sudo() {
+    [ "$1" = docker ] || return 1
+    shift
+    case "$1" in
+      compose)
+        case "$*" in
+          *" stop") state=stopped ;;
+          *" up -d") state=running ;;
+          *" ps -q godspeed") [ "$state" = running ] && printf running-container ;;
+        esac
+        ;;
+      cp) printf "%s\\n" "$*" >>"$POOL_LOG" ;;
+      inspect) case "$*" in *State.Health.Status*) printf healthy ;; *) printf expected-image ;; esac ;;
+    esac
+  }
+  state=running
+  SERVER_CONTAINER=stopped-container
+  SERVER_IMAGE=expected-image
+  reset_server
+' bash "$ROOT/scenarios/run-installed-scenarios.sh" 2>&1)
+if [ "$?" = 0 ] && grep -Fq 'cp /tmp' "$POOL_LOG" 2>/dev/null && grep -Fq 'stopped-container:/opt/data' "$POOL_LOG"; then
+  ok 'a Docker reset restores data through the container captured before stopping it'
+else
+  bad "a Docker reset cannot restore through its captured stopped container ($POOL_OUTPUT; $(cat "$POOL_LOG" 2>/dev/null))"
 fi
 POOL_RESULTS=$TMP/pooled-main-results
 POOL_LOG=$TMP/pooled-main-order
 mkdir -p "$POOL_RESULTS"
 POOL_OUTPUT=$(GODSPEED_SCENARIO_CATALOG="$POOL_CATALOG" GODSPEED_SCENARIO_RESULTS="$POOL_RESULTS" GODSPEED_SCENARIO_POOL_WORK="$TMP/pooled-main-work" POOL_LOG="$POOL_LOG" bash -c '
   . "$1" candidate all
-  install_native(){ :; }; capture_native(){ :; }; install_server(){ :; }; capture_server(){ :; }
+  install_native(){ :; }; verify_native_install(){ :; }; capture_native(){ :; }
+  install_server(){ :; }; capture_server(){ :; }; verify_server_install(){ :; }
   run_system(){ :; }
   run_script(){ printf "%s\n" "$1" >>"$POOL_LOG"; printf "PASS %s: checked\n" "$1" >"$RESULTS/$1.txt"; }
   main
 ' bash "$ROOT/scenarios/run-installed-scenarios.sh" 2>&1)
-if [ "$(tail -n 2 "$POOL_LOG")" = "$(printf 'settings-on-install\nhermes-update-rollback')" ] && grep -Fxq 'PASS linux-install: one native candidate install is ready' "$POOL_RESULTS/linux-install.txt" && \
+if [ "$(tail -n 3 "$POOL_LOG")" = "$(printf 'settings-on-install\nhermes-update-rollback\nanother-terminal')" ] && grep -Fxq 'PASS linux-install: one native candidate install is ready' "$POOL_RESULTS/linux-install.txt" && \
   grep -Fxq 'PASS docker-server: one Docker candidate install is ready' "$POOL_RESULTS/docker-server.txt"; then
-  ok 'one native and Docker install precede the terminal native checks in their required order'
+  ok 'one native and Docker install precede every catalog-owned terminal check in order'
 else
   bad "pooled installs or terminal order are wrong ($POOL_OUTPUT; $(cat "$POOL_LOG" 2>/dev/null))"
+fi
+POOL_RESULTS=$TMP/pooled-proof-results
+mkdir -p "$POOL_RESULTS"
+POOL_OUTPUT=$(GODSPEED_SCENARIO_CATALOG="$POOL_CATALOG" GODSPEED_SCENARIO_RESULTS="$POOL_RESULTS" GODSPEED_SCENARIO_POOL_WORK="$TMP/pooled-proof-work" bash -c '
+  . "$1" candidate all
+  install_native(){ :; }; capture_native(){ :; }; verify_native_install(){ return 1; }
+  install_server(){ :; }; capture_server(){ :; }; verify_server_install(){ return 1; }
+  main
+' bash "$ROOT/scenarios/run-installed-scenarios.sh" 2>&1)
+if [ "$?" = 0 ] && grep -Fq 'FAIL linux-install: the native candidate install or baseline failed' "$POOL_RESULTS/linux-install.txt" && \
+  grep -Fq 'FAIL docker-server: the Docker candidate install or baseline failed' "$POOL_RESULTS/docker-server.txt"; then
+  ok 'a failed staged runtime or image proof prevents either install PASS record'
+else
+  bad "a failed staged runtime or image proof can still produce an install PASS ($POOL_OUTPUT)"
+fi
+POOL_OUTPUT=$(GODSPEED_SCENARIO_RESULTS="$POOL_RESULTS" GODSPEED_SCENARIO_POOL_WORK="$TMP/pooled-image-proof-work" bash -c '
+  . "$1" candidate all
+  sudo() { [ "$1" = docker ] && [ "$2" = inspect ] && printf healthy; }
+  SERVER_CONTAINER=fixture
+  IMAGE=stage-image
+  SERVER_STAGE_IMAGE=wrong-image
+  verify_server_install && exit 1
+  SERVER_STAGE_IMAGE=stage-image
+  verify_server_install
+' bash "$ROOT/scenarios/run-installed-scenarios.sh" 2>&1)
+if [ "$?" = 0 ]; then
+  ok 'the Docker install proof compares the stage image before accepting its health'
+else
+  bad "the Docker install proof does not reject an image other than the stage's ($POOL_OUTPUT)"
 fi
 REMINDER_FOLDER=$(grep -n 'one_pair folder' "$ROOT/scenarios/reminder-closed-elsewhere.sh" | head -1 | cut -d: -f1)
 REMINDER_CONNECTED=$(grep -n 'one_pair connected' "$ROOT/scenarios/reminder-closed-elsewhere.sh" | head -1 | cut -d: -f1)
