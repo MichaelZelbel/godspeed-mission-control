@@ -6,6 +6,7 @@ SCENARIO=workouts-from-hevy
 . "$(dirname "$0")/scenario-lib.sh"
 # shellcheck source=scenarios/numbers-lib.sh
 . "$(dirname "$0")/numbers-lib.sh"
+REFUSED_HEVY_KEY='refused-'"scenario-key"
 
 check() {
   local folder=$1
@@ -61,7 +62,7 @@ NODE
 }
 
 server_hevy_url() { # <port>
-  printf 'services:\n  godspeed:\n    extra_hosts:\n      - "host.docker.internal:host-gateway"\n    environment:\n      GODSPEED_WORKOUTS_HEVY_URL: "http://host.docker.internal:%s"\n' "$1" |
+  printf 'services:\n  godspeed:\n    extra_hosts:\n      - "host.docker.internal:host-gateway"\n    environment:\n      GODSPEED_WORKOUTS_TEST: "1"\n      GODSPEED_WORKOUTS_HEVY_API: "http://host.docker.internal:%s"\n' "$1" |
     sudo tee "$SERVER_DIR/compose.override.yaml" >/dev/null ||
     fail "the Docker notebook Hevy override could not be written"
   server_compose -f "$SERVER_DIR/compose.override.yaml" up -d --force-recreate >&2 ||
@@ -69,19 +70,23 @@ server_hevy_url() { # <port>
   server_healthy 300 || fail "the Docker notebook was not healthy with the local Hevy address"
 }
 
+native_hevy_environment() { # <port>
+  printf '[Service]\nEnvironment="GODSPEED_WORKOUTS_TEST=1"\nEnvironment="GODSPEED_WORKOUTS_HEVY_API=http://127.0.0.1:%s"\n' "$1"
+}
+
 native_hevy_url() { # <port>
   local unit=${UNIT:-godspeed-integrated-notebook.service} dropin
   if systemctl --user cat "$unit" >/dev/null 2>&1; then
     dropin=$HOME/.config/systemd/user/$unit.d
     mkdir -p "$dropin" || fail "the native notebook Hevy override folder could not be made"
-    printf '[Service]\nEnvironment="GODSPEED_WORKOUTS_HEVY_URL=http://127.0.0.1:%s"\n' "$1" >"$dropin/scenario-hevy.conf" ||
+    native_hevy_environment "$1" >"$dropin/scenario-hevy.conf" ||
       fail "the native notebook Hevy override could not be written"
     systemctl --user daemon-reload && systemctl --user restart "$unit" ||
       fail "the native notebook could not be restarted with the local Hevy address"
   elif systemctl cat "$unit" >/dev/null 2>&1; then
     dropin=/etc/systemd/system/$unit.d
     sudo mkdir -p "$dropin" || fail "the native notebook Hevy override folder could not be made"
-    printf '[Service]\nEnvironment="GODSPEED_WORKOUTS_HEVY_URL=http://127.0.0.1:%s"\n' "$1" | sudo tee "$dropin/scenario-hevy.conf" >/dev/null ||
+    native_hevy_environment "$1" | sudo tee "$dropin/scenario-hevy.conf" >/dev/null ||
       fail "the native notebook Hevy override could not be written"
     sudo systemctl daemon-reload && sudo systemctl restart "$unit" ||
       fail "the native notebook could not be restarted with the local Hevy address"
@@ -105,8 +110,12 @@ persistence_roots() { # <docker|native> <scan name>
   case $platform in
     native)
       assistant_home "$scan"
+      # The carried add-on keeps its key in its own state folder, ~/.godspeed/workouts of the account
+      # the notebook runs as (third-party/addons/godspeed-workouts/lib/paths.mjs): that hevy.json is the
+      # key's one permitted file, and the folder is scanned with the rest once it exists.
       NATIVE_PERSISTENCE_ROOTS=("$ROOT" "$STATE" "$HERMES")
-      NATIVE_PERMITTED_HEVY_SETTINGS=$HERMES/hevy.json
+      [ ! -d "$HOME/.godspeed/workouts" ] || NATIVE_PERSISTENCE_ROOTS+=("$HOME/.godspeed/workouts")
+      NATIVE_PERMITTED_HEVY_SETTINGS=$HOME/.godspeed/workouts/hevy.json
       ;;
     docker)
       descriptor=$(in_server find /opt/data -path '*/.godspeed/assistant.json' -type f -print -quit) ||
@@ -116,14 +125,16 @@ persistence_roots() { # <docker|native> <scan name>
         fail "$scan could not read the Docker assistant home from $descriptor"
       [ -n "$home" ] || fail "$scan found no Docker assistant home in $descriptor"
       DOCKER_PERSISTENCE_ROOTS=(/opt/data "$home")
-      DOCKER_PERMITTED_HEVY_SETTINGS=$home/hevy.json
+      # The image's HOME is the assistant's home (docker/full-candidate/Dockerfile), so the add-on's state
+      # folder is ~/.godspeed/workouts there.
+      DOCKER_PERMITTED_HEVY_SETTINGS=$home/.godspeed/workouts/hevy.json
       ;;
     *) fail "unknown $platform persistence scan" ;;
   esac
 }
 
 refused_not_retained() { # <docker|native>
-  local platform=$1 key='refused-scenario-key' paths=$EVIDENCE/.$1-refused-key-paths code
+  local platform=$1 key=$REFUSED_HEVY_KEY paths=$EVIDENCE/.$1-refused-key-paths code
   persistence_roots "$platform" "$platform refused-key scan"
   case $platform in
     docker)
@@ -166,6 +177,7 @@ workout_snapshot() { # <docker|native> <file> <routine file> <exit file>
           "http://127.0.0.1:$NOTEBOOK_PORT/api/query" >"$EVIDENCE/.workouts-$platform-$query.json" ||
           fail "the native notebook could not read $query for the Hevy import"
       done
+      collection=$EVIDENCE/.workouts-$platform-collections.json items=$EVIDENCE/.workouts-$platform-collection_items.json
       assistant_home
       cp "$HERMES/cron/jobs.json" "$jobs" 2>/dev/null || : >"$jobs"
       ;;
@@ -174,10 +186,15 @@ workout_snapshot() { # <docker|native> <file> <routine file> <exit file>
 const fs=require('fs');const [platform,collectionsFile,itemsFile,jobsFile,out,routineOut]=process.argv.slice(2);
 const read=file=>{try{return JSON.parse(fs.readFileSync(file,'utf8'))}catch{return null}};
 const rows=data=>Array.isArray(data)?data:(Array.isArray(data?.data)?data.data:(Array.isArray(data?.jobs)?data.jobs:[]));
-const collection=rows(read(collectionsFile)).find(row=>row?.name==='Workouts');
-const items=collection?rows(read(itemsFile)).filter(row=>row?.collection_id===collection.id):[];
+const named=rows(read(collectionsFile)).filter(row=>row?.name==='Workouts'),all=rows(read(itemsFile));
+const collection=named.find(row=>row?.source_app==='godspeed-workouts')||named[0];
+const items=collection?all.filter(row=>row?.collection_id===collection.id):[];
+process.stderr.write(`${platform} snapshot: ${named.length} Workouts collection(s) [${named.map(row=>`${row.id}/${row.source_app||'-'}`).join(' ')}], ${all.length} item(s) [${[...new Set(all.map(row=>row?.collection_id))].join(' ')}], ${items.length} in the one read
+`);
 const value=(item,...names)=>names.map(name=>item?.[name]??item?.data?.[name]).find(value=>value!==undefined&&value!==null);
-const workoutRows=items.map(item=>({source_id:value(item,'source_id','hevy_id','workout_id','id'),title:value(item,'title','name'),exercise:value(item,'exercise','exercise_name'),set:value(item,'set')||{weight_kg:value(item,'weight_kg'),reps:value(item,'reps')}}));
+// A row as the carried add-on writes it (third-party/addons/godspeed-workouts/lib/rows.mjs): the Hevy id as
+// the item's source_id, the title in "workout", and each exercise with its sets as "Scenario Squat: 8 x 42 kg".
+const workoutRows=items.map(item=>{const logged=/^(.+?): (\d+(?:\.\d+)?) x (\d+(?:\.\d+)?) kg$/.exec(String(value(item,'exercises')||''));return {source_id:value(item,'source_id'),title:value(item,'workout'),exercise:logged?.[1],set:logged?{weight_kg:Number(logged[3]),reps:Number(logged[2])}:null};});
 const jobs=rows(read(jobsFile));
 const routine=jobs.filter(job=>job?.name==='Workouts from Hevy');const job=routine[0]||{};
 const cron=String(job.cron||job.schedule?.expr||job.schedule||'');const minute=/^([0-9]+)\s+\*/.exec(cron)?.[1];
@@ -188,18 +205,21 @@ NODE
   [ -n "$script" ] || { printf '1\n' >"$exit_file"; return; }
   case $platform in
     docker)
-      in_server sh -c "cd \"$docker_home/scripts\" && python3 \"$docker_home/scripts/$script\"" >/dev/null 2>&1; code=$?
+      # As the account the notebook and its routines run as; root would read another state folder.
+      in_server_as_hermes sh -c "cd \"$docker_home/scripts\" && python3 \"$docker_home/scripts/$script\"" >/dev/null 2>&1; code=$?
       ;;
     native)
       python=$(json_value "$HERMES/scripts/godspeed-routines.json" hermes_python) || { printf '1\n' >"$exit_file"; return; }
-      (cd "$HERMES/scripts" && "$python" "$HERMES/scripts/$script") >/dev/null 2>&1; code=$?
+      # With the local Hevy address the notebook's service has (native_hevy_url), as its routines run.
+      (cd "$HERMES/scripts" && GODSPEED_WORKOUTS_TEST=1 GODSPEED_WORKOUTS_HEVY_API="http://127.0.0.1:$HEVY_FIXTURE_PORT" "$python" "$HERMES/scripts/$script") >/dev/null 2>&1; code=$?
       ;;
   esac
   printf '%s\n' "$code" >"$exit_file"
 }
 
 platform_before() { # <docker|native> <accepted settings json>
-  local platform=$1 accepted=$2 response=$EVIDENCE/$platform-accepted.json code routine before=$EVIDENCE/.$platform-before.json after=$EVIDENCE/.$platform-after.json
+  # $1, not $platform: a word of `local` is expanded before the line sets platform, so it would be the caller's.
+  local platform=$1 accepted=$2 response=$EVIDENCE/$1-accepted.json code routine before=$EVIDENCE/.$1-before.json
   code=$(settings_post "$platform" "$accepted" "$response")
   [ "$code" -ge 200 ] 2>/dev/null && [ "$code" -lt 300 ] ||
     fail "$platform Settings did not accept the made-up Hevy key (HTTP $code): $(tr -d '\n' <"$response" | cut -c1-200)"
@@ -208,8 +228,11 @@ platform_before() { # <docker|native> <accepted settings json>
 }
 
 platform_after() { # <docker|native>
-  local platform=$1 response=$EVIDENCE/$platform-accepted.json before=$EVIDENCE/.$platform-before.json after=$EVIDENCE/.$platform-after.json routine=$EVIDENCE/.$platform-routine refused_paths=$EVIDENCE/.$platform-refused-key-paths
-  workout_snapshot "$platform" "$after" "$routine" "$EVIDENCE/.$platform-manual-exit"
+  local platform=$1 response=$EVIDENCE/$1-accepted.json before=$EVIDENCE/.$1-before.json after=$EVIDENCE/.$1-after.json routine=$EVIDENCE/.$1-routine refused_paths=$EVIDENCE/.$1-refused-key-paths
+  # A snapshot reads the tables before it runs the routine by hand: the first run brings Hevy's change
+  # in and its exit is the one kept, the second snapshot reads what that run left.
+  workout_snapshot "$platform" "$EVIDENCE/.$1-applied.json" "$routine" "$EVIDENCE/.$platform-manual-exit"
+  workout_snapshot "$platform" "$after" "$routine" "$EVIDENCE/.$platform-reread-exit"
   "$NODE" - "$before" "$after" "$response" "$EVIDENCE/.$platform-manual-exit" "$refused_paths" "$EVIDENCE/$platform.json" <<'NODE'
 const fs=require('fs');const read=file=>JSON.parse(fs.readFileSync(file,'utf8'));
 const before=read(process.argv[2]),after=read(process.argv[3]);
@@ -218,8 +241,8 @@ fs.writeFileSync(process.argv[7],JSON.stringify({...before,settings:{refused:{ac
 NODE
 }
 
-scan_fixture_key() {
-  local key='00000000-0000-4000-8000-000000000001' code native_paths=$EVIDENCE/.native-key-hits docker_paths=$EVIDENCE/.docker-key-hits
+scan_fixture_key() { # [accepted fixture key]
+  local key=${1:-'00000000-0000-4000-8000-000000000001'} code native_paths=$EVIDENCE/.native-key-hits docker_paths=$EVIDENCE/.docker-key-hits
   persistence_roots native 'native accepted-key scan'
   if grep -rlF --exclude-dir=.git --exclude-dir=node_modules -- "$key" "${NATIVE_PERSISTENCE_ROOTS[@]}" >"$native_paths"; then
     [ -s "$native_paths" ] || fail 'native accepted-key scan completed with no path output after a match'
@@ -261,20 +284,23 @@ NODE
 }
 
 act() {
+  need_node
   fresh_evidence
-  local state=$EVIDENCE/fixture-state.json port pid
+  local state=$EVIDENCE/fixture-state.json port pid fixture_key
+  fixture_key=$("$NODE" -p 'require("crypto").randomUUID()') || fail "the selected Node could not make the local Hevy fixture key"
   : >"$EVIDENCE/fixture.log"
-  node "$HERE/hevy-fixture.mjs" --state "$state" --log "$EVIDENCE/fixture.log" >"$EVIDENCE/fixture-port" & pid=$!
+  GODSPEED_HEVY_FIXTURE_KEY="$fixture_key" GODSPEED_HEVY_FIXTURE_HOST=0.0.0.0 "$NODE" "$HERE/hevy-fixture.mjs" --state "$state" --log "$EVIDENCE/fixture.log" >"$EVIDENCE/fixture-port" & pid=$!
   trap 'kill "$pid" 2>/dev/null || true' EXIT
   wait_for 20 'the local Hevy fixture to name its port' test -s "$EVIDENCE/fixture-port" || fail "the local Hevy fixture did not start"
   port=$(cat "$EVIDENCE/fixture-port")
+  HEVY_FIXTURE_PORT=$port
   curl -fsS "http://127.0.0.1:$port/health" >"$EVIDENCE/fixture-health.json" || fail "the local Hevy fixture did not answer health"
   grep -q '"ok":true' "$EVIDENCE/fixture-health.json" || fail "the local Hevy fixture returned an unhealthy health record"
-  curl -sS -H 'api-key: refused-scenario-key' "http://127.0.0.1:$port/v1/workouts" >/dev/null || true
+  curl -sS -H "api-key: $REFUSED_HEVY_KEY" "http://127.0.0.1:$port/v1/workouts" >/dev/null || true
   printf '{"fixture":"local-hevy"}\n' >"$EVIDENCE/setup.json"
   # Use distinct ports so the native installation and Docker server are independently real installs.
   server_install; server_hevy_url "$port"
-  printf '{"api_key":"refused-scenario-key"}\n' >"$EVIDENCE/.refused-key.json"
+  printf '{"key":"%s"}\n' "$REFUSED_HEVY_KEY" >"$EVIDENCE/.refused-key.json"
   settings_post docker "$EVIDENCE/.refused-key.json" "$EVIDENCE/docker-settings.json" >"$EVIDENCE/docker-settings.code"
   export GODSPEED_PORT=47832
   install_paths
@@ -292,15 +318,15 @@ act() {
       fail "$platform Settings did not reject the made-up Hevy key (HTTP $code)"
     refused_not_retained "$platform"
   done
-  printf '{"api_key":"00000000-0000-4000-8000-000000000001"}\n' >"$EVIDENCE/.accepted-key.json"
+  printf '{"key":"%s"}\n' "$fixture_key" >"$EVIDENCE/.accepted-key.json"
   platform_before docker "$EVIDENCE/.accepted-key.json"
   platform_before native "$EVIDENCE/.accepted-key.json"
-  node "$HERE/hevy-fixture.mjs" --state "$EVIDENCE/fixture-state.json" --log "$EVIDENCE/fixture.log" --mutate ||
+  "$NODE" "$HERE/hevy-fixture.mjs" --state "$EVIDENCE/fixture-state.json" --log "$EVIDENCE/fixture.log" --mutate ||
     fail "the local Hevy fixture could not change its made-up workouts"
   platform_after docker
   platform_after native
   rm -f "$EVIDENCE/.refused-key.json" "$EVIDENCE/.accepted-key.json"
-  scan_fixture_key
+  scan_fixture_key "$fixture_key"
   check "$EVIDENCE"
 }
 
