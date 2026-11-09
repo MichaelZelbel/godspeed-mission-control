@@ -47,7 +47,7 @@ const fs=require('fs'), p=process.argv[2], r=n=>JSON.parse(fs.readFileSync(`${p}
 const families=process.env.FACT_FAMILIES.split(',');
 const stable=value=>Array.isArray(value)?value.map(stable).sort((a,b)=>JSON.stringify(a).localeCompare(JSON.stringify(b))):value&&typeof value==='object'?Object.fromEntries(Object.keys(value).sort().map(k=>[k,stable(value[k])])):value;
 const has=(rows,value)=>rows.find(row=>row&&row.value===value);
-const quote=(row,text,id)=>row&&row.quote===text&&row.source_id===id;
+const quote=(row,text,id)=>row&&row.evidence_quote===text&&row.source_id===id;
 const fail=message=>{throw new Error(message)};
 try {
  const archive=r('archive.json');
@@ -63,7 +63,7 @@ try {
  if(!hamburg||hamburg.valid_from!==archiveDay||!quote(hamburg,move.text,move.id))fail('Hamburg is not a dated fact with the exact move quote and source');
  if(!berlin||berlin.valid_to!==archiveDay)fail('Berlin was deleted or left current instead of closed');
  if(!doctor||doctor.valid_from!==archiveDay||!quote(doctor,doctorMessage.text,doctorMessage.id))fail('Dr. Lang is not a dated fact with the exact doctor quote and source');
- for(const family of families)for(const row of a[family])if(['machine-1','track-1'].includes(row?.source_id)||['[IMPORTANT: You are running as a scheduled job]','track this'].includes(row?.quote))fail(`an excluded message was filed in ${family}`);
+ for(const family of families)for(const row of a[family])if(['machine-1','track-1'].includes(row?.source_id)||['[IMPORTANT: You are running as a scheduled job]','track this'].includes(row?.evidence_quote))fail(`an excluded message was filed in ${family}`);
 } catch(error) { process.stdout.write(error.message); process.exit(1); }
 NODE
   ) || fail "$why"

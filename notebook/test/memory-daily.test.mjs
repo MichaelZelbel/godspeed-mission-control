@@ -8,7 +8,7 @@ import {fileURLToPath} from 'node:url';
 import {Store} from '../core/records/store.mjs';
 import {QueryService} from '../core/query.mjs';
 import {Domains} from '../core/domains.mjs';
-import {archivePieces,qualifiesMessage,rememberWhatYouSaid} from '../core/memory-daily.mjs';
+import {archivePieces,modelRequest,qualifiesMessage,rememberWhatYouSaid} from '../core/memory-daily.mjs';
 import {frontMatter} from '../core/world-facts.mjs';
 
 const now=new Date('2026-11-07T04:00:00Z');
@@ -171,4 +171,10 @@ test('messages of an applied receipt whose deadline piece was refused are not se
  await go(async()=>false);const earlier=sent.length;
  archive(root,[...rows,{id:'p-new',at:'2026-11-03T12:00:00Z',text:'A new note today'}]);await go(async()=>true);
  assert.deepEqual(sent.slice(earlier),[['p-new']]);
+});
+
+test('the request names a doctor as a fixed fact, so "my new doctor is" becomes a dated fact',t=>{
+ const root=workspace(t),request=modelRequest({messages:[{id:'doctor-1',at:'2026-11-01T12:00:00Z',text:'my new doctor is Dr. Lang'}],query:null,root});
+ assert.ok(JSON.parse(request.prompt).fixed_fact_names.some(line=>line.startsWith('doctor:')),'a doctor is one of the fixed fact names');
+ assert.match(request.system,/who their doctor is\) is a fact dated from that day/);
 });
