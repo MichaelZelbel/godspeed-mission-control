@@ -105,6 +105,7 @@ persistence_roots() { # <docker|native> <scan name>
   case $platform in
     native)
       assistant_home "$scan"
+      # The state version history is application source, not retained user data.
       NATIVE_PERSISTENCE_ROOTS=("$ROOT" "$STATE" "$HERMES")
       NATIVE_PERMITTED_HEVY_SETTINGS=$HERMES/hevy.json
       ;;
@@ -133,7 +134,7 @@ refused_not_retained() { # <docker|native>
       fi
       ;;
     native)
-      if grep -rlF -- "$key" "${NATIVE_PERSISTENCE_ROOTS[@]}" >"$paths"; then :; else
+      if grep -rlF --exclude-dir=versions -- "$key" "${NATIVE_PERSISTENCE_ROOTS[@]}" >"$paths"; then :; else
         code=$?
         [ "$code" -eq 1 ] || fail "$platform refused-key scan could not run (grep ended $code)"
       fi
@@ -221,7 +222,7 @@ NODE
 scan_fixture_key() {
   local key='00000000-0000-4000-8000-000000000001' code native_paths=$EVIDENCE/.native-key-hits docker_paths=$EVIDENCE/.docker-key-hits
   persistence_roots native 'native accepted-key scan'
-  if grep -rlF --exclude-dir=.git --exclude-dir=node_modules -- "$key" "${NATIVE_PERSISTENCE_ROOTS[@]}" >"$native_paths"; then
+  if grep -rlF --exclude-dir=.git --exclude-dir=node_modules --exclude-dir=versions -- "$key" "${NATIVE_PERSISTENCE_ROOTS[@]}" >"$native_paths"; then
     [ -s "$native_paths" ] || fail 'native accepted-key scan completed with no path output after a match'
   else
     code=$?

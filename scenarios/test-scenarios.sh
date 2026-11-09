@@ -3873,6 +3873,8 @@ refuses 'a refused key kept outside hevy.json' workouts-from-hevy "$WH/refused-i
 RFS=$WH/refused-scan
 mkdir -p "$RFS/root/.godspeed" "$RFS/assistant"
 printf '{"home":"%s"}\n' "$RFS/assistant" >"$RFS/root/.godspeed/assistant.json"
+mkdir -p "$RFS/root/.godspeed/integrated-runtime/versions/current/scenarios"
+printf 'refused-scenario-key\n00000000-0000-4000-8000-000000000001\n' >"$RFS/root/.godspeed/integrated-runtime/versions/current/scenarios/test-scenarios.sh"
 printf 'refused-scenario-key\n' >"$RFS/assistant/settings.json"
 REFUSED_SCAN=$(env -u NODE GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy bash -c '
   cd "$3"
@@ -3885,6 +3887,19 @@ REFUSED_SCAN_CODE=$?
 case "$REFUSED_SCAN_CODE $REFUSED_SCAN" in
   "1 "*"native kept the refused Hevy key in $RFS/assistant/settings.json"*) ok "a refused key in the recorded native assistant home fails with its path" ;;
   *) bad "a refused key in the recorded native assistant home was not refused (exit $REFUSED_SCAN_CODE: $REFUSED_SCAN)" ;;
+esac
+rm -f "$RFS/assistant/settings.json"
+REFUSED_SCAN=$(GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy NODE="$(command -v node)" bash -c '
+  cd "$3"
+  . "$1"
+  install_paths
+  EVIDENCE=$2
+  refused_not_retained native
+' refused-scan "$ROOT/scenarios/workouts-from-hevy.sh" "$RFS" "$ROOT/scenarios" 2>&1)
+REFUSED_SCAN_CODE=$?
+case "$REFUSED_SCAN_CODE $REFUSED_SCAN" in
+  "0 "*) ok "the refused-key scan ignores the installed version's source files" ;;
+  *) bad "the refused-key scan treated the installed version's source as retained data (exit $REFUSED_SCAN_CODE: $REFUSED_SCAN)" ;;
 esac
 printf '00000000-0000-4000-8000-000000000001\n' >"$RFS/assistant/hevy.json"
 ACCEPTED_SCAN=$(GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy NODE="$(command -v node)" bash -c '
