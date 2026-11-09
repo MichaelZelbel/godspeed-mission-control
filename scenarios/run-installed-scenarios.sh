@@ -75,8 +75,10 @@ capture_server() {
 reset_server() {
   local container now
   [ -n "${SERVER_CONTAINER:-}" ] || return 1
+  container=$(sudo docker compose -p godspeed-mission-control --project-directory /opt/godspeed-mission-control -f /opt/godspeed-mission-control/compose.yaml --env-file /opt/godspeed-mission-control/.env ps -q godspeed) || return 1
+  [ -n "$container" ] || return 1
   sudo docker compose -p godspeed-mission-control --project-directory /opt/godspeed-mission-control -f /opt/godspeed-mission-control/compose.yaml --env-file /opt/godspeed-mission-control/.env stop >/dev/null || return 1
-  sudo docker cp "$WORK/server-data/." "$SERVER_CONTAINER:/opt/data" || return 1
+  sudo docker cp "$WORK/server-data/." "$container:/opt/data" || return 1
   sudo docker compose -p godspeed-mission-control --project-directory /opt/godspeed-mission-control -f /opt/godspeed-mission-control/compose.yaml --env-file /opt/godspeed-mission-control/.env up -d >/dev/null || return 1
   container=$(sudo docker compose -p godspeed-mission-control --project-directory /opt/godspeed-mission-control -f /opt/godspeed-mission-control/compose.yaml --env-file /opt/godspeed-mission-control/.env ps -q godspeed) || return 1
   [ -n "$container" ] || return 1

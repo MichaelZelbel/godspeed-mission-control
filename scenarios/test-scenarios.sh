@@ -322,22 +322,25 @@ POOL_OUTPUT=$(GODSPEED_SCENARIO_CATALOG="$POOL_CATALOG" GODSPEED_SCENARIO_RESULT
         case "$*" in
           *" stop") state=stopped ;;
           *" up -d") state=running ;;
-          *" ps -q godspeed") [ "$state" = running ] && printf running-container ;;
+          *" ps -q godspeed") [ "$state" = running ] && printf '%s' "$current_container" ;;
         esac
         ;;
-      cp) printf "%s\\n" "$*" >>"$POOL_LOG" ;;
+      cp)
+        case "$*" in *"$current_container:/opt/data") printf "%s\\n" "$*" >>"$POOL_LOG" ;; *) return 1 ;; esac
+        ;;
       inspect) case "$*" in *State.Health.Status*) printf healthy ;; *) printf expected-image ;; esac ;;
     esac
   }
   state=running
-  SERVER_CONTAINER=stopped-container
+  current_container=recreated-container
+  SERVER_CONTAINER=install-container
   SERVER_IMAGE=expected-image
   reset_server
 ' bash "$ROOT/scenarios/run-installed-scenarios.sh" 2>&1)
-if [ "$?" = 0 ] && grep -Fq 'cp /tmp' "$POOL_LOG" 2>/dev/null && grep -Fq 'stopped-container:/opt/data' "$POOL_LOG"; then
-  ok 'a Docker reset restores data through the container captured before stopping it'
+if [ "$?" = 0 ] && grep -Fq 'cp /tmp' "$POOL_LOG" 2>/dev/null && grep -Fq 'recreated-container:/opt/data' "$POOL_LOG"; then
+  ok 'a Docker reset restores data through the current container after force recreation'
 else
-  bad "a Docker reset cannot restore through its captured stopped container ($POOL_OUTPUT; $(cat "$POOL_LOG" 2>/dev/null))"
+  bad "a Docker reset cannot restore through the current container after force recreation ($POOL_OUTPUT; $(cat "$POOL_LOG" 2>/dev/null))"
 fi
 POOL_RESULTS=$TMP/pooled-main-results
 POOL_LOG=$TMP/pooled-main-order
@@ -384,6 +387,31 @@ if [ "$?" = 0 ]; then
   ok 'the Docker install proof compares the stage image before accepting its health'
 else
   bad "the Docker install proof does not reject an image other than the stage's ($POOL_OUTPUT)"
+fi
+POOL_NATIVE_ROOT=$TMP/pooled-native-proof
+POOL_OUTPUT=$(GODSPEED_SCENARIO_RESULTS="$POOL_RESULTS" GODSPEED_SCENARIO_POOL_WORK="$TMP/pooled-native-proof-work" POOL_NATIVE_ROOT="$POOL_NATIVE_ROOT" bash -c '
+  . "$1" candidate all
+  NATIVE_ROOT=$POOL_NATIVE_ROOT
+  PRODUCT=runtime ENGINE=engine
+  mkdir -p "$NATIVE_ROOT/.godspeed/integrated-runtime"
+  printf "runtime\\n" >"$NATIVE_ROOT/.godspeed/integrated-runtime/version"
+  printf "retained stage\\n" >"$NATIVE_ROOT/.godspeed/stage.json"
+  printf "kit-bootstrap/%s/setup-godspeed.sh\\nKB_BRANCH=%s\\nGODSPEED_STARTER_REF=%s\\n" "$ENGINE" "$ENGINE" "$PRODUCT" >"$WORK/native-install-trace.log"
+  curl() {
+    case "$*" in
+      *stage.json*) printf "expected stage\\n" >"${!#}" ;;
+      *health*) return 0 ;;
+      *) return 1 ;;
+    esac
+  }
+  verify_native_install && exit 1
+  printf "expected stage\\n" >"$NATIVE_ROOT/.godspeed/stage.json"
+  verify_native_install
+' bash "$ROOT/scenarios/run-installed-scenarios.sh" 2>&1)
+if [ "$?" = 0 ]; then
+  ok 'the native install proof rejects a retained stage file different from the staged one'
+else
+  bad "the native install proof does not reject a retained stage file different from the staged one ($POOL_OUTPUT)"
 fi
 REMINDER_FOLDER=$(grep -n 'one_pair folder' "$ROOT/scenarios/reminder-closed-elsewhere.sh" | head -1 | cut -d: -f1)
 REMINDER_CONNECTED=$(grep -n 'one_pair connected' "$ROOT/scenarios/reminder-closed-elsewhere.sh" | head -1 | cut -d: -f1)
