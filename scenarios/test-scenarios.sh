@@ -4298,21 +4298,96 @@ NODE
 facts_good() {
   local f=$1
   rm -rf "$f"; mkdir -p "$f"
-  printf '{"messages":[{"id":"move-1","text":"I moved to Hamburg on 1 November"},{"id":"doctor-1","text":"my new doctor is Dr. Lang"},{"id":"machine-1","text":"[IMPORTANT: You are running as a scheduled job]"},{"id":"track-1","text":"track this"}]}\n' >"$f/archive.json"
+  local archive_day=2026-11-01 archive_at move_text doctor_text
+  archive_at="${archive_day}T12:00:00Z"; move_text="I moved to Hamburg on $archive_day"; doctor_text="my new doctor is Dr. Lang as of $archive_day"
+  printf '{"messages":[{"id":"move-1","at":"%s","text":"%s"},{"id":"doctor-1","at":"%s","text":"%s"},{"id":"machine-1","at":"%s","text":"[IMPORTANT: You are running as a scheduled job]"},{"id":"track-1","at":"%s","text":"track this"}]}\n' "$archive_at" "$move_text" "$archive_at" "$doctor_text" "$archive_at" >"$f/archive.json"
   facts_json '[{"value":"Berlin"}]' >"$f/before.json"
   printf '{"name":"Remember what you said","cron":"40 3 * * *","script":"scenario-facts","exit":0}\n' >"$f/routine.json"
-  facts_json '[{"value":"Berlin","valid_to":"2026-11-01"},{"value":"Hamburg","valid_from":"2026-11-01","quote":"I moved to Hamburg on 1 November","source_id":"move-1"},{"value":"Dr. Lang","valid_from":"2026-11-01","quote":"my new doctor is Dr. Lang","source_id":"doctor-1"}]' >"$f/after.json"
+  facts_json "[{\"value\":\"Berlin\",\"valid_to\":\"$archive_day\"},{\"value\":\"Hamburg\",\"valid_from\":\"$archive_day\",\"evidence_quote\":\"$move_text\",\"source_id\":\"move-1\"},{\"value\":\"Dr. Lang\",\"valid_from\":\"$archive_day\",\"evidence_quote\":\"$doctor_text\",\"source_id\":\"doctor-1\"}]" >"$f/after.json"
   cp "$f/after.json" "$f/second.json"
 }
 facts_good "$DF2/good"
+DF_SCRIPT="$ROOT/scenarios/day-becomes-facts.sh"
+day_facts_provider_post_does_not_persist_the_key() { # <HTTP status> <description>
+  local status description folder key='day-facts-private-"key"' escaped_key code
+  status=$1; description=$2; folder=$TMP/day-facts-provider-action-$status
+  escaped_key=$(node -p 'JSON.stringify(process.argv[1]).slice(1,-1)' "$key")
+  rm -rf "$folder"
+  mkdir -p "$folder/home/cron" "$folder/home/scripts" "$folder/root" "$folder/tmp"
+  printf '%s\n' '{"jobs":[{"name":"Remember what you said","script":"scenario-facts","cron":"40 3 * * *"}]}' >"$folder/home/cron/jobs.json"
+  : >"$folder/home/scripts/scenario-facts"
+  if ACTION_HOME="$folder/home" ACTION_ESCAPED_KEY="$escaped_key" ACTION_POSTED="$folder/posted" ACTION_STATUS="$status" \
+    GODSPEED_SCENARIO_ROOT="$folder/root" GODSPEED_SCENARIO_WORK="$folder/work" TMPDIR="$folder/tmp" \
+    GODSPEED_SCENARIO_AI_KEY="$key" GODSPEED_SCENARIO_AI_URL='https://api.anthropic.com/v1' \
+    GODSPEED_SCENARIO_AI_MODEL='claude-haiku-4-5' bash -c '
+      scenario_dir=$(dirname "$1")
+      cd "$scenario_dir"
+      GODSPEED_SCENARIO_SOURCE_ONLY=yes . "$(basename "$1")"
+      install_the_stage_line() { :; }
+      need_node() { NODE=$(command -v node); }
+      wait_for() { :; }
+      assistant_home() { HERMES=$ACTION_HOME; }
+      facts_routine_script() { printf scenario-facts; }
+      run_facts_routine() { :; }
+      facts_snapshot() { :; }
+      check() { :; }
+      curl() {
+        local data= out= request
+        while [ "$#" -gt 0 ]; do
+          case "$1" in
+            -o) out=$2; shift 2 ;;
+            --data-binary) data=$2; shift 2 ;;
+            *) shift ;;
+          esac
+        done
+        if [ "$data" = @- ]; then
+          request=$(cat) || return
+          case "$request" in *"\"key\":\"$ACTION_ESCAPED_KEY\""*) ;; *) return 1 ;; esac
+          [ "$out" = /dev/null ] || printf "{\"connected\":true,\"echo\":\"%s\"}\\n" "$ACTION_ESCAPED_KEY"
+          : >"$ACTION_POSTED"
+          printf %s "$ACTION_STATUS"
+        else
+          printf '{}\n'
+        fi
+      }
+      act
+    ' _ "$DF_SCRIPT" >"$folder/action.log" 2>&1; then
+    code=0
+  else
+    code=$?
+  fi
+  if { { [ "$status" = 200 ] && [ "$code" = 0 ] && [ ! -e "$folder/work/day-becomes-facts/provider-error.json" ]; } ||
+       { [ "$status" != 200 ] && [ "$code" != 0 ] && node -e 'const [file,key]=process.argv.slice(1),e=JSON.parse(require("fs").readFileSync(file,"utf8")),escaped=JSON.stringify(key).slice(1,-1);process.exit(Number.isInteger(e.request_bytes)&&e.request_bytes>0&&e.model==="claude-haiku-4-5"&&e.provider_response.includes("[redacted]")&&!e.provider_response.includes(escaped)?0:1)' "$folder/work/day-becomes-facts/provider-error.json" "$key"; }; } \
+    && [ -f "$folder/posted" ] && ! rg -F -- "$key" "$folder" >/dev/null 2>&1 && ! rg -F -- "$escaped_key" "$folder" >/dev/null 2>&1; then
+    ok "$description"
+  else
+    bad "$description (exit $code: $(cat "$folder/action.log" 2>/dev/null))"
+  fi
+}
+day_facts_provider_post_does_not_persist_the_key 200 'a remembered-facts Settings POST streams its private key without persistence'
+day_facts_provider_post_does_not_persist_the_key 400 'a reflected-key Settings failure is neither persisted nor exposed'
+facts_archive_value() { # <message id> <field>
+  node - "$DF2/good/archive.json" "$1" "$2" <<'NODE'
+const [file,id,field]=process.argv.slice(2),archive=require(file);
+const message=(archive.messages||[]).find(row=>row?.id===id);
+if(typeof message?.[field]!=='string')process.exit(1);
+process.stdout.write(message[field]);
+NODE
+}
+FACTS_ARCHIVE_DAY=$(facts_archive_value move-1 at) || bad 'the dated-facts fixture has no move archive timestamp'
+FACTS_ARCHIVE_DAY=${FACTS_ARCHIVE_DAY:0:10}
+FACTS_MOVE_QUOTE=$(facts_archive_value move-1 text) || bad 'the dated-facts fixture has no move archive quote'
+FACTS_WRONG_DAY=$(node -e 'const day=process.argv[1];const date=new Date(`${day}T00:00:00Z`);date.setUTCDate(date.getUTCDate()+1);process.stdout.write(date.toISOString().slice(0,10))' "$FACTS_ARCHIVE_DAY")
 passes 'dated facts are filed once and excluded messages file nothing' day-becomes-facts "$DF2/good" 'Berlin was closed'
 copy "$DF2/good" "$DF2/wrong-time"; sed -i 's/40 3/41 3/' "$DF2/wrong-time/routine.json"
 refuses 'a remembered-facts routine at the wrong time' day-becomes-facts "$DF2/wrong-time" 'successful 03:40'
-copy "$DF2/good" "$DF2/no-date"; sed -i 's/"valid_from":"2026-11-01",//' "$DF2/no-date/after.json"; cp "$DF2/no-date/after.json" "$DF2/no-date/second.json"
+copy "$DF2/good" "$DF2/no-date"; sed -i "s/\"valid_from\":\"$FACTS_ARCHIVE_DAY\",//" "$DF2/no-date/after.json"; cp "$DF2/no-date/after.json" "$DF2/no-date/second.json"
 refuses 'an undated Hamburg fact' day-becomes-facts "$DF2/no-date" 'Hamburg is not a dated'
-copy "$DF2/good" "$DF2/no-quote"; sed -i 's/I moved to Hamburg on 1 November/I moved somewhere/' "$DF2/no-quote/after.json"; cp "$DF2/no-quote/after.json" "$DF2/no-quote/second.json"
+copy "$DF2/good" "$DF2/wrong-date"; sed -i "s/\"valid_from\":\"$FACTS_ARCHIVE_DAY\"/\"valid_from\":\"$FACTS_WRONG_DAY\"/g" "$DF2/wrong-date/after.json"; cp "$DF2/wrong-date/after.json" "$DF2/wrong-date/second.json"
+refuses 'facts dated differently from their archive' day-becomes-facts "$DF2/wrong-date" 'Hamburg is not a dated'
+copy "$DF2/good" "$DF2/no-quote"; sed -i "s/$FACTS_MOVE_QUOTE/I moved somewhere/" "$DF2/no-quote/after.json"; cp "$DF2/no-quote/after.json" "$DF2/no-quote/second.json"
 refuses 'a fact without the exact move quote' day-becomes-facts "$DF2/no-quote" 'Hamburg is not a dated'
-copy "$DF2/good" "$DF2/berlin-current"; sed -i 's/,"valid_to":"2026-11-01"//' "$DF2/berlin-current/after.json"; cp "$DF2/berlin-current/after.json" "$DF2/berlin-current/second.json"
+copy "$DF2/good" "$DF2/berlin-current"; sed -i "s/,\"valid_to\":\"$FACTS_ARCHIVE_DAY\"//" "$DF2/berlin-current/after.json"; cp "$DF2/berlin-current/after.json" "$DF2/berlin-current/second.json"
 refuses 'an older city left current' day-becomes-facts "$DF2/berlin-current" 'Berlin was deleted or left current'
 copy "$DF2/good" "$DF2/no-doctor"; sed -i 's/,{"value":"Dr. Lang"[^}]*}//' "$DF2/no-doctor/after.json"; cp "$DF2/no-doctor/after.json" "$DF2/no-doctor/second.json"
 refuses 'an absent doctor fact' day-becomes-facts "$DF2/no-doctor" 'Dr. Lang is not a dated'
