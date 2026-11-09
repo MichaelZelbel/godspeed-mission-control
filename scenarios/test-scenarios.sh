@@ -3725,7 +3725,7 @@ ACT_NODE_ORDER=$(env -u NODE GODSPEED_SCENARIO_ROOT="$RFS/root" ACTION_EVENTS="$
   install_paths() { :; }
   install_the_stage_line() { :; }
   native_hevy_url() { :; }
-  settings_post() { case $(cat "$2") in *refused*) printf 400 ;; *) printf 200 ;; esac; }
+  settings_post() { printf "settings:%s:%s\\n" "$1" "$(cat "$2")" >>"$ACTION_EVENTS"; case $(cat "$2") in *refused*) printf 400 ;; *) printf 200 ;; esac; }
   persistence_roots() { printf "persistence-%s:%s\\n" "$1" "${NODE:+set}" >>"$ACTION_EVENTS"; }
   refused_not_retained() { persistence_roots "$1"; }
   platform_before() { :; }
@@ -3738,8 +3738,8 @@ ACT_NODE_ORDER=$(env -u NODE GODSPEED_SCENARIO_ROOT="$RFS/root" ACTION_EVENTS="$
 INITIAL_HEVY_FIXTURE="selected-node:$ROOT/scenarios/hevy-fixture.mjs --state $RFS/action-evidence/fixture-state.json --log $RFS/action-evidence/fixture.log"
 MUTATED_HEVY_FIXTURE="$INITIAL_HEVY_FIXTURE --mutate"
 case "$ACT_NODE_ORDER" in
-  $'need-node\n'"$INITIAL_HEVY_FIXTURE"$'\npersistence-docker:set\npersistence-native:set\n'"$MUTATED_HEVY_FIXTURE") ok "the Hevy action uses its selected Node for both fixture launches before descriptor and persistence reads" ;;
-  *) bad "the Hevy action did not use its selected Node for both fixture launches before descriptor and persistence reads ($ACT_NODE_ORDER)" ;;
+  $'need-node\n'"$INITIAL_HEVY_FIXTURE"$'\nsettings:docker:{"key":"refused-scenario-key"}\nsettings:native:{"key":"refused-scenario-key"}\npersistence-docker:set\npersistence-native:set\nsettings:docker:{"key":"00000000-0000-4000-8000-000000000001"}\nsettings:native:{"key":"00000000-0000-4000-8000-000000000001"}\n'"$MUTATED_HEVY_FIXTURE") ok "the Hevy action sends both Hevy keys as Settings' key field through its selected Node before descriptor and persistence reads" ;;
+  *) bad "the Hevy action did not send both Hevy keys through Settings before descriptor and persistence reads ($ACT_NODE_ORDER)" ;;
 esac
 printf '00000000-0000-4000-8000-000000000001\n' >"$RFS/assistant/hevy.json"
 ACCEPTED_SCAN=$(GODSPEED_SCENARIO_ROOT="$RFS/root" SCENARIO=workouts-from-hevy NODE="$(command -v node)" bash -c '
