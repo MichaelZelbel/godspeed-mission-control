@@ -404,6 +404,13 @@ wait_for() { # <seconds> <what to say> <command...>
   return 1
 }
 
+# The briefing note the morning brief saved last, as plain text, for the scenarios that read it (numbers-lib.sh and server-lib.sh).
+NEWEST_BRIEFING_NOTE='
+const fs=require("fs");const d=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));
+const notes=(Array.isArray(d)?d:(d.data||[])).filter(n=>n&&n.source_app==="morning-brief"&&!n.is_trashed)
+ .sort((a,b)=>String(a.created_at).localeCompare(String(b.created_at)));
+const n=notes[notes.length-1];if(!n)process.exit(1);process.stdout.write(String(n.content||""));
+'
 # THE MORNING BRIEF, TURNED ON AND RUN THE WAY SETTINGS RUNS IT: the routine added (POST
 # /api/jobs/add, which answers the routine it made, under Hermes' id) and that routine run now (POST
 # /api/jobs/run with its id, Settings' "Run now"). Since 9 October 2026 the run answers
