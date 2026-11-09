@@ -348,6 +348,7 @@ test('a pull request from a fork runs nothing, and its verdict passes', async ()
   assert.equal(dispatch({ PICKED: ',plain-yes,typo-job,' }).status, 1, 'only: a name that is no job must fail');
   assert.equal(dispatch({ PICKED: ',plain-yes,mac-install,' }).status, 1, 'only: a listed Mac job that did not run must fail');
   assert.equal(dispatch({ PICKED: ',plain-yes,windows-old-names-move,' }).status, 1, 'only: a listed Windows job that did not run must fail');
+  assert.equal(dispatch({ PICKED: ',all,' }).status, 1, 'only=all names no job and must fail');
   assert.equal(dispatch({ PICKED: 'all' }).status, 1, 'no only: a skipped job still fails the run, as before');
   assert.equal(dispatch({ PICKED: ',plain-yes,', STAGE: 'skipped' }).status, 1, 'only: an unreadable stage still fails');
 });
@@ -435,7 +436,7 @@ test('the pick on a hand-started run reads `only`, and a night and an empty `onl
   assert.equal(pick('workflow_dispatch', 'first-day').out, 'picked=,first-day,\n');
   assert.equal(pick('workflow_dispatch', '').out, 'picked=all\n', 'an empty only runs everything');
   assert.equal(pick('workflow_dispatch', undefined).out, 'picked=all\n');
-  assert.equal(pick('workflow_dispatch', 'all').out, 'picked=all\n');
+  assert.equal(pick('workflow_dispatch', 'all').out, 'picked=,all,\n', '`all` is no job: it is picked as a name, so the verdict fails it');
   assert.equal(pick('schedule', 'first-day').out, 'picked=all\n', 'the night ignores only');
   for (const empty of [',', ',,, ,']) {
     const none = pick('workflow_dispatch', empty);
