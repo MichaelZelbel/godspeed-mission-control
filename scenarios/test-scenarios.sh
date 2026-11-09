@@ -4043,13 +4043,14 @@ facts_good() {
 facts_good "$DF2/good"
 DF_SCRIPT="$ROOT/scenarios/day-becomes-facts.sh"
 day_facts_provider_post_does_not_persist_the_key() { # <HTTP status> <description>
-  local status description folder key='day-facts-private-key' code
+  local status description folder key='day-facts-private-"key"' escaped_key code
   status=$1; description=$2; folder=$TMP/day-facts-provider-action-$status
+  escaped_key=$(node -p 'JSON.stringify(process.argv[1]).slice(1,-1)' "$key")
   rm -rf "$folder"
   mkdir -p "$folder/home/cron" "$folder/home/scripts" "$folder/root" "$folder/tmp"
   printf '%s\n' '{"jobs":[{"name":"Remember what you said","script":"scenario-facts","cron":"40 3 * * *"}]}' >"$folder/home/cron/jobs.json"
   : >"$folder/home/scripts/scenario-facts"
-  if ACTION_HOME="$folder/home" ACTION_KEY="$key" ACTION_POSTED="$folder/posted" ACTION_STATUS="$status" \
+  if ACTION_HOME="$folder/home" ACTION_KEY="$key" ACTION_ESCAPED_KEY="$escaped_key" ACTION_POSTED="$folder/posted" ACTION_STATUS="$status" \
     GODSPEED_SCENARIO_ROOT="$folder/root" GODSPEED_SCENARIO_WORK="$folder/work" TMPDIR="$folder/tmp" \
     GODSPEED_SCENARIO_AI_KEY="$key" GODSPEED_SCENARIO_AI_URL='https://api.anthropic.com/v1' \
     GODSPEED_SCENARIO_AI_MODEL='claude-haiku-4-5' bash -c '
@@ -4076,7 +4077,7 @@ day_facts_provider_post_does_not_persist_the_key() { # <HTTP status> <descriptio
         if [ "$data" = @- ]; then
           request=$(cat) || return
           case "$request" in *"\"key\":\"$ACTION_KEY\""*) ;; *) return 1 ;; esac
-          [ "$out" = /dev/null ] || printf "{\"connected\":true,\"echo\":\"%s\"}\\n" "$ACTION_KEY"
+          [ "$out" = /dev/null ] || printf "{\"connected\":true,\"echo\":\"%s\"}\\n" "$ACTION_ESCAPED_KEY"
           : >"$ACTION_POSTED"
           printf %s "$ACTION_STATUS"
         else
@@ -4090,8 +4091,8 @@ day_facts_provider_post_does_not_persist_the_key() { # <HTTP status> <descriptio
     code=$?
   fi
   if { { [ "$status" = 200 ] && [ "$code" = 0 ] && [ ! -e "$folder/work/day-becomes-facts/provider-error.json" ]; } ||
-       { [ "$status" != 200 ] && [ "$code" != 0 ] && node -e 'const e=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.exit(Number.isInteger(e.request_bytes)&&e.request_bytes>0&&e.model==="claude-haiku-4-5"&&e.provider_response.includes("[redacted]")?0:1)' "$folder/work/day-becomes-facts/provider-error.json"; }; } \
-    && [ -f "$folder/posted" ] && ! rg -F -- "$key" "$folder" >/dev/null 2>&1; then
+       { [ "$status" != 200 ] && [ "$code" != 0 ] && node -e 'const [file,key]=process.argv.slice(1),e=JSON.parse(require("fs").readFileSync(file,"utf8")),escaped=JSON.stringify(key).slice(1,-1);process.exit(Number.isInteger(e.request_bytes)&&e.request_bytes>0&&e.model==="claude-haiku-4-5"&&e.provider_response.includes("[redacted]")&&!e.provider_response.includes(escaped)?0:1)' "$folder/work/day-becomes-facts/provider-error.json" "$key"; }; } \
+    && [ -f "$folder/posted" ] && ! rg -F -- "$key" "$folder" >/dev/null 2>&1 && ! rg -F -- "$escaped_key" "$folder" >/dev/null 2>&1; then
     ok "$description"
   else
     bad "$description (exit $code: $(cat "$folder/action.log" 2>/dev/null))"
