@@ -59,6 +59,7 @@ act() {
   step_passed 'fictional bot reached the installed Telegram gateway'
   first_day_phase 'fictional emergency-kit goal is filed through the installed notebook'
   server_sparse_state
+  server_remember_gateway
   printf '{"goal":%s,"timezone":"Etc/UTC","delivery":"telegram"}\n' "$(quoted_json "$GOAL")" >"$EVIDENCE/.setup.json"
   [ "$(server_post /api/setup "$EVIDENCE/.setup.json" "$EVIDENCE/setup.json")" = 200 ] ||
     fail "the installed notebook would not file the emergency-kit goal: $(tr -d '\n' <"$EVIDENCE/setup.json" | cut -c1-200)"

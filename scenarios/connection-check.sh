@@ -55,6 +55,7 @@ act() {
   server_install
   phase 'the owner on the installed Docker Telegram gateway'
   server_telegram_setup without-ai
+  server_remember_gateway
   printf '{"goal":"Sleep eight hours a night","timezone":"Etc/UTC","delivery":"telegram"}\n' >"$EVIDENCE/.setup.json"
   [ "$(server_post /api/setup "$EVIDENCE/.setup.json" "$EVIDENCE/setup.json")" = 200 ] || fail 'the installed notebook would not make routines for the fixture goal'
   server_settle_gateway

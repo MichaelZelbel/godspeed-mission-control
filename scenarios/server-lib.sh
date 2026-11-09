@@ -147,13 +147,13 @@ server_telegram_setup() { # [without-ai]
   "$NODE" "$HERE/server-telegram.mjs" setup --server "$(server_container)" --evidence "$EVIDENCE" --notebook-port "$INGEST_PORT" \
     --token "$SERVER_TELEGRAM_TOKEN" --owner "$SERVER_TELEGRAM_OWNER" "${setup[@]}" ||
     fail 'the installed Docker Telegram setup did not hand the bot to its gateway'
-  server_remember_gateway
 }
 # The gateway reads Hermes' time zone once, when it starts, so the Telegram runner starts it again
 # half a minute after the zone changes (docker/full-candidate/telegram-runner.mjs), and the gateway
 # tells the owner it is shutting down. A goal filed through /api/setup after the Telegram setup names
-# the zone, so a scenario waits for that restart before its routines run: otherwise the notice lands
-# in the first routine's messages and a delivery made while the gateway drains is lost.
+# the zone, so a scenario remembers the gateway before that goal and waits for the restart after it:
+# otherwise the notice lands in the first routine's messages and a delivery made while the gateway
+# drains is lost.
 server_gateway_pid() {
   in_server cat /opt/data/full-candidate/telegram/runner.json 2>/dev/null |
     "$NODE" -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{const r=JSON.parse(s);if(r.state==="gateway"&&r.pid)process.stdout.write(String(r.pid))}catch{}})'
