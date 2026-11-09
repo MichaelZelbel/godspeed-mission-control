@@ -423,7 +423,16 @@ test('the PR-image job binds its published digest to stage and selects its share
   // The workflow is read with every line marked, so the checks below read as they did when they proved the draft.
   const workflow = readFileSync(WORKFLOW, 'utf8').replace(/\r\n/g, '\n');
   const text = workflow.split('\n').map((line) => `+${line}`).join('\n');
-  assert.match(text, /^\+    if: github\.event_name == 'pull_request' && github\.event\.pull_request\.head\.repo\.full_name == github\.repository$/m, 'only a same-repository pull request can build the image');
+  // The image job runs on every event but a fork's pull request (a skipped job skips every job that
+  // needs it, however indirectly, and every scenario needs stage, which needs this one), and only a
+  // pull request checks out and picks, so only a same-repository pull request can build the image.
+  assert.match(text, /^\+    if: github\.event_name != 'pull_request' \|\| github\.event\.pull_request\.head\.repo\.full_name == github\.repository$/m, 'the image job is skipped outside pull requests, which skips every scenario');
+  const imageJob = text.slice(text.indexOf('\n+  pr-image:\n'), text.indexOf('\n+  stage:\n'));
+  assert.ok(imageJob.length > 0, 'the image job was not found before stage');
+  assert.match(imageJob, /\+      - uses: actions\/checkout@v4\n\+        if: github\.event_name == 'pull_request'\n/, 'the image job checks out outside a pull request');
+  assert.match(imageJob, /\+        id: pick\n\+        if: github\.event_name == 'pull_request'\n/, 'the image job picks outside a pull request');
+  assert.match(imageJob, /\+      - uses: docker\/login-action@v3\n\+        if: steps\.pick\.outputs\.picked == 'true'\n/, 'the image job logs in without a pick');
+  assert.match(imageJob, /\+        id: publish\n\+        if: steps\.pick\.outputs\.picked == 'true'\n/, 'the image job publishes without a pick');
   assert.match(text, /^\+      TAG: pr-\$\{\{ github\.event\.pull_request\.number \}\}-\$\{\{ github\.event\.pull_request\.head\.sha \}\}$/m, 'the image tag is not unique to this pull request head');
   assert.match(text, /^\+          ref: \$\{\{ github\.event\.pull_request\.head\.sha \}\}$/m, 'the image builder does not check out the pull request head');
   assert.match(text, /^\+          docker build --build-arg REVISION="\$\{\{ github\.event\.pull_request\.head\.sha \}\}" -f docker\/full-candidate\/Dockerfile -t "\$IMAGE:\$TAG" \.$/m, 'the image build does not receive the pull request head revision');

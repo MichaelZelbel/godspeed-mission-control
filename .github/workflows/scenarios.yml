@@ -65,7 +65,11 @@ env:
 jobs:
   pr-image:
     name: the selected pull request server image
-    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    # It runs (and does nothing) on every event but a fork's pull request, so that it is never
+    # skipped there: GitHub skips a job whose dependencies, however indirect, include a skipped
+    # job, and every scenario needs stage, which needs this. When it was skipped outside pull
+    # requests (9 November 2026), every night and candidate run skipped every scenario.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     permissions:
@@ -80,11 +84,13 @@ jobs:
       TAG: pr-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}
     steps:
       - uses: actions/checkout@v4
+        if: github.event_name == 'pull_request'
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           persist-credentials: false
       - name: Is a server scenario selected?
         id: pick
+        if: github.event_name == 'pull_request'
         env:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
