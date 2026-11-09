@@ -266,7 +266,7 @@
   },
   {
     "name": "mc-video",
-    "commit": "f652ea78722a7412f3fdaf829b56b3adf1921147",
+    "commit": "e2827fd69350d6c101f9231e14cb0ffb9da328f8",
     "license": "MIT",
     "files": [
       "LICENSE",
@@ -442,6 +442,7 @@
       "test/bin-entry.test.mjs",
       "test/godspeed-option.test.mjs",
       "test/lib.test.mjs",
+      "test/setup-retry.test.mjs",
       "test/skills.test.mjs",
       "test/test_burn.py",
       "test/test_captions.py",

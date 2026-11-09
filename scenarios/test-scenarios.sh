@@ -110,12 +110,27 @@ server_download_failure() {
 }
 
 server_installed_asker() {
-  local output
-  output=$(bash -c '. "$1"; in_server_as_hermes(){ printf "%s\\n" "$*"; }; server_install_asker' bash "$HERE/server-lib.sh" 2>&1)
-  if [[ $output == *'test -f /opt/godspeed/kit/scenarios/scenario-asker.py'* && $output == *'ln -sfn /opt/godspeed/kit/scenarios/scenario-asker.py'* && $output != *'docker cp'* ]]; then
-    ok 'the fixture asker is linked from the installed candidate, not copied from the scenario host'
+  local candidate=$TMP/asker-candidate hermes=$TMP/asker-hermes target=$TMP/asker-home/scripts/scenario-asker.py args=$TMP/asker-args output code
+  mkdir -p "$candidate/scenarios" "$TMP/asker-home/scripts" "$TMP/asker-workspace" "$hermes"
+  printf 'the candidate fixture asker\n' >"$candidate/scenarios/scenario-asker.py"
+  printf 'old fixture\n' >"$TMP/asker-outside.py"
+  ln -s "$TMP/asker-outside.py" "$target"
+  printf '#!/bin/sh\nprintf "%%s\n" "$@" >"$SERVER_ASKER_ARGS"\n' >"$hermes/hermes"
+  chmod +x "$hermes/hermes"
+  output=$(SERVER_ASKER_KIT="$candidate" SERVER_ASKER_HERMES="$hermes/hermes" SERVER_ASKER_HOME="$TMP/asker-home" SERVER_ASKER_WORKSPACE="$TMP/asker-workspace" SERVER_ASKER_ARGS="$args" bash -c '
+    . "$1"
+    in_server_as_hermes() {
+      command=${3//\/opt\/godspeed\/kit/$SERVER_ASKER_KIT}
+      command=${command//\/opt\/hermes\/bin\/hermes/$SERVER_ASKER_HERMES}
+      HERMES_HOME="$SERVER_ASKER_HOME" GODSPEED_WORKSPACE="$SERVER_ASKER_WORKSPACE" sh -c "$command"
+    }
+    server_install_asker
+  ' bash "$HERE/server-lib.sh" 2>&1)
+  code=$?
+  if [ "$code" = 0 ] && [ -f "$target" ] && [ ! -L "$target" ] && [ "$(readlink -f "$target")" = "$target" ] && cmp -s "$candidate/scenarios/scenario-asker.py" "$target" && grep -Fx -- '--script' "$args" >/dev/null && grep -Fx -- 'scenario-asker.py' "$args" >/dev/null; then
+    ok 'the fixture asker is copied from the installed candidate into Hermes scripts'
   else
-    bad "the fixture asker is linked from the installed candidate, not copied from the scenario host ($output)"
+    bad "the fixture asker is copied from the installed candidate into Hermes scripts (exit $code: $output)"
   fi
 }
 server_installed_asker
@@ -171,6 +186,32 @@ server_telegram_setup_uses_local_door() { # <port>
 
 server_telegram_setup_uses_local_door 47832
 server_telegram_setup_uses_local_door 49999
+
+server_telegram_setup_uses_the_configured_ai() {
+  local compose=$TMP/server-telegram-ai-compose.yaml node=$TMP/server-telegram-ai-node log=$TMP/server-telegram-ai-node.log
+  mkdir -p "$TMP/server-telegram-ai-evidence" "$TMP/server-telegram-ai-server"
+  printf '#!/bin/sh\nif [ "$1" = -e ]; then exec "$SERVER_TELEGRAM_REAL_NODE" "$@"; fi\nprintf "%%s\\n" "$@" >"$SERVER_TELEGRAM_NODE_LOG"\n' >"$node"
+  chmod +x "$node"
+  SCENARIO=server-telegram-ai-test GODSPEED_SCENARIO_AI_KEY=k GODSPEED_SCENARIO_AI_URL=https://openrouter.ai/api/v1 GODSPEED_SCENARIO_AI_MODEL=anthropic/claude-haiku-5.5 \
+    EVIDENCE="$TMP/server-telegram-ai-evidence" HERE="$HERE" NODE="$node" SERVER_TELEGRAM_NODE_LOG="$log" SERVER_TELEGRAM_REAL_NODE="$(command -v node)" bash -c '
+      . "$1/scenarios/scenario-lib.sh"
+      . "$1/scenarios/server-lib.sh"
+      sudo() { [ "$1" = tee ] && cat >"$2"; }
+      server_compose() { :; }
+      server_healthy() { :; }
+      server_container() { printf fixture; }
+      SERVER_DIR="$2" server_telegram_setup
+    ' bash "$ROOT" "$TMP/server-telegram-ai-server" 2>/dev/null
+  compose=$TMP/server-telegram-ai-server/compose.scenario-telegram.yaml
+  if grep -Fqx -- '--ai-key' "$log" && grep -Fqx -- '--ai-url' "$log" && grep -Fqx 'https://openrouter.ai/api/v1' "$log" && \
+    grep -Fqx -- '--ai-model' "$log" && grep -Fqx 'anthropic/claude-haiku-5.5' "$log" && \
+    grep -Fqx '      GODSPEED_TG_MODEL: "anthropic/claude-haiku-5.5"' "$compose"; then
+    ok 'the Telegram setup receives the configured AI key, URL and model before it can test the key'
+  else
+    bad "the Telegram setup did not receive the configured AI key, URL and model ($(cat "$log" 2>/dev/null); $(cat "$compose" 2>/dev/null))"
+  fi
+}
+server_telegram_setup_uses_the_configured_ai
 
 server_sparse_inventory() {
   local output
@@ -4029,21 +4070,96 @@ NODE
 facts_good() {
   local f=$1
   rm -rf "$f"; mkdir -p "$f"
-  printf '{"messages":[{"id":"move-1","text":"I moved to Hamburg on 1 November"},{"id":"doctor-1","text":"my new doctor is Dr. Lang"},{"id":"machine-1","text":"[IMPORTANT: You are running as a scheduled job]"},{"id":"track-1","text":"track this"}]}\n' >"$f/archive.json"
+  local archive_day=2026-11-01 archive_at move_text doctor_text
+  archive_at="${archive_day}T12:00:00Z"; move_text="I moved to Hamburg on $archive_day"; doctor_text="my new doctor is Dr. Lang as of $archive_day"
+  printf '{"messages":[{"id":"move-1","at":"%s","text":"%s"},{"id":"doctor-1","at":"%s","text":"%s"},{"id":"machine-1","at":"%s","text":"[IMPORTANT: You are running as a scheduled job]"},{"id":"track-1","at":"%s","text":"track this"}]}\n' "$archive_at" "$move_text" "$archive_at" "$doctor_text" "$archive_at" >"$f/archive.json"
   facts_json '[{"value":"Berlin"}]' >"$f/before.json"
   printf '{"name":"Remember what you said","cron":"40 3 * * *","script":"scenario-facts","exit":0}\n' >"$f/routine.json"
-  facts_json '[{"value":"Berlin","valid_to":"2026-11-01"},{"value":"Hamburg","valid_from":"2026-11-01","quote":"I moved to Hamburg on 1 November","source_id":"move-1"},{"value":"Dr. Lang","valid_from":"2026-11-01","quote":"my new doctor is Dr. Lang","source_id":"doctor-1"}]' >"$f/after.json"
+  facts_json "[{\"value\":\"Berlin\",\"valid_to\":\"$archive_day\"},{\"value\":\"Hamburg\",\"valid_from\":\"$archive_day\",\"evidence_quote\":\"$move_text\",\"source_id\":\"move-1\"},{\"value\":\"Dr. Lang\",\"valid_from\":\"$archive_day\",\"evidence_quote\":\"$doctor_text\",\"source_id\":\"doctor-1\"}]" >"$f/after.json"
   cp "$f/after.json" "$f/second.json"
 }
 facts_good "$DF2/good"
+DF_SCRIPT="$ROOT/scenarios/day-becomes-facts.sh"
+day_facts_provider_post_does_not_persist_the_key() { # <HTTP status> <description>
+  local status description folder key='day-facts-private-"key"' escaped_key code
+  status=$1; description=$2; folder=$TMP/day-facts-provider-action-$status
+  escaped_key=$(node -p 'JSON.stringify(process.argv[1]).slice(1,-1)' "$key")
+  rm -rf "$folder"
+  mkdir -p "$folder/home/cron" "$folder/home/scripts" "$folder/root" "$folder/tmp"
+  printf '%s\n' '{"jobs":[{"name":"Remember what you said","script":"scenario-facts","cron":"40 3 * * *"}]}' >"$folder/home/cron/jobs.json"
+  : >"$folder/home/scripts/scenario-facts"
+  if ACTION_HOME="$folder/home" ACTION_ESCAPED_KEY="$escaped_key" ACTION_POSTED="$folder/posted" ACTION_STATUS="$status" \
+    GODSPEED_SCENARIO_ROOT="$folder/root" GODSPEED_SCENARIO_WORK="$folder/work" TMPDIR="$folder/tmp" \
+    GODSPEED_SCENARIO_AI_KEY="$key" GODSPEED_SCENARIO_AI_URL='https://api.anthropic.com/v1' \
+    GODSPEED_SCENARIO_AI_MODEL='claude-haiku-4-5' bash -c '
+      scenario_dir=$(dirname "$1")
+      cd "$scenario_dir"
+      GODSPEED_SCENARIO_SOURCE_ONLY=yes . "$(basename "$1")"
+      install_the_stage_line() { :; }
+      need_node() { NODE=$(command -v node); }
+      wait_for() { :; }
+      assistant_home() { HERMES=$ACTION_HOME; }
+      facts_routine_script() { printf scenario-facts; }
+      run_facts_routine() { :; }
+      facts_snapshot() { :; }
+      check() { :; }
+      curl() {
+        local data= out= request
+        while [ "$#" -gt 0 ]; do
+          case "$1" in
+            -o) out=$2; shift 2 ;;
+            --data-binary) data=$2; shift 2 ;;
+            *) shift ;;
+          esac
+        done
+        if [ "$data" = @- ]; then
+          request=$(cat) || return
+          case "$request" in *"\"key\":\"$ACTION_ESCAPED_KEY\""*) ;; *) return 1 ;; esac
+          [ "$out" = /dev/null ] || printf "{\"connected\":true,\"echo\":\"%s\"}\\n" "$ACTION_ESCAPED_KEY"
+          : >"$ACTION_POSTED"
+          printf %s "$ACTION_STATUS"
+        else
+          printf '{}\n'
+        fi
+      }
+      act
+    ' _ "$DF_SCRIPT" >"$folder/action.log" 2>&1; then
+    code=0
+  else
+    code=$?
+  fi
+  if { { [ "$status" = 200 ] && [ "$code" = 0 ] && [ ! -e "$folder/work/day-becomes-facts/provider-error.json" ]; } ||
+       { [ "$status" != 200 ] && [ "$code" != 0 ] && node -e 'const [file,key]=process.argv.slice(1),e=JSON.parse(require("fs").readFileSync(file,"utf8")),escaped=JSON.stringify(key).slice(1,-1);process.exit(Number.isInteger(e.request_bytes)&&e.request_bytes>0&&e.model==="claude-haiku-4-5"&&e.provider_response.includes("[redacted]")&&!e.provider_response.includes(escaped)?0:1)' "$folder/work/day-becomes-facts/provider-error.json" "$key"; }; } \
+    && [ -f "$folder/posted" ] && ! rg -F -- "$key" "$folder" >/dev/null 2>&1 && ! rg -F -- "$escaped_key" "$folder" >/dev/null 2>&1; then
+    ok "$description"
+  else
+    bad "$description (exit $code: $(cat "$folder/action.log" 2>/dev/null))"
+  fi
+}
+day_facts_provider_post_does_not_persist_the_key 200 'a remembered-facts Settings POST streams its private key without persistence'
+day_facts_provider_post_does_not_persist_the_key 400 'a reflected-key Settings failure is neither persisted nor exposed'
+facts_archive_value() { # <message id> <field>
+  node - "$DF2/good/archive.json" "$1" "$2" <<'NODE'
+const [file,id,field]=process.argv.slice(2),archive=require(file);
+const message=(archive.messages||[]).find(row=>row?.id===id);
+if(typeof message?.[field]!=='string')process.exit(1);
+process.stdout.write(message[field]);
+NODE
+}
+FACTS_ARCHIVE_DAY=$(facts_archive_value move-1 at) || bad 'the dated-facts fixture has no move archive timestamp'
+FACTS_ARCHIVE_DAY=${FACTS_ARCHIVE_DAY:0:10}
+FACTS_MOVE_QUOTE=$(facts_archive_value move-1 text) || bad 'the dated-facts fixture has no move archive quote'
+FACTS_WRONG_DAY=$(node -e 'const day=process.argv[1];const date=new Date(`${day}T00:00:00Z`);date.setUTCDate(date.getUTCDate()+1);process.stdout.write(date.toISOString().slice(0,10))' "$FACTS_ARCHIVE_DAY")
 passes 'dated facts are filed once and excluded messages file nothing' day-becomes-facts "$DF2/good" 'Berlin was closed'
 copy "$DF2/good" "$DF2/wrong-time"; sed -i 's/40 3/41 3/' "$DF2/wrong-time/routine.json"
 refuses 'a remembered-facts routine at the wrong time' day-becomes-facts "$DF2/wrong-time" 'successful 03:40'
-copy "$DF2/good" "$DF2/no-date"; sed -i 's/"valid_from":"2026-11-01",//' "$DF2/no-date/after.json"; cp "$DF2/no-date/after.json" "$DF2/no-date/second.json"
+copy "$DF2/good" "$DF2/no-date"; sed -i "s/\"valid_from\":\"$FACTS_ARCHIVE_DAY\",//" "$DF2/no-date/after.json"; cp "$DF2/no-date/after.json" "$DF2/no-date/second.json"
 refuses 'an undated Hamburg fact' day-becomes-facts "$DF2/no-date" 'Hamburg is not a dated'
-copy "$DF2/good" "$DF2/no-quote"; sed -i 's/I moved to Hamburg on 1 November/I moved somewhere/' "$DF2/no-quote/after.json"; cp "$DF2/no-quote/after.json" "$DF2/no-quote/second.json"
+copy "$DF2/good" "$DF2/wrong-date"; sed -i "s/\"valid_from\":\"$FACTS_ARCHIVE_DAY\"/\"valid_from\":\"$FACTS_WRONG_DAY\"/g" "$DF2/wrong-date/after.json"; cp "$DF2/wrong-date/after.json" "$DF2/wrong-date/second.json"
+refuses 'facts dated differently from their archive' day-becomes-facts "$DF2/wrong-date" 'Hamburg is not a dated'
+copy "$DF2/good" "$DF2/no-quote"; sed -i "s/$FACTS_MOVE_QUOTE/I moved somewhere/" "$DF2/no-quote/after.json"; cp "$DF2/no-quote/after.json" "$DF2/no-quote/second.json"
 refuses 'a fact without the exact move quote' day-becomes-facts "$DF2/no-quote" 'Hamburg is not a dated'
-copy "$DF2/good" "$DF2/berlin-current"; sed -i 's/,"valid_to":"2026-11-01"//' "$DF2/berlin-current/after.json"; cp "$DF2/berlin-current/after.json" "$DF2/berlin-current/second.json"
+copy "$DF2/good" "$DF2/berlin-current"; sed -i "s/,\"valid_to\":\"$FACTS_ARCHIVE_DAY\"//" "$DF2/berlin-current/after.json"; cp "$DF2/berlin-current/after.json" "$DF2/berlin-current/second.json"
 refuses 'an older city left current' day-becomes-facts "$DF2/berlin-current" 'Berlin was deleted or left current'
 copy "$DF2/good" "$DF2/no-doctor"; sed -i 's/,{"value":"Dr. Lang"[^}]*}//' "$DF2/no-doctor/after.json"; cp "$DF2/no-doctor/after.json" "$DF2/no-doctor/second.json"
 refuses 'an absent doctor fact' day-becomes-facts "$DF2/no-doctor" 'Dr. Lang is not a dated'
@@ -4078,6 +4194,27 @@ copy "$HU/good" "$HU/two-bells"; printf '[{"version":"1.2.0"},{"version":"1.2.0"
 refuses 'two update failure notifications' hermes-update-rollback "$HU/two-bells" 'exactly one pending bell'
 copy "$HU/good" "$HU/recent-taken"; sed -i 's/"attempted":false/"attempted":true/' "$HU/recent-taken/nights.json"
 refuses 'a three-day-old release taken' hermes-update-rollback "$HU/recent-taken" 'three-day 1.3.0 release was taken'
+HU_MIXED=$HU/mixed
+mkdir -p "$HU_MIXED/state" "$HU_MIXED/releases/bin"
+printf '{"last":{"reason":"Hermes cron"}}\n' >"$HU_MIXED/state/hermes-update.json"
+printf 'update 1.2.0\ngateway restart 1.2.0\n' >"$HU_MIXED/fixture.log"
+printf '{"data":[{"id":"hermes-update-1.2.0","status":"pending"},{"id":"routine-setup-failures","status":"pending"}]}\n' >"$HU_MIXED/notifications.json"
+printf '#!/bin/sh\nprintf "1.1.0\\n"\n' >"$HU_MIXED/releases/bin/hermes"
+chmod +x "$HU_MIXED/releases/bin/hermes"
+git -C "$HU_MIXED/releases" init -q
+git -C "$HU_MIXED/releases" -c user.name=fixture -c user.email=fixture@example.invalid commit --allow-empty -qm fixture
+# The serializer is embedded in the scenario, so run that exact program without an installation.
+awk '/\$NODE" - "\$STATE\/hermes-update\.json" "\$EVIDENCE\/releases" "\$EVIDENCE\/\$label-notifications\.json"/{serializer=1} serializer&&/^const fs=require/{body=1} body&&/^NODE$/{exit} body{print}' \
+  "$ROOT/scenarios/hermes-update-rollback.sh" >"$HU_MIXED/snapshot.cjs"
+if [ -s "$HU_MIXED/snapshot.cjs" ] \
+  && node "$HU_MIXED/snapshot.cjs" "$HU_MIXED/state/hermes-update.json" "$HU_MIXED/releases" "$HU_MIXED/notifications.json" \
+    "$HU_MIXED/fixture.log" 1.2.0 mixed >"$HU_MIXED/mixed.json" \
+  && node -e 'const n=require("fs").readFileSync(process.argv[1],"utf8"),snapshot=JSON.parse(n);if(snapshot.failure_bell!==true||snapshot.notification_count!==1||snapshot.notifications.length!==1||snapshot.notifications[0].version!=="1.2.0"||snapshot.notifications[0].pending!==true)process.exit(1);' \
+    "$HU_MIXED/mixed.json"; then
+  ok 'the Hermes snapshot ignores an unrelated routine-setup notice'
+else
+  bad 'the Hermes snapshot does not keep only its update notice'
+fi
 
 # The two local fixtures are useful without an installation. Their logs must never contain keys.
 HF=$TMP/hevy-fixture; mkdir -p "$HF"; : >"$HF/log"
@@ -4093,14 +4230,26 @@ kill "$HF_PID" 2>/dev/null || true
 if [ "$HF_BAD" = 401 ] && grep -q 'harbor-strength' <<<"$HF_GOOD" && grep -q 'canal-pull' <<<"$HF_EVENTS" && ! grep -q "$HF_KEY" "$HF/log"; then ok 'the local Hevy fixture accepts its run key, refuses the fixed key, changes and redacts'; else bad 'the local Hevy fixture does not keep its run key private'; fi
 HFD=$TMP/hermes-fixture
 HFD_LOG=$TMP/hermes-fixture.log
+HFD_BACKUP=$TMP/hermes-pre-update.zip
 if node "$ROOT/scenarios/hermes-update-fixture.mjs" --dir "$HFD" >/dev/null \
+  && [ -z "$(git -C "$HFD" status --porcelain)" ] \
+  && node --input-type=module -e "import {pathToFileURL} from 'node:url';const {officialHermesRemote}=await import(pathToFileURL(process.argv[1]).href);process.exit(officialHermesRemote(process.argv[2])?0:1)" "$ROOT/notebook/core/hermes-update.mjs" "$(git -C "$HFD" remote get-url origin)" \
   && [ "$(git -C "$HFD" tag | wc -l | tr -d '[:space:]')" = 4 ] \
   && [ "$(HERMES_FIXTURE_LOG=$HFD_LOG "$HFD/bin/hermes" --version)" = 1.0.0 ] \
   && [ "$(HERMES_FIXTURE_LOG=$HFD_LOG "$HFD/bin/hermes" update --check)" = 1.1.0 ] \
-  && HERMES_FIXTURE_LOG=$HFD_LOG "$HFD/bin/hermes" update 1.2.0 \
+  && HERMES_FIXTURE_LOG=$HFD_LOG "$HFD/bin/hermes" backup --output "$HFD_BACKUP" --keep 0 \
+  && [ -f "$HFD_BACKUP" ] \
+  && HERMES_FIXTURE_LOG=$HFD_LOG "$HFD/bin/hermes" update --no-backup --yes \
+  && [ "$(git -C "$HFD" describe --exact-match --tags HEAD)" = v1.1.0 ] \
+  && HERMES_FIXTURE_LOG=$HFD_LOG "$HFD/bin/hermes" plugins doctor "$HFD/plugins/godspeed-coach" --ci \
+  && node "$ROOT/scenarios/hermes-update-fixture.mjs" --dir "$HFD" --reveal 1.2.0 >/dev/null \
+  && HERMES_FIXTURE_LOG=$HFD_LOG "$HFD/bin/hermes" update --no-backup --yes \
   && [ "$(git -C "$HFD" describe --exact-match --tags HEAD)" = v1.2.0 ] \
   && ! HERMES_FIXTURE_LOG=$HFD_LOG "$HFD/bin/hermes" cron list >/dev/null 2>&1 \
   && git -C "$HFD" checkout -q v1.1.0 \
+  && HERMES_FIXTURE_LOG=$HFD_LOG "$HFD/bin/hermes" import "$HFD_BACKUP" --force \
+  && HERMES_FIXTURE_LOG=$HFD_LOG "$HFD/bin/hermes" pm install \
+  && node "$ROOT/scenarios/hermes-update-fixture.mjs" --dir "$HFD" --reveal 1.1.0 >/dev/null \
   && HERMES_FIXTURE_LOG=$HFD_LOG "$HFD/bin/hermes" update --backup \
   && [ "$(git -C "$HFD" describe --exact-match --tags HEAD)" = v1.1.0 ] \
   && HERMES_FIXTURE_LOG=$HFD_LOG "$HFD/bin/hermes" cron list >/dev/null \
@@ -4108,10 +4257,135 @@ if node "$ROOT/scenarios/hermes-update-fixture.mjs" --dir "$HFD" >/dev/null \
   && node "$ROOT/scenarios/hermes-update-fixture.mjs" --dir "$HFD" --reveal 1.3.0 >/dev/null \
   && [ "$(HERMES_FIXTURE_LOG=$HFD_LOG "$HFD/bin/hermes" update --check)" = 1.3.0 ] \
   && [ "$(node "$ROOT/scenarios/hermes-update-fixture.mjs" --dir "$HFD" --metadata)" = '[{"version":"1.0.0","healthy":true,"age_days":18},{"version":"1.1.0","healthy":true,"age_days":9},{"version":"1.2.0","healthy":false,"age_days":8},{"version":"1.3.0","healthy":true,"age_days":3}]' ] \
+  && grep -qx 'import 1.1.0' "$HFD_LOG" \
+  && grep -qx 'pm-install 1.1.0' "$HFD_LOG" \
+  && grep -qx 'plugins-doctor 1.1.0' "$HFD_LOG" \
   && ! grep -qE 'key|token|secret' "$HFD_LOG"; then
-  ok 'the local Hermes fixture versions, checks, breaks, answers, reveals and redacts'
+  ok 'the local Hermes fixture versions, backs up, checks, breaks, restores, answers, reveals and redacts'
 else
   bad 'the local Hermes fixture does not control its local releases and harmless command'
+fi
+HFD_STATE=$HFD/.fixture-state.json
+HFD_MISSING=$TMP/hermes-fixture-state
+HFD_OUTPUT=$TMP/hermes-fixture-missing-state.out
+if mv "$HFD_STATE" "$HFD_MISSING" \
+  && ! HERMES_FIXTURE_LOG=$HFD_LOG "$HFD/bin/hermes" update --check >"$HFD_OUTPUT" 2>&1 \
+  && ! HERMES_FIXTURE_LOG=$HFD_LOG "$HFD/bin/hermes" update --no-backup --yes >>"$HFD_OUTPUT" 2>&1 \
+  && ! HERMES_FIXTURE_LOG=$HFD_LOG "$HFD/bin/hermes" update --backup >>"$HFD_OUTPUT" 2>&1 \
+  && ! grep -q '1.1.0' "$HFD_OUTPUT" \
+  && mv "$HFD_MISSING" "$HFD_STATE"; then
+  ok 'the local Hermes fixture refuses every state-dependent update without fabricating a release'
+else
+  mv "$HFD_MISSING" "$HFD_STATE" 2>/dev/null || true
+  bad 'the local Hermes fixture fabricates a release when its state is missing'
+fi
+HFD_URL_FILE=$TMP/hermes-fixture-url
+node "$ROOT/scenarios/hermes-update-fixture.mjs" --dir "$HFD" --serve >"$HFD_URL_FILE" 2>/dev/null &
+HFD_PID=$!
+for _ in $(seq 1 20); do [ -s "$HFD_URL_FILE" ] && break; sleep 0.1; done
+HFD_URL=$(cat "$HFD_URL_FILE" 2>/dev/null || true)
+HFD_ALL=$(curl -fsS "$HFD_URL" 2>/dev/null || true)
+node "$ROOT/scenarios/hermes-update-fixture.mjs" --dir "$HFD" --reveal 1.2.0 >/dev/null
+HFD_REVEALED=$(curl -fsS "$HFD_URL" 2>/dev/null || true)
+kill "$HFD_PID" 2>/dev/null || true
+if [ "$HFD_ALL" = '[{"tag_name":"v1.0.0","published_at":"2026-10-20T00:00:00Z","prerelease":false,"draft":false},{"tag_name":"v1.1.0","published_at":"2026-10-29T00:00:00Z","prerelease":false,"draft":false},{"tag_name":"v1.2.0","published_at":"2026-10-30T00:00:00Z","prerelease":false,"draft":false},{"tag_name":"v1.3.0","published_at":"2026-11-04T00:00:00Z","prerelease":false,"draft":false}]' ] \
+  && [ "$HFD_REVEALED" = '[{"tag_name":"v1.0.0","published_at":"2026-10-20T00:00:00Z","prerelease":false,"draft":false},{"tag_name":"v1.1.0","published_at":"2026-10-29T00:00:00Z","prerelease":false,"draft":false},{"tag_name":"v1.2.0","published_at":"2026-10-30T00:00:00Z","prerelease":false,"draft":false}]' ]; then
+  ok 'the local Hermes fixture serves only its revealed releases on loopback'
+else
+  bad 'the local Hermes fixture does not serve its revealed releases on loopback'
+fi
+HRC=$TMP/hermes-release-cleanup
+mkdir -p "$HRC/bin" "$HRC/user" "$HRC/machine"
+printf '%s\n' '#!/bin/sh' 'if [ -e "$HERMES_RELEASE_CLEANUP_ROOT/user/scenario-hermes-releases.conf" ] || [ -e "$HERMES_RELEASE_CLEANUP_ROOT/machine/scenario-hermes-releases.conf" ]; then exit 1; fi' 'printf "%s\\n" "$*" >> "$HERMES_RELEASE_CLEANUP_LOG"' >"$HRC/bin/systemctl"
+printf '%s\n' '#!/bin/sh' 'exec "$@"' >"$HRC/bin/sudo"
+chmod +x "$HRC/bin/systemctl" "$HRC/bin/sudo"
+if ROOT="$ROOT" HRC="$HRC" HERMES_RELEASE_CLEANUP_ROOT="$HRC" HERMES_RELEASE_CLEANUP_LOG="$HRC/systemctl.log" PATH="$HRC/bin:$PATH" bash -c '
+  source "$ROOT/scenarios/hermes-update-rollback.sh"
+  for manager in user machine; do
+    source_file="$HRC/$manager/scenario-hermes-releases.conf"
+    : >"$source_file"
+    sleep 60 & pid=$!
+    release_fixture_pid=$pid
+    release_source_manager=$manager
+    release_source_dropin=$source_file
+    release_source_unit=godspeed-integrated-notebook.service
+    cleanup_release_source
+    [ ! -e "$source_file" ] && ! kill -0 "$pid" 2>/dev/null
+  done
+'; then
+  if [ ! -e "$HRC/user/scenario-hermes-releases.conf" ] && [ ! -e "$HRC/machine/scenario-hermes-releases.conf" ] \
+    && [ "$(grep -cx -- '--user daemon-reload' "$HRC/systemctl.log")" = 1 ] \
+    && [ "$(grep -cx -- '--user restart godspeed-integrated-notebook.service' "$HRC/systemctl.log")" = 1 ] \
+    && [ "$(grep -cx -- 'daemon-reload' "$HRC/systemctl.log")" = 1 ] \
+    && [ "$(grep -cx -- 'restart godspeed-integrated-notebook.service' "$HRC/systemctl.log")" = 1 ]; then
+    ok 'the Hermes release fixture and both temporary service overrides are removed before the service restarts'
+  else
+    bad 'the Hermes release-source cleanup does not reload and restart both service routes'
+  fi
+else
+  bad 'the Hermes release-source cleanup cannot remove both temporary service routes'
+fi
+HRC_FAILURE=$TMP/hermes-release-cleanup-failure
+mkdir -p "$HRC_FAILURE/bin" "$HRC_FAILURE/home"
+printf '%s\n' '#!/bin/sh' 'case "$*" in' '  "--user cat godspeed-integrated-notebook.service") exit 0 ;;' '  "--user daemon-reload") [ ! -e "$HERMES_RELEASE_FAILURE_READY" ] && exit 0 ;;' '  "--user restart godspeed-integrated-notebook.service") if [ ! -e "$HERMES_RELEASE_FAILURE_READY" ]; then : >"$HERMES_RELEASE_FAILURE_READY"; exit 0; fi ;;' 'esac' 'if [ -e "$HERMES_RELEASE_FAILURE_DROPIN" ]; then exit 1; fi' 'printf "%s\\n" "$*" >> "$HERMES_RELEASE_FAILURE_LOG"' >"$HRC_FAILURE/bin/systemctl"
+printf '%s\n' '#!/bin/sh' 'exec "$@"' >"$HRC_FAILURE/bin/sudo"
+chmod +x "$HRC_FAILURE/bin/systemctl" "$HRC_FAILURE/bin/sudo"
+if ROOT="$ROOT" HRC_FAILURE="$HRC_FAILURE" HERMES_RELEASE_FAILURE_DROPIN="$HRC_FAILURE/home/.config/systemd/user/godspeed-integrated-notebook.service.d/scenario-hermes-releases.conf" HERMES_RELEASE_FAILURE_LOG="$HRC_FAILURE/systemctl.log" HERMES_RELEASE_FAILURE_PID="$HRC_FAILURE/fixture.pid" HERMES_RELEASE_FAILURE_READY="$HRC_FAILURE/ready" GODSPEED_SCENARIO_ROOT="$HRC_FAILURE/root" GODSPEED_SCENARIO_WORK="$HRC_FAILURE/work" HOME="$HRC_FAILURE/home" PATH="$HRC_FAILURE/bin:$PATH" bash -c '
+  source "$ROOT/scenarios/hermes-update-rollback.sh"
+  scenario_arguments test-stage
+  install_the_stage_line() { :; }
+  need_node() { NODE=$(command -v node); }
+  notebook_is_up() { :; }
+  install_fixture_hermes() { :; }
+  record_releases() { :; }
+  run_night() { fail "the forced post-setup failure"; }
+  kill() { printf "%s\\n" "$1" >"$HERMES_RELEASE_FAILURE_PID"; command kill "$@"; }
+  act
+' >"$HRC_FAILURE/scenario.out" 2>&1; then
+  bad 'a Hermes post-setup failure exits after removing its temporary release source'
+elif [ ! -e "$HRC_FAILURE/home/.config/systemd/user/godspeed-integrated-notebook.service.d/scenario-hermes-releases.conf" ] \
+  && [ -s "$HRC_FAILURE/fixture.pid" ] \
+  && ! kill -0 "$(cat "$HRC_FAILURE/fixture.pid")" 2>/dev/null \
+  && grep -Fqx 'FAIL hermes-update-rollback: the forced post-setup failure' "$HRC_FAILURE/scenario.out" \
+  && [ "$(grep -cx -- '--user daemon-reload' "$HRC_FAILURE/systemctl.log")" = 1 ] \
+  && [ "$(grep -cx -- '--user restart godspeed-integrated-notebook.service' "$HRC_FAILURE/systemctl.log")" = 1 ]; then
+  ok 'a Hermes post-setup failure removes its temporary release source before restarting the service'
+else
+  bad 'a Hermes post-setup failure leaves its temporary release source or skips service restoration'
+fi
+HFD_RELATIVE=hermes-fixture-relative
+if (
+  cd "$TMP"
+  node "$ROOT/scenarios/hermes-update-fixture.mjs" --dir "$HFD_RELATIVE" >/dev/null \
+    && node "$ROOT/scenarios/hermes-update-fixture.mjs" --dir "$HFD_RELATIVE" --reveal 1.2.0 >/dev/null \
+    && (cd "$HFD_RELATIVE" && ./bin/hermes update --no-backup --yes) \
+    && [ "$(git -C "$HFD_RELATIVE" describe --exact-match --tags HEAD)" = v1.2.0 ]
+); then
+  ok 'the local Hermes fixture applies a revealed release from a relative path'
+else
+  bad 'the local Hermes fixture does not apply a revealed release from a relative path'
+fi
+HFD_QUOTED="$TMP/hermes-fixture's"
+if node "$ROOT/scenarios/hermes-update-fixture.mjs" --dir "$HFD_QUOTED" >/dev/null \
+  && "$HFD_QUOTED/bin/hermes" update --no-backup --yes \
+  && [ "$(git -C "$HFD_QUOTED" describe --exact-match --tags HEAD)" = v1.1.0 ]; then
+  ok 'the local Hermes fixture applies a release from an apostrophe-bearing path'
+else
+  bad 'the local Hermes fixture does not apply a release from an apostrophe-bearing path'
+fi
+HFD_LINK=$TMP/hermes-fixture-link
+ln -s "$HFD" "$HFD_LINK"
+if node "$ROOT/scenarios/hermes-update-fixture.mjs" --dir "$HFD_LINK" --reveal 1.2.0 >/dev/null \
+  && [ "$("$HFD_LINK/bin/hermes" update --check)" = 1.2.0 ] \
+  && "$HFD_LINK/bin/hermes" update --no-backup --yes \
+  && [ "$(git -C "$HFD" describe --exact-match --tags HEAD)" = v1.2.0 ] \
+  && git -C "$HFD" checkout -q v1.0.0 \
+  && node "$ROOT/scenarios/hermes-update-fixture.mjs" --dir "$HFD_LINK" --reveal 1.3.0 >/dev/null \
+  && "$HFD_LINK/bin/hermes" update --backup \
+  && [ "$(git -C "$HFD" describe --exact-match --tags HEAD)" = v1.3.0 ]; then
+  ok 'the local Hermes fixture keeps revealed releases through a symlink'
+else
+  bad 'the local Hermes fixture loses its revealed release through a symlink'
 fi
 
 # ============================================================ every one of them, the same shape
@@ -4232,11 +4506,10 @@ else
   bad "install_the_line_of_into read: $(cat "$TMP/sfr-asked")"
 fi
 
-# ================================================================ no default AI, never OpenRouter
-# On 5 November 2026 the checks fell back to an OpenRouter model nobody had set and ran out of the
-# owner's credit. A scenario that needs an AI now fails in a plain sentence when the address or the
-# model is missing, and when the address is OpenRouter's.
-section "the AI settings: no default, never OpenRouter"
+# =========================================================== explicit, small-model scenario AI
+# A scenario that needs an AI fails in a plain sentence when the address or the model is missing,
+# and only accepts the small Claude Haiku models on the capped test account.
+section "the AI settings: explicit small model"
 ai_run() { # <url> <model>
   GODSPEED_SCENARIO_AI_KEY=k GODSPEED_SCENARIO_AI_URL=$1 GODSPEED_SCENARIO_AI_MODEL=$2 SCENARIO=ai-settings-test     bash -c '. "$1/scenarios/scenario-lib.sh"; need_the_ai_key "a test"; echo "went-on"' _ "$ROOT" 2>&1
 }
@@ -4244,16 +4517,18 @@ AI_OUT=$(ai_run '' 'claude-haiku-4-5')
 case $AI_OUT in *GODSPEED_SCENARIO_AI_URL*'is not set'*) ok "no address: FAIL naming GODSPEED_SCENARIO_AI_URL" ;; *) bad "no address was not refused ($AI_OUT)" ;; esac
 AI_OUT=$(ai_run 'https://api.anthropic.com/v1' '')
 case $AI_OUT in *GODSPEED_SCENARIO_AI_MODEL*'is not set'*) ok "no model: FAIL naming GODSPEED_SCENARIO_AI_MODEL" ;; *) bad "no model was not refused ($AI_OUT)" ;; esac
-AI_OUT=$(ai_run 'https://openrouter.ai/api/v1' 'claude-haiku-4-5')
-case $AI_OUT in *openrouter.ai*'must never spend'*) ok "an OpenRouter address: FAIL" ;; *) bad "an OpenRouter address was not refused ($AI_OUT)" ;; esac
+AI_OUT=$(ai_run 'https://openrouter.ai/api/v1' 'anthropic/claude-haiku-5.5')
+case $AI_OUT in *went-on*) ok "the capped OpenRouter account and its small Haiku model go on" ;; *) bad "the capped OpenRouter account was refused ($AI_OUT)" ;; esac
+AI_OUT=$(ai_run 'https://openrouter.ai/api/v1' 'anthropic/claude-fable-5.1')
+case $AI_OUT in *GODSPEED_SCENARIO_AI_MODEL*'anthropic/claude-fable-5.1'*'small Claude Haiku'*) ok "a non-small model: FAIL naming the model" ;; *) bad "a non-small model was not refused ($AI_OUT)" ;; esac
 AI_OUT=$(ai_run 'http://api.anthropic.com/v1' 'claude-haiku-4-5')
 case $AI_OUT in *went-on*) bad "a clear-text http address was accepted ($AI_OUT)" ;; *https*) ok "a clear-text http address: FAIL" ;; *) bad "an http address was not refused for the right reason ($AI_OUT)" ;; esac
 AI_OUT=$(ai_run 'https://api.anthropic.com/v1' 'claude-haiku-4-5')
 case $AI_OUT in *went-on*) ok "Anthropic's address and a model go on" ;; *) bad "a good setting was refused ($AI_OUT)" ;; esac
-if grep -vE '^[[:space:]]*#' "$ROOT/scenarios/scenario-lib.sh" | grep -qE 'sonnet|openrouter\.ai/api'; then
-  bad "scenario-lib.sh still names a default model or an OpenRouter address"
+if grep -vE '^[[:space:]]*#' "$ROOT/scenarios/scenario-lib.sh" | grep -qE 'sonnet|claude-fable'; then
+  bad "scenario-lib.sh still names a non-small default model"
 else
-  ok "scenario-lib.sh names no default model and no OpenRouter address"
+  ok "scenario-lib.sh names no default or non-small model"
 fi
 
 # ================================================================ the corrected scenario seams

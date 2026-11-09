@@ -4,7 +4,18 @@ import {execFileSync} from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import {captureSent} from './server-telegram.mjs';
+import {captureSent,providerForAIURL} from './server-telegram.mjs';
+
+test('the configured AI URL selects the matching Telegram provider',()=>{
+  assert.equal(providerForAIURL('https://openrouter.ai/api/v1'),'openrouter');
+  assert.equal(providerForAIURL('https://api.anthropic.com/v1'),'anthropic');
+  for(const value of [
+    'https://api.openai.com/v1',
+    'https://evil.openrouter.ai/v1',
+    'https://evil.api.anthropic.com/v1',
+    'https://openrouter.ai.attacker.example/v1',
+  ]) assert.throws(()=>providerForAIURL(value),/no supported Telegram provider/);
+});
 
 test('the first action after setup ignores the setup handoff message',()=>{
   const state={sent:2,outbox:[{label:'setup-first-install',text:'Setup question'}]};
@@ -157,7 +168,7 @@ printf '{"sent":[{"chat_id":31415,"text":"Cancel the renewal of your gym members
   }
 });
 
-function fixture(name,script){
+function fixture(name,script,extraEnv={}){
   const folder=fs.mkdtempSync(path.join(os.tmpdir(),`server-telegram-${name}-`));
   const bin=path.join(folder,'bin');
   fs.mkdirSync(bin);
@@ -165,7 +176,7 @@ function fixture(name,script){
   fs.chmodSync(path.join(bin,'sudo'),0o755);
   const run=(...args)=>execFileSync(process.execPath,['server-telegram.mjs',...args,'--server','fixture','--evidence',folder],{
     cwd:path.dirname(new URL(import.meta.url).pathname),
-    env:{...process.env,PATH:`${bin}:${process.env.PATH}`,TRACE:path.join(folder,'trace'),COUNT:path.join(folder,'reads')},
+    env:{...process.env,...extraEnv,PATH:`${bin}:${process.env.PATH}`,TRACE:path.join(folder,'trace'),COUNT:path.join(folder,'reads')},
     stdio:'pipe',
   });
   return {folder,run};
@@ -225,10 +236,7 @@ printf '{"sent":[{"chat_id":31415,"text":"First."},{"chat_id":31415,"text":"Seco
   } finally { fs.rmSync(folder,{recursive:true,force:true}); }
 });
 
-// 47832 is the normal private listener every installed setup uses; 49672 stands for the override.
-// The fixture answers only the expected port, so a driver that ignores --notebook-port fails one of them.
-for(const port of ['47832','49672']) test(`setup cleanup finishes before it attributes every message of a multi-part reply (notebook port ${port})`,()=>{
-  const {folder,run}=fixture(`setup-${port}`,`#!/bin/sh
+const setupFixtureScript=port=>`#!/bin/sh
 input=$(cat)
 case "$*" in
   *'pkill -f '*) sh -c "$7"; exit $?;;
@@ -236,6 +244,7 @@ case "$*" in
   *http://127.0.0.1:${port}/api/telegram/connect*) echo "$*" >> "$TRACE"; echo '{"start_message":"/start abc"}'; exit 0;;
   *runner.json*) echo '{"state":"gateway"}'; exit 0;;
   *setup.json*) echo '{"done":true}'; exit 0;;
+  *'config get model.default'*) echo "\${MODEL_DEFAULT:-anthropic/claude-haiku-5.5}"; exit 0;;
   *record.json*) ;;
   *) exit 0;;
 esac
@@ -249,14 +258,29 @@ reads=$(grep -c read "$COUNT" 2>/dev/null)
 [ "$n" -ge 3 ] && { [ "$n" -gt 3 ] || [ "\${reads:-0}" -ge 3 ]; } && sent="$sent"',{"chat_id":31415,"text":"Connected","buttons":[]},{"chat_id":31415,"text":"First?","buttons":[{"label":"No","callback":"have:no"}]}'
 [ "$n" -ge 4 ] && sent="$sent"',{"chat_id":31415,"text":"Done","buttons":[]}'
 printf '{"sent":[%s],"requests":[]}\\n' "$sent"
-`);
+`;
+
+// 47832 is the normal private listener every installed setup uses; 49672 stands for the override.
+// The fixture answers only the expected port, so a driver that ignores --notebook-port fails one of them.
+for(const port of ['47832','49672']) test(`setup cleanup finishes before it attributes every message of a multi-part reply (notebook port ${port})`,()=>{
+  const {folder,run}=fixture(`setup-${port}`,setupFixtureScript(port));
   try {
     assert.throws(()=>run('setup','--token','t','--ai-key','k'),/--notebook-port is required/);
-    run('setup','--token','t','--ai-key','k','--notebook-port',port);
+    run('setup','--token','t','--ai-key','k','--ai-url','https://api.anthropic.com/v1','--ai-model','anthropic/claude-haiku-5.5','--notebook-port',port);
     assert.ok(fs.readFileSync(path.join(folder,'trace'),'utf8').includes(`http://127.0.0.1:${port}/api/telegram/connect`));
     const saved=JSON.parse(fs.readFileSync(path.join(folder,'run.json'),'utf8'));
     assert.deepEqual(saved.steps.map(step=>step.success),[true,true,true,true]);
     assert.equal(saved.outbox.length,saved.sent);
     assert.deepEqual(saved.outbox.map(message=>message.label),['setup-start','setup-start','setup-provider','setup-key','setup-key','setup-key','setup-first-install']);
+  } finally { fs.rmSync(folder,{recursive:true,force:true}); }
+});
+
+test('setup refuses an installed model that differs from the configured model',()=>{
+  const {folder,run}=fixture('setup-model-mismatch',setupFixtureScript('47832'),{MODEL_DEFAULT:'claude-fable-5.1'});
+  try {
+    assert.throws(
+      ()=>run('setup','--token','t','--ai-key','k','--ai-url','https://api.anthropic.com/v1','--ai-model','anthropic/claude-haiku-5.5','--notebook-port','47832'),
+      /model\.default is "claude-fable-5\.1", not "anthropic\/claude-haiku-5\.5"/,
+    );
   } finally { fs.rmSync(folder,{recursive:true,force:true}); }
 });

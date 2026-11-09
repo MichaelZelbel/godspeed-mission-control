@@ -5,7 +5,7 @@ This adds to the SDLC pack's default build policy.
 ## A check that runs only on a release candidate is not asked
 
 Some checks exist only for a frozen release candidate, the tag `candidate/<version>`, which is
-made after the release's pull requests merge: the scenario workflow on a candidate, "candidate
+made after the release's pull requests merge: the scenario workflow on a candidate (a whole candidate run; see the next section for the scenario a pull request itself runs), "candidate
 acceptance", and the "installed-candidate" and "credential-backed candidate" runs. No round and
 no person can run one at a pull request's head, so the queue neither waits for one nor asks about
 one.
@@ -24,3 +24,46 @@ one.
   not just do its job"). In one evening the queue asked four times for a candidate scenario run at
   a pull request's head (#307, #308, #306, #309). It cannot be answered before the merge, and each
   answer was "merge now, the next candidate proves it".
+
+## A pull request that changes a scenario is Done only when its scenario check is green
+
+A pull request that changes a proving scenario runs that scenario on its own code, as a check of
+the workflow "scenarios on pull request N": the job `the stage file`, one job for each scenario the
+workflow selected, and `the verdict`. Which scenarios are selected is decided by the workflow alone:
+the `stage file` job's step "Which scenarios this run proves" writes the selection (`picked`) in its
+summary. A scenario the workflow does not select has no job on a pull request, however it is
+documented elsewhere; do not look for one.
+Unlike the candidate-only checks above, a round can read this one at the pull request's head.
+
+- Such a pull request is Done only when the review says Ready at its head commit, CI marked it
+  ready, and every job of that scenarios run at the head commit is green, `the verdict` included.
+- A red or cancelled scenario job is not a question and not a deferral: the queue continues the
+  item itself, reads the job's log, corrects its own fix and pushes. The next push runs the
+  scenario again; an older run of the same pull request is cancelled by it.
+- A scenario job that is still running is waited for, never skipped over.
+- A pull request from a fork has no secrets, so no scenario job runs on it (the stage is skipped and
+  its verdict passes with "No scenario runs on a pull request from a fork"). That passing verdict is
+  not scenario proof and the rules above do not apply to it: the default and the required gate decide.
+- A pull request for which the workflow selected no scenario has no scenario job (only the stage
+  and the verdict run), and nothing here applies: the default and the candidate section above still
+  decide.
+- Reason: Michael, 8 November 2026. Eight scenario fixes merged on 7 November after review and unit
+  tests, and most still failed on the next candidate (8 November, run 42470722177), because
+  scenarios ran only at night and on a candidate. The factory has to be fast and efficient: a fix is
+  proved where it is made.
+
+## A pull request gets at most two review rounds
+
+A pull request gets at most two review rounds. From the third round on, only a finding that shows
+a real defect blocks: wrong behaviour a user or the release would hit, a broken or weakened check,
+a security problem, or an unmet item of the issue's acceptance. Everything else (more tests or
+coverage, wording, extra hardening, robustness beyond the contract, style) is written into the
+pull request as a note and does not block. The item is Done when the review has no such real
+defect and CI is green.
+
+- The build queue does not start a third correction round for findings that are not real defects,
+  and does not ask a person about them.
+- A real defect found in round three or later is fixed in one round, then this rule applies again.
+- Reason: Michael, 8 November 2026, approving this rule after reviews kept adding requirements
+  round after round (#357 ran about thirteen rounds on one paragraph, and many pull requests five
+  to fourteen), so nothing merged for hours.

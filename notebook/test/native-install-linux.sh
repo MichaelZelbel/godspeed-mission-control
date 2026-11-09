@@ -64,7 +64,6 @@ grep -qx "User=$(id -un)" "/etc/systemd/system/$service" || fail 'the service do
 grep -q '"GODSPEED_DEVICE":"production"' "$state/start.mjs" || fail 'the machine name was not kept'
 answers || fail 'the notebook does not answer'
 before=$(systemctl show -p MainPID --value "$service")
-
 # Copies earlier updates left (notebook/core/upgrade-copies.mjs): four whole ones, one that
 # stopped part-way, and a folder of the owner's own that no installer made.
 plant() { mkdir -p "$state/backups/$1" && echo '{"format":1,"files":[]}' > "$state/backups/$1/backup.json"; }
