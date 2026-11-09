@@ -162,6 +162,8 @@ test('the protected draft pools candidate systems and leaves the live workflow u
   assert.doesNotMatch(verdict, /CANDIDATE_ONLY:|--candidate-only/);
   assert.match(verdict, /\[ "\$IS_CANDIDATE" = true \] && args\+=\(--include-candidate-only\)/);
   assert.match(verdict, /\[ "\$WANT_MAC" = true \] \|\| args\+=\(--exclude mac-install\)/);
+  const mac = draft.slice(draft.indexOf('  mac-install:'), draft.indexOf('\n  docker-server:'));
+  assert.match(mac, /if: \$\{\{ inputs\.mac && startsWith\(inputs\.stage, 'candidate\/'\) \}\}/);
 });
 
 test('the verdict collector fails when a scenario verdict fails behind tee', async () => {

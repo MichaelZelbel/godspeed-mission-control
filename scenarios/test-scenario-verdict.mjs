@@ -77,6 +77,20 @@ test('includes every catalog candidate-only row only for a candidate run', () =>
   ]);
 });
 
+test('a candidate without optional Mac still collects its Windows verdict', () => {
+  const out = collectVerdicts({ catalog, includeCandidateOnly: true, excluded: 'mac', directories: [records({
+    'native.txt': 'PASS native: healthy\n',
+    'docker.txt': 'PASS docker: healthy\n',
+    'windows-old-names-move-moves.txt': 'PASS windows-old-names-move: open handles moved\n',
+    'windows-old-names-move-held.txt': 'PASS windows-old-names-move: held handles moved\n',
+  })] });
+  assert.deepEqual(out.lines, [
+    'PASS native: healthy',
+    'PASS docker: healthy',
+    'PASS windows-old-names-move: held handles moved',
+  ]);
+});
+
 test('accepts a standalone scenario result retained beside its evidence', () => {
   const out = collectVerdicts({ catalog, picked: ',native,', directories: [records({ 'result.txt': 'PASS native: healthy\n' })] });
   assert.deepEqual(out, { lines: ['PASS native: healthy'], failures: [] });

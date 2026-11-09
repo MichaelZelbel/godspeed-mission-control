@@ -168,7 +168,7 @@ jobs:
 
   mac-install:
     name: a stranger's Mac install
-    if: inputs.mac
+    if: ${{ inputs.mac && startsWith(inputs.stage, 'candidate/') }}
     needs: stage
     runs-on: macos-latest
     timeout-minutes: 60
