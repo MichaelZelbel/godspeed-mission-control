@@ -283,10 +283,6 @@ prepare_platform() { # <docker|native> <fixture port>
   refused_not_retained "$platform"
 }
 
-finish_platform() { # <docker|native>
-  platform_after "$1"
-}
-
 act() {
   fresh_evidence
   local state=$EVIDENCE/fixture-state.json port pid
@@ -312,8 +308,8 @@ act() {
   platform_before native "$EVIDENCE/.accepted-key.json"
   node "$HERE/hevy-fixture.mjs" --state "$EVIDENCE/fixture-state.json" --log "$EVIDENCE/fixture.log" --mutate ||
     fail "the local Hevy fixture could not change its made-up workouts"
-  finish_platform docker
-  finish_platform native
+  platform_after docker
+  platform_after native
   rm -f "$EVIDENCE/.refused-key.json" "$EVIDENCE/.accepted-key.json"
   scan_fixture_key
   check "$EVIDENCE"
