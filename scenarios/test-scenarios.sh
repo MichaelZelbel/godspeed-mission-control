@@ -3470,7 +3470,9 @@ node -e 'const fs=require("fs"),p=process.argv[1],d=JSON.parse(fs.readFileSync(p
 refuses 'asking today’s brief creates another note' first-day "$FD/second-note" 'second saved brief'
 
 copy "$FD/good" "$FD/brief-without-goal"
-sed -i 1d "$FD/brief-without-goal/brief.txt"
+printf 'Next today: buy the water and first-aid supplies.
+' >"$FD/brief-without-goal/brief.txt"
+first_day_brief_records "$FD/brief-without-goal"
 refuses 'a brief that does not name the goal' first-day "$FD/brief-without-goal" 'does not name the emergency-kit goal'
 copy "$FD/good" "$FD/brief-without-work"
 sed -i 2d "$FD/brief-without-work/brief.txt"
