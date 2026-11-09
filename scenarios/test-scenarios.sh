@@ -4050,7 +4050,7 @@ day_facts_provider_post_does_not_persist_the_key() { # <HTTP status> <descriptio
   mkdir -p "$folder/home/cron" "$folder/home/scripts" "$folder/root" "$folder/tmp"
   printf '%s\n' '{"jobs":[{"name":"Remember what you said","script":"scenario-facts","cron":"40 3 * * *"}]}' >"$folder/home/cron/jobs.json"
   : >"$folder/home/scripts/scenario-facts"
-  if ACTION_HOME="$folder/home" ACTION_KEY="$key" ACTION_ESCAPED_KEY="$escaped_key" ACTION_POSTED="$folder/posted" ACTION_STATUS="$status" \
+  if ACTION_HOME="$folder/home" ACTION_ESCAPED_KEY="$escaped_key" ACTION_POSTED="$folder/posted" ACTION_STATUS="$status" \
     GODSPEED_SCENARIO_ROOT="$folder/root" GODSPEED_SCENARIO_WORK="$folder/work" TMPDIR="$folder/tmp" \
     GODSPEED_SCENARIO_AI_KEY="$key" GODSPEED_SCENARIO_AI_URL='https://api.anthropic.com/v1' \
     GODSPEED_SCENARIO_AI_MODEL='claude-haiku-4-5' bash -c '
