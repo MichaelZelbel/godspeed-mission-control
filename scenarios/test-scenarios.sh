@@ -285,6 +285,7 @@ native-first	first.sh	shared	native	no	First native
 native-broken	broken.sh	shared	native	no	Broken native
 native-later	later.sh	shared	native	no	Later native
 cross-platform	cross-platform.sh	shared	both	no	Cross-platform
+cross-platform-later	cross-platform-later.sh	shared	both	no	Later cross-platform
 native-isolated	isolated.sh	isolated	native	no	Isolated native
 settings-on-install	settings-on-install.sh	terminal	native	no	Settings
 hermes-update-rollback	hermes-update-rollback.sh	terminal	native	no	Hermes
@@ -399,7 +400,11 @@ POOL_OUTPUT=$(GODSPEED_SCENARIO_CATALOG="$POOL_CATALOG" GODSPEED_SCENARIO_RESULT
   run_script(){ printf "%s\n" "$1" >>"$POOL_LOG"; printf "PASS %s: checked\n" "$1" >"$RESULTS/$1.txt"; }
   main
 ' bash "$ROOT/scenarios/run-installed-scenarios.sh" 2>&1)
-if [ "$(tail -n 4 "$POOL_LOG")" = "$(printf 'cross-platform\nsettings-on-install\nhermes-update-rollback\nanother-terminal')" ] && grep -Fxq 'PASS linux-install: one native candidate install is ready' "$POOL_RESULTS/linux-install.txt" && \
+POOL_EXPECTED=$( {
+  awk -F '\t' '$3 == "shared" && $4 == "both" { print $1 }' "$POOL_CATALOG"
+  printf '%s\n' settings-on-install hermes-update-rollback another-terminal
+} )
+if [ "$(cat "$POOL_LOG")" = "$POOL_EXPECTED" ] && grep -Fxq 'PASS linux-install: one native candidate install is ready' "$POOL_RESULTS/linux-install.txt" && \
   grep -Fxq 'PASS docker-server: one Docker candidate install is ready' "$POOL_RESULTS/docker-server.txt"; then
   ok 'one native and Docker install precede every catalog-owned cross-system and terminal check in order'
 else
