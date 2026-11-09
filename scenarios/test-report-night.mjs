@@ -5,19 +5,12 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { catalogRows } from './scenario-verdict.mjs';
 
 const SCRIPT = fileURLToPath(new URL('./report-night.mjs', import.meta.url));
 const WORKFLOW = fileURLToPath(new URL('../.github/workflows/scenarios.yml', import.meta.url));
 const DRAFT = fileURLToPath(new URL('../.github/workflow-drafts/scenarios.yml', import.meta.url));
 const PICKER = fileURLToPath(new URL('./pick-scenarios.sh', import.meta.url));
-
-function candidateOnlyIds(catalog) {
-  return catalog.split(/\r?\n/)
-    .filter((line) => line && !line.startsWith('#'))
-    .filter((line) => line.split('\t')[4] === 'yes')
-    .map((line) => line.split('\t')[0])
-    .sort();
-}
 
 function workflowJobs(draft) {
   const headers = [...draft.matchAll(/^  ([a-z0-9-]+):\n/gm)];
@@ -27,23 +20,27 @@ function workflowJobs(draft) {
   }));
 }
 
-function candidateJobIds(draft) {
-  return workflowJobs(draft)
-    .filter(({ body }) => /^    if:.*startsWith\(inputs\.stage, 'candidate\/'\)/m.test(body))
-    .map(({ id }) => id)
-    .sort();
-}
+const candidateGuards = new Map([
+  ['mac-install', "${{ inputs.mac && startsWith(inputs.stage, 'candidate/') }}"],
+  ['windows-old-names-move', "startsWith(inputs.stage, 'candidate/')"],
+]);
+
+const jobCondition = ({ body }) => body.match(/^    if: ([^\r\n]+)$/m)?.[1];
 
 function assertCandidateEligibilityConforms(catalog, draft) {
-  assert.deepEqual(candidateJobIds(draft), candidateOnlyIds(catalog));
-
-  const mac = workflowJobs(draft).find(({ id }) => id === 'mac-install');
-  assert.ok(mac, 'mac-install must have a workflow job');
-  assert.match(mac.body, /^    if:.*inputs\.mac/m);
+  const candidateIds = catalogRows(catalog).filter(({ candidateOnly }) => candidateOnly).map(({ id }) => id).sort();
+  assert.deepEqual(candidateIds, [...candidateGuards.keys()].sort());
+  const jobs = workflowJobs(draft);
   assert.deepEqual(
-    workflowJobs(draft).filter(({ body }) => /^    if:.*inputs\.mac/m.test(body)).map(({ id }) => id),
-    ['mac-install'],
+    jobs.map((job) => ({ id: job.id, condition: jobCondition(job) }))
+      .filter(({ condition }) => condition?.includes("startsWith(inputs.stage, 'candidate/')")),
+    [...candidateGuards].map(([id, condition]) => ({ id, condition })),
   );
+  for (const [id, condition] of candidateGuards) {
+    const job = jobs.find((item) => item.id === id);
+    assert.ok(job, `${id} must have a workflow job`);
+    assert.equal(jobCondition(job), condition, `${id} must keep its exact candidate-only guard`);
+  }
 }
 
 // state: { openIssues: [{number,title}], labelExists, logs: {jobName: text}, jobs: [{id,name,conclusion}] }
@@ -208,13 +205,16 @@ test('candidate-only catalog membership and candidate job guards stay conformant
   assertCandidateEligibilityConforms(catalog, draft);
 });
 
-test('candidate-only catalog rows without guarded jobs are rejected', async () => {
+test('a broadened Windows candidate-only guard is rejected', async () => {
   const { readFileSync } = await import('node:fs');
   const catalog = readFileSync(new URL('./scenario-catalog.tsv', import.meta.url), 'utf8');
   const draft = readFileSync(DRAFT, 'utf8');
-  const staleCatalog = `${catalog}\nmissing-candidate-job\tmissing.sh\tisolated\tnative\tyes\tMissing candidate job\n`;
+  const broadened = draft.replace(
+    "if: startsWith(inputs.stage, 'candidate/')",
+    "if: startsWith(inputs.stage, 'candidate/') || github.event_name == 'workflow_dispatch'",
+  );
   assert.throws(
-    () => assertCandidateEligibilityConforms(staleCatalog, draft),
+    () => assertCandidateEligibilityConforms(catalog, broadened),
     /Expected values to be strictly deep-equal/,
   );
 });
