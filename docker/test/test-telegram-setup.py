@@ -474,6 +474,21 @@ def test_key_provider():
     check("the installer's own ChatGPT sign-in is skipped", r["runs"] and r["runs"][-1].get("KB_SIGNIN_SKIP") == "1")
 
 
+def test_scenario_key_model():
+    model = "anthropic/claude-haiku-5.5"
+    r = scenario_run("the scenario's configured model is installed before its key is checked", {
+        "users": USERS,
+        "start": [{"from": 111, "text": "/start"}],
+        "rules": [
+            {"when": "Step 1 of 3: connect an AI", "do": [{"from": 111, "press": "openrouter"}]},
+            {"when": "Send me your OpenRouter API key", "do": [{"from": 111, "text": "sk-or-good-0123456789abcdef"}]},
+            {"when": "already have a Mission Control", "do": [{"from": 111, "press": "repo:fresh"}]},
+            {"when": "morning brief", "do": [{"from": 111, "press": "brief:no"}]},
+        ]}, extra_env={"GODSPEED_TG_MODEL": model})
+    check("the scenario model, rather than the provider default, is installed before the key check",
+          r["rc"] == 0 and r["hstate"].get("provider") == "openrouter" and r["hstate"].get("model") == model)
+
+
 CODE = "fictionalStartCode0123456789abcd"
 ONE_CLICK = {"GODSPEED_TG_FLOW": "notebook", "GODSPEED_TELEGRAM_START_CODE": CODE}
 NOTEBOOK = "https://203-0-113-7.sslip.io/dashboard"
@@ -796,7 +811,7 @@ def test_backup_key():
         {"when": "That is the service your main AI uses already", "do": [{"from": 111, "press": "openrouter"}]},
         {"when": "Send me your OpenRouter API key", "do": [{"from": 111, "text": bad}]},
         {"when": "did not answer with that key", "do": [{"from": 111, "text": good}]},
-    ])
+    ], extra={"GODSPEED_TG_MODEL": "anthropic/claude-haiku-5.5"})
     to_anna = r["to"](111)
     check("it finishes and says the chat is done for this request", r["rc"] == 0 and r["state"].get("done") is True
           and r["state"].get("request") == "fictional0request")
@@ -922,6 +937,7 @@ if __name__ == "__main__":
     test_snags()
     test_found_repo()
     test_key_provider()
+    test_scenario_key_model()
     test_one_click_names()
     test_one_click_happy()
     test_one_click_snags()
