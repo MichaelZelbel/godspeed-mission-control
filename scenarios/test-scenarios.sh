@@ -3740,7 +3740,7 @@ INITIAL_HEVY_FIXTURE="selected-node:$ROOT/scenarios/hevy-fixture.mjs --state $RF
 MUTATED_HEVY_FIXTURE="$INITIAL_HEVY_FIXTURE --mutate"
 REFUSED_HEVY_SETTINGS=$(printf 'settings:docker:{"key":"%s"}\nsettings:native:{"key":"%s"}\n' "$REFUSED_HEVY_KEY" "$REFUSED_HEVY_KEY")
 case "$ACT_NODE_STATUS:$ACT_NODE_EVENTS" in
-  "0:"$'need-node\n'"$INITIAL_HEVY_FIXTURE"$'\n'"$REFUSED_HEVY_SETTINGS"$'persistence-docker:set\npersistence-native:set\nsettings:docker:{"key":"00000000-0000-4000-8000-000000000001"}\nsettings:native:{"key":"00000000-0000-4000-8000-000000000001"}\n'"$MUTATED_HEVY_FIXTURE") ok "the Hevy action sends both Hevy keys as Settings' key field through its selected Node before descriptor and persistence reads" ;;
+  "0:"$'need-node\n'"$INITIAL_HEVY_FIXTURE"$'\n'"$REFUSED_HEVY_SETTINGS"$'\npersistence-docker:set\npersistence-native:set\nsettings:docker:{"key":"00000000-0000-4000-8000-000000000001"}\nsettings:native:{"key":"00000000-0000-4000-8000-000000000001"}\n'"$MUTATED_HEVY_FIXTURE") ok "the Hevy action sends both Hevy keys as Settings' key field through its selected Node before descriptor and persistence reads" ;;
   *) bad "the Hevy action did not send both Hevy keys through Settings before descriptor and persistence reads (exit $ACT_NODE_STATUS: $ACT_NODE_ORDER; events: $ACT_NODE_EVENTS)" ;;
 esac
 printf '00000000-0000-4000-8000-000000000001\n' >"$RFS/assistant/hevy.json"
