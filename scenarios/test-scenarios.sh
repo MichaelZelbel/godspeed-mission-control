@@ -4076,7 +4076,7 @@ day_facts_provider_post_does_not_persist_the_key() { # <HTTP status> <descriptio
         done
         if [ "$data" = @- ]; then
           request=$(cat) || return
-          case "$request" in *"\"key\":\"$ACTION_KEY\""*) ;; *) return 1 ;; esac
+          case "$request" in *"\"key\":\"$ACTION_ESCAPED_KEY\""*) ;; *) return 1 ;; esac
           [ "$out" = /dev/null ] || printf "{\"connected\":true,\"echo\":\"%s\"}\\n" "$ACTION_ESCAPED_KEY"
           : >"$ACTION_POSTED"
           printf %s "$ACTION_STATUS"
