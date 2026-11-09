@@ -4318,6 +4318,54 @@ if (
 else
   bad "the Hevy recreate or native service did not use the add-on's guarded local Hevy fixture"
 fi
+HEVY_NATIVE_USER_HOME=$TMP/hevy-native-user-home
+HEVY_NATIVE_SYSTEM_ROOT=$TMP/hevy-native-system
+if (
+  HOME=$HEVY_NATIVE_USER_HOME
+  export HOME
+  . "$ROOT/scenarios/workouts-from-hevy.sh"
+  systemctl() {
+    case "$1:$2" in
+      --user:cat|--user:daemon-reload|--user:restart) return 0 ;;
+      *) return 1 ;;
+    esac
+  }
+  wait_for() { :; }
+  notebook_is_up() { :; }
+  native_hevy_url 47841
+  [ "$(cat "$HOME/.config/systemd/user/godspeed-integrated-notebook.service.d/scenario-hevy.conf")" = "$(printf '%s\n' \
+    '[Service]' \
+    'Environment="GODSPEED_WORKOUTS_TEST=1"' \
+    'Environment="GODSPEED_WORKOUTS_HEVY_API=http://127.0.0.1:47841"')" ]
+) && (
+  . "$ROOT/scenarios/workouts-from-hevy.sh"
+  systemctl() {
+    case "$1:$2" in
+      --user:cat) return 1 ;;
+      cat:godspeed-integrated-notebook.service) return 0 ;;
+      *) return 1 ;;
+    esac
+  }
+  sudo() {
+    case $1 in
+      mkdir) mkdir -p "$HEVY_NATIVE_SYSTEM_ROOT/godspeed-integrated-notebook.service.d" ;;
+      tee) shift; command tee "$HEVY_NATIVE_SYSTEM_ROOT/godspeed-integrated-notebook.service.d/scenario-hevy.conf" ;;
+      systemctl) return 0 ;;
+      *) return 1 ;;
+    esac
+  }
+  wait_for() { :; }
+  notebook_is_up() { :; }
+  native_hevy_url 47842
+  [ "$(cat "$HEVY_NATIVE_SYSTEM_ROOT/godspeed-integrated-notebook.service.d/scenario-hevy.conf")" = "$(printf '%s\n' \
+    '[Service]' \
+    'Environment="GODSPEED_WORKOUTS_TEST=1"' \
+    'Environment="GODSPEED_WORKOUTS_HEVY_API=http://127.0.0.1:47842"')" ]
+); then
+  ok "both native Hevy service shapes write the guarded local fixture drop-in"
+else
+  bad "a native Hevy service shape did not write the guarded local fixture drop-in"
+fi
 HEVY_FAILURE_DIR=$TMP/server-hevy-write-failure
 mkdir -p "$HEVY_FAILURE_DIR"
 HEVY_FAILURE_MARKER=$TMP/hevy-compose-after-write-failure
