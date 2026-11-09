@@ -206,10 +206,14 @@ function stepHyperframes() {
   fs.mkdirSync(dir, { recursive: true });
   console.log("   Installing it once, here, so your assistant never has to download a program while it works (about 370 MB)...");
   const npm = path.join(path.dirname(process.execPath), isWin ? "npm.cmd" : "npm");
-  const r = spawnSync(fs.existsSync(npm) ? `"${npm}"` : "npm",
-    ["install", "--prefix", ".", `hyperframes@${L.HYPERFRAMES_VERSION}`, "--no-audit", "--no-fund", "--loglevel", "error"],
-    { cwd: dir, stdio: "inherit", shell: true });
-  if (r.status === 0 && hyperframesInstalled()) {
+  const installed = L.retryInstall(
+    () => spawnSync(fs.existsSync(npm) ? `"${npm}"` : "npm",
+      ["install", "--prefix", ".", `hyperframes@${L.HYPERFRAMES_VERSION}`, "--no-audit", "--no-fund", "--loglevel", "error"],
+      { cwd: dir, stdio: "inherit", shell: true }),
+    hyperframesInstalled,
+    () => console.log(`   Retrying the pinned HyperFrames ${L.HYPERFRAMES_VERSION} installation once after the first attempt did not finish cleanly...`),
+  );
+  if (installed) {
     ok(`ready in ${dir}`);
     return true;
   }

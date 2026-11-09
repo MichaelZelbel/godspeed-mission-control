@@ -129,13 +129,15 @@ server_telegram_setup() { # [without-ai]
     setup=(--without-ai)
   else
     need_the_ai_key 'the Telegram setup chat'
-    setup+=(--ai-key "$GODSPEED_SCENARIO_AI_KEY")
+    setup+=(--ai-key "$GODSPEED_SCENARIO_AI_KEY" --ai-url "$AI_URL" --ai-model "$AI_MODEL")
   fi
   # Keep this separate from compose.override.yaml: a scenario may already use that file to set its
   # clock, and the server's normal compose file must remain exactly what the /server installer made.
   printf 'services:\n  godspeed:\n    environment:\n      GODSPEED_TELEGRAM_API: "http://127.0.0.1:8081"\n' >"$EVIDENCE/.scenario-telegram-compose.yaml"
   if [ "${1:-}" = without-ai ]; then
     printf '      KB_SIGNIN_SKIP: "1"\n' >>"$EVIDENCE/.scenario-telegram-compose.yaml"
+  else
+    printf '      GODSPEED_TG_MODEL: %s\n' "$(quoted_json "$AI_MODEL")" >>"$EVIDENCE/.scenario-telegram-compose.yaml"
   fi
   sudo tee "$SERVER_DIR/compose.scenario-telegram.yaml" <"$EVIDENCE/.scenario-telegram-compose.yaml" >/dev/null ||
     fail 'the server could not direct its installed Telegram client to the local stand-in'
