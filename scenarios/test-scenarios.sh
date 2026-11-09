@@ -3365,6 +3365,13 @@ passes 'fresh Docker first day makes useful verified work, a sparse-data brief, 
 copy "$FD/good" "$FD/no-research"
 printf '[]\n' >"$FD/no-research/job-research.json"
 refuses 'a first day without research' first-day "$FD/no-research" 'research routine has no successful'
+copy "$FD/good" "$FD/goal-in-goals"
+printf '{"configured":true,"preserved":true,"results":[]}\n' >"$FD/goal-in-goals/setup.json"
+printf '{"data":[{"id":"g1","title":"Prepare a practical household emergency-kit checklist by Sunday."}]}\n' >"$FD/goal-in-goals/goals-after-setup.json"
+passes 'a first day whose goal the notebook holds among its goals' first-day "$FD/goal-in-goals" 'answered today'
+copy "$FD/goal-in-goals" "$FD/goal-missing"
+printf '{"data":[{"id":"g1","title":"Something else"}]}\n' >"$FD/goal-missing/goals-after-setup.json"
+refuses 'a first day whose notebook kept no such goal' first-day "$FD/goal-missing" 'did not retain the fictional emergency-kit goal'
 copy "$FD/good" "$FD/unverified"
 sed -i 's/STATUS: verified/STATUS: planned/' "$FD/unverified/work/W-000-first-day-emergency-kit.md"
 cp "$FD/good/work/W-000-first-day-emergency-kit.md" "$FD/unverified/work/W-other-verified.md"

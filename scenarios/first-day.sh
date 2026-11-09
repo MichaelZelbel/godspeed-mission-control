@@ -65,6 +65,9 @@ act() {
     fail "the installed notebook would not file the emergency-kit goal: $(tr -d '\n' <"$EVIDENCE/setup.json" | cut -c1-200)"
   server_pause_all_jobs
   server_settle_gateway
+  # The Hermes runtime's /api/setup answers with the routines it made, not the goal it filed, so the
+  # notebook's goals are read back for the proof that it kept the goal.
+  server_table goals "$EVIDENCE/goals-after-setup.json"
   step_passed 'fictional emergency-kit goal filed through the notebook'
   first_day_phase 'installed research routine'
   server_run_job research "$RESEARCH" 1800
@@ -102,7 +105,9 @@ check() { # <evidence folder>
   [ "${#SERVER_SPARSE_TABLES[@]}" -gt 0 ] || fail 'the installed server named no morning-brief source records'
   for table in "${SERVER_SPARSE_TABLES[@]}"; do sparse_files+=("sparse-${table//_/-}.json"); done
   kept_all "$folder" 'the installed first day' "${sparse_files[@]}"
-  grep -Fqx "$GOAL" <(json_value "$folder/setup.json" results.goal.title 2>/dev/null || true) ||
+  { [ -f "$folder/goals-after-setup.json" ] &&
+    "$NODE" -e 'const d=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")),rows=Array.isArray(d)?d:d.data||[];process.exit(rows.some(g=>String(g?.title||"").trim()===process.argv[2])?0:1)' "$folder/goals-after-setup.json" "$GOAL"; } ||
+    grep -Fqx "$GOAL" <(json_value "$folder/setup.json" results.goal.title 2>/dev/null || true) ||
     grep -Fq "$GOAL" "$folder/setup.json" || fail 'the notebook did not retain the fictional emergency-kit goal'
   grep -Fqx "$WORK_ID: planned" "$folder/first-day-work-filed.txt" ||
     fail 'the scenario did not retain its emergency-kit work filing'
