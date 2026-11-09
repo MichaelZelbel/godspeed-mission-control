@@ -149,7 +149,12 @@ async function runBriefing(job,{store,query,provider,now}){
   const goal=context.goals.find(row=>!excluded(row)&&text(row.title)),anyGoal=context.goals.some(row=>!excluded(row));
   addFirst(context.goals,row=>!excluded(row)&&text(row.title)?'One of your saved goals is '+text(row.title)+'.':null);
   const verified=context.work.filter(row=>row.state==='verified'&&row.kind!=='repair'&&!excluded(row)).sort((a,b)=>String(b.verification?.at||b.updated_at||'').localeCompare(String(a.verification?.at||a.updated_at||'')));
-  addFirst(verified,row=>text(row.title)?'Godspeed has verified this work: '+text(row.title)+'.':null);
+  // Work the daily round filed in the work register reaches the notebook as a legacy row with its
+  // fields as written, WHAT for its title (9 November 2026: a first day's verified playbook went
+  // unnamed, so the fallback said nothing of the work that was done).
+  const workTitle=row=>text(row.title)||text(row.legacy_fields?.WHAT);
+  const done=verified.find(workTitle);
+  addFirst(verified,row=>{const title=workTitle(row);return title?'Godspeed has verified this work: '+title+(/[.?!]$/.test(title)?'':'.'):null;});
   const due=context.deadlines.filter(row=>!excluded(row)&&deadlineLive(row,now.getTime())&&row.due_at&&Number.isFinite(Date.parse(row.due_at))&&Date.parse(row.due_at)>=now.getTime()).sort((a,b)=>Date.parse(a.due_at)-Date.parse(b.due_at));
   addFirst(due,row=>{const on=row.native_file?String(row.due_at).slice(0,10):dayOf(new Date(row.due_at),row.timezone||zone);return text(row.title)?'A dated obligation is '+text(row.title)+', due '+on+'.':null;});
   const keptSummaries=unknownSummaries.filter(summary=>!summary.source_ids.some(id=>rejectedIds.has(id)));
@@ -160,7 +165,7 @@ async function runBriefing(job,{store,query,provider,now}){
   if(!healthAdded&&!context.health.some(row=>!excluded(row)))add('There are no fresh health observations to report.');
   const action=context.contribution
    ?add('Review this checked draft before deciding. It has not been sent.')||add('Review this unsent draft.')
-   :add(goal?'Ask Godspeed to work on '+text(goal.title)+' and show you one concrete result today.':anyGoal?'Ask Godspeed to complete one goal step.':'Tell Godspeed one goal to work on today, then ask it for the first concrete step.')||add(anyGoal?'Ask Godspeed to complete one goal step.':'Tell Godspeed one goal.')||add(anyGoal?'Work on one goal step today.':'Name one goal today.')||add(anyGoal?'Do one goal step.':'Name one goal.');
+   :done&&add('Next: review the work Godspeed verified and say what it should do with it.')||add(goal?'Ask Godspeed to work on '+text(goal.title)+' and show you one concrete result today.':anyGoal?'Ask Godspeed to complete one goal step.':'Tell Godspeed one goal to work on today, then ask it for the first concrete step.')||add(anyGoal?'Ask Godspeed to complete one goal step.':'Tell Godspeed one goal.')||add(anyGoal?'Work on one goal step today.':'Name one goal today.')||add(anyGoal?'Do one goal step.':'Name one goal.');
   for(const line of required)add(line);
   if(context.contribution){add(context.contribution.content);add(context.contribution.link);}
   const result=parts.join('\n\n');

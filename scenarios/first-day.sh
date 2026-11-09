@@ -90,6 +90,8 @@ act() {
   server_table work_items "$EVIDENCE/work-items.json"
   server_table notes "$EVIDENCE/notes-after-reply.json"
   server_copy_evidence /opt/data/full-candidate/workspace/work "$EVIDENCE"
+  server_copy_evidence_if_there /opt/data/full-candidate/workspace/goals "$EVIDENCE"
+  server_copy_evidence_if_there /opt/data/full-candidate/workspace/ideas "$EVIDENCE"
   server_manifest
   step_passed 'morning brief was saved, delivered, and read back through Telegram'
   rm -f "$EVIDENCE"/.[a-z]*
@@ -130,20 +132,37 @@ for(const file of sparseFiles){
  const state=JSON.parse(read(file)),rows=Array.isArray(state)?state:state.data||[];
  if(!Array.isArray(rows)||rows.length)fail('the brief was not run with the required sparse installed state');
 }
-const cardFile=path.join(folder,'work',`${workId}.md`);
-if(!fs.existsSync(cardFile)||!fs.statSync(cardFile).isFile())fail('the scenario-filed emergency-kit work card is missing');
-const text=fs.readFileSync(cardFile,'utf8');
-const field=name=>(text.match(new RegExp(`^${name}:\\s*(.+)$`,'mi'))||[])[1]?.trim()||'';
-if(field('ID')!==workId||field('KEY')!==workKey||field('SOURCE')!=='first-day-scenario')fail('the selected emergency-kit work card does not retain the scenario filing');
-if(field('STATUS')!=='verified'||!/VERIFIED check passed/i.test(text))fail('the selected emergency-kit work card is not verified by its recorded check');
-const title=field('WHAT'),result=field('RESULT');
-if(!title||!result)fail('the verified work card lacks its title or result');
-const declared=(text.match(/^DONE WHEN:\s*A practical household emergency-kit checklist is written at (work\/(?:[A-Za-z0-9][A-Za-z0-9._-]*\/)*[A-Za-z0-9][A-Za-z0-9._-]*\.md) and ready for a reader\s*$/mi)||[])[1];
-if(!declared||declared!==resultFile)fail('the selected emergency-kit work card does not name its result file');
-const artifact=path.join(folder,declared);
-if(!fs.existsSync(artifact)||!fs.statSync(artifact).isFile())fail('the result artifact is not a practical emergency-kit checklist');
-const practical=fs.readFileSync(artifact,'utf8');
-if(!/[-*]\s*(?:\[[ xX]\]|\d+[.)])/.test(practical)||!/\b(?:\d+\s*(?:lit(?:re|er)s?|days?|hours?|batter(?:y|ies)|ml|kg)|at least \d+)\b/i.test(practical)||!['water','food','first aid|medication','light|power','communication|document'].every(group=>new RegExp(group,'i').test(practical))||/\b(?:TODO|TBD|placeholder|outline only)\b/i.test(practical))fail('the result artifact is not a practical emergency-kit checklist');
+// The finished work is the scenario's own card when the daily round took it, held to its checklist,
+// or else work the product chose for this goal itself (since 9 November 2026: the choice files its
+// own items and the round takes those first): a card under its own ID, verified by its recorded
+// check, with a title, a result and the file its check names, kept here and not a placeholder.
+const cards=fs.existsSync(path.join(folder,'work'))?fs.readdirSync(path.join(folder,'work')).filter(name=>/^W-[A-Za-z0-9._-]+\.md$/.test(name)):[];
+const card=name=>{const text=fs.readFileSync(path.join(folder,'work',name),'utf8');const field=key=>(text.match(new RegExp(`^${key}:\\s*(.+)$`,'mi'))||[])[1]?.trim()||'';return {name,text,field};};
+const verified=c=>c.field('ID')===c.name.replace(/\.md$/,'')&&c.field('STATUS')==='verified'&&/VERIFIED check passed/i.test(c.text);
+const slug=value=>value.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
+const own=cards.includes(`${workId}.md`)?card(`${workId}.md`):null;
+let title,result;
+if(own&&verified(own)){
+ const field=own.field,text=own.text;
+ if(field('KEY')!==workKey||field('SOURCE')!=='first-day-scenario')fail('the selected emergency-kit work card does not retain the scenario filing');
+ title=field('WHAT');result=field('RESULT');
+ if(!title||!result)fail('the verified work card lacks its title or result');
+ const declared=(text.match(/^DONE WHEN:\s*A practical household emergency-kit checklist is written at (work\/(?:[A-Za-z0-9][A-Za-z0-9._-]*\/)*[A-Za-z0-9][A-Za-z0-9._-]*\.md) and ready for a reader\s*$/mi)||[])[1];
+ if(!declared||declared!==resultFile)fail('the selected emergency-kit work card does not name its result file');
+ const artifact=path.join(folder,declared);
+ if(!fs.existsSync(artifact)||!fs.statSync(artifact).isFile())fail('the result artifact is not a practical emergency-kit checklist');
+ const practical=fs.readFileSync(artifact,'utf8');
+ if(!/[-*]\s*(?:\[[ xX]\]|\d+[.)])/.test(practical)||!/\b(?:\d+\s*(?:lit(?:re|er)s?|days?|hours?|batter(?:y|ies)|ml|kg)|at least \d+)\b/i.test(practical)||!['water','food','first aid|medication','light|power','communication|document'].every(group=>new RegExp(group,'i').test(practical))||/\b(?:TODO|TBD|placeholder|outline only)\b/i.test(practical))fail('the result artifact is not a practical emergency-kit checklist');
+}else{
+ const goalSlug=slug(goal);
+ const chosen=cards.filter(name=>name!==`${workId}.md`).map(card).filter(c=>verified(c)&&c.field('GOAL').length>=10&&goalSlug.startsWith(c.field('GOAL'))&&c.field('WHAT')&&c.field('RESULT')).find(c=>{
+  const named=(`${c.field('CHECK')} ${c.field('DONE WHEN')}`.match(/\b((?:work|goals|ideas)\/[A-Za-z0-9._\/-]+\.md)\b/)||[])[1];
+  const file=named&&path.join(folder,named);
+  return file&&fs.existsSync(file)&&fs.statSync(file).isFile()&&fs.readFileSync(file,'utf8').trim().split(/\s+/).length>=50&&!/\b(?:TODO|TBD|placeholder|outline only)\b/i.test(fs.readFileSync(file,'utf8'));
+ });
+ if(!chosen)fail('the selected emergency-kit work card is not verified by its recorded check, and no other work for the goal was verified with its result kept');
+ title=chosen.field('WHAT');result=chosen.field('RESULT');
+}
 const brief=normalized(read('brief.txt'));
 if(!brief.includes(goal))fail('the saved brief does not name the emergency-kit goal');
 if(!brief.includes(title)&&!brief.includes(result))fail('the saved brief does not identify the verified work');

@@ -215,6 +215,12 @@ server_copy_evidence() {
     fail "the installed server did not retain $source as evidence"
   fi
 }
+# The same for a folder the product makes only when it needs it (a goal's playbooks, its ideas).
+server_copy_evidence_if_there() {
+  local container; container=$(server_container)
+  [ -n "$container" ] && sudo docker exec "$container" test -d "$1" || return 0
+  server_copy_evidence "$1" "$2"
+}
 server_manifest() {
   "$NODE" -e '
 const crypto=require("crypto"),fs=require("fs"),path=require("path");
