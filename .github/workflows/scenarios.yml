@@ -1117,7 +1117,7 @@ jobs:
           # A name in `only` that is no job would run nothing and pass: it fails.
           if [ "$EVENT" = workflow_dispatch ] && [ "$PICKED" != all ] && [ "$STAGE" = success ]; then
             for want in ${PICKED//,/ }; do
-              case " $RESULTS " in *" $want="*) ;; *) echo "FAIL $want: there is no job of this name to run" | tee -a "$GITHUB_STEP_SUMMARY"; bad=1 ;; esac
+              [ "$want" = stage ] || [ "$want" = verdict ] || case " $RESULTS " in *" $want="*) ;; *) echo "FAIL $want: there is no job of this name to run" | tee -a "$GITHUB_STEP_SUMMARY"; bad=1 ;; esac
             done
           fi
           for pair in $RESULTS; do

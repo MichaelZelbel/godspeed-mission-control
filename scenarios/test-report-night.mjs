@@ -343,6 +343,8 @@ test('a pull request from a fork runs nothing, and its verdict passes', async ()
   const dispatch = (env) => run({ EVENT: 'workflow_dispatch', STAGE: 'success', RESULTS: names, ...env });
   assert.equal(dispatch({ PICKED: ',plain-yes,' }).status, 0, 'only: the jobs not listed are not judged');
   assert.equal(dispatch({ PICKED: ',plain-yes,voice,' }).status, 1, 'only: a listed job that did not run must fail');
+  assert.equal(dispatch({ PICKED: ',stage,' }).status, 0, 'only: `stage` is a job that always runs, not a typo');
+  assert.equal(dispatch({ PICKED: ',plain-yes,verdict,' }).status, 0, 'only: `verdict` is a job that always runs, not a typo');
   assert.equal(dispatch({ PICKED: ',plain-yes,typo-job,' }).status, 1, 'only: a name that is no job must fail');
   assert.equal(dispatch({ PICKED: ',plain-yes,mac-install,' }).status, 1, 'only: a listed Mac job that did not run must fail');
   assert.equal(dispatch({ PICKED: ',plain-yes,windows-old-names-move,' }).status, 1, 'only: a listed Windows job that did not run must fail');
