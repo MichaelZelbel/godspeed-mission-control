@@ -27,9 +27,10 @@
 #   due-before.json, due-<label>.json   the deadlines before and after each run: fine, broken, repaired
 #   notifications-before.json, notifications-<label>.json   the notebook's bell
 #   telegram-requests.json, runner.json  redacted local Bot API traffic and installed gateway state
+#   routine-diagnostics-<label>.json, routine-output-<label>/  each admitted Hermes child and its run log
 SCENARIO=connection-check
 # shellcheck source=scenarios/scenario-lib.sh
-. "$(dirname "$0")/scenario-lib.sh"
+. "$(dirname "${BASH_SOURCE[0]}")/scenario-lib.sh"
 . "$HERE/server-lib.sh"
 scenario_arguments "$@"
 
@@ -39,9 +40,11 @@ has_the_routine() { grep -qF "\"$ROUTINE\"" "$1/routines.json" 2>/dev/null; }
 no_routine() { fail "this install has no $ROUTINE (ticket 06, #200)"; }
 
 run_and_look() { # <label>: the installed routine, then its visible records
-  server_run_job "$1" "$ROUTINE" 300
+  local status=ok
+  [ "$1" = broken ] && status=delivery_failed
+  server_run_job "$1" "$ROUTINE" 300 "$status"
   server_telegram_mark "$1" cron
-  server_snapshot_table "$1" deadlines
+  server_table deadlines "$EVIDENCE/due-$1.json"
   server_snapshot_table "$1" notifications
 }
 
@@ -52,8 +55,10 @@ act() {
   server_install
   phase 'the owner on the installed Docker Telegram gateway'
   server_telegram_setup without-ai
+  server_remember_gateway
   printf '{"goal":"Sleep eight hours a night","timezone":"Etc/UTC","delivery":"telegram"}\n' >"$EVIDENCE/.setup.json"
   [ "$(server_post /api/setup "$EVIDENCE/.setup.json" "$EVIDENCE/setup.json")" = 200 ] || fail 'the installed notebook would not make routines for the fixture goal'
+  server_settle_gateway
   server_pause_all_jobs
   server_table jobs "$EVIDENCE/routines.json"
   has_the_routine "$EVIDENCE" || no_routine
@@ -91,10 +96,12 @@ check() { # <evidence folder>
 
   # fine: it says nothing.
   interaction_begin fine
-  text=$(outbox_between "$folder/run.json" fine | head -n 1)
+  text=$(outbox_between "$folder/run.json" fine | grep -Fvx '""' | head -n 1)
   [ -z "$text" ] || fail "the connection check sent a message although everything was fine: $text"
-  [ -z "$("$NODE" "$HERE/telegram-judge.mjs" deadlines "$folder/due-fine.json" "$folder/due-before.json")" ] ||
-    fail "the connection check opened a deadline although everything was fine: $("$NODE" "$HERE/telegram-judge.mjs" deadlines "$folder/due-fine.json" "$folder/due-before.json" | tr '\t\n' ' ')"
+  deadline=$("$NODE" "$HERE/telegram-judge.mjs" deadlines "$folder/due-fine.json" "$folder/due-before.json") ||
+    fail 'the fine-run deadline evidence cannot be read'
+  [ -z "$deadline" ] ||
+    fail "the connection check opened a deadline although everything was fine: $(tr '\t\n' ' ' <<<"$deadline")"
   [ "$("$NODE" "$HERE/telegram-judge.mjs" bell "$folder/notifications-fine.json" "$folder/notifications-before.json" connection)" = 0 ] ||
     fail "the connection check put a connection record in the bell although everything was fine"
   interaction_passed fine
@@ -122,11 +129,13 @@ check() { # <evidence folder>
   pass "with Telegram's key valid the connection check sent nothing, opened no deadline and rang no connection bell; with the key refused it told the owner once (one text about Telegram) and opened one deadline (\"$title\"); with the key valid again the next run closed it"
 }
 
-if [ "$CHECK_ONLY" = yes ]; then
-  install_paths
-  need_node
-  check "$EVIDENCE"
-else
-  act
-  check "$EVIDENCE"
+if [ "${BASH_SOURCE[0]}" = "$0" ]; then
+  if [ "$CHECK_ONLY" = yes ]; then
+    install_paths
+    need_node
+    check "$EVIDENCE"
+  else
+    act
+    check "$EVIDENCE"
+  fi
 fi

@@ -112,7 +112,7 @@ server_scheduled_brief() { # <note file> <seconds>
     fail 'the scheduled morning brief saved no readable note'
   "$NODE" -e 'const fs=require("fs"),source=JSON.parse(fs.readFileSync(process.argv[1],"utf8")),rows=Array.isArray(source)?source:source.data||[],before=JSON.parse(process.argv[4]);fs.writeFileSync(process.argv[2],JSON.stringify({id:process.argv[3],before_last_run_at:before,data:rows},null,2)+"\n")' "$jobs" "$EVIDENCE/job-scheduled-brief.json" "$id" "$before_run"
   server_telegram_record "$EVIDENCE/scheduled-telegram-requests.json"
-  "$NODE" -e 'const fs=require("fs"),brief=fs.readFileSync(process.argv[1],"utf8").replace(/\r\n?/g,"\n").trim(),record=JSON.parse(fs.readFileSync(process.argv[2],"utf8"));process.exit((record.sent||[]).some(sent=>String(sent.text||"").replace(/\r\n?/g,"\n").trim()===brief)?0:1)' "$1" "$EVIDENCE/scheduled-telegram-requests.json" ||
+  "$NODE" -e 'const fs=require("fs"),shown=value=>String(value||"").replace(/\r\n?/g,"\n").replace(/\[([^\]]*)\]\([^)]*\)/g,"$1").replace(/[*_~`#]/g,"").replace(/^[ \t]*>[ \t]?/gm,"").split("\n").map(line=>line.trim()).join("\n").trim(),brief=shown(fs.readFileSync(process.argv[1],"utf8")),record=JSON.parse(fs.readFileSync(process.argv[2],"utf8"));process.exit((record.sent||[]).some(sent=>shown(sent.text)===brief)?0:1)' "$1" "$EVIDENCE/scheduled-telegram-requests.json" ||
     fail 'the scheduler ran the morning brief but it never reached the installed Telegram gateway'
   rm -f "$jobs" "$notes" "$EVIDENCE"/.scheduled-brief-*
 }
@@ -147,6 +147,30 @@ server_telegram_setup() { # [without-ai]
   "$NODE" "$HERE/server-telegram.mjs" setup --server "$(server_container)" --evidence "$EVIDENCE" --notebook-port "$INGEST_PORT" \
     --token "$SERVER_TELEGRAM_TOKEN" --owner "$SERVER_TELEGRAM_OWNER" "${setup[@]}" ||
     fail 'the installed Docker Telegram setup did not hand the bot to its gateway'
+}
+# The gateway reads Hermes' time zone once, when it starts, so the Telegram runner starts it again
+# half a minute after the zone changes (docker/full-candidate/telegram-runner.mjs), and the gateway
+# tells the owner it is shutting down. A goal filed through /api/setup after the Telegram setup names
+# the zone, so a scenario remembers the gateway before that goal and waits for the restart after it:
+# otherwise the notice lands in the first routine's messages and a delivery made while the gateway
+# drains is lost.
+server_gateway_pid() {
+  in_server cat /opt/data/full-candidate/telegram/runner.json 2>/dev/null |
+    "$NODE" -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{const r=JSON.parse(s);if(r.state==="gateway"&&r.pid)process.stdout.write(String(r.pid))}catch{}})'
+}
+server_gateway_zone() { in_server_as_hermes sh -c 'grep -E "^timezone:" "$HERMES_HOME/config.yaml" 2>/dev/null || true'; }
+server_remember_gateway() {
+  SERVER_GATEWAY_PID=$(server_gateway_pid)
+  SERVER_GATEWAY_ZONE=$(server_gateway_zone)
+}
+# shellcheck disable=SC2317,SC2329  # asked by wait_for
+server_gateway_restarted() { local pid; pid=$(server_gateway_pid); [ -n "$pid" ] && [ "$pid" != "$SERVER_GATEWAY_PID" ]; }
+server_settle_gateway() {
+  [ "$(server_gateway_zone)" = "$SERVER_GATEWAY_ZONE" ] && return 0
+  wait_for 240 'the Telegram gateway to start again on the time zone the goal named' server_gateway_restarted ||
+    fail 'the Telegram gateway did not start again within 240 s after the goal changed its time zone'
+  server_telegram_mark gateway-restart cron
+  server_remember_gateway
 }
 server_telegram_say() { # <label> <text>
   interaction_begin "$1"
@@ -185,15 +209,34 @@ server_copy_evidence() {
   # Neither contains the provider key, which remains under the separate Telegram connection directory.
   local source=$1 target=$2
   local container; container=$(server_container)
-  [ -n "$container" ] && sudo docker cp "$container:$source" "$target" 2>/dev/null ||
+  if [ -n "$container" ] && sudo docker cp "$container:$source" "$target" 2>/dev/null; then
+    sudo chmod -R a+rX "$target" || fail "the copied $source evidence is not readable by the runner"
+  else
     fail "the installed server did not retain $source as evidence"
+  fi
+}
+# The same for a folder the product makes only when it needs it (a goal's playbooks, its ideas).
+server_copy_evidence_if_there() {
+  local container; container=$(server_container)
+  [ -n "$container" ] && sudo docker exec "$container" test -d "$1" || return 0
+  server_copy_evidence "$1" "$2"
 }
 server_manifest() {
   "$NODE" -e '
 const crypto=require("crypto"),fs=require("fs"),path=require("path");
 const [root,out]=process.argv.slice(1),files=[];
-for(const walk=d=>{for(const entry of fs.readdirSync(d,{withFileTypes:true})){const file=path.join(d,entry.name);if(entry.isDirectory())walk(file);else if(entry.isFile()){const data=fs.readFileSync(file);files.push({file:path.relative(root,file),bytes:data.length,sha256:crypto.createHash("sha256").update(data).digest("hex")});}}})(root);
-fs.writeFileSync(out,JSON.stringify({files},null,2)+"\\n");
+const walk=d=>{
+  for(const entry of fs.readdirSync(d,{withFileTypes:true})){
+    const file=path.join(d,entry.name);
+    if(entry.isDirectory())walk(file);
+    else if(entry.isFile()){
+      const data=fs.readFileSync(file);
+      files.push({file:path.relative(root,file),bytes:data.length,sha256:crypto.createHash("sha256").update(data).digest("hex")});
+    }
+  }
+};
+walk(root);
+fs.writeFileSync(out,JSON.stringify({files},null,2)+"\n");
 ' "$EVIDENCE" "$EVIDENCE/manifest.json" || fail 'the scenario could not write its evidence manifest'
 }
 
@@ -209,24 +252,69 @@ server_pause_all_jobs() {
       fail "Settings would not pause routine $id"
   done
 }
-server_run_job() { # <label> <job name> <seconds>
-  local jobs=$EVIDENCE/jobs-$1.json id before
+server_routine_evidence_paths() {
+  in_server node --input-type=module -e 'import {routineRunEvidencePaths} from "/opt/godspeed/kit/notebook/core/native-scheduler.mjs";process.stdout.write(JSON.stringify(routineRunEvidencePaths({workspace:process.env.GODSPEED_WORKSPACE,home:process.env.HERMES_HOME})));'
+}
+server_routine_evidence_path() { # <descriptor JSON> <diagnostics|output>
+  "$NODE" -e 'const value=JSON.parse(process.argv[1])[process.argv[2]];if(typeof value!=="string"||!value.startsWith("/"))process.exit(1);process.stdout.write(value)' "$1" "$2"
+}
+server_keep_routine_diagnostics() { # <label>
+  # The notebook writes the admission record before it starts Hermes, so this is
+  # also available when Settings refuses a second routine run.
+  local paths diagnostics output container
+  paths=$(server_routine_evidence_paths) || fail 'the installed server did not name its routine evidence paths'
+  diagnostics=$(server_routine_evidence_path "$paths" diagnostics) || fail 'the installed server named no routine diagnostics path'
+  output=$(server_routine_evidence_path "$paths" output) || fail 'the installed server named no routine output path'
+  server_copy_evidence "$diagnostics" "$EVIDENCE/routine-diagnostics-$1.json"
+  container=$(server_container)
+  if [ -n "$container" ] && sudo docker exec "$container" test -d "$output"; then
+    server_copy_evidence "$output" "$EVIDENCE/routine-output-$1"
+  fi
+}
+server_pause_job() { # <id> <label>
+  printf '{"id":%s,"paused":true}' "$(quoted_json "$1")" >"$EVIDENCE/.job-$2-pause.json"
+  [ "$(server_post /api/jobs/update "$EVIDENCE/.job-$2-pause.json" "$EVIDENCE/job-$2-pause.json")" = 200 ] ||
+    fail "Settings would not pause routine $1 after its run"
+}
+server_keep_routine_diagnostics_or_pause() { # <label> <id> <job name>
+  if (server_keep_routine_diagnostics "$1"); then return; fi
+  server_pause_job "$2" "$1"
+  fail "the installed server could not retain diagnostics for \"$3\" after its run"
+}
+server_run_job() { # <label> <job name> <seconds> [expected terminal status]
+  local jobs=$EVIDENCE/jobs-$1.json id before retry=0 expected=${4:-ok}
   server_table jobs "$jobs"
   id=$(server_job_id "$2" "$jobs")
   [ -n "$id" ] || fail "the installed server has no routine called \"$2\""
   before=$("$NODE" -e 'const fs=require("fs"),d=JSON.parse(fs.readFileSync(process.argv[1],"utf8")),rows=Array.isArray(d)?d:d.data||[],j=rows.find(v=>v?.id===process.argv[2]);process.stdout.write(String(j?.last_run_at||""))' "$jobs" "$id")
+  printf '{"id":%s,"paused":false}' "$(quoted_json "$id")" >"$EVIDENCE/.job-$1-resume.json"
+  [ "$(server_post /api/jobs/update "$EVIDENCE/.job-$1-resume.json" "$EVIDENCE/job-$1-resume.json")" = 200 ] ||
+    fail "Settings would not resume routine \"$2\" for its run"
   printf '{"id":%s}' "$(quoted_json "$id")" >"$EVIDENCE/.job-run.json"
-  case $(server_post /api/jobs/run "$EVIDENCE/.job-run.json" "$EVIDENCE/job-$1-start.json") in
-    200|202) ;;
-    *) fail "Settings would not run \"$2\": $(tr -d '\n' <"$EVIDENCE/job-$1-start.json" | cut -c1-200)" ;;
-  esac
+  while :; do
+    case $(server_post /api/jobs/run "$EVIDENCE/.job-run.json" "$EVIDENCE/job-$1-start.json") in
+      200|202) break ;;
+    esac
+    server_keep_routine_diagnostics_or_pause "$1" "$id" "$2"
+    if [ "$retry" = 0 ] && "$NODE" -e 'const fs=require("fs"),runs=JSON.parse(fs.readFileSync(process.argv[1],"utf8")).runs||[],last=runs.at(-1);process.exit(last?.admitted===false&&last.lifecycle_owner==="routine tick"?0:1)' "$EVIDENCE/routine-diagnostics-$1.json"; then
+      retry=1; sleep 5
+    else
+      server_pause_job "$id" "$1"
+      fail "Settings would not run \"$2\": $(tr -d '\n' <"$EVIDENCE/job-$1-start.json" | cut -c1-200)"
+    fi
+  done
   server_job_finished() {
     server_table jobs "$jobs" 2>/dev/null &&
-      "$NODE" -e 'const fs=require("fs"),d=JSON.parse(fs.readFileSync(process.argv[1],"utf8")),rows=Array.isArray(d)?d:d.data||[],j=rows.find(v=>v?.id===process.argv[2]);process.exit(j?.last_run_at&&j.last_run_at!==process.argv[3]&&j?.last_status==="ok"?0:1)' "$jobs" "$id" "$before"
+      "$NODE" -e 'const fs=require("fs"),d=JSON.parse(fs.readFileSync(process.argv[1],"utf8")),rows=Array.isArray(d)?d:d.data||[],j=rows.find(v=>v?.id===process.argv[2]);process.exit(j?.last_run_at&&j.last_run_at!==process.argv[3]&&j?.last_status===process.argv[4]?0:1)' "$jobs" "$id" "$before" "$expected"
   }
-  wait_for "$3" "the installed routine $2" server_job_finished ||
+  if ! wait_for "$3" "the installed routine $2" server_job_finished; then
+    server_keep_routine_diagnostics_or_pause "$1" "$id" "$2"
+    server_pause_job "$id" "$1"
     fail "the installed routine \"$2\" did not finish successfully within $3 s"
+  fi
+  server_keep_routine_diagnostics_or_pause "$1" "$id" "$2"
   cp "$jobs" "$EVIDENCE/job-$1.json"
+  server_pause_job "$id" "$1"
 }
 
 server_snapshot_table() { # <label> <table>

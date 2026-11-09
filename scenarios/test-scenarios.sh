@@ -109,6 +109,30 @@ server_download_failure() {
   fi
 }
 
+server_manifest_writes_evidence_manifest() {
+  local evidence=$TMP/server-manifest output code
+  mkdir -p "$evidence/nested"
+  printf 'top-level evidence\n' >"$evidence/top.txt"
+  printf 'nested evidence\n' >"$evidence/nested/item.txt"
+  output=$(NODE="${NODE:-node}" EVIDENCE="$evidence" bash -c '
+    . "$1"
+    fail() { printf "%s\\n" "$*" >&2; exit 42; }
+    server_manifest
+  ' bash "$HERE/server-lib.sh" 2>&1)
+  code=$?
+  if [ "$code" = 0 ] && node -e '
+    const fs=require("fs");
+    const files=JSON.parse(fs.readFileSync(process.argv[1],"utf8")).files;
+    process.exit(files.some(file=>file.file==="top.txt"&&file.bytes===19)&&files.some(file=>file.file==="nested/item.txt"&&file.bytes===16)?0:1);
+  ' "$evidence/manifest.json"; then
+    ok 'the real server manifest helper records nested scenario evidence'
+  else
+    bad "the real server manifest helper records nested scenario evidence (exit $code: $output)"
+  fi
+}
+
+server_manifest_writes_evidence_manifest
+
 server_installed_asker() {
   local candidate=$TMP/asker-candidate hermes=$TMP/asker-hermes target=$TMP/asker-home/scripts/scenario-asker.py args=$TMP/asker-args output code
   mkdir -p "$candidate/scenarios" "$TMP/asker-home/scripts" "$TMP/asker-workspace" "$hermes"
@@ -242,6 +266,242 @@ server_local_listener_port() {
   fi
 }
 server_local_listener_port
+
+server_copied_evidence_is_runner_readable() {
+  local evidence=$TMP/server-copy-evidence-readable log=$TMP/server-copy-evidence.log output
+  mkdir -p "$evidence"
+  if output=$(EVIDENCE="$evidence" SERVER_COPY_LOG="$log" bash -c '
+    . "$1"
+    fail() { printf "%s\\n" "$*" >&2; exit 42; }
+    server_container() { printf fixture; }
+    sudo() {
+      printf "%s\\n" "$*" >>"$SERVER_COPY_LOG"
+      case $1 in
+        docker) mkdir -p "$4"; : >"$4/run.md" ;;
+        chmod) : ;;
+      esac
+    }
+    server_copy_evidence /opt/data/full-candidate/hermes/cron/output "$EVIDENCE/routine-output-report"
+  ' bash "$HERE/server-lib.sh" 2>&1); then
+    if grep -Fqx "docker cp fixture:/opt/data/full-candidate/hermes/cron/output $evidence/routine-output-report" "$log" \
+      && grep -Fqx "chmod -R a+rX $evidence/routine-output-report" "$log"; then
+      ok 'copied routine output is made readable for the Actions runner'
+    else
+      bad "copied routine output is not made readable for the Actions runner ($(cat "$log" 2>/dev/null))"
+    fi
+  else
+    bad "copied routine output could not be made readable for the Actions runner ($output)"
+  fi
+}
+server_copied_evidence_is_runner_readable
+
+server_routine_evidence_paths_come_from_scheduler() {
+  local result=$TMP/server-routine-evidence-paths.json command=$TMP/server-routine-evidence-command output
+  if output=$(SERVER_ROUTINE_COMMAND="$command" bash -c '
+    . "$1"
+    in_server() { printf "%s\\n" "$*" >"$SERVER_ROUTINE_COMMAND"; printf "{\\\"diagnostics\\\":\\\"/owned/diagnostics.json\\\",\\\"output\\\":\\\"/owned/output\\\"}"; }
+    server_routine_evidence_paths
+  ' bash "$HERE/server-lib.sh" >"$result" 2>&1); then
+    if [ "$(<"$result")" = '{"diagnostics":"/owned/diagnostics.json","output":"/owned/output"}' ] && grep -Fq 'routineRunEvidencePaths' "$command"; then
+      ok 'routine evidence paths come from the installed scheduler'
+    else
+      bad "routine evidence paths do not come from the installed scheduler ($(cat "$command" 2>/dev/null): $output)"
+    fi
+  else
+    bad "the installed scheduler could not name routine evidence paths ($output)"
+  fi
+}
+server_routine_evidence_paths_come_from_scheduler
+
+server_run_job_keeps_success_evidence() {
+  local evidence=$TMP/server-run-job-evidence copies updates output
+  mkdir -p "$evidence"
+  if output=$(EVIDENCE="$evidence" SERVER_COPY_LOG="$evidence/copies" SERVER_UPDATES="$evidence/updates" NODE="$(command -v node)" bash -c '
+    . "$1"
+    quoted_json() { "$NODE" -e "process.stdout.write(JSON.stringify(process.argv[1]))" "$1"; }
+    tables=0
+    server_table() {
+      tables=$((tables + 1))
+      if [ "$tables" = 1 ]; then printf "[{\\\"id\\\":\\\"brief\\\",\\\"name\\\":\\\"Coach reminders and habit check\\\",\\\"last_run_at\\\":null,\\\"last_status\\\":null}]\\n" >"$2";
+      else printf "[{\\\"id\\\":\\\"brief\\\",\\\"name\\\":\\\"Coach reminders and habit check\\\",\\\"last_run_at\\\":\\\"later\\\",\\\"last_status\\\":\\\"ok\\\"}]\\n" >"$2"; fi
+    }
+    server_post() {
+      case $1 in
+        /api/jobs/update) printf "%s\\n" "$(cat "$2")" >>"$SERVER_UPDATES"; printf "{}\\n" >"$3"; printf 200 ;;
+        /api/jobs/run) printf "{\\\"started\\\":true}\\n" >"$3"; printf 202 ;;
+      esac
+    }
+    wait_for() { "${@:3}"; }
+    server_container() { printf fixture; }
+    sudo() { return 0; }
+    server_routine_evidence_paths() { printf "{\\\"diagnostics\\\":\\\"/owned/diagnostics.json\\\",\\\"output\\\":\\\"/owned/output\\\"}"; }
+    server_copy_evidence() { printf "%s|%s\\n" "$1" "$2" >>"$SERVER_COPY_LOG"; : >"$2"; }
+    server_run_job report "Coach reminders and habit check" 10
+  ' bash "$HERE/server-lib.sh" 2>&1); then
+    copies=$(<"$evidence/copies")
+    updates=$(<"$evidence/updates")
+    if grep -Fqx "/owned/diagnostics.json|$evidence/routine-diagnostics-report.json" "$evidence/copies" \
+      && grep -Fqx "/owned/output|$evidence/routine-output-report" "$evidence/copies" \
+      && [ "$updates" = "$(printf '%s\n%s' '{"id":"brief","paused":false}' '{"id":"brief","paused":true}')" ]; then
+      ok 'a successful routine run retains evidence and restores its paused state'
+    else
+      bad "a successful routine run retains evidence and restores its paused state (copies: $copies; updates: $updates)"
+    fi
+  else
+    bad "a successful routine run retains its diagnostics and cron output evidence ($output)"
+  fi
+}
+server_run_job_keeps_success_evidence
+
+server_run_job_accepts_expected_delivery_status() {
+  local evidence=$TMP/server-run-job-delivery-failed updates output
+  updates=$evidence/updates
+  mkdir -p "$evidence"
+  if output=$(EVIDENCE="$evidence" SERVER_UPDATES="$updates" NODE="$(command -v node)" bash -c '
+    . "$1"
+    quoted_json() { "$NODE" -e "process.stdout.write(JSON.stringify(process.argv[1]))" "$1"; }
+    tables=0
+    server_table() {
+      tables=$((tables + 1))
+      if [ "$tables" = 1 ]; then printf "[{\\\"id\\\":\\\"connection\\\",\\\"name\\\":\\\"Daily connection check\\\",\\\"last_run_at\\\":null,\\\"last_status\\\":null}]\\n" >"$2";
+      else printf "[{\\\"id\\\":\\\"connection\\\",\\\"name\\\":\\\"Daily connection check\\\",\\\"last_run_at\\\":\\\"later\\\",\\\"last_status\\\":\\\"delivery_failed\\\"}]\\n" >"$2"; fi
+    }
+    server_post() {
+      case $1 in
+        /api/jobs/update) printf "%s\\n" "$(cat "$2")" >>"$SERVER_UPDATES"; printf "{}\\n" >"$3"; printf 200 ;;
+        /api/jobs/run) printf "{\\\"started\\\":true}\\n" >"$3"; printf 202 ;;
+      esac
+    }
+    wait_for() { "${@:3}"; }
+    server_container() { printf fixture; }
+    sudo() { return 0; }
+    server_routine_evidence_paths() { printf "{\\\"diagnostics\\\":\\\"/owned/diagnostics.json\\\",\\\"output\\\":\\\"/owned/output\\\"}"; }
+    server_copy_evidence() { : >"$2"; }
+    server_run_job broken "Daily connection check" 10 delivery_failed
+  ' bash "$HERE/server-lib.sh" 2>&1); then
+    if [ "$(<"$updates")" = "$(printf '%s\n%s' '{"id":"connection","paused":false}' '{"id":"connection","paused":true}')" ]; then
+      ok 'a deliberately refused delivery can complete its routine check'
+    else
+      bad "a deliberately refused delivery did not restore its routine state ($(cat "$updates" 2>/dev/null))"
+    fi
+  else
+    bad "a deliberately refused delivery did not complete its routine check ($output)"
+  fi
+}
+server_run_job_accepts_expected_delivery_status
+
+connection_check_preserves_due_snapshots_and_uses_the_expected_status_for_each_phase() {
+  local evidence=$TMP/connection-check-statuses calls=$TMP/connection-check-calls snapshots=$TMP/connection-check-snapshots output
+  mkdir -p "$evidence"
+  if output=$(EVIDENCE="$evidence" CONNECTION_CHECK_CALLS="$calls" CONNECTION_CHECK_SNAPSHOTS="$snapshots" bash -c '
+    source=$1
+    set -- --check "$2"
+    . "$source"
+    server_run_job() { printf "%s|%s\\n" "$1" "$4" >>"$CONNECTION_CHECK_CALLS"; }
+    server_telegram_mark() { :; }
+    server_table() { printf "%s\\n" "$2" >>"$CONNECTION_CHECK_SNAPSHOTS"; printf "[]\\n" >"$2"; }
+    run_and_look fine
+    run_and_look broken
+    run_and_look repaired
+  ' bash "$HERE/connection-check.sh" "$evidence" 2>&1); then
+    if [ "$(<"$calls")" = "$(printf '%s\n%s\n%s' 'fine|ok' 'broken|delivery_failed' 'repaired|ok')" ] \
+      && [ "$(<"$snapshots")" = "$(printf '%s\n%s\n%s\n%s\n%s\n%s' "$evidence/due-fine.json" "$evidence/notifications-fine.json" "$evidence/due-broken.json" "$evidence/notifications-broken.json" "$evidence/due-repaired.json" "$evidence/notifications-repaired.json")" ]; then
+      ok 'connection-check keeps due snapshots and gives only its broken-key routine delivery_failed'
+    else
+      bad "connection-check used the wrong routine statuses or snapshots (statuses: $(cat "$calls" 2>/dev/null); snapshots: $(cat "$snapshots" 2>/dev/null))"
+    fi
+  else
+    bad "connection-check could not run its routine-status or snapshot phases ($output)"
+  fi
+}
+connection_check_preserves_due_snapshots_and_uses_the_expected_status_for_each_phase
+
+server_run_job_restores_pause_after_diagnostic_failure() {
+  local mode evidence updates output code
+  for mode in refused timed-out succeeded; do
+    evidence=$TMP/server-run-job-diagnostic-failure-$mode
+    updates=$evidence/updates
+    mkdir -p "$evidence"
+    output=$(SERVER_MODE="$mode" EVIDENCE="$evidence" SERVER_UPDATES="$updates" NODE="$(command -v node)" bash -c '
+    . "$1"
+    fail() { printf "FAIL: %s\\n" "$*" >&2; exit 42; }
+    quoted_json() { "$NODE" -e "process.stdout.write(JSON.stringify(process.argv[1]))" "$1"; }
+    tables=0
+    server_table() {
+      tables=$((tables + 1))
+      if [ "$tables" = 1 ]; then printf "[{\\\"id\\\":\\\"brief\\\",\\\"name\\\":\\\"Coach reminders and habit check\\\",\\\"last_run_at\\\":null,\\\"last_status\\\":null}]\\n" >"$2";
+      else printf "[{\\\"id\\\":\\\"brief\\\",\\\"name\\\":\\\"Coach reminders and habit check\\\",\\\"last_run_at\\\":\\\"later\\\",\\\"last_status\\\":\\\"ok\\\"}]\\n" >"$2"; fi
+    }
+    server_post() {
+      case $1 in
+        /api/jobs/update) printf "%s\\n" "$(cat "$2")" >>"$SERVER_UPDATES"; printf "{}\\n" >"$3"; printf 200 ;;
+        /api/jobs/run)
+          if [ "$SERVER_MODE" = refused ]; then printf "{\\\"error\\\":\\\"The assistant is updating or another routine is already running.\\\"}\\n" >"$3"; printf 409;
+          else printf "{\\\"started\\\":true}\\n" >"$3"; printf 202; fi ;;
+      esac
+    }
+    wait_for() { if [ "$SERVER_MODE" = timed-out ]; then return 1; fi; "${@:3}"; }
+    server_container() { printf fixture; }
+    sudo() { return 0; }
+    server_routine_evidence_paths() { printf "{\\\"diagnostics\\\":\\\"/owned/diagnostics.json\\\",\\\"output\\\":\\\"/owned/output\\\"}"; }
+    server_copy_evidence() {
+      if [ "$1" = /owned/diagnostics.json ]; then : >"$2"; else return 1; fi
+    }
+    server_run_job report "Coach reminders and habit check" 10
+  ' bash "$HERE/server-lib.sh" 2>&1)
+    code=$?
+    if [ "$code" != 42 ] || [ "$(<"$updates")" != "$(printf '%s\n%s' '{"id":"brief","paused":false}' '{"id":"brief","paused":true}')" ] \
+      || [[ $output != *'could not retain diagnostics'* ]]; then
+      bad "a $mode diagnostic-copy failure did not restore the routine’s paused state (exit $code: $output; updates: $(cat "$updates" 2>/dev/null))"
+      return
+    fi
+  done
+  ok 'diagnostic-copy failures restore the routine’s paused state after refusal, timeout, and success'
+}
+server_run_job_restores_pause_after_diagnostic_failure
+
+server_run_job_retries_a_tick_refusal() {
+  local evidence=$TMP/server-run-job-tick-retry output
+  mkdir -p "$evidence"
+  if output=$(EVIDENCE="$evidence" SERVER_RUNS="$evidence/runs" bash -c '
+    . "$1"
+    tables=0
+    server_table() {
+      tables=$((tables + 1))
+      if [ "$tables" = 1 ]; then printf "[{\\\"id\\\":\\\"brief\\\",\\\"name\\\":\\\"Coach reminders and habit check\\\",\\\"last_run_at\\\":null,\\\"last_status\\\":null}]\\n" >"$2";
+      else printf "[{\\\"id\\\":\\\"brief\\\",\\\"name\\\":\\\"Coach reminders and habit check\\\",\\\"last_run_at\\\":\\\"later\\\",\\\"last_status\\\":\\\"ok\\\"}]\\n" >"$2"; fi
+    }
+    server_post() {
+      case $1 in
+        /api/jobs/update) printf "{}\\n" >"$3"; printf 200 ;;
+        /api/jobs/run)
+          printf x >>"$SERVER_RUNS"
+          if [ "$(wc -c <"$SERVER_RUNS")" = 1 ]; then printf "{\\\"error\\\":\\\"The assistant is updating or another routine is already running.\\\"}\\n" >"$3"; printf 409;
+          else printf "{\\\"started\\\":true}\\n" >"$3"; printf 202; fi ;;
+      esac
+    }
+    wait_for() { "${@:3}"; }
+    sleep() { :; }
+    server_container() { printf fixture; }
+    sudo() { return 0; }
+    server_routine_evidence_paths() { printf "{\\\"diagnostics\\\":\\\"/owned/diagnostics.json\\\",\\\"output\\\":\\\"/owned/output\\\"}"; }
+    server_copy_evidence() {
+      if [ "$1" = /owned/diagnostics.json ]; then
+        printf "{\\\"runs\\\":[{\\\"admitted\\\":false,\\\"lifecycle_owner\\\":\\\"routine tick\\\"}]}\\n" >"$2"
+      else : >"$2"; fi
+    }
+    server_run_job report "Coach reminders and habit check" 10
+  ' bash "$HERE/server-lib.sh" 2>&1); then
+    if [ "$(wc -c <"$evidence/runs")" = 2 ]; then
+      ok 'a routine run retries once after the scheduler tick’s protective refusal'
+    else
+      bad "a routine run retries once after the scheduler tick’s protective refusal ($(wc -c <"$evidence/runs") run requests)"
+    fi
+  else
+    bad "a routine run retries once after the scheduler tick’s protective refusal ($output)"
+  fi
+}
+server_run_job_retries_a_tick_refusal
 
 server_telegram_setup_override() {
   local bin=$TMP/server-telegram-override-bin trace=$TMP/server-telegram-override.trace output port
@@ -3002,9 +3262,9 @@ cc_good() { # <folder>
   printf '[]\n' >"$f/due-before.json"
   printf '{"data":[]}\n' >"$f/notifications-before.json"
   for label in fine; do printf '[]\n' >"$f/due-$label.json"; printf '{"data":[]}\n' >"$f/notifications-$label.json"; done
-  printf '[{"slug":"telegram-key","title":"Connect Telegram again","state":"open"}]\n' >"$f/due-broken.json"
+  printf '[{"slug":"telegram-key","title":"Connect Telegram again","status":"open"}]\n' >"$f/due-broken.json"
   printf '{"data":[{"id":"n1","kind":"connection-telegram","body":"Telegram refused your bot key, so I cannot reach you there. Open Settings to connect it again."}]}\n' >"$f/notifications-broken.json"
-  printf '[{"slug":"telegram-key","title":"Connect Telegram again","state":"closed"}]\n' >"$f/due-repaired.json"
+  printf '[{"slug":"telegram-key","title":"Connect Telegram again","status":"closed"}]\n' >"$f/due-repaired.json"
   printf '{"data":[]}\n' >"$f/notifications-repaired.json"
   printf '{"requests":[{"method":"getMe","authorized":true},{"method":"getMe","authorized":false},{"method":"getMe","authorized":true}]}\n' >"$f/telegram-requests.json"
   printf '{"state":"gateway"}\n' >"$f/runner.json"
@@ -3027,9 +3287,15 @@ refuses 'a check that never reached the stand-in' connection-check "$C/never-rea
 copy "$C/good" "$C/speaks-when-fine"
 run_json "$C/speaks-when-fine" "$(msg fine 'All is well.')" "$(msg broken 'Telegram refused your bot key.')"
 refuses 'a message although everything is fine' connection-check "$C/speaks-when-fine" 'although everything was fine'
+copy "$C/good" "$C/empty-when-fine"
+run_json "$C/empty-when-fine" "$(msg fine '')" "$(msg broken 'Telegram refused your bot key, so I cannot reach you there. Open Settings to connect it again.')"
+passes 'an empty delivery while everything is fine' connection-check "$C/empty-when-fine" 'told the owner once'
 copy "$C/good" "$C/deadline-when-fine"
-printf '[{"slug":"x","title":"Something","state":"open"}]\n' >"$C/deadline-when-fine/due-fine.json"
+printf '[{"slug":"x","title":"Something","status":"open"}]\n' >"$C/deadline-when-fine/due-fine.json"
 refuses 'a deadline although everything is fine' connection-check "$C/deadline-when-fine" 'opened a deadline although'
+copy "$C/good" "$C/fine-deadline-malformed"
+printf '{\n' >"$C/fine-deadline-malformed/due-fine.json"
+refuses 'unreadable fine-run deadline evidence' connection-check "$C/fine-deadline-malformed" 'fine-run deadline evidence cannot be read'
 copy "$C/good" "$C/bell-when-fine"
 printf '{"data":[{"id":"n9","kind":"connection-telegram","body":"x"}]}\n' >"$C/bell-when-fine/notifications-fine.json"
 printf '{"data":[{"id":"n9","kind":"connection-telegram","body":"x"}]}\n' >"$C/bell-when-fine/notifications-broken.json"
@@ -3046,20 +3312,28 @@ copy "$C/good" "$C/no-deadline"
 printf '[]\n' >"$C/no-deadline/due-broken.json"
 refuses 'no deadline when broken' connection-check "$C/no-deadline" 'opened 0 deadlines'
 copy "$C/good" "$C/two-deadlines"
-printf '[{"slug":"a","title":"Connect Telegram again","state":"open"},{"slug":"b","title":"Telegram again","state":"open"}]\n' >"$C/two-deadlines/due-broken.json"
+printf '[{"slug":"a","title":"Connect Telegram again","status":"open"},{"slug":"b","title":"Telegram again","status":"open"}]\n' >"$C/two-deadlines/due-broken.json"
 refuses 'two deadlines when broken' connection-check "$C/two-deadlines" 'opened 2 deadlines'
 copy "$C/good" "$C/still-open"
-printf '[{"slug":"telegram-key","title":"Connect Telegram again","state":"open"}]\n' >"$C/still-open/due-repaired.json"
+printf '[{"slug":"telegram-key","title":"Connect Telegram again","status":"open"}]\n' >"$C/still-open/due-repaired.json"
 copy "$C/good" "$C/deleted"
 printf '[]\n' >"$C/deleted/due-repaired.json"
 refuses 'a deadline deleted instead of closed' connection-check "$C/deleted" 'absent, not closed'
 copy "$C/good" "$C/decoy-closed"
-printf '[{"slug":"the-open-deadline","title":"Connect Telegram again","state":"open"},{"slug":"the-decoy","title":"Telegram old","state":"closed"}]\n' >"$C/decoy-closed/due-broken.json"
-printf '[{"slug":"the-open-deadline","title":"Connect Telegram again","state":"open"},{"slug":"the-decoy","title":"Telegram old","state":"closed"}]\n' >"$C/decoy-closed/due-repaired.json"
+printf '[{"slug":"the-open-deadline","title":"Connect Telegram again","status":"open"},{"slug":"the-decoy","title":"Telegram old","status":"closed"}]\n' >"$C/decoy-closed/due-broken.json"
+printf '[{"slug":"the-open-deadline","title":"Connect Telegram again","status":"open"},{"slug":"the-decoy","title":"Telegram old","status":"closed"}]\n' >"$C/decoy-closed/due-repaired.json"
 refuses 'another closed Telegram deadline standing in for the open one' connection-check "$C/decoy-closed" 'not closed, after'
 refuses 'a deadline still open after the key is valid again' connection-check "$C/still-open" 'not closed, after'
 
 # ---------------------------------------------------------------------------------------- first-day
+first_day_brief_records() { # <folder>: what the brief in brief.txt leaves in Telegram and the notebook
+  local f=$1
+  printf '{"sent":[{"text":%s}]}\n' "$(node -e 'process.stdout.write(JSON.stringify(require("fs").readFileSync(process.argv[1],"utf8")))' "$f/brief.txt")" >"$f/scheduled-telegram-requests.json"
+  run_json "$f" "$(msg scheduled-brief "$(cat "$f/brief.txt")")" "$(msg todays-brief "$(cat "$f/brief.txt")")"
+  printf '[]\n' >"$f/work-items.json"
+  printf '{"data":[{"id":"brief-1","content":%s}]}\n' "$(node -e 'process.stdout.write(JSON.stringify(require("fs").readFileSync(process.argv[1],"utf8")))' "$f/brief.txt")" >"$f/notes-before-reply.json"
+  cp "$f/notes-before-reply.json" "$f/notes-after-reply.json"
+}
 first_day_good() { # <folder>
   local f=$1 label table sparse
   rm -rf "$f"; mkdir -p "$f/work"
@@ -3085,11 +3359,7 @@ EOF
   printf '{"requests":[{"method":"getUpdates","authorized":true},{"method":"sendMessage","authorized":true}]}\n' >"$f/telegram-requests.json"
   printf '{"id":"scheduled-brief","before_last_run_at":null,"data":[{"id":"scheduled-brief","last_run_at":"2026-11-06T10:01:00Z","last_status":"ok"}]}\n' >"$f/job-scheduled-brief.json"
   printf 'Morning brief: source=builtin\n' >"$f/brief-cron-runs.txt"
-  printf '{"sent":[{"text":%s}]}\n' "$(node -e 'process.stdout.write(JSON.stringify(require("fs").readFileSync(process.argv[1],"utf8")))' "$f/brief.txt")" >"$f/scheduled-telegram-requests.json"
-  run_json "$f" "$(msg scheduled-brief "$(cat "$f/brief.txt")")" "$(msg todays-brief "$(cat "$f/brief.txt")")"
-  printf '[]\n' >"$f/work-items.json"
-  printf '{"data":[{"id":"brief-1","content":%s}]}\n' "$(node -e 'process.stdout.write(JSON.stringify(require("fs").readFileSync(process.argv[1],"utf8")))' "$f/brief.txt")" >"$f/notes-before-reply.json"
-  cp "$f/notes-before-reply.json" "$f/notes-after-reply.json"
+  first_day_brief_records "$f"
   printf '{"files":[{"file":"brief.txt","bytes":1,"sha256":"test"}]}\n' >"$f/manifest.json"
 }
 section first-day
@@ -3099,6 +3369,49 @@ passes 'fresh Docker first day makes useful verified work, a sparse-data brief, 
 copy "$FD/good" "$FD/no-research"
 printf '[]\n' >"$FD/no-research/job-research.json"
 refuses 'a first day without research' first-day "$FD/no-research" 'research routine has no successful'
+# The product's own verified work for the goal, when the daily round did not take the late-filed item.
+copy "$FD/good" "$FD/product-work"
+printf 'ID: W-000-first-day-emergency-kit\nSTATUS: planned\nKEY: first-day-emergency-kit\nWHAT: Write a practical household emergency-kit checklist at work/emergency-kit-checklist.md\nSOURCE: first-day-scenario\n' >"$FD/product-work/work/W-000-first-day-emergency-kit.md"
+printf 'ID: W-20261106-01\nSTATUS: verified\nKIND: learn\nGOAL: prepare-a-practical-household-emergency-kit-checklist-by-sun\nWHAT: How do households build a practical emergency kit?\nCHECK: mc-check-written goals/playbooks/emergency-kit.md --min-words 50\nRESULT: The playbook is at goals/playbooks/emergency-kit.md.\n\n- 2026-11-06 VERIFIED check passed (mc-check-written goals/playbooks/emergency-kit.md)\n' >"$FD/product-work/work/W-20261106-01.md"
+mkdir -p "$FD/product-work/goals/playbooks"
+node -e 'process.stdout.write("## Who we model\n"+"Households that keep water, food, light and documents ready. ".repeat(12))' >"$FD/product-work/goals/playbooks/emergency-kit.md"
+printf 'One of your saved goals is Prepare a practical household emergency-kit checklist by Sunday..\n\nGodspeed has verified this work: How do households build a practical emergency kit?\n\nNext: review the work Godspeed verified and say what it should do with it.\n' >"$FD/product-work/brief.txt"
+first_day_brief_records "$FD/product-work"
+passes "a first day whose round did the product's own verified work for the goal" first-day "$FD/product-work" 'answered today'
+copy "$FD/product-work" "$FD/product-work-no-result"
+rm "$FD/product-work-no-result/goals/playbooks/emergency-kit.md"
+refuses 'verified product work whose result was not kept' first-day "$FD/product-work-no-result" 'no other work for the goal was verified'
+copy "$FD/product-work" "$FD/product-work-other-goal"
+sed -i 's/^GOAL: .*/GOAL: plant-the-fictional-garden/' "$FD/product-work-other-goal/work/W-20261106-01.md"
+refuses 'verified work for another goal' first-day "$FD/product-work-other-goal" 'no other work for the goal was verified'
+copy "$FD/product-work" "$FD/product-work-unnamed"
+printf 'One of your saved goals is Prepare a practical household emergency-kit checklist by Sunday..\n\nNext: review the work Godspeed verified and say what it should do with it.\n' >"$FD/product-work-unnamed/brief.txt"
+first_day_brief_records "$FD/product-work-unnamed"
+refuses 'a brief that does not name the product work' first-day "$FD/product-work-unnamed" 'does not identify the verified work'
+# A brief the model wrote: the goal in its own words, and the next steps as a numbered list.
+copy "$FD/product-work" "$FD/own-words"
+printf 'The playbook is finished at goals/playbooks/emergency-kit.md. It explains how households build one.\n\nWhat would help most for having your kit ready by Sunday:\n\n1. Open the checklist and tick what you already own.\n2. Fill in how many people it is for.\n' >"$FD/own-words/brief.txt"
+first_day_brief_records "$FD/own-words"
+passes 'a model-written brief that names the goal and its next steps in its own words' first-day "$FD/own-words" 'answered today'
+copy "$FD/product-work" "$FD/own-words-no-goal"
+printf 'The playbook for your kit is finished. It explains how people start.\n\nWhat would help most today:\n\n1. Open the playbook and read its first section.\n' >"$FD/own-words-no-goal/brief.txt"
+first_day_brief_records "$FD/own-words-no-goal"
+refuses 'a brief with only one word of the goal' first-day "$FD/own-words-no-goal" 'does not name the emergency-kit goal'
+copy "$FD/product-work" "$FD/own-words-no-step"
+printf 'The playbook for your kit by Sunday is finished.\n\nSources:\n\n1. Ready.gov\n2. Red Cross\n' >"$FD/own-words-no-step/brief.txt"
+first_day_brief_records "$FD/own-words-no-step"
+refuses 'a numbered list that is not a next step' first-day "$FD/own-words-no-step" 'no concrete next action'
+copy "$FD/product-work" "$FD/own-words-list-unrelated"
+printf 'The playbook for your kit by Sunday is finished.\n\nThe sources it read:\n\n- Read the Ready.gov page.\n' >"$FD/own-words-list-unrelated/brief.txt"
+first_day_brief_records "$FD/own-words-list-unrelated"
+refuses 'a step under a sentence that is not about next steps' first-day "$FD/own-words-list-unrelated" 'no concrete next action'
+copy "$FD/good" "$FD/goal-in-goals"
+printf '{"configured":true,"preserved":true,"results":[]}\n' >"$FD/goal-in-goals/setup.json"
+printf '{"data":[{"id":"g1","title":"Prepare a practical household emergency-kit checklist by Sunday."}]}\n' >"$FD/goal-in-goals/goals-after-setup.json"
+passes 'a first day whose goal the notebook holds among its goals' first-day "$FD/goal-in-goals" 'answered today'
+copy "$FD/goal-in-goals" "$FD/goal-missing"
+printf '{"data":[{"id":"g1","title":"Something else"}]}\n' >"$FD/goal-missing/goals-after-setup.json"
+refuses 'a first day whose notebook kept no such goal' first-day "$FD/goal-missing" 'did not retain the fictional emergency-kit goal'
 copy "$FD/good" "$FD/unverified"
 sed -i 's/STATUS: verified/STATUS: planned/' "$FD/unverified/work/W-000-first-day-emergency-kit.md"
 cp "$FD/good/work/W-000-first-day-emergency-kit.md" "$FD/unverified/work/W-other-verified.md"
@@ -3157,7 +3470,9 @@ node -e 'const fs=require("fs"),p=process.argv[1],d=JSON.parse(fs.readFileSync(p
 refuses 'asking today’s brief creates another note' first-day "$FD/second-note" 'second saved brief'
 
 copy "$FD/good" "$FD/brief-without-goal"
-sed -i 1d "$FD/brief-without-goal/brief.txt"
+printf 'Next today: buy the water and first-aid supplies.
+' >"$FD/brief-without-goal/brief.txt"
+first_day_brief_records "$FD/brief-without-goal"
 refuses 'a brief that does not name the goal' first-day "$FD/brief-without-goal" 'does not name the emergency-kit goal'
 copy "$FD/good" "$FD/brief-without-work"
 sed -i 2d "$FD/brief-without-work/brief.txt"
@@ -4443,6 +4758,7 @@ SFR_IMAGE=$(node "$ROOT/stage/stage.mjs" "$ROOT/stage.json" get serverEditions.s
 SFR_IMAGE=${SFR_IMAGE%%@*}
 SFR_DA=sha256:$(printf 'a%.0s' $(seq 64))
 SFR_DB=sha256:$(printf 'b%.0s' $(seq 64))
+SFR_PC=sha256:$(printf 'c%.0s' $(seq 64))
 printf '%s:v2-sha-%s %s\n' "$SFR_IMAGE" "$SFR_TWO" "$SFR_DA" >"$TMP/sfr-images-two"
 printf '%s:v2-sha-%s %s\n' "$SFR_IMAGE" "$SFR_ONE" "$SFR_DB" >"$TMP/sfr-images-one"
 : >"$TMP/sfr-images-none"
@@ -4480,6 +4796,31 @@ if [ "$SFR_CODE" = 0 ] && [ "$(node "$ROOT/stage/stage.mjs" "$TMP/sfr-night2/thi
   ok "a commit with no image of its own gets the newest ancestor's, and says whose"
 else
   bad "a commit with no image of its own (exit $SFR_CODE: $(cat "$TMP/sfr.err"))"
+fi
+SFR_OUT=$(GODSPEED_SCENARIO_REPO=$SFR_REPO GODSPEED_SCENARIO_PUBLIC_RAW=file://$TMP/sfr-public GODSPEED_SCENARIO_PR_IMAGE=$SFR_IMAGE@$SFR_PC \
+  bash "$SFR" '' "$SFR_TWO" "$TMP/sfr-pr" 2>"$TMP/sfr.err"); SFR_CODE=$?
+if [ "$SFR_CODE" = 0 ] && [ "$(node "$ROOT/stage/stage.mjs" "$TMP/sfr-pr/this-commit/stage.json" get serverEditions.server.image)" = "$SFR_IMAGE@$SFR_PC" ]; then
+  ok "a PR scenario stage uses its immutable head image, never an install or candidate tag"
+else
+  bad "a PR scenario stage did not use its head image (exit $SFR_CODE: $(cat "$TMP/sfr.err"))"
+fi
+SFR_OUT=$(GODSPEED_SCENARIO_REPO=$SFR_REPO GODSPEED_SCENARIO_PUBLIC_RAW=file://$TMP/sfr-public GODSPEED_SCENARIO_PR_IMAGE=$SFR_IMAGE:not-a-digest \
+  bash "$SFR" '' "$SFR_TWO" "$TMP/sfr-pr-missing" 2>"$TMP/sfr.err"); SFR_CODE=$?
+if [ "$SFR_CODE" != 0 ]; then ok "an invalid PR-head image does not fall back to an ancestor"; else bad "an invalid PR-head image fell back to an ancestor"; fi
+SFR_OUT=$(GODSPEED_SCENARIO_REPO=$SFR_REPO GODSPEED_SCENARIO_PUBLIC_RAW=file://$TMP/sfr-public GODSPEED_SCENARIO_PR_IMAGE=ghcr.io/another-product/server@$SFR_PC \
+  bash "$SFR" '' "$SFR_TWO" "$TMP/sfr-pr-foreign" 2>"$TMP/sfr.err"); SFR_CODE=$?
+if [ "$SFR_CODE" = 2 ] && [ ! -e "$TMP/sfr-pr-foreign/this-commit/stage.json" ]; then
+  ok "a foreign immutable PR image cannot become this commit's stage"
+else
+  bad "a foreign immutable PR image was not refused before staging (exit $SFR_CODE: $(cat "$TMP/sfr.err"))"
+fi
+node -e 'const fs=require("fs"),file=process.argv[1],s=JSON.parse(fs.readFileSync(file,"utf8"));s.serverEditions.other={image:"ghcr.io/another-product/server@sha256:"+"d".repeat(64)};fs.writeFileSync(file,JSON.stringify(s));' "$TMP/sfr-public/beta/stage.json"
+SFR_OUT=$(GODSPEED_SCENARIO_REPO=$SFR_REPO GODSPEED_SCENARIO_PUBLIC_RAW=file://$TMP/sfr-public GODSPEED_SCENARIO_PR_IMAGE=$SFR_IMAGE@$SFR_PC \
+  bash "$SFR" '' "$SFR_TWO" "$TMP/sfr-pr-second-edition" 2>"$TMP/sfr.err"); SFR_CODE=$?
+if [ "$SFR_CODE" = 2 ] && grep -qF 'supports one server edition' "$TMP/sfr.err" && [ ! -e "$TMP/sfr-pr-second-edition/this-commit/stage.json" ]; then
+  ok "a PR scenario stage refuses a second server edition with another image repository"
+else
+  bad "a PR scenario stage did not clearly refuse a second server edition (exit $SFR_CODE: $(cat "$TMP/sfr.err"))"
 fi
 sfr_night "$TMP/sfr-images-none" "$TMP/sfr-night3"
 if [ "$SFR_CODE" != 0 ]; then ok "no image within reach fails"; else bad "no image within reach succeeded"; fi
@@ -4544,6 +4885,14 @@ if grep -q "server_run_job report 'Coach reminders and habit check'" "$ROOT/scen
   ok "what-was-that.sh: its report step runs Coach reminders and habit check"
 else
   bad "what-was-that.sh: its report step does not run Coach reminders and habit check"
+fi
+if grep -q 'server_keep_routine_diagnostics' "$ROOT/scenarios/server-lib.sh" \
+  && grep -q 'server_run_job report' "$ROOT/scenarios/what-was-that.sh" \
+  && grep -q 'server_run_job "$1" "$ROUTINE"' "$ROOT/scenarios/connection-check.sh" \
+  && grep -q 'server_run_job research' "$ROOT/scenarios/first-day.sh"; then
+  ok "the three fresh-install routine scenarios retain lifecycle and Hermes run diagnostics"
+else
+  bad "the three fresh-install routine scenarios do not retain lifecycle and Hermes run diagnostics"
 fi
 CLOCK_DIR=$TMP/server-clock
 mkdir -p "$CLOCK_DIR"

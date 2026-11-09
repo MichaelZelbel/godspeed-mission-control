@@ -486,3 +486,16 @@ test('when every phone total is rejected by id, the factual fallback carries no 
  const result=await run(provider,query,store,'brief-rejected-only-phone-total'),saved=store.get('notes',result.record_id).content;
  assert.equal(result.fallback,true);assert.doesNotMatch(saved,/4200|so far|unknown phone-health/);assert.match(saved,/Ask Godspeed to work on Plant the fictional garden/);
 });
+
+// 9 November 2026, a first day on a server: the daily round's work reaches the notebook as a legacy
+// row (its register fields, WHAT for the title). A brief that fell back to its factual lines said
+// nothing of the verified playbook and asked the person to have work done that was done already.
+test('the factual fallback names verified register work by its WHAT and asks the person to review it',async()=>{
+ const {store,query}=fixture([]);store.save('goals',{title:'Plant the fictional garden',status:'adopted'});
+ store.save('work_items',{id:'W-20260101-01',kind:'legacy-work',state:'verified',legacy_fields:{ID:'W-20260101-01',STATUS:'verified',WHAT:'How do fictional gardeners plant their first bed?'}});
+ const provider=async input=>input.kind==='brief-verification'?{passed:false,reason:'The draft is not useful enough.',rejection_scope:'non-source',rejected_source_ids:[]}:'Unsupported draft.';
+ const result=await run(provider,query,store,'brief-legacy-work'),saved=store.get('notes',result.record_id).content;
+ assert.equal(result.fallback,true);
+ assert.match(saved,/Godspeed has verified this work: How do fictional gardeners plant their first bed\?/);
+ assert.match(saved,/^Next: review the work Godspeed verified/m);assert.doesNotMatch(saved,/Ask Godspeed to work on/);
+});

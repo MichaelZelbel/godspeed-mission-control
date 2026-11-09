@@ -21,6 +21,10 @@
 // Otherwise it runs as above. Silent stays silent: no output. The last --godspeed wins, so the
 // root a wired command appends cannot be redirected by an argument before it.
 //
+// --saved only reads: today's saved briefing, word for word, or nothing when none is saved (or the
+// person hid it). Telegram's "today's brief" answers with it before the model sees the message
+// (assistant-files/godspeed-reply/todays_brief.py, 9 November 2026), so it never writes one.
+//
 // The AI is the notebook's own: the one connected in Settings (.godspeed/provider.json), else the
 // assistant the notebook was wired to (assistant.json), as the notebook's server chooses it.
 import fs from 'node:fs';
@@ -77,6 +81,12 @@ if(import.meta.url===pathToFileURL(process.argv[1]||'').href){
  const at=process.argv.lastIndexOf('--godspeed'),root=(at>0&&process.argv[at+1])||process.env.GODSPEED_WORKSPACE||process.env.GODSPEED_ROOT;
  if(!root){console.error('The morning brief does not know which mission control to read (GODSPEED_WORKSPACE).');process.exit(2);}
  try{
+  if(process.argv.includes('--saved')){
+   const {note}=savedBriefToday(new Store(root,{device:machineDevice(root).id}));
+   const text=String(note?.content||'').trim();
+   if(text)process.stdout.write(text+'\n');
+   process.exit(0);
+  }
   const today=process.argv.includes('--today');
   const {text,existing}=await runMorningBrief({root});
   if(text&&(today||!existing))process.stdout.write(text+'\n');
