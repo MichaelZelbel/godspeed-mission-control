@@ -4307,11 +4307,16 @@ if (
   server_hevy_url 47839
   [ "$(cat "$TMP/hevy-compose-command")" = "$(printf '%s\n' \
     -f "$HEVY_DIR/compose.override.yaml" up -d --force-recreate)" ] && \
-    grep -Fqx '      GODSPEED_WORKOUTS_HEVY_URL: "http://host.docker.internal:47839"' "$HEVY_DIR/compose.override.yaml"
+    grep -Fqx '      GODSPEED_WORKOUTS_TEST: "1"' "$HEVY_DIR/compose.override.yaml" && \
+    grep -Fqx '      GODSPEED_WORKOUTS_HEVY_API: "http://host.docker.internal:47839"' "$HEVY_DIR/compose.override.yaml" && \
+    [ "$(native_hevy_environment 47839)" = "$(printf '%s\n' \
+      '[Service]' \
+      'Environment="GODSPEED_WORKOUTS_TEST=1"' \
+      'Environment="GODSPEED_WORKOUTS_HEVY_API=http://127.0.0.1:47839"')" ]
 ); then
-  ok "the Hevy recreate writes its override through sudo and passes it through the installed Compose boundary"
+  ok "the Hevy recreate and native service use the add-on's guarded local Hevy fixture"
 else
-  bad "the Hevy recreate did not write its override or pass both Compose layers"
+  bad "the Hevy recreate or native service did not use the add-on's guarded local Hevy fixture"
 fi
 HEVY_FAILURE_DIR=$TMP/server-hevy-write-failure
 mkdir -p "$HEVY_FAILURE_DIR"

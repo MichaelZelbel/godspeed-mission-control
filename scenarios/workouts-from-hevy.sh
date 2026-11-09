@@ -62,7 +62,7 @@ NODE
 }
 
 server_hevy_url() { # <port>
-  printf 'services:\n  godspeed:\n    extra_hosts:\n      - "host.docker.internal:host-gateway"\n    environment:\n      GODSPEED_WORKOUTS_HEVY_URL: "http://host.docker.internal:%s"\n' "$1" |
+  printf 'services:\n  godspeed:\n    extra_hosts:\n      - "host.docker.internal:host-gateway"\n    environment:\n      GODSPEED_WORKOUTS_TEST: "1"\n      GODSPEED_WORKOUTS_HEVY_API: "http://host.docker.internal:%s"\n' "$1" |
     sudo tee "$SERVER_DIR/compose.override.yaml" >/dev/null ||
     fail "the Docker notebook Hevy override could not be written"
   server_compose -f "$SERVER_DIR/compose.override.yaml" up -d --force-recreate >&2 ||
@@ -70,19 +70,23 @@ server_hevy_url() { # <port>
   server_healthy 300 || fail "the Docker notebook was not healthy with the local Hevy address"
 }
 
+native_hevy_environment() { # <port>
+  printf '[Service]\nEnvironment="GODSPEED_WORKOUTS_TEST=1"\nEnvironment="GODSPEED_WORKOUTS_HEVY_API=http://127.0.0.1:%s"\n' "$1"
+}
+
 native_hevy_url() { # <port>
   local unit=${UNIT:-godspeed-integrated-notebook.service} dropin
   if systemctl --user cat "$unit" >/dev/null 2>&1; then
     dropin=$HOME/.config/systemd/user/$unit.d
     mkdir -p "$dropin" || fail "the native notebook Hevy override folder could not be made"
-    printf '[Service]\nEnvironment="GODSPEED_WORKOUTS_HEVY_URL=http://127.0.0.1:%s"\n' "$1" >"$dropin/scenario-hevy.conf" ||
+    native_hevy_environment "$1" >"$dropin/scenario-hevy.conf" ||
       fail "the native notebook Hevy override could not be written"
     systemctl --user daemon-reload && systemctl --user restart "$unit" ||
       fail "the native notebook could not be restarted with the local Hevy address"
   elif systemctl cat "$unit" >/dev/null 2>&1; then
     dropin=/etc/systemd/system/$unit.d
     sudo mkdir -p "$dropin" || fail "the native notebook Hevy override folder could not be made"
-    printf '[Service]\nEnvironment="GODSPEED_WORKOUTS_HEVY_URL=http://127.0.0.1:%s"\n' "$1" | sudo tee "$dropin/scenario-hevy.conf" >/dev/null ||
+    native_hevy_environment "$1" | sudo tee "$dropin/scenario-hevy.conf" >/dev/null ||
       fail "the native notebook Hevy override could not be written"
     sudo systemctl daemon-reload && sudo systemctl restart "$unit" ||
       fail "the native notebook could not be restarted with the local Hevy address"
