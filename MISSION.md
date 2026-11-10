@@ -75,7 +75,7 @@ The factory may accept issues in these areas.
    their yes; an update keeps everything, and old data is archived, not deleted.
 2. **Their own AI, their own machine.** Godspeed works with the AI account the person connected and
    runs where they installed it.
-3. **Nothing reaches readers before a release.** `main` reaches nobody; only the release step,
+3. **Nothing reaches readers before a release.** `main` reaches no reader (only developers who install it on purpose); only the release step,
    on the owner's go, moves a version to `beta`. The factory never touches `beta` or release tags.
 4. **The factory cannot modify governance files.** `MISSION.md`, `FACTORY_RULES.md`,
    `engineering.md`, `AGENTS.md`, `CLAUDE.md` and `.archon/sdlc/policy/` are the constitution. A pull

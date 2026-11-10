@@ -10,14 +10,16 @@ covered yet; nor is a whole install.
 
 ## The notebook starts on a new person's empty folder and says it is healthy
 
-1. Make a new, empty folder for the person.
-2. Start the notebook on it, on a free port.
-3. Ask it `/health`.
-4. It answers HTTP 200 with `"ok": true` and `"version"` equal to the `version` in
+1. Record `git rev-parse HEAD` of the checkout; it must be the commit under test.
+2. Make a new, empty folder for the person.
+3. Start the notebook on it, on a free port.
+4. Ask it `/health`.
+5. It answers HTTP 200 with `"ok": true` and `"version"` equal to the `version` in
    `notebook/package.json`, and the log says it is listening on that port.
 
 **What would make this fail:** the process exits, `/health` does not answer within 30 seconds,
-`ok` is not true, or the version is not the one in this checkout.
+`ok` is not true, the version is not the one in this checkout, or the
+recorded commit is not the commit under test.
 
 ## The proving scenarios judge what they saw rightly
 

@@ -11,12 +11,15 @@ No `npm install` is needed: it uses Node's own modules. It needs a folder for th
 ```bash
 W=$(mktemp -d)                                   # a new, empty folder for the person
 P=$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",0)); print(s.getsockname()[1])')
-GODSPEED_WORKSPACE="$W" GODSPEED_PORT="$P" node notebook/server/main.mjs > "$ARTIFACTS_DIR/notebook.log" 2>&1 &
+GODSPEED_WORKSPACE="$W" GODSPEED_PORT="$P" node notebook/server/main.mjs > "${ARTIFACTS_DIR:-$W}/notebook.log" 2>&1 &
 NB=$!
 for i in $(seq 1 30); do curl -sf "http://127.0.0.1:$P/health" && break; sleep 1; done
 # ... drive it through HTTP on that port ...
 kill "$NB"; wait "$NB" 2>/dev/null; rm -rf "$W"
 ```
+
+Before starting it, record `git rev-parse HEAD` of the checkout you start it from: the notebook has no
+build-id endpoint, so that commit is the evidence that you ran the candidate.
 
 `GET /health` answers `{"ok":true,"format":1,"version":"<notebook/package.json version>",...}`.
 The web pages (`GET /`) answer 503 "Build the notebook frontend first" in a plain checkout; that is
@@ -25,7 +28,7 @@ expected here and not a defect.
 ## The proving scenarios
 
 `bash scenarios/test-scenarios.sh` from the root. About two minutes; its last line is
-`N of N pass`. Save the whole output in `$ARTIFACTS_DIR`.
+`N of N pass`. Save the whole output in `$ARTIFACTS_DIR` (or a temporary folder when that is not set).
 
 ## The server installer's own test
 
