@@ -4876,11 +4876,40 @@ fi
 # Cheap source checks: the live driver remains the only Telegram path, what-was-that runs the
 # routine a fresh install has, and a clock recreate includes both Compose layers.
 section "the corrected scenario seams"
-if ! grep -rEq --exclude=README.md --exclude=test-scenarios.sh 'owner-on-telegram|telegram-fixture-fetch|ensure_telegram_library' "$ROOT/scenarios"; then
+# A retired driver counts when a line uses it. A whole-line comment (# or //) that names it, as a
+# history note does, is not a use; a line with code before a trailing comment still is.
+retired_driver_uses() { # <folder>: file:line:text of each line in it that uses a retired driver
+  grep -rnE --exclude=README.md --exclude=test-scenarios.sh \
+    'owner-on-telegram|telegram-fixture-fetch|ensure_telegram_library' "$1" \
+    | grep -vE '^[^:]+:[0-9]+:[[:space:]]*(#|//)'
+}
+RETIRED_USES=$(retired_driver_uses "$ROOT/scenarios")
+if [ -z "$RETIRED_USES" ]; then
   ok "the Telegram scenarios have no in-process or post-install Telegram driver"
 else
-  bad "the Telegram scenarios still name the old in-process or post-install Telegram driver"
+  bad "the Telegram scenarios still name the old in-process or post-install Telegram driver: $RETIRED_USES"
 fi
+# The guard's own regression: comments naming a retired driver pass, each active use is caught.
+RETIRED_DIR="$TMP/retired-driver-guard"
+mkdir -p "$RETIRED_DIR"
+printf '#!/usr/bin/env bash\n# was: node telegram-fixture-fetch.mjs (retired)\n  # ensure_telegram_library ran here once\necho fine\n' >"$RETIRED_DIR/history.sh"
+printf '// owner-on-telegram used to drive this\nconsole.log(1)\n' >"$RETIRED_DIR/history.mjs"
+RETIRED_USES=$(retired_driver_uses "$RETIRED_DIR")
+if [ -z "$RETIRED_USES" ]; then
+  ok "the retired-driver guard ignores a comment that names a retired driver"
+else
+  bad "the retired-driver guard counts a comment as a use: $RETIRED_USES"
+fi
+for RETIRED_LINE in 'node "$HERE/telegram-fixture-fetch.mjs" "$DIR"' \
+  'ensure_telegram_library # sets up the bot' \
+  "import { drive } from './owner-on-telegram.mjs'"; do
+  printf '#!/usr/bin/env bash\n%s\n' "$RETIRED_LINE" >"$RETIRED_DIR/active.sh"
+  case $(retired_driver_uses "$RETIRED_DIR") in
+    *active.sh:2:*) ok "the retired-driver guard catches an active use: $RETIRED_LINE" ;;
+    *) bad "the retired-driver guard missed an active use: $RETIRED_LINE" ;;
+  esac
+done
+rm -rf "$RETIRED_DIR"
 if grep -q "server_run_job report 'Coach reminders and habit check'" "$ROOT/scenarios/what-was-that.sh"; then
   ok "what-was-that.sh: its report step runs Coach reminders and habit check"
 else
