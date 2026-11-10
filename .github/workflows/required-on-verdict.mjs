@@ -15,7 +15,8 @@
 // Node 22, Node's own modules only. `--self-test` proves the decision from fixtures.
 const API = "https://api.github.com";
 const MARKER = "<!-- archon-review-report -->";
-const LOOP_APPROVALS = /^Loop review: (approved|merging)(?![A-Za-z])/;
+// exactly what required-gate.mjs reads as an approving decision
+const LOOP_APPROVALS = /^Loop review:\s*(approved|merging)(?![a-z])/i;
 
 // The maintainer list, read as Archon reads it: logins, or { login, merge_queue } entries.
 export function maintainerLogins(text) {
@@ -88,6 +89,8 @@ function selfTest() {
     ["an issue's comment reruns nothing", decide(ev(verdict, "MichaelZelbel", false), m).act === false],
     ["a maintainer's approved loop review reruns", decide(ev(loop("approved", " (route: simple)"), "godspeed-dev-builder[bot]"), m).act === true],
     ["a maintainer's merging loop review reruns", decide(ev(loop("merging"), "godspeed-dev-builder[bot]"), m).act === true],
+    ["a loop review the gate reads (no space, any case) reruns too", decide(ev("Loop review:APPROVED", "godspeed-dev-builder[bot]"), m).act === true],
+    ["approvedly is not approved", decide(ev("Loop review: approvedly", "godspeed-dev-builder[bot]"), m).act === false],
     ["a loop review that sends back reruns nothing", decide(ev(loop("sent back"), "godspeed-dev-builder[bot]"), m).act === false],
     ["a loop review that needs the owner reruns nothing", decide(ev(loop("needs owner"), "godspeed-dev-builder[bot]"), m).act === false],
     ["a loop review that was not merged reruns nothing", decide(ev(loop("not merged"), "godspeed-dev-builder[bot]"), m).act === false],

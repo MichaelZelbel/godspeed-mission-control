@@ -20,9 +20,10 @@
 //      c. or the loop review of Cole Medin's AI software factory, trusted no more than (b): among the
 //         conversation comments whose body starts with `Loop review:` and whose author is a login in
 //         the same maintainers.json, the newest one counts. It approves the head commit only when its
-//         decision is `approved` or `merging`, it was written after the head commit was committed (a
-//         review from before the newest push is stale), and, if it names a reviewed head
-//         ("Reviewed head `<40 hex>`"), that is the head commit. A newer `sent back`, `needs owner` or
+//         decision is `approved` or `merging` and it names the exact commit it reviewed
+//         ("Reviewed head `<full 40-hex sha>`"), which must be the head commit. A comment that names
+//         no head, a short or malformed one, or another commit approves nothing. No commit or comment
+//         date is read, because a commit's date can be set to anything. A newer `sent back`, `needs owner` or
 //         `not merged` comment means no approval. Like (b), it is tried when no listed reviewer's
 //         approval stands, so it also passes beside a listed reviewer's request for changes.
 //      A push to main or a manual run needs no review.
@@ -249,13 +250,13 @@ export function readLoopReview(body) {
   const decision = ["not merged", "merged", "merging", "approved", "sent back", "needs owner"].find(
     (word) => rest.startsWith(word) && !/^[a-z]/.test(rest.slice(word.length)),
   );
-  const sha = /Reviewed head\s+`?([0-9a-fA-F]{40})(?![0-9a-zA-Z])/.exec(text)?.[1];
+  // whatever hex follows "Reviewed head", so a short sha reads as a head that differs, not as none
+  const sha = /Reviewed head\s+`?([0-9a-fA-F]+)/.exec(text)?.[1];
   return { decision: decision ?? "unknown", reviewed: sha ? sha.toLowerCase() : null };
 }
 
 // comments: [{ id, body, created_at, user: { login } }]; maintainers: a Set of lower-cased logins;
-// committedAt: when the head commit was committed (ISO text).
-export function loopVerdict({ comments = [], maintainers = new Set(), headSha, committedAt }) {
+export function loopVerdict({ comments = [], maintainers = new Set(), headSha }) {
   const trusted = comments
     .filter((comment) => {
       const login = comment?.user?.login;
@@ -264,14 +265,12 @@ export function loopVerdict({ comments = [], maintainers = new Set(), headSha, c
     .map((comment) => ({ comment, at: Date.parse(comment.created_at || "") || 0 }))
     .sort((a, b) => b.at - a.at || Number(b.comment.id) - Number(a.comment.id));
   if (trusted.length === 0) return { ok: false, line: "Cole's loop review: none (no `Loop review:` comment from a login in .archon/sdlc/policy/maintainers.json)" };
-  const { comment, at } = trusted[0];
+  const { comment } = trusted[0];
   const by = comment.user.login;
   const read = readLoopReview(comment.body);
   if (read.decision !== "approved" && read.decision !== "merging") return { ok: false, line: `Cole's loop review: the newest, from ${by}, says ${read.decision}, not approved` };
-  if (read.reviewed !== null && read.reviewed !== String(headSha).toLowerCase()) return { ok: false, line: `Cole's loop review: ${by} reviewed ${read.reviewed}, not ${headSha}` };
-  const committed = Date.parse(committedAt || "");
-  if (Number.isNaN(committed)) return { ok: false, line: "Cole's loop review: none (the head commit's date could not be read)" };
-  if (at < committed) return { ok: false, line: `Cole's loop review: ${by}'s ${read.decision} is older than the head commit ${headSha}, so it is stale` };
+  if (read.reviewed === null) return { ok: false, line: `Cole's loop review names no reviewed head commit (the ${read.decision} from ${by} has no "Reviewed head \`<sha>\`" line)` };
+  if (read.reviewed !== String(headSha).toLowerCase()) return { ok: false, line: `Cole's loop review: ${by} reviewed ${read.reviewed}, not ${headSha}` };
   return { ok: true, line: `the review passed: Cole's loop review from ${by} is ${read.decision} for ${headSha}` };
 }
 
@@ -292,7 +291,6 @@ export async function gate({
   fetchReviews = async () => [],
   fetchComments = async () => [],
   fetchMaintainers = async () => new Set(),
-  fetchHeadCommittedAt = async () => "",
   sleep,
   now,
   intervalMs = 30_000,
@@ -348,7 +346,6 @@ export async function gate({
           comments: await fetchComments(),
           maintainers: await fetchMaintainers(),
           headSha,
-          committedAt: await fetchHeadCommittedAt(),
         });
       } catch (error) {
         loop = { ok: false, line: `Cole's loop review could not be read: ${error.message}` };
@@ -719,16 +716,40 @@ const CASES = [
     args: () => cole({ fetchComments: async () => [loop(BUILDER, "approved (route: simple)", T3, SHA)] }),
   },
   {
-    name: "Cole's loop review merging passes, even naming no reviewed head",
+    name: "Cole's loop review merging for the exact head passes",
     want: true,
     says: `the review passed: Cole's loop review from ${BUILDER} is merging for ${SHA}`,
+    args: () => cole({ fetchComments: async () => [loop(BUILDER, "merging", T3, SHA)] }),
+  },
+  {
+    name: "Cole's loop review naming no reviewed head fails",
+    want: false,
+    says: "Cole's loop review names no reviewed head commit",
+    args: () => cole({ fetchComments: async () => [loop(BUILDER, "approved", T3)] }),
+  },
+  {
+    name: "a merging loop review naming no reviewed head fails",
+    want: false,
+    says: "Cole's loop review names no reviewed head commit",
     args: () => cole({ fetchComments: async () => [loop(BUILDER, "merging", T3)] }),
   },
   {
-    name: "Cole's loop review from before the newest commit is stale and fails",
+    name: "a short sha counts as another head, not as none",
     want: false,
-    says: "is older than the head commit",
-    args: () => cole({ fetchComments: async () => [loop(BUILDER, "approved", T1, SHA)] }),
+    says: `reviewed ${SHA.slice(0, 7)}, not ${SHA}`,
+    args: () => cole({ fetchComments: async () => [loop(BUILDER, "approved", T3, SHA.slice(0, 7))] }),
+  },
+  {
+    name: "a head that is no sha at all counts as naming none",
+    want: false,
+    says: "Cole's loop review names no reviewed head commit",
+    args: () => cole({ fetchComments: async () => [loop(BUILDER, "approved", T3, "not-a-sha")] }),
+  },
+  {
+    name: "an old approval does not cover a new, backdated head",
+    want: false,
+    says: `reviewed ${OLDER_SHA}, not ${SHA}`,
+    args: () => cole({ fetchComments: async () => [loop(BUILDER, "approved", T1, OLDER_SHA)] }),
   },
   {
     name: "Cole's loop review naming a different head fails",
@@ -780,13 +801,13 @@ const CASES = [
   },
 ];
 
-// Cole's loop review: the head commit was committed at T2, no approval of the release App.
+// Cole's loop review, with no approval of the release App.
 function loop(login, decision, at, sha, before = "") {
   const named = sha ? `\n\nReviewed head \`${sha}\`. It already contains main.` : "";
   return { id: nextId++, user: { login }, created_at: at, body: `${before}Loop review: ${decision}${named}` };
 }
 function cole(changed) {
-  return archon({ fetchHeadCommittedAt: async () => T2, ...changed });
+  return archon({ ...changed });
 }
 
 // A pull request with no approval of the release App, where Archon's verdict decides.
@@ -868,11 +889,6 @@ async function decide() {
           Infinity, // every comment, as Archon reads them: until a short page
         )
       : Promise.resolve([]);
-  // when the head commit was committed: a loop review from before that is stale
-  const fetchHeadCommittedAt = async () => {
-    const commit = await getJson(`${API}/repos/${repo}/commits/${headSha}`, token);
-    return commit?.commit?.committer?.date || "";
-  };
   // Archon's maintainer list at the head of the default branch (never the pull request's own copy):
   // no file means nobody
   const fetchMaintainers = async () => {
@@ -901,7 +917,6 @@ async function decide() {
     fetchReviews,
     fetchComments,
     fetchMaintainers,
-    fetchHeadCommittedAt,
     sleep: (ms) => new Promise((done) => setTimeout(done, ms)),
     now: () => Date.now(),
     log: (message) => console.log(message),
