@@ -17,3 +17,4 @@ Read `AGENTS.md` first; it is the repository's own guide and wins where this fil
   everyday English, without em dashes.
 - **Running it.** `harness/RUNTIME.md` says how to start the notebook and run the checks on a server
   without touching anything outside the checkout.
+- **Loop review comments.** Every `Loop review: approved` or `Loop review: merging` comment names the exact commit it reviewed on its own line: `Reviewed head \`<full 40-character sha>\``. The merge gate (`.github/workflows/required-gate.mjs`) accepts the review only for that exact head commit.
