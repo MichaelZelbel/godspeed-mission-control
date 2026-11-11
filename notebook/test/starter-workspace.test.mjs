@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import {fileURLToPath} from 'node:url';
-import {installStarter,addArchiveLine,ARCHIVE_LINE} from '../core/starter-workspace.mjs';
+import {installStarter,addArchiveLine,ARCHIVE_LINE,addStepLine,STEP_LINE} from '../core/starter-workspace.mjs';
 
 test('integrated installation retains every original Godspeed starter file and preserves user edits',()=>{
   const base=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-starter-')),root=path.join(base,'workspace');
@@ -59,4 +59,29 @@ test('the archive line never pushes a manual past the 20,000 characters Hermes r
   assert.equal(addArchiveLine(root,path.join(root,'.godspeed'),starter),false);
   assert.equal(fs.readFileSync(path.join(root,'AGENTS.md'),'utf8'),long);
   assert.ok(!fs.existsSync(path.join(root,'.godspeed','archive-line-added')),'a later update may still add it');
+});
+
+test('the manual teaches a yes through a waiting step, never a code, in a new folder and once in an existing reader\'s',()=>{
+  const starter=fileURLToPath(new URL('../../starter-godspeed/',import.meta.url));
+  const base=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-step-line-')),root=path.join(base,'reader');
+  installStarter(root,starter);
+  const manual=path.join(root,'AGENTS.md'),fresh=fs.readFileSync(manual,'utf8');
+  assert.ok(fresh.includes(STEP_LINE),'a new folder gets the line with the starter');
+  assert.match(STEP_LINE,/Never ask me to type a code/);
+  const recipe=fs.readFileSync(path.join(root,'skills','ask-for-a-yes','SKILL.md'),'utf8');
+  assert.ok(STEP_LINE.includes('skills/ask-for-a-yes/SKILL.md'),'the line points at the recipe a new folder gets');
+  assert.match(recipe,/\n {3}godspeed-step open --about "[^"\n]+" --question "[^"\n]+" --yes "[^"\n]+" --no "[^"\n]+" --by routine:[^\n]+\n/);
+  assert.match(recipe,/plain "yes" or "no"/);assert.match(recipe,/Never ask them to type a code/);
+  assert.ok([...fresh].length<20000,'the starter\'s manual is read whole');
+  const before=fresh.replace(STEP_LINE+'\n','');
+  fs.writeFileSync(manual,before);
+  assert.equal(addStepLine(root,path.join(root,'.godspeed'),starter),true);
+  assert.equal(fs.readFileSync(manual,'utf8'),fresh,'it lands where the starter has it, under the word about asking in a reply');
+  fs.writeFileSync(manual,before);
+  assert.equal(addStepLine(root,path.join(root,'.godspeed'),starter),false);
+  assert.equal(fs.readFileSync(manual,'utf8'),before,'a line its owner deleted is not put back');
+  const adopted=path.join(base,'adopted');fs.mkdirSync(path.join(adopted,'rules'),{recursive:true});
+  fs.writeFileSync(path.join(adopted,'rules','mine.md'),'x');fs.writeFileSync(path.join(adopted,'AGENTS.md'),'# Mine\n');
+  assert.equal(addStepLine(adopted,path.join(adopted,'.godspeed'),starter),false);
+  assert.equal(fs.readFileSync(path.join(adopted,'AGENTS.md'),'utf8'),'# Mine\n');
 });

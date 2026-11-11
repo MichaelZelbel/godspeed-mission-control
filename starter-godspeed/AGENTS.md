@@ -56,6 +56,7 @@ If it contradicts something you believe about me, the file wins.
 - **Ask in your reply, then wait.** When you need my answer before you go
   on, end your reply with the question and stop. I answer in my next
   message. Never answer it yourself or carry on as if I had.
+- **Never ask me to type a code.** For my yes, follow `skills/ask-for-a-yes/SKILL.md`.
 - **The notebook runs my routines.** It ticks Hermes' scheduler itself, so
   every routine runs without Hermes' gateway; never tell me one
   "will NOT fire until the gateway is started". Answer
@@ -171,8 +172,8 @@ If it contradicts something you believe about me, the file wins.
 
 My notebook is the one home of my people, the facts of my life and what
 happened: the pages I read and correct, People, My Profile, World and
-Timeline. Write them with the `notebook` tools (in Hermes their names begin
-`mcp__notebook__`, as in `mcp__notebook__search_brain`), so the chat and the
+Timeline. Write them with the `notebook` tools (in Hermes
+`mcp__notebook__search_brain` and the like), so the chat and the
 notebook never disagree, and keep no second copy in a file. Confirm each save in one
 short sentence that names the page. Follow my privacy rules for all of it.
 
