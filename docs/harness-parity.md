@@ -196,3 +196,24 @@ hook as a project Stop hook in a trusted copy of the starter, and nothing in an 
 The deadline check above is not wired for Codex yet; the table above still says what it does
 today. Proven by `tools/test-give-up-hook.js`, which runs both wirings' own command lines against
 a copy of the starter with Claude Code and Codex payloads.
+
+## A promise on a clock is written down
+
+Added 2026-11-11 (#233). When your mission control promises you something on a clock ("I'll send
+you this every Sunday"), the promise is a file in `work/promises/` (the folder's README gives the
+format), and every morning each one is checked. A missed one is said at the top of the morning
+brief and of `mc-due today` until a later one is kept. Setup writes the promise of each routine it
+schedules there itself, and never over a file that is already there.
+
+| | Claude Code | Hermes | Codex | OpenClaw |
+|---|---|---|---|---|
+| Asked once at the end of a turn that promised on a clock without a file | yes, `.claude/hooks/promise-needs-a-file.js` (`Stop`, registered in the Claude Code settings file) | no stop boundary | yes, the same hook through `.codex/hooks.json` (`Stop`, which sends the last assistant message) | no stop boundary |
+| Checked every morning, a missed one at the top of the brief and of `mc-due today` | yes | yes | yes | yes |
+| Setup writes the promise of each routine it schedules | yes | yes | yes | yes |
+
+**The gap, said plainly.** Codex runs the hooks in `.codex/hooks.json` only in a folder it trusts,
+and only a Codex with hooks (0.167 has them, and sends the last assistant message to `Stop`). The
+Codex case is proven with Codex-shaped payloads, not yet in a live Codex session. On Hermes and
+OpenClaw a promise made in a chat is not asked about at the end of the turn; it is still checked
+every morning once it is written down. Proven by `tools/test-promise-hook.js` and
+`tools/test-promises.js`.
