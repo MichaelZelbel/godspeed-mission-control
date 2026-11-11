@@ -20,6 +20,7 @@
 # scenario read it as it reads GitHub.
 #
 # Standard output is exactly two lines, ready for >> "$GITHUB_OUTPUT":  ref=<ref>  raw=<address>
+# GODSPEED_SCENARIO_ANCESTOR_OK=1 (a pull request run that built no image, so runs no server scenario) skips that failure.
 # Seams for the tests: GODSPEED_SCENARIO_PUBLIC_RAW (where beta/stage.json is read),
 # GODSPEED_SCENARIO_IMAGES (a file of "<image>:<tag> sha256:<64 hex>" lines; the registry is not
 # asked when it is set), GODSPEED_SCENARIO_REPO (the checkout).
@@ -111,7 +112,7 @@ if [ -n "$pr_image" ]; then
   say "The server image is PR head ${commit:0:7}'s immutable image."
 elif [ "$chosen" != "$commit" ]; then
   changed_inputs=$(git -C "$REPO" diff --name-only "$chosen" "$commit" | grep -E "$IMAGE_INPUTS" | head -5 || true)
-  if [ -n "$changed_inputs" ]; then
+  if [ -n "$changed_inputs" ] && [ -z "${GODSPEED_SCENARIO_ANCESTOR_OK:-}" ]; then
     say "No server image v2-sha-$commit exists, and the files the server image carries changed since the newest image (${chosen:0:7}'s), among them: $(printf '%s' "$changed_inputs" | tr '
 ' ' ')"
     say "Proving this commit on ${chosen:0:7}'s image would prove the older code. Wait for the image of $commit to be published (the Integrated Godspeed v2 run on main), or start scenarios.yml with the pull request number to build one."

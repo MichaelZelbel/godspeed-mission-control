@@ -17,7 +17,7 @@ run-name: ${{ github.event_name == 'pull_request' && format('scenarios on pull r
 # are for a candidate (the Mac one only when `inputs.mac` is true, the Windows one only on a
 # candidate's tag), which a scheduled run never is. The verdict job's last step then tells the night
 # in issues (scenarios/report-night.mjs, releases/godspeed-2.0.0-beta.15-nightly-proof-six-repairs).
-# A hand-started run may instead name a pull request (`pr`, with `only`, and `stage` left empty: -f stage= -f pr=463 -f only=plain-yes):
+# A hand-started run may instead name a pull request (`pr`, with `only`, and `stage` left empty: -f pr=463 -f only=plain-yes):
 # it builds that pull request's head image and proves the head on it, so a pull request that changes
 # only the notebook (which no scenario script names, so a pull request run picks nothing) gets its
 # scenarios run on its own code. A same-repository pull request only, and `only` is required, so one
@@ -44,9 +44,9 @@ on:
   workflow_dispatch:
     inputs:
       stage:
-        description: The stage to prove (a branch or tag holding stage.json, e.g. candidate/2.0.0-beta.7); empty with `pr` set
+        description: The stage to prove (a branch or tag holding stage.json, e.g. candidate/2.0.0-beta.7); empty proves this commit (or the pull request in `pr`) the way the night does
         required: false
-        default: beta
+        default: ''
       pr:
         description: 'A pull request number whose head image is built and whose head is proved (leave stage empty and name the jobs in only)'
         required: false
@@ -103,11 +103,11 @@ jobs:
         run: |
           set -e
           [[ "$NAMED_PR" =~ ^[0-9]+$ ]] || { echo "FAIL pr: the pull request must be a number, not: $NAMED_PR" | tee -a "$GITHUB_STEP_SUMMARY"; exit 1; }
-          [ -z "$INPUT_STAGE" ] || { echo "FAIL pr: a run on a pull request proves its head, so stage must be empty (-f stage=), not $INPUT_STAGE" | tee -a "$GITHUB_STEP_SUMMARY"; exit 1; }
+          [ -z "$INPUT_STAGE" ] || { echo "FAIL pr: a run on a pull request proves its head, so stage must be empty (leave it empty), not $INPUT_STAGE" | tee -a "$GITHUB_STEP_SUMMARY"; exit 1; }
           [ -n "$(printf '%s' "$INPUT_ONLY" | tr -d ' ,')" ] || { echo "FAIL pr: name the jobs to run in only, so one pull request does not run every scenario" | tee -a "$GITHUB_STEP_SUMMARY"; exit 1; }
-          gh api "repos/$GITHUB_REPOSITORY/pulls/$NAMED_PR" --jq '[.state, .head.repo.full_name, .head.sha] | @tsv' > "$RUNNER_TEMP/named"
+          gh api "repos/$GITHUB_REPOSITORY/pulls/$NAMED_PR" --jq '[(if .merged then "merged" else .state end), .head.repo.full_name, .head.sha] | @tsv' > "$RUNNER_TEMP/named"
           IFS=$'	' read -r state repo sha < "$RUNNER_TEMP/named"
-          [ "$state" = open ] || { echo "FAIL pr: pull request $NAMED_PR is $state, not open" | tee -a "$GITHUB_STEP_SUMMARY"; exit 1; }
+          [ "$state" = open ] || [ "$state" = merged ] || { echo "FAIL pr: pull request $NAMED_PR is $state, not open or merged" | tee -a "$GITHUB_STEP_SUMMARY"; exit 1; }
           [ "$repo" = "$GITHUB_REPOSITORY" ] || { echo "FAIL pr: pull request $NAMED_PR comes from $repo; only a branch of this repository is built here" | tee -a "$GITHUB_STEP_SUMMARY"; exit 1; }
           [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || { echo "FAIL pr: pull request $NAMED_PR has no head commit"; exit 1; }
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
@@ -166,6 +166,8 @@ jobs:
       # The commit the run proves: a pull request's own head, otherwise the one the run started on.
       PROOF_SHA: ${{ github.event.pull_request.head.sha || needs.pr-image.outputs.sha || github.sha }}
       GODSPEED_SCENARIO_PR_IMAGE: ${{ needs.pr-image.outputs.image }}
+      # A pull request run that built no image runs no server scenario, so the ancestor-image guard does not apply to it.
+      GODSPEED_SCENARIO_ANCESTOR_OK: ${{ github.event_name == 'pull_request' && '1' || '' }}
     outputs:
       picked: ${{ steps.pick.outputs.picked }}
       proof: ${{ env.PROOF_SHA }}
