@@ -14,10 +14,13 @@ import {cronCalendar} from './routine-times.mjs';
 const WEEKDAY_NAMES=['sunday','monday','tuesday','wednesday','thursday','friday','saturday'];
 
 // A routine's schedule as a promise's CADENCE and the first word and time of its DUE, or null for a
-// schedule no promise can carry (some weekdays only, an interval, a month day past the 28th).
+// schedule no promise can carry (some weekdays only, an interval, a month day past the 28th). One
+// that runs every few minutes or every hour promises a run each day.
 export function promiseDue(schedule){
  const every=String(schedule||'').trim().match(/^\*\/(\d{1,2}) \* \* \* \*$/);
  if(every)return Number(every[1])>=1&&Number(every[1])<=60?{cadence:'daily',when:'daily',time:'00:00'}:null;
+ const hourly=String(schedule||'').trim().match(/^(\d{1,2}) \* \* \* \*$/);
+ if(hourly)return Number(hourly[1])<=59?{cadence:'daily',when:'daily',time:'00:00'}:null;
  const calendar=cronCalendar(schedule);if(!calendar)return null;
  const time=calendar.times[0];
  if(calendar.month_day!==null)return calendar.month_day<=28&&calendar.weekdays.length===7?{cadence:'monthly',when:String(calendar.month_day),time}:null;

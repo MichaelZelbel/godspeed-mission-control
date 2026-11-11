@@ -115,10 +115,11 @@ export function prepForBrief(area, ymd) {
 // prepared, so the job prepares it again; until a fresh one replaces it, the brief and
 // `talk open --from-prep` keep using it. Every entry says stale: true or false.
 //
-// With { rhythmChanges: true } (#359), an area whose newest RHYTHM change (lib/rhythm-change.mjs)
-// dropped a day the old rhythm had, after the change and before the new rhythm's first talk, gets
-// that day too when it falls in the window: bridge: true, rhythm_change and next_talk. Nothing opens
-// a talk on it; a talk they start themselves that day opens from its preparation (prepForBrief).
+// With { rhythmChanges: true } (#359), an area whose newest RHYTHM change (lib/rhythm-change.mjs),
+// one nobody asked for, dropped a day the old rhythm had, after the change and before the new
+// rhythm's first talk, gets that day too when it falls in the window: bridge: true, rhythm_change
+// and next_talk. Nothing opens a talk on it; a talk they start themselves that day opens from its
+// preparation (prepForBrief).
 export function prepDue(mcDir, s, now, hours, opts = {}) {
   const tz = s.timezone;
   const today = localParts(now, tz).date;
@@ -164,7 +165,9 @@ function bridgeDay(mcDir, a, tz, days, inWindow, entry) {
 }
 
 // What the area's newest RHYTHM change dropped, or null when git knows of none: dropped(<day>) is
-// true for a day the old rhythm had, after the change and before the new rhythm's first talk.
+// true for a day the old rhythm had, after the change and before the new rhythm's first talk. A
+// change they asked for (#415, change.deliberate) drops no talk day: dropped is always false, and
+// asked(<day>) says which day it would have been.
 export function rhythmDrop(mcDir, a, tz) {
   const c = lastRhythmChange(mcDir, a);
   const old = c && parseRhythm(c.from);
@@ -172,12 +175,13 @@ export function rhythmDrop(mcDir, a, tz) {
   const was = { ...a, rhythm: old, rhythmText: c.from };
   const changeDay = localParts(new Date(c.changed), tz).date;
   const newFirst = nextTalkDay(a, addDays(changeDay, 1));
-  return { change: c, next: newFirst || "", dropped: (d) => d > changeDay && !(newFirst && d >= newFirst) && isTalkDay(was, d) && !isTalkDay(a, d) };
+  const fell = (d) => d > changeDay && !(newFirst && d >= newFirst) && isTalkDay(was, d) && !isTalkDay(a, d);
+  return c.deliberate ? { change: c, next: newFirst || "", dropped: () => false, asked: fell } : { change: c, next: newFirst || "", dropped: fell };
 }
 
-// A talk day, or a day the area's newest rhythm change dropped (rhythmDrop): the nightly job prepares
-// that day like a talk day (prep-due --rhythm-changes), so the talk they ask for on it opens from that
-// preparation and replaces an earlier talk that got no reply, as on a talk day (#359).
+// A talk day, or a day the area's newest rhythm change dropped when nobody asked for it (rhythmDrop):
+// the nightly job prepares that day like a talk day (prep-due --rhythm-changes), so the talk they ask
+// for on it opens from that preparation and replaces an earlier talk that got no reply, as on a talk day (#359).
 export function countsAsTalkDay(mcDir, area, ymd, tz) {
   if (isTalkDay(area, ymd)) return true;
   return Boolean(mcDir && tz && rhythmDrop(mcDir, area, tz)?.dropped(ymd));
@@ -230,9 +234,9 @@ export function prepWords(reason, area = null) {
 // null when the brief carries a usable one or the area never prepares. Due means: the area names
 // research domains (the gate needs a preparation), or a preparation file for this talk exists but is
 // refused, or the area's prep folder holds an earlier preparation (a job prepares this area's talks).
-// Given { mcDir, tz }, a day the area's newest rhythm change dropped (rhythmDrop) is due as well, in
-// any area: the nightly job lists exactly that day to be prepared (prep-due --rhythm-changes), so a
-// talk opened on it without one opened unprepared (#359).
+// Given { mcDir, tz }, a day the area's newest unasked rhythm change dropped (rhythmDrop) is due as
+// well, in any area: the nightly job lists exactly that day to be prepared (prep-due
+// --rhythm-changes), so a talk opened on it without one opened unprepared (#359).
 export function prepMissing(area, ymd, now = clockNow(), { mcDir = null, tz = null } = {}) {
   if (area.noTalk || !area.rhythm) return null;
   if (prepForBrief(area, ymd)) return null;
@@ -258,18 +262,20 @@ export function prepMissing(area, ymd, now = clockNow(), { mcDir = null, tz = nu
 // whether that day is a day of this talk, whether the file can open the talk (ready, or the reason
 // it cannot), and whether it is stale (prepared more than PREP_FRESH_HOURS before the talk). It
 // only reads. research_domains and goals tell the job whether the talk needs receipts and a review
-// (an area with RESEARCH DOMAIN lines) and what the review must judge.
+// (an area with RESEARCH DOMAIN lines) and what the review must judge. A day a rhythm change they
+// asked for dropped carries that change (rhythm_change, deliberate: true) to say why it is no talk day.
 export function prepCheck(mcDir, s, area, ymd) {
   const file = prepFile(area, ymd);
   const p = readPrep(file);
   const problem = prepProblem(p, area);
   const drop = isTalkDay(area, ymd) ? null : rhythmDrop(mcDir, area, s.timezone);
   const bridged = Boolean(drop?.dropped(ymd));
+  const asked = Boolean(drop?.asked?.(ymd));
   const talkDay = isTalkDay(area, ymd) || bridged;
   const at = zonedToUtc(ymd, area.time, s.timezone);
   return {
     area: area.slug, title: area.title, date: ymd, time: area.time, timezone: s.timezone, file: rel(mcDir, file),
-    talk_day: talkDay, ...(bridged ? { bridge: true, rhythm_change: drop.change } : {}), ready: !problem, ...(problem ? { problem } : {}),
+    talk_day: talkDay, ...(bridged ? { bridge: true, rhythm_change: drop.change } : asked ? { rhythm_change: drop.change } : {}), ready: !problem, ...(problem ? { problem } : {}),
     stale: !problem && prepStale(p, at), prepared: preparedAt(p)?.toISOString().replace(/\.\d+Z$/, "Z") || "",
     research_domains: researchDomains(area), goals: servedGoals(area),
   };
