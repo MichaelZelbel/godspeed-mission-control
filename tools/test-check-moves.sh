@@ -373,7 +373,17 @@ OUT="$(run)"; [ $? -eq 0 ] && ok "the hold lifts when the claim it waits on ende
 status_claim
 printf -- '---\nsubject: the-book\nattribute: status\nvalue: released\nvalid_from: 2026-09-15\n---\n' > "$TMP/world/claims/the-book--status--2026-09-15.md"
 OUT="$(run)"; [ $? -eq 0 ] && ok "  and when a newer claim replaced it" || bad "condition replaced: $OUT"
-rm "$TMP/world/claims/the-book--status--2026-09-15.md" "$TMP/$HOLD"
+rm "$TMP/world/claims/the-book--status--2026-09-15.md" "$TMP/world/claims/the-book--status--2026-09-01.md"
+OUT="$(run)"; [ $? -eq 1 ] && ok "  but a claim it waits on that is not in world/claims keeps the hold" || bad "missing condition: $OUT"
+case "$(GODSPEED_TODAY="$D" node "$HERE/holds.js" list --godspeed "$TMP" 2>&1)" in *"until the-book--status--2026-09-01, which is not in world/claims"*) ok "  and mc-holds list says so";; *) bad "  list on a missing condition";; esac
+status_claim
+printf -- '---\nsubject: the-book\nattribute: interview-stance\nvalue: yes, do the interview now\nvalid_from: 2026-09-20\n---\n' > "$TMP/world/claims/the-book--interview-stance--2026-09-20.md"
+OUT="$(run)"; [ $? -eq 0 ] && ok "the hold lifts when a newer claim on the same subject and attribute replaces it" || bad "hold replaced: $OUT"
+rm "$TMP/world/claims/the-book--interview-stance--2026-09-20.md"
+three "Answer Podcast X's interview invitation about the book" 'jane-doe,\n         the-book'
+OUT="$(run)"; [ $? -eq 1 ] && ok "a TOUCHES line wrapped onto a second line is read whole" || bad "wrapped TOUCHES: $OUT"
+three "Answer Podcast X's interview invitation about the book" the-book
+rm "$TMP/$HOLD"
 printf -- '---\nsubject: the-book\nattribute: proposals-stance\nvalue: no more of these until October\nstance: declined\nvalid_from: 2026-09-01\nvalid_to: 2026-09-25\n---\n' > "$TMP/world/claims/the-book--proposals-stance--2026-09-01.md"
 OUT="$(run)"; [ $? -eq 1 ] && ok "a hold with only a date holds every step on the day before its valid_to" || bad "date hold: $OUT"
 sed -i 's/2026-09-25/2026-09-24/' "$TMP/world/claims/the-book--proposals-stance--2026-09-01.md"
@@ -404,6 +414,12 @@ OUT="$(H hold --subject "The Book" --stance declined --words "no")"; [ $? -eq 1 
 OUT="$(H hold --subject the-book --stance maybe --words "no")"; [ $? -eq 1 ] && ok "  a stance other than declined or postponed is refused" || bad "  stance: $OUT"
 OUT="$(H list)"
 case "$OUT" in *"world/claims/the-book--interview-stance--$D.md: postponed, steps: interview, touching the-book"*"until the-book--status--2026-09-01: still current"*) ok "list prints the hold and what it waits on";; *) bad "list: $OUT";; esac
+printf -- '---\nsubject: The Book\nattribute: proposals-stance\nvalue: no\nstance: declined\n---\n' > "$TMP/world/claims/the-book--proposals-stance--x.md"
+printf 'no front matter\n' > "$TMP/world/claims/note.md"
+OUT="$(H list)"
+case "$OUT" in *'skipped: world/claims/the-book--proposals-stance--x.md: stance declined, but its subject "The Book" is not the slug'*) ok "  a claim with a stance whose subject is no slug is listed as skipped";; *) bad "  skipped subject: $OUT";; esac
+case "$OUT" in *'skipped: world/claims/note.md: no front matter'*) ok "  and so is a claim file with no front matter";; *) bad "  skipped front matter: $OUT";; esac
+rm "$TMP/world/claims/the-book--proposals-stance--x.md" "$TMP/world/claims/note.md"
 OUT="$(H end the-book--status--2026-09-01 --words "the book is out of beta")"
 grep -qx "valid_to: $D" "$TMP/world/claims/the-book--status--2026-09-01.md" && ok "end sets valid_to and keeps the file" || bad "end: $OUT"
 check_out="$(H list)"; [ "$check_out" = "nothing is held" ] && ok "  and then nothing is held" || bad "  after end: $check_out"

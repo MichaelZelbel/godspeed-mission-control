@@ -4718,7 +4718,7 @@ held_good() {
   printf '%s: postponed, steps: interview, touching the-book; the person said "not yet"; until the-book--status--2026-09-01: still current\n' "$HB_CLAIM" >"$1/day1-holds.txt"
   printf 'HELD 1: %s (held by %s)\n\n### 2. %s\nTOUCHES: jane-doe\n' "$HB_INT" "$HB_CLAIM" "$HB_NOTE" >"$1/day1-moves.md"
   printf 'held by %s: postponed\n\n### 1. %s\n' "$HB_CLAIM" "$HB_INT" >"$1/day1-held.md"
-  printf '# Decision\n\n## For you today\nNothing today: a step on today'"'"'s card is one you declined or postponed (%s), so the card is held back.\n' "$HB_CLAIM" >"$1/day1-decision.md"
+  printf '# Decision\n\n## For you today\nship-list card: 1. (held back: you postponed this, %s); 2. %s\n' "$HB_CLAIM" "$HB_NOTE" >"$1/day1-decision.md"
   printf 'held: move 1 "%s" by %s\nheld: W-20261119-01 "%s" by %s\ndecided 2026-11-20: decision.md\n' "$HB_INT" "$HB_CLAIM" "$HB_INT" "$HB_CLAIM" >"$1/day1-decide.txt"
   held_work "$HB_CLAIM" >"$1/day1-work.json"
   printf 'nothing is held\n' >"$1/day2-holds.txt"
@@ -4739,6 +4739,8 @@ copy "$HB/good" "$HB/card-not-held"; held_work '' >"$HB/card-not-held/day1-work.
 refuses 'a carried step the register does not list as held' held-by-a-claim "$HB/card-not-held" 'lists the interview step as held by []'
 copy "$HB/good" "$HB/no-jane"; printf 'HELD 1: %s (held by %s)\n' "$HB_INT" "$HB_CLAIM" >"$HB/no-jane/day1-moves.md"
 refuses 'the Jane Doe move held too' held-by-a-claim "$HB/no-jane" 'Jane Doe move is missing on day 1'
+copy "$HB/good" "$HB/card-wiped"; printf '# Decision\n\n## For you today\nNothing today: the card is held back.\n' >"$HB/card-wiped/day1-decision.md"
+refuses 'a day 1 card that lost the Jane Doe line' held-by-a-claim "$HB/card-wiped" "card lost the Jane Doe line"
 copy "$HB/good" "$HB/day2-held"; cp "$HB/good/day1-moves.md" "$HB/day2-held/day2-moves.md"
 refuses 'day 2 still holds the interview back' held-by-a-claim "$HB/day2-held" 'still holds the interview move back'
 copy "$HB/good" "$HB/day2-log"; printf 'held: W-20261119-01 "%s" by %s\ndecided 2026-11-21: decision.md\n' "$HB_INT" "$HB_CLAIM" >"$HB/day2-log/day2-decide.txt"

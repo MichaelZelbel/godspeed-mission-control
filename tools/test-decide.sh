@@ -36,7 +36,8 @@ printf -- '---\nname: next-action\ndescription: the recipe, cut down for a test\
 # for its moves names the moves check, and plays FAKE_FIX_MODE instead (default: it answers).
 # FAKE_ACTIVE=1 makes the first run leave a goal active and no moves, so the moves check fails.
 # holds (#282): a naive run that proposes an interview the person postponed (its APPLY is
-# FAKE_APPLY) beside a note to Jane Doe, and lists both on its card. FAKE_PROMPTS keeps each prompt.
+# FAKE_APPLY, its TOUCHES FAKE_TOUCHES) beside a note to Jane Doe, and lists both on its card
+# (FAKE_CARD, when it words the card itself). FAKE_PROMPTS keeps each prompt.
 cat > "$BIN/claude" <<'STAND'
 #!/usr/bin/env bash
 prompt="$(cat)"
@@ -48,8 +49,9 @@ case "$mode" in
   writes)  printf '# Decision\n\n## For you today\nNothing needs you today.\n' > "$FAKE_RUN/decision.md"
            [ "${FAKE_ACTIVE:-0}" = 1 ] && printf 'Attention for the test\nactive:\n  money-goal    outcome    deadline in 3 day(s)\n' > "$FAKE_RUN/attention.txt"
            echo "Nothing needs you today. nothing" ;;
-  holds)   printf '# Decision\n\n## For you today\nship-list card: 1. Answer Podcast X'"'"'s interview invitation about the book; 2. Send the launch note to Jane Doe\n\n## Moves\nTwo.\n' > "$FAKE_RUN/decision.md"
-           printf '### 1. Answer Podcast X'"'"'s interview invitation about the book\nAPPLY: %s\nTOUCHES: the-book\nGOAL: book\nPERMISSION: ship list\n\n### 2. Send the launch note to Jane Doe\nTOUCHES: jane-doe\nGOAL: book\nPERMISSION: ship list\n' "$FAKE_APPLY" > "$FAKE_RUN/moves.md"
+  holds)   card='ship-list card: 1. Answer Podcast X'"'"'s interview invitation about the book; 2. Send the launch note to Jane Doe'
+           printf '# Decision\n\n## For you today\n%s\n\n## Moves\nTwo.\n' "${FAKE_CARD:-$card}" > "$FAKE_RUN/decision.md"
+           printf '### 1. Answer Podcast X'"'"'s interview invitation about the book\nAPPLY: %s\nTOUCHES: %s\nGOAL: book\nPERMISSION: ship list\n\n### 2. Send the launch note to Jane Doe\nTOUCHES: jane-doe\nGOAL: book\nPERMISSION: ship list\n' "$FAKE_APPLY" "${FAKE_TOUCHES:-the-book}" > "$FAKE_RUN/moves.md"
            echo "Two changes are ready. ship-list card" ;;
   answers) echo "The moves are as far as they go today." ;;
   crash)   printf 'Traceback (most recent call last):\nModuleNotFoundError: No module named %s\n' "'ruamel'" >&2; exit 1 ;;
@@ -157,10 +159,24 @@ contains "  with a HELD line in its place" "$(cat "$RUN/moves.md")" "HELD 1: Ans
 contains "  the Jane Doe move stays" "$(cat "$RUN/moves.md")" "### 2. Send the launch note to Jane Doe"
 contains "  held.md keeps the block and the claim" "$(cat "$RUN/held.md" 2>/dev/null)" "held by $HOLD: postponed"
 contains "  held.md keeps the block itself" "$(cat "$RUN/held.md" 2>/dev/null)" "### 1. Answer Podcast X"
-check "  today's card is held back" "$(sed -n '/^## For you today/{n;p;}' "$RUN/decision.md" | cut -c1-14)" "Nothing today:"
+check "  the card keeps every other line as the run wrote it" "$(sed -n '/^## For you today/{n;p;}' "$RUN/decision.md")" "ship-list card: 1. (held back: you postponed this, $HOLD); 2. Send the launch note to Jane Doe"
 contains "  the output names the held move and the claim" "$OUT" "held: move 1 \"Answer Podcast X's interview invitation about the book\" by $HOLD"
 contains "  and the held card" "$OUT" "held: W-HELD-01 "
 contains "  the APPLY card now names what it touches" "$(cat "$G/work/W-HELD-01.md")" "TOUCHES: the-book"
+fresh; OUT="$(FAKE_MODE=holds FAKE_APPLY=W-HELD-01 FAKE_TOUCHES="$(printf 'jane-doe,\n         the-book')" decide)"
+missing "  a TOUCHES line the run wrapped onto a second line is read whole: the move is out" "$(cat "$RUN/moves.md")" "### 1. Answer Podcast X"
+contains "  and named on the output" "$OUT" "held: move 1 "
+fresh; OUT="$(FAKE_MODE=holds FAKE_APPLY=W-HELD-01 FAKE_CARD="ship-list card: 1. Say yes to the podcast; 2. Send the launch note to Jane Doe" decide)"
+contains "  a card that names the held move in other words is held back" "$(sed -n '/^## For you today/{n;p;}' "$RUN/decision.md")" "Held back: the card the run wrote lists a step you declined or postponed ($HOLD)"
+contains "  and the moves still ready are listed" "$(sed -n '/^## For you today/{n;p;}' "$RUN/decision.md")" "The moves still ready are 2. Send the launch note to Jane Doe (moves.md)"
+missing "  without the held one" "$(sed -n '/^## For you today/,/^## Moves/p' "$RUN/decision.md")" "podcast"
+mv "$G/world/claims" "$G/world/claims.away"; printf 'not a folder\n' > "$G/world/claims"
+fresh; OUT="$(FAKE_MODE=holds FAKE_APPLY=W-HELD-01 decide)"; RC=$?
+check "  holds that cannot be read: the day ends NOT clean" "$RC" "1"
+contains "  and says why" "$OUT" "decided $D, but what the person declined or postponed could not be read"
+contains "  the run is told it cannot tell" "$(cat "$RUN/holds.txt")" "holds NOT read:"
+contains "  and the moves check says so" "$(GODSPEED_ROOT="$G" "$NODE" "$HERE/check-moves.js" --godspeed "$G" --date "$D" 2>&1)" "NOTE holds NOT read ("
+rm -f "$G/world/claims"; mv "$G/world/claims.away" "$G/world/claims"
 D2=2026-10-11
 GODSPEED_ROOT="$G" "$NODE" "$HERE/holds.js" end the-book--status--2026-09-01 --words "the book is out of beta" --date "$D2" --godspeed "$G" >/dev/null
 OUT="$(D="$D2" RUN="$G/routines/next-action/$D2"; GODSPEED_RUNNER=claude FAKE_MODE=holds FAKE_APPLY=W-HELD-01 FAKE_RUN="$RUN" FAKE_CALLS="$CALLS" bash "$HERE/mc-decide" --godspeed "$G" --date "$D2" --timeout 60 2>&1)"

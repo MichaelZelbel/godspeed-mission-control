@@ -19,7 +19,7 @@ test('chat exposes original forecast validation, retained revisions and scoring 
 test('explicit journal command parsing preserves quoted words and retries once',async()=>{
  const {store,domains}=fixture();assert.deepEqual(commandWords('/journal note "Words with spaces"'),['/journal','note','Words with spaces']);const input={message:'/journal note "Fictional next move"',conversation_id:'fictional',request_id:'one'};await domains.invoke('conversation-chat',input);await domains.invoke('conversation-chat',input);assert.equal(domains.query.rows('journal').filter(j=>j.content==='Fictional next move').length,1);assert.ok(store.get('jobs','journal-tick'));
 });
-test('a work card the person postponed is mirrored as held, and as waiting for approval once the hold ends',()=>{
+test('a work card the person postponed is mirrored as held, and as waiting for approval once the hold ends; holds that cannot be read hold it too',()=>{
  const {store}=fixture(),root=store.root,today=process.env.GODSPEED_TODAY;
  fs.mkdirSync(path.join(root,'work'),{recursive:true});fs.mkdirSync(path.join(root,'world','claims'),{recursive:true});
  const card=(id,touches)=>fs.writeFileSync(path.join(root,'work',id+'.md'),`ID: ${id}\nSTATUS: blocked\nKEY: apply-${id}\n${touches?`TOUCHES: ${touches}\n`:''}WHAT: Answer the podcast's interview invitation about the book\nDONE WHEN: answered\nOWNER: godspeed\nNEEDS: authorization\nOUTWARD: yes\nSOURCE: next-action\n\n## Log\n`);
@@ -31,5 +31,7 @@ test('a work card the person postponed is mirrored as held, and as waiting for a
   let r=rows();assert.equal(r['W-1'].state,'held');assert.equal(r['W-1'].held_by,'world/claims/the-book--interview-stance--2026-09-10.md');
   assert.equal(r['W-2'].state,'awaiting_approval');assert.equal(r['W-2'].held_by,undefined);
   claim('2026-09-20');r=rows();assert.equal(r['W-1'].state,'awaiting_approval');assert.equal(r['W-1'].held_by,undefined);
+  fs.rmSync(path.join(root,'world','claims'),{recursive:true});fs.writeFileSync(path.join(root,'world','claims'),'not a folder');r=rows();
+  assert.equal(r['W-1'].state,'held');assert.match(r['W-1'].held_by,/^holds not read: /);assert.equal(r['W-2'].state,'awaiting_approval');
  }finally{if(today===undefined)delete process.env.GODSPEED_TODAY;else process.env.GODSPEED_TODAY=today;}
 });

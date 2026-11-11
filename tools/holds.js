@@ -71,13 +71,17 @@ const sameAttribute = (a, b) => text(a).toLowerCase().replace(/[-_\s]+/g, '-') =
 function readClaims(root) {
   const dir = path.join(root, CLAIMS);
   let names;
-  try { names = fs.readdirSync(dir).filter(n => n.endsWith('.md') && n !== 'README.md').sort(); } catch (e) { return []; }
-  const out = [];
+  try { names = fs.readdirSync(dir).filter(n => n.endsWith('.md') && n !== 'README.md').sort(); } catch (e) {
+    if (e.code === 'ENOENT') return { claims: [], unread: [] };
+    throw e;
+  }
+  const claims = [], unread = [];
   for (const file of names) {
     const parsed = frontMatter(L.readText(path.join(dir, file)));
-    if (parsed) out.push({ name: file.replace(/\.md$/, ''), id: `world/claims/${file}`, f: parsed.fields, body: parsed.body });
+    if (parsed) claims.push({ name: file.replace(/\.md$/, ''), id: `world/claims/${file}`, f: parsed.fields, body: parsed.body });
+    else unread.push(`world/claims/${file}: no front matter, so whether it holds anything cannot be told`);
   }
-  return out;
+  return { claims, unread };
 }
 
 const started = (c, date) => !day(c.f.valid_from) || day(c.f.valid_from) <= date;
@@ -89,15 +93,21 @@ function replacedBy(c, all, date) {
 }
 const current = (c, all, date) => started(c, date) && !closed(c, date) && !replacedBy(c, all, date);
 
-// Every hold that is in force on `date`: { id, name, subject, stance, steps, value, until, waiting }.
+// Every hold that is in force on `date`, { id, name, subject, stance, steps, value, until, waiting },
+// and `skipped`: one line for each claim file that may be a hold but cannot be read as one.
 // `waiting` says what the condition claim is: 'current', 'missing', or '' when there is none.
-function currentHolds(root, date) {
-  const all = readClaims(root);
+// A claim file that cannot be read throws: "could not tell" must never read as "nothing is held".
+function readHolds(root, date) {
+  const { claims: all, unread } = readClaims(root);
   const byName = new Map(all.map(c => [c.name, c]));
-  const holds = [];
+  const holds = [], skipped = [...unread];
   for (const c of all) {
     const stance = text(c.f.stance).toLowerCase();
-    if (!STANCES.includes(stance) || !SLUG.test(text(c.f.subject)) || !current(c, all, date)) continue;
+    if (!STANCES.includes(stance) || !current(c, all, date)) continue;
+    if (!SLUG.test(text(c.f.subject))) {
+      skipped.push(`${c.id}: stance ${stance}, but its subject "${text(c.f.subject)}" is not the slug of a world entity, so it holds nothing`);
+      continue;
+    }
     const until = stance === 'postponed' && text(c.f.until) ? claimName(c.f.until) : '';
     let waiting = '';
     if (until) {
@@ -108,12 +118,23 @@ function currentHolds(root, date) {
     const steps = (Array.isArray(c.f.steps) ? c.f.steps : text(c.f.steps).split(',')).map(s => text(s).toLowerCase()).filter(Boolean);
     holds.push({ id: c.id, name: c.name, subject: text(c.f.subject), stance, steps, value: text(c.f.value), until, waiting });
   }
-  return holds;
+  return { holds, skipped };
 }
+const currentHolds = (root, date) => readHolds(root, date).holds;
 
-// The slugs a TOUCHES line or field names; "none" and empty name nothing.
-function parseTouches(s) {
-  return text(s).toLowerCase().split(/[\s,]+/).filter(t => t && t !== 'none');
+// The words of a TOUCHES line or field, as written; "none" and empty name nothing. mc-work file
+// refuses one that is not a SLUG, and matching reads them lower-cased (parseTouches).
+const touchTokens = (s) => text(s).split(/[\s,]+/).filter(t => t && t.toLowerCase() !== 'none');
+const parseTouches = (s) => touchTokens(s).map(t => t.toLowerCase());
+// A move's TOUCHES in moves.md: its line plus the indented lines that continue it, the way the
+// next-action recipe wraps it. The moves check and strip both read it here, so they hold the same moves.
+function moveTouches(block) {
+  const lines = String(block).replace(/\r/g, '').split('\n');
+  const at = lines.findIndex(l => /^TOUCHES:/.test(l));
+  if (at < 0) return undefined;
+  let value = lines[at].replace(/^TOUCHES:[ \t]*/, '');
+  for (let i = at + 1; i < lines.length && /^\s+\S/.test(lines[i]); i++) value += ' ' + lines[i].trim();
+  return value;
 }
 const escape = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 // The first hold that holds a proposal touching `touches` (slugs, or a TOUCHES string) whose own
@@ -144,13 +165,14 @@ const yamlValue = (s) => (/^[\w .,;!?()'&/-]*$/.test(s) && !/^['\s]/.test(s) ? s
 
 const cmds = {};
 cmds.list = (a) => {
-  const holds = currentHolds(ROOT_OF(a), DATE_OF(a));
-  if (L.flag(a, 'json')) { L.say(JSON.stringify(holds, null, 2)); return; }
-  if (!holds.length) { L.say('nothing is held'); return; }
+  const { holds, skipped } = readHolds(ROOT_OF(a), DATE_OF(a));
+  if (L.flag(a, 'json')) { L.say(JSON.stringify({ holds, skipped }, null, 2)); return; }
+  if (!holds.length) L.say('nothing is held');
   for (const h of holds) {
     L.say(`${h.id}: ${h.stance}, ${h.steps.length ? 'steps: ' + h.steps.join(', ') : 'every step'}, touching ${h.subject}; the person said "${h.value}"`
       + (h.until ? `; ${condition(h)}` : ''));
   }
+  for (const line of skipped) L.say(`skipped: ${line}`);
 };
 
 cmds.hold = (a) => {
@@ -209,21 +231,38 @@ cmds.end = (a) => {
 
 // STRIP, run by mc-decide after the moves check. A move the person declined or postponed that is
 // still in moves.md after the run was sent back once is taken out by program: the block goes to
-// held.md, a HELD line stays in its place, and today's card is held back ("Nothing today: ...")
-// because the card is the run's own text and may still list it. Then one line per held proposal,
-// which is the log a schedule keeps (decide.log).
+// held.md and a HELD line stays in its place. Today's card is the run's own text, so the held
+// move's title is taken off it where it stands and every other line stays as the run wrote it;
+// a card that does not carry the title word for word may name the step in other words, so it is
+// held back and the moves still ready are listed instead. Then one line per held proposal and
+// per claim that could not be read as one, which is the log a schedule keeps (decide.log).
 const MOVE_HEADING = /^###? \d+\./;
 const TAIL = /^(?:FEWER|UNREAD|HOLD|HELD) |^## /;
 const OPEN_WAITING = ['planned', 'dispatched', 'attempted', 'blocked'];
+// decision.md with the held moves off its "For you today" section (see STRIP above).
+function withoutHeld(decision, held, ready) {
+  const ids = [...new Set(held.map(x => x.h.id))].join(', ');
+  const section = /^## For you today[^\n]*\n([\s\S]*?)(?=^## |(?![\s\S]))/m;
+  const m = section.exec(decision);
+  if (!m) return decision.replace(/\s*$/, '') + `\n\n## For you today\nHeld back: a step you declined or postponed (${ids}).\n`;
+  const titled = (x) => new RegExp(escape(x.title).replace(/\s+/g, '\\s+'), 'gi');
+  let card = m[1];
+  if (!ready.length) card = `Nothing today: every move today is one you declined or postponed (${ids}), so the card is held back.\n\n`;
+  else if (held.every(x => titled(x).test(card))) {
+    for (const x of held) card = card.replace(titled(x), `(held back: you ${x.h.stance} this, ${x.h.id})`);
+  } else card = `Held back: the card the run wrote lists a step you declined or postponed (${ids}), so it is not shown. The moves still ready are ${ready.join('; ')} (moves.md).\n\n`;
+  return decision.slice(0, m.index) + m[0].slice(0, m[0].length - m[1].length) + card + decision.slice(m.index + m[0].length);
+}
 cmds.strip = (a) => {
   const root = ROOT_OF(a), d = DATE_OF(a);
   const run = a.run && a.run !== 'true' ? a.run : path.join(root, 'routines', 'next-action', d);
-  const holds = currentHolds(root, d);
+  const { holds, skipped } = readHolds(root, d);
+  for (const line of skipped) L.say(`skipped: ${line}`);
   if (!holds.length) return;
   const movesFile = path.join(run, 'moves.md');
   const moves = fs.existsSync(movesFile) ? fs.readFileSync(movesFile, 'utf8').replace(/\r/g, '') : '';
   const work = L.store(path.join(root, 'work'), []);
-  const out = [], held = [], kept = [];
+  const out = [], held = [], kept = [], ready = [];
   for (const seg of moves.split(/^(?=###? \d+\.)/m)) {
     if (!MOVE_HEADING.test(seg)) { kept.push(seg); continue; }
     const lines = seg.split('\n');
@@ -232,10 +271,10 @@ cmds.strip = (a) => {
     const block = lines.slice(0, end).join('\n'), tail = lines.slice(end).join('\n');
     const heading = lines[0].replace(/^#+\s*/, '').trim();
     const title = heading.replace(/^\d+\.\s*/, '');
-    const touches = (block.match(/^TOUCHES:[ \t]*(.*)$/m) || [])[1] || '';
+    const touches = moveTouches(block) || '';
     const h = heldBy(holds, { touches, text: title });
-    if (!h) { kept.push(seg); continue; }
     const n = (heading.match(/^(\d+)\./) || [])[1] || '?';
+    if (!h) { kept.push(seg); ready.push(`${n}. ${title}`); continue; }
     held.push({ n, title, h, block: block.replace(/\s*$/, '\n') });
     kept.push(`HELD ${n}: ${title} (held by ${h.id})\n` + (tail ? '\n' + tail : '\n'));
     const applyTo = (block.match(/^APPLY:[ \t]*([A-Za-z0-9][A-Za-z0-9._-]*)/m) || [])[1];
@@ -250,14 +289,9 @@ cmds.strip = (a) => {
   if (held.length) {
     fs.writeFileSync(movesFile, kept.join(''), 'utf8');
     fs.appendFileSync(path.join(run, 'held.md'), held.map(x => `held by ${x.h.id}: ${x.h.stance}, the person said "${x.h.value}"\n\n${x.block}\n`).join(''), 'utf8');
-    const ids = [...new Set(held.map(x => x.h.id))].join(', ');
-    const line = `Nothing today: a step on today's card is one you declined or postponed (${ids}), so the card is held back. The other prepared moves are in moves.md.`;
     const decisionFile = path.join(run, 'decision.md');
     const decision = fs.existsSync(decisionFile) ? fs.readFileSync(decisionFile, 'utf8').replace(/\r/g, '') : '';
-    const section = /^## For you today[^\n]*\n[\s\S]*?(?=^## |(?![\s\S]))/m;
-    const replaced = section.test(decision) ? decision.replace(section, `## For you today\n${line}\n\n`)
-      : decision.replace(/\s*$/, '') + `\n\n## For you today\n${line}\n`;
-    fs.writeFileSync(decisionFile, replaced, 'utf8');
+    fs.writeFileSync(decisionFile, withoutHeld(decision, held, ready), 'utf8');
   }
   for (const c of work.all()) {
     if (!/^apply-/.test(c.f.KEY || '') || !OPEN_WAITING.includes(c.f.STATUS)) continue;
@@ -278,7 +312,7 @@ cmds.help = () => L.say(`mc-holds: what the person declined or postponed, read l
        [--to YYYY-MM-DD]            or until that day
        [--attribute A] [--date D]   writes world/claims/<slug>--<attribute>--<date>.md
   end <claim file> --words "<their words>" [--date D]   a later yes: the claim gets valid_to and stays
-  strip --run <folder> [--date D]   mc-decide's: held moves out of moves.md into held.md, the card held back`);
+  strip --run <folder> [--date D]   mc-decide's: held moves out of moves.md into held.md and off today's card`);
 
 if (require.main === module) {
   const a = L.parseArgs(process.argv.slice(2));
@@ -287,4 +321,4 @@ if (require.main === module) {
   try { cmds[cmd](a); } catch (e) { L.die(e.message); }
 }
 
-module.exports = { currentHolds, heldBy, describe };
+module.exports = { SLUG, touchTokens, moveTouches, currentHolds, heldBy, describe };

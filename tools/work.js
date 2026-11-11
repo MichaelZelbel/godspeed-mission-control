@@ -118,18 +118,24 @@ function goalMay(goal) { const st = standing(goal); return st ? st.lines : null;
 // ---------------------------------------------------------------------------
 // holds: a step the person declined or postponed (#282), read live from world/claims through
 // holds.js, so it lifts by itself when its claim ends. A card names what it touches in TOUCHES;
-// one without it is never held. Without holds.js beside this program nothing is held.
+// one without it is never held. Without holds.js beside this program nothing is held; one that is
+// there and fails stops the command, because "could not tell" must never read as "not held".
 // ---------------------------------------------------------------------------
 let holdsJs;
+const holdsBroken = (e) => die(`what the person declined or postponed could not be read (holds.js: ${String(e.message).split('\n')[0]}), so nothing is decided about held steps; mc-holds list says what is wrong`);
 function holdsLib() {
-  if (holdsJs === undefined) { try { holdsJs = require(path.join(__dirname, 'holds.js')); } catch (e) { holdsJs = null; } }
+  if (holdsJs === undefined) {
+    const file = path.join(__dirname, 'holds.js');
+    try { holdsJs = fs.existsSync(file) ? require(file) : null; } catch (e) { holdsBroken(e); }
+  }
   return holdsJs;
 }
 const holdsOn = {};
 function heldOf(c, d = today()) {
+  if (!c.f.TOUCHES) return null;
   const h = holdsLib();
-  if (!h || !c.f.TOUCHES) return null;
-  if (!(d in holdsOn)) holdsOn[d] = h.currentHolds(GODSPEED, d);
+  if (!h) return null;
+  if (!(d in holdsOn)) { try { holdsOn[d] = h.currentHolds(GODSPEED, d); } catch (e) { holdsBroken(e); } }
   return h.heldBy(holdsOn[d], { touches: c.f.TOUCHES, text: c.f.WHAT });
 }
 const heldWhy = (c, h) => `${c.id} is held: ${h.id} says "${h.value}" (${h.stance}); it comes back when that ends. To go ahead now, end it first: mc-holds end ${h.name} --words "..."`;
@@ -384,8 +390,8 @@ cmds.file = (a) => {
   if (!done && kind === 'learn' && where) done = `the answer to ${q(question || what)} is written in ${where}, with the evidence read`;
   if (kind === 'learn' && !namesFile(done)) die('a learn item is done when the answer is written somewhere a reader can open: its DONE WHEN must name a file (a path ending in .md, .csv, .json or .txt), or give --path <file>');
   if (!done) die('--done-when is required: what a reader will see when this is done, so it can be verified by someone who is not the runner');
-  const touches = a.touches === undefined || a.touches === 'true' ? [] : String(a.touches).split(/[\s,]+/).filter(t => t && t !== 'none');
-  const badSlug = touches.find(t => !/^[a-z0-9][a-z0-9-]*$/.test(t));
+  const touches = a.touches === undefined || a.touches === 'true' ? [] : (holdsLib() || die('--touches needs holds.js beside this program')).touchTokens(a.touches);
+  const badSlug = touches.find(t => !holdsLib().SLUG.test(t));
   if (badSlug) die(`--touches names world entities by their slugs (world/entities/<slug>.md), comma-separated; "${badSlug}" is not one`);
   const key = oneLine(a.key || what.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 80));
   const dup = S.all().find(c => c.f.KEY === key && OPEN.includes(c.f.STATUS));

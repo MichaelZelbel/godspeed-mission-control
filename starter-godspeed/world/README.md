@@ -100,7 +100,8 @@ proposed, it writes a claim with `stance: declined` or `stance: postponed` (`mc-
 `steps: [interview]` names the kinds of step it holds (without it, every step about the subject),
 and `until: <another claim file>` makes a postponement last only while that claim is current. A
 proposal that names the subject among the entities it touches (TOUCHES) is kept off your card
-until the claim gets a `valid_to`, or the claim it waits on ends. `mc-holds list` shows what is held.
+until the claim gets a `valid_to`, or the claim it waits on ends. `mc-holds list` shows what is held,
+and names a claim it cannot read as one (a subject that is not an entity's slug holds nothing).
 
 ## Filling it
 

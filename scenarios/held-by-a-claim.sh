@@ -8,7 +8,8 @@
 # this scenario seeds itself, with a carried interview step and a carried note to Jane Doe:
 #   day 1   the interview is absent from the day's moves and from its card, the decision's output
 #           names the claim that held the move and the carried step, and the register lists that
-#           step as held by it; the Jane Doe move and step are there and not held
+#           step as held by it; the Jane Doe move, its line on the card and its step are there and
+#           not held
 #   day 2   the book's beta claim was ended (mc-holds end): the interview move is back, nothing is
 #           held, and the card is not held back
 #
@@ -144,6 +145,8 @@ check() { # <evidence folder>
   held=$(row_field "$folder/day1-work.json" apply-answer-interview held_by)
   [ "$held" = "$claim" ] || fail "on day 1 the register lists the interview step as held by [$held], not by $claim"
   grep -q "^### [0-9]*\. $NOTE" "$folder/day1-moves.md" || fail "the Jane Doe move is missing on day 1, so more than the postponed step was held"
+  for_you "$folder/day1-decision.md" | grep -qF "$NOTE" ||
+    fail "day 1's card lost the Jane Doe line, so more than the postponed step was held: $(for_you "$folder/day1-decision.md" | tr '\n' ' ' | cut -c1-200)"
   held=$(row_field "$folder/day1-work.json" apply-launch-note held_by) || fail "day 1's register has no Jane Doe step"
   [ -z "$held" ] || fail "on day 1 the Jane Doe step is held by $held, though nothing was said about it"
   grep -q "^decided $DAY1" "$folder/day1-decide.txt" || fail "the decision of $DAY1 did not end decided: $(tail -n 1 "$folder/day1-decide.txt")"
@@ -154,7 +157,7 @@ check() { # <evidence folder>
   grep -q '^held:' "$folder/day2-decide.txt" && fail "day 2 still holds a step: $(grep '^held:' "$folder/day2-decide.txt" | head -n 1)"
   held=$(row_field "$folder/day2-work.json" apply-answer-interview held_by)
   [ -z "$held" ] || fail "on day 2 the register still lists the interview step as held by $held"
-  for_you "$folder/day2-decision.md" | grep -q '^Nothing today:' && fail "day 2's card is still held back"
+  for_you "$folder/day2-decision.md" | grep -qi 'held back' && fail "day 2's card is still held back"
   grep -q "^decided $DAY2" "$folder/day2-decide.txt" || fail "the decision of $DAY2 did not end decided: $(tail -n 1 "$folder/day2-decide.txt")"
   pass "the interview the person postponed stayed off the moves, the card and the register on $DAY1, held by $claim and named in the decision's output, while the Jane Doe step stayed; once the book's beta claim ended it came back on $DAY2"
 }

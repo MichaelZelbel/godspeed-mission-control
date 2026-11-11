@@ -173,11 +173,18 @@ if (text === null) {
 const FIELDS = ['GOAL', 'WHERE', 'NOW', 'AFTER', 'WHO DID THIS', 'HOW IT LANDS', 'UNDO', 'PERMISSION'];
 // Read like the fields above, but required only for a goal whose research names its limit.
 const PARSED = [...FIELDS, 'AIMS AT', 'TOUCHES'];
-// What the person declined or postponed, live from world/claims (holds.js). Without it, nothing is held.
-let holdsLib = null, claimHolds = [];
-try { holdsLib = require(path.join(__dirname, 'holds.js')); claimHolds = holdsLib.currentHolds(ROOT, DATE); } catch (e) { holdsLib = null; claimHolds = []; }
-const untouched = [];
+// What the person declined or postponed, live from world/claims (holds.js). Without holds.js beside
+// this program nothing is held; one that is there and fails says so, never a quiet "nothing held"
+// (mc-decide then ends the day not clean: a send-back could not mend it).
 const notes = [];
+let holdsLib = null, claimHolds = [];
+if (fs.existsSync(path.join(__dirname, 'holds.js'))) {
+  try { holdsLib = require(path.join(__dirname, 'holds.js')); claimHolds = holdsLib.currentHolds(ROOT, DATE); } catch (e) {
+    holdsLib = null;
+    notes.push(`NOTE holds NOT read (${String(e.message).split('\n')[0]}): no move was checked against what the person declined or postponed; mc-holds list says what is wrong`);
+  }
+}
+const untouched = [];
 const noted = new Set();
 // What the person is handed today: "move <n> (<title>)" for each of today's moves only they can
 // make, then the carried steps (below, after the moves are read).
@@ -205,7 +212,7 @@ for (const b of blocks) {
   }
   for (const k of FIELDS) if (!f[k] || !f[k].trim()) problems.push(`move "${title}": ${k} is missing or empty`);
   const goal = (f.GOAL || '').trim();
-  const hold = holdsLib && holdsLib.heldBy(claimHolds, { touches: f.TOUCHES, text: title.replace(/^\d+\.\s*/, '') });
+  const hold = holdsLib && holdsLib.heldBy(claimHolds, { touches: holdsLib.moveTouches(b), text: title.replace(/^\d+\.\s*/, '') });
   if (hold) problems.push(`move "${title}": held by ${hold.id}: the person ${hold.stance} this ("${hold.value}"); take it out of moves.md and off today's card`
     + (hold.until ? `; it may come back when ${hold.until} ends` : ''));
   if (f.TOUCHES === undefined) untouched.push((title.match(/^(\d+)\./) || [])[1] || '?');
