@@ -701,6 +701,17 @@ else bad "  the held notice step could not be filed: $OUT"; fi
 OUT="$(hw file --what "Answer the radio's interview invitation" --done-when "sent" --outward yes --key apply-radio --source next-action 2>&1)"
 missing "a card without TOUCHES is listed as before" "$(hw list 2>&1 | grep "$(idof apply-radio)")" "held by"
 OUT="$(hw unblock "$(idof apply-radio)" --why "ship list answer" --approved-by "yes" 2>&1)"; check "  and unblocked as before" "$?" "0"
+# #406: the hold ends on 2026-09-20 (it holds through the 19th); today is 2026-09-13.
+printf -- '---\nsubject: the-book\nattribute: status\nvalue: beta\nvalid_from: 2026-09-01\nvalid_to: 2026-09-20\n---\n' > "$TMP/world/claims/the-book--status--2026-09-01.md"
+heldjson() { hw list --json "$@" | "$NODE" -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{console.log("["+JSON.parse(s).find(x=>x.id===process.argv[1]).held_by+"]")})' "$HI"; }
+contains "list without --date marks by today, inside the hold" "$(hw list 2>&1 | grep "$HI")" "held by $HOLD"
+check "  and its JSON names the claim" "$(heldjson)" "[$HOLD]"
+contains "list --date on the hold's last day still marks it" "$(hw list --date 2026-09-19 2>&1 | grep "$HI")" "held by $HOLD"
+check "  and its JSON names the claim" "$(heldjson --date 2026-09-19)" "[$HOLD]"
+missing "list --date after the hold ended does not mark it" "$(hw list --date 2026-09-21 2>&1 | grep "$HI")" "held by"
+contains "  (it is listed)" "$(hw list --date 2026-09-21 2>&1)" "$HI"
+check "  and its JSON gives held_by empty" "$(heldjson --date 2026-09-21)" "[]"
+OUT="$(hw list --date tomorrow 2>&1)"; check "list --date that is not a date is refused" "$?" "1"
 printf -- '---\nsubject: the-book\nattribute: status\nvalue: beta\nvalid_from: 2026-09-01\nvalid_to: 2026-09-12\n---\n' > "$TMP/world/claims/the-book--status--2026-09-01.md"
 missing "once the claim it waits on ended, it is not held" "$(hw list 2>&1 | grep "$HI")" "held by"
 OUT="$(hw unblock "$HI" --why "ship list answer" --approved-by "ship all" 2>&1)"; check "  and unblock --approved-by works" "$?" "0"
