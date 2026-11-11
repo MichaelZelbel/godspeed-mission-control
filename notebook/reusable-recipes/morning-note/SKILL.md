@@ -38,7 +38,7 @@ Aim for 150-300 words when the sources support that much. With thin material, be
 
 **Opening.** One natural sentence about today, grounded in a real calendar read or a relevant fact. No heading or “morning brief” label. Do not count/preview the items or summarize later stories: checks may cut them. If no calendar was read, do not invent the user's day or lead with machinery about a failed collector.
 
-**News that matters.** Two or three useful stories when current opened sources establish them; one or two sentences each with their verified link. Explain relevance in the same breath only when the user's actual goals support it. Do not predict their revenue, buyers or costs from a product announcement. Omit yesterday's stories under different URLs, repeated subjects and topics deliberately resting. A thin pool can be acknowledged briefly without filler.
+**News that matters.** Two or three useful stories when current opened sources establish them, from the last two days (and the mornings since the last brief); an older one says its date; one or two sentences each with their verified link. Explain relevance in the same breath only when the user's actual goals support it. Do not predict their revenue, buyers or costs from a product announcement. Omit yesterday's stories under different URLs, repeated subjects and topics deliberately resting. A thin pool can be acknowledged briefly without filler.
 
 **Health.** Include one factual sentence every morning. Prefer a verified change or trend across days, using only counts/values the collection step actually computed from selected data. When no count is established, use the user's actual health words without invented numbers. With no fresh observations, say that honestly. Never diagnose, invent a dose, mistake missing input for zero, or turn a technical feed failure into the user's homework.
 
@@ -64,7 +64,7 @@ A current-world claim checked earlier carries its verification day instead of a 
 
 Keep uncertainty and the difference between preparation, permission, execution, verification and measured outcome visible in ordinary words. An exact local edit already approved by the user must not ask for approval again after it happened.
 
-The pipeline checks voice, sources, dates, numbers, links, repeated advice and exact choices, then gives the writer one rewrite with actual reasons. Final judges may cut; they do not manufacture facts. If both drafts fail review, the installed routine may save a shorter note built only from visible checked records after its mechanical checks pass; otherwise a failing gate stays undelivered, with a concrete authorized repair or an honest necessary user action.
+The pipeline checks voice, sources, dates, numbers, links, repeated advice and exact choices, then gives the writer one rewrite with actual reasons. A wording finding rewrites or drops only its sentence; an item is cut only when its core fact is unsupported. Judges do not manufacture facts. If both drafts fail review, the installed routine may save a shorter note built only from visible checked records after its mechanical checks pass; otherwise a failing gate stays undelivered, with a concrete authorized repair or an honest necessary user action.
 
 ## Retain the actual result
 

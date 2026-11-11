@@ -54,3 +54,65 @@ export function cutRefused(draft,voice,protectedLines){
  }
  return {text,cut};
 }
+
+// The items of a draft (#387): blocks between blank lines, and inside a block one item per
+// numbered line with the lines that follow it. [{start,end}] line indices, end exclusive.
+const NUMBERED_LINE=/^\s*\d+[.)]\s+\S/;
+export function draftItems(text){
+ const lines=text.split(/\r?\n/),items=[];let open=null;
+ for(const [i,line] of lines.entries()){
+  if(!line.trim()){open=null;continue;}
+  if(!open||NUMBERED_LINE.test(line)){open={start:i,end:i+1};items.push(open);}else open.end=i+1;
+ }
+ return items;
+}
+
+export const FINDING_PROBLEMS=['wording','core-unsupported'];
+// A check's findings name sentences copied exactly from the draft: [{sentence,problem,reason}].
+export const validFindings=(findings,text)=>Array.isArray(findings)&&findings.length>0&&findings.every(f=>f&&typeof f.sentence==='string'&&f.sentence.trim()&&String(text).includes(f.sentence)&&FINDING_PROBLEMS.includes(f.problem));
+
+const LINK=/https?:\/\/\S+/g;
+// A rewritten sentence is used only when it is one plain line that keeps to the rules and brings
+// no link the flagged sentence did not have.
+function usableRewrite(replacement,sentence,voice){
+ if(typeof replacement!=='string')return false;
+ const text=replacement.trim(),known=new Set(sentence.match(LINK)||[]);
+ return !!text&&!/[\r\n]/.test(text)&&text!==sentence.trim()&&!text.includes(EM_DASH)&&!ruleRefusals(text,voice,{skipOpener:true}).length&&(text.match(LINK)||[]).every(link=>known.has(link));
+}
+
+// Repairs only the flagged sentences (#387): a wording finding rewrites that sentence, or drops it
+// when no usable rewrite comes back; only a core-unsupported finding takes its whole item.
+// Items keep their numbers, so an exact supplied numbered list stays exact. A finding inside a line
+// Godspeed requires word for word throws: the caller then falls back as before.
+// rewrite(sentence,itemText,reason) resolves to the new sentence or ''.
+export async function applyFindings(text,findings,{protectedLines=[],voice=null,rewrite}){
+ const lines=text.split(/\r?\n/),keep=new Set(protectedLines.map(l=>l.trim()).filter(Boolean)),items=draftItems(text),changes=[];
+ const cut=new Set();
+ const itemOf=i=>items.find(item=>item.start<=i&&i<item.end);
+ const itemText=item=>lines.slice(item.start,item.end).join('\n');
+ for(const finding of [...findings].sort((a,b)=>(b.problem==='core-unsupported')-(a.problem==='core-unsupported'))){
+  const at=lines.findIndex((line,i)=>!cut.has(i)&&line.includes(finding.sentence));
+  if(at<0){if(lines.some((line,i)=>cut.has(i)&&line.includes(finding.sentence)))continue;throw Error('A flagged sentence is not on one line of the draft');}
+  if(keep.has(lines[at].trim()))throw Error('A flagged sentence is in a line Godspeed requires word for word');
+  const item=itemOf(at),first=lines[item.start].trim(),reason=String(finding.reason||'');
+  if(finding.problem==='core-unsupported'){
+   if(lines.slice(item.start,item.end).some(l=>keep.has(l.trim())))throw Error('A flagged item holds a line Godspeed requires word for word');
+   for(let i=item.start;i<item.end;i++)cut.add(i);
+   changes.push({action:'cut-item',item:first,sentence:finding.sentence,reason});continue;
+  }
+  const replacement=String(await rewrite(finding.sentence,itemText(item),reason)||'').trim();
+  if(usableRewrite(replacement,finding.sentence,voice)){
+   lines[at]=lines[at].replace(finding.sentence,()=>replacement);
+   changes.push({action:'rewrite',item:first,sentence:finding.sentence,replacement,reason});continue;
+  }
+  lines[at]=lines[at].replace(finding.sentence,'').replace(/\s{2,}/g,' ').trimEnd();
+  if(!lines[at].trim())cut.add(at);
+  const emptied=lines.slice(item.start,item.end).every(l=>!l.trim()||NUMBERED_LINE.test(l)&&!l.replace(/^\s*\d+[.)]\s*/,'').trim());
+  changes.push({action:'drop-sentence',item:first,sentence:finding.sentence,reason,...(emptied?{item_emptied:true}:{})});
+  if(emptied)for(let i=item.start;i<item.end;i++)cut.add(i);
+ }
+ const out=[];
+ for(const [i,line] of lines.entries()){if(cut.has(i)||line.trim()===''&&(!out.length||!out.at(-1).trim()))continue;if(line.trim()||out.length)out.push(line.trim()?line:'');}
+ while(out.length&&!out.at(-1).trim())out.pop();
+ return {text:out.join('\n'),changes};
+}

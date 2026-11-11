@@ -9,7 +9,8 @@ import {randomUUID} from 'node:crypto';
 import {Store} from './records/store.mjs';
 import {QueryService} from './query.mjs';
 import {checkVoice} from './voice-check.mjs';
-import {ruleRefusals,describeRefusal,cutRefused} from './briefing-cut.mjs';
+import {ruleRefusals,describeRefusal,cutRefused,applyFindings,validFindings} from './briefing-cut.mjs';
+import {newsWindow,classify,newsPool,freshLinks,ensureAgeLabels,thinCheck,thinReasons,newsLink,THIN_POOL} from './briefing-news.mjs';
 import {recipeContext} from './recipe-context.mjs';
 import {fileContext} from './context.mjs';
 import {localPath} from './local-path.mjs';
@@ -112,12 +113,39 @@ async function runBriefing(job,{store,query,provider,now}){
  const unknownSummaries=unknownColumns.map(column=>({date:column.date,line:summaryLine(column),source_ids:unknownSources(column)}));
  const healthSummaryLines=unknownSummaries.map(summary=>summary.line),unknownWeekLine=weekLine(unknownSummaries);
  context.episodes=context.episodes.filter(row=>Date.parse(row.onset_at)<=Date.now());context.medications=context.medications.filter(row=>Date.parse(row.taken_at)<=Date.now());
- context.watch_findings=JSON.parse(watchCommand({store,query},['pull','--channel','brief','--dry-run']).result);
- // Selected feeds and the actual selected finding need their latest evidence,
- // not every repeat of every source collected by other workflows.
- const selectedTopics=new Set([...watch.map(t=>t.id),...context.watch_findings.map(f=>f.topic_id)]),latestSources=new Map();
- for(const source of visibleRows(query,'watch_observations').filter(o=>selectedTopics.has(o.topic_id)&&Date.parse(o.observed_at)<=Date.now()&&Date.parse(o.observed_at)>=Date.now()-48*3600000).sort((a,b)=>a.observed_at.localeCompare(b.observed_at)))latestSources.set(JSON.stringify([source.topic_id,source.url]),source);
- context.source_receipts=[...latestSources.values()];
+ // News is what came out since search_start, two days back plus the mornings without a brief; an
+ // older item only when no earlier brief could have told it, with its date (#387).
+ const span=newsWindow({previousBriefs:query.rows('notes').map(n=>({day:briefedOn(n,zone),created_at:n.created_at})).filter(b=>b.day),today});
+ const aged=(row,c)=>c.state==='older'?{...row,age_label:c.age_label,published:c.published}:row;
+ // The brief's one finding, and the latest evidence of the selected feeds and of that finding, not
+ // every repeat of every source collected by other workflows.
+ const readNews=extraTopics=>{
+  const observations=visibleRows(query,'watch_observations'),byId=new Map(observations.map(o=>[o.id,o]));
+  const findings=JSON.parse(watchCommand({store,query},['queue']).result).map(f=>({row:{...f,found_at:f.created_at},...classify({published:byId.get(f.source_observation_id)?.comparison?.published,found_at:f.created_at},span,today,zone)}));
+  const chosen=findings.filter(f=>f.state!=='stale').slice(0,1).map(f=>aged(f.row,f));
+  const selected=new Set([...watch.map(t=>t.id),...chosen.map(f=>f.topic_id),...extraTopics]),latest=new Map();
+  for(const source of observations.filter(o=>selected.has(o.topic_id)&&Date.parse(o.observed_at)<=Date.now()).sort((a,b)=>a.observed_at.localeCompare(b.observed_at)))latest.set(JSON.stringify([source.topic_id,source.url]),source);
+  const receipts=[...latest.values()].map(o=>({row:o,...classify({published:o.comparison?.published,found_at:o.observed_at},span,today,zone)}));
+  const items={findings:findings.map(f=>({link:f.row.link,state:f.state})),receipts:receipts.map(r=>({url:r.row.url,changed:r.row.changed,state:r.state}))};
+  return {selected,findings:chosen,receipts:receipts.filter(r=>r.state!=='stale').map(r=>aged(r.row,r)),pool:newsPool({window:span,topics:watch,runs:visibleRows(query,'watch_runs'),observations,...items}),links:freshLinks(items)};
+ };
+ let news=readNews([]);
+ // A partly read or thin pool reads the owner's other watch topics, and retries the failed brief
+ // sources once, before anything is written. A failure there costs that part, not the morning.
+ if(news.pool.status==='partial'||news.pool.fresh<THIN_POOL){
+  const before=news,reason=[...(before.pool.status==='partial'?['partial']:[]),...(before.pool.fresh<THIN_POOL?['thin']:[])];
+  const briefIds=new Set(watch.map(t=>t.id)),topicsRead=[...before.pool.topics.filter(t=>t.status==='partial').map(t=>t.id),...visibleRows(query,'watch_topics').filter(t=>!t.paused&&!briefIds.has(t.id)).map(t=>t.id)];
+  const added=new Set();let error=null;
+  if(topicsRead.length){
+   const started=new Date().toISOString();
+   try{await procedure({id:job.id+'-wider-sources',kind:'watch',topic_ids:topicsRead,force_sources:true},{store,query,provider});}catch(e){error=e.message;}
+   for(const o of visibleRows(query,'watch_observations'))if(topicsRead.includes(o.topic_id)&&!briefIds.has(o.topic_id)&&String(o.observed_at)>=started&&o.status>=200&&o.status<300)added.add(o.topic_id);
+  }
+  news=readNews([...added]);
+  news.pool.widened={reason,topics_read:topicsRead,added:news.pool.fresh-before.pool.fresh,added_links:news.links.filter(link=>!before.links.includes(link)),...(error?{error}:{})};
+ }
+ context.watch_findings=news.findings;context.source_receipts=news.receipts;context.news_pool=news.pool;
+ const selectedTopics=news.selected;
 
  let contribution=visibleRows(query,'lead_entries').filter(e=>e.status==='ready'&&e.note_id&&e.content).sort((a,b)=>String(b.delivery_day).localeCompare(String(a.delivery_day))).find(e=>visibleRows(query,'notes').some(n=>n.id===e.note_id&&n.content===e.content));
  if(contribution){const refusals=ruleRefusals(contribution.content+'\n/dashboard/notes/'+encodeURIComponent(contribution.note_id),voice);if(refusals.length){leftOut.push({name:'the checked contribution',line:contribution.title||contribution.id,refusals});contribution=null;}}
@@ -155,7 +183,7 @@ async function runBriefing(job,{store,query,provider,now}){
   for(const [type,selected] of Object.entries(sourceRefs)){const current=new Map(visibleRows(query,type).map(r=>[r.id,r]));if(selected.some(r=>current.get(r.id)?._hash!==r._hash))throw Error('Briefing sources changed during judgment; retain its checks and prepare a new draft');}
   if(hash(ids(context.goals))!==hash(ids(visibleRows(query,'goals').filter(g=>['active','adopted'].includes(g.status))))||hash(ids(context.deadlines))!==hash(ids(visibleRows(query,'deadlines').filter(d=>d.status!=='closed')))||hash(context.health_freshness)!==hash(currentHealth(query,{now:now.getTime()}))||hash(context.workspace_sources)!==hash(fileContext(store,20000))||hash(context.workflow)!==hash(recipeContext(store,'morning-note'))||hash(context.people)!==hash(peopleAround()))throw Error('Briefing sources changed during judgment; retain its checks and prepare a new draft');
  });
- const writerContract='Write only the short useful morning note from these actual sources. Use concise everyday language and the configured voice, without em dashes, headings or machinery chatter. health_freshness.days is authoritative for daily health totals. A column whose state is settled (a manual value or the Food tracker totals) is known and may be used. Include one factual health sentence using only fresh recorded inputs, or honestly say fresh observations are missing. Explain the useful next action and the goal it serves in everyday words. User decisions must refer to an actual action_artifacts item with its exact link and reviewed content; an unprepared work item or a goal is not a finished proposal to approve. When contribution is present, make reviewing that checked contribution the main user action; include its complete copy-ready content unchanged and exactly its usable notebook link. Do not confuse that choice with approval for a different unprepared workflow. It is a draft awaiting the user’s choice, not a posted result. When no prepared artifact needs a decision, do not invent an approval request. Retain uncertainty. Do not repeat unchanged prior advice or claim a draft caused real-world progress. No unsupported figures, invented links, medical diagnosis or requests for self-management. When cycle_heads_up is a line, put it in word for word as one line of its own, and say nothing else about the cycle. When charm_line is a line, put it in word for word as one line of its own, and say nothing else about the Charm Challenge. An event in the owner’s calendar, a booking or a trip is not proof that the owner is the one who goes: the calendar’s organizer is the calendar’s owner. Before any sentence about the owner’s own day (travel, an appointment, an absence), compare it with day_notes and people. When the event, a note or a fact names someone else, say whose it is. When it is unclear, leave it out. When the owner’s own event overlaps a trip attributed to them, treat that as doubt about the trip, never as a reason to propose moving the event.';
+ const writerContract='Write only the short useful morning note from these actual sources. Use concise everyday language and the configured voice, without em dashes, headings or machinery chatter. health_freshness.days is authoritative for daily health totals. A column whose state is settled (a manual value or the Food tracker totals) is known and may be used. Include one factual health sentence using only fresh recorded inputs, or honestly say fresh observations are missing. Explain the useful next action and the goal it serves in everyday words. User decisions must refer to an actual action_artifacts item with its exact link and reviewed content; an unprepared work item or a goal is not a finished proposal to approve. When contribution is present, make reviewing that checked contribution the main user action; include its complete copy-ready content unchanged and exactly its usable notebook link. Do not confuse that choice with approval for a different unprepared workflow. It is a draft awaiting the user’s choice, not a posted result. When no prepared artifact needs a decision, do not invent an approval request. Retain uncertainty. Do not repeat unchanged prior advice or claim a draft caused real-world progress. No unsupported figures, invented links, medical diagnosis or requests for self-management. When cycle_heads_up is a line, put it in word for word as one line of its own, and say nothing else about the cycle. When charm_line is a line, put it in word for word as one line of its own, and say nothing else about the Charm Challenge. An event in the owner’s calendar, a booking or a trip is not proof that the owner is the one who goes: the calendar’s organizer is the calendar’s owner. Before any sentence about the owner’s own day (travel, an appointment, an absence), compare it with day_notes and people. When the event, a note or a fact names someone else, say whose it is. When it is unclear, leave it out. When the owner’s own event overlaps a trip attributed to them, treat that as doubt about the trip, never as a reason to propose moving the event. News is what came out since news_pool.search_start; when a watch_findings or source_receipts item has age_label, say how old it is, in the note’s language.';
  // The same words may open a later day's briefing; within one day they are a repeat (#195).
  const savedToday=visibleRows(query,'notes').filter(n=>briefedOn(n,zone)===today);
  const codeGate=text=>{const errors=[];if(typeof text!=='string'||!text.trim())errors.push('Briefing produced no text');else{if(context.cycle_heads_up&&!text.split(/\r?\n/).some(line=>line.trim()===context.cycle_heads_up))errors.push('Include the cycle heads-up line word for word, as one line of its own');if(context.charm_line&&!text.split(/\r?\n/).some(line=>line.trim()===context.charm_line))errors.push('Include the Charm Challenge line word for word, as one line of its own');if(text.includes('\u2014'))errors.push('Use the configured plain writing style');if(context.contribution&&(!text.includes(context.contribution.content)||!text.includes(context.contribution.link)))errors.push('Include the complete checked contribution and its usable link');if(voice){const checked=checkVoice(text,voice);if(checked.configured&&!checked.passed)errors.push('Configured voice check failed: '+checked.hits.map(h=>h.value).join(', '));}if(savedToday.some(n=>n.content.trim()===text.trim()))errors.push('The same note was already saved today; do not repeat it');}return errors;};
@@ -197,28 +225,72 @@ async function runBriefing(job,{store,query,provider,now}){
  // by the gate above. Without this the plain-words check, with a real model, failed every brief while a
  // challenge ran, calling the line unexplained jargon (walk-through, 26 October 2026).
  const ownLines=context.charm_line?' The line "'+context.charm_line+'" is the person\'s own Charm Challenge count: they started it themselves, the program writes it and checks it word for word. Never fail the draft because of that line; judge the rest of the note.':'';
- const verify=async(text,check)=>{const freshness=' health_freshness.days is authoritative. Code rendered every unknown phone column as “so far” with its stopped time. A settled manual or Food-tracker column is known and may be used.';const raw=await provider({kind:'brief-verification',check,context:{sources:context,draft:text},contract:(check==='source-facts'?'Check this exact draft against its actual dated sources and previous notes. Return JSON {passed:boolean,reason:string,rejection_scope:"source-claims"|"non-source",rejected_source_ids:string[]}. If source claims are rejected, set rejection_scope to "source-claims" and list every exact source record id. If the failure is about missing content, clarity, usefulness, or another non-source condition, set rejection_scope to "non-source" and rejected_source_ids to []. Fail unsupported claims, stale health, invented outcomes, absent health sentence and unchanged advice. Read the underlying records, not only a collected summary. Fail a sentence that says the owner (you) travels, attends or is away when the event’s own description, a day_notes note or a people fact names someone else, even when a collected summary says "with" the owner. List those record ids. Do not rewrite or send.':'Independently read this as a tired person seeing none of the work. Check clear meaning, usefulness, actual reachable decision artifacts, one current health sentence, no jargon or internal codes, and no repeated unanswered advice. Return JSON {passed:boolean,reason:string,rejection_scope:"source-claims"|"non-source",rejected_source_ids:string[]}. Use "source-claims" and exact source ids only when rejecting claims from saved records; use "non-source" and [] for every other failure. Do not rewrite or send.')+freshness+ownLines});let verdict;try{verdict=typeof raw==='string'?JSON.parse(raw.replace(/^```(?:json)?\s*|\s*```$/g,'')):raw;}catch{verdict={passed:false,reason:'Briefing check returned no valid verdict'};}if(!verdict||typeof verdict!=='object')verdict={passed:false,reason:'Briefing check returned no verdict'};const receipt=await store.saveAsync('job_receipts',{kind:check==='source-facts'?'brief-verification':'brief-delivery-verification',check,job_id:job.id,state:verdict.passed===true?'verified':'failed',source_hash:hash(context),draft_hash:hash(text),verdict,finished_at:new Date().toISOString()});return {verdict,receipt};};
+ // Which sentences failed, so that repair touches only those (#387).
+ const findingsRule=' When a sentence fails, also return findings:[{sentence,problem,reason}] with sentence copied exactly from the draft; problem is "core-unsupported" when the item’s main fact (its subject, decision or number) has no support in the sources, else "wording" (an invented detail, tone or phrasing).';
+ const verify=async(text,check)=>{const freshness=' health_freshness.days is authoritative. Code rendered every unknown phone column as “so far” with its stopped time. A settled manual or Food-tracker column is known and may be used.';const raw=await provider({kind:'brief-verification',check,context:{sources:context,draft:text},contract:(check==='source-facts'?'Check this exact draft against its actual dated sources and previous notes. Return JSON {passed:boolean,reason:string,rejection_scope:"source-claims"|"non-source",rejected_source_ids:string[]}. If source claims are rejected, set rejection_scope to "source-claims" and list every exact source record id. If the failure is about missing content, clarity, usefulness, or another non-source condition, set rejection_scope to "non-source" and rejected_source_ids to []. Fail unsupported claims, stale health, invented outcomes, absent health sentence and unchanged advice. Read the underlying records, not only a collected summary. Fail a sentence that says the owner (you) travels, attends or is away when the event’s own description, a day_notes note or a people fact names someone else, even when a collected summary says "with" the owner. List those record ids. Do not rewrite or send.':'Independently read this as a tired person seeing none of the work. Check clear meaning, usefulness, actual reachable decision artifacts, one current health sentence, no jargon or internal codes, and no repeated unanswered advice. Return JSON {passed:boolean,reason:string,rejection_scope:"source-claims"|"non-source",rejected_source_ids:string[]}. Use "source-claims" and exact source ids only when rejecting claims from saved records; use "non-source" and [] for every other failure. Do not rewrite or send.')+findingsRule+freshness+ownLines});let verdict;try{verdict=typeof raw==='string'?JSON.parse(raw.replace(/^```(?:json)?\s*|\s*```$/g,'')):raw;}catch{verdict={passed:false,reason:'Briefing check returned no valid verdict'};}if(!verdict||typeof verdict!=='object')verdict={passed:false,reason:'Briefing check returned no verdict'};const receipt=await store.saveAsync('job_receipts',{kind:check==='source-facts'?'brief-verification':'brief-delivery-verification',check,job_id:job.id,state:verdict.passed===true?'verified':'failed',source_hash:hash(context),draft_hash:hash(text),verdict,finished_at:new Date().toISOString()});return {verdict,receipt,draft:text};};
  let draft,modelDraft,check,deliveryCheck,feedback=[],cutReceipt=null,fallback=null;const allReasons=[],rejectedIds=new Set(),invalidReviews=[];
  const knownIds=new Set([...Object.values(sourceRefs).flat(),...context.action_artifacts.map(artifact=>({id:artifact.record_id})),...context.people.facts.map(f=>({id:f.id})),...(context.contribution?[{id:context.contribution.id},{id:context.contribution.note_id},...context.contribution.source_ids.map(id=>({id}))]:[])].filter(row=>row?.id!=null).map(row=>String(row.id)));
+ const collectRejections=review=>{
+  if(review.verdict.passed===true)return;
+  const {rejection_scope:scope,rejected_source_ids:ids=[]}=review.verdict;
+  if(!['source-claims','non-source'].includes(scope)||!Array.isArray(ids)||(scope==='source-claims'&&!ids.length)||(scope==='non-source'&&ids.length)){invalidReviews.push({check:review.receipt.check,reason:review.verdict.reason||'No accepted evidence'});return;}
+  for(const id of ids){if(knownIds.has(String(id)))rejectedIds.add(String(id));else invalidReviews.push({check:review.receipt.check,reason:'Unknown source id '+String(id)});}
+ };
+ const failureReasons=reviews=>reviews.filter(r=>r.verdict.passed!==true).flatMap(r=>[r.verdict.reason||'No accepted evidence',...(validFindings(r.verdict.findings,r.draft)?r.verdict.findings.map(f=>'Flagged sentence "'+f.sentence+'" ('+f.problem+'): '+String(f.reason||'')):[])]);
+ // The lines Godspeed requires word for word, and the text with any of them a cut lost put back.
+ const requiredLines=()=>[...healthSummaryLines,unknownWeekLine,context.cycle_heads_up,context.charm_line].filter(Boolean);
+ const protectedLines=()=>{const c=context.contribution;return [...requiredLines(),...(c?[...c.content.split(/\r?\n/),c.link]:[])];};
+ const restoreRequired=text=>{const c=context.contribution,missing=[...requiredLines().filter(line=>!text.split(/\r?\n/).some(l=>l.trim()===line)),...(c&&!text.includes(c.content)?[c.content]:[]),...(c&&!text.includes(c.link)?[c.link]:[])];return {text:missing.length?text.trimEnd()+'\n\n'+missing.join('\n\n'):text,missing};};
+ const ownLinesOf=text=>text.split(/\r?\n/).filter(l=>l.trim()&&!protectedLines().some(p=>p.trim()===l.trim()));
+ // Repair of the sentences the checks flagged on the rewritten draft (#387): a wording finding
+ // rewrites or drops that sentence, a core-unsupported one cuts its item. The repaired text is
+ // checked again; what is still flagged then is dropped without another model call. null when it
+ // cannot be repaired, and the factual fallback takes over as before.
+ const repairFlagged=async(text,findings)=>{
+  const changes=[];
+  const rewriteWithModel=async(sentence,item,reason)=>{
+   const raw=await provider({kind:'brief-sentence-repair',context:{sources:context,draft:text,item,sentence,reason},contract:'Rewrite only this one sentence so it says only what the sources support, in the same language and voice. Keep the item’s subject and the decision or fact it carries. Add no link, number or name the sentence and sources do not already have. Return JSON {sentence:string}; an empty string when no supported version exists.'});
+   try{const value=typeof raw==='string'?JSON.parse(raw.replace(/^```(?:json)?\s*|\s*```$/g,'')):raw;return typeof value?.sentence==='string'?value.sentence:'';}catch{return '';}
+  };
+  const settle=async(source,list,rewrite)=>{
+   const applied=await applyFindings(source,list,{protectedLines:protectedLines(),voice,rewrite});changes.push(...applied.changes);
+   const cut=cutRefused(applied.text,voice,protectedLines());changes.push(...cut.cut.map(c=>({action:'cut-rule',sentence:c.sentence,refusals:c.refusals})));
+   const restored=restoreRequired(cut.text).text,errors=codeGate(restored);
+   if(errors.length)throw Error('The repaired note fails its checks: '+errors.join('; '));
+   if(!ownLinesOf(restored).length)throw Error('Nothing of the note is left after repair');
+   return restored;
+  };
+  const save=fields=>store.saveAsync('job_receipts',{kind:'brief-repair',job_id:job.id,source_hash:hash(context),changes,draft_hash:hash(text),finished_at:new Date().toISOString(),...fields});
+  try{
+   let repaired=await settle(text,findings,rewriteWithModel);
+   const facts=await verify(repaired,'source-facts'),reader=await verify(repaired,'plain-words-and-delivery'),failing=[facts,reader].filter(r=>r.verdict.passed!==true);
+   if(!failing.length){const receipt=await save({state:'verified',repaired_hash:hash(repaired)});return {text:repaired,check:facts.receipt,deliveryCheck:reader.receipt,receipt};}
+   const reasons=failureReasons([facts,reader]);allReasons.push(...reasons);
+   if(!failing.every(r=>validFindings(r.verdict.findings,repaired))){failing.forEach(collectRejections);await save({state:'failed',repaired_hash:hash(repaired),recheck_reasons:reasons,error:'The recheck failed without naming its sentences'});return null;}
+   repaired=await settle(repaired,failing.flatMap(r=>r.verdict.findings),async()=>'');
+   const receipt=await save({state:'dropped-after-recheck',repaired_hash:hash(repaired),recheck_reasons:reasons});
+   return {text:repaired,check:receipt,deliveryCheck:receipt,receipt,dropped:true};
+  }catch(error){await save({state:'failed',error:error.message});return null;}
+ };
  for(let attempt=0;attempt<2;attempt++){
-  const raw=await provider({kind:'morning-brief',phase:attempt?'one-rewrite':'write',context:{...context,...(attempt?{rejected_draft:modelDraft,check_feedback:feedback}:{})},contract:writerContract+(attempt?' Correct the rejected note using these exact failure reasons. This is the single permitted rewrite.':'')});
+  const raw=await provider({kind:'morning-brief',phase:attempt?'one-rewrite':'write',context:{...context,...(attempt?{rejected_draft:modelDraft,check_feedback:feedback}:{})},contract:writerContract+(attempt?' Correct the rejected note using these exact failure reasons. This is the single permitted rewrite. Keep every numbered item and the decision or fact it carries. Change only the sentences the reasons name. Leave an item out only when a reason says its core fact is unsupported.':'')});
   let healthError=null;
   try{modelDraft=healthSafeReply(raw,'text',health);}catch(error){healthError=error.message;modelDraft='';}
   draft=[...healthSummaryLines,unknownWeekLine,modelDraft].filter(Boolean).join('\n\n');
   const code=[...(healthError?[healthError]:[]),...codeGate(draft)],facts=await verify(draft,'source-facts'),reader=await verify(draft,'plain-words-and-delivery');
-  feedback=[...code,...[facts,reader].filter(r=>r.verdict.passed!==true).map(r=>r.verdict.reason||'No accepted evidence')];
+  feedback=[...code,...failureReasons([facts,reader])];
   allReasons.push(...feedback);
-  for(const review of [facts,reader]){
-   if(review.verdict.passed===true)continue;
-   const {rejection_scope:scope,rejected_source_ids:ids=[]}=review.verdict;
-   if(!['source-claims','non-source'].includes(scope)||!Array.isArray(ids)||(scope==='source-claims'&&!ids.length)||(scope==='non-source'&&ids.length)){invalidReviews.push({check:review.receipt.check,reason:review.verdict.reason||'No accepted evidence'});continue;}
-   for(const id of ids){if(knownIds.has(String(id)))rejectedIds.add(String(id));else invalidReviews.push({check:review.receipt.check,reason:'Unknown source id '+String(id)});}
-  }
+  [facts,reader].forEach(collectRejections);
   await store.saveAsync('job_receipts',{kind:'brief-code-gate',job_id:job.id,attempt,state:code.length?'failed':'verified',source_hash:hash(context),draft_hash:hash(draft),errors:code,finished_at:new Date().toISOString()});
   if(!feedback.length){check=facts.receipt;deliveryCheck=reader.receipt;break;}
   if(attempt===1){
    if(code.some(e=>/already saved today/.test(e)))throw Error('The same note was already saved today');
    if([facts,reader].some(r=>r.verdict.passed!==true)){
+    const failing=[facts,reader].filter(r=>r.verdict.passed!==true);
+    if(!invalidReviews.length&&failing.every(r=>validFindings(r.verdict.findings,draft))){
+     const repaired=await repairFlagged(draft,failing.flatMap(r=>r.verdict.findings));
+     if(repaired){draft=repaired.text;check=repaired.check;deliveryCheck=repaired.deliveryCheck;if(repaired.dropped)cutReceipt=repaired.receipt;break;}
+    }
     const rejected=draft,reasons=[...feedback];
     try{
      if(invalidReviews.length)throw Error('Could not make a checked factual fallback: '+[...new Map(invalidReviews.map(review=>[review.check,review.reason])).entries()].map(([check,reason])=>check+': '+reason).join('; '));
@@ -231,13 +303,10 @@ async function runBriefing(job,{store,query,provider,now}){
     check=receipt;deliveryCheck=receipt;fallback={day:today,refusals:reasons,cut:[],draft_hash:hash(rejected),checked:true};cutReceipt=receipt;break;
    }
    check=facts.receipt;deliveryCheck=reader.receipt;
-   const required=[...healthSummaryLines,unknownWeekLine,context.cycle_heads_up,context.charm_line].filter(Boolean),c=context.contribution;
-   const protectedLines=[...required,...(c?[...c.content.split(/\r?\n/),c.link]:[])];
-   const cut=cutRefused(draft,voice,protectedLines);let text=cut.text;
-   const missing=[...required.filter(line=>!text.split(/\r?\n/).some(l=>l.trim()===line)),...(c&&!text.includes(c.content)?[c.content]:[]),...(c&&!text.includes(c.link)?[c.link]:[])];
-   if(missing.length)text=text.trimEnd()+'\n\n'+missing.join('\n\n');
-   const own=text.split(/\r?\n/).filter(l=>l.trim()&&!protectedLines.some(p=>p.trim()===l.trim())),remaining=codeGate(text);
-   if(!remaining.length&&own.length){
+   const required=requiredLines(),c=context.contribution;
+   const cut=cutRefused(draft,voice,protectedLines()),{text,missing}=restoreRequired(cut.text);
+   const remaining=codeGate(text);
+   if(!remaining.length&&ownLinesOf(text).length){
     cutReceipt=await store.saveAsync('job_receipts',{kind:'brief-cut',job_id:job.id,state:'verified',errors:code,cut:cut.cut,restored:missing,draft_hash:hash(draft),kept_hash:hash(text),finished_at:new Date().toISOString()});
     draft=text;break;
    }
@@ -256,12 +325,34 @@ async function runBriefing(job,{store,query,provider,now}){
    fallback={day,refusals,cut:cut.cut,draft_hash:hash(draft)};draft=fallbackText;break;
   }
  }
+ // A brief with nothing to decide and under two fresh news items is thin (#387). One rewrite that
+ // adds the missing decision or news must pass every check; a brief still thin says so and why,
+ // where the installation had sources or decisions to fill it.
+ let thin=thinCheck(draft,context),thinRepair='not-applicable';
+ if(thin.thin&&!fallback&&(thin.missing_actions.length||thin.missing_news.length)){
+  thinRepair='failed';
+  const missingNews=[...context.watch_findings,...context.source_receipts].filter(item=>thin.missing_news.includes(newsLink(item)));
+  const raw=await provider({kind:'morning-brief',phase:'thin-repair',context:{...context,thin_draft:draft,missing:{action_artifacts:thin.missing_actions,news:missingNews}},contract:writerContract+' The checked note in thin_draft gives the owner nothing to decide and too little fresh news. Write it again, keeping what it says, and add the decisions and news in missing.'});
+  let repaired=null;try{repaired=[...healthSummaryLines,unknownWeekLine,healthSafeReply(raw,'text',health)].filter(Boolean).join('\n\n');}catch{}
+  if(repaired&&!codeGate(repaired).length){
+   const facts=await verify(repaired,'source-facts'),reader=await verify(repaired,'plain-words-and-delivery');
+   if(facts.verdict.passed===true&&reader.verdict.passed===true){draft=repaired;check=facts.receipt;deliveryCheck=reader.receipt;thinRepair='passed';thin=thinCheck(draft,context);}
+  }
+ }
+ const agedNews=[...context.watch_findings,...context.source_receipts].filter(item=>item.age_label);
+ if(agedNews.length){const labelled=ensureAgeLabels(draft,agedNews,voice);if(!codeGate(labelled).length)draft=labelled;}
+ const thinNote=thin.thin?{reasons:thinReasons(thin,context.news_pool,{fallback:!!fallback})}:null;let thinLine='not-needed';
+ if(thinNote&&(watch.length||context.action_artifacts.length)){
+  const line='This brief is thin today: '+thinNote.reasons.join('; ')+'.',told=draft.trimEnd()+'\n\n'+line;
+  if(!ruleRefusals(line,voice,{skipOpener:true}).length&&!codeGate(told).length){draft=told;thinLine='told';}else thinLine='refused';
+ }
+ await store.saveAsync('job_receipts',{kind:'brief-final-check',job_id:job.id,state:thin.thin?'thin':'passed',has_action:thin.has_action,fresh_news:thin.fresh_news,thin_repair:thinRepair,...(thinNote?{reasons:thinNote.reasons,thin_line:thinLine}:{}),draft_hash:hash(draft),finished_at:new Date().toISOString()});
  const finalErrors=codeGate(draft);if(finalErrors.length)throw Error('Final exact briefing check failed: '+finalErrors.join('; '));
- if(job.rehearsal){checkCurrentSources();return {verified:true,silent:true,rehearsal:true,source_hash:hash(context),draft_hash:hash(draft),verification_ids:[check.id,deliveryCheck.id],...(fallback?{fallback:true}:{}),...(cutReceipt&&!fallback?{cut:true}:{}),...(leftOut.length?{left_out:leftOut.map(o=>o.name)}:{})};}
+ if(job.rehearsal){checkCurrentSources();return {verified:true,silent:true,rehearsal:true,source_hash:hash(context),draft_hash:hash(draft),verification_ids:[check.id,deliveryCheck.id],...(fallback?{fallback:true}:{}),...(cutReceipt&&!fallback?{cut:true}:{}),...(thinNote?{thin:thinNote}:{}),...(leftOut.length?{left_out:leftOut.map(o=>o.name)}:{})};}
  const key='brief-'+hash([today,draft]);if(store.get('notifications',key))return {verified:true,silent:true};
  const note=store.prepare('notes',{title:'Your morning briefing',content:draft,source_app:'morning-brief',brief_day:today,verification_id:check.id,delivery_verification_id:deliveryCheck.id,...(cutReceipt?{cut_receipt_id:cutReceipt.id}:{}),...(fallback?{fallback:true}:{}),sources:context.source_receipts.map(s=>s.id),evidence:context});
  await store.waitForWriter();
  let suppressed=false;await store.withLockAsync(()=>{if(store.get('notifications',key)){suppressed=true;return;}checkCurrentSources();const findings=context.watch_findings.filter(f=>draft.includes(f.what)&&draft.includes(f.link)).map(f=>store.get('watch_findings',f.id)).filter(f=>f?.status==='pending'),entry=context.contribution?store.get('lead_entries',context.contribution.id):null;if(entry&&(entry._hash!==contribution._hash||entry.status!=='ready'||!visibleRows(query,'notes').some(n=>n.id===entry.note_id&&n.content===entry.content)))throw Error('The contribution changed during briefing checks; preserve it and retry later');store.commit([note,...(fallback?[store.prepare('work_items',{id:'repair-brief-fallback-'+hash([job.id,fallback.day]),kind:'repair',title:'Repair the morning briefing of '+fallback.day+': only the short fallback went out',state:'needs_review',job_id:job.id,note_id:note.id,refusals:fallback.refusals,cut:fallback.cut,draft_hash:fallback.draft_hash,error:fallback.refusals.join('; '),check:'The next morning briefing is written in full',allowed_action:'inspect-and-retry',dependencies:[],max_attempts:3})]:[]),store.prepare('notifications',{id:key,record_id:note.id,verification_id:check.id,status:'ready'}),...findings.map(f=>store.prepare('watch_findings',{status:'shown',shown_at:new Date().toISOString(),channel:'brief',delivery_note_id:note.id},f)),...(entry?[store.prepare('lead_entries',{status:'queued',brief_queued_at:new Date().toISOString(),delivery_note_id:note.id},entry)]:[])]);});
  if(suppressed)return {verified:true,silent:true};
- return {verified:true,record_id:note.id,content_hash:store.get('notes',note.id)._hash,delivery:'notebook',...(fallback?{fallback:true}:{}),...(cutReceipt&&!fallback?{cut:true}:{}),...(leftOut.length?{left_out:leftOut.map(o=>o.name)}:{})};
+ return {verified:true,record_id:note.id,content_hash:store.get('notes',note.id)._hash,delivery:'notebook',...(fallback?{fallback:true}:{}),...(cutReceipt&&!fallback?{cut:true}:{}),...(thinNote?{thin:thinNote}:{}),...(leftOut.length?{left_out:leftOut.map(o=>o.name)}:{})};
 }
