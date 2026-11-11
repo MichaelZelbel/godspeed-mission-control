@@ -174,6 +174,9 @@ contains "  and says the held step is not applied" "$(for_you)" "Held back: move
 fresh; FAKE_MODE=holds FAKE_APPLY=W-HELD-01 FAKE_CARD="$(printf "ship-list card: 1. Answer Podcast X's interview invitation about the bookshop; 2. Answer Podcast X's interview invitation about the book; 3. Fix the shop link (carried)\n%s" "$QUESTION")" decide >/dev/null
 check "  only the held title as whole words is taken off; a line it begins, a carried line and the weekly question stay" "$(for_you | sed -n 1,2p)" "$(printf "ship-list card: 1. Answer Podcast X's interview invitation about the bookshop; 2. (held back: you postponed this, %s); 3. Fix the shop link (carried)\n%s" "$HOLD" "$QUESTION")"
 missing "  with no Held back line when the title was found" "$(for_you)" "Held back:"
+fresh; FAKE_MODE=holds FAKE_APPLY=W-HELD-01 FAKE_CARD="$(printf "ship-list card: 1. Answer Podcast X's interview invitation about the book with a short thank-you; 2. Answer Podcast X's interview invitation about the book (carried)\n%s" "$QUESTION")" decide >/dev/null
+check "  a longer line that begins with the held title stays; the held item itself is taken off" "$(for_you | sed -n 1,2p)" "$(printf "ship-list card: 1. Answer Podcast X's interview invitation about the book with a short thank-you; 2. (held back: you postponed this, %s) (carried)\n%s" "$HOLD" "$QUESTION")"
+missing "  and no Held back line is added" "$(for_you)" "Held back:"
 NOCARD="$TMP/no-card"; mkdir -p "$NOCARD"
 printf '# Decision\n\n## Moves\nOne.\n' > "$NOCARD/decision.md"
 printf "### 1. Answer Podcast X's interview invitation about the book\nTOUCHES: the-book\n" > "$NOCARD/moves.md"

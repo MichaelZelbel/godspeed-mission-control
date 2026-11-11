@@ -232,13 +232,15 @@ cmds.end = (a) => {
 // STRIP, run by mc-decide after the moves check. A move the person declined or postponed that is
 // still in moves.md after the run was sent back once is taken out by program: the block goes to
 // held.md and a HELD line stays in its place. Today's card is the run's own text, so only the held
-// move's title is taken off it, where it first stands as whole words; every other line stays as the
+// move's title is taken off it, where it first stands as a whole card item; every other line stays as the
 // run wrote it. A card that does not carry the title may name the step in other words, so it gets
 // one "Held back" line saying the step is not applied. Then one line per held proposal and per
 // claim that could not be read as one, which is the log a schedule keeps (decide.log).
 const MOVE_HEADING = /^###? \d+\./;
 const TAIL = /^(?:FEWER|UNREAD|HOLD|HELD) |^## /;
 const OPEN_WAITING = ['planned', 'dispatched', 'attempted', 'blocked'];
+// A card item ends at a semicolon, a line end, a parenthesised remark or a full stop.
+const ITEM_END = '(?=[ \\t]*(?:[;\\n(]|\\.(?!\\S)|$))';
 // decision.md with the held moves off its "For you today" section (see STRIP above).
 function withoutHeld(decision, held) {
   const section = /^## For you today[^\n]*\n([\s\S]*?)(?=^## |(?![\s\S]))/m;
@@ -246,7 +248,7 @@ function withoutHeld(decision, held) {
   let card = m ? m[1] : '';
   const notes = [];
   for (const x of held) {
-    const at = new RegExp(`(?<!\\w)${escape(x.title).replace(/\s+/g, '\\s+')}(?!\\w)`, 'i').exec(card);
+    const at = new RegExp(`(?<!\\w)${escape(x.title).replace(/\s+/g, '\\s+')}${ITEM_END}`, 'i').exec(card);
     if (at) card = card.slice(0, at.index) + `(held back: you ${x.h.stance} this, ${x.h.id})` + card.slice(at.index + at[0].length);
     else notes.push(`Held back: move ${x.n} of moves.md is a step you ${x.h.stance} (${x.h.id}); if this card names it in other words, it is not applied.`);
   }
