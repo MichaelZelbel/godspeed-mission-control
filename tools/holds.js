@@ -287,13 +287,33 @@ function withoutHeld(decision, held) {
   const card = sectionOf(decision, 'For you today[^\\n]*');
   let body = card ? card.body : '';
   const notes = [];
+  let marked = 0;
   for (const x of held) {
     const at = itemAt(body, x.title);
-    if (at) body = body.slice(0, at.from) + marks(x) + body.slice(at.to);
+    if (at) { body = body.slice(0, at.from) + marks(x) + body.slice(at.to); marked++; }
     else notes.push(`Held back: move ${x.n} of moves.md is a step you ${x.h.stance} (${x.h.id}); if this card names it in other words, it is not applied.`);
   }
   if (!card) return decision.replace(/\s*$/, '') + `\n\n## For you today\n${notes.join('\n')}\n`;
-  return putSection(decision, card, withNotes(body, notes));
+  return putSection(decision, card, withNotes(recount(body, marked), notes));
+}
+// THE CARD COUNTS ONLY WHAT IS READY (2026-11-11, #405). The run counted its card's items before a
+// held one was marked "held back", so "3 changes are ready" stood over two that were. The first
+// "<N> changes are ready" of the card loses the items marked here and says how many are held back,
+// in the run's own way of writing the number (a digit, or a word up to twelve).
+const NUMBER_WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve'];
+const READY = new RegExp(`\\b(\\d+|${NUMBER_WORDS.join('|')})(\\s+)changes?(\\s+)(?:are|is)(\\s+)ready\\b`, 'i');
+function recount(body, marked) {
+  if (!marked) return body;
+  const m = READY.exec(body);
+  if (!m) return body;
+  const asWord = !/^\d+$/.test(m[1]);
+  const n = asWord ? NUMBER_WORDS.indexOf(m[1].toLowerCase()) : parseInt(m[1], 10);
+  if (n < marked) return body;
+  const left = n - marked;
+  let said = asWord ? NUMBER_WORDS[left] : String(left);
+  if (asWord && /^[A-Z]/.test(m[1])) said = said[0].toUpperCase() + said.slice(1);
+  const phrase = `${said}${m[2]}${left === 1 ? 'change' : 'changes'}${m[3]}${left === 1 ? 'is' : 'are'}${m[4]}ready, ${marked} held back`;
+  return body.slice(0, m.index) + phrase + body.slice(m.index + m[0].length);
 }
 cmds.strip = (a) => {
   const root = ROOT_OF(a), d = DATE_OF(a);
