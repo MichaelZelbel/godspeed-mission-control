@@ -39,7 +39,7 @@ export function readChatHealth(store){
 // the supervisor must not restart the notebook because the chat is down.
 export function chatStatus(store){
  const record=readChatHealth(store);
- return record?{answered:record.answered===true,checked_at:record.at||null,failing_since:record.failing_since||null,problems:record.problems||[]}:null;
+ return record?{answered:record.answered===true,checked_at:record.at||null,failing_since:record.failing_since||null,problems:record.problems||[],delivery_failures:record.delivery_failures||[]}:null;
 }
 
 // What one check comes to, given the record of the last one. Pure: the record to keep and what to
@@ -66,7 +66,14 @@ export class ChatHealth{
  home(){return this.descriptor?.home;}
  // The test turn takes no lifecycle lease (the daily update would then skip its day); it waits out an update instead.
  updating(){return this.lifecycle?.reason==='assistant update'||fs.existsSync(path.join(this.store.state,'hermes-update.lock'));}
- async tick(){
+ // One check at a time: a failing one takes over 30 s and the scheduler ticks every 30 s, and a
+ // second check would read the same record and warn the owner again.
+ tick(){
+  if(this.checking)return Promise.resolve(null);
+  this.checking=this.check().finally(()=>{this.checking=null;});
+  return this.checking;
+ }
+ async check(){
   if(!this.home()||!telegramInHermes(this.home()))return null;
   const prev=readChatHealth(this.store),now=this.now(),last=prev?Date.parse(prev.at):this.started;
   if(now.getTime()-(Number.isFinite(last)?last:0)<CHECK_EVERY||this.updating())return null;
@@ -105,7 +112,7 @@ export class ChatHealth{
    return response.ok&&body.ok?{ok:true}:{ok:false,reason:'refused'};
   }catch{return {ok:false,reason:'network'};}
  }
- async bell(record){try{await this.store.saveAsync('notifications',record,undefined,{timeoutMs:30000});}catch{}}
+ async bell(record){try{await this.store.saveAsync('notifications',record,undefined,{timeoutMs:30000});}catch(error){console.error('Godspeed Mission Control: the chat check could not save its bell: '+String(error?.message||error));}}
  async carryOut(action,entry){
   const at=this.now().toISOString();
   if(action.resolve){await this.bell({id:'chat-health-'+action.resolve,status:'resolved',resolved_at:at});return;}

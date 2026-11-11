@@ -4,6 +4,7 @@ import importlib.util
 import json
 import os
 import shutil
+import sys
 import tempfile
 import types
 import unittest
@@ -57,9 +58,42 @@ def update(user=OWNER, chat_type="private", message_id=7, text="What is on today
                                  effective_user=types.SimpleNamespace(id=int(user)))
 
 
-def event(user=OWNER, chat_type="dm", message_id="9", text="Plan my week"):
+def event(user=OWNER, chat_type="dm", message_id="9", text="Plan my week", internal=False):
     return types.SimpleNamespace(source=types.SimpleNamespace(chat_id=user, user_id=user, chat_type=chat_type),
-                                 message_id=message_id, text=text)
+                                 message_id=message_id, text=text, internal=internal)
+
+
+HERMES_REPLY = ("Something went wrong and I couldn't finish this reply. Use /retry to try again, or /new to start "
+                "a fresh conversation. Technical details are in the gateway log (`hermes logs`).")
+
+
+class Runner:
+    """Hermes' turn handler as it is shaped in gateway/run_turn.py: an exception inside the model turn is
+    answered by _hmwa_agent_error_reply, whose text becomes the turn's reply; it never raises."""
+    def __init__(self, error):
+        self.error, self.handled = error, []
+
+    async def _handle_message_with_agent(self, event, source, _quick_key, run_generation):
+        try:
+            raise self.error
+        except Exception as e:
+            return await self._hmwa_agent_error_reply(e, event, source, None, "session", None)
+
+    async def _hmwa_agent_error_reply(self, e, event, source, session_entry, session_key, prepared):
+        self.handled.append(e)
+        return HERMES_REPLY
+
+
+class FlakyBot(Bot):
+    def __init__(self, failures):
+        super().__init__()
+        self.failures = failures
+
+    async def send_message(self, chat_id, text):
+        if self.failures:
+            self.failures -= 1
+            raise ConnectionError("Telegram did not answer")
+        await super().send_message(chat_id, text)
 
 
 STALE = ImportError("cannot import name 'resolve_turn_route' from 'agent.routing' (/opt/hermes-src/agent/routing.py)")
@@ -209,12 +243,104 @@ class PlainReply(Case):
         asyncio.run(self.adapter._notify_turn_error(event(), STALE))
         self.assertEqual((self.app.bot.sent, second.bot.sent), ([], [(int(OWNER), self.plugin.PLAIN)]))
 
+    def test_failed_turns_without_a_message_id_are_each_answered(self):
+        for _ in range(3):
+            asyncio.run(self.adapter._notify_turn_error(event(message_id=None), STALE))
+        self.assertEqual(self.app.bot.sent, [(int(OWNER), self.plugin.PLAIN)] * 3)
+
+    def test_an_internal_turn_keeps_hermes_notice(self):
+        wake = event(message_id=None, internal=True)
+        asyncio.run(self.adapter._notify_turn_error(wake, STALE))
+        self.assertEqual((self.adapter.originals, self.app.bot.sent, self.saved()), ([(wake, STALE)], [], []))
+
+    def test_a_message_that_cannot_be_saved_is_logged_and_the_reply_does_not_say_it_was_saved(self):
+        os.remove(os.path.join(self.folder, "plugin", "mission-control.txt"))
+        with self.assertLogs("godspeed-chat-guard", "ERROR") as logged:
+            asyncio.run(self.adapter._notify_turn_error(event(), STALE))
+        self.assertEqual(self.app.bot.sent, [(int(OWNER), self.plugin.PLAIN_UNSAVED)])
+        self.assertNotIn("saved", self.plugin.PLAIN_UNSAVED)
+        self.assert_plain(self.plugin.PLAIN_UNSAVED)
+        self.assertTrue(any("Plan my week" in line for line in logged.output))
+
+    def test_a_reply_that_could_not_be_sent_is_tried_again_on_the_next_failure(self):
+        self.app.bot = FlakyBot(1)
+        self.plugin.factory(self.app, self.adapter)
+        asyncio.run(self.adapter._notify_turn_error(event(), STALE))
+        self.assertEqual(self.app.bot.sent, [])
+        self.handle(update(message_id=9))
+        self.assertEqual(self.app.bot.sent, [(int(OWNER), self.plugin.PLAIN)])
+
     def test_the_unanswered_list_keeps_the_newest(self):
         root = os.path.join(self.folder, "mc")
         for n in range(self.plugin.KEEP + 3):
             self.plugin.save_unanswered(root, {"n": n})
         kept = self.saved()
         self.assertEqual((len(kept), kept[0]["n"], kept[-1]["n"]), (self.plugin.KEEP, 3, self.plugin.KEEP + 2))
+
+
+class ModelTurn(Case):
+    """An error inside the model turn, through Hermes' turn handler rather than the wrapped method."""
+    def setUp(self):
+        super().setUp()
+        self.plugin.start_watch = lambda root=None: None
+        self.Runner = type("GatewayRunner", (Runner,), {})
+        self.addCleanup(sys.modules.pop, "gateway.run", None)
+        sys.modules["gateway.run"] = types.SimpleNamespace(GatewayRunner=self.Runner)
+        self.plugin.factory(Application(), Adapter())
+
+    def turn(self, ev):
+        runner = self.Runner(STALE)
+        return runner, asyncio.run(runner._handle_message_with_agent(ev, ev.source, "key", 1))
+
+    def test_the_owner_gets_the_plain_sentence_and_the_message_is_saved(self):
+        runner, reply = self.turn(event())
+        self.assertEqual(reply, self.plugin.PLAIN)
+        self.assertEqual(runner.handled, [STALE], "Hermes still logs the error and keeps the message")
+        [line] = self.saved()
+        self.assertEqual((line["text"], line["why"]), ("Plan my week", "model turn"))
+
+    def test_a_group_or_an_internal_turn_keeps_hermes_reply(self):
+        self.assertEqual(self.turn(event(chat_type="group"))[1], HERMES_REPLY)
+        self.assertEqual(self.turn(event(internal=True))[1], HERMES_REPLY)
+        self.assertEqual(self.saved(), [])
+
+    def test_a_second_telegram_client_wraps_it_once(self):
+        self.plugin.factory(Application(), Adapter())
+        self.assertEqual(self.turn(event())[1], self.plugin.PLAIN)
+        self.assertEqual(len(self.saved()), 1)
+
+
+class StartWatch(Case):
+    def setUp(self):
+        super().setUp()
+        self.started = []
+        started = self.started
+
+        class Thread:
+            def __init__(self, target, name, daemon):
+                self.target, self.daemon = target, daemon
+
+            def start(self):
+                started.append(self)
+
+        self.plugin.threading = types.SimpleNamespace(Thread=Thread)
+        self.root = os.path.join(self.folder, "hermes")
+        os.makedirs(os.path.join(self.root, ".git"))
+        with open(os.path.join(self.root, ".git", "HEAD"), "w", encoding="utf-8") as f:
+            f.write(A + "\n")
+        self.plugin.hermes_root = lambda: self.root
+
+    def test_the_gateway_starts_one_watch_on_the_code_it_loaded(self):
+        self.plugin.factory(Application(), Adapter())
+        self.plugin.factory(Application(), Adapter())
+        [thread] = self.started
+        self.assertTrue(thread.daemon)
+        self.assertEqual((thread.target.__self__.root, thread.target.__self__.boot), (self.root, A))
+
+    def test_no_watch_on_code_whose_revision_cannot_be_read(self):
+        os.remove(os.path.join(self.root, ".git", "HEAD"))
+        self.plugin.factory(Application(), Adapter())
+        self.assertEqual(self.started, [])
 
 
 class Registration(unittest.TestCase):

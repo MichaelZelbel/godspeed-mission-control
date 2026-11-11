@@ -16,9 +16,9 @@ runs nowhere else):
   Hermes does, never with git: git refuses a checkout another account owns, which is exactly the
   layout this happened on. An unreadable revision never restarts anything.
 - A failed message or turn in the owner's private chat gets one plain sentence (PLAIN) and is saved
-  to <mission control>/.godspeed/chat-guard/unanswered.jsonl. Only the standard library and the
-  already loaded telegram package are used on that path: a lazy Hermes import is what fails in a
-  stale process.
+  to <mission control>/.godspeed/chat-guard/unanswered.jsonl, or logged where it cannot be saved. Only
+  the standard library and already loaded modules are used on that path: a lazy Hermes import is what
+  fails in a stale process.
 
 A file named self-restart-off beside this one turns the restart off (it is how the broken state is
 reproduced on purpose to check the chat's health check).
@@ -41,6 +41,8 @@ RESTART_EXIT = 75   # the exit code Hermes' service restarts on
 KEEP = 500          # unanswered messages kept
 PLAIN = ("Sorry, something went wrong on my side and I could not answer that. "
          "Your message is saved, and the problem is being fixed.")
+PLAIN_UNSAVED = ("Sorry, something went wrong on my side and I could not answer that. "
+                 "Please send it again a little later.")
 SHA = re.compile(r"^[0-9a-f]{40}([0-9a-f]{24})?$")
 PRIVATE = ("dm", "private")
 
@@ -141,6 +143,16 @@ def unanswered(chat_id, message_id, text, why):
             "chat_id": str(chat_id), "message_id": message_id, "text": text or "[a message without text]", "why": why}
 
 
+def keep(chat_id, message_id, text, why):
+    """Saves a message that got no answer, or logs it where it cannot be saved, and returns the
+    sentence to answer it with."""
+    entry = unanswered(chat_id, message_id, text, why)
+    if save_unanswered(mission_control(), entry):
+        return PLAIN
+    log.error("godspeed-chat-guard: an unanswered message that could not be saved: %s", json.dumps(entry, ensure_ascii=False))
+    return PLAIN_UNSAVED
+
+
 class Watch:
     def __init__(self, root, read=checkout_revision, signal_self=None, hard_exit=None, sleep=time.sleep, off=None):
         self.root, self.read, self.sleep = root, read, sleep
@@ -213,7 +225,10 @@ _answered = set()
 
 
 def first_answer(chat_id, message_id):
-    """True once per message, so a message both failure paths see gets one sentence."""
+    """True once per message, so a message both failure paths see gets one sentence. Without a
+    message id there is nothing to tell two failures apart by, so each is answered."""
+    if message_id is None:
+        return True
     key = (str(chat_id), str(message_id))
     if key in _answered:
         return False
@@ -221,6 +236,22 @@ def first_answer(chat_id, message_id):
         _answered.clear()
     _answered.add(key)
     return True
+
+
+def forget(chat_id, message_id):
+    """The sentence for this message was not delivered, so the next failure path may try again."""
+    _answered.discard((str(chat_id), str(message_id)))
+
+
+def owner_turn(event):
+    """Whether a Hermes event is the owner's own message in their private chat (not an internal
+    wake or notice Hermes made itself)."""
+    try:
+        source = getattr(event, "source", None)
+        return (not getattr(event, "internal", False) and str(getattr(source, "chat_type", "")) in PRIVATE
+                and getattr(source, "chat_id", None) is not None and allowed(getattr(source, "user_id", None)))
+    except Exception:
+        return False
 
 
 async def on_error(update, context):
@@ -232,16 +263,20 @@ async def on_error(update, context):
             return
         if not first_answer(chat.id, message.message_id):
             return
-        save_unanswered(mission_control(), unanswered(chat.id, message.message_id,
-                                                      getattr(message, "text", None) or getattr(message, "caption", None), "handler"))
-        await context.bot.send_message(chat_id=chat.id, text=PLAIN)
+        sentence = keep(chat.id, message.message_id, getattr(message, "text", None) or getattr(message, "caption", None), "handler")
+        try:
+            await context.bot.send_message(chat_id=chat.id, text=sentence)
+        except Exception:
+            forget(chat.id, message.message_id)
+            raise
     except Exception:
         log.exception("godspeed-chat-guard: the plain reply could not be sent")
 
 
 def wrap_turn_error(adapter, native):
-    """Replaces adapter._notify_turn_error so a failed turn in the owner's private chat gets PLAIN, and
-    no error name. Hermes offers no hook for a failed turn; this method is where every one ends."""
+    """Replaces adapter._notify_turn_error so a turn whose error escaped Hermes' turn handler gets PLAIN
+    in the owner's private chat, and no error name. An error inside the model turn itself never comes
+    here: Hermes answers it with its own reply, which wrap_agent_error_reply replaces."""
     current = getattr(adapter, "_notify_turn_error", None)
     if getattr(current, "godspeed_wrapped", False):
         current.godspeed_native = native
@@ -251,21 +286,19 @@ def wrap_turn_error(adapter, native):
         return False
 
     async def notify(event, error, *args, **kwargs):
-        try:
-            source = getattr(event, "source", None)
-            chat_id, user_id = getattr(source, "chat_id", None), getattr(source, "user_id", None)
-            mine = str(getattr(source, "chat_type", "")) in PRIVATE and chat_id is not None and allowed(user_id)
-        except Exception:
-            mine = False
-        if not mine:
+        if not owner_turn(event):
             result = current(event, error, *args, **kwargs)
             return await result if inspect.isawaitable(result) else result
-        message_id = getattr(event, "message_id", None)
+        chat_id, message_id = event.source.chat_id, getattr(event, "message_id", None)
         try:
             if not first_answer(chat_id, message_id):
                 return None
-            save_unanswered(mission_control(), unanswered(chat_id, message_id, getattr(event, "text", None), "turn"))
-            await notify.godspeed_native.bot.send_message(chat_id=int(chat_id), text=PLAIN)
+            sentence = keep(chat_id, message_id, getattr(event, "text", None), "turn")
+            try:
+                await notify.godspeed_native.bot.send_message(chat_id=int(chat_id), text=sentence)
+            except Exception:
+                forget(chat_id, message_id)
+                raise
         except Exception:
             log.exception("godspeed-chat-guard: the plain reply could not be sent")
         return None
@@ -276,10 +309,37 @@ def wrap_turn_error(adapter, native):
     return True
 
 
+def wrap_agent_error_reply(runner_class):
+    """Replaces the reply Hermes gives when a model turn raises (it names commands and the log) with
+    PLAIN in the owner's private chat. Hermes' own handling still runs first: it logs the error, keeps
+    the message in the conversation and marks the turn failed."""
+    current = getattr(runner_class, "_hmwa_agent_error_reply", None)
+    if getattr(current, "godspeed_wrapped", False):
+        return True
+    if not callable(current):
+        log.warning("godspeed-chat-guard: this Hermes has no reply for a failed model turn to replace; it keeps its own")
+        return False
+
+    async def reply(self, error, event, *args, **kwargs):
+        if not owner_turn(event):
+            return await current(self, error, event, *args, **kwargs)
+        try:
+            await current(self, error, event, *args, **kwargs)
+        except Exception:
+            log.exception("godspeed-chat-guard: Hermes' handling of a failed model turn failed too")
+        return keep(event.source.chat_id, getattr(event, "message_id", None), getattr(event, "text", None), "model turn")
+
+    reply.godspeed_wrapped = True
+    runner_class._hmwa_agent_error_reply = reply
+    return True
+
+
 def factory(native, adapter):
     start_watch()
     native.add_error_handler(on_error)
     wrap_turn_error(adapter, native)
+    # The gateway this factory runs in has loaded its runner already; importing it here could fail in a stale process.
+    wrap_agent_error_reply(getattr(sys.modules.get("gateway.run"), "GatewayRunner", None))
 
 
 def register(ctx):

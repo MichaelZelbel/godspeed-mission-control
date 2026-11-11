@@ -32,7 +32,7 @@ test('a chat that answers: one test turn through the gateway, nothing said, the 
  assert.equal(entry.answered,true);assert.deepEqual(f.said(),[]);
  assert.deepEqual(f.turns.map(x=>x.args),[['chat','-q',CHECK_QUESTION,'-Q','--continue','godspeed-chat-check-2026-11-11','--create-if-missing']]);
  assert.equal(f.turns[0].options.cwd,f.root);assert.equal(f.turns[0].options.env.HERMES_HOME,path.join(f.root,'hermes-home'));
- assert.deepEqual(chatStatus(f.store),{answered:true,checked_at:new Date(START+HOUR).toISOString(),failing_since:null,problems:[]});
+ assert.deepEqual(chatStatus(f.store),{answered:true,checked_at:new Date(START+HOUR).toISOString(),failing_since:null,problems:[],delivery_failures:[]});
  assert.equal(f.bell('down'),undefined);
 });
 
@@ -59,6 +59,7 @@ test('a message Telegram refuses is recorded as a failed delivery and said on th
  assert.equal(f.bell('down').status,'pending');
  assert.equal(f.record().told,false);
  assert.deepEqual(f.record().delivery_failures.map(x=>[x.kind,x.reason]),[['down','refused']]);
+ assert.deepEqual(chatStatus(f.store).delivery_failures.map(x=>x.reason),['refused']);
  f.telegram(async()=>{throw Error('getaddrinfo EAI_AGAIN');});f.later();failTwice(f);await f.health.tick();
  assert.deepEqual(f.record().delivery_failures.map(x=>x.reason),['refused','network']);
  f.telegram(async()=>({ok:true,json:async()=>({ok:true})}));f.later();failTwice(f);await f.health.tick();
@@ -102,6 +103,17 @@ test('no check within the hour, during a Hermes update, or without Telegram',asy
 test('several allowed users name no single owner: nothing is sent, the bell still is, and the failure is recorded',async t=>{
  const f=fixture(t,{env:`TELEGRAM_BOT_TOKEN=${TOKEN}\nTELEGRAM_ALLOWED_USERS=4242,5353\n`});f.later();failTwice(f);await f.health.tick();
  assert.deepEqual(f.sent,[]);assert.equal(f.bell('down').status,'pending');assert.deepEqual(f.record().delivery_failures.map(x=>x.reason),['no-owner']);
+});
+
+test('a check that is still running is not started again, so a failing chat is told once',async t=>{
+ const f=fixture(t);f.later();failTwice(f);
+ let open;const gate=new Promise(resolve=>{open=resolve;}),run=f.health.run;f.health.run=async(...args)=>{await gate;return run(...args);};
+ const first=f.health.tick();
+ await new Promise(resolve=>setImmediate(resolve));
+ const second=f.health.tick();
+ open();
+ assert.equal(await second,null,'a second tick while the first runs');await first;
+ assert.deepEqual(f.said(),[CHAT_HEALTH_WORDS.down]);assert.equal(f.turns.length,2);
 });
 
 test('nextChatHealth: an outage is told once and its recovery once',()=>{
