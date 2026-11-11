@@ -1,6 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import {fileURLToPath} from 'node:url';import {execFileSync} from 'node:child_process';
 import {Store} from '../core/records/store.mjs';import {QueryService} from '../core/query.mjs';import {chatContext} from '../core/chat-context.mjs';
-import {queueNotice,readNotices} from '../core/notices.mjs';import {openStep,heard} from '../core/waiting-steps.mjs';import {sayNotice,recordRoutine,delivered,followUpFailed,REPORT_CONTRACT} from '../core/background-reports.mjs';
+import {queueNotice,readNotices} from '../core/notices.mjs';import {openStep,heard} from '../core/waiting-steps.mjs';import {sayNotice,recordRoutine,delivered,followUpFailed,REPORT_CONTRACT,FOLLOW_UP_CONTRACT} from '../core/background-reports.mjs';
 
 // BACKGROUND REPORTS (4 November 2026, #198): a notice is written with the chat's guidance, recorded
 // where the chat reads it, and the chat's next reply is told about it.
@@ -280,7 +280,7 @@ test('the owner hears one plain sentence about the follow-up, once, or nothing',
  const sentence='I could not check yet whether the Ko-fi price change brought in more supporters, so I will look again in an hour.';
  assert.deepEqual(await failure(1,provider([{about:'Ko-fi price',text:sentence}],seen)),{told:true,given_up:false});
  assert.ok(!JSON.stringify(seen).includes('cannot import'),'the raw note is never handed to the AI');
- assert.ok(seen[0].signal,'the writing is bounded in time');
+ assert.ok(seen[0].signal,'the writing is bounded in time');assert.equal(seen[0].contract,FOLLOW_UP_CONTRACT,'asked for one sentence');
  assert.deepEqual(await failure(2,provider([{about:'Ko-fi price',text:sentence}],seen)),{told:false,given_up:false});
  const notices=readNotices(store);assert.equal(notices.length,1);
  assert.deepEqual([notices[0].id,notices[0].text,notices[0].written],['follow-up-failed-'+job.id,sentence,true]);

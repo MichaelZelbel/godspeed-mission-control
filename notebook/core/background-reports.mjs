@@ -128,7 +128,7 @@ export async function followUpFailed(store,{job={},origin,attempt,one_time,retry
  if(one_time&&attempt===1&&!given_up&&provider){
   const about='a follow-up you asked for';
   const facts=['What the follow-up was asked to do: '+String(job.prompt||'').slice(0,PROMPT_CHARS),'It could not run because something broke on the assistant\'s side.',retry_at?'It will be tried again at '+retry_at+'.':'It will be tried again later.'];
-  const bounded=input=>provider({...input,signal:AbortSignal.timeout(WRITING_MS)});
+  const bounded=input=>provider({...input,contract:FOLLOW_UP_CONTRACT,signal:AbortSignal.timeout(WRITING_MS)});
   const written=await writeReport({about,facts,text:''},{provider:bounded,guidance:guidance||chatGuidance({root:store.root,home})});
   const [report,...more]=written.reports,text=report?.text||'';
   if(written.written==='assistant'&&!more.length&&text&&!unsafeFollowUpText(text,job))told=queueNotice(store,{id:'follow-up-failed-'+origin,text,about,facts,written:true});
