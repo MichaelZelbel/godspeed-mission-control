@@ -118,7 +118,9 @@ async function setup(){
   inServer(['sh','-c','pkill -f [g]odspeed-scenario-telegram.py 2>/dev/null || true']);
   inServer(['cp','/opt/godspeed/kit/docker/test/fake-telegram.py','/tmp/godspeed-scenario-telegram.py']);
   inServer(['sh','-c',`python3 /tmp/godspeed-scenario-telegram.py --port 8081 --token ${JSON.stringify(token)} --scenario /tmp/godspeed-scenario-telegram.json --record /tmp/godspeed-scenario-telegram-record.json >/tmp/godspeed-scenario-telegram.log 2>&1 &`]);
-  await waitFor('API',copyRecord,record=>Array.isArray(record.requests),15);
+  const record=await waitFor('API',copyRecord,record=>record!==null && typeof record==='object',15);
+  // A fake from before #275 writes its record without the request log every step below reads.
+  if(!Array.isArray(record.requests)) throw Error("the installed fake Telegram API keeps no request log: the stage's server image is older than these scenarios");
   const connected=post(notebookPort,'/api/telegram/connect',{token,timezone:'Etc/UTC',address:'https://example.invalid'});
   if(!connected?.start_message) throw Error('Settings connected the bot but supplied no one-time /start message');
   await capture('setup-start','setup',()=>act({from:owner,text:connected.start_message}));

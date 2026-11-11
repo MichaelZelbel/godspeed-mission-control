@@ -153,6 +153,24 @@ test("pre_tool_call adds the session's conversation to asked, start and answer t
   } finally { fs.rmSync(d, { recursive: true, force: true }); }
 });
 
+test("in a turn the Godspeed notebook runs, the block and the commands get the notebook's conversation", { skip }, () => {
+  const d = tmp();
+  try {
+    const env = { GODSPEED_CHARM_CONVERSATION: "notebook:browser-owner" };
+    const block = call({ platform: "cli", session_id: "local-1", user_message: "useless garbage" }, { script: stub(d, ECHO), mc: "/some/mc", env });
+    assert.deepEqual(block.argv, ["context", "--godspeed", "/some/mc", "--conversation", "notebook:browser-owner", "--program-asks"]);
+    const out = hooks([
+      turnOf("cli", "local-1"),
+      tool("godspeed-charm asked --words x", "local-1"),
+      tool("godspeed-charm answer yes --words yes", "never-seen"),
+      tool('godspeed-charm asked --conversation "telegram:other" --words x', "local-1"),
+    ], { script: stub(d, ECHO), env });
+    assert.equal(out[1].args.command, 'godspeed-charm asked --conversation "notebook:browser-owner" --words x');
+    assert.equal(out[2].args.command, 'godspeed-charm answer --conversation "notebook:browser-owner" yes --words yes');
+    assert.equal(out[3], null);
+  } finally { fs.rmSync(d, { recursive: true, force: true }); }
+});
+
 test("pre_tool_call leaves an explicit --conversation, other commands and unknown sessions alone", { skip }, () => {
   const d = tmp();
   try {
