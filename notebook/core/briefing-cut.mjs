@@ -82,7 +82,7 @@ function usableRewrite(replacement,sentence,voice){
 
 // Repairs only the flagged sentences (#387): a wording finding rewrites that sentence, or drops it
 // when no usable rewrite comes back; only a core-unsupported finding takes its whole item.
-// Items keep their numbers, so an exact supplied numbered list stays exact. A finding inside a line
+// Items keep their numbers, on the item's first remaining line, so an exact supplied numbered list stays exact. A finding inside a line
 // Godspeed requires word for word throws: the caller then falls back as before.
 // rewrite(sentence,itemText,reason) resolves to the new sentence or ''.
 export async function applyFindings(text,findings,{protectedLines=[],voice=null,rewrite}){
@@ -110,6 +110,12 @@ export async function applyFindings(text,findings,{protectedLines=[],voice=null,
   const emptied=lines.slice(item.start,item.end).every((l,i)=>!(i===0?l.replace(ITEM_MARKER,''):l).trim());
   changes.push({action:'drop-sentence',item:first,sentence:finding.sentence,reason,...(emptied?{item_emptied:true}:{})});
   if(emptied)for(let i=item.start;i<item.end;i++)cut.add(i);
+ }
+ for(const item of items){
+  if(cut.has(item.start)||lines[item.start].replace(ITEM_MARKER,'').trim())continue;
+  const next=lines.findIndex((l,i)=>i>item.start&&i<item.end&&!cut.has(i)&&l.trim());
+  if(next<0)continue;
+  lines[item.start]=lines[item.start].trimEnd()+' '+lines[next].trim();cut.add(next);
  }
  const out=[];
  for(const [i,line] of lines.entries()){if(cut.has(i)||line.trim()===''&&(!out.length||!out.at(-1).trim()))continue;if(line.trim()||out.length)out.push(line.trim()?line:'');}
