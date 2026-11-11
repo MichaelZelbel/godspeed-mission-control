@@ -67,8 +67,9 @@ If it contradicts something you believe about me, the file wins.
   now, follow its recipe here, as the routine will.
   Anything new that runs without me also gets its row in `procedures.md` in
   the same session. No unlisted procedures, ever.
-- **Decisions get written down.** When I make a real decision, append one
-  line to `decisions.md` with the date and the why. Never edit old lines.
+- **Decisions get written down.** A decision about how you work: one dated
+  line with the why in `decisions.md`, never edited. My yes, no or "not
+  yet" to your proposal goes to `mc-holds`, never there.
 - **Save useful updates during the conversation.** When I tell you a useful
   fact, agreement or decision, file it while we work; do not wait for a
   separate capture or sorting request. People, facts and events go into my

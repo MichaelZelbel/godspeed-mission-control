@@ -36,7 +36,8 @@ if there is one: its "For you today" section is the daily round's choice. Then r
 and their notes are kept: call `get_user_profile` (their facts and the people closest to them)
 and `search_brain` for the people, projects and dates the files above name. Without the
 notebook tools, read `world/` instead and say in the brief that the notebook was not reached.
-Read the previous brief in `brief/` if there is one. Today is the date the terminal gives
+Read the previous brief in `brief/` if there is one. Never show a step that `mc-work list` marks
+"held by": the person declined or postponed it. Today is the date the terminal gives
 (`date +%F`, in the time zone the morning job runs in), also when the brief runs in the
 evening: never name a brief for another day. Do not invent change over time when there is no
 earlier record.
@@ -100,7 +101,8 @@ back every step of the day: `mc-work stop --today --words "<their words>"`. "sto
 line 2: find the `id` whose `n` is 2 in `mc-work going-out --json` and run
 `mc-work stop <id> --words "<their words>"` (for several numbers, once for each). Confirm in one
 plain sentence what is kept back. When nothing was going out, say "Nothing was going out today."
-and run nothing.
+and run nothing. "No more of these" or "not until ..." about a kind of step is recorded with
+`mc-holds hold`, as the next-action recipe's Step 0 says, never in `decisions.md`.
 
 ## Done yesterday without asking
 

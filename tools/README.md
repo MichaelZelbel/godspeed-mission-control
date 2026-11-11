@@ -197,6 +197,11 @@ one of the others is not installed.
   standing yes you gave its goal for that kind of step: then the step goes out at
   a set time (UTC, 18:00 unless the plan says otherwise) unless you say stop
   first, and `mc-work stop` keeps one step or the whole day back. Chapters 3 and 8.
+- **`holds.js`** (`mc-holds`) remembers the steps you declined or postponed. Your "no" or
+  "not yet, until the book is out of beta" is a claim in `world/claims/`, and every program that
+  puts a proposal in front of you reads it: a step about that thing stays off the day's moves,
+  the card and the work list, and comes back by itself when the claim, or the one it waits on,
+  ends. `mc-holds list` shows what is held; `mc-holds end` takes a no back.
 
 ```
 mc-goals attention          who gets attention today, and why
@@ -204,6 +209,7 @@ mc-goals settle             each goal's weekly number, and the verdicts on its m
 mc-forecast score           how good your mission control's predictions have been
 mc-work tick                dead leases, due retries, stale plans
 mc-work going-out           what goes out today unless you say stop
+mc-holds list               what you declined or postponed, and what each waits on
 ```
 
 - **`mc-run`** carries out one recipe from your mission control with nobody sitting at the
@@ -270,7 +276,12 @@ exit codes hears about it the same morning.
   it ready (`godspeed-coach prep-check`). The talk then opens with the opening that was written
   ahead, and its talk card goes with every message of the talk. It writes only
   `coach/<area>/prep/<date>.md` and contacts nobody; with Claude Code its file tools may write
-  in that folder only. A talk it could not prepare opens from its brief as before. The notebook's
+  in that folder only. A talk it could not prepare opens from its brief as before. When a talk's
+  rhythm changed and dropped a day it used to have, that day is prepared anyway until the new
+  rhythm's first talk, for a talk you start yourself, and the summary names the change. A talk
+  that opened without its preparation yesterday or today, on a day one was due, is named in the
+  summary and gets one repair item in your work list; a talk you start on another day may say it
+  is not prepared. The notebook's
   routine "Coaching talk preparation" runs it every night at 03:00; by hand:
 
 ```

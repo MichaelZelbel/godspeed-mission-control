@@ -50,6 +50,10 @@
 //     writing that it "changes no weekly number", though its recipe says such a chance gets a move.
 //     An opening whose idea file says "STATUS: dropped" (the person said no) or "STATUS: made" is
 //     skipped, though it stays in openings.md until its UNTIL; a missing idea file is still required.
+//   - nothing the person declined or postponed is proposed again (2026-11-11, #282): a move whose
+//     TOUCHES line names the subject of a hold claim in world/claims/ (holds.js says which) is a
+//     gap naming the claim; a carried APPLY step it holds gets a "HELD <id>" note and stays off
+//     today's card and out of the count. A move with no TOUCHES line is never held, and a NOTE says so.
 //
 //   mc-check-moves --date 2026-09-24 [--per-goal 3] [--godspeed DIR]
 //
@@ -168,8 +172,19 @@ if (text === null) {
 
 const FIELDS = ['GOAL', 'WHERE', 'NOW', 'AFTER', 'WHO DID THIS', 'HOW IT LANDS', 'UNDO', 'PERMISSION'];
 // Read like the fields above, but required only for a goal whose research names its limit.
-const PARSED = [...FIELDS, 'AIMS AT'];
+const PARSED = [...FIELDS, 'AIMS AT', 'TOUCHES'];
+// What the person declined or postponed, live from world/claims (holds.js). Without holds.js beside
+// this program nothing is held; one that is there and fails says so, never a quiet "nothing held"
+// (mc-decide then ends the day not clean: a send-back could not mend it).
 const notes = [];
+let holdsLib = null, claimHolds = [];
+if (fs.existsSync(path.join(__dirname, 'holds.js'))) {
+  try { holdsLib = require(path.join(__dirname, 'holds.js')); claimHolds = holdsLib.currentHolds(ROOT, DATE); } catch (e) {
+    holdsLib = null;
+    notes.push(`NOTE holds NOT read (${String(e.message).split('\n')[0]}): no move was checked against what the person declined or postponed; mc-holds list says what is wrong`);
+  }
+}
+const untouched = [];
 const noted = new Set();
 // What the person is handed today: "move <n> (<title>)" for each of today's moves only they can
 // make, then the carried steps (below, after the moves are read).
@@ -197,7 +212,11 @@ for (const b of blocks) {
   }
   for (const k of FIELDS) if (!f[k] || !f[k].trim()) problems.push(`move "${title}": ${k} is missing or empty`);
   const goal = (f.GOAL || '').trim();
-  if (goal) counts[goal] = (counts[goal] || 0) + 1;
+  const hold = holdsLib && holdsLib.heldBy(claimHolds, { touches: holdsLib.moveTouches(b), text: title.replace(/^\d+\.\s*/, '') });
+  if (hold) problems.push(`move "${title}": held by ${hold.id}: the person ${hold.stance} this ("${hold.value}"); take it out of moves.md and off today's card`
+    + (hold.until ? `; it may come back when ${hold.until} ends` : ''));
+  if (f.TOUCHES === undefined) untouched.push((title.match(/^(\d+)\./) || [])[1] || '?');
+  if (goal && !hold) counts[goal] = (counts[goal] || 0) + 1;
   const who = f['WHO DID THIS'] || '';
   if (/\b(his own|my own|her own|their own|this mission control|mission control's own)\b|W-\d{8}-\d+|ideas\//i.test(who)) {
     problems.push(`move "${title}": WHO DID THIS must name somebody outside who did this, not the person's or the mission control's own work`);
@@ -285,7 +304,6 @@ try { register = require(path.join(__dirname, 'mc-cards.js')).store(path.join(RO
 const carried = [];
 for (const c of register) {
   const f = c.f;
-  if (!/^(person|me|you|him|her|them|i)$/i.test((f.OWNER || '').trim())) continue;
   if ((f.SOURCE || '').trim() !== 'next-action' || !/^apply-/.test((f.KEY || '').trim())) continue;
   if (!WAITING.includes((f.STATUS || '').trim())) continue;
   // Answered already (an APPROVED line): it is no longer a question on the card. A yes to a step
@@ -297,10 +315,15 @@ for (const c of register) {
   const life = parseInt(f['STALE AFTER'] || '7', 10) || 7;
   if (age < 1 || age >= life) continue;
   if (todayApplies.has(c.id) || held.has(c.id)) continue;
+  // A step the person declined or postponed waits off the card by itself; it is never a gap.
+  const claim = holdsLib && holdsLib.heldBy(claimHolds, { touches: f.TOUCHES, text: f.WHAT });
+  if (claim) { notes.push(`HELD ${c.id}: ${holdsLib.describe(claim)}; it stays off today's card`); continue; }
+  if (!/^(person|me|you|him|her|them|i)$/i.test((f.OWNER || '').trim())) continue;
   carried.push(c);
   persons.push(`${c.id} (${shorten((f.WHAT || '').replace(/^Per [^:]*:\s*/, ''), 70)})`);
 }
 if (persons.length > 1) problems.push(`at most one move a day may be the person's to do; ${persons.length} are: ${persons.join('; ')}. Keep the one they already said they want; for every other carried step write a line "HOLD <work id>: <why>" in moves.md (it stays off today's card and still expires seven days after it was filed), and for today's moves find a route the mission control holds, or leave them for another day and write "FEWER <goal>: the person's one step today is move <n>" for a goal that is left short`);
+if (untouched.length) notes.push(`NOTE move${untouched.length > 1 ? 's' : ''} ${untouched.join(', ')}: no TOUCHES line, so nothing the person declined or postponed can reach ${untouched.length > 1 ? 'them' : 'it'}`);
 // The count itself, for other programs to read (goal-trial-check reads it); never fails a day.
 notes.unshift(`PERSON ${persons.length}: ${persons.length ? persons.join('; ') : 'none'}`);
 

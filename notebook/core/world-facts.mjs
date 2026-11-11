@@ -53,8 +53,8 @@ function readFolder(dir) {
 
 // Who a world file's subject is, in the notebook's own terms. An entity file
 // names its person's notebook id (menerio_id: the import kept Menerio's ids) and
-// nicknames; a person merged into another is that other person; one whose card
-// is hidden from assistants hides every fact about them.
+// nicknames; a person merged into another is that other person; a person or
+// thing hidden from assistants hides every fact about them.
 function resolver(query) {
   const all = query.rows('contacts'), visible = new Set(visibleRows(query, 'contacts').map(c => c.id));
   const byId = new Map(); for (const c of all) for (const id of [c.id, ...(c.former_ids || [])]) byId.set(id, c);
@@ -62,6 +62,7 @@ function resolver(query) {
   const byName = new Map();
   for (const c of all) if (!c.merged_into) for (const n of [c.name, ...(Array.isArray(c.aliases) ? c.aliases : [])]) if (typeof n === 'string' && n.trim()) byName.set(norm(n), [...(byName.get(norm(n)) || []), c]);
   const things = live(visibleRows(query, 'entities')), thingByName = new Map(things.map(e => [norm(e.name), e]));
+  const shown = new Set(things.map(e => e.id)), hiddenThings = new Set(live(query.rows('entities')).filter(e => !shown.has(e.id)).map(e => norm(e.name)));
   const entityFiles = new Map(readFolder(path.join(query.store.root, 'world', 'entities')).map(f => [f.fields.slug || f.name.replace(/\.md$/, ''), f.fields]));
   const cached = new Map();
   return slug => {
@@ -75,7 +76,7 @@ function resolver(query) {
       // two people: the oldest visible one stands for them.
       if (!c) { const found = [...new Set(names.flatMap(n => byName.get(n) || []))].sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || ''))); c = follow(found.find(x => visible.has(x.id)) || found[0]); }
       if (c) result = visible.has(c.id) ? {subject_type: 'contact', subject_id: c.id, subject_name: c.name} : null;
-      else if (names.some(n => (byName.get(n) || []).some(x => !visible.has(x.id)))) result = null;
+      else if (names.some(n => (byName.get(n) || []).some(x => !visible.has(x.id)) || hiddenThings.has(n))) result = null;
       else { const thing = names.map(n => thingByName.get(n)).find(Boolean); result = thing ? {subject_type: 'entity', subject_id: thing.id, subject_name: thing.name} : {subject_type: 'entity', subject_id: null, subject_name: e.name || slug}; }
     }
     cached.set(slug, result);
