@@ -38,6 +38,8 @@ printf -- '---\nname: next-action\ndescription: the recipe, cut down for a test\
 # holds (#282): a naive run that proposes an interview the person postponed (its APPLY is
 # FAKE_APPLY, its TOUCHES FAKE_TOUCHES) beside a note to Jane Doe, and lists both on its card
 # (FAKE_CARD, when it words the card itself) and its Moves list (FAKE_MOVES). FAKE_PROMPTS keeps each prompt.
+# FAKE_FULL=1 gives both moves every field the moves check asks for, so only the held one is short;
+# with FAKE_ACTIVE=1 the goal book is active too, and two moves are fewer than it needs (#405).
 cat > "$BIN/claude" <<'STAND'
 #!/usr/bin/env bash
 prompt="$(cat)"
@@ -51,7 +53,9 @@ case "$mode" in
            echo "Nothing needs you today. nothing" ;;
   holds)   card='ship-list card: 1. Answer Podcast X'"'"'s interview invitation about the book; 2. Send the launch note to Jane Doe'
            printf '# Decision\n\n## For you today\n%s\n\n## Moves\n%s\n' "${FAKE_CARD:-$card}" "${FAKE_MOVES:-Two.}" > "$FAKE_RUN/decision.md"
-           printf '### 1. Answer Podcast X'"'"'s interview invitation about the book\nAPPLY: %s\nTOUCHES: %s\nGOAL: book\nPERMISSION: ship list\n\n### 2. Send the launch note to Jane Doe\nTOUCHES: jane-doe\nGOAL: book\nPERMISSION: ship list\n' "$FAKE_APPLY" "${FAKE_TOUCHES:-the-book}" > "$FAKE_RUN/moves.md"
+           full=''; [ "${FAKE_FULL:-0}" = 1 ] && full='WHERE: x\nNOW: x\nAFTER: x\nWHO DID THIS: Ann Lee did this\nUNDO: x\n'
+           [ "${FAKE_ACTIVE:-0}" = 1 ] && printf 'Attention for the test\nactive:\n  book    outcome    deadline in 3 day(s)\n' > "$FAKE_RUN/attention.txt"
+           printf '### 1. Answer Podcast X'"'"'s interview invitation about the book\nAPPLY: %s\nTOUCHES: %s\nGOAL: book\nPERMISSION: ship list\nHOW IT LANDS: only the person\n'"$full"'\n### 2. Send the launch note to Jane Doe\nAPPLY: W-NOTE-01\nTOUCHES: jane-doe\nGOAL: book\nPERMISSION: ship list\nHOW IT LANDS: the mission control sends it\n'"$full" "$FAKE_APPLY" "${FAKE_TOUCHES:-the-book}" > "$FAKE_RUN/moves.md"
            echo "Two changes are ready. ship-list card" ;;
   answers) echo "The moves are as far as they go today." ;;
   crash)   printf 'Traceback (most recent call last):\nModuleNotFoundError: No module named %s\n' "'ruamel'" >&2; exit 1 ;;
@@ -189,6 +193,25 @@ fresh; FAKE_MODE=holds FAKE_APPLY=W-HELD-01 FAKE_MOVES="$(printf "1. book: Answe
 check "  the decision's Moves list no longer has the held move, only the held-back mark" "$(sed -n '/^## Moves$/,/^## /{/^## /d;p;}' "$RUN/decision.md" | sed -n 1,2p)" "$(printf "1. book: (held back: you postponed this, %s)\n2. book: Send the launch note to Jane Doe (ship list)" "$HOLD")"
 fresh; FAKE_MODE=holds FAKE_APPLY=W-HELD-01 decide >/dev/null
 check "  a Moves list that words the held move otherwise keeps its lines and says it is held" "$(sed -n '/^## Moves$/,/^## /{/^## /d;p;}' "$RUN/decision.md")" "$(printf "Two.\nHeld back: move 1 of moves.md is a step you postponed (%s); if a line here names it in other words, it is not on the ship list." "$HOLD")"
+echo "-- once a held move is taken out, the record and the card stop counting it (#405)"
+movescheck() { sed -n '/^## Moves check$/,/^## /{/^## Moves check$/d;p;}' "$RUN/decision.md"; }
+fresh; FAKE_MODE=holds FAKE_APPLY=W-HELD-01 FAKE_FULL=1 decide >/dev/null
+check "  it was sent back once" "$(grep -c . "$CALLS")" "2"
+check "  the held move was the only gap: the record has no Moves check" "$(movescheck)" ""
+missing "  and never tells the run to take it out" "$(cat "$RUN/decision.md")" "take it out of moves.md"
+fresh; FAKE_MODE=holds FAKE_APPLY=W-HELD-01 FAKE_FULL=1 FAKE_ACTIVE=1 decide >/dev/null
+contains "  another gap still stands, counted on the moves that are left" "$(movescheck)" "book: 1 move(s), fewer than 3"
+contains "  the person's count leaves the held move out" "$(movescheck)" "PERSON 0: none"
+missing "  and the held move is not named" "$(movescheck)" "Answer Podcast X"
+fresh; FAKE_MODE=holds FAKE_APPLY=W-HELD-01 decide >/dev/null
+contains "  a move short of its fields is still listed as before" "$(movescheck)" "move \"2. Send the launch note to Jane Doe\": WHERE is missing or empty"
+missing "  beside no word of the held one" "$(movescheck)" "Answer Podcast X"
+fresh; FAKE_MODE=holds FAKE_APPLY=W-HELD-01 FAKE_CARD="WHAT: 3 changes are ready: 1. Answer Podcast X's interview invitation about the book; 2. Send the launch note to Jane Doe; 3. Fix the shop link (carried)" decide >/dev/null
+check "  the card counts only the ready changes, and says how many are held back" "$(for_you | sed -n 1p)" "WHAT: 2 changes are ready, 1 held back: 1. (held back: you postponed this, $HOLD); 2. Send the launch note to Jane Doe; 3. Fix the shop link (carried)"
+fresh; FAKE_MODE=holds FAKE_APPLY=W-HELD-01 FAKE_CARD="Two changes are ready: 1. Answer Podcast X's interview invitation about the book; 2. Send the launch note to Jane Doe" decide >/dev/null
+check "  a count in words stays in words" "$(for_you | sed -n 1p)" "One change is ready, 1 held back: 1. (held back: you postponed this, $HOLD); 2. Send the launch note to Jane Doe"
+fresh; FAKE_MODE=holds FAKE_APPLY=W-HELD-01 FAKE_CARD="WHAT: 2 changes are ready: 1. Say yes to the podcast; 2. Send the launch note to Jane Doe" decide >/dev/null
+check "  a card that names the held move in other words keeps its count" "$(for_you | sed -n 1p)" "WHAT: 2 changes are ready: 1. Say yes to the podcast; 2. Send the launch note to Jane Doe"
 NOCARD="$TMP/no-card"; mkdir -p "$NOCARD"
 printf '# Decision\n\n## Moves\nOne.\n' > "$NOCARD/decision.md"
 printf "### 1. Answer Podcast X's interview invitation about the book\nTOUCHES: the-book\n" > "$NOCARD/moves.md"
