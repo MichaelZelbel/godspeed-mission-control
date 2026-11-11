@@ -83,6 +83,11 @@ class WriteAndEdit(FenceCase):
         self.refused("Write", {"file_path": str(ROOT / ".factory/hooks/another.py")})
         self.refused("NotebookEdit", {"notebook_path": str(ROOT / ".factory/hooks/x.ipynb")})
 
+    def test_session_started_in_the_starter(self):
+        starter = ROOT / "starter-godspeed"
+        self.allowed("Write", {"file_path": str(starter / ".claude/settings.json")}, cwd=starter, project=starter)
+        self.refused("Write", {"file_path": str(ROOT / ".claude/settings.json")}, cwd=starter, project=starter)
+
     def test_root_found_without_project_dir(self):
         self.refused("Write", {"file_path": str(ROOT / ".claude/settings.json")}, project=None)
         self.allowed("Write", {"file_path": str(ROOT / "starter-godspeed/.claude/settings.json")}, project=None)
@@ -169,6 +174,8 @@ class ShellReads(FenceCase):
             "mv /tmp/notes.txt .claude",
             "mv /tmp/notes.txt starter-godspeed/",
             "cp --parents src/a.txt build/",
+            "git checkout -- . ':!.claude'",
+            "cd starter-godspeed && git checkout -- ':/starter-godspeed/x.txt'",
         ]:
             with self.subTest(command=command):
                 self.bash_allowed(command)
@@ -226,6 +233,12 @@ class ShellWrites(FenceCase):
             "cd starter-godspeed && cp --parents .claude/settings.json ..",
             f"cd /tmp && cp --parents ./.claude/settings.json {root}",
             "rsync -R starter-godspeed/./.claude/settings.json .",
+            "cd .factory/hooks && echo \"$(rm holdout_fence.py)\"",
+            "cd .factory/hooks && bash <<'EOF'\nrm holdout_fence.py\nEOF",
+            "git checkout main -- ':(literal).factory/hooks/holdout_fence.py'",
+            "git restore --source=HEAD~1 -- ':(top).ignore'",
+            "cd starter-godspeed && git checkout main -- :/.ignore",
+            "cd starter-godspeed && git rm ':(top,icase).IGNORE'",
             "ln -s /tmp/evil.json .claude/settings.json",
             "ln -s -t .factory/hooks /tmp/evil.py",
             "rsync -rtv /tmp/hooks/ .factory/hooks/",

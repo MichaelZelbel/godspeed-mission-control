@@ -231,10 +231,12 @@ def check_shell(command: str, cwd: str, holdout: str, posix: bool) -> None:
 
 @functools.lru_cache(maxsize=None)
 def repo_roots() -> frozenset[str]:
-    """This repository's root: where this script lives, and $CLAUDE_PROJECT_DIR."""
+    """This repository's root: where this script lives, and $CLAUDE_PROJECT_DIR when that is the root
+    of a work tree (a session started in a subfolder such as starter-godspeed adds nothing)."""
     roots = {normal(str(Path(__file__).resolve().parents[2]))}
-    if os.environ.get("CLAUDE_PROJECT_DIR"):
-        roots.add(normal(os.environ["CLAUDE_PROJECT_DIR"]))
+    project = os.environ.get("CLAUDE_PROJECT_DIR")
+    if project and os.path.exists(os.path.join(project, ".git")):  # a work tree's root, not a subfolder
+        roots.add(normal(project))
     return frozenset(roots)
 
 
@@ -699,6 +701,38 @@ def find_writes(args: list[str], cwd: str, fence: list[str], text: str) -> bool:
     return False
 
 
+def work_root(folder: str) -> str:
+    """The root of the work tree holding `folder` (where `git -C folder` resolves `:/` paths)."""
+    path = folder
+    while True:
+        if os.path.exists(path + "/.git"):
+            return path
+        parent = os.path.dirname(path)
+        if parent == path or parent == "":
+            return folder
+        path = parent
+
+
+def pathspec(word: str, base: str) -> tuple[str, str] | None:
+    """A git pathspec as (path, the folder it is relative to); None for an exclusion. Magic such
+    as `:(top)`, `:/`, `:(literal)` and `:(icase)` is read the way git reads it."""
+    if not word.startswith(":"):
+        return word, base
+    long = re.match(r"^:\(([^)]*)\)(.*)$", word, re.S)
+    if long:
+        magic = {item.strip().lower().split(":", 1)[0] for item in long.group(1).split(",")}
+        if "exclude" in magic:
+            return None
+        top, rest = "top" in magic, long.group(2)
+        rest = rest.lower() if "icase" in magic else rest
+    else:
+        short = re.match(r"^:([/!^]*):?(.*)$", word, re.S)
+        if "!" in short.group(1) or "^" in short.group(1):
+            return None
+        top, rest = "/" in short.group(1), short.group(2)
+    return rest, work_root(base) if top else base
+
+
 def git_writes(args: list[str], cwd: str, fence: list[str]) -> bool:
     base, index = cwd, 0
     while index < len(args) and args[index].startswith("-"):
@@ -729,15 +763,17 @@ def git_writes(args: list[str], cwd: str, fence: list[str]) -> bool:
             source = sub == "checkout" and len(paths) >= 2
             paths = paths[1:] if source else paths
         source = source or any(arg in ("-s", "--source") or arg.startswith("--source=") for arg in rest)
-        for word in paths:
-            path = expand(word, base)
+        for spec in filter(None, (pathspec(word, base) for word in paths)):
+            word, folder = spec
+            path = expand(word, folder)
             whole_tree = path is not None and any(
                 root == path.rstrip("/") or root.startswith(path.rstrip("/") + "/") for root in repo_roots())
-            if hits(word, base, fence, whole=source or not whole_tree):
+            if hits(word, folder, fence, whole=source or not whole_tree):
                 return True
         return False
     if sub in GIT_REMOVERS:
-        return any(hits(word, base, fence, whole=True) for word in plain(rest))
+        return any(hits(spec[0], spec[1], fence, whole=True)
+                   for spec in filter(None, (pathspec(word, base) for word in plain(rest))))
     return False
 
 
@@ -840,27 +876,33 @@ def check_writes(command: str, cwd: str, fence: list[str], posix: bool, depth: i
             refuse("the command nests too deep to check and names the fence")
         return
     flat, docs, subs = scan(command, posix)
-    for header, body in docs:
-        kinds = heredoc_readers(header, posix)
-        if "shell" in kinds:
-            check_writes(body, cwd, fence, True, depth + 1)
-        if "powershell" in kinds:
-            check_writes(body, cwd, fence, False, depth + 1)
-        if "code" in kinds and names_fence(body, cwd, fence):
-            refuse(f"a script fed to `{header.strip()[:60]}` names the fence, which only changes by hand")
-    for sub in subs:
-        check_writes(sub, cwd, fence, posix, depth + 1)
+    # The command line first: it says which folders the command passes through (`cd`), and the
+    # substitutions and heredocs are then judged in each of them.
+    folders = [cwd]
     try:
         tokens = lex(flat, posix)
     except ValueError:
         if FENCE.search(flat.replace("\\", "/")) and MUTATES.search(flat):
             refuse("the command could not be read, writes, and names the fence")
-        return
+        tokens = []
     for words, targets in commands(tokens):
         for target in targets:
             if hits(target, cwd, fence):
                 refuse(f"`> {target[:80]}` would change the fence, which only changes by hand")
         cwd = command_writes(words, cwd, fence, flat, posix, depth) or cwd
+        if cwd not in folders:
+            folders.append(cwd)
+    for folder in folders:
+        for header, body in docs:
+            kinds = heredoc_readers(header, posix)
+            if "shell" in kinds:
+                check_writes(body, folder, fence, True, depth + 1)
+            if "powershell" in kinds:
+                check_writes(body, folder, fence, False, depth + 1)
+            if "code" in kinds and names_fence(body, folder, fence):
+                refuse(f"a script fed to `{header.strip()[:60]}` names the fence, which only changes by hand")
+        for sub in subs:
+            check_writes(sub, folder, fence, posix, depth + 1)
 
 
 def pre(event: dict) -> None:
