@@ -35,16 +35,22 @@ printf -- '---\nname: next-action\ndescription: the recipe, cut down for a test\
 # late (26 September: the record written, then the time limit, so no answer). The run sent back
 # for its moves names the moves check, and plays FAKE_FIX_MODE instead (default: it answers).
 # FAKE_ACTIVE=1 makes the first run leave a goal active and no moves, so the moves check fails.
+# holds (#282): a naive run that proposes an interview the person postponed (its APPLY is
+# FAKE_APPLY) beside a note to Jane Doe, and lists both on its card. FAKE_PROMPTS keeps each prompt.
 cat > "$BIN/claude" <<'STAND'
 #!/usr/bin/env bash
 prompt="$(cat)"
 mode="${FAKE_MODE:-writes}"
 case "$prompt" in *"the moves check"*) mode="${FAKE_FIX_MODE:-answers}" ;; esac
 echo "$mode" >> "$FAKE_CALLS"
+[ -z "${FAKE_PROMPTS:-}" ] || printf '%s\n' "$prompt" >> "$FAKE_PROMPTS"
 case "$mode" in
   writes)  printf '# Decision\n\n## For you today\nNothing needs you today.\n' > "$FAKE_RUN/decision.md"
            [ "${FAKE_ACTIVE:-0}" = 1 ] && printf 'Attention for the test\nactive:\n  money-goal    outcome    deadline in 3 day(s)\n' > "$FAKE_RUN/attention.txt"
            echo "Nothing needs you today. nothing" ;;
+  holds)   printf '# Decision\n\n## For you today\nship-list card: 1. Answer Podcast X'"'"'s interview invitation about the book; 2. Send the launch note to Jane Doe\n\n## Moves\nTwo.\n' > "$FAKE_RUN/decision.md"
+           printf '### 1. Answer Podcast X'"'"'s interview invitation about the book\nAPPLY: %s\nTOUCHES: the-book\nGOAL: book\nPERMISSION: ship list\n\n### 2. Send the launch note to Jane Doe\nTOUCHES: jane-doe\nGOAL: book\nPERMISSION: ship list\n' "$FAKE_APPLY" > "$FAKE_RUN/moves.md"
+           echo "Two changes are ready. ship-list card" ;;
   answers) echo "The moves are as far as they go today." ;;
   crash)   printf 'Traceback (most recent call last):\nModuleNotFoundError: No module named %s\n' "'ruamel'" >&2; exit 1 ;;
   silent)  echo "All done, the day is decided." ;;
@@ -134,6 +140,34 @@ ACTIVE="$(sed -n '/^active:/,/^[^ ]/p' "$RUN/attention.txt")"
 contains "  mc-decide hands GODSPEED_ATTENTION_PIN on: the pinned goal is active" "$ACTIVE" "  a4 "
 check "  and first" "$(printf '%s\n' "$ACTIVE" | sed -n '2p' | awk '{print $1}')" "a4"
 rm -f "$G/goals/a1.md" "$G/goals/a2.md" "$G/goals/a3.md" "$G/goals/a4.md"; rm -rf "$G/goals/research"
+
+echo "-- a step the person postponed is held off the day, and comes back when its condition ends (#282)"
+mkdir -p "$G/world/claims"
+printf -- '---\nsubject: the-book\nattribute: status\nvalue: beta\nvalid_from: 2026-09-01\n---\n' > "$G/world/claims/the-book--status--2026-09-01.md"
+printf -- '---\nsubject: the-book\nattribute: interview-stance\nvalue: not yet, only once the book is out of beta\nstance: postponed\nsteps: [interview]\nuntil: the-book--status--2026-09-01\nvalid_from: 2026-09-10\n---\n' > "$G/world/claims/the-book--interview-stance--2026-09-10.md"
+HOLD=world/claims/the-book--interview-stance--2026-09-10.md
+GODSPEED_ROOT="$G" GODSPEED_TODAY="$D" "$NODE" "$HERE/work.js" file --id W-HELD-01 --what "Answer Podcast X's interview invitation about the book" --done-when "sent" --outward yes --key apply-answer-interview --source next-action >/dev/null
+fresh; PROMPTS="$TMP/prompts.txt"; rm -f "$PROMPTS"
+OUT="$(FAKE_MODE=holds FAKE_APPLY=W-HELD-01 FAKE_PROMPTS="$PROMPTS" decide)"; RC=$?
+check "  the day is decided" "$RC" "0"
+contains "  holds.txt names the claim" "$(cat "$RUN/holds.txt" 2>/dev/null)" "$HOLD: postponed"
+contains "  and the run is told to read it" "$(head -c 2000 "$PROMPTS" 2>/dev/null)" "holds.txt (what the person declined or postponed"
+missing "  the interview move is out of moves.md" "$(cat "$RUN/moves.md")" "### 1. Answer Podcast X"
+contains "  with a HELD line in its place" "$(cat "$RUN/moves.md")" "HELD 1: Answer Podcast X's interview invitation about the book (held by $HOLD)"
+contains "  the Jane Doe move stays" "$(cat "$RUN/moves.md")" "### 2. Send the launch note to Jane Doe"
+contains "  held.md keeps the block and the claim" "$(cat "$RUN/held.md" 2>/dev/null)" "held by $HOLD: postponed"
+contains "  held.md keeps the block itself" "$(cat "$RUN/held.md" 2>/dev/null)" "### 1. Answer Podcast X"
+check "  today's card is held back" "$(sed -n '/^## For you today/{n;p;}' "$RUN/decision.md" | cut -c1-14)" "Nothing today:"
+contains "  the output names the held move and the claim" "$OUT" "held: move 1 \"Answer Podcast X's interview invitation about the book\" by $HOLD"
+contains "  and the held card" "$OUT" "held: W-HELD-01 "
+contains "  the APPLY card now names what it touches" "$(cat "$G/work/W-HELD-01.md")" "TOUCHES: the-book"
+D2=2026-10-11
+GODSPEED_ROOT="$G" "$NODE" "$HERE/holds.js" end the-book--status--2026-09-01 --words "the book is out of beta" --date "$D2" --godspeed "$G" >/dev/null
+OUT="$(D="$D2" RUN="$G/routines/next-action/$D2"; GODSPEED_RUNNER=claude FAKE_MODE=holds FAKE_APPLY=W-HELD-01 FAKE_RUN="$RUN" FAKE_CALLS="$CALLS" bash "$HERE/mc-decide" --godspeed "$G" --date "$D2" --timeout 60 2>&1)"
+contains "  the next day, with the book out of beta, the interview move is back" "$(cat "$G/routines/next-action/$D2/moves.md")" "### 1. Answer Podcast X"
+missing "  and nothing is held" "$OUT" "held:"
+contains "  holds.txt says so" "$(cat "$G/routines/next-action/$D2/holds.txt")" "nothing is held"
+rm -rf "$G/world" "$G/work"
 
 echo
 echo "$PASS passed, $FAIL failed"

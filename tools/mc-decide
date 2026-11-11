@@ -27,6 +27,8 @@
 # IT ENDS WITH ONE LINE: "decided <day>" and exit 0, or "NOT decided <day>" and exit 1 when the
 # assistant did not finish (the record then says so), or "decided <day>, but the assistant did
 # not finish" and exit 1 when it wrote the record and stopped before its answer.
+# A step you declined or postponed (`mc-holds`) is put in front of the run as holds.txt, and one
+# the run proposed anyway is taken out of its moves into held.md, with one "held:" line here.
 set -uo pipefail
 
 GODSPEED=""; DRY=0; TODAY=""; RUNDIR=""; TIMEOUT=1500; EXTRA=""
@@ -42,7 +44,7 @@ while [ $# -gt 0 ]; do
     # else's copy.
     --extra-prompt-file) EXTRA="$2"; shift 2 ;;
     --dry-run) DRY=1; shift ;;
-    -h|--help) sed -n '2,28p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,31p' "$0"; exit 0 ;;
     *) echo "mc-decide: I do not know the argument $1" >&2; exit 2 ;;
   esac
 done
@@ -198,6 +200,16 @@ fi
 # The notebook runs this file from its own copy of the kit, which git writes without the
 # executable bit on Linux and on a Mac, and the routines' daily round there stopped with
 # "mc-run is not installed" unless an older mc-run sat in ~/.local/bin.
+# WHAT THE PERSON DECLINED OR POSTPONED IS IN FRONT OF THE RUN (2026-11-11, #282). For sixteen
+# mornings the brief asked for a yes on an interview the person had said "not yet" to, because the
+# answer was a world claim and nothing that decides read the claims. holds.js reads them live.
+if [ -f "$HERE/holds.js" ]; then
+  GODSPEED_ROOT="$GODSPEED" "$NODE" "$HERE/holds.js" list --godspeed "$GODSPEED" --date "$TODAY" > "$RUNDIR/holds.txt" 2>&1 || true
+else
+  neighbour mc-holds
+  printf 'not on this computer, so today was decided without it:%s\n' "$MISSING" > "$RUNDIR/missing.txt"
+fi
+
 RUNNER="$HERE/mc-run"
 [ -f "$RUNNER" ] || RUNNER="$HOME/.local/bin/mc-run"
 [ -f "$RUNNER" ] || { echo "mc-decide: mc-run is not installed, so no recipe could be carried out." >&2; exit 3; }
@@ -205,8 +217,9 @@ RUNNER="$HERE/mc-run"
 PROMPT="Today is $TODAY (UTC). The run folder is $RUNDIR and it already holds settle.txt (each
 goal's weekly number and the verdicts on earlier moves; read it first), attention.txt (the goal
 plan), tick.txt (what time did to the work tracker), work.txt (every item on it),
-forecasts-due.txt and yesterday.md (yesterday's decision, or the line saying there was none),
-plus anything else that was available. Follow the next-action recipe exactly. Write
+forecasts-due.txt, yesterday.md (yesterday's decision, or the line saying there was none) and
+holds.txt (what the person declined or postponed: propose nothing it holds, and keep every item
+work.txt marks held off the card), plus anything else that was available. Follow the next-action recipe exactly. Write
 $RUNDIR/decision.md, file the work the mission control will do (mc-work-run carries it out later today; you
 take only what fits in two minutes), the day's moves and their one ship-list card for the person, and
 save what you changed. Your final answer is the 'For you today' section in one plain sentence,
@@ -253,6 +266,15 @@ sections of decision.md, and run the check again until it prints OK. Your final 
     GAPS="$(GODSPEED_ROOT="$GODSPEED" "$NODE" "$HERE/check-moves.js" --godspeed "$GODSPEED" --date "$TODAY" 2>&1)" \
       || printf '\n## Moves check\n\nStill short after one return run:\n\n%s\n' "$GAPS" >> "$RUNDIR/decision.md"
   fi
+fi
+
+# A STEP THE PERSON DECLINED OR POSTPONED NEVER REACHES THEM (2026-11-11, #282). A held move the
+# run proposed was a gap of the moves check and went back once; one still there is taken out here,
+# by program, before the bets are copied: its block goes to held.md, and today's card, which is
+# the run's own text and may still list it, is held back with a "Nothing today" line that says why.
+# Each held proposal is one "held:" line on this output, which is decide.log on a schedule.
+if [ -s "$RUNDIR/moves.md" ] && [ -f "$HERE/holds.js" ]; then
+  GODSPEED_ROOT="$GODSPEED" "$NODE" "$HERE/holds.js" strip --run "$RUNDIR" --date "$TODAY" --godspeed "$GODSPEED" 2>&1 || true
 fi
 
 # THE BETS GO ON THE CARDS BY PROGRAM, NOT BY THE RUN (2026-09-30). Each move's BET in moves.md is

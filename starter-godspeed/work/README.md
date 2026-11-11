@@ -31,6 +31,7 @@ ID: W-20260913-01
 STATUS: planned       planned, dispatched, attempted, verified, failed, blocked, stale, cancelled
 KEY: redraft-lines    the same open key files nothing twice
 GOAL: lead            CARD: M017
+TOUCHES: the-book      the world entities it is about; a step you declined or postponed on one waits (mc-holds)
 WHAT: Redraft the three lines
 DONE WHEN: a new draft exists with the three lines in it
 CHECK: test -f drafts/lines-v2.md      one shell line that exits 0 when it is done
