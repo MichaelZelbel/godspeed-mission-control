@@ -34,6 +34,12 @@ export function verifiedAt(row){
  return null;
 }
 
+// Research (a work card of KIND learn) is how Godspeed got to the result, not the result: its title is a
+// question, often with what was read in brackets. When the same days also finished work the person
+// gets (a checklist, a draft), the line names that work only, so it reads plainly (scenarios run
+// 43107490873 named a research question and a draft's full brief in one 450-character line).
+const research=row=>String(row?.legacy_fields?.KIND||row?.work_kind||'').trim().toLowerCase()==='learn';
+
 // The work verified since the last briefing (or, before the first, today and yesterday), newest
 // first, that the last briefing did not already name, as titles a person reads.
 export function finishedWork(rows,{previous=null,today,dayOf}={}){
@@ -44,9 +50,29 @@ export function finishedWork(rows,{previous=null,today,dayOf}={}){
  const titles=[];
  for(const row of [...(rows||[])].filter(row=>row?.state==='verified'&&row.kind!=='repair').map(row=>({row,at:verifiedAt(row)})).filter(x=>x.at&&fresh(x.at)).sort((a,b)=>b.at.localeCompare(a.at))){
   const title=plainTitle(row.row.title)||plainTitle(row.row.legacy_fields?.WHAT);
-  if(title&&!told.includes(title.toLowerCase())&&!titles.some(t=>t.toLowerCase()===title.toLowerCase()))titles.push(title);
+  if(title&&!told.includes(title.toLowerCase())&&!titles.some(t=>t.title.toLowerCase()===title.toLowerCase()))titles.push({title,research:research(row.row)});
  }
- return titles.slice(0,3);
+ const results=titles.filter(t=>!t.research);
+ return (results.length?results:titles).slice(0,3).map(t=>t.title);
+}
+
+// The verbs a "Next:" line may open with: an action the person can do today. A model asked for "a
+// verb such as buy, check, pack, write or review" wrote "Next: open the household blanks section ..."
+// (scenarios run 43107490873); the briefing's code gate holds the line to this list, and the writer
+// gets one rewrite before the factual fallback, whose own Next: line opens with "review".
+export const NEXT_VERBS=Object.freeze(['add','arrange','book','buy','call','check','collect','complete','create','gather','make','organize','pack','prepare','replace','review','schedule','set','store','test','update','write']);
+const NEXT_FILLER=new Set(['a','an','and','at','for','in','it','more','next','now','on','the','this','that','them','to','today','with','your']);
+
+// Null when every "Next:" line in the note opens with one of those verbs and says what it acts on,
+// otherwise the reason. A note without a "Next:" line is not refused here.
+export function nextLineError(text){
+ for(const line of String(text||'').split(/\r?\n/).map(line=>line.replace(/[*_`]/g,'').trim())){
+  const head=line.match(/^(?:next|today)(?:\s+(?:today|step|action))?\s*:\s*(.*)$/i);
+  if(!head)continue;
+  const words=head[1].toLowerCase().match(/[a-z]+/g)||[];
+  if(!NEXT_VERBS.includes(words[0])||!words.slice(1).some(word=>!NEXT_FILLER.has(word)))return 'Start the "Next:" line with one of these verbs, followed by what it acts on: '+NEXT_VERBS.join(', ');
+ }
+ return null;
 }
 
 // The one line the brief carries for them, or null when nothing was finished.
