@@ -40,7 +40,10 @@ export function researchDomains(area) {
 
 // Why this preparation's research cannot open the talk, or null. `files` names other sidecars to
 // check (the candidates in the run folder, before the host moves them beside the preparation).
-export function researchEvidenceProblem(prep, area, now = new Date(), files = null) {
+// { anyScope: true } leaves out only the area.md hash: an earlier preparation quoted with its date
+// stays the research that was reviewed after area.md changed (a RHYTHM edit too), though it can no
+// longer open a talk.
+export function researchEvidenceProblem(prep, area, now = new Date(), files = null, { anyScope = false } = {}) {
   const domains = researchDomains(area);
   if (!domains.length) return null;
   if (domains.some((id) => !/^[a-z0-9][a-z0-9-]*$/.test(id)) || new Set(domains).size !== domains.length) return "its research domains are invalid or duplicated";
@@ -63,7 +66,7 @@ export function researchEvidenceProblem(prep, area, now = new Date(), files = nu
   const prepHash = sha(prepBytes), areaHash = sha(areaBytes);
   if (evidence.version !== 1 || review.version !== 1) return "its research evidence version is unsupported";
   if (evidence.prep_sha256 !== prepHash || review.prep_sha256 !== prepHash) return "its research evidence or review belongs to another preparation";
-  if (evidence.area_sha256 !== areaHash || review.area_sha256 !== areaHash) return "its research scope changed after preparation";
+  if (!anyScope && (evidence.area_sha256 !== areaHash || review.area_sha256 !== areaHash)) return "its research scope changed after preparation";
   if (review.evidence_sha256 !== sha(evidenceBytes)) return "its research evidence changed after review";
   const sameIds = (ids) => Array.isArray(ids) && ids.length === domains.length && new Set(ids).size === ids.length && domains.every((id) => ids.includes(id));
   if (!sameIds(evidence.coverage_domains)) return "its research evidence does not cover the configured domains";

@@ -230,7 +230,7 @@ STAND
 chmod +x "$B/claude"
 export ST G4
 rrun() { PATH="$B:$PATH" GODSPEED_RUNNER=claude bash "$HERE/mc-coach-prep" --godspeed "$G4" "$@" 2>&1; }
-repairs() { "$NODE" --input-type=module -e 'import {pathToFileURL} from "node:url";const {Store}=await import(pathToFileURL(process.argv[1]).href);console.log(new Store(process.argv[2]).list("work_items").filter(r=>r.kind==="repair").length)' "$(P "$HERE/../notebook/core/records/store.mjs")" "$G4"; }
+repairs() { "$NODE" --input-type=module -e 'import {pathToFileURL} from "node:url";const {Store}=await import(pathToFileURL(process.argv[1]).href);console.log(new Store(process.argv[2]).list("work_items").filter(r=>r.kind==="repair").length)' "$(P "$HERE/../notebook/core/records/store.mjs")" "${1:-$G4}"; }
 export GODSPEED_NOW=2026-11-14T01:00:00Z GODSPEED_TODAY=2026-11-14
 R4="$G4/routines/coach-prep/2026-11-14"; P4="$G4/coach/work/prep"
 
@@ -301,6 +301,88 @@ OUT="$(rrun --area work --talk 2026-11-22)"; check "a try that passes exits 0" "
 check "  and ends the count" "$(tail -1 "$R4/work-2026-11-22.tries" | cut -f1)" "pass"
 OUT="$(rrun --area work --talk 2026-11-22 --tries 1)"
 check "  a run after it starts with no issues to resolve" "$(grep -c 'Resolve each issue' "$ST/prompt.$(cat "$ST/calls" | awk '{print $1-1}')")" "0"
+
+# #359, PROOF 1: Saturday's preparation ran and passed its review (above); on Sunday the talk they
+# start themselves opens from it. In a copy, so the blocks below keep their own folder.
+G5="$(P "$TMP/g5")"; mkdir -p "$G5"; cp -R "$G4/." "$G5/"
+coach5() { GODSPEED_NOW=2026-11-15T16:00:00Z "$NODE" "$GODSPEED_COACH_SCRIPT" "$@" --godspeed "$G5"; }
+OUT="$(coach5 brief work)"
+contains "Sunday's talk they start themselves opens from Saturday's sealed preparation" "$OUT" '--from-prep "coach/work/prep/2026-11-15.md" --shown'
+contains "  the brief carries it whole" "$OUT" "## The prepared talk"
+missing "  and says nothing is missing" "$OUT" "Not prepared"
+coach5 talk open work --from-prep coach/work/prep/2026-11-15.md --shown >/dev/null 2>&1
+contains "  the talk's record names it" "$(cat "$G5/coach/work/talks/2026-11-15.md" 2>/dev/null)" "PREP: coach/work/prep/2026-11-15.md"
+
+# #359, PROOF 2: on 1 November 2026 a weekly Sunday talk became a talk every two weeks without anyone
+# asking. The Sunday it dropped (8 November) is prepared anyway, the summary names the change, and
+# the talk they start that Sunday opens from that preparation.
+G6="$(P "$TMP/g6")"; mkdir -p "$G6/rules" "$G6/coach/work" "$G6/skills"
+cp -R "$G4/skills/." "$G6/skills/"; : > "$G6/AGENTS.md"; cp "$G4/coach/settings.json" "$G6/coach/settings.json"
+sed 's/^STARTS: .*/STARTS: 2026-10-04/' "$G4/coach/work/area.md" > "$G6/coach/work/area.md"
+GIT_COMMITTER_DATE=2026-10-01T10:00:00Z GIT_AUTHOR_DATE=2026-10-01T10:00:00Z sh -c 'git -C "$1" init -q && git -C "$1" add -A && git -C "$1" commit -q -m start' _ "$G6"
+GODSPEED_NOW=2026-11-01T09:00:00Z "$NODE" "$GODSPEED_COACH_SCRIPT" area set work RHYTHM every 2 weeks sunday --godspeed "$G6" >/dev/null
+GIT_COMMITTER_DATE=2026-11-01T09:00:00Z GIT_AUTHOR_DATE=2026-11-01T09:00:00Z git -C "$G6" commit -q -am "coach: area work RHYTHM"
+drun() { G4="$G6" PATH="$B:$PATH" GODSPEED_RUNNER=claude bash "$HERE/mc-coach-prep" --godspeed "$G6" "$@" 2>&1; }
+export GODSPEED_NOW=2026-11-07T02:00:00Z GODSPEED_TODAY=2026-11-07
+CHANGE='the rhythm changed on 2026-11-01 from "weekly sunday" to "every 2 weeks sunday"'
+OUT="$(drun --dry-run)"; check "a dry run the night before the dropped Sunday exits 0" "$?" "0"
+contains "  it names the dropped Sunday" "$OUT" "Work and money (work), 2026-11-08 at 18:00 Europe/Berlin -> coach/work/prep/2026-11-08.md"
+contains "  and why" "$OUT" "$CHANGE"
+rm -f "$ST/calls"
+OUT="$(drun)"; check "the dropped Sunday is prepared and exits 0" "$?" "0"
+check "  the writer and the reviewer ran" "$(cat "$ST/calls")" "2"
+check "  the coach says it is ready" "$("$NODE" "$GODSPEED_COACH_SCRIPT" prep-check work --date 2026-11-08 --godspeed "$G6" | cut -d, -f1)" "ready: coach/work/prep/2026-11-08.md"
+S6="$(cat "$G6/routines/coach-prep/2026-11-07/summary.txt")"
+contains "  the summary names the change and its commit" "$S6" "work 2026-11-08: $CHANGE ("
+contains "  and the commit's subject" "$S6" '"coach: area work RHYTHM"); 2026-11-08 was a talk day before, so it is prepared anyway for a talk they start themselves'
+contains "  and the next talk under the new rhythm" "$S6" "the next talk under the new rhythm is 2026-11-15"
+contains "  and that it was prepared" "$S6" "work 2026-11-08: prepared (coach/work/prep/2026-11-08.md), its review passed on try 1"
+contains "  the talk they start that Sunday opens from it" "$(GODSPEED_NOW=2026-11-08T16:00:00Z "$NODE" "$GODSPEED_COACH_SCRIPT" brief work --godspeed "$G6")" '--from-prep "coach/work/prep/2026-11-08.md" --shown'
+
+# #359, PROOF 3: a talk that opened without its preparation is named the next night, files one
+# repair item, and the run exits 1. A dry run only names it.
+GODSPEED_NOW=2026-11-08T16:00:00Z "$NODE" "$GODSPEED_COACH_SCRIPT" talk open work --opening "How was the week?" --godspeed "$G6" >/dev/null
+export GODSPEED_NOW=2026-11-09T02:00:00Z GODSPEED_TODAY=2026-11-09
+OUT="$(drun --dry-run)"; check "a dry run after a talk opened unprepared exits 0" "$?" "0"
+contains "  it names the talk" "$OUT" "Opened without its preparation: Work and money (work) 2026-11-08: it did not open from its preparation."
+check "  and files nothing" "$(repairs "$G6")" "0"
+OUT="$(drun)"; check "the next night's run exits 1" "$?" "1"
+contains "  the summary names it and the repair item" "$(cat "$G6/routines/coach-prep/2026-11-09/summary.txt")" "work 2026-11-08: the talk opened without its preparation (it did not open from its preparation); repair item: filed repair-coach-prep-"
+check "  one repair item is in the work list" "$(repairs "$G6")" "1"
+contains "  the run folder is committed" "$(git -C "$G6" show --name-only --format=%s HEAD)" "routines/coach-prep/2026-11-09/summary.txt"
+export GODSPEED_NOW=2026-11-14T01:00:00Z GODSPEED_TODAY=2026-11-14
+
+# When the coach cannot say which talks opened unprepared, the coming talk is still prepared, the
+# summary says what is not known, and the run exits 1.
+printf '%s\n' 'if (process.argv.includes("prep-missed")) { console.error("the talks folder is unreadable"); process.exit(1); }' \
+  'await import(process.env.REAL_COACH);' > "$TMP/broken-coach.mjs"
+bdrun() { REAL_COACH="$("$NODE" -e 'process.stdout.write(require("url").pathToFileURL(process.argv[1]).href)' "$GODSPEED_COACH_SCRIPT")" GODSPEED_COACH_SCRIPT="$(P "$TMP/broken-coach.mjs")" drun "$@"; }
+OUT="$(bdrun --dry-run)"; check "a dry run whose prep-missed fails exits 0" "$?" "0"
+contains "  it still names the coming talk" "$OUT" "Work and money (work), 2026-11-15 at 18:00 Europe/Berlin -> coach/work/prep/2026-11-15.md"
+contains "  and says what it does not know" "$OUT" "Note: the coach could not say which talks opened without their preparation: the talks folder is unreadable."
+rm -f "$ST/calls"
+OUT="$(bdrun)"; check "  the real run prepares the talk and exits 1" "$?:$(cat "$ST/calls")" "1:2"
+contains "  the summary says what is not known" "$(cat "$G6/routines/coach-prep/2026-11-14/summary.txt")" "the coach could not say which talks opened without their preparation: the talks folder is unreadable"
+
+# #359, the incident replayed in an area with no preparation on file and no research domain: the job
+# bridges the dropped Sunday and cannot prepare it. The talk they start that Sunday says it is not
+# prepared, and the next night names it, files one repair item and exits 1.
+G7="$(P "$TMP/g7")"; B7="$TMP/bin7"; mkdir -p "$G7/rules" "$G7/coach/rest" "$G7/skills" "$B7"
+cp -R "$G4/skills/." "$G7/skills/"; : > "$G7/AGENTS.md"; cp "$G4/coach/settings.json" "$G7/coach/settings.json"
+printf 'AREA: rest\nTITLE: Rest\nRHYTHM: weekly sunday\nTIME: 18:00\nSTARTS: 2026-10-04\nSTATUS: on\nSTYLE: review\nTONE: gentle\n\n## Preparation\nRead the week.\n' > "$G7/coach/rest/area.md"
+printf '#!/bin/sh\n[ "$1" = --help ] && { printf "  --restricted  Restricted mode\\n  --permission-mode <mode>  (\\"dontAsk\\")\\n  --strict-mcp-config\\n"; exit 0; }\necho "I could not finish."; exit 1\n' > "$B7/claude"; chmod +x "$B7/claude"
+GIT_COMMITTER_DATE=2026-10-01T10:00:00Z GIT_AUTHOR_DATE=2026-10-01T10:00:00Z sh -c 'git -C "$1" init -q && git -C "$1" add -A && git -C "$1" commit -q -m start' _ "$G7"
+GODSPEED_NOW=2026-11-01T09:00:00Z "$NODE" "$GODSPEED_COACH_SCRIPT" area set rest RHYTHM every 2 weeks sunday --godspeed "$G7" >/dev/null
+GIT_COMMITTER_DATE=2026-11-01T09:00:00Z GIT_AUTHOR_DATE=2026-11-01T09:00:00Z git -C "$G7" commit -q -am "coach: area rest RHYTHM"
+irun() { PATH="$B7:$PATH" GODSPEED_RUNNER=claude bash "$HERE/mc-coach-prep" --godspeed "$G7" "$@" 2>&1; }
+OUT="$(GODSPEED_NOW=2026-11-07T02:00:00Z GODSPEED_TODAY=2026-11-07 irun)"; check "replay: the dropped Sunday that cannot be prepared exits 1" "$?" "1"
+contains "  the summary names the change" "$(cat "$G7/routines/coach-prep/2026-11-07/summary.txt")" 'rest 2026-11-08: the rhythm changed on 2026-11-01'
+OUT="$(GODSPEED_NOW=2026-11-08T16:00:00Z "$NODE" "$GODSPEED_COACH_SCRIPT" brief rest --godspeed "$G7")"
+contains "  the brief of the talk they start that Sunday says it is not prepared" "$OUT" "The preparation for this talk is not ready: none was written."
+GODSPEED_NOW=2026-11-08T16:00:00Z "$NODE" "$GODSPEED_COACH_SCRIPT" talk open rest --opening "How was the week?" --godspeed "$G7" >/dev/null
+OUT="$(GODSPEED_NOW=2026-11-09T02:00:00Z GODSPEED_TODAY=2026-11-09 irun)"; check "  the next night's run exits 1" "$?" "1"
+contains "  its summary names the talk and the repair item" "$(cat "$G7/routines/coach-prep/2026-11-09/summary.txt")" "rest 2026-11-08: the talk opened without its preparation (none was written); repair item: filed repair-coach-prep-"
+check "  one repair item is in the work list" "$(repairs "$G7")" "1"
 
 # A RUN WHOSE RECORD HAS NO PAGE READ gets no receipts: the review is not even started.
 rm -f "$ST/calls"; sed -i 's/^  read_page toolu_ok /  : read_page toolu_ok /' "$B/claude"
