@@ -24,7 +24,7 @@ export const REPORT_CONTRACT="Write the message you send your owner in your chat
 export const REPORT_PREFIX='background-report-';
 // Words that ask the owner to type something to answer: `approve 59f1d506`, `/approve`, "send the
 // code 336d5142". Saying "approve of" or a commit's hex in a link asks for nothing.
-const REPLY_CODES=[/(?:^|[\s`"'“‘(])\/(?:approve|reject)\b/i,/\b(?:approve|reject)\s+[`"'“‘]?(?=[\w-]*\d)[\w-]{4,}/i,
+const REPLY_CODES=[/(?:^|[\s`"'“‘(])\/(?:approve|reject)\b/i,/\b(?:approve|reject)\s+[`"'“‘]?(?=[\w-]*\d)(?:(?=[\w-]*[a-z])[\w-]{4,}|\d{6,})/i,
  /\b(?:reply|send|type|enter|text)\b[^.!?\n]{0,40}?\b(?:code|id)\s*[:#]?\s*[`"'“‘]?[\w-]*\d/i];
 export const asksForCode=text=>REPLY_CODES.some(code=>code.test(text));
 
