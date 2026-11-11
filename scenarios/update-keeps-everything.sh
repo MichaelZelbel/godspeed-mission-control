@@ -7,9 +7,9 @@
 # stage once more, and then pressed Update now in Settings, ends on the stage's own commits with
 # everything of the owner's still there: every notebook record, the setting they made in the
 # assistant's own settings file, their chat history - and one night chat tidy-up, restored by this
-# release after it had left on 27 October 2026 although the notebook of main made it for a while. The owner gives the installed
-# notebook its first goal first: that is when it makes its starting routines, including a tidy-up
-# once a chat app is connected.
+# release after it had left on 27 October 2026 although the notebook of main made it for a while.
+# The owner gives the installed notebook its first goal first: that is when it makes its starting
+# routines, including a tidy-up once a chat app is connected.
 #
 # The line after the command, because an update that is run again is what a person does when they
 # are not sure the first one finished, and because nothing of theirs may be doubled or lost by it.
