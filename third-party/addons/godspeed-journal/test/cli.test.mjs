@@ -218,3 +218,19 @@ test("a start backdated to yesterday is filed on that day and is still open", ()
   assert.match(entryFiles(h)[0][0], /^2026\/11\/10\/150000-start-taxes\.md$/);
   assert.deepEqual(JSON.parse(run(h, "2026-11-11T08:01:00Z", "open", "--json").stdout).map((t) => t.started), ["2026-11-10T14:00:00.000Z"]);
 });
+
+test("an item settled before its finish asks, and a span on a finish is refused, both saving nothing", () => {
+  const h = mcDir();
+  run(h, "2026-11-11T08:00:00Z", "start", "Letter", "--done-means", "letter signed");
+  run(h, "2026-11-11T10:00:00Z", "done", "letter", "--missed", "letter signed");
+  const early = run(h, "2026-11-11T11:00:00Z", "met", "letter", "--met", "signed", "--when", "2 hours ago");
+  assert.equal(early.status, 2);
+  assert.equal(early.stderr, 'Nothing was saved. Ask them: That is before "Letter" was finished (today at 11:00). When did it happen?\n');
+  const ok = run(h, "2026-11-11T11:00:00Z", "met", "letter", "--met", "signed", "--when", "vor einer halben Stunde", "--json");
+  assert.equal(ok.status, 0, ok.stderr);
+  assert.deepEqual(JSON.parse(ok.stdout).recorded, { at: "2026-11-11T10:30:00.000Z", said: "today at 11:30" });
+  run(h, "2026-11-11T11:00:00Z", "start", "Call");
+  const span = run(h, "2026-11-11T14:00:00Z", "done", "call", "--when", "from 13:00 to 13:30");
+  assert.equal(span.status, 1); assert.match(span.stderr, /takes one time/);
+  assert.equal(entryFiles(h).length, 4);
+});
