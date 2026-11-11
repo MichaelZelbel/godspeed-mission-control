@@ -219,7 +219,7 @@ const commands = {
     out(due.map((x) => `${x.area}: ${x.title}, ${WEEKDAY_WORDS.en[weekdayOf(x.date)]} ${x.date} at ${x.time} (${x.timezone}), prepare ${x.file}${x.stale ? ` (stale, ${when(x)})` : ""}${bridged(x)}`).join("\n") || "Nothing to prepare.", due);
   },
   // For the same job (#359): the talks of the last --days days (default 1) that opened without a
-  // preparation in an area whose talks are prepared ahead, why, and the area's next talk day with no
+  // preparation that was due (lib/prep.mjs, prepMissing), why, and the area's next talk day with no
   // record yet. It only reads.
   "prep-missed"() {
     const raw = f.days ?? "1";
@@ -227,16 +227,18 @@ const commands = {
     const from = addDays(today, -Number(raw));
     const missed = [];
     for (const a of listAreas(mcDir)) {
-      if (!a.on || a.noTalk || !a.rhythm || !prepExpected(a)) continue;
-      // A talk they started on a day nothing was due to be prepared for may say it is not ready.
+      if (!a.on || a.noTalk || !a.rhythm) continue;
+      // A talk they started on a day nothing was due to be prepared for may say it is not ready. A day
+      // the newest rhythm change dropped is due in any area: the nightly job lists it to be prepared.
+      const expected = prepExpected(a);
       const drop = rhythmDrop(mcDir, a, s.timezone);
-      const due = (d) => isTalkDay(a, d) || drop?.dropped(d) || fs.existsSync(prepFile(a, d));
+      const due = (d) => drop?.dropped(d) || (expected && (isTalkDay(a, d) || fs.existsSync(prepFile(a, d))));
       for (const d of talkDates(a).filter((x) => x >= from && x <= today)) {
         if (readTalk(a, d).prep || !due(d)) continue;
         let next = nextTalkDay(a, today);
         while (next && fs.existsSync(talkFile(a, next))) next = nextTalkDay(a, addDays(next, 1));
         missed.push({ area: a.slug, title: a.title, date: d, talk: path.relative(mcDir, talkFile(a, d)).replace(/\\/g, "/"),
-          reason: prepMissing(a, d, at) || "it did not open from its preparation", next: next || "" });
+          reason: prepMissing(a, d, at, { mcDir, tz: s.timezone }) || "it did not open from its preparation", next: next || "" });
       }
     }
     out(missed.map((x) => `${x.area}: the ${x.title} talk of ${x.date} opened without its preparation (${x.reason}); next talk ${x.next || "none"}`).join("\n") || "No talk opened without its preparation.", missed);

@@ -364,6 +364,26 @@ rm -f "$ST/calls"
 OUT="$(bdrun)"; check "  the real run prepares the talk and exits 1" "$?:$(cat "$ST/calls")" "1:2"
 contains "  the summary says what is not known" "$(cat "$G6/routines/coach-prep/2026-11-14/summary.txt")" "the coach could not say which talks opened without their preparation: the talks folder is unreadable"
 
+# #359, the incident replayed in an area with no preparation on file and no research domain: the job
+# bridges the dropped Sunday and cannot prepare it. The talk they start that Sunday says it is not
+# prepared, and the next night names it, files one repair item and exits 1.
+G7="$(P "$TMP/g7")"; B7="$TMP/bin7"; mkdir -p "$G7/rules" "$G7/coach/rest" "$G7/skills" "$B7"
+cp -R "$G4/skills/." "$G7/skills/"; : > "$G7/AGENTS.md"; cp "$G4/coach/settings.json" "$G7/coach/settings.json"
+printf 'AREA: rest\nTITLE: Rest\nRHYTHM: weekly sunday\nTIME: 18:00\nSTARTS: 2026-10-04\nSTATUS: on\nSTYLE: review\nTONE: gentle\n\n## Preparation\nRead the week.\n' > "$G7/coach/rest/area.md"
+printf '#!/bin/sh\n[ "$1" = --help ] && { printf "  --restricted  Restricted mode\\n  --permission-mode <mode>  (\\"dontAsk\\")\\n  --strict-mcp-config\\n"; exit 0; }\necho "I could not finish."; exit 1\n' > "$B7/claude"; chmod +x "$B7/claude"
+GIT_COMMITTER_DATE=2026-10-01T10:00:00Z GIT_AUTHOR_DATE=2026-10-01T10:00:00Z sh -c 'git -C "$1" init -q && git -C "$1" add -A && git -C "$1" commit -q -m start' _ "$G7"
+GODSPEED_NOW=2026-11-01T09:00:00Z "$NODE" "$GODSPEED_COACH_SCRIPT" area set rest RHYTHM every 2 weeks sunday --godspeed "$G7" >/dev/null
+GIT_COMMITTER_DATE=2026-11-01T09:00:00Z GIT_AUTHOR_DATE=2026-11-01T09:00:00Z git -C "$G7" commit -q -am "coach: area rest RHYTHM"
+irun() { PATH="$B7:$PATH" GODSPEED_RUNNER=claude bash "$HERE/mc-coach-prep" --godspeed "$G7" "$@" 2>&1; }
+OUT="$(GODSPEED_NOW=2026-11-07T02:00:00Z GODSPEED_TODAY=2026-11-07 irun)"; check "replay: the dropped Sunday that cannot be prepared exits 1" "$?" "1"
+contains "  the summary names the change" "$(cat "$G7/routines/coach-prep/2026-11-07/summary.txt")" 'rest 2026-11-08: the rhythm changed on 2026-11-01'
+OUT="$(GODSPEED_NOW=2026-11-08T16:00:00Z "$NODE" "$GODSPEED_COACH_SCRIPT" brief rest --godspeed "$G7")"
+contains "  the brief of the talk they start that Sunday says it is not prepared" "$OUT" "The preparation for this talk is not ready: none was written."
+GODSPEED_NOW=2026-11-08T16:00:00Z "$NODE" "$GODSPEED_COACH_SCRIPT" talk open rest --opening "How was the week?" --godspeed "$G7" >/dev/null
+OUT="$(GODSPEED_NOW=2026-11-09T02:00:00Z GODSPEED_TODAY=2026-11-09 irun)"; check "  the next night's run exits 1" "$?" "1"
+contains "  its summary names the talk and the repair item" "$(cat "$G7/routines/coach-prep/2026-11-09/summary.txt")" "rest 2026-11-08: the talk opened without its preparation (none was written); repair item: filed repair-coach-prep-"
+check "  one repair item is in the work list" "$(repairs "$G7")" "1"
+
 # A RUN WHOSE RECORD HAS NO PAGE READ gets no receipts: the review is not even started.
 rm -f "$ST/calls"; sed -i 's/^  read_page toolu_ok /  : read_page toolu_ok /' "$B/claude"
 OUT="$(rrun --area work --talk 2026-11-29 --tries 1)"; check "a run that read no page exits 1" "$?" "1"

@@ -222,7 +222,10 @@ export function prepWords(reason, area = null) {
 // null when the brief carries a usable one or the area never prepares. Due means: the area names
 // research domains (the gate needs a preparation), or a preparation file for this talk exists but is
 // refused, or the area's prep folder holds an earlier preparation (a job prepares this area's talks).
-export function prepMissing(area, ymd, now = clockNow()) {
+// Given { mcDir, tz }, a day the area's newest rhythm change dropped (rhythmDrop) is due as well, in
+// any area: the nightly job lists exactly that day to be prepared (prep-due --rhythm-changes), so a
+// talk opened on it without one opened unprepared (#359).
+export function prepMissing(area, ymd, now = clockNow(), { mcDir = null, tz = null } = {}) {
   if (area.noTalk || !area.rhythm) return null;
   if (prepForBrief(area, ymd)) return null;
   const days = [];
@@ -238,7 +241,8 @@ export function prepMissing(area, ymd, now = clockNow()) {
     const problem = prepProblem(p, area, now);
     return prepWords(problem || `its opening was already used in the talk of ${prepUsedOn(area, p, ymd)}`, area);
   }
-  return prepExpected(area) ? "none was written" : null;
+  if (prepExpected(area)) return "none was written";
+  return mcDir && tz && rhythmDrop(mcDir, area, tz)?.dropped(ymd) ? "none was written" : null;
 }
 
 // One talk's preparation, for the job that prepares talks the day before (in Godspeed Mission

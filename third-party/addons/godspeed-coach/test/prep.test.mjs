@@ -13,7 +13,7 @@ import { fileURLToPath } from "node:url";
 import { readArea } from "../lib/areas.mjs";
 import { brief } from "../lib/brief.mjs";
 import { gate } from "../lib/gate.mjs";
-import { prepForBrief, prepDue } from "../lib/prep.mjs";
+import { prepForBrief, prepDue, rhythmDrop } from "../lib/prep.mjs";
 import { tmpMission, area, S } from "./helpers.mjs";
 
 const BIN = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "bin", "godspeed-coach.mjs");
@@ -544,6 +544,45 @@ test("no bridge without git, from a change that drops no day, and an edit not co
   assert.deepEqual([e.rhythm_change.commit, e.rhythm_change.from, e.rhythm_change.changed], ["not committed", "weekly sunday", "2026-11-06T12:00:00Z"]);
   // Two weeks on it is still not committed, and the next Sunday the new rhythm left out is not bridged again.
   assert.deepEqual(prepDue(mc, S, new Date("2026-11-21T02:00:00Z"), 48, { rhythmChanges: true }), []);
+});
+
+test("an uncommitted rhythm change swept into the talk-open commit keeps its own day, so the dropped Sunday stays dropped", () => {
+  // Changed on disk on 6 November, not committed; the talk they open on Sunday 8 November is saved by
+  // the coach's sync, whose commit takes area.md along with the talk record.
+  const mc = healthMission();
+  git(mc, "2026-10-01T10:00:00Z", "init", "-q"); git(mc, "2026-10-01T10:00:00Z", "add", "-A"); git(mc, "2026-10-01T10:00:00Z", "commit", "-qm", "start");
+  setRhythm(mc, "every 2 weeks sunday");
+  const changed = new Date("2026-11-06T12:00:00Z");
+  fs.utimesSync(path.join(mc, "coach", "health", "area.md"), changed, changed);
+  assert.equal(cli(mc, "2026-11-08T15:00:00Z", "talk", "open", "health", "--opening", "How was the week?").code, 0);
+  git(mc, "2026-11-08T15:01:00Z", "add", "-A"); git(mc, "2026-11-08T15:01:00Z", "commit", "-qm", "coach: health talk opened 2026-11-08");
+  const a = readArea(path.join(mc, "coach", "health"));
+  const drop = rhythmDrop(mc, a, S.timezone);
+  assert.equal(drop?.change.changed, "2026-11-06T12:00:00Z", JSON.stringify(drop?.change));
+  assert.equal(drop.change.subject, "coach: health talk opened 2026-11-08");
+  assert.equal(drop.dropped("2026-11-08"), true);
+  assert.match(cli(mc, "2026-11-09T01:00:00Z", "prep-missed").out, /^health: the Health and fitness talk of 2026-11-08 opened without its preparation \(none was written\); next talk 2026-11-15$/);
+  // The area's own `area set` commit is dated by the commit, even when area.md was last written earlier.
+  const set = drifted();
+  const early = new Date("2026-10-20T12:00:00Z");
+  fs.utimesSync(path.join(set, "coach", "health", "area.md"), early, early);
+  assert.equal(rhythmDrop(set, readArea(path.join(set, "coach", "health")), S.timezone)?.change.changed, "2026-11-01T09:00:00Z");
+});
+
+test("the incident replayed in an area with no preparation yet: the dropped Sunday's brief says it is not prepared, and prep-missed lists it", () => {
+  // No research domain and no preparation on file: before, nothing counted this day as due.
+  const mc = drifted();
+  assert.ok(!fs.existsSync(path.join(mc, "coach", "health", "prep")));
+  const b = brief(mc, S, readArea(path.join(mc, "coach", "health")), "2026-11-08", { inChat: true });
+  assert.ok(b.includes(SAYS("none was written")), b);
+  assert.equal(cli(mc, "2026-11-08T15:00:00Z", "talk", "open", "health", "--opening", "How was the week?").code, 0);
+  const j = JSON.parse(cli(mc, "2026-11-09T01:00:00Z", "prep-missed", "--json").out);
+  assert.deepEqual(j, [{ area: "health", title: "Health and fitness", date: "2026-11-08", talk: "coach/health/talks/2026-11-08.md", reason: "none was written", next: "2026-11-15" }]);
+  // The new rhythm's own talk days in that area stay out of scope as before: nothing prepares them.
+  const plain = drifted();
+  assert.ok(!brief(plain, S, readArea(path.join(plain, "coach", "health")), "2026-11-15").includes("## Not prepared"));
+  assert.equal(cli(plain, "2026-11-15T15:00:00Z", "talk", "open", "health", "--opening", "How was the fortnight?").code, 0);
+  assert.equal(cli(plain, "2026-11-16T01:00:00Z", "prep-missed").out, "No talk opened without its preparation.");
 });
 
 test("prep-missed lists a talk that opened without its preparation in an area whose talks are prepared ahead", () => {

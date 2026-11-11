@@ -4,8 +4,11 @@
 // `area set` ("coach: area <slug> RHYTHM", lib/sync.mjs), so the history already says when the rhythm
 // changed and what it was before; an area.md edited by hand shows there too once committed. An edit
 // not committed yet (git_sync off commits nothing) is dated by area.md's last write, so the day it
-// dropped is bridged once, not every night. Without git there is no change to find: this returns
-// null and nothing is bridged.
+// dropped is bridged once, not every night. That edit is committed later by whichever coach save
+// comes next (the sync commits the whole coach folder), often the talk they open on the dropped day
+// itself: a commit that is not this area's own `area set` of RHYTHM is therefore dated by area.md's
+// last write when that is earlier, so the change keeps the day it was made and the dropped day stays
+// dropped. Without git there is no change to find: this returns null and nothing is bridged.
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
@@ -36,5 +39,11 @@ export function lastRhythmChange(mcDir, area) {
   if (before === null) return null;
   const from = rhythmIn(before);
   if (!from || same(from, to)) return null;
-  return { from, to, changed: iso(new Date(changed)), commit: hash.slice(0, 7), subject };
+  let at = new Date(changed);
+  if (subject !== `coach: area ${area.slug} RHYTHM`) {
+    // Swept into another commit: the edit was on disk by area.md's last write, if that came first.
+    const written = fs.statSync(area.file).mtime;
+    if (written.getTime() < at.getTime()) at = written;
+  }
+  return { from, to, changed: iso(at), commit: hash.slice(0, 7), subject };
 }

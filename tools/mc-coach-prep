@@ -53,9 +53,9 @@
 # a talk they start themselves. The summary names the change (old and new rhythm, its day and
 # commit) and the next talk under the new rhythm. No talk opens by itself on that day.
 #
-# A TALK THAT OPENED WITHOUT ITS PREPARATION, yesterday or today, in an area whose talks are prepared
-# ahead, on a day one was due (a talk day, a day a rhythm change dropped, or a day whose preparation
-# was refused; `godspeed-coach prep-missed --days 1`), is named in the summary with the reason, and
+# A TALK THAT OPENED WITHOUT ITS PREPARATION, yesterday or today, on a day one was due (in an area
+# whose talks are prepared ahead, a talk day or a day whose preparation was refused; in any area, a
+# day a rhythm change dropped, since this job lists that day; `godspeed-coach prep-missed --days 1`), is named in the summary with the reason, and
 # one repair item is filed for it, as for a preparation that failed three times. When the coach
 # cannot say which talks those are, the summary says so and the talks are still prepared. A run by
 # hand for one talk (--area) leaves this out.

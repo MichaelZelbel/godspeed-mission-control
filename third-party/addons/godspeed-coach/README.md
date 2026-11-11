@@ -63,8 +63,10 @@ something another talk raised in the last seven days.
   `prep-due` also lists a day that the area's newest rhythm change in git dropped, until the new
   rhythm's first talk, so a talk they start themselves that day still opens prepared;
   `godspeed-coach prep-missed` lists the talks of the last day that opened without the
-  preparation due for them (a talk day, a day a rhythm change dropped, or a day whose preparation
-  was refused). A talk with no preparation of its own answers "what did you research?"
+  preparation due for them (in an area whose talks are prepared ahead, a talk day or a day whose
+  preparation was refused; in any area, a day a rhythm change dropped, because the job lists that
+  day to be prepared, and a talk they start on it without one says so). A rhythm change that was not
+  committed yet keeps the day it was made when a later coach save commits it. A talk with no preparation of its own answers "what did you research?"
   (`talk evidence`) from the area's newest preparation whose research and review still pass the
   gate, all but the area's own seal, with its date. In Godspeed Mission Control the
   routine "Coaching talk preparation" is that job: every night it prepares each talk of the next day
