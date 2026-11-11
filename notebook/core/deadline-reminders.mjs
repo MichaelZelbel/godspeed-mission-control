@@ -1,5 +1,5 @@
 import {hash} from './records/store.mjs';
-import {dueCommand,dueDelivered} from './native-due.mjs';
+import {dueCommand,dueDelivered,skippedSelfChecks} from './native-due.mjs';
 import {personalOperation} from './personal-operations.mjs';
 
 // The notebook's deadline reminders: one note for the obligations that need attention, once per stage,
@@ -11,10 +11,15 @@ import {personalOperation} from './personal-operations.mjs';
 // One answer to "is this obligation still open and showing now", shared by the reminders and the
 // morning brief's factual fallback so the two never disagree about a closed, snoozed or unstarted one.
 export const deadlineLive=(d,now=Date.now())=>!['closed','completed'].includes(d.status)&&(!d.start_at||Date.parse(d.start_at)<=now)&&(!d.snoozed_until||Date.parse(d.snoozed_until)<=now);
-export function remind(job,{store,query},now=Date.now()){
+export function remind(job,{store,query,notices},now=Date.now()){
  // The check answers 3 when the only thing wrong is a due file that needs a look; that file is said
- // below, so the reminders still run (9 October 2026).
- if(query.rows('deadlines').some(d=>d.native_file))try{dueCommand(store,['check']);}catch(error){if(error.status!==3)throw error;}
+ // below, so the reminders still run (9 October 2026). A self check naming a connection the daily
+ // check does not list is skipped, not a failure (#418); the caller that asks gets its line back.
+ if(query.rows('deadlines').some(d=>d.native_file)){
+  let output;
+  try{output=dueCommand(store,['check']).result;}catch(error){if(error.status!==3)throw error;output=error.stdout||'';}
+  if(Array.isArray(notices))notices.push(...skippedSelfChecks(output));
+ }
  for(const d of query.rows('deadlines').filter(d=>d.status==='open'&&!d.native_file&&d.completion_check?.type==='note-contains')){
   const check=d.completion_check,note=store.get('notes',check.note_id);
   if(note&&!note.is_trashed&&note._hash!==d.completion_baseline_hash&&note.content.includes(check.text)&&Date.parse(note.updated_at)>=Date.parse(d.start_at||d.created_at))personalOperation({store,query},{type:'obligation-complete',id:d.id,evidence:'Local note '+note.id+' revision '+note.revision+' contains the agreed completion text'});
