@@ -256,7 +256,7 @@ test("a finish dated before the task was reopened asks and saves nothing", () =>
   for (const kind of ["done", "drop"]) {
     const r = run(h, "2026-11-11T11:00:00Z", kind, "invoice", "--when", "at 10:15");
     assert.equal(r.status, 2);
-    assert.equal(r.stderr, 'Nothing was saved. Ask them: That is before "Invoice" was reopened (today at 11:00). When did you finish it?\n');
+    assert.equal(r.stderr, `Nothing was saved. Ask them: That is before "Invoice" was reopened (today at 11:00). When did you ${kind === "drop" ? "drop" : "finish"} it?\n`);
   }
   assert.equal(entryFiles(h).length, 3);
   assert.equal(run(h, "2026-11-11T11:00:00Z", "done", "invoice", "--when", "at 11:30").status, 0);
@@ -294,4 +294,33 @@ test("a finish whose every reading is before the start asks only that, once", ()
   const two = run(h, "2026-11-11T14:00:00Z", "done", "invoice", "--when", "at 2", "--json");
   assert.equal(two.status, 0, two.stdout + two.stderr);
   assert.equal(JSON.parse(two.stdout).recorded.said, "today at 14:00");
+});
+
+test("a drop or a finish dated before the start or the reopen asks in its own words, in English and German, and saves nothing", () => {
+  const asks = {
+    en: { start: 'That is before "Invoice" started (today at 13:00).', reopen: 'That is before "Invoice" was reopened (today at 15:00).', drop: "When did you drop it?", done: "When did you finish it?" },
+    de: { start: "Das ist vor dem Anfang von „Invoice\" (heute um 13:00).", reopen: "Das ist vor dem Wiederöffnen von „Invoice\" (heute um 15:00).", drop: "Wann hast du es fallen gelassen?", done: "Wann warst du fertig?" },
+  };
+  for (const lang of ["en", "de"]) {
+    const h = mcDir();
+    const settings = path.join(h, "routines", "journal", "settings.json");
+    fs.writeFileSync(settings, JSON.stringify({ ...JSON.parse(fs.readFileSync(settings, "utf8")), language: lang }));
+    const at = (hh) => (lang === "de" ? `um ${hh}` : `at ${hh}`);
+    run(h, "2026-11-11T12:00:00Z", "start", "Invoice");
+    for (const kind of ["drop", "done"]) {
+      const r = run(h, "2026-11-11T13:00:00Z", kind, "invoice", "--when", at(12), "--json");
+      assert.equal(r.status, 2, r.stdout + r.stderr);
+      assert.equal(JSON.parse(r.stdout).ask, `${asks[lang].start} ${asks[lang][kind]}`);
+    }
+    assert.equal(entryFiles(h).length, 1);
+    run(h, "2026-11-11T13:30:00Z", "done", "invoice");
+    run(h, "2026-11-11T14:00:00Z", "reopen", "invoice");
+    for (const kind of ["drop", "done"]) {
+      const r = run(h, "2026-11-11T15:00:00Z", kind, "invoice", "--when", at("14:30"), "--json");
+      assert.equal(r.status, 2, r.stdout + r.stderr);
+      assert.equal(JSON.parse(r.stdout).ask, `${asks[lang].reopen} ${asks[lang][kind]}`);
+    }
+    assert.equal(entryFiles(h).length, 3);
+    assert.equal(JSON.parse(run(h, "2026-11-11T15:01:00Z", "open", "--json").stdout).length, 1);
+  }
 });
