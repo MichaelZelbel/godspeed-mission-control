@@ -2,7 +2,8 @@
 // Each turn the person's message starts in a conversation leaves one small file,
 // .godspeed/charm-turns/<platform>_<session>.json, written by `context` (which the Hermes plugin and
 // the Claude Code hook run before every message). A command given no --conversation takes the one
-// marker written in the last ten minutes; with none or with several it never guesses.
+// marker written in the last ten minutes; with none or with several it never guesses. A turn the
+// Godspeed notebook runs names its conversation in GODSPEED_CHARM_CONVERSATION and leaves no marker.
 import fs from "node:fs";
 import path from "node:path";
 

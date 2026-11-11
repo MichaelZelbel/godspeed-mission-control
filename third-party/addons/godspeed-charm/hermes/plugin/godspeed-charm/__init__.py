@@ -14,6 +14,10 @@ The slip question is the program's, not the model's choice: pre_llm_call starts 
 judge` on the person's message while the model works, and transform_llm_output acts on its verdict
 on every platform: it records the question (`asked`) and ends the reply with it, or records a plain
 yes or no the model did not (`answer`).
+
+A turn the Godspeed notebook runs names its own conversation in GODSPEED_CHARM_CONVERSATION. There
+the notebook judges and records the slip question; the plugin gives the block and the commands that
+conversation instead of this session's, and judges nothing.
 """
 import importlib.util
 import json
@@ -52,6 +56,10 @@ def _mission_control():
             return f.read().strip()
     except OSError:
         return ""
+
+
+def _notebook_conversation():
+    return (os.environ.get("GODSPEED_CHARM_CONVERSATION") or "").strip()
 
 
 def _bin():
@@ -155,7 +163,10 @@ def on_pre_llm_call(**kwargs):
             args += ["--godspeed", mc_dir]
         platform = str(kwargs.get("platform") or "")
         session_id = str(kwargs.get("session_id") or "")
-        if platform and session_id:
+        notebook = _notebook_conversation()
+        if notebook:
+            args += ["--conversation", notebook, "--program-asks"]
+        elif platform and session_id:
             args += ["--conversation", f"{platform}:{session_id}", "--program-asks"]
         # A scheduled run is not a conversation with the person: no block at all, no turn marker
         # (the command writes it) and no conversation for its commands (_remember_platform). It
@@ -164,7 +175,7 @@ def on_pre_llm_call(**kwargs):
         _remember_platform(session_id, platform, scheduled)
         if scheduled:
             args.append("--scheduled")
-        else:
+        elif not notebook:
             _start_judge(session_id, platform, kwargs.get("user_message"))
         if platform == "telegram" and _stickers_available():
             args.append("--stickers")
@@ -474,7 +485,8 @@ _SAFE = re.compile(r"^[A-Za-z0-9_.:-]+$")
 
 def on_charm_before_tool(**kwargs):
     """Hermes' pre_tool_call: a `godspeed-charm asked|start|answer` the model types in the terminal
-    without --conversation gets this session's conversation, so the model never copies the id.
+    without --conversation gets this session's conversation (in a notebook turn, the notebook's),
+    so the model never copies the id.
     An explicit --conversation is left alone; a scheduled run has no conversation. None otherwise."""
     try:
         if str(kwargs.get("tool_name") or "") != "terminal" or os.environ.get("GODSPEED_SCHEDULED_RUN"):
@@ -489,7 +501,7 @@ def on_charm_before_tool(**kwargs):
         if not re.search(r"--conversation(?:\s|=)", command):
             with _pending_lock:
                 platform = _platforms.get(session_id)
-            conversation = f"{platform}:{session_id}" if platform and session_id else ""
+            conversation = _notebook_conversation() or (f"{platform}:{session_id}" if platform and session_id else "")
             if not conversation or not _SAFE.match(conversation):
                 return None
             command = command[:m.end()] + f' --conversation "{conversation}"' + command[m.end():]
