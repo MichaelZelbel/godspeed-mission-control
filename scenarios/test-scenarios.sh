@@ -3599,6 +3599,11 @@ copy "$FD/brief-real-unnamed" "$FD/brief-plain-title"
 sed -i '1i Finished and checked: Write a practical household emergency-kit checklist.\n' "$FD/brief-plain-title/brief.txt"
 first_day_brief_records "$FD/brief-plain-title"
 passes 'a brief that names the finished work by its title without the file path' first-day "$FD/brief-plain-title" 'answered today'
+copy "$FD/brief-real-unnamed" "$FD/brief-plain-title-comma"
+sed -i 's/^WHAT: .*/WHAT: Write the household emergency-kit checklist at work\/emergency-kit-checklist.md, with every item marked HAVE or NEED/' "$FD/brief-plain-title-comma/work/W-000-first-day-emergency-kit.md"
+sed -i '1i Finished and checked: Write the household emergency-kit checklist, with every item marked HAVE or NEED.\n' "$FD/brief-plain-title-comma/brief.txt"
+first_day_brief_records "$FD/brief-plain-title-comma"
+passes 'a brief that names a longer title without its file path, keeping the comma after it' first-day "$FD/brief-plain-title-comma" 'answered today'
 copy "$FD/brief-real-unnamed" "$FD/brief-goal-title"
 sed -i 's/^WHAT: .*/WHAT: Prepare a practical household emergency-kit checklist at work\/emergency-kit-checklist.md/' "$FD/brief-goal-title/work/W-000-first-day-emergency-kit.md"
 sed -i '1i Finished and checked: Prepare a practical household emergency-kit checklist.\n' "$FD/brief-goal-title/brief.txt"
