@@ -15,7 +15,8 @@ runs nowhere else):
   still alive five minutes later it exits 75 itself. The revision is read from the .git files, as
   Hermes does, never with git: git refuses a checkout another account owns, which is exactly the
   layout this happened on. An unreadable revision never restarts anything.
-- A failed message or turn in the owner's private chat gets one plain sentence (PLAIN) and is saved
+- A failed message or turn of the owner's gets one plain sentence (PLAIN) in the chat it came from,
+  their private chat or a group, and is saved
   to <mission control>/.godspeed/chat-guard/unanswered.jsonl, or logged where it cannot be saved. Only
   the standard library and already loaded modules are used on that path: a lazy Hermes import is what
   fails in a stale process.
@@ -44,7 +45,6 @@ PLAIN = ("Sorry, something went wrong on my side and I could not answer that. "
 PLAIN_UNSAVED = ("Sorry, something went wrong on my side and I could not answer that. "
                  "Please send it again a little later.")
 SHA = re.compile(r"^[0-9a-f]{40}([0-9a-f]{24})?$")
-PRIVATE = ("dm", "private")
 
 log = logging.getLogger("godspeed-chat-guard")
 
@@ -244,22 +244,23 @@ def forget(chat_id, message_id):
 
 
 def owner_turn(event):
-    """Whether a Hermes event is the owner's own message in their private chat (not an internal
-    wake or notice Hermes made itself)."""
+    """Whether a Hermes event is the owner's own message, in their private chat or a group (not an
+    internal wake or notice Hermes made itself)."""
     try:
         source = getattr(event, "source", None)
-        return (not getattr(event, "internal", False) and str(getattr(source, "chat_type", "")) in PRIVATE
-                and getattr(source, "chat_id", None) is not None and allowed(getattr(source, "user_id", None)))
+        return (not getattr(event, "internal", False) and getattr(source, "chat_id", None) is not None
+                and allowed(getattr(source, "user_id", None)))
     except Exception:
         return False
 
 
 async def on_error(update, context):
-    """python-telegram-bot's error handler: logs the error, and a message from the owner gets PLAIN."""
+    """python-telegram-bot's error handler: logs the error, and a message from the owner gets PLAIN in
+    the chat it came from."""
     try:
         log.error("godspeed-chat-guard: a Telegram update failed", exc_info=getattr(context, "error", None))
         message, chat, user = (getattr(update, name, None) for name in ("effective_message", "effective_chat", "effective_user"))
-        if message is None or getattr(chat, "type", None) not in PRIVATE or not allowed(getattr(user, "id", None)):
+        if message is None or chat is None or not allowed(getattr(user, "id", None)):
             return
         if not first_answer(chat.id, message.message_id):
             return
@@ -275,7 +276,7 @@ async def on_error(update, context):
 
 def wrap_turn_error(adapter, native):
     """Replaces adapter._notify_turn_error so a turn whose error escaped Hermes' turn handler gets PLAIN
-    in the owner's private chat, and no error name. An error inside the model turn itself never comes
+    for the owner, and no error name. An error inside the model turn itself never comes
     here: Hermes answers it with its own reply, which wrap_agent_error_reply replaces."""
     current = getattr(adapter, "_notify_turn_error", None)
     if getattr(current, "godspeed_wrapped", False):
@@ -311,7 +312,7 @@ def wrap_turn_error(adapter, native):
 
 def wrap_agent_error_reply(runner_class):
     """Replaces the reply Hermes gives when a model turn raises (it names commands and the log) with
-    PLAIN in the owner's private chat. Hermes' own handling still runs first: it logs the error, keeps
+    PLAIN for the owner. Hermes' own handling still runs first: it logs the error, keeps
     the message in the conversation and marks the turn failed."""
     current = getattr(runner_class, "_hmwa_agent_error_reply", None)
     if getattr(current, "godspeed_wrapped", False):

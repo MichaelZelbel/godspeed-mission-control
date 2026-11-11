@@ -24,7 +24,7 @@ const ENV_VALUE=name=>new RegExp('^\\s*'+name+'\\s*=\\s*(\\S+)','m');
 const OWNER=/^[1-9][0-9]*$/;
 
 export const CHAT_HEALTH_WORDS={
- down:'Your Telegram chat is not answering right now. Godspeed noticed and is trying to restart it; anything you send meanwhile is kept.',
+ down:'Your Telegram chat is not answering right now. Godspeed will tell you here when it answers again. Until then, messages you send it may get no answer; restarting the server usually brings it back.',
  up:'Your Telegram chat answers again. If you sent something while it was down, send it again if you still need an answer.',
  'not-ours':'Your Telegram chat runs on a copy of Hermes that belongs to another account on this server, so Godspeed cannot keep it up to date or repair it when something else changes it. Ask whoever set up the server to install Hermes for your assistant\'s own account.',
  'parts-behind':'Hermes on this server was updated, but the parts it needs were not, so your chat may stop answering. Whoever owns that Hermes copy should run: hermes update',

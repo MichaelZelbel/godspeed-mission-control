@@ -132,3 +132,9 @@ test('the routine tick runs the chat check first, and a check that throws does n
  await scheduler.tick();
  assert.equal(calls[0],'chat check');assert.ok(calls.includes('cron tick'));
 });
+
+test('the "not answering" message promises nothing the notebook does not do: it restarts nothing and keeps no message',()=>{
+ for(const kind of ['down','up'])assert.doesNotMatch(CHAT_HEALTH_WORDS[kind],/\b(trying to restart|is kept|are kept|saved)\b/i,kind);
+ assert.match(CHAT_HEALTH_WORDS.down,/tell you here when it answers again/);
+ assert.match(CHAT_HEALTH_WORDS.up,/send it again/);
+});

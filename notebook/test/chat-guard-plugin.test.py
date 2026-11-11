@@ -52,14 +52,17 @@ class Adapter:
         self.originals.append((event, error))
 
 
-def update(user=OWNER, chat_type="private", message_id=7, text="What is on today?"):
+GROUP = "-1001234567890"
+
+
+def update(user=OWNER, chat_type="private", message_id=7, text="What is on today?", chat=None):
     return types.SimpleNamespace(effective_message=types.SimpleNamespace(message_id=message_id, text=text, caption=None),
-                                 effective_chat=types.SimpleNamespace(id=int(user), type=chat_type),
+                                 effective_chat=types.SimpleNamespace(id=int(chat or user), type=chat_type),
                                  effective_user=types.SimpleNamespace(id=int(user)))
 
 
-def event(user=OWNER, chat_type="dm", message_id="9", text="Plan my week", internal=False):
-    return types.SimpleNamespace(source=types.SimpleNamespace(chat_id=user, user_id=user, chat_type=chat_type),
+def event(user=OWNER, chat_type="dm", message_id="9", text="Plan my week", internal=False, chat=None):
+    return types.SimpleNamespace(source=types.SimpleNamespace(chat_id=chat or user, user_id=user, chat_type=chat_type),
                                  message_id=message_id, text=text, internal=internal)
 
 
@@ -215,12 +218,19 @@ class PlainReply(Case):
         self.assertEqual(len(self.app.bot.sent), 1)
         self.assertEqual(len(self.saved()), 1)
 
-    def test_a_stranger_or_a_group_gets_nothing(self):
+    def test_a_stranger_gets_nothing_in_a_private_chat_or_a_group(self):
         self.handle(update(user="999"))
-        self.handle(update(chat_type="group"))
+        self.handle(update(user="999", chat_type="supergroup", chat=GROUP))
         self.handle(types.SimpleNamespace())
         self.assertEqual(self.app.bot.sent, [])
         self.assertEqual(self.saved(), [])
+
+    def test_the_owners_failed_message_in_a_group_gets_the_sentence_in_that_group_and_is_saved(self):
+        self.handle(update(chat_type="supergroup", chat=GROUP))
+        self.handle(update(chat_type="supergroup", chat=GROUP))
+        self.assertEqual(self.app.bot.sent, [(int(GROUP), self.plugin.PLAIN)])
+        [line] = self.saved()
+        self.assertEqual((line["chat_id"], line["text"], line["why"]), (GROUP, "What is on today?", "handler"))
 
     def test_a_failed_turn_gets_the_plain_sentence_instead_of_hermes_notice(self):
         asyncio.run(self.adapter._notify_turn_error(event(), STALE))
@@ -231,8 +241,14 @@ class PlainReply(Case):
         asyncio.run(self.adapter._notify_turn_error(event(), STALE))
         self.assertEqual(len(self.app.bot.sent), 1)
 
-    def test_a_group_turn_keeps_hermes_notice(self):
-        group = event(chat_type="group")
+    def test_the_owners_failed_turn_in_a_group_gets_the_sentence_in_that_group(self):
+        asyncio.run(self.adapter._notify_turn_error(event(chat_type="group", chat=GROUP), STALE))
+        self.assertEqual((self.app.bot.sent, self.adapter.originals), ([(int(GROUP), self.plugin.PLAIN)], []))
+        [line] = self.saved()
+        self.assertEqual((line["chat_id"], line["why"]), (GROUP, "turn"))
+
+    def test_a_strangers_turn_in_a_group_keeps_hermes_notice(self):
+        group = event(user="999", chat_type="group", chat=GROUP)
         asyncio.run(self.adapter._notify_turn_error(group, STALE))
         self.assertEqual(self.adapter.originals, [(group, STALE)])
         self.assertEqual(self.app.bot.sent, [])
@@ -299,8 +315,13 @@ class ModelTurn(Case):
         [line] = self.saved()
         self.assertEqual((line["text"], line["why"]), ("Plan my week", "model turn"))
 
-    def test_a_group_or_an_internal_turn_keeps_hermes_reply(self):
-        self.assertEqual(self.turn(event(chat_type="group"))[1], HERMES_REPLY)
+    def test_the_owners_model_turn_in_a_group_gets_the_plain_sentence(self):
+        self.assertEqual(self.turn(event(chat_type="group", chat=GROUP))[1], self.plugin.PLAIN)
+        [line] = self.saved()
+        self.assertEqual((line["chat_id"], line["why"]), (GROUP, "model turn"))
+
+    def test_a_strangers_or_an_internal_turn_keeps_hermes_reply(self):
+        self.assertEqual(self.turn(event(user="999", chat_type="group", chat=GROUP))[1], HERMES_REPLY)
         self.assertEqual(self.turn(event(internal=True))[1], HERMES_REPLY)
         self.assertEqual(self.saved(), [])
 
