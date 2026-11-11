@@ -29,6 +29,14 @@ export const isScenarioHermesReleaseUrl=value=>scenarioHermesReleaseUrlPattern.t
 const hermesRepositoryPath=`${HERMES_REPOSITORY.owner}/${HERMES_REPOSITORY.name}`.toLowerCase();
 export const officialHermesRemote=value=>['https://github.com/','git@github.com:','ssh://git@github.com/'].some(prefix=>String(value||'').trim().replace(/\/+$/,'').replace(/\.git$/i,'').toLowerCase()===prefix+hermesRepositoryPath);
 
+export const FOREIGN_CHECKOUT_REASON='This Hermes checkout belongs to another user.';
+// Godspeed can neither update nor repair a Hermes copy another account owns (git refuses it, and its
+// dependency sync needs that account). The updater skips such a copy and the chat check reports it.
+export function foreignCheckout(source,getuid=()=>process.getuid?.()){
+ const uid=getuid?.();if(uid===undefined||!source)return false;
+ try{return fs.statSync(source).uid!==uid;}catch{return false;}
+}
+
 export function readHermesUpdate(store){
  try{const value=JSON.parse(fs.readFileSync(path.join(store.state,UPDATE_FILE),'utf8'));return value&&typeof value==='object'&&!Array.isArray(value)?value:{};}catch{return {};}
 }
@@ -73,8 +81,8 @@ export class HermesUpdate{
   const executable=this.descriptor?.executable,sourceRaw=this.descriptor?.sourceRoot||hermesPython({executable,home:this.descriptor?.home}).source,source=sourceRaw&&path.resolve(sourceRaw);
   if(this.isDocker()||path.resolve(executable||'.').startsWith('/opt/hermes/'))return {reason:'This Hermes installation is managed by Docker.'};
   if(!this.descriptor?.verified||!path.isAbsolute(executable||'')||!source||!fs.existsSync(source))return {reason:'This assistant installation is not a recorded native Hermes checkout.'};
-  let stat;try{stat=fs.statSync(source);}catch{return {reason:'The recorded Hermes source cannot be read.'};}
-  if(this.getuid?.()!==undefined&&stat.uid!==this.getuid())return {reason:'This Hermes checkout belongs to another user.'};
+  try{fs.statSync(source);}catch{return {reason:'The recorded Hermes source cannot be read.'};}
+  if(foreignCheckout(source,this.getuid))return {reason:FOREIGN_CHECKOUT_REASON};
   const inside=await this.git(['rev-parse','--is-inside-work-tree'],source);if(inside.code!==0||inside.stdout.trim()!=='true')return {reason:'The recorded Hermes source is not a Git checkout.'};
   const dirty=await this.git(['status','--porcelain'],source);if(dirty.code!==0)return {reason:'The Hermes checkout could not be checked.'};
   if(dirty.stdout.trim())return {reason:'The Hermes checkout has uncommitted changes.'};

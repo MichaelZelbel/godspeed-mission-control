@@ -133,8 +133,11 @@ test('a full pool of fresh news is not widened',async()=>{
  const {store,query}=workspace('full-pool');const now=new Date();
  for(const n of [1,2,3]){const topic=store.save('watch_topics',{title:'Fictional source '+n,url:'https://fictional.invalid/'+n,include_in_brief:true,next_run_at:FUTURE});store.save('watch_observations',{topic_id:topic.id,url:topic.url,status:200,content:'Fictional news '+n,observed_at:now.toISOString(),changed:true,comparison:{meaningful:true,evidence:'Fictional news '+n}});}
  const other=store.save('watch_topics',{title:'Fictional unread source',url:'https://fictional.invalid/other'});
- const {note}=await run(store,query,{write:()=>HEALTH+'\n\nFictional news 1. https://fictional.invalid/1\n\nFictional news 2. https://fictional.invalid/2',now});
+ const {note,writes,receipt}=await run(store,query,{write:()=>HEALTH+'\n\nFictional news 1. https://fictional.invalid/1\n\nFictional news 2. https://fictional.invalid/2',now});
  assert.equal(note.evidence.news_pool.status,'complete');
+ assert.equal(receipt('brief-final-check').state,'passed');
+ assert.equal(receipt('brief-final-check').thin_repair,'not-applicable');
+ assert.ok(!writes.some(w=>w.phase==='thin-repair'));
  assert.equal(note.evidence.news_pool.fresh,3);
  assert.equal(note.evidence.news_pool.widened,null);
  assert.equal(store.list('watch_runs').filter(r=>r.topic_id===other.id).length,0);
@@ -176,6 +179,17 @@ test('a brief still thin after its repair says so and why',async()=>{
  assert.equal(result.thin.reasons[0],'nothing waits for your decision');assert.match(result.thin.reasons[1],/^only 1 fresh news item came in since \d+ \w+$/);
  assert.equal(receipt('brief-final-check').state,'thin');
  assert.equal(receipt('brief-final-check').thin_repair,'failed');
+ assert.match(note.content,/\n\nThis brief is thin today: nothing waits for your decision; only 1 fresh news item came in since \d+ \w+\.$/);
+});
+
+test('a repair that passes its checks but leaves the brief thin is recorded still thin, not passed',async()=>{
+ const {store,query,thinText}=thinFixture('thin-repair-still-thin');
+ const {result,note,writes,receipt}=await run(store,query,{now:new Date(),write:input=>input.phase==='thin-repair'?thinText+'\n\nA fictional quiet morning.':thinText});
+ assert.ok(writes.some(w=>w.phase==='thin-repair'));
+ assert.ok(note.content.includes('A fictional quiet morning.'));
+ assert.ok(result.thin);
+ assert.equal(receipt('brief-final-check').state,'thin');
+ assert.equal(receipt('brief-final-check').thin_repair,'still-thin');
  assert.match(note.content,/\n\nThis brief is thin today: nothing waits for your decision; only 1 fresh news item came in since \d+ \w+\.$/);
 });
 

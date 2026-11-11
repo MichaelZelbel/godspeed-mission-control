@@ -25,6 +25,7 @@ test('browser chat authenticates, saves messages and recalls history after resta
 });
 test('Hermes startup diagnostics do not become model JSON',()=>{
   assert.equal(hermesResponse('Warning: Unknown toolsets: none\n\n\x1b[2m  ⚠ tirith security scanner enabled but not available — command scanning will use pattern matching only\x1b[0m\n{"reply":"hello"}\n'),'{"reply":"hello"}');
+  assert.equal(hermesResponse('Warning: Unknown toolsets: no_mcp\nPlain answer.\n'),'Plain answer.');
   assert.equal(hermesResponse('{"reply":"Warning: keep this actual response"}'),'{"reply":"Warning: keep this actual response"}');
 });
 // The three waiting lines that ended chat replies in the live run of 9 October 2026.

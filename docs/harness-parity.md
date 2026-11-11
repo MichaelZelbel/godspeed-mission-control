@@ -113,6 +113,45 @@ gap with a daily job that reads what you typed and closes a deadline on your quo
 does not ship that job, because it needs a paid model call every day. Proven by
 `tools/test-obligation-close-hook.js` (Claude Code) and `tools/test-due.sh` (the events themselves).
 
+## No homework: never a page or a message with blanks for you to fill
+
+Added 2026-11-11. An assistant unsure of some facts is tempted to publish a page with an empty
+answer column, or to end with "open the link and fill this in". A published page is read-only, and
+the answers are usually already in your mission control. `.claude/hooks/no-homework.js` refuses
+both: before a publish (the Artifact tool, `scp <file> user@host:`, and any command named in
+`.claude/hooks/no-homework.json`), and once per turn at the end of it. A plain question you can
+answer by typing a reply is never refused.
+
+| | Claude Code | Hermes | Codex | OpenClaw |
+|---|---|---|---|---|
+| Refuses to publish a page with blanks (before the tool call) | yes, `.claude/hooks/no-homework.js` (`PreToolUse`) | no hook before a tool call | yes, the same hook through `.codex/hooks.json` (`PreToolUse`, shell commands; the Artifact tool is Claude Code's own) | no hook before a tool call |
+| Asks once when the last message sends you to fill something in | yes, `.claude/hooks/no-homework.js` (`Stop`) | no stop boundary | yes, the same hook through `.codex/hooks.json` (`Stop`, which sends the last assistant message) | no stop boundary |
+
+**Codex, said plainly.** Codex (0.167 on the build server, where hooks are a stable feature) loads a folder's
+`.codex/hooks.json` only once you trust that folder and review the hooks with `/hooks`. Until then
+it runs without this check. Its wiring is proven with Codex-shaped payloads only: no Codex session on
+the build server is signed in. Proven by `tools/test-no-homework-hook.js`, and on Claude Code
+2.1.317 by one real session for each half.
+
+## Nothing new at the top of your mission control unless you asked for it
+
+Added 2026-11-11. An assistant that drops a scratch folder, a screenshot or a new feature folder
+at the top of your mission control is sent back once at the end of its turn, and told to move the
+thing into the folder where it belongs, remove it, or ask you. Anything that was there when the
+session started, anything git already tracks (a folder that came with `git pull`), and anything
+you named in one of your messages ("make a folder called `garden`") is never questioned. Folders
+and files further down are never raised. Raised once, an entry is accepted for the rest of the
+session.
+
+| | Claude Code | Hermes | Codex | OpenClaw |
+|---|---|---|---|---|
+| Sends the assistant back once for a new entry at the top you did not ask for | yes, `.claude/hooks/no-new-top-folder.js` (`SessionStart`, `UserPromptSubmit`, `Stop`) | no stop boundary | yes, the same hook through `.codex/hooks.json` (`SessionStart`, `UserPromptSubmit`, `Stop`) | no stop boundary |
+
+**Codex, said plainly.** Codex loads a folder's `.codex/hooks.json` only once you trust that
+folder and review its hooks with `/hooks`. Until then it runs without this check. Its wiring is
+proven with Codex-shaped payloads only: no Codex session on the build server is signed in. Proven
+by `tools/test-no-new-top-folder-hook.js`.
+
 ## Drafts yes, posting in your name never
 
 Added 2026-11-11. The assistant may draft posts, comments and replies, but it cannot publish,
@@ -157,3 +196,24 @@ hook as a project Stop hook in a trusted copy of the starter, and nothing in an 
 The deadline check above is not wired for Codex yet; the table above still says what it does
 today. Proven by `tools/test-give-up-hook.js`, which runs both wirings' own command lines against
 a copy of the starter with Claude Code and Codex payloads.
+
+## A promise on a clock is written down
+
+Added 2026-11-11 (#233). When your mission control promises you something on a clock ("I'll send
+you this every Sunday"), the promise is a file in `work/promises/` (the folder's README gives the
+format), and every morning each one is checked. A missed one is said at the top of the morning
+brief and of `mc-due today` until a later one is kept. Setup writes the promise of each routine it
+schedules there itself, and never over a file that is already there.
+
+| | Claude Code | Hermes | Codex | OpenClaw |
+|---|---|---|---|---|
+| Asked once at the end of a turn that promised on a clock without a file | yes, `.claude/hooks/promise-needs-a-file.js` (`Stop`, registered in the Claude Code settings file) | no stop boundary | yes, the same hook through `.codex/hooks.json` (`Stop`, which sends the last assistant message) | no stop boundary |
+| Checked every morning, a missed one at the top of the brief and of `mc-due today` | yes | yes | yes | yes |
+| Setup writes the promise of each routine it schedules | yes | yes | yes | yes |
+
+**The gap, said plainly.** Codex runs the hooks in `.codex/hooks.json` only in a folder it trusts,
+and only a Codex with hooks (0.167 has them, and sends the last assistant message to `Stop`). The
+Codex case is proven with Codex-shaped payloads, not yet in a live Codex session. On Hermes and
+OpenClaw a promise made in a chat is not asked about at the end of the turn; it is still checked
+every morning once it is written down. Proven by `tools/test-promise-hook.js` and
+`tools/test-promises.js`.
