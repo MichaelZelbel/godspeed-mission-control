@@ -2,7 +2,7 @@ name: scenarios
 # The run's name carries the stage it proved, so a run on a candidate's tag that was left at the
 # default stage (beta) cannot be read as that candidate's pass: GitHub shows the input itself only
 # in the run's logs.
-run-name: ${{ github.event_name == 'pull_request' && format('scenarios on pull request {0}', github.event.pull_request.number) || format('scenarios {0}', inputs.stage || 'main, the night') }}
+run-name: ${{ github.event_name == 'pull_request' && format('scenarios on pull request {0}', github.event.pull_request.number) || (inputs.pr && format('scenarios on pull request {0}, started by hand', inputs.pr)) || format('scenarios {0}', inputs.stage || 'main, the night') }}
 # The proving scenarios a candidate runs before the maintainer is asked for "go" (godspeed-dev,
 # releases/godspeed-2.0.0-beta.7-stages/plan.md, "Proving scenarios" 1, 2 and 5, and
 # releases/godspeed-2.0.0-beta.8-faster-chat/plan.md, "Proving scenarios" 1, 3 and 4, which are
@@ -17,6 +17,11 @@ run-name: ${{ github.event_name == 'pull_request' && format('scenarios on pull r
 # are for a candidate (the Mac one only when `inputs.mac` is true, the Windows one only on a
 # candidate's tag), which a scheduled run never is. The verdict job's last step then tells the night
 # in issues (scenarios/report-night.mjs, releases/godspeed-2.0.0-beta.15-nightly-proof-six-repairs).
+# A hand-started run may instead name a pull request (`pr`, with `only`, and `stage` left empty: -f pr=463 -f only=plain-yes):
+# it builds that pull request's head image and proves the head on it, so a pull request that changes
+# only the notebook (which no scenario script names, so a pull request run picks nothing) gets its
+# scenarios run on its own code. A same-repository pull request only, and `only` is required, so one
+# pull request never runs every scenario (the scenario AI key is capped).
 # A pull request that changes a scenario's own script runs that scenario on the pull request's own
 # code (the job `stage` reads the changed files and says which scenarios to run: `picked`), so a fix
 # to a scenario is proved red or green before it merges instead of on the next night or candidate.
@@ -39,9 +44,13 @@ on:
   workflow_dispatch:
     inputs:
       stage:
-        description: The stage to prove (a branch or tag holding stage.json, e.g. candidate/2.0.0-beta.7)
-        required: true
-        default: beta
+        description: The stage to prove (a branch or tag holding stage.json, e.g. candidate/2.0.0-beta.7); empty proves this commit (or the pull request in `pr`) the way the night does
+        required: false
+        default: ''
+      pr:
+        description: 'A pull request number whose head image is built and whose head is proved (leave stage empty and name the jobs in only)'
+        required: false
+        default: ''
       mac:
         description: Also install on a Mac (once per candidate)
         type: boolean
@@ -79,14 +88,34 @@ jobs:
     outputs:
       picked: ${{ steps.pick.outputs.picked }}
       image: ${{ steps.publish.outputs.image }}
+      sha: ${{ steps.named.outputs.sha }}
     env:
       IMAGE: ghcr.io/michaelzelbel/godspeed-mission-control
-      TAG: pr-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}
     steps:
+      - name: The pull request a hand-started run names
+        id: named
+        if: github.event_name == 'workflow_dispatch' && inputs.pr != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NAMED_PR: ${{ inputs.pr }}
+          INPUT_STAGE: ${{ inputs.stage }}
+          INPUT_ONLY: ${{ inputs.only }}
+        run: |
+          set -e
+          [[ "$NAMED_PR" =~ ^[0-9]+$ ]] || { echo "FAIL pr: the pull request must be a number, not: $NAMED_PR" | tee -a "$GITHUB_STEP_SUMMARY"; exit 1; }
+          [ -z "$INPUT_STAGE" ] || { echo "FAIL pr: a run on a pull request proves its head, so stage must be empty (leave it empty), not $INPUT_STAGE" | tee -a "$GITHUB_STEP_SUMMARY"; exit 1; }
+          [ -n "$(printf '%s' "$INPUT_ONLY" | tr -d ' ,')" ] || { echo "FAIL pr: name the jobs to run in only, so one pull request does not run every scenario" | tee -a "$GITHUB_STEP_SUMMARY"; exit 1; }
+          gh api "repos/$GITHUB_REPOSITORY/pulls/$NAMED_PR" --jq '[(if .merged then "merged" else .state end), .head.repo.full_name, .head.sha] | @tsv' > "$RUNNER_TEMP/named"
+          IFS=$'	' read -r state repo sha < "$RUNNER_TEMP/named"
+          [ "$state" = open ] || [ "$state" = merged ] || { echo "FAIL pr: pull request $NAMED_PR is $state, not open or merged" | tee -a "$GITHUB_STEP_SUMMARY"; exit 1; }
+          [ "$repo" = "$GITHUB_REPOSITORY" ] || { echo "FAIL pr: pull request $NAMED_PR comes from $repo; only a branch of this repository is built here" | tee -a "$GITHUB_STEP_SUMMARY"; exit 1; }
+          [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || { echo "FAIL pr: pull request $NAMED_PR has no head commit"; exit 1; }
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "Proving the head of pull request $NAMED_PR, ${sha:0:7}, on an image built from it." | tee -a "$GITHUB_STEP_SUMMARY"
       - uses: actions/checkout@v4
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' || steps.named.outputs.sha != ''
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ github.event.pull_request.head.sha || steps.named.outputs.sha }}
           persist-credentials: false
       - name: Is a server scenario selected?
         id: pick
@@ -104,16 +133,20 @@ jobs:
           done
           echo 'picked=false' >> "$GITHUB_OUTPUT"
       - uses: docker/login-action@v3
-        if: steps.pick.outputs.picked == 'true'
+        if: steps.pick.outputs.picked == 'true' || steps.named.outputs.sha != ''
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Build and publish the selected PR-head image
         id: publish
-        if: steps.pick.outputs.picked == 'true'
+        if: steps.pick.outputs.picked == 'true' || steps.named.outputs.sha != ''
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || steps.named.outputs.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr }}
         run: |
-          docker build --build-arg REVISION="${{ github.event.pull_request.head.sha }}" -f docker/full-candidate/Dockerfile -t "$IMAGE:$TAG" .
+          TAG="pr-$PR_NUMBER-$HEAD_SHA"
+          docker build --build-arg REVISION="$HEAD_SHA" -f docker/full-candidate/Dockerfile -t "$IMAGE:$TAG" .
           docker push "$IMAGE:$TAG"
           digest=$(docker buildx imagetools inspect "$IMAGE:$TAG" --format '{{.Manifest.Digest}}')
           [[ $digest =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "the PR-head image has no immutable digest: $digest"; exit 1; }
@@ -123,7 +156,7 @@ jobs:
     name: the stage file
     needs: pr-image
     # A pull request from a fork has no secrets, so no scenario can run on it: nothing runs.
-    if: ${{ always() && (github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && needs.pr-image.result == 'success')) }}
+    if: ${{ always() && (github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && needs.pr-image.result == 'success')) && (inputs.pr == '' || needs.pr-image.result == 'success') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
@@ -131,10 +164,13 @@ jobs:
       pull-requests: read
     env:
       # The commit the run proves: a pull request's own head, otherwise the one the run started on.
-      PROOF_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      PROOF_SHA: ${{ github.event.pull_request.head.sha || needs.pr-image.outputs.sha || github.sha }}
       GODSPEED_SCENARIO_PR_IMAGE: ${{ needs.pr-image.outputs.image }}
+      # A pull request run that built no image runs no server scenario, so the ancestor-image guard does not apply to it.
+      GODSPEED_SCENARIO_ANCESTOR_OK: ${{ github.event_name == 'pull_request' && '1' || '' }}
     outputs:
       picked: ${{ steps.pick.outputs.picked }}
+      proof: ${{ env.PROOF_SHA }}
       version: ${{ steps.read.outputs.version }}
       product: ${{ steps.read.outputs.product }}
       engine: ${{ steps.read.outputs.engine }}
@@ -142,7 +178,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.stage || github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ inputs.stage || github.event.pull_request.head.sha || needs.pr-image.outputs.sha || github.sha }}
           fetch-depth: ${{ inputs.stage && 1 || 50 }}
           persist-credentials: false
       - uses: actions/setup-node@v4
@@ -384,7 +420,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.stage || github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ inputs.stage || github.event.pull_request.head.sha || needs.stage.outputs.proof || github.sha }}
           persist-credentials: false
       - uses: actions/download-artifact@v4
         if: ${{ !inputs.stage }}
@@ -411,7 +447,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.stage || github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ inputs.stage || github.event.pull_request.head.sha || needs.stage.outputs.proof || github.sha }}
           persist-credentials: false
       - uses: actions/download-artifact@v4
         if: ${{ !inputs.stage }}
@@ -439,7 +475,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.stage || github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ inputs.stage || github.event.pull_request.head.sha || needs.stage.outputs.proof || github.sha }}
           persist-credentials: false
       - uses: actions/download-artifact@v4
         if: ${{ !inputs.stage }}
@@ -467,7 +503,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.stage || github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ inputs.stage || github.event.pull_request.head.sha || needs.stage.outputs.proof || github.sha }}
           persist-credentials: false
       - uses: actions/download-artifact@v4
         if: ${{ !inputs.stage }}
@@ -489,7 +525,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.stage || github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ inputs.stage || github.event.pull_request.head.sha || needs.stage.outputs.proof || github.sha }}
           persist-credentials: false
       - uses: actions/download-artifact@v4
         if: ${{ !inputs.stage }}
@@ -512,7 +548,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.stage || github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ inputs.stage || github.event.pull_request.head.sha || needs.stage.outputs.proof || github.sha }}
           persist-credentials: false
       - uses: actions/download-artifact@v4
         if: ${{ !inputs.stage }}
@@ -535,7 +571,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.stage || github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ inputs.stage || github.event.pull_request.head.sha || needs.stage.outputs.proof || github.sha }}
           persist-credentials: false
       - uses: actions/download-artifact@v4
         if: ${{ !inputs.stage }}
@@ -565,7 +601,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.stage || github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ inputs.stage || github.event.pull_request.head.sha || needs.stage.outputs.proof || github.sha }}
           persist-credentials: false
       - uses: actions/download-artifact@v4
         if: ${{ !inputs.stage }}
@@ -588,7 +624,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.stage || github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ inputs.stage || github.event.pull_request.head.sha || needs.stage.outputs.proof || github.sha }}
           persist-credentials: false
       - uses: actions/download-artifact@v4
         if: ${{ !inputs.stage }}
@@ -619,7 +655,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.stage || github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ inputs.stage || github.event.pull_request.head.sha || needs.stage.outputs.proof || github.sha }}
           persist-credentials: false
       - uses: actions/download-artifact@v4
         if: ${{ !inputs.stage }}
@@ -642,7 +678,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.stage || github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ inputs.stage || github.event.pull_request.head.sha || needs.stage.outputs.proof || github.sha }}
           persist-credentials: false
       - uses: actions/download-artifact@v4
         if: ${{ !inputs.stage }}
@@ -665,7 +701,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.stage || github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ inputs.stage || github.event.pull_request.head.sha || needs.stage.outputs.proof || github.sha }}
           persist-credentials: false
       - uses: actions/download-artifact@v4
         if: ${{ !inputs.stage }}
@@ -696,7 +732,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.stage || github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ inputs.stage || github.event.pull_request.head.sha || needs.stage.outputs.proof || github.sha }}
           persist-credentials: false
       - uses: actions/download-artifact@v4
         if: ${{ !inputs.stage }}
@@ -763,7 +799,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.stage || github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ inputs.stage || github.event.pull_request.head.sha || needs.stage.outputs.proof || github.sha }}
           persist-credentials: false
       - uses: actions/download-artifact@v4
         if: ${{ !inputs.stage }}
@@ -800,7 +836,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.stage || github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ inputs.stage || github.event.pull_request.head.sha || needs.stage.outputs.proof || github.sha }}
           persist-credentials: false
       - uses: actions/download-artifact@v4
         if: ${{ !inputs.stage }}
@@ -827,7 +863,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.stage || github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ inputs.stage || github.event.pull_request.head.sha || needs.stage.outputs.proof || github.sha }}
           persist-credentials: false
       - uses: actions/download-artifact@v4
         if: ${{ !inputs.stage }}
@@ -863,7 +899,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.stage || github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ inputs.stage || github.event.pull_request.head.sha || needs.stage.outputs.proof || github.sha }}
           persist-credentials: false
       - uses: actions/download-artifact@v4
         if: ${{ !inputs.stage }}
@@ -897,7 +933,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.stage || github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ inputs.stage || github.event.pull_request.head.sha || needs.stage.outputs.proof || github.sha }}
           persist-credentials: false
       - uses: actions/download-artifact@v4
         if: ${{ !inputs.stage }}
@@ -931,7 +967,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.stage || github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ inputs.stage || github.event.pull_request.head.sha || needs.stage.outputs.proof || github.sha }}
           persist-credentials: false
       - uses: actions/download-artifact@v4
         if: ${{ !inputs.stage }}
@@ -961,7 +997,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.stage || github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ inputs.stage || github.event.pull_request.head.sha || needs.stage.outputs.proof || github.sha }}
           persist-credentials: false
       - uses: actions/download-artifact@v4
         if: ${{ !inputs.stage }}
@@ -993,7 +1029,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.stage || github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ inputs.stage || github.event.pull_request.head.sha || needs.stage.outputs.proof || github.sha }}
           persist-credentials: false
       - uses: actions/download-artifact@v4
         if: ${{ !inputs.stage }}
@@ -1027,7 +1063,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.stage || github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ inputs.stage || github.event.pull_request.head.sha || needs.stage.outputs.proof || github.sha }}
           persist-credentials: false
       - uses: actions/download-artifact@v4
         if: ${{ !inputs.stage }}
@@ -1057,7 +1093,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.stage || github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ inputs.stage || github.event.pull_request.head.sha || needs.stage.outputs.proof || github.sha }}
           persist-credentials: false
       - uses: actions/download-artifact@v4
         if: ${{ !inputs.stage }}
@@ -1091,7 +1127,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.stage || github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ inputs.stage || github.event.pull_request.head.sha || needs.stage.outputs.proof || github.sha }}
           persist-credentials: false
       - uses: actions/download-artifact@v4
         if: ${{ !inputs.stage }}

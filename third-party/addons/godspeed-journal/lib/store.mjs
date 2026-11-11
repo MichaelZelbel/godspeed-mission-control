@@ -6,7 +6,7 @@ import { localParts, now } from "./clock.mjs";
 import { loadSettings } from "./settings.mjs";
 
 const ARRAYS = new Set(["done_means", "met", "missed"]);
-const ORDER = ["at", "kind", "task", "title", "done_means", "met", "missed", "evidence", "evidence_id", "evidence_at", "source"];
+const ORDER = ["at", "written", "kind", "task", "title", "done_means", "met", "missed", "evidence", "evidence_id", "evidence_at", "source"];
 
 export function slugify(text) {
   const s = String(text || "").replace(/ß/g, "ss").replace(/ä/g, "ae").replace(/ö/g, "oe").replace(/ü/g, "ue")

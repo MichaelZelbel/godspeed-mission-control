@@ -24,7 +24,7 @@ export function contextBlock(entries, s, now) {
   const open = recentTasks(entries, now);
   const closedFromRecord = tasksFrom(entries).filter((t) => t.evidence && t.evidence.closed <= now.toISOString() &&
     minutesBetween(new Date(t.evidence.closed), now) <= CLOSED_NOTE_MINUTES);
-  const loose = looseEnds(entries).filter((t) => t.ended <= now.toISOString() && minutesBetween(new Date(t.ended), now) <= LOOSE_NOTE_MINUTES);
+  const loose = looseEnds(entries).filter((t) => t.told <= now.toISOString() && minutesBetween(new Date(t.told), now) <= LOOSE_NOTE_MINUTES);
   if (!open.length && !closedFromRecord.length && !loose.length) return "";
   const hm = (iso) => localParts(new Date(iso), s.timezone).hm;
   // For the model: the time alone today, otherwise weekday, date and time.

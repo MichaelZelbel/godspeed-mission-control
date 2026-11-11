@@ -82,11 +82,18 @@ control already sent you. "Track journal" is the one to use when you dictate: sp
 often turns "log" into "look". Every other message that starts with "track", such as "track belly
 92" or "track headache", goes to your trackers instead.
 
+You can say when something happened: "an hour ago", "at 11", "yesterday afternoon", "from 9 to
+10:30", "vor einer Stunde", "um halb zehn". Each move in a message gets its own time, in the order
+you told it, read in the time zone your settings name; a move with no time is saved as now. When
+the time could mean two things, is still ahead, or puts a finish before its start, your assistant
+asks you once instead of guessing, and its reply says the time it recorded.
+
 Prefer typing it yourself:
 
 ```
 godspeed-journal start "Edit the invoice" --done-means "sent and filed"
 godspeed-journal done "invoice" --met "sent and filed"
+godspeed-journal done "invoice" --when "an hour ago"
 
 # words that run over several lines, from any shell: put them in a file first
 godspeed-journal note --words-file words.txt --task invoice
