@@ -61,6 +61,15 @@ export function whenSaid(iso, now, tz, lang = "en") {
   return de ? `am ${Number(p.d)}. ${month} ${at}` : `on ${Number(p.d)} ${month} ${at}`;
 }
 
+// A span the way the question offers it, so the answer said back reads as that span: "today from
+// 09:00 to 10:00", "gestern von 21:00 bis 22:00".
+export function spanSaid(start, end, now, tz, lang = "en") {
+  const de = lang === "de";
+  const from = whenSaid(new Date(start).toISOString(), now, tz, lang);
+  const to = localParts(new Date(end), tz).hm;
+  return from.replace(/ (?:at|um) (\d\d:\d\d)$/, de ? ` von $1 bis ${to}` : ` from $1 to ${to}`);
+}
+
 export function inQuietHours(hm, range) {
   if (!range) return false;
   const [s, e] = range.split("-");
@@ -72,7 +81,8 @@ export function inQuietHours(hm, range) {
 // or none yet ("at 17:00", said at 15:00), the journal asks instead of guessing: a wrong time
 // saved silently is worse than one short question. The result is exactly one of
 //   { at }, { start, end }, { ask: "unknown" }, { ask: "which", options: [a, b] },
-//   { ask: "future", at }, { ask: "order", start, end }.
+//   { ask: "which", spans: [[start, end], [start, end]] }, { ask: "future", at }, { ask: "order" }.
+// Every option a question offers, said back in the words the journal used, settles it.
 const HOUR = 60, DAY_MS = 86400000;
 const NUMBER_WORDS = {
   a: 1, an: 1, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10,
@@ -138,7 +148,9 @@ function clockTime(text) {
       return { minutes: ((h % 12) + (d[3][0] === "p" ? 12 : 0)) * HOUR + m, explicit: true };
     }
     if (h > 23) return null;
-    return { minutes: h * HOUR + m, explicit: d[1].startsWith("0") || h === 0 || h >= 13 };
+    // "11:00" and "12:15", the way the journal itself writes a time when it asks, are the 24-hour
+    // clock: a question's own options, said back, must settle it. "9:30" and "11" stay open.
+    return { minutes: h * HOUR + m, explicit: d[1].length === 2 && d[2] !== undefined || h === 0 || h >= 13 };
   }
   const word = t.match(/^(\S+)\s*(a\.?m\.?|p\.?m\.?)?$/);
   if (word && hourOf(word[1]) !== undefined && hourOf(word[1]) > 0 && !/^\d/.test(word[1])) {
@@ -183,27 +195,31 @@ function zonedDate(date, minutes, tz) {
 }
 const addDays = (date, n) => new Date(Date.parse(date + "T00:00:00Z") + n * DAY_MS).toISOString().slice(0, 10);
 
-// Which of the possible times was meant. With a day named, each option on that day that is not
-// still ahead. With none, today's when it has passed, otherwise yesterday's within the last 12
-// hours ("23:00" said at 00:30 is last night; "at 11" said at 15:00 is not 23:00 yesterday).
-function pick(options, day, dayShift, now, tz) {
+// The instant one option of the day means. With a day named, that day. With none, today's when
+// it has passed, otherwise yesterday's within the last 12 hours ("23:00" said at 00:30 is last
+// night; "at 11" said at 15:00 is not 23:00 yesterday), otherwise today's, still ahead.
+function instant(m, day, dayShift, now, tz) {
   const today = localParts(now, tz).date;
-  const counted = [], ahead = [];
-  for (const m of options) {
-    if (day !== null) {
-      const t = zonedDate(addDays(today, day + dayShift), m, tz);
-      (t <= now ? counted : ahead).push(t);
-      continue;
-    }
-    const t = zonedDate(addDays(today, dayShift), m, tz);
-    if (t <= now) { counted.push(t); continue; }
-    const y = zonedDate(addDays(today, dayShift - 1), m, tz);
-    if (now - y <= 12 * HOUR * 60000) counted.push(y); else ahead.push(t);
-  }
-  counted.sort((a, b) => a - b); ahead.sort((a, b) => a - b);
+  if (day !== null) return zonedDate(addDays(today, day + dayShift), m, tz);
+  const t = zonedDate(addDays(today, dayShift), m, tz);
+  if (t <= now) return t;
+  const y = zonedDate(addDays(today, dayShift - 1), m, tz);
+  return now - y <= 12 * HOUR * 60000 ? y : t;
+}
+
+// Which of the possible times was meant. A time before `after` (the start of the task a finish
+// belongs to) cannot be meant, so it is left out before asking: "at 12" for a task started at
+// 13:00 is not offered as 00:00 or 12:00. When only such times are left, the latest is returned,
+// and the caller asks the one question that names the real problem.
+function pick(options, day, dayShift, now, tz, after = null) {
+  const all = options.map((m) => instant(m, day, dayShift, now, tz)).sort((a, b) => a - b);
+  const ahead = all.filter((t) => t > now);
+  const past = all.filter((t) => t <= now);
+  const counted = after ? past.filter((t) => t >= after) : past;
   if (counted.length === 1) return { at: counted[0] };
   if (counted.length > 1) return { ask: "which", options: counted };
-  return { ask: "future", at: ahead[0] };
+  if (ahead.length) return { ask: "future", at: ahead[0] };
+  return { at: past[past.length - 1] };
 }
 
 function normalize(words) {
@@ -212,7 +228,7 @@ function normalize(words) {
     .replace(/^(?:(?:at|around|about|roughly|um|gegen|so|etwa|ungefähr|circa|ca\.?)\s+)+/, "");
 }
 
-export function parseWhen(words, now, tz) {
+export function parseWhen(words, now, tz, { after = null } = {}) {
   let s = normalize(words);
   const ago = s.match(/^(.+) ago$/) || s.match(/^vor (.+)$/);
   if (ago) {
@@ -232,25 +248,46 @@ export function parseWhen(words, now, tz) {
 
   if (!s) {
     if (!period) return { ask: "unknown" };
-    return pick([PERIODS[period]], day, 0, now, tz);
+    return pick([PERIODS[period]], day, 0, now, tz, after);
   }
   const single = clockTime(s);
   if (single) {
     const { options, dayShift } = withPeriod(single, period);
-    return pick(options, day, dayShift, now, tz);
+    return pick(options, day, dayShift, now, tz, after);
   }
   const span = splitSpan(s);
   if (!span) return { ask: "unknown" };
-  const a = withPeriod(span[0], period);
-  const start = pick(a.options, day, a.dayShift, now, tz);
-  if (start.ask) return start;
-  const b = withPeriod(span[1], period);
-  const startDate = localParts(start.at, tz).date;
-  const ends = [0, 1].flatMap((n) => b.options.map((m) => zonedDate(addDays(startDate, n), m, tz)))
-    .filter((t) => t > start.at && t - start.at <= 12 * HOUR * 60000).sort((x, y) => x - y);
-  if (!ends.length) return { ask: "order", start: start.at, end: zonedDate(startDate, b.options[0], tz) };
-  if (ends[0] > now) return { ask: "future", at: ends[0] };
-  return { start: start.at, end: ends[0] };
+  return pickSpan(span, period, day, now, tz);
+}
+
+// Which start and end a span meant. Each reading of the start is paired with the first reading of
+// the end after it, so an end that settles the half of the day settles the start too ("von 12 bis
+// 13 Uhr" is noon). How long a span may run depends on what the words fixed: two explicit times on
+// one day any length, past midnight up to 12 hours; an explicit end up to 12 hours after the start;
+// an end on the 12-hour clock up to 10 ("9 to 5", "8 to 6", but not "10 to 9", which ends before it
+// starts). The question then names the real problem: two readings that both fit, an end still
+// ahead, or no reading where the end comes after the start.
+function pickSpan([a, b], period, day, now, tz) {
+  const ra = withPeriod(a, period), rb = withPeriod(b, period);
+  const pairs = [];
+  for (const m of ra.options) {
+    const start = instant(m, day, ra.dayShift, now, tz);
+    const date = localParts(start, tz).date;
+    const ends = [0, 1].flatMap((n) => rb.options.map((x) => zonedDate(addDays(date, n), x, tz)))
+      .filter((t) => {
+        if (t <= start) return false;
+        const span = t - start, sameDay = localParts(t, tz).date === date;
+        if (a.explicit && b.explicit && sameDay) return true;
+        return span <= (b.explicit ? 12 : 10) * HOUR * 60000;
+      }).sort((x, y) => x - y);
+    if (ends.length) pairs.push({ start, end: ends[0] });
+  }
+  pairs.sort((x, y) => x.start - y.start);
+  const done = pairs.filter((p) => p.end <= now);
+  if (done.length === 1) return { start: done[0].start, end: done[0].end };
+  if (done.length > 1) return { ask: "which", spans: done.map((p) => [p.start, p.end]) };
+  if (pairs.length) return { ask: "future", at: pairs[0].end };
+  return { ask: "order" };
 }
 
 // "from 9 to 10:30", "9-10:30", "von 9 bis 10:30", "zwischen 9 und 10". Every place the words

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { localParts, minutesBetween, inQuietHours, now, whenSaid, parseWhen } from "../lib/clock.mjs";
+import { localParts, minutesBetween, inQuietHours, now, whenSaid, parseWhen, spanSaid } from "../lib/clock.mjs";
 
 test("localParts converts to the configured zone", () => {
   const p = localParts(new Date("2026-09-22T08:40:12Z"), "Europe/Berlin");
@@ -93,4 +93,56 @@ test("parseWhen reads the time in the configured zone, across daylight saving an
   assert.deepEqual(at("um halb zehn", new Date("2026-03-29T10:00:00Z")), { at: "2026-03-29T07:30:00.000Z" });
   // 00:30 on 12 November in Berlin: "23:00" is the evening before.
   assert.deepEqual(at("23:00", new Date("2026-11-11T23:30:00Z")), { at: "2026-11-11T22:00:00.000Z" });
+});
+
+// Every option a question offers, said back word for word, settles it: the person answers with
+// the journal's own words, and a second question about the same time would be a loop.
+test("parseWhen settles each option its own question offers, for 11 and 12 o'clock, in English and German", () => {
+  const late = new Date("2026-11-11T22:30:00Z"); // 23:30 in Berlin
+  for (const words of ["at 11", "um 11", "at 12", "um 12", "um halb zwölf"]) {
+    const r = parseWhen(words, late, BERLIN);
+    assert.equal(r.ask, "which", words);
+    for (const lang of ["en", "de"]) {
+      for (const option of r.options) {
+        const said = whenSaid(option.toISOString(), late, BERLIN, lang);
+        assert.deepEqual(parseWhen(said, late, BERLIN), { at: option }, `${words} -> ${said}`);
+        const time = said.slice(-5);
+        assert.deepEqual(parseWhen(time, late, BERLIN), { at: option }, `${words} -> ${time}`);
+      }
+    }
+  }
+});
+
+test("a span question offers spans, and each one said back settles it", () => {
+  const late = new Date("2026-11-11T22:30:00Z"); // 23:30 in Berlin
+  const r = parseWhen("from 9 to 10", late, BERLIN);
+  assert.equal(r.ask, "which");
+  const offered = r.spans.map(([a, b]) => [spanSaid(a, b, late, BERLIN), spanSaid(a, b, late, BERLIN, "de")]);
+  assert.deepEqual(offered, [["today from 09:00 to 10:00", "heute von 09:00 bis 10:00"], ["today from 21:00 to 22:00", "heute von 21:00 bis 22:00"]]);
+  r.spans.forEach(([start, end], i) => {
+    for (const said of offered[i]) assert.deepEqual(parseWhen(said, late, BERLIN), { start, end }, said);
+  });
+});
+
+test("a span question names the real problem, and an end that fixes the half of the day fixes the start", () => {
+  const afternoon = new Date("2026-11-11T14:00:00Z"); // 15:00 in Berlin
+  assert.deepEqual(at("from 9 to 23:59", afternoon), { ask: "future", at: "2026-11-11T22:59:00.000Z" });
+  assert.deepEqual(at("from 10 to 9", afternoon), { ask: "order" });
+  assert.deepEqual(at("from 14:00 to 13:00", afternoon), { ask: "order" });
+  assert.deepEqual(at("von 12 bis 13 Uhr", afternoon), { start: "2026-11-11T11:00:00.000Z", end: "2026-11-11T12:00:00.000Z" });
+  assert.deepEqual(at("from 11 to 1", afternoon), { start: "2026-11-11T10:00:00.000Z", end: "2026-11-11T12:00:00.000Z" });
+  assert.deepEqual(at("from 9 to 5", afternoon), { ask: "future", at: "2026-11-11T16:00:00.000Z" });
+  assert.deepEqual(at("from 08:00 to 14:30", afternoon), { start: "2026-11-11T07:00:00.000Z", end: "2026-11-11T13:30:00.000Z" });
+  assert.deepEqual(at("from 23:00 to 01:00", new Date("2026-11-12T08:00:00Z")), { start: "2026-11-11T22:00:00.000Z", end: "2026-11-12T00:00:00.000Z" });
+});
+
+test("a time before the move's earliest possible moment is never offered", () => {
+  const afternoon = new Date("2026-11-11T14:00:00Z"); // 15:00 in Berlin
+  const started = new Date("2026-11-11T12:00:00Z"); // 13:00 in Berlin
+  // 00:00 and 12:00 are both before the start: no choice is offered, the latest comes back for
+  // the caller's before-start question.
+  assert.deepEqual(iso(parseWhen("at 12", afternoon, BERLIN, { after: started })), { at: "2026-11-11T11:00:00.000Z" });
+  // 02:00 is before the start, 14:00 is not: that settles it.
+  assert.deepEqual(iso(parseWhen("at 2", afternoon, BERLIN, { after: started })), { at: "2026-11-11T13:00:00.000Z" });
+  assert.deepEqual(iso(parseWhen("at 2", afternoon, BERLIN)), { ask: "which", options: ["2026-11-11T01:00:00.000Z", "2026-11-11T13:00:00.000Z"] });
 });

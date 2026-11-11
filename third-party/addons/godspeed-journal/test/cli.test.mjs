@@ -262,3 +262,36 @@ test("a finish dated before the task was reopened asks and saves nothing", () =>
   assert.equal(run(h, "2026-11-11T11:00:00Z", "done", "invoice", "--when", "at 11:30").status, 0);
   assert.equal(JSON.parse(run(h, "2026-11-11T11:01:00Z", "open", "--json").stdout).length, 0);
 });
+
+test("an option the question offered, given back as the answer, is saved without a second question", () => {
+  for (const lang of ["en", "de"]) {
+    const h = mcDir();
+    const settings = path.join(h, "routines", "journal", "settings.json");
+    fs.writeFileSync(settings, JSON.stringify({ ...JSON.parse(fs.readFileSync(settings, "utf8")), language: lang }));
+    const q = run(h, "2026-11-11T22:30:00Z", "note", "x", "--when", lang === "de" ? "um 11" : "at 11", "--json");
+    assert.equal(q.status, 2);
+    const ask = JSON.parse(q.stdout).ask;
+    const options = lang === "de" ? ["heute um 11:00", "heute um 23:00"] : ["today at 11:00", "today at 23:00"];
+    assert.equal(ask, lang === "de" ? `Meinst du ${options[0]} oder ${options[1]}?` : `Did you mean ${options[0]} or ${options[1]}?`);
+    for (const option of options) {
+      const r = run(h, "2026-11-11T22:30:00Z", "note", "x", "--when", option, "--json");
+      assert.equal(r.status, 0, r.stdout + r.stderr);
+      assert.equal(JSON.parse(r.stdout).recorded.said, option);
+    }
+    const span = JSON.parse(run(h, "2026-11-11T22:30:00Z", "start", "Run", "--when", lang === "de" ? "von 9 bis 10" : "from 9 to 10", "--json").stdout).ask;
+    const spanOption = lang === "de" ? "heute von 09:00 bis 10:00" : "today from 09:00 to 10:00";
+    assert.match(span, new RegExp(spanOption));
+    assert.equal(run(h, "2026-11-11T22:30:00Z", "start", "Run", "--when", spanOption).status, 0);
+  }
+});
+
+test("a finish whose every reading is before the start asks only that, once", () => {
+  const h = mcDir();
+  run(h, "2026-11-11T12:00:00Z", "start", "Invoice");
+  const r = run(h, "2026-11-11T14:00:00Z", "done", "invoice", "--when", "at 12");
+  assert.equal(r.status, 2);
+  assert.equal(r.stderr, 'Nothing was saved. Ask them: That is before "Invoice" started (today at 13:00). When did you finish it?\n');
+  const two = run(h, "2026-11-11T14:00:00Z", "done", "invoice", "--when", "at 2", "--json");
+  assert.equal(two.status, 0, two.stdout + two.stderr);
+  assert.equal(JSON.parse(two.stdout).recorded.said, "today at 14:00");
+});

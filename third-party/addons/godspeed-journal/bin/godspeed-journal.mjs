@@ -4,7 +4,7 @@
 // What gets decided lives in lib/, where the tests can reach it.
 import fs from "node:fs";
 import { findMissionControl } from "../lib/paths.mjs";
-import { now, localParts, sinceLabel, parseWhen, whenSaid } from "../lib/clock.mjs";
+import { now, localParts, sinceLabel, parseWhen, whenSaid, spanSaid } from "../lib/clock.mjs";
 import { loadSettings, setSetting, DEFAULTS } from "../lib/settings.mjs";
 import { writeEntry, readEntries, taskId } from "../lib/store.mjs";
 import { tasksFrom, openTasks, resolveTask, resolveClosed, resolveLooseEnd, matchItem } from "../lib/tasks.mjs";
@@ -96,20 +96,23 @@ function save(entry, label, happened = null) {
 
 const said = (date) => whenSaid(new Date(date).toISOString(), at, s.timezone, s.language);
 
-// --when: the person's own words for when it happened, or null when they gave none.
-function when() {
+// --when: the person's own words for when it happened, or null when they gave none. `after` is
+// the earliest time the move can have (a finish not before its start), so a question never offers
+// a time the answer would only bring back as a second question.
+function when(after = null) {
   if (f.when === undefined) return null;
-  const r = parseWhen(String(f.when), at, s.timezone);
+  const r = parseWhen(String(f.when), at, s.timezone, { after });
   const t = T(s);
   if (r.ask === "unknown") ask(t.askWhen());
+  if (r.ask === "which" && r.spans) ask(t.askWhich(...r.spans.map(([a, b]) => spanSaid(a, b, at, s.timezone, s.language))));
   if (r.ask === "which") ask(t.askWhich(said(r.options[0]), said(r.options[1])));
   if (r.ask === "future") ask(t.askFuture(said(r.at)));
   if (r.ask === "order") ask(t.askOrder());
   return r;
 }
 
-function oneTime() {
-  const r = when();
+function oneTime(after = null) {
+  const r = when(after);
   if (r?.start) die('This takes one time, for example --when "an hour ago". A span such as "from 9 to 10:30" goes on start.');
   return r?.at || null;
 }
@@ -127,7 +130,7 @@ function needTask(ref, opts) {
 // A finish read before its start, or before the reopen that made the task open again, would be
 // dropped or undone, so such a time asks instead.
 function finishTime(t) {
-  const time = oneTime();
+  const time = oneTime(new Date(Math.max(Date.parse(t.started), t.reopened ? Date.parse(t.reopened) : 0)));
   if (time && time < new Date(t.started)) ask(T(s).askBeforeStart(t.title, said(t.started)));
   if (time && t.reopened && time < new Date(t.reopened)) ask(T(s).askBeforeReopen(t.title, said(t.reopened)));
   return time;
@@ -201,7 +204,7 @@ const commands = {
     const unknown = items.find((x) => !x.item);
     if (unknown) die(`"${unknown.said}" is not one of the things "${t.title}" finished without: ${t.missed.join("; ")}.`);
     const met = [...new Set(items.map((x) => x.item))];
-    const time = oneTime();
+    const time = oneTime(new Date(t.ended));
     if (time && time < new Date(t.ended)) ask(T(s).askBeforeFinish(t.title, said(t.ended)));
     save({ kind: "met", task: t.id, met, words: f.words || "" }, `met ${t.title}`, time);
     out(`Saved: ${met.join("; ")} happened after all ("${t.title}")${saidAt(time)}.`, { ok: true, task: tasksFrom(entries()).find((x) => x.id === t.id), ...recorded(time) });
