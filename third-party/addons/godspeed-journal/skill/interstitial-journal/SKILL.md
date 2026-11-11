@@ -63,6 +63,24 @@ was saved: save it again with `--words-file`.
 - Anything else (a thought, a feeling, "still on it"): `godspeed-journal note "<verbatim>" [--task <task>]`,
   or `godspeed-journal note --words-file <file> [--task <task>]` when it runs over more than one line
 
+## When it happened
+
+When their words say when a move happened ("an hour ago", "at 11", "yesterday afternoon",
+"vor 20 Minuten"), add those words, as they said them, to that move's command:
+`--when "<their words>"` on `start`, `done`, `drop`, `note` or `met`. Never work out a time
+yourself and never pass one they did not say. A move with no time word gets no `--when` and is
+saved as now. Several moves each get their own, in the order told, and a move told as following
+straight on from a timed one ("then", "danach") gets the same words. "I finished the weekly plan
+an hour ago, then had breakfast, and breakfast is done now" is
+`done "weekly plan" --when "an hour ago"`, `start "Breakfast" --when "an hour ago"`, `done "breakfast"`.
+A whole task told after the fact ("wrote the report from 9 to 10:30") is one `start` with
+`--when "from 9 to 10:30"`, and `--met`/`--missed` from the done check.
+
+When the command answers with a question ("Nothing was saved. Ask them: ..."), that move was not
+saved: ask exactly that question, once, and nothing else. When they answer, save that move and
+the ones after it, with their answer as `--when`. Your reply names the time the command printed,
+in their language: `Saved, finished today at 10:40.`
+
 Titles are three to six words, the person's own. A title names the thing, never the act of
 starting it: "Blogartikel", not "starting the blog article"; never begin one with starting,
 beginning or anfangen. Done items are short and checkable ("thumbnail made", not "make it good").
@@ -72,7 +90,8 @@ beginning or anfangen. Done items are short and checkable ("thumbnail made", not
 The settings line in the [godspeed-journal] block, or `godspeed-journal config show`, gives
 `feedback`, `length` and `ask_done_definition`.
 
-**feedback = off.** Reply `Saved.` and nothing else, in their language. Never ask anything.
+**feedback = off.** Reply `Saved.` and nothing else, in their language, or, when a move carried
+`--when`, `Saved,` and the time the command printed. Never ask anything but the command's own question.
 
 **feedback = check** (the default) and **coach**:
 

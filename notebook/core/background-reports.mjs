@@ -7,7 +7,7 @@ import {ruleRefusals} from './briefing-cut.mjs';
 import {queueNotice} from './notices.mjs';
 import {deliveryFor} from './notebook-routines.mjs';
 import {finalReply,telegramInHermes} from './starting-routines.mjs';
-import {asksForCode,stampDelivered,stepsForWords,STEP_QUESTION_MAX_AGE_MS} from './waiting-steps.mjs';
+import {asksForCode,stampCard,stampDelivered,stepsForWords,STEP_QUESTION_MAX_AGE_MS} from './waiting-steps.mjs';
 
 // BACKGROUND WORK TELLS THE OWNER IN THE CHAT'S VOICE, AND THE CHAT KNOWS IT (4 November 2026, #198).
 //
@@ -83,6 +83,18 @@ export function delivered(store,words,receipts=[]){
   stampDelivered(store,record.report?.steps||[record.report?.step].filter(Boolean),record);
  }
  return found.map(r=>r.id);
+}
+
+// The gateway sent a waiting Telegram step's question as its Yes/No card (step_buttons.py, after
+// Telegram accepted it). The card is a background message like any routine report, recorded so the
+// chat knows what was asked, and it certifies the step in the same commit. False when the step is
+// not a waiting Telegram question that still has to go out.
+export async function cardSent(store,id){
+ const step=store.get('approvals',id);
+ if(step?.asked_in!=='telegram'||step.status!=='pending'||step.sent_at)return false;
+ const asker=step.asked_by?.name||null;
+ const receipt=await recordReport(store,{text:step.about+' '+step.question,about:asker||'',steps:[id],routine:asker,written:'routine',delivery:'telegram'});
+ return (await stampCard(store,id,receipt)).length>0;
 }
 
 // A ROUTINE THE NOTEBOOK RUNS ITSELF CERTIFIES ITS QUESTIONS TOO (11 November 2026, #262, #372).

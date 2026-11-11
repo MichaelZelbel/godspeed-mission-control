@@ -314,13 +314,14 @@ coach5 talk open work --from-prep coach/work/prep/2026-11-15.md --shown >/dev/nu
 contains "  the talk's record names it" "$(cat "$G5/coach/work/talks/2026-11-15.md" 2>/dev/null)" "PREP: coach/work/prep/2026-11-15.md"
 
 # #359, PROOF 2: on 1 November 2026 a weekly Sunday talk became a talk every two weeks without anyone
-# asking. The Sunday it dropped (8 November) is prepared anyway, the summary names the change, and
-# the talk they start that Sunday opens from that preparation.
+# asking (here an edit by hand, which records no request). The Sunday it dropped (8 November) is
+# prepared anyway, the summary names the change, and the talk they start that Sunday opens from that
+# preparation.
 G6="$(P "$TMP/g6")"; mkdir -p "$G6/rules" "$G6/coach/work" "$G6/skills"
 cp -R "$G4/skills/." "$G6/skills/"; : > "$G6/AGENTS.md"; cp "$G4/coach/settings.json" "$G6/coach/settings.json"
 sed 's/^STARTS: .*/STARTS: 2026-10-04/' "$G4/coach/work/area.md" > "$G6/coach/work/area.md"
 GIT_COMMITTER_DATE=2026-10-01T10:00:00Z GIT_AUTHOR_DATE=2026-10-01T10:00:00Z sh -c 'git -C "$1" init -q && git -C "$1" add -A && git -C "$1" commit -q -m start' _ "$G6"
-GODSPEED_NOW=2026-11-01T09:00:00Z "$NODE" "$GODSPEED_COACH_SCRIPT" area set work RHYTHM every 2 weeks sunday --godspeed "$G6" >/dev/null
+sed -i 's/^RHYTHM: .*/RHYTHM: every 2 weeks sunday/' "$G6/coach/work/area.md"
 GIT_COMMITTER_DATE=2026-11-01T09:00:00Z GIT_AUTHOR_DATE=2026-11-01T09:00:00Z git -C "$G6" commit -q -am "coach: area work RHYTHM"
 drun() { G4="$G6" PATH="$B:$PATH" GODSPEED_RUNNER=claude bash "$HERE/mc-coach-prep" --godspeed "$G6" "$@" 2>&1; }
 export GODSPEED_NOW=2026-11-07T02:00:00Z GODSPEED_TODAY=2026-11-07
@@ -372,7 +373,7 @@ cp -R "$G4/skills/." "$G7/skills/"; : > "$G7/AGENTS.md"; cp "$G4/coach/settings.
 printf 'AREA: rest\nTITLE: Rest\nRHYTHM: weekly sunday\nTIME: 18:00\nSTARTS: 2026-10-04\nSTATUS: on\nSTYLE: review\nTONE: gentle\n\n## Preparation\nRead the week.\n' > "$G7/coach/rest/area.md"
 printf '#!/bin/sh\n[ "$1" = --help ] && { printf "  --restricted  Restricted mode\\n  --permission-mode <mode>  (\\"dontAsk\\")\\n  --strict-mcp-config\\n"; exit 0; }\necho "I could not finish."; exit 1\n' > "$B7/claude"; chmod +x "$B7/claude"
 GIT_COMMITTER_DATE=2026-10-01T10:00:00Z GIT_AUTHOR_DATE=2026-10-01T10:00:00Z sh -c 'git -C "$1" init -q && git -C "$1" add -A && git -C "$1" commit -q -m start' _ "$G7"
-GODSPEED_NOW=2026-11-01T09:00:00Z "$NODE" "$GODSPEED_COACH_SCRIPT" area set rest RHYTHM every 2 weeks sunday --godspeed "$G7" >/dev/null
+sed -i 's/^RHYTHM: .*/RHYTHM: every 2 weeks sunday/' "$G7/coach/rest/area.md"
 GIT_COMMITTER_DATE=2026-11-01T09:00:00Z GIT_AUTHOR_DATE=2026-11-01T09:00:00Z git -C "$G7" commit -q -am "coach: area rest RHYTHM"
 irun() { PATH="$B7:$PATH" GODSPEED_RUNNER=claude bash "$HERE/mc-coach-prep" --godspeed "$G7" "$@" 2>&1; }
 OUT="$(GODSPEED_NOW=2026-11-07T02:00:00Z GODSPEED_TODAY=2026-11-07 irun)"; check "replay: the dropped Sunday that cannot be prepared exits 1" "$?" "1"
@@ -383,6 +384,23 @@ GODSPEED_NOW=2026-11-08T16:00:00Z "$NODE" "$GODSPEED_COACH_SCRIPT" talk open res
 OUT="$(GODSPEED_NOW=2026-11-09T02:00:00Z GODSPEED_TODAY=2026-11-09 irun)"; check "  the next night's run exits 1" "$?" "1"
 contains "  its summary names the talk and the repair item" "$(cat "$G7/routines/coach-prep/2026-11-09/summary.txt")" "rest 2026-11-08: the talk opened without its preparation (none was written); repair item: filed repair-coach-prep-"
 check "  one repair item is in the work list" "$(repairs "$G7")" "1"
+
+# #415: the same change made on purpose with the coach's own `area set` drops no talk day. The night
+# before that Sunday nothing is prepared or named, and preparing it by hand is refused with the reason.
+G8="$(P "$TMP/g8")"; mkdir -p "$G8/rules" "$G8/coach/rest" "$G8/skills"
+cp -R "$G4/skills/." "$G8/skills/"; : > "$G8/AGENTS.md"; cp "$G4/coach/settings.json" "$G8/coach/settings.json"
+printf 'AREA: rest\nTITLE: Rest\nRHYTHM: weekly sunday\nTIME: 18:00\nSTARTS: 2026-10-04\nSTATUS: on\nSTYLE: review\nTONE: gentle\n\n## Preparation\nRead the week.\n' > "$G8/coach/rest/area.md"
+GIT_COMMITTER_DATE=2026-10-01T10:00:00Z GIT_AUTHOR_DATE=2026-10-01T10:00:00Z sh -c 'git -C "$1" init -q && git -C "$1" add -A && git -C "$1" commit -q -m start' _ "$G8"
+GODSPEED_NOW=2026-11-01T09:00:00Z "$NODE" "$GODSPEED_COACH_SCRIPT" area set rest RHYTHM every 2 weeks sunday --godspeed "$G8" >/dev/null
+GIT_COMMITTER_DATE=2026-11-01T09:00:00Z GIT_AUTHOR_DATE=2026-11-01T09:00:00Z sh -c 'git -C "$1" add -A && git -C "$1" commit -q -m "coach: area rest RHYTHM"' _ "$G8"
+arun() { PATH="$B7:$PATH" GODSPEED_RUNNER=claude bash "$HERE/mc-coach-prep" --godspeed "$G8" "$@" 2>&1; }
+rm -f "$ST/calls"
+OUT="$(GODSPEED_NOW=2026-11-07T02:00:00Z GODSPEED_TODAY=2026-11-07 arun)"; check "a rhythm changed on purpose: the night before the dropped Sunday exits 0" "$?" "0"
+missing "  it does not name that Sunday" "$OUT" "2026-11-08"
+check "  and prepares nothing" "$(ls "$G8/coach/rest/prep" 2>/dev/null | wc -l | tr -d ' ')" "0"
+missing "  the summary names no rhythm change" "$(cat "$G8/routines/coach-prep/2026-11-07/summary.txt" 2>/dev/null)" "rhythm changed"
+OUT="$(GODSPEED_NOW=2026-11-07T02:00:00Z GODSPEED_TODAY=2026-11-07 arun --area rest --talk 2026-11-08)"; check "  preparing that Sunday by hand exits 2" "$?" "2"
+contains "  and says the rhythm was changed on purpose" "$OUT" "2026-11-08 is not a day of the rest talk: its rhythm was changed on purpose, so the day it dropped is not prepared."
 
 # A RUN WHOSE RECORD HAS NO PAGE READ gets no receipts: the review is not even started.
 rm -f "$ST/calls"; sed -i 's/^  read_page toolu_ok /  : read_page toolu_ok /' "$B/claude"

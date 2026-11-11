@@ -5042,6 +5042,36 @@ if [ "$SFR_CODE" = 0 ] && [ "$(node "$ROOT/stage/stage.mjs" "$TMP/sfr-night2/thi
 else
   bad "a commit with no image of its own (exit $SFR_CODE: $(cat "$TMP/sfr.err"))"
 fi
+# A commit that changed something the server image carries must not be proved on an ancestor's image (#467).
+mkdir -p "$SFR_REPO/notebook/assistant-files"
+echo changed >"$SFR_REPO/notebook/assistant-files/x"
+git -C "$SFR_REPO" add -A
+git -C "$SFR_REPO" -c user.name=t -c user.email=t@t commit -q -m three
+SFR_THREE=$(git -C "$SFR_REPO" rev-parse HEAD)
+SFR_OUT=$(GODSPEED_SCENARIO_REPO=$SFR_REPO GODSPEED_SCENARIO_PUBLIC_RAW=file://$TMP/sfr-public GODSPEED_SCENARIO_IMAGES=$TMP/sfr-images-one \
+  bash "$SFR" '' "$SFR_THREE" "$TMP/sfr-notebook" 2>"$TMP/sfr.err"); SFR_CODE=$?
+if [ "$SFR_CODE" = 1 ] && grep -qF "v2-sha-$SFR_THREE" "$TMP/sfr.err" && grep -qF 'notebook/assistant-files/x' "$TMP/sfr.err" && [ ! -e "$TMP/sfr-notebook/this-commit/stage.json" ]; then
+  ok "a changed notebook with no image of its own fails and names the missing image, never an ancestor's"
+else
+  bad "a notebook change fell back to an ancestor image (exit $SFR_CODE: $(cat "$TMP/sfr.err"))"
+fi
+printf '%s:v2-sha-%s %s\n' "$SFR_IMAGE" "$SFR_THREE" "$SFR_DA" >"$TMP/sfr-images-three"
+SFR_OUT=$(GODSPEED_SCENARIO_REPO=$SFR_REPO GODSPEED_SCENARIO_PUBLIC_RAW=file://$TMP/sfr-public GODSPEED_SCENARIO_IMAGES=$TMP/sfr-images-three \
+  bash "$SFR" '' "$SFR_THREE" "$TMP/sfr-notebook2" 2>"$TMP/sfr.err"); SFR_CODE=$?
+if [ "$SFR_CODE" = 0 ]; then ok "a changed notebook with its own image is proved on it"; else bad "a changed notebook with its own image failed (exit $SFR_CODE: $(cat "$TMP/sfr.err"))"; fi
+# The image-input list is the paths filter of the workflow that builds the image.
+if node -e '
+const fs = require("fs");
+const sh = fs.readFileSync(process.argv[1], "utf8").match(/^IMAGE_INPUTS=.(\^\(.*\)).$/m)[1];
+const mine = sh.slice(2, -1).split("|").map((x) => x.replace(/\\\./g, ".").replace(/\$$/, "")).sort();
+const wf = fs.readFileSync(process.argv[2], "utf8").match(/^    paths: \[(.*)\]$/m)[1];
+const theirs = wf.split(",").map((x) => x.trim().replace(/\x27/g, "").replace(/\*\*$/, "")).filter((x) => x !== ".github/workflows/v2-integrated.yml" && x !== "docker/test/").sort();
+if (JSON.stringify(mine) !== JSON.stringify(theirs) || !mine.length) { console.error(JSON.stringify(mine), JSON.stringify(theirs)); process.exit(1); }
+' "$SFR" "$ROOT/.github/workflows/v2-integrated.yml"; then
+  ok "stage-for-run.sh counts the same paths as image inputs as v2-integrated.yml builds an image for"
+else
+  bad "the image inputs of stage-for-run.sh differ from the paths filter of v2-integrated.yml"
+fi
 SFR_OUT=$(GODSPEED_SCENARIO_REPO=$SFR_REPO GODSPEED_SCENARIO_PUBLIC_RAW=file://$TMP/sfr-public GODSPEED_SCENARIO_PR_IMAGE=$SFR_IMAGE@$SFR_PC \
   bash "$SFR" '' "$SFR_TWO" "$TMP/sfr-pr" 2>"$TMP/sfr.err"); SFR_CODE=$?
 if [ "$SFR_CODE" = 0 ] && [ "$(node "$ROOT/stage/stage.mjs" "$TMP/sfr-pr/this-commit/stage.json" get serverEditions.server.image)" = "$SFR_IMAGE@$SFR_PC" ]; then
