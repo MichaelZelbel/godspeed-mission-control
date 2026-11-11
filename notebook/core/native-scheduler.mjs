@@ -70,6 +70,8 @@ const installedRoutine=(home,root,routine)=>hermesJobs(home).find(job=>job.name=
 // the longest script, up to 8100 seconds), so a tick gets two hours and forty-five minutes; past
 // that it is stopped with all it started, and its heartbeat stops with it.
 export const TICK_LIMIT=(2*60+45)*60000;
+// Two test turns of at most three minutes, the wait between them and the messages (chat-health.mjs).
+const CHAT_CHECK_LIMIT=8*60000;
 // The notebook edits Hermes schedules; it never runs a second scheduler. The
 // notebook's own record routines that Hermes has no job for (the watch sweep,
 // radar preparation and application) run beside it in `records`.
@@ -703,6 +705,7 @@ export class NativeScheduler{
   if(this.ticking){if(raise){await this.current?.catch(()=>null);await this.followConnectionCheck();}return records;}
   const now=this.now();if(now-(this.lastTick||0)<60000){this.onProgress?.();if(raise)await this.followConnectionCheck();return records;}
   if(this.updater)await beatWhile(this.updater.tick(this.store.get('settings','installation')?.timezone),()=>this.onProgress?.(),{limitMs:this.updateLimit,every:this.beatEvery}).catch(error=>console.error('Godspeed Mission Control: the Hermes update could not be checked: '+String(error?.message||error)));
+  if(this.chatHealth)await beatWhile(this.chatHealth.tick(),()=>this.onProgress?.(),{limitMs:CHAT_CHECK_LIMIT,every:this.beatEvery}).catch(error=>console.error('Godspeed Mission Control: the chat check could not run: '+String(error?.message||error)));
   const release=this.lifecycle.acquire('routine tick');if(!release)return records;
   this.ticking=true;this.lastTick=now;
   let failure=null,finish;const failures=[];
