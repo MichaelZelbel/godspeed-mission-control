@@ -78,9 +78,16 @@ function standIn(home,jobs=[]){
  };
  return {run,jobs:read,write,creates};
 }
-// A mission control made from the starter whose starting routines are made, with one of them running,
-// so the connection check is wanted.
-function ticked(t,{now=Date.now}={}){
+// The installed image sets GODSPEED_REVISION, and the Linux installer GODSPEED_WEB_ADDRESS: either makes this a server,
+// which always wants its connection check. A test says which it is about instead of taking it from where it runs.
+const SERVER={GODSPEED_REVISION:'0123456789abcdef0123456789abcdef01234567',GODSPEED_WEB_ADDRESS:'https://notes.example.test'};
+function runAs(t,server){
+ for(const name of Object.keys(SERVER)){const was=process.env[name];if(server)process.env[name]=SERVER[name];else delete process.env[name];t.after(()=>{if(was===undefined)delete process.env[name];else process.env[name]=was;});}
+}
+// A mission control on a computer made from the starter whose starting routines are made, with one of them
+// running, so the connection check is wanted.
+function ticked(t,{now=Date.now,server=false}={}){
+ runAs(t,server);
  const root=temporary(t),home=path.join(root,'.hermes-home');installStarter(root);fs.mkdirSync(home,{recursive:true});
  const store=new Store(root,{device:'pc'});store.save('settings',{id:'installation',owner:'pc',timezone:'Europe/Berlin',delivery:'notebook'});
  writeMachineRecord(store,{state:'created',device:'pc',created_at:new Date().toISOString(),timezone:'Europe/Berlin',delivery:'local',jobs:[]});
@@ -110,6 +117,12 @@ test('a connection check made paused, wanted by nothing, promises nothing',async
  const {root,scheduler,hermes}=ticked(t);hermes.write([]);
  await scheduler.followConnectionCheck();
  assert.equal(hermes.jobs()[0].enabled,false);assert.equal(fs.existsSync(path.join(folder(root),CHECK)),false);
+});
+
+test('on a server the connection check is wanted with nothing else running, so it is made running and promised',async t=>{
+ const {root,scheduler,hermes}=ticked(t,{server:true});hermes.write([]);
+ await scheduler.followConnectionCheck();
+ assert.equal(hermes.jobs()[0].enabled,true);assert.ok(fs.existsSync(path.join(folder(root),CHECK)));
 });
 
 test('a connection-check promise the person edited keeps every byte when the tick makes the routine again',async t=>{
