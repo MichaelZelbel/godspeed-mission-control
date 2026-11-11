@@ -45,6 +45,19 @@
 #      (notebook/scripts/coach-prep-repair.mjs), and a passing try ends the count.
 # An area without research domains is prepared as before: no marker, no receipts, no review.
 #
+# A DAY A RHYTHM CHANGE DROPPED (#359). On 1 November 2026 a weekly Sunday talk became a talk every
+# two weeks, nobody had asked for it, and the Sunday that dropped out was prepared by nothing; the
+# person started that talk themselves and it opened unprepared. So prep-due is asked with
+# --rhythm-changes: when the area's newest RHYTHM change in git (the coach commits each one) dropped
+# a talk day of the old rhythm before the new rhythm's first talk, that day is prepared as well, for
+# a talk they start themselves. The summary names the change (old and new rhythm, its day and
+# commit) and the next talk under the new rhythm. No talk opens by itself on that day.
+#
+# A TALK THAT OPENED WITHOUT ITS PREPARATION, yesterday or today, in an area whose talks are prepared
+# ahead (`godspeed-coach prep-missed --days 1`), is named in the summary with the reason, and one
+# repair item is filed for it, as for a preparation that failed three times. A run by hand for one
+# talk (--area) leaves this out.
+#
 # IT COMMITS ONLY ITS OWN FILES: each preparation it wrote, its two sidecars and its run folder
 # (routines/coach-prep/<date>/), by name, and pushes them when the folder has an origin.
 #
@@ -53,8 +66,9 @@
 #                                    prepares that talk now, even further ahead or prepared already
 # The notebook's routine "Coaching talk preparation" runs it every night at 03:00.
 #
-# Exit 0: every talk due was prepared, or none was due. 1: a talk could not be prepared, or did not
-# fit the time. 2: a wrong argument or no mission control. 3: the coach, Node.js or mc-run is missing.
+# Exit 0: every talk due was prepared, or none was due. 1: a talk could not be prepared, did not fit
+# the time, or opened without its preparation. 2: a wrong argument or no mission control. 3: the
+# coach, Node.js or mc-run is missing.
 set -uo pipefail
 
 GODSPEED=""; TODAY=""; BUDGET=120; TIMEOUT=2700; REVIEW_TIMEOUT=900; MAXTRIES=3; DRY=0; AREA=""; TALK=""
@@ -69,7 +83,7 @@ while [ $# -gt 0 ]; do
     --area) AREA="${2:-}"; shift 2 ;;
     --talk) TALK="${2:-}"; shift 2 ;;
     --dry-run) DRY=1; shift ;;
-    -h|--help) sed -n '2,54p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,67p' "$0"; exit 0 ;;
     *) echo "mc-coach-prep: I do not know the argument $1" >&2; exit 2 ;;
   esac
 done
@@ -116,10 +130,11 @@ if [ -n "$COACH_SCRIPT" ] && [ -f "$COACH_SCRIPT" ]; then coach() { "$NODE" "$CO
 elif command -v godspeed-coach >/dev/null 2>&1; then coach() { godspeed-coach "$@" --godspeed "$GODSPEED"; }
 else echo "mc-coach-prep: the coach (godspeed-coach) is not installed, so no talk can be looked up." >&2; exit 3; fi
 
-# One line per talk, soonest first: start (seconds), area, title, day, time, time zone, file, and
-# the time an older preparation was written (- for none). From prep-due, only the talks whose day is
-# today or tomorrow on the talk's own clock and that have not started; from prep-check (a talk named
-# by hand), that one talk.
+# One line per talk, soonest first: start (seconds), area, title, day, time, time zone, file, the
+# time an older preparation was written (- for none), and for a day a rhythm change dropped, the
+# note that says so (- for none). From prep-due, only the talks whose day is today or tomorrow on
+# the talk's own clock and that have not started; from prep-check (a talk named by hand), that one
+# talk.
 to_lines() { # mode: due | one
   "$NODE" -e '
 let s = ""; process.stdin.on("data", d => s += d).on("end", () => {
@@ -144,7 +159,9 @@ let s = ""; process.stdin.on("data", d => s += d).on("end", () => {
       const tomorrow = dayIn(now + 86400000, tz);
       if (date > tomorrow || at <= now) continue;
     }
-    out.push([Math.floor(at / 1000), area, title, date, time, tz, file, one(t.prepared) || "-"]);
+    const c = t.bridge && t.rhythm_change;
+    const note = c ? one(`the rhythm changed on ${dayIn(Date.parse(c.changed), tz)} from "${c.from}" to "${c.to}" (${c.commit}${c.subject ? `, "${c.subject}"` : ""}); ${date} was a talk day before, so it is prepared anyway for a talk they start themselves; the next talk under the new rhythm is ${t.next_talk || "not set"}`) : "-";
+    out.push([Math.floor(at / 1000), area, title, date, time, tz, file, one(t.prepared) || "-", note]);
   }
   out.sort((a, b) => a[0] - b[0]);
   for (const r of out) console.log(r.join("\t"));
@@ -161,6 +178,20 @@ let s = ""; process.stdin.on("data", d => s += d).on("end", () => {
   if (d.length) process.stdout.write(d.join(", ") + "\t" + g.join(", "));
 });'
 }
+# The talks that opened without their preparation (prep-missed --json), one line each: area, title,
+# day, the reason in everyday words, and the area's next talk day (- for none).
+missed_lines() {
+  "$NODE" -e '
+let s = ""; process.stdin.on("data", d => s += d).on("end", () => {
+  let list; try { list = JSON.parse(s.trim() || "[]"); } catch (e) { console.error("the coach did not answer in JSON: " + e.message); process.exit(3); }
+  const one = v => String(v == null ? "" : v).replace(/[\t\r\n]+/g, " ").trim();
+  for (const t of Array.isArray(list) ? list : []) {
+    const area = one(t && t.area), date = one(t && t.date), next = one(t && t.next);
+    if (!/^[a-z0-9][a-z0-9-]*$/.test(area) || !/^\d{4}-\d{2}-\d{2}$/.test(date)) { console.error("skipped a talk in a shape I do not know: " + JSON.stringify(t)); continue; }
+    console.log([area, one(t.title) || area, date, one(t.reason) || "it did not open from its preparation", /^\d{4}-\d{2}-\d{2}$/.test(next) ? next : "-"].join("\t"));
+  }
+});'
+}
 ERRF="$(mktemp "${TMPDIR:-/tmp}/mc-coach-prep.XXXXXX")"; trap 'rm -f "$ERRF"' EXIT
 if [ -n "$AREA" ]; then
   JSON="$(coach prep-check "$AREA" --date "$TALK" --json 2>"$ERRF")"
@@ -168,27 +199,37 @@ if [ -n "$AREA" ]; then
   printf '%s' "$JSON" | grep -q '"talk_day":true' || { echo "mc-coach-prep: $TALK is not a day of the $AREA talk." >&2; exit 2; }
   LIST="$(printf '%s' "$JSON" | to_lines one 2>"$ERRF")" || { echo "mc-coach-prep: $(tail -1 "$ERRF")" >&2; exit 3; }
 else
-  JSON="$(coach prep-due --within-hours 48 --json 2>"$ERRF")" || { echo "mc-coach-prep: the coach could not say which talks are coming: $(tail -1 "$ERRF")" >&2; exit 3; }
+  JSON="$(coach prep-due --within-hours 48 --rhythm-changes --json 2>"$ERRF")" || { echo "mc-coach-prep: the coach could not say which talks are coming: $(tail -1 "$ERRF")" >&2; exit 3; }
   LIST="$(printf '%s' "$JSON" | to_lines due 2>"$ERRF")" || { echo "mc-coach-prep: $(tail -1 "$ERRF")" >&2; exit 3; }
 fi
 LIST="$(printf '%s' "$LIST" | tr -d '\r')"
+MISSED=""
+if [ -z "$AREA" ]; then
+  JSON="$(coach prep-missed --days 1 --json 2>"$ERRF")" || { echo "mc-coach-prep: the coach could not say which talks opened without their preparation: $(tail -1 "$ERRF")" >&2; exit 3; }
+  MISSED="$(printf '%s' "$JSON" | missed_lines 2>"$ERRF" | tr -d '\r')" || { echo "mc-coach-prep: $(tail -1 "$ERRF")" >&2; exit 3; }
+fi
 
 if [ "$DRY" -eq 1 ]; then
-  if [ -z "$LIST" ]; then echo "Nothing to prepare: no talk today or tomorrow is without a preparation."; exit 0; fi
-  echo "Would prepare, soonest first:"
+  if [ -z "$LIST$MISSED" ]; then echo "Nothing to prepare: no talk today or tomorrow is without a preparation."; exit 0; fi
+  [ -n "$LIST" ] && echo "Would prepare, soonest first:"
   REVIEWED=0
-  while IFS=$'\t' read -r _ A TI D TM ZONE F PR; do
+  while IFS=$'\t' read -r _ A TI D TM ZONE F PR NOTE; do
+    [ -n "$A" ] || continue
     OVER=""; [ "$PR" != - ] && [ -f "$GODSPEED/$F" ] && OVER=", over its preparation of $PR"
     echo "  $TI ($A), $D at $TM $ZONE -> $F$OVER"
+    [ "$NOTE" != - ] && echo "    because $NOTE"
     if [ -n "$(research_of "$A" "$D")" ]; then
       REVIEWED=1
       echo "    then its receipts (${F%.md}.evidence.json, from the run's own record) and a review by a second AI (coach-prep-review, ${F%.md}.review.json) before it may open the talk"
     fi
   done <<< "$LIST"
+  while IFS=$'\t' read -r A TI D WHY _; do
+    [ -n "$A" ] && echo "Opened without its preparation: $TI ($A) $D: $WHY. A repair item would go to your work list."
+  done <<< "$MISSED"
   [ "$REVIEWED" -eq 1 ] && echo "A preparation that fails its review is tried again with the review's issues, up to $MAXTRIES times in this run while the time allows; after three failed tries in a row, one repair item goes to your work list."
   exit 0
 fi
-[ -n "$LIST" ] || { echo "nothing to prepare $TODAY"; exit 0; }
+[ -n "$LIST$MISSED" ] || { echo "nothing to prepare $TODAY"; exit 0; }
 
 RUNDIR="$GODSPEED/routines/coach-prep/$TODAY"; mkdir -p "$RUNDIR"
 SUMMARY="$RUNDIR/summary.txt"
@@ -262,8 +303,20 @@ REPAIR="$HERE/../notebook/scripts/coach-prep-repair.mjs"
 WROTE=()
 START=$(date +%s); BAD=0; SKIPPED=""
 fits() { [ $(( $(date +%s) - START + $1 )) -le $(( BUDGET * 60 )) ]; }
-while IFS=$'\t' read -r AT A TI D TM ZONE F PR <&3; do
+while IFS=$'\t' read -r A TI D WHY NX; do
   [ -n "$A" ] || continue
+  FILED="none could be filed: the notebook is not beside this tool"
+  NEXT=(); [ "$NX" != - ] && NEXT=(--next "$NX")
+  if [ -f "$REPAIR" ]; then
+    FILED="$("$NODE" "$REPAIR" --godspeed "$GODSPEED" --area "$A" --talk "$D" --title "$TI" --opened-unprepared "$WHY" \
+      ${NEXT[@]+"${NEXT[@]}"} --summary "routines/coach-prep/$TODAY/summary.txt" 2>&1 | tr -d '\r' | tail -1)"
+  fi
+  echo "$A $D: the talk opened without its preparation ($WHY); repair item: $FILED" >> "$SUMMARY"
+  BAD=$((BAD+1))
+done <<< "$MISSED"
+while IFS=$'\t' read -r AT A TI D TM ZONE F PR NOTE <&3; do
+  [ -n "$A" ] || continue
+  [ "$NOTE" != - ] && echo "$A $D: $NOTE" >> "$SUMMARY"
   RESEARCH="$(research_of "$A" "$D")"; DOMS="${RESEARCH%%$'\t'*}"; GOALS=""; [ -n "$RESEARCH" ] && GOALS="${RESEARCH#*$'\t'}"
   PER=$TIMEOUT; [ -n "$RESEARCH" ] && PER=$((TIMEOUT + REVIEW_TIMEOUT))
   if ! fits "$PER"; then

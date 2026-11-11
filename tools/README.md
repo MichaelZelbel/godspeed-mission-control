@@ -276,7 +276,11 @@ exit codes hears about it the same morning.
   it ready (`godspeed-coach prep-check`). The talk then opens with the opening that was written
   ahead, and its talk card goes with every message of the talk. It writes only
   `coach/<area>/prep/<date>.md` and contacts nobody; with Claude Code its file tools may write
-  in that folder only. A talk it could not prepare opens from its brief as before. The notebook's
+  in that folder only. A talk it could not prepare opens from its brief as before. When a talk's
+  rhythm changed and dropped a day it used to have, that day is prepared anyway until the new
+  rhythm's first talk, for a talk you start yourself, and the summary names the change. A talk
+  that opened without its preparation yesterday or today is named in the summary and gets one
+  repair item in your work list. The notebook's
   routine "Coaching talk preparation" runs it every night at 03:00; by hand:
 
 ```

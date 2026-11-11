@@ -20,7 +20,8 @@ import path from "node:path";
 import { parseDoc } from "./header.mjs";
 import { localParts, addDays, zonedToUtc, now as clockNow } from "./clock.mjs";
 import { researchEvidenceProblem, researchDomains, servedGoals } from "./prep-evidence.mjs";
-import { listAreas, isTalkDay, nextTalkDay } from "./areas.mjs";
+import { listAreas, isTalkDay, nextTalkDay, parseRhythm } from "./areas.mjs";
+import { lastRhythmChange } from "./rhythm-change.mjs";
 import { talkFile, talkDates, readTalk } from "./talks.mjs";
 
 export const prepDir = (area) => path.join(area.dir, "prep");
@@ -112,28 +113,64 @@ export function prepForBrief(area, ymd) {
 // A ready preparation that is stale (below) is listed too, with stale: true and when it was
 // prepared, so the job prepares it again; until a fresh one replaces it, the brief and
 // `talk open --from-prep` keep using it. Every entry says stale: true or false.
-export function prepDue(mcDir, s, now, hours) {
+//
+// With { rhythmChanges: true } (#359), an area whose newest RHYTHM change (lib/rhythm-change.mjs)
+// dropped a day the old rhythm had, after the change and before the new rhythm's first talk, gets
+// that day too when it falls in the window: bridge: true, rhythm_change and next_talk. Nothing opens
+// a talk on it; a talk they start themselves that day opens from its preparation (prepForBrief).
+export function prepDue(mcDir, s, now, hours, opts = {}) {
   const tz = s.timezone;
   const today = localParts(now, tz).date;
   const until = now.getTime() + hours * 3600000;
+  const days = Array.from({ length: Math.ceil(hours / 24) + 2 }, (_, i) => addDays(today, i));
+  const inWindow = (at) => at.getTime() >= now.getTime() && at.getTime() <= until;
+  // The entry for one talk day, or null when it is open already or has a ready, fresh preparation.
+  const entry = (a, d, at) => {
+    if (fs.existsSync(talkFile(a, d))) return null;
+    const p = readPrep(prepFile(a, d));
+    const ready = usable(a, p, d, now);
+    const stale = ready && prepStale(p, at, now);
+    if (ready && !stale) return null;
+    return { at: at.getTime(), area: a.slug, title: a.title, date: d, time: a.time, timezone: tz, file: rel(mcDir, prepFile(a, d)), stale, ...(stale ? { prepared: preparedAt(p)?.toISOString().replace(/\.\d+Z$/, "Z") || "" } : {}) };
+  };
   const out = [];
   for (const a of listAreas(mcDir)) {
     if (!a.on || a.noTalk || !a.rhythm) continue;
+    if (opts.rhythmChanges) out.push(...bridgeDay(mcDir, a, tz, days, now, inWindow, entry));
     let next = null;
-    for (let i = 0; i <= Math.ceil(hours / 24) + 1 && !next; i++) {
-      const d = addDays(today, i);
+    for (const d of days) {
       const at = isTalkDay(a, d) ? zonedToUtc(d, a.time, tz) : null;
-      if (at && at.getTime() >= now.getTime()) next = { d, at };
+      if (at && at.getTime() >= now.getTime()) { next = { d, at }; break; }
     }
     if (!next || next.at.getTime() > until) continue;
-    if (fs.existsSync(talkFile(a, next.d))) continue;
-    const p = readPrep(prepFile(a, next.d));
-    const ready = usable(a, p, next.d, now);
-    const stale = ready && prepStale(p, next.at, now);
-    if (ready && !stale) continue;
-    out.push({ at: next.at.getTime(), area: a.slug, title: a.title, date: next.d, time: a.time, timezone: tz, file: rel(mcDir, prepFile(a, next.d)), stale, ...(stale ? { prepared: preparedAt(p)?.toISOString().replace(/\.\d+Z$/, "Z") || "" } : {}) });
+    const e = entry(a, next.d, next.at);
+    if (e) out.push(e);
   }
   return out.sort((x, y) => x.at - y.at).map(({ at, ...r }) => r);
+}
+
+function bridgeDay(mcDir, a, tz, days, now, inWindow, entry) {
+  const c = lastRhythmChange(mcDir, a, now);
+  const old = c && parseRhythm(c.from);
+  if (!old) return [];
+  const was = { ...a, rhythm: old, rhythmText: c.from };
+  const changeDay = localParts(new Date(c.changed), tz).date;
+  const newFirst = nextTalkDay(a, addDays(changeDay, 1));
+  for (const d of days) {
+    if (d <= changeDay || (newFirst && d >= newFirst) || !isTalkDay(was, d) || isTalkDay(a, d)) continue;
+    const at = zonedToUtc(d, a.time, tz);
+    if (!inWindow(at)) continue;
+    const e = entry(a, d, at);
+    return e ? [{ ...e, bridge: true, rhythm_change: c, next_talk: newFirst || "" }] : [];
+  }
+  return [];
+}
+
+// Whether this area's talks are prepared ahead: it names research domains (the gate needs a
+// preparation), or its prep folder holds a preparation (a job prepares this area's talks).
+export function prepExpected(area) {
+  if (researchDomains(area).length) return true;
+  try { return fs.readdirSync(prepDir(area)).some((f) => /^\d{4}-\d{2}-\d{2}\.md$/.test(f)); } catch { return false; }
 }
 
 export const prepPath = rel;
@@ -192,10 +229,7 @@ export function prepMissing(area, ymd, now = clockNow()) {
     const problem = prepProblem(p, area, now);
     return prepWords(problem || `its opening was already used in the talk of ${prepUsedOn(area, p, ymd)}`, area);
   }
-  let earlier = false;
-  try { earlier = fs.readdirSync(prepDir(area)).some((f) => /^\d{4}-\d{2}-\d{2}\.md$/.test(f)); } catch { /* no prep folder */ }
-  if (researchDomains(area).length || earlier) return "none was written";
-  return null;
+  return prepExpected(area) ? "none was written" : null;
 }
 
 // One talk's preparation, for the job that prepares talks the day before (in Godspeed Mission

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // godspeed-coach: recurring coaching talks and daily habits for Godspeed Mission Control. This file only
 // parses arguments and prints. What gets decided lives in lib/, where the tests can reach it.
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { findMissionControl, appHome } from "../lib/paths.mjs";
@@ -15,12 +16,12 @@ import { brief, habitLine } from "../lib/brief.mjs";
 import { gate, NO_WAKE } from "../lib/gate.mjs";
 import { dueTick } from "../lib/tick.mjs";
 import { contextBlock, waitingTalks } from "../lib/context.mjs";
-import { readPrep, prepProblem, prepForBrief, prepDue, prepPath, prepCheck, prepFile } from "../lib/prep.mjs";
+import { readPrep, prepProblem, prepForBrief, prepDue, prepPath, prepCheck, prepFile, prepDir, prepMissing, prepExpected } from "../lib/prep.mjs";
 import { writeQuestions, readQuestions, questionsFile, openQuestionsDate, addQuestion, dropQuestion, hasQuestions } from "../lib/questions.mjs";
 import { commitCoach, syncInBackground, syncQueued, pullQuietly } from "../lib/sync.mjs";
 import { decodeArgv, readTextFile, restoreShellEnv, startedFromGitBash, gitBashPath, LAUNCHER_ENV, CMDLINE_ENV } from "../lib/argv.mjs";
 
-const FLAGS = new Set(["json", "yes", "no-hermes", "no-claude", "all", "scheduled", "remove", "shown"]);
+const FLAGS = new Set(["json", "yes", "no-hermes", "no-claude", "all", "scheduled", "remove", "shown", "rhythm-changes"]);
 // The values that name a file or folder. From Git Bash these are turned into Windows paths;
 // the person's words never are (lib/argv.mjs).
 const PATH_FLAGS = ["godspeed", "out", "evidence", "answer", "issues-out", "words-file", "opening-file", "prepared-file", "from-prep", "extra-skills-dir", "daily-table"];
@@ -99,6 +100,22 @@ function openTalkDate(a) {
   const open = talkDates(a).reverse().find((d) => readTalk(a, d).state === "opened");
   if (!open) die(`No ${a.title} talk is open. Give the day with --date.`);
   return open;
+}
+// A talk with no preparation of its own may still quote the area's newest preparation that passed its
+// review, dated on or before the talk, with its date (#359). Its review's hash of the file proves the
+// findings are the ones reviewed; prepProblem cannot decide this, since any later edit of area.md (a
+// RHYTHM change too) breaks the seal that lets a preparation open a talk.
+const NO_NEW_STUDY = "A search that found no new study means no new study, not that nothing is useful: answer from the routes, rejected routes and coverage above.";
+function reviewedBefore(a, ymd) {
+  let names = [];
+  try { names = fs.readdirSync(prepDir(a)).filter((n) => /^\d{4}-\d{2}-\d{2}\.md$/.test(n) && n.slice(0, 10) <= ymd).sort().reverse(); } catch { /* no prep folder */ }
+  for (const n of names) {
+    const file = path.join(prepDir(a), n);
+    let review = null;
+    try { review = JSON.parse(fs.readFileSync(file.replace(/\.md$/, ".review.json"), "utf8")); } catch { continue; }
+    if (review?.verdict === "pass" && review.prep_sha256 === crypto.createHash("sha256").update(fs.readFileSync(file)).digest("hex")) return { ...readPrep(file), date: n.slice(0, 10) };
+  }
+  return null;
 }
 function needHabit(words, opts) {
   const h = findHabit(mcDir, words, opts);
@@ -195,11 +212,32 @@ const commands = {
   "prep-due"() {
     const raw = f["within-hours"];
     const hours = Number(raw);
-    if (raw === undefined || !Number.isFinite(hours) || hours <= 0) die("godspeed-coach prep-due --within-hours <hours> [--json]: the talks that start within that many hours and are not prepared yet.");
-    const due = prepDue(mcDir, s, at, hours);
+    if (raw === undefined || !Number.isFinite(hours) || hours <= 0) die("godspeed-coach prep-due --within-hours <hours> [--rhythm-changes] [--json]: the talks that start within that many hours and are not prepared yet; with --rhythm-changes also a day a rhythm change just dropped.");
+    const due = prepDue(mcDir, s, at, hours, { rhythmChanges: Boolean(f["rhythm-changes"]) });
     // A stale one says when it was prepared, in the talk's own time zone.
     const when = (x) => { if (!x.prepared) return "no PREPARED time"; const p = localParts(new Date(x.prepared), x.timezone); return `prepared ${p.date} ${p.hm}`; };
-    out(due.map((x) => `${x.area}: ${x.title}, ${WEEKDAY_WORDS.en[weekdayOf(x.date)]} ${x.date} at ${x.time} (${x.timezone}), prepare ${x.file}${x.stale ? ` (stale, ${when(x)})` : ""}`).join("\n") || "Nothing to prepare.", due);
+    const bridged = (x) => x.bridge ? ` (not a talk day since the rhythm changed on ${localParts(new Date(x.rhythm_change.changed), x.timezone).date} from "${x.rhythm_change.from}" to "${x.rhythm_change.to}")` : "";
+    out(due.map((x) => `${x.area}: ${x.title}, ${WEEKDAY_WORDS.en[weekdayOf(x.date)]} ${x.date} at ${x.time} (${x.timezone}), prepare ${x.file}${x.stale ? ` (stale, ${when(x)})` : ""}${bridged(x)}`).join("\n") || "Nothing to prepare.", due);
+  },
+  // For the same job (#359): the talks of the last --days days (default 1) that opened without a
+  // preparation in an area whose talks are prepared ahead, why, and the area's next talk day with no
+  // record yet. It only reads.
+  "prep-missed"() {
+    const raw = f.days ?? "1";
+    if (!/^\d+$/.test(String(raw))) die("godspeed-coach prep-missed [--days <whole number>] [--json]: the talks of the last days that opened without their preparation.");
+    const from = addDays(today, -Number(raw));
+    const missed = [];
+    for (const a of listAreas(mcDir)) {
+      if (!a.on || a.noTalk || !a.rhythm || !prepExpected(a)) continue;
+      for (const d of talkDates(a).filter((x) => x >= from && x <= today)) {
+        if (readTalk(a, d).prep) continue;
+        let next = nextTalkDay(a, today);
+        while (next && fs.existsSync(talkFile(a, next))) next = nextTalkDay(a, addDays(next, 1));
+        missed.push({ area: a.slug, title: a.title, date: d, talk: path.relative(mcDir, talkFile(a, d)).replace(/\\/g, "/"),
+          reason: prepMissing(a, d, at) || "it did not open from its preparation", next: next || "" });
+      }
+    }
+    out(missed.map((x) => `${x.area}: the ${x.title} talk of ${x.date} opened without its preparation (${x.reason}); next talk ${x.next || "none"}`).join("\n") || "No talk opened without its preparation.", missed);
   },
   // One talk's preparation (lib/prep.mjs, prepCheck): "ready" when it can open the talk, else why
   // not; exit 1 when it cannot. The day is the talk's next one unless --date names another.
@@ -299,9 +337,11 @@ const commands = {
       const d = f.date ? dateArg(f.date) : ([...ds].reverse().find((x) => readTalk(a, x).state === "opened") || today);
       const t = ds.includes(d) ? readTalk(a, d) : null;
       const found = t ? null : prepForBrief(a, d);
-      const p = t ? (t.prep ? readPrep(path.resolve(mcDir, t.prep)) : null) : (found ? readPrep(found.file) : null);
+      const own = t ? (t.prep ? readPrep(path.resolve(mcDir, t.prep)) : null) : (found ? readPrep(found.file) : null);
+      const p = own || reviewedBefore(a, d);
       if (!p) return out(`There is no preparation to show for the ${a.title} talk of ${d}: do not claim any research for it.`, { ok: true, prep: null });
       const lines = [`Preparation: ${prepPath(mcDir, p.file)}`, `Prepared: ${p.head.PREPARED || "no time recorded"}`];
+      if (!own) lines.unshift(`This talk has no preparation of its own. The newest reviewed preparation of the ${a.title} talk is from ${p.date}: say that date when you use it, and never call it this week's research.`);
       const sec = (n) => { const k = Object.keys(p.sections).find((x) => x.toLowerCase() === n.toLowerCase()); return k ? String(p.sections[k]).trim() : ""; };
       const shown = {};
       for (const n of ["Routes", "Rejected routes", "Opportunities", "Research coverage", "Cut, and why"]) if (sec(n)) { lines.push("", `${n}:`, sec(n)); shown[n] = sec(n); }
@@ -312,7 +352,8 @@ const commands = {
       lines.push("", review ? `Second check: ${review.verdict}, ${review.reviewed_at || "no time recorded"}` : "Second check: none recorded");
       if (sources.length) { lines.push("Sources read:"); for (const x of sources) lines.push(`- ${x.url} (read ${x.read_at || "at no recorded time"}${x.tool ? `, with ${x.tool}` : ""})`); }
       else lines.push("No source pages were recorded.");
-      return out(lines.join("\n"), { ok: true, prep: prepPath(mcDir, p.file), prepared: p.head.PREPARED || "", sections: shown, review: review ? { verdict: review.verdict, reviewed_at: review.reviewed_at } : null, sources });
+      lines.push("", NO_NEW_STUDY);
+      return out(lines.join("\n"), { ok: true, prep: prepPath(mcDir, p.file), ...(own ? {} : { fallback: true, date: p.date }), prepared: p.head.PREPARED || "", sections: shown, review: review ? { verdict: review.verdict, reviewed_at: review.reviewed_at } : null, sources });
     }
     if (sub === "said") {
       // One --words per message: where commands show on their screen, the whole talk is saved in
