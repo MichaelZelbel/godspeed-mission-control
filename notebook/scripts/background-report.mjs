@@ -3,28 +3,34 @@
 //
 //   node background-report.mjs say    --godspeed <mission control> --home <Hermes home>   (a notice as JSON on stdin)
 //   node background-report.mjs delivered --godspeed <mission control> --home <Hermes home> [--receipts id,id]   (the words Hermes just delivered, on stdin)
+//   node background-report.mjs failed --godspeed <mission control> --home <Hermes home>   (a failed scheduled run as JSON on stdin)
 //   node background-report.mjs record --godspeed <mission control> --home <Hermes home> --routine <kind> [--delivery telegram|notebook[,...]] [--receipts]   (its words on stdin)
 //
 // `say` prints the words to deliver for one queued notice, written with the chat's guidance (or its
 // plain fallback text) and recorded where the chat reads it; `record` records a routine's own words
-// as printed and `delivered` makes the waiting steps a delivery record names answerable once Hermes has delivered it; `record --receipts` prints the ids of the records it wrote (a skill job's wrapper hands them back to `delivered --receipts`; otherwise the oldest undelivered record of exactly those words is used). See core/background-reports.mjs. Exit 1 only when the notebook cannot be written.
+// as printed and `delivered` makes the waiting steps a delivery record names answerable once Hermes has delivered it; `failed` keeps a scheduled run's failure note out of the chat and says at most one plain sentence about it (#385); `record --receipts` prints the ids of the records it wrote (a skill job's wrapper hands them back to `delivered --receipts`; otherwise the oldest undelivered record of exactly those words is used). See core/background-reports.mjs. Exit 1 only when the notebook cannot be written.
 import fs from 'node:fs';
 import {pathToFileURL} from 'node:url';
 import {CHATS} from '../core/waiting-steps.mjs';
 import {Store} from '../core/records/store.mjs';
 import {machineDevice} from '../core/device-id.mjs';
-import {sayNotice,recordRoutine,delivered} from '../core/background-reports.mjs';
+import {sayNotice,recordRoutine,delivered,followUpFailed} from '../core/background-reports.mjs';
 import {notebookProvider} from './morning-brief.mjs';
 
 const option=(argv,name)=>{const i=argv.indexOf('--'+name);return i>=0?argv[i+1]:undefined;};
 
 export async function main(argv,stdin){
  const [command]=argv,root=option(argv,'godspeed'),home=option(argv,'home');
- if(!root||!home||!['say','record','delivered'].includes(command))throw Error('Usage: background-report.mjs say|record|delivered --godspeed <root> --home <Hermes home>');
+ if(!root||!home||!['say','record','delivered','failed'].includes(command))throw Error('Usage: background-report.mjs say|record|delivered|failed --godspeed <root> --home <Hermes home>');
  const store=new Store(root,{device:machineDevice(root).id});
  if(command==='say'){
   let provider=null;try{provider=notebookProvider(store);}catch{}
   return (await sayNotice(store,{notice:JSON.parse(stdin),home,provider})).text;
+ }
+ if(command==='failed'){
+  let provider=null;try{provider=notebookProvider(store);}catch{}
+  await followUpFailed(store,{...JSON.parse(stdin),home,provider});
+  return '';
  }
  if(command==='delivered'){
   const receipts=option(argv,'receipts')?.split(',').filter(Boolean)||[];
