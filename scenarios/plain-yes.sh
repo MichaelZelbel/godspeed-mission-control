@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # PROVING SCENARIO OF 2.0.0-beta.17: a plain yes, or a button, answers the right waiting step.
+# (Evidence run for #372 after #450; this draft pull request is closed unmerged.)
 #
 # What it proves (godspeed-dev, releases/godspeed-2.0.0-beta.17-a-plain-yes/plan.md, "Proving
 # scenarios" 3, and issue #191), on an install whose owner is on a fixture Telegram, with steps opened
