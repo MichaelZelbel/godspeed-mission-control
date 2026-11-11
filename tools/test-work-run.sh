@@ -205,6 +205,33 @@ contains "  but kept private, whatever else its record says" "$OUT" "$VID kept p
 missing "  no page is on the item" "$(cat "$TMP/work/$VID.md")" "LINK:"
 check "  and the publish command was never called" "$([ -e "$TMP/publish-argv.txt" ] && echo called || echo never)" "never"
 
+# An ordinary approved send has a file and your yes, but your yes was for the send, not for a page.
+pub_file "Which venue answered the reading circle's email" pub-send --outward yes >/dev/null
+EID="$(id_of pub-send)"
+hw unblock "$EID" --why "test" --approved-by "yes, send it" >/dev/null
+rm -f "$TMP/publish-argv.txt"
+OUT="$(FAKE_SAY="$SAYS" run --only "$EID" --publish-cmd "$TMP/bin/publish" 2>&1)"
+check "an approved outward item that never asked for a page is verified" "$(status_of "$EID")" "verified"
+contains "  but kept private, because nobody asked for a page" "$OUT" "$EID kept private, not published: it has no PUBLISH: yes, so nobody asked for a page"
+missing "  no page is on the item" "$(cat "$TMP/work/$EID.md")" "LINK:"
+check "  and the publish command was never called" "$([ -e "$TMP/publish-argv.txt" ] && echo called || echo never)" "never"
+
+# The private words are read in WHAT and in DONE WHEN, whatever else the record permits.
+hold_on_words() {
+  local id="$1" where="$2"
+  hw unblock "$id" --why "test" --approved-by "yes" >/dev/null
+  rm -f "$TMP/publish-argv.txt"
+  OUT="$(FAKE_SAY="$SAYS" run --only "$id" --publish-cmd "$TMP/bin/publish" 2>&1)"
+  check "an item that says so in its $where is verified" "$(status_of "$id")" "verified"
+  contains "  but kept private by its own words" "$OUT" "$id kept private, not published: its own words say it is private"
+  check "  and the publish command was never called" "$([ -e "$TMP/publish-argv.txt" ] && echo called || echo never)" "never"
+}
+pub_file "Do not publish this: which flat suits us" pub-dnp --publish yes >/dev/null
+hold_on_words "$(id_of pub-dnp)" "WHAT"
+hw file --what "Compare the two flats" --done-when "the comparison is written in research/pub-never.md; never publish it" \
+  --check "$NODE $TMP/bin/check-written.js research/pub-never.md --min-words 50" --key pub-never --publish yes --source test >/dev/null
+hold_on_words "$(id_of pub-never)" "DONE WHEN"
+
 pub_file "Can a run grant itself a page" pub-grant >/dev/null
 GID="$(id_of pub-grant)"
 rm -f "$TMP/publish-argv.txt"
