@@ -206,15 +206,31 @@ def no_client():
 
 def send_fails():
     buttons, bot = gateway()
+    send = bot.send_message
 
-    async def broken(**kw):
-        raise RuntimeError("telegram is down")
-    bot.send_message = broken
+    async def no_keyboard(**kw):
+        if "reply_markup" in kw:
+            raise RuntimeError("the keyboard was refused")
+        return await send(**kw)
+    bot.send_message = no_keyboard
     buttons.post_waiting()
+    time.sleep(0.2)
+    assert bot.sent == [], "no plain copy: the next look sends the card instead"
     assert queue() == [IDS[0] + ".json"], queue()
     assert status(IDS[0]) == "waiting"
     step("heard", "--chat", "telegram", stdin="yes")
     assert status(IDS[0]) == "waiting", "a question that never reached the owner cannot be answered"
+
+
+def notebook_cannot_say():
+    buttons, bot = gateway()
+    real = buttons.run
+    buttons.run = lambda *args: subprocess.CompletedProcess(args, 1, "", "") if args[0] == "get" else real(*args)
+    buttons.post_waiting()
+    assert bot.sent == [] and queue() == [IDS[0] + ".json"], (bot.sent, queue())
+    buttons.run = real
+    post(buttons, bot, 1)
+    assert queue() == [] and status(IDS[0]) == "waiting"
 
 
 def expired():

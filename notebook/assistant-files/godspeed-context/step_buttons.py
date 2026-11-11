@@ -15,6 +15,7 @@ buttons, and only while the step still waits; then it tells the notebook the que
 import asyncio
 import importlib.util
 import json
+import logging
 import os
 import re
 import subprocess
@@ -104,6 +105,11 @@ class StepButtons(buttons.YesNoButtons):
             self._local.question = None
             self._local.sending = None
 
+    async def unsent(self, app, chat, words):
+        # A step's question is in no reply, and a typed answer counts only once its card went out:
+        # the hand-off stays, and the next look sends the card again.
+        pass
+
     def deliver(self, app, loop, route, tokens, words):
         sending = super().deliver(app, loop, route, tokens, words)
         self._local.sending = sending
@@ -136,7 +142,8 @@ class StepButtons(buttons.YesNoButtons):
                     if waiting is False:
                         os.remove(file)
                     elif waiting and self.post(item["id"], item["text"]):
-                        # Never posted twice: if the notebook cannot be told, the step stays unanswerable.
+                        # The file goes even if the notebook cannot be told: an unanswerable step is
+                        # better than its question asked twice.
                         self.sent(item["id"])
                         os.remove(file)
             except Exception:
@@ -161,9 +168,13 @@ class StepButtons(buttons.YesNoButtons):
 
     def sent(self, step_id):
         try:
-            self.run("sent", step_id)
+            run = self.run("sent", step_id)
+            failed = run is None or run.returncode != 0
         except Exception:
-            pass
+            failed = True
+        if failed:
+            logging.getLogger(__name__).warning("Step %s: its question went out, but the notebook was not told; "
+                                                "a yes or no to it changes nothing.", step_id)
 
     def factory(self, native, adapter):
         super().factory(native, adapter)
