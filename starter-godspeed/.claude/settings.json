@@ -10,6 +10,17 @@
           }
         ]
       }
+    ],
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/no-publish-in-the-persons-name.js\"",
+            "timeout": 10
+          }
+        ]
+      }
     ]
   }
 }
