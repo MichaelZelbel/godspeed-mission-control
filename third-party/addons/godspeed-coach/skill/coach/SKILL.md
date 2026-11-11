@@ -34,7 +34,9 @@ talk may look at), the goals it serves, and the talk prepared ahead when there i
 0. If the brief has a section "Not prepared", the preparation is missing or was refused. The opening
    starts, after where it comes from and which talk it is, with the one sentence that section gives,
    word for word, then carries on from the brief as steps 2 to 4 say. Never say or imply how long or
-   how widely anything was researched.
+   how widely anything was researched. The brief's research sections are then the nightly goal
+   research as it stands, not a reviewed preparation: when you use one, say its date, and never
+   present it as this week's research result or say the research found nothing useful.
 1. If the brief carries a prepared talk (its section "The prepared talk"), that is the preparation
    and the opening is written: skip steps 2 to 4, run the open command the brief prints (with
    `--from-prep`) as step 5 says, and your final answer is the opening it prints, exactly.
@@ -92,7 +94,10 @@ talk they start themselves".
 4. Never claim how long or how widely research ran ("I looked into this for days", "I read many
    studies"). Say what the preparation file shows: when asked what was researched, run
    `godspeed-coach talk evidence <area>` once and answer from its routes, sources and second check,
-   or say there is no preparation for this talk.
+   or say there is no preparation for this talk. When it names an earlier preparation, the talk has
+   none of its own: give that preparation's date with anything you take from it. A search that found
+   no new study means no new study, not that nothing is useful: answer from its routes, rejected
+   routes and coverage.
 5. The area's LIMIT lines are binding in every reply. Where an area has none, these hold anyway:
    a health talk never diagnoses, never makes "see a doctor" the answer and never tells them to buy
    or book anything; a money talk never moves money, buys or signs up for anything; a relationships
@@ -204,8 +209,8 @@ missed day.
 and follow "Opening a talk" in this conversation (skip the `[SILENT]` rule). The open command that
 brief prints ends with `--shown`, because they read the opening right here: run it exactly as
 printed, so a later conversation does not bring the talk up again. If a talk of that area is
-already open, continue it instead, with one exception: on a talk day of that area, when the open
-talk is an earlier one with no reply from them, run the brief anyway. It opens today's talk from
+already open, continue it instead, with one exception: on a talk day of that area (a day its newest
+rhythm change dropped counts as one: the coach prepares it like one), when the open talk is an earlier one with no reply from them, run the brief anyway. It opens today's talk from
 its preparation and closes the earlier one as not held, and the opening names that earlier talk in
 one short sentence. If today's talk is the open one, the brief says so: continue it. A talk with a
 reply is always continued. This holds while a talk of another area is open: that talk stays

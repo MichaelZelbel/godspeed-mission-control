@@ -14,6 +14,15 @@
         "hooks": [
           {
             "type": "command",
+            "command": "node \"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/give-up-check.js\"",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
             "command": "node \"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/no-homework.js\"",
             "timeout": 10
           }
@@ -21,6 +30,15 @@
       }
     ],
     "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/no-publish-in-the-persons-name.js\"",
+            "timeout": 10
+          }
+        ]
+      },
       {
         "matcher": "Bash|PowerShell|Artifact",
         "hooks": [
