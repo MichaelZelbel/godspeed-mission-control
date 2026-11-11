@@ -56,7 +56,7 @@ const mission = (extra = {}) => tmpMission({
   ...extra,
 });
 const work = (mc) => readArea(path.join(mc, "coach", "work"));
-const record = (mc, d) => fs.readFileSync(path.join(mc, "coach", "work", "talks", `${d}.md`), "utf8");
+const record = (mc, d, a = "work") => fs.readFileSync(path.join(mc, "coach", a, "talks", `${d}.md`), "utf8");
 
 test("talk open --from-prep opens with the prepared opening, keeps the talk card and prints the opening", () => {
   const mc = mission({ "coach/work/prep/2026-10-21.md": prep() });
@@ -525,6 +525,31 @@ test("a bridged Sunday's preparation is what the talk they start that day opens 
   const a = readArea(path.join(mc, "coach", "health"));
   assert.equal(prepForBrief(a, "2026-11-08")?.date, "2026-11-08");
   assert.match(cli(mc, "2026-11-08T15:00:00Z", "brief", "health").out, /--from-prep "coach\/health\/prep\/2026-11-08\.md" --shown/);
+});
+
+test("a bridged Sunday after a talk that got no reply counts as a talk day: the chat brief opens from its preparation and closes that talk as not held", () => {
+  // The owner ruling on #359: a day an unrequested rhythm change dropped is a talk day here, so the
+  // ready preparation is used and the unanswered talk of 1 November is replaced, not continued.
+  const mc = drifted();
+  const unanswered = "TALK: health\nDATE: 2026-11-01\nSTATE: opened\nOPENED: 2026-11-01T18:00:00Z\nFOLLOW-UP: \n\n## What was read\nx\n\n## The opening\nEarlier.\n\n## What you said\n\n## What changed\n\n";
+  fs.mkdirSync(path.join(mc, "coach", "health", "talks"), { recursive: true });
+  fs.writeFileSync(path.join(mc, "coach", "health", "talks", "2026-11-01.md"), unanswered);
+  fs.mkdirSync(path.join(mc, "coach", "health", "prep"), { recursive: true });
+  fs.writeFileSync(path.join(mc, "coach", "health", "prep", "2026-11-08.md"), prep({ area: "health", talk: "2026-11-08 19:00", prepared: "2026-11-07T01:30:00Z" }));
+  const check = cli(mc, "2026-11-07T02:00:00Z", "prep-check", "health", "--date", "2026-11-08");
+  assert.equal(check.code, 0, check.err);
+  assert.match(check.out, /^ready: coach\/health\/prep\/2026-11-08\.md, .*\(the rhythm change on 2026-11-01 dropped this day, so it counts as a talk day\)$/);
+  const b = cli(mc, "2026-11-08T18:00:00Z", "brief", "health");
+  assert.equal(b.code, 0, b.err);
+  assert.ok(!b.out.includes("not a talk day"), b.out.split("\n").slice(0, 3).join("\n"));
+  assert.match(b.out, /The Health and fitness talk of 2026-11-01 is still open with no reply from them\. Opening today's talk closes it as not held\./);
+  assert.match(b.out, /talk open health --godspeed "[^"]+" --from-prep "coach\/health\/prep\/2026-11-08\.md" --shown\./);
+  const r = cli(mc, "2026-11-08T18:01:00Z", "talk", "open", "health", "--from-prep", "coach/health/prep/2026-11-08.md", "--shown");
+  assert.equal(r.code, 0, r.err);
+  assert.ok(record(mc, "2026-11-08", "health").includes(`## The opening\n${OPENING}\n\nYour Health and fitness talk of 2026-11-01 got no reply, so I closed it as not held.\n`));
+  assert.match(fs.readFileSync(path.join(mc, "coach", "health", "talks", "2026-11-01.md"), "utf8"), /^STATE: not-held$/m);
+  // The next day nothing is reported missed: the talk opened from its preparation.
+  assert.equal(cli(mc, "2026-11-09T02:00:00Z", "prep-missed", "--days", "2").out, "No talk opened without its preparation.");
 });
 
 test("no bridge without git, from a change that drops no day, and an edit not committed yet counts from when area.md was written", () => {

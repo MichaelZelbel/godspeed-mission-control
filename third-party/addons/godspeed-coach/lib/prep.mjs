@@ -175,6 +175,14 @@ export function rhythmDrop(mcDir, a, tz) {
   return { change: c, next: newFirst || "", dropped: (d) => d > changeDay && !(newFirst && d >= newFirst) && isTalkDay(was, d) && !isTalkDay(a, d) };
 }
 
+// A talk day, or a day the area's newest rhythm change dropped (rhythmDrop): the nightly job prepares
+// that day like a talk day (prep-due --rhythm-changes), so the talk they ask for on it opens from that
+// preparation and replaces an earlier talk that got no reply, as on a talk day (#359).
+export function countsAsTalkDay(mcDir, area, ymd, tz) {
+  if (isTalkDay(area, ymd)) return true;
+  return Boolean(mcDir && tz && rhythmDrop(mcDir, area, tz)?.dropped(ymd));
+}
+
 // Whether this area's talks are prepared ahead: it names research domains (the gate needs a
 // preparation), or its prep folder holds a preparation (a job prepares this area's talks).
 export function prepExpected(area) {
@@ -255,11 +263,13 @@ export function prepCheck(mcDir, s, area, ymd) {
   const file = prepFile(area, ymd);
   const p = readPrep(file);
   const problem = prepProblem(p, area);
-  const talkDay = isTalkDay(area, ymd);
+  const drop = isTalkDay(area, ymd) ? null : rhythmDrop(mcDir, area, s.timezone);
+  const bridged = Boolean(drop?.dropped(ymd));
+  const talkDay = isTalkDay(area, ymd) || bridged;
   const at = zonedToUtc(ymd, area.time, s.timezone);
   return {
     area: area.slug, title: area.title, date: ymd, time: area.time, timezone: s.timezone, file: rel(mcDir, file),
-    talk_day: talkDay, ready: !problem, ...(problem ? { problem } : {}),
+    talk_day: talkDay, ...(bridged ? { bridge: true, rhythm_change: drop.change } : {}), ready: !problem, ...(problem ? { problem } : {}),
     stale: !problem && prepStale(p, at), prepared: preparedAt(p)?.toISOString().replace(/\.\d+Z$/, "Z") || "",
     research_domains: researchDomains(area), goals: servedGoals(area),
   };

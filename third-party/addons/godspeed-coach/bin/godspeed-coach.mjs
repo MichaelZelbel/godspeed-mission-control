@@ -15,7 +15,7 @@ import { brief, habitLine } from "../lib/brief.mjs";
 import { gate, NO_WAKE } from "../lib/gate.mjs";
 import { dueTick } from "../lib/tick.mjs";
 import { contextBlock, waitingTalks } from "../lib/context.mjs";
-import { readPrep, prepProblem, prepForBrief, prepDue, prepPath, prepCheck, prepFile, prepDir, prepMissing, prepExpected, rhythmDrop } from "../lib/prep.mjs";
+import { readPrep, prepProblem, prepForBrief, prepDue, prepPath, prepCheck, prepFile, prepDir, prepMissing, prepExpected, rhythmDrop, countsAsTalkDay } from "../lib/prep.mjs";
 import { researchDomains } from "../lib/prep-evidence.mjs";
 import { writeQuestions, readQuestions, questionsFile, openQuestionsDate, addQuestion, dropQuestion, hasQuestions } from "../lib/questions.mjs";
 import { commitCoach, syncInBackground, syncQueued, pullQuietly } from "../lib/sync.mjs";
@@ -252,7 +252,7 @@ const commands = {
     if (!d) die(`The ${a.title} talk has no coming day.`);
     const r = prepCheck(mcDir, s, a, d);
     const when = r.prepared ? (() => { const p = localParts(new Date(r.prepared), s.timezone); return `prepared ${p.date} ${p.hm}`; })() : "no PREPARED time";
-    const day = r.talk_day ? "" : ` (${d} is not a day of the ${a.title} talk)`;
+    const day = r.bridge ? ` (the rhythm change on ${localParts(new Date(r.rhythm_change.changed), s.timezone).date} dropped this day, so it counts as a talk day)` : r.talk_day ? "" : ` (${d} is not a day of the ${a.title} talk)`;
     out(r.ready ? `ready: ${r.file}, ${when}${r.stale ? ", stale: more than 48 hours before the talk" : ""}${day}` : `not ready: ${r.file}: ${r.problem}${day}`, r);
     if (!r.ready) process.exitCode = 1;
   },
@@ -323,9 +323,10 @@ const commands = {
         Object.assign(t, { opening: p.opening, prepared: p.card, read: f.read || `the prepared talk ${prepPath(mcDir, file)}`, prep: prepPath(mcDir, file) });
       }
       if (!t.opening) die('Give the opening: --opening "<what you are sending them>", or --from-prep <file> for a talk prepared ahead');
-      // A prepared talk they asked for on a talk day replaces an earlier one that got no reply. The
-      // opening is sealed, so the one sentence naming the replaced talk is added to it here.
-      const replaced = t.prep && shown && isTalkDay(a, d) ? unansweredBefore(a, d) : [];
+      // A prepared talk they asked for on a talk day (or a day the newest rhythm change dropped, which
+      // counts as one) replaces an earlier one that got no reply. The opening is sealed, so the one
+      // sentence naming the replaced talk is added to it here.
+      const replaced = t.prep && shown && countsAsTalkDay(mcDir, a, d, s.timezone) ? unansweredBefore(a, d) : [];
       if (replaced.length) t.opening = `${t.opening}\n\nYour ${a.title} talk of ${replaced.at(-1)} got no reply, so I closed it as not held.`;
       const r = openTalk(a, d, t, at);
       if (r.created) for (const e of replaced) setTalkState(a, e, "not-held");
