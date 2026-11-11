@@ -15,7 +15,7 @@ The daily-brief pipeline owns collection/checking/delivery. This method owns the
 2. The current collected facts: permitted calendar reads, opened news sources with article text and dates, the already capped cards, today's actual decision, recent verified work, fresh health measurements, the user's actual recent words, card outcomes and source gaps. Use the pipeline's structured source context when it is the installed equivalent of a facts document. A missing part stays missing.
 3. The user's retained voice examples, especially lines they accepted and refused with reasons.
 4. Their current identity, priorities and business/profile detail when relevant. Open the owning source before acting on detail beyond a summary.
-5. Search the visible notebook/current claims for any life fact that would change the note. Read the full evidence before asking the user for it.
+5. Search the visible notebook/current claims for any life fact that would change the note. Read the full evidence before asking the user for it. Before any sentence about the owner's own day (travel, an appointment, an absence), compare it with the notes and facts about the people around them. An event in their calendar is not proof that they are the one who goes. When the event, a note or a fact names someone else, say whose it is. When it stays unclear, leave it out.
 6. Open public primary sources when an authorized news check needs verification. A headline is not a story, and an unopened URL does not belong in the note.
 
 Use current dated evidence. Never infer a counter, user identity, income, health outcome or successful business result from a draft or old description.
@@ -38,7 +38,7 @@ Aim for 150-300 words when the sources support that much. With thin material, be
 
 **Opening.** One natural sentence about today, grounded in a real calendar read or a relevant fact. No heading or “morning brief” label. Do not count/preview the items or summarize later stories: checks may cut them. If no calendar was read, do not invent the user's day or lead with machinery about a failed collector.
 
-**News that matters.** Two or three useful stories when current opened sources establish them; one or two sentences each with their verified link. Explain relevance in the same breath only when the user's actual goals support it. Do not predict their revenue, buyers or costs from a product announcement. Omit yesterday's stories under different URLs, repeated subjects and topics deliberately resting. A thin pool can be acknowledged briefly without filler.
+**News that matters.** Two or three useful stories when current opened sources establish them, from the last two days (and the mornings since the last brief); an older one says its date; one or two sentences each with their verified link. Explain relevance in the same breath only when the user's actual goals support it. Do not predict their revenue, buyers or costs from a product announcement. Omit yesterday's stories under different URLs, repeated subjects and topics deliberately resting. A thin pool can be acknowledged briefly without filler.
 
 **Health.** Include one factual sentence every morning. Prefer a verified change or trend across days, using only counts/values the collection step actually computed from selected data. When no count is established, use the user's actual health words without invented numbers. With no fresh observations, say that honestly. Never diagnose, invent a dose, mistake missing input for zero, or turn a technical feed failure into the user's homework.
 
@@ -58,13 +58,13 @@ Mention deadlines only when actual urgency/consequence merits attention. Disting
 
 ## Check every claim before handing it back
 
-Each name, number, quote and link must come from supplied current facts or an actually opened source. Describe unfamiliar projects/people in the same sentence or leave them out. General claims about several items must be true of each item. Attribute what happened to the correct person/system.
+Each name, number, quote and link must come from supplied current facts or an actually opened source. Describe unfamiliar projects/people in the same sentence or leave them out. General claims about several items must be true of each item. Attribute what happened to the correct person/system. Say "you" only when the sources say it is the owner. When the owner's own event overlaps a trip or appointment attributed to them, treat that as doubt about whose it is, not as a reason to propose moving the event.
 
 A current-world claim checked earlier carries its verification day instead of a present-tense guarantee. Search for a newer settled fact before repeating an older card. Protect confidential employer/client names. Do not rename another person's product as the user's creation.
 
 Keep uncertainty and the difference between preparation, permission, execution, verification and measured outcome visible in ordinary words. An exact local edit already approved by the user must not ask for approval again after it happened.
 
-The pipeline checks voice, sources, dates, numbers, links, repeated advice and exact choices, then gives the writer one rewrite with actual reasons. Final judges may cut; they do not manufacture facts. If both drafts fail review, the installed routine may save a shorter note built only from visible checked records after its mechanical checks pass; otherwise a failing gate stays undelivered, with a concrete authorized repair or an honest necessary user action.
+The pipeline checks voice, sources, dates, numbers, links, repeated advice and exact choices, then gives the writer one rewrite with actual reasons. A wording finding rewrites or drops only its sentence; an item is cut only when its core fact is unsupported. Judges do not manufacture facts. If both drafts fail review, the installed routine may save a shorter note built only from visible checked records after its mechanical checks pass; otherwise a failing gate stays undelivered, with a concrete authorized repair or an honest necessary user action.
 
 ## Retain the actual result
 
