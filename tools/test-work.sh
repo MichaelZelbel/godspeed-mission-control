@@ -172,6 +172,23 @@ contains "  and says why" "$OUT" "never outward"
 check "  and files nothing" "$(idof rep-out)" "none"
 OUT="$(hw help 2>&1)"; contains "help names the repair kind" "$OUT" "--kind do|learn|repair"
 
+# --- a page is asked for, never inferred (#268) ------------------------------------------------------------
+OUT="$(hw file --learn "Which venues fit" --path research/venues.md --publish yes --key pub-yes --source test 2>&1)"
+contains "an item asking for a page files blocked, waiting for your yes" "$OUT" "blocked (needs authorization) outward: a page, made only after your yes"
+PUB="$(idof pub-yes)"
+check "  it is outward" "$(sed -n 's/^OUTWARD: //p' "$TMP/work/$PUB.md")" "yes"
+check "  and carries PUBLISH: yes" "$(sed -n 's/^PUBLISH: //p' "$TMP/work/$PUB.md")" "yes"
+OUT="$(hw file --what "Post the venues" --done-when "research/v2.md exists" --publish yes --outward yes --goal five --may replies --check "test -f research/v2.md" --key pub-may --source test 2>&1)"; check "a page on a standing permission is refused" "$?" "1"
+contains "  and says why" "$OUT" "not on a standing permission"
+OUT="$(hw file --what "Mend and publish" --done-when "research/fix.md exists" --kind repair --publish yes --key pub-rep --source test 2>&1)"; check "a repair that asks for a page is refused" "$?" "1"
+OUT="$(hw file --what "Publish something" --done-when "it is online" --publish yes --key pub-nofile --source test 2>&1)"; check "a page with no file named is refused" "$?" "1"
+contains "  and says why" "$OUT" "names the file to publish"
+OUT="$(hw file --what "Publish maybe" --done-when "research/m.md exists" --publish maybe --key pub-maybe --source test 2>&1)"; check "--publish takes only yes or no" "$?" "1"
+OUT="$(hw file --what "Publish bare" --done-when "research/m.md exists" --publish --key pub-bare --source test 2>&1)"; check "  and a bare --publish is refused too" "$?" "1"
+check "  none of those filed anything" "$(idof pub-may)$(idof pub-rep)$(idof pub-nofile)$(idof pub-maybe)$(idof pub-bare)" "nonenonenonenonenone"
+hw file --what "Write it privately" --done-when "research/p.md exists" --key pub-none --source test >/dev/null
+check "an item filed without --publish has no PUBLISH line" "$(grep -c '^PUBLISH:' "$TMP/work/$(idof pub-none).md")" "0"
+
 # --- sweep by goal, check ---------------------------------------------------------------------------
 hw file --what "Write the chapter" --done-when "chapter in the manuscript" --key chapter --goal book --source test >/dev/null
 OUT="$(hw sweep --goal book --stale --reason "book deadline moved" 2>&1)"

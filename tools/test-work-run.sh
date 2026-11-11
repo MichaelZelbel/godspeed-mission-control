@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # The gate for mc-work-run: the runner takes one item at a time under a lease, what the
 # assistant says is only ATTEMPTED, the item's own check is what verifies, a dead assistant is a
-# failure with a retry gap, a dry run touches nothing, a finished piece becomes a page named with
-# the assistant's own sentence for the person. No model runs here: a fake mc-run stands in for it.
+# failure with a retry gap, a dry run touches nothing, a finished piece becomes a page only when its
+# own item asked for one (#268), named with the assistant's own sentence for the person. No model runs here: a fake mc-run stands in for it.
 # Runs in a throwaway godspeed root; never touches a real work/.
 # Usage: bash tools/test-work-run.sh   (from a checkout of this kit)
 set -uo pipefail
@@ -47,6 +47,7 @@ case "${FAKE_MODE:-ok}" in
   *)        [ -n "${FAKE_TOUCH:-}" ] && printf 'repaired\n' > "$FAKE_TOUCH"
             [ -n "${FAKE_BEFORE:-}" ] && printf '%s\n' "$FAKE_BEFORE" > "$(dirname "$OUT")/before.txt"
             [ -n "${FAKE_KEEP:-}" ] && { mkdir -p "$KEEP/$(dirname "$FAKE_KEEP")"; printf 'as it was\n' > "$KEEP/$FAKE_KEEP"; }
+            [ -n "${FAKE_GRANT:-}" ] && { awk '{ print } /^OUTWARD: /{ print "PUBLISH: yes"; print "APPROVED: 2026-09-15 \"yes\"" }' "$FAKE_GRANT" > "$FAKE_GRANT.new"; sed 's/^OUTWARD: no$/OUTWARD: yes/' "$FAKE_GRANT.new" > "$FAKE_GRANT"; rm -f "$FAKE_GRANT.new"; }
             [ -n "$P" ] && { mkdir -p "$(dirname "$P")"; { echo "# Answer"; for i in $(seq 1 80); do printf 'word%s ' "$i"; done; echo; echo; echo "## Sources"; echo "- https://example.org/a"; } > "$P"; }
             echo "scratch line"; [ -n "${FAKE_SAY:-}" ] && echo "SAY: $FAKE_SAY"
             echo "RESULT: wrote $P with 80 words" ;;
@@ -97,6 +98,7 @@ check "  every item still planned" "$(grep -l '^STATUS: planned' "$TMP/work"/W-*
 check "  no run folder made" "$([ -d "$TMP/routines/work" ] && echo yes || echo no)" "no"
 
 # --- one item at a time, attempted then verified by its check ---------------------------------------------
+rm -f "$TMP/publish-argv.txt"
 OUT="$(FAKE_SAY="How people in their fifties make close friends is written up for you." run --max-items 1 --publish-cmd "$TMP/bin/publish" 2>&1)"; check "one item runs and the runner exits 0" "$?" "0"
 contains "  the playbook item was taken first" "$OUT" "W-20260915-02 taken (learn)"
 contains "  the assistant saw the goal's own words" "$(cat "$TMP/routines/work/2026-09-15/W-20260915-02/prompt-seen.txt")" "five really good friends"
@@ -105,10 +107,11 @@ contains "  what it said is ATTEMPTED" "$(grep -c 'ATTEMPTED attempt 1 by work-2
 check "  the check, not the runner, made it verified" "$(status_of W-20260915-02)" "verified"
 contains "  verified by its check on the record" "$(cat "$TMP/work/W-20260915-02.md")" "VERIFIED check passed"
 check "  the other two were left alone" "$(grep -l '^STATUS: planned' "$TMP/work"/W-*.md | wc -l | tr -d ' ')" "2"
-contains "  the finished file became a page" "$OUT" "published: https://example.org/pages/five-friends.html"
-contains "  and the page is on the item" "$(cat "$TMP/work/W-20260915-02.md")" "LINK: https://example.org/pages/five-friends.html"
-contains "  the page is named with what the assistant wrote for the reader" "$(cat "$TMP/publish-argv.txt")" "is written up for you."
-missing "  and not with the item's own description" "$(cat "$TMP/publish-argv.txt")" "It is written and ready to read"
+# A file, a SAY line, a passing check and a publish command are not permission (#268).
+contains "  an item that never asked for a page stays private, and the run says why" "$OUT" "W-20260915-02 kept private, not published: its register says OUTWARD: no"
+missing "  nothing was published" "$OUT" "W-20260915-02 published:"
+missing "  no page is on the item" "$(cat "$TMP/work/W-20260915-02.md")" "LINK:"
+check "  and the publish command was never called" "$([ -e "$TMP/publish-argv.txt" ] && echo called || echo never)" "never"
 contains "  the prompt asked for that sentence" "$(cat "$TMP/routines/work/2026-09-15/W-20260915-02/prompt-seen.txt")" "starts with SAY:"
 # The run is asked to run the item's own check before it answers (18 October 2026).
 contains "  and to run the item's own check before its final line" "$(cat "$TMP/routines/work/2026-09-15/W-20260915-02/prompt-seen.txt")" "Run the item's CHECK yourself"
@@ -152,11 +155,102 @@ contains "  its lease is still the other runner's" "$(cat "$TMP/work/W-20260915-
 check "an item with no check stays attempted after the assistant's word" "$(status_of W-20260915-05)" "attempted"
 
 # --- a finished piece with no sentence for the person is recorded, not announced ----------------------------------
-hw file --learn "Does housekeeping stay quiet?" --path research/quiet.md --check "$NODE $TMP/bin/check-written.js research/quiet.md --min-words 50" --key quiet --source test >/dev/null
+hw file --learn "Does housekeeping stay quiet?" --path research/quiet.md --check "$NODE $TMP/bin/check-written.js research/quiet.md --min-words 50" --key quiet --publish yes --source test >/dev/null
 QID="$(grep -l 'KEY: quiet' "$TMP/work"/W-*.md | head -1 | xargs basename | sed 's/.md$//')"
+hw unblock "$QID" --why "asked for a page" --approved-by "yes, put it online" >/dev/null
 OUT="$(run --only "$QID" --publish-cmd "$TMP/bin/publish" 2>&1)"
 missing "a piece with no SAY line leaves no sentence for the schedule to say" "$(cat "$TMP/routines/work/2026-09-15/$QID/answer.txt")" "SAY:"
 contains "  and the run says why" "$OUT" "no sentence for the person"
+
+# --- publication is the item's own choice, never inferred (#268) --------------------------------------------------
+# On 6 November 2026 an unattended run published an item whose WHAT said it was private and whose
+# OUTWARD was no. Every held case below has a file, a SAY line and a passing check.
+pub_file() { hw file --learn "$1" --path "research/$2.md" --check "$NODE $TMP/bin/check-written.js research/$2.md --min-words 50" --key "$2" --source test "${@:3}"; }
+id_of() { grep -l "^KEY: $1\$" "$TMP/work"/W-*.md | head -1 | xargs basename | sed 's/.md$//'; }
+SAYS="The piece you asked to put online is ready."
+
+OUT="$(pub_file "Which three venues fit the reading circle" pub-ok --publish yes)"
+contains "an item filed with --publish yes waits for your yes" "$OUT" "blocked (needs authorization)"
+PID="$(id_of pub-ok)"
+hw unblock "$PID" --why "asked for a page" --approved-by "yes, put it online" >/dev/null
+rm -f "$TMP/publish-argv.txt"
+OUT="$(FAKE_SAY="$SAYS" run --only "$PID" --publish-cmd "$TMP/bin/publish" 2>&1)"
+check "  once your yes is on it, it runs and its check verifies it" "$(status_of "$PID")" "verified"
+contains "  its finished file becomes a page" "$OUT" "$PID published: https://example.org/pages/pub-ok.html"
+contains "  and the page is on the item" "$(cat "$TMP/work/$PID.md")" "LINK: https://example.org/pages/pub-ok.html"
+contains "  the page is named with what the assistant wrote for the reader" "$(cat "$TMP/publish-argv.txt" 2>/dev/null)" "$SAYS"
+missing "  and not with the item's own description" "$(cat "$TMP/publish-argv.txt" 2>/dev/null)" "Which three venues"
+PS="$(cat "$TMP/routines/work/2026-09-15/$PID/prompt-seen.txt")"
+contains "  the assistant is told its file may become a page" "$PS" "This item's file may become a page"
+missing "  and is not handed a move to apply" "$PS" "apply it"
+
+pub_file "Is a claimed permission on an inward item enough" pub-inward >/dev/null
+IID="$(id_of pub-inward)"
+printf 'PUBLISH: yes\nAPPROVED: 2026-09-15 "yes"\n' > "$TMP/claim.txt"
+awk -v f="$TMP/claim.txt" '{ print } /^OUTWARD: /{ while ((getline l < f) > 0) print l }' "$TMP/work/$IID.md" > "$TMP/claimed.md" && mv "$TMP/claimed.md" "$TMP/work/$IID.md"
+rm -f "$TMP/publish-argv.txt"
+OUT="$(FAKE_SAY="$SAYS" run --only "$IID" --publish-cmd "$TMP/bin/publish" 2>&1)"
+check "an OUTWARD: no item that claims PUBLISH: yes is still verified" "$(status_of "$IID")" "verified"
+contains "  but kept private, and the run says why" "$OUT" "$IID kept private, not published: its register says OUTWARD: no"
+missing "  no page is on the item" "$(cat "$TMP/work/$IID.md")" "LINK:"
+check "  and the publish command was never called" "$([ -e "$TMP/publish-argv.txt" ] && echo called || echo never)" "never"
+
+pub_file "Private. Nothing here is published: my notes on the move" pub-private --publish yes >/dev/null
+VID="$(id_of pub-private)"
+hw unblock "$VID" --why "test" --approved-by "yes" >/dev/null
+rm -f "$TMP/publish-argv.txt"
+OUT="$(FAKE_SAY="$SAYS" run --only "$VID" --publish-cmd "$TMP/bin/publish" 2>&1)"
+check "an item whose own words say it is private is verified" "$(status_of "$VID")" "verified"
+contains "  but kept private, whatever else its record says" "$OUT" "$VID kept private, not published: its own words say it is private"
+missing "  no page is on the item" "$(cat "$TMP/work/$VID.md")" "LINK:"
+check "  and the publish command was never called" "$([ -e "$TMP/publish-argv.txt" ] && echo called || echo never)" "never"
+
+# An ordinary approved send has a file and your yes, but your yes was for the send, not for a page.
+pub_file "Which venue answered the reading circle's email" pub-send --outward yes >/dev/null
+EID="$(id_of pub-send)"
+hw unblock "$EID" --why "test" --approved-by "yes, send it" >/dev/null
+rm -f "$TMP/publish-argv.txt"
+OUT="$(FAKE_SAY="$SAYS" run --only "$EID" --publish-cmd "$TMP/bin/publish" 2>&1)"
+check "an approved outward item that never asked for a page is verified" "$(status_of "$EID")" "verified"
+contains "  but kept private, because nobody asked for a page" "$OUT" "$EID kept private, not published: it has no PUBLISH: yes, so nobody asked for a page"
+missing "  no page is on the item" "$(cat "$TMP/work/$EID.md")" "LINK:"
+check "  and the publish command was never called" "$([ -e "$TMP/publish-argv.txt" ] && echo called || echo never)" "never"
+
+# The private words are read in WHAT and in DONE WHEN, whatever else the record permits.
+hold_on_words() {
+  local id="$1" where="$2"
+  hw unblock "$id" --why "test" --approved-by "yes" >/dev/null
+  rm -f "$TMP/publish-argv.txt"
+  OUT="$(FAKE_SAY="$SAYS" run --only "$id" --publish-cmd "$TMP/bin/publish" 2>&1)"
+  check "an item that says so in its $where is verified" "$(status_of "$id")" "verified"
+  contains "  but kept private by its own words" "$OUT" "$id kept private, not published: its own words say it is private"
+  check "  and the publish command was never called" "$([ -e "$TMP/publish-argv.txt" ] && echo called || echo never)" "never"
+}
+hw file --what "Do not publish this: which flat suits us" --done-when "the comparison is written in research/pub-dnp.md" \
+  --check "$NODE $TMP/bin/check-written.js research/pub-dnp.md --min-words 50" --key pub-dnp --publish yes --source test >/dev/null
+hold_on_words "$(id_of pub-dnp)" "WHAT"
+hw file --what "Compare the two flats" --done-when "the comparison is written in research/pub-never.md; never publish it" \
+  --check "$NODE $TMP/bin/check-written.js research/pub-never.md --min-words 50" --key pub-never --publish yes --source test >/dev/null
+hold_on_words "$(id_of pub-never)" "DONE WHEN"
+# The bare word "private" is enough on its own, in either place.
+hw file --what "Private salary notes" --done-when "the notes are written in research/pub-bare-what.md" \
+  --check "$NODE $TMP/bin/check-written.js research/pub-bare-what.md --min-words 50" --key pub-bare-what --publish yes --source test >/dev/null
+hold_on_words "$(id_of pub-bare-what)" "WHAT (the bare word private)"
+PS="$(cat "$TMP/routines/work/2026-09-15/$(id_of pub-bare-what)/prompt-seen.txt")"
+missing "  the assistant is not told its file may become a page" "$PS" "This item's file may become a page"
+contains "  it is told the file stays private, and why" "$PS" "its own words say it is private"
+missing "  and is not handed a move to apply" "$PS" "apply it"
+hw file --what "Draft the salary notes" --done-when "the notes are written in research/pub-bare-done.md, kept private" \
+  --check "$NODE $TMP/bin/check-written.js research/pub-bare-done.md --min-words 50" --key pub-bare-done --publish yes --source test >/dev/null
+hold_on_words "$(id_of pub-bare-done)" "DONE WHEN (the bare word private)"
+
+pub_file "Can a run grant itself a page" pub-grant >/dev/null
+GID="$(id_of pub-grant)"
+rm -f "$TMP/publish-argv.txt"
+OUT="$(FAKE_SAY="$SAYS" FAKE_GRANT="$TMP/work/$GID.md" run --only "$GID" --publish-cmd "$TMP/bin/publish" 2>&1)"
+contains "a fake assistant wrote permission into its own item" "$(cat "$TMP/work/$GID.md")" "PUBLISH: yes"
+contains "an assistant that writes permission into its own item is kept private" "$OUT" "$GID kept private, not published: its register says OUTWARD: no"
+check "  and the publish command was never called" "$([ -e "$TMP/publish-argv.txt" ] && echo called || echo never)" "never"
 
 # --- the mission control's own machinery runs last, however early it was filed ------------------------------------------------
 hw file --what "Tidy the mission control's own plumbing" --done-when "research/plumbing.md exists" --key plumbing --source test >/dev/null
@@ -268,6 +362,7 @@ hw announce "$C3" >/dev/null 2>&1   # the morning message showed it
 OUT="$(GODSPEED_NOW=2026-09-15T18:02:00.000Z FAKE_BEFORE="the thread before my reply" run --only "$C3" 2>&1)"
 check "a standing step that kept its UNDO copy is verified by its live check" "$(status_of "$C3")" "verified"
 contains "  by the check, not the runner" "$(cat "$TMP/work/$C3.md")" "VERIFIED check passed (test -f research/circle-three.md)"
+missing "  and a run with no publish command says nothing about pages" "$OUT" "kept private"
 UNDO="$TMP/routines/work/2026-09-15/$C3/before.txt"
 "$NODE" --input-type=module -e '
 import fs from "node:fs";

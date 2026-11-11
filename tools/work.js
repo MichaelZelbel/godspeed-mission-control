@@ -22,6 +22,12 @@
 //    expires; `tick` gives back a lease that ran out with no report.
 //  - OUTWARD work - a send, a spend, a post, a listing, a sign-up - is filed blocked, is never
 //    retried on its own, and cannot be taken or unblocked without your own words quoted on it.
+//  - PUBLICATION IS ASKED FOR, NEVER INFERRED (#268). On 6 November 2026 an unattended run made a
+//    public page of an item whose WHAT said it was private and whose OUTWARD was no, because the
+//    runner published every verified file. A page is a post, so `--publish yes` files the item
+//    outward with PUBLISH: yes, blocked until your words are on it. mc-work-run publishes a file
+//    only when its item has OUTWARD yes, PUBLISH yes and APPROVED, and its own words do not call it
+//    private; every other finished file stays private.
 //  - A failure gets a growing gap, not a hammer: one day, then two, then four, up to MAX
 //    ATTEMPTS, and after that a person decides what happens.
 //  - `sweep --card` cancels the work under a card you answered. `sweep --goal` marks the work
@@ -75,7 +81,7 @@ const KINDS = ['do', 'learn', 'repair'];
 // slash in it, ending in .md, .csv, .json or .txt, trailing punctuation ignored.
 const namesFile = (s) => String(s || '').split(/\s+/).map(t => t.replace(/[.,;:)"'\]]+$/, ''))
   .some(t => t.includes('/') && /\.(md|csv|json|txt)$/i.test(t));
-const ORDER = ['ID', 'STATUS', 'KIND', 'KEY', 'GOAL', 'CARD', 'WHAT', 'DONE WHEN', 'CHECK', 'OWNER', 'NEEDS', 'OUTWARD', 'ATTEMPTS', 'MAX ATTEMPTS',
+const ORDER = ['ID', 'STATUS', 'KIND', 'KEY', 'GOAL', 'CARD', 'WHAT', 'DONE WHEN', 'CHECK', 'OWNER', 'NEEDS', 'OUTWARD', 'PUBLISH', 'ATTEMPTS', 'MAX ATTEMPTS',
   'LEASE', 'NEXT TRY', 'STALE AFTER', 'FILED', 'SOURCE', 'RESULT', 'LINK', 'APPROVED', 'MAY', 'GOES OUT', 'ANNOUNCED'];
 const S = L.store(DIR, ORDER);
 const { die, say, oneLine, flag, today, q } = L;
@@ -366,7 +372,13 @@ cmds.file = (a) => {
   if (!OWNERS.test(owner)) die('--owner must be godspeed, person or company:<slug>');
   let needs = asNeeds(oneLine(a.needs || 'none'));
   if (!NEEDS.test(needs)) die('--needs must be none, person, authorization or capability:<what is missing>');
-  const outward = a.outward === 'yes' ? 'yes' : 'no';
+  if (a.publish !== undefined && !['yes', 'no'].includes(a.publish)) die('--publish must be yes or no');
+  const publish = a.publish === 'yes';
+  if (publish) {
+    if (a.may !== undefined) die('a page goes out on a yes for this item, not on a standing permission: file it without --may');
+    if (!namesFile(done)) die('--publish needs a DONE WHEN that names the file to publish (a path ending in .md, .csv, .json or .txt)');
+  }
+  const outward = a.outward === 'yes' || publish ? 'yes' : 'no';
   if (kind === 'repair' && (outward === 'yes' || a.may !== undefined)) die('a repair mends this machine and reaches nobody else, so it is never outward: file the outward part as an item of its own');
   if (outward === 'yes' && needs === 'none') needs = 'authorization';
   if (owner === 'person' && needs === 'none') needs = 'person';
@@ -421,7 +433,7 @@ cmds.file = (a) => {
   if (S.exists(id)) die(`${id} already exists`);
   const f = {
     ID: id, STATUS: needs === 'none' ? 'planned' : 'blocked', KIND: kind, KEY: key, GOAL: oneLine(a.goal), CARD: oneLine(a.card), WHAT: what, 'DONE WHEN': done,
-    CHECK: oneLine(a.check), OWNER: owner, NEEDS: needs, OUTWARD: outward, ATTEMPTS: '0', 'MAX ATTEMPTS': String(parseInt(a['max-attempts'] || '3', 10) || 3),
+    CHECK: oneLine(a.check), OWNER: owner, NEEDS: needs, OUTWARD: outward, PUBLISH: publish ? 'yes' : '', ATTEMPTS: '0', 'MAX ATTEMPTS': String(parseInt(a['max-attempts'] || '3', 10) || 3),
     'STALE AFTER': String(parseInt(a['stale-after'] || '7', 10) || 7), FILED: d, SOURCE: oneLine(a.source || 'unknown'),
     APPROVED: standingWords, MAY: may ? may.kind : '', 'GOES OUT': goesOut,
   };
@@ -435,6 +447,7 @@ cmds.file = (a) => {
   const how = overLimit ? ` outward: this week's ${may.perWeek} ${may.kind} steps${of} are used, so this one needs a fresh yes`
     : standingWords && goesOut ? ` outward: goes out at ${goesOut} UTC unless stopped (standing ${may.kind}${of})`
     : standingWords ? ` outward: goes out when ready and is reported after (standing ${may.kind}${of})`
+    : publish ? ' outward: a page, made only after your yes (unblock --approved-by)'
     : outward === 'yes' ? ' outward: never on its own' : '';
   say(`${id}: ${f.STATUS}` + (f.STATUS === 'blocked' ? ` (needs ${needs})` : '') + how);
 };
@@ -784,6 +797,9 @@ cmds.help = () => say(`mc-work: dispatched, attempted and verified are three dif
                                         a repair mends the mission control's own machinery on the machine the run is on:
                                         mc-work-run lets that run change the files outside the folder the mission control
                                         installed or runs there, keeping a copy of each first; never outward
+       [--publish yes]                  its file becomes a page only with this: filed outward and blocked; mc-work-run
+                                        --publish-cmd publishes it once your yes is on it and its check verified.
+                                        Without it a finished file stays private
        [--learn "<question>" --path <file>]   sugar: KIND learn, WHAT the question, DONE WHEN "the answer ... is written in <file>"
        [--outward yes --goal G --may <kind> --check "<live check>" [--goes-out YYYY-MM-DDTHH:MM]]
                                         outward work on a standing permission of goal G (mc-goals allow; a strategy
