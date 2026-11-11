@@ -112,3 +112,24 @@ assistant remembers or you say `mc-due done`. The mission control this kit comes
 gap with a daily job that reads what you typed and closes a deadline on your quoted words; the kit
 does not ship that job, because it needs a paid model call every day. Proven by
 `tools/test-obligation-close-hook.js` (Claude Code) and `tools/test-due.sh` (the events themselves).
+
+## Drafts yes, posting in your name never
+
+Added 2026-11-11. The assistant may draft posts, comments and replies, but it cannot publish,
+schedule or queue one on a social platform in your name: you post, it prepares. A check on the
+tool call itself refuses a posting tool (Upload-Post, LinkedIn, X/Twitter, Facebook, Instagram,
+Threads, Reddit, TikTok, Bluesky, Mastodon and the like), a call that sends to one of their
+posting endpoints, and a browser click on a control named Post, Publish, Share, Tweet or Schedule.
+Reading (history, status, analytics), cancelling a scheduled post, and drafting stay allowed, so a
+mistake can always be cleaned up. Any error lets the call through. Turning it off is your choice:
+remove its entry from the settings.
+
+| | Claude Code | Hermes | Codex | OpenClaw |
+|---|---|---|---|---|
+| Refuses posting, scheduling or queueing in your name (before the tool call) | yes, `.claude/hooks/no-publish-in-the-persons-name.js` (`PreToolUse`, registered in the Claude Code settings file) | no hook before a tool call | yes, the same hook through `.codex/hooks.json` (`PreToolUse`; proven for shell commands) | no hook before a tool call |
+
+**Codex, said plainly.** Codex (0.167 on the build server) loads a folder's `.codex/hooks.json`
+only once you trust that folder and review the hooks with `/hooks`; until then it runs without
+this check. Its wiring is proven with Codex-shaped shell payloads (`Bash`, `command`), because no
+Codex session on the build server is signed in; whether Codex also sends its MCP tool calls to a
+pre-tool hook is not proven here. Proven by `tools/test-no-publish-hook.js`.
