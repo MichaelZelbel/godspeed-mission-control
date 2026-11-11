@@ -9,6 +9,7 @@ import {aiProbe} from './connection-check.mjs';
 import {queueNotice} from './notices.mjs';
 import {GODSPEED_PLUGINS,enabledGodspeedPlugins} from './godspeed-plugins.mjs';
 import {configList,readConfigValue} from './hermes-config.mjs';
+import {now as clockNow} from '../../third-party/addons/godspeed-coach/lib/clock.mjs';
 
 export const UPDATE_FILE='hermes-update.json';
 const DAY=24*60*60*1000,WAIT=7*DAY,RETRY=30*DAY,UPDATE_LIMIT=40*60*1000,RELEASE_LIMIT=120000;
@@ -19,8 +20,22 @@ const errorText=result=>[result?.stderr,result?.stdout,result?.error?.message].f
 const failure=({step,result})=>({step,output:scrubCredentials(errorText(result)).trim().slice(-2000)});
 const backupName=file=>/^godspeed-pre-update-[0-9a-f-]+\.zip$/.test(file);
 const HERMES_REPOSITORY={owner:'NousResearch',name:'hermes-agent'};
+export const HERMES_HTTPS_ORIGIN=`https://github.com/${HERMES_REPOSITORY.owner}/${HERMES_REPOSITORY.name}.git`;
+export const HERMES_RELEASES_URL=`https://api.github.com/repos/${HERMES_REPOSITORY.owner}/${HERMES_REPOSITORY.name}/releases?per_page=100`;
+export const SCENARIO_HERMES_RELEASES_PATH='/releases';
+export const scenarioHermesReleaseUrl=port=>`http://127.0.0.1:${port}${SCENARIO_HERMES_RELEASES_PATH}`;
+const scenarioHermesReleaseUrlPattern=new RegExp(`^http://127\\.0\\.0\\.1:\\d+${SCENARIO_HERMES_RELEASES_PATH}$`);
+export const isScenarioHermesReleaseUrl=value=>scenarioHermesReleaseUrlPattern.test(value||'');
 const hermesRepositoryPath=`${HERMES_REPOSITORY.owner}/${HERMES_REPOSITORY.name}`.toLowerCase();
-const officialHermesRemote=value=>['https://github.com/','git@github.com:','ssh://git@github.com/'].some(prefix=>String(value||'').trim().replace(/\/+$/,'').replace(/\.git$/i,'').toLowerCase()===prefix+hermesRepositoryPath);
+export const officialHermesRemote=value=>['https://github.com/','git@github.com:','ssh://git@github.com/'].some(prefix=>String(value||'').trim().replace(/\/+$/,'').replace(/\.git$/i,'').toLowerCase()===prefix+hermesRepositoryPath);
+
+export const FOREIGN_CHECKOUT_REASON='This Hermes checkout belongs to another user.';
+// Godspeed can neither update nor repair a Hermes copy another account owns (git refuses it, and its
+// dependency sync needs that account). The updater skips such a copy and the chat check reports it.
+export function foreignCheckout(source,getuid=()=>process.getuid?.()){
+ const uid=getuid?.();if(uid===undefined||!source)return false;
+ try{return fs.statSync(source).uid!==uid;}catch{return false;}
+}
 
 export function readHermesUpdate(store){
  try{const value=JSON.parse(fs.readFileSync(path.join(store.state,UPDATE_FILE),'utf8'));return value&&typeof value==='object'&&!Array.isArray(value)?value:{};}catch{return {};}
@@ -50,7 +65,7 @@ export function eligibleRelease(releases,installed,now=Date.now(),failed={}){
 }
 
 export class HermesUpdate{
- constructor({store,descriptor,ask,run=runChild,now=()=>new Date(),platform=process.platform,getuid=()=>process.getuid?.(),isDocker=()=>false,fetcher=globalThis.fetch,lifecycle=null,releaseLimit=RELEASE_LIMIT}={}){Object.assign(this,{store,descriptor,ask,run,now,platform,getuid,isDocker,fetcher,lifecycle,releaseLimit});this.running=null;}
+ constructor({store,descriptor,ask,run=runChild,now=clockNow,platform=process.platform,getuid=()=>process.getuid?.(),isDocker=()=>false,fetcher=globalThis.fetch,lifecycle=null,releaseLimit=RELEASE_LIMIT,releaseUrl=HERMES_RELEASES_URL}={}){Object.assign(this,{store,descriptor,ask,run,now,platform,getuid,isDocker,fetcher,lifecycle,releaseLimit,releaseUrl});this.running=null;}
  state(){return readHermesUpdate(this.store);}
  save(next){atomic(path.join(this.store.state,UPDATE_FILE),JSON.stringify(next,null,2)+'\n');return next;}
  setEnabled(enabled){return this.save({...transactionState(this.state()),enabled});}
@@ -66,8 +81,8 @@ export class HermesUpdate{
   const executable=this.descriptor?.executable,sourceRaw=this.descriptor?.sourceRoot||hermesPython({executable,home:this.descriptor?.home}).source,source=sourceRaw&&path.resolve(sourceRaw);
   if(this.isDocker()||path.resolve(executable||'.').startsWith('/opt/hermes/'))return {reason:'This Hermes installation is managed by Docker.'};
   if(!this.descriptor?.verified||!path.isAbsolute(executable||'')||!source||!fs.existsSync(source))return {reason:'This assistant installation is not a recorded native Hermes checkout.'};
-  let stat;try{stat=fs.statSync(source);}catch{return {reason:'The recorded Hermes source cannot be read.'};}
-  if(this.getuid?.()!==undefined&&stat.uid!==this.getuid())return {reason:'This Hermes checkout belongs to another user.'};
+  try{fs.statSync(source);}catch{return {reason:'The recorded Hermes source cannot be read.'};}
+  if(foreignCheckout(source,this.getuid))return {reason:FOREIGN_CHECKOUT_REASON};
   const inside=await this.git(['rev-parse','--is-inside-work-tree'],source);if(inside.code!==0||inside.stdout.trim()!=='true')return {reason:'The recorded Hermes source is not a Git checkout.'};
   const dirty=await this.git(['status','--porcelain'],source);if(dirty.code!==0)return {reason:'The Hermes checkout could not be checked.'};
   if(dirty.stdout.trim())return {reason:'The Hermes checkout has uncommitted changes.'};
@@ -81,7 +96,7 @@ export class HermesUpdate{
  async releases(){
   const abort=new AbortController();
   try{
-   const response=await this.releaseValue(this.fetcher(`https://api.github.com/repos/${HERMES_REPOSITORY.owner}/${HERMES_REPOSITORY.name}/releases?per_page=100`,{headers:{Accept:'application/vnd.github+json','User-Agent':'godspeed-mission-control'},signal:abort.signal}),abort);
+   const response=await this.releaseValue(this.fetcher(this.releaseUrl,{headers:{Accept:'application/vnd.github+json','User-Agent':'godspeed-mission-control'},signal:abort.signal}),abort);
    if(!response?.ok)throw Object.assign(Error('Hermes releases request failed ('+(response?.status||'unknown')+').'),{stderr:await this.releaseValue(response?.text?.()||'',abort),code:response?.status||1});
    return {releases:await this.releaseValue(response.json(),abort)};
   }catch(error){return {error};}finally{abort.abort();}

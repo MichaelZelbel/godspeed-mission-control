@@ -1,6 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';
 import {fileURLToPath} from 'node:url';import {execFileSync,spawnSync} from 'node:child_process';
-import {Store} from '../core/records/store.mjs';import {NativeScheduler} from '../core/native-scheduler.mjs';import {installStarter} from '../core/starter-workspace.mjs';
+import {Store} from '../core/records/store.mjs';import {NativeScheduler,routineRunEvidencePaths} from '../core/native-scheduler.mjs';import {runChild} from '../core/child-process.mjs';import {installStarter} from '../core/starter-workspace.mjs';
 import {SCRIPT_TIMEOUT_SECONDS,COMPRESSION_THRESHOLD_TOKENS,godspeedHermesSettings,setConfigValue,readConfigValue,configList,CRON_PROVIDER} from '../core/hermes-config.mjs';
 
 // What a live run of the book's prompts found on 9 October 2026 (a scratch Windows install, free
@@ -111,10 +111,13 @@ test('every wiring of a mission control made from the starter gives its Hermes t
  for(const name of ['mc-watch','mc-subs'])assert.match(fs.readFileSync(path.join(home,'bin',name),'utf8'),new RegExp('personal-command\\.mjs\' \''+name.slice(3)+'\' "\\$@"'));
  // The add-ons' context plugins are enabled, the Charm Challenge's too (spec 2026-10-21), each with
  // its mission control, its recipe and its command.
- assert.deepEqual(configList(readConfigValue(text,['plugins','enabled'])),['godspeed-coach','godspeed-journal','godspeed-headache','godspeed-charm','godspeed-context','godspeed-reply','godspeed-chat-tidy']);
+ assert.deepEqual(configList(readConfigValue(text,['plugins','enabled'])),['godspeed-coach','godspeed-journal','godspeed-headache','godspeed-charm','godspeed-context','godspeed-reply','godspeed-chat-tidy','godspeed-chat-guard']);
  // The night chat tidy-up's command is copied into the home, not only named as enabled.
  assert.match(fs.readFileSync(path.join(home,'plugins','godspeed-chat-tidy','plugin.yaml'),'utf8'),/^name: godspeed-chat-tidy$/m);
  assert.match(fs.readFileSync(path.join(home,'plugins','godspeed-chat-tidy','__init__.py'),'utf8'),/COMMAND = "godspeed-chat-tidy"[\s\S]*def register\(ctx\):\n[\s\S]*ctx\.register_command\(COMMAND, tidy/);
+ // The chat guard is copied with its mission control, where it saves the messages it could not answer.
+ assert.match(fs.readFileSync(path.join(home,'plugins','godspeed-chat-guard','__init__.py'),'utf8'),/def register\(ctx\):\n[\s\S]*ctx\.register_telegram_handler\(factory\)/);
+ assert.equal(fs.readFileSync(path.join(home,'plugins','godspeed-chat-guard','mission-control.txt'),'utf8'),root+'\n');
  assert.equal(fs.readFileSync(path.join(home,'plugins','godspeed-charm','mission-control.txt'),'utf8'),root+'\n');
  assert.match(fs.readFileSync(path.join(home,'plugins','godspeed-charm','__init__.py'),'utf8'),/GODSPEED_CHARM_SCRIPT/);
  assert.match(fs.readFileSync(path.join(home,'skills','charm-challenge','SKILL.md'),'utf8'),/^---\nname: charm-challenge\n/);
@@ -153,6 +156,127 @@ test('Run now answers at once and the routine runs on in the background',async t
  assert.throws(()=>scheduler.startRun('nope'),/Choose an existing Hermes task/,'a wrong id is said at once');
  store.save('settings',{id:'installation',owner:'vps'});
  assert.throws(()=>scheduler.startRun('brief'),/machine named vps/);
+});
+
+test('Run now keeps the admitted Hermes child, and a refusal keeps its real lifecycle owner',async t=>{
+ const root=temporary(t,'run-diagnostics'),home=path.join(root,'.hermes'),store=new Store(root,{device:'pc'});
+ store.save('settings',{id:'installation',owner:'pc',timezone:'Europe/Berlin',delivery:'notebook'});
+ fs.mkdirSync(path.join(home,'cron'),{recursive:true});fs.writeFileSync(path.join(home,'cron','jobs.json'),JSON.stringify({jobs:[{id:'brief',name:'Morning brief'}]}));
+ let finish,calls=0;const scheduler=new NativeScheduler(store,{executable:'hermes',home,device:'pc',run:async(executable,args,{onStart}={})=>{calls++;onStart?.({pid:4321,tree:{root:4321,process_group:4321}});await new Promise(resolve=>{finish=resolve;});return {code:0,signal:null,stdout:'the Hermes run log',stderr:'the Hermes warning'};}});
+ assert.deepEqual(scheduler.startRun('brief'),{started:true,id:'brief'});
+ await new Promise(resolve=>setImmediate(resolve));
+ assert.throws(()=>scheduler.startRun('brief'),/updating or another routine is already running/);assert.equal(calls,1,'the refusal did not start a concurrent Hermes command');
+ let diagnostics=JSON.parse(fs.readFileSync(path.join(store.state,'routine-run-diagnostics.json'),'utf8')).runs;
+ assert.deepEqual(diagnostics.map(run=>({admitted:run.admitted,lifecycle_owner:run.lifecycle_owner})),[{admitted:true,lifecycle_owner:'routine run'},{admitted:false,lifecycle_owner:'routine run'}]);
+ assert.deepEqual(diagnostics[0].command,['hermes','cron','run','brief']);assert.deepEqual(diagnostics[0].child,{pid:4321,tree:{root:4321,process_group:4321}});
+  const evidencePath=diagnostics[0].run_log.path;
+  assert.equal(evidencePath,routineRunEvidencePaths({workspace:root,home}).output);
+ finish();await scheduler.running;
+ diagnostics=JSON.parse(fs.readFileSync(path.join(store.state,'routine-run-diagnostics.json'),'utf8')).runs;
+ assert.equal(diagnostics[0].exit_status,0);assert.equal(diagnostics[0].stderr,'the Hermes warning');assert.equal(diagnostics[0].run_log.command_output,'the Hermes run log');assert.equal(diagnostics[0].run_log.path,evidencePath);
+});
+
+test('routine evidence paths belong to the scheduler workspace and Hermes home',()=>{
+ assert.deepEqual(routineRunEvidencePaths({workspace:'/owned/workspace',home:'/owned/hermes'}),{diagnostics:'/owned/workspace/.godspeed/routine-run-diagnostics.json',output:'/owned/hermes/cron/output'});
+});
+
+test('a failed rejected-run diagnostic keeps the active routine refusal',t=>{
+ const root=temporary(t,'rejected-run-diagnostic-failure'),home=path.join(root,'.hermes'),store=new Store(root,{device:'pc'}),jobs=path.join(home,'cron','jobs.json');
+ store.save('settings',{id:'installation',owner:'pc',timezone:'Europe/Berlin',delivery:'notebook'});fs.mkdirSync(path.dirname(jobs),{recursive:true});fs.writeFileSync(jobs,JSON.stringify({jobs:[{id:'brief',name:'Morning brief'}]}));
+ let calls=0;const scheduler=new NativeScheduler(store,{executable:'hermes',home,device:'pc',run:async()=>{calls++;return {stdout:''};}}),release=scheduler.lifecycle.acquire('assistant update');
+ scheduler.saveRunDiagnostic=()=>{throw Error('diagnostic storage is unavailable');};
+ assert.throws(()=>scheduler.startRun('brief'),/updating or another routine is already running/);assert.equal(calls,0,'the refusal did not start a concurrent Hermes command');release();
+});
+
+test('a failed admission diagnostic does not retain the routine lease',async t=>{
+ const root=temporary(t,'run-diagnostic-admission-failure'),home=path.join(root,'.hermes'),store=new Store(root,{device:'pc'});
+ store.save('settings',{id:'installation',owner:'pc',timezone:'Europe/Berlin',delivery:'notebook'});fs.mkdirSync(path.join(home,'cron'),{recursive:true});fs.writeFileSync(path.join(home,'cron','jobs.json'),JSON.stringify({jobs:[{id:'brief',name:'Morning brief'}]}));
+ const scheduler=new NativeScheduler(store,{executable:'hermes',home,device:'pc',run:async()=>({stdout:''})}),save=scheduler.saveRunDiagnostic;
+ scheduler.saveRunDiagnostic=()=>{throw Error('diagnostic storage is unavailable');};
+ assert.throws(()=>scheduler.startRun('brief'),/diagnostic storage is unavailable/);assert.equal(scheduler.lifecycle.busy,false,'the failed admission released its lease');
+ scheduler.saveRunDiagnostic=save;
+ assert.deepEqual(scheduler.startRun(),{started:true});await scheduler.running;
+ await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(scheduler.lifecycle.busy,false,'the next manual routine completed normally');
+});
+
+test('a failed post-admission diagnostic reports without changing a routine result or handoff',async t=>{
+ for(const [name,run,assertResult,after,expectedFailures] of [
+  ['success',async(_executable,_args,{onStart})=>{onStart({pid:4321});return {code:0,stdout:'done'};},async scheduler=>assert.equal(await scheduler.running,'done'),1,['completion diagnostic unavailable','completion diagnostic unavailable']],
+  ['failure',async(_executable,_args,{onStart})=>{onStart({pid:4321});throw Error('Hermes routine failed');},async scheduler=>await assert.rejects(scheduler.running,/Hermes routine failed/),0,['completion diagnostic unavailable','completion diagnostic unavailable','Hermes routine failed']],
+ ]){
+  await t.test(name,async t=>{
+   const root=temporary(t,'completion-diagnostic-'+name),home=path.join(root,'.hermes'),store=new Store(root,{device:'pc'}),jobs=path.join(home,'cron','jobs.json'),failures=[];let handoffs=0;
+   store.save('settings',{id:'installation',owner:'pc',timezone:'Europe/Berlin',delivery:'notebook'});fs.mkdirSync(path.dirname(jobs),{recursive:true});fs.writeFileSync(jobs,JSON.stringify({jobs:[{id:'brief',name:'Morning brief'}]}));
+   const scheduler=new NativeScheduler(store,{executable:'hermes',home,device:'pc',run});
+   scheduler.onFailure=error=>failures.push(error.message);scheduler.afterTick=()=>{handoffs++;};scheduler.updateRunDiagnostic=()=>{throw Error('completion diagnostic unavailable');};scheduler.startRun('brief');await assertResult(scheduler);
+   assert.deepEqual(failures,expectedFailures);assert.equal(handoffs,after);
+  });
+ }
+});
+
+test('a failed admitted Hermes child retains its output path, exit status, and stderr',async t=>{
+ const root=temporary(t,'run-diagnostic-failure'),home=path.join(root,'.hermes'),store=new Store(root,{device:'pc'});
+ store.save('settings',{id:'installation',owner:'pc',timezone:'Europe/Berlin',delivery:'notebook'});
+ fs.mkdirSync(path.join(home,'cron'),{recursive:true});fs.writeFileSync(path.join(home,'cron','jobs.json'),JSON.stringify({jobs:[{id:'brief',name:'Morning brief'}]}));
+ const scheduler=new NativeScheduler(store,{executable:'hermes',home,device:'pc',run:async(executable,args,{onStart}={})=>{onStart?.({pid:4321,tree:{root:4321,process_group:4321}});throw Object.assign(Error('Command failed with exit code 12'),{code:12,stderr:'Hermes routine failure'});}});
+ scheduler.startRun('brief');
+ const admitted=JSON.parse(fs.readFileSync(path.join(store.state,'routine-run-diagnostics.json'),'utf8')).runs[0];
+ await scheduler.running.catch(()=>{});
+ const run=JSON.parse(fs.readFileSync(path.join(store.state,'routine-run-diagnostics.json'),'utf8')).runs[0];
+ assert.equal(run.run_log.path,admitted.run_log.path);assert.equal(run.exit_status,12);assert.equal(run.stderr,'Hermes routine failure');assert.deepEqual(run.child,{pid:4321,tree:{root:4321,process_group:4321}});
+});
+
+test('a failed admitted routine reports its error and releases the routine lease',async t=>{
+ const root=temporary(t,'run-failure-notice'),home=path.join(root,'.hermes'),store=new Store(root,{device:'pc'}),jobs=path.join(home,'cron','jobs.json'),failures=[];
+ store.save('settings',{id:'installation',owner:'pc',timezone:'Europe/Berlin',delivery:'notebook'});fs.mkdirSync(path.dirname(jobs),{recursive:true});fs.writeFileSync(jobs,JSON.stringify({jobs:[{id:'brief',name:'Morning brief'}]}));
+ const scheduler=new NativeScheduler(store,{executable:'hermes',home,device:'pc',run:async()=>{throw Error('Hermes routine failed');}});scheduler.onFailure=error=>failures.push(error.message);
+ scheduler.startRun('brief');await scheduler.running.catch(()=>{});await new Promise(resolve=>setImmediate(resolve));
+ assert.deepEqual(failures,['Hermes routine failed']);assert.equal(scheduler.lifecycle.busy,false,'the failed routine released its lease');
+});
+
+test('interrupted Hermes children retain their buffered output in routine diagnostics',async t=>{
+ const root=temporary(t,'interrupted-run-diagnostics'),home=path.join(root,'.hermes'),store=new Store(root,{device:'pc'}),jobs=path.join(home,'cron','jobs.json');
+ store.save('settings',{id:'installation',owner:'pc',timezone:'Europe/Berlin',delivery:'notebook'});fs.mkdirSync(path.dirname(jobs),{recursive:true});fs.writeFileSync(jobs,JSON.stringify({jobs:[{id:'brief',name:'Morning brief'}]}));
+ for(const code of ['TIMEOUT','OUTPUT_LIMIT','ABORTED']){
+  const scheduler=new NativeScheduler(store,{executable:'hermes',home,device:'pc',run:async()=>{throw Object.assign(Error('Hermes stopped'),{code,stdout:'before stdout '+code,stderr:'before stderr '+code});}});
+  scheduler.startRun('brief');await scheduler.running.catch(()=>{});
+  const run=JSON.parse(fs.readFileSync(path.join(store.state,'routine-run-diagnostics.json'),'utf8')).runs.at(-1);
+  assert.equal(run.exit_status,code);assert.match(run.stderr,new RegExp('before stderr '+code));assert.match(run.run_log.command_output,new RegExp('before stdout '+code));
+ }
+});
+
+test('run diagnostics use durable ids, one command specification, and scrubbed output',async t=>{
+ const root=temporary(t,'durable-run-diagnostics'),home=path.join(root,'.hermes'),store=new Store(root,{device:'pc'}),jobs=path.join(home,'cron','jobs.json');
+ store.save('settings',{id:'installation',owner:'pc',timezone:'Europe/Berlin',delivery:'notebook'});fs.mkdirSync(path.dirname(jobs),{recursive:true});fs.writeFileSync(jobs,JSON.stringify({jobs:[{id:'brief',name:'Morning brief'}]}));
+ const failure=Object.assign(Error('Command failed with exit code 12'),{code:12,stderr:'\u001b[31mapi_key=sk-secret-token-12345678\u001b[0m\nkept stderr',stdout:'\u001b[32mBearer secret-token-123456789\u001b[0m\nkept stdout'}),calls=[],run=async(executable,args)=>{calls.push([executable,...args]);throw failure;};
+ const first=new NativeScheduler(store,{executable:'hermes',home,device:'pc',run});first.startRun('brief');await first.running.catch(()=>{});
+ const second=new NativeScheduler(store,{executable:'hermes-renamed',home,device:'pc',run});second.startRun('brief');await second.running.catch(()=>{});
+ const diagnostics=JSON.parse(fs.readFileSync(path.join(store.state,'routine-run-diagnostics.json'),'utf8')).runs.filter(entry=>entry.admitted);
+ assert.equal(new Set(diagnostics.map(entry=>entry.id)).size,2);assert.deepEqual(diagnostics.map(entry=>entry.command),[['hermes','cron','run','brief'],['hermes-renamed','cron','run','brief']]);assert.deepEqual(calls,diagnostics.map(entry=>entry.command));
+ for(const entry of diagnostics){assert.doesNotMatch(entry.stderr,/sk-secret-token|\x1b\[/);assert.doesNotMatch(entry.run_log.command_output,/secret-token|\x1b\[/);assert.match(entry.stderr,/kept stderr/);assert.match(entry.run_log.command_output,/kept stdout/);}
+});
+
+// A server set to its own Bot API (GODSPEED_TELEGRAM_API) routed only the gateway there; a routine
+// delivered by `hermes cron run` builds a Bot with no address and went to api.telegram.org.
+test('a Bot built without an address uses the server\'s own Bot API, and only a safe one',t=>{
+ const root=temporary(t,'telegram-route'),package_=path.join(root,'telegram');fs.mkdirSync(package_);
+ fs.writeFileSync(path.join(package_,'__init__.py'),'from telegram._bot import Bot\n');
+ fs.writeFileSync(path.join(package_,'_bot.py'),"class Bot:\n    def __init__(self, token, base_url='https://api.telegram.org/bot', base_file_url='https://api.telegram.org/file/bot', request=None):\n        self.base_url, self.base_file_url = base_url, base_file_url\n");
+ const hooks=fileURLToPath(new URL('../assistant-files',import.meta.url));
+ const bot=(api,code)=>{const result=spawnSync(process.platform==='win32'?'python':'python3',['-c',code],{encoding:'utf8',env:{...process.env,PYTHONPATH:[hooks,root].join(path.delimiter),GODSPEED_FILE_HERMES:'0',GODSPEED_TELEGRAM_API:api}});assert.equal(result.status,0,result.stderr);return result.stdout.trim();};
+ const plain="from telegram import Bot; b = Bot('t'); print(b.base_url, b.base_file_url)";
+ assert.equal(bot('http://127.0.0.1:8081',plain),'http://127.0.0.1:8081/bot http://127.0.0.1:8081/file/bot');
+ assert.equal(bot('https://bots.example.org/api/',plain),'https://bots.example.org/api/bot https://bots.example.org/api/file/bot');
+ assert.equal(bot('http://127.0.0.1:8081',"from telegram import Bot; print(Bot('t', base_url='https://x.example/bot').base_url)"),'https://x.example/bot','an address given by the caller stays');
+ assert.equal(bot('http://bots.example.org',plain),'https://api.telegram.org/bot https://api.telegram.org/file/bot','plain HTTP off this machine is refused');
+ assert.equal(bot('',plain),'https://api.telegram.org/bot https://api.telegram.org/file/bot','no setting, no change');
+});
+
+test("a routine's message reaches the owner without Hermes' header, job code and footer",()=>{
+ assert.equal(readConfigValue(godspeedHermesSettings(''),['cron','wrap_response']),'false');
+ assert.equal(readConfigValue(godspeedHermesSettings('cron:\n  wrap_response: true\n'),['cron','wrap_response']),'false',"an existing install with Hermes' default gets it too");
+ assert.equal(readConfigValue(godspeedHermesSettings('cron:\n  wrap_response: maybe\n'),['cron','wrap_response']),'maybe','a value the owner wrote stays');
 });
 
 // Hermes stops a cron script at cron.script_timeout_seconds (3600 unless set), one setting for all

@@ -12,12 +12,12 @@ which a step written inside a workflow file cannot be. They live in a folder of 
 same reason `stage/` does: everything in `tools/` is copied onto every user's computer as a program,
 and these are not programs for users.
 
-`chat-tidy-at-night`, `disk-filling`, `missed-routine` and `deadline-closes-itself` are not yet jobs of
+`chat-tidy-at-night`, `disk-filling`, `missed-routine`, `deadline-closes-itself` and `held-by-a-claim` are not yet jobs of
 that workflow: their jobs are written in the pull request that added them and are applied in the
 release step. Until then they are run by hand, with the environment their rows below name. Remove this
 paragraph when the jobs are in `.github/workflows/scenarios.yml`.
 
-`workouts-from-hevy`, `day-becomes-facts`, `hermes-update-rollback` and `first-day` are jobs of that workflow, and the verdict requires all four. Their fixtures are loopback-only and contain only made-up people, workouts and messages.
+`workouts-from-hevy`, `day-becomes-facts`, `hermes-update-rollback` and `first-day` are jobs of that workflow, and the verdict requires all four unless the run was started with `-f only=<job names>`, in which case it judges only the jobs named there. Their fixtures are loopback-only and contain only made-up people, workouts and messages.
 
 | script | what it proves |
 | --- | --- |
@@ -53,6 +53,7 @@ paragraph when the jobs are in `.github/workflows/scenarios.yml`.
 | `disk-filling.sh` | on the Docker server install, with a small file system over the data folder made to read 86%: the daily connection check says one message naming the three biggest places and opens one deadline, a second run says and opens nothing, at 75% the deadline closes; the cleanup routine then takes the 40-day-old request dump, session transcript and run log and leaves the note, both chats, the backup and the file of a listed session |
 | `missed-routine.sh` | not yet on the installed server's Telegram path, so acting ends at once in a FAIL line that says so; its checking part is held by `test-scenarios.sh`. Once moved: with one routine whose time passed without a run, one that failed twice and one that failed once, the daily connection check sends one message naming the first two and not the third, a second run sends nothing, and a good run of each closes what was opened |
 | `deadline-closes-itself.sh` | not yet on the installed server's Telegram path, so acting ends at once in a FAIL line that says so; its checking part is held by `test-scenarios.sh`. Once moved: a deadline on the AI's key closes on the next deadline run after the key is replaced in Settings, a deadline about Telegram closes when the connection check passes, and neither key's value is in any log, record or evidence file |
+| `held-by-a-claim.sh` | a step the person postponed until the book is out of beta (a world claim written with `mc-holds`) is kept off the real daily decision's moves, its card and the work register, with the claim named in the decision's output, while a step about someone else stays; once the book's beta claim ends the next decision proposes it again. The decision's assistant is a stand-in and it needs no key; `GODSPEED_SCENARIO_PRODUCT=<a checkout> bash scenarios/held-by-a-claim.sh local` runs it against a checkout |
 | `workouts-from-hevy.sh` (a workflow job) | Docker and Linux installs reject a made-up Hevy key, then import made-up workouts through Settings; their one hourly routine updates a changed workout and removes a deleted one without keeping the key elsewhere |
 | `day-becomes-facts.sh` (a workflow job) | the nightly remembered-facts routine turns an invented day's move and doctor into dated source-linked facts, closes the older city, ignores machine/`track` messages, and makes no second-copy records |
 | `hermes-update-rollback.sh` (a workflow job) | the notebook's 04:15 path keeps a good local Hermes release, rolls a broken one back with one notice, and leaves a three-day-old local release alone |
@@ -124,7 +125,7 @@ Named by the job, never in a file here (for the scenarios above that await their
 | `chat-tidy-at-night`, `deadline-closes-itself` | `GODSPEED_SCENARIO_AI_KEY` | the tidied chat and the next message need a model; Settings' own replacement of a key tests the new key with one; the same two say which. `missed-routine` and `disk-filling` need none |
 | `day-becomes-facts` | `GODSPEED_SCENARIO_AI_KEY` | the installed remembered-facts routine extracts from the invented archive with the scenario AI; the same URL and model variables say which. The workouts and Hermes fixtures need no real account or key. |
 
-`GODSPEED_SCENARIO_AI_URL` and `GODSPEED_SCENARIO_AI_MODEL` have no default: a scenario that needs an AI fails with a plain sentence naming whichever is missing, and it also fails if the URL is on openrouter.ai, so the checks can never spend OpenRouter money. They run on `https://api.anthropic.com/v1` with `claude-haiku-4-5`, set as repository variables, and the key is the secret `GODSPEED_SCENARIO_AI_KEY`.
+`GODSPEED_SCENARIO_AI_URL` and `GODSPEED_SCENARIO_AI_MODEL` have no default: a scenario that needs an AI fails with a plain sentence naming whichever is missing. The capped OpenRouter test account runs at `https://openrouter.ai/api/v1` with `anthropic/claude-haiku-5.5`, set as repository variables, and the key is the secret `GODSPEED_SCENARIO_AI_KEY`. The scenarios refuse a model that is not a small Claude Haiku model. Their Docker Telegram setup chooses OpenRouter for that URL (or Anthropic for `https://api.anthropic.com/v1`) and verifies that the installed assistant uses the configured model.
 
 The six reminder scenarios need no key at all: everything they do is this machine's own. "Two
 computers" are two installations on the one machine, each with its own mission control folder, its
@@ -142,7 +143,7 @@ install: the video add-on's own setup fetches HyperFrames' pinned release, ffmpe
 model, because that is what a reader's setup does. They run it from the install's own carried copy
 of the add-on (`mc_video_on`), so what runs is the commit the stage pins.
 
-`charm-challenge.sh` is the one scenario that moves a clock. A twenty-one day count cannot be
+`charm-challenge.sh` moves a clock. A twenty-one day count cannot be
 watched starting over on one machine in one job while every day is today, so it sets `GODSPEED_NOW`
 on the notebook's own service and starts it again, which is the product's own frozen clock for a
 rehearsal (`notebook/core/tracker-operations.mjs`). It counts the days in UTC and says so if the
@@ -152,6 +153,9 @@ chat over the notebook's own chat, the line the morning brief is given through t
 and the notebook's own run of what is due) and the note it wrote, and the Trackers shelf's own list
 and the card's own numbers. The day it runs the brief is the day the clock has moved to, so the
 routine is due whether the install had made it already or not.
+
+`hermes-update-rollback.sh` also moves the installed notebook service clock, to 04:15 for each
+nightly Hermes update decision it rehearses.
 
 ## Where they find the assistant, and its chat store
 
@@ -210,7 +214,15 @@ withdrawn list carried from `beta`, add-ons pinned as `third-party/addons/source
 the server image the commit's own `v2-sha-<commit>`, or the newest first-parent ancestor's within 50
 when CI built none for it), written with the commit's files into a folder the jobs read as
 `file://`. Main's own `stage.json` is never read by a night, because it names whatever version was
-frozen last. Its cases are in `test-scenarios.sh`.
+frozen last.
+
+A selected server scenario on a same-repository pull request is the exception: its `pr-image` job publishes
+only `pr-<number>-<head-sha>`, resolves that tag to an immutable `ghcr.io/...@sha256:...` image, and
+passes that opaque digest to its stage job. The stage accepts only that digest for the product's
+server image and does not look for a `v2-sha-*` image or an ancestor if it is absent or malformed.
+That PR-image proof supports exactly one public-stage server edition; a second edition is rejected
+without fallback.
+Every other run keeps the ordinary image policy above. Its cases are in `test-scenarios.sh`.
 
 Only the stage's own ref is read from that folder. A scenario that first installs an older version
 (`BEFORE_THE_MOVE`, `WITH_THE_VIDEO_SKILLS`) reads it from GitHub, as it always has

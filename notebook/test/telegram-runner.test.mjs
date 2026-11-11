@@ -49,6 +49,13 @@ test('the chat is told the browser\'s time zone and where the notebook opens, th
  assert.equal(notebookLink({},null,()=>{throw Error('unreadable');}),'');
 });
 
+test("the gateway finds the assistant's own commands, such as godspeed-brief for today's brief",async()=>{
+ const f=fixture();f.runner.env={...f.runner.env,HERMES_HOME:'/fictional/hermes-home'};
+ f.write('connection.json',connection);f.write('setup.json',{bot_id:4242,owner_id:111,chat_id:111,done:true});await tick(f.runner);
+ const gateway=f.started.find(child=>child.args?.[0]==='gateway');assert.ok(gateway,'the gateway runs');
+ assert.deepEqual(gateway.options.env.PATH.split(path.delimiter),[path.join('/fictional/hermes-home','bin'),'/usr/bin']);
+});
+
 test('a chat that stops is started again after a pause; once done, the gateway takes the bot at once',async()=>{
  const f=fixture();f.write('connection.json',connection);await tick(f.runner);
  f.started[0].emit('exit',1);await tick(f.runner);assert.equal(f.started.length,1,'not at once after a failure');assert.equal(f.state().state,'waiting-to-retry');

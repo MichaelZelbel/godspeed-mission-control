@@ -10,11 +10,11 @@ import {ActivityFeed} from '@/components/activity/ActivityFeed';
 import {CaptureEmptyState} from '@/components/notes/CaptureEmptyState';
 import {FileText,Users,MessageCircle,Bot,UserRound} from 'lucide-react';
 import {openFloatingChat} from '@/components/chat/GlobalAIChatFAB';
-import {peopleCountQuery} from './home-counts.mjs';
+import {peopleCountRequest} from './home-counts.mjs';
 export default function Home(){
  const navigate=useNavigate(),notes=useNotes('all');
  const status=useQuery({queryKey:['candidate-status'],queryFn:async()=>{const r=await fetch('/api/status');if(!r.ok)throw new Error('Could not read connection status');return r.json();},refetchInterval:5000});
- const people=useQuery({queryKey:['home-people-count'],queryFn:async()=>{const r=await fetch('/api/query',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(peopleCountQuery)});if(!r.ok)throw new Error('Could not load people');return r.json();}});
+ const people=useQuery({queryKey:['home-people-count'],queryFn:async()=>{const r=await fetch('/api/rpc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(peopleCountRequest)});if(!r.ok)throw new Error('Could not load people');return {count:(await r.json()).data?.total};}});
  // The chat was a small link in the third card, so people did not see they could talk to
  // Godspeed here (16 October 2026). This opens the same floating chat as the round
  // button, or the chat page where there is none.

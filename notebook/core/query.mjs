@@ -12,6 +12,9 @@ import {isTalkGate,talkArea,talkCalendar} from './routine-times.mjs';
 const talkRow=(job,root)=>{if(!isTalkGate(job))return {};const calendar=talkCalendar(talkArea(root));return calendar?{calendar,talk:true}:{};};
 import {nativeCardRows} from './card-commands.mjs';
 import {momentDates} from './timestamps.mjs';
+// A record with no name and no nickname (only written before 2.0.0-beta.14, issue 266) is not listed
+// among the people, though it stays on disk with whatever links to it.
+import {personNames} from './person-names.mjs';
 
 const inventory = JSON.parse(fs.readFileSync(fileURLToPath(new URL('../../docs/full-version/source-inventory.json', import.meta.url)), 'utf8'));
 export const tables = new Set(inventory.dependencies.flatMap(d => d.tables).filter(t => t !== 'note-attachments'));
@@ -404,7 +407,10 @@ export class QueryService {
             return correction;
           }
           const record = this.store.prepare(table, { ...(defaults[table] || {}), ...old, ...payload }, old);
-          if(table==='contacts'&&operation!=='delete'&&!(typeof record.name==='string'&&record.name.trim()))throw new Error('A person needs a name. Type their name and save again.');
+          // Opening a person records when (last_viewed_at); that is not a change to them, and is
+          // let through for a person saved without a name before the rule. Until issue 266 it was
+          // refused, and the first open of such a person ended in this error.
+          if(table==='contacts'&&operation!=='delete'&&!(old&&Object.keys(payload).every(key=>key==='last_viewed_at'||key==='id'))&&!(typeof record.name==='string'&&record.name.trim()))throw new Error('A person needs a name. Type their name and save again.');
           if(table==='contact_groups'&&payload.type&&payload.type!=='contact_groups')record.group_type=payload.type;
           if(table==='contact_group_memberships'&&!record.status_changed_at)record.status_changed_at=record.created_at;
           if(table==='contact_group_memberships'&&(!record.last_movement_at||old&&payload.status&&old.status!==payload.status))record.last_movement_at=record.updated_at;
@@ -492,7 +498,7 @@ export class QueryService {
       // and every capitalised name after a lowercase or accented one (Nina,
       // Otto after Ömer) was never listed.
       const byName = (a, b) => compareValues(String(a.name ?? ''), String(b.name ?? '')) || compareValues(String(a.id), String(b.id));
-      const query = String(args.search_text || '').toLowerCase(), all = this.rows('contacts').filter(r => !r.merged_into && r.id !== args.exclude_contact_id && [r.name, ...(r.aliases || [])].some(n => String(n ?? '').toLowerCase().includes(query))).sort(byName);
+      const query = String(args.search_text || '').toLowerCase(), all = this.rows('contacts').filter(r => !r.merged_into && r.id !== args.exclude_contact_id && personNames(r).some(n => n.includes(query))).sort(byName);
       const after = all.filter(r => !args.after_id || byName(r, { name: args.after_name, id: args.after_id }) > 0);
       const rows = after.slice(0, args.page_size || 50), last = rows.at(-1); return { rows, total: all.length, next: after.length > rows.length ? { name: last.name, id: last.id } : null };
     }

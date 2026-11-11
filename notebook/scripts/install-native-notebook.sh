@@ -243,7 +243,8 @@ previous_setting() {
 # assistant, the routines and the tools here. Until 7 October 2026 a server installed this
 # way had only http://127.0.0.1:47831, which no other computer or phone can open. A server
 # is a computer without a desktop whose public address has a name in public DNS
-# (server-address.mjs), or one named in GODSPEED_HOST.
+# (server-address.mjs finds its provider name or the checked sslip.io fallback),
+# or one named in GODSPEED_HOST.
 CADDY_VERSION=2.11.4
 HTTPS_SERVICE=godspeed-https.service
 CADDYFILE=/etc/caddy/Caddyfile
@@ -529,6 +530,9 @@ if [ -n "${GODSPEED_HOST:-}" ]; then
     || { echo "GODSPEED_HOST is not a name a web address can have: $GODSPEED_HOST" >&2; exit 1; }
 elif [ "$(uname -s)" = Linux ] && ! desktop_here; then
   web_host=$("$node" "$version/notebook/scripts/server-address.mjs" 2>/dev/null || true)
+  if [ -z "$web_host" ] && "$node" "$version/notebook/scripts/server-address.mjs" --has-public-ip; then
+    web_problem="This server has a public address, but Godspeed could not find a public DNS name for it. Point a hostname at this server and rerun with GODSPEED_HOST set to that name, or set up private Tailscale access. The notebook is only reachable on this server until then."
+  fi
 fi
 if [ -n "$web_host" ]; then
   export GODSPEED_HOST="$web_host" GODSPEED_WEB_PORT=${GODSPEED_WEB_PORT:-47833}

@@ -10,6 +10,17 @@ export const HYPERFRAMES_TAG = "v0.8.43";
 export const HYPERFRAMES_VERSION = HYPERFRAMES_TAG.slice(1);
 export const MARKER = ".installed-by-mc-video";
 
+// A package manager can finish without leaving the program its caller needs, and a lifecycle
+// download can fail after the package manager has fetched the package. Retry the whole install
+// once, accepting it only when both its exit status and the caller's readiness check agree.
+export function retryInstall(install, installed, retrying = () => {}) {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    if (install().status === 0 && installed()) return true;
+    if (attempt === 0) retrying();
+  }
+  return false;
+}
+
 // The recipes this add-on carries in skill/ and the setup copies into the reader's skills folder,
 // beside the HyperFrames recipes it downloads from the pin. Until 31 October 2026 Godspeed Mission
 // Control handed all four to every new reader whether they made videos or not; now only the people

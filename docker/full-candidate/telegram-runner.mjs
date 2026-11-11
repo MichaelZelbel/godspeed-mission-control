@@ -84,8 +84,12 @@ export class TelegramRunner{
           GODSPEED_TG_BACKUP:`${JSON.stringify(process.execPath)} ${JSON.stringify(this.backup)}`}};
     if(owned)
       return {kind:'gateway',key:'gateway:'+digest(connection.token,setup.owner_id,setup.chat_id),command:this.hermes,args:['gateway','run'],
-        // The assistant with tools sees only what passedEnvironment allows (assistant-files.mjs).
-        env:{...passedEnvironment(this.env),TELEGRAM_BOT_TOKEN:connection.token,TELEGRAM_ALLOWED_USERS:String(setup.owner_id),TELEGRAM_HOME_CHANNEL:String(setup.chat_id)}};
+        // The assistant with tools sees only what passedEnvironment allows (assistant-files.mjs), and
+        // the commands wire-assistant.mjs puts in Hermes' bin folder (godspeed-brief for "today's
+        // brief", godspeed-coach, godspeed-step), as a routine sees them (assistantEnvironment).
+        // Until 9 November 2026 the gateway had no such folder on its PATH, so asked for today's
+        // brief in Telegram it answered that godspeed-brief is not installed.
+        env:{...passedEnvironment(this.env),...(this.env.HERMES_HOME?{PATH:[path.join(this.env.HERMES_HOME,'bin'),this.env.PATH].filter(Boolean).join(path.delimiter)}:{}),TELEGRAM_BOT_TOKEN:connection.token,TELEGRAM_ALLOWED_USERS:String(setup.owner_id),TELEGRAM_HOME_CHANNEL:String(setup.chat_id)}};
     return {kind:'setup',key:'setup:'+digest(connection.token,connection.start_code),command:this.python,args:[this.setup],
       env:{...this.env,PATH:path.dirname(this.python)+path.delimiter+(this.env.PATH||''),GODSPEED_TELEGRAM_TOKEN:connection.token,
         GODSPEED_TELEGRAM_START_CODE:connection.start_code,GODSPEED_TG_FLOW:'notebook',GODSPEED_TG_HERMES:this.hermes,

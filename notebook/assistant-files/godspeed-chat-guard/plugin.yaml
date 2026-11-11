@@ -1,0 +1,8 @@
+name: godspeed-chat-guard
+version: "0.1.0"
+description: >-
+  Keeps the Telegram chat from going silent. Inside the chat gateway it restarts the chat, through
+  Hermes' own restart, once the Hermes code on disk changed under it, and a message the chat could not
+  answer gets one plain sentence back and is saved. Installed by the Godspeed Mission Control notebook.
+author: godspeed-mission-control
+kind: standalone

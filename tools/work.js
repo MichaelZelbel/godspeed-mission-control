@@ -22,6 +22,12 @@
 //    expires; `tick` gives back a lease that ran out with no report.
 //  - OUTWARD work - a send, a spend, a post, a listing, a sign-up - is filed blocked, is never
 //    retried on its own, and cannot be taken or unblocked without your own words quoted on it.
+//  - PUBLICATION IS ASKED FOR, NEVER INFERRED (#268). On 6 November 2026 an unattended run made a
+//    public page of an item whose WHAT said it was private and whose OUTWARD was no, because the
+//    runner published every verified file. A page is a post, so `--publish yes` files the item
+//    outward with PUBLISH: yes, blocked until your words are on it. mc-work-run publishes a file
+//    only when its item has OUTWARD yes, PUBLISH yes and APPROVED, and its own words do not call it
+//    private; every other finished file stays private.
 //  - A failure gets a growing gap, not a hammer: one day, then two, then four, up to MAX
 //    ATTEMPTS, and after that a person decides what happens.
 //  - `sweep --card` cancels the work under a card you answered. `sweep --goal` marks the work
@@ -75,7 +81,7 @@ const KINDS = ['do', 'learn', 'repair'];
 // slash in it, ending in .md, .csv, .json or .txt, trailing punctuation ignored.
 const namesFile = (s) => String(s || '').split(/\s+/).map(t => t.replace(/[.,;:)"'\]]+$/, ''))
   .some(t => t.includes('/') && /\.(md|csv|json|txt)$/i.test(t));
-const ORDER = ['ID', 'STATUS', 'KIND', 'KEY', 'GOAL', 'CARD', 'WHAT', 'DONE WHEN', 'CHECK', 'OWNER', 'NEEDS', 'OUTWARD', 'ATTEMPTS', 'MAX ATTEMPTS',
+const ORDER = ['ID', 'STATUS', 'KIND', 'KEY', 'GOAL', 'CARD', 'TOUCHES', 'WHAT', 'DONE WHEN', 'CHECK', 'OWNER', 'NEEDS', 'OUTWARD', 'PUBLISH', 'ATTEMPTS', 'MAX ATTEMPTS',
   'LEASE', 'NEXT TRY', 'STALE AFTER', 'FILED', 'SOURCE', 'RESULT', 'LINK', 'APPROVED', 'MAY', 'GOES OUT', 'ANNOUNCED'];
 const S = L.store(DIR, ORDER);
 const { die, say, oneLine, flag, today, q } = L;
@@ -108,6 +114,31 @@ function standing(goal) {
   return standings[goal];
 }
 function goalMay(goal) { const st = standing(goal); return st ? st.lines : null; }
+
+// ---------------------------------------------------------------------------
+// holds: a step the person declined or postponed (#282), read live from world/claims through
+// holds.js, so it lifts by itself when its claim ends. A card names what it touches in TOUCHES;
+// one without it is never held. Without holds.js beside this program nothing is held; one that is
+// there and fails stops the command, because "could not tell" must never read as "not held".
+// ---------------------------------------------------------------------------
+let holdsJs;
+const holdsBroken = (e) => die(`what the person declined or postponed could not be read (holds.js: ${String(e.message).split('\n')[0]}), so nothing is decided about held steps; mc-holds list says what is wrong`);
+function holdsLib() {
+  if (holdsJs === undefined) {
+    const file = path.join(__dirname, 'holds.js');
+    try { holdsJs = fs.existsSync(file) ? require(file) : null; } catch (e) { holdsBroken(e); }
+  }
+  return holdsJs;
+}
+const holdsOn = {};
+function heldOf(c, d = today()) {
+  if (!c.f.TOUCHES) return null;
+  const h = holdsLib();
+  if (!h) return null;
+  if (!(d in holdsOn)) { try { holdsOn[d] = h.currentHolds(GODSPEED, d); } catch (e) { holdsBroken(e); } }
+  return h.heldBy(holdsOn[d], { touches: c.f.TOUCHES, text: c.f.WHAT });
+}
+const heldWhy = (c, h) => `${c.id} is held: ${h.id} says "${h.value}" (${h.stance}); it comes back when that ends. To go ahead now, end it first: mc-holds end ${h.name} --words "..."`;
 // A CHECK THAT LOOKS AT NOTHING CHECKS NOTHING (final review, 2026-10-13). A step that goes out
 // without a yes each time is verified by its CHECK, and `true`, `:`, `exit 0`, `true;` or `echo ok`
 // pass whatever happened. So the check must hold at least one command that looks at something:
@@ -359,6 +390,9 @@ cmds.file = (a) => {
   if (!done && kind === 'learn' && where) done = `the answer to ${q(question || what)} is written in ${where}, with the evidence read`;
   if (kind === 'learn' && !namesFile(done)) die('a learn item is done when the answer is written somewhere a reader can open: its DONE WHEN must name a file (a path ending in .md, .csv, .json or .txt), or give --path <file>');
   if (!done) die('--done-when is required: what a reader will see when this is done, so it can be verified by someone who is not the runner');
+  const touches = a.touches === undefined || a.touches === 'true' ? [] : (holdsLib() || die('--touches needs holds.js beside this program')).touchTokens(a.touches);
+  const badSlug = touches.find(t => !holdsLib().SLUG.test(t));
+  if (badSlug) die(`--touches names world entities by their slugs (world/entities/<slug>.md), comma-separated; "${badSlug}" is not one`);
   const key = oneLine(a.key || what.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 80));
   const dup = S.all().find(c => c.f.KEY === key && OPEN.includes(c.f.STATUS));
   if (dup) { say(`${dup.id}: already on the register with this key (${dup.f.STATUS}); nothing filed twice`); return; }
@@ -366,7 +400,13 @@ cmds.file = (a) => {
   if (!OWNERS.test(owner)) die('--owner must be godspeed, person or company:<slug>');
   let needs = asNeeds(oneLine(a.needs || 'none'));
   if (!NEEDS.test(needs)) die('--needs must be none, person, authorization or capability:<what is missing>');
-  const outward = a.outward === 'yes' ? 'yes' : 'no';
+  if (a.publish !== undefined && !['yes', 'no'].includes(a.publish)) die('--publish must be yes or no');
+  const publish = a.publish === 'yes';
+  if (publish) {
+    if (a.may !== undefined) die('a page goes out on a yes for this item, not on a standing permission: file it without --may');
+    if (!namesFile(done)) die('--publish needs a DONE WHEN that names the file to publish (a path ending in .md, .csv, .json or .txt)');
+  }
+  const outward = a.outward === 'yes' || publish ? 'yes' : 'no';
   if (kind === 'repair' && (outward === 'yes' || a.may !== undefined)) die('a repair mends this machine and reaches nobody else, so it is never outward: file the outward part as an item of its own');
   if (outward === 'yes' && needs === 'none') needs = 'authorization';
   if (owner === 'person' && needs === 'none') needs = 'person';
@@ -420,8 +460,8 @@ cmds.file = (a) => {
   const id = a.id ? L.safeId(a.id) : nextId(d);
   if (S.exists(id)) die(`${id} already exists`);
   const f = {
-    ID: id, STATUS: needs === 'none' ? 'planned' : 'blocked', KIND: kind, KEY: key, GOAL: oneLine(a.goal), CARD: oneLine(a.card), WHAT: what, 'DONE WHEN': done,
-    CHECK: oneLine(a.check), OWNER: owner, NEEDS: needs, OUTWARD: outward, ATTEMPTS: '0', 'MAX ATTEMPTS': String(parseInt(a['max-attempts'] || '3', 10) || 3),
+    ID: id, STATUS: needs === 'none' ? 'planned' : 'blocked', KIND: kind, KEY: key, GOAL: oneLine(a.goal), CARD: oneLine(a.card), TOUCHES: touches.join(', '), WHAT: what, 'DONE WHEN': done,
+    CHECK: oneLine(a.check), OWNER: owner, NEEDS: needs, OUTWARD: outward, PUBLISH: publish ? 'yes' : '', ATTEMPTS: '0', 'MAX ATTEMPTS': String(parseInt(a['max-attempts'] || '3', 10) || 3),
     'STALE AFTER': String(parseInt(a['stale-after'] || '7', 10) || 7), FILED: d, SOURCE: oneLine(a.source || 'unknown'),
     APPROVED: standingWords, MAY: may ? may.kind : '', 'GOES OUT': goesOut,
   };
@@ -435,6 +475,7 @@ cmds.file = (a) => {
   const how = overLimit ? ` outward: this week's ${may.perWeek} ${may.kind} steps${of} are used, so this one needs a fresh yes`
     : standingWords && goesOut ? ` outward: goes out at ${goesOut} UTC unless stopped (standing ${may.kind}${of})`
     : standingWords ? ` outward: goes out when ready and is reported after (standing ${may.kind}${of})`
+    : publish ? ' outward: a page, made only after your yes (unblock --approved-by)'
     : outward === 'yes' ? ' outward: never on its own' : '';
   say(`${id}: ${f.STATUS}` + (f.STATUS === 'blocked' ? ` (needs ${needs})` : '') + how);
 };
@@ -453,6 +494,8 @@ cmds.take = (a) => {
   if (notYetDue(c) && !flag(a, 'now')) die(`${c.id} goes out at ${c.f['GOES OUT']} UTC unless stopped; not before`);
   if (isStanding(c) && !standingHolds(c)) die(`${c.id} was filed on the standing permission ${c.f.MAY || '(none named)'} of ${c.f.GOAL || 'its goal'}, which is no longer on the goal card in the words it was filed under; it waits for a fresh yes (unblock --approved-by)`);
   if (unshown(c)) die(`${c.id} has not been shown in a morning message, so the person could not stop it; it does not go out until it was (mc-work announce)`);
+  const held = heldOf(c, d);
+  if (held) die(heldWhy(c, held));
   if (c.f.OUTWARD === 'yes') {
     // Approved once is approved for this item: a yes already on record (from `unblock
     // --approved-by`) lets the runner take it, so a move the person said yes to actually lands
@@ -545,6 +588,8 @@ cmds.unblock = (a) => {
   if (!why) die('--why is required: what arrived (your word on it, the missing capability, the approval)');
   const d = a.date || today();
   if (c.f.OUTWARD === 'yes' && !oneLine(a['approved-by'])) die('outward work is unblocked only with --approved-by "<your words>"');
+  const held = heldOf(c, d);
+  if (held) die(heldWhy(c, held));
   if (a['approved-by']) { c.f.APPROVED = `${d} ${q(oneLine(a['approved-by']))}`; L.logLine(c, d, 'APPROVED', q(oneLine(a['approved-by']))); }
   c.f.STATUS = 'planned'; c.f.NEEDS = 'none';
   L.logLine(c, d, 'UNBLOCKED', why);
@@ -616,7 +661,7 @@ cmds['going-out'] = (a) => {
   // out within the next 24 hours.
   const to = minuteFrom(DAY_MS);
   const rows = (a.date ? dayList(a.date) : comingList().filter(r => r.c.f['GOES OUT'] <= to))
-    .filter(r => ['planned', 'dispatched'].includes(r.c.f.STATUS));
+    .filter(r => ['planned', 'dispatched'].includes(r.c.f.STATUS) && !heldOf(r.c));
   if (flag(a, 'json')) {
     say(JSON.stringify(rows.map(({ n, c }) => ({ n, id: c.id, at: c.f['GOES OUT'], what: c.f.WHAT, goal: c.f.GOAL || '', link: c.f.LINK || '', status: c.f.STATUS, announced: c.f.ANNOUNCED || '' }))));
     return;
@@ -643,7 +688,8 @@ cmds.announce = (a) => {
     const why = !c ? 'no such work'
       : !UNSENT.includes(c.f.STATUS) ? `is ${c.f.STATUS}`
       : !c.f['GOES OUT'] ? 'has no GOES OUT (it goes out alone, or only with a yes of its own)'
-      : goesOutBad(c) ? `has GOES OUT "${c.f['GOES OUT']}", not YYYY-MM-DDTHH:MM (UTC)` : '';
+      : goesOutBad(c) ? `has GOES OUT "${c.f['GOES OUT']}", not YYYY-MM-DDTHH:MM (UTC)`
+      : heldOf(c) ? heldWhy(c, heldOf(c)).replace(`${c.id} `, '') : '';
     if (why) { missed++; say(`${id}: ${why}, not marked`); continue; }
     c.f.ANNOUNCED = d;
     L.logLine(c, d, 'ANNOUNCED', 'in the morning message');
@@ -734,16 +780,21 @@ cmds.next = (a) => {
     && (c.f.OUTWARD !== 'yes' || (c.f.APPROVED && c.f.STATUS === 'planned')) && c.f.NEEDS === 'none' && !leaseLive(c) && (!a.goal || c.f.GOAL === a.goal)
     // a step that goes out unless stopped waits for its time (UTC) and for a morning message to
     // have shown it, and one whose standing permission was taken back does not go out on it at all
-    && !notYetDue(c) && !unshown(c) && !(isStanding(c) && !standingHolds(c)));
+    && !notYetDue(c) && !unshown(c) && !(isStanding(c) && !standingHolds(c)) && !heldOf(c, d));
   if (flag(a, 'json')) { say(JSON.stringify(rows.map(c => Object.assign({ id: c.id }, c.f)))); return; }
   if (!rows.length) { say('nothing runnable now'); return; }
   for (const c of rows) say(`${c.id.padEnd(16)} ${c.f.STATUS.padEnd(9)} ${(c.f.KIND || 'do').padEnd(5)} ${c.f.WHAT}` + (c.f.GOAL ? `  [${c.f.GOAL}]` : ''));
 };
 cmds.list = (a) => {
   const rows = (flag(a, 'all') ? S.all() : S.all().filter(c => OPEN.includes(c.f.STATUS))).filter(c => (!a.goal || c.f.GOAL === a.goal) && (!a.status || c.f.STATUS === a.status));
-  if (flag(a, 'json')) { say(JSON.stringify(rows.map(c => Object.assign({ id: c.id, log: c.log }, c.f)), null, 2)); return; }
+  // Held is decided for the day being listed: --date D (mc-decide --date D hands its run this list,
+  // and a hold that has ended by D no longer holds that day's steps, #406), today without it.
+  if (a.date !== undefined && !L.isoDate(a.date)) die(`--date ${a.date} is not a date (YYYY-MM-DD)`);
+  const d = a.date || today();
+  const heldId = (c) => { const h = heldOf(c, d); return h ? h.id : ''; };
+  if (flag(a, 'json')) { say(JSON.stringify(rows.map(c => Object.assign({ id: c.id, log: c.log }, c.f, { held_by: heldId(c) })), null, 2)); return; }
   if (!rows.length) { say('no open work'); return; }
-  for (const c of rows) say(`${c.f.STATUS.padEnd(10)} ${(c.f.KIND || 'do').padEnd(5)} ${c.id.padEnd(16)} ${(c.f.OWNER || '').padEnd(10)} ${c.f.WHAT}` + (c.f.NEEDS !== 'none' ? `  needs ${c.f.NEEDS}` : '') + (c.f.GOAL ? `  [${c.f.GOAL}]` : '') + (c.f.CARD ? `  {${c.f.CARD}}` : ''));
+  for (const c of rows) say(`${c.f.STATUS.padEnd(10)} ${(c.f.KIND || 'do').padEnd(5)} ${c.id.padEnd(16)} ${(c.f.OWNER || '').padEnd(10)} ${c.f.WHAT}` + (c.f.NEEDS !== 'none' ? `  needs ${c.f.NEEDS}` : '') + (c.f.GOAL ? `  [${c.f.GOAL}]` : '') + (c.f.CARD ? `  {${c.f.CARD}}` : '') + (heldId(c) ? `  held by ${heldId(c)}` : ''));
 };
 cmds.show = (a) => { const c = S.read(a._[0] || die('which item?')) || die('no such work'); say(S.render(c).trimEnd()); };
 cmds.check = () => {
@@ -780,10 +831,16 @@ cmds.help = () => say(`mc-work: dispatched, attempted and verified are three dif
   file --what "..." --done-when "..." [--key K] [--goal G] [--card C] [--check "<shell, exit 0 when done>"]
        [--owner godspeed|person|company:<slug>] [--needs none|person|authorization|capability:<x>] [--outward yes|no]
        [--max-attempts 3] [--stale-after 7] [--source "..."]       a second file with the same open KEY files nothing
+       [--touches "<slug>, <slug>"]     the world entities it is about (world/entities/<slug>.md): a step the person
+                                        declined or postponed on one of them (mc-holds) is held: listed as held,
+                                        never taken, unblocked, announced or going out until that claim ends
        [--kind do|learn|repair]         a learn item is a question; its DONE WHEN must name a file the answer is written in.
                                         a repair mends the mission control's own machinery on the machine the run is on:
                                         mc-work-run lets that run change the files outside the folder the mission control
                                         installed or runs there, keeping a copy of each first; never outward
+       [--publish yes]                  its file becomes a page only with this: filed outward and blocked; mc-work-run
+                                        --publish-cmd publishes it once your yes is on it and its check verified.
+                                        Without it a finished file stays private
        [--learn "<question>" --path <file>]   sugar: KIND learn, WHAT the question, DONE WHEN "the answer ... is written in <file>"
        [--outward yes --goal G --may <kind> --check "<live check>" [--goes-out YYYY-MM-DDTHH:MM]]
                                         outward work on a standing permission of goal G (mc-goals allow; a strategy
@@ -821,7 +878,8 @@ cmds.help = () => say(`mc-work: dispatched, attempted and verified are three dif
   sweep --goal <id> [--cancel|--stale] --reason "..."   a goal changed; its work is re-planned
   tick [--date D] [--json]           dead leases, due retries, stale plans, waiting on you over two weeks
   link <id> --url https://...        the page a finished piece became; the note and the card hand it over
-  next [--goal G] [--json] | list [--all] [--goal G] [--status S] [--json] | show <id> | check`);
+  next [--goal G] [--json] | list [--all] [--goal G] [--status S] [--date D] [--json] | show <id> | check
+                                     list marks a step held by what holds it on that day (--date D), today without it`);
 
 const a = L.parseArgs(process.argv.slice(2));
 L.alias(a, 'approved-by-him', 'approved-by');

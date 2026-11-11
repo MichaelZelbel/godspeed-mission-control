@@ -31,12 +31,14 @@ ID: W-20260913-01
 STATUS: planned       planned, dispatched, attempted, verified, failed, blocked, stale, cancelled
 KEY: redraft-lines    the same open key files nothing twice
 GOAL: lead            CARD: M017
+TOUCHES: the-book      the world entities it is about; a step you declined or postponed on one waits (mc-holds)
 WHAT: Redraft the three lines
 DONE WHEN: a new draft exists with the three lines in it
 CHECK: test -f drafts/lines-v2.md      one shell line that exits 0 when it is done
 OWNER: mission control            mission control, person, or company:<slug>
 NEEDS: none           none, person, authorization, or capability:<what is missing>
 OUTWARD: no           a send, a spend, a post, a listing: never on its own
+PUBLISH: yes          only when you asked for a page; without it a finished file stays private
 ATTEMPTS: 1   MAX ATTEMPTS: 3   LEASE: claude-laptop until 2026-09-13T12:00:00Z
 NEXT TRY: 2026-09-14  STALE AFTER: 7
 
@@ -83,6 +85,11 @@ yes or no. If you cannot write that sentence, you do not yet know what you are a
   `mc-work stop --today --words "..."` keeps back every one of that day's that has not gone out.
   Past the permission's weekly number a step is filed blocked and asks you again, and a
   permission taken off the goal card stops everything still waiting on it.
+- **A finished file becomes a page only when you asked for one.** `mc-work file ... --publish yes`
+  files the item outward and blocked, because a page is a post. Once your yes is on it
+  (`mc-work unblock <id> --why ... --approved-by "<your words>"`) and its check has verified it,
+  `mc-work-run --publish-cmd` publishes the file DONE WHEN names. Every other finished file stays
+  private, and so does an item whose own words say it is private; the run says why.
 - **Your answer reaches the work.** Answering a card cancels the work filed under it. Changing a
   goal marks the work under it stale, so it is re-planned rather than carried on with.
 - **Time passes even when nothing runs.** `mc-work tick` releases dead leases, names what is due
@@ -100,7 +107,7 @@ is worth more than one that quietly does something adjacent and reports success.
 ## The commands
 
 ```
-mc-work file --what "..." --done-when "..." [--check "..."] [--goal G] [--key K]
+mc-work file --what "..." --done-when "..." [--check "..."] [--goal G] [--key K] [--publish yes]
 mc-work take <id> --runner <name> [--approved-by "<your words>"]
 mc-work attempt <id> --runner <name> --ok --result "..." | --failed "why"
 mc-work verify <id> [--evidence "what was observed, where"]
@@ -110,4 +117,4 @@ mc-work tick | next | list | show <id> | check
 ```
 
 Chapters 3, 8 and 27 of the book are the idea behind this folder: progress written down, and the
-difference between saying a thing is done and showing it. The rooms next door are `goals/` and `forecasts/`.
+difference between saying a thing is done and showing it. The rooms next door are `goals/` and `forecasts/`, and inside this one, `promises/`: what your mission control promised you on a clock, and whether it kept its word.

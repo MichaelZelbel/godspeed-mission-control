@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {randomUUID} from 'node:crypto';
 import {hash,atomic} from './records/store.mjs';
 import {assistantEnvironment} from './assistant-files.mjs';
 import {nativeCardRows} from './card-commands.mjs';
@@ -13,6 +14,7 @@ import {FLAG,STARTING_ROUTINES,routineFiles,writeRoutineFiles,prepareCheckIn,sav
 import {cronOf,cronCalendar,calendarCron,retimeWhat,isTalkGate,isCoachTick,talkArea,moveTalk} from './routine-times.mjs';
 import {readNotebookRoutines,rememberNotebookRoutine,enableKind,deliveryFor,journalWanted,journalOnTheClock,JOURNAL_JOB,JOURNAL_SCRIPT,JOURNAL_WHAT,CHAT_TIDY_JOB,CHAT_TIDY_SCRIPT,CHAT_TIDY_SCHEDULE,CHAT_TIDY_WHAT,writeNotebookRoutines,BRIEF_JOB,BRIEF_SCRIPT,isBriefJob,CONNECTION_JOB,CONNECTION_SCRIPT,CONNECTION_WHAT,MAIL_COUNT_JOB,MAIL_COUNT_SCRIPT,MAIL_COUNT_WHAT,WORKOUTS_JOB,WORKOUTS_SCRIPT,WORKOUTS_WHAT,NOTICES_JOB,NOTICES_SCRIPT,NOTICES_WHAT} from './notebook-routines.mjs';
 import {holdQueuedNotices} from './notices.mjs';
+import {writeRoutinePromise} from './routine-promises.mjs';
 import {switchable,switchedOn,setRoutineSwitch,switchId} from './routine-switches.mjs';
 import {connectionCheckWanted} from './connection-check.mjs';
 import {mailCountWanted} from './mail-trackers.mjs';
@@ -39,9 +41,14 @@ export function nativeJobs(home,device='local'){
 }
 const RETRY_STARTING=3600000;
 const SETUP_FAILURES='routine-setup-failures.json',SETUP_NOTICE='routine-setup-failures',RETRY_MINUTES=[1,2,4,8,16,32,60];
+const RUN_DIAGNOSTICS='routine-run-diagnostics.json',MAX_RUN_DIAGNOSTICS=20;
+export const routineRunEvidencePaths=({workspace,home}={})=>({diagnostics:workspace?path.join(workspace,'.godspeed',RUN_DIAGNOSTICS):null,output:home?path.join(home,'cron','output'):null});
 const setupFailureFile=store=>path.join(store.state,SETUP_FAILURES);
+const runDiagnosticsFile=store=>routineRunEvidencePaths({workspace:store.root}).diagnostics;
 const readSetupFailures=store=>{try{const saved=JSON.parse(fs.readFileSync(setupFailureFile(store),'utf8'));return saved&&typeof saved==='object'&&saved.steps&&typeof saved.steps==='object'?saved:{steps:{}};}catch{return {steps:{}};}};
 const writeSetupFailures=(store,failures)=>atomic(setupFailureFile(store),JSON.stringify(failures,null,2)+'\n');
+const readRunDiagnostics=store=>{try{const saved=JSON.parse(fs.readFileSync(runDiagnosticsFile(store),'utf8'));return Array.isArray(saved?.runs)?saved:{runs:[]};}catch{return {runs:[]};}};
+const writeRunDiagnostics=(store,diagnostics)=>atomic(runDiagnosticsFile(store),JSON.stringify(diagnostics,null,2)+'\n');
 const diagnostic=error=>{const lines=String(error?.stderr||error?.message||'').replace(/\x1b\[[0-?]*[ -/]*[@-~]/g,'').split(/\r?\n/).map(line=>scrubCredentials(line).trimEnd()).filter(Boolean);return lines.slice(-10).join('\n').slice(-2000);};
 const errorLine=record=>{const lines=String(record.stderr||'').split(/\r?\n/).map(line=>line.trim()).filter(Boolean),trace=lines.findIndex(line=>/^Traceback \(most recent call last\):$/i.test(line));return (trace>=0?lines.at(-1):lines[0])||'exit code '+(record.exit_code??'unknown');};
 const cleanupFailure=(error,cleanup)=>Object.assign(Error(errorLine({stderr:diagnostic(error),exit_code:error?.code})+'; carried routine cleanup failed: '+errorLine({stderr:diagnostic(cleanup),exit_code:cleanup?.code})),{code:error?.code,cause:error});
@@ -64,6 +71,8 @@ const installedRoutine=(home,root,routine)=>hermesJobs(home).find(job=>job.name=
 // the longest script, up to 8100 seconds), so a tick gets two hours and forty-five minutes; past
 // that it is stopped with all it started, and its heartbeat stops with it.
 export const TICK_LIMIT=(2*60+45)*60000;
+// Two test turns of at most three minutes, the wait between them and the messages (chat-health.mjs).
+const CHAT_CHECK_LIMIT=8*60000;
 // The notebook edits Hermes schedules; it never runs a second scheduler. The
 // notebook's own record routines that Hermes has no job for (the watch sweep,
 // radar preparation and application) run beside it in `records`.
@@ -84,7 +93,11 @@ export class NativeScheduler{
  // A connected provider reaches the record routines too (/api/provider).
  set executor(value){if(this.records)this.records.executor=value;}
  get executor(){return this.records?.executor||null;}
- async command(args,{timeout=120000}={}){const timezone=this.store.get('settings','installation')?.timezone,env=assistantEnvironment({home:this.home,workspace:this.store.root});if(timezone)env.HERMES_TIMEZONE=timezone;const result=await this.run(this.executable,['cron',...args],{cwd:this.store.root,windowsHide:true,shell:false,env,maxBuffer:1024*1024,timeout});return result.stdout;}
+ routineCommand(args){return {executable:this.executable,args:['cron',...args]};}
+ async runRoutineCommand(command,{timeout=120000,onStart,detail=false}={}){const timezone=this.store.get('settings','installation')?.timezone,env=assistantEnvironment({home:this.home,workspace:this.store.root});if(timezone)env.HERMES_TIMEZONE=timezone;const result=await this.run(command.executable,command.args,{cwd:this.store.root,windowsHide:true,shell:false,env,maxBuffer:1024*1024,timeout,onStart});return detail?{...result,command:[command.executable,...command.args]}:result.stdout;}
+ async command(args,options={}){return this.runRoutineCommand(this.routineCommand(args),options);}
+ saveRunDiagnostic(entry){const diagnostics=readRunDiagnostics(this.store);diagnostics.runs=[...diagnostics.runs,entry].slice(-MAX_RUN_DIAGNOSTICS);writeRunDiagnostics(this.store,diagnostics);}
+ updateRunDiagnostic(id,fields){const diagnostics=readRunDiagnostics(this.store),index=diagnostics.runs.findIndex(entry=>entry.id===id);if(index<0)return;diagnostics.runs[index]={...diagnostics.runs[index],...fields};writeRunDiagnostics(this.store,diagnostics);}
  setupNotice(failures,now){
   try{
    const steps=Object.values(failures.steps),notice=this.store.get('notifications',SETUP_NOTICE);
@@ -233,7 +246,13 @@ export class NativeScheduler{
     made.push({id:job.id,key:routine.key,name:routine.name,what:routine.what});
    }
   }catch(error){for(const job of made)await this.command(['remove',job.id]).catch(()=>{});throw error;}
+  for(const routine of routines.filter(r=>made.some(m=>m.key===r.key)))this.writePromise({kind:routine.key,name:routine.name,what:routine.what,schedule:routine.schedule});
   return made;
+ }
+ // A promise that cannot be written never stops a routine being made.
+ writePromise(routine){
+  const timezone=this.store.get('settings','installation')?.timezone||Intl.DateTimeFormat().resolvedOptions().timeZone;
+  try{writeRoutinePromise(this.store.root,{...routine,timezone});}catch{}
  }
  // A routine added to the starting routines after a machine got its first ones (the nightly goal
  // research, 13 October 2026) is made once on that machine too, when it is not in the machine's
@@ -526,6 +545,7 @@ export class NativeScheduler{
   const made=hermesJobs(this.home).find(j=>!before.has(j.id));
   if(!made)return null;
   rememberNotebookRoutine(this.store,{id:made.id,key:'morning-brief',name:made.name||name,skill:'morning-brief',what:known.what});
+  this.writePromise({kind:'brief',name:made.name||name,what:known.what,schedule});
   return made.id;
  }
  // A Morning brief made the old way, as the morning-brief recipe (an AI job of Hermes), is made
@@ -693,6 +713,7 @@ export class NativeScheduler{
   if(this.ticking){if(raise){await this.current?.catch(()=>null);await this.followConnectionCheck();}return records;}
   const now=this.now();if(now-(this.lastTick||0)<60000){this.onProgress?.();if(raise)await this.followConnectionCheck();return records;}
   if(this.updater)await beatWhile(this.updater.tick(this.store.get('settings','installation')?.timezone),()=>this.onProgress?.(),{limitMs:this.updateLimit,every:this.beatEvery}).catch(error=>console.error('Godspeed Mission Control: the Hermes update could not be checked: '+String(error?.message||error)));
+  if(this.chatHealth)await beatWhile(this.chatHealth.tick(),()=>this.onProgress?.(),{limitMs:CHAT_CHECK_LIMIT,every:this.beatEvery}).catch(error=>console.error('Godspeed Mission Control: the chat check could not run: '+String(error?.message||error)));
   const release=this.lifecycle.acquire('routine tick');if(!release)return records;
   this.ticking=true;this.lastTick=now;
   let failure=null,finish;const failures=[];
@@ -735,16 +756,25 @@ export class NativeScheduler{
  startRun(id){
   this.requireOwner('Run the routine');
   if(id&&!nativeJobs(this.home,this.device).some(j=>j.id===id))throw Error('Choose an existing Hermes task');
-  const release=this.lifecycle.acquire('routine run');if(!release)throw Error('The assistant is updating or another routine is already running.');
-  const run=this.runNow(id);this.running=run;run.catch(()=>{}).finally(()=>{if(this.running===run)this.running=null;release();});
+  const release=this.lifecycle.acquire('routine run');
+  if(!release){try{this.saveRunDiagnostic({id:'rejected-'+randomUUID(),at:new Date(this.now()).toISOString(),admitted:false,lifecycle_owner:this.lifecycle.reason,requested_job:id||null});}catch{}throw Error('The assistant is updating or another routine is already running.');}
+  const args=id?['run',id]:['tick'],diagnosticId='run-'+randomUUID(),command=this.routineCommand(args),evidencePaths=routineRunEvidencePaths({workspace:this.store.root,home:this.home});
+  try{this.saveRunDiagnostic({id:diagnosticId,at:new Date(this.now()).toISOString(),admitted:true,lifecycle_owner:'routine run',requested_job:id||null,command:[command.executable,...command.args],child:{pid:null,tree:null},exit_status:null,signal:null,stderr:'',run_log:{path:evidencePaths.output,command_output:''}});}
+  catch(error){release();throw error;}
+  const run=this.runNow(id,{diagnosticId,command,evidencePaths});this.running=run;run.catch(error=>{try{this.onFailure?.(error);}catch{}}).finally(()=>{if(this.running===run)this.running=null;release();});
   return {started:true,...(id?{id}:{})};
  }
- async runNow(id){
+ recordRunDiagnostic(id,fields){if(!id)return;try{this.updateRunDiagnostic(id,fields);}catch(error){try{this.onFailure?.(error);}catch{}}}
+ async runNow(id,{diagnosticId=null,command=null,evidencePaths=routineRunEvidencePaths({workspace:this.store.root,home:this.home})}={}){
   this.requireOwner('Run the routine');
-  const work=id?(()=>{if(!nativeJobs(this.home,this.device).some(j=>j.id===id))throw Error('Choose an existing Hermes task');return this.command(['run',id],{timeout:this.tickLimit});})():this.command(['tick'],{timeout:this.tickLimit});
-  const result=await beatWhile(work,()=>this.onProgress?.(),{limitMs:this.tickLimit+60000,every:this.beatEvery});
+  const runCommand=command||this.routineCommand(id?['run',id]:['tick']),started=child=>this.recordRunDiagnostic(diagnosticId,{child:{pid:child?.pid??null,tree:child?.tree??null}});
+  const work=id?(()=>{if(!nativeJobs(this.home,this.device).some(j=>j.id===id))throw Error('Choose an existing Hermes task');return this.runRoutineCommand(runCommand,{timeout:this.tickLimit,onStart:started,detail:true});})():this.runRoutineCommand(runCommand,{timeout:this.tickLimit,onStart:started,detail:true});
+  let result;
+  try{result=await beatWhile(work,()=>this.onProgress?.(),{limitMs:this.tickLimit+60000,every:this.beatEvery});}
+  catch(error){this.recordRunDiagnostic(diagnosticId,{exit_status:error?.code??null,signal:error?.signal??null,stderr:diagnostic(error),run_log:{path:evidencePaths.output,command_output:diagnostic({stderr:error?.stdout})}});throw error;}
+  this.recordRunDiagnostic(diagnosticId,{exit_status:result?.code??0,signal:result?.signal??null,stderr:diagnostic({stderr:result?.stderr}),run_log:{path:evidencePaths.output,command_output:diagnostic({stderr:result?.stdout})}});
   try{this.afterTick();}catch{}
-  return result;
+  return result?.stdout;
  }
  async control(input,{enable=false}={}){
   if(enable){

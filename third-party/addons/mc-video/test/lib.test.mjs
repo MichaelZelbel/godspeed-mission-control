@@ -137,6 +137,54 @@ test("the HyperFrames pin is an exact tag", () => {
   assert.equal(L.HYPERFRAMES_VERSION, L.HYPERFRAMES_TAG.slice(1));
 });
 
+test("a failed install retries once and accepts the validated second attempt", () => {
+  let attempts = 0;
+  let retries = 0;
+  const installed = L.retryInstall(
+    () => { attempts++; return { status: attempts === 1 ? 1 : 0 }; },
+    () => attempts === 2,
+    () => { retries++; },
+  );
+  assert.equal(installed, true);
+  assert.equal(attempts, 2);
+  assert.equal(retries, 1);
+});
+
+test("a validated first install does not retry", () => {
+  let attempts = 0;
+  const installed = L.retryInstall(
+    () => { attempts++; return { status: 0 }; },
+    () => true,
+  );
+  assert.equal(installed, true);
+  assert.equal(attempts, 1);
+});
+
+test("a failed install remains failed after its one retry", () => {
+  let attempts = 0;
+  let retries = 0;
+  const installed = L.retryInstall(
+    () => { attempts++; return { status: 1 }; },
+    () => true,
+    () => { retries++; },
+  );
+  assert.equal(installed, false);
+  assert.equal(attempts, 2);
+  assert.equal(retries, 1);
+});
+
+test("an install that exits successfully without its package retries but never reports ready", () => {
+  let attempts = 0;
+  let validations = 0;
+  const installed = L.retryInstall(
+    () => { attempts++; return { status: 0 }; },
+    () => { validations++; return false; },
+  );
+  assert.equal(installed, false);
+  assert.equal(attempts, 2);
+  assert.equal(validations, 2);
+});
+
 test("only folders with a SKILL.md count as published HyperFrames skills", () => {
   const root = tmp();
   for (const n of ["hyperframes", "media-use"]) {

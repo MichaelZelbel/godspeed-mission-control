@@ -327,9 +327,22 @@ def on_transform(**kwargs):
         return None
 
 
+def _todays_brief():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("godspeed_reply_todays_brief", os.path.join(HERE, "todays_brief.py"))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def register(ctx):
     _bus.voice_transform = on_bus
     ctx.register_hook("transform_llm_output", on_transform)
+    # Today's brief in Telegram is the notebook's saved briefing, answered before the model (todays_brief.py).
+    try:
+        ctx.register_hook("pre_gateway_dispatch", _todays_brief().make_hook(_home))
+    except Exception:
+        pass
     if callable(getattr(ctx, "on_unload", None)):
         def detach():
             if getattr(_bus, "voice_transform", None) is on_bus:

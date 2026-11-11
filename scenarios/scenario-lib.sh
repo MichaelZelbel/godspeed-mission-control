@@ -146,8 +146,8 @@ show_assistant_home() {
 #   GODSPEED_SCENARIO_AI_URL    the service's address (a repository variable; no default)
 #   GODSPEED_SCENARIO_AI_MODEL  the model (a repository variable; no default)
 # There is no default for either on purpose: a default once sent the checks to a paid model on the
-# owner's OpenRouter account. The checks use https://api.anthropic.com/v1 and claude-haiku-4-5, and
-# they refuse openrouter.ai altogether.
+# owner's OpenRouter account. The checks use a capped OpenRouter test account and only a small
+# Claude Haiku model, so the configured model is always explicit and affordable.
 AI_URL=${GODSPEED_SCENARIO_AI_URL:-}
 AI_MODEL=${GODSPEED_SCENARIO_AI_MODEL:-}
 check_the_ai_settings() {
@@ -157,8 +157,9 @@ check_the_ai_settings() {
     https://*) ;;
     *) fail "GODSPEED_SCENARIO_AI_URL must be an https address, because the AI key is sent to it; use https://api.anthropic.com/v1" ;;
   esac
-  case "$(printf '%s' "$AI_URL" | tr 'A-Z' 'a-z')" in
-    *openrouter.ai*) fail "GODSPEED_SCENARIO_AI_URL points at openrouter.ai, and the checks must never spend the owner's OpenRouter money; use https://api.anthropic.com/v1" ;;
+  case "$AI_MODEL" in
+    claude-haiku-*|anthropic/claude-haiku-*) ;;
+    *) fail "GODSPEED_SCENARIO_AI_MODEL is $AI_MODEL, not a small Claude Haiku model, so the scenario cannot use it" ;;
   esac
 }
 need_the_ai_key() { # <what it is needed for>
@@ -403,6 +404,13 @@ wait_for() { # <seconds> <what to say> <command...>
   return 1
 }
 
+# The briefing note the morning brief saved last, as plain text, for the scenarios that read it (numbers-lib.sh and server-lib.sh).
+NEWEST_BRIEFING_NOTE='
+const fs=require("fs");const d=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));
+const notes=(Array.isArray(d)?d:(d.data||[])).filter(n=>n&&n.source_app==="morning-brief"&&!n.is_trashed)
+ .sort((a,b)=>String(a.created_at).localeCompare(String(b.created_at)));
+const n=notes[notes.length-1];if(!n)process.exit(1);process.stdout.write(String(n.content||""));
+'
 # THE MORNING BRIEF, TURNED ON AND RUN THE WAY SETTINGS RUNS IT: the routine added (POST
 # /api/jobs/add, which answers the routine it made, under Hermes' id) and that routine run now (POST
 # /api/jobs/run with its id, Settings' "Run now"). Since 9 October 2026 the run answers

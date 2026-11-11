@@ -16,9 +16,11 @@
 # makes it VERIFIED. An item that cannot be done from this machine is reported as failed with
 # the reason, and gets its retry gap from the register, not a hammer. Then the next item.
 #
-# IT NEVER MESSAGES YOU AND IT NEVER POSTS. A finished piece becomes a page when the caller names a
-# publish command, and the assistant's one sentence about it (its SAY line) stays in the item's run
-# folder, where the schedule that called this program reads it and tells you.
+# IT NEVER MESSAGES YOU AND IT NEVER POSTS ON ITS OWN. A finished file becomes a page only when the
+# caller names a publish command AND its item asked for one: filed with `mc-work file --publish yes`
+# (PUBLISH: yes, outward) and carrying your yes (APPROVED). Every other finished file stays
+# private, and the run says why. The assistant's one sentence about it (its SAY line) stays in
+# the item's run folder, where the schedule that called this program reads it and tells you.
 #
 # WHAT IT NEEDS: node, the `mc-work` register, `mc-run` and a `work-item` recipe in your mission control.
 # `mc-goals` is used when it is there, for the goal's own words and its playbook.
@@ -45,7 +47,8 @@
 #   --only <id>             run this one item and nothing else
 #   --extra-prompt-file F   your mission control's own additions to the recipe, added for this run only
 #   --publish-cmd "<cmd>"   a command that turns a finished file into an https page and prints
-#                           the address; run as: <cmd> <file> --title "<what>"
+#                           the address; run as: <cmd> <file> --title "<what>". Used only for an
+#                           item with PUBLISH: yes, OUTWARD: yes and your yes on it
 #   --dry-run               list what would run; take nothing, run nothing, write nothing
 #
 # EXIT CODES: 0 the run went through (an item the assistant reported as FAILED, or whose check
@@ -68,7 +71,7 @@ while [ $# -gt 0 ]; do
     --extra-prompt-file) EXTRA="$2"; shift 2 ;;
     --publish-cmd) PUBLISH_CMD="$2"; shift 2 ;;
     --dry-run) DRY=1; shift ;;
-    -h|--help) sed -n '2,54p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,57p' "$0"; exit 0 ;;
     *) echo "mc-work-run: I do not know the argument $1" >&2; exit 2 ;;
   esac
 done
@@ -187,8 +190,22 @@ RUNNER="$HERE/mc-run"
 newest() { ls -1 "$1"/"$2"-*.md 2>/dev/null | sort | tail -1; }
 field() { printf '%s\n' "$1" | sed -n "s/^$2: //p" | head -1; }
 # The first thing in DONE WHEN that looks like a file in the mission control: a path with a slash and a
-# plain-text extension. That file is what gets published when the item verifies.
+# plain-text extension. That file is what gets published when the item verifies and asked for a page.
 path_in() { printf '%s\n' "$1" | grep -oE '[A-Za-z0-9_][A-Za-z0-9_./-]*/[A-Za-z0-9_./-]+\.(md|csv|json|txt|html)' | head -1; }
+# Why an item's finished file must stay private, or nothing when it may become a page. It reads
+# the record as it was before the assistant ran, so a run cannot grant itself a page (#268).
+# POSIX ERE without \b, so it reads the same in BSD grep and Git Bash.
+PRIVATE_WORDS='(^|[^[:alnum:]])private(ly)?([^[:alnum:]]|$)|do not publish|don.t publish|never publish|not (to )?be published|nothing (here )?is published'
+publish_hold() {
+  local outward
+  if printf '%s\n%s\n' "$(field "$1" WHAT)" "$(field "$1" 'DONE WHEN')" | grep -qiE "$PRIVATE_WORDS"; then
+    echo "its own words say it is private"; return
+  fi
+  outward="$(field "$1" OUTWARD)"
+  [ "$outward" = "yes" ] || { echo "its register says OUTWARD: ${outward:-no}"; return; }
+  [ "$(field "$1" PUBLISH)" = "yes" ] || { echo "it has no PUBLISH: yes, so nobody asked for a page"; return; }
+  [ -n "$(field "$1" APPROVED)" ] || echo "no yes from you is on it (APPROVED is empty)"
+}
 
 START="$(date +%s)"
 N=0; DONE=0; VERIFIED=0; UNFINISHED=0
@@ -214,12 +231,18 @@ while IFS=$'\t' read -r ID KIND WHAT; do
   # own words are on it (APPROVED), and only then does this one item get the tools that change
   # things outside: the rest of the run stays read-only, as before.
   APPROVED=""; ITEM_TOOLS="$EXTRA_TOOLS"
+  # AN ITEM WHOSE ONE OUTWARD STEP IS ITS PAGE (#268) is not a move: it gets no apply tools, and the
+  # page is made by this program after its check, never by the assistant.
+  PAGE_ONLY=0; [ "$(field "$SHOW" PUBLISH)" = "yes" ] && PAGE_ONLY=1
+  # Whether its file may become a page is decided once, here, from the record as it was before the
+  # run: the prompt and the publication after the check both read this one answer.
+  PAGE_HOLD="$(publish_hold "$SHOW")"
   # A STEP ON A STANDING PERMISSION (filed with --may) went out without a yes for this one step, so
   # it is never recorded done unless its UNDO copy, before.txt, was saved first (2026-10-13).
   MAY_KIND="$(field "$SHOW" MAY)"
   if [ "$(field "$SHOW" OUTWARD)" = "yes" ]; then
     APPROVED="$(field "$SHOW" APPROVED)"
-    [ -n "$APPROVED" ] && [ -n "$APPLY_TOOLS" ] && ITEM_TOOLS="${ITEM_TOOLS:+$ITEM_TOOLS }$APPLY_TOOLS"
+    [ -n "$APPROVED" ] && [ -n "$APPLY_TOOLS" ] && [ "$PAGE_ONLY" -eq 0 ] && ITEM_TOOLS="${ITEM_TOOLS:+$ITEM_TOOLS }$APPLY_TOOLS"
   fi
   {
     echo "Today is $TODAY (UTC). The mission control is $GODSPEED and that is the folder you are working in."
@@ -237,7 +260,16 @@ while IFS=$'\t' read -r ID KIND WHAT; do
       if [ -n "$DG" ]; then cat "$DG"; else echo "(none)"; fi
     fi
     if [ -n "$EXTRA" ] && [ -f "$EXTRA" ]; then echo; cat "$EXTRA"; fi
-    if [ -n "$APPROVED" ]; then
+    if [ -n "$APPROVED" ] && [ "$PAGE_ONLY" -eq 1 ] && [ -n "$PAGE_HOLD" ]; then
+      echo
+      echo "## This item's file stays private"
+      echo "Its file does not become a page: $PAGE_HOLD. Do not publish, post, send or change anything outside this folder."
+    elif [ -n "$APPROVED" ] && [ "$PAGE_ONLY" -eq 1 ]; then
+      echo
+      echo "## This item's file may become a page"
+      echo "The person said yes to publishing the file DONE WHEN names, in these words: $APPROVED"
+      echo "The program that called you publishes it after the item's check passes. Do not publish, post, send or change anything outside this folder yourself."
+    elif [ -n "$APPROVED" ]; then
       echo
       echo "## This item is an approved move: apply it"
       # A STANDING YES (2026-10-12): `mc-work file --may` writes APPROVED as `standing <kind>: "<words>"`,
@@ -353,17 +385,25 @@ while IFS=$'\t' read -r ID KIND WHAT; do
   VERIFIED=$((VERIFIED + 1))
   log "$ID verified"
 
-  # A FINISHED PIECE BECOMES A PAGE. The page is made by whatever command the caller named; a
-  # mission control with no such command gets the file and no page.
+  # A FINISHED PIECE BECOMES A PAGE ONLY WHEN ITS ITEM ASKED FOR ONE (#268). Every verified file
+  # used to be published once the caller named a command, and on 6 November 2026 an unattended run
+  # put an item that said "Private. Nothing here is published" online. A passing check and a SAY line
+  # are not permission: only the item's own record from before the run is (publish_hold). The page
+  # is made by whatever command the caller named; a mission control with no such command gets the
+  # file and no page.
   FILE="$(path_in "$DONE_WHEN")"
   URL=""
   if [ -n "$FILE" ] && [ -f "$GODSPEED/$FILE" ] && [ -n "$PUBLISH_CMD" ]; then
-    URL="$($PUBLISH_CMD "$GODSPEED/$FILE" --title "${SAY:-$WHAT}" 2>/dev/null | grep -oE 'https://[^ ]+' | head -1)"
-    if [ -n "$URL" ]; then
-      reg work link "$ID" --url "$URL" 2>&1 | sed 's/^/  /'
-      log "$ID published: $URL"
+    if [ -n "$PAGE_HOLD" ]; then
+      log "$ID kept private, not published: $PAGE_HOLD"
     else
-      log "$ID not published here ($PUBLISH_CMD gave no address)"
+      URL="$($PUBLISH_CMD "$GODSPEED/$FILE" --title "${SAY:-$WHAT}" 2>/dev/null | grep -oE 'https://[^ ]+' | head -1)"
+      if [ -n "$URL" ]; then
+        reg work link "$ID" --url "$URL" 2>&1 | sed 's/^/  /'
+        log "$ID published: $URL"
+      else
+        log "$ID not published here ($PUBLISH_CMD gave no address)"
+      fi
     fi
   fi
   # NO SENTENCE FOR THE PERSON, NOTHING TO TELL. The recipe tells the assistant to write a SAY line

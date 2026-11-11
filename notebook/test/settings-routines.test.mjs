@@ -538,7 +538,10 @@ test('Settings, Notifications switches the morning brief and the weekly review o
  assert.equal(brief().no_agent,true,'the notebook\'s own briefing, not the recipe (#160)');assert.equal(brief().skill,null);
  assert.equal(review().schedule.expr,'0 17 * * 5');
  assert.deepEqual(scheduler.notifications().daily,{enabled:true,time:'06:45'});
+ const promise=path.join(store.root,'work','promises','routine-brief.md'),written=fs.readFileSync(promise,'utf8');
+ assert.match(written,/^DUE: daily 06:45 Europe\/Berlin$/m,'the brief\'s promise, written when it was made');
  await scheduler.setNotifications({daily:{enabled:true,time:'07:30'}});assert.equal(brief().schedule.expr,'30 7 * * *','moved, not doubled');assert.equal(hermes.jobs().filter(j=>j.script===BRIEF_SCRIPT).length,1);
+ assert.equal(fs.readFileSync(promise,'utf8'),written,'never written over');
  await scheduler.setNotifications({daily:{enabled:false,time:'07:30'}});assert.equal(brief().enabled,false,'off pauses it');
  await scheduler.setNotifications({daily:{enabled:true,time:'07:30'}});assert.equal(brief().enabled,true,'on resumes it');
  await assert.rejects(scheduler.setNotifications({weekly:{enabled:true,day:9,time:'17:00'}}),/day of the week/);

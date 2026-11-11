@@ -19,7 +19,13 @@
 // command, which is what the chat's "today's brief" runs) prints it unchanged; the routine prints
 // nothing for it, so a person who already read it in the chat is not sent it a second time.
 // Otherwise it runs as above. Silent stays silent: no output. The last --godspeed wins, so the
-// root a wired command appends cannot be redirected by an argument before it.
+// root a wired command appends cannot be redirected by an argument before it. A reminder whose self
+// check was skipped (#418) is said on stderr, once per file, after the briefing: stdout is what
+// Hermes delivers to the person.
+//
+// --saved only reads: today's saved briefing, word for word, or nothing when none is saved (or the
+// person hid it). Telegram's "today's brief" answers with it before the model sees the message
+// (assistant-files/godspeed-reply/todays_brief.py, 9 November 2026), so it never writes one.
 //
 // The AI is the notebook's own: the one connected in Settings (.godspeed/provider.json), else the
 // assistant the notebook was wired to (assistant.json), as the notebook's server chooses it.
@@ -60,26 +66,35 @@ export function notebookQuery(store,env=process.env){
 
 // The briefing, and the words to deliver: the saved note's, or '' when the briefing stays silent.
 // `existing` says the note was already saved, so only the one who asks for it prints it again.
+// `notices` are the self checks the reminders skipped on the way.
 export async function runMorningBrief({root,provider=null,env=process.env,now=new Date()}){
  const store=new Store(root,{device:machineDevice(root).id});
  const {note:saved,hidden}=savedBriefToday(store,now);
- if(saved)return {result:null,existing:true,text:String(saved.content||'')};
- if(hidden)return {result:null,existing:true,text:''};
+ if(saved)return {result:null,existing:true,text:String(saved.content||''),notices:[]};
+ if(hidden)return {result:null,existing:true,text:'',notices:[]};
  const query=notebookQuery(store,env);
  const ai=provider||notebookProvider(store,env);
  if(!ai)throw Error('The morning brief has no AI to write with: connect one in Settings, Your AI.');
- const result=await briefing({id:'morning-brief',kind:'morning-brief'},{store,query,provider:ai,now});
+ const notices=[];
+ const result=await briefing({id:'morning-brief',kind:'morning-brief'},{store,query,provider:ai,now,notices});
  const note=result.record_id?store.get('notes',result.record_id):null;
- return {result,existing:false,text:note?String(note.content||'').trim():''};
+ return {result,existing:false,text:note?String(note.content||'').trim():'',notices};
 }
 
 if(import.meta.url===pathToFileURL(process.argv[1]||'').href){
  const at=process.argv.lastIndexOf('--godspeed'),root=(at>0&&process.argv[at+1])||process.env.GODSPEED_WORKSPACE||process.env.GODSPEED_ROOT;
  if(!root){console.error('The morning brief does not know which mission control to read (GODSPEED_WORKSPACE).');process.exit(2);}
  try{
+  if(process.argv.includes('--saved')){
+   const {note}=savedBriefToday(new Store(root,{device:machineDevice(root).id}));
+   const text=String(note?.content||'').trim();
+   if(text)process.stdout.write(text+'\n');
+   process.exit(0);
+  }
   const today=process.argv.includes('--today');
-  const {text,existing}=await runMorningBrief({root});
+  const {text,existing,notices}=await runMorningBrief({root});
   if(text&&(today||!existing))process.stdout.write(text+'\n');
+  for(const line of notices)console.error(line);
   process.exit(0);
  }catch(error){
   // One plain sentence: the routine's script shows it as the run's last line in Settings > Routines.

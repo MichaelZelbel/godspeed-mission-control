@@ -24,6 +24,7 @@
 #   report-facts.json                the facts the report was written from
 #   conversation_messages-report.json  what the notebook's chat held after the report went out
 #   telegram-requests.json, runner.json, routines.json
+#   routine-diagnostics-report.json, routine-output-report/  the admitted Hermes child and its run log
 SCENARIO=what-was-that
 # shellcheck source=scenarios/scenario-lib.sh
 . "$(dirname "$0")/scenario-lib.sh"
@@ -43,8 +44,10 @@ act() {
   server_connects_the_model
   phase 'the owner on the installed Docker Telegram gateway'
   server_telegram_setup
+  server_remember_gateway
   printf '{"goal":"Sleep eight hours a night","timezone":"Etc/UTC","delivery":"telegram"}\n' >"$EVIDENCE/.setup.json"
   [ "$(server_post /api/setup "$EVIDENCE/.setup.json" "$EVIDENCE/setup.json")" = 200 ] || fail 'the installed notebook would not make routines for the fixture goal'
+  server_settle_gateway
   server_pause_all_jobs
   server_table jobs "$EVIDENCE/routines.json"
   printf '%s\n' "$FACTS" >"$EVIDENCE/report-facts.json"

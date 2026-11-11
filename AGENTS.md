@@ -12,4 +12,6 @@ Main changes only through a pull request whose `required` check passed: push a b
 one, never push to main. The check waits for every other check on the pull request's commit and
 for an approving review from a reviewer listed in the repository variable `REQUIRED_REVIEWERS`, or for
 Archon's review verdict on the head commit from a login in `.archon/sdlc/policy/maintainers.json` on main
-(the comment Archon's `publish-review` stamps; `.github/workflows/required-gate.mjs` says the rule).
+(the comment Archon's `publish-review` stamps), or for the newest `Loop review:` comment of Cole Medin's
+factory from such a login, if it says approved or merging and names the exact head commit
+(`.github/workflows/required-gate.mjs` says the rules).

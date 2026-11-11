@@ -89,9 +89,10 @@ if (command === 'codes') {
 } else if (command === 'deadlines') {
   const key = (r) => r?.slug ?? r?.id;
   const known = new Set(rest[0] ? rows(rest[0]).map(key) : []);
-  for (const r of rows(file)) if (!known.has(key(r))) console.log(`${r.state ?? ''}\t${r.title ?? ''}\t${key(r) ?? ''}`);
+  for (const r of rows(file)) if (!known.has(key(r))) console.log(`${r.status ?? r.state ?? ''}\t${r.title ?? ''}\t${key(r) ?? ''}`);
 } else if (command === 'state') {
-  console.log(rows(file).find((r) => (r?.slug ?? r?.id) === rest[0])?.state ?? 'absent');
+  const deadline = rows(file).find((r) => (r?.slug ?? r?.id) === rest[0]);
+  console.log(deadline?.status ?? deadline?.state ?? 'absent');
 } else if (command === 'bell') {
   const known = new Set(rows(rest[0]).map((r) => r?.id));
   const fresh = rows(file).filter((r) => !known.has(r?.id));

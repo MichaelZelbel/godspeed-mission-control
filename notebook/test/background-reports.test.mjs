@@ -1,6 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import {fileURLToPath} from 'node:url';import {execFileSync} from 'node:child_process';
 import {Store} from '../core/records/store.mjs';import {QueryService} from '../core/query.mjs';import {chatContext} from '../core/chat-context.mjs';
-import {queueNotice,readNotices} from '../core/notices.mjs';import {openStep,heard} from '../core/waiting-steps.mjs';import {sayNotice,recordRoutine,delivered,REPORT_CONTRACT} from '../core/background-reports.mjs';
+import {queueNotice,readNotices} from '../core/notices.mjs';import {openStep,heard} from '../core/waiting-steps.mjs';import {sayNotice,recordRoutine,delivered,followUpFailed,REPORT_CONTRACT,FOLLOW_UP_CONTRACT,GIVEN_UP_CONTRACT} from '../core/background-reports.mjs';
 
 // BACKGROUND REPORTS (4 November 2026, #198): a notice is written with the chat's guidance, recorded
 // where the chat reads it, and the chat's next reply is told about it.
@@ -116,6 +116,15 @@ class BasePlatformAdapter:
 sys.modules["gateway.platforms.base"].BasePlatformAdapter=BasePlatformAdapter
 sys.modules["cron.scheduler_delivery"]._redact_cron_payload=lambda text,what:text.replace("sk-secret-123","[redacted]")
 sys.modules["cron.scheduler"]._deliver_result=lambda job,content,adapters=None,loop=None,*,for_failure=False:delivered.append(content)
+import os
+sys.modules["cron.jobs"]=types.ModuleType("cron.jobs");sys.modules["cron"].jobs=sys.modules["cron.jobs"]
+created=[];counter=os.path.join(os.path.dirname(sys.argv[1]),"stub-jobs-created")
+def create_job(prompt,schedule,name=None,repeat=None,deliver=None,origin=None,skill=None,skills=None,failure_deliver=None):
+ if name=="Unschedulable":raise RuntimeError("jobs.json is locked")
+ if name=="Unlinkable":links=os.path.join(os.path.dirname(sys.argv[1]),"follow-ups.json");os.path.exists(links) and os.remove(links);os.mkdir(links)
+ n=(int(open(counter).read()) if os.path.exists(counter) else 0)+1;open(counter,"w").write(str(n))
+ created.append(dict(prompt=prompt,schedule=schedule,name=name,repeat=repeat,deliver=deliver,origin=origin,skill=skill,skills=skills,failure_deliver=failure_deliver));return {"id":"retry-%d"%n}
+sys.modules["cron.jobs"].create_job=create_job
 import importlib.util
 s=importlib.util.spec_from_file_location("godspeed_notebook",sys.argv[1]);m=importlib.util.module_from_spec(s);s.loader.exec_module(m)
 class Ctx:
@@ -123,24 +132,24 @@ class Ctx:
 m.register(Ctx());m.register(Ctx())
 deliver=sys.modules["cron.scheduler"]._deliver_result
 jobs=json.loads(sys.argv[2]);errors=[deliver(job,text,for_failure=failed) for job,text,failed in jobs]
-print(json.dumps({"errors":errors,"delivered":delivered}))
+print(json.dumps({"errors":errors,"delivered":delivered,"created":created}))
 `;
 function wiredProvider(t,{node=process.execPath}={}){
  const {root,home,store}=setup(t),dir=path.join(home,'plugins','godspeed_notebook');fs.mkdirSync(dir,{recursive:true});
  fs.copyFileSync(fileURLToPath(new URL('../assistant-files/godspeed-cron-provider.py',import.meta.url)),path.join(dir,'__init__.py'));
  fs.writeFileSync(path.join(dir,'report.json'),JSON.stringify({node,script:fileURLToPath(new URL('../scripts/background-report.mjs',import.meta.url)),root}));
- return {store,run:jobs=>JSON.parse(execFileSync(python,['-I','-c',CRON_STUB,path.join(dir,'__init__.py'),JSON.stringify(jobs)],{encoding:'utf8'}))};
+ return {store,dir,run:jobs=>JSON.parse(execFileSync(python,['-I','-c',CRON_STUB,path.join(dir,'__init__.py'),JSON.stringify(jobs)],{encoding:'utf8'}))};
 }
 
 test('what a Settings routine delivers is recorded as Hermes will send it, for local and Telegram delivery, before Hermes delivers it',t=>{
  if(!python)return t.skip('needs Python');
  const {store,run}=wiredProvider(t),words='Your weekly review is ready. Reply "ok" and I will start.';
  const out=run([[{id:'j1',name:'Weekly review',skill:'weekly-review',deliver:'telegram',resolved:{targets:{'telegram':[{platform:'telegram'}]},lane:'telegram'}},words,false],[{id:'j2',name:'Morning brief',skills:['morning-brief'],deliver:'local',resolved:{targets:{},lane:'local'}},'Good morning.',false],
-  [{id:'j3',name:'Own script',script:'x.py',deliver:'telegram',resolved:{targets:{'telegram':[{platform:'telegram'}]},lane:'telegram'}},'Printed by its script.',false],[{id:'j4',name:'Failing',skill:'coach',deliver:'telegram',resolved:{targets:{'telegram':[{platform:'telegram'}]},lane:'telegram'}},'It failed.',true],[{id:'j5',name:'Targeted',skill:'coach',deliver:'telegram:123',resolved:{targets:{'telegram:123':[{platform:'telegram'}]},lane:'telegram:123'}},'To a chat.',false],
+  [{id:'j3',name:'Own script',script:'x.py',deliver:'telegram',resolved:{targets:{'telegram':[{platform:'telegram'}]},lane:'telegram'}},'Printed by its script.',false],[{id:'j5',name:'Targeted',skill:'coach',deliver:'telegram:123',resolved:{targets:{'telegram:123':[{platform:'telegram'}]},lane:'telegram:123'}},'To a chat.',false],
   [{id:'j6',name:'Origin',skill:'coach',deliver:'origin',resolved:{targets:{'origin':[{platform:'telegram'}]},lane:'origin'}},'From origin.',false]]);
- assert.deepEqual(out.errors,[null,null,null,null,null,null]);assert.deepEqual(out.delivered,[words,'Good morning.','Printed by its script.','It failed.','To a chat.','From origin.']);
+ assert.deepEqual(out.errors,[null,null,null,null,null]);assert.deepEqual(out.delivered,[words,'Good morning.','Printed by its script.','To a chat.','From origin.']);
  store.scan?.();const saved=[...new Store(store.root,{device:'pc'}).records.values()].filter(r=>r.id.startsWith('background-report-')).sort((a,b)=>a.content<b.content?-1:1);
- assert.deepEqual(saved.map(r=>[r.content,r.delivered_to,r.conversation_id,r.report.routine]),[['From origin.','telegram','telegram-owner','Origin'],['Good morning.','notebook',null,'Morning brief'],['It failed.','telegram','telegram-owner','Failing'],['To a chat.','telegram','telegram-owner','Targeted'],[words,'telegram','telegram-owner','Weekly review']]);
+ assert.deepEqual(saved.map(r=>[r.content,r.delivered_to,r.conversation_id,r.report.routine]),[['From origin.','telegram','telegram-owner','Origin'],['Good morning.','notebook',null,'Morning brief'],['To a chat.','telegram','telegram-owner','Targeted'],[words,'telegram','telegram-owner','Weekly review']]);
 });
 
 const TELEGRAM_JOB={id:'j1',name:'Asker',skill:'ask',deliver:'telegram',resolved:{targets:{'telegram':[{platform:'telegram'}]},lane:'telegram'}};
@@ -193,16 +202,150 @@ test('a Settings routine\'s result that cannot be recorded is not delivered',t=>
  assert.match(out.errors[0],/Not delivered: it could not be recorded/);assert.deepEqual(out.delivered,[]);
 });
 
-test('a failure is recorded in the lane Hermes sends failures to, not the normal lane',t=>{
+test('a failure bound for the owner\'s chats is withheld; a failure lane outside them is delivered as before',t=>{
  if(!python)return t.skip('needs Python');
  const {store,run}=wiredProvider(t);
  const out=run([[{id:'j1',name:'To notebook',skill:'coach',deliver:'local',failure_deliver:'telegram',resolved:{targets:{'telegram':[{platform:'telegram'}]},lane:'telegram'}},'Failed A.',true],[{id:'j2',name:'To Telegram',skill:'coach',deliver:'telegram',failure_deliver:'local',resolved:{targets:{},lane:'local'}},'Failed B.',true],
   [{id:'j3',name:'Failure silenced',skill:'coach',deliver:'telegram',failure_deliver:'origin',resolved:{targets:{},lane:'origin'}},'Failed C.',true],[{id:'j4',name:'Blank lane',skill:'coach',deliver:'local',failure_deliver:' ',resolved:{targets:{},lane:'local'}},'Failed D.',true],
   [{id:'j5',name:'Composite',skill:'coach',deliver:'local',failure_deliver:'telegram,local',resolved:{targets:{telegram:[{platform:'telegram'}]},lane:'telegram,local'}},'Failed E.',true],[{id:'j6',name:'Origin',skill:'coach',deliver:'local',failure_deliver:'origin',origin_platform:'telegram',resolved:{targets:{'origin':[{platform:'telegram'}]},lane:'origin'}},'Failed F.',true],
-  [{id:'j7',name:'Elsewhere',skill:'coach',deliver:'local',failure_deliver:'discord',resolved:{targets:{'discord':[{platform:'discord'}]},lane:'discord'}},'Failed G.',true]]);
- assert.deepEqual(out.errors,[null,null,null,null,null,null,null]);
- const saved=[...new Store(store.root,{device:'pc'}).records.values()].filter(r=>r.id.startsWith('background-report-')).sort((a,b)=>a.content+a.delivered_to<b.content+b.delivered_to?-1:1);
- assert.deepEqual(saved.map(r=>[r.content,r.delivered_to]),[['Failed A.','telegram'],['Failed B.','notebook'],['Failed D.','notebook'],['Failed E.','notebook'],['Failed E.','telegram'],['Failed F.','telegram']]);
+  [{id:'j7',name:'Elsewhere',skill:'coach',deliver:'local',failure_deliver:'discord',resolved:{targets:{'discord':[{platform:'discord'}]},lane:'discord'}},'Failed G.',true],[{id:'j8',name:'Unresolvable',skill:'coach',deliver:'telegram',resolved:{}},'Failed H.',true]]);
+ assert.deepEqual(out.errors,[null,null,null,null,null,null,null,null]);
+ assert.deepEqual(out.delivered,['Failed C.','Failed G.'],'only lanes that reach neither the owner\'s Telegram nor the notebook get the note');
+ assert.deepEqual(records(new Store(store.root,{device:'pc'})),[],'nothing is recorded in the chat');
+ const kept=fs.readFileSync(path.join(store.state,'ai-failures.log'),'utf8');
+ for(const note of ['Failed A.','Failed B.','Failed D.','Failed E.','Failed F.','Failed H.'])assert.ok(kept.includes(note),note+' is kept in the failure log');
+});
+
+// A SCHEDULED FOLLOW-UP THAT FAILED (#385): the note Hermes delivered to the owner on 10 November 2026.
+const ISSUE_NOTE="[Cron delivery: kofi-pricing-revisit-20261110] \u26a0\ufe0f Cron 'kofi-pricing-revisit-20261110' failed: the run could not start. Run `godspeed sync --pull` (`cannot import name 'conversation_id'`) and check `hermes cron runs e6114fa9f94c` (output saved under ~/godspeed/.godspeed/integrated/cron-runs/e6114fa9f94c.log)";
+const FOLLOW_UP={id:'e6114fa9f94c',name:'kofi-pricing-revisit-20261110',prompt:'Check whether the Ko-fi price change from last week brought in more supporters, and tell Michael.',deliver:'telegram',schedule:{kind:'once',run_at:'2026-11-10T09:00:00+00:00'},repeat:{times:1,completed:0},resolved:{targets:{telegram:[{platform:'telegram'}]},lane:'telegram'}};
+const keptLines=store=>{try{return fs.readFileSync(path.join(store.state,'ai-failures.log'),'utf8').split('\n').filter(Boolean).map(l=>JSON.parse(l));}catch{return [];}};
+
+test('no raw failure note reaches the owner, from a prompt follow-up or a skill job',t=>{
+ if(!python)return t.skip('needs Python');
+ const {store,run}=wiredProvider(t);
+ const out=run([[FOLLOW_UP,ISSUE_NOTE,true],[{...FOLLOW_UP,id:'s1',skill:'coach',prompt:null},ISSUE_NOTE,true]]);
+ assert.deepEqual(out.errors,[null,null]);assert.deepEqual(out.delivered,[]);
+ const fresh=new Store(store.root,{device:'pc'});
+ assert.deepEqual(records(fresh),[]);
+ const said=JSON.stringify(readNotices(fresh));
+ for(const part of ['kofi-pricing-revisit','[Cron delivery','hermes cron','godspeed sync','cannot import','~/'])assert.ok(!said.includes(part),part+' is not in a notice');
+ const kept=keptLines(store);assert.equal(kept.length,2);assert.ok(kept.every(k=>k.diagnosis.includes('cannot import name')&&k.said===''));
+ assert.deepEqual(kept.map(k=>[k.scheduled_job,k.origin,k.attempt]),[['e6114fa9f94c','e6114fa9f94c',1],['s1','s1',1]]);
+});
+
+test('a failed one-time follow-up stays owed, and the retry that works ends it',t=>{
+ if(!python)return t.skip('needs Python');
+ const {store,run}=wiredProvider(t),before=Date.now();
+ const failed=run([[FOLLOW_UP,ISSUE_NOTE,true]]);
+ assert.equal(failed.created.length,1);
+ const [retry]=failed.created;
+ assert.deepEqual([retry.prompt,retry.name,retry.deliver,retry.repeat],[FOLLOW_UP.prompt,FOLLOW_UP.name,'telegram',1]);
+ const due=Date.parse(retry.schedule)-before;assert.ok(due>3500000&&due<3700000,'tried again in about an hour, not '+retry.schedule);
+ assert.match(retry.schedule,/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\+00:00$/,'an ISO time, which Hermes runs once');
+ const words='The Ko-fi change brought in three new supporters.';
+ const worked=run([[{...FOLLOW_UP,id:'retry-1',skill:'coach',schedule:{kind:'once'}},words,false]]);
+ assert.deepEqual(worked.errors,[null]);assert.deepEqual(worked.delivered,[words]);assert.deepEqual(worked.created,[]);
+ assert.deepEqual(records(new Store(store.root,{device:'pc'})).map(r=>[r.content,r.delivered_to]),[[words,'telegram']]);
+});
+
+test('retries are bounded, and a follow-up that keeps failing is left for repair',t=>{
+ if(!python)return t.skip('needs Python');
+ const {store,run}=wiredProvider(t),schedules=[];
+ let job=FOLLOW_UP;
+ for(let i=1;i<=4;i++){
+  const out=run([[job,ISSUE_NOTE,true]]);
+  assert.deepEqual([out.errors,out.delivered],[[null],[]]);
+  if(i<4){assert.equal(out.created.length,1);schedules.push(Date.parse(out.created[0].schedule));job={...FOLLOW_UP,id:'retry-'+i};}
+  else assert.deepEqual(out.created,[],'no fourth retry');
+ }
+ const hours=schedules.map(at=>Math.round((at-Date.now())/3600000));assert.deepEqual(hours,[1,6,24]);
+ const fresh=new Store(store.root,{device:'pc'}),given=fresh.get('notifications','follow-up-given-up-e6114fa9f94c');
+ assert.deepEqual([given.status,given.kind,given.link],['pending','follow-up-given-up','/dashboard/chat']);
+ assert.equal(given.body,'A follow-up you asked for in the chat could not be done. It was tried 4 times and will not be tried again. You can ask for it again in the chat.');
+ for(const name of ['kofi-pricing-revisit','e6114fa9f94c','retry-','failure log'])assert.ok(!given.body.includes(name),name+' is not in the notification');
+ assert.deepEqual(keptLines(store).map(k=>[k.origin,k.attempt]),[1,2,3,4].map(a=>['e6114fa9f94c',a]));
+ assert.deepEqual(readNotices(fresh),[],'without an AI, the owner\'s chat stays silent');
+});
+
+test('a follow-up that cannot be scheduled again is left for repair at once',t=>{
+ if(!python)return t.skip('needs Python');
+ const {store,run}=wiredProvider(t);
+ const out=run([[{...FOLLOW_UP,name:'Unschedulable'},ISSUE_NOTE,true]]);
+ assert.deepEqual([out.errors,out.delivered,out.created],[[null],[],[]]);
+ const fresh=new Store(store.root,{device:'pc'});
+ assert.match(fresh.get('notifications','follow-up-given-up-e6114fa9f94c').body,/It was tried 1 time and will not be tried again\. You can ask for it again in the chat\./);
+ assert.deepEqual(keptLines(store).map(k=>[k.attempt,k.retry_error]),[[1,'jobs.json is locked']]);
+ assert.deepEqual(readNotices(fresh),[]);
+});
+
+test('a follow-up whose retries could not be kept is left for repair at once, and said nothing about',t=>{
+ if(!python)return t.skip('needs Python');
+ const {store,run,dir}=wiredProvider(t);fs.mkdirSync(path.join(dir,'follow-ups.json'));
+ const out=run([[FOLLOW_UP,ISSUE_NOTE,true]]);
+ assert.deepEqual([out.errors,out.delivered,out.created],[[null],[],[]],'no retry that would count from the start again');
+ const fresh=new Store(store.root,{device:'pc'});
+ assert.match(fresh.get('notifications','follow-up-given-up-e6114fa9f94c').body,/It was tried 1 time and will not be tried again\. You can ask for it again in the chat\./);
+ const [kept]=keptLines(store);assert.match(kept.retry_error,/^the follow-up's retries could not be kept/);
+ assert.deepEqual(readNotices(fresh),[]);
+});
+
+test('a retry whose link could not be kept after it was scheduled still runs, and is not reported as given up',t=>{
+ if(!python)return t.skip('needs Python');
+ const {store,run}=wiredProvider(t);
+ const out=run([[{...FOLLOW_UP,name:'Unlinkable'},ISSUE_NOTE,true]]);
+ assert.deepEqual([out.errors,out.delivered,out.created.length],[[null],[],1]);
+ assert.equal(new Store(store.root,{device:'pc'}).get('notifications','follow-up-given-up-e6114fa9f94c'),undefined);
+ const [kept]=keptLines(store);assert.match(kept.retry_error,/^the retry is scheduled, but could not be linked/);
+});
+
+test('a failure the notebook could not keep is not reported to Hermes as handled',t=>{
+ if(!python)return t.skip('needs Python');
+ const {store,run}=wiredProvider(t);fs.mkdirSync(path.join(store.state,'ai-failures.log'),{recursive:true});
+ const out=run([[FOLLOW_UP,ISSUE_NOTE,true]]);
+ assert.match(out.errors[0],/^Not delivered: the failure could not be kept in the notebook\. .*failure log could not be written/);
+ assert.deepEqual(out.delivered,[]);
+});
+
+test('a recurring job\'s failure is kept and not said, and it is not scheduled again',t=>{
+ if(!python)return t.skip('needs Python');
+ const {store,run}=wiredProvider(t);
+ const out=run([[{...FOLLOW_UP,id:'daily',schedule:{kind:'cron',expr:'0 9 * * *'},repeat:{times:null,completed:3}},ISSUE_NOTE,true]]);
+ assert.deepEqual([out.errors,out.delivered,out.created],[[null],[],[]]);
+ assert.equal(keptLines(store).length,1);assert.deepEqual(readNotices(new Store(store.root,{device:'pc'})),[]);
+});
+
+test('the owner hears one plain sentence about the follow-up, once, or nothing',async t=>{
+ const {store,home}=setup(t),seen=[];
+ const job={id:FOLLOW_UP.id,name:FOLLOW_UP.name,prompt:FOLLOW_UP.prompt};
+ const failure=(attempt,ai,more={})=>followUpFailed(store,{job,origin:job.id,attempt,one_time:true,retry_at:'2026-11-10T10:00:00+00:00',given_up:false,note:ISSUE_NOTE,home,provider:ai,...more});
+ const sentence='I could not check yet whether the Ko-fi price change brought in more supporters, so I will look again in an hour.';
+ assert.deepEqual(await failure(1,provider([{about:'Ko-fi price',text:sentence}],seen)),{told:true,given_up:false});
+ assert.ok(!JSON.stringify(seen).includes('cannot import'),'the raw note is never handed to the AI');
+ assert.ok(seen[0].signal,'the writing is bounded in time');assert.equal(seen[0].contract,FOLLOW_UP_CONTRACT,'asked for one sentence');
+ assert.deepEqual(await failure(2,provider([{about:'Ko-fi price',text:sentence}],seen)),{told:false,given_up:false});
+ const notices=readNotices(store);assert.equal(notices.length,1);
+ assert.deepEqual([notices[0].id,notices[0].text,notices[0].written],['follow-up-failed-'+job.id,sentence,true]);
+ const other=setup(t);
+ const refusedText=['The job kofi-pricing-revisit-20261110 did not run.','Run `godspeed sync --pull` and I will retry.','A Python error stopped the Ko-fi check.','The log at ~/godspeed/cron.log says why.'];
+ for(const text of refusedText)assert.equal((await followUpFailed(other.store,{job,origin:job.id,attempt:1,one_time:true,given_up:false,note:ISSUE_NOTE,home:other.home,provider:provider([{about:'x',text}])})).told,false,text);
+ assert.equal((await followUpFailed(other.store,{job,origin:job.id,attempt:1,one_time:true,given_up:false,note:ISSUE_NOTE,home:other.home,provider:async()=>{throw Error('down');}})).told,false);
+ assert.deepEqual(readNotices(other.store),[]);
+});
+
+test('a follow-up that was given up is named by what it was for, never by its job name or id',async t=>{
+ const job={id:'retry-3',name:FOLLOW_UP.name,prompt:FOLLOW_UP.prompt},seen=[];
+ const givenUp=async ai=>{const {store,home}=setup(t);await followUpFailed(store,{job,origin:FOLLOW_UP.id,attempt:4,one_time:true,given_up:true,note:ISSUE_NOTE,home,provider:ai});return store.get('notifications','follow-up-given-up-'+FOLLOW_UP.id);};
+ const named=await givenUp(provider([{about:'Ko-fi',text:'checking whether the Ko-fi price change brought in more supporters.'}],seen));
+ assert.equal(named.body,'I could not do a follow-up you asked for in the chat: checking whether the Ko-fi price change brought in more supporters. It was tried 4 times and will not be tried again. You can ask for it again in the chat.');
+ assert.equal(named.link,'/dashboard/chat');
+ assert.equal(seen[0].contract,GIVEN_UP_CONTRACT);assert.ok(seen[0].signal,'the writing is bounded in time');
+ assert.ok(!JSON.stringify(seen).includes('cannot import')&&!JSON.stringify(seen).includes(FOLLOW_UP.name),'the AI sees what it was for, not the note or the job name');
+ const generic='A follow-up you asked for in the chat could not be done. It was tried 4 times and will not be tried again. You can ask for it again in the chat.';
+ for(const text of ['the kofi-pricing-revisit-20261110 check','the e6114fa9f94c job','the cron job','the check in ~/godspeed/notes.md','a "pricing" check'])
+  assert.equal((await givenUp(provider([{about:'x',text}]))).body,generic,text);
+ assert.equal((await givenUp(async()=>{throw Error('down');})).body,generic,'without an AI the notification still says what to do');
+ assert.equal((await givenUp(null)).body,generic);
 });
 
 test('a composite lane is recorded once for each destination Hermes resolves',t=>{

@@ -72,10 +72,3 @@ no_day() { # <observation lines file> <day> <metric> <why>
   ! awk -v d="$2" -v m="$3" '$1==d && $2==m {found=1} END{exit !found}' "$1" || fail "$3 on $2 was written although $4"
 }
 
-# The briefing note the morning brief saved last, as plain text, for the scenarios that read it.
-NEWEST_BRIEFING_NOTE='
-const fs=require("fs");const d=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));
-const notes=(Array.isArray(d)?d:(d.data||[])).filter(n=>n&&n.source_app==="morning-brief"&&!n.is_trashed)
- .sort((a,b)=>String(a.created_at).localeCompare(String(b.created_at)));
-const n=notes[notes.length-1];if(!n)process.exit(1);process.stdout.write(String(n.content||""));
-'

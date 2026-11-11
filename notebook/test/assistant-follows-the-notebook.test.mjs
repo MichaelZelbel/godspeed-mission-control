@@ -147,6 +147,16 @@ test('the starter manual says what the live run needed, and leaves a reader room
   const brief=fs.readFileSync(new URL('../../starter-godspeed/skills/morning-brief/SKILL.md',import.meta.url),'utf8');
   for(const said of [/## Switching it on/,/`skills: \["morning-brief"\]`/,/follow this recipe yourself, right here, exactly as the routine\s+will/,/Never start the routine's own `run` from the chat/,/`date \+%F`/,/Your final answer is the brief itself, word for word/])assert.match(brief,said);
   assert.doesNotMatch(manual,/[–—]/,'no long dashes');
+  // #282: the person's yes, no or "not yet" to a proposal is a world claim written by mc-holds,
+  // never a line in the decision log, so the decision path can hold the step back.
+  assert.match(manual,/My yes, no or "not\s+yet" to your proposal goes to `mc-holds`, never there/);
+  assert.doesNotMatch(manual,/yes, no or "not\s+yet"[^.]*decisions\.md/);
+  assert.match(brief,/`mc-holds hold`[^.]*never in `decisions\.md`/);
+  for(const copy of ['../../starter-godspeed/skills/next-action/SKILL.md','../../notebook/recipes/next-action/SKILL.md','../../notebook/reusable-recipes/next-action/SKILL.md']){
+    const recipe=fs.readFileSync(new URL(copy,import.meta.url),'utf8');
+    assert.match(recipe,/written as a hold on what the line touches, never as a line in `decisions\.md`:\s+`mc-holds hold --subject/,copy);
+    assert.match(recipe,/TOUCHES: <the slugs of the world entities/,copy);
+  }
   // research-watch ships in the starter now, with its hashes; the kit's copy is the same text.
   const starter=fs.readFileSync(new URL('../../starter-godspeed/skills/research-watch/SKILL.md',import.meta.url),'utf8');
   assert.equal(starter,fs.readFileSync(new URL('../../skills/research-watch/SKILL.md',import.meta.url),'utf8'));

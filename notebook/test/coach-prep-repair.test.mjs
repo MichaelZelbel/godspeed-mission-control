@@ -30,3 +30,18 @@ test('an item the person closed is filed again when the talk fails again',t=>{
  assert.equal(fileCoachPrepRepair({root,area:'work',talk:'2026-11-05'}).filed,true);
  assert.equal(new Store(root).get('work_items',id).state,'needs_review');
 });
+
+// #359: a talk that opened without its preparation gets the same kind of item, under the same id,
+// asking for the next talk to be ready.
+test('a talk that opened without its preparation files one item that asks for the next talk to be ready',t=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-coach-repair-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ const run=()=>spawnSync(process.execPath,[script,'--godspeed',root,'--area','health','--talk','2026-11-08','--title','Health','--opened-unprepared','none was written','--next','2026-11-15'],{encoding:'utf8'});
+ const first=run();assert.equal(first.status,0,first.stderr);assert.equal(first.stdout.trim(),'filed '+repairId('health','2026-11-08'));
+ const [item]=repairs(root);
+ assert.equal(item.title,'The Health talk of 2026-11-08 opened without a reviewed preparation: none was written');
+ assert.equal(item.check,'The next Health talk (2026-11-15) has a preparation that passes its review (godspeed-coach prep-check health --date 2026-11-15 says ready)');
+ assert.deepEqual([item.tries,item.error,item.state],[0,'none was written','needs_review']);
+ const again=run();assert.equal(again.status,0,again.stderr);assert.match(again.stdout,/^already open /);
+ assert.equal(repairs(root).length,1);
+ assert.equal(spawnSync(process.execPath,[script,'--godspeed',root,'--area','health','--talk','2026-11-01','--opened-unprepared','x','--next','soon'],{encoding:'utf8'}).status,2);
+});
