@@ -287,4 +287,4 @@ if (require.main === module) {
   try { cmds[cmd](a); } catch (e) { L.die(e.message); }
 }
 
-module.exports = { currentHolds, heldBy, parseTouches, describe, frontMatter };
+module.exports = { currentHolds, heldBy, describe };
