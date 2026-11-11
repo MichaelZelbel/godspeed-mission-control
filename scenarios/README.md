@@ -12,7 +12,7 @@ which a step written inside a workflow file cannot be. They live in a folder of 
 same reason `stage/` does: everything in `tools/` is copied onto every user's computer as a program,
 and these are not programs for users.
 
-`chat-tidy-at-night`, `disk-filling`, `missed-routine` and `deadline-closes-itself` are not yet jobs of
+`chat-tidy-at-night`, `disk-filling`, `missed-routine`, `deadline-closes-itself` and `held-by-a-claim` are not yet jobs of
 that workflow: their jobs are written in the pull request that added them and are applied in the
 release step. Until then they are run by hand, with the environment their rows below name. Remove this
 paragraph when the jobs are in `.github/workflows/scenarios.yml`.
@@ -53,6 +53,7 @@ paragraph when the jobs are in `.github/workflows/scenarios.yml`.
 | `disk-filling.sh` | on the Docker server install, with a small file system over the data folder made to read 86%: the daily connection check says one message naming the three biggest places and opens one deadline, a second run says and opens nothing, at 75% the deadline closes; the cleanup routine then takes the 40-day-old request dump, session transcript and run log and leaves the note, both chats, the backup and the file of a listed session |
 | `missed-routine.sh` | not yet on the installed server's Telegram path, so acting ends at once in a FAIL line that says so; its checking part is held by `test-scenarios.sh`. Once moved: with one routine whose time passed without a run, one that failed twice and one that failed once, the daily connection check sends one message naming the first two and not the third, a second run sends nothing, and a good run of each closes what was opened |
 | `deadline-closes-itself.sh` | not yet on the installed server's Telegram path, so acting ends at once in a FAIL line that says so; its checking part is held by `test-scenarios.sh`. Once moved: a deadline on the AI's key closes on the next deadline run after the key is replaced in Settings, a deadline about Telegram closes when the connection check passes, and neither key's value is in any log, record or evidence file |
+| `held-by-a-claim.sh` | a step the person postponed until the book is out of beta (a world claim written with `mc-holds`) is kept off the real daily decision's moves, its card and the work register, with the claim named in the decision's output, while a step about someone else stays; once the book's beta claim ends the next decision proposes it again. The decision's assistant is a stand-in and it needs no key; `GODSPEED_SCENARIO_PRODUCT=<a checkout> bash scenarios/held-by-a-claim.sh local` runs it against a checkout |
 | `workouts-from-hevy.sh` (a workflow job) | Docker and Linux installs reject a made-up Hevy key, then import made-up workouts through Settings; their one hourly routine updates a changed workout and removes a deleted one without keeping the key elsewhere |
 | `day-becomes-facts.sh` (a workflow job) | the nightly remembered-facts routine turns an invented day's move and doctor into dated source-linked facts, closes the older city, ignores machine/`track` messages, and makes no second-copy records |
 | `hermes-update-rollback.sh` (a workflow job) | the notebook's 04:15 path keeps a good local Hermes release, rolls a broken one back with one notice, and leaves a three-day-old local release alone |

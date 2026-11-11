@@ -95,6 +95,14 @@ Optional detail.
 `type`, `attribute` and `confidence` are open vocabulary. A missing `valid_to` means "believed
 true today". A missing `valid_from` means "true since before you started recording".
 
+**A claim can hold a step back.** When you decline or postpone something your mission control
+proposed, it writes a claim with `stance: declined` or `stance: postponed` (`mc-holds hold`).
+`steps: [interview]` names the kinds of step it holds (without it, every step about the subject),
+and `until: <another claim file>` makes a postponement last only while that claim is current. A
+proposal that names the subject among the entities it touches (TOUCHES) is kept off your card
+until the claim gets a `valid_to`, or the claim it waits on ends. `mc-holds list` shows what is held,
+and names a claim it cannot read as one (a subject that is not an entity's slug holds nothing).
+
 ## Filling it
 
 The assistant writes local records directly. Search first, reuse existing people, and keep
