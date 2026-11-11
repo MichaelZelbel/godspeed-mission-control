@@ -51,6 +51,15 @@ export function parseResults(results, skip = '') {
   return out;
 }
 
+export function verdictLines(text) {
+  const lines = new Map();
+  for (const line of String(text || '').split(/\r?\n/)) {
+    const match = line.match(/^(PASS|FAIL) ([A-Za-z0-9_-]+): .+$/);
+    if (match && !lines.has(match[2])) lines.set(match[2], line);
+  }
+  return lines;
+}
+
 export const lastLines = (log, n = LAST_LINES) =>
   String(log)
     .replace(/\x1b\[[0-9;]*m/g, '')
@@ -68,6 +77,7 @@ export async function reportNight(env = process.env, log = console.log) {
   const night = env.NIGHT || new Date().toISOString().slice(0, 10);
   const runLink = `${env.GITHUB_SERVER_URL || 'https://github.com'}/${repo}/actions/runs/${runId}`;
   const scenarios = parseResults(env.RESULTS, env.CANDIDATE_ONLY);
+  const verdicts = verdictLines(env.SCENARIO_VERDICTS);
 
   const call = async (method, path, body, okCodes = []) => {
     const res = await fetch(`${api}/repos/${repo}${path}`, {
@@ -131,12 +141,16 @@ export async function reportNight(env = process.env, log = console.log) {
       log(`closed ${name}: passed, issue #${number} closed`);
       continue;
     }
+    const exactVerdict = verdicts.get(name);
     const why = result === 'failure' ? 'failed' : `could not run (its job ended ${result || 'with no result'})`;
     let lines;
-    const got = await jobLog(name);
-    if (got && got.text) lines = got.text;
-    else if (got && got.skipped) lines = `The job did not run${scenarios.size && env.STAGE && env.STAGE !== 'success' ? `: the stage job ended ${env.STAGE}` : ''}.`;
-    else lines = `The job's log could not be read; the run link has it.`;
+    if (exactVerdict) lines = exactVerdict;
+    else {
+      const got = await jobLog(name);
+      if (got && got.text) lines = got.text;
+      else if (got && got.skipped) lines = `The job did not run${scenarios.size && env.STAGE && env.STAGE !== 'success' ? `: the stage job ended ${env.STAGE}` : ''}.`;
+      else lines = `The job's log could not be read; the run link has it.`;
+    }
     const body = `Night of ${night}: ${name} ${why}.\n\nRun: ${runLink}\n\nThe last lines:\n\n\`\`\`\n${lines}\n\`\`\`\n`;
     if (number) {
       await call('POST', `/issues/${number}/comments`, { body });

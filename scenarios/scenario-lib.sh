@@ -15,12 +15,13 @@
 # routine the notebook never made - fails with that as its symptom and never skips, because the
 # release step reads a run that did not fail as "the candidate is proved".
 #
-# TWO PARTS. Called with the stage ref a scenario does the whole thing on a fresh machine: it
-# installs, acts, writes what it saw as plain files into an evidence folder, and then judges that
-# folder. Called `--check <folder>` it only judges a folder, which is what its tests do, with one
-# prepared folder that should pass and one per failure it names (as stage/check-public-lines.sh
-# takes a folder so its own test can show it failing). The acting part needs a throwaway machine;
-# the checking part is where the scenario's judgement lives, and it needs nothing but files.
+# TWO PARTS. Called directly with the stage ref a scenario installs, acts, writes what it saw as
+# plain files into an evidence folder, and then judges that folder. Candidate and nightly runners
+# may instead provide one already-installed system and restore its mutable state before each
+# scenario; update and move scenarios keep their own installation. Called `--check <folder>` it
+# only judges a folder, which is what its tests do, with one prepared folder that should pass and
+# one per failure it names. The checking part is where the scenario's judgement lives, and it
+# needs nothing but files.
 set -u
 LC_ALL=C
 export LC_ALL
@@ -38,6 +39,16 @@ say() { printf '%s\n' "$*" >&2; }
 verdict() {
   printf '%s\n' "$1"
   [ -z "${GITHUB_STEP_SUMMARY:-}" ] || printf '%s\n' "$1" >>"$GITHUB_STEP_SUMMARY"
+  if [ -n "${EVIDENCE:-}" ] && [ -d "$EVIDENCE" ]; then
+    printf '%s\n' "$1" >"$EVIDENCE/.result.tmp" && mv -f "$EVIDENCE/.result.tmp" "$EVIDENCE/result.txt" || return 1
+  fi
+  if [ -n "${GODSPEED_SCENARIO_RESULTS:-}" ]; then
+    mkdir -p "$GODSPEED_SCENARIO_RESULTS" || return 1
+    local result tmp
+    result=$GODSPEED_SCENARIO_RESULTS/$SCENARIO.txt
+    tmp=$(mktemp "$GODSPEED_SCENARIO_RESULTS/.${SCENARIO}.XXXXXX") || return 1
+    printf '%s\n' "$1" >"$tmp" && mv -f "$tmp" "$result"
+  fi
 }
 pass() { verdict "PASS $SCENARIO: $*"; exit 0; }
 fail() {
@@ -96,6 +107,15 @@ fresh_evidence() {
 # anything while it is the same line: the stage's own copy of the installer, told which stage to
 # install, traced so the checking part can see which kit-bootstrap and which starter it used.
 install_the_stage_line() { # <trace file>
+  if [ "${GODSPEED_SCENARIO_REUSE_INSTALL:-}" = 1 ]; then
+    install_paths
+    [ -s "$RUNTIME/version" ] || fail "the pooled native install has no runtime version"
+    curl -fsS "http://127.0.0.1:$NOTEBOOK_PORT/health" >/dev/null 2>&1 ||
+      fail "the pooled native install does not answer on $NOTEBOOK_PORT"
+    printf 'reused candidate runtime %s\n' "$(cat "$RUNTIME/version")" >"$1" ||
+      fail "the pooled native install trace could not be kept"
+    return
+  fi
   say "The line, from the stage's own address: $STAGE_REF"
   curl -fsSL "$RAW/$STAGE_REF/install-godspeed.sh" | GODSPEED_STAGE_REF="$STAGE_REF" GODSPEED_STAGE_RAW="$RAW" bash -x 2> >(tee "$1" >&2) ||
     fail "the install line for $STAGE_REF failed before this scenario could do anything (its trace is in the step log)"
@@ -127,6 +147,7 @@ install_paths() {
 # because an update is the one thing that could move it.
 assistant_home() { # [failure context]
   local home context=${1:+$1: }
+  need_node
   home=$(json_value "$STATE/assistant.json" home) ||
     fail "${context}the install recorded no home for its assistant ($STATE/assistant.json names none), so its settings and its chat store cannot be found"
   if [ -z "$home" ] || [ ! -d "$home" ]; then
@@ -548,6 +569,24 @@ install_the_line_of_into() { # <ref> <root> <port> <trace file>
     fail "the install line for $1 into $2 failed before this scenario could do anything (its trace is in the step log)"
 }
 install_the_stage_line_into() { # <root> <port> <trace file>
+  local root=$1 port=$2 trace=$3 shared
+  if [ "${GODSPEED_SCENARIO_REUSE_INSTALL:-}" = 1 ]; then
+    install_paths
+    shared=$RUNTIME
+    [ -s "$shared/version" ] || fail "the pooled native install has no runtime for $root"
+    if [ "$root" = "$ROOT" ]; then
+      install_the_stage_line "$trace"
+      return
+    fi
+    rm -rf "$root"
+    mkdir -p "$root/.godspeed" || fail "the logical workspace $root could not be made"
+    cp -a "$ROOT/." "$root/" || fail "the pooled workspace could not seed logical workspace $root"
+    rm -rf "$root/.godspeed/integrated-runtime"
+    ln -s "$shared" "$root/.godspeed/integrated-runtime" || fail "logical workspace $root could not use the pooled runtime"
+    printf 'reused candidate runtime %s on logical port %s\n' "$(cat "$shared/version")" "$port" >"$trace" ||
+      fail "the logical workspace trace could not be kept"
+    return
+  fi
   if [ -n "${GODSPEED_SCENARIO_PRODUCT:-}" ]; then
     local_install_into "$1" "$2" "$3"
     return

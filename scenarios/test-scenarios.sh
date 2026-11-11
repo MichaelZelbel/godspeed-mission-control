@@ -560,6 +560,235 @@ routine_script_is 'a jobs envelope falls back to the product script, not its sam
 section 'server installer download'
 server_download_failure
 
+# ====================================================== installed-scenario orchestration
+section 'installed scenario orchestration'
+POOL_CATALOG=$TMP/pooled-catalog.tsv
+cat >"$POOL_CATALOG" <<'EOF'
+# id	implementation	class	system	candidate-only	display name
+linux-install	inline	pooled	native	no	Linux
+docker-server	inline	pooled	docker	no	Docker
+native-first	first.sh	shared	native	no	First native
+native-broken	broken.sh	shared	native	no	Broken native
+native-later	later.sh	shared	native	no	Later native
+cross-platform	cross-platform.sh	shared	both	no	Cross-platform
+cross-platform-later	cross-platform-later.sh	shared	both	no	Later cross-platform
+native-isolated	isolated.sh	isolated	native	no	Isolated native
+settings-on-install	settings-on-install.sh	terminal	native	no	Settings
+hermes-update-rollback	hermes-update-rollback.sh	terminal	native	no	Hermes
+another-terminal	another-terminal.sh	terminal	native	no	Another terminal
+EOF
+POOL_WANTS=$(GODSPEED_SCENARIO_CATALOG="$POOL_CATALOG" GODSPEED_SCENARIO_RESULTS="$TMP/pooled-wants" bash -c '
+  . "$1" candidate all
+  for picked in all ,native-first, ,cross-platform, ,native-isolated, ,docker-server, ,no-such-row,; do
+    PICKED=$picked
+    printf "%s" "$picked"
+    for system in native docker; do wants_install "$system" && printf " %s" "$system"; done
+    printf "\n"
+  done
+' bash "$ROOT/scenarios/run-installed-scenarios.sh" 2>&1)
+if [ "$POOL_WANTS" = "$(printf 'all native docker\n,native-first, native\n,cross-platform, native docker\n,native-isolated,\n,docker-server, docker\n,no-such-row,')" ]; then
+  ok 'a hand-picked run installs only the pooled systems its picked scenarios run on'
+else
+  bad "a hand-picked run does not install exactly the pooled systems its picks need ($POOL_WANTS)"
+fi
+POOL_RESULTS=$TMP/pooled-results
+POOL_LOG=$TMP/pooled-order
+mkdir -p "$POOL_RESULTS"
+POOL_OUTPUT=$(GODSPEED_SCENARIO_CATALOG="$POOL_CATALOG" GODSPEED_SCENARIO_RESULTS="$POOL_RESULTS" GODSPEED_SCENARIO_POOL_WORK="$TMP/pooled-work" POOL_LOG="$POOL_LOG" bash -c '
+  . "$1" candidate all
+  run_script() {
+    printf "%s\n" "$1" >>"$POOL_LOG"
+    [ "$1" != native-broken ] || return 2
+    printf "PASS %s: checked\n" "$1" >"$RESULTS/$1.txt"
+  }
+  run_system native
+' bash "$ROOT/scenarios/run-installed-scenarios.sh" 2>&1)
+if [ "$(cat "$POOL_LOG")" = "$(printf 'native-first\nnative-broken')" ] && grep -Fxq 'PASS native-first: checked' "$POOL_RESULTS/native-first.txt" && \
+  grep -Fq 'FAIL native-broken: the pooled native system could not be reset' "$POOL_RESULTS/native-broken.txt" && \
+  grep -Fq 'FAIL native-later: the pooled native system could not be reset' "$POOL_RESULTS/native-later.txt" && \
+  [ ! -e "$POOL_RESULTS/native-isolated.txt" ]; then
+  ok 'a pooled reset failure retains completed work without fabricating an isolated result'
+else
+  bad "a pooled reset failure does not retain only pooled ownership ($POOL_OUTPUT; $(cat "$POOL_LOG" 2>/dev/null))"
+fi
+POOL_RESULTS=$TMP/pooled-docker-results
+POOL_LOG=$TMP/pooled-docker.log
+mkdir -p "$POOL_RESULTS" "$TMP/pooled-server-data"
+POOL_OUTPUT=$(GODSPEED_SCENARIO_CATALOG="$POOL_CATALOG" GODSPEED_SCENARIO_RESULTS="$POOL_RESULTS" GODSPEED_SCENARIO_POOL_WORK="$TMP/pooled-work" POOL_LOG="$POOL_LOG" bash -c '
+  . "$1" candidate all
+  sudo() {
+    [ "$1" = docker ] || return 1
+    shift
+    case "$1" in
+      compose)
+        case "$*" in
+          *" stop") state=stopped ;;
+          *" up -d") state=running ;;
+          *" ps -q godspeed") [ "$state" = running ] && printf '%s' "$current_container" ;;
+        esac
+        ;;
+      cp)
+        case "$*" in *"$current_container:/opt/data") printf "%s\\n" "$*" >>"$POOL_LOG" ;; *) return 1 ;; esac
+        ;;
+      inspect) case "$*" in *State.Health.Status*) printf healthy ;; *) printf expected-image ;; esac ;;
+    esac
+  }
+  state=running
+  current_container=recreated-container
+  SERVER_CONTAINER=install-container
+  SERVER_IMAGE=expected-image
+  reset_server
+' bash "$ROOT/scenarios/run-installed-scenarios.sh" 2>&1)
+if [ "$?" = 0 ] && grep -Fq 'cp /tmp' "$POOL_LOG" 2>/dev/null && grep -Fq 'recreated-container:/opt/data' "$POOL_LOG"; then
+  ok 'a Docker reset restores data through the current container after force recreation'
+else
+  bad "a Docker reset cannot restore through the current container after force recreation ($POOL_OUTPUT; $(cat "$POOL_LOG" 2>/dev/null))"
+fi
+POOL_RESET_HOME=$TMP/pooled-reset-home
+POOL_SYSTEMD_DIR=$TMP/pooled-systemd
+POOL_NATIVE_ROOT=$TMP/pooled-reset-native
+POOL_ASSISTANT_HOME=$TMP/pooled-reset-assistant
+POOL_OUTPUT=$(HOME="$POOL_RESET_HOME" GODSPEED_SCENARIO_RESULTS="$POOL_RESULTS" GODSPEED_SCENARIO_POOL_WORK="$TMP/pooled-reset-work" POOL_SYSTEMD_DIR="$POOL_SYSTEMD_DIR" POOL_NATIVE_ROOT="$POOL_NATIVE_ROOT" POOL_ASSISTANT_HOME="$POOL_ASSISTANT_HOME" bash -c '
+  . "$1" candidate all
+  NATIVE_ROOT=$POOL_NATIVE_ROOT
+  native_dropin_dir() {
+    case "$1" in
+      user) printf "%s/.config/systemd/user/godspeed-integrated-notebook.service.d\\n" "$HOME" ;;
+      system) printf "%s/godspeed-integrated-notebook.service.d\\n" "$POOL_SYSTEMD_DIR" ;;
+    esac
+  }
+  mkdir -p "$NATIVE_ROOT/.godspeed/integrated-runtime" "$POOL_ASSISTANT_HOME" "$HOME/.config/systemd/user/godspeed-integrated-notebook.service.d" "$POOL_SYSTEMD_DIR/godspeed-integrated-notebook.service.d"
+  printf "runtime\\n" >"$NATIVE_ROOT/.godspeed/integrated-runtime/version"
+  printf "{\"home\":\"%s\"}\n" "$POOL_ASSISTANT_HOME" >"$NATIVE_ROOT/.godspeed/assistant.json"
+  printf "user baseline\\n" >"$HOME/.config/systemd/user/godspeed-integrated-notebook.service.d/scenario-clock.conf"
+  printf "system baseline\\n" >"$POOL_SYSTEMD_DIR/godspeed-integrated-notebook.service.d/scenario-clock.conf"
+  sudo() {
+    local command=$1 argument
+    shift
+    [ "$command" != systemctl ] || return 0
+    local arguments=()
+    for argument; do arguments+=("${argument//\/etc\/systemd\/system/$POOL_SYSTEMD_DIR}"); done
+    command "$command" "${arguments[@]}"
+  }
+  systemctl() { [ "$1" != --user ]; }
+  curl() { return 0; }
+  capture_native || exit 1
+  printf "user override\\n" >"$HOME/.config/systemd/user/godspeed-integrated-notebook.service.d/scenario-clock.conf"
+  printf "system override\\n" >"$POOL_SYSTEMD_DIR/godspeed-integrated-notebook.service.d/scenario-clock.conf"
+  reset_native && [ "$(cat "$HOME/.config/systemd/user/godspeed-integrated-notebook.service.d/scenario-clock.conf")" = "user baseline" ] && [ "$(cat "$POOL_SYSTEMD_DIR/godspeed-integrated-notebook.service.d/scenario-clock.conf")" = "system baseline" ] || exit 1
+  rm -rf "$HOME/.config/systemd/user/godspeed-integrated-notebook.service.d" "$POOL_SYSTEMD_DIR/godspeed-integrated-notebook.service.d"
+  rm -f "$WORK/native-user-service-config.tar" "$WORK/native-system-service-config.tar"
+  capture_native || exit 1
+  mkdir -p "$HOME/.config/systemd/user/godspeed-integrated-notebook.service.d" "$POOL_SYSTEMD_DIR/godspeed-integrated-notebook.service.d"
+  printf "user override\\n" >"$HOME/.config/systemd/user/godspeed-integrated-notebook.service.d/scenario-clock.conf"
+  printf "system override\\n" >"$POOL_SYSTEMD_DIR/godspeed-integrated-notebook.service.d/scenario-clock.conf"
+  reset_native && [ ! -e "$HOME/.config/systemd/user/godspeed-integrated-notebook.service.d" ] && [ ! -e "$POOL_SYSTEMD_DIR/godspeed-integrated-notebook.service.d" ]
+' bash "$ROOT/scenarios/run-installed-scenarios.sh" 2>&1)
+if [ "$?" = 0 ]; then
+  ok 'a native reset restores or removes both user and system service drop-ins from the install baseline'
+else
+  bad "a native reset leaves a service drop-in changed ($POOL_OUTPUT)"
+fi
+POOL_RESULTS=$TMP/pooled-main-results
+POOL_LOG=$TMP/pooled-main-order
+mkdir -p "$POOL_RESULTS"
+POOL_OUTPUT=$(GODSPEED_SCENARIO_CATALOG="$POOL_CATALOG" GODSPEED_SCENARIO_RESULTS="$POOL_RESULTS" GODSPEED_SCENARIO_POOL_WORK="$TMP/pooled-main-work" POOL_LOG="$POOL_LOG" bash -c '
+  . "$1" candidate all
+  install_native(){ :; }; verify_native_install(){ :; }; capture_native(){ :; }
+  install_server(){ :; }; capture_server(){ :; }; verify_server_install(){ :; }
+  run_system(){ :; }
+  run_script(){ printf "%s\n" "$1" >>"$POOL_LOG"; printf "PASS %s: checked\n" "$1" >"$RESULTS/$1.txt"; }
+  main
+' bash "$ROOT/scenarios/run-installed-scenarios.sh" 2>&1)
+POOL_EXPECTED=$( {
+  awk -F '\t' '$3 == "shared" && $4 == "both" { print $1 }' "$POOL_CATALOG"
+  printf '%s\n' settings-on-install hermes-update-rollback another-terminal
+} )
+if [ "$(cat "$POOL_LOG")" = "$POOL_EXPECTED" ] && grep -Fxq 'PASS linux-install: one native candidate install is ready' "$POOL_RESULTS/linux-install.txt" && \
+  grep -Fxq 'PASS docker-server: one Docker candidate install is ready' "$POOL_RESULTS/docker-server.txt"; then
+  ok 'one native and Docker install precede every catalog-owned cross-system and terminal check in order'
+else
+  bad "pooled installs, cross-system dispatch, or terminal order are wrong ($POOL_OUTPUT; $(cat "$POOL_LOG" 2>/dev/null))"
+fi
+POOL_RESULTS=$TMP/pooled-proof-results
+mkdir -p "$POOL_RESULTS"
+POOL_OUTPUT=$(GODSPEED_SCENARIO_CATALOG="$POOL_CATALOG" GODSPEED_SCENARIO_RESULTS="$POOL_RESULTS" GODSPEED_SCENARIO_POOL_WORK="$TMP/pooled-proof-work" bash -c '
+  . "$1" candidate all
+  install_native(){ :; }; capture_native(){ :; }; verify_native_install(){ return 1; }
+  install_server(){ :; }; capture_server(){ :; }; verify_server_install(){ return 1; }
+  main
+' bash "$ROOT/scenarios/run-installed-scenarios.sh" 2>&1)
+if [ "$?" = 0 ] && grep -Fq 'FAIL linux-install: the native candidate install or baseline failed' "$POOL_RESULTS/linux-install.txt" && \
+  grep -Fq 'FAIL docker-server: the Docker candidate install or baseline failed' "$POOL_RESULTS/docker-server.txt"; then
+  ok 'a failed staged runtime or image proof prevents either install PASS record'
+else
+  bad "a failed staged runtime or image proof can still produce an install PASS ($POOL_OUTPUT)"
+fi
+POOL_OUTPUT=$(GODSPEED_SCENARIO_RESULTS="$POOL_RESULTS" GODSPEED_SCENARIO_POOL_WORK="$TMP/pooled-image-proof-work" bash -c '
+  . "$1" candidate all
+  sudo() { [ "$1" = docker ] && [ "$2" = inspect ] && printf healthy; }
+  SERVER_CONTAINER=fixture
+  IMAGE=stage-image
+  SERVER_STAGE_IMAGE=wrong-image
+  verify_server_install && exit 1
+  SERVER_STAGE_IMAGE=stage-image
+  verify_server_install
+' bash "$ROOT/scenarios/run-installed-scenarios.sh" 2>&1)
+if [ "$?" = 0 ]; then
+  ok 'the Docker install proof compares the stage image before accepting its health'
+else
+  bad "the Docker install proof does not reject an image other than the stage's ($POOL_OUTPUT)"
+fi
+POOL_NATIVE_ROOT=$TMP/pooled-native-proof
+POOL_OUTPUT=$(GODSPEED_SCENARIO_RESULTS="$POOL_RESULTS" GODSPEED_SCENARIO_POOL_WORK="$TMP/pooled-native-proof-work" POOL_NATIVE_ROOT="$POOL_NATIVE_ROOT" bash -c '
+  . "$1" candidate all
+  NATIVE_ROOT=$POOL_NATIVE_ROOT
+  PRODUCT=runtime ENGINE=engine
+  mkdir -p "$NATIVE_ROOT/.godspeed/integrated-runtime"
+  printf "runtime\\n" >"$NATIVE_ROOT/.godspeed/integrated-runtime/version"
+  printf "retained stage\\n" >"$NATIVE_ROOT/.godspeed/stage.json"
+  printf "kit-bootstrap/%s/setup-godspeed.sh\\nKB_BRANCH=%s\\nGODSPEED_STARTER_REF=%s\\n" "$ENGINE" "$ENGINE" "$PRODUCT" >"$WORK/native-install-trace.log"
+  curl() {
+    case "$*" in
+      *stage.json*) printf "expected stage\\n" >"${!#}" ;;
+      *health*) return 0 ;;
+      *) return 1 ;;
+    esac
+  }
+  verify_native_install && exit 1
+  printf "expected stage\\n" >"$NATIVE_ROOT/.godspeed/stage.json"
+  verify_native_install
+' bash "$ROOT/scenarios/run-installed-scenarios.sh" 2>&1)
+if [ "$?" = 0 ]; then
+  ok 'the native install proof rejects a retained stage file different from the staged one'
+else
+  bad "the native install proof does not reject a retained stage file different from the staged one ($POOL_OUTPUT)"
+fi
+REMINDER_FOLDER=$(grep -n 'one_pair folder' "$ROOT/scenarios/reminder-closed-elsewhere.sh" | head -1 | cut -d: -f1)
+REMINDER_CONNECTED=$(grep -n 'one_pair connected' "$ROOT/scenarios/reminder-closed-elsewhere.sh" | head -1 | cut -d: -f1)
+if grep -q 'GODSPEED_SCENARIO_REUSE_INSTALL' "$ROOT/scenarios/scenario-lib.sh" && \
+  grep -q 'install_the_stage_line_into' "$ROOT/scenarios/closed-offline-on-both.sh" && \
+  grep -q 'install_the_stage_line_into' "$ROOT/scenarios/reminder-closed-elsewhere.sh" && \
+  grep -q 'ln -s "$shared" "$root/.godspeed/integrated-runtime"' "$ROOT/scenarios/scenario-lib.sh" && \
+  [ -n "$REMINDER_FOLDER" ] && [ -n "$REMINDER_CONNECTED" ] && [ "$REMINDER_FOLDER" -lt "$REMINDER_CONNECTED" ]; then
+  ok 'two-device reminder scenarios use separate workspaces linked to the pooled runtime, and folder mode starts from the clean baseline'
+else
+  bad 'two-device reminder scenarios do not reuse the pooled runtime from a clean folder baseline'
+fi
+if grep -q 'run_both_systems' "$ROOT/scenarios/run-installed-scenarios.sh" && \
+  ! grep -q 'run_script workouts-from-hevy workouts-from-hevy.sh both' "$ROOT/scenarios/run-installed-scenarios.sh" && \
+  grep -q 'server_install; server_hevy_url' "$ROOT/scenarios/workouts-from-hevy.sh" && \
+  grep -q 'install_the_stage_line "$EVIDENCE/install.log"' "$ROOT/scenarios/workouts-from-hevy.sh"; then
+  ok 'catalog-owned cross-system proofs join Docker and native phases without a second scenario run'
+else
+  bad 'a cross-system proof can still run both pooled sequences independently'
+fi
+if grep -q 'GODSPEED_SCENARIO_REUSE_INSTALL= install_the_stage_line' "$ROOT/scenarios/settings-on-install.sh"; then
+  ok 'the owner-setting proof reruns the installer after the pooled observation'
+else
+  bad 'the owner-setting proof reuses the install when it must rerun the installer'
+fi
+
 # =============================================================== 1. settings-on-install
 # A settings file as a wiring leaves it: Hermes' own keys, and the five of ticket 1.
 settings_good() { # <folder>
@@ -925,7 +1154,7 @@ refuses "a notebook that does not answer after the update" update-keeps-everythi
 section "the assistant's home"
 H=$TMP/home
 home_of() { # <state folder>: what assistant_home makes of it, its last line and its code
-  OUT=$(SCENARIO=home STATE=$1 NODE=$(command -v node) bash -c '. "$0" && assistant_home && printf "%s\n" "$HERMES"' \
+  OUT=$(env -u NODE SCENARIO=home STATE=$1 bash -c '. "$0" && assistant_home && printf "%s\n" "$HERMES"' \
     "$ROOT/scenarios/scenario-lib.sh" 2>/dev/null)
   CODE=$?
   OUT=$(printf '%s\n' "$OUT" | tail -n 1)
@@ -4994,6 +5223,47 @@ else
 fi
 HEVY_DIR=$TMP/server-hevy
 mkdir -p "$HEVY_DIR"
+HEVY_PLATFORM_BEFORE_DIR=$TMP/hevy-platform-before
+mkdir -p "$HEVY_PLATFORM_BEFORE_DIR"
+if HEVY_PLATFORM_BEFORE_OUTPUT=$(EVIDENCE=$HEVY_PLATFORM_BEFORE_DIR SCENARIO=workouts-from-hevy bash -uc '
+  . "$1"
+  settings_post() {
+    [ "$1" = docker ] && [ "$2" = "$EVIDENCE/accepted.json" ] && [ "$3" = "$EVIDENCE/docker-accepted.json" ] || return 1
+    printf 204
+  }
+  workout_snapshot() {
+    [ "$1" = docker ] && [ "$2" = "$EVIDENCE/.docker-before.json" ] && [ "$3" = "$EVIDENCE/.docker-routine" ] && [ "$4" = "$EVIDENCE/.docker-manual-exit" ]
+  }
+  platform_before docker "$EVIDENCE/accepted.json"
+' "$ROOT/scenarios/test-scenarios.sh" "$ROOT/scenarios/workouts-from-hevy.sh" 2>&1); then
+  ok "the Hevy accepted-key request names its selected platform under nounset"
+else
+  bad "the Hevy accepted-key request did not name its selected platform under nounset ($HEVY_PLATFORM_BEFORE_OUTPUT)"
+fi
+HEVY_EXIT_CLEANUP_DIR=$TMP/hevy-exit-cleanup
+if HEVY_EXIT_CLEANUP_OUTPUT=$(EVIDENCE=$HEVY_EXIT_CLEANUP_DIR SCENARIO=workouts-from-hevy bash -uc '
+  . "$1"
+  fake_node() { printf "47888\\n"; }
+  need_node() { NODE=fake_node; }
+  wait_for() { :; }
+  curl() { printf "{\"ok\":true}\n"; }
+  server_install() { :; }
+  server_hevy_url() { :; }
+  install_paths() { :; }
+  install_the_stage_line() { :; }
+  native_hevy_url() { :; }
+  settings_post() { printf 400; }
+  refused_not_retained() { :; }
+  platform_before() { :; }
+  platform_after() { :; }
+  scan_fixture_key() { :; }
+  check() { :; }
+  act
+' "$ROOT/scenarios/test-scenarios.sh" "$ROOT/scenarios/workouts-from-hevy.sh" 2>&1); then
+  ok "the Hevy fixture cleanup tolerates a completed action under nounset"
+else
+  bad "the Hevy fixture cleanup did not tolerate a completed action under nounset ($HEVY_EXIT_CLEANUP_OUTPUT)"
+fi
 if (
   GODSPEED_SCENARIO_SERVER_DIR=$HEVY_DIR
   export GODSPEED_SCENARIO_SERVER_DIR
@@ -5106,6 +5376,14 @@ if node --test "$ROOT/scenarios/test-server-telegram.mjs" >"$TMP/server-telegram
 else
   cat "$TMP/server-telegram.log"
   bad "server-telegram.mjs: its node --test cases fail"
+fi
+
+section "scenario-verdict.mjs: its node --test cases"
+if node --test "$ROOT/scenarios/test-scenario-verdict.mjs" >"$TMP/scenario-verdict.log" 2>&1; then
+  ok "scenario-verdict.mjs: its node --test cases pass"
+else
+  cat "$TMP/scenario-verdict.log"
+  bad "scenario-verdict.mjs: its node --test cases fail"
 fi
 
 printf '\n%s of %s pass.\n' "$PASS" "$((PASS + FAIL))"

@@ -1,0 +1,122 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { collectVerdicts } from './scenario-verdict.mjs';
+
+const catalog = [
+  '# id\timplementation\tclass\tsystem\tcandidate-only\tdisplay name',
+  'native\tnative.sh\tshared\tnative\tno\tNative',
+  'docker\tdocker.sh\tshared\tdocker\tno\tDocker',
+  'mac\tinline\tpooled\tmac\tyes\tMac',
+  'windows-old-names-move\twindows.ps1\tisolated\twindows\tyes\tWindows',
+].join('\n');
+
+function records(files) {
+  const dir = mkdtempSync(join(tmpdir(), 'scenario-verdict-'));
+  for (const [name, line] of Object.entries(files)) writeFileSync(join(dir, name), line);
+  return dir;
+}
+
+test('merges every selected PASS line in catalog order', () => {
+  const out = collectVerdicts({ catalog, directories: [records({ 'docker.txt': 'PASS docker: healthy\n', 'native.txt': 'PASS native: healthy\n' })] });
+  assert.deepEqual(out, { lines: ['PASS native: healthy', 'PASS docker: healthy'], failures: [] });
+});
+
+test('retains a scenario failure without hiding the other scenario result', () => {
+  const out = collectVerdicts({ catalog, directories: [records({ 'native.txt': 'FAIL native: no health\n', 'docker.txt': 'PASS docker: healthy\n' })] });
+  assert.deepEqual(out.lines, ['FAIL native: no health', 'PASS docker: healthy']);
+  assert.deepEqual(out.failures, []);
+});
+
+test('the command fails when a complete scenario result is FAIL', () => {
+  const dir = records({ 'native.txt': 'FAIL native: no health\n', 'docker.txt': 'PASS docker: healthy\n' });
+  writeFileSync(join(dir, 'catalog.tsv'), catalog);
+  const run = spawnSync(process.execPath, ['scenarios/scenario-verdict.mjs', '--catalog', join(dir, 'catalog.tsv'), '--results', dir, '--picked', ',native,'], { encoding: 'utf8' });
+  assert.equal(run.status, 1);
+  assert.match(run.stdout, /^FAIL native: no health$/m);
+});
+
+test('status reports a complete failure without preventing nightly reporting', () => {
+  const dir = records({ 'native.txt': 'FAIL native: no health\n', 'docker.txt': 'PASS docker: healthy\n' });
+  writeFileSync(join(dir, 'catalog.tsv'), catalog);
+  const run = spawnSync(process.execPath, ['scenarios/scenario-verdict.mjs', '--catalog', join(dir, 'catalog.tsv'), '--results', dir, '--picked', ',native,', '--status'], { encoding: 'utf8' });
+  assert.equal(run.status, 0);
+  assert.equal(run.stdout.trim(), 'native=failure');
+});
+
+test('fails closed for missing, duplicate, and malformed records', () => {
+  const first = records({ 'native.txt': 'PASS native: healthy\n', 'docker.txt': 'not a verdict\n' });
+  const second = records({ 'native.txt': 'PASS native: copied\n' });
+  const out = collectVerdicts({ catalog, directories: [first, second] });
+  assert.match(out.lines[0], /^FAIL native: expected 1 result record/);
+  assert.match(out.lines[1], /^FAIL docker: malformed result record/);
+  assert.equal(out.failures.length, 2);
+});
+
+test('judges only picked names', () => {
+  const out = collectVerdicts({ catalog, picked: ',docker,', directories: [records({ 'docker.txt': 'PASS docker: healthy\n', 'native.txt': 'FAIL native: no health\n' })] });
+  assert.deepEqual(out, { lines: ['PASS docker: healthy'], failures: [] });
+});
+
+test('a picked candidate-only or excluded name that could not run fails', () => {
+  const out = collectVerdicts({ catalog, picked: ',docker,mac,windows-old-names-move,', excluded: 'mac', directories: [records({ 'docker.txt': 'PASS docker: healthy\n' })] });
+  assert.deepEqual(out.lines, [
+    'PASS docker: healthy',
+    'FAIL mac: expected 1 result record, found 0',
+    'FAIL windows-old-names-move: expected 2 result records, found 0',
+  ]);
+});
+
+test('a picked name that is no scenario fails, while the stage and verdict jobs are accepted', () => {
+  const out = collectVerdicts({ catalog, picked: ',stage,docker,verdict,no-such-thing,', directories: [records({ 'docker.txt': 'PASS docker: healthy\n' })] });
+  assert.deepEqual(out, {
+    lines: ['PASS docker: healthy', 'FAIL no-such-thing: there is no scenario of this name to run'],
+    failures: ['no-such-thing: there is no scenario of this name to run'],
+  });
+});
+
+test('includes every catalog candidate-only row only for a candidate run', () => {
+  const out = collectVerdicts({ catalog, includeCandidateOnly: true, directories: [records({
+    'native.txt': 'PASS native: healthy\n',
+    'docker.txt': 'PASS docker: healthy\n',
+    'mac.txt': 'PASS mac: healthy\n',
+    'windows-old-names-move-moves.txt': 'PASS windows-old-names-move: open handles moved\n',
+    'windows-old-names-move-held.txt': 'PASS windows-old-names-move: held handles moved\n',
+  })] });
+  assert.deepEqual(out.lines, [
+    'PASS native: healthy',
+    'PASS docker: healthy',
+    'PASS mac: healthy',
+    'PASS windows-old-names-move: held handles moved',
+  ]);
+});
+
+test('a candidate without optional Mac still collects its Windows verdict', () => {
+  const out = collectVerdicts({ catalog, includeCandidateOnly: true, excluded: 'mac', directories: [records({
+    'native.txt': 'PASS native: healthy\n',
+    'docker.txt': 'PASS docker: healthy\n',
+    'windows-old-names-move-moves.txt': 'PASS windows-old-names-move: open handles moved\n',
+    'windows-old-names-move-held.txt': 'PASS windows-old-names-move: held handles moved\n',
+  })] });
+  assert.deepEqual(out.lines, [
+    'PASS native: healthy',
+    'PASS docker: healthy',
+    'PASS windows-old-names-move: held handles moved',
+  ]);
+});
+
+test('accepts a standalone scenario result retained beside its evidence', () => {
+  const out = collectVerdicts({ catalog, picked: ',native,', directories: [records({ 'result.txt': 'PASS native: healthy\n' })] });
+  assert.deepEqual(out, { lines: ['PASS native: healthy'], failures: [] });
+});
+
+test('requires both Windows move modes and produces one scenario verdict', () => {
+  const out = collectVerdicts({ catalog, picked: ',windows-old-names-move,', includeCandidateOnly: true, directories: [records({
+    'windows-old-names-move-moves.txt': 'PASS windows-old-names-move: open handles moved\n',
+    'windows-old-names-move-held.txt': 'PASS windows-old-names-move: held handles moved\n',
+  })] });
+  assert.deepEqual(out, { lines: ['PASS windows-old-names-move: held handles moved'], failures: [] });
+});

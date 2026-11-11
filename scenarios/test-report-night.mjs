@@ -5,9 +5,45 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { catalogRows } from './scenario-verdict.mjs';
 
 const SCRIPT = fileURLToPath(new URL('./report-night.mjs', import.meta.url));
 const WORKFLOW = fileURLToPath(new URL('../.github/workflows/scenarios.yml', import.meta.url));
+const DRAFT = fileURLToPath(new URL('../.github/workflow-drafts/scenarios.yml', import.meta.url));
+const PICKER = fileURLToPath(new URL('./pick-scenarios.sh', import.meta.url));
+
+function workflowJobs(draft) {
+  const headers = [...draft.matchAll(/^  ([a-z0-9-]+):\n/gm)];
+  return headers.map((header, index) => ({
+    id: header[1],
+    body: draft.slice(header.index, headers[index + 1]?.index),
+  }));
+}
+
+const pickedOnly = (id) => `(needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',${id},'))`;
+const windowsGuard = `startsWith(inputs.stage, 'candidate/') && ${pickedOnly('windows-old-names-move')}`;
+const candidateGuards = new Map([
+  ['mac-install', `\${{ inputs.mac && startsWith(inputs.stage, 'candidate/') && ${pickedOnly('mac-install')} }}`],
+  ['windows-old-names-move', `\${{ ${windowsGuard} }}`],
+]);
+
+const jobCondition = ({ body }) => body.match(/^    if: ([^\r\n]+)$/m)?.[1];
+
+function assertCandidateEligibilityConforms(catalog, draft) {
+  const candidateIds = catalogRows(catalog).filter(({ candidateOnly }) => candidateOnly).map(({ id }) => id).sort();
+  assert.deepEqual(candidateIds, [...candidateGuards.keys()].sort());
+  const jobs = workflowJobs(draft);
+  assert.deepEqual(
+    jobs.map((job) => ({ id: job.id, condition: jobCondition(job) }))
+      .filter(({ condition }) => condition?.includes("startsWith(inputs.stage, 'candidate/')")),
+    [...candidateGuards].map(([id, condition]) => ({ id, condition })),
+  );
+  for (const [id, condition] of candidateGuards) {
+    const job = jobs.find((item) => item.id === id);
+    assert.ok(job, `${id} must have a workflow job`);
+    assert.equal(jobCondition(job), condition, `${id} must keep its exact candidate-only guard`);
+  }
+}
 
 // state: { openIssues: [{number,title}], labelExists, logs: {jobName: text}, jobs: [{id,name,conclusion}] }
 async function night(results, state = {}, extra = {}) {
@@ -72,6 +108,16 @@ test('a failed scenario with no issue opens one', async () => {
   assert.equal(r.comments.length, 0);
 });
 
+test('a pooled failure reports its exact scenario verdict before a shared job log', async () => {
+  const r = await night('voice=failure', {
+    jobs: [{ id: 5, name: 'the installed Linux and Docker scenarios', conclusion: 'failure' }],
+    logs: { 'the installed Linux and Docker scenarios': 'shared job log' },
+  }, { SCENARIO_VERDICTS: 'FAIL voice: no sound came back\nPASS plain-yes: approved' });
+  assert.equal(r.code, 0, r.stderr);
+  assert.match(r.created[0].body.body, /FAIL voice: no sound came back/);
+  assert.doesNotMatch(r.created[0].body.body, /shared job log/);
+});
+
 test('a failed scenario with an open issue adds a comment and opens nothing', async () => {
   const r = await night('voice=failure', { openIssues: [{ number: 12, title: T('voice') }] });
   assert.equal(r.code, 0, r.stderr);
@@ -130,6 +176,178 @@ test('a job that only runs for a candidate is left out', async () => {
 test('a report that cannot be made fails loudly', async () => {
   const r = await night('voice=failure', {}, { GITHUB_RUN_ID: '' });
   assert.notEqual(r.code, 0);
+});
+
+test('the protected draft pools candidate systems and leaves the live workflow unchanged', async () => {
+  const { readFileSync } = await import('node:fs');
+  const draft = readFileSync(DRAFT, 'utf8');
+  const live = readFileSync(WORKFLOW, 'utf8');
+  assert.match(draft, /^  pooled:\n    name: the installed Linux and Docker scenarios/m);
+  assert.match(draft, /bash scenarios\/run-installed-scenarios\.sh "\$STAGE_REF"/);
+  assert.match(draft, /scenario-verdict\.mjs --catalog scenarios\/scenario-catalog\.tsv/);
+  assert.doesNotMatch(live, /run-installed-scenarios\.sh/);
+  assert.match(draft, /picked=\$\(bash scenarios\/pick-scenarios\.sh "\$RUNNER_TEMP\/changed"\)/);
+  const pooled = draft.slice(draft.indexOf('  pooled:'), draft.indexOf('\n  mac-install:'));
+  assert.match(pooled, /PRODUCT: \$\{\{ needs\.stage\.outputs\.product \}\}/);
+  assert.match(pooled, /ENGINE: \$\{\{ needs\.stage\.outputs\.engine \}\}/);
+  assert.match(pooled, /IMAGE: \$\{\{ needs\.stage\.outputs\.image \}\}/);
+  const verdict = draft.slice(draft.indexOf('  verdict:'));
+  assert.match(verdict, /uses: actions\/checkout@v4\n        with:\n          ref: \$\{\{ inputs\.stage \|\| github\.event\.pull_request\.head\.sha \|\| github\.sha \}\}/);
+  assert.doesNotMatch(verdict, /CANDIDATE_ONLY:|--candidate-only/);
+  assert.match(verdict, /\[ "\$IS_CANDIDATE" = true \] && args\+=\(--include-candidate-only\)/);
+  assert.match(verdict, /\[ "\$WANT_MAC" = true \] \|\| args\+=\(--exclude mac-install\)/);
+  const mac = draft.slice(draft.indexOf('  mac-install:'), draft.indexOf('\n  docker-server:'));
+  assert.ok(mac.includes(`    if: ${candidateGuards.get('mac-install')}\n`), 'the Mac job keeps its candidate-only guard');
+});
+
+test('candidate-only catalog membership and candidate job guards stay conformant', async () => {
+  const { readFileSync } = await import('node:fs');
+  const catalog = readFileSync(new URL('./scenario-catalog.tsv', import.meta.url), 'utf8');
+  const draft = readFileSync(DRAFT, 'utf8');
+  assertCandidateEligibilityConforms(catalog, draft);
+});
+
+test('a broadened Windows candidate-only guard is rejected', async () => {
+  const { readFileSync } = await import('node:fs');
+  const catalog = readFileSync(new URL('./scenario-catalog.tsv', import.meta.url), 'utf8');
+  const draft = readFileSync(DRAFT, 'utf8');
+  const broadened = draft.replace(
+    `if: \${{ ${windowsGuard} }}`,
+    `if: \${{ ${windowsGuard} || github.event_name == 'workflow_dispatch' }}`,
+  );
+  assert.notEqual(broadened, draft, 'the Windows guard to broaden is missing');
+  assert.throws(
+    () => assertCandidateEligibilityConforms(catalog, broadened),
+    /Expected values to be strictly deep-equal/,
+  );
+});
+
+test('the verdict collector fails when a scenario verdict fails behind tee', async () => {
+  const { readFileSync } = await import('node:fs');
+  const draft = readFileSync(DRAFT, 'utf8').replace(/\r\n/g, '\n');
+  const start = draft.indexOf('      - name: Every selected scenario has a verdict, or the run fails\n');
+  assert.ok(start >= 0, 'no scenario verdict step');
+  const rest = draft.slice(start + 1);
+  const end = rest.indexOf('\n      - name: Tell the night in issues');
+  const step = end < 0 ? rest : rest.slice(0, end);
+  assert.match(step, /^        shell: bash$/m,
+    'the verdict pipe must use GitHub Actions bash pipefail semantics');
+  assert.match(step, /scenario-verdict\.mjs "\$\{args\[@\]\}" \| tee/);
+  assert.doesNotMatch(step, /^        continue-on-error:/m);
+});
+
+test('the draft picker selects every standalone scenario for workflow and scenario support changes', async () => {
+  const { readFileSync, writeFileSync, mkdtempSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { spawnSync } = await import('node:child_process');
+  const catalog = readFileSync(new URL('./scenario-catalog.tsv', import.meta.url), 'utf8');
+  const allScripts = `,${catalog.split('\n').filter((line) => line && !line.startsWith('#'))
+    .map((line) => line.split('\t')).filter(([, implementation]) => implementation.endsWith('.sh'))
+    .map(([id]) => id).join(',')},`;
+  const pick = (files) => {
+    const dir = mkdtempSync(`${tmpdir()}/draft-pick-`).replaceAll(String.fromCharCode(92), '/');
+    const changed = `${dir}/changed`;
+    writeFileSync(changed, `${files.join('\n')}\n`);
+    const result = spawnSync('bash', [PICKER, changed], { cwd: fileURLToPath(new URL('..', import.meta.url)), encoding: 'utf8' });
+    assert.equal(result.status, 0, result.stderr);
+    return result.stdout.trim();
+  };
+  const sharedInputs = [
+    '.github/workflows/scenarios.yml',
+    '.github/workflow-drafts/scenarios.yml',
+    'scenarios/capture-scenario-result.sh',
+    'scenarios/pick-scenarios.sh',
+    'scenarios/run-installed-scenarios.sh',
+    'scenarios/scenario-catalog.tsv',
+    'scenarios/scenario-lib.sh',
+    'scenarios/scenario-verdict.mjs',
+    'scenarios/server-lib.sh',
+    'scenarios/telegram-through-hermes.py',
+    'scenarios/numbers-lib.sh',
+    'scenarios/hevy-fixture.mjs',
+    'scenarios/facts-lib.sh',
+    'scenarios/telegram-judge.mjs',
+    'scenarios/server-telegram.mjs',
+    'scenarios/scenario-asker.py',
+  ];
+  for (const input of sharedInputs) assert.equal(pick([input]), allScripts, `${input} must prove every standalone scenario`);
+  assert.equal(pick(['scenarios/new-shared-helper.mjs']), allScripts, 'an unowned scenario support path must prove every standalone scenario');
+  assert.equal(pick(['scenarios/voice-through-hermes.py']), ',voice,', 'voice-through-hermes.py is voice\'s named companion');
+  assert.equal(pick(['scenarios/voice.sh']), ',voice,');
+  assert.equal(pick(['scenarios/plain-yes-extra.py']), ',plain-yes,');
+  assert.equal(pick(['README.md']), ',');
+});
+
+test('the draft stage handoff writes the complete picker result for a changed support helper', async () => {
+  const { readFileSync, writeFileSync, mkdtempSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { spawnSync } = await import('node:child_process');
+  const draft = readFileSync(DRAFT, 'utf8').replace(/\r\n/g, '\n');
+  const catalog = readFileSync(new URL('./scenario-catalog.tsv', import.meta.url), 'utf8');
+  const allScripts = `,${catalog.split('\n').filter((line) => line && !line.startsWith('#'))
+    .map((line) => line.split('\t')).filter(([, implementation]) => implementation.endsWith('.sh'))
+    .map(([id]) => id).join(',')},`;
+  const stepStart = draft.indexOf('      - name: Which scenarios this run proves\n');
+  const stepEnd = draft.indexOf('\n      - name:', stepStart + 1);
+  assert.ok(stepStart >= 0 && stepEnd > stepStart, 'the draft pick step was not found');
+  const step = draft.slice(stepStart, stepEnd);
+  const runStart = step.indexOf('        run: |\n');
+  assert.ok(runStart >= 0, 'the draft pick step has no shell block');
+  const script = step.slice(runStart + '        run: |\n'.length).split('\n')
+    .filter((line) => line.startsWith('          ')).map((line) => line.slice(10)).join('\n');
+  assert.ok(script.includes('pick-scenarios.sh'), 'the draft pick block does not invoke the picker');
+  const dir = mkdtempSync(`${tmpdir()}/draft-stage-pick-`).replaceAll(String.fromCharCode(92), '/');
+  const bin = `${dir}/bin`;
+  const output = `${dir}/github-output`;
+  const summary = `${dir}/github-summary`;
+  const { mkdirSync } = await import('node:fs');
+  mkdirSync(bin);
+  writeFileSync(`${bin}/gh`, '#!/bin/sh\nprintf "%s\\n" scenarios/numbers-lib.sh\n', { mode: 0o755 });
+  const result = spawnSync('bash', ['-c', script], {
+    cwd: fileURLToPath(new URL('..', import.meta.url)),
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      PATH: `${bin}:${process.env.PATH}`,
+      GITHUB_EVENT_NAME: 'pull_request',
+      GITHUB_OUTPUT: output,
+      GITHUB_STEP_SUMMARY: summary,
+      GITHUB_REPOSITORY: 'o/r',
+      PR: '123',
+      RUNNER_TEMP: dir,
+    },
+  });
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(readFileSync(output, 'utf8'), `picked=${allScripts}\n`);
+});
+
+test('the draft verdict waits for pooled records and downloads them before collecting verdicts', async () => {
+  const { readFileSync } = await import('node:fs');
+  const draft = readFileSync(DRAFT, 'utf8').replace(/\r\n/g, '\n');
+  const verdict = draft.slice(draft.search(/^ {2}verdict:[ \t]*$/m));
+  assert.match(verdict, /^ {4}needs: \[[^\]]*\bpooled\b[^\]]*\]/m, 'the verdict must wait for the pooled producer');
+  const download = verdict.indexOf('actions/download-artifact@v4');
+  const collector = verdict.indexOf('node scenarios/scenario-verdict.mjs');
+  assert.ok(download >= 0 && download < collector, 'the verdict must download result artifacts before collecting them');
+  assert.match(verdict.slice(download, collector), /merge-multiple: true/, 'the pooled result artifact must be merged into the collector directory');
+});
+
+test('the draft uploads one exact result record for every standalone script job', async () => {
+  const { readFileSync } = await import('node:fs');
+  const draft = readFileSync(DRAFT, 'utf8').replace(/\r\n/g, '\n');
+  const catalog = readFileSync(new URL('./scenario-catalog.tsv', import.meta.url), 'utf8')
+    .split('\n').filter((line) => line && !line.startsWith('#')).map((line) => line.split('\t'))
+    .filter(([, implementation]) => implementation.endsWith('.sh')).map(([id]) => id);
+  for (const id of catalog) {
+    const start = draft.search(new RegExp(`^ {2}${id}:[ \\t]*$`, 'm'));
+    assert.ok(start >= 0, `draft has no ${id} job`);
+    const rest = draft.slice(start + 1);
+    const end = rest.search(/^ {2}[A-Za-z0-9_-]+:[ \t]*$/m);
+    const block = end < 0 ? rest : rest.slice(0, end);
+    assert.match(block, new RegExp(`capture-scenario-result\\.sh ${id} "\\$STAGE_REF"`), `${id} bypasses the exact-result wrapper`);
+    assert.match(block, new RegExp(`scenario-results/${id}\\.txt`), `${id} does not upload its exact result`);
+  }
+  assert.doesNotMatch(draft, /scenario-results\/fallback|its isolated job passed/);
 });
 
 // The verdict job lists its scenarios twice: `needs:` (so it waits for them) and `RESULTS` (the
@@ -539,4 +757,40 @@ test('the pick on a hand-started run reads `only`, and a night and an empty `onl
   assert.equal(evalCond({ event: 'workflow_dispatch', stage: 'candidate/x', picked: ',first-day,', mac: true }, 'mac-install'), false, 'mac=true does not add the Mac job to an only run');
   // no issue is filed for a run that is not the night's
   assert.match(text, /Tell the night in issues[\s\S]*?if: always\(\) && github\.event_name == 'schedule'/);
+});
+
+test('the draft picks by hand with `only`, hands the pick to the pool, and picks the PR image through the catalog', async () => {
+  const { readFileSync, writeFileSync, mkdtempSync, mkdirSync, chmodSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { spawnSync } = await import('node:child_process');
+  const draft = readFileSync(DRAFT, 'utf8').replace(/\r\n/g, '\n');
+  const repo = fileURLToPath(new URL('..', import.meta.url));
+  assert.ok(draft.includes('ONLY: ${{ inputs.only }}'), 'the draft pick step does not read inputs.only');
+  const pick = (only) => {
+    const dir = mkdtempSync(`${tmpdir()}/draft-only-`).replaceAll(String.fromCharCode(92), '/');
+    writeFileSync(`${dir}/out`, '');
+    const r = spawnSync('bash', ['-c', pickStep(draft)], { cwd: repo, encoding: 'utf8', env: { ...process.env, GITHUB_EVENT_NAME: 'workflow_dispatch', ONLY: only, GITHUB_OUTPUT: `${dir}/out`, RUNNER_TEMP: dir, GITHUB_STEP_SUMMARY: `${dir}/sum` } });
+    return { status: r.status, out: readFileSync(`${dir}/out`, 'utf8') };
+  };
+  assert.deepEqual(pick(' voice , ,first-day'), { status: 0, out: 'picked=,voice,first-day,\n' });
+  assert.deepEqual(pick(''), { status: 0, out: 'picked=all\n' });
+  assert.notEqual(pick('voice;echo hi').status, 0, 'a value that is not scenario names must fail');
+  const pooled = workflowJobs(draft).find(({ id }) => id === 'pooled').body;
+  assert.match(pooled, /PICKED: \$\{\{ needs\.stage\.outputs\.picked \}\}\n {8}run: bash scenarios\/run-installed-scenarios\.sh "\$STAGE_REF" "\$PICKED"\n/, 'the pool does not run only the picked scenarios');
+
+  const imageJob = workflowJobs(draft).find(({ id }) => id === 'pr-image').body;
+  const at = imageJob.indexOf('        run: |\n', imageJob.indexOf('        id: pick\n'));
+  const to = imageJob.indexOf('      - uses: docker/login-action@v3', at);
+  assert.ok(at > 0 && to > at, 'the draft PR-image picker was not found');
+  const script = imageJob.slice(at + '        run: |\n'.length, to).replace(/^ {10}/gm, '');
+  const image = (files) => {
+    const dir = mkdtempSync(`${tmpdir()}/draft-pr-image-`).replaceAll(String.fromCharCode(92), '/');
+    mkdirSync(`${dir}/bin`); writeFileSync(`${dir}/bin/gh`, '#!/usr/bin/env bash\nprintf "%s\\n" "$DRAFT_FILES"\n'); chmodSync(`${dir}/bin/gh`, 0o755); writeFileSync(`${dir}/out`, '');
+    const r = spawnSync('bash', ['-c', script], { cwd: repo, encoding: 'utf8', env: { ...process.env, PATH: `${dir}/bin:${process.env.PATH}`, DRAFT_FILES: files, GITHUB_REPOSITORY: 'me/repo', PR: '42', RUNNER_TEMP: dir, GITHUB_OUTPUT: `${dir}/out` } });
+    assert.equal(r.status, 0, r.stdout + r.stderr); return readFileSync(`${dir}/out`, 'utf8');
+  };
+  assert.equal(image('scenarios/server-lib.sh'), 'picked=true\n', 'a shared helper change does not publish the PR image');
+  assert.equal(image('scenarios/first-day.sh'), 'picked=true\n', 'a picked server scenario does not publish the PR image');
+  assert.equal(image('scenarios/voice.sh'), 'picked=false\n', 'a picked scenario without a server publishes the PR image');
+  assert.equal(image('README.md'), 'picked=false\n', 'a change outside the scenarios publishes the PR image');
 });

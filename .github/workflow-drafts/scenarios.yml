@@ -1,0 +1,1143 @@
+name: scenarios
+# The run's name carries the stage it proved, so a run on a candidate's tag that was left at the
+# default stage (beta) cannot be read as that candidate's pass: GitHub shows the input itself only
+# in the run's logs.
+run-name: ${{ github.event_name == 'pull_request' && format('scenarios on pull request {0}', github.event.pull_request.number) || format('scenarios {0}', inputs.stage || 'main, the night') }}
+# The proving scenarios a candidate runs before the maintainer is asked for "go" (godspeed-dev,
+# releases/godspeed-2.0.0-beta.7-stages/plan.md, "Proving scenarios" 1, 2 and 5, and
+# releases/godspeed-2.0.0-beta.8-faster-chat/plan.md, "Proving scenarios" 1, 3 and 4, which are
+# scripts in scenarios/; its scenario 2, the night chat tidy-up, left the release with the tidy-up
+# on 27 October 2026). Started by hand on the candidate's own tag, with the same tag as the stage
+# to prove: --ref candidate/2.0.0-beta.8 -f stage=candidate/2.0.0-beta.8 (or beta, or main).
+# Candidate and nightly checks share one native and one Docker installation, restoring their mutable
+# state between checks; update and move checks keep isolated installations. Pull requests still run
+# each changed script alone. Every check ends with PASS <name> or FAIL <name>: <what it saw>.
+# Every night on main (process.md section 5): the Linux and Docker jobs. The Mac and Windows jobs
+# are for a candidate (the Mac one only when `inputs.mac` is true, the Windows one only on a
+# candidate's tag), which a scheduled run never is. The verdict job's last step then tells the night
+# in issues (scenarios/report-night.mjs, releases/godspeed-2.0.0-beta.15-nightly-proof-six-repairs).
+# A pull request that changes a scenario's own script runs that scenario on the pull request's own
+# code (the job `stage` reads the changed files and says which scenarios to run: `picked`), so a fix
+# to a scenario is proved red or green before it merges instead of on the next night or candidate.
+# Nothing else runs on a pull request: no Mac, no Windows, no scenario whose files the pull request
+# did not touch (and never the install, Docker or update jobs), no issue in the night's name; a pull request from a fork runs nothing (no secrets).
+# A newer commit on the same pull request cancels the older run.
+# A candidate's run can be narrowed by hand: `-f only=first-day,talk-prep-honest` (scenario names
+# from scenarios/scenario-catalog.tsv, comma separated) runs only those scenarios, plus the stage job
+# and the verdict, which judges only what was picked and fails on a name that is no scenario; no issue
+# is filed for it. A pooled scenario named alone still gets its system's one install. Without `only`
+# every scenario runs as before (the night, a plain dispatch). The Windows job runs on `only` when
+# listed on a candidate, the Mac job when listed with `-f mac=true` on a candidate. The run keeps the
+# title "scenarios <stage>": the release gate counts a run by that title.
+# A night proves main's own commit: with no `stage` input (the schedule) the stage is made from
+# github.sha by scenarios/stage-for-run.sh and handed to every job as the artifact run-stage, read as
+# file://; main's own stage.json names the last frozen version and is never read.
+on:
+  schedule:
+    - cron: '30 2 * * *'
+  pull_request:
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+    inputs:
+      stage:
+        description: The stage to prove (a branch or tag holding stage.json, e.g. candidate/2.0.0-beta.7)
+        required: true
+        default: beta
+      mac:
+        description: Also install on a Mac (once per candidate)
+        type: boolean
+        default: false
+      only:
+        description: 'Only these scenarios (comma-separated catalog names, e.g. first-day,talk-prep-honest); empty runs every one'
+        required: false
+        default: ''
+permissions:
+  contents: read
+concurrency:
+  # One group per pull request, so a new commit cancels the older run; every other run has its own.
+  group: scenarios-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+env:
+  # Without a stage (the night) the stage is this commit's, in a folder every job downloads to
+  # $RUNNER_TEMP/run-stage (GitHub's Ubuntu runners keep that at /home/runner/work/_temp).
+  STAGE_REF: ${{ inputs.stage || 'this-commit' }}
+  RAW: ${{ inputs.stage && 'https://raw.githubusercontent.com/MichaelZelbel/godspeed-mission-control' || 'file:///home/runner/work/_temp/run-stage' }}
+  GODSPEED_SCENARIO_RAW: ${{ inputs.stage && 'https://raw.githubusercontent.com/MichaelZelbel/godspeed-mission-control' || 'file:///home/runner/work/_temp/run-stage' }}
+jobs:
+  pr-image:
+    name: the selected pull request server image
+    # It runs (and does nothing) on every event but a fork's pull request, so that it is never
+    # skipped there: GitHub skips a job whose dependencies, however indirect, include a skipped
+    # job, and every scenario needs stage, which needs this. When it was skipped outside pull
+    # requests (9 November 2026), every night and candidate run skipped every scenario.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    permissions:
+      contents: read
+      packages: write
+      pull-requests: read
+    outputs:
+      picked: ${{ steps.pick.outputs.picked }}
+      image: ${{ steps.publish.outputs.image }}
+    env:
+      IMAGE: ghcr.io/michaelzelbel/godspeed-mission-control
+      TAG: pr-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        if: github.event_name == 'pull_request'
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Is a server scenario selected?
+        id: pick
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          set -e
+          gh api "repos/$GITHUB_REPOSITORY/pulls/$PR/files" --paginate --jq '.[].filename' > "$RUNNER_TEMP/changed"
+          for job in $(bash scenarios/pick-scenarios.sh "$RUNNER_TEMP/changed" | tr ',' ' '); do
+            grep -qF server_install "scenarios/$job.sh" && { echo 'picked=true' >> "$GITHUB_OUTPUT"; exit 0; }
+            grep -qx 'scenarios/server-lib.sh' "$RUNNER_TEMP/changed" && grep -qF '. "$HERE/server-lib.sh"' "scenarios/$job.sh" && { echo 'picked=true' >> "$GITHUB_OUTPUT"; exit 0; }
+          done
+          echo 'picked=false' >> "$GITHUB_OUTPUT"
+      - uses: docker/login-action@v3
+        if: steps.pick.outputs.picked == 'true'
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and publish the selected PR-head image
+        id: publish
+        if: steps.pick.outputs.picked == 'true'
+        run: |
+          docker build --build-arg REVISION="${{ github.event.pull_request.head.sha }}" -f docker/full-candidate/Dockerfile -t "$IMAGE:$TAG" .
+          docker push "$IMAGE:$TAG"
+          digest=$(docker buildx imagetools inspect "$IMAGE:$TAG" --format '{{.Manifest.Digest}}')
+          [[ $digest =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "the PR-head image has no immutable digest: $digest"; exit 1; }
+          echo "image=$IMAGE@$digest" >> "$GITHUB_OUTPUT"
+
+  stage:
+    name: the stage file
+    needs: pr-image
+    # A pull request from a fork has no secrets, so no scenario can run on it: nothing runs.
+    if: ${{ always() && (github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && needs.pr-image.result == 'success')) }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    env:
+      # The commit the run proves: a pull request's own head, otherwise the one the run started on.
+      PROOF_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      GODSPEED_SCENARIO_PR_IMAGE: ${{ needs.pr-image.outputs.image }}
+    outputs:
+      picked: ${{ steps.pick.outputs.picked }}
+      version: ${{ steps.read.outputs.version }}
+      product: ${{ steps.read.outputs.product }}
+      engine: ${{ steps.read.outputs.engine }}
+      image: ${{ steps.read.outputs.image }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.stage || github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: ${{ inputs.stage && 1 || 50 }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with: { node-version: '22.19.0' }
+      - name: This commit's own stage (no stage given, the night)
+        if: ${{ !inputs.stage }}
+        run: |
+          set -e
+          out=$(bash scenarios/stage-for-run.sh '' "$PROOF_SHA" "$RUNNER_TEMP/run-stage")
+          echo "$out"
+          [ "$out" = "$(printf 'ref=%s\nraw=%s' "$STAGE_REF" "$RAW")" ] || { echo "the stage is not where the jobs will read it ($RAW)"; exit 1; }
+      - uses: actions/upload-artifact@v4
+        if: ${{ !inputs.stage }}
+        with:
+          name: run-stage
+          path: ${{ runner.temp }}/run-stage
+          include-hidden-files: true
+          retention-days: 3
+      - name: Which scenarios this run proves
+        id: pick
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          ONLY: ${{ inputs.only }}
+        run: |
+          set -e
+          if [ "$GITHUB_EVENT_NAME" != pull_request ]; then
+            # A hand-started run may name the jobs to run; an empty value and every other event run them all.
+            only=$(printf '%s' "${ONLY:-}" | tr -d ' \t\r\n')
+            if [ "$GITHUB_EVENT_NAME" != workflow_dispatch ] || [ -z "$only" ]; then
+              echo "picked=all" | tee -a "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            [[ "$only" =~ ^[a-z0-9,-]*[a-z0-9-][a-z0-9,-]*$ ]] || { echo "only must be scenario names separated by commas, not: $only" | tee -a "$GITHUB_STEP_SUMMARY"; exit 1; }
+            picked=$(printf ',%s,' "$only" | tr -s ',')
+            echo "Only these jobs run:$picked" | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "picked=$picked" | tee -a "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # A pull request owns script files and their companions; shared pooling inputs prove every
+          # standalone scenario because every one depends on that orchestration.
+          gh api "repos/$GITHUB_REPOSITORY/pulls/$PR/files" --paginate --jq '.[].filename' > "$RUNNER_TEMP/changed"
+          picked=$(bash scenarios/pick-scenarios.sh "$RUNNER_TEMP/changed")
+          echo "The pull request changes $(wc -l < "$RUNNER_TEMP/changed") files; scenarios picked:$picked" | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "picked=$picked" | tee -a "$GITHUB_OUTPUT"
+      - name: Read and check it
+        id: read
+        run: |
+          set -e
+          f=stage.json; [ -n "$INPUT_STAGE" ] || f="$RUNNER_TEMP/run-stage/this-commit/stage.json"
+          node stage/stage.mjs "$f" check
+          {
+            echo "version=$(node stage/stage.mjs "$f" get version)"
+            echo "product=$(node stage/stage.mjs "$f" get productCommit)"
+            echo "engine=$(node stage/stage.mjs "$f" get kitBootstrap.unixEngineCommit)"
+            echo "image=$(node stage/stage.mjs "$f" get serverEditions.server.image)"
+          } | tee -a "$GITHUB_OUTPUT"
+        env:
+          INPUT_STAGE: ${{ inputs.stage }}
+
+  pooled:
+    name: the installed Linux and Docker scenarios
+    if: ${{ github.event_name != 'pull_request' }}
+    needs: stage
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    env:
+      GODSPEED_SCENARIO_RESULTS: ${{ runner.temp }}/scenario-results
+      GODSPEED_SCENARIO_WORK: ${{ runner.temp }}/scenario-evidence
+      GODSPEED_SCENARIO_AI_KEY: ${{ secrets.GODSPEED_SCENARIO_AI_KEY }}
+      GODSPEED_SCENARIO_AI_URL: ${{ vars.GODSPEED_SCENARIO_AI_URL }}
+      GODSPEED_SCENARIO_AI_MODEL: ${{ vars.GODSPEED_SCENARIO_AI_MODEL }}
+      ELEVENLABS_TEST_KEY_STT: ${{ secrets.ELEVENLABS_TEST_KEY_STT }}
+      ELEVENLABS_TEST_KEY_NO_STT: ${{ secrets.ELEVENLABS_TEST_KEY_NO_STT }}
+      ELEVENLABS_TEST_VOICE_ID: ${{ vars.ELEVENLABS_TEST_VOICE_ID }}
+      PRODUCT: ${{ needs.stage.outputs.product }}
+      ENGINE: ${{ needs.stage.outputs.engine }}
+      IMAGE: ${{ needs.stage.outputs.image }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.stage || github.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        if: ${{ !inputs.stage }}
+        with:
+          name: run-stage
+          path: ${{ runner.temp }}/run-stage
+      - name: Install once and run the compatible checks
+        shell: bash
+        env:
+          PICKED: ${{ needs.stage.outputs.picked }}
+        run: bash scenarios/run-installed-scenarios.sh "$STAGE_REF" "$PICKED"
+      - name: Keep each result and what each pooled scenario saw
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pooled-scenario-results
+          path: |
+            ${{ runner.temp }}/scenario-results
+            ${{ runner.temp }}/scenario-evidence
+          if-no-files-found: warn
+
+  mac-install:
+    name: a stranger's Mac install
+    if: ${{ inputs.mac && startsWith(inputs.stage, 'candidate/') && (needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',mac-install,')) }}
+    needs: stage
+    runs-on: macos-latest
+    timeout-minutes: 60
+    env:
+      PRODUCT: ${{ needs.stage.outputs.product }}
+      ENGINE: ${{ needs.stage.outputs.engine }}
+    steps:
+      - name: The line, from the stage's own address
+        run: curl -fsSL "$RAW/$STAGE_REF/install-godspeed.sh" | GODSPEED_STAGE_REF="$STAGE_REF" /bin/bash -x 2> >(tee "$RUNNER_TEMP/trace.log" >&2)
+      - name: It installed what the stage names
+        run: |
+          fail() { echo "FAIL mac-install: $1" | tee -a "$GITHUB_STEP_SUMMARY" "$RUNNER_TEMP/failed"; exit 1; }
+          root="$HOME/godspeed-v2"
+          got=$(cat "$root/.godspeed/integrated-runtime/version" 2>/dev/null || echo none)
+          [ "$got" = "$PRODUCT" ] || fail "runtime $got, the stage names $PRODUCT"
+          { grep -qF "kit-bootstrap/$ENGINE/setup-godspeed.sh" "$RUNNER_TEMP/trace.log" && grep -qF "KB_BRANCH=$ENGINE" "$RUNNER_TEMP/trace.log"; } \
+            || fail "the installer did not run kit-bootstrap $ENGINE, the stage's"
+          grep -qF "GODSPEED_STARTER_REF=$PRODUCT" "$RUNNER_TEMP/trace.log" \
+            || fail "the installer did not make the mission control from starter $PRODUCT, the stage's"
+          for _ in $(seq 1 30); do curl -fsS http://127.0.0.1:47831/health >/dev/null 2>&1 && break; sleep 2; done
+          curl -fsS http://127.0.0.1:47831/health >/dev/null || fail "the notebook does not answer"
+          echo "PASS mac-install: runtime and starter $got, kit-bootstrap $ENGINE, notebook answers" | tee -a "$GITHUB_STEP_SUMMARY" "$RUNNER_TEMP/mac-install.txt"
+      - name: Say so when it failed before its checks
+        if: failure()
+        run: 'if [ -s "$RUNNER_TEMP/failed" ]; then cat "$RUNNER_TEMP/failed" > "$RUNNER_TEMP/mac-install.txt"; else echo "FAIL mac-install: the install line itself failed (its step log says how)" | tee -a "$GITHUB_STEP_SUMMARY" "$RUNNER_TEMP/mac-install.txt"; fi'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mac-install-results
+          path: ${{ runner.temp }}/mac-install.txt
+          if-no-files-found: warn
+
+  linux-update:
+    name: an update from the current public version
+    # The install, Docker and update proofs have no script of their own to change: a pull request never runs them.
+    if: ${{ github.event_name != 'pull_request' && (needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',linux-update,')) }}
+    needs: stage
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      PRODUCT: ${{ needs.stage.outputs.product }}
+      ENGINE: ${{ needs.stage.outputs.engine }}
+    steps:
+      - uses: actions/download-artifact@v4
+        if: ${{ !inputs.stage }}
+        with:
+          name: run-stage
+          path: ${{ runner.temp }}/run-stage
+      - name: Today's public line
+        run: curl -fsSL https://godspeedmissioncontrol.com/install | bash
+      - name: Something of the owner's in the notebook and the settings
+        run: |
+          set -e
+          root="$HOME/godspeed-v2"; rt="$root/.godspeed/integrated-runtime"
+          node_bin=$(find "$rt/runtime" -maxdepth 3 -path '*/node-v*/bin/node' 2>/dev/null | sort | tail -n 1); node_bin=${node_bin:-node}
+          notebook() { GODSPEED_WORKSPACE="$root" GODSPEED_MEDIA_ROOT="$rt/media" "$node_bin" "$rt/versions/$(cat "$rt/version")/notebook/bin/godspeed.mjs" "$@"; }
+          echo '{"title":"Scenario five","content":"A note the owner wrote before the update"}' > "$RUNNER_TEMP/note.json"
+          notebook record save notes "$RUNNER_TEMP/note.json"
+          notebook export "$RUNNER_TEMP/before.json"
+          mkdir -p "$root/work" && echo "the owner's own file" > "$root/work/scenario-5.txt"
+          echo "GODSPEED_SCENARIO_FIVE=kept" >> "$HOME/.godspeed/device.env"
+          cat "$rt/version" > "$RUNNER_TEMP/version-before"
+      - name: The line again, against the stage
+        run: curl -fsSL "$RAW/$STAGE_REF/install-godspeed.sh" | GODSPEED_STAGE_REF="$STAGE_REF" GODSPEED_STAGE_RAW="$RAW" bash -x 2> >(tee "$RUNNER_TEMP/trace.log" >&2)
+      - name: It ends on the stage's version, everything kept
+        run: |
+          fail() { echo "FAIL linux-update: $1" | tee -a "$GITHUB_STEP_SUMMARY" "$RUNNER_TEMP/failed"; exit 1; }
+          root="$HOME/godspeed-v2"; rt="$root/.godspeed/integrated-runtime"
+          got=$(cat "$rt/version"); before=$(cat "$RUNNER_TEMP/version-before")
+          [ "$got" = "$PRODUCT" ] || fail "runtime $got after the update, the stage names $PRODUCT"
+          { grep -qF "kit-bootstrap/$ENGINE/setup-godspeed.sh" "$RUNNER_TEMP/trace.log" && grep -qF "KB_BRANCH=$ENGINE" "$RUNNER_TEMP/trace.log"; } \
+            || fail "the installer did not run kit-bootstrap $ENGINE, the stage's"
+          grep -qF "GODSPEED_STARTER_REF=$PRODUCT" "$RUNNER_TEMP/trace.log" \
+            || fail "the installer did not make the mission control from starter $PRODUCT, the stage's"
+          grep -qx "the owner's own file" "$root/work/scenario-5.txt" || fail "the owner's file is gone"
+          grep -qx "GODSPEED_SCENARIO_FIVE=kept" "$HOME/.godspeed/device.env" || fail "the setting is gone"
+          node_bin=$(find "$rt/runtime" -maxdepth 3 -path '*/node-v*/bin/node' 2>/dev/null | sort | tail -n 1); node_bin=${node_bin:-node}
+          notebook() { GODSPEED_WORKSPACE="$root" GODSPEED_MEDIA_ROOT="$rt/media" "$node_bin" "$rt/versions/$got/notebook/bin/godspeed.mjs" "$@"; }
+          notebook record list notes | grep -qF "A note the owner wrote before the update" || fail "the owner's note is gone from the notebook"
+          notebook export "$RUNNER_TEMP/after.json" || fail "the notebook could not be exported after the update"
+          lost=$("$node_bin" -e '
+            const fs=require("fs");const rd=f=>JSON.parse(fs.readFileSync(f,"utf8"));
+            const list=x=>Array.isArray(x)?x:(x.records||x.items||Object.values(x).find(Array.isArray)||[]);
+            const key=r=>JSON.stringify([r.type||r.kind||"",r.id||r.slug||r.path||JSON.stringify(r)]);
+            const after=new Set(list(rd(process.argv[2])).map(key));
+            const lost=list(rd(process.argv[1])).filter(r=>!after.has(key(r)));
+            if(lost.length){console.log(lost.length+" notebook records are gone");process.exit(1)}
+          ' "$RUNNER_TEMP/before.json" "$RUNNER_TEMP/after.json" 2>&1) || fail "${lost:-the two exports could not be compared}"
+          for _ in $(seq 1 30); do curl -fsS http://127.0.0.1:47831/health >/dev/null 2>&1 && break; sleep 2; done
+          curl -fsS http://127.0.0.1:47831/health >/dev/null || fail "the notebook does not answer"
+          echo "PASS linux-update: $before to $got, the note, every notebook record, the file and the setting kept" | tee -a "$GITHUB_STEP_SUMMARY" "$RUNNER_TEMP/linux-update.txt"
+      - name: Say so when it failed before its checks
+        if: failure()
+        run: 'if [ -s "$RUNNER_TEMP/failed" ]; then cat "$RUNNER_TEMP/failed" > "$RUNNER_TEMP/linux-update.txt"; else echo "FAIL linux-update: a step before the checks failed (its step log says how)" | tee -a "$GITHUB_STEP_SUMMARY" "$RUNNER_TEMP/linux-update.txt"; fi'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: linux-update-result
+          path: ${{ runner.temp }}/linux-update.txt
+          if-no-files-found: error
+
+  # The scenarios of 2.0.0-beta.8 are scripts in scenarios/ (their README says how each one
+  # proves what it proves), run from the stage's own copy of them.
+  settings-on-install:
+    name: the faster-chat settings a fresh install carries
+    needs: stage
+    if: ${{ github.event_name == 'pull_request' && (needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',settings-on-install,')) }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.stage || github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        if: ${{ !inputs.stage }}
+        with:
+          name: run-stage
+          path: ${{ runner.temp }}/run-stage
+      - name: The scenario, the stage's own copy of it
+        shell: bash
+        run: bash scenarios/capture-scenario-result.sh settings-on-install "$STAGE_REF"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: settings-on-install-result, path: '${{ runner.temp }}/scenario-results/settings-on-install.txt', if-no-files-found: error }
+
+  voice:
+    name: a voice note, with the permission and without it
+    needs: stage
+    if: ${{ github.event_name == 'pull_request' && (needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',voice,')) }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      ELEVENLABS_TEST_KEY_STT: ${{ secrets.ELEVENLABS_TEST_KEY_STT }}
+      ELEVENLABS_TEST_KEY_NO_STT: ${{ secrets.ELEVENLABS_TEST_KEY_NO_STT }}
+      ELEVENLABS_TEST_VOICE_ID: ${{ vars.ELEVENLABS_TEST_VOICE_ID }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.stage || github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        if: ${{ !inputs.stage }}
+        with:
+          name: run-stage
+          path: ${{ runner.temp }}/run-stage
+      - name: The scenario, the stage's own copy of it
+        shell: bash
+        run: bash scenarios/capture-scenario-result.sh voice "$STAGE_REF"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: voice-result, path: '${{ runner.temp }}/scenario-results/voice.txt', if-no-files-found: error }
+
+  update-keeps-everything:
+    name: an update from the current public version keeps everything
+    needs: stage
+    if: ${{ needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',update-keeps-everything,') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    # The owner's chat history is a conversation with the assistant, which needs an AI.
+    env:
+      GODSPEED_SCENARIO_AI_KEY: ${{ secrets.GODSPEED_SCENARIO_AI_KEY }}
+      GODSPEED_SCENARIO_AI_URL: ${{ vars.GODSPEED_SCENARIO_AI_URL }}
+      GODSPEED_SCENARIO_AI_MODEL: ${{ vars.GODSPEED_SCENARIO_AI_MODEL }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.stage || github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        if: ${{ !inputs.stage }}
+        with:
+          name: run-stage
+          path: ${{ runner.temp }}/run-stage
+      - name: The scenario, the stage's own copy of it
+        shell: bash
+        run: bash scenarios/capture-scenario-result.sh update-keeps-everything "$STAGE_REF"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: update-keeps-everything-result, path: '${{ runner.temp }}/scenario-results/update-keeps-everything.txt', if-no-files-found: error }
+
+  # The scenarios of 2.0.0-beta.12: reminders and their closings live in the notebook. None of them
+  # needs a key: two computers are two installations on the one machine, joined through one bare
+  # repository on it standing in for the private GitHub repository (scenarios/README.md).
+  # reminder-closed-elsewhere, reminders-move-keeps-everything and late-reminder-file were taken out
+  # on 31 October 2026, their scripts testing the wrong thing, and are back here fixed (#108).
+  two-machines-move-at-once:
+    name: two computers that move the same reminders at once
+    needs: stage
+    if: ${{ needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',two-machines-move-at-once,') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.stage || github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        if: ${{ !inputs.stage }}
+        with:
+          name: run-stage
+          path: ${{ runner.temp }}/run-stage
+      - name: The scenario, the stage's own copy of it
+        shell: bash
+        run: bash scenarios/capture-scenario-result.sh two-machines-move-at-once "$STAGE_REF"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: two-machines-move-at-once-result, path: '${{ runner.temp }}/scenario-results/two-machines-move-at-once.txt', if-no-files-found: error }
+  closed-offline-on-both:
+    name: one reminder closed on two computers while they were apart
+    needs: stage
+    if: ${{ github.event_name == 'pull_request' && (needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',closed-offline-on-both,')) }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.stage || github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        if: ${{ !inputs.stage }}
+        with:
+          name: run-stage
+          path: ${{ runner.temp }}/run-stage
+      - name: The scenario, the stage's own copy of it
+        shell: bash
+        run: bash scenarios/capture-scenario-result.sh closed-offline-on-both "$STAGE_REF"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: closed-offline-on-both-result, path: '${{ runner.temp }}/scenario-results/closed-offline-on-both.txt', if-no-files-found: error }
+
+  reminder-from-settings:
+    name: a reminder saved in Settings on a fresh install
+    needs: stage
+    if: ${{ github.event_name == 'pull_request' && (needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',reminder-from-settings,')) }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.stage || github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        if: ${{ !inputs.stage }}
+        with:
+          name: run-stage
+          path: ${{ runner.temp }}/run-stage
+      - name: The scenario, the stage's own copy of it
+        shell: bash
+        run: bash scenarios/capture-scenario-result.sh reminder-from-settings "$STAGE_REF"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: reminder-from-settings-result, path: '${{ runner.temp }}/scenario-results/reminder-from-settings.txt', if-no-files-found: error }
+
+  reminder-closed-elsewhere:
+    name: a reminder closed on the other computer, both ways of syncing
+    needs: stage
+    if: ${{ github.event_name == 'pull_request' && (needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',reminder-closed-elsewhere,')) }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.stage || github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        if: ${{ !inputs.stage }}
+        with:
+          name: run-stage
+          path: ${{ runner.temp }}/run-stage
+      - name: The scenario, the stage's own copy of it
+        shell: bash
+        run: bash scenarios/capture-scenario-result.sh reminder-closed-elsewhere "$STAGE_REF"
+      - name: Keep what the scenario saw (the sync rounds' answers among it)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reminder-closed-elsewhere-evidence
+          path: ${{ runner.temp }}/reminder-closed-elsewhere
+          if-no-files-found: ignore
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: reminder-closed-elsewhere-result, path: '${{ runner.temp }}/scenario-results/reminder-closed-elsewhere.txt', if-no-files-found: error }
+
+  reminders-move-keeps-everything:
+    name: the move into the notebook keeps every reminder
+    needs: stage
+    if: ${{ needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',reminders-move-keeps-everything,') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.stage || github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        if: ${{ !inputs.stage }}
+        with:
+          name: run-stage
+          path: ${{ runner.temp }}/run-stage
+      - name: The scenario, the stage's own copy of it
+        shell: bash
+        run: bash scenarios/capture-scenario-result.sh reminders-move-keeps-everything "$STAGE_REF"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: reminders-move-keeps-everything-result, path: '${{ runner.temp }}/scenario-results/reminders-move-keeps-everything.txt', if-no-files-found: error }
+
+  late-reminder-file:
+    name: a file written the old way after the move
+    needs: stage
+    if: ${{ needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',late-reminder-file,') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.stage || github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        if: ${{ !inputs.stage }}
+        with:
+          name: run-stage
+          path: ${{ runner.temp }}/run-stage
+      - name: The scenario, the stage's own copy of it
+        shell: bash
+        run: bash scenarios/capture-scenario-result.sh late-reminder-file "$STAGE_REF"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: late-reminder-file-result, path: '${{ runner.temp }}/scenario-results/late-reminder-file.txt', if-no-files-found: error }
+
+  # The scenarios of 2.0.0-beta.13: the Charm Challenge, the video skills that leave the default
+  # set, and an update that removes only the copies nobody changed (releases/
+  # godspeed-2.0.0-beta.13-charm-video-notebook/plan.md, "Proving scenarios" 1 to 3).
+  charm-challenge:
+    name: the Charm Challenge, start to finish
+    needs: stage
+    if: ${{ github.event_name == 'pull_request' && (needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',charm-challenge,')) }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    # The owner's own chat is answered by a model, the one update-keeps-everything uses.
+    env:
+      GODSPEED_SCENARIO_AI_KEY: ${{ secrets.GODSPEED_SCENARIO_AI_KEY }}
+      GODSPEED_SCENARIO_AI_URL: ${{ vars.GODSPEED_SCENARIO_AI_URL }}
+      GODSPEED_SCENARIO_AI_MODEL: ${{ vars.GODSPEED_SCENARIO_AI_MODEL }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.stage || github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        if: ${{ !inputs.stage }}
+        with:
+          name: run-stage
+          path: ${{ runner.temp }}/run-stage
+      - name: The scenario, the stage's own copy of it
+        shell: bash
+        run: bash scenarios/capture-scenario-result.sh charm-challenge "$STAGE_REF"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: charm-challenge-result, path: '${{ runner.temp }}/scenario-results/charm-challenge.txt', if-no-files-found: error }
+
+  no-video-skills-by-default:
+    name: a fresh install has no video skills, the add-on brings them
+    needs: stage
+    if: ${{ github.event_name == 'pull_request' && (needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',no-video-skills-by-default,')) }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.stage || github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        if: ${{ !inputs.stage }}
+        with:
+          name: run-stage
+          path: ${{ runner.temp }}/run-stage
+      - name: The scenario, the stage's own copy of it
+        shell: bash
+        run: bash scenarios/capture-scenario-result.sh no-video-skills-by-default "$STAGE_REF"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: no-video-skills-by-default-result, path: '${{ runner.temp }}/scenario-results/no-video-skills-by-default.txt', if-no-files-found: error }
+
+  update-removes-only-unchanged-skills:
+    name: an update removes only the unchanged video skills
+    needs: stage
+    if: ${{ needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',update-removes-only-unchanged-skills,') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.stage || github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        if: ${{ !inputs.stage }}
+        with:
+          name: run-stage
+          path: ${{ runner.temp }}/run-stage
+      - name: The scenario, the stage's own copy of it
+        shell: bash
+        run: bash scenarios/capture-scenario-result.sh update-removes-only-unchanged-skills "$STAGE_REF"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: update-removes-only-unchanged-skills-result, path: '${{ runner.temp }}/scenario-results/update-removes-only-unchanged-skills.txt', if-no-files-found: error }
+
+  # The scenario of 2.0.0-beta.14: a morning briefing that breaks one of the reader's writing rules
+  # still arrives (releases/godspeed-2.0.0-beta.14-charm-proven-briefing-kept/plan.md, "Proving
+  # scenarios" 4). Its scenarios 1 to 3 are the four jobs above that came back fixed with #132, #133
+  # and #134 after they were taken out for 2.0.0-beta.13 on 31 October 2026.
+  briefing-breaks-a-rule:
+    name: a briefing that breaks a rule still arrives
+    needs: stage
+    if: ${{ github.event_name == 'pull_request' && (needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',briefing-breaks-a-rule,')) }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      GODSPEED_SCENARIO_AI_KEY: ${{ secrets.GODSPEED_SCENARIO_AI_KEY }}
+      GODSPEED_SCENARIO_AI_URL: ${{ vars.GODSPEED_SCENARIO_AI_URL }}
+      GODSPEED_SCENARIO_AI_MODEL: ${{ vars.GODSPEED_SCENARIO_AI_MODEL }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.stage || github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        if: ${{ !inputs.stage }}
+        with:
+          name: run-stage
+          path: ${{ runner.temp }}/run-stage
+      - name: The scenario, the stage's own copy of it
+        shell: bash
+        run: bash scenarios/capture-scenario-result.sh briefing-breaks-a-rule "$STAGE_REF"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: briefing-breaks-a-rule-result, path: '${{ runner.temp }}/scenario-results/briefing-breaks-a-rule.txt', if-no-files-found: error }
+
+  # The scenarios of 2.0.0-beta.15 (releases/godspeed-2.0.0-beta.15-nightly-proof-six-repairs/plan.md,
+  # "Proving scenarios" 3 and 4); its scenario 1 is the four jobs above that came back fixed with
+  # #143, #144 and #146 after they were taken out for 2.0.0-beta.14 on 2 November 2026.
+  # An install from before 2.0.0-beta.11 moves to the folder names without "Full Alpha" (#6, #150).
+  # For a candidate only: a Windows machine costs the most, and the night proves main.
+  windows-old-names-move:
+    name: an old Windows install moves to the new folder names
+    if: ${{ startsWith(inputs.stage, 'candidate/') && (needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',windows-old-names-move,')) }}
+    needs: stage
+    runs-on: windows-2025
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix: { mode: [moves, held] }
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: '${{ inputs.stage }}', persist-credentials: false }
+      - name: The scenario, the stage's own copy of it
+        shell: pwsh
+        run: |
+          $a = @('${{ inputs.stage }}'); if ('${{ matrix.mode }}' -eq 'held') { $a += 'held' }
+          # Its output goes to files, not to this step's pipe: a program the install leaves running
+          # would otherwise hold that pipe open, and the step never ended (2 November 2026, held).
+          $p = Start-Process pwsh -ArgumentList (@('-NoProfile', '-File', 'scenarios/windows-old-names-move.ps1') + $a) -NoNewWindow -PassThru `
+            -RedirectStandardOutput "$env:RUNNER_TEMP/verdict" -RedirectStandardError "$env:RUNNER_TEMP/scenario-steps.log"
+          $p.WaitForExit()
+          Get-Content "$env:RUNNER_TEMP/scenario-steps.log", "$env:RUNNER_TEMP/verdict" -ErrorAction SilentlyContinue
+          exit $p.ExitCode
+      - name: Keep this matrix mode's result
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/windows-old-names-move"
+          grep -E '^(PASS|FAIL) windows-old-names-move:' "$RUNNER_TEMP/verdict" | tail -1 > "$RUNNER_TEMP/windows-old-names-move/windows-old-names-move-${{ matrix.mode }}.txt" ||
+            echo "FAIL windows-old-names-move: the ${{ matrix.mode }} mode stopped before its verdict" > "$RUNNER_TEMP/windows-old-names-move/windows-old-names-move-${{ matrix.mode }}.txt"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-old-names-move-${{ matrix.mode }}
+          path: ${{ runner.temp }}/windows-old-names-move
+
+  # Telegram answers in the language of the message it answers (#140, #151), through the installed
+  # Hermes and its Telegram send path; the AI that translates is the job's own.
+  telegram-language:
+    name: Telegram answers in the language of the message
+    needs: stage
+    if: ${{ github.event_name == 'pull_request' && (needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',telegram-language,')) }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      GODSPEED_SCENARIO_AI_KEY: ${{ secrets.GODSPEED_SCENARIO_AI_KEY }}
+      GODSPEED_SCENARIO_AI_URL: ${{ vars.GODSPEED_SCENARIO_AI_URL }}
+      GODSPEED_SCENARIO_AI_MODEL: ${{ vars.GODSPEED_SCENARIO_AI_MODEL }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.stage || github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        if: ${{ !inputs.stage }}
+        with:
+          name: run-stage
+          path: ${{ runner.temp }}/run-stage
+      - name: The scenario, the stage's own copy of it
+        shell: bash
+        run: bash scenarios/capture-scenario-result.sh telegram-language "$STAGE_REF"
+      - name: Keep what the scenario saw (each reply before and after, the plugin's log)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: telegram-language-evidence
+          path: ${{ runner.temp }}/telegram-language
+          if-no-files-found: ignore
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: telegram-language-result, path: '${{ runner.temp }}/scenario-results/telegram-language.txt', if-no-files-found: error }
+
+  # The scenarios of 2.0.0-beta.16 (releases/godspeed-2.0.0-beta.16-prepared-talks/plan.md,
+  # "Proving scenarios" 3 and 4); its scenario 2 is the charm-challenge job above, which now vents
+  # five times.
+  brief-asked-in-chat:
+    name: today's brief asked in the chat is the morning briefing
+    needs: stage
+    if: ${{ github.event_name == 'pull_request' && (needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',brief-asked-in-chat,')) }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      GODSPEED_SCENARIO_AI_KEY: ${{ secrets.GODSPEED_SCENARIO_AI_KEY }}
+      GODSPEED_SCENARIO_AI_URL: ${{ vars.GODSPEED_SCENARIO_AI_URL }}
+      GODSPEED_SCENARIO_AI_MODEL: ${{ vars.GODSPEED_SCENARIO_AI_MODEL }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.stage || github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        if: ${{ !inputs.stage }}
+        with:
+          name: run-stage
+          path: ${{ runner.temp }}/run-stage
+      - name: The scenario, the stage's own copy of it
+        shell: bash
+        run: bash scenarios/capture-scenario-result.sh brief-asked-in-chat "$STAGE_REF"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: brief-asked-in-chat-result, path: '${{ runner.temp }}/scenario-results/brief-asked-in-chat.txt', if-no-files-found: error }
+
+  talk-prep-honest:
+    name: a talk says when its preparation did not pass, and opens from one that did
+    needs: stage
+    if: ${{ github.event_name == 'pull_request' && (needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',talk-prep-honest,')) }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      GODSPEED_SCENARIO_AI_KEY: ${{ secrets.GODSPEED_SCENARIO_AI_KEY }}
+      GODSPEED_SCENARIO_AI_URL: ${{ vars.GODSPEED_SCENARIO_AI_URL }}
+      GODSPEED_SCENARIO_AI_MODEL: ${{ vars.GODSPEED_SCENARIO_AI_MODEL }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.stage || github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        if: ${{ !inputs.stage }}
+        with:
+          name: run-stage
+          path: ${{ runner.temp }}/run-stage
+      - name: The scenario, the stage's own copy of it
+        shell: bash
+        run: bash scenarios/capture-scenario-result.sh talk-prep-honest "$STAGE_REF"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: talk-prep-honest-result, path: '${{ runner.temp }}/scenario-results/talk-prep-honest.txt', if-no-files-found: error }
+      - name: Keep what the scenario saw
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: talk-prep-honest-evidence
+          path: ${{ runner.temp }}/talk-prep-honest
+          if-no-files-found: error
+
+  # The scenarios of 2.0.0-beta.17 (releases/godspeed-2.0.0-beta.17-a-plain-yes/plan.md, "Proving
+  # scenarios" 2, 3, 4 and 7), through the installed Hermes with a stand-in Telegram account.
+  no-question-he-cannot-judge:
+    name: background work asks nothing the owner cannot judge, and never for a code
+    needs: stage
+    if: ${{ github.event_name == 'pull_request' && (needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',no-question-he-cannot-judge,')) }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      GODSPEED_SCENARIO_AI_KEY: ${{ secrets.GODSPEED_SCENARIO_AI_KEY }}
+      GODSPEED_SCENARIO_AI_URL: ${{ vars.GODSPEED_SCENARIO_AI_URL }}
+      GODSPEED_SCENARIO_AI_MODEL: ${{ vars.GODSPEED_SCENARIO_AI_MODEL }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.stage || github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        if: ${{ !inputs.stage }}
+        with:
+          name: run-stage
+          path: ${{ runner.temp }}/run-stage
+      - name: The scenario, the stage's own copy of it
+        shell: bash
+        run: bash scenarios/capture-scenario-result.sh no-question-he-cannot-judge "$STAGE_REF"
+      - name: Keep what the scenario saw (every message sent, the waiting steps after each situation)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: no-question-he-cannot-judge-evidence
+          path: ${{ runner.temp }}/no-question-he-cannot-judge
+          if-no-files-found: ignore
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: no-question-he-cannot-judge-result, path: '${{ runner.temp }}/scenario-results/no-question-he-cannot-judge.txt', if-no-files-found: error }
+
+  plain-yes:
+    name: a plain yes or a button answers the right waiting step
+    needs: stage
+    if: ${{ github.event_name == 'pull_request' && (needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',plain-yes,')) }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      GODSPEED_SCENARIO_AI_KEY: ${{ secrets.GODSPEED_SCENARIO_AI_KEY }}
+      GODSPEED_SCENARIO_AI_URL: ${{ vars.GODSPEED_SCENARIO_AI_URL }}
+      GODSPEED_SCENARIO_AI_MODEL: ${{ vars.GODSPEED_SCENARIO_AI_MODEL }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.stage || github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        if: ${{ !inputs.stage }}
+        with:
+          name: run-stage
+          path: ${{ runner.temp }}/run-stage
+      - name: The scenario, the stage's own copy of it
+        shell: bash
+        run: bash scenarios/capture-scenario-result.sh plain-yes "$STAGE_REF"
+      - name: Keep what the scenario saw (every message sent, the waiting steps after each answer)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: plain-yes-evidence
+          path: ${{ runner.temp }}/plain-yes
+          if-no-files-found: ignore
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: plain-yes-result, path: '${{ runner.temp }}/scenario-results/plain-yes.txt', if-no-files-found: error }
+
+  what-was-that:
+    name: right after a background report, "what is this about?" is answered from what was sent
+    needs: stage
+    if: ${{ github.event_name == 'pull_request' && (needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',what-was-that,')) }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      GODSPEED_SCENARIO_AI_KEY: ${{ secrets.GODSPEED_SCENARIO_AI_KEY }}
+      GODSPEED_SCENARIO_AI_URL: ${{ vars.GODSPEED_SCENARIO_AI_URL }}
+      GODSPEED_SCENARIO_AI_MODEL: ${{ vars.GODSPEED_SCENARIO_AI_MODEL }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.stage || github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        if: ${{ !inputs.stage }}
+        with:
+          name: run-stage
+          path: ${{ runner.temp }}/run-stage
+      - name: The scenario, the stage's own copy of it
+        shell: bash
+        run: bash scenarios/capture-scenario-result.sh what-was-that "$STAGE_REF"
+      - name: Keep what the scenario saw (the report, its record, the answer)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: what-was-that-evidence
+          path: ${{ runner.temp }}/what-was-that
+          if-no-files-found: ignore
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: what-was-that-result, path: '${{ runner.temp }}/scenario-results/what-was-that.txt', if-no-files-found: error }
+
+  connection-check:
+    name: the daily connection check is silent while all work, and speaks once when Telegram's key is refused
+    needs: stage
+    if: ${{ github.event_name == 'pull_request' && (needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',connection-check,')) }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.stage || github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        if: ${{ !inputs.stage }}
+        with:
+          name: run-stage
+          path: ${{ runner.temp }}/run-stage
+      - name: The scenario, the stage's own copy of it
+        shell: bash
+        run: bash scenarios/capture-scenario-result.sh connection-check "$STAGE_REF"
+      - name: Keep what the scenario saw (every message, the deadlines and the bell after each run)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: connection-check-evidence
+          path: ${{ runner.temp }}/connection-check
+          if-no-files-found: ignore
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: connection-check-result, path: '${{ runner.temp }}/scenario-results/connection-check.txt', if-no-files-found: error }
+
+  # The scenarios of 2.0.0-beta.20 (releases/godspeed-2.0.0-beta.20-nothing-private-left/plan.md,
+  # "Proving scenarios" 2 to 4), and the first-day proof carried over from beta.18.1's plan (#275).
+  workouts-from-hevy:
+    name: Docker and Linux import made-up Hevy workouts
+    needs: stage
+    if: ${{ github.event_name == 'pull_request' && (needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',workouts-from-hevy,')) }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.stage || github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        if: ${{ !inputs.stage }}
+        with:
+          name: run-stage
+          path: ${{ runner.temp }}/run-stage
+      - name: The scenario, the stage's own copy of it
+        shell: bash
+        run: bash scenarios/capture-scenario-result.sh workouts-from-hevy "$STAGE_REF"
+      - name: Keep what the scenario saw
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: workouts-from-hevy-evidence
+          path: ${{ runner.temp }}/workouts-from-hevy
+          if-no-files-found: ignore
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: workouts-from-hevy-result, path: '${{ runner.temp }}/scenario-results/workouts-from-hevy.txt', if-no-files-found: error }
+
+  day-becomes-facts:
+    name: an overnight remembered-facts routine files one day once
+    needs: stage
+    if: ${{ github.event_name == 'pull_request' && (needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',day-becomes-facts,')) }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      GODSPEED_SCENARIO_AI_KEY: ${{ secrets.GODSPEED_SCENARIO_AI_KEY }}
+      GODSPEED_SCENARIO_AI_URL: ${{ vars.GODSPEED_SCENARIO_AI_URL }}
+      GODSPEED_SCENARIO_AI_MODEL: ${{ vars.GODSPEED_SCENARIO_AI_MODEL }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.stage || github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        if: ${{ !inputs.stage }}
+        with:
+          name: run-stage
+          path: ${{ runner.temp }}/run-stage
+      - name: The scenario, the stage's own copy of it
+        shell: bash
+        run: bash scenarios/capture-scenario-result.sh day-becomes-facts "$STAGE_REF"
+      - name: Keep what the scenario saw
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: day-becomes-facts-evidence
+          path: ${{ runner.temp }}/day-becomes-facts
+          if-no-files-found: ignore
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: day-becomes-facts-result, path: '${{ runner.temp }}/scenario-results/day-becomes-facts.txt', if-no-files-found: error }
+
+  hermes-update-rollback:
+    name: a Hermes update keeps good and rolls back broken releases
+    needs: stage
+    if: ${{ github.event_name == 'pull_request' && (needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',hermes-update-rollback,')) }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.stage || github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        if: ${{ !inputs.stage }}
+        with:
+          name: run-stage
+          path: ${{ runner.temp }}/run-stage
+      - name: The scenario, the stage's own copy of it
+        shell: bash
+        run: bash scenarios/capture-scenario-result.sh hermes-update-rollback "$STAGE_REF"
+      - name: Keep what the scenario saw
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hermes-update-rollback-evidence
+          path: ${{ runner.temp }}/hermes-update-rollback
+          if-no-files-found: ignore
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: hermes-update-rollback-result, path: '${{ runner.temp }}/scenario-results/hermes-update-rollback.txt', if-no-files-found: error }
+
+  first-day:
+    name: a fresh Docker server turns a first goal into useful work and a matching Telegram brief
+    needs: stage
+    if: ${{ github.event_name == 'pull_request' && (needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',first-day,')) }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      GODSPEED_SCENARIO_AI_KEY: ${{ secrets.GODSPEED_SCENARIO_AI_KEY }}
+      GODSPEED_SCENARIO_AI_URL: ${{ vars.GODSPEED_SCENARIO_AI_URL }}
+      GODSPEED_SCENARIO_AI_MODEL: ${{ vars.GODSPEED_SCENARIO_AI_MODEL }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.stage || github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        if: ${{ !inputs.stage }}
+        with:
+          name: run-stage
+          path: ${{ runner.temp }}/run-stage
+      - name: The scenario, the stage's own copy of it
+        shell: bash
+        run: bash scenarios/capture-scenario-result.sh first-day "$STAGE_REF"
+      - name: Keep what the scenario saw (the work, the brief, every request)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: first-day-evidence
+          path: ${{ runner.temp }}/first-day
+          if-no-files-found: ignore
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: first-day-result, path: '${{ runner.temp }}/scenario-results/first-day.txt', if-no-files-found: error }
+
+  verdict:
+    name: the verdict
+    if: always()
+    needs: [stage, pr-image, pooled, mac-install, linux-update, settings-on-install, voice, update-keeps-everything, reminder-closed-elsewhere, reminders-move-keeps-everything, two-machines-move-at-once, late-reminder-file, closed-offline-on-both, reminder-from-settings, charm-challenge, no-video-skills-by-default, update-removes-only-unchanged-skills, briefing-breaks-a-rule, windows-old-names-move, telegram-language, brief-asked-in-chat, talk-prep-honest, no-question-he-cannot-judge, plain-yes, what-was-that, connection-check, workouts-from-hevy, day-becomes-facts, hermes-update-rollback, first-day]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+      actions: read
+    env:
+      STAGE: ${{ needs.stage.result }}
+      PR_IMAGE: ${{ needs.pr-image.result }}
+      WANT_MAC: ${{ inputs.mac }}
+      EVENT: ${{ github.event_name }}
+      PICKED: ${{ needs.stage.outputs.picked }}
+      IS_CANDIDATE: ${{ startsWith(inputs.stage, 'candidate/') }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.stage || github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with: { node-version: '22.19.0' }
+      - uses: actions/download-artifact@v4
+        if: ${{ needs.stage.result == 'success' }}
+        with:
+          path: ${{ runner.temp }}/scenario-results
+          merge-multiple: true
+      - name: Every selected scenario has a verdict, or the run fails
+        shell: bash
+        run: |
+          # A pull request whose image job failed or was cancelled skipped the stage: that is a failure, never a fork.
+          case $PR_IMAGE in failure|cancelled) echo "FAIL pr-image: the pull request's server image job ended $PR_IMAGE, so no scenario ran" | tee -a "$GITHUB_STEP_SUMMARY"; exit 1 ;; esac
+          # A pull request from a fork runs nothing (the stage job is skipped): nothing to judge.
+          [ "$EVENT" != pull_request ] || [ "$STAGE" != skipped ] || { echo "No scenario runs on a pull request from a fork." | tee -a "$GITHUB_STEP_SUMMARY"; exit 0; }
+          [ "$STAGE" = success ] || { echo "FAIL stage: the stage file at $STAGE_REF could not be read or is not a stage file" | tee -a "$GITHUB_STEP_SUMMARY"; exit 1; }
+          args=(--catalog scenarios/scenario-catalog.tsv --results "$RUNNER_TEMP/scenario-results" --picked "$PICKED")
+          [ "$IS_CANDIDATE" = true ] && args+=(--include-candidate-only)
+          [ "$WANT_MAC" = true ] || args+=(--exclude mac-install)
+          node scenarios/scenario-verdict.mjs "${args[@]}" | tee "$RUNNER_TEMP/scenario-verdicts.txt" | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Tell the night in issues (one per failing scenario, closed when it passes)
+        if: always() && github.event_name == 'schedule'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          export RESULTS="$(node scenarios/scenario-verdict.mjs --catalog scenarios/scenario-catalog.tsv --results "$RUNNER_TEMP/scenario-results" --picked all --status)"
+          export SCENARIO_VERDICTS="$(cat "$RUNNER_TEMP/scenario-verdicts.txt")"
+          node scenarios/report-night.mjs
