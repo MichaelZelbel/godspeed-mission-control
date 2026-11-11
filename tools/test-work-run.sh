@@ -232,6 +232,17 @@ hold_on_words "$(id_of pub-dnp)" "WHAT"
 hw file --what "Compare the two flats" --done-when "the comparison is written in research/pub-never.md; never publish it" \
   --check "$NODE $TMP/bin/check-written.js research/pub-never.md --min-words 50" --key pub-never --publish yes --source test >/dev/null
 hold_on_words "$(id_of pub-never)" "DONE WHEN"
+# The bare word "private" is enough on its own, in either place.
+hw file --what "Private salary notes" --done-when "the notes are written in research/pub-bare-what.md" \
+  --check "$NODE $TMP/bin/check-written.js research/pub-bare-what.md --min-words 50" --key pub-bare-what --publish yes --source test >/dev/null
+hold_on_words "$(id_of pub-bare-what)" "WHAT (the bare word private)"
+PS="$(cat "$TMP/routines/work/2026-09-15/$(id_of pub-bare-what)/prompt-seen.txt")"
+missing "  the assistant is not told its file may become a page" "$PS" "This item's file may become a page"
+contains "  it is told the file stays private, and why" "$PS" "its own words say it is private"
+missing "  and is not handed a move to apply" "$PS" "apply it"
+hw file --what "Draft the salary notes" --done-when "the notes are written in research/pub-bare-done.md, kept private" \
+  --check "$NODE $TMP/bin/check-written.js research/pub-bare-done.md --min-words 50" --key pub-bare-done --publish yes --source test >/dev/null
+hold_on_words "$(id_of pub-bare-done)" "DONE WHEN (the bare word private)"
 
 pub_file "Can a run grant itself a page" pub-grant >/dev/null
 GID="$(id_of pub-grant)"

@@ -195,7 +195,7 @@ path_in() { printf '%s\n' "$1" | grep -oE '[A-Za-z0-9_][A-Za-z0-9_./-]*/[A-Za-z0
 # Why an item's finished file must stay private, or nothing when it may become a page. It reads
 # the record as it was before the assistant ran, so a run cannot grant itself a page (#268).
 # POSIX ERE without \b, so it reads the same in BSD grep and Git Bash.
-PRIVATE_WORDS='(^|[^[:alnum:]])privately?([^[:alnum:]]|$)|do not publish|don.t publish|never publish|not (to )?be published|nothing (here )?is published'
+PRIVATE_WORDS='(^|[^[:alnum:]])private(ly)?([^[:alnum:]]|$)|do not publish|don.t publish|never publish|not (to )?be published|nothing (here )?is published'
 publish_hold() {
   local outward
   if printf '%s\n%s\n' "$(field "$1" WHAT)" "$(field "$1" 'DONE WHEN')" | grep -qiE "$PRIVATE_WORDS"; then
@@ -234,6 +234,9 @@ while IFS=$'\t' read -r ID KIND WHAT; do
   # AN ITEM WHOSE ONE OUTWARD STEP IS ITS PAGE (#268) is not a move: it gets no apply tools, and the
   # page is made by this program after its check, never by the assistant.
   PAGE_ONLY=0; [ "$(field "$SHOW" PUBLISH)" = "yes" ] && PAGE_ONLY=1
+  # Whether its file may become a page is decided once, here, from the record as it was before the
+  # run: the prompt and the publication after the check both read this one answer.
+  PAGE_HOLD="$(publish_hold "$SHOW")"
   # A STEP ON A STANDING PERMISSION (filed with --may) went out without a yes for this one step, so
   # it is never recorded done unless its UNDO copy, before.txt, was saved first (2026-10-13).
   MAY_KIND="$(field "$SHOW" MAY)"
@@ -257,7 +260,11 @@ while IFS=$'\t' read -r ID KIND WHAT; do
       if [ -n "$DG" ]; then cat "$DG"; else echo "(none)"; fi
     fi
     if [ -n "$EXTRA" ] && [ -f "$EXTRA" ]; then echo; cat "$EXTRA"; fi
-    if [ -n "$APPROVED" ] && [ "$PAGE_ONLY" -eq 1 ]; then
+    if [ -n "$APPROVED" ] && [ "$PAGE_ONLY" -eq 1 ] && [ -n "$PAGE_HOLD" ]; then
+      echo
+      echo "## This item's file stays private"
+      echo "Its file does not become a page: $PAGE_HOLD. Do not publish, post, send or change anything outside this folder."
+    elif [ -n "$APPROVED" ] && [ "$PAGE_ONLY" -eq 1 ]; then
       echo
       echo "## This item's file may become a page"
       echo "The person said yes to publishing the file DONE WHEN names, in these words: $APPROVED"
@@ -387,9 +394,8 @@ while IFS=$'\t' read -r ID KIND WHAT; do
   FILE="$(path_in "$DONE_WHEN")"
   URL=""
   if [ -n "$FILE" ] && [ -f "$GODSPEED/$FILE" ] && [ -n "$PUBLISH_CMD" ]; then
-    HOLD="$(publish_hold "$SHOW")"
-    if [ -n "$HOLD" ]; then
-      log "$ID kept private, not published: $HOLD"
+    if [ -n "$PAGE_HOLD" ]; then
+      log "$ID kept private, not published: $PAGE_HOLD"
     else
       URL="$($PUBLISH_CMD "$GODSPEED/$FILE" --title "${SAY:-$WHAT}" 2>/dev/null | grep -oE 'https://[^ ]+' | head -1)"
       if [ -n "$URL" ]; then
