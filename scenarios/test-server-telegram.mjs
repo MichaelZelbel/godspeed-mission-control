@@ -284,3 +284,35 @@ test('setup refuses an installed model that differs from the configured model',(
     );
   } finally { fs.rmSync(folder,{recursive:true,force:true}); }
 });
+
+const setupWithRecord=record=>`#!/bin/sh
+cat >/dev/null
+case "$*" in
+  *"cat /tmp/godspeed-scenario-telegram-record.json") ${record};;
+  *) exit 0;;
+esac
+`;
+
+test('setup names an installed fake Telegram without a request log as an image older than these scenarios',()=>{
+  const {folder,run}=fixture('setup-old-image',setupWithRecord(`echo '{"sent":[],"edits":[],"calls":{},"deleted":[]}'`));
+  try {
+    const started=Date.now();
+    assert.throws(()=>run('setup','--token','t','--notebook-port','47832','--without-ai'),error=>{
+      assert.match(String(error.stderr),/the stage's server image is older than these scenarios/);
+      assert.doesNotMatch(String(error.stderr),/did not appear within/);
+      return true;
+    });
+    assert.ok(Date.now()-started<10000,'an old image fails at once, not after the start-up wait');
+  } finally { fs.rmSync(folder,{recursive:true,force:true}); }
+});
+
+test('setup still times out naming the Telegram API when the fake writes no record',()=>{
+  const {folder,run}=fixture('setup-no-record',setupWithRecord('exit 1'));
+  try {
+    assert.throws(()=>run('setup','--token','t','--notebook-port','47832','--without-ai'),error=>{
+      assert.match(String(error.stderr),/the installed Telegram API did not appear within 15 seconds/);
+      assert.doesNotMatch(String(error.stderr),/older than these scenarios/);
+      return true;
+    });
+  } finally { fs.rmSync(folder,{recursive:true,force:true}); }
+});
