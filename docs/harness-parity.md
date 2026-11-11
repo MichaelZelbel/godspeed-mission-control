@@ -112,3 +112,23 @@ assistant remembers or you say `mc-due done`. The mission control this kit comes
 gap with a daily job that reads what you typed and closes a deadline on your quoted words; the kit
 does not ship that job, because it needs a paid model call every day. Proven by
 `tools/test-obligation-close-hook.js` (Claude Code) and `tools/test-due.sh` (the events themselves).
+
+## No homework: never a page or a message with blanks for you to fill
+
+Added 2026-11-11. An assistant unsure of some facts is tempted to publish a page with an empty
+answer column, or to end with "open the link and fill this in". A published page is read-only, and
+the answers are usually already in your mission control. `.claude/hooks/no-homework.js` refuses
+both: before a publish (the Artifact tool, `scp <file> user@host:`, and any command named in
+`.claude/hooks/no-homework.json`), and once per turn at the end of it. A plain question you can
+answer by typing a reply is never refused.
+
+| | Claude Code | Hermes | Codex | OpenClaw |
+|---|---|---|---|---|
+| Refuses to publish a page with blanks (before the tool call) | yes, `.claude/hooks/no-homework.js` (`PreToolUse`) | no hook before a tool call | yes, the same hook through `.codex/hooks.json` (`PreToolUse`, shell commands; the Artifact tool is Claude Code's own) | no hook before a tool call |
+| Asks once when the last message sends you to fill something in | yes, `.claude/hooks/no-homework.js` (`Stop`) | no stop boundary | yes, the same hook through `.codex/hooks.json` (`Stop`, which sends the last assistant message) | no stop boundary |
+
+**Codex, said plainly.** Codex (0.167 on the build server, where hooks are a stable feature) loads a folder's
+`.codex/hooks.json` only once you trust that folder and review the hooks with `/hooks`. Until then
+it runs without this check. Its wiring is proven with Codex-shaped payloads only: no Codex session on
+the build server is signed in. Proven by `tools/test-no-homework-hook.js`, and on Claude Code
+2.1.317 by one real session for each half.
