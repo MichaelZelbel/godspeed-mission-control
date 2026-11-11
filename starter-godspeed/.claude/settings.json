@@ -9,6 +9,15 @@
             "timeout": 15
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/give-up-check.js\"",
+            "timeout": 10
+          }
+        ]
       }
     ],
     "PreToolUse": [

@@ -10,6 +10,17 @@
           }
         ]
       }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$(git rev-parse --show-toplevel 2>/dev/null || pwd)/.claude/hooks/give-up-check.js\"",
+            "timeout": 10
+          }
+        ]
+      }
     ]
   }
 }

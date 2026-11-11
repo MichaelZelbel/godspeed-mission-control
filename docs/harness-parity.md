@@ -133,3 +133,27 @@ only once you trust that folder and review the hooks with `/hooks`; until then i
 this check. Its wiring is proven with Codex-shaped shell payloads (`Bash`, `command`), because no
 Codex session on the build server is signed in; whether Codex also sends its MCP tool calls to a
 pre-tool hook is not proven here. Proven by `tools/test-no-publish-hook.js`.
+
+## Asking once before it gives up
+
+Added 2026-11-11. When the assistant is about to end a turn with a message that gives up early
+("I can't do this", "this is blocked") or hands the work back ("you'll need to do this
+yourself"), a stop check asks it once: show that it is done or truly impossible, or continue. It
+never tells the assistant to say the work is done, and a message that ends by asking you before a
+step that cannot be undone always passes. It asks at most once per turn, and any error lets the
+turn end.
+
+| | Claude Code | Hermes | Codex | OpenClaw |
+|---|---|---|---|---|
+| Stopped once at the end of a turn that gives up or hands back | yes, `.claude/hooks/give-up-check.js` (registered in `.claude/settings.json`) | no stop boundary | yes, the same `.claude/hooks/give-up-check.js`, registered in `.codex/hooks.json` | no stop boundary |
+
+**Codex, checked on 0.167.0.** Codex now has a stop boundary: it sends a stop hook the last
+assistant message (`last_assistant_message`), whether a stop hook already fired
+(`stop_hook_active`) and the turn's id (`turn_id`), and reads the same
+`{"decision": "block", "reason": ...}` answer as Claude Code. It reads a folder's
+`.codex/hooks.json` only once you have trusted that folder, and asks you once to trust a new hook
+(`/hooks`); until then the check does not run there. Codex's own hook list found the starter's
+hook as a project Stop hook in a trusted copy of the starter, and nothing in an untrusted one.
+The deadline check above is not wired for Codex yet; the table above still says what it does
+today. Proven by `tools/test-give-up-hook.js`, which runs both wirings' own command lines against
+a copy of the starter with Claude Code and Codex payloads.
