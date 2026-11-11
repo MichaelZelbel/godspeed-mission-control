@@ -838,8 +838,13 @@ update_good() { # <folder>
     "$NEW" "$ENGINE" >"$folder/stage.json"
   cp "$folder/stage.json" "$folder/kept-stage.json"
   printf '+ curl -fsSL https://raw.githubusercontent.com/x/kit-bootstrap/%s/setup-godspeed.sh\n+ KB_BRANCH=%s\n+ GODSPEED_STARTER_REF=%s\n' \
-    "$ENGINE" "$ENGINE" "$NEW" >"$folder/trace-1.log"
-  cp "$folder/trace-1.log" "$folder/trace-2.log"
+    "$ENGINE" "$ENGINE" "$NEW" >"$folder/trace-2.log"
+  printf 'The download of 2.0.0-beta.8 matched the checksum its release publishes.\nGodspeed Mission Control is now 2.0.0-beta.8. Everything of yours was kept.\n' \
+    >"$folder/update-said.txt"
+  printf '{"code":202,"started":true}\n' >"$folder/button-said.json"
+  printf '{"state":"updated","from":"2.0.0-beta.8","to":"2.0.0-beta.8","message":"Updated to 2.0.0-beta.8."}\n' \
+    >"$folder/button-status.json"
+  sed 's/"2.0.0-beta.8"/"2.0.0-beta.8.handover"/' "$folder/stage.json" >"$folder/button-kept-stage.json"
   printf '["goals","the-first-goal"]\n["notes","scenario-four"]\n["settings","installation"]\n' >"$folder/records-before.txt"
   printf '["goals","the-first-goal"]\n["notes","scenario-four"]\n["settings","installation"]\n' \
     >"$folder/records-after.txt"
@@ -876,6 +881,26 @@ sed -i 's/KB_BRANCH=3333333333333333333333333333333333333333/KB_BRANCH=444444444
   "$U/wrong-engine/trace-2.log"
 refuses "an update that ran another kit-bootstrap than the stage's" update-keeps-everything "$U/wrong-engine" \
   "did not run kit-bootstrap"
+
+copy "$U/good" "$U/unchecked"
+sed -i '/matched the checksum/d' "$U/unchecked/update-said.txt"
+refuses "an update whose download the command did not check" update-keeps-everything "$U/unchecked" \
+  "the command did not verify the download"
+
+copy "$U/good" "$U/command-elsewhere"
+sed -i 's/is now 2.0.0-beta.8\./is now 2.0.0-beta.7./' "$U/command-elsewhere/update-said.txt"
+refuses "a command that updated to another version than the stage's" update-keeps-everything "$U/command-elsewhere" \
+  "did not say it brought the machine to 2.0.0-beta.8"
+
+copy "$U/good" "$U/button-failed"
+sed -i 's/"updated"/"failed"/' "$U/button-failed/button-status.json"
+refuses "an Update now whose update failed" update-keeps-everything "$U/button-failed" \
+  "Update now did not finish: the update it started ended failed"
+
+copy "$U/good" "$U/button-not-taken"
+cp "$U/good/stage.json" "$U/button-not-taken/button-kept-stage.json"
+refuses "an Update now after which the newer release's stage file is not kept" update-keeps-everything "$U/button-not-taken" \
+  "not the newer release's 2.0.0-beta.8.handover"
 
 copy "$U/good" "$U/record-gone"
 printf '["settings","installation"]\n' >"$U/record-gone/records-after.txt"
@@ -916,6 +941,77 @@ copy "$U/good" "$U/silent"
 printf '000\n' >"$U/silent/health.txt"
 refuses "a notebook that does not answer after the update" update-keeps-everything "$U/silent" \
   "answered 000 on its own address"
+
+# ================================================ server-update-keeps-everything (#456)
+SERVER_OLD=ghcr.io/michaelzelbel/godspeed-mission-control@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+SERVER_NEW=ghcr.io/michaelzelbel/godspeed-mission-control@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+server_update_good() { # <folder>
+  local folder=$1
+  rm -rf "$folder"
+  mkdir -p "$folder"
+  printf '{"version":"2.0.0-beta.21","serverEditions":{"server":{"image":"%s"}}}\n' "$SERVER_NEW" >"$folder/stage.json"
+  printf '%s\n' "$SERVER_OLD" >"$folder/image-before"
+  printf '%s\n' "$SERVER_NEW" >"$folder/image-after"
+  printf '%s\n' "$SERVER_NEW" >"$folder/image-again"
+  printf '%s\n' "$SERVER_NEW" >"$folder/container-image.txt"
+  printf 'healthy\n' >"$folder/health.txt"
+  printf '2.0.0-beta.21\n' >"$folder/version.txt"
+  printf 'Updating Godspeed Mission Control to 2.0.0-beta.21.\nThe download of 2.0.0-beta.21 matched the checksum its release publishes.\n' >"$folder/update-said.txt"
+  printf 'You have the newest version, 2.0.0-beta.21. Nothing was changed.\n' >"$folder/again-said.txt"
+  printf '{"data":[{"id":"g1","title":"Keep the server scenario ready","status":"active"}]}\n' >"$folder/goals-before.json"
+  cp "$folder/goals-before.json" "$folder/goals-after.json"
+}
+
+section server-update-keeps-everything
+SU=$TMP/server-update
+server_update_good "$SU/good"
+passes "a server updated to the stage's image from a checked download, healthy, with the owner's goal, and a second run that changed nothing" \
+  server-update-keeps-everything "$SU/good" "the command run again changed nothing"
+
+copy "$SU/good" "$SU/already"
+printf '%s\n' "$SERVER_NEW" >"$SU/already/image-before"
+refuses "a public server that already ran the stage's image" server-update-keeps-everything "$SU/already" \
+  "so there was nothing to update"
+
+copy "$SU/good" "$SU/unchecked"
+sed -i '/matched the checksum/d' "$SU/unchecked/update-said.txt"
+refuses "an update whose download was not checked" server-update-keeps-everything "$SU/unchecked" \
+  "it did not verify the download"
+
+copy "$SU/good" "$SU/old-image"
+printf '%s\n' "$SERVER_OLD" >"$SU/old-image/image-after"
+refuses "a server whose settings still name the old image" server-update-keeps-everything "$SU/old-image" \
+  "after the update, and the stage names"
+
+copy "$SU/good" "$SU/old-container"
+printf '%s\n' "$SERVER_OLD" >"$SU/old-container/container-image.txt"
+refuses "a server whose running container is the old one" server-update-keeps-everything "$SU/old-container" \
+  "the running container was made from"
+
+copy "$SU/good" "$SU/unhealthy"
+printf 'unhealthy\n' >"$SU/unhealthy/health.txt"
+refuses "a server that is not healthy after the update" server-update-keeps-everything "$SU/unhealthy" \
+  "is unhealthy after the update, not healthy"
+
+copy "$SU/good" "$SU/no-version"
+printf 'none\n' >"$SU/no-version/version.txt"
+refuses "a server that does not say which version it runs" server-update-keeps-everything "$SU/no-version" \
+  "the server says it runs none after the update"
+
+copy "$SU/good" "$SU/goal-gone"
+printf '{"data":[]}\n' >"$SU/goal-gone/goals-after.json"
+refuses "an update that lost the owner's goal" server-update-keeps-everything "$SU/goal-gone" \
+  "the owner's first goal is gone"
+
+copy "$SU/good" "$SU/again-changed"
+printf 'Updating Godspeed Mission Control to 2.0.0-beta.21.\n' >"$SU/again-changed/again-said.txt"
+refuses "a second run that did not say the newest version is installed" server-update-keeps-everything "$SU/again-changed" \
+  "did not say 2.0.0-beta.21 is the newest version"
+
+copy "$SU/good" "$SU/again-image"
+printf '%s\n' "$SERVER_OLD" >"$SU/again-image/image-again"
+refuses "a second run that changed the image" server-update-keeps-everything "$SU/again-image" \
+  "godspeed-update run again changed the server image"
 
 # ================================================================== the assistant's own home
 # Where the acting parts look for the assistant's settings and chat store: the home the install
@@ -4861,8 +4957,8 @@ BASH_SCENARIOS=(settings-on-install night-tidy voice update-keeps-everything
   brief-asked-in-chat talk-prep-honest no-question-he-cannot-judge plain-yes what-was-that connection-check
   first-day phone-health-days incomplete-day phone-goes-quiet mail-count talk-on-talk-day
   chat-tidy-at-night disk-filling missed-routine deadline-closes-itself held-by-a-claim
-  workouts-from-hevy day-becomes-facts hermes-update-rollback)
-for file in scenario-lib.sh numbers-lib.sh server-lib.sh "${BASH_SCENARIOS[@]/%/.sh}" test-scenarios.sh; do
+  workouts-from-hevy day-becomes-facts hermes-update-rollback server-update-keeps-everything)
+for file in scenario-lib.sh numbers-lib.sh server-lib.sh update-keeps-everything-release.sh "${BASH_SCENARIOS[@]/%/.sh}" test-scenarios.sh; do
   if bash -n "$ROOT/scenarios/$file" 2>/dev/null; then
     ok "bash reads scenarios/$file"
   else

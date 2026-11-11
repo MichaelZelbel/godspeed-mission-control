@@ -24,7 +24,7 @@ paragraph when the jobs are in `.github/workflows/scenarios.yml`.
 | `settings-on-install.sh` | a fresh install carries the faster-chat settings, and a value the owner set stays theirs |
 | `night-tidy.sh` (no workflow job yet) | the night chat tidy-up summarises the owner's chat and touches nothing else (the routine is back for installs with a chat app connected; not run on a candidate between 27 October 2026, when the tidy-up left 2.0.0-beta.8, and its return) |
 | `voice.sh` | a voice note is understood and answered, with the ElevenLabs permission and without it |
-| `update-keeps-everything.sh` | an update from the current public version keeps records, settings and the chat |
+| `update-keeps-everything.sh` | an update from the current public version with the stage's own `godspeed-update`, from a download it checked against the release's `SHA256SUMS`, then the line, then Update now in Settings, keeps records, settings and the chat; GitHub's releases stand in on the machine (`update-keeps-everything-release.sh`) |
 | `reminder-closed-elsewhere.sh` | a reminder closed on one computer is closed on the other, both ways of syncing, with no Git run by anyone |
 | `reminders-move-keeps-everything.sh` | the move of the reminders into the notebook keeps every one of them and loses none of the old files (an update from the last version before that move, `BEFORE_THE_MOVE`, because the public version has it already) |
 | `two-machines-move-at-once.sh` | two computers that move the same reminders before either syncs end with every reminder and every closing exactly once |
@@ -56,6 +56,7 @@ paragraph when the jobs are in `.github/workflows/scenarios.yml`.
 | `held-by-a-claim.sh` | a step the person postponed until the book is out of beta (a world claim written with `mc-holds`) is kept off the real daily decision's moves, its card and the work register, with the claim named in the decision's output, while a step about someone else stays; once the book's beta claim ends the next decision proposes it again. The decision's assistant is a stand-in and it needs no key; `GODSPEED_SCENARIO_PRODUCT=<a checkout> bash scenarios/held-by-a-claim.sh local` runs it against a checkout |
 | `workouts-from-hevy.sh` (a workflow job) | Docker and Linux installs reject a made-up Hevy key, then import made-up workouts through Settings; their one hourly routine updates a changed workout and removes a deleted one without keeping the key elsewhere |
 | `day-becomes-facts.sh` (a workflow job) | the nightly remembered-facts routine turns an invented day's move and doctor into dated source-linked facts, closes the older city, ignores machine/`track` messages, and makes no second-copy records |
+| `server-update-keeps-everything.sh` (a workflow job) | a Docker server from today's public `/server` line updates with the stage's own `godspeed-update`, from a checked download, to the image the stage names, healthy, with the owner's goal kept; the command run again changes nothing |
 | `hermes-update-rollback.sh` (a workflow job) | the notebook's 04:15 path keeps a good local Hermes release, rolls a broken one back with one notice, and leaves a three-day-old local release alone |
 
 ## Where there is no network
