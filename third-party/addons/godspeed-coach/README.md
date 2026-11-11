@@ -55,11 +55,20 @@ something another talk raised in the last seven days.
 - **A talk prepared ahead, when a job of yours writes one.** A minute before a talk is too little
   time to prepare it well. If something writes `coach/<area>/prep/<talk date>.md` ahead of time
   (`STATE: ready`, a section "The opening" and a section "Talk card"), the talk opens with that
-  opening as written (except that a talk asked for on a talk day, replacing an earlier unanswered
+  opening as written (except that a talk asked for on a talk day, or on a day the newest rhythm change dropped, replacing an earlier unanswered
   talk, adds one sentence naming and closing that earlier talk), and every interface carries its talk card while the talk is open, with the
   file behind it for depth. `godspeed-coach prep-due` tells that job which coming talks still need it,
   and which were prepared more than 48 hours before they start and need it again;
-  `godspeed-coach prep-check` says whether one talk's file is ready. In Godspeed Mission Control the
+  `godspeed-coach prep-check` says whether one talk's file is ready. With `--rhythm-changes`,
+  `prep-due` also lists a day that the area's newest rhythm change in git dropped, until the new
+  rhythm's first talk, so a talk they start themselves that day still opens prepared;
+  `godspeed-coach prep-missed` lists the talks of the last day that opened without the
+  preparation due for them (in an area whose talks are prepared ahead, a talk day or a day whose
+  preparation was refused; in any area, a day a rhythm change dropped, because the job lists that
+  day to be prepared, and a talk they start on it without one says so). A rhythm change that was not
+  committed yet keeps the day it was made when a later coach save commits it. A talk with no preparation of its own answers "what did you research?"
+  (`talk evidence`) from the area's newest preparation whose research and review still pass the
+  gate, all but the area's own seal, with its date. In Godspeed Mission Control the
   routine "Coaching talk preparation" is that job: every night it prepares each talk of the next day
   with the coach-prep recipe.
 
@@ -113,6 +122,8 @@ godspeed-coach habits week                    # the last seven days of each habi
 godspeed-coach talk state health              # the last five health talks and how they went
 godspeed-coach talk said health --words "first message" --words "second message"   # one --words per message
 godspeed-coach prep-due --within-hours 48     # the coming talks with no prepared talk yet (--json too)
+godspeed-coach prep-due --within-hours 48 --rhythm-changes   # and a day a rhythm change just dropped
+godspeed-coach prep-missed --days 1           # the talks of the last day that opened without their preparation (--json too)
 godspeed-coach questions health                  # the live questions of the next health talk (coach/health/questions/<date>.md)
 godspeed-coach questions health add "Is zone 2 worth it?" --why "they asked"   # the model refines them only here
 godspeed-coach questions health drop "zone 2"    # takes one away
