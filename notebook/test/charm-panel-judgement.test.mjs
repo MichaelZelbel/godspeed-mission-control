@@ -11,6 +11,8 @@ import {JUDGE_PROTOCOL} from '../../third-party/addons/godspeed-charm/lib/judge.
 import {addonInvocation} from '../core/native-personal.mjs';
 import {wordCheckMs} from '../core/charm-judgement.mjs';
 
+const auditLog='logs/godspeed-charm.log';
+
 // Issue #218: a slip typed in the notebook's chat panel gets the same question the Hermes plugin
 // asks. The panel's route is /api/browser-chat -> domains.nativeAgent, a one-shot assistant run with
 // the plugin loaded; the notebook names the turn's conversation (GODSPEED_CHARM_CONVERSATION), so it
@@ -51,7 +53,7 @@ async function panel(t,options){
  let minute=0;const tick=()=>{process.env.GODSPEED_CHARM_NOW=new Date(START+(++minute)*60000).toISOString();};
  const say=async message=>{tick();const r=await fetch(base+'/api/browser-chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message})});assert.equal(r.status,200);return (await r.json()).reply;};
  const op=input=>{tick();return s.domains.invoke('personal-operation',{type:'charm',...input});};
- return {say,op,s};
+ return {say,op,s,home};
 }
 
 test('five vents in five new panel conversations each end with the question and record asked',{skip},async t=>{
@@ -84,6 +86,23 @@ test('a no to the open question records kept, not a reset',{skip},async t=>{
  await say('no');
  const state=(await op({action:'status'})).state;
  assert.equal(state.open.length,0);assert.equal(state.kept,1);assert.equal(state.resetToday,false);
+});
+
+test('the native panel records redacted judgement evidence for a vent and its no',{skip},async t=>{
+ const {say,op,home}=await panel(t);
+ await op({action:'start',words:'start'});
+ await say(VENT);
+ await say('no');
+ const entries=fs.readFileSync(path.join(home,auditLog),'utf8').trim().split('\n').map(JSON.parse);
+ assert.equal(entries.length,2);
+ for(const entry of entries)assert.deepEqual(Object.keys(entry).sort(),['at','conversation','did','source','verdict','why']);
+ assert.deepEqual(entries.map(({conversation,verdict,source,did})=>({conversation,verdict,source,did})),[
+  {conversation:'notebook:browser-owner',verdict:'ask',source:'model',did:'asked'},
+  {conversation:'notebook:browser-owner',verdict:'answer',source:'rule',did:'answered no'},
+ ]);
+ const evidence=JSON.stringify(entries);
+ assert.doesNotMatch(evidence,/garbage/);
+ assert.ok(!('words' in entries[0]));
 });
 
 test('the verdict words the panel accepts are the plugin\'s',()=>{
@@ -150,12 +169,15 @@ const events=s=>s.store.list('collection_items').map(i=>i.data).filter(d=>d&&d.k
 
 for(const [day,fresh] of [['the first day (several fresh markers)',['cli:local-a','cli:local-b','cli:local-c']],['a later day (one fresh marker)',['cli:local-a']]]){
  test(`a vent the model also records itself is one question in this chat, on ${day}`,{skip},async t=>{
-  const {say,op,s}=await panel(t,{turn:(opts,input)=>{if(/useless/.test(input)){markers(opts,...fresh);runs('asked','--words',VENT)(opts);}}});
+  const {say,op,s,home}=await panel(t,{turn:(opts,input)=>{if(/useless/.test(input)){markers(opts,...fresh);runs('asked','--words',VENT)(opts);}}});
   await op({action:'start',words:'start'});
   const reply=await say(VENT);
   assert.equal(reply.split('Back to 21?').length,2,reply);
   assert.match(reply,/Back to 21\? Yes \/ No\.$/);
   assert.deepEqual(events(s).map(e=>[e.kind,e.conversation]),[['asked','notebook:browser-owner']]);
+  // The panel's audit evidence still has the vent, once (#340).
+  const entries=fs.readFileSync(path.join(home,auditLog),'utf8').trim().split('\n').map(JSON.parse);
+  assert.deepEqual(entries.map(({conversation,verdict,did})=>({conversation,verdict,did})),[{conversation:'notebook:browser-owner',verdict:'ask',did:'asked by the model'}]);
  });
 }
 

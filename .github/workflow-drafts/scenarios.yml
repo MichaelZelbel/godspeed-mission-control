@@ -1,0 +1,7 @@
+      - name: Keep the Charm Challenge evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: charm-challenge-evidence
+          path: ${{ runner.temp }}/charm-challenge
+          if-no-files-found: warn
