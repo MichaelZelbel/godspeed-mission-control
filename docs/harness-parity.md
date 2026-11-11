@@ -112,3 +112,22 @@ assistant remembers or you say `mc-due done`. The mission control this kit comes
 gap with a daily job that reads what you typed and closes a deadline on your quoted words; the kit
 does not ship that job, because it needs a paid model call every day. Proven by
 `tools/test-obligation-close-hook.js` (Claude Code) and `tools/test-due.sh` (the events themselves).
+
+## Nothing new at the top of your mission control unless you asked for it
+
+Added 2026-11-11. An assistant that drops a scratch folder, a screenshot or a new feature folder
+at the top of your mission control is sent back once at the end of its turn, and told to move the
+thing into the folder where it belongs, remove it, or ask you. Anything that was there when the
+session started, anything git already tracks (a folder that came with `git pull`), and anything
+you named in one of your messages ("make a folder called `garden`") is never questioned. Folders
+and files further down are never raised. Raised once, an entry is accepted for the rest of the
+session.
+
+| | Claude Code | Hermes | Codex | OpenClaw |
+|---|---|---|---|---|
+| Sends the assistant back once for a new entry at the top you did not ask for | yes, `.claude/hooks/no-new-top-folder.js` (`SessionStart`, `UserPromptSubmit`, `Stop`) | no stop boundary | yes, the same hook through `.codex/hooks.json` (`SessionStart`, `UserPromptSubmit`, `Stop`) | no stop boundary |
+
+**Codex, said plainly.** Codex loads a folder's `.codex/hooks.json` only once you trust that
+folder and review its hooks with `/hooks`. Until then it runs without this check. Its wiring is
+proven with Codex-shaped payloads only: no Codex session on the build server is signed in. Proven
+by `tools/test-no-new-top-folder-hook.js`.
