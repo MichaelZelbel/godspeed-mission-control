@@ -123,7 +123,7 @@ export function unsafeFollowUpText(text,job){
 
 export async function followUpFailed(store,{job={},origin,attempt,one_time,retry_at,given_up,retry_error,note,home,provider=null,guidance,now=new Date()}){
  origin=String(origin||job.id||'');
- keepAiFailure({file:path.join(store.state,KEPT_FILE),diagnostic:note,said:'',now,extra:{scheduled_job:job.id,name:job.name,origin,attempt,...(retry_error?{retry_error}:{})}});
+ if(!keepAiFailure({file:path.join(store.state,KEPT_FILE),diagnostic:note,said:'',now,extra:{scheduled_job:job.id,name:job.name,origin,attempt,...(retry_error?{retry_error}:{})}}))throw Error('the failure log could not be written');
  let told=false;
  if(one_time&&attempt===1&&!given_up&&provider){
   const about='a follow-up you asked for';

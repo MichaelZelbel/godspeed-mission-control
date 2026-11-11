@@ -145,7 +145,10 @@ def _take_follow_up(job_id):
         follow_ups = _read_follow_ups()
         entry = follow_ups.pop(job_id, None)
         if entry is not None:
-            _write_follow_ups(follow_ups)
+            try:
+                _write_follow_ups(follow_ups)
+            except OSError:
+                pass  # the entry stays until pruned; this job id never fails again
     if isinstance(entry, dict) and entry.get("origin") and isinstance(entry.get("attempt"), int):
         return {"origin": entry["origin"], "attempt": entry["attempt"]}
     return {"origin": job_id, "attempt": 0}
@@ -202,9 +205,13 @@ def handle_failure(job, content):
         if attempt <= len(RETRY_DELAYS):
             try:
                 retry_id, retry_at = _schedule_retry(job, RETRY_DELAYS[attempt - 1])
-                _link_retry(retry_id, follow_up["origin"], attempt)
             except Exception as error:
                 given_up, retry_error = True, str(error)[:300]
+            else:
+                try:
+                    _link_retry(retry_id, follow_up["origin"], attempt)
+                except Exception as error:
+                    retry_error = "the retry is scheduled, but could not be linked to its follow-up: %s" % str(error)[:300]
         else:
             given_up = True
     report = {"job": {"id": job_id, "name": job.get("name"), "prompt": job.get("prompt")}, "origin": follow_up["origin"],

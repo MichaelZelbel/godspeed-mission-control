@@ -120,6 +120,7 @@ import os
 sys.modules["cron.jobs"]=types.ModuleType("cron.jobs");sys.modules["cron"].jobs=sys.modules["cron.jobs"]
 created=[];counter=os.path.join(os.path.dirname(sys.argv[1]),"stub-jobs-created")
 def create_job(prompt,schedule,name=None,repeat=None,deliver=None,origin=None,skill=None,skills=None,failure_deliver=None):
+ if name=="Unschedulable":raise RuntimeError("jobs.json is locked")
  n=(int(open(counter).read()) if os.path.exists(counter) else 0)+1;open(counter,"w").write(str(n))
  created.append(dict(prompt=prompt,schedule=schedule,name=name,repeat=repeat,deliver=deliver,origin=origin,skill=skill,skills=skills,failure_deliver=failure_deliver));return {"id":"retry-%d"%n}
 sys.modules["cron.jobs"].create_job=create_job
@@ -136,7 +137,7 @@ function wiredProvider(t,{node=process.execPath}={}){
  const {root,home,store}=setup(t),dir=path.join(home,'plugins','godspeed_notebook');fs.mkdirSync(dir,{recursive:true});
  fs.copyFileSync(fileURLToPath(new URL('../assistant-files/godspeed-cron-provider.py',import.meta.url)),path.join(dir,'__init__.py'));
  fs.writeFileSync(path.join(dir,'report.json'),JSON.stringify({node,script:fileURLToPath(new URL('../scripts/background-report.mjs',import.meta.url)),root}));
- return {store,run:jobs=>JSON.parse(execFileSync(python,['-I','-c',CRON_STUB,path.join(dir,'__init__.py'),JSON.stringify(jobs)],{encoding:'utf8'}))};
+ return {store,dir,run:jobs=>JSON.parse(execFileSync(python,['-I','-c',CRON_STUB,path.join(dir,'__init__.py'),JSON.stringify(jobs)],{encoding:'utf8'}))};
 }
 
 test('what a Settings routine delivers is recorded as Hermes will send it, for local and Telegram delivery, before Hermes delivers it',t=>{
@@ -263,6 +264,34 @@ test('retries are bounded, and a follow-up that keeps failing is left for repair
  assert.match(given.body,/failed 4 times and will not be tried again/);
  assert.deepEqual(keptLines(store).map(k=>[k.origin,k.attempt]),[1,2,3,4].map(a=>['e6114fa9f94c',a]));
  assert.deepEqual(readNotices(fresh),[],'without an AI, the owner\'s chat stays silent');
+});
+
+test('a follow-up that cannot be scheduled again is left for repair at once',t=>{
+ if(!python)return t.skip('needs Python');
+ const {store,run}=wiredProvider(t);
+ const out=run([[{...FOLLOW_UP,name:'Unschedulable'},ISSUE_NOTE,true]]);
+ assert.deepEqual([out.errors,out.delivered,out.created],[[null],[],[]]);
+ const fresh=new Store(store.root,{device:'pc'});
+ assert.match(fresh.get('notifications','follow-up-given-up-e6114fa9f94c').body,/failed 1 time and will not be tried again/);
+ assert.deepEqual(keptLines(store).map(k=>[k.attempt,k.retry_error]),[[1,'jobs.json is locked']]);
+ assert.deepEqual(readNotices(fresh),[]);
+});
+
+test('a retry whose link could not be kept still runs, and is not reported as given up',t=>{
+ if(!python)return t.skip('needs Python');
+ const {store,run,dir}=wiredProvider(t);fs.mkdirSync(path.join(dir,'follow-ups.json'));
+ const out=run([[FOLLOW_UP,ISSUE_NOTE,true]]);
+ assert.deepEqual([out.errors,out.delivered,out.created.length],[[null],[],1]);
+ assert.equal(new Store(store.root,{device:'pc'}).get('notifications','follow-up-given-up-e6114fa9f94c'),undefined);
+ const [kept]=keptLines(store);assert.match(kept.retry_error,/^the retry is scheduled, but could not be linked/);
+});
+
+test('a failure the notebook could not keep is not reported to Hermes as handled',t=>{
+ if(!python)return t.skip('needs Python');
+ const {store,run}=wiredProvider(t);fs.mkdirSync(path.join(store.state,'ai-failures.log'),{recursive:true});
+ const out=run([[FOLLOW_UP,ISSUE_NOTE,true]]);
+ assert.match(out.errors[0],/^Not delivered: the failure could not be kept in the notebook\. .*failure log could not be written/);
+ assert.deepEqual(out.delivered,[]);
 });
 
 test('a recurring job\'s failure is kept and not said, and it is not scheduled again',t=>{
