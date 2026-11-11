@@ -33,7 +33,8 @@ function setup(t,{judgeSeconds,model=true,answer='Understood.',turn}={}){
  if(!model)fs.rmSync(stub);
  const spawnProcess=(command,args,opts)=>{
   const child=new EventEmitter();child.stdin=new PassThrough();child.stdout=new PassThrough();child.stderr=new PassThrough();
-  child.stdin.on('data',data=>queueMicrotask(()=>{turn?.(opts,String(data));child.stdout.write(answer);child.emit('close',0);}));
+  // A failing check inside the turn fails the turn, so the chat answers with an error, not never.
+  child.stdin.on('data',data=>queueMicrotask(()=>{try{turn?.(opts,String(data));}catch(error){child.stderr.write(String(error.stack));child.emit('close',1);return;}child.stdout.write(answer);child.emit('close',0);}));
   return child;
  };
  return {root,home,spawnProcess};
