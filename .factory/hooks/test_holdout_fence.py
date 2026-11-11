@@ -91,14 +91,27 @@ class WriteAndEdit(FenceCase):
         self.refused("Write", {"file_path": str(HOME / ".claude/settings.json")})
         self.refused("Write", {"file_path": "~/.claude/settings.json"})
 
-    def test_another_work_tree_root(self):
+    def test_a_second_worktree_of_this_repository(self):
+        folder = Path(tempfile.mkdtemp())
+        tree = folder / "second"
+        made = subprocess.run(["git", "-C", str(ROOT), "worktree", "add", "--detach", str(tree)],
+                              capture_output=True, text=True)
+        if made.returncode != 0:
+            shutil.rmtree(folder, ignore_errors=True)
+            self.skipTest(f"git worktree add failed: {made.stderr.strip()}")
+        try:
+            self.refused("Write", {"file_path": str(tree / ".claude/settings.json")})
+            self.refused("Edit", {"file_path": str(tree / ".factory/hooks/holdout_fence.py")})
+            self.refused("Bash", {"command": f"rm '{tree.as_posix()}/.ignore'"})
+            self.allowed("Write", {"file_path": str(tree / "starter-godspeed/.claude/settings.json")})
+        finally:
+            subprocess.run(["git", "-C", str(ROOT), "worktree", "remove", "--force", str(tree)], capture_output=True)
+            shutil.rmtree(folder, ignore_errors=True)
+
+    def test_another_repository_is_not_fenced(self):
         tree = Path(tempfile.mkdtemp())
         try:
-            (tree / ".git").mkdir()
-            self.refused("Write", {"file_path": str(tree / ".claude/settings.json")})
-            self.refused("Write", {"file_path": str(tree / ".factory/hooks/holdout_fence.py")})
-            self.allowed("Write", {"file_path": str(tree / "starter-godspeed/.claude/settings.json")})
-            shutil.rmtree(tree / ".git")
+            subprocess.run(["git", "init", "-q", str(tree)], check=True)
             self.allowed("Write", {"file_path": str(tree / ".claude/settings.json")})
         finally:
             shutil.rmtree(tree, ignore_errors=True)
@@ -144,6 +157,14 @@ class ShellReads(FenceCase):
             "rm -f *.log build/*.tmp",
             "echo done > \"$TMPDIR/out.txt\"",
             "cd starter-godspeed && cat .claude/settings.json > ../copy.json",
+            "git restore .",
+            "git reset --hard HEAD",
+            "ln -s .factory/hooks /tmp/hooks-link",
+            "ln -s ../.claude/settings.json /tmp/settings-link",
+            "rsync -rtv src/ build/",
+            "python3 -c \"open('starter-godspeed/.claude/settings.json', 'w').write('{}')\"",
+            "tar -czf /tmp/backup.tgz .claude/settings.json",
+            "tar -xzf node.tgz -C /tmp",
         ]:
             with self.subTest(command=command):
                 self.bash_allowed(command)
@@ -190,6 +211,22 @@ class ShellWrites(FenceCase):
             "cp /tmp/x .claude/settings.json",
             "cp -r /tmp/hooks .factory/",
             "cp /tmp/x.py .factory/hooks",
+            "cp --target-directory=.factory/hooks /tmp/new.py",
+            "cp --target-directory .factory/hooks /tmp/new.py",
+            "cp -t .factory/hooks /tmp/new.py",
+            "cp -t.factory/hooks /tmp/new.py",
+            "cp -at .factory/hooks /tmp/new.py",
+            "install --target-directory=.factory/hooks /tmp/new.py",
+            "mv -t.factory/hooks /tmp/new.py",
+            "ln -s /tmp/evil.json .claude/settings.json",
+            "ln -s -t .factory/hooks /tmp/evil.py",
+            "rsync -rtv /tmp/hooks/ .factory/hooks/",
+            "git restore -- .claude",
+            "git checkout main -- .",
+            "git restore --source HEAD~3 .",
+            "tar -xf a.tar .claude/settings.json",
+            "python3 -c \"open('.claude/settings.json').read()\"",
+            "python3 -c \"import os; open(os.environ['ROOT'] + '/.claude/settings.json', 'w')\"",
             "install -m 644 /tmp/x .ignore",
             "rm .ignore",
             "rm -rf .factory",

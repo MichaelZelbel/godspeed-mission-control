@@ -30,6 +30,7 @@ Claude Code lets a call through when a hook errors, so `pre` fails closed: an er
 from __future__ import annotations
 
 import fnmatch
+import functools
 import json
 import os
 import re
@@ -228,21 +229,52 @@ def check_shell(command: str, cwd: str, holdout: str, posix: bool) -> None:
 
 # ---- The fence itself: which writes would change it ----------------------------------------------
 
-def fence_paths() -> list[str]:
-    """The fenced paths, comparable with `normal` paths: below this repository's root (where this
-    script lives, and $CLAUDE_PROJECT_DIR) and the account's own Claude settings."""
+@functools.lru_cache(maxsize=None)
+def repo_roots() -> frozenset[str]:
+    """This repository's root: where this script lives, and $CLAUDE_PROJECT_DIR."""
     roots = {normal(str(Path(__file__).resolve().parents[2]))}
     if os.environ.get("CLAUDE_PROJECT_DIR"):
         roots.add(normal(os.environ["CLAUDE_PROJECT_DIR"]))
-    paths = [f"{root}/{tail}" for root in sorted(roots) for tail in FENCED_TAILS]
+    return frozenset(roots)
+
+
+def fence_paths() -> list[str]:
+    """The fenced paths, comparable with `normal` paths: below this repository's root and the
+    account's own Claude settings."""
+    paths = [f"{root}/{tail}" for root in sorted(repo_roots()) for tail in FENCED_TAILS]
     homes = {normal("~/.claude")}
     if os.environ.get("CLAUDE_CONFIG_DIR"):
         homes.add(normal(os.environ["CLAUDE_CONFIG_DIR"]))
     return paths + [f"{home}/{name}" for home in sorted(homes) for name in ("settings.json", "settings.local.json")]
 
 
+@functools.lru_cache(maxsize=None)
+def git_common_dir(base: str) -> str | None:
+    """The shared git folder of the work tree at `base` (a worktree's `.git` file points into it)."""
+    git = f"{base}/.git"
+    if os.path.isdir(git):
+        return normal(git)
+    try:
+        line = Path(git).read_text(encoding="utf-8", errors="replace").strip()
+    except OSError:
+        return None
+    if not line.startswith("gitdir:"):
+        return None
+    gitdir = line[len("gitdir:"):].strip().replace("\\", "/")
+    gitdir = normal(gitdir if os.path.isabs(gitdir) or re.match(r"^[a-zA-Z]:", gitdir) else f"{base}/{gitdir}")
+    try:
+        common = Path(gitdir, "commondir").read_text(encoding="utf-8").strip().replace("\\", "/")
+    except OSError:
+        return gitdir
+    return normal(common if os.path.isabs(common) else f"{gitdir}/{common}")
+
+
 def work_tree(base: str) -> bool:
-    return base != "" and os.path.exists(base + "/.git")
+    """Whether `base` is the root of a work tree of this same repository (a second worktree)."""
+    if base == "":
+        return False
+    mine = {git_common_dir(root) for root in repo_roots()} - {None}
+    return git_common_dir(base) in mine
 
 
 def parents(path: str) -> list[str]:
@@ -332,6 +364,23 @@ def hits(word: str, cwd: str, fence: list[str], whole: bool = False) -> bool:
                 return True
             continue
         if fenced(path, fence, whole) or fenced(normal(os.path.realpath(path)), fence, whole):
+            return True
+    return False
+
+
+PATH_ENDS = set(" \t\r\n'\"`()[]{}=,;<>|&+")
+
+
+def names_fence(text: str, cwd: str, fence: list[str]) -> bool:
+    """Whether code whose effect cannot be read names a fenced file. Each fenced name is taken with
+    the path in front of it (`starter-godspeed/.claude/settings.json` is a product file); a bare
+    `.claude/settings.json` or `.ignore` counts, since what it is joined to cannot be known."""
+    text = text.replace("\\", "/")
+    for match in FENCE.finditer(text):
+        start = match.start()
+        while start > 0 and text[start - 1] not in PATH_ENDS:
+            start -= 1
+        if text[start:match.start()] in ("", "/", "./") or hits(text[start:match.end()], cwd, fence):
             return True
     return False
 
@@ -540,13 +589,32 @@ def xargs_command(args: list[str]) -> list[str]:
 INLINE_CODE = {"-c", "-e", "-E", "--eval", "-p", "--print", "-r", "/c", "/k", "-command", "eval"}
 
 
+def target_directory(args: list[str]) -> str | None:
+    """The folder of GNU cp/install/mv's -t DIR, -tDIR, -at DIR or --target-directory[=]DIR."""
+    for index, arg in enumerate(args):
+        following = args[index + 1] if index + 1 < len(args) else None
+        if arg == "--":
+            return None
+        if arg.startswith("--target-directory="):
+            return arg.split("=", 1)[1]
+        if arg == "--target-directory" and following is not None:
+            return following
+        if re.match(r"^-[a-zA-Z]*t", arg) and not arg.startswith("--"):
+            rest = arg[arg.index("t") + 1:]
+            if rest:
+                return rest
+            if following is not None:
+                return following
+    return None
+
+
 def copier_writes(name: str, args: list[str], cwd: str, fence: list[str]) -> bool:
     positional = plain(args)
     lowered = [arg.lower() for arg in args]
-    directory, into = None, False
-    for flag in ("-t", "--target-directory", "-destination"):
-        if flag in lowered and lowered.index(flag) + 1 < len(args):
-            directory, into = args[lowered.index(flag) + 1], flag != "-destination"
+    directory = target_directory(args) if name in ("cp", "install", "ln") else None
+    into = directory is not None
+    if "-destination" in lowered and lowered.index("-destination") + 1 < len(args):
+        directory = args[lowered.index("-destination") + 1]
     if directory is not None:
         dest, sources = directory, [p for p in positional if p != directory]
     elif len(positional) >= 2:
@@ -581,7 +649,7 @@ def find_writes(args: list[str], cwd: str, fence: list[str], text: str) -> bool:
             writes |= write_shaped([a for a in args[index + 1:] if a not in (";", "+", "{}")])
     if not writes:
         return False
-    if FENCE.search(text.replace("\\", "/")):
+    if names_fence(text, cwd, fence):
         return True
     starts = []
     for arg in args:
@@ -641,7 +709,24 @@ def git_writes(args: list[str], cwd: str, fence: list[str]) -> bool:
     if sub == "reset" and not set(rest) & {"--hard", "--merge", "--keep"}:
         return False
     if sub in GIT_RESTORERS:
-        return any(hits(word, base, fence) for word in plain(rest))
+        # A path that is or holds a fenced file is refused (`git restore .claude`). The whole tree
+        # (`git checkout -- .`) is left alone when it is restored from the index, which cannot hold
+        # a fence change the factory could not write; from another commit it is refused too.
+        if "--" in rest:
+            before, paths = rest[:rest.index("--")], rest[rest.index("--") + 1:]
+            source = sub == "checkout" and bool(plain(before))
+        else:
+            paths = plain(rest)
+            source = sub == "checkout" and len(paths) >= 2
+            paths = paths[1:] if source else paths
+        source = source or any(arg in ("-s", "--source") or arg.startswith("--source=") for arg in rest)
+        for word in paths:
+            path = expand(word, base)
+            whole_tree = path is not None and any(
+                root == path.rstrip("/") or root.startswith(path.rstrip("/") + "/") for root in repo_roots())
+            if hits(word, base, fence, whole=source or not whole_tree):
+                return True
+        return False
     if sub in GIT_REMOVERS:
         return any(hits(word, base, fence, whole=True) for word in plain(rest))
     return False
@@ -669,17 +754,24 @@ def command_writes(words: list[str], cwd: str, fence: list[str], text: str, posi
         return cwd
     if name == "xargs":
         inner = xargs_command(args)
-        blocked = write_shaped(inner) and bool(FENCE.search(text.replace("\\", "/")))
+        blocked = write_shaped(inner) and names_fence(text, cwd, fence)
         if not blocked and inner:
             command_writes(inner, cwd, fence, text, posix, depth)
     elif name == "find":
         blocked = find_writes(args, cwd, fence, text)
     elif name == "git":
         blocked = git_writes(args, cwd, fence)
+    elif name in ("tar", "bsdtar", "unzip", "7z", "7za"):
+        # an archive's contents cannot be known; extracting one that names the fence counts
+        extracts = name == "unzip" or (name.startswith("7z") and args[:1] == ["x"]) or any(
+            arg in ("--extract", "--get") or re.fullmatch(r"-?[A-Za-z]*x[A-Za-z]*", arg)
+            for arg in args[:1]) or any(re.fullmatch(r"-[A-Za-z]*x[A-Za-z]*", arg) for arg in args)
+        blocked = extracts and names_fence(" ".join(args), cwd, fence)
     elif name == "dd":
         blocked = any(arg.startswith("of=") and hits(arg[3:], cwd, fence) for arg in args)
     elif name in REMOVERS:
-        blocked = any(hits(word, cwd, fence, whole=True) for word in positional)
+        moved_into = target_directory(args) if name == "mv" else None
+        blocked = any(hits(word, cwd, fence, whole=True) for word in positional + [moved_into or ""])
     elif name in WRITERS:
         blocked = any(hits(word, cwd, fence) for word in positional)
     elif name in CHANGERS:
@@ -688,13 +780,12 @@ def command_writes(words: list[str], cwd: str, fence: list[str], text: str, posi
     elif name in COPIERS:
         blocked = copier_writes(name, args, cwd, fence)
     elif name == "ln":
-        dest_dir = os.path.dirname(expand(positional[-1], cwd) or cwd) if positional else cwd
-        blocked = any(hits(word, cwd, fence, whole=True) or hits(word, dest_dir, fence, whole=True)
-                      for word in positional)
+        # only the link is written; a later write through a link is caught by following it
+        blocked = copier_writes(name, args, cwd, fence)
     if not blocked and name in IN_PLACE and in_place(name, args):
         blocked = any(hits(word, cwd, fence) for word in positional)
     if not blocked and name in INTERPRETERS and set(lowered) & INLINE_CODE:
-        blocked = bool(FENCE.search(" ".join(args).replace("\\", "/")))
+        blocked = names_fence(" ".join(args), cwd, fence)
     if not blocked:
         # any program's output file: -o FILE, --output FILE, --output=FILE
         for index, arg in enumerate(args):
@@ -738,7 +829,7 @@ def check_writes(command: str, cwd: str, fence: list[str], posix: bool, depth: i
             check_writes(body, cwd, fence, True, depth + 1)
         if "powershell" in kinds:
             check_writes(body, cwd, fence, False, depth + 1)
-        if "code" in kinds and FENCE.search(body.replace("\\", "/")):
+        if "code" in kinds and names_fence(body, cwd, fence):
             refuse(f"a script fed to `{header.strip()[:60]}` names the fence, which only changes by hand")
     for sub in subs:
         check_writes(sub, cwd, fence, posix, depth + 1)
