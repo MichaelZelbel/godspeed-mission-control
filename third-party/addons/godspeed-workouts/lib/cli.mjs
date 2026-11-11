@@ -83,7 +83,8 @@ function writeLauncher(dir, script) {
   return f;
 }
 
-// The key from outside, checked with Hevy before it is kept: a key Hevy refuses is never saved.
+// The key from outside, kept only once Hevy has confirmed it: a key Hevy refuses, or one it could
+// not check because it did not answer, is never saved.
 async function takeKey(ctx, { ask }) {
   const raw = await keyFromOutside({ env: ctx.env, ask });
   if (!raw) return { key: null };
@@ -95,7 +96,7 @@ async function takeKey(ctx, { ask }) {
     return { key, user };
   } catch (e) {
     if (e instanceof HevyError && e.kind === "key") throw new Error("Hevy refused that key. Make a new one at https://hevy.com/settings?developer (it needs Hevy Pro) and try again.");
-    if (e instanceof HevyError && e.kind === "down") { saveKey(ctx.paths, key); return { key, user: null, why: e.message }; }
+    if (e instanceof HevyError && e.kind === "down") return { key: null, why: e.message };
     throw e;
   }
 }
@@ -116,15 +117,16 @@ async function setup(ctx) {
   saveSettings(paths, settings);
 
   // The key.
-  let key = readKey(paths), user = null;
+  let key = readKey(paths), user = null, unchecked = false;
   if (ctx.env.HEVY_API_KEY || !key) {
     const got = await takeKey(ctx, { ask: true });
-    if (got.key) { key = got.key; user = got.user; print(`Hevy key saved${user ? `: ${userWords(user)}` : ` (Hevy did not answer just now: ${got.why}; it is checked at the first run)`}.`); }
+    if (got.key) { key = got.key; user = got.user; print(`Hevy key saved: ${userWords(user)}.`); }
+    else if (got.why) { unchecked = true; print(`Hevy did not answer just now (${got.why}), so the key was not kept. Try again in a while: godspeed-workouts connect`); }
   } else {
     try { user = await new Hevy({ key, base: hevyBase(ctx.env) }).userInfo(); print(`Hevy key: kept, ${userWords(user)}.`); }
     catch (e) { print(`Hevy key: kept, but ${e.message}.`); }
   }
-  if (!key) print("No Hevy key yet. Make one at https://hevy.com/settings?developer (Hevy Pro), then run: godspeed-workouts connect");
+  if (!key && !unchecked) print("No Hevy key yet. Make one at https://hevy.com/settings?developer (Hevy Pro), then run: godspeed-workouts connect");
 
   // The notebook.
   const nb = new Notebook({ base: notebookBase(ctx.env) });
@@ -160,8 +162,9 @@ async function setup(ctx) {
 async function connect(ctx) {
   ensurePrivateDir(ctx.paths.root);
   const got = await takeKey(ctx, { ask: true });
+  if (got.why) { ctx.fail(`Hevy did not answer just now (${got.why}), so the key was not saved. Try again in a while: godspeed-workouts connect`); return 1; }
   if (!got.key) { ctx.fail("No key was given. Put it in HEVY_API_KEY, pipe it in, or type it when asked."); return 1; }
-  ctx.print(`Hevy key saved${got.user ? `: ${userWords(got.user)}` : ""}.`);
+  ctx.print(`Hevy key saved: ${userWords(got.user)}.`);
   const r = await runSync({ paths: ctx.paths, settings: ctx.settings, env: ctx.env });
   ctx.print(`Run: ${r.summary}`);
   return r.code;
