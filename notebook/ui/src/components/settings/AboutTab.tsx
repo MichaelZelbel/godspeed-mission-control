@@ -1,4 +1,5 @@
-import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { GUIDE_URL } from "@/lib/brand";
 
 // Settings, About (18 October 2026): what this installation is, where it keeps your files, whose data
@@ -27,6 +28,22 @@ export interface AboutInfo {
   };
 }
 
+// The newest release and how this installation takes it (/api/update, core/update.mjs): the Update now
+// button where the notebook can update itself, the line to run where it cannot (a Docker server, or a
+// computer whose installation came before the button).
+type UpdateState = "checking" | "downloading" | "preparing" | "switching" | "updated" | "failed";
+export interface UpdateInfo {
+  installed: string;
+  newest: { tag: string; version: string; notes: string } | null;
+  newer: boolean;
+  way: "windows" | "server" | "handover" | "terminal" | "none";
+  command: string | null;
+  busy: boolean;
+  status: { state: UpdateState; from: string; to: string; message: string; at: string } | null;
+  error: string | null;
+}
+const RUNNING: UpdateState[] = ["checking", "downloading", "preparing", "switching"];
+
 const SOURCE_URL = "https://github.com/MichaelZelbel/godspeed-mission-control";
 const KNOWN_ISSUES_URL = `${GUIDE_URL}/known-issues`;
 const RELEASE_CHECK_URL = `${GUIDE_URL}/update#check-which-release-you-have`;
@@ -47,6 +64,75 @@ function longDay(value: string | null): string {
 function withLinks(text: string) {
   return text.split(/(https:\/\/[^\s)]+)/).map((part, i) =>
     /^https:\/\//.test(part) ? <a key={i} className="underline" href={part} target="_blank" rel="noreferrer">{part.replace(/^https:\/\//, "")}</a> : part,
+  );
+}
+
+async function loadUpdate(): Promise<UpdateInfo> {
+  const response = await fetch('/api/update');
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || "Request failed");
+  return data;
+}
+
+function UpdateBlock() {
+  const client = useQueryClient();
+  // When the button was answered: the status this update ends with is written after it. One an earlier
+  // update left (failed, or updated) must not end this one before its first status arrives.
+  const [asked, setAsked] = useState<string | null>(null);
+  const [said, setSaid] = useState<string | null>(null);
+  const { data, error } = useQuery({
+    queryKey: ["update"], queryFn: loadUpdate, staleTime: 60000, retry: false,
+    // While an update runs the notebook restarts, and every question fails until the new one answers.
+    refetchInterval: query => (asked !== null || query.state.data?.busy || RUNNING.includes(query.state.data?.status?.state as UpdateState) ? 3000 : false),
+  });
+  const status = data?.status;
+  const running = asked !== null || !!data?.busy || (!!status && RUNNING.includes(status.state));
+  if (asked !== null && data && !data.busy && status && !RUNNING.includes(status.state) && status.at >= asked) setAsked(null);
+  async function updateNow() {
+    setSaid(null);
+    try {
+      const response = await fetch('/api/update', { method: "POST" });
+      const answer = await response.json();
+      if (response.status === 202) setAsked(answer.status?.at || new Date().toISOString());
+      else setSaid(answer.error || answer.message);
+    } catch {
+      setSaid("The update could not be started. Reload the page to try again.");
+    }
+    client.invalidateQueries({ queryKey: ["update"] });
+  }
+  if (!data && !error) return null;
+  return (
+    <div className="space-y-1 text-sm">
+      {data?.newest && (
+        <p>
+          Newest version: {data.newest.version}{" "}
+          (<a className="underline" href={data.newest.notes} target="_blank" rel="noreferrer">What changed</a>)
+        </p>
+      )}
+      {data?.error && <p className="text-muted-foreground">{data.error}</p>}
+      {running ? (
+        <p role="status">{error ? "Restarting with the new version…" : status && RUNNING.includes(status.state) ? status.message : "Starting the update…"}</p>
+      ) : (
+        <>
+          {status?.state === "failed" && <p role="alert" className="text-destructive">{status.message}</p>}
+          {status?.state === "updated" && data?.installed === status.to && <p>Updated to {status.to}.</p>}
+          {data?.newest && !data.newer && <p>You have the newest version.</p>}
+          {data?.newer && (data.way === "handover" || data.way === "windows") && (
+            <button type="button" className="border rounded px-3 py-1" onClick={updateNow}>Update now</button>
+          )}
+          {data?.newer && data.way === "terminal" && (
+            <p>To update, run this in a terminal on this computer: <code>{data.command}</code></p>
+          )}
+          {data?.newer && data.way === "server" && (
+            <>
+              <p>To update, run this on your server: <code>{data.command}</code></p>
+              <p className="text-muted-foreground">A server a hosting company set up with one click is updated in that company's panel.</p>
+            </>
+          )}
+        </>
+      )}
+      {said && <p role="alert">{said}</p>}
+    </div>
   );
 }
 
@@ -91,6 +177,7 @@ export function AboutTab() {
                 </dd>
               </div>
             </dl>
+            <UpdateBlock />
             <p className="text-sm">
               <a className="underline" href={RELEASE_CHECK_URL} target="_blank" rel="noreferrer">How to check whether a newer release is out</a>
             </p>

@@ -18,7 +18,8 @@ check() { if [ "$2" = "$3" ]; then ok "$1"; else bad "$1 (want [$3], got [$2])";
 echo "mc-uninstall"
 
 # 1. The lists. What kb_install_godspeed_tools (kit-bootstrap lib.sh) copies: every file in tools/
-# but *.md and the tests, then the launchers it writes, and godspeed-browser (kb_wire_computer).
+# but *.md and the tests, then the launchers it writes, godspeed-browser (kb_wire_computer), and
+# godspeed-update (notebook/scripts/install-native-notebook.sh, install_update_command).
 listed=" $(sed -n '/^HELPERS="/,/"$/p; /^PROGRAMS="/,/"$/p' "$HERE/mc-uninstall" | sed 's/^[A-Z]*="//; s/"$//' | tr '\n' ' ') "
 missing=""
 for f in "$HERE"/*; do
@@ -31,7 +32,7 @@ for f in "$HERE"/*; do
   case "$listed" in *" $base "*) ;; *) missing="$missing $base" ;; esac
 done
 for base in mc-prompt-harvest mc-compile-rules mc-check-keys mc-due mc-goals mc-forecast mc-work mc-check-written \
-            mc-check-moves mc-menerio-connect mc-search godspeed-browser; do
+            mc-check-moves mc-menerio-connect mc-search godspeed-browser godspeed-update; do
   case "$listed" in *" $base "*) ;; *) missing="$missing $base" ;; esac
 done
 check "every program the installer puts in ~/.local/bin is on mc-uninstall's lists" "${missing# }" ""
