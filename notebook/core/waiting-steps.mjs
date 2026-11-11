@@ -125,7 +125,9 @@ export function openStep(store,{about,question,yes,no,by,chat,job,quietly,subjec
 
 // A step is answerable once the code that sent its question has said so (`sent_at`). Three senders do:
 // openStep, for a question it writes into the notebook chat itself; a background delivery record that
-// names the step (background-reports.mjs, via stampDelivered, together with its receipt); and the Telegram sender, for a direct
+// names the step, once Hermes delivered it: through the gateway's delivery wrapper, or, for a run the
+// notebook started itself, the notebook's own look at Hermes' executions ledger (background-reports.mjs,
+// certifyRoutineRuns), each via stampDelivered together with its receipt; and the Telegram sender, for a direct
 // reply it sent that holds the words of a step opened during that very turn (stampReply). The asker's
 // own say-so never counts, and a question printed once certifies one step, however many ask the same words.
 // The time a question or a later message reached the chat, never equal to one already recorded, so a
