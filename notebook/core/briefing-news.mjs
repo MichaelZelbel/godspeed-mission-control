@@ -96,7 +96,7 @@ export function ensureAgeLabels(text,items,voice){
  return blocks.join('\n\n');
 }
 
-const NUMBERED=/^\s*\d+[.)]\s+\S/m;
+const NUMBERED=/^[ \t]*\d+[.)][ \t]+\S/m;
 // A brief is thin when it gives the owner nothing to decide and fewer than two fresh news items.
 export function thinCheck(text,{action_artifacts=[],watch_findings=[],source_receipts=[]}){
  const has_action=NUMBERED.test(text)||action_artifacts.some(a=>a.link&&text.includes(a.link));

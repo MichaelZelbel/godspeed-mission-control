@@ -57,7 +57,7 @@ export function cutRefused(draft,voice,protectedLines){
 
 // The items of a draft (#387): blocks between blank lines, and inside a block one item per
 // numbered line with the lines that follow it. [{start,end}] line indices, end exclusive.
-const NUMBERED_LINE=/^\s*\d+[.)]\s+\S/;
+const NUMBERED_LINE=/^\s*\d+[.)]\s+\S/,ITEM_MARKER=/^\s*\d+[.)]/;
 export function draftItems(text){
  const lines=text.split(/\r?\n/),items=[];let open=null;
  for(const [i,line] of lines.entries()){
@@ -107,7 +107,7 @@ export async function applyFindings(text,findings,{protectedLines=[],voice=null,
   }
   lines[at]=lines[at].replace(finding.sentence,'').replace(/\s{2,}/g,' ').trimEnd();
   if(!lines[at].trim())cut.add(at);
-  const emptied=lines.slice(item.start,item.end).every(l=>!l.trim()||NUMBERED_LINE.test(l)&&!l.replace(/^\s*\d+[.)]\s*/,'').trim());
+  const emptied=lines.slice(item.start,item.end).every((l,i)=>!(i===0?l.replace(ITEM_MARKER,''):l).trim());
   changes.push({action:'drop-sentence',item:first,sentence:finding.sentence,reason,...(emptied?{item_emptied:true}:{})});
   if(emptied)for(let i=item.start;i<item.end;i++)cut.add(i);
  }

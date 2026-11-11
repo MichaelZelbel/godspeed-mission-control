@@ -122,11 +122,12 @@ async function runBriefing(job,{store,query,provider,now}){
  const readNews=extraTopics=>{
   const observations=visibleRows(query,'watch_observations'),byId=new Map(observations.map(o=>[o.id,o]));
   const findings=JSON.parse(watchCommand({store,query},['queue']).result).map(f=>({row:{...f,found_at:f.created_at},...classify({published:byId.get(f.source_observation_id)?.comparison?.published,found_at:f.created_at},span,today,zone)}));
-  const chosen=findings.filter(f=>f.state!=='stale').slice(0,1).map(f=>aged(f.row,f));
+  const told=findings.filter(f=>f.state!=='stale').slice(0,1),chosen=told.map(f=>aged(f.row,f));
   const selected=new Set([...watch.map(t=>t.id),...chosen.map(f=>f.topic_id),...extraTopics]),latest=new Map();
   for(const source of observations.filter(o=>selected.has(o.topic_id)&&Date.parse(o.observed_at)<=Date.now()).sort((a,b)=>a.observed_at.localeCompare(b.observed_at)))latest.set(JSON.stringify([source.topic_id,source.url]),source);
   const receipts=[...latest.values()].map(o=>({row:o,...classify({published:o.comparison?.published,found_at:o.observed_at},span,today,zone)}));
-  const items={findings:findings.map(f=>({link:f.row.link,state:f.state})),receipts:receipts.map(r=>({url:r.row.url,changed:r.row.changed,state:r.state}))};
+  // The pool counts the findings the writer gets, and the stale ones it was spared.
+  const items={findings:[...told,...findings.filter(f=>f.state==='stale')].map(f=>({link:f.row.link,state:f.state})),receipts:receipts.map(r=>({url:r.row.url,changed:r.row.changed,state:r.state}))};
   return {selected,findings:chosen,receipts:receipts.filter(r=>r.state!=='stale').map(r=>aged(r.row,r)),pool:newsPool({window:span,topics:watch,runs:visibleRows(query,'watch_runs'),observations,...items}),links:freshLinks(items)};
  };
  let news=readNews([]);
@@ -332,12 +333,15 @@ async function runBriefing(job,{store,query,provider,now}){
  if(thin.thin&&!fallback&&(thin.missing_actions.length||thin.missing_news.length)){
   thinRepair='failed';
   const missingNews=[...context.watch_findings,...context.source_receipts].filter(item=>thin.missing_news.includes(newsLink(item)));
-  const raw=await provider({kind:'morning-brief',phase:'thin-repair',context:{...context,thin_draft:draft,missing:{action_artifacts:thin.missing_actions,news:missingNews}},contract:writerContract+' The checked note in thin_draft gives the owner nothing to decide and too little fresh news. Write it again, keeping what it says, and add the decisions and news in missing.'});
-  let repaired=null;try{repaired=[...healthSummaryLines,unknownWeekLine,healthSafeReply(raw,'text',health)].filter(Boolean).join('\n\n');}catch{}
-  if(repaired&&!codeGate(repaired).length){
-   const facts=await verify(repaired,'source-facts'),reader=await verify(repaired,'plain-words-and-delivery');
-   if(facts.verdict.passed===true&&reader.verdict.passed===true){draft=repaired;check=facts.receipt;deliveryCheck=reader.receipt;thinRepair='passed';thin=thinCheck(draft,context);}
-  }
+  // The checked brief is already deliverable: a failure in this optional step leaves it as it was.
+  try{
+   const raw=await provider({kind:'morning-brief',phase:'thin-repair',context:{...context,thin_draft:draft,missing:{action_artifacts:thin.missing_actions,news:missingNews}},contract:writerContract+' The checked note in thin_draft gives the owner nothing to decide and too little fresh news. Write it again, keeping what it says, and add the decisions and news in missing.'});
+   const repaired=[...healthSummaryLines,unknownWeekLine,healthSafeReply(raw,'text',health)].filter(Boolean).join('\n\n');
+   if(!codeGate(repaired).length){
+    const facts=await verify(repaired,'source-facts'),reader=await verify(repaired,'plain-words-and-delivery');
+    if(facts.verdict.passed===true&&reader.verdict.passed===true){draft=repaired;check=facts.receipt;deliveryCheck=reader.receipt;thinRepair='passed';thin=thinCheck(draft,context);}
+   }
+  }catch{}
  }
  const agedNews=[...context.watch_findings,...context.source_receipts].filter(item=>item.age_label);
  if(agedNews.length){const labelled=ensureAgeLabels(draft,agedNews,voice);if(!codeGate(labelled).length)draft=labelled;}

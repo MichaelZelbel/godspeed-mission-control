@@ -65,6 +65,27 @@ test('a flagged sentence with no usable rewrite is dropped alone, never its item
  assert.deepEqual(receipt('brief-repair').changes.map(c=>c.action),['drop-sentence','rewrite']);
 });
 
+test('a rewritten sentence the recheck still flags is dropped, and its item stays',async()=>{
+ const {store,query}=workspace('recheck-drops');
+ const check=input=>{if(input.check==='source-facts')return pass;const draft=input.context.draft,found=[...nits(draft),...(draft.includes('Pick one of the two.')?[{sentence:'Pick one of the two.',problem:'wording',reason:'Still too pushy.'}]:[])];return found.length?fail(found):pass;};
+ const {result,note,receipt}=await run(store,query,{write:()=>TENTH,check,repair:input=>({sentence:/dentist/.test(input.context.item)?'Pick one of the two.':'Say whether the pause goes ahead.'})});
+ assert.equal(result.fallback,undefined);
+ assert.doesNotMatch(note.content,/Pick one of the two|He waits for you/);
+ assert.match(note.content,/^1\. Your 10:00 call clashes with the fictional dentist visit\.$/m);
+ assert.match(note.content,/^2\. The fictional sales pause needs your decision by Friday\. Say whether the pause goes ahead\.$/m);
+ assert.equal(receipt('brief-repair').state,'dropped-after-recheck');
+});
+
+test('a recheck that fails without naming its sentences takes the factual fallback',async()=>{
+ const {store,query}=workspace('recheck-unnamed');
+ const check=input=>{if(input.check==='source-facts')return pass;const draft=input.context.draft;return draft.includes('Pick one of the two.')?fail(undefined):nits(draft).length?fail(nits(draft)):pass;};
+ const {result,note,receipt}=await run(store,query,{write:()=>TENTH,check,repair:input=>({sentence:/dentist/.test(input.context.item)?'Pick one of the two.':'Say whether the pause goes ahead.'})});
+ assert.equal(result.fallback,true);
+ assert.doesNotMatch(note.content,/Pick one of the two/);
+ assert.equal(receipt('brief-repair').state,'failed');
+ assert.equal(receipt('brief-repair').error,'The recheck failed without naming its sentences');
+});
+
 const earlierBrief=(store,day,at)=>store.save('notes',{title:'Your morning briefing',content:'An earlier fictional brief of '+day+'.',source_app:'morning-brief',brief_day:day,created_at:at});
 test('news reaches back two days, and one day further for each missed morning',async()=>{
  for(const [day,start,gap] of [['2026-11-09','2026-11-08',0],['2026-11-06','2026-11-05',3]]){
@@ -119,6 +140,16 @@ test('a full pool of fresh news is not widened',async()=>{
  assert.equal(store.list('watch_runs').filter(r=>r.topic_id===other.id).length,0);
 });
 
+test('findings the writer does not get leave the pool thin, so it is widened',async()=>{
+ const {store,query}=workspace('queued-findings');const now=new Date();
+ const topic=store.save('watch_topics',{title:'Fictional feed',paused:true});
+ for(const n of [1,2,3])store.save('watch_findings',{topic_id:topic.id,score:60+n,what:'Fictional story '+n+'.',link:'https://fictional.invalid/story-'+n,status:'pending',expires:FUTURE,created_at:now.toISOString()});
+ const {note,writes}=await run(store,query,{write:()=>HEALTH,now});
+ assert.equal(writes[0].context.watch_findings.length,1);
+ assert.equal(note.evidence.news_pool.fresh,1);
+ assert.deepEqual(note.evidence.news_pool.widened.reason,['thin']);
+});
+
 // The 153-word shape: an opening and one news item, while a prepared decision waited.
 const thinFixture=name=>{
  const {store,query}=workspace(name),topic=store.save('watch_topics',{title:'Fictional feed',paused:true}),link='https://fictional.invalid/one-story';
@@ -148,6 +179,15 @@ test('a brief still thin after its repair says so and why',async()=>{
  assert.match(note.content,/\n\nThis brief is thin today: nothing waits for your decision; only 1 fresh news item came in since \d+ \w+\.$/);
 });
 
+test('a thin repair whose model call fails leaves the checked brief to go out, told thin',async()=>{
+ const {store,query,thinText}=thinFixture('thin-repair-throws');
+ const {result,note,receipt}=await run(store,query,{now:new Date(),write:input=>{if(input.phase==='thin-repair')throw Error('Fictional provider outage');return thinText;}});
+ assert.ok(note.content.startsWith(thinText));
+ assert.ok(result.thin);
+ assert.equal(receipt('brief-final-check').thin_repair,'failed');
+ assert.match(note.content,/This brief is thin today: nothing waits for your decision/);
+});
+
 test('a quiet installation with nothing to tell is flagged thin but not told so',async()=>{
  const {store,query}=workspace('thin-quiet');
  const {result,note,writes,receipt}=await run(store,query,{write:()=>HEALTH});
@@ -170,6 +210,7 @@ test('the window, the news states and the thin check, one rule at a time',()=>{
  assert.equal(thinCheck('https://x.invalid/1 https://x.invalid/3',context).thin,true);
  assert.equal(thinCheck('https://x.invalid/1 https://x.invalid/2',context).thin,false);
  assert.equal(thinCheck('1. Decide on it.',context).thin,false);
+ assert.equal(thinCheck('Good morning.\n\n1.\n\nHealth fine.',context).has_action,false,'a bare item number is no decision');
  assert.equal(thinCheck('See /dashboard/notes/a',context).thin,false);
 });
 
@@ -178,4 +219,7 @@ test('draft items and sentence repair keep to their lines',async()=>{
  await assert.rejects(applyFindings('Required line.\n\nOther.',[{sentence:'Required line.',problem:'wording'}],{protectedLines:['Required line.'],rewrite:async()=>''}),/word for word/);
  const out=await applyFindings('Intro.\n\n1. Keep this. Fix this.\n2. Drop item.',[{sentence:'Drop item.',problem:'core-unsupported',reason:'r'},{sentence:'Fix this.',problem:'wording',reason:'w'}],{rewrite:async()=>'Fixed https://new.invalid'});
  assert.equal(out.text,'Intro.\n\n1. Keep this.','a rewrite that brings a new link is not used');
+ const emptied=await applyFindings('Good morning.\n\n1. Only this.\n\nHealth fine.',[{sentence:'Only this.',problem:'wording',reason:'w'}],{rewrite:async()=>''});
+ assert.equal(emptied.text,'Good morning.\n\nHealth fine.');
+ assert.equal(emptied.changes[0].item_emptied,true);
 });
