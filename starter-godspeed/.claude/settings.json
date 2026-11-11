@@ -27,6 +27,15 @@
             "timeout": 10
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/promise-needs-a-file.js\"",
+            "timeout": 10
+          }
+        ]
       }
     ],
     "SessionStart": [

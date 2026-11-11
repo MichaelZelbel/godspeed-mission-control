@@ -1,6 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import path from 'node:path';import {fileURLToPath} from 'node:url';import {EventEmitter} from 'node:events';import {PassThrough} from 'node:stream';
 import {nativeAgent} from '../core/native-agent.mjs';import {NativeScheduler,nativeJobs} from '../core/native-scheduler.mjs';import {Store} from '../core/records/store.mjs';import {Domains} from '../core/domains.mjs';import {QueryService} from '../core/query.mjs';
-import {execFileSync} from 'node:child_process';import {installStarter,adoptedMissionControl} from '../core/starter-workspace.mjs';import {FLAG,readMachineRecord,writeMachineRecord} from '../core/starting-routines.mjs';import {runCommand} from '../core/child-process.mjs';
+import {execFileSync} from 'node:child_process';import {installStarter,adoptedMissionControl} from '../core/starter-workspace.mjs';import {FLAG,STARTING_ROUTINES,readMachineRecord,writeMachineRecord} from '../core/starting-routines.mjs';import {runCommand} from '../core/child-process.mjs';
 import {beginContext,scheduleInvite,setTimezone,writeContext,INVITE_JOB} from '../core/context-setup.mjs';
 import {CHAT_TIDY_JOB,BRIEF_SCRIPT} from '../core/notebook-routines.mjs';
 import {addArea,findArea} from '../../third-party/addons/godspeed-coach/lib/areas.mjs';import {openTalk,readTalk} from '../../third-party/addons/godspeed-coach/lib/talks.mjs';import {addDays,localParts,now as coachNow,weekdayOf} from '../../third-party/addons/godspeed-coach/lib/clock.mjs';import {resolvedCoachArea} from '../core/coach-chat.mjs';import {charmNow} from '../core/charm-operation.mjs';
@@ -311,6 +311,10 @@ for(const [label,sent] of [['still waits to be sent',false],['went out, and Herm
   scheduler.lastTick=0;await scheduler.tick();
   // The seven, beside the invitation, and the night chat tidy-up because this server has a chat app.
   assert.deepEqual(names(hermes.jobs()),[INVITE_JOB,...STARTING_NAMES,CHAT_TIDY_JOB]);
+  // Each starting routine's promise, once: another tick writes nothing again.
+  const promises=path.join(root,'work','promises'),written=()=>Object.fromEntries(fs.readdirSync(promises).map(n=>[n,fs.readFileSync(path.join(promises,n),'utf8')]));
+  assert.deepEqual(Object.keys(written()).sort(),['README.md',...STARTING_ROUTINES.filter(r=>STARTING_NAMES.includes(r.name)).map(r=>'routine-'+r.key+'.md')].sort());
+  const before=written();scheduler.lastTick=0;await scheduler.tick();assert.deepEqual(written(),before);
   assert.equal(store.get('settings',FLAG).state,'created');assert.equal(readMachineRecord(store).state,'created');
   assert.deepEqual([...new Set(hermes.jobs().filter(j=>j.name!==INVITE_JOB&&j.name!==CHAT_TIDY_JOB).map(j=>j.deliver))],['telegram']);
   assert.equal(hermes.jobs().find(j=>j.name===CHAT_TIDY_JOB).deliver,'local');
