@@ -166,6 +166,11 @@ atomic(path.join(home,'plugins','godspeed-reply','model-command.txt'),modelComma
 // THE NIGHT CHAT TIDY-UP'S COMMAND (assistant-files/godspeed-chat-tidy): /godspeed-chat-tidy runs the
 // gateway's own /compress for the owner's chat, which the night routine dispatches.
 fs.cpSync(path.join(kit,'notebook','assistant-files','godspeed-chat-tidy'),path.join(home,'plugins','godspeed-chat-tidy'),{recursive:true,filter:source=>!/__pycache__/.test(source)});
+// THE CHAT GUARD (assistant-files/godspeed-chat-guard, issue #384): inside the gateway it restarts the
+// chat when the Hermes code under it changed, and a message it could not answer gets a plain sentence
+// and is saved under the mission control.
+fs.cpSync(path.join(kit,'notebook','assistant-files','godspeed-chat-guard'),path.join(home,'plugins','godspeed-chat-guard'),{recursive:true,filter:source=>!/__pycache__/.test(source)});
+atomic(path.join(home,'plugins','godspeed-chat-guard','mission-control.txt'),root+'\n');
 let text=fs.existsSync(file)?fs.readFileSync(file,'utf8').replace(/^\uFEFF/,''):`terminal:\n  cwd: ${JSON.stringify(root)}\nskills:\n  external_dirs: [${JSON.stringify(path.join(root,'skills'))}]\nmemory:\n  memory_enabled: false\n`;
 // WHERE A SKILL THE OWNER ASKS FOR IN A CHAT IS MADE. external_dirs above only lets Hermes read the
 // mission control's skills; it creates a new one in its own home unless skills.create_dir names

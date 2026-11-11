@@ -14,6 +14,7 @@ import {FLAG,STARTING_ROUTINES,routineFiles,writeRoutineFiles,prepareCheckIn,sav
 import {cronOf,cronCalendar,calendarCron,retimeWhat,isTalkGate,isCoachTick,talkArea,moveTalk} from './routine-times.mjs';
 import {readNotebookRoutines,rememberNotebookRoutine,enableKind,deliveryFor,journalWanted,journalOnTheClock,JOURNAL_JOB,JOURNAL_SCRIPT,JOURNAL_WHAT,CHAT_TIDY_JOB,CHAT_TIDY_SCRIPT,CHAT_TIDY_SCHEDULE,CHAT_TIDY_WHAT,writeNotebookRoutines,BRIEF_JOB,BRIEF_SCRIPT,isBriefJob,CONNECTION_JOB,CONNECTION_SCRIPT,CONNECTION_WHAT,MAIL_COUNT_JOB,MAIL_COUNT_SCRIPT,MAIL_COUNT_WHAT,WORKOUTS_JOB,WORKOUTS_SCRIPT,WORKOUTS_WHAT,NOTICES_JOB,NOTICES_SCRIPT,NOTICES_WHAT} from './notebook-routines.mjs';
 import {holdQueuedNotices} from './notices.mjs';
+import {writeRoutinePromise} from './routine-promises.mjs';
 import {switchable,switchedOn,setRoutineSwitch,switchId} from './routine-switches.mjs';
 import {connectionCheckWanted} from './connection-check.mjs';
 import {mailCountWanted} from './mail-trackers.mjs';
@@ -70,6 +71,8 @@ const installedRoutine=(home,root,routine)=>hermesJobs(home).find(job=>job.name=
 // the longest script, up to 8100 seconds), so a tick gets two hours and forty-five minutes; past
 // that it is stopped with all it started, and its heartbeat stops with it.
 export const TICK_LIMIT=(2*60+45)*60000;
+// Two test turns of at most three minutes, the wait between them and the messages (chat-health.mjs).
+const CHAT_CHECK_LIMIT=8*60000;
 // The notebook edits Hermes schedules; it never runs a second scheduler. The
 // notebook's own record routines that Hermes has no job for (the watch sweep,
 // radar preparation and application) run beside it in `records`.
@@ -243,7 +246,13 @@ export class NativeScheduler{
     made.push({id:job.id,key:routine.key,name:routine.name,what:routine.what});
    }
   }catch(error){for(const job of made)await this.command(['remove',job.id]).catch(()=>{});throw error;}
+  for(const routine of routines.filter(r=>made.some(m=>m.key===r.key)))this.writePromise({kind:routine.key,name:routine.name,what:routine.what,schedule:routine.schedule});
   return made;
+ }
+ // A promise that cannot be written never stops a routine being made.
+ writePromise(routine){
+  const timezone=this.store.get('settings','installation')?.timezone||Intl.DateTimeFormat().resolvedOptions().timeZone;
+  try{writeRoutinePromise(this.store.root,{...routine,timezone});}catch{}
  }
  // A routine added to the starting routines after a machine got its first ones (the nightly goal
  // research, 13 October 2026) is made once on that machine too, when it is not in the machine's
@@ -536,6 +545,7 @@ export class NativeScheduler{
   const made=hermesJobs(this.home).find(j=>!before.has(j.id));
   if(!made)return null;
   rememberNotebookRoutine(this.store,{id:made.id,key:'morning-brief',name:made.name||name,skill:'morning-brief',what:known.what});
+  this.writePromise({kind:'brief',name:made.name||name,what:known.what,schedule});
   return made.id;
  }
  // A Morning brief made the old way, as the morning-brief recipe (an AI job of Hermes), is made
@@ -703,6 +713,7 @@ export class NativeScheduler{
   if(this.ticking){if(raise){await this.current?.catch(()=>null);await this.followConnectionCheck();}return records;}
   const now=this.now();if(now-(this.lastTick||0)<60000){this.onProgress?.();if(raise)await this.followConnectionCheck();return records;}
   if(this.updater)await beatWhile(this.updater.tick(this.store.get('settings','installation')?.timezone),()=>this.onProgress?.(),{limitMs:this.updateLimit,every:this.beatEvery}).catch(error=>console.error('Godspeed Mission Control: the Hermes update could not be checked: '+String(error?.message||error)));
+  if(this.chatHealth)await beatWhile(this.chatHealth.tick(),()=>this.onProgress?.(),{limitMs:CHAT_CHECK_LIMIT,every:this.beatEvery}).catch(error=>console.error('Godspeed Mission Control: the chat check could not run: '+String(error?.message||error)));
   const release=this.lifecycle.acquire('routine tick');if(!release)return records;
   this.ticking=true;this.lastTick=now;
   let failure=null,finish;const failures=[];

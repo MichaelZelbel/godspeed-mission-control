@@ -44,7 +44,8 @@
  * Let undated wishes in and within a month it is a to-do app you do not maintain.
  *
  *   mc-due                    everything, loudest first
- *   mc-due today              at most three, for your morning brief to read
+ *   mc-due today              at most three, for your morning brief to read, after any promise
+ *                             of your mission control's that was missed (promises.js)
  *   mc-due add <name> --title "..." [--from YYYY-MM-DD] --target YYYY-MM-DD and/or --to YYYY-MM-DD
  *          --done-when "..." [--cost "..."] [--repeats monthly|yearly|"every N days"]
  *          [--self-check none|secret-changed|connection-ok|file-newer] [--self-check-arg ARG] [--link URL]
@@ -666,7 +667,7 @@ function help() {
   console.log(`mc-due - the things with a last day, and how loud to be about them
 
   mc-due                         everything, loudest first
-  mc-due today                   at most three, for your morning brief
+  mc-due today                   a missed promise first, then at most three, for your morning brief
   mc-due add <name> --title "..." [--from YYYY-MM-DD]
           --target YYYY-MM-DD and/or --to YYYY-MM-DD
           --done-when "..." [--cost "..."]
@@ -712,10 +713,19 @@ function sayOutOfStep() {
     OUT_OF_STEP[0] + (OUT_OF_STEP.length > 1 ? " (and " + (OUT_OF_STEP.length - 1) + " more)" : "") + ".");
 }
 
-function cmdList(day, capped) {
+// A promise of your mission control's that was missed, never kept or cannot be read comes first in
+// the day's list (promises.js). The list goes on even when the promises could not be checked.
+function promiseSaying() {
+  try { const promises = require("./promises.js"); return promises.promiseLines(promises.checkPromises(godspeed)); }
+  catch (_) { return ["Your promises could not be checked today."]; }
+}
+
+// `said`: something was printed above the list, so an empty list says nothing of its own.
+function cmdList(day, capped, said = false) {
   const rows = load(day);
   sayOutOfStep();
   if (!rows.length) {
+    if (said) return 0;
     console.log("Nothing with a last day yet.");
     console.log("Add one:  mc-due add tax --title \"My tax return\" --from 2027-01-01 --to 2027-07-31 \\");
     console.log("            --done-when \"it is filed\" --cost \"a late fee, and they estimate my income themselves\"");
@@ -753,7 +763,7 @@ function cmdList(day, capped) {
     // never written to: there is no window in it to say anything about.
     show = show.concat(rows.filter((r) => r.problem));
   }
-  if (!show.length) { console.log("Nothing needs saying today."); return 0; }
+  if (!show.length) { if (!said) console.log("Nothing needs saying today."); return 0; }
   for (const r of show) {
     if (r.problem) {
       console.log(WORDS.unreadable.padEnd(15) + lookSentence(r));
@@ -1135,7 +1145,7 @@ const cmd = args[0] && !args[0].startsWith("-") ? args[0] : "";
 let rc = 0;
 switch (cmd) {
   case "": case "list": rc = cmdList(day, false); break;
-  case "today": rc = cmdList(day, true); break;
+  case "today": { const promises = promiseSaying(); for (const line of promises) console.log(line); rc = cmdList(day, true, promises.length > 0); break; }
   case "add": rc = cmdAdd(day); break;
   case "done": rc = cmdDone(day); break;
   case "target": rc = cmdTarget(day); break;
