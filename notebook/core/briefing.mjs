@@ -331,7 +331,8 @@ async function runBriefing(job,{store,query,provider,now,notices,promiseRoot=sto
  }
  // A brief with nothing to decide and under two fresh news items is thin (#387). One rewrite that
  // adds the missing decision or news must pass every check; a brief still thin says so and why,
- // where the installation had sources or decisions to fill it.
+ // where the installation had sources or decisions to fill it. A repair that passes its checks
+ // but leaves the brief thin is recorded as 'still-thin', never 'passed' (#412).
  let thin=thinCheck(draft,context),thinRepair='not-applicable';
  if(thin.thin&&!fallback&&(thin.missing_actions.length||thin.missing_news.length)){
   thinRepair='failed';
@@ -342,7 +343,7 @@ async function runBriefing(job,{store,query,provider,now,notices,promiseRoot=sto
    const repaired=[...healthSummaryLines,unknownWeekLine,healthSafeReply(raw,'text',health)].filter(Boolean).join('\n\n');
    if(!codeGate(repaired).length){
     const facts=await verify(repaired,'source-facts'),reader=await verify(repaired,'plain-words-and-delivery');
-    if(facts.verdict.passed===true&&reader.verdict.passed===true){draft=repaired;check=facts.receipt;deliveryCheck=reader.receipt;thinRepair='passed';thin=thinCheck(draft,context);}
+    if(facts.verdict.passed===true&&reader.verdict.passed===true){draft=repaired;check=facts.receipt;deliveryCheck=reader.receipt;thin=thinCheck(draft,context);thinRepair=thin.thin?'still-thin':'passed';}
    }
   }catch{}
  }

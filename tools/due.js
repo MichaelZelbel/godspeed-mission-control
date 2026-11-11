@@ -781,10 +781,15 @@ function cmdList(day, capped, said = false) {
     }
     if (!capped) {
       const c = (r.o.head["SELF-CHECK"] || "none").toLowerCase();
+      const scArg = (r.o.head["SELF-CHECK-ARG"] || "").trim();
+      // A connection the daily check does not list is never watched (`mc-due check` skips it), so
+      // saying it closes itself would be a promise nothing keeps (#428).
       console.log("               " + (c === "none"
         ? "only your word closes this one:  mc-due done " + r.slug
-        : "closes itself when " + (c === "secret-changed" || c === "connection-ok"
-          ? selfCheckWords(c, (r.o.head["SELF-CHECK-ARG"] || "").trim()) : (r.o.head["SELF-CHECK"] || ""))));
+        : c === "connection-ok" && !connectionId(scArg)
+          ? "stays open until you close it:  mc-due done " + r.slug + "  (\"" + scArg + "\" is not a connection the daily connection check knows)"
+          : "closes itself when " + (c === "secret-changed" || c === "connection-ok"
+            ? selfCheckWords(c, scArg) : (r.o.head["SELF-CHECK"] || ""))));
     }
   }
   return 0;
