@@ -3425,6 +3425,10 @@ I have no fresh health readings for today, so there is nothing to report on that
 EOF
 first_day_brief_records "$FD/product-output"
 passes 'a model-written brief that tells the checklist the product wrote in its own words' first-day "$FD/product-output" 'answered today'
+copy "$FD/product-output" "$FD/product-output-first-aid"
+sed -i 's/light and communication, medicines/light and communication, first aid and medicines/' "$FD/product-output-first-aid/brief.txt"
+first_day_brief_records "$FD/product-output-first-aid"
+passes 'a model-written brief whose report of the checklist mentions first aid' first-day "$FD/product-output-first-aid" 'answered today'
 copy "$FD/product-output" "$FD/product-output-unnamed"
 printf 'Your household emergency-kit checklist for Sunday is one of your saved goals.\n\nWhat I need from you:\n\n1. Reply here with how many people live in your household.\n' >"$FD/product-output-unnamed/brief.txt"
 first_day_brief_records "$FD/product-output-unnamed"

@@ -188,12 +188,13 @@ const listItem=/^(?:\d+[.)]|[-*\u2022])\s/;
 const step=line=>{const m=line.match(/^(?:\d+[.)]|[-*\u2022])\s+(.+)$/);if(!m)return false;const w=m[1].toLowerCase().match(/[a-z]+/g)||[];return stepVerbs.has(w[0])&&w.slice(1).some(word=>!filler.has(word));};
 // Or, for work the product chose, by at least three words of its recorded result that the goal does
 // not already say (a checklist "written", with a "source link" on every "item"), told outside its
-// list items and its lines about next steps: those that reuse such words ask for work, they do not
-// report it.
+// list items, its headings about next steps and the lines that open as one: those that reuse such
+// words ask for work, they do not report it. A sentence that only mentions "first aid" still reports.
 const aboutNext=line=>/\b(?:next|steps?|what would help|need from you|to do|do today|today|first|action)\b/i.test(line);
+const asksNext=line=>aboutNext(line)&&(/:$/.test(line)||/^(?:next|today|steps?|what (?:would help|i need)|to do)\b/i.test(line));
 const plain=new Set(['about','also','been','check','does','done','each','every','from','goal','goals','godspeed','have','here','into','least','more','most','only','some','than','that','their','them','then','there','they','this','what','when','where','which','will','with','work','would','your']);
 const ownWords=text=>[...new Set((text.toLowerCase().match(/[a-z0-9]+/g)||[]).filter(word=>word.length>=4&&!plain.has(word)&&!goalWords.includes(word)))];
-const reported=new Set(lines.filter(line=>!listItem.test(line)&&!aboutNext(line)).join(' ').toLowerCase().match(/[a-z0-9]+/g)||[]);
+const reported=new Set(lines.filter(line=>!listItem.test(line)&&!asksNext(line)).join(' ').toLowerCase().match(/[a-z0-9]+/g)||[]);
 if(!named.some(names=>names.some(name=>brief.toLowerCase().includes(name.toLowerCase())))&&!told.some(text=>ownWords(text).filter(word=>reported.has(word)).length>=3))fail('the saved brief does not identify the verified work');
 const listed=lines.some((line,at)=>{if(!step(line))return false;for(let i=at-1;i>=0;i--){if(!lines[i]||listItem.test(lines[i]))continue;return aboutNext(lines[i]);}return false;});
 if(!listed&&(!nextLine||verb<0||!words.slice(verb+1).some(word=>!filler.has(word))))fail('the saved brief has no concrete next action');
