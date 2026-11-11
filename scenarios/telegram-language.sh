@@ -148,6 +148,25 @@ act() {
 is_english() { grep -qiwE 'the|you|what|how|it|are|and|that|will|does|done' <<<"$1" && ! grep -qiwE 'du|dass|woran|ist|und|nicht|ich|die|der|das' <<<"$1"; }
 is_german() { grep -qiwE 'du|dass|woran|ist|und|nicht|ich|die|der|das' <<<"$1" && ! grep -qiwE 'the|you|what|how|are|that|will|does|done' <<<"$1"; }
 
+# What the plugin's own log says about the replies it did not correct: its result and, for a failed
+# translation, why each try failed (godspeed-model's own error words). With a case's name, only the
+# lines for that case's draft. Empty when the log has nothing to add; it never changes the verdict.
+plugin_said() { # <evidence folder> [case]
+  "$NODE" -e '
+const fs=require("fs");const [folder,name]=process.argv.slice(1);
+let draft=null;
+if(name){try{draft=(JSON.parse(fs.readFileSync(folder+"/turns.json","utf8"))[name]||{}).draft??null;}catch{}}
+const said=new Set();
+for(const line of fs.readFileSync(folder+"/godspeed-reply.log","utf8").split("\n")){
+ let e;try{e=JSON.parse(line);}catch{continue;}
+ if(!e||e.result==="corrected"||e.result==="scheduled")continue;
+ if(draft!==null&&e.sent!==draft)continue;
+ said.add(String(e.result)+(Array.isArray(e.failed_tries)&&e.failed_tries.length?" (tries: "+e.failed_tries.join(" | ")+")":""));
+}
+if(said.size)process.stdout.write("; the plugin logged: "+[...said].join("; "));
+' "$1" "${2:-}" 2>/dev/null || true
+}
+
 check() { # <evidence folder>
   local folder=$1 name sent draft
   [ -d "$folder" ] || fail "there is nothing at $folder, so this scenario kept no evidence of a reply"
@@ -166,16 +185,16 @@ check() { # <evidence folder>
   # Three English journal messages with a German draft: English, and not the German question.
   for name in j1 j2 j3; do
     sent=$(json_value "$folder/turns.json" "$name.sent")
-    is_english "$sent" || fail "the English journal message $name was answered in something other than English: $sent"
-    case $sent in *"Woran merkst"*) fail "the English journal message $name still got the German question: $sent" ;; esac
+    is_english "$sent" || fail "the English journal message $name was answered in something other than English: $sent$(plugin_said "$folder" "$name")"
+    case $sent in *"Woran merkst"*) fail "the English journal message $name still got the German question: $sent$(plugin_said "$folder" "$name")" ;; esac
   done
   # English, German, English in one chat, each following its message.
   sent=$(json_value "$folder/turns.json" chat-en-1.sent)
-  is_english "$sent" || fail "the first English message in the chat was not answered in English: $sent"
+  is_english "$sent" || fail "the first English message in the chat was not answered in English: $sent$(plugin_said "$folder" chat-en-1)"
   sent=$(json_value "$folder/turns.json" chat-de.sent)
-  is_german "$sent" || fail "the German message in the chat was not answered in German: $sent"
+  is_german "$sent" || fail "the German message in the chat was not answered in German: $sent$(plugin_said "$folder" chat-de)"
   sent=$(json_value "$folder/turns.json" chat-en-2.sent)
-  is_english "$sent" || fail "the English message after the German one was not answered in English: $sent"
+  is_english "$sent" || fail "the English message after the German one was not answered in English: $sent$(plugin_said "$folder" chat-en-2)"
   # A scheduled delivery is exactly what was drafted.
   sent=$(json_value "$folder/turns.json" cron.sent)
   draft=$(json_value "$folder/turns.json" cron.draft)
@@ -185,7 +204,7 @@ check() { # <evidence folder>
   corrected=$(times_in "$folder/godspeed-reply.log" '"result": "corrected"')
   scheduled=$(times_in "$folder/godspeed-reply.log" '"result": "scheduled"')
   lines=$(grep -c . "$folder/godspeed-reply.log")
-  [ "$corrected" = 6 ] || fail "the plugin's log records $corrected corrections, not 6 (three journal turns and three turns of the chat)"
+  [ "$corrected" = 6 ] || fail "the plugin's log records $corrected corrections, not 6 (three journal turns and three turns of the chat)$(plugin_said "$folder")"
   [ "$scheduled" = 1 ] || fail "the plugin's log records $scheduled scheduled deliveries left alone, not 1"
   [ "$lines" = 7 ] || fail "the plugin's log has $lines lines for 7 replies"
 
