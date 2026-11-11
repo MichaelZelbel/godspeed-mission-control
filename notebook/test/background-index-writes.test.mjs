@@ -27,6 +27,7 @@ test('a full refresh finishes while the notebook keeps writing, and keeps the ne
  writing=false;await done;
  t.diagnostic(`one read ${pass.toFixed(0)} ms, one receipt ${save.toFixed(0)} ms; refresh while writing: ${finished===null?'unfinished':finished.toFixed(0)+' ms'}, ${reads} reads, ${writes} receipts`);
  assert.notEqual(finished,null,`the refresh was still reading after ${limit.toFixed(0)} ms (${reads} reads, ${writes} receipts written)`);
+ assert.ok(writes>=2,'the notebook wrote receipts while the refresh read: '+writes+' receipts');
  assert.ok(reads<=2,'the refresh did not start over for writes it never indexes: '+reads+' reads');
  assert.equal(index.search('zebrafinch').length,1,'the file another program changed is searchable');
  assert.equal(index.search('after-marker').length,1);assert.equal(index.search('before-marker').length,0,'the refresh did not put back the older text it had read');
