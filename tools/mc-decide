@@ -114,7 +114,11 @@ mkdir -p "$RUNDIR"
 # "nothing was written" at the end while having quietly aged the register is the exact shape of
 # lie this whole program exists to refuse. So a dry run LISTS the work instead of ticking it, and
 # says so.
-if [ "$DRY" -eq 1 ]; then
+# A dry run for a day named by --date lists by that day, as its work.txt does (#432): listing writes
+# nothing, so it can look ahead without moving time.
+if [ "$DRY" -eq 1 ] && [ -n "$DATED" ]; then
+  reg work list --date "$TODAY" > "$RUNDIR/tick.txt" 2>/dev/null || true
+elif [ "$DRY" -eq 1 ]; then
   reg work list > "$RUNDIR/tick.txt" 2>/dev/null || true
 else
   reg work tick > "$RUNDIR/tick.txt" 2>/dev/null || true
