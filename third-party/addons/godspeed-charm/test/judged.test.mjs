@@ -105,6 +105,17 @@ test("a vent in a notebook chat ends with the exact question, once, also when th
   } finally { gone(dir); }
 });
 
+test("in a turn the Godspeed notebook runs, the plugin judges and records nothing and leaves no marker", { skip }, () => {
+  const dir = mission();
+  try {
+    const out = drive(dir, [register, pre(VENT), reply("Here is the file.")], { GODSPEED_CHARM_CONVERSATION: "notebook:browser-owner" });
+    assert.equal(out.results[2].text, null);
+    assert.deepEqual(kinds(dir), ["start"]);
+    assert.deepEqual(out.log, []);
+    assert.equal(fs.existsSync(path.join(dir, ".godspeed", "charm-turns")), false);
+  } finally { gone(dir); }
+});
+
 test("a silent reply to a judged turn still writes its one log line and ends the turn", { skip }, () => {
   const dir = mission();
   try {

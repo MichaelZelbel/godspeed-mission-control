@@ -32,7 +32,7 @@ function run(dir, args, { day = "2026-10-21", env = {}, input } = {}) {
     encoding: "utf8", input, windowsHide: true,
     env: {
       ...process.env, GODSPEED_CHARM_DIR: dir, GODSPEED_CHARM_NOW: new Date(at).toISOString(),
-      GODSPEED_SCHEDULED_RUN: "", CLAUDE_CODE_ENTRYPOINT: "cli", GODSPEED_CHARM_LAUNCHER: "", ...env,
+      GODSPEED_SCHEDULED_RUN: "", GODSPEED_CHARM_CONVERSATION: "", CLAUDE_CODE_ENTRYPOINT: "cli", GODSPEED_CHARM_LAUNCHER: "", ...env,
     },
   });
 }
@@ -636,6 +636,32 @@ test("a scheduled run leaves no marker and cannot use one", () => {
   const r = run(dir, ["asked", "--words", "idiot"], { day: "2026-10-30", env: { GODSPEED_SCHEDULED_RUN: "1" } });
   assert.notEqual(r.status, 0);
   assert.deepEqual(openOf(dir), []);
+  gone(dir);
+});
+
+// A Godspeed notebook chat turn names its conversation itself (GODSPEED_CHARM_CONVERSATION, #441).
+const NOTEBOOK = { GODSPEED_CHARM_CONVERSATION: "notebook:browser-owner" };
+test("the notebook's GODSPEED_CHARM_CONVERSATION wins over the markers, and --conversation over it", () => {
+  const dir = mission();
+  run(dir, ["start"], { day: "2026-10-29" });
+  turn(dir, "cli:x");
+  assert.equal(run(dir, ["asked", "--words", "idiot"], { day: "2026-10-30", env: NOTEBOOK }).status, 0);
+  assert.deepEqual(openOf(dir), ["notebook:browser-owner"]);
+  assert.equal(run(dir, ["asked", "--conversation", "telegram:1", "--words", "idiot"], { day: "2026-10-30", env: NOTEBOOK }).status, 0);
+  assert.deepEqual(openOf(dir), ["notebook:browser-owner", "telegram:1"]);
+  const r = run(dir, ["answer", "yes", "--words", "yes"], { day: "2026-10-30", env: { ...NOTEBOOK, GODSPEED_SCHEDULED_RUN: "1" } });
+  assert.notEqual(r.status, 0);
+  assert.match(r.stderr, /--conversation/);
+  gone(dir);
+});
+
+test("context leaves no marker when the notebook names the conversation", () => {
+  const dir = mission();
+  run(dir, ["start"], { day: "2026-10-29" });
+  const r = turn(dir, "notebook:browser-owner", "2026-10-30", NOTEBOOK);
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /godspeed-charm/);
+  assert.equal(fs.existsSync(path.join(dir, ".godspeed", "charm-turns")), false);
   gone(dir);
 });
 
