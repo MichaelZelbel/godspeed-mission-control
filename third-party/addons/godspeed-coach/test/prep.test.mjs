@@ -712,6 +712,27 @@ test("a rhythm change made with area set and not committed yet (git_sync off) is
   assert.deepEqual(prepDue(mc, S, SAT, 48, { rhythmChanges: true }), []);
 });
 
+test("a rhythm set twice with area set is deliberate, whether the sets are committed apart, together or not at all", () => {
+  const setTwice = (commits) => {
+    const mc = healthMission();
+    git(mc, "2026-10-01T10:00:00Z", "init", "-q"); git(mc, "2026-10-01T10:00:00Z", "add", "-A"); git(mc, "2026-10-01T10:00:00Z", "commit", "-qm", "start");
+    const commit = () => { git(mc, "2026-11-01T09:00:00Z", "add", "-A"); git(mc, "2026-11-01T09:00:00Z", "commit", "-qm", "coach: area health RHYTHM"); };
+    assert.equal(cli(mc, "2026-11-01T09:00:00Z", "area", "set", "health", "RHYTHM", "every", "3", "weeks", "sunday").code, 0);
+    if (commits === "each") commit();
+    assert.equal(cli(mc, "2026-11-01T09:01:00Z", "area", "set", "health", "RHYTHM", "every", "2", "weeks", "sunday").code, 0);
+    if (commits !== "none") commit();
+    const changed = new Date("2026-11-01T09:01:00Z");
+    fs.utimesSync(path.join(mc, "coach", "health", "area.md"), changed, changed);
+    return mc;
+  };
+  for (const [commits, from] of [["none", "weekly sunday"], ["once", "weekly sunday"], ["each", "every 3 weeks sunday"]]) {
+    const mc = setTwice(commits);
+    assert.equal(fs.readFileSync(path.join(mc, "coach", "health", "rhythm-set.md"), "utf8"), `FROM: ${from}\nTO: every 2 weeks sunday\n`, commits);
+    assert.equal(rhythmDrop(mc, health(mc), S.timezone)?.change.deliberate, true, commits);
+    assert.deepEqual(prepDue(mc, S, SAT, 48, { rhythmChanges: true }), [], commits);
+  }
+});
+
 test("a rhythm change whose origin is unknown is bridged as before, also when area set made only part of it", () => {
   // area set made it fortnightly and a hand edit then made it every three weeks, nothing committed:
   // the change from weekly to every three weeks is not what the record says.

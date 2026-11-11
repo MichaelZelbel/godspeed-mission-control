@@ -163,7 +163,7 @@ const commands = {
       if (!key || !v.length) die(`godspeed-coach area set <area> <${AREA_FIELDS.join("|")}> <value>`);
       try {
         let b = setAreaField(a, key, v.join(" "));
-        if (key.toUpperCase() === "RHYTHM") recordRhythmSet(a, a.rhythmText, b.rhythmText);
+        if (key.toUpperCase() === "RHYTHM") recordRhythmSet(mcDir, a, a.rhythmText, b.rhythmText);
         // An area that had no talk gets one from tomorrow when it is given a rhythm.
         if (key.toUpperCase() === "RHYTHM" && b.rhythm && !b.starts) b = setAreaField(b, "STARTS", addDays(today, 1));
         saved(`area ${b.slug} ${key.toUpperCase()}`);

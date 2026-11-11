@@ -31,27 +31,40 @@ const same = (a, b) => a.trim().toLowerCase() === b.trim().toLowerCase();
 export const RHYTHM_SET = "rhythm-set.md";
 
 // What `area set <area> RHYTHM` changed, so the change reads as asked for. Nothing when it changed nothing.
-export function recordRhythmSet(area, from, to) {
+// A set the history has not yet separated from the previous one (no commit in between) extends that
+// record, so the change git sees, from the committed rhythm to this one, matches it.
+export function recordRhythmSet(mcDir, area, from, to) {
   if (same(from, to)) return;
-  fs.writeFileSync(path.join(area.dir, RHYTHM_SET), `FROM: ${from.trim()}\nTO: ${to.trim()}\n`);
+  const committed = committedRhythm(mcDir, area);
+  const prev = committed !== null && !same(committed, from) ? readRecord(area) : null;
+  const start = prev && same(prev.TO, from) ? prev.FROM : from;
+  fs.writeFileSync(path.join(area.dir, RHYTHM_SET), `FROM: ${start.trim()}\nTO: ${to.trim()}\n`);
+}
+
+function readRecord(area) {
+  try {
+    const { FROM = "", TO = "" } = parseDoc(fs.readFileSync(path.join(area.dir, RHYTHM_SET), "utf8")).head;
+    return FROM.trim() && TO.trim() ? { FROM, TO } : null;
+  } catch { return null; }
 }
 
 // { deliberate: true } when rhythm-set.md records exactly this change, else nothing: a missing,
 // unreadable or older record leaves the change's origin unknown.
 function asked(area, from, to) {
-  try {
-    const { FROM = "", TO = "" } = parseDoc(fs.readFileSync(path.join(area.dir, RHYTHM_SET), "utf8")).head;
-    if (FROM.trim() && TO.trim() && same(FROM, from) && same(TO, to)) return { deliberate: true };
-  } catch {}
-  return {};
+  const r = readRecord(area);
+  return r && same(r.FROM, from) && same(r.TO, to) ? { deliberate: true } : {};
 }
+
+// "./" makes the path relative to mcDir, also when mcDir is a folder inside a larger repository.
+const relPath = (mcDir, area) => "./" + path.relative(mcDir, area.file).replace(/\\/g, "/");
+const headText = (mcDir, area) => git(mcDir, ["show", `HEAD:${relPath(mcDir, area)}`]);
+const committedRhythm = (mcDir, area) => { const t = headText(mcDir, area); return t === null ? null : rhythmIn(t); };
 
 // { from, to, changed (ISO time), commit (short hash, or "not committed"), subject }, plus
 // deliberate: true only for a change made with `area set`, or null when git knows of no change.
 export function lastRhythmChange(mcDir, area) {
-  // "./" makes the path relative to mcDir, also when mcDir is a folder inside a larger repository.
-  const rel = "./" + path.relative(mcDir, area.file).replace(/\\/g, "/");
-  const head = git(mcDir, ["show", `HEAD:${rel}`]);
+  const rel = relPath(mcDir, area);
+  const head = headText(mcDir, area);
   if (head === null) return null;
   const to = area.rhythmText.trim();
   const committed = rhythmIn(head);

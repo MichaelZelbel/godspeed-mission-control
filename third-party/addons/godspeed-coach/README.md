@@ -36,8 +36,9 @@ something another talk raised in the last seven days.
 ## What it is
 
 - **One folder per area** under `coach/` in your mission control: `area.md` (rhythm, time,
-  style, tone, limits, how to prepare), `questions.md`, `talks/` (one record per talk) and
-  `habits/` (one file per habit). Plain text you can read and edit.
+  style, tone, limits, how to prepare), `questions.md`, `talks/` (one record per talk),
+  `habits/` (one file per habit) and, once you change the rhythm with `area set`,
+  `rhythm-set.md` (that change, so it drops no talk day). Plain text you can read and edit.
 - **One command**, `godspeed-coach`, that the recipe and the schedule use.
 - **One recipe**, `coach`, copied into your skills folder: how to open, continue and close a talk,
   how to track a habit, and what never to do (a wall of text, praise, a habit you did not agree to).
