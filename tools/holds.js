@@ -231,26 +231,30 @@ cmds.end = (a) => {
 
 // STRIP, run by mc-decide after the moves check. A move the person declined or postponed that is
 // still in moves.md after the run was sent back once is taken out by program: the block goes to
-// held.md and a HELD line stays in its place. Today's card is the run's own text, so the held
-// move's title is taken off it where it stands and every other line stays as the run wrote it;
-// a card that does not carry the title word for word may name the step in other words, so it is
-// held back and the moves still ready are listed instead. Then one line per held proposal and
-// per claim that could not be read as one, which is the log a schedule keeps (decide.log).
+// held.md and a HELD line stays in its place. Today's card is the run's own text, so only the held
+// move's title is taken off it, where it first stands as whole words; every other line stays as the
+// run wrote it. A card that does not carry the title may name the step in other words, so it gets
+// one "Held back" line saying the step is not applied. Then one line per held proposal and per
+// claim that could not be read as one, which is the log a schedule keeps (decide.log).
 const MOVE_HEADING = /^###? \d+\./;
 const TAIL = /^(?:FEWER|UNREAD|HOLD|HELD) |^## /;
 const OPEN_WAITING = ['planned', 'dispatched', 'attempted', 'blocked'];
 // decision.md with the held moves off its "For you today" section (see STRIP above).
-function withoutHeld(decision, held, ready) {
-  const ids = [...new Set(held.map(x => x.h.id))].join(', ');
+function withoutHeld(decision, held) {
   const section = /^## For you today[^\n]*\n([\s\S]*?)(?=^## |(?![\s\S]))/m;
   const m = section.exec(decision);
-  if (!m) return decision.replace(/\s*$/, '') + `\n\n## For you today\nHeld back: a step you declined or postponed (${ids}).\n`;
-  const titled = (x) => new RegExp(escape(x.title).replace(/\s+/g, '\\s+'), 'gi');
-  let card = m[1];
-  if (!ready.length) card = `Nothing today: every move today is one you declined or postponed (${ids}), so the card is held back.\n\n`;
-  else if (held.every(x => titled(x).test(card))) {
-    for (const x of held) card = card.replace(titled(x), `(held back: you ${x.h.stance} this, ${x.h.id})`);
-  } else card = `Held back: the card the run wrote lists a step you declined or postponed (${ids}), so it is not shown. The moves still ready are ${ready.join('; ')} (moves.md).\n\n`;
+  let card = m ? m[1] : '';
+  const notes = [];
+  for (const x of held) {
+    const at = new RegExp(`(?<!\\w)${escape(x.title).replace(/\s+/g, '\\s+')}(?!\\w)`, 'i').exec(card);
+    if (at) card = card.slice(0, at.index) + `(held back: you ${x.h.stance} this, ${x.h.id})` + card.slice(at.index + at[0].length);
+    else notes.push(`Held back: move ${x.n} of moves.md is a step you ${x.h.stance} (${x.h.id}); if this card names it in other words, it is not applied.`);
+  }
+  if (!m) return decision.replace(/\s*$/, '') + `\n\n## For you today\n${notes.join('\n')}\n`;
+  if (notes.length) {
+    const body = card.replace(/\s*$/, ''), gap = card.slice(body.length);
+    card = (body ? body + '\n' : '') + notes.join('\n') + (gap.length > 1 ? gap : '\n');
+  }
   return decision.slice(0, m.index) + m[0].slice(0, m[0].length - m[1].length) + card + decision.slice(m.index + m[0].length);
 }
 cmds.strip = (a) => {
@@ -262,7 +266,7 @@ cmds.strip = (a) => {
   const movesFile = path.join(run, 'moves.md');
   const moves = fs.existsSync(movesFile) ? fs.readFileSync(movesFile, 'utf8').replace(/\r/g, '') : '';
   const work = L.store(path.join(root, 'work'), []);
-  const out = [], held = [], kept = [], ready = [];
+  const out = [], held = [], kept = [];
   for (const seg of moves.split(/^(?=###? \d+\.)/m)) {
     if (!MOVE_HEADING.test(seg)) { kept.push(seg); continue; }
     const lines = seg.split('\n');
@@ -274,7 +278,7 @@ cmds.strip = (a) => {
     const touches = moveTouches(block) || '';
     const h = heldBy(holds, { touches, text: title });
     const n = (heading.match(/^(\d+)\./) || [])[1] || '?';
-    if (!h) { kept.push(seg); ready.push(`${n}. ${title}`); continue; }
+    if (!h) { kept.push(seg); continue; }
     held.push({ n, title, h, block: block.replace(/\s*$/, '\n') });
     kept.push(`HELD ${n}: ${title} (held by ${h.id})\n` + (tail ? '\n' + tail : '\n'));
     const applyTo = (block.match(/^APPLY:[ \t]*([A-Za-z0-9][A-Za-z0-9._-]*)/m) || [])[1];
@@ -291,7 +295,7 @@ cmds.strip = (a) => {
     fs.appendFileSync(path.join(run, 'held.md'), held.map(x => `held by ${x.h.id}: ${x.h.stance}, the person said "${x.h.value}"\n\n${x.block}\n`).join(''), 'utf8');
     const decisionFile = path.join(run, 'decision.md');
     const decision = fs.existsSync(decisionFile) ? fs.readFileSync(decisionFile, 'utf8').replace(/\r/g, '') : '';
-    fs.writeFileSync(decisionFile, withoutHeld(decision, held, ready), 'utf8');
+    fs.writeFileSync(decisionFile, withoutHeld(decision, held), 'utf8');
   }
   for (const c of work.all()) {
     if (!/^apply-/.test(c.f.KEY || '') || !OPEN_WAITING.includes(c.f.STATUS)) continue;

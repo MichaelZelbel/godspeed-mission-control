@@ -166,10 +166,20 @@ contains "  the APPLY card now names what it touches" "$(cat "$G/work/W-HELD-01.
 fresh; OUT="$(FAKE_MODE=holds FAKE_APPLY=W-HELD-01 FAKE_TOUCHES="$(printf 'jane-doe,\n         the-book')" decide)"
 missing "  a TOUCHES line the run wrapped onto a second line is read whole: the move is out" "$(cat "$RUN/moves.md")" "### 1. Answer Podcast X"
 contains "  and named on the output" "$OUT" "held: move 1 "
-fresh; OUT="$(FAKE_MODE=holds FAKE_APPLY=W-HELD-01 FAKE_CARD="ship-list card: 1. Say yes to the podcast; 2. Send the launch note to Jane Doe" decide)"
-contains "  a card that names the held move in other words is held back" "$(sed -n '/^## For you today/{n;p;}' "$RUN/decision.md")" "Held back: the card the run wrote lists a step you declined or postponed ($HOLD)"
-contains "  and the moves still ready are listed" "$(sed -n '/^## For you today/{n;p;}' "$RUN/decision.md")" "The moves still ready are 2. Send the launch note to Jane Doe (moves.md)"
-missing "  without the held one" "$(sed -n '/^## For you today/,/^## Moves/p' "$RUN/decision.md")" "podcast"
+for_you() { sed -n '/^## For you today/,/^## Moves/{/^## /d;p;}' "$RUN/decision.md"; }
+QUESTION='How many copies sold this week? (the book has no number read today)'
+fresh; FAKE_MODE=holds FAKE_APPLY=W-HELD-01 FAKE_CARD="$(printf 'ship-list card: 1. Say yes to the podcast; 2. Send the launch note to Jane Doe; 3. Fix the shop link (carried)\n%s' "$QUESTION")" decide >/dev/null
+check "  a card that names the held move in other words keeps every line as the run wrote it" "$(for_you | sed -n 1,2p)" "$(printf 'ship-list card: 1. Say yes to the podcast; 2. Send the launch note to Jane Doe; 3. Fix the shop link (carried)\n%s' "$QUESTION")"
+contains "  and says the held step is not applied" "$(for_you)" "Held back: move 1 of moves.md is a step you postponed ($HOLD); if this card names it in other words, it is not applied."
+fresh; FAKE_MODE=holds FAKE_APPLY=W-HELD-01 FAKE_CARD="$(printf "ship-list card: 1. Answer Podcast X's interview invitation about the bookshop; 2. Answer Podcast X's interview invitation about the book; 3. Fix the shop link (carried)\n%s" "$QUESTION")" decide >/dev/null
+check "  only the held title as whole words is taken off; a line it begins, a carried line and the weekly question stay" "$(for_you | sed -n 1,2p)" "$(printf "ship-list card: 1. Answer Podcast X's interview invitation about the bookshop; 2. (held back: you postponed this, %s); 3. Fix the shop link (carried)\n%s" "$HOLD" "$QUESTION")"
+missing "  with no Held back line when the title was found" "$(for_you)" "Held back:"
+NOCARD="$TMP/no-card"; mkdir -p "$NOCARD"
+printf '# Decision\n\n## Moves\nOne.\n' > "$NOCARD/decision.md"
+printf "### 1. Answer Podcast X's interview invitation about the book\nTOUCHES: the-book\n" > "$NOCARD/moves.md"
+GODSPEED_ROOT="$G" "$NODE" "$HERE/holds.js" strip --run "$NOCARD" --date "$D" --godspeed "$G" >/dev/null
+check "  a decision with no card gets one that says the step is held back" "$(sed -n '/^## For you today/,$p' "$NOCARD/decision.md")" "$(printf '## For you today\nHeld back: move 1 of moves.md is a step you postponed (%s); if this card names it in other words, it is not applied.' "$HOLD")"
+contains "  and the rest of it stays" "$(cat "$NOCARD/decision.md")" "$(printf '## Moves\nOne.')"
 mv "$G/world/claims" "$G/world/claims.away"; printf 'not a folder\n' > "$G/world/claims"
 fresh; OUT="$(FAKE_MODE=holds FAKE_APPLY=W-HELD-01 decide)"; RC=$?
 check "  holds that cannot be read: the day ends NOT clean" "$RC" "1"
