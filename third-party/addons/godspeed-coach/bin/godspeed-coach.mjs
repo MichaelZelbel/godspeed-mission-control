@@ -18,6 +18,7 @@ import { contextBlock, waitingTalks } from "../lib/context.mjs";
 import { readPrep, prepProblem, prepForBrief, prepDue, prepPath, prepCheck, prepFile, prepDir, prepMissing, prepExpected, rhythmDrop, countsAsTalkDay } from "../lib/prep.mjs";
 import { researchDomains } from "../lib/prep-evidence.mjs";
 import { writeQuestions, readQuestions, questionsFile, openQuestionsDate, addQuestion, dropQuestion, hasQuestions } from "../lib/questions.mjs";
+import { recordRhythmSet } from "../lib/rhythm-change.mjs";
 import { commitCoach, syncInBackground, syncQueued, pullQuietly } from "../lib/sync.mjs";
 import { decodeArgv, readTextFile, restoreShellEnv, startedFromGitBash, gitBashPath, LAUNCHER_ENV, CMDLINE_ENV } from "../lib/argv.mjs";
 
@@ -162,6 +163,7 @@ const commands = {
       if (!key || !v.length) die(`godspeed-coach area set <area> <${AREA_FIELDS.join("|")}> <value>`);
       try {
         let b = setAreaField(a, key, v.join(" "));
+        if (key.toUpperCase() === "RHYTHM") recordRhythmSet(a, a.rhythmText, b.rhythmText);
         // An area that had no talk gets one from tomorrow when it is given a rhythm.
         if (key.toUpperCase() === "RHYTHM" && b.rhythm && !b.starts) b = setAreaField(b, "STARTS", addDays(today, 1));
         saved(`area ${b.slug} ${key.toUpperCase()}`);
@@ -252,7 +254,10 @@ const commands = {
     if (!d) die(`The ${a.title} talk has no coming day.`);
     const r = prepCheck(mcDir, s, a, d);
     const when = r.prepared ? (() => { const p = localParts(new Date(r.prepared), s.timezone); return `prepared ${p.date} ${p.hm}`; })() : "no PREPARED time";
-    const day = r.bridge ? ` (the rhythm change on ${localParts(new Date(r.rhythm_change.changed), s.timezone).date} dropped this day, so it counts as a talk day)` : r.talk_day ? "" : ` (${d} is not a day of the ${a.title} talk)`;
+    const change = r.rhythm_change && `the rhythm change on ${localParts(new Date(r.rhythm_change.changed), s.timezone).date}`;
+    const day = r.bridge ? ` (${change} dropped this day, so it counts as a talk day)`
+      : r.rhythm_change?.deliberate ? ` (${change} from "${r.rhythm_change.from}" to "${r.rhythm_change.to}" was asked for, so this day is not a talk day and is not prepared)`
+      : r.talk_day ? "" : ` (${d} is not a day of the ${a.title} talk)`;
     out(r.ready ? `ready: ${r.file}, ${when}${r.stale ? ", stale: more than 48 hours before the talk" : ""}${day}` : `not ready: ${r.file}: ${r.problem}${day}`, r);
     if (!r.ready) process.exitCode = 1;
   },

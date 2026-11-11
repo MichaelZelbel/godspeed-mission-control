@@ -277,8 +277,9 @@ exit codes hears about it the same morning.
   ahead, and its talk card goes with every message of the talk. It writes only
   `coach/<area>/prep/<date>.md` and contacts nobody; with Claude Code its file tools may write
   in that folder only. A talk it could not prepare opens from its brief as before. When a talk's
-  rhythm changed and dropped a day it used to have, that day is prepared anyway until the new
-  rhythm's first talk, for a talk you start yourself, and the summary names the change. A talk
+  rhythm changed without you asking and dropped a day it used to have, that day is prepared anyway
+  until the new rhythm's first talk, for a talk you start yourself, and the summary names the
+  change. A rhythm you changed yourself (`godspeed-coach area set <area> RHYTHM ...`) drops no talk day. A talk
   that opened without its preparation yesterday or today, on a day one was due, is named in the
   summary and gets one repair item in your work list; a talk you start on another day may say it
   is not prepared. The notebook's

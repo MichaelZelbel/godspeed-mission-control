@@ -11,9 +11,9 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { readArea } from "../lib/areas.mjs";
-import { brief } from "../lib/brief.mjs";
+import { brief, continuingTalkDay } from "../lib/brief.mjs";
 import { gate } from "../lib/gate.mjs";
-import { prepForBrief, prepDue, rhythmDrop } from "../lib/prep.mjs";
+import { prepForBrief, prepDue, rhythmDrop, countsAsTalkDay } from "../lib/prep.mjs";
 import { tmpMission, area, S } from "./helpers.mjs";
 
 const BIN = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "bin", "godspeed-coach.mjs");
@@ -644,6 +644,86 @@ test("prep-missed leaves out a talk they started on a day nothing was to be prep
   fs.writeFileSync(f, fs.readFileSync(f, "utf8").replace("\nLIMIT:", "\nRESEARCH DOMAIN: fitness | training\nLIMIT:"));
   assert.equal(cli(mc, "2026-11-08T15:00:00Z", "talk", "open", "health", "--opening", "How was the week?").code, 0);
   assert.match(cli(mc, "2026-11-09T01:00:00Z", "prep-missed").out, /^health: the Health and fitness talk of 2026-11-08 opened without its preparation/);
+});
+
+// #415: a rhythm change made on purpose with `area set` drops no talk day. Its commit carries the same
+// subject as the unasked change of drifted(); only the record `area set` writes tells them apart.
+const askedFor = ({ commit = true } = {}) => {
+  const mc = healthMission();
+  git(mc, "2026-10-01T10:00:00Z", "init", "-q"); git(mc, "2026-10-01T10:00:00Z", "add", "-A"); git(mc, "2026-10-01T10:00:00Z", "commit", "-qm", "start");
+  const r = cli(mc, "2026-11-01T09:00:00Z", "area", "set", "health", "RHYTHM", "every", "2", "weeks", "sunday");
+  assert.equal(r.code, 0, r.err);
+  if (commit) { git(mc, "2026-11-01T09:00:00Z", "add", "-A"); git(mc, "2026-11-01T09:00:00Z", "commit", "-qm", "coach: area health RHYTHM"); }
+  return mc;
+};
+const health = (mc) => readArea(path.join(mc, "coach", "health"));
+
+test("a rhythm change made with area set: the dropped Sunday is not prepared, and prep-check says why", () => {
+  const mc = askedFor();
+  assert.equal(fs.readFileSync(path.join(mc, "coach", "health", "rhythm-set.md"), "utf8"), "FROM: weekly sunday\nTO: every 2 weeks sunday\n");
+  assert.deepEqual(prepDue(mc, S, SAT, 48, { rhythmChanges: true }), []);
+  const j = JSON.parse(cli(mc, SAT.toISOString(), "prep-check", "health", "--date", "2026-11-08", "--json").out);
+  assert.equal(j.talk_day, false);
+  assert.ok(!("bridge" in j), JSON.stringify(j));
+  assert.equal(j.rhythm_change.deliberate, true);
+  assert.match(cli(mc, SAT.toISOString(), "prep-check", "health", "--date", "2026-11-08").out, /\(the rhythm change on 2026-11-01 from "weekly sunday" to "every 2 weeks sunday" was asked for, so this day is not a talk day and is not prepared\)$/);
+  // Setting the same rhythm again records nothing new.
+  fs.rmSync(path.join(mc, "coach", "health", "rhythm-set.md"));
+  assert.equal(cli(mc, "2026-11-02T09:00:00Z", "area", "set", "health", "RHYTHM", "every", "2", "weeks", "sunday").code, 0);
+  assert.ok(!fs.existsSync(path.join(mc, "coach", "health", "rhythm-set.md")));
+});
+
+test("a rhythm change made with area set: the talk they ask for on the dropped Sunday continues the unanswered one and opens nothing from a preparation", () => {
+  const mc = askedFor();
+  const unanswered = "TALK: health\nDATE: 2026-11-01\nSTATE: opened\nOPENED: 2026-11-01T18:00:00Z\nFOLLOW-UP: \n\n## What was read\nx\n\n## The opening\nEarlier.\n\n## What you said\n\n## What changed\n\n";
+  fs.mkdirSync(path.join(mc, "coach", "health", "talks"), { recursive: true });
+  fs.writeFileSync(path.join(mc, "coach", "health", "talks", "2026-11-01.md"), unanswered);
+  fs.mkdirSync(path.join(mc, "coach", "health", "prep"), { recursive: true });
+  fs.writeFileSync(path.join(mc, "coach", "health", "prep", "2026-11-08.md"), prep({ area: "health", talk: "2026-11-08 19:00", prepared: "2026-11-07T01:30:00Z" }));
+  const b = cli(mc, "2026-11-08T18:00:00Z", "brief", "health");
+  assert.equal(b.code, 0, b.err);
+  assert.match(b.out, /The Health and fitness talk of 2026-11-01 is still open and today is not a talk day of this area: continue that talk/);
+  assert.ok(!b.out.includes("--from-prep"), b.out.split("\n").slice(0, 4).join("\n"));
+  const r = cli(mc, "2026-11-08T18:01:00Z", "talk", "open", "health", "--from-prep", "coach/health/prep/2026-11-08.md", "--shown");
+  assert.equal(r.code, 0, r.err);
+  assert.ok(!record(mc, "2026-11-08", "health").includes("closed it as not held"));
+  assert.match(fs.readFileSync(path.join(mc, "coach", "health", "talks", "2026-11-01.md"), "utf8"), /^STATE: opened$/m);
+  const late = askedFor();
+  assert.equal(cli(late, "2026-11-08T15:00:00Z", "talk", "open", "health", "--opening", "How was the week?").code, 0);
+  assert.equal(cli(late, "2026-11-09T02:00:00Z", "prep-missed", "--days", "2").out, "No talk opened without its preparation.");
+});
+
+test("a rhythm change made with area set: the earlier talk is continued until the new rhythm's first talk, which is prepared as on main", () => {
+  const mc = askedFor();
+  const a = health(mc);
+  assert.equal(countsAsTalkDay(mc, a, "2026-11-08", S.timezone), false);
+  fs.mkdirSync(path.join(mc, "coach", "health", "talks"), { recursive: true });
+  fs.writeFileSync(path.join(mc, "coach", "health", "talks", "2026-11-01.md"), "TALK: health\nDATE: 2026-11-01\nSTATE: opened\nOPENED: 2026-11-01T18:00:00Z\n\n## The opening\nEarlier.\n");
+  assert.equal(continuingTalkDay(a, "2026-11-08", { mcDir: mc, tz: S.timezone }), "2026-11-01");
+  assert.equal(countsAsTalkDay(mc, a, "2026-11-15", S.timezone), true);
+  assert.deepEqual(prepDue(mc, S, new Date("2026-11-14T02:00:00Z"), 48, { rhythmChanges: true }).map((x) => [x.date, Boolean(x.bridge)]), [["2026-11-15", false]]);
+});
+
+test("a rhythm change made with area set and not committed yet (git_sync off) is deliberate too", () => {
+  const mc = askedFor({ commit: false });
+  const changed = new Date("2026-11-06T12:00:00Z");
+  fs.utimesSync(path.join(mc, "coach", "health", "area.md"), changed, changed);
+  assert.equal(rhythmDrop(mc, health(mc), S.timezone)?.change.deliberate, true);
+  assert.deepEqual(prepDue(mc, S, SAT, 48, { rhythmChanges: true }), []);
+});
+
+test("a rhythm change whose origin is unknown is bridged as before, also when area set made only part of it", () => {
+  // area set made it fortnightly and a hand edit then made it every three weeks, nothing committed:
+  // the change from weekly to every three weeks is not what the record says.
+  const mc = askedFor({ commit: false });
+  setRhythm(mc, "every 3 weeks sunday");
+  const changed = new Date("2026-11-06T12:00:00Z");
+  fs.utimesSync(path.join(mc, "coach", "health", "area.md"), changed, changed);
+  const change = rhythmDrop(mc, health(mc), S.timezone).change;
+  assert.equal("deliberate" in change, false, JSON.stringify(change));
+  assert.deepEqual(prepDue(mc, S, SAT, 48, { rhythmChanges: true }).map((x) => [x.date, x.bridge]), [["2026-11-08", true]]);
+  const unasked = drifted();
+  assert.equal("deliberate" in rhythmDrop(unasked, health(unasked), S.timezone).change, false);
 });
 
 test("an unprepared brief says its research sections are not a reviewed preparation", () => {

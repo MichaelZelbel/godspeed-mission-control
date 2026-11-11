@@ -55,16 +55,18 @@ something another talk raised in the last seven days.
 - **A talk prepared ahead, when a job of yours writes one.** A minute before a talk is too little
   time to prepare it well. If something writes `coach/<area>/prep/<talk date>.md` ahead of time
   (`STATE: ready`, a section "The opening" and a section "Talk card"), the talk opens with that
-  opening as written (except that a talk asked for on a talk day, or on a day the newest rhythm change dropped, replacing an earlier unanswered
+  opening as written (except that a talk asked for on a talk day, or on a day the newest rhythm change dropped when nobody asked for it, replacing an earlier unanswered
   talk, adds one sentence naming and closing that earlier talk), and every interface carries its talk card while the talk is open, with the
   file behind it for depth. `godspeed-coach prep-due` tells that job which coming talks still need it,
   and which were prepared more than 48 hours before they start and need it again;
   `godspeed-coach prep-check` says whether one talk's file is ready. With `--rhythm-changes`,
   `prep-due` also lists a day that the area's newest rhythm change in git dropped, until the new
-  rhythm's first talk, so a talk they start themselves that day still opens prepared;
+  rhythm's first talk, so a talk they start themselves that day still opens prepared. A change
+  they asked for with `area set`, which writes `coach/<area>/rhythm-set.md`, drops no talk day:
+  that day is not listed;
   `godspeed-coach prep-missed` lists the talks of the last day that opened without the
   preparation due for them (in an area whose talks are prepared ahead, a talk day or a day whose
-  preparation was refused; in any area, a day a rhythm change dropped, because the job lists that
+  preparation was refused; in any area, a day a rhythm change nobody asked for dropped, because the job lists that
   day to be prepared, and a talk they start on it without one says so). A rhythm change that was not
   committed yet keeps the day it was made when a later coach save commits it. A talk with no preparation of its own answers "what did you research?"
   (`talk evidence`) from the area's newest preparation whose research and review still pass the
