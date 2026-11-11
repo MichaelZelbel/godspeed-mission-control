@@ -111,9 +111,13 @@ export function recordRoutine(store,{routine,text,home,delivery}){
 // never in the chat. The first failure of a one-time follow-up is said in one plain sentence about
 // what it was for, written by the notebook's AI; without an AI, or with words that still read like
 // the note, nothing is said. A follow-up whose retries are used up is left for repair with a
-// notification in the notebook.
+// notification in the notebook. It names what the follow-up was for in a few everyday words the AI
+// wrote from its prompt, never the job's name or id (the name Hermes shows is the AI's own label for
+// the job, like `kofi-pricing-revisit-20261110`), and tells the owner they can ask for it again in
+// the chat, where the link goes. The failure log is for repair, not for the owner, so it is not named.
 export const FOLLOW_UP_CONTRACT="Write one sentence for your owner, in your own voice as in your chat with them, about the follow-up described in the facts: what it was meant to do, in everyday words, that it could not run because something broke on your side, and when you will try again. Use only the facts given. Never name a job, a program, an error, a command or a file. Return JSON {reports:[{about,text}]} with exactly one report.";
-const FOLLOW_UP_CHARS=300,PROMPT_CHARS=600,WRITING_MS=60000;
+export const GIVEN_UP_CONTRACT="Name the follow-up described in the facts for your owner in a few everyday words, as the object of a sentence like 'I could not do ...': what it was meant to do, at most a dozen words, no full stop. Use only the facts given. Never name a job, a program, an error, a command or a file. Return JSON {reports:[{about,text}]} with exactly one report, its text the words.";
+const SUBJECT_CHARS=120,FOLLOW_UP_CHARS=300,PROMPT_CHARS=600,WRITING_MS=60000;
 const TECHNICAL=/\b(?:hermes|cron|traceback|exception|error|godspeed sync)\b/i,A_PATH=/[~\/][\w.-]+\/[\w.-]/;
 
 export function unsafeFollowUpText(text,job){
@@ -128,12 +132,24 @@ export async function followUpFailed(store,{job={},origin,attempt,one_time,retry
  if(one_time&&attempt===1&&!given_up&&provider){
   const about='a follow-up you asked for';
   const facts=['What the follow-up was asked to do: '+String(job.prompt||'').slice(0,PROMPT_CHARS),'It could not run because something broke on the assistant\'s side.',retry_at?'It will be tried again at '+retry_at+'.':'It will be tried again later.'];
-  const bounded=input=>provider({...input,contract:FOLLOW_UP_CONTRACT,signal:AbortSignal.timeout(WRITING_MS)});
-  const written=await writeReport({about,facts,text:''},{provider:bounded,guidance:guidance||chatGuidance({root:store.root,home})});
-  const [report,...more]=written.reports,text=report?.text||'';
-  if(written.written==='assistant'&&!more.length&&text&&!unsafeFollowUpText(text,job))told=queueNotice(store,{id:'follow-up-failed-'+origin,text,about,facts,written:true});
+  const text=await writeOne({store,job,origin,facts,contract:FOLLOW_UP_CONTRACT,home,provider,guidance});
+  if(text)told=queueNotice(store,{id:'follow-up-failed-'+origin,text,about,facts,written:true});
  }
- if(given_up)await store.saveAsync('notifications',{id:'follow-up-given-up-'+origin,status:'pending',kind:'follow-up-given-up',title:'A follow-up could not be done',
-  body:`The follow-up "${job.name||origin}" you asked for in the chat failed ${attempt} ${attempt===1?'time':'times'} and will not be tried again. What went wrong is kept in the notebook's failure log.`,link:'/dashboard/settings',failed_at:now.toISOString()},undefined,{timeoutMs:30000});
+ if(given_up){
+  const what=provider&&job.prompt?await writeOne({store,job,origin,facts:['What the follow-up was asked to do: '+String(job.prompt).slice(0,PROMPT_CHARS)],contract:GIVEN_UP_CONTRACT,home,provider,guidance}):'';
+  const subject=what&&what.length<=SUBJECT_CHARS&&!/[\n"]/.test(what)?what.replace(/[.!\s]+$/,''):'';
+  const tries=`${attempt} ${attempt===1?'time':'times'}`;
+  await store.saveAsync('notifications',{id:'follow-up-given-up-'+origin,status:'pending',kind:'follow-up-given-up',title:'A follow-up could not be done',
+   body:(subject?`I could not do a follow-up you asked for in the chat: ${subject}. `:'A follow-up you asked for in the chat could not be done. ')+`It was tried ${tries} and will not be tried again. You can ask for it again in the chat.`,link:'/dashboard/chat',failed_at:now.toISOString()},undefined,{timeoutMs:30000});
+ }
  return {told,given_up:!!given_up};
+}
+
+// One text from the notebook's AI about a follow-up, bounded in time; '' when no AI wrote exactly one
+// that is free of the job's name and id, the first job's id, and anything technical.
+async function writeOne({store,job,origin,facts,contract,home,provider,guidance}){
+ const bounded=input=>provider({...input,contract,signal:AbortSignal.timeout(WRITING_MS)});
+ const written=await writeReport({about:'a follow-up you asked for',facts,text:''},{provider:bounded,guidance:guidance||chatGuidance({root:store.root,home})});
+ const [report,...more]=written.reports,text=report?.text||'';
+ return written.written==='assistant'&&!more.length&&text&&!unsafeFollowUpText(text,job)&&!(origin&&text.toLowerCase().includes(origin.toLowerCase()))?text:'';
 }

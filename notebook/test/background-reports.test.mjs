@@ -1,6 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import {fileURLToPath} from 'node:url';import {execFileSync} from 'node:child_process';
 import {Store} from '../core/records/store.mjs';import {QueryService} from '../core/query.mjs';import {chatContext} from '../core/chat-context.mjs';
-import {queueNotice,readNotices} from '../core/notices.mjs';import {openStep,heard} from '../core/waiting-steps.mjs';import {sayNotice,recordRoutine,delivered,followUpFailed,REPORT_CONTRACT,FOLLOW_UP_CONTRACT} from '../core/background-reports.mjs';
+import {queueNotice,readNotices} from '../core/notices.mjs';import {openStep,heard} from '../core/waiting-steps.mjs';import {sayNotice,recordRoutine,delivered,followUpFailed,REPORT_CONTRACT,FOLLOW_UP_CONTRACT,GIVEN_UP_CONTRACT} from '../core/background-reports.mjs';
 
 // BACKGROUND REPORTS (4 November 2026, #198): a notice is written with the chat's guidance, recorded
 // where the chat reads it, and the chat's next reply is told about it.
@@ -261,8 +261,9 @@ test('retries are bounded, and a follow-up that keeps failing is left for repair
  }
  const hours=schedules.map(at=>Math.round((at-Date.now())/3600000));assert.deepEqual(hours,[1,6,24]);
  const fresh=new Store(store.root,{device:'pc'}),given=fresh.get('notifications','follow-up-given-up-e6114fa9f94c');
- assert.deepEqual([given.status,given.kind,given.link],['pending','follow-up-given-up','/dashboard/settings']);
- assert.match(given.body,/failed 4 times and will not be tried again/);
+ assert.deepEqual([given.status,given.kind,given.link],['pending','follow-up-given-up','/dashboard/chat']);
+ assert.equal(given.body,'A follow-up you asked for in the chat could not be done. It was tried 4 times and will not be tried again. You can ask for it again in the chat.');
+ for(const name of ['kofi-pricing-revisit','e6114fa9f94c','retry-','failure log'])assert.ok(!given.body.includes(name),name+' is not in the notification');
  assert.deepEqual(keptLines(store).map(k=>[k.origin,k.attempt]),[1,2,3,4].map(a=>['e6114fa9f94c',a]));
  assert.deepEqual(readNotices(fresh),[],'without an AI, the owner\'s chat stays silent');
 });
@@ -273,7 +274,7 @@ test('a follow-up that cannot be scheduled again is left for repair at once',t=>
  const out=run([[{...FOLLOW_UP,name:'Unschedulable'},ISSUE_NOTE,true]]);
  assert.deepEqual([out.errors,out.delivered,out.created],[[null],[],[]]);
  const fresh=new Store(store.root,{device:'pc'});
- assert.match(fresh.get('notifications','follow-up-given-up-e6114fa9f94c').body,/failed 1 time and will not be tried again/);
+ assert.match(fresh.get('notifications','follow-up-given-up-e6114fa9f94c').body,/It was tried 1 time and will not be tried again\. You can ask for it again in the chat\./);
  assert.deepEqual(keptLines(store).map(k=>[k.attempt,k.retry_error]),[[1,'jobs.json is locked']]);
  assert.deepEqual(readNotices(fresh),[]);
 });
@@ -284,7 +285,7 @@ test('a follow-up whose retries could not be kept is left for repair at once, an
  const out=run([[FOLLOW_UP,ISSUE_NOTE,true]]);
  assert.deepEqual([out.errors,out.delivered,out.created],[[null],[],[]],'no retry that would count from the start again');
  const fresh=new Store(store.root,{device:'pc'});
- assert.match(fresh.get('notifications','follow-up-given-up-e6114fa9f94c').body,/failed 1 time and will not be tried again/);
+ assert.match(fresh.get('notifications','follow-up-given-up-e6114fa9f94c').body,/It was tried 1 time and will not be tried again\. You can ask for it again in the chat\./);
  const [kept]=keptLines(store);assert.match(kept.retry_error,/^the follow-up's retries could not be kept/);
  assert.deepEqual(readNotices(fresh),[]);
 });
@@ -330,6 +331,21 @@ test('the owner hears one plain sentence about the follow-up, once, or nothing',
  for(const text of refusedText)assert.equal((await followUpFailed(other.store,{job,origin:job.id,attempt:1,one_time:true,given_up:false,note:ISSUE_NOTE,home:other.home,provider:provider([{about:'x',text}])})).told,false,text);
  assert.equal((await followUpFailed(other.store,{job,origin:job.id,attempt:1,one_time:true,given_up:false,note:ISSUE_NOTE,home:other.home,provider:async()=>{throw Error('down');}})).told,false);
  assert.deepEqual(readNotices(other.store),[]);
+});
+
+test('a follow-up that was given up is named by what it was for, never by its job name or id',async t=>{
+ const job={id:'retry-3',name:FOLLOW_UP.name,prompt:FOLLOW_UP.prompt},seen=[];
+ const givenUp=async ai=>{const {store,home}=setup(t);await followUpFailed(store,{job,origin:FOLLOW_UP.id,attempt:4,one_time:true,given_up:true,note:ISSUE_NOTE,home,provider:ai});return store.get('notifications','follow-up-given-up-'+FOLLOW_UP.id);};
+ const named=await givenUp(provider([{about:'Ko-fi',text:'checking whether the Ko-fi price change brought in more supporters.'}],seen));
+ assert.equal(named.body,'I could not do a follow-up you asked for in the chat: checking whether the Ko-fi price change brought in more supporters. It was tried 4 times and will not be tried again. You can ask for it again in the chat.');
+ assert.equal(named.link,'/dashboard/chat');
+ assert.equal(seen[0].contract,GIVEN_UP_CONTRACT);assert.ok(seen[0].signal,'the writing is bounded in time');
+ assert.ok(!JSON.stringify(seen).includes('cannot import')&&!JSON.stringify(seen).includes(FOLLOW_UP.name),'the AI sees what it was for, not the note or the job name');
+ const generic='A follow-up you asked for in the chat could not be done. It was tried 4 times and will not be tried again. You can ask for it again in the chat.';
+ for(const text of ['the kofi-pricing-revisit-20261110 check','the e6114fa9f94c job','the cron job','the check in ~/godspeed/notes.md','a "pricing" check'])
+  assert.equal((await givenUp(provider([{about:'x',text}]))).body,generic,text);
+ assert.equal((await givenUp(async()=>{throw Error('down');})).body,generic,'without an AI the notification still says what to do');
+ assert.equal((await givenUp(null)).body,generic);
 });
 
 test('a composite lane is recorded once for each destination Hermes resolves',t=>{
