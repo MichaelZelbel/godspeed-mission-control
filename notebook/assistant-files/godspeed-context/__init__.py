@@ -18,7 +18,7 @@ recorded by the notebook (core/background-reports.mjs) as a conversation_message
 background-report-*, and the last few of a day are listed before each reply (reports_block), so
 "what is this about?" can be answered from the message itself.
 
-Buttons: a waiting step's question in Telegram also gets Yes and No buttons (step_buttons.py).
+Buttons: a waiting step's question in Telegram is sent once, as one message with Yes and No buttons (step_buttons.py).
 """
 import importlib.util
 import json
