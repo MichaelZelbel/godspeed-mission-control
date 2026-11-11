@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 // godspeed-coach: recurring coaching talks and daily habits for Godspeed Mission Control. This file only
 // parses arguments and prints. What gets decided lives in lib/, where the tests can reach it.
-import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { findMissionControl, appHome } from "../lib/paths.mjs";
@@ -16,7 +15,8 @@ import { brief, habitLine } from "../lib/brief.mjs";
 import { gate, NO_WAKE } from "../lib/gate.mjs";
 import { dueTick } from "../lib/tick.mjs";
 import { contextBlock, waitingTalks } from "../lib/context.mjs";
-import { readPrep, prepProblem, prepForBrief, prepDue, prepPath, prepCheck, prepFile, prepDir, prepMissing, prepExpected } from "../lib/prep.mjs";
+import { readPrep, prepProblem, prepForBrief, prepDue, prepPath, prepCheck, prepFile, prepDir, prepMissing, prepExpected, rhythmDrop } from "../lib/prep.mjs";
+import { researchDomains } from "../lib/prep-evidence.mjs";
 import { writeQuestions, readQuestions, questionsFile, openQuestionsDate, addQuestion, dropQuestion, hasQuestions } from "../lib/questions.mjs";
 import { commitCoach, syncInBackground, syncQueued, pullQuietly } from "../lib/sync.mjs";
 import { decodeArgv, readTextFile, restoreShellEnv, startedFromGitBash, gitBashPath, LAUNCHER_ENV, CMDLINE_ENV } from "../lib/argv.mjs";
@@ -101,19 +101,18 @@ function openTalkDate(a) {
   if (!open) die(`No ${a.title} talk is open. Give the day with --date.`);
   return open;
 }
-// A talk with no preparation of its own may still quote the area's newest preparation that passed its
-// review, dated on or before the talk, with its date (#359). Its review's hash of the file proves the
-// findings are the ones reviewed; prepProblem cannot decide this, since any later edit of area.md (a
-// RHYTHM change too) breaks the seal that lets a preparation open a talk.
+// A talk with no preparation of its own may still quote the area's newest researched preparation that
+// passes the gate, dated on or before the talk, with its date (#359). Only area.md's hash is left out
+// of the check: any later edit of area.md (a RHYTHM change too) breaks the seal that lets a
+// preparation open a talk, not the research its review passed.
 const NO_NEW_STUDY = "A search that found no new study means no new study, not that nothing is useful: answer from the routes, rejected routes and coverage above.";
 function reviewedBefore(a, ymd) {
+  if (!researchDomains(a).length) return null;
   let names = [];
   try { names = fs.readdirSync(prepDir(a)).filter((n) => /^\d{4}-\d{2}-\d{2}\.md$/.test(n) && n.slice(0, 10) <= ymd).sort().reverse(); } catch { /* no prep folder */ }
   for (const n of names) {
-    const file = path.join(prepDir(a), n);
-    let review = null;
-    try { review = JSON.parse(fs.readFileSync(file.replace(/\.md$/, ".review.json"), "utf8")); } catch { continue; }
-    if (review?.verdict === "pass" && review.prep_sha256 === crypto.createHash("sha256").update(fs.readFileSync(file)).digest("hex")) return { ...readPrep(file), date: n.slice(0, 10) };
+    const p = readPrep(path.join(prepDir(a), n));
+    if (!prepProblem(p, a, at, { anyScope: true })) return { ...p, date: n.slice(0, 10) };
   }
   return null;
 }
@@ -229,8 +228,11 @@ const commands = {
     const missed = [];
     for (const a of listAreas(mcDir)) {
       if (!a.on || a.noTalk || !a.rhythm || !prepExpected(a)) continue;
+      // A talk they started on a day nothing was due to be prepared for may say it is not ready.
+      const drop = rhythmDrop(mcDir, a, s.timezone);
+      const due = (d) => isTalkDay(a, d) || drop?.dropped(d) || fs.existsSync(prepFile(a, d));
       for (const d of talkDates(a).filter((x) => x >= from && x <= today)) {
-        if (readTalk(a, d).prep) continue;
+        if (readTalk(a, d).prep || !due(d)) continue;
         let next = nextTalkDay(a, today);
         while (next && fs.existsSync(talkFile(a, next))) next = nextTalkDay(a, addDays(next, 1));
         missed.push({ area: a.slug, title: a.title, date: d, talk: path.relative(mcDir, talkFile(a, d)).replace(/\\/g, "/"),

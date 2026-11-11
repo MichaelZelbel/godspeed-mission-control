@@ -62,9 +62,11 @@ something another talk raised in the last seven days.
   `godspeed-coach prep-check` says whether one talk's file is ready. With `--rhythm-changes`,
   `prep-due` also lists a day that the area's newest rhythm change in git dropped, until the new
   rhythm's first talk, so a talk they start themselves that day still opens prepared;
-  `godspeed-coach prep-missed` lists the talks of the last day that opened without their
-  preparation. A talk with no preparation of its own answers "what did you research?"
-  (`talk evidence`) from the area's newest reviewed preparation, with its date. In Godspeed Mission Control the
+  `godspeed-coach prep-missed` lists the talks of the last day that opened without the
+  preparation due for them (a talk day, a day a rhythm change dropped, or a day whose preparation
+  was refused). A talk with no preparation of its own answers "what did you research?"
+  (`talk evidence`) from the area's newest preparation whose research and review still pass the
+  gate, all but the area's own seal, with its date. In Godspeed Mission Control the
   routine "Coaching talk preparation" is that job: every night it prepares each talk of the next day
   with the coach-prep recipe.
 

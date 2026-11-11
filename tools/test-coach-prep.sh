@@ -352,6 +352,18 @@ check "  one repair item is in the work list" "$(repairs "$G6")" "1"
 contains "  the run folder is committed" "$(git -C "$G6" show --name-only --format=%s HEAD)" "routines/coach-prep/2026-11-09/summary.txt"
 export GODSPEED_NOW=2026-11-14T01:00:00Z GODSPEED_TODAY=2026-11-14
 
+# When the coach cannot say which talks opened unprepared, the coming talk is still prepared, the
+# summary says what is not known, and the run exits 1.
+printf '%s\n' 'if (process.argv.includes("prep-missed")) { console.error("the talks folder is unreadable"); process.exit(1); }' \
+  'await import(process.env.REAL_COACH);' > "$TMP/broken-coach.mjs"
+bdrun() { REAL_COACH="$("$NODE" -e 'process.stdout.write(require("url").pathToFileURL(process.argv[1]).href)' "$GODSPEED_COACH_SCRIPT")" GODSPEED_COACH_SCRIPT="$(P "$TMP/broken-coach.mjs")" drun "$@"; }
+OUT="$(bdrun --dry-run)"; check "a dry run whose prep-missed fails exits 0" "$?" "0"
+contains "  it still names the coming talk" "$OUT" "Work and money (work), 2026-11-15 at 18:00 Europe/Berlin -> coach/work/prep/2026-11-15.md"
+contains "  and says what it does not know" "$OUT" "Note: the coach could not say which talks opened without their preparation: the talks folder is unreadable."
+rm -f "$ST/calls"
+OUT="$(bdrun)"; check "  the real run prepares the talk and exits 1" "$?:$(cat "$ST/calls")" "1:2"
+contains "  the summary says what is not known" "$(cat "$G6/routines/coach-prep/2026-11-14/summary.txt")" "the coach could not say which talks opened without their preparation: the talks folder is unreadable"
+
 # A RUN WHOSE RECORD HAS NO PAGE READ gets no receipts: the review is not even started.
 rm -f "$ST/calls"; sed -i 's/^  read_page toolu_ok /  : read_page toolu_ok /' "$B/claude"
 OUT="$(rrun --area work --talk 2026-11-29 --tries 1)"; check "a run that read no page exits 1" "$?" "1"

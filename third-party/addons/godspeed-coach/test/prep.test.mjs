@@ -527,20 +527,23 @@ test("a bridged Sunday's preparation is what the talk they start that day opens 
   assert.match(cli(mc, "2026-11-08T15:00:00Z", "brief", "health").out, /--from-prep "coach\/health\/prep\/2026-11-08\.md" --shown/);
 });
 
-test("no bridge without git, from a change that drops no day, and an edit not committed yet counts as made now", () => {
+test("no bridge without git, from a change that drops no day, and an edit not committed yet counts from when area.md was written", () => {
   const plain = healthMission(); setRhythm(plain, "every 2 weeks sunday");
   assert.deepEqual(prepDue(plain, S, SAT, 48, { rhythmChanges: true }), [], "a folder that is no repository");
   // Fortnightly to weekly drops nothing; 8 November is a talk day of the new rhythm, listed as usual.
   const more = drifted("every 2 weeks sunday", "weekly sunday");
   assert.deepEqual(prepDue(more, S, SAT, 48, { rhythmChanges: true }).map((x) => [x.date, Boolean(x.bridge)]), [["2026-11-08", false]]);
-  // Changed on disk on 6 November, not committed: the change counts from now.
+  // Changed on disk on 6 November and never committed (git_sync off): the change counts from then.
   const mc = healthMission();
   git(mc, "2026-10-01T10:00:00Z", "init", "-q"); git(mc, "2026-10-01T10:00:00Z", "add", "-A"); git(mc, "2026-10-01T10:00:00Z", "commit", "-qm", "start");
   setRhythm(mc, "every 2 weeks sunday");
+  const changed = new Date("2026-11-06T12:00:00Z");
+  fs.utimesSync(path.join(mc, "coach", "health", "area.md"), changed, changed);
   const [e] = prepDue(mc, S, SAT, 48, { rhythmChanges: true });
   assert.equal(e?.date, "2026-11-08");
-  assert.equal(e.rhythm_change.commit, "not committed");
-  assert.equal(e.rhythm_change.from, "weekly sunday");
+  assert.deepEqual([e.rhythm_change.commit, e.rhythm_change.from, e.rhythm_change.changed], ["not committed", "weekly sunday", "2026-11-06T12:00:00Z"]);
+  // Two weeks on it is still not committed, and the next Sunday the new rhythm left out is not bridged again.
+  assert.deepEqual(prepDue(mc, S, new Date("2026-11-21T02:00:00Z"), 48, { rhythmChanges: true }), []);
 });
 
 test("prep-missed lists a talk that opened without its preparation in an area whose talks are prepared ahead", () => {
@@ -560,6 +563,23 @@ test("prep-missed lists a talk that opened without its preparation in an area wh
   cli(never, "2026-10-21T17:00:00Z", "talk", "open", "work", "--opening", "How did the week go?");
   assert.equal(cli(never, at, "prep-missed").out, "No talk opened without its preparation.");
   assert.equal(cli(never, at, "prep-missed", "--days", "soon").code, 1);
+});
+
+test("prep-missed leaves out a talk they started on a day nothing was to be prepared for, and lists a dropped day's", () => {
+  // Friday 23 October is no talk day and the next talk is five days away with no preparation yet.
+  const off = mission(); addDomain(off);
+  assert.equal(cli(off, "2026-10-23T17:00:00Z", "talk", "open", "work", "--opening", "How is it going?").code, 0);
+  assert.equal(cli(off, "2026-10-24T01:00:00Z", "prep-missed").out, "No talk opened without its preparation.");
+  // A preparation for that day that was there and refused still counts.
+  fs.mkdirSync(path.join(off, "coach", "work", "prep"), { recursive: true });
+  fs.writeFileSync(path.join(off, "coach", "work", "prep", "2026-10-23.md"), prep({ state: "draft" }));
+  assert.match(cli(off, "2026-10-24T01:00:00Z", "prep-missed").out, /^work: the Work and money talk of 2026-10-23 opened without its preparation/);
+  // The Sunday a rhythm change dropped was to be prepared: a talk opened that day without it is listed.
+  const mc = drifted();
+  const f = path.join(mc, "coach", "health", "area.md");
+  fs.writeFileSync(f, fs.readFileSync(f, "utf8").replace("\nLIMIT:", "\nRESEARCH DOMAIN: fitness | training\nLIMIT:"));
+  assert.equal(cli(mc, "2026-11-08T15:00:00Z", "talk", "open", "health", "--opening", "How was the week?").code, 0);
+  assert.match(cli(mc, "2026-11-09T01:00:00Z", "prep-missed").out, /^health: the Health and fitness talk of 2026-11-08 opened without its preparation/);
 });
 
 test("an unprepared brief says its research sections are not a reviewed preparation", () => {
@@ -593,6 +613,11 @@ test("talk evidence for a talk with no preparation of its own shows the newest r
   assert.match(cli(failed, "2026-10-28T17:30:00Z", "talk", "evidence", "work").out, /no preparation to show/);
   const edited = fallback((m) => fs.appendFileSync(path.join(m, "coach", "work", "prep", "2026-10-21.md"), "\nA line added after the review.\n"));
   assert.match(cli(edited, "2026-10-28T17:30:00Z", "talk", "evidence", "work").out, /no preparation to show/);
+  // A passing review is not enough: without its reading receipts, or reviewed by the run that wrote it, the gate refuses it.
+  const noEvidence = fallback((m) => fs.rmSync(path.join(m, "coach", "work", "prep", "2026-10-21.evidence.json")));
+  assert.match(cli(noEvidence, "2026-10-28T17:30:00Z", "talk", "evidence", "work").out, /no preparation to show/);
+  const selfReviewed = fallback((m) => { const r = path.join(m, "coach", "work", "prep", "2026-10-21.review.json"); fs.writeFileSync(r, fs.readFileSync(r, "utf8").replace('"session_id":"rs"', '"session_id":"ws"')); });
+  assert.match(cli(selfReviewed, "2026-10-28T17:30:00Z", "talk", "evidence", "work").out, /no preparation to show/);
 });
 
 test("the recipe: an unprepared talk dates the goal research, and a follow-up keeps no new study apart from nothing useful", () => {

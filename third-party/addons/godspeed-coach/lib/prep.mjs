@@ -53,8 +53,9 @@ export function readPrep(file) {
 }
 
 // Why a prepared talk cannot open a talk, in words; null when it can. Ready means STATE ready with
-// an opening and a talk card, and for this area when the file names one.
-export function prepProblem(p, area = null, now = clockNow()) {
+// an opening and a talk card, and for this area when the file names one. `opts` goes to
+// researchEvidenceProblem.
+export function prepProblem(p, area = null, now = clockNow(), opts = {}) {
   if (!p) return "there is no such file";
   if (area && p.head.AREA && p.head.AREA.trim().toLowerCase() !== area.slug) return `it is for the ${p.head.AREA.trim()} talk, not the ${area.title} talk`;
   if (p.state !== "ready") return `its STATE is ${p.state || "missing"}, not ready`;
@@ -62,7 +63,7 @@ export function prepProblem(p, area = null, now = clockNow()) {
   if (empty.length) return `its section${empty.length > 1 ? "s" : ""} ${empty.join(" and ")} ${empty.length > 1 ? "are" : "is"} empty`;
   const at = preparedAt(p);
   if (at && at.getTime() > now.getTime() + 60_000) return "its PREPARED time is in the future";
-  return researchEvidenceProblem(p, area, now);
+  return researchEvidenceProblem(p, area, now, null, opts);
 }
 
 // The day of another talk of this area that already opened with this preparation's opening, or null.
@@ -136,7 +137,7 @@ export function prepDue(mcDir, s, now, hours, opts = {}) {
   const out = [];
   for (const a of listAreas(mcDir)) {
     if (!a.on || a.noTalk || !a.rhythm) continue;
-    if (opts.rhythmChanges) out.push(...bridgeDay(mcDir, a, tz, days, now, inWindow, entry));
+    if (opts.rhythmChanges) out.push(...bridgeDay(mcDir, a, tz, days, inWindow, entry));
     let next = null;
     for (const d of days) {
       const at = isTalkDay(a, d) ? zonedToUtc(d, a.time, tz) : null;
@@ -149,21 +150,29 @@ export function prepDue(mcDir, s, now, hours, opts = {}) {
   return out.sort((x, y) => x.at - y.at).map(({ at, ...r }) => r);
 }
 
-function bridgeDay(mcDir, a, tz, days, now, inWindow, entry) {
-  const c = lastRhythmChange(mcDir, a, now);
-  const old = c && parseRhythm(c.from);
-  if (!old) return [];
-  const was = { ...a, rhythm: old, rhythmText: c.from };
-  const changeDay = localParts(new Date(c.changed), tz).date;
-  const newFirst = nextTalkDay(a, addDays(changeDay, 1));
+function bridgeDay(mcDir, a, tz, days, inWindow, entry) {
+  const drop = rhythmDrop(mcDir, a, tz);
+  if (!drop) return [];
   for (const d of days) {
-    if (d <= changeDay || (newFirst && d >= newFirst) || !isTalkDay(was, d) || isTalkDay(a, d)) continue;
+    if (!drop.dropped(d)) continue;
     const at = zonedToUtc(d, a.time, tz);
     if (!inWindow(at)) continue;
     const e = entry(a, d, at);
-    return e ? [{ ...e, bridge: true, rhythm_change: c, next_talk: newFirst || "" }] : [];
+    return e ? [{ ...e, bridge: true, rhythm_change: drop.change, next_talk: drop.next }] : [];
   }
   return [];
+}
+
+// What the area's newest RHYTHM change dropped, or null when git knows of none: dropped(<day>) is
+// true for a day the old rhythm had, after the change and before the new rhythm's first talk.
+export function rhythmDrop(mcDir, a, tz) {
+  const c = lastRhythmChange(mcDir, a);
+  const old = c && parseRhythm(c.from);
+  if (!old) return null;
+  const was = { ...a, rhythm: old, rhythmText: c.from };
+  const changeDay = localParts(new Date(c.changed), tz).date;
+  const newFirst = nextTalkDay(a, addDays(changeDay, 1));
+  return { change: c, next: newFirst || "", dropped: (d) => d > changeDay && !(newFirst && d >= newFirst) && isTalkDay(was, d) && !isTalkDay(a, d) };
 }
 
 // Whether this area's talks are prepared ahead: it names research domains (the gate needs a

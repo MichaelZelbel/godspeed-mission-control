@@ -54,9 +54,11 @@
 # commit) and the next talk under the new rhythm. No talk opens by itself on that day.
 #
 # A TALK THAT OPENED WITHOUT ITS PREPARATION, yesterday or today, in an area whose talks are prepared
-# ahead (`godspeed-coach prep-missed --days 1`), is named in the summary with the reason, and one
-# repair item is filed for it, as for a preparation that failed three times. A run by hand for one
-# talk (--area) leaves this out.
+# ahead, on a day one was due (a talk day, a day a rhythm change dropped, or a day whose preparation
+# was refused; `godspeed-coach prep-missed --days 1`), is named in the summary with the reason, and
+# one repair item is filed for it, as for a preparation that failed three times. When the coach
+# cannot say which talks those are, the summary says so and the talks are still prepared. A run by
+# hand for one talk (--area) leaves this out.
 #
 # IT COMMITS ONLY ITS OWN FILES: each preparation it wrote, its two sidecars and its run folder
 # (routines/coach-prep/<date>/), by name, and pushes them when the folder has an origin.
@@ -203,14 +205,16 @@ else
   LIST="$(printf '%s' "$JSON" | to_lines due 2>"$ERRF")" || { echo "mc-coach-prep: $(tail -1 "$ERRF")" >&2; exit 3; }
 fi
 LIST="$(printf '%s' "$LIST" | tr -d '\r')"
-MISSED=""
+MISSED=""; MISSED_ERR=""
 if [ -z "$AREA" ]; then
-  JSON="$(coach prep-missed --days 1 --json 2>"$ERRF")" || { echo "mc-coach-prep: the coach could not say which talks opened without their preparation: $(tail -1 "$ERRF")" >&2; exit 3; }
-  MISSED="$(printf '%s' "$JSON" | missed_lines 2>"$ERRF" | tr -d '\r')" || { echo "mc-coach-prep: $(tail -1 "$ERRF")" >&2; exit 3; }
+  if ! JSON="$(coach prep-missed --days 1 --json 2>"$ERRF")" || ! MISSED="$(printf '%s' "$JSON" | missed_lines 2>"$ERRF" | tr -d '\r')"; then
+    MISSED=""; MISSED_ERR="the coach could not say which talks opened without their preparation: $(tail -1 "$ERRF")"
+    echo "mc-coach-prep: $MISSED_ERR" >&2
+  fi
 fi
 
 if [ "$DRY" -eq 1 ]; then
-  if [ -z "$LIST$MISSED" ]; then echo "Nothing to prepare: no talk today or tomorrow is without a preparation."; exit 0; fi
+  if [ -z "$LIST$MISSED$MISSED_ERR" ]; then echo "Nothing to prepare: no talk today or tomorrow is without a preparation."; exit 0; fi
   [ -n "$LIST" ] && echo "Would prepare, soonest first:"
   REVIEWED=0
   while IFS=$'\t' read -r _ A TI D TM ZONE F PR NOTE; do
@@ -226,10 +230,11 @@ if [ "$DRY" -eq 1 ]; then
   while IFS=$'\t' read -r A TI D WHY _; do
     [ -n "$A" ] && echo "Opened without its preparation: $TI ($A) $D: $WHY. A repair item would go to your work list."
   done <<< "$MISSED"
+  [ -n "$MISSED_ERR" ] && echo "Note: $MISSED_ERR."
   [ "$REVIEWED" -eq 1 ] && echo "A preparation that fails its review is tried again with the review's issues, up to $MAXTRIES times in this run while the time allows; after three failed tries in a row, one repair item goes to your work list."
   exit 0
 fi
-[ -n "$LIST$MISSED" ] || { echo "nothing to prepare $TODAY"; exit 0; }
+[ -n "$LIST$MISSED$MISSED_ERR" ] || { echo "nothing to prepare $TODAY"; exit 0; }
 
 RUNDIR="$GODSPEED/routines/coach-prep/$TODAY"; mkdir -p "$RUNDIR"
 SUMMARY="$RUNDIR/summary.txt"
@@ -314,6 +319,7 @@ while IFS=$'\t' read -r A TI D WHY NX; do
   echo "$A $D: the talk opened without its preparation ($WHY); repair item: $FILED" >> "$SUMMARY"
   BAD=$((BAD+1))
 done <<< "$MISSED"
+[ -n "$MISSED_ERR" ] && { echo "$MISSED_ERR" >> "$SUMMARY"; BAD=$((BAD+1)); }
 while IFS=$'\t' read -r AT A TI D TM ZONE F PR NOTE <&3; do
   [ -n "$A" ] || continue
   [ "$NOTE" != - ] && echo "$A $D: $NOTE" >> "$SUMMARY"
