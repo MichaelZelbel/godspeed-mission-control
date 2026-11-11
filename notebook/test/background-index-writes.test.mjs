@@ -13,15 +13,19 @@ test('a full refresh finishes while the notebook keeps writing, and keeps the ne
  let started=performance.now();await index.rebuildBackground();const pass=performance.now()-started;
  fs.writeFileSync(path.join(root,'archives','batch-0','new-finding.md'),'# Fresh\nzebrafinch observation');
  let reads=0;const read=index.readBackground.bind(index);index.readBackground=async()=>{reads++;const documents=await read();return documents;};
- // A receipt several times during one read of the workspace.
- const every=Math.max(100,Math.round(pass/4));let writes=0;
- const writer=setInterval(()=>{writes++;const receipt=store.save('job_receipts',{job_id:'watch-sweeper',kind:'watch',state:'verified'});index.update([receipt]);},every);
+ let writes=0,writing=true;const write=()=>{writes++;const receipt=store.save('job_receipts',{job_id:'watch-sweeper',kind:'watch',state:'verified'});index.update([receipt]);};
+ started=performance.now();write();const save=performance.now()-started;writes=0;
+ // A receipt several times during one read of the workspace: one every hundred
+ // files it reads. A receipt is saved synchronously and syncs to disk many
+ // times, over 100 ms on a busy disk; a writer on a clock that fires again as
+ // soon as a save ends leaves the refresh one step per save and it never ends.
+ const breathe=index.breathe.bind(index);let files=0;index.breathe=async()=>{if(writing&&++files%100===0)write();return breathe();};
  started=performance.now();const done=index.rebuildBackground().then(()=>performance.now()-started);
  // While the refresh reads, the note changes and goes into the index on its own.
- await new Promise(r=>setTimeout(r,Math.min(every,pass/3)));const changed=store.save('notes',{id:note.id,content:'after-marker'});index.update([changed]);
- const limit=Math.max(10000,pass*10),finished=await Promise.race([done,new Promise(r=>setTimeout(()=>r(null),limit))]);
- clearInterval(writer);await done;
- t.diagnostic(`one read ${pass.toFixed(0)} ms; refresh while writing every ${every} ms: ${finished===null?'unfinished':finished.toFixed(0)+' ms'}, ${reads} reads, ${writes} receipts`);
+ await new Promise(r=>setTimeout(r,pass/4));const changed=store.save('notes',{id:note.id,content:'after-marker'});index.update([changed]);
+ const limit=20*(pass+5*save),finished=await Promise.race([done,new Promise(r=>setTimeout(()=>r(null),limit))]);
+ writing=false;await done;
+ t.diagnostic(`one read ${pass.toFixed(0)} ms, one receipt ${save.toFixed(0)} ms; refresh while writing: ${finished===null?'unfinished':finished.toFixed(0)+' ms'}, ${reads} reads, ${writes} receipts`);
  assert.notEqual(finished,null,`the refresh was still reading after ${limit.toFixed(0)} ms (${reads} reads, ${writes} receipts written)`);
  assert.ok(reads<=2,'the refresh did not start over for writes it never indexes: '+reads+' reads');
  assert.equal(index.search('zebrafinch').length,1,'the file another program changed is searchable');
