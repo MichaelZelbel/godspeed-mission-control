@@ -311,9 +311,9 @@ for(const [label,sent] of [['still waits to be sent',false],['went out, and Herm
   scheduler.lastTick=0;await scheduler.tick();
   // The seven, beside the invitation, and the night chat tidy-up because this server has a chat app.
   assert.deepEqual(names(hermes.jobs()),[INVITE_JOB,...STARTING_NAMES,CHAT_TIDY_JOB]);
-  // Each starting routine's promise, once: another tick writes nothing again.
+  // Each starting routine's promise, and the daily connection check's the tick made beside them (#436), once: another tick writes nothing again.
   const promises=path.join(root,'work','promises'),written=()=>Object.fromEntries(fs.readdirSync(promises).map(n=>[n,fs.readFileSync(path.join(promises,n),'utf8')]));
-  assert.deepEqual(Object.keys(written()).sort(),['README.md',...STARTING_ROUTINES.filter(r=>STARTING_NAMES.includes(r.name)).map(r=>'routine-'+r.key+'.md')].sort());
+  assert.deepEqual(Object.keys(written()).sort(),['README.md',...STARTING_ROUTINES.filter(r=>STARTING_NAMES.includes(r.name)).map(r=>'routine-'+r.key+'.md'),'routine-connection-check.md'].sort());
   const before=written();scheduler.lastTick=0;await scheduler.tick();assert.deepEqual(written(),before);
   assert.equal(store.get('settings',FLAG).state,'created');assert.equal(readMachineRecord(store).state,'created');
   assert.deepEqual([...new Set(hermes.jobs().filter(j=>j.name!==INVITE_JOB&&j.name!==CHAT_TIDY_JOB).map(j=>j.deliver))],['telegram']);

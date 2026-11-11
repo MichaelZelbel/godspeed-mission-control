@@ -51,7 +51,8 @@
 # --rhythm-changes: when the area's newest RHYTHM change in git (the coach commits each one) dropped
 # a talk day of the old rhythm before the new rhythm's first talk, that day is prepared as well, for
 # a talk they start themselves. The summary names the change (old and new rhythm, its day and
-# commit) and the next talk under the new rhythm. No talk opens by itself on that day.
+# commit) and the next talk under the new rhythm. No talk opens by itself on that day. A change they
+# asked for with `godspeed-coach area set` (#415) drops no talk day, so that day is not prepared.
 #
 # A TALK THAT OPENED WITHOUT ITS PREPARATION, yesterday or today, on a day one was due (in an area
 # whose talks are prepared ahead, a talk day or a day whose preparation was refused; in any area, a
@@ -85,7 +86,7 @@ while [ $# -gt 0 ]; do
     --area) AREA="${2:-}"; shift 2 ;;
     --talk) TALK="${2:-}"; shift 2 ;;
     --dry-run) DRY=1; shift ;;
-    -h|--help) sed -n '2,67p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,68p' "$0"; exit 0 ;;
     *) echo "mc-coach-prep: I do not know the argument $1" >&2; exit 2 ;;
   esac
 done
@@ -198,7 +199,11 @@ ERRF="$(mktemp "${TMPDIR:-/tmp}/mc-coach-prep.XXXXXX")"; trap 'rm -f "$ERRF"' EX
 if [ -n "$AREA" ]; then
   JSON="$(coach prep-check "$AREA" --date "$TALK" --json 2>"$ERRF")"
   [ -n "$JSON" ] || { echo "mc-coach-prep: the coach does not know the $AREA talk of $TALK: $(tail -1 "$ERRF")" >&2; exit 2; }
-  printf '%s' "$JSON" | grep -q '"talk_day":true' || { echo "mc-coach-prep: $TALK is not a day of the $AREA talk." >&2; exit 2; }
+  if ! printf '%s' "$JSON" | grep -q '"talk_day":true'; then
+    if printf '%s' "$JSON" | grep -q '"deliberate":true'; then echo "mc-coach-prep: $TALK is not a day of the $AREA talk: its rhythm was changed on purpose, so the day it dropped is not prepared." >&2
+    else echo "mc-coach-prep: $TALK is not a day of the $AREA talk." >&2; fi
+    exit 2
+  fi
   LIST="$(printf '%s' "$JSON" | to_lines one 2>"$ERRF")" || { echo "mc-coach-prep: $(tail -1 "$ERRF")" >&2; exit 3; }
 else
   JSON="$(coach prep-due --within-hours 48 --rhythm-changes --json 2>"$ERRF")" || { echo "mc-coach-prep: the coach could not say which talks are coming: $(tail -1 "$ERRF")" >&2; exit 3; }
