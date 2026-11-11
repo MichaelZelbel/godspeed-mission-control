@@ -14,7 +14,7 @@ ci_apt_prepare() {
     [ -f "$f" ] || continue
     sudo sed -i -E \
       -e 's#(https?|mirror\+file):(//)?(azure\.archive\.ubuntu\.com|[a-z0-9.-]*\.archive\.ubuntu\.com)/ubuntu/?#http://archive.ubuntu.com/ubuntu/#g' \
-      -e 's#mirror\+file:/etc/apt/apt-mirrors\.txt#http://archive.ubuntu.com/ubuntu/#g' \ "$f"
+      -e 's#mirror\+file:/etc/apt/apt-mirrors\.txt#http://archive.ubuntu.com/ubuntu/#g' "$f"
   done
   sudo apt-get update -o Acquire::Retries=5 -o Acquire::http::Timeout=20
 }
