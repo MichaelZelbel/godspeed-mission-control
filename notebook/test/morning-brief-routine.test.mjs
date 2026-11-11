@@ -300,7 +300,9 @@ test('godspeed-brief says a skipped self check once on stderr and delivers only 
  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));t.after(()=>server.close());
  fs.writeFileSync(path.join(root,'.godspeed','provider.json'),JSON.stringify({url:`http://127.0.0.1:${server.address().port}/v1/chat/completions`,key:'made-up',model:'made-up'}));
  const script=fileURLToPath(new URL('../scripts/morning-brief.mjs',import.meta.url));
- const child=spawn(process.execPath,[script,'--today','--godspeed',root],{env:{...process.env,GODSPEED_WORKSPACE:root,GODSPEED_ASSISTANT_CONFIG:path.join(root,'none.json')}});
+ // Node 22 prints its own ExperimentalWarning for node:sqlite on stderr; only that one is turned off,
+ // so the line count below still counts everything the brief itself says there.
+ const child=spawn(process.execPath,['--disable-warning=ExperimentalWarning',script,'--today','--godspeed',root],{env:{...process.env,GODSPEED_WORKSPACE:root,GODSPEED_ASSISTANT_CONFIG:path.join(root,'none.json')}});
  let stdout='',stderr='';child.stdout.on('data',c=>stdout+=c);child.stderr.on('data',c=>stderr+=c);
  const status=await new Promise(resolve=>child.on('close',resolve));
  assert.equal(status,0,stderr);

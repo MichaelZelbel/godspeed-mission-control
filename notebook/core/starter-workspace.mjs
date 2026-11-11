@@ -47,25 +47,34 @@ export function installStarter(root, starter=defaultStarter) {
   copyMissing(starter,root);
 }
 
-// The line the starter's manual carries since 12 October 2026, so a reader's assistant looks in the
-// conversation archive before it says it does not remember. A new folder gets it with the starter's
-// AGENTS.md; a reader's existing manual is never replaced, so it is added there once: below the
-// manual's own word about prompts/ when that is there, else at the end. Only a starter-born mission
-// control is touched (an adopted one is its owner's own manual), and a note in the machine's own
-// state folder (never synced) means it is added once and never again, even if its owner deletes it.
-export const ARCHIVE_LINE='- When you cannot recall an earlier conversation, run `mc-prompt-archive search <words>` before saying you don\'t know.';
-export function addArchiveLine(root,state=path.join(root,'.godspeed'),starter=defaultStarter){
-  const manual=path.join(root,'AGENTS.md'),flag=path.join(state,'archive-line-added');
-  if(!fs.existsSync(manual)||fs.existsSync(flag)||!starterBorn(root,starter))return false;
-  const mark=()=>{fs.mkdirSync(state,{recursive:true});fs.writeFileSync(flag,new Date().toISOString()+'\n');};
+// Lines the starter's manual gained after readers had installed it. A new folder gets each with the
+// starter's AGENTS.md; a reader's existing manual is never replaced, so each is added there once:
+// below the manual's own bullet that starts with `after` when that is there, else at the end. Only a
+// starter-born mission control is touched (an adopted one is its owner's own manual), and a note in
+// the machine's own state folder (never synced) means it is added once and never again, even if its
+// owner deletes it.
+function addManualLine(root,state,starter,{line,flag,present,after}){
+  const manual=path.join(root,'AGENTS.md'),note=path.join(state,flag);
+  if(!fs.existsSync(manual)||fs.existsSync(note)||!starterBorn(root,starter))return false;
+  const mark=()=>{fs.mkdirSync(state,{recursive:true});fs.writeFileSync(note,new Date().toISOString()+'\n');};
   let text=fs.readFileSync(manual,'utf8');
-  if(text.includes('mc-prompt-archive search')){mark();return false;}
+  if(text.includes(present)){mark();return false;}
   const eol=text.includes('\r\n')?'\r\n':'\n',lines=text.split(/\r?\n/);
-  const at=lines.findIndex(line=>line.startsWith('- **Never load `prompts/`.**'));
-  if(at>=0){let end=at+1;while(end<lines.length&&/^ {2}\S/.test(lines[end]))end++;lines.splice(end,0,ARCHIVE_LINE);text=lines.join(eol);}
-  else text=text.replace(/\s*$/,'')+eol+eol+ARCHIVE_LINE+eol;
+  const at=lines.findIndex(l=>l.startsWith(after));
+  if(at>=0){let end=at+1;while(end<lines.length&&/^ {2}\S/.test(lines[end]))end++;lines.splice(end,0,line);text=lines.join(eol);}
+  else text=text.replace(/\s*$/,'')+eol+eol+line+eol;
   // Hermes drops the middle of a manual past 20,000 characters, so a manual this line would push
   // over that is left as it is (and asked again on the next update, in case it got shorter).
   if([...text].length>=20000)return false;
   fs.writeFileSync(manual,text);mark();return true;
 }
+
+// Since 12 October 2026: the assistant looks in the conversation archive before it says it does not remember.
+export const ARCHIVE_LINE='- When you cannot recall an earlier conversation, run `mc-prompt-archive search <words>` before saying you don\'t know.';
+export const addArchiveLine=(root,state=path.join(root,'.godspeed'),starter=defaultStarter)=>
+  addManualLine(root,state,starter,{line:ARCHIVE_LINE,flag:'archive-line-added',present:'mc-prompt-archive search',after:'- **Never load `prompts/`.**'});
+
+// Since 11 November 2026 (#191): a yes from background work is asked in words, never with a code to type.
+export const STEP_LINE='- **Never ask me to type a code.** For my yes, follow `skills/ask-for-a-yes/SKILL.md`.';
+export const addStepLine=(root,state=path.join(root,'.godspeed'),starter=defaultStarter)=>
+  addManualLine(root,state,starter,{line:STEP_LINE,flag:'step-line-added',present:'skills/ask-for-a-yes/',after:'- **Ask in your reply, then wait.**'});
