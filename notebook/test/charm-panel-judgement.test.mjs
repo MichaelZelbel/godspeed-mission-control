@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {EventEmitter} from 'node:events';
+import {spawnSync} from 'node:child_process';
 import {PassThrough} from 'node:stream';
 import {createService} from '../server/main.mjs';
 import {JUDGE_PROTOCOL} from '../../third-party/addons/godspeed-charm/lib/judge.mjs';
@@ -11,14 +12,16 @@ import {addonInvocation} from '../core/native-personal.mjs';
 import {wordCheckMs} from '../core/charm-judgement.mjs';
 
 // Issue #218: a slip typed in the notebook's chat panel gets the same question the Hermes plugin
-// asks. The panel's route is /api/browser-chat -> domains.nativeAgent (a one-shot assistant run that
-// does not pass through the plugin), so the notebook asks the judgement itself. The assistant here
-// answers in plain words; the godspeed-model stand-in decides what is a slip.
+// asks. The panel's route is /api/browser-chat -> domains.nativeAgent, a one-shot assistant run with
+// the plugin loaded; the notebook names the turn's conversation (GODSPEED_CHARM_CONVERSATION), so it
+// alone judges and records, and a command the model runs lands in the same conversation (#441). The
+// assistant here answers in plain words, after running the commands a test gives it; the
+// godspeed-model stand-in decides what is a slip.
 const START=Date.parse('2026-10-21T08:00:00Z');
 const VENT='This is useless, you are garbage and wrong again';
 const skip=process.platform==='win32';
 
-function setup(t,{judgeSeconds,model=true,answer='Understood.'}={}){
+function setup(t,{judgeSeconds,model=true,answer='Understood.',turn}={}){
  process.env.GODSPEED_CHARM_NOW=new Date(START).toISOString();
  if(judgeSeconds)process.env.GODSPEED_CHARM_JUDGE_SECONDS=judgeSeconds;
  t.after(()=>{delete process.env.GODSPEED_CHARM_NOW;delete process.env.GODSPEED_CHARM_JUDGE_SECONDS;});
@@ -28,9 +31,9 @@ function setup(t,{judgeSeconds,model=true,answer='Understood.'}={}){
  // Says "slip" for the vent and "unsure" for "hmm", "not" for anything else.
  fs.writeFileSync(stub,`#!${process.execPath}\nlet s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const p=JSON.parse(s).prompt;const v=/useless/.test(p)?'slip':/hmm/.test(p)?'unsure':'not';setTimeout(()=>console.log(JSON.stringify({text:JSON.stringify({verdict:v,language:'en'})})),Number(process.env.STUB_MODEL_MS||0));});\n`,{mode:0o755});
  if(!model)fs.rmSync(stub);
- const spawnProcess=()=>{
+ const spawnProcess=(command,args,opts)=>{
   const child=new EventEmitter();child.stdin=new PassThrough();child.stdout=new PassThrough();child.stderr=new PassThrough();
-  child.stdin.on('data',()=>queueMicrotask(()=>{child.stdout.write(answer);child.emit('close',0);}));
+  child.stdin.on('data',data=>queueMicrotask(()=>{turn?.(opts,String(data));child.stdout.write(answer);child.emit('close',0);}));
   return child;
  };
  return {root,home,spawnProcess};
@@ -135,4 +138,39 @@ test('a reply that quotes the question and goes on still ends with the question'
  const reply=await say(VENT);
  assert.match(reply,/Here is the requested correction\.\n\nThat sounded like a slip\. Back to 21\?[^]*$/);
  assert.equal((await op({action:'status'})).state.open.length,1);
+});
+
+// What the model does in a turn: runs the add-on command with the turn's environment and no
+// --conversation, as a model typing `godspeed-charm ...` in the terminal would.
+const runs=(...args)=>opts=>{const r=spawnSync(process.execPath,[opts.env.GODSPEED_CHARM_SCRIPT,...args,'--json'],{env:{...opts.env,GODSPEED_CHARM_NOW:process.env.GODSPEED_CHARM_NOW},encoding:'utf8'});assert.equal(r.status,0,r.stderr);};
+// The turn markers Hermes sessions left in the last minutes (lib/turns.mjs writeTurn).
+const markers=(opts,...conversations)=>{const dir=path.join(opts.env.GODSPEED_CHARM_DIR,'.godspeed','charm-turns');fs.mkdirSync(dir,{recursive:true});for(const c of conversations)fs.writeFileSync(path.join(dir,c.replace(/[^A-Za-z0-9_.-]/g,'_')+'.json'),JSON.stringify({conversation:c,when:process.env.GODSPEED_CHARM_NOW})+'\n');};
+const events=s=>s.store.list('collection_items').map(i=>i.data).filter(d=>d&&d.kind!=='start').sort((a,b)=>String(a.at).localeCompare(String(b.at)));
+
+for(const [day,fresh] of [['the first day (several fresh markers)',['cli:local-a','cli:local-b','cli:local-c']],['a later day (one fresh marker)',['cli:local-a']]]){
+ test(`a vent the model also records itself is one question in this chat, on ${day}`,{skip},async t=>{
+  const {say,op,s}=await panel(t,{turn:(opts,input)=>{if(/useless/.test(input)){markers(opts,...fresh);runs('asked','--words',VENT)(opts);}}});
+  await op({action:'start',words:'start'});
+  const reply=await say(VENT);
+  assert.equal(reply.split('Back to 21?').length,2,reply);
+  assert.match(reply,/Back to 21\? Yes \/ No\.$/);
+  assert.deepEqual(events(s).map(e=>[e.kind,e.conversation]),[['asked','notebook:browser-owner']]);
+ });
+}
+
+for(const [said,kind,model] of [['yes','reset',true],['yes','reset',false],['no','kept',true],['no','kept',false]]){
+ test(`a ${said} answers the vent's question in this chat (${model?'the model records it':'the notebook records it'})`,{skip},async t=>{
+  const {say,op,s}=await panel(t,{turn:(opts,input)=>{if(model&&input.startsWith(said)){markers(opts,'cli:local-a');runs('answer',said,'--words',said)(opts);}}});
+  await op({action:'start',words:'start'});
+  assert.match(await say(VENT),/Back to 21\?/);
+  await say(said);
+  assert.deepEqual(events(s).map(e=>[e.kind,e.conversation]),[['asked','notebook:browser-owner'],[kind,'notebook:browser-owner']]);
+ });
+}
+
+test('the assistant turn is told this chat\'s Charm conversation',{skip},async t=>{
+ const seen=[];
+ const {say}=await panel(t,{turn:opts=>seen.push(opts.env.GODSPEED_CHARM_CONVERSATION)});
+ await say('What is the weather like?');
+ assert.deepEqual(seen,['notebook:browser-owner']);
 });
