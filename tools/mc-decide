@@ -31,11 +31,11 @@
 # the run proposed anyway is taken out of its moves into held.md, with one "held:" line here.
 set -uo pipefail
 
-GODSPEED=""; DRY=0; TODAY=""; RUNDIR=""; TIMEOUT=1500; EXTRA=""
+GODSPEED=""; DRY=0; TODAY=""; DATED=""; RUNDIR=""; TIMEOUT=1500; EXTRA=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --godspeed) GODSPEED="$2"; shift 2 ;;
-    --date) TODAY="$2"; shift 2 ;;
+    --date) TODAY="$2"; DATED=1; shift 2 ;;
     --run-dir) RUNDIR="$2"; shift 2 ;;
     --timeout) TIMEOUT="$2"; shift 2 ;;
     # A mission control that has grown things this kit knows nothing about puts them in a file and names it
@@ -114,7 +114,11 @@ mkdir -p "$RUNDIR"
 # "nothing was written" at the end while having quietly aged the register is the exact shape of
 # lie this whole program exists to refuse. So a dry run LISTS the work instead of ticking it, and
 # says so.
-if [ "$DRY" -eq 1 ]; then
+# A dry run for a day named by --date lists by that day, as its work.txt does (#432): listing writes
+# nothing, so it can look ahead without moving time.
+if [ "$DRY" -eq 1 ] && [ -n "$DATED" ]; then
+  reg work list --date "$TODAY" > "$RUNDIR/tick.txt" 2>/dev/null || true
+elif [ "$DRY" -eq 1 ]; then
   reg work list > "$RUNDIR/tick.txt" 2>/dev/null || true
 else
   reg work tick > "$RUNDIR/tick.txt" 2>/dev/null || true
@@ -134,7 +138,13 @@ if [ -s "$RUNDIR/decision.md" ] && [ -s "$RUNDIR/attention.txt" ]; then :; else
   reg goals attention --date "$TODAY" > "$RUNDIR/attention.txt" 2>/dev/null || true
 fi
 reg forecast due --date "$TODAY"    > "$RUNDIR/forecasts-due.txt" 2>/dev/null || true
-reg work list --all > "$RUNDIR/work.txt" 2>/dev/null || true
+# A day decided by --date gets its steps marked held by what holds them ON THAT DAY, as holds.txt,
+# moves.md and the card already are (#406); a scheduled run lists them by today, as it always did.
+if [ -n "$DATED" ]; then
+  reg work list --all --date "$TODAY" > "$RUNDIR/work.txt" 2>/dev/null || true
+else
+  reg work list --all > "$RUNDIR/work.txt" 2>/dev/null || true
+fi
 
 # YESTERDAY'S RECORD IS PUT IN FRONT OF TODAY'S RUN, NOT LEFT FOR IT TO GO AND FIND. The recipe
 # asks "what came of what you chose yesterday" and for two days nothing answered it, because the
@@ -252,6 +262,7 @@ fi
 # goals in eight of their forty minutes. So the count is checked by a program, and a run that
 # falls short is sent back ONCE with the exact gaps, in the same folder, to finish them. A second
 # shortfall is written into the record as it stands, never hidden.
+SHORT=0
 if [ -s "$RUNDIR/decision.md" ] && [ -f "$HERE/check-moves.js" ]; then
   GAPS="$(GODSPEED_ROOT="$GODSPEED" "$NODE" "$HERE/check-moves.js" --godspeed "$GODSPEED" --date "$TODAY" 2>&1)"
   if [ $? -ne 0 ]; then
@@ -269,8 +280,7 @@ sections of decision.md, and run the check again until it prints OK. Your final 
     bash "$RUNNER" next-action --godspeed "$GODSPEED" --cwd "$GODSPEED" ${EXTRA:+--prompt-file "$EXTRA"} --prompt "$FIX" \
       --timeout "$TIMEOUT" --out "$RUNDIR/answer-moves.txt" \
       --allowed-tools "Bash Read Grep Glob Write Edit WebSearch WebFetch" || true
-    GAPS="$(GODSPEED_ROOT="$GODSPEED" "$NODE" "$HERE/check-moves.js" --godspeed "$GODSPEED" --date "$TODAY" 2>&1)" \
-      || printf '\n## Moves check\n\nStill short after one return run:\n\n%s\n' "$GAPS" >> "$RUNDIR/decision.md"
+    GODSPEED_ROOT="$GODSPEED" "$NODE" "$HERE/check-moves.js" --godspeed "$GODSPEED" --date "$TODAY" >/dev/null 2>&1 || SHORT=1
   fi
 fi
 
@@ -282,6 +292,16 @@ fi
 if [ -s "$RUNDIR/moves.md" ] && [ -f "$HERE/holds.js" ]; then
   GODSPEED_ROOT="$GODSPEED" "$NODE" "$HERE/holds.js" strip --run "$RUNDIR" --date "$TODAY" --godspeed "$GODSPEED" 2>&1 \
     || HOLDS_UNREAD="${HOLDS_UNREAD:-the moves the person declined or postponed may still be in moves.md and on the card of the day (holds.js strip failed, see above)}"
+fi
+
+# THE SHORTFALL IS WRITTEN AFTER THE HELD MOVES ARE OUT (2026-11-11, #405). A held move still there
+# after the return run is a gap of the check above, but by now strip has taken it out of moves.md
+# and off the card. Read before strip, the record named it as one of the person's moves, counted it
+# in their PERSON line and told the run to take it out. So the check is read again here, on the
+# moves that are left: it names only what is truly still short, and nothing when nothing is.
+if [ "$SHORT" -eq 1 ]; then
+  GAPS="$(GODSPEED_ROOT="$GODSPEED" "$NODE" "$HERE/check-moves.js" --godspeed "$GODSPEED" --date "$TODAY" 2>&1)" \
+    || printf '\n## Moves check\n\nStill short after one return run:\n\n%s\n' "$GAPS" >> "$RUNDIR/decision.md"
 fi
 
 # THE BETS GO ON THE CARDS BY PROGRAM, NOT BY THE RUN (2026-09-30). Each move's BET in moves.md is

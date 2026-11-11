@@ -12,7 +12,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import {spawnSync,execFileSync} from 'node:child_process';
+import {spawn,spawnSync,execFileSync} from 'node:child_process';
+import http from 'node:http';
 import {fileURLToPath} from 'node:url';
 import {Store} from '../core/records/store.mjs';
 import {QueryService} from '../core/query.mjs';
@@ -263,3 +264,48 @@ for(const [name,fields] of [['hidden',{ai_visibility:'hidden'}],['sensitive',{is
   const r=await runMorningBrief({root,provider:async()=>{throw Error('the AI must not be asked');},now:new Date('2026-11-04T09:00:00Z')});
   assert.equal(r.text,'');assert.equal(briefNotes(root).length,1);
  });
+
+// #418: one reminder whose self check names a connection the daily check does not list stopped the
+// whole briefing, because the reminders' check failed on it before a word was written.
+function unknownConnectionReminder(t){
+ const {root}=workspace(t);
+ const day=new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Berlin'}).format(new Date());
+ const shift=n=>new Date(Date.parse(day+'T12:00:00Z')+n*86400000).toISOString().slice(0,10);
+ const reminder=(slug,title,arg)=>fs.writeFileSync(path.join(root,'due',slug+'.md'),`TITLE: ${title}\nDONE-WHEN: works\nCOST-IF-MISSED: none\nSELF-CHECK: connection-ok\nSELF-CHECK-ARG: ${arg}\nREPEATS: no\n\n## Windows\n\nSTRIP: ${shift(-5)} ${shift(20)}\n`);
+ fs.mkdirSync(path.join(root,'due'),{recursive:true});fs.mkdirSync(path.join(root,'.godspeed'),{recursive:true});
+ reminder('reconnect-slack','Reconnect Slack','Slack');reminder('reconnect-telegram','Reconnect Telegram','telegram');
+ fs.writeFileSync(path.join(root,'.godspeed','connection-check.json'),JSON.stringify({day,connections:{telegram:{set_up:true,ok:true}}}));
+ return root;
+}
+const briefCount=root=>new QueryService(new Store(root)).rows('notes').filter(n=>n.source_app==='morning-brief').length;
+const telegramReminder=root=>new QueryService(new Store(root)).rows('deadlines').find(d=>d.native_slug==='reconnect-telegram')?.status;
+
+test('one reminder whose self check names an unknown connection does not stop the briefing, and is said once',async t=>{
+ const root=unknownConnectionReminder(t);
+ const {text,notices}=await runMorningBrief({root,provider:async input=>verifies(input)||OK});
+ assert.ok(text,'a briefing was written');
+ assert.equal(briefCount(root),1);
+ assert.equal(notices.length,1);assert.match(notices[0],/^due\/reconnect-slack\.md: self check skipped: .*"Slack"/);
+ assert.equal(telegramReminder(root),'closed','the other reminder closed itself as before');
+});
+
+// The entry as godspeed-brief runs it: the skip is said on stderr, once, and stdout (what Hermes
+// delivers to the person) carries only the briefing.
+test('godspeed-brief says a skipped self check once on stderr and delivers only the briefing',async t=>{
+ const root=unknownConnectionReminder(t);
+ const server=http.createServer((request,response)=>{let body='';request.on('data',c=>body+=c);request.on('end',()=>{
+  const input=JSON.parse(JSON.parse(body).messages[1].content),answer=verifies(input);
+  response.setHeader('Content-Type','application/json');response.end(JSON.stringify({choices:[{message:{content:answer?JSON.stringify(answer):OK}}]}));
+ });});
+ await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));t.after(()=>server.close());
+ fs.writeFileSync(path.join(root,'.godspeed','provider.json'),JSON.stringify({url:`http://127.0.0.1:${server.address().port}/v1/chat/completions`,key:'made-up',model:'made-up'}));
+ const script=fileURLToPath(new URL('../scripts/morning-brief.mjs',import.meta.url));
+ const child=spawn(process.execPath,[script,'--today','--godspeed',root],{env:{...process.env,GODSPEED_WORKSPACE:root,GODSPEED_ASSISTANT_CONFIG:path.join(root,'none.json')}});
+ let stdout='',stderr='';child.stdout.on('data',c=>stdout+=c);child.stderr.on('data',c=>stderr+=c);
+ const status=await new Promise(resolve=>child.on('close',resolve));
+ assert.equal(status,0,stderr);
+ assert.match(stdout,/Review the fictional list today\./);assert.doesNotMatch(stdout,/skipped/);
+ const lines=stderr.split(/\r?\n/).filter(Boolean);
+ assert.equal(lines.length,1,stderr);assert.match(lines[0],/^due\/reconnect-slack\.md: self check skipped: .*"Slack"/);
+ assert.equal(briefCount(root),1);assert.equal(telegramReminder(root),'closed');
+});

@@ -59,7 +59,7 @@ export function savedBriefToday(store,now=new Date()){
  return note?{note,hidden:false}:{note:null,hidden:true};
 }
 
-export async function briefing(job,{store,query,provider,now=new Date()}){
+export async function briefing(job,{store,query,provider,now=new Date(),notices}){
  if(job.rehearsal){
   const copy=path.join(store.state,'brief-rehearsals',randomUUID());fs.mkdirSync(copy,{recursive:true,mode:0o700});
   await store.waitForWriter();await store.withLockAsync(()=>{
@@ -89,13 +89,13 @@ export async function briefing(job,{store,query,provider,now=new Date()}){
    }
   });
   const rehearsalStore=new Store(copy,{device:store.device}),rehearsalQuery=new QueryService(rehearsalStore);
-  return {...await runBriefing(job,{store:rehearsalStore,query:rehearsalQuery,provider,now}),rehearsal_workspace:copy};
+  return {...await runBriefing(job,{store:rehearsalStore,query:rehearsalQuery,provider,now,notices}),rehearsal_workspace:copy};
  }
- return runBriefing(job,{store,query,provider,now});
+ return runBriefing(job,{store,query,provider,now,notices});
 }
-async function runBriefing(job,{store,query,provider,now}){
+async function runBriefing(job,{store,query,provider,now,notices}){
  if(!provider)throw Error('Connect an assistant before writing a briefing');
- remind({},{store,query});
+ remind({},{store,query,notices});
  const voiceFile=path.join(store.root,'profile','voice.md'),voice=fs.existsSync(voiceFile)?fs.readFileSync(voiceFile,'utf8'):null;
  // A line Godspeed requires word for word that breaks those same rules is left out and reported (issue #117).
  const leftOut=[];
@@ -328,7 +328,8 @@ async function runBriefing(job,{store,query,provider,now}){
  }
  // A brief with nothing to decide and under two fresh news items is thin (#387). One rewrite that
  // adds the missing decision or news must pass every check; a brief still thin says so and why,
- // where the installation had sources or decisions to fill it.
+ // where the installation had sources or decisions to fill it. A repair that passes its checks
+ // but leaves the brief thin is recorded as 'still-thin', never 'passed' (#412).
  let thin=thinCheck(draft,context),thinRepair='not-applicable';
  if(thin.thin&&!fallback&&(thin.missing_actions.length||thin.missing_news.length)){
   thinRepair='failed';
@@ -339,7 +340,7 @@ async function runBriefing(job,{store,query,provider,now}){
    const repaired=[...healthSummaryLines,unknownWeekLine,healthSafeReply(raw,'text',health)].filter(Boolean).join('\n\n');
    if(!codeGate(repaired).length){
     const facts=await verify(repaired,'source-facts'),reader=await verify(repaired,'plain-words-and-delivery');
-    if(facts.verdict.passed===true&&reader.verdict.passed===true){draft=repaired;check=facts.receipt;deliveryCheck=reader.receipt;thinRepair='passed';thin=thinCheck(draft,context);}
+    if(facts.verdict.passed===true&&reader.verdict.passed===true){draft=repaired;check=facts.receipt;deliveryCheck=reader.receipt;thin=thinCheck(draft,context);thinRepair=thin.thin?'still-thin':'passed';}
    }
   }catch{}
  }

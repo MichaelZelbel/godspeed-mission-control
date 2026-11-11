@@ -27,7 +27,10 @@ export function hermesProvider({executable='hermes',home,cwd,model,provider,sour
     const signal=input.signal;
     if(signal?.aborted)throw new Error('Reply stopped');
     if(input.model||input.effort){const options=await run.options();if(signal?.aborted)throw new Error('Reply stopped');const selected=options.models.find(m=>m.id===(input.model||options.current));if(!selected)throw new Error('This model is not available through your connected account');if(input.effort&&!selected.efforts.includes(input.effort))throw new Error('This effort is not supported by the selected model');}
-    const args=['chat','--query-file','-','--quiet','--oneshot','--max-turns','1','--toolsets','none','--in',cwd,'--source','tool'];
+    // Hermes 0.22 and later refuse the toolset name none (#418, 11 November 2026). no_mcp is Hermes'
+    // own "no MCP servers" sentinel; named alone it leaves no tools on 0.22.7 and 0.23.1, and on the
+    // pinned 2026.9.24 it is an unknown name that, like none, gives no tools.
+    const args=['chat','--query-file','-','--quiet','--oneshot','--max-turns','1','--toolsets','no_mcp','--in',cwd,'--source','tool'];
     if(input.model||model)args.push('--model',input.model||model);if(input.effort)args.push('--reasoning',input.effort);if(provider)args.push('--provider',provider);
     const temporary=[];
     try{
@@ -118,7 +121,7 @@ export function waitingLine(line){
   return !!m[1]||/[^\x00-\x7f]/.test(m[2]);
 }
 export function hermesResponse(output){
-  return output.replace(/\x1b\[[0-9;]*m/g,'').replace(/^Warning: Unknown toolsets: none\r?\n\s*/,'').replace(/^\s*⚠ tirith security scanner enabled but not available[^\n]*\r?\n\s*/,'')
+  return output.replace(/\x1b\[[0-9;]*m/g,'').replace(/^Warning: Unknown toolsets: (?:none|no_mcp)\r?\n\s*/,'').replace(/^\s*⚠ tirith security scanner enabled but not available[^\n]*\r?\n\s*/,'')
     .split(/\r?\n/).filter(line=>!waitingLine(line)).join('\n').trim();
 }
 // What the AI program prints when the account needs its sign-in; the daily connection check's routines source leaves such a failure to the AI's own message.
