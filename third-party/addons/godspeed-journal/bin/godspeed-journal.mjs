@@ -128,11 +128,12 @@ function needTask(ref, opts) {
 }
 
 // A finish read before its start, or before the reopen that made the task open again, would be
-// dropped or undone, so such a time asks instead.
-function finishTime(t) {
+// dropped or undone, so such a time asks instead, in the words of the move: a drop is asked when
+// it was dropped, not when it was finished.
+function finishTime(t, dropped = false) {
   const time = oneTime(new Date(Math.max(Date.parse(t.started), t.reopened ? Date.parse(t.reopened) : 0)));
-  if (time && time < new Date(t.started)) ask(T(s).askBeforeStart(t.title, said(t.started)));
-  if (time && t.reopened && time < new Date(t.reopened)) ask(T(s).askBeforeReopen(t.title, said(t.reopened)));
+  if (time && time < new Date(t.started)) ask(T(s).askBeforeStart(t.title, said(t.started), dropped));
+  if (time && t.reopened && time < new Date(t.reopened)) ask(T(s).askBeforeReopen(t.title, said(t.reopened), dropped));
   return time;
 }
 
@@ -178,7 +179,7 @@ const commands = {
   },
   drop() {
     const t = needTask(pos.join(" "));
-    const time = finishTime(t);
+    const time = finishTime(t, true);
     save({ kind: "drop", task: t.id, words: f.words || "" }, `drop ${t.title}`, time);
     out(`Saved: dropped "${t.title}"${saidAt(time)}`, { ok: true, task: t.id, ...recorded(time) });
   },
