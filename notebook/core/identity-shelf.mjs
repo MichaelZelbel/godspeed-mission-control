@@ -566,7 +566,7 @@ export class IdentityShelf{
     this.rulePlan(t,null,proposed,'',{create:true});
     const now=this.now().getTime(),id='rule-'+randomUUID().slice(0,8);
     for(const [key,p] of this.proposals)if(now-p.at>PROPOSAL_MS)this.proposals.delete(key);
-    this.proposals.set(id,{id,at:now,fields:proposed,similar});
+    this.proposals.set(id,{id,at:now,fields:{...fields},title,similar});
     while(this.proposals.size>PROPOSALS_KEPT)this.proposals.delete(this.proposals.keys().next().value);
     const shown={title,group:proposed.group||'how',line:oneLine(proposed.line)},first=similar[0];
     const say=first?'You already have '+(first.n?'rule '+first.n+', ':'the rule ')+'"'+first.title+'": "'+kindLine(first)+'". Shall I change that rule to say "'+kindLine(shown)+'" instead, add this as a new rule, change the wording, or leave it?'
@@ -582,22 +582,22 @@ export class IdentityShelf{
     if(!ANSWERS.includes(answer))refuse('Answer with add, reword, change or leave.','BAD_ANSWER');
     if(!this.ownerAsked(options.words,{since:proposal.at}))refuse('Pass the owner\'s answer, copied exactly from the message they sent after you showed them the rule.','NOT_ANSWERED');
     const given=fields&&typeof fields==='object'?fields:{};
-    if(answer==='reword'&&!['line','title'].some(k=>given[k]!==undefined&&oneLine(given[k])!==oneLine(proposal.fields[k])))refuse('Pass the new wording in fields: line, and title if the name changes.','BLANK');
+    if(answer==='reword'&&!['line','title'].some(k=>given[k]!==undefined&&oneLine(given[k])!==oneLine(k==='title'?proposal.title:proposal.fields[k])))refuse('Pass the new wording in fields: line, and title if the name changes.','BLANK');
     let result;
     if(answer==='leave')result={saved:false,left:true};
     else if(answer==='add')result=await this.addRule(proposal.fields,options);
-    else if(answer==='reword')result=await this.addRule({...proposal.fields,...given,title:given.title??undefined},options);
+    else if(answer==='reword')result=await this.addRule({...proposal.fields,...given},options);
     else{
       const t=this.target(target);if(t.kind!=='rule')refuse('Name the rule to change as its target, "rule:<name>".','UNKNOWN_TARGET');
       const now=this.read(t.target);
-      result={...await this.save(t.target,{fields:{line:proposal.fields.line,...given}},{...options,expected_hash:now.hash}),target:t.target};
+      result={...await this.save(t.target,{fields:{line:proposal.fields.line,group:proposal.fields.group||'how',...given}},{...options,expected_hash:now.hash}),target:t.target};
     }
     this.proposals.delete(proposal.id);
     return result;
   }
   waitingProposals(){
     const now=this.now().getTime();
-    return [...this.proposals.values()].filter(p=>now-p.at<=PROPOSAL_MS).map(p=>({id:p.id,proposed:{title:p.fields.title,group:p.fields.group||'how',line:oneLine(p.fields.line)},similar:p.similar.map(r=>r.target)}));
+    return [...this.proposals.values()].filter(p=>now-p.at<=PROPOSAL_MS).map(p=>({id:p.id,proposed:{title:p.title,group:p.fields.group||'how',line:oneLine(p.fields.line)},similar:p.similar.map(r=>r.target)}));
   }
   async removeRule(target,options={}){
     const t=this.target(target);if(t.kind!=='rule')refuse('Only a rule can be removed here.','REFUSED');

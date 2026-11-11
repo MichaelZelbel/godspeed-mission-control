@@ -270,17 +270,18 @@ test('ask first: "change the wording" saves the edited text, and "leave it" save
 test('a similar rule brings the offer to change it instead, with new rules added automatically too',async()=>{
   const root=workspace(),{s,tool}=await service(root);
   try{
-    owner(s,'Never delete my files or notes.');
+    owner(s,'Always ask me before you delete my files or notes.');
     const files=ruleFiles(root);
-    const offered=await tool({action:'add_rule',fields:{line:'Delete my files or notes.',group:'never'},words:'Never delete my files or notes.'});
+    const offered=await tool({action:'add_rule',fields:{line:'Ask me before you delete my files or notes.',group:'must'},words:'Always ask me before you delete my files or notes.'});
     assert.equal(offered.error,false,offered.text);assert.equal(offered.value.saved,false);
     assert.equal(offered.value.similar[0].target,'rule:never-delete-without-asking');assert.ok(offered.value.choices.includes('change'));
-    assert.match(offered.value.say,/^You already have rule \d+, "[^"]+": "Never: [^"]+"\. Shall I change that rule to say "Never: Delete my files or notes\." instead/);
+    assert.match(offered.value.say,/^You already have rule \d+, "[^"]+": "Never: [^"]+"\. Shall I change that rule to say "Must: Ask me before you delete my files or notes\." instead/);
     assert.deepEqual(ruleFiles(root),files);
     owner(s,'Change that one.');
     const changed=await tool({action:'add_rule',proposal:offered.value.proposal,answer:'change',target:'rule:never-delete-without-asking',words:'Change that one'});
     assert.equal(changed.error,false,changed.text);
-    assert.match(read(root,'rules','never-delete-without-asking.md'),/^line: "Delete my files or notes\."$/m);
+    const rule=read(root,'rules','never-delete-without-asking.md');
+    assert.match(rule,/^line: "Ask me before you delete my files or notes\."$/m);assert.match(rule,/^group: "?must"?$/m,'saved with the kind it was offered with');
     assert.deepEqual(ruleFiles(root),files,'no second rule');
   }finally{await s.close();}
 });
@@ -316,5 +317,31 @@ test('the chat on the page without tools shows a proposed rule and saves nothing
     assert.equal(r.body.data.reply,'Sure.\n\nI can add this rule: "Never: Phone anyone for me after 9 pm.". Add it as written, change the wording, or leave it?');
     assert.equal(r.body.data.identity_changed,false);assert.deepEqual(ruleFiles(root),files);assert.equal(read(root,'AGENTS.md'),manual);
     assert.match(s.domains.identity.chatContext(),/New rules: Ask first\.[^\n]*\nWaiting for their answer: proposal rule-[0-9a-f]+, "Never: Phone anyone for me after 9 pm\."/);
+  }finally{await s.close();}
+});
+
+test('the chat on the page without tools switches the setting and answers a proposed rule with the owner\'s reply',async()=>{
+  const root=workspace();let changes=[];
+  const provider=async input=>input.kind==='conversation-chat'?{reply:'Sure.',language:'en',identity_changes:changes}:{terms:[]};
+  const s=await createService({root,port:0,provider}),base='http://127.0.0.1:'+s.address.port;
+  const post=async(route,input)=>{const r=await fetch(base+route,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(input)});return {status:r.status,body:await r.json()};};
+  const say=async(message,list)=>{changes=list;const r=await chat(post,{message,page:'identity'});assert.equal(r.status,200,JSON.stringify(r.body));return r.body.data;};
+  const offer=async()=>{
+    await say('Please never phone anyone for me after 9 pm.',[{action:'add_rule',fields:{line:'Phone anyone for me after 9 pm.',group:'never'},source_quote:'never phone anyone for me after 9 pm'}]);
+    return s.domains.identity.waitingProposals().at(-1).id;
+  };
+  try{
+    const set=await say('Please ask me before adding rules.',[{action:'rules_setting',mode:'ask-first',source_quote:'ask me before adding rules'}]);
+    assert.equal(set.reply,'Sure.\n\nNew rules: Ask first.');assert.equal(s.domains.identity.newRules(),'ask-first');
+    const files=ruleFiles(root),manual=read(root,'AGENTS.md');
+    const left=await say('Leave it.',[{action:'add_rule',proposal:await offer(),answer:'leave',source_quote:'Leave it'}]);
+    assert.equal(left.reply,'Sure.\n\nI left it; nothing was added.');assert.equal(left.identity_changed,false);
+    assert.deepEqual(ruleFiles(root),files);assert.equal(read(root,'AGENTS.md'),manual);
+    const yes=await say('Yes, add it.',[{action:'add_rule',proposal:await offer(),answer:'add',source_quote:'add it'}]);
+    assert.equal(yes.identity_changed,true,yes.reply);
+    const added=ruleFiles(root).filter(f=>!files.includes(f));assert.equal(added.length,1);
+    assert.match(read(root,'rules',added[0]),/^line: "Phone anyone for me after 9 pm\."$/m);
+    await say('From now on add rules automatically.',[{action:'rules_setting',mode:'automatic',source_quote:'add rules automatically'}]);
+    assert.equal(s.domains.identity.newRules(),'automatic');
   }finally{await s.close();}
 });
