@@ -147,3 +147,74 @@ test("paused capture saves nothing and asks nothing until it is switched back on
   assert.equal(run(h, "2026-09-22T11:48:00Z", "note", "back again").status, 0);
   assert.equal(files(), before + 1);
 });
+
+const entryFiles = (h) => {
+  const root = path.join(h, "routines", "journal", "entries");
+  return fs.existsSync(root) ? fs.readdirSync(root, { recursive: true }).filter((f) => f.endsWith(".md")).map((f) => [f.replaceAll("\\", "/"), fs.readFileSync(path.join(root, f), "utf8")]) : [];
+};
+
+test("an entry without a time word is saved as now, exactly as before", () => {
+  const h = mcDir();
+  const r = run(h, "2026-11-11T09:30:00.000Z", "start", "Edit video");
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(r.stdout, 'Saved: start "Edit video" (t-20261111-1030-edit-video)\n');
+  const [[file, text]] = entryFiles(h);
+  assert.match(file, /^2026\/11\/11\/103000-start-edit-video\.md$/);
+  assert.match(text, /^---\nat: 2026-11-11T09:30:00\.000Z\nkind: start\n/);
+  assert.doesNotMatch(text, /written:/);
+});
+
+test("several moves told late each get their own time, in the order told", () => {
+  const h = mcDir();
+  run(h, "2026-11-11T07:00:00Z", "start", "Weekly plan");
+  // "I finished the weekly plan an hour ago, then had breakfast, and breakfast is done now."
+  const done = run(h, "2026-11-11T10:00:00Z", "done", "weekly plan", "--when", "an hour ago");
+  assert.equal(done.status, 0, done.stderr);
+  assert.equal(done.stdout, 'Saved: done "Weekly plan", today at 10:00\n');
+  assert.equal(run(h, "2026-11-11T10:00:00Z", "start", "Breakfast", "--when", "an hour ago").status, 0);
+  assert.equal(run(h, "2026-11-11T10:00:00Z", "done", "breakfast").status, 0);
+  const day = JSON.parse(run(h, "2026-11-11T10:01:00Z", "day", "--json").stdout);
+  const plan = day.tasks.find((t) => t.title === "Weekly plan"), breakfast = day.tasks.find((t) => t.title === "Breakfast");
+  assert.deepEqual([plan.ended, plan.minutes], ["2026-11-11T09:00:00.000Z", 120]);
+  assert.deepEqual([breakfast.started, breakfast.ended, breakfast.minutes], ["2026-11-11T09:00:00.000Z", "2026-11-11T10:00:00.000Z", 60]);
+  const backdated = entryFiles(h).filter(([, t]) => t.includes("at: 2026-11-11T09:00:00.000Z"));
+  assert.equal(backdated.length, 2);
+  for (const [, t] of backdated) assert.match(t, /\nwritten: 2026-11-11T10:00:00\.000Z\n/);
+});
+
+test("a whole task told after the fact with a span is saved as its start and its finish", () => {
+  const h = mcDir();
+  const r = run(h, "2026-11-11T14:00:00Z", "start", "Report", "--when", "from 9 to 10:30", "--met", "sent", "--json");
+  assert.equal(r.status, 0, r.stderr);
+  assert.deepEqual(JSON.parse(r.stdout).recorded, { start: "2026-11-11T08:00:00.000Z", end: "2026-11-11T09:30:00.000Z", said: "today at 09:00 - today at 10:30" });
+  assert.deepEqual(JSON.parse(run(h, "2026-11-11T14:01:00Z", "open", "--json").stdout), []);
+  const [t] = JSON.parse(run(h, "2026-11-11T14:01:00Z", "day", "--json").stdout).tasks;
+  assert.deepEqual([t.id, t.state, t.started, t.ended, t.minutes], ["t-20261111-0900-report", "done", "2026-11-11T08:00:00.000Z", "2026-11-11T09:30:00.000Z", 90]);
+});
+
+test("a finish before its start, a time still ahead, or a time that fits two asks once and saves nothing", () => {
+  const h = mcDir();
+  run(h, "2026-11-11T10:00:00Z", "start", "Invoice");
+  const before = run(h, "2026-11-11T10:30:00Z", "done", "--when", "an hour ago");
+  assert.equal(before.status, 2);
+  assert.equal(before.stderr, 'Nothing was saved. Ask them: That is before "Invoice" started (today at 11:00). When did you finish it?\n');
+  assert.equal(JSON.parse(run(h, "2026-11-11T10:31:00Z", "open", "--json").stdout).length, 1);
+
+  const future = run(h, "2026-11-11T14:00:00Z", "note", "x", "--when", "at 23:00", "--json");
+  assert.equal(future.status, 2);
+  assert.deepEqual(JSON.parse(future.stdout), { ok: false, ask: "Today at 23:00 is still ahead. When did it happen?" });
+
+  const which = run(h, "2026-11-11T21:00:00Z", "start", "Run", "--when", "at 9");
+  assert.equal(which.status, 2);
+  assert.match(which.stderr, /^Nothing was saved\. Ask them: Did you mean today at 09:00 or today at 21:00\?\n$/);
+  assert.equal(entryFiles(h).length, 1);
+});
+
+test("a start backdated to yesterday is filed on that day and is still open", () => {
+  const h = mcDir();
+  const r = run(h, "2026-11-11T08:00:00Z", "start", "Taxes", "--when", "gestern Nachmittag");
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /, yesterday at 15:00\n$/);
+  assert.match(entryFiles(h)[0][0], /^2026\/11\/10\/150000-start-taxes\.md$/);
+  assert.deepEqual(JSON.parse(run(h, "2026-11-11T08:01:00Z", "open", "--json").stdout).map((t) => t.started), ["2026-11-10T14:00:00.000Z"]);
+});

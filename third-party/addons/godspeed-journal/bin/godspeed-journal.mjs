@@ -4,11 +4,12 @@
 // What gets decided lives in lib/, where the tests can reach it.
 import fs from "node:fs";
 import { findMissionControl } from "../lib/paths.mjs";
-import { now, localParts, sinceLabel } from "../lib/clock.mjs";
+import { now, localParts, sinceLabel, parseWhen, whenSaid } from "../lib/clock.mjs";
 import { loadSettings, setSetting, DEFAULTS } from "../lib/settings.mjs";
 import { writeEntry, readEntries, taskId } from "../lib/store.mjs";
 import { tasksFrom, openTasks, resolveTask, resolveClosed, resolveLooseEnd, matchItem } from "../lib/tasks.mjs";
 import { dueMessages } from "../lib/tick.mjs";
+import { T } from "../lib/text.mjs";
 import { contextBlock } from "../lib/context.mjs";
 import { checkRecord, recordNeeds } from "../lib/evidence.mjs";
 import { dayReport, weekReport, renderWeek, wordsReport, renderWords } from "../lib/report.mjs";
@@ -46,6 +47,13 @@ const { pos, f, error: argError } = parseArgs(rest);
 const QUIET = cmd === "context" || cmd === "tick";
 
 function die(msg) { if (QUIET) process.exit(0); console.error(msg); process.exit(1); }
+// The time words need the person to say more. Nothing is saved, and the exit status (2, not 1)
+// tells whoever runs the command that this is a question to relay, not an error.
+function ask(question) {
+  if (f.json) console.log(JSON.stringify({ ok: false, ask: question }));
+  else console.error(`Nothing was saved. Ask them: ${question}`);
+  process.exit(2);
+}
 
 if (launched.error) die(launched.error);
 if (argError) die(argError);
@@ -78,11 +86,36 @@ const at = now();
 const entries = () => readEntries(mcDir, s, { days: 8, until: at });
 const out = (human, json) => console.log(f.json ? JSON.stringify(json) : human);
 
-function save(entry, label) {
-  const { file, entry: e } = writeEntry(mcDir, s, { source: f.source || "cli", ...entry }, at);
+// An entry told with a time of its own is filed at that time, and keeps when it was written.
+function save(entry, label, happened = null) {
+  const full = { source: f.source || "cli", ...entry, ...(happened ? { written: at.toISOString() } : {}) };
+  const { file, entry: e } = writeEntry(mcDir, s, full, happened || at);
   syncInBackground(mcDir, `journal: ${label}`, syncMode);
   return { file, e };
 }
+
+const said = (date) => whenSaid(new Date(date).toISOString(), at, s.timezone, s.language);
+
+// --when: the person's own words for when it happened, or null when they gave none.
+function when() {
+  if (f.when === undefined) return null;
+  const r = parseWhen(String(f.when), at, s.timezone);
+  const t = T(s);
+  if (r.ask === "unknown") ask(t.askWhen());
+  if (r.ask === "which") ask(t.askWhich(said(r.options[0]), said(r.options[1])));
+  if (r.ask === "future") ask(t.askFuture(said(r.at)));
+  if (r.ask === "order") ask(t.askOrder());
+  return r;
+}
+
+function oneTime() {
+  const r = when();
+  if (r?.start) die('This takes one time, for example --when "an hour ago". A span such as "from 9 to 10:30" goes on start.');
+  return r?.at || null;
+}
+
+const recorded = (time) => time ? { recorded: { at: time.toISOString(), said: said(time) } } : {};
+const saidAt = (time) => time ? `, ${said(time)}` : "";
 
 function needTask(ref, opts) {
   const t = resolveTask(entries(), ref, opts);
@@ -91,14 +124,30 @@ function needTask(ref, opts) {
   return t;
 }
 
+// A finish read before its start would be dropped, so a time before the start asks instead.
+function finishTime(t) {
+  const time = oneTime();
+  if (time && time < new Date(t.started)) ask(T(s).askBeforeStart(t.title, said(t.started)));
+  return time;
+}
+
 const commands = {
   start() {
     const title = pos.join(" ").trim();
     if (!title) die('Say what you are starting: godspeed-journal start "Edit the video"');
-    const id = taskId(at, s.timezone, title);
-    save({ kind: "start", task: id, title, done_means: f["done-means"], words: f.words || title }, `start ${title}`);
+    const r = when();
+    const started = r?.start || r?.at || null;
+    const id = taskId(started || at, s.timezone, title);
+    save({ kind: "start", task: id, title, done_means: f["done-means"], words: f.words || title }, `start ${title}`, started);
+    // A whole task told after the fact ("wrote the report from 9 to 10:30") is a start and a finish.
+    if (r?.end) {
+      save({ kind: "done", task: id, met: f.met, missed: f.missed, words: f.words || title }, `done ${title}`, r.end);
+      const task = tasksFrom(entries()).find((t) => t.id === id);
+      return out(`Saved: "${title}" from ${said(r.start)} to ${said(r.end)} (${id})`,
+        { ok: true, task, recorded: { start: r.start.toISOString(), end: r.end.toISOString(), said: `${said(r.start)} - ${said(r.end)}` } });
+    }
     const task = tasksFrom(entries()).find((t) => t.id === id);
-    out(`Saved: start "${title}" (${id})`, { ok: true, task });
+    out(`Saved: start "${title}" (${id})${saidAt(started)}`, { ok: true, task, ...recorded(started) });
   },
   define() {
     const t = needTask(pos.join(" "));
@@ -112,18 +161,21 @@ const commands = {
     const words = text || String(f.words || "").trim();
     if (!words) die("A note needs words.");
     const t = f.task ? needTask(f.task) : null;
-    save({ kind: "note", task: t?.id, words }, "note");
-    out("Saved.", { ok: true, task: t?.id || null });
+    const time = oneTime();
+    save({ kind: "note", task: t?.id, words }, "note", time);
+    out(`Saved${saidAt(time)}.`, { ok: true, task: t?.id || null, ...recorded(time) });
   },
   done() {
     const t = needTask(pos.join(" "));
-    save({ kind: "done", task: t.id, met: f.met, missed: f.missed, words: f.words || "" }, `done ${t.title}`);
-    out(`Saved: done "${t.title}"`, { ok: true, task: resolveTask(entries(), t.id, { includeClosed: true }) });
+    const time = finishTime(t);
+    save({ kind: "done", task: t.id, met: f.met, missed: f.missed, words: f.words || "" }, `done ${t.title}`, time);
+    out(`Saved: done "${t.title}"${saidAt(time)}`, { ok: true, task: resolveTask(entries(), t.id, { includeClosed: true }), ...recorded(time) });
   },
   drop() {
     const t = needTask(pos.join(" "));
-    save({ kind: "drop", task: t.id, words: f.words || "" }, `drop ${t.title}`);
-    out(`Saved: dropped "${t.title}"`, { ok: true, task: t.id });
+    const time = finishTime(t);
+    save({ kind: "drop", task: t.id, words: f.words || "" }, `drop ${t.title}`, time);
+    out(`Saved: dropped "${t.title}"${saidAt(time)}`, { ok: true, task: t.id, ...recorded(time) });
   },
   // Undoes a close, most often one the record made that the person says is wrong. The proof it
   // used is remembered for this task, so the next look at the record does not close it again.
@@ -147,8 +199,10 @@ const commands = {
     const unknown = items.find((x) => !x.item);
     if (unknown) die(`"${unknown.said}" is not one of the things "${t.title}" finished without: ${t.missed.join("; ")}.`);
     const met = [...new Set(items.map((x) => x.item))];
-    save({ kind: "met", task: t.id, met, words: f.words || "" }, `met ${t.title}`);
-    out(`Saved: ${met.join("; ")} happened after all ("${t.title}").`, { ok: true, task: tasksFrom(entries()).find((x) => x.id === t.id) });
+    const time = oneTime();
+    if (time && time < new Date(t.ended)) ask(T(s).askBeforeFinish(t.title, said(t.ended)));
+    save({ kind: "met", task: t.id, met, words: f.words || "" }, `met ${t.title}`, time);
+    out(`Saved: ${met.join("; ")} happened after all ("${t.title}")${saidAt(time)}.`, { ok: true, task: tasksFrom(entries()).find((x) => x.id === t.id), ...recorded(time) });
   },
   mark() {
     const [ref, flag] = pos;
