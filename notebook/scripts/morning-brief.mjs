@@ -94,7 +94,7 @@ if(import.meta.url===pathToFileURL(process.argv[1]||'').href){
   const today=process.argv.includes('--today');
   const {text,existing,notices}=await runMorningBrief({root});
   if(text&&(today||!existing))process.stdout.write(text+'\n');
-  for(const line of new Set(notices))console.error(line);
+  for(const line of notices)console.error(line);
   process.exit(0);
  }catch(error){
   // One plain sentence: the routine's script shows it as the run's last line in Settings > Routines.
