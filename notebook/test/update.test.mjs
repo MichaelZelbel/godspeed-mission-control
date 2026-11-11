@@ -1,5 +1,5 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import crypto from 'node:crypto';import {spawn} from 'node:child_process';
-import {compareVersions,findNewest,installedVersion,updateWay,runUpdate,releaseSources,readStatus,ARCHIVE,WINDOWS_SETUP,WINDOWS_FLAGS} from '../core/update.mjs';
+import {compareVersions,findNewest,installedVersion,updateWay,runUpdate,releaseSources,readStatus,settle,ARCHIVE,WINDOWS_SETUP,WINDOWS_FLAGS} from '../core/update.mjs';
 import {VERSION} from '../core/version.mjs';
 
 // godspeed-update and Settings' Update now (#456): which release is newest, whether it is newer,
@@ -175,4 +175,16 @@ test('a Docker server is updated on the server, and a copy no installer made not
   const root=computer('2.0.0-beta.20');
   assert.equal(updateWay({root,env:{},product:silent.product}),'terminal');
   assert.equal(updateWay({root,env:{GODSPEED_HANDOVER:'1'},product:silent.product}),'handover');
+});
+
+test('settling an update start.mjs took over keeps the new stage files, this version and the one before',async()=>{
+  const root=computer('2.0.0-beta.30'),state=path.join(root,'.godspeed','integrated-runtime'),update=path.join(root,'.godspeed','update');
+  for(const old of ['b'.repeat(40),'c'.repeat(40)])fs.mkdirSync(path.join(state,'versions',old),{recursive:true});
+  fs.writeFileSync(path.join(state,'previous-version'),'b'.repeat(40)+'\n');
+  fs.mkdirSync(update,{recursive:true});fs.writeFileSync(path.join(update,'stage.json'),'{"version":"2.0.0-beta.30"}');fs.writeFileSync(path.join(update,'stage-ref'),'candidate/2.0.0-beta.30\n');
+  const settled=await settle({root});
+  assert.equal(settled.state,'updated');assert.equal(settled.to,'2.0.0-beta.30');
+  assert.deepEqual(fs.readdirSync(path.join(state,'versions')).sort(),['a'.repeat(40),'b'.repeat(40)]);
+  assert.equal(fs.readFileSync(path.join(root,'.godspeed','stage-ref'),'utf8'),'candidate/2.0.0-beta.30\n');
+  assert.ok(!fs.existsSync(path.join(update,'stage.json')));
 });

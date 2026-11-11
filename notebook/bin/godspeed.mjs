@@ -45,12 +45,14 @@ if(args[0]==='backup'&&args.includes('--before-update')){
 }
 // godspeed-update: the newest stable release, checked against its release's SHA256SUMS and installed
 // by the installer this computer has (core/update.mjs). It opens no notebook: the installer runs the
-// new version's init. --from-settings is how the Update now button starts it.
+// new version's init. --from-settings is how the Update now button starts it, and --settle [--made
+// COPY] is how start.mjs finishes one it took over (scripts/native-start-script.mjs).
 if(args[0]==='update'){
  const option=name=>{const at=args.indexOf(name);return at>0?args[at+1]:undefined;};
- const known=new Set(['--check','--from-settings','--channel']),words=args.slice(1).filter((word,at,all)=>all[at-1]!=='--channel');
+ const known=new Set(['--check','--from-settings','--channel','--settle','--made']),words=args.slice(1).filter((word,at,all)=>!['--channel','--made'].includes(all[at-1]));
  if(words.some(word=>!known.has(word))||(args.includes('--channel')&&!['stable','testing'].includes(option('--channel'))))throw Error('update [--check] [--channel stable|testing]');
- const {runUpdate}=await import('../core/update.mjs');
+ const {runUpdate,settle}=await import('../core/update.mjs');
+ if(args.includes('--settle')){console.log(JSON.stringify(await settle({root,made:option('--made')}),null,2));process.exit(0);}
  await runUpdate({root,channel:option('--channel')||'stable',check:args.includes('--check'),fromSettings:args.includes('--from-settings')});
  process.exit(0);
 }

@@ -285,3 +285,24 @@ export async function startUpdate({root,env=process.env,product=ownProduct,fetch
   }finally{fs.closeSync(output);}
   return {code:202,started:true,status};
 }
+
+// The last step of an update start.mjs took over (native-start-script.mjs), once the new notebook
+// answers: what the installer does after its own restart worked. The stage files the update was
+// read from take the place of the old ones, the copy made before it stays and older ones go
+// (upgrade-copies.mjs), and of the versions only this one and the one before it stay.
+export async function settle({root,made,now=()=>new Date()}){
+  root=path.resolve(root);
+  const state=runtime(root),current=nativeCommit(root);
+  let previous='';try{previous=fs.readFileSync(path.join(state,'previous-version'),'utf8').trim();}catch{}
+  for(const name of ['stage.json','stage-ref'])if(fs.existsSync(file(root,name)))fs.renameSync(file(root,name),path.join(root,'.godspeed',name));
+  if(made){
+    const {pruneUpgradeCopies}=await import('./upgrade-copies.mjs');
+    try{pruneUpgradeCopies(path.join(state,'backups'),{made});}catch{}
+  }
+  for(const name of fs.readdirSync(path.join(state,'versions')))if(name!==current&&name!==previous)fs.rmSync(path.join(state,'versions',name),{recursive:true,force:true});
+  const runtimeFolder=path.join(state,'runtime');
+  for(const name of fs.existsSync(runtimeFolder)?fs.readdirSync(runtimeFolder):[])if(name.startsWith('.download.'))fs.rmSync(path.join(runtimeFolder,name),{recursive:true,force:true});
+  fs.rmSync(path.join(state,'source'),{recursive:true,force:true});
+  const version=installedVersion({root});
+  return writeStatus(root,{...readStatus(root),state:'updated',to:version,message:'Updated to '+version+'.'},now);
+}

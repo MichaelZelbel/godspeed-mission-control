@@ -431,6 +431,50 @@ prune_update_copies() {
   "$node" "$version/notebook/bin/godspeed.mjs" prune-backups "$state/backups" --made "$backup_dir" >/dev/null 2>&1 \
     || echo "Older backups made before updates could not all be removed. They are in: $state/backups" >&2
 }
+# --- An update started from inside the running notebook -------------------------------
+# The Update now button (notebook/core/update.mjs) runs this installer inside the notebook's own
+# service, without a terminal or the administrator, so it cannot stop and start that service. It
+# runs in two halves instead, around a restart the service makes by itself (start.mjs,
+# scripts/native-start-script.mjs): GODSPEED_UPDATE_MODE=prepare gets the new version ready
+# beside the running one and leaves switch.json; GODSPEED_UPDATE_MODE=switch, run by start.mjs
+# before any notebook starts, makes the copy, switches the folder and the assistant over and
+# leaves trial.json, for start.mjs to try the new notebook. Without the mode nothing changes.
+#
+# The service's own definition stays as it is: rewriting a system unit needs the administrator.
+# PATH is left out of the comparison, since inside the service it is the one the unit gave.
+without_path() { sed -e '/^Environment="PATH=/d' -e 's#<key>PATH</key><string>[^<]*</string>##'; }
+same_definition() {
+  local file want
+  case "$manager" in
+    system) file=$system_unit; want=$(unit_text system) ;;
+    user) file=$user_unit; want=$(unit_text user) ;;
+    launchd) file=$(launch_plist); want=$(plist_text) ;;
+    *) return 1 ;;
+  esac
+  [ "$(without_path < "$file")" = "$(printf '%s\n' "$want" | without_path)" ]
+}
+NEEDS_TERMINAL='This update changes how the computer starts the notebook, which needs the administrator. Run godspeed-update in a terminal.'
+
+# godspeed-update, the command that brings this installation to the newest stable release
+# (notebook/core/update.mjs), in ~/.local/bin, which the shared installer puts on the PATH. It runs
+# whichever version is switched in at the time. One that updates another installation on this
+# computer stays as it is, and this installation's own command is said instead.
+install_update_command() {
+  local command="$HOME/.local/bin/godspeed-update" own
+  own="root=$(printf '%q' "$root")"
+  if [ -e "$command" ] && ! grep -qxF "$own" "$command" 2>/dev/null; then
+    echo "The command godspeed-update on this computer is another installation's. This one updates with: GODSPEED_WORKSPACE='$root' '$node' '$state/versions/'\$(cat '$state/version')'/notebook/bin/godspeed.mjs' update" >&2
+    return 0
+  fi
+  mkdir -p "$HOME/.local/bin" || return 0
+  {
+    printf '#!/usr/bin/env bash\n# godspeed-update: brings the Godspeed Mission Control in this folder to the newest stable release.\n'
+    printf '%s\nnode=%q\n' "$own" "$node"
+    printf 'state="$root/.godspeed/integrated-runtime"\n'
+    printf 'GODSPEED_WORKSPACE=$root exec "$node" "$state/versions/$(cat "$state/version")/notebook/bin/godspeed.mjs" update "$@"\n'
+  } > "$command.new" && chmod 755 "$command.new" && mv "$command.new" "$command"
+}
+
 # Lets a test load the functions above without installing anything.
 if [ "${GODSPEED_INSTALLER_FUNCTIONS_ONLY:-}" = 1 ]; then return 0 2>/dev/null || exit 0; fi
 
@@ -439,6 +483,9 @@ root=${1:?The original installer must supply its Godspeed folder}
 root=$(cd "$root" && pwd -P)
 state="$root/.godspeed/integrated-runtime"
 mkdir -p "$state"
+mode=${GODSPEED_UPDATE_MODE:-}
+case "$mode" in '' | prepare | switch) ;; *) echo "GODSPEED_UPDATE_MODE=$mode is not prepare or switch." >&2; exit 1 ;; esac
+update_dir="$root/.godspeed/update"
 # One exact version, named by the installer that runs this. Until 6 October 2026 it
 # defaulted to the development branch, so two installs a day apart got different code.
 revision=${GODSPEED_PRODUCT_REF:-}
@@ -472,7 +519,11 @@ if [ "${GODSPEED_SKIP_UI:-}" != 1 ] && [ ! -f "$version/notebook/ui/.godspeed-bu
 fi
 
 # What this installation ran with until now stays, unless this run names it (previous_setting).
-for setting in GODSPEED_DEVICE GODSPEED_PORT GODSPEED_MEDIA_ROOT GODSPEED_WEB_PORT GODSPEED_HOST; do
+# Inside the service also its web address, which only the administrator could make again, and
+# the Hermes it used, which a terminal names in its own environment.
+kept="GODSPEED_DEVICE GODSPEED_PORT GODSPEED_MEDIA_ROOT GODSPEED_WEB_PORT GODSPEED_HOST"
+[ -z "$mode" ] || kept="$kept GODSPEED_WEB_ADDRESS HERMES_HOME"
+for setting in $kept; do
   if [ -z "${!setting:-}" ]; then
     value=$(previous_setting "$setting")
     if [ -n "$value" ]; then export "$setting=$value"; fi
@@ -512,7 +563,14 @@ service_group=$(id -gn)
 system_unit="/etc/systemd/system/$SERVICE"
 user_unit="$HOME/.config/systemd/user/$SERVICE"
 manager=none
-if systemd_here; then
+if [ -n "$mode" ]; then
+  # The service that runs this notebook, as its files say: asking for root would wait for a password.
+  if [ -f "$system_unit" ]; then manager=system
+  elif [ -f "$user_unit" ]; then manager=user
+  elif launchd_here && [ -f "$(launch_plist)" ]; then manager=launchd
+  else echo "$NEEDS_TERMINAL" >&2; exit 1
+  fi
+elif systemd_here; then
   if root_available; then manager=system; else manager=user; fi
 elif launchd_here; then
   manager=launchd
@@ -525,7 +583,9 @@ web_host=""
 web_front_kind=""
 web_site=""
 web_problem=""
-if [ -n "${GODSPEED_HOST:-}" ]; then
+if [ -n "$mode" ]; then
+  : # The address it had stays (kept above with the other settings).
+elif [ -n "${GODSPEED_HOST:-}" ]; then
   web_host=$("$node" "$version/notebook/scripts/server-address.mjs" --name "$GODSPEED_HOST") \
     || { echo "GODSPEED_HOST is not a name a web address can have: $GODSPEED_HOST" >&2; exit 1; }
 elif [ "$(uname -s)" = Linux ] && ! desktop_here; then
@@ -550,7 +610,16 @@ fi
 web_address=${web_site:+https://$web_site}
 # The notebook gives this address to an assistant asked for the link to it (core/notebook-address.mjs,
 # the tool get_notebook_link); start.mjs keeps it. Worked out again on every run, never kept from before.
-if [ -n "$web_address" ]; then export GODSPEED_WEB_ADDRESS="$web_address"; else unset GODSPEED_WEB_ADDRESS; fi
+if [ -n "$web_address" ]; then export GODSPEED_WEB_ADDRESS="$web_address"; elif [ -z "$mode" ]; then unset GODSPEED_WEB_ADDRESS; fi
+
+# The first half of an update from inside the service: the new version is ready, nothing else changed.
+if [ "$mode" = prepare ]; then
+  same_definition || { echo "$NEEDS_TERMINAL" >&2; exit 1; }
+  mkdir -p "$update_dir"
+  "$node" -e 'const [file,commit]=process.argv.slice(1),env={};for(const name of ["GODSPEED_PRODUCT_REPOSITORY","GODSPEED_FOOD_TABLE","GODSPEED_SKIP_UI","GODSPEED_INTEGRATED_BESIDE"])if(process.env[name])env[name]=process.env[name];require("fs").writeFileSync(file+".new",JSON.stringify({commit,env})+"\n");require("fs").renameSync(file+".new",file);' "$update_dir/switch.json" "$(basename "$version")"
+  echo "The new version is ready beside the one that runs." >&2
+  exit 0
+fi
 
 # Stop the notebook before its folder and its assistant are changed, and start the one
 # that ran before again if the installation stops before it is switched over.
@@ -559,7 +628,9 @@ switched=""
 trap 'status=$?; if [ "$status" -ne 0 ] && [ -n "$stopped" ] && [ -z "$switched" ]; then echo "The installation stopped, so the notebook that ran before is started again." >&2; if [ "$stopped" = system ]; then as_root systemctl start "$SERVICE" >/dev/null 2>&1 || true; elif [ "$stopped" = launchd ]; then launch_start || true; else systemctl --user start "$SERVICE" >/dev/null 2>&1 || true; fi; fi' EXIT
 # A unit whose file is here is stopped even when it is not running at this moment: one
 # that keeps failing restarts every few seconds and could start in the middle of this.
-if systemd_here; then
+if [ "$mode" = switch ]; then
+  : # start.mjs runs this before it starts any notebook.
+elif systemd_here; then
   if [ "$manager" = system ] && [ -f "$system_unit" ]; then
     if systemctl is-active --quiet "$SERVICE" 2>/dev/null; then stopped=system; fi
     as_root systemctl stop "$SERVICE"
@@ -622,6 +693,13 @@ if [ -n "$before" ] && [ "$before" != "$(basename "$version")" ]; then printf '%
 basename "$version" > "$state/version"
 previous=$(cat "$state/previous-version" 2>/dev/null || true)
 switched=1
+install_update_command
+
+# The second half of an update from inside the service: start.mjs now tries the new notebook.
+if [ "$mode" = switch ]; then
+  "$node" -e 'const [file,from,to,backup]=process.argv.slice(1);require("fs").writeFileSync(file,JSON.stringify({from,to,backup})+"\n");' "$update_dir/trial.json" "$before" "$(basename "$version")" "$backup_dir"
+  exit 0
+fi
 
 started=""
 case "$manager" in
