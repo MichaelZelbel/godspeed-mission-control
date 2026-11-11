@@ -14,7 +14,9 @@ permissions:
   pull-requests: read
 jobs:
   rerun:
-    if: github.event.issue.pull_request && (startsWith(github.event.comment.body, '<!-- archon-review-report -->') || startsWith(github.event.comment.body, 'Loop review: approved') || startsWith(github.event.comment.body, 'Loop review: merging'))
+    # Wrapped in ${{ }} and a block scalar: the plain form broke YAML at the colon in 'Loop review: approved'.
+    if: >-
+      ${{ github.event.issue.pull_request && (startsWith(github.event.comment.body, '<!-- archon-review-report -->') || startsWith(github.event.comment.body, 'Loop review: approved') || startsWith(github.event.comment.body, 'Loop review: merging')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
