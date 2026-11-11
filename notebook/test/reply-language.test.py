@@ -1,7 +1,9 @@
 """godspeed-reply (notebook/assistant-files/godspeed-reply): the reply goes out in the language of the
 message it answers. The plugin's own code runs for real, against a real SQLite store shaped like
 Hermes' (sessions, messages) and a stand-in for the `godspeed-model` command the notebook installs,
-which answers from a table and records every request. Run: python reply-language.test.py [-v]"""
+which answers from a table and records every request. A text it has no answer for, or every request
+while a file "fail-next" is there (which it then counts down), fails as godspeed-model does: exit 1
+and its error words (the file "error.txt") on stderr. Run: python reply-language.test.py [-v]"""
 import importlib.util
 import json
 import os
@@ -22,7 +24,17 @@ with open(os.path.join(here, "requests.jsonl"), "a", encoding="utf-8") as f:
     f.write(json.dumps(request) + "\\n")
 table = json.load(open(os.path.join(here, "table.json"), encoding="utf-8"))
 text = request["prompt"].split("\\n\\n", 1)[1]
-if text not in table:
+fail_next = os.path.join(here, "fail-next")
+failing = os.path.exists(fail_next)
+if failing:
+    left = int(open(fail_next).read()) - 1
+    if left > 0:
+        open(fail_next, "w").write(str(left))
+    else:
+        os.remove(fail_next)
+if failing or text not in table:
+    if os.path.exists(os.path.join(here, "error.txt")):
+        sys.stderr.write(open(os.path.join(here, "error.txt"), encoding="utf-8").read())
     sys.exit(1)
 print(json.dumps({"text": table[text]}))
 """
@@ -85,6 +97,12 @@ class Reply(unittest.TestCase):
         """The stand-in translates `draft` (as the plugin holds it back) into `translation`."""
         self.table[self.mod._protect(draft)[0]] = translation
         self.save_table()
+
+    def fail_next(self, times, error=""):
+        with open(os.path.join(self.model, "fail-next"), "w") as f:
+            f.write(str(times))
+        with open(os.path.join(self.model, "error.txt"), "w", encoding="utf-8") as f:
+            f.write(error)
 
     def requests(self):
         try:
@@ -190,13 +208,13 @@ class Reply(unittest.TestCase):
         self.assertNotIn("Ich habe", sent)
         # What the model was shown held the protected parts back.
         self.assertNotIn("example.com", self.requests()[0]["prompt"])
-        # A translation that drops a link, or changes a number, never goes out.
+        # A translation that drops a link, or changes a number, never goes out: the draft does, as written.
         for n, bad in enumerate((english.replace(marks["https://example.com/a?b=1"], "the link"),
                                  english.replace("14 tasks", "15 tasks"))):
             self.table[held] = bad
             self.save_table()
             self.say("bad%d" % n, JOURNAL[0])
-            self.assertEqual(self.send("bad%d" % n, draft), draft)
+            self.assertEqual(self.send("bad%d" % n, draft), self.mod.NOTICE["en"] + "\n\n" + draft)
 
     def test_a_cron_delivery_is_unchanged(self):
         self.say("job", JOURNAL[0], source="cron")
@@ -211,18 +229,87 @@ class Reply(unittest.TestCase):
         self.assertEqual(self.requests(), [])
         self.assertEqual({e["result"] for e in self.log()}, {"scheduled"})
 
-    def test_a_failed_correction_sends_the_original(self):
+    def test_a_correction_that_fails_once_is_tried_again(self):
+        self.teach(DRAFT, SENT)
+        self.fail_next(1, "Error: The connection was reset\n")
+        self.say("r", JOURNAL[0])
+        self.assertEqual(self.send("r", DRAFT), SENT)
+        self.assertEqual(len(self.requests()), 2)
+        line = self.log()[-1]
+        self.assertEqual(line["result"], "corrected")
+        self.assertEqual(line["failed_tries"], ["request-failed: Error: The connection was reset"])
+
+    def test_a_correction_that_fails_twice_says_so_in_the_message_language_above_the_draft(self):
+        self.teach(DRAFT, SENT)
+        self.fail_next(2, "The AI usage limit of this connection is reached.\n")
         self.say("f", JOURNAL[0])
-        self.assertEqual(self.send("f", DRAFT), DRAFT)  # the stand-in has no answer: it exits 1
-        self.assertTrue(self.log()[-1]["result"].startswith("correction-failed"))
+        sent = self.send("f", DRAFT)
+        self.assertEqual(sent, self.mod.NOTICE["en"] + "\n\n" + DRAFT)
+        self.assertEqual(self.mod.language_of(self.mod.NOTICE["en"]), "en")
+        self.assertEqual(len(self.requests()), 2)
+        line = self.log()[-1]
+        self.assertEqual(line["result"], "correction-failed:request-failed: The AI usage limit of this connection is reached.")
+        self.assertEqual(len(line["failed_tries"]), 2)
+        self.assertEqual(line["sent"], sent)
+        # The same for a German message whose draft is English, in German.
+        english_draft = "I saved that. What does done look like for you?"
+        self.say("f2", GERMAN_MESSAGE)
+        self.fail_next(2)
+        sent = self.send("f2", english_draft)
+        self.assertEqual(sent, self.mod.NOTICE["de"] + "\n\n" + english_draft)
+        self.assertEqual(self.mod.language_of(self.mod.NOTICE["de"]), "de")
+        self.assertEqual(self.log()[-1]["result"], "correction-failed:request-failed")
+
+    def test_every_kind_of_failed_correction_gets_the_notice(self):
         self.teach(DRAFT + " ", DRAFT + " ")  # an answer that is still German
         self.say("g", JOURNAL[1])
-        self.assertEqual(self.send("g", DRAFT + " "), DRAFT + " ")
+        self.assertEqual(self.send("g", DRAFT + " "), self.mod.NOTICE["en"] + "\n\n" + DRAFT + " ")
         self.assertEqual(self.log()[-1]["result"], "correction-failed:still-the-wrong-language")
+        self.assertEqual(len(self.requests()), 2)
         os.remove(os.path.join(self.plugin, "model-command.txt"))  # no door at all
         self.say("h", JOURNAL[2])
-        self.assertEqual(self.send("h", DRAFT + "  "), DRAFT + "  ")
+        self.assertEqual(self.send("h", DRAFT + "  "), self.mod.NOTICE["en"] + "\n\n" + DRAFT + "  ")
         self.assertEqual(self.log()[-1]["result"], "correction-failed:no-model-command")
+
+    def test_the_log_keeps_the_error_words_without_keys_or_tokens(self):
+        os.environ["GODSPEED_SCENARIO_AI_KEY"] = "plain-words-key-value"
+        error = ("Error: 401 from https://ai.example/v1?key=abc123 with Authorization: \"Bearer qwertyuiop\" "
+                 "(api_key=sk-live-0123456789abcdef, bot 123456789:AAHdqTcvCH1vGWJxfSeofSAs0K5PALDsaw, "
+                 "id 9f8e7d6c5b4a39281706f5e4d3c2b1a0) for plain-words-key-value; the key: is invalid\n")
+        self.fail_next(2, error)
+        self.say("e", JOURNAL[0])
+        self.send("e", DRAFT)
+        logged = self.log()[-1]["result"]
+        for secret in ("abc123", "qwertyuiop", "sk-live", "AAHdqTcv", "9f8e7d6c5b4a", "plain-words-key-value"):
+            self.assertNotIn(secret, logged)
+        for kept in ("Error: 401 from https://ai.example/v1", "the key: is invalid", "[redacted]"):
+            self.assertIn(kept, logged)
+        # Only the end of a long error is kept.
+        self.fail_next(2, "x " * 1000 + "the last words\n")
+        self.say("e2", JOURNAL[1])
+        self.send("e2", DRAFT)
+        logged = self.log()[-1]["result"]
+        self.assertTrue(logged.endswith("the last words"))
+        self.assertLessEqual(len(logged), len("correction-failed:request-failed: ") + self.mod.ERROR_CHARS)
+
+    def test_a_message_after_context_in_the_other_language_gets_a_reply_in_its_own(self):
+        english_draft = "I saved that. What does done look like for you?"
+        german_sent = "Ich habe das gespeichert. Woran merkst du, dass es fertig ist?"
+        self.teach(DRAFT, SENT)
+        self.teach(english_draft, german_sent)
+        # English after German context: the model kept writing German.
+        for message in (GERMAN_MESSAGE, "Ich habe die Tests fertig und schreibe jetzt die Notizen"):
+            self.say("de-then-en", message)
+            self.assertEqual(self.send("de-then-en", DRAFT), DRAFT)
+        self.say("de-then-en", JOURNAL[0])
+        self.assertEqual(self.send("de-then-en", DRAFT), SENT)
+        # German after English context: the model kept writing English.
+        for message in JOURNAL[:2]:
+            self.say("en-then-de", message)
+            self.assertEqual(self.send("en-then-de", english_draft), english_draft)
+        self.say("en-then-de", GERMAN_MESSAGE)
+        self.assertEqual(self.send("en-then-de", english_draft), german_sent)
+        self.assertEqual(len(self.requests()), 2)
 
     def test_a_second_step_added_by_the_documented_call_runs_after_the_language_step(self):
         self.teach(DRAFT, SENT)
