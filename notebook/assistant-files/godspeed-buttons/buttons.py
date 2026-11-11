@@ -240,18 +240,12 @@ class YesNoButtons:
                 kwargs["message_thread_id"] = int(route["threadId"])
             message = await app.bot.send_message(**kwargs)
         except (Exception, asyncio.CancelledError) as error:
-            # Whatever stopped it (the keyboard, the route, Telegram, a shutdown during the wait):
-            # the question was taken out of the reply, so it must still arrive. Plain words are
-            # enough, since a typed yes or no answers it everywhere.
             try:
                 self.discard(tokens)
             except Exception:
                 pass
             if chat is not None:
-                try:
-                    await app.bot.send_message(chat_id=chat, text=words["question"])
-                except Exception:
-                    pass
+                await self.unsent(app, chat, words)
             if isinstance(error, asyncio.CancelledError):
                 raise
             return False
@@ -264,6 +258,15 @@ class YesNoButtons:
             except Exception:
                 pass
         return True
+
+    async def unsent(self, app, chat, words):
+        """The message with buttons did not go out (the keyboard, the route, Telegram, a shutdown during
+        the wait). The question was taken out of the reply, so it must still arrive: plain words are
+        enough, since a typed yes or no answers it everywhere."""
+        try:
+            await app.bot.send_message(chat_id=chat, text=words["question"])
+        except Exception:
+            pass
 
     # ---- a tap ---------------------------------------------------------------------------------
     async def edit(self, context, message, text, reply_markup=None):
