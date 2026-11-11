@@ -4703,6 +4703,49 @@ else
   bad 'the local Hermes fixture loses its revealed release through a symlink'
 fi
 
+# ==================================================================== held-by-a-claim (#282)
+section 'held-by-a-claim'
+HB=$TMP/held
+HB_CLAIM=world/claims/the-book--interview-stance--2026-11-19.md
+HB_INT="Answer Podcast X's interview invitation about the book"
+HB_NOTE='Send the launch note to Jane Doe'
+held_work() { # <held_by of the interview step>
+  printf '[{"id":"W-20261119-01","KEY":"apply-answer-interview","held_by":"%s"},{"id":"W-20261119-02","KEY":"apply-launch-note","held_by":""}]\n' "$1"
+}
+held_good() {
+  rm -rf "$1"; mkdir -p "$1"
+  printf '%s: postponed interview touching the-book, until the-book--status--2026-09-01 ends\n' "$HB_CLAIM" >"$1/hold.txt"
+  printf '%s: postponed, steps: interview, touching the-book; the person said "not yet"; until the-book--status--2026-09-01: still current\n' "$HB_CLAIM" >"$1/day1-holds.txt"
+  printf 'HELD 1: %s (held by %s)\n\n### 2. %s\nTOUCHES: jane-doe\n' "$HB_INT" "$HB_CLAIM" "$HB_NOTE" >"$1/day1-moves.md"
+  printf 'held by %s: postponed\n\n### 1. %s\n' "$HB_CLAIM" "$HB_INT" >"$1/day1-held.md"
+  printf '# Decision\n\n## For you today\nNothing today: a step on today'"'"'s card is one you declined or postponed (%s), so the card is held back.\n' "$HB_CLAIM" >"$1/day1-decision.md"
+  printf 'held: move 1 "%s" by %s\nheld: W-20261119-01 "%s" by %s\ndecided 2026-11-20: decision.md\n' "$HB_INT" "$HB_CLAIM" "$HB_INT" "$HB_CLAIM" >"$1/day1-decide.txt"
+  held_work "$HB_CLAIM" >"$1/day1-work.json"
+  printf 'nothing is held\n' >"$1/day2-holds.txt"
+  printf '### 1. %s\nTOUCHES: the-book\n\n### 2. %s\nTOUCHES: jane-doe\n' "$HB_INT" "$HB_NOTE" >"$1/day2-moves.md"
+  printf '# Decision\n\n## For you today\nship-list card: 1. %s; 2. %s\n' "$HB_INT" "$HB_NOTE" >"$1/day2-decision.md"
+  printf 'decided 2026-11-21: decision.md\n' >"$1/day2-decide.txt"
+  held_work '' >"$1/day2-work.json"
+}
+held_good "$HB/good"
+passes 'a postponed step held on day 1 and back once its condition ended' held-by-a-claim "$HB/good" 'came back on 2026-11-21'
+copy "$HB/good" "$HB/day1-shows"; printf '### 1. %s\nTOUCHES: the-book\n\n### 2. %s\n' "$HB_INT" "$HB_NOTE" >"$HB/day1-shows/day1-moves.md"
+refuses 'day 1 still proposes the postponed interview' held-by-a-claim "$HB/day1-shows" 'still proposes the interview'
+copy "$HB/good" "$HB/day1-card"; printf '# Decision\n\n## For you today\nship-list card: 1. %s\n' "$HB_INT" >"$HB/day1-card/day1-decision.md"
+refuses 'day 1 card still asks about the interview' held-by-a-claim "$HB/day1-card" "card still asks about the interview"
+copy "$HB/good" "$HB/no-claim-in-log"; printf 'held: move 1 "%s"\ndecided 2026-11-20: decision.md\n' "$HB_INT" >"$HB/no-claim-in-log/day1-decide.txt"
+refuses 'a decision output that never names the claim' held-by-a-claim "$HB/no-claim-in-log" 'does not name the claim that held the interview move'
+copy "$HB/good" "$HB/card-not-held"; held_work '' >"$HB/card-not-held/day1-work.json"
+refuses 'a carried step the register does not list as held' held-by-a-claim "$HB/card-not-held" 'lists the interview step as held by []'
+copy "$HB/good" "$HB/no-jane"; printf 'HELD 1: %s (held by %s)\n' "$HB_INT" "$HB_CLAIM" >"$HB/no-jane/day1-moves.md"
+refuses 'the Jane Doe move held too' held-by-a-claim "$HB/no-jane" 'Jane Doe move is missing on day 1'
+copy "$HB/good" "$HB/day2-held"; cp "$HB/good/day1-moves.md" "$HB/day2-held/day2-moves.md"
+refuses 'day 2 still holds the interview back' held-by-a-claim "$HB/day2-held" 'still holds the interview move back'
+copy "$HB/good" "$HB/day2-log"; printf 'held: W-20261119-01 "%s" by %s\ndecided 2026-11-21: decision.md\n' "$HB_INT" "$HB_CLAIM" >"$HB/day2-log/day2-decide.txt"
+refuses 'day 2 output still holds a step' held-by-a-claim "$HB/day2-log" 'day 2 still holds a step'
+copy "$HB/good" "$HB/no-hold"; printf 'ERROR: --until names no claim in world/claims/\n' >"$HB/no-hold/hold.txt"
+refuses 'a hold mc-holds never wrote' held-by-a-claim "$HB/no-hold" 'wrote no claim'
+
 # ============================================================ every one of them, the same shape
 section 'every script'
 BASH_SCENARIOS=(settings-on-install night-tidy voice update-keeps-everything
@@ -4711,7 +4754,7 @@ BASH_SCENARIOS=(settings-on-install night-tidy voice update-keeps-everything
   no-video-skills-by-default update-removes-only-unchanged-skills briefing-breaks-a-rule telegram-language
   brief-asked-in-chat talk-prep-honest no-question-he-cannot-judge plain-yes what-was-that connection-check
   first-day phone-health-days incomplete-day phone-goes-quiet mail-count talk-on-talk-day
-  chat-tidy-at-night disk-filling missed-routine deadline-closes-itself
+  chat-tidy-at-night disk-filling missed-routine deadline-closes-itself held-by-a-claim
   workouts-from-hevy day-becomes-facts hermes-update-rollback)
 for file in scenario-lib.sh numbers-lib.sh server-lib.sh "${BASH_SCENARIOS[@]/%/.sh}" test-scenarios.sh; do
   if bash -n "$ROOT/scenarios/$file" 2>/dev/null; then
