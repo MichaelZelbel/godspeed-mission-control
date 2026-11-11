@@ -22,12 +22,31 @@ const clean=words=>String(words??'').toLowerCase().replace(/[‘’]/g,"'").repl
 // Anything longer or different is neither: the message then reaches the model as an ordinary one.
 export const classifyAnswer=words=>{const w=clean(words);return YES.has(w)?'yes':NO.has(w)?'no':null;};
 
-const CODE=/\/(?:approve|reject)\b|\b(?:approve|reject|genehmig\w*)\s+\S*\d/i;
+// Words that ask the owner to type something to answer (#191): `/approve`; a yes word or "reply",
+// "answer" or "respond" ("with") followed by a code: a step id or other UUID, a token of six or more with a letter and a digit, six or more
+// digits with no currency sign or word before or after them, or an all-letter hex word set off by
+// Markdown, quotes or `#`; "reply ... code <value>"; "send/text/type (me) the code <value>";
+// "enter the code <value> here / in the chat", the value bare or wrapped in Markdown or quotes (a
+// full stop or other sentence mark after the value ends the sentence, so "Here is the map" is not
+// "here"); "yes"/"no"/"ok" plus a code, quoted or after "reply/answer/say/type/send".
+// "approve facade", "approve Q3-budget", "genehmigt 250000 Euro", "approve $25000000", a commit in
+// a link, a pickup code to enter at a machine, a door code to text to someone else, "Enter the code
+// 4711. Here is the map." or "Invoice no 123456" ask for nothing.
+const REPLY_CODES=[/(?:^|[^\w/])\/(?:approve|reject)\b/i,
+ /\b(?:approve|reject|genehmig\w*|ablehn\w*|(?:reply|answer|respond)(?:\s+with)?)[^\w\n.!?,;]{1,6}(?:(?:step-)?[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}|(?=[a-z]*\d)(?=\d*[a-z])[a-z0-9]{6,}|(?<![$€£]\s?)\d{6,}(?!\s*(?:€|\$|£|%|euro|eur|usd|dollar|chf|gbp))|(?<=[`*"'#][^\w\n]{0,5})[a-f]{6,}|[a-f]{6,}(?=[`*"']))(?![\w-])/i,
+ /(?:\breply\b[^.!?\n]{0,40}?|\b(?:send|text|type)(?:\s+(?:me|us|back|in))*\s+(?:the|this|that)\s+)\b(?:code|id)\b[^\w\n.!?,;]{0,6}[\w-]*\d/i,
+ /\benter\s+(?:the|this|that)\s+(?:code|id)\b[^\w\n.!?,;]{0,6}[\w-]*\d[\w-]*[`*"'“”‘’]{0,3}\s+(?:here|in\s+(?:the|this|your)\s+(?:chat|reply|answer))\b/i,
+ /(?:\b(?:reply|answer|respond|say|type|send|write|text)\b[^.!?\n]{0,20}?\s|[`*"'“‘])(?:yes|no|ok|ja|nein)[^\w\n.!?,;]{1,6}(?:(?:step-)?[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}|(?=[a-z]*\d)(?=\d*[a-z])[a-z0-9]{6,}|\d{6,})(?![\w-])/i];
+export const asksForCode=text=>REPLY_CODES.some(code=>code.test(text));
+// A waiting step's own words stay as strict as before #191 (main's pattern, unchanged): any "/approve"; "approve", "reject" or "genehmig…" followed by
+// any token holding a digit is refused, short codes included ("Reply approve 4711 to go ahead."). Refusing
+// a step text only makes the assistant reword it, so this check may be stricter than the routine check.
+const STEP_CODE=/\/(?:approve|reject)\b|\b(?:approve|reject|genehmig\w*)\s+\S*\d/i;
 const hexCode=text=>(text.match(/[0-9a-f]{6,}/gi)||[]).some(run=>/\d/.test(run)&&/[a-f]/i.test(run));
 export function checkStepText(label,text,id){
  if(typeof text!=='string'||!text.trim())throw Error('Say what the '+label+' is.');
  if(text.length>300||/[\r\n]/.test(text))throw Error('The '+label+' must be one line of at most 300 characters.');
- if(CODE.test(text)||hexCode(text)||text.includes(id))throw Error('The '+label+' must not hold a code to type; the owner answers with a plain yes or no.');
+ if(asksForCode(text)||STEP_CODE.test(text)||hexCode(text)||text.includes(id))throw Error('The '+label+' must not hold a code to type; the owner answers with a plain yes or no.');
 }
 
 export function readStep(record){
@@ -106,7 +125,9 @@ export function openStep(store,{about,question,yes,no,by,chat,job,quietly,subjec
 
 // A step is answerable once the code that sent its question has said so (`sent_at`). Three senders do:
 // openStep, for a question it writes into the notebook chat itself; a background delivery record that
-// names the step (background-reports.mjs, via stampDelivered, together with its receipt); and the Telegram sender, for a direct
+// names the step, once Hermes delivered it: through the gateway's delivery wrapper, or, for a run the
+// notebook started itself, the notebook's own look at Hermes' executions ledger (background-reports.mjs,
+// certifyRoutineRuns), each via stampDelivered together with its receipt; and the Telegram sender, for a direct
 // reply it sent that holds the words of a step opened during that very turn (stampReply). The asker's
 // own say-so never counts, and a question printed once certifies one step, however many ask the same words.
 // The time a question or a later message reached the chat, never equal to one already recorded, so a

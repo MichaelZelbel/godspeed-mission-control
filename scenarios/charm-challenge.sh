@@ -72,7 +72,7 @@
 #   vent-2-reply.txt .. vent-5-reply.txt, no-2-reply.txt .. no-5-reply.txt     the other four
 #   vents.txt                    one line per vent and per "no": vent|no<TAB>n<TAB>started<TAB>ended (epoch seconds)
 #   commands.txt                 the assistant's command log since the first vent
-#   charm-log.txt                the Charm plugin's log lines (logs/godspeed-charm.log) since the first vent
+#   charm-log.txt                the Charm judgement's audit log lines (logs/godspeed-charm.log) since the first vent
 #   status-after-no.txt / card-after-no.txt / brief-after-no.txt / shelf-after-no.txt
 #   status-fourth-day.txt / card-fourth-day.txt / brief-fourth-day.txt    three days later
 #   brief-run.json               what the notebook said when it ran its routines that day
@@ -86,6 +86,8 @@
 SCENARIO=charm-challenge
 # shellcheck source=scenarios/scenario-lib.sh
 . "$(dirname "$0")/scenario-lib.sh"
+# shellcheck source=scenarios/charm-log.sh
+. "$(dirname "$0")/charm-log.sh"
 scenario_arguments "$@"
 
 DAYS=21
@@ -261,10 +263,11 @@ the_brief_runs() {
 # exist before, and each conversation gets its own "no". The first one keeps the names the scenario
 # always had (vent-reply.txt, no-reply.txt).
 five_vents() {
-  local n vent started ended name_vent name_no first_started log log_before
+  local n vent started ended name_vent name_no first_started log log_cursor
   : >"$EVIDENCE/vents.txt"
   log="$HERMES/logs/godspeed-charm.log"
-  log_before=$(wc -l <"$log" 2>/dev/null || true)
+  log_cursor=$(charm_log_cursor "$log") ||
+    fail "the installed panel Charm judgement could not inspect evidence at $log before five vents"
   first_started=$(date +%s)
   for n in 1 2 3 4 5; do
     case $n in
@@ -292,7 +295,7 @@ five_vents() {
   done
   assistant_commands "$EVIDENCE/commands.txt" "$((first_started - 5))"
   sed 's/^/  command | /' "$EVIDENCE/commands.txt" >&2
-  tail -n "+$((${log_before:-0} + 1))" "$log" >"$EVIDENCE/charm-log.txt" 2>/dev/null || : >"$EVIDENCE/charm-log.txt"
+  retain_new_charm_log "$log" "$log_cursor" "$EVIDENCE/charm-log.txt"
   sed 's/^/  charm-log | /' "$EVIDENCE/charm-log.txt" >&2
 }
 

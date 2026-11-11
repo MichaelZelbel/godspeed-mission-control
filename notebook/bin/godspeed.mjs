@@ -14,7 +14,7 @@ import {assistantProfiles,selectAssistantProfile} from '../core/assistant-files.
 import {installSkillTree} from '../core/packaged-skills.mjs';
 import {removeRetiredSkills} from '../core/retired-skills.mjs';
 import {planWorkspaceMove,moveWorkspace,undoWorkspaceMove} from '../core/workspace-move.mjs';
-import {installStarter,adoptedMissionControl,addArchiveLine} from '../core/starter-workspace.mjs';
+import {installStarter,adoptedMissionControl,addArchiveLine,addStepLine} from '../core/starter-workspace.mjs';
 import {machineDevice} from '../core/device-id.mjs';
 import {listHabits,initializeHabitProgress} from '../../third-party/addons/godspeed-coach/lib/habits.mjs';
 import {localParts,now as clockNow} from '../../third-party/addons/godspeed-coach/lib/clock.mjs';
@@ -63,6 +63,7 @@ if(command==='init'){
   const adopted=adoptedMissionControl(root);
   installStarter(root);
   addArchiveLine(root,store.state);
+  addStepLine(root,store.state);
   const addons=fileURLToPath(new URL('../../third-party/addons/',import.meta.url));
   const recipes=fileURLToPath(new URL('../recipes/',import.meta.url));
   // mc-video is not in this list any more (31 October 2026): the recipes for making and finishing

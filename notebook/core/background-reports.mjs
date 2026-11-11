@@ -1,12 +1,13 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import {DatabaseSync} from 'node:sqlite';
 import {hash} from './records/store.mjs';
 import {keepAiFailure,KEPT_FILE} from './ai-failures.mjs';
 import {ruleRefusals} from './briefing-cut.mjs';
 import {queueNotice} from './notices.mjs';
 import {deliveryFor} from './notebook-routines.mjs';
-import {telegramInHermes} from './starting-routines.mjs';
-import {stampDelivered,stepsForWords} from './waiting-steps.mjs';
+import {finalReply,telegramInHermes} from './starting-routines.mjs';
+import {asksForCode,stampDelivered,stepsForWords,STEP_QUESTION_MAX_AGE_MS} from './waiting-steps.mjs';
 
 // BACKGROUND WORK TELLS THE OWNER IN THE CHAT'S VOICE, AND THE CHAT KNOWS IT (4 November 2026, #198).
 //
@@ -22,7 +23,6 @@ import {stampDelivered,stepsForWords} from './waiting-steps.mjs';
 const GUIDANCE_CHARS=20000,REPORT_CHARS=4000;
 export const REPORT_CONTRACT="Write the message you send your owner in your chat with them about what happened below. guidance is what you read before every reply in that chat: write exactly as you write there, in your own voice. Say what it is about from zero, in everyday words, about one thing, and end with the one plain step it needs from them, or none. Use only the facts given. Never put an id, a code or a command in it, and never ask them to type one. If the facts are about more than one thing, write one report for each. Return JSON {reports:[{about,text}]}.";
 export const REPORT_PREFIX='background-report-';
-const CODE_REPLY=/\b(?:approve|reject)\s+[0-9a-f]{6,}\b/i;
 
 const readText=file=>{try{return fs.readFileSync(file,'utf8').slice(0,GUIDANCE_CHARS);}catch{return null;}};
 
@@ -38,7 +38,7 @@ function parseReports(raw){
 }
 
 function refused(text,{step,voice}){
- return !text||text.length>REPORT_CHARS||ruleRefusals(text,voice).length>0||CODE_REPLY.test(text)||(step&&text.includes(step));
+ return !text||text.length>REPORT_CHARS||ruleRefusals(text,voice).length>0||asksForCode(text)||(step&&text.includes(step));
 }
 
 // The words for a hand-over: {reports:[{about,text}], written:'assistant'|'fallback'}. Anything that
@@ -71,7 +71,8 @@ export const recordReport=(store,message)=>store.saveAsync('conversation_message
 // Called only after Hermes delivered `words` to the owner. `receipts` are the ids of the delivery
 // records the caller recorded for this delivery; a caller that did not record them (a routine
 // script recorded its own words earlier) gets the oldest Telegram record of exactly those words
-// not yet delivered. A receipt is used once, and certifies the complete step set its record names.
+// not yet delivered. The notebook's own look after a routine run (certifyRoutineRuns) passes the
+// receipt it found. A receipt is used once, and certifies the complete step set its record names.
 // Returns the ids of the receipts used; none when nothing matched.
 export function delivered(store,words,receipts=[]){
  const open=r=>r.delivered_to==='telegram'&&!r.delivered_at;
@@ -82,6 +83,48 @@ export function delivered(store,words,receipts=[]){
   stampDelivered(store,record.report?.steps||[record.report?.step].filter(Boolean),record);
  }
  return found.map(r=>r.id);
+}
+
+// A ROUTINE THE NOTEBOOK RUNS ITSELF CERTIFIES ITS QUESTIONS TOO (11 November 2026, #262, #372).
+// The gateway's delivery wrapper certifies the runs it delivers, but the notebook's own `hermes cron
+// run` and `hermes cron tick` never load it, so a question from such a run reached Telegram without
+// its Yes/No buttons and a plain yes answered nothing. Now, after each of those runs, the notebook
+// reads Hermes' executions ledger (cron/executions.db, one row per run, either command): a run Hermes
+// says it delivered to a Telegram lane, finished in the last day, certifies the open Telegram record
+// of exactly that run's words (its cron/output file) that its script wrote during that very run. A
+// failed, queued or suppressed delivery certifies nothing, and an older delivered run cannot certify
+// a newer copy of the same words. A ledger that cannot be read certifies nothing, as before.
+const FILE_CLOCK_MS=2000,JOB_ID=/^[A-Za-z0-9_-]+$/;
+const telegramLane=job=>String(job?.deliver||'').split(',').map(p=>p.trim()).some(part=>part==='telegram'||part.startsWith('telegram:')||(!part||part==='origin')&&job?.origin?.platform==='telegram');
+function deliveredRuns(home){
+ const file=path.join(home,'cron','executions.db');if(!fs.existsSync(file))return [];
+ let db;
+ try{
+  db=new DatabaseSync(file,{readOnly:true});
+  return db.prepare("select job_id, started_at, finished_at from executions where status = 'completed' and delivery_outcome = 'delivered'").all();
+ }catch{return [];}finally{try{db?.close();}catch{}}
+}
+function runWords(home,jobId,from,to){
+ const folder=path.join(home,'cron','output',jobId);let names;
+ try{names=fs.readdirSync(folder).filter(n=>n.endsWith('.md')).sort().reverse();}catch{return null;}
+ for(const name of names){
+  const file=path.join(folder,name),at=fs.statSync(file).mtimeMs;
+  if(at>=from&&at<=to)return finalReply(fs.readFileSync(file,'utf8'));
+ }
+ return null;
+}
+export function certifyRoutineRuns(store,{home,jobs,now=Date.now()}){
+ const byId=new Map(jobs.map(j=>[j.id,j])),used=[];
+ const runs=deliveredRuns(home).map(r=>({job:byId.get(r.job_id),from:Date.parse(r.started_at)-FILE_CLOCK_MS,finished:Date.parse(r.finished_at)}))
+  .filter(r=>r.job&&JOB_ID.test(r.job.id)&&telegramLane(r.job)&&Number.isFinite(r.from)&&Number.isFinite(r.finished)&&now-r.finished<=STEP_QUESTION_MAX_AGE_MS)
+  .sort((a,b)=>a.finished-b.finished);
+ for(const {job,from,finished} of runs){
+  const to=finished+FILE_CLOCK_MS,words=runWords(home,job.id,from,to);if(!words)continue;
+  const inside=r=>{const at=Date.parse(r.sent_at);return at>=from&&at<=to;};
+  const receipt=store.list('conversation_messages').filter(r=>r.delivered_to==='telegram'&&!r.delivered_at&&r.content===words&&inside(r)).sort((a,b)=>a.sent_at.localeCompare(b.sent_at))[0];
+  if(receipt)used.push(...delivered(store,words,[receipt.id]));
+ }
+ return used;
 }
 
 // The words to say for a fresh notice. Reports a writing split off wait as notices of their own.
@@ -96,7 +139,12 @@ export async function sayNotice(store,{notice,home,provider=null,guidance}){
 // A routine's own words, recorded as they were printed. A job made in Settings delivers where its
 // own job says, which the Hermes hook passes as delivery. A list of deliveries is recorded together
 // or not at all. Resolves (a list: returns) to the ids of the records, the receipts of their delivery.
+// Words that ask the owner to type a code to answer are refused, not recorded (#191): every caller
+// sends only what was recorded, so the refusal keeps them out of the chat, and the routine's run
+// keeps the reason. A yes is asked for with a waiting step (godspeed-step open), answered in words.
+export const ASKS_FOR_CODE='Not sent: these words ask your owner to type a code to answer. Ask for a yes with godspeed-step open, which they answer with a plain yes or no.';
 export function recordRoutine(store,{routine,text,home,delivery}){
+ if(asksForCode(text))throw Error(ASKS_FOR_CODE);
  const steps=stepsForWords(store,text);
  const message=d=>({text,about:routine,routine,steps,written:'routine',delivery:d});
  if(!Array.isArray(delivery))return recordReport(store,message(delivery||reportDelivery(store,home))).then(r=>[r.id]);
