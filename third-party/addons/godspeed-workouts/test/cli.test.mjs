@@ -14,9 +14,9 @@ import { KEY, workout } from "./fakes/hevy.mjs";
 
 const BIN = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "bin", "godspeed-workouts.mjs");
 // The command as its own process. Not spawnSync: the pretend Hevy answers from this process.
-function cmd(args, { input = "", env }) {
+function cmd(args, { input = "", env, cwd }) {
   return new Promise((resolve) => {
-    const c = spawn(process.execPath, [BIN, ...args], { env, stdio: ["pipe", "pipe", "pipe"] });
+    const c = spawn(process.execPath, [BIN, ...args], { env, cwd, stdio: ["pipe", "pipe", "pipe"] });
     let stdout = "", stderr = "";
     c.stdout.on("data", (d) => { stdout += d; });
     c.stderr.on("data", (d) => { stderr += d; });
@@ -73,6 +73,39 @@ test("connect takes the key from standard input, checks it with Hevy, and never 
     for (const out of [ok.stdout, ok.stderr, st.stdout, fs.readFileSync(w.paths.log, "utf8"), fs.readFileSync(w.paths.state, "utf8")]) assert.ok(!out.includes(KEY));
     if (process.platform !== "win32") assert.equal(fs.statSync(w.paths.hevy).mode & 0o777, 0o600);
   } finally { await w.close(); }
+});
+
+test("connect while Hevy does not answer saves no key, says so, and starts no run", async () => {
+  const w = await world({ key: null });
+  try {
+    w.hevy.fh.down = true;
+    const env = { ...process.env, ...w.env, GODSPEED_WORKOUTS_STATE: w.paths.root };
+    delete env.HEVY_API_KEY;
+    const r = await cmd(["connect"], { input: `${KEY}\n`, env });
+    assert.equal(r.status, 1);
+    assert.match(r.stderr, /Hevy did not answer just now \(Hevy answered 500\), so the key was not saved\. Try again in a while: godspeed-workouts connect/);
+    assert.doesNotMatch(r.stdout + r.stderr, /Hevy key saved|Run:/);
+    assert.equal(fs.existsSync(w.paths.hevy), false, "no key file is written");
+    assert.equal(fs.existsSync(w.paths.state), false, "no run started");
+    const st = await cmd(["status"], { env });
+    assert.match(st.stdout, /Hevy key: none \(godspeed-workouts connect\)/);
+  } finally { await w.close(); }
+});
+
+test("setup with a new key while Hevy does not answer keeps the earlier key and still finishes", async () => {
+  const w = await world();
+  const home = tmp("home");
+  try {
+    const before = fs.readFileSync(w.paths.hevy);
+    w.hevy.fh.down = true;
+    const env = { ...process.env, ...w.env, GODSPEED_WORKOUTS_STATE: w.paths.root, GODSPEED_WORKOUTS_APP: path.join(home, "app"), HOME: home, HEVY_API_KEY: "11111111-1111-4111-8111-111111111111" };
+    const r = await cmd(["setup", "--no-run", "--no-schedule"], { env, cwd: home });
+    assert.equal(r.status, 0, r.stderr);
+    assert.match(r.stdout, /Hevy did not answer just now \(Hevy answered 500\), so the key was not kept\. Try again in a while: godspeed-workouts connect/);
+    assert.doesNotMatch(r.stdout, /Hevy key saved|checked at the first run|No Hevy key yet/);
+    assert.match(r.stdout, /^Command: /m);
+    assert.deepEqual(fs.readFileSync(w.paths.hevy), before, "the earlier key stays byte for byte");
+  } finally { await w.close(); fs.rmSync(home, { recursive: true, force: true }); }
 });
 
 test("help names every command", async () => {
