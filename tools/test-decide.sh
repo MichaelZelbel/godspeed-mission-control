@@ -245,6 +245,23 @@ contains "  a day still inside the hold: work.txt keeps the marker" "$(grep W-HE
 contains "  as holds.txt for that day says" "$(cat "$G/routines/next-action/2026-10-10/holds.txt")" "$HOLD: postponed"
 fresh; dated "$T" >/dev/null
 contains "  a scheduled run (no --date) marks by today, as before" "$(grep W-HELD-01 "$G/routines/next-action/$T/work.txt" 2>/dev/null)" "held by $HOLD"
+
+echo "-- a dry run for a day ahead lists Open work by that day, as its work.txt does (#432)"
+openwork() { printf '%s\n' "$1" | sed -n '/^Open work/,/^$/p' | grep W-HELD-01; }
+registry() { (cd "$G" && find goals forecasts work world -type f 2>/dev/null | LC_ALL=C sort | xargs -r sha256sum); }
+fresh; BEFORE="$(registry)"
+OUT="$(dated 2026-10-12 --date 2026-10-12 --dry-run)"
+contains "  (the step is listed under Open work)" "$(openwork "$OUT")" "W-HELD-01"
+missing "  a day after the hold ended: Open work shows the step free" "$(openwork "$OUT")" "held by"
+check "  and says what work.txt for that day says" "$(openwork "$OUT")" "$(grep W-HELD-01 "$G/routines/next-action/2026-10-12/work.txt")"
+OUT="$(dated 2026-10-10 --date 2026-10-10 --dry-run)"
+contains "  a day still inside the hold: Open work keeps the marker" "$(openwork "$OUT")" "held by $HOLD"
+check "  and says what work.txt for that day says" "$(openwork "$OUT")" "$(grep W-HELD-01 "$G/routines/next-action/2026-10-10/work.txt")"
+OUT="$(dated "$T" --dry-run)"
+contains "  a dry run without --date marks by today, as before" "$(openwork "$OUT")" "held by $HOLD"
+check "  the dry runs changed nothing in the registry" "$(registry)" "$BEFORE"
+contains "  (the registry was there to compare)" "$BEFORE" "work/W-HELD-01.md"
+check "  and decided nothing" "$(ls "$G/routines/next-action/2026-10-12/decision.md" 2>/dev/null)" ""
 fresh
 rm -rf "$G/world" "$G/work"
 
