@@ -252,6 +252,7 @@ fi
 # goals in eight of their forty minutes. So the count is checked by a program, and a run that
 # falls short is sent back ONCE with the exact gaps, in the same folder, to finish them. A second
 # shortfall is written into the record as it stands, never hidden.
+SHORT=0
 if [ -s "$RUNDIR/decision.md" ] && [ -f "$HERE/check-moves.js" ]; then
   GAPS="$(GODSPEED_ROOT="$GODSPEED" "$NODE" "$HERE/check-moves.js" --godspeed "$GODSPEED" --date "$TODAY" 2>&1)"
   if [ $? -ne 0 ]; then
@@ -269,8 +270,7 @@ sections of decision.md, and run the check again until it prints OK. Your final 
     bash "$RUNNER" next-action --godspeed "$GODSPEED" --cwd "$GODSPEED" ${EXTRA:+--prompt-file "$EXTRA"} --prompt "$FIX" \
       --timeout "$TIMEOUT" --out "$RUNDIR/answer-moves.txt" \
       --allowed-tools "Bash Read Grep Glob Write Edit WebSearch WebFetch" || true
-    GAPS="$(GODSPEED_ROOT="$GODSPEED" "$NODE" "$HERE/check-moves.js" --godspeed "$GODSPEED" --date "$TODAY" 2>&1)" \
-      || printf '\n## Moves check\n\nStill short after one return run:\n\n%s\n' "$GAPS" >> "$RUNDIR/decision.md"
+    GODSPEED_ROOT="$GODSPEED" "$NODE" "$HERE/check-moves.js" --godspeed "$GODSPEED" --date "$TODAY" >/dev/null 2>&1 || SHORT=1
   fi
 fi
 
@@ -282,6 +282,16 @@ fi
 if [ -s "$RUNDIR/moves.md" ] && [ -f "$HERE/holds.js" ]; then
   GODSPEED_ROOT="$GODSPEED" "$NODE" "$HERE/holds.js" strip --run "$RUNDIR" --date "$TODAY" --godspeed "$GODSPEED" 2>&1 \
     || HOLDS_UNREAD="${HOLDS_UNREAD:-the moves the person declined or postponed may still be in moves.md and on the card of the day (holds.js strip failed, see above)}"
+fi
+
+# THE SHORTFALL IS WRITTEN AFTER THE HELD MOVES ARE OUT (2026-11-11, #405). A held move still there
+# after the return run is a gap of the check above, but by now strip has taken it out of moves.md
+# and off the card. Read before strip, the record named it as one of the person's moves, counted it
+# in their PERSON line and told the run to take it out. So the check is read again here, on the
+# moves that are left: it names only what is truly still short, and nothing when nothing is.
+if [ "$SHORT" -eq 1 ]; then
+  GAPS="$(GODSPEED_ROOT="$GODSPEED" "$NODE" "$HERE/check-moves.js" --godspeed "$GODSPEED" --date "$TODAY" 2>&1)" \
+    || printf '\n## Moves check\n\nStill short after one return run:\n\n%s\n' "$GAPS" >> "$RUNDIR/decision.md"
 fi
 
 # THE BETS GO ON THE CARDS BY PROGRAM, NOT BY THE RUN (2026-09-30). Each move's BET in moves.md is
