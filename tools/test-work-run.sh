@@ -226,7 +226,8 @@ hold_on_words() {
   contains "  but kept private by its own words" "$OUT" "$id kept private, not published: its own words say it is private"
   check "  and the publish command was never called" "$([ -e "$TMP/publish-argv.txt" ] && echo called || echo never)" "never"
 }
-pub_file "Do not publish this: which flat suits us" pub-dnp --publish yes >/dev/null
+hw file --what "Do not publish this: which flat suits us" --done-when "the comparison is written in research/pub-dnp.md" \
+  --check "$NODE $TMP/bin/check-written.js research/pub-dnp.md --min-words 50" --key pub-dnp --publish yes --source test >/dev/null
 hold_on_words "$(id_of pub-dnp)" "WHAT"
 hw file --what "Compare the two flats" --done-when "the comparison is written in research/pub-never.md; never publish it" \
   --check "$NODE $TMP/bin/check-written.js research/pub-never.md --min-words 50" --key pub-never --publish yes --source test >/dev/null
