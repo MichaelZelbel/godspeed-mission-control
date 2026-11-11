@@ -9,7 +9,9 @@
 # setup and the withdrawn list carried from the public stage (beta), the add-ons pinned as
 # third-party/addons/sources.json holds them at the commit, and the server image the commit's own
 # v2-sha-<commit> (or, when CI built none for it because no image input changed, the newest
-# first-parent ancestor's within 50, named on stderr). A same-repository pull-request scenario gets
+# first-parent ancestor's within 50, named on stderr, but only when nothing the server image carries
+# changed in between: see IMAGE_INPUTS below, and a commit that did change one and has no image of
+# its own fails, naming the missing image, instead of proving an ancestor's code). A same-repository pull-request scenario gets
 # GODSPEED_SCENARIO_PR_IMAGE, the selected PR-head image's immutable digest; it never falls back.
 # That proof supports exactly one public-stage server edition: a second edition is rejected without
 # fallback.
@@ -33,6 +35,12 @@ usage() { say "usage: bash scenarios/stage-for-run.sh <stage or ''> <commit> <fo
 stage=$1; commit=$2; folder=$3
 case $commit in *[!0-9a-f]* | '') usage ;; esac
 [ ${#commit} -eq 40 ] || usage
+# The paths whose change makes CI build a server image: the paths filter of v2-integrated.yml (the
+# workflow that publishes v2-sha-<commit> from main), less its own file and docker/test, which the
+# image does not carry. scenarios/test-scenarios.sh keeps the two lists equal. The image copies the
+# whole repository, but main builds one only for these, so a change anywhere else (skills/,
+# scenarios/, docs) is a listed limit: it never gets an image of its own and is not proved by one.
+IMAGE_INPUTS='^(notebook/|third-party/addons/godspeed-coach/|third-party/addons/godspeed-charm/|docker/full-candidate/|docker/rootfs/|install-godspeed\.sh$|install-godspeed-dev\.sh$)'
 pr_image=${GODSPEED_SCENARIO_PR_IMAGE:-}
 if [ -n "$pr_image" ]; then
   [[ $pr_image =~ ^ghcr\.io/[a-z0-9][a-z0-9._/-]*@sha256:[0-9a-f]{64}$ ]] || { say "The PR scenario image is not an immutable ghcr.io digest: $pr_image"; exit 2; }
@@ -102,6 +110,13 @@ fi
 if [ -n "$pr_image" ]; then
   say "The server image is PR head ${commit:0:7}'s immutable image."
 elif [ "$chosen" != "$commit" ]; then
+  changed_inputs=$(git -C "$REPO" diff --name-only "$chosen" "$commit" | grep -E "$IMAGE_INPUTS" | head -5 || true)
+  if [ -n "$changed_inputs" ]; then
+    say "No server image v2-sha-$commit exists, and the files the server image carries changed since the newest image (${chosen:0:7}'s), among them: $(printf '%s' "$changed_inputs" | tr '
+' ' ')"
+    say "Proving this commit on ${chosen:0:7}'s image would prove the older code. Wait for the image of $commit to be published (the Integrated Godspeed v2 run on main), or start scenarios.yml with the pull request number to build one."
+    exit 1
+  fi
   say "CI built no server image for ${commit:0:7} (no image input changed); the server image is ${chosen:0:7}'s, the newest commit before it that has one."
 else
   say "The server image is ${commit:0:7}'s own."
