@@ -231,6 +231,21 @@ OUT="$(D="$D2" RUN="$G/routines/next-action/$D2"; GODSPEED_RUNNER=claude FAKE_MO
 contains "  the next day, with the book out of beta, the interview move is back" "$(cat "$G/routines/next-action/$D2/moves.md")" "### 1. Answer Podcast X"
 missing "  and nothing is held" "$OUT" "held:"
 contains "  holds.txt says so" "$(cat "$G/routines/next-action/$D2/holds.txt")" "nothing is held"
+
+echo "-- a day decided ahead with --date: work.txt marks held by that day, not by today (#406)"
+# The hold ended on $D2 (it held through 2026-10-10); today is 2026-10-09, before it ended.
+T=2026-10-09
+dated() { local day="$1"; shift; GODSPEED_TODAY="$T" GODSPEED_RUNNER=claude FAKE_MODE=holds FAKE_APPLY=W-HELD-01 FAKE_RUN="$G/routines/next-action/$day" FAKE_CALLS="$CALLS" bash "$HERE/mc-decide" --godspeed "$G" "$@" --timeout 60 2>&1; }
+fresh; dated 2026-10-12 --date 2026-10-12 >/dev/null
+missing "  a day after the hold ended: work.txt shows the step free" "$(grep W-HELD-01 "$G/routines/next-action/2026-10-12/work.txt" 2>/dev/null)" "held by"
+contains "  (the step is in work.txt)" "$(cat "$G/routines/next-action/2026-10-12/work.txt" 2>/dev/null)" "W-HELD-01"
+contains "  as holds.txt for that day says" "$(cat "$G/routines/next-action/2026-10-12/holds.txt")" "nothing is held"
+fresh; dated 2026-10-10 --date 2026-10-10 >/dev/null
+contains "  a day still inside the hold: work.txt keeps the marker" "$(grep W-HELD-01 "$G/routines/next-action/2026-10-10/work.txt" 2>/dev/null)" "held by $HOLD"
+contains "  as holds.txt for that day says" "$(cat "$G/routines/next-action/2026-10-10/holds.txt")" "$HOLD: postponed"
+fresh; dated "$T" >/dev/null
+contains "  a scheduled run (no --date) marks by today, as before" "$(grep W-HELD-01 "$G/routines/next-action/$T/work.txt" 2>/dev/null)" "held by $HOLD"
+fresh
 rm -rf "$G/world" "$G/work"
 
 echo

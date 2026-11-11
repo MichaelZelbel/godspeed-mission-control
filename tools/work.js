@@ -787,7 +787,11 @@ cmds.next = (a) => {
 };
 cmds.list = (a) => {
   const rows = (flag(a, 'all') ? S.all() : S.all().filter(c => OPEN.includes(c.f.STATUS))).filter(c => (!a.goal || c.f.GOAL === a.goal) && (!a.status || c.f.STATUS === a.status));
-  const heldId = (c) => { const h = heldOf(c); return h ? h.id : ''; };
+  // Held is decided for the day being listed: --date D (mc-decide --date D hands its run this list,
+  // and a hold that has ended by D no longer holds that day's steps, #406), today without it.
+  if (a.date !== undefined && !L.isoDate(a.date)) die(`--date ${a.date} is not a date (YYYY-MM-DD)`);
+  const d = a.date || today();
+  const heldId = (c) => { const h = heldOf(c, d); return h ? h.id : ''; };
   if (flag(a, 'json')) { say(JSON.stringify(rows.map(c => Object.assign({ id: c.id, log: c.log }, c.f, { held_by: heldId(c) })), null, 2)); return; }
   if (!rows.length) { say('no open work'); return; }
   for (const c of rows) say(`${c.f.STATUS.padEnd(10)} ${(c.f.KIND || 'do').padEnd(5)} ${c.id.padEnd(16)} ${(c.f.OWNER || '').padEnd(10)} ${c.f.WHAT}` + (c.f.NEEDS !== 'none' ? `  needs ${c.f.NEEDS}` : '') + (c.f.GOAL ? `  [${c.f.GOAL}]` : '') + (c.f.CARD ? `  {${c.f.CARD}}` : '') + (heldId(c) ? `  held by ${heldId(c)}` : ''));
@@ -874,7 +878,8 @@ cmds.help = () => say(`mc-work: dispatched, attempted and verified are three dif
   sweep --goal <id> [--cancel|--stale] --reason "..."   a goal changed; its work is re-planned
   tick [--date D] [--json]           dead leases, due retries, stale plans, waiting on you over two weeks
   link <id> --url https://...        the page a finished piece became; the note and the card hand it over
-  next [--goal G] [--json] | list [--all] [--goal G] [--status S] [--json] | show <id> | check`);
+  next [--goal G] [--json] | list [--all] [--goal G] [--status S] [--date D] [--json] | show <id> | check
+                                     list marks a step held by what holds it on that day (--date D), today without it`);
 
 const a = L.parseArgs(process.argv.slice(2));
 L.alias(a, 'approved-by-him', 'approved-by');

@@ -506,6 +506,17 @@ check "an unknown connection's self check does not fail the check" "$rc" "0"
 check "  it is said once, naming the file" "$(printf '%s\n' "$out" | grep -c 'due/reconnect-slack.md: self check skipped: ')" "1"
 contains "  and names the connection" "$out" '"Slack" is not one of'
 contains "  and the other reminder still closes itself" "$out" "closed itself: Reconnect Telegram too"
+# The list says what the check does for it: no promise that it closes itself, and the unknown name (#428).
+oldc reconnect-frob "Reconnect the frobnicator" frobnicator
+oldc reconnect-tg-later "Reconnect Telegram later" telegram
+out="$(GODSPEED_TODAY=2026-10-13 GODSPEED_ROOT="$SK" node "$HERE/due.js" --godspeed "$SK")"
+check "  the list does not promise an unknown connection closes itself" "$(printf '%s\n' "$out" | grep -c 'finds frobnicator working')" "0"
+contains "  the list says it stays open until you close it" "$out" "stays open until you close it:  mc-due done reconnect-frob"
+contains "  and names the connection the daily check does not know" "$out" '"frobnicator" is not a connection the daily connection check knows'
+contains "  a known connection still closes itself in the list" "$out" "closes itself when the daily connection check finds Telegram working"
+out="$(GODSPEED_TODAY=2026-10-13 GODSPEED_ROOT="$SK" node "$HERE/due.js" --godspeed "$SK" check reconnect-frob)"
+contains "  and check says the same: it stays open until you close it" "$out" "It stays open until you close it"
+check "  check promises no closing either" "$(printf '%s\n' "$out" | grep -c 'closed itself')" "0"
 s add reconnect --title "Reconnect Telegram" --from 2026-10-10 --to 2026-10-30 --done-when "works" --cost "no messages" --self-check connection-ok --self-check-arg telegram >/dev/null
 rec() { printf '{"at":"x","day":"%s","connections":{"telegram":%s}}' "$1" "$2" > "$SC/.godspeed/connection-check.json"; }
 out="$(GODSPEED_TODAY=2026-10-12 s check reconnect)"; contains "no record yet: not yet, with why" "$out" "has not looked at Telegram yet"
