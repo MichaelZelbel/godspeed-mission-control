@@ -140,6 +140,10 @@ const cards=fs.existsSync(path.join(folder,'work'))?fs.readdirSync(path.join(fol
 const card=name=>{const text=fs.readFileSync(path.join(folder,'work',name),'utf8');const field=key=>(text.match(new RegExp(`^${key}:\\s*(.+)$`,'mi'))||[])[1]?.trim()||'';return {name,text,field};};
 const verified=c=>c.field('ID')===c.name.replace(/\.md$/,'')&&c.field('STATUS')==='verified'&&/VERIFIED check passed/i.test(c.text);
 const slug=value=>value.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
+// A title as the brief says it (owner, PR #449: by its title, without file paths): the title, or the
+// title without the place its file goes ("... at work/emergency-kit-checklist.md"), when at least
+// four words of it are left that the goal does not already say.
+const titles=title=>{const plain=title.replace(/\s+(?:at|in|into|to|under|as|from)\s+(?=\S*[\\/])\S+/gi,' ').replace(/\s+/g,' ').trim().replace(/[\s,;:.]+$/,'');return plain!==title&&plain.split(' ').length>=4&&!goal.toLowerCase().includes(plain.toLowerCase())?[title,plain]:[title];};
 const own=cards.includes(`${workId}.md`)?card(`${workId}.md`):null;
 let named;
 if(own&&verified(own)){
@@ -147,13 +151,13 @@ if(own&&verified(own)){
  if(field('KEY')!==workKey||field('SOURCE')!=='first-day-scenario')fail('the selected emergency-kit work card does not retain the scenario filing');
  const title=field('WHAT'),result=field('RESULT');
  if(!title||!result)fail('the verified work card lacks its title or result');
- named=[[title,result]];
+ named=[[...titles(title),result]];
  const declared=(text.match(/^DONE WHEN:\s*A practical household emergency-kit checklist is written at (work\/(?:[A-Za-z0-9][A-Za-z0-9._-]*\/)*[A-Za-z0-9][A-Za-z0-9._-]*\.md) and ready for a reader\s*$/mi)||[])[1];
  if(!declared||declared!==resultFile)fail('the selected emergency-kit work card does not name its result file');
  const artifact=path.join(folder,declared);
  if(!fs.existsSync(artifact)||!fs.statSync(artifact).isFile())fail('the result artifact is not a practical emergency-kit checklist');
  const practical=fs.readFileSync(artifact,'utf8');
- if(!/[-*]\s*(?:\[[ xX]\]|\d+[.)])/.test(practical)||!/\b(?:\d+\s*(?:lit(?:re|er)s?|days?|hours?|batter(?:y|ies)|ml|kg)|at least \d+)\b/i.test(practical)||!['water','food','first aid|medication','light|power','communication|document'].every(group=>new RegExp(group,'i').test(practical))||/\b(?:TODO|TBD|placeholder|outline only)\b/i.test(practical))fail('the result artifact is not a practical emergency-kit checklist');
+ if(!/[-*]\s*(?:\[[ xX]\]|\d+[.)])|^[ \t]*[-*][ \t]+\S/m.test(practical)||!/\b(?:\d+\s*(?:lit(?:re|er)s?|days?|hours?|batter(?:y|ies)|ml|kg)|at least \d+)\b/i.test(practical)||!['water','food','first aid|medication','light|power','communication|document'].every(group=>new RegExp(group,'i').test(practical))||/\b(?:TODO|TBD|placeholder|outline only)\b/i.test(practical))fail('the result artifact is not a practical emergency-kit checklist');
 }else{
  const goalSlug=slug(goal);
  const kept=c=>(`${c.field('CHECK')} ${c.field('DONE WHEN')}`.match(/\b((?:work|goals|ideas)\/[A-Za-z0-9._\/-]+\.md)\b/)||[])[1];
@@ -164,7 +168,7 @@ if(own&&verified(own)){
  if(!chosen.length)fail('the selected emergency-kit work card is not verified by its recorded check, and no other work for the goal was verified with its result kept');
  // Any of them may be the work the brief tells: by its title or result, the file it wrote, or what
  // that file is (a goal's playbook, its ideas), since a brief written by the model uses its own words.
- named=chosen.map(c=>{const file=kept(c),kind=file.startsWith('goals/playbooks/')?'playbook':file.startsWith('ideas/')?'idea':null;return [c.field('WHAT'),c.field('RESULT'),file,...(kind?[kind]:[])];});
+ named=chosen.map(c=>{const file=kept(c),kind=file.startsWith('goals/playbooks/')?'playbook':file.startsWith('ideas/')?'idea':null;return [...titles(c.field('WHAT')),c.field('RESULT'),file,...(kind?[kind]:[])];});
 }
 const brief=normalized(read('brief.txt'));
 // A brief the model wrote names the goal in its own words (planner, 9 November 2026): the title, or
