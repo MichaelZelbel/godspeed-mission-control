@@ -37,6 +37,26 @@ scenario_arguments "$@"
 
 LABELS='s1 s3-ask s3 s2 s4 s5'
 
+# The install keeps "Journal check-ins" only while one of the journal's check-ins is switched on
+# (notebook-routines.mjs, journalWanted), and all are off on a fresh install. The owner switches one
+# on the way the chat does, through the notebook's journal command (native-personal.mjs, addonCommand);
+# the nudge speaks only about a task he started, and he started none, so situation 5 still expects silence.
+server_switches_journal_on() {
+  in_server_as_hermes node --input-type=module -e '
+import {addonCommand} from "/opt/godspeed/kit/notebook/core/native-personal.mjs";
+import {Store} from "/opt/godspeed/kit/notebook/core/records/store.mjs";
+import {machineDevice} from "/opt/godspeed/kit/notebook/core/device-id.mjs";
+const root=process.env.GODSPEED_WORKSPACE,store=new Store(root,{device:machineDevice(root).id});
+addonCommand(store,{addon:"journal",args:["config","set","nudge.enabled","true"]});
+' >&2 || fail "the installed journal would not switch its check-ins on"
+  wait_for 300 'the installed notebook to make the routine "Journal check-ins"' server_has_journal_routine ||
+    fail 'the installed notebook made no routine "Journal check-ins" within 300 s after the journal'"'"'s check-ins were switched on'
+}
+# shellcheck disable=SC2317,SC2329  # asked by wait_for
+server_has_journal_routine() {
+  server_table jobs "$EVIDENCE/.jobs-journal.json" 2>/dev/null && [ -n "$(server_job_id 'Journal check-ins' "$EVIDENCE/.jobs-journal.json")" ]
+}
+
 act() {
   need_the_ai_key "the owner's plain \"approve\" answered in the chat"
   fresh_evidence
@@ -50,6 +70,7 @@ act() {
   printf '{"goal":"Sleep eight hours a night","timezone":"Etc/UTC","delivery":"telegram"}\n' >"$EVIDENCE/.setup.json"
   [ "$(server_post /api/setup "$EVIDENCE/.setup.json" "$EVIDENCE/setup.json")" = 200 ] || fail 'the installed notebook would not make routines for the fixture goal'
   server_settle_gateway
+  server_switches_journal_on
   server_pause_all_jobs
   server_install_asker
   server_table jobs "$EVIDENCE/routines.json"
