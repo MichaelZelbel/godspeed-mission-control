@@ -1,6 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import {fileURLToPath} from 'node:url';import {execFileSync} from 'node:child_process';
 import {Store} from '../core/records/store.mjs';import {QueryService} from '../core/query.mjs';import {chatContext} from '../core/chat-context.mjs';
-import {queueNotice,readNotices} from '../core/notices.mjs';import {openStep,heard} from '../core/waiting-steps.mjs';import {sayNotice,recordRoutine,delivered,followUpFailed,REPORT_CONTRACT,FOLLOW_UP_CONTRACT,GIVEN_UP_CONTRACT} from '../core/background-reports.mjs';
+import {queueNotice,readNotices} from '../core/notices.mjs';import {openStep,heard} from '../core/waiting-steps.mjs';import {sayNotice,recordRoutine,delivered,followUpFailed,ASKS_FOR_CODE,REPORT_CONTRACT,FOLLOW_UP_CONTRACT,GIVEN_UP_CONTRACT} from '../core/background-reports.mjs';
 
 // BACKGROUND REPORTS (4 November 2026, #198): a notice is written with the chat's guidance, recorded
 // where the chat reads it, and the chat's next reply is told about it.
@@ -425,4 +425,57 @@ test('on an adopted mission control a waiting step\'s question is delivered by t
  const fresh=new Store(root,{device:'pc'});
  assert.ok(fresh.get('approvals',opened.id).sent_at,'certified once Hermes delivered it');
  const answer=heard(fresh,{chat:'telegram',words:'yes'});assert.equal(answer.kind,'answered');assert.equal(fresh.get('approvals',opened.id).status,'approved');
+});
+
+// A ROUTINE NEVER ASKS FOR A CODE (11 November 2026, #191).
+const CODED=['Reply "approve aad2598f" to restart it, or "reject aad2598f" to cancel it.','Reply `approve 1ad58918` to let the proposed plan go ahead.','/approve 59f1d506','The old programs can still send messages. If you want me to stop them, send the code 336d5142.',
+ 'Reply **approve** `1ad58918` to go on.','Reply approve **aad2598f** to go on.','Reply "approve deadbeef" to go on.','To go on: approve #59f1d506','Antworte mit "genehmige 59f1d506".',
+ 'If you want me to stop them, type the code 336d5142.','Text me the code 336d5142.','Enter the code 336d5142 here to stop them.',
+ 'Reply approve 583920 to go on.','Reply approve 5839201 to go on.','Reply with 583920 to go on.','Enter the code `336d5142` here to stop them.','Enter the code **336d5142** in the chat.',
+ 'Reply "yes 721943a1" to go ahead.','To go ahead, answer with step-721943a1-0d01-4cc1-a3a5-18ba608e90ef','Type `no 583920` to stop.','Respond with 721943a1. Then I start.','Enter the code "336d5142" here.'];
+const PROSE=['I\'d approve of an earlier bedtime: you slept well every night you were in bed by ten.','The fix is in https://github.com/MichaelZelbel/godspeed-mission-control/commit/9227a0b4 and ran fine overnight.','The board will approve 2026\'s budget on Friday.',
+ 'Enter the pickup code 583920 at the machine.','Text her the door code 4711.','Finance will approve Q3-budget on Monday.',
+ 'The council will approve facade repairs on Friday.','Die Bank genehmigt 250000 Euro.','Approve: decade-old pipes need work.',
+ 'The board will approve $25000000 for the bridge.','The board will approve €2500000 today.','Please reply with your thoughts.','Enter the code `4711` at the door.',
+ 'Your parcel is in locker 12. Enter the code 583920. Here is the address: Main St 4.','At the gate, enter the code 4711. Here is the map.','Enter the code 4711! Here we go.',
+ 'Model no A12345 is back in stock.','Invoice no 123456 was paid.','She said yes. 583920 people watched.','Reply to Anna. The code 4711 opens the gate.'];
+const A_CODE=/approve|reject|code [0-9a-f]/i;
+
+test('a routine\'s words that ask for a code to type are refused and recorded nowhere, for one destination or several',async t=>{
+ const {store,home}=setup(t),{main}=await import('../scripts/background-report.mjs');
+ for(const text of CODED){
+  assert.throws(()=>recordRoutine(store,{routine:'R',text,home,delivery:'telegram'}),{message:ASKS_FOR_CODE},text);
+  assert.throws(()=>recordRoutine(store,{routine:'R',text,home,delivery:['notebook','telegram']}),{message:ASKS_FOR_CODE},text);
+  await assert.rejects(main(['record','--godspeed',store.root,'--home',home,'--routine','R','--receipts'],text),{message:ASKS_FOR_CODE},text);
+ }
+ assert.deepEqual(records(new Store(store.root,{device:'pc'})),[]);
+ assert.doesNotMatch(ASKS_FOR_CODE,/\d/);
+});
+
+test('a routine\'s ordinary words, even with "approve" in prose or a commit in a link, are recorded exactly as written',async t=>{
+ const {store,home}=setup(t);
+ for(const text of PROSE)await recordRoutine(store,{routine:'R',text,home,delivery:'telegram'});
+ assert.deepEqual(records(new Store(store.root,{device:'pc'})).map(r=>r.content).sort(),[...PROSE].sort());
+});
+
+test('Hermes delivers no coded routine result, says why in the run, and delivers ordinary words as written',t=>{
+ if(!python)return t.skip('needs Python');
+ const {store,run}=wiredProvider(t);
+ const out=run([...CODED,...PROSE].map(text=>[TELEGRAM_JOB,text,false]));
+ assert.deepEqual(out.delivered,PROSE,'the delivery spy saw only the ordinary words');
+ out.errors.slice(0,CODED.length).forEach(error=>assert.match(error,/^Not delivered: .*ask your owner to type a code/));
+ assert.deepEqual(out.errors.slice(CODED.length),PROSE.map(()=>null));
+ assert.deepEqual(records(new Store(store.root,{device:'pc'})).map(r=>r.content).sort(),[...PROSE].sort());
+});
+
+test('a routine that needs a yes asks with a waiting step instead, which a plain yes in the chat answers',async t=>{
+ const {store,home}=setup(t);
+ assert.throws(()=>recordRoutine(store,{routine:'cleanup',text:'Reply "approve aad2598f" to stop the six old programs.',home,delivery:'telegram'}),{message:ASKS_FOR_CODE});
+ const step=openStep(store,{about:'Six old programs can still send you messages the chat cannot explain.',question:'Shall I stop them?',yes:'I will stop the six old programs.',no:'I will leave them running.',by:'routine:cleanup',chat:'telegram'});
+ assert.equal(step.outcome,'asked');assert.ok(!A_CODE.test(step.message));
+ const [receipt]=await recordRoutine(store,{routine:'cleanup',text:step.message,home,delivery:'telegram'});
+ delivered(store,step.message,[receipt]);
+ const answered=heard(store,{chat:'telegram',words:'yes'});
+ assert.equal(answered.kind,'answered');assert.equal(answered.reply,'I will stop the six old programs.');
+ assert.equal(store.get('approvals',step.id).status,'approved');
 });

@@ -6,7 +6,7 @@ import {ruleRefusals} from './briefing-cut.mjs';
 import {queueNotice} from './notices.mjs';
 import {deliveryFor} from './notebook-routines.mjs';
 import {telegramInHermes} from './starting-routines.mjs';
-import {stampDelivered,stepsForWords} from './waiting-steps.mjs';
+import {asksForCode,stampDelivered,stepsForWords} from './waiting-steps.mjs';
 
 // BACKGROUND WORK TELLS THE OWNER IN THE CHAT'S VOICE, AND THE CHAT KNOWS IT (4 November 2026, #198).
 //
@@ -22,7 +22,6 @@ import {stampDelivered,stepsForWords} from './waiting-steps.mjs';
 const GUIDANCE_CHARS=20000,REPORT_CHARS=4000;
 export const REPORT_CONTRACT="Write the message you send your owner in your chat with them about what happened below. guidance is what you read before every reply in that chat: write exactly as you write there, in your own voice. Say what it is about from zero, in everyday words, about one thing, and end with the one plain step it needs from them, or none. Use only the facts given. Never put an id, a code or a command in it, and never ask them to type one. If the facts are about more than one thing, write one report for each. Return JSON {reports:[{about,text}]}.";
 export const REPORT_PREFIX='background-report-';
-const CODE_REPLY=/\b(?:approve|reject)\s+[0-9a-f]{6,}\b/i;
 
 const readText=file=>{try{return fs.readFileSync(file,'utf8').slice(0,GUIDANCE_CHARS);}catch{return null;}};
 
@@ -38,7 +37,7 @@ function parseReports(raw){
 }
 
 function refused(text,{step,voice}){
- return !text||text.length>REPORT_CHARS||ruleRefusals(text,voice).length>0||CODE_REPLY.test(text)||(step&&text.includes(step));
+ return !text||text.length>REPORT_CHARS||ruleRefusals(text,voice).length>0||asksForCode(text)||(step&&text.includes(step));
 }
 
 // The words for a hand-over: {reports:[{about,text}], written:'assistant'|'fallback'}. Anything that
@@ -96,7 +95,12 @@ export async function sayNotice(store,{notice,home,provider=null,guidance}){
 // A routine's own words, recorded as they were printed. A job made in Settings delivers where its
 // own job says, which the Hermes hook passes as delivery. A list of deliveries is recorded together
 // or not at all. Resolves (a list: returns) to the ids of the records, the receipts of their delivery.
+// Words that ask the owner to type a code to answer are refused, not recorded (#191): every caller
+// sends only what was recorded, so the refusal keeps them out of the chat, and the routine's run
+// keeps the reason. A yes is asked for with a waiting step (godspeed-step open), answered in words.
+export const ASKS_FOR_CODE='Not sent: these words ask your owner to type a code to answer. Ask for a yes with godspeed-step open, which they answer with a plain yes or no.';
 export function recordRoutine(store,{routine,text,home,delivery}){
+ if(asksForCode(text))throw Error(ASKS_FOR_CODE);
  const steps=stepsForWords(store,text);
  const message=d=>({text,about:routine,routine,steps,written:'routine',delivery:d});
  if(!Array.isArray(delivery))return recordReport(store,message(delivery||reportDelivery(store,home))).then(r=>[r.id]);

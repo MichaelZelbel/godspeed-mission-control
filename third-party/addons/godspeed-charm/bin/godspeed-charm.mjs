@@ -120,15 +120,17 @@ function need(key, example) {
   if (typeof f[key] !== "string" || !f[key].trim()) die(`godspeed-charm ${cmd} needs --${key}, for example: ${example}`);
   return f[key];
 }
-// The conversation this command runs in: --conversation wins; else the one fresh turn marker
-// (lib/turns.mjs), never in a scheduled run. Empty when it cannot be known.
+// The conversation this command runs in: --conversation wins; else the conversation the Godspeed
+// notebook names for its own chat turn (GODSPEED_CHARM_CONVERSATION); else the one fresh turn marker
+// (lib/turns.mjs). Neither of the last two in a scheduled run. Empty when it cannot be known.
 let learned;
 function conversationOf() {
   if (typeof f.conversation === "string" && f.conversation.trim()) return f.conversation;
   if (learned === undefined) {
     learned = "";
     if (!f.scheduled && !process.env.GODSPEED_SCHEDULED_RUN) {
-      try { learned = currentConversation(mcDir, at).conversation ?? ""; } catch { /* unknown */ }
+      learned = (process.env.GODSPEED_CHARM_CONVERSATION || "").trim();
+      if (!learned) try { learned = currentConversation(mcDir, at).conversation ?? ""; } catch { /* unknown */ }
     }
   }
   return learned;
@@ -246,8 +248,9 @@ const commands = {
       conversation = `claude:${input.session_id}`;
     }
     // This turn's conversation, for the commands the model runs in it (lib/turns.mjs). Never
-    // for a scheduled run, and never at the cost of the block.
-    if (conversation) { try { writeTurn(mcDir, conversation, at); } catch { /* the command then needs --conversation */ } }
+    // for a scheduled run, and never at the cost of the block. A notebook chat turn names its
+    // conversation itself, so it leaves no marker for commands run elsewhere to take.
+    if (conversation && !(process.env.GODSPEED_CHARM_CONVERSATION || "").trim()) { try { writeTurn(mcDir, conversation, at); } catch { /* the command then needs --conversation */ } }
     let state = load();
     // A busy notebook gets a moment, not the lock's usual 20 seconds: the person's message is
     // waiting (Hermes gives this hook 5 seconds). Unwritten, the finish is still said, and written

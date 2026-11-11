@@ -69,6 +69,11 @@ const NUMBER_WORDS =
 const HOMEWORK_SENTENCES = [
   /\b(write|fill|enter|put|type)\s+(in\s+)?(the\s+)?(true\s+|right\s+|correct\s+|real\s+)?(answer|answers|value|values)\b/i,
   /\badd\s+(in\s+)?(the\s+|your\s+)?(true\s+|right\s+|correct\s+|real\s+)?(answer|answers)\b/i,
+  // Answers sent into THIS page or link: "Write your answers into this page", "on this page",
+  // "in this link", "Antworten in diese Seite". Only this page or link as the target: "write your
+  // answers in block capitals" or "enter your answers into the form" on another website pass.
+  /\b(write|put|enter|type|add|fill\s+in|note|record|leave)\s+(down\s+)?(your\s+|the\s+|all\s+)?(answers?|replies|responses)\s+(directly\s+|right\s+)?(in|into|on|onto|at)\s+this\s+(page|link|document|doc|sheet|table|file)\b/i,
+  /\bAntworten?\b[^.\n]{0,40}\b(in|auf)\s+(diese|dieses|diesen)\s+(Seite|Link|Dokument|Tabelle|Blatt)\b/i,
   // "fill in this", "fill out each": the page itself. "fill in the ..." only when what is to be
   // filled is the page, its blanks, or a form at a link: a how-to about a paper form ("Fill in
   // the registration form at the desk") is not homework.
@@ -141,6 +146,53 @@ function escapeRx(s) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+// A table header that names an answer column: "Answer", "Reply", "Antwort", "True answer",
+// "Your value" and so on. Markdown and HTML tables use this one rule.
+function isAnswerHeader(head) {
+  return (
+    /\b(answer|value|response|reply|correct|truth|true|antwort)\b/i.test(head) || /\byour\b/i.test(head)
+  );
+}
+
+// The visible text of an HTML cell: tags, &nbsp; and whitespace removed.
+function htmlCellText(inner) {
+  return inner
+    .replace(/<[^>]*>/g, "")
+    .replace(/&nbsp;|&#160;|&#xa0;/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
+ * An HTML table whose header row names an answer column (see isAnswerHeader) with an empty cell
+ * under it in a body row. The header row is the first row that holds <th> cells. Returns a short
+ * description, or null.
+ */
+function findBlankHtmlAnswerColumn(text) {
+  const tables = text.match(/<table\b[\s\S]*?<\/table\s*>/gi) || [];
+  for (const table of tables) {
+    const rows = table.match(/<tr\b[\s\S]*?(?=<tr\b|<\/table\s*>)/gi) || [];
+    let header = null;
+    for (const row of rows) {
+      const cells = [];
+      const rx = /<(th|td)\b[^>]*>([\s\S]*?)(?=<\/?(?:th|td|tr)\b|<\/(?:thead|tbody|tfoot|table)\b|$)/gi;
+      let m;
+      while ((m = rx.exec(row))) cells.push({ th: m[1].toLowerCase() === "th", text: htmlCellText(m[2]) });
+      if (!cells.length) continue;
+      if (!header) {
+        if (cells.some((c) => c.th)) header = cells.map((c) => c.text.toLowerCase());
+        continue;
+      }
+      for (let c = 0; c < cells.length && c < header.length; c++) {
+        if (isAnswerHeader(header[c]) && cells[c].text === "" && !cells[c].th) {
+          return 'an HTML table with an empty "' + header[c].replace(/[:\s]+$/, "") + '" cell';
+        }
+      }
+    }
+  }
+  return null;
+}
+
 /**
  * A markdown or HTML table holding an answer-shaped column with empty cells.
  * This is the strongest signal there is: a blank someone is meant to fill.
@@ -172,15 +224,18 @@ function findBlankAnswerColumn(text) {
     // Body row. Is any cell empty under an answer-shaped header?
     for (let c = 0; c < cells.length && c < headerCols.length; c++) {
       const head = headerCols[c] || "";
-      const isAnswerCol =
-        /\b(answer|value|response|reply|correct|truth|true)\b/.test(head) || /\byour\b/.test(head);
-      if (isAnswerCol && cells[c] === "") {
+      if (isAnswerHeader(head) && cells[c] === "") {
         return 'a markdown table with an empty "' + head.trim() + '" cell';
       }
     }
   }
 
-  // HTML
+  // HTML: the same rule as Markdown, column by column, so a table gets the same verdict
+  // whichever way it is written.
+  const html = findBlankHtmlAnswerColumn(text);
+  if (html) return html;
+
+  // HTML, the original shape: a "True answer" header and an empty cell anywhere.
   const htmlHead = /<th[^>]*>\s*(?:true|correct|real|your)\s+answer\s*<\/th>/i;
   if (htmlHead.test(text) && /<td[^>]*>\s*(?:&nbsp;|\s)*<\/td>/i.test(text)) {
     return "an HTML table with an empty answer column";

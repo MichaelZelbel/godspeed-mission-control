@@ -6,6 +6,7 @@ import {assistantEnvironment} from './assistant-files.mjs';
 import {hermesResponse,hermesFailureMessage,childFailure} from './runtime.mjs';
 import {runChild} from './child-process.mjs';
 import {keepAiFailure} from './ai-failures.mjs';
+import {charmConversation} from './charm-operation.mjs';
 
 // Whether the assistant's home names a model of its own (config.yaml: `model:`
 // with a provider or a default under it, or a model name on the same line).
@@ -22,6 +23,7 @@ export const NO_MODEL_IN_HOME='The assistant has no AI to think with: the AI con
 // A chat has the same ten minutes as one through hermesProvider; until
 // 6 October 2026 it had none, and only Stop ended one that never answered.
 export function nativeAgent({executable,home,cwd,providerFile,spawnProcess=spawn,timeLimit,keptFile,lifecycle}){
+ // Only an assistant update refuses a chat (hermes-lifecycle.mjs), so the refusal is true.
  const agent=async input=>{const release=lifecycle?.acquire('chat reply');if(lifecycle&&!release)throw Error('The assistant is updating; try the chat again in a moment.');try{
   const args=['chat','--query-file','-','--quiet','--oneshot','--in',cwd,'--continue','godspeed-notebook-'+hash(input.conversation_id||input.note_id||'general').slice(0,24),'--create-if-missing','--no-restore-cwd'];
   // The chat answers with the model the assistant's own home is set to, as the
@@ -53,6 +55,10 @@ export function nativeAgent({executable,home,cwd,providerFile,spawnProcess=spawn
   if(provider)args.push('--provider','openai-api');
   if(input.effort)args.push('--reasoning',input.effort);
   const env=assistantEnvironment({home,workspace:cwd});env.GODSPEED_FILE_HERMES='0';
+  // The notebook records the Charm question of its own chat turn (charm-judgement.mjs); the Charm
+  // plugin and the commands the model runs in this turn take this conversation, never a Hermes one (#441).
+  const charm=charmConversation(input.conversation_id);
+  if(charm)env.GODSPEED_CHARM_CONVERSATION=charm;else delete env.GODSPEED_CHARM_CONVERSATION;
   if(provider){env.OPENAI_API_KEY=provider.key;env.OPENAI_BASE_URL=provider.url.replace(/\/chat\/completions\/?$/,'');}
   const timeoutMs=timeLimit||([300000,600000].includes(input.timeout_ms)?input.timeout_ms:600000);
   // page_context: the numbered parts of the page that shows who the assistant is, when the message

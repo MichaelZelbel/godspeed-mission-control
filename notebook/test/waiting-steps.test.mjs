@@ -178,6 +178,8 @@ test('a scheduled run answers for nobody, and a step text holding a code is refu
  assert.equal(store.get('approvals',id).status,'pending');
  await assert.rejects(()=>ask(store,'Reply "approve 59f1d506" to allow it'),/code/);
  await assert.rejects(()=>ask(store,'Use /approve now'),/code/);
+ await assert.rejects(()=>ask(store,'Reply approve 4711 to go ahead.'),/code/);
+ await assert.rejects(()=>ask(store,'approve 12345 to restart?'),/code/);
  await assert.rejects(()=>ask(store,'Step 59f1d506 waits'),/code/);
  await assert.rejects(()=>ask(store,'x'.repeat(301)),/300/);
 });
@@ -248,6 +250,7 @@ test('godspeed-step opens, reads and answers; a scheduled run cannot answer',asy
  const refused=run(['answer',id,'--chat','telegram'],{env:{GODSPEED_SCHEDULED_RUN:'1'}});assert.equal(refused.status,1);assert.match(refused.stderr,/scheduled run/);
  assert.equal(JSON.parse(run(['heard','--chat','telegram'],{input:'yes',env:{GODSPEED_SCHEDULED_RUN:'1'}}).stdout).kind,'none');
  const bad=run(['open','--about','Reply "approve 59f1d506"','--question','q','--yes','y','--no','n','--by','routine:test']);assert.equal(bad.status,1);
+ const short=run(['open','--about','Reply approve 4711 to go ahead.','--question','Restart it?','--yes','y','--no','n','--by','routine:test']);assert.equal(short.status,1);assert.match(short.stderr,/code to type/);
 });
 
 test('a step whose question was not sent cannot be reached by a bare yes, and a delivery of other words or to another chat does not send it',async t=>{

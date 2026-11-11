@@ -102,6 +102,9 @@ the Godspeed notebook and refuses to install without one.
   arrives (never for a scheduled run). `asked`, `answer` and `start` given no `--conversation`
   take the one marker written in the last ten minutes; with none or two they refuse and name the
   flag. An explicit `--conversation` always wins. On Hermes the plugin also adds the flag itself.
+  A turn the Godspeed notebook runs names its own conversation in `GODSPEED_CHARM_CONVERSATION`:
+  commands take it before any marker, the turn leaves no marker, and the notebook, not the
+  plugin, records that turn's slip question.
 - `.godspeed/charm-buttons/`: one small file per Telegram button (which conversation asked, when,
   and the answer it gives), kept 30 days.
 

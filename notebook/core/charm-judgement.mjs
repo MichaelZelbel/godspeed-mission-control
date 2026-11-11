@@ -1,15 +1,19 @@
 // The slip question in the notebook's chat panel (and every other chat the assistant answers through
-// domains.nativeAgent). Hermes' own plugin (godspeed-charm/hermes/plugin) judges the messages that
-// pass through it; this chat's turns are one-shot assistant runs, so the notebook asks the same
-// judgement (`godspeed-charm judge`, lib/judge.mjs) while the assistant works, and acts on its
-// verdict as the plugin does: the reply ends with the question, recorded as `asked`, or a plain
-// yes or no is recorded as the `answer`. Best effort, as the model's own question is (R15): whatever
-// goes wrong, the reply goes out as the assistant wrote it.
+// domains.nativeAgent). These turns are one-shot assistant runs with Hermes' Charm plugin
+// (godspeed-charm/hermes/plugin) loaded, but the notebook is the one that judges and records them:
+// it names the turn's conversation in GODSPEED_CHARM_CONVERSATION (native-agent.mjs), so the plugin
+// judges nothing and the commands the model runs land in this chat's conversation (#441). The
+// notebook asks the judgement (`godspeed-charm judge`, lib/judge.mjs) while the assistant works, and
+// acts on its verdict as the plugin does: the reply ends with the question, recorded as `asked`, or a
+// plain yes or no is recorded as the `answer`. A question the model already recorded in this turn is
+// not recorded twice. Best effort, as the model's own question is (R15): whatever goes wrong, the
+// reply goes out as the assistant wrote it.
 import fs from 'node:fs';import path from 'node:path';import {randomUUID} from 'node:crypto';
 import {addonInvocation} from './native-personal.mjs';
 import {JUDGE_PROTOCOL} from '../../third-party/addons/godspeed-charm/lib/judge.mjs';
 import {runChild} from './child-process.mjs';
-import {charmConversation,charmOperation} from './charm-operation.mjs';
+import {charmConversation,charmNow,charmOperation} from './charm-operation.mjs';
+import {T,pickLanguage} from '../../third-party/addons/godspeed-charm/lib/texts.mjs';
 
 // The seconds the judgement may take from the message's arrival; as in the plugin the variable exists for tests.
 const judgeSeconds=()=>Number(process.env.GODSPEED_CHARM_JUDGE_SECONDS)||25;
@@ -37,6 +41,8 @@ const nativeLog=(home,conversation,verdict,did)=>{
   fs.appendFileSync(file,JSON.stringify({at:new Date().toISOString(),conversation,verdict:verdict?.verdict??null,source:verdict?.source??null,why:verdict?.why??null,did})+'\n');
  }catch{}
 };
+// The question open in this conversation ({when, seq} tell two apart) and the settings' language.
+const openQuestion=(store,conversation)=>{try{const {state,settings}=charmNow(store);return {open:state.open.find(q=>q.conversation===conversation)||null,language:settings.language};}catch{return {open:null};}};
 
 // Starts the judgement of this message. `end(reply)` says what the reply becomes; `drop()` is for a
 // turn that ends without one.
@@ -57,12 +63,18 @@ export function startCharmJudgement(domains,input){
   const model=modelCommand(domains.query?.nativeHermesHome);
   verdict=judge(model?['--model-command',model]:['--no-model'],judgeSeconds()*1000).catch(()=>null);
  }catch{drop();return nothing;}
+ const before=openQuestion(store,conversation).open;
  return {drop,async end(reply){
   let v,did='no action';
   try{
    // Past the limit, or no answer: the word check alone, as the plugin does.
    v=await verdict||await judge(['--no-model'],wordCheckMs()).catch(()=>null);
    if(!v||v.verdict==='none')return reply;
+   if(v.verdict==='ask'){
+    // The model ran `godspeed-charm asked` itself in this turn: the question is recorded already.
+    const {open:now,language}=openQuestion(store,conversation);
+    if(now&&(!before||now.when!==before.when||now.seq!==before.seq)){did='asked by the model';return ending(reply,T[pickLanguage(v.language,language)].question());}
+   }
    const done=charmOperation(domains,v.verdict==='answer'?{action:'answer',answer:v.answer,conversation,words,language:v.language}:{action:'asked',conversation,words,language:v.language});
    if(!done.ok){did='refused';return reply;}
    if(!done.reply)return reply;
