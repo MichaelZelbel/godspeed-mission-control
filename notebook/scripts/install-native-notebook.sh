@@ -451,7 +451,7 @@ same_definition() {
     launchd) file=$(launch_plist); want=$(plist_text) ;;
     *) return 1 ;;
   esac
-  [ "$(without_path < "$file")" = "$(printf '%s\n' "$want" | without_path)" ]
+  [ -r "$file" ] && [ "$(without_path < "$file")" = "$(printf '%s\n' "$want" | without_path)" ]
 }
 NEEDS_TERMINAL='This update changes how the computer starts the notebook, which needs the administrator. Run godspeed-update in a terminal.'
 
@@ -711,6 +711,9 @@ case "$manager" in
       systemctl --user daemon-reload >/dev/null 2>&1 || true
     fi
     unit_text system | as_root tee "$system_unit" >/dev/null
+    # Readable for the notebook's account, whose update from Settings compares it (same_definition):
+    # under a strict umask sudo's tee made it the administrator's alone.
+    as_root chmod 644 "$system_unit"
     as_root systemctl daemon-reload
     as_root systemctl enable "$SERVICE" >/dev/null 2>&1
     as_root systemctl restart "$SERVICE"
