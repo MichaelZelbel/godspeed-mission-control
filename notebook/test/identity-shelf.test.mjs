@@ -487,5 +487,10 @@ test('a similar rule is found for a near-duplicate and none for an unrelated rul
   const {shelf}=workspace();
   assert.equal(shelf.similarRules({line:'Never delete my files or notes.'})[0]?.target,'rule:never-delete-without-asking');
   assert.equal(shelf.similarRules({line:'Never send an email in my name without showing me the draft.'})[0]?.target,'rule:never-send-in-my-name');
-  for(const line of ['Always reply in German.','Phone anyone for me after 9 pm.','Keep my notes short.'])assert.deepEqual(shelf.similarRules({line}),[],line);
+  assert.equal(shelf.similarRules({line:'Never spend my money.'})[0]?.target,'rule:never-spend-my-money');
+  // Unrelated rules, among them everyday ones that share common words ("email", "draft", "send",
+  // "message") with the long line of the starter safety rule "Never send anything in my name".
+  for(const line of ['Always reply in German.','Phone anyone for me after 9 pm.','Keep my notes short.',
+    'Put emoji in an email you draft for me.','Never use emoji in my emails.','Use my nickname in an email you draft for me.','Send me a message after 10pm.',
+    'Write emails in a formal tone.','Draft my messages in short sentences.'])assert.deepEqual(shelf.similarRules({line}),[],line);
 });
