@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import {fileURLToPath} from 'node:url';
+import {execFileSync} from 'node:child_process';
 import {installStarter,addArchiveLine,ARCHIVE_LINE,addStepLine,STEP_LINE} from '../core/starter-workspace.mjs';
 
 test('integrated installation retains every original Godspeed starter file and preserves user edits',()=>{
@@ -84,4 +85,18 @@ test('the manual teaches a yes through a waiting step, never a code, in a new fo
   fs.writeFileSync(path.join(adopted,'rules','mine.md'),'x');fs.writeFileSync(path.join(adopted,'AGENTS.md'),'# Mine\n');
   assert.equal(addStepLine(adopted,path.join(adopted,'.godspeed'),starter),false);
   assert.equal(fs.readFileSync(path.join(adopted,'AGENTS.md'),'utf8'),'# Mine\n');
+});
+
+test('godspeed init adds the line about asking for a yes to an existing reader\'s manual once',()=>{
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-step-init-')),cli=fileURLToPath(new URL('../bin/godspeed.mjs',import.meta.url));
+  const init=()=>execFileSync(process.execPath,['--no-warnings',cli,'init'],{env:{...process.env,GODSPEED_WORKSPACE:root},windowsHide:true});
+  init();
+  const manual=path.join(root,'AGENTS.md'),flag=path.join(root,'.godspeed','step-line-added'),before=fs.readFileSync(manual,'utf8').replace(STEP_LINE+'\n','');
+  assert.ok(!before.includes(STEP_LINE));
+  fs.writeFileSync(manual,before);fs.rmSync(flag,{force:true});
+  init();
+  assert.ok(fs.readFileSync(manual,'utf8').includes(STEP_LINE),'the update adds the line');assert.ok(fs.existsSync(flag));
+  fs.writeFileSync(manual,before);
+  init();
+  assert.equal(fs.readFileSync(manual,'utf8'),before,'a line its owner deleted is not put back');
 });
