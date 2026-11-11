@@ -175,6 +175,9 @@ class ShellReads(FenceCase):
             "mv /tmp/notes.txt starter-godspeed/",
             "cp --parents src/a.txt build/",
             "git checkout -- . ':!.claude'",
+            "grep -o .ignore README.md",
+            "rg -o .ignore README.md",
+            "bash -lc 'cat .claude/settings.json'",
             "cd starter-godspeed && git checkout -- ':/starter-godspeed/x.txt'",
         ]:
             with self.subTest(command=command):
@@ -274,6 +277,9 @@ class ShellWrites(FenceCase):
             "cd starter-godspeed && echo x > ../.claude/settings.json",
             "bash -c 'echo x > .ignore'",
             "sh -c \"rm -rf .factory\"",
+            "bash -lc 'rm .ignore'",
+            "sh -ec 'rm .ignore'",
+            "bash -l -c 'echo x > .claude/settings.json'",
             "eval 'rm .ignore'",
             "echo $(rm .ignore)",
             "echo `rm .ignore`",

@@ -83,6 +83,9 @@ COPIERS = {"cp", "install", "rsync", "copy-item", "cpi", "copy"}
 # Programs that write in place only with a flag.
 IN_PLACE = {"sed", "gsed", "perl", "ruby", "awk", "gawk"}
 SHELLS = {"bash", "sh", "zsh", "dash", "ksh", "fish"}
+# Programs whose -o (or wget's -O) names the file they write.
+OUTPUT_FLAG_PROGRAMS = {"curl", "wget", "sort", "gcc", "g++", "cc", "clang", "clang++", "go", "rustc",
+                        "pandoc", "openssl", "gpg", "base64"}
 POWERSHELLS = {"pwsh", "powershell", "pwsh.exe", "powershell.exe"}
 INTERPRETERS = {"python", "python3", "python2", "py", "node", "nodejs", "deno", "bun", "perl", "ruby",
                 "php", "cmd", "cmd.exe", "osascript", "lua", "tclsh"}
@@ -790,9 +793,14 @@ def command_writes(words: list[str], cwd: str, fence: list[str], text: str, posi
             return expand(positional[0], cwd) or cwd
         return normal("~") if name == "cd" and not positional else cwd
     if name in SHELLS | POWERSHELLS:
-        for flag in ("-c", "-command", "/c"):
-            if flag in lowered and lowered.index(flag) + 1 < len(args):
-                check_writes(args[lowered.index(flag) + 1], cwd, fence, name in SHELLS, depth + 1)
+        for index, arg in enumerate(args):
+            # bash -c, -lc, -ec ...; pwsh -c / -Command
+            flag = (re.fullmatch(r"-[a-zA-Z]*c[a-zA-Z]*", arg) if name in SHELLS
+                    else arg.lower() in ("-c", "-command", "/c"))
+            code = next((rest for rest in args[index + 1:] if not rest.startswith("-")), None)
+            if flag and code is not None:
+                check_writes(code, cwd, fence, name in SHELLS, depth + 1)
+                break
         return cwd
     if name == "eval":
         check_writes(" ".join(args), cwd, fence, posix, depth + 1)
@@ -840,9 +848,11 @@ def command_writes(words: list[str], cwd: str, fence: list[str], text: str, posi
     if not blocked and name in INTERPRETERS and set(lowered) & INLINE_CODE:
         blocked = names_fence(" ".join(args), cwd, fence)
     if not blocked:
-        # any program's output file: -o FILE, --output FILE, --output=FILE
+        # an output file: --output FILE or --output=FILE for any program; -o / -O only for programs
+        # where it names one (grep -o and rg -o only print what matched)
+        short = ("-o", "-O") if name in OUTPUT_FLAG_PROGRAMS else ()
         for index, arg in enumerate(args):
-            value = args[index + 1] if arg in ("-o", "-O", "--output", "--output-file", "--out") and index + 1 < len(
+            value = args[index + 1] if arg in short + ("--output", "--output-file", "--out") and index + 1 < len(
                 args) else arg.split("=", 1)[1] if re.match(r"^--(?:output|output-file|out)=", arg) else None
             if value is not None and hits(value, cwd, fence):
                 blocked = True
