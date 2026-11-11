@@ -1,6 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import {fileURLToPath} from 'node:url';import {execFileSync} from 'node:child_process';
 import {Store} from '../core/records/store.mjs';import {QueryService} from '../core/query.mjs';import {chatContext} from '../core/chat-context.mjs';
-import {queueNotice,readNotices} from '../core/notices.mjs';import {openStep,heard} from '../core/waiting-steps.mjs';import {sayNotice,recordRoutine,delivered,followUpFailed,ASKS_FOR_CODE,REPORT_CONTRACT,FOLLOW_UP_CONTRACT,GIVEN_UP_CONTRACT} from '../core/background-reports.mjs';
+import {queueNotice,readNotices} from '../core/notices.mjs';import {openStep,heard} from '../core/waiting-steps.mjs';import {cardSent,sayNotice,recordRoutine,delivered,followUpFailed,ASKS_FOR_CODE,REPORT_CONTRACT,FOLLOW_UP_CONTRACT,GIVEN_UP_CONTRACT} from '../core/background-reports.mjs';
 
 // BACKGROUND REPORTS (4 November 2026, #198): a notice is written with the chat's guidance, recorded
 // where the chat reads it, and the chat's next reply is told about it.
@@ -153,13 +153,15 @@ test('what a Settings routine delivers is recorded as Hermes will send it, for l
 });
 
 const TELEGRAM_JOB={id:'j1',name:'Asker',skill:'ask',deliver:'telegram',resolved:{targets:{'telegram':[{platform:'telegram'}]},lane:'telegram'}};
-const openAsk=(store,about)=>openStep(store,{about,question:'Shall I go on?',yes:'I will restart it now.',no:'I will leave it as it is.',by:'routine:test',chat:'telegram'});
+// `words`: the question printed as words, which still certify it; a Telegram step's own message is
+// empty, since the gateway's card asks it.
+const openAsk=(store,about)=>({...openStep(store,{about,question:'Shall I go on?',yes:'I will restart it now.',no:'I will leave it as it is.',by:'routine:test',chat:'telegram'}),words:about+' Shall I go on?'});
 
 test('a question Hermes really delivers through the wrapper is answered by a bare yes, with no stamping by hand',t=>{
  if(!python)return t.skip('needs Python');
  const {store,run}=wiredProvider(t),one=openAsk(store,'The bot stopped.'),two=openAsk(store,'The disk is full.'),third=openAsk(store,'The bot stopped.');
  assert.equal(heard(new Store(store.root,{device:'pc'}),{chat:'telegram',words:'yes'}).kind,'none');
- const out=run([[TELEGRAM_JOB,one.message+'\n'+two.message,false]]);
+ const out=run([[TELEGRAM_JOB,one.words+'\n'+two.words,false]]);
  assert.deepEqual(out.errors,[null]);
  const fresh=new Store(store.root,{device:'pc'});
  assert.ok(fresh.get('approvals',one.id).sent_at&&fresh.get('approvals',two.id).sent_at);
@@ -173,16 +175,16 @@ const staleDelivery=(store,words,report)=>{const id='background-report-20200101T
 test('an older undelivered record with the same words is not the receipt of a newer delivery',t=>{
  if(!python)return t.skip('needs Python');
  const {store,run}=wiredProvider(t),old=openAsk(store,'The disk is full.'),fresh=openAsk(store,'The bot stopped.');
- staleDelivery(store,fresh.message,{steps:[old.id],routine:'older'});
- assert.deepEqual(run([[TELEGRAM_JOB,fresh.message,false]]).errors,[null]);
+ staleDelivery(store,fresh.words,{steps:[old.id],routine:'older'});
+ assert.deepEqual(run([[TELEGRAM_JOB,fresh.words,false]]).errors,[null]);
  const after=new Store(store.root,{device:'pc'});
  assert.ok(after.get('approvals',fresh.id).sent_at);assert.equal(after.get('approvals',old.id).sent_at,undefined);
 });
 
 test('a delivery record persisted with the single step it once named still makes that step answerable',t=>{
  const {store}=setup(t),step=openAsk(store,'The bot stopped.');
- staleDelivery(store,step.message,{step:step.id,routine:'before the upgrade'});
- assert.equal(delivered(store,step.message).length,1);
+ staleDelivery(store,step.words,{step:step.id,routine:'before the upgrade'});
+ assert.equal(delivered(store,step.words).length,1);
  assert.ok(new Store(store.root,{device:'pc'}).get('approvals',step.id).sent_at);
 });
 
@@ -191,8 +193,8 @@ test('a delivery whose receipt cannot be used says so, and still reports that th
  const bin=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-node-'));t.after(()=>fs.rmSync(bin,{recursive:true,force:true}));
  const node=path.join(bin,'node');fs.writeFileSync(node,`#!/bin/sh\ncase " $* " in *" delivered "*) echo broken >&2; exit 1;; esac\nexec ${process.execPath} "$@"\n`,{mode:0o755});
  const {store,run}=wiredProvider(t,{node}),one=openAsk(store,'The bot stopped.');
- const out=run([[TELEGRAM_JOB,one.message,false]]);
- assert.match(out.errors[0],/^Delivered, but a question in it could not be marked as answerable.*broken/);assert.deepEqual(out.delivered,[one.message]);
+ const out=run([[TELEGRAM_JOB,one.words,false]]);
+ assert.match(out.errors[0],/^Delivered, but a question in it could not be marked as answerable.*broken/);assert.deepEqual(out.delivered,[one.words]);
 });
 
 test('a Settings routine\'s result that cannot be recorded is not delivered',t=>{
@@ -416,7 +418,7 @@ test('on an adopted mission control a waiting step\'s question is delivered by t
  writeRoutineFiles(home,routineFiles({root,home,state:store.state,timezone:'Europe/Berlin'}));
  const send=()=>execFileSync(python,[path.join(home,'scripts','godspeed-notices.py')],{cwd:path.join(home,'scripts'),encoding:'utf8',env:{...process.env,PYTHONIOENCODING:'utf-8'}}).trim();
  assert.equal(send(),'','the sender has started, with nothing queued');
- const opened=openAsk(store,'The bot stopped.');queueNotice(store,{id:'step-question',text:opened.message,step:opened.id});
+ const opened=openAsk(store,'The bot stopped.');queueNotice(store,{id:'step-question',text:opened.words,step:opened.id});
  const words=send();
  assert.match(words,/Shall I go on\?/);
  const dir=path.join(home,'plugins','godspeed_notebook');
@@ -472,9 +474,9 @@ test('a routine that needs a yes asks with a waiting step instead, which a plain
  const {store,home}=setup(t);
  assert.throws(()=>recordRoutine(store,{routine:'cleanup',text:'Reply "approve aad2598f" to stop the six old programs.',home,delivery:'telegram'}),{message:ASKS_FOR_CODE});
  const step=openStep(store,{about:'Six old programs can still send you messages the chat cannot explain.',question:'Shall I stop them?',yes:'I will stop the six old programs.',no:'I will leave them running.',by:'routine:cleanup',chat:'telegram'});
- assert.equal(step.outcome,'asked');assert.ok(!A_CODE.test(step.message));
- const [receipt]=await recordRoutine(store,{routine:'cleanup',text:step.message,home,delivery:'telegram'});
- delivered(store,step.message,[receipt]);
+ assert.equal(step.outcome,'asked');assert.equal(step.message,'','the gateway sends the question, with its buttons');
+ const record=store.get('approvals',step.id);assert.ok(!A_CODE.test(record.about+' '+record.question));
+ assert.equal(await cardSent(store,step.id),true);
  const answered=heard(store,{chat:'telegram',words:'yes'});
  assert.equal(answered.kind,'answered');assert.equal(answered.reply,'I will stop the six old programs.');
  assert.equal(store.get('approvals',step.id).status,'approved');
