@@ -148,7 +148,9 @@ const NEW_RULES_WORDS={automatic:'Add automatically','ask-first':'Ask first'};
 // "Is there already a rule that says this?": words of three letters or more shared by the two
 // texts, without these, each cut to a rough stem. Similar is at least two shared words, one of them
 // a word of the rule's own name (what the rule is about), that make up more than half of the new
-// rule's words. Near-duplicates of the starter rules match. A single word in common never turns an
+// rule's words; or, for a short new rule, every word of the rule's name, making up at least half of
+// the new rule's words ("never sign emails as me" is the rule "Never sign as me"). Near-duplicates of
+// the starter rules match. A single word in common never turns an
 // automatic save into a question, and neither do everyday words a long rule happens to use: "Put
 // emoji in an email you draft for me" shares "email" and "draft" with "Never send anything in my
 // name", and is still not that rule.
@@ -554,10 +556,10 @@ export class IdentityShelf{
   }
   // The rules that say much the same as these fields (STOP above), most alike first, at most three.
   similarRules(fields){
-    const proposed=contentWords(oneLine(fields.title)+' '+oneLine(fields.line));if(proposed.size<2)return [];
+    const proposed=contentWords(oneLine(fields.title)+' '+oneLine(fields.line));if(!proposed.size)return [];
     return this.overview().rules.map(r=>{const own=contentWords(r.title+' '+(r.line||r.about||'')),named=contentWords(r.title),shared=[...proposed].filter(w=>own.has(w));
-      return {rule:r,shared:shared.length,named:shared.some(w=>named.has(w)),cover:shared.length/proposed.size};})
-      .filter(x=>x.shared>=2&&x.named&&x.cover>0.5).sort((a,b)=>b.cover-a.cover||b.shared-a.shared).slice(0,3)
+      return {rule:r,shared:shared.length,named:shared.some(w=>named.has(w)),wholeName:named.size>0&&[...named].every(w=>proposed.has(w)),cover:shared.length/proposed.size};})
+      .filter(x=>x.named&&(x.shared>=2&&x.cover>0.5||x.wholeName&&x.cover>=0.5)).sort((a,b)=>b.cover-a.cover||b.shared-a.shared).slice(0,3)
       .map(({rule:r})=>({target:r.target,n:r.n,title:r.title,group:r.group,line:r.line||r.about||''}));
   }
   // A rule the assistant was asked to add. Saved at once when new rules are added automatically and
