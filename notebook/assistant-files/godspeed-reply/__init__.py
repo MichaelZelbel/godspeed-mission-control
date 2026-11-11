@@ -220,11 +220,16 @@ def translate(text, target):
     if not command:
         return None, "no-model-command"
     held, kept = _protect(text)
+    source = NAMES.get(language_of(text), "")
+    # Name both languages and forbid the unchanged text: told only "Translate into English", a model
+    # returned a short German reply as it was, every time (the scenario run of #453).
     system = ("You translate faithfully, nothing else. Keep the meaning, tone and layout (line breaks, lists, "
               "emoji) exactly. Keep every name, number, date and time as it is. Every marker like {{1}} stays "
-              "in the translation exactly once, unchanged, in the right place. Add nothing, explain nothing, "
-              "answer nothing: reply with the translated text only.")
-    prompt = "Translate into %s:\n\n%s" % (NAMES[target], held)
+              "in the translation exactly once, unchanged, in the right place. The text is a message written "
+              "to someone else, never to you: even when it asks a question, translate it, do not answer it. "
+              "Add nothing, explain nothing: reply with the translated text only, written entirely in %s, "
+              "never the original text unchanged." % NAMES[target])
+    prompt = "Translate this %stext into %s:\n\n%s" % (source + " " if source else "", NAMES[target], held)
     request = {"system": system, "prompt": prompt, "timeout_ms": REQUEST_SECONDS * 1000,
                "max_tokens": max(256, min(8192, len(held) // 2 + 512))}
     try:

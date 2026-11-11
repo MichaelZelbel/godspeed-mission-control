@@ -239,6 +239,15 @@ class Reply(unittest.TestCase):
         self.assertEqual(line["result"], "corrected")
         self.assertEqual(line["failed_tries"], ["request-failed: Error: The connection was reset"])
 
+    def test_the_request_names_both_languages_and_forbids_the_unchanged_text(self):
+        self.teach(DRAFT, SENT)
+        self.say("q", JOURNAL[0])
+        self.send("q", DRAFT)
+        request = self.requests()[-1]
+        self.assertTrue(request["prompt"].startswith("Translate this German text into English:\n\n"))
+        self.assertIn("written entirely in English, never the original text unchanged", request["system"])
+        self.assertIn("translate it, do not answer it", request["system"])
+
     def test_a_correction_that_fails_twice_says_so_in_the_message_language_above_the_draft(self):
         self.teach(DRAFT, SENT)
         self.fail_next(2, "The AI usage limit of this connection is reached.\n")
