@@ -38,11 +38,15 @@ const REPLY_CODES=[/(?:^|[^\w/])\/(?:approve|reject)\b/i,
  /\benter\s+(?:the|this|that)\s+(?:code|id)\b[^\w\n.!?,;]{0,6}[\w-]*\d[\w-]*[`*"'“”‘’]{0,3}\s+(?:here|in\s+(?:the|this|your)\s+(?:chat|reply|answer))\b/i,
  /(?:\b(?:reply|answer|respond|say|type|send|write|text)\b[^.!?\n]{0,20}?\s|[`*"'“‘])(?:yes|no|ok|ja|nein)[^\w\n.!?,;]{1,6}(?:(?:step-)?[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}|(?=[a-z]*\d)(?=\d*[a-z])[a-z0-9]{6,}|\d{6,})(?![\w-])/i];
 export const asksForCode=text=>REPLY_CODES.some(code=>code.test(text));
+// A waiting step's own words stay as strict as before #191 (main's pattern, unchanged): any "/approve"; "approve", "reject" or "genehmig…" followed by
+// any token holding a digit is refused, short codes included ("Reply approve 4711 to go ahead."). Refusing
+// a step text only makes the assistant reword it, so this check may be stricter than the routine check.
+const STEP_CODE=/\/(?:approve|reject)\b|\b(?:approve|reject|genehmig\w*)\s+\S*\d/i;
 const hexCode=text=>(text.match(/[0-9a-f]{6,}/gi)||[]).some(run=>/\d/.test(run)&&/[a-f]/i.test(run));
 export function checkStepText(label,text,id){
  if(typeof text!=='string'||!text.trim())throw Error('Say what the '+label+' is.');
  if(text.length>300||/[\r\n]/.test(text))throw Error('The '+label+' must be one line of at most 300 characters.');
- if(asksForCode(text)||hexCode(text)||text.includes(id))throw Error('The '+label+' must not hold a code to type; the owner answers with a plain yes or no.');
+ if(asksForCode(text)||STEP_CODE.test(text)||hexCode(text)||text.includes(id))throw Error('The '+label+' must not hold a code to type; the owner answers with a plain yes or no.');
 }
 
 export function readStep(record){
