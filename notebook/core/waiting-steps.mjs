@@ -22,17 +22,21 @@ const clean=words=>String(words??'').toLowerCase().replace(/[‘’]/g,"'").repl
 // Anything longer or different is neither: the message then reaches the model as an ordinary one.
 export const classifyAnswer=words=>{const w=clean(words);return YES.has(w)?'yes':NO.has(w)?'no':null;};
 
-// Words that ask the owner to type something to answer (#191): `/approve`; a yes word or "reply"
-// ("reply with") followed by a code: a token of six or more with a letter and a digit, six or more
+// Words that ask the owner to type something to answer (#191): `/approve`; a yes word or "reply",
+// "answer" or "respond" ("with") followed by a code: a step id or other UUID, a token of six or more with a letter and a digit, six or more
 // digits with no currency sign or word before or after them, or an all-letter hex word set off by
 // Markdown, quotes or `#`; "reply ... code <value>"; "send/text/type (me) the code <value>";
-// "enter the code <value> here / in the chat", the value bare or wrapped in Markdown or quotes.
+// "enter the code <value> here / in the chat", the value bare or wrapped in Markdown or quotes (a
+// full stop or other sentence mark after the value ends the sentence, so "Here is the map" is not
+// "here"); "yes"/"no"/"ok" plus a code, quoted or after "reply/answer/say/type/send".
 // "approve facade", "approve Q3-budget", "genehmigt 250000 Euro", "approve $25000000", a commit in
-// a link, a pickup code to enter at a machine, or a door code to text to someone else ask for nothing.
+// a link, a pickup code to enter at a machine, a door code to text to someone else, "Enter the code
+// 4711. Here is the map." or "Invoice no 123456" ask for nothing.
 const REPLY_CODES=[/(?:^|[^\w/])\/(?:approve|reject)\b/i,
- /\b(?:approve|reject|genehmig\w*|ablehn\w*|reply(?:\s+with)?)[^\w\n.!?,;]{1,6}(?:(?=[a-z]*\d)(?=\d*[a-z])[a-z0-9]{6,}|(?<![$€£]\s?)\d{6,}(?!\s*(?:€|\$|£|%|euro|eur|usd|dollar|chf|gbp))|(?<=[`*"'#][^\w\n]{0,5})[a-f]{6,}|[a-f]{6,}(?=[`*"']))(?![\w-])/i,
+ /\b(?:approve|reject|genehmig\w*|ablehn\w*|(?:reply|answer|respond)(?:\s+with)?)[^\w\n.!?,;]{1,6}(?:(?:step-)?[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}|(?=[a-z]*\d)(?=\d*[a-z])[a-z0-9]{6,}|(?<![$€£]\s?)\d{6,}(?!\s*(?:€|\$|£|%|euro|eur|usd|dollar|chf|gbp))|(?<=[`*"'#][^\w\n]{0,5})[a-f]{6,}|[a-f]{6,}(?=[`*"']))(?![\w-])/i,
  /(?:\breply\b[^.!?\n]{0,40}?|\b(?:send|text|type)(?:\s+(?:me|us|back|in))*\s+(?:the|this|that)\s+)\b(?:code|id)\b[^\w\n.!?,;]{0,6}[\w-]*\d/i,
- /\benter\s+(?:the|this|that)\s+(?:code|id)\b[^\w\n.!?,;]{0,6}[\w-]*\d[\w-]*[^\w\s]{0,3}\s+(?:here|in\s+(?:the|this|your)\s+(?:chat|reply|answer))\b/i];
+ /\benter\s+(?:the|this|that)\s+(?:code|id)\b[^\w\n.!?,;]{0,6}[\w-]*\d[\w-]*[`*"'“”‘’]{0,3}\s+(?:here|in\s+(?:the|this|your)\s+(?:chat|reply|answer))\b/i,
+ /(?:\b(?:reply|answer|respond|say|type|send|write|text)\b[^.!?\n]{0,20}?\s|[`*"'“‘])(?:yes|no|ok|ja|nein)[^\w\n.!?,;]{1,6}(?:(?:step-)?[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}|(?=[a-z]*\d)(?=\d*[a-z])[a-z0-9]{6,}|\d{6,})(?![\w-])/i];
 export const asksForCode=text=>REPLY_CODES.some(code=>code.test(text));
 const hexCode=text=>(text.match(/[0-9a-f]{6,}/gi)||[]).some(run=>/\d/.test(run)&&/[a-f]/i.test(run));
 export function checkStepText(label,text,id){
