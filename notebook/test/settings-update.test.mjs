@@ -61,6 +61,9 @@ test('Update now starts the same command apart from the notebook, and only when 
   assert.deepEqual(started.map(s=>[s.command,s.args.slice(1),s.options.detached,s.options.env.GODSPEED_WORKSPACE]),[[process.execPath,['update','--from-settings'],true,root]]);
   assert.match(started[0].args[0],/notebook[\\/]bin[\\/]godspeed\.mjs$/);
   assert.equal(readStatus(root).state,'checking');
+  // A second press before the command it started has taken its lock starts no second one.
+  assert.deepEqual(await startUpdate({root,env,spawnImpl}),{code:409,error:'An update is already running.'});
+  assert.equal(started.length,1);
   assert.equal((await startUpdate({root,env:{...env,GODSPEED_HANDOVER:''},spawnImpl})).code,409,'a notebook its start.mjs cannot hand over is updated from a terminal');
 });
 

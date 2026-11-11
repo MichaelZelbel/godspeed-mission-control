@@ -273,7 +273,9 @@ export async function startUpdate({root,env=process.env,product=ownProduct,fetch
   if(way==='server')return {code:409,error:'On a Docker server Godspeed is updated on the server itself. Run this there: sudo godspeed-update'};
   if(way==='terminal')return {code:409,error:'This installation is updated from a terminal on this computer. Run: godspeed-update'};
   if(way!=='handover'&&way!=='windows')return {code:409,error:'No installer put this copy of Godspeed here, so it cannot update itself.'};
-  if(updateBusy(root))return {code:409,error:'An update is already running.'};
+  // The command it starts takes its lock only once it runs: until then the status it was started with says so.
+  const started=readStatus(root);
+  if(updateBusy(root)||(started?.state==='checking'&&now().getTime()-Date.parse(started.at)<STALLED))return {code:409,error:'An update is already running.'};
   const installed=installedVersion({root});let newest;
   try{newest=await findNewest({fetchImpl,env});}catch(error){return {code:502,error:error.message};}
   if(compareVersions(newest.version,installed)<=0)return {code:200,started:false,message:'You have the newest version, '+installed+'. Nothing was changed.'};

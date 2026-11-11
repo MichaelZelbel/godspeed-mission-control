@@ -27,7 +27,7 @@ const json = (value: unknown, status = 200) => new Response(JSON.stringify(value
 function show(about: AboutInfo, update: UpdateInfo = upToDate) {
   vi.stubGlobal("fetch", vi.fn(async (address: string, init?: RequestInit) => {
     if (address !== "/api/update") return json(about);
-    return init?.method === "POST" ? json({ started: true }, 202) : json(update);
+    return init?.method === "POST" ? json({ started: true, status: { state: "checking", from: update.installed, to: "2.0.0-beta.30", message: "Getting 2.0.0-beta.30 ready.", at: "2026-11-11T11:00:00.000Z" } }, 202) : json(update);
   }));
   render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><AboutTab /></QueryClientProvider>);
 }
@@ -68,6 +68,13 @@ describe("AboutTab", () => {
     expect(await screen.findByText(/Newest version: 2\.0\.0-beta\.30/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Update now" }));
     await waitFor(() => expect(fetch).toHaveBeenCalledWith("/api/update", { method: "POST" }));
+  });
+
+  it("after Update now, an earlier update's failure does not bring the button back before this one reports", async () => {
+    show(computer, { ...upToDate, installed: "2.0.0-beta.20", newer: true, status: { state: "failed", from: "2.0.0-beta.20", to: "2.0.0-beta.30", message: "The update to 2.0.0-beta.30 did not finish. The version you have is still running.", at: "2026-11-11T10:00:00.000Z" } });
+    fireEvent.click(await screen.findByRole("button", { name: "Update now" }));
+    expect(await screen.findByText("Starting the update…")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Update now" })).not.toBeInTheDocument();
   });
 
   it("on a Docker server shows the line to run on the server instead of a button", async () => {

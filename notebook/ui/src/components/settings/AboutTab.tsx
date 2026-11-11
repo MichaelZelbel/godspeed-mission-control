@@ -76,22 +76,24 @@ async function loadUpdate(): Promise<UpdateInfo> {
 
 function UpdateBlock() {
   const client = useQueryClient();
-  const [asked, setAsked] = useState(false);
+  // When the button was answered: the status this update ends with is written after it. One an earlier
+  // update left (failed, or updated) must not end this one before its first status arrives.
+  const [asked, setAsked] = useState<string | null>(null);
   const [said, setSaid] = useState<string | null>(null);
   const { data, error } = useQuery({
     queryKey: ["update"], queryFn: loadUpdate, staleTime: 60000, retry: false,
     // While an update runs the notebook restarts, and every question fails until the new one answers.
-    refetchInterval: query => (asked || query.state.data?.busy || RUNNING.includes(query.state.data?.status?.state as UpdateState) ? 3000 : false),
+    refetchInterval: query => (asked !== null || query.state.data?.busy || RUNNING.includes(query.state.data?.status?.state as UpdateState) ? 3000 : false),
   });
   const status = data?.status;
-  const running = asked || !!data?.busy || (!!status && RUNNING.includes(status.state));
-  if (asked && data && !data.busy && status && !RUNNING.includes(status.state)) setAsked(false);
+  const running = asked !== null || !!data?.busy || (!!status && RUNNING.includes(status.state));
+  if (asked !== null && data && !data.busy && status && !RUNNING.includes(status.state) && status.at >= asked) setAsked(null);
   async function updateNow() {
     setSaid(null);
     try {
       const response = await fetch('/api/update', { method: "POST" });
       const answer = await response.json();
-      if (response.status === 202) setAsked(true);
+      if (response.status === 202) setAsked(answer.status?.at || new Date().toISOString());
       else setSaid(answer.error || answer.message);
     } catch {
       setSaid("The update could not be started. Reload the page to try again.");
