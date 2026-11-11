@@ -132,6 +132,50 @@ expect("the Artifact tool cannot publish an HTML worksheet",
 expect("the Artifact tool publishes the filled HTML table",
   run(pre("Artifact", { file_path: page(DEFAULT, "art-done.html",
     "<table><tr><th>Question</th><th>True answer</th></tr><tr><td>Where do I live?</td><td>Lisbon</td></tr></table>") })), "pass");
+// #437: an HTML answer column headed plain "Answer", "Reply" or "Antwort", every cell empty.
+const htmlTable = (head, a, b) =>
+  "<table><thead><tr><th>Question</th><th>" + head + "</th></tr></thead><tbody>" +
+  "<tr><td>Where do I live?</td><td>" + a + "</td></tr><tr><td>Who is my manager?</td><td>" + b + "</td></tr></tbody></table>";
+for (const head of ["Answer", "Reply", "Antwort", " answer: ", "REPLY:"]) {
+  r = run(pre("Artifact", { file_path: page(DEFAULT, "plain-" + head.trim().replace(/\W/g, "") + ".html", htmlTable(head, "", "&nbsp;")) }));
+  expect('an HTML table headed "' + head + '" with every cell empty is refused', r, "deny");
+  check('  with the same reason the other worksheets get ("' + head + '")',
+    /LOOK UP THE ANSWERS IN THE MISSION CONTROL FIRST/.test(r.reason) && /publishing a worksheet/.test(r.reason), r.reason);
+}
+expect('an HTML table headed "Answer" with every cell filled publishes',
+  run(pre("Artifact", { file_path: page(DEFAULT, "plain-filled.html", htmlTable("Answer", "Lisbon", "<b>Ana</b>")) })), "pass");
+// HTML and Markdown give the same verdict for the same table.
+const mdTable = (head, a, b) => ["| Question | " + head + " |", "|---|---|", "| Where do I live? | " + a + " |", "| Who is my manager? | " + b + " |"].join("\n");
+for (const [label, head, a, b] of [
+  ["some cells empty", "Answer", "Lisbon", ""],
+  ["all cells filled", "Answer", "Lisbon", "Ana"],
+  ["an empty Notes column", "Notes", "", ""],
+  ["an empty Antwort column", "Antwort", "", ""],
+]) {
+  const md = run(pre("Artifact", { file_path: page(DEFAULT, "pair-" + label.replace(/\W/g, "") + ".md", mdTable(head, a, b)) }));
+  const ht = run(pre("Artifact", { file_path: page(DEFAULT, "pair-" + label.replace(/\W/g, "") + ".html", htmlTable(head, a, b)) }));
+  check("HTML and Markdown agree on a table with " + label + " (" + md.verdict + ")", md.verdict === ht.verdict, md.verdict + " vs " + ht.verdict);
+}
+// #437: a sentence sending the answers into this page or link.
+[
+  ["into-page.md", "Write your answers into this page and send it back."],
+  ["into-page2.md", "Please put the answers into this page."],
+  ["on-page.md", "Write your answers on this page, then tell me."],
+  ["in-link.md", "Enter your answers in this link."],
+  ["de-page.md", "Bitte schreib deine Antworten in diese Seite und schick sie zur\u00fcck."],
+].forEach(([name, sentence]) => {
+  expect('"' + sentence + '" above a list of questions is refused',
+    run(pre("Artifact", { file_path: page(DEFAULT, name, "# Open questions\n\n" + sentence + "\n\n1. Where do I live?\n2. Who is my manager?\n") })), "deny");
+});
+// The owner's ruling on #231 still holds for these.
+[
+  ["other-site.md", "# How to file the claim\n\nOn the insurer's website, open the claim form, enter your answers into the form and press Submit.\n"],
+  ["report-answer.md", "# Report\n\n| Question | Answer |\n|---|---|\n| Where do I live? | Lisbon |\n\nThe answers in this page come from your notes.\n"],
+  ["report-answer.html", "<h1>Report</h1>" + htmlTable("Answer", "Lisbon", "Ana") + "<p>Die Antworten auf dieser Seite stammen aus deinen Notizen.</p>"],
+].forEach(([name, body]) => {
+  expect(name + " (a finished report or a how-to about another form) publishes",
+    run(pre("Artifact", { file_path: page(DEFAULT, name, body) })), "pass");
+});
 expect("a relative path is read against the session's folder",
   run(pre("Bash", { command: "scp worksheet.md person@pages.example.com:/var/www/" }, { cwd: DEFAULT })), "deny");
 expect("a write-up about this check may quote its wording",
