@@ -66,8 +66,18 @@ const NUMBER_WORDS =
 //
 // "add" pairs only with answers, never with value: "this will add real value to the brief" is
 // ordinary English. And "confirm all 12" after "I" or "we" is a report on tests, not a request.
+// Not when the assistant says it will do the writing itself ("I'll write the answers in").
+const NOT_MINE = "(?<!\\b(?:i|we|i'll|we'll|i\\s+will|we\\s+will|i\\s+can|we\\s+can|i've|we've|i\\s+have|we\\s+have)\\s+)";
+const TO_PERSON = "\\b(write|fill|enter|put|type)\\b";
+
 const HOMEWORK_SENTENCES = [
-  /\b(write|fill|enter|put|type)\s+(in\s+)?(the\s+)?(true\s+|right\s+|correct\s+|real\s+)?(answer|answers|value|values)\b/i,
+  // "... into this page", "... on the sheet": the person is to write into the document itself.
+  new RegExp(NOT_MINE + TO_PERSON + "[^.\\n]{0,50}\\b(into|in|on)\\s+(this|the)\\s+(page|document|doc|sheet|form|table)\\b", "i"),
+  // "... in the right-hand column", "... into the last column".
+  new RegExp(NOT_MINE + TO_PERSON + "[^.\\n]{0,50}\\b(in|into)\\s+the\\s+[a-z -]{0,30}\\bcolumn\\b", "i"),
+  // The verb before "next to each": "write your answers next to each item".
+  new RegExp(NOT_MINE + "\\b(write|fill|answer|put|tell)\\b[^.\\n]{0,50}\\bnext to each\\b", "i"),
+  /\b(write|fill|enter|put|type)\s+(in\s+)?(the\s+|your\s+)?(true\s+|right\s+|correct\s+|real\s+)?(answer|answers|value|values)\b/i,
   /\badd\s+(in\s+)?(the\s+|your\s+)?(true\s+|right\s+|correct\s+|real\s+)?(answer|answers)\b/i,
   /\bfill\s+(in|out)\s+(the|this|each|every|these)\b/i,
   /\b(the\s+)?(right-?hand\s+|last\s+|final\s+|empty\s+)?column\s+is\s+(the\s+)?only\s+thing\s+missing\b/i,

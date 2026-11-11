@@ -104,6 +104,17 @@ expect("a page telling the person to write into it is refused",
   run(pre("Bash", { command: scpTo(page(DEFAULT, "ask.md", "# Findings\n\nOpen the link and write the true answer next to each.\n")) })), "deny");
 expect("the same page without that sentence publishes",
   run(pre("Bash", { command: scpTo(page(DEFAULT, "told.md", "# Findings\n\nEvery answer is now recorded.\n")) })), "pass");
+// The common ways of telling the person to write into the page (review of PR #416).
+[
+  ["fill-in.md", "Fill in your answers in the right-hand column below."],
+  ["write-into.md", "Write your answers into this page and tell me when done."],
+  ["next-to-each.md", "Please write your answers next to each item below and send the page back."],
+].forEach(([name, sentence]) => {
+  expect('"' + sentence + '" on a page is refused',
+    run(pre("Artifact", { file_path: page(DEFAULT, name, "# Open items\n\n" + sentence + "\n\n- Where do I live?\n- Who is my manager?\n") })), "deny");
+});
+expect("a page saying the assistant put the results on it publishes",
+  run(pre("Artifact", { file_path: page(DEFAULT, "put.md", "# Findings\n\nI put the results on the page. We have put each value in the last column.\n") })), "pass");
 expect('a "what is needed from you" heading is refused',
   run(pre("Bash", { command: scpTo(page(DEFAULT, "open.md", "# Open questions\n\n## What is needed from you\n\nOne line.\n")) })), "deny");
 expect("the Artifact tool cannot publish an HTML worksheet",
@@ -153,6 +164,7 @@ check("the block says to find the answers or ask one plain sentence",
 expect('"fill in the form at this link" is blocked', run(stop("I made a form for this. Please fill in the form at https://forms.example.com/x and I will carry on.")), "block");
 expect('"add the answers" is blocked', run(stop("The page is up. Add the answers in the last column and ping me.")), "block");
 expect('"could you confirm each of the 20 rows" is blocked', run(stop("Could you confirm each of the 20 rows?")), "block");
+expect('"fill in your answers in the right-hand column" is blocked', run(stop("The page is up: fill in your answers in the right-hand column and I will carry on.")), "block");
 expect("one plain question passes", run(stop("I found everything except one thing: which month did you start at the new job?")), "pass");
 expect("an ordinary finished report passes", run(stop("Done. I filed the three facts in your notebook and published the report at https://pages.example.com/audit.")), "pass");
 expect('"this will add real value" is not homework', run(stop("Filed the summary. This will add real value to tomorrow's brief.")), "pass");
