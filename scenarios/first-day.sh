@@ -143,7 +143,7 @@ const slug=value=>value.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/
 // A title as the brief says it (owner, PR #449: by its title, without file paths): the title, or the
 // title without the place its file goes ("... at work/emergency-kit-checklist.md"), when at least
 // four words of it are left that the goal does not already say.
-const titles=title=>{const plain=title.replace(/\s+(?:at|in|into|to|under|as|from)\s+(?=\S*[\\/])\S+/gi,' ').replace(/\s+/g,' ').trim().replace(/[\s,;:.]+$/,'');return plain!==title&&plain.split(' ').length>=4&&!goal.toLowerCase().includes(plain.toLowerCase())?[title,plain]:[title];};
+const titles=title=>{const plain=title.replace(/\s+(?:at|in|into|to|under|as|from)\s+(?=\S*[\\/])\S*?(?=[,;:.!?)]*(?:\s|$))/gi,'').replace(/\s+/g,' ').trim().replace(/[\s,;:.]+$/,'');return plain!==title&&plain.split(' ').length>=4&&!goal.toLowerCase().includes(plain.toLowerCase())?[title,plain]:[title];};
 const own=cards.includes(`${workId}.md`)?card(`${workId}.md`):null;
 let named;
 if(own&&verified(own)){

@@ -17,11 +17,11 @@ export function plainTitle(title){
  const plain=title
   .replace(/`([^`]*[\\/][^`]*)`/g,'$1')
   .replace(/`[^`]*`/g,' ')
-  .replace(/\s+(?:at|in|into|to|under|as|from)\s+(?=\S*[\\/])\S+/gi,' ')
+  .replace(/\s+(?:at|in|into|to|under|as|from)\s+(?=\S*[\\/])\S*?(?=[,;:.!?)]*(?:\s|$))/gi,'')
   .replace(/(?:^|\s)\S*[\\/]\S*\.[A-Za-z0-9]+(?=$|[\s,;:.!?)])/g,' ')
   .replace(/\bW-\d+[A-Za-z0-9._-]*/g,' ')
   .replace(/\s+/g,' ').trim().replace(/[\s,;:.]+$/,'');
- return plain&&!/[\r\n\u0000-\u001f]/.test(plain)&&plain.length<=200?plain:null;
+ return plain&&!/[\r\n\u0000-\u001f]/.test(plain)&&plain.length<=480?plain:null;
 }
 
 // When the work's check passed: the notebook's own verification, or the VERIFIED line of the work
@@ -52,5 +52,6 @@ export function finishedWork(rows,{previous=null,today,dayOf}={}){
 // The one line the brief carries for them, or null when nothing was finished.
 export function finishedLine(titles){
  if(!titles?.length)return null;
- return 'Finished and checked: '+titles.join('; ')+'.';
+ const line='Finished and checked: '+titles.join('; ');
+ return /[.?!]$/.test(line)?line:line+'.';
 }

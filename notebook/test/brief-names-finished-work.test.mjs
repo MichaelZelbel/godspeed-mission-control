@@ -1,6 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';
 import {Store} from '../core/records/store.mjs';import {QueryService} from '../core/query.mjs';import {briefing} from '../core/briefing.mjs';
-import {plainTitle,finishedWork} from '../core/briefing-done.mjs';
+import {plainTitle,finishedWork,finishedLine} from '../core/briefing-done.mjs';
 
 // A morning brief names the work finished and checked since the last one by its title (#377; owner's
 // decision on PR #449). The first-day scenario's real brief (scenarios run 43070186384) said only that
@@ -32,6 +32,18 @@ test('a brief after a day whose work passed its check names that work by its tit
  assert.equal(seen[0].context.done_line,'Finished and checked: Write a practical household emergency-kit checklist.');
  assert.match(seen[0].contract,/done_line/);
  assert.match(seen[0].contract,/on a line of its own that starts with "Next:"/,'the next action is asked for on a line of its own');
+});
+
+test('a long work title is still named, and a question keeps its own mark',()=>{
+ // The two works scenarios run 43076784276 verified: the draft's title is over 200 characters once
+ // its path is left out, and it was dropped before this.
+ const draft='Draft the household emergency-kit checklist file from the supported claims in goals/research/prepare-a-practical-household-emergency-kit-checklist-by-sun/claims.md, with every item marked HAVE or NEED for the person to fill in, and the water rule (3 days, 1 gallon per person per day; 2 weeks at home if possible) and the six-month review date on it';
+ const question='How do people who finished a household emergency kit get there?';
+ const rows=[question,draft].map(what=>({state:'verified',kind:'legacy-work',legacy_fields:{WHAT:what},legacy_log:[{date:'2026-11-11',event:'VERIFIED',rest:'check passed'}]}));
+ const titles=finishedWork(rows,{today:'2026-11-12',dayOf:d=>d.toISOString().slice(0,10)});
+ assert.equal(titles.length,2);assert.ok(titles[1].startsWith('Draft the household emergency-kit checklist file from the supported claims, with every item'));assert.doesNotMatch(titles[1],/goals\//);
+ assert.equal(finishedLine([question]),'Finished and checked: '+question);
+ assert.equal(finishedLine(['Plant the fictional bed']),'Finished and checked: Plant the fictional bed.');
 });
 
 test('a brief after a day with no verified work claims none',async()=>{
