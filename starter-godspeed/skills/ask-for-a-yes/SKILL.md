@@ -26,6 +26,8 @@ plain "yes" or "no" (or a button, where the chat has one). Nothing happens befor
    sends, pays, deletes or publishes something. `godspeed-step help` lists every option.
 3. **Say its message.** When it prints `"outcome": "asked"`, the message to the person is its
    `message`, word for word (a routine prints it as its result). Any other outcome asked
-   nothing: say nothing about it, unless what was done needs one plain sentence.
+   nothing: say nothing about it, unless what was done needs one plain sentence. An empty
+   `message` means the question already went to them in Telegram, with Yes and No buttons:
+   say nothing about it.
 4. **Never** put the step's id, a code, a command or "approve"/"reject" with anything after it
    in a message. A routine's words that ask for a code are not sent at all.

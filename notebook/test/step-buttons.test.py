@@ -44,6 +44,7 @@ folder = os.path.join(HERE, "..", "assistant-files", "godspeed-context")
 spec = importlib.util.spec_from_file_location("step_buttons", os.path.join(folder, "step_buttons.py"))
 step_buttons = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(step_buttons)
+step_buttons.EVERY = 3600  # the watcher factory starts would race the posts each case makes by hand
 
 
 class Bot:
@@ -86,7 +87,6 @@ def gateway():
     threading.Thread(target=loop.run_forever, daemon=True).start()
 
     async def connect():
-        # factory also starts the watcher; it looks every few seconds, so the test posts by hand.
         buttons.factory(App(bot), None)
     asyncio.run_coroutine_threadsafe(connect(), loop).result()
     return buttons, bot
@@ -129,6 +129,8 @@ def queue():
 
 def one_step():
     buttons, bot = gateway()
+    step("heard", "--chat", "telegram", stdin="yes")
+    assert status(IDS[0]) == "waiting", "a yes cannot reach a step whose question has not gone out"
     (sent,) = post(buttons, bot, 1)
     assert sent[0]["text"] == MESSAGES[0], sent[0]["text"]
     markup = sent[0]["reply_markup"].inline_keyboard[0]
@@ -138,6 +140,21 @@ def one_step():
     press(buttons, bot, sent, "yes")
     assert status(IDS[0]) == "yes"
     assert bot.edits[-1]["text"] == MESSAGES[0] + "\n\nYes: I will restart it now.", bot.edits
+    buttons.post_waiting()
+    assert len(bot.sent) == 1, bot.sent
+
+
+def typed_after_card():
+    buttons, bot = gateway()
+    post(buttons, bot, 1)
+    step("heard", "--chat", "telegram", stdin="yes")
+    assert status(IDS[0]) == "yes"
+
+
+def answered_first():
+    buttons, bot = gateway()
+    buttons.post_waiting()
+    assert bot.sent == [] and queue() == [], (bot.sent, queue())
 
 
 def two_steps():
@@ -196,6 +213,8 @@ def send_fails():
     buttons.post_waiting()
     assert queue() == [IDS[0] + ".json"], queue()
     assert status(IDS[0]) == "waiting"
+    step("heard", "--chat", "telegram", stdin="yes")
+    assert status(IDS[0]) == "waiting", "a question that never reached the owner cannot be answered"
 
 
 def expired():

@@ -29,43 +29,44 @@ function setup(t){
   return {stdout:''};
  };
  const scheduler=new NativeScheduler(store,{executable:'hermes',home,device:'vps',run});
- const ask=about=>openStep(store,{about,question:'Shall I turn them off?',yes:'I will turn them off.',no:'I will leave them.',by:'routine:probe',chat:'telegram'});
+ // `words`: a routine that prints the question itself, rather than leaving it to the gateway's card.
+ const ask=about=>({...openStep(store,{about,question:'Shall I turn them off?',yes:'I will turn them off.',no:'I will leave them.',by:'routine:probe',chat:'telegram'}),words:about+' Shall I turn them off?'});
  const buttons=id=>fs.existsSync(path.join(store.state,STEP_QUESTIONS,id+'.json'));
  return {root,store,scheduler,hermes,ask,buttons};
 }
 const ways={'cron run probe1':s=>s.runNow('probe1'),'cron tick':s=>s.tick()};
 
 for(const [way,go] of Object.entries(ways)){
- test(`a question from a no-agent routine the notebook runs with \`hermes ${way}\` gets its buttons and a plain yes answers it`,async t=>{
+ test(`a question from a no-agent routine the notebook runs with \`hermes ${way}\` is answered by a plain yes, and no card follows its words`,async t=>{
   const {root,scheduler,hermes,ask,buttons}=setup(t),step=ask('Seven leftover programs still run.');
-  hermes.words=step.message;
+  hermes.words=step.words;
   await go(scheduler);
   assert.ok(hermes.seen.includes(way));
   const fresh=new Store(root,{device:'vps'});
   assert.ok(fresh.get('approvals',step.id).sent_at,'the step is certified');
-  assert.ok(buttons(step.id),'its Yes/No buttons are handed to the gateway');
+  assert.equal(buttons(step.id),false,'the words carried the question, so no card follows');
   assert.equal(heard(fresh,{chat:'telegram',words:'yes'}).kind,'answered');
   assert.equal(fresh.get('approvals',step.id).status,'approved');
  });
 
- for(const outcome of ['failed','queued'])test(`a run through \`hermes ${way}\` whose delivery Hermes reports as ${outcome} leaves its question unanswerable`,async t=>{
+ for(const outcome of ['failed','queued'])test(`a run through \`hermes ${way}\` whose delivery Hermes reports as ${outcome} leaves its question unanswerable until the gateway's card asks it`,async t=>{
   const {root,scheduler,hermes,ask,buttons}=setup(t),step=ask('Seven leftover programs still run.');
-  hermes.words=step.message;hermes.outcome=outcome;
+  hermes.words=step.words;hermes.outcome=outcome;
   await go(scheduler);
   const fresh=new Store(root,{device:'vps'});
   assert.equal(fresh.get('approvals',step.id).sent_at,undefined);
-  assert.equal(buttons(step.id),false);
+  assert.ok(buttons(step.id),'the gateway will still ask it');
   assert.equal(heard(fresh,{chat:'telegram',words:'yes'}).kind,'none');
  });
 }
 
 test('an earlier delivered run does not certify the same question asked again by a run whose delivery failed',async t=>{
  const {root,store,scheduler,hermes,ask}=setup(t),first=ask('Seven leftover programs still run.');
- hermes.words=first.message;
+ hermes.words=first.words;
  await scheduler.runNow('probe1');
  assert.ok(new Store(root,{device:'vps'}).get('approvals',first.id).sent_at);
  const second=ask('Seven leftover programs still run.');
- assert.equal(second.message,first.message);
+ assert.equal(second.words,first.words);
  hermes.outcome='failed';
  await new Promise(r=>setTimeout(r,2100));
  await scheduler.runNow('probe1');

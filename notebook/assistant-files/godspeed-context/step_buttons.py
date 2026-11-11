@@ -5,10 +5,12 @@ Yes/No buttons, notebook/assistant-files/godspeed-buttons/buttons.py. This file 
 use of them: tokens live in .godspeed/step-buttons/ under the prefix gss1:, and a tap runs
 `godspeed-step press <step> yes|no`, which answers that one step and no other.
 
-Why a folder: the process that delivers a report often has no Telegram client (the notebook runs
-`hermes cron tick` itself), and the buttons can only be sent from the gateway. So when the notebook
-makes a Telegram step answerable it leaves {id, text, expires_at} in .godspeed/step-questions/<id>.json
-(notebook/core/waiting-steps.mjs), and the gateway posts the button message for each file it finds.
+Why a folder: the process that asks often has no Telegram client (the notebook runs `hermes cron
+tick` itself), and the buttons can only be sent from the gateway. So when a Telegram step opens, the
+notebook leaves {id, text, expires_at} in .godspeed/step-questions/<id>.json
+(notebook/core/waiting-steps.mjs). The gateway sends that question once, as one message with its
+buttons, and only while the step still waits; then it tells the notebook the question went out
+(`godspeed-step sent`), which is what makes the step answerable.
 """
 import asyncio
 import importlib.util
@@ -46,7 +48,7 @@ PREFIX = "gss1:"
 FOLDER = "step-buttons"
 CALLBACK = "waiting-step"
 QUEUE = "step-questions"
-EVERY = 5            # seconds between looks at the hand-off folder
+EVERY = 1            # seconds between looks at the hand-off folder
 SENT_WITHIN = 60     # seconds to wait for the scheduled send before keeping the file for the next look
 STEP_ID = re.compile(r"^step-[0-9a-f-]{36}$")
 GENERIC = {"en": "A question is waiting for your answer."}
@@ -73,6 +75,11 @@ class StepButtons(buttons.YesNoButtons):
         self.command = command
         self._local = threading.local()
         self._watching = False
+
+    @staticmethod
+    def delay():
+        # A step's message is the question itself and follows no reply.
+        return 0
 
     def texts(self):
         # The shared library takes a message's text from here; `post` sets this step's own question
@@ -124,10 +131,39 @@ class StepButtons(buttons.YesNoButtons):
                     os.remove(file)
                 elif expiry(item) < time.time():
                     os.remove(file)
-                elif self.post(item["id"], item["text"]):
-                    os.remove(file)
+                else:
+                    waiting = self.waiting(item["id"])
+                    if waiting is False:
+                        os.remove(file)
+                    elif waiting and self.post(item["id"], item["text"]):
+                        # Never posted twice: if the notebook cannot be told, the step stays unanswerable.
+                        self.sent(item["id"])
+                        os.remove(file)
             except Exception:
                 continue
+
+    def run(self, *args):
+        command = self.command()
+        if not command:
+            return None
+        return subprocess.run(command[:2] + list(args) + command[2:], capture_output=True, text=True, encoding="utf-8",
+                              errors="replace", stdin=subprocess.DEVNULL, timeout=25)
+
+    def waiting(self, step_id):
+        """True while the step waits for its answer, False once it does not, None when the notebook cannot say."""
+        try:
+            run = self.run("get", step_id)
+            if run is None or run.returncode != 0:
+                return None
+            return json.loads(run.stdout).get("status") == "waiting"
+        except Exception:
+            return None
+
+    def sent(self, step_id):
+        try:
+            self.run("sent", step_id)
+        except Exception:
+            pass
 
     def factory(self, native, adapter):
         super().factory(native, adapter)
@@ -145,12 +181,9 @@ class StepButtons(buttons.YesNoButtons):
 
     def answer(self, token):
         """The command's reply to a press: what happened, or why nothing did (exit 2)."""
-        command = self.command()
-        if not command:
+        run = self.run("press", token["step"], token["answer"])
+        if run is None:
             raise RuntimeError("No godspeed-step command")
-        run = subprocess.run(command[:2] + ["press", token["step"], token["answer"]] + command[2:],
-                             capture_output=True, text=True, encoding="utf-8", errors="replace",
-                             stdin=subprocess.DEVNULL, timeout=25)
         if run.returncode not in (0, 2):
             raise RuntimeError("godspeed-step press failed")
         reply = json.loads(run.stdout).get("reply")
