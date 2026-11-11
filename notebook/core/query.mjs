@@ -12,6 +12,9 @@ import {isTalkGate,talkArea,talkCalendar} from './routine-times.mjs';
 const talkRow=(job,root)=>{if(!isTalkGate(job))return {};const calendar=talkCalendar(talkArea(root));return calendar?{calendar,talk:true}:{};};
 import {nativeCardRows} from './card-commands.mjs';
 import {momentDates} from './timestamps.mjs';
+// A record with no name and no nickname (only written before 2.0.0-beta.14, issue 266) is not listed
+// among the people, though it stays on disk with whatever links to it.
+import {personNames} from './person-names.mjs';
 
 const inventory = JSON.parse(fs.readFileSync(fileURLToPath(new URL('../../docs/full-version/source-inventory.json', import.meta.url)), 'utf8'));
 export const tables = new Set(inventory.dependencies.flatMap(d => d.tables).filter(t => t !== 'note-attachments'));
@@ -171,10 +174,6 @@ function memberOf(people){
   return id=>{let person=byId.get(id);for(let hops=0;person?.merged_into&&hops<5;hops++)person=byId.get(person.merged_into)||byUid.get(person.merged_into);return person?.id||id;};
 }
 export const claimHolds=(claim,day)=>(!claim.valid_from||claim.valid_from<=day)&&(!claim.valid_to||claim.valid_to>day);
-// A person's name and nicknames that are text and not blank. A record with none (only written
-// before 2.0.0-beta.14, issue 266) is not listed among the people, though it stays on disk with
-// whatever links to it.
-const personNames=r=>[r.name,...(Array.isArray(r.aliases)?r.aliases:[])].filter(n=>typeof n==='string'&&n.trim());
 // A note folder's path as the Notes page writes it: no leading, trailing or doubled slash. The page
 // strips, collapses and then trims (Notes.tsx), which can leave a slash the trim uncovered
 // ("/Travel//Japan/ "), so the ends are stripped once more and the shape always holds.
@@ -499,7 +498,7 @@ export class QueryService {
       // and every capitalised name after a lowercase or accented one (Nina,
       // Otto after Ömer) was never listed.
       const byName = (a, b) => compareValues(String(a.name ?? ''), String(b.name ?? '')) || compareValues(String(a.id), String(b.id));
-      const query = String(args.search_text || '').toLowerCase(), all = this.rows('contacts').filter(r => !r.merged_into && r.id !== args.exclude_contact_id && personNames(r).some(n => n.toLowerCase().includes(query))).sort(byName);
+      const query = String(args.search_text || '').toLowerCase(), all = this.rows('contacts').filter(r => !r.merged_into && r.id !== args.exclude_contact_id && personNames(r).some(n => n.includes(query))).sort(byName);
       const after = all.filter(r => !args.after_id || byName(r, { name: args.after_name, id: args.after_id }) > 0);
       const rows = after.slice(0, args.page_size || 50), last = rows.at(-1); return { rows, total: all.length, next: after.length > rows.length ? { name: last.name, id: last.id } : null };
     }
