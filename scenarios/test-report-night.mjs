@@ -284,6 +284,13 @@ test('the draft collects the verdicts once and the night reports from that same 
   assert.equal(failed.handed.status, 0, failed.handed.stderr);
   assert.deepEqual(failed.handed.stdout.split('\n').map((line) => line.split(':')[0]), rows.map((row) => `FAIL ${row.id}`),
     'a failed stage must still hand the night every scenario, failed');
+  const told = await night('', {}, { SCENARIO_VERDICTS: failed.handed.stdout, STAGE: 'failure' });
+  assert.equal(told.code, 0, told.stderr);
+  assert.equal(told.created.length, rows.length);
+  for (const { body } of told.created) {
+    assert.match(body.body, /It did not run: the stage job ended failure\./, 'a failed stage must be the cause each issue names');
+    assert.doesNotMatch(body.body, /result record/);
+  }
   const ran = run('success');
   assert.equal(ran.handed.status, 0, ran.handed.stderr);
   assert.match(ran.handed.stdout, /^PASS voice: heard$/m);

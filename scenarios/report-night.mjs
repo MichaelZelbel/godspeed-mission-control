@@ -135,6 +135,8 @@ export async function reportNight(env = process.env, log = console.log) {
     }
   };
 
+  // A failed stage ran no scenario, so a verdict's missing record is not the cause the issue should quote.
+  const stageEnded = env.STAGE && env.STAGE !== 'success' ? env.STAGE : '';
   const failures = [];
   for (const [name, result] of scenarios) {
     const title = titleOf(name);
@@ -149,11 +151,12 @@ export async function reportNight(env = process.env, log = console.log) {
     const exactVerdict = verdicts.get(name);
     const why = result === 'failure' ? 'failed' : `could not run (its job ended ${result || 'with no result'})`;
     let lines;
-    if (exactVerdict) lines = exactVerdict;
+    if (exactVerdict && stageEnded) lines = `It did not run: the stage job ended ${stageEnded}.`;
+    else if (exactVerdict) lines = exactVerdict;
     else {
       const got = await jobLog(name);
       if (got && got.text) lines = got.text;
-      else if (got && got.skipped) lines = `The job did not run${scenarios.size && env.STAGE && env.STAGE !== 'success' ? `: the stage job ended ${env.STAGE}` : ''}.`;
+      else if (got && got.skipped) lines = `The job did not run${stageEnded ? `: the stage job ended ${stageEnded}` : ''}.`;
       else lines = `The job's log could not be read; the run link has it.`;
     }
     const body = `Night of ${night}: ${name} ${why}.\n\nRun: ${runLink}\n\nThe last lines:\n\n\`\`\`\n${lines}\n\`\`\`\n`;
