@@ -87,7 +87,7 @@ function usableRewrite(replacement,sentence,voice){
 // rewrite(sentence,itemText,reason) resolves to the new sentence or ''.
 export async function applyFindings(text,findings,{protectedLines=[],voice=null,rewrite}){
  const lines=text.split(/\r?\n/),keep=new Set(protectedLines.map(l=>l.trim()).filter(Boolean)),items=draftItems(text),changes=[];
- const cut=new Set();
+ const cut=new Set(),lastDrop=new Map();
  const itemOf=i=>items.find(item=>item.start<=i&&i<item.end);
  const itemText=item=>lines.slice(item.start,item.end).join('\n');
  for(const finding of [...findings].sort((a,b)=>(b.problem==='core-unsupported')-(a.problem==='core-unsupported'))){
@@ -108,13 +108,17 @@ export async function applyFindings(text,findings,{protectedLines=[],voice=null,
   lines[at]=lines[at].replace(finding.sentence,'').replace(/\s{2,}/g,' ').trimEnd();
   if(!lines[at].trim())cut.add(at);
   const emptied=lines.slice(item.start,item.end).every((l,i)=>!(i===0?l.replace(ITEM_MARKER,''):l).trim());
-  changes.push({action:'drop-sentence',item:first,sentence:finding.sentence,reason,...(emptied?{item_emptied:true}:{})});
+  const change={action:'drop-sentence',item:first,sentence:finding.sentence,reason,...(emptied?{item_emptied:true}:{})};
+  changes.push(change);lastDrop.set(item.start,change);
   if(emptied)for(let i=item.start;i<item.end;i++)cut.add(i);
  }
  for(const item of items){
   if(cut.has(item.start)||lines[item.start].replace(ITEM_MARKER,'').trim())continue;
-  const next=lines.findIndex((l,i)=>i>item.start&&i<item.end&&!cut.has(i)&&l.trim());
-  if(next<0)continue;
+  const next=lines.findIndex((l,i)=>i>item.start&&i<item.end&&!cut.has(i)&&l.trim()&&!keep.has(l.trim()));
+  if(next<0){
+   if(lastDrop.has(item.start)){cut.add(item.start);lastDrop.get(item.start).item_emptied=true;}
+   continue;
+  }
   lines[item.start]=lines[item.start].trimEnd()+' '+lines[next].trim();cut.add(next);
  }
  const out=[];

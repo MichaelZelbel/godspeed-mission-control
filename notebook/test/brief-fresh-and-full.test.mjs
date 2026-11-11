@@ -225,4 +225,9 @@ test('draft items and sentence repair keep to their lines',async()=>{
  const headless=await applyFindings('Good morning.\n\n1. Your call clashes with the dentist.\nDecide which one moves by noon.\n\nHealth fine.',[{sentence:'Your call clashes with the dentist.',problem:'wording',reason:'w'}],{rewrite:async()=>''});
  assert.equal(headless.text,'Good morning.\n\n1. Decide which one moves by noon.\n\nHealth fine.','a kept item keeps its number on its text');
  assert.equal(thinCheck(headless.text,{}).has_action,true);
+ const charm='Charm Challenge: day 12 of 30.';
+ const overRequired=await applyFindings('Good morning.\n\n1. Your call clashes with the dentist.\n'+charm+'\n\nHealth fine.',[{sentence:'Your call clashes with the dentist.',problem:'wording',reason:'w'}],{protectedLines:[charm],rewrite:async()=>''});
+ assert.equal(overRequired.text,'Good morning.\n\n'+charm+'\n\nHealth fine.','a required line is never pulled onto an item number');
+ assert.equal(overRequired.changes[0].item_emptied,true);
+ assert.equal(thinCheck(overRequired.text,{}).has_action,false);
 });
