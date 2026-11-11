@@ -20,11 +20,22 @@ its agent wrote, and Hermes does not put that into the chat's history. register(
 delivery of a skill job's result so the notebook first records the words Hermes will send (media tags out, redacted; without its header and footer)
 (notebook/scripts/background-report.mjs record), where the chat reads them. A composite lane is recorded for all its destinations at once or not at all. A result that could not be recorded is not delivered: the run says why in its delivery
 error, like the routines that print their own words. Once Hermes has delivered any result, the notebook is told the words (background-report.mjs delivered, with the receipts of the records written for it), and the waiting steps that record names become answerable; a delivery whose receipt could not be used says so in its delivery error. The wiring writes report.json beside this file.
+
+A failed run (11 November 2026, #385): Hermes' failure note (a job name, a Python error, a command) once
+reached the owner's Telegram word for word, and a one-time follow-up was then marked done without ever
+having run. A failure bound for the owner's chats is no longer delivered: the notebook keeps it in its
+failure log (background-report.mjs failed), and the owner hears at most one plain sentence about it. A
+one-time follow-up that failed is scheduled again, as a new one-time job, up to three times; after that
+it is left for repair with a notification in the notebook. follow-ups.json beside this file links each
+of those jobs to the follow-up it continues.
 """
 
+import inspect
 import json
 import os
 import subprocess
+import threading
+from datetime import datetime, timedelta, timezone
 
 from cron.scheduler_provider import InProcessCronScheduler as _BuiltIn
 
@@ -104,8 +115,117 @@ def mark_delivered(job, content, receipts, for_failure=False):
         return str(error)
 
 
+RETRY_DELAYS = (3600, 21600, 86400)
+FOLLOW_UPS = os.path.join(HERE, "follow-ups.json")
+FOLLOW_UP_DAYS = 7
+_follow_ups_lock = threading.Lock()
+# What a retry copies from the job it continues, when this Hermes' create_job takes it.
+RETRY_FIELDS = ("prompt", "name", "deliver", "origin", "skill", "skills", "model", "provider", "base_url", "script",
+                "context_from", "enabled_toolsets", "workdir", "no_agent", "failure_deliver", "reasoning_effort",
+                "interpreter", "timezone")
+
+
+def _one_time(job):
+    schedule, repeat = job.get("schedule"), job.get("repeat")
+    return (isinstance(schedule, dict) and schedule.get("kind") == "once") or (isinstance(repeat, dict) and repeat.get("times") == 1)
+
+
+def _read_follow_ups():
+    try:
+        with open(FOLLOW_UPS, encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def _take_follow_up(job_id):
+    """{origin, attempt}: the follow-up this job continues and how many runs of it failed before."""
+    with _follow_ups_lock:
+        follow_ups = _read_follow_ups()
+        entry = follow_ups.pop(job_id, None)
+        if entry is not None:
+            _write_follow_ups(follow_ups)
+    if isinstance(entry, dict) and entry.get("origin") and isinstance(entry.get("attempt"), int):
+        return {"origin": entry["origin"], "attempt": entry["attempt"]}
+    return {"origin": job_id, "attempt": 0}
+
+
+def _write_follow_ups(follow_ups):
+    oldest = (datetime.now(timezone.utc) - timedelta(days=FOLLOW_UP_DAYS)).isoformat()
+    kept = {k: v for k, v in follow_ups.items() if isinstance(v, dict) and str(v.get("at", "")) >= oldest}
+    temporary = FOLLOW_UPS + ".tmp"
+    with open(temporary, "w", encoding="utf-8") as f:
+        json.dump(kept, f)
+    os.replace(temporary, FOLLOW_UPS)
+
+
+def _link_retry(retry_id, origin, attempt):
+    with _follow_ups_lock:
+        follow_ups = _read_follow_ups()
+        follow_ups[retry_id] = {"origin": origin, "attempt": attempt, "at": datetime.now(timezone.utc).isoformat()}
+        _write_follow_ups(follow_ups)
+
+
+def _schedule_retry(job, delay):
+    """The id of a new one-time job doing the failed job's work `delay` seconds from now. An ISO
+    time is what Hermes reads as one run; an interval such as "30m" would repeat."""
+    from cron.jobs import create_job
+    accepted = inspect.signature(create_job).parameters
+    fields = {k: job.get(k) for k in RETRY_FIELDS if k in accepted and job.get(k) is not None}
+    if fields.get("skills"):
+        fields.pop("skill", None)
+    at = (datetime.now(timezone.utc) + timedelta(seconds=delay)).replace(microsecond=0)
+    fields.update(schedule=at.isoformat(), repeat=1)
+    return create_job(**fields)["id"], at.isoformat()
+
+
+def _owner_failure(job):
+    """Whether a failure of this job would reach the owner's chats. When that cannot be told, it is
+    treated as if it would: the raw note must not reach them."""
+    try:
+        return bool(_destinations(job, True))
+    except Exception:
+        return True
+
+
+def handle_failure(job, content):
+    """The failure goes to the notebook's failure log instead of the owner, and a one-time follow-up
+    is scheduled again until its retries are used up. None, or why the notebook could not keep it."""
+    job_id = str(job.get("id") or "")
+    follow_up = _take_follow_up(job_id)
+    attempt = follow_up["attempt"] + 1
+    one_time = _one_time(job)
+    retry_at = retry_error = None
+    given_up = False
+    if one_time:
+        if attempt <= len(RETRY_DELAYS):
+            try:
+                retry_id, retry_at = _schedule_retry(job, RETRY_DELAYS[attempt - 1])
+                _link_retry(retry_id, follow_up["origin"], attempt)
+            except Exception as error:
+                given_up, retry_error = True, str(error)[:300]
+        else:
+            given_up = True
+    report = {"job": {"id": job_id, "name": job.get("name"), "prompt": job.get("prompt")}, "origin": follow_up["origin"],
+              "attempt": attempt, "one_time": one_time, "retry_at": retry_at, "given_up": given_up,
+              "retry_error": retry_error, "note": content if isinstance(content, str) else str(content)}
+    try:
+        with open(os.path.join(HERE, "report.json"), encoding="utf-8") as f:
+            wiring = json.load(f)
+        r = subprocess.run([wiring["node"], wiring["script"], "failed", "--godspeed", wiring["root"], "--home", HOME],
+                           input=json.dumps(report), capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=120)
+        if r.returncode != 0:
+            return "Not delivered: the failure could not be kept in the notebook. " + r.stderr.strip()[:300]
+        return None
+    except Exception as error:
+        return "Not delivered: the failure could not be kept in the notebook. %s" % error
+
+
 def wrap_delivery(deliver):
     def deliver_recorded(job, content, *args, for_failure=False, **kwargs):
+        if for_failure and _owner_failure(job):
+            return handle_failure(job, content)
         refused, receipts = record_result(job, content, for_failure)
         if refused:
             return refused
