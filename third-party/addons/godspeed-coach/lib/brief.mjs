@@ -10,8 +10,8 @@ import { parseDoc } from "./header.mjs";
 import { localParts, addDays, dayWords } from "./clock.mjs";
 import { lastTalk, unansweredBefore, missedInARow, talkFile, talkDates, readTalk } from "./talks.mjs";
 import { listHabits, stats, verdict, daysWords } from "./habits.mjs";
-import { rhythmWords, listAreas, findArea, isTalkDay } from "./areas.mjs";
-import { prepForBrief, prepMissing } from "./prep.mjs";
+import { rhythmWords, listAreas, findArea } from "./areas.mjs";
+import { prepForBrief, prepMissing, countsAsTalkDay } from "./prep.mjs";
 import { readQuestions, questionsFile } from "./questions.mjs";
 
 export function queuedQuestions(area, ymd) {
@@ -139,8 +139,10 @@ export const preparedHint = (from) => `<two to four more things from ${from}, on
 export const fromPrepCommand = (area, home, file) => `godspeed-coach talk open ${area.slug} --godspeed "${home}" --from-prep "${file}"`;
 const FROM_PREP_SAYS = "The opening is written: this command saves it with the talk card and prints it, and your final answer is that opening, exactly as printed.";
 
-export function continuingTalkDay(area, ymd) {
-  if (fs.existsSync(talkFile(area, ymd)) || isTalkDay(area, ymd)) return null;
+// The earlier talk still open with no reply that a talk they ask for today continues, or null when
+// today opens its own talk: a talk day, or a day the newest rhythm change dropped (countsAsTalkDay).
+export function continuingTalkDay(area, ymd, { mcDir = null, tz = null } = {}) {
+  if (fs.existsSync(talkFile(area, ymd)) || countsAsTalkDay(mcDir, area, ymd, tz)) return null;
   return unansweredBefore(area, ymd).at(-1) || null;
 }
 
@@ -156,7 +158,7 @@ export function brief(mcDir, s, area, ymd, { inChat = false } = {}) {
   const prep = prepForBrief(area, ymd);
   L.push(`COACH TALK DUE: ${area.title} (id for commands: ${area.slug}), ${ymd}, ${area.time} ${s.timezone}`);
   const earlier = inChat ? unansweredBefore(area, ymd) : [];
-  const continuing = inChat && continuingTalkDay(area, ymd);
+  const continuing = inChat && continuingTalkDay(area, ymd, { mcDir, tz: s.timezone });
   if (inChat && fs.existsSync(talkFile(area, ymd))) L.push(`Today's ${area.title} talk is already open: continue it (the coach recipe, "Continuing a talk") and do not run the open command below.`);
   else if (continuing) L.push(`The ${area.title} talk of ${earlier.at(-1)} is still open and today is not a talk day of this area: continue that talk (the coach recipe, "Continuing a talk") and do not run the open command below.`);
   else if (earlier.length) L.push(prep ? `The ${area.title} talk of ${earlier.at(-1)} is still open with no reply from them. Opening today's talk closes it as not held. The open command adds the sentence naming it to the prepared opening: do not add another.` : `The ${area.title} talk of ${earlier.at(-1)} is still open with no reply from them. This talk has no preparation, so the open command leaves it open.`);
@@ -165,8 +167,8 @@ export function brief(mcDir, s, area, ymd, { inChat = false } = {}) {
   if (!continuing) L.push(prep
     ? `Record: ${rel(talkFile(area, ymd))}, created by (run it exactly like this): ${fromPrepCommand(area, home, rel(prep.file))}${inChat ? " --shown" : ""}. ${FROM_PREP_SAYS}`
     : `Record: ${rel(talkFile(area, ymd))}, created by (run it exactly like this): godspeed-coach talk open ${area.slug} --godspeed "${home}" --opening "<the opening>" --prepared "${hint}" --read "<what you read>"${inChat ? " --shown" : ""}`);
-  const missing = prep ? null : prepMissing(area, ymd);
-  if (missing) L.push("", "## Not prepared", `The preparation for this talk is not ready, and the opening must say so. Right after where it comes from, say this one sentence, word for word: "The preparation for this talk is not ready: ${missing}." Then carry on from this brief. Never say or suggest how long or how widely anything was researched; say only what the brief shows.`, "");
+  const missing = prep ? null : prepMissing(area, ymd, undefined, { mcDir, tz: s.timezone });
+  if (missing) L.push("", "## Not prepared", `The preparation for this talk is not ready, and the opening must say so. Right after where it comes from, say this one sentence, word for word: "The preparation for this talk is not ready: ${missing}." Then carry on from this brief. Anything from the research sections below is the nightly goal research as it stands, not a reviewed preparation: when you use it, say its date, and never present it as this week's research result or say the research found nothing useful. Never say or suggest how long or how widely anything was researched; say only what the brief shows.`, "");
   L.push(`Mission control folder: ${home} (every godspeed-coach command in this talk takes --godspeed "${home}")`);
   L.push(`Style: ${area.style}. Tone: ${area.tone}. Rhythm: ${rhythmWords(area)}.`);
   if (area.serves.length) L.push(`Serves: ${area.serves.join(", ")}.`);
