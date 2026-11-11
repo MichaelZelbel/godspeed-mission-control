@@ -68,6 +68,11 @@ reaches only the Routines list). Its one plain sentence is printed like any othe
 reaches the person the way their lines do (a note in "From your routines" on a computer, Telegram
 on a server), and it is kept in godspeed-routines-status.json beside Hermes' own record, from which
 the Routines list still says that the run failed (starting-routines.mjs, routineStatus).
+
+A routine that has a promise in work/promises/ (a line ROUTINE: <kind>, which setup writes when it
+makes the routine) leaves the person's date in routines/ran/<kind>.txt after every run that ended
+well (stamp). That date is the promise's proof, so a routine that stopped running is told at the
+top of the next morning, where a quiet one is not.
 """
 import argparse
 import hashlib
@@ -190,11 +195,16 @@ def fail(sentence, result=None):
 
 
 STATUS = "godspeed-routines-status.json"
+# Set when this run kept a failure (remember): such a run is not proof that a promise was kept.
+FAILED_THIS_RUN = False
 
 
 def remember(c, kind, failed=None):
     """What this run of a daily-round routine came to, beside Hermes' own record: the Routines list
     shows a run that printed its failure as failed (starting-routines.mjs, routineStatus)."""
+    global FAILED_THIS_RUN
+    if failed:
+        FAILED_THIS_RUN = True
     path = os.path.join(c["home"], STATUS)
     try:
         with open(path, encoding="utf-8") as f:
@@ -1327,9 +1337,32 @@ ROUTINES = {"research": research, "decide": decide, "work": work, "due": due, "b
              "cleanup": cleanup, "mail-count": mail_count, "workouts": workouts, "memory-daily": memory_daily}
 
 
+def stamp(c, kind):
+    """The proof of a promise kept: the person's date in routines/ran/<kind>.txt, written only for a
+    routine some promise names, and never failing the run that writes it."""
+    try:
+        claim = "ROUTINE: " + kind
+        promises = Path(c["root"]) / "work" / "promises"
+        if not any(claim in (l.strip() for l in read(str(f)).splitlines()) for f in promises.glob("*.md")):
+            return
+        path = Path(c["root"]) / "routines" / "ran" / (kind + ".txt")
+        text = today(c) + "\n"
+        if read(str(path)) == text:
+            return
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = str(path) + ".tmp"
+        with open(tmp, "w", encoding="utf-8", newline="\n") as f:
+            f.write(text)
+        os.replace(tmp, str(path))
+    except Exception:
+        pass
+
+
 def main(kind):
     c = config()
     out = ROUTINES[kind](c)
+    if not FAILED_THIS_RUN:
+        stamp(c, kind)
     out, recorded = out if isinstance(out, tuple) else (out, kind in NOT_RECORDED)
     if out:
         if not recorded:
