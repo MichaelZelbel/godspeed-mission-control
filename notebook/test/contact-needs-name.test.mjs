@@ -35,3 +35,19 @@ test('a contact without a name can still be removed',()=>{
   query.execute({table:'contacts',operation:'delete',filters:[['eq','id','old']],values:{id:'old'}});
   assert.deepEqual(contacts(query),[]);
 });
+
+// Issue 266: opening a person records last_viewed_at, and for an old contact without a name that
+// write was refused, so its first open ended in this error.
+test('opening an old contact without a name records the view, and still changes nothing else',()=>{
+  const {store,query}=setup();
+  const old=store.save('contacts',{id:'old',relationship:'friend'});
+  const at='2026-11-11T10:00:00.000Z';
+  query.execute({table:'contacts',operation:'update',values:{last_viewed_at:at},filters:[['eq','id','old']]});
+  const read=contacts(query)[0];
+  assert.equal(read.last_viewed_at,at);
+  assert.equal(read.relationship,'friend');
+  assert.equal(read.name,undefined,'the record was not given a name');
+  assert.equal(read.uid,old.uid);
+  assert.throws(()=>query.execute({table:'contacts',operation:'update',values:{last_viewed_at:at,relationship:'colleague'},filters:[['eq','id','old']]}),{message:MESSAGE});
+  assert.throws(()=>query.execute({table:'contacts',operation:'insert',values:{last_viewed_at:at}}),{message:MESSAGE},'a new person still needs a name');
+});
