@@ -121,6 +121,7 @@ sys.modules["cron.jobs"]=types.ModuleType("cron.jobs");sys.modules["cron"].jobs=
 created=[];counter=os.path.join(os.path.dirname(sys.argv[1]),"stub-jobs-created")
 def create_job(prompt,schedule,name=None,repeat=None,deliver=None,origin=None,skill=None,skills=None,failure_deliver=None):
  if name=="Unschedulable":raise RuntimeError("jobs.json is locked")
+ if name=="Unlinkable":links=os.path.join(os.path.dirname(sys.argv[1]),"follow-ups.json");os.path.exists(links) and os.remove(links);os.mkdir(links)
  n=(int(open(counter).read()) if os.path.exists(counter) else 0)+1;open(counter,"w").write(str(n))
  created.append(dict(prompt=prompt,schedule=schedule,name=name,repeat=repeat,deliver=deliver,origin=origin,skill=skill,skills=skills,failure_deliver=failure_deliver));return {"id":"retry-%d"%n}
 sys.modules["cron.jobs"].create_job=create_job
@@ -277,10 +278,21 @@ test('a follow-up that cannot be scheduled again is left for repair at once',t=>
  assert.deepEqual(readNotices(fresh),[]);
 });
 
-test('a retry whose link could not be kept still runs, and is not reported as given up',t=>{
+test('a follow-up whose retries could not be kept is left for repair at once, and said nothing about',t=>{
  if(!python)return t.skip('needs Python');
  const {store,run,dir}=wiredProvider(t);fs.mkdirSync(path.join(dir,'follow-ups.json'));
  const out=run([[FOLLOW_UP,ISSUE_NOTE,true]]);
+ assert.deepEqual([out.errors,out.delivered,out.created],[[null],[],[]],'no retry that would count from the start again');
+ const fresh=new Store(store.root,{device:'pc'});
+ assert.match(fresh.get('notifications','follow-up-given-up-e6114fa9f94c').body,/failed 1 time and will not be tried again/);
+ const [kept]=keptLines(store);assert.match(kept.retry_error,/^the follow-up's retries could not be kept/);
+ assert.deepEqual(readNotices(fresh),[]);
+});
+
+test('a retry whose link could not be kept after it was scheduled still runs, and is not reported as given up',t=>{
+ if(!python)return t.skip('needs Python');
+ const {store,run}=wiredProvider(t);
+ const out=run([[{...FOLLOW_UP,name:'Unlinkable'},ISSUE_NOTE,true]]);
  assert.deepEqual([out.errors,out.delivered,out.created.length],[[null],[],1]);
  assert.equal(new Store(store.root,{device:'pc'}).get('notifications','follow-up-given-up-e6114fa9f94c'),undefined);
  const [kept]=keptLines(store);assert.match(kept.retry_error,/^the retry is scheduled, but could not be linked/);

@@ -27,7 +27,8 @@ having run. A failure bound for the owner's chats is no longer delivered: the no
 failure log (background-report.mjs failed), and the owner hears at most one plain sentence about it. A
 one-time follow-up that failed is scheduled again, as a new one-time job, up to three times; after that
 it is left for repair with a notification in the notebook. follow-ups.json beside this file links each
-of those jobs to the follow-up it continues.
+of those jobs to the follow-up it continues; when it cannot be written, the follow-up is left for repair
+at once rather than retried without a count.
 """
 
 import inspect
@@ -163,6 +164,17 @@ def _write_follow_ups(follow_ups):
     os.replace(temporary, FOLLOW_UPS)
 
 
+def _links_kept():
+    """Whether follow-ups.json can be written. A retry it cannot link would count its failures from
+    the start again, so it would never stop being scheduled."""
+    with _follow_ups_lock:
+        try:
+            _write_follow_ups(_read_follow_ups())
+            return True
+        except OSError:
+            return False
+
+
 def _link_retry(retry_id, origin, attempt):
     with _follow_ups_lock:
         follow_ups = _read_follow_ups()
@@ -202,7 +214,11 @@ def handle_failure(job, content):
     retry_at = retry_error = None
     given_up = False
     if one_time:
-        if attempt <= len(RETRY_DELAYS):
+        if attempt > len(RETRY_DELAYS):
+            given_up = True
+        elif not _links_kept():
+            given_up, retry_error = True, "the follow-up's retries could not be kept in %s" % FOLLOW_UPS
+        else:
             try:
                 retry_id, retry_at = _schedule_retry(job, RETRY_DELAYS[attempt - 1])
             except Exception as error:
@@ -212,8 +228,6 @@ def handle_failure(job, content):
                     _link_retry(retry_id, follow_up["origin"], attempt)
                 except Exception as error:
                     retry_error = "the retry is scheduled, but could not be linked to its follow-up: %s" % str(error)[:300]
-        else:
-            given_up = True
     report = {"job": {"id": job_id, "name": job.get("name"), "prompt": job.get("prompt")}, "origin": follow_up["origin"],
               "attempt": attempt, "one_time": one_time, "retry_at": retry_at, "given_up": given_up,
               "retry_error": retry_error, "note": content if isinstance(content, str) else str(content)}
