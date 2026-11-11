@@ -239,25 +239,61 @@ cmds.end = (a) => {
 const MOVE_HEADING = /^###? \d+\./;
 const TAIL = /^(?:FEWER|UNREAD|HOLD|HELD) |^## /;
 const OPEN_WAITING = ['planned', 'dispatched', 'attempted', 'blocked'];
-// A card item ends at a semicolon, a line end, a parenthesised remark or a full stop.
-const ITEM_END = '(?=[ \\t]*(?:[;\\n(]|\\.(?!\\S)|$))';
-// decision.md with the held moves off its "For you today" section (see STRIP above).
+// A card item starts at the start of the card, or after a semicolon, a line end or a colon, with an
+// optional list marker ("1." "2)" "-" "*"). It ends at a semicolon, a line end or a full stop; failing
+// that, at a parenthesised remark such as "(carried)". An item that only contains the held title
+// ("Draft and post on LinkedIn", "Re-post on LinkedIn") is not the held step and is left alone.
+const ITEM_START = '(^|[;:\\n])([ \\t]*(?:\\d+[.)][ \\t]*|[-*][ \\t]+)?)';
+const ITEM_ENDS = ['(?=[ \\t]*(?:[;\\n]|\\.(?!\\S)|$))', '(?=[ \\t]*\\()'];
+// Where in text the held title stands as a whole item: { from, to } of the title, or null. A plain
+// item wins over one with a remark, so "Post on LinkedIn (recap); Post on LinkedIn" takes the second.
+function itemAt(text, title) {
+  const t = escape(title).replace(/\s+/g, '\\s+');
+  for (const tail of ITEM_ENDS) {
+    const m = new RegExp(ITEM_START + t + tail, 'i').exec(text);
+    if (m) { const from = m.index + m[1].length + m[2].length; return { from, to: m.index + m[0].length }; }
+  }
+  return null;
+}
+// One section of decision.md by its exact heading: { m, body } or null.
+function sectionOf(decision, heading) {
+  const m = new RegExp(`^## ${heading}[ \\t]*\\n([\\s\\S]*?)(?=^## |(?![\\s\\S]))`, 'm').exec(decision);
+  return m ? { m, body: m[1] } : null;
+}
+function withNotes(body, notes) {
+  if (!notes.length) return body;
+  const kept = body.replace(/\s*$/, ''), gap = body.slice(kept.length);
+  return (kept ? kept + '\n' : '') + notes.join('\n') + (gap.length > 1 ? gap : '\n');
+}
+function putSection(decision, s, body) {
+  return decision.slice(0, s.m.index) + s.m[0].slice(0, s.m[0].length - s.body.length) + body + decision.slice(s.m.index + s.m[0].length);
+}
+// decision.md with the held moves off its "For you today" card and its "## Moves" list (see STRIP above).
 function withoutHeld(decision, held) {
-  const section = /^## For you today[^\n]*\n([\s\S]*?)(?=^## |(?![\s\S]))/m;
-  const m = section.exec(decision);
-  let card = m ? m[1] : '';
+  const marks = (x) => `(held back: you ${x.h.stance} this, ${x.h.id})`;
+  // The Moves list: the held move's line keeps its number and goal, and the rest of it (what it
+  // changes, "(ship list)") is replaced by the held-back mark.
+  const moves = sectionOf(decision, 'Moves');
+  if (moves) {
+    let body = moves.body;
+    const notes = [];
+    for (const x of held) {
+      const at = itemAt(body, x.title);
+      if (at) { const eol = body.indexOf('\n', at.from); body = body.slice(0, at.from) + marks(x) + (eol < 0 ? '' : body.slice(eol)); }
+      else notes.push(`Held back: move ${x.n} of moves.md is a step you ${x.h.stance} (${x.h.id}); if a line here names it in other words, it is not on the ship list.`);
+    }
+    decision = putSection(decision, moves, withNotes(body, notes));
+  }
+  const card = sectionOf(decision, 'For you today[^\\n]*');
+  let body = card ? card.body : '';
   const notes = [];
   for (const x of held) {
-    const at = new RegExp(`(?<!\\w)${escape(x.title).replace(/\s+/g, '\\s+')}${ITEM_END}`, 'i').exec(card);
-    if (at) card = card.slice(0, at.index) + `(held back: you ${x.h.stance} this, ${x.h.id})` + card.slice(at.index + at[0].length);
+    const at = itemAt(body, x.title);
+    if (at) body = body.slice(0, at.from) + marks(x) + body.slice(at.to);
     else notes.push(`Held back: move ${x.n} of moves.md is a step you ${x.h.stance} (${x.h.id}); if this card names it in other words, it is not applied.`);
   }
-  if (!m) return decision.replace(/\s*$/, '') + `\n\n## For you today\n${notes.join('\n')}\n`;
-  if (notes.length) {
-    const body = card.replace(/\s*$/, ''), gap = card.slice(body.length);
-    card = (body ? body + '\n' : '') + notes.join('\n') + (gap.length > 1 ? gap : '\n');
-  }
-  return decision.slice(0, m.index) + m[0].slice(0, m[0].length - m[1].length) + card + decision.slice(m.index + m[0].length);
+  if (!card) return decision.replace(/\s*$/, '') + `\n\n## For you today\n${notes.join('\n')}\n`;
+  return putSection(decision, card, withNotes(body, notes));
 }
 cmds.strip = (a) => {
   const root = ROOT_OF(a), d = DATE_OF(a);

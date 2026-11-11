@@ -37,7 +37,7 @@ printf -- '---\nname: next-action\ndescription: the recipe, cut down for a test\
 # FAKE_ACTIVE=1 makes the first run leave a goal active and no moves, so the moves check fails.
 # holds (#282): a naive run that proposes an interview the person postponed (its APPLY is
 # FAKE_APPLY, its TOUCHES FAKE_TOUCHES) beside a note to Jane Doe, and lists both on its card
-# (FAKE_CARD, when it words the card itself). FAKE_PROMPTS keeps each prompt.
+# (FAKE_CARD, when it words the card itself) and its Moves list (FAKE_MOVES). FAKE_PROMPTS keeps each prompt.
 cat > "$BIN/claude" <<'STAND'
 #!/usr/bin/env bash
 prompt="$(cat)"
@@ -50,7 +50,7 @@ case "$mode" in
            [ "${FAKE_ACTIVE:-0}" = 1 ] && printf 'Attention for the test\nactive:\n  money-goal    outcome    deadline in 3 day(s)\n' > "$FAKE_RUN/attention.txt"
            echo "Nothing needs you today. nothing" ;;
   holds)   card='ship-list card: 1. Answer Podcast X'"'"'s interview invitation about the book; 2. Send the launch note to Jane Doe'
-           printf '# Decision\n\n## For you today\n%s\n\n## Moves\nTwo.\n' "${FAKE_CARD:-$card}" > "$FAKE_RUN/decision.md"
+           printf '# Decision\n\n## For you today\n%s\n\n## Moves\n%s\n' "${FAKE_CARD:-$card}" "${FAKE_MOVES:-Two.}" > "$FAKE_RUN/decision.md"
            printf '### 1. Answer Podcast X'"'"'s interview invitation about the book\nAPPLY: %s\nTOUCHES: %s\nGOAL: book\nPERMISSION: ship list\n\n### 2. Send the launch note to Jane Doe\nTOUCHES: jane-doe\nGOAL: book\nPERMISSION: ship list\n' "$FAKE_APPLY" "${FAKE_TOUCHES:-the-book}" > "$FAKE_RUN/moves.md"
            echo "Two changes are ready. ship-list card" ;;
   answers) echo "The moves are as far as they go today." ;;
@@ -177,6 +177,18 @@ missing "  with no Held back line when the title was found" "$(for_you)" "Held b
 fresh; FAKE_MODE=holds FAKE_APPLY=W-HELD-01 FAKE_CARD="$(printf "ship-list card: 1. Answer Podcast X's interview invitation about the book with a short thank-you; 2. Answer Podcast X's interview invitation about the book (carried)\n%s" "$QUESTION")" decide >/dev/null
 check "  a longer line that begins with the held title stays; the held item itself is taken off" "$(for_you | sed -n 1,2p)" "$(printf "ship-list card: 1. Answer Podcast X's interview invitation about the book with a short thank-you; 2. (held back: you postponed this, %s) (carried)\n%s" "$HOLD" "$QUESTION")"
 missing "  and no Held back line is added" "$(for_you)" "Held back:"
+fresh; FAKE_MODE=holds FAKE_APPLY=W-HELD-01 FAKE_CARD="$(printf "ship-list card: 1. Draft and answer Podcast X's interview invitation about the book; 2. Re-answer Podcast X's interview invitation about the book; 3. Answer Podcast X's interview invitation about the book\n%s" "$QUESTION")" decide >/dev/null
+check "  a longer line that ends with the held title stays; the held item itself is taken off" "$(for_you | sed -n 1,2p)" "$(printf "ship-list card: 1. Draft and answer Podcast X's interview invitation about the book; 2. Re-answer Podcast X's interview invitation about the book; 3. (held back: you postponed this, %s)\n%s" "$HOLD" "$QUESTION")"
+missing "  and no Held back line is added" "$(for_you)" "Held back:"
+fresh; FAKE_MODE=holds FAKE_APPLY=W-HELD-01 FAKE_CARD="$(printf "ship-list card: 1. Answer Podcast X's interview invitation about the book (a short thank-you); 2. Answer Podcast X's interview invitation about the book\n%s" "$QUESTION")" decide >/dev/null
+check "  an item with the held title and a remark of its own stays when the held item stands plain" "$(for_you | sed -n 1,2p)" "$(printf "ship-list card: 1. Answer Podcast X's interview invitation about the book (a short thank-you); 2. (held back: you postponed this, %s)\n%s" "$HOLD" "$QUESTION")"
+fresh; FAKE_MODE=holds FAKE_APPLY=W-HELD-01 FAKE_CARD="ship-list card: 1. Draft and answer Podcast X's interview invitation about the book" decide >/dev/null
+check "  a card where the held title only ends a longer item keeps it" "$(for_you | sed -n 1p)" "ship-list card: 1. Draft and answer Podcast X's interview invitation about the book"
+contains "  and says the held step is not applied" "$(for_you)" "Held back: move 1 of moves.md is a step you postponed ($HOLD)"
+fresh; FAKE_MODE=holds FAKE_APPLY=W-HELD-01 FAKE_MOVES="$(printf "1. book: Answer Podcast X's interview invitation about the book (ship list)\n2. book: Send the launch note to Jane Doe (ship list)")" decide >/dev/null
+check "  the decision's Moves list no longer has the held move, only the held-back mark" "$(sed -n '/^## Moves$/,/^## /{/^## /d;p;}' "$RUN/decision.md" | sed -n 1,2p)" "$(printf "1. book: (held back: you postponed this, %s)\n2. book: Send the launch note to Jane Doe (ship list)" "$HOLD")"
+fresh; FAKE_MODE=holds FAKE_APPLY=W-HELD-01 decide >/dev/null
+check "  a Moves list that words the held move otherwise keeps its lines and says it is held" "$(sed -n '/^## Moves$/,/^## /{/^## /d;p;}' "$RUN/decision.md")" "$(printf "Two.\nHeld back: move 1 of moves.md is a step you postponed (%s); if a line here names it in other words, it is not on the ship list." "$HOLD")"
 NOCARD="$TMP/no-card"; mkdir -p "$NOCARD"
 printf '# Decision\n\n## Moves\nOne.\n' > "$NOCARD/decision.md"
 printf "### 1. Answer Podcast X's interview invitation about the book\nTOUCHES: the-book\n" > "$NOCARD/moves.md"
