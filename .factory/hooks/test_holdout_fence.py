@@ -165,6 +165,10 @@ class ShellReads(FenceCase):
             "python3 -c \"open('starter-godspeed/.claude/settings.json', 'w').write('{}')\"",
             "tar -czf /tmp/backup.tgz .claude/settings.json",
             "tar -xzf node.tgz -C /tmp",
+            "mv /tmp/readme.txt .",
+            "mv /tmp/notes.txt .claude",
+            "mv /tmp/notes.txt starter-godspeed/",
+            "cp --parents src/a.txt build/",
         ]:
             with self.subTest(command=command):
                 self.bash_allowed(command)
@@ -218,6 +222,10 @@ class ShellWrites(FenceCase):
             "cp -at .factory/hooks /tmp/new.py",
             "install --target-directory=.factory/hooks /tmp/new.py",
             "mv -t.factory/hooks /tmp/new.py",
+            "mv /tmp/hooks .factory",
+            "cd starter-godspeed && cp --parents .claude/settings.json ..",
+            f"cd /tmp && cp --parents ./.claude/settings.json {root}",
+            "rsync -R starter-godspeed/./.claude/settings.json .",
             "ln -s /tmp/evil.json .claude/settings.json",
             "ln -s -t .factory/hooks /tmp/evil.py",
             "rsync -rtv /tmp/hooks/ .factory/hooks/",
@@ -292,6 +300,8 @@ class PowerShell(FenceCase):
             "Select-String FENCE .factory\\hooks\\holdout_fence.py",
             "Copy-Item .claude\\settings.json C:\\temp\\backup.json",
             "Set-Content -Path starter-godspeed\\.claude\\settings.json -Value '{}'",
+            "Move-Item -LiteralPath notes.txt -Destination starter-godspeed\\notes.txt",
+            "Copy-Item -LiteralPath x.json -Destination starter-godspeed\\.claude\\settings.json",
         ]:
             with self.subTest(command=command):
                 self.allowed("PowerShell", {"command": command})
@@ -304,6 +314,7 @@ class PowerShell(FenceCase):
             "Remove-Item -Recurse -Force .factory",
             "Move-Item .claude\\settings.json x.json",
             "Copy-Item C:\\temp\\x.json -Destination .claude\\settings.json",
+            "Move-Item -LiteralPath C:\\temp\\x.json -Destination .claude\\settings.json",
             "Clear-Content .ignore",
             "echo x > .ignore",
         ]:

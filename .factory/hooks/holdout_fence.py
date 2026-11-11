@@ -608,10 +608,11 @@ def target_directory(args: list[str]) -> str | None:
     return None
 
 
-def copier_writes(name: str, args: list[str], cwd: str, fence: list[str]) -> bool:
+def copier_writes(name: str, args: list[str], cwd: str, fence: list[str], gnu: bool = True) -> bool:
+    """Whether a copy, move or link writes the fence. `gnu`: Unix options (not PowerShell's)."""
     positional = plain(args)
     lowered = [arg.lower() for arg in args]
-    directory = target_directory(args) if name in ("cp", "install", "ln") else None
+    directory = target_directory(args) if gnu and name in ("cp", "install", "ln", "mv") else None
     into = directory is not None
     if "-destination" in lowered and lowered.index("-destination") + 1 < len(args):
         directory = args[lowered.index("-destination") + 1]
@@ -628,10 +629,18 @@ def copier_writes(name: str, args: list[str], cwd: str, fence: list[str]) -> boo
         resolved and os.path.isdir(resolved))
     if not into:
         return False
+    # cp --parents and rsync -R keep each source's whole path below the destination
+    keeps_path = "--parents" in args or (name == "rsync" and any(
+        arg == "--relative" or re.fullmatch(r"-[a-zA-Z]*R[a-zA-Z]*", arg) for arg in args))
     for source in sources:
         clean = source.replace("\\", "/").rstrip("/")
         base = clean.rsplit("/", 1)[-1]
-        if base in (".", "") or source.endswith("/") and name == "rsync":
+        if keeps_path:
+            kept = clean.split("/./", 1)[-1] if "/./" in clean else clean
+            kept = re.sub(r"^(?:\./|/)+", "", kept)
+            if kept and hits(f"{dest.rstrip('/')}/{kept}", cwd, fence, whole=True):
+                return True
+        elif base in (".", "") or source.endswith("/") and name == "rsync":
             # the source's contents land in the destination itself
             if resolved and fenced(resolved, fence, whole=True):
                 return True
@@ -769,19 +778,27 @@ def command_writes(words: list[str], cwd: str, fence: list[str], text: str, posi
         blocked = extracts and names_fence(" ".join(args), cwd, fence)
     elif name == "dd":
         blocked = any(arg.startswith("of=") and hits(arg[3:], cwd, fence) for arg in args)
+    elif name in ("mv", "move-item", "mi", "move"):
+        # the sources go away with all they hold; the destination is written like a copy's
+        into = target_directory(args) if name == "mv" and posix else None
+        lowered_args = [arg.lower() for arg in args]
+        if "-destination" in lowered_args and lowered_args.index("-destination") + 1 < len(args):
+            into = args[lowered_args.index("-destination") + 1]
+        sources = [word for word in positional if word != into] if into else positional[:-1]
+        blocked = any(hits(word, cwd, fence, whole=True) for word in sources) or copier_writes(
+            "mv", args, cwd, fence, posix)
     elif name in REMOVERS:
-        moved_into = target_directory(args) if name == "mv" else None
-        blocked = any(hits(word, cwd, fence, whole=True) for word in positional + [moved_into or ""])
+        blocked = any(hits(word, cwd, fence, whole=True) for word in positional)
     elif name in WRITERS:
         blocked = any(hits(word, cwd, fence) for word in positional)
     elif name in CHANGERS:
         recursive = any(arg == "--recursive" or re.match(r"^-[a-zA-Z]*R", arg) for arg in args)
         blocked = any(hits(word, cwd, fence, whole=recursive) for word in positional)
     elif name in COPIERS:
-        blocked = copier_writes(name, args, cwd, fence)
+        blocked = copier_writes(name, args, cwd, fence, posix)
     elif name == "ln":
         # only the link is written; a later write through a link is caught by following it
-        blocked = copier_writes(name, args, cwd, fence)
+        blocked = copier_writes(name, args, cwd, fence, posix)
     if not blocked and name in IN_PLACE and in_place(name, args):
         blocked = any(hits(word, cwd, fence) for word in positional)
     if not blocked and name in INTERPRETERS and set(lowered) & INLINE_CODE:
