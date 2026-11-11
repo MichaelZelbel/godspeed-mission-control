@@ -34,6 +34,13 @@ const verdictOf=stdout=>{
  return null;
 };
 const ending=(reply,question)=>reply.trimEnd().endsWith(question)?reply:reply.trimEnd()+'\n\n'+question;
+const nativeLog=(home,conversation,verdict,did)=>{
+ try{
+  const folder=path.join(home,'logs'),file=path.join(folder,'godspeed-charm.log');
+  fs.mkdirSync(folder,{recursive:true});
+  fs.appendFileSync(file,JSON.stringify({at:new Date().toISOString(),conversation,verdict:verdict?.verdict??null,source:verdict?.source??null,why:verdict?.why??null,did})+'\n');
+ }catch{}
+};
 // The question open in this conversation ({when, seq} tell two apart) and the settings' language.
 const openQuestion=(store,conversation)=>{try{const {state,settings}=charmNow(store);return {open:state.open.find(q=>q.conversation===conversation)||null,language:settings.language};}catch{return {open:null};}};
 
@@ -58,18 +65,22 @@ export function startCharmJudgement(domains,input){
  }catch{drop();return nothing;}
  const before=openQuestion(store,conversation).open;
  return {drop,async end(reply){
+  let v,did='no action';
   try{
    // Past the limit, or no answer: the word check alone, as the plugin does.
-   const v=await verdict||await judge(['--no-model'],wordCheckMs()).catch(()=>null);
+   v=await verdict||await judge(['--no-model'],wordCheckMs()).catch(()=>null);
    if(!v||v.verdict==='none')return reply;
    if(v.verdict==='ask'){
     // The model ran `godspeed-charm asked` itself in this turn: the question is recorded already.
     const {open:now,language}=openQuestion(store,conversation);
-    if(now&&(!before||now.when!==before.when||now.seq!==before.seq))return ending(reply,T[pickLanguage(v.language,language)].question());
+    if(now&&(!before||now.when!==before.when||now.seq!==before.seq)){did='asked by the model';return ending(reply,T[pickLanguage(v.language,language)].question());}
    }
    const done=charmOperation(domains,v.verdict==='answer'?{action:'answer',answer:v.answer,conversation,words,language:v.language}:{action:'asked',conversation,words,language:v.language});
-   return done.ok&&done.reply?ending(reply,done.reply):reply;
-  }catch{return reply;}
-  finally{drop();}
+   if(!done.ok){did='refused';return reply;}
+   if(!done.reply)return reply;
+   did=v.verdict==='answer'?'answered '+v.answer:'asked';
+   return ending(reply,done.reply);
+  }catch{did='failed';return reply;}
+  finally{nativeLog(domains.query?.nativeHermesHome,conversation,v,did);drop();}
  }};
 }
