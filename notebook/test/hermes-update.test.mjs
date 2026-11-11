@@ -238,6 +238,33 @@ test('active chats, scheduler ticks, and manual routines defer updates for their
  for(const [name,enter] of cases){const f=fixture(t),lifecycle=new HermesLifecycle();f.updater.lifecycle=lifecycle;const leave=await enter(f,lifecycle);assert.equal(lifecycle.busy,true,name);assert.deepEqual(await f.updater.runNow(),{result:'skipped',reason:busy},name);assert.equal(applied(f.calls),false,name);await leave();assert.equal(lifecycle.busy,false,name);}
 });
 
+function answeringAgent(f,lifecycle){
+ const spawns=[];
+ const agent=nativeAgent({executable:f.updater.descriptor.executable,home:f.updater.descriptor.home,cwd:f.store.root,lifecycle,spawnProcess:()=>{const child=new EventEmitter();child.stdin=new PassThrough();child.stdout=new PassThrough();child.stderr=new PassThrough();child.stdin.on('data',()=>queueMicrotask(()=>{child.stdout.write('the answer');child.emit('close',0);}));spawns.push(child);return child;}});
+ return {agent,spawns};
+}
+
+test('a chat during a routine tick is answered, and the update still waits for both',async t=>{
+ const f=fixture(t),lifecycle=new HermesLifecycle();f.updater.lifecycle=lifecycle;
+ let entered,finish;const started=new Promise(resolve=>{entered=resolve;}),gate=new Promise(resolve=>{finish=resolve;});
+ const scheduler=new NativeScheduler(f.store,{home:f.updater.descriptor.home,executable:f.updater.descriptor.executable,lifecycle,run:async()=>{entered();await gate;return {stdout:''};}}),ticking=scheduler.tick();
+ await started;assert.equal(lifecycle.reason,'routine tick');
+ const {agent,spawns}=answeringAgent(f,lifecycle);
+ assert.deepEqual(await agent({message:'hello'}),{reply:'the answer'});assert.equal(spawns.length,1);
+ assert.deepEqual(await f.updater.runNow(),{result:'skipped',reason:'Godspeed is still handling a chat or routine.'});assert.equal(applied(f.calls),false);
+ finish();await ticking;assert.equal(lifecycle.busy,false);
+});
+
+test('only an assistant update refuses a chat, and the refusal says so',async t=>{
+ const f=fixture(t),lifecycle=new HermesLifecycle(),{agent,spawns}=answeringAgent(f,lifecycle);
+ const update=lifecycle.acquire('assistant update');
+ await assert.rejects(agent({message:'hi'}),{message:'The assistant is updating; try the chat again in a moment.'});assert.equal(spawns.length,0);
+ update();
+ const run=lifecycle.acquire('routine run'),otherChat=lifecycle.acquire('chat reply');
+ assert.deepEqual(await agent({message:'hi'}),{reply:'the answer'});assert.equal(spawns.length,1);
+ run();otherChat();assert.equal(lifecycle.busy,false);
+});
+
 test('a busy scheduled update records its visible deferral reason before marking the day',async t=>{
  const f=fixture(t),lifecycle=new HermesLifecycle(),release=lifecycle.acquire('routine tick');f.updater.lifecycle=lifecycle;const result=await f.updater.tick('UTC'),last=readHermesUpdate(f.store).last;assert.equal(result.result,'skipped');assert.equal(last.result,'skipped');assert.equal(last.reason,'Godspeed is still handling a chat or routine.');assert.equal(last.day,'2026-11-06');release();
 });
