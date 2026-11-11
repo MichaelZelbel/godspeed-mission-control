@@ -6,7 +6,7 @@ import {ruleRefusals} from './briefing-cut.mjs';
 import {queueNotice} from './notices.mjs';
 import {deliveryFor} from './notebook-routines.mjs';
 import {telegramInHermes} from './starting-routines.mjs';
-import {stampDelivered,stepsForWords} from './waiting-steps.mjs';
+import {asksForCode,stampDelivered,stepsForWords} from './waiting-steps.mjs';
 
 // BACKGROUND WORK TELLS THE OWNER IN THE CHAT'S VOICE, AND THE CHAT KNOWS IT (4 November 2026, #198).
 //
@@ -22,11 +22,6 @@ import {stampDelivered,stepsForWords} from './waiting-steps.mjs';
 const GUIDANCE_CHARS=20000,REPORT_CHARS=4000;
 export const REPORT_CONTRACT="Write the message you send your owner in your chat with them about what happened below. guidance is what you read before every reply in that chat: write exactly as you write there, in your own voice. Say what it is about from zero, in everyday words, about one thing, and end with the one plain step it needs from them, or none. Use only the facts given. Never put an id, a code or a command in it, and never ask them to type one. If the facts are about more than one thing, write one report for each. Return JSON {reports:[{about,text}]}.";
 export const REPORT_PREFIX='background-report-';
-// Words that ask the owner to type something to answer: `approve 59f1d506`, `/approve`, "send the
-// code 336d5142". Saying "approve of" or a commit's hex in a link asks for nothing.
-const REPLY_CODES=[/(?:^|[\s`"'“‘(])\/(?:approve|reject)\b/i,/\b(?:approve|reject)\s+[`"'“‘]?(?=[\w-]*\d)(?:(?=[\w-]*[a-z])[\w-]{4,}|\d{6,})/i,
- /\b(?:reply|send|type|enter|text)\b[^.!?\n]{0,40}?\b(?:code|id)\s*[:#]?\s*[`"'“‘]?[\w-]*\d/i];
-export const asksForCode=text=>REPLY_CODES.some(code=>code.test(text));
 
 const readText=file=>{try{return fs.readFileSync(file,'utf8').slice(0,GUIDANCE_CHARS);}catch{return null;}};
 

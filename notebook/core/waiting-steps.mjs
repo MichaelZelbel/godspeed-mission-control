@@ -22,12 +22,19 @@ const clean=words=>String(words??'').toLowerCase().replace(/[‘’]/g,"'").repl
 // Anything longer or different is neither: the message then reaches the model as an ordinary one.
 export const classifyAnswer=words=>{const w=clean(words);return YES.has(w)?'yes':NO.has(w)?'no':null;};
 
-const CODE=/\/(?:approve|reject)\b|\b(?:approve|reject|genehmig\w*)\s+\S*\d/i;
+// Words that ask the owner to type something to answer (#191): `/approve`, a yes word or "reply"
+// followed by a code (a hex run or a mixed token of six or more, through Markdown, quotes or `#`),
+// and "reply/send (me) the code <value>". "approve of", "approve Q3-budget", a commit in a link, or a
+// door code to enter at a machine or text to someone else ask for nothing.
+const REPLY_CODES=[/(?:^|[^\w/])\/(?:approve|reject)\b/i,
+ /\b(?:approve|reject|genehmig\w*|ablehn\w*|reply)[^\w\n.!?,;]{1,6}(?:[0-9a-f]{6,}|(?=[a-z]*\d)[a-z0-9]{6,})(?![\w-])/i,
+ /(?:\breply\b[^.!?\n]{0,40}?|\bsend(?:\s+(?:me|us|back))*\s+(?:the|this|that)\s+)\b(?:code|id)\b[^\w\n.!?,;]{0,6}[\w-]*\d/i];
+export const asksForCode=text=>REPLY_CODES.some(code=>code.test(text));
 const hexCode=text=>(text.match(/[0-9a-f]{6,}/gi)||[]).some(run=>/\d/.test(run)&&/[a-f]/i.test(run));
 export function checkStepText(label,text,id){
  if(typeof text!=='string'||!text.trim())throw Error('Say what the '+label+' is.');
  if(text.length>300||/[\r\n]/.test(text))throw Error('The '+label+' must be one line of at most 300 characters.');
- if(CODE.test(text)||hexCode(text)||text.includes(id))throw Error('The '+label+' must not hold a code to type; the owner answers with a plain yes or no.');
+ if(asksForCode(text)||hexCode(text)||text.includes(id))throw Error('The '+label+' must not hold a code to type; the owner answers with a plain yes or no.');
 }
 
 export function readStep(record){
