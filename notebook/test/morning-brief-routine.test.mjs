@@ -263,3 +263,20 @@ for(const [name,fields] of [['hidden',{ai_visibility:'hidden'}],['sensitive',{is
   const r=await runMorningBrief({root,provider:async()=>{throw Error('the AI must not be asked');},now:new Date('2026-11-04T09:00:00Z')});
   assert.equal(r.text,'');assert.equal(briefNotes(root).length,1);
  });
+
+// #418: one reminder whose self check names a connection the daily check does not list stopped the
+// whole briefing, because the reminders' check failed on it before a word was written.
+test('one reminder whose self check names an unknown connection does not stop the briefing, and is said once',async t=>{
+ const {root}=workspace(t);
+ const day=new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Berlin'}).format(new Date());
+ const shift=n=>new Date(Date.parse(day+'T12:00:00Z')+n*86400000).toISOString().slice(0,10);
+ const reminder=(slug,title,arg)=>fs.writeFileSync(path.join(root,'due',slug+'.md'),`TITLE: ${title}\nDONE-WHEN: works\nCOST-IF-MISSED: none\nSELF-CHECK: connection-ok\nSELF-CHECK-ARG: ${arg}\nREPEATS: no\n\n## Windows\n\nSTRIP: ${shift(-5)} ${shift(20)}\n`);
+ fs.mkdirSync(path.join(root,'due'),{recursive:true});fs.mkdirSync(path.join(root,'.godspeed'),{recursive:true});
+ reminder('reconnect-slack','Reconnect Slack','Slack');reminder('reconnect-telegram','Reconnect Telegram','telegram');
+ fs.writeFileSync(path.join(root,'.godspeed','connection-check.json'),JSON.stringify({day,connections:{telegram:{set_up:true,ok:true}}}));
+ const {text,notices}=await runMorningBrief({root,provider:async input=>verifies(input)||OK});
+ assert.ok(text,'a briefing was written');
+ assert.equal(new QueryService(new Store(root)).rows('notes').filter(n=>n.source_app==='morning-brief').length,1);
+ assert.equal(notices.length,1);assert.match(notices[0],/^due\/reconnect-slack\.md: self check skipped: .*"Slack"/);
+ assert.equal(new QueryService(new Store(root)).rows('deadlines').find(d=>d.native_slug==='reconnect-telegram')?.status,'closed','the other reminder closed itself as before');
+});
