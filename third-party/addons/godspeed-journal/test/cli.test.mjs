@@ -234,3 +234,31 @@ test("an item settled before its finish asks, and a span on a finish is refused,
   assert.equal(span.status, 1); assert.match(span.stderr, /takes one time/);
   assert.equal(entryFiles(h).length, 4);
 });
+
+test("a finish told after the evening list but dated before it is named in the next one, and in the block meanwhile", () => {
+  const h = mcDir();
+  const settings = path.join(h, "routines", "journal", "settings.json");
+  fs.writeFileSync(settings, JSON.stringify({ ...JSON.parse(fs.readFileSync(settings, "utf8")), nudge: { enabled: false }, evening: { enabled: true, at: "18:30" } }));
+  run(h, "2026-11-11T08:00:00Z", "start", "Letter", "--done-means", "letter signed");
+  assert.match(run(h, "2026-11-11T17:31:00Z", "tick").stdout, /still open:\n• Letter/);
+  const late = run(h, "2026-11-11T20:00:00Z", "done", "letter", "--missed", "letter signed", "--when", "at 17:00");
+  assert.equal(late.status, 0, late.stderr);
+  assert.match(run(h, "2026-11-12T08:00:00Z", "context").stdout, /- t-20261111-0900-letter: "Letter", finished Wed 2026-11-11 17:00, without: letter signed/);
+  assert.match(run(h, "2026-11-12T17:31:00Z", "tick").stdout, /• Letter, missing: letter signed/);
+  assert.equal(run(h, "2026-11-13T17:31:00Z", "tick").stdout, "");
+});
+
+test("a finish dated before the task was reopened asks and saves nothing", () => {
+  const h = mcDir();
+  run(h, "2026-11-11T08:00:00Z", "start", "Invoice");
+  run(h, "2026-11-11T09:00:00Z", "done", "invoice");
+  run(h, "2026-11-11T10:00:00Z", "reopen", "invoice");
+  for (const kind of ["done", "drop"]) {
+    const r = run(h, "2026-11-11T11:00:00Z", kind, "invoice", "--when", "at 10:15");
+    assert.equal(r.status, 2);
+    assert.equal(r.stderr, 'Nothing was saved. Ask them: That is before "Invoice" was reopened (today at 11:00). When did you finish it?\n');
+  }
+  assert.equal(entryFiles(h).length, 3);
+  assert.equal(run(h, "2026-11-11T11:00:00Z", "done", "invoice", "--when", "at 11:30").status, 0);
+  assert.equal(JSON.parse(run(h, "2026-11-11T11:01:00Z", "open", "--json").stdout).length, 0);
+});

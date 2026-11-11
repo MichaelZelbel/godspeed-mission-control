@@ -29,20 +29,23 @@ export function tasksFrom(entries) {
     if (e.kind === "reopen") {
       if (t.state === "open") continue;
       if (t.evidence) t.rejected.push(t.evidence.id);
-      Object.assign(t, { state: "open", met: [], missed: [], last: e.at });
-      delete t.ended; delete t.evidence;
+      Object.assign(t, { state: "open", met: [], missed: [], last: e.at, reopened: e.at });
+      delete t.ended; delete t.told; delete t.evidence;
       continue;
     }
     // The first close wins. Two machines can each find the same proof before either has seen
     // the other's entry, and a second close must not move the time the task ended.
     if ((e.kind === "done" || e.kind === "drop") && t.state !== "open") continue;
     if (e.kind === "define") t.done_means.push(...(e.done_means || []));
+    // A finish told late ends when it happened but was told when it was written, and only from
+    // then can an evening list or the per-turn block name what it left out.
     if (e.kind === "done") {
-      Object.assign(t, { state: "done", ended: e.at, met: e.met || [], missed: e.missed || [] });
+      Object.assign(t, { state: "done", ended: e.at, told: e.written || e.at, met: e.met || [], missed: e.missed || [] });
       // Closed from the record, not by the person: it ended when the proof happened (the post
       // went out), and the proof travels with it so every interface can say what it was.
       if (e.source === "evidence") {
         t.ended = e.evidence_at || e.at;
+        t.told = e.at;
         t.evidence = { url: e.evidence || "", id: e.evidence_id || e.evidence || "", words: e.words || "", closed: e.at };
       }
     }

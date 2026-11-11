@@ -124,10 +124,12 @@ function needTask(ref, opts) {
   return t;
 }
 
-// A finish read before its start would be dropped, so a time before the start asks instead.
+// A finish read before its start, or before the reopen that made the task open again, would be
+// dropped or undone, so such a time asks instead.
 function finishTime(t) {
   const time = oneTime();
   if (time && time < new Date(t.started)) ask(T(s).askBeforeStart(t.title, said(t.started)));
+  if (time && t.reopened && time < new Date(t.reopened)) ask(T(s).askBeforeReopen(t.title, said(t.reopened)));
   return time;
 }
 
