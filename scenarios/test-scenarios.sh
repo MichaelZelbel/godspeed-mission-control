@@ -3433,7 +3433,7 @@ copy "$FD/product-output" "$FD/product-output-no-step"
 printf 'Your household emergency-kit checklist is written, and each item has a source link; a few items are marked contested.\n\nWhat I need from you is nothing yet.\n' >"$FD/product-output-no-step/brief.txt"
 first_day_brief_records "$FD/product-output-no-step"
 refuses 'a brief that asks for nothing to do' first-day "$FD/product-output-no-step" 'no concrete next action'
-# The result's words in the steps a brief asks for, or under a "Next:" line, do not report the work.
+# The result's words in a brief's list items, or in a line about its next steps, do not report the work.
 copy "$FD/product-output" "$FD/product-output-unfinished"
 printf 'Nothing for your emergency kit by Sunday was finished yesterday; no work was verified.\n\nNext steps:\n\n1. Write down the items you need, then find a source and a link for each item.\n' >"$FD/product-output-unfinished/brief.txt"
 first_day_brief_records "$FD/product-output-unfinished"
@@ -3442,6 +3442,14 @@ copy "$FD/product-output" "$FD/product-output-unfinished-next"
 printf 'Nothing for your emergency kit by Sunday was finished yesterday.\n\nNext: write the items down with a source link on every item, as the check counts them.\n' >"$FD/product-output-unfinished-next/brief.txt"
 first_day_brief_records "$FD/product-output-unfinished-next"
 refuses 'a brief that says no work was finished and asks for the written items on its next line' first-day "$FD/product-output-unfinished-next" 'does not identify the verified work'
+copy "$FD/product-output" "$FD/product-output-unfinished-find"
+printf 'Nothing for your emergency kit by Sunday was finished yesterday; no work was verified.\n\nWhat I need from you:\n\n1. Reply with your household size.\n2. Find a source and a link for each item you have written.\n' >"$FD/product-output-unfinished-find/brief.txt"
+first_day_brief_records "$FD/product-output-unfinished-find"
+refuses 'a brief that says no work was finished and asks for the written items in a step of any verb' first-day "$FD/product-output-unfinished-find" 'does not identify the verified work'
+copy "$FD/product-output" "$FD/product-output-unfinished-heading"
+printf 'Nothing for your emergency kit by Sunday was finished yesterday; no work was verified.\n\nNext steps: once the items are written, each one needs a source link.\n\n1. Reply with your household size.\n' >"$FD/product-output-unfinished-heading/brief.txt"
+first_day_brief_records "$FD/product-output-unfinished-heading"
+refuses 'a brief that says no work was finished and asks for the written items under its next steps' first-day "$FD/product-output-unfinished-heading" 'does not identify the verified work'
 copy "$FD/good" "$FD/goal-in-goals"
 printf '{"configured":true,"preserved":true,"results":[]}\n' >"$FD/goal-in-goals/setup.json"
 printf '{"data":[{"id":"g1","title":"Prepare a practical household emergency-kit checklist by Sunday."}]}\n' >"$FD/goal-in-goals/goals-after-setup.json"
