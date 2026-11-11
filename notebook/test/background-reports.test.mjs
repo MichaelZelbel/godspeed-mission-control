@@ -430,10 +430,12 @@ test('on an adopted mission control a waiting step\'s question is delivered by t
 // A ROUTINE NEVER ASKS FOR A CODE (11 November 2026, #191).
 const CODED=['Reply "approve aad2598f" to restart it, or "reject aad2598f" to cancel it.','Reply `approve 1ad58918` to let the proposed plan go ahead.','/approve 59f1d506','The old programs can still send messages. If you want me to stop them, send the code 336d5142.',
  'Reply **approve** `1ad58918` to go on.','Reply approve **aad2598f** to go on.','Reply "approve deadbeef" to go on.','To go on: approve #59f1d506','Antworte mit "genehmige 59f1d506".',
- 'If you want me to stop them, type the code 336d5142.','Text me the code 336d5142.','Enter the code 336d5142 here to stop them.'];
+ 'If you want me to stop them, type the code 336d5142.','Text me the code 336d5142.','Enter the code 336d5142 here to stop them.',
+ 'Reply approve 583920 to go on.','Reply approve 5839201 to go on.','Reply with 583920 to go on.','Enter the code `336d5142` here to stop them.','Enter the code **336d5142** in the chat.'];
 const PROSE=['I\'d approve of an earlier bedtime: you slept well every night you were in bed by ten.','The fix is in https://github.com/MichaelZelbel/godspeed-mission-control/commit/9227a0b4 and ran fine overnight.','The board will approve 2026\'s budget on Friday.',
  'Enter the pickup code 583920 at the machine.','Text her the door code 4711.','Finance will approve Q3-budget on Monday.',
- 'The council will approve facade repairs on Friday.','Die Bank genehmigt 250000 Euro.','Approve: decade-old pipes need work.'];
+ 'The council will approve facade repairs on Friday.','Die Bank genehmigt 250000 Euro.','Approve: decade-old pipes need work.',
+ 'The board will approve $25000000 for the bridge.','The board will approve €2500000 today.','Please reply with your thoughts.','Enter the code `4711` at the door.'];
 const A_CODE=/approve|reject|code [0-9a-f]/i;
 
 test('a routine\'s words that ask for a code to type are refused and recorded nowhere, for one destination or several',async t=>{
