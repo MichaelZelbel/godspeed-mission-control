@@ -473,3 +473,19 @@ test('rules are numbered as AGENTS.md numbers them, and the rest follow by where
   assert.match(told,/a "Never" sentence alone says the opposite/);
   assert.match(told,/\n\d+\. Founder only \(rule:founder-only; for the companies\)\n/,'a rule without a sentence or a stated kind is named only');
 });
+
+test('the new-rules setting reads automatic until it is set, and keeps what is set',async()=>{
+  const {shelf,store}=workspace();
+  assert.equal(shelf.newRules(),'automatic');assert.equal(shelf.overview().new_rules,'automatic');
+  assert.deepEqual(await shelf.setNewRules('ask-first'),{saved:true,new_rules:'ask-first'});
+  assert.equal(new IdentityShelf(store).newRules(),'ask-first','read back from the store, not from memory');
+  await assert.rejects(shelf.setNewRules('sometimes'),error=>error.code==='BAD_MODE');
+  assert.equal(shelf.newRules(),'ask-first');
+});
+
+test('a similar rule is found for a near-duplicate and none for an unrelated rule',()=>{
+  const {shelf}=workspace();
+  assert.equal(shelf.similarRules({line:'Never delete my files or notes.'})[0]?.target,'rule:never-delete-without-asking');
+  assert.equal(shelf.similarRules({line:'Never send an email in my name without showing me the draft.'})[0]?.target,'rule:never-send-in-my-name');
+  for(const line of ['Always reply in German.','Phone anyone for me after 9 pm.','Keep my notes short.'])assert.deepEqual(shelf.similarRules({line}),[],line);
+});

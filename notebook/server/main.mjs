@@ -504,6 +504,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         if(route==='/api/identity/notebook'&&req.method==='GET')return send(res,200,notebookTotals({store,query}));
         // The instructions connected AI apps receive (get_user_profile): records, kept as records.
         if(route==='/api/identity/instructions'&&req.method==='GET')return send(res,200,{data:shelf.instructionList()});
+        if(route==='/api/identity/rules-setting'&&req.method==='GET')return send(res,200,{new_rules:shelf.newRules()});
         if(route==='/api/identity/instruction-history'&&req.method==='GET')return send(res,200,{data:shelf.instructionVersions(url.searchParams.get('id'))});
         if(req.method!=='POST')return send(res,405,{error:'Use GET or POST'});
         const input=JSON.parse(await body(req,256*1024)),options={expected_hash:typeof input.expected_hash==='string'?input.expected_hash:undefined,by:'notebook'};
@@ -512,6 +513,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         if(route==='/api/identity/restore')return send(res,200,await shelf.restore(input.target,String(input.version||''),options));
         if(route==='/api/identity/rule')return send(res,200,await shelf.addRule(input.fields||{},{by:'notebook'}));
         if(route==='/api/identity/remove')return send(res,200,await shelf.removeRule(input.target,options));
+        if(route==='/api/identity/rules-setting')return send(res,200,await shelf.setNewRules(input.new_rules));
         if(route==='/api/identity/mark-who')return send(res,200,await shelf.markWho({by:'notebook'}));
         if(route==='/api/identity/gather-rules')return send(res,200,await shelf.gatherRules({by:'notebook'}));
         // "Bring it here": the text the assistant's program read first, its owner's own, moves into

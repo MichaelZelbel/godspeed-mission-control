@@ -244,10 +244,10 @@ gave it, and what its exceptions are. The short list below is written from those
 files by `mc-compile-rules`, and it is the only rules text you read every
 session.
 
-When I give you a new rule, write it as a new file in `rules/` and run
-`mc-compile-rules`. If the block is full, the program will say so
-and show you which lines are longest, and then the answer is to merge two rules
-that say the same thing, not to make the list longer.
+Add a new rule I give you with `identity_files` add_rule, which knows if I
+want it shown first: then show it in one message with plain choices. Without
+the notebook, show me the rule, then write it in `rules/` and run
+`mc-compile-rules`. A full block means merging two rules.
 
 <!-- rules:begin - written by mc-compile-rules from the files in rules/. Edit those, not this. -->
 
