@@ -267,6 +267,22 @@ test('ask first: "change the wording" saves the edited text, and "leave it" save
   }finally{await s.close();}
 });
 
+test('ask first: "change the wording" keeps the name the owner gave the rule',async()=>{
+  const root=workspace(),{s,tool}=await service(root);
+  try{
+    await s.domains.identity.setNewRules('ask-first');
+    owner(s,'Never phone anyone for me after 9 pm, and call it No late calls.');
+    const offered=await tool({action:'add_rule',fields:{title:'No late calls',line:'Phone anyone for me after 9 pm.',group:'never'},words:'Never phone anyone for me after 9 pm, and call it No late calls.'});
+    assert.equal(offered.error,false,offered.text);
+    assert.equal(s.domains.identity.waitingProposals()[0].proposed.title,'No late calls');
+    owner(s,'Make it 10 pm.');
+    const reworded=await tool({action:'add_rule',proposal:offered.value.proposal,answer:'reword',fields:{line:'Phone anyone for me after 10 pm.'},words:'Make it 10 pm'});
+    assert.equal(reworded.error,false,reworded.text);
+    const rule=read(root,'rules','no-late-calls.md');
+    assert.match(rule,/^title: "?No late calls"?$/m);assert.match(rule,/^line: "Phone anyone for me after 10 pm\."$/m);
+  }finally{await s.close();}
+});
+
 test('a similar rule brings the offer to change it instead, with new rules added automatically too',async()=>{
   const root=workspace(),{s,tool}=await service(root);
   try{
