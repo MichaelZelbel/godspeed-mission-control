@@ -141,7 +141,7 @@ const card=name=>{const text=fs.readFileSync(path.join(folder,'work',name),'utf8
 const verified=c=>c.field('ID')===c.name.replace(/\.md$/,'')&&c.field('STATUS')==='verified'&&/VERIFIED check passed/i.test(c.text);
 const slug=value=>value.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
 const own=cards.includes(`${workId}.md`)?card(`${workId}.md`):null;
-let named,told=[];
+let named;
 if(own&&verified(own)){
  const field=own.field,text=own.text;
  if(field('KEY')!==workKey||field('SOURCE')!=='first-day-scenario')fail('the selected emergency-kit work card does not retain the scenario filing');
@@ -165,7 +165,6 @@ if(own&&verified(own)){
  // Any of them may be the work the brief tells: by its title or result, the file it wrote, or what
  // that file is (a goal's playbook, its ideas), since a brief written by the model uses its own words.
  named=chosen.map(c=>{const file=kept(c),kind=file.startsWith('goals/playbooks/')?'playbook':file.startsWith('ideas/')?'idea':null;return [c.field('WHAT'),c.field('RESULT'),file,...(kind?[kind]:[])];});
- told=chosen.map(c=>c.field('RESULT').replace(/\S*\/\S*/g,' '));
 }
 const brief=normalized(read('brief.txt'));
 // A brief the model wrote names the goal in its own words (planner, 9 November 2026): the title, or
@@ -174,6 +173,7 @@ const stop=new Set(['a','an','and','at','by','for','from','in','into','it','its'
 const goalWords=[...new Set((goal.toLowerCase().match(/[a-z0-9]+/g)||[]).filter(word=>!stop.has(word)))];
 const briefWords=new Set(brief.toLowerCase().match(/[a-z0-9]+/g)||[]);
 if(!brief.includes(goal)&&goalWords.filter(word=>briefWords.has(word)).length<2)fail('the saved brief does not name the emergency-kit goal');
+if(!named.some(names=>names.some(name=>brief.toLowerCase().includes(name.toLowerCase()))))fail('the saved brief does not identify the verified work');
 const nextLine=brief.split('\n').map(line=>line.trim()).find(line=>/^(?:next|today)(?:\s+(?:today|step|action))?\s*:/i.test(line));
 const nextTask=nextLine?.replace(/^[^:]*:\s*/,'')||'';
 const words=nextTask.toLowerCase().match(/[a-z]+/g)||[];
@@ -184,19 +184,9 @@ const verb=words.findIndex(word=>verbs.has(word));
 // a heading or sentence about the next steps (planner, 9 November 2026).
 const lines=brief.split('\n').map(line=>line.trim());
 const stepVerbs=new Set([...verbs,'open','tick','fill','mark','read','send','tell','answer','choose','decide','pick','count','list','print','sign','save','order','ask','reply','measure','label','put','keep','start','finish','note']);
-const listItem=/^(?:\d+[.)]|[-*\u2022])\s/;
 const step=line=>{const m=line.match(/^(?:\d+[.)]|[-*\u2022])\s+(.+)$/);if(!m)return false;const w=m[1].toLowerCase().match(/[a-z]+/g)||[];return stepVerbs.has(w[0])&&w.slice(1).some(word=>!filler.has(word));};
-// Or, for work the product chose, by at least three words of its recorded result that the goal does
-// not already say (a checklist "written", with a "source link" on every "item"), told outside its
-// list items, its headings about next steps and the lines that open as one: those that reuse such
-// words ask for work, they do not report it. A sentence that only mentions "first aid" still reports.
-const aboutNext=line=>/\b(?:next|steps?|what would help|need from you|to do|do today|today|first|action)\b/i.test(line);
-const asksNext=line=>aboutNext(line)&&(/:$/.test(line)||/^(?:next|today|steps?|what (?:would help|i need)|to do)\b/i.test(line));
-const plain=new Set(['about','also','been','check','does','done','each','every','from','goal','goals','godspeed','have','here','into','least','more','most','only','some','than','that','their','them','then','there','they','this','what','when','where','which','will','with','work','would','your']);
-const ownWords=text=>[...new Set((text.toLowerCase().match(/[a-z0-9]+/g)||[]).filter(word=>word.length>=4&&!plain.has(word)&&!goalWords.includes(word)))];
-const reported=new Set(lines.filter(line=>!listItem.test(line)&&!asksNext(line)).join(' ').toLowerCase().match(/[a-z0-9]+/g)||[]);
-if(!named.some(names=>names.some(name=>brief.toLowerCase().includes(name.toLowerCase())))&&!told.some(text=>ownWords(text).filter(word=>reported.has(word)).length>=3))fail('the saved brief does not identify the verified work');
-const listed=lines.some((line,at)=>{if(!step(line))return false;for(let i=at-1;i>=0;i--){if(!lines[i]||listItem.test(lines[i]))continue;return aboutNext(lines[i]);}return false;});
+const aboutNext=line=>/\b(?:next|steps?|what would help|to do|do today|today|first|action)\b/i.test(line);
+const listed=lines.some((line,at)=>{if(!step(line))return false;for(let i=at-1;i>=0;i--){if(!lines[i]||/^(?:\d+[.)]|[-*\u2022])\s/.test(lines[i]))continue;return aboutNext(lines[i]);}return false;});
 if(!listed&&(!nextLine||verb<0||!words.slice(verb+1).some(word=>!filler.has(word))))fail('the saved brief has no concrete next action');
 const manifest=JSON.parse(read('manifest.json'));
 if(!Array.isArray(manifest.files)||!manifest.files.length)fail('the evidence manifest names no retained files');

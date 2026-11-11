@@ -3405,55 +3405,6 @@ copy "$FD/product-work" "$FD/own-words-list-unrelated"
 printf 'The playbook for your kit by Sunday is finished.\n\nThe sources it read:\n\n- Read the Ready.gov page.\n' >"$FD/own-words-list-unrelated/brief.txt"
 first_day_brief_records "$FD/own-words-list-unrelated"
 refuses 'a step under a sentence that is not about next steps' first-day "$FD/own-words-list-unrelated" 'no concrete next action'
-# The brief of a real first day (run 43054716985): it tells the checklist the product chose and wrote
-# in its own words, and asks for the next step under "What I need from you".
-copy "$FD/product-work" "$FD/product-output"
-rm "$FD/product-output/work/W-20261106-01.md"
-printf 'ID: W-20261111-01\nSTATUS: verified\nGOAL: prepare-a-practical-household-emergency-kit-checklist-by-sun\nWHAT: Write the household emergency-kit checklist from the sourced claims in goals/research/prepare-a-practical-household-emergency-kit-checklist-by-sun/claims.md, for a household with no case of its own yet, and flag which items are contested.\nCHECK: mc-check-written goals/outputs/prepare-a-practical-household-emergency-kit-checklist-by-sun/household-kit-checklist.md --min-words 300\nRESULT: goals/outputs/prepare-a-practical-household-emergency-kit-checklist-by-sun/household-kit-checklist.md is written, with 770 words and a source link on every item (the check counts 40+ links, at least 5 required).\n\n- 2026-11-11 VERIFIED check passed (mc-check-written goals/outputs/prepare-a-practical-household-emergency-kit-checklist-by-sun/household-kit-checklist.md)\n' >"$FD/product-output/work/W-20261111-01.md"
-mkdir -p "$FD/product-output/goals/outputs/prepare-a-practical-household-emergency-kit-checklist-by-sun"
-node -e 'process.stdout.write("## Water\n"+"- Store 4 litres of water per person per day for 3 days (https://www.ready.gov/water).\n".repeat(8))' >"$FD/product-output/goals/outputs/prepare-a-practical-household-emergency-kit-checklist-by-sun/household-kit-checklist.md"
-cat >"$FD/product-output/brief.txt" <<'EOF'
-Your household emergency-kit checklist is written and ready to read in your notebook. It covers water, food, light and communication, medicines, and documents and cash, and each item has a source link. A few items are marked CONTESTED because they rest on one blog or one consumer test, so treat those numbers as rough.
-
-The list is still general. Your household's size, ages, medicines, pets and local hazards would change it more than any source does, and the checklist ends with those questions for that reason. Your answers would make the existing list specific to your household.
-
-What I need from you:
-
-1. Reply here with your household facts from the end of the checklist: how many people and their ages, any medicines or allergies, pets or babies, the main hazards where you live, a rough budget, and your area. I will tailor the list before you buy anything. Without these, the list stays generic and may miss what your household needs.
-
-I have no fresh health readings for today, so there is nothing to report on that front.
-EOF
-first_day_brief_records "$FD/product-output"
-passes 'a model-written brief that tells the checklist the product wrote in its own words' first-day "$FD/product-output" 'answered today'
-copy "$FD/product-output" "$FD/product-output-first-aid"
-sed -i 's/light and communication, medicines/light and communication, first aid and medicines/' "$FD/product-output-first-aid/brief.txt"
-first_day_brief_records "$FD/product-output-first-aid"
-passes 'a model-written brief whose report of the checklist mentions first aid' first-day "$FD/product-output-first-aid" 'answered today'
-copy "$FD/product-output" "$FD/product-output-unnamed"
-printf 'Your household emergency-kit checklist for Sunday is one of your saved goals.\n\nWhat I need from you:\n\n1. Reply here with how many people live in your household.\n' >"$FD/product-output-unnamed/brief.txt"
-first_day_brief_records "$FD/product-output-unnamed"
-refuses 'a brief that names only the goal of the written checklist' first-day "$FD/product-output-unnamed" 'does not identify the verified work'
-copy "$FD/product-output" "$FD/product-output-no-step"
-printf 'Your household emergency-kit checklist is written, and each item has a source link; a few items are marked contested.\n\nWhat I need from you is nothing yet.\n' >"$FD/product-output-no-step/brief.txt"
-first_day_brief_records "$FD/product-output-no-step"
-refuses 'a brief that asks for nothing to do' first-day "$FD/product-output-no-step" 'no concrete next action'
-# The result's words in a brief's list items, or in a line about its next steps, do not report the work.
-copy "$FD/product-output" "$FD/product-output-unfinished"
-printf 'Nothing for your emergency kit by Sunday was finished yesterday; no work was verified.\n\nNext steps:\n\n1. Write down the items you need, then find a source and a link for each item.\n' >"$FD/product-output-unfinished/brief.txt"
-first_day_brief_records "$FD/product-output-unfinished"
-refuses 'a brief that says no work was finished and asks for the written items in its steps' first-day "$FD/product-output-unfinished" 'does not identify the verified work'
-copy "$FD/product-output" "$FD/product-output-unfinished-next"
-printf 'Nothing for your emergency kit by Sunday was finished yesterday.\n\nNext: write the items down with a source link on every item, as the check counts them.\n' >"$FD/product-output-unfinished-next/brief.txt"
-first_day_brief_records "$FD/product-output-unfinished-next"
-refuses 'a brief that says no work was finished and asks for the written items on its next line' first-day "$FD/product-output-unfinished-next" 'does not identify the verified work'
-copy "$FD/product-output" "$FD/product-output-unfinished-find"
-printf 'Nothing for your emergency kit by Sunday was finished yesterday; no work was verified.\n\nWhat I need from you:\n\n1. Reply with your household size.\n2. Find a source and a link for each item you have written.\n' >"$FD/product-output-unfinished-find/brief.txt"
-first_day_brief_records "$FD/product-output-unfinished-find"
-refuses 'a brief that says no work was finished and asks for the written items in a step of any verb' first-day "$FD/product-output-unfinished-find" 'does not identify the verified work'
-copy "$FD/product-output" "$FD/product-output-unfinished-heading"
-printf 'Nothing for your emergency kit by Sunday was finished yesterday; no work was verified.\n\nNext steps: once the items are written, each one needs a source link.\n\n1. Reply with your household size.\n' >"$FD/product-output-unfinished-heading/brief.txt"
-first_day_brief_records "$FD/product-output-unfinished-heading"
-refuses 'a brief that says no work was finished and asks for the written items under its next steps' first-day "$FD/product-output-unfinished-heading" 'does not identify the verified work'
 copy "$FD/good" "$FD/goal-in-goals"
 printf '{"configured":true,"preserved":true,"results":[]}\n' >"$FD/goal-in-goals/setup.json"
 printf '{"data":[{"id":"g1","title":"Prepare a practical household emergency-kit checklist by Sunday."}]}\n' >"$FD/goal-in-goals/goals-after-setup.json"
