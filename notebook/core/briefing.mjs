@@ -59,7 +59,7 @@ export function savedBriefToday(store,now=new Date()){
  return note?{note,hidden:false}:{note:null,hidden:true};
 }
 
-export async function briefing(job,{store,query,provider,now=new Date()}){
+export async function briefing(job,{store,query,provider,now=new Date(),notices}){
  if(job.rehearsal){
   const copy=path.join(store.state,'brief-rehearsals',randomUUID());fs.mkdirSync(copy,{recursive:true,mode:0o700});
   await store.waitForWriter();await store.withLockAsync(()=>{
@@ -89,13 +89,13 @@ export async function briefing(job,{store,query,provider,now=new Date()}){
    }
   });
   const rehearsalStore=new Store(copy,{device:store.device}),rehearsalQuery=new QueryService(rehearsalStore);
-  return {...await runBriefing(job,{store:rehearsalStore,query:rehearsalQuery,provider,now}),rehearsal_workspace:copy};
+  return {...await runBriefing(job,{store:rehearsalStore,query:rehearsalQuery,provider,now,notices}),rehearsal_workspace:copy};
  }
- return runBriefing(job,{store,query,provider,now});
+ return runBriefing(job,{store,query,provider,now,notices});
 }
-async function runBriefing(job,{store,query,provider,now}){
+async function runBriefing(job,{store,query,provider,now,notices}){
  if(!provider)throw Error('Connect an assistant before writing a briefing');
- remind({},{store,query});
+ remind({},{store,query,notices});
  const voiceFile=path.join(store.root,'profile','voice.md'),voice=fs.existsSync(voiceFile)?fs.readFileSync(voiceFile,'utf8'):null;
  // A line Godspeed requires word for word that breaks those same rules is left out and reported (issue #117).
  const leftOut=[];

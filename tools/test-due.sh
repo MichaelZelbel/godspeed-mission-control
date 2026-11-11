@@ -494,6 +494,18 @@ check "no key value or stored hash is in a page, a moment or the output" "$LEAK"
 
 out="$(s add reconnect --title "Reconnect Telegram" --from 2026-10-10 --to 2026-10-30 --done-when "works" --cost "no messages" --self-check connection-ok --self-check-arg Slack 2>&1)"
 contains "connection-ok refuses a name the check does not list" "$out" "must name a connection"
+# A hand-written or older reminder naming a connection the check does not list is skipped, said once
+# with its file, and not counted as a problem, so the other reminders and whatever runs the check go on (#418).
+SK="$TMP/selfcheck-skip"; mkdir -p "$SK/.godspeed" "$SK/rules" "$SK/due"; : > "$SK/AGENTS.md"
+oldc() { printf 'TITLE: %s\nDONE-WHEN: works\nCOST-IF-MISSED: none\nSELF-CHECK: connection-ok\nSELF-CHECK-ARG: %s\nREPEATS: no\n\n## Windows\n\nSTRIP: 2026-10-10 2026-10-30\n' "$2" "$3" > "$SK/due/$1.md"; }
+oldc reconnect-slack "Reconnect Slack" Slack
+oldc reconnect-tg "Reconnect Telegram too" telegram
+printf '{"at":"x","day":"2026-10-13","connections":{"telegram":{"set_up":true,"ok":true}}}' > "$SK/.godspeed/connection-check.json"
+out="$(GODSPEED_TODAY=2026-10-13 GODSPEED_ROOT="$SK" node "$HERE/due.js" --godspeed "$SK" check)"; rc=$?
+check "an unknown connection's self check does not fail the check" "$rc" "0"
+check "  it is said once, naming the file" "$(printf '%s\n' "$out" | grep -c 'due/reconnect-slack.md: self check skipped: ')" "1"
+contains "  and names the connection" "$out" '"Slack" is not one of'
+contains "  and the other reminder still closes itself" "$out" "closed itself: Reconnect Telegram too"
 s add reconnect --title "Reconnect Telegram" --from 2026-10-10 --to 2026-10-30 --done-when "works" --cost "no messages" --self-check connection-ok --self-check-arg telegram >/dev/null
 rec() { printf '{"at":"x","day":"%s","connections":{"telegram":%s}}' "$1" "$2" > "$SC/.godspeed/connection-check.json"; }
 out="$(GODSPEED_TODAY=2026-10-12 s check reconnect)"; contains "no record yet: not yet, with why" "$out" "has not looked at Telegram yet"
