@@ -319,6 +319,26 @@ test('a daily round that went wrong tells the person in one line, once a day, an
  assert.match(routineRow(query.rows('jobs').find(j=>j.id==='choose'),{timeZone:'Europe/Berlin'}).last,/and it worked\.$/);
 });
 
+// The proof of a routine's promise (work/promises/, tools/promises.js): its date after every run
+// that ended well, only for a routine some promise names.
+const routinePromise=(root,kind)=>fs.writeFileSync(path.join(root,'work','promises','routine-'+kind+'.md'),'PROMISE: routine-'+kind+'\nROUTINE: '+kind+'\n');
+test('a routine with a promise leaves its date after a run that ended well, and one without leaves nothing',{skip:!havePython&&'no Python here'},t=>{
+ const {root,home}=scriptFixture(t);routinePromise(root,'due');
+ const run=runScript(home,'godspeed-deadline-reminders.py');assert.equal(run.status,0,run.stderr);
+ assert.equal(fs.readFileSync(path.join(root,'routines','ran','due.txt'),'utf8'),berlinDay+'\n');
+ const other=scriptFixture(t),quiet=runScript(other.home,'godspeed-deadline-reminders.py');assert.equal(quiet.status,0,quiet.stderr);
+ assert.equal(fs.existsSync(path.join(other.root,'routines','ran')),false);
+});
+
+test('a daily round that went wrong leaves no proof that its promise was kept',{skip:(!havePython||!bash)&&'no Python or bash here'},t=>{
+ const {root,home}=scriptFixture(t),fake=path.join(root,'.fake-assistant');fs.mkdirSync(fake,{recursive:true});routinePromise(root,'decide');
+ fs.writeFileSync(path.join(fake,'hermes'),'#!/usr/bin/env bash\ncat >/dev/null\necho "Upstream idle timeout exceeded" >&2\nexit 1\n',{mode:0o755});
+ const settings=path.join(home,'scripts','godspeed-routines.json');fs.writeFileSync(settings,JSON.stringify({...JSON.parse(fs.readFileSync(settings,'utf8')),hermes:path.join(fake,'hermes')}));
+ const run=runScript(home,'godspeed-daily-round-choose.py');
+ assert.equal(run.status,0,run.stderr);assert.match(run.stdout,/did not finish/);
+ assert.equal(fs.existsSync(path.join(root,'routines','ran','decide.txt')),false);
+});
+
 test('a piece of the daily round\'s work that failed its check is said in one line',{skip:!havePython&&'no Python here'},t=>{
  const {home}=scriptFixture(t);
  // mc-work-run's own log lines (tools/mc-work-run), as the routine reads them.

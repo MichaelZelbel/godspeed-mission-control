@@ -231,6 +231,38 @@ OUT="$(D="$D2" RUN="$G/routines/next-action/$D2"; GODSPEED_RUNNER=claude FAKE_MO
 contains "  the next day, with the book out of beta, the interview move is back" "$(cat "$G/routines/next-action/$D2/moves.md")" "### 1. Answer Podcast X"
 missing "  and nothing is held" "$OUT" "held:"
 contains "  holds.txt says so" "$(cat "$G/routines/next-action/$D2/holds.txt")" "nothing is held"
+
+echo "-- a day decided ahead with --date: work.txt marks held by that day, not by today (#406)"
+# The hold ended on $D2 (it held through 2026-10-10); today is 2026-10-09, before it ended.
+T=2026-10-09
+dated() { local day="$1"; shift; GODSPEED_TODAY="$T" GODSPEED_RUNNER=claude FAKE_MODE=holds FAKE_APPLY=W-HELD-01 FAKE_RUN="$G/routines/next-action/$day" FAKE_CALLS="$CALLS" bash "$HERE/mc-decide" --godspeed "$G" "$@" --timeout 60 2>&1; }
+fresh; dated 2026-10-12 --date 2026-10-12 >/dev/null
+missing "  a day after the hold ended: work.txt shows the step free" "$(grep W-HELD-01 "$G/routines/next-action/2026-10-12/work.txt" 2>/dev/null)" "held by"
+contains "  (the step is in work.txt)" "$(cat "$G/routines/next-action/2026-10-12/work.txt" 2>/dev/null)" "W-HELD-01"
+contains "  as holds.txt for that day says" "$(cat "$G/routines/next-action/2026-10-12/holds.txt")" "nothing is held"
+fresh; dated 2026-10-10 --date 2026-10-10 >/dev/null
+contains "  a day still inside the hold: work.txt keeps the marker" "$(grep W-HELD-01 "$G/routines/next-action/2026-10-10/work.txt" 2>/dev/null)" "held by $HOLD"
+contains "  as holds.txt for that day says" "$(cat "$G/routines/next-action/2026-10-10/holds.txt")" "$HOLD: postponed"
+fresh; dated "$T" >/dev/null
+contains "  a scheduled run (no --date) marks by today, as before" "$(grep W-HELD-01 "$G/routines/next-action/$T/work.txt" 2>/dev/null)" "held by $HOLD"
+
+echo "-- a dry run for a day ahead lists Open work by that day, as its work.txt does (#432)"
+openwork() { printf '%s\n' "$1" | sed -n '/^Open work/,/^$/p' | grep W-HELD-01; }
+registry() { (cd "$G" && find goals forecasts work world -type f 2>/dev/null | LC_ALL=C sort | xargs -r sha256sum); }
+fresh; BEFORE="$(registry)"
+OUT="$(dated 2026-10-12 --date 2026-10-12 --dry-run)"
+contains "  (the step is listed under Open work)" "$(openwork "$OUT")" "W-HELD-01"
+missing "  a day after the hold ended: Open work shows the step free" "$(openwork "$OUT")" "held by"
+check "  and says what work.txt for that day says" "$(openwork "$OUT")" "$(grep W-HELD-01 "$G/routines/next-action/2026-10-12/work.txt")"
+OUT="$(dated 2026-10-10 --date 2026-10-10 --dry-run)"
+contains "  a day still inside the hold: Open work keeps the marker" "$(openwork "$OUT")" "held by $HOLD"
+check "  and says what work.txt for that day says" "$(openwork "$OUT")" "$(grep W-HELD-01 "$G/routines/next-action/2026-10-10/work.txt")"
+OUT="$(dated "$T" --dry-run)"
+contains "  a dry run without --date marks by today, as before" "$(openwork "$OUT")" "held by $HOLD"
+check "  the dry runs changed nothing in the registry" "$(registry)" "$BEFORE"
+contains "  (the registry was there to compare)" "$BEFORE" "work/W-HELD-01.md"
+check "  and decided nothing" "$(ls "$G/routines/next-action/2026-10-12/decision.md" 2>/dev/null)" ""
+fresh
 rm -rf "$G/world" "$G/work"
 
 echo

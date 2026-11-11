@@ -53,7 +53,9 @@ test('/api/about names the version, this installation\'s folders and the food ta
  const about=await (await fetch(base+'/api/about')).json();
  assert.equal(about.version,JSON.parse(read('../package.json')).version);
  assert.equal(about.version,VERSION);
- assert.equal((await (await fetch(base+'/health')).json()).version,about.version,'the health address and Settings, About name the same version');
+ const health=await (await fetch(base+'/health')).json();
+ assert.equal(health.version,about.version,'the health address and Settings, About name the same version');
+ assert.equal(health.chat,null,'no chat check has run in a fresh folder');
  assert.equal(about.on,'computer');
  assert.deepEqual(about.folders,{workspace:path.resolve(root),notes:path.join(path.resolve(root),'notebook'),media:path.resolve(media),backups:path.join(path.resolve(root),'.godspeed','backups')});
  assert.equal(about.food.installed,true);

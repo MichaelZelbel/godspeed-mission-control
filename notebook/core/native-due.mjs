@@ -1,7 +1,8 @@
 import {createRequire} from 'node:module';import {spawnSync} from 'node:child_process';import {fileURLToPath} from 'node:url';import {hash} from './records/store.mjs';
 import {localPath} from './local-path.mjs';
 import {copyOldReminders,writable} from './due-copy.mjs';
-const {createDueCommands}=createRequire(import.meta.url)('../../tools/due.js');
+const {createDueCommands,skippedSelfChecks}=createRequire(import.meta.url)('../../tools/due.js');
+export {skippedSelfChecks};
 // Every reminder with a day attached, as a row of the notebook: out of the records, through the
 // program that owns them (tools/due.js on the notebook's store, #90). A file an older version left
 // in due/ that that program cannot read is 'needs-a-look', never closed (9 October 2026: an
@@ -40,7 +41,7 @@ export function dueCommand(store,args,{copy:alsoCopy=true}={}){
  const run=spawnSync(process.execPath,[script,...args,'--godspeed',store.root],{cwd:store.root,encoding:'utf8',timeout:15000,windowsHide:true,shell:false,env:{...process.env,GODSPEED_TODAY:day}});
  // What the child wrote, for the reader that is about to ask this store for it.
  store.scan(true);
- if(run.status!==0)throw Object.assign(Error(String(run.stderr||run.stdout||'Obligation command failed').slice(0,500)),{status:run.status});
+ if(run.status!==0)throw Object.assign(Error(String(run.stderr||run.stdout||'Obligation command failed').slice(0,500)),{status:run.status,stdout:run.stdout});
  return {result:run.stdout.trim()};
 }
 // A DEADLINE SAVED IN SETTINGS OR TOLD IN THE NOTEBOOK'S CHAT IS A REMINDER OF ITS OWN

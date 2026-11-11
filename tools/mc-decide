@@ -31,11 +31,11 @@
 # the run proposed anyway is taken out of its moves into held.md, with one "held:" line here.
 set -uo pipefail
 
-GODSPEED=""; DRY=0; TODAY=""; RUNDIR=""; TIMEOUT=1500; EXTRA=""
+GODSPEED=""; DRY=0; TODAY=""; DATED=""; RUNDIR=""; TIMEOUT=1500; EXTRA=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --godspeed) GODSPEED="$2"; shift 2 ;;
-    --date) TODAY="$2"; shift 2 ;;
+    --date) TODAY="$2"; DATED=1; shift 2 ;;
     --run-dir) RUNDIR="$2"; shift 2 ;;
     --timeout) TIMEOUT="$2"; shift 2 ;;
     # A mission control that has grown things this kit knows nothing about puts them in a file and names it
@@ -114,7 +114,11 @@ mkdir -p "$RUNDIR"
 # "nothing was written" at the end while having quietly aged the register is the exact shape of
 # lie this whole program exists to refuse. So a dry run LISTS the work instead of ticking it, and
 # says so.
-if [ "$DRY" -eq 1 ]; then
+# A dry run for a day named by --date lists by that day, as its work.txt does (#432): listing writes
+# nothing, so it can look ahead without moving time.
+if [ "$DRY" -eq 1 ] && [ -n "$DATED" ]; then
+  reg work list --date "$TODAY" > "$RUNDIR/tick.txt" 2>/dev/null || true
+elif [ "$DRY" -eq 1 ]; then
   reg work list > "$RUNDIR/tick.txt" 2>/dev/null || true
 else
   reg work tick > "$RUNDIR/tick.txt" 2>/dev/null || true
@@ -134,7 +138,13 @@ if [ -s "$RUNDIR/decision.md" ] && [ -s "$RUNDIR/attention.txt" ]; then :; else
   reg goals attention --date "$TODAY" > "$RUNDIR/attention.txt" 2>/dev/null || true
 fi
 reg forecast due --date "$TODAY"    > "$RUNDIR/forecasts-due.txt" 2>/dev/null || true
-reg work list --all > "$RUNDIR/work.txt" 2>/dev/null || true
+# A day decided by --date gets its steps marked held by what holds them ON THAT DAY, as holds.txt,
+# moves.md and the card already are (#406); a scheduled run lists them by today, as it always did.
+if [ -n "$DATED" ]; then
+  reg work list --all --date "$TODAY" > "$RUNDIR/work.txt" 2>/dev/null || true
+else
+  reg work list --all > "$RUNDIR/work.txt" 2>/dev/null || true
+fi
 
 # YESTERDAY'S RECORD IS PUT IN FRONT OF TODAY'S RUN, NOT LEFT FOR IT TO GO AND FIND. The recipe
 # asks "what came of what you chose yesterday" and for two days nothing answered it, because the

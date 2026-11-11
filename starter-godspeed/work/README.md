@@ -117,4 +117,4 @@ mc-work tick | next | list | show <id> | check
 ```
 
 Chapters 3, 8 and 27 of the book are the idea behind this folder: progress written down, and the
-difference between saying a thing is done and showing it. The rooms next door are `goals/` and `forecasts/`.
+difference between saying a thing is done and showing it. The rooms next door are `goals/` and `forecasts/`, and inside this one, `promises/`: what your mission control promised you on a clock, and whether it kept its word.

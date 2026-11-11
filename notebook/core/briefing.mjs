@@ -5,6 +5,7 @@ import {deadlineLive,remind} from './deadline-reminders.mjs';
 import {watchCommand} from './watch-commands.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
+import {createRequire} from 'node:module';
 import {randomUUID} from 'node:crypto';
 import {Store} from './records/store.mjs';
 import {QueryService} from './query.mjs';
@@ -19,6 +20,7 @@ import {cycleOperation} from './cycle-operations.mjs';
 import {addonCommand} from './native-personal.mjs';
 import {dayOf} from './trackers.mjs';
 import {linkFacts,worldFacts,ownerRelationships,newestOnly,fieldList} from './world-facts.mjs';
+const {checkPromises,promiseSayings}=createRequire(import.meta.url)('../../tools/promises.js');
 const BRIEFING_SOURCE_SELECTORS=Object.freeze({
  notes:({actionSources,previousNotes,dayNotes})=>[...new Map([...actionSources,...previousNotes,...dayNotes].map(note=>[note.id,note])).values()],
  watch_topics:({query,selectedTopics})=>visibleRows(query,'watch_topics').filter(t=>selectedTopics.has(t.id)),
@@ -59,7 +61,7 @@ export function savedBriefToday(store,now=new Date()){
  return note?{note,hidden:false}:{note:null,hidden:true};
 }
 
-export async function briefing(job,{store,query,provider,now=new Date()}){
+export async function briefing(job,{store,query,provider,now=new Date(),notices}){
  if(job.rehearsal){
   const copy=path.join(store.state,'brief-rehearsals',randomUUID());fs.mkdirSync(copy,{recursive:true,mode:0o700});
   await store.waitForWriter();await store.withLockAsync(()=>{
@@ -89,13 +91,14 @@ export async function briefing(job,{store,query,provider,now=new Date()}){
    }
   });
   const rehearsalStore=new Store(copy,{device:store.device}),rehearsalQuery=new QueryService(rehearsalStore);
-  return {...await runBriefing(job,{store:rehearsalStore,query:rehearsalQuery,provider,now}),rehearsal_workspace:copy};
+  return {...await runBriefing(job,{store:rehearsalStore,query:rehearsalQuery,provider,now,notices,promiseRoot:store.root}),rehearsal_workspace:copy};
  }
- return runBriefing(job,{store,query,provider,now});
+ return runBriefing(job,{store,query,provider,now,notices});
 }
-async function runBriefing(job,{store,query,provider,now}){
+async function runBriefing(job,{store,query,provider,now,notices,promiseRoot=store.root}){
  if(!provider)throw Error('Connect an assistant before writing a briefing');
- remind({},{store,query});
+ let promises;try{promises=promiseSayings(checkPromises(promiseRoot,{now}));}catch{promises=[{line:'Your promises could not be checked today.',fallback:'Your promises could not be checked today.'}];}
+ remind({},{store,query,notices});
  const voiceFile=path.join(store.root,'profile','voice.md'),voice=fs.existsSync(voiceFile)?fs.readFileSync(voiceFile,'utf8'):null;
  // A line Godspeed requires word for word that breaks those same rules is left out and reported (issue #117).
  const leftOut=[];
@@ -328,7 +331,8 @@ async function runBriefing(job,{store,query,provider,now}){
  }
  // A brief with nothing to decide and under two fresh news items is thin (#387). One rewrite that
  // adds the missing decision or news must pass every check; a brief still thin says so and why,
- // where the installation had sources or decisions to fill it.
+ // where the installation had sources or decisions to fill it. A repair that passes its checks
+ // but leaves the brief thin is recorded as 'still-thin', never 'passed' (#412).
  let thin=thinCheck(draft,context),thinRepair='not-applicable';
  if(thin.thin&&!fallback&&(thin.missing_actions.length||thin.missing_news.length)){
   thinRepair='failed';
@@ -339,7 +343,7 @@ async function runBriefing(job,{store,query,provider,now}){
    const repaired=[...healthSummaryLines,unknownWeekLine,healthSafeReply(raw,'text',health)].filter(Boolean).join('\n\n');
    if(!codeGate(repaired).length){
     const facts=await verify(repaired,'source-facts'),reader=await verify(repaired,'plain-words-and-delivery');
-    if(facts.verdict.passed===true&&reader.verdict.passed===true){draft=repaired;check=facts.receipt;deliveryCheck=reader.receipt;thinRepair='passed';thin=thinCheck(draft,context);}
+    if(facts.verdict.passed===true&&reader.verdict.passed===true){draft=repaired;check=facts.receipt;deliveryCheck=reader.receipt;thin=thinCheck(draft,context);thinRepair=thin.thin?'still-thin':'passed';}
    }
   }catch{}
  }
@@ -349,6 +353,14 @@ async function runBriefing(job,{store,query,provider,now}){
  if(thinNote&&(watch.length||context.action_artifacts.length)){
   const line='This brief is thin today: '+thinNote.reasons.join('; ')+'.',told=draft.trimEnd()+'\n\n'+line;
   if(!ruleRefusals(line,voice,{skipOpener:true}).length&&!codeGate(told).length){draft=told;thinLine='told';}else thinLine='refused';
+ }
+ // A promise that was missed, never kept or cannot be read opens the brief. It goes in after the
+ // writing and its checks, not among the required lines, which a repair puts back at the end.
+ if(promises.length){
+  const own=new Set(codeGate(draft)),added=text=>codeGate(text).filter(error=>!own.has(error));
+  const lines=promises.map(p=>added([p.line,draft].join('\n\n')).length?p.fallback:p.line),told=[...lines,draft].join('\n\n'),errors=added(told);
+  if(!errors.length)draft=told;
+  else{const id='repair-brief-line-'+hash(['the promise lines',lines]),old=store.get('work_items',id);if(!old||old.state==='verified')await store.saveAsync('work_items',{id,kind:'repair',title:'The morning briefing left out a promise that was not kept, because it breaks your writing rules',state:'needs_review',job_id:job.id,line_name:'the promise lines',line:lines.join('\n'),error:errors.join('; '),check:'The line passes the writing rules in profile/voice.md, or the rule is changed',allowed_action:'inspect-and-retry',dependencies:[],max_attempts:3});}
  }
  await store.saveAsync('job_receipts',{kind:'brief-final-check',job_id:job.id,state:thin.thin?'thin':'passed',has_action:thin.has_action,fresh_news:thin.fresh_news,thin_repair:thinRepair,...(thinNote?{reasons:thinNote.reasons,thin_line:thinLine}:{}),draft_hash:hash(draft),finished_at:new Date().toISOString()});
  const finalErrors=codeGate(draft);if(finalErrors.length)throw Error('Final exact briefing check failed: '+finalErrors.join('; '));

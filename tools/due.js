@@ -44,7 +44,8 @@
  * Let undated wishes in and within a month it is a to-do app you do not maintain.
  *
  *   mc-due                    everything, loudest first
- *   mc-due today              at most three, for your morning brief to read
+ *   mc-due today              at most three, for your morning brief to read, after any promise
+ *                             of your mission control's that was missed (promises.js)
  *   mc-due add <name> --title "..." [--from YYYY-MM-DD] --target YYYY-MM-DD and/or --to YYYY-MM-DD
  *          --done-when "..." [--cost "..."] [--repeats monthly|yearly|"every N days"]
  *          [--self-check none|secret-changed|connection-ok|file-newer] [--self-check-arg ARG] [--link URL]
@@ -124,6 +125,15 @@ function findGodspeed() {
   }
   for (const d of [process.env.GODSPEED_DIR, readDeviceEnv("GODSPEED_DIR")]) if (isFolder(d)) return path.resolve(d);
   return "";
+}
+
+// A self check naming a connection the daily check does not list is skipped and said on its own
+// line, not counted as a problem: one such reminder used to stop the whole morning brief (#418).
+// The notebook reads these lines back out of the check's output.
+const SKIPPED = ": self check skipped: ";
+function skippedSelfChecks(text) {
+  const lines = String(text || "").split(/\r?\n/).map((line) => line.trim());
+  return [...new Set(lines.filter((line) => /^due\/[^\s:]+\.md: /.test(line) && line.includes(SKIPPED)))];
 }
 
 // `store` is the notebook of this mission control when the caller has one open already (the
@@ -616,7 +626,7 @@ function secretChanged(o, strip) {
 function connectionOk(o, strip) {
   const arg = (o.head["SELF-CHECK-ARG"] || "").trim();
   const id = connectionId(arg);
-  if (!id) return { error: "it says to watch a connection but \"" + arg + "\" is not one of: " + Object.values(CONNECTIONS).join(", ") };
+  if (!id) return { skipped: "it says to watch a connection, but \"" + arg + "\" is not one of: " + Object.values(CONNECTIONS).join(", ") + ". It stays open until you close it" };
   const label = CONNECTIONS[id];
   const record = readJson(path.join(stateDir(), "connection-check.json"));
   const entry = record && record.connections && record.connections[id];
@@ -657,7 +667,7 @@ function help() {
   console.log(`mc-due - the things with a last day, and how loud to be about them
 
   mc-due                         everything, loudest first
-  mc-due today                   at most three, for your morning brief
+  mc-due today                   a missed promise first, then at most three, for your morning brief
   mc-due add <name> --title "..." [--from YYYY-MM-DD]
           --target YYYY-MM-DD and/or --to YYYY-MM-DD
           --done-when "..." [--cost "..."]
@@ -703,10 +713,19 @@ function sayOutOfStep() {
     OUT_OF_STEP[0] + (OUT_OF_STEP.length > 1 ? " (and " + (OUT_OF_STEP.length - 1) + " more)" : "") + ".");
 }
 
-function cmdList(day, capped) {
+// A promise of your mission control's that was missed, never kept or cannot be read comes first in
+// the day's list (promises.js). The list goes on even when the promises could not be checked.
+function promiseSaying() {
+  try { const promises = require("./promises.js"); return promises.promiseLines(promises.checkPromises(godspeed)); }
+  catch (_) { return ["Your promises could not be checked today."]; }
+}
+
+// `said`: something was printed above the list, so an empty list says nothing of its own.
+function cmdList(day, capped, said = false) {
   const rows = load(day);
   sayOutOfStep();
   if (!rows.length) {
+    if (said) return 0;
     console.log("Nothing with a last day yet.");
     console.log("Add one:  mc-due add tax --title \"My tax return\" --from 2027-01-01 --to 2027-07-31 \\");
     console.log("            --done-when \"it is filed\" --cost \"a late fee, and they estimate my income themselves\"");
@@ -744,7 +763,7 @@ function cmdList(day, capped) {
     // never written to: there is no window in it to say anything about.
     show = show.concat(rows.filter((r) => r.problem));
   }
-  if (!show.length) { console.log("Nothing needs saying today."); return 0; }
+  if (!show.length) { if (!said) console.log("Nothing needs saying today."); return 0; }
   for (const r of show) {
     if (r.problem) {
       console.log(WORDS.unreadable.padEnd(15) + lookSentence(r));
@@ -762,10 +781,15 @@ function cmdList(day, capped) {
     }
     if (!capped) {
       const c = (r.o.head["SELF-CHECK"] || "none").toLowerCase();
+      const scArg = (r.o.head["SELF-CHECK-ARG"] || "").trim();
+      // A connection the daily check does not list is never watched (`mc-due check` skips it), so
+      // saying it closes itself would be a promise nothing keeps (#428).
       console.log("               " + (c === "none"
         ? "only your word closes this one:  mc-due done " + r.slug
-        : "closes itself when " + (c === "secret-changed" || c === "connection-ok"
-          ? selfCheckWords(c, (r.o.head["SELF-CHECK-ARG"] || "").trim()) : (r.o.head["SELF-CHECK"] || ""))));
+        : c === "connection-ok" && !connectionId(scArg)
+          ? "stays open until you close it:  mc-due done " + r.slug + "  (\"" + scArg + "\" is not a connection the daily connection check knows)"
+          : "closes itself when " + (c === "secret-changed" || c === "connection-ok"
+            ? selfCheckWords(c, scArg) : (r.o.head["SELF-CHECK"] || ""))));
     }
   }
   return 0;
@@ -1030,6 +1054,7 @@ function cmdCheck(day) {
     if (!cur) continue;
     const r = selfCheck(o, cur.strip);
     if (r.error) { console.log("  due/" + slug + ".md: " + r.error); problems++; continue; }
+    if (r.skipped) { console.log("  due/" + slug + ".md" + SKIPPED + r.skipped + "."); continue; }
     if (r.state) { o.head["SELF-CHECK-STATE"] = r.state; save(o); }
     if (!r.done && r.why) console.log("  not yet: " + (o.head["TITLE"] || slug) + " (" + r.why + ")");
     if (r.done) {
@@ -1120,7 +1145,7 @@ const cmd = args[0] && !args[0].startsWith("-") ? args[0] : "";
 let rc = 0;
 switch (cmd) {
   case "": case "list": rc = cmdList(day, false); break;
-  case "today": rc = cmdList(day, true); break;
+  case "today": { const promises = promiseSaying(); for (const line of promises) console.log(line); rc = cmdList(day, true, promises.length > 0); break; }
   case "add": rc = cmdAdd(day); break;
   case "done": rc = cmdDone(day); break;
   case "target": rc = cmdTarget(day); break;
@@ -1253,5 +1278,5 @@ return {
   recordSaid: (...a) => { let done; through(() => { done = recordSaid(...a); }, true); return done; },
 };
 }
-module.exports={createDueCommands};
+module.exports={createDueCommands,skippedSelfChecks};
 if(require.main===module)process.exit(createDueCommands().run());
