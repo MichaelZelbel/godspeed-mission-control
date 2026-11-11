@@ -239,3 +239,49 @@ export async function runUpdate({root,channel='stable',check=false,fromSettings=
     release();
   }
 }
+
+// What Settings, About shows (GET /api/update). The newest release is asked of GitHub at most once
+// every ten minutes, unless the reader asks again.
+const ASKED_FOR=10*60*1000,STALLED=2*60*1000,SETUP_STALLED=30*60*1000;
+const asked=new Map();
+const RUNNING=['checking','downloading','preparing','switching'];
+// An update in progress that nothing carries on any more ended one way or the other: the version
+// running says which. The Windows setup runs on its own, so it gets longer before it counts as stopped.
+function settledStatus(root,installed,now){
+  const status=readStatus(root);
+  if(!status||!RUNNING.includes(status.state)||updateBusy(root))return status;
+  try{if(status.to&&compareVersions(installed,status.to)>=0)return writeStatus(root,{...status,state:'updated',message:'Updated to '+status.to+'.'},now);}catch{}
+  if(now().getTime()-Date.parse(status.at)<(status.state==='switching'?SETUP_STALLED:STALLED))return status;
+  return writeStatus(root,{...status,state:'failed',message:'The update to '+status.to+' did not finish. The version you have is still running.'},now);
+}
+export async function updateOverview({root,env=process.env,product=ownProduct,refresh=false,fetchImpl,now=()=>new Date()}){
+  const installed=installedVersion({root}),way=updateWay({root,env,product}),key=releaseSources(env).api;
+  let newest=null,error=null;
+  try{
+    const kept=asked.get(key);
+    if(!refresh&&kept&&now().getTime()-kept.at<ASKED_FOR)newest=kept.newest;
+    else{newest=await findNewest({fetchImpl,env});asked.set(key,{at:now().getTime(),newest});}
+  }catch(failure){error=failure.message;}
+  let newer=false;try{newer=!!newest&&compareVersions(newest.version,installed)>0;}catch{}
+  return {installed,newest,newer,way,command:COMMANDS[way]||null,busy:updateBusy(root),status:settledStatus(root,installed,now),error};
+}
+
+// The Update now button (POST /api/update): the same command, started apart from the notebook so it
+// lives on while the notebook it updates stops. Answers {code, ...} for the response.
+export async function startUpdate({root,env=process.env,product=ownProduct,fetchImpl,spawnImpl=spawn,command=fileURLToPath(new URL('../bin/godspeed.mjs',import.meta.url)),now=()=>new Date()}){
+  const way=updateWay({root,env,product});
+  if(way==='server')return {code:409,error:'On a Docker server Godspeed is updated on the server itself. Run this there: sudo godspeed-update'};
+  if(way==='terminal')return {code:409,error:'This installation is updated from a terminal on this computer. Run: godspeed-update'};
+  if(way!=='handover'&&way!=='windows')return {code:409,error:'No installer put this copy of Godspeed here, so it cannot update itself.'};
+  if(updateBusy(root))return {code:409,error:'An update is already running.'};
+  const installed=installedVersion({root});let newest;
+  try{newest=await findNewest({fetchImpl,env});}catch(error){return {code:502,error:error.message};}
+  if(compareVersions(newest.version,installed)<=0)return {code:200,started:false,message:'You have the newest version, '+installed+'. Nothing was changed.'};
+  const status=writeStatus(root,{state:'checking',from:installed,to:newest.version,notes:newest.notes,message:'Getting '+newest.version+' ready.'},now);
+  const output=fs.openSync(file(root,'update.log'),'a');
+  try{
+    const child=spawnImpl(process.execPath,[command,'update','--from-settings'],{cwd:root,env:{...env,GODSPEED_WORKSPACE:root},detached:true,stdio:['ignore',output,output],windowsHide:true});
+    child.on?.('error',()=>{});child.unref?.();
+  }finally{fs.closeSync(output);}
+  return {code:202,started:true,status};
+}
