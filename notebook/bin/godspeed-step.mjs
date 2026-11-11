@@ -3,7 +3,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {Store} from '../core/records/store.mjs';
 import {machineDevice} from '../core/device-id.mjs';
-import {openStep,pressStep,ASKER_KINDS,answerChosen,heard,quietMessage,readStep,CHATS} from '../core/waiting-steps.mjs';
+import {openStep,pressStep,ASKER_KINDS,answerChosen,heard,quietMessage,readStep,sentWithin,CHATS} from '../core/waiting-steps.mjs';
+import {cardSent} from '../core/background-reports.mjs';
 
 // The one way to ask the owner for a yes (core/waiting-steps.mjs). A refusal reads as one plain line.
 const fail=error=>{process.stderr.write('Error: '+(error?.message||String(error))+'\n'+(process.env.GODSPEED_DEBUG?String(error?.stack||'')+'\n':''));process.exit(1);};
@@ -18,8 +19,9 @@ const HELP=`godspeed-step: ask your owner for a yes, and read the answer.
       Only an asked outcome opens a waiting step, and prints {"id","message"}; the others open none. Each text is one plain line without a code.
       --about says what this is about for someone who saw none of the work, --yes and --no say what
       happens. A step asked in the notebook is put into the notebook chat for you. A step asked in
-      Telegram is sent by the one who tells your owner: hand the step's id to the notice, or say "message"
-      in your reply to your owner. Until that message has gone out, a plain yes cannot reach the step.
+      Telegram goes to your owner by itself, as one message with Yes and No buttons; its message is
+      empty, so say nothing more about it. open waits up to 20 seconds for that message to go out,
+      and until it has, a plain yes cannot reach the step.
   get <id>
       Prints the step with status waiting, yes or no.
   heard --chat telegram|notebook
@@ -28,6 +30,8 @@ const HELP=`godspeed-step: ask your owner for a yes, and read the answer.
       Only the assistant, right after its owner chose a step you asked about in words.
   press <id> yes|no
       Only the Telegram buttons use this: a press on a waiting step's own message.
+  sent <id>
+      Only the Telegram buttons use this, once a step's question went out with its buttons.
 `;
 const args=process.argv.slice(2),option=name=>{const at=args.indexOf(name);return at<0?undefined:args[at+1];};
 const root=option('--godspeed')||process.env.GODSPEED_WORKSPACE,verb=args[0];
@@ -36,6 +40,8 @@ if(!root)throw Error('Say which mission control folder: --godspeed <folder>.');
 const scheduled=Boolean(process.env.GODSPEED_SCHEDULED_RUN),print=value=>process.stdout.write(JSON.stringify(value,null,2)+'\n');
 const chatOption=()=>{const chat=option('--chat');if(!CHATS.includes(chat))throw Error('Say which chat: --chat telegram or --chat notebook.');return chat;};
 const stateDir=path.join(root,'.godspeed');
+const SEND_WAIT_MS=20000;
+const sendWaitMs=()=>{const seconds=Number(process.env.GODSPEED_STEP_SEND_WAIT);return process.env.GODSPEED_STEP_SEND_WAIT&&Number.isFinite(seconds)&&seconds>=0?seconds*1000:SEND_WAIT_MS;};
 if(verb==='heard'){
  const chat=chatOption();
  if(scheduled){print({kind:'none'});process.exit(0);}
@@ -49,9 +55,11 @@ if(verb==='open'){
  const VALUED=['--about','--question','--yes','--no','--by','--chat','--job','--quietly','--subject','--extra','--godspeed'],BARE=['--outward','--within'];
  for(let at=1;at<args.length;at++){if(VALUED.includes(args[at])){const value=args[at+1];if(value===undefined||VALUED.includes(value)||BARE.includes(value))throw Error(args[at]+' needs a value.');at++;}else if(!BARE.includes(args[at]))throw Error('Unknown option '+args[at]+' for open.');}
  if(args.includes('--within')&&option('--extra')===undefined)throw Error('--within needs --extra.');
- const installation=store.get('settings','installation');
- print(openStep(store,{about:option('--about'),question:option('--question'),yes:option('--yes'),no:option('--no'),by:option('--by'),job:option('--job'),quietly:option('--quietly'),subject:option('--subject'),outward:args.includes('--outward'),extra:option('--extra')===undefined?undefined:{instruction:option('--extra'),within:args.includes('--within')},
-  chat:option('--chat')||(installation?.delivery==='telegram'?'telegram':'notebook')}));
+ const installation=store.get('settings','installation'),chat=option('--chat')||(installation?.delivery==='telegram'?'telegram':'notebook');
+ const result=openStep(store,{about:option('--about'),question:option('--question'),yes:option('--yes'),no:option('--no'),by:option('--by'),job:option('--job'),quietly:option('--quietly'),subject:option('--subject'),outward:args.includes('--outward'),extra:option('--extra')===undefined?undefined:{instruction:option('--extra'),within:args.includes('--within')},chat});
+ // The gateway sends a Telegram step's card; waiting for it keeps the question inside the routine's run.
+ if(result.outcome==='asked'&&chat==='telegram')await sentWithin(store,result.id,sendWaitMs());
+ print(result);
 }else if(verb==='get'){
  const record=store.get('approvals',args[1]);if(!record)throw Error('That step does not exist.');print(readStep(record));
 }else if(verb==='answer'){
@@ -59,4 +67,7 @@ if(verb==='open'){
 }else if(verb==='press'){
  const done=pressStep(store,{id:args[1],answer:args[2],scheduled});
  print({reply:done.reply,changed:done.changed});process.exit(done.changed?0:2);
+}else if(verb==='sent'){
+ if(scheduled)throw Error('A scheduled run cannot say a question went out.');
+ print({sent:await cardSent(store,args[1])});
 }else throw Error('Unknown verb. '+HELP);

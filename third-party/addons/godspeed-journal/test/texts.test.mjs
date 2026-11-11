@@ -41,3 +41,14 @@ test("the README never tells a reader to install from a private repository", () 
   assert.equal(pkg.repository.url, "https://github.com/MichaelZelbel/godspeed-mission-control.git");
   assert.equal(pkg.repository.directory, "third-party/addons/godspeed-journal");
 });
+
+test("the recipe and the README say how a time a person names is saved, and that an unsure one asks once", () => {
+  const t = flat(recipe);
+  assert.match(t, /## When it happened/);
+  assert.match(t, /`--when "<their words>"` on `start`, `done`, `drop`, `note` or `met`\. Never work out a time yourself and never pass one they did not say\./);
+  assert.match(t, /A move with no time word gets no `--when` and is saved as now\./);
+  assert.match(t, /that move was not saved: ask exactly that question, once, and nothing else\./);
+  const readme = flat(read("README.md"));
+  assert.match(readme, /You can say when something happened: "an hour ago", "at 11", "yesterday afternoon"/);
+  assert.match(readme, /asks you once instead of guessing, and its reply says the time it recorded\./);
+});

@@ -39,6 +39,13 @@ const STRINGS = {
     nothingOn: (names) => `Nothing has gone out on ${names} since.`,
     onRecord: (name, when, title, url) => `On record: the ${name} post${title ? ` "${title}"` : ""} went out ${when}${url ? `, ${url}` : ""}.`,
     or: " or ",
+    askWhen: () => 'When was that? For example "at 10:40" or "an hour ago".',
+    askWhich: (a, b) => `Did you mean ${a} or ${b}?`,
+    askFuture: (when) => `${when[0].toUpperCase()}${when.slice(1)} is still ahead. When did it happen?`,
+    askBeforeStart: (title, when) => `That is before "${title}" started (${when}). When did you finish it?`,
+    askBeforeReopen: (title, when) => `That is before "${title}" was reopened (${when}). When did you finish it?`,
+    askBeforeFinish: (title, when) => `That is before "${title}" was finished (${when}). When did it happen?`,
+    askOrder: () => "That ends before it starts. When did it start and end?",
   },
   de: {
     nudge: ({ title, when, doneMeans = [], record = "", lastNote = "", last = true }) => [
@@ -69,6 +76,13 @@ const STRINGS = {
     nothingOn: (names) => `Auf ${names} ist seitdem nichts erschienen.`,
     onRecord: (name, when, title, url) => `Belegt: Der ${name}-Beitrag${title ? ` "${title}"` : ""} ist ${when} erschienen${url ? `, ${url}` : ""}.`,
     or: " oder ",
+    askWhen: () => 'Wann war das? Zum Beispiel „um 10:40" oder „vor einer Stunde".',
+    askWhich: (a, b) => `Meinst du ${a} oder ${b}?`,
+    askFuture: (when) => `${when[0].toUpperCase()}${when.slice(1)} liegt noch vor uns. Wann war es?`,
+    askBeforeStart: (title, when) => `Das ist vor dem Anfang von „${title}" (${when}). Wann warst du fertig?`,
+    askBeforeReopen: (title, when) => `Das ist vor dem Wiederöffnen von „${title}" (${when}). Wann warst du fertig?`,
+    askBeforeFinish: (title, when) => `Das ist vor dem Abschluss von „${title}" (${when}). Wann ist es passiert?`,
+    askOrder: () => "Das endet, bevor es anfängt. Wann hat es angefangen und aufgehört?",
   },
 };
 
