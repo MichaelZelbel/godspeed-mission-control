@@ -39,9 +39,6 @@ say() { printf '%s\n' "$*" >&2; }
 verdict() {
   printf '%s\n' "$1"
   [ -z "${GITHUB_STEP_SUMMARY:-}" ] || printf '%s\n' "$1" >>"$GITHUB_STEP_SUMMARY"
-  if [ -n "${EVIDENCE:-}" ] && [ -d "$EVIDENCE" ]; then
-    printf '%s\n' "$1" >"$EVIDENCE/.result.tmp" && mv -f "$EVIDENCE/.result.tmp" "$EVIDENCE/result.txt" || return 1
-  fi
   if [ -n "${GODSPEED_SCENARIO_RESULTS:-}" ]; then
     mkdir -p "$GODSPEED_SCENARIO_RESULTS" || return 1
     local result tmp
@@ -569,24 +566,6 @@ install_the_line_of_into() { # <ref> <root> <port> <trace file>
     fail "the install line for $1 into $2 failed before this scenario could do anything (its trace is in the step log)"
 }
 install_the_stage_line_into() { # <root> <port> <trace file>
-  local root=$1 port=$2 trace=$3 shared
-  if [ "${GODSPEED_SCENARIO_REUSE_INSTALL:-}" = 1 ]; then
-    install_paths
-    shared=$RUNTIME
-    [ -s "$shared/version" ] || fail "the pooled native install has no runtime for $root"
-    if [ "$root" = "$ROOT" ]; then
-      install_the_stage_line "$trace"
-      return
-    fi
-    rm -rf "$root"
-    mkdir -p "$root/.godspeed" || fail "the logical workspace $root could not be made"
-    cp -a "$ROOT/." "$root/" || fail "the pooled workspace could not seed logical workspace $root"
-    rm -rf "$root/.godspeed/integrated-runtime"
-    ln -s "$shared" "$root/.godspeed/integrated-runtime" || fail "logical workspace $root could not use the pooled runtime"
-    printf 'reused candidate runtime %s on logical port %s\n' "$(cat "$shared/version")" "$port" >"$trace" ||
-      fail "the logical workspace trace could not be kept"
-    return
-  fi
   if [ -n "${GODSPEED_SCENARIO_PRODUCT:-}" ]; then
     local_install_into "$1" "$2" "$3"
     return

@@ -108,9 +108,13 @@ test('a candidate without optional Mac still collects its Windows verdict', () =
   ]);
 });
 
-test('accepts a standalone scenario result retained beside its evidence', () => {
-  const out = collectVerdicts({ catalog, picked: ',native,', directories: [records({ 'result.txt': 'PASS native: healthy\n' })] });
-  assert.deepEqual(out, { lines: ['PASS native: healthy'], failures: [] });
+test('a scenario folder of what it saw beside the pooled records adds no second record', () => {
+  const dir = records({ 'native.txt': 'PASS native: healthy\n', 'docker.txt': 'PASS docker: healthy\n' });
+  mkdirSync(join(dir, 'native'));
+  writeFileSync(join(dir, 'native', 'result.txt'), 'PASS native: healthy\n');
+  writeFileSync(join(dir, 'native', 'reply.txt'), 'PASS native: what the reply said\n');
+  const out = collectVerdicts({ catalog, directories: [dir] });
+  assert.deepEqual(out, { lines: ['PASS native: healthy', 'PASS docker: healthy'], failures: [] });
 });
 
 test('requires both Windows move modes and produces one scenario verdict', () => {

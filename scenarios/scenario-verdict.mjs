@@ -44,12 +44,7 @@ export function collectVerdicts({ catalog, picked = 'all', includeCandidateOnly 
     const aliases = row.id === 'windows-old-names-move'
       ? /^(windows-old-names-move|windows-old-names-move-(?:moves|held))\.txt$/
       : new RegExp(`^${row.id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\.txt$`);
-    const matches = all.filter(({ file, text }) => {
-      const name = file.split('/').pop();
-      // A standalone job keeps its exact result beside its evidence as result.txt;
-      // pooled jobs keep the scenario id in the filename. Both are one record per scenario.
-      return aliases.test(name) || (name === 'result.txt' && text.includes(` ${row.id}`));
-    }).sort((a, b) => a.file.localeCompare(b.file));
+    const matches = all.filter(({ file }) => aliases.test(file.split('/').pop())).sort((a, b) => a.file.localeCompare(b.file));
     const required = row.id === 'windows-old-names-move' ? 2 : 1;
     if (matches.length !== required) {
       failures.push(`${row.id}: expected ${required} result record${required === 1 ? '' : 's'}, found ${matches.length}`);

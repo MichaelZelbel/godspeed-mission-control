@@ -611,6 +611,22 @@ if [ "$(cat "$POOL_LOG")" = "$(printf 'native-first\nnative-broken')" ] && grep 
 else
   bad "a pooled reset failure does not retain only pooled ownership ($POOL_OUTPUT; $(cat "$POOL_LOG" 2>/dev/null))"
 fi
+POOL_RESULTS=$TMP/pooled-both-results
+mkdir -p "$POOL_RESULTS"
+POOL_OUTPUT=$(GODSPEED_SCENARIO_CATALOG="$POOL_CATALOG" GODSPEED_SCENARIO_RESULTS="$POOL_RESULTS" GODSPEED_SCENARIO_POOL_WORK="$TMP/pooled-work" bash -c '
+  . "$1" candidate all
+  record linux-install FAIL "the native candidate install or baseline failed"
+  record docker-server PASS "one Docker candidate install is ready"
+  record_unavailable native "the native candidate install or baseline failed"
+  run_script() { printf "PASS %s: ran without its install\n" "$1" >"$RESULTS/$1.txt"; }
+  run_both_systems
+' bash "$ROOT/scenarios/run-installed-scenarios.sh" 2>&1)
+if grep -Fxq 'FAIL cross-platform: the native candidate install or baseline failed' "$POOL_RESULTS/cross-platform.txt" && \
+  grep -Fxq 'FAIL cross-platform-later: the native candidate install or baseline failed' "$POOL_RESULTS/cross-platform-later.txt"; then
+  ok 'a scenario on both systems keeps the reason its install was unavailable'
+else
+  bad "a scenario on both systems loses the reason its install was unavailable ($POOL_OUTPUT; $(cat "$POOL_RESULTS"/cross-platform*.txt 2>/dev/null))"
+fi
 POOL_RESULTS=$TMP/pooled-docker-results
 POOL_LOG=$TMP/pooled-docker.log
 mkdir -p "$POOL_RESULTS" "$TMP/pooled-server-data"
@@ -763,17 +779,6 @@ if [ "$?" = 0 ]; then
   ok 'the native install proof rejects a retained stage file different from the staged one'
 else
   bad "the native install proof does not reject a retained stage file different from the staged one ($POOL_OUTPUT)"
-fi
-REMINDER_FOLDER=$(grep -n 'one_pair folder' "$ROOT/scenarios/reminder-closed-elsewhere.sh" | head -1 | cut -d: -f1)
-REMINDER_CONNECTED=$(grep -n 'one_pair connected' "$ROOT/scenarios/reminder-closed-elsewhere.sh" | head -1 | cut -d: -f1)
-if grep -q 'GODSPEED_SCENARIO_REUSE_INSTALL' "$ROOT/scenarios/scenario-lib.sh" && \
-  grep -q 'install_the_stage_line_into' "$ROOT/scenarios/closed-offline-on-both.sh" && \
-  grep -q 'install_the_stage_line_into' "$ROOT/scenarios/reminder-closed-elsewhere.sh" && \
-  grep -q 'ln -s "$shared" "$root/.godspeed/integrated-runtime"' "$ROOT/scenarios/scenario-lib.sh" && \
-  [ -n "$REMINDER_FOLDER" ] && [ -n "$REMINDER_CONNECTED" ] && [ "$REMINDER_FOLDER" -lt "$REMINDER_CONNECTED" ]; then
-  ok 'two-device reminder scenarios use separate workspaces linked to the pooled runtime, and folder mode starts from the clean baseline'
-else
-  bad 'two-device reminder scenarios do not reuse the pooled runtime from a clean folder baseline'
 fi
 if grep -q 'run_both_systems' "$ROOT/scenarios/run-installed-scenarios.sh" && \
   ! grep -q 'run_script workouts-from-hevy workouts-from-hevy.sh both' "$ROOT/scenarios/run-installed-scenarios.sh" && \

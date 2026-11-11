@@ -6,11 +6,11 @@ linux-update	inline	isolated	native	no	an update from today's public install
 settings-on-install	settings-on-install.sh	terminal	native	no	a fresh install keeps the owner's settings
 voice	voice.sh	shared	native	no	a voice note, with the permission and without it
 update-keeps-everything	update-keeps-everything.sh	isolated	native	no	an update keeps every record, setting and chat
-reminder-closed-elsewhere	reminder-closed-elsewhere.sh	shared	native	no	a reminder closed elsewhere is closed here
+reminder-closed-elsewhere	reminder-closed-elsewhere.sh	isolated	native	no	a reminder closed elsewhere is closed here
 reminders-move-keeps-everything	reminders-move-keeps-everything.sh	isolated	native	no	the reminders move keeps every reminder
 two-machines-move-at-once	two-machines-move-at-once.sh	isolated	native	no	two computers move reminders at once
 late-reminder-file	late-reminder-file.sh	isolated	native	no	a late old reminder file still arrives once
-closed-offline-on-both	closed-offline-on-both.sh	shared	native	no	one reminder closed offline on both computers
+closed-offline-on-both	closed-offline-on-both.sh	isolated	native	no	one reminder closed offline on both computers
 reminder-from-settings	reminder-from-settings.sh	shared	native	no	a Settings reminder reaches the notebook and brief
 charm-challenge	charm-challenge.sh	shared	native	no	the Charm Challenge starts, talks and restarts honestly
 no-video-skills-by-default	no-video-skills-by-default.sh	shared	native	no	video skills are absent until their add-on is set up

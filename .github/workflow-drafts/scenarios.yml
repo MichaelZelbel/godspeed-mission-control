@@ -236,15 +236,20 @@ jobs:
         env:
           PICKED: ${{ needs.stage.outputs.picked }}
         run: bash scenarios/run-installed-scenarios.sh "$STAGE_REF" "$PICKED"
-      - name: Keep each result and what each pooled scenario saw
+      - name: Keep each pooled scenario's result
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: pooled-scenario-results
-          path: |
-            ${{ runner.temp }}/scenario-results
-            ${{ runner.temp }}/scenario-evidence
+          path: ${{ runner.temp }}/scenario-results
           if-no-files-found: warn
+      - name: Keep what each pooled scenario saw
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pooled-scenario-evidence
+          path: ${{ runner.temp }}/scenario-evidence
+          if-no-files-found: ignore
 
   mac-install:
     name: a stranger's Mac install
@@ -460,7 +465,7 @@ jobs:
   closed-offline-on-both:
     name: one reminder closed on two computers while they were apart
     needs: stage
-    if: ${{ github.event_name == 'pull_request' && (needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',closed-offline-on-both,')) }}
+    if: ${{ needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',closed-offline-on-both,') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     steps:
@@ -506,7 +511,7 @@ jobs:
   reminder-closed-elsewhere:
     name: a reminder closed on the other computer, both ways of syncing
     needs: stage
-    if: ${{ github.event_name == 'pull_request' && (needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',reminder-closed-elsewhere,')) }}
+    if: ${{ needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',reminder-closed-elsewhere,') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     steps:
@@ -725,7 +730,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: windows-old-names-move-${{ matrix.mode }}
+          name: windows-old-names-move-${{ matrix.mode }}-result
           path: ${{ runner.temp }}/windows-old-names-move
 
   # Telegram answers in the language of the message it answers (#140, #151), through the installed
@@ -1116,9 +1121,11 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@v4
         with: { node-version: '22.19.0' }
+      # Only result artifacts: an evidence folder or the run's stage is never a verdict.
       - uses: actions/download-artifact@v4
         if: ${{ needs.stage.result == 'success' }}
         with:
+          pattern: '*-result*'
           path: ${{ runner.temp }}/scenario-results
           merge-multiple: true
       - name: Every selected scenario has a verdict, or the run fails
@@ -1138,6 +1145,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
-          export RESULTS="$(node scenarios/scenario-verdict.mjs --catalog scenarios/scenario-catalog.tsv --results "$RUNNER_TEMP/scenario-results" --picked all --status)"
+          RESULTS=$(node scenarios/scenario-verdict.mjs --catalog scenarios/scenario-catalog.tsv --results "$RUNNER_TEMP/scenario-results" --picked all --status) || exit 1
+          export RESULTS
           export SCENARIO_VERDICTS="$(cat "$RUNNER_TEMP/scenario-verdicts.txt")"
           node scenarios/report-night.mjs

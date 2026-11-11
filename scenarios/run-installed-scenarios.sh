@@ -145,6 +145,7 @@ run_both_systems() {
     [ -n "$id" ] && [ "${id:0:1}" != '#' ] || continue
     selected "$id" || continue
     [ "$execution" = shared ] && [ "$system" = both ] || continue
+    [ -s "$RESULTS/$id.txt" ] && continue
     ready_for both || { record "$id" FAIL 'a required pooled candidate install was unavailable'; continue; }
     run_script "$id" "$script" both; status=$?
     case "$status" in

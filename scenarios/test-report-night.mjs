@@ -330,14 +330,18 @@ test('the draft verdict waits for pooled records and downloads them before colle
   const collector = verdict.indexOf('node scenarios/scenario-verdict.mjs');
   assert.ok(download >= 0 && download < collector, 'the verdict must download result artifacts before collecting them');
   assert.match(verdict.slice(download, collector), /merge-multiple: true/, 'the pooled result artifact must be merged into the collector directory');
+  assert.match(verdict.slice(download, collector), /pattern: '\*-result\*'/, 'only result artifacts may reach the collector, never an evidence folder');
+  const notVerdicts = [...draft.matchAll(/^ +(?:with: \{ )?name: ([^\s,]+)/gm)].map((m) => m[1])
+    .filter((name) => /-evidence$|^run-stage$/.test(name));
+  assert.ok(notVerdicts.includes('pooled-scenario-evidence'), 'the pooled evidence must be an artifact of its own');
+  for (const name of notVerdicts) assert.doesNotMatch(name, /-result/, `${name} would reach the collector`);
 });
 
 test('the draft uploads one exact result record for every standalone script job', async () => {
   const { readFileSync } = await import('node:fs');
   const draft = readFileSync(DRAFT, 'utf8').replace(/\r\n/g, '\n');
-  const catalog = readFileSync(new URL('./scenario-catalog.tsv', import.meta.url), 'utf8')
-    .split('\n').filter((line) => line && !line.startsWith('#')).map((line) => line.split('\t'))
-    .filter(([, implementation]) => implementation.endsWith('.sh')).map(([id]) => id);
+  const catalog = catalogRows(readFileSync(new URL('./scenario-catalog.tsv', import.meta.url), 'utf8'))
+    .filter(({ implementation }) => implementation.endsWith('.sh')).map(({ id }) => id);
   for (const id of catalog) {
     const start = draft.search(new RegExp(`^ {2}${id}:[ \\t]*$`, 'm'));
     assert.ok(start >= 0, `draft has no ${id} job`);
@@ -348,6 +352,30 @@ test('the draft uploads one exact result record for every standalone script job'
     assert.match(block, new RegExp(`scenario-results/${id}\\.txt`), `${id} does not upload its exact result`);
   }
   assert.doesNotMatch(draft, /scenario-results\/fallback|its isolated job passed/);
+});
+
+// The draft's verdict judges the catalog but waits only for the jobs in its `needs:`. A catalog row
+// whose job it does not wait for is judged before that job uploads, and fails as "found 0". Every
+// row has a job of its own except the pool's inline native and Docker installs. A row the pool runs
+// (shared or terminal) runs alone only on a pull request; any other row runs alone everywhere.
+test("the draft verdict waits for every catalog row's job, and each job runs where its class says", async () => {
+  const { readFileSync } = await import('node:fs');
+  const draft = readFileSync(DRAFT, 'utf8').replace(/\r\n/g, '\n');
+  const rows = catalogRows(readFileSync(new URL('./scenario-catalog.tsv', import.meta.url), 'utf8'));
+  const jobs = workflowJobs(draft.slice(draft.indexOf('\njobs:\n')));
+  const verdict = jobs.find(({ id }) => id === 'verdict');
+  assert.ok(verdict, 'the draft has no verdict job');
+  const needs = verdict.body.match(/^ {4}needs: \[([^\]]*)\]/m)[1].split(',').map((x) => x.trim()).filter(Boolean);
+  assert.equal(new Set(needs).size, needs.length, 'duplicate in needs');
+  const pooledInline = (row) => row.implementation === 'inline' && row.execution === 'pooled' && row.system !== 'mac';
+  const ownJobs = rows.filter((row) => !pooledInline(row)).map(({ id }) => id);
+  assert.deepEqual(needs.filter((id) => !['stage', 'pr-image', 'pooled'].includes(id)).sort(), [...ownJobs].sort());
+  assert.deepEqual(jobs.map(({ id }) => id).filter((id) => id !== 'verdict').sort(), [...needs].sort(), 'a draft job the verdict does not wait for');
+  for (const row of rows.filter(({ implementation }) => implementation.endsWith('.sh'))) {
+    const condition = jobCondition(jobs.find(({ id }) => id === row.id));
+    const prOnly = condition.startsWith("${{ github.event_name == 'pull_request' && ");
+    assert.equal(prOnly, row.execution !== 'isolated', `${row.id} (${row.execution}) has guard ${condition}`);
+  }
 });
 
 // The verdict job lists its scenarios twice: `needs:` (so it waits for them) and `RESULTS` (the
