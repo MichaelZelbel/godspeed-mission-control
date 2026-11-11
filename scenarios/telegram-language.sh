@@ -150,17 +150,17 @@ is_german() { grep -qiwE 'du|dass|woran|ist|und|nicht|ich|die|der|das' <<<"$1" &
 
 # What the plugin's own log says about the replies it did not correct: its result and, for a failed
 # translation, why each try failed (godspeed-model's own error words). With a case's name, only the
-# lines for that case's draft. Empty when the log has nothing to add; it never changes the verdict.
+# lines that sent what reached the bot in that case. Empty when the log has nothing to add; it never changes the verdict.
 plugin_said() { # <evidence folder> [case]
   "$NODE" -e '
 const fs=require("fs");const [folder,name]=process.argv.slice(1);
-let draft=null;
-if(name){try{draft=(JSON.parse(fs.readFileSync(folder+"/turns.json","utf8"))[name]||{}).draft??null;}catch{}}
+let sent=null;
+if(name){try{sent=(JSON.parse(fs.readFileSync(folder+"/turns.json","utf8"))[name]||{}).sent??null;}catch{}}
 const said=new Set();
 for(const line of fs.readFileSync(folder+"/godspeed-reply.log","utf8").split("\n")){
  let e;try{e=JSON.parse(line);}catch{continue;}
  if(!e||e.result==="corrected"||e.result==="scheduled")continue;
- if(draft!==null&&e.sent!==draft)continue;
+ if(sent!==null&&e.sent!==sent)continue;
  said.add(String(e.result)+(Array.isArray(e.failed_tries)&&e.failed_tries.length?" (tries: "+e.failed_tries.join(" | ")+")":""));
 }
 if(said.size)process.stdout.write("; the plugin logged: "+[...said].join("; "));

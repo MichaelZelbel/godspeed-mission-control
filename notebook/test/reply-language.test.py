@@ -264,8 +264,17 @@ class Reply(unittest.TestCase):
         self.teach(DRAFT + " ", DRAFT + " ")  # an answer that is still German
         self.say("g", JOURNAL[1])
         self.assertEqual(self.send("g", DRAFT + " "), self.mod.NOTICE["en"] + "\n\n" + DRAFT + " ")
-        self.assertEqual(self.log()[-1]["result"], "correction-failed:still-the-wrong-language")
+        self.assertEqual(self.log()[-1]["result"],
+                         "correction-failed:still-the-wrong-language: the answer was the draft unchanged")
         self.assertEqual(len(self.requests()), 2)
+        # An answer in the draft's language, not the same text: the log keeps what the model answered.
+        german_answer = "Gut, ich habe es gespeichert. Woran merkst du, dass es fertig ist?"
+        self.teach(DRAFT + "   ", german_answer)
+        self.say("g2", JOURNAL[1])
+        self.assertEqual(self.send("g2", DRAFT + "   "), self.mod.NOTICE["en"] + "\n\n" + DRAFT + "   ")
+        line = self.log()[-1]
+        self.assertEqual(line["result"], "correction-failed:still-the-wrong-language: " + german_answer)
+        self.assertEqual(line["failed_tries"], ["still-the-wrong-language: " + german_answer] * 2)
         os.remove(os.path.join(self.plugin, "model-command.txt"))  # no door at all
         self.say("h", JOURNAL[2])
         self.assertEqual(self.send("h", DRAFT + "  "), self.mod.NOTICE["en"] + "\n\n" + DRAFT + "  ")

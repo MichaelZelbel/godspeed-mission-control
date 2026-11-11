@@ -253,8 +253,10 @@ def translate(text, target):
         answer = answer.replace("{{%d}}" % n, original)
     if _digits(_plain(answer)) != _digits(_plain(text)):
         return None, "numbers-changed"
-    if language_of(answer) == language_of(text) or answer == text:
-        return None, "still-the-wrong-language"
+    if answer == text.strip():
+        return None, "still-the-wrong-language: the answer was the draft unchanged"
+    if language_of(answer) == language_of(text):
+        return None, "still-the-wrong-language: " + _error_words(answer)
     return answer, ""
 
 
