@@ -39,14 +39,6 @@ test('the command fails when a complete scenario result is FAIL', () => {
   assert.match(run.stdout, /^FAIL native: no health$/m);
 });
 
-test('status reports a complete failure without preventing nightly reporting', () => {
-  const dir = records({ 'native.txt': 'FAIL native: no health\n', 'docker.txt': 'PASS docker: healthy\n' });
-  writeFileSync(join(dir, 'catalog.tsv'), catalog);
-  const run = spawnSync(process.execPath, ['scenarios/scenario-verdict.mjs', '--catalog', join(dir, 'catalog.tsv'), '--results', dir, '--picked', ',native,', '--status'], { encoding: 'utf8' });
-  assert.equal(run.status, 0);
-  assert.equal(run.stdout.trim(), 'native=failure');
-});
-
 test('fails closed for missing, duplicate, and malformed records', () => {
   const first = records({ 'native.txt': 'PASS native: healthy\n', 'docker.txt': 'not a verdict\n' });
   const second = records({ 'native.txt': 'PASS native: copied\n' });

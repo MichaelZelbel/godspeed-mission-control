@@ -118,6 +118,22 @@ test('a pooled failure reports its exact scenario verdict before a shared job lo
   assert.doesNotMatch(r.created[0].body.body, /shared job log/);
 });
 
+test("the collector's verdict lines alone say which scenarios failed and which passed", async () => {
+  const r = await night('', { openIssues: [{ number: 12, title: T('plain-yes') }] },
+    { SCENARIO_VERDICTS: 'FAIL voice: no result record\nPASS plain-yes: approved' });
+  assert.equal(r.code, 0, r.stderr);
+  assert.deepEqual(r.created.map((c) => c.body.title), [T('voice')]);
+  assert.match(r.created[0].body.body, /voice failed\.[\s\S]*FAIL voice: no result record/);
+  assert.deepEqual(r.patches.map((p) => p.path), ['/issues/12']);
+});
+
+test('verdict lines that are set but hold no verdict fail the report instead of passing the night silently', async () => {
+  const r = await night('voice=failure', {}, { SCENARIO_VERDICTS: '' });
+  assert.notEqual(r.code, 0);
+  assert.match(r.stderr, /SCENARIO_VERDICTS holds no scenario verdict/);
+  assert.equal(r.created.length, 0);
+});
+
 test('a failed scenario with an open issue adds a comment and opens nothing', async () => {
   const r = await night('voice=failure', { openIssues: [{ number: 12, title: T('voice') }] });
   assert.equal(r.code, 0, r.stderr);
@@ -184,7 +200,7 @@ test('the protected draft pools candidate systems and leaves the live workflow u
   const live = readFileSync(WORKFLOW, 'utf8');
   assert.match(draft, /^  pooled:\n    name: the installed Linux and Docker scenarios/m);
   assert.match(draft, /bash scenarios\/run-installed-scenarios\.sh "\$STAGE_REF"/);
-  assert.match(draft, /scenario-verdict\.mjs --catalog scenarios\/scenario-catalog\.tsv/);
+  assert.match(draft, /args=\(--catalog scenarios\/scenario-catalog\.tsv /);
   assert.doesNotMatch(live, /run-installed-scenarios\.sh/);
   assert.match(draft, /picked=\$\(bash scenarios\/pick-scenarios\.sh "\$RUNNER_TEMP\/changed"\)/);
   const pooled = draft.slice(draft.indexOf('  pooled:'), draft.indexOf('\n  mac-install:'));
@@ -234,6 +250,43 @@ test('the verdict collector fails when a scenario verdict fails behind tee', asy
     'the verdict pipe must use GitHub Actions bash pipefail semantics');
   assert.match(step, /scenario-verdict\.mjs "\$\{args\[@\]\}" \| tee/);
   assert.doesNotMatch(step, /^        continue-on-error:/m);
+});
+
+test('the draft collects the verdicts once and the night reports from that same file, even when the stage failed', async () => {
+  const { readFileSync, writeFileSync, mkdtempSync, mkdirSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { spawnSync } = await import('node:child_process');
+  const draft = readFileSync(DRAFT, 'utf8').replace(/\r\n/g, '\n');
+  const verdict = draft.slice(draft.search(/^ {2}verdict:[ \t]*$/m));
+  const runOf = (name) => {
+    const at = verdict.indexOf(`      - name: ${name}`);
+    assert.ok(at >= 0, `no step ${name}`);
+    const body = verdict.slice(at).match(/^ {8}run: \|\n((?: {10}.*\n|\n)+)/m);
+    return body[1].replace(/^ {10}/gm, '');
+  };
+  const collect = runOf('Every selected scenario has a verdict, or the run fails');
+  const tell = runOf('Tell the night in issues');
+  assert.equal((verdict.match(/node scenarios\/scenario-verdict\.mjs/g) || []).length, 1, 'the verdicts are collected more than once');
+  const repo = fileURLToPath(new URL('..', import.meta.url));
+  const run = (STAGE) => {
+    const dir = mkdtempSync(`${tmpdir()}/draft-verdict-`);
+    mkdirSync(`${dir}/scenario-results`);
+    if (STAGE === 'success') writeFileSync(`${dir}/scenario-results/voice.txt`, 'PASS voice: heard\n');
+    const env = { ...process.env, RUNNER_TEMP: dir, GITHUB_STEP_SUMMARY: `${dir}/summary`, STAGE_REF: 'main', EVENT: 'schedule', STAGE, PICKED: STAGE === 'success' ? 'all' : '', PR_IMAGE: 'skipped', IS_CANDIDATE: 'false', WANT_MAC: '' };
+    const collected = spawnSync('bash', ['-eo', 'pipefail', '-c', collect], { cwd: repo, encoding: 'utf8', env });
+    // report-night itself is tested above; here only what the night step hands it
+    const handed = spawnSync('bash', ['-e', '-c', tell.replace('node scenarios/report-night.mjs', 'printf %s "$SCENARIO_VERDICTS"')], { cwd: repo, encoding: 'utf8', env });
+    return { collected, handed };
+  };
+  const rows = catalogRows(readFileSync(fileURLToPath(new URL('./scenario-catalog.tsv', import.meta.url)), 'utf8')).filter((row) => !row.candidateOnly);
+  const failed = run('failure');
+  assert.equal(failed.collected.status, 1, 'a failed stage must fail the verdict');
+  assert.equal(failed.handed.status, 0, failed.handed.stderr);
+  assert.deepEqual(failed.handed.stdout.split('\n').map((line) => line.split(':')[0]), rows.map((row) => `FAIL ${row.id}`),
+    'a failed stage must still hand the night every scenario, failed');
+  const ran = run('success');
+  assert.equal(ran.handed.status, 0, ran.handed.stderr);
+  assert.match(ran.handed.stdout, /^PASS voice: heard$/m);
 });
 
 test('the draft picker selects every standalone scenario for workflow and scenario support changes', async () => {

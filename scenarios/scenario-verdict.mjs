@@ -82,7 +82,6 @@ function argumentsOf(argv) {
     else if (arg === '--picked') out.picked = argv[++i];
     else if (arg === '--include-candidate-only') out.includeCandidateOnly = true;
     else if (arg === '--exclude') out.excluded = argv[++i];
-    else if (arg === '--status') out.status = true;
     else throw new Error(`unknown argument ${arg}`);
   }
   if (!out.catalog) throw new Error('--catalog is required');
@@ -93,12 +92,11 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   try {
     const args = argumentsOf(process.argv);
     const result = collectVerdicts({ catalog: readFileSync(args.catalog, 'utf8'), picked: args.picked, includeCandidateOnly: args.includeCandidateOnly, excluded: args.excluded, directories: args.dirs });
-    if (args.status) console.log(result.lines.map((line) => `${line.slice(line.indexOf(' ') + 1, line.indexOf(':'))}=${line.startsWith('PASS ') ? 'success' : 'failure'}`).join(' '));
-    else result.lines.forEach((line) => console.log(line));
+    result.lines.forEach((line) => console.log(line));
     if (result.failures.length) {
       result.failures.forEach((failure) => console.error(`scenario verdict: ${failure}`));
     }
-    if (!args.status && (result.failures.length || result.lines.some((line) => line.startsWith('FAIL ')))) process.exitCode = 1;
+    if (result.failures.length || result.lines.some((line) => line.startsWith('FAIL '))) process.exitCode = 1;
   } catch (error) {
     console.error(`scenario verdict: ${error.message}`);
     process.exitCode = 2;

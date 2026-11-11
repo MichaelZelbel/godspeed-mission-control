@@ -1135,17 +1135,19 @@ jobs:
           case $PR_IMAGE in failure|cancelled) echo "FAIL pr-image: the pull request's server image job ended $PR_IMAGE, so no scenario ran" | tee -a "$GITHUB_STEP_SUMMARY"; exit 1 ;; esac
           # A pull request from a fork runs nothing (the stage job is skipped): nothing to judge.
           [ "$EVENT" != pull_request ] || [ "$STAGE" != skipped ] || { echo "No scenario runs on a pull request from a fork." | tee -a "$GITHUB_STEP_SUMMARY"; exit 0; }
-          [ "$STAGE" = success ] || { echo "FAIL stage: the stage file at $STAGE_REF could not be read or is not a stage file" | tee -a "$GITHUB_STEP_SUMMARY"; exit 1; }
+          # A failed stage picked nothing and ran nothing: every scenario is judged, and fails unrun, so the night still files each one.
+          stage=ran
+          [ "$STAGE" = success ] || { echo "FAIL stage: the stage file at $STAGE_REF could not be read or is not a stage file" | tee -a "$GITHUB_STEP_SUMMARY"; stage=failed; PICKED=all; }
           args=(--catalog scenarios/scenario-catalog.tsv --results "$RUNNER_TEMP/scenario-results" --picked "$PICKED")
           [ "$IS_CANDIDATE" = true ] && args+=(--include-candidate-only)
           [ "$WANT_MAC" = true ] || args+=(--exclude mac-install)
           node scenarios/scenario-verdict.mjs "${args[@]}" | tee "$RUNNER_TEMP/scenario-verdicts.txt" | tee -a "$GITHUB_STEP_SUMMARY"
+          [ "$stage" = ran ]
       - name: Tell the night in issues (one per failing scenario, closed when it passes)
         if: always() && github.event_name == 'schedule'
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
-          RESULTS=$(node scenarios/scenario-verdict.mjs --catalog scenarios/scenario-catalog.tsv --results "$RUNNER_TEMP/scenario-results" --picked all --status) || exit 1
-          export RESULTS
-          export SCENARIO_VERDICTS="$(cat "$RUNNER_TEMP/scenario-verdicts.txt")"
+          SCENARIO_VERDICTS=$(cat "$RUNNER_TEMP/scenario-verdicts.txt") || exit 1
+          export SCENARIO_VERDICTS
           node scenarios/report-night.mjs
