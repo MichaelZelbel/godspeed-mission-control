@@ -14,6 +14,7 @@ import {FLAG,STARTING_ROUTINES,routineFiles,writeRoutineFiles,prepareCheckIn,sav
 import {cronOf,cronCalendar,calendarCron,retimeWhat,isTalkGate,isCoachTick,talkArea,moveTalk} from './routine-times.mjs';
 import {readNotebookRoutines,rememberNotebookRoutine,enableKind,deliveryFor,journalWanted,journalOnTheClock,JOURNAL_JOB,JOURNAL_SCRIPT,JOURNAL_WHAT,CHAT_TIDY_JOB,CHAT_TIDY_SCRIPT,CHAT_TIDY_SCHEDULE,CHAT_TIDY_WHAT,writeNotebookRoutines,BRIEF_JOB,BRIEF_SCRIPT,isBriefJob,CONNECTION_JOB,CONNECTION_SCRIPT,CONNECTION_WHAT,MAIL_COUNT_JOB,MAIL_COUNT_SCRIPT,MAIL_COUNT_WHAT,WORKOUTS_JOB,WORKOUTS_SCRIPT,WORKOUTS_WHAT,NOTICES_JOB,NOTICES_SCRIPT,NOTICES_WHAT} from './notebook-routines.mjs';
 import {holdQueuedNotices} from './notices.mjs';
+import {certifyRoutineRuns} from './background-reports.mjs';
 import {writeRoutinePromise} from './routine-promises.mjs';
 import {switchable,switchedOn,setRoutineSwitch,switchId} from './routine-switches.mjs';
 import {connectionCheckWanted} from './connection-check.mjs';
@@ -679,8 +680,10 @@ export class NativeScheduler{
  // After every tick on the machine that runs the routines: the routines' scripts follow the notebook's
  // folders (an upgrade moves them), and a reply that reached nobody becomes a note. On a mission control
  // not made from the starter that is only for the routines the notebook made itself (the notice sender,
- // switched-on routines), never the owner's own jobs.
+ // switched-on routines), never the owner's own jobs. First, the questions those runs delivered to
+ // Telegram become answerable (certifyRoutineRuns), whoever made the job.
  afterTick(){
+  try{certifyRoutineRuns(this.store,{home:this.home,jobs:hermesJobs(this.home)});}catch(error){try{this.onFailure?.(error);}catch{}}
   if(!starterBorn(this.store.root)){
    const made=new Set(readNotebookRoutines(this.store).jobs.map(j=>j.id));if(!made.size)return [];
    const timezone=this.store.get('settings','installation')?.timezone||Intl.DateTimeFormat().resolvedOptions().timeZone;

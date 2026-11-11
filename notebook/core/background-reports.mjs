@@ -1,12 +1,13 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import {DatabaseSync} from 'node:sqlite';
 import {hash} from './records/store.mjs';
 import {keepAiFailure,KEPT_FILE} from './ai-failures.mjs';
 import {ruleRefusals} from './briefing-cut.mjs';
 import {queueNotice} from './notices.mjs';
 import {deliveryFor} from './notebook-routines.mjs';
-import {telegramInHermes} from './starting-routines.mjs';
-import {asksForCode,stampDelivered,stepsForWords} from './waiting-steps.mjs';
+import {finalReply,telegramInHermes} from './starting-routines.mjs';
+import {asksForCode,stampDelivered,stepsForWords,STEP_QUESTION_MAX_AGE_MS} from './waiting-steps.mjs';
 
 // BACKGROUND WORK TELLS THE OWNER IN THE CHAT'S VOICE, AND THE CHAT KNOWS IT (4 November 2026, #198).
 //
@@ -70,7 +71,8 @@ export const recordReport=(store,message)=>store.saveAsync('conversation_message
 // Called only after Hermes delivered `words` to the owner. `receipts` are the ids of the delivery
 // records the caller recorded for this delivery; a caller that did not record them (a routine
 // script recorded its own words earlier) gets the oldest Telegram record of exactly those words
-// not yet delivered. A receipt is used once, and certifies the complete step set its record names.
+// not yet delivered. The notebook's own look after a routine run (certifyRoutineRuns) passes the
+// receipt it found. A receipt is used once, and certifies the complete step set its record names.
 // Returns the ids of the receipts used; none when nothing matched.
 export function delivered(store,words,receipts=[]){
  const open=r=>r.delivered_to==='telegram'&&!r.delivered_at;
@@ -81,6 +83,48 @@ export function delivered(store,words,receipts=[]){
   stampDelivered(store,record.report?.steps||[record.report?.step].filter(Boolean),record);
  }
  return found.map(r=>r.id);
+}
+
+// A ROUTINE THE NOTEBOOK RUNS ITSELF CERTIFIES ITS QUESTIONS TOO (11 November 2026, #262, #372).
+// The gateway's delivery wrapper certifies the runs it delivers, but the notebook's own `hermes cron
+// run` and `hermes cron tick` never load it, so a question from such a run reached Telegram without
+// its Yes/No buttons and a plain yes answered nothing. Now, after each of those runs, the notebook
+// reads Hermes' executions ledger (cron/executions.db, one row per run, either command): a run Hermes
+// says it delivered to a Telegram lane, finished in the last day, certifies the open Telegram record
+// of exactly that run's words (its cron/output file) that its script wrote during that very run. A
+// failed, queued or suppressed delivery certifies nothing, and an older delivered run cannot certify
+// a newer copy of the same words. A ledger that cannot be read certifies nothing, as before.
+const FILE_CLOCK_MS=2000,JOB_ID=/^[A-Za-z0-9_-]+$/;
+const telegramLane=job=>String(job?.deliver||'').split(',').map(p=>p.trim()).some(part=>part==='telegram'||part.startsWith('telegram:')||(!part||part==='origin')&&job?.origin?.platform==='telegram');
+function deliveredRuns(home){
+ const file=path.join(home,'cron','executions.db');if(!fs.existsSync(file))return [];
+ let db;
+ try{
+  db=new DatabaseSync(file,{readOnly:true});
+  return db.prepare("select job_id, started_at, finished_at from executions where status = 'completed' and delivery_outcome = 'delivered'").all();
+ }catch{return [];}finally{try{db?.close();}catch{}}
+}
+function runWords(home,jobId,from,to){
+ const folder=path.join(home,'cron','output',jobId);let names;
+ try{names=fs.readdirSync(folder).filter(n=>n.endsWith('.md')).sort().reverse();}catch{return null;}
+ for(const name of names){
+  const file=path.join(folder,name),at=fs.statSync(file).mtimeMs;
+  if(at>=from&&at<=to)return finalReply(fs.readFileSync(file,'utf8'));
+ }
+ return null;
+}
+export function certifyRoutineRuns(store,{home,jobs,now=Date.now()}){
+ const byId=new Map(jobs.map(j=>[j.id,j])),used=[];
+ const runs=deliveredRuns(home).map(r=>({job:byId.get(r.job_id),from:Date.parse(r.started_at)-FILE_CLOCK_MS,finished:Date.parse(r.finished_at)}))
+  .filter(r=>r.job&&JOB_ID.test(r.job.id)&&telegramLane(r.job)&&Number.isFinite(r.from)&&Number.isFinite(r.finished)&&now-r.finished<=STEP_QUESTION_MAX_AGE_MS)
+  .sort((a,b)=>a.finished-b.finished);
+ for(const {job,from,finished} of runs){
+  const to=finished+FILE_CLOCK_MS,words=runWords(home,job.id,from,to);if(!words)continue;
+  const inside=r=>{const at=Date.parse(r.sent_at);return at>=from&&at<=to;};
+  const receipt=store.list('conversation_messages').filter(r=>r.delivered_to==='telegram'&&!r.delivered_at&&r.content===words&&inside(r)).sort((a,b)=>a.sent_at.localeCompare(b.sent_at))[0];
+  if(receipt)used.push(...delivered(store,words,[receipt.id]));
+ }
+ return used;
 }
 
 // The words to say for a fresh notice. Reports a writing split off wait as notices of their own.
