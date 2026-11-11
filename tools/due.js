@@ -127,6 +127,15 @@ function findGodspeed() {
   return "";
 }
 
+// A self check naming a connection the daily check does not list is skipped and said on its own
+// line, not counted as a problem: one such reminder used to stop the whole morning brief (#418).
+// The notebook reads these lines back out of the check's output.
+const SKIPPED = ": self check skipped: ";
+function skippedSelfChecks(text) {
+  const lines = String(text || "").split(/\r?\n/).map((line) => line.trim());
+  return [...new Set(lines.filter((line) => /^due\/[^\s:]+\.md: /.test(line) && line.includes(SKIPPED)))];
+}
+
 // `store` is the notebook of this mission control when the caller has one open already (the
 // notebook runs every obligation command inside its workspace lock); `files: true` asks for the
 // old files as the storage instead of the notebook's records, which is what ticket 02's own check
@@ -617,7 +626,7 @@ function secretChanged(o, strip) {
 function connectionOk(o, strip) {
   const arg = (o.head["SELF-CHECK-ARG"] || "").trim();
   const id = connectionId(arg);
-  if (!id) return { error: "it says to watch a connection but \"" + arg + "\" is not one of: " + Object.values(CONNECTIONS).join(", ") };
+  if (!id) return { skipped: "it says to watch a connection, but \"" + arg + "\" is not one of: " + Object.values(CONNECTIONS).join(", ") + ". It stays open until you close it" };
   const label = CONNECTIONS[id];
   const record = readJson(path.join(stateDir(), "connection-check.json"));
   const entry = record && record.connections && record.connections[id];
@@ -1040,6 +1049,7 @@ function cmdCheck(day) {
     if (!cur) continue;
     const r = selfCheck(o, cur.strip);
     if (r.error) { console.log("  due/" + slug + ".md: " + r.error); problems++; continue; }
+    if (r.skipped) { console.log("  due/" + slug + ".md" + SKIPPED + r.skipped + "."); continue; }
     if (r.state) { o.head["SELF-CHECK-STATE"] = r.state; save(o); }
     if (!r.done && r.why) console.log("  not yet: " + (o.head["TITLE"] || slug) + " (" + r.why + ")");
     if (r.done) {
@@ -1263,5 +1273,5 @@ return {
   recordSaid: (...a) => { let done; through(() => { done = recordSaid(...a); }, true); return done; },
 };
 }
-module.exports={createDueCommands};
+module.exports={createDueCommands,skippedSelfChecks};
 if(require.main===module)process.exit(createDueCommands().run());
