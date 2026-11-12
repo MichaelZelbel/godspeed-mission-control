@@ -7,7 +7,8 @@ import {appendAssistantMessage} from './conversation-state.mjs';
 // ONE WAITING STEP FOR EVERY YES (issue #196): background work that needs the owner's yes opens a
 // step, an `approvals` record, and the owner answers it with a plain yes or no in the chat it was
 // asked in. The program finds which step a yes belongs to from these records; the model only
-// phrases "which one?" and reads the owner's choice back into a step id (answerChosen).
+// phrases "which one?" and, when the owner's choice does not name one step in that step's own words,
+// reads it back into a step id (answerChosen).
 // Each chat a step can be asked in, with the one conversation it is read from; `asked_in` and the
 // matcher's route both come from this table.
 export const ROUTES={telegram:{conversation:'telegram-owner',matches:id=>id==='telegram-owner'},notebook:{conversation:'notebook:general',matches:id=>/^notebook:general(:session:|$)/.test(id)}};
@@ -268,6 +269,25 @@ function chooseContext(steps,chat){
   steps.map(s=>s.id+': '+s.about).join('; ')+'.';
 }
 
+// After "which one?", a short answer that names exactly one listed step by its own words ("the plants
+// one") is recorded by the program, so the owner's choice never rests on the model running a command
+// (run 43144822157: the model said "confirmed" and recorded nothing). Every word beside a few filler
+// words must be in that step's words and in no other listed step's; a longer message, a yes or no, or
+// a word no step holds ("not the plants one", "both") goes to the model as before.
+const CHOICE_FILLER=new Set(['the','a','an','one','that','this','i','mean','meant','please','it','is','for','der','die','das','den','dem','ein','eine','einen','einer','bitte','ich','meine','meinte']);
+const CHOICE_MAX_WORDS=6;
+const wordsOf=text=>String(text).toLowerCase().normalize('NFKD').replace(/\p{M}/gu,'').match(/[\p{L}\p{N}]+/gu)||[];
+const sameWord=(said,own)=>said===own||(Math.min(said.length,own.length)>=4&&(said.startsWith(own)||own.startsWith(said)));
+function chosenByWords(steps,words){
+ const said=wordsOf(words);
+ if(!said.length||said.length>CHOICE_MAX_WORDS)return null;
+ const content=said.filter(w=>!CHOICE_FILLER.has(w));
+ if(!content.length)return null;
+ const hits=steps.filter(s=>{const own=wordsOf(s.about);return content.every(w=>own.some(o=>sameWord(w,o)));});
+ const named=hits.length===1?hits[0]:null;
+ return named&&steps.every(s=>s===named||!content.some(w=>wordsOf(s.about).some(o=>sameWord(w,o))))?named:null;
+}
+
 // A bare yes answers the last thing asked: any other message delivered to the chat after the step's
 // question went out (a background report that does not carry this step) is the newer one.
 const spokeSince=(store,chat,step)=>store.list('conversation_messages').some(r=>r.delivered_to===chat&&r.delivered_at&&r.delivered_at>stepTime(step)&&!(r.report?.steps||[r.report?.step]).includes(step.id));
@@ -285,6 +305,12 @@ export function heard(store,{chat,words,at=new Date().toISOString(),scheduled=fa
    const done=answerStep(store,listed[0],answer,{chat,words});
    rememberAfterAnswer(dir,chats,chat,at);
    return {kind:'answered',step:done.step,reply:answer==='yes'?done.step.on_yes:done.step.on_no,context:answeredContext(done.step,answer)};
+  }
+  const chosen=answer?null:chosenByWords(named(listed),words);
+  if(chosen){
+   const done=answerStep(store,chosen.id,clarification.answer,{chat,words});
+   rememberAfterAnswer(dir,chats,chat,at);
+   return {kind:'answered',step:done.step,reply:clarification.answer==='yes'?done.step.on_yes:done.step.on_no,context:answeredContext(done.step,clarification.answer)};
   }
   remember(dir,chats,chat,at,{...clarification,step_ids:listed,state:'choosing',words});
   return {kind:'choose',steps:named(listed),context:chooseContext(named(listed),chat)};

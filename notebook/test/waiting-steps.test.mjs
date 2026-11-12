@@ -147,13 +147,41 @@ test('two waiting: a yes gets one question naming both, and the owner\'s choice 
  assert.ok(!asked.context.includes(a.id)&&!asked.context.includes(b.id));
  assert.deepEqual(store.list('approvals').map(r=>r.status),['pending','pending']);
  assert.throws(()=>answerChosen(store,{chat:'telegram',id:a.id}),/not just chosen/);
- const chose=heard(store,{chat:'telegram',words:'the bot one'});
+ const chose=heard(store,{chat:'telegram',words:'the first one'});
  assert.equal(chose.kind,'choose');assert.match(chose.context,new RegExp(a.id));
  assert.throws(()=>answerChosen(store,{chat:'telegram',id:'step-other'}),/not just chosen/);
  assert.throws(()=>answerChosen(store,{chat:'telegram',id:a.id,scheduled:true}),/scheduled run/);
  answerChosen(store,{chat:'telegram',id:a.id});
- assert.equal(store.get('approvals',a.id).status,'approved');assert.equal(store.get('approvals',a.id).user_words,'the bot one');assert.equal(store.get('approvals',b.id).status,'pending');
+ assert.equal(store.get('approvals',a.id).status,'approved');assert.equal(store.get('approvals',a.id).user_words,'the first one');assert.equal(store.get('approvals',b.id).status,'pending');
  assert.throws(()=>answerChosen(store,{chat:'telegram',id:b.id}),/not just chosen/);
+});
+
+test('after "which one?", a short answer in one step\'s own words is recorded by the program, for that step only',async t=>{
+ const {store}=fixture(t),plants=await ask(store,'Water the balcony plants this week'),gym=await ask(store,'Cancel the renewal of your gym membership');
+ assert.equal(heard(store,{chat:'telegram',words:'yes'}).kind,'ask');
+ const chose=heard(store,{chat:'telegram',words:'the plants one'});
+ assert.equal(chose.kind,'answered');assert.equal(chose.step.id,plants.id);assert.match(chose.context,/recorded/);
+ assert.ok(!chose.context.includes(plants.id));
+ assert.equal(store.get('approvals',plants.id).status,'approved');assert.equal(store.get('approvals',plants.id).user_words,'the plants one');
+ assert.equal(store.get('approvals',gym.id).status,'pending');
+ assert.throws(()=>answerChosen(store,{chat:'telegram',id:gym.id}),/not just chosen/);
+});
+
+test('after "which one?", a no is recorded as a no for the step named, and a singular names a plural',async t=>{
+ const {store}=fixture(t),plants=await ask(store,'Water the balcony plants this week'),gym=await ask(store,'Cancel the renewal of your gym membership');
+ assert.equal(heard(store,{chat:'telegram',words:'no'}).kind,'ask');
+ assert.equal(heard(store,{chat:'telegram',words:'The plant'}).kind,'answered');
+ assert.equal(store.get('approvals',plants.id).status,'rejected');assert.equal(store.get('approvals',gym.id).status,'pending');
+});
+
+test('after "which one?", an answer the program cannot read as one step goes to the model and records nothing',async t=>{
+ for(const words of ['not the plants one','both','the plants or the gym','what does the gym membership cost now, before I decide','the week one','yes the plants one','the first one']){
+  const {store}=fixture(t),plants=await ask(store,'Water the balcony plants this week'),gym=await ask(store,'Cancel the renewal of your gym membership this week');
+  assert.equal(heard(store,{chat:'telegram',words:'yes'}).kind,'ask');
+  const chose=heard(store,{chat:'telegram',words});
+  assert.equal(chose.kind,'choose',words);
+  assert.deepEqual([store.get('approvals',plants.id).status,store.get('approvals',gym.id).status],['pending','pending'],words);
+ }
 });
 
 test('none waiting: a yes changes nothing; a message that is not a plain answer never matches',async t=>{
