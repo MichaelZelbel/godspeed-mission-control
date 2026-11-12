@@ -79,6 +79,38 @@ test('Update now starts the same command apart from the notebook, and only when 
   assert.equal((await startUpdate({root,env:{...env,GODSPEED_HANDOVER:''},spawnImpl})).code,409,'a notebook its start.mjs cannot hand over is updated from a terminal');
 });
 
+test('Update now pressed in two tabs at the same moment starts one update, and the other is told one runs (#477)',async t=>{
+  const env={GODSPEED_HANDOVER:'1'},started=[];
+  const spawnImpl=(command,args,options)=>{started.push({command,args,options});return {unref(){},on(){}};};
+  // A slow newest-release lookup: both presses are in before either answer comes.
+  const lookups=[];
+  const find=()=>new Promise((resolve,reject)=>lookups.push({resolve,reject}));
+  const root=computer('2.0.0-beta.20');
+  const newest={version:'2.0.0-beta.30',tag:'stand-in',notes:''};
+  const presses=[startUpdate({root,env,find,spawnImpl}),startUpdate({root,env,find,spawnImpl})];
+  await new Promise(resolve=>setImmediate(resolve));
+  const asked=lookups.length;
+  for(const lookup of lookups.splice(0))lookup.resolve(newest);
+  const answers=await Promise.all(presses);
+  assert.equal(asked,1,'only the first press asks for the newest release');
+  assert.deepEqual(answers.map(answer=>answer.code),[202,409]);
+  assert.equal(answers[0].started,true);
+  assert.deepEqual(answers[1],{code:409,error:'An update is already running.'});
+  assert.equal(started.length,1,'one updater is started');
+  // A lookup that fails gives the claim back: the next press is taken as usual.
+  const other=computer('2.0.0-beta.20');
+  const failing=startUpdate({root:other,env,find,spawnImpl});
+  assert.equal((await startUpdate({root:other,env,find,spawnImpl})).code,409);
+  lookups[0].reject(Error('GitHub could not be reached to see whether a newer version exists.'));
+  assert.deepEqual(await failing,{code:502,error:'GitHub could not be reached to see whether a newer version exists.'});
+  assert.equal(readStatus(other),null);
+  const again=startUpdate({root:other,env,find,spawnImpl});
+  assert.equal(lookups.length,2,'the later press asks again');
+  lookups[1].resolve(newest);
+  assert.equal((await again).code,202);
+  assert.equal(started.length,2);
+});
+
 test('an update nothing carries on any more is shown as how it ended',async()=>{
   const root=computer('2.0.0-beta.30'),later=new Date(Date.now()+60*60*1000);
   writeStatus(root,{state:'switching',from:'2.0.0-beta.20',to:'2.0.0-beta.30',message:'Restarting.'});
