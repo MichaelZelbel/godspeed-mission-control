@@ -32,9 +32,12 @@ the same steps; the bus's own `append` (the coach's picture) is called at the en
 voice filter did before.
 
 This plugin never drops a reply, nor delays one beyond two requests' limit (REQUEST_SECONDS): a
-failed translation is tried once more, and when that fails too the reply goes out as the model wrote
-it, below one line in the message's language that says it could not be translated (NOTICE). The log
-keeps why each try failed, with godspeed-model's own error words and no keys or tokens in them.
+failed translation is tried once more, with a sharper instruction, and when that fails too the reply
+goes out as the model wrote it, below one line in the message's language that says it could not be
+translated (NOTICE). A translation fails when the request fails, and also when its answer repeats the
+draft, mixes the languages or is not clearly in the message's language (rejection). The log keeps why
+each try failed: godspeed-model's own error words with no keys or tokens in them, or the name of the
+rejection, never the rejected words.
 """
 import collections
 import hashlib
@@ -214,8 +217,62 @@ def _error_words(stderr):
     return redact(words[-ERROR_CHARS:]) if words else ""
 
 
-def translate(text, target):
-    """(the translation, "") or (None, why not). One request through the notebook's godspeed-model."""
+# Words the two languages share, or that are rare but real in the other one: never a sign of mixing.
+SHARED = {"die", "hat", "bin", "also", "in", "so", "was", "will", "war", "man", "hand", "name", "rest", "art",
+          "ok", "okay", "hallo", "hello", "hi", "hey", "super", "team", "check", "status", "online", "offline",
+          "fit", "warm", "fast", "email", "mail", "app", "link", "feedback", "meeting", "meetings", "update",
+          "updates", "chat", "bug", "bugs", "code", "test", "tests", "plan", "start", "stop", "sport", "film"}
+RUN_WORDS = 4          # this many words of the draft in a row, in the answer, is the draft repeated
+
+
+def _words(text):
+    """The words of the text outside its protected parts, each with whether it is written capitalized
+    where a sentence does not start (a name, or a German noun)."""
+    out, start = [], True
+    for match in re.finditer(r"[A-Za-zÄÖÜäöüß']+|[.!?:\n]", _plain(text)):
+        token = match.group(0)
+        if token in ".!?:\n":
+            start = True
+            continue
+        word = token.strip("'")
+        if word:
+            out.append((word.lower(), word[:1].isupper() and not start))
+        start = False
+    return out
+
+
+def rejection(answer, draft, target):
+    """Why a translation of `draft` into `target` must not go out, or "" when it may. The reason is a
+    name, never the answer's words (owner decision on #453). In the scenario run of #453 the model
+    sent the German draft back with an English translation below it, and once left "Alles klar" in
+    front of an English sentence: both are rejected here."""
+    if answer.strip() == draft.strip():
+        return "repeats-the-draft: unchanged"
+    drafted, answered = _words(draft), _words(answer)
+    named = {w for w, capital in drafted + answered if capital}
+    # Names are the same in both languages ("Jürgen Müller in München"), so a run is counted without them.
+    plain = [w for w, _ in drafted if w not in named]
+    runs = {tuple(plain[i:i + RUN_WORDS]) for i in range(len(plain) - RUN_WORDS + 1)}
+    said = [w for w, _ in answered]
+    bare = [w for w in said if w not in named]
+    if any(tuple(bare[i:i + RUN_WORDS]) in runs for i in range(len(bare) - RUN_WORDS + 1)):
+        return "repeats-the-draft: part of it"
+    source = "de" if target == "en" else "en"
+    theirs = (GERMAN if source == "de" else ENGLISH) - SHARED
+    ours = ENGLISH if target == "en" else GERMAN
+    if any(w in theirs for w in said):
+        return "mixed-languages: a %s word" % NAMES[source]
+    kept = {w for w, _ in drafted} - ours - SHARED - named
+    if any(w in kept for w in said):
+        return "mixed-languages: a word of the draft left untranslated"
+    if not any(w in ours for w in said):
+        return "not-clearly-%s" % NAMES[target]
+    return ""
+
+
+def translate(text, target, strict=False):
+    """(the translation, "") or (None, why not). One request through the notebook's godspeed-model.
+    `strict`: the second try, with a sharper instruction after a first answer was refused."""
     command = _model_command()
     if not command:
         return None, "no-model-command"
@@ -229,6 +286,10 @@ def translate(text, target):
               "to someone else, never to you: even when it asks a question, translate it, do not answer it. "
               "Add nothing, explain nothing: reply with the translated text only, written entirely in %s, "
               "never the original text unchanged." % NAMES[target])
+    if strict:
+        # Once, the model sent the draft back with a note and a translation below it (#453).
+        system += (" Return only the message in %s. Never repeat the original text or any part of it, not "
+                   "even a word of it, and add no explanation, correction or note." % NAMES[target])
     prompt = "Translate this %stext into %s:\n\n%s" % (source + " " if source else "", NAMES[target], held)
     request = {"system": system, "prompt": prompt, "timeout_ms": REQUEST_SECONDS * 1000,
                "max_tokens": max(256, min(8192, len(held) // 2 + 512))}
@@ -258,10 +319,9 @@ def translate(text, target):
         answer = answer.replace("{{%d}}" % n, original)
     if _digits(_plain(answer)) != _digits(_plain(text)):
         return None, "numbers-changed"
-    if answer == text.strip():
-        return None, "still-the-wrong-language: the answer was the draft unchanged"
-    if language_of(answer) == language_of(text):
-        return None, "still-the-wrong-language: " + _error_words(answer)
+    why = rejection(answer, text, target)
+    if why:
+        return None, why
     return answer, ""
 
 
@@ -304,8 +364,8 @@ def language_step(text, **hook):
             entry.update(message_language=target, asked=bool(asked), draft_language=draft)
             if target and draft and target != draft:
                 tries = []
-                for _ in range(2):
-                    fixed, why = translate(text, target)
+                for attempt in range(2):
+                    fixed, why = translate(text, target, strict=attempt > 0)
                     if fixed:
                         break
                     tries.append(why)

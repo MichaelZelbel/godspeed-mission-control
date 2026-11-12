@@ -3,7 +3,8 @@ message it answers. The plugin's own code runs for real, against a real SQLite s
 Hermes' (sessions, messages) and a stand-in for the `godspeed-model` command the notebook installs,
 which answers from a table and records every request. A text it has no answer for, or every request
 while a file "fail-next" is there (which it then counts down), fails as godspeed-model does: exit 1
-and its error words (the file "error.txt") on stderr. Run: python reply-language.test.py [-v]"""
+and its error words (the file "error.txt") on stderr. A second, stricter try (the system words "Never
+repeat the original text") is answered from the table's "strict:<text>" when there is one. Run: python reply-language.test.py [-v]"""
 import importlib.util
 import json
 import os
@@ -24,6 +25,8 @@ with open(os.path.join(here, "requests.jsonl"), "a", encoding="utf-8") as f:
     f.write(json.dumps(request) + "\\n")
 table = json.load(open(os.path.join(here, "table.json"), encoding="utf-8"))
 text = request["prompt"].split("\\n\\n", 1)[1]
+if "Never repeat the original text" in request["system"] and "strict:" + text in table:
+    text = "strict:" + text
 fail_next = os.path.join(here, "fail-next")
 failing = os.path.exists(fail_next)
 if failing:
@@ -273,17 +276,16 @@ class Reply(unittest.TestCase):
         self.teach(DRAFT + " ", DRAFT + " ")  # an answer that is still German
         self.say("g", JOURNAL[1])
         self.assertEqual(self.send("g", DRAFT + " "), self.mod.NOTICE["en"] + "\n\n" + DRAFT + " ")
-        self.assertEqual(self.log()[-1]["result"],
-                         "correction-failed:still-the-wrong-language: the answer was the draft unchanged")
+        self.assertEqual(self.log()[-1]["result"], "correction-failed:repeats-the-draft: unchanged")
         self.assertEqual(len(self.requests()), 2)
-        # An answer in the draft's language, not the same text: the log keeps what the model answered.
+        # An answer in the draft's language, not the same text: the log names why, not the words.
         german_answer = "Gut, ich habe es gespeichert. Woran merkst du, dass es fertig ist?"
         self.teach(DRAFT + "   ", german_answer)
         self.say("g2", JOURNAL[1])
         self.assertEqual(self.send("g2", DRAFT + "   "), self.mod.NOTICE["en"] + "\n\n" + DRAFT + "   ")
         line = self.log()[-1]
-        self.assertEqual(line["result"], "correction-failed:still-the-wrong-language: " + german_answer)
-        self.assertEqual(line["failed_tries"], ["still-the-wrong-language: " + german_answer] * 2)
+        self.assertEqual(line["result"], "correction-failed:repeats-the-draft: part of it")
+        self.assertNotIn("Gut, ich", json.dumps(line["failed_tries"], ensure_ascii=False))
         os.remove(os.path.join(self.plugin, "model-command.txt"))  # no door at all
         self.say("h", JOURNAL[2])
         self.assertEqual(self.send("h", DRAFT + "  "), self.mod.NOTICE["en"] + "\n\n" + DRAFT + "  ")
@@ -309,6 +311,69 @@ class Reply(unittest.TestCase):
         logged = self.log()[-1]["result"]
         self.assertTrue(logged.endswith("the last words"))
         self.assertLessEqual(len(logged), len("correction-failed:request-failed: ") + self.mod.ERROR_CHARS)
+
+    # -- the owner decision on #453 of 12 November: reject, retry once stricter, then the notice
+    ECHO = (DRAFT + "\n\nWait, I need to correct that: the translation is below.\n\n"
+            "Got it, that's saved. How do you notice that it's finished?")  # run 43115758752, chat-en-1
+    MIXED = "Alles klar, I've saved the entry. How can you tell it's finished?"  # the same run, j1
+
+    def test_the_draft_repeated_with_a_translation_is_rejected_and_the_stricter_try_goes_out(self):
+        self.assertEqual(self.mod.rejection(self.ECHO, DRAFT, "en"), "repeats-the-draft: part of it")
+        self.teach(DRAFT, self.ECHO)
+        self.table["strict:" + DRAFT] = SENT
+        self.save_table()
+        self.say("echo", JOURNAL[0])
+        self.assertEqual(self.send("echo", DRAFT), SENT)
+        first, second = self.requests()
+        self.assertNotIn("Never repeat the original text", first["system"])
+        self.assertIn("Return only the message in English. Never repeat the original text or any part of it",
+                      second["system"])
+        line = self.log()[-1]
+        self.assertEqual((line["result"], line["failed_tries"]), ("corrected", ["repeats-the-draft: part of it"]))
+        self.assertNotIn("Wait, I need", json.dumps(line, ensure_ascii=False).replace(line["sent"], ""))
+
+    def test_an_answer_that_mixes_the_languages_is_rejected(self):
+        self.assertEqual(self.mod.rejection(self.MIXED, DRAFT, "en"),
+                         "mixed-languages: a word of the draft left untranslated")
+        self.assertEqual(self.mod.rejection("Got it, das is saved. How do you notice that it's done?", DRAFT, "en"),
+                         "mixed-languages: a German word")
+        english_draft = "I saved that. What does done look like for you?"
+        self.assertEqual(self.mod.rejection("Ich habe das gespeichert. What does fertig look like?", english_draft, "de"),
+                         "mixed-languages: a English word")
+        self.teach(DRAFT, self.MIXED)
+        self.say("mix", JOURNAL[0])
+        self.assertEqual(self.send("mix", DRAFT), self.mod.NOTICE["en"] + "\n\n" + DRAFT)
+        line = self.log()[-1]
+        self.assertEqual(line["failed_tries"], ["mixed-languages: a word of the draft left untranslated"] * 2)
+        self.assertNotIn("I've saved", line["result"] + " ".join(line["failed_tries"]))
+
+    def test_a_clean_answer_in_the_target_language_is_accepted(self):
+        self.assertEqual(self.mod.rejection(SENT, DRAFT, "en"), "")
+        self.assertEqual(self.mod.rejection("Got it, that's saved. How do you notice that it's finished?", DRAFT, "en"), "")
+        # Names stay names, and an English word German writes as a noun is German.
+        self.assertEqual(self.mod.rejection("I told Jürgen Müller in München that it is done.",
+                                            "Ich habe Jürgen Müller in München gesagt, dass es fertig ist.", "en"), "")
+        self.assertEqual(self.mod.rejection("Dein Meeting mit Anna ist verschoben, ich sage dir dann Bescheid.",
+                                            "Your meeting with Anna is moved, I will let you know.", "de"), "")
+        # An answer with no word of either language is not clearly English.
+        self.assertEqual(self.mod.rejection("👍", DRAFT, "en"), "not-clearly-English")
+        self.teach(DRAFT, SENT)
+        self.say("clean", JOURNAL[0])
+        self.assertEqual(self.send("clean", DRAFT), SENT)
+        self.assertEqual(len(self.requests()), 1)
+        self.assertNotIn("failed_tries", self.log()[-1])
+
+    def test_a_second_rejected_answer_sends_the_notice(self):
+        self.teach(DRAFT, self.ECHO)
+        self.table["strict:" + DRAFT] = self.MIXED
+        self.save_table()
+        self.say("twice", JOURNAL[0])
+        self.assertEqual(self.send("twice", DRAFT), self.mod.NOTICE["en"] + "\n\n" + DRAFT)
+        self.assertEqual(len(self.requests()), 2)
+        line = self.log()[-1]
+        self.assertEqual(line["result"], "correction-failed:mixed-languages: a word of the draft left untranslated")
+        self.assertEqual(line["failed_tries"], ["repeats-the-draft: part of it",
+                                                "mixed-languages: a word of the draft left untranslated"])
 
     def test_a_message_after_context_in_the_other_language_gets_a_reply_in_its_own(self):
         english_draft = "I saved that. What does done look like for you?"
