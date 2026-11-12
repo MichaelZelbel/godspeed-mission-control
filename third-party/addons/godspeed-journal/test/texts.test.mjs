@@ -52,3 +52,14 @@ test("the recipe and the README say how a time a person names is saved, and that
   assert.match(readme, /You can say when something happened: "an hour ago", "at 11", "yesterday afternoon"/);
   assert.match(readme, /asks you once instead of guessing, and its reply says the time it recorded\./);
 });
+
+test("the recipe asks about impact at most once, never with feedback off, and the README says where finished tasks go", () => {
+  const t = flat(recipe);
+  assert.match(t, /`Was that just everyday, or does it matter more\?` \(German: `War das einfach Alltag, oder ist es dir wichtiger\?`\)/);
+  assert.match(t, /`godspeed-journal impact \[<task>\] <1-4>/);
+  assert.match(t, /--impact <2-4>/);
+  assert.match(t, /With `feedback = off`, or when the settings line says `save_as_moments=false`, the impact question is never asked\./);
+  const readme = flat(read("README.md"));
+  assert.match(readme, /Every task you finish also becomes one moment in the notebook's timeline/);
+  assert.match(readme, /`godspeed-journal config set save_as_moments off` stops it\./);
+});

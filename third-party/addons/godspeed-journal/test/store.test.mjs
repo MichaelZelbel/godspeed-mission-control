@@ -43,3 +43,9 @@ test("readEntries returns the last N local days, oldest first", () => {
   const got = readEntries(h, S, { days: 3, until: new Date("2026-09-22T12:00:00Z") }).map((e) => e.words);
   assert.deepEqual(got, ["a", "b"]);
 });
+
+test("an entry keeps its impact, and one without it is written exactly as before", () => {
+  const e = { at: "2026-09-22T11:00:00.000Z", kind: "done", task: "t-1", source: "cli", words: "" };
+  assert.equal(serialize(e), "---\nat: 2026-09-22T11:00:00.000Z\nkind: done\ntask: t-1\nsource: cli\n---\n\n");
+  assert.equal(parse(serialize({ ...e, impact: 3 })).impact, "3");
+});

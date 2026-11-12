@@ -15,6 +15,9 @@ export function tasksFrom(entries) {
     if (!t) continue;
     if (e.kind === "nudge") { t.nudges++; t.lastNudge = e.at; continue; }
     if (e.kind === "mark") { t.flags.push(String(e.words || "").trim()); continue; }
+    // How much a finished task mattered, said after the finish: it changes the moment the notebook
+    // keeps for the close, not what the person is doing, so it is no activity either.
+    if (e.kind === "impact") { if (t.state === "done") setImpact(t, e); continue; }
     // Something left out at the finish that happened after all. It moves from missed to met, so
     // the evening list and the block stop naming it; the finish itself keeps its time.
     if (e.kind === "met") {
@@ -30,7 +33,7 @@ export function tasksFrom(entries) {
       if (t.state === "open") continue;
       if (t.evidence) t.rejected.push(t.evidence.id);
       Object.assign(t, { state: "open", met: [], missed: [], last: e.at, reopened: e.at });
-      delete t.ended; delete t.told; delete t.evidence;
+      delete t.ended; delete t.told; delete t.evidence; delete t.impact; delete t.impactAt;
       continue;
     }
     // The first close wins. Two machines can each find the same proof before either has seen
@@ -41,6 +44,7 @@ export function tasksFrom(entries) {
     // then can an evening list or the per-turn block name what it left out.
     if (e.kind === "done") {
       Object.assign(t, { state: "done", ended: e.at, told: e.written || e.at, met: e.met || [], missed: e.missed || [] });
+      setImpact(t, e);
       // Closed from the record, not by the person: it ended when the proof happened (the post
       // went out), and the proof travels with it so every interface can say what it was.
       if (e.source === "evidence") {
@@ -56,6 +60,15 @@ export function tasksFrom(entries) {
 }
 
 const itemKey = (x) => String(x).trim().toLowerCase();
+
+// 1 everyday, 2 short-term, 3 lasting, 4 life-defining: the notebook's impact scale. An entry
+// without a valid level leaves the task's impact as it was.
+export const IMPACT_LEVELS = [1, 2, 3, 4];
+export const impactLevel = (value) => { const n = Number(value); return IMPACT_LEVELS.includes(n) ? n : null; };
+function setImpact(t, e) {
+  const level = impactLevel(e.impact);
+  if (level) Object.assign(t, { impact: level, impactAt: e.at });
+}
 
 export const openTasks = (entries) => tasksFrom(entries).filter((t) => t.state === "open");
 
@@ -116,6 +129,18 @@ export function resolveClosed(entries, ref) {
   const byId = closed.find((t) => t.id === ref);
   if (byId) return byId;
   const matches = closed.filter((t) => t.title.toLowerCase().includes(String(ref).toLowerCase()));
+  if (matches.length > 1) return { ambiguous: matches.map((t) => t.title) };
+  return matches[0] || null;
+}
+
+// For `impact`: a finished task, by id or title words; with no words, the one most recently told
+// finished, which is the one the question after a finish is about.
+export function resolveDone(entries, ref) {
+  const done = tasksFrom(entries).filter((t) => t.state === "done");
+  if (!ref) return done.sort((a, b) => a.told.localeCompare(b.told)).at(-1) || null;
+  const byId = done.find((t) => t.id === ref);
+  if (byId) return byId;
+  const matches = done.filter((t) => t.title.toLowerCase().includes(String(ref).toLowerCase()));
   if (matches.length > 1) return { ambiguous: matches.map((t) => t.title) };
   return matches[0] || null;
 }

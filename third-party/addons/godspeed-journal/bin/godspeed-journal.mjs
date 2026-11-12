@@ -7,7 +7,7 @@ import { findMissionControl } from "../lib/paths.mjs";
 import { now, localParts, sinceLabel, parseWhen, whenSaid, spanSaid } from "../lib/clock.mjs";
 import { loadSettings, setSetting, DEFAULTS } from "../lib/settings.mjs";
 import { writeEntry, readEntries, taskId } from "../lib/store.mjs";
-import { tasksFrom, openTasks, resolveTask, resolveClosed, resolveLooseEnd, matchItem } from "../lib/tasks.mjs";
+import { tasksFrom, openTasks, resolveTask, resolveClosed, resolveLooseEnd, resolveDone, matchItem, impactLevel } from "../lib/tasks.mjs";
 import { dueMessages } from "../lib/tick.mjs";
 import { T } from "../lib/text.mjs";
 import { contextBlock } from "../lib/context.mjs";
@@ -137,6 +137,13 @@ function finishTime(t, dropped = false) {
   return time;
 }
 
+const IMPACT_NAMES = { 1: "everyday", 2: "short-term", 3: "lasting", 4: "life-defining" };
+function impactFlag(value) {
+  const level = impactLevel(value);
+  if (!level || !/^\d$/.test(String(value).trim())) die("Impact is 1 (everyday), 2 (short-term), 3 (lasting) or 4 (life-defining).");
+  return level;
+}
+
 const commands = {
   start() {
     const title = pos.join(" ").trim();
@@ -172,9 +179,10 @@ const commands = {
     out(`Saved${saidAt(time)}.`, { ok: true, task: t?.id || null, ...recorded(time) });
   },
   done() {
+    const impact = f.impact === undefined ? undefined : impactFlag(f.impact);
     const t = needTask(pos.join(" "));
     const time = finishTime(t);
-    save({ kind: "done", task: t.id, met: f.met, missed: f.missed, words: f.words || "" }, `done ${t.title}`, time);
+    save({ kind: "done", task: t.id, met: f.met, missed: f.missed, impact, words: f.words || "" }, `done ${t.title}`, time);
     out(`Saved: done "${t.title}"${saidAt(time)}`, { ok: true, task: resolveTask(entries(), t.id, { includeClosed: true }), ...recorded(time) });
   },
   drop() {
@@ -182,6 +190,17 @@ const commands = {
     const time = finishTime(t, true);
     save({ kind: "drop", task: t.id, words: f.words || "" }, `drop ${t.title}`, time);
     out(`Saved: dropped "${t.title}"${saidAt(time)}`, { ok: true, task: t.id, ...recorded(time) });
+  },
+  // How much a finished task mattered, when the person answers the one question after the finish.
+  // The notebook's moment for that close takes the new level.
+  impact() {
+    const level = impactFlag(pos.at(-1));
+    const ref = pos.slice(0, -1).join(" ").trim();
+    const t = resolveDone(entries(), ref);
+    if (!t) die(ref ? `No finished task matches "${ref}".` : "No finished task yet.");
+    if (t.ambiguous) die(`Several finished tasks match "${ref}": ${t.ambiguous.join(" / ")}. Say which one.`);
+    save({ kind: "impact", task: t.id, impact: level, words: f.words || "" }, `impact ${t.title}`);
+    out(`Saved: "${t.title}" is ${IMPACT_NAMES[level]}.`, { ok: true, task: tasksFrom(entries()).find((x) => x.id === t.id) });
   },
   // Undoes a close, most often one the record made that the person says is wrong. The proof it
   // used is remembered for this task, so the next look at the record does not close it again.

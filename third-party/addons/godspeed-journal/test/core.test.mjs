@@ -288,3 +288,16 @@ test("context: loose ends of the last day are named with the command, and never 
   assert.match(c, /godspeed-journal met <id> --met "<item>"/);
   assert.equal(contextBlock(es, S, new Date("2026-09-30T18:00:00Z")), "");
 });
+
+test("impact: set by the finish or a later answer, which is no activity; ignored on an open task; cleared by a reopen", () => {
+  const done = E("2026-09-22T11:00:00.000Z", "done", { task: "t-v", impact: "3" });
+  const [t] = tasksFrom([start, done]);
+  assert.equal(t.impact, 3); assert.equal(t.impactAt, done.at);
+  const later = E("2026-09-22T12:00:00.000Z", "impact", { task: "t-v", impact: "4" });
+  const [u] = tasksFrom([start, done, later]);
+  assert.equal(u.impact, 4); assert.equal(u.impactAt, later.at); assert.equal(u.last, done.at);
+  assert.equal(tasksFrom([start, E("2026-09-22T09:00:00.000Z", "impact", { task: "t-v", impact: "2" })])[0].impact, undefined);
+  const [r] = tasksFrom([start, done, E("2026-09-22T12:30:00.000Z", "reopen", { task: "t-v" })]);
+  assert.equal(r.impact, undefined); assert.equal(r.impactAt, undefined);
+  assert.equal(tasksFrom([start, E("2026-09-22T11:00:00.000Z", "done", { task: "t-v" })])[0].impact, undefined);
+});
