@@ -22,12 +22,15 @@ Buttons: a waiting step's question in Telegram is sent once, as one message with
 """
 import importlib.util
 import json
+import logging
 import os
 import re
 import subprocess
 import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+# One line per owner turn in the gateway log says what the waiting-step match did, never the words (#372).
+log = logging.getLogger("godspeed-step")
 INVITED_DAYS = 14   # the invitation says "today or next week"
 STARTED_HOURS = 24  # a chat left half way is not followed for ever
 
@@ -217,17 +220,34 @@ def _text(message):
     return message if isinstance(message, str) else ""
 
 
+def _note(line, *args):
+    try:
+        log.info("godspeed-step (telegram): " + line, *args)
+    except Exception:
+        pass
+
+
 def waiting_step_block(message, session_id):
     command = _step_command()
-    if not command or not _text(message).strip() or not _owner_telegram(session_id):
+    if not command or not _text(message).strip():
+        return None
+    words = len(_text(message).split())
+    if not _owner_telegram(session_id):
+        _note("a message of %d words was not matched: not the owner's private chat in this session", words)
         return None
     try:
         run = subprocess.run(command[:2] + ["heard", "--chat", "telegram"] + command[2:], input=_text(message),
                              capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=_step_timeout())
         if run.returncode == 0:
-            return step_block(json.loads(run.stdout))
-    except Exception:
-        pass
+            report = json.loads(run.stdout)
+            _note("a message of %d words was heard as %s", words, report.get("kind") if isinstance(report, dict) else "nothing")
+            return step_block(report)
+        last = (run.stderr or "").strip().splitlines()[-1:] or ["no error output"]
+        _note("a message of %d words could not be matched: the step command exited %d (%s)", words, run.returncode, last[0][:200])
+    except subprocess.TimeoutExpired:
+        _note("a message of %d words could not be matched: the step command took longer than %ss", words, _step_timeout())
+    except Exception as e:
+        _note("a message of %d words could not be matched: %s", words, type(e).__name__)
     return STEP_RETRY_BLOCK
 
 

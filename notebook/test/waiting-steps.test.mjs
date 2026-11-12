@@ -167,6 +167,16 @@ test('after "which one?", a short answer in one step\'s own words is recorded by
  assert.throws(()=>answerChosen(store,{chat:'telegram',id:gym.id}),/not just chosen/);
 });
 
+test('the gateway\'s heard command records the owner\'s choice in one step\'s own words, as Telegram sends it',async t=>{
+ const {root,store}=fixture(t),plants=await ask(store,'Water the balcony plants this week'),gym=await ask(store,'Cancel the renewal of your gym membership');
+ const heardCli=words=>JSON.parse(spawnSync(process.execPath,[script,'heard','--chat','telegram','--godspeed',root],{input:words,encoding:'utf8'}).stdout);
+ assert.equal(heardCli('yes').kind,'ask');
+ const chose=heardCli('the plants one');
+ assert.equal(chose.kind,'answered');assert.match(chose.context,/recorded/);
+ const fresh=new Store(root,{device:'vps'});
+ assert.equal(fresh.get('approvals',plants.id).status,'approved');assert.equal(fresh.get('approvals',gym.id).status,'pending');
+});
+
 test('after "which one?", a no is recorded as a no for the step named, and a singular names a plural',async t=>{
  const {store}=fixture(t),plants=await ask(store,'Water the balcony plants this week'),gym=await ask(store,'Cancel the renewal of your gym membership');
  assert.equal(heard(store,{chat:'telegram',words:'no'}).kind,'ask');

@@ -180,13 +180,14 @@ server_telegram_say() { # <label> <text>
   SCENARIO_INTERACTION=''
 }
 # The line each button handler of the gateway logs where a press stopped, and when it registered
-# (notebook/assistant-files/godspeed-buttons/buttons.py), kept after a press whether it worked or not.
+# (notebook/assistant-files/godspeed-buttons/buttons.py), kept after a press whether it worked or not,
+# with the line the waiting-step match logs for each typed message (godspeed-context's waiting_step_block).
 # The file is never empty: it says so when there was no log, no such line in it, or no way to read it.
 server_keep_button_log() { # <label>
   local kept=$EVIDENCE/button-log-$1.txt
   in_server_as_hermes sh -c 'set -- "$HERMES_HOME"/logs/*.log
     [ -e "$1" ] || { echo "(no log under $HERMES_HOME/logs)"; exit 0; }
-    grep -hF godspeed-buttons "$@" | sort -u | grep . || echo "(no godspeed-buttons line in $HERMES_HOME/logs)"' \
+    grep -hE "godspeed-(buttons|step)" "$@" | sort -u | grep . || echo "(no godspeed-buttons line in $HERMES_HOME/logs)"' \
     >"$kept" 2>/dev/null || echo '(the gateway log could not be read)' >"$kept"
 }
 server_telegram_press() { # <label> <question text> <button label>

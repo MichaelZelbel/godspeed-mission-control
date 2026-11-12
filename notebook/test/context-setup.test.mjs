@@ -169,13 +169,17 @@ test('the installed plugin hands the owner\'s private Telegram yes to a real wai
   const step=(...args)=>JSON.parse(execFileSync(process.execPath,[path.join(kit,'notebook','bin','godspeed-step.mjs'),...args,'--godspeed',root],{encoding:'utf8'}));
   const open=async about=>{const {id,message}=step('open','--about',about,'--question','Restart it?','--yes','I restart it.','--no','I leave it.','--by','routine:test','--chat','telegram');const store=new Store(root,{device:'vps'});await recordReport(store,{text:message,steps:[id],delivery:'telegram'});delivered(store,message);return id;};
   const plugin=path.join(home,'plugins','godspeed-context','__init__.py');
+  const lines=[];
   const turn=(session,words='yes')=>{
-    const out=execFileSync(python,['-c',`import importlib.util,json,sys
+    const out=execFileSync(python,['-c',`import importlib.util,json,sys,logging
+seen=[];h=logging.Handler();h.emit=lambda r:seen.append(r.getMessage());logging.getLogger("godspeed-step").addHandler(h);logging.getLogger("godspeed-step").setLevel(logging.INFO)
 spec=importlib.util.spec_from_file_location("p",sys.argv[1]);m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
-print(json.dumps(m.on_pre_llm_call(platform="telegram",user_message=sys.argv[2],session_id="sess")))`,plugin,words],
+r=m.on_pre_llm_call(platform="telegram",user_message=sys.argv[2],session_id="sess")
+print(json.dumps(seen));print(json.dumps(r))`,plugin,words],
       {encoding:'utf8',env:{...process.env,PYTHONPATH:path.join(base,'stubs'),TELEGRAM_ALLOWED_USERS:'4242',STUB_HERMES_SESSION_PLATFORM:'telegram',STUB_HERMES_SESSION_CHAT_TYPE:'dm',
-        STUB_HERMES_SESSION_CHAT_ID:session.chat,STUB_HERMES_SESSION_USER_ID:session.user,STUB_HERMES_SESSION_ID:session.id}}).trim();
-    return JSON.parse(out);
+        STUB_HERMES_SESSION_CHAT_ID:session.chat,STUB_HERMES_SESSION_USER_ID:session.user,STUB_HERMES_SESSION_ID:session.id}}).trim().split('\n');
+    lines.push(...JSON.parse(out[0]));
+    return JSON.parse(out[1]);
   };
   const owner={chat:'4242',user:'4242',id:'sess'},status=id=>step('get',id).status;
   const stranger=await open('The disk is full.');
@@ -187,6 +191,14 @@ print(json.dumps(m.on_pre_llm_call(platform="telegram",user_message=sys.argv[2],
   const command=path.join(home,'plugins','godspeed-context','step-command.txt'),kept=fs.readFileSync(command,'utf8');
   fs.writeFileSync(command,JSON.stringify([path.join(base,'no-such-node'),'x','y'])+'\n');
   const failed=turn(owner);assert.match(failed.context,/send it again/);assert.ok(!/no-such-node/.test(failed.context));
+  // The gateway log says what the match did each turn, and never the owner's words (#372).
+  assert.equal(lines.filter(l=>/not the owner's private chat in this session/.test(l)).length,3,lines.join('\n'));
+  assert.ok(lines.includes('godspeed-step (telegram): a message of 1 words was heard as answered'),lines.join('\n'));
+  assert.match(lines.at(-1),/^godspeed-step \(telegram\): a message of 1 words could not be matched: /);
+  fs.writeFileSync(command,kept);
+  turn(owner,'the cache one please');
+  assert.equal(lines.at(-1),'godspeed-step (telegram): a message of 4 words was heard as none');
+  assert.ok(lines.every(l=>!/\b(yes|no|cache)\b/.test(l.replace(/^godspeed-step \(telegram\): /,''))),lines.join('\n'));
 });
 
 test('the recipe is installed for a starter-born assistant, names its doors and uses only tools the notebook has',async t=>{
