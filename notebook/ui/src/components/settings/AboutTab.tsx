@@ -30,7 +30,8 @@ export interface AboutInfo {
 
 // The newest release and how this installation takes it (/api/update, core/update.mjs): the Update now
 // button where the notebook can update itself, the line to run where it cannot (a Docker server, or a
-// computer whose installation came before the button).
+// computer whose installation came before the button). `automatic` is the choice to update automatically
+// (core/automatic-update.mjs, #458), offered only where the notebook can update itself.
 type UpdateState = "checking" | "downloading" | "preparing" | "switching" | "updated" | "failed";
 export interface UpdateInfo {
   installed: string;
@@ -41,6 +42,15 @@ export interface UpdateInfo {
   busy: boolean;
   status: { state: UpdateState; from: string; to: string; message: string; at: string } | null;
   error: string | null;
+  automatic?: AutomaticInfo;
+}
+export interface AutomaticInfo {
+  offered: boolean;
+  reason: string | null;
+  choice: "automatic" | "myself";
+  time: string;
+  paused: { until: string | null } | null;
+  last: { day: string; result: string; to: string | null; message: string | null } | null;
 }
 const RUNNING: UpdateState[] = ["checking", "downloading", "preparing", "switching"];
 
@@ -132,7 +142,75 @@ function UpdateBlock() {
         </>
       )}
       {said && <p role="alert">{said}</p>}
+      {data?.automatic && <AutomaticUpdates automatic={data.automatic} />}
     </div>
+  );
+}
+
+type PauseChoice = "none" | "date" | "on";
+function AutomaticUpdates({ automatic }: { automatic: AutomaticInfo }) {
+  const client = useQueryClient();
+  const [refused, setRefused] = useState<string | null>(null);
+  // Choosing "Pause through" saves nothing until a date is picked.
+  const [pickingDate, setPickingDate] = useState(false);
+  const pause: PauseChoice = pickingDate || automatic.paused?.until ? "date" : automatic.paused ? "on" : "none";
+  if (!automatic.offered) return <p className="text-muted-foreground">{automatic.reason}</p>;
+  async function save(change: Partial<Pick<AutomaticInfo, "choice" | "time" | "paused">>) {
+    setRefused(null);
+    try {
+      const response = await fetch('/api/update/automatic', { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(change) });
+      if (!response.ok) setRefused((await response.json()).error || "The choice could not be saved.");
+    } catch {
+      setRefused("The choice could not be saved. Reload the page to try again.");
+    }
+    client.invalidateQueries({ queryKey: ["update"] });
+  }
+  function choosePause(next: PauseChoice) {
+    setPickingDate(next === "date");
+    if (next === "none") void save({ paused: null });
+    if (next === "on") void save({ paused: { until: null } });
+  }
+  const last = automatic.last;
+  return (
+    <fieldset className="space-y-1 pt-2">
+      <legend className="font-semibold">Updates</legend>
+      <label className="flex items-center gap-2">
+        <input type="radio" name="update-choice" checked={automatic.choice === "myself"} onChange={() => void save({ choice: "myself" })} />
+        Update myself
+      </label>
+      <label className="flex items-center gap-2">
+        <input type="radio" name="update-choice" checked={automatic.choice === "automatic"} onChange={() => void save({ choice: "automatic" })} />
+        Update automatically
+      </label>
+      {automatic.choice === "automatic" && (
+        <div className="space-y-1 pl-6">
+          <label className="flex items-center gap-2">
+            Install at
+            <input type="time" className="border rounded px-1" value={automatic.time} onChange={event => { if (event.target.value) void save({ time: event.target.value }); }} />
+          </label>
+          <p className="text-muted-foreground">
+            Godspeed checks once a day and installs a newer stable release at this time, in your time zone, when no chat or
+            routine is running. A change counts from tomorrow on.
+          </p>
+          <label className="flex items-center gap-2">
+            <input type="radio" name="update-pause" checked={pause === "none"} onChange={() => choosePause("none")} />
+            Not paused
+          </label>
+          <label className="flex items-center gap-2">
+            <input type="radio" name="update-pause" checked={pause === "date"} onChange={() => choosePause("date")} />
+            Pause through
+            <input type="date" aria-label="Pause through" className="border rounded px-1" value={automatic.paused?.until || ""} disabled={pause !== "date"} onChange={event => { if (event.target.value) void save({ paused: { until: event.target.value } }); }} />
+          </label>
+          <label className="flex items-center gap-2">
+            <input type="radio" name="update-pause" checked={pause === "on"} onChange={() => choosePause("on")} />
+            Pause until I turn it back on
+          </label>
+        </div>
+      )}
+      {last?.result === "failed" && <p className="text-muted-foreground">The last automatic update did not work: {last.message} It tries again the next day.</p>}
+      {last?.result === "updated" && <p className="text-muted-foreground">Last updated itself to {last.to}.</p>}
+      {refused && <p role="alert">{refused}</p>}
+    </fieldset>
   );
 }
 
