@@ -5,7 +5,8 @@ description: >-
   (transform_llm_output; Hermes keeps only the first replacement any plugin returns, so Godspeed
   has one). The first step it runs: a reply in English or German to a message clearly in the other
   language is translated faithfully by the AI connected in Settings, unless the person asked for a
-  language; scheduled deliveries are never touched. Other plugins add their own step with the
+  language; a translation that fails twice sends the reply as written, below one line in the
+  message's language that says so; scheduled deliveries are never touched. Other plugins add their own step with the
   documented call in this plugin's __init__.py (godspeed_reply_steps_v1) instead of registering their
   own transformer. It also answers a Telegram message that only asks for today's brief with the
   briefing the notebook saved today, word for word, before the model sees it (todays_brief.py).
