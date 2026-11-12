@@ -30,6 +30,22 @@ Version 2 is the current edition. The install lines on this page install the cur
 
 Godspeed carries the Workouts add-on. With Hevy Pro, open **Settings** > **Workouts from Hevy**, make a Hevy developer key, and connect it there. The key stays in the add-on's private state; Settings shows the imported-row count and last run, and the one hourly **Workouts from Hevy** routine appears under **Settings** > **Routines**. When taking over a standalone add-on schedule, Godspeed first proves the carried routine can import; if setup fails, Settings names the safe reason and retry time while the existing schedule stays in place. If retiring that schedule fails after the proof, the carried routine keeps running and Settings reports the removal retry. Disconnect stops that routine while keeping the tracker and its rows.
 
+## New in 2.0.0-beta.23
+
+Godspeed can update itself, a question on Telegram is one message with its buttons, and your assistant gets the safeguards its maintainer uses. This release also carries everything built for 2.0.0-beta.21 and 2.0.0-beta.22.
+
+- **Update with one button, or automatically.** **Settings** has an **Update now** button, and `godspeed-update` is one command, that bring Godspeed to the newest stable release. You can also let it update itself at a time you choose, or pause that. On the Docker server the button shows the line to run instead.
+- **A question from background work is one Telegram message with its Yes and No buttons.** A plain yes, typed or pressed, answers the step that is waiting. Reports from background work speak in plain words, only about what you can decide, one thing per message, and never ask you to type a code.
+- **Safeguards for every assistant.** Your assistant asks itself once whether it is really finished before it gives up or hands work back. It never hands you a page or a message with blanks to fill in. It may draft posts but never publishes, schedules or queues one on a social platform in your name. A promise on a clock ("every Sunday") is written down and run, and a missed one is named at the top of the morning list. No new folders or files appear at the top of your mission control unless you named them.
+- **The journal knows when things happened.** "An hour ago", "at 11" or "yesterday afternoon" is recorded as that time, and every finished journal task also becomes a moment in the notebook's timeline.
+- **You choose how a new rule is added:** on its own, or shown to you first. A short rule that repeats one you already have is offered as a change to it.
+- **The Telegram chat no longer goes silent when the assistant program under it changes:** it restarts onto the new code and keeps answering. It also answers an English message in English again.
+- **Coaching talks and a changed rhythm.** A rhythm you changed on purpose no longer makes the dropped day a talk day. When a change you did not ask for dropped a talk day and the last talk got no reply, the new talk opens from its preparation and the unanswered one is filed as not held.
+- **The morning brief** keeps its items, tells only fresh news, checks whose trip it is before it says "you", and holds back proposals you declined or postponed.
+- **Linux on a server without a screen** gives an address that opens from another device, with HTTPS, as the server installer already does.
+
+Updating keeps your folder, notes and settings.
+
 ## New in 2.0.0-beta.20
 
 Workouts from Hevy come with Godspeed, what you told it during the day is remembered overnight, and Godspeed keeps its assistant program current.
