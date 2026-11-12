@@ -3341,7 +3341,7 @@ rm "$Q/no-snapshot/approvals-s4.json"
 refuses 'a run that kept no snapshot after situation 4' no-question-he-cannot-judge "$Q/no-snapshot" 'approvals-s4.json is not in what the scenario kept'
 
 # ---------------------------------------------------------------------------------- plain-yes
-PB1='Send this week food log to your nutritionist'
+PB1='Start a food log for this week in your notebook'
 PB2='Cancel the renewal of your gym membership'
 PA='Renew this week library books'
 PC='Book the car yearly inspection'
@@ -3363,8 +3363,8 @@ py_good() { # <folder>
   rm -rf "$f"
   mkdir -p "$f"
   run_json "$f" "$(msg a-ask 'Renew the library books?' true "$YN")" "$(msg a 'Done, I renewed them.')" \
-    "$(msg b-ask 'Send the food log to your nutritionist?' true "$YN")" "$(msg b-ask 'Cancel the renewal of your gym membership?' true "$YN")" \
-    "$(msg b 'Which one: the food log for your nutritionist, or cancelling the gym membership?')" "$(msg b-choice 'Sent the food log.')" \
+    "$(msg b-ask 'Start a food log in your notebook?' true "$YN")" "$(msg b-ask 'Cancel the renewal of your gym membership?' true "$YN")" \
+    "$(msg b 'Which one: starting the food log, or cancelling the gym membership?')" "$(msg b-choice 'Started the food log.')" \
     "$(msg c-ask 'Book the car inspection?' true "$YN")" "$(msg c-press 'Cancelled the gym membership renewal.')" "$(msg d 'Nothing is waiting for a yes right now.')"
   py_snapshots "$f"
   live_telegram_evidence "$f"
@@ -3384,7 +3384,7 @@ copy "$P/good" "$P/b-approved-one"
 rows "$P/b-approved-one/approvals-b.json" approved a1 "$PA" approved b1 "$PB1" pending b2 "$PB2"
 refuses 'a yes with two waiting that approved one' plain-yes "$P/b-approved-one" 'approved one of them'
 copy "$P/good" "$P/b-names-one"
-run_json "$P/b-names-one" "$(msg a-ask 'Renew the books?' true "$YN")" "$(msg a 'Done.')" "$(msg b 'Do you mean the food log for your nutritionist?')" \
+run_json "$P/b-names-one" "$(msg a-ask 'Renew the books?' true "$YN")" "$(msg a 'Done.')" "$(msg b 'Do you mean the food log?')" \
   "$(msg b-ask 'Cancel the gym membership?' true "$YN")" "$(msg c-ask 'Book the inspection?' true "$YN")"
 refuses 'a question that names only one of two waiting steps' plain-yes "$P/b-names-one" 'does not name both'
 copy "$P/good" "$P/b-two-questions"
