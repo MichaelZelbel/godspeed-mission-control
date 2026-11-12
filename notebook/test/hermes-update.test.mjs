@@ -255,11 +255,15 @@ test('a chat during a routine tick is answered, and the update still waits for b
  finish();await ticking;assert.equal(lifecycle.busy,false);
 });
 
-test('only an assistant update refuses a chat, and the refusal says so',async t=>{
+test('only an assistant or Godspeed update refuses a chat, and the refusal names which',async t=>{
  const f=fixture(t),lifecycle=new HermesLifecycle(),{agent,spawns}=answeringAgent(f,lifecycle);
  const update=lifecycle.acquire('assistant update');
  await assert.rejects(agent({message:'hi'}),{message:'The assistant is updating; try the chat again in a moment.'});assert.equal(spawns.length,0);
  update();
+ // A Godspeed update refuses it too, and says it is Godspeed that is updating (#483).
+ const godspeed=lifecycle.acquire('godspeed update');
+ await assert.rejects(agent({message:'hi'}),{message:'Godspeed is updating; try the chat again in a moment.'});assert.equal(spawns.length,0);
+ godspeed();
  const run=lifecycle.acquire('routine run'),otherChat=lifecycle.acquire('chat reply');
  assert.deepEqual(await agent({message:'hi'}),{reply:'the answer'});assert.equal(spawns.length,1);
  run();otherChat();assert.equal(lifecycle.busy,false);

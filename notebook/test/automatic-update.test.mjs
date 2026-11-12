@@ -4,6 +4,8 @@ import {HermesLifecycle} from '../core/hermes-lifecycle.mjs';
 import {AutomaticUpdate,AUTOMATIC_FILE} from '../core/automatic-update.mjs';
 import {readStatus,writeStatus} from '../core/update.mjs';
 import {readNotices} from '../core/notices.mjs';
+import {nativeAgent} from '../core/native-agent.mjs';
+import {EventEmitter} from 'node:events';import {PassThrough} from 'node:stream';
 
 // Update automatically (#458): off unless chosen, once a day at the chosen time in the person's time
 // zone, never while a chat or routine runs, paused when asked, and said once afterwards. The update
@@ -177,4 +179,43 @@ test('Settings refuses a time or pause that is not one',()=>{
   const env=setup();
   for(const input of [{choice:'often'},{time:'4:00'},{time:'24:00'},{paused:{until:'2026-02-30'}},{paused:'tomorrow'},null])assert.throws(()=>env.automatic.save(input),error=>error.status===400,JSON.stringify(input));
   assert.equal(env.automatic.save({choice:'myself',paused:{until:null}}).paused,null,'only automatic updates pause');
+});
+
+// A chat through the notebook's own agent, whose assistant answers at once (as in hermes-update.test.mjs).
+function chatAgent(env){
+  const spawns=[],home=path.join(env.root,'.godspeed','hermes-home');fs.mkdirSync(home,{recursive:true});
+  const agent=nativeAgent({executable:process.execPath,home,cwd:env.root,lifecycle:env.lifecycle,spawnProcess:()=>{const child=new EventEmitter();child.stdin=new PassThrough();child.stdout=new PassThrough();child.stderr=new PassThrough();child.stdin.on('data',()=>queueMicrotask(()=>{child.stdout.write('the answer');child.emit('close',0);}));spawns.push(child);return child;}});
+  return {agent,spawns};
+}
+
+// #483: for up to a minute after an automatic update failed, a chat was refused with "The assistant
+// is updating", because the lease waited for the next tick. It ends as soon as the status settles.
+test('once an automatic update fails, its lease ends at once and a chat is answered without another tick',async()=>{
+  const env=setup();chosen(env);const {agent,spawns}=chatAgent(env);
+  assert.equal(await env.at('2026-11-12','04:00'),'started');
+  await assert.rejects(agent({message:'hi'}),{message:'Godspeed is updating; try the chat again in a moment.'},'refused while the update runs, naming Godspeed');
+  for(const kind of ['routine tick','routine run','assistant update','godspeed update'])assert.equal(env.lifecycle.acquire(kind),null,kind+' still waits for the update');
+  assert.equal(env.automatic.overview().last.result,'started');
+  env.ended('failed','The download did not finish.');
+  const chat=env.lifecycle.acquire('chat reply');
+  assert.ok(chat,'the lease ended with the update, before any tick');chat();
+  assert.deepEqual(await agent({message:'hi'}),{reply:'the answer'});assert.equal(spawns.length,1);
+  assert.equal(env.lifecycle.busy,false);
+  const shown=env.automatic.overview().last;
+  assert.equal(shown.result,'failed','Settings shows how it ended, not that it started');assert.match(shown.message,/download did not finish/);
+  assert.equal(readNotices(env.store).filter(notice=>notice.about==='the automatic update').length,1,'said once');
+  await env.at('2026-11-12','04:01');
+  assert.equal(readNotices(env.store).filter(notice=>notice.about==='the automatic update').length,1,'and not again at the next tick');
+});
+
+test('an update whose status says it is still going keeps its lease when a chat asks',async()=>{
+  const env=setup({way:'windows'});chosen(env);
+  await env.at('2026-11-12','04:00');
+  writeStatus(env.root,{...readStatus(env.root),state:'switching',message:'The Windows setup is installing 2.0.0-beta.30.'},()=>env.clock.at);
+  env.clock.at=berlin('2026-11-12','04:20');
+  assert.equal(env.lifecycle.acquire('chat reply'),null);assert.equal(env.lifecycle.reason,'godspeed update');
+  assert.equal(env.automatic.overview().last.result,'started');
+  env.clock.at=berlin('2026-11-12','04:30');
+  const chat=env.lifecycle.acquire('chat reply');assert.ok(chat,'a setup that never finished counts as stopped');chat();
+  assert.equal(env.automatic.overview().last.result,'failed');
 });
