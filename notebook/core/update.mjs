@@ -123,6 +123,8 @@ export function updateWay({root,env=process.env,product=ownProduct}){
   if(by==='computer'||nativeCommit(root))return env.GODSPEED_HANDOVER==='1'?'handover':'terminal';
   return 'none';
 }
+// The ways the notebook updates the installation itself (Update now, and the automatic update).
+export const updatesItself=way=>way==='handover'||way==='windows';
 export const COMMANDS={terminal:'godspeed-update',server:'sudo godspeed-update'};
 
 export const updateFolder=root=>path.join(root,'.godspeed','update');
@@ -245,6 +247,7 @@ export async function runUpdate({root,channel='stable',check=false,fromSettings=
 const ASKED_FOR=10*60*1000,STALLED=2*60*1000,SETUP_STALLED=30*60*1000;
 const asked=new Map();
 const RUNNING=['checking','downloading','preparing','switching'];
+export const underWay=status=>RUNNING.includes(status?.state);
 // An update in progress that nothing carries on any more ended one way or the other: the version
 // running says which. The Windows setup runs on its own, so it gets longer before it counts as stopped.
 export function settledStatus(root,installed,now){
@@ -279,7 +282,7 @@ export async function startUpdate({root,env=process.env,product=ownProduct,fetch
   const way=updateWay({root,env,product});
   if(way==='server')return {code:409,error:'On a Docker server Godspeed is updated on the server itself. Run this there: sudo godspeed-update'};
   if(way==='terminal')return {code:409,error:'This installation is updated from a terminal on this computer. Run: godspeed-update'};
-  if(way!=='handover'&&way!=='windows')return {code:409,error:'No installer put this copy of Godspeed here, so it cannot update itself.'};
+  if(!updatesItself(way))return {code:409,error:'No installer put this copy of Godspeed here, so it cannot update itself.'};
   if(updateRunning(root,now))return {code:409,error:'An update is already running.'};
   const installed=installedVersion({root});let newest;
   try{newest=await findNewest({fetchImpl,env});}catch(error){return {code:502,error:error.message};}

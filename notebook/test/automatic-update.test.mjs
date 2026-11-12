@@ -85,6 +85,32 @@ test('it waits while a chat or a routine runs, and nothing starts while it runs'
   await busy.at('2026-11-13','04:00');assert.equal(busy.starts.length,1);
 });
 
+test('on Windows the lease holds while the setup installs, after the update command handed it over',async()=>{
+  const env=setup({way:'windows'});chosen(env);
+  await env.at('2026-11-12','04:00');
+  writeStatus(env.root,{...readStatus(env.root),state:'switching',message:'The Windows setup is installing 2.0.0-beta.30.'},()=>env.clock.at);
+  for(const time of ['04:01','04:10','04:29'])await env.at('2026-11-12',time);
+  assert.equal(env.lifecycle.acquire('routine tick'),null,'no routine while the setup installs');
+  await env.at('2026-11-12','04:30');
+  assert.equal(env.lifecycle.busy,false,'a setup that never finished counts as stopped after 30 minutes');
+  assert.equal(env.automatic.overview().last.result,'failed');
+});
+
+test('Settings saved while an update is being started is kept, and an attempt that cannot be kept starts nothing',async()=>{
+  const env=setup(),{starts}=env;chosen(env);
+  let saved;
+  env.automatic.start=async()=>{starts.push('');env.clock.at=berlin('2026-11-12','04:00');saved=env.automatic.save({choice:'myself'});return {code:200,started:false};};
+  assert.equal(await env.at('2026-11-12','04:00'),'current');
+  assert.equal(saved.choice,'myself');assert.equal(env.automatic.overview().choice,'myself','the change made during the start stays');
+  await env.at('2026-11-14','04:00');assert.equal(starts.length,1,'Update myself from then on');
+
+  const stuck=setup();chosen(stuck);
+  stuck.automatic.write=()=>{throw Error('read-only');};
+  for(const time of ['04:00','04:01','04:02'])assert.equal(await stuck.at('2026-11-12',time),null);
+  assert.deepEqual(stuck.starts,[],'nothing starts when today\'s attempt cannot be written down');
+  assert.equal(stuck.lifecycle.busy,false);
+});
+
 test('a pause holds through its date, or until the person turns it back on',async()=>{
   const env=setup();chosen(env,{paused:{until:'2026-11-13'}});
   assert.deepEqual(env.automatic.overview().paused,{until:'2026-11-13'});

@@ -11,12 +11,13 @@ export class HermesLifecycle{
  constructor(){this.active=new Set();}
  acquire(kind){
   const held=this.kinds();
-  if(UPDATES.some(update=>held.has(update))||(UPDATES.includes(kind)&&held.size)||(ROUTINES.includes(kind)&&ROUTINES.some(routine=>held.has(routine))))return null;
+  if(this.updating||(UPDATES.includes(kind)&&held.size)||(ROUTINES.includes(kind)&&ROUTINES.some(routine=>held.has(routine))))return null;
   const lease={kind};this.active.add(lease);
   return ()=>{this.active.delete(lease);};
  }
  kinds(){return new Set([...this.active].map(lease=>lease.kind));}
  get busy(){return this.active.size>0;}
+ get updating(){const held=this.kinds();return UPDATES.some(update=>held.has(update));}
  // The lease that refuses the most: what a refused routine run records as its owner.
  get reason(){const held=this.kinds();return [...UPDATES,...ROUTINES,'chat reply'].find(kind=>held.has(kind))||null;}
 }

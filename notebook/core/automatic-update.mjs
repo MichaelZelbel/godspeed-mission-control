@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {atomic} from './records/store.mjs';
 import {queueNotice} from './notices.mjs';
-import {compareVersions,installedVersion,settledStatus,updateRunning,updateWay} from './update.mjs';
+import {compareVersions,installedVersion,settledStatus,underWay,updateRunning,updatesItself,updateWay} from './update.mjs';
 
 // UPDATE AUTOMATICALLY (12 November 2026, #458). In Settings, About the person chooses Update myself
 // (the default, also for an installation that never chose) or Update automatically. Automatic checks
@@ -10,8 +10,10 @@ import {compareVersions,installedVersion,settledStatus,updateRunning,updateWay} 
 // the same update as the Update now button: the only way it installs is the `start` it is given,
 // which the notebook makes startUpdate (core/update.mjs). It never starts while a chat reply or a
 // routine runs, and holds the lifecycle's `godspeed update` lease while the update runs, so none
-// starts until the new version answers (core/hermes-lifecycle.mjs). A change in Settings counts from
-// the next day. A pause lasts through a date, or until the person turns it back on.
+// starts while it does (core/hermes-lifecycle.mjs): until the notebook stops for the new version,
+// or the update's status says it ended. On Windows that includes the setup, which runs on after
+// the update's command has handed it over. A change in Settings counts from the next day. A pause
+// lasts through a date, or until the person turns it back on.
 //
 // It is offered only where the notebook can update the installation itself (handover, windows) and
 // knows when a chat or routine runs (the original runtime's lifecycle). A Docker server is updated on
@@ -59,9 +61,11 @@ export class AutomaticUpdate{
   }
   file(){return path.join(this.store.state,AUTOMATIC_FILE);}
   write(state){atomic(this.file(),JSON.stringify(state,null,2)+'\n');}
+  // A Settings change saved while an update was being started is kept: the choice is read again.
+  record(last){this.write({...readAutomatic(this.store),last});}
   offer(){
     const way=this.way();
-    if(way!=='handover'&&way!=='windows')return {offered:false,reason:OFFERED_NOT[way]||OFFERED_NOT.none};
+    if(!updatesItself(way))return {offered:false,reason:OFFERED_NOT[way]||OFFERED_NOT.none};
     if(!this.lifecycle)return {offered:false,reason:OFFERED_NOT.none};
     return {offered:true,reason:null};
   }
@@ -98,50 +102,59 @@ export class AutomaticUpdate{
     const state=readAutomatic(this.store),last=state.last;
     if(last?.result!=='started'||last.told)return;
     const installed=installedVersion({root:this.store.root}),status=settledStatus(this.store.root,installed,this.now);
-    if(status?.state==='updated'&&last.to&&compareVersions(installed,last.to)>=0)return this.tell(state,{...last,result:'updated',message:null});
-    if(status?.state==='failed'||status?.state==='updated')return this.tell(state,{...last,result:'failed',message:status.message});
+    if(status?.state==='updated'&&last.to&&compareVersions(installed,last.to)>=0)return this.tell({...last,result:'updated',message:null});
+    if(status?.state==='failed'||status?.state==='updated')return this.tell({...last,result:'failed',message:status.message});
   }
-  tell(state,last){
-    const at=this.now().toISOString();
+  // Told once it was said somewhere; a started update that could be said nowhere is tried again.
+  tell(last){
+    const at=this.now().toISOString(),said=[];
+    const say=action=>{try{action();said.push(true);}catch{}};
     if(last.result==='updated'){
       const text='Godspeed Mission Control updated itself to '+last.to+'.'+(last.notes?' What changed: '+last.notes:'');
-      try{queueNotice(this.store,{id:'godspeed-updated-'+last.to,text,about:'the automatic update'});}catch{}
-      try{
+      say(()=>queueNotice(this.store,{id:'godspeed-updated-'+last.to,text,about:'the automatic update'}));
+      say(()=>{
         this.store.save('notifications',{id:'godspeed-update',status:'pending',title:'Godspeed updated itself',body:text,link:'/dashboard/settings#about',updated_at:at});
         if(this.store.get('notifications','godspeed-update-failed')?.status==='pending')this.store.save('notifications',{id:'godspeed-update-failed',status:'resolved',resolved_at:at});
-      }catch{}
+      });
     }else{
-      const text='Godspeed Mission Control could not update itself'+(last.to?' to '+last.to:'')+'. '+reasonOf(last.message)+'. The version you have'+(last.from?', '+last.from+',':'')+' keeps running. It tries again tomorrow at '+state.time+'.';
-      try{queueNotice(this.store,{id:'godspeed-update-failed-'+last.day,text,about:'the automatic update'});}catch{}
-      try{this.store.save('notifications',{id:'godspeed-update-failed',status:'pending',title:'Godspeed could not update itself',body:text,link:'/dashboard/settings#about',failed_at:at});}catch{}
+      const text='Godspeed Mission Control could not update itself'+(last.to?' to '+last.to:'')+'. '+reasonOf(last.message)+'. The version you have'+(last.from?', '+last.from+',':'')+' keeps running. It tries again tomorrow at '+readAutomatic(this.store).time+'.';
+      say(()=>queueNotice(this.store,{id:'godspeed-update-failed-'+last.day,text,about:'the automatic update'}));
+      say(()=>this.store.save('notifications',{id:'godspeed-update-failed',status:'pending',title:'Godspeed could not update itself',body:text,link:'/dashboard/settings#about',failed_at:at}));
     }
-    this.write({...state,last:{...last,told:true}});
+    this.record({...last,told:said.length>0});
+  }
+  // The lease is held while the update's command runs, and after it while its status says the update
+  // is still going (the Windows setup), until that status counts as stopped (core/update.mjs).
+  updateUnderWay(){
+    const root=this.store.root;
+    return updateRunning(root,this.now)||underWay(settledStatus(root,installedVersion({root}),this.now));
   }
   async tick(){
     if(this.running)return null;
     this.running=true;
     try{
-      if(this.lease&&!updateRunning(this.store.root,this.now)){this.lease();this.lease=null;}
+      if(this.lease&&!this.updateUnderWay()){this.lease();this.lease=null;}
       this.report();
       const state=readAutomatic(this.store),{day,hhmm}=this.clock();
       if(state.choice!=='automatic'||!this.offer().offered||this.pausedOn(state,day)||state.changed_day===day||hhmm<state.time||state.last?.day===day)return null;
       const lease=this.lifecycle.acquire('godspeed update');
       if(!lease)return null;
-      const from=installedVersion({root:this.store.root});
+      const last={day,at:this.now().toISOString(),from:installedVersion({root:this.store.root})};
+      // Today's attempt is kept before the update starts: if it cannot be, nothing starts.
+      try{this.record({...last,result:'checking'});}catch(error){lease();throw error;}
       let answer;
       try{answer=await this.start();}catch(error){answer={code:500,error:error?.message};}
-      const last={day,at:this.now().toISOString(),from};
       if(answer?.code===202){
         this.lease=lease;
-        this.write({...state,last:{...last,result:'started',to:answer.status?.to||null,notes:answer.status?.notes||null}});
+        this.record({...last,result:'started',to:answer.status?.to||null,notes:answer.status?.notes||null});
         return 'started';
       }
       lease();
-      if(answer?.code===200){this.write({...state,last:{...last,result:'current'}});return 'current';}
-      if(answer?.code===409){this.write({...state,last:{...last,result:'skipped',message:answer.error||null}});return 'skipped';}
-      this.tell(state,{...last,result:'failed',message:answer?.error});
+      if(answer?.code===200){this.record({...last,result:'current'});return 'current';}
+      if(answer?.code===409){this.record({...last,result:'skipped',message:answer.error||null});return 'skipped';}
+      this.tell({...last,result:'failed',message:answer?.error});
       return 'failed';
-    }catch{return null;}
+    }catch(error){console.error('The automatic update could not run: '+(error?.message||error));return null;}
     finally{this.running=false;}
   }
 }
