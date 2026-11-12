@@ -10,9 +10,9 @@ import types
 import unittest
 
 try:  # Hermes' own Python has the real SDK: then a press is read the way the gateway reads it.
-    from telegram import Bot as SdkBot, Update as SdkUpdate
+    from telegram import Update as SdkUpdate
 except ImportError:
-    SdkBot = SdkUpdate = None
+    SdkUpdate = None
 
 OWNER, BOT = 31415, 1112
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -60,6 +60,9 @@ class Bot:
 
     async def edit_message_text(self, **kw):
         self.edits.append(kw)
+
+    async def answer_callback_query(self, *args, **kw):
+        pass
 
 
 def tap(buttons_, bot, data, message_id, user=OWNER, handler=None):
@@ -193,6 +196,60 @@ class SharedButtons(unittest.TestCase):
         self.assertIn(WORDS["en"]["buttonFailed"], self.bot.edits[0]["text"])
         self.assertEqual(self.bot.edits[1]["text"], "worked")
 
+    def stops(self, press):
+        """The gates `press` logged it stopped at."""
+        with self.assertLogs("godspeed-buttons", "DEBUG") as logged:
+            buttons.log.debug("pressed")
+            press()
+        return [line.split(" stopped at ", 1)[1] for line in logged.output if " stopped at " in line]
+
+    def test_each_stop_after_the_gates_names_itself(self):
+        def unreadable():
+            tokens, message = self.ask("one", "s1")
+            with open(os.path.join(self.buttons.folder(), tokens["yes"] + ".json"), "w") as f:
+                f.write("{")
+            tap(self.buttons, self.bot, self.data(tokens, "yes"), message)
+
+        def unwritable_claim():
+            tokens, message = self.ask("one", "s1")
+
+            def claim(token):
+                raise OSError("read-only")
+            self.buttons.claim = claim
+            tap(self.buttons, self.bot, self.data(tokens, "yes"), message)
+            del self.buttons.claim
+
+        answered, answered_message = self.ask("one", "s1")
+        tap(self.buttons, self.bot, self.data(answered, "yes"), answered_message)
+
+        def failing_callback():
+            tokens, message = self.ask("two", "s2")
+
+            def broken(token):
+                raise RuntimeError("nothing happened")
+            self.buttons.callbacks["two"] = broken
+            tap(self.buttons, self.bot, self.data(tokens, "yes"), message)
+
+        def closed():
+            tokens, message = self.ask("one", "s1")
+            self.buttons.close()
+            tap(self.buttons, self.bot, self.data(tokens, "yes"), message)
+        cases = [
+            ("a press without its message", lambda: asyncio.run(self.buttons.callback(
+                types.SimpleNamespace(callback_query=None), types.SimpleNamespace(bot=self.bot)))),
+            ("token (none kept here)", lambda: tap(self.buttons, self.bot, self.buttons.prefix + "a" * 32, 101)),
+            ("token (unreadable)", unreadable),
+            ("claim (could not be written)", unwritable_claim),
+            ("claim (answered already)",
+             lambda: tap(self.buttons, self.bot, self.data(answered, "no"), answered_message)),
+            ("callback two (failed)", failing_callback),
+            ("closed", closed),
+        ]
+        for gate, press in cases:
+            with self.subTest(gate=gate):
+                self.assertEqual(self.stops(press), [gate])
+        self.assertEqual(self.heard, [("one", "yes", "s1")])
+
 
 def driver_press(data, text):
     """The update the scenarios' stand-in Telegram queues when server-telegram.mjs presses `data`."""
@@ -243,9 +300,9 @@ class PressShapes(unittest.TestCase):
         self.buttons.bind(tokens, message_id)
         update["callback_query"]["data"] = self.buttons.prefix + tokens["yes"]
         change(update)
-        parsed = SdkUpdate.de_json(update, SdkBot("1:a")) if SdkUpdate else as_objects(update)
         bot = Bot()
         bot.id = bot_id
+        parsed = SdkUpdate.de_json(update, bot) if SdkUpdate else as_objects(update)
         with self.assertLogs("godspeed-buttons", "DEBUG") as logged:
             buttons.log.debug("pressed")
             asyncio.run(self.buttons.callback(parsed, types.SimpleNamespace(bot=bot)))
