@@ -39,6 +39,18 @@ test('on a Docker server Settings shows the newest version and the line to run o
   assert.equal(refused.status,409);
   assert.match((await refused.json()).error,/sudo godspeed-update/);
   assert.ok(!fs.existsSync(path.join(root,'.godspeed','update')),'nothing was started or written');
+  // Updating automatically (#458) is not offered there, and Settings says why in one line.
+  assert.equal(shown.automatic.offered,false);assert.match(shown.automatic.reason,/Docker server/);
+  const automatic=await fetch(base+'/api/update/automatic',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({choice:'automatic'})});
+  assert.equal(automatic.status,409);assert.match((await automatic.json()).error,/Docker server/);
+  assert.equal((await (await fetch(base+'/api/update/automatic')).json()).choice,'myself');
+});
+
+test('an installation that never chose reads Update myself',async t=>{
+  withEnv(t,{GODSPEED_SCENARIO_RELEASES_URL:'http://127.0.0.1:9'});
+  const root=computer('2.0.0-beta.20'),service=await createService({root,port:0});t.after(()=>service.close());
+  const shown=await (await fetch('http://127.0.0.1:'+service.address.port+'/api/update')).json();
+  assert.equal(shown.automatic.choice,'myself');assert.equal(shown.automatic.time,'04:00');assert.equal(shown.automatic.paused,null);
 });
 
 test('a GitHub that cannot be reached is said in a plain sentence',async t=>{

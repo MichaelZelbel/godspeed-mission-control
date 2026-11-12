@@ -19,3 +19,14 @@ test('only an assistant update runs alone; chats run beside anything else, and a
  assert.equal(fresh.reason,'assistant update');
  update();assert.equal(fresh.busy,false);assert.equal(fresh.reason,null);
 });
+
+test('an automatic Godspeed update waits for every chat and routine, and while it runs nothing else starts',()=>{
+ const lifecycle=new HermesLifecycle();
+ for(const kind of ['chat reply','routine tick','routine run','assistant update']){
+  const held=lifecycle.acquire(kind);assert.equal(lifecycle.acquire('godspeed update'),null,kind);held();
+ }
+ const update=lifecycle.acquire('godspeed update');assert.ok(update);
+ for(const kind of ['chat reply','routine tick','routine run','assistant update','godspeed update'])assert.equal(lifecycle.acquire(kind),null,kind);
+ assert.equal(lifecycle.reason,'godspeed update');
+ update();assert.equal(lifecycle.busy,false);
+});
