@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import "@testing-library/jest-dom/vitest";
-import { AboutTab, type AboutInfo, type UpdateInfo } from "./AboutTab";
+import { AboutTab, type AboutInfo, type AutomaticInfo, type UpdateInfo } from "./AboutTab";
 
 // Settings, About (18 October 2026): the README and the food tracker send readers here.
 const food: AboutInfo["food"] = {
@@ -87,5 +87,31 @@ describe("AboutTab", () => {
   it("says plainly when an update failed", async () => {
     show(computer, { ...upToDate, installed: "2.0.0-beta.20", newer: true, status: { state: "failed", from: "2.0.0-beta.20", to: "2.0.0-beta.30", message: "The download of 2.0.0-beta.30 does not match the checksum its release publishes, so nothing was installed. The version you have keeps running.", at: "2026-11-11T10:00:00.000Z" } });
     expect(await screen.findByRole("alert")).toHaveTextContent(/does not match the checksum.*The version you have keeps running\./);
+  });
+
+  it("on a Docker server says in one line why it cannot update itself automatically, and offers no choice", async () => {
+    const reason = "On a Docker server Godspeed is updated on the server itself (sudo godspeed-update), so it cannot update itself automatically.";
+    show({ ...computer, on: "server" }, { ...upToDate, way: "server", automatic: { offered: false, reason, choice: "myself", time: "04:00", paused: null, last: null } });
+    expect(await screen.findByText(reason)).toBeInTheDocument();
+    expect(screen.queryByRole("radio", { name: "Update automatically" })).not.toBeInTheDocument();
+  });
+
+  it("reads Update myself until the person chooses Update automatically, which then shows the time", async () => {
+    let automatic: AutomaticInfo = { offered: true, reason: null, choice: "myself", time: "04:00", paused: null, last: null };
+    const asked: { body: unknown }[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (address: string, init?: RequestInit) => {
+      if (address === "/api/update/automatic") { const change = JSON.parse(String(init?.body)); asked.push({ body: change }); automatic = { ...automatic, ...change }; return json(automatic); }
+      if (address === "/api/update") return json({ ...upToDate, automatic });
+      return json(computer);
+    }));
+    render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><AboutTab /></QueryClientProvider>);
+    expect(await screen.findByRole("radio", { name: "Update myself" })).toBeChecked();
+    expect(screen.queryByLabelText("Install at")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("radio", { name: "Update automatically" }));
+    await waitFor(() => expect(asked).toEqual([{ body: { choice: "automatic" } }]));
+    expect(await screen.findByLabelText("Install at")).toHaveValue("04:00");
+    expect(screen.getByRole("radio", { name: "Update automatically" })).toBeChecked();
+    fireEvent.click(screen.getByRole("radio", { name: "Pause until I turn it back on" }));
+    await waitFor(() => expect(asked.at(-1)).toEqual({ body: { paused: { until: null } } }));
   });
 });

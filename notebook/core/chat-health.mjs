@@ -64,8 +64,9 @@ export class ChatHealth{
   this.started=now().getTime();
  }
  home(){return this.descriptor?.home;}
- // The test turn takes no lifecycle lease (the daily update would then skip its day); it waits out an update instead.
- updating(){return this.lifecycle?.reason==='assistant update'||fs.existsSync(path.join(this.store.state,'hermes-update.lock'));}
+ // The test turn takes no lifecycle lease (the daily update would then skip its day); it waits out an
+ // update, the assistant's or Godspeed's, instead.
+ updating(){return !!this.lifecycle?.updating||fs.existsSync(path.join(this.store.state,'hermes-update.lock'));}
  // One check at a time: a failing one takes over 30 s and the scheduler ticks every 30 s, and a
  // second check would read the same record and warn the owner again.
  tick(){

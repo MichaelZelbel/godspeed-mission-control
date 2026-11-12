@@ -49,6 +49,6 @@ export function contextBlock(entries, s, now) {
     lines.push(`Finished without something they said done includes. Never bring these up yourself. If they say one happened after all (or answer the evening list with done), run: godspeed-journal met <id> --met "<item>"`);
     for (const t of loose) lines.push(`- ${t.id}: "${t.title}", finished ${when(t.ended)}, without: ${t.missed.join("; ")}`);
   }
-  lines.push(`Settings: feedback=${s.feedback}, length=${s.length}, ask_done_definition=${s.ask_done_definition}, prefix_required=${s.prefix_required}. Anything addressed to the journal follows the interstitial-journal recipe.`);
+  lines.push(`Settings: feedback=${s.feedback}, length=${s.length}, ask_done_definition=${s.ask_done_definition}, prefix_required=${s.prefix_required}, save_as_moments=${s.save_as_moments}. Anything addressed to the journal follows the interstitial-journal recipe.`);
   return lines.join("\n");
 }
