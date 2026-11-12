@@ -171,17 +171,26 @@ def _backup_command():
 # the owner answers with a plain yes or no. The program matches the answer to the step before the model
 # runs (notebook/core/waiting-steps.mjs); this hands it the owner's message, in the owner's own private
 # Telegram chat only, and tells the model what happened or to ask which one is meant.
-def _owner_telegram(session_id):
+def _owner_mismatch(session_id):
+    """The names of the checks the turn fails (never their values), or [] for the owner's own chat."""
     try:
         from gateway.session_context import get_session_env
         got = {field: str(get_session_env("HERMES_SESSION_" + field, "") or "")
                for field in ("PLATFORM", "CHAT_ID", "CHAT_TYPE", "USER_ID", "ID")}
-        owner = os.environ.get("TELEGRAM_ALLOWED_USERS", "").strip()
-        return (re.fullmatch(r"[1-9][0-9]*", owner) is not None and got["PLATFORM"] == "telegram"
-                and got["CHAT_TYPE"] in ("dm", "private") and got["CHAT_ID"] == owner
-                and got["USER_ID"] == owner and got["ID"] == session_id)
     except (ImportError, AttributeError):
-        return False
+        return ["session context"]
+    owner = os.environ.get("TELEGRAM_ALLOWED_USERS", "").strip()
+    failed = [] if re.fullmatch(r"[1-9][0-9]*", owner) else ["TELEGRAM_ALLOWED_USERS"]
+    failed += [] if got["PLATFORM"] == "telegram" else ["PLATFORM"]
+    failed += [] if got["CHAT_TYPE"] in ("dm", "private") else ["CHAT_TYPE"]
+    failed += [] if got["CHAT_ID"] == owner else ["CHAT_ID"]
+    failed += [] if got["USER_ID"] == owner else ["USER_ID"]
+    failed += [] if got["ID"] == session_id else ["ID" + (" (empty)" if not got["ID"] else "") + (" (no session_id)" if not session_id else "")]
+    return failed
+
+
+def _owner_telegram(session_id):
+    return not _owner_mismatch(session_id)
 
 
 def _step_command():
@@ -232,8 +241,9 @@ def waiting_step_block(message, session_id):
     if not command or not _text(message).strip():
         return None
     words = len(_text(message).split())
-    if not _owner_telegram(session_id):
-        _note("a message of %d words was not matched: not the owner's private chat in this session", words)
+    failed = _owner_mismatch(session_id)
+    if failed:
+        _note("a message of %d words was not matched: not the owner's private chat in this session (%s differs)", words, ", ".join(failed))
         return None
     try:
         run = subprocess.run(command[:2] + ["heard", "--chat", "telegram"] + command[2:], input=_text(message),

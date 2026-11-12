@@ -192,7 +192,7 @@ print(json.dumps(seen));print(json.dumps(r))`,plugin,words],
   fs.writeFileSync(command,JSON.stringify([path.join(base,'no-such-node'),'x','y'])+'\n');
   const failed=turn(owner);assert.match(failed.context,/send it again/);assert.ok(!/no-such-node/.test(failed.context));
   // The gateway log says what the match did each turn, and never the owner's words (#372).
-  assert.equal(lines.filter(l=>/not the owner's private chat in this session/.test(l)).length,3,lines.join('\n'));
+  assert.deepEqual(lines.filter(l=>/not the owner's private chat in this session/.test(l)).map(l=>l.match(/session \((.*) differs\)/)[1]),['USER_ID','CHAT_ID','ID'],lines.join('\n'));
   assert.ok(lines.includes('godspeed-step (telegram): a message of 1 words was heard as answered'),lines.join('\n'));
   assert.match(lines.at(-1),/^godspeed-step \(telegram\): a message of 1 words could not be matched: /);
   fs.writeFileSync(command,kept);
