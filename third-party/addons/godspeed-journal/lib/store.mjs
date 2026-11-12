@@ -6,7 +6,7 @@ import { localParts, now } from "./clock.mjs";
 import { loadSettings } from "./settings.mjs";
 
 const ARRAYS = new Set(["done_means", "met", "missed"]);
-const ORDER = ["at", "written", "kind", "task", "title", "done_means", "met", "missed", "evidence", "evidence_id", "evidence_at", "source"];
+const ORDER = ["at", "written", "kind", "task", "title", "done_means", "met", "missed", "evidence", "evidence_id", "evidence_at", "source", "impact", "moment"];
 
 export function slugify(text) {
   const s = String(text || "").replace(/ß/g, "ss").replace(/ä/g, "ae").replace(/ö/g, "oe").replace(/ü/g, "ue")
@@ -59,7 +59,11 @@ export function writeEntry(mcDir, settings, entry, at = now()) {
   const base = `${p.hms}-${entry.kind}-${slugify(label).slice(0, 24).replace(/-+$/, "")}`;
   let name = `${base}.md`;
   for (let n = 2; fs.existsSync(path.join(mcDir, rel, name)); n++) name = `${base}-${n}.md`;
-  const full = { ...entry, at: at.toISOString() };
+  // A close says whether it becomes a moment in the notebook's timeline, decided by the switch as
+  // it is now, so turning the switch on later does not bring back closes made while it was off,
+  // and turning it off does not lose a close made while it was on (issue #457).
+  const moment = entry.kind === "done" && entry.moment === undefined ? { moment: loadSettings(mcDir).save_as_moments === false ? "no" : "yes" } : {};
+  const full = { ...entry, ...moment, at: at.toISOString() };
   fs.writeFileSync(path.join(mcDir, rel, name), serialize(full));
   return { file: path.join(rel, name).replace(/\\/g, "/"), entry: full };
 }

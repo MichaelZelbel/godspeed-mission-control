@@ -192,6 +192,18 @@ test("a whole task told after the fact with a span is saved as its start and its
   assert.deepEqual([t.id, t.state, t.started, t.ended, t.minutes], ["t-20261111-0900-report", "done", "2026-11-11T08:00:00.000Z", "2026-11-11T09:30:00.000Z", 90]);
 });
 
+test("a whole task told with a span keeps its impact, and an impact with no finish saves nothing", () => {
+  const h = mcDir();
+  const bad = run(h, "2026-11-11T14:00:00Z", "start", "Lease", "--when", "from 9 to 10", "--impact", "5");
+  assert.equal(bad.status, 1); assert.match(bad.stderr, /Impact is 1 \(everyday\)/);
+  const open = run(h, "2026-11-11T14:00:00Z", "start", "Lease", "--impact", "3");
+  assert.equal(open.status, 1); assert.match(open.stderr, /--impact goes with a finish/);
+  assert.equal(entryFiles(h).length, 0);
+  const r = run(h, "2026-11-11T14:00:00Z", "start", "Lease", "--when", "from 9 to 10", "--impact", "3", "--json");
+  assert.equal(r.status, 0, r.stderr);
+  assert.deepEqual([JSON.parse(r.stdout).task.state, JSON.parse(r.stdout).task.impact], ["done", 3]);
+});
+
 test("a finish before its start, a time still ahead, or a time that fits two asks once and saves nothing", () => {
   const h = mcDir();
   run(h, "2026-11-11T10:00:00Z", "start", "Invoice");
@@ -323,4 +335,23 @@ test("a drop or a finish dated before the start or the reopen asks in its own wo
     assert.equal(entryFiles(h).length, 3);
     assert.equal(JSON.parse(run(h, "2026-11-11T15:01:00Z", "open", "--json").stdout).length, 1);
   }
+});
+
+test("done --impact keeps the level, a bad one saves nothing, and impact answers for the latest finish", () => {
+  const h = mcDir();
+  run(h, "2026-11-01T08:00:00Z", "start", "Sign the lease");
+  const bad = run(h, "2026-11-01T09:00:00Z", "done", "--impact", "5");
+  assert.equal(bad.status, 1); assert.match(bad.stderr, /Impact is 1 \(everyday\)/);
+  assert.equal(entryFiles(h).length, 1);
+  const done = run(h, "2026-11-01T09:00:00Z", "done", "--impact", "3", "--json");
+  assert.equal(done.status, 0, done.stderr); assert.equal(JSON.parse(done.stdout).task.impact, 3);
+  run(h, "2026-11-01T09:10:00Z", "start", "Dishes");
+  assert.equal(run(h, "2026-11-01T09:20:00Z", "done").stdout, 'Saved: done "Dishes"\n');
+  run(h, "2026-11-01T09:30:00Z", "start", "Still going");
+  const latest = run(h, "2026-11-01T09:40:00Z", "impact", "2");
+  assert.equal(latest.status, 0, latest.stderr); assert.equal(latest.stdout, 'Saved: "Dishes" is short-term.\n');
+  const named = run(h, "2026-11-01T09:41:00Z", "impact", "lease", "4", "--json");
+  assert.equal(JSON.parse(named.stdout).task.impact, 4);
+  const open = run(h, "2026-11-01T09:42:00Z", "impact", "Still going", "3");
+  assert.equal(open.status, 1); assert.match(open.stderr, /No finished task matches "Still going"/);
 });
