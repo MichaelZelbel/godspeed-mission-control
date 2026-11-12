@@ -3665,6 +3665,22 @@ refuses 'a reply that differs from the saved brief' first-day "$FD/different-rep
 copy "$FD/good" "$FD/vague-next-action"
 sed -i 's/^Next today: buy the water and first-aid supplies\.$/Next: continue./' "$FD/vague-next-action/brief.txt"
 refuses 'a brief whose next step is vague' first-day "$FD/vague-next-action" 'no concrete next action'
+# The owner's decision on PR #449 (12 November 2026): a Next: line that starts with an action passes,
+# with the verbs step lists use and ordinary ones for any goal. Scenarios run 43107490873's line first.
+copy "$FD/good" "$FD/next-open"
+sed -i 's/^Next today: buy the water and first-aid supplies\.$/Next: open the household blanks section of that checklist draft and fill in the first one, who lives with you and their ages./' "$FD/next-open/brief.txt"
+first_day_brief_records "$FD/next-open"
+passes 'a Next: line that opens with open, as a real brief wrote it' first-day "$FD/next-open" 'answered today'
+copy "$FD/good" "$FD/next-email"
+sed -i 's/^Next today: buy the water and first-aid supplies\.$/Next: email your neighbour about the spare torch./' "$FD/next-email/brief.txt"
+first_day_brief_records "$FD/next-email"
+passes 'a Next: line that opens with an ordinary action such as email' first-day "$FD/next-email" 'answered today'
+copy "$FD/good" "$FD/next-no-action"
+sed -i 's/^Next today: buy the water and first-aid supplies\.$/Next: the water and first-aid supplies./' "$FD/next-no-action/brief.txt"
+refuses 'a Next: line that starts with no action' first-day "$FD/next-no-action" 'no concrete next action'
+copy "$FD/good" "$FD/next-open-nothing"
+sed -i 's/^Next today: buy the water and first-aid supplies\.$/Next: open it./' "$FD/next-open-nothing/brief.txt"
+refuses 'a Next: line whose action acts on nothing' first-day "$FD/next-open-nothing" 'no concrete next action'
 copy "$FD/good" "$FD/second-note"
 node -e 'const fs=require("fs"),p=process.argv[1],d=JSON.parse(fs.readFileSync(p,"utf8"));d.data.push({...d.data[0],id:"brief-2"});fs.writeFileSync(p,JSON.stringify(d))' "$FD/second-note/notes-after-reply.json"
 refuses 'asking today’s brief creates another note' first-day "$FD/second-note" 'second saved brief'
@@ -3677,6 +3693,55 @@ refuses 'a brief that does not name the goal' first-day "$FD/brief-without-goal"
 copy "$FD/good" "$FD/brief-without-work"
 sed -i 2d "$FD/brief-without-work/brief.txt"
 refuses 'a brief that does not identify the verified work' first-day "$FD/brief-without-work" 'does not identify the verified work'
+# The brief of scenarios run 43070186384 told the checklist in its own words and named no work: still
+# refused. The product now puts the finished work in by its title without the file's place (#377,
+# owner on PR #449), and that brief passes.
+copy "$FD/good" "$FD/brief-real-unnamed"
+cat >"$FD/brief-real-unnamed/brief.txt" <<'EOF'
+Your emergency-kit checklist goal, due Sunday, has a first draft. It is about 1,000 words in 15 sections, and it is written, not yet fitted to your home.
+
+What only you can do:
+
+1. Tell me the household basics: who lives with you and which prescriptions need a 7-day supply.
+Next today: buy the water and first-aid supplies.
+EOF
+first_day_brief_records "$FD/brief-real-unnamed"
+refuses 'a brief that tells the checklist in its own words but names no work' first-day "$FD/brief-real-unnamed" 'does not identify the verified work'
+copy "$FD/brief-real-unnamed" "$FD/brief-plain-title"
+sed -i '1i Finished and checked: Write a practical household emergency-kit checklist.\n' "$FD/brief-plain-title/brief.txt"
+first_day_brief_records "$FD/brief-plain-title"
+passes 'a brief that names the finished work by its title without the file path' first-day "$FD/brief-plain-title" 'answered today'
+copy "$FD/brief-real-unnamed" "$FD/brief-plain-title-comma"
+sed -i 's/^WHAT: .*/WHAT: Write the household emergency-kit checklist at work\/emergency-kit-checklist.md, with every item marked HAVE or NEED/' "$FD/brief-plain-title-comma/work/W-000-first-day-emergency-kit.md"
+sed -i '1i Finished and checked: Write the household emergency-kit checklist, with every item marked HAVE or NEED.\n' "$FD/brief-plain-title-comma/brief.txt"
+first_day_brief_records "$FD/brief-plain-title-comma"
+passes 'a brief that names a longer title without its file path, keeping the comma after it' first-day "$FD/brief-plain-title-comma" 'answered today'
+copy "$FD/brief-real-unnamed" "$FD/brief-goal-title"
+sed -i 's/^WHAT: .*/WHAT: Prepare a practical household emergency-kit checklist at work\/emergency-kit-checklist.md/' "$FD/brief-goal-title/work/W-000-first-day-emergency-kit.md"
+sed -i '1i Finished and checked: Prepare a practical household emergency-kit checklist.\n' "$FD/brief-goal-title/brief.txt"
+first_day_brief_records "$FD/brief-goal-title"
+refuses 'a brief whose only work title is the goal itself once its path is left out' first-day "$FD/brief-goal-title" 'does not identify the verified work'
+# A checklist the product writes with plain bullets is a checklist (owner on PR #449); what it must
+# hold is unchanged.
+copy "$FD/good" "$FD/plain-bullets"
+cat >"$FD/plain-bullets/work/emergency-kit-checklist.md" <<'EOF'
+## Water
+- 4 litres per person per day for 3 days
+* Food: 3 days of shelf-stable meals
+- First aid kit and a 7-day supply of medication
+- Light and power: 2 torches with spare batteries
+- Communication and documents: copies in a waterproof pouch
+EOF
+passes 'a practical checklist written with plain bullets' first-day "$FD/plain-bullets" 'answered today'
+copy "$FD/plain-bullets" "$FD/plain-bullets-thin"
+sed -i '/documents/d' "$FD/plain-bullets-thin/work/emergency-kit-checklist.md"
+refuses 'a plain-bullet checklist missing a group' first-day "$FD/plain-bullets-thin" 'not a practical emergency-kit checklist'
+copy "$FD/plain-bullets" "$FD/plain-bullets-no-amounts"
+printf '%s\n' '- Water' '- Food' '- First aid' '- Power' '- Documents' >"$FD/plain-bullets-no-amounts/work/emergency-kit-checklist.md"
+refuses 'a plain-bullet checklist without quantities' first-day "$FD/plain-bullets-no-amounts" 'not a practical emergency-kit checklist'
+copy "$FD/plain-bullets" "$FD/no-list"
+printf '%s\n' 'Water: 4 litres per person per day for 3 days. Food, first aid, power and documents too.' >"$FD/no-list/work/emergency-kit-checklist.md"
+refuses 'a checklist that is not a list' first-day "$FD/no-list" 'not a practical emergency-kit checklist'
 
 # ============================================== the five scenarios of 2.0.0-beta.18 (numbers come in)
 # Each is judged on made-up folders only: one that should pass, and one per failure that is easy to
