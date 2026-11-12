@@ -3341,9 +3341,9 @@ rm "$Q/no-snapshot/approvals-s4.json"
 refuses 'a run that kept no snapshot after situation 4' no-question-he-cannot-judge "$Q/no-snapshot" 'approvals-s4.json is not in what the scenario kept'
 
 # ---------------------------------------------------------------------------------- plain-yes
-PB1='Send this week food log to your nutritionist'
+PB1='Water the balcony plants this week'
 PB2='Cancel the renewal of your gym membership'
-PA='Share this week food log with your nutritionist'
+PA='Renew this week library books'
 PC='Book the car yearly inspection'
 YN='[{"text":"Yes","callback_data":"y"},{"text":"No","callback_data":"n"}]'
 py_snapshots() { # <folder> <statuses of a, b1, b2, c in order, for each label>
@@ -3362,9 +3362,9 @@ py_good() { # <folder>
   local f=$1
   rm -rf "$f"
   mkdir -p "$f"
-  run_json "$f" "$(msg a-ask 'Share the food log with your nutritionist?' true "$YN")" "$(msg a 'Done, I shared it.')" \
-    "$(msg b-ask 'Send the food log to your nutritionist?' true "$YN")" "$(msg b-ask 'Cancel the renewal of your gym membership?' true "$YN")" \
-    "$(msg b 'Which one: the food log for your nutritionist, or cancelling the gym membership?')" "$(msg b-choice 'Sent the food log.')" \
+  run_json "$f" "$(msg a-ask 'Renew the library books?' true "$YN")" "$(msg a 'Done, I renewed them.')" \
+    "$(msg b-ask 'Water the balcony plants?' true "$YN")" "$(msg b-ask 'Cancel the renewal of your gym membership?' true "$YN")" \
+    "$(msg b 'Which one: watering the balcony plants, or cancelling the gym membership?')" "$(msg b-choice 'Watered the plants.')" \
     "$(msg c-ask 'Book the car inspection?' true "$YN")" "$(msg c-press 'Cancelled the gym membership renewal.')" "$(msg d 'Nothing is waiting for a yes right now.')"
   py_snapshots "$f"
   live_telegram_evidence "$f"
@@ -3384,18 +3384,18 @@ copy "$P/good" "$P/b-approved-one"
 rows "$P/b-approved-one/approvals-b.json" approved a1 "$PA" approved b1 "$PB1" pending b2 "$PB2"
 refuses 'a yes with two waiting that approved one' plain-yes "$P/b-approved-one" 'approved one of them'
 copy "$P/good" "$P/b-names-one"
-run_json "$P/b-names-one" "$(msg a-ask 'Share the log?' true "$YN")" "$(msg a 'Done.')" "$(msg b 'Do you mean the food log for your nutritionist?')" \
+run_json "$P/b-names-one" "$(msg a-ask 'Renew the books?' true "$YN")" "$(msg a 'Done.')" "$(msg b 'Do you mean the balcony plants?')" \
   "$(msg b-ask 'Cancel the gym membership?' true "$YN")" "$(msg c-ask 'Book the inspection?' true "$YN")"
 refuses 'a question that names only one of two waiting steps' plain-yes "$P/b-names-one" 'does not name both'
 copy "$P/good" "$P/b-two-questions"
-run_json "$P/b-two-questions" "$(msg a 'Done.')" "$(msg b 'The food log, or the gym membership?')" "$(msg b 'Which one, the food log or the gym?')" \
+run_json "$P/b-two-questions" "$(msg a 'Done.')" "$(msg b 'The balcony plants, or the gym membership?')" "$(msg b 'Which one, the plants or the gym?')" \
   "$(msg b-ask 'Cancel the gym?' true "$YN")" "$(msg c-ask 'Book the inspection?' true "$YN")"
 refuses 'two questions for one yes' plain-yes "$P/b-two-questions" 'got 2 messages'
 copy "$P/good" "$P/choice-approved-both"
 rows "$P/choice-approved-both/approvals-b-choice.json" approved a1 "$PA" approved b1 "$PB1" approved b2 "$PB2"
 refuses 'an answer naming one that approved both' plain-yes "$P/choice-approved-both" 'approved the gym step too'
 copy "$P/good" "$P/no-buttons"
-run_json "$P/no-buttons" "$(msg a 'Done.')" "$(msg b 'The food log, or the gym membership?')" \
+run_json "$P/no-buttons" "$(msg a 'Done.')" "$(msg b 'The balcony plants, or the gym membership?')" \
   "$(msg b-ask 'Cancel the gym membership?')" "$(msg c-ask 'Book the inspection?')"
 refuses 'a question that went out without buttons' plain-yes "$P/no-buttons" 'without Yes/No buttons'
 copy "$P/good" "$P/press-approved-other"
@@ -3408,7 +3408,7 @@ copy "$P/good" "$P/yes-with-nothing-waiting"
 rows "$P/yes-with-nothing-waiting/approvals-d.json" approved a1 "$PA" approved b1 "$PB1" approved b2 "$PB2" approved c1 "$PC"
 refuses 'a yes with nothing waiting that approved something' plain-yes "$P/yes-with-nothing-waiting" 'changed the status of a step'
 copy "$P/good" "$P/typed-code"
-run_json "$P/typed-code" "$(msg a 'Done.')" "$(msg b 'The food log, or the gym membership? Reply approve 59f1d506')" \
+run_json "$P/typed-code" "$(msg a 'Done.')" "$(msg b 'The balcony plants, or the gym membership? Reply approve 59f1d506')" \
   "$(msg b-ask 'Cancel the gym membership?' true "$YN")" "$(msg c-ask 'Book the inspection?' true "$YN")" "$(msg d 'ok')"
 refuses 'a question that asks for a code' plain-yes "$P/typed-code" 'holds a code'
 

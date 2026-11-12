@@ -150,9 +150,12 @@ class Fake:
         else:
             msg = next((m for m in reversed(self.sent) if m["chat_id"] == uid
                         and any(button["callback"] == a["press"] for button in m["buttons"])), None)
+            # python-telegram-bot cannot read a press without chat_instance or its message's date, and
+            # Hermes' gateway then stalls on it (date 0 is Telegram's mark of a message it no longer shows).
             upd = {"callback_query": {"id": "cq%d" % self.next_update, "from": user, "data": a["press"],
+                                      "chat_instance": str(uid),
                                       "message": {"message_id": msg["message_id"] if msg else 0, "chat": chat,
-                                                  "from": BOT,
+                                                  "date": int(msg["t"]) if msg else 0, "from": BOT,
                                                   "text": msg["text"] if msg else ""}}}
         upd["update_id"] = self.next_update
         self.next_update += 1
