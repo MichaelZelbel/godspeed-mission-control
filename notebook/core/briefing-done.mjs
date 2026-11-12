@@ -56,21 +56,25 @@ export function finishedWork(rows,{previous=null,today,dayOf}={}){
  return (results.length?results:titles).slice(0,3).map(t=>t.title);
 }
 
-// The verbs a "Next:" line may open with: an action the person can do today. A model asked for "a
-// verb such as buy, check, pack, write or review" wrote "Next: open the household blanks section ..."
-// (scenarios run 43107490873); the briefing's code gate holds the line to this list, and the writer
-// gets one rewrite before the factual fallback, whose own Next: line opens with "review".
-export const NEXT_VERBS=Object.freeze(['add','arrange','book','buy','call','check','collect','complete','create','gather','make','organize','pack','prepare','replace','review','schedule','set','store','test','update','write']);
+// The verbs a "Next:" line may open with: an action the person can do today, for any goal ("Next:
+// walk 20 minutes after lunch.", "Next: email the landlord about the lease.", "Next: open the
+// checklist and fill in who lives with you."). The owner's decision on PR #449 (12 November 2026):
+// this is only a request. When the first draft's "Next:" line opens with some other word, the writer
+// is asked once to start it with an action, and whatever comes back is kept; a brief is never
+// discarded or replaced because of its verb. The first-day scenario accepts the same verbs
+// (scenarios/first-day.sh, actionVerbs).
+export const NEXT_VERBS=Object.freeze(['add','answer','arrange','ask','book','bring','buy','call','cancel','check','choose','clean','clear','collect','complete','confirm','cook','count','create','decide','download','drink','drop','eat','email','fill','find','finish','fix','follow','gather','get','give','go','install','invite','join','keep','label','list','look','make','mark','measure','meet','message','move','note','open','order','organize','pack','pay','phone','pick','plan','practice','practise','prepare','print','put','read','record','renew','reply','replace','return','review','ring','run','save','schedule','send','set','share','sign','sort','start','stop','store','stretch','take','talk','tell','test','text','tick','try','update','visit','walk','wash','watch','water','write']);
 const NEXT_FILLER=new Set(['a','an','and','at','for','in','it','more','next','now','on','the','this','that','them','to','today','with','your']);
 
-// Null when every "Next:" line in the note opens with one of those verbs and says what it acts on,
-// otherwise the reason. A note without a "Next:" line is not refused here.
+// Null when every "Next:" line in the note opens with an action verb and says what it acts on,
+// otherwise the request the writer gets for its one rewrite. A note without a "Next:" line, and a
+// "Today:" line (often the weather or the day's plan, not an action), are not asked about here.
 export function nextLineError(text){
  for(const line of String(text||'').split(/\r?\n/).map(line=>line.replace(/[*_`]/g,'').trim())){
-  const head=line.match(/^(?:next|today)(?:\s+(?:today|step|action))?\s*:\s*(.*)$/i);
+  const head=line.match(/^next(?:\s+(?:today|step|action))?\s*:\s*(.*)$/i);
   if(!head)continue;
   const words=head[1].toLowerCase().match(/[a-z]+/g)||[];
-  if(!NEXT_VERBS.includes(words[0])||!words.slice(1).some(word=>!NEXT_FILLER.has(word)))return 'Start the "Next:" line with one of these verbs, followed by what it acts on: '+NEXT_VERBS.join(', ');
+  if(!NEXT_VERBS.includes(words[0])||!words.slice(1).some(word=>!NEXT_FILLER.has(word)))return 'Start the "Next:" line with an action the person can do, followed by what it acts on (for example "Next: walk 20 minutes after lunch." or "Next: email the landlord about the lease.")';
  }
  return null;
 }

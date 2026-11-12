@@ -76,32 +76,56 @@ test('when work the person gets was finished, the line names it and leaves the r
  assert.deepEqual(finishedWork(rows.slice(0,1),{today:'2026-11-12',dayOf}),[RESEARCH],'research alone is still named');
 });
 
-test('a "Next:" line must open with an action verb',()=>{
- assert.match(nextLineError(OPEN_DRAFT),/Start the "Next:" line with one of these verbs/);
+// The owner's decision on PR #449 (12 November 2026): the verb is only a request. Ordinary next
+// actions for any goal pass as written, and a brief is never discarded or replaced because of its verb.
+const ORDINARY=['Next: walk 20 minutes after lunch.','Next: ask your sister which weekend works.','Next: email the landlord about the lease.','Next: drink a glass of water before coffee.','Next: call the pharmacy about the refill.','Next: book the dentist for next week.'];
+
+test('a "Next:" line that opens with an action passes, for any goal; one with no action is asked about',()=>{
+ for(const line of ORDINARY)assert.equal(nextLineError('Good morning.\n\n'+line),null,line);
+ assert.equal(nextLineError(OPEN_DRAFT),null,'open and fill are actions too');
  assert.equal(nextLineError('Next: write down who lives with you and their ages.'),null);
  assert.equal(nextLineError('**Next:** buy 12 litres of bottled water.'),null);
+ assert.equal(nextLineError('Today: rain until noon, so the run moves to the evening.'),null,'a Today: line is not a next action');
+ assert.match(nextLineError('Next: the landlord, about the lease.'),/Start the "Next:" line with an action/);
  assert.match(nextLineError('Next: review it.'),/Start the "Next:" line/,'a verb with nothing to act on');
  assert.equal(nextLineError('No action line here.'),null);
- for(const verb of ['open','fill','read'])assert.ok(!NEXT_VERBS.includes(verb));
+ for(const verb of ['open','fill','read','walk','email','ask','drink'])assert.ok(NEXT_VERBS.includes(verb),verb);
 });
 
-test('a brief whose "Next:" line opens with another verb gets a rewrite, and the saved note opens with an action verb',async()=>{
+const goalSetup=(name,title)=>{const store=new Store(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-brief-next-'+name+'-'))),query=new QueryService(store);store.save('settings',{id:'installation',timezone:'UTC'});store.save('goals',{title,status:'adopted'});return {store,query};};
+const brief=async(env,id,drafts)=>{
+ const seen=[];const provider=async input=>{if(input.kind==='brief-verification')return {passed:true,reason:'Fixture checked the sources and the reader.'};seen.push(input);return drafts[Math.min(seen.length-1,drafts.length-1)];};
+ const result=await briefing({id},{store:env.store,query:env.query,provider,now:new Date('2026-11-12T07:00:00Z')});
+ return {content:env.store.get('notes',result.record_id).content,seen,receipts:env.store.list('job_receipts').filter(r=>r.job_id===id),repairs:env.store.list('work_items').filter(r=>r.kind==='repair')};
+};
+
+test('a brief for a goal that is not an emergency kit keeps its ordinary next action, with no rewrite',async()=>{
+ const env=goalSetup('walk','Walk 8,000 steps a day by December');
+ const draft='Your walking goal is going well: the 8,000 steps a day by December are within reach.\n\nI have no fresh health readings this morning, so I can\'t say anything about your health today.\n\nNext: walk 20 minutes after lunch.';
+ const {content,seen,receipts,repairs}=await brief(env,'brief-walk',[draft]);
+ assert.equal(content,draft,'the brief is saved as written');
+ assert.equal(seen.length,1,'no rewrite was asked for');
+ assert.ok(!receipts.some(r=>r.kind==='brief-factual-fallback'));assert.deepEqual(repairs,[]);
+});
+
+test('a brief whose "Next:" line opens with no action gets one rewrite, and a rewrite that keeps it is saved as written',async()=>{
+ const env=goalSetup('lease','Renew the flat lease before January');
+ const draft='Your lease runs out in January, and the renewal letter has not come yet.\n\nI have no fresh health readings this morning, so I can\'t say anything about your health today.\n\nNext: the landlord, about the lease.';
+ const {content,seen,receipts,repairs}=await brief(env,'brief-lease',[draft]);
+ assert.equal(seen.length,2,'the one rewrite was asked for');
+ assert.equal(seen[1].phase,'one-rewrite');
+ assert.ok(JSON.stringify(seen[1].context.check_feedback).includes('Start the \\"Next:\\" line with an action'),'the rewrite is told why');
+ assert.equal(content,draft,'whatever the rewrite says is kept');
+ assert.ok(!receipts.some(r=>r.kind==='brief-factual-fallback'||r.kind==='brief-cut'),'neither replaced nor cut');
+ assert.deepEqual(repairs,[],'no repair card');
+});
+
+test('a rewrite that starts the line with an action is the brief saved',async()=>{
  const env=setup('next');card(env.store);
- const drafts=[OPEN_DRAFT,OPEN_DRAFT.replace('Next: open the household blanks section of that checklist draft and fill in the first one,','Next: write down in the household blanks of that checklist draft')];
- const seen=[];const provider=async input=>{if(input.kind==='brief-verification')return {passed:true,reason:'Fixture checked the sources and the reader.'};seen.push(input);return drafts[Math.min(seen.length-1,1)];};
- const result=await briefing({id:'brief-next'},{store:env.store,query:env.query,provider,now:new Date('2026-11-12T07:00:00Z')});
- const content=env.store.get('notes',result.record_id).content;
- assert.match(content,/^Next: write down in the household blanks of that checklist draft who lives with you and their ages\.$/m);
- assert.doesNotMatch(content,/Next: open/);
- assert.ok(seen.some(input=>JSON.stringify(input.context.check_feedback||'').includes('Start the \\"Next:\\" line')),'the rewrite is told why');
-});
-
-test('a brief whose writer keeps another verb falls back to a "Next:" line that opens with review',async()=>{
- const env=setup('next-fallback');card(env.store);
- const provider=async input=>input.kind==='brief-verification'?{passed:true,reason:'Fixture checked the sources and the reader.'}:OPEN_DRAFT;
- const result=await briefing({id:'brief-next-fallback'},{store:env.store,query:env.query,provider,now:new Date('2026-11-12T07:00:00Z')});
- const content=env.store.get('notes',result.record_id).content;
- assert.doesNotMatch(content,/Next: open/);assert.equal(nextLineError(content),null);
- assert.match(content,/^Next: review /m);
+ const bad=OPEN_DRAFT.replace('Next: open the household blanks section of that checklist draft and fill in the first one,','Next: the household blanks of that checklist draft,');
+ const good=OPEN_DRAFT;
+ const {content,seen}=await brief(env,'brief-next',[bad,good]);
+ assert.equal(seen.length,2);
+ assert.match(content,/^Next: open the household blanks section of that checklist draft and fill in the first one, who lives with you and their ages\.$/m);
  assert.match(content,/^Finished and checked: Write a practical household emergency-kit checklist\.$/m);
 });

@@ -191,7 +191,12 @@ const stepVerbs=new Set([...verbs,'open','tick','fill','mark','read','send','tel
 const step=line=>{const m=line.match(/^(?:\d+[.)]|[-*\u2022])\s+(.+)$/);if(!m)return false;const w=m[1].toLowerCase().match(/[a-z]+/g)||[];return stepVerbs.has(w[0])&&w.slice(1).some(word=>!filler.has(word));};
 const aboutNext=line=>/\b(?:next|steps?|what would help|to do|do today|today|first|action)\b/i.test(line);
 const listed=lines.some((line,at)=>{if(!step(line))return false;for(let i=at-1;i>=0;i--){if(!lines[i]||/^(?:\d+[.)]|[-*\u2022])\s/.test(lines[i]))continue;return aboutNext(lines[i]);}return false;});
-if(!listed&&(!nextLine||verb<0||!words.slice(verb+1).some(word=>!filler.has(word))))fail('the saved brief has no concrete next action');
+// Or a "Next:" line that starts with an action, for any goal (owner, PR #449, 12 November 2026: the
+// verbs step lists may use, and ordinary ones such as walk, email or drink). The product asks its
+// writer for the same (notebook/core/briefing-done.mjs, NEXT_VERBS).
+const actionVerbs=new Set([...stepVerbs,'bring','cancel','clean','clear','confirm','cook','download','drink','drop','eat','email','find','fix','follow','get','give','go','install','invite','join','look','meet','message','move','pay','phone','plan','practice','practise','record','renew','return','ring','run','share','sort','stop','stretch','take','talk','text','try','visit','walk','wash','watch','water']);
+const opens=nextLine&&actionVerbs.has(words[0])&&words.slice(1).some(word=>!filler.has(word));
+if(!listed&&!opens&&(!nextLine||verb<0||!words.slice(verb+1).some(word=>!filler.has(word))))fail('the saved brief has no concrete next action');
 const manifest=JSON.parse(read('manifest.json'));
 if(!Array.isArray(manifest.files)||!manifest.files.length)fail('the evidence manifest names no retained files');
 NODE

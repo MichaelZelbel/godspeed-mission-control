@@ -3665,6 +3665,22 @@ refuses 'a reply that differs from the saved brief' first-day "$FD/different-rep
 copy "$FD/good" "$FD/vague-next-action"
 sed -i 's/^Next today: buy the water and first-aid supplies\.$/Next: continue./' "$FD/vague-next-action/brief.txt"
 refuses 'a brief whose next step is vague' first-day "$FD/vague-next-action" 'no concrete next action'
+# The owner's decision on PR #449 (12 November 2026): a Next: line that starts with an action passes,
+# with the verbs step lists use and ordinary ones for any goal. Scenarios run 43107490873's line first.
+copy "$FD/good" "$FD/next-open"
+sed -i 's/^Next today: buy the water and first-aid supplies\.$/Next: open the household blanks section of that checklist draft and fill in the first one, who lives with you and their ages./' "$FD/next-open/brief.txt"
+first_day_brief_records "$FD/next-open"
+passes 'a Next: line that opens with open, as a real brief wrote it' first-day "$FD/next-open" 'answered today'
+copy "$FD/good" "$FD/next-email"
+sed -i 's/^Next today: buy the water and first-aid supplies\.$/Next: email your neighbour about the spare torch./' "$FD/next-email/brief.txt"
+first_day_brief_records "$FD/next-email"
+passes 'a Next: line that opens with an ordinary action such as email' first-day "$FD/next-email" 'answered today'
+copy "$FD/good" "$FD/next-no-action"
+sed -i 's/^Next today: buy the water and first-aid supplies\.$/Next: the water and first-aid supplies./' "$FD/next-no-action/brief.txt"
+refuses 'a Next: line that starts with no action' first-day "$FD/next-no-action" 'no concrete next action'
+copy "$FD/good" "$FD/next-open-nothing"
+sed -i 's/^Next today: buy the water and first-aid supplies\.$/Next: open it./' "$FD/next-open-nothing/brief.txt"
+refuses 'a Next: line whose action acts on nothing' first-day "$FD/next-open-nothing" 'no concrete next action'
 copy "$FD/good" "$FD/second-note"
 node -e 'const fs=require("fs"),p=process.argv[1],d=JSON.parse(fs.readFileSync(p,"utf8"));d.data.push({...d.data[0],id:"brief-2"});fs.writeFileSync(p,JSON.stringify(d))' "$FD/second-note/notes-after-reply.json"
 refuses 'asking today’s brief creates another note' first-day "$FD/second-note" 'second saved brief'
