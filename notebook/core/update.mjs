@@ -278,14 +278,24 @@ export function updateRunning(root,now=()=>new Date()){
 
 // The Update now button (POST /api/update): the same command, started apart from the notebook so it
 // lives on while the notebook it updates stops. Answers {code, ...} for the response.
-export async function startUpdate({root,env=process.env,product=ownProduct,fetchImpl,spawnImpl=spawn,command=fileURLToPath(new URL('../bin/godspeed.mjs',import.meta.url)),now=()=>new Date()}){
+// Two presses that arrive together (two tabs) both pass the check before either has written its
+// status, because the newest release is asked of GitHub in between: the first one claims the start
+// at once, before that question, and gives the claim back when it has answered (#477).
+const starting=new Set();
+export async function startUpdate({root,env=process.env,product=ownProduct,fetchImpl,find=findNewest,spawnImpl=spawn,command=fileURLToPath(new URL('../bin/godspeed.mjs',import.meta.url)),now=()=>new Date()}){
   const way=updateWay({root,env,product});
   if(way==='server')return {code:409,error:'On a Docker server Godspeed is updated on the server itself. Run this there: sudo godspeed-update'};
   if(way==='terminal')return {code:409,error:'This installation is updated from a terminal on this computer. Run: godspeed-update'};
   if(!updatesItself(way))return {code:409,error:'No installer put this copy of Godspeed here, so it cannot update itself.'};
-  if(updateRunning(root,now))return {code:409,error:'An update is already running.'};
+  const claim=path.resolve(root);
+  if(starting.has(claim)||updateRunning(root,now))return {code:409,error:'An update is already running.'};
+  starting.add(claim);
+  try{return await claimedStart({root,env,fetchImpl,find,spawnImpl,command,now});}
+  finally{starting.delete(claim);}
+}
+async function claimedStart({root,env,fetchImpl,find,spawnImpl,command,now}){
   const installed=installedVersion({root});let newest;
-  try{newest=await findNewest({fetchImpl,env});}catch(error){return {code:502,error:error.message};}
+  try{newest=await find({fetchImpl,env});}catch(error){return {code:502,error:error.message};}
   if(compareVersions(newest.version,installed)<=0)return {code:200,started:false,message:'You have the newest version, '+installed+'. Nothing was changed.'};
   const status=writeStatus(root,{state:'checking',from:installed,to:newest.version,notes:newest.notes,message:'Getting '+newest.version+' ready.'},now);
   const output=fs.openSync(file(root,'update.log'),'a');
