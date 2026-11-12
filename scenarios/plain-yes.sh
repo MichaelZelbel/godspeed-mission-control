@@ -61,8 +61,10 @@ act() {
   server_table jobs "$EVIDENCE/routines.json"
 
   phase 'a plain yes, two waiting, a button, and nothing waiting'
-  ask_file a-ask "Share this week's food log with your nutritionist" \
-    "Share this week's food log with your nutritionist?" 'The log is shared' 'It stays private'
+  # Every part runs in the owner's one chat, so a's step, answered by then, must not read like one of
+  # b's: a second "share the food log" after the first is rightly questioned as a repeat, not approved.
+  ask_file a-ask "Renew this week's library books" "Renew this week's library books?" 'The books are renewed' \
+    'They are due on Friday'
   two_asks_file b-ask "Send this week's food log to your nutritionist" \
     "Send this week's food log to your nutritionist?" 'The log is sent' 'Nothing is sent' \
     'Cancel the renewal of your gym membership' 'Cancel the renewal of your gym membership?' 'The renewal is cancelled' 'The membership renews'
@@ -100,10 +102,10 @@ check() { # <evidence folder>
 
   # a. One step waits and a plain yes approves it.
   interaction_begin a-ask
-  [ "$(status_after a-ask 'Share this week')" = pending ] || fail 'the one waiting step was not offered to the owner'
+  [ "$(status_after a-ask 'library books')" = pending ] || fail 'the one waiting step was not offered to the owner'
   interaction_passed a-ask
   interaction_begin a
-  [ "$(status_after a 'Share this week')" = approved ] || fail "one step waited and the owner's \"yes\" did not approve it (it is \"$(status_after a 'Share this week')\")"
+  [ "$(status_after a 'library books')" = approved ] || fail "one step waited and the owner's \"yes\" did not approve it (it is \"$(status_after a 'library books')\")"
   count=$(messages_of a accepted | grep -c . || true)
   [ "$count" = 1 ] || fail "the owner's \"yes\" to the one waiting step was answered with $count messages, not one"
   interaction_passed a
