@@ -23,8 +23,9 @@ export const NO_MODEL_IN_HOME='The assistant has no AI to think with: the AI con
 // A chat has the same ten minutes as one through hermesProvider; until
 // 6 October 2026 it had none, and only Stop ended one that never answered.
 export function nativeAgent({executable,home,cwd,providerFile,spawnProcess=spawn,timeLimit,keptFile,lifecycle}){
- // Only an assistant or Godspeed update refuses a chat (hermes-lifecycle.mjs), so the refusal is true.
- const agent=async input=>{const release=lifecycle?.acquire('chat reply');if(lifecycle&&!release)throw Error('The assistant is updating; try the chat again in a moment.');try{
+ // Only an assistant or Godspeed update refuses a chat (hermes-lifecycle.mjs), so the refusal is true,
+ // and it names which of the two is updating (#483).
+ const agent=async input=>{const release=lifecycle?.acquire('chat reply');if(lifecycle&&!release)throw Error((lifecycle.reason==='godspeed update'?'Godspeed is updating':'The assistant is updating')+'; try the chat again in a moment.');try{
   const args=['chat','--query-file','-','--quiet','--oneshot','--in',cwd,'--continue','godspeed-notebook-'+hash(input.conversation_id||input.note_id||'general').slice(0,24),'--create-if-missing','--no-restore-cwd'];
   // The chat answers with the model the assistant's own home is set to, as the
   // Telegram bot does: one Mission Control, one brain. The model Settings

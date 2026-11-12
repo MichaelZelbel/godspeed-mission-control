@@ -77,6 +77,8 @@ export class AutomaticUpdate{
   // A pause through a date that has passed is over.
   pausedOn(state,day){return !!state.paused&&(state.paused.until===null||day<=state.paused.until);}
   overview(){
+    // An update that ended since the last tick shows how it ended, not that it started (#483).
+    try{this.report();}catch{}
     const state=readAutomatic(this.store),{day}=this.clock(),last=state.last;
     return {
       ...this.offer(),choice:state.choice,time:state.time,
@@ -137,7 +139,10 @@ export class AutomaticUpdate{
       this.report();
       const state=readAutomatic(this.store),{day,hhmm}=this.clock();
       if(state.choice!=='automatic'||!this.offer().offered||this.pausedOn(state,day)||state.changed_day===day||hhmm<state.time||state.last?.day===day)return null;
-      const lease=this.lifecycle.acquire('godspeed update');
+      // Once the update has started, its lease is over the moment its status says it ended (#483):
+      // a chat right after a failed update is answered, not refused until the next tick.
+      let lease=null;
+      lease=this.lifecycle.acquire('godspeed update',{over:()=>!!lease&&this.lease===lease&&!this.updateUnderWay()});
       if(!lease)return null;
       const last={day,at:this.now().toISOString(),from:installedVersion({root:this.store.root})};
       // Today's attempt is kept before the update starts: if it cannot be, nothing starts.
