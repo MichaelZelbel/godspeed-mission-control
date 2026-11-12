@@ -43,7 +43,7 @@ test('on a Docker server Settings shows the newest version and the line to run o
   assert.equal(shown.automatic.offered,false);assert.match(shown.automatic.reason,/Docker server/);
   const automatic=await fetch(base+'/api/update/automatic',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({choice:'automatic'})});
   assert.equal(automatic.status,409);assert.match((await automatic.json()).error,/Docker server/);
-  assert.equal((await (await fetch(base+'/api/update/automatic')).json()).choice,'myself');
+  assert.equal((await (await fetch(base+'/api/update')).json()).automatic.choice,'myself');
 });
 
 test('an installation that never chose reads Update myself',async t=>{
