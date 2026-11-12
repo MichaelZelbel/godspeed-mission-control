@@ -49,6 +49,12 @@ JOURNAL = [
 ]
 DRAFT = "Alles klar, das ist gespeichert. Woran merkst du, dass es fertig ist?"
 SENT = "Got it, that is saved. What does done look like?"
+STATUS_REPLIES = [  # the review of PR #465, D1
+    ("Gespeichert: Login-Seite fertig, API-Doku in Arbeit, Tests offen.",
+     "Saved: login page done, API docs in progress, tests open."),
+    ("Diese Woche ist noch offen:\n- Login-Seite: fertig\n- API-Doku: in Arbeit\n- Tests: offen",
+     "Still open this week:\n- Login page: done\n- API docs: in progress\n- Tests: open"),
+]
 GERMAN_MESSAGE = "Ich bin heute mit dem Bericht fertig und fange jetzt mit den Tests an"
 
 
@@ -333,18 +339,17 @@ class Reply(unittest.TestCase):
         self.assertNotIn("Wait, I need", json.dumps(line, ensure_ascii=False).replace(line["sent"], ""))
 
     def test_an_answer_that_mixes_the_languages_is_rejected(self):
-        self.assertEqual(self.mod.rejection(self.MIXED, DRAFT, "en"),
-                         "mixed-languages: a word of the draft left untranslated")
-        self.assertEqual(self.mod.rejection("Got it, das is saved. How do you notice that it's done?", DRAFT, "en"),
-                         "mixed-languages: a German word")
+        self.assertEqual(self.mod.rejection(self.MIXED, DRAFT, "en"), "mixed-languages: too many German words")
+        self.assertEqual(self.mod.rejection("Got it, ich habe das saved. Und wie merkst du that it is done?", DRAFT, "en"),
+                         "mixed-languages: too many German words")
         english_draft = "I saved that. What does done look like for you?"
         self.assertEqual(self.mod.rejection("Ich habe das gespeichert. What does fertig look like?", english_draft, "de"),
-                         "mixed-languages: a English word")
+                         "mixed-languages: too many English words")
         self.teach(DRAFT, self.MIXED)
         self.say("mix", JOURNAL[0])
         self.assertEqual(self.send("mix", DRAFT), self.mod.NOTICE["en"] + "\n\n" + DRAFT)
         line = self.log()[-1]
-        self.assertEqual(line["failed_tries"], ["mixed-languages: a word of the draft left untranslated"] * 2)
+        self.assertEqual(line["failed_tries"], ["mixed-languages: too many German words"] * 2)
         self.assertNotIn("I've saved", line["result"] + " ".join(line["failed_tries"]))
 
     def test_a_clean_answer_in_the_target_language_is_accepted(self):
@@ -355,6 +360,13 @@ class Reply(unittest.TestCase):
                                             "Ich habe Jürgen Müller in München gesagt, dass es fertig ist.", "en"), "")
         self.assertEqual(self.mod.rejection("Dein Meeting mit Anna ist verschoben, ich sage dir dann Bescheid.",
                                             "Your meeting with Anna is moved, I will let you know.", "de"), "")
+        # A German status list answered in English keeps words like Login, API and Tests: they are not
+        # judged one by one, so the faithful translation goes out (the review of PR #465, D1).
+        for draft, answer in STATUS_REPLIES:
+            self.assertEqual(self.mod.rejection(answer, draft, "en"), "", answer)
+        self.assertEqual(self.mod.rejection("Got it, I saved the entry. How can you tell it's finished?",
+                                            "Alles klar, ich habe den Eintrag gespeichert. Woran merkst du, dass es fertig ist?",
+                                            "en"), "")
         # An answer with no word of either language is not clearly English.
         self.assertEqual(self.mod.rejection("👍", DRAFT, "en"), "not-clearly-English")
         self.teach(DRAFT, SENT)
@@ -371,9 +383,9 @@ class Reply(unittest.TestCase):
         self.assertEqual(self.send("twice", DRAFT), self.mod.NOTICE["en"] + "\n\n" + DRAFT)
         self.assertEqual(len(self.requests()), 2)
         line = self.log()[-1]
-        self.assertEqual(line["result"], "correction-failed:mixed-languages: a word of the draft left untranslated")
+        self.assertEqual(line["result"], "correction-failed:mixed-languages: too many German words")
         self.assertEqual(line["failed_tries"], ["repeats-the-draft: part of it",
-                                                "mixed-languages: a word of the draft left untranslated"])
+                                                "mixed-languages: too many German words"])
 
     def test_a_message_after_context_in_the_other_language_gets_a_reply_in_its_own(self):
         english_draft = "I saved that. What does done look like for you?"

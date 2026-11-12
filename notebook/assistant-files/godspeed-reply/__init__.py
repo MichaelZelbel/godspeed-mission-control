@@ -81,7 +81,7 @@ today thanks please yes tell finished starting working""".split())
 GERMAN = set("""der die das den dem des ein eine einen einem einer und oder aber ist sind nicht ich du wir ihr
 es mit von für auf zu zum zur im dass wie wo woran wann warum hat habe haben bin auch noch schon mir mich
 dich dir kein keine mein meine dein deine fertig heute bitte danke ja nein merkst jetzt nur wenn dann bei
-aus nach über kann können soll muss werden wird gerade heißt woher wieso welche""".split())
+aus nach über kann können soll muss werden wird gerade heißt woher wieso welche alles klar""".split())
 GERMAN_LETTERS = re.compile(r"[äöüßÄÖÜ]")
 WORD = re.compile(r"[A-Za-zÄÖÜäöüß']+")
 URL = re.compile(r"https?://[^\s<>()\[\]]+|www\.[^\s<>()\[\]]+")
@@ -257,16 +257,18 @@ def rejection(answer, draft, target):
     bare = [w for w in said if w not in named]
     if any(tuple(bare[i:i + RUN_WORDS]) in runs for i in range(len(bare) - RUN_WORDS + 1)):
         return "repeats-the-draft: part of it"
+    # The answer as a whole must be clearly in the target language: of its words that tell a language,
+    # at least MIN_SHARE are the target's. A single kept word ("Login-Seite" -> "Login page", API, Tests)
+    # is not judged on its own: it cannot tell a loanword from a forgotten word (owner decision on #453).
     source = "de" if target == "en" else "en"
     theirs = (GERMAN if source == "de" else ENGLISH) - SHARED
-    ours = ENGLISH if target == "en" else GERMAN
-    if any(w in theirs for w in said):
-        return "mixed-languages: a %s word" % NAMES[source]
-    kept = {w for w, _ in drafted} - ours - SHARED - named
-    if any(w in kept for w in said):
-        return "mixed-languages: a word of the draft left untranslated"
-    if not any(w in ours for w in said):
+    ours = (ENGLISH if target == "en" else GERMAN) - SHARED
+    mine = sum(w in ours for w in said)
+    other = sum(w in theirs for w in said)
+    if not mine:
         return "not-clearly-%s" % NAMES[target]
+    if mine / (mine + other) < MIN_SHARE:
+        return "mixed-languages: too many %s words" % NAMES[source]
     return ""
 
 
