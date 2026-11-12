@@ -53,6 +53,11 @@ jobs:
           for t in tools/test-observed-state.js tools/test-check-brief.js tools/test-limit.js tools/test-apply-target.js tools/test-nested-checkout.js tools/test-no-chapters.js tools/test-promises.js tools/test-promise-hook.js; do
             echo "== $t"; node "$t"
           done
+      # The fence that keeps the factory out of the holdout scenarios and away from the fence itself
+      # (.factory/hooks/holdout_fence.py): every way of writing the fence is refused, and reading it or
+      # writing the starter's own settings file is not (#417, #425).
+      - name: The holdout fence refuses changes to itself and nothing else
+        run: python3 .factory/hooks/test_holdout_fence.py
       # The reminder tool the way a reader receives it: copied away from the kit, with no notebook
       # beside it (the Docker image, a Hostinger server). 2.0.0-beta.12 left that edition with no
       # reminders at all, and only docker.yml, which does not run on tools/, could have seen it (#112).

@@ -120,16 +120,24 @@ export function openStep(store,{about,question,yes,no,by,chat,job,quietly,subjec
   try{appendAssistantMessage(store,'general',message);stamp(store,id);}
   catch(error){withdrawStep(store,id);throw error;}
  }
+ if(chat==='telegram'){
+  try{handOffButtons(store,[id]);}
+  catch(error){withdrawStep(store,id);throw error;}
+  return {outcome:'asked',id,message:''};
+ }
  return {outcome:'asked',id,message};
 }
 
-// A step is answerable once the code that sent its question has said so (`sent_at`). Three senders do:
-// openStep, for a question it writes into the notebook chat itself; a background delivery record that
-// names the step, once Hermes delivered it: through the gateway's delivery wrapper, or, for a run the
-// notebook started itself, the notebook's own look at Hermes' executions ledger (background-reports.mjs,
-// certifyRoutineRuns), each via stampDelivered together with its receipt; and the Telegram sender, for a direct
-// reply it sent that holds the words of a step opened during that very turn (stampReply). The asker's
-// own say-so never counts, and a question printed once certifies one step, however many ask the same words.
+// A step is answerable once the code that sent its question has said so (`sent_at`). These senders do:
+// openStep, for a question it writes into the notebook chat itself; the gateway's Yes/No card, the one
+// message a Telegram step's question goes out in (step_buttons.py runs `godspeed-step sent` once
+// Telegram accepted it, background-reports.mjs cardSent, stampCard). Words that still carry a question
+// certify it too: a background delivery record that names the step, once Hermes delivered it, through
+// the gateway's delivery wrapper or, for a run the notebook started itself, the notebook's own look at
+// Hermes' executions ledger (background-reports.mjs, certifyRoutineRuns), each via stampDelivered with
+// its receipt; and the Telegram sender, for a direct reply it sent that holds the words of a step opened
+// during that very turn (stampReply). The asker's own say-so never counts, and a question printed once
+// certifies one step, however many ask the same words.
 // The time a question or a later message reached the chat, never equal to one already recorded, so a
 // message sent in the same millisecond still counts as newer (`spokeSince`).
 export const deliveryClock=store=>{
@@ -142,7 +150,8 @@ export const deliveryClock=store=>{
 export const saveReached=(store,value)=>store.withLockAsync(()=>store.saveUnderLock('conversation_messages',{...value,delivered_to:'telegram',delivered_at:deliveryClock(store)}));
 // One delivery certifies every question it carries, and its receipt, in one commit: a failure leaves
 // none of them answerable, never a prefix of a multi-question message. Each gets its own position.
-const stampAll=(store,ids,{chat,messageId,receipt}={})=>store.withLock(()=>{
+// A question that went out needs no card from the gateway any more: its hand-off goes.
+function stampUnderLock(store,ids,{chat,messageId,receipt}={}){
  const base=Date.parse(deliveryClock(store));let n=0;
  const changes=[],stamped=[];
  for(const id of ids){
@@ -155,18 +164,34 @@ const stampAll=(store,ids,{chat,messageId,receipt}={})=>store.withLock(()=>{
  const stored=receipt&&store.get('conversation_messages',receipt.id);
  if(stored)changes.push(store.prepare('conversation_messages',{delivered_at:new Date(base+n++).toISOString()},stored));
  if(changes.length)store.commit(changes);
+ for(const id of stamped)dropHandOff(store,id);
  return stamped;
-});
+}
+const stampAll=(store,ids,options)=>store.withLock(()=>stampUnderLock(store,ids,options));
 const stamp=(store,id)=>stampAll(store,[id]);
-export const stampDelivered=(store,ids,receipt)=>{
- const stamped=stampAll(store,ids,{chat:'telegram',receipt});
- try{handOffButtons(store,stamped);}catch{}
-};
-// The process that delivers a report usually has no Telegram client (the notebook's own `hermes cron
-// tick`), so the Yes/No buttons are sent by the gateway's godspeed-context plugin (step_buttons.py),
-// which watches this folder: one file per Telegram step that has just become answerable.
+export const stampDelivered=(store,ids,receipt)=>stampAll(store,ids,{chat:'telegram',receipt});
+// The gateway's card went out: the one message that asked this Telegram step's question.
+export const stampCard=(store,id,receipt)=>store.withLockAsync(()=>stampUnderLock(store,[id],{chat:'telegram',receipt}));
+// Resolves once the step's question went out or the step stopped waiting, or after `ms`. A Telegram
+// step's card is sent by the gateway, so `godspeed-step open` waits here for it before the routine ends.
+export async function sentWithin(store,id,ms){
+ const until=Date.now()+ms;
+ for(;;){
+  const record=store.get('approvals',id);
+  if(!record||record.status!=='pending'||record.sent_at||Date.now()>=until)return;
+  await new Promise(resolve=>setTimeout(resolve,Math.min(200,Math.max(0,until-Date.now()))));
+ }
+}
+// The process that asks usually has no Telegram client (the notebook's own `hermes cron tick`), so a
+// Telegram step's question is sent, once, with its Yes/No buttons, by the gateway's godspeed-context
+// plugin (step_buttons.py), which watches this folder: one file per Telegram step whose question the
+// gateway is to send. It is written when the step opens and deleted once the question went out (by
+// its card or in words) or the step was answered.
 export const STEP_QUESTIONS='step-questions',STEP_QUESTION_MAX_AGE_MS=24*3600000;
 const STEP_ID=/^step-[0-9a-f-]{36}$/;
+function dropHandOff(store,id){
+ if(STEP_ID.test(id))try{fs.rmSync(path.join(store.state,STEP_QUESTIONS,id+'.json'),{force:true});}catch{}
+}
 function handOffButtons(store,ids){
  if(!ids.length)return;
  const dir=path.join(store.state,STEP_QUESTIONS);
@@ -194,8 +219,7 @@ export function stepsForWords(store,text,since=''){
 export function stampReply(store,{words,since,messageId}){
  const ids=stepsForWords(store,words,since);
  if(!ids.length)return;
- const stamped=stampAll(store,ids,{messageId});
- try{handOffButtons(store,stamped);}catch{}
+ stampAll(store,ids,{messageId});
 }
 function withdrawStep(store,id){
  try{store.withLock(()=>{const record=store.get('approvals',id);if(record?.status==='pending'&&!record.sent_at)store.commit([store.prepare('approvals',{status:'withdrawn'},record)]);});}catch{}
@@ -214,6 +238,7 @@ export function answerStep(store,id,answer,{chat,words}){
   const job=yes&&record.job_id?store.get('jobs',record.job_id):null;
   if(job?.outward&&hash(job.payload)===record.payload_hash&&['awaiting_approval','pending'].includes(job.state))changes.push(store.prepare('jobs',{approval_id:record.id,state:'pending'},job));
   store.commit(changes);
+  dropHandOff(store,id);
   return {already:false,step:readStep(changes[0])};
  });
 }

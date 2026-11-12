@@ -37,7 +37,7 @@ mc-check-research mc-check-research.cmd mc-check-written
 mc-compile-rules mc-decide mc-due mc-forecast mc-goals mc-holds mc-holds.cmd mc-install-count mc-judge-brief mc-judge-brief.cmd mc-mail mc-mail.cmd
 mc-menerio-connect mc-menerio-connect.cmd mc-notebook-env mc-notebook-sync mc-notebook-sync.cmd mc-observed-state
 mc-observed-state.cmd mc-prompt-archive mc-prompt-archive.cmd mc-prompt-harvest mc-research mc-research.cmd mc-run
-mc-search mc-search.cmd mc-work mc-work-run godspeed-browser mc-uninstall"
+mc-search mc-search.cmd mc-work mc-work-run godspeed-browser godspeed-update mc-uninstall"
 
 LABEL=com.godspeedmissioncontrol.notebook
 BROWSER_LABEL=com.godspeedmissioncontrol.computer

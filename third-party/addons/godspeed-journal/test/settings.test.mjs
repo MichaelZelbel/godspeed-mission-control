@@ -46,3 +46,10 @@ test("validateSettings reports problems in a hand-edited file", () => {
   assert.deepEqual(validateSettings(DEFAULTS), []);
   assert.equal(validateSettings({ ...DEFAULTS, length: "medium" }).length, 1);
 });
+
+test("finished tasks are saved as moments unless switched off", () => {
+  const h = mcDir();
+  assert.equal(loadSettings(h).save_as_moments, true);
+  setSetting(h, "save_as_moments", "off");
+  assert.equal(JSON.parse(fs.readFileSync(settingsFile(h), "utf8")).save_as_moments, false);
+});

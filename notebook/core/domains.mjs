@@ -52,7 +52,7 @@ export function noteContentHash(content){const s=String(content??'');let h=0x811
 const IDENTITY_PAGE=Symbol('identity page');
 // For a model without tools (the notebook's own provider): how it asks for a change on that page.
 // The server makes the change through the page's own path, and only with the owner's own words.
-const identityContract=' The user has the notebook page open that shows who you are, your rules, what you know about them and your skills: context.identity_page lists them by number, each rule with its sentence now. To change one there because the current message of the user explicitly asks for it, add identity_changes:[{action,target,source_quote,text?,fields?}] (at most 3): action save, add_rule, remove_rule or undo; target from that list ("who", "extra", "rule:<name>", "profile:<name>", "skill:<name>"); source_quote the exact words of the current message that ask for it. save on who takes text, the whole new paragraph; save on extra takes text, the whole new extra instructions. save on a rule, and add_rule, take fields with only what changes: title (its short name, a few words), line (the one sentence), group must, never or how, always (true: read before every job), story. What you know about them, and your skills, take only undo here; for any other change to them, say they can be changed on that page. Do not say in reply that something was changed: the server adds what it changed, or why it did not.';
+const identityContract=' The user has the notebook page open that shows who you are, your rules, what you know about them and your skills: context.identity_page lists them by number, each rule with its sentence now. To change one there because the current message of the user explicitly asks for it, add identity_changes:[{action,target,source_quote,text?,fields?,proposal?,answer?,mode?}] (at most 3): action save, add_rule, remove_rule, undo or rules_setting; target from that list ("who", "extra", "rule:<name>", "profile:<name>", "skill:<name>"); source_quote the exact words of the current message that ask for it. save on who takes text, the whole new paragraph; save on extra takes text, the whole new extra instructions. save on a rule, and add_rule, take fields with only what changes: title (its short name, a few words), line (the one sentence), group must, never or how, always (true: read before every job), story. add_rule may come back as a proposal the server shows them; to answer one listed as waiting, send add_rule with proposal (its id) and answer add, reword (fields with the new wording), change (target, the rule to change instead) or leave. rules_setting with mode automatic or ask-first changes whether new rules are added at once or shown to them first. What you know about them, and your skills, take only undo here; for any other change to them, say they can be changed on that page. Do not say in reply that something was changed: the server adds what it changed, or why it did not.';
 function json(result){return typeof result==='string'?JSON.parse(result.trim().replace(/^```(?:json)?\s*/,'').replace(/\s*```$/,'')):result;}
 function cites(source,quote){return typeof source==='string'?source.includes(quote):source&&typeof source==='object'?Object.values(source).some(value=>cites(value,quote)):false;}
 function reviewData(value){const result={...value};for(const field of ['themes','open_loops','connections','gaps','people_summary']){if(typeof result[field]==='string'&&field==='gaps')result[field]=[result[field]];if(result[field]==null)result[field]=[];if(!Array.isArray(result[field]))throw new Error('The review returned an invalid '+field+' list');}return result;}
@@ -720,7 +720,7 @@ export class Domains {
       if(name==='conversation-chat'&&input[IDENTITY_PAGE]&&Array.isArray(structured.identity_changes)&&structured.identity_changes.length){
         const outcome=await this.identityChanges(structured.identity_changes.slice(0,3),requested);
         tool_results.push(...outcome.done);
-        content=[...(outcome.done.length?[content,...outcome.said]:[]),...outcome.refused.map(r=>'I did not change that: '+r)].filter(Boolean).join('\n\n');
+        content=[...(outcome.done.length||outcome.said.length?[content,...outcome.said]:[]),...outcome.refused.map(r=>'I did not change that: '+r)].filter(Boolean).join('\n\n');
       }
       const opened=structured.operation_results?.find(r=>r.type==='coach_talks'&&r.status==='open');
       const saved = await this.store.saveAsync('conversation_messages', { content, role: 'assistant', talk_id:opened?.id||input.talk_id||null,note_id: input.note_id || null, contact_id: input.contact_id || null, person_id:input.contact_id||null, conversation_id: input.conversation_id || null },undefined,{signal});
@@ -739,14 +739,17 @@ export class Domains {
       const quote=String(change?.source_quote||'').trim(),action=String(change?.action||''),target=String(change?.target||'');
       try{
         if(!quote||!message.includes(quote)||!shelf.ownerAsked(quote))throw Error('a change here needs your own request, in your own words.');
-        if(!['save','add_rule','remove_rule','undo'].includes(action))throw Error('that is not a change I can make there.');
+        if(!['save','add_rule','remove_rule','undo','rules_setting'].includes(action))throw Error('that is not a change I can make there.');
         const options={by:'assistant',words:quote};let result;
-        if(action==='add_rule')result=await shelf.addRule(change.fields||{},options);
+        if(action==='rules_setting'){result=await shelf.setNewRules(change.mode);said.push('New rules: '+(result.new_rules==='ask-first'?'Ask first.':'Add automatically.'));continue;}
+        if(action==='add_rule')result=change.proposal?await shelf.answerRule(String(change.proposal),String(change.answer||''),{...options,fields:change.fields,target:change.target||undefined}):await shelf.offerRule(change.fields||{},options);
         else{
           const now=shelf.read(target);options.expected_hash=now.hash;
           if(action==='save'&&!['who','extra','rule'].includes(now.kind))throw Error('what it knows about the owner, and a skill, are changed on the page itself, or by undo here.');
           result=action==='save'?await shelf.save(target,{text:change.text,fields:change.fields},options):action==='remove_rule'?await shelf.removeRule(target,options):await shelf.undo(target,options);
         }
+        if(result.proposal){said.push(result.say);continue;}
+        if(result.left){said.push('I left it; nothing was added.');continue;}
         done.push({tool:'identity_files',success:true,action,target:result.target||target});
         said.push(result.unchanged?'Nothing needed changing there.':'Saved: '+String(result.message||'').replace(/^Identity: /,'').replace(/ \(asked in chat\)$/,'')+'. The earlier version is kept on that page.');
       }catch(error){refused.push(String(error.message||error).replace(/^./,c=>c.toLowerCase()));}

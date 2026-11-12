@@ -1,6 +1,7 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';
 import {Store} from '../core/records/store.mjs';import {installStarter} from '../core/starter-workspace.mjs';
 import {NativeScheduler} from '../core/native-scheduler.mjs';
+import {HermesLifecycle} from '../core/hermes-lifecycle.mjs';
 import {ChatHealth,CHAT_HEALTH_FILE,CHAT_HEALTH_WORDS,CHECK_EVERY,CHECK_QUESTION,chatStatus,nextChatHealth} from '../core/chat-health.mjs';
 
 for(const key of Object.keys(process.env))if(/^(GODSPEED_|HERMES_)/.test(key))delete process.env[key];
@@ -95,7 +96,11 @@ test('no check within the hour, during a Hermes update, or without Telegram',asy
  assert.equal(await f.health.tick(),null,'the first check waits an hour after start');
  f.later();await f.health.tick();f.later(HOUR-60000);assert.equal(await f.health.tick(),null);assert.equal(f.turns.length,1);
  f.later(60000);fs.writeFileSync(path.join(f.store.state,'hermes-update.lock'),'1');assert.equal(await f.health.tick(),null);
- fs.rmSync(path.join(f.store.state,'hermes-update.lock'));f.health.lifecycle={reason:'assistant update'};assert.equal(await f.health.tick(),null);
+ fs.rmSync(path.join(f.store.state,'hermes-update.lock'));
+ for(const kind of ['assistant update','godspeed update']){
+  f.health.lifecycle=new HermesLifecycle();const release=f.health.lifecycle.acquire(kind);
+  assert.equal(await f.health.tick(),null,'during the '+kind);release();
+ }
  assert.equal(f.turns.length,1);
  const g=fixture(t,{env:'OPENAI_API_KEY=x\n'});g.later();assert.equal(await g.health.tick(),null);assert.equal(g.turns.length,0);assert.equal(chatStatus(g.store),null);
 });
