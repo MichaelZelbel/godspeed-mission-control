@@ -192,6 +192,18 @@ test("a whole task told after the fact with a span is saved as its start and its
   assert.deepEqual([t.id, t.state, t.started, t.ended, t.minutes], ["t-20261111-0900-report", "done", "2026-11-11T08:00:00.000Z", "2026-11-11T09:30:00.000Z", 90]);
 });
 
+test("a whole task told with a span keeps its impact, and an impact with no finish saves nothing", () => {
+  const h = mcDir();
+  const bad = run(h, "2026-11-11T14:00:00Z", "start", "Lease", "--when", "from 9 to 10", "--impact", "5");
+  assert.equal(bad.status, 1); assert.match(bad.stderr, /Impact is 1 \(everyday\)/);
+  const open = run(h, "2026-11-11T14:00:00Z", "start", "Lease", "--impact", "3");
+  assert.equal(open.status, 1); assert.match(open.stderr, /--impact goes with a finish/);
+  assert.equal(entryFiles(h).length, 0);
+  const r = run(h, "2026-11-11T14:00:00Z", "start", "Lease", "--when", "from 9 to 10", "--impact", "3", "--json");
+  assert.equal(r.status, 0, r.stderr);
+  assert.deepEqual([JSON.parse(r.stdout).task.state, JSON.parse(r.stdout).task.impact], ["done", 3]);
+});
+
 test("a finish before its start, a time still ahead, or a time that fits two asks once and saves nothing", () => {
   const h = mcDir();
   run(h, "2026-11-11T10:00:00Z", "start", "Invoice");

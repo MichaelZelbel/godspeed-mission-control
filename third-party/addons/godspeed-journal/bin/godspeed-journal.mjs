@@ -148,13 +148,15 @@ const commands = {
   start() {
     const title = pos.join(" ").trim();
     if (!title) die('Say what you are starting: godspeed-journal start "Edit the video"');
+    const impact = f.impact === undefined ? undefined : impactFlag(f.impact);
     const r = when();
+    if (impact && !r?.end) die('--impact goes with a finish: on done, or on a start told with a span such as "from 9 to 10".');
     const started = r?.start || r?.at || null;
     const id = taskId(started || at, s.timezone, title);
     save({ kind: "start", task: id, title, done_means: f["done-means"], words: f.words || title }, `start ${title}`, started);
     // A whole task told after the fact ("wrote the report from 9 to 10:30") is a start and a finish.
     if (r?.end) {
-      save({ kind: "done", task: id, met: f.met, missed: f.missed, words: f.words || title }, `done ${title}`, r.end);
+      save({ kind: "done", task: id, met: f.met, missed: f.missed, impact, words: f.words || title }, `done ${title}`, r.end);
       const task = tasksFrom(entries()).find((t) => t.id === id);
       return out(`Saved: "${title}" from ${said(r.start)} to ${said(r.end)} (${id})`,
         { ok: true, task, recorded: { start: r.start.toISOString(), end: r.end.toISOString(), said: `${said(r.start)} - ${said(r.end)}` } });

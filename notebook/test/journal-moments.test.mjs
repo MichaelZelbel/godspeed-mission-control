@@ -48,6 +48,19 @@ test('a close made while the notebook was not running is written on its next run
  assert.equal(live(nb).length,1);
 });
 
+test('a moment the person removed is not written back',async t=>{
+ const root=fixture(t),nb=open(root);
+ start(root,'09:00','t-1','Pay the rent');entry(root,'09:05',{kind:'done',task:'t-1'});
+ await reconcile(nb);
+ const [m]=live(nb);
+ await nb.query.executeAsync({table:'moments',operation:'delete',filters:[['eq','id',m.id]]});
+ assert.equal(live(nb).length,0);
+ assert.deepEqual(await reconcile(nb),{written:[],updated:[],removed:[]});
+ assert.deepEqual(await reconcile(open(root)),{written:[],updated:[],removed:[]},'a restart does not bring it back');
+ assert.equal(live(nb).length,0);
+ assert.equal(nb.store.list('moments').length,1);
+});
+
 test('reopening takes the moment out with a tombstone; closing again writes it once with the new times',async t=>{
  const root=fixture(t),nb=open(root);
  start(root,'09:00','t-1','Draft the post');entry(root,'10:00',{kind:'done',task:'t-1'});
