@@ -185,8 +185,16 @@ def _owner_mismatch(session_id):
     failed += [] if got["CHAT_TYPE"] in ("dm", "private") else ["CHAT_TYPE"]
     failed += [] if got["CHAT_ID"] == owner else ["CHAT_ID"]
     failed += [] if got["USER_ID"] == owner else ["USER_ID"]
-    failed += [] if got["ID"] == session_id else ["ID" + (" (empty)" if not got["ID"] else "") + (" (no session_id)" if not session_id else "")]
-    return failed
+    if got["ID"] == session_id:
+        return failed
+    # After the owner's first message Hermes can leave HERMES_SESSION_ID empty while the turn is
+    # still theirs (#372; the owner's decision on #482): only then, and only when every other check
+    # matched the owner, chat id included, the empty id is accepted. A Telegram private chat's id is
+    # its user's id, so a value left over from another chat cannot pass. A different id never does.
+    if not got["ID"] and session_id and not failed:
+        _note("a message in the owner's private chat was accepted without a session id (Hermes gave none; every other check matched)")
+        return failed
+    return failed + ["ID" + (" (empty)" if not got["ID"] else "") + (" (no session_id)" if not session_id else "")]
 
 
 def _owner_telegram(session_id):

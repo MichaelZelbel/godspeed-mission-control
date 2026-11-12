@@ -199,6 +199,24 @@ print(json.dumps(seen));print(json.dumps(r))`,plugin,words],
   turn(owner,'the cache one please');
   assert.equal(lines.at(-1),'godspeed-step (telegram): a message of 4 words was heard as none');
   assert.ok(lines.every(l=>!/\b(yes|no|cache)\b/.test(l.replace(/^godspeed-step \(telegram\): /,''))),lines.join('\n'));
+  // Hermes can leave the session id empty after the owner's first message (#372). The owner's
+  // decision on #482: an empty id passes only when every other check matches the owner, the chat id
+  // included, and says so in the log; a different id is still refused.
+  const accepted='godspeed-step (telegram): a message in the owner\'s private chat was accepted without a session id (Hermes gave none; every other check matched)';
+  const later=await open('The backup is late.');
+  let from=lines.length;
+  assert.equal(turn({...owner,chat:'-100',id:''})?.context?.includes('godspeed-step')??false,false,'empty id, another chat: refused');
+  assert.equal(status(later),'waiting');
+  assert.ok(!lines.slice(from).includes(accepted),lines.join('\n'));
+  assert.match(lines.at(-1),/not the owner's private chat in this session \(CHAT_ID, ID \(empty\) differs\)/);
+  from=lines.length;
+  assert.equal(turn({...owner,id:'another-session'})?.context?.includes('godspeed-step')??false,false,'a different id: refused');
+  assert.equal(status(later),'waiting');
+  assert.match(lines.at(-1),/not the owner's private chat in this session \(ID differs\)/);
+  from=lines.length;
+  assert.match(turn({...owner,id:''}).context,/the program has recorded it/,'empty id, everything else the owner: accepted');
+  assert.equal(status(later),'yes');
+  assert.deepEqual(lines.slice(from),[accepted,'godspeed-step (telegram): a message of 1 words was heard as answered'],lines.join('\n'));
 });
 
 test('the recipe is installed for a starter-born assistant, names its doors and uses only tools the notebook has',async t=>{
