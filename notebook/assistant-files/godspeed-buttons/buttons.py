@@ -7,7 +7,8 @@ the question was asked, the language ...), when it was made and the answer its b
 runs the callback registered for the token's id, and for that id only; the message then says what
 the callback returned, and the buttons go. Both buttons of one message share one claim, so a message
 is answered at most once. A tap by anyone but the owner, on a message that is not the bot's own, or
-on an answered message changes nothing.
+on an answered message changes nothing. Every press that stops short of its callback writes one
+line naming the gate it stopped at to the `godspeed-buttons` log, and so to the gateway's log.
 
 A caller builds `YesNoButtons(root, callbacks, texts, prefix=..., folder=...)`, hands `factory` to
 `register_telegram_handler`, and calls `offer(id, fields, route, language)` once its message is
@@ -17,6 +18,7 @@ buttonFailed}}; `callbacks` maps an id to `fn(token) -> reply text`, token["answ
 """
 import asyncio
 import json
+import logging
 import os
 import re
 import secrets
@@ -25,6 +27,7 @@ import time
 HEX = re.compile(r"^[a-f0-9]{32}$")
 RETENTION = 30 * 86400  # seconds; habit-button tokens are kept as long
 MAX_TOKENS = 4096
+log = logging.getLogger("godspeed-buttons")
 
 
 class YesNoButtons:
@@ -71,6 +74,7 @@ class YesNoButtons:
         self.clients[id(native)] = (native, loop)
         # Scoped to this caller's own buttons, so Hermes' and the other plugins' buttons keep working.
         native.add_handler(CallbackQueryHandler(self.callback, pattern="^" + re.escape(self.prefix)))
+        log.info("godspeed-buttons (%s): press handler registered in handler group 0 (the default)", self.prefix)
 
     def client(self):
         live = [(app, loop) for app, loop in list(self.clients.values()) if not loop.is_closed()]
@@ -240,18 +244,12 @@ class YesNoButtons:
                 kwargs["message_thread_id"] = int(route["threadId"])
             message = await app.bot.send_message(**kwargs)
         except (Exception, asyncio.CancelledError) as error:
-            # Whatever stopped it (the keyboard, the route, Telegram, a shutdown during the wait):
-            # the question was taken out of the reply, so it must still arrive. Plain words are
-            # enough, since a typed yes or no answers it everywhere.
             try:
                 self.discard(tokens)
             except Exception:
                 pass
             if chat is not None:
-                try:
-                    await app.bot.send_message(chat_id=chat, text=words["question"])
-                except Exception:
-                    pass
+                await self.unsent(app, chat, words)
             if isinstance(error, asyncio.CancelledError):
                 raise
             return False
@@ -264,6 +262,15 @@ class YesNoButtons:
             except Exception:
                 pass
         return True
+
+    async def unsent(self, app, chat, words):
+        """The message with buttons did not go out (the keyboard, the route, Telegram, a shutdown during
+        the wait). The question was taken out of the reply, so it must still arrive: plain words are
+        enough, since a typed yes or no answers it everywhere."""
+        try:
+            await app.bot.send_message(chat_id=chat, text=words["question"])
+        except Exception:
+            pass
 
     # ---- a tap ---------------------------------------------------------------------------------
     async def edit(self, context, message, text, reply_markup=None):
@@ -279,21 +286,39 @@ class YesNoButtons:
             await self.edit(context, message, words[language]["question"] + "\n\n" + words[language]["buttonFailed"],
                             reply_markup=getattr(message, "reply_markup", None))
 
+    def refused(self, query, message, owner, bot_id):
+        """The gate a press fails, or None. Anyone but the owner, in any chat but theirs, on any message
+        but this bot's, gets nothing at all."""
+        if not owner:
+            return "allowed users (TELEGRAM_ALLOWED_USERS is not exactly one id)"
+        if str(query.from_user.id) != owner:
+            return "owner"
+        if str(message.chat.id) != owner or message.chat.type != "private":
+            return "private chat"
+        if getattr(message, "forward_origin", None):
+            return "forward_origin"
+        if str(getattr(message.from_user, "id", "")) != str(bot_id):
+            return "bot message (from_user.id == bot.id)"
+        if not self.data.match(str(query.data or "")):
+            return "prefix " + self.prefix
+        return None
+
+    def stopped(self, gate):
+        log.warning("godspeed-buttons (%s): a press stopped at %s", self.prefix, gate)
+
     async def callback(self, update, context):
         query = update.callback_query
         message = query.message if query else None
-        if not query or not message or not self.active:
-            return
+        if not query or not message:
+            return self.stopped("a press without its message")
+        if not self.active:
+            return self.stopped("closed")
         owner = self.owner()
-        user_id, chat_id = str(query.from_user.id), str(message.chat.id)
-        # Anyone but the owner, in any chat but theirs, on any message but this bot's: nothing at all.
-        if not owner or user_id != owner or chat_id != owner or message.chat.type != "private":
-            return
-        if getattr(message, "forward_origin", None) or str(getattr(message.from_user, "id", "")) != str(context.bot.id):
-            return
-        match = self.data.match(str(query.data or ""))
-        if not match:
-            return
+        gate = self.refused(query, message, owner, context.bot.id)
+        if gate:
+            return self.stopped(gate)
+        chat_id = str(message.chat.id)
+        match = self.data.match(str(query.data))
         try:
             await query.answer()  # Stops the spinner; says nothing about what happens next.
         except Exception:
@@ -304,23 +329,28 @@ class YesNoButtons:
         found, token = await asyncio.to_thread(self.load, match.group(1))
         if found == "missing":
             # A button whose token was never kept here, or is past its 30 days, answers nothing.
+            self.stopped("token (none kept here)")
             if words:
                 await self.edit(context, message, words[shown]["noOpenQuestion"])
             return
         if found != "ok":
+            self.stopped("token (unreadable)")
             await self.failed(context, message, words, shown)
             return
-        if (token.get("ownerId") != owner or token.get("chatId") != chat_id or token.get("botId") != str(context.bot.id)
-                or token.get("messageId") != str(message.message_id)):
-            return
+        bound = {"ownerId": owner, "chatId": chat_id, "botId": str(context.bot.id), "messageId": str(message.message_id)}
+        unbound = [field for field, value in bound.items() if token.get(field) != value]
+        if unbound:
+            return self.stopped("token binding (" + ", ".join(unbound) + ")")
         language = token["language"] if words and token["language"] in words else shown
         try:
             claimed = await asyncio.to_thread(self.claim, token)
         except Exception:
+            self.stopped("claim (could not be written)")
             await self.failed(context, message, words, language)
             return
         if not claimed:
             # This message was answered already: the command is not run again, so nothing is written.
+            self.stopped("claim (answered already)")
             if words:
                 await self.edit(context, message, words[language]["noOpenQuestion"])
             return
@@ -328,6 +358,7 @@ class YesNoButtons:
             reply = await asyncio.to_thread(self.callbacks[token["id"]], token)
         except Exception:
             # Nothing is known to have changed: give the tap back, so a second one can try.
+            self.stopped("callback " + str(token["id"]) + " (failed)")
             try:
                 await asyncio.to_thread(self.release, token)
             except Exception:

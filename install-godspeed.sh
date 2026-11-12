@@ -138,7 +138,11 @@ bash -c "$hook" install-native-notebook "$root"
 # What this computer got: the stage file it was installed from, as it was read, and the ref it
 # was read from, beside the notebook's own record of the commit it runs. Nothing reads these two
 # yet; they are here so a person, a support answer and the proving scenarios can see which
-# version, kit-bootstrap commit and starter commit this computer was installed with.
-mkdir -p "$root/.godspeed"
-cp "$work/stage.json" "$root/.godspeed/stage.json"
-printf '%s\n' "$STAGE_REF" > "$root/.godspeed/stage-ref"
+# version, kit-bootstrap commit and starter commit this computer was installed with. An update the
+# Update now button started (GODSPEED_UPDATE_MODE=prepare, notebook/core/update.mjs) has only got
+# the new version ready: its files wait in .godspeed/update until the new notebook answers.
+kept=$root/.godspeed
+[ "${GODSPEED_UPDATE_MODE:-}" != prepare ] || kept=$root/.godspeed/update
+mkdir -p "$kept"
+cp "$work/stage.json" "$kept/stage.json"
+printf '%s\n' "$STAGE_REF" > "$kept/stage-ref"

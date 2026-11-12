@@ -3,12 +3,12 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import {spawnSync} from 'node:child_process';
+import {spawn,spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {Store,hash} from '../core/records/store.mjs';
 import {QueryService} from '../core/query.mjs';
 import {Domains} from '../core/domains.mjs';
-import {recordReport,recordRoutine,delivered} from '../core/background-reports.mjs';
+import {cardSent,recordReport,recordRoutine,delivered} from '../core/background-reports.mjs';
 import {Telegram} from '../core/telegram.mjs';
 import {Scheduler} from '../core/jobs/scheduler.mjs';
 import {openStep,ROUTES,CHATS,chatOf,ASKER_KINDS,answerStep,answerChosen,heard,stampReply,readStep,waitingSteps} from '../core/waiting-steps.mjs';
@@ -20,10 +20,17 @@ function fixture(t){
  const store=new Store(root,{device:'vps'});store.save('settings',{id:'installation',owner:'vps',timezone:'UTC',delivery:'notebook'});
  return {root,store};
 }
-const open=(store,about,chat='telegram',extra={})=>openStep(store,{about,question:'Shall I go on?',yes:'I will restart it now.',no:'I will leave it as it is.',by:'routine:test',chat,...extra});
-// A Telegram question reaches the owner the way Hermes delivers a notice: the delivery record names the step.
-const deliver=async(store,{id,message})=>{await recordReport(store,{text:message,about:'',steps:[id],routine:'notice',written:'assistant',delivery:'telegram'});delivered(store,message);};
-const ask=async(...args)=>{const opened=open(...args);if(args[2]!=='notebook')await deliver(args[0],opened);return opened;};
+// `words` is the question as a routine or reply would print it itself: a Telegram step's own
+// message is empty, since the gateway's card asks it.
+const open=(store,about,chat='telegram',extra={})=>{
+ const opened=openStep(store,{about,question:'Shall I go on?',yes:'I will restart it now.',no:'I will leave it as it is.',by:'routine:test',chat,...extra});
+ return opened.outcome==='asked'?{...opened,words:store.get('approvals',opened.id).about+' Shall I go on?'}:opened;
+};
+// Words that carry a question reach the owner the way Hermes delivers a notice: the delivery record names the step.
+const deliver=async(store,{id,words})=>{await recordReport(store,{text:words,about:'',steps:[id],routine:'notice',written:'assistant',delivery:'telegram'});delivered(store,words);};
+// A Telegram question reaches the owner as the gateway's card.
+const ask=async(...args)=>{const opened=open(...args);if(args[2]!=='notebook')assert.equal(await cardSent(args[0],opened.id),true);return opened;};
+const handOff=(store,id)=>path.join(store.state,'step-questions',id+'.json');
 
 test('one step waiting: a yes approves it and the reply says what happens; a no rejects it',async t=>{
  const {store}=fixture(t),{id}=await ask(store,'The bot stopped.');
@@ -71,17 +78,17 @@ test('a scheduler delivery, a command reply or a failure notice sent after the q
 
 test('a Telegram receipt reserved after the question was certified is newer, whenever it chose its position',async t=>{
  const {store}=fixture(t),opened=open(store,'The bot stopped.');
- await recordReport(store,{text:opened.message,about:'',steps:[opened.id],routine:'notice',written:'assistant',delivery:'telegram'});
+ await recordReport(store,{text:opened.words,about:'',steps:[opened.id],routine:'notice',written:'assistant',delivery:'telegram'});
  const bot=new Telegram({store,domains:{},token:'x',owner:1,transport:async()=>({ok:true,json:async()=>({ok:true,result:{message_id:3}})})});
  const lock=store.withLockAsync.bind(store);let certified=false;
- store.withLockAsync=(fn,options)=>{if(!certified&&store.get('command_receipts','telegram-8-failure-notice')?.state==='verified'){certified=true;delivered(store,opened.message);}return lock(fn,options);};
+ store.withLockAsync=(fn,options)=>{if(!certified&&store.get('command_receipts','telegram-8-failure-notice')?.state==='verified'){certified=true;delivered(store,opened.words);}return lock(fn,options);};
  await bot.failureNotice('telegram-8','Sorry.');
  assert.ok(certified);
  assert.equal(heard(store,{chat:'telegram',words:'yes'}).kind,'ask');assert.equal(store.get('approvals',opened.id).status,'pending');
 });
 
 test('a Hermes receipt of two questions certifies both or neither, and a later receipt makes a bare yes ask',async t=>{
- const {store}=fixture(t),a=open(store,'The bot stopped.'),b=open(store,'The disk is full.'),words=a.message+'\n'+b.message;
+ const {store}=fixture(t),a=open(store,'The bot stopped.'),b=open(store,'The disk is full.'),words=a.words+'\n'+b.words;
  const [receipt]=await recordRoutine(store,{routine:'asker',text:words,delivery:'telegram'});
  const commit=store.commit.bind(store);store.commit=changes=>{if(changes.some(r=>r.id===receipt))throw new Error('disk');return commit(changes);};
  assert.throws(()=>delivered(store,words,[receipt]));
@@ -94,32 +101,34 @@ test('a Hermes receipt of two questions certifies both or neither, and a later r
  assert.equal(heard(store,{chat:'telegram',words:'yes'}).kind,'ask');
 });
 
-test('a direct Telegram reply hands each stamped question to the buttons, with its own expiry',async t=>{
+test('a Telegram step hands its question to the buttons when it opens, and words that carry it take the hand-off back',async t=>{
  const {store}=fixture(t),a=open(store,'The bot stopped.');
- stampReply(store,{words:a.message,since:'',messageId:7});
- const item=JSON.parse(fs.readFileSync(path.join(store.state,'step-questions',a.id+'.json'),'utf8'));
- assert.equal(item.text,store.get('approvals',a.id).about+' '+store.get('approvals',a.id).question);
+ const item=JSON.parse(fs.readFileSync(handOff(store,a.id),'utf8'));
+ assert.equal(item.text,a.words);
  assert.ok(Date.parse(item.expires_at)>Date.now());
+ stampReply(store,{words:a.words,since:'',messageId:7});
+ assert.ok(store.get('approvals',a.id).sent_at);
+ assert.equal(fs.existsSync(handOff(store,a.id)),false,'the question went out in words, so no card follows');
 });
 
 test('a direct Telegram reply of two questions certifies both or neither',async t=>{
  const {store}=fixture(t),a=open(store,'The bot stopped.'),b=open(store,'The disk is full.');
  const commit=store.commit.bind(store);store.commit=changes=>{if(changes.some(r=>r.id===b.id))throw new Error('disk');return commit(changes);};
- assert.throws(()=>stampReply(store,{words:a.message+'\n'+b.message,since:'',messageId:7}));
+ assert.throws(()=>stampReply(store,{words:a.words+'\n'+b.words,since:'',messageId:7}));
  assert.deepEqual(waitingSteps(store).map(s=>s.id),[],'no prefix of the reply became answerable');
  store.commit=commit;
- stampReply(store,{words:a.message+'\n'+b.message,since:'',messageId:7});
+ stampReply(store,{words:a.words+'\n'+b.words,since:'',messageId:7});
  assert.deepEqual(waitingSteps(store).map(s=>s.id).sort(),[a.id,b.id].sort());
 });
 
 test('a question sent but not registered tells the owner, and is not sent again',async t=>{
  const {store}=fixture(t);let a,sent=[];
- const domains={invoke:async()=>{a=open(store,'The bot stopped.');return {reply:a.message};}};
+ const domains={invoke:async()=>{a=open(store,'The bot stopped.');return {reply:a.words};}};
  const updates=[{update_id:1,message:{from:{id:123,is_bot:false},chat:{id:123,type:'private'},text:'hi'}}];
  const transport=async(url,o)=>({ok:true,json:async()=>{if(url.endsWith('getUpdates'))return {ok:true,result:updates};sent.push(JSON.parse(o.body).text);return {ok:true,result:{message_id:sent.length}};}});
  const commit=store.commit.bind(store);store.commit=changes=>{if(changes.some(r=>r.sent_at))throw new Error('disk');return commit(changes);};
  await new Telegram({store,domains,token:'synthetic-bot',owner:'123',transport}).tick();
- assert.equal(sent.length,2);assert.equal(sent[0],a.message);assert.match(sent[1],/could not register/);
+ assert.equal(sent.length,2);assert.equal(sent[0],a.words);assert.match(sent[1],/could not register/);
  assert.equal(store.get('command_receipts','telegram-1').state,'needs_review');
 });
 
@@ -138,13 +147,51 @@ test('two waiting: a yes gets one question naming both, and the owner\'s choice 
  assert.ok(!asked.context.includes(a.id)&&!asked.context.includes(b.id));
  assert.deepEqual(store.list('approvals').map(r=>r.status),['pending','pending']);
  assert.throws(()=>answerChosen(store,{chat:'telegram',id:a.id}),/not just chosen/);
- const chose=heard(store,{chat:'telegram',words:'the bot one'});
+ const chose=heard(store,{chat:'telegram',words:'the first one'});
  assert.equal(chose.kind,'choose');assert.match(chose.context,new RegExp(a.id));
  assert.throws(()=>answerChosen(store,{chat:'telegram',id:'step-other'}),/not just chosen/);
  assert.throws(()=>answerChosen(store,{chat:'telegram',id:a.id,scheduled:true}),/scheduled run/);
  answerChosen(store,{chat:'telegram',id:a.id});
- assert.equal(store.get('approvals',a.id).status,'approved');assert.equal(store.get('approvals',a.id).user_words,'the bot one');assert.equal(store.get('approvals',b.id).status,'pending');
+ assert.equal(store.get('approvals',a.id).status,'approved');assert.equal(store.get('approvals',a.id).user_words,'the first one');assert.equal(store.get('approvals',b.id).status,'pending');
  assert.throws(()=>answerChosen(store,{chat:'telegram',id:b.id}),/not just chosen/);
+});
+
+test('after "which one?", a short answer in one step\'s own words is recorded by the program, for that step only',async t=>{
+ const {store}=fixture(t),plants=await ask(store,'Water the balcony plants this week'),gym=await ask(store,'Cancel the renewal of your gym membership');
+ assert.equal(heard(store,{chat:'telegram',words:'yes'}).kind,'ask');
+ const chose=heard(store,{chat:'telegram',words:'the plants one'});
+ assert.equal(chose.kind,'answered');assert.equal(chose.step.id,plants.id);assert.match(chose.context,/recorded/);
+ assert.ok(!chose.context.includes(plants.id));
+ assert.equal(store.get('approvals',plants.id).status,'approved');assert.equal(store.get('approvals',plants.id).user_words,'the plants one');
+ assert.equal(store.get('approvals',gym.id).status,'pending');
+ assert.throws(()=>answerChosen(store,{chat:'telegram',id:gym.id}),/not just chosen/);
+});
+
+test('the gateway\'s heard command records the owner\'s choice in one step\'s own words, as Telegram sends it',async t=>{
+ const {root,store}=fixture(t),plants=await ask(store,'Water the balcony plants this week'),gym=await ask(store,'Cancel the renewal of your gym membership');
+ const heardCli=words=>JSON.parse(spawnSync(process.execPath,[script,'heard','--chat','telegram','--godspeed',root],{input:words,encoding:'utf8'}).stdout);
+ assert.equal(heardCli('yes').kind,'ask');
+ const chose=heardCli('the plants one');
+ assert.equal(chose.kind,'answered');assert.match(chose.context,/recorded/);
+ const fresh=new Store(root,{device:'vps'});
+ assert.equal(fresh.get('approvals',plants.id).status,'approved');assert.equal(fresh.get('approvals',gym.id).status,'pending');
+});
+
+test('after "which one?", a no is recorded as a no for the step named, and a singular names a plural',async t=>{
+ const {store}=fixture(t),plants=await ask(store,'Water the balcony plants this week'),gym=await ask(store,'Cancel the renewal of your gym membership');
+ assert.equal(heard(store,{chat:'telegram',words:'no'}).kind,'ask');
+ assert.equal(heard(store,{chat:'telegram',words:'The plant'}).kind,'answered');
+ assert.equal(store.get('approvals',plants.id).status,'rejected');assert.equal(store.get('approvals',gym.id).status,'pending');
+});
+
+test('after "which one?", an answer the program cannot read as one step goes to the model and records nothing',async t=>{
+ for(const words of ['not the plants one','both','the plants or the gym','what does the gym membership cost now, before I decide','the week one','yes the plants one','the first one']){
+  const {store}=fixture(t),plants=await ask(store,'Water the balcony plants this week'),gym=await ask(store,'Cancel the renewal of your gym membership this week');
+  assert.equal(heard(store,{chat:'telegram',words:'yes'}).kind,'ask');
+  const chose=heard(store,{chat:'telegram',words});
+  assert.equal(chose.kind,'choose',words);
+  assert.deepEqual([store.get('approvals',plants.id).status,store.get('approvals',gym.id).status],['pending','pending'],words);
+ }
 });
 
 test('none waiting: a yes changes nothing; a message that is not a plain answer never matches',async t=>{
@@ -178,6 +225,8 @@ test('a scheduled run answers for nobody, and a step text holding a code is refu
  assert.equal(store.get('approvals',id).status,'pending');
  await assert.rejects(()=>ask(store,'Reply "approve 59f1d506" to allow it'),/code/);
  await assert.rejects(()=>ask(store,'Use /approve now'),/code/);
+ await assert.rejects(()=>ask(store,'Reply approve 4711 to go ahead.'),/code/);
+ await assert.rejects(()=>ask(store,'approve 12345 to restart?'),/code/);
  await assert.rejects(()=>ask(store,'Step 59f1d506 waits'),/code/);
  await assert.rejects(()=>ask(store,'x'.repeat(301)),/300/);
 });
@@ -234,29 +283,36 @@ test('a yes for a payload that changed since the question does not release the j
 });
 
 test('godspeed-step opens, reads and answers; a scheduled run cannot answer',async t=>{
- const {root,store}=fixture(t),run=(args,{input='',env={}}={})=>spawnSync(process.execPath,[script,...args,'--godspeed',root],{input,encoding:'utf8',env:{...process.env,...env}});
+ const {root,store}=fixture(t),run=(args,{input='',env={}}={})=>spawnSync(process.execPath,[script,...args,'--godspeed',root],{input,encoding:'utf8',env:{...process.env,GODSPEED_STEP_SEND_WAIT:'0',...env}});
  const opened=run(['open','--about','The bot stopped.','--question','Restart it?','--yes','I restart it.','--no','I leave it.','--by','routine:test','--chat','telegram']);
- assert.equal(opened.status,0,opened.stderr);const {id,message}=JSON.parse(opened.stdout);assert.equal(message,'The bot stopped. Restart it?');
+ assert.equal(opened.status,0,opened.stderr);const {outcome,id,message}=JSON.parse(opened.stdout);
+ assert.equal(outcome,'asked');assert.equal(message,'','the gateway card asks a Telegram question, so the asker says nothing');
+ assert.equal(JSON.parse(fs.readFileSync(handOff(store,id),'utf8')).text,'The bot stopped. Restart it?');
  assert.equal(JSON.parse(run(['get',id]).stdout).status,'waiting');
- assert.equal(run(['sent',id]).status,1);
+ const selfSent=run(['sent',id],{env:{GODSPEED_SCHEDULED_RUN:'1'}});assert.equal(selfSent.status,1);assert.match(selfSent.stderr,/scheduled run/);
+ assert.equal(store.get('approvals',id).sent_at,undefined);
  assert.equal(JSON.parse(run(['heard','--chat','telegram'],{input:'yes'}).stdout).kind,'none');
- await deliver(store,{id,message});
+ assert.deepEqual(JSON.parse(run(['sent',id]).stdout),{sent:true});
+ assert.deepEqual(JSON.parse(run(['sent',id]).stdout),{sent:false},'a question goes out once');
  assert.equal(JSON.parse(run(['heard','--chat','telegram'],{input:'how are you'}).stdout).kind,'none');
  assert.equal(JSON.parse(run(['heard','--chat','telegram'],{input:'yes'}).stdout).kind,'ask');
  assert.equal(JSON.parse(run(['heard','--chat','telegram'],{input:'yes'}).stdout).kind,'answered');
  assert.equal(JSON.parse(run(['get',id]).stdout).status,'yes');
  const refused=run(['answer',id,'--chat','telegram'],{env:{GODSPEED_SCHEDULED_RUN:'1'}});assert.equal(refused.status,1);assert.match(refused.stderr,/scheduled run/);
  assert.equal(JSON.parse(run(['heard','--chat','telegram'],{input:'yes',env:{GODSPEED_SCHEDULED_RUN:'1'}}).stdout).kind,'none');
+ const notebook=JSON.parse(run(['open','--about','The disk is full.','--question','Clean it?','--yes','y','--no','n','--by','routine:test','--chat','notebook']).stdout);
+ assert.equal(notebook.message,'The disk is full. Clean it?');
  const bad=run(['open','--about','Reply "approve 59f1d506"','--question','q','--yes','y','--no','n','--by','routine:test']);assert.equal(bad.status,1);
+ const short=run(['open','--about','Reply approve 4711 to go ahead.','--question','Restart it?','--yes','y','--no','n','--by','routine:test']);assert.equal(short.status,1);assert.match(short.stderr,/code to type/);
 });
 
 test('a step whose question was not sent cannot be reached by a bare yes, and a delivery of other words or to another chat does not send it',async t=>{
- const {store}=fixture(t),{id,message}=open(store,'The bot stopped.'),other=open(store,'The disk is full.');
+ const {store}=fixture(t),{id,words}=open(store,'The bot stopped.'),other=open(store,'The disk is full.');
  assert.equal(heard(store,{chat:'telegram',words:'yes'}).kind,'none');assert.equal(store.get('approvals',id).status,'pending');
  await recordReport(store,{text:'Something else entirely.',step:null,delivery:'telegram'});
- await recordReport(store,{text:message,steps:[id],delivery:'notebook'});delivered(store,message);
+ await recordReport(store,{text:words,steps:[id],delivery:'notebook'});delivered(store,words);
  assert.equal(heard(store,{chat:'telegram',words:'yes'}).kind,'none');
- await deliver(store,{id,message});
+ await deliver(store,{id,words});
  assert.equal(heard(store,{chat:'telegram',words:'yes'}).kind,'answered');
  assert.equal(store.get('approvals',other.id).sent_at,undefined);
 });
@@ -292,8 +348,8 @@ test('a chat-note that cannot be saved after the answer does not hide the commit
 test('one direct reply certifies one step: the one opened in that turn whose words it holds',async t=>{
  const {store}=fixture(t);let opened=[],sends=0;
  const domains={invoke:async(_,{message})=>{
-  if(message==='how is it going'){opened=[open(store,'The bot stopped.'),open(store,'The bot stopped.')];return {reply:opened[0].message};}
-  return {reply:'Nice weather. '+opened[0].message};}};
+  if(message==='how is it going'){opened=[open(store,'The bot stopped.'),open(store,'The bot stopped.')];return {reply:opened[0].words};}
+  return {reply:'Nice weather. '+opened[0].words};}};
  const updates=[{update_id:1,message:{from:{id:123,is_bot:false},chat:{id:123,type:'private'},text:'how is it going'}}];
  const transport=async url=>({ok:true,json:async()=>url.endsWith('getUpdates')?{ok:true,result:updates}:{ok:true,result:{message_id:100+ ++sends}}});
  const telegram=new Telegram({store,domains,token:'synthetic-bot',owner:'123',transport,loginLink:path=>'https://x.test'+path});
@@ -304,7 +360,7 @@ test('one direct reply certifies one step: the one opened in that turn whose wor
 
 test('a direct reply that prints two questions certifies both, even when the receipt write fails after the send',async t=>{
  const {store}=fixture(t);let a,b,sends=0;
- const domains={invoke:async()=>{a=open(store,'The bot stopped.');b=open(store,'The disk is full.');return {reply:a.message+'\n'+b.message};}};
+ const domains={invoke:async()=>{a=open(store,'The bot stopped.');b=open(store,'The disk is full.');return {reply:a.words+'\n'+b.words};}};
  const updates=[{update_id:1,message:{from:{id:123,is_bot:false},chat:{id:123,type:'private'},text:'how is it going'}}];
  const transport=async url=>({ok:true,json:async()=>url.endsWith('getUpdates')?{ok:true,result:updates}:{ok:true,result:{message_id:100+ ++sends}}});
  const telegram=new Telegram({store,domains,token:'synthetic-bot',owner:'123',transport});
@@ -318,7 +374,7 @@ test('a direct reply that prints two questions certifies both, even when the rec
 
 test('an unrelated reply, an older step and a command reply cannot certify a step',async t=>{
  const {store}=fixture(t),old=open(store,'The bot stopped.');
- let fresh;const domains={invoke:async()=>{fresh=open(store,'The disk is full.');return {reply:'Nothing to report. '+old.message};}};
+ let fresh;const domains={invoke:async()=>{fresh=open(store,'The disk is full.');return {reply:'Nothing to report. '+old.words};}};
  const updates=[{update_id:1,message:{from:{id:123,is_bot:false},chat:{id:123,type:'private'},text:'hello'}},{update_id:2,message:{from:{id:123,is_bot:false},chat:{id:123,type:'private'},text:'/notebook'}}];
  const transport=async url=>({ok:true,json:async()=>url.endsWith('getUpdates')?{ok:true,result:updates}:{ok:true,result:{message_id:7}}});
  await new Telegram({store,domains,token:'synthetic-bot',owner:'123',transport,loginLink:path=>'https://x.test'+path}).tick();
@@ -335,34 +391,34 @@ test('only steps asked in the receiving chat count, whatever waits in the other 
 });
 
 test('a Hermes routine that prints a step question makes it answerable only after Hermes delivered the words',async t=>{
- const {store}=fixture(t),{message,id}=open(store,'The bot stopped.');
- await recordRoutine(store,{routine:'asker',text:message,delivery:'telegram'});
+ const {store}=fixture(t),{words,id}=open(store,'The bot stopped.');
+ await recordRoutine(store,{routine:'asker',text:words,delivery:'telegram'});
  assert.deepEqual(store.list("conversation_messages")[0].report.steps,[id]);
  assert.equal(heard(store,{chat:'telegram',words:'yes'}).kind,'none');
  delivered(store,'Other words');
  assert.equal(heard(store,{chat:'telegram',words:'yes'}).kind,'none');
- delivered(store,message);
+ delivered(store,words);
  assert.equal(heard(store,{chat:'telegram',words:'yes'}).kind,'answered');
 });
 
 test('two equal-text records certify one delivery each, in order, and a delivery names the whole step set of its record',async t=>{
  const {store}=fixture(t),a=open(store,'The bot stopped.'),b=open(store,'The bot stopped.'),c=open(store,'The disk is full.');
- const first=await recordRoutine(store,{routine:'asker',text:a.message,delivery:'telegram'});
+ const first=await recordRoutine(store,{routine:'asker',text:a.words,delivery:'telegram'});
  assert.equal(first.length,1);
- assert.deepEqual(delivered(store,a.message,first),first);
- assert.deepEqual(delivered(store,a.message,first),[],'a receipt is used once');
+ assert.deepEqual(delivered(store,a.words,first),first);
+ assert.deepEqual(delivered(store,a.words,first),[],'a receipt is used once');
  assert.deepEqual(waitingSteps(store).map(s=>s.id),[a.id],'only the step its record named became answerable');
- const both=await recordRoutine(store,{routine:'asker',text:b.message+'\n'+c.message,delivery:'telegram'});
+ const both=await recordRoutine(store,{routine:'asker',text:b.words+'\n'+c.words,delivery:'telegram'});
  assert.deepEqual(store.get('conversation_messages',both[0]).report.steps,[b.id,c.id]);
- delivered(store,b.message+'\n'+c.message);
+ delivered(store,b.words+'\n'+c.words);
  assert.deepEqual(heard(store,{chat:'telegram',words:'yes'}).steps.map(s=>s.id).sort(),[a.id,b.id,c.id].sort(),'a two-question message makes both answerable, so a bare yes asks which');
 });
 
 test('a direct reply is stamped with the words actually sent, so a progress photo or a cut reply cannot certify an unseen question',async t=>{
  const {store}=fixture(t),sent=[];
  let long,short,uid=1;const domains={invoke:async()=>{
-  if(uid===1){long=open(store,'Long one.');return {reply:'x'.repeat(4000)+' '+long.message,habit:{progress:{version:1}}};}
-  short=open(store,'Short one.');return {reply:'Nice. '+short.message,habit:{progress:{version:1}}};}};
+  if(uid===1){long=open(store,'Long one.');return {reply:'x'.repeat(4000)+' '+long.words,habit:{progress:{version:1}}};}
+  short=open(store,'Short one.');return {reply:'Nice. '+short.words,habit:{progress:{version:1}}};}};
  const transport=async(url,input)=>{
   if(url.endsWith('getUpdates'))return {ok:true,json:async()=>({ok:true,result:[{update_id:uid,message:{from:{id:123,is_bot:false},chat:{id:123,type:'private'},text:'hi'}}]})};
   sent.push([url.split('/').pop(),input instanceof Object&&input.body instanceof FormData?input.body.get('caption'):JSON.parse(input.body).text]);
@@ -372,10 +428,10 @@ test('a direct reply is stamped with the words actually sent, so a progress phot
  assert.equal(sent.at(-1)[0],'sendMessage');assert.ok(!sent.at(-1)[1].includes('Long one.'));assert.equal(store.get('approvals',long.id).sent_at,undefined);
  uid=2;
  await telegram.tick();
- assert.equal(sent.at(-1)[0],'sendPhoto');assert.equal(sent.at(-1)[1],'Nice. '+short.message);assert.ok(store.get('approvals',short.id).sent_at);
+ assert.equal(sent.at(-1)[0],'sendPhoto');assert.equal(sent.at(-1)[1],'Nice. '+short.words);assert.ok(store.get('approvals',short.id).sent_at);
 });
 
-test('a button press answers only a Telegram question that has gone out; a delivery that stamps nothing hands nothing to the buttons',async t=>{
+test('a button press answers only a Telegram question that has gone out; a delivery that stamps nothing leaves the hand-off',async t=>{
  const {root,store}=fixture(t),notebook=open(store,'The disk is full.','notebook'),unsent=open(store,'The bot stopped.');
  const press=id=>spawnSync(process.execPath,[script,'press',id,'yes','--godspeed',root],{encoding:'utf8'});
  for(const {id} of [notebook,unsent]){
@@ -383,9 +439,8 @@ test('a button press answers only a Telegram question that has gone out; a deliv
   assert.equal(store.get('approvals',id).status,'pending');
  }
  delivered(store,'Something nobody asked about.');
- assert.equal(fs.existsSync(path.join(store.state,'step-questions')),false);
- await deliver(store,unsent);
- assert.equal(fs.existsSync(path.join(store.state,'step-questions',unsent.id+'.json')),true);
+ assert.deepEqual(fs.readdirSync(path.join(store.state,'step-questions')),[unsent.id+'.json']);
+ assert.equal(await cardSent(store,unsent.id),true);
  assert.equal(press(unsent.id).status,0);
  assert.equal(store.get('approvals',unsent.id).status,'approved');
 });
@@ -416,7 +471,7 @@ test('a rejected step is asked again only when it changed, and then says what ch
  heard(store,{chat:'telegram',words:'no'});
  assert.equal(open(store,'Delete the cache.','telegram',{subject:'cache'}).answer,'no');
  const changed=open(store,'Delete the cache, now twice the size.','telegram',{subject:'cache'});
- assert.equal(changed.outcome,'asked');assert.match(changed.message,/You said no to "Delete the cache\." before\. What changed: Delete the cache, now twice/);
+ assert.equal(changed.outcome,'asked');assert.match(changed.words,/You said no to "Delete the cache\." before\. What changed: Delete the cache, now twice/);
 });
 
 test('an outward step with an earlier unrelated decision is still asked',async t=>{
@@ -456,26 +511,51 @@ test('the scenario asker drives the real godspeed-step open with every flag it e
  const full={about:'a',question:'q',yes:'y',no:'n'};
  const asks=[{...full,quiet:'restart'},{...full,optional_after:'Stop them'},{...full,subject:'gw'},{...full,about:'-- restart the gateway'}];
  fs.writeFileSync(path.join(home,'.scenario-asks.json'),JSON.stringify(asks));
- const done=spawnSync('python3',[fileURLToPath(new URL('../../scenarios/scenario-asker.py',import.meta.url))],{cwd:home,encoding:'utf8',env:{...process.env,HERMES_HOME:home}});
+ const done=spawnSync('python3',[fileURLToPath(new URL('../../scenarios/scenario-asker.py',import.meta.url))],{cwd:home,encoding:'utf8',env:{...process.env,HERMES_HOME:home,GODSPEED_STEP_SEND_WAIT:'0'}});
  assert.equal(done.status,0,done.stderr);
  const calls=fs.readFileSync(path.join(home,'argv.log'),'utf8').split('@@\n').filter(Boolean).map(c=>c.trim().split('\n'));
  assert.ok(calls[0].includes('--quietly')&&calls[0].includes('restart'));
  assert.ok(calls[1].includes('--extra')&&calls[1].includes('Stop them')&&!calls[1].includes('--within'));
  assert.ok(calls[2].includes('--subject')&&calls[2].includes('gw'));
- assert.equal(store.list('approvals').filter(a=>a.status==='pending').length,2);
- // One routine run delivers one body: every question asked is recorded once, as printed, before it is
- // printed, and the delivery of that body makes both waiting steps answerable.
- const body=done.stdout.trim();
- assert.equal(body.split('\n').filter(Boolean).length,2);
- const records=store.list('conversation_messages').filter(r=>r.report?.routine==='Scenario asker');
- assert.equal(records.length,1);
- assert.equal(records[0].content,body);
- assert.equal(records[0].delivered_to,'telegram');
- assert.equal(records[0].report.steps.length,2);
- assert.deepEqual(delivered(store,body),[records[0].id]);
+ // The run prints nothing: each question goes out as its own card from the gateway, which makes it answerable.
+ assert.equal(done.stdout,'');
+ assert.equal(store.list('conversation_messages').filter(r=>r.report?.routine==='Scenario asker').length,0);
  const pending=store.list('approvals').filter(a=>a.status==='pending');
  assert.equal(pending.length,2);
- assert.ok(pending.every(a=>a.sent_at),'both waiting steps are answerable once the body is delivered');
+ assert.ok(pending.every(a=>!a.sent_at&&fs.existsSync(handOff(store,a.id))));
+ for(const a of pending)assert.equal(await cardSent(store,a.id),true);
+ for(const a of pending){
+  assert.ok(store.get('approvals',a.id).sent_at);
+  assert.ok(store.list('conversation_messages').some(r=>r.delivered_at&&r.report?.steps?.includes(a.id)),'the card is recorded as the message that asked it');
+ }
+});
+
+test('godspeed-step open for Telegram returns once the gateway sent its card',async t=>{
+ const {root,store}=fixture(t);
+ const child=spawn(process.execPath,[script,'open','--about','The bot stopped.','--question','Restart it?','--yes','y','--no','n','--by','routine:test','--chat','telegram','--godspeed',root],{env:{...process.env,GODSPEED_STEP_SEND_WAIT:'10'}});
+ let out='';child.stdout.on('data',d=>out+=d);
+ const exited=new Promise(resolve=>child.on('exit',resolve)),started=Date.now();
+ let id;
+ while(!id&&Date.now()-started<5000){
+  id=fs.readdirSync(store.state).includes('step-questions')?fs.readdirSync(path.join(store.state,'step-questions'))[0]?.replace(/\.json$/,''):undefined;
+  if(!id)await new Promise(r=>setTimeout(r,50));
+ }
+ assert.ok(id,'the hand-off is written while open waits');
+ assert.equal(child.exitCode,null,'open has not returned before the card went out');
+ assert.equal(await cardSent(store,id),true);
+ assert.equal(await exited,0);
+ assert.ok(Date.now()-started<8000,'open returned well before its bound');
+ assert.equal(JSON.parse(out).id,id);
+});
+
+test('only a waiting Telegram question that has not gone out can be marked sent, and nothing is recorded otherwise',async t=>{
+ const {store}=fixture(t),answered=open(store,'The bot stopped.'),sent=await ask(store,'The disk is full.'),notebook=open(store,'The fan is loud.','notebook');
+ answerStep(store,answered.id,'yes',{chat:'notebook',words:'yes'});
+ assert.equal(fs.existsSync(handOff(store,answered.id)),false,'answering takes the hand-off back');
+ const before=store.list('conversation_messages').length;
+ for(const {id} of [answered,sent,notebook])assert.equal(await cardSent(store,id),false);
+ assert.equal(store.get('approvals',answered.id).sent_at,undefined);
+ assert.equal(store.list('conversation_messages').length,before);
 });
 
 test('the scenario asker records a question before it prints it, and prints nothing when the record is refused',async t=>{

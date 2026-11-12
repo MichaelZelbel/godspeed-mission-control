@@ -40,14 +40,14 @@ export function dueMessages(entries, s, now, verdicts = new Map()) {
     }
   }
 
-  // Loose ends are what a finish since the last evening list left out of its done definition.
+  // Loose ends are what a finish told since the last evening list left out of its done definition.
   // Each is named in exactly one evening list; after that only `met` (it happened after all) or
   // the person's own memory brings it back.
   if (s.evening.enabled && lp.hm >= s.evening.at && !doneToday("evening")) {
     const open = recentTasks(entries, now).filter((t) => !held(t));
     const lastEvening = entries.filter((e) => e.kind === "evening" && new Date(e.at) < now).at(-1);
     const from = lastEvening ? new Date(lastEvening.at) : new Date(now.getTime() - DAY * 60000);
-    const loose = looseEnds(entries).filter((t) => new Date(t.ended) > from && new Date(t.ended) <= now);
+    const loose = looseEnds(entries).filter((t) => new Date(t.told) > from && new Date(t.told) <= now);
     if (open.length || loose.length) {
       messages.push(T(s).evening(open.map((t) => ({ title: t.title, when: when(t.started) })), loose.map((t) => ({ title: t.title, missed: t.missed }))));
     }

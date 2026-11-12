@@ -209,8 +209,9 @@ missed day.
 and follow "Opening a talk" in this conversation (skip the `[SILENT]` rule). The open command that
 brief prints ends with `--shown`, because they read the opening right here: run it exactly as
 printed, so a later conversation does not bring the talk up again. If a talk of that area is
-already open, continue it instead, with one exception: on a talk day of that area, when the open
-talk is an earlier one with no reply from them, run the brief anyway. It opens today's talk from
+already open, continue it instead, with one exception: on a talk day of that area (a day its newest
+rhythm change dropped counts as one when nobody asked for that change: the coach prepares it like one;
+a change they asked for with `area set` drops no talk day), when the open talk is an earlier one with no reply from them, run the brief anyway. It opens today's talk from
 its preparation and closes the earlier one as not held, and the opening names that earlier talk in
 one short sentence. If today's talk is the open one, the brief says so: continue it. A talk with a
 reply is always continued. This holds while a talk of another area is open: that talk stays

@@ -14,6 +14,7 @@ import {FLAG,STARTING_ROUTINES,routineFiles,writeRoutineFiles,prepareCheckIn,sav
 import {cronOf,cronCalendar,calendarCron,retimeWhat,isTalkGate,isCoachTick,talkArea,moveTalk} from './routine-times.mjs';
 import {readNotebookRoutines,rememberNotebookRoutine,enableKind,deliveryFor,journalWanted,journalOnTheClock,JOURNAL_JOB,JOURNAL_SCRIPT,JOURNAL_WHAT,CHAT_TIDY_JOB,CHAT_TIDY_SCRIPT,CHAT_TIDY_SCHEDULE,CHAT_TIDY_WHAT,writeNotebookRoutines,BRIEF_JOB,BRIEF_SCRIPT,isBriefJob,CONNECTION_JOB,CONNECTION_SCRIPT,CONNECTION_WHAT,MAIL_COUNT_JOB,MAIL_COUNT_SCRIPT,MAIL_COUNT_WHAT,WORKOUTS_JOB,WORKOUTS_SCRIPT,WORKOUTS_WHAT,NOTICES_JOB,NOTICES_SCRIPT,NOTICES_WHAT} from './notebook-routines.mjs';
 import {holdQueuedNotices} from './notices.mjs';
+import {certifyRoutineRuns} from './background-reports.mjs';
 import {writeRoutinePromise} from './routine-promises.mjs';
 import {switchable,switchedOn,setRoutineSwitch,switchId} from './routine-switches.mjs';
 import {connectionCheckWanted} from './connection-check.mjs';
@@ -252,7 +253,7 @@ export class NativeScheduler{
  // A promise that cannot be written never stops a routine being made.
  writePromise(routine){
   const timezone=this.store.get('settings','installation')?.timezone||Intl.DateTimeFormat().resolvedOptions().timeZone;
-  try{writeRoutinePromise(this.store.root,{...routine,timezone});}catch{}
+  try{writeRoutinePromise(this.store.root,{...routine,timezone,now:new Date(this.now())});}catch{}
  }
  // A routine added to the starting routines after a machine got its first ones (the nightly goal
  // research, 13 October 2026) is made once on that machine too, when it is not in the machine's
@@ -305,6 +306,7 @@ export class NativeScheduler{
   const made=hermesJobs(this.home).find(j=>!before.has(j.id)&&j.name===NOTICES_JOB);
   if(!made)throw Error('Hermes did not keep the routine "'+NOTICES_JOB+'"');
   rememberNotebookRoutine(this.store,{id:made.id,key:'notices',name:NOTICES_JOB,what:NOTICES_WHAT});
+  this.writePromise({kind:'notices',name:NOTICES_JOB,what:NOTICES_WHAT,schedule:'*/15 * * * *'});
   return made.id;
  }
  // Routines wait for their switches only once the notice sender exists, which means the earlier notices are marked.
@@ -380,6 +382,7 @@ export class NativeScheduler{
   const made=hermesJobs(this.home).find(j=>!before.has(j.id)&&j.name===JOURNAL_JOB);
   if(!made)throw Error('Hermes did not keep the routine "'+JOURNAL_JOB+'"');
   rememberNotebookRoutine(this.store,{id:made.id,key:'journal-tick',name:JOURNAL_JOB,what:JOURNAL_WHAT});
+  this.writePromise({kind:'journal-tick',name:JOURNAL_JOB,what:JOURNAL_WHAT,schedule:'*/15 * * * *'});
   return made.id;
  }
  // THE DAILY CONNECTION CHECK (4 November 2026, #200; notebook-routines.mjs, core/connection-check.mjs).
@@ -414,12 +417,14 @@ export class NativeScheduler{
    return job.id;
   }
   const before=new Set(jobs.map(j=>j.id));
-  const brief=this.notificationJob('morning-brief'),briefAt=brief&&brief.enabled!==false?cronCalendar(cronOf(brief))?.times?.[0]:null,check=dailyTime(connectionCheckTime(briefAt));
-  await this.command(['create',check.minute+' '+check.hour+' * * *','--no-agent','--name',CONNECTION_JOB,'--script',CONNECTION_SCRIPT,'--deliver',deliveryFor(installation,{telegram:telegramInHermes(this.home)}),'--failure-deliver','local','--workdir',root]);
+  const brief=this.notificationJob('morning-brief'),briefAt=brief&&brief.enabled!==false?cronCalendar(cronOf(brief))?.times?.[0]:null,check=dailyTime(connectionCheckTime(briefAt)),schedule=check.minute+' '+check.hour+' * * *';
+  await this.command(['create',schedule,'--no-agent','--name',CONNECTION_JOB,'--script',CONNECTION_SCRIPT,'--deliver',deliveryFor(installation,{telegram:telegramInHermes(this.home)}),'--failure-deliver','local','--workdir',root]);
   const made=hermesJobs(this.home).find(j=>!before.has(j.id)&&j.name===CONNECTION_JOB);
   if(!made)throw Error('Hermes did not keep the routine "'+CONNECTION_JOB+'"');
   if(!wanted)try{await this.command(['pause',made.id]);}catch(error){await this.command(['remove',made.id]).catch(()=>{});throw error;}
   rememberNotebookRoutine(this.store,{id:made.id,key:'connection-check',name:CONNECTION_JOB,what:CONNECTION_WHAT,paused_by_notebook:!wanted,running_by_notebook:wanted});
+  // Promised only when it is made running: a check made paused would be told as missed every morning.
+  if(wanted)this.writePromise({kind:'connection-check',name:CONNECTION_JOB,what:CONNECTION_WHAT,schedule});
   return made.id;
  }
  // THE MAIL COUNTS (notebook-routines.mjs, core/mail-trackers.mjs): one routine while a tracker has a
@@ -445,6 +450,7 @@ export class NativeScheduler{
   const made=hermesJobs(this.home).find(j=>!before.has(j.id)&&j.name===MAIL_COUNT_JOB);
   if(!made)throw Error('Hermes did not keep the routine "'+MAIL_COUNT_JOB+'"');
   rememberNotebookRoutine(this.store,{id:made.id,key:'mail-count',name:MAIL_COUNT_JOB,what:MAIL_COUNT_WHAT});
+  this.writePromise({kind:'mail-count',name:MAIL_COUNT_JOB,what:MAIL_COUNT_WHAT,schedule:'30 4 * * *'});
   return made.id;
  }
  // A routine that could not be made or resumed is a pending notice for the owner (like a blind watch
@@ -505,7 +511,9 @@ export class NativeScheduler{
   await this.command(['create',minute+' * * * *','--no-agent','--name',WORKOUTS_JOB,'--script',WORKOUTS_SCRIPT,'--deliver','local','--failure-deliver','local','--workdir',root]);
   const made=hermesJobs(this.home).find(j=>!before.has(j.id)&&j.name===WORKOUTS_JOB&&j.script===WORKOUTS_SCRIPT);
   if(!made)throw Error('Hermes did not keep the routine "'+WORKOUTS_JOB+'"');
-  return this.completeWorkoutsHandover(made);
+  const id=await this.completeWorkoutsHandover(made);
+  this.writePromise({kind:'workouts',name:WORKOUTS_JOB,what:WORKOUTS_WHAT,schedule:minute+' * * * *'});
+  return id;
  }
  async completeWorkoutsHandover(candidate){
   const started=this.now();
@@ -679,8 +687,10 @@ export class NativeScheduler{
  // After every tick on the machine that runs the routines: the routines' scripts follow the notebook's
  // folders (an upgrade moves them), and a reply that reached nobody becomes a note. On a mission control
  // not made from the starter that is only for the routines the notebook made itself (the notice sender,
- // switched-on routines), never the owner's own jobs.
+ // switched-on routines), never the owner's own jobs. First, the questions those runs delivered to
+ // Telegram become answerable (certifyRoutineRuns), whoever made the job.
  afterTick(){
+  try{certifyRoutineRuns(this.store,{home:this.home,jobs:hermesJobs(this.home)});}catch(error){try{this.onFailure?.(error);}catch{}}
   if(!starterBorn(this.store.root)){
    const made=new Set(readNotebookRoutines(this.store).jobs.map(j=>j.id));if(!made.size)return [];
    const timezone=this.store.get('settings','installation')?.timezone||Intl.DateTimeFormat().resolvedOptions().timeZone;

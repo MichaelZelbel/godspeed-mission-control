@@ -283,3 +283,25 @@ test('the installer counts only its own notebook as answering, and says when ano
   assert.equal(mine.status,0,mine.err);
   assert.equal(mine.err,'');
 });
+
+// The Update now button's update runs this installer inside the running service (#456). There it may
+// not rewrite the service's definition, so it goes on only when the definition stays as it is but for PATH.
+test('an update from inside the service goes on only when the service would be defined the same',{skip:options.skip||(process.platform==='darwin'&&'systemd units are Linux only')},()=>{
+  const dir=scratch('definition'),env={root:'/srv/mc',state:'/srv/mc/.godspeed/integrated-runtime',node:'/srv/node',service_user:'anna',service_group:'staff',HOME:'/home/anna',system_unit:dir+'/unit',manager:'system'};
+  assert.equal(sh('PATH=/installer/path:/usr/bin unit_text system > "$system_unit"; PATH=/service/path:/usr/bin same_definition',env).status,0,'only PATH differs');
+  assert.equal(sh('unit_text system > "$system_unit"; node=/srv/other-node same_definition',env).status,1,'another Node.js needs the administrator');
+  assert.equal(sh('same_definition',{...env,manager:'none'}).status,1);
+});
+
+test('godspeed-update runs the version switched in, and another installation\'s command stays',options,()=>{
+  const home=scratch('home'),root=scratch('mc root'),state=root+'/.godspeed/integrated-runtime',commit='a'.repeat(40);
+  fs.mkdirSync(state+'/versions/'+commit+'/notebook/bin',{recursive:true});fs.writeFileSync(state+'/version',commit+'\n');
+  fs.writeFileSync(state+'/versions/'+commit+'/notebook/bin/godspeed.mjs','console.log(process.env.GODSPEED_WORKSPACE+"|"+process.argv.slice(2).join(" "));');
+  const env={HOME:home,root,state,node:slash(process.execPath)};
+  const made=sh('install_update_command',env);assert.equal(made.status,0,made.err);
+  const command=home+'/.local/bin/godspeed-update';
+  assert.equal(spawnSync(bash,[command,'--check'],{encoding:'utf8'}).stdout.trim(),root+'|update --check');
+  const other=sh('install_update_command',{...env,root:scratch('another')});
+  assert.equal(other.status,0);assert.match(other.err,/The command godspeed-update on this computer is another installation's\. This one updates with: GODSPEED_WORKSPACE=/);
+  assert.equal(spawnSync(bash,[command,'--check'],{encoding:'utf8'}).stdout.trim(),root+'|update --check','the first installation\'s command is kept');
+});

@@ -7,7 +7,8 @@ import {appendAssistantMessage} from './conversation-state.mjs';
 // ONE WAITING STEP FOR EVERY YES (issue #196): background work that needs the owner's yes opens a
 // step, an `approvals` record, and the owner answers it with a plain yes or no in the chat it was
 // asked in. The program finds which step a yes belongs to from these records; the model only
-// phrases "which one?" and reads the owner's choice back into a step id (answerChosen).
+// phrases "which one?" and, when the owner's choice does not name one step in that step's own words,
+// reads it back into a step id (answerChosen).
 // Each chat a step can be asked in, with the one conversation it is read from; `asked_in` and the
 // matcher's route both come from this table.
 export const ROUTES={telegram:{conversation:'telegram-owner',matches:id=>id==='telegram-owner'},notebook:{conversation:'notebook:general',matches:id=>/^notebook:general(:session:|$)/.test(id)}};
@@ -22,12 +23,31 @@ const clean=words=>String(words??'').toLowerCase().replace(/[‘’]/g,"'").repl
 // Anything longer or different is neither: the message then reaches the model as an ordinary one.
 export const classifyAnswer=words=>{const w=clean(words);return YES.has(w)?'yes':NO.has(w)?'no':null;};
 
-const CODE=/\/(?:approve|reject)\b|\b(?:approve|reject|genehmig\w*)\s+\S*\d/i;
+// Words that ask the owner to type something to answer (#191): `/approve`; a yes word or "reply",
+// "answer" or "respond" ("with") followed by a code: a step id or other UUID, a token of six or more with a letter and a digit, six or more
+// digits with no currency sign or word before or after them, or an all-letter hex word set off by
+// Markdown, quotes or `#`; "reply ... code <value>"; "send/text/type (me) the code <value>";
+// "enter the code <value> here / in the chat", the value bare or wrapped in Markdown or quotes (a
+// full stop or other sentence mark after the value ends the sentence, so "Here is the map" is not
+// "here"); "yes"/"no"/"ok" plus a code, quoted or after "reply/answer/say/type/send".
+// "approve facade", "approve Q3-budget", "genehmigt 250000 Euro", "approve $25000000", a commit in
+// a link, a pickup code to enter at a machine, a door code to text to someone else, "Enter the code
+// 4711. Here is the map." or "Invoice no 123456" ask for nothing.
+const REPLY_CODES=[/(?:^|[^\w/])\/(?:approve|reject)\b/i,
+ /\b(?:approve|reject|genehmig\w*|ablehn\w*|(?:reply|answer|respond)(?:\s+with)?)[^\w\n.!?,;]{1,6}(?:(?:step-)?[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}|(?=[a-z]*\d)(?=\d*[a-z])[a-z0-9]{6,}|(?<![$€£]\s?)\d{6,}(?!\s*(?:€|\$|£|%|euro|eur|usd|dollar|chf|gbp))|(?<=[`*"'#][^\w\n]{0,5})[a-f]{6,}|[a-f]{6,}(?=[`*"']))(?![\w-])/i,
+ /(?:\breply\b[^.!?\n]{0,40}?|\b(?:send|text|type)(?:\s+(?:me|us|back|in))*\s+(?:the|this|that)\s+)\b(?:code|id)\b[^\w\n.!?,;]{0,6}[\w-]*\d/i,
+ /\benter\s+(?:the|this|that)\s+(?:code|id)\b[^\w\n.!?,;]{0,6}[\w-]*\d[\w-]*[`*"'“”‘’]{0,3}\s+(?:here|in\s+(?:the|this|your)\s+(?:chat|reply|answer))\b/i,
+ /(?:\b(?:reply|answer|respond|say|type|send|write|text)\b[^.!?\n]{0,20}?\s|[`*"'“‘])(?:yes|no|ok|ja|nein)[^\w\n.!?,;]{1,6}(?:(?:step-)?[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}|(?=[a-z]*\d)(?=\d*[a-z])[a-z0-9]{6,}|\d{6,})(?![\w-])/i];
+export const asksForCode=text=>REPLY_CODES.some(code=>code.test(text));
+// A waiting step's own words stay as strict as before #191 (main's pattern, unchanged): any "/approve"; "approve", "reject" or "genehmig…" followed by
+// any token holding a digit is refused, short codes included ("Reply approve 4711 to go ahead."). Refusing
+// a step text only makes the assistant reword it, so this check may be stricter than the routine check.
+const STEP_CODE=/\/(?:approve|reject)\b|\b(?:approve|reject|genehmig\w*)\s+\S*\d/i;
 const hexCode=text=>(text.match(/[0-9a-f]{6,}/gi)||[]).some(run=>/\d/.test(run)&&/[a-f]/i.test(run));
 export function checkStepText(label,text,id){
  if(typeof text!=='string'||!text.trim())throw Error('Say what the '+label+' is.');
  if(text.length>300||/[\r\n]/.test(text))throw Error('The '+label+' must be one line of at most 300 characters.');
- if(CODE.test(text)||hexCode(text)||text.includes(id))throw Error('The '+label+' must not hold a code to type; the owner answers with a plain yes or no.');
+ if(asksForCode(text)||STEP_CODE.test(text)||hexCode(text)||text.includes(id))throw Error('The '+label+' must not hold a code to type; the owner answers with a plain yes or no.');
 }
 
 export function readStep(record){
@@ -101,14 +121,24 @@ export function openStep(store,{about,question,yes,no,by,chat,job,quietly,subjec
   try{appendAssistantMessage(store,'general',message);stamp(store,id);}
   catch(error){withdrawStep(store,id);throw error;}
  }
+ if(chat==='telegram'){
+  try{handOffButtons(store,[id]);}
+  catch(error){withdrawStep(store,id);throw error;}
+  return {outcome:'asked',id,message:''};
+ }
  return {outcome:'asked',id,message};
 }
 
-// A step is answerable once the code that sent its question has said so (`sent_at`). Three senders do:
-// openStep, for a question it writes into the notebook chat itself; a background delivery record that
-// names the step (background-reports.mjs, via stampDelivered, together with its receipt); and the Telegram sender, for a direct
-// reply it sent that holds the words of a step opened during that very turn (stampReply). The asker's
-// own say-so never counts, and a question printed once certifies one step, however many ask the same words.
+// A step is answerable once the code that sent its question has said so (`sent_at`). These senders do:
+// openStep, for a question it writes into the notebook chat itself; the gateway's Yes/No card, the one
+// message a Telegram step's question goes out in (step_buttons.py runs `godspeed-step sent` once
+// Telegram accepted it, background-reports.mjs cardSent, stampCard). Words that still carry a question
+// certify it too: a background delivery record that names the step, once Hermes delivered it, through
+// the gateway's delivery wrapper or, for a run the notebook started itself, the notebook's own look at
+// Hermes' executions ledger (background-reports.mjs, certifyRoutineRuns), each via stampDelivered with
+// its receipt; and the Telegram sender, for a direct reply it sent that holds the words of a step opened
+// during that very turn (stampReply). The asker's own say-so never counts, and a question printed once
+// certifies one step, however many ask the same words.
 // The time a question or a later message reached the chat, never equal to one already recorded, so a
 // message sent in the same millisecond still counts as newer (`spokeSince`).
 export const deliveryClock=store=>{
@@ -121,7 +151,8 @@ export const deliveryClock=store=>{
 export const saveReached=(store,value)=>store.withLockAsync(()=>store.saveUnderLock('conversation_messages',{...value,delivered_to:'telegram',delivered_at:deliveryClock(store)}));
 // One delivery certifies every question it carries, and its receipt, in one commit: a failure leaves
 // none of them answerable, never a prefix of a multi-question message. Each gets its own position.
-const stampAll=(store,ids,{chat,messageId,receipt}={})=>store.withLock(()=>{
+// A question that went out needs no card from the gateway any more: its hand-off goes.
+function stampUnderLock(store,ids,{chat,messageId,receipt}={}){
  const base=Date.parse(deliveryClock(store));let n=0;
  const changes=[],stamped=[];
  for(const id of ids){
@@ -134,18 +165,34 @@ const stampAll=(store,ids,{chat,messageId,receipt}={})=>store.withLock(()=>{
  const stored=receipt&&store.get('conversation_messages',receipt.id);
  if(stored)changes.push(store.prepare('conversation_messages',{delivered_at:new Date(base+n++).toISOString()},stored));
  if(changes.length)store.commit(changes);
+ for(const id of stamped)dropHandOff(store,id);
  return stamped;
-});
+}
+const stampAll=(store,ids,options)=>store.withLock(()=>stampUnderLock(store,ids,options));
 const stamp=(store,id)=>stampAll(store,[id]);
-export const stampDelivered=(store,ids,receipt)=>{
- const stamped=stampAll(store,ids,{chat:'telegram',receipt});
- try{handOffButtons(store,stamped);}catch{}
-};
-// The process that delivers a report usually has no Telegram client (the notebook's own `hermes cron
-// tick`), so the Yes/No buttons are sent by the gateway's godspeed-context plugin (step_buttons.py),
-// which watches this folder: one file per Telegram step that has just become answerable.
+export const stampDelivered=(store,ids,receipt)=>stampAll(store,ids,{chat:'telegram',receipt});
+// The gateway's card went out: the one message that asked this Telegram step's question.
+export const stampCard=(store,id,receipt)=>store.withLockAsync(()=>stampUnderLock(store,[id],{chat:'telegram',receipt}));
+// Resolves once the step's question went out or the step stopped waiting, or after `ms`. A Telegram
+// step's card is sent by the gateway, so `godspeed-step open` waits here for it before the routine ends.
+export async function sentWithin(store,id,ms){
+ const until=Date.now()+ms;
+ for(;;){
+  const record=store.get('approvals',id);
+  if(!record||record.status!=='pending'||record.sent_at||Date.now()>=until)return;
+  await new Promise(resolve=>setTimeout(resolve,Math.min(200,Math.max(0,until-Date.now()))));
+ }
+}
+// The process that asks usually has no Telegram client (the notebook's own `hermes cron tick`), so a
+// Telegram step's question is sent, once, with its Yes/No buttons, by the gateway's godspeed-context
+// plugin (step_buttons.py), which watches this folder: one file per Telegram step whose question the
+// gateway is to send. It is written when the step opens and deleted once the question went out (by
+// its card or in words) or the step was answered.
 export const STEP_QUESTIONS='step-questions',STEP_QUESTION_MAX_AGE_MS=24*3600000;
 const STEP_ID=/^step-[0-9a-f-]{36}$/;
+function dropHandOff(store,id){
+ if(STEP_ID.test(id))try{fs.rmSync(path.join(store.state,STEP_QUESTIONS,id+'.json'),{force:true});}catch{}
+}
 function handOffButtons(store,ids){
  if(!ids.length)return;
  const dir=path.join(store.state,STEP_QUESTIONS);
@@ -173,8 +220,7 @@ export function stepsForWords(store,text,since=''){
 export function stampReply(store,{words,since,messageId}){
  const ids=stepsForWords(store,words,since);
  if(!ids.length)return;
- const stamped=stampAll(store,ids,{messageId});
- try{handOffButtons(store,stamped);}catch{}
+ stampAll(store,ids,{messageId});
 }
 function withdrawStep(store,id){
  try{store.withLock(()=>{const record=store.get('approvals',id);if(record?.status==='pending'&&!record.sent_at)store.commit([store.prepare('approvals',{status:'withdrawn'},record)]);});}catch{}
@@ -193,6 +239,7 @@ export function answerStep(store,id,answer,{chat,words}){
   const job=yes&&record.job_id?store.get('jobs',record.job_id):null;
   if(job?.outward&&hash(job.payload)===record.payload_hash&&['awaiting_approval','pending'].includes(job.state))changes.push(store.prepare('jobs',{approval_id:record.id,state:'pending'},job));
   store.commit(changes);
+  dropHandOff(store,id);
   return {already:false,step:readStep(changes[0])};
  });
 }
@@ -222,6 +269,25 @@ function chooseContext(steps,chat){
   steps.map(s=>s.id+': '+s.about).join('; ')+'.';
 }
 
+// After "which one?", a short answer that names exactly one listed step by its own words ("the plants
+// one") is recorded by the program, so the owner's choice never rests on the model running a command
+// (run 43144822157: the model said "confirmed" and recorded nothing). Every word beside a few filler
+// words must be in that step's words and in no other listed step's; a longer message, a yes or no, or
+// a word no step holds ("not the plants one", "both") goes to the model as before.
+const CHOICE_FILLER=new Set(['the','a','an','one','that','this','i','mean','meant','please','it','is','for','der','die','das','den','dem','ein','eine','einen','einer','bitte','ich','meine','meinte']);
+const CHOICE_MAX_WORDS=6;
+const wordsOf=text=>String(text).toLowerCase().normalize('NFKD').replace(/\p{M}/gu,'').match(/[\p{L}\p{N}]+/gu)||[];
+const sameWord=(said,own)=>said===own||(Math.min(said.length,own.length)>=4&&(said.startsWith(own)||own.startsWith(said)));
+function chosenByWords(steps,words){
+ const said=wordsOf(words);
+ if(!said.length||said.length>CHOICE_MAX_WORDS)return null;
+ const content=said.filter(w=>!CHOICE_FILLER.has(w));
+ if(!content.length)return null;
+ const hits=steps.filter(s=>{const own=wordsOf(s.about);return content.every(w=>own.some(o=>sameWord(w,o)));});
+ const named=hits.length===1?hits[0]:null;
+ return named&&steps.every(s=>s===named||!content.some(w=>wordsOf(s.about).some(o=>sameWord(w,o))))?named:null;
+}
+
 // A bare yes answers the last thing asked: any other message delivered to the chat after the step's
 // question went out (a background report that does not carry this step) is the newer one.
 const spokeSince=(store,chat,step)=>store.list('conversation_messages').some(r=>r.delivered_to===chat&&r.delivered_at&&r.delivered_at>stepTime(step)&&!(r.report?.steps||[r.report?.step]).includes(step.id));
@@ -239,6 +305,12 @@ export function heard(store,{chat,words,at=new Date().toISOString(),scheduled=fa
    const done=answerStep(store,listed[0],answer,{chat,words});
    rememberAfterAnswer(dir,chats,chat,at);
    return {kind:'answered',step:done.step,reply:answer==='yes'?done.step.on_yes:done.step.on_no,context:answeredContext(done.step,answer)};
+  }
+  const chosen=answer?null:chosenByWords(named(listed),words);
+  if(chosen){
+   const done=answerStep(store,chosen.id,clarification.answer,{chat,words});
+   rememberAfterAnswer(dir,chats,chat,at);
+   return {kind:'answered',step:done.step,reply:clarification.answer==='yes'?done.step.on_yes:done.step.on_no,context:answeredContext(done.step,clarification.answer)};
   }
   remember(dir,chats,chat,at,{...clarification,step_ids:listed,state:'choosing',words});
   return {kind:'choose',steps:named(listed),context:chooseContext(named(listed),chat)};

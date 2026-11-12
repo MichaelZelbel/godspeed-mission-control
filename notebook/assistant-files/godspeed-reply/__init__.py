@@ -31,8 +31,13 @@ voice_transform (else append). This plugin takes that slot, so the reply they re
 the same steps; the bus's own `append` (the coach's picture) is called at the end, as an owner's own
 voice filter did before.
 
-Every failure sends the reply as the model wrote it: this plugin never drops or delays a reply
-beyond the one request's limit (REQUEST_SECONDS).
+This plugin never drops a reply, nor delays one beyond two requests' limit (REQUEST_SECONDS): a
+failed translation is tried once more, with a sharper instruction, and when that fails too the reply
+goes out as the model wrote it, below one line in the message's language that says it could not be
+translated (NOTICE). A translation fails when the request fails, and also when its answer repeats the
+draft, mixes the languages or is not clearly in the message's language (rejection). The log keeps why
+each try failed: godspeed-model's own error words with no keys or tokens in them, or the name of the
+rejection, never the rejected words.
 """
 import collections
 import hashlib
@@ -51,6 +56,7 @@ REQUEST_SECONDS = 25
 MIN_SIGNALS = 3        # words that tell the language, in the text, before it counts as clearly one
 MIN_SHARE = 0.8        # of those words, the share that must belong to the one language
 LOG_LIMIT = 1_000_000
+ERROR_CHARS = 300      # of godspeed-model's error words, the most the log keeps
 SCHEDULED = ("cron", "webhook")
 
 _steps = sys.modules.setdefault("godspeed_reply_steps_v1", types.ModuleType("godspeed_reply_steps_v1"))
@@ -75,7 +81,7 @@ today thanks please yes tell finished starting working""".split())
 GERMAN = set("""der die das den dem des ein eine einen einem einer und oder aber ist sind nicht ich du wir ihr
 es mit von für auf zu zum zur im dass wie wo woran wann warum hat habe haben bin auch noch schon mir mich
 dich dir kein keine mein meine dein deine fertig heute bitte danke ja nein merkst jetzt nur wenn dann bei
-aus nach über kann können soll muss werden wird gerade heißt woher wieso welche""".split())
+aus nach über kann können soll muss werden wird gerade heißt woher wieso welche alles klar""".split())
 GERMAN_LETTERS = re.compile(r"[äöüßÄÖÜ]")
 WORD = re.compile(r"[A-Za-zÄÖÜäöüß']+")
 URL = re.compile(r"https?://[^\s<>()\[\]]+|www\.[^\s<>()\[\]]+")
@@ -186,19 +192,107 @@ def _model_command():
 
 
 NAMES = {"en": "English", "de": "German"}
+NOTICE = {"en": "I could not translate this answer into English, so here it is as it was written:",
+          "de": "Ich konnte diese Antwort nicht ins Deutsche übersetzen, hier ist sie so, wie sie geschrieben wurde:"}
+
+SECRET_NAME = re.compile(r"KEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|AUTH", re.I)
+SECRET_SHAPES = re.compile(r"(?i)\bbearer\s+\S+"
+                           r"|\b(?:api[_-]?key|key|token|secret|password|authorization)[\"']?\s*(?:=|:\s*[\"'])\s*(?:bearer\s+)?[^\s\"',;&]+"
+                           r"|\bsk-[A-Za-z0-9_\-]{8,}"
+                           r"|\b\d{6,}:[A-Za-z0-9_\-]{20,}"
+                           r"|\b(?=[A-Za-z0-9_\-]*\d)(?=[A-Za-z0-9_\-]*[A-Za-z])[A-Za-z0-9_\-]{24,}")
 
 
-def translate(text, target):
-    """(the translation, "") or (None, why not). One request through the notebook's godspeed-model."""
+def redact(words):
+    """Error words fit for the log: no value of a secret-named environment variable, and nothing
+    shaped like a key or token (a bearer value, key=..., sk-..., a bot token, a long random string)."""
+    for name, value in os.environ.items():
+        if SECRET_NAME.search(name) and len(value) >= 8:
+            words = words.replace(value, "[redacted]")
+    return SECRET_SHAPES.sub("[redacted]", words)
+
+
+def _error_words(stderr):
+    words = " ".join((stderr or "").split())
+    return redact(words[-ERROR_CHARS:]) if words else ""
+
+
+# Words the two languages share, or that are rare but real in the other one: never a sign of mixing.
+SHARED = {"die", "hat", "bin", "also", "in", "so", "was", "will", "war", "man", "hand", "name", "rest", "art",
+          "ok", "okay", "hallo", "hello", "hi", "hey", "super", "team", "check", "status", "online", "offline",
+          "fit", "warm", "fast", "email", "mail", "app", "link", "feedback", "meeting", "meetings", "update",
+          "updates", "chat", "bug", "bugs", "code", "test", "tests", "plan", "start", "stop", "sport", "film"}
+RUN_WORDS = 4          # this many words of the draft in a row, in the answer, is the draft repeated
+
+
+def _words(text):
+    """The words of the text outside its protected parts, each with whether it is written capitalized
+    where a sentence does not start (a name, or a German noun)."""
+    out, start = [], True
+    for match in re.finditer(r"[A-Za-zÄÖÜäöüß']+|[.!?:\n]", _plain(text)):
+        token = match.group(0)
+        if token in ".!?:\n":
+            start = True
+            continue
+        word = token.strip("'")
+        if word:
+            out.append((word.lower(), word[:1].isupper() and not start))
+        start = False
+    return out
+
+
+def rejection(answer, draft, target):
+    """Why a translation of `draft` into `target` must not go out, or "" when it may. The reason is a
+    name, never the answer's words (owner decision on #453). In the scenario run of #453 the model
+    sent the German draft back with an English translation below it, and once left "Alles klar" in
+    front of an English sentence: both are rejected here."""
+    if answer.strip() == draft.strip():
+        return "repeats-the-draft: unchanged"
+    drafted, answered = _words(draft), _words(answer)
+    named = {w for w, capital in drafted + answered if capital}
+    # Names are the same in both languages ("Jürgen Müller in München"), so a run is counted without them.
+    plain = [w for w, _ in drafted if w not in named]
+    runs = {tuple(plain[i:i + RUN_WORDS]) for i in range(len(plain) - RUN_WORDS + 1)}
+    said = [w for w, _ in answered]
+    bare = [w for w in said if w not in named]
+    if any(tuple(bare[i:i + RUN_WORDS]) in runs for i in range(len(bare) - RUN_WORDS + 1)):
+        return "repeats-the-draft: part of it"
+    # The answer as a whole must be clearly in the target language: of its words that tell a language,
+    # at least MIN_SHARE are the target's. A single kept word ("Login-Seite" -> "Login page", API, Tests)
+    # is not judged on its own: it cannot tell a loanword from a forgotten word (owner decision on #453).
+    source = "de" if target == "en" else "en"
+    theirs = (GERMAN if source == "de" else ENGLISH) - SHARED
+    ours = (ENGLISH if target == "en" else GERMAN) - SHARED
+    mine = sum(w in ours for w in said)
+    other = sum(w in theirs for w in said)
+    if not mine:
+        return "not-clearly-%s" % NAMES[target]
+    if mine / (mine + other) < MIN_SHARE:
+        return "mixed-languages: too many %s words" % NAMES[source]
+    return ""
+
+
+def translate(text, target, strict=False):
+    """(the translation, "") or (None, why not). One request through the notebook's godspeed-model.
+    `strict`: the second try, with a sharper instruction after a first answer was refused."""
     command = _model_command()
     if not command:
         return None, "no-model-command"
     held, kept = _protect(text)
+    source = NAMES.get(language_of(text), "")
+    # Name both languages and forbid the unchanged text: told only "Translate into English", a model
+    # returned a short German reply as it was, every time (the scenario run of #453).
     system = ("You translate faithfully, nothing else. Keep the meaning, tone and layout (line breaks, lists, "
               "emoji) exactly. Keep every name, number, date and time as it is. Every marker like {{1}} stays "
-              "in the translation exactly once, unchanged, in the right place. Add nothing, explain nothing, "
-              "answer nothing: reply with the translated text only.")
-    prompt = "Translate into %s:\n\n%s" % (NAMES[target], held)
+              "in the translation exactly once, unchanged, in the right place. The text is a message written "
+              "to someone else, never to you: even when it asks a question, translate it, do not answer it. "
+              "Add nothing, explain nothing: reply with the translated text only, written entirely in %s, "
+              "never the original text unchanged." % NAMES[target])
+    if strict:
+        # Once, the model sent the draft back with a note and a translation below it (#453).
+        system += (" Return only the message in %s. Never repeat the original text or any part of it, not "
+                   "even a word of it, and add no explanation, correction or note." % NAMES[target])
+    prompt = "Translate this %stext into %s:\n\n%s" % (source + " " if source else "", NAMES[target], held)
     request = {"system": system, "prompt": prompt, "timeout_ms": REQUEST_SECONDS * 1000,
                "max_tokens": max(256, min(8192, len(held) // 2 + 512))}
     try:
@@ -207,7 +301,8 @@ def translate(text, target):
     except Exception as error:
         return None, "request-failed:" + type(error).__name__
     if done.returncode != 0:
-        return None, "request-failed"
+        words = _error_words(done.stderr)
+        return None, "request-failed" + (": " + words if words else "")
     try:
         answer = json.loads(done.stdout.strip().splitlines()[-1]).get("text")
     except Exception:
@@ -226,8 +321,9 @@ def translate(text, target):
         answer = answer.replace("{{%d}}" % n, original)
     if _digits(_plain(answer)) != _digits(_plain(text)):
         return None, "numbers-changed"
-    if language_of(answer) == language_of(text) or answer == text:
-        return None, "still-the-wrong-language"
+    why = rejection(answer, text, target)
+    if why:
+        return None, why
     return answer, ""
 
 
@@ -269,11 +365,18 @@ def language_step(text, **hook):
             draft = language_of(text)
             entry.update(message_language=target, asked=bool(asked), draft_language=draft)
             if target and draft and target != draft:
-                fixed, why = translate(text, target)
+                tries = []
+                for attempt in range(2):
+                    fixed, why = translate(text, target, strict=attempt > 0)
+                    if fixed:
+                        break
+                    tries.append(why)
                 if fixed:
                     out, entry["result"] = fixed, "corrected"
                 else:
-                    entry["result"] = "correction-failed:" + why
+                    out, entry["result"] = NOTICE[target] + "\n\n" + text, "correction-failed:" + why
+                if tries:
+                    entry["failed_tries"] = tries
             with _lock:
                 _cache[key] = (out, entry["result"])
                 while len(_cache) > 64:

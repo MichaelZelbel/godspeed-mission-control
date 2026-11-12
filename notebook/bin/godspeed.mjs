@@ -14,7 +14,7 @@ import {assistantProfiles,selectAssistantProfile} from '../core/assistant-files.
 import {installSkillTree} from '../core/packaged-skills.mjs';
 import {removeRetiredSkills} from '../core/retired-skills.mjs';
 import {planWorkspaceMove,moveWorkspace,undoWorkspaceMove} from '../core/workspace-move.mjs';
-import {installStarter,adoptedMissionControl,addArchiveLine} from '../core/starter-workspace.mjs';
+import {installStarter,adoptedMissionControl,addArchiveLine,addStepLine} from '../core/starter-workspace.mjs';
 import {machineDevice} from '../core/device-id.mjs';
 import {listHabits,initializeHabitProgress} from '../../third-party/addons/godspeed-coach/lib/habits.mjs';
 import {localParts,now as clockNow} from '../../third-party/addons/godspeed-coach/lib/clock.mjs';
@@ -43,6 +43,19 @@ if(args[0]==='backup'&&args.includes('--before-update')){
  const view=workspaceForCopy(root,{device:machineDevice(root).id});
  console.log(JSON.stringify(makeUpdateCopy(view,process.env.GODSPEED_MEDIA_ROOT||path.join(view.state,'media'),path.resolve(folder)),null,2));process.exit(0);
 }
+// godspeed-update: the newest stable release, checked against its release's SHA256SUMS and installed
+// by the installer this computer has (core/update.mjs). It opens no notebook: the installer runs the
+// new version's init. --from-settings is how the Update now button starts it, and --settle [--made
+// COPY] is how start.mjs finishes one it took over (scripts/native-start-script.mjs).
+if(args[0]==='update'){
+ const option=name=>{const at=args.indexOf(name);return at>0?args[at+1]:undefined;};
+ const known=new Set(['--check','--from-settings','--channel','--settle','--made']),words=args.slice(1).filter((word,at,all)=>!['--channel','--made'].includes(all[at-1]));
+ if(words.some(word=>!known.has(word))||(args.includes('--channel')&&!['stable','testing'].includes(option('--channel'))))throw Error('update [--check] [--channel stable|testing]');
+ const {runUpdate,settle}=await import('../core/update.mjs');
+ if(args.includes('--settle')){console.log(JSON.stringify(await settle({root,made:option('--made')}),null,2));process.exit(0);}
+ await runUpdate({root,channel:option('--channel')||'stable',check:args.includes('--check'),fromSettings:args.includes('--from-settings')});
+ process.exit(0);
+}
 if(args[0]==='workspace-move'){
  const [_,action,value,installationFile]=args;
  let outcome;
@@ -63,6 +76,7 @@ if(command==='init'){
   const adopted=adoptedMissionControl(root);
   installStarter(root);
   addArchiveLine(root,store.state);
+  addStepLine(root,store.state);
   const addons=fileURLToPath(new URL('../../third-party/addons/',import.meta.url));
   const recipes=fileURLToPath(new URL('../recipes/',import.meta.url));
   // mc-video is not in this list any more (31 October 2026): the recipes for making and finishing
@@ -153,5 +167,5 @@ else if(command==='convert-notebook'){
   const {renamed=[],rewritten=[],problems,...summary}=outcome;
   result={...summary,renamed:renamed.length,rewritten:rewritten.length,...(problems?{problems}:{}),first_renames:renamed.slice(0,10).map(r=>r.from+' -> '+r.to),full_list:list};
 }
-else throw new Error('Commands: init, record list/get/save/merge/remove/display-name, memory search/lookup, world claim/event/close [--dry-run], backup FOLDER [--before-update], prune-backups FOLDER --made COPY [--keep 1], restore FOLDER [--repository PATH], import FILE, export [FILE], validate, sync folder [PATH...], health import FOLDER, menerio chunks ARCHIVE_SOURCE_DIR, convert-notebook [--dry-run]');
+else throw new Error('Commands: init, record list/get/save/merge/remove/display-name, memory search/lookup, world claim/event/close [--dry-run], backup FOLDER [--before-update], prune-backups FOLDER --made COPY [--keep 1], restore FOLDER [--repository PATH], import FILE, export [FILE], validate, update [--check] [--channel testing], sync folder [PATH...], health import FOLDER, menerio chunks ARCHIVE_SOURCE_DIR, convert-notebook [--dry-run]');
 console.log(JSON.stringify(result,null,2));

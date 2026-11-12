@@ -1072,8 +1072,13 @@ update_good() { # <folder>
     "$NEW" "$ENGINE" >"$folder/stage.json"
   cp "$folder/stage.json" "$folder/kept-stage.json"
   printf '+ curl -fsSL https://raw.githubusercontent.com/x/kit-bootstrap/%s/setup-godspeed.sh\n+ KB_BRANCH=%s\n+ GODSPEED_STARTER_REF=%s\n' \
-    "$ENGINE" "$ENGINE" "$NEW" >"$folder/trace-1.log"
-  cp "$folder/trace-1.log" "$folder/trace-2.log"
+    "$ENGINE" "$ENGINE" "$NEW" >"$folder/trace-2.log"
+  printf 'The download of 2.0.0-beta.8 matched the checksum its release publishes.\nGodspeed Mission Control is now 2.0.0-beta.8. Everything of yours was kept.\n' \
+    >"$folder/update-said.txt"
+  printf '{"code":202,"started":true}\n' >"$folder/button-said.json"
+  printf '{"state":"updated","from":"2.0.0-beta.8","to":"2.0.0-beta.8","message":"Updated to 2.0.0-beta.8."}\n' \
+    >"$folder/button-status.json"
+  sed 's/"2.0.0-beta.8"/"2.0.0-beta.8.handover"/' "$folder/stage.json" >"$folder/button-kept-stage.json"
   printf '["goals","the-first-goal"]\n["notes","scenario-four"]\n["settings","installation"]\n' >"$folder/records-before.txt"
   printf '["goals","the-first-goal"]\n["notes","scenario-four"]\n["settings","installation"]\n' \
     >"$folder/records-after.txt"
@@ -1110,6 +1115,26 @@ sed -i 's/KB_BRANCH=3333333333333333333333333333333333333333/KB_BRANCH=444444444
   "$U/wrong-engine/trace-2.log"
 refuses "an update that ran another kit-bootstrap than the stage's" update-keeps-everything "$U/wrong-engine" \
   "did not run kit-bootstrap"
+
+copy "$U/good" "$U/unchecked"
+sed -i '/matched the checksum/d' "$U/unchecked/update-said.txt"
+refuses "an update whose download the command did not check" update-keeps-everything "$U/unchecked" \
+  "the command did not verify the download"
+
+copy "$U/good" "$U/command-elsewhere"
+sed -i 's/is now 2.0.0-beta.8\./is now 2.0.0-beta.7./' "$U/command-elsewhere/update-said.txt"
+refuses "a command that updated to another version than the stage's" update-keeps-everything "$U/command-elsewhere" \
+  "did not say it brought the machine to 2.0.0-beta.8"
+
+copy "$U/good" "$U/button-failed"
+sed -i 's/"updated"/"failed"/' "$U/button-failed/button-status.json"
+refuses "an Update now whose update failed" update-keeps-everything "$U/button-failed" \
+  "Update now did not finish: the update it started ended failed"
+
+copy "$U/good" "$U/button-not-taken"
+cp "$U/good/stage.json" "$U/button-not-taken/button-kept-stage.json"
+refuses "an Update now after which the newer release's stage file is not kept" update-keeps-everything "$U/button-not-taken" \
+  "not the newer release's 2.0.0-beta.8.handover"
 
 copy "$U/good" "$U/record-gone"
 printf '["settings","installation"]\n' >"$U/record-gone/records-after.txt"
@@ -1150,6 +1175,77 @@ copy "$U/good" "$U/silent"
 printf '000\n' >"$U/silent/health.txt"
 refuses "a notebook that does not answer after the update" update-keeps-everything "$U/silent" \
   "answered 000 on its own address"
+
+# ================================================ server-update-keeps-everything (#456)
+SERVER_OLD=ghcr.io/michaelzelbel/godspeed-mission-control@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+SERVER_NEW=ghcr.io/michaelzelbel/godspeed-mission-control@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+server_update_good() { # <folder>
+  local folder=$1
+  rm -rf "$folder"
+  mkdir -p "$folder"
+  printf '{"version":"2.0.0-beta.21","serverEditions":{"server":{"image":"%s"}}}\n' "$SERVER_NEW" >"$folder/stage.json"
+  printf '%s\n' "$SERVER_OLD" >"$folder/image-before"
+  printf '%s\n' "$SERVER_NEW" >"$folder/image-after"
+  printf '%s\n' "$SERVER_NEW" >"$folder/image-again"
+  printf '%s\n' "$SERVER_NEW" >"$folder/container-image.txt"
+  printf 'healthy\n' >"$folder/health.txt"
+  printf '2.0.0-beta.21\n' >"$folder/version.txt"
+  printf 'Updating Godspeed Mission Control to 2.0.0-beta.21.\nThe download of 2.0.0-beta.21 matched the checksum its release publishes.\n' >"$folder/update-said.txt"
+  printf 'You have the newest version, 2.0.0-beta.21. Nothing was changed.\n' >"$folder/again-said.txt"
+  printf '{"data":[{"id":"g1","title":"Keep the server scenario ready","status":"active"}]}\n' >"$folder/goals-before.json"
+  cp "$folder/goals-before.json" "$folder/goals-after.json"
+}
+
+section server-update-keeps-everything
+SU=$TMP/server-update
+server_update_good "$SU/good"
+passes "a server updated to the stage's image from a checked download, healthy, with the owner's goal, and a second run that changed nothing" \
+  server-update-keeps-everything "$SU/good" "the command run again changed nothing"
+
+copy "$SU/good" "$SU/already"
+printf '%s\n' "$SERVER_NEW" >"$SU/already/image-before"
+refuses "a public server that already ran the stage's image" server-update-keeps-everything "$SU/already" \
+  "so there was nothing to update"
+
+copy "$SU/good" "$SU/unchecked"
+sed -i '/matched the checksum/d' "$SU/unchecked/update-said.txt"
+refuses "an update whose download was not checked" server-update-keeps-everything "$SU/unchecked" \
+  "it did not verify the download"
+
+copy "$SU/good" "$SU/old-image"
+printf '%s\n' "$SERVER_OLD" >"$SU/old-image/image-after"
+refuses "a server whose settings still name the old image" server-update-keeps-everything "$SU/old-image" \
+  "after the update, and the stage names"
+
+copy "$SU/good" "$SU/old-container"
+printf '%s\n' "$SERVER_OLD" >"$SU/old-container/container-image.txt"
+refuses "a server whose running container is the old one" server-update-keeps-everything "$SU/old-container" \
+  "the running container was made from"
+
+copy "$SU/good" "$SU/unhealthy"
+printf 'unhealthy\n' >"$SU/unhealthy/health.txt"
+refuses "a server that is not healthy after the update" server-update-keeps-everything "$SU/unhealthy" \
+  "is unhealthy after the update, not healthy"
+
+copy "$SU/good" "$SU/no-version"
+printf 'none\n' >"$SU/no-version/version.txt"
+refuses "a server that does not say which version it runs" server-update-keeps-everything "$SU/no-version" \
+  "the server says it runs none after the update"
+
+copy "$SU/good" "$SU/goal-gone"
+printf '{"data":[]}\n' >"$SU/goal-gone/goals-after.json"
+refuses "an update that lost the owner's goal" server-update-keeps-everything "$SU/goal-gone" \
+  "the owner's first goal is gone"
+
+copy "$SU/good" "$SU/again-changed"
+printf 'Updating Godspeed Mission Control to 2.0.0-beta.21.\n' >"$SU/again-changed/again-said.txt"
+refuses "a second run that did not say the newest version is installed" server-update-keeps-everything "$SU/again-changed" \
+  "did not say 2.0.0-beta.21 is the newest version"
+
+copy "$SU/good" "$SU/again-image"
+printf '%s\n' "$SERVER_OLD" >"$SU/again-image/image-again"
+refuses "a second run that changed the image" server-update-keeps-everything "$SU/again-image" \
+  "godspeed-update run again changed the server image"
 
 # ================================================================== the assistant's own home
 # Where the acting parts look for the assistant's settings and chat store: the home the install
@@ -2071,6 +2167,110 @@ charm_good() { # <folder>
 
 section charm-challenge
 C=$TMP/charm
+charm_log_source_boundary() {
+  local folder=$TMP/charm-log-source source=$TMP/charm-log-source/godspeed-charm.log evidence=$TMP/charm-log-source/charm-log.txt output code cursor
+  rm -rf "$folder"
+  mkdir -p "$folder"
+  printf '{"verdict":"old"}\n' >"$source"
+  cursor=$(bash -c '. "$1"; charm_log_cursor "$2"' bash "$HERE/charm-log.sh" "$source")
+  printf '{"verdict":"ask"}\n' >>"$source"
+  output=$(bash -c '. "$1"; fail(){ printf "%s\\n" "$*"; exit 42; }; retain_new_charm_log "$2" "$3" "$4"' \
+    bash "$HERE/charm-log.sh" "$source" "$cursor" "$evidence" 2>&1)
+  code=$?
+  if [ "$code" = 0 ] && [ "$(<"$evidence")" = '{"verdict":"ask"}' ]; then
+    ok 'the Charm log helper retains newly written JSONL evidence'
+  else
+    bad "the Charm log helper did not retain newly written JSONL evidence (exit $code: $output)"
+  fi
+  rm -f "$source"
+  output=$(bash -c '. "$1"; fail(){ printf "%s\\n" "$*"; exit 42; }; retain_new_charm_log "$2" "$3" "$4"' \
+    bash "$HERE/charm-log.sh" "$source" 0 "$evidence" 2>&1)
+  code=$?
+  if [ "$code" = 42 ] && [[ $output == *"installed panel Charm judgement did not write evidence to $source"* ]]; then
+    ok 'a missing Charm source log names the absent panel evidence'
+  else
+    bad "a missing Charm source log did not name the absent panel evidence (exit $code: $output)"
+  fi
+  printf '{"verdict":"ask"}\n' >"$source"
+  cursor=$(bash -c '. "$1"; charm_log_cursor "$2"' bash "$HERE/charm-log.sh" "$source")
+  output=$(bash -c '. "$1"; fail(){ printf "%s\\n" "$*"; exit 42; }; retain_new_charm_log "$2" "$3" "$4"' \
+    bash "$HERE/charm-log.sh" "$source" "$cursor" "$evidence" 2>&1)
+  code=$?
+  if [ "$code" = 42 ] && [[ $output == *"installed panel Charm judgement did not write evidence to $source"* ]]; then
+    ok 'an unchanged Charm source log names the absent panel evidence'
+  else
+    bad "an unchanged Charm source log did not name the absent panel evidence (exit $code: $output)"
+  fi
+}
+charm_log_source_boundary
+
+charm_five_vents_boundary() {
+  local folder=$TMP/charm-five-vents hermes output code shim marker real_stat
+  hermes=$folder/hermes
+  mkdir -p "$hermes/logs"
+  output=$(cd "$HERE" && EVIDENCE="$folder/missing" HERMES="$hermes" WRITE_AUDIT=no bash -c '
+    source <(sed -e "/^scenario_arguments /d" -e "/^if \[ \"\$CHECK_ONLY\" = yes \]; then/,\$d" "$1")
+    fail(){ printf "%s\\n" "$*"; exit 42; }
+    say(){ :; }
+    assistant_commands(){ : >"$1"; }
+    chat_panel_new_conversation(){ : >"$1"; }
+    chat_panel_says(){ : >"$2"; if [ "$WRITE_AUDIT" = yes ] && [ "$1" != no ]; then printf "{\\\"conversation\\\":\\\"vent\\\"}\\n" >>"$HERMES/logs/godspeed-charm.log"; fi; }
+    mkdir -p "$EVIDENCE"
+    five_vents
+  ' bash "$HERE/charm-challenge.sh" 2>&1)
+  code=$?
+  if [ "$code" = 42 ] && [[ $output == *"installed panel Charm judgement did not write evidence to $hermes/logs/godspeed-charm.log"* ]]; then
+    ok 'five vents name the missing Charm source log'
+  else
+    bad "five vents did not name the missing Charm source log (exit $code: $output)"
+  fi
+  printf '{"verdict":"old"}\n' >"$hermes/logs/godspeed-charm.log"
+  shim=$folder/stat-fails
+  marker=$folder/stat-failed
+  real_stat=$(command -v stat)
+  mkdir -p "$shim"
+  printf '%s\n' '#!/usr/bin/env bash' \
+    '[ ! -e "$CHARM_TEST_STAT_MARKER" ] && { : >"$CHARM_TEST_STAT_MARKER"; exit 1; }' \
+    'exec "$CHARM_TEST_REAL_STAT" "$@"' >"$shim/stat"
+  chmod +x "$shim/stat"
+  output=$(cd "$HERE" && EVIDENCE="$folder/baseline-stat-failure" HERMES="$hermes" WRITE_AUDIT=yes \
+    CHARM_TEST_STAT_MARKER="$marker" CHARM_TEST_REAL_STAT="$real_stat" PATH="$shim:$PATH" bash -c '
+    source <(sed -e "/^scenario_arguments /d" -e "/^if \[ \"\$CHECK_ONLY\" = yes \]; then/,\$d" "$1")
+    fail(){ printf "%s\\n" "$*"; exit 42; }
+    say(){ :; }
+    assistant_commands(){ : >"$1"; }
+    chat_panel_new_conversation(){ : >"$1"; }
+    chat_panel_says(){ : >"$2"; if [ "$WRITE_AUDIT" = yes ] && [ "$1" != no ]; then printf "{\\\"conversation\\\":\\\"vent\\\"}\\n" >>"$HERMES/logs/godspeed-charm.log"; fi; }
+    mkdir -p "$EVIDENCE"
+    five_vents
+  ' bash "$HERE/charm-challenge.sh" 2>&1)
+  code=$?
+  if [ "$code" = 42 ] && [ ! -e "$folder/baseline-stat-failure/charm-log.txt" ] && \
+    [ "$(<"$hermes/logs/godspeed-charm.log")" = '{"verdict":"old"}' ] && \
+    [ ! -e "$folder/baseline-stat-failure/.panel-new-1.json" ] && \
+    [[ $output == *"could not inspect evidence at $hermes/logs/godspeed-charm.log before five vents"* ]]; then
+    ok 'five vents reject a failed baseline Charm log inspection'
+  else
+    bad "five vents accepted a failed baseline Charm log inspection (exit $code: $output)"
+  fi
+  output=$(cd "$HERE" && EVIDENCE="$folder/written" HERMES="$hermes" WRITE_AUDIT=yes bash -c '
+    source <(sed -e "/^scenario_arguments /d" -e "/^if \[ \"\$CHECK_ONLY\" = yes \]; then/,\$d" "$1")
+    fail(){ printf "%s\\n" "$*"; exit 42; }
+    say(){ :; }
+    assistant_commands(){ : >"$1"; }
+    chat_panel_new_conversation(){ : >"$1"; }
+    chat_panel_says(){ : >"$2"; if [ "$WRITE_AUDIT" = yes ] && [ "$1" != no ]; then printf "{\\\"conversation\\\":\\\"vent\\\"}\\n" >>"$HERMES/logs/godspeed-charm.log"; fi; }
+    mkdir -p "$EVIDENCE"
+    five_vents
+  ' bash "$HERE/charm-challenge.sh" 2>&1)
+  code=$?
+  if [ "$code" = 0 ] && [ "$(grep -c '^{' "$folder/written/charm-log.txt")" = 5 ]; then
+    ok 'five vents retain the source log their chat actions wrote'
+  else
+    bad "five vents did not retain the source log their chat actions wrote (exit $code: $output)"
+  fi
+}
+charm_five_vents_boundary
 charm_good "$C/good"
 passes 'a challenge started, vented at, kept once and started over twice' \
   charm-challenge "$C/good" 'started over with a new end date each and 2 restarts'
@@ -3375,9 +3575,9 @@ rm "$Q/no-snapshot/approvals-s4.json"
 refuses 'a run that kept no snapshot after situation 4' no-question-he-cannot-judge "$Q/no-snapshot" 'approvals-s4.json is not in what the scenario kept'
 
 # ---------------------------------------------------------------------------------- plain-yes
-PB1='Send this week food log to your nutritionist'
+PB1='Water the balcony plants this week'
 PB2='Cancel the renewal of your gym membership'
-PA='Share this week food log with your nutritionist'
+PA='Renew this week library books'
 PC='Book the car yearly inspection'
 YN='[{"text":"Yes","callback_data":"y"},{"text":"No","callback_data":"n"}]'
 py_snapshots() { # <folder> <statuses of a, b1, b2, c in order, for each label>
@@ -3396,9 +3596,9 @@ py_good() { # <folder>
   local f=$1
   rm -rf "$f"
   mkdir -p "$f"
-  run_json "$f" "$(msg a-ask 'Share the food log with your nutritionist?' true "$YN")" "$(msg a 'Done, I shared it.')" \
-    "$(msg b-ask 'Send the food log to your nutritionist?' true "$YN")" "$(msg b-ask 'Cancel the renewal of your gym membership?' true "$YN")" \
-    "$(msg b 'Which one: the food log for your nutritionist, or cancelling the gym membership?')" "$(msg b-choice 'Sent the food log.')" \
+  run_json "$f" "$(msg a-ask 'Renew the library books?' true "$YN")" "$(msg a 'Done, I renewed them.')" \
+    "$(msg b-ask 'Water the balcony plants?' true "$YN")" "$(msg b-ask 'Cancel the renewal of your gym membership?' true "$YN")" \
+    "$(msg b 'Which one: watering the balcony plants, or cancelling the gym membership?')" "$(msg b-choice 'Watered the plants.')" \
     "$(msg c-ask 'Book the car inspection?' true "$YN")" "$(msg c-press 'Cancelled the gym membership renewal.')" "$(msg d 'Nothing is waiting for a yes right now.')"
   py_snapshots "$f"
   live_telegram_evidence "$f"
@@ -3418,18 +3618,18 @@ copy "$P/good" "$P/b-approved-one"
 rows "$P/b-approved-one/approvals-b.json" approved a1 "$PA" approved b1 "$PB1" pending b2 "$PB2"
 refuses 'a yes with two waiting that approved one' plain-yes "$P/b-approved-one" 'approved one of them'
 copy "$P/good" "$P/b-names-one"
-run_json "$P/b-names-one" "$(msg a-ask 'Share the log?' true "$YN")" "$(msg a 'Done.')" "$(msg b 'Do you mean the food log for your nutritionist?')" \
+run_json "$P/b-names-one" "$(msg a-ask 'Renew the books?' true "$YN")" "$(msg a 'Done.')" "$(msg b 'Do you mean the balcony plants?')" \
   "$(msg b-ask 'Cancel the gym membership?' true "$YN")" "$(msg c-ask 'Book the inspection?' true "$YN")"
 refuses 'a question that names only one of two waiting steps' plain-yes "$P/b-names-one" 'does not name both'
 copy "$P/good" "$P/b-two-questions"
-run_json "$P/b-two-questions" "$(msg a 'Done.')" "$(msg b 'The food log, or the gym membership?')" "$(msg b 'Which one, the food log or the gym?')" \
+run_json "$P/b-two-questions" "$(msg a 'Done.')" "$(msg b 'The balcony plants, or the gym membership?')" "$(msg b 'Which one, the plants or the gym?')" \
   "$(msg b-ask 'Cancel the gym?' true "$YN")" "$(msg c-ask 'Book the inspection?' true "$YN")"
 refuses 'two questions for one yes' plain-yes "$P/b-two-questions" 'got 2 messages'
 copy "$P/good" "$P/choice-approved-both"
 rows "$P/choice-approved-both/approvals-b-choice.json" approved a1 "$PA" approved b1 "$PB1" approved b2 "$PB2"
 refuses 'an answer naming one that approved both' plain-yes "$P/choice-approved-both" 'approved the gym step too'
 copy "$P/good" "$P/no-buttons"
-run_json "$P/no-buttons" "$(msg a 'Done.')" "$(msg b 'The food log, or the gym membership?')" \
+run_json "$P/no-buttons" "$(msg a 'Done.')" "$(msg b 'The balcony plants, or the gym membership?')" \
   "$(msg b-ask 'Cancel the gym membership?')" "$(msg c-ask 'Book the inspection?')"
 refuses 'a question that went out without buttons' plain-yes "$P/no-buttons" 'without Yes/No buttons'
 copy "$P/good" "$P/press-approved-other"
@@ -3442,7 +3642,7 @@ copy "$P/good" "$P/yes-with-nothing-waiting"
 rows "$P/yes-with-nothing-waiting/approvals-d.json" approved a1 "$PA" approved b1 "$PB1" approved b2 "$PB2" approved c1 "$PC"
 refuses 'a yes with nothing waiting that approved something' plain-yes "$P/yes-with-nothing-waiting" 'changed the status of a step'
 copy "$P/good" "$P/typed-code"
-run_json "$P/typed-code" "$(msg a 'Done.')" "$(msg b 'The food log, or the gym membership? Reply approve 59f1d506')" \
+run_json "$P/typed-code" "$(msg a 'Done.')" "$(msg b 'The balcony plants, or the gym membership? Reply approve 59f1d506')" \
   "$(msg b-ask 'Cancel the gym membership?' true "$YN")" "$(msg c-ask 'Book the inspection?' true "$YN")" "$(msg d 'ok')"
 refuses 'a question that asks for a code' plain-yes "$P/typed-code" 'holds a code'
 
@@ -3699,6 +3899,22 @@ refuses 'a reply that differs from the saved brief' first-day "$FD/different-rep
 copy "$FD/good" "$FD/vague-next-action"
 sed -i 's/^Next today: buy the water and first-aid supplies\.$/Next: continue./' "$FD/vague-next-action/brief.txt"
 refuses 'a brief whose next step is vague' first-day "$FD/vague-next-action" 'no concrete next action'
+# The owner's decision on PR #449 (12 November 2026): a Next: line that starts with an action passes,
+# with the verbs step lists use and ordinary ones for any goal. Scenarios run 43107490873's line first.
+copy "$FD/good" "$FD/next-open"
+sed -i 's/^Next today: buy the water and first-aid supplies\.$/Next: open the household blanks section of that checklist draft and fill in the first one, who lives with you and their ages./' "$FD/next-open/brief.txt"
+first_day_brief_records "$FD/next-open"
+passes 'a Next: line that opens with open, as a real brief wrote it' first-day "$FD/next-open" 'answered today'
+copy "$FD/good" "$FD/next-email"
+sed -i 's/^Next today: buy the water and first-aid supplies\.$/Next: email your neighbour about the spare torch./' "$FD/next-email/brief.txt"
+first_day_brief_records "$FD/next-email"
+passes 'a Next: line that opens with an ordinary action such as email' first-day "$FD/next-email" 'answered today'
+copy "$FD/good" "$FD/next-no-action"
+sed -i 's/^Next today: buy the water and first-aid supplies\.$/Next: the water and first-aid supplies./' "$FD/next-no-action/brief.txt"
+refuses 'a Next: line that starts with no action' first-day "$FD/next-no-action" 'no concrete next action'
+copy "$FD/good" "$FD/next-open-nothing"
+sed -i 's/^Next today: buy the water and first-aid supplies\.$/Next: open it./' "$FD/next-open-nothing/brief.txt"
+refuses 'a Next: line whose action acts on nothing' first-day "$FD/next-open-nothing" 'no concrete next action'
 copy "$FD/good" "$FD/second-note"
 node -e 'const fs=require("fs"),p=process.argv[1],d=JSON.parse(fs.readFileSync(p,"utf8"));d.data.push({...d.data[0],id:"brief-2"});fs.writeFileSync(p,JSON.stringify(d))' "$FD/second-note/notes-after-reply.json"
 refuses 'asking today’s brief creates another note' first-day "$FD/second-note" 'second saved brief'
@@ -3711,6 +3927,55 @@ refuses 'a brief that does not name the goal' first-day "$FD/brief-without-goal"
 copy "$FD/good" "$FD/brief-without-work"
 sed -i 2d "$FD/brief-without-work/brief.txt"
 refuses 'a brief that does not identify the verified work' first-day "$FD/brief-without-work" 'does not identify the verified work'
+# The brief of scenarios run 43070186384 told the checklist in its own words and named no work: still
+# refused. The product now puts the finished work in by its title without the file's place (#377,
+# owner on PR #449), and that brief passes.
+copy "$FD/good" "$FD/brief-real-unnamed"
+cat >"$FD/brief-real-unnamed/brief.txt" <<'EOF'
+Your emergency-kit checklist goal, due Sunday, has a first draft. It is about 1,000 words in 15 sections, and it is written, not yet fitted to your home.
+
+What only you can do:
+
+1. Tell me the household basics: who lives with you and which prescriptions need a 7-day supply.
+Next today: buy the water and first-aid supplies.
+EOF
+first_day_brief_records "$FD/brief-real-unnamed"
+refuses 'a brief that tells the checklist in its own words but names no work' first-day "$FD/brief-real-unnamed" 'does not identify the verified work'
+copy "$FD/brief-real-unnamed" "$FD/brief-plain-title"
+sed -i '1i Finished and checked: Write a practical household emergency-kit checklist.\n' "$FD/brief-plain-title/brief.txt"
+first_day_brief_records "$FD/brief-plain-title"
+passes 'a brief that names the finished work by its title without the file path' first-day "$FD/brief-plain-title" 'answered today'
+copy "$FD/brief-real-unnamed" "$FD/brief-plain-title-comma"
+sed -i 's/^WHAT: .*/WHAT: Write the household emergency-kit checklist at work\/emergency-kit-checklist.md, with every item marked HAVE or NEED/' "$FD/brief-plain-title-comma/work/W-000-first-day-emergency-kit.md"
+sed -i '1i Finished and checked: Write the household emergency-kit checklist, with every item marked HAVE or NEED.\n' "$FD/brief-plain-title-comma/brief.txt"
+first_day_brief_records "$FD/brief-plain-title-comma"
+passes 'a brief that names a longer title without its file path, keeping the comma after it' first-day "$FD/brief-plain-title-comma" 'answered today'
+copy "$FD/brief-real-unnamed" "$FD/brief-goal-title"
+sed -i 's/^WHAT: .*/WHAT: Prepare a practical household emergency-kit checklist at work\/emergency-kit-checklist.md/' "$FD/brief-goal-title/work/W-000-first-day-emergency-kit.md"
+sed -i '1i Finished and checked: Prepare a practical household emergency-kit checklist.\n' "$FD/brief-goal-title/brief.txt"
+first_day_brief_records "$FD/brief-goal-title"
+refuses 'a brief whose only work title is the goal itself once its path is left out' first-day "$FD/brief-goal-title" 'does not identify the verified work'
+# A checklist the product writes with plain bullets is a checklist (owner on PR #449); what it must
+# hold is unchanged.
+copy "$FD/good" "$FD/plain-bullets"
+cat >"$FD/plain-bullets/work/emergency-kit-checklist.md" <<'EOF'
+## Water
+- 4 litres per person per day for 3 days
+* Food: 3 days of shelf-stable meals
+- First aid kit and a 7-day supply of medication
+- Light and power: 2 torches with spare batteries
+- Communication and documents: copies in a waterproof pouch
+EOF
+passes 'a practical checklist written with plain bullets' first-day "$FD/plain-bullets" 'answered today'
+copy "$FD/plain-bullets" "$FD/plain-bullets-thin"
+sed -i '/documents/d' "$FD/plain-bullets-thin/work/emergency-kit-checklist.md"
+refuses 'a plain-bullet checklist missing a group' first-day "$FD/plain-bullets-thin" 'not a practical emergency-kit checklist'
+copy "$FD/plain-bullets" "$FD/plain-bullets-no-amounts"
+printf '%s\n' '- Water' '- Food' '- First aid' '- Power' '- Documents' >"$FD/plain-bullets-no-amounts/work/emergency-kit-checklist.md"
+refuses 'a plain-bullet checklist without quantities' first-day "$FD/plain-bullets-no-amounts" 'not a practical emergency-kit checklist'
+copy "$FD/plain-bullets" "$FD/no-list"
+printf '%s\n' 'Water: 4 litres per person per day for 3 days. Food, first aid, power and documents too.' >"$FD/no-list/work/emergency-kit-checklist.md"
+refuses 'a checklist that is not a list' first-day "$FD/no-list" 'not a practical emergency-kit checklist'
 
 # ============================================== the five scenarios of 2.0.0-beta.18 (numbers come in)
 # Each is judged on made-up folders only: one that should pass, and one per failure that is easy to
@@ -4991,8 +5256,8 @@ BASH_SCENARIOS=(settings-on-install night-tidy voice update-keeps-everything
   brief-asked-in-chat talk-prep-honest no-question-he-cannot-judge plain-yes what-was-that connection-check
   first-day phone-health-days incomplete-day phone-goes-quiet mail-count talk-on-talk-day
   chat-tidy-at-night disk-filling missed-routine deadline-closes-itself held-by-a-claim
-  workouts-from-hevy day-becomes-facts hermes-update-rollback)
-for file in scenario-lib.sh numbers-lib.sh server-lib.sh "${BASH_SCENARIOS[@]/%/.sh}" test-scenarios.sh; do
+  workouts-from-hevy day-becomes-facts hermes-update-rollback server-update-keeps-everything)
+for file in scenario-lib.sh numbers-lib.sh server-lib.sh update-keeps-everything-release.sh "${BASH_SCENARIOS[@]/%/.sh}" test-scenarios.sh; do
   if bash -n "$ROOT/scenarios/$file" 2>/dev/null; then
     ok "bash reads scenarios/$file"
   else
@@ -5075,6 +5340,36 @@ if [ "$SFR_CODE" = 0 ] && [ "$(node "$ROOT/stage/stage.mjs" "$TMP/sfr-night2/thi
   ok "a commit with no image of its own gets the newest ancestor's, and says whose"
 else
   bad "a commit with no image of its own (exit $SFR_CODE: $(cat "$TMP/sfr.err"))"
+fi
+# A commit that changed something the server image carries must not be proved on an ancestor's image (#467).
+mkdir -p "$SFR_REPO/notebook/assistant-files"
+echo changed >"$SFR_REPO/notebook/assistant-files/x"
+git -C "$SFR_REPO" add -A
+git -C "$SFR_REPO" -c user.name=t -c user.email=t@t commit -q -m three
+SFR_THREE=$(git -C "$SFR_REPO" rev-parse HEAD)
+SFR_OUT=$(GODSPEED_SCENARIO_REPO=$SFR_REPO GODSPEED_SCENARIO_PUBLIC_RAW=file://$TMP/sfr-public GODSPEED_SCENARIO_IMAGES=$TMP/sfr-images-one \
+  bash "$SFR" '' "$SFR_THREE" "$TMP/sfr-notebook" 2>"$TMP/sfr.err"); SFR_CODE=$?
+if [ "$SFR_CODE" = 1 ] && grep -qF "v2-sha-$SFR_THREE" "$TMP/sfr.err" && grep -qF 'notebook/assistant-files/x' "$TMP/sfr.err" && [ ! -e "$TMP/sfr-notebook/this-commit/stage.json" ]; then
+  ok "a changed notebook with no image of its own fails and names the missing image, never an ancestor's"
+else
+  bad "a notebook change fell back to an ancestor image (exit $SFR_CODE: $(cat "$TMP/sfr.err"))"
+fi
+printf '%s:v2-sha-%s %s\n' "$SFR_IMAGE" "$SFR_THREE" "$SFR_DA" >"$TMP/sfr-images-three"
+SFR_OUT=$(GODSPEED_SCENARIO_REPO=$SFR_REPO GODSPEED_SCENARIO_PUBLIC_RAW=file://$TMP/sfr-public GODSPEED_SCENARIO_IMAGES=$TMP/sfr-images-three \
+  bash "$SFR" '' "$SFR_THREE" "$TMP/sfr-notebook2" 2>"$TMP/sfr.err"); SFR_CODE=$?
+if [ "$SFR_CODE" = 0 ]; then ok "a changed notebook with its own image is proved on it"; else bad "a changed notebook with its own image failed (exit $SFR_CODE: $(cat "$TMP/sfr.err"))"; fi
+# The image-input list is the paths filter of the workflow that builds the image.
+if node -e '
+const fs = require("fs");
+const sh = fs.readFileSync(process.argv[1], "utf8").match(/^IMAGE_INPUTS=.(\^\(.*\)).$/m)[1];
+const mine = sh.slice(2, -1).split("|").map((x) => x.replace(/\\\./g, ".").replace(/\$$/, "")).sort();
+const wf = fs.readFileSync(process.argv[2], "utf8").match(/^    paths: \[(.*)\]$/m)[1];
+const theirs = wf.split(",").map((x) => x.trim().replace(/\x27/g, "").replace(/\*\*$/, "")).filter((x) => x !== ".github/workflows/v2-integrated.yml" && x !== "docker/test/").sort();
+if (JSON.stringify(mine) !== JSON.stringify(theirs) || !mine.length) { console.error(JSON.stringify(mine), JSON.stringify(theirs)); process.exit(1); }
+' "$SFR" "$ROOT/.github/workflows/v2-integrated.yml"; then
+  ok "stage-for-run.sh counts the same paths as image inputs as v2-integrated.yml builds an image for"
+else
+  bad "the image inputs of stage-for-run.sh differ from the paths filter of v2-integrated.yml"
 fi
 SFR_OUT=$(GODSPEED_SCENARIO_REPO=$SFR_REPO GODSPEED_SCENARIO_PUBLIC_RAW=file://$TMP/sfr-public GODSPEED_SCENARIO_PR_IMAGE=$SFR_IMAGE@$SFR_PC \
   bash "$SFR" '' "$SFR_TWO" "$TMP/sfr-pr" 2>"$TMP/sfr.err"); SFR_CODE=$?

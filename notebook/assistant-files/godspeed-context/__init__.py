@@ -18,16 +18,19 @@ recorded by the notebook (core/background-reports.mjs) as a conversation_message
 background-report-*, and the last few of a day are listed before each reply (reports_block), so
 "what is this about?" can be answered from the message itself.
 
-Buttons: a waiting step's question in Telegram also gets Yes and No buttons (step_buttons.py).
+Buttons: a waiting step's question in Telegram is sent once, as one message with Yes and No buttons (step_buttons.py).
 """
 import importlib.util
 import json
+import logging
 import os
 import re
 import subprocess
 import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+# One line per owner turn in the gateway log says what the waiting-step match did, never the words (#372).
+log = logging.getLogger("godspeed-step")
 INVITED_DAYS = 14   # the invitation says "today or next week"
 STARTED_HOURS = 24  # a chat left half way is not followed for ever
 
@@ -168,17 +171,34 @@ def _backup_command():
 # the owner answers with a plain yes or no. The program matches the answer to the step before the model
 # runs (notebook/core/waiting-steps.mjs); this hands it the owner's message, in the owner's own private
 # Telegram chat only, and tells the model what happened or to ask which one is meant.
-def _owner_telegram(session_id):
+def _owner_mismatch(session_id):
+    """The names of the checks the turn fails (never their values), or [] for the owner's own chat."""
     try:
         from gateway.session_context import get_session_env
         got = {field: str(get_session_env("HERMES_SESSION_" + field, "") or "")
                for field in ("PLATFORM", "CHAT_ID", "CHAT_TYPE", "USER_ID", "ID")}
-        owner = os.environ.get("TELEGRAM_ALLOWED_USERS", "").strip()
-        return (re.fullmatch(r"[1-9][0-9]*", owner) is not None and got["PLATFORM"] == "telegram"
-                and got["CHAT_TYPE"] in ("dm", "private") and got["CHAT_ID"] == owner
-                and got["USER_ID"] == owner and got["ID"] == session_id)
     except (ImportError, AttributeError):
-        return False
+        return ["session context"]
+    owner = os.environ.get("TELEGRAM_ALLOWED_USERS", "").strip()
+    failed = [] if re.fullmatch(r"[1-9][0-9]*", owner) else ["TELEGRAM_ALLOWED_USERS"]
+    failed += [] if got["PLATFORM"] == "telegram" else ["PLATFORM"]
+    failed += [] if got["CHAT_TYPE"] in ("dm", "private") else ["CHAT_TYPE"]
+    failed += [] if got["CHAT_ID"] == owner else ["CHAT_ID"]
+    failed += [] if got["USER_ID"] == owner else ["USER_ID"]
+    if got["ID"] == session_id:
+        return failed
+    # After the owner's first message Hermes can leave HERMES_SESSION_ID empty while the turn is
+    # still theirs (#372; the owner's decision on #482): only then, and only when every other check
+    # matched the owner, chat id included, the empty id is accepted. A Telegram private chat's id is
+    # its user's id, so a value left over from another chat cannot pass. A different id never does.
+    if not got["ID"] and session_id and not failed:
+        _note("a message in the owner's private chat was accepted without a session id (Hermes gave none; every other check matched)")
+        return failed
+    return failed + ["ID" + (" (empty)" if not got["ID"] else "") + (" (no session_id)" if not session_id else "")]
+
+
+def _owner_telegram(session_id):
+    return not _owner_mismatch(session_id)
 
 
 def _step_command():
@@ -217,17 +237,35 @@ def _text(message):
     return message if isinstance(message, str) else ""
 
 
+def _note(line, *args):
+    try:
+        log.info("godspeed-step (telegram): " + line, *args)
+    except Exception:
+        pass
+
+
 def waiting_step_block(message, session_id):
     command = _step_command()
-    if not command or not _text(message).strip() or not _owner_telegram(session_id):
+    if not command or not _text(message).strip():
+        return None
+    words = len(_text(message).split())
+    failed = _owner_mismatch(session_id)
+    if failed:
+        _note("a message of %d words was not matched: not the owner's private chat in this session (%s differs)", words, ", ".join(failed))
         return None
     try:
         run = subprocess.run(command[:2] + ["heard", "--chat", "telegram"] + command[2:], input=_text(message),
                              capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=_step_timeout())
         if run.returncode == 0:
-            return step_block(json.loads(run.stdout))
-    except Exception:
-        pass
+            report = json.loads(run.stdout)
+            _note("a message of %d words was heard as %s", words, report.get("kind") if isinstance(report, dict) else "nothing")
+            return step_block(report)
+        last = (run.stderr or "").strip().splitlines()[-1:] or ["no error output"]
+        _note("a message of %d words could not be matched: the step command exited %d (%s)", words, run.returncode, last[0][:200])
+    except subprocess.TimeoutExpired:
+        _note("a message of %d words could not be matched: the step command took longer than %ss", words, _step_timeout())
+    except Exception as e:
+        _note("a message of %d words could not be matched: %s", words, type(e).__name__)
     return STEP_RETRY_BLOCK
 
 

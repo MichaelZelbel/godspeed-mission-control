@@ -314,6 +314,35 @@ MODEL
   fi
 }
 
+# godspeed-update (docker/server/update.sh), the command that brings this server to the newest
+# stable release, kept in this folder and run as the administrator on the server itself. Its
+# command goes where godspeed-model goes, and one that updates another installation stays.
+install_update_command() {
+  local command_dir="${GODSPEED_MODEL_COMMAND_DIR:-/usr/local/bin}" own
+  mkdir -p "$DIR/.godspeed" "$command_dir" || return 1
+  curl -fsSL "$GODSPEED_RAW/docker/server/update.sh" -o "$DIR/.godspeed/update.sh.new" \
+    || { rm -f "$DIR/.godspeed/update.sh.new"; return 1; }
+  mv -f "$DIR/.godspeed/update.sh.new" "$DIR/.godspeed/update.sh" || return 1
+  own="install=$(printf '%q' "$DIR")"
+  if [ -e "$command_dir/godspeed-update" ] && ! grep -qxF "$own" "$command_dir/godspeed-update" 2>/dev/null; then return 0; fi
+  {
+    printf '#!/bin/bash\n# godspeed-update: brings the Godspeed Mission Control server in this folder to the newest stable release.\n%s\n' "$own"
+    printf 'GODSPEED_DIR="$install" exec bash "$install/.godspeed/update.sh" "$@"\n'
+  } > "$command_dir/godspeed-update" && chmod 755 "$command_dir/godspeed-update"
+}
+
+# A new version that does not start: the one that ran before, with its own compose file, is
+# started again. Until #456 the new one was left failing with no way back.
+PREVIOUS_IMAGE=""
+PREVIOUS_TRY=""
+put_back_previous() { # <host> <setup code>
+  [ -n "$PREVIOUS_IMAGE" ] && [ "$PREVIOUS_IMAGE" != "$IMAGE" ] && [ -f "$DIR/compose.yaml.before" ] || return 1
+  IMAGE="$PREVIOUS_IMAGE" TRY="$PREVIOUS_TRY"
+  write_env "$1" "$2" && mv -f "$DIR/compose.yaml.before" "$DIR/compose.yaml" || return 1
+  compose up -d --remove-orphans >>"$LOG" 2>&1
+  wait_healthy
+}
+
 # --- The machine ---------------------------------------------------------------
 
 # Docker for Debian and Ubuntu comes from Docker's own installer; elsewhere Docker must be there.
@@ -591,6 +620,7 @@ main() {
     host="$(sed -n 's/^GODSPEED_HOST=//p' "$DIR/.env" | tail -1)"
     code="$(sed -n 's/^GODSPEED_SETUP_CODE=//p' "$DIR/.env" | tail -1)"
     TRY="$(sed -n 's/^GODSPEED_IMAGE=//p' "$DIR/.env" | tail -1)"
+    PREVIOUS_IMAGE="$(sed -n 's/^GODSPEED_SERVER_IMAGE=//p' "$DIR/.env" | tail -1)" PREVIOUS_TRY="$TRY"
   fi
   decide_image
   if [ -n "${GODSPEED_HOST:-}" ]; then
@@ -622,6 +652,7 @@ main() {
   curl -fsSL "$GODSPEED_RAW/docker/hostinger/compose.yaml" -o "$DIR/compose.yaml.new" 2>>"$LOG" \
     && grep -q "^name: $PROJECT" "$DIR/compose.yaml.new" \
     || { rm -f "$DIR/compose.yaml.new"; stop "Could not download Godspeed Mission Control's settings file. Check that this server can reach github.com, then run this line again."; }
+  if [ -f "$DIR/compose.yaml" ]; then cp -p "$DIR/compose.yaml" "$DIR/compose.yaml.before"; fi
   mv -f "$DIR/compose.yaml.new" "$DIR/compose.yaml"
   [ -z "$TRY" ] || step "Using the version to try instead of the one the $GODSPEED_STAGE_REF line names: $TRY"
   write_env "$host" "$code" || stop "Could not write the settings in $DIR/.env, so nothing was changed."
@@ -633,11 +664,18 @@ main() {
   compose up -d --remove-orphans >>"$LOG" 2>&1
   if ! wait_healthy; then
     compose logs --tail 100 >>"$LOG" 2>&1
+    if put_back_previous "$host" "$code"; then
+      stop "The new version did not start, so the version that ran before is running again. What went wrong is written in $LOG."
+    fi
     stop "Godspeed Mission Control did not start. What went wrong is written in $LOG."
   fi
+  rm -f "$DIR/compose.yaml.before"
+  # The version that runs, for godspeed-update; a version to try is not one the stage names.
+  if [ -z "$TRY" ]; then printf '%s\n' "$STAGE_VERSION" > "$DIR/version"; else rm -f "$DIR/version"; fi
   # A new image keeps the HTTPS service waiting for the app; make sure it runs now.
   compose up -d >>"$LOG" 2>&1
   install_model_command || stop "Godspeed runs, but its connection for add-ons could not be installed. Check this server can reach github.com, then run this installer again."
+  install_update_command || step "The command godspeed-update could not be installed now; running this line again installs it."
   step "Getting the security certificate for https://$host (up to $(minutes "$CERT_WAIT"))."
   wait_certificate "$host"
 

@@ -28,3 +28,4 @@ workouts-from-hevy	workouts-from-hevy.sh	shared	both	no	Hevy workouts import on 
 day-becomes-facts	day-becomes-facts.sh	shared	native	no	a day becomes dated remembered facts
 hermes-update-rollback	hermes-update-rollback.sh	terminal	native	no	Hermes updates and rolls back safely
 first-day	first-day.sh	shared	docker	no	a first Docker day makes useful work and a matching brief
+server-update-keeps-everything	server-update-keeps-everything.sh	isolated	docker	no	a Docker server update keeps everything

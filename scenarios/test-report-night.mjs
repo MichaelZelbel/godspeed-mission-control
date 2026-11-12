@@ -208,7 +208,7 @@ test('the protected draft pools candidate systems and leaves the live workflow u
   assert.match(pooled, /ENGINE: \$\{\{ needs\.stage\.outputs\.engine \}\}/);
   assert.match(pooled, /IMAGE: \$\{\{ needs\.stage\.outputs\.image \}\}/);
   const verdict = draft.slice(draft.indexOf('  verdict:'));
-  assert.match(verdict, /uses: actions\/checkout@v4\n        with:\n          ref: \$\{\{ inputs\.stage \|\| github\.event\.pull_request\.head\.sha \|\| github\.sha \}\}/);
+  assert.match(verdict, /uses: actions\/checkout@v4\n        with:\n          ref: \$\{\{ inputs\.stage \|\| github\.event\.pull_request\.head\.sha \|\| needs\.stage\.outputs\.proof \|\| github\.sha \}\}/);
   assert.doesNotMatch(verdict, /CANDIDATE_ONLY:|--candidate-only/);
   assert.match(verdict, /\[ "\$IS_CANDIDATE" = true \] && args\+=\(--include-candidate-only\)/);
   assert.match(verdict, /\[ "\$WANT_MAC" = true \] \|\| args\+=\(--exclude mac-install\)/);
@@ -482,7 +482,7 @@ test('the four beta.20 jobs check out the selected stage and run their own scena
     const rest = text.slice(start + 1);
     const end = rest.search(/^ {2}[A-Za-z0-9_-]+:[ \t]*$/m);
     const block = end < 0 ? rest : rest.slice(0, end);
-    assert.ok(block.includes('ref: ${{ inputs.stage || github.event.pull_request.head.sha || github.sha }}'), `${j} does not check out the selected stage (or a pull request's own head)`);
+    assert.ok(block.includes('ref: ${{ inputs.stage || github.event.pull_request.head.sha || needs.stage.outputs.proof || github.sha }}'), `${j} does not check out the selected stage (or a pull request's own head)`);
     assert.ok(block.includes(`bash scenarios/${j}.sh "$STAGE_REF"`), `${j} does not run scenarios/${j}.sh at the stage`);
     assert.equal((block.match(/bash scenarios\/[a-z-]+\.sh/g) || []).length, 1, `${j} runs more than its own scenario`);
   }
@@ -588,7 +588,8 @@ test('the pick names the scenarios whose script or owned file changed', async ()
 test("the stage and every scenario job prove the pull request's own head commit", async () => {
   const { readFileSync } = await import('node:fs');
   const text = readFileSync(WORKFLOW, 'utf8').replace(/\r\n/g, '\n');
-  const head = 'ref: ${{ inputs.stage || github.event.pull_request.head.sha || github.sha }}';
+  const head = 'ref: ${{ inputs.stage || github.event.pull_request.head.sha || needs.stage.outputs.proof || github.sha }}';
+  const stageHead = 'ref: ${{ inputs.stage || github.event.pull_request.head.sha || needs.pr-image.outputs.sha || github.sha }}';
   const jobsText = text.slice(text.indexOf('\njobs:\n'));
   const starts = [...jobsText.matchAll(/^ {2}([A-Za-z0-9_-]+):[ \t]*$/gm)];
   const blockOf = (name) => {
@@ -597,8 +598,8 @@ test("the stage and every scenario job prove the pull request's own head commit"
     return jobsText.slice(starts[i].index, i + 1 < starts.length ? starts[i + 1].index : undefined);
   };
   const stage = blockOf('stage');
-  assert.ok(stage.includes(head), 'the stage job does not check out the pull request head');
-  assert.ok(stage.includes('PROOF_SHA: ${{ github.event.pull_request.head.sha || github.sha }}'), 'the stage job has no PROOF_SHA of the pull request head');
+  assert.ok(stage.includes(stageHead), 'the stage job does not check out the pull request head');
+  assert.ok(stage.includes('PROOF_SHA: ${{ github.event.pull_request.head.sha || needs.pr-image.outputs.sha || github.sha }}'), 'the stage job has no PROOF_SHA of the pull request head');
   assert.ok(stage.includes('scenarios/stage-for-run.sh \'\' "$PROOF_SHA"'), 'the stage file is not made from PROOF_SHA');
   assert.ok(!stage.includes('"$GITHUB_SHA"'), 'the stage job still reads GITHUB_SHA');
   let checked = 0;
@@ -735,18 +736,18 @@ test('the PR-image job binds its published digest to stage and selects its share
   assert.match(text, /^\+    if: github\.event_name != 'pull_request' \|\| github\.event\.pull_request\.head\.repo\.full_name == github\.repository$/m, 'the image job is skipped outside pull requests, which skips every scenario');
   const imageJob = text.slice(text.indexOf('\n+  pr-image:\n'), text.indexOf('\n+  stage:\n'));
   assert.ok(imageJob.length > 0, 'the image job was not found before stage');
-  assert.match(imageJob, /\+      - uses: actions\/checkout@v4\n\+        if: github\.event_name == 'pull_request'\n/, 'the image job checks out outside a pull request');
+  assert.match(imageJob, /\+      - uses: actions\/checkout@v4\n\+        if: github\.event_name == 'pull_request' \|\| steps\.named\.outputs\.sha != ''\n/, 'the image job checks out outside a pull request');
   assert.match(imageJob, /\+        id: pick\n\+        if: github\.event_name == 'pull_request'\n/, 'the image job picks outside a pull request');
-  assert.match(imageJob, /\+      - uses: docker\/login-action@v3\n\+        if: steps\.pick\.outputs\.picked == 'true'\n/, 'the image job logs in without a pick');
-  assert.match(imageJob, /\+        id: publish\n\+        if: steps\.pick\.outputs\.picked == 'true'\n/, 'the image job publishes without a pick');
-  assert.match(text, /^\+      TAG: pr-\$\{\{ github\.event\.pull_request\.number \}\}-\$\{\{ github\.event\.pull_request\.head\.sha \}\}$/m, 'the image tag is not unique to this pull request head');
-  assert.match(text, /^\+          ref: \$\{\{ github\.event\.pull_request\.head\.sha \}\}$/m, 'the image builder does not check out the pull request head');
-  assert.match(text, /^\+          docker build --build-arg REVISION="\$\{\{ github\.event\.pull_request\.head\.sha \}\}" -f docker\/full-candidate\/Dockerfile -t "\$IMAGE:\$TAG" \.$/m, 'the image build does not receive the pull request head revision');
+  assert.match(imageJob, /\+      - uses: docker\/login-action@v3\n\+        if: steps\.pick\.outputs\.picked == 'true' \|\| steps\.named\.outputs\.sha != ''\n/, 'the image job logs in without a pick');
+  assert.match(imageJob, /\+        id: publish\n\+        if: steps\.pick\.outputs\.picked == 'true' \|\| steps\.named\.outputs\.sha != ''\n/, 'the image job publishes without a pick');
+  assert.match(text, /^\+          TAG="pr-\$PR_NUMBER-\$HEAD_SHA"$/m, 'the image tag is not unique to this pull request head');
+  assert.match(text, /^\+          ref: \$\{\{ github\.event\.pull_request\.head\.sha \|\| steps\.named\.outputs\.sha \}\}$/m, 'the image builder does not check out the pull request head');
+  assert.match(text, /^\+          docker build --build-arg REVISION="\$HEAD_SHA" -f docker\/full-candidate\/Dockerfile -t "\$IMAGE:\$TAG" \.$/m, 'the image build does not receive the pull request head revision');
   assert.match(text, /^\+      image: \$\{\{ steps\.publish\.outputs\.image \}\}$/m, 'the image job does not publish its immutable image');
   assert.match(text, /^\+          digest=\$\(docker buildx imagetools inspect "\$IMAGE:\$TAG" --format '\{\{\.Manifest\.Digest\}\}'\)$/m, 'the published image is not resolved to a digest');
   assert.match(text, /^\+          \[\[ \$digest =~ \^sha256:\[0-9a-f]\{64\}\$ \]\] \|\|/m, 'the published image digest is not verified');
   assert.match(text, /^\+      GODSPEED_SCENARIO_PR_IMAGE: \$\{\{ needs\.pr-image\.outputs\.image \}\}$/m, 'stage rebuilds the image reference instead of receiving its output');
-  assert.match(text, /^\+    if: \$\{\{ always\(\) && \(github\.event_name != 'pull_request' \|\| \(github\.event\.pull_request\.head\.repo\.full_name == github\.repository && needs\.pr-image\.result == 'success'\)\) \}\}$/m, 'stage can run after a selected PR image fails');
+  assert.match(text, /^\+    if: \$\{\{ always\(\) && \(github\.event_name != 'pull_request' \|\| \(github\.event\.pull_request\.head\.repo\.full_name == github\.repository && needs\.pr-image\.result == 'success'\)\) && \(inputs\.pr == '' \|\| needs\.pr-image\.result == 'success'\) \}\}$/m, 'stage can run after a selected PR image fails');
   assert.doesNotMatch(text, /GODSPEED_SCENARIO_PR_IMAGE_TAG/, 'stage reconstructs the producer tag');
   const readers=[...workflow.matchAll(/bash scenarios\/([a-z0-9-]+)\.sh "\$STAGE_REF"/g)].map(match=>match[1]).sort().filter(name=>/^\. "\$HERE\/server-lib\.sh"$/m.test(readFileSync(fileURLToPath(new URL(`./${name}.sh`, import.meta.url)),'utf8')));
   assert.ok(readers.length>0,'the workflow has no direct shared-server helper consumer');

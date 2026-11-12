@@ -25,6 +25,7 @@
 #   run.json                 every message sent (with its step's label and buttons) and each step's outcome
 #   approvals-<label>.json   the waiting steps after each step: a-ask a b-ask b b-choice c-ask c-press d-no d
 #   telegram-requests.json, runner.json, routines.json
+#   button-log-<label>.txt   after each press, where the gateway's button handlers stopped a press
 SCENARIO=plain-yes
 # shellcheck source=scenarios/scenario-lib.sh
 . "$(dirname "$0")/scenario-lib.sh"
@@ -60,17 +61,22 @@ act() {
   server_table jobs "$EVIDENCE/routines.json"
 
   phase 'a plain yes, two waiting, a button, and nothing waiting'
-  ask_file a-ask "Share this week's food log with your nutritionist" \
-    "Share this week's food log with your nutritionist?" 'The log is shared' 'It stays private'
-  two_asks_file b-ask "Send this week's food log to your nutritionist" \
-    "Send this week's food log to your nutritionist?" 'The log is sent' 'Nothing is sent' \
+  # Every part runs in the owner's one chat, so a's step, answered by then, must not read like one of
+  # b's, or the answer to b is rightly questioned as a repeat. Every step is a harmless household
+  # chore that matches no built-in notebook feature (a food log, tracker, journal, coach, reminder) and
+  # no starter rule (nothing sent, posted, bought or booked in anyone's name), or "the plants one" is
+  # rightly read as something else, or rightly not approved (owner decision on #482).
+  ask_file a-ask "Renew this week's library books" "Renew this week's library books?" 'The books are renewed' \
+    'They are due on Friday'
+  two_asks_file b-ask "Water the balcony plants this week" \
+    "Water the balcony plants this week?" 'The plants are watered' 'The plants wait' \
     'Cancel the renewal of your gym membership' 'Cancel the renewal of your gym membership?' 'The renewal is cancelled' 'The membership renews'
   ask_file c-ask "Book the car's yearly inspection" "Book the car's yearly inspection?" 'The inspection is booked' 'Nothing is booked'
   server_set_asks "$EVIDENCE/asks-a-ask.json"; server_run_asker a-ask; server_snapshot_table a-ask approvals
   server_telegram_say a yes; server_snapshot_table a approvals
   server_set_asks "$EVIDENCE/asks-b-ask.json"; server_run_asker b-ask; server_snapshot_table b-ask approvals
   server_telegram_say b yes; server_snapshot_table b approvals
-  server_telegram_say b-choice 'the food log one'; server_snapshot_table b-choice approvals
+  server_telegram_say b-choice 'the plants one'; server_snapshot_table b-choice approvals
   server_set_asks "$EVIDENCE/asks-c-ask.json"; server_run_asker c-ask; server_snapshot_table c-ask approvals
   server_telegram_press c-press gym Yes; server_snapshot_table c-press approvals
   server_telegram_press d-no inspection No; server_snapshot_table d-no approvals
@@ -99,10 +105,10 @@ check() { # <evidence folder>
 
   # a. One step waits and a plain yes approves it.
   interaction_begin a-ask
-  [ "$(status_after a-ask 'Share this week')" = pending ] || fail 'the one waiting step was not offered to the owner'
+  [ "$(status_after a-ask 'library books')" = pending ] || fail 'the one waiting step was not offered to the owner'
   interaction_passed a-ask
   interaction_begin a
-  [ "$(status_after a 'Share this week')" = approved ] || fail "one step waited and the owner's \"yes\" did not approve it (it is \"$(status_after a 'Share this week')\")"
+  [ "$(status_after a 'library books')" = approved ] || fail "one step waited and the owner's \"yes\" did not approve it (it is \"$(status_after a 'library books')\")"
   count=$(messages_of a accepted | grep -c . || true)
   [ "$count" = 1 ] || fail "the owner's \"yes\" to the one waiting step was answered with $count messages, not one"
   interaction_passed a
@@ -112,17 +118,17 @@ check() { # <evidence folder>
   count=$(messages_of b accepted | grep -c . || true)
   [ "$count" = 1 ] || fail "the owner's \"yes\" with two steps waiting got $count messages, not one question"
   text=$(messages_of b accepted)
-  if ! grep -qiE 'food log|nutritionist' <<<"$text" || ! grep -qiE 'gym|membership' <<<"$text"; then
-    fail "the question to a \"yes\" with two steps waiting does not name both of them (the food log and the gym membership): $text"
+  if ! grep -qi 'plants' <<<"$text" || ! grep -qiE 'gym|membership' <<<"$text"; then
+    fail "the question to a \"yes\" with two steps waiting does not name both of them (the balcony plants and the gym membership): $text"
   fi
-  [ "$(status_after b 'Send this week')" = pending ] && [ "$(status_after b 'gym')" = pending ] ||
-    fail "a \"yes\" with two steps waiting approved one of them (food log: \"$(status_after b 'Send this week')\", gym: \"$(status_after b 'gym')\")"
+  [ "$(status_after b 'balcony plants')" = pending ] && [ "$(status_after b 'gym')" = pending ] ||
+    fail "a \"yes\" with two steps waiting approved one of them (plants: \"$(status_after b 'balcony plants')\", gym: \"$(status_after b 'gym')\")"
   interaction_passed b
   interaction_begin b-choice
-  [ "$(status_after b-choice 'Send this week')" = approved ] ||
-    fail "the answer \"the food log one\" did not approve the food log step (it is \"$(status_after b-choice 'Send this week')\")"
+  [ "$(status_after b-choice 'balcony plants')" = approved ] ||
+    fail "the answer \"the plants one\" did not approve the plants step (it is \"$(status_after b-choice 'balcony plants')\")"
   [ "$(status_after b-choice 'gym')" = pending ] ||
-    fail "the answer \"the food log one\" approved the gym step too (it is \"$(status_after b-choice 'gym')\")"
+    fail "the answer \"the plants one\" approved the gym step too (it is \"$(status_after b-choice 'gym')\")"
   interaction_passed b-choice
 
   # c. A button approves its own step and no other.
