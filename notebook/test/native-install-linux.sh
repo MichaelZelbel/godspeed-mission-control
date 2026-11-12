@@ -7,7 +7,9 @@
 # 2026) and one whose notebook does not answer is undone and removes none; since 21 October 2026
 # the copy holds what an update can change and never work/. Since 26 October 2026: an update that
 # finds a Hermes this account cannot load keeps the one that works, and add-ons still reach it.
-# Since 2.0.0-beta.11: the upgrade renames the folder's note FULL-ALPHA.md to NOTEBOOK.md.
+# Since 2.0.0-beta.11: the upgrade renames the folder's note FULL-ALPHA.md to NOTEBOOK.md. Since
+# #456: an update handed over inside the running service, as Settings' Update now runs one, and
+# one whose notebook never answers, undone the same way.
 set -euo pipefail
 here=$(cd "$(dirname "$0")/../.." && pwd)
 work=$(mktemp -d)
@@ -126,9 +128,47 @@ answers || fail 'the notebook that ran before does not answer again'
 while IFS= read -r name; do [ -e "$state/backups/$name" ] || fail "the failed update removed $name"; done < "$work/kept"
 [ "$(copies)" = 2 ] || fail "after a failed update there are $(copies) copies, not the one before it and the one it made"
 
+echo '== an update handed over inside the running service (the Update now button'"'"'s way)'
+# The button cannot stop the service it runs in (notebook/core/update.mjs): the installer gets the
+# new version ready beside the running one, start.mjs takes it over across two restarts systemd
+# makes by itself, tries the new notebook and finishes the update (scripts/native-start-script.mjs).
+git -C "$work/product" checkout -q "$second" -- notebook/scripts/supervise.mjs
+git -C "$work/product" -c user.name=test -c user.email=test@example.invalid commit -q -am 'version four'
+fourth=$(git -C "$work/product" rev-parse HEAD)
+status() { "$(ls -d "$state"/runtime/node-v*/bin/node | head -1)" -e 'try{process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).state)}catch{}' "$root/.godspeed/update/status.json"; }
+wait_for() { for _ in $(seq 1 120); do [ "$(status)" = "$1" ] && return 0; sleep 2; done; return 1; }
+handed_over() { GODSPEED_UPDATE_MODE=prepare GODSPEED_SKIP_UI=1 install "$1" || fail "the update to $1 was not prepared"; }
+running=$(systemctl show -p MainPID --value "$service")
+handed_over "$fourth"
+[ "$(systemctl show -p MainPID --value "$service")" = "$running" ] || fail 'preparing the update stopped the notebook'
+[ "$(cat "$state/version")" = "$second" ] || fail 'preparing the update switched the version'
+[ -f "$root/.godspeed/update/switch.json" ] || fail 'the prepared update left nothing for start.mjs to take over'
+kill -USR2 "$(cat "$root/.godspeed/update/start.pid")"
+wait_for updated || fail "start.mjs did not finish the update: $(cat "$root/.godspeed/update/status.json" 2>&1; tail -20 "$root/.godspeed/update/update.log" 2>&1)"
+[ "$(cat "$state/version")" = "$fourth" ] || fail 'the handed-over update did not switch to the new version'
+[ "$(cat "$state/previous-version")" = "$second" ] || fail 'the version before the handed-over update was not kept as the previous one'
+grep -q "versions/$fourth/" "$state/start.mjs" || fail 'the service does not start the new version'
+grep -q '"GODSPEED_DEVICE":"production"' "$state/start.mjs" || fail 'the handed-over update renamed the machine'
+answers || fail 'the notebook does not answer after the handed-over update'
+made=$(cd "$state/backups" && ls -d 2*-"$second" 2>/dev/null | sort | tail -1)
+[ -n "$made" ] && [ -f "$state/backups/$made/backup.json" ] || fail 'the handed-over update made no copy before it'
+[ "$(copies)" = 1 ] || fail "the handed-over update kept $(copies) copies made before updates, not only its own"
+[ ! -e "$state/versions/$first" ] && [ -d "$state/versions/$second" ] || fail 'the versions kept are not this one and the one before'
+grep -qxF "root=$(printf '%q' "$root")" "$HOME/.local/bin/godspeed-update" || fail 'godspeed-update does not update this installation'
+
+echo '== a handed-over update whose notebook never answers is undone'
+ls -A "$state/backups" > "$work/kept"
+handed_over "$third"
+kill -USR2 "$(cat "$root/.godspeed/update/start.pid")"
+wait_for failed || fail "start.mjs did not put the version before back: $(cat "$root/.godspeed/update/status.json" 2>&1)"
+[ "$(cat "$state/version")" = "$fourth" ] || fail 'the version that ran before the handed-over update was not put back'
+grep -q "versions/$fourth/" "$state/start.mjs" || fail 'start.mjs does not start the version that ran before'
+answers || fail 'the notebook that ran before does not answer again'
+while IFS= read -r name; do [ -e "$state/backups/$name" ] || fail "the undone update removed $name"; done < "$work/kept"
+
 echo '== a notebook killed from outside comes back'
 sudo systemctl kill -s KILL "$service"
 sleep 8
 systemctl is-active --quiet "$service" || fail 'systemd did not restart a killed notebook'
 answers || fail 'the restarted notebook does not answer'
-echo 'Installed, upgraded with the machine name kept, the note in the folder renamed and only its own copy made before the update, a Hermes that loads kept over one that does not, a failed update undone with every copy kept, and restarted after a kill.'
+echo 'Installed, upgraded with the machine name kept, the note in the folder renamed and only its own copy made before the update, a Hermes that loads kept over one that does not, a failed update undone with every copy kept, an update handed over inside the service and one undone there, and restarted after a kill.'
