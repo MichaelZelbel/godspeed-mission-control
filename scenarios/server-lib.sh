@@ -179,11 +179,20 @@ server_telegram_say() { # <label> <text>
     fail "the installed Telegram gateway did not accept $1"
   SCENARIO_INTERACTION=''
 }
+# The line each button handler of the gateway logs where a press stopped, and when it registered
+# (notebook/assistant-files/godspeed-buttons/buttons.py), kept after a press whether it worked or not.
+server_keep_button_log() { # <label>
+  in_server_as_hermes sh -c 'cat "$HERMES_HOME"/logs/*.log 2>/dev/null | grep -F godspeed-buttons | sort -u' \
+    >"$EVIDENCE/button-log-$1.txt" 2>/dev/null || true
+}
 server_telegram_press() { # <label> <question text> <button label>
   interaction_begin "$1"
-  "$NODE" "$HERE/server-telegram.mjs" press --server "$(server_container)" --evidence "$EVIDENCE" \
-    --owner "$SERVER_TELEGRAM_OWNER" --label "$1" --question "$2" --button "$3" ||
+  if ! "$NODE" "$HERE/server-telegram.mjs" press --server "$(server_container)" --evidence "$EVIDENCE" \
+    --owner "$SERVER_TELEGRAM_OWNER" --label "$1" --question "$2" --button "$3"; then
+    server_keep_button_log "$1"
     fail "the installed Telegram gateway did not accept $1"
+  fi
+  server_keep_button_log "$1"
   SCENARIO_INTERACTION=''
 }
 server_telegram_snapshot() {

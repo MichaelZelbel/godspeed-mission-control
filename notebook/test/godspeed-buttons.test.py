@@ -9,12 +9,25 @@ import tempfile
 import types
 import unittest
 
+try:  # Hermes' own Python has the real SDK: then a press is read the way the gateway reads it.
+    from telegram import Bot as SdkBot, Update as SdkUpdate
+except ImportError:
+    SdkBot = SdkUpdate = None
+
 OWNER, BOT = 31415, 1112
 HERE = os.path.dirname(os.path.abspath(__file__))
-spec = importlib.util.spec_from_file_location(
-    "buttons", os.path.join(HERE, "..", "assistant-files", "godspeed-buttons", "buttons.py"))
-buttons = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(buttons)
+
+
+def load(name, *parts):
+    spec = importlib.util.spec_from_file_location(name, os.path.join(HERE, *parts))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+buttons = load("buttons", "..", "assistant-files", "godspeed-buttons", "buttons.py")
+# The stand-in Telegram whose press scenarios/server-telegram.mjs queues.
+fake_telegram = load("fake_telegram", "..", "..", "docker", "test", "fake-telegram.py")
 
 WORDS = {"en": {"question": "Go ahead?", "buttonYes": "Yes", "buttonNo": "No",
                 "noOpenQuestion": "Nothing is open.", "buttonFailed": "That did not go through."}}
@@ -179,6 +192,119 @@ class SharedButtons(unittest.TestCase):
         self.assertEqual(calls, ["yes", "yes"])
         self.assertIn(WORDS["en"]["buttonFailed"], self.bot.edits[0]["text"])
         self.assertEqual(self.bot.edits[1]["text"], "worked")
+
+
+def driver_press(data, text):
+    """The update the scenarios' stand-in Telegram queues when server-telegram.mjs presses `data`."""
+    fake = fake_telegram.Fake("1:a", {"users": {str(OWNER): {"first_name": "Scenario owner"}}})
+    fake.handle("sendMessage", {"chat_id": OWNER, "text": text,
+                                "reply_markup": {"inline_keyboard": [[{"text": "Yes", "callback_data": data}]]}})
+    fake.later({"from": OWNER, "press": data})
+    return fake.updates[-1], fake.sent[-1]["message_id"], fake_telegram.BOT["id"]
+
+
+def telegram_press(data, text):
+    """The update Telegram itself sends for a press in the owner's private chat (Bot API, CallbackQuery)."""
+    message_id = 120
+    return {"update_id": 900, "callback_query": {
+        "id": "4382bfdwdsb323b2d9", "chat_instance": "-7843297923742", "data": data,
+        "from": {"id": OWNER, "is_bot": False, "first_name": "Ann", "language_code": "en"},
+        "message": {"message_id": message_id, "date": 1794400000, "text": text,
+                    "from": {"id": BOT, "is_bot": True, "first_name": "Godspeed", "username": "godspeed_bot"},
+                    "chat": {"id": OWNER, "type": "private", "first_name": "Ann"},
+                    "reply_markup": {"inline_keyboard": [[{"text": "Yes", "callback_data": data}]]}}}}, message_id, BOT
+
+
+def as_objects(value):
+    """A Bot API dict read with python-telegram-bot's attribute names, for a Python without the SDK."""
+    if isinstance(value, dict):
+        return types.SimpleNamespace(**{("from_user" if key == "from" else key): as_objects(item)
+                                        for key, item in value.items()})
+    return value
+
+
+class PressShapes(unittest.TestCase):
+    """The press the scenarios send and the press Telegram sends, through every gate of callback()."""
+
+    def setUp(self):
+        self.dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.dir.cleanup)
+        os.environ["TELEGRAM_ALLOWED_USERS"] = str(OWNER)
+        self.heard = []
+        self.buttons = buttons.YesNoButtons(lambda: self.dir.name,
+                                            {"step": lambda t: self.heard.append(t["answer"]) or "Approved."},
+                                            texts=lambda: WORDS, prefix="gss1:", folder="step-buttons")
+
+    def press(self, shape, change=lambda update: None):
+        """Makes a step's tokens, presses Yes in `shape` after `change`, and gives the gate it stopped at."""
+        route = {"ownerId": str(OWNER), "chatId": str(OWNER)}
+        update, message_id, bot_id = shape("gss1:" + "0" * 32, WORDS["en"]["question"])
+        tokens = self.buttons.issue("step", {"step": "gym"}, route, bot_id, "en")
+        self.buttons.bind(tokens, message_id)
+        update["callback_query"]["data"] = self.buttons.prefix + tokens["yes"]
+        change(update)
+        parsed = SdkUpdate.de_json(update, SdkBot("1:a")) if SdkUpdate else as_objects(update)
+        bot = Bot()
+        bot.id = bot_id
+        with self.assertLogs("godspeed-buttons", "DEBUG") as logged:
+            buttons.log.debug("pressed")
+            asyncio.run(self.buttons.callback(parsed, types.SimpleNamespace(bot=bot)))
+        return [line.split(" stopped at ", 1)[1] for line in logged.output if " stopped at " in line]
+
+    def test_both_shapes_carry_what_the_sdk_needs_to_read_a_press(self):
+        for shape in (driver_press, telegram_press):
+            with self.subTest(shape=shape.__name__):
+                query = shape("gss1:" + "0" * 32, "Q?")[0]["callback_query"]
+                self.assertTrue({"id", "from", "chat_instance", "data", "message"} <= set(query))
+                self.assertTrue({"message_id", "date", "chat"} <= set(query["message"]))
+                self.assertEqual(query["message"]["chat"]["type"], "private")
+
+    def test_the_owners_press_answers_its_step_in_both_shapes(self):
+        for shape in (driver_press, telegram_press):
+            with self.subTest(shape=shape.__name__):
+                self.heard.clear()
+                self.assertEqual(self.press(shape), [])
+                self.assertEqual(self.heard, ["yes"])
+
+    def test_each_gate_stops_a_press_and_names_itself(self):
+        def message(update):
+            return update["callback_query"]["message"]
+
+        def allowed_users(update):
+            os.environ["TELEGRAM_ALLOWED_USERS"] = "%d,%d" % (OWNER, OWNER + 1)
+        gates = {
+            "allowed users": allowed_users,
+            "owner": lambda u: u["callback_query"]["from"].update(id=OWNER + 1),
+            "private chat": lambda u: message(u)["chat"].update(type="group", title="Family"),
+            "forward_origin": lambda u: message(u).update(forward_origin={
+                "type": "user", "date": 1794400000, "sender_user": {"id": 7, "is_bot": False, "first_name": "Bo"}}),
+            "bot message": lambda u: message(u)["from"].update(id=7, is_bot=False),
+            "prefix": lambda u: u["callback_query"].update(data="gsx1:" + "0" * 32),
+            "token binding (messageId)": lambda u: message(u).update(message_id=message(u)["message_id"] + 1),
+        }
+        for shape in (driver_press, telegram_press):
+            for gate, change in gates.items():
+                with self.subTest(shape=shape.__name__, gate=gate):
+                    os.environ["TELEGRAM_ALLOWED_USERS"] = str(OWNER)
+                    stopped = self.press(shape, change)
+                    self.assertEqual(len(stopped), 1, stopped)
+                    self.assertTrue(stopped[0].startswith(gate), stopped)
+                    self.assertEqual(self.heard, [])
+
+    def test_the_handler_says_which_handler_group_it_joined(self):
+        class Native:
+            def add_handler(self, handler):
+                pass
+        ext = types.ModuleType("telegram.ext")
+        ext.CallbackQueryHandler = lambda callback, pattern: None
+        sys.modules["telegram.ext"] = ext
+        self.addCleanup(sys.modules.pop, "telegram.ext", None)
+
+        async def register():
+            self.buttons.factory(Native(), None)
+        with self.assertLogs("godspeed-buttons", "INFO") as logged:
+            asyncio.run(register())
+        self.assertIn("(gss1:): press handler registered in handler group 0", logged.output[0])
 
 
 if __name__ == "__main__":

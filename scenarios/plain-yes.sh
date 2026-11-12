@@ -25,6 +25,7 @@
 #   run.json                 every message sent (with its step's label and buttons) and each step's outcome
 #   approvals-<label>.json   the waiting steps after each step: a-ask a b-ask b b-choice c-ask c-press d-no d
 #   telegram-requests.json, runner.json, routines.json
+#   button-log-<label>.txt   after each press, where the gateway's button handlers stopped a press
 SCENARIO=plain-yes
 # shellcheck source=scenarios/scenario-lib.sh
 . "$(dirname "$0")/scenario-lib.sh"
