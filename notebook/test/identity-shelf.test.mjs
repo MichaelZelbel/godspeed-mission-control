@@ -494,3 +494,53 @@ test('a similar rule is found for a near-duplicate and none for an unrelated rul
     'Put emoji in an email you draft for me.','Never use emoji in my emails.','Use my nickname in an email you draft for me.','Send me a message after 10pm.',
     'Write emails in a formal tone.','Draft my messages in short sentences.'])assert.deepEqual(shelf.similarRules({line}),[],line);
 });
+
+test('a short near-duplicate of a rule finds that rule, and is offered as a change to it in both modes',async()=>{
+  const {shelf,root}=workspace();
+  const wordings=[{title:'Never sign emails as me',group:'never',line:'Sign emails as me.'},{title:'Never sign anything as me',group:'never',line:'Sign anything as me.'},
+    {line:'never sign emails as me'},{line:'never sign anything as me'}];
+  const rules=()=>fs.readdirSync(path.join(root,'rules')).sort();
+  for(const fields of wordings)assert.equal(shelf.similarRules(fields)[0]?.target,'rule:never-sign-as-me',JSON.stringify(fields));
+  // A longer wording that matched before still does.
+  assert.equal(shelf.similarRules({line:'Never sign letters as me or imitate my voice.'})[0]?.target,'rule:never-sign-as-me');
+  // A short rule that shares no meaningful word with any rule is no near-duplicate.
+  for(const line of ['never book flights before 9','Never book flights before 9 am.'])assert.deepEqual(shelf.similarRules({line}),[],line);
+  const before=rules();
+  for(const mode of ['automatic','ask-first']){
+    await shelf.setNewRules(mode);
+    for(const fields of wordings.slice(0,2)){
+      const offer=await shelf.offerRule(fields);
+      assert.equal(offer.saved,false,mode+': '+fields.title+' is not saved beside the rule it repeats');
+      assert.equal(offer.similar[0]?.target,'rule:never-sign-as-me');assert.ok(offer.choices.includes('change'));
+      assert.match(offer.say,/You already have rule \d+, "Never sign as me".*Shall I change that rule/);
+    }
+  }
+  assert.deepEqual(rules(),before,'no second rule is written');
+});
+
+test('a short rule that shares only one name word with a rule, in another sense, is not that rule',async()=>{
+  const {shelf,root}=workspace();
+  const others=['Sign me up for the gym','Never sign up for newsletters'];
+  for(const line of others){
+    assert.ok(!shelf.similarRules({line}).some(r=>r.target==='rule:never-sign-as-me'),line);
+    assert.ok(!shelf.similarRules({title:line,group:'never',line}).some(r=>r.target==='rule:never-sign-as-me'),line+' as a title');
+  }
+  // What a short wording that repeats a rule found still finds it.
+  assert.equal(shelf.similarRules({line:'never sign emails as me'})[0]?.target,'rule:never-sign-as-me');
+  assert.equal(shelf.similarRules({line:'Never spend money on apps'})[0]?.target,'rule:never-spend-my-money');
+  assert.equal(shelf.similarRules({line:'Ask me about doubt'})[0]?.target,'rule:when-in-doubt-ask');
+  await shelf.setNewRules('ask-first');
+  for(const line of others){
+    const offer=await shelf.offerRule({line});
+    assert.equal(offer.saved,false,'ask-first: '+line+' is shown first');
+    assert.ok(!offer.similar.some(r=>r.target==='rule:never-sign-as-me'),line);
+    assert.doesNotMatch(offer.say,/Never sign as me/,line);
+  }
+  await shelf.setNewRules('automatic');
+  const before=fs.readdirSync(path.join(root,'rules')).length;
+  for(const line of others){
+    const saved=await shelf.offerRule({line});
+    assert.equal(saved.saved,true,'automatic: '+line+' is saved without a question');
+  }
+  assert.equal(fs.readdirSync(path.join(root,'rules')).length,before+2,'both are saved as rules of their own');
+});

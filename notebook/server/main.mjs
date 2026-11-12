@@ -57,6 +57,7 @@ import {BODY_LIMIT as UPLOAD_LIMIT,ensureToken,renewToken,tokenMatches,tokenDama
 import {recoverPhoneConnection} from '../core/connection-check.mjs';
 import {now as clockNow} from '../../third-party/addons/godspeed-coach/lib/clock.mjs';
 import {about} from '../core/about.mjs';
+import {updateOverview,startUpdate} from '../core/update.mjs';
 import {showCard as showContextCard,readContext,markContext} from '../core/context-setup.mjs';
 import {visibleRows} from '../core/visibility.mjs';
 import {NoteProcessing} from '../core/processing.mjs';
@@ -358,6 +359,12 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
       if (route === '/api/session') return send(res, 200, { user: { id: 'owner' }, profile: query.rows('profiles')[0] || { id: 'owner', display_name: auth.read().owner?.username || 'Owner' }, expires_at:auth.session(req)?.expires || null });
       // Settings, About: the version and release, this installation's folders, the food table's licence (core/about.mjs).
       if(route==='/api/about'&&req.method==='GET')return send(res,200,await about({store,mediaRoot,device}));
+      // Settings, About: the newest release and the Update now button, which runs godspeed-update (core/update.mjs).
+      if(route==='/api/update'){
+        if(req.method==='GET')return send(res,200,await updateOverview({root:store.root,refresh:url.searchParams.get('refresh')==='1'}));
+        if(req.method!=='POST')return send(res,405,{error:'Use GET or POST'});
+        const {code,...answer}=await startUpdate({root:store.root});return send(res,code,answer);
+      }
       if (route === '/api/status') return query.withSnapshot(()=>{const installation=query.rows('settings').find(row=>row.id==='installation');return send(res, 200, { configured:!!installation,goalSetupComplete:query.rows('goals').some(g=>['active','adopted','paused','achieved','completed'].includes(g.status)),goals:query.rows('goals'),work:query.rows('work_items'),decisions:query.rows('decisions'),owner:installation?.owner,device,server:mediaSync.server()||(device==='vps'?device:null),platform:process.platform,runtimeConfigured:!!domains.provider,sync:sync.last,mediaSync:mediaSync.last,kinds:originalRuntime?enableKinds(store.root):kinds,problems: store.problems, lastScan: store.lastScan, lastIndex: index.lastRebuild, records: store.records.size, schedules: query.rows('jobs'),routineSwitches: originalRuntime?routineSwitches(store,{jobs:hermesJobs(scheduler.home),home:scheduler.home}):null,assistantUpdate:originalRuntime?updateStatus(store):null, conflicts: sync.pendingConflicts().map(name=>{try{const c=JSON.parse(fs.readFileSync(path.join(store.root,'conflicts',name),'utf8'));return {id:c.id,kind:c.kind,path:c.path||c.type+'/'+c.record_id};}catch{return {id:name.replace(/\.json$/,''),kind:null,path:null,degraded:true};}}) });});
       if(route==='/api/hermes-update'){
         if(!domains.hermesUpdate)return send(res,200,{available:false});

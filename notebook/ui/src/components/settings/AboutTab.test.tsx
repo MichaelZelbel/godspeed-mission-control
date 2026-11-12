@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import "@testing-library/jest-dom/vitest";
-import { AboutTab, type AboutInfo } from "./AboutTab";
+import { AboutTab, type AboutInfo, type UpdateInfo } from "./AboutTab";
 
 // Settings, About (18 October 2026): the README and the food tracker send readers here.
 const food: AboutInfo["food"] = {
@@ -18,8 +18,17 @@ const computer: AboutInfo = {
   folders: { workspace: "/home/reader/godspeed-v2", notes: "/home/reader/godspeed-v2/notebook", media: "/home/reader/godspeed-v2/.godspeed/integrated-runtime/media", backups: "/home/reader/godspeed-v2/.godspeed/backups" },
   food,
 };
-function show(about: AboutInfo) {
-  vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify(about), { status: 200, headers: { "Content-Type": "application/json" } })));
+const notes = "https://github.com/MichaelZelbel/godspeed-mission-control/releases/tag/candidate/2.0.0-beta.30";
+const upToDate: UpdateInfo = {
+  installed: "2.0.0-beta.30", newest: { tag: "candidate/2.0.0-beta.30", version: "2.0.0-beta.30", notes },
+  newer: false, way: "handover", command: null, busy: false, status: null, error: null,
+};
+const json = (value: unknown, status = 200) => new Response(JSON.stringify(value), { status, headers: { "Content-Type": "application/json" } });
+function show(about: AboutInfo, update: UpdateInfo = upToDate) {
+  vi.stubGlobal("fetch", vi.fn(async (address: string, init?: RequestInit) => {
+    if (address !== "/api/update") return json(about);
+    return init?.method === "POST" ? json({ started: true, status: { state: "checking", from: update.installed, to: "2.0.0-beta.30", message: "Getting 2.0.0-beta.30 ready.", at: "2026-11-11T11:00:00.000Z" } }, 202) : json(update);
+  }));
   render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><AboutTab /></QueryClientProvider>);
 }
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
@@ -45,5 +54,38 @@ describe("AboutTab", () => {
     expect(await screen.findByText(/Not recorded\. This copy was not set up by one of the installers\./)).toBeInTheDocument();
     expect(screen.getByText("These folders are on your server.")).toBeInTheDocument();
     expect(screen.getByText(/The food table is not on your server yet\./)).toBeInTheDocument();
+  });
+
+  it("says when the newest version is installed", async () => {
+    show(computer);
+    expect(await screen.findByText("You have the newest version.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "What changed" })).toHaveAttribute("href", notes);
+    expect(screen.queryByRole("button", { name: "Update now" })).not.toBeInTheDocument();
+  });
+
+  it("offers Update now when a newer version exists, and starts the update", async () => {
+    show(computer, { ...upToDate, installed: "2.0.0-beta.20", newer: true });
+    expect(await screen.findByText(/Newest version: 2\.0\.0-beta\.30/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Update now" }));
+    await waitFor(() => expect(fetch).toHaveBeenCalledWith("/api/update", { method: "POST" }));
+  });
+
+  it("after Update now, an earlier update's failure does not bring the button back before this one reports", async () => {
+    show(computer, { ...upToDate, installed: "2.0.0-beta.20", newer: true, status: { state: "failed", from: "2.0.0-beta.20", to: "2.0.0-beta.30", message: "The update to 2.0.0-beta.30 did not finish. The version you have is still running.", at: "2026-11-11T10:00:00.000Z" } });
+    fireEvent.click(await screen.findByRole("button", { name: "Update now" }));
+    expect(await screen.findByText("Starting the update…")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Update now" })).not.toBeInTheDocument();
+  });
+
+  it("on a Docker server shows the line to run on the server instead of a button", async () => {
+    show({ ...computer, on: "server" }, { ...upToDate, installed: "2.0.0-beta.20", newer: true, way: "server", command: "sudo godspeed-update" });
+    expect(await screen.findByText("sudo godspeed-update")).toBeInTheDocument();
+    expect(screen.getByText(/one click is updated in that company's panel/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Update now" })).not.toBeInTheDocument();
+  });
+
+  it("says plainly when an update failed", async () => {
+    show(computer, { ...upToDate, installed: "2.0.0-beta.20", newer: true, status: { state: "failed", from: "2.0.0-beta.20", to: "2.0.0-beta.30", message: "The download of 2.0.0-beta.30 does not match the checksum its release publishes, so nothing was installed. The version you have keeps running.", at: "2026-11-11T10:00:00.000Z" } });
+    expect(await screen.findByRole("alert")).toHaveTextContent(/does not match the checksum.*The version you have keeps running\./);
   });
 });

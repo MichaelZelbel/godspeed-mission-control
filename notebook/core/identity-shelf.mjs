@@ -148,12 +148,23 @@ const NEW_RULES_WORDS={automatic:'Add automatically','ask-first':'Ask first'};
 // "Is there already a rule that says this?": words of three letters or more shared by the two
 // texts, without these, each cut to a rough stem. Similar is at least two shared words, one of them
 // a word of the rule's own name (what the rule is about), that make up more than half of the new
-// rule's words. Near-duplicates of the starter rules match. A single word in common never turns an
-// automatic save into a question, and neither do everyday words a long rule happens to use: "Put
+// rule's words; or, for a short new rule, every word of the rule's name, making up at least half of
+// the new rule's words ("never sign emails as me" is the rule "Never sign as me"). When the name has
+// a single such word, the new rule also needs another word of the name (NAME_SKIP below aside):
+// "never sign emails as me" has "sign" and "as", "Ask me about doubt" has "doubt" and "ask" of "When
+// in doubt, ask", while "Sign me up for the gym" and "Never sign up for newsletters" share only "sign"
+// and are not "Never sign as me". Near-duplicates of the starter rules match. A single word in
+// common never turns an automatic save into a question, and neither do everyday words a long rule happens to use: "Put
 // emoji in an email you draft for me" shares "email" and "draft" with "Never send anything in my
 // name", and is still not that rule.
 const STOP=new Set('a an the and or but if then so to of in on at for from by with without about into over under as is are be been being was were do does did done not no never always must i me my mine you your it its this that these those there here what which who whom when where why how any anything something everything some all each every one ever just only also than too very can could should would will shall may might ask asked'.split(' '));
-const contentWords=text=>new Set(String(text??'').toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9 ]+/g,' ').split(/\s+/).filter(w=>w.length>2&&!STOP.has(w)).map(w=>w.replace(/(ing|ed|es|s)$/,'').replace(/(.)\1$/,'$1')));
+const plainWords=text=>String(text??'').toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9 ]+/g,' ').split(/\s+/).filter(Boolean);
+const stem=w=>w.replace(/(ing|ed|es|s)$/,'').replace(/(.)\1$/,'$1');
+const contentWords=text=>new Set(plainWords(text).filter(w=>w.length>2&&!STOP.has(w)).map(stem));
+// The words of a rule's name for that second word: any word but "never" and the like and the
+// pronouns of the owner and the assistant ("as" and "in" count, "me" does not).
+const NAME_SKIP=new Set('never always not no don dont i me my mine you your'.split(' '));
+const nameWords=text=>new Set(plainWords(text).filter(w=>!NAME_SKIP.has(w)).map(w=>w.length>2&&!STOP.has(w)?stem(w):w));
 // A rule shown to the owner first waits here for their answer: at most this many, for this long.
 // A restart forgets them; answering one then says it is no longer waiting, and the rule is shown again.
 const PROPOSALS_KEPT=20,PROPOSAL_MS=24*60*60*1000;
@@ -554,10 +565,10 @@ export class IdentityShelf{
   }
   // The rules that say much the same as these fields (STOP above), most alike first, at most three.
   similarRules(fields){
-    const proposed=contentWords(oneLine(fields.title)+' '+oneLine(fields.line));if(proposed.size<2)return [];
+    const text=oneLine(fields.title)+' '+oneLine(fields.line),proposed=contentWords(text),said=nameWords(text);if(!proposed.size)return [];
     return this.overview().rules.map(r=>{const own=contentWords(r.title+' '+(r.line||r.about||'')),named=contentWords(r.title),shared=[...proposed].filter(w=>own.has(w));
-      return {rule:r,shared:shared.length,named:shared.some(w=>named.has(w)),cover:shared.length/proposed.size};})
-      .filter(x=>x.shared>=2&&x.named&&x.cover>0.5).sort((a,b)=>b.cover-a.cover||b.shared-a.shared).slice(0,3)
+      return {rule:r,shared:shared.length,named:shared.some(w=>named.has(w)),wholeName:named.size>0&&[...named].every(w=>proposed.has(w))&&(named.size>1||[...nameWords(r.title)].filter(w=>said.has(w)).length>=2),cover:shared.length/proposed.size};})
+      .filter(x=>x.named&&(x.shared>=2&&x.cover>0.5||x.wholeName&&x.cover>=0.5)).sort((a,b)=>b.cover-a.cover||b.shared-a.shared).slice(0,3)
       .map(({rule:r})=>({target:r.target,n:r.n,title:r.title,group:r.group,line:r.line||r.about||''}));
   }
   // A rule the assistant was asked to add. Saved at once when new rules are added automatically and
