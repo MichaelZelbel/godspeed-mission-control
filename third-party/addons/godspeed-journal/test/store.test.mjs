@@ -49,3 +49,15 @@ test("an entry keeps its impact, and one without it is written exactly as before
   assert.equal(serialize(e), "---\nat: 2026-09-22T11:00:00.000Z\nkind: done\ntask: t-1\nsource: cli\n---\n\n");
   assert.equal(parse(serialize({ ...e, impact: 3 })).impact, "3");
 });
+
+test("a close records whether it becomes a moment, from the switch as it is when written; other kinds record nothing", async () => {
+  const { saveSettings, loadSettings } = await import("../lib/settings.mjs");
+  const h = mcDir();
+  saveSettings(h, { ...loadSettings(h), git_sync: "off" });
+  const until = new Date("2026-09-22T12:00:00Z");
+  writeEntry(h, S, { kind: "done", task: "t-1", words: "" }, new Date("2026-09-22T09:00:00Z"));
+  saveSettings(h, { ...loadSettings(h), save_as_moments: false });
+  writeEntry(h, S, { kind: "done", task: "t-2", words: "" }, new Date("2026-09-22T09:10:00Z"));
+  writeEntry(h, S, { kind: "note", words: "n" }, new Date("2026-09-22T09:20:00Z"));
+  assert.deepEqual(readEntries(h, S, { days: 1, until }).map((e) => [e.kind, e.moment]), [["done", "yes"], ["done", "no"], ["note", undefined]]);
+});

@@ -301,3 +301,12 @@ test("impact: set by the finish or a later answer, which is no activity; ignored
   assert.equal(r.impact, undefined); assert.equal(r.impactAt, undefined);
   assert.equal(tasksFrom([start, E("2026-09-22T11:00:00.000Z", "done", { task: "t-v" })])[0].impact, undefined);
 });
+
+test("moment: a close says whether it becomes a moment; an older close says nothing; a reopen clears it", () => {
+  const st = E("2026-09-22T10:00:00.000Z", "start", { task: "t-m", title: "M" });
+  assert.equal(tasksFrom([st, E("2026-09-22T11:00:00.000Z", "done", { task: "t-m", moment: "yes" })])[0].moment, true);
+  assert.equal(tasksFrom([st, E("2026-09-22T11:00:00.000Z", "done", { task: "t-m", moment: "no" })])[0].moment, false);
+  assert.equal(tasksFrom([st, E("2026-09-22T11:00:00.000Z", "done", { task: "t-m" })])[0].moment, undefined);
+  const [r] = tasksFrom([st, E("2026-09-22T11:00:00.000Z", "done", { task: "t-m", moment: "no" }), E("2026-09-22T12:00:00.000Z", "reopen", { task: "t-m" })]);
+  assert.equal(r.moment, undefined);
+});

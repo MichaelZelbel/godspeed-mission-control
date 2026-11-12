@@ -110,6 +110,42 @@ test('with the setting off nothing is written',async t=>{
  assert.equal(nb.store.list('moments').length,0);
 });
 
+const setSwitch=(root,on)=>saveSettings(root,{...loadSettings(root),save_as_moments:on});
+
+test('a task closed with the setting off never becomes a moment, even once it is back on',async t=>{
+ const root=fixture(t,{save_as_moments:false}),nb=open(root);
+ start(root,'09:00','t-1','Dishes');entry(root,'09:10',{kind:'done',task:'t-1'});
+ setSwitch(root,true);
+ assert.deepEqual(await reconcile(nb),{written:[],updated:[],removed:[]});
+ start(root,'09:20','t-2','Laundry');entry(root,'09:30',{kind:'done',task:'t-2'});
+ assert.deepEqual(live(nb).length,0);
+ assert.equal((await reconcile(nb)).written.length,1,'a close made after it is back on is written');
+ assert.deepEqual(live(nb).map(m=>m.source_id),['t-2']);
+});
+
+test('a task closed with the setting on keeps its moment when it is turned off before the notebook runs',async t=>{
+ const root=fixture(t);
+ start(root,'09:00','t-1','Post the letter');entry(root,'09:10',{kind:'done',task:'t-1'});
+ setSwitch(root,false);
+ const nb=open(root);
+ assert.equal((await reconcile(nb)).written.length,1);
+ assert.deepEqual(await reconcile(nb),{written:[],updated:[],removed:[]},'written once');
+ assert.equal(nb.store.list('moments').length,1);
+ start(root,'09:20','t-2','Mow the lawn');entry(root,'09:30',{kind:'done',task:'t-2'});
+ assert.deepEqual(await reconcile(nb),{written:[],updated:[],removed:[]},'a close made while it is off is not');
+});
+
+test('a close the journal wrote before it recorded the switch follows the switch as it is now',async t=>{
+ const root=fixture(t),nb=open(root);
+ start(root,'09:00','t-1','Old close');entry(root,'09:10',{kind:'done',task:'t-1'});
+ const dir=path.join(root,'routines','journal','entries','2026','11','01');
+ for(const n of fs.readdirSync(dir))fs.writeFileSync(path.join(dir,n),fs.readFileSync(path.join(dir,n),'utf8').replace(/^moment: .*\n/m,''));
+ setSwitch(root,false);
+ assert.equal((await reconcile(nb)).written.length,0);
+ setSwitch(root,true);
+ assert.equal((await reconcile(nb)).written.length,1);
+});
+
 test('a moment stays when its entry files go missing',async t=>{
  const root=fixture(t),nb=open(root);
  start(root,'09:00','t-1','Pay rent');entry(root,'09:05',{kind:'done',task:'t-1'});

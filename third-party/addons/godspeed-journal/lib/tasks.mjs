@@ -33,7 +33,7 @@ export function tasksFrom(entries) {
       if (t.state === "open") continue;
       if (t.evidence) t.rejected.push(t.evidence.id);
       Object.assign(t, { state: "open", met: [], missed: [], last: e.at, reopened: e.at });
-      delete t.ended; delete t.told; delete t.evidence; delete t.impact; delete t.impactAt;
+      delete t.ended; delete t.told; delete t.evidence; delete t.impact; delete t.impactAt; delete t.moment;
       continue;
     }
     // The first close wins. Two machines can each find the same proof before either has seen
@@ -45,6 +45,9 @@ export function tasksFrom(entries) {
     if (e.kind === "done") {
       Object.assign(t, { state: "done", ended: e.at, told: e.written || e.at, met: e.met || [], missed: e.missed || [] });
       setImpact(t, e);
+      // Whether this close becomes a moment, as the switch said when it was written; a close from
+      // before the switch was recorded has no answer, and the switch as it is now decides.
+      if (e.moment === "yes" || e.moment === "no") t.moment = e.moment === "yes";
       // Closed from the record, not by the person: it ended when the proof happened (the post
       // went out), and the proof travels with it so every interface can say what it was.
       if (e.source === "evidence") {

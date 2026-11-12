@@ -17,7 +17,6 @@ export const journalMomentId=task=>'journal-'+hash(['journal-moment',task.id,tas
 
 export async function reconcileJournalMoments({store,query,now=new Date()}){
  const result={written:[],updated:[],removed:[]},settings=loadSettings(store.root);
- if(settings.save_as_moments===false)return result;
  const tasks=new Map(tasksFrom(readEntries(store.root,settings,{days:3650,until:now})).map(t=>[t.id,t]));
  const live=new Map(query.rows('moments').filter(m=>m.source_type==='journal').map(m=>[m.id,m]));
  for(const m of live.values()){
@@ -27,7 +26,10 @@ export async function reconcileJournalMoments({store,query,now=new Date()}){
   live.delete(m.id);result.removed.push(m.id);
  }
  for(const t of tasks.values()){
-  if(t.state!=='done')continue;
+  // The switch as it was when the task closed decides, so turning it on later does not bring back
+  // closes made while it was off, and turning it off does not lose one made while it was on. A
+  // close written before the journal recorded that follows the switch as it is now.
+  if(t.state!=='done'||!(t.moment??settings.save_as_moments!==false))continue;
   const id=journalMomentId(t);
   if(!store.get('moments',id)){
    await query.executeAsync({table:'moments',operation:'insert',values:{id,uid:hash(id).slice(0,32),title:t.title,description:t.done_means.length?'Done meant: '+t.done_means.join('; '):null,happened_at:t.started,happened_end:t.ended,status:'past_fact',impact_level:t.impact||1,source_type:'journal',source_id:t.id,origin:'journal',metadata:{journal_ended:t.ended,...(t.impactAt?{journal_impact_at:t.impactAt}:{})}}});

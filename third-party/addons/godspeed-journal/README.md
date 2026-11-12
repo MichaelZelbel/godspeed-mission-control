@@ -144,7 +144,8 @@ you started and finished it, what done meant, and an impact that is everyday unl
 assistant say otherwise; when it looks like it mattered more, your assistant may ask you once.
 Reopening a task takes its moment back out until you finish it again. A task finished while the
 notebook is not running gets its moment when the notebook next runs, and your finish is saved
-either way. `godspeed-journal config set save_as_moments off` stops it.
+either way. `godspeed-journal config set save_as_moments off` stops it: a task finished while it
+is off never becomes a moment, even after you turn it back on.
 
 ## Settings
 
