@@ -1148,10 +1148,40 @@ jobs:
         if: failure()
         run: 'grep -qE "^(PASS|FAIL) first-day:" "$RUNNER_TEMP/verdict" 2>/dev/null || echo "FAIL first-day: it stopped before its own verdict (its step log says how)" | tee -a "$GITHUB_STEP_SUMMARY"'
 
+  server-update-keeps-everything:
+    name: a Docker server updates from the current public version with godspeed-update and keeps everything
+    needs: stage
+    if: ${{ needs.stage.outputs.picked == 'all' || contains(needs.stage.outputs.picked, ',server-update-keeps-everything,') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.stage || github.event.pull_request.head.sha || needs.stage.outputs.proof || github.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        if: ${{ !inputs.stage }}
+        with:
+          name: run-stage
+          path: ${{ runner.temp }}/run-stage
+      - name: The scenario, the stage's own copy of it
+        shell: bash
+        run: bash scenarios/server-update-keeps-everything.sh "$STAGE_REF" | tee "$RUNNER_TEMP/verdict"
+      - name: Keep what the scenario saw
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: server-update-keeps-everything-evidence
+          path: ${{ runner.temp }}/server-update-keeps-everything
+          if-no-files-found: ignore
+      - name: Say so when it stopped before its own verdict
+        if: failure()
+        run: 'grep -qE "^(PASS|FAIL) server-update-keeps-everything:" "$RUNNER_TEMP/verdict" 2>/dev/null || echo "FAIL server-update-keeps-everything: it stopped before its own verdict (its step log says how)" | tee -a "$GITHUB_STEP_SUMMARY"'
+
   verdict:
     name: the verdict
     if: always()
-    needs: [stage, pr-image, linux-install, mac-install, docker-server, linux-update, settings-on-install, voice, update-keeps-everything, reminder-closed-elsewhere, reminders-move-keeps-everything, two-machines-move-at-once, late-reminder-file, closed-offline-on-both, reminder-from-settings, charm-challenge, no-video-skills-by-default, update-removes-only-unchanged-skills, briefing-breaks-a-rule, windows-old-names-move, telegram-language, brief-asked-in-chat, talk-prep-honest, no-question-he-cannot-judge, plain-yes, what-was-that, connection-check, workouts-from-hevy, day-becomes-facts, hermes-update-rollback, first-day]
+    needs: [stage, pr-image, linux-install, mac-install, docker-server, linux-update, settings-on-install, voice, update-keeps-everything, reminder-closed-elsewhere, reminders-move-keeps-everything, two-machines-move-at-once, late-reminder-file, closed-offline-on-both, reminder-from-settings, charm-challenge, no-video-skills-by-default, update-removes-only-unchanged-skills, briefing-breaks-a-rule, windows-old-names-move, telegram-language, brief-asked-in-chat, talk-prep-honest, no-question-he-cannot-judge, plain-yes, what-was-that, connection-check, workouts-from-hevy, day-becomes-facts, hermes-update-rollback, first-day, server-update-keeps-everything]
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -1196,6 +1226,7 @@ jobs:
         day-becomes-facts=${{ needs.day-becomes-facts.result }}
         hermes-update-rollback=${{ needs.hermes-update-rollback.result }}
         first-day=${{ needs.first-day.result }}
+        server-update-keeps-everything=${{ needs.server-update-keeps-everything.result }}
     steps:
       - uses: actions/checkout@v4
         if: github.event_name == 'schedule'
