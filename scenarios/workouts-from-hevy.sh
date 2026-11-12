@@ -286,11 +286,11 @@ NODE
 act() {
   need_node
   fresh_evidence
-  local state=$EVIDENCE/fixture-state.json port pid fixture_key
+  local state=$EVIDENCE/fixture-state.json port pid='' fixture_key
   fixture_key=$("$NODE" -p 'require("crypto").randomUUID()') || fail "the selected Node could not make the local Hevy fixture key"
   : >"$EVIDENCE/fixture.log"
   GODSPEED_HEVY_FIXTURE_KEY="$fixture_key" GODSPEED_HEVY_FIXTURE_HOST=0.0.0.0 "$NODE" "$HERE/hevy-fixture.mjs" --state "$state" --log "$EVIDENCE/fixture.log" >"$EVIDENCE/fixture-port" & pid=$!
-  trap 'kill "$pid" 2>/dev/null || true' EXIT
+  trap 'kill "${pid:-}" 2>/dev/null || true' EXIT
   wait_for 20 'the local Hevy fixture to name its port' test -s "$EVIDENCE/fixture-port" || fail "the local Hevy fixture did not start"
   port=$(cat "$EVIDENCE/fixture-port")
   HEVY_FIXTURE_PORT=$port
@@ -302,7 +302,8 @@ act() {
   server_install; server_hevy_url "$port"
   printf '{"key":"%s"}\n' "$REFUSED_HEVY_KEY" >"$EVIDENCE/.refused-key.json"
   settings_post docker "$EVIDENCE/.refused-key.json" "$EVIDENCE/docker-settings.json" >"$EVIDENCE/docker-settings.code"
-  export GODSPEED_PORT=47832
+  # A pooled run keeps the native notebook on the port it was installed with.
+  [ "${GODSPEED_SCENARIO_REUSE_INSTALL:-}" = 1 ] || export GODSPEED_PORT=47832
   install_paths
   install_the_stage_line "$EVIDENCE/install.log"
   wait_for 180 'the native notebook to answer after install' notebook_is_up || fail "the native notebook did not answer after install"

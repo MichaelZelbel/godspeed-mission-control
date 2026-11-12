@@ -1,0 +1,31 @@
+# id	implementation	class	system	candidate-only	display name
+linux-install	inline	pooled	native	no	a stranger's Linux install
+mac-install	inline	pooled	mac	yes	a stranger's Mac install
+docker-server	inline	pooled	docker	no	a stranger's Docker server
+linux-update	inline	isolated	native	no	an update from today's public install
+settings-on-install	settings-on-install.sh	terminal	native	no	a fresh install keeps the owner's settings
+voice	voice.sh	shared	native	no	a voice note, with the permission and without it
+update-keeps-everything	update-keeps-everything.sh	isolated	native	no	an update keeps every record, setting and chat
+reminder-closed-elsewhere	reminder-closed-elsewhere.sh	isolated	native	no	a reminder closed elsewhere is closed here
+reminders-move-keeps-everything	reminders-move-keeps-everything.sh	isolated	native	no	the reminders move keeps every reminder
+two-machines-move-at-once	two-machines-move-at-once.sh	isolated	native	no	two computers move reminders at once
+late-reminder-file	late-reminder-file.sh	isolated	native	no	a late old reminder file still arrives once
+closed-offline-on-both	closed-offline-on-both.sh	isolated	native	no	one reminder closed offline on both computers
+reminder-from-settings	reminder-from-settings.sh	shared	native	no	a Settings reminder reaches the notebook and brief
+charm-challenge	charm-challenge.sh	shared	native	no	the Charm Challenge starts, talks and restarts honestly
+no-video-skills-by-default	no-video-skills-by-default.sh	shared	native	no	video skills are absent until their add-on is set up
+update-removes-only-unchanged-skills	update-removes-only-unchanged-skills.sh	isolated	native	no	an update removes only unchanged video skills
+briefing-breaks-a-rule	briefing-breaks-a-rule.sh	shared	native	no	a morning brief keeps going when a rule rejects one line
+windows-old-names-move	windows-old-names-move.ps1	isolated	windows	yes	Windows moves the old Full Alpha names
+telegram-language	telegram-language.sh	shared	native	no	Telegram answers in the message language
+brief-asked-in-chat	brief-asked-in-chat.sh	shared	native	no	the chat gives the saved morning brief
+talk-prep-honest	talk-prep-honest.sh	shared	native	no	a talk preparation says honestly what it cannot cover
+no-question-he-cannot-judge	no-question-he-cannot-judge.sh	shared	docker	no	Telegram asks only questions the owner can judge
+plain-yes	plain-yes.sh	shared	docker	no	a plain yes approves the one waiting step
+what-was-that	what-was-that.sh	shared	docker	no	what was that explains the queued notice
+connection-check	connection-check.sh	shared	docker	no	the connection check tells the owner only when needed
+workouts-from-hevy	workouts-from-hevy.sh	shared	both	no	Hevy workouts import on Linux and Docker
+day-becomes-facts	day-becomes-facts.sh	shared	native	no	a day becomes dated remembered facts
+hermes-update-rollback	hermes-update-rollback.sh	terminal	native	no	Hermes updates and rolls back safely
+first-day	first-day.sh	shared	docker	no	a first Docker day makes useful work and a matching brief
+server-update-keeps-everything	server-update-keeps-everything.sh	isolated	docker	no	a Docker server update keeps everything

@@ -11,7 +11,9 @@
 // the workflow's token.
 //
 // Environment: RESULTS ("name=result name=result ..."), STAGE (the stage job's result, optional),
-// CANDIDATE_ONLY (names of jobs that do not run at night, left out), GITHUB_TOKEN, GITHUB_REPOSITORY,
+// CANDIDATE_ONLY (names of jobs that do not run at night, left out), or instead SCENARIO_VERDICTS (the
+// collector's "PASS|FAIL <name>: ..." lines, which give both each scenario's result and the exact
+// line its issue quotes; set but holding none is an error), GITHUB_TOKEN, GITHUB_REPOSITORY,
 // GITHUB_RUN_ID, GITHUB_SERVER_URL, GITHUB_API_URL, NIGHT (default: today, UTC),
 // WORKFLOW_FILE (default .github/workflows/scenarios.yml, where the jobs' display names are read).
 import { readFileSync } from 'node:fs';
@@ -51,6 +53,15 @@ export function parseResults(results, skip = '') {
   return out;
 }
 
+export function verdictLines(text) {
+  const lines = new Map();
+  for (const line of String(text || '').split(/\r?\n/)) {
+    const match = line.match(/^(PASS|FAIL) ([A-Za-z0-9_-]+): .+$/);
+    if (match && !lines.has(match[2])) lines.set(match[2], line);
+  }
+  return lines;
+}
+
 export const lastLines = (log, n = LAST_LINES) =>
   String(log)
     .replace(/\x1b\[[0-9;]*m/g, '')
@@ -67,7 +78,11 @@ export async function reportNight(env = process.env, log = console.log) {
   if (!repo || !env.GITHUB_TOKEN || !runId) throw new Error('GITHUB_REPOSITORY, GITHUB_TOKEN and GITHUB_RUN_ID are needed');
   const night = env.NIGHT || new Date().toISOString().slice(0, 10);
   const runLink = `${env.GITHUB_SERVER_URL || 'https://github.com'}/${repo}/actions/runs/${runId}`;
-  const scenarios = parseResults(env.RESULTS, env.CANDIDATE_ONLY);
+  const verdicts = verdictLines(env.SCENARIO_VERDICTS);
+  if (env.SCENARIO_VERDICTS !== undefined && !verdicts.size) throw new Error('SCENARIO_VERDICTS holds no scenario verdict');
+  const scenarios = env.SCENARIO_VERDICTS === undefined
+    ? parseResults(env.RESULTS, env.CANDIDATE_ONLY)
+    : new Map([...verdicts].map(([name, line]) => [name, line.startsWith('PASS ') ? 'success' : 'failure']));
 
   const call = async (method, path, body, okCodes = []) => {
     const res = await fetch(`${api}/repos/${repo}${path}`, {
@@ -120,6 +135,8 @@ export async function reportNight(env = process.env, log = console.log) {
     }
   };
 
+  // A failed stage ran no scenario, so a verdict's missing record is not the cause the issue should quote.
+  const stageEnded = env.STAGE && env.STAGE !== 'success' ? env.STAGE : '';
   const failures = [];
   for (const [name, result] of scenarios) {
     const title = titleOf(name);
@@ -131,12 +148,17 @@ export async function reportNight(env = process.env, log = console.log) {
       log(`closed ${name}: passed, issue #${number} closed`);
       continue;
     }
+    const exactVerdict = verdicts.get(name);
     const why = result === 'failure' ? 'failed' : `could not run (its job ended ${result || 'with no result'})`;
     let lines;
-    const got = await jobLog(name);
-    if (got && got.text) lines = got.text;
-    else if (got && got.skipped) lines = `The job did not run${scenarios.size && env.STAGE && env.STAGE !== 'success' ? `: the stage job ended ${env.STAGE}` : ''}.`;
-    else lines = `The job's log could not be read; the run link has it.`;
+    if (exactVerdict && stageEnded) lines = `It did not run: the stage job ended ${stageEnded}.`;
+    else if (exactVerdict) lines = exactVerdict;
+    else {
+      const got = await jobLog(name);
+      if (got && got.text) lines = got.text;
+      else if (got && got.skipped) lines = `The job did not run${stageEnded ? `: the stage job ended ${stageEnded}` : ''}.`;
+      else lines = `The job's log could not be read; the run link has it.`;
+    }
     const body = `Night of ${night}: ${name} ${why}.\n\nRun: ${runLink}\n\nThe last lines:\n\n\`\`\`\n${lines}\n\`\`\`\n`;
     if (number) {
       await call('POST', `/issues/${number}/comments`, { body });

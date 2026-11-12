@@ -18,6 +18,10 @@ in_server() { local container; container=$(server_container) && [ -n "$container
 in_server_as_hermes() { local container; container=$(server_container) && [ -n "$container" ] && sudo docker exec -i --user hermes "$container" "$@"; }
 
 server_install() {
+  if [ "${GODSPEED_SCENARIO_REUSE_SERVER:-}" = 1 ]; then
+    server_healthy 300 || fail "the pooled Docker server is not healthy"
+    return
+  fi
   local installer=$EVIDENCE/.server-installer.sh
   say "The /server line, against the stage: $STAGE_REF"
   curl -fsSL https://godspeedmissioncontrol.com/server >"$installer" ||
