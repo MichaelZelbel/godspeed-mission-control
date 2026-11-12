@@ -61,5 +61,5 @@ test("the recipe asks about impact at most once, never with feedback off, and th
   assert.match(t, /With `feedback = off`, or when the settings line says `save_as_moments=false`, the impact question is never asked\./);
   const readme = flat(read("README.md"));
   assert.match(readme, /Every task you finish also becomes one moment in the notebook's timeline/);
-  assert.match(readme, /`godspeed-journal config set save_as_moments off` stops it\./);
+  assert.match(readme, /`godspeed-journal config set save_as_moments off` stops it: a task finished while it is off never becomes a moment, even after you turn it back on\./);
 });
