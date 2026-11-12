@@ -105,7 +105,7 @@ export class AutomaticUpdate{
     if(status?.state==='updated'&&last.to&&compareVersions(installed,last.to)>=0)return this.tell({...last,result:'updated',message:null});
     if(status?.state==='failed'||status?.state==='updated')return this.tell({...last,result:'failed',message:status.message});
   }
-  // Told once it was said somewhere; a started update that could be said nowhere is tried again.
+  // Said once. If neither the notices nor the bell took it, it is not said again; Settings still shows the result.
   tell(last){
     const at=this.now().toISOString(),said=[];
     const say=action=>{try{action();said.push(true);}catch{}};
