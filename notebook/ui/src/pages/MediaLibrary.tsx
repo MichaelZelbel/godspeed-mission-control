@@ -27,6 +27,7 @@ import {
   Play,
   Sparkles,
   RefreshCw,
+  CloudOff,
 } from "lucide-react";
 
 import { formatDistanceToNow } from "date-fns";
@@ -526,6 +527,32 @@ export default function MediaLibrary() {
     enabled: !!user,
   });
 
+  // An item over 50 MB added on another computer has its record here but not
+  // its file. Asked again each minute while any is missing, so a file that
+  // arrives later turns its card back into an ordinary one.
+  const { data: missingHere = new Set<string>() } = useQuery({
+    queryKey: ["media-missing-here", user?.id, storagePaths],
+    queryFn: async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error("Not authenticated");
+      const results = await Promise.all(
+        chunk(storagePaths).map(async (slice) => {
+          const resp = await fetch(`${SUPABASE_URL}/api/media/missing-here`, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${session.access_token}`, "Content-Type": "application/json" },
+            body: JSON.stringify({ paths: slice }),
+          });
+          if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+          const result: { data: string[] } = await resp.json();
+          return result.data;
+        })
+      );
+      return new Set(results.flat());
+    },
+    enabled: !!user && storagePaths.length > 0,
+    refetchInterval: (query) => (query.state.data?.size ? 60_000 : false),
+  });
+
   // Fetch note titles for all unique note IDs
   const noteIds = useMemo(() => [...new Set(mediaItems.map(m => m.note_id))], [mediaItems]);
   const { data: noteTitles = {} } = useQuery({
@@ -721,7 +748,8 @@ export default function MediaLibrary() {
               const previewUrl = getMediaUrl(group.storage_path);
               const hasBrokenPreview = Boolean(brokenPreviews[group.storage_path]);
               const status = isRetrying ? "processing" : group.analysis_status;
-              const canRetry = !isRetrying && (status === "failed" || status === "complete" || hasBrokenPreview);
+              const notHere = missingHere.has(group.storage_path);
+              const canRetry = !notHere && !isRetrying && (status === "failed" || status === "complete" || hasBrokenPreview);
 
               const openDocument = () =>
                 setOpenItem({
@@ -772,7 +800,12 @@ export default function MediaLibrary() {
                 >
                   {/* Thumbnail */}
                   <div className="relative h-36 bg-muted flex items-center justify-center overflow-hidden">
-                    {isPdf ? (
+                    {notHere ? (
+                      <div className="flex flex-col items-center gap-2 text-muted-foreground/70 px-3 text-center">
+                        <CloudOff className="h-10 w-10" />
+                        <span className="text-[10px] leading-tight">Not on this computer</span>
+                      </div>
+                    ) : isPdf ? (
                       previewUrl ? (
                         <PdfThumbnail url={previewUrl} width={320} />
                       ) : (
@@ -804,6 +837,15 @@ export default function MediaLibrary() {
                         className="absolute top-1.5 left-1.5 text-[9px] z-10"
                       >
                         Kept on this computer only
+                      </Badge>
+                    )}
+                    {notHere && (
+                      <Badge
+                        variant="secondary"
+                        title="Its file is not on this computer. Files over 50 MB stay on the computer they were added on, so open it there."
+                        className="absolute top-1.5 left-1.5 text-[9px] z-10"
+                      >
+                        Kept on another computer
                       </Badge>
                     )}
                     {/* Status badge */}
@@ -882,6 +924,7 @@ export default function MediaLibrary() {
       <MediaDetailDialog
         item={selectedOpenItem}
         noteTitle={selectedOpenItem ? noteTitles[selectedOpenItem.note_id] : undefined}
+        missingHere={!!selectedOpenItem && missingHere.has(selectedOpenItem.storage_path)}
         onClose={() => setOpenItem(null)}
       />
     </div>
