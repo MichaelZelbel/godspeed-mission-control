@@ -141,6 +141,7 @@ function groupMediaByDocument(items: MediaItem[]): DocumentGroup[] {
 
 const CONTENT_TYPES = [
   "all",
+  "pdf",
   "screenshot",
   "photo",
   "diagram",
@@ -152,6 +153,29 @@ const CONTENT_TYPES = [
   "code",
   "other",
 ];
+
+/** The filter's label: "All types", "PDF", "ui mockup". */
+function contentTypeLabel(t: string): string {
+  return t === "all" ? "All types" : t === "pdf" ? "PDF" : t.replace("_", " ");
+}
+
+/** "pdf" is the file's own type, not the analysis's guess at what a picture shows. */
+function matchesContentType(group: { media_type: string; raw_analysis: Record<string, unknown> | null }, filter: string): boolean {
+  if (filter === "all") return true;
+  if (filter === "pdf") return group.media_type === "pdf" || group.media_type === "pdf_page";
+  return group.raw_analysis?.content_type === filter;
+}
+
+/**
+ * The card's heading: the note's title, or for media with no titled note the file's own name,
+ * without the folders it is stored under.
+ */
+function cardTitle(noteTitle: string | undefined, originalFilename: string | null, storagePath: string): string {
+  const title = noteTitle?.trim();
+  if (title) return title;
+  const name = (originalFilename || storagePath || "").replace(/^.*[\\/]/, "").trim();
+  return name || "Untitled";
+}
 
 // Average tokens per image analysis (~500 prompt + ~200 completion)
 const AVG_TOKENS_PER_IMAGE = 700;
@@ -606,10 +630,7 @@ export default function MediaLibrary() {
     let groups = documentGroups;
 
     if (contentTypeFilter !== "all") {
-      groups = groups.filter(g => {
-        const raw = g.raw_analysis as Record<string, unknown> | null;
-        return raw?.content_type === contentTypeFilter;
-      });
+      groups = groups.filter(g => matchesContentType(g, contentTypeFilter));
     }
 
     if (searchQuery.trim()) {
@@ -706,7 +727,7 @@ export default function MediaLibrary() {
             <SelectContent>
               {CONTENT_TYPES.map(t => (
                 <SelectItem key={t} value={t} className="text-xs">
-                  {t === "all" ? "All types" : t.replace("_", " ")}
+                  {contentTypeLabel(t)}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -746,7 +767,7 @@ export default function MediaLibrary() {
             {filteredGroups.map((group) => {
               const raw = group.raw_analysis as Record<string, unknown> | null;
               const contentType = raw?.content_type as string | undefined;
-              const noteTitle = noteTitles[group.note_id] || "Untitled";
+              const noteTitle = cardTitle(noteTitles[group.note_id], group.original_filename, group.storage_path);
               const isPdf = group.media_type === "pdf" || group.media_type === "pdf_page";
 
               const isRetrying = reanalyze.isPathPending(group.storage_path);

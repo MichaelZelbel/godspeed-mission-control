@@ -49,6 +49,7 @@ import {
 const ChatMarkdown = lazy(() => import("./ChatMarkdown"));
 
 import ChatComposer, {type ChatFile} from "./ChatComposer";
+import { useChatEntryInView } from "./chat-entry";
 import { BRAIN_PAGE } from "@/lib/brain-page";
 import { personLabel } from "@/components/timeline/people";
 type ChatMessage = PersistedChatMessage;
@@ -79,6 +80,8 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
   const pageChat=pageContext??(page?PAGE_CHATS[new URLSearchParams(location.search).get('page')||'']:undefined);
   const queryClient = useQueryClient();
   const isMobile = useIsMobile();
+  // A narrow window shows one way into the chat at a time (chat-entry.ts, issue #530).
+  const entryInView = useChatEntryInView();
   const [open, setOpen] = useState(page);
   const openChangeRef=useRef(onOpenChange);openChangeRef.current=onOpenChange;
   useEffect(()=>{openChangeRef.current?.(open);},[open]);
@@ -513,7 +516,7 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
   return (
     <>
       {/* FAB button */}
-      {!page && !embedded && !open && (
+      {!page && !embedded && !open && !(isMobile && entryInView) && (
         <button
           onClick={() => setOpen(true)}
           className={cn(

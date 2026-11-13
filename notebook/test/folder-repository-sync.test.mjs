@@ -35,7 +35,7 @@ test('the notebook commits only its own folder and leaves the owner work, index 
   const note=envy.store.save('notes',{title:'Shared note',content:'From envy'});
   assert.equal(envy.sync.reconcile().state,'synced');
   const pushed=git(envy.dir,'show','--name-only','--format=%an','origin/main').split('\n').filter(Boolean);
-  assert.equal(pushed[0],'Godspeed Mission Control');
+  assert.equal(pushed[0],'Godspeed Mission Control (envy)');
   assert.deepEqual(pushed.slice(1),['notebook/Shared note.md'],'Only the note left the machine');
   assert.equal(git(envy.dir,'diff','--cached','--name-only'),'rules/own.md','The session work stays staged');
   assert.equal(git(envy.dir,'diff','--name-only'),'AGENTS.md','The unsaved edit stays as it was');

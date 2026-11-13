@@ -207,7 +207,7 @@ export function prepareCheckIn(root,{timezone,delivery,goal,now=new Date()}){
 // {rhythm, next_talk} for those two jobs, {} for any other.
 export function coachRoutineTimes(job,root,{now=new Date()}={}){
  const name=String(job.title||''),every=/^\*\/(\d+) \* \* \* \*$/.exec(String(job.schedule||'').trim());
- if(name===NOTEBOOK_TICK_JOB||name===TICK_JOB)return every?{rhythm:'Checks every '+every[1]+' minutes for a due reminder or habit question.'}:{};
+ if(name===NOTEBOOK_TICK_JOB||name===TICK_JOB)return every?{rhythm:'Checks every '+(Number(every[1])===1?'minute':every[1]+' minutes')+' for a due reminder or habit question.'}:{};
  if(name!==NOTEBOOK_TALK_JOB&&name!==TALK_JOB)return {};
  let areas=[];try{areas=listAreas(root).filter(a=>a.on&&a.rhythm);}catch{}
  if(!areas.length)return {};

@@ -10,9 +10,10 @@ import {ActivityFeed} from '@/components/activity/ActivityFeed';
 import {CaptureEmptyState} from '@/components/notes/CaptureEmptyState';
 import {FileText,Users,MessageCircle,Bot,UserRound} from 'lucide-react';
 import {openFloatingChat} from '@/components/chat/GlobalAIChatFAB';
+import {useChatEntry} from '@/components/chat/chat-entry';
 import {peopleCountRequest} from './home-counts.mjs';
 export default function Home(){
- const navigate=useNavigate(),notes=useNotes('all');
+ const navigate=useNavigate(),notes=useNotes('all'),chatEntry=useChatEntry<HTMLButtonElement>();
  const status=useQuery({queryKey:['candidate-status'],queryFn:async()=>{const r=await fetch('/api/status');if(!r.ok)throw new Error('Could not read connection status');return r.json();},refetchInterval:5000});
  const people=useQuery({queryKey:['home-people-count'],queryFn:async()=>{const r=await fetch('/api/rpc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(peopleCountRequest)});if(!r.ok)throw new Error('Could not load people');return {count:(await r.json()).data?.total};}});
  // The chat was a small link in the third card, so people did not see they could talk to
@@ -27,7 +28,7 @@ export default function Home(){
  return <div className="space-y-6 max-w-7xl mx-auto">
   <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
    <div><h1 className="text-2xl font-display font-bold">Your notebook</h1><p className="text-sm text-muted-foreground mt-1">Your notes, people and personal knowledge, together.</p></div>
-   <Button size="lg" className="h-14 w-full sm:w-auto px-8 text-base font-semibold gap-3 shadow-md" onClick={chat}><Bot className="h-5 w-5" aria-hidden="true"/>Chat with Godspeed</Button>
+   <Button ref={chatEntry} size="lg" className="h-14 w-full sm:w-auto px-8 text-base font-semibold gap-3 shadow-md" onClick={chat}><Bot className="h-5 w-5" aria-hidden="true"/>Chat with Godspeed</Button>
   </div>
   {context.data?.show&&<Card className="border-primary/40" aria-labelledby="context-card-title"><CardContent className="py-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
    <div className="flex items-start gap-3"><UserRound className="h-5 w-5 mt-0.5 text-primary shrink-0" aria-hidden="true"/><div><p id="context-card-title" className="font-semibold">Tell Godspeed about you, about five minutes</p><p className="text-sm text-muted-foreground">Where you live, a little about you, and what you want help with first.</p></div></div>

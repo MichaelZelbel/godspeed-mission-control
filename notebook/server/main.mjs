@@ -26,7 +26,7 @@ import {FactClosing} from '../core/fact-closing.mjs';
 import {JournalMoments} from '../core/journal-moments.mjs';
 import {saveConversationState,retainCompletedConversation,bindConversationSession,conversationRuntimeId} from '../core/conversation-state.mjs';
 import { importExport,exportRecords } from '../core/import.mjs';
-import { kinds } from '../core/jobs/scheduler.mjs';
+import { kinds,setupResults } from '../core/jobs/scheduler.mjs';
 import { MediaSync } from '../core/sync/media.mjs';
 import { mcp } from './mcp.mjs';
 import {notebookTotals} from './memory-tools.mjs';
@@ -73,6 +73,7 @@ import {recordRunningNotebook} from '../core/running-notebook.mjs';
 import {HermesUpdate,isScenarioHermesReleaseUrl,updateStatus} from '../core/hermes-update.mjs';
 import {HermesLifecycle} from '../core/hermes-lifecycle.mjs';
 import {ChatHealth,chatStatus} from '../core/chat-health.mjs';
+import {MEDIA_UPLOAD_MAX_BYTES,MEDIA_UPLOAD_MAX_MB,MEDIA_UPLOAD_REQUEST_EXTRA_BYTES} from '../shared/media-limits.mjs';
 
 // A backup AI is another service than the main AI, in Settings and in /backupai alike: when one
 // service fails, its other models and keys usually fail with it, and Hermes counts the same service
@@ -103,9 +104,22 @@ export function userFacing(error, roots = []) {
   message = message.replace(/[A-Za-z]:[\\/][^\s'"]*|\\\\[^\s'"]+|(?<![\w.])\/(?:home|opt|root|var|tmp|Users|srv|data|mnt|etc|private)\/[^\s'"]*/g, '[path]');
   return message || null;
 }
+// The POST routes that act on Hermes' routines; with no verified assistant setup they answer why (#524).
+const ASSISTANT_ROUTES=['/api/owner','/api/routines/switch','/api/delivery','/api/setup','/api/jobs/run','/api/jobs/update','/api/jobs/add'];
+// What is wrong with assistant.json, in plain words. An empty file still "cannot be read" with the
+// original runtime off, as before; with it on, unconnectedAssistant says it is empty (#524, 13 November 2026).
+const unreadableAssistant=file=>`The assistant setup in ${file} cannot be read. Run the Godspeed installer again to set up the assistant. Until then the assistant cannot answer.`;
 function readAssistant(file){
-  try{const descriptor=JSON.parse(fs.readFileSync(file,'utf8').replace(/^\uFEFF/,''));if(descriptor&&typeof descriptor==='object')return {descriptor};}catch{}
-  return {problem:`The assistant setup in ${file} cannot be read. Run the Godspeed installer again to set up the assistant. Until then the assistant cannot answer.`};
+  let text;try{text=fs.readFileSync(file,'utf8').replace(/^\uFEFF/,'');}catch{return {problem:unreadableAssistant(file)};}
+  if(!text.trim())return {problem:unreadableAssistant(file),empty:true};
+  try{const descriptor=JSON.parse(text);if(descriptor&&typeof descriptor==='object')return {descriptor};}catch{}
+  return {problem:unreadableAssistant(file)};
+}
+// Why the original runtime has no assistant: the setup is not verified, empty, unreadable or missing.
+function unconnectedAssistant(file,assistant){
+  if(assistant.descriptor)return `The assistant setup in ${file} is not verified, so the assistant is not connected. Run the Godspeed installer again to connect the assistant. Until then the assistant cannot answer.`;
+  if(assistant.empty)return `The assistant setup in ${file} is empty. Run the Godspeed installer again to set up the assistant. Until then the assistant cannot answer.`;
+  return assistant.problem||`There is no assistant setup at ${file}. Run the Godspeed installer again to set up the assistant. Until then the assistant cannot answer.`;
 }
 export async function createService({ root, mediaRoot, host = '127.0.0.1', port = 47831, webPort, localPort, token, uiRoot, provider, device = 'local', authNow } = {}) {
   // The store keeps every record in memory and re-reads only the files its
@@ -134,7 +148,10 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   try{recordRunningNotebook({root:store.root,assistantConfig:process.env.GODSPEED_ASSISTANT_CONFIG});}catch(error){console.error('Godspeed Mission Control: could not record where the notebook runs:',error.message);}
   // An assistant program that is not Hermes, or an assistant.json that cannot be read, leaves the
   // notebook running without its AI and says which setting to change (#506, 13 November 2026);
-  // until then it stopped startup, over and over.
+  // until then it stopped startup, over and over. With the original runtime on, a setup that is
+  // missing, unreadable, empty or not verified does the same (#524): the assistant's own parts
+  // (its chat, routines, updater, chat check and Workouts) are not built and no routine runs until
+  // the setup is fixed and the notebook restarted.
   const originalRuntime=process.env.GODSPEED_ORIGINAL_RUNTIME==='on';
   let assistantProblem=null;
   const assistant=(!provider||originalRuntime)&&fs.existsSync(assistantPath)?readAssistant(assistantPath):{};
@@ -142,17 +159,19 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
     if(typeof executable==='string'&&isHermesExecutable(executable))provider=hermesProvider({executable,home:assistant.descriptor.home,cwd:store.root,sourceRoot:assistant.descriptor.sourceRoot});
     else assistantProblem=`The assistant program set in ${assistantPath} is "${executable}", which is not Hermes. Set "executable" in that file to your Hermes program (its name is hermes), or run the Godspeed installer again to set up the assistant. Until then the assistant cannot answer.`;}
   else if(!provider&&assistant.problem)assistantProblem=assistant.problem;
+  const assistantMissing=originalRuntime&&!assistant.descriptor?.verified;
+  if(assistantMissing)assistantProblem=unconnectedAssistant(assistantPath,assistant);
   if(assistantProblem)console.error('Godspeed Mission Control: '+assistantProblem);
   // What the supervisor reads as "alive" (supervisor-health.mjs): an AI call
   // beats while it is inside its own time limit, plus a minute to be stopped.
   let schedulerHeartbeat=new Date().toISOString();const {beatWhile}=await import('../core/supervisor-health.mjs'),beat=()=>{schedulerHeartbeat=new Date().toISOString();};
   if(provider){const connected=provider;provider=Object.assign(async input=>beatWhile(connected(input),beat,{limitMs:(input?.timeout_ms||600000)+60000}),connected);}
   const descriptor=originalRuntime?assistant.descriptor??null:null;
-  if(originalRuntime&&!descriptor?.verified)throw Error('Connect the original Godspeed assistant before starting the integrated notebook');
-  const lifecycle=originalRuntime?new HermesLifecycle():null,domains=new Domains(query,{provider}),scheduler=originalRuntime?new NativeScheduler(store,{...descriptor,device,lifecycle,records:new Scheduler(store,{device,executor:jobExecutor(provider,query),only:NativeScheduler.recordKinds,delivery:'notebook'})}):new Scheduler(store,{device,query,executor:jobExecutor(provider,query)});scheduler.onProgress=beat;scheduler.onFailure=error=>console.error('Godspeed Mission Control: a routine could not be created, the next tick tries again:',error.message);
+  const lifecycle=originalRuntime?new HermesLifecycle():null,domains=new Domains(query,{provider}),recordRoutines=()=>new Scheduler(store,{device,executor:jobExecutor(provider,query),only:NativeScheduler.recordKinds,delivery:'notebook'}),scheduler=assistantMissing?recordRoutines():originalRuntime?new NativeScheduler(store,{...descriptor,device,lifecycle,records:recordRoutines()}):new Scheduler(store,{device,query,executor:jobExecutor(provider,query)});scheduler.onProgress=beat;scheduler.onFailure=error=>console.error('Godspeed Mission Control: a routine could not be created, the next tick tries again:',error.message);
   let workouts=null;
   const automaticUpdate=new AutomaticUpdate({store,lifecycle,start:()=>startUpdate({root:store.root})});
-  if(originalRuntime){domains.nativeAgent=nativeAgent({...descriptor,cwd:store.root,providerFile:providerPath,keptFile:path.join(store.state,KEPT_FILE),lifecycle});const scenarioReleaseUrl=process.env.GODSPEED_SCENARIO_HERMES_UPDATE_RELEASES_URL;const updater=new HermesUpdate({store,descriptor,ask:askDirectly,lifecycle,releaseUrl:isScenarioHermesReleaseUrl(scenarioReleaseUrl)?scenarioReleaseUrl:undefined});scheduler.updater=updater;scheduler.chatHealth=new ChatHealth({store,descriptor,lifecycle});domains.hermesUpdate=updater;domains.nativeScheduler=scheduler;query.nativeHermesHome=descriptor.home;}
+  domains.assistantProblem=assistantMissing?assistantProblem:null;
+  if(originalRuntime&&!assistantMissing){domains.nativeAgent=nativeAgent({...descriptor,cwd:store.root,providerFile:providerPath,keptFile:path.join(store.state,KEPT_FILE),lifecycle});const scenarioReleaseUrl=process.env.GODSPEED_SCENARIO_HERMES_UPDATE_RELEASES_URL;const updater=new HermesUpdate({store,descriptor,ask:askDirectly,lifecycle,releaseUrl:isScenarioHermesReleaseUrl(scenarioReleaseUrl)?scenarioReleaseUrl:undefined});scheduler.updater=updater;scheduler.chatHealth=new ChatHealth({store,descriptor,lifecycle});domains.hermesUpdate=updater;domains.nativeScheduler=scheduler;query.nativeHermesHome=descriptor.home;}
   // Where the routines' AI is set: the Hermes home the routines run in (core/routine-ai.mjs).
   const routineAI=originalRuntime&&descriptor?.verified&&descriptor.home?{home:descriptor.home,state:store.state}:null;
   // A CHATGPT PLAN SIGNED IN FROM SETTINGS (core/plan-signin.mjs), one sign-in for the main AI and the
@@ -388,7 +407,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         if(req.method!=='POST')return send(res,405,{error:'Use POST'});
         return send(res,200,automaticUpdate.save(JSON.parse(await body(req,4096))));
       }
-      if (route === '/api/status') return query.withSnapshot(()=>{const installation=query.rows('settings').find(row=>row.id==='installation');return send(res, 200, { configured:!!installation,goalSetupComplete:query.rows('goals').some(g=>['active','adopted','paused','achieved','completed'].includes(g.status)),goals:query.rows('goals'),work:query.rows('work_items'),decisions:query.rows('decisions'),owner:installation?.owner,device,server:mediaSync.server()||(device==='vps'?device:null),platform:process.platform,runtimeConfigured:!!domains.provider,assistantProblem:domains.provider?null:assistantProblem,sync:sync.last,mediaSync:mediaSync.last,kinds:originalRuntime?enableKinds(store.root):kinds,problems: store.problems, lastScan: store.lastScan, lastIndex: index.lastRebuild, records: store.records.size, schedules: query.rows('jobs'),routineSwitches: originalRuntime?routineSwitches(store,{jobs:hermesJobs(scheduler.home),home:scheduler.home}):null,assistantUpdate:originalRuntime?updateStatus(store):null, conflicts: sync.pendingConflicts().map(name=>{try{const c=JSON.parse(fs.readFileSync(path.join(store.root,'conflicts',name),'utf8'));return {id:c.id,kind:c.kind,path:c.path||c.type+'/'+c.record_id};}catch{return {id:name.replace(/\.json$/,''),kind:null,path:null,degraded:true};}}) });});
+      if (route === '/api/status') return query.withSnapshot(()=>{const installation=query.rows('settings').find(row=>row.id==='installation');return send(res, 200, { configured:!!installation,goalSetupComplete:query.rows('goals').some(g=>['active','adopted','paused','achieved','completed'].includes(g.status)),goals:query.rows('goals'),work:query.rows('work_items'),decisions:query.rows('decisions'),owner:installation?.owner,device,server:mediaSync.server()||(device==='vps'?device:null),platform:process.platform,runtimeConfigured:!!domains.provider&&!assistantMissing,assistantProblem:domains.provider&&!assistantMissing?null:assistantProblem,sync:sync.last,mediaSync:mediaSync.last,kinds:originalRuntime?enableKinds(store.root):kinds,problems: store.problems, lastScan: store.lastScan, lastIndex: index.lastRebuild, records: store.records.size, schedules: query.rows('jobs'),routineSwitches: originalRuntime&&!assistantMissing?routineSwitches(store,{jobs:hermesJobs(scheduler.home),home:scheduler.home}):null,assistantUpdate:originalRuntime?updateStatus(store):null, conflicts: sync.pendingConflicts().map(name=>{try{const c=JSON.parse(fs.readFileSync(path.join(store.root,'conflicts',name),'utf8'));return {id:c.id,kind:c.kind,path:c.path||c.type+'/'+c.record_id};}catch{return {id:name.replace(/\.json$/,''),kind:null,path:null,degraded:true};}}) });});
       if(route==='/api/hermes-update'){
         if(!domains.hermesUpdate)return send(res,200,{available:false});
         if(req.method==='GET')return send(res,200,{available:true,...updateStatus(store)});
@@ -476,13 +495,14 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
       }
       if(route==='/api/sync/sign-in'&&req.method==='GET')return send(res,200,{signIn:githubSignIn.status()});
       if(route==='/api/sync/run'&&req.method==='POST')return send(res,200,{status:await syncRunner.run()});
+      if(assistantMissing&&req.method==='POST'&&ASSISTANT_ROUTES.includes(route))throw Error(assistantProblem);
       // "server": the server this computer is paired with, whatever it is called, or this machine
       // when it is the server (the one that makes pairing codes). Until 9 October 2026 the button
       // sent the name 'vps', which only the one-click server has.
       if(route==='/api/owner'&&req.method==='POST'){const input=JSON.parse(await body(req));const owner=input.owner==='this'?device:input.owner==='server'?mediaSync.server()||(device==='vps'?device:null):input.owner;if(owner===null)throw new Error('Pair this computer with your server first, under Pair the server and media, then choose the server here');if(typeof owner!=='string'||!/^[a-z0-9][a-z0-9-]{0,39}$/.test(owner))throw new Error('Choose the machine that runs the routines by its name');await scheduler.transfer(owner);return send(res,200,{owner});}
       // Settings > Notifications: the morning brief and the weekly review, on or off and when (native-scheduler.mjs).
       if(route==='/api/notifications'){
-        if(!originalRuntime)return send(res,200,{available:false});
+        if(!originalRuntime||assistantMissing)return send(res,200,{available:false});
         if(req.method==='GET')return send(res,200,{available:true,...scheduler.notifications()});
         if(req.method==='POST')return send(res,200,{available:true,...await scheduler.setNotifications(JSON.parse(await body(req,4096)))});
         return send(res,405,{error:'Use GET or POST'});
@@ -554,7 +574,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         if(route==='/api/identity/instruction-restore')return send(res,200,await shelf.restoreInstruction(String(input.id||''),String(input.version||''),options));
         return send(res,404,{error:'Unknown operation'});
       }
-      if(route==='/api/setup'&&req.method==='POST'){const input=JSON.parse(await body(req));return send(res,200,{...await scheduler.configure({...input,owner:mediaSync.server()||device}),results:await scheduler.tick({raise:true})});}
+      if(route==='/api/setup'&&req.method==='POST'){const input=JSON.parse(await body(req));return send(res,200,{...await scheduler.configure({...input,owner:mediaSync.server()||device}),results:setupResults(store,await scheduler.tick({raise:true}))});}
       if(route==='/api/jobs/run'&&req.method==='POST'){const input=JSON.parse(await body(req));if(originalRuntime)return send(res,202,scheduler.startRun(input.id));return send(res,200,{results:await scheduler.tick()});}
       if(route==='/api/connections/recheck'&&req.method==='POST'){await jobExecutor(provider,query)({kind:'connection-check',id:'manual-connection-check',manual:true},{store,settings:store.get('settings','installation')||{}});return send(res,200,{connections:query.rows('connector_status').map(({id,ok,status,checked_at})=>({id,ok,status,checked_at}))});}
       if(route==='/api/jobs/update'&&req.method==='POST'){const input=JSON.parse(await body(req));return send(res,200,{data:originalRuntime?await scheduler.control(input):await controlRoutine(store,input,{device})});}
@@ -611,8 +631,12 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
       if (route === '/api/rpc' && req.method === 'POST') { const input = JSON.parse(await body(req)); const data = query.rpc(input.rpc, input.args); return send(res, 200, { data, error: null }); }
       if (route === '/api/structural' && req.method === 'POST') { const input = JSON.parse(await body(req)), data = store.structural(input.type, input.id, input.action, input.options); if (input.type === 'notes' && input.action === 'remove') await retireShares(store, [input.id]); return send(res, 200, { data, error: null }); }
       if (route === '/api/media/upload' && req.method === 'POST') {
-        const bytes = await body(req, 100 * 1024 * 1024), form = await new Request('http://localhost/', { method: 'POST', headers: { 'content-type': req.headers['content-type'] }, body: bytes }).formData();
+        // The note editor holds files to the same limit (shared/media-limits.mjs).
+        const tooLarge=`This file is too large. Max is ${MEDIA_UPLOAD_MAX_MB} MB.`;
+        let bytes;try{bytes=await body(req, MEDIA_UPLOAD_MAX_BYTES + MEDIA_UPLOAD_REQUEST_EXTRA_BYTES);}catch(error){if(error.message==='Request is too large')return send(res,413,{error:tooLarge});throw error;}
+        const form = await new Request('http://localhost/', { method: 'POST', headers: { 'content-type': req.headers['content-type'] }, body: bytes }).formData();
         const file = form.get('file'); if (!(file instanceof Blob)) throw new Error('Missing media file');
+        if(file.size>MEDIA_UPLOAD_MAX_BYTES)return send(res,413,{error:tooLarge});
         const original = String(form.get('path') || file.name || 'media'), data = Buffer.from(await file.arrayBuffer()), digest = hash(data);
         // A PDF's text read in the browser. Note attachments can be long
         // (a contract, a manual); a chat attachment is held to 60,000 characters
@@ -762,7 +786,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   // Finished journal tasks become moments (core/journal-moments.mjs).
   const journalMoments=new JournalMoments({store,query,device}),journalMomentsTimer=setInterval(()=>{if(!menerioImport.mutating)void journalMoments.tick().catch(()=>{});},60000);journalMomentsTimer.unref?.();
   const interval = setInterval(() => { if (!menerioImport.mutating) void store.verify().then(()=>index.rebuildBackground()).catch(()=>{}); }, 600000);
-  const jobs=setInterval(()=>{if(!menerioImport.mutating)scheduler.tick().catch(()=>{});},30000);
+  const jobs=setInterval(()=>{if(!menerioImport.mutating&&!assistantMissing)scheduler.tick().catch(()=>{});},30000);
   const syncTimer=setInterval(()=>{if(!menerioImport.mutating&&fs.existsSync(path.join(store.state,'sync-config.json')))void syncRunner.run();},60000);
   const mediaTimer=setInterval(()=>{if(!menerioImport.mutating){carry();mediaSync.reconcile();}},60000);
   const telegram=!originalRuntime&&process.env.GODSPEED_TELEGRAM==='on'&&process.env.GODSPEED_CANDIDATE_BOT_TOKEN&&process.env.GODSPEED_CANDIDATE_BOT_OWNER?new Telegram({store,domains,token:process.env.GODSPEED_CANDIDATE_BOT_TOKEN,owner:process.env.GODSPEED_CANDIDATE_BOT_OWNER,loginLink:process.env.GODSPEED_BROWSER_ORIGIN?destination=>{const code=randomBytes(32).toString('hex');loginLinks.set(code,Date.now()+300000);return process.env.GODSPEED_BROWSER_ORIGIN+'/login/'+code+'?next='+encodeURIComponent(destination);}:undefined}):null;
@@ -804,7 +828,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
     try { await listen(localServer, Number(localPort), '127.0.0.1'); }
     catch (error) { await close(); throw error; }
   }
-  if(originalRuntime){
+  if(originalRuntime&&!assistantMissing){
     workouts=new WorkoutsAddon({root:store.root,address:()=>{const address=(localServer||server).address();return address&&typeof address==='object'?'http://127.0.0.1:'+address.port:null;}});
     scheduler.setWorkouts(workouts);
   }

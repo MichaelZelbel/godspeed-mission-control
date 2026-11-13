@@ -12,11 +12,24 @@ import {CARRIED_FOLDER,CARRY_LIMIT,isCarriedPath} from '../media-store.mjs';
 import {resolveSavedConflict} from '../conflicts.mjs';
 import {queueNotice} from '../notices.mjs';
 import {createRequire} from 'node:module';
+import {machineDevice,LEGACY_DEVICE} from '../device-id.mjs';
 const {quietGit,signInMissing,signInNotice}=createRequire(import.meta.url)('../../../tools/unattended-git.cjs');
 
 // What sync never puts in a repository, whichever repository it is: build
 // output, archives, recordings, pictures and the disposable SQLite indexes.
 const keptLocal=['sqlite*','png','jpg','mp4','mp3','pdf','zip','tar','gz','tgz','7z','exe','msi','dmg','iso','mov','webm','wav','m4a','tmp'];
+// Each computer signs the notebook's commits with its own machine name, so the
+// copy's history and a later conflict review can tell which computer changed
+// what. The name is the one device-id.mjs gave this install; the sync worker's
+// Store has no device of its own, so it reads the same name from the folder.
+export const NOTEBOOK_AUTHOR='Godspeed Mission Control';
+export const isNotebookAuthor=name=>name===NOTEBOOK_AUTHOR||String(name).startsWith(NOTEBOOK_AUTHOR+' (');
+export function commitIdentity(store){
+  const machine=String(store.device&&store.device!==LEGACY_DEVICE?store.device:machineDevice(store.root).id);
+  const name=NOTEBOOK_AUTHOR+' ('+machine.replace(/[<>\r\n]/g,'')+')';
+  const email=(machine.toLowerCase().replace(/[^a-z0-9._-]+/g,'-').replace(/^-+|-+$/g,'')||'computer')+'@godspeed.localhost';
+  return {GIT_AUTHOR_NAME:name,GIT_AUTHOR_EMAIL:email,GIT_COMMITTER_NAME:name,GIT_COMMITTER_EMAIL:email};
+}
 export function readSyncConfig(state){try{return JSON.parse(fs.readFileSync(path.join(state,'sync-config.json'),'utf8'));}catch{return null;}}
 export const folderModeRefusal='This notebook already syncs through the folder\'s own repository, so a separate repository cannot be connected here';
 const posix=file=>file.split(path.sep).join('/');
@@ -683,7 +696,7 @@ export class FileSync {
   // the notebook's commits must not start the owner's post-commit jobs. Its
   // push still runs the owner's pre-push gate.
   quiet(){const dir=path.join(this.store.state,'no-hooks');fs.mkdirSync(dir,{recursive:true});return ['-c','core.hooksPath='+dir];}
-  identity(){return {GIT_AUTHOR_NAME:'Godspeed Mission Control',GIT_AUTHOR_EMAIL:'godspeed@localhost',GIT_COMMITTER_NAME:'Godspeed Mission Control',GIT_COMMITTER_EMAIL:'godspeed@localhost'};}
+  identity(){return this.identityEnv||=commitIdentity(this.store);}
   // Another program may be in the middle of something with this repository.
   // The notebook waits for the next round instead of acting on half a merge.
   // A lock that a killed Git left behind is cleared first (staleLocks).
