@@ -38,6 +38,25 @@ file_first_day_work() {
   grep -Fqx "$WORK_ID: planned" "$EVIDENCE/first-day-work-filed.txt" ||
     fail 'the scenario-filed emergency-kit work was not planned'
 }
+# The work routine's recorded run (issue #492). Since 9 October 2026 a run in which some item did not
+# pass its check ends as "error" and says so, and the round also works items the choice filed itself.
+# So an error is this day's failure only when it is anything but failed checks of such items: the
+# scenario's own item failing, an item that could not be finished, or a failure that names no item.
+# Whether the round did verified work for the goal is the card check's question, not this one.
+work_run_fault() { # <jobs JSON>: prints why the work routine's run does not count, if it does not
+  "$NODE" - "$1" "$WORK" "Write a practical household emergency-kit checklist at $RESULT_FILE" <<'NODE'
+const fs=require('fs'),[file,name,ownWhat]=process.argv.slice(2),d=JSON.parse(fs.readFileSync(file,'utf8'));
+const fault=reason=>{console.log(reason);process.exit(0)};
+const job=(Array.isArray(d)?d:d.data||[]).find(j=>j?.title===name||j?.name===name);
+if(!job?.last_run_at)fault(`the installed routine "${name}" has no recorded run`);
+if(job.last_status==='ok')process.exit(0);
+const error=String(job.last_error||'').trim(),sentence=/Today's work did not pass its check, so it is not done yet: "(.+?)"\.(?:\s+|$)/y,siblings=[];
+for(let m;sentence.lastIndex<error.length&&(m=sentence.exec(error));)siblings.push(m[1].replace(/\.\.\.$/,''));
+const tellsAll=error&&sentence.lastIndex>=error.length;
+if(job.last_status!=='error'||!tellsAll||!siblings.length)fault(`the installed routine "${name}" ended with ${job.last_status}: ${error||'no error recorded'}`);
+if(siblings.some(what=>ownWhat.startsWith(what)))fault(`the scenario's own emergency-kit work did not pass its check: ${error}`);
+NODE
+}
 step_passed() { # <name>
   printf 'PASS %s: %s\n' "$SCENARIO" "$1" | tee -a "$EVIDENCE/steps.tsv" >&2
 }
@@ -46,6 +65,7 @@ first_day_phase() { # <step name>
   phase "$1"
 }
 act() {
+  local reason
   fresh_evidence
   install_paths
   need_node
@@ -78,7 +98,8 @@ act() {
   first_day_phase 'scenario files the emergency-kit work for the installed daily round'
   file_first_day_work
   first_day_phase 'installed work routine'
-  server_run_job work "$WORK" 1800
+  server_run_job work "$WORK" 1800 'ok|error'
+  reason=$(work_run_fault "$EVIDENCE/job-work.json") && [ -z "$reason" ] || fail "${reason:-the record of the work routine could not be read}"
   server_telegram_mark work cron
   step_passed 'installed research, choice, and work routines completed'
   first_day_phase 'installed morning brief and its Telegram delivery'
@@ -113,10 +134,11 @@ check() { # <evidence folder>
     grep -Fq "$GOAL" "$folder/setup.json" || fail 'the notebook did not retain the fictional emergency-kit goal'
   grep -Fqx "$WORK_ID: planned" "$folder/first-day-work-filed.txt" ||
     fail 'the scenario did not retain its emergency-kit work filing'
-  for label in research choice work; do
+  for label in research choice; do
     "$NODE" -e 'const fs=require("fs"),d=JSON.parse(fs.readFileSync(process.argv[1],"utf8")),rows=Array.isArray(d)?d:d.data||[];process.exit(rows.some(j=>j?.last_run_at&&j?.last_status==="ok")?0:1)' "$folder/job-$label.json" ||
       fail "the installed $label routine has no successful recorded run"
   done
+  reason=$(work_run_fault "$folder/job-work.json") && [ -z "$reason" ] || fail "${reason:-the record of the work routine could not be read}"
   "$NODE" -e 'const fs=require("fs"),d=JSON.parse(fs.readFileSync(process.argv[1],"utf8")),rows=Array.isArray(d)?d:d.data||[],hasBaseline=Object.hasOwn(d,"before_last_run_at"),baseline=d.before_last_run_at,job=rows.find(j=>j?.id===d.id);process.exit(d.id&&hasBaseline&&(baseline===null||typeof baseline==="string")&&job?.last_run_at&&job.last_run_at!==baseline&&job?.last_status==="ok"?0:1)' "$folder/job-scheduled-brief.json" ||
     fail 'the installed scheduled morning brief has no successful recorded run'
   grep -Eqi 'source[[:space:]]*[:=][[:space:]]*"?builtin' "$folder/brief-cron-runs.txt" ||

@@ -390,6 +390,52 @@ server_run_job_accepts_expected_delivery_status() {
 }
 server_run_job_accepts_expected_delivery_status
 
+server_run_job_ends_at_once_on_an_unaccepted_status() {
+  local accepted evidence output code
+  for accepted in ok 'ok|error'; do
+    evidence=$TMP/server-run-job-error-${accepted//|/-}
+    mkdir -p "$evidence"
+    output=$(SERVER_ACCEPTED="$accepted" EVIDENCE="$evidence" SERVER_UPDATES="$evidence/updates" NODE="$(command -v node)" bash -c '
+    . "$1"
+    fail() { printf "FAIL: %s\\n" "$*" >&2; exit 42; }
+    quoted_json() { "$NODE" -e "process.stdout.write(JSON.stringify(process.argv[1]))" "$1"; }
+    tables=0
+    server_table() {
+      tables=$((tables + 1))
+      if [ "$tables" = 1 ]; then printf "[{\\\"id\\\":\\\"work\\\",\\\"title\\\":\\\"Daily round: do the work\\\",\\\"last_run_at\\\":null,\\\"last_status\\\":null}]\\n" >"$2";
+      else printf "[{\\\"id\\\":\\\"work\\\",\\\"title\\\":\\\"Daily round: do the work\\\",\\\"last_run_at\\\":\\\"later\\\",\\\"last_status\\\":\\\"error\\\",\\\"last_error\\\":\\\"Today did not pass its check\\\"}]\\n" >"$2"; fi
+    }
+    server_post() {
+      case $1 in
+        /api/jobs/update) printf "%s\\n" "$(cat "$2")" >>"$SERVER_UPDATES"; printf "{}\\n" >"$3"; printf 200 ;;
+        /api/jobs/run) printf "{\\\"started\\\":true}\\n" >"$3"; printf 202 ;;
+      esac
+    }
+    wait_for() { "${@:3}"; }
+    server_container() { printf fixture; }
+    sudo() { return 0; }
+    server_routine_evidence_paths() { printf "{\\\"diagnostics\\\":\\\"/owned/diagnostics.json\\\",\\\"output\\\":\\\"/owned/output\\\"}"; }
+    server_copy_evidence() { : >"$2"; }
+    server_run_job work "Daily round: do the work" 10 "$SERVER_ACCEPTED"
+  ' bash "$HERE/server-lib.sh" 2>&1)
+    code=$?
+    if [ "$(<"$evidence/updates")" != "$(printf '%s\n%s' '{"id":"work","paused":false}' '{"id":"work","paused":true}')" ] || [ ! -s "$evidence/job-work.json" ]; then
+      bad "a routine run that ended with error under accepted '$accepted' did not keep its record and pause it again ($output; updates: $(cat "$evidence/updates" 2>/dev/null))"
+      return
+    fi
+    if [ "$accepted" = ok ] && { [ "$code" != 42 ] || [[ $output != *'"Daily round: do the work" ended with error: Today did not pass its check'* ]]; }; then
+      bad "a routine run that ended with error did not fail at once with its own reason (exit $code: $output)"
+      return
+    fi
+    if [ "$accepted" != ok ] && [ "$code" != 0 ]; then
+      bad "a routine run that ended with an accepted error was refused (exit $code: $output)"
+      return
+    fi
+  done
+  ok 'a routine run that ends with a status it may not have fails at once with its last_error'
+}
+server_run_job_ends_at_once_on_an_unaccepted_status
+
 connection_check_preserves_due_snapshots_and_uses_the_expected_status_for_each_phase() {
   local evidence=$TMP/connection-check-statuses calls=$TMP/connection-check-calls snapshots=$TMP/connection-check-snapshots output
   mkdir -p "$evidence"
@@ -3768,11 +3814,15 @@ first_day_brief_records() { # <folder>: what the brief in brief.txt leaves in Te
   printf '{"data":[{"id":"brief-1","content":%s}]}\n' "$(node -e 'process.stdout.write(JSON.stringify(require("fs").readFileSync(process.argv[1],"utf8")))' "$f/brief.txt")" >"$f/notes-before-reply.json"
   cp "$f/notes-before-reply.json" "$f/notes-after-reply.json"
 }
+first_day_work_run() { # <folder> <last status> <last error>: the work routine beside an ok choice routine
+  node -e 'const [file,status,error]=process.argv.slice(1);require("fs").writeFileSync(file,JSON.stringify({data:[{id:"choice",title:"Daily round: choose today\x27s work",last_run_at:"2026-11-06T10:00:00Z",last_status:"ok"},{id:"work",title:"Daily round: do the work",last_run_at:"2026-11-06T10:05:00Z",last_status:status,last_error:error||null}]})+"\n")' "$1/job-work.json" "$2" "$3"
+}
 first_day_good() { # <folder>
   local f=$1 label table sparse
   rm -rf "$f"; mkdir -p "$f/work"
   printf '{"results":{"goal":{"title":"Prepare a practical household emergency-kit checklist by Sunday."}}}\n' >"$f/setup.json"
-  for label in research choice work; do printf '[{"id":"%s","last_run_at":"2026-11-06T10:00:00Z","last_status":"ok"}]\n' "$label" >"$f/job-$label.json"; done
+  for label in research choice; do printf '[{"id":"%s","last_run_at":"2026-11-06T10:00:00Z","last_status":"ok"}]\n' "$label" >"$f/job-$label.json"; done
+  first_day_work_run "$f" ok ''
   printf 'ID: W-000-first-day-emergency-kit\nSTATUS: verified\nKEY: first-day-emergency-kit\nWHAT: Write a practical household emergency-kit checklist at work/emergency-kit-checklist.md\nDONE WHEN: A practical household emergency-kit checklist is written at work/emergency-kit-checklist.md and ready for a reader\nCHECK: test -s work/emergency-kit-checklist.md\nSOURCE: first-day-scenario\nRESULT: Wrote emergency-kit-checklist.md with practical supplies.\n\n- 2026-11-06 VERIFIED check passed (test -s work/emergency-kit-checklist.md)\n' >"$f/work/W-000-first-day-emergency-kit.md"
   cat >"$f/work/emergency-kit-checklist.md" <<'EOF'
 - [ ] Water: 12 litres for 3 days
@@ -3803,6 +3853,25 @@ passes 'fresh Docker first day makes useful verified work, a sparse-data brief, 
 copy "$FD/good" "$FD/no-research"
 printf '[]\n' >"$FD/no-research/job-research.json"
 refuses 'a first day without research' first-day "$FD/no-research" 'research routine has no successful'
+# Issue #492: a work run that told a failed check of an item the choice filed itself still counts;
+# the scenario's own item failing, an unfinished item, or any other error does not.
+SIBLING_CHECK="Today's work did not pass its check, so it is not done yet: \"Idea hunt for prepare-a-practical-household-emergency-kit-checklist-by-sun: search one area (what is already at home, the household's own...\"."
+OWN_CHECK="Today's work did not pass its check, so it is not done yet: \"Write a practical household emergency-kit checklist at work/emergency-kit-checklist.md\"."
+copy "$FD/good" "$FD/work-sibling-check-failed"
+first_day_work_run "$FD/work-sibling-check-failed" error "$SIBLING_CHECK"
+passes "a work run whose only failure is the check of an item the choice filed itself" first-day "$FD/work-sibling-check-failed" 'answered today'
+copy "$FD/good" "$FD/work-own-check-failed"
+first_day_work_run "$FD/work-own-check-failed" error "$SIBLING_CHECK $OWN_CHECK"
+refuses "a work run in which the scenario's own item did not pass its check" first-day "$FD/work-own-check-failed" "own emergency-kit work did not pass its check"
+copy "$FD/good" "$FD/work-unfinished"
+first_day_work_run "$FD/work-unfinished" error "$SIBLING_CHECK Today's work could not be finished, so it is not done yet: \"Idea hunt\"."
+refuses 'a work run with an item that could not be finished' first-day "$FD/work-unfinished" 'ended with error'
+copy "$FD/good" "$FD/work-other-error"
+first_day_work_run "$FD/work-other-error" error "The daily round's work could not start today."
+refuses 'a work run that could not start' first-day "$FD/work-other-error" 'ended with error'
+copy "$FD/good" "$FD/work-never-ran"
+printf '[{"id":"choice","title":"Daily round: choose today\x27s work","last_run_at":"2026-11-06T10:00:00Z","last_status":"ok"}]\n' >"$FD/work-never-ran/job-work.json"
+refuses 'a first day whose work routine never ran, beside a successful choice' first-day "$FD/work-never-ran" 'has no recorded run'
 # The product's own verified work for the goal, when the daily round did not take the late-filed item.
 copy "$FD/good" "$FD/product-work"
 printf 'ID: W-000-first-day-emergency-kit\nSTATUS: planned\nKEY: first-day-emergency-kit\nWHAT: Write a practical household emergency-kit checklist at work/emergency-kit-checklist.md\nSOURCE: first-day-scenario\n' >"$FD/product-work/work/W-000-first-day-emergency-kit.md"
