@@ -73,6 +73,7 @@ import {recordRunningNotebook} from '../core/running-notebook.mjs';
 import {HermesUpdate,isScenarioHermesReleaseUrl,updateStatus} from '../core/hermes-update.mjs';
 import {HermesLifecycle} from '../core/hermes-lifecycle.mjs';
 import {ChatHealth,chatStatus} from '../core/chat-health.mjs';
+import {MEDIA_UPLOAD_MAX_BYTES,MEDIA_UPLOAD_MAX_MB,MEDIA_UPLOAD_REQUEST_EXTRA_BYTES} from '../shared/media-limits.mjs';
 
 // A backup AI is another service than the main AI, in Settings and in /backupai alike: when one
 // service fails, its other models and keys usually fail with it, and Hermes counts the same service
@@ -630,8 +631,12 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
       if (route === '/api/rpc' && req.method === 'POST') { const input = JSON.parse(await body(req)); const data = query.rpc(input.rpc, input.args); return send(res, 200, { data, error: null }); }
       if (route === '/api/structural' && req.method === 'POST') { const input = JSON.parse(await body(req)), data = store.structural(input.type, input.id, input.action, input.options); if (input.type === 'notes' && input.action === 'remove') await retireShares(store, [input.id]); return send(res, 200, { data, error: null }); }
       if (route === '/api/media/upload' && req.method === 'POST') {
-        const bytes = await body(req, 100 * 1024 * 1024), form = await new Request('http://localhost/', { method: 'POST', headers: { 'content-type': req.headers['content-type'] }, body: bytes }).formData();
+        // The note editor holds files to the same limit (shared/media-limits.mjs).
+        const tooLarge=`This file is too large. Max is ${MEDIA_UPLOAD_MAX_MB} MB.`;
+        let bytes;try{bytes=await body(req, MEDIA_UPLOAD_MAX_BYTES + MEDIA_UPLOAD_REQUEST_EXTRA_BYTES);}catch(error){if(error.message==='Request is too large')return send(res,413,{error:tooLarge});throw error;}
+        const form = await new Request('http://localhost/', { method: 'POST', headers: { 'content-type': req.headers['content-type'] }, body: bytes }).formData();
         const file = form.get('file'); if (!(file instanceof Blob)) throw new Error('Missing media file');
+        if(file.size>MEDIA_UPLOAD_MAX_BYTES)return send(res,413,{error:tooLarge});
         const original = String(form.get('path') || file.name || 'media'), data = Buffer.from(await file.arrayBuffer()), digest = hash(data);
         // A PDF's text read in the browser. Note attachments can be long
         // (a contract, a manual); a chat attachment is held to 60,000 characters
