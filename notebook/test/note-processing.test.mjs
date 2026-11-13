@@ -126,3 +126,20 @@ test('the daily limit counts every processing run, not every note',async()=>{
   const start=lateMorningInBerlin();for(let i=0;i<5;i++)await p2.tick({now:start+i*60000});
   assert.equal(paid,2);
 });
+
+// Until 13 November 2026 processing settings written in part before the
+// runner's first run (from a screen, the API or another computer) left no
+// start, and processing never started.
+test('processing settings written in part before the first run keep what was written, and processing still starts',async()=>{
+  const {store,query,domains}=setup(),processing=new NoteProcessing({store,query,domains,device:'vps'});
+  await query.executeAsync({table:'settings',operation:'upsert',values:{id:'processing',daily_limit:5}});
+  await processing.tick({now:Date.now()-1000});
+  const started=store.get('settings','processing');
+  assert.ok(started.since,'the first run gives the saved settings a start');
+  assert.equal(started.daily_limit,5);
+  const note=store.save('notes',{title:'Climbing',content:'Fictional Ana and I go climbing on Monday the 12th.'});
+  assert.equal((await processing.tick({now:Date.parse(note.updated_at)+180000})).processed,1);
+  await query.executeAsync({table:'settings',operation:'upsert',values:{id:'processing',quiet_minutes:5}});
+  const later=store.get('settings','processing');
+  assert.equal(later.since,started.since);assert.equal(later.daily_limit,5);assert.equal(later.quiet_minutes,5);
+});

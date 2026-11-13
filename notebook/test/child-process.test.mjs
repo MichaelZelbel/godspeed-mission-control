@@ -74,23 +74,56 @@ test('a chat through the original assistant has a time limit',async()=>{
  assert.ok(Date.now()-started<5000);
 });
 
-test('a stopped program that ignores the request to stop is killed, with what it started',async t=>{
+// A program that ignores the request to stop and starts a second one that ignores it too. Both
+// stop by themselves after lifeMs, so a test run cut short (a time limit, a crash, a killed test
+// process) cannot leave them running for good. Both command lines name the fixture's folder.
+function stubbornProgram(t,lifeMs){
  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-stubborn-'));t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
  const pids=path.join(dir,'pids.txt'),script=path.join(dir,'stubborn.js');
  fs.writeFileSync(script,`const {spawn}=require('child_process'),fs=require('fs');process.on('SIGTERM',()=>{});
-const grandchild=spawn(process.execPath,['-e','process.on("SIGTERM",()=>{});setInterval(()=>{},1000)'],{stdio:'ignore'});
-fs.writeFileSync(${JSON.stringify(pids)},process.pid+' '+grandchild.pid);setInterval(()=>{},1000);`);
+const grandchild=spawn(process.execPath,['-e','process.on("SIGTERM",()=>{});setInterval(()=>{},1000);setTimeout(()=>process.exit(0),${Number(lifeMs)})//'+${JSON.stringify(dir)}],{stdio:'ignore'});
+fs.writeFileSync(${JSON.stringify(pids)},process.pid+' '+grandchild.pid);setInterval(()=>{},1000);setTimeout(()=>process.exit(0),${Number(lifeMs)});`);
+ // Waits for both PIDs and, as soon as they are known, kills both when the test ends, passed or failed.
+ const started=async within=>{
+  for(const until=Date.now()+within;Date.now()<until;await new Promise(r=>setTimeout(r,100))){
+   let text='';try{text=fs.readFileSync(pids,'utf8');}catch{}
+   if(/^\d+ \d+$/.test(text)){const both=text.split(' ').map(Number);t.after(()=>{for(const pid of both)try{process.kill(pid,'SIGKILL');}catch{}});return both;}
+  }
+  return null;
+ };
+ return {dir,script,started};
+}
+// A killed program nobody has collected yet (a zombie, as under a container's process 1 that
+// collects nothing) is stopped: it runs nothing, it only has not been reaped.
+const zombie=pid=>{try{return /^\d+ \(.*\) Z/s.test(fs.readFileSync('/proc/'+pid+'/stat','utf8'));}catch{return false;}};
+const alive=pid=>{try{process.kill(pid,0);return !zombie(pid);}catch(error){return error.code==='EPERM';}};
+
+test('a stopped program that ignores the request to stop is killed, with what it started',async t=>{
+ // Far longer than this test waits, so only runChild can stop them in time.
+ const fixture=stubbornProgram(t,60000);
  // Long enough for a slow machine to start both programs before time runs out.
- const running=runChild(process.execPath,[script],{timeoutMs:8000,graceMs:300});
- for(const until=Date.now()+7500;!fs.existsSync(pids)&&Date.now()<until;)await new Promise(r=>setTimeout(r,100));
+ const running=runChild(process.execPath,[fixture.script],{timeoutMs:8000,graceMs:300});
+ const both=await fixture.started(7500);
  await assert.rejects(running,error=>error.code==='TIMEOUT');
- const [parent,grandchild]=fs.readFileSync(pids,'utf8').split(' ').map(Number);
- // A killed program nobody has collected yet (a zombie, as under a container's process 1 that
- // collects nothing) is stopped: it runs nothing, it only has not been reaped.
- const zombie=pid=>{try{return /^\d+ \(.*\) Z/s.test(fs.readFileSync('/proc/'+pid+'/stat','utf8'));}catch{return false;}};
- const alive=pid=>{try{process.kill(pid,0);return !zombie(pid);}catch(error){return error.code==='EPERM';}};
+ assert.ok(both,'the program wrote both PIDs before its time ran out');
+ const [parent,grandchild]=both;
  const until=Date.now()+8000;while((alive(parent)||alive(grandchild))&&Date.now()<until)await new Promise(r=>setTimeout(r,100));
  assert.equal(alive(parent),false,'the program itself must be gone');assert.equal(alive(grandchild),false,'and what it started');
+});
+
+test('the stubborn program stops by itself when the test running it is killed',async t=>{
+ const lifeMs=3000,fixture=stubbornProgram(t,lifeMs);
+ // The test's runner side in a process of its own, with a time limit it never reaches.
+ const runner=spawn(process.execPath,['--input-type=module','-e',`import {runChild} from ${JSON.stringify(new URL('../core/child-process.mjs',import.meta.url).href)};await runChild(process.execPath,[${JSON.stringify(fixture.script)}],{timeoutMs:600000});`],{stdio:'ignore'});
+ t.after(()=>{try{runner.kill('SIGKILL');}catch{}});
+ const both=await fixture.started(7500);
+ assert.ok(both,'the program wrote both PIDs');
+ const gone=new Promise(resolve=>runner.once('exit',resolve));runner.kill('SIGKILL');await gone;
+ // Neither PID may still run a program with the fixture's command line once the bound has passed.
+ const fixtures=pid=>{if(!alive(pid))return false;try{return fs.readFileSync('/proc/'+pid+'/cmdline','utf8').includes(fixture.dir);}catch{return process.platform!=='linux';}};
+ assert.ok(both.some(fixtures),'both programs outlive the runner until their bound');
+ const until=Date.now()+lifeMs+8000;while(both.some(fixtures)&&Date.now()<until)await new Promise(r=>setTimeout(r,100));
+ assert.deepEqual(both.filter(fixtures),[],'no program with the fixture\'s command line runs after the bound');
 });
 
 test('the tool-enabled assistant gets the variables it needs and none of the server\'s secrets',()=>{

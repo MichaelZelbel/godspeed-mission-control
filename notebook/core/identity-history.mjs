@@ -4,7 +4,7 @@ import {execFile,execFileSync} from 'node:child_process';
 import {promisify} from 'node:util';
 import {createRequire} from 'node:module';
 const {quietGit}=createRequire(import.meta.url)('../../tools/unattended-git.cjs');
-import {FileSync,readSyncConfig} from './sync/git.mjs';
+import {FileSync,readSyncConfig,commitIdentity} from './sync/git.mjs';
 import {shared} from './file-policy.mjs';
 
 // EARLIER VERSIONS OF THE FILES ON THE IDENTITY PAGE, KEPT AS GIT HISTORY.
@@ -88,8 +88,7 @@ export class ShelfHistory{
         raw(['update-index','-z','--index-info'],{env,input:entries.join('\0')+'\0'});
         const tree=git(['write-tree'],{env});
         if(base&&tree===git(['rev-parse',base+'^{tree}']))return {commit:base,entries:[]};
-        const identity={GIT_AUTHOR_NAME:'Godspeed Mission Control',GIT_AUTHOR_EMAIL:'godspeed@localhost',GIT_COMMITTER_NAME:'Godspeed Mission Control',GIT_COMMITTER_EMAIL:'godspeed@localhost'};
-        return {commit:git(['commit-tree',tree,...(base?['-p',base]:[]),'-m',text,...(extra?['-m',extra]:[])],{env:identity}),entries};
+        return {commit:git(['commit-tree',tree,...(base?['-p',base]:[]),'-m',text,...(extra?['-m',extra]:[])],{env:commitIdentity(this.store)}),entries};
       }finally{drop();}
     };
     // The text each file had before, when the repository does not hold it yet.
