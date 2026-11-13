@@ -15,6 +15,19 @@ const quietReads=new Set([...restartableReads,'coach-tick','journal-tick','coach
 // The longest a job is taken to be working: a routine makes up to five AI calls of five minutes.
 export const JOB_LIMIT=45*60000;
 const KEEP_MS=14*86400000,KEEP_HISTORY_MS=2*86400000,KEEP_LAST=3,PRUNE_EVERY=6*3600000,PRUNE_BATCH=500;
+// The routines a first setup makes, and what the setup says about each: the first run's own
+// result, or that the routine is not due yet and when it first runs (a weekly review set up today
+// first runs in a week). Results for other routines are kept as they are.
+export const STARTING_JOBS=['deadline-reminder','coaching','profiling','review'];
+export function setupResults(store,results=[]){
+  const seen=new Set(results.map(r=>r.id)),out=[...results];
+  for(const id of STARTING_JOBS){
+    if(seen.has(id))continue;const job=store.get('jobs',id),at=Date.parse(job?.next_run);
+    if(!job||!Number.isFinite(at))continue;
+    out.push({id,state:'not due',next_run:job.next_run,reason:job.paused?'It is paused.':'Not due yet: it first runs on '+new Date(at).toISOString().slice(0,10)+'.'});
+  }
+  return out;
+}
 export class Scheduler {
   // only: the kinds this scheduler runs (beside Hermes, the record routines
   // Hermes has no job for); delivery: where its results go, overriding settings.
@@ -45,7 +58,11 @@ export class Scheduler {
   // started: until 6 October 2026 one whose delivery was uncertain could be
   // unpaused by another route and its next run sent the message again.
   eligible(job,now){return (!this.only||this.only.has(job.kind))&&job.owner===this.device&&!job.paused&&!(Date.parse(job.next_run)>now)&&!['awaiting_approval','needs_review'].includes(job.state)&&!this.unfinished.has(job.id);}
-  async tick(now = Date.now()) {
+  // The setup asks for its first run the way it asks the assistant's scheduler, with options
+  // ({raise:true}); until 13 November 2026 those options were read as the time, so the first
+  // setup ran every routine at once and each said "Invalid time value".
+  async tick(at = Date.now()) {
+    const now=typeof at==='number'?at:at instanceof Date?at.getTime():Date.now();
     if (this.running) return [];
     this.running = true; this.onProgress?.();const results = [];
     try {
