@@ -41,7 +41,7 @@ import {leadWords} from './lead-commands.mjs';
 import {radarWords} from './radar-lifecycle.mjs';
 import {retrieveNoteWindows} from './retrieval-windows.mjs';
 import {retireShares} from './shares.mjs';
-import {hasCoachAreas,resolvedCoachArea,coachTalkStart,coachTalkRecordProblem,markCoachTalkShown} from './coach-chat.mjs';
+import {hasCoachAreas,resolvedCoachArea,coachTalkStart,coachTalkRecordProblem,coachTalkRecordOpening,coachTalkRetryMessage,markCoachTalkShown} from './coach-chat.mjs';
 import {canStartTalk} from '../../third-party/addons/godspeed-coach/lib/areas.mjs';
 // The note screens' content hash (ui/src/lib/note-ai-edit.ts hashNoteContent,
 // FNV-1a and the length): what a chat request says the owner was looking at.
@@ -291,8 +291,19 @@ export class Domains {
       const start=await this.nativeCoachStart(input);
       // The Charm Challenge's slip judgement runs while the assistant works (core/charm-judgement.mjs).
       const judged=startCharmJudgement(this,input);
-      let result=await this.nativeAgent({...input,nativeFiles,page_context:input[IDENTITY_PAGE],step_context:input.step_context,coach_talk_start:start}).catch(error=>{judged.drop();throw error;});
-      const problem=start&&coachTalkRecordProblem(this.store,start,result.reply,{requireShown:start.continuing});if(problem){judged.drop();throw Error(problem);}
+      const ask=message=>this.nativeAgent({...input,message,nativeFiles,page_context:input[IDENTITY_PAGE],step_context:input.step_context,coach_talk_start:start});
+      let result=await ask(input.message).catch(error=>{judged.drop();throw error;});
+      let problem=start&&coachTalkRecordProblem(this.store,start,result.reply,{requireShown:start.continuing});
+      // A reply that misses the opening its talk record rightly holds is asked for once more, with the
+      // guard's reason; a second miss opens the talk from the record. A wrong record still refuses (issue #489).
+      if(problem&&coachTalkRecordOpening(this.store,start)){
+        // A second call that fails is a second miss, unless the person cancelled.
+        const again=await ask(coachTalkRetryMessage(input.message,problem)).catch(error=>{if(input.signal?.aborted){judged.drop();throw error;}return {reply:''};});
+        problem=coachTalkRecordProblem(this.store,start,again.reply,{requireShown:false});
+        if(!problem)result=again;
+        else{const opening=coachTalkRecordOpening(this.store,start);if(opening){result={...again,reply:opening};problem=null;}}
+      }
+      if(problem){judged.drop();throw Error(problem);}
       if(start?.opening)judged.drop();else result.reply=await judged.end(result.reply);
       await this.store.saveAsync('conversation_messages',{role:'assistant',content:result.reply,conversation_id:input.conversation_id||null,contact_id:input.contact_id||null,source_app:'hermes'},undefined,{signal:input.signal});
       if(start)markCoachTalkShown(this.store,start);
