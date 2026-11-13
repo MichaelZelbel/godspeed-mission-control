@@ -123,3 +123,8 @@ export function keptHere({mediaRoot,carried}){
     return !own?.removed_at&&!(own&&fs.existsSync(carriedFile(carried,own)));
   }).map(m=>({path:m.path,size:m.size}));
 }
+// The paths whose file this computer cannot serve: kept on another computer,
+// or not here yet. A removed item is not counted.
+export function missingHere(media,paths){
+  return [...new Set(paths)].filter(original=>{const found=findMedia(media,original);return !found||(!found.removed&&!fs.existsSync(found.file));});
+}
