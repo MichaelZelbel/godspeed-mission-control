@@ -667,7 +667,8 @@ test('a pull request from a fork runs nothing, and its verdict passes', async ()
 const pickStep = (text) => {
   const at = text.indexOf('        id: pick\n', text.indexOf('\n  stage:'));
   const run = text.indexOf('        run: |\n', at);
-  const to = text.indexOf('      - name: Read and check it', run);
+  const reuse = text.indexOf('      - name: Leave out what already passed', run);
+  const to = reuse > 0 && reuse < text.indexOf('      - name: Read and check it', run) ? reuse : text.indexOf('      - name: Read and check it', run);
   assert.ok(at > 0 && run > at && to > run, 'the pick step was not found');
   return text.slice(run + '        run: |\n'.length, to).replace(/^ {10}/gm, '');
 };
