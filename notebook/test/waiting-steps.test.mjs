@@ -531,21 +531,27 @@ test('the scenario asker drives the real godspeed-step open with every flag it e
 });
 
 test('godspeed-step open for Telegram returns once the gateway sent its card',async t=>{
- const {root,store}=fixture(t);
- const child=spawn(process.execPath,[script,'open','--about','The bot stopped.','--question','Restart it?','--yes','y','--no','n','--by','routine:test','--chat','telegram','--godspeed',root],{env:{...process.env,GODSPEED_STEP_SEND_WAIT:'10'}});
- let out='';child.stdout.on('data',d=>out+=d);
- const exited=new Promise(resolve=>child.on('exit',resolve)),started=Date.now();
- let id;
- while(!id&&Date.now()-started<5000){
-  id=fs.readdirSync(store.state).includes('step-questions')?fs.readdirSync(path.join(store.state,'step-questions'))[0]?.replace(/\.json$/,''):undefined;
-  if(!id)await new Promise(r=>setTimeout(r,50));
- }
- assert.ok(id,'the hand-off is written while open waits');
- assert.equal(child.exitCode,null,'open has not returned before the card went out');
+ // Issue #504: the test waits for events, not for a fixed time: the step's hand-off file (by its own
+ // name, never the atomic writer's .tmp file beside it), open's exit and its output closing. The one
+ // clock left is the check that open returned well before its 10 s bound, so it returned because the
+ // card went out.
+ const {root,store}=fixture(t),BOUND_S=10;
+ const child=spawn(process.execPath,[script,'open','--about','The bot stopped.','--question','Restart it?','--yes','y','--no','n','--by','routine:test','--chat','telegram','--godspeed',root],{env:{...process.env,GODSPEED_STEP_SEND_WAIT:String(BOUND_S)}});
+ t.after(()=>{if(child.exitCode===null&&child.signalCode===null)child.kill();});
+ let out='',err='';child.stdout.on('data',d=>out+=d);child.stderr.on('data',d=>err+=d);
+ let ended=false;const closed=new Promise(resolve=>child.on('close',(code,signal)=>{ended=true;resolve({code,signal});})),started=Date.now();
+ const dir=path.join(store.state,'step-questions'),handedOff=()=>{try{return fs.readdirSync(dir).filter(n=>/^step-[0-9a-f-]{36}\.json$/.test(n));}catch{return [];}};
+ let files=handedOff();
+ while(!files.length&&!ended){await new Promise(r=>setTimeout(r,20));files=handedOff();}
+ assert.equal(files.length,1,'the hand-off is written while open waits'+(ended?' (open ended first: '+err+')':''));
+ const id=files[0].replace(/\.json$/,'');
+ assert.equal(ended,false,'open has not returned before the card went out');
+ assert.equal(store.get('approvals',id)?.sent_at,undefined);
  assert.equal(await cardSent(store,id),true);
- assert.equal(await exited,0);
+ assert.deepEqual(await closed,{code:0,signal:null},err);
  assert.ok(Date.now()-started<8000,'open returned well before its bound');
  assert.equal(JSON.parse(out).id,id);
+ assert.ok(store.get('approvals',id).sent_at,'the step is recorded as sent');
 });
 
 test('only a waiting Telegram question that has not gone out can be marked sent, and nothing is recorded otherwise',async t=>{
