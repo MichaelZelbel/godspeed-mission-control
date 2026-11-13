@@ -55,6 +55,19 @@ export function appendToSection(text, title, line) {
   return lines.join("\n") + "\n";
 }
 
+// Replaces the whole "## title" section with `content`, creating it at the end of the file when it
+// is missing. Everything else stays as it was.
+export function setSection(text, title, content) {
+  const lines = String(text || "").replace(/\r\n/g, "\n").replace(/\n+$/, "").split("\n");
+  const body = String(content || "").replace(/\r\n?/g, "\n").trim();
+  const start = lines.findIndex((l) => l.trim() === `## ${title}`);
+  if (start === -1) return lines.join("\n") + `\n\n## ${title}\n${body ? body + "\n" : ""}`;
+  let end = lines.findIndex((l, j) => j > start && l.startsWith("## "));
+  if (end === -1) end = lines.length;
+  lines.splice(start + 1, end - start - 1, ...(body ? [body] : []), ...(end < lines.length ? [""] : []));
+  return lines.join("\n") + "\n";
+}
+
 export function formatDoc(head, sections) {
   const h = Object.entries(head).flatMap(([k, v]) => (Array.isArray(v) ? v.map((x) => `${k}: ${x}`) : [`${k}: ${v ?? ""}`.trimEnd()]));
   const s = Object.entries(sections).map(([t, c]) => `## ${t}\n${c ? c + "\n" : ""}`);

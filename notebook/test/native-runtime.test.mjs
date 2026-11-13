@@ -74,7 +74,7 @@ test('a native chat rejects failed coach-start classification but preserves an e
 });
 test('a native chat requires the prepared opening through the production start handoff',async t=>{
  const validRoot=fixture(t),validStore=new Store(validRoot),validDomains=new Domains(new QueryService(validStore)),valid=preparedCoachArea(validRoot);validDomains.nativeAgent=async input=>{if(input.coach_start_resolution)return {reply:'{"area":"health"}'};const start=input.coach_talk_start;openTalk(findArea(validRoot,start.area),start.day,{opening:start.opening});return {reply:start.opening};};assert.equal((await validDomains.invoke('conversation-chat',{message:'Let us have my health talk now.',conversation_id:'fixture'})).reply,valid.opening);assert.ok(readTalk(valid.area,valid.day).shown);assert.equal(validStore.list('conversation_messages').length,1);
- const mismatchRoot=fixture(t),mismatchStore=new Store(mismatchRoot),mismatchDomains=new Domains(new QueryService(mismatchStore)),mismatch=preparedCoachArea(mismatchRoot);mismatchDomains.nativeAgent=async input=>{if(input.coach_start_resolution)return {reply:'{"area":"health"}'};const start=input.coach_talk_start;openTalk(findArea(mismatchRoot,start.area),start.day,{opening:'Other words.'});return {reply:'Other words.'};};await assert.rejects(mismatchDomains.invoke('conversation-chat',{message:'Let us have my health talk now.',conversation_id:'fixture'}),/did not use its prepared opening/);assert.equal(readTalk(mismatch.area,mismatch.day).shown,'');assert.equal(mismatchStore.list('conversation_messages').length,0);
+ const mismatchRoot=fixture(t),mismatchStore=new Store(mismatchRoot),mismatchDomains=new Domains(new QueryService(mismatchStore)),mismatch=preparedCoachArea(mismatchRoot);mismatchDomains.nativeAgent=async input=>{if(input.coach_start_resolution)return {reply:'{"area":"health"}'};const start=input.coach_talk_start;openTalk(findArea(mismatchRoot,start.area),start.day,{opening:'Other words.'});return {reply:'Other words.'};};assert.equal((await mismatchDomains.invoke('conversation-chat',{message:'Let us have my health talk now.',conversation_id:'fixture'})).reply,mismatch.opening);assert.equal(readTalk(mismatch.area,mismatch.day).sections['The opening'].trim(),mismatch.opening);assert.ok(readTalk(mismatch.area,mismatch.day).shown);assert.equal(mismatchStore.list('conversation_messages').at(-1).content,mismatch.opening);
 });
 test('a talk start whose reply misses its opening once uses the second reply (issue #489)',async t=>{
  for(const prepared of [true,false]){
@@ -95,6 +95,21 @@ test('a talk start whose reply misses its opening twice opens from the record (i
   assert.equal(calls,2);assert.equal(http.status,200);assert.equal(http.body.error??null,null);assert.equal(http.body.reply,talk.sections['The opening'].trim());
   if(prepared)assert.equal(http.body.reply,start.opening);else assert.match(http.body.reply,/^The preparation for this talk is not ready: .+\. Let us start from your week: how did sleep go\?$/);
   assert.doesNotMatch(http.body.reply,/Hello!|Still not|failed/);assert.equal(store.list('conversation_messages').at(-1).content,http.body.reply);assert.ok(talk.shown||readTalk(findArea(root,'health'),start.day).shown);
+ }
+});
+test('a talk start whose record has the wrong opening opens from the preparation and corrects the record (issue #495)',async t=>{
+ // The two records the app check of run 1574944d saw: a prepared talk opened with other words, and an
+ // unprepared one whose opening leaves out the not-ready sentence. A third has no opening at all.
+ for(const [prepared,recorded] of [[true,'Other words: how was your week?'],[false,'Let us start from your week: how did sleep go?'],[true,'']]){
+  const root=fixture(t);if(prepared)preparedCoachArea(root);else coachArea(root);let calls=0;
+  const service=await createService({root,port:0}),store=service.store;t.after(()=>service.close());
+  service.domains.nativeAgent=async input=>{if(input.coach_start_resolution)return {reply:'{"area":"health"}'};const start=input.coach_talk_start;calls++;openTalk(findArea(root,start.area),start.day,{opening:recorded,read:'the sleep table',shown:new Date().toISOString()});return {reply:recorded||'Hello!'};};
+  const response=await fetch('http://127.0.0.1:'+service.address.port+'/api/functions/conversation-chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:'Let us have my health talk now.',conversation_id:'notebook:general'})}),body=await response.json(),start=coachTalkStart(store,findArea(root,'health')),talk=readTalk(findArea(root,'health'),start.day);
+  assert.equal(response.status,200);assert.equal(body.error??null,null);assert.equal(calls,1);
+  if(prepared)assert.equal(body.data.reply,start.opening);else assert.equal(body.data.reply,start.sentence+' What would you like to try next in Health?');
+  // The record holds exactly what the person saw, and keeps the rest of what the assistant wrote.
+  assert.equal(talk.sections['The opening'],body.data.reply);assert.equal(talk.sections['What was read'],'the sleep table');assert.equal(talk.state,'opened');assert.ok(talk.shown);
+  assert.equal(store.list('conversation_messages').at(-1).content,body.data.reply);
  }
 });
 test('a prepared opening remains exact when Charm judges the same native request',async t=>{
