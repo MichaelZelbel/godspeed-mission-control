@@ -666,7 +666,7 @@ const CASES = [
         fetchRuns: snapshots([
           checkRun("suite", "completed", "success", T1),
           checkRun("a plain yes or a button answers the right waiting step", "completed", "skipped", T2),
-          checkRun("a first day on a fresh machine", "completed", "skipped", T2),
+          checkRun("a fresh Docker server turns a first goal into useful work and a matching Telegram brief", "completed", "skipped", T2),
           checkRun("the verdict", "completed", "success", T3),
         ]),
       }),

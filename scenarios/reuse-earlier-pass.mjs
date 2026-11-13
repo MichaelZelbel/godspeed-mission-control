@@ -7,8 +7,8 @@
 // up to date by merging main into it (Cole Medin's archon-loop does that on every lap) therefore
 // reran the same unchanged scenario change over and over: 43 to 50 times on one pull request.
 //
-// The rule: for each picked scenario that uses the AI key, take the pull request's own diff of what a scenario
-// depends on in this repository (scenarios/ and this workflow, see scenarioPaths) (merge-base with the base branch to head). When an earlier head of
+// The rule: for each picked scenario that uses the AI key, take the pull request's own diff of the whole
+// change (see ownChangePaths) (merge-base with the base branch to head). When an earlier head of
 // this pull request has the scenario's job concluded `success` in its scenarios run, and its own
 // diff of the same files has the same patch id, the scenario is left out of `picked`, and the step
 // summary says "passed on <sha>, own change unchanged since". Anything else (no earlier pass, only a
@@ -39,14 +39,14 @@ export function workflowJobs(text) {
   });
 }
 
-// What counts as "the pull request's own change" for every scenario: everything the pull request
-// changes under scenarios/ (the scenario's own script and companions, and the helpers they all source,
-// scenario-lib.sh and server-lib.sh among them) and this workflow. Whole directory, as a pathspec, so a
-// file the pull request touched on an earlier head and reverted since still shows. A change to any of
-// it by a later push therefore runs every picked scenario again; a merge of main in changes none of it
-// (the merge base moves with main).
-export function scenarioPaths() {
-  return ['scenarios/', '.github/workflows/scenarios.yml'];
+// What counts as "the pull request's own change": all of it, every file of the diff from the merge base
+// with the base branch to the head (no pathspec). A scenario runs the pull request's whole tree (the
+// image and the stage are built from the head), so a later push that only touches product code must run
+// it again; a merge of main in changes none of the pull request's own diff (the merge base moves with
+// main). One case stays open on purpose: main's own change to scenarios/ that a merge brings in changes
+// the script that runs without changing the pull request's own diff; the night proves main as a whole.
+export function ownChangePaths() {
+  return [];
 }
 
 // The decision, with everything it needs handed in so a test can drive it without GitHub.
@@ -78,13 +78,12 @@ export function decide({ picked, ai, files, passes, ownId }) {
   return { picked: keep.length ? `,${keep.join(',')},` : ',', reused, runs };
 }
 
-// The id of the pull request's own diff `git diff <mergeBase> <sha> -- <files>`: a hash of the diff with
+// The id of the pull request's own diff `git diff <mergeBase> <sha>` (limited to <files> when some are given): a hash of the diff with
 // its `index` lines and the line numbers of its hunk headers taken out, every other character kept
 // (whitespace too), so a merge of main that only moves the lines around a change does not look like a
 // different change, and an edit of a single space does. A doubt makes the ids differ, which runs the scenario.
 export function patchId(cwd, mergeBase, sha, files) {
-  if (files.length === 0) throw new Error('no files');
-  const diff = execFileSync('git', ['diff', '--no-ext-diff', '--no-color', mergeBase, sha, '--', ...files], { cwd, encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 });
+  const diff = execFileSync('git', ['diff', '--no-ext-diff', '--no-color', mergeBase, sha, ...(files.length ? ['--', ...files] : [])], { cwd, encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 });
   if (diff.trim() === '') throw new Error('empty own diff');
   const normal = diff.split('\n').filter((line) => !line.startsWith('index ')).map((line) => line.replace(/^@@ -[\d,]+ \+[\d,]+ @@/, '@@')).join('\n');
   return createHash('sha256').update(normal).digest('hex');
@@ -116,7 +115,7 @@ function main() {
     const jobs = workflowJobs(readFileSync(workflowPath, 'utf8'));
     const ai = new Set(jobs.filter((job) => job.usesAi).map((job) => job.id));
     const nameOf = new Map(jobs.map((job) => [job.id, job.name]));
-    const files = () => scenarioPaths();
+    const files = () => ownChangePaths();
 
     // Earlier heads of this pull request whose scenarios run finished with each job's conclusion.
     const runs = ghJson(['api', '--method', 'GET', `repos/${repo}/actions/workflows/scenarios.yml/runs`, '-f', 'event=pull_request', '-f', `branch=${env.HEAD_REF}`, '-f', 'per_page=100'])

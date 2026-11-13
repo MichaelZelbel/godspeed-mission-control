@@ -7,7 +7,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
-import { decide, scenarioPaths, patchId, workflowJobs } from './reuse-earlier-pass.mjs';
+import { decide, ownChangePaths, patchId, workflowJobs } from './reuse-earlier-pass.mjs';
 
 const SCRIPT = fileURLToPath(new URL('./reuse-earlier-pass.mjs', import.meta.url));
 const WORKFLOW = fileURLToPath(new URL('../.github/workflows/scenarios.yml', import.meta.url));
@@ -86,8 +86,8 @@ test('decide: a scenario without the AI key is never touched, and each job is ju
   assert.deepEqual(r.reused.map((x) => x.job), ['plain-yes']);
 });
 
-test('the comparison covers the whole scenarios folder and the workflow, so a shared helper counts', () => {
-  assert.deepEqual(scenarioPaths(), ['scenarios/', '.github/workflows/scenarios.yml']);
+test('the comparison covers the whole own diff, so a shared helper or product code counts', () => {
+  assert.deepEqual(ownChangePaths(), []);
 });
 
 test('the workflow: the AI scenarios are found, and stage hands on what the reuse step leaves', () => {
@@ -170,9 +170,9 @@ test('end to end: a changed own diff runs although an earlier pass exists', () =
   assert.equal(r.stdout, 'picked=,plain-yes,\n', r.stderr);
 });
 
-test('a later change to a shared helper under scenarios/, or to one space, makes the own change differ', () => {
+test('a later change to a shared helper, to product code, or to one space, makes the own change differ', () => {
   const { dir, write } = repo();
-  const paths = scenarioPaths();
+  const paths = ownChangePaths();
   git(dir, 'checkout', '-q', '-b', 'pr');
   write('scenarios/plain-yes.sh', readFileSync(`${dir}/scenarios/plain-yes.sh`, 'utf8').replace('line 20', 'line 20 changed'));
   git(dir, 'commit', '-q', '-am', 'own change');
@@ -183,7 +183,38 @@ test('a later change to a shared helper under scenarios/, or to one space, makes
   git(dir, 'commit', '-q', '-m', 'helper');
   const helper = git(dir, 'rev-parse', 'HEAD');
   assert.notEqual(patchId(dir, base, helper, paths), patchId(dir, base, first, paths), 'a new helper did not count as a change');
+  write('notebook.js', 'product\n');
+  git(dir, 'add', '-A');
+  git(dir, 'commit', '-q', '-m', 'product');
+  const product = git(dir, 'rev-parse', 'HEAD');
+  assert.notEqual(patchId(dir, base, product, paths), patchId(dir, base, helper, paths), 'product code did not count as a change');
   write('scenarios/plain-yes.sh', readFileSync(`${dir}/scenarios/plain-yes.sh`, 'utf8').replace('line 20 changed', 'line 20  changed'));
   git(dir, 'commit', '-q', '-am', 'space');
-  assert.notEqual(patchId(dir, base, git(dir, 'rev-parse', 'HEAD'), paths), patchId(dir, base, helper, paths), 'one space did not count as a change');
+  assert.notEqual(patchId(dir, base, git(dir, 'rev-parse', 'HEAD'), paths), patchId(dir, base, product, paths), 'one space did not count as a change');
+});
+
+// The step body in the workflow, run through bash: a missing script, a crash and an odd line all leave
+// the pick as it is, and a good line is passed on. Never an empty `picked`.
+function reuseStepBody() {
+  const text = readFileSync(WORKFLOW, 'utf8').replace(/\r\n/g, '\n');
+  const at = text.indexOf('\n        run: |\n', text.indexOf('        id: reuse\n'));
+  const to = text.indexOf('      - name: Read and check it', at);
+  assert.ok(at > 0 && to > at, 'the reuse step was not found');
+  return text.slice(at + '\n        run: |\n'.length, to).replace(/^ {10}/gm, '');
+}
+function runStep(scriptBody) {
+  const dir = mkdtempSync(`${tmpdir()}/step-`).replaceAll('\\', '/');
+  mkdirSync(`${dir}/scenarios`);
+  if (scriptBody !== null) writeFileSync(`${dir}/scenarios/reuse-earlier-pass.mjs`, scriptBody);
+  writeFileSync(`${dir}/out`, '');
+  const r = spawnSync('bash', ['-eo', 'pipefail', '-c', reuseStepBody()], { cwd: dir, encoding: 'utf8', env: { ...process.env, PICKED: ',plain-yes,', GITHUB_OUTPUT: `${dir}/out` } });
+  return { status: r.status, out: readFileSync(`${dir}/out`, 'utf8') };
+}
+test('the step body: a missing script, a crash or an odd line keep the pick; a good line is used', () => {
+  assert.deepEqual(runStep(null), { status: 0, out: 'picked=,plain-yes,\n' });
+  assert.deepEqual(runStep('process.exit(3);'), { status: 0, out: 'picked=,plain-yes,\n' });
+  assert.deepEqual(runStep('console.log("picked=all");'), { status: 0, out: 'picked=,plain-yes,\n' });
+  assert.deepEqual(runStep('console.log("picked=,plain-yes");'), { status: 0, out: 'picked=,plain-yes,\n' });
+  assert.deepEqual(runStep('console.log("picked=,");'), { status: 0, out: 'picked=,\n' });
+  assert.deepEqual(runStep('console.log("picked=,first-day,");'), { status: 0, out: 'picked=,first-day,\n' });
 });
