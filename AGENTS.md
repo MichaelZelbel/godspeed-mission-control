@@ -13,5 +13,8 @@ one, never push to main. The check waits for every other check on the pull reque
 for an approving review from a reviewer listed in the repository variable `REQUIRED_REVIEWERS`, or for
 Archon's review verdict on the head commit from a login in `.archon/sdlc/policy/maintainers.json` on main
 (the comment Archon's `publish-review` stamps), or for the newest `Loop review:` comment of Cole Medin's
-factory from such a login, if it says approved or merging and names the exact head commit
+factory from such a login, if it says approved or merging and names the exact head commit.
+A pull request the factory's builder App (`godspeed-dev-builder[bot]`) opened from a branch of this
+repository needs no review comment: Cole's `archon-loop` reviews it and its land step merges it at
+the reviewed head, so `required` waits only for every other check on its commit
 (`.github/workflows/required-gate.mjs` says the rules).
