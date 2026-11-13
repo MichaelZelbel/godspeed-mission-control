@@ -399,6 +399,39 @@ test('the running service logs a routine that could not be created, and its tick
  assert.ok(logged.some(line=>/could not be created, the next tick tries again.*could not create it/.test(line)),logged.join('\n'));
 });
 
+// An assistant program that is not Hermes, with no other AI connected, stopped startup with
+// "Choose the verified Hermes runtime" and the supervisor started it again in a loop (#506).
+async function startWithAssistant(t,{text,originalRuntime}){
+ const root=temporary(t);installStarter(root);
+ const assistant=path.join(root,'assistant-test.json');fs.writeFileSync(assistant,text(root));
+ const names=['GODSPEED_ORIGINAL_RUNTIME','GODSPEED_ASSISTANT_CONFIG','GODSPEED_MODEL_URL'],saved=Object.fromEntries(names.map(name=>[name,process.env[name]]));
+ if(originalRuntime)process.env.GODSPEED_ORIGINAL_RUNTIME='on';else delete process.env.GODSPEED_ORIGINAL_RUNTIME;
+ process.env.GODSPEED_ASSISTANT_CONFIG=assistant;delete process.env.GODSPEED_MODEL_URL;
+ t.after(()=>{for(const name of names)if(saved[name]===undefined)delete process.env[name];else process.env[name]=saved[name];});
+ const {createService}=await import('../server/main.mjs');
+ const logged=[],original=console.error;console.error=(...line)=>{logged.push(line.join(' '));};
+ let service;try{service=await createService({root,port:0,device:'pc'});}finally{console.error=original;}
+ t.after(()=>service.close());
+ const base='http://127.0.0.1:'+service.address.port;
+ const health=await fetch(base+'/health');assert.equal(health.status,200);assert.equal((await health.json()).ok,true);
+ const status=await (await fetch(base+'/api/status')).json();assert.equal(status.runtimeConfigured,false);
+ assert.ok(logged.some(line=>line.includes(status.assistantProblem)),logged.join('\n'));
+ return status.assistantProblem;
+}
+const hermesHome=root=>{const home=path.join(root,'.hermes-home');fs.mkdirSync(home,{recursive:true});return home;};
+test('a non-Hermes assistant program does not stop the notebook from starting and is named in plain words',async t=>{
+ const problem=await startWithAssistant(t,{originalRuntime:true,text:root=>JSON.stringify({verified:true,executable:path.join(root,'bin','hermes-agent'),home:hermesHome(root)})});
+ assert.match(problem,/hermes-agent", which is not Hermes\. Set "executable"/);
+});
+test('an assistant program that is not a name at all is named in plain words too',async t=>{
+ const problem=await startWithAssistant(t,{originalRuntime:true,text:root=>JSON.stringify({verified:true,executable:5,home:hermesHome(root)})});
+ assert.match(problem,/is "5", which is not Hermes\. Set "executable"/);
+});
+test('an assistant.json that cannot be read does not stop the notebook from starting and is named in plain words',async t=>{
+ const problem=await startWithAssistant(t,{originalRuntime:false,text:()=>'{"verified":true,'});
+ assert.match(problem,/The assistant setup in .*assistant-test\.json cannot be read\. Run the Godspeed installer again/);
+});
+
 test('a setup that overlaps the running periodic tick still hears its failed connection-check creation',async t=>{
  noMail(t);
  const {store,home,hermes,job}=await withGoal(t);
