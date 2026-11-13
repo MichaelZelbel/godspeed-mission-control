@@ -4,6 +4,7 @@ import {fieldList} from './fields.mjs';
 import {sameIndex,personKey,relationKey} from './same-thing.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
+import {carriedRoot,keepMedia} from './media-store.mjs';
 const NOT_UNDOABLE='Godspeed cannot tell exactly what this change did, so it cannot undo it. Correct it on the profile or person instead.';
 const key=value=>String(value||'').normalize('NFKD').toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,''),same=value=>String(value??'').trim().toLowerCase();
 export function factSubject(p){const subject_type=p.entity_id?'entity':p.contact_id?'contact':p.subject_type||'self';return {subject_type,subject_id:p.entity_id||p.contact_id||p.subject_id||null,attribute:p.attribute||key(p.canonical_label||p.label)};}
@@ -92,9 +93,9 @@ export class Review {
       if(id&&result.facts[0].outcome!=='inserted')targets.push({type:'claims',id,before:this.store.get('claims',id),after_hash:this.store.get('claims',id)._hash,shared:true});
     }else if(type==='media_conflict'){
       const root=this.domains.mediaRoot;
-      for(const mapping of [p.local,p.remote])if(hash(fs.readFileSync(path.join(root,safe(mapping.file))))!==mapping.sha256)throw new Error('A retained media version needs repair before resolving');
-      const local={...p.local,path:p.local.path+'.conflict-'+p.local.sha256.slice(0,12)};
-      atomic(path.join(root,hash(local.path)+'.mapping.json'),JSON.stringify(local));atomic(path.join(root,hash(p.remote.path)+'.mapping.json'),JSON.stringify(p.remote));
+      const local={...p.local,path:p.local.path+'.conflict-'+p.local.sha256.slice(0,12)},kept=[local,p.remote].map(mapping=>[mapping,fs.readFileSync(path.join(root,safe(mapping.file)))]);
+      if(kept.some(([mapping,data])=>hash(data)!==mapping.sha256))throw new Error('A retained media version needs repair before resolving');
+      for(const [mapping,data] of kept){atomic(path.join(root,hash(mapping.path)+'.mapping.json'),JSON.stringify(mapping));keepMedia(carriedRoot(this.store),mapping,data);}
     }else if(type==='source_version'){
       if(!this.store.get('notes',p.previous_note_id)||!this.store.get('notes',p.new_note_id))throw new Error('An imported source version is missing');
     }else if(type==='add_contact'){
