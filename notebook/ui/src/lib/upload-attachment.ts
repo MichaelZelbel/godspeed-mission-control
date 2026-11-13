@@ -1,6 +1,8 @@
 import { supabase } from "@/integrations/supabase/client";
+import { MEDIA_UPLOAD_MAX_BYTES, MEDIA_UPLOAD_MAX_MB } from "../../../shared/media-limits.mjs";
 
-const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20 MB
+// The server's own limit for /api/media/upload, so the editor refuses exactly what it would.
+const MAX_FILE_SIZE = MEDIA_UPLOAD_MAX_BYTES;
 
 export type MediaType = "image" | "video" | "audio" | "pdf" | "unknown";
 
@@ -28,7 +30,7 @@ export function detectMediaType(file: File): MediaType {
 
 export function validateFile(file: File): string | null {
   if (file.size > MAX_FILE_SIZE) {
-    return `File too large (${(file.size / 1024 / 1024).toFixed(1)} MB). Max is 20 MB.`;
+    return `File too large (${(file.size / 1024 / 1024).toFixed(1)} MB). Max is ${MEDIA_UPLOAD_MAX_MB} MB.`;
   }
   if (detectMediaType(file) === "unknown") {
     return `Unsupported file type: ${file.type || "unknown"}`;
