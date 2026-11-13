@@ -43,6 +43,7 @@ function readCarried(carried,original){
   return m&&m.path===original&&SHA.test(String(m.sha256))?m:null;
 }
 const readRoot=(mediaRoot,original)=>readJson(path.join(mediaRoot,mappingName(original)));
+const carriedFile=(carried,m)=>path.join(carried,carriedName(m.sha256,m.path));
 // Written beside its target under a dot name, which neither sync mode
 // commits, and then renamed: the media timer writes here without the
 // workspace lock, while a sync round may be adding the folder.
@@ -74,17 +75,19 @@ export function findMedia({mediaRoot,carried},original){
   const own=readCarried(carried,original),root=readRoot(mediaRoot,original);
   if(!own&&!root)return null;
   const same=!!root&&(!own||root.sha256===own.sha256),removed=!!(own?.removed_at||(same&&root.removed_at));
-  const ownFile=own&&path.join(carried,carriedName(own.sha256,own.path));
+  const ownFile=own&&carriedFile(carried,own);
   const file=ownFile&&fs.existsSync(ownFile)?ownFile:same?path.join(mediaRoot,mediaFileName(root.file)):ownFile;
   return {mapping:own||root,file,removed};
 }
 // Keeps a copy of an item in the notebook. Returns the number of files written.
-// Content too large to carry retires an older carried copy at the same path,
-// so it is not served in place of the new content and the item counts as kept
-// on this computer only.
+// Content too large to carry stays on this computer. When an older version at
+// the same path was carried, its mapping is rewritten for the new content
+// without the file: the older copy is then not served in its place, and a
+// computer that still holds the older content does not carry it back, because
+// the hashes differ.
 export function keepMedia(carried,mapping,data){
-  if(data.length>CARRY_LIMIT){fs.rmSync(path.join(carried,mappingName(mapping.path)),{force:true});return 0;}
-  const file=path.join(carried,carriedName(mapping.sha256,mapping.path));let written=0;
+  if(data.length>CARRY_LIMIT)return readCarried(carried,mapping.path)?writeMapping(carried,mapping):0;
+  const file=carriedFile(carried,mapping);let written=0;
   if(!fs.existsSync(file)){writeWhole(file,data);written++;}
   return written+writeMapping(carried,mapping);
 }
@@ -104,7 +107,7 @@ export function carryMedia({mediaRoot,carried}){
     const root=readJson(path.join(mediaRoot,name));if(!root||typeof root.path!=='string'||!SHA.test(String(root.sha256)))continue;
     const own=readCarried(carried,root.path);
     if(root.removed_at){if(own&&!own.removed_at&&own.sha256===root.sha256)copied+=writeMapping(carried,{...own,removed_at:root.removed_at});continue;}
-    if(own&&(own.removed_at||own.sha256!==root.sha256||fs.existsSync(path.join(carried,carriedName(own.sha256,own.path)))))continue;
+    if(own&&(own.removed_at||own.sha256!==root.sha256||fs.existsSync(carriedFile(carried,own))))continue;
     let file;try{file=path.join(mediaRoot,mediaFileName(root.file));if(fs.statSync(file).size>CARRY_LIMIT)continue;}catch{continue;}
     const data=fs.readFileSync(file);if(hash(data)!==root.sha256)continue;
     copied+=keepMedia(carried,own||root,data);
@@ -114,5 +117,9 @@ export function carryMedia({mediaRoot,carried}){
 // The items too large to carry, which stay on this computer only.
 export function keptHere({mediaRoot,carried}){
   let names=[];try{names=fs.readdirSync(mediaRoot).filter(n=>n.endsWith('.mapping.json'));}catch{}
-  return names.map(name=>readJson(path.join(mediaRoot,name))).filter(m=>m&&typeof m.path==='string'&&!m.removed_at&&m.size>CARRY_LIMIT&&!readCarried(carried,m.path)).map(m=>({path:m.path,size:m.size}));
+  return names.map(name=>readJson(path.join(mediaRoot,name))).filter(m=>{
+    if(!m||typeof m.path!=='string'||m.removed_at||!(m.size>CARRY_LIMIT))return false;
+    const own=readCarried(carried,m.path);
+    return !own?.removed_at&&!(own&&fs.existsSync(carriedFile(carried,own)));
+  }).map(m=>({path:m.path,size:m.size}));
 }

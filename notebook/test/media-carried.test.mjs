@@ -159,10 +159,17 @@ test('a Drive re-import too large to carry retires the carried copy and is kept 
   current=['2026-11-01T00:00:00Z',small];await connectors.invoke('gdrive-sync',{});
   assert.ok(fs.existsSync(path.join(carried,sha(original)+'.mapping.json')));
   current=['2026-11-02T00:00:00Z',big];await connectors.invoke('gdrive-sync',{});
-  carryMedia({mediaRoot,carried});
-  assert.ok(!fs.existsSync(path.join(carried,sha(original)+'.mapping.json')),'the stale carried mapping is gone');
+  const mapping=path.join(carried,sha(original)+'.mapping.json'),keptHere=async()=>(await(await fetch(base+'/api/media/kept-here')).json()).data;
+  // Another computer that still holds the small version pulls the new mapping
+  // and runs its media tick: it must not carry the small version back.
+  const other=path.join(root,'other-media');fs.mkdirSync(other);
+  fs.writeFileSync(path.join(other,mediaObjectName(sha(small),'Plan.pdf')),small);
+  fs.writeFileSync(path.join(other,sha(original)+'.mapping.json'),JSON.stringify({path:original,file:mediaObjectName(sha(small),'Plan.pdf'),sha256:sha(small),size:small.length,contentType:'application/pdf'}));
+  carryMedia({mediaRoot:other,carried});carryMedia({mediaRoot,carried});
+  assert.equal(JSON.parse(fs.readFileSync(mapping,'utf8')).sha256,sha(big),'the carried mapping names the new content');
+  assert.ok(!fs.existsSync(path.join(carried,carriedName(sha(big),original))),'content over 50 MB is not carried');
   const served=await read(original);assert.equal(served.status,200);assert.equal(served.bytes.length,big.length);
-  assert.deepEqual((await(await fetch(base+'/api/media/kept-here')).json()).data,[{path:original,size:big.length}]);
+  assert.deepEqual(await keptHere(),[{path:original,size:big.length}]);
 });
 
 test('keeping both media versions carries both',async t=>{
