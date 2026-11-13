@@ -1,5 +1,5 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import {spawn} from 'node:child_process';
-import {Store} from '../core/records/store.mjs';import {QueryService} from '../core/query.mjs';import {Scheduler} from '../core/jobs/scheduler.mjs';import {jobExecutor} from '../core/runtime.mjs';
+import {Store} from '../core/records/store.mjs';import {QueryService} from '../core/query.mjs';import {Scheduler} from '../core/jobs/scheduler.mjs';import {jobExecutor,modelProvider} from '../core/runtime.mjs';import http from 'node:http';
 import {Telegram} from '../core/telegram.mjs';import {controlRoutine} from '../core/jobs/routine-control.mjs';import {personalOperation} from '../core/personal-operations.mjs';import {watchCommand} from '../core/watch-commands.mjs';
 import {NativeScheduler} from '../core/native-scheduler.mjs';import * as health from '../core/supervisor-health.mjs';
 
@@ -141,4 +141,19 @@ test('a long routine keeps the heartbeat alive while it is inside its time limit
  const scheduler=new Scheduler(store,{device:'vps',beatEvery:100,executor:async()=>{await new Promise(r=>setTimeout(r,1500));return {verified:true,silent:true};}});
  let jobBeats=0;scheduler.onProgress=()=>jobBeats++;await scheduler.tick(t0);
  assert.ok(jobBeats>=7,'beats while a job works: '+jobBeats);
+});
+
+// A routine whose AI cannot be reached says so in plain words, naming the address it tried (#506);
+// it used to record only "fetch failed".
+test('a routine whose AI cannot be reached records that the AI could not be reached, with its address',async t=>{
+ const {store,query}=workspace(t);
+ store.save('settings',{id:'installation',owner:'vps',timezone:'Europe/Berlin',delivery:'notebook'});
+ store.save('jobs',{id:'coaching-health',kind:'coaching',area:'health',owner:'vps',paused:false,state:'pending',next_run:'2026-10-07T03:16:00.000Z',interval_ms:86400000});
+ const closed=http.createServer();await new Promise(r=>closed.listen(0,'127.0.0.1',r));const port=closed.address().port;await new Promise(r=>closed.close(r));
+ const scheduler=new Scheduler(store,{device:'vps',executor:jobExecutor(modelProvider({url:'http://127.0.0.1:'+port+'/v1/chat/completions',key:'fictional-key',model:'fictional-model',retryWaits:[]}),query)});
+ await scheduler.tick(t0);
+ const failed=store.list('job_receipts').find(r=>r.job_id==='coaching-health');assert.equal(failed?.state,'failed');
+ for(const reason of [failed?.error,store.get('jobs','coaching-health').last_outcome]){
+  assert.match(String(reason),/could not be reached/);assert.ok(String(reason).includes('127.0.0.1:'+port),String(reason));assert.doesNotMatch(String(reason),/fetch failed/);
+ }
 });
