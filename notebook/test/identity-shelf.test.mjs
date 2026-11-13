@@ -9,6 +9,7 @@ import {createRequire} from 'node:module';
 import {Store,atomic,hash} from '../core/records/store.mjs';
 import {FileSync} from '../core/sync/git.mjs';
 import {IdentityShelf,personaOf,MANUAL_LIMIT,MANUAL_WARN} from '../core/identity-shelf.mjs';
+import {COMMIT_PREFIX} from '../core/identity-history.mjs';
 import {SOUL_MARK,HERMES_DEFAULTS} from '../core/assistant-soul.mjs';
 import {installSkillTree} from '../core/packaged-skills.mjs';
 import {scanContext} from '../core/context-scan.mjs';
@@ -240,7 +241,8 @@ test('through the folder\'s own repository each change is a commit with its mess
   const shelf=new IdentityShelf(store),who=shelf.read('who');
   const saved=await shelf.save('who',{text:'You are Captain Speedy.'},{expected_hash:who.hash});
   assert.equal(saved.recorded.where,'folder');assert.ok(saved.recorded.commit);
-  assert.equal(git(dir,'log','-1','--format=%s|%an'),'Identity: changed who it is|Godspeed Mission Control');
+  const [subject,author]=git(dir,'log','-1','--format=%s|%an').split('|');
+  assert.equal(subject,'Identity: changed who it is');assert.match(author,/^Godspeed Mission Control \(.+\)$/);
   assert.deepEqual(git(dir,'show','--name-only','--format=','HEAD').split('\n'),['AGENTS.md'],'only the manual is in the commit');
   assert.equal(git(dir,'diff','--cached','--name-only'),'rules/when-in-doubt-ask.md','the session work stays staged');
   assert.equal(git(dir,'status','--porcelain','--','AGENTS.md'),'','Git sees the manual as committed');
@@ -249,6 +251,16 @@ test('through the folder\'s own repository each change is a commit with its mess
   const versions=await shelf.versions('who');assert.equal(versions[0].text,'You are Captain Speedy.');assert.match(versions[1].text,/^You are Godspeed Mission Control/);
   await shelf.undo('who');assert.equal(read(dir,'AGENTS.md'),read(seed,'AGENTS.md'));
   assert.equal(git(dir,'log','-1','--format=%s'),'Identity: undid the last change to who it is');
+});
+
+test('versions saved before each computer signed its own commits keep the labels the new ones get',()=>{
+  const {shelf}=workspace();
+  for(const author of ['Godspeed Mission Control','Godspeed Mission Control (envy)']){
+    assert.equal(shelf.byWhom({author,message:COMMIT_PREFIX+'changed who it is'}),'you, on this page',author);
+    assert.equal(shelf.byWhom({author,message:COMMIT_PREFIX+'changed who it is (asked in chat)'}),'your assistant, asked in chat',author);
+    assert.equal(shelf.byWhom({author,message:'sync: notebook changes'}),'saved by your notebook',author);
+  }
+  assert.equal(shelf.byWhom({author:'Michael',message:'edited by hand'}),'Michael');
 });
 
 test('an edit made outside the page and not committed yet is kept as a version before the next change',async()=>{

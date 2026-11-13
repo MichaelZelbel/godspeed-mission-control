@@ -264,7 +264,7 @@ test('knowledge: a clone on a machine with no Git identity still commits and syn
     const store=new Store(dir),sync=new FileSync(store);sync.initialize('https://github.com/synthetic/private.git');
     store.save('notes',{title:'First',content:'x\n'});
     assert.equal(sync.reconcile().state,'synced',JSON.stringify(sync.last));
-    assert.equal(git(dir,'log','-1','--format=%an'),'Godspeed Mission Control');
+    assert.match(git(dir,'log','-1','--format=%an'),/^Godspeed Mission Control \(.+\)$/);
   }finally{for(const k of Object.keys(process.env))if(!(k in saved))delete process.env[k];Object.assign(process.env,saved);}
 });
 
