@@ -38,6 +38,31 @@ test('a calendar claim with no calendar read is dropped, and the rest of the bri
  assert.equal(briefs(query).length,1);assert.equal(query.rows('notifications').filter(n=>n.status==='ready').length,1);
 });
 
+const SAME='The fictional garden club meets on Saturday.',OTHER='Health: the fictional step count is steady.';
+for(const [shape,draft,kept] of [['the whole brief is that one paragraph',CALENDAR+' '+SAME+' '+REST,[SAME+' '+REST]],['the brief has other paragraphs',CALENDAR+' '+SAME+' '+REST+'\n\n'+OTHER,[SAME+' '+REST,OTHER]]])
+test('a refused sentence inside a paragraph goes alone, and the paragraph keeps what passed, when '+shape+' (#500)',async t=>{
+ const {store,query}=workspace(t);let refused=0;
+ const provider=async input=>{
+  if(input.kind==='brief-verification'){
+   const text=input.context.draft;
+   if(input.check==='source-facts'&&text.includes(CALENDAR)){refused++;return {passed:false,reason:'No calendar read appears in the sources.',rejection_scope:'source-claims',rejected_source_ids:[],findings:[{sentence:CALENDAR,problem:'core-unsupported',reason:'No calendar read appears in the sources.'}]};}
+   return {passed:true,reason:'Fictional sources checked.'};
+  }
+  if(input.kind==='brief-sentence-repair')return {sentence:''};
+  return draft;
+ };
+ const result=await jobExecutor(provider,query)({kind:'morning-brief',id:'brief-calendar-in-paragraph'},{store,settings:{}});
+ const saved=store.get('notes',result.record_id);
+ assert.ok(refused>=2,'the source check refused the claim on the draft and on its rewrite');
+ assert.equal(result.fallback,undefined,'what passed is the brief, not the honest note');
+ assert.doesNotMatch(saved.content,/calendar/i,'the refused sentence never reaches the brief');
+ for(const text of kept)assert.ok(saved.content.includes(text),'kept: '+text);
+ const repair=query.rows('job_receipts').filter(r=>r.kind==='brief-repair').at(-1);
+ assert.equal(repair.state,'verified',repair.error);
+ assert.deepEqual(repair.changes.map(c=>[c.action,c.sentence]),[['drop-sentence',CALENDAR]]);
+ assert.equal(briefs(query).length,1);assert.equal(query.rows('notifications').filter(n=>n.status==='ready').length,1);
+});
+
 test('when the source check refuses every sentence, the honest note is saved and the routine exits 0',async t=>{
  const {root}=workspace(t);
  // Every draft is refused, as last night: a source claim with no record named and no sentence named.
