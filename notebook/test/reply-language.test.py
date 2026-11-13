@@ -387,6 +387,73 @@ class Reply(unittest.TestCase):
         self.assertEqual(line["failed_tries"], ["repeats-the-draft: part of it",
                                                 "mixed-languages: too many German words"])
 
+    # -- #486: a short reply may not keep a word of the other language, unless it is a loanword
+    KEPT = "Got it, I saved the Eintrag. How can you tell that it is fertig?"  # the report on #486
+    EINTRAG = "Alles klar, ich habe den Eintrag gespeichert. Woran merkst du, dass es fertig ist?"
+    CLEAN = "Got it, I saved the entry. How can you tell that it is finished?"
+
+    def test_a_short_reply_that_keeps_a_german_word_is_translated_again(self):
+        self.assertEqual(self.mod.rejection(self.KEPT, self.EINTRAG, "en"), "kept-a-word: German")
+        self.teach(self.EINTRAG, self.KEPT)
+        self.table["strict:" + self.EINTRAG] = self.CLEAN
+        self.save_table()
+        self.say("kept", JOURNAL[0])
+        self.assertEqual(self.send("kept", self.EINTRAG), self.CLEAN)
+        self.assertEqual(len(self.requests()), 2)
+        line = self.log()[-1]
+        self.assertEqual((line["result"], line["failed_tries"]), ("corrected", ["kept-a-word: German"]))
+        self.assertNotIn("fertig", " ".join(line["failed_tries"]))
+        # The same the other way: a short German reply that keeps an English word.
+        self.assertEqual(self.mod.rejection("Ich habe es gespeichert, und es ist done.",
+                                            "I saved it, and it is done.", "de"), "kept-a-word: English")
+
+    def test_a_second_answer_that_still_keeps_the_word_goes_out_as_it_is(self):
+        self.teach(self.EINTRAG, self.KEPT)
+        self.table["strict:" + self.EINTRAG] = self.KEPT
+        self.save_table()
+        self.say("kept2", JOURNAL[0])
+        self.assertEqual(self.send("kept2", self.EINTRAG), self.KEPT)
+        self.assertEqual(len(self.requests()), 2)  # one extra translation, no third
+        line = self.log()[-1]
+        self.assertEqual((line["result"], line["failed_tries"]), ("corrected", ["kept-a-word: German"]))
+        self.assertEqual(self.mod.rejection(self.KEPT, self.EINTRAG, "en", kept_word=False), "")
+
+    def test_loanwords_on_the_list_never_trigger_a_second_translation(self):
+        draft = "Deine Login und API Tests sind durch."
+        answer = "Your Login and API Tests passed."
+        self.assertEqual(self.mod.rejection(answer, draft, "en"), "")
+        for word in ("Login", "API", "Tests", "Update", "Telegram"):
+            self.assertIn(word.lower(), self.mod.LOANWORDS)
+            self.assertEqual(self.mod.rejection("I sent the %s for you, it is done." % word,
+                                                "Ich habe das %s gesendet, es ist fertig." % word, "en"), "", word)
+        self.teach(draft, answer)
+        self.say("loan", JOURNAL[0])
+        self.assertEqual(self.send("loan", draft), answer)
+        self.assertEqual(len(self.requests()), 1)
+        self.assertNotIn("failed_tries", self.log()[-1])
+
+    def test_a_long_reply_with_one_german_word_follows_the_share_rule(self):
+        draft = ("Alles klar, ich habe den Eintrag gespeichert und die Notizen für die Woche ergänzt. Die "
+                 "Login-Seite ist fertig, die API-Doku ist in Arbeit, und die Tests schreibe ich morgen. "
+                 "Woran merkst du, dass es fertig ist?")
+        answer = ("Got it, I saved the entry and added the notes for this week. The login page is done, the "
+                  "API docs are in progress, and I will write the tests tomorrow. How can you tell that it is fertig?")
+        self.assertGreaterEqual(len(self.mod._words(answer)), self.mod.SHORT_WORDS)
+        self.assertEqual(self.mod.rejection(answer, draft, "en"), "")
+        self.teach(draft, answer)
+        self.say("long", JOURNAL[0])
+        self.assertEqual(self.send("long", draft), answer)
+        self.assertEqual(len(self.requests()), 1)
+        # Too many German words in a long answer are still mixed, as before.
+        mixed = answer + " Und ich bin nicht sicher, ob du das auch so siehst, aber wir können es jetzt noch ändern."
+        self.assertEqual(self.mod.rejection(mixed, draft, "en"), "mixed-languages: too many German words")
+
+    def test_a_german_reply_to_a_german_message_is_unchanged(self):
+        self.say("de", GERMAN_MESSAGE)
+        self.assertEqual(self.send("de", self.EINTRAG), self.EINTRAG)
+        self.assertEqual(self.requests(), [])
+        self.assertEqual(self.log()[-1]["result"], "unchanged")
+
     def test_a_message_after_context_in_the_other_language_gets_a_reply_in_its_own(self):
         english_draft = "I saved that. What does done look like for you?"
         german_sent = "Ich habe das gespeichert. Woran merkst du, dass es fertig ist?"
