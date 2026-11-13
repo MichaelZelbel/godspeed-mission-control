@@ -10,7 +10,8 @@
 // reads the verdict itself. Cole's loop reviewer leaves a comment whose body starts with `Loop review: `
 // and then its decision; `approved` and `merging` from the same logins rerun the check the same way
 // (any other decision approves nothing, so it reruns nothing). A run still going needs nothing: the gate reads the comments at its end.
-// It decides nothing about the merge; required-gate.mjs does.
+// It decides nothing about the merge; required-gate.mjs does. The factory builder's own pull requests
+// need no rerun: the gate reads no comment for them, only the other checks.
 //
 // Node 22, Node's own modules only. `--self-test` proves the decision from fixtures.
 const API = "https://api.github.com";
