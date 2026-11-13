@@ -17,17 +17,21 @@ export const JOB_LIMIT=45*60000;
 const KEEP_MS=14*86400000,KEEP_HISTORY_MS=2*86400000,KEEP_LAST=3,PRUNE_EVERY=6*3600000,PRUNE_BATCH=500;
 // The routines a first setup makes, and what the setup says about each: the first run's own
 // result, or that the routine is not due yet and when it first runs (a weekly review set up today
-// first runs in a week). Results for other routines are kept as they are.
+// first runs in a week). A routine that has run before (a repeated setup) says when it next runs:
+// the time when that is today on the person's clock, else the day. Results for other routines are
+// kept as they are.
 export const STARTING_JOBS=['deadline-reminder','coaching','profiling','review'];
-export function setupResults(store,results=[]){
+export function setupResults(store,results=[],now=Date.now()){
   const seen=new Set(results.map(r=>r.id)),out=[...results];
   // The day on the person's own clock: a routine due at 23:30 UTC first runs the next day in Berlin.
   let timeZone=store.get('settings','installation')?.timezone||'UTC';try{new Intl.DateTimeFormat('en',{timeZone});}catch{timeZone='UTC';}
   const day=at=>new Intl.DateTimeFormat('en-CA',{timeZone,year:'numeric',month:'2-digit',day:'2-digit'}).format(at);
+  const time=at=>new Intl.DateTimeFormat('en-GB',{timeZone,hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).format(at);
+  const when=(job,at)=>!job.last_run?'it first runs on '+day(at):day(at)===day(now)?'it next runs at '+time(at):'it next runs on '+day(at);
   for(const id of STARTING_JOBS){
     if(seen.has(id))continue;const job=store.get('jobs',id),at=Date.parse(job?.next_run);
     if(!job||!Number.isFinite(at))continue;
-    out.push({id,state:'not due',next_run:job.next_run,reason:job.paused?'It is paused.':'Not due yet: it first runs on '+day(at)+'.'});
+    out.push({id,state:'not due',next_run:job.next_run,reason:job.paused?'It is paused.':'Not due yet: '+when(job,at)+'.'});
   }
   return out;
 }
