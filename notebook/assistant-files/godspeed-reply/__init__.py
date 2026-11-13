@@ -35,7 +35,9 @@ This plugin never drops a reply, nor delays one beyond two requests' limit (REQU
 failed translation is tried once more, with a sharper instruction, and when that fails too the reply
 goes out as the model wrote it, below one line in the message's language that says it could not be
 translated (NOTICE). A translation fails when the request fails, and also when its answer repeats the
-draft, mixes the languages or is not clearly in the message's language (rejection). The log keeps why
+draft, mixes the languages or is not clearly in the message's language (rejection), and, on the first
+try, when an answer of under SHORT_WORDS words keeps a word of the other language that is not a
+loanword (#486). The second answer goes out with such a word rather than not at all. The log keeps why
 each try failed: godspeed-model's own error words with no keys or tokens in them, or the name of the
 rejection, never the rejected words.
 """
@@ -223,6 +225,11 @@ SHARED = {"die", "hat", "bin", "also", "in", "so", "was", "will", "war", "man", 
           "fit", "warm", "fast", "email", "mail", "app", "link", "feedback", "meeting", "meetings", "update",
           "updates", "chat", "bug", "bugs", "code", "test", "tests", "plan", "start", "stop", "sport", "film"}
 RUN_WORDS = 4          # this many words of the draft in a row, in the answer, is the draft repeated
+# Words a reply in either language keeps from the other on purpose: never a kept word (#486).
+LOANWORDS = {"login", "logout", "api", "apis", "test", "tests", "update", "updates", "telegram", "whatsapp",
+             "email", "mail", "app", "apps", "team", "meeting", "meetings", "status", "feedback", "chat",
+             "link", "online", "offline", "bug", "bugs", "code", "release", "deadline", "browser", "server"}
+SHORT_WORDS = 25       # an answer of fewer words than this may not keep a single word of the other language
 
 
 def _words(text):
@@ -241,11 +248,12 @@ def _words(text):
     return out
 
 
-def rejection(answer, draft, target):
+def rejection(answer, draft, target, kept_word=True):
     """Why a translation of `draft` into `target` must not go out, or "" when it may. The reason is a
     name, never the answer's words (owner decision on #453). In the scenario run of #453 the model
     sent the German draft back with an English translation below it, and once left "Alles klar" in
-    front of an English sentence: both are rejected here."""
+    front of an English sentence: both are rejected here. `kept_word`: also reject a short answer
+    that keeps one word of the other language (#486); the second try is sent with such a word."""
     if answer.strip() == draft.strip():
         return "repeats-the-draft: unchanged"
     drafted, answered = _words(draft), _words(answer)
@@ -269,12 +277,18 @@ def rejection(answer, draft, target):
         return "not-clearly-%s" % NAMES[target]
     if mine / (mine + other) < MIN_SHARE:
         return "mixed-languages: too many %s words" % NAMES[source]
+    # A short answer is judged word by word: one kept word of the other language's list that is not a
+    # loanword ("Got it, I saved the Eintrag. How can you tell that it is fertig?") is a reason to
+    # translate once more (#486). A longer answer keeps the share rule above alone.
+    if kept_word and len(said) < SHORT_WORDS and any(w in theirs - LOANWORDS for w in said):
+        return "kept-a-word: %s" % NAMES[source]
     return ""
 
 
 def translate(text, target, strict=False):
     """(the translation, "") or (None, why not). One request through the notebook's godspeed-model.
-    `strict`: the second try, with a sharper instruction after a first answer was refused."""
+    `strict`: the second try, with a sharper instruction after a first answer was refused. A second
+    answer that only keeps a word of the other language goes out as it is (#486): no third try."""
     command = _model_command()
     if not command:
         return None, "no-model-command"
@@ -321,7 +335,7 @@ def translate(text, target, strict=False):
         answer = answer.replace("{{%d}}" % n, original)
     if _digits(_plain(answer)) != _digits(_plain(text)):
         return None, "numbers-changed"
-    why = rejection(answer, text, target)
+    why = rejection(answer, text, target, kept_word=not strict)
     if why:
         return None, why
     return answer, ""
