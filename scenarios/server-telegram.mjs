@@ -89,16 +89,27 @@ function post(notebookPort,pathname,body){
   const result=inServer(['curl','-fsS','--max-time','300','-X','POST','-H','Content-Type: application/json','--data-binary','@-',`http://127.0.0.1:${notebookPort}${pathname}`],Buffer.from(json(body)));
   return JSON.parse(result);
 }
-async function waitFor(description,readValue,predicate,seconds=90){
+// refused(value) names why waiting on is pointless (the setup said no), and then the wait stops at once.
+async function waitFor(description,readValue,predicate,seconds=90,refused=()=>''){
   const end=Date.now()+seconds*1000;
   while(Date.now()<end){
-    try { const value=readValue(); if(predicate(value)) return value; } catch {}
+    let value, why='';
+    try { value=readValue(); if(predicate(value)) return value; why=refused(value); } catch {}
+    if(why) throw Error(why);
     await sleep(1000);
   }
   throw Error(`the installed Telegram ${description} did not appear within ${seconds} seconds`);
 }
 
 // The setup chat answers one owner action in several messages; the ones a wait lets pass belong to the step before it.
+// The setup asks for the key again, with its "Pick another AI" button, only when it refused the one it got:
+// that message holds the provider's own words (such as HTTP 402), which belong in the failure.
+export function keyRefusal(record,since){
+  const asked=(record.sent ?? []).slice(since).find(message=>(message.buttons ?? []).some(button=>button.callback==='brain:other'));
+  if(!asked) return '';
+  const words=String(asked.text ?? '').replace(/<[^>]*>/g,'').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&#x27;|&#39;/g,"'").replace(/&amp;/g,'&').trim();
+  return `the setup refused the AI key: ${words}`;
+}
 function attributeSent(label){
   const state=loadState();
   captureSent(state,copyRecord(),label);
@@ -110,6 +121,7 @@ async function setup(){
   if(!token) throw Error('server-telegram: --token is required for setup');
   const notebookPort=option('--notebook-port');
   const withoutAI=args.includes('--without-ai');
+  let keySent;
   const scenario={users:{[owner]:{first_name:'Scenario owner',username:'scenario_owner'}},start:[],rules:[]};
   const scenarioFile=path.join(evidence,'telegram-scenario.json');
   write(scenarioFile,scenario);
@@ -132,9 +144,22 @@ async function setup(){
     await capture('setup-provider','press',()=>act({from:owner,press:provider}));
     const key=optional('--ai-key');
     if(!key) throw Error('server-telegram: --ai-key is required because the setup path checks the dedicated AI account');
+    keySent=loadState().sent;
     await capture('setup-key','say',()=>act({from:owner,text:key}));
   }
-  await waitFor('first-install question',copyRecord,record=>(record.sent ?? []).some(message=>(message.buttons ?? []).some(button=>button.callback==='have:no')),180);
+  try {
+    await waitFor('first-install question',copyRecord,record=>(record.sent ?? []).some(message=>(message.buttons ?? []).some(button=>button.callback==='have:no')),180,
+      record=>keySent===undefined ? '' : keyRefusal(record,keySent));
+  } catch(error) {
+    if(keySent!==undefined) {
+      // The refusal goes into the run's own outbox and steps, not only into telegram-requests.json.
+      const state=loadState();
+      try { captureSent(state,copyRecord(),'setup-key'); } catch {}
+      state.steps.push({label:'setup-first-install',kind:'press',success:false,error:String(error.message ?? error)});
+      saveState(state);
+    }
+    throw error;
+  }
   attributeSent(withoutAI ? 'setup-start' : 'setup-key');
   await capture('setup-first-install','press',()=>act({from:owner,press:'have:no'}));
   await waitFor('gateway handoff',runner,value=>value.state==='gateway',180);
