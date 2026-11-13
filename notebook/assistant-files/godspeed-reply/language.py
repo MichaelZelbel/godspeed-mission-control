@@ -7,7 +7,7 @@ and every message gets "en" or "de" (message_language):
 
 1. the language the message asks for ("answer in German"),
 2. else the language its own words tell, when at least one word tells one and the other language's
-   words are a small part,
+   words are a small part (a known word, not an umlaut, which may be a name),
 3. else the language of the person's recent messages, newest first,
 4. else the language set for the person (person_language),
 5. else English, every add-on's default.
@@ -15,8 +15,8 @@ and every message gets "en" or "de" (message_language):
 language_of with its default threshold also judges a whole reply, which only counts as one language
 when it is clearly one: that side is unchanged.
 
-Loaded by file path (godspeed-reply/__init__.py and todays_brief.py), never as a package, so each copy
-of the plugin finds the mission-control.txt next to it.
+Loaded by file path (godspeed-reply/__init__.py, todays_brief.py, and godspeed-charm for the line it adds
+to a reply), never as a package, so each copy of the plugin finds the mission-control.txt next to it.
 """
 import json
 import os
@@ -57,13 +57,16 @@ def _plain(text):
 def language_of(text, least=MIN_SIGNALS):
     """"en", "de" or None: at least `least` words tell a language, and the other's are a small part.
     Mixed text, too few telling words, and everything in a quote or link: None. A reply is judged with
-    the default; an incoming message with least=1 (message_language)."""
+    the default; an incoming message with least=1 (message_language). Below the default, an umlaut
+    tells nothing: in a short message it is usually a name ("Call Jörg")."""
     if not isinstance(text, str):
         return None
     plain = _plain(text)
     words = [w.lower().strip("'") for w in WORD.findall(plain)]
     en = sum(w in ENGLISH for w in words)
-    de = sum(w in GERMAN for w in words) + len(GERMAN_LETTERS.findall(plain))
+    de = sum(w in GERMAN for w in words)
+    if least >= MIN_SIGNALS:
+        de += len(GERMAN_LETTERS.findall(plain))
     total = en + de
     if total < least:
         return None

@@ -264,6 +264,10 @@ class Reply(unittest.TestCase):
         self.assertEqual(decide("Ok"), "en")
         self.assertEqual(decide("Thanks", [GERMAN_MESSAGE], "de"), "en")
         self.assertEqual(decide("Bitte antworte auf Englisch", [GERMAN_MESSAGE]), "en")
+        # A name with an umlaut is no German word: the person's English messages decide.
+        for name in ("Call Jörg", "Email Müller", "Meet Günter tomorrow"):
+            self.assertEqual(decide(name, [JOURNAL[0]] * 3), "en", name)
+        self.assertEqual(decide("Call Jörg", [GERMAN_MESSAGE]), "de")
 
     def test_names_numbers_urls_and_quotes_survive_a_correction(self):
         draft = ('Ich habe "Projekt Nordlicht" mit Anna Schmidt auf 14 Aufgaben gesetzt, siehe '
