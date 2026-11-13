@@ -10,7 +10,9 @@ name: required
 # counts the suite result from the earlier run on the same commit.
 #
 # Job `required` asks the two questions, each answered with one plain line:
-# .github/workflows/required-gate.mjs. It always runs, even when the suite failed, so that the
+# .github/workflows/required-gate.mjs. A pull request the factory's builder App opened from a branch
+# of this repository is asked only the first, because Cole's archon-loop reviews it and merges it at
+# the reviewed head itself. It always runs, even when the suite failed, so that the
 # check reports a reason instead of staying absent and blocking the pull request forever.
 #
 # Nothing here writes anything: the permissions below are all read, and the checkouts keep no
@@ -104,10 +106,14 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@v4
         with: { node-version: '22.19.0' }
-      - name: Every other check on this commit passed, and a listed reviewer approved it
+      - name: Every other check on this commit passed, and the pull request was reviewed
         env:
           GITHUB_TOKEN: ${{ github.token }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
+          # who opened the pull request and where its branch lives: the factory builder's own pull
+          # requests from this repository need no review comment (required-gate.mjs says why)
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
           REQUIRED_REVIEWERS: ${{ vars.REQUIRED_REVIEWERS }}
         run: node .github/workflows/required-gate.mjs
