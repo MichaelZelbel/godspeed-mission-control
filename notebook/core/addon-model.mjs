@@ -4,7 +4,7 @@ import {fileURLToPath} from 'node:url';
 import {runChild} from './child-process.mjs';
 import {assistantEnvironment} from './assistant-files.mjs';
 import {readBackupEndpoint,noteMainAnswered,noteMainFailed,noteBackupAnswered} from './backup-ai.mjs';
-import {hermesPythons} from './runtime.mjs';
+import {hermesPythons,unreachableAI} from './runtime.mjs';
 import {assistantConfiguration} from './running-notebook.mjs';
 
 const read=file=>JSON.parse(fs.readFileSync(file,'utf8').replace(/^﻿/,''));
@@ -137,7 +137,7 @@ function receipt(state,entry){
  try{if(fs.existsSync(file)&&fs.statSync(file).size>1000000)fs.renameSync(file,file+'.1');fs.appendFileSync(file,JSON.stringify(entry)+'\n',{mode:0o600});}catch{}
 }
 async function askEndpoint(endpoint,request,deadline){
- const response=await fetch(endpoint.url,{method:'POST',headers:{authorization:'Bearer '+endpoint.key,'content-type':'application/json'},body:JSON.stringify({model:endpoint.model,messages:[{role:'system',content:request.system},{role:'user',content:request.prompt}],max_tokens:request.max_tokens}),signal:AbortSignal.timeout(Math.max(1,deadline-Date.now()))});
+ const response=await fetch(endpoint.url,{method:'POST',headers:{authorization:'Bearer '+endpoint.key,'content-type':'application/json'},body:JSON.stringify({model:endpoint.model,messages:[{role:'system',content:request.system},{role:'user',content:request.prompt}],max_tokens:request.max_tokens}),signal:AbortSignal.timeout(Math.max(1,deadline-Date.now()))}).catch(error=>{throw error.message==='fetch failed'?unreachableAI(endpoint.url,error):error;});
  if(!response.ok)throw Error('The selected Godspeed model could not answer (HTTP '+response.status+'). Check its connection and usage allowance.');
  const data=await response.json(),message=data.choices?.[0]?.message;
  if(message?.tool_calls?.length||typeof message?.content!=='string'||!message.content.trim())throw Error('The selected Godspeed model returned no usable text');

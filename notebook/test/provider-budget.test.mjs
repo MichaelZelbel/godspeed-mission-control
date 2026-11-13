@@ -60,3 +60,18 @@ test('a passing 502, 503, 504 or 429 from the provider is tried again, and other
   await assert.rejects(provider({kind:'connection-test'}),/HTTP 401: Invalid key/);assert.equal(calls,1,'a wrong key is said at once');
  }finally{await new Promise(r=>server.close(r));}
 });
+
+// Only a connection that failed is called unreachable (#506): a header Node refused on this computer
+// and a stopped request keep their own errors.
+test('a stopped request keeps its own error and a local fetch error is not called unreachable',async()=>{
+ const original=globalThis.fetch,ask=modelProvider({url:'http://localhost/fixture',key:'fictional',model:'fictional',retryWaits:[]});
+ try{
+  globalThis.fetch=async()=>{throw new TypeError('Cannot convert argument to a ByteString');};
+  await assert.rejects(ask({kind:'chat'}),{name:'TypeError',message:'Cannot convert argument to a ByteString'});
+  globalThis.fetch=async(url,options)=>{throw options.signal.reason;};
+  const controller=new AbortController();controller.abort();
+  await assert.rejects(ask({kind:'chat',signal:controller.signal}),{name:'AbortError'});
+  globalThis.fetch=async()=>{throw new TypeError('fetch failed');};
+  await assert.rejects(ask({kind:'chat'}),{message:/^The AI at localhost could not be reached\./});
+ }finally{globalThis.fetch=original;}
+});
