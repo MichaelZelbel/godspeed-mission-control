@@ -1,7 +1,7 @@
 import {canStartTalk,findArea,listAreas} from '../../third-party/addons/godspeed-coach/lib/areas.mjs';
 import {brief,continuingTalkDay} from '../../third-party/addons/godspeed-coach/lib/brief.mjs';
 import {prepForBrief,prepMissing} from '../../third-party/addons/godspeed-coach/lib/prep.mjs';
-import {readTalk,setShown} from '../../third-party/addons/godspeed-coach/lib/talks.mjs';
+import {readTalk,setOpening,setShown} from '../../third-party/addons/godspeed-coach/lib/talks.mjs';
 import {localParts,now} from '../../third-party/addons/godspeed-coach/lib/clock.mjs';
 import {loadSettings} from '../../third-party/addons/godspeed-coach/lib/settings.mjs';
 
@@ -46,6 +46,26 @@ export function coachTalkRecordOpening(store,start){
   if(start.continuing)return null;
   const area=findArea(store.root,start.area),talk=area&&readTalk(area,start.day),opening=String(talk?.sections['The opening']||'').trim();
   return opening&&!coachTalkRecordProblem(store,start,opening,{requireShown:false})?opening:null;
+}
+
+// The question an unprepared talk asks when the notebook writes its opening itself (issue #495),
+// in the area's style: review asks what changed, compass asks about direction.
+const usualQuestion=area=>area.style==='review'?`What has changed since our last ${area.title} talk?`:`What would you like to try next in ${area.title}?`;
+
+// A talk record the assistant opened with the wrong opening (not the prepared one, none at all, or
+// without the "preparation is not ready" sentence) is corrected to what the talk was prepared to
+// say: the prepared opening, or the not-ready sentence plus the usual question. Returns that opening,
+// which is what the person reads, with no further AI call (issue #495). Null when the record is
+// right, missing or no longer open, the talk continues an earlier one, or nothing was prepared to say.
+export function coachTalkCorrectedOpening(store,start){
+  if(start.continuing)return null;
+  const area=findArea(store.root,start.area),talk=area&&readTalk(area,start.day);
+  if(!talk||talk.state!=='opened')return null;
+  if(!coachTalkRecordProblem(store,start,String(talk.sections['The opening']||'').trim(),{requireShown:false}))return null;
+  const opening=start.opening?start.opening.trim():start.sentence?`${start.sentence} ${usualQuestion(area)}`:null;
+  if(!opening)return null;
+  setOpening(area,start.day,opening);
+  return coachTalkRecordProblem(store,start,opening,{requireShown:false})?null:opening;
 }
 
 // What the assistant is told when its reply to a talk start failed the guard (issue #489).
