@@ -36,6 +36,7 @@
 #   trace-2.log                       what the run of the line after it did
 #   button-said.json / button-status.json   Update now's answer, and how the update it started ended
 #   button-kept-stage.json            the stage file the machine kept after Update now
+#   button-version.txt                the stand-in release's version (stand-in-version.mjs)
 #   records-before.txt / -after.txt   one line per notebook record, from the notebook's own export
 #   owner-setting-before.txt / -after.txt  the value the owner set in the assistant's settings
 #   chat-before.txt / -after.txt      the chat history's own rows
@@ -88,11 +89,22 @@ stand_in_stage() { # <folder>
     curl -fsSL "$RAW/$STAGE_REF/stage/stage.sh" -o "$1/$BUTTON_TAG/stage/stage.sh" &&
     curl -fsSL "$RAW/beta/stage.json" -o "$1/beta/stage.json" ||
     fail "the stage's own files at $STAGE_REF could not be read for the stand-in stage"
+  # Newer than the stage and than the version the notebook says it runs, which after a release step
+  # is above the public version a night's stage is named after (#490).
+  local installed version
+  installed=$("$NODE" --input-type=module -e '
+const {installedVersion}=await import(process.argv[1]);
+process.stdout.write(installedVersion({root:process.argv[2]}));
+' "$HERE/../notebook/core/update.mjs" "$ROOT") && [ -n "$installed" ] ||
+    fail "the version the notebook runs could not be read, so no newer stand-in can be named"
+  version=$("$NODE" "$HERE/stand-in-version.mjs" "$(json_value "$1/.stage.json" version)" "$installed") ||
+    fail "no stand-in version newer than the stage and $installed could be named"
+  printf '%s\n' "$version" >"$EVIDENCE/button-version.txt"
   "$NODE" -e '
-const fs=require("fs"),[from,to]=process.argv.slice(1),stage=JSON.parse(fs.readFileSync(from,"utf8"));
-stage.version+=".handover";
+const fs=require("fs"),[from,to,version]=process.argv.slice(1),stage=JSON.parse(fs.readFileSync(from,"utf8"));
+stage.version=version;
 fs.writeFileSync(to,JSON.stringify(stage,null,2)+"\n");
-' "$1/.stage.json" "$1/$BUTTON_TAG/stage.json" || fail "the stand-in stage file could not be written"
+' "$1/.stage.json" "$1/$BUTTON_TAG/stage.json" "$version" || fail "the stand-in stage file could not be written"
 }
 
 # The notebook's own service, told where the stand-in releases and the stand-in stage are, and
@@ -280,8 +292,16 @@ check() { # <evidence folder>
   button=$(json_value "$folder/button-status.json" state) || button=none
   [ "$button" = updated ] ||
     fail "Update now did not finish: the update it started ended $button ($(json_value "$folder/button-status.json" message 2>/dev/null))"
-  [ "$(json_value "$folder/button-kept-stage.json" version)" = "$version.handover" ] ||
-    fail "after Update now the machine keeps the stage file of $(json_value "$folder/button-kept-stage.json" version), not the newer release's $version.handover"
+  local stand_in
+  stand_in=$(tr -d ' \n\r' <"$folder/button-version.txt" 2>/dev/null) && [ -n "$stand_in" ] ||
+    fail "button-version.txt names no stand-in version, so what Update now should have taken cannot be said"
+  "$NODE" --input-type=module -e '
+const {compareVersions}=await import(process.argv[1]);
+process.exit(compareVersions(process.argv[2],process.argv[3])>0?0:1);
+' "$HERE/../notebook/core/update.mjs" "$stand_in" "$version" 2>/dev/null ||
+    fail "the stand-in release $stand_in is not newer than the stage's $version, so Update now proved nothing"
+  [ "$(json_value "$folder/button-kept-stage.json" version)" = "$stand_in" ] ||
+    fail "after Update now the machine keeps the stage file of $(json_value "$folder/button-kept-stage.json" version), not the newer release's $stand_in"
 
   # Everything of the owner's.
   local lost
@@ -309,7 +329,7 @@ check() { # <evidence folder>
   [ "$routines" = 1 ] ||
     fail "the assistant has the routine \"$ROUTINE\" $routines times after the update, not the one this release makes"
 
-  pass "$before became $after, the stage's own commit, through godspeed-update from a checked download, with its kit-bootstrap $engine and its stage file; Update now took $version.handover over; every notebook record, the owner's own $owner_after and the chat history came through the command, the line and the button, the notebook answers, and there is one \"$ROUTINE\""
+  pass "$before became $after, the stage's own commit, through godspeed-update from a checked download, with its kit-bootstrap $engine and its stage file; Update now took $stand_in over; every notebook record, the owner's own $owner_after and the chat history came through the command, the line and the button, the notebook answers, and there is one \"$ROUTINE\""
 }
 
 if [ "$CHECK_ONLY" = yes ]; then

@@ -1125,6 +1125,7 @@ update_good() { # <folder>
   printf '{"state":"updated","from":"2.0.0-beta.8","to":"2.0.0-beta.8","message":"Updated to 2.0.0-beta.8."}\n' \
     >"$folder/button-status.json"
   sed 's/"2.0.0-beta.8"/"2.0.0-beta.8.handover"/' "$folder/stage.json" >"$folder/button-kept-stage.json"
+  printf '2.0.0-beta.8.handover\n' >"$folder/button-version.txt"
   printf '["goals","the-first-goal"]\n["notes","scenario-four"]\n["settings","installation"]\n' >"$folder/records-before.txt"
   printf '["goals","the-first-goal"]\n["notes","scenario-four"]\n["settings","installation"]\n' \
     >"$folder/records-after.txt"
@@ -1181,6 +1182,17 @@ copy "$U/good" "$U/button-not-taken"
 cp "$U/good/stage.json" "$U/button-not-taken/button-kept-stage.json"
 refuses "an Update now after which the newer release's stage file is not kept" update-keeps-everything "$U/button-not-taken" \
   "not the newer release's 2.0.0-beta.8.handover"
+
+copy "$U/good" "$U/no-button-version"
+rm "$U/no-button-version/button-version.txt"
+refuses "a run that kept no stand-in version for Update now" update-keeps-everything "$U/no-button-version" \
+  "button-version.txt names no stand-in version"
+
+copy "$U/good" "$U/button-not-newer"
+printf '2.0.0-beta.7.handover\n' >"$U/button-not-newer/button-version.txt"
+sed -i 's/"2.0.0-beta.8.handover"/"2.0.0-beta.7.handover"/' "$U/button-not-newer/button-kept-stage.json"
+refuses "a stand-in release no newer than the stage" update-keeps-everything "$U/button-not-newer" \
+  "the stand-in release 2.0.0-beta.7.handover is not newer than the stage's 2.0.0-beta.8"
 
 copy "$U/good" "$U/record-gone"
 printf '["settings","installation"]\n' >"$U/record-gone/records-after.txt"
@@ -5763,6 +5775,15 @@ if node --test "$ROOT/scenarios/test-server-telegram.mjs" >"$TMP/server-telegram
 else
   cat "$TMP/server-telegram.log"
   bad "server-telegram.mjs: its node --test cases fail"
+fi
+
+# update-keeps-everything's stand-in for Update now must be newer than what the machine runs (#490).
+section "stand-in-version.mjs: its node --test cases"
+if node --test "$ROOT/scenarios/test-stand-in-version.mjs" >"$TMP/stand-in-version.log" 2>&1; then
+  ok "stand-in-version.mjs: its node --test cases pass"
+else
+  cat "$TMP/stand-in-version.log"
+  bad "stand-in-version.mjs: its node --test cases fail"
 fi
 
 section "scenario-verdict.mjs: its node --test cases"
