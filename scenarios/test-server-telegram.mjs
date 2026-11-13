@@ -316,3 +316,38 @@ test('setup still times out naming the Telegram API when the fake writes no reco
     });
   } finally { fs.rmSync(folder,{recursive:true,force:true}); }
 });
+
+// A setup that refuses the key asks for it again, with the provider's words, as on 13 November 2026 (#527).
+const refusedKeyScript=`#!/bin/sh
+input=$(cat)
+case "$*" in
+  *'pkill -f '*) sh -c "$7"; exit $?;;
+  *__act*) echo act >> "$TRACE"; exit 0;;
+  *http://127.0.0.1:47832/api/telegram/connect*) echo '{"start_message":"/start abc"}'; exit 0;;
+  *record.json*) ;;
+  *) exit 0;;
+esac
+n=$(grep -c act "$TRACE" 2>/dev/null); n=\${n:-0}
+sent=''
+[ "$n" -ge 1 ] && sent='{"chat_id":31415,"text":"Hi","buttons":[]},{"chat_id":31415,"text":"Which?","buttons":[{"label":"O","callback":"openrouter"}]}'
+[ "$n" -ge 2 ] && sent="$sent"',{"chat_id":31415,"text":"Send me your OpenRouter API key.","buttons":[{"label":"Pick another AI","callback":"brain:other"}]}'
+[ "$n" -ge 3 ] && sent="$sent"',{"chat_id":31415,"text":"Thanks, I deleted your message. Checking the key with OpenRouter...","buttons":[]},{"chat_id":31415,"text":"OpenRouter did not answer with that key. It said: HTTP 402: Insufficient credits. Add more using https://openrouter.ai/settings/credits\\\\n\\\\nSend another key, or pick another AI.","buttons":[{"label":"Pick another AI","callback":"brain:other"}]}'
+printf '{"sent":[%s],"requests":[]}\\n' "$sent"
+`;
+
+test('setup stops at once with the setup\'s own words when it refuses the AI key',()=>{
+  const {folder,run}=fixture('setup-refused-key',refusedKeyScript);
+  try {
+    const started=Date.now();
+    assert.throws(()=>run('setup','--token','t','--ai-key','sk-or-v1-0123456789abcdef','--ai-url','https://openrouter.ai/api/v1','--ai-model','anthropic/claude-haiku-5.5','--notebook-port','47832'),error=>{
+      assert.match(String(error.stderr),/server-telegram: the setup refused the AI key: OpenRouter did not answer with that key\. It said: HTTP 402: Insufficient credits/);
+      assert.doesNotMatch(String(error.stderr),/did not appear within/);
+      return true;
+    });
+    assert.ok(Date.now()-started<20000,'a refused key fails at once, not after the 180 second wait');
+    const saved=JSON.parse(fs.readFileSync(path.join(folder,'run.json'),'utf8'));
+    assert.ok(saved.outbox.some(message=>message.label==='setup-key'&&/HTTP 402/.test(message.text)),'the refusal is in the run outbox');
+    assert.deepEqual(saved.steps.at(-1),{label:'setup-first-install',kind:'press',success:false,error:saved.steps.at(-1).error});
+    assert.match(saved.steps.at(-1).error,/the setup refused the AI key: .*HTTP 402/);
+  } finally { fs.rmSync(folder,{recursive:true,force:true}); }
+});
