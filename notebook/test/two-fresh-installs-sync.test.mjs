@@ -69,3 +69,35 @@ test('processing settings someone changed before the first sync are still kept f
   assert.equal(kept.length,1,JSON.stringify(kept.map(r=>r.path)));
   assert.match(kept[0].path,/settings\/processing/);
 });
+
+// Until 13 November 2026 the joining install's untouched defaults were kept for
+// review against the changed settings, and its first sync stopped.
+test('a fresh install joining a copy whose processing settings were changed takes them, and notes travel both ways',async t=>{
+  const install=installs(t),desktop=await install('desktop',desktopStart,store=>store.save('settings',{...store.get('settings','processing'),daily_limit:10}));
+  assert.equal(desktop.sync.reconcile().state,'synced');
+  const laptop=await install('laptop',laptopStart),status=laptop.sync.reconcile();
+  assert.equal(status.state,'synced',JSON.stringify(status));
+  assert.deepEqual(reviews(laptop.dir),[]);
+  assert.equal(laptop.store.list('settings').filter(s=>s.id==='processing').length,1);
+  assert.equal(laptop.store.get('settings','processing').daily_limit,10);
+  desktop.store.save('notes',{title:'Hello',content:'from the desktop\n'});
+  assert.equal(desktop.sync.reconcile().state,'synced');
+  assert.equal(laptop.sync.reconcile().state,'synced');
+  assert.equal(laptop.store.list('notes').find(n=>n.title==='Hello')?.content,'from the desktop\n');
+  laptop.store.save('notes',{title:'Reply',content:'from the laptop\n'});
+  assert.equal(laptop.sync.reconcile().state,'synced');
+  assert.equal(desktop.sync.reconcile().state,'synced');
+  assert.equal(desktop.store.list('notes').find(n=>n.title==='Reply')?.content,'from the laptop\n');
+  assert.equal(desktop.store.get('settings','processing').daily_limit,10);
+});
+
+test('processing settings changed differently on both computers are still kept for review',async t=>{
+  const install=installs(t),desktop=await install('desktop',desktopStart,store=>store.save('settings',{...store.get('settings','processing'),daily_limit:10}));
+  assert.equal(desktop.sync.reconcile().state,'synced');
+  const laptop=await install('laptop',laptopStart,store=>store.save('settings',{...store.get('settings','processing'),daily_limit:20}));
+  const status=laptop.sync.reconcile();
+  assert.equal(status.state,'conflict',JSON.stringify(status));
+  const kept=reviews(laptop.dir);
+  assert.equal(kept.length,1,JSON.stringify(kept.map(r=>r.path)));
+  assert.match(kept[0].path,/settings\/processing/);
+});
