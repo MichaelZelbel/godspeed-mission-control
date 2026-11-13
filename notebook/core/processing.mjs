@@ -10,7 +10,7 @@ import {visibleRows} from './visibility.mjs';
 // Until 6 October 2026 this was not ported: a note was processed only from the
 // note's own menu, and the screens' sweep call failed silently.
 export const PIPELINE = 'analysis';
-const DEFAULTS = {enabled: true, daily_limit: 40, quiet_minutes: 2, min_chars: 30, retry_minutes: 30, max_attempts: 3};
+export const DEFAULTS = {enabled: true, daily_limit: 40, quiet_minutes: 2, min_chars: 30, retry_minutes: 30, max_attempts: 3};
 export const contentFingerprint = note => hash([String(note.title || ''), String(note.content || '')]);
 // A note its writer marked skip_processing: true (an add-on that already wrote its summary and
 // facts, one note per scanned letter) stays visible and searchable like any note, but processing
