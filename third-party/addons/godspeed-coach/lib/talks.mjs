@@ -3,7 +3,7 @@
 // happened for work/commitments/, so a talk that got no answer still leaves a record.
 import fs from "node:fs";
 import path from "node:path";
-import { parseDoc, setHead, appendToSection, formatDoc } from "./header.mjs";
+import { parseDoc, setHead, appendToSection, setSection, formatDoc } from "./header.mjs";
 import { localParts, zonedToUtc, addDays } from "./clock.mjs";
 import { talkMoment, isTalkDay, listAreas } from "./areas.mjs";
 
@@ -68,6 +68,9 @@ export const setFollowUp = (area, ymd, iso) => rewrite(area, ymd, (t) => setHead
 export const addSaid = (area, ymd, lines) => rewrite(area, ymd, (t) => [].concat(lines).reduce((acc, l) => appendToSection(acc, "What you said", l), t));
 // Without a messenger the opening reached nobody's phone. SHOWN is when the [godspeed-coach] block
 // first put it in front of the assistant in a conversation with them, so it is brought up once.
+// The opening the person was actually shown, when the record holds another one (the notebook chat
+// corrects a record whose opening was not the prepared one, issue #495).
+export const setOpening = (area, ymd, opening) => rewrite(area, ymd, (t) => setSection(t, "The opening", opening));
 export const setShown = (area, ymd, iso) => rewrite(area, ymd, (t) => setHead(t, "SHOWN", iso));
 
 // A talk opens between its moment and six hours after it, once. A server that was down all evening

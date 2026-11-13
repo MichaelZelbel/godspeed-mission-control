@@ -233,6 +233,9 @@ test('draft items and sentence repair keep to their lines',async()=>{
  await assert.rejects(applyFindings('Required line.\n\nOther.',[{sentence:'Required line.',problem:'wording'}],{protectedLines:['Required line.'],rewrite:async()=>''}),/word for word/);
  const out=await applyFindings('Intro.\n\n1. Keep this. Fix this.\n2. Drop item.',[{sentence:'Drop item.',problem:'core-unsupported',reason:'r'},{sentence:'Fix this.',problem:'wording',reason:'w'}],{rewrite:async()=>'Fixed https://new.invalid'});
  assert.equal(out.text,'Intro.\n\n1. Keep this.','a rewrite that brings a new link is not used');
+ const paragraph=await applyFindings('Nothing on the calendar. Read one chapter.\n\nHealth fine.',[{sentence:'Nothing on the calendar.',problem:'core-unsupported',reason:'r'}],{rewrite:async()=>{throw Error('an unsupported sentence is not rewritten');}});
+ assert.equal(paragraph.text,'Read one chapter.\n\nHealth fine.','in a plain paragraph an unsupported sentence goes alone (#500)');
+ assert.equal(paragraph.changes[0].action,'drop-sentence');
  const emptied=await applyFindings('Good morning.\n\n1. Only this.\n\nHealth fine.',[{sentence:'Only this.',problem:'wording',reason:'w'}],{rewrite:async()=>''});
  assert.equal(emptied.text,'Good morning.\n\nHealth fine.');
  assert.equal(emptied.changes[0].item_emptied,true);
