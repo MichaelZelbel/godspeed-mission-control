@@ -176,10 +176,16 @@ if(own&&verified(own)){
  named=[[...titles(title),result]];
  const declared=(text.match(/^DONE WHEN:\s*A practical household emergency-kit checklist is written at (work\/(?:[A-Za-z0-9][A-Za-z0-9._-]*\/)*[A-Za-z0-9][A-Za-z0-9._-]*\.md) and ready for a reader\s*$/mi)||[])[1];
  if(!declared||declared!==resultFile)fail('the selected emergency-kit work card does not name its result file');
- const artifact=path.join(folder,declared);
- if(!fs.existsSync(artifact)||!fs.statSync(artifact).isFile())fail('the result artifact is not a practical emergency-kit checklist');
+ const artifact=path.join(folder,declared),notPractical=why=>fail(`the result artifact ${declared} is not a practical emergency-kit checklist: ${why}`);
+ if(!fs.existsSync(artifact)||!fs.statSync(artifact).isFile())notPractical('it was not kept');
  const practical=fs.readFileSync(artifact,'utf8');
- if(!/[-*]\s*(?:\[[ xX]\]|\d+[.)])|^[ \t]*[-*][ \t]+\S/m.test(practical)||!/\b(?:\d+\s*(?:lit(?:re|er)s?|days?|hours?|batter(?:y|ies)|ml|kg)|at least \d+)\b/i.test(practical)||!['water','food','first aid|medication','light|power','communication|document'].every(group=>new RegExp(group,'i').test(practical))||/\b(?:TODO|TBD|placeholder|outline only)\b/i.test(practical))fail('the result artifact is not a practical emergency-kit checklist');
+ // A list item opens its line with a bullet, a checkbox or a number, as the product writes them in
+ // its own words: "- [ ] water", "* food", "[ ] torches", "1. WATER".
+ if(!/^[ \t]*(?:[-*\u2022](?:[ \t]*\[[ xX]\]|[ \t])|\[[ xX]\]|\d+[.)][ \t])[ \t]*\S/m.test(practical))notPractical('it has no list items');
+ if(!/\b(?:\d+\s*(?:lit(?:re|er)s?|days?|hours?|batter(?:y|ies)|ml|kg)|at least \d+)\b/i.test(practical))notPractical('it names no amounts');
+ const missing=['water','food','first aid|medication','light|power','communication|document'].filter(group=>!new RegExp(group,'i').test(practical));
+ if(missing.length)notPractical(`it does not cover ${missing.join(', ')}`);
+ if(/\b(?:TODO|TBD|placeholder|outline only)\b/i.test(practical))notPractical('it is a placeholder');
 }else{
  const goalSlug=slug(goal);
  const kept=c=>(`${c.field('CHECK')} ${c.field('DONE WHEN')}`.match(/\b((?:work|goals|ideas)\/[A-Za-z0-9._\/-]+\.md)\b/)||[])[1];

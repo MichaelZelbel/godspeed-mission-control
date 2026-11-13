@@ -3921,7 +3921,7 @@ cp "$FD/good/work/W-000-first-day-emergency-kit.md" "$FD/unverified/work/W-other
 refuses 'a first day without its selected checked work' first-day "$FD/unverified" 'selected emergency-kit work card is not verified'
 copy "$FD/good" "$FD/no-artifact"
 rm "$FD/no-artifact/work/emergency-kit-checklist.md"
-refuses 'a first day without a practical artifact' first-day "$FD/no-artifact" 'not a practical emergency-kit checklist'
+refuses 'a first day without a practical artifact' first-day "$FD/no-artifact" 'work/emergency-kit-checklist.md is not a practical emergency-kit checklist: it was not kept'
 copy "$FD/good" "$FD/placeholder"
 printf '%s\n' '- [ ] TODO: outline only' >"$FD/placeholder/work/emergency-kit-checklist.md"
 refuses 'a placeholder checklist' first-day "$FD/placeholder" 'not a practical emergency-kit checklist'
@@ -4045,6 +4045,24 @@ refuses 'a plain-bullet checklist without quantities' first-day "$FD/plain-bulle
 copy "$FD/plain-bullets" "$FD/no-list"
 printf '%s\n' 'Water: 4 litres per person per day for 3 days. Food, first aid, power and documents too.' >"$FD/no-list/work/emergency-kit-checklist.md"
 refuses 'a checklist that is not a list' first-day "$FD/no-list" 'not a practical emergency-kit checklist'
+# The product's checklist of 13 November 2026 (PR #498's first nightly run): numbered sections and
+# bare checkboxes, with no bullet in front of them.
+copy "$FD/good" "$FD/bare-checkboxes"
+cat >"$FD/bare-checkboxes/work/emergency-kit-checklist.md" <<'EOF'
+1. WATER
+
+Plan for at least 4 litres per person per day, for 3 days.
+
+[ ] Stored bottled water, sealed, for 3 days
+[ ] Tinned food with pull-off lids
+[x] Ready-made first aid kit and 7 days of repeat prescriptions
+[ ] Torches with spare batteries, and a power bank
+[ ] Identity documents in a waterproof bag
+EOF
+passes 'a practical checklist written with bare checkboxes and numbered sections' first-day "$FD/bare-checkboxes" 'answered today'
+copy "$FD/bare-checkboxes" "$FD/rules-and-bold"
+printf '%s\n' '**Water**: 4 litres per person per day for 3 days.' '---' 'Food, first aid, power and documents too.' >"$FD/rules-and-bold/work/emergency-kit-checklist.md"
+refuses 'a checklist whose only marks are bold text and a rule' first-day "$FD/rules-and-bold" 'it has no list items'
 
 # ============================================== the five scenarios of 2.0.0-beta.18 (numbers come in)
 # Each is judged on made-up folders only: one that should pass, and one per failure that is easy to
