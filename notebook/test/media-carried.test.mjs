@@ -149,6 +149,22 @@ test('a Drive re-import with new content replaces the carried copy',async t=>{
   }
 });
 
+test('a Drive re-import too large to carry retires the carried copy and is kept here',async t=>{
+  const root=workspace(t),{service,base,read,mediaRoot,carried}=await start(t,root),small=Buffer.from('%PDF-1.4 small'),big=Buffer.alloc(CARRY_LIMIT+10,7);
+  const connectors=new Connectors(service.domains),original='drive/file-1/Plan.pdf';
+  connectors.save('gdrive',{origin:'https://www.googleapis.com',token:'token',folder_id:'folder'});
+  let current;const invoke=connectors.invoke.bind(connectors);
+  connectors.invoke=(name,input)=>name==='gdrive-proxy'?{files:[{id:'file-1',name:'Plan.pdf',mimeType:'application/pdf',modifiedTime:current[0]}]}:invoke(name,input);
+  connectors.request=async()=>new Response(current[1]);
+  current=['2026-11-01T00:00:00Z',small];await connectors.invoke('gdrive-sync',{});
+  assert.ok(fs.existsSync(path.join(carried,sha(original)+'.mapping.json')));
+  current=['2026-11-02T00:00:00Z',big];await connectors.invoke('gdrive-sync',{});
+  carryMedia({mediaRoot,carried});
+  assert.ok(!fs.existsSync(path.join(carried,sha(original)+'.mapping.json')),'the stale carried mapping is gone');
+  const served=await read(original);assert.equal(served.status,200);assert.equal(served.bytes.length,big.length);
+  assert.deepEqual((await(await fetch(base+'/api/media/kept-here')).json()).data,[{path:original,size:big.length}]);
+});
+
 test('keeping both media versions carries both',async t=>{
   const root=workspace(t),{service,upload,read,mediaRoot}=await start(t,root),remote=Buffer.from('a newer picture from another computer');
   assert.equal((await upload(picturePath,picture)).status,200);

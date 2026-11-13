@@ -79,8 +79,11 @@ export function findMedia({mediaRoot,carried},original){
   return {mapping:own||root,file,removed};
 }
 // Keeps a copy of an item in the notebook. Returns the number of files written.
+// Content too large to carry retires an older carried copy at the same path,
+// so it is not served in place of the new content and the item counts as kept
+// on this computer only.
 export function keepMedia(carried,mapping,data){
-  if(data.length>CARRY_LIMIT)return 0;
+  if(data.length>CARRY_LIMIT){fs.rmSync(path.join(carried,mappingName(mapping.path)),{force:true});return 0;}
   const file=path.join(carried,carriedName(mapping.sha256,mapping.path));let written=0;
   if(!fs.existsSync(file)){writeWhole(file,data);written++;}
   return written+writeMapping(carried,mapping);
