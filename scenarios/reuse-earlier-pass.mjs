@@ -34,7 +34,7 @@ export function workflowJobs(text) {
   return headers.map((header, index) => {
     const jobBody = body.slice(header.index, headers[index + 1]?.index);
     const name = jobBody.match(/^ {4}name: (.+)$/m)?.[1].trim();
-    return { id: header[1], name: name ?? header[1], usesAi: jobBody.includes('GODSPEED_SCENARIO_AI_KEY') };
+    return { id: header[1], name: name ?? header[1], usesAi: /^ +GODSPEED_SCENARIO_AI_KEY:/m.test(jobBody) };
   });
 }
 
@@ -127,7 +127,7 @@ function main() {
       .filter((run) => run.path === '.github/workflows/scenarios.yml' && String(run.id) !== String(env.GITHUB_RUN_ID)
         && (run.pull_requests ?? []).some((p) => String(p.number) === String(pr)))
       .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at))
-      .slice(0, 40);
+      .slice(0, 10); // the newest few are enough for a pull request kept up to date by merging main in
     const passedBy = new Map(); // job id -> shas, newest first
     for (const run of runs) {
       const list = ghJson(['api', '--method', 'GET', `repos/${repo}/actions/runs/${run.id}/jobs`, '-f', 'filter=latest', '-f', 'per_page=100']).jobs;
@@ -135,7 +135,7 @@ function main() {
         if (!ai.has(id)) continue;
         if (list.some((job) => job.name === name && job.conclusion === 'success')) {
           const shas = passedBy.get(id) ?? [];
-          if (!shas.includes(run.head_sha)) shas.push(run.head_sha);
+          if (!shas.includes(run.head_sha) && shas.length < 5) shas.push(run.head_sha);
           passedBy.set(id, shas);
         }
       }

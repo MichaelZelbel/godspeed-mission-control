@@ -99,7 +99,8 @@ test('the workflow: the AI scenarios are found, and stage hands on what the reus
   assert.equal(byId['plain-yes'].usesAi, true);
   assert.equal(byId['plain-yes'].name, 'a plain yes or a button answers the right waiting step');
   assert.equal(byId['linux-install'].usesAi, false);
-  assert.match(text, /^ {6}picked: \$\{\{ steps\.reuse\.outputs\.picked \}\}$/m);
+  assert.match(text, /^ {6}picked: \$\{\{ steps\.reuse\.outputs\.picked \|\| steps\.pick\.outputs\.picked \}\}$/m, 'an empty reuse output must fall back to the pick, never skip every scenario');
+  assert.match(text, /id: reuse\n {8}if: github\.event_name == 'pull_request'\n {8}shell: bash\n/);
   assert.match(text, /^ {6}actions: read$/m);
 });
 

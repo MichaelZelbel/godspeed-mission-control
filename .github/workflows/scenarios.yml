@@ -158,7 +158,7 @@ jobs:
     # A pull request from a fork has no secrets, so no scenario can run on it: nothing runs.
     if: ${{ always() && (github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && needs.pr-image.result == 'success')) && (inputs.pr == '' || needs.pr-image.result == 'success') }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 10
     permissions:
       contents: read
       pull-requests: read
@@ -170,7 +170,8 @@ jobs:
       # A pull request run that built no image runs no server scenario, so the ancestor-image guard does not apply to it.
       GODSPEED_SCENARIO_ANCESTOR_OK: ${{ github.event_name == 'pull_request' && '1' || '' }}
     outputs:
-      picked: ${{ steps.reuse.outputs.picked }}
+      # The reuse step only runs on a pull request, and only when this checkout has its script; otherwise the pick stands.
+      picked: ${{ steps.reuse.outputs.picked || steps.pick.outputs.picked }}
       proof: ${{ env.PROOF_SHA }}
       version: ${{ steps.read.outputs.version }}
       product: ${{ steps.read.outputs.product }}
@@ -232,6 +233,8 @@ jobs:
           echo "picked=$picked" | tee -a "$GITHUB_OUTPUT"
       - name: Leave out what already passed on this pull request
         id: reuse
+        if: github.event_name == 'pull_request'
+        shell: bash
         # An AI scenario that passed on an earlier head of this same pull request is not run (and paid
         # for) again when the pull request's own change to the files that picked it is unchanged, as
         # after a push that only merged main in. Pull requests only; every other event keeps `picked`
@@ -243,7 +246,12 @@ jobs:
           BASE_REF: ${{ github.event.pull_request.base.ref }}
           PICKED: ${{ steps.pick.outputs.picked }}
           CHANGED_FILE: ${{ runner.temp }}/changed
-        run: node scenarios/reuse-earlier-pass.mjs | tee -a "$GITHUB_OUTPUT"
+        run: |
+          # A head that predates the script, a crash or an odd answer leaves the pick as it is: never an empty `picked`.
+          line=
+          [ ! -f scenarios/reuse-earlier-pass.mjs ] || line=$(node scenarios/reuse-earlier-pass.mjs) || line=
+          [[ "$line" =~ ^picked=,([a-z0-9,-]*)$ ]] || line="picked=$PICKED"
+          echo "$line" | tee -a "$GITHUB_OUTPUT"
       - name: Read and check it
         id: read
         run: |
