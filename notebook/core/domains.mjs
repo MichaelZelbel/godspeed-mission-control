@@ -42,7 +42,7 @@ import {leadWords} from './lead-commands.mjs';
 import {radarWords} from './radar-lifecycle.mjs';
 import {retrieveNoteWindows} from './retrieval-windows.mjs';
 import {retireShares} from './shares.mjs';
-import {hasCoachAreas,resolvedCoachArea,coachTalkStart,coachTalkRecordProblem,coachTalkRecordOpening,coachTalkRetryMessage,markCoachTalkShown} from './coach-chat.mjs';
+import {hasCoachAreas,resolvedCoachArea,coachTalkStart,coachTalkRecordProblem,coachTalkRecordOpening,coachTalkCorrectedOpening,coachTalkRetryMessage,markCoachTalkShown} from './coach-chat.mjs';
 import {canStartTalk} from '../../third-party/addons/godspeed-coach/lib/areas.mjs';
 // The note screens' content hash (ui/src/lib/note-ai-edit.ts hashNoteContent,
 // FNV-1a and the length): what a chat request says the owner was looking at.
@@ -301,9 +301,13 @@ export class Domains {
       const ask=message=>this.nativeAgent({...input,message,nativeFiles,page_context:input[IDENTITY_PAGE],step_context:input.step_context,coach_talk_start:start});
       let result=await ask(input.message).catch(error=>{judged.drop();throw error;});
       let problem=start&&coachTalkRecordProblem(this.store,start,result.reply,{requireShown:start.continuing});
+      // A record with the wrong opening is corrected to the prepared one, and the talk opens from it
+      // without another call (issue #495).
+      const corrected=problem&&coachTalkCorrectedOpening(this.store,start);
+      if(corrected){result={...result,reply:corrected};problem=null;}
       // A reply that misses the opening its talk record rightly holds is asked for once more, with the
-      // guard's reason; a second miss opens the talk from the record. A wrong record still refuses (issue #489).
-      if(problem&&coachTalkRecordOpening(this.store,start)){
+      // guard's reason; a second miss opens the talk from the record (issue #489).
+      else if(problem&&coachTalkRecordOpening(this.store,start)){
         // A second call that fails is a second miss, unless the person cancelled.
         const again=await ask(coachTalkRetryMessage(input.message,problem)).catch(error=>{if(input.signal?.aborted){judged.drop();throw error;}return {reply:''};});
         problem=coachTalkRecordProblem(this.store,start,again.reply,{requireShown:false});
