@@ -12,7 +12,7 @@ import { QueryService } from '../core/query.mjs';
 import { Domains } from '../core/domains.mjs';
 import { Scheduler } from '../core/jobs/scheduler.mjs';
 import {controlRoutine} from '../core/jobs/routine-control.mjs';
-import { modelProvider, jobExecutor,hermesProvider } from '../core/runtime.mjs';
+import { modelProvider, jobExecutor,hermesProvider,isHermesExecutable } from '../core/runtime.mjs';
 import {assistantEnvironment} from '../core/assistant-files.mjs';
 import { FileSync } from '../core/sync/git.mjs';
 import {conflictView,resolveSavedConflict} from '../core/conflicts.mjs';
@@ -128,7 +128,12 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   const assistantPath=process.env.GODSPEED_ASSISTANT_CONFIG||path.join(store.state,'assistant.json');
   // Where this notebook really runs from, for the tools (core/running-notebook.mjs): Windows only.
   try{recordRunningNotebook({root:store.root,assistantConfig:process.env.GODSPEED_ASSISTANT_CONFIG});}catch(error){console.error('Godspeed Mission Control: could not record where the notebook runs:',error.message);}
-  if(!provider&&fs.existsSync(assistantPath)){const descriptor=JSON.parse(fs.readFileSync(assistantPath,'utf8').replace(/^\uFEFF/,''));if(descriptor.verified)provider=hermesProvider({executable:descriptor.executable,home:descriptor.home,cwd:store.root,sourceRoot:descriptor.sourceRoot});}
+  // An assistant program that is not Hermes leaves the notebook running without its AI and says which
+  // setting to change (#506, 13 November 2026); until then it stopped startup, over and over.
+  let assistantProblem=null;
+  if(!provider&&fs.existsSync(assistantPath)){const descriptor=JSON.parse(fs.readFileSync(assistantPath,'utf8').replace(/^\uFEFF/,''));
+    if(descriptor.verified&&isHermesExecutable(descriptor.executable||'hermes'))provider=hermesProvider({executable:descriptor.executable,home:descriptor.home,cwd:store.root,sourceRoot:descriptor.sourceRoot});
+    else if(descriptor.verified){assistantProblem=`The assistant program set in ${assistantPath} is "${descriptor.executable}", which is not Hermes. Set "executable" in that file to your Hermes program (its name is hermes), or run the Godspeed installer again to set up the assistant. Until then the assistant cannot answer.`;console.error('Godspeed Mission Control: '+assistantProblem);}}
   // What the supervisor reads as "alive" (supervisor-health.mjs): an AI call
   // beats while it is inside its own time limit, plus a minute to be stopped.
   let schedulerHeartbeat=new Date().toISOString();const {beatWhile}=await import('../core/supervisor-health.mjs'),beat=()=>{schedulerHeartbeat=new Date().toISOString();};
@@ -375,7 +380,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         if(req.method!=='POST')return send(res,405,{error:'Use POST'});
         return send(res,200,automaticUpdate.save(JSON.parse(await body(req,4096))));
       }
-      if (route === '/api/status') return query.withSnapshot(()=>{const installation=query.rows('settings').find(row=>row.id==='installation');return send(res, 200, { configured:!!installation,goalSetupComplete:query.rows('goals').some(g=>['active','adopted','paused','achieved','completed'].includes(g.status)),goals:query.rows('goals'),work:query.rows('work_items'),decisions:query.rows('decisions'),owner:installation?.owner,device,server:mediaSync.server()||(device==='vps'?device:null),platform:process.platform,runtimeConfigured:!!domains.provider,sync:sync.last,mediaSync:mediaSync.last,kinds:originalRuntime?enableKinds(store.root):kinds,problems: store.problems, lastScan: store.lastScan, lastIndex: index.lastRebuild, records: store.records.size, schedules: query.rows('jobs'),routineSwitches: originalRuntime?routineSwitches(store,{jobs:hermesJobs(scheduler.home),home:scheduler.home}):null,assistantUpdate:originalRuntime?updateStatus(store):null, conflicts: sync.pendingConflicts().map(name=>{try{const c=JSON.parse(fs.readFileSync(path.join(store.root,'conflicts',name),'utf8'));return {id:c.id,kind:c.kind,path:c.path||c.type+'/'+c.record_id};}catch{return {id:name.replace(/\.json$/,''),kind:null,path:null,degraded:true};}}) });});
+      if (route === '/api/status') return query.withSnapshot(()=>{const installation=query.rows('settings').find(row=>row.id==='installation');return send(res, 200, { configured:!!installation,goalSetupComplete:query.rows('goals').some(g=>['active','adopted','paused','achieved','completed'].includes(g.status)),goals:query.rows('goals'),work:query.rows('work_items'),decisions:query.rows('decisions'),owner:installation?.owner,device,server:mediaSync.server()||(device==='vps'?device:null),platform:process.platform,runtimeConfigured:!!domains.provider,assistantProblem:domains.provider?null:assistantProblem,sync:sync.last,mediaSync:mediaSync.last,kinds:originalRuntime?enableKinds(store.root):kinds,problems: store.problems, lastScan: store.lastScan, lastIndex: index.lastRebuild, records: store.records.size, schedules: query.rows('jobs'),routineSwitches: originalRuntime?routineSwitches(store,{jobs:hermesJobs(scheduler.home),home:scheduler.home}):null,assistantUpdate:originalRuntime?updateStatus(store):null, conflicts: sync.pendingConflicts().map(name=>{try{const c=JSON.parse(fs.readFileSync(path.join(store.root,'conflicts',name),'utf8'));return {id:c.id,kind:c.kind,path:c.path||c.type+'/'+c.record_id};}catch{return {id:name.replace(/\.json$/,''),kind:null,path:null,degraded:true};}}) });});
       if(route==='/api/hermes-update'){
         if(!domains.hermesUpdate)return send(res,200,{available:false});
         if(req.method==='GET')return send(res,200,{available:true,...updateStatus(store)});

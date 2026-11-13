@@ -399,6 +399,25 @@ test('the running service logs a routine that could not be created, and its tick
  assert.ok(logged.some(line=>/could not be created, the next tick tries again.*could not create it/.test(line)),logged.join('\n'));
 });
 
+// An assistant program that is not Hermes, with no other AI connected, stopped startup with
+// "Choose the verified Hermes runtime" and the supervisor started it again in a loop (#506).
+test('a non-Hermes assistant program does not stop the notebook from starting and is named in plain words',async t=>{
+ const root=temporary(t),home=path.join(root,'.hermes-home');installStarter(root);fs.mkdirSync(home,{recursive:true});
+ const assistant=path.join(root,'assistant-test.json');fs.writeFileSync(assistant,JSON.stringify({verified:true,executable:path.join(root,'bin','hermes-agent'),home}));
+ const names=['GODSPEED_ORIGINAL_RUNTIME','GODSPEED_ASSISTANT_CONFIG','GODSPEED_MODEL_URL'],saved=Object.fromEntries(names.map(name=>[name,process.env[name]]));
+ process.env.GODSPEED_ORIGINAL_RUNTIME='on';process.env.GODSPEED_ASSISTANT_CONFIG=assistant;delete process.env.GODSPEED_MODEL_URL;
+ t.after(()=>{for(const name of names)if(saved[name]===undefined)delete process.env[name];else process.env[name]=saved[name];});
+ const {createService}=await import('../server/main.mjs');
+ const logged=[],original=console.error;console.error=(...line)=>{logged.push(line.join(' '));};
+ let service;try{service=await createService({root,port:0,device:'pc'});}finally{console.error=original;}
+ t.after(()=>service.close());
+ const base='http://127.0.0.1:'+service.address.port;
+ const health=await fetch(base+'/health');assert.equal(health.status,200);assert.equal((await health.json()).ok,true);
+ assert.ok(logged.some(line=>/is not Hermes/.test(line)&&/"executable"/.test(line)),logged.join('\n'));
+ const status=await (await fetch(base+'/api/status')).json();
+ assert.equal(status.runtimeConfigured,false);assert.match(status.assistantProblem,/hermes-agent", which is not Hermes\. Set "executable"/);
+});
+
 test('a setup that overlaps the running periodic tick still hears its failed connection-check creation',async t=>{
  noMail(t);
  const {store,home,hermes,job}=await withGoal(t);

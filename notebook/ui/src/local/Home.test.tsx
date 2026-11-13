@@ -24,14 +24,14 @@ Object.defineProperty(window, "matchMedia", { writable: true, value: (query: str
 Element.prototype.scrollIntoView = () => {};
 globalThis.ResizeObserver ??= class { observe() {} unobserve() {} disconnect() {} } as any;
 
-function page(withChat: boolean, context: { show: boolean; state?: string | null } = { show: false }) {
+function page(withChat: boolean, context: { show: boolean; state?: string | null } = { show: false }, status: Record<string, unknown> = { runtimeConfigured: true }) {
   const posts: unknown[] = [];
   vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
     if (String(url) === "/api/context-setup") {
       if (init?.method === "POST") { posts.push(JSON.parse(String(init.body))); context = { show: false, state: "skipped" }; }
       return new Response(JSON.stringify(context), { status: 200, headers: { "Content-Type": "application/json" } });
     }
-    return new Response(JSON.stringify({ runtimeConfigured: true, count: 0, data: [] }), { status: 200, headers: { "Content-Type": "application/json" } });
+    return new Response(JSON.stringify({ ...status, count: 0, data: [] }), { status: 200, headers: { "Content-Type": "application/json" } });
   }));
   render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
     <MemoryRouter initialEntries={["/dashboard"]}>
@@ -87,5 +87,15 @@ describe("the dashboard's chat button", () => {
     expect(openFloatingChat()).toBe(false);
     fireEvent.click(screen.getByRole("button", { name: "Chat with Godspeed" }));
     expect(await screen.findByText("The chat page")).toBeInTheDocument();
+  });
+});
+
+// An assistant program that is not Hermes is named on the card, not left as "Connecting…" (#506).
+describe("the Godspeed card", () => {
+  it("names the assistant's problem instead of Connecting", async () => {
+    const problem = 'The assistant program set in /state/assistant.json is "/usr/bin/python3", which is not Hermes. Set "executable" in that file to your Hermes program (its name is hermes), or run the Godspeed installer again to set up the assistant. Until then the assistant cannot answer.';
+    page(false, { show: false }, { runtimeConfigured: false, assistantProblem: problem });
+    expect(await screen.findByText(problem)).toBeInTheDocument();
+    expect(screen.queryByText("Connecting…")).toBeNull();
   });
 });
