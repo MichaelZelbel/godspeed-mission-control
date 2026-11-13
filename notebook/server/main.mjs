@@ -26,7 +26,7 @@ import {FactClosing} from '../core/fact-closing.mjs';
 import {JournalMoments} from '../core/journal-moments.mjs';
 import {saveConversationState,retainCompletedConversation,bindConversationSession,conversationRuntimeId} from '../core/conversation-state.mjs';
 import { importExport,exportRecords } from '../core/import.mjs';
-import { kinds } from '../core/jobs/scheduler.mjs';
+import { kinds,setupResults } from '../core/jobs/scheduler.mjs';
 import { MediaSync } from '../core/sync/media.mjs';
 import { mcp } from './mcp.mjs';
 import {notebookTotals} from './memory-tools.mjs';
@@ -574,7 +574,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         if(route==='/api/identity/instruction-restore')return send(res,200,await shelf.restoreInstruction(String(input.id||''),String(input.version||''),options));
         return send(res,404,{error:'Unknown operation'});
       }
-      if(route==='/api/setup'&&req.method==='POST'){const input=JSON.parse(await body(req));return send(res,200,{...await scheduler.configure({...input,owner:mediaSync.server()||device}),results:await scheduler.tick({raise:true})});}
+      if(route==='/api/setup'&&req.method==='POST'){const input=JSON.parse(await body(req));return send(res,200,{...await scheduler.configure({...input,owner:mediaSync.server()||device}),results:setupResults(store,await scheduler.tick({raise:true}))});}
       if(route==='/api/jobs/run'&&req.method==='POST'){const input=JSON.parse(await body(req));if(originalRuntime)return send(res,202,scheduler.startRun(input.id));return send(res,200,{results:await scheduler.tick()});}
       if(route==='/api/connections/recheck'&&req.method==='POST'){await jobExecutor(provider,query)({kind:'connection-check',id:'manual-connection-check',manual:true},{store,settings:store.get('settings','installation')||{}});return send(res,200,{connections:query.rows('connector_status').map(({id,ok,status,checked_at})=>({id,ok,status,checked_at}))});}
       if(route==='/api/jobs/update'&&req.method==='POST'){const input=JSON.parse(await body(req));return send(res,200,{data:originalRuntime?await scheduler.control(input):await controlRoutine(store,input,{device})});}
