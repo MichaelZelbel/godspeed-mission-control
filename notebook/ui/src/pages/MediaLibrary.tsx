@@ -835,51 +835,55 @@ export default function MediaLibrary() {
                         onError={() => setBrokenPreviews((prev) => ({ ...prev, [group.storage_path]: true }))}
                       />
                     )}
-                    {keptHere.has(group.storage_path) && (
-                      <Badge
-                        variant="secondary"
-                        title="Over 50 MB, so it is not in your private GitHub copy. It stays on this computer and in its backups."
-                        className="absolute top-1.5 left-1.5 text-[9px] z-10"
-                      >
-                        Kept on this computer only
-                      </Badge>
-                    )}
-                    {notHere && (
-                      <Badge
-                        variant="secondary"
-                        title="Its file is not on this computer. Files over 50 MB stay on the computer they were added on, so open it there."
-                        className="absolute top-1.5 left-1.5 text-[9px] z-10"
-                      >
-                        Kept on another computer
-                      </Badge>
-                    )}
-                    {/* Status badge */}
-                    <div className="absolute top-1.5 right-1.5 z-10">
-                      {status === "complete" && !hasBrokenPreview && (
-                        <span className="bg-success/90 text-success-foreground text-[9px] px-1.5 py-0.5 rounded-full">
-                          ✓
-                        </span>
-                      )}
-                      {(status === "pending" || status === "processing") && (
-                        <span className="flex items-center gap-1 bg-background/90 text-muted-foreground text-[9px] px-1.5 py-0.5 rounded-full">
-                          <Loader2 className="h-2.5 w-2.5 animate-spin" />
-                          {isRetrying ? "Retrying…" : "Analyzing…"}
-                        </span>
-                      )}
-                      {canRetry && (
-                        <button
-                          type="button"
-                          title={group.original_filename ? `Retry: ${group.original_filename}` : "Retry analysis"}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            retryItem();
-                          }}
-                          className="flex items-center gap-1 bg-background/90 hover:bg-accent text-foreground border border-border text-[9px] px-1.5 py-0.5 rounded-full"
+                    {/* One row: the badge on the left, the status (unchanged) on the right, so a
+                        long badge wraps beside the status instead of running under it. */}
+                    <div className="absolute top-1.5 inset-x-1.5 z-10 flex items-start gap-1">
+                      {keptHere.has(group.storage_path) && (
+                        <Badge
+                          variant="secondary"
+                          title="Over 50 MB, so it is not in your private GitHub copy. It stays on this computer and in its backups."
+                          className="min-w-0 text-[9px]"
                         >
-                          <RefreshCw className="h-2.5 w-2.5" />
-                          {status === "complete" ? "Re-analyze" : "Retry"}
-                        </button>
+                          Kept on this computer only
+                        </Badge>
                       )}
+                      {notHere && (
+                        <Badge
+                          variant="secondary"
+                          title="Its file is not on this computer. Files over 50 MB stay on the computer they were added on, so open it there."
+                          className="min-w-0 text-[9px]"
+                        >
+                          Kept on another computer
+                        </Badge>
+                      )}
+                      {/* Status badge */}
+                      <div className="ml-auto shrink-0">
+                        {status === "complete" && !hasBrokenPreview && (
+                          <span className="bg-success/90 text-success-foreground text-[9px] px-1.5 py-0.5 rounded-full">
+                            ✓
+                          </span>
+                        )}
+                        {(status === "pending" || status === "processing") && (
+                          <span className="flex items-center gap-1 bg-background/90 text-muted-foreground text-[9px] px-1.5 py-0.5 rounded-full">
+                            <Loader2 className="h-2.5 w-2.5 animate-spin" />
+                            {isRetrying ? "Retrying…" : "Analyzing…"}
+                          </span>
+                        )}
+                        {canRetry && (
+                          <button
+                            type="button"
+                            title={group.original_filename ? `Retry: ${group.original_filename}` : "Retry analysis"}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              retryItem();
+                            }}
+                            className="flex items-center gap-1 bg-background/90 hover:bg-accent text-foreground border border-border text-[9px] px-1.5 py-0.5 rounded-full"
+                          >
+                            <RefreshCw className="h-2.5 w-2.5" />
+                            {status === "complete" ? "Re-analyze" : "Retry"}
+                          </button>
+                        )}
+                      </div>
                     </div>
                     {contentType && (
                       <Badge variant="secondary" className="absolute bottom-1.5 left-1.5 text-[9px] z-10">
