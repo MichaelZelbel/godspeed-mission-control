@@ -57,6 +57,12 @@ if(job.last_status!=='error'||!tellsAll||!siblings.length)fault(`the installed r
 if(siblings.some(what=>ownWhat.startsWith(what)))fault(`the scenario's own emergency-kit work did not pass its check: ${error}`);
 NODE
 }
+# A routine's kept record (server_run_job, server_scheduled_brief) names the routine and its last run
+# before the scenario triggered it. Only that routine's own run, recorded after the trigger, counts,
+# and only when it ended ok: an earlier success, or a sibling's, is not this day's run (issue #508).
+own_run_ok() { # <job record JSON>
+  "$NODE" -e 'const fs=require("fs"),d=JSON.parse(fs.readFileSync(process.argv[1],"utf8")),rows=Array.isArray(d)?d:d.data||[],hasBaseline=Object.hasOwn(d,"before_last_run_at"),baseline=d.before_last_run_at,job=rows.find(j=>j?.id===d.id),after=(run,before)=>before===null||(run!==before&&!(Date.parse(run)<=Date.parse(before)));process.exit(d.id&&hasBaseline&&(baseline===null||typeof baseline==="string")&&job?.last_run_at&&after(job.last_run_at,baseline)&&job?.last_status==="ok"?0:1)' "$1"
+}
 step_passed() { # <name>
   printf 'PASS %s: %s\n' "$SCENARIO" "$1" | tee -a "$EVIDENCE/steps.tsv" >&2
 }
@@ -135,11 +141,11 @@ check() { # <evidence folder>
   grep -Fqx "$WORK_ID: planned" "$folder/first-day-work-filed.txt" ||
     fail 'the scenario did not retain its emergency-kit work filing'
   for label in research choice; do
-    "$NODE" -e 'const fs=require("fs"),d=JSON.parse(fs.readFileSync(process.argv[1],"utf8")),rows=Array.isArray(d)?d:d.data||[];process.exit(rows.some(j=>j?.last_run_at&&j?.last_status==="ok")?0:1)' "$folder/job-$label.json" ||
+    own_run_ok "$folder/job-$label.json" ||
       fail "the installed $label routine has no successful recorded run"
   done
   reason=$(work_run_fault "$folder/job-work.json") && [ -z "$reason" ] || fail "${reason:-the record of the work routine could not be read}"
-  "$NODE" -e 'const fs=require("fs"),d=JSON.parse(fs.readFileSync(process.argv[1],"utf8")),rows=Array.isArray(d)?d:d.data||[],hasBaseline=Object.hasOwn(d,"before_last_run_at"),baseline=d.before_last_run_at,job=rows.find(j=>j?.id===d.id);process.exit(d.id&&hasBaseline&&(baseline===null||typeof baseline==="string")&&job?.last_run_at&&job.last_run_at!==baseline&&job?.last_status==="ok"?0:1)' "$folder/job-scheduled-brief.json" ||
+  own_run_ok "$folder/job-scheduled-brief.json" ||
     fail 'the installed scheduled morning brief has no successful recorded run'
   grep -Eqi 'source[[:space:]]*[:=][[:space:]]*"?builtin' "$folder/brief-cron-runs.txt" ||
     fail 'the morning brief was not triggered by the installed scheduler'
