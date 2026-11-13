@@ -81,7 +81,8 @@ function usableRewrite(replacement,sentence,voice){
 }
 
 // Repairs only the flagged sentences (#387): a wording finding rewrites that sentence, or drops it
-// when no usable rewrite comes back; only a core-unsupported finding takes its whole item.
+// when no usable rewrite comes back; only a core-unsupported finding takes its whole numbered item,
+// and in a plain paragraph only its own sentence.
 // Items keep their numbers, on the item's first remaining line, so an exact supplied numbered list stays exact. A finding inside a line
 // Godspeed requires word for word throws: the caller then falls back as before.
 // rewrite(sentence,itemText,reason) resolves to the new sentence or ''.
@@ -95,17 +96,19 @@ export async function applyFindings(text,findings,{protectedLines=[],voice=null,
   if(at<0){if(lines.some((line,i)=>cut.has(i)&&line.includes(finding.sentence)))continue;throw Error('A flagged sentence is not on one line of the draft');}
   if(keep.has(lines[at].trim()))throw Error('A flagged sentence is in a line Godspeed requires word for word');
   const item=itemOf(at),first=lines[item.start].trim(),reason=String(finding.reason||'');
-  if(finding.problem==='core-unsupported'){
+  // A numbered item is about one thing, so an unsupported core fact takes the item. A plain
+  // paragraph can carry several things; its unsupported sentence goes alone, without a rewrite (#500).
+  if(finding.problem==='core-unsupported'&&NUMBERED_LINE.test(lines[item.start])){
    if(lines.slice(item.start,item.end).some(l=>keep.has(l.trim())))throw Error('A flagged item holds a line Godspeed requires word for word');
    for(let i=item.start;i<item.end;i++)cut.add(i);
    changes.push({action:'cut-item',item:first,sentence:finding.sentence,reason});continue;
   }
-  const replacement=String(await rewrite(finding.sentence,itemText(item),reason)||'').trim();
+  const replacement=finding.problem==='core-unsupported'?'':String(await rewrite(finding.sentence,itemText(item),reason)||'').trim();
   if(usableRewrite(replacement,finding.sentence,voice)){
    lines[at]=lines[at].replace(finding.sentence,()=>replacement);
    changes.push({action:'rewrite',item:first,sentence:finding.sentence,replacement,reason});continue;
   }
-  lines[at]=lines[at].replace(finding.sentence,'').replace(/\s{2,}/g,' ').trimEnd();
+  {const indent=lines[at].match(/^\s*/)[0],rest=lines[at].slice(indent.length).replace(finding.sentence,'').replace(/\s{2,}/g,' ').trim();lines[at]=rest?indent+rest:'';}
   if(!lines[at].trim())cut.add(at);
   const emptied=lines.slice(item.start,item.end).every((l,i)=>!(i===0?l.replace(ITEM_MARKER,''):l).trim());
   const change={action:'drop-sentence',item:first,sentence:finding.sentence,reason,...(emptied?{item_emptied:true}:{})};
