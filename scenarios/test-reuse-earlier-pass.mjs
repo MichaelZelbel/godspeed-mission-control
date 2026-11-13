@@ -7,7 +7,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
-import { decide, ownFiles, patchId, workflowJobs } from './reuse-earlier-pass.mjs';
+import { decide, scenarioPaths, patchId, workflowJobs } from './reuse-earlier-pass.mjs';
 
 const SCRIPT = fileURLToPath(new URL('./reuse-earlier-pass.mjs', import.meta.url));
 const WORKFLOW = fileURLToPath(new URL('../.github/workflows/scenarios.yml', import.meta.url));
@@ -86,11 +86,8 @@ test('decide: a scenario without the AI key is never touched, and each job is ju
   assert.deepEqual(r.reused.map((x) => x.job), ['plain-yes']);
 });
 
-test('ownFiles picks the way the stage job does, server-lib.sh only for a scenario that sources it', () => {
-  const changed = ['scenarios/first-day.sh', 'scenarios/first-day-fixture.mjs', 'scenarios/first-day2.sh', 'scenarios/server-lib.sh', 'README.md'];
-  assert.deepEqual(ownFiles('first-day', changed, false), ['scenarios/first-day-fixture.mjs', 'scenarios/first-day.sh']);
-  assert.deepEqual(ownFiles('plain-yes', changed, true), ['scenarios/server-lib.sh']);
-  assert.deepEqual(ownFiles('plain-yes', changed, false), []);
+test('the comparison covers the whole scenarios folder and the workflow, so a shared helper counts', () => {
+  assert.deepEqual(scenarioPaths(), ['scenarios/', '.github/workflows/scenarios.yml']);
 });
 
 test('the workflow: the AI scenarios are found, and stage hands on what the reuse step leaves', () => {
@@ -111,7 +108,7 @@ test('non-pull-request events keep picked as it is, with no GitHub call', () => 
   }
 });
 test('a pull request that hits an error runs everything that was picked, and says so on stderr only', () => {
-  const r = spawnSync(process.execPath, [SCRIPT], { encoding: 'utf8', env: { ...process.env, GITHUB_EVENT_NAME: 'pull_request', PICKED: ',plain-yes,', CHANGED_FILE: '/nonexistent/changed' } });
+  const r = spawnSync(process.execPath, [SCRIPT], { encoding: 'utf8', env: { ...process.env, GITHUB_EVENT_NAME: 'pull_request', PICKED: ',plain-yes,', WORKFLOW_FILE: '/nonexistent/scenarios.yml' } });
   assert.equal(r.stdout, 'picked=,plain-yes,\n');
   assert.match(r.stderr, /every picked scenario runs/);
 });
@@ -148,7 +145,7 @@ function standIn({ jobConclusion }) {
     '',
   ].join('\n'));
   writeFileSync(`${dir}/changed`, 'scenarios/plain-yes.sh\n');
-  return { dir, head, env: { ...process.env, REUSE_GH_STUB: `${dir}/gh-stub.mjs`, GITHUB_EVENT_NAME: 'pull_request', GITHUB_REPOSITORY: 'me/repo', PR: '42', HEAD_REF: 'pr', PROOF_SHA: head, GITHUB_RUN_ID: '9', GITHUB_WORKSPACE: dir, CHANGED_FILE: `${dir}/changed`, PICKED: ',plain-yes,', GITHUB_STEP_SUMMARY: `${dir}/summary` } };
+  return { dir, head, env: { ...process.env, REUSE_GH_STUB: `${dir}/gh-stub.mjs`, GITHUB_EVENT_NAME: 'pull_request', GITHUB_REPOSITORY: 'me/repo', PR: '42', HEAD_REF: 'pr', PROOF_SHA: head, GITHUB_RUN_ID: '9', GITHUB_WORKSPACE: dir, WORKFLOW_FILE: `${dir}/.github/workflows/scenarios.yml`, PICKED: ',plain-yes,', GITHUB_STEP_SUMMARY: `${dir}/summary` } };
 }
 
 test('end to end: a push that only merged main in reuses the earlier pass and says so in the summary', () => {
@@ -171,4 +168,22 @@ test('end to end: a changed own diff runs although an earlier pass exists', () =
   git(dir, 'commit', '-q', '-am', 'own change 2');
   const r = spawnSync(process.execPath, [SCRIPT], { cwd: dir, encoding: 'utf8', env: { ...env, PROOF_SHA: git(dir, 'rev-parse', 'HEAD') } });
   assert.equal(r.stdout, 'picked=,plain-yes,\n', r.stderr);
+});
+
+test('a later change to a shared helper under scenarios/, or to one space, makes the own change differ', () => {
+  const { dir, write } = repo();
+  const paths = scenarioPaths();
+  git(dir, 'checkout', '-q', '-b', 'pr');
+  write('scenarios/plain-yes.sh', readFileSync(`${dir}/scenarios/plain-yes.sh`, 'utf8').replace('line 20', 'line 20 changed'));
+  git(dir, 'commit', '-q', '-am', 'own change');
+  const base = git(dir, 'merge-base', 'main', 'HEAD');
+  const first = git(dir, 'rev-parse', 'HEAD');
+  write('scenarios/scenario-lib.sh', 'helper\n');
+  git(dir, 'add', '-A');
+  git(dir, 'commit', '-q', '-m', 'helper');
+  const helper = git(dir, 'rev-parse', 'HEAD');
+  assert.notEqual(patchId(dir, base, helper, paths), patchId(dir, base, first, paths), 'a new helper did not count as a change');
+  write('scenarios/plain-yes.sh', readFileSync(`${dir}/scenarios/plain-yes.sh`, 'utf8').replace('line 20 changed', 'line 20  changed'));
+  git(dir, 'commit', '-q', '-am', 'space');
+  assert.notEqual(patchId(dir, base, git(dir, 'rev-parse', 'HEAD'), paths), patchId(dir, base, helper, paths), 'one space did not count as a change');
 });

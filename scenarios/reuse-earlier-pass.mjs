@@ -7,8 +7,8 @@
 // up to date by merging main into it (Cole Medin's archon-loop does that on every lap) therefore
 // reran the same unchanged scenario change over and over: 43 to 50 times on one pull request.
 //
-// The rule: for each picked scenario that uses the AI key, take the files that picked it and the
-// pull request's own diff of them (merge-base with the base branch to head). When an earlier head of
+// The rule: for each picked scenario that uses the AI key, take the pull request's own diff of what a scenario
+// depends on in this repository (scenarios/ and this workflow, see scenarioPaths) (merge-base with the base branch to head). When an earlier head of
 // this pull request has the scenario's job concluded `success` in its scenarios run, and its own
 // diff of the same files has the same patch id, the scenario is left out of `picked`, and the step
 // summary says "passed on <sha>, own change unchanged since". Anything else (no earlier pass, only a
@@ -20,6 +20,7 @@
 // Called by the `stage` job (.github/workflows/scenarios.yml, step "Leave out what already passed");
 // prints `picked=<list>` on stdout for $GITHUB_OUTPUT. Tests: scenarios/test-reuse-earlier-pass.mjs.
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { readFileSync, appendFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
@@ -38,18 +39,18 @@ export function workflowJobs(text) {
   });
 }
 
-// The files that picked a scenario on a pull request: the same two rules as the `stage` job's pick
-// step (a scenario owns scenarios/<job>.sh and scenarios/<job>-*; server-lib.sh picks every scenario
-// that sources it). `sourcesServerLib` is whether scenarios/<job>.sh sources it.
-export function ownFiles(job, changed, sourcesServerLib) {
-  const own = new RegExp(`^scenarios/${job}(\\.sh|-[^/]*)$`);
-  const files = changed.filter((file) => own.test(file));
-  if (sourcesServerLib && changed.includes('scenarios/server-lib.sh')) files.push('scenarios/server-lib.sh');
-  return [...new Set(files)].sort();
+// What counts as "the pull request's own change" for every scenario: everything the pull request
+// changes under scenarios/ (the scenario's own script and companions, and the helpers they all source,
+// scenario-lib.sh and server-lib.sh among them) and this workflow. Whole directory, as a pathspec, so a
+// file the pull request touched on an earlier head and reverted since still shows. A change to any of
+// it by a later push therefore runs every picked scenario again; a merge of main in changes none of it
+// (the merge base moves with main).
+export function scenarioPaths() {
+  return ['scenarios/', '.github/workflows/scenarios.yml'];
 }
 
 // The decision, with everything it needs handed in so a test can drive it without GitHub.
-//   picked: ',a,b,'  ai: Set of job ids using the AI key  files(job): the files that picked it
+//   picked: ',a,b,'  ai: Set of job ids using the AI key  files(job): the paths the comparison covers
 //   passes(job): shas of earlier heads of this pull request where the job concluded success, newest first
 //   ownId(sha, files): the patch id of the pull request's own diff of files at sha (throws when unknown)
 // Returns { picked, reused: [{job, sha}], runs: [{job, why}] }.
@@ -77,16 +78,16 @@ export function decide({ picked, ai, files, passes, ownId }) {
   return { picked: keep.length ? `,${keep.join(',')},` : ',', reused, runs };
 }
 
-// The patch id of `git diff <mergeBase> <sha> -- <files>`, line numbers ignored (--stable), so a
-// merge of main that only moves the lines around a change does not look like a different change.
+// The id of the pull request's own diff `git diff <mergeBase> <sha> -- <files>`: a hash of the diff with
+// its `index` lines and the line numbers of its hunk headers taken out, every other character kept
+// (whitespace too), so a merge of main that only moves the lines around a change does not look like a
+// different change, and an edit of a single space does. A doubt makes the ids differ, which runs the scenario.
 export function patchId(cwd, mergeBase, sha, files) {
   if (files.length === 0) throw new Error('no files');
-  const diff = execFileSync('git', ['diff', '--no-ext-diff', mergeBase, sha, '--', ...files], { cwd, encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 });
+  const diff = execFileSync('git', ['diff', '--no-ext-diff', '--no-color', mergeBase, sha, '--', ...files], { cwd, encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 });
   if (diff.trim() === '') throw new Error('empty own diff');
-  const out = execFileSync('git', ['patch-id', '--stable'], { cwd, input: diff, encoding: 'utf8' });
-  const id = out.trim().split(/\s+/)[0];
-  if (!/^[0-9a-f]{40,64}$/.test(id)) throw new Error('no patch id');
-  return id;
+  const normal = diff.split('\n').filter((line) => !line.startsWith('index ')).map((line) => line.replace(/^@@ -[\d,]+ \+[\d,]+ @@/, '@@')).join('\n');
+  return createHash('sha256').update(normal).digest('hex');
 }
 
 // The GitHub command line. The tests stand a node script in for it (REUSE_GH_STUB) so they run anywhere.
@@ -115,11 +116,7 @@ function main() {
     const jobs = workflowJobs(readFileSync(workflowPath, 'utf8'));
     const ai = new Set(jobs.filter((job) => job.usesAi).map((job) => job.id));
     const nameOf = new Map(jobs.map((job) => [job.id, job.name]));
-    const changed = readFileSync(env.CHANGED_FILE, 'utf8').split('\n').filter(Boolean);
-    const sources = (job) => {
-      try { return readFileSync(`${cwd}/scenarios/${job}.sh`, 'utf8').includes('. "$HERE/server-lib.sh"'); } catch { return false; }
-    };
-    const files = (job) => ownFiles(job, changed, sources(job));
+    const files = () => scenarioPaths();
 
     // Earlier heads of this pull request whose scenarios run finished with each job's conclusion.
     const runs = ghJson(['api', '--method', 'GET', `repos/${repo}/actions/workflows/scenarios.yml/runs`, '-f', 'event=pull_request', '-f', `branch=${env.HEAD_REF}`, '-f', 'per_page=100'])
