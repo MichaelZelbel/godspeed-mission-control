@@ -31,6 +31,10 @@ voice_transform (else append). This plugin takes that slot, so the reply they re
 the same steps; the bus's own `append` (the coach's picture) is called at the end, as an owner's own
 voice filter did before.
 
+The language of the message comes from one decision, language.py's message_language, which gives
+every message one, a short one too: its own words, else the person's recent messages, else the
+language set for the person (#505). Today's brief (todays_brief.py) uses the same decision.
+
 This plugin never drops a reply, nor delays one beyond two requests' limit (REQUEST_SECONDS): a
 failed translation is tried once more, with a sharper instruction, and when that fails too the reply
 goes out as the model wrote it, below one line in the message's language that says it could not be
@@ -46,7 +50,6 @@ import hashlib
 import json
 import os
 import re
-import sqlite3
 import subprocess
 import sys
 import threading
@@ -55,8 +58,6 @@ import types
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REQUEST_SECONDS = 25
-MIN_SIGNALS = 3        # words that tell the language, in the text, before it counts as clearly one
-MIN_SHARE = 0.8        # of those words, the share that must belong to the one language
 LOG_LIMIT = 1_000_000
 ERROR_CHARS = 300      # of godspeed-model's error words, the most the log keeps
 SCHEDULED = ("cron", "webhook")
@@ -76,94 +77,23 @@ def add_step(name, fn):
 _steps.add_step = add_step
 
 # ---------------------------------------------------------------- which language
-ENGLISH = set("""the a and or but is are be to of on at for with from by i you we it this that my your what how
-when where why do does did done have has had not would can could should just then if about me us they he she
-his our their there here these those been get got make let now new look like which more some any much next
-today thanks please yes tell finished starting working""".split())
-GERMAN = set("""der die das den dem des ein eine einen einem einer und oder aber ist sind nicht ich du wir ihr
-es mit von für auf zu zum zur im dass wie wo woran wann warum hat habe haben bin auch noch schon mir mich
-dich dir kein keine mein meine dein deine fertig heute bitte danke ja nein merkst jetzt nur wenn dann bei
-aus nach über kann können soll muss werden wird gerade heißt woher wieso welche alles klar""".split())
-GERMAN_LETTERS = re.compile(r"[äöüßÄÖÜ]")
-WORD = re.compile(r"[A-Za-zÄÖÜäöüß']+")
-URL = re.compile(r"https?://[^\s<>()\[\]]+|www\.[^\s<>()\[\]]+")
-CODE = re.compile(r"```.*?```|`[^`\n]+`", re.S)
-QUOTE = re.compile(r'"[^"\n]{2,}"|“[^”\n]{2,}”|„[^“”\n]{2,}[“”]|«[^»\n]{2,}»')
-MEDIA = re.compile(r"^[ \t]*MEDIA:[^\n]*$", re.M)
+def _load(name, file):
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(name, os.path.join(HERE, file))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
-def _plain(text):
-    for pattern in (CODE, URL, MEDIA, QUOTE):
-        text = pattern.sub(" ", text)
-    return text
+_language = _load("godspeed_reply_language", "language.py")
+language_of, asked_language, _plain = _language.language_of, _language.asked_language, _language._plain
+ENGLISH, GERMAN, WORD, CODE, URL, QUOTE, MEDIA = (_language.ENGLISH, _language.GERMAN, _language.WORD, _language.CODE,
+                                                  _language.URL, _language.QUOTE, _language.MEDIA)
+MIN_SIGNALS, MIN_SHARE = _language.MIN_SIGNALS, _language.MIN_SHARE
 
 
-def language_of(text):
-    """"en", "de" or None. Only clear text has a language: enough words of one language that the
-    other's are a small part. Mixed text, a word or two, and everything in a quote or link: None."""
-    if not isinstance(text, str):
-        return None
-    plain = _plain(text)
-    words = [w.lower().strip("'") for w in WORD.findall(plain)]
-    en = sum(w in ENGLISH for w in words)
-    de = sum(w in GERMAN for w in words) + len(GERMAN_LETTERS.findall(plain))
-    total = en + de
-    if total < MIN_SIGNALS:
-        return None
-    if en / total >= MIN_SHARE:
-        return "en"
-    if de / total >= MIN_SHARE:
-        return "de"
-    return None
-
-
-REQUEST_VERB = re.compile(r"\b(?:answer|reply|respond|write|speak|say|tell|translate|talk|antworte\w*|schreib\w*|"
-                          r"sag\w*|sprich\w*|übersetz\w*|rede\w*|bitte|please)\b", re.I)
-ASKED = {"de": re.compile(r"\b(?:in|into|to|auf)\s+(?:german|deutsch)\b|\bins\s+deutsche\b|\bdeutsch\s+bitte\b", re.I),
-         "en": re.compile(r"\b(?:in|into|to|auf)\s+(?:english|englisch)\b|\bins\s+englische\b|\benglish\s+please\b", re.I)}
-
-
-def asked_language(message):
-    """The language the latest message asks for ("answer in German", "translate this into English"),
-    the later request when it names both, else None."""
-    if not isinstance(message, str) or not REQUEST_VERB.search(message):
-        return None
-    found = [(m.start(), lang) for lang, pattern in ASKED.items() for m in pattern.finditer(message)]
-    return max(found)[1] if found else None
-
-
-# ---------------------------------------------------------------- the person's latest message
 def _home():
     return os.environ.get("HERMES_HOME") or os.path.dirname(os.path.dirname(HERE))
-
-
-def _text_of(content):
-    if isinstance(content, str) and content.lstrip().startswith("["):
-        try:
-            content = json.loads(content)
-        except ValueError:
-            return content
-    if isinstance(content, list):
-        return " ".join(str(p.get("text", "")) for p in content if isinstance(p, dict))
-    return content if isinstance(content, str) else ""
-
-
-def latest_message(session_id):
-    """(the person's latest message in the session, the session's source) from Hermes' own store.
-    Hermes writes the turn's inbound message before it runs the model."""
-    if not session_id:
-        return "", ""
-    db = os.path.join(_home(), "state.db")
-    if not os.path.exists(db):
-        return "", ""
-    conn = sqlite3.connect("file:%s?mode=ro" % db.replace("\\", "/"), uri=True, timeout=2)
-    try:
-        row = conn.execute("SELECT content FROM messages WHERE session_id=? AND role='user' "
-                           "ORDER BY id DESC LIMIT 1", (session_id,)).fetchone()
-        src = conn.execute("SELECT source FROM sessions WHERE id=?", (session_id,)).fetchone()
-    finally:
-        conn.close()
-    return _text_of(row[0]) if row else "", str(src[0] if src and src[0] else "")
 
 
 # ---------------------------------------------------------------- the correction
@@ -365,7 +295,7 @@ def language_step(text, **hook):
              "result": "unchanged", "sent": text}
     out = text
     try:
-        message, source = latest_message(session)
+        message, earlier, source = _language.session_messages(_home(), session)
         key = (session, hashlib.sha256(text.encode("utf-8")).hexdigest(), hashlib.sha256(message.encode("utf-8")).hexdigest())
         with _lock:
             known = _cache.get(key)
@@ -375,7 +305,7 @@ def language_step(text, **hook):
             out, entry["result"] = known
         else:
             asked = asked_language(message)
-            target = asked or language_of(message)
+            target = _language.message_language(message, earlier, _language.person_language())
             draft = language_of(text)
             entry.update(message_language=target, asked=bool(asked), draft_language=draft)
             if target and draft and target != draft:
@@ -444,20 +374,12 @@ def on_transform(**kwargs):
         return None
 
 
-def _todays_brief():
-    import importlib.util
-    spec = importlib.util.spec_from_file_location("godspeed_reply_todays_brief", os.path.join(HERE, "todays_brief.py"))
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
 def register(ctx):
     _bus.voice_transform = on_bus
     ctx.register_hook("transform_llm_output", on_transform)
     # Today's brief in Telegram is the notebook's saved briefing, answered before the model (todays_brief.py).
     try:
-        ctx.register_hook("pre_gateway_dispatch", _todays_brief().make_hook(_home))
+        ctx.register_hook("pre_gateway_dispatch", _load("godspeed_reply_todays_brief", "todays_brief.py").make_hook(_home))
     except Exception:
         pass
     if callable(getattr(ctx, "on_unload", None)):

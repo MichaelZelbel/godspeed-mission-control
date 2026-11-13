@@ -180,24 +180,90 @@ class Reply(unittest.TestCase):
         self.assertEqual(self.send("d", listing), listing)
         self.assertEqual(len(self.requests()), 2)
 
-    def test_mixed_text_is_unchanged(self):
+    def test_mixed_text_takes_the_language_of_the_messages_before_it(self):
         mixed = "Ok, das ist erledigt and I will save the notes for you now"
         self.assertIsNone(self.mod.language_of(mixed))
         self.say("m", JOURNAL[0])
         self.assertEqual(self.send("m", mixed), mixed)
         self.assertIsNone(self.mod.language_of("Das ist gut und I think the tests are done"))
+        self.say("n", GERMAN_MESSAGE)
         self.say("n", "Das ist gut und I think the tests are done")
         self.assertEqual(self.send("n", DRAFT), DRAFT)
         self.assertEqual(self.requests(), [])
 
-    def test_a_two_word_acknowledgement_is_unchanged(self):
+    def test_a_two_word_acknowledgement_keeps_a_reply_in_its_language(self):
         self.say("s", "Thanks, done")
         self.assertEqual(self.send("s", "Alles klar"), "Alles klar")
         self.say("t", JOURNAL[0])
         self.assertEqual(self.send("t", "Alles klar!"), "Alles klar!")
+        self.say("u", GERMAN_MESSAGE)
         self.say("u", "Ok")
         self.assertEqual(self.send("u", DRAFT), DRAFT)
         self.assertEqual(self.requests(), [])
+
+    # -- #505: every message has a language, a short one too
+    ENGLISH_DRAFT = "I saved that. What does done look like for you?"
+    GERMAN_SENT = "Ich habe das gespeichert. Woran merkst du, dass es fertig ist?"
+
+    def test_short_messages_have_a_language(self):
+        self.teach(DRAFT, SENT)
+        self.teach(self.ENGLISH_DRAFT, self.GERMAN_SENT)
+        for session, message, draft, sent in (("short-1", "Did my tests pass?", DRAFT, SENT),
+                                              ("short-2", "Kannst du den Eintrag speichern?", self.ENGLISH_DRAFT, self.GERMAN_SENT),
+                                              ("short-3", "Danke", self.ENGLISH_DRAFT, self.GERMAN_SENT),
+                                              ("short-4", "Thanks", DRAFT, SENT)):
+            self.say(session, message)
+            self.assertEqual(self.send(session, draft), sent, message)
+        self.assertEqual([e["message_language"] for e in self.log()], ["en", "de", "de", "en"])
+
+    def test_a_mixed_message_follows_the_person_then_their_setting(self):
+        mixed = "Kannst du check the tests?"
+        self.assertIsNone(self.mod.language_of(mixed, least=1))
+        self.teach(DRAFT, SENT)
+        self.teach(self.ENGLISH_DRAFT, self.GERMAN_SENT)
+        # Nothing before it and no setting: English.
+        self.say("mixed-1", mixed)
+        self.assertEqual(self.send("mixed-1", DRAFT), SENT)
+        # The language set in the person's add-on settings.
+        root = os.path.join(self.temp, "mission-control")
+        os.makedirs(os.path.join(root, "routines", "journal"))
+        with open(os.path.join(root, "routines", "journal", "settings.json"), "w", encoding="utf-8") as f:
+            json.dump({"language": "de"}, f)
+        with open(os.path.join(self.plugin, "mission-control.txt"), "w", encoding="utf-8") as f:
+            f.write(root + "\n")
+        self.say("mixed-2", mixed)
+        self.assertEqual(self.send("mixed-2", self.ENGLISH_DRAFT), self.GERMAN_SENT)
+        # An earlier German message of the person wins over a setting of English.
+        with open(os.path.join(root, "routines", "journal", "settings.json"), "w", encoding="utf-8") as f:
+            json.dump({"language": "en"}, f)
+        self.say("mixed-3", GERMAN_MESSAGE)
+        self.say("mixed-3", mixed)
+        self.assertEqual(self.send("mixed-3", DRAFT), DRAFT)
+
+    def test_recent_messages_of_the_person_count_across_sessions(self):
+        self.db.execute("ALTER TABLE sessions ADD COLUMN user_id TEXT")
+        self.db.execute("INSERT INTO sessions(id, source, user_id) VALUES ('old', 'telegram', '7'), "
+                        "('new', 'telegram', '7'), ('other', 'telegram', '8'), ('other-new', 'telegram', '8')")
+        self.db.commit()
+        self.teach(DRAFT, SENT)
+        self.teach(self.ENGLISH_DRAFT, self.GERMAN_SENT)
+        self.say("old", GERMAN_MESSAGE)
+        self.say("other", JOURNAL[0])
+        self.say("new", "Ok")
+        self.assertEqual(self.send("new", self.ENGLISH_DRAFT), self.GERMAN_SENT)
+        # Another person's messages do not count: person 8's own English one does.
+        self.say("other-new", "Ok")
+        self.assertEqual(self.send("other-new", DRAFT), SENT)
+
+    def test_the_decision_itself(self):
+        decide = self.mod._language.message_language
+        self.assertEqual(decide("Danke"), "de")
+        self.assertEqual(decide("Thanks!"), "en")
+        self.assertEqual(decide("Danke, thanks", ["Ok", GERMAN_MESSAGE]), "de")
+        self.assertEqual(decide("Ok", [], "de"), "de")
+        self.assertEqual(decide("Ok"), "en")
+        self.assertEqual(decide("Thanks", [GERMAN_MESSAGE], "de"), "en")
+        self.assertEqual(decide("Bitte antworte auf Englisch", [GERMAN_MESSAGE]), "en")
 
     def test_names_numbers_urls_and_quotes_survive_a_correction(self):
         draft = ('Ich habe "Projekt Nordlicht" mit Anna Schmidt auf 14 Aufgaben gesetzt, siehe '
