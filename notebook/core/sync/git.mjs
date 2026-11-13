@@ -8,6 +8,7 @@ import { identityPlan, identities, readBlobs } from './identity.mjs';
 import { shared,durableRoots,syncedFiles,devicePrivatePaths,recordsFolder,isRecordPath,deletableTypes,windowsInvalid,notebookNote,retiredNotebookNote } from '../file-policy.mjs';
 import { candidate, key as nameKey } from '../records/layout.mjs';
 import {validateAssistantFiles} from '../assistant-files.mjs';
+import {CARRIED_FOLDER,isCarriedPath} from '../media-store.mjs';
 import {resolveSavedConflict} from '../conflicts.mjs';
 import {queueNotice} from '../notices.mjs';
 import {createRequire} from 'node:module';
@@ -340,6 +341,15 @@ export class FileSync {
     for(let i=0;i<tracked.length;i+=200)this.git(['rm','--cached','--quiet','-r','--',...tracked.slice(i,i+200)]);
     return tracked.length;
   }
+  // The pictures and PDFs the notebook carries (media-store.mjs) that the
+  // ignore policy leaves out by their extension (**/*.png). They are added by
+  // name instead of through the policy: the plain-mode .gitignore is
+  // committed, and a computer still on 2.0.0-beta.23 would write its own back
+  // every round.
+  carriedMedia(){
+    const folder=recordsFolder+'/'+CARRIED_FOLDER;if(!fs.existsSync(path.join(this.store.root,folder)))return [];
+    return this.names(['--literal-pathspecs','ls-files','-z','--others','--ignored','--exclude-standard','--',folder]).filter(name=>{if(!isCarriedPath(name))return false;try{const stat=fs.lstatSync(path.join(this.store.root,name));return stat.isFile()&&stat.size<=this.largeFile;}catch{return false;}});
+  }
   commitLocal(){
     if(this.pendingConflicts().length)throw new Error('Resolve saved conflicts before syncing');
     this.writeIgnoreFile();
@@ -350,12 +360,12 @@ export class FileSync {
     const staged=this.names(['diff','--cached','--name-only','-z','--diff-filter=d']);
     if(staged.some(n=>!shared(n)&&n!=='.gitignore'))throw new Error('Sync repository contains staged files outside durable state');
     const roots=[...durableRoots.filter(r=>fs.existsSync(path.join(this.store.root,r))),...syncedFiles.filter(r=>fs.existsSync(path.join(this.store.root,r))),...(this.gitDir?[]:['.gitignore'])];
-    const untracked=this.untrackSpecial(roots.filter(r=>r!=='.gitignore')),heavy=new Set(this.heavyLocalFiles());
+    const untracked=this.untrackSpecial(roots.filter(r=>r!=='.gitignore')),heavy=new Set(this.heavyLocalFiles()),media=this.carriedMedia();
     const changes=this.names(['status','--porcelain','-z','--no-renames','--untracked-files=all','--',...roots]),kept=changes.filter(e=>e.startsWith('?? ')).map(e=>e.slice(3)).filter(name=>this.keptLocal(name));
     // Validation guards what a commit uploads. With nothing to commit there is
     // nothing to guard, and reading the whole vault to validate it anyway held
     // the workspace for a second of every idle round on an imported vault.
-    if(!staged.length&&!untracked&&!changes.map(e=>e.slice(3)).some(name=>!heavy.has(name)&&!kept.includes(name)))return false;
+    if(!staged.length&&!untracked&&!media.length&&!changes.map(e=>e.slice(3)).some(name=>!heavy.has(name)&&!kept.includes(name)))return false;
     this.removalsAsTombstones();
     this.validate();
     // On a file system that ignores case, `git add` files a page whose title
@@ -364,6 +374,7 @@ export class FileSync {
     const respelled=this.respelled(this.names(['--literal-pathspecs','diff','--name-only','-z','--no-renames','--diff-filter=M','--',recordsFolder]));
     for(let i=0;i<respelled.length;i+=200)this.git(['--literal-pathspecs','rm','--cached','--quiet','--',...respelled.slice(i,i+200).map(([old])=>old)]);
     this.git(['add','--',...roots,...[...heavy,...kept].map(name=>':(exclude,literal)'+name.replace(/\/$/,''))]);
+    for(let i=0;i<media.length;i+=200)this.git(['--literal-pathspecs','add','-f','--',...media.slice(i,i+200)]);
     if(this.names(['diff','--cached','--name-only','-z','--diff-filter=d']).some(n=>!shared(n)&&n!=='.gitignore'))throw new Error('A private path was staged; sync stopped');
     if(this.git(['diff','--cached','--name-only']))this.git(['commit','-m','Save Godspeed Mission Control records'],undefined,{env:this.identity(),timeout:120000});
   }
@@ -449,7 +460,8 @@ export class FileSync {
         const pending=this.store.withLock(()=>{const heavy=new Set(this.heavyLocalFiles());return new Set([
           ...this.gitBytes(['diff','--name-only','-z']).toString('utf8').split('\0'),
           ...this.gitBytes(['diff','--cached','--name-only','-z']).toString('utf8').split('\0'),
-          ...this.gitBytes(['ls-files','--others','--exclude-standard','-z']).toString('utf8').split('\0').filter(name=>!this.keptLocal(name))
+          ...this.gitBytes(['ls-files','--others','--exclude-standard','-z']).toString('utf8').split('\0').filter(name=>!this.keptLocal(name)),
+          ...this.carriedMedia()
         ].filter(name=>name&&!heavy.has(name)&&(shared(name)||(name==='.gitignore'&&!this.gitDir)))).size;});
         this.last={state:pending?'pending':'synced',at:new Date().toISOString(),pending,...(pending?{detail:'New local edits will upload on the next synchronization cycle.'}:{})};
     }catch(error){this.tellSignInMissing(error);this.last={state:this.pendingConflicts().length?'conflict':'pending',at:new Date().toISOString(),error:'Sync did not complete; local files remain available',detail:error.message==='Workspace is being written by another process'?'The assistant is saving its state.':String(error.message).split('\n')[0]};}
@@ -606,7 +618,8 @@ export class FileSync {
       // 2026 the merged version replaced that write. Such a file stays as it
       // is now, with the merged version kept for review; one the merge left
       // as it was is simply left alone, and the next commit takes the edit.
-      const differing=this.blobFiles(dir).filter(n=>shared(n)&&!mergedRecords.has(n)).map(file=>({file,text:fs.readFileSync(path.join(dir,file))})).filter(item=>!fs.existsSync(path.join(this.store.root,item.file))||!fs.readFileSync(path.join(this.store.root,item.file)).equals(item.text));
+      // A carried media file already here is the same file: its name is its content hash.
+      const differing=this.blobFiles(dir).filter(n=>shared(n)&&!mergedRecords.has(n)&&!(isCarriedPath(n)&&fs.existsSync(path.join(this.store.root,n)))).map(file=>({file,text:fs.readFileSync(path.join(dir,file))})).filter(item=>!fs.existsSync(path.join(this.store.root,item.file))||!fs.readFileSync(path.join(this.store.root,item.file)).equals(item.text));
       const committed=readBlobs((args,options)=>this.gitBytes(args,undefined,options),differing.map(item=>localHead+':'+item.file)),documents=[];
       differing.forEach((item,i)=>{
         const live=path.join(this.store.root,item.file),now=fs.existsSync(live)?fs.readFileSync(live):null,then=committed[i];
@@ -644,8 +657,9 @@ export class FileSync {
   // and to the owner.
   inScope(name){
     // A notebook page is always the notebook's, whatever its title ends in:
-    // a note called "backup.sqlite" is backup.sqlite.md.
-    const page=name.startsWith(recordsFolder+'/')&&name.endsWith('.md');
+    // a note called "backup.sqlite" is backup.sqlite.md. So is a picture the
+    // notebook carries (media-store.mjs), whose name is its content hash.
+    const page=name.startsWith(recordsFolder+'/')&&name.endsWith('.md')||isCarriedPath(name);
     if(!shared(name)||(!page&&keptLocal.some(ext=>new RegExp('\\.'+ext.replace('*','.*')+'$','i').test(name))))return false;
     const paths=this.folder.paths;return paths.includes('*')||paths.some(p=>name===p||name.startsWith(p+'/'));
   }
@@ -705,7 +719,7 @@ export class FileSync {
   // left the machine while sync said "synced".
   folderChanges(){
     const out=this.gitBytes(['--no-optional-locks','--literal-pathspecs','status','--porcelain','-z','--no-renames','--untracked-files=all','--ignore-submodules=all','--',...this.scopeRoots()]).toString('utf8');
-    const ignored=this.inScope(recordsFolder+'/Page.md')&&fs.existsSync(this.store.recordsRoot)?this.names(['--literal-pathspecs','ls-files','-z','--others','--ignored','--exclude-standard','--',recordsFolder]).filter(name=>candidate(name.slice(recordsFolder.length+1))).map(name=>'!! '+name):[];
+    const ignored=this.inScope(recordsFolder+'/Page.md')&&fs.existsSync(this.store.recordsRoot)?this.names(['--literal-pathspecs','ls-files','-z','--others','--ignored','--exclude-standard','--',recordsFolder]).filter(name=>candidate(name.slice(recordsFolder.length+1))||isCarriedPath(name)).map(name=>'!! '+name):[];
     return [...out.split('\0').filter(Boolean),...ignored].map(entry=>({code:entry.slice(0,2),name:entry.slice(3)}))
       .filter(({code,name})=>!name.endsWith('/')&&!windowsInvalid(name)&&this.inScope(name)&&(code.includes('D')||(()=>{try{return fs.statSync(path.join(this.store.root,name)).size<=this.largeFile;}catch{return false;}})()))
       .map(({name})=>name);

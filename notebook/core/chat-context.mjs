@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {hash} from './records/store.mjs';
+import {findMedia} from './media-store.mjs';
 import {visibleRows} from './visibility.mjs';
 import {latestPerDayMetric} from './health-inputs.mjs';
 import {fileContext} from './context.mjs';
@@ -151,14 +152,14 @@ function collectionItems(all,terms){
   return {rows,titles};
 }
 function compact(record,max){const result={};let remaining=max;for(const key of ['id','claim_id','subject_type','subject_kind','subject_id','contact_id','attribute','label','title','name','value','valid_from','valid_to','confidence','source_type','source_id','evidence_quote','content','description','notes','email','phone','bio','summary','metadata','tags','field_schema','data','created_at']){if(record[key]==null)continue;const text=typeof record[key]==='string'?record[key]:JSON.stringify(record[key]);if(text.length>remaining){result[key]=text.slice(0,remaining);result.context_truncated=true;break;}result[key]=record[key];remaining-=text.length;}return result;}
-export function chatAttachments(mediaRoot,files=[]){
+export function chatAttachments(mediaRoot,files=[],carried=null){
   if(!Array.isArray(files)||files.length>10)throw new Error('Attach up to 10 files per message');
   const images=[],documents=[];let bytes=0;
   for(const item of files){
     if(typeof item.path!=='string')throw new Error('Attachment is missing its saved file');
-    const mapping=JSON.parse(fs.readFileSync(path.join(mediaRoot,hash(item.path)+'.mapping.json'),'utf8'));
-    if(mapping.removed_at||path.basename(mapping.file)!==mapping.file)throw new Error('Attachment is unavailable');
-    const data=fs.readFileSync(path.join(mediaRoot,mapping.file));bytes+=data.length;
+    let found=null;try{found=findMedia({mediaRoot,carried},item.path);}catch{}
+    if(!found||found.removed)throw new Error('Attachment is unavailable');
+    const mapping=found.mapping,data=fs.readFileSync(found.file);bytes+=data.length;
     if(bytes>20*1024*1024||hash(data)!==mapping.sha256)throw new Error('Attachments exceed 20 MB or failed their integrity check');
     const mime=mapping.contentType||'',name=String(item.name||item.path).slice(0,200);
     if(['image/png','image/jpeg','image/webp','image/gif'].includes(mime))images.push({mime,name,data:data.toString('base64')});

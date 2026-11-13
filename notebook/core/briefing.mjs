@@ -8,6 +8,7 @@ import path from 'node:path';
 import {createRequire} from 'node:module';
 import {randomUUID} from 'node:crypto';
 import {Store} from './records/store.mjs';
+import {carriedRoot} from './media-store.mjs';
 import {QueryService} from './query.mjs';
 import {checkVoice} from './voice-check.mjs';
 import {ruleRefusals,describeRefusal,cutRefused,applyFindings,validFindings} from './briefing-cut.mjs';
@@ -66,7 +67,9 @@ export async function briefing(job,{store,query,provider,now=new Date(),notices}
  if(job.rehearsal){
   const copy=path.join(store.state,'brief-rehearsals',randomUUID());fs.mkdirSync(copy,{recursive:true,mode:0o700});
   await store.waitForWriter();await store.withLockAsync(()=>{
-   fs.cpSync(store.recordsRoot,path.join(copy,path.basename(store.recordsRoot)),{recursive:true,preserveTimestamps:true});
+   // A rehearsal reads records only, so the notebook's pictures and PDFs stay where they are.
+   const media=carriedRoot(store);
+   fs.cpSync(store.recordsRoot,path.join(copy,path.basename(store.recordsRoot)),{recursive:true,preserveTimestamps:true,filter:source=>source!==media&&!source.startsWith(media+path.sep)});
    // A rehearsal is a copy of the workspace, so the rooms the brief reads come along as they are.
    // 'due' is among them not to read a reminder out of it - a reminder is a record now (#90) and
    // the line below takes its self check from there - but because a file in it that no program can

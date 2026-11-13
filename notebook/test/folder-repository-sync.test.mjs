@@ -188,3 +188,24 @@ test('on the server, a file the notebook never commits is set aside instead of b
   atomic(path.join(envy.dir,'brief','2026-10-07.md'),'Mine\n');
   assert.equal(envy.sync.reconcile().state,'pending');assert.equal(read(envy.dir,'brief','2026-10-07.md'),'Mine\n');
 });
+
+test('the notebook\'s carried pictures travel through the folder\'s repository, also when the owner ignores pictures',()=>{
+  const {machine}=fixture(),envy=machine('envy'),server=machine('server',['*']);
+  // This owner's own exclude file ignores pictures and PDFs.
+  fs.appendFileSync(path.join(envy.dir,'.git','info','exclude'),'*.png\n*.pdf\n');
+  const note=envy.store.save('notes',{title:'Scan',content:'The receipt'});
+  assert.equal(envy.sync.reconcile().state,'synced');assert.equal(server.sync.reconcile().state,'synced');
+  const media=path.join(envy.dir,'notebook','_media'),picture=Buffer.from([137,80,78,71,0,1,2,3]),pdf=Buffer.from('%PDF-1.4 synthetic'),pictureName='c'.repeat(64)+'.png',pdfName='f'.repeat(64)+'.pdf',mapping='d'.repeat(64)+'.mapping.json';
+  fs.mkdirSync(media,{recursive:true});fs.writeFileSync(path.join(media,pictureName),picture);fs.writeFileSync(path.join(media,pdfName),pdf);fs.writeFileSync(path.join(media,mapping),'{"path":"p.png"}\n');
+  // Something else under the notebook named like a picture is still not the notebook's.
+  fs.writeFileSync(path.join(envy.dir,'notebook','photo.png'),picture);
+  assert.equal(envy.sync.reconcile().state,'synced');
+  const pushed=remoteFiles(envy.dir);
+  for(const name of [pictureName,pdfName,mapping])assert.ok(pushed.includes('notebook/_media/'+name),name);
+  assert.ok(!pushed.includes('notebook/photo.png'));
+  assert.equal(server.sync.reconcile().state,'synced');
+  assert.deepEqual(fs.readFileSync(path.join(server.dir,'notebook','_media',pictureName)),picture);
+  assert.deepEqual(fs.readFileSync(path.join(server.dir,'notebook','_media',pdfName)),pdf);
+  assert.equal(server.store.get('notes',note.id).content,'The receipt');assert.deepEqual(server.store.problems,[]);
+  assert.equal(status(server.dir),'');
+});
