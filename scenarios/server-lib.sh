@@ -299,8 +299,11 @@ server_keep_routine_diagnostics_or_pause() { # <label> <id> <job name>
   server_pause_job "$2" "$1"
   fail "the installed server could not retain diagnostics for \"$3\" after its run"
 }
-server_run_job() { # <label> <job name> <seconds> [expected terminal status]
-  local jobs=$EVIDENCE/jobs-$1.json id before retry=0 expected=${4:-ok}
+# A run is over once the routine records a newer last run, whatever its status. A status other than
+# the accepted ones (ok, or e.g. "ok|error") fails at once and names the routine's own last_error,
+# instead of waiting out <seconds> for a status that will not come.
+server_run_job() { # <label> <job name> <seconds> [accepted statuses, "|" between them]
+  local jobs=$EVIDENCE/jobs-$1.json id before retry=0 accepted=${4:-ok} ended
   server_table jobs "$jobs"
   id=$(server_job_id "$2" "$jobs")
   [ -n "$id" ] || fail "the installed server has no routine called \"$2\""
@@ -323,16 +326,18 @@ server_run_job() { # <label> <job name> <seconds> [expected terminal status]
   done
   server_job_finished() {
     server_table jobs "$jobs" 2>/dev/null &&
-      "$NODE" -e 'const fs=require("fs"),d=JSON.parse(fs.readFileSync(process.argv[1],"utf8")),rows=Array.isArray(d)?d:d.data||[],j=rows.find(v=>v?.id===process.argv[2]);process.exit(j?.last_run_at&&j.last_run_at!==process.argv[3]&&j?.last_status===process.argv[4]?0:1)' "$jobs" "$id" "$before" "$expected"
+      "$NODE" -e 'const fs=require("fs"),d=JSON.parse(fs.readFileSync(process.argv[1],"utf8")),rows=Array.isArray(d)?d:d.data||[],j=rows.find(v=>v?.id===process.argv[2]);process.exit(j?.last_run_at&&j.last_run_at!==process.argv[3]?0:1)' "$jobs" "$id" "$before"
   }
   if ! wait_for "$3" "the installed routine $2" server_job_finished; then
     server_keep_routine_diagnostics_or_pause "$1" "$id" "$2"
     server_pause_job "$id" "$1"
-    fail "the installed routine \"$2\" did not finish successfully within $3 s"
+    fail "the installed routine \"$2\" did not finish within $3 s"
   fi
   server_keep_routine_diagnostics_or_pause "$1" "$id" "$2"
   cp "$jobs" "$EVIDENCE/job-$1.json"
+  ended=$("$NODE" -e 'const fs=require("fs"),d=JSON.parse(fs.readFileSync(process.argv[1],"utf8")),rows=Array.isArray(d)?d:d.data||[],j=rows.find(v=>v?.id===process.argv[2]),status=String(j?.last_status??"no status");if(!process.argv[3].split("|").includes(status))process.stdout.write(status+(j?.last_error?": "+String(j.last_error).replace(/\s+/g," ").slice(0,300):""))' "$jobs" "$id" "$accepted")
   server_pause_job "$id" "$1"
+  [ -z "$ended" ] || fail "the installed routine \"$2\" ended with $ended"
 }
 
 server_snapshot_table() { # <label> <table>
