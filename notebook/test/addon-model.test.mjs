@@ -147,6 +147,14 @@ test('API-only Godspeed: the main address first, the backup address only when it
  mainUp=false;fs.unlinkSync(path.join(f.state,'provider-backup.json'));
  await assert.rejects(addonModel({root:f.root,input}),/HTTP 503/);assert.equal(backup.seen.length,1);
 });
+// #506: an address nothing listens on said only "fetch failed".
+test('API-only Godspeed: a main address nothing listens on is said in plain words',async t=>{
+ const f=fixture(t);fs.unlinkSync(path.join(f.state,'assistant.json'));
+ const closed=http.createServer();await new Promise(r=>closed.listen(0,'127.0.0.1',r));const port=closed.address().port;await new Promise(r=>closed.close(r));
+ fs.writeFileSync(path.join(f.state,'provider.json'),JSON.stringify({url:'http://127.0.0.1:'+port+'/v1/chat/completions',key:'main-key-test-only',model:'main-model'}));
+ const error=await addonModel({root:f.root,input}).then(()=>null,e=>e);
+ assert.match(error.message,new RegExp('The AI at 127\\.0\\.0\\.1:'+port+' could not be reached'));assert.doesNotMatch(error.message,/fetch failed/);
+});
 test('a Hermes installation reports the backup its helper used, and remembers the main one failing',async t=>{
  const f=fixture(t);
  const result=await addonModel({root:f.root,input,spawnProcess:fakeSpawn({text:'ok',provider:'openrouter',model:'backup-model',backup:true})});

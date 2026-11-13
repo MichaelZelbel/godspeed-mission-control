@@ -55,7 +55,8 @@ const rulesScript=path.join(kit,'tools/compile-rules.js');
 if(process.platform==='win32')atomic(path.join(commandHome,'mc-compile-rules.cmd'),cmd(at=>'"'+at(process.execPath)+'" "'+at(rulesScript)+'" --godspeed "'+at(root)+'" %*\r\n'));
 shellCommand(path.join(commandHome,'mc-compile-rules'),[process.execPath,rulesScript,'--godspeed',root]);
 // Developer assistants opened on this folder reach the same integrated memory.
-const mcpFile=path.join(root,'.mcp.json'),mcp=JSON.parse(fs.readFileSync(mcpFile,'utf8').replace(/^\uFEFF/,''));
+// A mission control without one (made by hand, or one that never had it) gets it written below (#530).
+const mcpFile=path.join(root,'.mcp.json'),mcp=fs.existsSync(mcpFile)?JSON.parse(fs.readFileSync(mcpFile,'utf8').replace(/^\uFEFF/,'')):{};
 mcp.mcpServers??={};
 // The shared .mcp.json names the standard address; a machine whose notebook
 // listens elsewhere says so in its own untracked settings. Until 6 October 2026
