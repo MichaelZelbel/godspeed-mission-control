@@ -5,6 +5,8 @@ import os from 'node:os';
 import path from 'node:path';
 import {createService} from '../server/main.mjs';
 import {coachRoutineTimes} from '../core/starting-routines.mjs';
+import {Store} from '../core/records/store.mjs';
+import {setupResults} from '../core/jobs/scheduler.mjs';
 
 // 13 November 2026 (#526): on a notebook without the original assistant, the first setup said
 // "Invalid time value" for deadline-reminder, coaching, profiling and review. The setup asked
@@ -27,6 +29,16 @@ test('the first setup gives each starting routine a real result, never "Invalid 
   // The routines not due were not run early.
   for(const id of ['coaching','profiling','review'])assert.ok(Date.parse(service.store.get('jobs',id).next_run)>Date.now(),id);
  }finally{await service.close();}
+});
+
+test('a routine not due yet says the day it first runs on the person\'s own clock',t=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-first-setup-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ const store=new Store(root,{device:'local'});
+ store.save('settings',{id:'installation',owner:'local',timezone:'Europe/Berlin',delivery:'notebook'});
+ store.save('jobs',{id:'review',kind:'review',owner:'local',paused:false,state:'pending',next_run:'2026-11-20T23:30:00.000Z',interval_ms:604800000});
+ assert.deepEqual(setupResults(store,[]),[{id:'review',state:'not due',next_run:'2026-11-20T23:30:00.000Z',reason:'Not due yet: it first runs on 2026-11-21.'}]);
+ // A result the run itself gave is kept as it is.
+ assert.deepEqual(setupResults(store,[{id:'review',state:'verified'}]),[{id:'review',state:'verified'}]);
 });
 
 test('the tick routine reads "every minute" for a rhythm of 1 and "every N minutes" otherwise',()=>{

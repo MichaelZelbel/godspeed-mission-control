@@ -21,10 +21,13 @@ const KEEP_MS=14*86400000,KEEP_HISTORY_MS=2*86400000,KEEP_LAST=3,PRUNE_EVERY=6*3
 export const STARTING_JOBS=['deadline-reminder','coaching','profiling','review'];
 export function setupResults(store,results=[]){
   const seen=new Set(results.map(r=>r.id)),out=[...results];
+  // The day on the person's own clock: a routine due at 23:30 UTC first runs the next day in Berlin.
+  let timeZone=store.get('settings','installation')?.timezone||'UTC';try{new Intl.DateTimeFormat('en',{timeZone});}catch{timeZone='UTC';}
+  const day=at=>new Intl.DateTimeFormat('en-CA',{timeZone,year:'numeric',month:'2-digit',day:'2-digit'}).format(at);
   for(const id of STARTING_JOBS){
     if(seen.has(id))continue;const job=store.get('jobs',id),at=Date.parse(job?.next_run);
     if(!job||!Number.isFinite(at))continue;
-    out.push({id,state:'not due',next_run:job.next_run,reason:job.paused?'It is paused.':'Not due yet: it first runs on '+new Date(at).toISOString().slice(0,10)+'.'});
+    out.push({id,state:'not due',next_run:job.next_run,reason:job.paused?'It is paused.':'Not due yet: it first runs on '+day(at)+'.'});
   }
   return out;
 }
