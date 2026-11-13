@@ -16,6 +16,7 @@ import {groupContext} from './group-context.mjs';
 import {noteConnections,linkSuggestions} from './related.mjs';
 import {graphData} from './graph.mjs';
 import { slug, hash } from './records/store.mjs';
+import {carriedRoot,findMedia} from './media-store.mjs';
 import {dailyMemorySubjectId,normalName} from './memory-daily-identity.mjs';
 import {decodeDailyMemoryPlan} from './daily-memory-plan.mjs';
 import fs from 'node:fs';
@@ -133,6 +134,12 @@ export function weekNotes(notes){
 }
 export class Domains {
   constructor(query, { provider = null } = {}) { this.query = query; this.store = query.store; this.provider = provider; }
+  // A saved picture or PDF, read where it is kept (media-store.mjs).
+  media(original){
+    const found=findMedia({mediaRoot:this.mediaRoot,carried:carriedRoot(this.store)},original);
+    if(!found)throw new Error('Media not found');if(found.removed)throw new Error('Media was removed');
+    return found;
+  }
   async nativeCoachStart(input){
     if(!hasCoachAreas(this.store.root))return null;
     const reply=await this.nativeAgent({...input,conversation_id:(input.conversation_id||'general')+'-coach-start-resolution',coach_start_resolution:true,message:'Resolve this owner message into JSON only. Return {"area":"<existing coach area slug>"} only when it explicitly asks to start that area\'s coaching talk now; otherwise return {"area":null}. Do not use tools or change files. Owner message: '+JSON.stringify(String(input.message||''))});
@@ -286,8 +293,8 @@ export class Domains {
     }
     if(name==='conversation-chat'&&this.nativeAgent){
       if(input.contact_id&&!visibleRows(this.query,'contacts').some(p=>p.id===input.contact_id))throw Error('Choose an available person');
-      const files=input.uploadedFiles||[];if(files.length)chatAttachments(this.mediaRoot,files);
-      const nativeFiles=files.map(item=>{const mapping=JSON.parse(fs.readFileSync(path.join(this.mediaRoot,hash(item.path)+'.mapping.json'),'utf8'));return {name:item.name||item.path,path:path.join(this.mediaRoot,mapping.file)};});
+      const files=input.uploadedFiles||[];if(files.length)chatAttachments(this.mediaRoot,files,carriedRoot(this.store));
+      const nativeFiles=files.map(item=>({name:item.name||item.path,path:this.media(item.path).file}));
       const start=await this.nativeCoachStart(input);
       // The Charm Challenge's slip judgement runs while the assistant works (core/charm-judgement.mjs).
       const judged=startCharmJudgement(this,input);
@@ -407,7 +414,7 @@ export class Domains {
       // description. The call was not ported until 6 October 2026, so every PDF
       // upload ended in an error nobody saw.
       if(input.note_id&&!visibleRows(this.query,'notes').some(n=>n.id===input.note_id))throw new Error('This source is hidden from the assistant');
-      const mapping=JSON.parse(fs.readFileSync(path.join(this.mediaRoot,hash(input.storage_path)+'.mapping.json'),'utf8'));if(mapping.removed_at)throw new Error('Media was removed');
+      const {mapping}=this.media(input.storage_path);
       const text=String(mapping.extractedText||'').trim();
       if(this.provider)try{return await this.invoke('analyze-media',{...input,media_type:'pdf'});}catch(error){if(!text)throw error;}
       if(!text)throw new Error('This PDF has no readable text. Connect a model that reads PDFs, or add the pages as images.');
@@ -419,9 +426,8 @@ export class Domains {
     if(name==='analyze-media'){
       if(input.note_id&&!visibleRows(this.query,'notes').some(n=>n.id===input.note_id))throw new Error('This source is hidden from the assistant');
       if(!this.provider)throw new Error('Connect a model with image or PDF support before media analysis');
-      const mapping=JSON.parse(fs.readFileSync(path.join(this.mediaRoot,hash(input.storage_path)+'.mapping.json'),'utf8'));
-      if(mapping.removed_at)throw new Error('Media was removed');
-      const bytes=fs.readFileSync(path.join(this.mediaRoot,mapping.file));if(hash(bytes)!==mapping.sha256)throw new Error('Media integrity check failed');
+      const {mapping,file}=this.media(input.storage_path);
+      const bytes=fs.readFileSync(file);if(hash(bytes)!==mapping.sha256)throw new Error('Media integrity check failed');
       if(!/^(image\/(png|jpeg|webp|gif)|application\/pdf)$/.test(mapping.contentType))throw new Error('Analysis supports images and PDF documents');
       const old=this.query.rows('media_analysis').find(r=>r.storage_path===input.storage_path);
       const row=this.store.save('media_analysis',{id:old?.id,note_id:input.note_id,storage_path:input.storage_path,media_type:input.media_type,original_filename:input.original_filename,analysis_status:'processing',source_sha256:mapping.sha256});
@@ -574,7 +580,7 @@ export class Domains {
       // product as a candidate; a failed lookup leaves it out and the model says it found nothing.
       if(name==='conversation-chat'&&/(?<!\d)\d{8,14}(?!\d)/.test(String(input.message||''))){const {lookupBarcode}=await import('./food-products.mjs');for(const code of new Set(String(input.message).match(/(?<!\d)\d{8,14}(?!\d)/g)))try{await lookupBarcode(this.store.state,code,{fetcher:this.foodFetcher,signal:input.signal});}catch{}}
       const context=await retrievedContext(this.query,input,this.provider,{index:this.index}),notes=context.notes;
-      const attached=chatAttachments(this.mediaRoot,input.files||[]);context.documents=attached.documents;
+      const attached=chatAttachments(this.mediaRoot,input.files||[],carriedRoot(this.store));context.documents=attached.documents;
       if(name==='conversation-chat'&&input[IDENTITY_PAGE])context.identity_page=input[IDENTITY_PAGE];
       if(input.attachments){
         if(!Array.isArray(input.attachments)||input.attachments.length>10)throw Error('Attach up to 10 text files per message');

@@ -10,13 +10,13 @@ Windows and VPS must use the same record service, preserve direct assistant edit
 
 Narrative records use Markdown with JSON frontmatter (valid YAML); structured records use JSON. A record has format version, immutable identity UUID, readable ID, type, aliases, revision and timestamps. IDs inherited from imports stay unchanged. Display-name changes do not rename records. New offline records use a readable slug plus a device identity suffix, avoiding ambiguous allocation of the same bare slug on disconnected devices. Imports retain source ID mapping in records.
 
-All durable state, including review, jobs, schema, settings, receipts and conflicts, lives in files. SQLite only holds derived search documents. Binary media and credentials live outside the synced workspace. A full startup scan and periodic reconciliation repair missed watcher events.
+All durable state, including review, jobs, schema, settings, receipts and conflicts, lives in files. SQLite only holds derived search documents. Credentials live outside the synced workspace. Binary media lives in the device media root; a copy of each item of 50 MB or less is also kept in `notebook/_media/` under its content hash, and larger files stay on their device. A full startup scan and periodic reconciliation repair missed watcher events.
 
 A single workspace lock protects writers. A transaction directory records staged after-images and before-images, followed by a durable prepared marker. Recovery completes prepared transactions before opening the service. Validation runs against the whole proposed state before preparation. Incomplete transactions without a prepared marker are not published. Readers use the lock for structural changes; outside edits are validated on the next scan.
 
 Structural changes retain tombstones and aliases. Stable UUID references disambiguate readable aliases. Merge rewrites known typed references and preserves provenance. Unresolved or ambiguous references stop sync. World events remain append-only. Replacing a current claim closes its validity and creates a successor rather than erasing the old fact.
 
-Git sync stages only declared record roots and never databases, media or credentials. Separate file changes merge; same-record conflicts preserve base/local/remote snapshots in files outside ordinary record parsing. Conflicts stop publication until explicitly resolved. No force push. A rejection is fetched and retried with the same graph validation.
+Git sync stages only declared record roots and never databases or credentials; media only as the hash-named copies in `notebook/_media/`. Separate file changes merge; same-record conflicts preserve base/local/remote snapshots in files outside ordinary record parsing. Conflicts stop publication until explicitly resolved. No force push. A rejection is fetched and retried with the same graph validation.
 
 The scheduler owner is explicit. Pairing sets the VPS owner; an unreachable VPS never transfers ownership. Jobs record attempted and verified outcomes and fail closed for outward actions without permission. Provider credentials are optional local configuration, never synced.
 

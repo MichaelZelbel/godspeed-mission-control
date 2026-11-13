@@ -63,6 +63,7 @@ import {showCard as showContextCard,readContext,markContext} from '../core/conte
 import {visibleRows} from '../core/visibility.mjs';
 import {NoteProcessing} from '../core/processing.mjs';
 import {mediaObjectName,mediaFileName} from '../core/media-names.mjs';
+import {carriedRoot,carryMedia,findMedia,keepMedia,keptHere,removeCarried} from '../core/media-store.mjs';
 import {retireShares} from '../core/shares.mjs';
 import {installFoodTable,foodTableWanted} from '../core/food-table.mjs';
 import {repairTimelineAtStart} from '../core/due-copy.mjs';
@@ -159,6 +160,9 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   mediaRoot = path.resolve(mediaRoot || path.join(store.state, 'media')); fs.mkdirSync(mediaRoot, { recursive: true });
   domains.mediaRoot=mediaRoot;
   const mediaSync=new MediaSync(store,mediaRoot),pairCodes=new Map(),pairKeysPath=path.join(store.state,'pair-clients.json');
+  const carried=carriedRoot(store),media={mediaRoot,carried};
+  const carry=()=>{try{carryMedia(media);}catch(e){console.error('Godspeed Mission Control: copying media into the notebook failed:',e);}};
+  carry();
   // A paired device's key, kept as its hash with an id, so the owner can list and revoke it.
   // Keys saved before 6 October 2026 were bare hashes; they are read as unnamed keys.
   const pairKeys=(fs.existsSync(pairKeysPath)?JSON.parse(fs.readFileSync(pairKeysPath,'utf8')):[]).map(k=>typeof k==='string'?{id:k.slice(0,16),hash:k,created_at:null}:k);
@@ -213,7 +217,6 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
     res.writeHead(200, { ...headers, 'Content-Length': size });
     pipeline(handle.createReadStream(), res, error => { if (error) res.destroy(); });
   }
-  const mapping = original => { const file = path.join(mediaRoot, hash(original) + '.mapping.json'); if (!fs.existsSync(file)) return null; return JSON.parse(fs.readFileSync(file, 'utf8')); };
   async function body(req, limit = 2 * 1024 * 1024) {
     let size = 0; const chunks = [];
     for await (const chunk of req) { size += chunk.length; if (size > limit) throw new Error('Request is too large'); chunks.push(chunk); }
@@ -604,20 +607,23 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         const extractedText=form.get('extracted_text');if(extractedText!=null&&(typeof extractedText!=='string'||extractedText.length>1000000||file.type!=='application/pdf'))throw new Error('Invalid extracted PDF text');
         const target = mediaObjectName(digest, original);
         atomic(path.join(mediaRoot, target), data);
-        const previousFile=path.join(mediaRoot,hash(original)+'.mapping.json');
-        if(fs.existsSync(previousFile)){const previous=JSON.parse(fs.readFileSync(previousFile,'utf8'));if(!previous.removed_at&&previous.sha256!==digest)throw new Error('This media path already has different content. Choose a new path; both binaries were retained.');}
-        atomic(path.join(mediaRoot, hash(original) + '.mapping.json'), JSON.stringify({ path: original, file: target, sha256: digest, size: data.length, contentType: file.type,...(extractedText?{extractedText:extractedText.replace(/\r\n?/g,'\n')}:{}) }));
+        const previous=findMedia(media,original);
+        if(previous&&!previous.removed&&previous.mapping.sha256!==digest)throw new Error('This media path already has different content. Choose a new path; both binaries were retained.');
+        const saved={ path: original, file: target, sha256: digest, size: data.length, contentType: file.type,...(extractedText?{extractedText:extractedText.replace(/\r\n?/g,'\n')}:{}) };
+        atomic(path.join(mediaRoot, hash(original) + '.mapping.json'), JSON.stringify(saved));
+        keepMedia(carried,saved,data);
         return send(res, 200, { data: { path: original, fullPath: original, id: digest }, error: null });
       }
       if(route==='/api/media/remove'&&req.method==='POST'){
-        const input=JSON.parse(await body(req));for(const original of input.paths||[]){const file=path.join(mediaRoot,hash(original)+'.mapping.json');if(fs.existsSync(file)){const mapping=JSON.parse(fs.readFileSync(file,'utf8'));mapping.removed_at=new Date().toISOString();atomic(file,JSON.stringify(mapping));}}return send(res,200,{data:[],error:null});
+        const input=JSON.parse(await body(req)),at=new Date().toISOString();for(const original of input.paths||[]){const file=path.join(mediaRoot,hash(original)+'.mapping.json');if(fs.existsSync(file)){const mapping=JSON.parse(fs.readFileSync(file,'utf8'));mapping.removed_at=at;atomic(file,JSON.stringify(mapping));}removeCarried(carried,original,at);}return send(res,200,{data:[],error:null});
       }
       if (route.startsWith('/api/media/file/') && req.method === 'GET') {
-        const original = decodeURIComponent(route.slice('/api/media/file/'.length)), stored = mapping(original);
-        if(!stored)return send(res,404,{error:'Media not found'});
-        if(stored.removed_at)return send(res,404,{error:'Media removed'});
-        return sendFile(res, path.join(mediaRoot, mediaFileName(stored.file)), { 'Content-Type': stored.contentType || 'application/octet-stream', 'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': "default-src 'none'; sandbox" });
+        const original = decodeURIComponent(route.slice('/api/media/file/'.length)), found = findMedia(media, original);
+        if(!found)return send(res,404,{error:'Media not found'});
+        if(found.removed)return send(res,404,{error:'Media removed'});
+        return sendFile(res, found.file, { 'Content-Type': found.mapping.contentType || 'application/octet-stream', 'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': "default-src 'none'; sandbox" });
       }
+      if(route==='/api/media/kept-here'&&req.method==='GET')return send(res,200,{data:keptHere(media)});
       if(route==='/api/chat/transcribe'&&req.method==='POST'){
         if(dictationBusy)return send(res,429,{error:'Another recording is being transcribed. Please try again shortly.'});
         dictationBusy=true;
@@ -744,7 +750,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   const interval = setInterval(() => { if (!menerioImport.mutating) void store.verify().then(()=>index.rebuildBackground()).catch(()=>{}); }, 600000);
   const jobs=setInterval(()=>{if(!menerioImport.mutating)scheduler.tick().catch(()=>{});},30000);
   const syncTimer=setInterval(()=>{if(!menerioImport.mutating&&fs.existsSync(path.join(store.state,'sync-config.json')))void syncRunner.run();},60000);
-  const mediaTimer=setInterval(()=>{if(!menerioImport.mutating)mediaSync.reconcile();},60000);
+  const mediaTimer=setInterval(()=>{if(!menerioImport.mutating){carry();mediaSync.reconcile();}},60000);
   const telegram=!originalRuntime&&process.env.GODSPEED_TELEGRAM==='on'&&process.env.GODSPEED_CANDIDATE_BOT_TOKEN&&process.env.GODSPEED_CANDIDATE_BOT_OWNER?new Telegram({store,domains,token:process.env.GODSPEED_CANDIDATE_BOT_TOKEN,owner:process.env.GODSPEED_CANDIDATE_BOT_OWNER,loginLink:process.env.GODSPEED_BROWSER_ORIGIN?destination=>{const code=randomBytes(32).toString('hex');loginLinks.set(code,Date.now()+300000);return process.env.GODSPEED_BROWSER_ORIGIN+'/login/'+code+'?next='+encodeURIComponent(destination);}:undefined}):null;
   const telegramTimer=telegram?setInterval(()=>{if(!menerioImport.mutating)telegram.tick().catch(()=>{});},3000):null;
   scheduler.deliver=telegram?(id,result)=>telegram.deliver(id,result):null;

@@ -510,6 +510,22 @@ export default function MediaLibrary() {
     staleTime: 45 * 60 * 1000,
   });
 
+  // Items over 50 MB are not in the private GitHub copy; they stay on this computer.
+  const { data: keptHere = new Set<string>() } = useQuery({
+    queryKey: ["media-kept-here", user?.id],
+    queryFn: async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error("Not authenticated");
+      const resp = await fetch(`${SUPABASE_URL}/api/media/kept-here`, {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const result: { data: { path: string }[] } = await resp.json();
+      return new Set(result.data.map((item) => item.path));
+    },
+    enabled: !!user,
+  });
+
   // Fetch note titles for all unique note IDs
   const noteIds = useMemo(() => [...new Set(mediaItems.map(m => m.note_id))], [mediaItems]);
   const { data: noteTitles = {} } = useQuery({
@@ -780,6 +796,15 @@ export default function MediaLibrary() {
                         loading="lazy"
                         onError={() => setBrokenPreviews((prev) => ({ ...prev, [group.storage_path]: true }))}
                       />
+                    )}
+                    {keptHere.has(group.storage_path) && (
+                      <Badge
+                        variant="secondary"
+                        title="Over 50 MB, so it is not in your private GitHub copy. It stays on this computer and in its backups."
+                        className="absolute top-1.5 left-1.5 text-[9px] z-10"
+                      >
+                        Kept on this computer only
+                      </Badge>
                     )}
                     {/* Status badge */}
                     <div className="absolute top-1.5 right-1.5 z-10">
