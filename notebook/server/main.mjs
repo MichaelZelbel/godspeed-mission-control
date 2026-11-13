@@ -63,7 +63,7 @@ import {showCard as showContextCard,readContext,markContext} from '../core/conte
 import {visibleRows} from '../core/visibility.mjs';
 import {NoteProcessing} from '../core/processing.mjs';
 import {mediaObjectName,mediaFileName} from '../core/media-names.mjs';
-import {carriedRoot,carryMedia,findMedia,keepMedia,keptHere,removeCarried} from '../core/media-store.mjs';
+import {carriedRoot,carryMedia,findMedia,keepMedia,keptHere,missingHere,removeCarried} from '../core/media-store.mjs';
 import {retireShares} from '../core/shares.mjs';
 import {installFoodTable,foodTableWanted} from '../core/food-table.mjs';
 import {repairTimelineAtStart} from '../core/due-copy.mjs';
@@ -624,6 +624,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         return sendFile(res, found.file, { 'Content-Type': found.mapping.contentType || 'application/octet-stream', 'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': "default-src 'none'; sandbox" });
       }
       if(route==='/api/media/kept-here'&&req.method==='GET')return send(res,200,{data:keptHere(media)});
+      if(route==='/api/media/missing-here'&&req.method==='POST'){const paths=JSON.parse(await body(req))?.paths;if(!Array.isArray(paths)||paths.length>500||paths.some(p=>typeof p!=='string'))throw new Error('Invalid media paths');return send(res,200,{data:missingHere(media,paths)});}
       if(route==='/api/chat/transcribe'&&req.method==='POST'){
         if(dictationBusy)return send(res,429,{error:'Another recording is being transcribed. Please try again shortly.'});
         dictationBusy=true;
