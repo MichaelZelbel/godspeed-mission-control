@@ -291,6 +291,8 @@ export class Domains {
       if(step?.reply!==undefined)return step;
       if(step?.context)input={...input,step_context:step.context};
     }
+    // No verified assistant to ask: the person hears why instead (#524).
+    if(name==='conversation-chat'&&this.assistantProblem)throw Error(this.assistantProblem);
     if(name==='conversation-chat'&&this.nativeAgent){
       if(input.contact_id&&!visibleRows(this.query,'contacts').some(p=>p.id===input.contact_id))throw Error('Choose an available person');
       const files=input.uploadedFiles||[];if(files.length)chatAttachments(this.mediaRoot,files,carriedRoot(this.store));

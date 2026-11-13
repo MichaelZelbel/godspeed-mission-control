@@ -401,9 +401,10 @@ test('the running service logs a routine that could not be created, and its tick
 
 // An assistant program that is not Hermes, with no other AI connected, stopped startup with
 // "Choose the verified Hermes runtime" and the supervisor started it again in a loop (#506).
-async function startWithAssistant(t,{text,originalRuntime}){
+async function startWithAssistant(t,{text,originalRuntime,provider=false}){
  const root=temporary(t);installStarter(root);
- const assistant=path.join(root,'assistant-test.json');fs.writeFileSync(assistant,text(root));
+ if(provider){fs.mkdirSync(path.join(root,'.godspeed'),{recursive:true});fs.writeFileSync(path.join(root,'.godspeed','provider.json'),JSON.stringify({url:'http://127.0.0.1:9/v1/chat/completions',key:'k',model:'m'}));}
+ const assistant=path.join(root,'assistant-test.json');if(text)fs.writeFileSync(assistant,text(root));
  const names=['GODSPEED_ORIGINAL_RUNTIME','GODSPEED_ASSISTANT_CONFIG','GODSPEED_MODEL_URL'],saved=Object.fromEntries(names.map(name=>[name,process.env[name]]));
  if(originalRuntime)process.env.GODSPEED_ORIGINAL_RUNTIME='on';else delete process.env.GODSPEED_ORIGINAL_RUNTIME;
  process.env.GODSPEED_ASSISTANT_CONFIG=assistant;delete process.env.GODSPEED_MODEL_URL;
@@ -416,21 +417,46 @@ async function startWithAssistant(t,{text,originalRuntime}){
  const health=await fetch(base+'/health');assert.equal(health.status,200);assert.equal((await health.json()).ok,true);
  const status=await (await fetch(base+'/api/status')).json();assert.equal(status.runtimeConfigured,false);
  assert.ok(logged.some(line=>line.includes(status.assistantProblem)),logged.join('\n'));
- return status.assistantProblem;
+ return {problem:status.assistantProblem,base,logged,assistant};
 }
 const hermesHome=root=>{const home=path.join(root,'.hermes-home');fs.mkdirSync(home,{recursive:true});return home;};
 test('a non-Hermes assistant program does not stop the notebook from starting and is named in plain words',async t=>{
- const problem=await startWithAssistant(t,{originalRuntime:true,text:root=>JSON.stringify({verified:true,executable:path.join(root,'bin','hermes-agent'),home:hermesHome(root)})});
+ const {problem}=await startWithAssistant(t,{originalRuntime:true,text:root=>JSON.stringify({verified:true,executable:path.join(root,'bin','hermes-agent'),home:hermesHome(root)})});
  assert.match(problem,/hermes-agent", which is not Hermes\. Set "executable"/);
 });
 test('an assistant program that is not a name at all is named in plain words too',async t=>{
- const problem=await startWithAssistant(t,{originalRuntime:true,text:root=>JSON.stringify({verified:true,executable:5,home:hermesHome(root)})});
+ const {problem}=await startWithAssistant(t,{originalRuntime:true,text:root=>JSON.stringify({verified:true,executable:5,home:hermesHome(root)})});
  assert.match(problem,/is "5", which is not Hermes\. Set "executable"/);
 });
 test('an assistant.json that cannot be read does not stop the notebook from starting and is named in plain words',async t=>{
- const problem=await startWithAssistant(t,{originalRuntime:false,text:()=>'{"verified":true,'});
+ const {problem}=await startWithAssistant(t,{originalRuntime:false,text:()=>'{"verified":true,'});
  assert.match(problem,/The assistant setup in .*assistant-test\.json cannot be read\. Run the Godspeed installer again/);
 });
+
+// With the original runtime on, a setup that is unreadable, empty or not verified used to stop
+// startup, over and over (#524).
+const unconnected={
+ 'cut short':{text:()=>'{"verified":true,',words:/cannot be read\. Run the Godspeed installer again/},
+ empty:{text:()=>'',words:/is empty\. Run the Godspeed installer again/},
+ 'an empty object':{text:()=>'{}',words:/is not verified, so the assistant is not connected\. Run the Godspeed installer again to connect the assistant/},
+ 'not verified':{text:root=>JSON.stringify({verified:false,executable:'hermes',home:hermesHome(root)}),words:/is not verified, so the assistant is not connected\. Run the Godspeed installer again to connect the assistant/},
+ missing:{text:null,words:/There is no assistant setup at .*Run the Godspeed installer again to set up the assistant/},
+};
+async function startUnconnected(t,{text,words},provider=false){
+ const {problem,base,logged,assistant}=await startWithAssistant(t,{originalRuntime:true,text,provider});
+ const lines=logged.filter(line=>words.test(line));
+ assert.equal(lines.length,1,logged.join('\n'));assert.ok(lines[0].includes(assistant),lines[0]);
+ assert.doesNotMatch(logged.join('\n'),/SyntaxError|^\s+at |will answer/m);
+ assert.match(problem,words);
+ const chat=await fetch(base+'/api/browser-chat',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({message:'hello'})});
+ assert.match((await chat.json()).error,words);
+ for(const route of ['/api/owner','/api/routines/switch','/api/delivery','/api/setup','/api/jobs/run','/api/jobs/update','/api/jobs/add']){
+  const refused=await fetch(base+route,{method:'POST',headers:{'content-type':'application/json'},body:'{}'});
+  assert.match((await refused.json()).error,words,route);
+ }
+}
+for(const [name,setup] of Object.entries(unconnected))test(`with the original runtime on, an assistant setup that is ${name} leaves the notebook running and says so in plain words`,t=>startUnconnected(t,setup));
+test('a connected Settings provider does not hide an assistant setup that is not verified, and the chat is not sent to it',t=>startUnconnected(t,unconnected['not verified'],true));
 
 test('a setup that overlaps the running periodic tick still hears its failed connection-check creation',async t=>{
  noMail(t);
