@@ -191,14 +191,43 @@ class Reply(unittest.TestCase):
         self.assertEqual(self.send("n", DRAFT), DRAFT)
         self.assertEqual(self.requests(), [])
 
-    def test_a_two_word_acknowledgement_keeps_a_reply_in_its_language(self):
+    def test_a_two_word_acknowledgement_goes_out_in_the_message_language(self):
+        # Until #505 a two-word reply had no language and went out as it was; the review of PR #516
+        # sent that back: a short answer in the wrong language is the case the issue is about.
+        self.teach("Alles klar", "Got it")
+        self.teach("Alles klar!", "Got it!")
         self.say("s", "Thanks, done")
-        self.assertEqual(self.send("s", "Alles klar"), "Alles klar")
+        self.assertEqual(self.send("s", "Alles klar"), "Got it")
         self.say("t", JOURNAL[0])
-        self.assertEqual(self.send("t", "Alles klar!"), "Alles klar!")
+        self.assertEqual(self.send("t", "Alles klar!"), "Got it!")
+        self.assertEqual(len(self.requests()), 2)
         self.say("u", GERMAN_MESSAGE)
         self.say("u", "Ok")
         self.assertEqual(self.send("u", DRAFT), DRAFT)
+        self.assertEqual(len(self.requests()), 2)
+
+    # -- the review of PR #516: a short reply is judged against the message's language too
+    def test_a_short_reply_in_the_other_language_is_translated(self):
+        for session, message, draft, sent in (
+                ("r-1", "Did my tests pass?", "Nein, zwei Tests sind fehlgeschlagen.", "No, two tests failed."),
+                ("r-2", "Did my tests pass?", "Ja, sie sind durchgelaufen.", "Yes, they passed."),
+                ("r-3", "Thanks", "Gern geschehen!", "You're welcome!"),
+                ("r-4", "Thanks", "Gerne!", "You're welcome!"),
+                ("r-5", "Danke", "You're welcome!", "Gern geschehen!"),
+                ("r-6", "Danke", "No problem!", "Kein Problem!")):
+            self.teach(draft, sent)
+            self.say(session, message)
+            self.assertEqual(self.send(session, draft), sent, (message, draft))
+        self.assertEqual([(e["message_language"], e["draft_language"], e["result"]) for e in self.log()],
+                         [("en", "de", "corrected")] * 4 + [("de", "en", "corrected")] * 2)
+
+    def test_a_short_reply_already_in_the_message_language_is_unchanged(self):
+        for session, message, draft in (("k-1", "Thanks", "You're welcome!"), ("k-2", "Danke", "Gern geschehen!"),
+                                        ("k-3", "Did my tests pass?", "Yes, all 42 passed."),
+                                        ("k-4", "Hast du das gespeichert?", "Ja, ist gespeichert."),
+                                        ("k-5", "Call Jörg", "Done, Jörg is on the list.")):
+            self.say(session, message)
+            self.assertEqual(self.send(session, draft), draft, (message, draft))
         self.assertEqual(self.requests(), [])
 
     # -- #505: every message has a language, a short one too

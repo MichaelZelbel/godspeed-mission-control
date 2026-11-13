@@ -222,7 +222,7 @@ def translate(text, target, strict=False):
     if not command:
         return None, "no-model-command"
     held, kept = _protect(text)
-    source = NAMES.get(language_of(text), "")
+    source = NAMES.get(_language.reply_language(text), "")
     # Name both languages and forbid the unchanged text: told only "Translate into English", a model
     # returned a short German reply as it was, every time (the scenario run of #453).
     system = ("You translate faithfully, nothing else. Keep the meaning, tone and layout (line breaks, lists, "
@@ -305,7 +305,7 @@ def language_step(text, **hook):
         else:
             asked = asked_language(message)
             target = _language.message_language(message, earlier, _language.person_language())
-            draft = language_of(text)
+            draft = _language.reply_language(text)
             entry.update(message_language=target, asked=bool(asked), draft_language=draft)
             if target and draft and target != draft:
                 tries = []

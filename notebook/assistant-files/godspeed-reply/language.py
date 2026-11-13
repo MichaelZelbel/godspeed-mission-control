@@ -12,8 +12,9 @@ and every message gets "en" or "de" (message_language):
 4. else the language set for the person (person_language),
 5. else English, every add-on's default.
 
-language_of with its default threshold also judges a whole reply, which only counts as one language
-when it is clearly one: that side is unchanged.
+A reply is judged against that decision with reply_language: by the default threshold when it is long
+enough, else by its few words as a message is, so a short wrong-language reply ("Gern geschehen!" to
+"Thanks") is translated too (the review of PR #516).
 
 Loaded by file path (godspeed-reply/__init__.py, todays_brief.py, and godspeed-charm for the line it adds
 to a reply), never as a package, so each copy of the plugin finds the mission-control.txt next to it.
@@ -34,12 +35,12 @@ SETTINGS = (("routines", "charm"), ("routines", "journal"), ("coach",), ("routin
 ENGLISH = set("""the a and or but is are be to of on at for with from by i you we it this that my your what how
 when where why do does did done have has had not would can could should just then if about me us they he she
 his our their there here these those been get got make let now new look like which more some any much next
-today today's todays morning thanks please yes tell finished starting working""".split())
+today today's todays morning thanks please yes no tell finished starting working welcome you're sure""".split())
 GERMAN = set("""der die das den dem des ein eine einen einem einer und oder aber ist sind nicht ich du wir ihr
 es mit von für auf zu zum zur im dass wie wo woran wann warum hat habe haben bin auch noch schon mir mich
 dich dir kein keine mein meine dein deine fertig heute bitte danke ja nein merkst jetzt nur wenn dann bei
 aus nach über kann können soll muss werden wird gerade heißt woher wieso welche alles klar heutiges heutige
-heutigen morgenbriefing tagesbriefing""".split())
+heutigen morgenbriefing tagesbriefing sie gern gerne geschehen""".split())
 GERMAN_LETTERS = re.compile(r"[äöüßÄÖÜ]")
 WORD = re.compile(r"[A-Za-zÄÖÜäöüß']+")
 URL = re.compile(r"https?://[^\s<>()\[\]]+|www\.[^\s<>()\[\]]+")
@@ -90,6 +91,13 @@ def asked_language(message):
         return None
     found = [(m.start(), lang) for lang, pattern in ASKED.items() for m in pattern.finditer(message)]
     return max(found)[1] if found else None
+
+
+def reply_language(text):
+    """"en", "de" or None for a draft reply: clearly one language by the default threshold, else, for a
+    short reply ("Gern geschehen!", "Nein, zwei Tests sind fehlgeschlagen."), the language its few
+    telling words agree on. Mixed words: None, so the reply goes out as it is."""
+    return language_of(text) or language_of(text, least=1)
 
 
 def _told(message):
