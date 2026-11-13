@@ -34,6 +34,15 @@ const inNotebook = name => name.startsWith(prefix) && !name.includes('\n') && ca
 const canonical = value => JSON.stringify(value, (k, v) => v && typeof v === 'object' && !Array.isArray(v) ? Object.fromEntries(Object.keys(v).sort().map(key => [key, v[key]])) : v);
 const same = (a, b) => canonical(a) === canonical(b);
 const parentedTypes = new Set([...childrenOf.values()].flat().map(child => child.type));
+// What a record keeps about itself rather than about anyone's choices.
+const bookkeeping = new Set(['uid', 'device', 'revision', 'created_at', 'updated_at', '_hash']);
+// Fields a machine stamps on its own when it writes the record: the first
+// processing run saves the processing settings with the moment it started
+// (NoteProcessing.tick), so two fresh installs' copies differ there although
+// nobody chose anything.
+const stamped = { 'settings/processing': ['since'] };
+const choices = record => Object.fromEntries(Object.entries(record).filter(([field]) => !bookkeeping.has(field) && !(stamped[record.type + '/' + record.id] || []).includes(field)));
+const sameChoices = (a, b) => a.type === b.type && a.id === b.id && same(choices(a), choices(b));
 const parented = record => isReadable(record) && parentedTypes.has(record.type);
 
 // Field-by-field three-way merge of one record. `mergeText(base, local,
@@ -229,13 +238,18 @@ export function identityPlan({ git, mergeText, find = () => undefined, base, loc
     // for review under the identity of the one that stayed, so choosing it
     // replaces that one's values. Until 7 October 2026 the other was moved to
     // "installation 2.md", which nothing reads, and one machine's settings
-    // were replaced without a word.
+    // were replaced without a word. A copy that holds the same choices (only
+    // its identity, its times and what the machine stamped on its own differ)
+    // is the same settings: no review. Until 13 November 2026 two fresh
+    // installs' processing settings were kept for review, and the second
+    // computer's sync stopped for a conflict nobody made.
     const recordOf = o => (place.get(o.uid).local || place.get(o.uid).remote)?.record;
     if (!documents.length && records.length > 1 && records.every(o => { const r = recordOf(o); return r && !isReadable(r); })) {
       const keep = (preferRemote ? records.find(o => !o.local) : records.find(o => o.local)) || records[0], kept = keep.local ? 'local' : 'remote', kept_ = recordOf(keep);
       for (const o of records) if (o !== keep) {
         const other = recordOf(o), side = kept === 'local' ? 'remote' : 'local', as = { text: encode({ ...other, uid: kept_.uid }) };
         planned.add(o.uid); planned.add(keep.uid); finals.set(o.uid, null);
+        if (sameChoices(kept_, other)) continue;
         review(keep.file, { base: null, [kept]: place.get(keep.uid)[kept] || { text: encode(kept_) }, [side]: as }, kept);
       }
       continue;
