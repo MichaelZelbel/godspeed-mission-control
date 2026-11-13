@@ -10,6 +10,9 @@ import {createHash} from 'node:crypto';
 import {createService} from '../server/main.mjs';
 import {mediaObjectName} from '../core/media-names.mjs';
 import {CARRY_LIMIT,carriedName,carryMedia,findMedia} from '../core/media-store.mjs';
+import {chatAttachments} from '../core/chat-context.mjs';
+import {Connectors} from '../core/connectors.mjs';
+import {Review} from '../core/review.mjs';
 
 for(const key of Object.keys(process.env))if(/^(GODSPEED_|HERMES_)/.test(key))delete process.env[key];
 const sha=value=>createHash('sha256').update(value).digest('hex');
@@ -40,16 +43,22 @@ test('a picture saved through the upload lands in notebook/_media and is served 
 });
 
 test('a second install with only the notes folder serves the same picture, and a removal there travels',async t=>{
-  const first=workspace(t),one=await start(t,first);
-  assert.equal((await one.upload(picturePath,picture)).status,200);await one.close();
+  const first=workspace(t),one=await start(t,first),pdfPath='chat/scan/Letter.pdf',pdf=Buffer.from('%PDF-1.4 synthetic letter');
+  assert.equal((await one.upload(picturePath,picture)).status,200);
+  const form=new FormData();form.set('file',new Blob([pdf],{type:'application/pdf'}),'Letter.pdf');form.set('path',pdfPath);form.set('extracted_text','Page 1\nDear owner');
+  assert.equal((await fetch(one.base+'/api/media/upload',{method:'POST',body:form})).status,200);await one.close();
   const second=workspace(t);fs.cpSync(path.join(first,'notebook'),path.join(second,'notebook'),{recursive:true});
   const two=await start(t,second);
   assert.deepEqual(fs.readdirSync(two.mediaRoot),[],'the second install has an empty media root');
   const served=await two.read(picturePath);
   assert.equal(served.status,200);assert.equal(served.type,'image/png');assert.deepEqual(served.bytes,picture);
+  // The chat and the PDF reader read the carried copy too.
+  assert.deepEqual(chatAttachments(two.mediaRoot,[{path:picturePath}],two.carried).images.map(image=>image.data),[picture.toString('base64')]);
+  assert.equal((await two.service.domains.invoke('analyze-pdf',{storage_path:pdfPath})).analysis.extracted_text,'Page 1\nDear owner');
   const removed=await fetch(two.base+'/api/media/remove',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({paths:[picturePath]})});
   assert.equal(removed.status,200);await removed.json();
   assert.equal((await two.read(picturePath)).status,404);
+  assert.throws(()=>chatAttachments(two.mediaRoot,[{path:picturePath}],two.carried),/unavailable/);
   assert.ok(JSON.parse(fs.readFileSync(path.join(two.carried,sha(picturePath)+'.mapping.json'),'utf8')).removed_at,'the removal is in the carried mapping, which travels');
 });
 
@@ -122,4 +131,30 @@ test('media sync with the server takes a file the notebook already carries inste
   assert.equal(result.state,'synced');assert.equal(result.found,1);assert.equal(result.downloaded,0);
   assert.ok(!asked.some(route=>route.startsWith('/api/media/blob/')),'nothing was downloaded');
   assert.deepEqual(fs.readFileSync(path.join(local.mediaRoot,mediaObjectName(sha(picture),picturePath))),picture);
+});
+
+// New content at a path already carried is carried too, so the old copy is
+// not served in its place.
+test('a Drive re-import with new content replaces the carried copy',async t=>{
+  const root=workspace(t),{service,read,mediaRoot,carried}=await start(t,root);
+  const connectors=new Connectors(service.domains),versions=[['2026-11-01T00:00:00Z',Buffer.from('%PDF-1.4 version one')],['2026-11-02T00:00:00Z',Buffer.from('%PDF-1.4 version two')]];
+  connectors.save('gdrive',{origin:'https://www.googleapis.com',token:'token',folder_id:'folder'});
+  let current;const invoke=connectors.invoke.bind(connectors);
+  connectors.invoke=(name,input)=>name==='gdrive-proxy'?{files:[{id:'file-1',name:'Plan.pdf',mimeType:'application/pdf',modifiedTime:current[0]}]}:invoke(name,input);
+  connectors.request=async()=>new Response(current[1]);
+  for(current of versions){
+    await connectors.invoke('gdrive-sync',{});
+    carryMedia({mediaRoot,carried});
+    assert.deepEqual((await read('drive/file-1/Plan.pdf')).bytes,current[1]);
+  }
+});
+
+test('keeping both media versions carries both',async t=>{
+  const root=workspace(t),{service,upload,read,mediaRoot}=await start(t,root),remote=Buffer.from('a newer picture from another computer');
+  assert.equal((await upload(picturePath,picture)).status,200);
+  const local=JSON.parse(fs.readFileSync(path.join(mediaRoot,sha(picturePath)+'.mapping.json'),'utf8')),file=mediaObjectName(sha(remote),picturePath);
+  fs.writeFileSync(path.join(mediaRoot,file),remote);
+  new Review(service.domains).apply(service.store.save('review_queue',{suggestion_type:'media_conflict',title:'Keep both',payload:{local,remote:{...local,file,sha256:sha(remote),size:remote.length}},status:'pending_review'}));
+  assert.deepEqual((await read(picturePath)).bytes,remote);
+  assert.deepEqual((await read(picturePath+'.conflict-'+sha(picture).slice(0,12))).bytes,picture);
 });

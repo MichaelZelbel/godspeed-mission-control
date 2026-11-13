@@ -13,7 +13,7 @@ import {hash,retrying,syncFolder} from './records/store.mjs';
 import {mediaFileName} from './media-names.mjs';
 import {recordsFolder} from './file-policy.mjs';
 
-// The same limit as FileSync's largeFile: a bigger file would not be uploaded.
+// Sync uploads nothing larger: it is FileSync's largeFile.
 export const CARRY_LIMIT=50*1024*1024;
 export const CARRIED_FOLDER='_media';
 export const carriedRoot=store=>path.join(store.recordsRoot,CARRIED_FOLDER);

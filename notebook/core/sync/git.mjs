@@ -8,7 +8,7 @@ import { identityPlan, identities, readBlobs } from './identity.mjs';
 import { shared,durableRoots,syncedFiles,devicePrivatePaths,recordsFolder,isRecordPath,deletableTypes,windowsInvalid,notebookNote,retiredNotebookNote } from '../file-policy.mjs';
 import { candidate, key as nameKey } from '../records/layout.mjs';
 import {validateAssistantFiles} from '../assistant-files.mjs';
-import {CARRIED_FOLDER,isCarriedPath} from '../media-store.mjs';
+import {CARRIED_FOLDER,CARRY_LIMIT,isCarriedPath} from '../media-store.mjs';
 import {resolveSavedConflict} from '../conflicts.mjs';
 import {queueNotice} from '../notices.mjs';
 import {createRequire} from 'node:module';
@@ -129,7 +129,7 @@ export async function joinRepository(store,options={}){
 }
 
 export class FileSync {
-  constructor(store,{branch='main',remote='origin',largeFile=50*1024*1024}={}) {
+  constructor(store,{branch='main',remote='origin',largeFile=CARRY_LIMIT}={}) {
     if(!/^[\w/.-]+$/.test(branch)||branch.startsWith('-')||!/^\w+$/.test(remote))throw new Error('Invalid sync configuration');
     this.store=store;this.branch=branch;this.remote=remote;this.largeFile=largeFile;this.last=null;
     // A mission control that is already its own repository, cloned to the
