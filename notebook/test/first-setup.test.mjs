@@ -41,6 +41,43 @@ test('a routine not due yet says the day it first runs on the person\'s own cloc
  assert.deepEqual(setupResults(store,[{id:'review',state:'verified'}]),[{id:'review',state:'verified'}]);
 });
 
+// 13 November 2026 (#537): a repeated setup said of a routine that had already run that it
+// "first runs on" today. A routine that has run before says when it next runs.
+test('a routine that has run before says when it next runs, not when it first runs',t=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-first-setup-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ const store=new Store(root,{device:'local'});
+ store.save('settings',{id:'installation',owner:'local',timezone:'Europe/Berlin',delivery:'notebook'});
+ const job=(id,next_run,last_run)=>store.save('jobs',{id,kind:id,owner:'local',paused:false,state:'pending',next_run,...(last_run?{last_run}:{})});
+ // Never run: the day it first runs.
+ job('review','2026-11-20T10:00:00.000Z');
+ // Ran before, next run later today in Berlin (14:00 UTC is 15:00 CET).
+ job('deadline-reminder','2026-11-13T14:00:00.000Z','2026-11-12T14:00:00.000Z');
+ // Ran before, next run at 23:30 UTC: still 13 November in UTC, but 00:30 on 14 November in Berlin.
+ job('coaching','2026-11-13T23:30:00.000Z','2026-11-12T23:30:00.000Z');
+ const now=Date.parse('2026-11-13T09:00:00.000Z');
+ const byId=Object.fromEntries(setupResults(store,[],now).map(r=>[r.id,r.reason]));
+ assert.deepEqual(byId,{
+  review:'Not due yet: it first runs on 2026-11-20.',
+  'deadline-reminder':'Not due yet: it next runs at 15:00.',
+  coaching:'Not due yet: it next runs on 2026-11-14.'});
+ // Paused stays paused.
+ store.save('jobs',{id:'coaching',paused:true});
+ assert.equal(setupResults(store,[],now).find(r=>r.id==='coaching').reason,'It is paused.');
+});
+
+test('a repeated setup says the deadline reminder that already ran next runs, never "first runs"',async t=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-first-setup-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ const service=await createService({root,device:'local',port:0});
+ try{
+  const setup=async()=>{const reply=await fetch('http://127.0.0.1:'+service.address.port+'/api/setup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({goal:'Run a 10k by spring',timezone:'Europe/Berlin'})});assert.equal(reply.status,200);return Object.fromEntries((await reply.json()).results.map(r=>[r.id,r]));};
+  const first=await setup();assert.notEqual(first['deadline-reminder'].state,'not due');
+  const again=await setup();
+  assert.equal(again['deadline-reminder'].state,'not due');
+  assert.match(again['deadline-reminder'].reason,/^Not due yet: it next runs (at \d{2}:\d{2}|on \d{4}-\d{2}-\d{2})\.$/);
+  for(const r of Object.values(again))assert.doesNotMatch(String(r.reason||''),/Invalid time value/,r.id);
+ }finally{await service.close();}
+});
+
 test('the tick routine reads "every minute" for a rhythm of 1 and "every N minutes" otherwise',()=>{
  const root=os.tmpdir(),tick=schedule=>coachRoutineTimes({title:'Coach reminders and habit check',schedule},root);
  assert.deepEqual(tick('*/1 * * * *'),{rhythm:'Checks every minute for a due reminder or habit question.'});
