@@ -404,7 +404,7 @@ test('the running service logs a routine that could not be created, and its tick
 async function startWithAssistant(t,{text,originalRuntime,provider=false}){
  const root=temporary(t);installStarter(root);
  if(provider){fs.mkdirSync(path.join(root,'.godspeed'),{recursive:true});fs.writeFileSync(path.join(root,'.godspeed','provider.json'),JSON.stringify({url:'http://127.0.0.1:9/v1/chat/completions',key:'k',model:'m'}));}
- const assistant=path.join(root,'assistant-test.json');fs.writeFileSync(assistant,text(root));
+ const assistant=path.join(root,'assistant-test.json');if(text)fs.writeFileSync(assistant,text(root));
  const names=['GODSPEED_ORIGINAL_RUNTIME','GODSPEED_ASSISTANT_CONFIG','GODSPEED_MODEL_URL'],saved=Object.fromEntries(names.map(name=>[name,process.env[name]]));
  if(originalRuntime)process.env.GODSPEED_ORIGINAL_RUNTIME='on';else delete process.env.GODSPEED_ORIGINAL_RUNTIME;
  process.env.GODSPEED_ASSISTANT_CONFIG=assistant;delete process.env.GODSPEED_MODEL_URL;
@@ -440,6 +440,7 @@ const unconnected={
  empty:{text:()=>'',words:/is empty\. Run the Godspeed installer again/},
  'an empty object':{text:()=>'{}',words:/is not verified, so the assistant is not connected\. Run the Godspeed installer again to connect the assistant/},
  'not verified':{text:root=>JSON.stringify({verified:false,executable:'hermes',home:hermesHome(root)}),words:/is not verified, so the assistant is not connected\. Run the Godspeed installer again to connect the assistant/},
+ missing:{text:null,words:/There is no assistant setup at .*Run the Godspeed installer again to set up the assistant/},
 };
 async function startUnconnected(t,{text,words},provider=false){
  const {problem,base,logged,assistant}=await startWithAssistant(t,{originalRuntime:true,text,provider});
@@ -449,6 +450,10 @@ async function startUnconnected(t,{text,words},provider=false){
  assert.match(problem,words);
  const chat=await fetch(base+'/api/browser-chat',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({message:'hello'})});
  assert.match((await chat.json()).error,words);
+ for(const route of ['/api/owner','/api/routines/switch','/api/delivery','/api/setup','/api/jobs/run','/api/jobs/update','/api/jobs/add']){
+  const refused=await fetch(base+route,{method:'POST',headers:{'content-type':'application/json'},body:'{}'});
+  assert.match((await refused.json()).error,words,route);
+ }
 }
 for(const [name,setup] of Object.entries(unconnected))test(`with the original runtime on, an assistant setup that is ${name} leaves the notebook running and says so in plain words`,t=>startUnconnected(t,setup));
 test('a connected Settings provider does not hide an assistant setup that is not verified, and the chat is not sent to it',t=>startUnconnected(t,unconnected['not verified'],true));

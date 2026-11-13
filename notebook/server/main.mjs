@@ -494,10 +494,10 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
       }
       if(route==='/api/sync/sign-in'&&req.method==='GET')return send(res,200,{signIn:githubSignIn.status()});
       if(route==='/api/sync/run'&&req.method==='POST')return send(res,200,{status:await syncRunner.run()});
+      if(assistantMissing&&req.method==='POST'&&ASSISTANT_ROUTES.includes(route))throw Error(assistantProblem);
       // "server": the server this computer is paired with, whatever it is called, or this machine
       // when it is the server (the one that makes pairing codes). Until 9 October 2026 the button
       // sent the name 'vps', which only the one-click server has.
-      if(assistantMissing&&req.method==='POST'&&ASSISTANT_ROUTES.includes(route))throw Error(assistantProblem);
       if(route==='/api/owner'&&req.method==='POST'){const input=JSON.parse(await body(req));const owner=input.owner==='this'?device:input.owner==='server'?mediaSync.server()||(device==='vps'?device:null):input.owner;if(owner===null)throw new Error('Pair this computer with your server first, under Pair the server and media, then choose the server here');if(typeof owner!=='string'||!/^[a-z0-9][a-z0-9-]{0,39}$/.test(owner))throw new Error('Choose the machine that runs the routines by its name');await scheduler.transfer(owner);return send(res,200,{owner});}
       // Settings > Notifications: the morning brief and the weekly review, on or off and when (native-scheduler.mjs).
       if(route==='/api/notifications'){
