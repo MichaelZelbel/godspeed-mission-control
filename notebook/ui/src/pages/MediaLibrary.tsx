@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback } from "react";
 import { SEOHead } from "@/components/SEOHead";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Input } from "@/components/ui/input";
@@ -530,7 +530,9 @@ export default function MediaLibrary() {
   // An item over 50 MB added on another computer has its record here but not
   // its file. Asked again each minute while any is missing, so a file that
   // arrives later turns its card back into an ordinary one.
-  const { data: missingHere = new Set<string>() } = useQuery({
+  // A path's preview waits until it has been checked here: a thumbnail that
+  // loaded first would ask for a file that is not on this computer.
+  const { data: presence, isError: presenceFailed } = useQuery({
     queryKey: ["media-missing-here", user?.id, storagePaths],
     queryFn: async () => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -547,11 +549,14 @@ export default function MediaLibrary() {
           return result.data;
         })
       );
-      return new Set(results.flat());
+      return { checked: new Set(storagePaths), missing: new Set(results.flat()) };
     },
     enabled: !!user && storagePaths.length > 0,
-    refetchInterval: (query) => (query.state.data?.size ? 60_000 : false),
+    placeholderData: keepPreviousData,
+    refetchInterval: (query) => (query.state.data?.missing.size ? 60_000 : false),
   });
+  const missingHere = presence?.missing ?? new Set<string>();
+  const checkedHere = (storagePath: string) => presenceFailed || !!presence?.checked.has(storagePath);
 
   // Fetch note titles for all unique note IDs
   const noteIds = useMemo(() => [...new Set(mediaItems.map(m => m.note_id))], [mediaItems]);
@@ -745,7 +750,7 @@ export default function MediaLibrary() {
               const isPdf = group.media_type === "pdf" || group.media_type === "pdf_page";
 
               const isRetrying = reanalyze.isPathPending(group.storage_path);
-              const previewUrl = getMediaUrl(group.storage_path);
+              const previewUrl = checkedHere(group.storage_path) ? getMediaUrl(group.storage_path) : "";
               const hasBrokenPreview = Boolean(brokenPreviews[group.storage_path]);
               const status = isRetrying ? "processing" : group.analysis_status;
               const notHere = missingHere.has(group.storage_path);
@@ -818,7 +823,7 @@ export default function MediaLibrary() {
                       <div className="flex flex-col items-center gap-2 text-muted-foreground/70 px-3 text-center">
                         <Image className="h-10 w-10" />
                         <span className="text-[10px] leading-tight">
-                          {hasBrokenPreview || !signedUrlsLoading ? "Preview unavailable" : "Loading preview…"}
+                          {hasBrokenPreview || (!signedUrlsLoading && checkedHere(group.storage_path)) ? "Preview unavailable" : "Loading preview…"}
                         </span>
                       </div>
                     ) : (
