@@ -531,11 +531,11 @@ test('the scenario asker drives the real godspeed-step open with every flag it e
 });
 
 test('godspeed-step open for Telegram returns once the gateway sent its card',async t=>{
- // Issue #504: no clock decides this test. The bound open waits for is far beyond anything the test
- // waits for, so open returning at all says the card went out; the test waits only for events: the
- // step's hand-off file (by its own name, never the atomic writer's .tmp file beside it), open's exit
- // and its output closing.
- const {root,store}=fixture(t),BOUND_S=120;
+ // Issue #504: the test waits for events, not for a fixed time: the step's hand-off file (by its own
+ // name, never the atomic writer's .tmp file beside it), open's exit and its output closing. The one
+ // clock left is the check that open returned well before its 10 s bound, so it returned because the
+ // card went out.
+ const {root,store}=fixture(t),BOUND_S=10;
  const child=spawn(process.execPath,[script,'open','--about','The bot stopped.','--question','Restart it?','--yes','y','--no','n','--by','routine:test','--chat','telegram','--godspeed',root],{env:{...process.env,GODSPEED_STEP_SEND_WAIT:String(BOUND_S)}});
  t.after(()=>{if(child.exitCode===null&&child.signalCode===null)child.kill();});
  let out='',err='';child.stdout.on('data',d=>out+=d);child.stderr.on('data',d=>err+=d);
@@ -549,7 +549,7 @@ test('godspeed-step open for Telegram returns once the gateway sent its card',as
  assert.equal(store.get('approvals',id)?.sent_at,undefined);
  assert.equal(await cardSent(store,id),true);
  assert.deepEqual(await closed,{code:0,signal:null},err);
- assert.ok(Date.now()-started<BOUND_S*1000,'open returned because the card went out, not at its bound');
+ assert.ok(Date.now()-started<8000,'open returned well before its bound');
  assert.equal(JSON.parse(out).id,id);
  assert.ok(store.get('approvals',id).sent_at,'the step is recorded as sent');
 });
