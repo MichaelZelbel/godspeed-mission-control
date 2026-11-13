@@ -19,8 +19,16 @@ export function providerTimeBudget(input){
   return input.timeout_ms||600000;
 }
 export function providerTimeoutMessage(milliseconds){return milliseconds===20000?'The suggestion did not finish within 20 seconds. Please try again.':milliseconds===300000?'The scheduled AI call exceeded five minutes. This attempt failed.':'The AI did not finish within ten minutes. Try a shorter message or a lower effort.';}
+export function isHermesExecutable(executable){return ['hermes','hermes.exe'].includes(path.basename(executable).toLowerCase());}
+// AN AI THAT CANNOT BE REACHED IS SAID IN PLAIN WORDS (#506, 13 November 2026). Node's fetch reports
+// a refused, unresolvable or dropped connection only as "fetch failed", which routines recorded as
+// their reason. Only the host and port are named, never the path or the key.
+export function unreachableAI(url,cause){
+  let host='';try{host=new URL(url).host;}catch{}
+  return Error((host?'The AI at '+host:'The AI')+' could not be reached. Check that this computer is online and that the AI\'s address in Settings is right.',{cause});
+}
 export function hermesProvider({executable='hermes',home,cwd,model,provider,sourceRoot,spawnProcess}={}){
-  if(!['hermes','hermes.exe'].includes(path.basename(executable).toLowerCase()))throw new Error('Choose the verified Hermes runtime');
+  if(!isHermesExecutable(executable))throw new Error('Choose the verified Hermes runtime');
   const run=async input=>{
     const timeoutMs=providerTimeBudget(input);
     if(input.attachments?.some(a=>a.mime==='application/pdf'))throw new Error('Use a document-capable model endpoint for PDF analysis');
@@ -167,7 +175,7 @@ export function modelProvider({ url, key, model, maxTokens = 4096, retryWaits = 
     let response;
     for(let attempt=0;;attempt++){
       try{response=await fetch(url,{method:'POST',headers:{'Authorization':'Bearer '+key,'Content-Type':'application/json'},body:request,signal:signal?AbortSignal.any([signal,AbortSignal.timeout(timeoutMs)]):AbortSignal.timeout(timeoutMs)});}
-      catch(error){if(error.name==='TimeoutError')throw Error(providerTimeoutMessage(timeoutMs));throw error;}
+      catch(error){if(error.name==='TimeoutError')throw Error(providerTimeoutMessage(timeoutMs));if(error.message==='fetch failed')throw unreachableAI(url,error);throw error;}
       if(response.ok||!RETRY_STATUS.has(response.status)||attempt>=retryWaits.length||signal?.aborted)break;
       await response.arrayBuffer().catch(()=>{});
       await new Promise((resolve,reject)=>{const timer=setTimeout(resolve,retryWaits[attempt]);signal?.addEventListener('abort',()=>{clearTimeout(timer);reject(signal.reason);},{once:true});});
