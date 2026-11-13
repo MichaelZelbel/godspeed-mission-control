@@ -87,9 +87,8 @@ def _load(name, file):
 
 _language = _load("godspeed_reply_language", "language.py")
 language_of, asked_language, _plain = _language.language_of, _language.asked_language, _language._plain
-ENGLISH, GERMAN, WORD, CODE, URL, QUOTE, MEDIA = (_language.ENGLISH, _language.GERMAN, _language.WORD, _language.CODE,
-                                                  _language.URL, _language.QUOTE, _language.MEDIA)
-MIN_SIGNALS, MIN_SHARE = _language.MIN_SIGNALS, _language.MIN_SHARE
+ENGLISH, GERMAN, MIN_SHARE = _language.ENGLISH, _language.GERMAN, _language.MIN_SHARE
+CODE, URL, QUOTE, MEDIA = _language.CODE, _language.URL, _language.QUOTE, _language.MEDIA
 
 
 def _home():
