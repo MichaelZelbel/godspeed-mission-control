@@ -240,7 +240,8 @@ test('through the folder\'s own repository each change is a commit with its mess
   const shelf=new IdentityShelf(store),who=shelf.read('who');
   const saved=await shelf.save('who',{text:'You are Captain Speedy.'},{expected_hash:who.hash});
   assert.equal(saved.recorded.where,'folder');assert.ok(saved.recorded.commit);
-  assert.equal(git(dir,'log','-1','--format=%s|%an'),'Identity: changed who it is|Godspeed Mission Control');
+  const [subject,author]=git(dir,'log','-1','--format=%s|%an').split('|');
+  assert.equal(subject,'Identity: changed who it is');assert.match(author,/^Godspeed Mission Control \(.+\)$/);
   assert.deepEqual(git(dir,'show','--name-only','--format=','HEAD').split('\n'),['AGENTS.md'],'only the manual is in the commit');
   assert.equal(git(dir,'diff','--cached','--name-only'),'rules/when-in-doubt-ask.md','the session work stays staged');
   assert.equal(git(dir,'status','--porcelain','--','AGENTS.md'),'','Git sees the manual as committed');
