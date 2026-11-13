@@ -21,6 +21,7 @@ export function DashboardLayout() {
   // Godspeed's brain docks its own chat beside its content, as Notes does: no floating button
   // over the rule being changed.
   const isChat=pathname==="/dashboard/chat",isNotes=pathname.startsWith("/dashboard/notes"),isImport=pathname==="/dashboard/settings/import",isHabit=pathname.startsWith("/trackers/habits/"),isBrain=pathname===BRAIN_PAGE.path;
+  const floatingChat=!isChat&&!isNotes&&!isImport&&!isHabit&&!isBrain;
 
   return (
     <SidebarProvider>
@@ -39,7 +40,10 @@ export function DashboardLayout() {
 
 
           
-          <main className="flex-1 overflow-auto p-6">
+          {/* Where the floating chat button shows, the page keeps room below its content for it (6rem:
+              the button's 3.5rem and its 1.5rem from the edge, and a gap), so scrolled to the end
+              nothing on a narrow window lies under it (issue #530). */}
+          <main className={floatingChat?"flex-1 overflow-auto p-6 pb-24":"flex-1 overflow-auto p-6"}>
             {/* A crashing page no longer takes the sidebar with it, and the
                 boundary clears on the next navigation. Loading a page's code
                 keeps the sidebar and header on screen. */}
@@ -50,7 +54,7 @@ export function DashboardLayout() {
             </RouteErrorBoundary>
           </main>
         </div>
-        {!isChat&&!isNotes&&!isImport&&!isHabit&&!isBrain&&<GlobalAIChatFAB />}
+        {floatingChat&&<GlobalAIChatFAB />}
         <CommandPalette />
       </div>
     </SidebarProvider>

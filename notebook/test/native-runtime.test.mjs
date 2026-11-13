@@ -112,6 +112,14 @@ test('a talk start whose record has the wrong opening opens from the preparation
   assert.equal(store.list('conversation_messages').at(-1).content,body.data.reply);
  }
 });
+test('a talk with no preparation file keeps, as its opening, the reply the person was shown (issue #530)',async t=>{
+ // The stand-in AI of the review of PR #512 wrote one opening into the record and answered with fewer words.
+ const root=fixture(t),store=new Store(root),domains=new Domains(new QueryService(store));addArea(root,{slug:'health',title:'Health',rhythm:'weekly sunday',time:'19:00',starts:'2026-01-04'});
+ domains.nativeAgent=async input=>{if(input.coach_start_resolution)return {reply:'{"area":"health"}'};const start=input.coach_talk_start;assert.equal(start.opening,null);assert.equal(start.sentence,null);openTalk(findArea(root,start.area),start.day,{opening:'Hi! How was your week? Tell me about your health.',read:'the sleep table'});return {reply:'Hi! How was your week?'};};
+ const result=await domains.invoke('conversation-chat',{message:'Let us have my health talk now.',conversation_id:'fixture'}),start=coachTalkStart(store,findArea(root,'health')),talk=readTalk(findArea(root,'health'),start.day);
+ assert.equal(result.reply,'Hi! How was your week?');assert.equal(talk.sections['The opening'],result.reply);assert.equal(talk.sections['What was read'],'the sleep table');assert.ok(talk.shown);
+ assert.equal(store.list('conversation_messages').at(-1).content,result.reply);
+});
 test('a prepared opening remains exact when Charm judges the same native request',async t=>{
  const root=fixture(t),store=new Store(root),domains=new Domains(new QueryService(store)),prepared=preparedCoachArea(root),slip='This is useless, you are garbage and wrong again';
  assert.equal((await domains.invoke('personal-operation',{type:'charm',action:'start',words:'start'})).ok,true);
