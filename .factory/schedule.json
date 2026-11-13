@@ -1,0 +1,1 @@
+{"workflow": "archon-loop", "parallel": 8, "inputs": {"runtime": "harness/RUNTIME.md", "merge": "auto"}}

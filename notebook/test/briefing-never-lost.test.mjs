@@ -89,12 +89,16 @@ test('a factual fallback uses visible facts, not hidden or sensitive records',as
  assert.match(saved,/Fictional visible energy: 6/);assert.doesNotMatch(saved,/Hidden fictional|Sensitive fictional/);
 });
 
-test('an unsafe factual fallback remains unsent with its rejected draft receipt',async()=>{
+// When the factual fallback cannot keep to the rules, the short honest note goes out in a wording
+// that does, and the rejected draft stays in the receipt (#491; before, nothing was saved).
+test('an unsafe factual fallback gives way to the honest note, with its rejected draft receipt',async()=>{
  const {store,query}=fixture(['BANNED-WORD: Godspeed','BANNED-WORD: goal','BANNED-WORD: Tell','BANNED-WORD: one','BANNED-WORD: work','BANNED-WORD: today','BANNED-WORD: first','BANNED-WORD: concrete','BANNED-WORD: step']);
  const provider=async input=>input.kind==='brief-verification'?reviewFailure(input):'Rejected private model prose.';
- await assert.rejects(run(provider,query,store,'brief-factual-unsafe'),/Could not make a checked factual fallback/);
- assert.equal(query.rows('notes').filter(note=>note.source_app==='morning-brief').length,0);
- const receipt=query.rows('job_receipts').find(row=>row.kind==='brief-factual-fallback');assert.equal(receipt.state,'failed');assert.equal(receipt.rejected_draft,'Rejected private model prose.');assert.equal(receipt.all_reasons.length,2);
+ const result=await run(provider,query,store,'brief-factual-unsafe'),saved=store.get('notes',result.record_id);
+ assert.equal(result.fallback,true);assert.equal(saved.content,'The full note for '+saved.brief_day+' could not be written. A repair item is open.');
+ const receipt=query.rows('job_receipts').find(row=>row.kind==='brief-factual-fallback');assert.equal(receipt.state,'verified');assert.equal(receipt.honest_note,true);assert.match(receipt.fallback_error,/checked factual fallback/);
+ assert.equal(receipt.rejected_draft,'Rejected private model prose.');assert.equal(receipt.all_reasons.length,2);
+ assert.equal(repairs(query).filter(row=>row.note_id===saved.id).length,1);
 });
 
 test('a required line with a banned word is left out and reported, and the briefing is saved',async()=>{
@@ -422,20 +426,24 @@ test('a first-attempt source rejection holds after a differently rejected rewrit
  assert.equal(result.fallback,true);assert.doesNotMatch(content,/release notes/i);
 });
 
-// A malformed source-claim review leaves no safe inventory for the fallback. It is refused, and the
-// rejected draft and reasons remain in the failed receipt.
+// A malformed source-claim review leaves no safe inventory for the factual fallback: the brief is the
+// short honest note, which states nothing from the sources (#491; before, nothing was saved), and the
+// rejected draft and reasons remain in the receipt.
 for(const [name,verdict] of [
  ['an empty id list',{passed:false,reason:'The only saved goal is no longer an active commitment.',rejection_scope:'source-claims',rejected_source_ids:[]}],
  ['no id list',{passed:false,reason:'The only saved goal is no longer an active commitment.',rejection_scope:'source-claims'}],
  ['an id list that is not a list',{passed:false,reason:'The only saved goal is no longer an active commitment.',rejection_scope:'source-claims',rejected_source_ids:'the goal'}],
  ['an id that is not one of its sources',{passed:false,reason:'The only saved goal is no longer an active commitment.',rejection_scope:'source-claims',rejected_source_ids:['fictional-unknown-id']}],
-])test('a failed fact check with '+name+' sends no fallback and keeps the evidence',async()=>{
+])test('a failed fact check with '+name+' sends the honest note and keeps the evidence',async()=>{
  const {store,query}=fixture([]);store.save('goals',{title:'Cancel the fictional contract',status:'adopted'});
  const provider=async input=>input.kind==='brief-verification'?(input.check==='source-facts'?verdict:{passed:false,reason:'Unclear',rejection_scope:'non-source',rejected_source_ids:[]}):'Unsupported private draft.';
- await assert.rejects(run(provider,query,store,'brief-unidentified-'+name.replaceAll(' ','-')),/Could not make a checked factual fallback/);
+ const result=await run(provider,query,store,'brief-unidentified-'+name.replaceAll(' ','-')),saved=store.get('notes',result.record_id);
+ assert.equal(result.fallback,true);assert.match(saved.content,/^Your full morning briefing for \d{4}-\d{2}-\d{2} could not be written today/);
+ assert.doesNotMatch(saved.content,/fictional contract|Unsupported private draft/);
  const receipt=query.rows('job_receipts').find(r=>r.kind==='brief-factual-fallback');
- assert.equal(receipt.state,'failed');assert.equal(receipt.rejected_draft,'Unsupported private draft.');assert.ok(receipt.reasons.includes(verdict.reason));
- assert.equal(query.rows('notes').filter(n=>n.source_app==='morning-brief').length,0);assert.equal(query.rows('notifications').length,0);
+ assert.equal(receipt.state,'verified');assert.equal(receipt.honest_note,true);assert.match(receipt.fallback_error,/Could not make a checked factual fallback/);
+ assert.equal(receipt.rejected_draft,'Unsupported private draft.');assert.ok(receipt.reasons.includes(verdict.reason));
+ assert.equal(query.rows('notifications').filter(n=>n.status==='ready').length,1);assert.equal(repairs(query).filter(row=>row.note_id===saved.id).length,1);
 });
 
 // Archon R2, round 3: a contribution the review rejected by id is neither repeated nor required; the

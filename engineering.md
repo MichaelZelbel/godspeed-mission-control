@@ -17,4 +17,11 @@ Read `AGENTS.md` first; it is the repository's own guide and wins where this fil
   everyday English, without em dashes.
 - **Running it.** `harness/RUNTIME.md` says how to start the notebook and run the checks on a server
   without touching anything outside the checkout.
-- **Loop review comments.** Every `Loop review: approved` or `Loop review: merging` comment names the exact commit it reviewed on its own line: `Reviewed head \`<full 40-character sha>\``. The merge gate (`.github/workflows/required-gate.mjs`) accepts the review only for that exact head commit.
+- **Loop review comments.** On the factory's own pull requests (opened by the builder App,
+  `godspeed-dev-builder[bot]`, from a branch of this repository) the merge gate
+  (`.github/workflows/required-gate.mjs`) reads no review comment at all: `required` passes once every
+  other check on the head commit passed, and the loop's reviewer and its land step decide the merge
+  at the reviewed head. So a loop review needs no `Reviewed head` line for the gate's sake, and a
+  `Loop review: not merged` comment does not turn `required` red. Only on a pull request someone
+  else opened does a loop review count as a review, and then only an `approved` or `merging` one that
+  names the exact head commit on a line `Reviewed head \`<full 40-character sha>\``.
