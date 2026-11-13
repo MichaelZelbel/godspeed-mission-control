@@ -98,4 +98,19 @@ describe("the Godspeed card", () => {
     expect(await screen.findByText(problem)).toBeInTheDocument();
     expect(screen.queryByText("Connecting…")).toBeNull();
   });
+  // The sentence carries a long file path with no spaces; it wraps inside the card instead of
+  // running off its edge, in smaller type than the short status words, and the card (a grid item)
+  // may shrink below that path's width (PR #518 review).
+  it("wraps the long problem inside the card", async () => {
+    const problem = "The assistant program set in /home/someone/Library/Application Support/Godspeed/.godspeed-state/assistant.json is not Hermes.";
+    page(false, { show: false }, { runtimeConfigured: false, assistantProblem: problem });
+    const line = await screen.findByText(problem);
+    expect(line.className).toContain("[overflow-wrap:anywhere]");
+    expect(line.className).not.toContain("text-lg");
+    expect(line.closest(".min-w-0")).toHaveTextContent("Godspeed");
+  });
+  it("keeps the short status in large type", async () => {
+    page(false, { show: false }, { runtimeConfigured: true });
+    expect((await screen.findByText("Ready to chat")).className).toContain("text-lg");
+  });
 });
