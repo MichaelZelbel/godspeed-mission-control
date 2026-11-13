@@ -5682,6 +5682,14 @@ else
   bad "report-night.mjs: its node --test cases fail"
 fi
 
+section "reuse-earlier-pass.mjs: which repeats a pull request does not pay for"
+if node --test "$ROOT/scenarios/test-reuse-earlier-pass.mjs" >"$TMP/reuse-earlier-pass.log" 2>&1; then
+  ok "reuse-earlier-pass.mjs: its node --test cases pass"
+else
+  cat "$TMP/reuse-earlier-pass.log"
+  bad "reuse-earlier-pass.mjs: its node --test cases fail"
+fi
+
 section "server-telegram.mjs: its node --test cases"
 if node --test "$ROOT/scenarios/test-server-telegram.mjs" >"$TMP/server-telegram.log" 2>&1; then
   ok "server-telegram.mjs: its node --test cases pass"

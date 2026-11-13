@@ -162,6 +162,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
+      actions: read
     env:
       # The commit the run proves: a pull request's own head, otherwise the one the run started on.
       PROOF_SHA: ${{ github.event.pull_request.head.sha || needs.pr-image.outputs.sha || github.sha }}
@@ -169,7 +170,7 @@ jobs:
       # A pull request run that built no image runs no server scenario, so the ancestor-image guard does not apply to it.
       GODSPEED_SCENARIO_ANCESTOR_OK: ${{ github.event_name == 'pull_request' && '1' || '' }}
     outputs:
-      picked: ${{ steps.pick.outputs.picked }}
+      picked: ${{ steps.reuse.outputs.picked }}
       proof: ${{ env.PROOF_SHA }}
       version: ${{ steps.read.outputs.version }}
       product: ${{ steps.read.outputs.product }}
@@ -229,6 +230,20 @@ jobs:
           done
           echo "The pull request changes $(wc -l < "$RUNNER_TEMP/changed") files; scenarios picked:$picked" | tee -a "$GITHUB_STEP_SUMMARY"
           echo "picked=$picked" | tee -a "$GITHUB_OUTPUT"
+      - name: Leave out what already passed on this pull request
+        id: reuse
+        # An AI scenario that passed on an earlier head of this same pull request is not run (and paid
+        # for) again when the pull request's own change to the files that picked it is unchanged, as
+        # after a push that only merged main in. Pull requests only; every other event keeps `picked`
+        # as it is. Any doubt (no earlier pass, a different own change, an error) keeps the scenario in.
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          PICKED: ${{ steps.pick.outputs.picked }}
+          CHANGED_FILE: ${{ runner.temp }}/changed
+        run: node scenarios/reuse-earlier-pass.mjs | tee -a "$GITHUB_OUTPUT"
       - name: Read and check it
         id: read
         run: |

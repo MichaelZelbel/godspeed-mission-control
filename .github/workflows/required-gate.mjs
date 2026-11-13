@@ -655,6 +655,23 @@ const CASES = [
       }),
   },
   {
+    // scenarios.yml leaves out an AI scenario that already passed on an earlier head of the pull
+    // request (scenarios/reuse-earlier-pass.mjs): its job is skipped on this head, the verdict job
+    // passes, and the gate must read that as passed, never as a missing check.
+    name: "reused scenarios (their jobs skipped, the verdict passed) read as passed",
+    want: true,
+    says: "every other check on the head commit passed (2: suite, the verdict)",
+    args: () =>
+      pullRequest({
+        fetchRuns: snapshots([
+          checkRun("suite", "completed", "success", T1),
+          checkRun("a plain yes or a button answers the right waiting step", "completed", "skipped", T2),
+          checkRun("a first day on a fresh machine", "completed", "skipped", T2),
+          checkRun("the verdict", "completed", "success", T3),
+        ]),
+      }),
+  },
+  {
     name: "only the latest run per check name counts",
     want: true,
     says: "every other check on the head commit passed (1: docker)",
