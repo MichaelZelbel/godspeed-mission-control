@@ -103,6 +103,10 @@ export function userFacing(error, roots = []) {
   message = message.replace(/[A-Za-z]:[\\/][^\s'"]*|\\\\[^\s'"]+|(?<![\w.])\/(?:home|opt|root|var|tmp|Users|srv|data|mnt|etc|private)\/[^\s'"]*/g, '[path]');
   return message || null;
 }
+function readAssistant(file){
+  try{const descriptor=JSON.parse(fs.readFileSync(file,'utf8').replace(/^\uFEFF/,''));if(descriptor&&typeof descriptor==='object')return {descriptor};}catch{}
+  return {problem:`The assistant setup in ${file} cannot be read. Run the Godspeed installer again to set up the assistant. Until then the assistant cannot answer.`};
+}
 export async function createService({ root, mediaRoot, host = '127.0.0.1', port = 47831, webPort, localPort, token, uiRoot, provider, device = 'local', authNow } = {}) {
   // The store keeps every record in memory and re-reads only the files its
   // watcher names; the index follows the store's changes row by row.
@@ -128,18 +132,22 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   const assistantPath=process.env.GODSPEED_ASSISTANT_CONFIG||path.join(store.state,'assistant.json');
   // Where this notebook really runs from, for the tools (core/running-notebook.mjs): Windows only.
   try{recordRunningNotebook({root:store.root,assistantConfig:process.env.GODSPEED_ASSISTANT_CONFIG});}catch(error){console.error('Godspeed Mission Control: could not record where the notebook runs:',error.message);}
-  // An assistant program that is not Hermes leaves the notebook running without its AI and says which
-  // setting to change (#506, 13 November 2026); until then it stopped startup, over and over.
+  // An assistant program that is not Hermes, or an assistant.json that cannot be read, leaves the
+  // notebook running without its AI and says which setting to change (#506, 13 November 2026);
+  // until then it stopped startup, over and over.
+  const originalRuntime=process.env.GODSPEED_ORIGINAL_RUNTIME==='on';
   let assistantProblem=null;
-  if(!provider&&fs.existsSync(assistantPath)){const descriptor=JSON.parse(fs.readFileSync(assistantPath,'utf8').replace(/^\uFEFF/,''));
-    if(descriptor.verified&&isHermesExecutable(descriptor.executable||'hermes'))provider=hermesProvider({executable:descriptor.executable,home:descriptor.home,cwd:store.root,sourceRoot:descriptor.sourceRoot});
-    else if(descriptor.verified){assistantProblem=`The assistant program set in ${assistantPath} is "${descriptor.executable}", which is not Hermes. Set "executable" in that file to your Hermes program (its name is hermes), or run the Godspeed installer again to set up the assistant. Until then the assistant cannot answer.`;console.error('Godspeed Mission Control: '+assistantProblem);}}
+  const assistant=(!provider||originalRuntime)&&fs.existsSync(assistantPath)?readAssistant(assistantPath):{};
+  if(!provider&&assistant.descriptor?.verified){const executable=assistant.descriptor.executable||'hermes';
+    if(typeof executable==='string'&&isHermesExecutable(executable))provider=hermesProvider({executable,home:assistant.descriptor.home,cwd:store.root,sourceRoot:assistant.descriptor.sourceRoot});
+    else assistantProblem=`The assistant program set in ${assistantPath} is "${executable}", which is not Hermes. Set "executable" in that file to your Hermes program (its name is hermes), or run the Godspeed installer again to set up the assistant. Until then the assistant cannot answer.`;}
+  else if(!provider&&assistant.problem)assistantProblem=assistant.problem;
+  if(assistantProblem)console.error('Godspeed Mission Control: '+assistantProblem);
   // What the supervisor reads as "alive" (supervisor-health.mjs): an AI call
   // beats while it is inside its own time limit, plus a minute to be stopped.
   let schedulerHeartbeat=new Date().toISOString();const {beatWhile}=await import('../core/supervisor-health.mjs'),beat=()=>{schedulerHeartbeat=new Date().toISOString();};
   if(provider){const connected=provider;provider=Object.assign(async input=>beatWhile(connected(input),beat,{limitMs:(input?.timeout_ms||600000)+60000}),connected);}
-  const originalRuntime=process.env.GODSPEED_ORIGINAL_RUNTIME==='on';
-  const descriptor=originalRuntime&&fs.existsSync(assistantPath)?JSON.parse(fs.readFileSync(assistantPath,'utf8').replace(/^\uFEFF/,'')):null;
+  const descriptor=originalRuntime?assistant.descriptor??null:null;
   if(originalRuntime&&!descriptor?.verified)throw Error('Connect the original Godspeed assistant before starting the integrated notebook');
   const lifecycle=originalRuntime?new HermesLifecycle():null,domains=new Domains(query,{provider}),scheduler=originalRuntime?new NativeScheduler(store,{...descriptor,device,lifecycle,records:new Scheduler(store,{device,executor:jobExecutor(provider,query),only:NativeScheduler.recordKinds,delivery:'notebook'})}):new Scheduler(store,{device,query,executor:jobExecutor(provider,query)});scheduler.onProgress=beat;scheduler.onFailure=error=>console.error('Godspeed Mission Control: a routine could not be created, the next tick tries again:',error.message);
   let workouts=null;
