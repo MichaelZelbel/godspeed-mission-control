@@ -230,6 +230,18 @@ async function runBriefing(job,{store,query,provider,now,notices,promiseRoot=sto
   if(!action||codeGate(result).length||ruleRefusals(result,voice).length)throw Error('Could not make a checked factual fallback from the available sources');
   return result;
  };
+ // The note that says the full brief could not be written. It carries the lines the program writes
+ // and checks word for word, and the checked contribution only when no review left its sources in
+ // doubt; it states nothing else from the sources. null when every wording breaks a rule.
+ const honestNote=unidentified=>{
+  if(unidentified)context.contribution=null;
+  const c=context.contribution,own=[context.done_line,context.cycle_heads_up,context.charm_line,...(c?[c.content,c.link]:[])].filter(Boolean);
+  for(const opening of ['Your full morning briefing for '+today+' could not be written today, because the checks refused what was drafted. A repair item has been opened for it.','The full note for '+today+' could not be written. A repair item is open.']){
+   const text=[opening,...own].join('\n\n');
+   if(!codeGate(text).length&&!ruleRefusals(text,voice).length)return text;
+  }
+  return null;
+ };
  // The Charm Challenge line is the person's own count, written by the add-on and checked word for word
  // by the gate above. Without this the plain-words check, with a real model, failed every brief while a
  // challenge ran, calling the line unexplained jargon (walk-through, 26 October 2026).
@@ -302,19 +314,29 @@ async function runBriefing(job,{store,query,provider,now,notices,promiseRoot=sto
    if(code.some(e=>/already saved today/.test(e)))throw Error('The same note was already saved today');
    if([facts,reader].some(r=>r.verdict.passed!==true)){
     const failing=[facts,reader].filter(r=>r.verdict.passed!==true);
-    if(!invalidReviews.length&&failing.every(r=>validFindings(r.verdict.findings,draft))){
+    // Sentences the checks name are repaired or dropped even when a review named no source record:
+    // a claim about something no source holds (a calendar that was never read) has no record to
+    // name, and the brief was lost for it (nightly run, 13 November 2026, #491).
+    if(failing.every(r=>validFindings(r.verdict.findings,draft))){
      const repaired=await repairFlagged(draft,failing.flatMap(r=>r.verdict.findings));
      if(repaired){draft=repaired.text;check=repaired.check;deliveryCheck=repaired.deliveryCheck;if(repaired.dropped)cutReceipt=repaired.receipt;break;}
     }
-    const rejected=draft,reasons=[...feedback];
+    const rejected=draft,reasons=[...feedback];let honest=null;
     try{
      if(invalidReviews.length)throw Error('Could not make a checked factual fallback: '+[...new Map(invalidReviews.map(review=>[review.check,review.reason])).entries()].map(([check,reason])=>check+': '+reason).join('; '));
      draft=factualFallback(rejectedIds);
     }catch(error){
-     await store.saveAsync('job_receipts',{kind:'brief-factual-fallback',job_id:job.id,state:'failed',source_hash:hash(context),rejected_draft:rejected,rejected_hash:hash(rejected),reasons,all_reasons:allReasons,fallback_error:error.message,finished_at:new Date().toISOString()});
-     throw error;
+     // The short honest note states no fact from the sources, so no check can refuse it for a
+     // claim about something it did not read (#491). Only when even it breaks a rule is the brief
+     // not saved, with the reason.
+     const note=honestNote(invalidReviews.length>0);
+     if(!note){
+      await store.saveAsync('job_receipts',{kind:'brief-factual-fallback',job_id:job.id,state:'failed',source_hash:hash(context),rejected_draft:rejected,rejected_hash:hash(rejected),reasons,all_reasons:allReasons,fallback_error:error.message,finished_at:new Date().toISOString()});
+      throw error;
+     }
+     draft=note;honest=error.message;
     }
-    const receipt=await store.saveAsync('job_receipts',{kind:'brief-factual-fallback',job_id:job.id,state:'verified',source_hash:hash(context),draft_hash:hash(draft),rejected_draft:rejected,rejected_hash:hash(rejected),reasons,all_reasons:allReasons,rejected_source_ids:[...rejectedIds],checks:['visible sources','voice','required lines','duplicate','length'],finished_at:new Date().toISOString()});
+    const receipt=await store.saveAsync('job_receipts',{kind:'brief-factual-fallback',job_id:job.id,state:'verified',source_hash:hash(context),draft_hash:hash(draft),rejected_draft:rejected,rejected_hash:hash(rejected),reasons,all_reasons:allReasons,rejected_source_ids:[...rejectedIds],...(honest?{honest_note:true,fallback_error:honest,checks:['no source facts','voice','required lines','duplicate']}:{checks:['visible sources','voice','required lines','duplicate','length']}),finished_at:new Date().toISOString()});
     check=receipt;deliveryCheck=receipt;fallback={day:today,refusals:reasons,cut:[],draft_hash:hash(rejected),checked:true};cutReceipt=receipt;break;
    }
    check=facts.receipt;deliveryCheck=reader.receipt;
