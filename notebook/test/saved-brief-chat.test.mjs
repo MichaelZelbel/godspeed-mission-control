@@ -36,9 +36,40 @@ test('candidate Telegram reports a definitely incomplete long saved brief',async
  const transport=async(url,init)=>{const method=url.split('/').at(-1),body=JSON.parse(init.body);if(method==='getUpdates')return new Response(JSON.stringify({ok:true,result:updates.splice(0)}));attempted.push(body.text);if(attempted.length===2)return new Response(JSON.stringify({ok:false,error_code:400}),{status:400});accepted.push(body.text);return new Response(JSON.stringify({ok:true,result:{message_id:attempted.length}}));};
  await new Telegram({store,domains:new Domains(query,{provider:async()=>({reply:'Substitute'})}),token:'TEST',owner:'42',transport}).tick();
  assert.equal(attempted.length,3);assert.equal(accepted.length,2);assert.equal(accepted[0],longSaved.slice(0,4000));
- assert.equal(accepted[1],"Your briefing was only partly delivered. Please ask for today's brief again.");
+ assert.equal(accepted[1],'Your reply was only partly delivered. Please send your message again.');
  assert.equal(store.get('command_receipts','telegram-2').state,'needs_review');
  assert.equal(store.get('command_receipts','telegram-2-failure-notice').state,'verified');
+});
+
+test('candidate Telegram reports a malformed definite rejection after one part',async t=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-saved-brief-telegram-malformed-')),store=new Store(root),query=new QueryService(store);t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ const longSaved='Saved filtered briefing. '+'.'.repeat(4000);store.save('notes',{title:'Your morning briefing',content:longSaved,source_app:'morning-brief',brief_day:day()});
+ const attempted=[],updates=[{update_id:3,message:{from:{id:42,is_bot:false},chat:{id:42,type:'private'},text:'brief'}}];
+ const transport=async(url,init)=>{const method=url.split('/').at(-1),body=JSON.parse(init.body);if(method==='getUpdates')return new Response(JSON.stringify({ok:true,result:updates.splice(0)}));attempted.push(body.text);if(attempted.length===2)return new Response('not json',{status:400});return new Response(JSON.stringify({ok:true,result:{message_id:attempted.length}}));};
+ await new Telegram({store,domains:new Domains(query),token:'TEST',owner:'42',transport}).tick();
+ assert.deepEqual(attempted.slice(0,2).map(text=>text.length),[4000,25]);assert.equal(attempted.length,3);
+ assert.equal(attempted.at(-1),'Your reply was only partly delivered. Please send your message again.');
+ assert.equal(store.get('command_receipts','telegram-3-failure-notice').state,'verified');
+});
+
+test('candidate Telegram does not follow an uncertain server failure with another send',async t=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-saved-brief-telegram-server-')),store=new Store(root),query=new QueryService(store);t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ const longSaved='Saved filtered briefing. '+'.'.repeat(4000);store.save('notes',{title:'Your morning briefing',content:longSaved,source_app:'morning-brief',brief_day:day()});
+ const attempted=[],updates=[{update_id:4,message:{from:{id:42,is_bot:false},chat:{id:42,type:'private'},text:'brief'}}];
+ const transport=async(url,init)=>{const method=url.split('/').at(-1),body=JSON.parse(init.body);if(method==='getUpdates')return new Response(JSON.stringify({ok:true,result:updates.splice(0)}));attempted.push(body.text);if(attempted.length===2)return new Response(JSON.stringify({ok:false,error_code:500}),{status:500});return new Response(JSON.stringify({ok:true,result:{message_id:attempted.length}}));};
+ await new Telegram({store,domains:new Domains(query),token:'TEST',owner:'42',transport}).tick();
+ assert.deepEqual(attempted.map(text=>text.length),[4000,25]);
+ assert.equal(store.get('command_receipts','telegram-4-failure-notice'),undefined);
+});
+
+test('candidate Telegram gives ordinary partial replies neutral recovery guidance',async t=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-chat-telegram-partial-')),store=new Store(root),query=new QueryService(store);t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ const attempted=[],updates=[{update_id:5,message:{from:{id:42,is_bot:false},chat:{id:42,type:'private'},text:'Explain my project'}}];
+ const transport=async(url,init)=>{const method=url.split('/').at(-1),body=JSON.parse(init.body);if(method==='getUpdates')return new Response(JSON.stringify({ok:true,result:updates.splice(0)}));attempted.push(body.text);if(attempted.length===2)return new Response(JSON.stringify({ok:false,error_code:400}),{status:400});return new Response(JSON.stringify({ok:true,result:{message_id:attempted.length}}));};
+ const domains=new Domains(query,{provider:async()=>({reply:'x'.repeat(8001)})});
+ await new Telegram({store,domains,token:'TEST',owner:'42',transport}).tick();
+ assert.deepEqual(attempted.slice(0,2).map(text=>text.length),[4000,4000]);assert.equal(attempted.length,3);
+ assert.equal(attempted.at(-1),'Your reply was only partly delivered. Please send your message again.');
 });
 
 test('candidate Telegram delivers a long saved brief in full',async t=>{
