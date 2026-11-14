@@ -194,7 +194,11 @@ if(own&&verified(own)){
  // its own words: "- [ ] water", "* food", "[ ] torches", "1. WATER".
  if(!/^[ \t]*(?:[-*\u2022](?:[ \t]*\[[ xX]\]|[ \t])|\[[ xX]\]|\d+[.)][ \t])[ \t]*\S/m.test(practical))notPractical('it has no list items');
  if(!/\b(?:\d+\s*(?:lit(?:re|er)s?|days?|hours?|batter(?:y|ies)|ml|kg)|at least \d+)\b/i.test(practical))notPractical('it names no amounts');
- const missing=['water','food','first aid|medication','light|power','communication|document'].filter(group=>!new RegExp(group,'i').test(practical));
+ // Each is a topic the list must cover, in any of the words the product's own lists use for it
+ // (nightly of 14 November 2026: "Important papers" and "A list of phone numbers", with neither
+ // "communication" nor "document").
+ const topics={water:/water/i,food:/food/i,'first aid or medication':/first aid|medication/i,'light or power':/light|power/i,'communication or documents':/communicat|document|papers|contact|phone|radio/i};
+ const missing=Object.keys(topics).filter(topic=>!topics[topic].test(practical));
  if(missing.length)notPractical(`it does not cover ${missing.join(', ')}`);
  if(/\b(?:TODO|TBD|placeholder|outline only)\b/i.test(practical))notPractical('it is a placeholder');
 }else{

@@ -4098,7 +4098,12 @@ EOF
 passes 'a practical checklist written with plain bullets' first-day "$FD/plain-bullets" 'answered today'
 copy "$FD/plain-bullets" "$FD/plain-bullets-thin"
 sed -i '/documents/d' "$FD/plain-bullets-thin/work/emergency-kit-checklist.md"
-refuses 'a plain-bullet checklist missing a group' first-day "$FD/plain-bullets-thin" 'not a practical emergency-kit checklist'
+refuses 'a plain-bullet checklist missing a group' first-day "$FD/plain-bullets-thin" 'it does not cover communication or documents'
+# The product's checklist of 14 November 2026 (nightly): the papers and the phone numbers, in words
+# that are neither "communication" nor "document".
+copy "$FD/plain-bullets-thin" "$FD/papers-and-numbers"
+printf '%s\n' '## Important papers (in a waterproof bag)' '- [ ] Copies of passports, ID cards and insurance policies' '- [ ] A list of phone numbers: family, doctors, your insurer' >>"$FD/papers-and-numbers/work/emergency-kit-checklist.md"
+passes 'a checklist that covers papers and phone numbers in its own words' first-day "$FD/papers-and-numbers" 'answered today'
 copy "$FD/plain-bullets" "$FD/plain-bullets-no-amounts"
 printf '%s\n' '- Water' '- Food' '- First aid' '- Power' '- Documents' >"$FD/plain-bullets-no-amounts/work/emergency-kit-checklist.md"
 refuses 'a plain-bullet checklist without quantities' first-day "$FD/plain-bullets-no-amounts" 'not a practical emergency-kit checklist'
