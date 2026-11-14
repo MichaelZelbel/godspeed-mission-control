@@ -70,8 +70,8 @@ paragraph when the jobs are in `.github/workflows/scenarios.yml`.
 
 `GODSPEED_SCENARIO_PRODUCT=<a checkout> GODSPEED_SCENARIO_MODES=folder bash scenarios/reminder-closed-elsewhere.sh local`
 runs the folder half of `reminder-closed-elsewhere` against a checkout instead of the install line: the
-installation steps are done by `local_install_into` in `scenario-lib.sh`, and a stand-in answers 404 for
-the stand-in owner's repositories. The workflow never sets either variable. A sync round that has to end
+installation steps are done by `local_install_into` in `scenario-lib.sh`. The workflow never sets
+either variable. A sync round that has to end
 synced (`sync_round`) is asked again until `GODSPEED_SCENARIO_ROUND_DEADLINE` seconds (180) have passed.
 
 ## How one is run
@@ -139,8 +139,11 @@ The six reminder scenarios need no key at all: everything they do is this machin
 computers" are two installations on the one machine, each with its own mission control folder, its
 own port (`GODSPEED_PORT`) and its own device identity, joined through one bare Git repository on
 that machine standing in for the private GitHub repository, which Git is told to use for that
-address. The product still checks the address is a private GitHub one, so the one thing they ask of
-the network beyond the install itself is that api.github.com answers 404 for an owner nobody has.
+address. The product still checks the address is a private GitHub one, and the answer
+api.github.com gives for a repository nobody can see, 404, is given on that machine for the stand-in
+owner (`stand_in_answers_privacy` in `scenario-lib.sh`): asked of GitHub itself without a key, the
+check was rate-limited and failed a night (issue #557). So they ask nothing of the network beyond
+the install itself.
 
 `voice.sh` also takes `ELEVENLABS_TEST_VOICE_ID` (a public ElevenLabs voice by default) and sends
 `voice-note.wav`, the short recording kept beside it. No chat account of any kind is needed: the

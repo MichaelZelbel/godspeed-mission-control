@@ -3046,6 +3046,25 @@ if [ -n "$SI_SSH_BARE" ] && [ -z "$(git -C "$SI_SSH_BARE" for-each-ref 2>/dev/nu
 else
   bad "stand_in_github_over_ssh made a repository with history ($SI_SSH)"
 fi
+# Whether a stand-in repository is private is answered on this machine, for every Node the scenario
+# starts, and nothing else is: api.github.com answered something other than 404 to the second
+# computer of two-machines-move-at-once on a night it was rate-limited (issue #557).
+for shape in stand_in_github stand_in_github_over_ssh; do
+  SI_ANSWER=$(HOME="$SI_HOME" GIT_CONFIG_GLOBAL="$SI_HOME/gitconfig" SCENARIO=stand-in-test GODSPEED_SCENARIO_WORK="$TMP/si-privacy" bash -c '
+    . "$1/scenarios/scenario-lib.sh"; '"$shape"' "$2/privacy-'"$shape"'" >/dev/null 2>&1
+    stand_in_answers_privacy
+    owner=${STAND_IN_ADDRESS#*github.com[:/]}; owner=${owner%%/*}
+    printf "%s|%s|" "$owner" "$NODE_OPTIONS"
+    node -e "const real=globalThis.fetch.toString();
+      fetch(\"https://api.github.com/repos/$owner/x\").then(r=>console.log(r.status+\"|\"+(real.includes(\"api.github.com\")?\"wrapped\":\"plain\")))"
+    ' _ "$ROOT" "$TMP" 2>&1)
+  SI_IMPORT="--import=file://$TMP/si-privacy/stand-in-privacy/github-404.mjs"
+  if [ "$SI_ANSWER" = "godspeed-scenario-stand-in|$SI_IMPORT|404|wrapped" ]; then
+    ok "$shape has the stand-in owner's repositories answered 404 here, once, for every Node it starts"
+  else
+    bad "$shape left the stand-in's privacy to api.github.com or loaded the answer twice ($SI_ANSWER)"
+  fi
+done
 
 # ======================================= sync rounds that have to end synced (issue #125)
 # On 2.0.0-beta.14 the folder half's first round answered "pending", sent nothing, and the answer went

@@ -81,7 +81,8 @@ act() {
   printf '%s\n' "$OLD_SET_CLOSINGS" >"$EVIDENCE/expected-closings.txt"
 
   say "== the second computer, set up from the copy on GitHub, also on the version before the move"
-  address=$(stand_in_github "$work/github")
+  stand_in_github "$work/github"
+  address=$STAND_IN_ADDRESS
   sync_on "$ROOT" configure "$address" >"$EVIDENCE/configure.json" ||
     fail "Settings' own way of connecting a repository was refused on the first computer"
   sync_on "$ROOT" >"$EVIDENCE/rounds.txt" || fail "the first sync round failed, so the second computer had nothing to be set up from"
