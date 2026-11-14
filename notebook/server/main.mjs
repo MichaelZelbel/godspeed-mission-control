@@ -651,7 +651,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
       if (route === '/api/structural' && req.method === 'POST') { const input = JSON.parse(await body(req)), data = store.structural(input.type, input.id, input.action, input.options); if (input.type === 'notes' && input.action === 'remove') await retireShares(store, [input.id]); return send(res, 200, { data, error: null }); }
       if (route === '/api/media/upload' && req.method === 'POST') {
         // The note editor holds files to the same limit (shared/media-limits.mjs).
-        const tooLarge=`This file is too large. Max is ${MEDIA_UPLOAD_MAX_MB} MB.`;
+        const tooLarge=`This file is too large. Max is ${MEDIA_UPLOAD_MAX_MB} MB. Keep the file outside the notebook and add a link to it instead.`;
         let bytes;try{bytes=await body(req, MEDIA_UPLOAD_MAX_BYTES + MEDIA_UPLOAD_REQUEST_EXTRA_BYTES);}catch(error){if(error.message==='Request is too large')return send(res,413,{error:tooLarge});throw error;}
         const form = await new Request('http://localhost/', { method: 'POST', headers: { 'content-type': req.headers['content-type'] }, body: bytes }).formData();
         const file = form.get('file'); if (!(file instanceof Blob)) throw new Error('Missing media file');

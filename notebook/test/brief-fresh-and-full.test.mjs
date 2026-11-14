@@ -239,6 +239,9 @@ test('draft items and sentence repair keep to their lines',async()=>{
  const emptied=await applyFindings('Good morning.\n\n1. Only this.\n\nHealth fine.',[{sentence:'Only this.',problem:'wording',reason:'w'}],{rewrite:async()=>''});
  assert.equal(emptied.text,'Good morning.\n\nHealth fine.');
  assert.equal(emptied.changes[0].item_emptied,true);
+ const emptiedBullet=await applyFindings('Good morning.\n\n- Keep this.\n- Refuse all of this.\n- Keep this too.\n\nHealth fine.',[{sentence:'Refuse all of this.',problem:'wording',reason:'w'}],{rewrite:async()=>''});
+ assert.equal(emptiedBullet.text,'Good morning.\n\n- Keep this.\n- Keep this too.\n\nHealth fine.','a wholly refused bullet and its empty wrapper go, while surrounding content stays unchanged');
+ assert.equal(emptiedBullet.changes[0].item_emptied,true);
  const headless=await applyFindings('Good morning.\n\n1. Your call clashes with the dentist.\nDecide which one moves by noon.\n\nHealth fine.',[{sentence:'Your call clashes with the dentist.',problem:'wording',reason:'w'}],{rewrite:async()=>''});
  assert.equal(headless.text,'Good morning.\n\n1. Decide which one moves by noon.\n\nHealth fine.','a kept item keeps its number on its text');
  assert.equal(thinCheck(headless.text,{}).has_action,true);
