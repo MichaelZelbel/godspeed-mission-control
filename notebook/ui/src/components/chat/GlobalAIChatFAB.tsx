@@ -134,20 +134,21 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
     return match ? match[1] : page?new URLSearchParams(location.search).get("person"):null;
   }, [location.pathname,location.search,page]);
 
-  // Detect collection context from /collections/:slug and optional /:itemId
+  // Detect collection context from /collections/:slug and optional /:itemId; the chat in its own
+  // window (/dashboard/chat?collection=slug&item=id) reads the same from its address (issue #588).
   const collectionSlug = useMemo(() => {
     const match = location.pathname.match(/^\/collections\/([^/]+)/);
-    return match ? match[1] : null;
-  }, [location.pathname]);
+    return match ? match[1] : page?new URLSearchParams(location.search).get("collection"):null;
+  }, [location.pathname,location.search,page]);
 
   const collectionItemId = useMemo(() => {
     // /collections/:slug/:itemId - but skip reserved subroutes like /schema
     const match = location.pathname.match(/^\/collections\/[^/]+\/([^/]+)$/);
-    if (!match) return null;
+    if (!match) return page&&collectionSlug?new URLSearchParams(location.search).get("item"):null;
     const seg = match[1];
     if (seg === "schema" || seg === "new") return null;
     return seg;
-  }, [location.pathname]);
+  }, [location.pathname,location.search,page,collectionSlug]);
 
 
   const [collectionId, setCollectionId] = useState<string | null>(null);
@@ -180,6 +181,9 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
         : "general";
 
   useEffect(()=>{let active=true;setContextTitle(noteTitle||'');if(noteId&&noteTitle===undefined)supabase.from('notes').select('*').eq('id',noteId).single().then(({data}:any)=>{if(active&&data)setContextTitle(data.title||'Untitled note');});else if(personId)supabase.from('contacts').select('*').eq('id',personId).single().then(({data}:any)=>{if(active&&data)setContextTitle(personLabel(data));});return()=>{active=false;};},[noteId,personId,noteTitle]);
+
+  // The same conversation in its own window: the address names the context in the order contextKey picks it.
+  const popOutHref='/dashboard/chat'+(pageChat?'?page='+encodeURIComponent(pageChat.page):collectionSlug?'?collection='+encodeURIComponent(collectionSlug)+(collectionItemId?'&item='+encodeURIComponent(collectionItemId):''):noteId?'?note='+encodeURIComponent(noteId):personId?'?person='+encodeURIComponent(personId):'');
 
   // Persisted chat state for the current context
   const chatKey = `${user?.id ?? "anon"}|${contextKey}`;
@@ -562,7 +566,7 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
               </div>
               {page&&<Button variant="ghost" className="h-11" onClick={handleClear} disabled={isLoading || isClearing}>Clear conversation</Button>}
               {!page&&<div className="flex items-center gap-1">
-                <a className="inline-flex h-11 w-11 sm:h-10 sm:w-10 items-center justify-center rounded hover:bg-muted" href={'/dashboard/chat'+(pageChat?'?page='+encodeURIComponent(pageChat.page):noteId?'?note='+encodeURIComponent(noteId):personId?'?person='+encodeURIComponent(personId):'')} target="_blank" rel="noreferrer" aria-label="Open chat in a new window" title="Open chat in a new window"><ExternalLink className="h-4 w-4"/></a>
+                <a className="inline-flex h-11 w-11 sm:h-10 sm:w-10 items-center justify-center rounded hover:bg-muted" href={popOutHref} target="_blank" rel="noreferrer" aria-label="Open chat in a new window" title="Open chat in a new window"><ExternalLink className="h-4 w-4"/></a>
                 {!embedded&&<span className="text-[10px] text-muted-foreground hidden xl:inline mr-1">Ctrl+Shift+K</span>}
                 {state.messages.length > 0 && (
                   <Button
