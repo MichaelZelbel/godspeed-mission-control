@@ -31,7 +31,10 @@ function page(withChat: boolean, context: { show: boolean; state?: string | null
       if (init?.method === "POST") { posts.push(JSON.parse(String(init.body))); context = { show: false, state: "skipped" }; }
       return new Response(JSON.stringify(context), { status: 200, headers: { "Content-Type": "application/json" } });
     }
-    return new Response(JSON.stringify({ ...status, count: 0, data: [] }), { status: 200, headers: { "Content-Type": "application/json" } });
+    // Like the server, the status carries the AI check's answer only when asked for it (#573).
+    const { aiProblem, ...always } = status;
+    const checked = new URL(String(url), "http://localhost").searchParams.get("checkAI") === "1";
+    return new Response(JSON.stringify({ ...always, ...(checked ? { aiProblem } : {}), count: 0, data: [] }), { status: 200, headers: { "Content-Type": "application/json" } });
   }));
   render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
     <MemoryRouter initialEntries={["/dashboard"]}>
