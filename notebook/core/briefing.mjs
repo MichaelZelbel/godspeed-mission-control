@@ -63,6 +63,27 @@ export function savedBriefToday(store,now=new Date()){
  return note?{note,hidden:false}:{note:null,hidden:true};
 }
 
+const BRIEF_REQUESTS={
+ en:new Set(["today's brief",'todays brief','today brief',"today's briefing",'todays briefing',"today's morning brief",'todays morning brief',"today's morning briefing",'my brief','my briefing','the brief','the brief again','my brief again','morning brief','my morning brief','the morning brief','morning briefing','my morning briefing','brief','briefing']),
+ de:new Set(['heutiges briefing','das heutige briefing','briefing von heute','das briefing von heute','mein briefing','das briefing','morgenbriefing','mein morgenbriefing','das morgenbriefing','heutiges morgenbriefing','das heutige morgenbriefing','tagesbriefing','mein tagesbriefing']),
+};
+const BRIEF_REQUEST_FRAMES={
+ en:[/^(?:please\s+)?(?:show|send|give|get)\s+me\s+/,/^(?:what(?:'s| is)|where(?:'s| is))\s+/,/^(?:can|could)\s+(?:i|you)\s+(?:see|have|get|send me|show me)\s+/,/\s+please$/],
+ de:[/^(?:bitte\s+)?(?:zeig|schick|gib)\s+mir\s+/,/^(?:was ist|wo ist)\s+/,/\s+bitte$/],
+};
+
+// This is the same deliberately narrow request vocabulary as the Telegram gateway hook.
+export function asksForTodaysBrief(text){
+ if(typeof text!=='string'||text.length>80)return false;
+ const plain=text.toLowerCase().replaceAll('’',"'").replace(/[^\p{L}\p{N}_\s']/gu,' ').replace(/\s+/g,' ').trim();
+ for(const language of Object.keys(BRIEF_REQUESTS)){
+  const candidates=new Set([plain]);
+  for(const frame of BRIEF_REQUEST_FRAMES[language])for(const candidate of [...candidates])candidates.add(candidate.replace(frame,'').trim());
+  if([...candidates].some(candidate=>BRIEF_REQUESTS[language].has(candidate)))return true;
+ }
+ return false;
+}
+
 export async function briefing(job,{store,query,provider,now=new Date(),notices}){
  if(job.rehearsal){
   const copy=path.join(store.state,'brief-rehearsals',randomUUID());fs.mkdirSync(copy,{recursive:true,mode:0o700});
