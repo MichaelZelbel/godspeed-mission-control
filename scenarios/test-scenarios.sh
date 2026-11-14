@@ -5474,10 +5474,61 @@ refuses 'day 2 output still holds a step' held-by-a-claim "$HB/day2-log" 'day 2 
 copy "$HB/good" "$HB/no-hold"; printf 'ERROR: --until names no claim in world/claims/\n' >"$HB/no-hold/hold.txt"
 refuses 'a hold mc-holds never wrote' held-by-a-claim "$HB/no-hold" 'wrote no claim'
 
+# ============================================== media-travels (2.0.0-beta.24, item 3, #57)
+PIC=1111111111111111111111111111111111111111111111111111111111111111
+PDFSHA=2222222222222222222222222222222222222222222222222222222222222222
+BIG=3333333333333333333333333333333333333333333333333333333333333333
+media_travels_good() { # <folder>
+  local folder=$1
+  rm -rf "$folder"
+  mkdir -p "$folder"
+  printf '%s\n' "$OLD_COMMIT" >"$folder/a-version-before"
+  printf '%s\n' "$NEW_COMMIT" >"$folder/a-version-after"
+  printf '%s\n' "$NEW_COMMIT" >"$folder/b-version"
+  printf '%s\n' "$PIC" >"$folder/picture-sha"
+  printf '%s\n' "$PDFSHA" >"$folder/pdf-sha"
+  printf '%s\n' "$BIG" >"$folder/large-sha"
+  : >"$folder/a-carried-before-update.txt"
+  printf '%s.mapping.json\n%s.pdf\n%s.png\n' x "$PDFSHA" "$PIC" >"$folder/a-carried-after-update.txt"
+  printf '{"data":[{"path":"user/44444444-4444-4444-8444-444444444444.mp4","size":53477376}]}\n' >"$folder/a-kept-here.json"
+  cp "$folder/a-carried-after-update.txt" "$folder/b-carried.txt"
+  printf '200\n' >"$folder/b-picture.status"; printf '%s\n' "$PIC" >"$folder/b-picture.sha"
+  printf '200\n' >"$folder/b-pdf.status"; printf '%s\n' "$PDFSHA" >"$folder/b-pdf.sha"
+  printf '404\n' >"$folder/b-large.status"
+  printf '200\n' >"$folder/b-remove.status"
+  printf '404\n' >"$folder/a-picture-after-removal.status"
+  printf 'x.png\n' | sed "s/x/$PIC/" >"$folder/a-media-root-after-removal.txt"
+}
+section media-travels
+M=$TMP/media-travels
+media_travels_good "$M/good"
+passes "a picture and a PDF that travel through the copy to a fresh install" media-travels "$M/good" "served by a fresh install"
+refuses "a run that kept nothing at all" media-travels "$M/never-written" "there is nothing at"
+copy "$M/good" "$M/no-move"; cp "$M/good/a-version-before" "$M/no-move/a-version-after"
+refuses "a first computer that never updated" media-travels "$M/no-move" "runs the same commit"
+copy "$M/good" "$M/had-carried"; printf '%s.png\n' "$PIC" >"$M/had-carried/a-carried-before-update.txt"
+refuses "a first computer that carried media before the update" media-travels "$M/had-carried" "had nothing to carry"
+copy "$M/good" "$M/not-carried"; printf '%s.pdf\n' "$PDFSHA" >"$M/not-carried/a-carried-after-update.txt"
+refuses "a first start that did not carry the picture" media-travels "$M/not-carried" "did not carry the picture"
+copy "$M/good" "$M/big-carried"; printf '%s.png\n%s.pdf\n%s.mp4\n' "$PIC" "$PDFSHA" "$BIG" >"$M/big-carried/a-carried-after-update.txt"
+refuses "a file over 50 MB that was carried" media-travels "$M/big-carried" "GitHub refuses a file that large"
+copy "$M/good" "$M/not-kept"; printf '{"data":[]}\n' >"$M/not-kept/a-kept-here.json"
+refuses "a large file the library does not mark" media-travels "$M/not-kept" "kept on this computer only"
+copy "$M/good" "$M/b-missing"; printf '404\n' >"$M/b-missing/b-picture.status"
+refuses "a second computer that cannot serve the picture" media-travels "$M/b-missing" "for the picture"
+copy "$M/good" "$M/b-other-bytes"; printf '%s\n' "$BIG" >"$M/b-other-bytes/b-pdf.sha"
+refuses "a second computer that serves other bytes for the PDF" media-travels "$M/b-other-bytes" "different bytes for the PDF"
+copy "$M/good" "$M/b-large"; printf '200\n' >"$M/b-large/b-large.status"
+refuses "a second computer that serves the large file" media-travels "$M/b-large" "serves the file over 50 MB"
+copy "$M/good" "$M/removal-lost"; printf '200\n' >"$M/removal-lost/a-picture-after-removal.status"
+refuses "a removal that never reached the first computer" media-travels "$M/removal-lost" "not 404"
+copy "$M/good" "$M/bytes-deleted"; : >"$M/bytes-deleted/a-media-root-after-removal.txt"
+refuses "a removal that deleted the first computer's own bytes" media-travels "$M/bytes-deleted" "lost the picture's bytes"
+
 # ============================================================ every one of them, the same shape
 section 'every script'
 BASH_SCENARIOS=(settings-on-install night-tidy voice update-keeps-everything
-  reminder-closed-elsewhere reminders-move-keeps-everything two-machines-move-at-once
+  reminder-closed-elsewhere reminders-move-keeps-everything two-machines-move-at-once media-travels
   late-reminder-file closed-offline-on-both reminder-from-settings charm-challenge
   no-video-skills-by-default update-removes-only-unchanged-skills briefing-breaks-a-rule telegram-language
   brief-asked-in-chat talk-prep-honest no-question-he-cannot-judge plain-yes what-was-that connection-check
