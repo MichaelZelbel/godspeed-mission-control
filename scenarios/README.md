@@ -143,7 +143,13 @@ address. The product still checks the address is a private GitHub one, and the a
 api.github.com gives for a repository nobody can see, 404, is given on that machine for the stand-in
 owner (`stand_in_answers_privacy` in `scenario-lib.sh`): asked of GitHub itself without a key, the
 check was rate-limited and failed a night (issue #557). So they ask nothing of the network beyond
-the install itself.
+the install itself, except in one place: `two-machines-move-at-once`, after both computers are
+updated, runs `github-privacy-live.mjs` (`live_github_privacy` in `scenario-lib.sh`). That is the one
+check that asks the real api.github.com, without a key, through the updated product's own
+`FileSync.verifyRemote`: a public repository (`octocat/Hello-World`) has to be refused as publicly
+readable, and one nobody has has to be taken as private. While GitHub answers anything else it asks
+again, 3 tries over about 2 minutes, and then fails the scenario with GitHub's status and its
+rate-limit headers in the FAIL line.
 
 `voice.sh` also takes `ELEVENLABS_TEST_VOICE_ID` (a public ElevenLabs voice by default) and sends
 `voice-note.wav`, the short recording kept beside it. No chat account of any kind is needed: the

@@ -36,6 +36,7 @@
 #   a-state.txt / b-state.txt             what each computer's own reminders say afterwards
 #   expected-pages.txt / expected-closings.txt  the set that was seeded, as it has to come out
 #   rounds.txt                            what every sync round answered
+#   github-privacy-live.txt               the product's own privacy request, asked of the real GitHub
 SCENARIO=two-machines-move-at-once
 # shellcheck source=scenarios/scenario-lib.sh
 . "$(dirname "$0")/scenario-lib.sh"
@@ -105,6 +106,9 @@ act() {
   read_version "$b"
   cp "$(runtime_of "$ROOT")/version" "$EVIDENCE/a-version-after" || fail "the update left no version file behind on the first computer"
   cp "$(runtime_of "$b")/version" "$EVIDENCE/b-version-after" || fail "the update left no version file behind on the second computer"
+  # The stand-in answered GitHub's privacy question for both joins above; the updated product's own
+  # request is asked of the real api.github.com here instead (scenario-lib.sh live_github_privacy).
+  live_github_privacy "$ROOT" "$EVIDENCE/github-privacy-live.txt"
   # Each one takes the old files in on its own first run, before anything is carried either way.
   due_on "$ROOT" state >"$EVIDENCE/a-state.txt" || fail "the first computer could not say what it holds after the move"
   due_on "$b" state >"$EVIDENCE/b-state.txt" || fail "the second computer could not say what it holds after the move"
