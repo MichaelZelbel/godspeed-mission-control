@@ -68,7 +68,7 @@ const BRIEF_REQUESTS=Object.fromEntries(Object.entries(briefRequests.asks).map((
 const BRIEF_REQUEST_FRAMES=Object.fromEntries(Object.entries(briefRequests.frames).map(([language,frames])=>[language,frames.map(frame=>new RegExp(frame))]));
 
 export function asksForTodaysBrief(text){
- if(typeof text!=='string'||text.length>80)return false;
+ if(typeof text!=='string'||[...text].length>80)return false;
  const plain=text.toLowerCase().replaceAll('’',"'").replace(/[^\p{L}\p{N}_\s']/gu,' ').replace(/\s+/g,' ').trim();
  for(const language of Object.keys(BRIEF_REQUESTS)){
   const candidates=new Set([plain]);

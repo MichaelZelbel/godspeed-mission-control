@@ -10,7 +10,7 @@ export class Telegram {
     const habit=habits.at(-1);let bytes;
     if(habit)try{bytes=await this.renderProgress(habit,{locale});}catch{}
     const text=String(reply),parts=[];for(let start=0;start<text.length;start+=4000)parts.push(text.slice(start,start+4000));if(!parts.length)parts.push('');
-    const sendText=async()=>{let sent;for(const part of parts)sent=await this.call('sendMessage',{chat_id:this.owner,text:part});return sent;};
+    const sendText=async()=>{let sent,sentParts=0;for(const part of parts)try{sent=await this.call('sendMessage',{chat_id:this.owner,text:part});sentParts++;}catch(error){if(sentParts&&error.code==='TELEGRAM_REJECTED')error.code='TELEGRAM_PARTIAL_REJECTION';throw error;}return sent;};
     if(!bytes)return {...await sendText(),dispatched:text};
     // One picture is the reply, with its text as the caption. Long answers keep their text reply.
     let message;if(text.length>1024)message=await sendText();
@@ -27,7 +27,7 @@ export class Telegram {
   // A message carrying a link goes without a preview: Telegram's servers fetch
   // a previewed link first, and a one-time sign-in link was used up by them
   // before the owner could tap it (until 6 October 2026).
-  async call(method,input){if(method==='sendMessage'&&/https?:\/\//i.test(String(input.text||'')))input={...input,link_preview_options:{is_disabled:true}};const response=await this.transport(this.origin+'/bot'+this.token+'/'+method,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(input),signal:AbortSignal.timeout(35000)});const data=await response.json();if(!response.ok||!data.ok)throw new Error('Candidate Telegram request failed');return data.result;}
+  async call(method,input){if(method==='sendMessage'&&/https?:\/\//i.test(String(input.text||'')))input={...input,link_preview_options:{is_disabled:true}};const response=await this.transport(this.origin+'/bot'+this.token+'/'+method,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(input),signal:AbortSignal.timeout(35000)});const data=await response.json();if(!response.ok||!data.ok)throw Object.assign(new Error('Candidate Telegram request failed'),{code:'TELEGRAM_REJECTED'});return data.result;}
   async failureNotice(id,text){
     const receiptId=id+'-failure-notice';
     if(this.store.get('command_receipts',receiptId))return;
@@ -70,7 +70,7 @@ export class Telegram {
           await this.store.saveAsync('command_receipts',{id,state:'verified',message_id:delivered.message_id,result:reply});
           if(!answered)await saveReached(this.store,{role:'assistant',content:reply,source_app:'telegram',message_id:delivered.message_id,conversation_id:'telegram-owner'});
           if(unregistered)throw Error('A question was sent but could not be registered');
-        }catch{await this.store.saveAsync('command_receipts',{id,state:'needs_review',error:'Telegram request did not finish. It will not be replayed automatically.'});if(!sendAttempted)await this.failureNotice(id,'I could not finish your message. I have not repeated any actions. Please try again.');else if(unregistered)await this.failureNotice(id,'I asked you a question but could not register it, so a plain yes or no will not answer it. Please ask me again.');}
+        }catch(error){await this.store.saveAsync('command_receipts',{id,state:'needs_review',error:'Telegram request did not finish. It will not be replayed automatically.'});if(!sendAttempted)await this.failureNotice(id,'I could not finish your message. I have not repeated any actions. Please try again.');else if(error.code==='TELEGRAM_PARTIAL_REJECTION')await this.failureNotice(id,"Your briefing was only partly delivered. Please ask for today's brief again.");else if(unregistered)await this.failureNotice(id,'I asked you a question but could not register it, so a plain yes or no will not answer it. Please ask me again.');}
         atomic(this.file,JSON.stringify({offset:update.update_id+1}));
       }
     }finally{this.running=false;}
