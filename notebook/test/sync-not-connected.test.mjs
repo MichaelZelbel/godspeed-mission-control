@@ -22,6 +22,18 @@ test('Sync now on a notebook that never connected sync says so and runs no git',
   assert.equal(fs.existsSync(path.join(service.store.state,'sync-status.json')),false);
 });
 
+test('Sync now on a notebook that connected sync still runs the sync',async t=>{
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-sync-connected-'));process.env.GODSPEED_ASSISTANT_CONFIG=path.join(root,'no-assistant.json');
+  const service=await createService({root,port:0});
+  t.after(async()=>{await service.close();fs.rmSync(root,{recursive:true,force:true});delete process.env.GODSPEED_ASSISTANT_CONFIG;});
+  fs.writeFileSync(path.join(service.store.state,'sync-config.json'),JSON.stringify({enabled:true}));
+  const r=await fetch('http://127.0.0.1:'+service.address.port+'/api/sync/run',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+  assert.equal(r.status,200);
+  const body=await r.json();
+  assert.notEqual(body.status.state,'not_connected');
+  assert.doesNotMatch(JSON.stringify(body),/Sync is not connected/);
+});
+
 test("Settings' Sync now shows that answer",()=>{
   const control=fs.readFileSync(new URL('../ui/src/local/Control.tsx',import.meta.url),'utf8');
   const button=control.slice(control.indexOf("call('sync/run'"),control.indexOf('>Sync now</button>')+200);
