@@ -801,6 +801,32 @@ for glue in ',' ':' '+' '='; do
 done
 OUT="$(hw file --what "Draft the kit list" --done-when "the kit list is written in work/kit-list.md" --check "cmp work/kit-list.md,work/a+b/routines/work/kit.md" --key kit-glued-look-alike --source test 2>&1)"
 contains "a path glued on that only looks like a run-log folder files" "$OUT" ": planned"
+# A folder name ending in spaces and dots before a separator is the folder Windows sees (#561)
+si=0
+for spelt in 'routines/work . /x.md' 'routines/work .. /x.md' 'Routines. /Work. . /x.md'; do
+  si=$((si+1))
+  OUT="$(hw file --what "Draft the kit checklist" --done-when "the checklist is written in $spelt" --key "kit-spdot-done-$si" --source test 2>&1)"
+  check "a DONE WHEN in '$spelt' is refused" "$?" "1"
+  contains "  naming the folder the cleanup empties" "$OUT" "inside routines/work/, a run-log folder"
+  check "  and nothing is filed" "$(idof "kit-spdot-done-$si")" "none"
+  OUT="$(hw file --learn "What goes in a kit?" --done-when "the answer is written in work/kit.md" --path "$spelt" --key "kit-spdot-path-$si" --source test 2>&1)"
+  check "  as a --path it is refused" "$?" "1"
+  contains "  naming the folder the cleanup empties" "$OUT" "--path names $spelt, inside routines/work/, a run-log folder"
+  OUT="$(hw file --what "Draft the kit list" --done-when "the kit list is written" --check "test -s '$spelt'" --key "kit-spdot-check-$si" --source test 2>&1)"
+  check "  as a CHECK it is refused" "$?" "1"
+  contains "  naming the folder the cleanup empties" "$OUT" "inside routines/work/, a run-log folder"
+done
+OUT="$(hw file --what "Write the notes" --done-when "the notes are written in work/notes . /x.md" --key notes-spdot-look-alike --source test 2>&1)"
+contains "a look-alike with a space-dot folder name files" "$OUT" ": planned"
+# A web address is not a path of the notebook; a run-log folder named alone is still that folder (#561)
+OUT="$(hw file --what "Read the page" --done-when "see https://example.com/routines/work/x.md" --key web-look-alike --source test 2>&1)"
+contains "a web address that only looks like a run-log path files" "$OUT" ": planned"
+OUT="$(hw file --what "Draft the kit" --done-when "the kit is written in routines/work/" --key kit-folder-alone --source test 2>&1)"
+check "a DONE WHEN naming only a run-log folder is refused" "$?" "1"
+contains "  naming the folder the cleanup empties" "$OUT" "names routines/work/, which is routines/work/, a run-log folder"
+check "  and nothing is filed" "$(idof kit-folder-alone)" "none"
+OUT="$(hw file --what "Draft the kit" --done-when "the kit is written in work/kit.md" --check "test -s file://$TMP/routines/work/kit.md" --key kit-file-url --source test 2>&1)"
+check "a file:// address into a run-log folder is still refused" "$?" "1"
 # One list of run-log folders (#551): mc-work refuses each folder the cleanup sweeps, and no other.
 CLEANUP="$HERE/../notebook/core/cleanup.mjs"
 if [ -f "$CLEANUP" ]; then
