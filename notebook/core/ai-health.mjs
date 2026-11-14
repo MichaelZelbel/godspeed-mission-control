@@ -1,7 +1,7 @@
 // WHETHER THE CONNECTED AI CAN BE USED (#573, 14 November 2026). The Dashboard said "Ready to chat"
 // with a key the AI refused and with the AI stopped: it only knew that an AI was set up. Each answer
 // of the notebook's own calls now clears the problem, and each refused key or unreachable AI (an
-// error with aiProblem, core/runtime.mjs) sets it. While the Dashboard is open it asks again, with
+// error with aiProblem, core/runtime.mjs) sets it. While the Dashboard card is open it asks again, with
 // the provider's own smallest request, once what it knows is older than a recheck interval: shorter
 // while there is a problem, so a key that works again shows soon.
 export class AIHealth{

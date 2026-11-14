@@ -7,6 +7,7 @@ import os from 'node:os';
 import path from 'node:path';
 import http from 'node:http';
 import {loadChatOptions} from '../ui/src/local/chat-options.mjs';
+import {modelProvider} from '../core/runtime.mjs';
 
 const KEY='fictional-good-key',MODEL='fictional-model-7';
 // A stand-in AI on this computer that takes only KEY.
@@ -30,7 +31,8 @@ async function notebook(t,{url,key}){
  t.after(async()=>{await service.close();for(const n of names)if(saved[n]===undefined)delete process.env[n];else process.env[n]=saved[n];fs.rmSync(root,{recursive:true,force:true});});
  const base='http://127.0.0.1:'+service.address.port;
  return {
-  status:async()=>(await fetch(base+'/api/status')).json(),
+  status:async()=>(await fetch(base+'/api/status?checkAI=1')).json(),
+  plainStatus:async()=>(await fetch(base+'/api/status')).json(),
   options:()=>loadChatOptions({fetcher:(route,init)=>fetch(base+route,init)}),
   chat:async message=>{const r=await fetch(base+'/api/functions/conversation-chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message})});return {status:r.status,body:await r.json()};},
  };
@@ -63,4 +65,19 @@ test('an AI that cannot be reached is said on the Dashboard and in the chat repl
  assert.match((await nb.status()).aiProblem,unreachable);
  const reply=await nb.chat('Fictional question');
  assert.notEqual(reply.status,200);assert.match(reply.body.error,unreachable);assert.doesNotMatch(reply.body.error,/fetch failed/);
+});
+
+test('only the Dashboard card asks the AI: the status other pages read sends nothing to it',async t=>{
+ const ai=await standInAI(t),nb=await notebook(t,{url:ai.url,key:KEY});
+ const status=await nb.plainStatus();assert.equal(status.runtimeConfigured,true);assert.equal(status.aiProblem,null);
+ assert.equal(ai.calls,0);
+ await nb.status();assert.equal(ai.calls,1);
+});
+
+test('an AI that takes the request but never answers cannot be reached',async t=>{
+ const hung=http.createServer(()=>{});await new Promise(resolve=>hung.listen(0,'127.0.0.1',resolve));
+ t.after(()=>{hung.closeAllConnections();hung.close();});
+ const provider=modelProvider({url:'http://127.0.0.1:'+hung.address().port+'/v1/chat/completions',key:KEY,model:MODEL,checkTimeoutMs:200});
+ const problem=await provider.check();
+ assert.equal(problem?.aiProblem,'unreachable');assert.match(problem.message,/^The AI at 127\.0\.0\.1:\d+ could not be reached\./);
 });

@@ -173,7 +173,7 @@ export function providerReason(diagnostic,secrets=[]){
 // right a minute later. 429, 502, 503 and 504 are tried twice more, after 2 and 5 seconds, unless
 // the request was stopped; any other answer, and a third failure, is said as before.
 const RETRY_STATUS=new Set([429,502,503,504]);
-export function modelProvider({ url, key, model, maxTokens = 4096, retryWaits = [2000,5000] } = {}) {
+export function modelProvider({ url, key, model, maxTokens = 4096, retryWaits = [2000,5000], checkTimeoutMs = 15000 } = {}) {
   if(!url || !key || !model)return null;
   const parsed=new URL(url);if(parsed.protocol!=='https:' && !['127.0.0.1','localhost'].includes(parsed.hostname))throw new Error('Model provider requires HTTPS');
   const run=async input=>{
@@ -194,11 +194,12 @@ export function modelProvider({ url, key, model, maxTokens = 4096, retryWaits = 
     return text;
   };
   // The smallest request that shows whether the key is taken and the AI answers: the problem as an
-  // error, or null. Any other answer, even a refusal of the request itself, is an AI that works.
+  // error, or null. Any other answer, even a refusal of the request itself, is an AI that works; no
+  // answer at all, even one that never comes, is an AI that cannot be reached.
   const check=async()=>{
-    try{const response=await fetch(url,{method:'POST',headers:{'Authorization':'Bearer '+key,'Content-Type':'application/json'},body:JSON.stringify({model,max_tokens:1,messages:[{role:'user',content:'Reply with OK.'}]}),signal:AbortSignal.timeout(15000)});
+    try{const response=await fetch(url,{method:'POST',headers:{'Authorization':'Bearer '+key,'Content-Type':'application/json'},body:JSON.stringify({model,max_tokens:1,messages:[{role:'user',content:'Reply with OK.'}]}),signal:AbortSignal.timeout(checkTimeoutMs)});
       await response.arrayBuffer().catch(()=>{});return response.status===401?refusedKey(url):null;}
-    catch(error){return error.message==='fetch failed'?unreachableAI(url,error):null;}
+    catch(error){return unreachableAI(url,error);}
   };
   return Object.assign(run,{model,check});
 }

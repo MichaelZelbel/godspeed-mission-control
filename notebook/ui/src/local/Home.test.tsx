@@ -119,7 +119,7 @@ describe("the Godspeed card", () => {
   });
   it("says Connecting only while the status is loading", async () => {
     let answer: (r: Response) => void = () => {};
-    vi.stubGlobal("fetch", vi.fn((url: string) => String(url) === "/api/status" ? new Promise<Response>(r => { answer = r; }) : Promise.resolve(new Response(JSON.stringify({ show: false, count: 0, data: [] }), { status: 200, headers: { "Content-Type": "application/json" } }))));
+    vi.stubGlobal("fetch", vi.fn((url: string) => String(url).startsWith("/api/status") ? new Promise<Response>(r => { answer = r; }) : Promise.resolve(new Response(JSON.stringify({ show: false, count: 0, data: [] }), { status: 200, headers: { "Content-Type": "application/json" } }))));
     render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter initialEntries={["/dashboard"]}><Home /></MemoryRouter></QueryClientProvider>);
     expect(await screen.findByText("Connecting…")).toBeInTheDocument();
     answer(new Response(JSON.stringify({ runtimeConfigured: false, assistantProblem: null }), { status: 200, headers: { "Content-Type": "application/json" } }));
