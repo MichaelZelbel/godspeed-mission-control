@@ -1,3 +1,4 @@
+import {NO_AI_CHAT} from './no-ai.mjs';
 import {momentDraft} from './moment-draft.mjs';
 import {impactGuidance,impactWords} from './impact-scale.mjs';
 
@@ -8,7 +9,7 @@ const contract='Return only JSON {draft:{title,description,happened_at,happened_
 // Form extraction needs no notebook search. One call and one total deadline
 // cover the provider and parsing; malformed output earns an explicit retry.
 export async function draftEvent(provider,input){
-  if(!provider)throw Error('Choose and configure a model provider before asking Godspeed');
+  if(!provider)throw Error(NO_AI_CHAT);
   const description=String(input.message||input.messages?.filter(m=>m?.role==='user').at(-1)?.content||'').trim();
   if(!description)throw Error('Add a description before asking for a suggestion.');
   const today=typeof input.today==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(input.today)?input.today:new Date().toISOString().slice(0,10);
