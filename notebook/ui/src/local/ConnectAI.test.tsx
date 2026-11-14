@@ -9,6 +9,7 @@ import path from "node:path";
 import http from "node:http";
 import { spawn } from "node:child_process";
 import { BackupAI, ConnectAI, PlanSignIn, RoutineAIState } from "./ConnectAI";
+import { SAVED_PROVIDER_SERVICES } from "../../../core/provider-service.mjs";
 
 // A backup AI (22 October 2026, discussion #20): a second AI the person connects themselves, used
 // only when the main one fails. Settings shows it, what it did, a form like the main one, and Remove.
@@ -59,11 +60,8 @@ describe("the saved main AI in Settings", () => {
     expect(screen.getByLabelText("Key")).toBeRequired();
   });
 
-  it.each([
-    ["openrouter", "OpenRouter"],
-    ["openai", "OpenAI"],
-    ["other", "Another service"],
-  ])("accepts the server's %s saved-provider service", async (service, label) => {
+  const serviceLabels = { openrouter: "OpenRouter", openai: "OpenAI", other: "Another service" };
+  it.each(SAVED_PROVIDER_SERVICES.map(service => [service, serviceLabels[service]]))("accepts the server's %s saved-provider service", async (service, label) => {
     serve({ ...supportingRoutes, provider: () => [200, { configured: true, service, url: service === "other" ? "https://ai.example.test/v1" : `https://${service}.example.test/v1`, model: "fictional/model", key: true }] });
     settings();
     const select = await screen.findByLabelText("Your AI service") as HTMLSelectElement;

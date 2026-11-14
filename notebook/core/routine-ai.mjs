@@ -5,6 +5,8 @@ import {setConfigValue,readConfigValue,deleteConfigValue} from './hermes-config.
 import {hermesProvider} from './runtime.mjs';
 import {hermesHelper,runHermesHelper} from './addon-model.mjs';
 import {fallbackChain,noteMainAnswered,noteMainFailed} from './backup-ai.mjs';
+import {providerService} from './provider-service.mjs';
+export {providerService} from './provider-service.mjs';
 
 // THE AI THE ROUTINES THINK WITH (18 October 2026). Every installer ends with "connect your own AI
 // account in Settings", and until this change that form powered only the notebook's own small jobs
@@ -23,12 +25,6 @@ const unquote=v=>typeof v==='string'?v.replace(/^["']|["']$/g,'').trim():'';
 // The endpoint's address without /chat/completions, the form Hermes and every OpenAI-compatible
 // library want as their base address.
 export function baseAddress(url){return String(url||'').trim().replace(/\/chat\/completions\/?$/,'').replace(/\/+$/,'');}
-
-export function providerService(url){
- let host;try{host=new URL(baseAddress(url)).hostname.toLowerCase();}catch{return 'other';}
- if(host==='openrouter.ai'||host.endsWith('.openrouter.ai'))return 'openrouter';
- return host==='api.openai.com'?'openai':'other';
-}
 
 // What Hermes needs for an endpoint the Settings form connects (Hermes hermes_cli/auth.py and
 // runtime_provider_backends.py): OpenRouter is Hermes' own provider "openrouter" with

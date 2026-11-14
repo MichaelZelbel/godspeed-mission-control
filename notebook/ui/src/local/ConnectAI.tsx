@@ -3,6 +3,7 @@ import {useQuery,useQueryClient} from '@tanstack/react-query';
 import {Button} from '@/components/ui/button';
 import {Input} from '@/components/ui/input';
 import {AlertTriangle,CheckCircle2,Loader2} from 'lucide-react';
+import {isSavedProviderService,SAVED_PROVIDER_SERVICES} from '../../../core/provider-service.mjs';
 
 // Settings > Your AI (18 October 2026). What the person connects here powers the notebook and, unless
 // they untick it, the daily routines and the chat too (notebook/core/routine-ai.mjs): every installer
@@ -12,14 +13,15 @@ import {AlertTriangle,CheckCircle2,Loader2} from 'lucide-react';
 // backup each on their own (core/routine-ai.mjs).
 type Check={at:string;ok:boolean;reply?:string;error?:string;backup?:{ok:boolean;error?:string;model?:string}};
 export type RoutineAI={available:boolean;provider?:string|null;model?:string|null;base_url?:string|null;source?:'settings'|'hermes'|'none';key?:boolean|null;check?:Check|null};
-type SavedProvider=|{configured:false;key:false}|{configured:true;service:'openrouter'|'openai'|'other';url:string;model:string;key:boolean};
+type SavedProviderService=(typeof SAVED_PROVIDER_SERVICES)[number];
+type SavedProvider=|{configured:false;key:false}|{configured:true;service:SavedProviderService;url:string;model:string;key:boolean};
 async function call(route:string,body?:unknown){const r=await fetch('/api/'+route,{method:body?'POST':'GET',headers:{'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});const data=await r.json();if(!r.ok)throw new Error(data.error);return data;}
 export const routineAIStatus=()=>call('routine-ai') as Promise<RoutineAI>;
 function providerResponse(value:unknown):SavedProvider{
   if(!value||typeof value!=='object')throw new Error('The saved AI connection could not be read.');
   const data=value as Record<string,unknown>;
   if(data.configured===false&&data.key===false)return {configured:false,key:false};
-  if(data.configured===true&&['openrouter','openai','other'].includes(String(data.service))&&typeof data.url==='string'&&typeof data.model==='string'&&typeof data.key==='boolean')return data as SavedProvider;
+  if(data.configured===true&&isSavedProviderService(data.service)&&typeof data.url==='string'&&typeof data.model==='string'&&typeof data.key==='boolean')return data as SavedProvider;
   throw new Error('The saved AI connection could not be read.');
 }
 const savedProvider=async()=>providerResponse(await call('provider'));
