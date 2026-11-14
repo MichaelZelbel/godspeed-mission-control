@@ -105,9 +105,9 @@ Author: writer, 2026-11-13, area being built: the brief when the source check re
 ## H-09 A large file on the other computer is explained in words, not broken
 Protects: the notebook's media (MISSION Core capabilities) across computers joined through the private GitHub copy; README beta.21 (a second computer joined through the private copy gets everything)
 Touches: notebook media, record sync, two computers
-Setup: computers A and B joined through the stand-in private copy. On A, add to a note through the notebook a picture of 110 MB (larger than any single file GitHub accepts) and sync. Sync B.
+Setup: computers A and B joined through the stand-in private copy. On A, add to a note through the notebook a picture of 75 MB and sync. Sync B. (75 MB is over 50 MB, the size above which GitHub warns about a single file and the app keeps a file only on the computer that has it, and under the 100 MB the notebook accepts for one upload, so the notebook takes it. A notebook that refuses it makes the scenario INCONCLUSIVE, never PASS.)
 Steps: on B, open the note and the media list (HTTP, and in the browser when built). Open the large file's card, and ask for the file itself the way the card's link or preview does.
-Expect: on B the note and a card for the file are there. The card says in plain words that the file is kept on the other computer, naming that computer the way the app names it elsewhere when it has a name for it, and that it is not on this one. No broken-image icon, no empty frame, no endless spinner, and no bare error ("404", "Not found", "Failed to load", a code or a stack) on the card, in its preview, or on the page its link opens. Nothing about the file is reported to the person as lost or deleted.
+Expect: on B the note and a card for the file are there. The card says in plain words that the file is kept on the other computer, naming that computer the way the app names it elsewhere when it has a name for it, and that it is not on this one. No broken-image icon, no empty frame, no endless spinner, and no bare error ("404", "Not found", "Media not found", "Failed to load", a JSON error such as `{"error": …}` alone, a code or a stack) on the card, in its preview, in the note where the file is embedded, or on the page its link opens. Nothing about the file is reported to the person as lost or deleted.
 Author: writer, 2026-11-13, area being built: media in the notebook across two computers
 
 ## H-10 The computer that has the large file labels it readably
@@ -121,9 +121,9 @@ Author: writer, 2026-11-13, area being built: media in the notebook across two c
 ## H-11 One large file does not hold back the rest of its note
 Protects: the notebook's media; README beta.21 and the merged change "pictures and PDFs travel with the private GitHub copy"
 Touches: notebook media, notes, record sync
-Setup: computers A and B joined. On A, one note holds its text, a 200 KB picture, a 1 MB PDF and a 110 MB file. Sync A, then B.
+Setup: computers A and B joined. On A, one note holds its text, a 200 KB picture, a 1 MB PDF and a 75 MB file (the large file of H-09). Sync A, then B.
 Steps: on B, open the note and each of its three media cards; download the picture and the PDF.
-Expect: on B the note's text is there word for word, the picture and the PDF open and are byte-for-byte A's (same SHA-256), and only the large file's card shows the H-09 words. The note is not missing, empty, marked conflicted or held back because of the large file. Escaped class: handled per record, not per file inside it.
+Expect: on B the note's text is there word for word, the picture and the PDF open and are byte-for-byte A's (same SHA-256), and only the large file's card shows the H-09 words, and where the note embeds the large file B shows those words, not a broken image. The note is not missing, empty, marked conflicted or held back because of the large file. Escaped class: handled per record, not per file inside it.
 Author: writer, 2026-11-13, area being built: media in the notebook across two computers; escaped class "repaired per record, not inside it"
 
 ## H-12 Editing on the other computer never harms the large file
@@ -195,7 +195,7 @@ Protects: one state, every surface; docs/chat-design.md (the same composer serve
 Touches: global chat, note chat, collection chat, pop-out chat, composer pickers
 Setup: a fresh folder with one note and one collection made through the app, no AI connected, frontend built.
 Steps: in the browser, without sending anything, open in turn: the global chat from the Dashboard, the full chat page if the app has one, the note's chat, the collection's chat, and the pop-out (separate window) of each of those chats the app offers one for. In each, after loading settles, read the chat's header, empty-chat text and the composer's model and effort pickers with their options.
-Expect: every chat and every pop-out reads the same state as the Dashboard's card in H-19: no AI is connected yet, with the way to Settings, Your AI reachable from it or from the card. None shows "Connected model", "Connected", a model name as the chosen model, or "Connecting…" after loading. A chat opened from a note or a collection is not more optimistic than the global one, and a pop-out is not more optimistic than the chat it came from. Judge: `judges/ai_state_judge.py`, one snapshot per chat, state "none".
+Expect: every chat and every pop-out reads the same state as the Dashboard's card in H-19: no AI is connected yet, with the way to Settings, Your AI reachable from it or from the card. None shows "Connected model", "Connected", a model name as the chosen model, or "Connecting…" after loading. A chat opened from a note or a collection is not more optimistic than the global one, and a pop-out is not more optimistic than the chat it came from. No state label (header, model picker, effort picker) is cut off in any chat or pop-out, since a cut label can read as another state. Judge: `judges/ai_state_judge.py`, one snapshot per chat, state "none".
 Author: writer, 2026-11-14, escaped defect #563 (class: same state on every surface; each chat is its own surface)
 
 ## H-21 Sending a message anyway gets the same plain answer in every chat
@@ -203,7 +203,7 @@ Protects: merged #552/#555 refusal ("No AI is connected yet. Connect your AI ser
 Touches: global chat, note chat, collection chat, pop-out chat, HTTP chat route
 Setup: as H-20. A stand-in AI server runs locally but is NOT connected in the app; it records any request that reaches it.
 Steps: send "What should I do today?" from the global chat, the note's chat, the collection's chat and from a pop-out chat; also send one message with a small text file attached. Then send the same message through the HTTP route the chat page itself uses. After each, read the reply and the composer.
-Expect: every reply is exactly the refusal sentence above, word for word, and nothing else: no "The AI request failed", no AI company reason, no raw error, status code, JSON or stack, no endless typing indicator. The composer is usable again right after (send enabled, the pickers still not claiming a connection). The HTTP route answers the same sentence in words. The stand-in AI records zero requests. The Dashboard's card still says "No AI is connected yet" afterwards. Judge: `judges/ai_state_judge.py`, one reply surface per chat plus the HTTP reply, state "none".
+Expect: every reply is exactly the refusal sentence above, word for word, and nothing else: no "The AI request failed", no AI company reason, no raw error, status code, JSON or stack, no endless typing indicator. The composer is usable again right after (send enabled, the pickers still not claiming a connection, and no picker label cut off, since a cut label can read as another state). The HTTP route answers the same sentence in words. The stand-in AI records zero requests. The Dashboard's card still says "No AI is connected yet" afterwards. Judge: `judges/ai_state_judge.py`, one reply surface per chat plus the HTTP reply, state "none".
 Author: writer, 2026-11-14, escaped defect #563 (class: the reply to a message and the screens around it state the same thing)
 
 ## H-22 Picking a model or an effort with no AI connected changes nothing that claims a connection
@@ -211,7 +211,7 @@ Protects: docs/chat-design.md ("Model choices come from the configured Hermes pr
 Touches: composer model picker, effort picker, global chat, note chat
 Setup: as H-20.
 Steps: in the global chat and in the note's chat, open the model picker and choose every option it offers, one at a time; do the same with the effort picker (including Auto). After each choice, read both pickers, the chat's header and the Dashboard's card (reload it), then send one message.
-Expect: the model picker offers no model that is not from a connected AI (with none connected, no model names at all, or an option that says in words that no AI is connected); no choice turns any label into "Connected", "Connected model" or a model name presented as in use; choosing never shows an error. Effort choices work or are plainly unavailable, never a broken control. Every send still gets the refusal sentence word for word, and the card still says "No AI is connected yet". Judge: `judges/ai_state_judge.py`, one snapshot per choice, state "none".
+Expect: the model picker offers no model that is not from a connected AI (with none connected, no model names at all, or an option that says in words that no AI is connected); no choice turns any label into "Connected", "Connected model" or a model name presented as in use; choosing never shows an error. Effort choices work or are plainly unavailable, never a broken control. After every choice, no picker label is cut off. Every send still gets the refusal sentence word for word, and the card still says "No AI is connected yet". Judge: `judges/ai_state_judge.py`, one snapshot per choice, state "none".
 Author: writer, 2026-11-14, escaped defect #563 (class: a control that shows the AI's state must not claim one the install does not have)
 
 ## H-23 Connecting an AI in Settings changes every surface, with nothing stale left
