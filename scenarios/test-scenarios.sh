@@ -347,6 +347,12 @@ server_run_job_keeps_success_evidence() {
     else
       bad "a successful routine run retains evidence and restores its paused state (copies: $copies; updates: $updates)"
     fi
+    # Issue #508: the kept record names the routine and its last run before the trigger.
+    if node -e 'const d=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.exit(d.id==="brief"&&Object.hasOwn(d,"before_last_run_at")&&d.before_last_run_at===null&&d.data?.[0]?.last_run_at==="later"?0:1)' "$evidence/job-report.json"; then
+      ok "a routine run's kept record names the routine and its last run before the trigger"
+    else
+      bad "a routine run's kept record names the routine and its last run before the trigger ($(cat "$evidence/job-report.json" 2>/dev/null))"
+    fi
   else
     bad "a successful routine run retains its diagnostics and cron output evidence ($output)"
   fi
@@ -3833,7 +3839,7 @@ first_day_good() { # <folder>
   local f=$1 label table sparse
   rm -rf "$f"; mkdir -p "$f/work"
   printf '{"results":{"goal":{"title":"Prepare a practical household emergency-kit checklist by Sunday."}}}\n' >"$f/setup.json"
-  for label in research choice; do printf '[{"id":"%s","last_run_at":"2026-11-06T10:00:00Z","last_status":"ok"}]\n' "$label" >"$f/job-$label.json"; done
+  for label in research choice; do printf '{"id":"%s","before_last_run_at":"2026-11-05T10:00:00Z","data":[{"id":"%s","last_run_at":"2026-11-06T10:00:00Z","last_status":"ok"}]}\n' "$label" "$label" >"$f/job-$label.json"; done
   first_day_work_run "$f" ok ''
   printf 'ID: W-000-first-day-emergency-kit\nSTATUS: verified\nKEY: first-day-emergency-kit\nWHAT: Write a practical household emergency-kit checklist at work/emergency-kit-checklist.md\nDONE WHEN: A practical household emergency-kit checklist is written at work/emergency-kit-checklist.md and ready for a reader\nCHECK: test -s work/emergency-kit-checklist.md\nSOURCE: first-day-scenario\nRESULT: Wrote emergency-kit-checklist.md with practical supplies.\n\n- 2026-11-06 VERIFIED check passed (test -s work/emergency-kit-checklist.md)\n' >"$f/work/W-000-first-day-emergency-kit.md"
   cat >"$f/work/emergency-kit-checklist.md" <<'EOF'
@@ -3865,6 +3871,25 @@ passes 'fresh Docker first day makes useful verified work, a sparse-data brief, 
 copy "$FD/good" "$FD/no-research"
 printf '[]\n' >"$FD/no-research/job-research.json"
 refuses 'a first day without research' first-day "$FD/no-research" 'research routine has no successful'
+# Issue #508: the research and choice runs count only when they are the routine's own run, recorded
+# after the scenario's trigger. An earlier success, or a sibling's, does not stand in for it.
+for label in research choice; do
+  copy "$FD/good" "$FD/$label-old-ok-beside-new-error"
+  printf '{"id":"%s","before_last_run_at":"2026-11-05T10:00:00Z","data":[{"id":"setup-%s","last_run_at":"2026-11-05T09:00:00Z","last_status":"ok"},{"id":"%s","last_run_at":"2026-11-06T10:00:00Z","last_status":"error","last_error":"model refused"}]}\n' "$label" "$label" "$label" >"$FD/$label-old-ok-beside-new-error/job-$label.json"
+  refuses "an older successful run beside the $label routine's newer failed one" first-day "$FD/$label-old-ok-beside-new-error" "$label routine has no successful"
+  copy "$FD/good" "$FD/$label-ok-before-trigger"
+  printf '{"id":"%s","before_last_run_at":"2026-11-05T10:00:00Z","data":[{"id":"%s","last_run_at":"2026-11-05T10:00:00Z","last_status":"ok"}]}\n' "$label" "$label" >"$FD/$label-ok-before-trigger/job-$label.json"
+  refuses "a $label routine whose only success is the run before the scenario's trigger" first-day "$FD/$label-ok-before-trigger" "$label routine has no successful"
+  copy "$FD/good" "$FD/$label-ok-older-than-trigger"
+  printf '{"id":"%s","before_last_run_at":"2026-11-05T10:00:00Z","data":[{"id":"%s","last_run_at":"2026-11-04T10:00:00Z","last_status":"ok"}]}\n' "$label" "$label" >"$FD/$label-ok-older-than-trigger/job-$label.json"
+  refuses "a $label routine whose recorded success is older than the scenario's trigger" first-day "$FD/$label-ok-older-than-trigger" "$label routine has no successful"
+  copy "$FD/good" "$FD/$label-no-baseline"
+  printf '[{"id":"%s","last_run_at":"2026-11-06T10:00:00Z","last_status":"ok"}]\n' "$label" >"$FD/$label-no-baseline/job-$label.json"
+  refuses "a $label record that does not say which run the scenario triggered" first-day "$FD/$label-no-baseline" "$label routine has no successful"
+  copy "$FD/good" "$FD/$label-first-run"
+  printf '{"id":"%s","before_last_run_at":null,"data":[{"id":"setup-%s","last_run_at":"2026-11-05T09:00:00Z","last_status":"error"},{"id":"%s","last_run_at":"2026-11-06T10:00:00Z","last_status":"ok"}]}\n' "$label" "$label" "$label" >"$FD/$label-first-run/job-$label.json"
+  passes "a $label routine's first ever run, newer and ok, beside a failed sibling" first-day "$FD/$label-first-run" 'answered today'
+done
 # Issue #492: a work run that told a failed check of an item the choice filed itself still counts;
 # the scenario's own item failing, an unfinished item, or any other error does not.
 SIBLING_CHECK="Today's work did not pass its check, so it is not done yet: \"Idea hunt for prepare-a-practical-household-emergency-kit-checklist-by-sun: search one area (what is already at home, the household's own...\"."
