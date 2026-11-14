@@ -5,7 +5,8 @@ import os from 'node:os';
 import path from 'node:path';
 import {EventEmitter} from 'node:events';
 import {PassThrough} from 'node:stream';
-import {hermesSettingsFor,providerService,setEnvValue,connectRoutineAI,routineAIStatus,checkRoutineAI} from '../core/routine-ai.mjs';
+import {hermesSettingsFor,setEnvValue,connectRoutineAI,routineAIStatus,checkRoutineAI} from '../core/routine-ai.mjs';
+import {providerService} from '../core/provider-service.mjs';
 import {homeHasModel} from '../core/native-agent.mjs';
 
 // What the person connects in Settings powers the routines too (18 October 2026): every installer
@@ -107,13 +108,13 @@ test('the Settings form connects the routines\' AI through the server, and leave
   assert.equal((await call('routine-ai')).data.source,'none','before: Settings says the routines have no AI');
   const connected=await call('provider',{url,key:'fictional-key',model:'fictional-model'});
   assert.equal(connected.status,200,JSON.stringify(connected.data));
-  assert.deepEqual(connected.data.provider,{configured:true,service:'other',url,model:'fictional-model',key:true});
+  assert.deepEqual(connected.data.provider,{configured:true,url,model:'fictional-model',key:true});
   assert.equal(JSON.stringify(connected.data).includes('fictional-key'),false,'the response does not expose the key');
   assert.equal(connected.data.routines.source,'settings');assert.equal(connected.data.routines.check.ok,true,'the routines reached the AI');
   assert.match(fs.readFileSync(path.join(hermesHome,'config.yaml'),'utf8'),/default: "fictional-model"/);
   // The notebook's own copy got the full address, as before.
   assert.equal(JSON.parse(fs.readFileSync(path.join(root,'.godspeed','provider.json'),'utf8')).url,url+'/chat/completions');
-  assert.deepEqual((await call('provider')).data,{configured:true,service:'other',url,model:'fictional-model',key:true});
+  assert.deepEqual((await call('provider')).data,{configured:true,url,model:'fictional-model',key:true});
   assert.equal((await call('routine-ai/check',{})).data.check.ok,true);
   // An own sign-in stays when the box is unticked: only the notebook's copy changes.
   fs.writeFileSync(path.join(hermesHome,'config.yaml'),'model:\n  provider: openai-codex\n  default: gpt-fictional\n');
@@ -132,11 +133,7 @@ test('the Settings form connects the routines\' AI through the server, and leave
   assert.notEqual(refused.status,200);assert.match(refused.data.error,/space or a quotation mark/);
  }finally{await service.close();}
  const reopened=await createService({root,port:0,device:'pc'}),reopenedBase='http://127.0.0.1:'+reopened.address.port;
- try{const response=await fetch(reopenedBase+'/api/provider'),data=await response.json();assert.deepEqual(data,{configured:true,service:'other',url,model:'retained-key-model',key:true});assert.equal(JSON.stringify(data).includes('other-key'),false);
-  for(const [savedUrl,service] of [['https://openrouter.ai/api/v1/chat/completions','openrouter'],['https://api.openai.com/v1/chat/completions','openai'],['https://llm.example.test/v1/chat/completions','other']]){
-   fs.writeFileSync(path.join(root,'.godspeed','provider.json'),JSON.stringify({url:savedUrl,key:'not-returned',model:'m'}));
-   const view=await fetch(reopenedBase+'/api/provider');assert.equal((await view.json()).service,service);
-  }
+ try{const response=await fetch(reopenedBase+'/api/provider'),data=await response.json();assert.deepEqual(data,{configured:true,url,model:'retained-key-model',key:true});assert.equal(JSON.stringify(data).includes('other-key'),false);
   const providerFile=path.join(root,'.godspeed','provider.json');fs.writeFileSync(providerFile,'{broken');const broken=await fetch(reopenedBase+'/api/provider');assert.notEqual(broken.status,200);assert.match((await broken.json()).error,/not valid JSON/);
   fs.rmSync(providerFile);fs.mkdirSync(providerFile);const unreadable=await fetch(reopenedBase+'/api/provider');assert.notEqual(unreadable.status,200);fs.rmdirSync(providerFile);}
  finally{await reopened.close();}

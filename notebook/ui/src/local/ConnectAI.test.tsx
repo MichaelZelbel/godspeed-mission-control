@@ -9,7 +9,6 @@ import path from "node:path";
 import http from "node:http";
 import { spawn } from "node:child_process";
 import { BackupAI, ConnectAI, PlanSignIn, RoutineAIState } from "./ConnectAI";
-import { SAVED_PROVIDER_SERVICES } from "../../../core/provider-service.mjs";
 
 // A backup AI (22 October 2026, discussion #20): a second AI the person connects themselves, used
 // only when the main one fails. Settings shows it, what it did, a form like the main one, and Remove.
@@ -38,7 +37,7 @@ describe("the saved main AI in Settings", () => {
   };
 
   it("reopens an Another service connection without exposing its saved key", async () => {
-    const saved = { configured: true, service: "other", url: "https://ai.example.test/v1", model: "fictional/model", key: true };
+    const saved = { configured: true, url: "https://ai.example.test/v1", model: "fictional/model", key: true };
     const calls = serve({ ...supportingRoutes, provider: body => [200, body ? { connected: true, provider: saved, routines: { available: false } } : saved] });
     const first = settings();
     await waitFor(() => expect(screen.getByLabelText("Your AI service")).toHaveValue("other"));
@@ -60,24 +59,27 @@ describe("the saved main AI in Settings", () => {
     expect(screen.getByLabelText("Key")).toBeRequired();
   });
 
-  const serviceLabels = { openrouter: "OpenRouter", openai: "OpenAI", other: "Another service" };
-  it.each(SAVED_PROVIDER_SERVICES.map(service => [service, serviceLabels[service]]))("accepts the server's %s saved-provider service", async (service, label) => {
-    serve({ ...supportingRoutes, provider: () => [200, { configured: true, service, url: service === "other" ? "https://ai.example.test/v1" : `https://${service}.example.test/v1`, model: "fictional/model", key: true }] });
+  it.each([
+    ["https://edge.openrouter.ai/v1", "openrouter", "OpenRouter"],
+    ["https://api.openai.com/v1", "openai", "OpenAI"],
+    ["https://ai.example.test/v1", "other", "Another service"],
+  ])("classifies the saved URL %s as %s", async (url, service, label) => {
+    serve({ ...supportingRoutes, provider: () => [200, { configured: true, url, model: "fictional/model", key: true }] });
     settings();
     const select = await screen.findByLabelText("Your AI service") as HTMLSelectElement;
     expect(select).toHaveValue(service);
     expect(select.selectedOptions[0]).toHaveTextContent(label);
   });
 
-  it("withholds the form when a successful saved-provider response has an unknown service", async () => {
-    serve({ ...supportingRoutes, provider: () => [200, { configured: true, service: "future-service", url: "https://ai.example.test/v1", model: "fictional/model", key: true }] });
+  it("withholds the form when a successful saved-provider response is malformed", async () => {
+    serve({ ...supportingRoutes, provider: () => [200, { configured: true, url: "https://ai.example.test/v1", key: true }] });
     settings();
     expect(await screen.findByRole("alert")).toHaveTextContent(/form is unavailable/);
     expect(screen.queryByRole("button", { name: "Test and connect" })).toBeNull();
   });
 
   it("requires a new key when the saved endpoint changes", async () => {
-    const saved = { configured: true, service: "other", url: "https://ai.example.test/v1", model: "fictional/model", key: true };
+    const saved = { configured: true, url: "https://ai.example.test/v1", model: "fictional/model", key: true };
     serve({ ...supportingRoutes, provider: () => [200, saved] });settings();
     await screen.findByLabelText("Key (leave it empty to keep the saved one)");
     fireEvent.change(screen.getByLabelText(/Its address/), { target: { value: "https://other.example.test/v1" } });

@@ -40,7 +40,7 @@ import {durableRoots,durableFiles} from '../core/file-policy.mjs';
 import { WebAuth, safeReturn } from './web-auth.mjs';
 import { MenerioImport } from './menerio-import.mjs';
 import {TelegramConnection} from './telegram-connect.mjs';
-import {hermesSettingsFor,connectRoutineAI,routineAIStatus,checkRoutineAI,baseAddress,providerService,askDirectly,connectPlanMain} from '../core/routine-ai.mjs';
+import {hermesSettingsFor,connectRoutineAI,routineAIStatus,checkRoutineAI,baseAddress,askDirectly,connectPlanMain} from '../core/routine-ai.mjs';
 import {withBackup,readBackupEndpoint,backupEntryFor,connectBackupAI,connectHermesBackup,removeBackupAI,backupStatus,fallbackChain} from '../core/backup-ai.mjs';
 import {PlanSignIn,PLAN_PROVIDER} from '../core/plan-signin.mjs';
 import {voiceStatus,saveVoice} from '../core/voice-replies.mjs';
@@ -81,7 +81,7 @@ import {MEDIA_UPLOAD_MAX_BYTES,MEDIA_UPLOAD_MAX_MB,MEDIA_UPLOAD_REQUEST_EXTRA_BY
 const SAME_SERVICE='That is the service your main AI uses already. A backup steps in when the main AI fails, so it has to be another service.';
 const BACKUP_SERVICE='That is the service your backup AI uses. Remove the backup first, or choose another service for your main AI.';
 export const sameService=(one,other)=>!!one?.provider&&!!other?.provider&&one.provider===other.provider&&(one.provider!=='custom'||String(one.base_url||'').replace(/\/+$/,'')===String(other.base_url||'').replace(/\/+$/,''));
-const providerView=config=>({configured:true,service:providerService(config.url),url:baseAddress(config.url),model:config.model,key:!!config.key});
+const providerView=config=>({configured:true,url:baseAddress(config.url),model:config.model,key:!!config.key});
 const readSavedProvider=file=>{
   let text;try{text=fs.readFileSync(file,'utf8');}catch(error){if(error.code==='ENOENT')return null;throw error;}
   const config=JSON.parse(text);

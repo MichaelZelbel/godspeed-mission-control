@@ -6,7 +6,6 @@ import {hermesProvider} from './runtime.mjs';
 import {hermesHelper,runHermesHelper} from './addon-model.mjs';
 import {fallbackChain,noteMainAnswered,noteMainFailed} from './backup-ai.mjs';
 import {providerService} from './provider-service.mjs';
-export {providerService} from './provider-service.mjs';
 
 // THE AI THE ROUTINES THINK WITH (18 October 2026). Every installer ends with "connect your own AI
 // account in Settings", and until this change that form powered only the notebook's own small jobs
