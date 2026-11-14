@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Check, ChevronsUpDown, Plus, X } from "lucide-react";
+import { Check, ChevronsUpDown, Plus, UserPlus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -15,15 +15,28 @@ import {
 import { cn } from "@/lib/utils";
 import type { TimelineContact } from "./AddEventDialog";
 import { personLabel } from "./people";
+import { newPersonOffer } from "./moment-form.mjs";
 
 interface PeopleMultiSelectProps {
   people: TimelineContact[];
   value: string[];
   onChange: (ids: string[]) => void;
+  /** Names typed in the picker that are not in People yet; they are created when the moment is saved. */
+  newNames?: string[];
+  onNewNamesChange?: (names: string[]) => void;
 }
 
-export default function PeopleMultiSelect({ people, value, onChange }: PeopleMultiSelectProps) {
+export default function PeopleMultiSelect({ people, value, onChange, newNames = [], onNewNamesChange }: PeopleMultiSelectProps) {
   const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  // Offered only when the typed name is nobody in People (without case) and not already added.
+  const offer = onNewNamesChange ? newPersonOffer(search, people, newNames) : null;
+
+  const addNew = (name: string) => {
+    onNewNamesChange?.([...newNames, name]);
+    setSearch("");
+  };
+  const removeNew = (name: string) => onNewNamesChange?.(newNames.filter((n) => n !== name));
 
   const selectedSet = useMemo(() => new Set(value), [value]);
   const peopleById = useMemo(() => {
@@ -50,7 +63,7 @@ export default function PeopleMultiSelect({ people, value, onChange }: PeopleMul
 
   return (
     <div className="space-y-2">
-      {selected.length > 0 && (
+      {(selected.length > 0 || newNames.length > 0) && (
         <div className="flex flex-wrap gap-1.5">
           {selected.map((p) => (
             <Badge key={p.id} variant="secondary" className="gap-1 pr-1 h-6 text-xs">
@@ -65,10 +78,24 @@ export default function PeopleMultiSelect({ people, value, onChange }: PeopleMul
               </button>
             </Badge>
           ))}
+          {newNames.map((name) => (
+            <Badge key={`new:${name}`} variant="outline" className="gap-1 pr-1 h-6 text-xs border-dashed" data-new-person={name}>
+              {name}
+              <span className="text-[10px] uppercase tracking-wide text-muted-foreground">new</span>
+              <button
+                type="button"
+                onClick={() => removeNew(name)}
+                className="rounded-sm hover:bg-muted-foreground/20 p-0.5"
+                aria-label={`Remove new person ${name}`}
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </Badge>
+          ))}
         </div>
       )}
 
-      <Popover open={open} onOpenChange={setOpen}>
+      <Popover open={open} onOpenChange={(next) => { setOpen(next); if (!next) setSearch(""); }}>
         <PopoverTrigger asChild>
           <Button
             type="button"
@@ -80,7 +107,7 @@ export default function PeopleMultiSelect({ people, value, onChange }: PeopleMul
           >
             <span className="flex items-center gap-1.5">
               <Plus className="h-3.5 w-3.5" />
-              {selected.length === 0 ? "Add person" : "Add more"}
+              {selected.length === 0 && newNames.length === 0 ? "Add person" : "Add more"}
             </span>
             <ChevronsUpDown className="h-3.5 w-3.5 opacity-50" />
           </Button>
@@ -90,9 +117,31 @@ export default function PeopleMultiSelect({ people, value, onChange }: PeopleMul
           align="start"
         >
           <Command>
-            <CommandInput placeholder="Search people…" />
+            <CommandInput
+              placeholder={onNewNamesChange ? "Search or type a new name…" : "Search people…"}
+              value={search}
+              onValueChange={setSearch}
+            />
             <CommandList className="max-h-72">
-              <CommandEmpty>No people found.</CommandEmpty>
+              {!offer && (
+                <CommandEmpty>{people.length === 0 && onNewNamesChange ? "Type a name to add a new person." : "No people found."}</CommandEmpty>
+              )}
+
+              {offer && (
+                <>
+                  <CommandGroup>
+                    <CommandItem
+                      forceMount
+                      value={`__new_person__ ${offer}`}
+                      onSelect={() => addNew(offer)}
+                    >
+                      <UserPlus className="mr-2 h-4 w-4" />
+                      Add "{offer}" as a new person
+                    </CommandItem>
+                  </CommandGroup>
+                  <CommandSeparator />
+                </>
+              )}
 
               {selected.length > 0 && (
                 <>

@@ -18,7 +18,7 @@ import { Slider } from "@/components/ui/slider";
 import { Textarea } from "@/components/ui/textarea";
 import ImportanceSlider from "./ImportanceSlider";
 import { UNNAMED_PERSON } from "./people";
-import { filledOnOpen, mergeSuggestion } from "./moment-form.mjs";
+import { filledOnOpen, mergeSuggestion, newPeopleToCreate } from "./moment-form.mjs";
 
 export interface TimelineContact {
   id: string;
@@ -82,6 +82,8 @@ export default function AddEventDialog({ people, onCreated, editEvent, open: con
   const [matchedPeople, setMatchedPeople] = useState<string[]>([]);
   const [suggestedNewPeople, setSuggestedNewPeople] = useState<string[]>([]);
   const [selectedNewPeople, setSelectedNewPeople] = useState<string[]>([]);
+  // New people typed into the People picker by hand, created on save like the suggested ones.
+  const [typedNewPeople, setTypedNewPeople] = useState<string[]>([]);
   const [suggestionApplied, setSuggestionApplied] = useState(false);
   // How many fields the last suggestion filled; 0 means everything was already filled in.
   const [suggestionFilled, setSuggestionFilled] = useState(0);
@@ -117,6 +119,7 @@ export default function AddEventDialog({ people, onCreated, editEvent, open: con
     setFilled(filledOnOpen(editEvent));
     setSuggestedNewPeople([]);
     setSelectedNewPeople([]);
+    setTypedNewPeople([]);
     setSuggestionApplied(false);
   }, [open, editEvent, today]);
 
@@ -212,13 +215,12 @@ export default function AddEventDialog({ people, onCreated, editEvent, open: con
         impact_level: impactLevel,
         confidence_date: confDate,
         confidence_truth: confTruth,
-        person_id: matchedPeople[0] || null,
       };
 
       // People are resolved before the moment is written, so a failure here
       // leaves nothing half-saved and a retry does not create a second moment.
       const newPeopleIds: string[] = [];
-      for (const name of selectedNewPeople) {
+      for (const name of newPeopleToCreate(selectedNewPeople, typedNewPeople)) {
         // A name typed as new may already be in People under another case.
         const { data: existing, error: lookupError } = await supabase
           .from("contacts")
@@ -239,17 +241,20 @@ export default function AddEventDialog({ people, onCreated, editEvent, open: con
         newPeopleIds.push(data.id);
       }
 
+      const desiredIds = Array.from(new Set([...matchedPeople, ...newPeopleIds]));
+      // The first person, picked or new, is the moment's main person.
+      const momentRow = { ...momentPayload, person_id: desiredIds[0] || null };
+
       let momentId = editEvent?.id;
       if (isEditMode && momentId) {
-        const { error } = await supabase.from("moments" as any).update(momentPayload).eq("id", momentId);
+        const { error } = await supabase.from("moments" as any).update(momentRow).eq("id", momentId);
         if (error) throw error;
       } else {
-        const { data, error } = await supabase.from("moments" as any).insert({ ...momentPayload, source: "manual" }).select("id").single();
+        const { data, error } = await supabase.from("moments" as any).insert({ ...momentRow, source: "manual" }).select("id").single();
         if (error || !data) throw error || new Error("Moment was not created");
         momentId = (data as any).id;
       }
 
-      const desiredIds = Array.from(new Set([...matchedPeople, ...newPeopleIds]));
       if (momentId) {
         // Diff against what the moment already has instead of the old
         // delete-everything-then-reinsert. That pattern permanently lost every
@@ -329,7 +334,7 @@ export default function AddEventDialog({ people, onCreated, editEvent, open: con
         </div>
         <ImportanceSlider value={impactLevel} onChange={(v) => { setImpactLevel(v); markFilled("impactLevel"); }} />
         <div className="space-y-2"><Label>Confidence (Truth): {confTruth}</Label><Slider value={[confTruth]} onValueChange={([v]) => { setConfTruth(v); markFilled("confTruth"); }} min={0} max={10} step={1} /></div>
-        {people.length > 0 && <div className="space-y-2"><Label className="text-xs">People</Label><PeopleMultiSelect people={people} value={matchedPeople} onChange={setMatchedPeople} /></div>}
+        <div className="space-y-2"><Label className="text-xs">People</Label><PeopleMultiSelect people={people} value={matchedPeople} onChange={setMatchedPeople} newNames={typedNewPeople} onNewNamesChange={setTypedNewPeople} /></div>
         {suggestedNewPeople.length > 0 && <div className="space-y-2"><Label className="text-xs text-muted-foreground">Add new people (not yet in your list)</Label><div className="space-y-1.5">{suggestedNewPeople.map((name) => <label key={name} className="flex items-center gap-2 cursor-pointer"><Checkbox checked={selectedNewPeople.includes(name)} onCheckedChange={(checked) => setSelectedNewPeople((prev) => checked ? [...prev, name] : prev.filter((n) => n !== name))} /><span className="text-sm">{name}</span></label>)}</div></div>}
       </div>
       <DialogFooter><Button onClick={handleSave} disabled={saving || !title.trim() || !dateStart}>{saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}{isEditMode ? "Save Changes" : "Create Moment"}</Button></DialogFooter>
