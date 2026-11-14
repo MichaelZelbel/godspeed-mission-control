@@ -4111,6 +4111,21 @@ for item in 'Spare contact lenses and solution' 'Spare contacts and a lens case'
   printf -- '- [ ] %s\n' "$item" >>"$thin/work/emergency-kit-checklist.md"
   refuses "a checklist without the documents topic that lists \"$item\"" first-day "$thin" 'it does not cover communication or documents'
 done
+copy "$FD/plain-bullets" "$FD/no-first-aid"
+sed -i '/First aid/d' "$FD/no-first-aid/work/emergency-kit-checklist.md"
+refuses 'a plain-bullet checklist without first aid or medication' first-day "$FD/no-first-aid" 'it does not cover first aid or medication'
+# The product's checklist on PR #560's run of 14 November 2026: medicine and a first-aid kit, in words
+# that are neither "first aid" nor "medication".
+for item in 'Prescription medicines for at least 7 days' 'First-aid kit: plasters, sterile gauze, medical tape'; do
+  kit=$FD/first-aid-$(printf '%s' "$item" | tr -c 'A-Za-z' '-')
+  copy "$FD/no-first-aid" "$kit"
+  printf -- '- [ ] %s\n' "$item" >>"$kit/work/emergency-kit-checklist.md"
+  passes "a checklist whose first aid or medication is \"$item\"" first-day "$kit" 'answered today'
+done
+# Medical records are papers, not first aid.
+copy "$FD/no-first-aid" "$FD/no-first-aid-medical-records"
+printf -- '- [ ] Medical records and a list of allergies\n' >>"$FD/no-first-aid-medical-records/work/emergency-kit-checklist.md"
+refuses 'a checklist without first aid that lists medical records' first-day "$FD/no-first-aid-medical-records" 'it does not cover first aid or medication'
 copy "$FD/plain-bullets" "$FD/plain-bullets-no-amounts"
 printf '%s\n' '- Water' '- Food' '- First aid' '- Power' '- Documents' >"$FD/plain-bullets-no-amounts/work/emergency-kit-checklist.md"
 refuses 'a plain-bullet checklist without quantities' first-day "$FD/plain-bullets-no-amounts" 'not a practical emergency-kit checklist'
