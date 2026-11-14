@@ -10,7 +10,7 @@ import {visibleRows} from './visibility.mjs';
 // Until 6 October 2026 this was not ported: a note was processed only from the
 // note's own menu, and the screens' sweep call failed silently.
 export const PIPELINE = 'analysis';
-const DEFAULTS = {enabled: true, daily_limit: 40, quiet_minutes: 2, min_chars: 30, retry_minutes: 30, max_attempts: 3};
+export const DEFAULTS = {enabled: true, daily_limit: 40, quiet_minutes: 2, min_chars: 30, retry_minutes: 30, max_attempts: 3};
 export const contentFingerprint = note => hash([String(note.title || ''), String(note.content || '')]);
 // A note its writer marked skip_processing: true (an add-on that already wrote its summary and
 // facts, one note per scanned letter) stays visible and searchable like any note, but processing
@@ -74,7 +74,9 @@ export class NoteProcessing {
     if (this.owner() && this.owner() !== this.device) return {skipped: 'another machine runs the routines'};
     let settings = processingSettings(this.store);
     // The first run on the runner sets the start: what came before is Menerio's.
+    // Settings saved before that run (a partial write, or a record taken from another computer) get their start the same way and keep what they say.
     if (!settings.saved) { await this.store.saveAsync('settings', {id: 'processing', ...DEFAULTS, since: new Date(now).toISOString()}); settings = processingSettings(this.store); }
+    else if (!settings.since) { await this.store.saveAsync('settings', {id: 'processing', since: new Date(now).toISOString()}); settings = processingSettings(this.store); }
     if (!settings.enabled) return {skipped: 'processing is switched off'};
     if (!this.domains.provider) { this.status = {...this.status, state: 'waiting for a model'}; return {skipped: 'no model connected'}; }
     const timezone = this.store.get('settings', 'installation')?.timezone, day = today(timezone, new Date(now));

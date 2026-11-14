@@ -84,3 +84,14 @@ describe("New rules in Settings", () => {
     await waitFor(() => expect((fetch as ReturnType<typeof vi.fn>).mock.calls.some(([url, init]) => url === "/api/identity/rules-setting" && init?.method === "POST" && init.body === JSON.stringify({ new_rules: "automatic" }))).toBe(true));
   });
 });
+
+// #506: an assistant program that is not Hermes is named on the Routines line, after "not configured".
+describe("The Routines line", () => {
+  afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+
+  it("says which setting the assistant needs", async () => {
+    const problem = 'The assistant program set in /state/assistant.json is "/usr/bin/python3", which is not Hermes. Set "executable" in that file to your Hermes program (its name is hermes), or run the Godspeed installer again to set up the assistant. Until then the assistant cannot answer.';
+    const { findByText } = settings("/dashboard/settings", { runtimeConfigured: false, assistantProblem: problem });
+    expect((await findByText(/which is not Hermes/)).textContent).toContain("not configured. " + problem + " Account access");
+  });
+});

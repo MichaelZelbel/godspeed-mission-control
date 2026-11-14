@@ -141,6 +141,7 @@ function groupMediaByDocument(items: MediaItem[]): DocumentGroup[] {
 
 const CONTENT_TYPES = [
   "all",
+  "pdf",
   "screenshot",
   "photo",
   "diagram",
@@ -152,6 +153,29 @@ const CONTENT_TYPES = [
   "code",
   "other",
 ];
+
+/** The filter's label: "All types", "PDF", "ui mockup". */
+function contentTypeLabel(t: string): string {
+  return t === "all" ? "All types" : t === "pdf" ? "PDF" : t.replace("_", " ");
+}
+
+/** "pdf" is the file's own type, not the analysis's guess at what a picture shows. */
+function matchesContentType(group: { media_type: string; raw_analysis: Record<string, unknown> | null }, filter: string): boolean {
+  if (filter === "all") return true;
+  if (filter === "pdf") return group.media_type === "pdf" || group.media_type === "pdf_page";
+  return group.raw_analysis?.content_type === filter;
+}
+
+/**
+ * The card's heading: the note's title, or for media with no titled note the file's own name,
+ * without the folders it is stored under.
+ */
+function cardTitle(noteTitle: string | undefined, originalFilename: string | null, storagePath: string): string {
+  const title = noteTitle?.trim();
+  if (title) return title;
+  const name = (originalFilename || storagePath || "").replace(/^.*[\\/]/, "").trim();
+  return name || "Untitled";
+}
 
 // Average tokens per image analysis (~500 prompt + ~200 completion)
 const AVG_TOKENS_PER_IMAGE = 700;
@@ -606,10 +630,7 @@ export default function MediaLibrary() {
     let groups = documentGroups;
 
     if (contentTypeFilter !== "all") {
-      groups = groups.filter(g => {
-        const raw = g.raw_analysis as Record<string, unknown> | null;
-        return raw?.content_type === contentTypeFilter;
-      });
+      groups = groups.filter(g => matchesContentType(g, contentTypeFilter));
     }
 
     if (searchQuery.trim()) {
@@ -706,7 +727,7 @@ export default function MediaLibrary() {
             <SelectContent>
               {CONTENT_TYPES.map(t => (
                 <SelectItem key={t} value={t} className="text-xs">
-                  {t === "all" ? "All types" : t.replace("_", " ")}
+                  {contentTypeLabel(t)}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -746,7 +767,7 @@ export default function MediaLibrary() {
             {filteredGroups.map((group) => {
               const raw = group.raw_analysis as Record<string, unknown> | null;
               const contentType = raw?.content_type as string | undefined;
-              const noteTitle = noteTitles[group.note_id] || "Untitled";
+              const noteTitle = cardTitle(noteTitles[group.note_id], group.original_filename, group.storage_path);
               const isPdf = group.media_type === "pdf" || group.media_type === "pdf_page";
 
               const isRetrying = reanalyze.isPathPending(group.storage_path);
@@ -835,51 +856,55 @@ export default function MediaLibrary() {
                         onError={() => setBrokenPreviews((prev) => ({ ...prev, [group.storage_path]: true }))}
                       />
                     )}
-                    {keptHere.has(group.storage_path) && (
-                      <Badge
-                        variant="secondary"
-                        title="Over 50 MB, so it is not in your private GitHub copy. It stays on this computer and in its backups."
-                        className="absolute top-1.5 left-1.5 text-[9px] z-10"
-                      >
-                        Kept on this computer only
-                      </Badge>
-                    )}
-                    {notHere && (
-                      <Badge
-                        variant="secondary"
-                        title="Its file is not on this computer. Files over 50 MB stay on the computer they were added on, so open it there."
-                        className="absolute top-1.5 left-1.5 text-[9px] z-10"
-                      >
-                        Kept on another computer
-                      </Badge>
-                    )}
-                    {/* Status badge */}
-                    <div className="absolute top-1.5 right-1.5 z-10">
-                      {status === "complete" && !hasBrokenPreview && (
-                        <span className="bg-success/90 text-success-foreground text-[9px] px-1.5 py-0.5 rounded-full">
-                          ✓
-                        </span>
-                      )}
-                      {(status === "pending" || status === "processing") && (
-                        <span className="flex items-center gap-1 bg-background/90 text-muted-foreground text-[9px] px-1.5 py-0.5 rounded-full">
-                          <Loader2 className="h-2.5 w-2.5 animate-spin" />
-                          {isRetrying ? "Retrying…" : "Analyzing…"}
-                        </span>
-                      )}
-                      {canRetry && (
-                        <button
-                          type="button"
-                          title={group.original_filename ? `Retry: ${group.original_filename}` : "Retry analysis"}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            retryItem();
-                          }}
-                          className="flex items-center gap-1 bg-background/90 hover:bg-accent text-foreground border border-border text-[9px] px-1.5 py-0.5 rounded-full"
+                    {/* One row: the badge on the left, the status (unchanged) on the right, so a
+                        long badge wraps beside the status instead of running under it. */}
+                    <div className="absolute top-1.5 inset-x-1.5 z-10 flex items-start gap-1">
+                      {keptHere.has(group.storage_path) && (
+                        <Badge
+                          variant="secondary"
+                          title="Over 50 MB, so it is not in your private GitHub copy. It stays on this computer and in its backups."
+                          className="min-w-0 text-[9px]"
                         >
-                          <RefreshCw className="h-2.5 w-2.5" />
-                          {status === "complete" ? "Re-analyze" : "Retry"}
-                        </button>
+                          Kept on this computer only
+                        </Badge>
                       )}
+                      {notHere && (
+                        <Badge
+                          variant="secondary"
+                          title="Its file is not on this computer. Files over 50 MB stay on the computer they were added on, so open it there."
+                          className="min-w-0 text-[9px]"
+                        >
+                          Kept on another computer
+                        </Badge>
+                      )}
+                      {/* Status badge */}
+                      <div className="ml-auto shrink-0">
+                        {status === "complete" && !hasBrokenPreview && (
+                          <span className="bg-success/90 text-success-foreground text-[9px] px-1.5 py-0.5 rounded-full">
+                            ✓
+                          </span>
+                        )}
+                        {(status === "pending" || status === "processing") && (
+                          <span className="flex items-center gap-1 bg-background/90 text-muted-foreground text-[9px] px-1.5 py-0.5 rounded-full">
+                            <Loader2 className="h-2.5 w-2.5 animate-spin" />
+                            {isRetrying ? "Retrying…" : "Analyzing…"}
+                          </span>
+                        )}
+                        {canRetry && (
+                          <button
+                            type="button"
+                            title={group.original_filename ? `Retry: ${group.original_filename}` : "Retry analysis"}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              retryItem();
+                            }}
+                            className="flex items-center gap-1 bg-background/90 hover:bg-accent text-foreground border border-border text-[9px] px-1.5 py-0.5 rounded-full"
+                          >
+                            <RefreshCw className="h-2.5 w-2.5" />
+                            {status === "complete" ? "Re-analyze" : "Retry"}
+                          </button>
+                        )}
+                      </div>
                     </div>
                     {contentType && (
                       <Badge variant="secondary" className="absolute bottom-1.5 left-1.5 text-[9px] z-10">

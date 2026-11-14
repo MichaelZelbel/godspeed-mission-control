@@ -347,6 +347,12 @@ server_run_job_keeps_success_evidence() {
     else
       bad "a successful routine run retains evidence and restores its paused state (copies: $copies; updates: $updates)"
     fi
+    # Issue #508: the kept record names the routine and its last run before the trigger.
+    if node -e 'const d=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.exit(d.id==="brief"&&Object.hasOwn(d,"before_last_run_at")&&d.before_last_run_at===null&&d.data?.[0]?.last_run_at==="later"?0:1)' "$evidence/job-report.json"; then
+      ok "a routine run's kept record names the routine and its last run before the trigger"
+    else
+      bad "a routine run's kept record names the routine and its last run before the trigger ($(cat "$evidence/job-report.json" 2>/dev/null))"
+    fi
   else
     bad "a successful routine run retains its diagnostics and cron output evidence ($output)"
   fi
@@ -389,6 +395,52 @@ server_run_job_accepts_expected_delivery_status() {
   fi
 }
 server_run_job_accepts_expected_delivery_status
+
+server_run_job_ends_at_once_on_an_unaccepted_status() {
+  local accepted evidence output code
+  for accepted in ok 'ok|error'; do
+    evidence=$TMP/server-run-job-error-${accepted//|/-}
+    mkdir -p "$evidence"
+    output=$(SERVER_ACCEPTED="$accepted" EVIDENCE="$evidence" SERVER_UPDATES="$evidence/updates" NODE="$(command -v node)" bash -c '
+    . "$1"
+    fail() { printf "FAIL: %s\\n" "$*" >&2; exit 42; }
+    quoted_json() { "$NODE" -e "process.stdout.write(JSON.stringify(process.argv[1]))" "$1"; }
+    tables=0
+    server_table() {
+      tables=$((tables + 1))
+      if [ "$tables" = 1 ]; then printf "[{\\\"id\\\":\\\"work\\\",\\\"title\\\":\\\"Daily round: do the work\\\",\\\"last_run_at\\\":null,\\\"last_status\\\":null}]\\n" >"$2";
+      else printf "[{\\\"id\\\":\\\"work\\\",\\\"title\\\":\\\"Daily round: do the work\\\",\\\"last_run_at\\\":\\\"later\\\",\\\"last_status\\\":\\\"error\\\",\\\"last_error\\\":\\\"Today did not pass its check\\\"}]\\n" >"$2"; fi
+    }
+    server_post() {
+      case $1 in
+        /api/jobs/update) printf "%s\\n" "$(cat "$2")" >>"$SERVER_UPDATES"; printf "{}\\n" >"$3"; printf 200 ;;
+        /api/jobs/run) printf "{\\\"started\\\":true}\\n" >"$3"; printf 202 ;;
+      esac
+    }
+    wait_for() { "${@:3}"; }
+    server_container() { printf fixture; }
+    sudo() { return 0; }
+    server_routine_evidence_paths() { printf "{\\\"diagnostics\\\":\\\"/owned/diagnostics.json\\\",\\\"output\\\":\\\"/owned/output\\\"}"; }
+    server_copy_evidence() { : >"$2"; }
+    server_run_job work "Daily round: do the work" 10 "$SERVER_ACCEPTED"
+  ' bash "$HERE/server-lib.sh" 2>&1)
+    code=$?
+    if [ "$(<"$evidence/updates")" != "$(printf '%s\n%s' '{"id":"work","paused":false}' '{"id":"work","paused":true}')" ] || [ ! -s "$evidence/job-work.json" ]; then
+      bad "a routine run that ended with error under accepted '$accepted' did not keep its record and pause it again ($output; updates: $(cat "$evidence/updates" 2>/dev/null))"
+      return
+    fi
+    if [ "$accepted" = ok ] && { [ "$code" != 42 ] || [[ $output != *'"Daily round: do the work" ended with error: Today did not pass its check'* ]]; }; then
+      bad "a routine run that ended with error did not fail at once with its own reason (exit $code: $output)"
+      return
+    fi
+    if [ "$accepted" != ok ] && [ "$code" != 0 ]; then
+      bad "a routine run that ended with an accepted error was refused (exit $code: $output)"
+      return
+    fi
+  done
+  ok 'a routine run that ends with a status it may not have fails at once with its last_error'
+}
+server_run_job_ends_at_once_on_an_unaccepted_status
 
 connection_check_preserves_due_snapshots_and_uses_the_expected_status_for_each_phase() {
   local evidence=$TMP/connection-check-statuses calls=$TMP/connection-check-calls snapshots=$TMP/connection-check-snapshots output
@@ -2994,6 +3046,86 @@ if [ -n "$SI_SSH_BARE" ] && [ -z "$(git -C "$SI_SSH_BARE" for-each-ref 2>/dev/nu
 else
   bad "stand_in_github_over_ssh made a repository with history ($SI_SSH)"
 fi
+# Whether a stand-in repository is private is answered on this machine, for every Node the scenario
+# starts, and nothing else is: api.github.com answered something other than 404 to the second
+# computer of two-machines-move-at-once on a night it was rate-limited (issue #557).
+for shape in stand_in_github stand_in_github_over_ssh; do
+  SI_ANSWER=$(HOME="$SI_HOME" GIT_CONFIG_GLOBAL="$SI_HOME/gitconfig" SCENARIO=stand-in-test GODSPEED_SCENARIO_WORK="$TMP/si-privacy" bash -c '
+    . "$1/scenarios/scenario-lib.sh"; '"$shape"' "$2/privacy-'"$shape"'" >/dev/null 2>&1
+    stand_in_answers_privacy
+    owner=${STAND_IN_ADDRESS#*github.com[:/]}; owner=${owner%%/*}
+    printf "%s|%s|" "$owner" "$NODE_OPTIONS"
+    node -e "const real=globalThis.fetch.toString();
+      fetch(\"https://api.github.com/repos/$owner/x\").then(r=>console.log(r.status+\"|\"+(real.includes(\"api.github.com\")?\"wrapped\":\"plain\")))"
+    ' _ "$ROOT" "$TMP" 2>&1)
+  SI_IMPORT="--import=file://$TMP/si-privacy/stand-in-privacy/github-404.mjs"
+  if [ "$SI_ANSWER" = "godspeed-scenario-stand-in|$SI_IMPORT|404|wrapped" ]; then
+    ok "$shape has the stand-in owner's repositories answered 404 here, once, for every Node it starts"
+  else
+    bad "$shape left the stand-in's privacy to api.github.com or loaded the answer twice ($SI_ANSWER)"
+  fi
+done
+
+# The one check that still asks the real api.github.com (github-privacy-live.mjs, issue #557) runs
+# the product's own verifyRemote. Here GitHub is answered on this machine: a rate limit's 403 is a
+# FAIL naming 403 and the rate-limit headers after its tries, a public repository taken as private
+# is a FAIL at once, and the right answers are a PASS. No network.
+GP=$TMP/github-privacy
+mkdir -p "$GP"
+cat >"$GP/403.mjs" <<'STUB'
+import fs from 'node:fs';
+globalThis.fetch = async url => { fs.appendFileSync(process.env.GP_ASKED, url + '\n');
+  return new Response('{"message":"API rate limit exceeded"}', { status: 403, headers: { 'x-ratelimit-limit': '60', 'x-ratelimit-remaining': '0', 'x-ratelimit-reset': '1763120000' } }); };
+STUB
+cat >"$GP/right.mjs" <<'STUB'
+globalThis.fetch = async url => new Response('{}', { status: String(url).endsWith('/octocat/Hello-World') ? 200 : 404 });
+STUB
+cat >"$GP/public-as-private.mjs" <<'STUB'
+import fs from 'node:fs';
+globalThis.fetch = async url => { fs.appendFileSync(process.env.GP_ASKED, url + '\n'); return new Response('{}', { status: 404 }); };
+STUB
+gp() { # <stub> <out>: the check against the product in this checkout, GitHub answered by the stub
+  GP_ASKED="$GP/asked-$1" GODSPEED_PRIVACY_WAITS='0 0' NODE_OPTIONS="--import=file://$GP/$1.mjs" \
+    node "$ROOT/scenarios/github-privacy-live.mjs" "$ROOT/notebook/core/sync/git.mjs" >"$2" 2>/dev/null
+}
+if gp 403 "$GP/403.out"; then
+  bad "github-privacy-live passed while GitHub answered 403 ($(cat "$GP/403.out"))"
+elif grep -q '^FAIL .*answered 403 .*x-ratelimit-remaining: 0' "$GP/403.out" && [ "$(grep -c . "$GP/asked-403")" = 3 ]; then
+  ok "github-privacy-live fails on GitHub's 403 after 3 tries, naming 403 and the rate-limit headers"
+else
+  bad "github-privacy-live did not fail on 403 with GitHub's status after 3 tries ($(cat "$GP/403.out"); asked $(grep -c . "$GP/asked-403" 2>/dev/null) times)"
+fi
+if gp public-as-private "$GP/pp.out"; then
+  bad "github-privacy-live passed while the product took a public repository as private ($(cat "$GP/pp.out"))"
+elif grep -q '^FAIL .*let a public repository through as private' "$GP/pp.out" && [ "$(grep -c . "$GP/asked-public-as-private")" = 1 ]; then
+  ok "github-privacy-live fails at once when the product lets a public repository through as private"
+else
+  bad "github-privacy-live did not fail at once on a public repository taken as private ($(cat "$GP/pp.out"))"
+fi
+if gp right "$GP/right.out" && grep -q '^PASS .*public repository (200).*nobody has (404)' "$GP/right.out"; then
+  ok "github-privacy-live passes when GitHub answers 200 for the public repository and 404 for the missing one"
+else
+  bad "github-privacy-live did not pass on GitHub's right answers ($(cat "$GP/right.out"))"
+fi
+# live_github_privacy keeps the stand-in's answer out of the live check: the Node it starts gets an
+# empty NODE_OPTIONS, and the check's FAIL line is the scenario's FAIL line.
+cat >"$GP/fake-node" <<'FAKE'
+#!/usr/bin/env bash
+printf '%s\n' "${NODE_OPTIONS-unset}" >"$GP_SEEN"
+echo "FAIL the live GitHub privacy check, asked about a public repository: GitHub answered 403"
+exit 1
+FAKE
+chmod +x "$GP/fake-node"
+GP_LINE=$(GP_SEEN="$GP/seen" SCENARIO=gp-test GODSPEED_SCENARIO_WORK="$GP/work" bash -c '
+  . "$1/scenarios/scenario-lib.sh"; stand_in_answers_privacy; NODE=$2/fake-node
+  mkdir -p "$2/root/.godspeed/integrated-runtime"; echo v >"$2/root/.godspeed/integrated-runtime/version"
+  live_github_privacy "$2/root" "$2/live.txt"' _ "$ROOT" "$GP" 2>/dev/null)
+if [ "$(cat "$GP/seen" 2>/dev/null)" = '' ] && [ -f "$GP/seen" ] &&
+  [ "$GP_LINE" = "FAIL gp-test: the live GitHub privacy check, asked about a public repository: GitHub answered 403" ]; then
+  ok "live_github_privacy runs the check without the stand-in's answer and fails the scenario with its line"
+else
+  bad "live_github_privacy let the stand-in's answer in or lost the check's FAIL line (NODE_OPTIONS: $(cat "$GP/seen" 2>/dev/null); said: $GP_LINE)"
+fi
 
 # ======================================= sync rounds that have to end synced (issue #125)
 # On 2.0.0-beta.14 the folder half's first round answered "pending", sent nothing, and the answer went
@@ -3780,11 +3912,15 @@ first_day_brief_records() { # <folder>: what the brief in brief.txt leaves in Te
   printf '{"data":[{"id":"brief-1","content":%s}]}\n' "$(node -e 'process.stdout.write(JSON.stringify(require("fs").readFileSync(process.argv[1],"utf8")))' "$f/brief.txt")" >"$f/notes-before-reply.json"
   cp "$f/notes-before-reply.json" "$f/notes-after-reply.json"
 }
+first_day_work_run() { # <folder> <last status> <last error> [run at] [baseline, "null" for none]: the work routine's kept record beside an ok choice routine
+  node -e 'const [file,status,error,at,before]=process.argv.slice(1);require("fs").writeFileSync(file,JSON.stringify({id:"work",before_last_run_at:before==="null"?null:before,data:[{id:"choice",title:"Daily round: choose today\x27s work",last_run_at:"2026-11-06T10:00:00Z",last_status:"ok"},{id:"work",title:"Daily round: do the work",last_run_at:at,last_status:status,last_error:error||null}]})+"\n")' "$1/job-work.json" "$2" "$3" "${4:-2026-11-06T10:05:00Z}" "${5:-2026-11-05T10:05:00Z}"
+}
 first_day_good() { # <folder>
   local f=$1 label table sparse
   rm -rf "$f"; mkdir -p "$f/work"
   printf '{"results":{"goal":{"title":"Prepare a practical household emergency-kit checklist by Sunday."}}}\n' >"$f/setup.json"
-  for label in research choice work; do printf '[{"id":"%s","last_run_at":"2026-11-06T10:00:00Z","last_status":"ok"}]\n' "$label" >"$f/job-$label.json"; done
+  for label in research choice; do printf '{"id":"%s","before_last_run_at":"2026-11-05T10:00:00Z","data":[{"id":"%s","last_run_at":"2026-11-06T10:00:00Z","last_status":"ok"}]}\n' "$label" "$label" >"$f/job-$label.json"; done
+  first_day_work_run "$f" ok ''
   printf 'ID: W-000-first-day-emergency-kit\nSTATUS: verified\nKEY: first-day-emergency-kit\nWHAT: Write a practical household emergency-kit checklist at work/emergency-kit-checklist.md\nDONE WHEN: A practical household emergency-kit checklist is written at work/emergency-kit-checklist.md and ready for a reader\nCHECK: test -s work/emergency-kit-checklist.md\nSOURCE: first-day-scenario\nRESULT: Wrote emergency-kit-checklist.md with practical supplies.\n\n- 2026-11-06 VERIFIED check passed (test -s work/emergency-kit-checklist.md)\n' >"$f/work/W-000-first-day-emergency-kit.md"
   cat >"$f/work/emergency-kit-checklist.md" <<'EOF'
 - [ ] Water: 12 litres for 3 days
@@ -3815,6 +3951,67 @@ passes 'fresh Docker first day makes useful verified work, a sparse-data brief, 
 copy "$FD/good" "$FD/no-research"
 printf '[]\n' >"$FD/no-research/job-research.json"
 refuses 'a first day without research' first-day "$FD/no-research" 'research routine has no successful'
+# Issue #508: the research and choice runs count only when they are the routine's own run, recorded
+# after the scenario's trigger. An earlier success, or a sibling's, does not stand in for it.
+for label in research choice; do
+  copy "$FD/good" "$FD/$label-old-ok-beside-new-error"
+  printf '{"id":"%s","before_last_run_at":"2026-11-05T10:00:00Z","data":[{"id":"setup-%s","last_run_at":"2026-11-05T09:00:00Z","last_status":"ok"},{"id":"%s","last_run_at":"2026-11-06T10:00:00Z","last_status":"error","last_error":"model refused"}]}\n' "$label" "$label" "$label" >"$FD/$label-old-ok-beside-new-error/job-$label.json"
+  refuses "an older successful run beside the $label routine's newer failed one" first-day "$FD/$label-old-ok-beside-new-error" "$label routine has no successful"
+  copy "$FD/good" "$FD/$label-ok-before-trigger"
+  printf '{"id":"%s","before_last_run_at":"2026-11-05T10:00:00Z","data":[{"id":"%s","last_run_at":"2026-11-05T10:00:00Z","last_status":"ok"}]}\n' "$label" "$label" >"$FD/$label-ok-before-trigger/job-$label.json"
+  refuses "a $label routine whose only success is the run before the scenario's trigger" first-day "$FD/$label-ok-before-trigger" "$label routine has no successful"
+  copy "$FD/good" "$FD/$label-ok-older-than-trigger"
+  printf '{"id":"%s","before_last_run_at":"2026-11-05T10:00:00Z","data":[{"id":"%s","last_run_at":"2026-11-04T10:00:00Z","last_status":"ok"}]}\n' "$label" "$label" >"$FD/$label-ok-older-than-trigger/job-$label.json"
+  refuses "a $label routine whose recorded success is older than the scenario's trigger" first-day "$FD/$label-ok-older-than-trigger" "$label routine has no successful"
+  copy "$FD/good" "$FD/$label-no-baseline"
+  printf '[{"id":"%s","last_run_at":"2026-11-06T10:00:00Z","last_status":"ok"}]\n' "$label" >"$FD/$label-no-baseline/job-$label.json"
+  refuses "a $label record that does not say which run the scenario triggered" first-day "$FD/$label-no-baseline" "$label routine has no successful"
+  copy "$FD/good" "$FD/$label-first-run"
+  printf '{"id":"%s","before_last_run_at":null,"data":[{"id":"setup-%s","last_run_at":"2026-11-05T09:00:00Z","last_status":"error"},{"id":"%s","last_run_at":"2026-11-06T10:00:00Z","last_status":"ok"}]}\n' "$label" "$label" "$label" >"$FD/$label-first-run/job-$label.json"
+  passes "a $label routine's first ever run, newer and ok, beside a failed sibling" first-day "$FD/$label-first-run" 'answered today'
+done
+# Issue #492: a work run that told a failed check of an item the choice filed itself still counts;
+# the scenario's own item failing, an unfinished item, or any other error does not.
+SIBLING_CHECK="Today's work did not pass its check, so it is not done yet: \"Idea hunt for prepare-a-practical-household-emergency-kit-checklist-by-sun: search one area (what is already at home, the household's own...\"."
+OWN_CHECK="Today's work did not pass its check, so it is not done yet: \"Write a practical household emergency-kit checklist at work/emergency-kit-checklist.md\"."
+copy "$FD/good" "$FD/work-sibling-check-failed"
+first_day_work_run "$FD/work-sibling-check-failed" error "$SIBLING_CHECK"
+passes "a work run whose only failure is the check of an item the choice filed itself" first-day "$FD/work-sibling-check-failed" 'answered today'
+copy "$FD/good" "$FD/work-own-check-failed"
+first_day_work_run "$FD/work-own-check-failed" error "$SIBLING_CHECK $OWN_CHECK"
+refuses "a work run in which the scenario's own item did not pass its check" first-day "$FD/work-own-check-failed" "own emergency-kit work did not pass its check"
+copy "$FD/good" "$FD/work-unfinished"
+first_day_work_run "$FD/work-unfinished" error "$SIBLING_CHECK Today's work could not be finished, so it is not done yet: \"Idea hunt\"."
+refuses 'a work run with an item that could not be finished' first-day "$FD/work-unfinished" 'ended with error'
+copy "$FD/good" "$FD/work-other-error"
+first_day_work_run "$FD/work-other-error" error "The daily round's work could not start today."
+refuses 'a work run that could not start' first-day "$FD/work-other-error" 'ended with error'
+copy "$FD/good" "$FD/work-never-ran"
+printf '{"id":"work","before_last_run_at":null,"data":[{"id":"choice","title":"Daily round: choose today\x27s work","last_run_at":"2026-11-06T10:00:00Z","last_status":"ok"}]}\n' >"$FD/work-never-ran/job-work.json"
+refuses 'a first day whose work routine never ran, beside a successful choice' first-day "$FD/work-never-ran" 'has no recorded run'
+# Issue #546: the work run counts only when it is the routine's own run, recorded after the
+# scenario's trigger, as research and choice already are (#508).
+copy "$FD/good" "$FD/work-ok-older-than-trigger"
+first_day_work_run "$FD/work-ok-older-than-trigger" ok '' 2026-11-04T10:05:00Z
+refuses "a work routine whose recorded success is older than the scenario's trigger" first-day "$FD/work-ok-older-than-trigger" 'no run recorded after the scenario triggered it'
+copy "$FD/good" "$FD/work-ok-before-trigger"
+first_day_work_run "$FD/work-ok-before-trigger" ok '' 2026-11-05T10:05:00Z
+refuses "a work routine whose only success is the run before the scenario's trigger" first-day "$FD/work-ok-before-trigger" 'no run recorded after the scenario triggered it'
+copy "$FD/good" "$FD/work-sibling-check-before-trigger"
+first_day_work_run "$FD/work-sibling-check-before-trigger" error "$SIBLING_CHECK" 2026-11-04T10:05:00Z
+refuses "an earlier work run that told only a sibling's failed check" first-day "$FD/work-sibling-check-before-trigger" 'no run recorded after the scenario triggered it'
+copy "$FD/good" "$FD/work-other-routine"
+node -e 'const fs=require("fs"),p=process.argv[1],d=JSON.parse(fs.readFileSync(p,"utf8"));d.id="choice";d.before_last_run_at="2026-11-05T10:00:00Z";d.data[1].last_run_at="2026-11-04T10:05:00Z";fs.writeFileSync(p,JSON.stringify(d))' "$FD/work-other-routine/job-work.json"
+refuses "a work record that names another routine's newer run" first-day "$FD/work-other-routine" 'has no recorded run'
+copy "$FD/good" "$FD/work-no-baseline"
+node -e 'const fs=require("fs"),p=process.argv[1],d=JSON.parse(fs.readFileSync(p,"utf8"));fs.writeFileSync(p,JSON.stringify(d.data))' "$FD/work-no-baseline/job-work.json"
+refuses "a work record that does not say which run the scenario triggered" first-day "$FD/work-no-baseline" 'does not say which run the scenario triggered'
+copy "$FD/good" "$FD/work-first-run"
+first_day_work_run "$FD/work-first-run" ok '' 2026-11-06T10:05:00Z null
+passes "the work routine's first ever run, recorded after the trigger" first-day "$FD/work-first-run" 'answered today'
+copy "$FD/good" "$FD/work-sibling-check-first-run"
+first_day_work_run "$FD/work-sibling-check-first-run" error "$SIBLING_CHECK" 2026-11-06T10:05:00Z null
+passes "a first work run whose only failure is a sibling's check" first-day "$FD/work-sibling-check-first-run" 'answered today'
 # The product's own verified work for the goal, when the daily round did not take the late-filed item.
 copy "$FD/good" "$FD/product-work"
 printf 'ID: W-000-first-day-emergency-kit\nSTATUS: planned\nKEY: first-day-emergency-kit\nWHAT: Write a practical household emergency-kit checklist at work/emergency-kit-checklist.md\nSOURCE: first-day-scenario\n' >"$FD/product-work/work/W-000-first-day-emergency-kit.md"
@@ -3864,7 +4061,7 @@ cp "$FD/good/work/W-000-first-day-emergency-kit.md" "$FD/unverified/work/W-other
 refuses 'a first day without its selected checked work' first-day "$FD/unverified" 'selected emergency-kit work card is not verified'
 copy "$FD/good" "$FD/no-artifact"
 rm "$FD/no-artifact/work/emergency-kit-checklist.md"
-refuses 'a first day without a practical artifact' first-day "$FD/no-artifact" 'not a practical emergency-kit checklist'
+refuses 'a first day without a practical artifact' first-day "$FD/no-artifact" 'work/emergency-kit-checklist.md is not a practical emergency-kit checklist: it was not kept'
 copy "$FD/good" "$FD/placeholder"
 printf '%s\n' '- [ ] TODO: outline only' >"$FD/placeholder/work/emergency-kit-checklist.md"
 refuses 'a placeholder checklist' first-day "$FD/placeholder" 'not a practical emergency-kit checklist'
@@ -3988,6 +4185,24 @@ refuses 'a plain-bullet checklist without quantities' first-day "$FD/plain-bulle
 copy "$FD/plain-bullets" "$FD/no-list"
 printf '%s\n' 'Water: 4 litres per person per day for 3 days. Food, first aid, power and documents too.' >"$FD/no-list/work/emergency-kit-checklist.md"
 refuses 'a checklist that is not a list' first-day "$FD/no-list" 'not a practical emergency-kit checklist'
+# The product's checklist of 13 November 2026 (PR #498's first nightly run): numbered sections and
+# bare checkboxes, with no bullet in front of them.
+copy "$FD/good" "$FD/bare-checkboxes"
+cat >"$FD/bare-checkboxes/work/emergency-kit-checklist.md" <<'EOF'
+1. WATER
+
+Plan for at least 4 litres per person per day, for 3 days.
+
+[ ] Stored bottled water, sealed, for 3 days
+[ ] Tinned food with pull-off lids
+[x] Ready-made first aid kit and 7 days of repeat prescriptions
+[ ] Torches with spare batteries, and a power bank
+[ ] Identity documents in a waterproof bag
+EOF
+passes 'a practical checklist written with bare checkboxes and numbered sections' first-day "$FD/bare-checkboxes" 'answered today'
+copy "$FD/bare-checkboxes" "$FD/rules-and-bold"
+printf '%s\n' '**Water**: 4 litres per person per day for 3 days.' '---' 'Food, first aid, power and documents too.' >"$FD/rules-and-bold/work/emergency-kit-checklist.md"
+refuses 'a checklist whose only marks are bold text and a rule' first-day "$FD/rules-and-bold" 'it has no list items'
 
 # ============================================== the five scenarios of 2.0.0-beta.18 (numbers come in)
 # Each is judged on made-up folders only: one that should pass, and one per failure that is easy to
@@ -5259,10 +5474,61 @@ refuses 'day 2 output still holds a step' held-by-a-claim "$HB/day2-log" 'day 2 
 copy "$HB/good" "$HB/no-hold"; printf 'ERROR: --until names no claim in world/claims/\n' >"$HB/no-hold/hold.txt"
 refuses 'a hold mc-holds never wrote' held-by-a-claim "$HB/no-hold" 'wrote no claim'
 
+# ============================================== media-travels (2.0.0-beta.24, item 3, #57)
+PIC=1111111111111111111111111111111111111111111111111111111111111111
+PDFSHA=2222222222222222222222222222222222222222222222222222222222222222
+BIG=3333333333333333333333333333333333333333333333333333333333333333
+media_travels_good() { # <folder>
+  local folder=$1
+  rm -rf "$folder"
+  mkdir -p "$folder"
+  printf '%s\n' "$OLD_COMMIT" >"$folder/a-version-before"
+  printf '%s\n' "$NEW_COMMIT" >"$folder/a-version-after"
+  printf '%s\n' "$NEW_COMMIT" >"$folder/b-version"
+  printf '%s\n' "$PIC" >"$folder/picture-sha"
+  printf '%s\n' "$PDFSHA" >"$folder/pdf-sha"
+  printf '%s\n' "$BIG" >"$folder/large-sha"
+  : >"$folder/a-carried-before-update.txt"
+  printf '%s.mapping.json\n%s.pdf\n%s.png\n' x "$PDFSHA" "$PIC" >"$folder/a-carried-after-update.txt"
+  printf '{"data":[{"path":"user/44444444-4444-4444-8444-444444444444.mp4","size":53477376}]}\n' >"$folder/a-kept-here.json"
+  cp "$folder/a-carried-after-update.txt" "$folder/b-carried.txt"
+  printf '200\n' >"$folder/b-picture.status"; printf '%s\n' "$PIC" >"$folder/b-picture.sha"
+  printf '200\n' >"$folder/b-pdf.status"; printf '%s\n' "$PDFSHA" >"$folder/b-pdf.sha"
+  printf '404\n' >"$folder/b-large.status"
+  printf '200\n' >"$folder/b-remove.status"
+  printf '404\n' >"$folder/a-picture-after-removal.status"
+  printf 'x.png\n' | sed "s/x/$PIC/" >"$folder/a-media-root-after-removal.txt"
+}
+section media-travels
+M=$TMP/media-travels
+media_travels_good "$M/good"
+passes "a picture and a PDF that travel through the copy to a fresh install" media-travels "$M/good" "served by a fresh install"
+refuses "a run that kept nothing at all" media-travels "$M/never-written" "there is nothing at"
+copy "$M/good" "$M/no-move"; cp "$M/good/a-version-before" "$M/no-move/a-version-after"
+refuses "a first computer that never updated" media-travels "$M/no-move" "runs the same commit"
+copy "$M/good" "$M/had-carried"; printf '%s.png\n' "$PIC" >"$M/had-carried/a-carried-before-update.txt"
+refuses "a first computer that carried media before the update" media-travels "$M/had-carried" "had nothing to carry"
+copy "$M/good" "$M/not-carried"; printf '%s.pdf\n' "$PDFSHA" >"$M/not-carried/a-carried-after-update.txt"
+refuses "a first start that did not carry the picture" media-travels "$M/not-carried" "did not carry the picture"
+copy "$M/good" "$M/big-carried"; printf '%s.png\n%s.pdf\n%s.mp4\n' "$PIC" "$PDFSHA" "$BIG" >"$M/big-carried/a-carried-after-update.txt"
+refuses "a file over 50 MB that was carried" media-travels "$M/big-carried" "GitHub refuses a file that large"
+copy "$M/good" "$M/not-kept"; printf '{"data":[]}\n' >"$M/not-kept/a-kept-here.json"
+refuses "a large file the library does not mark" media-travels "$M/not-kept" "kept on this computer only"
+copy "$M/good" "$M/b-missing"; printf '404\n' >"$M/b-missing/b-picture.status"
+refuses "a second computer that cannot serve the picture" media-travels "$M/b-missing" "for the picture"
+copy "$M/good" "$M/b-other-bytes"; printf '%s\n' "$BIG" >"$M/b-other-bytes/b-pdf.sha"
+refuses "a second computer that serves other bytes for the PDF" media-travels "$M/b-other-bytes" "different bytes for the PDF"
+copy "$M/good" "$M/b-large"; printf '200\n' >"$M/b-large/b-large.status"
+refuses "a second computer that serves the large file" media-travels "$M/b-large" "serves the file over 50 MB"
+copy "$M/good" "$M/removal-lost"; printf '200\n' >"$M/removal-lost/a-picture-after-removal.status"
+refuses "a removal that never reached the first computer" media-travels "$M/removal-lost" "not 404"
+copy "$M/good" "$M/bytes-deleted"; : >"$M/bytes-deleted/a-media-root-after-removal.txt"
+refuses "a removal that deleted the first computer's own bytes" media-travels "$M/bytes-deleted" "lost the picture's bytes"
+
 # ============================================================ every one of them, the same shape
 section 'every script'
 BASH_SCENARIOS=(settings-on-install night-tidy voice update-keeps-everything
-  reminder-closed-elsewhere reminders-move-keeps-everything two-machines-move-at-once
+  reminder-closed-elsewhere reminders-move-keeps-everything two-machines-move-at-once media-travels
   late-reminder-file closed-offline-on-both reminder-from-settings charm-challenge
   no-video-skills-by-default update-removes-only-unchanged-skills briefing-breaks-a-rule telegram-language
   brief-asked-in-chat talk-prep-honest no-question-he-cannot-judge plain-yes what-was-that connection-check
@@ -5680,6 +5946,14 @@ if node --test "$ROOT/scenarios/test-report-night.mjs" >"$TMP/report-night.log" 
 else
   cat "$TMP/report-night.log"
   bad "report-night.mjs: its node --test cases fail"
+fi
+
+section "reuse-earlier-pass.mjs: which repeats a pull request does not pay for"
+if node --test "$ROOT/scenarios/test-reuse-earlier-pass.mjs" >"$TMP/reuse-earlier-pass.log" 2>&1; then
+  ok "reuse-earlier-pass.mjs: its node --test cases pass"
+else
+  cat "$TMP/reuse-earlier-pass.log"
+  bad "reuse-earlier-pass.mjs: its node --test cases fail"
 fi
 
 section "server-telegram.mjs: its node --test cases"

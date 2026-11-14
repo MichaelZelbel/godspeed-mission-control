@@ -8,6 +8,7 @@ import {hash} from './records/store.mjs';
 import {durable,windowsInvalid} from './file-policy.mjs';
 import {newFindings} from './context-scan.mjs';
 import {ShelfHistory,COMMIT_PREFIX} from './identity-history.mjs';
+import {isNotebookAuthor} from './sync/git.mjs';
 import {readSoul,syncSoul,soulChars,EXTRA,SOUL_LIMIT} from './assistant-soul.mjs';
 import {normalized} from './packaged-skills.mjs';
 
@@ -663,8 +664,8 @@ export class IdentityShelf{
   byWhom(v){
     if(v.unrecorded)return 'not kept as a version yet';
     if(String(v.message).startsWith(COMMIT_PREFIX+'kept the version from before'))return 'kept by your notebook';
-    if(v.author==='Godspeed Mission Control'&&String(v.message).startsWith(COMMIT_PREFIX))return /\(asked in chat\)$/.test(v.message)?'your assistant, asked in chat':'you, on this page';
-    if(v.author==='Godspeed Mission Control')return 'saved by your notebook';
+    if(isNotebookAuthor(v.author)&&String(v.message).startsWith(COMMIT_PREFIX))return /\(asked in chat\)$/.test(v.message)?'your assistant, asked in chat':'you, on this page';
+    if(isNotebookAuthor(v.author))return 'saved by your notebook';
     return v.author||'unknown';
   }
   async undo(target,options={}){

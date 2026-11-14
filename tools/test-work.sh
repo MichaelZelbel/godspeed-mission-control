@@ -19,6 +19,7 @@ trap 'rm -rf "$TMP" "$TEST_GUARD_HOME"' EXIT
 mkdir -p "$TMP/rules" "$TMP/bin"
 : > "$TMP/AGENTS.md"
 cp "$HERE/work.js" "$TMP/bin/"
+cp "$HERE/run-log-folders.js" "$TMP/bin/"
 cp "$HERE/goals.js" "$TMP/bin/"
 cp "$HERE/mc-cards.js" "$TMP/bin/"
 cp "$HERE/check-written.js" "$TMP/bin/"
@@ -716,6 +717,141 @@ printf -- '---\nsubject: the-book\nattribute: status\nvalue: beta\nvalid_from: 2
 missing "once the claim it waits on ended, it is not held" "$(hw list 2>&1 | grep "$HI")" "held by"
 OUT="$(hw unblock "$HI" --why "ship list answer" --approved-by "ship all" 2>&1)"; check "  and unblock --approved-by works" "$?" "0"
 rm -rf "$TMP/world"
+
+# --- a result is kept with the person's work, never in a run-log folder (#543) --------------------
+OUT="$(hw file --what "Draft the household emergency-kit checklist" --done-when "the checklist is written in routines/next-action/2026-09-13/kit-checklist.md" --goal ready --key kit-in-log --source next-action 2>&1)"
+check "a DONE WHEN inside a run-log folder is refused" "$?" "1"
+contains "  and names the folder the cleanup empties" "$OUT" "routines/next-action/, a run-log folder whose files the nightly cleanup deletes"
+contains "  and says where a result goes" "$OUT" "put it under work/, goals/ or ideas/"
+check "  and nothing is filed" "$(idof kit-in-log)" "none"
+OUT="$(hw file --learn "What goes in an emergency kit?" --path routines/research/2026-09-13/kit.md --key kit-learn-in-log --source test 2>&1)"
+check "a --path inside a run-log folder is refused" "$?" "1"
+check "  and nothing is filed" "$(idof kit-learn-in-log)" "none"
+OUT="$(hw file --what "Draft the kit list" --done-when "the kit list is written" --check "test -s routines/work/2026-09-13/kit.md" --key kit-check-in-log --source test 2>&1)"
+check "a CHECK reading a file inside a run-log folder is refused" "$?" "1"
+check "  and nothing is filed" "$(idof kit-check-in-log)" "none"
+OUT="$(hw file --what "Draft the household emergency-kit checklist" --done-when "the checklist is written in work/kit-checklist.md" --check "test -s work/kit-checklist.md" --goal ready --key kit-in-work --source next-action 2>&1)"
+contains "the same item with its result under work/ files" "$OUT" ": planned"
+# On Windows and on a Mac's usual disk a folder name ignores capitals, and Windows writes \ (#545)
+OUT="$(hw file --what "Draft the kit checklist" --done-when "the checklist is written in routines/Next-Action/2026-09-13/kit.md" --key kit-caps-in-log --source test 2>&1)"
+check "a DONE WHEN in a run-log folder written with other capitals is refused" "$?" "1"
+contains "  with the same message, naming the folder the cleanup empties" "$OUT" "inside routines/next-action/, a run-log folder whose files the nightly cleanup deletes"
+contains "  and says where a result goes" "$OUT" "put it under work/, goals/ or ideas/"
+check "  and nothing is filed" "$(idof kit-caps-in-log)" "none"
+OUT="$(hw file --learn "What goes in a kit?" --path 'Routines\Work\2026-09-13\kit.md' --key kit-back-in-log --source test 2>&1)"
+check "a --path in a run-log folder written with backslashes and other capitals is refused" "$?" "1"
+contains "  with the same message, naming the folder the cleanup empties" "$OUT" "inside routines/work/, a run-log folder"
+check "  and nothing is filed" "$(idof kit-back-in-log)" "none"
+OUT="$(hw file --what "Draft the kit list" --done-when "the kit list is written" --check 'test -s routines\coach-prep\2026-09-13\kit.md' --key kit-check-back-in-log --source test 2>&1)"
+check "a CHECK reading a run-log file through backslashes is refused" "$?" "1"
+check "  and nothing is filed" "$(idof kit-check-back-in-log)" "none"
+# Every system reads routines//work/, routines\\work\\ and routines/./work/ as routines/work/ (#548)
+OUT="$(hw file --what "Draft the kit checklist" --done-when "the checklist is written in routines//next-action/2026-09-13/kit.md" --key kit-dbl-in-log --source test 2>&1)"
+check "a DONE WHEN in a run-log folder written with a doubled / is refused" "$?" "1"
+contains "  with the same message, naming the folder the cleanup empties" "$OUT" "inside routines/next-action/, a run-log folder whose files the nightly cleanup deletes"
+check "  and nothing is filed" "$(idof kit-dbl-in-log)" "none"
+OUT="$(hw file --learn "What goes in a kit?" --path 'routines/./research/2026-09-13/kit.md' --key kit-dot-in-log --source test 2>&1)"
+check "a --path in a run-log folder written with a ./ step is refused" "$?" "1"
+contains "  with the same message, naming the folder the cleanup empties" "$OUT" "inside routines/research/, a run-log folder"
+check "  and nothing is filed" "$(idof kit-dot-in-log)" "none"
+OUT="$(hw file --what "Draft the kit list" --done-when "the kit list is written" --check 'test -s routines\\work\\2026-09-13\\kit.md' --key kit-check-dbl-back-in-log --source test 2>&1)"
+check "a CHECK reading a run-log file through shell-escaped backslashes is refused" "$?" "1"
+contains "  with the same message, naming the folder the cleanup empties" "$OUT" "inside routines/work/, a run-log folder"
+check "  and nothing is filed" "$(idof kit-check-dbl-back-in-log)" "none"
+OUT="$(hw file --what "Draft the kit list" --done-when 'the kit list is written in routines\/.\coach-prep//kit.md' --key kit-mixed-in-log --source test 2>&1)"
+check "a DONE WHEN in a run-log folder written with mixed separators and ./ is refused" "$?" "1"
+contains "  with the same message, naming the folder the cleanup empties" "$OUT" "inside routines/coach-prep/, a run-log folder"
+check "  and nothing is filed" "$(idof kit-mixed-in-log)" "none"
+OUT="$(hw file --what "Write the round notes" --done-when "the notes are written in work/routines/next-action-notes.md" --check "test -s work/routines/next-action-notes.md" --key notes-look-alike --source test 2>&1)"
+contains "a path that only looks like a run-log folder files" "$OUT" ": planned"
+OUT="$(hw file --what "Write the kit notes" --done-when 'the notes are written in Work\kit-notes.md and work/kit-notes.md' --key kit-in-work-back --source test 2>&1)"
+contains "a result under work/ still files" "$OUT" ": planned"
+# The path is worked out as a file system reads it, not matched as text (#551)
+OUT="$(hw file --what "Draft the kit checklist" --done-when "the checklist is written in routines/work./2026-09-13/kit.md" --key kit-trail-dot-in-log --source test 2>&1)"
+check "a DONE WHEN in a run-log folder written with a trailing dot, which Windows drops, is refused" "$?" "1"
+contains "  with the same message, naming the folder the cleanup empties" "$OUT" "inside routines/work/, a run-log folder"
+check "  and nothing is filed" "$(idof kit-trail-dot-in-log)" "none"
+OUT="$(hw file --learn "What goes in a kit?" --path 'routines/work /2026-09-13/kit.md' --key kit-trail-space-in-log --source test 2>&1)"
+check "a --path in a run-log folder written with a trailing space, which Windows drops, is refused" "$?" "1"
+contains "  with the same message, naming the folder the cleanup empties" "$OUT" "inside routines/work/, a run-log folder"
+check "  and nothing is filed" "$(idof kit-trail-space-in-log)" "none"
+OUT="$(hw file --what "Draft the kit checklist" --done-when "the checklist is written in work/../routines/work/2026-09-13/kit.md" --key kit-climb-in-log --source test 2>&1)"
+check "a DONE WHEN that climbs back into a run-log folder is refused" "$?" "1"
+contains "  with the same message, naming the folder the cleanup empties" "$OUT" "inside routines/work/, a run-log folder"
+check "  and nothing is filed" "$(idof kit-climb-in-log)" "none"
+OUT="$(hw file --what "Draft the kit checklist" --done-when "the checklist is written in $TMP/routines/next-action/2026-09-13/kit.md" --key kit-abs-in-log --source test 2>&1)"
+check "a DONE WHEN naming a run-log folder by its full path is refused" "$?" "1"
+contains "  with the same message, naming the folder the cleanup empties" "$OUT" "inside routines/next-action/, a run-log folder"
+check "  and nothing is filed" "$(idof kit-abs-in-log)" "none"
+OUT="$(hw file --what "Draft the kit checklist" --done-when "the checklist is written in routines/work/../../work/kit.md" --key kit-climb-out --source test 2>&1)"
+contains "a DONE WHEN that climbs out of a run-log folder into work/ files" "$OUT" ": planned"
+OUT="$(hw file --what "Draft the kit list" --done-when "the kit list is written in work/kit-list.md" --check "test -s routines/research/../../work/kit-list.md" --key kit-check-climb-out --source test 2>&1)"
+contains "a CHECK that climbs out of a run-log folder into work/ files" "$OUT" ": planned"
+OUT="$(hw file --learn "What goes in a grab bag?" --path 'work\answers\a.md' --key learn-back-path --source test 2>&1)"
+contains "a learn --path written with backslashes names a file and files" "$OUT" ": planned"
+missing "  and is not told it names no file" "$OUT" "must name a file"
+# A run-log path glued after an earlier path is still refused, as on main (#551 review)
+gi=0
+for glue in ',' ':' '+' '='; do
+  gi=$((gi+1))
+  OUT="$(hw file --what "Draft the kit checklist" --done-when "the checklist is written in work/a.md${glue}routines/work/2026-09-13/kit.md" --key "kit-glued-$gi" --source test 2>&1)"
+  check "a DONE WHEN with a run-log path glued on by '$glue' is refused" "$?" "1"
+  contains "  naming that path and the folder the cleanup empties" "$OUT" "names routines/work/2026-09-13/kit.md, inside routines/work/, a run-log folder"
+  check "  and nothing is filed" "$(idof "kit-glued-$gi")" "none"
+done
+OUT="$(hw file --what "Draft the kit list" --done-when "the kit list is written in work/kit-list.md" --check "cmp work/kit-list.md,work/a+b/routines/work/kit.md" --key kit-glued-look-alike --source test 2>&1)"
+contains "a path glued on that only looks like a run-log folder files" "$OUT" ": planned"
+# A folder name ending in spaces and dots before a separator is the folder Windows sees (#561)
+si=0
+for spelt in 'routines/work . /x.md' 'routines/work .. /x.md' 'Routines. /Work. . /x.md'; do
+  si=$((si+1))
+  OUT="$(hw file --what "Draft the kit checklist" --done-when "the checklist is written in $spelt" --key "kit-spdot-done-$si" --source test 2>&1)"
+  check "a DONE WHEN in '$spelt' is refused" "$?" "1"
+  contains "  naming the folder the cleanup empties" "$OUT" "inside routines/work/, a run-log folder"
+  check "  and nothing is filed" "$(idof "kit-spdot-done-$si")" "none"
+  OUT="$(hw file --learn "What goes in a kit?" --done-when "the answer is written in work/kit.md" --path "$spelt" --key "kit-spdot-path-$si" --source test 2>&1)"
+  check "  as a --path it is refused" "$?" "1"
+  contains "  naming the folder the cleanup empties" "$OUT" "--path names $spelt, inside routines/work/, a run-log folder"
+  OUT="$(hw file --what "Draft the kit list" --done-when "the kit list is written" --check "test -s '$spelt'" --key "kit-spdot-check-$si" --source test 2>&1)"
+  check "  as a CHECK it is refused" "$?" "1"
+  contains "  naming the folder the cleanup empties" "$OUT" "inside routines/work/, a run-log folder"
+done
+OUT="$(hw file --what "Write the notes" --done-when "the notes are written in work/notes . /x.md" --key notes-spdot-look-alike --source test 2>&1)"
+contains "a look-alike with a space-dot folder name files" "$OUT" ": planned"
+# A web address is not a path of the notebook; a run-log folder named alone is still that folder (#561)
+OUT="$(hw file --what "Read the page" --done-when "see https://example.com/routines/work/x.md" --key web-look-alike --source test 2>&1)"
+contains "a web address that only looks like a run-log path files" "$OUT" ": planned"
+OUT="$(hw file --what "Draft the kit" --done-when "the kit is written in routines/work/" --key kit-folder-alone --source test 2>&1)"
+check "a DONE WHEN naming only a run-log folder is refused" "$?" "1"
+contains "  naming the folder the cleanup empties" "$OUT" "names routines/work/, which is routines/work/, a run-log folder"
+check "  and nothing is filed" "$(idof kit-folder-alone)" "none"
+OUT="$(hw file --what "Draft the kit" --done-when "the kit is written in work/kit.md" --check "test -s file://$TMP/routines/work/kit.md" --key kit-file-url --source test 2>&1)"
+check "a file:// address into a run-log folder is still refused" "$?" "1"
+# One list of run-log folders (#551): mc-work refuses each folder the cleanup sweeps, and no other.
+CLEANUP="$HERE/../notebook/core/cleanup.mjs"
+if [ -f "$CLEANUP" ]; then
+  SWEPT="$("$NODE" --input-type=module -e '
+const {places}=await import(process.argv[1]);
+for(const p of places({root:process.argv[2],home:process.argv[2]+"/no-home"}))console.log(p.name);
+' "$CLEANUP" "$TMP")"
+  [ -n "$SWEPT" ] && ok "  the cleanup names the run-log folders it sweeps" || bad "  the cleanup names the run-log folders it sweeps"
+  i=0
+  while IFS= read -r folder; do
+    i=$((i+1))
+    OUT="$(hw file --what "Keep a note" --done-when "the note is written in $folder/2026-09-13/note.md" --key "drift-$i" --source test 2>&1)"
+    check "  mc-work refuses $folder/, which the nightly cleanup empties" "$?" "1"
+    contains "    naming that folder" "$OUT" "inside $folder/, a run-log folder"
+    check "    and nothing is filed" "$(idof "drift-$i")" "none"
+  done <<< "$SWEPT"
+  check "  the cleanup and mc-work read one list of run-log folders" \
+    "$("$NODE" --input-type=module -e '
+const {RUN_LOG_FOLDERS}=await import(process.argv[1]);
+console.log(JSON.stringify(RUN_LOG_FOLDERS));
+' "$CLEANUP")" \
+    "$("$NODE" -e 'console.log(JSON.stringify(require(process.argv[1]).RUN_LOG_FOLDERS))' "$TMP/bin/run-log-folders.js")"
+  OUT="$(hw file --what "Keep a note" --done-when "the note is written in routines/elsewhere/2026-09-13/note.md" --key drift-none --source test 2>&1)"
+  contains "  mc-work refuses no routines folder the cleanup leaves alone" "$OUT" ": planned"
+fi
 
 echo
 echo "$PASS passed, $FAIL failed"

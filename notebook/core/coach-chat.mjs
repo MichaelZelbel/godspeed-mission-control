@@ -70,3 +70,14 @@ export function coachTalkCorrectedOpening(store,start){
 
 // What the assistant is told when its reply to a talk start failed the guard (issue #489).
 export const coachTalkRetryMessage=(message,problem)=>`${String(message||'')}\n\nYour previous reply to this was refused and the person did not see it: ${problem} The talk record already exists; do not open it again. Answer again now, as the brief says: your final answer is the talk's opening as it stands in the record.`;
+
+// A talk that opened with no prepared opening holds, as its opening, the reply the person was
+// actually shown: the assistant may write one opening into the record and answer with other words
+// (issue #530). A prepared talk's reply is its record's opening already, and a continued talk's
+// record holds an earlier day's opening, so neither is touched.
+export function coachTalkRecordShownOpening(store,start,reply){
+  if(!start||start.continuing||start.opening)return;
+  const area=findArea(store.root,start.area),talk=area&&readTalk(area,start.day),shown=String(reply||'').trim();
+  if(!talk||!shown||String(talk.sections['The opening']||'').trim()===shown)return;
+  setOpening(area,start.day,shown);
+}

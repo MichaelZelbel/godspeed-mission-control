@@ -31,7 +31,7 @@ compile-rules.js due-files.js due.js forecast.js goals.js holds.js judge-brief.j
 mc-mail-age.json mc-mail-gmail.js mc-mail-himalaya.json mc-mail-imap.js mc-mail-pair.js mc-mail-wire.js
 mc-mail.js mc-notebook.js menerio-connect.js notebook-sync.py observed-state.js promises.js prompt-harvest.js
 prompt-machine-openers.json prompt-machine-openers.mjs
-recipe-shipped-hashes.sh search.js subscriptions.cjs test_world_pull.py unattended-git.cjs work.js world-pull.py"
+recipe-shipped-hashes.sh run-log-folders.js search.js subscriptions.cjs test_world_pull.py unattended-git.cjs work.js world-pull.py"
 PROGRAMS="mc-check-brief mc-check-brief.cmd mc-check-built-on mc-check-built-on.cmd mc-coach-prep mc-coach-prep.cmd mc-check-keys mc-check-moves
 mc-check-research mc-check-research.cmd mc-check-written
 mc-compile-rules mc-decide mc-due mc-forecast mc-goals mc-holds mc-holds.cmd mc-install-count mc-judge-brief mc-judge-brief.cmd mc-mail mc-mail.cmd

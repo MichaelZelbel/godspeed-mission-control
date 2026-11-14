@@ -115,7 +115,8 @@ one_pair() { # <mode> <A root> <A port> <B root> <B port> <stand-in folder>
     notebook_on "$a" sync folder notebook >"$EVIDENCE/$mode-join.json" ||
       fail "godspeed sync folder notebook was refused on $a, so there is no mission control carrying its own notebook (what it said is in the step log)"
   else
-    address=$(stand_in_github "$bare")
+    stand_in_github "$bare"
+    address=$STAND_IN_ADDRESS
     sync_on "$a" configure "$address" >"$EVIDENCE/$mode-configure.json" ||
       fail "Settings' own way of connecting a repository was refused on $a (its answer is in $mode-configure.json)"
     grep -q 'configuration_failed\|configuration_error' "$EVIDENCE/$mode-configure.json" &&

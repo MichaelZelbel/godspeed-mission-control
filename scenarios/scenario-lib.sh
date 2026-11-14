@@ -672,10 +672,9 @@ sync_round() { # <root> <mode> <what the round does, for the symptom>
 # to the folder and nothing else: a new mission control is the starter copied into an empty folder
 # with `git init -b main` and `godspeed.mjs init` (the first commit); a folder that is not empty and
 # is not a mission control is refused as kit-bootstrap's kb_new_godspeed refuses it; a folder that
-# has an origin is joined with `godspeed sync folder`, as install-native-notebook.sh does. The checks
-# of a private GitHub address ask api.github.com, which a stand-in cannot reach, so a program loaded
-# by NODE_OPTIONS answers 404 for the stand-in owner, as GitHub does for a repository nobody can see.
-# The workflow never sets it, and the verdict says when it was used.
+# has an origin is joined with `godspeed sync folder`, as install-native-notebook.sh does. The stand-in
+# owner's repositories are answered here (stand_in_answers_privacy). The workflow never sets it, and
+# the verdict says when it was used.
 local_install_into() { # <root> <port> <trace file>
   local root=$1 product=$GODSPEED_SCENARIO_PRODUCT folder
   folder=${GODSPEED_SCENARIO_WORK:-${RUNNER_TEMP:-/tmp}}/local-product
@@ -693,17 +692,7 @@ local_install_into() { # <root> <port> <trace file>
   mkdir -p "$root/.godspeed/integrated-runtime/versions" "$folder" || fail "the runtime folder in $root could not be made"
   ln -sfn "$product" "$root/.godspeed/integrated-runtime/versions/local" || fail "the product could not be linked into $root"
   printf 'local\n' >"$root/.godspeed/integrated-runtime/version" || fail "the version file in $root could not be written"
-  cat >"$folder/github-404.mjs" <<'STUB'
-// Written by scenarios/scenario-lib.sh (local_install_into): api.github.com answers 404 for the
-// stand-in owner's repositories, which is what it answers for a private one asked without a key.
-const real = globalThis.fetch;
-globalThis.fetch = (url, ...rest) =>
-  String(url).startsWith('https://api.github.com/repos/godspeed-scenario-stand-in/')
-    ? Promise.resolve(new Response('{"message":"Not Found"}', { status: 404 }))
-    : real(url, ...rest);
-STUB
-  NODE_OPTIONS="--import=file://$folder/github-404.mjs"
-  export NODE_OPTIONS
+  stand_in_answers_privacy
   RUNTIME=$(runtime_of "$root")
   need_node
   GODSPEED_WORKSPACE="$root" "$NODE" "$product/notebook/bin/godspeed.mjs" init >"$3" 2>&1 || fail "godspeed init failed in $root (see $3)"
@@ -712,11 +701,53 @@ STUB
   fi
 }
 
+# GITHUB'S ANSWER ABOUT A STAND-IN REPOSITORY, given on this machine. Before a notebook joins an
+# address, the product asks api.github.com whether it is private (FileSync.verifyRemote wants a 404,
+# which GitHub gives for a repository nobody can see) and refuses on any other answer. Asked of the
+# real api.github.com without a key from a shared runner, that is rate-limited, and on 14 November
+# 2026 it answered something else and failed two-machines-move-at-once (issue #557). So a program
+# loaded by NODE_OPTIONS into this shell and every Node it starts, the install line's included,
+# answers 404 for the stand-in owner's repositories and hands every other request to the real fetch:
+# the product's own check still runs, and still reads the repository with git afterwards.
+stand_in_answers_privacy() {
+  local folder=${GODSPEED_SCENARIO_WORK:-${RUNNER_TEMP:-/tmp}}/stand-in-privacy
+  local import="--import=file://$folder/github-404.mjs"
+  case " ${NODE_OPTIONS:-} " in *" $import "*) return 0 ;; esac
+  mkdir -p "$folder" || fail "the folder for GitHub's stand-in answer ($folder) could not be made"
+  cat >"$folder/github-404.mjs" <<'STUB' || fail "GitHub's stand-in answer could not be written into $folder"
+// Written by scenarios/scenario-lib.sh (stand_in_answers_privacy): api.github.com answers 404 for the
+// stand-in owner's repositories, which is what it answers for a private one asked without a key.
+const real = globalThis.fetch;
+globalThis.fetch = (url, ...rest) =>
+  String(url).startsWith('https://api.github.com/repos/godspeed-scenario-stand-in/')
+    ? Promise.resolve(new Response('{"message":"Not Found"}', { status: 404 }))
+    : real(url, ...rest);
+STUB
+  NODE_OPTIONS="${NODE_OPTIONS:+$NODE_OPTIONS }$import"
+  export NODE_OPTIONS
+}
+
+# THE ONE PLACE A NIGHT STILL ASKS THE REAL api.github.com WHETHER A REPOSITORY IS PRIVATE (issue
+# #557). github-privacy-live.mjs runs the installed product's own FileSync.verifyRemote, without a
+# key, about a public repository (it has to be refused) and one nobody has (GitHub's 404 has to be
+# taken as private), asking again for about 2 minutes while GitHub answers anything else. The
+# stand-in's answer (stand_in_answers_privacy) is kept out of it: NODE_OPTIONS is emptied for it. A
+# FAIL names GitHub's status and its rate-limit headers, and fails the scenario.
+live_github_privacy() { # <root> <file for what it said>
+  local line
+  NODE_OPTIONS='' "$NODE" "$HERE/github-privacy-live.mjs" "$(product_script "$1" notebook/core/sync/git.mjs)" >"$2" ||
+    fail "$(sed -n 's/^FAIL //p' "$2" | head -n 1 | grep . || echo "the live GitHub privacy check stopped without its own verdict (see $2)")"
+  line=$(sed -n 's/^PASS //p' "$2" | head -n 1)
+  [ -n "$line" ] || fail "the live GitHub privacy check said neither PASS nor FAIL (see $2)"
+  say "$line"
+}
+
 # THE PRIVATE GITHUB REPOSITORY, STOOD IN FOR BY ONE BARE REPOSITORY ON THIS MACHINE, the way
 # notebook/test/installer-join-sync.test.mjs does it: Git is told that the GitHub address leads to
 # the folder, for this process and every program it starts. The product still checks the address is
-# a private GitHub one (FileSync.verifyRemote asks api.github.com and wants a 404, which an owner
-# nobody has gives), and then reads it with git, which the redirect sends here. Prints the address.
+# a private GitHub one (stand_in_answers_privacy), and then reads it with git, which the redirect
+# sends here. NEVER CALLED INSIDE A COMMAND SUBSTITUTION: it fills STAND_IN_ADDRESS, because the
+# answer about privacy lives in this shell's environment and a subshell would throw it away.
 stand_in_github() { # <folder>
   local folder=$1 owner=godspeed-scenario-stand-in name
   name=stand-in-$(od -An -N4 -tx1 /dev/urandom | tr -d ' \n')
@@ -731,8 +762,10 @@ stand_in_github() { # <folder>
   # A stranger's computer has a Git identity of its own; a commit without one fails.
   git config --global user.name "Godspeed Scenario" || fail "this machine's Git could not be given a name"
   git config --global user.email "scenario@localhost" || fail "this machine's Git could not be given an address"
+  stand_in_answers_privacy
   say "The private GitHub repository is stood in for by $folder/$name.git"
-  printf 'https://github.com/%s/%s.git\n' "$owner" "$name"
+  # shellcheck disable=SC2034  # the scenario that sourced this file is what reads it
+  STAND_IN_ADDRESS=https://github.com/$owner/$name.git
 }
 
 # THE SAME STAND-IN FOR A MISSION CONTROL THAT IS ITS OWN REPOSITORY, where telling Git that the
@@ -742,8 +775,7 @@ stand_in_github() { # <folder>
 # GitHub repository and not a folder on this machine. So no rewriting is set here at all. The
 # address is the SSH form of the same private repository, which the product takes exactly as it
 # takes a real one (verifyRemote: https://github.com/<owner>/<name> or git@github.com:<owner>/<name>,
-# the owner asked of api.github.com, which answers 404 for an owner nobody has, and then read with
-# git), and git reaches the bare repository on this machine because this scenario's own `ssh` runs
+# its privacy answered by stand_in_answers_privacy, and then read with git), and git reaches the bare repository on this machine because this scenario's own `ssh` runs
 # the server side here. Every call of git still goes through the git the scenario wrote down
 # (git_calls_shim), including the ones this ssh makes inside the product's own sync rounds.
 # NEVER CALLED INSIDE A COMMAND SUBSTITUTION: it fills STAND_IN_ADDRESS, because what tells git the
@@ -796,6 +828,7 @@ STAND_IN_SSH
   # program in a folder this run deletes.
   GIT_SSH_COMMAND=$stand_in/ssh
   export GIT_SSH_COMMAND
+  stand_in_answers_privacy
   # So it cannot be read inside a command substitution, which would throw that environment away
   # with the subshell: it fills STAND_IN_ADDRESS and says what it stood in for, as read_version does
   # with the version it read.

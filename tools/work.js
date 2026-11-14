@@ -78,9 +78,75 @@ const NEEDS = /^(none|person|authorization|capability:.+)$/;
 const asNeeds = (v) => (PERSON.test(v) ? 'person' : v);
 const KINDS = ['do', 'learn', 'repair'];
 // A learn item is done when its answer is in a file. "Names a file" means: a token with a
-// slash in it, ending in .md, .csv, .json or .txt, trailing punctuation ignored.
+// slash or backslash in it, ending in .md, .csv, .json or .txt, trailing punctuation ignored.
 const namesFile = (s) => String(s || '').split(/\s+/).map(t => t.replace(/[.,;:)"'\]]+$/, ''))
-  .some(t => t.includes('/') && /\.(md|csv|json|txt)$/i.test(t));
+  .some(t => /[\\/]/.test(t) && /\.(md|csv|json|txt)$/i.test(t));
+// WHERE A RESULT IS KEPT (#543). On 14 November 2026 a daily round kept a person's finished
+// checklist in routines/next-action/<day>/, a run-log folder the nightly cleanup empties after 30
+// days, and verified the item on it there. So `file` refuses a DONE WHEN, --path or CHECK that names
+// a file inside one of those folders (run-log-folders.js holds the list the cleanup sweeps).
+//
+// The path is worked out the way a file system reads it, not matched as text (#551): three patches
+// in a row (#544, #545, #548) each taught a pattern one more spelling of the same folder. Either
+// separator splits steps; `.` and empty steps go; `..` removes the step before it; trailing dots and
+// spaces go (Windows drops them, so routines/work./ is routines/work/); capitals are ignored (Windows
+// and a Mac's usual disk ignore them). A plain relative path is read from the mission control, as
+// CHECK runs there, so it lies in a folder only when it starts with it. Where text cannot say where a
+// path starts (an absolute path, $VAR/..., ~/..., OUT=..., or one that climbs above its start with
+// ..), the folder may appear anywhere in it. A path that names the folder itself is refused like a
+// file inside it (#561): `routines/work/` is where the cleanup sweeps, whatever follows.
+const { RUN_LOG_FOLDERS } = require(path.join(__dirname, 'run-log-folders.js'));
+const RUN_LOG_STEPS = RUN_LOG_FOLDERS.map(f => ({ folder: f, steps: f.split('/') }));
+// The words of a text that may be paths: split at spaces and shell punctuation, and also with the
+// spaces kept that a run of spaces and dots carries up to a separator, so `routines/work /x.md` and
+// `routines/work . /x.md` are each one candidate (#561), as Windows reads both as routines/work/.
+// A web address (https://host/...) is not a path of the notebook, so it is taken out first; a
+// file:// address names a file on this computer and stays.
+const PATH_STOP = /[\s"'`;|&<>()]+/;
+const PATH_STOP_KEEPING_SPACE_BEFORE_SEP = /[\s"'`;|&<>()]*["'`;|&<>()][\s"'`;|&<>()]*|\s+(?![. ]*[\\/])/;
+const WEB_ADDRESS = /(?<![A-Za-z0-9+.-])(?!file:)[A-Za-z][A-Za-z0-9+.-]+:\/\/[^\s"'`<>()]*/gi;
+const pathCandidates = (text) => {
+  const s = String(text || '').replace(WEB_ADDRESS, ' ');
+  return [...new Set([...s.split(PATH_STOP_KEEPING_SPACE_BEFORE_SEP), ...s.split(PATH_STOP)])]
+    .map(t => t.replace(/[.,;:]+$/, '')).filter(Boolean);
+};
+const pathSteps = (p) => {
+  const out = [];
+  for (const raw of p.split(/[\\/]/)) {
+    if (raw === '..') { if (out.length && out[out.length - 1] !== '..') out.pop(); else out.push('..'); continue; }
+    const name = raw.replace(/[. ]+$/, '');
+    if (name) out.push(name.toLowerCase());
+  }
+  return out;
+};
+// A first step with anything but a plain name in it (`OUT=`, `--path=`, `$GODSPEED_ROOT`, `~`, `C:`)
+// is not a folder of the mission control: the path proper starts after its last such character.
+const GLUED_PREFIX = /^[^\\/]*[^A-Za-z0-9_. \-\\/]/;
+const runLogFolderAt = (candidate) => {
+  const anchored = /^[\\/]/.test(candidate) || GLUED_PREFIX.test(candidate);
+  const steps = pathSteps(candidate.replace(GLUED_PREFIX, ''));
+  const starts = anchored || steps[0] === '..' ? steps.map((_, i) => i) : [0];
+  for (const i of starts) {
+    const hit = RUN_LOG_STEPS.find(f => steps.length >= i + f.steps.length && f.steps.every((x, k) => steps[i + k] === x));
+    if (hit) return { folder: hit.folder, itself: steps.length === i + hit.steps.length };
+  }
+  return null;
+};
+// A path may also be glued after an earlier one (`work/a.md,routines/work/b.md`, `a:routines/...`,
+// `x+routines/...`, `OUT=routines/...`): the text after every character that is not part of a plain
+// path is tried as a path of its own, so a run-log path refused alone stays refused when glued on.
+const PATH_GLUE = /[^A-Za-z0-9_. \-\\/]/g;
+const runLogFolderOf = (candidate) => {
+  const starts = [0, ...[...candidate.matchAll(PATH_GLUE)].map(m => m.index + 1)];
+  for (const i of starts) { const p = candidate.slice(i), hit = runLogFolderAt(p); if (hit) return { path: p, ...hit }; }
+  return null;
+};
+// The first path in the text that lies in a run-log folder, as written (from where it is glued on),
+// with that folder; or null.
+const runLogPath = (text) => {
+  for (const written of pathCandidates(text)) { const hit = runLogFolderOf(written); if (hit) return hit; }
+  return null;
+};
 const ORDER = ['ID', 'STATUS', 'KIND', 'KEY', 'GOAL', 'CARD', 'TOUCHES', 'WHAT', 'DONE WHEN', 'CHECK', 'OWNER', 'NEEDS', 'OUTWARD', 'PUBLISH', 'ATTEMPTS', 'MAX ATTEMPTS',
   'LEASE', 'NEXT TRY', 'STALE AFTER', 'FILED', 'SOURCE', 'RESULT', 'LINK', 'APPROVED', 'MAY', 'GOES OUT', 'ANNOUNCED'];
 const S = L.store(DIR, ORDER);
@@ -388,6 +454,11 @@ cmds.file = (a) => {
   let done = oneLine(a['done-when']);
   const where = oneLine(a.path);
   if (!done && kind === 'learn' && where) done = `the answer to ${q(question || what)} is written in ${where}, with the evidence read`;
+  // Before the learn check below, so a Windows path in a run-log folder hears why it is refused (#545).
+  for (const [label, text] of [['DONE WHEN', done], ['--path', where], ['CHECK', a.check === true ? '' : oneLine(a.check)]]) {
+    const inLog = runLogPath(text);
+    if (inLog) die(`${label} names ${inLog.path}, ${inLog.itself ? 'which is' : 'inside'} ${inLog.folder}/, a run-log folder whose files the nightly cleanup deletes after 30 days. A result is kept with the person's work: put it under work/, goals/ or ideas/ (for example work/<a short name>.md) and name that path instead`);
+  }
   if (kind === 'learn' && !namesFile(done)) die('a learn item is done when the answer is written somewhere a reader can open: its DONE WHEN must name a file (a path ending in .md, .csv, .json or .txt), or give --path <file>');
   if (!done) die('--done-when is required: what a reader will see when this is done, so it can be verified by someone who is not the runner');
   const touches = a.touches === undefined || a.touches === 'true' ? [] : (holdsLib() || die('--touches needs holds.js beside this program')).touchTokens(a.touches);

@@ -81,7 +81,8 @@ act() {
   in_server sh -c "find /opt/data -type f \\( -iname '*ingest*' -o -iname '*upload*' \\) -exec sha256sum {} + 2>/dev/null | sort" >"$EVIDENCE/raw-after.txt" || :
 
   phase 'a second notebook paired with the server'
-  second_url=$(stand_in_github "$EVIDENCE/github")
+  stand_in_github "$EVIDENCE/github"
+  second_url=$STAND_IN_ADDRESS
   pair_the_server "$second_url" "$EVIDENCE/github"
   install_the_stage_line_into "$SECOND_ROOT" "$SECOND_PORT" "$EVIDENCE/second-install.log"
   RUNTIME=$(runtime_of "$SECOND_ROOT")

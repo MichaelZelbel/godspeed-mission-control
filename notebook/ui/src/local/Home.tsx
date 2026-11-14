@@ -10,9 +10,10 @@ import {ActivityFeed} from '@/components/activity/ActivityFeed';
 import {CaptureEmptyState} from '@/components/notes/CaptureEmptyState';
 import {FileText,Users,MessageCircle,Bot,UserRound} from 'lucide-react';
 import {openFloatingChat} from '@/components/chat/GlobalAIChatFAB';
+import {useChatEntry} from '@/components/chat/chat-entry';
 import {peopleCountRequest} from './home-counts.mjs';
 export default function Home(){
- const navigate=useNavigate(),notes=useNotes('all');
+ const navigate=useNavigate(),notes=useNotes('all'),chatEntry=useChatEntry<HTMLButtonElement>();
  const status=useQuery({queryKey:['candidate-status'],queryFn:async()=>{const r=await fetch('/api/status');if(!r.ok)throw new Error('Could not read connection status');return r.json();},refetchInterval:5000});
  const people=useQuery({queryKey:['home-people-count'],queryFn:async()=>{const r=await fetch('/api/rpc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(peopleCountRequest)});if(!r.ok)throw new Error('Could not load people');return {count:(await r.json()).data?.total};}});
  // The chat was a small link in the third card, so people did not see they could talk to
@@ -27,7 +28,7 @@ export default function Home(){
  return <div className="space-y-6 max-w-7xl mx-auto">
   <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
    <div><h1 className="text-2xl font-display font-bold">Your notebook</h1><p className="text-sm text-muted-foreground mt-1">Your notes, people and personal knowledge, together.</p></div>
-   <Button size="lg" className="h-14 w-full sm:w-auto px-8 text-base font-semibold gap-3 shadow-md" onClick={chat}><Bot className="h-5 w-5" aria-hidden="true"/>Chat with Godspeed</Button>
+   <Button ref={chatEntry} size="lg" className="h-14 w-full sm:w-auto px-8 text-base font-semibold gap-3 shadow-md" onClick={chat}><Bot className="h-5 w-5" aria-hidden="true"/>Chat with Godspeed</Button>
   </div>
   {context.data?.show&&<Card className="border-primary/40" aria-labelledby="context-card-title"><CardContent className="py-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
    <div className="flex items-start gap-3"><UserRound className="h-5 w-5 mt-0.5 text-primary shrink-0" aria-hidden="true"/><div><p id="context-card-title" className="font-semibold">Tell Godspeed about you, about five minutes</p><p className="text-sm text-muted-foreground">Where you live, a little about you, and what you want help with first.</p></div></div>
@@ -36,7 +37,7 @@ export default function Home(){
   <div className="grid gap-4 sm:grid-cols-3">
    <Card><CardHeader className="flex flex-row items-center justify-between pb-2"><CardTitle className="text-sm font-medium">Notes</CardTitle><FileText className="h-4 w-4 text-muted-foreground"/></CardHeader><CardContent><p className="text-3xl font-bold">{notes.isLoading?'…':notes.isError?'Unavailable':notes.data?.length||0}</p><Link className="text-sm text-primary" to="/dashboard/notes">Open notes</Link></CardContent></Card>
    <Card><CardHeader className="flex flex-row items-center justify-between pb-2"><CardTitle className="text-sm font-medium">People</CardTitle><Users className="h-4 w-4 text-muted-foreground"/></CardHeader><CardContent><p className="text-3xl font-bold">{people.isLoading?'…':people.isError?'Unavailable':people.data?.count||0}</p><Link className="text-sm text-primary" to="/dashboard/people">Open people</Link></CardContent></Card>
-   <Card><CardHeader className="flex flex-row items-center justify-between pb-2"><CardTitle className="text-sm font-medium">Godspeed</CardTitle><MessageCircle className="h-4 w-4 text-muted-foreground"/></CardHeader><CardContent><p className="text-lg font-semibold mb-1">{status.isError?'Connection unavailable':status.data?.runtimeConfigured?'Ready to chat':'Connecting…'}</p><a className="text-sm text-primary" href="/chat">Open Godspeed chat</a></CardContent></Card>
+   <Card className="min-w-0"><CardHeader className="flex flex-row items-center justify-between pb-2"><CardTitle className="text-sm font-medium">Godspeed</CardTitle><MessageCircle className="h-4 w-4 text-muted-foreground"/></CardHeader><CardContent>{/* No AI set up at all says so and links to Settings, Your AI; "Connecting…" is only the wait for the status (#552). */}{!status.isError&&!status.data?.runtimeConfigured&&status.data?.assistantProblem?<p data-testid="assistant-problem" className="text-sm font-medium mb-1 [overflow-wrap:anywhere]">{status.data.assistantProblem}</p>:status.isSuccess&&!status.data?.runtimeConfigured?<p data-testid="no-ai" className="text-sm font-medium mb-1">No AI is connected yet. <Link className="underline" to="/dashboard/settings#connect-ai">Connect it in Settings, Your AI</Link>.</p>:<p className="text-lg font-semibold mb-1">{status.isError?'Connection unavailable':status.data?.runtimeConfigured?'Ready to chat':'Connecting…'}</p>}<a className="text-sm text-primary" href="/chat">Open Godspeed chat</a></CardContent></Card>
   </div>
   <div className="grid gap-6 lg:grid-cols-3"><div className="lg:col-span-2 space-y-6">
    {notes.isError?<Card><CardContent className="py-6"><p role="alert">Your notes could not be loaded.</p><Button variant="outline" onClick={()=>notes.refetch()}>Try again</Button></CardContent></Card>:notes.data?.length?<RecentNotesCard notes={notes.data}/>:<Card><CardContent className="py-8">{notes.isLoading?<p>Loading notes…</p>:<CaptureEmptyState onCreateNote={()=>navigate('/dashboard/notes?action=create')}/>}</CardContent></Card>}

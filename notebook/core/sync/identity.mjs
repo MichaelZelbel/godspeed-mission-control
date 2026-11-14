@@ -26,6 +26,7 @@
 import { recordsFolder } from '../file-policy.mjs';
 import { decode, encode, hash } from '../records/store.mjs';
 import path from 'node:path';
+import { DEFAULTS as processingDefaults } from '../processing.mjs';
 import { candidate, folderFor, nameFor, candidateName, isReadable, childrenOf, key as nameKey } from '../records/layout.mjs';
 
 const prefix = recordsFolder + '/';
@@ -43,6 +44,9 @@ const bookkeeping = new Set(['uid', 'device', 'revision', 'created_at', 'updated
 const stamped = { 'settings/processing': ['since'] };
 const choices = record => Object.fromEntries(Object.entries(record).filter(([field]) => !bookkeeping.has(field) && !(stamped[record.type + '/' + record.id] || []).includes(field)));
 const sameChoices = (a, b) => a.type === b.type && a.id === b.id && same(choices(a), choices(b));
+// The processing settings as the first processing run saves them, which nobody
+// chose. A field the record lacks reads as its default (processingSettings).
+const untouched = record => record.type === 'settings' && record.id === 'processing' && Object.entries(processingDefaults).every(([field, value]) => same(Object.hasOwn(record, field) ? record[field] : value, value));
 const parented = record => isReadable(record) && parentedTypes.has(record.type);
 
 // Field-by-field three-way merge of one record. `mergeText(base, local,
@@ -242,14 +246,18 @@ export function identityPlan({ git, mergeText, find = () => undefined, base, loc
     // its identity, its times and what the machine stamped on its own differ)
     // is the same settings: no review. Until 13 November 2026 two fresh
     // installs' processing settings were kept for review, and the second
-    // computer's sync stopped for a conflict nobody made.
+    // computer's sync stopped for a conflict nobody made. A copy of the
+    // processing settings nobody changed is set aside without review too, so
+    // the other computer's stays. Until 13 November 2026 a fresh install
+    // joining a copy whose processing settings had been changed stopped its
+    // first sync for a conflict nobody made.
     const recordOf = o => (place.get(o.uid).local || place.get(o.uid).remote)?.record;
     if (!documents.length && records.length > 1 && records.every(o => { const r = recordOf(o); return r && !isReadable(r); })) {
       const keep = (preferRemote ? records.find(o => !o.local) : records.find(o => o.local)) || records[0], kept = keep.local ? 'local' : 'remote', kept_ = recordOf(keep);
       for (const o of records) if (o !== keep) {
         const other = recordOf(o), side = kept === 'local' ? 'remote' : 'local', as = { text: encode({ ...other, uid: kept_.uid }) };
         planned.add(o.uid); planned.add(keep.uid); finals.set(o.uid, null);
-        if (sameChoices(kept_, other)) continue;
+        if (sameChoices(kept_, other) || untouched(other)) continue;
         review(keep.file, { base: null, [kept]: place.get(keep.uid)[kept] || { text: encode(kept_) }, [side]: as }, kept);
       }
       continue;

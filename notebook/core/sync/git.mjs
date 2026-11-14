@@ -12,11 +12,24 @@ import {CARRIED_FOLDER,CARRY_LIMIT,isCarriedPath} from '../media-store.mjs';
 import {resolveSavedConflict} from '../conflicts.mjs';
 import {queueNotice} from '../notices.mjs';
 import {createRequire} from 'node:module';
+import {machineDevice,LEGACY_DEVICE} from '../device-id.mjs';
 const {quietGit,signInMissing,signInNotice}=createRequire(import.meta.url)('../../../tools/unattended-git.cjs');
 
 // What sync never puts in a repository, whichever repository it is: build
 // output, archives, recordings, pictures and the disposable SQLite indexes.
 const keptLocal=['sqlite*','png','jpg','mp4','mp3','pdf','zip','tar','gz','tgz','7z','exe','msi','dmg','iso','mov','webm','wav','m4a','tmp'];
+// Each computer signs the notebook's commits with its own machine name, so the
+// copy's history and a later conflict review can tell which computer changed
+// what. The name is the one device-id.mjs gave this install; the sync worker's
+// Store has no device of its own, so it reads the same name from the folder.
+export const NOTEBOOK_AUTHOR='Godspeed Mission Control';
+export const isNotebookAuthor=name=>name===NOTEBOOK_AUTHOR||String(name).startsWith(NOTEBOOK_AUTHOR+' (');
+export function commitIdentity(store){
+  const machine=String(store.device&&store.device!==LEGACY_DEVICE?store.device:machineDevice(store.root).id);
+  const name=NOTEBOOK_AUTHOR+' ('+machine.replace(/[<>\r\n]/g,'')+')';
+  const email=(machine.toLowerCase().replace(/[^a-z0-9._-]+/g,'-').replace(/^-+|-+$/g,'')||'computer')+'@godspeed.localhost';
+  return {GIT_AUTHOR_NAME:name,GIT_AUTHOR_EMAIL:email,GIT_COMMITTER_NAME:name,GIT_COMMITTER_EMAIL:email};
+}
 export function readSyncConfig(state){try{return JSON.parse(fs.readFileSync(path.join(state,'sync-config.json'),'utf8'));}catch{return null;}}
 export const folderModeRefusal='This notebook already syncs through the folder\'s own repository, so a separate repository cannot be connected here';
 const posix=file=>file.split(path.sep).join('/');
@@ -128,6 +141,22 @@ export async function joinRepository(store,options={}){
   return {...config,remote:url};
 }
 
+// GitHub's privacy answer was neither 200 nor 404. GitHub refuses unauthenticated questions from
+// one address after 60 an hour (403 or 429 with x-ratelimit-remaining: 0, or a retry-after), which
+// is common behind a shared network; the person is told to wait, and until when, rather than to
+// look for something wrong with the repository. The sync worker passes this message on as it is.
+export class PrivacyUnverified extends Error {
+  constructor(response){
+    const now=Date.now(),h=name=>response.headers?.get?.(name)??null,status=response.status;
+    if(status===429||(status===403&&(h('x-ratelimit-remaining')==='0'||h('retry-after')!==null))){
+      const after=h('retry-after'),reset=h('x-ratelimit-reset');
+      const at=after!==null?(/^\d+$/.test(after.trim())?now+Number(after)*1000:Date.parse(after)):reset!==null&&/^\d+$/.test(reset.trim())?Number(reset)*1000:NaN;
+      super('GitHub is limiting requests from this network right now, so whether the repository is private could not be verified; no files were uploaded. '+(Number.isFinite(at)?'Try again after '+new Date(Math.max(at,now)).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',timeZoneName:'short'})+'.':'Try again in an hour.'));
+    }else super('GitHub answered '+status+' when asked whether the repository is private, so its privacy could not be verified; no files were uploaded. Try again later; if it keeps happening, check https://www.githubstatus.com.');
+    this.name='PrivacyUnverified';
+  }
+}
+
 export class FileSync {
   constructor(store,{branch='main',remote='origin',largeFile=CARRY_LIMIT}={}) {
     if(!/^[\w/.-]+$/.test(branch)||branch.startsWith('-')||!/^\w+$/.test(remote))throw new Error('Invalid sync configuration');
@@ -170,7 +199,7 @@ export class FileSync {
   async verifyRemote(remoteUrl){
     const match=String(remoteUrl).match(/^(?:https:\/\/github\.com\/|git@github\.com:)([\w.-]+)\/([\w.-]+?)(?:\.git)?\/?$/);if(!match)throw new Error('Use a GitHub repository address without embedded credentials');
     const response=await fetch('https://api.github.com/repos/'+match[1]+'/'+match[2],{headers:{Accept:'application/vnd.github+json'},signal:AbortSignal.timeout(15000)});
-    if(response.status===200)throw new Error('This repository is publicly readable. Choose a private repository for your knowledge');if(response.status!==404)throw new Error('Repository privacy could not be verified; no files were uploaded');
+    if(response.status===200)throw new Error('This repository is publicly readable. Choose a private repository for your knowledge');if(response.status!==404)throw new PrivacyUnverified(response);
     try{this.git(['ls-remote',remoteUrl]);}catch{throw new Error('The private repository could not be read with this device Git credentials; no files were uploaded');}
   }
   // Adds the lines to the folder's own .gitignore, stops tracking NOTEBOOK.md (the first commit of a
@@ -683,7 +712,7 @@ export class FileSync {
   // the notebook's commits must not start the owner's post-commit jobs. Its
   // push still runs the owner's pre-push gate.
   quiet(){const dir=path.join(this.store.state,'no-hooks');fs.mkdirSync(dir,{recursive:true});return ['-c','core.hooksPath='+dir];}
-  identity(){return {GIT_AUTHOR_NAME:'Godspeed Mission Control',GIT_AUTHOR_EMAIL:'godspeed@localhost',GIT_COMMITTER_NAME:'Godspeed Mission Control',GIT_COMMITTER_EMAIL:'godspeed@localhost'};}
+  identity(){return this.identityEnv||=commitIdentity(this.store);}
   // Another program may be in the middle of something with this repository.
   // The notebook waits for the next round instead of acting on half a merge.
   // A lock that a killed Git left behind is cleared first (staleLocks).

@@ -28,6 +28,14 @@ test('the reply plugin is installed beside the context plugin, enabled, and know
  const again=wire(root,home);assert.equal(fs.readFileSync(path.join(home,'config.yaml'),'utf8'),text);assert.deepEqual(lines(again),[]);
 });
 
+test('a mission control without .mcp.json gets one and its plugins (issue #530)',t=>{
+ const {root,home}=setup(t);fs.rmSync(path.join(root,'.mcp.json'),{force:true});
+ const result=wire(root,home);assert.equal(result.status,0,result.stderr);
+ assert.ok(fs.existsSync(path.join(home,'plugins','godspeed-reply','__init__.py')),'the plugins are installed');
+ assert.ok(configList(readConfigValue(fs.readFileSync(path.join(home,'config.yaml'),'utf8'),['plugins','enabled'])).includes('godspeed-reply'));
+ assert.deepEqual(JSON.parse(fs.readFileSync(path.join(root,'.mcp.json'),'utf8')).mcpServers.notebook,{type:'http',url:'${GODSPEED_NOTEBOOK_URL:-http://127.0.0.1:47831/mcp}'});
+});
+
 test('an already enabled list gains the reply plugin',t=>{
  const {root,home}=setup(t);
  fs.writeFileSync(path.join(home,'config.yaml'),'plugins:\n  enabled: ["godspeed-coach", "my-own"]\n');

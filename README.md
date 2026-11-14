@@ -30,6 +30,17 @@ Version 2 is the current edition. The install lines on this page install the cur
 
 Godspeed carries the Workouts add-on. With Hevy Pro, open **Settings** > **Workouts from Hevy**, make a Hevy developer key, and connect it there. The key stays in the add-on's private state; Settings shows the imported-row count and last run, and the one hourly **Workouts from Hevy** routine appears under **Settings** > **Routines**. When taking over a standalone add-on schedule, Godspeed first proves the carried routine can import; if setup fails, Settings names the safe reason and retry time while the existing schedule stays in place. If retiring that schedule fails after the proof, the carried routine keeps running and Settings reports the removal retry. Disconnect stops that routine while keeping the tracker and its rows.
 
+## New in 2.0.0-beta.24
+
+Godspeed no longer leaves you empty-handed when one of its own safety checks refuses what the AI wrote, and your pictures and PDFs travel with your notebook.
+
+- **A coaching talk always starts.** When the AI's first reply misses the prepared opening, Godspeed asks once more, and if that misses too it opens the talk from the prepared record itself, never an error instead of a talk.
+- **The morning brief always arrives.** A sentence the source check refuses is dropped, and the brief is saved with what passed.
+- **Pictures and PDFs travel with the notebook.** Each one of 50 MB or less is kept in the private GitHub copy beside your notes, so a new computer or server shows every picture. A larger file stays on its computer and the media library says so. After the update, the media already on your computer is added to the copy once.
+- **The first day's work finishes** on a fresh Docker server, or says why it stopped.
+- **Short English replies on Telegram stay English**, even when the AI slips in a German word.
+- **Update now's proof works again** right after a release.
+
 ## New in 2.0.0-beta.23
 
 Godspeed can update itself, a question on Telegram is one message with its buttons, and your assistant gets the safeguards its maintainer uses. This release also carries everything built for 2.0.0-beta.21 and 2.0.0-beta.22.
