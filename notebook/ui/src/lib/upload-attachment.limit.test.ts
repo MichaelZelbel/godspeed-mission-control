@@ -18,9 +18,10 @@ describe("the note editor's attachment limit", () => {
     expect(validateFile(sized(60 * 1024 * 1024))).toBeNull();
   });
 
-  it("takes a file of exactly the limit and refuses one byte more, naming the limit", () => {
+  it("takes a file of exactly the limit and tells a person what to do with a larger file", () => {
     expect(validateFile(sized(MEDIA_UPLOAD_MAX_BYTES))).toBeNull();
     const refused = validateFile(sized(MEDIA_UPLOAD_MAX_BYTES + 1));
-    expect(refused).toMatch(new RegExp(`Max is ${MEDIA_UPLOAD_MAX_MB} MB\\.$`));
+    expect(refused).toContain(`Max is ${MEDIA_UPLOAD_MAX_MB} MB.`);
+    expect(refused).toContain("Keep the file outside the notebook and add a link to it instead.");
   });
 });
