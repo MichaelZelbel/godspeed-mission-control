@@ -9,10 +9,11 @@ export class Telegram {
     const habits=[result?.habit,...(result?.operation_results||[]).map(value=>value?.habit)].filter(h=>h?.progress?.version===1);
     const habit=habits.at(-1);let bytes;
     if(habit)try{bytes=await this.renderProgress(habit,{locale});}catch{}
-    const text=String(reply).slice(0,4000);
-    if(!bytes)return {...await this.call('sendMessage',{chat_id:this.owner,text}),dispatched:text};
+    const text=String(reply),parts=[];for(let start=0;start<text.length;start+=4000)parts.push(text.slice(start,start+4000));if(!parts.length)parts.push('');
+    const sendText=async()=>{let sent;for(const part of parts)sent=await this.call('sendMessage',{chat_id:this.owner,text:part});return sent;};
+    if(!bytes)return {...await sendText(),dispatched:text};
     // One picture is the reply, with its text as the caption. Long answers keep their text reply.
-    let message;if(text.length>1024)message=await this.call('sendMessage',{chat_id:this.owner,text});
+    let message;if(text.length>1024)message=await sendText();
     const form=new FormData();form.set('chat_id',this.owner);form.set('caption',text.length<=1024?text:habitProgressText(habit,{locale}).split('\n').slice(0,4).join('\n'));
     form.set('photo',new Blob([bytes],{type:'image/png'}),'habit-progress.png');
     // An ambiguous network failure is not followed by a second send. A definite API rejection

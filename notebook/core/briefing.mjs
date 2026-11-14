@@ -63,16 +63,10 @@ export function savedBriefToday(store,now=new Date()){
  return note?{note,hidden:false}:{note:null,hidden:true};
 }
 
-const BRIEF_REQUESTS={
- en:new Set(["today's brief",'todays brief','today brief',"today's briefing",'todays briefing',"today's morning brief",'todays morning brief',"today's morning briefing",'my brief','my briefing','the brief','the brief again','my brief again','morning brief','my morning brief','the morning brief','morning briefing','my morning briefing','brief','briefing']),
- de:new Set(['heutiges briefing','das heutige briefing','briefing von heute','das briefing von heute','mein briefing','das briefing','morgenbriefing','mein morgenbriefing','das morgenbriefing','heutiges morgenbriefing','das heutige morgenbriefing','tagesbriefing','mein tagesbriefing']),
-};
-const BRIEF_REQUEST_FRAMES={
- en:[/^(?:please\s+)?(?:show|send|give|get)\s+me\s+/,/^(?:what(?:'s| is)|where(?:'s| is))\s+/,/^(?:can|could)\s+(?:i|you)\s+(?:see|have|get|send me|show me)\s+/,/\s+please$/],
- de:[/^(?:bitte\s+)?(?:zeig|schick|gib)\s+mir\s+/,/^(?:was ist|wo ist)\s+/,/\s+bitte$/],
-};
+const briefRequests=JSON.parse(fs.readFileSync(new URL('../assistant-files/godspeed-reply/brief-requests.json',import.meta.url),'utf8'));
+const BRIEF_REQUESTS=Object.fromEntries(Object.entries(briefRequests.asks).map(([language,asks])=>[language,new Set(asks)]));
+const BRIEF_REQUEST_FRAMES=Object.fromEntries(Object.entries(briefRequests.frames).map(([language,frames])=>[language,frames.map(frame=>new RegExp(frame))]));
 
-// This is the same deliberately narrow request vocabulary as the Telegram gateway hook.
 export function asksForTodaysBrief(text){
  if(typeof text!=='string'||text.length>80)return false;
  const plain=text.toLowerCase().replaceAll('’',"'").replace(/[^\p{L}\p{N}_\s']/gu,' ').replace(/\s+/g,' ').trim();
