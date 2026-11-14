@@ -52,7 +52,9 @@ test('a fixed-id record written on both machines before they met is kept for rev
 
 // A second computer set up on its own (a plain folder) joins a notebook that
 // already exists: the notebook keeps its settings, as it keeps its files, and
-// the newcomer's are kept for review.
+// the newcomer's are kept for review. Until the review is decided the
+// newcomer's file is held back (#570): it keeps its own settings and sends
+// none of them.
 test("on a first join the notebook keeps its fixed-id record and the newcomer's waits for review",t=>{
   const machine=machines(t),desktop=machine('desktop');
   desktop.store.save('settings',{id:'installation',owner:'desktop',timezone:'Europe/Berlin'});
@@ -62,9 +64,10 @@ test("on a first join the notebook keeps its fixed-id record and the newcomer's 
   store.save('settings',{id:'installation',owner:'laptop',timezone:'America/New_York'});
   sync.initialize('https://github.com/synthetic/private.git');git(dir,'config','user.name','laptop');git(dir,'config','user.email','laptop@localhost');git(dir,'remote','set-url','origin',machines.remote);
   const status=sync.reconcile();
-  assert.equal(store.get('settings','installation').owner,'desktop',JSON.stringify(status));
+  assert.equal(store.get('settings','installation').owner,'laptop',JSON.stringify(status));
   const kept=reviews(dir).filter(r=>/settings\/installation/.test(r.path));
   assert.equal(kept.length,1,JSON.stringify(status));
-  assert.match(kept[0].local,/"owner": "laptop"/);
+  assert.match(kept[0].local,/"owner": "laptop"/);assert.match(kept[0].remote,/"owner": "desktop"/);
+  assert.match(git(machines.remote,'show','main:'+kept[0].path),/"owner": "desktop"/);
   assert.deepEqual(store.problems,[]);
 });
