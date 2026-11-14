@@ -67,6 +67,10 @@ yes or no. If you cannot write that sentence, you do not yet know what you are a
 - **`attempt --ok` makes it attempted, never verified.** `verify` runs the CHECK and accepts only
   exit 0, or takes evidence a person observed: a link, a file they opened, a screenshot. For work
   the mission control owns, the word "done" is not evidence and is refused in those words.
+- **A result is kept with your work.** A DONE WHEN, `--path` or CHECK that names a file in
+  `routines/research`, `routines/work`, `routines/next-action` or `routines/coach-prep` is
+  refused: those hold the mission control's own run records, which the nightly cleanup deletes
+  after 30 days. Results go in `work/`, `goals/` or `ideas/`.
 - **A failure gets a gap, not a hammer.** Retry after one day, then two, then four, up to MAX
   ATTEMPTS. After that a person decides. An assistant retrying a broken thing every ten minutes
   all night is how you end up with three hundred of something.
