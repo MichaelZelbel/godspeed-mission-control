@@ -219,6 +219,19 @@ test("a plain no the model did not record is recorded and its reply added; one i
   }
 });
 
+test("a plain no gets its line in the language the reply goes out in, godspeed-reply's decision, not the setting", { skip }, () => {
+  for (const [words, setting, line] of [["Nein.", "en", T.de.no({ daysToGo: 20 })], ["No.", "de", T.en.no({ daysToGo: 20 })]]) {
+    const dir = mission();
+    try {
+      const run = (args, now) => spawnSync(process.execPath, [BIN, ...args], { encoding: "utf8", env: { ...process.env, GODSPEED_CHARM_DIR: dir, GODSPEED_CHARM_NOW: now, GODSPEED_SCHEDULED_RUN: "" } });
+      assert.equal(run(["config", "set", "language", setting], at("2026-10-22", 8)).status, 0);
+      assert.equal(run(["asked", "--conversation", "telegram:s-1", "--words", "garbage"], at("2026-10-22", 8)).status, 0);
+      const out = drive(dir, [register, pre(words, { platform: "telegram" }), reply("Ok.", { platform: "telegram" })]);
+      assert.equal(out.results[2].text, `Ok.\n\n${line}`, words);
+    } finally { gone(dir); }
+  }
+});
+
 test("on Telegram the program's question goes out with its buttons, and the reply keeps no question", { skip }, () => {
   const dir = mission();
   try {

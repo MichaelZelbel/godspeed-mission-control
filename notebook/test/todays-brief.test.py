@@ -4,6 +4,7 @@ word for word, answered before the model. The plugin's own code runs against a s
 import asyncio
 import importlib.util
 import os
+import sqlite3
 import stat
 import sys
 import tempfile
@@ -51,12 +52,12 @@ class TodaysBrief(unittest.TestCase):
     def test_the_asks_in_english_and_german(self):
         for text in ("today's brief", "Today's brief?", "today’s brief", "my brief", "the brief again",
                      "Show me today's brief", "morning brief please", "brief"):
-            self.assertEqual(brief.asks_for_brief(text), "en", text)
+            self.assertTrue(brief.asks_for_brief(text), text)
         for text in ("Heutiges Briefing", "zeig mir das Briefing von heute", "mein Morgenbriefing", "Morgenbriefing bitte"):
-            self.assertEqual(brief.asks_for_brief(text), "de", text)
+            self.assertTrue(brief.asks_for_brief(text), text)
         for text in ("what was in yesterday's brief?", "make the brief shorter from tomorrow", "brief me on the garden",
                      "yes", "", None, "today's brief " * 10):
-            self.assertIsNone(brief.asks_for_brief(text), text)
+            self.assertFalse(brief.asks_for_brief(text), text)
 
     def test_the_saved_briefing_word_for_word_and_nothing_written(self):
         self.assertEqual(brief.answer(event("today's brief"), home_with(SAVED + "\n")), SAVED)
@@ -64,6 +65,22 @@ class TodaysBrief(unittest.TestCase):
     def test_no_briefing_saved_today_is_one_sentence_in_the_language_asked(self):
         self.assertEqual(brief.answer(event("today's brief"), home_with("")), "No morning briefing is saved for today.")
         self.assertEqual(brief.answer(event("heutiges Briefing"), home_with("")), "Für heute ist kein Morgenbriefing gespeichert.")
+
+    def test_a_bare_briefing_follows_the_persons_earlier_messages(self):
+        home = home_with("")
+        self.assertEqual(brief.answer(event("Briefing"), home), "No morning briefing is saved for today.")
+        db = sqlite3.connect(os.path.join(home, "state.db"))
+        db.executescript("CREATE TABLE sessions(id TEXT PRIMARY KEY, source TEXT NOT NULL, user_id TEXT);"
+                         "CREATE TABLE messages(id INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT NOT NULL,"
+                         " role TEXT NOT NULL, content TEXT);")
+        db.execute("INSERT INTO sessions VALUES ('s', 'telegram', ?), ('t', 'telegram', '999')", (OWNER,))
+        db.execute("INSERT INTO messages(session_id, role, content) VALUES ('s', 'user', ?)",
+                   ("Ich bin heute mit dem Bericht fertig und fange jetzt mit den Tests an",))
+        db.execute("INSERT INTO messages(session_id, role, content) VALUES ('t', 'user', 'What is on my list today?')")
+        db.commit()
+        db.close()
+        self.assertEqual(brief.answer(event("Briefing"), home), "Für heute ist kein Morgenbriefing gespeichert.")
+        self.assertEqual(brief.answer(event("today's brief"), home), "No morning briefing is saved for today.")
 
     def test_everything_else_goes_to_the_model(self):
         home = home_with(SAVED)

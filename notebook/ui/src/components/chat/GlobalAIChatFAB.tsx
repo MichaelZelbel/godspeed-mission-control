@@ -10,7 +10,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { triggerCreditsRefresh } from "@/lib/credits-events";
-import { summarizeChat } from "@/lib/chat-summary";
+import { summarizeChat, type ChatFunction } from "@/lib/chat-summary";
 import { functionErrorMessage, OUT_OF_CREDITS_MESSAGE } from "@/lib/function-error";
 import {
   loadChatState,
@@ -274,7 +274,7 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
 
   /** Fold older turns into the summary after the reply is shown, without holding it back. */
   const summarizeLater = useCallback(
-    (chatFn: "note-chat" | "collection-chat", key: string, userId: string | undefined, ctx: string, from: PersistedChatState) => {
+    (chatFn: ChatFunction, key: string, userId: string | undefined, ctx: string, from: PersistedChatState) => {
       if (summarizingRef.current) return;
       summarizingRef.current = true;
       void summarizeChat(chatFn, from)
