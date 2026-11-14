@@ -4104,6 +4104,13 @@ refuses 'a plain-bullet checklist missing a group' first-day "$FD/plain-bullets-
 copy "$FD/plain-bullets-thin" "$FD/papers-and-numbers"
 printf '%s\n' '## Important papers (in a waterproof bag)' '- [ ] Copies of passports, ID cards and insurance policies' '- [ ] A list of phone numbers: family, doctors, your insurer' >>"$FD/papers-and-numbers/work/emergency-kit-checklist.md"
 passes 'a checklist that covers papers and phone numbers in its own words' first-day "$FD/papers-and-numbers" 'answered today'
+# Contact lenses and a phone's power bank are not the communication or documents topic.
+for item in 'Spare contact lenses and solution' 'Spare contacts and a lens case' 'A power bank for your phone'; do
+  thin=$FD/thin-$(printf '%s' "$item" | tr -c 'A-Za-z' '-')
+  copy "$FD/plain-bullets-thin" "$thin"
+  printf -- '- [ ] %s\n' "$item" >>"$thin/work/emergency-kit-checklist.md"
+  refuses "a checklist without the documents topic that lists \"$item\"" first-day "$thin" 'it does not cover communication or documents'
+done
 copy "$FD/plain-bullets" "$FD/plain-bullets-no-amounts"
 printf '%s\n' '- Water' '- Food' '- First aid' '- Power' '- Documents' >"$FD/plain-bullets-no-amounts/work/emergency-kit-checklist.md"
 refuses 'a plain-bullet checklist without quantities' first-day "$FD/plain-bullets-no-amounts" 'not a practical emergency-kit checklist'
