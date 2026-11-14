@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 import {afterEach,beforeEach,expect,it,vi} from 'vitest';
 import {cleanup,fireEvent,render,screen,waitFor} from '@testing-library/react';
+import {readFileSync} from 'node:fs';
+import {join} from 'node:path';
 import '@testing-library/jest-dom/vitest';
 import ChatComposer from './ChatComposer';
 
@@ -50,7 +52,9 @@ it.each([
  const {container}=render(<div style={{width:_surface.includes('375')?351:480}}><ChatComposer {...{value:'',onChange(){},onSend(){},onStop(){},busy:false,files:[],onFiles(){},model:state?.current||'',effort:'',onModel(){},onEffort(){},reply:'',onError(){}}}/></div>);
  const model=screen.getByRole('combobox',{name:'Model'});
  await waitFor(()=>expect(model).toHaveDisplayValue(label));
- expect(model).toHaveAttribute('data-chat-model');
+ const css=readFileSync(join(process.cwd(),'src/index.css'),'utf8');
+ expect(css).toMatch(/@container \(max-width: 32rem\)[\s\S]*?\[data-chat-toolbar\][\s\S]*?display: grid;[\s\S]*?grid-template-columns: 2\.75rem minmax\(0, 1fr\) auto;/);
+ expect(css).toMatch(/@container \(max-width: 32rem\)[\s\S]*?\[data-chat-model\][\s\S]*?grid-column: 1 \/ -1;[\s\S]*?max-width: none;[\s\S]*?width: 100%;/);
  expect(container.querySelector('[data-chat-toolbar]')).toContainElement(model);
 });
 

@@ -130,4 +130,10 @@ describe("the Godspeed card", () => {
     page(false, { show: false }, { runtimeConfigured: true });
     expect((await screen.findByText("Ready to chat")).className).toContain("text-lg");
   });
+  it("does not call a provider that refused its key ready", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => new Response(JSON.stringify(String(url) === "/api/status" ? { runtimeConfigured: true } : { error: "Model choices are unavailable" }), { status: String(url) === "/api/chat/options" ? 500 : 200, headers: { "Content-Type": "application/json" } })));
+    render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter initialEntries={["/dashboard"]}><Home /></MemoryRouter></QueryClientProvider>);
+    expect(await screen.findByText("AI unavailable")).toBeInTheDocument();
+    expect(screen.queryByText("Ready to chat")).toBeNull();
+  });
 });
