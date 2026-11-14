@@ -90,10 +90,13 @@ const namesFile = (s) => String(s || '').split(/\s+/).map(t => t.replace(/[.,;:)
 const RUN_LOG_FOLDERS = ['routines/research', 'routines/work', 'routines/next-action', 'routines/coach-prep'];
 // On Windows and on a Mac's usual disk a folder name ignores capitals, and Windows writes `\` between
 // folders, so routines/Next-Action/ and routines\next-action\ are the same folder the cleanup
-// empties (#545): the match ignores capitals and takes either separator.
-const RUN_LOG_PATH = new RegExp(`(?:^|[^A-Za-z0-9_.-])((?:${RUN_LOG_FOLDERS.map(f => f.split('/').map(p => p.replace(/-/g, '\\-')).join('[\\\\/]')).join('|')})[\\\\/][^\\s"'\`;|&<>)]+)`, 'i');
+// empties (#545): the match ignores capitals and takes either separator. Every system also reads
+// routines//work/, routines\\work\\ and routines/./work/ as routines/work/ (#548), so a separator
+// is any run of / and \, with any ./ steps inside it.
+const RUN_LOG_SEP = '[\\\\/]+(?:\\.[\\\\/]+)*';
+const RUN_LOG_PATH = new RegExp(`(?:^|[^A-Za-z0-9_.-])((?:${RUN_LOG_FOLDERS.map(f => f.split('/').map(p => p.replace(/-/g, '\\-')).join(RUN_LOG_SEP)).join('|')})${RUN_LOG_SEP}[^\\s"'\`;|&<>)]+)`, 'i');
 const runLogPath = (s) => { const m = String(s || '').match(RUN_LOG_PATH); return m ? m[1].replace(/[.,;:]+$/, '') : ''; };
-const runLogFolder = (p) => RUN_LOG_FOLDERS.find(f => p.replace(/\\/g, '/').toLowerCase().startsWith(f + '/'));
+const runLogFolder = (p) => RUN_LOG_FOLDERS.find(f => p.replace(/[\\/]+(?:\.[\\/]+)*/g, '/').toLowerCase().startsWith(f + '/'));
 const ORDER = ['ID', 'STATUS', 'KIND', 'KEY', 'GOAL', 'CARD', 'TOUCHES', 'WHAT', 'DONE WHEN', 'CHECK', 'OWNER', 'NEEDS', 'OUTWARD', 'PUBLISH', 'ATTEMPTS', 'MAX ATTEMPTS',
   'LEASE', 'NEXT TRY', 'STALE AFTER', 'FILED', 'SOURCE', 'RESULT', 'LINK', 'APPROVED', 'MAY', 'GOES OUT', 'ANNOUNCED'];
 const S = L.store(DIR, ORDER);
