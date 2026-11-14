@@ -81,6 +81,13 @@ import {MEDIA_UPLOAD_MAX_BYTES,MEDIA_UPLOAD_MAX_MB,MEDIA_UPLOAD_REQUEST_EXTRA_BY
 const SAME_SERVICE='That is the service your main AI uses already. A backup steps in when the main AI fails, so it has to be another service.';
 const BACKUP_SERVICE='That is the service your backup AI uses. Remove the backup first, or choose another service for your main AI.';
 export const sameService=(one,other)=>!!one?.provider&&!!other?.provider&&one.provider===other.provider&&(one.provider!=='custom'||String(one.base_url||'').replace(/\/+$/,'')===String(other.base_url||'').replace(/\/+$/,''));
+const providerView=config=>({configured:true,url:baseAddress(config.url),model:config.model,key:!!config.key});
+const readSavedProvider=file=>{
+  let text;try{text=fs.readFileSync(file,'utf8');}catch(error){if(error.code==='ENOENT')return null;throw error;}
+  const config=JSON.parse(text);
+  if(!config||typeof config!=='object'||typeof config.url!=='string'||typeof config.key!=='string'||typeof config.model!=='string'||!modelProvider(config))throw new Error('The saved AI connection is not valid. Connect it again after checking the server log.');
+  return config;
+};
 
 // What the browser is told each built file is. A module script sent as
 // octet-stream is refused outright: the PDF reader's worker (.mjs) was, so
@@ -421,8 +428,14 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
       // The AI the person connects in Settings serves the notebook and, unless they untick it,
       // the routines and the chat too: it is written into Hermes' own home (core/routine-ai.mjs),
       // and one short request through Hermes shows whether the routines can reach it.
+      if(route==='/api/provider'&&req.method==='GET'){
+        const saved=readSavedProvider(providerPath);return send(res,200,saved?providerView(saved):{configured:false,key:false});
+      }
       if(route==='/api/provider'&&req.method==='POST'){
-        const input=JSON.parse(await body(req)),address=String(input.url||'').trim(),config={url:!address||/\/chat\/completions\/?$/.test(address)?address:baseAddress(address)+'/chat/completions',key:typeof input.key==='string'?input.key.trim():input.key,model:typeof input.model==='string'?input.model.trim():input.model};
+        const input=JSON.parse(await body(req)),address=String(input.url||'').trim(),saved=readSavedProvider(providerPath),submittedKey=typeof input.key==='string'?input.key.trim():input.key;
+        const normalizedAddress=!address||/\/chat\/completions\/?$/.test(address)?address:baseAddress(address)+'/chat/completions';
+        const retainedKey=!submittedKey&&saved&&baseAddress(normalizedAddress)===baseAddress(saved.url)?saved.key:submittedKey;
+        const config={url:normalizedAddress,key:retainedKey,model:typeof input.model==='string'?input.model.trim():input.model};
         const chosen=modelProvider(config);if(!chosen)throw new Error('Provide a model endpoint, key and model name');
         const routines=routineAI&&input.routines!==false;
         if(routines)hermesSettingsFor(config);
@@ -434,9 +447,9 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         await chosen({kind:'connection-test',contract:'Reply with Connected.'});
         const kept=guarded(chosen);
         atomic(providerPath,JSON.stringify(config));fs.chmodSync(providerPath,0o600);provider=kept;domains.provider=kept;scheduler.executor=jobExecutor(kept,query);
-        if(!routines)return send(res,200,{connected:true,routines:routineAI?{available:true,...routineAIStatus(routineAI)}:{available:false}});
+        if(!routines)return send(res,200,{connected:true,provider:providerView(config),routines:routineAI?{available:true,...routineAIStatus(routineAI)}:{available:false}});
         connectRoutineAI({...routineAI,config});
-        return send(res,200,{connected:true,routines:{available:true,...await checkRoutineAI({...routineAI,executable:descriptor.executable,cwd:store.root,sourceRoot:descriptor.sourceRoot})}});
+        return send(res,200,{connected:true,provider:providerView(config),routines:{available:true,...await checkRoutineAI({...routineAI,executable:descriptor.executable,cwd:store.root,sourceRoot:descriptor.sourceRoot})}});
       }
       // The Goals page: each goal's weekly number and readings, bets and verdicts, today's decision, the
       // work and its checks, what went out, the research brief, and the routines' AI (core/goal-overview.mjs).
