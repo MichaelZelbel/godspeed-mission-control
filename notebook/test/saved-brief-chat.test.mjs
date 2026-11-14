@@ -62,6 +62,16 @@ test('candidate Telegram does not follow an uncertain server failure with anothe
  assert.equal(store.get('command_receipts','telegram-4-failure-notice'),undefined);
 });
 
+test('candidate Telegram does not follow a malformed server failure with another send',async t=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-saved-brief-telegram-malformed-server-')),store=new Store(root),query=new QueryService(store);t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ const longSaved='Saved filtered briefing. '+'.'.repeat(4000);store.save('notes',{title:'Your morning briefing',content:longSaved,source_app:'morning-brief',brief_day:day()});
+ const attempted=[],updates=[{update_id:6,message:{from:{id:42,is_bot:false},chat:{id:42,type:'private'},text:'brief'}}];
+ const transport=async(url,init)=>{const method=url.split('/').at(-1),body=JSON.parse(init.body);if(method==='getUpdates')return new Response(JSON.stringify({ok:true,result:updates.splice(0)}));attempted.push(body.text);if(attempted.length===2)return new Response('not json',{status:500});return new Response(JSON.stringify({ok:true,result:{message_id:attempted.length}}));};
+ await new Telegram({store,domains:new Domains(query),token:'TEST',owner:'42',transport}).tick();
+ assert.deepEqual(attempted.map(text=>text.length),[4000,25]);
+ assert.equal(store.get('command_receipts','telegram-6-failure-notice'),undefined);
+});
+
 test('candidate Telegram gives ordinary partial replies neutral recovery guidance',async t=>{
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-chat-telegram-partial-')),store=new Store(root),query=new QueryService(store);t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
  const attempted=[],updates=[{update_id:5,message:{from:{id:42,is_bot:false},chat:{id:42,type:'private'},text:'Explain my project'}}];

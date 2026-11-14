@@ -3,6 +3,8 @@ import path from 'node:path';
 import {atomic,hash} from './records/store.mjs';
 import {habitProgressPng,habitProgressText} from './habit-progress-image.mjs';
 import {stampReply,saveReached} from './waiting-steps.mjs';
+const isDefiniteRejection=(response,data)=>
+  (response.status>=400&&response.status<500)||(data?.ok===false&&Number(data.error_code)>=400&&Number(data.error_code)<500);
 export class Telegram {
   constructor({store,domains,token,owner,origin='https://api.telegram.org',transport=fetch,loginLink,renderProgress=habitProgressPng}){this.store=store;this.domains=domains;this.token=token;this.owner=String(owner);this.origin=origin;this.transport=transport;this.loginLink=loginLink;this.renderProgress=renderProgress;this.file=path.join(store.state,'telegram-offset.json');this.running=false;}
   async replyWithProgress(reply,result,locale='en'){
@@ -19,9 +21,9 @@ export class Telegram {
     // An ambiguous network failure is not followed by a second send. A definite API rejection
     // means no photo was delivered, so the already-saved answer can safely fall back to text.
     const response=await this.transport(this.origin+'/bot'+this.token+'/sendPhoto',{method:'POST',body:form,signal:AbortSignal.timeout(35000)});
-    const data=await response.json();
+    let data;try{data=await response.json();}catch(error){if(isDefiniteRejection(response))return message?{...message,dispatched:text}:{...await this.call('sendMessage',{chat_id:this.owner,text}),dispatched:text};throw error;}
     if(response.ok&&data.ok)return {...data.result,dispatched:text};
-    if(data.ok===false&&Number(data.error_code)>=400&&Number(data.error_code)<500)return message?{...message,dispatched:text}:{...await this.call('sendMessage',{chat_id:this.owner,text}),dispatched:text};
+    if(isDefiniteRejection(response,data))return message?{...message,dispatched:text}:{...await this.call('sendMessage',{chat_id:this.owner,text}),dispatched:text};
     throw Error('Telegram picture delivery is uncertain');
   }
   // A message carrying a link goes without a preview: Telegram's servers fetch
@@ -30,10 +32,10 @@ export class Telegram {
   async call(method,input){
     if(method==='sendMessage'&&/https?:\/\//i.test(String(input.text||'')))input={...input,link_preview_options:{is_disabled:true}};
     const response=await this.transport(this.origin+'/bot'+this.token+'/'+method,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(input),signal:AbortSignal.timeout(35000)});
-    let data;try{data=await response.json();}catch(error){if(response.status>=400&&response.status<500)throw Object.assign(new Error('Candidate Telegram request was rejected'),{code:'TELEGRAM_REJECTED'});throw error;}
+    let data;try{data=await response.json();}catch(error){if(isDefiniteRejection(response))throw Object.assign(new Error('Candidate Telegram request was rejected'),{code:'TELEGRAM_REJECTED'});throw error;}
     if(response.ok&&data.ok)return data.result;
     const error=new Error('Candidate Telegram request failed');
-    if((response.status>=400&&response.status<500)||(data.ok===false&&Number(data.error_code)>=400&&Number(data.error_code)<500))error.code='TELEGRAM_REJECTED';
+    if(isDefiniteRejection(response,data))error.code='TELEGRAM_REJECTED';
     throw error;
   }
   async failureNotice(id,text){
