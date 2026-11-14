@@ -19,6 +19,7 @@ trap 'rm -rf "$TMP" "$TEST_GUARD_HOME"' EXIT
 mkdir -p "$TMP/rules" "$TMP/bin"
 : > "$TMP/AGENTS.md"
 cp "$HERE/work.js" "$TMP/bin/"
+cp "$HERE/run-log-folders.js" "$TMP/bin/"
 cp "$HERE/goals.js" "$TMP/bin/"
 cp "$HERE/mc-cards.js" "$TMP/bin/"
 cp "$HERE/check-written.js" "$TMP/bin/"
@@ -765,11 +766,54 @@ OUT="$(hw file --what "Write the round notes" --done-when "the notes are written
 contains "a path that only looks like a run-log folder files" "$OUT" ": planned"
 OUT="$(hw file --what "Write the kit notes" --done-when 'the notes are written in Work\kit-notes.md and work/kit-notes.md' --key kit-in-work-back --source test 2>&1)"
 contains "a result under work/ still files" "$OUT" ": planned"
+# The path is worked out as a file system reads it, not matched as text (#551)
+OUT="$(hw file --what "Draft the kit checklist" --done-when "the checklist is written in routines/work./2026-09-13/kit.md" --key kit-trail-dot-in-log --source test 2>&1)"
+check "a DONE WHEN in a run-log folder written with a trailing dot, which Windows drops, is refused" "$?" "1"
+contains "  with the same message, naming the folder the cleanup empties" "$OUT" "inside routines/work/, a run-log folder"
+check "  and nothing is filed" "$(idof kit-trail-dot-in-log)" "none"
+OUT="$(hw file --learn "What goes in a kit?" --path 'routines/work /2026-09-13/kit.md' --key kit-trail-space-in-log --source test 2>&1)"
+check "a --path in a run-log folder written with a trailing space, which Windows drops, is refused" "$?" "1"
+contains "  with the same message, naming the folder the cleanup empties" "$OUT" "inside routines/work/, a run-log folder"
+check "  and nothing is filed" "$(idof kit-trail-space-in-log)" "none"
+OUT="$(hw file --what "Draft the kit checklist" --done-when "the checklist is written in work/../routines/work/2026-09-13/kit.md" --key kit-climb-in-log --source test 2>&1)"
+check "a DONE WHEN that climbs back into a run-log folder is refused" "$?" "1"
+contains "  with the same message, naming the folder the cleanup empties" "$OUT" "inside routines/work/, a run-log folder"
+check "  and nothing is filed" "$(idof kit-climb-in-log)" "none"
+OUT="$(hw file --what "Draft the kit checklist" --done-when "the checklist is written in $TMP/routines/next-action/2026-09-13/kit.md" --key kit-abs-in-log --source test 2>&1)"
+check "a DONE WHEN naming a run-log folder by its full path is refused" "$?" "1"
+contains "  with the same message, naming the folder the cleanup empties" "$OUT" "inside routines/next-action/, a run-log folder"
+check "  and nothing is filed" "$(idof kit-abs-in-log)" "none"
+OUT="$(hw file --what "Draft the kit checklist" --done-when "the checklist is written in routines/work/../../work/kit.md" --key kit-climb-out --source test 2>&1)"
+contains "a DONE WHEN that climbs out of a run-log folder into work/ files" "$OUT" ": planned"
+OUT="$(hw file --what "Draft the kit list" --done-when "the kit list is written in work/kit-list.md" --check "test -s routines/research/../../work/kit-list.md" --key kit-check-climb-out --source test 2>&1)"
+contains "a CHECK that climbs out of a run-log folder into work/ files" "$OUT" ": planned"
+OUT="$(hw file --learn "What goes in a grab bag?" --path 'work\answers\a.md' --key learn-back-path --source test 2>&1)"
+contains "a learn --path written with backslashes names a file and files" "$OUT" ": planned"
+missing "  and is not told it names no file" "$OUT" "must name a file"
+# One list of run-log folders (#551): mc-work refuses each folder the cleanup sweeps, and no other.
 CLEANUP="$HERE/../notebook/core/cleanup.mjs"
 if [ -f "$CLEANUP" ]; then
-  check "  mc-work refuses exactly the folders the nightly cleanup empties" \
-    "$(grep -o "RUN_LOG_FOLDERS *= *\[[^]]*\]" "$HERE/work.js" | sed "s/.*\[//; s/[] ']//g")" \
-    "$(grep -o "RUN_LOG_FOLDERS *= *\[[^]]*\]" "$CLEANUP" | sed "s/.*\[//; s/[] ']//g")"
+  SWEPT="$("$NODE" --input-type=module -e '
+const {places}=await import(process.argv[1]);
+for(const p of places({root:process.argv[2],home:process.argv[2]+"/no-home"}))console.log(p.name);
+' "$CLEANUP" "$TMP")"
+  [ -n "$SWEPT" ] && ok "  the cleanup names the run-log folders it sweeps" || bad "  the cleanup names the run-log folders it sweeps"
+  i=0
+  while IFS= read -r folder; do
+    i=$((i+1))
+    OUT="$(hw file --what "Keep a note" --done-when "the note is written in $folder/2026-09-13/note.md" --key "drift-$i" --source test 2>&1)"
+    check "  mc-work refuses $folder/, which the nightly cleanup empties" "$?" "1"
+    contains "    naming that folder" "$OUT" "inside $folder/, a run-log folder"
+    check "    and nothing is filed" "$(idof "drift-$i")" "none"
+  done <<< "$SWEPT"
+  check "  the cleanup and mc-work read one list of run-log folders" \
+    "$("$NODE" --input-type=module -e '
+const {RUN_LOG_FOLDERS}=await import(process.argv[1]);
+console.log(JSON.stringify(RUN_LOG_FOLDERS));
+' "$CLEANUP")" \
+    "$("$NODE" -e 'console.log(JSON.stringify(require(process.argv[1]).RUN_LOG_FOLDERS))' "$TMP/bin/run-log-folders.js")"
+  OUT="$(hw file --what "Keep a note" --done-when "the note is written in routines/elsewhere/2026-09-13/note.md" --key drift-none --source test 2>&1)"
+  contains "  mc-work refuses no routines folder the cleanup leaves alone" "$OUT" ": planned"
 fi
 
 echo
