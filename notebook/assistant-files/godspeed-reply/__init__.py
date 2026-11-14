@@ -203,6 +203,13 @@ def rejection(answer, draft, target, kept_word=True):
     mine = sum(w in ours for w in said)
     other = sum(w in theirs for w in said)
     if not mine:
+        # A short draft ("Alles klar", "Of course!") is sent for translation on its few telling words
+        # (reply_language), and its faithful translation often has none ("All right", "Natürlich!").
+        # So such an answer is refused only when its words point to the source language (or it repeats
+        # the draft, above), never because none of the target's listed words appear (owner decision on
+        # #531, the review of PR #516). An answer with no words at all is still not a translation.
+        if not other and said and _language.language_of(draft) is None:
+            return ""
         return "not-clearly-%s" % NAMES[target]
     if mine / (mine + other) < MIN_SHARE:
         return "mixed-languages: too many %s words" % NAMES[source]

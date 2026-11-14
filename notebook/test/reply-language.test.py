@@ -221,6 +221,25 @@ class Reply(unittest.TestCase):
         self.assertEqual([(e["message_language"], e["draft_language"], e["result"]) for e in self.log()],
                          [("en", "de", "corrected")] * 4 + [("de", "en", "corrected")] * 2)
 
+    def test_a_faithful_short_translation_without_listed_words_goes_out_without_the_notice(self):
+        # The review of PR #516 (D1), owner decision on #531: "All right" and "Natürlich!" name no listed
+        # word of their language; they were refused twice and the person got the could-not-translate notice.
+        for session, message, draft, sent in (("f-1", "Thanks, done", "Alles klar", "All right"),
+                                              ("f-2", "Danke", "Of course!", "Natürlich!")):
+            self.teach(draft, sent)
+            self.say(session, message)
+            self.assertEqual(self.send(session, draft), sent, (message, draft))
+        self.assertEqual(len(self.requests()), 2)
+        self.assertEqual([(e["result"], e.get("failed_tries")) for e in self.log()], [("corrected", None)] * 2)
+        self.assertEqual(self.mod.rejection("All right", "Alles klar", "en"), "")
+        self.assertEqual(self.mod.rejection("Natürlich!", "Of course!", "de"), "")
+        # A short answer is still refused when its words point to the source language, when it repeats
+        # the draft, or when it has no words at all; a long draft keeps needing a word of the target.
+        self.assertEqual(self.mod.rejection("Klar", "Alles klar", "en"), "not-clearly-English")
+        self.assertEqual(self.mod.rejection("Of course!", "Of course!", "de"), "repeats-the-draft: unchanged")
+        self.assertEqual(self.mod.rejection("👍", "Alles klar", "en"), "not-clearly-English")
+        self.assertEqual(self.mod.rejection("All right", DRAFT, "en"), "not-clearly-English")
+
     def test_a_short_reply_already_in_the_message_language_is_unchanged(self):
         for session, message, draft in (("k-1", "Thanks", "You're welcome!"), ("k-2", "Danke", "Gern geschehen!"),
                                         ("k-3", "Did my tests pass?", "Yes, all 42 passed."),
