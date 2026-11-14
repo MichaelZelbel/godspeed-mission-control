@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {EventEmitter} from 'node:events';
 import {PassThrough} from 'node:stream';
-import {hermesSettingsFor,setEnvValue,connectRoutineAI,routineAIStatus,checkRoutineAI} from '../core/routine-ai.mjs';
+import {hermesSettingsFor,providerService,setEnvValue,connectRoutineAI,routineAIStatus,checkRoutineAI} from '../core/routine-ai.mjs';
 import {homeHasModel} from '../core/native-agent.mjs';
 
 // What the person connects in Settings powers the routines too (18 October 2026): every installer
@@ -14,6 +14,7 @@ const temporary=t=>{const dir=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-rou
 const home=t=>{const root=temporary(t),h=path.join(root,'hermes'),state=path.join(root,'state');fs.mkdirSync(h,{recursive:true});fs.mkdirSync(state,{recursive:true});return {home:h,state};};
 
 test('an endpoint becomes the Hermes provider that reads it: OpenRouter, OpenAI, or any other address',()=>{
+ assert.deepEqual(['openrouter','openrouter','openai','other'],['https://openrouter.ai/api/v1','https://edge.openrouter.ai/v1','https://api.openai.com/v1','https://llm.example.org/v1'].map(providerService));
  assert.deepEqual(hermesSettingsFor({url:'https://openrouter.ai/api/v1/chat/completions',key:'sk-or-fictional',model:'fictional/model'}),{provider:'openrouter',base_url:'https://openrouter.ai/api/v1',model:'fictional/model',env:{OPENROUTER_API_KEY:'sk-or-fictional'}});
  assert.deepEqual(hermesSettingsFor({url:'https://api.openai.com/v1/chat/completions',key:'sk-fictional',model:'gpt-fictional'}),{provider:'openai-api',base_url:'https://api.openai.com/v1',model:'gpt-fictional',env:{OPENAI_API_KEY:'sk-fictional'}});
  assert.deepEqual(hermesSettingsFor({url:'https://llm.example.org/v1/',key:'k1',model:'m'}),{provider:'custom',base_url:'https://llm.example.org/v1',model:'m',api_key:'k1'});
@@ -106,13 +107,13 @@ test('the Settings form connects the routines\' AI through the server, and leave
   assert.equal((await call('routine-ai')).data.source,'none','before: Settings says the routines have no AI');
   const connected=await call('provider',{url,key:'fictional-key',model:'fictional-model'});
   assert.equal(connected.status,200,JSON.stringify(connected.data));
-  assert.deepEqual(connected.data.provider,{configured:true,url,model:'fictional-model',key:true});
+  assert.deepEqual(connected.data.provider,{configured:true,service:'other',url,model:'fictional-model',key:true});
   assert.equal(JSON.stringify(connected.data).includes('fictional-key'),false,'the response does not expose the key');
   assert.equal(connected.data.routines.source,'settings');assert.equal(connected.data.routines.check.ok,true,'the routines reached the AI');
   assert.match(fs.readFileSync(path.join(hermesHome,'config.yaml'),'utf8'),/default: "fictional-model"/);
   // The notebook's own copy got the full address, as before.
   assert.equal(JSON.parse(fs.readFileSync(path.join(root,'.godspeed','provider.json'),'utf8')).url,url+'/chat/completions');
-  assert.deepEqual((await call('provider')).data,{configured:true,url,model:'fictional-model',key:true});
+  assert.deepEqual((await call('provider')).data,{configured:true,service:'other',url,model:'fictional-model',key:true});
   assert.equal((await call('routine-ai/check',{})).data.check.ok,true);
   // An own sign-in stays when the box is unticked: only the notebook's copy changes.
   fs.writeFileSync(path.join(hermesHome,'config.yaml'),'model:\n  provider: openai-codex\n  default: gpt-fictional\n');
@@ -121,12 +122,23 @@ test('the Settings form connects the routines\' AI through the server, and leave
   assert.equal(fs.readFileSync(path.join(hermesHome,'config.yaml'),'utf8'),'model:\n  provider: openai-codex\n  default: gpt-fictional\n');
   const retained=await call('provider',{url,key:'',model:'retained-key-model',routines:false});
   assert.equal(retained.status,200);assert.equal(JSON.parse(fs.readFileSync(path.join(root,'.godspeed','provider.json'),'utf8')).key,'other-key');
+  let leaked=false;const otherEndpoint=http.createServer((req,res)=>{leaked=!!req.headers.authorization;res.end('{}');});
+  await new Promise(r=>otherEndpoint.listen(0,'127.0.0.1',r));
+  const changed=await call('provider',{url:'http://127.0.0.1:'+otherEndpoint.address().port+'/v1',key:'',model:'changed-service',routines:false});
+  await new Promise(r=>otherEndpoint.close(r));
+  assert.notEqual(changed.status,200);assert.equal(leaked,false,'a saved key is never sent to a changed endpoint');
   // A key Hermes could not read is refused before anything is saved.
   const refused=await call('provider',{url,key:'two words',model:'m'});
   assert.notEqual(refused.status,200);assert.match(refused.data.error,/space or a quotation mark/);
  }finally{await service.close();}
  const reopened=await createService({root,port:0,device:'pc'}),reopenedBase='http://127.0.0.1:'+reopened.address.port;
- try{const response=await fetch(reopenedBase+'/api/provider'),data=await response.json();assert.deepEqual(data,{configured:true,url,model:'retained-key-model',key:true});assert.equal(JSON.stringify(data).includes('other-key'),false);}
+ try{const response=await fetch(reopenedBase+'/api/provider'),data=await response.json();assert.deepEqual(data,{configured:true,service:'other',url,model:'retained-key-model',key:true});assert.equal(JSON.stringify(data).includes('other-key'),false);
+  for(const [savedUrl,service] of [['https://openrouter.ai/api/v1/chat/completions','openrouter'],['https://api.openai.com/v1/chat/completions','openai'],['https://llm.example.test/v1/chat/completions','other']]){
+   fs.writeFileSync(path.join(root,'.godspeed','provider.json'),JSON.stringify({url:savedUrl,key:'not-returned',model:'m'}));
+   const view=await fetch(reopenedBase+'/api/provider');assert.equal((await view.json()).service,service);
+  }
+  const providerFile=path.join(root,'.godspeed','provider.json');fs.writeFileSync(providerFile,'{broken');const broken=await fetch(reopenedBase+'/api/provider');assert.notEqual(broken.status,200);assert.match((await broken.json()).error,/not valid JSON/);
+  fs.rmSync(providerFile);fs.mkdirSync(providerFile);const unreadable=await fetch(reopenedBase+'/api/provider');assert.notEqual(unreadable.status,200);fs.rmdirSync(providerFile);}
  finally{await reopened.close();}
 });
 

@@ -24,18 +24,24 @@ const unquote=v=>typeof v==='string'?v.replace(/^["']|["']$/g,'').trim():'';
 // library want as their base address.
 export function baseAddress(url){return String(url||'').trim().replace(/\/chat\/completions\/?$/,'').replace(/\/+$/,'');}
 
+export function providerService(url){
+ let host;try{host=new URL(baseAddress(url)).hostname.toLowerCase();}catch{return 'other';}
+ if(host==='openrouter.ai'||host.endsWith('.openrouter.ai'))return 'openrouter';
+ return host==='api.openai.com'?'openai':'other';
+}
+
 // What Hermes needs for an endpoint the Settings form connects (Hermes hermes_cli/auth.py and
 // runtime_provider_backends.py): OpenRouter is Hermes' own provider "openrouter" with
 // OPENROUTER_API_KEY; OpenAI's API is "openai-api" with OPENAI_API_KEY; any other
 // OpenAI-compatible address is "custom", whose key Hermes reads from model.api_key.
 export function hermesSettingsFor({url,key,model}){
- const base=baseAddress(url);let host;
- try{host=new URL(base).hostname.toLowerCase();}catch{throw Error('Give the address of an AI service, starting with https://');}
+ const base=baseAddress(url);
+ try{new URL(base);}catch{throw Error('Give the address of an AI service, starting with https://');}
  if(!key||/[\s"'\\]/.test(key))throw Error('The key has a space or a quotation mark in it. Copy it again from your AI account.');
  if(!model||!String(model).trim())throw Error('Name the model the routines should use');
  model=String(model).trim();
- if(host==='openrouter.ai'||host.endsWith('.openrouter.ai'))return {provider:'openrouter',base_url:'https://openrouter.ai/api/v1',model,env:{OPENROUTER_API_KEY:key}};
- if(host==='api.openai.com')return {provider:'openai-api',base_url:'https://api.openai.com/v1',model,env:{OPENAI_API_KEY:key}};
+ if(providerService(base)==='openrouter')return {provider:'openrouter',base_url:'https://openrouter.ai/api/v1',model,env:{OPENROUTER_API_KEY:key}};
+ if(providerService(base)==='openai')return {provider:'openai-api',base_url:'https://api.openai.com/v1',model,env:{OPENAI_API_KEY:key}};
  return {provider:'custom',base_url:base,model,api_key:key};
 }
 
