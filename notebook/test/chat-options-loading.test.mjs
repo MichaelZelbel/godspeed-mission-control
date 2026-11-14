@@ -12,3 +12,28 @@ test('endpoint default choices use the empty default model ID and retain its rea
 test('invalid choices fail visibly rather than making up a model',async()=>{
  await assert.rejects(loadChatOptions({fetcher:async()=>new Response(JSON.stringify({current:'missing',models:[]}))}),/No model choices/);
 });
+
+// #563: with no AI connected the picker said "Connected model" while the Dashboard and the chat said no AI is connected.
+import fs from 'node:fs';import os from 'node:os';import path from 'node:path';
+async function optionsFrom(t,provider){
+ const names=['GODSPEED_ORIGINAL_RUNTIME','GODSPEED_ASSISTANT_CONFIG','GODSPEED_MODEL_URL','GODSPEED_MODEL_KEY','GODSPEED_MODEL'],saved=Object.fromEntries(names.map(n=>[n,process.env[n]]));
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-chat-options-'));
+ for(const n of names)delete process.env[n];process.env.GODSPEED_ASSISTANT_CONFIG=path.join(root,'no-assistant.json');
+ const {createService}=await import('../server/main.mjs');const service=await createService({root:path.join(root,'workspace'),port:0,provider});
+ t.after(async()=>{await service.close();for(const n of names)if(saved[n]===undefined)delete process.env[n];else process.env[n]=saved[n];fs.rmSync(root,{recursive:true,force:true});});
+ const base='http://127.0.0.1:'+service.address.port,status=await (await fetch(base+'/api/status')).json();
+ return {status,options:await loadChatOptions({fetcher:(url,init)=>fetch(base+url,init)})};
+}
+test('with no AI connected the model choices say so rather than naming a connected model',async t=>{
+ const {status,options}=await optionsFrom(t);
+ assert.equal(status.runtimeConfigured,false);assert.equal(options.connected,false);assert.equal(options.label,'No AI connected');assert.doesNotMatch(JSON.stringify(options),/Connected model/);
+});
+test('a connected AI keeps its own model choices',async t=>{
+ const provider=Object.assign(async()=>({reply:'ok'}),{options:async()=>({current:'fictional-model',models:[{id:'fictional-model',efforts:['low','high']}]})});
+ const {status,options}=await optionsFrom(t,provider);
+ assert.equal(status.runtimeConfigured,true);assert.equal(options.connected,true);assert.equal(options.current,'fictional-model');assert.deepEqual(options.models,[{id:'fictional-model',efforts:['low','high']}]);
+});
+test('a connected AI without a model list is still shown as the connected model',async t=>{
+ const {options}=await optionsFrom(t,async()=>({reply:'ok'}));
+ assert.equal(options.connected,true);assert.equal(options.current,'');assert.equal(options.label,'Connected model');
+});
