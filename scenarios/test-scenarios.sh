@@ -3046,6 +3046,86 @@ if [ -n "$SI_SSH_BARE" ] && [ -z "$(git -C "$SI_SSH_BARE" for-each-ref 2>/dev/nu
 else
   bad "stand_in_github_over_ssh made a repository with history ($SI_SSH)"
 fi
+# Whether a stand-in repository is private is answered on this machine, for every Node the scenario
+# starts, and nothing else is: api.github.com answered something other than 404 to the second
+# computer of two-machines-move-at-once on a night it was rate-limited (issue #557).
+for shape in stand_in_github stand_in_github_over_ssh; do
+  SI_ANSWER=$(HOME="$SI_HOME" GIT_CONFIG_GLOBAL="$SI_HOME/gitconfig" SCENARIO=stand-in-test GODSPEED_SCENARIO_WORK="$TMP/si-privacy" bash -c '
+    . "$1/scenarios/scenario-lib.sh"; '"$shape"' "$2/privacy-'"$shape"'" >/dev/null 2>&1
+    stand_in_answers_privacy
+    owner=${STAND_IN_ADDRESS#*github.com[:/]}; owner=${owner%%/*}
+    printf "%s|%s|" "$owner" "$NODE_OPTIONS"
+    node -e "const real=globalThis.fetch.toString();
+      fetch(\"https://api.github.com/repos/$owner/x\").then(r=>console.log(r.status+\"|\"+(real.includes(\"api.github.com\")?\"wrapped\":\"plain\")))"
+    ' _ "$ROOT" "$TMP" 2>&1)
+  SI_IMPORT="--import=file://$TMP/si-privacy/stand-in-privacy/github-404.mjs"
+  if [ "$SI_ANSWER" = "godspeed-scenario-stand-in|$SI_IMPORT|404|wrapped" ]; then
+    ok "$shape has the stand-in owner's repositories answered 404 here, once, for every Node it starts"
+  else
+    bad "$shape left the stand-in's privacy to api.github.com or loaded the answer twice ($SI_ANSWER)"
+  fi
+done
+
+# The one check that still asks the real api.github.com (github-privacy-live.mjs, issue #557) runs
+# the product's own verifyRemote. Here GitHub is answered on this machine: a rate limit's 403 is a
+# FAIL naming 403 and the rate-limit headers after its tries, a public repository taken as private
+# is a FAIL at once, and the right answers are a PASS. No network.
+GP=$TMP/github-privacy
+mkdir -p "$GP"
+cat >"$GP/403.mjs" <<'STUB'
+import fs from 'node:fs';
+globalThis.fetch = async url => { fs.appendFileSync(process.env.GP_ASKED, url + '\n');
+  return new Response('{"message":"API rate limit exceeded"}', { status: 403, headers: { 'x-ratelimit-limit': '60', 'x-ratelimit-remaining': '0', 'x-ratelimit-reset': '1763120000' } }); };
+STUB
+cat >"$GP/right.mjs" <<'STUB'
+globalThis.fetch = async url => new Response('{}', { status: String(url).endsWith('/octocat/Hello-World') ? 200 : 404 });
+STUB
+cat >"$GP/public-as-private.mjs" <<'STUB'
+import fs from 'node:fs';
+globalThis.fetch = async url => { fs.appendFileSync(process.env.GP_ASKED, url + '\n'); return new Response('{}', { status: 404 }); };
+STUB
+gp() { # <stub> <out>: the check against the product in this checkout, GitHub answered by the stub
+  GP_ASKED="$GP/asked-$1" GODSPEED_PRIVACY_WAITS='0 0' NODE_OPTIONS="--import=file://$GP/$1.mjs" \
+    node "$ROOT/scenarios/github-privacy-live.mjs" "$ROOT/notebook/core/sync/git.mjs" >"$2" 2>/dev/null
+}
+if gp 403 "$GP/403.out"; then
+  bad "github-privacy-live passed while GitHub answered 403 ($(cat "$GP/403.out"))"
+elif grep -q '^FAIL .*answered 403 .*x-ratelimit-remaining: 0' "$GP/403.out" && [ "$(grep -c . "$GP/asked-403")" = 3 ]; then
+  ok "github-privacy-live fails on GitHub's 403 after 3 tries, naming 403 and the rate-limit headers"
+else
+  bad "github-privacy-live did not fail on 403 with GitHub's status after 3 tries ($(cat "$GP/403.out"); asked $(grep -c . "$GP/asked-403" 2>/dev/null) times)"
+fi
+if gp public-as-private "$GP/pp.out"; then
+  bad "github-privacy-live passed while the product took a public repository as private ($(cat "$GP/pp.out"))"
+elif grep -q '^FAIL .*let a public repository through as private' "$GP/pp.out" && [ "$(grep -c . "$GP/asked-public-as-private")" = 1 ]; then
+  ok "github-privacy-live fails at once when the product lets a public repository through as private"
+else
+  bad "github-privacy-live did not fail at once on a public repository taken as private ($(cat "$GP/pp.out"))"
+fi
+if gp right "$GP/right.out" && grep -q '^PASS .*public repository (200).*nobody has (404)' "$GP/right.out"; then
+  ok "github-privacy-live passes when GitHub answers 200 for the public repository and 404 for the missing one"
+else
+  bad "github-privacy-live did not pass on GitHub's right answers ($(cat "$GP/right.out"))"
+fi
+# live_github_privacy keeps the stand-in's answer out of the live check: the Node it starts gets an
+# empty NODE_OPTIONS, and the check's FAIL line is the scenario's FAIL line.
+cat >"$GP/fake-node" <<'FAKE'
+#!/usr/bin/env bash
+printf '%s\n' "${NODE_OPTIONS-unset}" >"$GP_SEEN"
+echo "FAIL the live GitHub privacy check, asked about a public repository: GitHub answered 403"
+exit 1
+FAKE
+chmod +x "$GP/fake-node"
+GP_LINE=$(GP_SEEN="$GP/seen" SCENARIO=gp-test GODSPEED_SCENARIO_WORK="$GP/work" bash -c '
+  . "$1/scenarios/scenario-lib.sh"; stand_in_answers_privacy; NODE=$2/fake-node
+  mkdir -p "$2/root/.godspeed/integrated-runtime"; echo v >"$2/root/.godspeed/integrated-runtime/version"
+  live_github_privacy "$2/root" "$2/live.txt"' _ "$ROOT" "$GP" 2>/dev/null)
+if [ "$(cat "$GP/seen" 2>/dev/null)" = '' ] && [ -f "$GP/seen" ] &&
+  [ "$GP_LINE" = "FAIL gp-test: the live GitHub privacy check, asked about a public repository: GitHub answered 403" ]; then
+  ok "live_github_privacy runs the check without the stand-in's answer and fails the scenario with its line"
+else
+  bad "live_github_privacy let the stand-in's answer in or lost the check's FAIL line (NODE_OPTIONS: $(cat "$GP/seen" 2>/dev/null); said: $GP_LINE)"
+fi
 
 # ======================================= sync rounds that have to end synced (issue #125)
 # On 2.0.0-beta.14 the folder half's first round answered "pending", sent nothing, and the answer went
