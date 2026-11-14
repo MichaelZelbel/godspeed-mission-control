@@ -7,7 +7,7 @@ Shared workflow gates own every decision. Inspect a run's identity and status
 before responding to a declared gate.
 
 Project runtime scenarios: `harness/END-TO-END.md`.
-Holdout scenarios: outside this repository, on the factory server only (`C:/Program Files/Git/home/godspeed-forge/holdouts/godspeed-mission-control/HOLDOUT.md`, with its
+Holdout scenarios: outside this repository, on the factory server only (`/home/godspeed-forge/holdouts/godspeed-mission-control/HOLDOUT.md`, with its
 `judges/` beside it), passed to the loop and the manager as their `holdout` input. Since
 2026-11-14 the factory runs on Codex, and Cole Medin's README says: "The fence is a Claude Code
 hook. A factory running Codex or Pi has no fence: keep its holdout outside the repository and pass
