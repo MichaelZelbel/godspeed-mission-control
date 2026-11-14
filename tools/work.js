@@ -110,15 +110,17 @@ const pathCandidates = (text) => {
   return [...new Set([...s.split(PATH_STOP_KEEPING_SPACE_BEFORE_SEP), ...s.split(PATH_STOP)])]
     .map(t => t.replace(/[.,;:]+$/, '')).filter(Boolean);
 };
-const pathSteps = (p) => {
+// The steps of a path as written, capitals kept (pathSteps below ignores them).
+const pathParts = (p) => {
   const out = [];
   for (const raw of p.split(/[\\/]/)) {
     if (raw === '..') { if (out.length && out[out.length - 1] !== '..') out.pop(); else out.push('..'); continue; }
     const name = raw.replace(/[. ]+$/, '');
-    if (name) out.push(name.toLowerCase());
+    if (name) out.push(name);
   }
   return out;
 };
+const pathSteps = (p) => pathParts(p).map(s => (s === '..' ? s : s.toLowerCase()));
 // A first step with anything but a plain name in it (`OUT=`, `--path=`, `$GODSPEED_ROOT`, `~`, `C:`)
 // is not a folder of the mission control: the path proper starts after its last such character.
 const GLUED_PREFIX = /^[^\\/]*[^A-Za-z0-9_. \-\\/]/;
@@ -146,6 +148,49 @@ const runLogFolderOf = (candidate) => {
 const runLogPath = (text) => {
   for (const written of pathCandidates(text)) { const hit = runLogFolderOf(written); if (hit) return hit; }
   return null;
+};
+// THE FILE AN ITEM NAMES, AS IT LIES ON DISK (#571). mc-work-run commits and publishes the file an
+// item's DONE WHEN names, and until 14 November 2026 it found that file with its own copy of a text
+// pattern, so every path this program learned to read (backslashes, other capitals, doubled
+// separators, ./ steps, names ending in space-dot) still missed there, and a space cut a path in
+// two. Now it asks `files`, which reads a path with the steps above and looks each step up in the
+// folder it names: the same name first, else the one Windows or a Mac would open for it (capitals
+// ignored, trailing dots and spaces dropped). A path may hold spaces, so runs of words are tried
+// too, earliest first and shortest first. Only a file of the mission control that is there counts;
+// the answer is its path from the mission control with / between steps, written as on disk.
+const NAMED_FILE_EXT = /\.(md|csv|json|txt|html)$/i;
+const fileOnDisk = (written, root) => {
+  let c = written.replace(/^["'`(\[<]+/, '').replace(/[.,;:)"'`\]>]+$/, '');
+  if (!/[\\/]/.test(c) || !NAMED_FILE_EXT.test(c)) return '';
+  if (/^([\\/]|[A-Za-z]:[\\/])/.test(c)) {
+    const rel = path.relative(root, c);
+    if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) return '';
+    c = rel;
+  }
+  const parts = pathParts(c);
+  if (!parts.length || parts.includes('..')) return '';
+  let dir = root; const out = [];
+  for (const part of parts) {
+    let names; try { names = fs.readdirSync(dir); } catch (e) { return ''; }
+    const want = part.toLowerCase();
+    const name = names.includes(part) ? part : names.find(n => n.replace(/[. ]+$/, '').toLowerCase() === want);
+    if (!name) return '';
+    out.push(name); dir = path.join(dir, name);
+  }
+  try { return fs.statSync(dir).isFile() ? out.join('/') : ''; } catch (e) { return ''; }
+};
+const fileNamed = (text, root = GODSPEED) => {
+  const words = String(text || '').replace(WEB_ADDRESS, ' ').split(/(\s+)/);
+  for (let i = 0; i < words.length; i += 2) {
+    let joined = '';
+    for (let j = i; j < words.length && j < i + 24; j += 2) {
+      joined += (j > i ? words[j - 1] : '') + words[j];
+      // A path glued after other text (OUT=..., --path=..., a:...) is tried from after each glue too.
+      const starts = [0, ...[...joined.matchAll(PATH_GLUE)].map(m => m.index + 1)];
+      for (const k of starts) { const hit = fileOnDisk(joined.slice(k), root); if (hit) return hit; }
+    }
+  }
+  return '';
 };
 const ORDER = ['ID', 'STATUS', 'KIND', 'KEY', 'GOAL', 'CARD', 'TOUCHES', 'WHAT', 'DONE WHEN', 'CHECK', 'OWNER', 'NEEDS', 'OUTWARD', 'PUBLISH', 'ATTEMPTS', 'MAX ATTEMPTS',
   'LEASE', 'NEXT TRY', 'STALE AFTER', 'FILED', 'SOURCE', 'RESULT', 'LINK', 'APPROVED', 'MAY', 'GOES OUT', 'ANNOUNCED'];
@@ -867,6 +912,18 @@ cmds.list = (a) => {
   if (!rows.length) { say('no open work'); return; }
   for (const c of rows) say(`${c.f.STATUS.padEnd(10)} ${(c.f.KIND || 'do').padEnd(5)} ${c.id.padEnd(16)} ${(c.f.OWNER || '').padEnd(10)} ${c.f.WHAT}` + (c.f.NEEDS !== 'none' ? `  needs ${c.f.NEEDS}` : '') + (c.f.GOAL ? `  [${c.f.GOAL}]` : '') + (c.f.CARD ? `  {${c.f.CARD}}` : '') + (heldId(c) ? `  held by ${heldId(c)}` : ''));
 };
+// files [<id>...] [--verified-on D]: the file each item's DONE WHEN names, one per line, as it lies on
+// disk (fileNamed). mc-work-run commits and publishes by these names.
+cmds.files = (a) => {
+  if (a['verified-on'] !== undefined && !L.isoDate(a['verified-on'])) die(`--verified-on ${a['verified-on']} is not a date (YYYY-MM-DD)`);
+  const rows = a._.length ? a._.map(id => S.read(id) || die(`no such work: ${id}`)) : S.all();
+  const seen = new Set();
+  for (const c of rows) {
+    if (a['verified-on'] && !(c.log || []).some(l => l.event === 'VERIFIED' && l.date === a['verified-on'])) continue;
+    const f = fileNamed(c.f['DONE WHEN']);
+    if (f && !seen.has(f)) { seen.add(f); say(f); }
+  }
+};
 cmds.show = (a) => { const c = S.read(a._[0] || die('which item?')) || die('no such work'); say(S.render(c).trimEnd()); };
 cmds.check = () => {
   const all = S.all();
@@ -949,6 +1006,8 @@ cmds.help = () => say(`mc-work: dispatched, attempted and verified are three dif
   sweep --goal <id> [--cancel|--stale] --reason "..."   a goal changed; its work is re-planned
   tick [--date D] [--json]           dead leases, due retries, stale plans, waiting on you over two weeks
   link <id> --url https://...        the page a finished piece became; the note and the card hand it over
+  files [<id>...] [--verified-on D]  the file each item's DONE WHEN names, as it lies in the mission control
+                                     (backslashes, capitals and spaces read as the file system reads them)
   next [--goal G] [--json] | list [--all] [--goal G] [--status S] [--date D] [--json] | show <id> | check
                                      list marks a step held by what holds it on that day (--date D), today without it`);
 
