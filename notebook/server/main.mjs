@@ -413,9 +413,10 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
       }
       if (route === '/api/status'){
         // Only the Dashboard card asks for the check (?checkAI=1): it is a billed request, and the note
-        // editor and event dialog read this status every 5 s too. The first look waits a moment for it,
-        // so the Dashboard does not open on "Ready to chat" for a key that is refused.
-        if(url.searchParams.get('checkAI')==='1'&&domains.provider?.check&&!assistantMissing){const first=!aiHealth.checkedAt,checking=aiHealth.refresh(checkAI);if(first&&checking)await Promise.race([checking,new Promise(resolve=>setTimeout(resolve,3000).unref())]);}
+        // editor and event dialog read this status every 5 s too. Each look whose result is older than
+        // the recheck interval waits a moment for a fresh check, so neither a Dashboard just opened nor
+        // one left open says "Ready to chat" from a result taken before the key was refused.
+        if(url.searchParams.get('checkAI')==='1'&&domains.provider?.check&&!assistantMissing){const checking=aiHealth.refresh(checkAI);if(checking)await Promise.race([checking,new Promise(resolve=>setTimeout(resolve,3000).unref())]);}
         return query.withSnapshot(()=>{const installation=query.rows('settings').find(row=>row.id==='installation');return send(res, 200, { configured:!!installation,goalSetupComplete:query.rows('goals').some(g=>['active','adopted','paused','achieved','completed'].includes(g.status)),goals:query.rows('goals'),work:query.rows('work_items'),decisions:query.rows('decisions'),owner:installation?.owner,device,server:mediaSync.server()||(device==='vps'?device:null),platform:process.platform,runtimeConfigured:!!domains.provider&&!assistantMissing,aiProblem:domains.provider&&!assistantMissing?aiHealth.problem:null,assistantProblem:domains.provider&&!assistantMissing?null:assistantProblem,sync:sync.last,mediaSync:mediaSync.last,kinds:originalRuntime?enableKinds(store.root):kinds,problems: store.problems, lastScan: store.lastScan, lastIndex: index.lastRebuild, records: store.records.size, schedules: query.rows('jobs'),routineSwitches: originalRuntime&&!assistantMissing?routineSwitches(store,{jobs:hermesJobs(scheduler.home),home:scheduler.home}):null,assistantUpdate:originalRuntime?updateStatus(store):null, conflicts: sync.pendingConflicts().map(name=>{try{const c=JSON.parse(fs.readFileSync(path.join(store.root,'conflicts',name),'utf8'));return {id:c.id,kind:c.kind,path:c.path||c.type+'/'+c.record_id};}catch{return {id:name.replace(/\.json$/,''),kind:null,path:null,degraded:true};}}) });});}
       if(route==='/api/hermes-update'){
         if(!domains.hermesUpdate)return send(res,200,{available:false});

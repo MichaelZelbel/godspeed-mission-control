@@ -2,10 +2,12 @@
 // with a key the AI refused and with the AI stopped: it only knew that an AI was set up. Each answer
 // of the notebook's own calls now clears the problem, and each refused key or unreachable AI (an
 // error with aiProblem, core/runtime.mjs) sets it. While the Dashboard card is open it asks again, with
-// the provider's own smallest request, once what it knows is older than a recheck interval: shorter
-// while there is a problem, so a key that works again shows soon.
+// the provider's own smallest request, once what it knows is older than a recheck interval. A good
+// result once kept for 30 s left the card on "Ready to chat" that long after the key was refused or
+// the AI stopped, and a Dashboard opened in that time said it too: both intervals are now 3 s, so
+// what the card says is never older than one check and its 5 s poll.
 export class AIHealth{
- constructor({okRecheckMs=30000,problemRecheckMs=10000,now=Date.now}={}){
+ constructor({okRecheckMs=3000,problemRecheckMs=3000,now=Date.now}={}){
   Object.assign(this,{okRecheckMs,problemRecheckMs,now,problem:null,checkedAt:0,generation:0,checking:null});
  }
  answered(){this.problem=null;this.checkedAt=this.now();}

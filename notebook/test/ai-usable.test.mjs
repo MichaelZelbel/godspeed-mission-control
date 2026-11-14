@@ -67,6 +67,20 @@ test('an AI that cannot be reached is said on the Dashboard and in the chat repl
  assert.notEqual(reply.status,200);assert.match(reply.body.error,unreachable);assert.doesNotMatch(reply.body.error,/fetch failed/);
 });
 
+// The loop review of PR #579: a good result was kept for 30 s, so the card said "Ready to chat" that
+// long after the key was refused or the AI stopped. No chat is sent here: only the card's own look.
+test('a Dashboard looking a few seconds after the AI broke says so, without a chat in between',async t=>{
+ const ai=await standInAI(t),nb=await notebook(t,{url:ai.url,key:KEY});
+ const later=()=>new Promise(resolve=>setTimeout(resolve,3100));
+ assert.equal((await nb.status()).aiProblem,null);
+ ai.key='fictional-new-key';await later();
+ assert.match((await nb.status()).aiProblem??'',/refused its key/);
+ ai.key=KEY;await later();
+ assert.equal((await nb.status()).aiProblem,null);
+ await ai.stop();await later();
+ assert.match((await nb.status()).aiProblem??'',/could not be reached/);
+});
+
 test('only the Dashboard card asks the AI: the status other pages read sends nothing to it',async t=>{
  const ai=await standInAI(t),nb=await notebook(t,{url:ai.url,key:KEY});
  const status=await nb.plainStatus();assert.equal(status.runtimeConfigured,true);assert.equal(status.aiProblem,null);
