@@ -63,6 +63,21 @@ export function savedBriefToday(store,now=new Date()){
  return note?{note,hidden:false}:{note:null,hidden:true};
 }
 
+const briefRequests=JSON.parse(fs.readFileSync(new URL('../assistant-files/godspeed-reply/brief-requests.json',import.meta.url),'utf8'));
+const BRIEF_REQUESTS=Object.fromEntries(Object.entries(briefRequests.asks).map(([language,asks])=>[language,new Set(asks)]));
+const BRIEF_REQUEST_FRAMES=Object.fromEntries(Object.entries(briefRequests.frames).map(([language,frames])=>[language,frames.map(frame=>new RegExp(frame))]));
+
+export function asksForTodaysBrief(text){
+ if(typeof text!=='string'||[...text].length>80)return false;
+ const plain=text.toLowerCase().replaceAll('’',"'").replace(/[^\p{L}\p{N}_\s']/gu,' ').replace(/\s+/g,' ').trim();
+ for(const language of Object.keys(BRIEF_REQUESTS)){
+  const candidates=new Set([plain]);
+  for(const frame of BRIEF_REQUEST_FRAMES[language])for(const candidate of [...candidates])candidates.add(candidate.replace(frame,'').trim());
+  if([...candidates].some(candidate=>BRIEF_REQUESTS[language].has(candidate)))return true;
+ }
+ return false;
+}
+
 export async function briefing(job,{store,query,provider,now=new Date(),notices}){
  if(job.rehearsal){
   const copy=path.join(store.state,'brief-rehearsals',randomUUID());fs.mkdirSync(copy,{recursive:true,mode:0o700});
