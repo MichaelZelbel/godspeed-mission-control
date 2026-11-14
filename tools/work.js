@@ -81,6 +81,15 @@ const KINDS = ['do', 'learn', 'repair'];
 // slash in it, ending in .md, .csv, .json or .txt, trailing punctuation ignored.
 const namesFile = (s) => String(s || '').split(/\s+/).map(t => t.replace(/[.,;:)"'\]]+$/, ''))
   .some(t => t.includes('/') && /\.(md|csv|json|txt)$/i.test(t));
+// WHERE A RESULT IS KEPT (#543). The folders below hold the mission control's own run records, and
+// the nightly cleanup deletes their files after 30 days (RUN_LOG_FOLDERS in
+// notebook/core/cleanup.mjs; keep the two lists the same). On 14 November 2026 a daily round kept a
+// person's finished checklist in routines/next-action/<day>/ and verified the item on it there, so
+// the checklist would have vanished a month later. A result goes in work/, goals/ or ideas/, so
+// `file` refuses a DONE WHEN, --path or CHECK that names a file inside one of these folders.
+const RUN_LOG_FOLDERS = ['routines/research', 'routines/work', 'routines/next-action', 'routines/coach-prep'];
+const RUN_LOG_PATH = new RegExp(`(?:^|[^A-Za-z0-9_.-])((?:${RUN_LOG_FOLDERS.map(f => f.replace(/[-/]/g, '\\$&')).join('|')})/[^\\s"'\`;|&<>)]+)`);
+const runLogPath = (s) => { const m = String(s || '').match(RUN_LOG_PATH); return m ? m[1].replace(/[.,;:]+$/, '') : ''; };
 const ORDER = ['ID', 'STATUS', 'KIND', 'KEY', 'GOAL', 'CARD', 'TOUCHES', 'WHAT', 'DONE WHEN', 'CHECK', 'OWNER', 'NEEDS', 'OUTWARD', 'PUBLISH', 'ATTEMPTS', 'MAX ATTEMPTS',
   'LEASE', 'NEXT TRY', 'STALE AFTER', 'FILED', 'SOURCE', 'RESULT', 'LINK', 'APPROVED', 'MAY', 'GOES OUT', 'ANNOUNCED'];
 const S = L.store(DIR, ORDER);
@@ -390,6 +399,10 @@ cmds.file = (a) => {
   if (!done && kind === 'learn' && where) done = `the answer to ${q(question || what)} is written in ${where}, with the evidence read`;
   if (kind === 'learn' && !namesFile(done)) die('a learn item is done when the answer is written somewhere a reader can open: its DONE WHEN must name a file (a path ending in .md, .csv, .json or .txt), or give --path <file>');
   if (!done) die('--done-when is required: what a reader will see when this is done, so it can be verified by someone who is not the runner');
+  for (const [label, text] of [['DONE WHEN', done], ['--path', where], ['CHECK', a.check === true ? '' : oneLine(a.check)]]) {
+    const inLog = runLogPath(text);
+    if (inLog) die(`${label} names ${inLog}, inside ${RUN_LOG_FOLDERS.find(f => inLog.startsWith(f + '/'))}/, a run-log folder whose files the nightly cleanup deletes after 30 days. A result is kept with the person's work: put it under work/, goals/ or ideas/ (for example work/<a short name>.md) and name that path instead`);
+  }
   const touches = a.touches === undefined || a.touches === 'true' ? [] : (holdsLib() || die('--touches needs holds.js beside this program')).touchTokens(a.touches);
   const badSlug = touches.find(t => !holdsLib().SLUG.test(t));
   if (badSlug) die(`--touches names world entities by their slugs (world/entities/<slug>.md), comma-separated; "${badSlug}" is not one`);

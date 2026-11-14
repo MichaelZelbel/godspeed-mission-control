@@ -717,6 +717,27 @@ missing "once the claim it waits on ended, it is not held" "$(hw list 2>&1 | gre
 OUT="$(hw unblock "$HI" --why "ship list answer" --approved-by "ship all" 2>&1)"; check "  and unblock --approved-by works" "$?" "0"
 rm -rf "$TMP/world"
 
+# --- a result is kept with the person's work, never in a run-log folder (#543) --------------------
+OUT="$(hw file --what "Draft the household emergency-kit checklist" --done-when "the checklist is written in routines/next-action/2026-09-13/kit-checklist.md" --goal ready --key kit-in-log --source next-action 2>&1)"
+check "a DONE WHEN inside a run-log folder is refused" "$?" "1"
+contains "  and names the folder the cleanup empties" "$OUT" "routines/next-action/, a run-log folder whose files the nightly cleanup deletes"
+contains "  and says where a result goes" "$OUT" "put it under work/, goals/ or ideas/"
+check "  and nothing is filed" "$(idof kit-in-log)" "none"
+OUT="$(hw file --learn "What goes in an emergency kit?" --path routines/research/2026-09-13/kit.md --key kit-learn-in-log --source test 2>&1)"
+check "a --path inside a run-log folder is refused" "$?" "1"
+check "  and nothing is filed" "$(idof kit-learn-in-log)" "none"
+OUT="$(hw file --what "Draft the kit list" --done-when "the kit list is written" --check "test -s routines/work/2026-09-13/kit.md" --key kit-check-in-log --source test 2>&1)"
+check "a CHECK reading a file inside a run-log folder is refused" "$?" "1"
+check "  and nothing is filed" "$(idof kit-check-in-log)" "none"
+OUT="$(hw file --what "Draft the household emergency-kit checklist" --done-when "the checklist is written in work/kit-checklist.md" --check "test -s work/kit-checklist.md" --goal ready --key kit-in-work --source next-action 2>&1)"
+contains "the same item with its result under work/ files" "$OUT" ": planned"
+CLEANUP="$HERE/../notebook/core/cleanup.mjs"
+if [ -f "$CLEANUP" ]; then
+  check "  mc-work refuses exactly the folders the nightly cleanup empties" \
+    "$(grep -o "RUN_LOG_FOLDERS *= *\[[^]]*\]" "$HERE/work.js" | sed "s/.*\[//; s/[] ']//g")" \
+    "$(grep -o "RUN_LOG_FOLDERS *= *\[[^]]*\]" "$CLEANUP" | sed "s/.*\[//; s/[] ']//g")"
+fi
+
 echo
 echo "$PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]
