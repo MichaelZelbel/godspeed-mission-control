@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {filledOnOpen, mergeSuggestion} from '../ui/src/components/timeline/moment-form.mjs';
+import {filledOnOpen, mergeSuggestion, newPersonOffer, newPeopleToCreate} from '../ui/src/components/timeline/moment-form.mjs';
 
 const people = [{id: 'p-ana', name: 'Fictional Ana'}, {id: 'p-ben', name: 'Fictional Ben'}];
 const blank = {title: '', dateStart: '2026-10-10', dateEnd: '', status: 'unknown', impactLevel: 2, confDate: 5, confTruth: 5, matchedPeople: []};
@@ -86,4 +86,31 @@ test('a suggestion missing values leaves those fields as they are', () => {
   assert.deepEqual(mergeSuggestion(blank, filledOnOpen(null), null, people).changed, []);
   assert.equal(mergeSuggestion(blank, filledOnOpen(null), {impact_level: 9, confidence_truth: -3}, people).form.impactLevel, 4);
   assert.equal(mergeSuggestion(blank, filledOnOpen(null), {impact_level: 9, confidence_truth: -3}, people).form.confTruth, 0);
+});
+
+test('the People picker offers a typed name that is nobody in People as a new person', () => {
+  assert.equal(newPersonOffer('  Fictional   Dora ', people, []), 'Fictional Dora');
+  assert.equal(newPersonOffer('', people, []), null, 'an empty search offers nothing');
+  assert.equal(newPersonOffer('   ', people, []), null);
+});
+
+test('a typed name that is in People under another case is not offered as new', () => {
+  assert.equal(newPersonOffer('fictional ana', people, []), null);
+  assert.equal(newPersonOffer('FICTIONAL BEN', people, []), null);
+  // A part of a name is still a new name: "Fictional" alone is nobody.
+  assert.equal(newPersonOffer('Fictional', people, []), 'Fictional');
+});
+
+test('a name already added as new is not offered twice', () => {
+  assert.equal(newPersonOffer('fictional dora', people, ['Fictional Dora']), null);
+});
+
+test('with an empty People list any typed name can be added', () => {
+  assert.equal(newPersonOffer('Fictional Eli', [], []), 'Fictional Eli');
+});
+
+test('a save creates the suggested and the typed new people, each once and only those kept', () => {
+  assert.deepEqual(newPeopleToCreate(['Fictional Cleo'], ['Fictional Dora', 'fictional cleo']), ['Fictional Cleo', 'Fictional Dora']);
+  assert.deepEqual(newPeopleToCreate([], []), [], 'a new chip removed before saving creates nobody');
+  assert.deepEqual(newPeopleToCreate(['  '], ['']), []);
 });
