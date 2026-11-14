@@ -41,6 +41,7 @@ import { WebAuth, safeReturn } from './web-auth.mjs';
 import { MenerioImport } from './menerio-import.mjs';
 import {TelegramConnection} from './telegram-connect.mjs';
 import {hermesSettingsFor,connectRoutineAI,routineAIStatus,checkRoutineAI,baseAddress,askDirectly,connectPlanMain} from '../core/routine-ai.mjs';
+import {AIHealth} from '../core/ai-health.mjs';
 import {withBackup,readBackupEndpoint,backupEntryFor,connectBackupAI,connectHermesBackup,removeBackupAI,backupStatus,fallbackChain} from '../core/backup-ai.mjs';
 import {PlanSignIn,PLAN_PROVIDER} from '../core/plan-signin.mjs';
 import {voiceStatus,saveVoice} from '../core/voice-replies.mjs';
@@ -141,7 +142,9 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   // AI and then that backup.
   const backupFor=()=>{const saved=readBackupEndpoint(store.state);if(saved){try{return modelProvider(saved);}catch{return null;}}
     try{return routineAI&&fallbackChain(fs.readFileSync(path.join(routineAI.home,'config.yaml'),'utf8')).length?hermesProvider({executable:descriptor.executable,home:descriptor.home,cwd:store.root,sourceRoot:descriptor.sourceRoot}):null;}catch{return null;}};
-  const guarded=main=>withBackup(main,backupFor,{state:store.state,model:()=>readBackupEndpoint(store.state)?.model});
+  const aiHealth=new AIHealth(),guarded=main=>aiHealth.watch(withBackup(main,backupFor,{state:store.state,model:()=>readBackupEndpoint(store.state)?.model}));
+  // A main AI that could not be used still serves the chat when a backup answers; one without a check of its own counts as working.
+  const checkAI=async()=>{const problem=await domains.provider.check();if(!problem)return null;const backup=backupFor();return backup&&!(backup.check&&await backup.check())?null:problem;};
   if(!provider&&fs.existsSync(providerPath))provider=guarded(modelProvider(JSON.parse(fs.readFileSync(providerPath,'utf8'))));
   provider ||= guarded(modelProvider({url:process.env.GODSPEED_MODEL_URL,key:process.env.GODSPEED_MODEL_KEY,model:process.env.GODSPEED_MODEL}));
   const assistantPath=process.env.GODSPEED_ASSISTANT_CONFIG||path.join(store.state,'assistant.json');
@@ -185,7 +188,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
     connectPlanMain({...routineAI,model:found.model});
     try{fs.unlinkSync(providerPath);}catch{}
     const hermes=hermesProvider({executable:descriptor.executable,home:descriptor.home,cwd:store.root,sourceRoot:descriptor.sourceRoot});
-    provider=hermes;domains.provider=hermes;scheduler.executor=jobExecutor(hermes,query);
+    provider=hermes;domains.provider=hermes;scheduler.executor=jobExecutor(hermes,query);aiHealth.reset();
     await checkRoutineAI({...routineAI,executable:descriptor.executable,cwd:store.root,sourceRoot:descriptor.sourceRoot});
     return found;
   }}):null;
@@ -408,7 +411,10 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         if(req.method!=='POST')return send(res,405,{error:'Use POST'});
         return send(res,200,automaticUpdate.save(JSON.parse(await body(req,4096))));
       }
-      if (route === '/api/status') return query.withSnapshot(()=>{const installation=query.rows('settings').find(row=>row.id==='installation');return send(res, 200, { configured:!!installation,goalSetupComplete:query.rows('goals').some(g=>['active','adopted','paused','achieved','completed'].includes(g.status)),goals:query.rows('goals'),work:query.rows('work_items'),decisions:query.rows('decisions'),owner:installation?.owner,device,server:mediaSync.server()||(device==='vps'?device:null),platform:process.platform,runtimeConfigured:!!domains.provider&&!assistantMissing,assistantProblem:domains.provider&&!assistantMissing?null:assistantProblem,sync:sync.last,mediaSync:mediaSync.last,kinds:originalRuntime?enableKinds(store.root):kinds,problems: store.problems, lastScan: store.lastScan, lastIndex: index.lastRebuild, records: store.records.size, schedules: query.rows('jobs'),routineSwitches: originalRuntime&&!assistantMissing?routineSwitches(store,{jobs:hermesJobs(scheduler.home),home:scheduler.home}):null,assistantUpdate:originalRuntime?updateStatus(store):null, conflicts: sync.pendingConflicts().map(name=>{try{const c=JSON.parse(fs.readFileSync(path.join(store.root,'conflicts',name),'utf8'));return {id:c.id,kind:c.kind,path:c.path||c.type+'/'+c.record_id};}catch{return {id:name.replace(/\.json$/,''),kind:null,path:null,degraded:true};}}) });});
+      if (route === '/api/status'){
+        // The first look waits a moment for the check, so the Dashboard does not open on "Ready to chat" for a key that is refused.
+        if(domains.provider?.check&&!assistantMissing){const first=!aiHealth.checkedAt,checking=aiHealth.refresh(checkAI);if(first&&checking)await Promise.race([checking,new Promise(resolve=>setTimeout(resolve,3000).unref())]);}
+        return query.withSnapshot(()=>{const installation=query.rows('settings').find(row=>row.id==='installation');return send(res, 200, { configured:!!installation,goalSetupComplete:query.rows('goals').some(g=>['active','adopted','paused','achieved','completed'].includes(g.status)),goals:query.rows('goals'),work:query.rows('work_items'),decisions:query.rows('decisions'),owner:installation?.owner,device,server:mediaSync.server()||(device==='vps'?device:null),platform:process.platform,runtimeConfigured:!!domains.provider&&!assistantMissing,aiProblem:domains.provider&&!assistantMissing?aiHealth.problem:null,assistantProblem:domains.provider&&!assistantMissing?null:assistantProblem,sync:sync.last,mediaSync:mediaSync.last,kinds:originalRuntime?enableKinds(store.root):kinds,problems: store.problems, lastScan: store.lastScan, lastIndex: index.lastRebuild, records: store.records.size, schedules: query.rows('jobs'),routineSwitches: originalRuntime&&!assistantMissing?routineSwitches(store,{jobs:hermesJobs(scheduler.home),home:scheduler.home}):null,assistantUpdate:originalRuntime?updateStatus(store):null, conflicts: sync.pendingConflicts().map(name=>{try{const c=JSON.parse(fs.readFileSync(path.join(store.root,'conflicts',name),'utf8'));return {id:c.id,kind:c.kind,path:c.path||c.type+'/'+c.record_id};}catch{return {id:name.replace(/\.json$/,''),kind:null,path:null,degraded:true};}}) });});}
       if(route==='/api/hermes-update'){
         if(!domains.hermesUpdate)return send(res,200,{available:false});
         if(req.method==='GET')return send(res,200,{available:true,...updateStatus(store)});
@@ -432,7 +438,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         catch(error){if(error.backupService)throw error;}
         await chosen({kind:'connection-test',contract:'Reply with Connected.'});
         const kept=guarded(chosen);
-        atomic(providerPath,JSON.stringify(config));fs.chmodSync(providerPath,0o600);provider=kept;domains.provider=kept;scheduler.executor=jobExecutor(kept,query);
+        atomic(providerPath,JSON.stringify(config));fs.chmodSync(providerPath,0o600);provider=kept;domains.provider=kept;scheduler.executor=jobExecutor(kept,query);aiHealth.reset();aiHealth.answered();
         if(!routines)return send(res,200,{connected:true,routines:routineAI?{available:true,...routineAIStatus(routineAI)}:{available:false}});
         connectRoutineAI({...routineAI,config});
         return send(res,200,{connected:true,routines:{available:true,...await checkRoutineAI({...routineAI,executable:descriptor.executable,cwd:store.root,sourceRoot:descriptor.sourceRoot})}});
@@ -669,7 +675,8 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         try{const descriptor=fs.existsSync(assistantPath)?JSON.parse(fs.readFileSync(assistantPath,'utf8').replace(/^\uFEFF/,'')):null;return send(res,200,await transcribeRecording(descriptor,store.root,await body(req,8*1024*1024),String(req.headers['content-type']||'')));}finally{dictationBusy=false;}
       }
       // With no AI connected (the same test as runtimeConfigured in /api/status), the picker says so instead of naming a "Connected model" (#563).
-      if(route==='/api/chat/options'&&req.method==='GET'){if(!domains.provider||assistantMissing)return send(res,200,{connected:false,current:'No AI connected',models:[{id:'',efforts:[]}]});return send(res,200,provider?.options?await provider.options():{current:'Connected model',models:[{id:'',efforts:[]}]});}
+      // An AI connected in Settings is named by the model saved there, and one that could not be used says why (#573).
+      if(route==='/api/chat/options'&&req.method==='GET'){if(!domains.provider||assistantMissing)return send(res,200,{connected:false,current:'No AI connected',models:[{id:'',efforts:[]}]});const choices=provider?.options?await provider.options():{current:provider?.model||'Connected model',models:[{id:'',efforts:[]}]};return send(res,200,aiHealth.problem?{...choices,problem:aiHealth.problem}:choices);}
       if(route==='/api/chat/stop'&&req.method==='POST'){const input=JSON.parse(await body(req));chatRequests.get(input.id)?.abort();return send(res,200,{ok:true});}
       if (route.startsWith('/api/functions/') && req.method === 'POST') {
         const name=route.slice('/api/functions/'.length),input=JSON.parse(await body(req));

@@ -57,7 +57,7 @@ test('a passing 502, 503, 504 or 429 from the provider is tried again, and other
   calls=0;answers.push([503,{}],[503,{}],[503,{error:{message:'Still down'}}]);
   await assert.rejects(provider({kind:'connection-test'}),/Model provider failed with HTTP 503: Still down/);assert.equal(calls,3,'tried three times in all');
   calls=0;answers.push([401,{error:{message:'Invalid key'}}]);
-  await assert.rejects(provider({kind:'connection-test'}),/HTTP 401: Invalid key/);assert.equal(calls,1,'a wrong key is said at once');
+  await assert.rejects(provider({kind:'connection-test'}),{message:/refused its key, so it could not be used\. Check the key in Settings, Your AI\./,aiProblem:'refused'});assert.equal(calls,1,'a wrong key is said at once');
  }finally{await new Promise(r=>server.close(r));}
 });
 
