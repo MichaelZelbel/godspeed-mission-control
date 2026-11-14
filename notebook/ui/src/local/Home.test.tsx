@@ -109,6 +109,23 @@ describe("the Godspeed card", () => {
     expect(line.className).not.toContain("text-lg");
     expect(line.closest(".min-w-0")).toHaveTextContent("Godspeed");
   });
+  // No AI set up at all is said in plain words with a link to Settings, Your AI; "Connecting…"
+  // is only the wait for the status (#552).
+  it("says no AI is connected and links to Settings, Your AI", async () => {
+    page(false, { show: false }, { runtimeConfigured: false, assistantProblem: null });
+    expect(await screen.findByText(/No AI is connected yet\./)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Connect it in Settings, Your AI" })).toHaveAttribute("href", "/dashboard/settings#connect-ai");
+    expect(screen.queryByText("Connecting…")).toBeNull();
+  });
+  it("says Connecting only while the status is loading", async () => {
+    let answer: (r: Response) => void = () => {};
+    vi.stubGlobal("fetch", vi.fn((url: string) => String(url) === "/api/status" ? new Promise<Response>(r => { answer = r; }) : Promise.resolve(new Response(JSON.stringify({ show: false, count: 0, data: [] }), { status: 200, headers: { "Content-Type": "application/json" } }))));
+    render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter initialEntries={["/dashboard"]}><Home /></MemoryRouter></QueryClientProvider>);
+    expect(await screen.findByText("Connecting…")).toBeInTheDocument();
+    answer(new Response(JSON.stringify({ runtimeConfigured: false, assistantProblem: null }), { status: 200, headers: { "Content-Type": "application/json" } }));
+    expect(await screen.findByText(/No AI is connected yet\./)).toBeInTheDocument();
+    expect(screen.queryByText("Connecting…")).toBeNull();
+  });
   it("keeps the short status in large type", async () => {
     page(false, { show: false }, { runtimeConfigured: true });
     expect((await screen.findByText("Ready to chat")).className).toContain("text-lg");
