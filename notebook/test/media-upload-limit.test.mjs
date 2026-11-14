@@ -7,12 +7,16 @@ import {MEDIA_UPLOAD_MAX_BYTES,MEDIA_UPLOAD_MAX_MB} from '../shared/media-limits
 // now hold files to one number, shared/media-limits.mjs. This checks the server against it; the
 // editor's own test (ui/src/lib/upload-attachment.limit.test.ts) checks the editor against it.
 test('/api/media/upload takes a file of exactly the shared limit and refuses one byte more, naming the limit',async()=>{
-  const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-upload-limit-')),service=await createService({root,port:0}),base='http://127.0.0.1:'+service.address.port;
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-upload-limit-')),mediaRoot=path.join(root,'media'),service=await createService({root,mediaRoot,port:0}),base='http://127.0.0.1:'+service.address.port;
   const upload=async(size,name)=>{const form=new FormData();form.set('file',new Blob([new Uint8Array(size)],{type:'video/mp4'}),name);form.set('path','owner/'+name);const r=await fetch(base+'/api/media/upload',{method:'POST',body:form});return {status:r.status,body:await r.json()};};
   try{
     assert.ok(MEDIA_UPLOAD_MAX_BYTES>50*1024*1024,'above the size at which a file is kept on one computer only');
     const taken=await upload(MEDIA_UPLOAD_MAX_BYTES,'at-the-limit.mp4');assert.equal(taken.status,200,JSON.stringify(taken.body));
+    assert.equal(taken.body.data.path,'owner/at-the-limit.mp4','the accepted-size upload follows the current add-file path');
+    const acceptedArtifacts=fs.readdirSync(mediaRoot).sort();
     const refused=await upload(MEDIA_UPLOAD_MAX_BYTES+1,'one-byte-over.mp4');assert.equal(refused.status,413);
-    assert.equal(refused.body.error,`This file is too large. Max is ${MEDIA_UPLOAD_MAX_MB} MB.`);
+    assert.equal(refused.body.error,`This file is too large. Max is ${MEDIA_UPLOAD_MAX_MB} MB. Keep the file outside the notebook and add a link to it instead.`);
+    assert.deepEqual(fs.readdirSync(mediaRoot).sort(),acceptedArtifacts,'the refused upload leaves no attachment or partial stored copy');
+    assert.equal(fs.existsSync(path.join(root,'notes','one-byte-over.md')),false,'the refused upload creates no note');
   }finally{await service.close();fs.rmSync(root,{recursive:true,force:true});}
 });
