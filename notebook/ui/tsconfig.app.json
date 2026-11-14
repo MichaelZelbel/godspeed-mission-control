@@ -19,6 +19,15 @@
     "paths": {
       "@/*": [
         "./src/*"
+      ],
+      "@powersync/tanstack-react-query": [
+        "./src/local/disabled-row-sync.ts"
+      ],
+      "@powersync/react": [
+        "./src/local/disabled-row-sync.ts"
+      ],
+      "@powersync/web": [
+        "./src/local/disabled-row-sync.ts"
       ]
     },
     "skipLibCheck": true,
