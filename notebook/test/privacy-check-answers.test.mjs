@@ -11,7 +11,7 @@ import { FileSync } from '../core/sync/git.mjs';
 // GitHub's answer to "is this repository private?" decides what the person reads, and in every
 // answer but 404 nothing reaches GitHub: not even the read with this computer's Git sign-in.
 const at=(hour,minute)=>{const d=new Date();d.setHours(hour,minute,0,0);if(d<=Date.now())d.setDate(d.getDate()+1);return d;};
-const clock=d=>d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+const clock=d=>d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',timeZoneName:'short'});
 
 function answering(t,status,headers={}){
   const dir=fs.mkdtempSync(path.join(os.tmpdir(),'privacy-answer-'));
@@ -35,6 +35,17 @@ test('a 403 rate limit says GitHub is limiting this network and when to try agai
 
 test('a 429 with retry-after says when to try again, from now',async t=>{
   const before=Date.now(),{check,calls}=answering(t,429,{'retry-after':'600'});
+  const times=[clock(new Date(before+600000)),clock(new Date(Date.now()+600000))];
+  await assert.rejects(check(),error=>{
+    assert.match(error.message,/^GitHub is limiting requests from this network right now.*no files were uploaded/);
+    assert.ok(times.some(time=>error.message.endsWith('Try again after '+time+'.')),error.message);
+    return true;
+  });
+  assert.deepEqual(calls,[]);
+});
+
+test('a 403 with only retry-after is a limit too',async t=>{
+  const before=Date.now(),{check,calls}=answering(t,403,{'retry-after':'600'});
   const times=[clock(new Date(before+600000)),clock(new Date(Date.now()+600000))];
   await assert.rejects(check(),error=>{
     assert.match(error.message,/^GitHub is limiting requests from this network right now.*no files were uploaded/);
