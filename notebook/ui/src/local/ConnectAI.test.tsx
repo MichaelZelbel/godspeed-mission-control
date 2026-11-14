@@ -22,6 +22,38 @@ function serve(routes: Record<string, (body?: any) => [number, unknown]>) {
 }
 const show = () => render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><BackupAI /></QueryClientProvider>);
 
+describe("the saved main AI in Settings", () => {
+  afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+  const settings = () => render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><ConnectAI /></QueryClientProvider>);
+  const supportingRoutes = {
+    "routine-ai": () => [200, { available: false }] as [number, unknown],
+    "backup-ai": () => [200, { ...none, hermes: false }] as [number, unknown],
+  };
+
+  it("reopens an Another service connection without exposing its saved key", async () => {
+    const saved = { configured: true, url: "https://ai.example.test/v1", model: "fictional/model", key: true };
+    const calls = serve({ ...supportingRoutes, provider: body => [200, body ? { connected: true, provider: saved, routines: { available: false } } : saved] });
+    const first = settings();
+    await waitFor(() => expect(screen.getByLabelText("Your AI service")).toHaveValue("other"));
+    expect(screen.getByLabelText(/Its address/)).toHaveValue(saved.url);
+    expect(screen.getByLabelText(/Model, written/)).toHaveValue(saved.model);
+    const key = screen.getByLabelText("Key (leave it empty to keep the saved one)") as HTMLInputElement;
+    expect(key).not.toBeRequired();expect(key).toHaveValue("");expect(document.body).not.toHaveTextContent("fictional-secret");
+    first.unmount();settings();
+    await waitFor(() => expect(screen.getByLabelText("Your AI service")).toHaveValue("other"));
+    fireEvent.click(screen.getByRole("button", { name: "Test and connect" }));
+    await screen.findByText("Connected. The notebook uses it.");
+    expect(calls.find(c => c.body && c.route === "provider")?.body).toEqual({ url: saved.url, key: "", model: saved.model, routines: true });
+  });
+
+  it("keeps a new form on OpenRouter and requires a key", async () => {
+    serve({ ...supportingRoutes, provider: () => [200, { configured: false, key: false }] });
+    settings();
+    expect(await screen.findByLabelText("Your AI service")).toHaveValue("openrouter");
+    expect(screen.getByLabelText("Key")).toBeRequired();
+  });
+});
+
 describe("Backup AI in Settings", () => {
   afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
