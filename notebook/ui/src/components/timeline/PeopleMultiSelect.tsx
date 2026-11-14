@@ -129,7 +129,9 @@ export default function PeopleMultiSelect({ people, value, onChange, newNames = 
 
               {offer && (
                 <>
-                  <CommandGroup>
+                  {/* forceMount on the group too: cmdk hides a group it counts no
+                      matching items in, and a forced item is not counted (#581). */}
+                  <CommandGroup forceMount>
                     <CommandItem
                       forceMount
                       value={`__new_person__ ${offer}`}

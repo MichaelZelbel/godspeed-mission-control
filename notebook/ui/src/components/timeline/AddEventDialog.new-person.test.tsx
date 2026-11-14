@@ -54,6 +54,17 @@ function typeInPicker(text: string) {
   fireEvent.change(screen.getByPlaceholderText(/Search or type a new name/), { target: { value: text } });
 }
 
+// Chooses the new-person item the way a mouse user does: it must be an
+// accessible option (no hidden ancestor, so the role query finds it) and
+// visible, and it is clicked, not chosen with Enter. cmdk hides a group it
+// counts no matching items in, and that hid this item once (#581 review).
+async function clickAddNew(name: string) {
+  const option = await screen.findByRole("option", { name: `Add "${name}" as a new person` });
+  expect(option).toBeVisible();
+  expect(option.closest("[hidden]")).toBeNull();
+  fireEvent.click(option);
+}
+
 const participants = () => fake.current.on("moment_participants", "insert").flatMap((q: RecordedQuery) => (q.payload as any[]).map((r) => r.person_id));
 
 describe("adding a new person while adding a moment by hand", () => {
@@ -63,7 +74,7 @@ describe("adding a new person while adding a moment by hand", () => {
     fake.current = notebook([{ id: "c-ada", name: "Fictional Ada" }]);
     const onCreated = openDialog([{ id: "c-ada", name: "Fictional Ada", relationship: null }]);
     typeInPicker("Fictional Bea");
-    fireEvent.click(await screen.findByText('Add "Fictional Bea" as a new person'));
+    await clickAddNew("Fictional Bea");
     const chip = document.querySelector('[data-new-person="Fictional Bea"]') as HTMLElement;
     expect(chip).toBeInTheDocument();
     expect(within(chip).getByText("new")).toBeInTheDocument();
@@ -93,7 +104,7 @@ describe("adding a new person while adding a moment by hand", () => {
     fake.current = notebook([{ id: "c-cleo", name: "Fictional Cleo" }]);
     const onCreated = openDialog([]);
     typeInPicker("FICTIONAL CLEO");
-    fireEvent.click(await screen.findByText('Add "FICTIONAL CLEO" as a new person'));
+    await clickAddNew("FICTIONAL CLEO");
 
     fireEvent.click(screen.getByRole("button", { name: /Create/ }));
     await waitFor(() => expect(onCreated).toHaveBeenCalled());
@@ -108,7 +119,7 @@ describe("adding a new person while adding a moment by hand", () => {
     fireEvent.click(screen.getByText(/^Add (person|more)$/).closest("button")!);
     expect(await screen.findByText("Type a name to add a new person.")).toBeInTheDocument();
     fireEvent.change(screen.getByPlaceholderText(/Search or type a new name/), { target: { value: "Fictional Dora" } });
-    fireEvent.click(await screen.findByText('Add "Fictional Dora" as a new person'));
+    await clickAddNew("Fictional Dora");
 
     fireEvent.click(screen.getByRole("button", { name: /Create/ }));
     await waitFor(() => expect(onCreated).toHaveBeenCalled());
@@ -120,7 +131,7 @@ describe("adding a new person while adding a moment by hand", () => {
     fake.current = notebook([]);
     const onCreated = openDialog([]);
     typeInPicker("Fictional Eli");
-    fireEvent.click(await screen.findByText('Add "Fictional Eli" as a new person'));
+    await clickAddNew("Fictional Eli");
     fireEvent.keyDown(document.activeElement || document.body, { key: "Escape" });
     fireEvent.click(await screen.findByRole("button", { name: "Remove new person Fictional Eli" }));
     expect(document.querySelector('[data-new-person="Fictional Eli"]')).not.toBeInTheDocument();
@@ -135,7 +146,7 @@ describe("adding a new person while adding a moment by hand", () => {
     fake.current = notebook([], { failInsert: true });
     const onCreated = openDialog([]);
     typeInPicker("Fictional Finn");
-    fireEvent.click(await screen.findByText('Add "Fictional Finn" as a new person'));
+    await clickAddNew("Fictional Finn");
 
     fireEvent.click(screen.getByRole("button", { name: /Create/ }));
     await waitFor(() => expect(fake.current.on("contacts", "insert")).toHaveLength(1));
@@ -158,7 +169,7 @@ describe("adding a new person while adding a moment by hand", () => {
       />,
     );
     typeInPicker("Fictional Gus");
-    fireEvent.click(await screen.findByText('Add "Fictional Gus" as a new person'));
+    await clickAddNew("Fictional Gus");
 
     fireEvent.click(screen.getByRole("button", { name: /Save|Update/ }));
     await waitFor(() => expect(onCreated).toHaveBeenCalled());
