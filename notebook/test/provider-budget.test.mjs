@@ -1,5 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import http from 'node:http';import {EventEmitter} from 'node:events';import {PassThrough} from 'node:stream';
 import {providerTimeBudget,providerTimeoutMessage,jobExecutor,modelProvider,hermesProvider,hermesFailureMessage} from '../core/runtime.mjs';import {Store} from '../core/records/store.mjs';import {QueryService} from '../core/query.mjs';
+import {withBackup} from '../core/backup-ai.mjs';
 test('interactive and background calls remain bounded, with no arbitrary timeout extension',()=>{
  assert.equal(providerTimeBudget({}),600000);assert.equal(providerTimeBudget({timeout_ms:300000}),300000);
  for(const timeout_ms of [0,-1,Infinity,'300000',3600000])assert.throws(()=>providerTimeBudget({timeout_ms}),/supported/);
@@ -13,6 +14,10 @@ test('the short suggestion budget is accepted only for drafting and aborts nativ
  let observed;
  const original=globalThis.fetch;globalThis.fetch=async(url,options)=>{observed=options.signal;return await new Promise((resolve,reject)=>{options.signal.addEventListener('abort',()=>reject(options.signal.reason),{once:true});});};
  try{const controller=new AbortController(),call=modelProvider({url:'http://localhost/fixture',key:'fictional',model:'fictional'})({kind:'draft-event',timeout_ms:20000,signal:controller.signal});controller.abort();await assert.rejects(call);assert.equal(observed.aborted,true);}finally{globalThis.fetch=original;}
+});
+test('the configured model remains visible through the provider wrapper used by the server',async()=>{
+ const provider=withBackup(modelProvider({url:'http://localhost/fixture',key:'fictional',model:'configured-super-readable-model'}),()=>null);
+ assert.deepEqual(await provider.options(),{current:'configured-super-readable-model',models:[{id:'configured-super-readable-model',efforts:[]}]});
 });
 test('scheduled coaching uses its background budget and preserves the chosen model effort',async()=>{
  const store=new Store(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-background-budget-'))),query=new QueryService(store),calls=[],provider=async input=>{calls.push(input);return 'Which fictional habit feels easiest?';};
@@ -57,7 +62,12 @@ test('a passing 502, 503, 504 or 429 from the provider is tried again, and other
   calls=0;answers.push([503,{}],[503,{}],[503,{error:{message:'Still down'}}]);
   await assert.rejects(provider({kind:'connection-test'}),/Model provider failed with HTTP 503: Still down/);assert.equal(calls,3,'tried three times in all');
   calls=0;answers.push([401,{error:{message:'Invalid key'}}]);
+  assert.deepEqual(await provider.options(),{current:'fictional-model',models:[{id:'fictional-model',efforts:[]}]});
   await assert.rejects(provider({kind:'connection-test'}),/HTTP 401: Invalid key/);assert.equal(calls,1,'a wrong key is said at once');
+  await assert.rejects(provider.options(),/refused its key/);
+  answers.push([200,{choices:[{message:{content:'Connected again.'}}]}]);
+  assert.equal(await provider({kind:'connection-test'}),'Connected again.');
+  assert.deepEqual(await provider.options(),{current:'fictional-model',models:[{id:'fictional-model',efforts:[]}]});
  }finally{await new Promise(r=>server.close(r));}
 });
 
