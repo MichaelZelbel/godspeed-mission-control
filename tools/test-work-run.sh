@@ -21,7 +21,7 @@ trap 'rm -rf "$TMP" "$OUTSIDE" "$TEST_GUARD_HOME"' EXIT
 mkdir -p "$TMP/rules" "$TMP/bin" "$TMP/goals/playbooks" "$TMP/skills/work-item" "$TMP/research"
 : > "$TMP/AGENTS.md"
 printf 'receipt\n' > "$TMP/rules/machine-words.txt"
-for f in work.js goals.js mc-cards.js mc-work-run check-written.js; do cp "$HERE/$f" "$TMP/bin/"; done
+for f in work.js run-log-folders.js goals.js mc-cards.js mc-work-run check-written.js; do cp "$HERE/$f" "$TMP/bin/"; done
 cp "$HERE/../starter-godspeed/skills/work-item/SKILL.md" "$TMP/skills/work-item/SKILL.md"
 chmod +x "$TMP/bin/mc-work-run"
 
