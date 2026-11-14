@@ -131,6 +131,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   const connectMeaning=config=>{index.meaning?.close();index.meaning=new MeaningIndex(index,{config});};
   connectMeaning(embeddingConfig(store.state));
   const githubSignIn=new GitHubSignIn();
+  const syncNotConnected={state:'not_connected',error:'Sync is not connected, so nothing was synced. Your files are safe on this computer.',detail:'To connect it, open Settings, then Sync and schedule ownership, and press Connect record sync.'};
   const syncRunner=new SyncRunner(root,{onResult:result=>{sync.last=result;atomic(path.join(store.state,'sync-status.json'),JSON.stringify(result));}});
   const providerPath=path.join(store.state,'provider.json');
   // The backup AI the person connected in Settings (core/backup-ai.mjs): the notebook's own calls
@@ -495,7 +496,11 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         const input=JSON.parse(await body(req));return send(res,200,await connectRecordSync({url:input.url,configure:url=>syncRunner.configure(url),signIn:githubSignIn}));
       }
       if(route==='/api/sync/sign-in'&&req.method==='GET')return send(res,200,{signIn:githubSignIn.status()});
-      if(route==='/api/sync/run'&&req.method==='POST')return send(res,200,{status:await syncRunner.run()});
+      if(route==='/api/sync/run'&&req.method==='POST'){
+        // A notebook that never connected sync is told so, instead of running git and showing its error.
+        if(!fs.existsSync(path.join(store.state,'sync-config.json')))return send(res,200,{status:{...syncNotConnected}});
+        return send(res,200,{status:await syncRunner.run()});
+      }
       if(assistantMissing&&req.method==='POST'&&ASSISTANT_ROUTES.includes(route))throw Error(assistantProblem);
       // "server": the server this computer is paired with, whatever it is called, or this machine
       // when it is the server (the one that makes pairing codes). Until 9 October 2026 the button
