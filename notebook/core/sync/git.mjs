@@ -34,6 +34,7 @@ export function readSyncConfig(state){try{return JSON.parse(fs.readFileSync(path
 export const folderModeRefusal='This notebook already syncs through the folder\'s own repository, so a separate repository cannot be connected here';
 const posix=file=>file.split(path.sep).join('/');
 const readJson=file=>{try{return JSON.parse(fs.readFileSync(file,'utf8'));}catch{return null;}};
+const mergeReview=c=>c?.kind==='git'&&typeof c.remote_commit==='string'&&typeof c.path==='string'&&shared(c.path);
 // One path kept for review in conflicts/ (conflicts.mjs): base, local and
 // remote as they were, as text unless one of them is binary.
 function reviewItem(id,name,versions,remoteCommit,extra={}){
@@ -199,17 +200,16 @@ export class FileSync {
   // The files an unresolved saved conflict holds back (#570): this computer
   // keeps its own version on disk, uncommitted, while the shared history
   // follows the other computers for that file, and every other file keeps
-  // syncing. A review about many files (a mass removal), about a file outside
-  // the synced folder, or one that does not read holds no file.
+  // syncing. Only a review a merge saved (it names the other computers'
+  // commit) holds its file, and the other side's name for it when they
+  // renamed it differently. Every other review holds nothing: an edit made
+  // here from an older version (stale-write), a packaged skill's new version,
+  // a mass removal, or one that does not read.
   heldPaths(){
     const dir=path.join(this.store.root,'conflicts'),held=new Set();
     for(const n of this.pendingConflicts()){
-      const c=readJson(path.join(dir,n));
-      if(c?.kind==='git'&&typeof c.path==='string'&&shared(c.path))for(const name of [c.path,c.remote_path])if(typeof name==='string'&&shared(name))held.add(name);
-      else if(c?.kind==='stale-write'){
-        if(!this.store.fileOf)this.store.scan();
-        const file=this.store.fileOf.get(c.type+'/'+c.record_id);if(file)held.add(posix(path.relative(this.store.root,file)));
-      }
+      const c=readJson(path.join(dir,n));if(!mergeReview(c))continue;
+      for(const name of [c.path,c.remote_path])if(typeof name==='string'&&shared(name))held.add(name);
     }
     return held;
   }
@@ -223,7 +223,7 @@ export class FileSync {
   refreshHeld(dir,remoteCommit){
     const folder=path.join(this.store.root,'conflicts');
     for(const n of this.pendingConflicts()){
-      const file=path.join(folder,n),c=readJson(file);if(c?.kind!=='git'||typeof c.path!=='string'||!shared(c.path))continue;
+      const file=path.join(folder,n),c=readJson(file);if(!mergeReview(c))continue;
       const name=typeof c.remote_path==='string'?c.remote_path:c.path,bytes=v=>v===null||v===undefined?null:Buffer.from(v,c.encoding==='base64'?'base64':'utf8');
       const record=v=>{if(!v||!isRecordPath(name))return null;try{return decode(v.toString('utf8'),name);}catch{return null;}};
       const local=bytes(c.local),stored=bytes(c.remote);let remote=null;try{remote=this.gitBytes(['cat-file','blob','HEAD:'+name],dir);}catch{}
