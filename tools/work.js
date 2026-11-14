@@ -93,16 +93,21 @@ const namesFile = (s) => String(s || '').split(/\s+/).map(t => t.replace(/[.,;:)
 // and a Mac's usual disk ignore them). A plain relative path is read from the mission control, as
 // CHECK runs there, so it lies in a folder only when it starts with it. Where text cannot say where a
 // path starts (an absolute path, $VAR/..., ~/..., OUT=..., or one that climbs above its start with
-// ..), the folder may appear anywhere in it. At least one step must follow the folder.
+// ..), the folder may appear anywhere in it. A path that names the folder itself is refused like a
+// file inside it (#561): `routines/work/` is where the cleanup sweeps, whatever follows.
 const { RUN_LOG_FOLDERS } = require(path.join(__dirname, 'run-log-folders.js'));
 const RUN_LOG_STEPS = RUN_LOG_FOLDERS.map(f => ({ folder: f, steps: f.split('/') }));
-// The words of a text that may be paths: split at spaces and shell punctuation, and also with a space
-// kept when a separator follows it, so `routines/work /x.md` is one candidate.
+// The words of a text that may be paths: split at spaces and shell punctuation, and also with the
+// spaces kept that a run of spaces and dots carries up to a separator, so `routines/work /x.md` and
+// `routines/work . /x.md` are each one candidate (#561), as Windows reads both as routines/work/.
+// A web address (https://host/...) is not a path of the notebook, so it is taken out first; a
+// file:// address names a file on this computer and stays.
 const PATH_STOP = /[\s"'`;|&<>()]+/;
-const PATH_STOP_KEEPING_SPACE_BEFORE_SEP = /[\s"'`;|&<>()]*["'`;|&<>()][\s"'`;|&<>()]*|\s+(?![\\/])/;
+const PATH_STOP_KEEPING_SPACE_BEFORE_SEP = /[\s"'`;|&<>()]*["'`;|&<>()][\s"'`;|&<>()]*|\s+(?![. ]*[\\/])/;
+const WEB_ADDRESS = /(?<![A-Za-z0-9+.-])(?!file:)[A-Za-z][A-Za-z0-9+.-]+:\/\/[^\s"'`<>()]*/gi;
 const pathCandidates = (text) => {
-  const s = String(text || '');
-  return [...new Set([...s.split(PATH_STOP), ...s.split(PATH_STOP_KEEPING_SPACE_BEFORE_SEP)])]
+  const s = String(text || '').replace(WEB_ADDRESS, ' ');
+  return [...new Set([...s.split(PATH_STOP_KEEPING_SPACE_BEFORE_SEP), ...s.split(PATH_STOP)])]
     .map(t => t.replace(/[.,;:]+$/, '')).filter(Boolean);
 };
 const pathSteps = (p) => {
@@ -122,10 +127,10 @@ const runLogFolderAt = (candidate) => {
   const steps = pathSteps(candidate.replace(GLUED_PREFIX, ''));
   const starts = anchored || steps[0] === '..' ? steps.map((_, i) => i) : [0];
   for (const i of starts) {
-    const hit = RUN_LOG_STEPS.find(f => steps.length > i + f.steps.length && f.steps.every((x, k) => steps[i + k] === x));
-    if (hit) return hit.folder;
+    const hit = RUN_LOG_STEPS.find(f => steps.length >= i + f.steps.length && f.steps.every((x, k) => steps[i + k] === x));
+    if (hit) return { folder: hit.folder, itself: steps.length === i + hit.steps.length };
   }
-  return '';
+  return null;
 };
 // A path may also be glued after an earlier one (`work/a.md,routines/work/b.md`, `a:routines/...`,
 // `x+routines/...`, `OUT=routines/...`): the text after every character that is not part of a plain
@@ -133,7 +138,7 @@ const runLogFolderAt = (candidate) => {
 const PATH_GLUE = /[^A-Za-z0-9_. \-\\/]/g;
 const runLogFolderOf = (candidate) => {
   const starts = [0, ...[...candidate.matchAll(PATH_GLUE)].map(m => m.index + 1)];
-  for (const i of starts) { const p = candidate.slice(i), folder = runLogFolderAt(p); if (folder) return { path: p, folder }; }
+  for (const i of starts) { const p = candidate.slice(i), hit = runLogFolderAt(p); if (hit) return { path: p, ...hit }; }
   return null;
 };
 // The first path in the text that lies in a run-log folder, as written (from where it is glued on),
@@ -452,7 +457,7 @@ cmds.file = (a) => {
   // Before the learn check below, so a Windows path in a run-log folder hears why it is refused (#545).
   for (const [label, text] of [['DONE WHEN', done], ['--path', where], ['CHECK', a.check === true ? '' : oneLine(a.check)]]) {
     const inLog = runLogPath(text);
-    if (inLog) die(`${label} names ${inLog.path}, inside ${inLog.folder}/, a run-log folder whose files the nightly cleanup deletes after 30 days. A result is kept with the person's work: put it under work/, goals/ or ideas/ (for example work/<a short name>.md) and name that path instead`);
+    if (inLog) die(`${label} names ${inLog.path}, ${inLog.itself ? 'which is' : 'inside'} ${inLog.folder}/, a run-log folder whose files the nightly cleanup deletes after 30 days. A result is kept with the person's work: put it under work/, goals/ or ideas/ (for example work/<a short name>.md) and name that path instead`);
   }
   if (kind === 'learn' && !namesFile(done)) die('a learn item is done when the answer is written somewhere a reader can open: its DONE WHEN must name a file (a path ending in .md, .csv, .json or .txt), or give --path <file>');
   if (!done) die('--done-when is required: what a reader will see when this is done, so it can be verified by someone who is not the runner');
