@@ -7,6 +7,7 @@ import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { Store } from '../core/records/store.mjs';
 import { FileSync } from '../core/sync/git.mjs';
+import { userFacing } from '../server/main.mjs';
 
 // GitHub's answer to "is this repository private?" decides what the person reads, and in every
 // answer but 404 nothing reaches GitHub: not even the read with this computer's Git sign-in.
@@ -84,4 +85,13 @@ test('Connect record sync shows the worker\'s message about GitHub\'s answer as 
   assert.equal(out.state,'configuration_failed');
   assert.match(out.configuration_error,/^GitHub answered 503 when asked whether the repository is private.*no files were uploaded/);
   assert.equal(fs.existsSync(path.join(dir,'.git')),false);
+});
+
+// Settings shows the message through the server's error sanitizer, which cuts server paths out. Until
+// #562's review it read the "s://" of the status page's address as a Windows drive path ("check http[path]").
+test('Settings shows the status page address whole, and still hides a drive path',async t=>{
+  const {check}=answering(t,503);let message;
+  await assert.rejects(check(),error=>{message=userFacing(error,[os.homedir(),os.tmpdir()]);return true;});
+  assert.ok(message.endsWith('check https://www.githubstatus.com.'),message);
+  assert.equal(userFacing(new Error("Cannot open 'C:\\Users\\ann\\notes' or D:/data/x"),[]),"Cannot open '[path]' or [path]");
 });

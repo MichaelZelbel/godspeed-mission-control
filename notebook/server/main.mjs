@@ -90,7 +90,8 @@ export const staticTypes = { '.html':'text/html; charset=utf-8','.js':'text/java
 // sentences and pass; a file-system or programming error carries server paths
 // and internals, so it is logged and the browser gets a plain sentence instead
 // (until 6 October 2026 it got "ENOENT: no such file or directory, open 'C:\Users\...'").
-// An absolute path left in a passed message is cut out as well.
+// An absolute path left in a passed message is cut out as well. A drive letter counts only when no
+// letter or digit comes before it, so the "s:/" of an https:// address is not a Windows path (#562).
 export function userFacing(error, roots = []) {
   if (!(error instanceof Error)) return null;
   const code = String(error.code || '');
@@ -101,7 +102,7 @@ export function userFacing(error, roots = []) {
   if (error instanceof TypeError || error instanceof RangeError || error instanceof ReferenceError) return null;
   let message = String(error.message || '');
   for (const root of roots.filter(Boolean).sort((a, b) => b.length - a.length)) for (const form of new Set([root, root.replaceAll('\\', '/'), root.replaceAll('\\', '\\\\')])) message = message.split(form).join('[path]');
-  message = message.replace(/[A-Za-z]:[\\/][^\s'"]*|\\\\[^\s'"]+|(?<![\w.])\/(?:home|opt|root|var|tmp|Users|srv|data|mnt|etc|private)\/[^\s'"]*/g, '[path]');
+  message = message.replace(/(?<![A-Za-z0-9])[A-Za-z]:[\\/][^\s'"]*|\\\\[^\s'"]+|(?<![\w.])\/(?:home|opt|root|var|tmp|Users|srv|data|mnt|etc|private)\/[^\s'"]*/g, '[path]');
   return message || null;
 }
 // The POST routes that act on Hermes' routines; with no verified assistant setup they answer why (#524).
