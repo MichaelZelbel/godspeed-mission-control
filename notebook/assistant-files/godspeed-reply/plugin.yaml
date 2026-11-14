@@ -3,9 +3,10 @@ version: "0.1.0"
 description: >-
   The one step that runs on every reply the assistant has finished and before it is sent or spoken
   (transform_llm_output; Hermes keeps only the first replacement any plugin returns, so Godspeed
-  has one). The first step it runs: a reply in English or German to a message clearly in the other
-  language is translated faithfully by the AI connected in Settings, unless the person asked for a
-  language; a translation that fails twice sends the reply as written, below one line in the
+  has one). The first step it runs: every message has a language (the one the person asked for, else
+  its own words, else the person's recent messages, else the language set in their add-ons' settings,
+  else English), and a reply clearly in the other one is translated faithfully by the AI connected in
+  Settings; a translation that fails twice sends the reply as written, below one line in the
   message's language that says so; scheduled deliveries are never touched. Other plugins add their own step with the
   documented call in this plugin's __init__.py (godspeed_reply_steps_v1) instead of registering their
   own transformer. It also answers a Telegram message that only asks for today's brief with the
