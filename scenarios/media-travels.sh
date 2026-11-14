@@ -154,8 +154,12 @@ act() {
   printf '%s\n' "$code" >"$EVIDENCE/b-remove.status"
   sync_round "$b" b "carries the removal of the picture to the copy"
   sync_round "$ROOT" a "brings the removal of the picture to the first computer"
-  wait_for 60 "the first computer no longer serves the picture" \
-    sh -c "[ \"\$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:$NOTEBOOK_PORT/api/media/file/$(printf '%s' "$PICTURE_PATH" | sed 's|/|%2F|g'))\" = 404 ]" || true
+  # Installing the second computer took the service the first one ran as, so the first computer is
+  # started again (the same line over the same folder is a restart) before it is asked anything.
+  install_the_stage_line_into "$ROOT" "$NOTEBOOK_PORT" "$EVIDENCE/a-restart.log"
+  wait_for 120 "the first computer answers again" curl -fsS --max-time 10 "http://127.0.0.1:$NOTEBOOK_PORT/health" -o /dev/null || true
+  gone() { status_of "$NOTEBOOK_PORT" "$PICTURE_PATH" "$EVIDENCE/a-picture-after-removal.status"; [ "$(cat "$EVIDENCE/a-picture-after-removal.status")" = 404 ]; }
+  wait_for 60 "the first computer no longer serves the picture" gone || true
   status_of "$NOTEBOOK_PORT" "$PICTURE_PATH" "$EVIDENCE/a-picture-after-removal.status"
   { ls "$(runtime_of "$ROOT")/media" 2>/dev/null || true; } | sort >"$EVIDENCE/a-media-root-after-removal.txt"
   rm -f "$picture" "$pdf" "$large"
