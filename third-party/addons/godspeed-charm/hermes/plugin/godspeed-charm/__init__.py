@@ -98,6 +98,20 @@ except Exception:
     # Without the buttons the challenge still works: the question stays in the reply.
     _telegram_module, _question = None, None
 
+# godspeed-reply's one decision of the language of the person's message: its reply step translates
+# the reply into that language, so the line this plugin adds must be in it too. Installed next to this
+# plugin by the notebook's wire-assistant; in a checkout, in the notebook's assistant-files. Without
+# godspeed-reply nothing translates the reply, and the judge's language stays.
+_LANGUAGE_PLACES = (os.path.join(HERE, "..", "godspeed-reply", "language.py"),
+                    os.path.join(HERE, "..", "..", "..", "..", "..", "..", "notebook", "assistant-files", "godspeed-reply", "language.py"))
+try:
+    _language_spec = importlib.util.spec_from_file_location(
+        "godspeed_charm_reply_language", next(f for f in _LANGUAGE_PLACES if os.path.isfile(f)))
+    _language = importlib.util.module_from_spec(_language_spec)
+    _language_spec.loader.exec_module(_language)
+except Exception:
+    _language = None
+
 
 def _enabled_plugins(config_path):
     """The names under plugins.enabled in Hermes' config.yaml, or None when it cannot be read.
@@ -269,7 +283,7 @@ def _start_judge(session_id, platform, message):
     with os.fdopen(handle, "w", encoding="utf-8") as f:
         f.write(words)
     model = _model_command()
-    turn = {"conversation": f"{platform}:{session_id}", "file": file, "hash": digest, "began": time.monotonic(),
+    turn = {"conversation": f"{platform}:{session_id}", "file": file, "words": words, "hash": digest, "began": time.monotonic(),
             "result": None, "replied": False, "done": {}}
     deadline = _judge_seconds()
 
@@ -309,12 +323,23 @@ def _log(turn, verdict, did):
         pass
 
 
-def _record(turn, verdict, *args):
-    """A `godspeed-charm asked|answer` for this turn's conversation and words: its {ok, reply, state}
-    report on success (exit 0), else None."""
-    language = verdict.get("language")
+def _reply_language(turn, session_id, verdict):
+    """The language the reply goes out in: godspeed-reply's decision on the person's message (the
+    turn's words while the store has none), else the judge's."""
+    if _language is None:
+        return verdict.get("language")
+    try:
+        message, earlier, _source = _language.session_messages(_home(), session_id)
+        return _language.message_language(message or turn["words"], earlier, _language.person_language())
+    except Exception:
+        return verdict.get("language")
+
+
+def _record(turn, language, *args):
+    """A `godspeed-charm asked|answer` for this turn's conversation and words, its line in `language`:
+    its {ok, reply, state} report on success (exit 0), else None."""
     r = subprocess.run(_command(*args, "--conversation", turn["conversation"], "--words-file", turn["file"], "--json",
-                                *(["--language", language] if language == "de" else [])),
+                                *(["--language", language] if language in ("en", "de") else [])),
                        capture_output=True, text=True, encoding="utf-8", errors="replace", stdin=subprocess.DEVNULL, timeout=_timeout())
     reports = _reports(r.stdout) if r.returncode == 0 else []
     return reports[-1] if reports and reports[-1].get("ok") is True and reports[-1].get("reply") else None
@@ -329,20 +354,20 @@ def _judged_reply(turn, session_id, text, kwargs, model_asked=False):
     verdict = _verdict(turn)
     if verdict is None or verdict["verdict"] == "none":
         return None, "nothing"
+    language = _reply_language(turn, session_id, verdict)
     if verdict["verdict"] == "answer":
-        report = _record(turn, verdict, "answer", verdict["answer"])
+        report = _record(turn, language, "answer", verdict["answer"])
         if report is None:
             return None, "no answer recorded (the model had, or none was open)"
         return _ending(_compose(text, kwargs), report["reply"]), "answered " + verdict["answer"]
     if model_asked:
         return None, "the model asked itself"
-    report = _record(turn, verdict, "asked")
+    report = _record(turn, language, "asked")
     if report is None:
         return None, "asked refused"
     reply = str(report["reply"])
     if str(kwargs.get("platform") or "") == "telegram" and _question is not None:
         conversation = turn["conversation"]
-        language = verdict.get("language")
         asked = _open_asked(conversation)
         entry = {"conversation": conversation, "askedWhen": asked and asked["when"],
                  "askedSeq": asked and asked.get("seq"), "reply": reply,
