@@ -20,7 +20,7 @@ export function creditsBlockedMessage(credits: Pick<AICredits, "creditsGranted" 
 }
 
 export function useAICreditsGate() {
-  const { credits, isLoading, refetch } = useAICredits();
+  const { credits, providerConfigured, isLoading, refetch } = useAICredits();
 
   const checkCredits = useCallback((): boolean => {
     // Fail-open while loading
@@ -41,5 +41,5 @@ export function useAICreditsGate() {
     return true;
   }, [credits, isLoading]);
 
-  return { checkCredits, credits, isLoading, refetch };
+  return { checkCredits, credits, providerConfigured, isLoading, refetch };
 }

@@ -3,6 +3,7 @@ import {useQuery,useQueryClient} from '@tanstack/react-query';
 import {Button} from '@/components/ui/button';
 import {Input} from '@/components/ui/input';
 import {AlertTriangle,CheckCircle2,Loader2} from 'lucide-react';
+import {providerService} from '../../../core/provider-service.mjs';
 
 // Settings > Your AI (18 October 2026). What the person connects here powers the notebook and, unless
 // they untick it, the daily routines and the chat too (notebook/core/routine-ai.mjs): every installer
@@ -12,8 +13,17 @@ import {AlertTriangle,CheckCircle2,Loader2} from 'lucide-react';
 // backup each on their own (core/routine-ai.mjs).
 type Check={at:string;ok:boolean;reply?:string;error?:string;backup?:{ok:boolean;error?:string;model?:string}};
 export type RoutineAI={available:boolean;provider?:string|null;model?:string|null;base_url?:string|null;source?:'settings'|'hermes'|'none';key?:boolean|null;check?:Check|null};
+type SavedProvider=|{configured:false;key:false}|{configured:true;url:string;model:string;key:boolean};
 async function call(route:string,body?:unknown){const r=await fetch('/api/'+route,{method:body?'POST':'GET',headers:{'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});const data=await r.json();if(!r.ok)throw new Error(data.error);return data;}
 export const routineAIStatus=()=>call('routine-ai') as Promise<RoutineAI>;
+function providerResponse(value:unknown):SavedProvider{
+  if(!value||typeof value!=='object')throw new Error('The saved AI connection could not be read.');
+  const data=value as Record<string,unknown>;
+  if(data.configured===false&&data.key===false)return {configured:false,key:false};
+  if(data.configured===true&&typeof data.url==='string'&&typeof data.model==='string'&&typeof data.key==='boolean')return data as SavedProvider;
+  throw new Error('The saved AI connection could not be read.');
+}
+const savedProvider=async()=>providerResponse(await call('provider'));
 // THE CHOICES, the same for the main AI and the backup (22 October 2026, discussion #20): a key of
 // OpenRouter, OpenAI or another OpenAI-compatible service, and, where Hermes runs the routines, a
 // ChatGPT plan signed in right here (PlanSignIn, core/plan-signin.mjs), as the one-line server's
@@ -57,16 +67,25 @@ export function RoutineAIState({status,checking,onCheck}:{status?:RoutineAI;chec
 export function ConnectAI(){
   const qc=useQueryClient();
   const status=useQuery({queryKey:['routine-ai'],queryFn:routineAIStatus});
+  const saved=useQuery({queryKey:['provider'],queryFn:savedProvider});
   const [service,setService]=useState('openrouter'),[address,setAddress]=useState(''),[model,setModel]=useState(''),[key,setKey]=useState('');
   const [routines,setRoutines]=useState<boolean|null>(null),[busy,setBusy]=useState(false),[checking,setChecking]=useState(false),[error,setError]=useState(''),[done,setDone]=useState('');
   const data=status.data,useForRoutines=routines??(data?.source!=='hermes');
+  const filled=useRef(false);
+  useEffect(()=>{if(filled.current||!saved.data)return;filled.current=true;if(!saved.data.configured)return;
+    const url=saved.data.url,selected=providerService(url);
+    setService(selected);setAddress(selected==='other'?url:'');setModel(saved.data.model||'');
+  },[saved.data]);
   const check=async()=>{setChecking(true);setError('');try{qc.setQueryData(['routine-ai'],await call('routine-ai/check',{}));}catch(e:any){setError(e.message);}finally{setChecking(false);}};
   // An AI nobody checked for a day is checked once when Settings opens, so what it says is seen, not assumed.
   const looked=useRef(false);
   useEffect(()=>{if(looked.current||!data?.available||data.source==='none')return;looked.current=true;if(!data.check||Date.now()-Date.parse(data.check.at)>DAY)check();},[data]);
+  const selectedUrl=service==='other'?address.trim():SERVICES.find(s=>s.id===service)?.url||'';
+  const editableAddress=(value:string)=>value.replace(/\/chat\/completions\/?$/,'').replace(/\/+$/,'');
+  const canRetainKey=!!saved.data?.configured&&saved.data.key&&editableAddress(selectedUrl)===editableAddress(saved.data.url);
   const submit=async(e:React.FormEvent)=>{e.preventDefault();setBusy(true);setError('');setDone('');
     const url=service==='other'?address.trim():SERVICES.find(s=>s.id===service)!.url;
-    try{const result=await call('provider',{url,key,model,routines:useForRoutines});setKey('');
+    try{const result=await call('provider',{url,key,model,routines:useForRoutines});setKey('');qc.setQueryData(['provider'],result.provider);
       if(result.routines?.available)qc.setQueryData(['routine-ai'],result.routines);
       setDone(!useForRoutines||!result.routines?.available?'Connected. The notebook uses it.':result.routines.check?.ok?'Connected. The routines, the chat and the notebook use it, and the routines reached it just now.':'Connected for the notebook, but the routines could not reach it: '+(result.routines.check?.error||'no answer')+'.');
       qc.invalidateQueries({queryKey:['candidate-status']});
@@ -74,7 +93,7 @@ export function ConnectAI(){
   return <section id="connect-ai" className="border rounded p-4 space-y-4" aria-labelledby="connect-ai-title">
     <h2 id="connect-ai-title" className="text-xl">Your AI</h2>
     {status.isLoading?<p role="status">Reading which AI your routines use…</p>:<RoutineAIState status={data} checking={checking} onCheck={check}/>}
-    <form className="space-y-3" onSubmit={submit}>
+    {saved.error?<p role="alert" className="text-red-500">The saved AI connection could not be read. The form is unavailable so it cannot be overwritten.</p>:saved.isLoading?<p role="status">Reading your saved AI connection…</p>:<form className="space-y-3" onSubmit={submit}>
       <p>Connect the AI account you pay for. The key stays on this device and never goes into your notes.</p>
       <label className="block">Your AI service
         <select className="block border bg-background rounded p-2 min-h-11" value={service} onChange={e=>setService(e.target.value)}>{servicesFor(!!data?.available).map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
@@ -83,13 +102,13 @@ export function ConnectAI(){
         <Input required type="url" placeholder="https://…/v1" value={address} onChange={e=>setAddress(e.target.value)}/></label>}
       <label className="block">Model, written the way your service writes it
         <Input required spellCheck={false} placeholder={service==='openrouter'?'for example vendor/model-name':''} value={model} onChange={e=>setModel(e.target.value)}/></label>
-      <label className="block">Key
-        <Input required type="password" autoComplete="off" spellCheck={false} value={key} onChange={e=>setKey(e.target.value)}/></label>
+      <label className="block">{canRetainKey?'Key (leave it empty to keep the saved one)':'Key'}
+        <Input required={!canRetainKey} type="password" autoComplete="off" spellCheck={false} value={key} onChange={e=>setKey(e.target.value)}/></label>
       {data?.available&&<label className="flex gap-2 items-start"><input type="checkbox" className="mt-1" checked={useForRoutines} onChange={e=>setRoutines(e.target.checked)}/><span>Use it for the daily routines and the chat too{data.source==='hermes'?'. Unticked, they keep the account you signed in to in Hermes.':'.'}</span></label>}
       <Button className="min-h-11" disabled={busy}>{busy?<><Loader2 className="h-4 w-4 animate-spin mr-2" aria-hidden="true"/>Testing…</>:'Test and connect'}</Button></>}
       {done&&<p role="status">{done}</p>}
       {error&&<p role="alert" className="text-red-500">{error}</p>}
-    </form>
+    </form>}
     <BackupAI/>
   </section>;
 }

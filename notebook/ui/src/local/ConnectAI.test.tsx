@@ -3,6 +3,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import "@testing-library/jest-dom/vitest";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import http from "node:http";
+import { spawn } from "node:child_process";
 import { BackupAI, ConnectAI, PlanSignIn, RoutineAIState } from "./ConnectAI";
 
 // A backup AI (22 October 2026, discussion #20): a second AI the person connects themselves, used
@@ -15,12 +20,103 @@ function serve(routes: Record<string, (body?: any) => [number, unknown]>) {
   vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
     const route = String(url).replace(/^\/api\//, ""), body = init?.body ? JSON.parse(String(init.body)) : undefined;
     calls.push({ route, body });
-    const [status, data] = (routes[route] || (() => [404, { error: "unknown" }]))(body);
+    const fallback = route === "provider" ? (() => [200, { configured: false, key: false }] as [number, unknown]) : (() => [404, { error: "unknown" }] as [number, unknown]);
+    const [status, data] = (routes[route] || fallback)(body);
     return new Response(JSON.stringify(data), { status, headers: { "Content-Type": "application/json" } });
   }));
   return calls;
 }
 const show = () => render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><BackupAI /></QueryClientProvider>);
+
+describe("the saved main AI in Settings", () => {
+  afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+  const settings = () => render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><ConnectAI /></QueryClientProvider>);
+  const supportingRoutes = {
+    "routine-ai": () => [200, { available: false }] as [number, unknown],
+    "backup-ai": () => [200, { ...none, hermes: false }] as [number, unknown],
+  };
+
+  it("reopens an Another service connection without exposing its saved key", async () => {
+    const saved = { configured: true, url: "https://ai.example.test/v1", model: "fictional/model", key: true };
+    const calls = serve({ ...supportingRoutes, provider: body => [200, body ? { connected: true, provider: saved, routines: { available: false } } : saved] });
+    const first = settings();
+    await waitFor(() => expect(screen.getByLabelText("Your AI service")).toHaveValue("other"));
+    expect(screen.getByLabelText(/Its address/)).toHaveValue(saved.url);
+    expect(screen.getByLabelText(/Model, written/)).toHaveValue(saved.model);
+    const key = screen.getByLabelText("Key (leave it empty to keep the saved one)") as HTMLInputElement;
+    expect(key).not.toBeRequired();expect(key).toHaveValue("");expect(document.body).not.toHaveTextContent("fictional-secret");
+    first.unmount();settings();
+    await waitFor(() => expect(screen.getByLabelText("Your AI service")).toHaveValue("other"));
+    fireEvent.click(screen.getByRole("button", { name: "Test and connect" }));
+    await screen.findByText("Connected. The notebook uses it.");
+    expect(calls.find(c => c.body && c.route === "provider")?.body).toEqual({ url: saved.url, key: "", model: saved.model, routines: true });
+  });
+
+  it("keeps a new form on OpenRouter and requires a key", async () => {
+    serve({ ...supportingRoutes, provider: () => [200, { configured: false, key: false }] });
+    settings();
+    expect(await screen.findByLabelText("Your AI service")).toHaveValue("openrouter");
+    expect(screen.getByLabelText("Key")).toBeRequired();
+  });
+
+  it.each([
+    ["https://edge.openrouter.ai/v1", "openrouter", "OpenRouter"],
+    ["https://api.openai.com/v1", "openai", "OpenAI"],
+    ["https://ai.example.test/v1", "other", "Another service"],
+  ])("classifies the saved URL %s as %s", async (url, service, label) => {
+    serve({ ...supportingRoutes, provider: () => [200, { configured: true, url, model: "fictional/model", key: true }] });
+    settings();
+    const select = await screen.findByLabelText("Your AI service") as HTMLSelectElement;
+    expect(select).toHaveValue(service);
+    expect(select.selectedOptions[0]).toHaveTextContent(label);
+  });
+
+  it("withholds the form when a successful saved-provider response is malformed", async () => {
+    serve({ ...supportingRoutes, provider: () => [200, { configured: true, url: "https://ai.example.test/v1", key: true }] });
+    settings();
+    expect(await screen.findByRole("alert")).toHaveTextContent(/form is unavailable/);
+    expect(screen.queryByRole("button", { name: "Test and connect" })).toBeNull();
+  });
+
+  it("requires a new key when the saved endpoint changes", async () => {
+    const saved = { configured: true, url: "https://ai.example.test/v1", model: "fictional/model", key: true };
+    serve({ ...supportingRoutes, provider: () => [200, saved] });settings();
+    await screen.findByLabelText("Key (leave it empty to keep the saved one)");
+    fireEvent.change(screen.getByLabelText(/Its address/), { target: { value: "https://other.example.test/v1" } });
+    expect(screen.getByLabelText("Key")).toBeRequired();
+  });
+
+  it("does not present an unconfigured form when the saved connection cannot be read", async () => {
+    serve({ ...supportingRoutes, provider: () => [500, { error: "unreadable" }] });settings();
+    expect(await screen.findByRole("alert")).toHaveTextContent(/form is unavailable/);
+    expect(screen.queryByRole("button", { name: "Test and connect" })).toBeNull();
+  });
+
+  it("shows a saved Another service after the server and Settings reopen", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "godspeed-connect-ai-ui-"));
+    const endpoint = http.createServer((req, res) => { res.setHeader("content-type", "application/json");res.end(JSON.stringify({ choices: [{ message: { content: "Connected" } }] })); });
+    await new Promise<void>(resolve => endpoint.listen(0, "127.0.0.1", resolve));
+    const openServer = () => new Promise<{base:string;close:()=>Promise<void>}>((resolve, reject) => {
+      const script = `import('./server/main.mjs').then(async({createService})=>{const service=await createService({root:process.argv[1],port:0,device:'pc'});console.log(service.address.port);process.on('SIGTERM',async()=>{await service.close();process.exit(0);});})`;
+      const child = spawn(process.execPath, ["--input-type=module", "-e", script, root], { cwd: path.resolve(process.cwd(), ".."), stdio: ["ignore", "pipe", "pipe"] });
+      let stderr = "";child.stderr.on("data", data => stderr += data);child.once("error", reject);child.stdout.once("data", data => { const port = Number(String(data).trim());if(!port)return reject(new Error(stderr || "server did not start"));resolve({ base: `http://127.0.0.1:${port}`, close: () => new Promise(done => { child.once("exit", () => done());child.kill("SIGTERM"); }) }); });
+    });
+    const first = await openServer();
+    const address = `http://127.0.0.1:${(endpoint.address() as any).port}/v1`;
+    const saved = await fetch(first.base + "/api/provider", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url: address, key: "fictional-secret", model: "fictional-model", routines: false }) });
+    expect(saved.ok).toBe(true);await first.close();
+    const reopened = await openServer();
+    const base = reopened.base, nativeFetch = fetch;
+    vi.stubGlobal("fetch", (url: string, init?: RequestInit) => nativeFetch(String(url).startsWith("/api/") ? base + url : url, init));
+    settings();
+    await waitFor(() => expect(screen.getByLabelText("Your AI service")).toHaveValue("other"));
+    expect(screen.getByLabelText(/Its address/)).toHaveValue(address);
+    expect(screen.getByLabelText(/Model, written/)).toHaveValue("fictional-model");
+    expect(screen.getByLabelText(/leave it empty/)).toHaveValue("");
+    expect(document.body).not.toHaveTextContent("fictional-secret");
+    await reopened.close();await new Promise<void>(resolve => endpoint.close(() => resolve()));fs.rmSync(root, { recursive: true, force: true });
+  });
+});
 
 describe("Backup AI in Settings", () => {
   afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
