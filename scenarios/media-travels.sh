@@ -124,15 +124,19 @@ act() {
     fail "the first computer's media library could not say which files it keeps only on this computer"
 
   say "== the first computer is connected to the private copy, and a second computer is made from the copy"
-  address=$(stand_in_github "$work/github")
-  sync_on "$ROOT" configure "$address" >"$EVIDENCE/configure.json" ||
-    fail "Settings' own way of connecting a repository was refused on the first computer"
+  # The owner's own mission control, which the installer made a repository with its first commit,
+  # given the copy on GitHub a person makes for it (scenario-lib.sh stand_in_github_over_ssh).
+  stand_in_github_over_ssh "$work/github"
+  address=$STAND_IN_ADDRESS
+  git -C "$ROOT" remote add origin "$address" || fail "the mission control in $ROOT could not be given its copy on GitHub"
+  notebook_on "$ROOT" sync folder notebook >"$EVIDENCE/join.json" ||
+    fail "godspeed sync folder notebook was refused on the first computer, so there is no mission control carrying its own notebook (what it said is in the step log)"
   sync_round "$ROOT" a "carries the first computer's notebook to the copy"
   git clone -q "$address" "$b" || fail "the second computer could not be set up from the copy on GitHub"
   install_the_stage_line_into "$b" "$B_PORT" "$EVIDENCE/b-install.log"
   read_version "$b"
   cp "$(runtime_of "$b")/version" "$EVIDENCE/b-version" || fail "the second computer's install left no version file behind"
-  notebook_on "$b" sync folder >&2 || fail "godspeed sync folder was refused on the second computer, so it never joined"
+  notebook_on "$b" sync folder notebook >&2 || fail "godspeed sync folder notebook was refused on the second computer, so it never joined"
   sync_round "$b" b "brings the first computer's notebook to the second computer"
   carried_of "$b" "$EVIDENCE/b-carried.txt"
 
