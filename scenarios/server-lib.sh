@@ -334,7 +334,9 @@ server_run_job() { # <label> <job name> <seconds> [accepted statuses, "|" betwee
     fail "the installed routine \"$2\" did not finish within $3 s"
   fi
   server_keep_routine_diagnostics_or_pause "$1" "$id" "$2"
-  cp "$jobs" "$EVIDENCE/job-$1.json"
+  # The kept record names the routine and its last run before the trigger, so a check can hold the
+  # run to the one this trigger made rather than to any earlier success (issue #508).
+  "$NODE" -e 'const fs=require("fs"),source=JSON.parse(fs.readFileSync(process.argv[1],"utf8")),rows=Array.isArray(source)?source:source.data||[];fs.writeFileSync(process.argv[2],JSON.stringify({id:process.argv[3],before_last_run_at:process.argv[4]||null,data:rows},null,2)+"\n")' "$jobs" "$EVIDENCE/job-$1.json" "$id" "$before"
   ended=$("$NODE" -e 'const fs=require("fs"),d=JSON.parse(fs.readFileSync(process.argv[1],"utf8")),rows=Array.isArray(d)?d:d.data||[],j=rows.find(v=>v?.id===process.argv[2]),status=String(j?.last_status??"no status");if(!process.argv[3].split("|").includes(status))process.stdout.write(status+(j?.last_error?": "+String(j.last_error).replace(/\s+/g," ").slice(0,300):""))' "$jobs" "$id" "$accepted")
   server_pause_job "$id" "$1"
   [ -z "$ended" ] || fail "the installed routine \"$2\" ended with $ended"
