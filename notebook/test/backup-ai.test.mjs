@@ -195,7 +195,7 @@ test('the notebook server tries the backup address for its own calls when the ma
   const status=(await call('backup-ai')).data;assert.equal(status.usage.answers,1);assert.ok(status.usage.main_failing_since);
   // Removed, it is gone: the main one's failure is said again.
   const removed=await call('backup-ai/remove',{});assert.equal(removed.data.removed,true);assert.equal(removed.data.configured,false);
-  await assert.rejects(service.domains.provider({kind:'fictional-small-job',contract:'Reply with Connected.'}),/HTTP 401/);
+  await assert.rejects(service.domains.provider({kind:'fictional-small-job',contract:'Reply with Connected.'}),/refused its key/);
   assert.equal(backup.seen.length,2);
   const bad=await call('backup-ai',{url:backup.url,key:'two words',model:'m'});assert.equal(bad.status,400);
  }finally{await service.close();}

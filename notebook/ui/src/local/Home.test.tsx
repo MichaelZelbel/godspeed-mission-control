@@ -31,7 +31,10 @@ function page(withChat: boolean, context: { show: boolean; state?: string | null
       if (init?.method === "POST") { posts.push(JSON.parse(String(init.body))); context = { show: false, state: "skipped" }; }
       return new Response(JSON.stringify(context), { status: 200, headers: { "Content-Type": "application/json" } });
     }
-    return new Response(JSON.stringify({ ...status, count: 0, data: [] }), { status: 200, headers: { "Content-Type": "application/json" } });
+    // Like the server, the status carries the AI check's answer only when asked for it (#573).
+    const { aiProblem, ...always } = status;
+    const checked = new URL(String(url), "http://localhost").searchParams.get("checkAI") === "1";
+    return new Response(JSON.stringify({ ...always, ...(checked ? { aiProblem } : {}), count: 0, data: [] }), { status: 200, headers: { "Content-Type": "application/json" } });
   }));
   render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
     <MemoryRouter initialEntries={["/dashboard"]}>
@@ -119,13 +122,23 @@ describe("the Godspeed card", () => {
   });
   it("says Connecting only while the status is loading", async () => {
     let answer: (r: Response) => void = () => {};
-    vi.stubGlobal("fetch", vi.fn((url: string) => String(url) === "/api/status" ? new Promise<Response>(r => { answer = r; }) : Promise.resolve(new Response(JSON.stringify({ show: false, count: 0, data: [] }), { status: 200, headers: { "Content-Type": "application/json" } }))));
+    vi.stubGlobal("fetch", vi.fn((url: string) => String(url).startsWith("/api/status") ? new Promise<Response>(r => { answer = r; }) : Promise.resolve(new Response(JSON.stringify({ show: false, count: 0, data: [] }), { status: 200, headers: { "Content-Type": "application/json" } }))));
     render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter initialEntries={["/dashboard"]}><Home /></MemoryRouter></QueryClientProvider>);
     expect(await screen.findByText("Connecting…")).toBeInTheDocument();
     answer(new Response(JSON.stringify({ runtimeConfigured: false, assistantProblem: null }), { status: 200, headers: { "Content-Type": "application/json" } }));
     expect(await screen.findByText(/No AI is connected yet\./)).toBeInTheDocument();
     expect(screen.queryByText("Connecting…")).toBeNull();
   });
+  // A key the AI refused, or an AI that cannot be reached, is not "Ready to chat" (#573).
+  for (const [why, aiProblem] of [["a refused key", "The AI at api.example.test refused its key, so it could not be used. Check the key in Settings, Your AI."], ["an unreachable AI", "The AI at 127.0.0.1:9 could not be reached. Check that it is running and this computer is online, and that its address in Settings, Your AI is right."]]) {
+    it(`says ${why} could not be used and links to Settings, Your AI`, async () => {
+      page(false, { show: false }, { runtimeConfigured: true, aiProblem });
+      expect(await screen.findByText("Your AI could not be used")).toBeInTheDocument();
+      expect(screen.getByText(aiProblem, { exact: false })).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: "Open Settings, Your AI" })).toHaveAttribute("href", "/dashboard/settings#connect-ai");
+      expect(screen.queryByText("Ready to chat")).toBeNull();
+    });
+  }
   it("keeps the short status in large type", async () => {
     page(false, { show: false }, { runtimeConfigured: true });
     expect((await screen.findByText("Ready to chat")).className).toContain("text-lg");

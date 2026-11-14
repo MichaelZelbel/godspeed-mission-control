@@ -31,9 +31,11 @@ interface Props {
 }
 
 /**
- * Unified visibility toggle for any AI-touched entity.
- *  - Eye + "AI"     = visible to AI (People, AI Chat, MCP)
- *  - EyeOff + "Hidden" = hidden from all AI surfaces
+ * Unified visibility toggle for any AI-touched entity. Its words say what it does (#573): it read
+ * "AI", and one click hid the note from People, the Note Graph, AI Chat and MCP.
+ *  - Eye + "Hide from AI"      = visible to AI (People, AI Chat, MCP); a click hides it
+ *  - EyeOff + "Hidden from AI" = hidden from all AI surfaces
+ * Icon-only, the same words are its accessible name.
  *
  * For `kind="person"` this flips `is_sensitive` (which also cascades to
  * linked notes/moments/actions). For all other kinds it flips
@@ -92,7 +94,7 @@ export function AiVisibilityButton({ kind, id, hidden, className, iconOnly = fal
       : "Visible to AI: used in People profiles, the Note Graph, AI Chat, and MCP clients. Click to hide.";
 
   const Icon = pending ? Loader2 : optimistic ? EyeOff : Eye;
-  const label = optimistic ? "Hidden" : "AI";
+  const label = optimistic ? "Hidden from AI" : "Hide from AI";
 
   return (
     <>
@@ -106,6 +108,7 @@ export function AiVisibilityButton({ kind, id, hidden, className, iconOnly = fal
               onClick={onClick}
               disabled={pending}
               aria-pressed={optimistic}
+              aria-label={iconOnly ? label : undefined}
               className={cn(
                 "h-7 gap-1.5 px-2 text-xs font-normal",
                 optimistic

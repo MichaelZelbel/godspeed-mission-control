@@ -18,7 +18,7 @@ export type AiKind = "notes" | "contacts" | "moments" | "collection_items" | "ac
  */
 export function useToggleAiVisibility(kind: AiKind) {
   const qc = useQueryClient();
-  return useMutation({
+  const mutation = useMutation({
     mutationFn: async ({ id, visibility }: { id: string; visibility: AiVisibility }) => {
       const { error } = await (supabase as any)
         .from(kind)
@@ -35,16 +35,18 @@ export function useToggleAiVisibility(kind: AiKind) {
       if (kind === "notes") qc.invalidateQueries({ queryKey: ["note", id] });
       qc.invalidateQueries({ queryKey: ["contacts"] });
       qc.invalidateQueries({ queryKey: ["ai_hidden_counts"] });
-      showToast.success(
-        visibility === "hidden"
-          ? "Hidden from AI - excluded from People, Graph, AI Chat & MCP"
-          : "Visible to AI again"
-      );
+      // Hiding is one click on the note's toolbar, so it can be taken back from the toast (#573).
+      if (visibility === "hidden")
+        showToast.success("Hidden from AI - excluded from People, Graph, AI Chat & MCP", {
+          action: { label: "Undo", onClick: () => mutation.mutate({ id, visibility: "visible" }) },
+        });
+      else showToast.success("Visible to AI again");
     },
     onError: (e: any) => {
       showToast.error(e.message ?? "Failed to update AI visibility");
     },
   });
+  return mutation;
 }
 
 /**
@@ -55,7 +57,7 @@ export function useToggleAiVisibility(kind: AiKind) {
  */
 export function useToggleSensitivePerson() {
   const qc = useQueryClient();
-  return useMutation({
+  const mutation = useMutation({
     mutationFn: async ({ id, isSensitive }: { id: string; isSensitive: boolean }) => {
       const { error } = await (supabase as any)
         .from("contacts")
@@ -64,18 +66,19 @@ export function useToggleSensitivePerson() {
       if (error) throw error;
       return { id, isSensitive };
     },
-    onSuccess: ({ isSensitive }) => {
+    onSuccess: ({ id, isSensitive }) => {
       qc.invalidateQueries({ queryKey: ["contacts"] });
       qc.invalidateQueries({ queryKey: ["people"] });
       qc.invalidateQueries({ queryKey: ["ai_hidden_counts"] });
-      showToast.success(
-        isSensitive
-          ? "Marked sensitive - hidden from all AI features"
-          : "No longer sensitive - visible to AI again"
-      );
+      if (isSensitive)
+        showToast.success("Marked sensitive - hidden from all AI features", {
+          action: { label: "Undo", onClick: () => mutation.mutate({ id, isSensitive: false }) },
+        });
+      else showToast.success("No longer sensitive - visible to AI again");
     },
     onError: (e: any) => {
       showToast.error(e.message ?? "Failed to update sensitive flag");
     },
   });
+  return mutation;
 }
