@@ -189,9 +189,6 @@ RUNNER="$HERE/mc-run"
 # The newest file for a goal in a folder, by name (they carry the date), or nothing.
 newest() { ls -1 "$1"/"$2"-*.md 2>/dev/null | sort | tail -1; }
 field() { printf '%s\n' "$1" | sed -n "s/^$2: //p" | head -1; }
-# The first thing in DONE WHEN that looks like a file in the mission control: a path with a slash and a
-# plain-text extension. That file is what gets published when the item verifies and asked for a page.
-path_in() { printf '%s\n' "$1" | grep -oE '[A-Za-z0-9_][A-Za-z0-9_./-]*/[A-Za-z0-9_./-]+\.(md|csv|json|txt|html)' | head -1; }
 # Why an item's finished file must stay private, or nothing when it may become a page. It reads
 # the record as it was before the assistant ran, so a run cannot grant itself a page (#268).
 # POSIX ERE without \b, so it reads the same in BSD grep and Git Bash.
@@ -391,7 +388,9 @@ while IFS=$'\t' read -r ID KIND WHAT; do
   # are not permission: only the item's own record from before the run is (publish_hold). The page
   # is made by whatever command the caller named; a mission control with no such command gets the
   # file and no page.
-  FILE="$(path_in "$DONE_WHEN")"
+  # The file DONE WHEN names, as mc-work reads the path (#571): a pattern of this program's own missed
+  # what mc-work had learned (backslashes, capitals, spaces), so it lives in one place.
+  FILE="$(reg work files "$ID" 2>/dev/null | head -1)"
   URL=""
   if [ -n "$FILE" ] && [ -f "$GODSPEED/$FILE" ] && [ -n "$PUBLISH_CMD" ]; then
     if [ -n "$PAGE_HOLD" ]; then
@@ -416,19 +415,11 @@ reg work check 2>/dev/null | grep -E '^PROBLEM' | sed 's/^/  /' || true
 
 # SAVE IT, if this mission control is a git repository. The register, the run records, the playbooks and any
 # file an item named are added by name; nothing else in the folder is swept up.
-FILES_SCRIPT='
-let s=""; process.stdin.on("data",d=>s+=d).on("end",()=>{
-  let rows=[]; try { rows=JSON.parse(s); } catch(e) {}
-  const re=/[A-Za-z0-9_][A-Za-z0-9_./-]*\/[A-Za-z0-9_./-]+\.(md|csv|json|txt|html)/;
-  for (const r of rows) {
-    if (!r.log || !r.log.some(l=>l.event==="VERIFIED"&&l.date===process.argv[1])) continue;
-    const m=String(r["DONE WHEN"]||"").match(re); if (m) console.log(m[0]);
-  }
-});'
 if [ -d "$GODSPEED/.git" ] && command -v git >/dev/null 2>&1; then
   for d in work goals forecasts attention research routines/work; do [ -e "$GODSPEED/$d" ] && git -C "$GODSPEED" add "$d" >/dev/null 2>&1; done
-  for f in $(reg work list --all --json 2>/dev/null | "$NODE" -e "$FILES_SCRIPT" "$TODAY"); do
-    [ -f "$GODSPEED/$f" ] && git -C "$GODSPEED" add "$f" >/dev/null 2>&1
+  # One name per line, read whole, so a space in a folder or file name stays part of the name.
+  reg work files --verified-on "$TODAY" 2>/dev/null | while IFS= read -r f; do
+    [ -n "$f" ] && [ -f "$GODSPEED/$f" ] && git -C "$GODSPEED" add -- "$f" >/dev/null 2>&1
   done
   if [ -s "$RUNDIR_TOUCHED" ]; then
     sort -u "$RUNDIR_TOUCHED" | while IFS= read -r f; do

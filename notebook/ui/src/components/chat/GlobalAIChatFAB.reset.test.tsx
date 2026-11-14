@@ -39,7 +39,7 @@ afterEach(()=>{cleanup();vi.unstubAllGlobals();});
 
 it('keeps the transcript until Clear is confirmed by the server and sends the new session thereafter',async()=>{
  fireEvent.click(screen.getByRole('button',{name:'Clear conversation'}));
- fireEvent.click(await screen.findByRole('button',{name:'Clear',exact:true}));
+ fireEvent.click(await screen.findByRole('button',{name:'Clear'}));
  await waitFor(()=>expect(finish).toBeTypeOf('function'));
  expect(screen.getByText('Fictional earlier answer')).toBeInTheDocument();
  expect(screen.getByRole('button',{name:'Send'})).toBeDisabled();
@@ -56,7 +56,7 @@ it('keeps the transcript until Clear is confirmed by the server and sends the ne
 
 it('keeps the transcript and shows the reason when the server refuses Clear',async()=>{
  fireEvent.click(screen.getByRole('button',{name:'Clear conversation'}));
- fireEvent.click(await screen.findByRole('button',{name:'Clear',exact:true}));
+ fireEvent.click(await screen.findByRole('button',{name:'Clear'}));
  await waitFor(()=>expect(screen.getByRole('button',{name:'Send'})).toBeDisabled());
  finish(response({error:'Conversation changed before clearing. Reopen it and review the current history.'},409));
  expect(await screen.findByText('Conversation changed before clearing. Reopen it and review the current history.')).toBeInTheDocument();
