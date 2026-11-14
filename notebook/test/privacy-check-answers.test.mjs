@@ -95,3 +95,12 @@ test('Settings shows the status page address whole, and still hides a drive path
   assert.ok(message.endsWith('check https://www.githubstatus.com.'),message);
   assert.equal(userFacing(new Error("Cannot open 'C:\\Users\\ann\\notes' or D:/data/x"),[]),"Cannot open '[path]' or [path]");
 });
+
+// Both refusals keep saying it "could not be verified": the nightly's live check
+// (scenarios/github-privacy-live.mjs) asks GitHub again after a wait only for refusals worded so.
+test('a rate limit and any other answer both say it could not be verified',async t=>{
+  for(const [status,headers] of [[403,{'x-ratelimit-remaining':'0'}],[429,{}],[503,{}]]){
+    const {check}=answering(t,status,headers);
+    await assert.rejects(check(),/could not be verified; no files were uploaded/);
+  }
+});

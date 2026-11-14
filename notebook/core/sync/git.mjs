@@ -151,7 +151,7 @@ export class PrivacyUnverified extends Error {
     if(status===429||(status===403&&(h('x-ratelimit-remaining')==='0'||h('retry-after')!==null))){
       const after=h('retry-after'),reset=h('x-ratelimit-reset');
       const at=after!==null?(/^\d+$/.test(after.trim())?now+Number(after)*1000:Date.parse(after)):reset!==null&&/^\d+$/.test(reset.trim())?Number(reset)*1000:NaN;
-      super('GitHub is limiting requests from this network right now, so it could not be checked that the repository is private; no files were uploaded. '+(Number.isFinite(at)?'Try again after '+new Date(Math.max(at,now)).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',timeZoneName:'short'})+'.':'Try again in an hour.'));
+      super('GitHub is limiting requests from this network right now, so whether the repository is private could not be verified; no files were uploaded. '+(Number.isFinite(at)?'Try again after '+new Date(Math.max(at,now)).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',timeZoneName:'short'})+'.':'Try again in an hour.'));
     }else super('GitHub answered '+status+' when asked whether the repository is private, so its privacy could not be verified; no files were uploaded. Try again later; if it keeps happening, check https://www.githubstatus.com.');
     this.name='PrivacyUnverified';
   }
