@@ -59,6 +59,25 @@ describe("the saved main AI in Settings", () => {
     expect(screen.getByLabelText("Key")).toBeRequired();
   });
 
+  it.each([
+    ["openrouter", "OpenRouter"],
+    ["openai", "OpenAI"],
+    ["other", "Another service"],
+  ])("accepts the server's %s saved-provider service", async (service, label) => {
+    serve({ ...supportingRoutes, provider: () => [200, { configured: true, service, url: service === "other" ? "https://ai.example.test/v1" : `https://${service}.example.test/v1`, model: "fictional/model", key: true }] });
+    settings();
+    const select = await screen.findByLabelText("Your AI service") as HTMLSelectElement;
+    expect(select).toHaveValue(service);
+    expect(select.selectedOptions[0]).toHaveTextContent(label);
+  });
+
+  it("withholds the form when a successful saved-provider response has an unknown service", async () => {
+    serve({ ...supportingRoutes, provider: () => [200, { configured: true, service: "future-service", url: "https://ai.example.test/v1", model: "fictional/model", key: true }] });
+    settings();
+    expect(await screen.findByRole("alert")).toHaveTextContent(/form is unavailable/);
+    expect(screen.queryByRole("button", { name: "Test and connect" })).toBeNull();
+  });
+
   it("requires a new key when the saved endpoint changes", async () => {
     const saved = { configured: true, service: "other", url: "https://ai.example.test/v1", model: "fictional/model", key: true };
     serve({ ...supportingRoutes, provider: () => [200, saved] });settings();
