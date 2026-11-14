@@ -43,12 +43,17 @@ file_first_day_work() {
 # So an error is this day's failure only when it is anything but failed checks of such items: the
 # scenario's own item failing, an item that could not be finished, or a failure that names no item.
 # Whether the round did verified work for the goal is the card check's question, not this one.
+# Only the run of the routine the kept record names, recorded after the scenario's trigger, is this
+# day's run, the same rule own_run_ok holds research and choice to (issue #546).
 work_run_fault() { # <jobs JSON>: prints why the work routine's run does not count, if it does not
   "$NODE" - "$1" "$WORK" "Write a practical household emergency-kit checklist at $RESULT_FILE" <<'NODE'
 const fs=require('fs'),[file,name,ownWhat]=process.argv.slice(2),d=JSON.parse(fs.readFileSync(file,'utf8'));
 const fault=reason=>{console.log(reason);process.exit(0)};
-const job=(Array.isArray(d)?d:d.data||[]).find(j=>j?.title===name||j?.name===name);
+const hasBaseline=d&&!Array.isArray(d)&&Object.hasOwn(d,'before_last_run_at'),baseline=hasBaseline?d.before_last_run_at:undefined;
+if(!d?.id||!hasBaseline||!(baseline===null||typeof baseline==='string'))fault(`the record of the installed routine "${name}" does not say which run the scenario triggered`);
+const job=(d.data||[]).find(j=>j?.id===d.id&&(j.title===name||j.name===name));
 if(!job?.last_run_at)fault(`the installed routine "${name}" has no recorded run`);
+if(baseline!==null&&(job.last_run_at===baseline||Date.parse(job.last_run_at)<=Date.parse(baseline)))fault(`the installed routine "${name}" has no run recorded after the scenario triggered it`);
 if(job.last_status==='ok')process.exit(0);
 const error=String(job.last_error||'').trim(),sentence=/Today's work did not pass its check, so it is not done yet: "(.+?)"\.(?:\s+|$)/y,siblings=[];
 for(let m;sentence.lastIndex<error.length&&(m=sentence.exec(error));)siblings.push(m[1].replace(/\.\.\.$/,''));

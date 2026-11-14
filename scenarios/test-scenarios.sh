@@ -3832,8 +3832,8 @@ first_day_brief_records() { # <folder>: what the brief in brief.txt leaves in Te
   printf '{"data":[{"id":"brief-1","content":%s}]}\n' "$(node -e 'process.stdout.write(JSON.stringify(require("fs").readFileSync(process.argv[1],"utf8")))' "$f/brief.txt")" >"$f/notes-before-reply.json"
   cp "$f/notes-before-reply.json" "$f/notes-after-reply.json"
 }
-first_day_work_run() { # <folder> <last status> <last error>: the work routine beside an ok choice routine
-  node -e 'const [file,status,error]=process.argv.slice(1);require("fs").writeFileSync(file,JSON.stringify({data:[{id:"choice",title:"Daily round: choose today\x27s work",last_run_at:"2026-11-06T10:00:00Z",last_status:"ok"},{id:"work",title:"Daily round: do the work",last_run_at:"2026-11-06T10:05:00Z",last_status:status,last_error:error||null}]})+"\n")' "$1/job-work.json" "$2" "$3"
+first_day_work_run() { # <folder> <last status> <last error> [run at] [baseline, "null" for none]: the work routine's kept record beside an ok choice routine
+  node -e 'const [file,status,error,at,before]=process.argv.slice(1);require("fs").writeFileSync(file,JSON.stringify({id:"work",before_last_run_at:before==="null"?null:before,data:[{id:"choice",title:"Daily round: choose today\x27s work",last_run_at:"2026-11-06T10:00:00Z",last_status:"ok"},{id:"work",title:"Daily round: do the work",last_run_at:at,last_status:status,last_error:error||null}]})+"\n")' "$1/job-work.json" "$2" "$3" "${4:-2026-11-06T10:05:00Z}" "${5:-2026-11-05T10:05:00Z}"
 }
 first_day_good() { # <folder>
   local f=$1 label table sparse
@@ -3907,8 +3907,31 @@ copy "$FD/good" "$FD/work-other-error"
 first_day_work_run "$FD/work-other-error" error "The daily round's work could not start today."
 refuses 'a work run that could not start' first-day "$FD/work-other-error" 'ended with error'
 copy "$FD/good" "$FD/work-never-ran"
-printf '[{"id":"choice","title":"Daily round: choose today\x27s work","last_run_at":"2026-11-06T10:00:00Z","last_status":"ok"}]\n' >"$FD/work-never-ran/job-work.json"
+printf '{"id":"work","before_last_run_at":null,"data":[{"id":"choice","title":"Daily round: choose today\x27s work","last_run_at":"2026-11-06T10:00:00Z","last_status":"ok"}]}\n' >"$FD/work-never-ran/job-work.json"
 refuses 'a first day whose work routine never ran, beside a successful choice' first-day "$FD/work-never-ran" 'has no recorded run'
+# Issue #546: the work run counts only when it is the routine's own run, recorded after the
+# scenario's trigger, as research and choice already are (#508).
+copy "$FD/good" "$FD/work-ok-older-than-trigger"
+first_day_work_run "$FD/work-ok-older-than-trigger" ok '' 2026-11-04T10:05:00Z
+refuses "a work routine whose recorded success is older than the scenario's trigger" first-day "$FD/work-ok-older-than-trigger" 'no run recorded after the scenario triggered it'
+copy "$FD/good" "$FD/work-ok-before-trigger"
+first_day_work_run "$FD/work-ok-before-trigger" ok '' 2026-11-05T10:05:00Z
+refuses "a work routine whose only success is the run before the scenario's trigger" first-day "$FD/work-ok-before-trigger" 'no run recorded after the scenario triggered it'
+copy "$FD/good" "$FD/work-sibling-check-before-trigger"
+first_day_work_run "$FD/work-sibling-check-before-trigger" error "$SIBLING_CHECK" 2026-11-04T10:05:00Z
+refuses "an earlier work run that told only a sibling's failed check" first-day "$FD/work-sibling-check-before-trigger" 'no run recorded after the scenario triggered it'
+copy "$FD/good" "$FD/work-other-routine"
+node -e 'const fs=require("fs"),p=process.argv[1],d=JSON.parse(fs.readFileSync(p,"utf8"));d.id="choice";d.before_last_run_at="2026-11-05T10:00:00Z";d.data[1].last_run_at="2026-11-04T10:05:00Z";fs.writeFileSync(p,JSON.stringify(d))' "$FD/work-other-routine/job-work.json"
+refuses "a work record that names another routine's newer run" first-day "$FD/work-other-routine" 'has no recorded run'
+copy "$FD/good" "$FD/work-no-baseline"
+node -e 'const fs=require("fs"),p=process.argv[1],d=JSON.parse(fs.readFileSync(p,"utf8"));fs.writeFileSync(p,JSON.stringify(d.data))' "$FD/work-no-baseline/job-work.json"
+refuses "a work record that does not say which run the scenario triggered" first-day "$FD/work-no-baseline" 'does not say which run the scenario triggered'
+copy "$FD/good" "$FD/work-first-run"
+first_day_work_run "$FD/work-first-run" ok '' 2026-11-06T10:05:00Z null
+passes "the work routine's first ever run, recorded after the trigger" first-day "$FD/work-first-run" 'answered today'
+copy "$FD/good" "$FD/work-sibling-check-first-run"
+first_day_work_run "$FD/work-sibling-check-first-run" error "$SIBLING_CHECK" 2026-11-06T10:05:00Z null
+passes "a first work run whose only failure is a sibling's check" first-day "$FD/work-sibling-check-first-run" 'answered today'
 # The product's own verified work for the goal, when the daily round did not take the late-filed item.
 copy "$FD/good" "$FD/product-work"
 printf 'ID: W-000-first-day-emergency-kit\nSTATUS: planned\nKEY: first-day-emergency-kit\nWHAT: Write a practical household emergency-kit checklist at work/emergency-kit-checklist.md\nSOURCE: first-day-scenario\n' >"$FD/product-work/work/W-000-first-day-emergency-kit.md"
