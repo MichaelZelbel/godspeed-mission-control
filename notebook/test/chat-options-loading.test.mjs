@@ -26,12 +26,12 @@ async function optionsFrom(t,provider){
 }
 test('with no AI connected the model choices say so rather than naming a connected model',async t=>{
  const {status,options}=await optionsFrom(t);
- assert.equal(status.runtimeConfigured,false);assert.equal(options.connected,false);assert.equal(options.label,'No AI connected');assert.doesNotMatch(JSON.stringify(options),/Connected model/);
+ assert.equal(status.aiConfigured,false);assert.equal(status.runtimeConfigured,false);assert.equal(options.connected,false);assert.equal(options.label,'No AI connected');assert.doesNotMatch(JSON.stringify(options),/Connected model/);
 });
 test('a connected AI keeps its own model choices',async t=>{
  const provider=Object.assign(async()=>({reply:'ok'}),{options:async()=>({current:'fictional-model',models:[{id:'fictional-model',efforts:['low','high']}]})});
  const {status,options}=await optionsFrom(t,provider);
- assert.equal(status.runtimeConfigured,true);assert.equal(options.connected,true);assert.equal(options.current,'fictional-model');assert.deepEqual(options.models,[{id:'fictional-model',efforts:['low','high']}]);
+ assert.equal(status.aiConfigured,true);assert.equal(status.runtimeConfigured,true);assert.equal(options.connected,true);assert.equal(options.current,'fictional-model');assert.deepEqual(options.models,[{id:'fictional-model',efforts:['low','high']}]);
 });
 test('a connected AI without a model list is still shown as the connected model',async t=>{
  const {options}=await optionsFrom(t,async()=>({reply:'ok'}));
