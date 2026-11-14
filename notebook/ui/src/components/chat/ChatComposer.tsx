@@ -10,12 +10,22 @@ export default function ChatComposer(p:Props){
   const picker=useRef<HTMLInputElement>(null),recorder=useRef<MediaRecorder|null>(null),recordingTimer=useRef<ReturnType<typeof setTimeout>>(),audioRequest=useRef<AbortController|null>(null),playbackUtterance=useRef<SpeechSynthesisUtterance|null>(null),mounted=useRef(true),draft=useRef(p.value);
   draft.current=p.value;
   const [uploading,setUploading]=useState(false),[listening,setListening]=useState(false),[transcribing,setTranscribing]=useState(false),[speaking,setSpeaking]=useState(false),[dragging,setDragging]=useState(false);
-  const [options,setOptions]=useState<{current:string;label?:string;connected?:boolean;models:Array<{id:string;efforts:string[]}>}>({current:'',models:[]});
+  const [options,setOptions]=useState<{current:string;label?:string;connected?:boolean;problem?:string;models:Array<{id:string;efforts:string[]}>}>({current:'',models:[]});
   const [modelError,setModelError]=useState(''),[modelAttempt,setModelAttempt]=useState(0);
   const canRecord=!!navigator.mediaDevices?.getUserMedia&&typeof MediaRecorder!=='undefined';
   useEffect(()=>{let alive=true;const request=new AbortController();setModelError('');loadChatOptions({signal:request.signal}).then(data=>{if(alive){setOptions(data);p.onModel(data.current);}}).catch(e=>{if(alive)setModelError(e.message||'Model choices could not be loaded. Try again.');});return()=>{alive=false;request.abort();};},[modelAttempt]);
+  // A chat left open while the person connected an AI, changed its key or fixed it shows that when they come back to
+  // the tab and after each reply (#573). The person's own model choice stays while it is still offered.
+  const chosen=useRef(p.model);chosen.current=p.model;
+  const refreshOptions=useRef<()=>void>(()=>{});
+  refreshOptions.current=()=>{if(modelError||!options.models.length)return;loadChatOptions().then(data=>{if(!mounted.current)return;setOptions(data);if(!data.models.some(m=>m.id===chosen.current))p.onModel(data.current);}).catch(()=>{});};
+  useEffect(()=>{const back=()=>{if(document.visibilityState==='visible')refreshOptions.current();};window.addEventListener('focus',back);document.addEventListener('visibilitychange',back);return()=>{window.removeEventListener('focus',back);document.removeEventListener('visibilitychange',back);};},[]);
+  const wasBusy=useRef(p.busy);
+  useEffect(()=>{if(wasBusy.current&&!p.busy)refreshOptions.current();wasBusy.current=p.busy;},[p.busy]);
   useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;clearTimeout(recordingTimer.current);audioRequest.current?.abort();if(recorder.current?.state==='recording')recorder.current.stop();recorder.current?.stream.getTracks().forEach(t=>t.stop());window.speechSynthesis?.cancel();};},[]);
   const noAI=options.connected===false,efforts=noAI?[]:options.models.find(m=>m.id===p.model)?.efforts||[];
+  const modelLabel=(id:string)=>noAI?'No AI connected':options.problem?'AI could not be used':id||options.label||'Connected model';
+  const modelTitle=!options.models.length?undefined:options.problem||modelLabel(p.model);
   const addFiles=async(list:FileList|File[])=>{
     const files=Array.from(list);if(p.files.length+files.length>10){p.onError('Attach up to 10 files per message');return;}
     if(files.reduce((n,f)=>n+f.size,0)>20*1024*1024){p.onError('Choose files totaling at most 20 MB');return;}
@@ -62,8 +72,9 @@ export default function ChatComposer(p:Props){
     <div className="flex flex-nowrap items-center gap-1 px-2 pb-2" data-chat-toolbar>
       <input ref={picker} type="file" multiple className="hidden" accept="image/png,image/jpeg,image/webp,image/gif,application/pdf,.txt,.md,.csv,.json,.log,.xml,.html,.yaml,.yml" aria-label="Choose attachments" onChange={e=>{if(e.target.files)void addFiles(e.target.files);}}/>
       <Button variant="ghost" size="icon" className="h-11 w-11 shrink-0" aria-label="Add files" title="Add images, PDFs, or text files" disabled={p.busy||uploading} onClick={()=>picker.current?.click()}>{uploading?<Loader2 className="h-5 w-5 animate-spin"/>:<Plus className="h-5 w-5"/>}</Button>
-      <select aria-label="Model" title={p.model} className="h-11 flex-1 basis-0 rounded-md bg-transparent text-xs px-1 min-w-0 max-w-40 focus-visible:outline focus-visible:outline-primary" disabled={p.busy||noAI||!options.models.length} value={p.model} onChange={e=>{p.onModel(e.target.value);p.onEffort('');}}>{!options.models.length&&<option value="">{modelError?'Model choices unavailable':'Loading models...'}</option>}{options.models.map(m=><option key={m.id} value={m.id}>{noAI?'No AI connected':m.id||options.label||'Connected model'}</option>)}</select>
-      <select aria-label="Reasoning effort" title={p.effort||'Automatic effort'} className="h-11 flex-1 basis-0 min-w-0 rounded-md bg-transparent text-xs px-1 max-w-24" value={p.effort} disabled={p.busy||!efforts.length} onChange={e=>p.onEffort(e.target.value)}><option value="">Auto</option>{efforts.map(e=><option key={e} value={e}>{e==='none'?'None':e[0].toUpperCase()+e.slice(1)}</option>)}</select>
+      {/* A label longer than the room it has ends in an ellipsis, and the whole of it is the tooltip (#573). */}
+      <select aria-label="Model" title={modelTitle} className="h-11 min-w-0 max-w-56 flex-auto truncate rounded-md bg-transparent text-xs px-1 focus-visible:outline focus-visible:outline-primary" disabled={p.busy||noAI||!options.models.length} value={p.model} onChange={e=>{p.onModel(e.target.value);p.onEffort('');}}>{!options.models.length&&<option value="">{modelError?'Model choices unavailable':'Loading models...'}</option>}{options.models.map(m=><option key={m.id} value={m.id}>{modelLabel(m.id)}</option>)}</select>
+      {efforts.length>0&&<select aria-label="Reasoning effort" title={p.effort||'Automatic effort'} className="h-11 min-w-0 max-w-24 flex-auto truncate rounded-md bg-transparent text-xs px-1" value={p.effort} disabled={p.busy} onChange={e=>p.onEffort(e.target.value)}><option value="">Auto</option>{efforts.map(e=><option key={e} value={e}>{e==='none'?'None':e[0].toUpperCase()+e.slice(1)}</option>)}</select>}
       <div className="flex shrink-0 items-center ml-auto">
         <Button variant="ghost" size="icon" className={'h-11 w-11 '+(listening?'text-red-500':'')} aria-pressed={listening} aria-label={transcribing?'Transcribing recording':listening?'Stop dictation':'Dictate message'} title={canRecord?'Dictate message':'Microphone access requires HTTPS or localhost'} disabled={!canRecord||p.busy||transcribing} onClick={()=>void dictate()}>{transcribing?<Loader2 className="h-4 w-4 animate-spin"/>:<Mic className="h-4 w-4"/>}</Button>
         <Button variant="ghost" size="icon" className={'h-11 w-11 '+(speaking?'text-primary':'')} aria-pressed={speaking} aria-label={speaking?'Stop reading aloud':'Read last reply aloud'} title={window.speechSynthesis?(speaking?'Stop reading aloud':'Read last reply aloud'):'Playback is unavailable in this browser'} disabled={!p.reply||!window.speechSynthesis} onClick={playback}>{speaking?<Volume2 className="h-4 w-4"/>:<VolumeX className="h-4 w-4"/>}</Button>
