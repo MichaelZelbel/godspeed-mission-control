@@ -181,3 +181,91 @@ Setup: as H-03 (five invented sentences among fifteen), with no brief made yet t
 Steps: ask the chat for "today's brief". Then ask for "the brief again". Then run the morning briefing routine the same day.
 Expect: the chat's brief carries all ten grounded sentences and nothing of the five invented ones; the second ask gives the same text with no new request to the AI to write a brief; the morning does not send a second, different brief. Judge: `judges/brief_judge.py` with `expect_single_brief: true`.
 Author: writer, 2026-11-13, area being built: the brief when the source check refuses part of the draft; escaped class "repaired on one path, not every path"
+
+## H-19 A fresh install with no AI says so the same way everywhere on the first page
+Protects: MISSION ("thinks with the person's own AI", connected in Settings, Your AI); merged #552/#555 (the Godspeed card says "No AI is connected yet" with a link to Settings, Your AI; "Connecting…" shows only while the status loads); one state, every surface
+Touches: dashboard, Godspeed card, global chat, chat composer (model and effort pickers), sidebar
+Setup: a fresh folder, no AI connected by any route, frontend built.
+Steps: in the browser, open the Dashboard at 1280x800 and at 375x800. Wait until no request has been in flight for 3 seconds. Read every place on that screen that says anything about the AI: the Godspeed card, the global chat (open it the way the page offers, and read its header, empty-chat text and anything above the composer), the composer's model picker and effort picker (their visible labels and every option each lists when opened), and any sidebar or banner item about the AI.
+Expect: the Godspeed card says "No AI is connected yet" and its link opens Settings at Your AI (`/dashboard/settings#connect-ai`). No surface on the screen claims a connection: no "Connected", "Connected model", "Connected to …", no model name offered as if it were in use, no "Connecting…" once loading is over, no blank or placeholder picker label that reads as a working AI. Every surface that states the AI's state says the same thing as the card, in words a person reads the same way. No label is cut off at either width. Judge: `judges/ai_state_judge.py`, one snapshot per width, state "none", required card, global chat status, model picker, effort picker.
+Author: writer, 2026-11-14, escaped defect #563 (class: one install state must read the same on every surface visible at that moment)
+
+## H-20 Every chat, wherever it is opened, says no AI is connected before anything is sent
+Protects: one state, every surface; docs/chat-design.md (the same composer serves the full chat page, the floating chat, a note's chat and the pop-out, with model and effort on one row)
+Touches: global chat, note chat, collection chat, pop-out chat, composer pickers
+Setup: a fresh folder with one note and one collection made through the app, no AI connected, frontend built.
+Steps: in the browser, without sending anything, open in turn: the global chat from the Dashboard, the full chat page if the app has one, the note's chat, the collection's chat, and the pop-out (separate window) of each of those chats the app offers one for. In each, after loading settles, read the chat's header, empty-chat text and the composer's model and effort pickers with their options.
+Expect: every chat and every pop-out reads the same state as the Dashboard's card in H-19: no AI is connected yet, with the way to Settings, Your AI reachable from it or from the card. None shows "Connected model", "Connected", a model name as the chosen model, or "Connecting…" after loading. A chat opened from a note or a collection is not more optimistic than the global one, and a pop-out is not more optimistic than the chat it came from. Judge: `judges/ai_state_judge.py`, one snapshot per chat, state "none".
+Author: writer, 2026-11-14, escaped defect #563 (class: same state on every surface; each chat is its own surface)
+
+## H-21 Sending a message anyway gets the same plain answer in every chat
+Protects: merged #552/#555 refusal ("No AI is connected yet. Connect your AI service in Settings, Your AI, then ask Godspeed again."); README ("When your assistant has no AI of its own, the chat names the Settings box as Settings shows it"); misuse
+Touches: global chat, note chat, collection chat, pop-out chat, HTTP chat route
+Setup: as H-20. A stand-in AI server runs locally but is NOT connected in the app; it records any request that reaches it.
+Steps: send "What should I do today?" from the global chat, the note's chat, the collection's chat and from a pop-out chat; also send one message with a small text file attached. Then send the same message through the HTTP route the chat page itself uses. After each, read the reply and the composer.
+Expect: every reply is exactly the refusal sentence above, word for word, and nothing else: no "The AI request failed", no AI company reason, no raw error, status code, JSON or stack, no endless typing indicator. The composer is usable again right after (send enabled, the pickers still not claiming a connection). The HTTP route answers the same sentence in words. The stand-in AI records zero requests. The Dashboard's card still says "No AI is connected yet" afterwards. Judge: `judges/ai_state_judge.py`, one reply surface per chat plus the HTTP reply, state "none".
+Author: writer, 2026-11-14, escaped defect #563 (class: the reply to a message and the screens around it state the same thing)
+
+## H-22 Picking a model or an effort with no AI connected changes nothing that claims a connection
+Protects: docs/chat-design.md ("Model choices come from the configured Hermes profile"); one state, every surface; misuse
+Touches: composer model picker, effort picker, global chat, note chat
+Setup: as H-20.
+Steps: in the global chat and in the note's chat, open the model picker and choose every option it offers, one at a time; do the same with the effort picker (including Auto). After each choice, read both pickers, the chat's header and the Dashboard's card (reload it), then send one message.
+Expect: the model picker offers no model that is not from a connected AI (with none connected, no model names at all, or an option that says in words that no AI is connected); no choice turns any label into "Connected", "Connected model" or a model name presented as in use; choosing never shows an error. Effort choices work or are plainly unavailable, never a broken control. Every send still gets the refusal sentence word for word, and the card still says "No AI is connected yet". Judge: `judges/ai_state_judge.py`, one snapshot per choice, state "none".
+Author: writer, 2026-11-14, escaped defect #563 (class: a control that shows the AI's state must not claim one the install does not have)
+
+## H-23 Connecting an AI in Settings changes every surface, with nothing stale left
+Protects: MISSION (the person connects their own AI in Settings, Your AI); README ("Connecting your AI in Settings now also connects your routines"); merged #552/#555; sequences
+Touches: Settings Your AI, dashboard card, global chat, note chat, collection chat, pop-out chat, composer pickers
+Setup: as H-20, plus a stand-in AI the verifier runs that answers like an OpenAI-compatible service with one model named "standin-model-1" and records every request. Keep three browser tabs open: the Dashboard with the global chat open, the note's chat, and one pop-out chat.
+Steps: in a fourth tab, connect the stand-in AI in Settings, Your AI, the way a person connects an API key or endpoint, with "Use it for the daily routines and the chat too" left as it is by default (tick it if it is not). Then: (1) open fresh the Dashboard, the global chat, the note's chat, the collection's chat and a new pop-out, and read every surface of H-19 and H-20; (2) in the three tabs left open from before, send one message each without reloading, then read those tabs.
+Expect: (1) on the very first load after connecting, no surface anywhere says "No AI is connected yet", "Connect your AI", "Connecting…" (after loading) or anything about a refused key; the Godspeed card says the AI is connected; the model picker shows "standin-model-1" (or the model the person chose in Settings), never the placeholder "Connected model". (2) every message from a tab opened before the change reaches the stand-in AI (it records each) and its answer is shown; no tab answers with the refusal sentence, and after that send none of the three tabs still shows no-AI text. Judge: `judges/ai_state_judge.py`, state "connected", `expect_model: "standin-model-1"`, one snapshot for the fresh loads and one per old tab.
+Author: writer, 2026-11-14, escaped defect #563 (class: the state changes everywhere when it changes, not only on the screens a change touched)
+
+## H-24 An AI that refuses its key reads the same on every surface
+Protects: README (a refused sign-in or key is told in plain words; "A failed chat request says what to do next" and tells you to check the AI connection in Settings); merged #506; one state, every surface
+Touches: dashboard card, global chat, note chat, collection chat, pop-out chat, composer pickers, Settings Your AI
+Setup: a fresh folder, a note and a collection; the stand-in AI is connected in Settings, Your AI while it accepts the key, then switched by the verifier to answer every request with an authentication refusal (HTTP 401 with an "invalid API key" message).
+Steps: open the Dashboard, the global chat, the note's chat, the collection's chat and a pop-out; read every surface of H-19 and H-20 after loading; send one message from each chat.
+Expect: every surface says the same state: an AI is connected but its key (or sign-in) was refused, and points to Settings to fix it. None says "No AI is connected yet" (one is connected), and none claims a working connection ("Connected", "Ready", a model shown as in use with nothing saying the key is refused). Every chat's reply says the key was refused and to check Settings, in words, the same in every chat, with no raw status code, JSON or stack, no endless indicator. Judge: `judges/ai_state_judge.py`, state "refused".
+Author: writer, 2026-11-14, escaped defect #563 with the state from #506 (class: one install state, every surface)
+
+## H-25 Fixing the key, and losing it again, flips every surface each time
+Protects: one state, every surface; sequences; README (the daily connection check notices a key refused and the deadline closes the first day it works again: the state is not frozen)
+Touches: Settings Your AI, dashboard card, all chats, composer pickers
+Setup: H-24 completed (key refused).
+Steps: (1) make the stand-in AI accept the key again and re-save the connection in Settings, Your AI as a person would; read every surface and send one message from each chat. (2) Then switch the stand-in AI back to refusing the key, without touching Settings; send one message from the global chat, then read every surface again.
+Expect: after (1), every surface reads connected exactly as H-23 expects, with no "refused", "No AI is connected yet" or "Connecting…" left anywhere, and each message reaches the stand-in AI. After (2), the reply says the key was refused; by the next load of each surface, no surface still claims a working connection while the key is refused, and none says "No AI is connected yet". Judge: `judges/ai_state_judge.py`, snapshots "connected" then "refused".
+Author: writer, 2026-11-14, escaped defect #563 (class: every surface follows a change of state, in both directions)
+
+## H-26 A restart keeps every surface in agreement, and "Connecting…" never sticks
+Protects: merged #552/#555 ("Connecting…" shows only while the status loads); old behaviour still works across a restart
+Touches: dashboard card, all chats, composer pickers, notebook restart
+Setup: two fresh folders: one with no AI connected, one with the stand-in AI connected as H-23.
+Steps: for each folder, restart the notebook on the same folder and port range, open the Dashboard and each chat of H-20 the moment the notebook answers its health check, and read every surface once loading has settled; also stop the stand-in AI for the connected folder before one reload and read the card while it is loading and after.
+Expect: on the no-AI folder every surface reads as H-19/H-20 after the restart; on the connected folder every surface reads as H-23 (1). "Connecting…" may appear only while a status request is in flight and is gone once it settles, on every surface, in every case, including when the stand-in AI is down: then the surfaces say in words that the AI could not be reached or tell the person to check Settings, never "No AI is connected yet" and never a permanent "Connecting…". Judge: `judges/ai_state_judge.py` for the settled snapshots.
+Author: writer, 2026-11-14, escaped defect #563 (class: one state, every surface; old behaviour across restart)
+
+## H-27 The words the person reads are the same over HTTP and on the built pages
+Protects: one state, every surface and every route; the person never gets a different answer depending on how the chat is reached
+Touches: HTTP routes the pages use for AI status and chat, built pages
+Setup: a fresh folder with no AI connected, frontend built.
+Steps: watch the requests the built Dashboard and a note's chat make while loading and while sending a message. Repeat each of those requests directly with a plain HTTP client. Then connect the stand-in AI as H-23 and repeat both the page loads and the direct requests.
+Expect: what the direct requests answer about the AI's state agrees with what the pages show at the same moment: before connecting, nothing reports a connected AI or a usable model, and the chat request answers with the refusal sentence word for word; after connecting, nothing still reports no AI, and the chat request reaches the stand-in AI. No route answers with a bare error, an empty body or a stack in either state.
+Author: writer, 2026-11-14, escaped defect #563 (class: one state, every surface; negative space over every route)
+
+## H-28 An AI connected only for Settings is explained the same in every chat
+Protects: README ("When the AI you connected in Settings was not set up for your assistant, because Use it for the daily routines and the chat too was unticked, the chat says so and how to fix it, instead of failing on your first message"); one state, every surface
+Touches: Settings Your AI, global chat, note chat, collection chat, pop-out chat, composer pickers
+Setup: a fresh folder with a note and a collection; the stand-in AI connected in Settings, Your AI with "Use it for the daily routines and the chat too" unticked.
+Steps: open each chat of H-20, read its header and pickers after loading, and send one message from each.
+Expect: every chat gives the same explanation that the connected AI is not set up for the assistant and how to fix it (the box in Settings, named as Settings shows it); none answers with "The AI request failed" or a raw error, none says "No AI is connected yet" in one chat while another says something else, and no picker presents a model as ready to answer while the chat refuses. Then ticking the box in Settings makes every chat's next message reach the stand-in AI and leaves no explanation text behind on any surface.
+Author: writer, 2026-11-14, escaped defect #563 (class: one state, every surface, for each state the install can be in)
+
+## H-29 At phone width every state label is read whole
+Protects: one state, every surface: a state cut to "Connect…" or "No AI is…" reads as a different state; docs/chat-design.md (model and effort selectors shrink within their column, Auto keeps room)
+Touches: composer model and effort pickers, Godspeed card, chat headers, pop-out
+Setup: three fresh folders: no AI connected; stand-in AI connected; stand-in AI connected and refusing its key (as H-24).
+Steps: in the browser at 375x800 and at 1280x800, open the Dashboard with the global chat and a note's chat; read each state label (card, chat header, model picker, effort picker) and measure whether its text is cut (scrollWidth larger than clientWidth, or an ellipsis).
+Expect: in every folder and at both widths, each state label shows its whole text, and the whole text reads the same state as the card. No picker label is truncated into something that reads as a different state. Judge: `judges/ai_state_judge.py` with `clipped` recorded per surface, one snapshot per folder and width.
+Author: writer, 2026-11-14, escaped defect #563 (class: one state, every surface, at every width)
