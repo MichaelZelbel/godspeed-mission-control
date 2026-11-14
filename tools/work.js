@@ -117,7 +117,7 @@ const pathSteps = (p) => {
 // A first step with anything but a plain name in it (`OUT=`, `--path=`, `$GODSPEED_ROOT`, `~`, `C:`)
 // is not a folder of the mission control: the path proper starts after its last such character.
 const GLUED_PREFIX = /^[^\\/]*[^A-Za-z0-9_. \-\\/]/;
-const runLogFolderOf = (candidate) => {
+const runLogFolderAt = (candidate) => {
   const anchored = /^[\\/]/.test(candidate) || GLUED_PREFIX.test(candidate);
   const steps = pathSteps(candidate.replace(GLUED_PREFIX, ''));
   const starts = anchored || steps[0] === '..' ? steps.map((_, i) => i) : [0];
@@ -127,9 +127,19 @@ const runLogFolderOf = (candidate) => {
   }
   return '';
 };
-// The first path in the text that lies in a run-log folder, as written, with that folder; or null.
+// A path may also be glued after an earlier one (`work/a.md,routines/work/b.md`, `a:routines/...`,
+// `x+routines/...`, `OUT=routines/...`): the text after every character that is not part of a plain
+// path is tried as a path of its own, so a run-log path refused alone stays refused when glued on.
+const PATH_GLUE = /[^A-Za-z0-9_. \-\\/]/g;
+const runLogFolderOf = (candidate) => {
+  const starts = [0, ...[...candidate.matchAll(PATH_GLUE)].map(m => m.index + 1)];
+  for (const i of starts) { const p = candidate.slice(i), folder = runLogFolderAt(p); if (folder) return { path: p, folder }; }
+  return null;
+};
+// The first path in the text that lies in a run-log folder, as written (from where it is glued on),
+// with that folder; or null.
 const runLogPath = (text) => {
-  for (const written of pathCandidates(text)) { const folder = runLogFolderOf(written); if (folder) return { path: written, folder }; }
+  for (const written of pathCandidates(text)) { const hit = runLogFolderOf(written); if (hit) return hit; }
   return null;
 };
 const ORDER = ['ID', 'STATUS', 'KIND', 'KEY', 'GOAL', 'CARD', 'TOUCHES', 'WHAT', 'DONE WHEN', 'CHECK', 'OWNER', 'NEEDS', 'OUTWARD', 'PUBLISH', 'ATTEMPTS', 'MAX ATTEMPTS',

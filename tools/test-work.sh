@@ -790,6 +790,17 @@ contains "a CHECK that climbs out of a run-log folder into work/ files" "$OUT" "
 OUT="$(hw file --learn "What goes in a grab bag?" --path 'work\answers\a.md' --key learn-back-path --source test 2>&1)"
 contains "a learn --path written with backslashes names a file and files" "$OUT" ": planned"
 missing "  and is not told it names no file" "$OUT" "must name a file"
+# A run-log path glued after an earlier path is still refused, as on main (#551 review)
+gi=0
+for glue in ',' ':' '+' '='; do
+  gi=$((gi+1))
+  OUT="$(hw file --what "Draft the kit checklist" --done-when "the checklist is written in work/a.md${glue}routines/work/2026-09-13/kit.md" --key "kit-glued-$gi" --source test 2>&1)"
+  check "a DONE WHEN with a run-log path glued on by '$glue' is refused" "$?" "1"
+  contains "  naming that path and the folder the cleanup empties" "$OUT" "names routines/work/2026-09-13/kit.md, inside routines/work/, a run-log folder"
+  check "  and nothing is filed" "$(idof "kit-glued-$gi")" "none"
+done
+OUT="$(hw file --what "Draft the kit list" --done-when "the kit list is written in work/kit-list.md" --check "cmp work/kit-list.md,work/a+b/routines/work/kit.md" --key kit-glued-look-alike --source test 2>&1)"
+contains "a path glued on that only looks like a run-log folder files" "$OUT" ": planned"
 # One list of run-log folders (#551): mc-work refuses each folder the cleanup sweeps, and no other.
 CLEANUP="$HERE/../notebook/core/cleanup.mjs"
 if [ -f "$CLEANUP" ]; then
