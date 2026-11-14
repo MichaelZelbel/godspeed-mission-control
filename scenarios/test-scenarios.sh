@@ -3046,6 +3046,86 @@ if [ -n "$SI_SSH_BARE" ] && [ -z "$(git -C "$SI_SSH_BARE" for-each-ref 2>/dev/nu
 else
   bad "stand_in_github_over_ssh made a repository with history ($SI_SSH)"
 fi
+# Whether a stand-in repository is private is answered on this machine, for every Node the scenario
+# starts, and nothing else is: api.github.com answered something other than 404 to the second
+# computer of two-machines-move-at-once on a night it was rate-limited (issue #557).
+for shape in stand_in_github stand_in_github_over_ssh; do
+  SI_ANSWER=$(HOME="$SI_HOME" GIT_CONFIG_GLOBAL="$SI_HOME/gitconfig" SCENARIO=stand-in-test GODSPEED_SCENARIO_WORK="$TMP/si-privacy" bash -c '
+    . "$1/scenarios/scenario-lib.sh"; '"$shape"' "$2/privacy-'"$shape"'" >/dev/null 2>&1
+    stand_in_answers_privacy
+    owner=${STAND_IN_ADDRESS#*github.com[:/]}; owner=${owner%%/*}
+    printf "%s|%s|" "$owner" "$NODE_OPTIONS"
+    node -e "const real=globalThis.fetch.toString();
+      fetch(\"https://api.github.com/repos/$owner/x\").then(r=>console.log(r.status+\"|\"+(real.includes(\"api.github.com\")?\"wrapped\":\"plain\")))"
+    ' _ "$ROOT" "$TMP" 2>&1)
+  SI_IMPORT="--import=file://$TMP/si-privacy/stand-in-privacy/github-404.mjs"
+  if [ "$SI_ANSWER" = "godspeed-scenario-stand-in|$SI_IMPORT|404|wrapped" ]; then
+    ok "$shape has the stand-in owner's repositories answered 404 here, once, for every Node it starts"
+  else
+    bad "$shape left the stand-in's privacy to api.github.com or loaded the answer twice ($SI_ANSWER)"
+  fi
+done
+
+# The one check that still asks the real api.github.com (github-privacy-live.mjs, issue #557) runs
+# the product's own verifyRemote. Here GitHub is answered on this machine: a rate limit's 403 is a
+# FAIL naming 403 and the rate-limit headers after its tries, a public repository taken as private
+# is a FAIL at once, and the right answers are a PASS. No network.
+GP=$TMP/github-privacy
+mkdir -p "$GP"
+cat >"$GP/403.mjs" <<'STUB'
+import fs from 'node:fs';
+globalThis.fetch = async url => { fs.appendFileSync(process.env.GP_ASKED, url + '\n');
+  return new Response('{"message":"API rate limit exceeded"}', { status: 403, headers: { 'x-ratelimit-limit': '60', 'x-ratelimit-remaining': '0', 'x-ratelimit-reset': '1763120000' } }); };
+STUB
+cat >"$GP/right.mjs" <<'STUB'
+globalThis.fetch = async url => new Response('{}', { status: String(url).endsWith('/octocat/Hello-World') ? 200 : 404 });
+STUB
+cat >"$GP/public-as-private.mjs" <<'STUB'
+import fs from 'node:fs';
+globalThis.fetch = async url => { fs.appendFileSync(process.env.GP_ASKED, url + '\n'); return new Response('{}', { status: 404 }); };
+STUB
+gp() { # <stub> <out>: the check against the product in this checkout, GitHub answered by the stub
+  GP_ASKED="$GP/asked-$1" GODSPEED_PRIVACY_WAITS='0 0' NODE_OPTIONS="--import=file://$GP/$1.mjs" \
+    node "$ROOT/scenarios/github-privacy-live.mjs" "$ROOT/notebook/core/sync/git.mjs" >"$2" 2>/dev/null
+}
+if gp 403 "$GP/403.out"; then
+  bad "github-privacy-live passed while GitHub answered 403 ($(cat "$GP/403.out"))"
+elif grep -q '^FAIL .*answered 403 .*x-ratelimit-remaining: 0' "$GP/403.out" && [ "$(grep -c . "$GP/asked-403")" = 3 ]; then
+  ok "github-privacy-live fails on GitHub's 403 after 3 tries, naming 403 and the rate-limit headers"
+else
+  bad "github-privacy-live did not fail on 403 with GitHub's status after 3 tries ($(cat "$GP/403.out"); asked $(grep -c . "$GP/asked-403" 2>/dev/null) times)"
+fi
+if gp public-as-private "$GP/pp.out"; then
+  bad "github-privacy-live passed while the product took a public repository as private ($(cat "$GP/pp.out"))"
+elif grep -q '^FAIL .*let a public repository through as private' "$GP/pp.out" && [ "$(grep -c . "$GP/asked-public-as-private")" = 1 ]; then
+  ok "github-privacy-live fails at once when the product lets a public repository through as private"
+else
+  bad "github-privacy-live did not fail at once on a public repository taken as private ($(cat "$GP/pp.out"))"
+fi
+if gp right "$GP/right.out" && grep -q '^PASS .*public repository (200).*nobody has (404)' "$GP/right.out"; then
+  ok "github-privacy-live passes when GitHub answers 200 for the public repository and 404 for the missing one"
+else
+  bad "github-privacy-live did not pass on GitHub's right answers ($(cat "$GP/right.out"))"
+fi
+# live_github_privacy keeps the stand-in's answer out of the live check: the Node it starts gets an
+# empty NODE_OPTIONS, and the check's FAIL line is the scenario's FAIL line.
+cat >"$GP/fake-node" <<'FAKE'
+#!/usr/bin/env bash
+printf '%s\n' "${NODE_OPTIONS-unset}" >"$GP_SEEN"
+echo "FAIL the live GitHub privacy check, asked about a public repository: GitHub answered 403"
+exit 1
+FAKE
+chmod +x "$GP/fake-node"
+GP_LINE=$(GP_SEEN="$GP/seen" SCENARIO=gp-test GODSPEED_SCENARIO_WORK="$GP/work" bash -c '
+  . "$1/scenarios/scenario-lib.sh"; stand_in_answers_privacy; NODE=$2/fake-node
+  mkdir -p "$2/root/.godspeed/integrated-runtime"; echo v >"$2/root/.godspeed/integrated-runtime/version"
+  live_github_privacy "$2/root" "$2/live.txt"' _ "$ROOT" "$GP" 2>/dev/null)
+if [ "$(cat "$GP/seen" 2>/dev/null)" = '' ] && [ -f "$GP/seen" ] &&
+  [ "$GP_LINE" = "FAIL gp-test: the live GitHub privacy check, asked about a public repository: GitHub answered 403" ]; then
+  ok "live_github_privacy runs the check without the stand-in's answer and fails the scenario with its line"
+else
+  bad "live_github_privacy let the stand-in's answer in or lost the check's FAIL line (NODE_OPTIONS: $(cat "$GP/seen" 2>/dev/null); said: $GP_LINE)"
+fi
 
 # ======================================= sync rounds that have to end synced (issue #125)
 # On 2.0.0-beta.14 the folder half's first round answered "pending", sent nothing, and the answer went
@@ -5424,10 +5504,61 @@ refuses 'day 2 output still holds a step' held-by-a-claim "$HB/day2-log" 'day 2 
 copy "$HB/good" "$HB/no-hold"; printf 'ERROR: --until names no claim in world/claims/\n' >"$HB/no-hold/hold.txt"
 refuses 'a hold mc-holds never wrote' held-by-a-claim "$HB/no-hold" 'wrote no claim'
 
+# ============================================== media-travels (2.0.0-beta.24, item 3, #57)
+PIC=1111111111111111111111111111111111111111111111111111111111111111
+PDFSHA=2222222222222222222222222222222222222222222222222222222222222222
+BIG=3333333333333333333333333333333333333333333333333333333333333333
+media_travels_good() { # <folder>
+  local folder=$1
+  rm -rf "$folder"
+  mkdir -p "$folder"
+  printf '%s\n' "$OLD_COMMIT" >"$folder/a-version-before"
+  printf '%s\n' "$NEW_COMMIT" >"$folder/a-version-after"
+  printf '%s\n' "$NEW_COMMIT" >"$folder/b-version"
+  printf '%s\n' "$PIC" >"$folder/picture-sha"
+  printf '%s\n' "$PDFSHA" >"$folder/pdf-sha"
+  printf '%s\n' "$BIG" >"$folder/large-sha"
+  : >"$folder/a-carried-before-update.txt"
+  printf '%s.mapping.json\n%s.pdf\n%s.png\n' x "$PDFSHA" "$PIC" >"$folder/a-carried-after-update.txt"
+  printf '{"data":[{"path":"user/44444444-4444-4444-8444-444444444444.mp4","size":53477376}]}\n' >"$folder/a-kept-here.json"
+  cp "$folder/a-carried-after-update.txt" "$folder/b-carried.txt"
+  printf '200\n' >"$folder/b-picture.status"; printf '%s\n' "$PIC" >"$folder/b-picture.sha"
+  printf '200\n' >"$folder/b-pdf.status"; printf '%s\n' "$PDFSHA" >"$folder/b-pdf.sha"
+  printf '404\n' >"$folder/b-large.status"
+  printf '200\n' >"$folder/b-remove.status"
+  printf '404\n' >"$folder/a-picture-after-removal.status"
+  printf 'x.png\n' | sed "s/x/$PIC/" >"$folder/a-media-root-after-removal.txt"
+}
+section media-travels
+M=$TMP/media-travels
+media_travels_good "$M/good"
+passes "a picture and a PDF that travel through the copy to a fresh install" media-travels "$M/good" "served by a fresh install"
+refuses "a run that kept nothing at all" media-travels "$M/never-written" "there is nothing at"
+copy "$M/good" "$M/no-move"; cp "$M/good/a-version-before" "$M/no-move/a-version-after"
+refuses "a first computer that never updated" media-travels "$M/no-move" "runs the same commit"
+copy "$M/good" "$M/had-carried"; printf '%s.png\n' "$PIC" >"$M/had-carried/a-carried-before-update.txt"
+refuses "a first computer that carried media before the update" media-travels "$M/had-carried" "had nothing to carry"
+copy "$M/good" "$M/not-carried"; printf '%s.pdf\n' "$PDFSHA" >"$M/not-carried/a-carried-after-update.txt"
+refuses "a first start that did not carry the picture" media-travels "$M/not-carried" "did not carry the picture"
+copy "$M/good" "$M/big-carried"; printf '%s.png\n%s.pdf\n%s.mp4\n' "$PIC" "$PDFSHA" "$BIG" >"$M/big-carried/a-carried-after-update.txt"
+refuses "a file over 50 MB that was carried" media-travels "$M/big-carried" "GitHub refuses a file that large"
+copy "$M/good" "$M/not-kept"; printf '{"data":[]}\n' >"$M/not-kept/a-kept-here.json"
+refuses "a large file the library does not mark" media-travels "$M/not-kept" "kept on this computer only"
+copy "$M/good" "$M/b-missing"; printf '404\n' >"$M/b-missing/b-picture.status"
+refuses "a second computer that cannot serve the picture" media-travels "$M/b-missing" "for the picture"
+copy "$M/good" "$M/b-other-bytes"; printf '%s\n' "$BIG" >"$M/b-other-bytes/b-pdf.sha"
+refuses "a second computer that serves other bytes for the PDF" media-travels "$M/b-other-bytes" "different bytes for the PDF"
+copy "$M/good" "$M/b-large"; printf '200\n' >"$M/b-large/b-large.status"
+refuses "a second computer that serves the large file" media-travels "$M/b-large" "serves the file over 50 MB"
+copy "$M/good" "$M/removal-lost"; printf '200\n' >"$M/removal-lost/a-picture-after-removal.status"
+refuses "a removal that never reached the first computer" media-travels "$M/removal-lost" "not 404"
+copy "$M/good" "$M/bytes-deleted"; : >"$M/bytes-deleted/a-media-root-after-removal.txt"
+refuses "a removal that deleted the first computer's own bytes" media-travels "$M/bytes-deleted" "lost the picture's bytes"
+
 # ============================================================ every one of them, the same shape
 section 'every script'
 BASH_SCENARIOS=(settings-on-install night-tidy voice update-keeps-everything
-  reminder-closed-elsewhere reminders-move-keeps-everything two-machines-move-at-once
+  reminder-closed-elsewhere reminders-move-keeps-everything two-machines-move-at-once media-travels
   late-reminder-file closed-offline-on-both reminder-from-settings charm-challenge
   no-video-skills-by-default update-removes-only-unchanged-skills briefing-breaks-a-rule telegram-language
   brief-asked-in-chat talk-prep-honest no-question-he-cannot-judge plain-yes what-was-that connection-check

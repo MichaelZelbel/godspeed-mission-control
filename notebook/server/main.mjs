@@ -90,7 +90,8 @@ export const staticTypes = { '.html':'text/html; charset=utf-8','.js':'text/java
 // sentences and pass; a file-system or programming error carries server paths
 // and internals, so it is logged and the browser gets a plain sentence instead
 // (until 6 October 2026 it got "ENOENT: no such file or directory, open 'C:\Users\...'").
-// An absolute path left in a passed message is cut out as well.
+// An absolute path left in a passed message is cut out as well. A drive letter counts only when no
+// letter or digit comes before it, so the "s:/" of an https:// address is not a Windows path (#562).
 export function userFacing(error, roots = []) {
   if (!(error instanceof Error)) return null;
   const code = String(error.code || '');
@@ -101,7 +102,7 @@ export function userFacing(error, roots = []) {
   if (error instanceof TypeError || error instanceof RangeError || error instanceof ReferenceError) return null;
   let message = String(error.message || '');
   for (const root of roots.filter(Boolean).sort((a, b) => b.length - a.length)) for (const form of new Set([root, root.replaceAll('\\', '/'), root.replaceAll('\\', '\\\\')])) message = message.split(form).join('[path]');
-  message = message.replace(/[A-Za-z]:[\\/][^\s'"]*|\\\\[^\s'"]+|(?<![\w.])\/(?:home|opt|root|var|tmp|Users|srv|data|mnt|etc|private)\/[^\s'"]*/g, '[path]');
+  message = message.replace(/(?<![A-Za-z0-9])[A-Za-z]:[\\/][^\s'"]*|\\\\[^\s'"]+|(?<![\w.])\/(?:home|opt|root|var|tmp|Users|srv|data|mnt|etc|private)\/[^\s'"]*/g, '[path]');
   return message || null;
 }
 // The POST routes that act on Hermes' routines; with no verified assistant setup they answer why (#524).
@@ -667,7 +668,8 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         dictationBusy=true;
         try{const descriptor=fs.existsSync(assistantPath)?JSON.parse(fs.readFileSync(assistantPath,'utf8').replace(/^\uFEFF/,'')):null;return send(res,200,await transcribeRecording(descriptor,store.root,await body(req,8*1024*1024),String(req.headers['content-type']||'')));}finally{dictationBusy=false;}
       }
-      if(route==='/api/chat/options'&&req.method==='GET')return send(res,200,provider?.options?await provider.options():{current:'Connected model',models:[{id:'',efforts:[]}]});
+      // With no AI connected (the same test as runtimeConfigured in /api/status), the picker says so instead of naming a "Connected model" (#563).
+      if(route==='/api/chat/options'&&req.method==='GET'){if(!domains.provider||assistantMissing)return send(res,200,{connected:false,current:'No AI connected',models:[{id:'',efforts:[]}]});return send(res,200,provider?.options?await provider.options():{current:'Connected model',models:[{id:'',efforts:[]}]});}
       if(route==='/api/chat/stop'&&req.method==='POST'){const input=JSON.parse(await body(req));chatRequests.get(input.id)?.abort();return send(res,200,{ok:true});}
       if (route.startsWith('/api/functions/') && req.method === 'POST') {
         const name=route.slice('/api/functions/'.length),input=JSON.parse(await body(req));
