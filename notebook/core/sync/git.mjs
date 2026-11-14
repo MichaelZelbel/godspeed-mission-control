@@ -141,6 +141,22 @@ export async function joinRepository(store,options={}){
   return {...config,remote:url};
 }
 
+// GitHub's privacy answer was neither 200 nor 404. GitHub refuses unauthenticated questions from
+// one address after 60 an hour (403 or 429 with x-ratelimit-remaining: 0, or a retry-after), which
+// is common behind a shared network; the person is told to wait, and until when, rather than to
+// look for something wrong with the repository. The sync worker passes this message on as it is.
+export class PrivacyUnverified extends Error {
+  constructor(response){
+    const now=Date.now(),h=name=>response.headers?.get?.(name)??null,status=response.status;
+    if(status===429||(status===403&&(h('x-ratelimit-remaining')==='0'||h('retry-after')!==null))){
+      const after=h('retry-after'),reset=h('x-ratelimit-reset');
+      const at=after!==null?(/^\d+$/.test(after.trim())?now+Number(after)*1000:Date.parse(after)):reset!==null&&/^\d+$/.test(reset.trim())?Number(reset)*1000:NaN;
+      super('GitHub is limiting requests from this network right now, so it could not be checked that the repository is private; no files were uploaded. '+(Number.isFinite(at)?'Try again after '+new Date(Math.max(at,now)).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})+'.':'Try again in an hour.'));
+    }else super('GitHub answered '+status+' when asked whether the repository is private, so its privacy could not be verified; no files were uploaded. Try again later; if it keeps happening, check https://www.githubstatus.com.');
+    this.name='PrivacyUnverified';
+  }
+}
+
 export class FileSync {
   constructor(store,{branch='main',remote='origin',largeFile=CARRY_LIMIT}={}) {
     if(!/^[\w/.-]+$/.test(branch)||branch.startsWith('-')||!/^\w+$/.test(remote))throw new Error('Invalid sync configuration');
@@ -183,7 +199,7 @@ export class FileSync {
   async verifyRemote(remoteUrl){
     const match=String(remoteUrl).match(/^(?:https:\/\/github\.com\/|git@github\.com:)([\w.-]+)\/([\w.-]+?)(?:\.git)?\/?$/);if(!match)throw new Error('Use a GitHub repository address without embedded credentials');
     const response=await fetch('https://api.github.com/repos/'+match[1]+'/'+match[2],{headers:{Accept:'application/vnd.github+json'},signal:AbortSignal.timeout(15000)});
-    if(response.status===200)throw new Error('This repository is publicly readable. Choose a private repository for your knowledge');if(response.status!==404)throw new Error('Repository privacy could not be verified; no files were uploaded');
+    if(response.status===200)throw new Error('This repository is publicly readable. Choose a private repository for your knowledge');if(response.status!==404)throw new PrivacyUnverified(response);
     try{this.git(['ls-remote',remoteUrl]);}catch{throw new Error('The private repository could not be read with this device Git credentials; no files were uploaded');}
   }
   // Adds the lines to the folder's own .gitignore, stops tracking NOTEBOOK.md (the first commit of a
