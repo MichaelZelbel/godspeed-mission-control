@@ -144,11 +144,13 @@ test('a sync round with nothing new does not read the whole vault while holding 
   assert.equal(a.reads-reads,0,'an idle sync round read the whole vault '+(a.reads-reads)+' times');
 });
 
-test('a sync round with a saved conflict still refuses, even with nothing new to upload',()=>{
+test('a sync round with a saved conflict still reports it, even with nothing new to upload',()=>{
   const {a}=fixture(),A=new FileSync(a);
   fs.mkdirSync(path.join(a.root,'conflicts'),{recursive:true});
   atomic(path.join(a.root,'conflicts','pending.json'),JSON.stringify({id:'pending',path:'notebook/notes/x.md'}));
-  assert.equal(A.reconcile().state,'conflict');
+  const result=A.reconcile();
+  assert.equal(result.state,'conflict');
+  assert.equal(result.error,undefined,JSON.stringify(result));
 });
 
 test('taking the other side\'s commit that changes nothing does not rebuild the workspace',()=>{
