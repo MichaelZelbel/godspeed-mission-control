@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import {createRequire} from 'node:module';
 
 // THE NIGHTLY CLEANUP OF GODSPEED'S OWN WORKING FILES (#238). The assistant leaves request dumps and
 // session transcripts in the sessions folder of its home and of every profile, and Godspeed's routines
@@ -17,9 +18,10 @@ export const KEEP_DAYS=30;
 // In the assistant's home and every profile of it: sessions/<these>, except every file of a session
 // that sessions/sessions.json still lists (the assistant resumes those).
 const SESSION_FILES=[/^request_dump_.*\.json$/,/^session_.*\.json$/,/\.jsonl$/];
-// The run files Godspeed's own routines write, one folder per day under each of these: research
-// (mc-research), work (mc-work-run), next-action (mc-decide) and coach-prep (mc-coach-prep).
-export const RUN_LOG_FOLDERS=['routines/research','routines/work','routines/next-action','routines/coach-prep'];
+// The run files Godspeed's own routines write, one folder per day under each of these. The folder
+// names live in tools/run-log-folders.js because mc-work reads them too, where it runs without the
+// notebook.
+export const RUN_LOG_FOLDERS=createRequire(import.meta.url)('../../tools/run-log-folders.js').RUN_LOG_FOLDERS;
 const DAY_FOLDER=/^\d{4}-\d{2}-\d{2}$/;
 const isWorkUndoBackup=(name,depth)=>depth===1&&name==='before.txt';
 // Shorter strings in sessions.json are words (a platform, a mode), not ids a file name could carry.
