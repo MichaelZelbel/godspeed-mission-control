@@ -7,8 +7,11 @@ Shared workflow gates own every decision. Inspect a run's identity and status
 before responding to a declared gate.
 
 Project runtime scenarios: `harness/END-TO-END.md`.
-Holdout scenarios: `.factory/holdout/HOLDOUT.md`, fenced by `.factory/hooks/holdout_fence.py`
-(only the holdout-writer and holdout-verifier subagents may read it).
+Holdout scenarios: outside this repository, on the factory server only (`C:/Program Files/Git/home/godspeed-forge/holdouts/godspeed-mission-control/HOLDOUT.md`, with its
+`judges/` beside it), passed to the loop and the manager as their `holdout` input. Since
+2026-11-14 the factory runs on Codex, and Cole Medin's README says: "The fence is a Claude Code
+hook. A factory running Codex or Pi has no fence: keep its holdout outside the repository and pass
+that path as the `holdout` input instead." The fence files stay for a switch back to Claude.
 Ordinary checks: `python harness/ci.py`.
 
 Record this application's tested source SHA, candidate, run IDs, coverage,
