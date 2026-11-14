@@ -110,7 +110,7 @@ for (const c of cases) {
   for (let attempt = 0; ; attempt++) {
     r = await ask(c.address);
     if (c.right(r) || !unverified(r) || attempt >= waits.length) break;
-    console.error(`Asked about ${c.name} (try ${attempt + 1} of ${waits.length + 1}): ${said(r)}; asking again in ${waits[attempt]} seconds`);
+    console.error(`Asked about ${c.name} (try ${attempt + 1} of ${waits.length + 1}): ${said(r)}; asking again in ${waits[attempt]} second${waits[attempt] === 1 ? '' : 's'}`);
     await sleep(waits[attempt]);
   }
   if (!c.right(r)) {
