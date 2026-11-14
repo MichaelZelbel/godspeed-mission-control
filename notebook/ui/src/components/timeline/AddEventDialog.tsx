@@ -63,7 +63,7 @@ const AI_FALLBACK = "The suggestion could not be made. Try again.";
 export default function AddEventDialog({ people, onCreated, editEvent, open: controlledOpen, onOpenChange }: AddEventDialogProps) {
   const { user, session } = useAuth();
   const { toast } = useToast();
-  const { checkCredits } = useAICreditsGate();
+  const { checkCredits, providerConfigured } = useAICreditsGate();
   const isControlled = controlledOpen !== undefined;
   const [internalOpen, setInternalOpen] = useState(false);
   const open = isControlled ? controlledOpen : internalOpen;
@@ -279,7 +279,7 @@ export default function AddEventDialog({ people, onCreated, editEvent, open: con
       }
 
       // Fire-and-forget: extract profile facts about participants from this moment.
-      if (momentId) {
+      if (momentId && providerConfigured) {
         supabase.functions.invoke("extract-moment-profile", { body: { moment_id: momentId } }).catch(() => {});
       }
 
