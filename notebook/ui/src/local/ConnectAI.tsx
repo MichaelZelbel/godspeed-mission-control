@@ -47,7 +47,8 @@ const when=(at:string)=>{const d=new Date(at);return isNaN(d.getTime())?at:d.toL
 const DAY=24*3600*1000;
 
 export function RoutineAIState({status,checking,onCheck}:{status?:RoutineAI;checking:boolean;onCheck:()=>void}){
-  if(!status?.available)return null;
+  if(status&&!status.available)return <p role="status">This installation runs no daily routines and no assistant chat because no assistant program is installed.</p>;
+  if(!status)return null;
   if(status.source==='none')return <p className="flex gap-2 items-start" role="status"><AlertTriangle className="h-5 w-5 shrink-0 text-amber-500" aria-hidden="true"/><span>Your daily routines have no AI to think with yet, so they cannot run. Connect your AI below.</span></p>;
   const check=status.check;
   return <div className="space-y-2">
