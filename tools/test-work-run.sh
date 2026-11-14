@@ -270,6 +270,25 @@ if command -v git >/dev/null 2>&1; then
   OUT="$(FAKE_TOUCH="tool.sh" run --only "$SID" 2>&1)"
   contains "a program the item repaired is saved with the run" "$(git -C "$TMP" show --stat --format= HEAD 2>/dev/null)" "tool.sh"
   missing "  and a file that was already changed before the run is left alone" "$(git -C "$TMP" show --stat --format= HEAD 2>/dev/null)" "already-dirty.txt"
+
+  # The file an item named is committed by the name mc-work reads in its DONE WHEN (#571), not by a
+  # pattern of the runner's own that missed backslashes and cut a path at a space. ideas/ is not a
+  # folder the run adds whole, so only the item's own name can bring these files in.
+  mkdir -p "$TMP/ideas/goals" "$TMP/ideas/my plans"
+  printf '# Plan\n' > "$TMP/ideas/goals/plan.md"
+  printf '# Plan\n' > "$TMP/ideas/my plans/plan.md"
+  hw file --what "Write the plan" --done-when 'the plan is written in ideas\goals\plan.md' --check "test -f ideas/goals/plan.md" --key bs-path --source test >/dev/null
+  hw file --what "Write the other plan" --done-when "the plan is written in ideas/my plans/plan.md, read through" --check "test -f 'ideas/my plans/plan.md'" --key space-path --source test >/dev/null
+  BSID="$(grep -l 'KEY: bs-path$' "$TMP/work"/W-*.md | head -1 | xargs basename | sed 's/.md$//')"
+  SPID="$(grep -l 'KEY: space-path$' "$TMP/work"/W-*.md | head -1 | xargs basename | sed 's/.md$//')"
+  check "mc-work names the file a backslash path means, as it lies on disk" "$(hw files "$BSID")" "ideas/goals/plan.md"
+  check "  and keeps a space in a folder name" "$(hw files "$SPID")" "ideas/my plans/plan.md"
+  run --only "$BSID" >/dev/null 2>&1
+  check "an item verified today whose DONE WHEN names ideas\\goals\\plan.md" "$(status_of "$BSID")" "verified"
+  check "  has that file committed by name" "$(git -C "$TMP" log -1 --name-only --format= -- ideas/goals/plan.md 2>/dev/null)" "ideas/goals/plan.md"
+  run --only "$SPID" >/dev/null 2>&1
+  check "an item verified today whose path has a space in a folder name" "$(status_of "$SPID")" "verified"
+  check "  has that file committed by name" "$(git -C "$TMP" log -1 --name-only --format= -- 'ideas/my plans/plan.md' 2>/dev/null)" "ideas/my plans/plan.md"
 fi
 
 # --- a machine repair may reach outside the folder, keeping a copy first (2026-10-27) -----------------------------
