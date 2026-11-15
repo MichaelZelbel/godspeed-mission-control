@@ -8,6 +8,13 @@ import test from 'node:test';
 
 const here=path.dirname(new URL(import.meta.url).pathname);
 
+test('the scenario fixture gives every adopted goal its public card ID',()=>{
+  const scenario=fs.readFileSync(path.join(here,'talk-prep-honest.sh'),'utf8');
+  for(const id of ['lower-ldl','sleep-better','visible-abs']){
+    assert.match(scenario,new RegExp(`printf 'ID: ${id}\\\\nGOAL: ${id}\\\\n`));
+  }
+});
+
 const runRoute=async createFresh=>{
   const folder=fs.mkdtempSync(path.join(os.tmpdir(),'talk-prep-run-now-'));
   const root=path.join(folder,'root');

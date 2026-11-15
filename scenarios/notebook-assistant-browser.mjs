@@ -12,8 +12,6 @@ if(!base||!evidence)throw Error('usage: notebook-assistant-browser.mjs --base UR
 fs.mkdirSync(path.join(evidence,'screenshots'),{recursive:true});
 const actions=[],consoleRows=[],network=[];
 const write=(name,value)=>fs.writeFileSync(path.join(evidence,name),typeof value==='string'?value:JSON.stringify(value,null,2)+'\n');
-const chrome=process.env.CHROME_PATH||['/usr/bin/google-chrome','/usr/bin/chromium','/usr/bin/chromium-browser'].find(fs.existsSync);
-if(!chrome)throw Error('Chromium is not installed at a documented executable name; set CHROME_PATH');
 const profile=path.join(evidence,'.chromium-profile'),port=48764;
 let browser,fixture,ws,browserOut,browserErr;
 let routeError;
@@ -40,6 +38,8 @@ const action=async(name,fn)=>{globalThis.phase=name;try{await fn();actions.push(
 const formValue=label=>js(`(()=>{const l=[...document.querySelectorAll('label')].find(x=>x.textContent.includes(${JSON.stringify(label)}));const e=l&&(l.htmlFor?document.getElementById(l.htmlFor):l.parentElement?.querySelector('input,select'));return e&&e.value})()`);
 const observeProvider=async name=>write(name,{service:(await formValue('Your AI service'))==='other'?'Another service':'',url:await formValue('Its address'),model:await formValue('Model, written'),key:(await js(`document.body.innerText.includes('leave it empty to keep the saved one')`))===true});
 try{
+  const chrome=process.env.CHROME_PATH??['/usr/bin/google-chrome','/usr/bin/chromium','/usr/bin/chromium-browser'].find(fs.existsSync);
+  if(!chrome||!fs.existsSync(chrome))throw Error('Chromium is not installed at a documented executable name; set CHROME_PATH');
   browserOut=fs.openSync(path.join(evidence,'browser.stdout.log'),'a');
   browserErr=fs.openSync(path.join(evidence,'browser.stderr.log'),'a');
   browser=spawn(chrome,[`--remote-debugging-port=${port}`,`--user-data-dir=${profile}`,'--headless=new','--no-first-run','--disable-gpu','about:blank'],{stdio:['ignore',browserOut,browserErr]});

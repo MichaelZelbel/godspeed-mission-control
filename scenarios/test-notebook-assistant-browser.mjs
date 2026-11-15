@@ -8,6 +8,27 @@ import test from 'node:test';
 
 const here=path.dirname(new URL(import.meta.url).pathname);
 
+test('a missing browser is retained as one contained failure',async()=>{
+  const folder=fs.mkdtempSync(path.join(os.tmpdir(),'notebook-assistant-no-browser-'));
+  const evidence=path.join(folder,'evidence');
+  try{
+    const child=spawn(process.execPath,[path.join(here,'notebook-assistant-browser.mjs'),'--base','http://127.0.0.1:1','--evidence',evidence],{
+      env:{...process.env,CHROME_PATH:path.join(folder,'not-installed')},stdio:['ignore','ignore','pipe']
+    });
+    let stderr='';child.stderr.on('data',chunk=>stderr+=chunk);
+    const code=await new Promise((resolve,reject)=>{child.once('error',reject);child.once('exit',resolve);});
+    assert.notEqual(code,0);
+    assert.deepEqual(JSON.parse(fs.readFileSync(path.join(evidence,'failure.json'),'utf8')),{
+      phase:'',message:'Chromium is not installed at a documented executable name; set CHROME_PATH'
+    });
+    assert.equal(fs.readFileSync(path.join(evidence,'cleanup.txt'),'utf8'),'browser=stopped\nfixture=stopped\n');
+    assert.equal(stderr,'FAIL notebook-assistant-browser: Chromium is not installed at a documented executable name; set CHROME_PATH\n');
+    assert.doesNotMatch(stderr,/notebook-assistant-browser\.mjs:\d+|\n\s+at /);
+  } finally {
+    fs.rmSync(folder,{recursive:true,force:true});
+  }
+});
+
 test('a fixture bind failure stops the browser it started',async()=>{
   const folder=fs.mkdtempSync(path.join(os.tmpdir(),'notebook-assistant-cleanup-'));
   const evidence=path.join(folder,'evidence');

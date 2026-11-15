@@ -133,9 +133,9 @@ random_marker() { printf '%s-%s' "$1" "$(od -An -N8 -tx1 /dev/urandom | tr -d ' 
 
 write_area() {
   mkdir -p "$ROOT/coach/health" "$ROOT/goals"
-  printf 'GOAL: lower-ldl\nTITLE: Lower my LDL cholesterol\nSTATUS: adopted\n' >"$ROOT/goals/lower-ldl.md"
-  printf 'GOAL: sleep-better\nTITLE: Sleep seven hours most nights\nSTATUS: adopted\n' >"$ROOT/goals/sleep-better.md"
-  printf 'GOAL: visible-abs\nTITLE: Visible abs by the summer\nSTATUS: adopted\n' >"$ROOT/goals/visible-abs.md"
+  printf 'ID: lower-ldl\nGOAL: lower-ldl\nTITLE: Lower my LDL cholesterol\nSTATUS: adopted\n' >"$ROOT/goals/lower-ldl.md"
+  printf 'ID: sleep-better\nGOAL: sleep-better\nTITLE: Sleep seven hours most nights\nSTATUS: adopted\n' >"$ROOT/goals/sleep-better.md"
+  printf 'ID: visible-abs\nGOAL: visible-abs\nTITLE: Visible abs by the summer\nSTATUS: adopted\n' >"$ROOT/goals/visible-abs.md"
   {
     printf 'AREA: health\nTITLE: Health\nRHYTHM: daily\nTIME: 19:00\nSTARTS: %s\nSTATUS: on\nSTYLE: compass\nTONE: gentle\n' "$(day_in -2)"
     printf 'SERVES: lower-ldl, sleep-better, visible-abs\n'
