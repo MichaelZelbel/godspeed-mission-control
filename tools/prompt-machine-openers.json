@@ -1,3 +1,0 @@
-{
-  "machine_banner": "^\\[(?:[A-Z][A-Z0-9 ]{2,}|(?:Cron|Webhook) delivery\\b)"
-}
