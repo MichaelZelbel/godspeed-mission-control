@@ -5,6 +5,7 @@ docker-server	inline	pooled	docker	no	a stranger's Docker server
 linux-update	inline	isolated	native	no	an update from today's public install
 settings-on-install	settings-on-install.sh	terminal	native	no	a fresh install keeps the owner's settings
 voice	voice.sh	shared	native	no	a voice note, with the permission and without it
+local-voice	local-voice.sh	terminal	native	no	a fresh native install understands a German voice note without a key
 update-keeps-everything	update-keeps-everything.sh	isolated	native	no	an update keeps every record, setting and chat
 reminder-closed-elsewhere	reminder-closed-elsewhere.sh	isolated	native	no	a reminder closed elsewhere is closed here
 reminders-move-keeps-everything	reminders-move-keeps-everything.sh	isolated	native	no	the reminders move keeps every reminder

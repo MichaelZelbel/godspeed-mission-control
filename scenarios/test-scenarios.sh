@@ -5575,7 +5575,7 @@ refuses "a removal that deleted the first computer's own bytes" media-travels "$
 
 # ============================================================ every one of them, the same shape
 section 'every script'
-BASH_SCENARIOS=(settings-on-install night-tidy voice update-keeps-everything
+BASH_SCENARIOS=(settings-on-install night-tidy voice local-voice update-keeps-everything
   reminder-closed-elsewhere reminders-move-keeps-everything two-machines-move-at-once media-travels
   late-reminder-file closed-offline-on-both reminder-from-settings charm-challenge
   no-video-skills-by-default update-removes-only-unchanged-skills briefing-breaks-a-rule telegram-language
