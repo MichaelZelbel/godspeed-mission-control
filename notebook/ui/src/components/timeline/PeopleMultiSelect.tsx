@@ -127,24 +127,6 @@ export default function PeopleMultiSelect({ people, value, onChange, newNames = 
                 <CommandEmpty>{people.length === 0 && onNewNamesChange ? "Type a name to add a new person." : "No people found."}</CommandEmpty>
               )}
 
-              {offer && (
-                <>
-                  {/* forceMount on the group too: cmdk hides a group it counts no
-                      matching items in, and a forced item is not counted (#581). */}
-                  <CommandGroup forceMount>
-                    <CommandItem
-                      forceMount
-                      value={`__new_person__ ${offer}`}
-                      onSelect={() => addNew(offer)}
-                    >
-                      <UserPlus className="mr-2 h-4 w-4" />
-                      Add "{offer}" as a new person
-                    </CommandItem>
-                  </CommandGroup>
-                  <CommandSeparator />
-                </>
-              )}
-
               {selected.length > 0 && (
                 <>
                   <CommandGroup heading="Selected">
@@ -175,6 +157,25 @@ export default function PeopleMultiSelect({ people, value, onChange, newNames = 
                   </CommandItem>
                 ))}
               </CommandGroup>
+
+              {offer && (
+                <>
+                  <CommandSeparator />
+                  {/* Existing matches come first so Enter keeps selecting the best
+                      match. Force the group too because cmdk otherwise hides a
+                      group whose only item is forced (#581). */}
+                  <CommandGroup forceMount>
+                    <CommandItem
+                      forceMount
+                      value={`__new_person__ ${offer}`}
+                      onSelect={() => addNew(offer)}
+                    >
+                      <UserPlus className="mr-2 h-4 w-4" />
+                      Add "{offer}" as a new person
+                    </CommandItem>
+                  </CommandGroup>
+                </>
+              )}
             </CommandList>
           </Command>
         </PopoverContent>

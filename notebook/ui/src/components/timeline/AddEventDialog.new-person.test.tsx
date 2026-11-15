@@ -99,6 +99,19 @@ describe("adding a new person while adding a moment by hand", () => {
     expect(participants()).toEqual(["c-ada"]);
   });
 
+  it("uses Enter to pick an existing partial match instead of adding the typed name", async () => {
+    fake.current = notebook([{ id: "c-anna", name: "Anna Fictional" }]);
+    openDialog([{ id: "c-anna", name: "Anna Fictional", relationship: null }]);
+    typeInPicker("Ann");
+
+    expect(await screen.findByRole("option", { name: "Anna Fictional" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("option", { name: 'Add "Ann" as a new person' })).toHaveAttribute("aria-selected", "false");
+    fireEvent.keyDown(screen.getByPlaceholderText(/Search or type a new name/), { key: "Enter" });
+
+    expect(screen.getByRole("button", { name: "Remove Anna Fictional" })).toBeInTheDocument();
+    expect(document.querySelector('[data-new-person="Ann"]')).not.toBeInTheDocument();
+  });
+
   it("links a person the database has under another case instead of making a second one", async () => {
     // The dialog's list is behind: the database already has "Fictional Cleo".
     fake.current = notebook([{ id: "c-cleo", name: "Fictional Cleo" }]);
