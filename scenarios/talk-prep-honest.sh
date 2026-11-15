@@ -158,6 +158,15 @@ write_area() {
   } >"$ROOT/coach/health/area.md"
 }
 
+write_installed_fixture_area() {
+  mkdir -p "$ROOT/coach/route-fixture"
+  {
+    printf 'AREA: route-fixture\nTITLE: Route fixture\nRHYTHM: daily\nTIME: 18:30\nSTARTS: %s\nSTATUS: on\nSTYLE: compass\nTONE: gentle\n' "$(day_in -2)"
+    printf 'LIMIT: use only the fixture text and recommend no outward action\n'
+    printf '\n## Preparation\n\nPrepare a short check-in about keeping this maintained route working.\n'
+  } >"$ROOT/coach/route-fixture/area.md"
+}
+
 add_research_domains() {
   "$NODE" - "$ROOT/coach/health/area.md" <<'NODE'
 const fs=require('fs'),file=process.argv[2],text=fs.readFileSync(file,'utf8');
@@ -281,12 +290,11 @@ act() {
   DAY_B=$(day_in +1)
   { printf 'a=%s\nb=%s\noffset=%s\n' "$DAY_A" "$DAY_B" "$(date +%z)"; } >"$EVIDENCE/days.txt"
 
+  phase 'a supported coaching-area fixture is prepared through installed Run now'
+  write_installed_fixture_area
+  run_installed_preparation
   phase 'a fixture person: one health area, three goals, three research domains'
   write_area
-  phase 'the installed Coaching talk preparation job runs through Run now'
-  run_installed_preparation
-  # Give the installed job a supported fixture that needs no web-reading tool from the scenario
-  # model. The research cases below then add their domains and create reviewed public evidence.
   add_research_domains
   cp "$ROOT/coach/health/area.md" "$EVIDENCE/area.md"
 
