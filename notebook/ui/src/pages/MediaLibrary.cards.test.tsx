@@ -31,10 +31,11 @@ function row(id: string, path: string, note: string | null, mediaType: string, o
   };
 }
 
-async function open(rows: ReturnType<typeof row>[], notes: { id: string; title: string }[], localOnlyPath?: string) {
+async function open(rows: ReturnType<typeof row>[], notes: { id: string; title: string }[], localOnlyPath?: string, remoteOnly: { path: string; contentType: string; filename: string; note_id: string }[] = []) {
   const supa = createFakeSupabase((q) => {
     if (q.table === "media_analysis") return { data: rows };
     if (q.table === "notes") return { data: notes };
+    if (q.table === "note_attachments") return { data: remoteOnly.map(item => ({ ...item, storage_path: item.path, file_type: item.contentType, mime_type: item.contentType, created_at: "2026-11-13T10:00:00Z" })) };
     return undefined;
   });
   fake.current = {
@@ -45,6 +46,7 @@ async function open(rows: ReturnType<typeof row>[], notes: { id: string; title: 
   const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
     const u = String(url);
     if (u.endsWith("/api/media/kept-here")) return new Response(JSON.stringify({ data: [] }));
+    if (u.endsWith("/api/media/kept-elsewhere")) return new Response(JSON.stringify({ data: remoteOnly.map(({ path, contentType }) => ({ path, contentType, size: 75 * 1024 * 1024 })) }));
     if (u.endsWith("/api/media/presence")) {
       const paths = JSON.parse(String(init?.body)).paths as string[];
       return new Response(JSON.stringify({ data: Object.fromEntries(paths.map(path => [path, path === localOnlyPath ? "kept_elsewhere" : "present"])) }));
@@ -106,9 +108,23 @@ describe("Media Library cards", () => {
     const fetchMock = await open(rows, [], localOnlyPath);
 
     expect(await screen.findByText("Kept on another computer")).toBeInTheDocument();
+    expect(screen.getByText(/Open it on the computer where it was added, or make it smaller than 50 MB/)).toBeInTheDocument();
     const presenceCalls = fetchMock.mock.calls.filter(([url]) => String(url).endsWith("/api/media/presence"));
     expect(presenceCalls).toHaveLength(2);
     expect(JSON.parse(String(presenceCalls[0][1]?.body)).paths).toHaveLength(500);
     expect(document.querySelector(`img[src*="${encodeURIComponent(localOnlyPath)}"]`)).toBeNull();
+  });
+
+  it("shows and searches a carried remote-only file even without a local analysis row", async () => {
+    const path = "owner/remote-id.pdf";
+    await open([], [{ id: "note-remote", title: "Trip plans" }], path, [
+      { path, contentType: "application/pdf", filename: "Tickets for Berlin.pdf", note_id: "note-remote" },
+    ]);
+
+    expect(await screen.findByText("Kept on another computer")).toBeInTheDocument();
+    expect(cardTitles()).toContain("Trip plans");
+    expect(screen.getByText("Tickets for Berlin.pdf")).toBeInTheDocument();
+    fireEvent.change(screen.getByRole("textbox", { name: "Search media" }), { target: { value: "Berlin" } });
+    expect(cardTitles()).toEqual(["Trip plans"]);
   });
 });

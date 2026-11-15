@@ -54,6 +54,12 @@ interface MediaItem {
   updated_at: string | null;
 }
 
+interface RemoteOnlyMedia {
+  path: string;
+  size: number;
+  contentType: string;
+}
+
 interface DocumentGroup {
   key: string;
   note_id: string;
@@ -400,7 +406,38 @@ export default function MediaLibrary() {
     },
     enabled: !!user,
   });
-  const mediaItems = useMemo(() => mediaData ?? [], [mediaData]);
+  const { data: remoteOnlyItems = [] } = useQuery({
+    queryKey: ["media-kept-elsewhere", user?.id],
+    queryFn: async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error("Not authenticated");
+      const resp = await fetch(`${SUPABASE_URL}/api/media/kept-elsewhere`, { headers: { Authorization: `Bearer ${session.access_token}` } });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const result: { data: RemoteOnlyMedia[] } = await resp.json();
+      if (result.data.length === 0) return [] as MediaItem[];
+      const paths = result.data.map((item) => item.path);
+      const attachments = await selectInChunks<{ note_id: string | null; storage_path: string; filename: string | null; file_type: string | null; mime_type: string | null; created_at: string | null }>(paths, (slice) =>
+        supabase.from("note_attachments").select("note_id, storage_path, filename, file_type, mime_type, created_at").in("storage_path", slice),
+      );
+      const byPath = new Map(attachments.map((item) => [item.storage_path, item]));
+      return result.data.map((item): MediaItem => {
+        const attachment = byPath.get(item.path);
+        const mime = attachment?.mime_type || attachment?.file_type || item.contentType;
+        return {
+          id: `kept-elsewhere:${item.path}`, note_id: attachment?.note_id || "", storage_path: item.path,
+          media_type: mime === "application/pdf" ? "pdf" : "image", page_number: null,
+          original_filename: attachment?.filename || item.path.replace(/^.*[\\/]/, ""), description: null,
+          extracted_text: null, topics: [], raw_analysis: null, analysis_status: "complete",
+          created_at: attachment?.created_at || null, updated_at: null,
+        };
+      });
+    },
+    enabled: !!user,
+  });
+  const mediaItems = useMemo(() => {
+    const localPaths = new Set((mediaData ?? []).map((item) => item.storage_path));
+    return [...(mediaData ?? []), ...remoteOnlyItems.filter((item) => !localPaths.has(item.storage_path))];
+  }, [mediaData, remoteOnlyItems]);
 
   // While anything is being analyzed, poll only those rows' status (a few
   // bytes each). A row still in progress that changed is read in full and
@@ -904,6 +941,11 @@ export default function MediaLibrary() {
                             · {group.duplicate_count + 1} copies
                           </span>
                         )}
+                      </p>
+                    )}
+                    {notHere && (
+                      <p className="text-[10px] leading-tight text-muted-foreground">
+                        Open it on the computer where it was added, or make it smaller than 50 MB so it can travel.
                       </p>
                     )}
                     {group.description && (

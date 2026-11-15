@@ -123,6 +123,16 @@ export function keptHere({mediaRoot,carried}){
     return !own?.removed_at&&!(own&&fs.existsSync(carriedFile(carried,own)));
   }).map(m=>({path:m.path,size:m.size}));
 }
+// The carried mappings whose bytes are intentionally on another computer.
+// Media Library uses this list to show files that have no local analysis row.
+export function keptElsewhere({mediaRoot,carried}){
+  let names=[];try{names=fs.readdirSync(carried).filter(n=>n.endsWith('.mapping.json'));}catch{}
+  return names.map(name=>readJson(path.join(carried,name))).filter(m=>{
+    if(!m||typeof m.path!=='string'||m.removed_at||!(m.size>CARRY_LIMIT)||!SHA.test(String(m.sha256)))return false;
+    const found=findMedia({mediaRoot,carried},m.path);
+    return found&&!found.removed&&!fs.existsSync(found.file);
+  }).map(m=>({path:m.path,size:m.size,contentType:m.contentType||'application/octet-stream'}));
+}
 // The paths whose file this computer cannot serve: kept on another computer,
 // or not here yet. A removed item is not counted.
 export function missingHere(media,paths){

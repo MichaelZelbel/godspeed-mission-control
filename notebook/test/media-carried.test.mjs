@@ -9,7 +9,7 @@ import path from 'node:path';
 import {createHash} from 'node:crypto';
 import {createService} from '../server/main.mjs';
 import {mediaObjectName} from '../core/media-names.mjs';
-import {CARRY_LIMIT,carriedName,carryMedia,findMedia,mediaPresence,missingHere} from '../core/media-store.mjs';
+import {CARRY_LIMIT,carriedName,carryMedia,findMedia,keptElsewhere,mediaPresence,missingHere} from '../core/media-store.mjs';
 import {chatAttachments} from '../core/chat-context.mjs';
 import {Connectors} from '../core/connectors.mjs';
 import {Review} from '../core/review.mjs';
@@ -102,9 +102,11 @@ test('items whose files are kept on another computer explain where to open them,
   const two=await start(t,second);
   assert.deepEqual((await missing(two.base,[picturePath,bigPath,unknownPath])).body.data,[bigPath,unknownPath]);
   assert.deepEqual((await presence(two.base,[picturePath,bigPath,unknownPath])).body.data,{[picturePath]:'present',[bigPath]:'kept_elsewhere',[unknownPath]:'unavailable'});
+  assert.deepEqual((await(await fetch(two.base+'/api/media/kept-elsewhere')).json()).data,[{path:bigPath,size:big.length,contentType:'application/pdf'}]);
   // The same carried state is independent of media type. Add a 75 MB picture mapping to
   // the copied notebook and directly open both content URLs as a browser would.
   fs.writeFileSync(path.join(two.carried,sha(bigPicture)+'.mapping.json'),JSON.stringify({path:bigPicture,file:sha(big)+'.png',sha256:sha(big),size:big.length,contentType:'image/png'}));
+  assert.deepEqual(keptElsewhere({mediaRoot:two.mediaRoot,carried:two.carried}).map(item=>item.path).sort(),[bigPath,bigPicture].sort());
   for(const original of [bigPath,bigPicture]){
     const opened=await fetch(two.base+'/api/media/file/'+encodeURIComponent(original));
     assert.equal(opened.status,404);assert.match(opened.headers.get('content-type'),/^text\/html/);
