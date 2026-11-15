@@ -14,6 +14,8 @@ test('the maintained route accepts browser-runner Chrome executable variables',(
   assert.match(source,/process\.env\.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH/);
   assert.match(source,/\/usr\/bin\/google-chrome-stable/);
   assert.match(source,/\/opt\/google\/chrome\/chrome/);
+  assert.match(source,/waitVisible/);
+  assert.match(source,/l\.querySelector\('input,select,textarea'\)/);
 });
 
 test('a fixture bind failure stops the browser it started',async()=>{

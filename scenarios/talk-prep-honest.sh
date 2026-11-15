@@ -154,11 +154,16 @@ write_area() {
     printf 'AREA: health\nTITLE: Health\nRHYTHM: daily\nTIME: 19:00\nSTARTS: %s\nSTATUS: on\nSTYLE: compass\nTONE: gentle\n' "$(day_in -2)"
     printf 'SERVES: lower-ldl, sleep-better, visible-abs\n'
     printf 'LIMIT: never diagnose and never tell them to buy or book anything\n'
-    printf 'RESEARCH DOMAIN: blood-lipids | LDL and the routes that lower it: food, movement, supplements, medicines they could ask about\n'
-    printf 'RESEARCH DOMAIN: sleep | How much sleep helps, what extends it, and what only feels like it\n'
-    printf 'RESEARCH DOMAIN: body-composition | Fat loss and muscle, including what makes abs visible\n'
     printf '\n## Preparation\n\nRead the goals, the health data and the last talk, then prepare the talk.\n'
   } >"$ROOT/coach/health/area.md"
+}
+
+add_research_domains() {
+  "$NODE" - "$ROOT/coach/health/area.md" <<'NODE'
+const fs=require('fs'),file=process.argv[2],text=fs.readFileSync(file,'utf8');
+const domains='RESEARCH DOMAIN: blood-lipids | LDL and the routes that lower it: food, movement, supplements, medicines they could ask about\nRESEARCH DOMAIN: sleep | How much sleep helps, what extends it, and what only feels like it\nRESEARCH DOMAIN: body-composition | Fat loss and muscle, including what makes abs visible\n';
+fs.writeFileSync(file,text.replace('\n## Preparation','\n'+domains+'\n## Preparation'));
+NODE
 }
 
 # A preparation of the coach's shape. <file> <talk day> <prepared at> <routes: 2 or 3> <opening text>
@@ -278,9 +283,12 @@ act() {
 
   phase 'a fixture person: one health area, three goals, three research domains'
   write_area
-  cp "$ROOT/coach/health/area.md" "$EVIDENCE/area.md"
   phase 'the installed Coaching talk preparation job runs through Run now'
   run_installed_preparation
+  # Give the installed job a supported fixture that needs no web-reading tool from the scenario
+  # model. The research cases below then add their domains and create reviewed public evidence.
+  add_research_domains
+  cp "$ROOT/coach/health/area.md" "$EVIDENCE/area.md"
 
   phase 'a: a preparation whose review leaves one goal uncovered'
   prepare_and_review a "$DAY_A" 2 'Good evening. Tonight: your LDL result, the half hour of sleep, and one thing to try.' fail "$URL_1" "$URL_2"
