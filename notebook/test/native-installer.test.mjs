@@ -28,7 +28,10 @@ test('the native installer provisions local transcription only on Hermes-support
  assert.equal(supported.status,0,supported.err);assert.equal(fs.readFileSync(calls,'utf8').trim(),'pm install --extra stt-whisper');
  fs.rmSync(calls);
  const unsupported=sh('install_local_stt "$FAKE_BIN/hermes"',{FAKE_BIN:bin,FAKE_CALLS:calls,FAKE_OS:'Darwin',FAKE_ARCH:'x86_64'});
- assert.notEqual(unsupported.status,0);assert.match(unsupported.err,/not supported by Hermes on Darwin x86_64/);assert.equal(fs.existsSync(calls),false);
+ assert.equal(unsupported.status,2);assert.match(unsupported.err,/not supported by Hermes on Darwin x86_64/);assert.equal(fs.existsSync(calls),false);
+ const source=fs.readFileSync(installer,'utf8');
+ assert.match(source,/GODSPEED_LOCAL_STT="\$local_stt" "\$node" .*wire-assistant/,'wiring receives the supported or unavailable capability');
+ assert.match(source,/if \[ "\$result" -eq 2 \]; then local_stt=unavailable; else exit "\$result"; fi/,'unsupported machines continue, real provisioning failures stop');
 });
 
 // systemd is Linux's alone, and a Mac's /bin/bash 3.2 quotes the unit's values differently.

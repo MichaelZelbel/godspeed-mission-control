@@ -13,7 +13,7 @@ import {syncSoul,readExtra} from '../core/assistant-soul.mjs';
 import {installModelCommand} from './install-model-command.mjs';
 import {noteHermesMet} from '../core/starting-routines.mjs';
 import {keepOutOfGit} from '../core/first-commit.mjs';
-import {godspeedVoiceSettings,automaticTranscriptionLanguage,renewElevenLabsCommand,chatVoiceDefaults,ownerChats} from '../core/voice-replies.mjs';
+import {godspeedVoiceSettings,automaticTranscriptionLanguage,noteLocalTranscriptionCapability,renewElevenLabsCommand,chatVoiceDefaults,ownerChats} from '../core/voice-replies.mjs';
 import {GODSPEED_PLUGINS,enabledGodspeedPlugins} from '../core/godspeed-plugins.mjs';
 const root=process.env.GODSPEED_WORKSPACE,home=process.argv[2];if(!root||!home)throw new Error("Set GODSPEED_WORKSPACE to your mission control folder and name your assistant's home folder");
 // The notebook is opened only where its records are needed (a starter-made mission control, or a
@@ -22,6 +22,7 @@ const root=process.env.GODSPEED_WORKSPACE,home=process.argv[2];if(!root||!home)t
 // the rest needs only the folder's own paths.
 let opened=null;const notebook=()=>opened??=new Store(root);
 const store={root:path.resolve(root),state:path.join(path.resolve(root),'.godspeed'),get:(type,id)=>notebook().get(type,id)};fs.mkdirSync(store.state,{recursive:true});
+if(process.env.GODSPEED_LOCAL_STT==='available'||process.env.GODSPEED_LOCAL_STT==='unavailable')noteLocalTranscriptionCapability(store.state,process.env.GODSPEED_LOCAL_STT==='available');
 const port=Number(process.env.GODSPEED_PORT||47831),file=path.join(home,'config.yaml');fs.mkdirSync(home,{recursive:true});
 const kit=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..');
 // Keep the original main-branch command suite available as well as the

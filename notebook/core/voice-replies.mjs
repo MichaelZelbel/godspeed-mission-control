@@ -114,14 +114,20 @@ export function godspeedVoiceSettings(text,{home,state,node,script,platform}){
 // Hermes' fresh configuration used to choose English for every transcription. Godspeed owns the
 // correction only while the value remains blank; a language chosen later belongs to the owner.
 export function automaticTranscriptionLanguage(text,state,{fresh=false}={}){
- const record=readVoiceRecord(state),language=unquote(readConfigValue(text,['stt','language'])||'');
+ const record=readVoiceRecord(state),raw=String(readConfigValue(text,['stt','language'])||'').trim(),language=unquote(raw);
  if(record.stt_language==='auto'){
   if(language)return relinquishTranscriptionLanguage(record,state),text;
   return setConfigValue(text,['stt','language'],'""');
  }
- if(!fresh||language!=='en')return text;
+ // Hermes' generated default is quoted. An unquoted value may be a person's explicit choice.
+ if(!fresh||raw!=='"en"')return text;
  writeVoiceRecord(state,{...record,stt_language:'auto'});
  return setConfigValue(text,['stt','language'],'""');
+}
+export function noteLocalTranscriptionCapability(state,available){
+ const record=readVoiceRecord(state),next={...record};
+ if(available)delete next.local_stt;else next.local_stt='unavailable';
+ writeVoiceRecord(state,next);
 }
 function relinquishTranscriptionLanguage(record,state){
  const next={...record};delete next.stt_language;writeVoiceRecord(state,next);
@@ -177,6 +183,8 @@ export function transcribeStatus({config,record={}}){
    ?'Your ElevenLabs key may not transcribe, and your voice notes are sent to ElevenLabs all the same, because stt.provider says so in Hermes itself: allow the key '+STT_PERMISSION+' on the ElevenLabs page for API keys, or change that setting in Hermes.'
    :String(open.words||'')+' Your voice notes are sent to ElevenLabs until you save your key again.'};
  if(provider&&provider!=='local')return {service:'hermes',provider,words:null};
+ if(record.local_stt==='unavailable')return {service:'unavailable',model:null,
+  words:'Voice notes need an ElevenLabs key on this computer. Save one here and allow it Speech to Text on the ElevenLabs page for API keys.'};
  return {service:'local',model:null,
   words:!open?null:open.answer==='no'?open.words||null:String(open.words||'')+' Your voice notes are understood on this computer until it is known.'};
 }

@@ -15,7 +15,8 @@ act() {
  mkdir -p "$EVIDENCE/model-cache"; HF_HOME="$EVIDENCE/model-cache" "$python" "$HERE/local-voice-through-hermes.py" --audio "$EVIDENCE/german.mp3" --transcript "$EVIDENCE/transcript.txt" --call "$EVIDENCE/call.json" "${extra[@]}"; cp "$HERMES/config.yaml" "$EVIDENCE/config.yaml"
 }
 check() {
- local folder=$1; kept "$folder" transcript.txt "the returned words"; kept "$folder" call.json "the Hermes entry point"; kept "$folder" config.yaml "the fresh language setting"
+ local folder=$1; [ -d "$folder" ] || fail "there is nothing at $folder, so this scenario kept no evidence of a voice note"
+ kept "$folder" transcript.txt "the returned words"; kept "$folder" call.json "the Hermes entry point"; kept "$folder" config.yaml "the fresh language setting"
  grep -Eqi 'guten|morgen|sonne|berlin' "$folder/transcript.txt" || fail "the recording did not come back as German words: $(head -1 "$folder/transcript.txt")"
  grep -q 'tools.transcription_local' "$folder/call.json" || fail "the recording did not use Hermes local transcription"
  want_config "$folder/config.yaml" stt.language '' "the fresh assistant's settings"
