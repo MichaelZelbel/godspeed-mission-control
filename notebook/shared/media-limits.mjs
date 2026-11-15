@@ -7,3 +7,4 @@ export const MEDIA_UPLOAD_MAX_BYTES=MEDIA_UPLOAD_MAX_MB*1024*1024;
 // What a request may carry beyond the file: the form's own framing and a PDF's text read in
 // the browser (at most 1,000,000 characters, so at most 3 MB as UTF-8).
 export const MEDIA_UPLOAD_REQUEST_EXTRA_BYTES=4*1024*1024;
+export const MEDIA_PRESENCE_BATCH_SIZE=500;

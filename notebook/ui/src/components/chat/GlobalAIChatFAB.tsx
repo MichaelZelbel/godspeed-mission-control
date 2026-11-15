@@ -53,7 +53,6 @@ import {ChatConnectionEmptyState} from "./ChatConnectionEmptyState";
 import { useChatEntryInView } from "./chat-entry";
 import { BRAIN_PAGE } from "@/lib/brain-page";
 import { personLabel } from "@/components/timeline/people";
-import { ChatAttachmentLink } from "./ChatAttachmentLink";
 type ChatMessage = PersistedChatMessage;
 type SizeMode = "docked" | "expanded" | "fullscreen";
 
@@ -657,7 +656,7 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
                   >
                     {msg.role === "assistant" ? (
                       <div className="prose prose-sm dark:prose-invert max-w-none">
-                        <Suspense fallback={<div><p className="whitespace-pre-wrap">{msg.content}</p>{msg.attachments?.map(file=><ChatAttachmentLink key={file.path} file={file}/>)}</div>}>
+                        <Suspense fallback={<p className="whitespace-pre-wrap">{msg.content}</p>}>
                           <ChatMarkdown>{msg.content}</ChatMarkdown>
                         </Suspense>
                       </div>

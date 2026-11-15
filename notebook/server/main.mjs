@@ -73,7 +73,7 @@ import {recordRunningNotebook} from '../core/running-notebook.mjs';
 import {HermesUpdate,isScenarioHermesReleaseUrl,updateStatus} from '../core/hermes-update.mjs';
 import {HermesLifecycle} from '../core/hermes-lifecycle.mjs';
 import {ChatHealth,chatStatus} from '../core/chat-health.mjs';
-import {MEDIA_UPLOAD_MAX_BYTES,MEDIA_UPLOAD_MAX_MB,MEDIA_UPLOAD_REQUEST_EXTRA_BYTES} from '../shared/media-limits.mjs';
+import {MEDIA_PRESENCE_BATCH_SIZE,MEDIA_UPLOAD_MAX_BYTES,MEDIA_UPLOAD_MAX_MB,MEDIA_UPLOAD_REQUEST_EXTRA_BYTES} from '../shared/media-limits.mjs';
 
 // A backup AI is another service than the main AI, in Settings and in /backupai alike: when one
 // service fails, its other models and keys usually fail with it, and Hermes counts the same service
@@ -681,8 +681,8 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         return sendFile(res, found.file, { 'Content-Type': found.mapping.contentType || 'application/octet-stream', 'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': "default-src 'none'; sandbox" });
       }
       if(route==='/api/media/kept-here'&&req.method==='GET')return send(res,200,{data:keptHere(media)});
-      if(route==='/api/media/missing-here'&&req.method==='POST'){const paths=JSON.parse(await body(req))?.paths;if(!Array.isArray(paths)||paths.length>500||paths.some(p=>typeof p!=='string'))throw new Error('Invalid media paths');return send(res,200,{data:missingHere(media,paths)});}
-      if(route==='/api/media/presence'&&req.method==='POST'){const paths=JSON.parse(await body(req))?.paths;if(!Array.isArray(paths)||paths.length>500||paths.some(p=>typeof p!=='string'))throw new Error('Invalid media paths');return send(res,200,{data:mediaPresence(media,paths)});}
+      if(route==='/api/media/missing-here'&&req.method==='POST'){const paths=JSON.parse(await body(req))?.paths;if(!Array.isArray(paths)||paths.length>MEDIA_PRESENCE_BATCH_SIZE||paths.some(p=>typeof p!=='string'))throw new Error('Invalid media paths');return send(res,200,{data:missingHere(media,paths)});}
+      if(route==='/api/media/presence'&&req.method==='POST'){const paths=JSON.parse(await body(req))?.paths;if(!Array.isArray(paths)||paths.length>MEDIA_PRESENCE_BATCH_SIZE||paths.some(p=>typeof p!=='string'))throw new Error('Invalid media paths');return send(res,200,{data:mediaPresence(media,paths)});}
       if(route==='/api/chat/transcribe'&&req.method==='POST'){
         if(dictationBusy)return send(res,429,{error:'Another recording is being transcribed. Please try again shortly.'});
         dictationBusy=true;
