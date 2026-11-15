@@ -111,14 +111,31 @@ export function godspeedVoiceSettings(text,{home,state,node,script,platform}){
  return text;
 }
 
+// Hermes' fresh configuration used to choose English for every transcription. Godspeed owns the
+// correction only while the value remains blank; a language chosen later belongs to the owner.
+export function automaticTranscriptionLanguage(text,state,{fresh=false}={}){
+ const record=readVoiceRecord(state),language=unquote(readConfigValue(text,['stt','language'])||'');
+ if(record.stt_language==='auto'){
+  if(language)return relinquishTranscriptionLanguage(record,state),text;
+  return setConfigValue(text,['stt','language'],'""');
+ }
+ if(!fresh||language!=='en')return text;
+ writeVoiceRecord(state,{...record,stt_language:'auto'});
+ return setConfigValue(text,['stt','language'],'""');
+}
+function relinquishTranscriptionLanguage(record,state){
+ const next={...record};delete next.stt_language;writeVoiceRecord(state,next);
+}
+
 // UNDERSTANDING THE VOICE NOTE WITH ELEVENLABS (core/voice-speech.mjs says what Hermes reads and why
 // no package is needed). Hermes is set to it only when the person's key may transcribe, which Settings
 // asks the key once; otherwise the voice note is understood on the computer itself, as before. An
 // stt.provider the owner set in Hermes themselves is theirs and stays, as a tts.provider does: only
 // an empty one, or the one Godspeed wrote itself, is written again.
-export function withElevenLabsTranscription(text){
+export function withElevenLabsTranscription(text,state){
  let out=setConfigValue(text,['stt','provider'],JSON.stringify(STT_PROVIDER));
- return setConfigValue(out,['stt','elevenlabs','model_id'],JSON.stringify(STT_MODEL));
+ out=setConfigValue(out,['stt','elevenlabs','model_id'],JSON.stringify(STT_MODEL));
+ return state?automaticTranscriptionLanguage(out,state):out;
 }
 // Godspeed's own: the stt.provider in config.yaml is ElevenLabs and Godspeed's record says Godspeed
 // wrote it. Only that one is Godspeed's to write again or to take away.
@@ -259,7 +276,7 @@ export async function saveVoice({home,state,input={},fetcher,api,node,script,pla
  let config=withElevenLabs(read(configFile),{home,state,choice,node,script,platform});
  const wrote=asked?.answer==='yes'&&mayWriteTranscription(config,record);
  const undid=asked?.answer==='no'&&godspeedWroteTranscription(config,record);
- if(wrote)config=withElevenLabsTranscription(config);
+ if(wrote)config=withElevenLabsTranscription(config,state);
  if(undid)config=withoutElevenLabsTranscription(config);
  writePrivate(configFile,config);
  const next={...clearFailure(record),service:'elevenlabs',elevenlabs:choice,at:now.toISOString()};

@@ -20,6 +20,17 @@ test('the installer is valid bash',options,()=>{
   assert.equal(result.status,0,result.stderr);
 });
 
+test('the native installer provisions local transcription only on Hermes-supported machines',options,()=>{
+ const bin=scratch('stt-bin'),calls=bin+'/calls';fs.mkdirSync(bin,{recursive:true});
+ fs.writeFileSync(bin+'/hermes','#!/bin/sh\nprintf "%s\\n" "$*" > "$FAKE_CALLS"\n',{mode:0o755});
+ fs.writeFileSync(bin+'/uname','#!/bin/sh\n[ "$1" = -s ] && echo "$FAKE_OS" || echo "$FAKE_ARCH"\n',{mode:0o755});
+ const supported=sh('install_local_stt "$FAKE_BIN/hermes"',{FAKE_BIN:bin,FAKE_CALLS:calls,FAKE_OS:'Linux',FAKE_ARCH:'x86_64'});
+ assert.equal(supported.status,0,supported.err);assert.equal(fs.readFileSync(calls,'utf8').trim(),'pm install --extra stt-whisper');
+ fs.rmSync(calls);
+ const unsupported=sh('install_local_stt "$FAKE_BIN/hermes"',{FAKE_BIN:bin,FAKE_CALLS:calls,FAKE_OS:'Darwin',FAKE_ARCH:'x86_64'});
+ assert.notEqual(unsupported.status,0);assert.match(unsupported.err,/not supported by Hermes on Darwin x86_64/);assert.equal(fs.existsSync(calls),false);
+});
+
 // systemd is Linux's alone, and a Mac's /bin/bash 3.2 quotes the unit's values differently.
 test('the unit names the account, the folder and the commands exactly as systemd reads them',{skip:options.skip||(process.platform==='darwin'&&'systemd units are Linux only')},()=>{
   const env={root:'/srv/my 100% folder',state:'/srv/my 100% folder/.godspeed/integrated-runtime',node:'/opt/god$peed "x"/bin/node',service_user:'anna',service_group:'staff',HOME:'/home/anna',UNIT_PATH:'/opt/node/bin:/usr/bin'};

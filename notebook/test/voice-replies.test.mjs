@@ -9,7 +9,7 @@ import {spawn,spawnSync,execFileSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {installStarter} from '../core/starter-workspace.mjs';
 import {readConfigValue,configList,godspeedHermesSettings} from '../core/hermes-config.mjs';
-import {PROVIDER,FREE_VOICE,VOICE_MODE_FILE,SPEECH_SCRIPT,ELEVENLABS_DEFAULTS,withElevenLabs,withFreeVoice,withoutElevenLabsTranscription,godspeedVoiceSettings,speechCommand,chatVoiceDefaults,ownerChats,saveVoice,voiceStatus,elevenLabsChoice,sampleText} from '../core/voice-replies.mjs';
+import {PROVIDER,FREE_VOICE,VOICE_MODE_FILE,SPEECH_SCRIPT,ELEVENLABS_DEFAULTS,withElevenLabs,withFreeVoice,withoutElevenLabsTranscription,godspeedVoiceSettings,automaticTranscriptionLanguage,speechCommand,chatVoiceDefaults,ownerChats,saveVoice,voiceStatus,elevenLabsChoice,sampleText} from '../core/voice-replies.mjs';
 import {elevenLabsProblem,elevenLabsSpeech,readVoiceRecord,noteVoiceFailed,noteVoiceWorked,failureWords,oneSecondSample,transcribePermissionWords,STT_MODEL,STT_PROVIDER,VOICE_FILE} from '../core/voice-speech.mjs';
 import {readNotices} from '../core/notices.mjs';
 import {TelegramRunner} from '../../docker/full-candidate/telegram-runner.mjs';
@@ -209,6 +209,19 @@ test('a key that may transcribe makes Hermes understand voice notes with ElevenL
  await saving(f,{},fetcher);
  assert.equal(transcribed.length,1,'asked when a key is saved, not at every save');
  assert.equal(f.config(),before);
+});
+
+test('Godspeed makes the fresh Hermes transcription language automatic until its owner chooses one',t=>{
+ const f=installation(t),upstream='stt:\n  language: "en"\n  local:\n    language: de\n';
+ const automatic=automaticTranscriptionLanguage(upstream,f.state,{fresh:true});
+ assert.equal(readConfigValue(automatic,['stt','language']),'""');
+ assert.equal(readConfigValue(automatic,['stt','local','language']),'de','provider-specific language stays');
+ assert.equal(readVoiceRecord(f.state).stt_language,'auto');
+ assert.equal(automaticTranscriptionLanguage(automatic,f.state),automatic,'later wiring keeps the owned blank');
+ const german=automatic.replace('language: ""','language: de');
+ assert.equal(automaticTranscriptionLanguage(german,f.state),german,'a language the owner chose stays');
+ assert.equal(readVoiceRecord(f.state).stt_language,undefined,'and Godspeed relinquishes it');
+ assert.equal(automaticTranscriptionLanguage('stt:\n  language: fr\n',f.state,{fresh:true}),'stt:\n  language: fr\n');
 });
 
 test('a key that may not transcribe leaves voice notes understood here, and Settings names the permission',async t=>{

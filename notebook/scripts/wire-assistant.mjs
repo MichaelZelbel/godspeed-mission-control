@@ -13,7 +13,7 @@ import {syncSoul,readExtra} from '../core/assistant-soul.mjs';
 import {installModelCommand} from './install-model-command.mjs';
 import {noteHermesMet} from '../core/starting-routines.mjs';
 import {keepOutOfGit} from '../core/first-commit.mjs';
-import {godspeedVoiceSettings,renewElevenLabsCommand,chatVoiceDefaults,ownerChats} from '../core/voice-replies.mjs';
+import {godspeedVoiceSettings,automaticTranscriptionLanguage,renewElevenLabsCommand,chatVoiceDefaults,ownerChats} from '../core/voice-replies.mjs';
 import {GODSPEED_PLUGINS,enabledGodspeedPlugins} from '../core/godspeed-plugins.mjs';
 const root=process.env.GODSPEED_WORKSPACE,home=process.argv[2];if(!root||!home)throw new Error("Set GODSPEED_WORKSPACE to your mission control folder and name your assistant's home folder");
 // The notebook is opened only where its records are needed (a starter-made mission control, or a
@@ -258,6 +258,7 @@ if(starterBorn(root)){
  // voice where nobody chose one. An ElevenLabs voice was renewed above already, for every mission
  // control, and this writes the same command again without changing anything.
  text=godspeedVoiceSettings(text,{home,state:store.state});
+ text=automaticTranscriptionLanguage(text,store.state,{fresh:true});
  installDeliveryWrapper();
 }
 else{
