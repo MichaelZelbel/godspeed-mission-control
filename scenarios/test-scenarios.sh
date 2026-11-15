@@ -3079,7 +3079,7 @@ globalThis.fetch = async (url, options) => { fs.appendFileSync(process.env.GP_AS
 STUB
 cat >"$GP/right.mjs" <<'STUB'
 import fs from 'node:fs';
-globalThis.fetch = async (url, options) => { fs.appendFileSync(process.env.GP_ASKED, `${url}|${new Headers(options?.headers).get('authorization')}\n`); return new Response('{}', { status: String(url).endsWith('/octocat/Hello-World') ? 200 : 404 }); };
+globalThis.fetch = async (url, options) => { fs.appendFileSync(process.env.GP_ASKED, `${url}|${new Headers(options?.headers).get('authorization')}|${options?.signal instanceof AbortSignal}\n`); return new Response('{}', { status: String(url).endsWith('/octocat/Hello-World') ? 200 : 404 }); };
 STUB
 cat >"$GP/public-as-private.mjs" <<'STUB'
 import fs from 'node:fs';
@@ -3104,10 +3104,10 @@ else
   bad "github-privacy-live did not fail at once on a public repository taken as private ($(cat "$GP/pp.out"))"
 fi
 if gp right "$GP/right.out" && grep -q '^PASS .*public repository (200).*nobody has (404)' "$GP/right.out" &&
-  [ "$(grep -c '|Bearer scenario-test-token$' "$GP/asked-right")" = 2 ]; then
-  ok "github-privacy-live passes when GitHub answers 200 for the public repository and 404 for the missing one"
+  [ "$(grep -c '|Bearer scenario-test-token|true$' "$GP/asked-right")" = 2 ]; then
+  ok "github-privacy-live preserves the product abort signal and passes on GitHub's 200/404 answers"
 else
-  bad "github-privacy-live did not pass on GitHub's right answers ($(cat "$GP/right.out"))"
+  bad "github-privacy-live did not preserve both product abort signals or pass on GitHub's right answers ($(cat "$GP/right.out"); requests: $(cat "$GP/asked-right" 2>/dev/null))"
 fi
 if GP_ASKED="$GP/asked-missing" GODSPEED_PRIVACY_WAITS='0 0' NODE_OPTIONS="--import=file://$GP/right.mjs" \
   node "$ROOT/scenarios/github-privacy-live.mjs" "$ROOT/notebook/core/sync/git.mjs" >"$GP/missing.out" 2>/dev/null; then
