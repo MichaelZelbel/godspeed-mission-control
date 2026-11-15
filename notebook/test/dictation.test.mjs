@@ -8,6 +8,11 @@ import {PassThrough} from 'node:stream';
 import {createService} from '../server/main.mjs';
 import {transcribeRecording} from '../core/dictation.mjs';
 
+test('installed dictation bootstraps Hermes before loading its transcription tools',()=>{
+  const script=fs.readFileSync(new URL('../assistant-files/dictate.py',import.meta.url),'utf8');
+  assert.ok(script.indexOf("import hermes_bootstrap")<script.indexOf('from tools.transcription_tools import'));
+});
+
 test('dictation rejects unsupported, empty and oversized recordings before starting Hermes',async()=>{
   await assert.rejects(transcribeRecording(null,'',Buffer.from('x'),'text/plain'),/format/);
   await assert.rejects(transcribeRecording(null,'',Buffer.alloc(0),'audio/webm'),/one minute/);
