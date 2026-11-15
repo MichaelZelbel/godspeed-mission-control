@@ -25,7 +25,11 @@ const runRoute=async createFresh=>{
       response.setHeader('content-type','application/json');
       if(request.url==='/api/query'){
         queried++;
-        response.end(JSON.stringify([{id:'prep-job',name:'Coaching talk preparation',last_run_at:queried===1?'before':'after',last_status:queried===1?'':'ok'}]));
+        response.end(JSON.stringify({
+          data:[{id:'prep-job',name:'Coaching talk preparation',last_run_at:queried===1?'before':'after',last_status:queried===1?'':'ok'}],
+          count:1,
+          error:null
+        }));
       }else if(request.url==='/api/jobs/run'){
         assert.deepEqual(JSON.parse(body),{id:'prep-job'});
         if(createFresh){
