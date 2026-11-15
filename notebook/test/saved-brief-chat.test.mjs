@@ -28,6 +28,18 @@ test('saved brief requests bypass provider and native agents word for word',asyn
  assert.equal(saved.includes('FILTERED OUT SENTENCE'),false);
 });
 
+test('a brief request creates the checked briefing before any ordinary chat reply',async t=>{
+ const store=new Store(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-new-brief-chat-'))),query=new QueryService(store);t.after(()=>fs.rmSync(store.root,{recursive:true,force:true}));
+ store.save('settings',{id:'installation',timezone:'UTC'});store.save('goals',{title:'Prepare a fictional guide',status:'adopted'});
+ const calls=[],provider=async input=>{calls.push(input.kind);if(input.kind==='brief-verification')return {passed:true,reason:'Fictional briefing checked.'};return saved;};
+ const domains=new Domains(query,{provider});
+ const first=await domains.invoke('conversation-chat',{conversation_id:'notebook:first',request_id:'brief-first',message:"today's brief"});
+ const again=await domains.invoke('conversation-chat',{conversation_id:'notebook:first',request_id:'brief-again',message:'the brief again'});
+ assert.equal(first.reply,saved);assert.equal(again.reply,saved);
+ assert.equal(store.list('notes').filter(note=>note.source_app==='morning-brief').length,1);
+ assert.equal(calls.includes('conversation-chat'),false);
+});
+
 test('candidate Telegram reports a definitely incomplete long saved brief',async t=>{
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-saved-brief-telegram-partial-')),store=new Store(root),query=new QueryService(store);t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
  const longSaved='Saved filtered briefing.\n\n'+'.'.repeat(4000)+'\n\nCharm Challenge: exact final line.';
