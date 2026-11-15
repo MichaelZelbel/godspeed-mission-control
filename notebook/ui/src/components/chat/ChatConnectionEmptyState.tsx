@@ -1,6 +1,7 @@
 import {useQuery} from '@tanstack/react-query';
 import {Link} from 'react-router-dom';
-export type ChatAvailability='none'|'ready'|'refused'|'unreachable';
+import {CHAT_AVAILABILITIES} from '../../../../core/chat-availability.mjs';
+export type ChatAvailability=(typeof CHAT_AVAILABILITIES)[number];
 type ChatOptions={connected?:boolean;usable?:boolean;availability?:ChatAvailability};
 export type ChatAIState='checking'|ChatAvailability;
 

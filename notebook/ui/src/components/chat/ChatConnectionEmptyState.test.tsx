@@ -21,10 +21,10 @@ describe.each(surfaces)('%s pre-composer state',surface=>{
     expect(screen.getByRole('link',{name:'Open Settings, Your AI'})).toHaveAttribute('href','/dashboard/settings#connect-ai');
     expect(screen.queryByText('Ordinary ready state')).not.toBeInTheDocument();
   });
-  it('replaces ready wording when the configured AI is unusable',async()=>{
-    show({connected:true,usable:false});
-    expect(await screen.findByText('Your AI could not be used')).toBeInTheDocument();
-    expect(screen.getByText(/sign-in, key, or connection/)).toBeInTheDocument();
+  it('replaces ready wording when the configured AI cannot be reached',async()=>{
+    show({connected:true,usable:false,availability:'unreachable'});
+    expect(await screen.findByText('Your AI could not be reached')).toBeInTheDocument();
+    expect(screen.getByText('Check its connection before you type.')).toBeInTheDocument();
     expect(screen.getByRole('link',{name:'Open Settings, Your AI'})).toHaveAttribute('href','/dashboard/settings#connect-ai');
     expect(screen.queryByText('Ordinary ready state')).not.toBeInTheDocument();
   });

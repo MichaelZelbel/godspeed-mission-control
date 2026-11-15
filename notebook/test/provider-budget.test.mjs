@@ -77,6 +77,21 @@ test('a passing 502, 503, 504 or 429 from the provider is tried again, and other
  }finally{await new Promise(r=>server.close(r));}
 });
 
+test('a refused model provider is reclassified when its next check cannot reach the service',async()=>{
+ const original=globalThis.fetch,provider=modelProvider({url:'http://localhost/fixture',key:'fictional',model:'fictional',retryWaits:[]});let call=0;
+ try{
+  globalThis.fetch=async()=>{if(call++===0)return new Response('{}',{status:401});throw new TypeError('fetch failed');};
+  await assert.rejects(provider({kind:'connection-check',timeout_ms:15000}),/HTTP 401/);assert.equal(provider.health(),'refused');
+  await assert.rejects(provider({kind:'connection-check',timeout_ms:15000}),/could not be reached/);assert.equal(provider.health(),'unreachable');
+ }finally{globalThis.fetch=original;}
+});
+
+test('Hermes exposes a bounded check and classifies an authentication refusal',async()=>{
+ const home=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-hermes-health-'));let prompt;
+ const provider=hermesProvider({home,cwd:home,spawnProcess:()=>{const child=new EventEmitter();child.stdin=new PassThrough();child.stdout=new PassThrough();child.stderr=new PassThrough();child.stdin.on('data',data=>{prompt=JSON.parse(data);queueMicrotask(()=>{child.stdout.end();child.stderr.end('AuthenticationError: token expired, private diagnostic\n');child.emit('close',1);});});return child;}});
+ await assert.rejects(provider.check(),/needs sign-in/);assert.equal(provider.health(),'refused');assert.equal(prompt.kind,'connection-check');assert.equal(prompt.timeout_ms,undefined);
+});
+
 // Only a connection that failed is called unreachable (#506): a header Node refused on this computer
 // and a stopped request keep their own errors.
 test('a stopped request keeps its own error and a local fetch error is not called unreachable',async()=>{

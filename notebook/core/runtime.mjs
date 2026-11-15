@@ -30,6 +30,7 @@ export function unreachableAI(url,cause){
 }
 export function hermesProvider({executable='hermes',home,cwd,model,provider,sourceRoot,spawnProcess}={}){
   if(!isHermesExecutable(executable))throw new Error('Choose the verified Hermes runtime');
+  let healthFailure='unreachable';
   const run=async input=>{
     const timeoutMs=providerTimeBudget(input);
     if(input.attachments?.some(a=>a.mime==='application/pdf'))throw new Error('Use a document-capable model endpoint for PDF analysis');
@@ -52,11 +53,15 @@ export function hermesProvider({executable='hermes',home,cwd,model,provider,sour
       // waiting for their chat must not be used up here (godspeed-coach lib/context.mjs).
       const result=await runChild(executable,args,{cwd,env:{...assistantEnvironment({home,workspace:cwd}),GODSPEED_SCHEDULED_RUN:'1'},input:JSON.stringify(prompt),timeoutMs,maxBytes:1024*1024,signal,spawnProcess}).catch(error=>{throw childFailure(error,timeoutMs,'The AI connection could not start');});
       const text=hermesResponse(result.stdout);
-      if(result.code===0&&text)return text;
+      if(result.code===0&&text){healthFailure='unreachable';return text;}
+      healthFailure=AI_SIGN_IN.test(result.stderr+'\n'+text)?'refused':'unreachable';
       throw new Error(hermesFailureMessage(result.stderr+'\n'+text));
     }finally{for(const file of temporary)try{fs.unlinkSync(file);}catch{}}
   };
-  let cached,loadedAt=0;run.options=async()=>{if(cached&&Date.now()-loadedAt<300000)return cached;const {python,source}=hermesPython({executable,sourceRoot,home});if(!python)throw new Error('Model choices could not be loaded');const helper=fileURLToPath(new URL('../assistant-files/chat-options.py',import.meta.url));cached=await runChild(python,['-I',helper,source],{cwd:fs.existsSync(source)?source:home||cwd,env:assistantEnvironment({home,workspace:cwd}),timeoutMs:20000,spawnProcess}).then(result=>{if(result.code)throw Error();return JSON.parse(result.stdout.trim().split(/\r?\n/).at(-1));}).catch(()=>{throw new Error('Model choices could not be loaded');});loadedAt=Date.now();return cached;};return run;
+  let cached,loadedAt=0;run.options=async()=>{if(cached&&Date.now()-loadedAt<300000)return cached;const {python,source}=hermesPython({executable,sourceRoot,home});if(!python)throw new Error('Model choices could not be loaded');const helper=fileURLToPath(new URL('../assistant-files/chat-options.py',import.meta.url));cached=await runChild(python,['-I',helper,source],{cwd:fs.existsSync(source)?source:home||cwd,env:assistantEnvironment({home,workspace:cwd}),timeoutMs:20000,spawnProcess}).then(result=>{if(result.code)throw Error();return JSON.parse(result.stdout.trim().split(/\r?\n/).at(-1));}).catch(()=>{throw new Error('Model choices could not be loaded');});loadedAt=Date.now();return cached;};
+  run.check=async()=>{await run({kind:'connection-check',contract:'Reply with OK.',timeout_ms:15000});};
+  run.health=()=>healthFailure;
+  return run;
 }
 // THE PYTHON HERMES RUNS ON, for the model list under the chat (assistant-files/chat-options.py
 // imports Hermes' own modules). Until 18 October 2026 it was looked for only where the one-click

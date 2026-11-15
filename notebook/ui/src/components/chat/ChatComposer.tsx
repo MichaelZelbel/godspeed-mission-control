@@ -3,6 +3,7 @@ import {Plus,ArrowUp,Square,Mic,Volume2,VolumeX,X,FileText,Loader2} from 'lucide
 import {Button} from '@/components/ui/button';
 import {Textarea} from '@/components/ui/textarea';
 import {loadChatOptions} from '@/local/chat-options.mjs';
+import type {ChatAvailability} from './ChatConnectionEmptyState';
 
 export type ChatFile={path:string;name:string;type:string;text?:string};
 type Props={value:string;onChange:(text:string)=>void;onSend:()=>void;onStop:()=>void;busy:boolean;files:ChatFile[];onFiles:(files:ChatFile[])=>void;model:string;effort:string;onModel:(v:string)=>void;onEffort:(v:string)=>void;reply:string;context?:string;compact?:boolean;onError:(message:string)=>void};
@@ -10,7 +11,7 @@ export default function ChatComposer(p:Props){
   const picker=useRef<HTMLInputElement>(null),recorder=useRef<MediaRecorder|null>(null),recordingTimer=useRef<ReturnType<typeof setTimeout>>(),audioRequest=useRef<AbortController|null>(null),playbackUtterance=useRef<SpeechSynthesisUtterance|null>(null),mounted=useRef(true),draft=useRef(p.value);
   draft.current=p.value;
   const [uploading,setUploading]=useState(false),[listening,setListening]=useState(false),[transcribing,setTranscribing]=useState(false),[speaking,setSpeaking]=useState(false),[dragging,setDragging]=useState(false);
-  const [options,setOptions]=useState<{current:string;label?:string;connected?:boolean;usable?:boolean;availability?:'none'|'ready'|'refused'|'unreachable';models:Array<{id:string;efforts:string[]}>}>({current:'',models:[]});
+  const [options,setOptions]=useState<{current:string;label?:string;connected?:boolean;usable?:boolean;availability?:ChatAvailability;models:Array<{id:string;efforts:string[]}>}>({current:'',models:[]});
   const [modelError,setModelError]=useState(''),[modelAttempt,setModelAttempt]=useState(0);
   const canRecord=!!navigator.mediaDevices?.getUserMedia&&typeof MediaRecorder!=='undefined';
   useEffect(()=>{let alive=true;const request=new AbortController();setModelError('');loadChatOptions({signal:request.signal}).then(data=>{if(alive){setOptions(data);p.onModel(data.current);}}).catch(e=>{if(alive)setModelError(e.message||'Model choices could not be loaded. Try again.');});return()=>{alive=false;request.abort();};},[modelAttempt]);
