@@ -6,6 +6,7 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';
 import http from 'node:http';import {spawn} from 'node:child_process';import {fileURLToPath} from 'node:url';
 import {Store} from '../core/records/store.mjs';import {QueryService} from '../core/query.mjs';import {jobExecutor} from '../core/runtime.mjs';
+import {createService} from '../server/main.mjs';
 
 const CALENDAR='Nothing from the calendar needs attention.';
 const REST='Next: review the fictional reading list and pick one chapter.';
@@ -64,7 +65,8 @@ test('a refused sentence inside a paragraph goes alone, and the paragraph keeps 
 });
 
 test('when the source check refuses every sentence, the honest note is saved and the routine exits 0',async t=>{
- const {root}=workspace(t);
+ const {root,store}=workspace(t);
+ store.save('deadlines',{title:'Submit the fictional reading plan',status:'open',due_at:'2027-01-15T12:00:00Z',timezone:'Europe/Berlin'});
  // Every draft is refused, as last night: a source claim with no record named and no sentence named.
  const server=http.createServer((request,response)=>{let body='';request.on('data',c=>body+=c);request.on('end',()=>{
   const input=JSON.parse(JSON.parse(body).messages[1].content);
@@ -80,11 +82,35 @@ test('when the source check refuses every sentence, the honest note is saved and
  const timer=setTimeout(()=>child.kill(),120000);
  const status=await new Promise(resolve=>child.on('close',resolve));clearTimeout(timer);
  assert.equal(status,0,stderr);
- assert.match(stdout,/^Your full morning briefing for \d{4}-\d{2}-\d{2} could not be written today, because the checks refused what was drafted\. A repair item has been opened for it\.\s*$/);
+ assert.match(stdout,/^Your full morning briefing for \d{4}-\d{2}-\d{2} could not be written today, because the checks refused what was drafted\. A repair item has been opened for it\.\s+Next: open Submit the fictional reading plan and choose the first step to finish before 2027-01-15\.\s*$/);
  const fresh=new QueryService(new Store(root)),notes=briefs(fresh);
  assert.equal(notes.length,1);assert.equal(notes[0].fallback,true);assert.equal(notes[0].content.trim(),stdout.trim());
- assert.doesNotMatch(notes[0].content,/calendar|reading list/i,'the note states nothing from the sources');
+ assert.doesNotMatch(notes[0].content,/calendar|review the fictional reading list/i,'none of the refused draft claims reaches the fallback');
  const receipt=fresh.rows('job_receipts').find(r=>r.kind==='brief-factual-fallback');
  assert.equal(receipt.honest_note,true);assert.match(receipt.rejected_draft,/calendar/);
  assert.equal(fresh.rows('work_items').filter(w=>w.kind==='repair'&&w.note_id===notes[0].id).length,1);
+ const before=JSON.stringify(notes),chat=spawn(process.execPath,[script,'--saved','--godspeed',root],{env:{...process.env,GODSPEED_WORKSPACE:root}});
+ let chatOut='',chatErr='';chat.stdout.on('data',c=>chatOut+=c);chat.stderr.on('data',c=>chatErr+=c);
+ const chatStatus=await new Promise(resolve=>chat.on('close',resolve));
+ assert.equal(chatStatus,0,chatErr);assert.equal(chatOut.trim(),notes[0].content.trim(),'chat returns the saved fallback without redrafting');
+ assert.equal(JSON.stringify(briefs(new QueryService(new Store(root)))),before,'chat writes no second brief');
+});
+
+test('the public job API saves a factual fallback that says its checks failed',async t=>{
+ const {root}=workspace(t),provider=async input=>input.kind==='brief-verification'
+  ?{passed:false,reason:'The fictional draft is not useful enough.',rejection_scope:'non-source',rejected_source_ids:[]}
+  :CALENDAR+'\n\n'+REST;
+ const service=await createService({root,port:0,provider}),base='http://127.0.0.1:'+service.address.port;
+ t.after(()=>service.close());
+ service.store.save('settings',{id:'installation',owner:service.store.device,timezone:'Europe/Berlin'});
+ service.store.save('deadlines',{title:'Submit the fictional reading plan',status:'open',due_at:'2027-01-15T12:00:00Z',timezone:'Europe/Berlin'});
+ service.store.save('jobs',{id:'public-brief',kind:'morning-brief',owner:service.store.device,paused:false,next_run:'2020-01-01T00:00:00Z',interval_ms:86400000,state:'pending'});
+ const response=await fetch(base+'/api/jobs/run',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:'public-brief'})});
+ const payload=await response.json();assert.equal(response.status,200,JSON.stringify(payload));
+ assert.equal(payload.results.find(result=>result.id==='public-brief')?.state,'verified',JSON.stringify(payload));
+ const saved=briefs(service.query).at(-1);
+ assert.match(saved.content,/^Your full morning briefing for \d{4}-\d{2}-\d{2} could not be written today, because the checks refused what was drafted\./);
+ assert.match(saved.content,/Next: Ask Godspeed to work on Read the fictional reading list and show you one concrete result today\./);
+ assert.doesNotMatch(saved.content,/Nothing from the calendar needs attention|review the fictional reading list and pick one chapter/);
+ assert.equal(saved.fallback,true);
 });
