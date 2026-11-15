@@ -26,9 +26,9 @@ paragraph when the jobs are in `.github/workflows/scenarios.yml`.
 
 `notebook-assistant-journeys` is a maintained manual scenario. Run it on a throwaway native
 scenario machine with `bash scenarios/notebook-assistant-journeys.sh <stage ref>`. It needs
-Chromium at `/usr/bin/google-chrome`, `/usr/bin/chromium`, or `/usr/bin/chromium-browser`; set
-`CHROME_PATH` to its executable when it is installed elsewhere. Its fixture is loopback-only and
-the command retains the browser evidence described in the table below.
+Chrome or Chromium at a standard Linux executable location; browser runners may provide
+`CHROME_PATH`, `CHROME_BIN`, or `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` when it is elsewhere. Its
+fixture is loopback-only and the command retains the browser evidence described in the table below.
 
 `workouts-from-hevy`, `day-becomes-facts`, `hermes-update-rollback` and `first-day` are jobs of that workflow, and the verdict requires all four unless the run was started with `-f only=<job names>`, in which case it judges only the jobs named there. Their fixtures are loopback-only and contain only made-up people, workouts and messages.
 

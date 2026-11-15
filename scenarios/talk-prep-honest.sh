@@ -78,7 +78,7 @@ settings_connects_the_model() {
 }
 
 run_installed_preparation() {
-  local jobs=$EVIDENCE/.prep-jobs.json id before after code produced
+  local jobs=$EVIDENCE/.prep-jobs.json id before after code produced attempt=0 answer
   installed_preparation_is_listed() {
     curl -fsS --max-time 30 -X POST -H 'Content-Type: application/json' -d '{"table":"jobs"}' "http://127.0.0.1:$NOTEBOOK_PORT/api/query" -o "$jobs" 2>/dev/null || return 1
     id=$("$NODE" -e 'const d=JSON.parse(require("fs").readFileSync(process.argv[1])),r=Array.isArray(d)?d:(d.data||[]),j=r.find(x=>x.name==="Coaching talk preparation"||x.title==="Coaching talk preparation"||x.kind==="coach-prep");if(j)process.stdout.write(String(j.id))' "$jobs")
@@ -88,8 +88,19 @@ run_installed_preparation() {
     fail "the installed routine list has no Coaching talk preparation job"
   before=$("$NODE" -e 'const d=JSON.parse(require("fs").readFileSync(process.argv[1])),r=Array.isArray(d)?d:(d.data||[]),j=r.find(x=>String(x.id)===process.argv[2]);process.stdout.write(String(j?.last_run_at||"never"))' "$jobs" "$id")
   printf 'id=%s\nbefore=%s\n' "$id" "$before" >"$EVIDENCE/prep-run-before.txt"
-  code=$(curl -sS -o "$EVIDENCE/prep-run-request.json" -w '%{http_code}' --max-time 60 -X POST -H 'Content-Type: application/json' -d "{\"id\":$(quoted_json "$id")}" "http://127.0.0.1:$NOTEBOOK_PORT/api/jobs/run") || fail "the installed preparation job could not be requested"
-  { [ "$code" = 200 ] || [ "$code" = 202 ]; } || fail "the installed preparation job was refused with HTTP $code"
+  while [ "$attempt" -lt 18 ]; do
+    attempt=$((attempt + 1)); answer=$EVIDENCE/.prep-run-request-$attempt.json
+    code=$(curl -sS -o "$answer" -w '%{http_code}' --max-time 60 -X POST -H 'Content-Type: application/json' -d "{\"id\":$(quoted_json "$id")}" "http://127.0.0.1:$NOTEBOOK_PORT/api/jobs/run") || fail "the installed preparation job could not be requested"
+    printf 'attempt=%s http=%s response=%s\n' "$attempt" "$code" "$(tr -d '\n' <"$answer")" >>"$EVIDENCE/prep-run-requests.txt"
+    if { [ "$code" = 200 ] || [ "$code" = 202 ]; } && grep -qE '"started": *true|"results"' "$answer"; then
+      cp "$answer" "$EVIDENCE/prep-run-request.json"
+      break
+    fi
+    grep -q 'The assistant is updating or another routine is already running' "$answer" ||
+      fail "the installed preparation job was refused with HTTP $code: $(tr -d '\n' <"$answer" | cut -c1-200)"
+    sleep 5
+  done
+  [ -s "$EVIDENCE/prep-run-request.json" ] || fail "the installed preparation job stayed busy and refused every Run now request"
   prep_run_finished() {
     curl -fsS --max-time 30 -X POST -H 'Content-Type: application/json' -d '{"table":"jobs"}' "http://127.0.0.1:$NOTEBOOK_PORT/api/query" -o "$jobs" 2>/dev/null || return 1
     after=$("$NODE" -e 'const d=JSON.parse(require("fs").readFileSync(process.argv[1])),r=Array.isArray(d)?d:(d.data||[]),j=r.find(x=>String(x.id)===process.argv[2]);process.stdout.write([j?.last_run_at||"",j?.last_status||"",j?.last_error||""].join("\t"))' "$jobs" "$id")

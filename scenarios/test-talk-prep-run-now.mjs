@@ -15,7 +15,7 @@ test('the scenario fixture gives every adopted goal its public card ID',()=>{
   }
 });
 
-const runRoute=async createFresh=>{
+const runRoute=async(createFresh,{busyOnce=false}={})=>{
   const folder=fs.mkdtempSync(path.join(os.tmpdir(),'talk-prep-run-now-'));
   const root=path.join(folder,'root');
   const work=path.join(folder,'work');
@@ -24,7 +24,7 @@ const runRoute=async createFresh=>{
   const old=path.join(prep,'old.md');
   fs.writeFileSync(old,'old preparation\n');
   fs.utimesSync(old,new Date('2020-01-01T00:00:00Z'),new Date('2020-01-01T00:00:00Z'));
-  let queried=0;
+  let queried=0,runRequests=0;
   const server=http.createServer((request,response)=>{
     let body='';
     request.on('data',chunk=>body+=chunk);
@@ -39,6 +39,12 @@ const runRoute=async createFresh=>{
         }));
       }else if(request.url==='/api/jobs/run'){
         assert.deepEqual(JSON.parse(body),{id:'prep-job'});
+        runRequests++;
+        if(busyOnce&&runRequests===1){
+          response.statusCode=400;
+          response.end('{"error":"The assistant is updating or another routine is already running."}');
+          return;
+        }
         if(createFresh){
           const fresh=path.join(prep,'fresh.md');
           fs.writeFileSync(fresh,'fresh preparation\n');
@@ -63,7 +69,7 @@ const runRoute=async createFresh=>{
     child.stdout.on('data',chunk=>output+=chunk);
     child.stderr.on('data',chunk=>output+=chunk);
     const code=await new Promise((resolve,reject)=>{child.once('error',reject);child.once('exit',resolve);});
-    return {code,output,evidence:path.join(work,'talk-prep-honest'),folder};
+    return {code,output,evidence:path.join(work,'talk-prep-honest'),folder,runRequests:()=>runRequests};
   }finally{
     await new Promise(resolve=>server.close(resolve));
   }
@@ -90,5 +96,14 @@ test('the public Run now caller retains the preparation created by that run',asy
       count:1,
       error:null
     });
+  }finally{fs.rmSync(result.folder,{recursive:true,force:true});}
+});
+
+test('the public Run now caller waits for routine creation to release the installed assistant',async()=>{
+  const result=await runRoute(true,{busyOnce:true});
+  try{
+    assert.equal(result.code,0,result.output);
+    assert.equal(result.runRequests(),2);
+    assert.match(fs.readFileSync(path.join(result.evidence,'prep-run-requests.txt'),'utf8'),/attempt=1 http=400 .*another routine is already running[\s\S]*attempt=2 http=202 .*"started":true/);
   }finally{fs.rmSync(result.folder,{recursive:true,force:true});}
 });

@@ -61,3 +61,11 @@ test('a fixture bind failure stops the browser it started',async()=>{
     fs.rmSync(folder,{recursive:true,force:true});
   }
 });
+
+test('the maintained route accepts the Chrome executable variable used by browser runners',async()=>{
+  const source=fs.readFileSync(path.join(here,'notebook-assistant-browser.mjs'),'utf8');
+  assert.match(source,/process\.env\.CHROME_BIN/);
+  assert.match(source,/process\.env\.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH/);
+  assert.match(source,/\/usr\/bin\/google-chrome-stable/);
+  assert.match(source,/\/opt\/google\/chrome\/chrome/);
+});

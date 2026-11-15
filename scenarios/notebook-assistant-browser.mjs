@@ -38,7 +38,9 @@ const action=async(name,fn)=>{globalThis.phase=name;try{await fn();actions.push(
 const formValue=label=>js(`(()=>{const l=[...document.querySelectorAll('label')].find(x=>x.textContent.includes(${JSON.stringify(label)}));const e=l&&(l.htmlFor?document.getElementById(l.htmlFor):l.parentElement?.querySelector('input,select'));return e&&e.value})()`);
 const observeProvider=async name=>write(name,{service:(await formValue('Your AI service'))==='other'?'Another service':'',url:await formValue('Its address'),model:await formValue('Model, written'),key:(await js(`document.body.innerText.includes('leave it empty to keep the saved one')`))===true});
 try{
-  const chrome=process.env.CHROME_PATH??['/usr/bin/google-chrome','/usr/bin/chromium','/usr/bin/chromium-browser'].find(fs.existsSync);
+  const chrome=[process.env.CHROME_PATH,process.env.CHROME_BIN,process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH,
+    '/usr/bin/google-chrome','/usr/bin/google-chrome-stable','/opt/google/chrome/chrome','/usr/bin/chromium','/usr/bin/chromium-browser'
+  ].find(x=>x&&fs.existsSync(x));
   if(!chrome||!fs.existsSync(chrome))throw Error('Chromium is not installed at a documented executable name; set CHROME_PATH');
   browserOut=fs.openSync(path.join(evidence,'browser.stdout.log'),'a');
   browserErr=fs.openSync(path.join(evidence,'browser.stderr.log'),'a');
