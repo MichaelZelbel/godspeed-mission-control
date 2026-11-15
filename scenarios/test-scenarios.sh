@@ -5977,6 +5977,49 @@ else
   bad "a failed Hevy override write did not stop before the server recreate (exit $HEVY_FAILURE_CODE: $HEVY_FAILURE_OUTPUT)"
 fi
 
+# ======================================================= notebook-assistant-journeys
+assistant_journeys_good() {
+  local folder=$1
+  rm -rf "$folder"; mkdir -p "$folder/screenshots"
+  node - "$folder" <<'NODE'
+const fs=require('fs'),p=require('path'),d=process.argv[2],w=(n,x)=>fs.writeFileSync(p.join(d,n),typeof x==='string'?x:JSON.stringify(x)+'\n');
+const names=['provider-saved','provider-after-navigation','provider-after-reload','notebook-restarted','provider-after-restart','moment-saved-without-ai','moment-edited-without-ai','moment-saved-with-ai','moment-edited-with-ai'];w('actions.json',names.map(name=>({name,ok:true})));
+for(const n of ['provider-navigation.json','provider-reload.json','provider-restart.json'])w(n,{service:'Another service',url:'http://127.0.0.1:48763/v1',model:'fixture-model',key:true});
+w('moments.json',{'without-ai':{saved:true,edited:true},'with-ai':{saved:true,edited:true}});
+w('fixture-requests.jsonl','{"phase":"with-ai","operation":"extract-moment-profile","action":"save"}\n{"phase":"with-ai","operation":"extract-moment-profile","action":"edit"}\n');
+w('browser-console.json',[]);w('browser-network.json',[]);w('restart.txt','old_pid=101 new_pid=202 healthy=yes\n');w('cleanup.txt','browser=stopped\nfixture=stopped\n');
+NODE
+}
+section notebook-assistant-journeys
+N=$TMP/notebook-assistant
+assistant_journeys_good "$N/good"
+passes 'custom AI persistence and both moment enrichment states through the installed browser route' notebook-assistant-journeys "$N/good" 'owned browser and fixture stopped'
+for transition in navigation reload restart; do
+  copy "$N/good" "$N/wrong-$transition"
+  printf '{"service":"OpenAI","url":"http://127.0.0.1:48763/v1","model":"fixture-model","key":true}\n' >"$N/wrong-$transition/provider-$transition.json"
+  refuses "a provider lost after $transition" notebook-assistant-journeys "$N/wrong-$transition" 'incomplete or contradicts'
+done
+copy "$N/good" "$N/missing-key"; node -e 'let x=require(process.argv[1]);x.key=false;require("fs").writeFileSync(process.argv[1],JSON.stringify(x))' "$N/missing-key/provider-restart.json"
+refuses 'a saved provider whose key appears missing' notebook-assistant-journeys "$N/missing-key" 'incomplete or contradicts'
+copy "$N/good" "$N/no-ai-called"; printf '{"phase":"without-ai","operation":"extract-moment-profile","action":"save"}\n' >>"$N/no-ai-called/fixture-requests.jsonl"
+refuses 'an extraction request while no AI was connected' notebook-assistant-journeys "$N/no-ai-called" 'incomplete or contradicts'
+copy "$N/good" "$N/no-ai-error"; printf '[{"phase":"without-ai","text":"extract-moment-profile failed"}]\n' >"$N/no-ai-error/browser-console.json"
+refuses 'an extraction error while no AI was connected' notebook-assistant-journeys "$N/no-ai-error" 'incomplete or contradicts'
+for action in save edit; do
+  copy "$N/good" "$N/no-ai-$action"; grep -v '"action":"'$action'"' "$N/no-ai-$action/fixture-requests.jsonl" >"$N/no-ai-$action/requests"; mv "$N/no-ai-$action/requests" "$N/no-ai-$action/fixture-requests.jsonl"
+  refuses "no extraction after the AI-backed $action" notebook-assistant-journeys "$N/no-ai-$action" 'incomplete or contradicts'
+done
+copy "$N/good" "$N/action-failed"; sed -i '0,/"ok":true/s//"ok":false/' "$N/action-failed/actions.json"
+refuses 'evidence without every successful visible action' notebook-assistant-journeys "$N/action-failed" 'incomplete or contradicts'
+copy "$N/good" "$N/secret"; printf 'scenario-secret-never-retain\n' >"$N/secret/leak.txt"
+refuses 'a submitted secret in retained evidence' notebook-assistant-journeys "$N/secret" 'leaked into retained evidence'
+copy "$N/good" "$N/no-cleanup"; printf 'browser=stopped\n' >"$N/no-cleanup/cleanup.txt"
+refuses 'a fixture with no cleanup record' notebook-assistant-journeys "$N/no-cleanup" 'incomplete or contradicts'
+copy "$N/good" "$N/malformed-failure"; printf '{"phase":3,"message":"bad"}\n' >"$N/malformed-failure/failure.json"
+refuses 'malformed retained route failure evidence' notebook-assistant-journeys "$N/malformed-failure" 'malformed'
+copy "$N/good" "$N/route-failure"; printf '{"phase":"connected","message":"browser closed"}\n' >"$N/route-failure/failure.json"
+refuses 'a contained route failure instead of a product verdict' notebook-assistant-journeys "$N/route-failure" 'stopped during connected'
+
 # ================================================================ the night's report
 # report-night.mjs opens, comments on and closes the issues of a failed night; its own tests stand a
 # fake GitHub in for the real one.

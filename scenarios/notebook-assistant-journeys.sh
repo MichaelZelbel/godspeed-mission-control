@@ -29,6 +29,16 @@ act() {
 check() { # <evidence folder>
   local folder=$1 secret
   [ -d "$folder" ] || fail "there is nothing at $folder, so the installed browser route kept no evidence"
+  if [ -e "$folder/failure.json" ]; then
+    need_node
+    "$NODE" - "$folder/failure.json" <<'NODE' || fail "the retained browser failure is malformed"
+const fs=require('fs');
+const value=JSON.parse(fs.readFileSync(process.argv[2],'utf8'));
+if(!value||typeof value.phase!=='string'||typeof value.message!=='string'||!value.message.trim())throw Error('invalid failure');
+if(/\n\s*at\s|\.mjs:\d+/.test(value.message))throw Error('failure contains a stack or source location');
+NODE
+    fail "the installed browser route stopped during $("$NODE" -p "require(process.argv[1]).phase || 'startup'" "$folder/failure.json")"
+  fi
   for file in actions.json provider-navigation.json provider-reload.json provider-restart.json moments.json fixture-requests.jsonl browser-console.json browser-network.json restart.txt cleanup.txt; do
     kept "$folder" "$file" "the installed browser route's $file"
   done
