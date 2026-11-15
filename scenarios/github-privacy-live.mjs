@@ -2,8 +2,8 @@
 //
 // The reminder scenarios answer GitHub's privacy question for their stand-in repository on the
 // machine (scenario-lib.sh stand_in_answers_privacy), so this is the one place a night still asks
-// the real api.github.com. It runs the product's own FileSync.verifyRemote, unchanged and without a
-// key, as a person's install asks it, about two repositories:
+// the real api.github.com. It runs the product's own FileSync.verifyRemote unchanged, adding the
+// workflow's read-only token at this scenario boundary, about two repositories:
 //
 //   a public one (octocat/Hello-World): the product has to refuse it as publicly readable;
 //   one nobody has (godspeed-scenario-stand-in/<random>): the product has to take GitHub's 404 as
@@ -27,6 +27,11 @@ if (!file) {
   console.log('FAIL the live GitHub privacy check was not told where the product\'s git.mjs is');
   process.exit(1);
 }
+const token = process.env.GODSPEED_SCENARIO_GITHUB_TOKEN?.trim();
+if (!token) {
+  console.log('FAIL GODSPEED_SCENARIO_GITHUB_TOKEN is not set, so the live GitHub privacy check cannot be authenticated');
+  process.exit(1);
+}
 const waits = (process.env.GODSPEED_PRIVACY_WAITS ?? '40 80').trim().split(/\s+/).filter(Boolean).map(Number);
 if (waits.some(n => !Number.isFinite(n) || n < 0)) {
   console.log(`FAIL GODSPEED_PRIVACY_WAITS is not seconds separated by spaces: ${process.env.GODSPEED_PRIVACY_WAITS}`);
@@ -45,13 +50,20 @@ if (typeof FileSync?.prototype?.verifyRemote !== 'function') {
   process.exit(1);
 }
 
-// What GitHub answered, read off the product's own request as it passes: the request and the
-// response go through untouched.
+// What GitHub answered, read off the product's own request as it passes. Only this scenario's
+// authorization is added; the product's request options and headers are preserved.
 let last = null;
 const real = globalThis.fetch;
 globalThis.fetch = async (url, ...rest) => {
+  const github = String(url).startsWith('https://api.github.com/');
+  if (github) {
+    const options = rest[0] ?? {};
+    const headers = new Headers(options.headers);
+    headers.set('Authorization', `Bearer ${token}`);
+    rest[0] = { ...options, headers };
+  }
   const response = await real(url, ...rest);
-  if (String(url).startsWith('https://api.github.com/')) {
+  if (github) {
     const h = name => response.headers.get(name);
     last = {
       url: String(url),
@@ -119,4 +131,4 @@ for (const c of cases) {
   }
   passed.push(`${c.name} (${r.github.status})`);
 }
-console.log(`PASS the product's own privacy request, asked of the real api.github.com without a key, refused ${passed[0]} and took ${passed[1]} as private`);
+console.log(`PASS the product's own privacy request, authenticated to the real api.github.com, refused ${passed[0]} and took ${passed[1]} as private`);

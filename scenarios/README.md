@@ -135,21 +135,22 @@ Named by the job, never in a file here (for the scenarios above that await their
 
 `GODSPEED_SCENARIO_AI_URL` and `GODSPEED_SCENARIO_AI_MODEL` have no default: a scenario that needs an AI fails with a plain sentence naming whichever is missing. The capped OpenRouter test account runs at `https://openrouter.ai/api/v1` with `anthropic/claude-haiku-5.5`, set as repository variables, and the key is the secret `GODSPEED_SCENARIO_AI_KEY`. The scenarios refuse a model that is not a small Claude Haiku model. Their Docker Telegram setup chooses OpenRouter for that URL (or Anthropic for `https://api.anthropic.com/v1`) and verifies that the installed assistant uses the configured model.
 
-The six reminder scenarios need no key at all: everything they do is this machine's own. "Two
-computers" are two installations on the one machine, each with its own mission control folder, its
-own port (`GODSPEED_PORT`) and its own device identity, joined through one bare Git repository on
-that machine standing in for the private GitHub repository, which Git is told to use for that
-address. The product still checks the address is a private GitHub one, and the answer
-api.github.com gives for a repository nobody can see, 404, is given on that machine for the stand-in
-owner (`stand_in_answers_privacy` in `scenario-lib.sh`): asked of GitHub itself without a key, the
-check was rate-limited and failed a night (issue #557). So they ask nothing of the network beyond
-the install itself, except in one place: `two-machines-move-at-once`, after both computers are
-updated, runs `github-privacy-live.mjs` (`live_github_privacy` in `scenario-lib.sh`). That is the one
-check that asks the real api.github.com, without a key, through the updated product's own
-`FileSync.verifyRemote`: a public repository (`octocat/Hello-World`) has to be refused as publicly
-readable, and one nobody has has to be taken as private. While GitHub answers anything else it asks
-again, 3 tries over about 2 minutes, and then fails the scenario with GitHub's status and its
-rate-limit headers in the FAIL line.
+The reminder scenarios do their reminder work entirely on the runner. "Two computers" are two
+installations on the one machine, each with its own mission control folder, its own port
+(`GODSPEED_PORT`) and its own device identity, joined through one bare Git repository on that
+machine standing in for the private GitHub repository, which Git is told to use for that address.
+The product still checks the address is a private GitHub one, and the answer api.github.com gives
+for a repository nobody can see, 404, is given on that machine for the stand-in owner
+(`stand_in_answers_privacy` in `scenario-lib.sh`).
+
+One proof is deliberately live: after both computers are updated, `two-machines-move-at-once` runs
+`github-privacy-live.mjs` (`live_github_privacy` in `scenario-lib.sh`). The workflow supplies its
+read-only token as `GODSPEED_SCENARIO_GITHUB_TOKEN`, and the scenario adds it only to this request,
+not to the installed product. Through the updated product's own `FileSync.verifyRemote`, a public
+repository (`octocat/Hello-World`) has to be refused as publicly readable, and one nobody has has to
+be taken as private. A missing token, a skipped request, or any answer that does not verify those
+two results fails. Responses that cannot verify privacy are retried 3 times over about 2 minutes,
+then fail the scenario with GitHub's status and rate-limit headers in the FAIL line.
 
 `voice.sh` also takes `ELEVENLABS_TEST_VOICE_ID` (a public ElevenLabs voice by default) and sends
 `voice-note.wav`, the short recording kept beside it. No chat account of any kind is needed: the

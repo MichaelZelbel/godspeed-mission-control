@@ -728,13 +728,16 @@ STUB
 }
 
 # THE ONE PLACE A NIGHT STILL ASKS THE REAL api.github.com WHETHER A REPOSITORY IS PRIVATE (issue
-# #557). github-privacy-live.mjs runs the installed product's own FileSync.verifyRemote, without a
-# key, about a public repository (it has to be refused) and one nobody has (GitHub's 404 has to be
-# taken as private), asking again for about 2 minutes while GitHub answers anything else. The
+# #557). github-privacy-live.mjs runs the installed product's own FileSync.verifyRemote, with this
+# scenario's read-only workflow token, about a public repository (it has to be refused) and one
+# nobody has (GitHub's 404 has to be taken as private), asking again for about 2 minutes while
+# GitHub answers anything else. The
 # stand-in's answer (stand_in_answers_privacy) is kept out of it: NODE_OPTIONS is emptied for it. A
 # FAIL names GitHub's status and its rate-limit headers, and fails the scenario.
 live_github_privacy() { # <root> <file for what it said>
   local line
+  [ -n "${GODSPEED_SCENARIO_GITHUB_TOKEN:-}" ] ||
+    fail "GODSPEED_SCENARIO_GITHUB_TOKEN is not set, so the live GitHub privacy check cannot be authenticated"
   NODE_OPTIONS='' "$NODE" "$HERE/github-privacy-live.mjs" "$(product_script "$1" notebook/core/sync/git.mjs)" >"$2" ||
     fail "$(sed -n 's/^FAIL //p' "$2" | head -n 1 | grep . || echo "the live GitHub privacy check stopped without its own verdict (see $2)")"
   line=$(sed -n 's/^PASS //p' "$2" | head -n 1)
