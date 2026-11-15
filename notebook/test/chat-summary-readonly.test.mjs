@@ -4,7 +4,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {createService} from '../server/main.mjs';
-import {NOTEBOOK_CHAT_FUNCTIONS} from '../core/notebook-chat.mjs';
+
+const CHAT_SURFACES=['conversation-chat','note-chat','collection-chat'];
 
 // The note, collection and assistant chat screens fold older turns into a
 // rolling summary by sending {mode:'summarize', messages} to their chat
@@ -12,7 +13,7 @@ import {NOTEBOOK_CHAT_FUNCTIONS} from '../core/notebook-chat.mjs';
 // user message of the transcript again, and when that message asked for a
 // note the note was made again, once per summary (7 October 2026). A summary
 // is a reading of the transcript: it saves nothing and runs no tool.
-for(const chat of NOTEBOOK_CHAT_FUNCTIONS)test(chat+' summarize saves nothing and runs no tool',async t=>{
+for(const chat of CHAT_SURFACES)test(chat+' summarize saves nothing and runs no tool',async t=>{
   const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-chat-summary-'));const calls=[];
   const s=await createService({root,port:0,provider:async input=>{calls.push(input);return input.kind==='chat-summary'?{summary:'They asked for a note about milk, and it was saved.'}:{reply:'Saved your note.',notes_created:[{title:'Buy milk',content:'Buy milk'}],item_updates:[],operations:[]};}});
   t.after(async()=>{await s.close();fs.rmSync(root,{recursive:true,force:true});});

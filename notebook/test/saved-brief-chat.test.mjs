@@ -8,7 +8,8 @@ import {QueryService} from '../core/query.mjs';
 import {Domains} from '../core/domains.mjs';
 import {createService} from '../server/main.mjs';
 import {Telegram} from '../core/telegram.mjs';
-import {NOTEBOOK_CHAT_FUNCTIONS} from '../core/notebook-chat.mjs';
+
+const CHAT_SURFACES=['conversation-chat','note-chat','collection-chat'];
 
 const saved='Saved filtered briefing.\n\nNext: exact allowed next step.\n\nCharm Challenge: exact line.';
 const savedWithoutChallenge='Saved filtered briefing.\n\nNext: exact allowed next step.';
@@ -22,7 +23,7 @@ const chatInputs=store=>{
   'note-chat':{note_id:note.id},
   'collection-chat':{collection_id:collection.id},
  };
- return NOTEBOOK_CHAT_FUNCTIONS.map(name=>[name,inputByName[name]]);
+ return CHAT_SURFACES.map(name=>[name,inputByName[name]]);
 };
 
 test('saved brief requests bypass provider and native agents word for word',async t=>{
@@ -58,7 +59,7 @@ test('a brief request without a saved briefing keeps ordinary chat behavior',asy
   assert.equal(result.reply,'The ordinary chat answer');
  }
  assert.equal(store.list('notes').filter(note=>note.source_app==='morning-brief').length,0);
- assert.deepEqual(calls,NOTEBOOK_CHAT_FUNCTIONS);
+ assert.deepEqual(calls,CHAT_SURFACES);
 });
 
 test('candidate Telegram reports a definitely incomplete long saved brief',async t=>{

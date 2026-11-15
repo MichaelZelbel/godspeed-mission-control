@@ -591,7 +591,7 @@ export class Domains {
       return { success: true, suggestions: saved.map(r=>({...r,...r.payload,review_id:r.id})), processed: saved.length,left_out:leftOut,created:0,linked:0,message:'Saved '+saved.length+' proposals for review.'+(leftOut?' Left out '+leftOut+' the notebook already has or had already suggested.':'') };
     }
     if(isNotebookChat(name)&&input.mode==='summarize')return this.summarizeChat(input);
-    if (['note-chat','collection-chat','conversation-chat','weekly-review','generate_collection_schema'].includes(name)) {
+    if (isNotebookChat(name)||['weekly-review','generate_collection_schema'].includes(name)) {
       if (!this.provider) throw new Error(NO_AI_CHAT);
       // A barcode in her message is looked up first (Open Food Facts, cached), so the model is given the
       // product as a candidate; a failed lookup leaves it out and the model says it found nothing.
