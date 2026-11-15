@@ -4,6 +4,7 @@ import {conversationRuntimeId,bindConversationSession} from './conversation-stat
 import {startCharmJudgement} from './charm-judgement.mjs';
 import {chatOf,classifyAnswer,heard as heardStep} from './waiting-steps.mjs';
 import {asksForTodaysBrief,savedBriefToday} from './briefing.mjs';
+import {isNotebookChat} from './notebook-chat.mjs';
 
 const STEP_RETRY='I could not check your waiting questions just now. Please send your answer again in a moment.';
 import {draftEvent} from './draft-event.mjs';
@@ -283,12 +284,12 @@ export class Domains {
       const contact_id=input.contact_id||input.person_id||input.personId;
       if(contact_id)input={...input,contact_id,person_id:contact_id,conversation_id:'notebook:person:'+contact_id};
     }
-    if(['conversation-chat','note-chat','collection-chat'].includes(name)){
+    if(isNotebookChat(name)){
       if(input.conversation_session===undefined)bindConversationSession(this.store,input);
       input={...input,conversation_id:conversationRuntimeId(input)};
       if(!input.message)input={...input,message:input.messages?.filter(m=>m.role==='user').at(-1)?.content||''};
     }
-    if(['conversation-chat','note-chat','collection-chat'].includes(name)&&asksForTodaysBrief(input.message)){
+    if(isNotebookChat(name)&&input.mode!=='summarize'&&asksForTodaysBrief(input.message)){
       const saved=savedBriefToday(this.store).note;
       if(saved){
         const reply=String(saved.content||'');
@@ -589,7 +590,7 @@ export class Domains {
       const leftOut=screened.dropped.length;
       return { success: true, suggestions: saved.map(r=>({...r,...r.payload,review_id:r.id})), processed: saved.length,left_out:leftOut,created:0,linked:0,message:'Saved '+saved.length+' proposals for review.'+(leftOut?' Left out '+leftOut+' the notebook already has or had already suggested.':'') };
     }
-    if(['note-chat','collection-chat','conversation-chat'].includes(name)&&input.mode==='summarize')return this.summarizeChat(input);
+    if(isNotebookChat(name)&&input.mode==='summarize')return this.summarizeChat(input);
     if (['note-chat','collection-chat','conversation-chat','weekly-review','generate_collection_schema'].includes(name)) {
       if (!this.provider) throw new Error(NO_AI_CHAT);
       // A barcode in her message is looked up first (Open Food Facts, cached), so the model is given the
