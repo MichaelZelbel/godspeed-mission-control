@@ -239,8 +239,17 @@ async function runBriefing(job,{store,query,provider,now,notices,promiseRoot=sto
  const honestNote=unidentified=>{
   if(unidentified)context.contribution=null;
   const c=context.contribution,own=[context.done_line,context.cycle_heads_up,context.charm_line,...(c?[c.content,c.link]:[])].filter(Boolean);
+  // A malformed review cannot safely tell us which drafted claims to retain. A current goal and a
+  // live deadline still support an imperative, not a claim: open the dated obligation and choose
+  // its first step. This leaves every refused sentence out while the person still gets somewhere
+  // concrete to begin (#656).
+  const clean=value=>typeof value==='string'&&value.trim()&&value.length<=500&&!/[\r\n\u0000-\u001f]/.test(value)?value.trim():null;
+  const goal=context.goals.find(row=>clean(row.title));
+  const due=context.deadlines.filter(row=>deadlineLive(row,now.getTime())&&row.due_at&&Number.isFinite(Date.parse(row.due_at))&&Date.parse(row.due_at)>=now.getTime()&&clean(row.title)).sort((a,b)=>Date.parse(a.due_at)-Date.parse(b.due_at))[0];
+  const next=goal&&due?'Next: open '+clean(due.title)+' and choose the first step to finish before '+(due.native_file?String(due.due_at).slice(0,10):dayOf(new Date(due.due_at),due.timezone||zone))+'.':null;
   for(const opening of ['Your full morning briefing for '+today+' could not be written today, because the checks refused what was drafted. A repair item has been opened for it.','The full note for '+today+' could not be written. A repair item is open.']){
-   const text=[opening,...own].join('\n\n');
+   const action=next&&!codeGate([opening,next].join('\n\n')).length&&!ruleRefusals(next,voice).length?next:null;
+   const text=[opening,...own,...(action?[action]:[])].join('\n\n');
    if(!codeGate(text).length&&!ruleRefusals(text,voice).length)return text;
   }
   return null;

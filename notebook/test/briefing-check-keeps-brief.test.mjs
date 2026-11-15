@@ -64,7 +64,8 @@ test('a refused sentence inside a paragraph goes alone, and the paragraph keeps 
 });
 
 test('when the source check refuses every sentence, the honest note is saved and the routine exits 0',async t=>{
- const {root}=workspace(t);
+ const {root,store}=workspace(t);
+ store.save('deadlines',{title:'Submit the fictional reading plan',status:'open',due_at:'2027-01-15T12:00:00Z',timezone:'Europe/Berlin'});
  // Every draft is refused, as last night: a source claim with no record named and no sentence named.
  const server=http.createServer((request,response)=>{let body='';request.on('data',c=>body+=c);request.on('end',()=>{
   const input=JSON.parse(JSON.parse(body).messages[1].content);
@@ -80,11 +81,16 @@ test('when the source check refuses every sentence, the honest note is saved and
  const timer=setTimeout(()=>child.kill(),120000);
  const status=await new Promise(resolve=>child.on('close',resolve));clearTimeout(timer);
  assert.equal(status,0,stderr);
- assert.match(stdout,/^Your full morning briefing for \d{4}-\d{2}-\d{2} could not be written today, because the checks refused what was drafted\. A repair item has been opened for it\.\s*$/);
+ assert.match(stdout,/^Your full morning briefing for \d{4}-\d{2}-\d{2} could not be written today, because the checks refused what was drafted\. A repair item has been opened for it\.\s+Next: open Submit the fictional reading plan and choose the first step to finish before 2027-01-15\.\s*$/);
  const fresh=new QueryService(new Store(root)),notes=briefs(fresh);
  assert.equal(notes.length,1);assert.equal(notes[0].fallback,true);assert.equal(notes[0].content.trim(),stdout.trim());
- assert.doesNotMatch(notes[0].content,/calendar|reading list/i,'the note states nothing from the sources');
+ assert.doesNotMatch(notes[0].content,/calendar|review the fictional reading list/i,'none of the refused draft claims reaches the fallback');
  const receipt=fresh.rows('job_receipts').find(r=>r.kind==='brief-factual-fallback');
  assert.equal(receipt.honest_note,true);assert.match(receipt.rejected_draft,/calendar/);
  assert.equal(fresh.rows('work_items').filter(w=>w.kind==='repair'&&w.note_id===notes[0].id).length,1);
+ const before=JSON.stringify(notes),chat=spawn(process.execPath,[script,'--saved','--godspeed',root],{env:{...process.env,GODSPEED_WORKSPACE:root}});
+ let chatOut='',chatErr='';chat.stdout.on('data',c=>chatOut+=c);chat.stderr.on('data',c=>chatErr+=c);
+ const chatStatus=await new Promise(resolve=>chat.on('close',resolve));
+ assert.equal(chatStatus,0,chatErr);assert.equal(chatOut.trim(),notes[0].content.trim(),'chat returns the saved fallback without redrafting');
+ assert.equal(JSON.stringify(briefs(new QueryService(new Store(root)))),before,'chat writes no second brief');
 });
