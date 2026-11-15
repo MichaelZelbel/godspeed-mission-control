@@ -15,7 +15,7 @@ test('the scenario fixture gives every adopted goal its public card ID',()=>{
   }
 });
 
-const runRoute=async(createFresh,{busyOnce=false}={})=>{
+const runRoute=async(createFresh,{busyOnce=false,failed=false}={})=>{
   const folder=fs.mkdtempSync(path.join(os.tmpdir(),'talk-prep-run-now-'));
   const root=path.join(folder,'root');
   const work=path.join(folder,'work');
@@ -33,7 +33,7 @@ const runRoute=async(createFresh,{busyOnce=false}={})=>{
       if(request.url==='/api/query'){
         queried++;
         response.end(JSON.stringify({
-          data:[{id:'prep-job',name:'Coaching talk preparation',last_run_at:queried===1?'before':'after',last_status:queried===1?'':'ok'}],
+          data:[{id:'prep-job',name:'Coaching talk preparation',last_run_at:queried===1?'before':'after',last_status:queried===1?'':failed?'failed':'ok',last_error:failed?'fixture preparation failed':''}],
           count:1,
           error:null
         }));
@@ -49,6 +49,11 @@ const runRoute=async(createFresh,{busyOnce=false}={})=>{
           const fresh=path.join(prep,'fresh.md');
           fs.writeFileSync(fresh,'fresh preparation\n');
           fs.utimesSync(fresh,new Date('2030-01-01T00:00:00Z'),new Date('2030-01-01T00:00:00Z'));
+        }
+        if(failed){
+          const run=path.join(root,'routines','coach-prep','2030-01-01');
+          fs.mkdirSync(run,{recursive:true});
+          fs.writeFileSync(path.join(run,'summary.txt'),'health 2030-01-02: fixture review did not pass\n');
         }
         response.statusCode=202;
         response.end('{"started":true}');
@@ -92,7 +97,7 @@ test('the public Run now caller retains the preparation created by that run',asy
     assert.equal(fs.readFileSync(path.join(result.evidence,'routine-preparation-source.txt'),'utf8'),'coach/health/prep/fresh.md\n');
     const jobs=JSON.parse(fs.readFileSync(path.join(result.evidence,'prep-jobs-after.json'),'utf8'));
     assert.deepEqual(jobs,{
-      data:[{id:'prep-job',name:'Coaching talk preparation',last_run_at:'after',last_status:'ok'}],
+      data:[{id:'prep-job',name:'Coaching talk preparation',last_run_at:'after',last_status:'ok',last_error:''}],
       count:1,
       error:null
     });
@@ -105,5 +110,15 @@ test('the public Run now caller waits for routine creation to release the instal
     assert.equal(result.code,0,result.output);
     assert.equal(result.runRequests(),2);
     assert.match(fs.readFileSync(path.join(result.evidence,'prep-run-requests.txt'),'utf8'),/attempt=1 http=400 .*another routine is already running[\s\S]*attempt=2 http=202 .*"started":true/);
+  }finally{fs.rmSync(result.folder,{recursive:true,force:true});}
+});
+
+test('a failed installed preparation retains its product-owned summary',async()=>{
+  const result=await runRoute(false,{failed:true});
+  try{
+    assert.notEqual(result.code,0);
+    assert.match(result.output,/retained summary: health 2030-01-02: fixture review did not pass/);
+    assert.equal(fs.readFileSync(path.join(result.evidence,'prep-run-summary.txt'),'utf8'),'health 2030-01-02: fixture review did not pass\n');
+    assert.match(fs.readFileSync(path.join(result.evidence,'prep-run-after.txt'),'utf8'),/status=failed/);
   }finally{fs.rmSync(result.folder,{recursive:true,force:true});}
 });

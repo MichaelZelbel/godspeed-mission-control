@@ -78,7 +78,7 @@ settings_connects_the_model() {
 }
 
 run_installed_preparation() {
-  local jobs=$EVIDENCE/.prep-jobs.json id before after code produced attempt=0 answer
+  local jobs=$EVIDENCE/.prep-jobs.json id before after code produced attempt=0 answer summary status
   installed_preparation_is_listed() {
     curl -fsS --max-time 30 -X POST -H 'Content-Type: application/json' -d '{"table":"jobs"}' "http://127.0.0.1:$NOTEBOOK_PORT/api/query" -o "$jobs" 2>/dev/null || return 1
     id=$("$NODE" -e 'const d=JSON.parse(require("fs").readFileSync(process.argv[1])),r=Array.isArray(d)?d:(d.data||[]),j=r.find(x=>x.name==="Coaching talk preparation"||x.title==="Coaching talk preparation"||x.kind==="coach-prep");if(j)process.stdout.write(String(j.id))' "$jobs")
@@ -107,9 +107,12 @@ run_installed_preparation() {
     [ "$(printf '%s' "$after" | cut -f1)" != "$before" ] && [ -n "$(printf '%s' "$after" | cut -f2)" ]
   }
   wait_for 600 "the installed Coaching talk preparation job to finish" prep_run_finished || fail "the installed preparation job recorded no new completed run"
-  [ "$(printf '%s' "$after" | cut -f2)" = ok ] || fail "the installed preparation job failed: $(printf '%s' "$after" | cut -f3)"
-  printf 'id=%s\nafter=%s\nstatus=ok\n' "$id" "$(printf '%s' "$after" | cut -f1)" >"$EVIDENCE/prep-run-after.txt"
+  status=$(printf '%s' "$after" | cut -f2)
+  printf 'id=%s\nafter=%s\nstatus=%s\n' "$id" "$(printf '%s' "$after" | cut -f1)" "$status" >"$EVIDENCE/prep-run-after.txt"
   cp "$jobs" "$EVIDENCE/prep-jobs-after.json"
+  summary=$(find "$ROOT/routines/coach-prep" -type f -name summary.txt -print 2>/dev/null | sort | tail -n 1)
+  [ -z "$summary" ] || cp "$summary" "$EVIDENCE/prep-run-summary.txt"
+  [ "$status" = ok ] || fail "the installed preparation job failed: $(printf '%s' "$after" | cut -f3); retained summary: $(tr '\n' ' ' <"${summary:-/dev/null}" | cut -c1-300)"
   produced=$(first_file_newer_than "$ROOT/coach" '*/prep/*.md' "$EVIDENCE/prep-run-request.json")
   [ -n "$produced" ] || fail "the successful installed preparation run produced no preparation attributable to that run"
   cp "$produced" "$EVIDENCE/routine-preparation.md"
