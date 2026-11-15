@@ -9,6 +9,7 @@ import { useReanalyzeMedia } from "@/hooks/useMediaAnalysis";
 import { PdfThumbnail } from "@/components/media/PdfThumbnail";
 import { toast } from "sonner";
 import { functionErrorMessage } from "@/lib/function-error";
+import { keptElsewhereMessage } from "@/lib/media-presence";
 
 export interface MediaDetailItem {
   id: string;
@@ -28,10 +29,11 @@ interface Props {
   item: MediaDetailItem | null;
   noteTitle?: string;
   missingHere?: boolean;
+  presenceChecked?: boolean;
   onClose: () => void;
 }
 
-export function MediaDetailDialog({ item, noteTitle, missingHere = false, onClose }: Props) {
+export function MediaDetailDialog({ item, noteTitle, missingHere = false, presenceChecked = true, onClose }: Props) {
   const navigate = useNavigate();
   const reanalyze = useReanalyzeMedia();
   const [signedUrl, setSignedUrl] = useState<string>("");
@@ -49,7 +51,7 @@ export function MediaDetailDialog({ item, noteTitle, missingHere = false, onClos
     setPreviewFailed(false);
     setSignFailed(false);
     setSignedUrl("");
-    if (!storagePath) return;
+    if (!storagePath || missingHere || !presenceChecked) return;
     let cancelled = false;
     (async () => {
       const { data, error } = await supabase.storage
@@ -62,7 +64,7 @@ export function MediaDetailDialog({ item, noteTitle, missingHere = false, onClos
     return () => {
       cancelled = true;
     };
-  }, [storagePath]);
+  }, [storagePath, missingHere, presenceChecked]);
 
   if (!item) return null;
 
@@ -100,9 +102,11 @@ export function MediaDetailDialog({ item, noteTitle, missingHere = false, onClos
             <div role="status" className="flex flex-col items-center gap-2 text-muted-foreground px-4 text-center">
               <CloudOff className="h-12 w-12" />
               <span className="text-xs">
-                This file is kept on another computer. Files over 50 MB stay on the computer they were added on; open it there.
+                {keptElsewhereMessage}
               </span>
             </div>
+          ) : !presenceChecked ? (
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           ) : signFailed ? (
             <div role="alert" className="flex flex-col items-center gap-2 text-muted-foreground px-4 text-center">
               <FileText className="h-12 w-12" />

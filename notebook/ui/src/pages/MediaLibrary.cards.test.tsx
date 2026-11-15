@@ -45,7 +45,7 @@ async function open(rows: ReturnType<typeof row>[], notes: { id: string; title: 
   vi.stubGlobal("fetch", vi.fn(async (url: string) => {
     const u = String(url);
     if (u.endsWith("/api/media/kept-here")) return new Response(JSON.stringify({ data: [] }));
-    if (u.endsWith("/api/media/missing-here")) return new Response(JSON.stringify({ data: [] }));
+    if (u.endsWith("/api/media/presence")) return new Response(JSON.stringify({ data: Object.fromEntries(rows.map(row => [row.storage_path, "present"])) }));
     return new Response(JSON.stringify({ data: {} }));
   }));
   const { default: MediaLibrary } = await import("./MediaLibrary");

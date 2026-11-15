@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback } from "react";
 import { SEOHead } from "@/components/SEOHead";
-import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Input } from "@/components/ui/input";
@@ -36,6 +36,7 @@ import { useReanalyzeMedia } from "@/hooks/useMediaAnalysis";
 import { MediaDetailDialog, MediaDetailItem } from "@/components/media/MediaDetailDialog";
 import { PdfThumbnail } from "@/components/media/PdfThumbnail";
 import { dbErrorMessage, functionErrorMessage } from "@/lib/function-error";
+import { useMediaPresence } from "@/lib/media-presence";
 
 interface MediaItem {
   id: string;
@@ -556,31 +557,9 @@ export default function MediaLibrary() {
   // arrives later turns its card back into an ordinary one.
   // A path's preview waits until it has been checked here: a thumbnail that
   // loaded first would ask for a file that is not on this computer.
-  const { data: presence, isError: presenceFailed } = useQuery({
-    queryKey: ["media-missing-here", user?.id, storagePaths],
-    queryFn: async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error("Not authenticated");
-      const results = await Promise.all(
-        chunk(storagePaths).map(async (slice) => {
-          const resp = await fetch(`${SUPABASE_URL}/api/media/missing-here`, {
-            method: "POST",
-            headers: { Authorization: `Bearer ${session.access_token}`, "Content-Type": "application/json" },
-            body: JSON.stringify({ paths: slice }),
-          });
-          if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-          const result: { data: string[] } = await resp.json();
-          return result.data;
-        })
-      );
-      return { checked: new Set(storagePaths), missing: new Set(results.flat()) };
-    },
-    enabled: !!user && storagePaths.length > 0,
-    placeholderData: keepPreviousData,
-    refetchInterval: (query) => (query.state.data?.missing.size ? 60_000 : false),
-  });
-  const missingHere = presence?.missing ?? new Set<string>();
-  const checkedHere = (storagePath: string) => presenceFailed || !!presence?.checked.has(storagePath);
+  const { data: presence, isError: presenceFailed } = useMediaPresence(user ? storagePaths : []);
+  const missingHere = new Set(Object.entries(presence || {}).filter(([, value]) => value === "kept_elsewhere").map(([storagePath]) => storagePath));
+  const checkedHere = (storagePath: string) => presenceFailed || presence?.[storagePath] !== undefined;
 
   // Fetch note titles for all unique note IDs
   const noteIds = useMemo(() => [...new Set(mediaItems.map(m => m.note_id))], [mediaItems]);
@@ -954,6 +933,7 @@ export default function MediaLibrary() {
       <MediaDetailDialog
         item={selectedOpenItem}
         noteTitle={selectedOpenItem ? noteTitles[selectedOpenItem.note_id] : undefined}
+        presenceChecked={!!selectedOpenItem && checkedHere(selectedOpenItem.storage_path)}
         missingHere={!!selectedOpenItem && missingHere.has(selectedOpenItem.storage_path)}
         onClose={() => setOpenItem(null)}
       />

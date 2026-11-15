@@ -14,10 +14,10 @@
 #   computer A starts on the version before this one (2.0.0-beta.23), holds a picture, a PDF and a
 #     file over 50 MB in its media library, and is then updated to the candidate. The first start
 #     after the update has to carry the media it already holds into notebook/_media/ (and not the
-#     large file);
+#     two 75 MB files, while carrying only their small mappings);
 #   computer B is a fresh install of the candidate made from A's copy on GitHub, with an empty media
-#     root. It has to serve the picture and the PDF, and not the large file (that one stays on A and
-#     A's media library says so: GET /api/media/kept-here);
+#     root. It has to serve the small picture and PDF. The 75 MB picture and PDF stay on A, and B
+#     has to classify both as kept elsewhere rather than trying to display broken previews;
 #   a removal on B travels back: A then answers 404 for the picture, while A's own media root still
 #     holds its bytes.
 #
@@ -26,14 +26,14 @@
 #
 # What it keeps for its checking part (every file one value or one list):
 #   a-version-before / a-version-after / b-version   the commit each computer ran
-#   picture-sha / pdf-sha / large-sha                the SHA-256 of the three files that were added
+#   picture-sha / pdf-sha / large-*-sha              the SHA-256 of the four files that were added
 #   a-carried-before-update.txt                      notebook/_media on A before the update
 #   a-carried-after-update.txt                       notebook/_media on A after the update
 #   a-kept-here.json                                 A's answer to GET /api/media/kept-here
 #   b-carried.txt                                    notebook/_media on B after its first sync
 #   b-picture.status / b-picture.sha                 what B answers for the picture
 #   b-pdf.status / b-pdf.sha                         what B answers for the PDF
-#   b-large.status                                   what B answers for the large file
+#   b-large-*.status / b-large-presence.json         B cannot serve the large bytes and explains why
 #   b-remove.status                                  what B answered to removing the picture
 #   a-picture-after-removal.status                   what A answers for the picture afterwards
 #   a-media-root-after-removal.txt                   the files in A's media root afterwards
@@ -46,7 +46,8 @@ BEFORE_MEDIA_TRAVELS=${GODSPEED_SCENARIO_BEFORE_MEDIA_TRAVELS:-candidate/2.0.0-b
 B_PORT=47841
 PICTURE_PATH='user/33333333-3333-4333-8333-333333333333.png'
 PDF_PATH='chat/scan/Letter.pdf'
-LARGE_PATH='user/44444444-4444-4444-8444-444444444444.mp4'
+LARGE_PICTURE_PATH='user/44444444-4444-4444-8444-444444444444.png'
+LARGE_PDF_PATH='user/55555555-5555-4555-8555-555555555555.pdf'
 # A 1x1 PNG.
 PICTURE_BASE64='iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
 
@@ -90,18 +91,21 @@ carried_of() { # <root> <file>
 act() {
   fresh_evidence
   install_paths
-  local work=${GODSPEED_SCENARIO_WORK:-${RUNNER_TEMP:-/tmp}} b address picture pdf large
+  local work=${GODSPEED_SCENARIO_WORK:-${RUNNER_TEMP:-/tmp}} b address picture pdf large_picture large_pdf
   b=$work/computer-b
   rm -rf "$b"
   picture=$EVIDENCE/.picture.png
   pdf=$EVIDENCE/.letter.pdf
-  large=$EVIDENCE/.large.mp4
+  large_picture=$EVIDENCE/.large-picture.png
+  large_pdf=$EVIDENCE/.large.pdf
   printf '%s' "$PICTURE_BASE64" | base64 -d >"$picture" || fail "the made-up picture could not be written"
   printf '%%PDF-1.4 synthetic letter for the media scenario\n' >"$pdf" || fail "the made-up PDF could not be written"
-  head -c $((51 * 1024 * 1024)) /dev/zero >"$large" || fail "the made-up large file could not be written"
+  { printf '%s' "$PICTURE_BASE64" | base64 -d; head -c $((75 * 1024 * 1024)) /dev/zero; } >"$large_picture" || fail "the made-up large picture could not be written"
+  { printf '%%PDF-1.4 synthetic large letter\n'; head -c $((75 * 1024 * 1024)) /dev/zero; } >"$large_pdf" || fail "the made-up large PDF could not be written"
   sha_of "$picture" >"$EVIDENCE/picture-sha"
   sha_of "$pdf" >"$EVIDENCE/pdf-sha"
-  sha_of "$large" >"$EVIDENCE/large-sha"
+  sha_of "$large_picture" >"$EVIDENCE/large-picture-sha"
+  sha_of "$large_pdf" >"$EVIDENCE/large-pdf-sha"
 
   say "== the first computer, on the version before this one, holding a picture, a PDF and a file over 50 MB"
   install_the_line_of_into "$BEFORE_MEDIA_TRAVELS" "$ROOT" "$NOTEBOOK_PORT" "$EVIDENCE/a-before.log"
@@ -110,7 +114,8 @@ act() {
   cp "$(runtime_of "$ROOT")/version" "$EVIDENCE/a-version-before" || fail "the install of the version before this one left no version file behind"
   upload_to "$NOTEBOOK_PORT" "$picture" "$PICTURE_PATH" image/png
   upload_to "$NOTEBOOK_PORT" "$pdf" "$PDF_PATH" application/pdf 'Page 1 Dear owner'
-  upload_to "$NOTEBOOK_PORT" "$large" "$LARGE_PATH" video/mp4
+  upload_to "$NOTEBOOK_PORT" "$large_picture" "$LARGE_PICTURE_PATH" image/png
+  upload_to "$NOTEBOOK_PORT" "$large_pdf" "$LARGE_PDF_PATH" application/pdf 'Page 1 Large letter'
   carried_of "$ROOT" "$EVIDENCE/a-carried-before-update.txt"
 
   say "== the first computer is updated to the candidate: its first start has to carry what it holds"
@@ -145,7 +150,11 @@ act() {
     serves "$B_PORT" "$PICTURE_PATH" "$EVIDENCE/b-picture.status" "$EVIDENCE/b-picture.sha" || true
   status_of "$B_PORT" "$PICTURE_PATH" "$EVIDENCE/b-picture.status" "$EVIDENCE/b-picture.sha"
   status_of "$B_PORT" "$PDF_PATH" "$EVIDENCE/b-pdf.status" "$EVIDENCE/b-pdf.sha"
-  status_of "$B_PORT" "$LARGE_PATH" "$EVIDENCE/b-large.status"
+  status_of "$B_PORT" "$LARGE_PICTURE_PATH" "$EVIDENCE/b-large-picture.status"
+  status_of "$B_PORT" "$LARGE_PDF_PATH" "$EVIDENCE/b-large-pdf.status"
+  curl -sS --max-time 60 -X POST -H 'Content-Type: application/json' \
+    -d "{\"paths\":[\"$LARGE_PICTURE_PATH\",\"$LARGE_PDF_PATH\"]}" "http://127.0.0.1:$B_PORT/api/media/presence" -o "$EVIDENCE/b-large-presence.json" ||
+    fail "the second computer could not classify its local-only files"
 
   say "== removing the picture on the second computer travels back to the first"
   local code
@@ -162,24 +171,25 @@ act() {
   wait_for 60 "the first computer no longer serves the picture" gone || true
   status_of "$NOTEBOOK_PORT" "$PICTURE_PATH" "$EVIDENCE/a-picture-after-removal.status"
   { ls "$(runtime_of "$ROOT")/media" 2>/dev/null || true; } | sort >"$EVIDENCE/a-media-root-after-removal.txt"
-  rm -f "$picture" "$pdf" "$large"
+  rm -f "$picture" "$pdf" "$large_picture" "$large_pdf"
 }
 
 # ----------------------------------------------------------------------------------- the judging
 check() { # <evidence folder>
-  local folder=$1 picture pdf large
+  local folder=$1 picture pdf large_picture large_pdf
   [ -d "$folder" ] || fail "there is nothing at $folder, so this scenario kept no evidence of media travelling between two computers"
   need_node
   kept_all "$folder" "what the two computers held and served" \
-    a-version-before a-version-after b-version picture-sha pdf-sha large-sha \
+    a-version-before a-version-after b-version picture-sha pdf-sha large-picture-sha large-pdf-sha \
     a-carried-after-update.txt a-kept-here.json b-carried.txt \
-    b-picture.status b-picture.sha b-pdf.status b-pdf.sha b-large.status b-remove.status \
+    b-picture.status b-picture.sha b-pdf.status b-pdf.sha b-large-picture.status b-large-pdf.status b-large-presence.json b-remove.status \
     a-picture-after-removal.status
   [ -f "$folder/a-carried-before-update.txt" ] || fail "a-carried-before-update.txt is not in what the scenario kept: notebook/_media on the first computer before the update"
   [ -f "$folder/a-media-root-after-removal.txt" ] || fail "a-media-root-after-removal.txt is not in what the scenario kept: the first computer's media root after the removal"
   picture=$(tr -d ' \n\r' <"$folder/picture-sha")
   pdf=$(tr -d ' \n\r' <"$folder/pdf-sha")
-  large=$(tr -d ' \n\r' <"$folder/large-sha")
+  large_picture=$(tr -d ' \n\r' <"$folder/large-picture-sha")
+  large_pdf=$(tr -d ' \n\r' <"$folder/large-pdf-sha")
 
   # THE FIRST COMPUTER REALLY MOVED, and the media was only in its media root before.
   [ "$(tr -d ' \n\r' <"$folder/a-version-before")" != "$(tr -d ' \n\r' <"$folder/a-version-after")" ] ||
@@ -195,10 +205,10 @@ check() { # <evidence folder>
     fail "the first computer's first start after the update did not carry the picture into notebook/_media (it holds: $(tr '\n' ' ' <"$folder/a-carried-after-update.txt" | cut -c1-200))"
   grep -qxF "$pdf.pdf" "$folder/a-carried-after-update.txt" ||
     fail "the first computer's first start after the update did not carry the PDF into notebook/_media (it holds: $(tr '\n' ' ' <"$folder/a-carried-after-update.txt" | cut -c1-200))"
-  ! grep -qF "$large" "$folder/a-carried-after-update.txt" ||
-    fail "the file over 50 MB was carried into notebook/_media, and GitHub refuses a file that large"
-  grep -qF "user/44444444-4444-4444-8444-444444444444.mp4" "$folder/a-kept-here.json" ||
-    fail "the first computer's media library does not say the file over 50 MB is kept on this computer only: $(tr -d '\n' <"$folder/a-kept-here.json" | cut -c1-200)"
+  ! grep -qxF "$large_picture.png" "$folder/a-carried-after-update.txt" && ! grep -qxF "$large_pdf.pdf" "$folder/a-carried-after-update.txt" ||
+    fail "content over 50 MB was carried into notebook/_media"
+  grep -qF "$LARGE_PICTURE_PATH" "$folder/a-kept-here.json" && grep -qF "$LARGE_PDF_PATH" "$folder/a-kept-here.json" ||
+    fail "the first computer does not list both large files as kept here: $(tr -d '\n' <"$folder/a-kept-here.json" | cut -c1-200)"
 
   # THE SECOND COMPUTER, FROM THE COPY ALONE, SERVES THE SMALL ONES AND NOT THE LARGE ONE.
   grep -qxF "$picture.png" "$folder/b-carried.txt" && grep -qxF "$pdf.pdf" "$folder/b-carried.txt" ||
@@ -211,8 +221,10 @@ check() { # <evidence folder>
     fail "the second computer answers $(tr -d ' \n\r' <"$folder/b-pdf.status") for the PDF, so a note there would show it missing"
   [ "$(tr -d ' \n\r' <"$folder/b-pdf.sha")" = "$pdf" ] ||
     fail "the second computer serves different bytes for the PDF than the first computer was given"
-  [ "$(tr -d ' \n\r' <"$folder/b-large.status")" != 200 ] ||
-    fail "the second computer serves the file over 50 MB, which never left the first computer"
+  [ "$(tr -d ' \n\r' <"$folder/b-large-picture.status")" != 200 ] && [ "$(tr -d ' \n\r' <"$folder/b-large-pdf.status")" != 200 ] ||
+    fail "the second computer serves content over 50 MB, which never left the first computer"
+  [ "$("$NODE" -e 'const d=require(process.argv[1]).data;process.stdout.write(String(Object.values(d).every(v=>v==="kept_elsewhere")))' "$folder/b-large-presence.json")" = true ] ||
+    fail "the second computer did not classify both large files as kept elsewhere: $(tr -d '\n' <"$folder/b-large-presence.json" | cut -c1-200)"
 
   # A REMOVAL ON THE SECOND COMPUTER TRAVELS BACK, and removes nothing of the first one's own bytes.
   [ "$(tr -d ' \n\r' <"$folder/b-remove.status")" = 200 ] ||

@@ -9,7 +9,7 @@ import path from 'node:path';
 import {createHash} from 'node:crypto';
 import {createService} from '../server/main.mjs';
 import {mediaObjectName} from '../core/media-names.mjs';
-import {CARRY_LIMIT,carriedName,carryMedia,findMedia,missingHere} from '../core/media-store.mjs';
+import {CARRY_LIMIT,carriedName,carryMedia,findMedia,mediaPresence,missingHere} from '../core/media-store.mjs';
 import {chatAttachments} from '../core/chat-context.mjs';
 import {Connectors} from '../core/connectors.mjs';
 import {Review} from '../core/review.mjs';
@@ -82,9 +82,9 @@ test('the first run copies the existing media once and changes nothing in the me
 
 test('a file over 50 MB stays on this computer and its library item says so',async t=>{
   const root=workspace(t),{base,upload,read,carried,mediaRoot}=await start(t,root);
-  const big=Buffer.alloc(CARRY_LIMIT+1,7),original='user/44444444-4444-4444-8444-444444444444.mp4';
-  assert.equal((await upload(original,big,'video/mp4')).status,200);
-  assert.deepEqual(fs.existsSync(carried)?fs.readdirSync(carried):[],[],'neither the file nor its mapping is carried');
+  const big=Buffer.alloc(75*1024*1024,7),original='user/44444444-4444-4444-8444-444444444444.png';
+  assert.equal((await upload(original,big,'image/png')).status,200);
+  assert.deepEqual(fs.readdirSync(carried),[sha(original)+'.mapping.json'],'only the mapping is carried');
   assert.ok(fs.existsSync(path.join(mediaRoot,mediaObjectName(sha(big),original))));
   const served=await read(original);assert.equal(served.status,200);assert.equal(served.bytes.length,big.length);
   assert.equal((await upload(picturePath,picture)).status,200);
@@ -93,17 +93,21 @@ test('a file over 50 MB stays on this computer and its library item says so',asy
 });
 
 test('an item whose file is kept on another computer is reported as not here, until the file arrives',async t=>{
-  const first=workspace(t),one=await start(t,first),big=Buffer.alloc(CARRY_LIMIT+1,7),bigPath='user/55555555-5555-4555-8555-555555555555.pdf',unknownPath='user/66666666-6666-4666-8666-666666666666.png';
+  const first=workspace(t),one=await start(t,first),big=Buffer.alloc(75*1024*1024,7),bigPath='user/55555555-5555-4555-8555-555555555555.pdf',unknownPath='user/66666666-6666-4666-8666-666666666666.png';
   assert.equal((await one.upload(picturePath,picture)).status,200);
   assert.equal((await one.upload(bigPath,big,'application/pdf')).status,200);await one.close();
   const missing=async(base,paths)=>{const r=await fetch(base+'/api/media/missing-here',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({paths})});return {status:r.status,body:await r.json()};};
+  const presence=async(base,paths)=>{const r=await fetch(base+'/api/media/presence',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({paths})});return {status:r.status,body:await r.json()};};
   const second=workspace(t);fs.cpSync(path.join(first,'notebook'),path.join(second,'notebook'),{recursive:true});
   const two=await start(t,second);
   assert.deepEqual((await missing(two.base,[picturePath,bigPath,unknownPath])).body.data,[bigPath,unknownPath]);
+  assert.deepEqual((await presence(two.base,[picturePath,bigPath,unknownPath])).body.data,{[picturePath]:'present',[bigPath]:'kept_elsewhere',[unknownPath]:'unavailable'});
   assert.notEqual((await missing(two.base,'x')).status,200);
+  assert.notEqual((await presence(two.base,'x')).status,200);
   // The computer that holds the file still keeps it here.
   const again=await start(t,first,one.mediaRoot);
   assert.deepEqual((await missing(again.base,[picturePath,bigPath])).body.data,[]);
+  assert.deepEqual((await presence(again.base,[picturePath,bigPath])).body.data,{[picturePath]:'present',[bigPath]:'present'});
   assert.deepEqual((await(await fetch(again.base+'/api/media/kept-here')).json()).data,[{path:bigPath,size:big.length}]);
   // The file arriving on the second computer makes the item ordinary again.
   assert.equal((await two.upload(bigPath,big,'application/pdf')).status,200);
@@ -114,10 +118,11 @@ test('an item whose file is kept on another computer is reported as not here, un
 test('a carried mapping without its file counts as not here, and a removed item does not',()=>{
   const root=fs.mkdtempSync(path.join(os.tmpdir(),'gm-carried-'));
   try{
-    const carried=path.join(root,'_media'),mediaRoot=path.join(root,'m'),big='drive/file-1/Plan.pdf',gone='drive/file-2/Old.pdf',content=sha('large content');fs.mkdirSync(carried,{recursive:true});
-    for(const [original,extra] of [[big,{}],[gone,{removed_at:'2026-11-01T00:00:00.000Z'}]])
-      fs.writeFileSync(path.join(carried,sha(original)+'.mapping.json'),JSON.stringify({path:original,file:carriedName(content,original),sha256:content,size:CARRY_LIMIT+1,contentType:'application/pdf',...extra}));
+    const carried=path.join(root,'_media'),mediaRoot=path.join(root,'m'),big='drive/file-1/Plan.pdf',gone='drive/file-2/Old.pdf',delayed='drive/file-3/Soon.pdf',content=sha('large content');fs.mkdirSync(carried,{recursive:true});
+    for(const [original,size,extra] of [[big,CARRY_LIMIT+1,{}],[gone,CARRY_LIMIT+1,{removed_at:'2026-11-01T00:00:00.000Z'}],[delayed,100,{}]])
+      fs.writeFileSync(path.join(carried,sha(original)+'.mapping.json'),JSON.stringify({path:original,file:carriedName(content,original),sha256:content,size,contentType:'application/pdf',...extra}));
     assert.deepEqual(missingHere({mediaRoot,carried},[big,gone,big]),[big]);
+    assert.deepEqual(mediaPresence({mediaRoot,carried},[big,gone,delayed,'unknown']),{[big]:'kept_elsewhere',[gone]:'removed',[delayed]:'unavailable',unknown:'unavailable'});
   }finally{fs.rmSync(root,{recursive:true,force:true});}
 });
 
