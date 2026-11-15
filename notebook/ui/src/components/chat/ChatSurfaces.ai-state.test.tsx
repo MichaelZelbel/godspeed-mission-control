@@ -2,7 +2,7 @@
 import {afterEach,beforeEach,expect,it,vi} from 'vitest';
 import {act,cleanup,fireEvent,render,screen} from '@testing-library/react';
 import {MemoryRouter} from 'react-router-dom';
-import {QueryClient,QueryClientProvider} from '@tanstack/react-query';
+import {focusManager,QueryClient,QueryClientProvider} from '@tanstack/react-query';
 import '@testing-library/jest-dom/vitest';
 import {GlobalAIChatFAB} from './GlobalAIChatFAB';
 import {NoteChatPanel} from '@/components/notes/NoteChatPanel';
@@ -28,10 +28,11 @@ const surfaces=[
 ] as const;
 
 beforeEach(()=>{localStorage.clear();});
-afterEach(()=>{cleanup();vi.unstubAllGlobals();vi.useRealTimers();});
+afterEach(()=>{cleanup();focusManager.setFocused(undefined);vi.unstubAllGlobals();vi.useRealTimers();});
 
-it('refreshes an open chat when AI availability changes',async()=>{
+it('refreshes an open chat in the background when AI availability changes',async()=>{
   vi.useFakeTimers();
+  focusManager.setFocused(false);
   let options={connected:false,usable:false};
   vi.stubGlobal('fetch',vi.fn(async()=>response(options)));
   wrap(<ChatConnectionEmptyState ready={<div>Ready to chat</div>}/>);
