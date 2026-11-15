@@ -92,6 +92,29 @@ test('Hermes exposes a bounded check and classifies an authentication refusal',a
  await assert.rejects(provider.check(),/needs sign-in/);assert.equal(provider.health(),'refused');assert.equal(prompt.kind,'connection-check');assert.equal(prompt.timeout_ms,undefined);
 });
 
+test('the Hermes health check stops at its 15-second process deadline',async t=>{
+ t.mock.timers.enable({apis:['setTimeout']});
+ const home=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-hermes-health-timeout-'));let call=0;
+ const provider=hermesProvider({home,cwd:home,spawnProcess:()=>{const child=new EventEmitter();child.stdin=new PassThrough();child.stdout=new PassThrough();child.stderr=new PassThrough();if(call++===0)child.stdin.on('data',()=>queueMicrotask(()=>{child.stderr.end('AuthenticationError: token expired\n');child.stdout.end();child.emit('close',1);}));return child;}});
+ await assert.rejects(provider.check(),/needs sign-in/);assert.equal(provider.health(),'refused');
+ const check=provider.check();t.mock.timers.tick(14999);assert.equal(provider.health(),'unreachable');t.mock.timers.tick(1);
+ await assert.rejects(check,/ten minutes/);
+});
+
+test('a refused Hermes provider is reclassified when its next check cannot start',async()=>{
+ const home=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-hermes-health-transition-'));let call=0;
+ const provider=hermesProvider({home,cwd:home,spawnProcess:()=>{if(call++)throw new Error('fictional spawn failure');const child=new EventEmitter();child.stdin=new PassThrough();child.stdout=new PassThrough();child.stderr=new PassThrough();child.stdin.on('data',()=>queueMicrotask(()=>{child.stdout.end();child.stderr.end('AuthenticationError: token expired\n');child.emit('close',1);}));return child;}});
+ await assert.rejects(provider.check(),/needs sign-in/);assert.equal(provider.health(),'refused');
+ await assert.rejects(provider.check(),/could not start/);assert.equal(provider.health(),'unreachable');
+});
+
+test('a refused Hermes provider is reclassified when its next check exceeds the output limit',async()=>{
+ const home=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-hermes-health-output-'));let call=0;
+ const provider=hermesProvider({home,cwd:home,spawnProcess:()=>{const child=new EventEmitter();child.stdin=new PassThrough();child.stdout=new PassThrough();child.stderr=new PassThrough();child.stdin.on('data',()=>queueMicrotask(()=>{if(call++===0){child.stderr.end('AuthenticationError: token expired\n');child.stdout.end();child.emit('close',1);}else child.stdout.write('x'.repeat(1024*1024+1));}));return child;}});
+ await assert.rejects(provider.check(),/needs sign-in/);assert.equal(provider.health(),'refused');
+ await assert.rejects(provider.check(),/output exceeded/);assert.equal(provider.health(),'unreachable');
+});
+
 // Only a connection that failed is called unreachable (#506): a header Node refused on this computer
 // and a stopped request keep their own errors.
 test('a stopped request keeps its own error and a local fetch error is not called unreachable',async()=>{

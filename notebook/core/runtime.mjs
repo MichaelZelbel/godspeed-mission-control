@@ -59,7 +59,7 @@ export function hermesProvider({executable='hermes',home,cwd,model,provider,sour
     }finally{for(const file of temporary)try{fs.unlinkSync(file);}catch{}}
   };
   let cached,loadedAt=0;run.options=async()=>{if(cached&&Date.now()-loadedAt<300000)return cached;const {python,source}=hermesPython({executable,sourceRoot,home});if(!python)throw new Error('Model choices could not be loaded');const helper=fileURLToPath(new URL('../assistant-files/chat-options.py',import.meta.url));cached=await runChild(python,['-I',helper,source],{cwd:fs.existsSync(source)?source:home||cwd,env:assistantEnvironment({home,workspace:cwd}),timeoutMs:20000,spawnProcess}).then(result=>{if(result.code)throw Error();return JSON.parse(result.stdout.trim().split(/\r?\n/).at(-1));}).catch(()=>{throw new Error('Model choices could not be loaded');});loadedAt=Date.now();return cached;};
-  run.check=async()=>{await run({kind:'connection-check',contract:'Reply with OK.',timeout_ms:15000});};
+  run.check=async()=>{healthFailure='unreachable';await run({kind:'connection-check',contract:'Reply with OK.',timeout_ms:15000});};
   run.health=()=>healthFailure;
   return run;
 }
