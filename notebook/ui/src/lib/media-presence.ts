@@ -1,18 +1,28 @@
 import { useQuery } from "@tanstack/react-query";
+import { z } from "zod";
 
-export type MediaPresence = "present" | "kept_elsewhere" | "removed" | "unavailable";
+const mediaPresenceSchema = z.enum(["present", "kept_elsewhere", "removed", "unavailable"]);
+const mediaPresenceResponseSchema = z.object({ data: z.record(z.string(), mediaPresenceSchema) });
+export type MediaPresence = z.infer<typeof mediaPresenceSchema>;
+
+const PRESENCE_BATCH_SIZE = 500;
 
 export async function loadMediaPresence(paths: string[], signal?: AbortSignal): Promise<Record<string, MediaPresence>> {
-  if (paths.length === 0) return {};
-  const response = await fetch("/api/media/presence", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ paths }),
-    signal,
-  });
-  if (!response.ok) throw new Error(`Media presence answered ${response.status}`);
-  const result: { data: Record<string, MediaPresence> } = await response.json();
-  return result.data;
+  const uniquePaths = [...new Set(paths)];
+  const batches = Array.from({ length: Math.ceil(uniquePaths.length / PRESENCE_BATCH_SIZE) }, (_, index) =>
+    uniquePaths.slice(index * PRESENCE_BATCH_SIZE, (index + 1) * PRESENCE_BATCH_SIZE),
+  );
+  const results = await Promise.all(batches.map(async batch => {
+    const response = await fetch("/api/media/presence", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ paths: batch }),
+      signal,
+    });
+    if (!response.ok) throw new Error(`Media presence answered ${response.status}`);
+    return mediaPresenceResponseSchema.parse(await response.json()).data;
+  }));
+  return Object.assign({}, ...results);
 }
 
 export function useMediaPresence(paths: string[]) {

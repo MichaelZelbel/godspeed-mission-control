@@ -206,9 +206,9 @@ check() { # <evidence folder>
   grep -qxF "$pdf.pdf" "$folder/a-carried-after-update.txt" ||
     fail "the first computer's first start after the update did not carry the PDF into notebook/_media (it holds: $(tr '\n' ' ' <"$folder/a-carried-after-update.txt" | cut -c1-200))"
   ! grep -qxF "$large_picture.png" "$folder/a-carried-after-update.txt" && ! grep -qxF "$large_pdf.pdf" "$folder/a-carried-after-update.txt" ||
-    fail "content over 50 MB was carried into notebook/_media"
+    fail "GitHub refuses a file that large, but content over 50 MB was carried into notebook/_media"
   grep -qF "$LARGE_PICTURE_PATH" "$folder/a-kept-here.json" && grep -qF "$LARGE_PDF_PATH" "$folder/a-kept-here.json" ||
-    fail "the first computer does not list both large files as kept here: $(tr -d '\n' <"$folder/a-kept-here.json" | cut -c1-200)"
+    fail "the first computer does not mark both large files as kept on this computer only: $(tr -d '\n' <"$folder/a-kept-here.json" | cut -c1-200)"
 
   # THE SECOND COMPUTER, FROM THE COPY ALONE, SERVES THE SMALL ONES AND NOT THE LARGE ONE.
   grep -qxF "$picture.png" "$folder/b-carried.txt" && grep -qxF "$pdf.pdf" "$folder/b-carried.txt" ||
@@ -222,8 +222,8 @@ check() { # <evidence folder>
   [ "$(tr -d ' \n\r' <"$folder/b-pdf.sha")" = "$pdf" ] ||
     fail "the second computer serves different bytes for the PDF than the first computer was given"
   [ "$(tr -d ' \n\r' <"$folder/b-large-picture.status")" != 200 ] && [ "$(tr -d ' \n\r' <"$folder/b-large-pdf.status")" != 200 ] ||
-    fail "the second computer serves content over 50 MB, which never left the first computer"
-  [ "$("$NODE" -e 'const d=require(process.argv[1]).data;process.stdout.write(String(Object.values(d).every(v=>v==="kept_elsewhere")))' "$folder/b-large-presence.json")" = true ] ||
+    fail "the second computer serves the file over 50 MB, whose content never left the first computer"
+  [ "$(LARGE_PICTURE_PATH="$LARGE_PICTURE_PATH" LARGE_PDF_PATH="$LARGE_PDF_PATH" "$NODE" -e 'const d=require(process.argv[1]).data||{};process.stdout.write(String(d[process.env.LARGE_PICTURE_PATH]==="kept_elsewhere"&&d[process.env.LARGE_PDF_PATH]==="kept_elsewhere"))' "$folder/b-large-presence.json")" = true ] ||
     fail "the second computer did not classify both large files as kept elsewhere: $(tr -d '\n' <"$folder/b-large-presence.json" | cut -c1-200)"
 
   # A REMOVAL ON THE SECOND COMPUTER TRAVELS BACK, and removes nothing of the first one's own bytes.

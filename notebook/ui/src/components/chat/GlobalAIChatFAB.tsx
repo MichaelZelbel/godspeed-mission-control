@@ -12,7 +12,6 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { triggerCreditsRefresh } from "@/lib/credits-events";
 import { summarizeChat, type ChatFunction } from "@/lib/chat-summary";
 import { functionErrorMessage, OUT_OF_CREDITS_MESSAGE } from "@/lib/function-error";
-import { keptElsewhereMessage, useMediaPresence } from "@/lib/media-presence";
 import {
   loadChatState,
   saveChatState,
@@ -54,6 +53,7 @@ import {ChatConnectionEmptyState} from "./ChatConnectionEmptyState";
 import { useChatEntryInView } from "./chat-entry";
 import { BRAIN_PAGE } from "@/lib/brain-page";
 import { personLabel } from "@/components/timeline/people";
+import { ChatAttachmentLink } from "./ChatAttachmentLink";
 type ChatMessage = PersistedChatMessage;
 type SizeMode = "docked" | "expanded" | "fullscreen";
 
@@ -75,12 +75,6 @@ export const OPEN_CHAT_EVENT="godspeed:open-chat";
 // Opens the floating chat when one is on the page, and sends `message` there when one is given (the
 // dashboard's "Tell Godspeed about you" sends "context"); returns false when no floating chat answered.
 export function openFloatingChat(message?:string){const event=new CustomEvent(OPEN_CHAT_EVENT,{cancelable:true,detail:{message}});window.dispatchEvent(event);return event.defaultPrevented;}
-function ChatAttachmentLink({file}:{file:{path:string;name:string}}){
-  const {data}=useMediaPresence([file.path]);
-  if(data?.[file.path]==="kept_elsewhere")return <span className="block text-xs mt-2 text-muted-foreground">{file.name}: {keptElsewhereMessage}</span>;
-  if(data?.[file.path]!=="present")return <span className="block text-xs mt-2 text-muted-foreground">{file.name}</span>;
-  return <a className="block text-xs underline mt-2" href={"/api/media/file/"+encodeURIComponent(file.path)} target="_blank" rel="noreferrer">{file.name}</a>;
-}
 export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChange,pageContext}:{page?:boolean;embedded?:boolean;noteTitle?:string;onOpenChange?:(open:boolean)=>void;pageContext?:PageContext}) {
   const { user, session } = useAuth();
   const location = useLocation();
