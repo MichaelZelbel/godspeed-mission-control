@@ -70,6 +70,7 @@ contains "  the summary says so" "$(cat "$G/routines/coach-prep/2026-10-24/summa
 PR="$(cat "$TMP/prompt")"
 contains "  the prompt names the talk, its day and its clock" "$PR" "Prepare the Weekly check-in talk (area weekly-check-in) on 2026-10-25 at 18:00 (Europe/Berlin)."
 contains "  and the time now on the coach's clock" "$PR" "Now: 2026-10-24T01:00:00Z (UTC)"
+contains "  and makes the preparation use that exact current instant" "$PR" "Its PREPARED field must be exactly 2026-10-24T01:00:00Z"
 contains "  and says never to open the talk" "$PR" "never run godspeed-coach talk open"
 contains "  the recipe is coach-prep, read from the skills folder" "$PR" "# Coaching talk preparation"
 A="$(cat "$TMP/args")"
