@@ -92,8 +92,8 @@ test('a file over 50 MB stays on this computer and its library item says so',asy
   assert.deepEqual(kept.data,[{path:original,size:big.length}]);
 });
 
-test('an item whose file is kept on another computer is reported as not here, until the file arrives',async t=>{
-  const first=workspace(t),one=await start(t,first),big=Buffer.alloc(75*1024*1024,7),bigPath='user/55555555-5555-4555-8555-555555555555.pdf',unknownPath='user/66666666-6666-4666-8666-666666666666.png';
+test('items whose files are kept on another computer explain where to open them, until a file arrives',async t=>{
+  const first=workspace(t),one=await start(t,first),big=Buffer.alloc(75*1024*1024,7),bigPath='user/55555555-5555-4555-8555-555555555555.pdf',bigPicture='user/77777777-7777-4777-8777-777777777777.png',unknownPath='user/66666666-6666-4666-8666-666666666666.png';
   assert.equal((await one.upload(picturePath,picture)).status,200);
   assert.equal((await one.upload(bigPath,big,'application/pdf')).status,200);await one.close();
   const missing=async(base,paths)=>{const r=await fetch(base+'/api/media/missing-here',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({paths})});return {status:r.status,body:await r.json()};};
@@ -102,6 +102,14 @@ test('an item whose file is kept on another computer is reported as not here, un
   const two=await start(t,second);
   assert.deepEqual((await missing(two.base,[picturePath,bigPath,unknownPath])).body.data,[bigPath,unknownPath]);
   assert.deepEqual((await presence(two.base,[picturePath,bigPath,unknownPath])).body.data,{[picturePath]:'present',[bigPath]:'kept_elsewhere',[unknownPath]:'unavailable'});
+  // The same carried state is independent of media type. Add a 75 MB picture mapping to
+  // the copied notebook and directly open both content URLs as a browser would.
+  fs.writeFileSync(path.join(two.carried,sha(bigPicture)+'.mapping.json'),JSON.stringify({path:bigPicture,file:sha(big)+'.png',sha256:sha(big),size:big.length,contentType:'image/png'}));
+  for(const original of [bigPath,bigPicture]){
+    const opened=await fetch(two.base+'/api/media/file/'+encodeURIComponent(original));
+    assert.equal(opened.status,404);assert.match(opened.headers.get('content-type'),/^text\/html/);
+    const explanation=await opened.text();assert.match(explanation,/kept on the computer where it was added/i);assert.match(explanation,/make the file smaller than 50 MB/i);
+  }
   assert.notEqual((await missing(two.base,'x')).status,200);
   assert.notEqual((await presence(two.base,'x')).status,200);
   // The computer that holds the file still keeps it here.
