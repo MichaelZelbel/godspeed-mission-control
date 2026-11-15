@@ -5991,7 +5991,7 @@ const add=(phase,surface,width,state,extra={})=>snapshots.push({phase,surface,wi
 for(const width of [1280,375])for(const surface of surfaces)add('none',surface,width,'none');
 for(const surface of ['global-chat','note-chat','collection-chat','popout-chat'])add('none-sent',surface,1280,'none',{reply:refusal});
 snapshots.push({phase:'none-sent',surface:'http-chat',width:1280,state:'none',reply:refusal,httpAgreement:true});
-for(const phase of ['connected','refused','recovered','unreachable'])for(const surface of surfaces){const state=phase==='recovered'?'connected':phase;add(phase,surface,1280,state,{withoutReload:true,requestObserved:state==='connected',reply:state==='connected'?'stand-in answer':'Plain contained provider failure'});}
+for(const phase of ['connected','refused','recovered','unreachable'])for(const surface of surfaces){const state=phase==='recovered'?'connected':phase;add(phase,surface,1280,state,surface==='dashboard'?{withoutReload:true}:{withoutReload:true,requestObserved:state==='connected',reply:state==='connected'?'stand-in answer':'Plain contained provider failure'});}
 for(const state of ['connected','refused'])for(const width of [1280,375])for(const surface of ['dashboard','global-chat','note-chat','popout-chat'])add(state+'-layout',surface,width,state);
 snapshots.push({phase:'none-http',surface:'http-status',width:1280,state:'none',httpAgreement:true},{phase:'connected-http',surface:'http-status',width:1280,state:'connected',httpAgreement:true});
 w('ai-state-evidence.json',{noAIProviderRequests:0,snapshots});
