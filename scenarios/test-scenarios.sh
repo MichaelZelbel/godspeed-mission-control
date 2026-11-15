@@ -3441,6 +3441,12 @@ talk_good() { # <folder>
   local folder=$1 goal
   rm -rf "$folder"
   mkdir -p "$folder"
+  printf 'id=prep-job\nbefore=2026-11-01T10:00:00Z\n' >"$folder/prep-run-before.txt"
+  printf 'id=prep-job\nafter=2026-11-01T10:01:00Z\nstatus=ok\n' >"$folder/prep-run-after.txt"
+  printf '{"started":true}\n' >"$folder/prep-run-request.json"
+  printf '[{"id":"prep-job","name":"Coaching talk preparation","last_status":"ok","last_run_at":"2026-11-01T10:01:00Z"}]\n' >"$folder/prep-jobs-after.json"
+  printf '## The opening\n\nA preparation made by the installed job.\n' >"$folder/routine-preparation.md"
+  printf 'coach/health/prep/2026-11-03.md\n' >"$folder/routine-preparation-source.txt"
   printf 'a=2026-11-02\nb=2026-11-03\noffset=+0000\n' >"$folder/days.txt"
   {
     printf 'AREA: health\nSERVES: lower-ldl, sleep-better, visible-abs\n'
@@ -3481,6 +3487,22 @@ copy "$T/good" "$T/empty-block"
 : >"$T/empty-block/block-b.txt"
 passes 'a day B whose scheduled context is empty, which is clean' \
   talk-prep-honest "$T/empty-block" 'opened from the preparation'"'"'s own opening'
+
+copy "$T/good" "$T/no-prep-job"
+printf '[]\n' >"$T/no-prep-job/prep-jobs-after.json"
+refuses 'no installed preparation job' talk-prep-honest "$T/no-prep-job" 'not attributable'
+
+copy "$T/good" "$T/no-new-prep-run"
+printf 'id=prep-job\nafter=2026-11-01T10:00:00Z\nstatus=ok\n' >"$T/no-new-prep-run/prep-run-after.txt"
+refuses 'no new completed preparation run' talk-prep-honest "$T/no-new-prep-run" 'no new completed run'
+
+copy "$T/good" "$T/failed-prep-run"
+sed -i 's/status=ok/status=failed/' "$T/failed-prep-run/prep-run-after.txt"
+refuses 'a failed installed preparation run' talk-prep-honest "$T/failed-prep-run" 'did not finish successfully'
+
+copy "$T/good" "$T/not-attributed"
+printf '[{"id":"another-job","name":"Coaching talk preparation","last_status":"ok"}]\n' >"$T/not-attributed/prep-jobs-after.json"
+refuses 'output not attributable to the installed preparation run' talk-prep-honest "$T/not-attributed" 'not attributable'
 
 copy "$T/good" "$T/a-still-open"
 printf '# Scheduled\n\n- Open talk: Health, since 2026-11-02\n' >"$T/a-still-open/block-b.txt"
@@ -3619,6 +3641,45 @@ refuses 'an area that serves two goals' talk-prep-honest "$T/two-goals" 'exactly
 copy "$T/good" "$T/no-domains"
 sed -i '/^RESEARCH DOMAIN/d' "$T/no-domains/area.md"
 refuses 'an area with no research domain' talk-prep-honest "$T/no-domains" 'names no RESEARCH DOMAIN'
+
+# ======================================================= notebook-assistant-journeys
+assistant_journeys_good() {
+  local folder=$1
+  rm -rf "$folder"; mkdir -p "$folder/screenshots"
+  node - "$folder" <<'NODE'
+const fs=require('fs'),p=require('path'),d=process.argv[2],w=(n,x)=>fs.writeFileSync(p.join(d,n),typeof x==='string'?x:JSON.stringify(x)+'\n');
+const names=['provider-saved','provider-after-navigation','provider-after-reload','notebook-restarted','provider-after-restart','moment-saved-without-ai','moment-edited-without-ai','moment-saved-with-ai','moment-edited-with-ai'];w('actions.json',names.map(name=>({name,ok:true})));
+for(const n of ['provider-navigation.json','provider-reload.json','provider-restart.json'])w(n,{service:'Another service',url:'http://127.0.0.1:48763/v1',model:'fixture-model',key:true});
+w('moments.json',{'without-ai':{saved:true,edited:true},'with-ai':{saved:true,edited:true}});
+w('fixture-requests.jsonl','{"phase":"with-ai","operation":"extract-moment-profile","action":"save"}\n{"phase":"with-ai","operation":"extract-moment-profile","action":"edit"}\n');
+w('browser-console.json',[]);w('browser-network.json',[]);w('restart.txt','old_pid=101 new_pid=202 healthy=yes\n');w('cleanup.txt','browser=stopped\nfixture=stopped\n');
+NODE
+}
+section notebook-assistant-journeys
+N=$TMP/notebook-assistant
+assistant_journeys_good "$N/good"
+passes 'custom AI persistence and both moment enrichment states through the installed browser route' notebook-assistant-journeys "$N/good" 'owned browser and fixture stopped'
+for transition in navigation reload restart; do
+  copy "$N/good" "$N/wrong-$transition"
+  printf '{"service":"OpenAI","url":"http://127.0.0.1:48763/v1","model":"fixture-model","key":true}\n' >"$N/wrong-$transition/provider-$transition.json"
+  refuses "a provider lost after $transition" notebook-assistant-journeys "$N/wrong-$transition" 'incomplete or contradicts'
+done
+copy "$N/good" "$N/missing-key"; node -e 'let x=require(process.argv[1]);x.key=false;require("fs").writeFileSync(process.argv[1],JSON.stringify(x))' "$N/missing-key/provider-restart.json"
+refuses 'a saved provider whose key appears missing' notebook-assistant-journeys "$N/missing-key" 'incomplete or contradicts'
+copy "$N/good" "$N/no-ai-called"; printf '{"phase":"without-ai","operation":"extract-moment-profile","action":"save"}\n' >>"$N/no-ai-called/fixture-requests.jsonl"
+refuses 'an extraction request while no AI was connected' notebook-assistant-journeys "$N/no-ai-called" 'incomplete or contradicts'
+copy "$N/good" "$N/no-ai-error"; printf '[{"phase":"without-ai","text":"extract-moment-profile failed"}]\n' >"$N/no-ai-error/browser-console.json"
+refuses 'an extraction error while no AI was connected' notebook-assistant-journeys "$N/no-ai-error" 'incomplete or contradicts'
+for action in save edit; do
+  copy "$N/good" "$N/no-ai-$action"; grep -v '"action":"'$action'"' "$N/no-ai-$action/fixture-requests.jsonl" >"$N/no-ai-$action/requests"; mv "$N/no-ai-$action/requests" "$N/no-ai-$action/fixture-requests.jsonl"
+  refuses "no extraction after the AI-backed $action" notebook-assistant-journeys "$N/no-ai-$action" 'incomplete or contradicts'
+done
+copy "$N/good" "$N/action-failed"; sed -i '0,/"ok":true/s//"ok":false/' "$N/action-failed/actions.json"
+refuses 'evidence without every successful visible action' notebook-assistant-journeys "$N/action-failed" 'incomplete or contradicts'
+copy "$N/good" "$N/secret"; printf 'scenario-secret-never-retain\n' >"$N/secret/leak.txt"
+refuses 'a submitted secret in retained evidence' notebook-assistant-journeys "$N/secret" 'leaked into retained evidence'
+copy "$N/good" "$N/no-cleanup"; printf 'browser=stopped\n' >"$N/no-cleanup/cleanup.txt"
+refuses 'a fixture with no cleanup record' notebook-assistant-journeys "$N/no-cleanup" 'incomplete or contradicts'
 
 # ===================================================== the owner on Telegram (2.0.0-beta.17)
 # no-question-he-cannot-judge, plain-yes, what-was-that and connection-check judge what an install sent

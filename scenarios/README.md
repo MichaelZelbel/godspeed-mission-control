@@ -19,7 +19,7 @@ inside a workflow file cannot be. They live in a folder of their own for the sam
 does: everything in `tools/` is copied onto every user's computer as a program, and these are not
 programs for users.
 
-`chat-tidy-at-night`, `disk-filling`, `missed-routine`, `deadline-closes-itself` and `held-by-a-claim` are not yet jobs of
+`chat-tidy-at-night`, `disk-filling`, `missed-routine`, `deadline-closes-itself`, `held-by-a-claim` and `notebook-assistant-journeys` are not yet jobs of
 that workflow: their jobs are written in the pull request that added them and are applied in the
 release step. Until then they are run by hand, with the environment their rows below name. Remove this
 paragraph when the jobs are in `.github/workflows/scenarios.yml`.
@@ -46,6 +46,7 @@ paragraph when the jobs are in `.github/workflows/scenarios.yml`.
 | `telegram-language.sh` | through the installed assistant's own outgoing hook and Telegram send path, a reply written in the other language than the message it answers is sent in the message's language (three English journal messages with a German draft, English, German, English in one chat, a cron delivery left alone); the builder's copy runs it with `GODSPEED_SCENARIO_PRODUCT` and a Hermes it can run |
 | `brief-asked-in-chat.sh` | with the Charm Challenge running and the Morning brief routine run, "today's brief" asked in the notebook's chat is answered with the saved briefing's Charm line word for word, a seeded sentence that breaks a writing rule is absent from the briefing and the answer and its repair item is listed, and asking again saves no second briefing note |
 | `talk-prep-honest.sh` | a fixture person with one health area serving three goals and naming research domains: a preparation whose review leaves a goal uncovered is refused by the real seal and the installed gate, and the talk opens with the one sentence naming what is missing and no line claiming a research duration; a preparation covering all three goals, routes recorded in full, with a passing review sealed by the real seal opens the talk from its own opening |
+| `notebook-assistant-journeys.sh` | through installed Chromium and the production notebook UI, Settings saves Another service and shows the same address, model and retained-key state after navigation, reload and a notebook restart; Timeline saves and edits one moment with no AI without requesting extraction, then saves and edits another with a loopback AI and requests extraction both times. It retains redacted browser, request, restart and screenshot evidence and stops only its own browser and loopback fixture |
 | `phone-health-days.sh` | on the Docker server install, made-up Health Auto Export uploads (overlapping windows, a day re-sent, a workout sent twice, a run and a slow "run") leave exact day records, a second paired notebook shows the same days after a sync, and a wrong token answers 404 and stores nothing |
 | `incomplete-day.sh` | a day whose last point is 19:55 is briefed as stopping at 19:55, with no short-day wording and its protein count unknown; after a protein number is given by hand the next briefing counts it |
 | `phone-goes-quiet.sh` | 37 hours past the last upload the connection check sends one message and files one deadline, a second run sends nothing, an upload closes the deadline |

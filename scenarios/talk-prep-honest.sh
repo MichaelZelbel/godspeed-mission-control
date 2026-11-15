@@ -77,6 +77,30 @@ settings_connects_the_model() {
   say "The chat thinks with $AI_MODEL at $AI_URL"
 }
 
+run_installed_preparation() {
+  local jobs=$EVIDENCE/.prep-jobs.json id before after code produced
+  curl -fsS --max-time 60 -X POST -H 'Content-Type: application/json' -d '{"table":"jobs"}' "http://127.0.0.1:$NOTEBOOK_PORT/api/query" -o "$jobs" || fail "the installed notebook would not list its routines"
+  id=$("$NODE" -e 'const d=JSON.parse(require("fs").readFileSync(process.argv[1])),r=Array.isArray(d)?d:(d.data||[]),j=r.find(x=>x.name==="Coaching talk preparation"||x.title==="Coaching talk preparation"||x.kind==="coach-prep");if(j)process.stdout.write(String(j.id))' "$jobs")
+  [ -n "$id" ] || fail "the installed routine list has no Coaching talk preparation job"
+  before=$("$NODE" -e 'const d=JSON.parse(require("fs").readFileSync(process.argv[1])),r=Array.isArray(d)?d:(d.data||[]),j=r.find(x=>String(x.id)===process.argv[2]);process.stdout.write(String(j?.last_run_at||"never"))' "$jobs" "$id")
+  printf 'id=%s\nbefore=%s\n' "$id" "$before" >"$EVIDENCE/prep-run-before.txt"
+  code=$(curl -sS -o "$EVIDENCE/prep-run-request.json" -w '%{http_code}' --max-time 60 -X POST -H 'Content-Type: application/json' -d "{\"id\":$(quoted_json "$id")}" "http://127.0.0.1:$NOTEBOOK_PORT/api/jobs/run") || fail "the installed preparation job could not be requested"
+  { [ "$code" = 200 ] || [ "$code" = 202 ]; } || fail "the installed preparation job was refused with HTTP $code"
+  prep_run_finished() {
+    curl -fsS --max-time 30 -X POST -H 'Content-Type: application/json' -d '{"table":"jobs"}' "http://127.0.0.1:$NOTEBOOK_PORT/api/query" -o "$jobs" 2>/dev/null || return 1
+    after=$("$NODE" -e 'const d=JSON.parse(require("fs").readFileSync(process.argv[1])),r=Array.isArray(d)?d:(d.data||[]),j=r.find(x=>String(x.id)===process.argv[2]);process.stdout.write([j?.last_run_at||"",j?.last_status||"",j?.last_error||""].join("\t"))' "$jobs" "$id")
+    [ "$(printf '%s' "$after" | cut -f1)" != "$before" ] && [ -n "$(printf '%s' "$after" | cut -f2)" ]
+  }
+  wait_for 600 "the installed Coaching talk preparation job to finish" prep_run_finished || fail "the installed preparation job recorded no new completed run"
+  [ "$(printf '%s' "$after" | cut -f2)" = ok ] || fail "the installed preparation job failed: $(printf '%s' "$after" | cut -f3)"
+  printf 'id=%s\nafter=%s\nstatus=ok\n' "$id" "$(printf '%s' "$after" | cut -f1)" >"$EVIDENCE/prep-run-after.txt"
+  cp "$jobs" "$EVIDENCE/prep-jobs-after.json"
+  produced=$(find "$ROOT/coach" -path '*/prep/*.md' -type f -newer "$EVIDENCE/prep-run-request.json" -print 2>/dev/null | head -n 1)
+  [ -n "$produced" ] || fail "the successful installed preparation run produced no preparation attributable to that run"
+  cp "$produced" "$EVIDENCE/routine-preparation.md"
+  printf '%s\n' "${produced#"$ROOT"/}" >"$EVIDENCE/routine-preparation-source.txt"
+}
+
 # ---------------------------------------------------------------------------------- the fixtures
 # A run record the way Claude Code keeps one: a JSON line per message, the prompt naming the run's
 # marker, and for each page a WebFetch call and its successful result, all inside the run's time.
@@ -229,6 +253,8 @@ act() {
   phase 'a fixture person: one health area, three goals, three research domains'
   write_area
   cp "$ROOT/coach/health/area.md" "$EVIDENCE/area.md"
+  phase 'the installed Coaching talk preparation job runs through Run now'
+  run_installed_preparation
 
   phase 'a: a preparation whose review leaves one goal uncovered'
   prepare_and_review a "$DAY_A" 2 'Good evening. Tonight: your LDL result, the half hour of sleep, and one thing to try.' fail "$URL_1" "$URL_2"
@@ -272,8 +298,17 @@ claims_research_time() { # <file>: prints the first line that does, and leaves 0
   grep -Eiv '^$' "$1" | grep -Ei -- "$CLAIM" | head -n 1 | grep .
 }
 check() { # <evidence folder>
-  local folder=$1 sentence a b opening_b goal route_count label field reply
+  local folder=$1 sentence a b opening_b goal route_count label field reply run_id before after
   [ -d "$folder" ] || fail "there is nothing at $folder, so this scenario kept no evidence of a talk's preparation"
+  kept_all "$folder" 'the installed preparation job and its public Run now request' prep-run-before.txt prep-run-after.txt prep-run-request.json prep-jobs-after.json routine-preparation.md routine-preparation-source.txt
+  run_id=$(sed -n 's/^id=//p' "$folder/prep-run-before.txt"); before=$(sed -n 's/^before=//p' "$folder/prep-run-before.txt"); after=$(sed -n 's/^after=//p' "$folder/prep-run-after.txt")
+  [ -n "$run_id" ] || fail "the retained preparation run names no installed job"
+  [ -n "$after" ] && [ "$after" != "$before" ] || fail "the installed preparation job recorded no new completed run"
+  grep -qx 'status=ok' "$folder/prep-run-after.txt" || fail "the installed preparation job did not finish successfully"
+  grep -Eq '"started"[[:space:]]*:[[:space:]]*true|"results"' "$folder/prep-run-request.json" || fail "the public Run now request did not start the preparation job"
+  "$NODE" -e 'const d=JSON.parse(require("fs").readFileSync(process.argv[1])),r=Array.isArray(d)?d:(d.data||[]),j=r.find(x=>String(x.id)===process.argv[2]);process.exit(j&&(j.name==="Coaching talk preparation"||j.title==="Coaching talk preparation"||j.kind==="coach-prep")&&j.last_status==="ok"?0:1)' "$folder/prep-jobs-after.json" "$run_id" || fail "the successful run is not attributable to the installed Coaching talk preparation job"
+  grep -Eq '^coach/[^/]+/prep/[^/]+\.md$' "$folder/routine-preparation-source.txt" || fail "the installed run's preparation has no product-owned source path"
+  grep -q '^## The opening' "$folder/routine-preparation.md" || fail "the installed run's preparation has no opening to judge"
   b=$(sed -n 's/^b=//p' "$folder/days.txt" 2>/dev/null)
   if [ ! -s "$folder/talk-b.md" ]; then
     [ -n "$b" ] || fail "days.txt does not say which two talk days this scenario worked on"
