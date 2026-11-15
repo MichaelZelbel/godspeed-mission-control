@@ -10,7 +10,7 @@ act() {
  wait_for 120 "the installed notebook to answer" notebook_answers || fail "the installed notebook did not answer"
  local code response=$EVIDENCE/response.json
  code=$(curl -sS -o "$response" -w '%{http_code}' -X POST \
-   -H 'Content-Type: audio/mp4' --data-binary @"$EVIDENCE/german.mp3" \
+   -H 'Content-Type: audio/mpeg' --data-binary @"$EVIDENCE/german.mp3" \
    "http://127.0.0.1:$NOTEBOOK_PORT/api/chat/transcribe") || fail "the installed notebook's dictation endpoint could not be reached"
  [ "$code" = 200 ] || fail "the installed notebook could not transcribe the recording (HTTP $code: $(tr -d '\n' <"$response" | cut -c1-200))"
  "$NODE" -e 'const fs=require("fs"),[input,transcript,call]=process.argv.slice(1),answer=JSON.parse(fs.readFileSync(input,"utf8"));if(!String(answer.text||"").trim())throw Error("the dictation endpoint returned no words");fs.writeFileSync(transcript,String(answer.text).trim()+"\n");fs.writeFileSync(call,JSON.stringify({endpoint:"/api/chat/transcribe",implementation:"notebook/assistant-files/dictate.py",status:200})+"\n")' "$response" "$EVIDENCE/transcript.txt" "$EVIDENCE/call.json" || fail "the installed notebook's dictation response was not usable"

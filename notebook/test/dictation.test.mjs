@@ -31,6 +31,15 @@ test('dictation follows a native wrapper descriptor to its source venv',async t=
   assert.deepEqual(await transcribeRecording({verified:true,executable,sourceRoot:source,home:path.join(root,'home')},root,Buffer.from('audio'),'audio/webm',{spawnProcess}),{ok:true,text:'recorded'});
   assert.equal(started.command,python);assert.equal(started.options.cwd,source);
 });
+test('dictation keeps an MP3 recording as MP3 for Hermes',async()=>{
+  let filename;
+  const spawnProcess=(command,args)=>{
+    filename=args.at(-1);const child=new EventEmitter();child.stdout=new PassThrough();child.stderr=new PassThrough();
+    setImmediate(()=>{child.stdout.end('{"ok":true,"text":"Guten Morgen"}\n');child.emit('close',0);});return child;
+  };
+  assert.deepEqual(await transcribeRecording({verified:true,executable:'/tmp/hermes',home:'/tmp/hermes-home'},'/tmp',Buffer.from('mp3'),'audio/mpeg',{spawnProcess}),{ok:true,text:'Guten Morgen'});
+  assert.equal(path.extname(filename),'.mp3');
+});
 test('dictation endpoint refuses cross-site audio and recovers after an invalid recording',async()=>{
   const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-dictation-test-'));
   const service=await createService({root,port:0,provider:async()=>''});

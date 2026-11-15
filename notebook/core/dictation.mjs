@@ -8,7 +8,7 @@ import {runChild} from './child-process.mjs';
 import {hermesPython} from './runtime.mjs';
 
 export async function transcribeRecording(descriptor,workspace,audio,type,{spawnProcess=spawn}={}){
-  const extension={'audio/webm':'.webm','audio/ogg':'.ogg','audio/mp4':'.mp4','audio/wav':'.wav'}[type.split(';')[0]];
+  const extension={'audio/webm':'.webm','audio/ogg':'.ogg','audio/mp4':'.mp4','audio/wav':'.wav','audio/mpeg':'.mp3'}[type.split(';')[0]];
   if(!extension)throw new Error('This audio format is not supported');
   if(!audio.length||audio.length>8*1024*1024)throw new Error('Record up to one minute of speech');
   if(!descriptor?.verified)throw new Error('Connect Hermes to use dictation');
