@@ -8,5 +8,5 @@ export async function loadChatOptions({fetcher=fetch,signal,timeoutMs=15000}={})
  const current=data.models.some(m=>m.id===data.current)?data.current:data.models.length===1&&data.models[0].id===''?'':null;
  if(current===null)throw Error('The configured model is not among the available choices.');
  // connected:false is the server saying no AI is connected at all (#563); any other answer is a connected AI.
- return {current,label:data.connected===false?'No AI connected':typeof data.current==='string'?data.current:'Connected model',connected:data.connected!==false,models:data.models};
+ return {current,label:data.connected===false?'No AI connected':typeof data.current==='string'?data.current:'Connected model',connected:data.connected!==false,usable:data.usable!==false,models:data.models};
 }
