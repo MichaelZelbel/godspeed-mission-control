@@ -22,19 +22,30 @@ const observationPages=[];
 let routeError;
 const fixtureRows=[];
 const pause=ms=>new Promise(r=>setTimeout(r,ms));
-const within=(promise,what)=>Promise.race([promise,pause(15000).then(()=>{throw Error(`${what} did not finish within 15 seconds`);})]);
+const deadline=Number(process.env.BROWSER_TEST_TIMEOUT_MS)||15000;
+const within=(promise,what)=>Promise.race([promise,pause(deadline).then(()=>{throw Error(`${what} did not finish within ${deadline/1000} seconds`);})]);
+const fetchWithin=async(url,options={},what='request')=>{
+  const controller=new AbortController();
+  const timer=setTimeout(()=>controller.abort(),deadline);
+  try{return await fetch(url,{...options,signal:controller.signal});}
+  catch(error){if(error?.name==='AbortError')throw Error(`${what} did not finish within ${deadline/1000} seconds`);throw error;}
+  finally{clearTimeout(timer);}
+};
 const waitForBrowserExit=async timeout=>{
   if(browser.exitCode!==null||browser.signalCode!==null)return true;
   return Promise.race([new Promise(r=>browser.once('exit',()=>r(true))),pause(timeout).then(()=>false)]);
 };
+const command=(program,args)=>new Promise((ok,no)=>{let out='';const p=spawn(program,args);p.stdout.on('data',x=>out+=x);p.once('error',no);p.once('exit',code=>code===0?ok(out.trim()):no(Error(`${program} ${args.join(' ')} failed`)));});
 const stopBrowser=async()=>{
-  if(!browser||browser.exitCode!==null||browser.signalCode!==null)return;
-  browser.kill('SIGTERM');
-  if(!await waitForBrowserExit(5000)&&browser.exitCode===null&&browser.signalCode===null){
-    const exited=waitForBrowserExit(5000);
-    browser.kill('SIGKILL');
-    await exited;
-  }
+  if(!browser)return true;
+  const exists=()=>{try{process.kill(-browser.pid,0);return true;}catch(error){if(error?.code==='ESRCH')return false;throw error;}};
+  const signal=kind=>{try{process.kill(-browser.pid,kind);}catch(error){if(error?.code!=='ESRCH')throw error;}};
+  const goneWithin=async timeout=>{for(let elapsed=0;elapsed<timeout;elapsed+=50){if(!exists())return true;await pause(50);}return !exists();};
+  if(!exists())return true;
+  signal('SIGTERM');
+  if(!await goneWithin(5000)){signal('SIGKILL');if(!await goneWithin(5000))return false;}
+  await waitForBrowserExit(1000);
+  return true;
 };
 let seq=0;const pending=new Map();
 const cdp=(method,params={})=>within(Promise.race([new Promise((ok,no)=>{const id=++seq;pending.set(id,[ok,no]);ws.send(JSON.stringify({id,method,params}));}),browserGone.then(()=>{throw Error('Chromium exited during browser observation');})]),`Chromium ${method}`);
@@ -46,8 +57,10 @@ const observeProvider=async name=>write(name,{service:(await formValue('Your AI 
 const snapshots=[];
 const stateFrom=(text,model)=>/no ai connected/i.test(text+' '+model)?'none':/could not be used|could not be reached|unreachable/i.test(text)?'unreachable':/refused|check Settings, Your AI/i.test(text)?'refused':'connected';
 const pageSocket=async url=>{
-  const target=await fetch(`http://127.0.0.1:${port}/json/new?${encodeURIComponent(url)}`,{method:'PUT'}).then(r=>{if(!r.ok)throw Error('Chromium could not open an observation tab');return r.json();});
-  const socket=new WebSocket(target.webSocketDebuggerUrl);await new Promise((ok,no)=>{socket.onopen=ok;socket.onerror=no});
+  const target=await fetchWithin(`http://127.0.0.1:${port}/json/new?${encodeURIComponent(url)}`,{method:'PUT'},'Chromium observation-tab request').then(r=>{if(!r.ok)throw Error('Chromium could not open an observation tab');return r.json();});
+  const socket=new WebSocket(target.webSocketDebuggerUrl);
+  try{await within(new Promise((ok,no)=>{socket.onopen=ok;socket.onerror=no}),'Chromium observation-tab connection');}
+  catch(error){socket.close();throw error;}
   let number=0;const waiting=new Map();socket.onmessage=event=>{const message=JSON.parse(event.data);if(message.id&&waiting.has(message.id)){const [ok,no]=waiting.get(message.id);waiting.delete(message.id);message.error?no(Error(message.error.message)):ok(message.result);}};
   socket.onclose=()=>{for(const [,no] of waiting.values())no(Error('Chromium closed an observation tab'));waiting.clear();};
   const call=(method,params={})=>within(Promise.race([new Promise((ok,no)=>{const id=++number;waiting.set(id,[ok,no]);socket.send(JSON.stringify({id,method,params}));}),browserGone.then(()=>{throw Error('Chromium exited during browser observation');})]),`observation tab ${method}`);
@@ -81,7 +94,7 @@ const saveProvider=async(url,key)=>{await go(base+'/dashboard/settings#connect-a
 try{
   browserOut=fs.openSync(path.join(evidence,'browser.stdout.log'),'a');
   browserErr=fs.openSync(path.join(evidence,'browser.stderr.log'),'a');
-  browser=spawn(chrome,[`--remote-debugging-port=${port}`,`--user-data-dir=${profile}`,'--headless=new','--no-sandbox','--no-first-run','--disable-gpu','about:blank'],{stdio:['ignore',browserOut,browserErr]});
+  browser=spawn(chrome,[`--remote-debugging-port=${port}`,`--user-data-dir=${profile}`,'--headless=new','--no-sandbox','--no-first-run','--disable-gpu','about:blank'],{stdio:['ignore',browserOut,browserErr],detached:true});
   browser.once('exit',browserExited);
   await new Promise((ok,no)=>{browser.once('spawn',ok);browser.once('error',no);});
   write('browser.pid',String(browser.pid)+'\n');
@@ -91,9 +104,11 @@ try{
   }
   fixture=http.createServer((request,response)=>{let body='';request.on('data',x=>body+=x);request.on('end',()=>{const operation=globalThis.momentOperation||'connect',at=globalThis.phase||'';fixtureRows.push({phase:at.includes('without-ai')?'without-ai':at.includes('with-ai')?'with-ai':at,operation:request.url?.includes('chat/completions')?'extract-moment-profile':'provider-check',action:operation});if(globalThis.providerMode==='unreachable'){request.socket.destroy();return;}const refused=globalThis.providerMode==='refused',content=/suggestions/i.test(body)?'{"suggestions":[]}':'Stand-in answer from the maintained notebook journey.';response.writeHead(refused?401:200,{'content-type':'application/json'});response.end(JSON.stringify(refused?{error:{message:'scenario key refused'}}:{id:'fixture',object:'chat.completion',created:1,model:'standin-model-1',choices:[{index:0,message:{role:'assistant',content},finish_reason:'stop'}],usage:{prompt_tokens:1,completion_tokens:1,total_tokens:2}}));});});
   await new Promise((ok,no)=>fixture.once('error',no).listen(48763,'127.0.0.1',ok));
-  for(let n=0;n<100;n++){if(browser.exitCode!==null||browser.signalCode!==null)throw Error('Chromium exited before exposing its debugging page');try{const tabs=await fetch(`http://127.0.0.1:${port}/json`).then(r=>r.json());if(tabs[0]?.webSocketDebuggerUrl){ws=new WebSocket(tabs[0].webSocketDebuggerUrl);break;}}catch{}await pause(100);}
+  if(process.env.BROWSER_TEST_SERVICE_CONTROL)await command(process.env.BROWSER_TEST_SERVICE_CONTROL,[]);
+  for(let n=0;n<100;n++){if(browser.exitCode!==null||browser.signalCode!==null)throw Error('Chromium exited before exposing its debugging page');try{const tabs=await fetchWithin(`http://127.0.0.1:${port}/json`,{},'Chromium debugging-page request').then(r=>r.json());if(tabs[0]?.webSocketDebuggerUrl){ws=new WebSocket(tabs[0].webSocketDebuggerUrl);break;}}catch(error){if(/did not finish/.test(error.message))throw error;}await pause(100);}
   if(!ws)throw Error('Chromium did not expose its debugging page');
-  await new Promise((ok,no)=>{ws.onopen=ok;ws.onerror=no});
+  try{await within(new Promise((ok,no)=>{ws.onopen=ok;ws.onerror=no}),'Chromium debugging connection');}
+  catch(error){ws.close();throw error;}
   ws.onmessage=e=>{const m=JSON.parse(e.data);if(m.id&&pending.has(m.id)){const [ok,no]=pending.get(m.id);pending.delete(m.id);m.error?no(Error(m.error.message)):ok(m.result);}else if(m.method==='Runtime.consoleAPICalled')consoleRows.push({phase:globalThis.phase||'',text:(m.params.args||[]).map(x=>x.value||x.description).join(' ')});else if(m.method==='Network.requestWillBeSent')network.push({url:m.params.request.url,method:m.params.request.method});};
   ws.onclose=()=>{for(const [,no] of pending.values())no(Error('Chromium closed its debugging connection'));pending.clear();};
   await cdp('Page.enable');await cdp('Runtime.enable');await cdp('Network.enable');
@@ -121,7 +136,6 @@ try{
   await action('provider-saved',async()=>{await fill('Your AI service','other');await pause(100);await fill('Its address','http://127.0.0.1:48763/v1');await fill('Model, written','fixture-model');await fill('Key','scenario-secret-never-retain');await click('Test and connect');await pause(1200);});
   await action('provider-after-navigation',async()=>{await go(base+'/dashboard/timeline');await go(base+'/dashboard/settings#connect-ai');await observeProvider('provider-navigation.json');});
   await action('provider-after-reload',async()=>{await cdp('Page.reload');await pause(1200);await observeProvider('provider-reload.json');});
-  const command=(program,args)=>new Promise((ok,no)=>{let out='';const p=spawn(program,args);p.stdout.on('data',x=>out+=x);p.once('exit',code=>code===0?ok(out.trim()):no(Error(`${program} ${args.join(' ')} failed`)));});
   const service='godspeed-integrated-notebook.service';
   const userService=await command('systemctl',['--user','cat',service]).then(()=>true,()=>false);
   const systemctl=(...args)=>command(userService?'systemctl':'sudo',userService?['--user',...args]:['systemctl',...args]);
@@ -148,10 +162,12 @@ try{
   for(const {page} of observationPages)closePage(page);
   if(fixture?.listening)await new Promise(r=>fixture.close(r));
   try{ws?.close();}catch{}
-  await stopBrowser();
+  const browserStopped=await stopBrowser();
   if(browserOut!==undefined)fs.closeSync(browserOut);
   if(browserErr!==undefined)fs.closeSync(browserErr);
-  fs.rmSync(profile,{recursive:true,force:true});write('cleanup.txt','browser=stopped\nfixture=stopped\n');
+  fs.rmSync(profile,{recursive:true,force:true});
+  write('cleanup.txt',`browser=${browserStopped?'stopped':'timeout'}\nfixture=${fixture?.listening?'timeout':'stopped'}\n`);
+  if(!browserStopped&&!routeError){routeError=Error('Chromium process tree did not stop within 10 seconds');write('failure.json',{phase:globalThis.phase||'',message:routeError.message});}
 }
 if(routeError){
   console.error(`FAIL notebook-assistant-browser: ${routeError instanceof Error?routeError.message:String(routeError)}`);

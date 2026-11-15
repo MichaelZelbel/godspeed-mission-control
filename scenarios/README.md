@@ -28,7 +28,11 @@ paragraph when the jobs are in `.github/workflows/scenarios.yml`.
 scenario machine with `bash scenarios/notebook-assistant-journeys.sh <stage ref>`. It needs
 Chromium at `/usr/bin/google-chrome`, `/usr/bin/chromium`, or `/usr/bin/chromium-browser`; set
 `CHROME_PATH` to its executable when it is installed elsewhere. Its fixture is loopback-only and
-the command retains the browser evidence described in the table below.
+the command retains the browser evidence described in the table below. The installed notebook must
+be a native Linux systemd service, with either a usable user systemd session or permission to run
+`sudo systemctl restart godspeed-integrated-notebook.service`. Evidence is kept under
+`${GODSPEED_SCENARIO_WORK:-${RUNNER_TEMP:-/tmp}}/notebook-assistant-journeys`; set
+`GODSPEED_SCENARIO_WORK=<kept folder>` to retain it somewhere durable.
 
 `workouts-from-hevy`, `day-becomes-facts`, `hermes-update-rollback` and `first-day` are jobs of that workflow, and the verdict requires all four unless the run was started with `-f only=<job names>`, in which case it judges only the jobs named there. Their fixtures are loopback-only and contain only made-up people, workouts and messages.
 
