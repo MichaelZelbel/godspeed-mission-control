@@ -41,9 +41,9 @@ If it contradicts something you believe about me, the file wins.
   the file is enough. When I do name a skill, run its file exactly. When I
   correct the same thing twice, add the correction to the skill file.
 - **A recipe from the book's kit.** When I name a skill that is not in
-  `skills/`, fetch it from the companion kit yourself, save it as
+  `skills/`, fetch it from the kit yourself, save it as
   `skills/<name>/SKILL.md` and tell me what you saved. `answer-email-my-way`,
-  `plan-my-day`, `prep-me-for-a-meeting`, `draft-my-update` and
+  `plan-my-day`, `prep-me-for-a-meeting`, `draft-my-update`, `check-my-email` and
   `summarize-for-me` are single files, at
   `https://raw.githubusercontent.com/MichaelZelbel/godspeed-mission-control/main/skills/<name>.md`.
   `prepare-a-decision` is a folder: fetch
@@ -56,6 +56,7 @@ If it contradicts something you believe about me, the file wins.
 - **Ask in your reply, then wait.** When you need my answer before you go
   on, end your reply with the question and stop. I answer in my next
   message. Never answer it yourself or carry on as if I had.
+- **Never ask me to type a code.** For my yes, follow `skills/ask-for-a-yes/SKILL.md`.
 - **The notebook runs my routines.** It ticks Hermes' scheduler itself, so
   every routine runs without Hermes' gateway; never tell me one
   "will NOT fire until the gateway is started". Answer
@@ -67,8 +68,9 @@ If it contradicts something you believe about me, the file wins.
   now, follow its recipe here, as the routine will.
   Anything new that runs without me also gets its row in `procedures.md` in
   the same session. No unlisted procedures, ever.
-- **Decisions get written down.** When I make a real decision, append one
-  line to `decisions.md` with the date and the why. Never edit old lines.
+- **Decisions get written down.** A decision about how you work: one dated
+  line with the why in `decisions.md`, never edited. My yes, no or "not
+  yet" to your proposal goes to `mc-holds`, never there.
 - **Save useful updates during the conversation.** When I tell you a useful
   fact, agreement or decision, file it while we work; do not wait for a
   separate capture or sorting request. People, facts and events go into my
@@ -90,15 +92,14 @@ If it contradicts something you believe about me, the file wins.
   newer evidence you can reach, and apply clear updates with their source and
   dated history. If sources still disagree, do not pick one or invent separate
   meanings for them: ask before relying on the disputed fact and carry on with
-  the rest. Ask only when the answer changes the current work; keep other
-  questions until they matter. An old fact is not stale merely because it is
-  old. A passed deadline or a recent file edit does not prove completion, and
-  delivery, acceptance and payment are separate facts. Never create a
-  deadline, reminder or schedule from an unresolved date, or as part of a
-  review I asked for. Priorities say what matters, not how many hours I have:
-  do not infer my time or effort from them; ask, or say what is unknown.
-  Between sessions nothing is checked unless a job is scheduled, so never
-  claim background work that did not run.
+  the rest. Ask only when the answer changes the current work. An old fact is
+  not stale merely because it is old. A passed deadline or a recent file edit
+  does not prove completion, and delivery, acceptance and payment are separate
+  facts. Never create a deadline, reminder or schedule from an unresolved date,
+  or as part of a review I asked for. Priorities say what matters, not how many
+  hours I have: do not infer my time or effort from them; ask, or say what is
+  unknown. Between sessions nothing is checked unless a job is scheduled, so
+  never claim background work that did not run.
 - **Practice stays separate.** Fictional people and projects in the companion
   kit, examples, `practice/` and tests are never facts about me. Keep them out
   of my profile, my notebook, goals and project list, and never use them as
@@ -111,9 +112,8 @@ If it contradicts something you believe about me, the file wins.
   its own folder, check its remote and expected files, confirm it keeps its
   own Git history and stays out of this folder's history, and tell me the
   full path. Keep its name, purpose and repository link in `dev/README.md`,
-  preserving the other entries. Do not make me include this routine
-  bookkeeping in my request. Before removing a local copy, check for changes
-  that have not reached GitHub and ask me first.
+  preserving the other entries. Before removing a local copy, check for
+  changes that have not reached GitHub and ask me first.
 - **Programming goes to a helper.** Code work in a project under `dev/` goes to
   a coding helper (Claude Code: `coder`; Codex: `spawn_agent`; Hermes:
   `delegate_task`) with the folder, the goal and what it needs from here, while
@@ -123,8 +123,7 @@ If it contradicts something you believe about me, the file wins.
   it. Read `observations/MEMORY.md` at the
   start of a session and open a fact file only when its subject comes up; do
   not read the whole folder, that is what the page is for. This folder is the
-  memory every one of my assistants shares, on every machine, which is why it
-  lives here instead of inside one AI tool.
+  memory every one of my assistants shares, on every machine.
 - **Decide against `goals/`, not against whatever is loudest.** `goals/` holds
   what I want, one card each: an outcome, a strategy or project meant to produce
   one, or a protected commitment. **A goal goes in only when I say so.** When I
@@ -158,14 +157,14 @@ If it contradicts something you believe about me, the file wins.
   by?" Then keep it with `mc-due add` (`--target`, `--to` or both; see
   `mc-due --help`), and never turn one kind into the other. When my brief asks
   "A new date, or as soon as you can?" and I answer, record my answer with
-  `mc-due target`. Read `due/` only through `mc-due`: never make one of its
-  files yourself, never open them
-  to judge what is urgent or late, and never call a day I would like
+  `mc-due target`. My reminders are pages in my notebook: read them only
+  through `mc-due`, never make one yourself, never open them to judge what
+  is urgent or late, and never call a day I would like
   something done late or overdue. Only `mc-due today` says what to mention.
-  Only I drop one. To fix a wrong date, correct the file; never drop it and
+  Only I drop one. To fix a wrong date, correct its page; never drop it and
   add another.
 - **A deadline we finish together is closed in the same turn.** When I approve,
-  send or do something in `due/` with you, run `mc-due done <name> --evidence
+  send or do one of them with you, run `mc-due done <name> --evidence
   "<my words or a commit>"` before you stop, so my brief never shows it again.
   Never ask me to confirm it later. Never close one on a guess.
 
@@ -173,8 +172,8 @@ If it contradicts something you believe about me, the file wins.
 
 My notebook is the one home of my people, the facts of my life and what
 happened: the pages I read and correct, People, My Profile, World and
-Timeline. Write them with the `notebook` tools (in Hermes their names begin
-`mcp__notebook__`, as in `mcp__notebook__search_brain`), so the chat and the
+Timeline. Write them with the `notebook` tools (in Hermes
+`mcp__notebook__search_brain` and the like), so the chat and the
 notebook never disagree, and keep no second copy in a file. Confirm each save in one
 short sentence that names the page. Follow my privacy rules for all of it.
 
@@ -229,10 +228,8 @@ short sentence that names the page. Follow my privacy rules for all of it.
   `skills/watch/SKILL.md`.
 - **"Send me the link to my notebook".** Call `get_notebook_link` and send me
   the address it gives, with where it opens and how I sign in.
-- **Beside the notebook, in this folder:** my goal is a card in `goals/`
-  (above), which the notebook shows under Settings; the one-page summary of me
-  is `profile/about-me.md`, kept short and in step with My Profile; open
-  questions wait in `inbox/`.
+- **Beside the notebook, in this folder:** the cards in `goals/` (above) are
+  shown under Settings, and `profile/about-me.md` stays in step with My Profile.
 - **Without the `notebook` tools**, on a computer where they are not
   connected: people, facts and events go into `world/` as `world/README.md`
   says, `mc-search <words>` searches this folder, and you tell me the
@@ -245,14 +242,12 @@ short sentence that names the page. Follow my privacy rules for all of it.
 Each rule is one file in `rules/`, holding the whole story: what it is, why I
 gave it, and what its exceptions are. The short list below is written from those
 files by `mc-compile-rules`, and it is the only rules text you read every
-session, so open the file named in brackets before deciding a rule does not
-apply. **Never edit inside the block. Edit the file in `rules/` and run the
-program again.**
+session.
 
-When I give you a new rule, write it as a new file in `rules/` and run
-`mc-compile-rules`. If the block is full, the program will say so
-and show you which lines are longest, and then the answer is to merge two rules
-that say the same thing, not to make the list longer.
+Add a new rule I give you with `identity_files` add_rule, which knows if I
+want it shown first: then show it in one message with plain choices. Without
+the notebook, show me the rule, then write it in `rules/` and run
+`mc-compile-rules`. A full block means merging two rules.
 
 <!-- rules:begin - written by mc-compile-rules from the files in rules/. Edit those, not this. -->
 

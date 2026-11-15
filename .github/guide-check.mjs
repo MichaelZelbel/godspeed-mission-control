@@ -77,8 +77,13 @@ function readReviews(git, range, known) {
 }
 
 /** The open pages of one repository. Throws MapError when the map itself is wrong. */
-function check({ repo, mapFile }) {
+function check({ repo, mapFile, eventName = process.env.GITHUB_EVENT_NAME }) {
   const git = gitIn(repo);
+  // pull_request checks out GitHub's temporary merge of the PR into its base. Its tree
+  // repeats the PR's mapped changes after the author's Guide-Reviewed commit. Judge the
+  // second parent, which is the reviewed PR head; a push still judges its actual HEAD.
+  const parents = git.run("rev-list", "--parents", "-n", "1", "HEAD").split(" ");
+  const head = eventName === "pull_request" && parents.length === 3 ? parents[2] : "HEAD";
   let map;
   try {
     map = JSON.parse(readFileSync(mapFile, "utf8"));
@@ -91,10 +96,10 @@ function check({ repo, mapFile }) {
   if (!git.ok("cat-file", "-e", `${since}^{commit}`)) {
     return { skipped: `the start commit ${since.slice(0, 9)} is not in this clone (a shallow clone?), so nothing was checked` };
   }
-  if (!git.ok("merge-base", "--is-ancestor", since, "HEAD")) {
+  if (!git.ok("merge-base", "--is-ancestor", since, head)) {
     throw new MapError(`"since" ${since.slice(0, 9)} in ${mapFile} is not in this branch's history; set it to a commit this branch contains`);
   }
-  const range = `${since}..HEAD`;
+  const range = `${since}..${head}`;
   const { reviews, warnings } = readReviews(git, range, new Set(Object.keys(pages)));
   const exclude = (Array.isArray(map.ignore) ? map.ignore : []).map((g) => `:(exclude,glob)${g}`);
   const open = [];
@@ -103,7 +108,7 @@ function check({ repo, mapFile }) {
     // The newest change to the page's paths that no review covers: a review covers every commit
     // it contains, so its hash (and since) are left out of the walk.
     const covering = reviews.filter((r) => r.all || r.slugs.has(slug)).map((r) => r.sha);
-    const last = git.run("log", "-1", "--topo-order", "--format=%H%x09%s", "HEAD", "--not", since, ...covering, "--", ...globs.map((g) => `:(glob)${g}`), ...exclude);
+    const last = git.run("log", "-1", "--topo-order", "--format=%H%x09%s", head, "--not", since, ...covering, "--", ...globs.map((g) => `:(glob)${g}`), ...exclude);
     if (!last) continue;
     const [sha, subject = ""] = last.split("\t");
     open.push({ slug, url: pageUrl(map.guide, slug), sha, subject });
@@ -114,7 +119,7 @@ function check({ repo, mapFile }) {
   if (existsSync(site)) {
     for (const slug of Object.keys(pages)) if (!existsSync(join(site, `${slug}.md`))) warnings.push(`the map names "${slug}", but ${join(site, `${slug}.md`)} does not exist (renamed or removed?)`);
   }
-  const pushed = git.ok("rev-parse", "--verify", "-q", "HEAD") && git.run("branch", "-r", "--contains", "HEAD") !== "";
+  const pushed = git.ok("rev-parse", "--verify", "-q", head) && git.run("branch", "-r", "--contains", head) !== "";
   return { since, open, warnings, pushed };
 }
 
@@ -175,7 +180,7 @@ function selfTest() {
     const mapFile = join(repo, ".github", "guide-map.json");
     const writeMap = (start) => put(".github/guide-map.json", JSON.stringify({ guide: "https://example.invalid/guide/", since: start, ignore: ["**/*.test.*", "docs/**", ".github/**"], pages: { alpha: ["app/**"], beta: ["skill/x/**"] } }));
     writeMap(since);
-    const run = () => check({ repo, mapFile });
+    const run = () => check({ repo, mapFile, eventName: "push" });
     const open = () => run().open.map((o) => o.slug);
 
     expect("nothing changed since the start: no page is open", open(), []);
@@ -194,6 +199,14 @@ function selfTest() {
     expect("the amend command it prints clears the page it names", [open(), g.run("rev-parse", "HEAD") !== amended], [["alpha"], true]);
     commit("Squashed\n\n* Rename a variable\n  Guide-Reviewed: none-needed (internal names only)");
     expect("none-needed (reason), even indented in a squash message, clears every page", open(), []);
+    g.run("checkout", "-q", "-b", "pull-request");
+    commit("Change a mapped file on the PR", { "app/main.js": "4\n" });
+    commit("Review the guide on the PR\n\nGuide-Reviewed: alpha");
+    g.run("checkout", "-q", "main");
+    commit("Advance the base in the same mapped folder", { "app/base.js": "1\n" });
+    g.run("merge", "--no-ff", "-q", "pull-request", "-m", "Synthetic pull request merge");
+    expect("a pull_request checks the reviewed PR parent, not its synthetic merge", check({ repo, mapFile, eventName: "pull_request" }).open.map((o) => o.slug), []);
+    expect("a push still checks the real merge commit", check({ repo, mapFile, eventName: "push" }).open.map((o) => o.slug), ["alpha"]);
     commit("Typo\n\nGuide-Reviewed: gamma");
     expect("a page name the map does not know is warned about", run().warnings.some((w) => w.includes('"gamma"')), true);
     writeMap("0123456789abcdef0123456789abcdef01234567");

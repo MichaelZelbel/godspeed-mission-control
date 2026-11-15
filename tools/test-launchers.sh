@@ -80,7 +80,8 @@ out="$(chat sh "$HERE/mc-due" list 2>&1)"
 contains "in the chat, mc-due reads the chat's own deadlines" "$out" "Nothing with a last day yet"
 missing "  not those of the mission control this computer was joined to" "$out" "other mission control"
 chat sh "$HERE/mc-due" add present --title "Present for Priya" --target 2026-12-20 --done-when "bought" >/dev/null 2>&1
-[ -f "$C/due/present.md" ] && ok "  and mc-due add files into the chat's own mission control" || bad "  and mc-due add files into the chat's own mission control"
+# A reminder is a page in the chat's own notebook now (#90), never a file in due/.
+[ -n "$(grep -rl '^id: due-present$' "$C/notebook/Deadlines" 2>/dev/null)" ] && ok "  and mc-due add files into the chat's own mission control" || bad "  and mc-due add files into the chat's own mission control"
 [ -f "$O/due/present.md" ] && bad "  never into the other one" || ok "  never into the other one"
 out="$(chat sh "$HERE/mc-check-keys" 2>&1)"
 contains "mc-check-keys checks the chat's own mission control" "$(printf '%s' "$out" | tr '\\' '/')" "Your mission control folder: $CP"

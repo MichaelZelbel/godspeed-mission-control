@@ -46,6 +46,7 @@ import {
   Globe,
 } from "lucide-react";
 import { BRAND } from "@/lib/brand";
+import { personLabel } from "@/components/timeline/people";
 
 const typeConfig: Record<string, { icon: typeof UserPlus; label: string; color: string }> = {
   add_contact: { icon: UserPlus, label: "Add to People", color: "text-green-500" },
@@ -80,7 +81,7 @@ export default function ReviewQueue() {
     queryKey: ["review-person-names", user?.id],
     queryFn: async () => {
       const { data } = await supabase.from("contacts").select("id,name");
-      return new Map<string, string>(((data || []) as any[]).map((c) => [c.id, c.name]));
+      return new Map<string, string>(((data || []) as any[]).map((c) => [c.id, personLabel(c)]));
     },
     enabled: !!user,
     staleTime: 60_000,
@@ -169,7 +170,7 @@ export default function ReviewQueue() {
       if (readError) throw readError;
       if (!contact) return;
       const aliases = Array.isArray(contact.aliases) ? contact.aliases : [];
-      const { error } = await supabase.from("contacts").update({ aliases: aliases.filter((a: string) => a.toLowerCase() !== String(alias).toLowerCase()) }).eq("id", contact_id);
+      const { error } = await supabase.from("contacts").update({ aliases: aliases.filter((a: unknown) => typeof a !== "string" || a.toLowerCase() !== String(alias).toLowerCase()) }).eq("id", contact_id);
       if (error) throw error;
       queryClient.invalidateQueries({ queryKey: ["contacts"] });
       return;
@@ -681,7 +682,7 @@ export default function ReviewQueue() {
         return;
       }
       const currentAliases: string[] = Array.isArray(contact.aliases) ? contact.aliases : [];
-      if (!currentAliases.some((a: string) => a.toLowerCase() === alias.toLowerCase())) {
+      if (!currentAliases.some((a: unknown) => typeof a === "string" && a.toLowerCase() === String(alias).toLowerCase())) {
         const { error: updateErr } = await supabase
           .from("contacts")
           .update({ aliases: [...currentAliases, alias] })

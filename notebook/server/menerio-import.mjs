@@ -55,15 +55,19 @@ export class MenerioImport {
     this.save(job);
     this.worker=new this.WorkerClass(new URL('./menerio-import-worker.mjs',import.meta.url),{workerData:{mode,root:this.store.root,device:this.store.device,mediaRoot:this.mediaRoot,jobRoot:path.join(this.root,job.id),prepared,credentials}});
     if(this.beat)void beatWhile(new Promise(resolve=>this.worker.once('exit',resolve)),this.beat,{limitMs:IMPORT_LIMIT_MS,every:this.beatEvery});
+    // The end of a copy (ready, complete, failed) is saved when its worker has exited, not when it
+    // says so: `start` refuses while a worker is set, so a "ready" saved earlier let a person who
+    // pressed Import at once get "A copy is already running" for a preview that was ready.
+    let ended=null;
     this.worker.on('message',message=>{
       const current=this.read();if(current.id!==job.id)return;
       if(message.progress)this.save({...current,progress:message.progress});
-      if(message.ready)this.save({...current,state:'ready',progress:'Your preview is ready.',summary:message.summary,copyDate:message.copyDate});
-      if(message.complete){try{this.onComplete();}catch{}this.save({...current,state:'complete',progress:'Your Menerio content has been copied.',summary:message.summary});}
-      if(message.failed)this.save({...current,state:'failed',error:message.error});
+      if(message.ready)ended={state:'ready',progress:'Your preview is ready.',summary:message.summary,copyDate:message.copyDate};
+      if(message.complete){try{this.onComplete();}catch{}ended={state:'complete',progress:'Your Menerio content has been copied.',summary:message.summary};}
+      if(message.failed)ended={state:'failed',error:message.error};
     });
     this.worker.on('error',()=>this.save({...this.read(),state:'failed',error:'The copy stopped unexpectedly. Preview again to continue safely.'}));
-    this.worker.on('exit',()=>{this.worker=null;const current=this.read();if(['preparing','importing'].includes(current.state))this.save({...current,state:'failed',error:'The copy stopped unexpectedly. Preview again to continue safely.'});});
+    this.worker.on('exit',()=>{this.worker=null;const current=this.read();if(current.id!==job.id)return;if(ended&&['preparing','importing'].includes(current.state))this.save({...current,...ended});else if(['preparing','importing'].includes(current.state))this.save({...current,state:'failed',error:'The copy stopped unexpectedly. Preview again to continue safely.'});});
     return job;
   }
   async close(){if(this.worker)await this.worker.terminate();}

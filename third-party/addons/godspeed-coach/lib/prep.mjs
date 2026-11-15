@@ -19,8 +19,9 @@ import fs from "node:fs";
 import path from "node:path";
 import { parseDoc } from "./header.mjs";
 import { localParts, addDays, zonedToUtc, now as clockNow } from "./clock.mjs";
-import { researchEvidenceProblem } from "./prep-evidence.mjs";
-import { listAreas, isTalkDay, nextTalkDay } from "./areas.mjs";
+import { researchEvidenceProblem, researchDomains, servedGoals } from "./prep-evidence.mjs";
+import { listAreas, isTalkDay, nextTalkDay, parseRhythm } from "./areas.mjs";
+import { lastRhythmChange } from "./rhythm-change.mjs";
 import { talkFile, talkDates, readTalk } from "./talks.mjs";
 
 export const prepDir = (area) => path.join(area.dir, "prep");
@@ -52,8 +53,9 @@ export function readPrep(file) {
 }
 
 // Why a prepared talk cannot open a talk, in words; null when it can. Ready means STATE ready with
-// an opening and a talk card, and for this area when the file names one.
-export function prepProblem(p, area = null, now = clockNow()) {
+// an opening and a talk card, and for this area when the file names one. `opts` goes to
+// researchEvidenceProblem.
+export function prepProblem(p, area = null, now = clockNow(), opts = {}) {
   if (!p) return "there is no such file";
   if (area && p.head.AREA && p.head.AREA.trim().toLowerCase() !== area.slug) return `it is for the ${p.head.AREA.trim()} talk, not the ${area.title} talk`;
   if (p.state !== "ready") return `its STATE is ${p.state || "missing"}, not ready`;
@@ -61,7 +63,7 @@ export function prepProblem(p, area = null, now = clockNow()) {
   if (empty.length) return `its section${empty.length > 1 ? "s" : ""} ${empty.join(" and ")} ${empty.length > 1 ? "are" : "is"} empty`;
   const at = preparedAt(p);
   if (at && at.getTime() > now.getTime() + 60_000) return "its PREPARED time is in the future";
-  return researchEvidenceProblem(p, area, now);
+  return researchEvidenceProblem(p, area, now, null, opts);
 }
 
 // The day of another talk of this area that already opened with this preparation's opening, or null.
@@ -112,46 +114,169 @@ export function prepForBrief(area, ymd) {
 // A ready preparation that is stale (below) is listed too, with stale: true and when it was
 // prepared, so the job prepares it again; until a fresh one replaces it, the brief and
 // `talk open --from-prep` keep using it. Every entry says stale: true or false.
-export function prepDue(mcDir, s, now, hours) {
+//
+// With { rhythmChanges: true } (#359), an area whose newest RHYTHM change (lib/rhythm-change.mjs),
+// one nobody asked for, dropped a day the old rhythm had, after the change and before the new
+// rhythm's first talk, gets that day too when it falls in the window: bridge: true, rhythm_change
+// and next_talk. Nothing opens a talk on it; a talk they start themselves that day opens from its
+// preparation (prepForBrief).
+export function prepDue(mcDir, s, now, hours, opts = {}) {
   const tz = s.timezone;
   const today = localParts(now, tz).date;
   const until = now.getTime() + hours * 3600000;
+  const days = Array.from({ length: Math.ceil(hours / 24) + 2 }, (_, i) => addDays(today, i));
+  const inWindow = (at) => at.getTime() >= now.getTime() && at.getTime() <= until;
+  // The entry for one talk day, or null when it is open already or has a ready, fresh preparation.
+  const entry = (a, d, at) => {
+    if (fs.existsSync(talkFile(a, d))) return null;
+    const p = readPrep(prepFile(a, d));
+    const ready = usable(a, p, d, now);
+    const stale = ready && prepStale(p, at, now);
+    if (ready && !stale) return null;
+    return { at: at.getTime(), area: a.slug, title: a.title, date: d, time: a.time, timezone: tz, file: rel(mcDir, prepFile(a, d)), stale, ...(stale ? { prepared: preparedAt(p)?.toISOString().replace(/\.\d+Z$/, "Z") || "" } : {}) };
+  };
   const out = [];
   for (const a of listAreas(mcDir)) {
     if (!a.on || a.noTalk || !a.rhythm) continue;
+    if (opts.rhythmChanges) out.push(...bridgeDay(mcDir, a, tz, days, inWindow, entry));
     let next = null;
-    for (let i = 0; i <= Math.ceil(hours / 24) + 1 && !next; i++) {
-      const d = addDays(today, i);
+    for (const d of days) {
       const at = isTalkDay(a, d) ? zonedToUtc(d, a.time, tz) : null;
-      if (at && at.getTime() >= now.getTime()) next = { d, at };
+      if (at && at.getTime() >= now.getTime()) { next = { d, at }; break; }
     }
     if (!next || next.at.getTime() > until) continue;
-    if (fs.existsSync(talkFile(a, next.d))) continue;
-    const p = readPrep(prepFile(a, next.d));
-    const ready = usable(a, p, next.d, now);
-    const stale = ready && prepStale(p, next.at, now);
-    if (ready && !stale) continue;
-    out.push({ at: next.at.getTime(), area: a.slug, title: a.title, date: next.d, time: a.time, timezone: tz, file: rel(mcDir, prepFile(a, next.d)), stale, ...(stale ? { prepared: preparedAt(p)?.toISOString().replace(/\.\d+Z$/, "Z") || "" } : {}) });
+    const e = entry(a, next.d, next.at);
+    if (e) out.push(e);
   }
   return out.sort((x, y) => x.at - y.at).map(({ at, ...r }) => r);
 }
 
+function bridgeDay(mcDir, a, tz, days, inWindow, entry) {
+  const drop = rhythmDrop(mcDir, a, tz);
+  if (!drop) return [];
+  for (const d of days) {
+    if (!drop.dropped(d)) continue;
+    const at = zonedToUtc(d, a.time, tz);
+    if (!inWindow(at)) continue;
+    const e = entry(a, d, at);
+    return e ? [{ ...e, bridge: true, rhythm_change: drop.change, next_talk: drop.next }] : [];
+  }
+  return [];
+}
+
+// What the area's newest RHYTHM change dropped, or null when git knows of none: dropped(<day>) is
+// true for a day the old rhythm had, after the change and before the new rhythm's first talk. A
+// change they asked for (#415, change.deliberate) drops no talk day: dropped is always false, and
+// asked(<day>) says which day it would have been.
+export function rhythmDrop(mcDir, a, tz) {
+  const c = lastRhythmChange(mcDir, a);
+  const old = c && parseRhythm(c.from);
+  if (!old) return null;
+  const was = { ...a, rhythm: old, rhythmText: c.from };
+  const changeDay = localParts(new Date(c.changed), tz).date;
+  const newFirst = nextTalkDay(a, addDays(changeDay, 1));
+  const fell = (d) => d > changeDay && !(newFirst && d >= newFirst) && isTalkDay(was, d) && !isTalkDay(a, d);
+  return c.deliberate ? { change: c, next: newFirst || "", dropped: () => false, asked: fell } : { change: c, next: newFirst || "", dropped: fell };
+}
+
+// A talk day, or a day the area's newest rhythm change dropped when nobody asked for it (rhythmDrop):
+// the nightly job prepares that day like a talk day (prep-due --rhythm-changes), so the talk they ask
+// for on it opens from that preparation and replaces an earlier talk that got no reply, as on a talk day (#359).
+export function countsAsTalkDay(mcDir, area, ymd, tz) {
+  if (isTalkDay(area, ymd)) return true;
+  return Boolean(mcDir && tz && rhythmDrop(mcDir, area, tz)?.dropped(ymd));
+}
+
+// Whether this area's talks are prepared ahead: it names research domains (the gate needs a
+// preparation), or its prep folder holds a preparation (a job prepares this area's talks).
+export function prepExpected(area) {
+  if (researchDomains(area).length) return true;
+  try { return fs.readdirSync(prepDir(area)).some((f) => /^\d{4}-\d{2}-\d{2}\.md$/.test(f)); } catch { return false; }
+}
+
 export const prepPath = rel;
+
+// A refusal reason (prepProblem, researchEvidenceProblem) in everyday words, for the one sentence a
+// talk opens with when its preparation is not ready. Anything not listed falls back to a plain line.
+const domainLabel = (area, id) => {
+  const line = (area?.lists?.["RESEARCH DOMAIN"] || []).find((l) => l.split("|")[0].trim() === id);
+  return (line && line.split("|")[1]?.trim()) || id;
+};
+export function prepWords(reason, area = null) {
+  const r = String(reason || "");
+  const rows = [
+    [/^there is no such file/, () => "none was written"],
+    [/^it is for the .* talk, not/, () => "the one written was for another talk"],
+    [/^its STATE is/, () => "it was not finished"],
+    [/^its sections? .* (is|are) empty/, () => "it has no opening or no talk card"],
+    [/^its PREPARED time is in the future/, () => "its time stamp is wrong"],
+    [/^its research section "(.*)" is empty/, (m) => `it left out its part on ${m[1].toLowerCase()}`],
+    [/^its research domains are invalid/, () => "the research areas of this talk are set up wrongly"],
+    [/missing or unreadable/, () => "the record of what it read, or its second check, is missing"],
+    [/^its research evidence version is unsupported/, () => "its research record is in a format the coach cannot read"],
+    [/belongs to another preparation|changed after review/, () => "it changed after it was checked"],
+    [/^its research scope changed/, () => "the talk's research areas changed after it was written"],
+    [/does not cover the configured domains|omitted or duplicated a research domain/, () => "its research does not cover every area of this talk"],
+    [/^its independent research review did not pass/, () => "the second check did not pass"],
+    [/does not substantiate research domain "(.*)"/, (m) => `the second check did not confirm the research on ${domainLabel(area, m[1])}`],
+    [/did not judge the goal "(.*)"/, () => "the second check left out a goal this talk serves"],
+    [/does not substantiate goal "(.*)"/, () => "the second check did not confirm the research on a goal this talk serves"],
+    [/was not recorded as an independent execution/, () => "its second check was not done independently"],
+    [/no source-page reading receipts|source-page reading receipt is invalid/, () => "it shows no source pages it actually read"],
+    [/execution receipt is incomplete|timestamps are invalid|PREPARED time does not match/, () => "its research record is incomplete or its times do not add up"],
+    [/^its opening was already used/, () => "its opening was already used in another talk"],
+  ];
+  for (const [re, f] of rows) { const m = r.match(re); if (m) return f(m); }
+  return "it did not pass its checks";
+}
+
+// Whether a preparation was due for the brief of <ymd> and is missing, and why in everyday words;
+// null when the brief carries a usable one or the area never prepares. Due means: the area names
+// research domains (the gate needs a preparation), or a preparation file for this talk exists but is
+// refused, or the area's prep folder holds an earlier preparation (a job prepares this area's talks).
+// Given { mcDir, tz }, a day the area's newest unasked rhythm change dropped (rhythmDrop) is due as
+// well, in any area: the nightly job lists exactly that day to be prepared (prep-due
+// --rhythm-changes), so a talk opened on it without one opened unprepared (#359).
+export function prepMissing(area, ymd, now = clockNow(), { mcDir = null, tz = null } = {}) {
+  if (area.noTalk || !area.rhythm) return null;
+  if (prepForBrief(area, ymd)) return null;
+  const days = [];
+  if (isTalkDay(area, ymd)) days.push(ymd);
+  else {
+    const next = nextTalkDay(area, addDays(ymd, 1));
+    if (next && next <= addDays(ymd, PREP_AHEAD_DAYS)) days.push(next);
+    days.push(ymd, addDays(ymd, -1));
+  }
+  for (const d of days) {
+    const p = readPrep(prepFile(area, d));
+    if (!p) continue;
+    const problem = prepProblem(p, area, now);
+    return prepWords(problem || `its opening was already used in the talk of ${prepUsedOn(area, p, ymd)}`, area);
+  }
+  if (prepExpected(area)) return "none was written";
+  return mcDir && tz && rhythmDrop(mcDir, area, tz)?.dropped(ymd) ? "none was written" : null;
+}
 
 // One talk's preparation, for the job that prepares talks the day before (in Godspeed Mission
 // Control, mc-coach-prep with the coach-prep recipe) and for a person who asks: which file it is,
 // whether that day is a day of this talk, whether the file can open the talk (ready, or the reason
 // it cannot), and whether it is stale (prepared more than PREP_FRESH_HOURS before the talk). It
-// only reads.
+// only reads. research_domains and goals tell the job whether the talk needs receipts and a review
+// (an area with RESEARCH DOMAIN lines) and what the review must judge. A day a rhythm change they
+// asked for dropped carries that change (rhythm_change, deliberate: true) to say why it is no talk day.
 export function prepCheck(mcDir, s, area, ymd) {
   const file = prepFile(area, ymd);
   const p = readPrep(file);
   const problem = prepProblem(p, area);
-  const talkDay = isTalkDay(area, ymd);
+  const drop = isTalkDay(area, ymd) ? null : rhythmDrop(mcDir, area, s.timezone);
+  const bridged = Boolean(drop?.dropped(ymd));
+  const asked = Boolean(drop?.asked?.(ymd));
+  const talkDay = isTalkDay(area, ymd) || bridged;
   const at = zonedToUtc(ymd, area.time, s.timezone);
   return {
     area: area.slug, title: area.title, date: ymd, time: area.time, timezone: s.timezone, file: rel(mcDir, file),
-    talk_day: talkDay, ready: !problem, ...(problem ? { problem } : {}),
+    talk_day: talkDay, ...(bridged ? { bridge: true, rhythm_change: drop.change } : asked ? { rhythm_change: drop.change } : {}), ready: !problem, ...(problem ? { problem } : {}),
     stale: !problem && prepStale(p, at), prepared: preparedAt(p)?.toISOString().replace(/\.\d+Z$/, "Z") || "",
+    research_domains: researchDomains(area), goals: servedGoals(area),
   };
 }

@@ -1,7 +1,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {hash} from './records/store.mjs';
+import {findMedia} from './media-store.mjs';
 import {visibleRows} from './visibility.mjs';
+import {latestPerDayMetric} from './health-inputs.mjs';
 import {fileContext} from './context.mjs';
 import {retrieveNoteWindows} from './retrieval-windows.mjs';
 import {explicitNoteCapture} from './chat-intent.mjs';
@@ -14,6 +16,7 @@ import {headacheLog} from './native-personal.mjs';
 import {contextBlock} from '../../third-party/addons/godspeed-headache/lib/context.mjs';
 import {loadSettings as headacheSettings} from '../../third-party/addons/godspeed-headache/lib/settings.mjs';
 import {now as clockNow} from '../../third-party/addons/godspeed-coach/lib/clock.mjs';
+import {charmBlock} from './charm-operation.mjs';
 // Full write baselines stay outside the enumerable prompt object.
 const writeSnapshots=new WeakMap();
 export const collectionWriteSnapshot=context=>writeSnapshots.get(context)||[];
@@ -44,7 +47,7 @@ function buildChatContext(query,input){
     return {rows:ranked.slice(0,limit).map(({r})=>compact(r,5000)),total:rows.length};
   };
   const context={...fileContext(query.store,10000),retrieval:{method:'keyword selection; only supplied records are available',counts:{}}};
-  context.personal={goals:visibleRows(query,'goals').slice(-20),work:visibleRows(query,'work_items').slice(-20),deadlines:visibleRows(query,'deadlines').filter(d=>d.status!=='closed').slice(-20),talks:visibleRows(query,'coach_talks').slice(-5),habits:visibleRows(query,'habits').slice(-10),journal:visibleRows(query,'journal').slice(-5),health:visibleRows(query,'health_observations').filter(h=>Date.parse(h.observed_at)>=Date.now()-7*86400000).slice(-10),forecasts:visibleRows(query,'forecasts').slice(-10),jobs:query.rows('jobs')};
+  context.personal={goals:visibleRows(query,'goals').slice(-20),work:visibleRows(query,'work_items').slice(-20),deadlines:visibleRows(query,'deadlines').filter(d=>d.status!=='closed').slice(-20),talks:visibleRows(query,'coach_talks').slice(-5),habits:visibleRows(query,'habits').slice(-10),journal:visibleRows(query,'journal').slice(-5),health:latestPerDayMetric(visibleRows(query,'health_observations')).filter(h=>Date.parse(h.observed_at)>=Date.now()-7*86400000).slice(-10),forecasts:visibleRows(query,'forecasts').slice(-10),jobs:query.rows('jobs')};
   // Every tracker and every open tracker question, with their ids: without them
   // the model cannot name a tracker or answer a question's yes (D-321). Read
   // through query.rows, so from this context's one snapshot of the vault.
@@ -71,6 +74,12 @@ function buildChatContext(query,input){
    }else context.personal.food=null;
   }catch{context.personal.food=null;}
   try{const log=headacheLog(reader),settings=headacheSettings(query.store.root);context.personal.headache={tracker:log.tracker?.id||null,open:contextBlock(log.episodes,settings,clockNow())||'No headache is open.'};}catch{context.personal.headache={tracker:null,open:'The headache tracker could not be read.'};}
+  // The Charm Challenge (spec 2026-10-21): its [godspeed-charm] block for THIS chat, as the bot's and
+  // Claude Code's show it before every message, its steps said as charm operations (this chat has
+  // no shell). Only here does a bare yes or no answer an open question. A note's or a collection's
+  // chat runs no operations, so it gets none. Nothing runs, or the record cannot be read: no block,
+  // and the chat goes on.
+  try{context.personal.charm=input.note_id||input.collection_id?null:charmBlock(reader,input.conversation_id);}catch{context.personal.charm=null;}
   for(const type of ['notes','contacts','entities','world_claims','moments','profile_facts','goals','media_analysis']){
     const selected=pick(type,type==='notes'?8:4);context[type]=selected.rows;context.retrieval.counts[type]=selected.total;
   }
@@ -143,14 +152,14 @@ function collectionItems(all,terms){
   return {rows,titles};
 }
 function compact(record,max){const result={};let remaining=max;for(const key of ['id','claim_id','subject_type','subject_kind','subject_id','contact_id','attribute','label','title','name','value','valid_from','valid_to','confidence','source_type','source_id','evidence_quote','content','description','notes','email','phone','bio','summary','metadata','tags','field_schema','data','created_at']){if(record[key]==null)continue;const text=typeof record[key]==='string'?record[key]:JSON.stringify(record[key]);if(text.length>remaining){result[key]=text.slice(0,remaining);result.context_truncated=true;break;}result[key]=record[key];remaining-=text.length;}return result;}
-export function chatAttachments(mediaRoot,files=[]){
+export function chatAttachments(mediaRoot,files=[],carried=null){
   if(!Array.isArray(files)||files.length>10)throw new Error('Attach up to 10 files per message');
   const images=[],documents=[];let bytes=0;
   for(const item of files){
     if(typeof item.path!=='string')throw new Error('Attachment is missing its saved file');
-    const mapping=JSON.parse(fs.readFileSync(path.join(mediaRoot,hash(item.path)+'.mapping.json'),'utf8'));
-    if(mapping.removed_at||path.basename(mapping.file)!==mapping.file)throw new Error('Attachment is unavailable');
-    const data=fs.readFileSync(path.join(mediaRoot,mapping.file));bytes+=data.length;
+    let found=null;try{found=findMedia({mediaRoot,carried},item.path);}catch{}
+    if(!found||found.removed)throw new Error('Attachment is unavailable');
+    const mapping=found.mapping,data=fs.readFileSync(found.file);bytes+=data.length;
     if(bytes>20*1024*1024||hash(data)!==mapping.sha256)throw new Error('Attachments exceed 20 MB or failed their integrity check');
     const mime=mapping.contentType||'',name=String(item.name||item.path).slice(0,200);
     if(['image/png','image/jpeg','image/webp','image/gif'].includes(mime))images.push({mime,name,data:data.toString('base64')});

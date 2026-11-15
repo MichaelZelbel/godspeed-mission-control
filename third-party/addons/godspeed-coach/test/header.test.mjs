@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { parseDoc, setHead, appendToSection, formatDoc } from "../lib/header.mjs";
+import { parseDoc, setHead, appendToSection, setSection, formatDoc } from "../lib/header.mjs";
 import { zonedToUtc, addDays, weekdayOf, daysBetween } from "../lib/clock.mjs";
 
 const AREA = `AREA: health
@@ -63,4 +63,16 @@ test("date helpers", () => {
   assert.equal(addDays("2026-09-30", 1), "2026-10-01");
   assert.equal(weekdayOf("2026-10-04"), "sun");
   assert.equal(daysBetween("2026-09-29", "2026-10-04"), 5);
+});
+
+test("setSection replaces one section's text and leaves the rest as it was", () => {
+  const out = setSection(AREA, "Preparation", "Only this now.");
+  const d = parseDoc(out);
+  assert.equal(d.sections.Preparation, "Only this now.");
+  assert.equal(d.sections.Notes, "none");
+  assert.deepEqual(d.lists["MAY READ"], parseDoc(AREA).lists["MAY READ"]);
+  assert.match(out, /Only this now\.\n\n## Notes\n/);
+  assert.equal(parseDoc(setSection(AREA, "Notes", "last")).sections.Notes, "last");
+  assert.equal(parseDoc(setSection(AREA, "Extra", "added")).sections.Extra, "added");
+  assert.equal(parseDoc(setSection(AREA, "Preparation", "")).sections.Preparation, "");
 });

@@ -15,7 +15,7 @@ name: Integrated Godspeed v2
 on:
   push:
     branches: [main]
-    paths: [.github/workflows/v2-integrated.yml, 'notebook/**', 'third-party/addons/godspeed-coach/**', 'docker/full-candidate/**', 'docker/rootfs/**', 'docker/test/**', install-godspeed.sh, install-godspeed-dev.sh]
+    paths: [.github/workflows/v2-integrated.yml, 'notebook/**', 'third-party/addons/godspeed-coach/**', 'third-party/addons/godspeed-charm/**', 'docker/full-candidate/**', 'docker/rootfs/**', 'docker/test/**', install-godspeed.sh, install-godspeed-dev.sh]
   workflow_dispatch:
 permissions:
   contents: read
@@ -33,7 +33,11 @@ jobs:
       - name: Install, upgrade and recover
         run: bash notebook/test/native-install-linux.sh
   image:
-    runs-on: ubuntu-latest
+    # Ubuntu 24.04, named, not ubuntu-latest: on 1 November 2026 GitHub's ubuntu-latest became
+    # Ubuntu 26.04, for which Playwright 1.56.1 (docker/full-candidate/test.sh) cannot install the
+    # browser's system packages, so every image from b57c899 on failed its browser check and none
+    # was published. The scenarios run on 24.04 too.
+    runs-on: ubuntu-24.04
     timeout-minutes: 40
     permissions:
       contents: read
@@ -59,6 +63,10 @@ jobs:
         run: |
           node notebook/scripts/run-tests.mjs third-party/addons/godspeed-coach/test/prep.test.mjs notebook/test/starting-routines.test.mjs notebook/test/coach-prep-recipe.test.mjs
           bash tools/test-coach-prep.sh
+      - name: Charm Challenge
+        run: |
+          node --test "third-party/addons/godspeed-charm/test/*.test.mjs"
+          node notebook/scripts/run-tests.mjs notebook/test/charm-operation.test.mjs notebook/test/charm-brief.test.mjs notebook/test/charm-tracker-list.test.mjs
       - name: Original folder and integrated core checks
         run: |
           node notebook/scripts/run-tests.mjs notebook/test/starter-workspace.test.mjs notebook/test/assistant-starter-wiring.test.mjs notebook/test/computer-wiring-on-existing-server.test.mjs notebook/test/windows-command-files.test.mjs notebook/test/final-core-contracts.test.mjs notebook/test/telegram-replies.test.mjs notebook/test/native-runtime.test.mjs notebook/test/addon-model.test.mjs notebook/test/docker-model-proxy.test.mjs notebook/test/backup-ai.test.mjs notebook/test/backup-ai-telegram.test.mjs notebook/test/routine-ai.test.mjs notebook/test/plan-signin.test.mjs

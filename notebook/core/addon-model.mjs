@@ -4,7 +4,8 @@ import {fileURLToPath} from 'node:url';
 import {runChild} from './child-process.mjs';
 import {assistantEnvironment} from './assistant-files.mjs';
 import {readBackupEndpoint,noteMainAnswered,noteMainFailed,noteBackupAnswered} from './backup-ai.mjs';
-import {hermesPythons} from './runtime.mjs';
+import {hermesPythons,unreachableAI} from './runtime.mjs';
+import {assistantConfiguration} from './running-notebook.mjs';
 
 const read=file=>JSON.parse(fs.readFileSync(file,'utf8').replace(/^﻿/,''));
 const pause=ms=>new Promise(resolve=>setTimeout(resolve,ms));
@@ -62,10 +63,10 @@ function rememberPython(connection,python){
   fs.writeFileSync(temporary,JSON.stringify({executable:descriptor.executable,mtime:fs.statSync(descriptor.executable).mtimeMs,python}),{mode:0o600});fs.renameSync(temporary,file);
  }catch{}
 }
-export function modelConnection(root){
- const state=path.join(path.resolve(root),'.godspeed'),descriptorFile=path.join(state,'assistant.json');
- if(fs.existsSync(descriptorFile))return hermesHelper(read(descriptorFile),state);
- const file=path.join(state,'provider.json');
+export function modelConnection(root,{env=process.env}={}){
+ const {assistantFile,state,providerFile}=assistantConfiguration(root,{env});
+ if(assistantFile)return hermesHelper(read(assistantFile),state);
+ const file=providerFile;
  if(!fs.existsSync(file))throw Error('Connect a model in Godspeed before using an add-on');
  const provider=read(file);
  if(!validEndpoint(provider))throw Error('The Godspeed model connection is incomplete');
@@ -136,7 +137,7 @@ function receipt(state,entry){
  try{if(fs.existsSync(file)&&fs.statSync(file).size>1000000)fs.renameSync(file,file+'.1');fs.appendFileSync(file,JSON.stringify(entry)+'\n',{mode:0o600});}catch{}
 }
 async function askEndpoint(endpoint,request,deadline){
- const response=await fetch(endpoint.url,{method:'POST',headers:{authorization:'Bearer '+endpoint.key,'content-type':'application/json'},body:JSON.stringify({model:endpoint.model,messages:[{role:'system',content:request.system},{role:'user',content:request.prompt}],max_tokens:request.max_tokens}),signal:AbortSignal.timeout(Math.max(1,deadline-Date.now()))});
+ const response=await fetch(endpoint.url,{method:'POST',headers:{authorization:'Bearer '+endpoint.key,'content-type':'application/json'},body:JSON.stringify({model:endpoint.model,messages:[{role:'system',content:request.system},{role:'user',content:request.prompt}],max_tokens:request.max_tokens}),signal:AbortSignal.timeout(Math.max(1,deadline-Date.now()))}).catch(error=>{throw error.message==='fetch failed'?unreachableAI(endpoint.url,error):error;});
  if(!response.ok)throw Error('The selected Godspeed model could not answer (HTTP '+response.status+'). Check its connection and usage allowance.');
  const data=await response.json(),message=data.choices?.[0]?.message;
  if(message?.tool_calls?.length||typeof message?.content!=='string'||!message.content.trim())throw Error('The selected Godspeed model returned no usable text');
@@ -148,7 +149,7 @@ export async function addonModel({root,input,describe=false,spawnProcess}={}){
  const execute=async()=>{
   if(connection.kind==='hermes'){
    // The helper tries the main connection, then the backup the person connected (addon-model.py).
-   const parsed=await runHermesHelper({connection,root,request,deadline,spawnProcess});
+   let parsed;try{parsed=await runHermesHelper({connection,root,request,deadline,spawnProcess});}catch(error){if(describe&&error.loaded&&error.reason==='model')return {configured:false};throw error;}
    if(!describe){if(parsed.backup){noteMainFailed(connection.state,Error('The main connection did not answer an add-on request'));noteBackupAnswered(connection.state,{provider:parsed.provider,model:parsed.model});}else noteMainAnswered(connection.state);}
    return parsed;
   }

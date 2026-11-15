@@ -331,7 +331,7 @@ contains "no network: said plainly" "$out" "The notebook  failed: this computer 
 # The runner is copied somewhere with no notebook-sync.py beside it, so it stops right after
 # the refresh and never gets as far as calling a notebook, real or not.
 newbox runner; mkdir -p "$HH" "$B/bin"
-cp "$HERE/mc-notebook-sync" "$HERE/mc-menerio-connect" "$HERE/menerio-connect.js" "$HERE/mc-notebook.js" "$B/bin/"
+cp "$HERE/mc-notebook-sync" "$HERE/mc-menerio-connect" "$HERE/menerio-connect.js" "$HERE/mc-notebook.js" "$HERE/unattended-git.cjs" "$B/bin/"
 printf 'mcp_servers:\n  notebook:\n    url: https://mcp.menerio.com\n    headers:\n      Authorization: Bearer ${MENERIO_API_KEY}\n' > "$HH/config.yaml"
 printf 'MENERIO_API_KEY=%s\n' "$KEY1" > "$HH/.env"
 printf 'GODSPEED_DIR=%s\n' "$B/godspeed" > "$B/home/.godspeed/device.env"

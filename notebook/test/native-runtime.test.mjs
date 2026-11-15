@@ -1,8 +1,9 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import path from 'node:path';import {fileURLToPath} from 'node:url';import {EventEmitter} from 'node:events';import {PassThrough} from 'node:stream';
 import {nativeAgent} from '../core/native-agent.mjs';import {NativeScheduler,nativeJobs} from '../core/native-scheduler.mjs';import {Store} from '../core/records/store.mjs';import {Domains} from '../core/domains.mjs';import {QueryService} from '../core/query.mjs';
-import {execFileSync} from 'node:child_process';import {installStarter,adoptedMissionControl} from '../core/starter-workspace.mjs';import {FLAG,readMachineRecord,writeMachineRecord} from '../core/starting-routines.mjs';import {runCommand} from '../core/child-process.mjs';
+import {execFileSync} from 'node:child_process';import {installStarter,adoptedMissionControl} from '../core/starter-workspace.mjs';import {FLAG,STARTING_ROUTINES,readMachineRecord,writeMachineRecord} from '../core/starting-routines.mjs';import {runCommand} from '../core/child-process.mjs';
 import {beginContext,scheduleInvite,setTimezone,writeContext,INVITE_JOB} from '../core/context-setup.mjs';
-import {CHAT_TIDY_JOB} from '../core/notebook-routines.mjs';
+import {CHAT_TIDY_JOB,BRIEF_SCRIPT} from '../core/notebook-routines.mjs';
+import {addArea,findArea} from '../../third-party/addons/godspeed-coach/lib/areas.mjs';import {openTalk,readTalk} from '../../third-party/addons/godspeed-coach/lib/talks.mjs';import {addDays,localParts,now as coachNow,weekdayOf} from '../../third-party/addons/godspeed-coach/lib/clock.mjs';import {resolvedCoachArea,coachTalkStart} from '../core/coach-chat.mjs';import {createService} from '../server/main.mjs';import {charmNow} from '../core/charm-operation.mjs';
 const goalsTool=fileURLToPath(new URL('../../tools/goals.js',import.meta.url));
 // The chat files a goal with the original tool. It finds its mission control from GODSPEED_ROOT or the
 // folder it runs in, never from a flag, so both are this fixture's.
@@ -24,6 +25,114 @@ test('Godspeed chat uses native Hermes rather than the notebook action planner w
  assert.equal((await domains.invoke('conversation-chat',{message:'Fictional question',conversation_id:'fixture'})).reply,'Original agent Fictional question');
  assert.equal(store.list('conversation_messages').at(-1).source_app,'hermes');
  const note=await store.saveAsync('notes',{title:'Fictional memory',content:'Menerio remains connected'});assert.equal(store.get('notes',note.id).content,'Menerio remains connected');
+});
+function coachArea(root){
+ const area=addArea(root,{slug:'health',title:'Health',rhythm:'weekly sunday',time:'19:00',starts:'2026-01-04'}),text=fs.readFileSync(area.file,'utf8');fs.writeFileSync(area.file,text.replace('SERVES:','RESEARCH DOMAIN: sleep | sleep research\nSERVES:'));return findArea(root,'health');
+}
+function preparedCoachArea(root){
+ const area=addArea(root,{slug:'health',title:'Health',rhythm:'daily',time:'19:00',starts:'2020-01-01'}),day=localParts(coachNow(),'UTC').date,opening='Good evening. Here is the prepared opening.',prepared=new Date(coachNow().getTime()-60000).toISOString();fs.mkdirSync(path.join(area.dir,'prep'),{recursive:true});fs.writeFileSync(path.join(area.dir,'prep',day+'.md'),`AREA: health\nTALK: ${day} 19:00\nPREPARED: ${prepared}\nSTATE: ready\n\n## The opening\n${opening}\n\n## Talk card\n${opening}\n`);return {area:findArea(root,'health'),day,opening};
+}
+test('a native chat refuses an unresolved coach opening instead of saving its unrelated reply',async t=>{
+ const root=fixture(t),store=new Store(root),domains=new Domains(new QueryService(store));coachArea(root);
+ let attempts=0;domains.nativeAgent=async input=>input.coach_start_resolution?{reply:'{"area":"health"}'}:(attempts++,{reply:'I do not have your profile information or goals yet in the notebook.'});
+ await assert.rejects(domains.invoke('conversation-chat',{message:'Let us have my health talk now.',conversation_id:'fixture'}),/talk record .* was not created/);
+ assert.equal(attempts,1);assert.equal(store.list('conversation_messages').length,0);
+ assert.equal(fs.existsSync(path.join(root,'coach','health','talks')),false);
+});
+test('a native chat accepts only an unprepared opening that its record holds',async t=>{
+ const root=fixture(t),store=new Store(root),domains=new Domains(new QueryService(store));coachArea(root);
+ domains.nativeAgent=async input=>{
+  if(input.coach_start_resolution)return {reply:'{"area":"health"}'};
+  const start=input.coach_talk_start;if(!start)return {reply:'ordinary reply'};
+  const opening=start.sentence+' Let us start from your week: how did sleep go?',area=findArea(root,start.area);openTalk(area,start.day,{opening,shown:new Date().toISOString()});return {reply:opening};
+ };
+ const result=await domains.invoke('conversation-chat',{message:'Let us have my health talk now.',conversation_id:'fixture'});assert.match(result.reply,/preparation for this talk is not ready/);
+});
+test('a native chat does not start paused or no-talk areas',async t=>{
+ for(const [header,value] of [['RHYTHM','none'],['STATUS','paused']]){
+  const root=fixture(t),store=new Store(root),domains=new Domains(new QueryService(store)),area=coachArea(root),text=fs.readFileSync(area.file,'utf8');fs.writeFileSync(area.file,text.replace(`${header}: ${header==='RHYTHM'?'weekly sunday':'on'}`,`${header}: ${value}`));let replyInput,resolutions=0;
+  domains.nativeAgent=async input=>input.coach_start_resolution?(resolutions++,{reply:'{"area":"health"}'}):(replyInput=input,{reply:'ordinary reply'});
+  assert.equal((await domains.invoke('conversation-chat',{message:'Let us have my health talk now.',conversation_id:'fixture'})).reply,'ordinary reply');assert.equal(resolutions,0);assert.equal(replyInput.coach_talk_start,null);assert.equal(fs.existsSync(path.join(root,'coach','health','talks')),false);
+ }
+});
+test('a native chat continues the earlier unanswered talk on a non-talk day',async t=>{
+ const root=fixture(t),store=new Store(root),domains=new Domains(new QueryService(store)),today=localParts(coachNow(),'UTC').date,day=addDays(today,-1),rhythm=['mon','tue','wed','thu','fri','sat','sun'].find(name=>name!==weekdayOf(today));
+ const area=addArea(root,{slug:'health',title:'Health',rhythm:'weekly '+rhythm,time:'19:00',starts:'2020-01-01'});openTalk(area,day,{opening:'Earlier opening.',shown:new Date().toISOString()});let start;
+ domains.nativeAgent=async input=>{if(input.coach_start_resolution)return {reply:'{"area":"health"}'};start=input.coach_talk_start;return {reply:'Continuing the earlier talk.'};};
+ assert.equal((await domains.invoke('conversation-chat',{message:'Let us have my health talk now.',conversation_id:'fixture'})).reply,'Continuing the earlier talk.');assert.equal(start.day,day);assert.equal(start.continuing,true);assert.equal(fs.existsSync(path.join(area.dir,'talks',today+'.md')),false);assert.equal(store.list('conversation_messages').length,1);
+});
+test('a native chat refuses an unshown earlier continuation',async t=>{
+ const root=fixture(t),store=new Store(root),domains=new Domains(new QueryService(store)),today=localParts(coachNow(),'UTC').date,day=addDays(today,-1),rhythm=['mon','tue','wed','thu','fri','sat','sun'].find(name=>name!==weekdayOf(today));
+ const area=addArea(root,{slug:'health',title:'Health',rhythm:'weekly '+rhythm,time:'19:00',starts:'2020-01-01'});openTalk(area,day,{opening:'Earlier opening.'});let attempts=0;
+ domains.nativeAgent=async input=>input.coach_start_resolution?{reply:'{"area":"health"}'}:(attempts++,{reply:'Continuing the earlier talk.'});
+ await assert.rejects(domains.invoke('conversation-chat',{message:'Let us have my health talk now.',conversation_id:'fixture'}),/was not marked shown in this chat/);assert.equal(attempts,1);assert.equal(store.list('conversation_messages').length,0);assert.equal(fs.existsSync(path.join(area.dir,'talks',today+'.md')),false);
+});
+test('a native chat rejects failed coach-start classification but preserves an explicit no-start',async t=>{
+ const root=fixture(t),store=new Store(root),domains=new Domains(new QueryService(store)),area=coachArea(root);for(const reply of ['not JSON','[]','{}','{"area":"health","extra":true}','{"area":1}','{"area":"unknown"}'])assert.throws(()=>resolvedCoachArea(reply,root),/could not determine whether this starts a coaching talk/);assert.equal(resolvedCoachArea('{"area":null}',root),null);
+ let replies=0;domains.nativeAgent=async input=>input.coach_start_resolution?{reply:'not JSON'}:(replies++,{reply:'ordinary reply'});await assert.rejects(domains.invoke('conversation-chat',{message:'Let us have my health talk now.',conversation_id:'fixture'}),/could not determine whether this starts a coaching talk/);assert.equal(replies,0);assert.equal(store.list('conversation_messages').length,0);
+ domains.nativeAgent=async input=>input.coach_start_resolution?{reply:'{"area":null}'}:{reply:'ordinary reply'};assert.equal((await domains.invoke('conversation-chat',{message:'Fictional question',conversation_id:'fixture'})).reply,'ordinary reply');assert.equal(store.list('conversation_messages').length,1);assert.equal(findArea(root,'health').slug,area.slug);
+});
+test('a native chat requires the prepared opening through the production start handoff',async t=>{
+ const validRoot=fixture(t),validStore=new Store(validRoot),validDomains=new Domains(new QueryService(validStore)),valid=preparedCoachArea(validRoot);validDomains.nativeAgent=async input=>{if(input.coach_start_resolution)return {reply:'{"area":"health"}'};const start=input.coach_talk_start;openTalk(findArea(validRoot,start.area),start.day,{opening:start.opening});return {reply:start.opening};};assert.equal((await validDomains.invoke('conversation-chat',{message:'Let us have my health talk now.',conversation_id:'fixture'})).reply,valid.opening);assert.ok(readTalk(valid.area,valid.day).shown);assert.equal(validStore.list('conversation_messages').length,1);
+ const mismatchRoot=fixture(t),mismatchStore=new Store(mismatchRoot),mismatchDomains=new Domains(new QueryService(mismatchStore)),mismatch=preparedCoachArea(mismatchRoot);mismatchDomains.nativeAgent=async input=>{if(input.coach_start_resolution)return {reply:'{"area":"health"}'};const start=input.coach_talk_start;openTalk(findArea(mismatchRoot,start.area),start.day,{opening:'Other words.'});return {reply:'Other words.'};};assert.equal((await mismatchDomains.invoke('conversation-chat',{message:'Let us have my health talk now.',conversation_id:'fixture'})).reply,mismatch.opening);assert.equal(readTalk(mismatch.area,mismatch.day).sections['The opening'].trim(),mismatch.opening);assert.ok(readTalk(mismatch.area,mismatch.day).shown);assert.equal(mismatchStore.list('conversation_messages').at(-1).content,mismatch.opening);
+});
+test('a talk start whose reply misses its opening once uses the second reply (issue #489)',async t=>{
+ for(const prepared of [true,false]){
+  const root=fixture(t),store=new Store(root),domains=new Domains(new QueryService(store));if(prepared)preparedCoachArea(root);else coachArea(root);let calls=0,retry;
+  domains.nativeAgent=async input=>{if(input.coach_start_resolution)return {reply:'{"area":"health"}'};const start=input.coach_talk_start,opening=start.opening||start.sentence+' Let us start from your week: how did sleep go?';calls++;if(calls===1){openTalk(findArea(root,start.area),start.day,{opening});return {reply:'Hello! Ready for your health talk?'};}retry=input.message;return {reply:opening};};
+  const result=await domains.invoke('conversation-chat',{message:'Let us have my health talk now.',conversation_id:'fixture'}),start=coachTalkStart(store,findArea(root,'health'));
+  assert.equal(calls,2);assert.match(retry,/^Let us have my health talk now\.\n\nYour previous reply to this was refused/);assert.match(retry,prepared?/did not use the health talk's prepared opening/:/did not include the health talk's required preparation sentence/);
+  assert.equal(result.reply,readTalk(findArea(root,'health'),start.day).sections['The opening'].trim());if(prepared)assert.equal(result.reply,start.opening);else assert.match(result.reply,/The preparation for this talk is not ready/);
+  assert.equal(store.list('conversation_messages').at(-1).content,result.reply);assert.ok(readTalk(findArea(root,'health'),start.day).shown);
+ }
+});
+test('a talk start whose reply misses its opening twice opens from the record (issue #489)',async t=>{
+ for(const [prepared,second] of [[true,'Still not the opening.'],[false,'Still not the opening.'],[true,null]]){
+  const root=fixture(t);if(prepared)preparedCoachArea(root);else coachArea(root);let calls=0;
+  const service=await createService({root,port:0}),store=service.store;t.after(()=>service.close());
+  service.domains.nativeAgent=async input=>{if(input.coach_start_resolution)return {reply:'{"area":"health"}'};const start=input.coach_talk_start;calls++;if(calls===1){openTalk(findArea(root,start.area),start.day,{opening:start.opening||start.sentence+' Let us start from your week: how did sleep go?'});return {reply:'Hello! Ready for your health talk?'};}if(second===null)throw Error('The AI request failed');return {reply:second};};
+  const response=await fetch('http://127.0.0.1:'+service.address.port+'/api/functions/conversation-chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:'Let us have my health talk now.',conversation_id:'notebook:general'})}),body=await response.json(),http={status:response.status,body:{...body,reply:body.data?.reply}},start=coachTalkStart(store,findArea(root,'health')),talk=readTalk(findArea(root,'health'),start.day);
+  assert.equal(calls,2);assert.equal(http.status,200);assert.equal(http.body.error??null,null);assert.equal(http.body.reply,talk.sections['The opening'].trim());
+  if(prepared)assert.equal(http.body.reply,start.opening);else assert.match(http.body.reply,/^The preparation for this talk is not ready: .+\. Let us start from your week: how did sleep go\?$/);
+  assert.doesNotMatch(http.body.reply,/Hello!|Still not|failed/);assert.equal(store.list('conversation_messages').at(-1).content,http.body.reply);assert.ok(talk.shown||readTalk(findArea(root,'health'),start.day).shown);
+ }
+});
+test('a talk start whose record has the wrong opening opens from the preparation and corrects the record (issue #495)',async t=>{
+ // The two records the app check of run 1574944d saw: a prepared talk opened with other words, and an
+ // unprepared one whose opening leaves out the not-ready sentence. A third has no opening at all.
+ for(const [prepared,recorded] of [[true,'Other words: how was your week?'],[false,'Let us start from your week: how did sleep go?'],[true,'']]){
+  const root=fixture(t);if(prepared)preparedCoachArea(root);else coachArea(root);let calls=0;
+  const service=await createService({root,port:0}),store=service.store;t.after(()=>service.close());
+  service.domains.nativeAgent=async input=>{if(input.coach_start_resolution)return {reply:'{"area":"health"}'};const start=input.coach_talk_start;calls++;openTalk(findArea(root,start.area),start.day,{opening:recorded,read:'the sleep table',shown:new Date().toISOString()});return {reply:recorded||'Hello!'};};
+  const response=await fetch('http://127.0.0.1:'+service.address.port+'/api/functions/conversation-chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:'Let us have my health talk now.',conversation_id:'notebook:general'})}),body=await response.json(),start=coachTalkStart(store,findArea(root,'health')),talk=readTalk(findArea(root,'health'),start.day);
+  assert.equal(response.status,200);assert.equal(body.error??null,null);assert.equal(calls,1);
+  if(prepared)assert.equal(body.data.reply,start.opening);else assert.equal(body.data.reply,start.sentence+' What would you like to try next in Health?');
+  // The record holds exactly what the person saw, and keeps the rest of what the assistant wrote.
+  assert.equal(talk.sections['The opening'],body.data.reply);assert.equal(talk.sections['What was read'],'the sleep table');assert.equal(talk.state,'opened');assert.ok(talk.shown);
+  assert.equal(store.list('conversation_messages').at(-1).content,body.data.reply);
+ }
+});
+test('a talk with no preparation file keeps, as its opening, the reply the person was shown (issue #530)',async t=>{
+ // The stand-in AI of the review of PR #512 wrote one opening into the record and answered with fewer words.
+ const root=fixture(t),store=new Store(root),domains=new Domains(new QueryService(store));addArea(root,{slug:'health',title:'Health',rhythm:'weekly sunday',time:'19:00',starts:'2026-01-04'});
+ domains.nativeAgent=async input=>{if(input.coach_start_resolution)return {reply:'{"area":"health"}'};const start=input.coach_talk_start;assert.equal(start.opening,null);assert.equal(start.sentence,null);openTalk(findArea(root,start.area),start.day,{opening:'Hi! How was your week? Tell me about your health.',read:'the sleep table'});return {reply:'Hi! How was your week?'};};
+ const result=await domains.invoke('conversation-chat',{message:'Let us have my health talk now.',conversation_id:'fixture'}),start=coachTalkStart(store,findArea(root,'health')),talk=readTalk(findArea(root,'health'),start.day);
+ assert.equal(result.reply,'Hi! How was your week?');assert.equal(talk.sections['The opening'],result.reply);assert.equal(talk.sections['What was read'],'the sleep table');assert.ok(talk.shown);
+ assert.equal(store.list('conversation_messages').at(-1).content,result.reply);
+});
+test('a prepared opening remains exact when Charm judges the same native request',async t=>{
+ const root=fixture(t),store=new Store(root),domains=new Domains(new QueryService(store)),prepared=preparedCoachArea(root),slip='This is useless, you are garbage and wrong again';
+ assert.equal((await domains.invoke('personal-operation',{type:'charm',action:'start',words:'start'})).ok,true);
+ let preparedStart=true,ordinaryTurns=0;domains.nativeAgent=async input=>{if(input.coach_start_resolution)return {reply:preparedStart?'{"area":"health"}':'{"area":null}'};const start=input.coach_talk_start;if(!start){ordinaryTurns++;return {reply:'Ordinary reply.'};}openTalk(findArea(root,start.area),start.day,{opening:start.opening});return {reply:start.opening};};
+ const result=await domains.invoke('conversation-chat',{message:slip+' Let us have my health talk now.',conversation_id:'prepared-proof'});
+ assert.equal(result.reply,prepared.opening);assert.equal(store.list('conversation_messages').at(-1).content,prepared.opening);assert.ok(readTalk(prepared.area,prepared.day).shown);
+ assert.deepEqual(charmNow(store).state.open,[]);
+ preparedStart=false;assert.equal((await domains.invoke('conversation-chat',{message:'yes',conversation_id:'prepared-proof'})).reply,'Ordinary reply.');assert.equal(ordinaryTurns,1);assert.deepEqual(charmNow(store).state.open,[]);
+ assert.match((await domains.invoke('conversation-chat',{message:slip,conversation_id:'charm-proof'})).reply,/That sounded like a slip/);
+});
+test('a cancelled prepared coach chat leaves its unpersisted opening unshown',async t=>{
+ const root=fixture(t),store=new Store(root),domains=new Domains(new QueryService(store)),prepared=preparedCoachArea(root),controller=new AbortController();domains.nativeAgent=async input=>{if(input.coach_start_resolution)return {reply:'{"area":"health"}'};const start=input.coach_talk_start;openTalk(findArea(root,start.area),start.day,{opening:start.opening});controller.abort();return {reply:start.opening};};
+ await assert.rejects(domains.invoke('conversation-chat',{message:'Let us have my health talk now.',conversation_id:'fixture',signal:controller.signal}),/aborted/);assert.equal(readTalk(prepared.area,prepared.day).shown,'');assert.equal(store.list('conversation_messages').length,0);
 });
 test('native setup files the goal using the original main tool and creates no replacement routines',async t=>{
  const root=fixture(t);fs.mkdirSync(path.join(root,'rules'));const store=new Store(root),home=path.join(root,'.hermes'),scheduler=new NativeScheduler(store,{home,executable:'hermes'});
@@ -60,8 +169,10 @@ function starterFixture(t,{config=true}={}){
  if(config)fs.writeFileSync(path.join(home,'config.yaml'),'terminal:\n  cwd: "'+root.replaceAll('\\','/')+'"\nmcp_servers:\n  notebook:\n    url: http://127.0.0.1:47831/mcp\n');
  return {root,home};
 }
-// Seven since 18 October 2026: each coaching talk is prepared the night before it, at 03:00.
-const STARTING=[['Nightly goal research','15 0 * * *','godspeed-goal-research.py'],['Daily round: choose today\'s work','30 5 * * *','godspeed-daily-round-choose.py'],['Daily round: do the work','0 10,16 * * *','godspeed-daily-round-work.py'],['Deadline reminders','0 8 * * *','godspeed-deadline-reminders.py'],['Weekly check-in','*/15 * * * *','godspeed-coach-talks.py'],['Coach reminders and habit check','*/15 * * * *','godspeed-coach-reminders.py'],['Coaching talk preparation','0 3 * * *','godspeed-coach-prep.py']];
+// Eight since 7 November 2026: remembered conversations follow coaching preparation at 03:40.
+const STARTING=[['Nightly goal research','15 0 * * *','godspeed-goal-research.py'],['Daily round: choose today\'s work','30 5 * * *','godspeed-daily-round-choose.py'],['Daily round: do the work','0 10,16 * * *','godspeed-daily-round-work.py'],['Deadline reminders','0 8 * * *','godspeed-deadline-reminders.py'],['Weekly check-in','*/15 * * * *','godspeed-coach-talks.py'],['Coach reminders and habit check','*/15 * * * *','godspeed-coach-reminders.py'],['Coaching talk preparation','0 3 * * *','godspeed-coach-prep.py'],['Remember what you said','40 3 * * *','godspeed-remember-what-you-said.py'],['Nightly cleanup','45 2 * * *','godspeed-nightly-cleanup.py']],CONNECTION=['Daily connection check','0 5 * * *','godspeed-connection-check.py'];
+// What a machine has in Hermes once it has ticked: the starting routines the first goal made, and the daily connection check (4 November 2026) the next tick adds beside them.
+const TICKED=[...STARTING,CONNECTION];
 
 test('a fresh mission control made from the starter starts the daily round, deadline reminders and the weekly check-in with its first goal',async t=>{
  const {root,home}=starterFixture(t),store=new Store(root,{device:'laptop-1'}),hermes=fakeHermes(home);
@@ -96,8 +207,8 @@ test('a fresh mission control made from the starter starts the daily round, dead
  // Once only: setting up again, ticking, or removing a routine never makes one again.
  await scheduler.configure({goal:'A second fictional goal',timezone:'America/New_York'});
  hermes.write(jobs.filter(j=>j.name!=='Deadline reminders'));scheduler.lastTick=0;await scheduler.tick();
- assert.equal(hermes.jobs().length,STARTING.length-1,'a routine the reader removed stays removed');
- assert.equal(hermes.calls.filter(c=>c.args[1]==='create').length,STARTING.length);
+ assert.equal(hermes.jobs().length,TICKED.length-1,'a routine the reader removed stays removed');
+ assert.equal(hermes.calls.filter(c=>c.args[1]==='create').length,TICKED.length);
 });
 
 test('with Telegram the starting routines deliver there, and the coach talks there as before',async t=>{
@@ -109,46 +220,64 @@ test('with Telegram the starting routines deliver there, and the coach talks the
  assert.equal(JSON.parse(fs.readFileSync(path.join(root,'coach','settings.json'),'utf8')).talk_delivery,'messenger');
 });
 
-test('nothing is started for a mission control set up before, one whose Hermes has routines, or one not made from the starter',async t=>{
+test('every installation gets cleanup while starting routines still respect existing routines and adopted controls',async t=>{
  // Set up before this change: an installation record and no record of starting routines.
  {const {root,home}=starterFixture(t),store=new Store(root,{device:'pc'}),hermes=fakeHermes(home);store.save('settings',{id:'installation',owner:'pc',timezone:'Europe/Berlin',delivery:'notebook'});
   const scheduler=new NativeScheduler(store,{home,executable:'hermes',device:'pc',run:hermes.run});
   await scheduler.configure({goal:'Fictional later goal'});await scheduler.tick();
-  assert.equal(hermes.jobs().length,0);assert.ok(!store.get('settings','starting-routines'));}
+  assert.deepEqual(hermes.jobs().map(job=>job.name),['Nightly cleanup']);assert.ok(!store.get('settings','starting-routines'));}
  // Hermes already has routines of its own.
  {const {root,home}=starterFixture(t),store=new Store(root,{device:'pc'}),hermes=fakeHermes(home);hermes.write([{id:'mine',name:'My own brief',enabled:true}]);
   await new NativeScheduler(store,{home,executable:'hermes',device:'pc',run:hermes.run}).configure({goal:'Fictional goal',timezone:'Europe/Berlin'});
-  assert.deepEqual(hermes.jobs().map(j=>j.id),['mine']);assert.equal(store.get('settings','starting-routines').state,'skipped');}
+  assert.deepEqual(hermes.jobs().map(j=>j.name),['My own brief','Nightly cleanup']);assert.equal(store.get('settings','starting-routines').state,'skipped');}
  // An adopted mission control: the owner's own manual and rules, the owner's own recipes, live
- // routines on several machines. The developer's own machines are this case; they get nothing new.
+ // routines on several machines. The developer's own machines are this case; since #225 they get the
+ // notice sender, while the fixed nightly cleanup runs everywhere, and any other routine waits for its switch.
  {const root=fixture(t),home=path.join(root,'.hermes-home');fs.mkdirSync(path.join(root,'rules'),{recursive:true});fs.writeFileSync(path.join(root,'AGENTS.md'),'# My own mission control\n');fs.writeFileSync(path.join(root,'rules','my-own-rule.md'),'Mine.\n');
   for(const skill of ['next-action','work-item'])fs.mkdirSync(path.join(root,'skills',skill),{recursive:true}),fs.writeFileSync(path.join(root,'skills',skill,'SKILL.md'),'My own '+skill);
   installStarter(root);assert.equal(adoptedMissionControl(root),true);
   const store=new Store(root,{device:'pc'}),hermes=fakeHermes(home),scheduler=new NativeScheduler(store,{home,executable:'hermes',device:'pc',run:hermes.run});
   await scheduler.configure({goal:'Fictional adopted goal',timezone:'Europe/Berlin'});
   fileGoal(root,'--status','adopted','--title','Another fictional goal');scheduler.lastTick=0;await scheduler.tick();
-  assert.equal(hermes.calls.filter(c=>c.args[1]==='create').length,0,'no new job');assert.ok(!store.get('settings','starting-routines'));
-  assert.equal(fs.existsSync(path.join(home,'scripts')),false);assert.equal(fs.existsSync(path.join(root,'coach','weekly-check-in')),false);}
+  assert.deepEqual(hermes.calls.filter(c=>c.args[1]==='create').map(c=>c.args[c.args.indexOf('--name')+1]),['Nightly cleanup','Godspeed notices'],'the cleanup and notice sender');assert.ok(!store.get('settings','starting-routines'));
+  assert.equal(fs.existsSync(path.join(root,'coach','weekly-check-in')),false);}
+});
+
+test('a fresh mission control schedules its nightly cleanup before its first goal',async t=>{
+ const {root,home}=starterFixture(t),store=new Store(root,{device:'pc-1'}),hermes=fakeHermes(home),scheduler=new NativeScheduler(store,{home,executable:'hermes',device:'pc-1',run:hermes.run});
+ await scheduler.tick();
+ assert.deepEqual(hermes.jobs().map(job=>[job.name,job.schedule_display,job.script]),[['Nightly cleanup','45 2 * * *','godspeed-nightly-cleanup.py']]);
+});
+
+test('overlapping setup and tick admit the nightly cleanup once',async t=>{
+ const {root,home}=starterFixture(t),store=new Store(root,{device:'pc-1'}),hermes=fakeHermes(home);store.save('settings',{id:'installation',owner:'pc-1',timezone:'Europe/Berlin',delivery:'notebook'});
+ let release,admitted,creates=0;const gate=new Promise(resolve=>{release=resolve;}),firstAdmission=new Promise(resolve=>{admitted=resolve;});
+ const run=async(executable,args,options)=>{if(args[1]==='create'&&args.includes('Nightly cleanup')){creates++;if(creates===1){admitted();await gate;}}return hermes.run(executable,args,options);};
+ const scheduler=new NativeScheduler(store,{home,executable:'hermes',device:'pc-1',run}),setup=scheduler.configure({goal:'Fictional later goal',timezone:'Europe/Berlin'});
+ await firstAdmission;scheduler.lastTick=0;const tick=scheduler.tick();await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(creates,1,'the second caller waits to inspect the job after the first creates it');
+ release();await Promise.all([setup,tick]);
+ assert.equal(hermes.jobs().filter(job=>job.name==='Nightly cleanup').length,1);
 });
 
 test('a goal told in the chat starts the same routines at the next tick, on this computer\'s clock',async t=>{
  const {root,home}=starterFixture(t),store=new Store(root,{device:'pc-1'}),hermes=fakeHermes(home);
  const scheduler=new NativeScheduler(store,{home,executable:'hermes',device:'pc-1',run:hermes.run});
- await scheduler.tick();assert.equal(hermes.calls.filter(c=>c.args[1]==='create').length,0,'no goal yet, nothing started');
+ await scheduler.tick();assert.equal(hermes.calls.filter(c=>c.args[1]==='create').length,1,'the cleanup starts before a goal');
  assert.ok(!store.get('settings','installation'));
  // The chat files the goal with the original tool (starter AGENTS.md: "make this a goal").
  fileGoal(root,'--status','adopted','--title','Fictional chat goal');
  scheduler.lastTick=0;await scheduler.tick();
  const zone=Intl.DateTimeFormat().resolvedOptions().timeZone;
- assert.deepEqual(hermes.jobs().map(j=>[j.name,j.schedule_display,j.script]),STARTING);
+ assert.deepEqual(hermes.jobs().map(j=>[j.name,j.schedule_display,j.script]),[STARTING.at(-1),...TICKED.filter(([name])=>name!=='Nightly cleanup')]);
  assert.equal(store.get('settings','installation').owner,'pc-1');assert.equal(store.get('settings','installation').timezone,zone);
- assert.equal(hermes.calls.find(c=>c.args[1]==='create').timezone,zone);
+ assert.equal(hermes.calls.find(c=>c.args.includes('Nightly goal research')).timezone,zone);
  assert.match(fs.readFileSync(path.join(root,'coach','weekly-check-in','area.md'),'utf8'),/^SERVES: fictional-chat-goal$/m);
- scheduler.lastTick=0;await scheduler.tick();assert.equal(hermes.jobs().length,STARTING.length,'and only once');
+ scheduler.lastTick=0;await scheduler.tick();assert.equal(hermes.jobs().length,TICKED.length,'and only once');
  // A provisional idea is not a goal: it starts nothing.
  const other=starterFixture(t),otherStore=new Store(other.root,{device:'pc-2'}),otherHermes=fakeHermes(other.home);
  fileGoal(other.root,'--title','Only an idea');
- await new NativeScheduler(otherStore,{home:other.home,executable:'hermes',device:'pc-2',run:otherHermes.run}).tick();assert.equal(otherHermes.jobs().length,0);
+ await new NativeScheduler(otherStore,{home:other.home,executable:'hermes',device:'pc-2',run:otherHermes.run}).tick();assert.deepEqual(otherHermes.jobs().map(job=>job.name),['Nightly cleanup']);
 });
 
 // A reader starts on a computer, later orders a server that joins the same mission control from
@@ -178,10 +307,9 @@ test('a server that joins later and takes the routines over gets the starting ro
  serverScheduler.lastTick=0;await serverScheduler.tick();
  const named=serverHermes.calls.filter(c=>c.args[1]==='create').map(c=>c.args[c.args.indexOf('--name')+1]);
  assert.equal(named.filter(n=>STARTING.some(([name])=>name===n)).length,STARTING.length,'once');
- // This server has a chat app, and still the tick makes nothing else: the night chat tidy-up is
- // made for no install since 27 October 2026 (notebook-routines.mjs, CHAT_TIDY_JOB).
- assert.deepEqual(named.filter(n=>!STARTING.some(([name])=>name===n)),[]);
- assert.equal(serverHermes.jobs().some(j=>j.name===CHAT_TIDY_JOB),false);
+ // This server has a chat app, so the tick adds the night chat tidy-up, once, and nothing else.
+ assert.deepEqual(named.filter(n=>!TICKED.some(([name])=>name===n)),[CHAT_TIDY_JOB]);
+ assert.equal(serverHermes.jobs().filter(j=>j.name===CHAT_TIDY_JOB).length,1);
  // The computer no longer runs them: its Hermes is not ticked.
  pc.save('settings',{id:'installation',owner:'vps'});pcScheduler.lastTick=0;const before=pcHermes.calls.length;await pcScheduler.tick();
  assert.equal(pcHermes.calls.length,before);
@@ -198,11 +326,11 @@ test('the routines are made on the machine that runs them, and a failed start is
  const result=await new NativeScheduler(store,{home,executable:'hermes',device:'laptop-1',run:hermes.run}).configure({goal:'Fictional paired goal',timezone:'Europe/Berlin',owner:'vps'});
  assert.equal(result.routines.state,'pending');assert.equal(hermes.jobs().length,0,'not in this laptop\'s Hermes');
  const server=new NativeScheduler(new Store(root,{device:'vps'}),{home,executable:'hermes',device:'vps',run:hermes.run});await server.tick();
- assert.equal(hermes.jobs().length,STARTING.length,'the server makes them');
+ assert.equal(hermes.jobs().length,TICKED.length,'the server makes them');
  // Hermes refusing one: the ones made are taken back, and the start waits an hour.
  const next=starterFixture(t),nextStore=new Store(next.root,{device:'pc'}),broken=fakeHermes(next.home,{fail:'Deadline reminders'});
  const failed=await new NativeScheduler(nextStore,{home:next.home,executable:'hermes',device:'pc',run:broken.run}).configure({goal:'Fictional goal',timezone:'Europe/Berlin'});
- assert.equal(failed.routines.state,'pending');assert.equal(broken.jobs().length,0);assert.ok(Date.parse(readMachineRecord(nextStore).retry_after)>Date.now()+3500000);
+ assert.equal(failed.routines.state,'pending');assert.deepEqual(names(broken.jobs()),['Nightly cleanup']);assert.ok(Date.parse(readMachineRecord(nextStore).retry_after)>Date.now()+3500000);
 });
 // THE FIRST GOAL AFTER THE GETTING-TO-KNOW-YOU CHAT (17 October 2026, found while the user guide was
 // checked against the release of 16 October): on a server the invitation that chat sends is a
@@ -210,7 +338,7 @@ test('the routines are made on the machine that runs them, and a failed start is
 // answer, the city, wrote the installation record. Either way a first goal told afterwards started
 // nothing, and so did one told after a morning brief or a reminder was asked for in the chat.
 const names=jobs=>jobs.map(j=>j.name);
-const STARTING_NAMES=STARTING.map(([name])=>name);
+const STARTING_NAMES=TICKED.map(([name])=>name);
 for(const [label,sent] of [['still waits to be sent',false],['went out, and Hermes keeps it for a week',true]]){
  test('on a server, a first goal told in the getting-to-know-you chat starts the routines while its invitation '+label,async t=>{
   const {root,home}=starterFixture(t),store=new Store(root,{device:'vps'}),hermes=fakeHermes(home);
@@ -225,12 +353,15 @@ for(const [label,sent] of [['still waits to be sent',false],['went out, and Herm
   if(sent){const [invite]=hermes.jobs();hermes.write([{...invite,enabled:false,state:'completed',next_run_at:null,last_run_at:new Date().toISOString(),last_status:'ok',repeat:{times:1,completed:1}}]);}
   fileGoal(root,'--status','adopted','--title','Fictional first goal');
   scheduler.lastTick=0;await scheduler.tick();
-  // The seven, beside the invitation, and no night chat tidy-up although this server has a chat
-  // app (made for no install since 27 October 2026, notebook-routines.mjs, CHAT_TIDY_JOB).
-  assert.deepEqual(names(hermes.jobs()),[INVITE_JOB,...STARTING_NAMES]);
+  // The seven, beside the invitation, and the night chat tidy-up because this server has a chat app.
+  assert.deepEqual(names(hermes.jobs()),[INVITE_JOB,...STARTING_NAMES,CHAT_TIDY_JOB]);
+  // Each starting routine's promise, and the daily connection check's the tick made beside them (#436), once: another tick writes nothing again.
+  const promises=path.join(root,'work','promises'),written=()=>Object.fromEntries(fs.readdirSync(promises).map(n=>[n,fs.readFileSync(path.join(promises,n),'utf8')]));
+  assert.deepEqual(Object.keys(written()).sort(),['README.md',...STARTING_ROUTINES.filter(r=>STARTING_NAMES.includes(r.name)).map(r=>'routine-'+r.key+'.md'),'routine-connection-check.md'].sort());
+  const before=written();scheduler.lastTick=0;await scheduler.tick();assert.deepEqual(written(),before);
   assert.equal(store.get('settings',FLAG).state,'created');assert.equal(readMachineRecord(store).state,'created');
-  assert.deepEqual([...new Set(hermes.jobs().filter(j=>j.name!==INVITE_JOB).map(j=>j.deliver))],['telegram']);
-  assert.equal(hermes.jobs().some(j=>j.name===CHAT_TIDY_JOB),false);
+  assert.deepEqual([...new Set(hermes.jobs().filter(j=>j.name!==INVITE_JOB&&j.name!==CHAT_TIDY_JOB).map(j=>j.deliver))],['telegram']);
+  assert.equal(hermes.jobs().find(j=>j.name===CHAT_TIDY_JOB).deliver,'local');
  });
 }
 
@@ -242,7 +373,7 @@ test('on a computer, the city answered first in the getting-to-know-you chat lea
   assert.equal(store.get('settings',FLAG)?.state,'pending',where+': the mark of a new mission control waiting for its first goal');
   if(where==='the chat'){fileGoal(root,'--status','adopted','--title','Fictional first goal');scheduler.lastTick=0;await scheduler.tick();}
   else{const result=await scheduler.configure({goal:'Fictional first goal',timezone:'Europe/Berlin'});assert.equal(result.routines?.state,'created',where);}
-  assert.deepEqual(hermes.jobs().map(j=>[j.name,j.schedule_display,j.script]),STARTING,where);
+  assert.deepEqual(hermes.jobs().map(j=>[j.name,j.schedule_display,j.script]),where==='the chat'?TICKED:STARTING,where);
   for(const call of hermes.calls.filter(c=>c.args[1]==='create'))assert.equal(call.timezone,'Europe/Vienna',where+': on the clock the city gave');
   assert.match(fs.readFileSync(path.join(root,'coach','weekly-check-in','area.md'),'utf8'),/^SERVES: fictional-first-goal$/m);
   assert.equal(store.get('settings',FLAG).state,'created');
@@ -258,6 +389,9 @@ const CHAT_JOBS={
  'a reminder every weekday at seven':()=>({name:'Stretch',schedule:{kind:'cron',expr:'0 7 * * 1-5'},schedule_display:'0 7 * * 1-5',prompt:'Remind me to stretch.',workdir:null,deliver:'origin'}),
  'a one-time reminder':()=>({name:'Call the dentist',schedule:{kind:'once',run_at:'2026-10-20T09:00:00+02:00'},schedule_display:'once at 2026-10-20 09:00',repeat:{times:1,completed:0},prompt:'Remind me to call the dentist.',workdir:null,deliver:'origin'}),
 };
+// A Morning brief made the old way, as the recipe, is made again as the notebook's own briefing on the
+// tick (NativeScheduler.followBrief, #160), so it comes after the routines that tick started.
+const briefLast=(what,name)=>what==='a morning brief'?[...STARTING_NAMES,name]:[name,...STARTING_NAMES];
 const chatJob=(job,{created_at=new Date().toISOString(),...more}={})=>({id:'chat-'+job.name.toLowerCase().replace(/\W+/g,'-'),repeat:{times:null,completed:0},...job,enabled:true,state:'scheduled',created_at,next_run_at:null,last_run_at:null,...more});
 
 test('a morning brief, a research watch or a reminder asked for in the chat before the first goal never keeps the routines away',async t=>{
@@ -268,8 +402,9 @@ test('a morning brief, a research watch or a reminder asked for in the chat befo
   hermes.write([chatJob(make(root))]);
   fileGoal(root,'--status','adopted','--title','Fictional first goal');
   scheduler.lastTick=0;await scheduler.tick();
-  assert.deepEqual(names(hermes.jobs()),[make(root).name,...STARTING_NAMES],what);
+  assert.deepEqual(names(hermes.jobs()),briefLast(what,make(root).name),what);
   assert.equal(store.get('settings',FLAG).state,'created',what);
+  if(what==='a morning brief')assert.equal(hermes.jobs().find(j=>j.name==='Morning brief').script,BRIEF_SCRIPT,'made again as the notebook\'s own briefing (#160)');
  }
  // A one-time job is a reminder, never a routine, even one the reader made before Godspeed came, and
  // so is one Hermes keeps after it ran.
@@ -294,10 +429,10 @@ test('routines the reader had in this Hermes before the mission control came, or
   const scheduler=new NativeScheduler(store,{home,executable:'hermes',device:'pc',run:hermes.run});
   if(what.startsWith('made before'))hermes.write([make(root)]);
   await scheduler.tick();
-  if(!what.startsWith('made before'))hermes.write([make(root)]);
+  if(!what.startsWith('made before'))hermes.write([...hermes.jobs(),make(root)]);
   fileGoal(root,'--status','adopted','--title','Fictional first goal');
   scheduler.lastTick=0;await scheduler.tick();
-  assert.equal(hermes.jobs().length,1,what+': nothing added beside the reader\'s own');
+  assert.equal(hermes.jobs().length,2,what+': only the cleanup is added beside the reader\'s own');
   assert.equal(store.get('settings',FLAG).state,'skipped',what);assert.equal(readMachineRecord(store).state,'skipped',what);
   assert.deepEqual(readMachineRecord(store).because.map(j=>j.name),[make(root).name],what+': the record names the routine that decided it');
  }
@@ -324,28 +459,28 @@ test('after the update, a machine whose routines were kept away only by jobs mad
   hermes.write([make(root)]);fileGoal(root,'--status','adopted','--title','Fictional first goal');before(store);
   const scheduler=new NativeScheduler(store,{home,executable:'hermes',device:'pc',run:hermes.run});
   await scheduler.tick();
-  assert.deepEqual(names(hermes.jobs()),[make(root).name,...STARTING_NAMES],what);
+  assert.deepEqual(names(hermes.jobs()),briefLast(what,make(root).name),what);
   assert.equal(store.get('settings',FLAG).state,'created',what);assert.equal(readMachineRecord(store).state,'created',what);
   // Made once: a routine the reader removes afterwards stays removed.
   hermes.write(hermes.jobs().filter(j=>j.name!=='Deadline reminders'));scheduler.lastTick=0;await scheduler.tick();
-  assert.equal(hermes.jobs().length,STARTING.length,what+': a routine the reader removed stays removed');
+  assert.equal(hermes.jobs().length,TICKED.length,what+': a routine the reader removed stays removed');
  }
  // The city filed first by the release of 16 October: an installation record and no record of starting routines.
  {const {root,home}=starterFixture(t),store=new Store(root,{device:'pc'}),hermes=fakeHermes(home);
   before(store,{state:'none'});writeContext(store,{timezone:'Europe/Berlin',timezone_from:'answer'});
   fileGoal(root,'--status','adopted','--title','Fictional first goal');
   const scheduler=new NativeScheduler(store,{home,executable:'hermes',device:'pc',run:hermes.run});await scheduler.tick();
-  assert.deepEqual(hermes.jobs().map(j=>[j.name,j.schedule_display,j.script]),STARTING,'the city first');assert.equal(store.get('settings',FLAG).state,'created');}
+  assert.deepEqual(hermes.jobs().map(j=>[j.name,j.schedule_display,j.script]),TICKED,'the city first');assert.equal(store.get('settings',FLAG).state,'created');}
  // A real skip: the reader's own routine from before the mission control came. Looked at once
  // more, it stays, and it is not looked at again when the reader later removes that routine.
  {const {root,home}=starterFixture(t),store=new Store(root,{device:'pc'}),hermes=fakeHermes(home);
   hermes.write([chatJob({name:'My own brief',schedule:{kind:'cron',expr:'0 6 * * *'},prompt:'My own morning.',workdir:null},{created_at:'2026-09-01T07:00:00+02:00'})]);
   fileGoal(root,'--status','adopted','--title','Fictional first goal');before(store);
   const scheduler=new NativeScheduler(store,{home,executable:'hermes',device:'pc',run:hermes.run});await scheduler.tick();
-  assert.deepEqual(names(hermes.jobs()),['My own brief']);assert.equal(store.get('settings',FLAG).state,'skipped');
+  assert.deepEqual(names(hermes.jobs()),['My own brief','Nightly cleanup']);assert.equal(store.get('settings',FLAG).state,'skipped');
   assert.equal(readMachineRecord(store).state,'skipped');assert.ok(readMachineRecord(store).rule,'decided by today\'s rule');
   hermes.write([]);scheduler.lastTick=0;await scheduler.tick();
-  assert.equal(hermes.calls.filter(c=>c.args[1]==='create').length,0,'decided once');}
+  assert.deepEqual(names(hermes.jobs()),[]);assert.equal(hermes.calls.filter(c=>c.args[1]==='create').length,1,'decided once');}
  // Set up before 8 October 2026: its owner answering the city after the update changes nothing.
  {const {root,home}=starterFixture(t),store=new Store(root,{device:'pc'}),hermes=fakeHermes(home);
   store.save('settings',{id:'installation',owner:'pc',timezone:'Europe/Berlin',delivery:'notebook',created_at:'2026-10-01T08:00:00.000Z'});
@@ -353,7 +488,7 @@ test('after the update, a machine whose routines were kept away only by jobs mad
   fileGoal(root,'--status','adopted','--title','Fictional later goal');
   const scheduler=new NativeScheduler(store,{home,executable:'hermes',device:'pc',run:hermes.run});await scheduler.tick();
   await scheduler.configure({goal:'Another fictional goal'});
-  assert.equal(hermes.jobs().length,0,'an installation set up before stays as it was');assert.ok(!store.get('settings',FLAG));}
+  assert.deepEqual(names(hermes.jobs()),['Nightly cleanup'],'an installation set up before gets only its cleanup');assert.ok(!store.get('settings',FLAG));}
 });
 
 test('notebook schedule controls call Hermes cron and reflect its job file',async t=>{
@@ -362,7 +497,7 @@ test('notebook schedule controls call Hermes cron and reflect its job file',asyn
  fs.writeFileSync(path.join(home,'cron/jobs.json'),JSON.stringify([{id:'fixture',name:'Morning brief',enabled:true,state:'scheduled'}]));
  const scheduler=new NativeScheduler(store,{home,executable:'hermes',run:async(exe,args)=>{calls.push({exe,args});return {stdout:''};}});
  await scheduler.control({id:'fixture',paused:true});assert.deepEqual(calls[0],{exe:'hermes',args:['cron','pause','fixture']});
- await scheduler.control({kind:'morning-brief',interval_ms:86400000},{enable:true});assert.ok(calls[1].args.includes('--skill'));assert.ok(calls[1].args.includes('morning-brief'));assert.equal(store.list('jobs').length,0);
+ await scheduler.control({kind:'morning-brief',interval_ms:86400000},{enable:true});assert.ok(calls[1].args.includes('--no-agent'));assert.equal(calls[1].args[calls[1].args.indexOf('--script')+1],BRIEF_SCRIPT);assert.ok(!calls[1].args.includes('--skill'),'the notebook\'s own briefing, not the recipe (#160)');assert.equal(store.list('jobs').length,0);
 });
 
 test('a machine that got the first routines before the nightly research existed gets it once, and never again after the reader removed it',async t=>{
@@ -372,7 +507,7 @@ test('a machine that got the first routines before the nightly research existed 
  // An installation from before: no research routine, and no record that it was ever offered.
  hermes.write(hermes.jobs().filter(j=>j.name!=='Nightly goal research'));
  const here=readMachineRecord(store);writeMachineRecord(store,{...here,jobs:here.jobs.filter(j=>j.key!=='research')});
- const creates=()=>hermes.calls.filter(c=>c.args[1]==='create').length,before=creates();
+ const creates=()=>hermes.calls.filter(c=>c.args[1]==='create'&&!c.args.includes(CONNECTION[0])).length,before=creates();
  scheduler.lastTick=0;await scheduler.tick();
  assert.equal(creates(),before+1,'made once');
  assert.deepEqual(hermes.jobs().filter(j=>j.name==='Nightly goal research').map(j=>[j.schedule_display,j.script]),[['15 0 * * *','godspeed-goal-research.py']]);
@@ -387,8 +522,8 @@ test('a machine that got the first routines before the nightly research existed 
  otherHermes.write(otherHermes.jobs().filter(j=>j.name!=='Nightly goal research'));
  const old=readMachineRecord(otherStore);writeMachineRecord(otherStore,{...old,jobs:old.jobs.filter(j=>j.key!=='research')});
  fs.rmSync(path.join(other.root,'skills','goal-research'),{recursive:true,force:true});
- const count=otherHermes.calls.filter(c=>c.args[1]==='create').length;otherScheduler.lastTick=0;await otherScheduler.tick();
- assert.equal(otherHermes.calls.filter(c=>c.args[1]==='create').length,count);
+ const created=()=>otherHermes.calls.filter(c=>c.args[1]==='create'&&!c.args.includes(CONNECTION[0])).length,count=created();otherScheduler.lastTick=0;await otherScheduler.tick();
+ assert.equal(created(),count);
 });
 
 // Coaching talks prepared the night before (18 October 2026): a machine that got its routines
@@ -402,7 +537,7 @@ test('a machine that got its routines before talks were prepared ahead gets the 
  // An installation from 17 October: six routines, no preparation, and no record that it was offered.
  hermes.write(hermes.jobs().filter(j=>j.name!=='Coaching talk preparation'));
  const here=readMachineRecord(store);writeMachineRecord(store,{...here,jobs:here.jobs.filter(j=>j.key!=='coach-prep')});
- const creates=()=>hermes.calls.filter(c=>c.args[1]==='create').length,before=creates();
+ const creates=()=>hermes.calls.filter(c=>c.args[1]==='create'&&!c.args.includes(CONNECTION[0])).length,before=creates();
  // Without the recipe it waits.
  fs.rmSync(path.join(root,'skills','coach-prep'),{recursive:true,force:true});
  scheduler.lastTick=0;await scheduler.tick();

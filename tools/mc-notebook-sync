@@ -90,6 +90,10 @@ trap 'rmdir "$LOCK" 2>/dev/null || true' EXIT
 # this lock and skips, harmlessly. Never push from here: pushing stays a decision, not
 # a schedule.
 #
+# No GitHub sign-in window from a run nobody watches: every git line below goes through unattended-git.cjs
+# (the no-prompt environment, and a once-a-day notice that names Connect when the sign-in is missing).
+UG="$(winpath "$(cd "$(dirname "$0")" && pwd)")/unattended-git.cjs"; if command -v node >/dev/null 2>&1 && [ -f "$UG" ]; then git() { node "$UG" --tell "$GODSPEED" "$@"; }; fi
+
 # NAME THE BRANCH, DO NOT LET GIT GUESS IT. `git pull --rebase origin` with no branch
 # works only on a clone whose branch has an upstream configured, and a folder that was
 # copied, restored from a backup, or cloned by a tool often has none. Git then refuses

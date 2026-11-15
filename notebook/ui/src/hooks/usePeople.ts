@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { showToast } from "@/lib/toast";
 import { usePeopleSync } from "@/hooks/usePeopleSync";
+import { personNames } from "@/components/timeline/people";
 
 export interface Person {
   id: string;
@@ -60,7 +61,8 @@ export interface ContactPage {
 }
 
 function normalizePerson(d: Person): Person {
-  return { ...d, aliases: d.aliases || [], app_mappings: d.app_mappings || {},
+  return { ...d, name: typeof d.name === "string" ? d.name : "",
+    aliases: Array.isArray(d.aliases) ? d.aliases.filter((a) => typeof a === "string" && a.trim() !== "") : [], app_mappings: d.app_mappings || {},
     is_favorite: d.is_favorite ?? false, last_viewed_at: d.last_viewed_at ?? null };
 }
 
@@ -122,7 +124,9 @@ export function usePinnedPeople(recentLimit = 15) {
       ]);
       if (favorites.error) throw favorites.error;
       if (recent.error) throw recent.error;
-      return [...new Map([...favorites.data, ...recent.data].map((row: Person) => [row.id, normalizePerson(row)])).values()];
+      // A person saved without any name is left out, as search_contacts_page leaves them out (issue 266).
+      const named = [...favorites.data, ...recent.data].filter((row: Person) => personNames(row).length > 0);
+      return [...new Map(named.map((row: Person) => [row.id, normalizePerson(row)])).values()];
     },
   });
   return { ...query, data: query.data ?? [] };

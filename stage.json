@@ -17,6 +17,7 @@
     "sha256": "4a1c63c8a14af59a0c5b295b63a2bc5e45f6637174b706f1b2b7826fd513c2a5"
   },
   "addons": {
+    "godspeed-charm": "9390da492a0035a41b0eb02584234e269bca6dc8",
     "godspeed-coach": "085eb63febce37b87dbf947eac2b840dc0c5fdc3",
     "godspeed-headache": "d07d6a0250ff3266ed3ddff2416cbd788c6dfb2c",
     "godspeed-journal": "d370b082fec8ef85eee54b4be1f64b502b00447d",

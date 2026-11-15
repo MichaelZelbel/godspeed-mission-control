@@ -19,6 +19,7 @@ export const DEFAULTS = Object.freeze({
   evidence: { script: "" },       // a program that prints the posts that went out (README, "Already on record"); a path inside mission control
   tick_host: "",                  // the one machine that sends nudges and the evening list
   git_sync: "auto",               // auto: commit and push | commit: commit only | off
+  save_as_moments: true,          // false: finished tasks are not saved as moments in the notebook's timeline
 });
 
 const CHOICES = {

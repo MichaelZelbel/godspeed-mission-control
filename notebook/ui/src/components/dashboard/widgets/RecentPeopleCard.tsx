@@ -5,8 +5,11 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { UserCircle, ArrowRight, Heart } from "lucide-react";
+import { personLabel, personNames } from "@/components/timeline/people";
 
-type RecentPerson = { id: string; name: string; relationship: string | null; updated_at: string | null };
+type RecentPerson = { id: string; name: string; aliases: unknown; relationship: string | null; updated_at: string | null };
+
+const SHOWN = 5;
 
 export function RecentPeopleCard() {
   const navigate = useNavigate();
@@ -17,13 +20,14 @@ export function RecentPeopleCard() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("contacts")
-        .select("id, name, relationship, updated_at")
+        .select("id, name, aliases, relationship, updated_at")
         .eq("user_id", user!.id)
         .is("merged_into", null)
         .order("updated_at", { ascending: false })
-        .limit(5);
+        .limit(SHOWN * 4);
       if (error) throw error;
-      return (data || []) as RecentPerson[];
+      // A person saved without any name is not listed, as on the People page (issue 266).
+      return ((data || []) as RecentPerson[]).filter((p) => personNames(p).length > 0).slice(0, SHOWN);
     },
   });
 
@@ -53,7 +57,7 @@ export function RecentPeopleCard() {
                 className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm transition-colors hover:bg-accent"
               >
                 <UserCircle className="h-4 w-4 shrink-0 text-muted-foreground" />
-                <span className="truncate font-medium">{person.name}</span>
+                <span className="truncate font-medium">{personLabel(person)}</span>
                 {person.relationship && (
                   <span className="truncate text-xs text-muted-foreground">{person.relationship}</span>
                 )}

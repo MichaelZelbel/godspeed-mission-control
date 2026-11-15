@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # PROVING SCENARIO 2: the night chat tidy-up does its job, and only its job.
 #
-# NOT RUN ON A CANDIDATE SINCE 27 OCTOBER 2026: the tidy-up left 2.0.0-beta.8 (the plan's note at
-# its top) and no install gets the routine (notebook/core/notebook-routines.mjs), so this scenario
-# would only find it missing. It is kept, with its checking part tested, for the release that
-# brings the tidy-up back, which puts its job into .github/workflows/scenarios.yml again.
+# THE ROUTINE IS BACK for installs with a chat app connected (notebook/core/notebook-routines.mjs,
+# native-scheduler.mjs), through the godspeed-chat-tidy gateway plugin. It was left out of
+# 2.0.0-beta.8 on 27 October 2026 and has not run on a candidate since; its job is not yet in
+# .github/workflows/scenarios.yml.
 #
 # What it proves (godspeed-dev, releases/godspeed-2.0.0-beta.8-faster-chat/plan.md, scenario 2): on
 # a fresh install whose assistant has a chat app, the notebook makes the routine "Night chat
@@ -24,8 +24,8 @@
 # its own chat store (scenario-lib.sh, assistant_keeps_a_conversation), so the job hands this
 # scenario a key:
 #   GODSPEED_SCENARIO_AI_KEY    (the release step names the repository secret; without it: FAIL)
-#   GODSPEED_SCENARIO_AI_URL    the service's address, OpenRouter by default
-#   GODSPEED_SCENARIO_AI_MODEL  the model the summary is written with
+#   GODSPEED_SCENARIO_AI_URL    the service's address (a repository variable; no default)
+#   GODSPEED_SCENARIO_AI_MODEL  the model the summary is written with (a repository variable; no default)
 #
 #   bash scenarios/night-tidy.sh candidate/2.0.0-beta.8
 #   bash scenarios/night-tidy.sh --check <folder>

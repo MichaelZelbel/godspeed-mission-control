@@ -12,8 +12,9 @@ import { seed } from '../core/seeds.mjs';
 import { execFileSync } from 'node:child_process';
 import {assistantProfiles,selectAssistantProfile} from '../core/assistant-files.mjs';
 import {installSkillTree} from '../core/packaged-skills.mjs';
+import {removeRetiredSkills} from '../core/retired-skills.mjs';
 import {planWorkspaceMove,moveWorkspace,undoWorkspaceMove} from '../core/workspace-move.mjs';
-import {installStarter,adoptedMissionControl,addArchiveLine} from '../core/starter-workspace.mjs';
+import {installStarter,adoptedMissionControl,addArchiveLine,addStepLine} from '../core/starter-workspace.mjs';
 import {machineDevice} from '../core/device-id.mjs';
 import {listHabits,initializeHabitProgress} from '../../third-party/addons/godspeed-coach/lib/habits.mjs';
 import {localParts,now as clockNow} from '../../third-party/addons/godspeed-coach/lib/clock.mjs';
@@ -42,6 +43,19 @@ if(args[0]==='backup'&&args.includes('--before-update')){
  const view=workspaceForCopy(root,{device:machineDevice(root).id});
  console.log(JSON.stringify(makeUpdateCopy(view,process.env.GODSPEED_MEDIA_ROOT||path.join(view.state,'media'),path.resolve(folder)),null,2));process.exit(0);
 }
+// godspeed-update: the newest stable release, checked against its release's SHA256SUMS and installed
+// by the installer this computer has (core/update.mjs). It opens no notebook: the installer runs the
+// new version's init. --from-settings is how the Update now button starts it, and --settle [--made
+// COPY] is how start.mjs finishes one it took over (scripts/native-start-script.mjs).
+if(args[0]==='update'){
+ const option=name=>{const at=args.indexOf(name);return at>0?args[at+1]:undefined;};
+ const known=new Set(['--check','--from-settings','--channel','--settle','--made']),words=args.slice(1).filter((word,at,all)=>!['--channel','--made'].includes(all[at-1]));
+ if(words.some(word=>!known.has(word))||(args.includes('--channel')&&!['stable','testing'].includes(option('--channel'))))throw Error('update [--check] [--channel stable|testing]');
+ const {runUpdate,settle}=await import('../core/update.mjs');
+ if(args.includes('--settle')){console.log(JSON.stringify(await settle({root,made:option('--made')}),null,2));process.exit(0);}
+ await runUpdate({root,channel:option('--channel')||'stable',check:args.includes('--check'),fromSettings:args.includes('--from-settings')});
+ process.exit(0);
+}
 if(args[0]==='workspace-move'){
  const [_,action,value,installationFile]=args;
  let outcome;
@@ -62,18 +76,24 @@ if(command==='init'){
   const adopted=adoptedMissionControl(root);
   installStarter(root);
   addArchiveLine(root,store.state);
+  addStepLine(root,store.state);
   const addons=fileURLToPath(new URL('../../third-party/addons/',import.meta.url));
   const recipes=fileURLToPath(new URL('../recipes/',import.meta.url));
-  for(const [name,recipe] of [['godspeed-coach','coach'],['godspeed-journal','interstitial-journal'],['mc-phone','phone-errands'],['mc-video','video-finishing']]){
+  // mc-video is not in this list any more (31 October 2026): the recipes for making and finishing
+  // video are the video add-on's, and its own setup installs them, so a folder whose owner never set
+  // that add-on up no longer gets video-finishing either (core/retired-skills.mjs).
+  for(const [name,recipe] of [['godspeed-coach','coach'],['godspeed-journal','interstitial-journal'],['mc-phone','phone-errands']]){
     const source=path.join(addons,name,'skill',recipe);if(fs.existsSync(source)&&!fs.existsSync(path.join(root,'skills',recipe)))fs.cpSync(source,path.join(root,'skills',recipe),{recursive:true});
   }
   if(fs.existsSync(recipes))for(const name of fs.readdirSync(recipes))installSkillTree(store,path.join(recipes,name),path.join(root,'skills',name),{adopted});
-  // What this command wrote before is brought up to date; a text the owner
-  // changed is left alone. Until 6 October 2026 an existing copy was never
-  // updated, so machines kept saying records/ and forbade the owner's own Git.
-  const contract=path.join(root,'FULL-ALPHA.md'),earlier=['records/','notebook/'].map(folder=>'# Integrated notebook\n\nThis is the complete Godspeed Mission Control starter with an integrated notebook. AGENTS.md and the original folder workflow remain the operating manual. Notebook records live in '+folder+' alongside those folders. Use the notebook or its MCP tools for notebook edits; use the original commands and readable files for Godspeed work. Credentials and disposable SQLite indexes stay in .godspeed and never enter private Git sync. Connected file sync uses the conflict-preserving reconciler; do not run a second Git synchronizer on the same workspace.\n');
-  const contractText='# Integrated notebook\n\nThis is the complete Godspeed Mission Control starter with an integrated notebook. AGENTS.md and the original folder workflow remain the operating manual. Notebook records live in notebook/ alongside those folders. Use the notebook or its MCP tools for notebook edits; use the original commands and readable files for Godspeed work. Credentials, media and the rebuildable search databases stay in .godspeed and never enter Git. When this folder is its own Git repository (godspeed sync folder), the notebook commits only its own paths and your commits and pushes go on as before; otherwise its connected file sync is the only synchronizer for this folder.\n';
-  if(!fs.existsSync(contract)||earlier.includes(fs.readFileSync(contract,'utf8')))atomic(contract,contractText);
+  // An update takes the video recipes an earlier version installed out of the owner's skills/ again,
+  // but only the copies Godspeed itself put there unchanged: one the owner edited stays, and an
+  // installation with the video add-on set up keeps them all (core/retired-skills.mjs).
+  const retired=removeRetiredSkills(store,root);
+  // The note that says what this folder is: NOTEBOOK.md, renamed from FULL-ALPHA.md once where that
+  // never leaves this computer through Git, and brought up to date under the name it keeps while it
+  // still reads as the notebook wrote it (core/notebook-note.mjs).
+  (await import('../core/notebook-note.mjs')).settleNotebookNote(root,{write:true});
   const spec=fs.readFileSync(fileURLToPath(new URL('../../docs/full-version/file-format.md',import.meta.url)),'utf8');
   if(!fs.existsSync(path.join(root,'README.md')))atomic(path.join(root,'README.md'),'# Godspeed Mission Control\n\n'+spec);
   const progressZone=store.get('settings','installation')?.timezone||'UTC',progressDay=localParts(clockNow(),progressZone).date;let progressUpgrades=0;
@@ -81,9 +101,9 @@ if(command==='init'){
   // Last, once everything above is in the folder: a new mission control's first commit (core/first-commit.mjs).
   const committed=(await import('../core/first-commit.mjs')).firstCommit(root);
   if(!committed.made&&/failed/.test(committed.reason))process.stderr.write('The folder\'s first Git commit was not made ('+committed.reason+'); everything else is set up.\n');
-  result={initialized:true,preservedExisting:true,habitProgressUpgrades:progressUpgrades,...(committed.made?{firstCommit:{branch:committed.branch,files:committed.files}}:{})};
-}else if(['coach','journal'].includes(command)){
-  const addon=command==='coach'?'godspeed-coach':'godspeed-journal';
+  result={initialized:true,preservedExisting:true,habitProgressUpgrades:progressUpgrades,...(retired.removed.length?{videoSkillsRemoved:retired.removed}:{}),...(retired.kept.length?{videoSkillsKept:retired.kept}:{}),...(retired.videoAddon?{videoSkillsKeptFor:retired.videoAddon}:{}),...(committed.made?{firstCommit:{branch:committed.branch,files:committed.files}}:{})};
+}else if(['coach','journal','charm'].includes(command)){
+  const addon='godspeed-'+command;
   const executable=fileURLToPath(new URL('../../third-party/addons/'+addon+'/bin/'+addon+'.mjs',import.meta.url));
   process.stdout.write(execFileSync(process.execPath,[executable,verb,...rest,'--godspeed',root],{encoding:'utf8',windowsHide:true,env:{...process.env,GODSPEED_COACH_GIT_SYNC:'off',GODSPEED_JOURNAL_GIT_SYNC:'off'}}));process.exit(0);
 }else if(command==='assistant'&&verb==='profiles')result=assistantProfiles(store);
@@ -134,6 +154,7 @@ else if(command==='validate')result={problems:store.scan()&&store.problems};
 // checksum, offline after that (core/food-table.mjs).
 else if(command==='food-table'&&verb==='install')result=await (await import('../core/food-table.mjs')).installFoodTable(store.state,{force:rest.includes('--force')});
 else if(command==='food-table'&&verb==='status')result=(await import('../core/food-table.mjs')).tableStatus(store.state);
+else if(command==='health'&&verb==='import'){if(!rest[0])throw new Error('Name the folder of uploads to import: health import FOLDER');result=(await import('../core/phone-health.mjs')).importFolder(store,path.resolve(rest[0]));}
 else if(command==='menerio'&&verb==='chunks')result=(await import('../core/menerio-chunks.mjs')).importOrphanChunks(store,path.resolve(rest[0]));
 // Named paths: folder mode with those paths. None (what the installers run when they
 // join a computer to a mission control already on GitHub): joinRepository decides.
@@ -146,5 +167,5 @@ else if(command==='convert-notebook'){
   const {renamed=[],rewritten=[],problems,...summary}=outcome;
   result={...summary,renamed:renamed.length,rewritten:rewritten.length,...(problems?{problems}:{}),first_renames:renamed.slice(0,10).map(r=>r.from+' -> '+r.to),full_list:list};
 }
-else throw new Error('Commands: init, record list/get/save/merge/remove/display-name, memory search/lookup, world claim/event/close [--dry-run], backup FOLDER [--before-update], prune-backups FOLDER --made COPY [--keep 1], restore FOLDER [--repository PATH], import FILE, export [FILE], validate, sync folder [PATH...], menerio chunks ARCHIVE_SOURCE_DIR, convert-notebook [--dry-run]');
+else throw new Error('Commands: init, record list/get/save/merge/remove/display-name, memory search/lookup, world claim/event/close [--dry-run], backup FOLDER [--before-update], prune-backups FOLDER --made COPY [--keep 1], restore FOLDER [--repository PATH], import FILE, export [FILE], validate, update [--check] [--channel testing], sync folder [PATH...], health import FOLDER, menerio chunks ARCHIVE_SOURCE_DIR, convert-notebook [--dry-run]');
 console.log(JSON.stringify(result,null,2));

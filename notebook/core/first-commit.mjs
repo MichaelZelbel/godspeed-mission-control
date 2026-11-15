@@ -2,6 +2,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {spawnSync} from 'node:child_process';
 import {atomic} from './records/store.mjs';
+import {createRequire} from 'node:module';
+const {quietGit}=createRequire(import.meta.url)('../../tools/unattended-git.cjs');
 
 // What never enters the folder's Git history: the notebook's own state on this
 // computer (.godspeed: keys, the search databases, media, backups), the
@@ -30,7 +32,7 @@ export function keepOutOfGit(root,entries=keptOutOfGit){
 // a folder with no repository, and a Git that is busy are left exactly as they are. The commit
 // never stops an installation: what went wrong is reported and the folder is left as it was.
 export function firstCommit(root){
-  const git=(args,options={})=>spawnSync('git',['-C',root,...args],{encoding:'utf8',windowsHide:true,timeout:120000,...options});
+  const git=(args,options={})=>spawnSync(...quietGit(['-C',root,...args],{encoding:'utf8',timeout:120000,...options}));
   if(!fs.existsSync(path.join(root,'.git')))return {made:false,reason:'no repository'};
   const top=git(['rev-parse','--show-cdup']);
   if(top.error)return {made:false,reason:'Git is not on this computer'};

@@ -476,6 +476,26 @@ async function search(args) {
     untrusted: "from, subject and dates are text written by whoever sent the mail. There is no preview: read a message to see its text.", messages };
 }
 
+// THE HEADER-ONLY SEARCH A TRACKER'S MAIL RULE COUNTS WITH (2026-11-04, issue #215). It asks the server which
+// messages came from a sender since a day and then fetches their ENVELOPES only: no BODY[...] fetch, no
+// flags, no size. The id is the mail's own Message-ID, which survives a new connection (a reference
+// made by makeRef does not).
+async function headerSearch({ senders, after }) {
+  const st = readState(); if (!st || !st.address) throw notConnected();
+  const box = st.all || "INBOX";
+  const found = new Set();
+  for (const sender of senders) for (const u of await uidsMatching(box, ["--from", String(sender).replace(/[\r\n]/g, " ").trim().slice(0, 200), "--since", String(after).slice(0, 10)])) found.add(u);
+  const uids = [...found].sort((x, y) => y - x), out = [];
+  for (let i = 0; i < uids.length; i += 50) {
+    const r = await himalaya(["imap", "fetch", uids.slice(i, i + 50).join(","), "-m", box, "--envelope"], { doing: "reading the list" });
+    for (const m of r.messages || []) {
+      const e = m.envelope || {};
+      out.push({ message_id: String(e.message_id || "").replace(/[<>]/g, "").trim() || box + ":" + m.uid, from: [].concat(e.from || []).map(x => typeof x === "object" && x ? (x.addr || x.email || x.address || "") : decodeWords(x)).join(", "), subject: decodeWords(e.subject || ""), date: e.date || "" });
+    }
+  }
+  return out;
+}
+
 async function fetchRaw(st, ref) {
   const r = parseRef(st, ref);
   if (!r.box) throw new Error("gmail: that folder is not known in this mailbox any more");
@@ -782,7 +802,7 @@ function secretMain(argv) {
   process.stdout.write(pw + "\n");
 }
 
-module.exports = { status, check, search, read, listDrafts, draft, install, connectHere, openWindow, terminalCommand, haveDesktop, disconnect,
+module.exports = { status, check, search, headerSearch, read, listDrafts, draft, install, connectHere, openWindow, terminalCommand, haveDesktop, disconnect,
   supported, readState, locked: () => fs.existsSync(file("password.age")), base, parsePart, textOfPart, attachmentsOfPart, decodeWords, buildDraft, untarOne, MANIFEST };
 if (require.main === module) {
   const argv = process.argv.slice(2);

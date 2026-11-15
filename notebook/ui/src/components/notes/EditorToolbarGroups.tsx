@@ -105,6 +105,9 @@ export function HistoryGroup({ editor }: GroupProps) {
   );
 }
 
+/** Every label the block-type menu's trigger can show; the longest sets its width. */
+export const BLOCK_TYPE_LABELS = ["Normal text", "Heading 1", "Heading 2", "Heading 3"] as const;
+
 export function BlockTypeGroup({ editor }: GroupProps) {
   const currentHeading = editor.isActive("heading", { level: 1 })
     ? "Heading 1"
@@ -117,12 +120,29 @@ export function BlockTypeGroup({ editor }: GroupProps) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        {/* Fixed width so the toolbar's Priority+ math stays exact and the row
-            doesn't jitter when the caret moves between heading levels. */}
-        <Button variant="ghost" size="sm" className="h-7 w-28 justify-between gap-1 text-xs font-normal px-2">
-          <span className="flex items-center gap-1 truncate">
+        {/* The label is never cut (#553): every choice is laid in the same grid cell and only the
+            current one is visible, so the trigger is always as wide as the longest choice. Its width
+            does not change when the caret moves between heading levels, and it is at least the width
+            the toolbar's Priority+ math charges for it (BLOCK_TYPE_WIDTH in toolbarLayout.ts). */}
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 min-w-[120px] shrink-0 justify-between gap-1 text-xs font-normal px-1.5"
+          data-testid="block-type-trigger"
+        >
+          <span className="flex items-center gap-1 whitespace-nowrap">
             <Pilcrow className="h-3.5 w-3.5 shrink-0" />
-            {currentHeading}
+            <span className="grid whitespace-nowrap" data-testid="block-type-label">
+              {BLOCK_TYPE_LABELS.map((label) => (
+                <span
+                  key={label}
+                  className={label === currentHeading ? "col-start-1 row-start-1" : "invisible col-start-1 row-start-1"}
+                  aria-hidden={label === currentHeading ? undefined : true}
+                >
+                  {label}
+                </span>
+              ))}
+            </span>
           </span>
           <ChevronDown className="h-3 w-3 shrink-0" />
         </Button>

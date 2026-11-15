@@ -8,8 +8,10 @@ import {EventEmitter} from 'node:events';
 import {PassThrough} from 'node:stream';
 import {execFileSync,spawn} from 'node:child_process';
 import {addonModel,modelInput,modelConnection,assistantCheck} from '../core/addon-model.mjs';
+import {assistantConfiguration,recordRunningNotebook} from '../core/running-notebook.mjs';
 import {installModelCommand} from '../scripts/install-model-command.mjs';
 import {chooseAssistant} from '../scripts/choose-assistant.mjs';
+import {hermesPythons} from '../core/runtime.mjs';
 
 function fixture(t){
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-addons-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
@@ -19,6 +21,28 @@ function fixture(t){
  return {root,state,home,runtime};
 }
 const input={system:'Evaluate only this fictional profile.',prompt:'Invented person who likes sailing.'};
+test('assistant configuration follows the environment, Windows pointer, then workspace state',t=>{
+ const f=fixture(t),external=path.join(f.root,'external'),pointer=path.join(external,'pointer-assistant.json'),selected=path.join(external,'selected-assistant.json');fs.mkdirSync(external);fs.writeFileSync(pointer,'{}');fs.writeFileSync(selected,'{}');
+ recordRunningNotebook({root:f.root,assistantConfig:pointer,platform:'win32'});
+ assert.equal(assistantConfiguration(f.root,{env:{GODSPEED_ASSISTANT_CONFIG:selected}}).assistantFile,selected);
+ assert.equal(assistantConfiguration(f.root,{env:{}}).assistantFile,pointer);
+ fs.writeFileSync(path.join(f.state,'running-notebook.json'),JSON.stringify({format:1,assistantConfig:pointer,stateFolder:external,workspace:external}));
+ assert.equal(assistantConfiguration(f.root,{env:{}}).assistantFile,path.join(f.state,'assistant.json'));
+});
+test('an add-on uses the assistant state named by the Windows notebook pointer',t=>{
+ const f=fixture(t),external=path.join(f.root,'external'),runtime=path.join(external,'runtime'),home=path.join(external,'home'),config=path.join(external,'assistant.json');fs.mkdirSync(runtime,{recursive:true});fs.mkdirSync(home);fs.writeFileSync(path.join(runtime,'hermes'),'');fs.writeFileSync(path.join(runtime,'python3'),'');fs.writeFileSync(config,JSON.stringify({verified:true,executable:path.join(runtime,'hermes'),home,sourceRoot:runtime}));
+ recordRunningNotebook({root:f.root,assistantConfig:config,platform:'win32'});
+ const connection=modelConnection(f.root);assert.equal(connection.descriptor.executable,path.join(runtime,'hermes'));assert.equal(connection.state,external);
+});
+test('an add-on honors the selected assistant configuration over pointer and workspace state',t=>{
+ const f=fixture(t),assistant=state=>{
+  const runtime=path.join(state,'runtime'),home=path.join(state,'home'),config=path.join(state,'assistant.json'),descriptor={verified:true,executable:path.join(runtime,'hermes'),home,sourceRoot:runtime};
+  fs.mkdirSync(runtime,{recursive:true});fs.mkdirSync(home);fs.writeFileSync(path.join(runtime,'hermes'),'');fs.writeFileSync(path.join(runtime,'python3'),'');fs.writeFileSync(config,JSON.stringify(descriptor));return {config,descriptor};
+ },pointer=assistant(path.join(f.root,'pointer-state')),selected=assistant(path.join(f.root,'selected-state'));
+ recordRunningNotebook({root:f.root,assistantConfig:pointer.config,platform:'win32'});
+ const connection=modelConnection(f.root,{env:{GODSPEED_ASSISTANT_CONFIG:selected.config}});
+ assert.deepEqual(connection.descriptor,selected.descriptor);assert.equal(connection.state,path.dirname(selected.config));
+});
 test('the packaged server runtime uses its own virtual environment and source root',t=>{
  const f=fixture(t),bin=path.join(f.runtime,'bin'),venv=path.join(f.runtime,'.venv','bin');fs.mkdirSync(bin,{recursive:true});fs.mkdirSync(venv,{recursive:true});fs.writeFileSync(path.join(venv,'python3'),'');
  fs.writeFileSync(path.join(f.state,'assistant.json'),JSON.stringify({verified:true,home:f.home,executable:path.join(bin,'hermes')}));const connection=modelConnection(f.root);assert.equal(connection.python,path.join(venv,'python3'));assert.equal(connection.sourceRoot,f.runtime);
@@ -123,6 +147,14 @@ test('API-only Godspeed: the main address first, the backup address only when it
  mainUp=false;fs.unlinkSync(path.join(f.state,'provider-backup.json'));
  await assert.rejects(addonModel({root:f.root,input}),/HTTP 503/);assert.equal(backup.seen.length,1);
 });
+// #506: an address nothing listens on said only "fetch failed".
+test('API-only Godspeed: a main address nothing listens on is said in plain words',async t=>{
+ const f=fixture(t);fs.unlinkSync(path.join(f.state,'assistant.json'));
+ const closed=http.createServer();await new Promise(r=>closed.listen(0,'127.0.0.1',r));const port=closed.address().port;await new Promise(r=>closed.close(r));
+ fs.writeFileSync(path.join(f.state,'provider.json'),JSON.stringify({url:'http://127.0.0.1:'+port+'/v1/chat/completions',key:'main-key-test-only',model:'main-model'}));
+ const error=await addonModel({root:f.root,input}).then(()=>null,e=>e);
+ assert.match(error.message,new RegExp('The AI at 127\\.0\\.0\\.1:'+port+' could not be reached'));assert.doesNotMatch(error.message,/fetch failed/);
+});
 test('a Hermes installation reports the backup its helper used, and remembers the main one failing',async t=>{
  const f=fixture(t);
  const result=await addonModel({root:f.root,input,spawnProcess:fakeSpawn({text:'ok',provider:'openrouter',model:'backup-model',backup:true})});
@@ -210,6 +242,7 @@ test('the installer\'s check says whether Hermes loads, through its own Python o
  assert.deepEqual(await check({[f.managed]:described}),{loads:true,direct:true,configured:true,calls:[f.managed]});
  assert.deepEqual(await check({[f.managed]:notLoaded,[f.venv]:described}),{loads:true,direct:false,configured:true,calls:[f.managed,f.venv]});
  assert.deepEqual(await check({[f.managed]:unchosen}),{loads:true,direct:true,configured:false,calls:[f.managed]},'no model chosen yet is no broken Hermes');
+ assert.deepEqual(await addonModel({root:f.root,describe:true,spawnProcess:spawnBy({[f.managed]:unchosen},[])}),{configured:false},'an unconfigured Hermes is described without being treated as a broken connection');
  assert.deepEqual(await check({[f.managed]:notLoaded,[f.venv]:notLoaded}),{loads:false,why:'the Python module ruamel is missing',calls:[f.managed,f.venv]});
  const asked=[];await assistantCheck({root:f.root,executable:f.executable,home:f.home,spawnProcess:fakeSpawn(described[1],{onSpawn:c=>asked.push(c.input)})});
  assert.deepEqual(asked,[{describe:true}]);
@@ -264,6 +297,21 @@ test('a Hermes found that starts only through another Python gives way to one th
  assert.equal(same.chosen,f.found);assert.deepEqual(same.said,[]);
  const worse=await choose(f,{[f.found]:onlyThroughAnother,[f.earlier]:broken});
  assert.equal(worse.chosen,f.found);assert.equal(f.descriptor().executable,f.found);
+});
+
+test('a root launcher that reaches a dependency-less Python is replaced by a checked source-venv command',async t=>{
+ const f=installation(t,null),source=path.join(f.root,'opt','hermes-src'),put=(file,text='')=>{fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file,text);return file;},python=execFileSync('sh',['-c','command -v python3'],{encoding:'utf8'}).trim(),dependencies=path.join(source,'dependencies'),venv=path.join(source,'venv','bin','python3');
+ put(path.join(source,'hermes_cli','__init__.py'));put(path.join(source,'hermes_cli','config.py'),"import godspeed_test_missing_dependency\ndef load_config_readonly(): return {'model': {'provider': 'test-provider', 'default': 'test-model'}}\n");
+ put(path.join(source,'hermes_cli','runtime_provider.py'),'resolve_runtime_provider = _get_named_custom_provider = expand_direct_api_alias = None\n');put(path.join(source,'agent','__init__.py'));put(path.join(source,'agent','auxiliary_client.py'),'resolve_provider_client = _normalize_aux_provider = None\n');put(path.join(dependencies,'godspeed_test_missing_dependency.py'));
+ put(venv,'#!/bin/sh\nPYTHONPATH='+dependencies+':${PYTHONPATH:-} exec '+python+' "$@"\n');fs.chmodSync(venv,0o700);
+ const created=path.join(f.root,'routine-created');put(path.join(source,'hermes'),"import pathlib, sys\nif sys.argv[1:] == ['--version']:\n print('OpenAI SDK: installed')\nelif sys.argv[1:3] == ['cron', 'create']:\n pathlib.Path("+JSON.stringify(created)+").write_text('created')\nelse:\n raise SystemExit(1)\n");
+ const managed=put(path.join(source,'.hermes','tools','python-3.14','bin','python3'),'#!/bin/sh\nexec '+python+' "$@"\n');fs.chmodSync(managed,0o700);
+ const inner=put(path.join(source,'.hermes','bin','hermes'),"#!/bin/sh\nexec "+managed+" -I -c 'import sys\nsys.path.insert(0, '\"'\"'"+source+"'\"'\"')\nimport hermes_bootstrap\n' \"$@\"\n"),found=put(path.join(f.root,'root','.local','bin','hermes'),'#!/bin/sh\nexec '+inner+' "$@"\n');fs.chmodSync(inner,0o700);fs.chmodSync(found,0o700);
+ assert.equal(hermesPythons({executable:found,home:f.home}).source,source);
+ assert.deepEqual(await assistantCheck({root:f.root,executable:found,home:f.home}),{loads:true,direct:false,configured:true});
+ const chosen=await chooseAssistant({root:f.root,found,home:f.home});
+ assert.equal(chosen,path.join(f.root,'.godspeed','native-hermes','hermes'));assert.deepEqual(f.descriptor(),{verified:true,executable:chosen,home:f.home,sourceRoot:source});
+ assert.match(execFileSync(chosen,['--version'],{encoding:'utf8'}),/OpenAI SDK: installed/);execFileSync(chosen,['cron','create']);assert.equal(fs.readFileSync(created,'utf8'),'created');
 });
 
 test('when no Hermes loads, the installer says so plainly and goes on with the one found',async t=>{

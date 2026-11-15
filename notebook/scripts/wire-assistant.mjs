@@ -6,14 +6,15 @@ import {ApiKeys,ASSISTANT_KEY_NAME} from '../core/api-keys.mjs';
 import {installSkillTree} from '../core/packaged-skills.mjs';
 import {commandFile} from './windows-command-file.mjs';
 import {starterBorn} from '../core/starter-workspace.mjs';
-import {withTimezone,godspeedHermesSettings,setConfigValue,CRON_PROVIDER,backupQuickCommand,BACKUP_COMMAND} from '../core/hermes-config.mjs';
+import {withTimezone,godspeedHermesSettings,setConfigValue,readConfigValue,configList,CRON_PROVIDER,backupQuickCommand,BACKUP_COMMAND} from '../core/hermes-config.mjs';
 import {moveSavedSkills} from '../core/assistant-skills.mjs';
 import {personaOf} from '../core/persona.mjs';
 import {syncSoul,readExtra} from '../core/assistant-soul.mjs';
 import {installModelCommand} from './install-model-command.mjs';
 import {noteHermesMet} from '../core/starting-routines.mjs';
 import {keepOutOfGit} from '../core/first-commit.mjs';
-import {godspeedVoiceSettings,chatVoiceDefaults,ownerChats} from '../core/voice-replies.mjs';
+import {godspeedVoiceSettings,renewElevenLabsCommand,chatVoiceDefaults,ownerChats} from '../core/voice-replies.mjs';
+import {GODSPEED_PLUGINS,enabledGodspeedPlugins} from '../core/godspeed-plugins.mjs';
 const root=process.env.GODSPEED_WORKSPACE,home=process.argv[2];if(!root||!home)throw new Error("Set GODSPEED_WORKSPACE to your mission control folder and name your assistant's home folder");
 // The notebook is opened only where its records are needed (a starter-made mission control, or a
 // server's key): opening it reads every one of its files, and this runs at every install and every
@@ -27,7 +28,7 @@ const kit=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..');
 // integrated adapters below. Dependencies stay beside their original wrappers.
 const commandHome=path.join(home,'bin');
 fs.mkdirSync(commandHome,{recursive:true});
-installModelCommand({root,home});
+const modelCommand=installModelCommand({root,home});
 // Every Windows command file lives in commandHome; windows-command-file.mjs says why
 // the paths in it are written the way they are.
 const cmd=write=>commandFile(write,{folder:commandHome});
@@ -54,7 +55,8 @@ const rulesScript=path.join(kit,'tools/compile-rules.js');
 if(process.platform==='win32')atomic(path.join(commandHome,'mc-compile-rules.cmd'),cmd(at=>'"'+at(process.execPath)+'" "'+at(rulesScript)+'" --godspeed "'+at(root)+'" %*\r\n'));
 shellCommand(path.join(commandHome,'mc-compile-rules'),[process.execPath,rulesScript,'--godspeed',root]);
 // Developer assistants opened on this folder reach the same integrated memory.
-const mcpFile=path.join(root,'.mcp.json'),mcp=JSON.parse(fs.readFileSync(mcpFile,'utf8').replace(/^\uFEFF/,''));
+// A mission control without one (made by hand, or one that never had it) gets it written below (#530).
+const mcpFile=path.join(root,'.mcp.json'),mcp=fs.existsSync(mcpFile)?JSON.parse(fs.readFileSync(mcpFile,'utf8').replace(/^\uFEFF/,'')):{};
 mcp.mcpServers??={};
 // The shared .mcp.json names the standard address; a machine whose notebook
 // listens elsewhere says so in its own untracked settings. Until 6 October 2026
@@ -109,7 +111,21 @@ for(const command of (process.env.GODSPEED_ORIGINAL_RUNTIME==='on'?['mail','watc
  if(process.platform==='win32')atomic(bin+'.cmd',cmd(at=>'"'+at(process.execPath)+'" "'+at(script)+'" %* --godspeed "'+at(root)+'"\r\n'));
  shellCommand(bin,[process.execPath,script],' --godspeed '+quote(root));
 }
-const packagedSkills=[['coach','coach'],['journal','interstitial-journal'],['headache','headache-tracker']];
+// THE ONE WAY TO ASK FOR A YES (core/waiting-steps.mjs): routines, add-ons and the assistant open a
+// waiting step with `godspeed-step open`; the chat plugin below hands the owner's plain yes or no to it.
+{
+ const script=path.join(kit,'notebook','bin','godspeed-step.mjs'),bin=path.join(home,'bin','godspeed-step');
+ if(process.platform==='win32')atomic(bin+'.cmd',cmd(at=>'"'+at(process.execPath)+'" "'+at(script)+'" %* --godspeed "'+at(root)+'"\r\n'));
+ shellCommand(bin,[process.execPath,script],' --godspeed '+quote(root));
+}
+{
+ // The morning-brief recipe's command for "today's brief" in the chat (#193): the routine's own
+ // briefing, shown if today's is saved, else saved once.
+ const script=path.join(kit,'notebook/scripts/morning-brief.mjs'),bin=path.join(home,'bin','godspeed-brief');
+ if(process.platform==='win32')atomic(bin+'.cmd',cmd(at=>'"'+at(process.execPath)+'" "'+at(script)+'" --today %* --godspeed "'+at(root)+'"\r\n'));
+ shellCommand(bin,[process.execPath,script,'--today'],' --godspeed '+quote(root));
+}
+const packagedSkills=[['coach','coach'],['journal','interstitial-journal'],['headache','headache-tracker'],['charm','charm-challenge']];
 for(const [addon,skill] of packagedSkills){
  const source=path.join(kit,'third-party/addons/godspeed-'+addon);
  fs.cpSync(path.join(source,'hermes/plugin/godspeed-'+addon),path.join(home,'plugins/godspeed-'+addon),{recursive:true});
@@ -136,6 +152,26 @@ catch(error){console.error('The skills your assistant saved in its own folder we
 // scheduled job delivered is not part of the chat the assistant sees next.
 fs.cpSync(path.join(kit,'notebook','assistant-files','godspeed-context'),path.join(home,'plugins','godspeed-context'),{recursive:true,filter:source=>!/__pycache__/.test(source)});
 atomic(path.join(home,'plugins','godspeed-context','mission-control.txt'),root+'\n');
+atomic(path.join(home,'plugins','godspeed-context','step-command.txt'),JSON.stringify([process.execPath,path.join(kit,'notebook','bin','godspeed-step.mjs'),'--godspeed',root])+'\n');
+// THE SHARED YES/NO BUTTONS (assistant-files/godspeed-buttons, issue #197): a library, not a plugin
+// (it is not in plugins.enabled). Charm's slip question and the waiting-step questions use it, so
+// a button's owner check, its one-answer claim and its token live in one place.
+fs.cpSync(path.join(kit,'notebook','assistant-files','godspeed-buttons'),path.join(home,'plugins','godspeed-buttons'),{recursive:true,filter:source=>!/__pycache__/.test(source)});
+// THE ONE OUTGOING STEP (core: assistant-files/godspeed-reply, issue #140): Hermes keeps only the first
+// replacement any transform_llm_output callback returns, so this plugin is the one, and it runs the
+// steps other plugins add. Its first step has a reply go out in the language of the message it
+// answers; it asks the AI connected in Settings through the godspeed-model command written above.
+fs.cpSync(path.join(kit,'notebook','assistant-files','godspeed-reply'),path.join(home,'plugins','godspeed-reply'),{recursive:true,filter:source=>!/__pycache__/.test(source)});
+atomic(path.join(home,'plugins','godspeed-reply','mission-control.txt'),root+'\n');
+atomic(path.join(home,'plugins','godspeed-reply','model-command.txt'),modelCommand.command+'\n');
+// THE NIGHT CHAT TIDY-UP'S COMMAND (assistant-files/godspeed-chat-tidy): /godspeed-chat-tidy runs the
+// gateway's own /compress for the owner's chat, which the night routine dispatches.
+fs.cpSync(path.join(kit,'notebook','assistant-files','godspeed-chat-tidy'),path.join(home,'plugins','godspeed-chat-tidy'),{recursive:true,filter:source=>!/__pycache__/.test(source)});
+// THE CHAT GUARD (assistant-files/godspeed-chat-guard, issue #384): inside the gateway it restarts the
+// chat when the Hermes code under it changed, and a message it could not answer gets a plain sentence
+// and is saved under the mission control.
+fs.cpSync(path.join(kit,'notebook','assistant-files','godspeed-chat-guard'),path.join(home,'plugins','godspeed-chat-guard'),{recursive:true,filter:source=>!/__pycache__/.test(source)});
+atomic(path.join(home,'plugins','godspeed-chat-guard','mission-control.txt'),root+'\n');
 let text=fs.existsSync(file)?fs.readFileSync(file,'utf8').replace(/^\uFEFF/,''):`terminal:\n  cwd: ${JSON.stringify(root)}\nskills:\n  external_dirs: [${JSON.stringify(path.join(root,'skills'))}]\nmemory:\n  memory_enabled: false\n`;
 // WHERE A SKILL THE OWNER ASKS FOR IN A CHAT IS MADE. external_dirs above only lets Hermes read the
 // mission control's skills; it creates a new one in its own home unless skills.create_dir names
@@ -145,11 +181,10 @@ let text=fs.existsSync(file)?fs.readFileSync(file,'utf8').replace(/^\uFEFF/,''):
 // only when this file is made: an install that already had a config.yaml would never get it
 // otherwise, and an update runs this.
 text=setConfigValue(text,['skills','create_dir'],JSON.stringify(path.join(root,'skills')));
-if(!/^plugins:/m.test(text))text+='\nplugins:\n  enabled: ["godspeed-coach", "godspeed-journal", "godspeed-headache", "godspeed-context"]\n';
+if(!/^plugins:/m.test(text))text+='\nplugins:\n  enabled: ['+GODSPEED_PLUGINS.map(JSON.stringify).join(', ')+']\n';
 else{
  const block=text.match(/^plugins:[^\n]*\n(?:[ \t]+[^\n]*\n|\n)*/m)?.[0]||'';
- const disabled=block.match(/  disabled:\s*\[([^\]]*)\]/)?.[1]||'';
- const names=['godspeed-coach','godspeed-journal','godspeed-headache','godspeed-context'].filter(n=>!disabled.includes(n));
+ const names=enabledGodspeedPlugins(configList(readConfigValue(text,['plugins','disabled'])));
  let updated=block;
  if(/  enabled:\s*\[([^\]]*)\]/.test(block))updated=block.replace(/  enabled:\s*\[([^\]]*)\]/,(_m,old)=>'  enabled: ['+[old.trim(),...names.filter(n=>!old.includes(n)).map(n=>JSON.stringify(n))].filter(Boolean).join(', ')+']');
  else if(/^  enabled:\s*\n/m.test(block))updated=block.replace(/^  enabled:\s*\n((?:    - [^\n]*\n)*)/m,(_m,old)=>'  enabled:\n'+old+names.filter(n=>!old.includes(n)).map(n=>'    - '+JSON.stringify(n)+'\n').join(''));
@@ -198,18 +233,41 @@ if(process.env.GODSPEED_COMPUTER==='on'){
 // read "every weekday at seven" from the chat on the server's clock, usually UTC. Only for a
 // mission control made from the starter, and only where no zone was chosen yet.
 if(starterBorn(root))text=withTimezone(text,store.get('settings','installation')?.timezone);
+// The ElevenLabs voice chosen in Settings, in every mission control: its command names the speech
+// script of the version that was installed when it was chosen, and an update puts the script in a
+// new version folder and removes the old one, so the command is written again here with this
+// version's path (core/voice-replies.mjs says what went wrong without this). Settings writes that
+// command for an adopted mission control as much as for one made from the starter, so this one line
+// stands outside the starter's block below; a mission control with no ElevenLabs voice of Godspeed's
+// is left exactly as it is.
+text=renewElevenLabsCommand(text,{home,state:store.state});
+// The Hermes cron provider that records what a routine sent where the chat reads it, and certifies a delivery.
+function installDeliveryWrapper(){
+ const provider=path.join(home,'plugins',CRON_PROVIDER,'__init__.py'),source=fs.readFileSync(path.join(kit,'notebook','assistant-files','godspeed-cron-provider.py'),'utf8').replace(/\r\n/g,'\n');
+ if(!fs.existsSync(provider)||fs.readFileSync(provider,'utf8')!==source){fs.mkdirSync(path.dirname(provider),{recursive:true});atomic(provider,source);}
+ atomic(path.join(path.dirname(provider),'report.json'),JSON.stringify({node:process.execPath,script:path.join(kit,'notebook','scripts','background-report.mjs'),root})+'\n');
+}
 // What the assistant of a mission control made from the starter needs from Hermes, found by a live
 // run of the book's prompts on 9 October 2026 (hermes-config.mjs says why for each): no Hermes
 // memory beside the notebook, no clarify tool in a chat nobody can answer it in, the notebook's
 // tools offered directly, and a scheduler Hermes knows is running. An adopted mission control is
-// the owner's and keeps its assistant as it was.
+// the owner's and keeps its assistant as it was, except for the delivery wrapper (below).
 if(starterBorn(root)){
  text=godspeedHermesSettings(text);
  // The voice the assistant answers voice notes with (core/voice-replies.mjs): the multilingual free
- // voice, or the ElevenLabs voice chosen in Settings with its command where this version keeps it.
+ // voice where nobody chose one. An ElevenLabs voice was renewed above already, for every mission
+ // control, and this writes the same command again without changing anything.
  text=godspeedVoiceSettings(text,{home,state:store.state});
- const provider=path.join(home,'plugins',CRON_PROVIDER,'__init__.py'),source=fs.readFileSync(path.join(kit,'notebook','assistant-files','godspeed-cron-provider.py'),'utf8').replace(/\r\n/g,'\n');
- if(!fs.existsSync(provider)||fs.readFileSync(provider,'utf8')!==source){fs.mkdirSync(path.dirname(provider),{recursive:true});atomic(provider,source);}
+ installDeliveryWrapper();
+}
+else{
+ // The notice sender and the delivery wrapper reach every install (#225, 4 November 2026): what the
+ // sender says, and the chat's record of what was sent, need the wrapper on an adopted mission control
+ // too. Only the wrapper is written, and a scheduler the owner chose stays.
+ installDeliveryWrapper();
+ const provider=String(readConfigValue(text,['cron','provider'])??'').replace(/^["']|["']$/g,'');
+ if(!provider||provider===CRON_PROVIDER)text=setConfigValue(text,['cron','provider'],CRON_PROVIDER);
+ else console.error('Godspeed\'s delivery wrapper is not active: this assistant already uses the "'+provider+'" scheduler (cron.provider), so a waiting step\'s plain yes cannot reach it.');
 }
 // /backupai in Telegram on the one-click server, where its Telegram runner hands the chat to the
 // backup AI setup (hermes-config.mjs, core/backup-ai.mjs); on every other installation a backup AI
@@ -221,6 +279,21 @@ if(starterBorn(root)){
  if(runner)atomic(marker,'/'+BACKUP_COMMAND+'\n');else fs.rmSync(marker,{force:true});
 }
 atomic(file,text);fs.chmodSync(file,0o600);
+// A SECOND TRANSFORMER CAN CANCEL THE FIRST: Hermes keeps only the first reply any plugin returns, in
+// plugin load order. So one line names every other enabled plugin that registers its own
+// transform_llm_output; it should add a step to godspeed-reply instead (godspeed_reply_steps_v1,
+// documented in the plugin). godspeed-charm and godspeed-coach register one but hand their reply to
+// the steps (they call the output bus godspeed-reply takes), so they are not named.
+try{
+ const composing=['godspeed-reply','godspeed-charm','godspeed-coach'];
+ const registers=name=>{
+  const dir=path.join(home,'plugins',name),files=[];
+  try{for(const entry of fs.readdirSync(dir,{withFileTypes:true}))if(entry.isFile()&&entry.name.endsWith('.py'))files.push(path.join(dir,entry.name));}catch{return false;}
+  return files.some(f=>/register_hook\(\s*["']transform_llm_output["']/.test(fs.readFileSync(f,'utf8')));
+ };
+ const others=configList(readConfigValue(text,['plugins','enabled'])||'[]').map(n=>n.replace(/^["']|["']$/g,'')).filter(n=>n&&!composing.includes(n)&&registers(n));
+ if(others.length)console.error('Other plugins register their own transform_llm_output, so only one of them can change a reply and Godspeed\'s language check (godspeed-reply) can be cancelled: '+others.join(', ')+'. Each should add a step to godspeed-reply instead (godspeed_reply_steps_v1).');
+}catch(error){console.error('The enabled plugins were not checked for a second reply transformer: '+error.message);}
 // A voice note in the owner's Telegram chat is answered with a voice note and the text, by default and
 // only there (core/voice-replies.mjs says why not through voice.auto_tts); a chat's own choice stays.
 // The gateway reads it when it starts next.

@@ -42,6 +42,7 @@ export const DEFAULT_FIELDS = Object.freeze([
   {name: 'topic-of-interest', one: false, says: 'a topic someone is interested in', aliases: ['interest', 'interests', 'topics-of-interest']},
   {name: 'email', one: false, says: 'an email address', aliases: ['email-address', 'e-mail']},
   {name: 'phone', one: false, says: 'a phone number', aliases: ['phone-number', 'mobile', 'telephone']},
+  {name: 'doctor', one: false, says: 'a doctor someone goes to, named as the value', aliases: ['physician', 'family-doctor', 'gp', 'hausarzt']},
   {name: 'website', one: false, says: 'a website someone runs or owns', aliases: ['personal-website', 'homepage', 'web-site']},
 ].map(f => Object.freeze({...f, aliases: Object.freeze(f.aliases)})));
 

@@ -39,6 +39,7 @@ P="\$*"; [ -t 0 ] || P="\$P \$(cat)"
 GOAL="\$(printf '%s' "\$P" | sed -n 's/.*Goal: \([a-z0-9-]*\)\. Mode.*/\1/p' | head -1)"
 DAY="\$(printf '%s' "\$P" | sed -n 's/.*Today is \([0-9-]*\) (UTC).*/\1/p' | head -1)"
 echo "\$GOAL" >> "$TMP/ran"
+printf '%s\n' "\$P" > "$TMP/prompt-\$GOAL"
 [ -f "$G/goals/research/\$GOAL/days/\$DAY.gap.md" ] && echo "\$GOAL" >> "$TMP/gap-during"
 grep -qx "\$GOAL" "$TMP/fail-these" 2>/dev/null && { echo "crashed"; exit 1; }
 R="$G/goals/research/\$GOAL"
@@ -281,6 +282,25 @@ check "  the same budget fits when the checks read no pages" "$?" "0"
 # Claude Code does (checked with real runs, see mc-run's anchor_rules): //x is the absolute x, ~/x
 # the home's, /x the folder it started in, x the folder it is in now. Its first act is that cd.
 # Then it saves a whole night and tries files outside goals/research/ and ideas/.
+echo "-- the area's open questions reach the goal's prompt"
+export GODSPEED_TODAY=2026-10-20
+hg file --kind outcome --title "Longevity" --id longevity --area health --status adopted --source x >/dev/null
+hg file --kind outcome --title "Reading" --id reading --area health --status adopted --source x >/dev/null
+mkdir -p "$G/coach/health/questions" "$G/coach/past/questions" "$G/coach/other"
+printf 'AREA: health\nTITLE: Health\nRHYTHM: weekly sunday\nSERVES: longevity\nSOURCE: Peter Attia, The Drive\nSOURCE: r/Fitness (community: leads only)\n\n## Preparation\nx\n' > "$G/coach/health/area.md"
+printf 'AREA: past\nTITLE: Past\nRHYTHM: weekly sunday\nSERVES: reading\n\n## Preparation\nx\n' > "$G/coach/past/area.md"
+printf 'AREA: other\nTITLE: Other\nRHYTHM: weekly sunday\nSERVES: nothing-here\n\n## Preparation\nx\n' > "$G/coach/other/area.md"
+printf 'QUESTIONS: health\nFOR: 2026-10-25\n\n- Is zone 2 worth it?\n  WHY: asked\n  ORIGIN: asked\n' > "$G/coach/health/questions/2026-10-25.md"
+printf 'QUESTIONS: past\nFOR: 2026-10-10\n\n- Old question\n  WHY: old\n  ORIGIN: asked\n' > "$G/coach/past/questions/2026-10-10.md"
+rm -f "$TMP/prompt-longevity" "$TMP/prompt-reading"
+OUT="$(HOME="$TMP/home" PATH="$B:$PATH" GODSPEED_RUNNER=claude bash "$HERE/mc-research" --godspeed "$G" --date 2026-10-20 --only longevity 2>&1)"
+contains "a goal served by an area with open questions gets the file in its prompt" "$(cat "$TMP/prompt-longevity" 2>/dev/null)" "coach/health/questions/2026-10-25.md"
+contains "  and the area's sources" "$(cat "$TMP/prompt-longevity" 2>/dev/null)" "Peter Attia, The Drive; r/Fitness"
+contains "  and the recipe section it follows" "$(cat "$TMP/prompt-longevity" 2>/dev/null)" "Follow the recipe's section \"Live questions\""
+OUT="$(HOME="$TMP/home" PATH="$B:$PATH" GODSPEED_RUNNER=claude bash "$HERE/mc-research" --godspeed "$G" --date 2026-10-20 --only reading 2>&1)"
+missing "a goal whose area's questions are for a talk already past gets nothing" "$(cat "$TMP/prompt-reading" 2>/dev/null)" "The coach area"
+missing "  the prompt is the plain one" "$(cat "$TMP/prompt-reading" 2>/dev/null)" "coach/past"
+
 echo "-- a night that moves into its goal's folder first"
 export GODSPEED_TODAY=2026-10-23
 G3="$TMP/mission control three"; B3="$TMP/bin3"; mkdir -p "$G3/rules" "$G3/skills/goal-research" "$G3/ideas" "$G3/routines" "$B3"

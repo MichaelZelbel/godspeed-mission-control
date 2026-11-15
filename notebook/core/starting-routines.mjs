@@ -8,14 +8,17 @@ import {addArea,findArea,listAreas,rhythmWords,nextTalkDay} from '../../third-pa
 import {loadSettings as coachSettings,saveSettings as saveCoach} from '../../third-party/addons/godspeed-coach/lib/settings.mjs';
 import {localParts,addDays,zonedToUtc} from '../../third-party/addons/godspeed-coach/lib/clock.mjs';
 import {TALK_PROMPT,NOTEBOOK_TALK_JOB,NOTEBOOK_TICK_JOB,TALK_JOB,TICK_JOB} from '../../third-party/addons/godspeed-coach/lib/setup.mjs';
-import {JOURNAL_JOB,JOURNAL_SCRIPT,CHAT_TIDY_JOB,CHAT_TIDY_SCRIPT} from './notebook-routines.mjs';
+import {SWITCHABLE_NOTEBOOK_ROUTINES,CHAT_TIDY_JOB,CHAT_TIDY_SCRIPT,BRIEF_JOB,BRIEF_SCRIPT,NOTICES_JOB,NOTICES_SCRIPT} from './notebook-routines.mjs';
+import {CONNECTION_NOTICE_PREFIX} from './connection-names.mjs';
 import {NOTICES_FILE} from './notices.mjs';
 import {hermesPython} from './runtime.mjs';
+import {adoptedMissionControl} from './starter-workspace.mjs';
 
 // The routines a reader's first goal starts (Teach It Once, Chapters 3, 5, 8, 24, 25 and 30): the
 // nightly goal research, the daily round (two routines: one chooses the day's work, one does it),
 // deadline reminders, a weekly check-in with the coach's reminders, and since 18 October 2026 the
-// preparation of each coaching talk the night before it: seven routines in all. Until 8 October 2026
+// preparation of each coaching talk the night before it, and since 7 November 2026 (#286) the nightly
+// "Remember what you said": eight routines in all. Until 8 October 2026
 // the first goal started nothing with the original assistant: setup filed the goal and saved the
 // clock, and the book's routines never ran unless a reader built them by hand.
 //
@@ -45,6 +48,10 @@ export const STARTING_ROUTINES=[
  // control that already had its routines gets it once, when it has the coach-prep recipe
  // (NativeScheduler.addNewStartingRoutines).
  {key:'coach-prep',name:'Coaching talk preparation',schedule:'0 3 * * *',script:'godspeed-coach-prep.py',needs:'coach-prep',what:'Every night at 03:00 it prepares each coaching talk of the next day, such as your weekly check-in: it reads your goal and its research, what changed and what you said, and writes the opening of the talk and the notes it carries. It contacts nobody and says nothing; the talk opens with what it prepared.'},
+ {key:'memory-daily',name:'Remember what you said',schedule:'40 3 * * *',script:'godspeed-remember-what-you-said.py',what:'Every night at 03:40 it turns qualifying things you typed into dated, quote-backed facts and events. It uses only your connected AI, says nothing, and you can pause it in Settings > Routines.'},
+ // Since 5 November 2026 (#238): every install clears out the assistant's and the routines' own old
+ // working files at night (core/cleanup.mjs), after the nightly research (00:15, up to two hours).
+ {key:'cleanup',name:'Nightly cleanup',schedule:'45 2 * * *',script:'godspeed-nightly-cleanup.py',what:'Every night at 02:45 it removes the assistant\'s old request dumps and session transcripts, and the old run files of your routines, once they have not been touched for 30 days. It touches nothing else, says nothing, and logs what it freed.'},
 ];
 
 // This machine's own record of the starting routines in its Hermes, beside the notebook's other
@@ -71,7 +78,8 @@ export function writeMachineRecord(store,record){atomic(machineFile(store),JSON.
 //  - and, with no folder, it was there before this mission control came to this machine (metAt
 //    below): a reminder asked for in this mission control's chat was made after that. A job with no
 //    date counts, since nothing says it is new.
-// starterBorn() still keeps every routine away from an adopted mission control, whatever its Hermes has.
+// starterBorn() still keeps the starting routines away from an adopted mission control, whatever its Hermes has;
+// since #225 it gets the notice sender, and each routine only when switched on (routine-switches.mjs).
 export const OWN_ROUTINES_RULE=2;
 const samePlace=(a,b)=>{const real=p=>{try{return fs.realpathSync(p);}catch{return path.resolve(p);}},n=p=>real(String(p)).replace(/[\\/]+$/,'');return process.platform==='win32'?n(a).toLowerCase()===n(b).toLowerCase():n(a)===n(b);};
 export function ownRoutines(jobs,{root,since}){
@@ -135,16 +143,15 @@ export function telegramInHermes(home){try{return /^\s*TELEGRAM_BOT_TOKEN\s*=\s*
 // The assistant's own terminal and desktop app are routed the same way, as agent:main:local:dm:<id>,
 // and are no chat app: until 27 October 2026 one conversation in the terminal counted as one
 // (godspeed_routines.py, CHAT_KEY, says what that did to the routine).
-// Since 27 October 2026 the night chat tidy-up is made for no install (notebook-routines.mjs), so
-// nothing asks this until the release that brings it back.
-export const OWNER_CHAT_KEY_LIKE='agent:main:%:dm:%',OWN_SURFACES_LIKE='agent:main:local:%';
+// The assistant's own surfaces and its non-chat entry points (cli, tui, cron, webhook, api_server) are no chat app; the same six are refused by godspeed_routines.py and the godspeed-chat-tidy plugin.
+export const OWNER_CHAT_KEY_LIKE='agent:main:%:dm:%',OWNER_CHAT_KEY=/^agent:main:(?!(?:local|cli|tui|cron|webhook|api_server):)[^:]+:dm:.+$/;
 export function routedOwnerChats(home){
  const file=path.join(home,'state.db');if(!fs.existsSync(file))return [];
  let db;
  try{
   db=new DatabaseSync(file,{readOnly:true});
-  return db.prepare('select session_key from gateway_routing where scope = ? and session_key like ? and session_key not like ?')
-   .all(path.join(home,'sessions'),OWNER_CHAT_KEY_LIKE,OWN_SURFACES_LIKE).map(row=>row.session_key);
+  return db.prepare('select session_key from gateway_routing where scope = ? and session_key like ?')
+   .all(path.join(home,'sessions'),OWNER_CHAT_KEY_LIKE).map(row=>row.session_key).filter(key=>OWNER_CHAT_KEY.test(key));
  }catch{return [];}finally{try{db?.close();}catch{}}
 }
 export function chatAppInHermes(home){return telegramInHermes(home)||routedOwnerChats(home).length>0;}
@@ -168,12 +175,12 @@ function hermesRuntime({home,state,hermes}){
 }
 
 // Hermes runs only scripts in its own scripts folder, with its own Python on every system.
-export function routineFiles({root,home,state,timezone,node=process.execPath,hermes=null}){
+export function routineFiles({root,home,state,timezone,node=process.execPath,hermes=null,workouts=path.join(kit,'third-party','addons','godspeed-workouts','bin','godspeed-workouts.mjs'),workoutsNotebook=null}){
  // tools: the kit's own programs (mc-decide, mc-work-run, due.js), run where they are; bin: the
  // assistant's command folder, first on the path for the recipes they run.
- const config={root,home,bin:path.join(home,'bin'),tools:path.join(kit,'tools'),node,hermes:hermes&&path.isAbsolute(hermes)?hermes:null,...hermesRuntime({home,state,hermes}),coach:path.join(kit,'third-party','addons','godspeed-coach','bin','godspeed-coach.mjs'),coach_app:path.join(state,'coach-app'),journal:path.join(kit,'third-party','addons','godspeed-journal','bin','godspeed-journal.mjs'),journal_app:path.join(state,'journal-app'),notices:path.join(state,NOTICES_FILE),timezone};
+ const config={root,home,bin:path.join(home,'bin'),tools:path.join(kit,'tools'),node,hermes:hermes&&path.isAbsolute(hermes)?hermes:null,...hermesRuntime({home,state,hermes}),brief:path.join(kit,'notebook','scripts','morning-brief.mjs'),reports:path.join(kit,'notebook','scripts','background-report.mjs'),connection_check:path.join(kit,'notebook','scripts','connection-check.mjs'),mail_count:path.join(kit,'notebook','scripts','mail-count.mjs'),memory_daily:path.join(kit,'notebook','scripts','memory-daily.mjs'),connection_notice_prefix:CONNECTION_NOTICE_PREFIX,cleanup:path.join(kit,'notebook','scripts','nightly-cleanup.mjs'),coach:path.join(kit,'third-party','addons','godspeed-coach','bin','godspeed-coach.mjs'),coach_app:path.join(state,'coach-app'),journal:path.join(kit,'third-party','addons','godspeed-journal','bin','godspeed-journal.mjs'),journal_app:path.join(state,'journal-app'),workouts,workouts_notebook:workoutsNotebook,notices:path.join(state,NOTICES_FILE),adopted:adoptedMissionControl(root),timezone};
  const files={'godspeed_routines.py':fs.readFileSync(runner,'utf8').replace(/\r\n/g,'\n'),'godspeed-routines.json':JSON.stringify(config,null,2)+'\n'};
- for(const routine of [...STARTING_ROUTINES,{key:'journal-tick',name:JOURNAL_JOB,script:JOURNAL_SCRIPT},{key:'chat-tidy',name:CHAT_TIDY_JOB,script:CHAT_TIDY_SCRIPT}])files[routine.script]='# Written by the Godspeed Mission Control notebook for the routine "'+routine.name+'".\n# The notebook writes it again when its own folders change; the work is in godspeed_routines.py.\nfrom godspeed_routines import main\n\nmain('+JSON.stringify(routine.key)+')\n';
+ for(const routine of [...STARTING_ROUTINES,...SWITCHABLE_NOTEBOOK_ROUTINES,{key:'chat-tidy',name:CHAT_TIDY_JOB,script:CHAT_TIDY_SCRIPT},{key:'brief',name:BRIEF_JOB,script:BRIEF_SCRIPT},{key:'notices',name:NOTICES_JOB,script:NOTICES_SCRIPT}])files[routine.script]='# Written by the Godspeed Mission Control notebook for the routine "'+routine.name+'".\n# The notebook writes it again when its own folders change; the work is in godspeed_routines.py.\nfrom godspeed_routines import main\n\nmain('+JSON.stringify(routine.key)+')\n';
  return files;
 }
 export function writeRoutineFiles(home,files){
@@ -200,7 +207,7 @@ export function prepareCheckIn(root,{timezone,delivery,goal,now=new Date()}){
 // {rhythm, next_talk} for those two jobs, {} for any other.
 export function coachRoutineTimes(job,root,{now=new Date()}={}){
  const name=String(job.title||''),every=/^\*\/(\d+) \* \* \* \*$/.exec(String(job.schedule||'').trim());
- if(name===NOTEBOOK_TICK_JOB||name===TICK_JOB)return every?{rhythm:'Checks every '+every[1]+' minutes for a due reminder or habit question.'}:{};
+ if(name===NOTEBOOK_TICK_JOB||name===TICK_JOB)return every?{rhythm:'Checks every '+(Number(every[1])===1?'minute':every[1]+' minutes')+' for a due reminder or habit question.'}:{};
  if(name!==NOTEBOOK_TALK_JOB&&name!==TALK_JOB)return {};
  let areas=[];try{areas=listAreas(root).filter(a=>a.on&&a.rhythm);}catch{}
  if(!areas.length)return {};
@@ -246,14 +253,15 @@ export function finalReply(text){
 // A daily-round routine that went wrong prints its one sentence for the person like any other line
 // (godspeed_routines.py, tell), so Hermes records the run as having worked. Its own record beside
 // Hermes' says it failed, and Settings > Routines says so: {last_status, last_error} for the row
-// of that run, {} otherwise. Only the record written by that very run counts.
+// of that run, with its consecutive-failure count for the daily connection check, {} otherwise.
+// Only the record written by that very run counts.
 export const ROUTINE_STATUS='godspeed-routines-status.json';
 export function routineStatus(home,job){
  const routine=STARTING_ROUTINES.find(r=>r.script===job?.script);if(!routine||!job.last_run_at)return {};
  let status;try{status=JSON.parse(fs.readFileSync(path.join(home,ROUTINE_STATUS),'utf8'))?.[routine.key];}catch{return {};}
  const ran=Date.parse(job.last_run_at),at=Date.parse(status?.at);
  if(!status?.failed||!Number.isFinite(ran)||!Number.isFinite(at)||Math.abs(ran-at)>10*60000)return {};
- return {last_status:'error',last_error:String(status.failed).slice(0,500)};
+ return {last_status:'error',last_error:String(status.failed).slice(0,500),failure_streak:Number.isInteger(status.failure_streak)&&status.failure_streak>0?status.failure_streak:0};
 }
 const runWords=(day,time)=>new Intl.DateTimeFormat('en-GB',{day:'numeric',month:'long',year:'numeric',timeZone:'UTC'}).format(new Date(day+'T00:00:00Z'))+', '+time.slice(0,5).replace('-',':');
 
@@ -279,6 +287,9 @@ export function saveRoutineResults(store,{home,jobs,messenger=false,now=Date.now
  const before=started?'':JSON.stringify(progress),since=Date.parse(progress.since),saved=[];
  for(const job of jobs){
   if(!job?.id||!/^[A-Za-z0-9_-]+$/.test(job.id)||!reachesNobody(job,{messenger}))continue;
+  // The Morning brief keeps its own note, "Your morning briefing" (scripts/morning-brief.mjs, #160):
+  // what its run printed is that note's text, and a second copy here would show it twice.
+  if(job.script===BRIEF_SCRIPT)continue;
   const folder=path.join(home,'cron','output',job.id);if(!fs.existsSync(folder))continue;
   for(const name of fs.readdirSync(folder).filter(n=>/^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}\.md$/.test(n)).sort()){
    if(progress.jobs[job.id]&&name<=progress.jobs[job.id])continue;

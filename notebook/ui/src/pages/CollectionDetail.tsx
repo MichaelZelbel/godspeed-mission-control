@@ -119,6 +119,7 @@ import {
   duplicateItemData,
   mergeItemData,
 } from "@/components/collections/collectionItemData";
+import { personLabel } from "@/components/timeline/people";
 
 type Collection = Database["public"]["Tables"]["collections"]["Row"];
 type CollectionItem = Database["public"]["Tables"]["collection_items"]["Row"];
@@ -980,7 +981,7 @@ function LinkPicker({
           setResults(
             (data ?? []).map((person) => ({
               id: person.id,
-              label: person.name,
+              label: personLabel(person),
             })),
           );
       } else if (

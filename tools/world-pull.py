@@ -14,6 +14,13 @@ A file with no origin line at all is treated as origin: godspeed, because the tw
 files that existed before this script have no origin line and losing one of them
 is worse than keeping a stale copy.
 
+Every moment it writes is a life event and nothing else: render_event below writes
+the day, who was there and where it came from, and never a line that closes one of
+the owner's deadlines. Since 30 October 2026 a deadline is a page in the notebook and
+closing one is a moment on the notebook's timeline, written by `godspeed due done`
+with the evidence; this script neither writes nor reads one. Its own events stay
+files in the world folder.
+
 Usage:
     python3 scripts/world_pull.py                      # dry run, prints the plan
     python3 scripts/world_pull.py --apply              # write the files
@@ -27,12 +34,23 @@ import json
 import os
 import pathlib
 import re
+import shutil
 import subprocess
 import sys
 import urllib.error
 import urllib.request
 
 DEFAULT_BASE_URL = "https://tjeapelvjlmbxafsmjef.supabase.co/functions/v1"
+
+def unattended_git():
+    """The command that runs git without any chance of a sign-in window (tools/unattended-git.cjs)."""
+    node = shutil.which("node")
+    helper = pathlib.Path(__file__).resolve().parent / "unattended-git.cjs"
+    if node and helper.is_file():
+        return [node, str(helper)]
+    # Plain git, without unattended-git.cjs: these commands are local and read no credential, so no window can open.
+    return ["git"]
+
 
 GODSPEED = "godspeed"
 MENERIO = "menerio"
@@ -747,7 +765,7 @@ def save_to_history(root, plan):
         return False
 
     def git(*args, data=None):
-        return subprocess.run(["git", "-C", str(root)] + list(args), input=data,
+        return subprocess.run(unattended_git() + ["-C", str(root)] + list(args), input=data,
                               stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=120)
 
     try:

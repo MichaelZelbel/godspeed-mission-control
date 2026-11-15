@@ -5,11 +5,40 @@
 //   1. Every other check run on the head commit passed. The latest run per check name counts;
 //      runs named `required` (this gate itself) and runs that were `skipped` are left out; runs
 //      still queued or in progress are waited for.
-//   2. On a pull request, the latest review of the head commit from each login listed in the
-//      repository variable REQUIRED_REVIEWERS is read: at least one of those latest reviews must
-//      be an approval, and none of them may ask for changes. "Latest" means the latest review of
-//      any kind, so a later comment leaves a login with no approval standing. A push to main or a
-//      manual run needs no review.
+//   2. On a pull request, a review of the head commit, in one of three ways, unless the pull
+//      request is the factory builder's (see below):
+//      a. the latest review of the head commit from each login listed in the repository variable
+//         REQUIRED_REVIEWERS is read: at least one of those latest reviews must be an approval, and
+//         none of them may ask for changes. "Latest" means the latest review of any kind, so a later
+//         comment leaves a login with no approval standing (the release step's own pull requests);
+//      b. or Archon's review verdict, trusted exactly as Archon's merge queue trusts it (coleam00/Archon
+//         v0.13.2, .archon/workflows/sdlc/.shared/merge.ts `trustedReview` and review-comment.ts
+//         `readReviewStamp`): the one comment on the pull request whose first line is the marker
+//         `<!-- archon-review-report -->` and whose author is a login listed in
+//         .archon/sdlc/policy/maintainers.json on the default branch; two such comments count as none;
+//         its stamp must say "Verdict: ready" for exactly the head commit. Nothing more is checked
+//         than Archon checks (godspeed-dev process.md, section 12, says why);
+//      c. or the loop review of Cole Medin's AI software factory, trusted no more than (b): among the
+//         conversation comments whose body starts with `Loop review:` and whose author is a login in
+//         the same maintainers.json, the newest one counts. It approves the head commit only when its
+//         decision is `approved` or `merging` and it names the exact commit it reviewed
+//         ("Reviewed head `<full 40-hex sha>`"), which must be the head commit. A comment that names
+//         no head, a short or malformed one, or another commit approves nothing. No commit or comment
+//         date is read, because a commit's date can be set to anything. A newer `sent back`, `needs owner` or
+//         `not merged` comment means no approval. Like (b), it is tried when no listed reviewer's
+//         approval stands, so it also passes beside a listed reviewer's request for changes.
+//      A push to main or a manual run needs no review.
+//
+//   A pull request of Cole Medin's AI software factory needs no review comment either: when its
+//   author is the factory's builder App (FACTORY_BUILDER below, `godspeed-dev-builder[bot]`) and its
+//   branch lives in this repository (not a fork), condition 1 alone decides. In Cole's design the
+//   review and the merge decision happen inside his `archon-loop` workflow: the reviewer gives its
+//   verdict and the loop's land step (.archon/workflows/sdlc/loop/scripts/land.ts) merges with
+//   `gh pr merge --squash --match-head-commit <sha>` seconds later, and only the builder App's own
+//   workflow merges such a pull request. A `required` that also waited for a comment could never be
+//   green when land asks to merge, and land's own `Loop review: not merged` would then turn it red for
+//   good. So for these pull requests no review, verdict or loop comment is read at all. Every other
+//   pull request (a person's, another App's, one from a fork) keeps the three ways above exactly.
 //
 // Everything below the environment is a plain function over data, and the waiting takes its
 // clock, its sleeping and its reading of the checks as arguments. That is what lets `--self-test`
@@ -162,6 +191,102 @@ export function reviewVerdict({
 }
 
 // ---------------------------------------------------------------------------
+// Archon's review verdict: the same rule as Archon's merge queue, nothing added
+// ---------------------------------------------------------------------------
+
+export const REVIEW_MARKER = "<!-- archon-review-report -->";
+
+// Archon's readReviewStamp: the marker on the first line, the reviewed commit on the second, the
+// verdict on the third. Null when the body is not a review comment.
+export function readReviewStamp(body) {
+  const lines = String(body ?? "").split(/\r?\n/);
+  if (lines[0] !== REVIEW_MARKER) return null;
+  const reviewed = /^Reviewed commit: `([0-9a-f]{7,64})`$/.exec(lines[1] ?? "")?.[1];
+  if (reviewed === undefined) return null;
+  const verdict = /^Verdict: (ready|not ready)$/.exec(lines[2] ?? "")?.[1];
+  return { reviewed, ready: verdict === undefined ? null : verdict === "ready" };
+}
+
+// Archon's parseMaintainerList: a JSON array of logins, or of { login, merge_queue? } entries;
+// anything else refuses (and so the gate fails, as Archon's queue does).
+export function parseMaintainers(text) {
+  let parsed;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    throw new Error(".archon/sdlc/policy/maintainers.json is not valid JSON");
+  }
+  const invalid = ".archon/sdlc/policy/maintainers.json must be a JSON array of forge logins or { \"login\", \"merge_queue\"? } entries";
+  if (!Array.isArray(parsed)) throw new Error(invalid);
+  return new Set(
+    parsed.map((entry) => {
+      if (typeof entry === "string" && entry.trim() !== "") return entry.trim().toLowerCase();
+      const login = entry && typeof entry === "object" ? entry.login : undefined;
+      const mergeQueue = entry && typeof entry === "object" ? entry.merge_queue : undefined;
+      if (typeof login !== "string" || login.trim() === "" || !(mergeQueue === undefined || mergeQueue === "own-prs")) {
+        throw new Error(invalid);
+      }
+      return login.trim().toLowerCase();
+    }),
+  );
+}
+
+// Archon's trustedReview, then its gate's two refusals: the verdict is not Ready, or it is for
+// another commit. comments: [{ body, user: { login } }]; maintainers: a Set of lower-cased logins.
+export function archonVerdict({ comments = [], maintainers = new Set(), headSha }) {
+  const trusted = comments.filter((comment) => {
+    const login = comment?.user?.login;
+    return readReviewStamp(comment?.body) !== null && typeof login === "string" && login !== "" && maintainers.has(login.toLowerCase());
+  });
+  if (trusted.length === 0) return { ok: false, line: "Archon's review verdict: none (no marked comment from a login in .archon/sdlc/policy/maintainers.json)" };
+  if (trusted.length > 1) return { ok: false, line: `Archon's review verdict: duplicate (${trusted.length} marked comments from listed logins, so none counts)` };
+  const stamp = readReviewStamp(trusted[0].body);
+  const by = trusted[0].user.login;
+  if (stamp.ready === null) return { ok: false, line: `Archon's review verdict from ${by} is unstamped` };
+  if (!stamp.ready) return { ok: false, line: `Archon's review verdict from ${by} is not ready` };
+  if (stamp.reviewed !== headSha) return { ok: false, line: `Archon's review verdict from ${by} is for ${stamp.reviewed}, not ${headSha}` };
+  return { ok: true, line: `the review passed: Archon's verdict from ${by} is ready for ${headSha}` };
+}
+
+// ---------------------------------------------------------------------------
+// Cole's loop review: the factory's reviewer leaves one `Loop review: <decision>` comment per lap
+// ---------------------------------------------------------------------------
+
+export const LOOP_PREFIX = "Loop review:";
+
+// The decision of a loop review comment and the head it names, or null when the body is not one.
+export function readLoopReview(body) {
+  const text = String(body ?? "");
+  if (!text.startsWith(LOOP_PREFIX)) return null;
+  const rest = text.slice(LOOP_PREFIX.length).trimStart().toLowerCase();
+  const decision = ["not merged", "merged", "merging", "approved", "sent back", "needs owner"].find(
+    (word) => rest.startsWith(word) && !/^[a-z]/.test(rest.slice(word.length)),
+  );
+  // whatever hex follows "Reviewed head", so a short sha reads as a head that differs, not as none
+  const sha = /Reviewed head\s+`?([0-9a-fA-F]+)/.exec(text)?.[1];
+  return { decision: decision ?? "unknown", reviewed: sha ? sha.toLowerCase() : null };
+}
+
+// comments: [{ id, body, created_at, user: { login } }]; maintainers: a Set of lower-cased logins;
+export function loopVerdict({ comments = [], maintainers = new Set(), headSha }) {
+  const trusted = comments
+    .filter((comment) => {
+      const login = comment?.user?.login;
+      return readLoopReview(comment?.body) !== null && typeof login === "string" && login !== "" && maintainers.has(login.toLowerCase());
+    })
+    .map((comment) => ({ comment, at: Date.parse(comment.created_at || "") || 0 }))
+    .sort((a, b) => b.at - a.at || Number(b.comment.id) - Number(a.comment.id));
+  if (trusted.length === 0) return { ok: false, line: "Cole's loop review: none (no `Loop review:` comment from a login in .archon/sdlc/policy/maintainers.json)" };
+  const { comment } = trusted[0];
+  const by = comment.user.login;
+  const read = readLoopReview(comment.body);
+  if (read.decision !== "approved" && read.decision !== "merging") return { ok: false, line: `Cole's loop review: the newest, from ${by}, says ${read.decision}, not approved` };
+  if (read.reviewed === null) return { ok: false, line: `Cole's loop review names no reviewed head commit (the ${read.decision} from ${by} has no "Reviewed head \`<sha>\`" line)` };
+  if (read.reviewed !== String(headSha).toLowerCase()) return { ok: false, line: `Cole's loop review: ${by} reviewed ${read.reviewed}, not ${headSha}` };
+  return { ok: true, line: `the review passed: Cole's loop review from ${by} is ${read.decision} for ${headSha}` };
+}
+
+// ---------------------------------------------------------------------------
 // The two conditions together
 // ---------------------------------------------------------------------------
 
@@ -170,12 +295,31 @@ export function needsReviewFor(event) {
   return event === "pull_request" || event === "pull_request_review";
 }
 
+// The login GitHub gives the App that opens the factory's pull requests. A login ending in `[bot]`
+// cannot be taken by a person: GitHub logins allow no brackets.
+export const FACTORY_BUILDER = "godspeed-dev-builder[bot]";
+
+// A pull request of Cole's factory: opened by the builder App, from a branch of this repository.
+// Logins compare case-blind, as GitHub's do. A missing author or head repository is no factory pull
+// request, so it keeps the ordinary rules.
+export function isFactoryPull({ prAuthor, headRepo, baseRepo, builder = FACTORY_BUILDER }) {
+  const author = String(prAuthor || "").toLowerCase();
+  const head = String(headRepo || "").toLowerCase();
+  const base = String(baseRepo || "").toLowerCase();
+  return author !== "" && author === String(builder).toLowerCase() && head !== "" && head === base;
+}
+
 export async function gate({
   event,
   headSha,
   requiredReviewers,
+  prAuthor = "",
+  headRepo = "",
+  baseRepo = "",
   fetchRuns,
   fetchReviews = async () => [],
+  fetchComments = async () => [],
+  fetchMaintainers = async () => new Set(),
   sleep,
   now,
   intervalMs = 30_000,
@@ -208,10 +352,51 @@ export async function gate({
     checksOk = true;
   }
 
+  // Cole's factory reviews and merges its own pull requests inside its workflow, so for them the
+  // checks alone decide and no review or comment is read
+  if (needsReviewFor(event) && isFactoryPull({ prAuthor, headRepo, baseRepo })) {
+    const review = {
+      ok: true,
+      line:
+        `no review comment is required: the pull request is the factory builder's (${prAuthor}, ` +
+        `a branch of ${baseRepo}); Cole's archon-loop reviews it and merges it at the reviewed head`,
+    };
+    lines.push(review.line);
+    lines.push(`required: ${checksOk ? "PASS" : "FAIL"}`);
+    return { pass: checksOk, lines, checks, review };
+  }
+
   const needsReview = needsReviewFor(event);
   const reviews = needsReview ? await fetchReviews() : [];
-  const review = reviewVerdict({ reviews, headSha, requiredReviewers, needsReview, event });
+  let review = reviewVerdict({ reviews, headSha, requiredReviewers, needsReview, event });
   lines.push(review.line);
+  // without an approval of the release App, Archon's verdict or Cole's loop review passes it instead, exactly as Archon's
+  // merge queue would (which reads no GitHub review at all)
+  if (needsReview && !review.ok) {
+    let archon;
+    try {
+      archon = archonVerdict({ comments: await fetchComments(), maintainers: await fetchMaintainers(), headSha });
+    } catch (error) {
+      archon = { ok: false, line: `Archon's review verdict could not be read: ${error.message}` };
+    }
+    lines.push(archon.line);
+    if (archon.ok) review = archon;
+    // and then the loop review of Cole's factory, trusted no more than Archon's verdict
+    if (!archon.ok) {
+      let loop;
+      try {
+        loop = loopVerdict({
+          comments: await fetchComments(),
+          maintainers: await fetchMaintainers(),
+          headSha,
+        });
+      } catch (error) {
+        loop = { ok: false, line: `Cole's loop review could not be read: ${error.message}` };
+      }
+      lines.push(loop.line);
+      if (loop.ok) review = loop;
+    }
+  }
 
   const pass = checksOk && review.ok;
   lines.push(`required: ${pass ? "PASS" : "FAIL"}`);
@@ -238,9 +423,9 @@ async function getJson(url, token) {
   return response.json();
 }
 
-async function allPages(url, token, pick) {
+async function allPages(url, token, pick, maxPages = 20) {
   const out = [];
-  for (let page = 1; page <= 20; page += 1) {
+  for (let page = 1; page <= maxPages; page += 1) {
     const batch = pick(await getJson(`${url}&page=${page}`, token));
     out.push(...batch);
     if (batch.length < 100) break;
@@ -289,6 +474,10 @@ function reviewOf(login, state, commitId, at) {
 const SHA = "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0";
 const OLDER_SHA = "0000111122223333444455556666777788889999";
 const BOT = "some-app[bot]";
+const BUILDER = "godspeed-dev-builder[bot]";
+
+const REPO = "MichaelZelbel/godspeed-mission-control";
+const PERSON = "MichaelZelbel";
 
 const T1 = "2026-10-25T08:00:00Z";
 const T2 = "2026-10-25T08:10:00Z";
@@ -300,6 +489,9 @@ function pullRequest(changed) {
     event: "pull_request",
     headSha: SHA,
     requiredReviewers: BOT,
+    prAuthor: PERSON,
+    headRepo: REPO,
+    baseRepo: REPO,
     fetchRuns: snapshots([checkRun("suite", "completed", "success", T1)]),
     fetchReviews: async () => [reviewOf(BOT, "APPROVED", SHA, T2)],
     ...changed,
@@ -463,6 +655,23 @@ const CASES = [
       }),
   },
   {
+    // scenarios.yml leaves out an AI scenario that already passed on an earlier head of the pull
+    // request (scenarios/reuse-earlier-pass.mjs): its job is skipped on this head, the verdict job
+    // passes, and the gate must read that as passed, never as a missing check.
+    name: "reused scenarios (their jobs skipped, the verdict passed) read as passed",
+    want: true,
+    says: "every other check on the head commit passed (2: suite, the verdict)",
+    args: () =>
+      pullRequest({
+        fetchRuns: snapshots([
+          checkRun("suite", "completed", "success", T1),
+          checkRun("a plain yes or a button answers the right waiting step", "completed", "skipped", T2),
+          checkRun("a fresh Docker server turns a first goal into useful work and a matching Telegram brief", "completed", "skipped", T2),
+          checkRun("the verdict", "completed", "success", T3),
+        ]),
+      }),
+  },
+  {
     name: "only the latest run per check name counts",
     want: true,
     says: "every other check on the head commit passed (1: docker)",
@@ -486,7 +695,304 @@ const CASES = [
         ]),
       }),
   },
+  // Archon's review verdict: the same rule as Archon's merge queue
+  {
+    name: "Archon's verdict, ready at the head, from a listed maintainer, passes without an approval",
+    want: true,
+    says: `the review passed: Archon's verdict from ${BUILDER} is ready for ${SHA}`,
+    args: () => archon({ fetchComments: async () => [marked(BUILDER, SHA, "ready")] }),
+  },
+  {
+    name: "Archon's verdict not ready fails",
+    want: false,
+    says: `Archon's review verdict from ${BUILDER} is not ready`,
+    args: () => archon({ fetchComments: async () => [marked(BUILDER, SHA, "not ready")] }),
+  },
+  {
+    name: "Archon's verdict for another commit fails",
+    want: false,
+    says: `Archon's review verdict from ${BUILDER} is for ${OLDER_SHA}, not ${SHA}`,
+    args: () => archon({ fetchComments: async () => [marked(BUILDER, OLDER_SHA, "ready")] }),
+  },
+  {
+    name: "a marked comment from a login not in maintainers.json is ignored",
+    want: false,
+    says: "Archon's review verdict: none",
+    args: () => archon({ fetchComments: async () => [marked("someone-else", SHA, "ready")] }),
+  },
+  {
+    name: "two marked comments from listed logins count as none",
+    want: false,
+    says: "Archon's review verdict: duplicate (2 marked comments",
+    args: () => archon({ fetchComments: async () => [marked(BUILDER, SHA, "ready"), marked("MichaelZelbel", SHA, "ready")] }),
+  },
+  {
+    name: "an outsider's marked comment beside the listed one changes nothing",
+    want: true,
+    says: `the review passed: Archon's verdict from ${BUILDER} is ready for ${SHA}`,
+    args: () => archon({ fetchComments: async () => [marked("stranger", OLDER_SHA, "not ready"), marked(BUILDER, SHA, "ready")] }),
+  },
+  {
+    name: "a comment whose first line is not exactly the marker is no verdict",
+    want: false,
+    says: "Archon's review verdict: none",
+    args: () => archon({ fetchComments: async () => [{ id: nextId++, user: { login: BUILDER }, body: ` ${marked(BUILDER, SHA, "ready").body}` }] }),
+  },
+  {
+    name: "a verdict without its stamp is unstamped and fails",
+    want: false,
+    says: `Archon's review verdict from ${BUILDER} is unstamped`,
+    args: () => archon({ fetchComments: async () => [{ id: nextId++, user: { login: BUILDER }, body: `<!-- archon-review-report -->\nReviewed commit: \`${SHA}\`\n\nreport` }] }),
+  },
+  {
+    name: "with no maintainers.json nobody's verdict counts",
+    want: false,
+    says: "Archon's review verdict: none",
+    args: () => archon({ fetchMaintainers: async () => new Set(), fetchComments: async () => [marked(BUILDER, SHA, "ready")] }),
+  },
+  {
+    name: "a maintainers.json in the wrong shape fails the gate",
+    want: false,
+    says: "Archon's review verdict could not be read: .archon/sdlc/policy/maintainers.json must be a JSON array",
+    args: () => archon({ fetchMaintainers: async () => parseMaintainers('{"login":"x"}'), fetchComments: async () => [marked(BUILDER, SHA, "ready")] }),
+  },
+  {
+    name: "Archon's verdict passes even beside a listed reviewer's request for changes, as Archon's gate reads no GitHub review",
+    want: true,
+    says: `the review passed: Archon's verdict from ${BUILDER} is ready for ${SHA}`,
+    args: () => archon({ fetchReviews: async () => [reviewOf(BOT, "CHANGES_REQUESTED", SHA, T2)], fetchComments: async () => [marked(BUILDER, SHA, "ready")] }),
+  },
+  {
+    name: "Archon's verdict also needs every other check green",
+    want: false,
+    says: "every other check on the head commit failed: suite concluded failure",
+    args: () => archon({ fetchRuns: snapshots([checkRun("suite", "completed", "failure", T1)]), fetchComments: async () => [marked(BUILDER, SHA, "ready")] }),
+  },
+  {
+    name: "the maintainer list reads logins and { login, merge_queue } entries, case-blind",
+    want: true,
+    says: `the review passed: Archon's verdict from ${BUILDER} is ready for ${SHA}`,
+    args: () => archon({ fetchMaintainers: async () => parseMaintainers('["MichaelZelbel", { "login": "Godspeed-Dev-Builder[bot]", "merge_queue": "own-prs" }]'), fetchComments: async () => [marked(BUILDER, SHA, "ready")] }),
+  },
+  // Cole's loop review
+  {
+    name: "Cole's loop review approved after the head commit passes",
+    want: true,
+    says: `the review passed: Cole's loop review from ${BUILDER} is approved for ${SHA}`,
+    args: () => cole({ fetchComments: async () => [loop(BUILDER, "approved (route: simple)", T3, SHA)] }),
+  },
+  {
+    name: "Cole's loop review merging for the exact head passes",
+    want: true,
+    says: `the review passed: Cole's loop review from ${BUILDER} is merging for ${SHA}`,
+    args: () => cole({ fetchComments: async () => [loop(BUILDER, "merging", T3, SHA)] }),
+  },
+  {
+    name: "Cole's loop review naming no reviewed head fails",
+    want: false,
+    says: "Cole's loop review names no reviewed head commit",
+    args: () => cole({ fetchComments: async () => [loop(BUILDER, "approved", T3)] }),
+  },
+  {
+    name: "a merging loop review naming no reviewed head fails",
+    want: false,
+    says: "Cole's loop review names no reviewed head commit",
+    args: () => cole({ fetchComments: async () => [loop(BUILDER, "merging", T3)] }),
+  },
+  {
+    name: "a short sha counts as another head, not as none",
+    want: false,
+    says: `reviewed ${SHA.slice(0, 7)}, not ${SHA}`,
+    args: () => cole({ fetchComments: async () => [loop(BUILDER, "approved", T3, SHA.slice(0, 7))] }),
+  },
+  {
+    name: "a head that is no sha at all counts as naming none",
+    want: false,
+    says: "Cole's loop review names no reviewed head commit",
+    args: () => cole({ fetchComments: async () => [loop(BUILDER, "approved", T3, "not-a-sha")] }),
+  },
+  {
+    name: "an old approval does not cover a new, backdated head",
+    want: false,
+    says: `reviewed ${OLDER_SHA}, not ${SHA}`,
+    args: () => cole({ fetchComments: async () => [loop(BUILDER, "approved", T1, OLDER_SHA)] }),
+  },
+  {
+    name: "Cole's loop review naming a different head fails",
+    want: false,
+    says: `reviewed ${OLDER_SHA}, not ${SHA}`,
+    args: () => cole({ fetchComments: async () => [loop(BUILDER, "approved", T3, OLDER_SHA)] }),
+  },
+  {
+    name: "a newer sent back after an approval fails",
+    want: false,
+    says: "says sent back, not approved",
+    args: () => cole({ fetchComments: async () => [loop(BUILDER, "approved", T2, SHA), loop(BUILDER, "sent back", T3)] }),
+  },
+  {
+    name: "a newer not merged after an approval fails",
+    want: false,
+    says: "says not merged, not approved",
+    args: () => cole({ fetchComments: async () => [loop(BUILDER, "approved", T2, SHA), loop(BUILDER, "not merged: conflict", T3)] }),
+  },
+  {
+    name: "a loop review from a login not in maintainers.json is ignored",
+    want: false,
+    says: "Cole's loop review: none",
+    args: () => cole({ fetchComments: async () => [loop("someone-else", "approved", T3, SHA)] }),
+  },
+  {
+    name: "an outsider's newer sent back does not cancel a maintainer's approval",
+    want: true,
+    says: `Cole's loop review from ${BUILDER} is approved`,
+    args: () => cole({ fetchComments: async () => [loop(BUILDER, "approved", T2, SHA), loop("stranger", "sent back", T3)] }),
+  },
+  {
+    name: "Cole's loop review passes beside a listed reviewer's request for changes, as Archon's verdict does",
+    want: true,
+    says: `Cole's loop review from ${BUILDER} is approved`,
+    args: () => cole({ fetchReviews: async () => [reviewOf(BOT, "CHANGES_REQUESTED", SHA, T2)], fetchComments: async () => [loop(BUILDER, "approved", T3, SHA)] }),
+  },
+  {
+    name: "Cole's loop review also needs every other check green",
+    want: false,
+    says: "every other check on the head commit failed: suite concluded failure",
+    args: () => cole({ fetchRuns: snapshots([checkRun("suite", "completed", "failure", T1)]), fetchComments: async () => [loop(BUILDER, "approved", T3, SHA)] }),
+  },
+  {
+    name: "a comment that only contains the words, not starting with them, is no loop review",
+    want: false,
+    says: "Cole's loop review: none",
+    args: () => cole({ fetchComments: async () => [loop(BUILDER, "approved", T3, SHA, "Note: ")] }),
+  },
+  // Cole's factory: the builder App's own pull requests are reviewed and merged inside archon-loop
+  {
+    name: "the factory builder's pull request with every other check green and no review passes",
+    want: true,
+    says: `no review comment is required: the pull request is the factory builder's (${BUILDER}`,
+    args: () => factory({}),
+  },
+  {
+    name: "the factory builder's pull request with a failed other check fails",
+    want: false,
+    says: "every other check on the head commit failed: docker concluded failure",
+    args: () =>
+      factory({
+        fetchRuns: snapshots([
+          checkRun("suite", "completed", "success", T1),
+          checkRun("docker", "completed", "failure", T1),
+        ]),
+      }),
+  },
+  {
+    name: "the factory builder's pull request with a check still running at the time limit fails",
+    want: false,
+    says: "every other check on the head commit failed: docker is still in_progress after 80 minutes",
+    args: () => factory({ fetchRuns: snapshots([checkRun("docker", "in_progress", null, T1)]) }),
+  },
+  {
+    name: "the factory builder's pull request whose newest loop review says not merged passes when the checks are green",
+    want: true,
+    says: `no review comment is required: the pull request is the factory builder's (${BUILDER}`,
+    args: () =>
+      factory({
+        fetchComments: async () => [
+          loop(BUILDER, "approved", T2),
+          loop(BUILDER, "not merged (route: simple). gh pr merge refused: the required check is pending", T3),
+        ],
+      }),
+  },
+  {
+    name: "the factory builder's pull request passes beside a listed reviewer's request for changes",
+    want: true,
+    says: `no review comment is required: the pull request is the factory builder's (${BUILDER}`,
+    args: () => factory({ fetchReviews: async () => [reviewOf(BOT, "CHANGES_REQUESTED", SHA, T2)] }),
+  },
+  {
+    name: "the builder's login compares case-blind",
+    want: true,
+    says: "no review comment is required",
+    args: () => factory({ prAuthor: "Godspeed-Dev-Builder[bot]" }),
+  },
+  {
+    name: "a person's pull request with no review still fails",
+    want: false,
+    says: `the review failed: no listed reviewer approved ${SHA}`,
+    args: () => archon({ prAuthor: PERSON }),
+  },
+  {
+    name: "another App's pull request with no review still fails",
+    want: false,
+    says: "Cole's loop review: none",
+    args: () => archon({ prAuthor: "godspeed-dev-release[bot]" }),
+  },
+  {
+    name: "a login that only contains the builder's name is no builder",
+    want: false,
+    says: "Cole's loop review: none",
+    args: () => archon({ prAuthor: `evil-${BUILDER}` }),
+  },
+  {
+    name: "the builder's login on a pull request from a fork keeps the ordinary rules",
+    want: false,
+    says: "Cole's loop review: none",
+    args: () => archon({ prAuthor: BUILDER, headRepo: "someone/godspeed-mission-control" }),
+  },
+  {
+    name: "a pull request with no known head repository keeps the ordinary rules",
+    want: false,
+    says: "Cole's loop review: none",
+    args: () => archon({ prAuthor: BUILDER, headRepo: "" }),
+  },
+  {
+    name: "a person's pull request whose newest loop review says not merged still fails",
+    want: false,
+    says: "says not merged, not approved",
+    args: () => cole({ fetchComments: async () => [loop(BUILDER, "approved", T2, SHA), loop(BUILDER, "not merged", T3)] }),
+  },
+  {
+    name: "a push to main by the builder's commit still needs no review",
+    want: true,
+    says: "no review is required (push)",
+    args: () => factory({ event: "push" }),
+  },
 ];
+
+// A pull request of Cole's factory: the builder App opened it from a branch of this repository, and
+// nobody reviewed it in any way the ordinary rules read. Reading a review or a comment would be a bug.
+function factory(changed) {
+  return archon({
+    prAuthor: BUILDER,
+    fetchReviews: async () => {
+      throw new Error("a factory pull request must not read reviews");
+    },
+    fetchComments: async () => {
+      throw new Error("a factory pull request must not read comments");
+    },
+    ...changed,
+  });
+}
+
+// Cole's loop review, with no approval of the release App.
+function loop(login, decision, at, sha, before = "") {
+  const named = sha ? `\n\nReviewed head \`${sha}\`. It already contains main.` : "";
+  return { id: nextId++, user: { login }, created_at: at, body: `${before}Loop review: ${decision}${named}` };
+}
+function cole(changed) {
+  return archon({ ...changed });
+}
+
+// A pull request with no approval of the release App, where Archon's verdict decides.
+function marked(login, sha, verdict) {
+  return { id: nextId++, user: { login }, body: `<!-- archon-review-report -->\nReviewed commit: \`${sha}\`\nVerdict: ${verdict}\nContract: complete\n\nThe report.` };
+}
+function archon(changed) {
+  return pullRequest({
+    fetchReviews: async () => [],
+    fetchMaintainers: async () => parseMaintainers(JSON.stringify(["MichaelZelbel", BUILDER])),
+    ...changed,
+  });
+}
 
 async function selfTest() {
   let passed = 0;
@@ -547,12 +1053,45 @@ async function decide() {
         )
       : Promise.resolve([]);
 
+  // the pull request's conversation comments, where Archon publishes its verdict
+  const fetchComments = () =>
+    prNumber
+      ? allPages(`${API}/repos/${repo}/issues/${prNumber}/comments?per_page=100`, token, (body) =>
+          Array.isArray(body) ? body : [],
+          Infinity, // every comment, as Archon reads them: until a short page
+        )
+      : Promise.resolve([]);
+  // Archon's maintainer list at the head of the default branch (never the pull request's own copy):
+  // no file means nobody
+  const fetchMaintainers = async () => {
+    const { default_branch: branch } = await getJson(`${API}/repos/${repo}`, token);
+    const response = await fetch(
+      `${API}/repos/${repo}/contents/.archon/sdlc/policy/maintainers.json?ref=${encodeURIComponent(branch)}`,
+      {
+        headers: {
+          accept: "application/vnd.github.raw+json",
+          authorization: `Bearer ${token}`,
+          "x-github-api-version": "2022-11-28",
+          "user-agent": "godspeed-required-gate",
+        },
+      },
+    );
+    if (response.status === 404) return new Set();
+    if (!response.ok) throw new Error(`maintainers.json on ${branch} answered ${response.status}`);
+    return parseMaintainers(await response.text());
+  };
+
   const { pass, lines } = await gate({
     event,
     headSha,
     requiredReviewers: process.env.REQUIRED_REVIEWERS,
+    prAuthor: process.env.PR_AUTHOR,
+    headRepo: process.env.HEAD_REPO,
+    baseRepo: repo,
     fetchRuns,
     fetchReviews,
+    fetchComments,
+    fetchMaintainers,
     sleep: (ms) => new Promise((done) => setTimeout(done, ms)),
     now: () => Date.now(),
     log: (message) => console.log(message),

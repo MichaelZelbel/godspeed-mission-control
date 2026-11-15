@@ -8,11 +8,13 @@ const root=()=>fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-idle-heartbeat-'))
 // it, mid-conversation. The heartbeat only ever moved when the AI provider was
 // called, so a server with nothing due was killed for being idle.
 test('a tick reports a heartbeat even when there is nothing due',async()=>{
-  const store=new Store(root());let ran=0;
-  const scheduler=new NativeScheduler(store,{executable:'hermes-test',home:store.root,run:async()=>{ran++;return {stdout:''};}});
+  // Only Hermes' own tick counts: a folder with no manual of its own is not a starter-made one, so the
+  // same tick also asks Hermes to make the notice sender (#225), a second call that is not the scheduler.
+  const store=new Store(root());const calls=[];
+  const scheduler=new NativeScheduler(store,{executable:'hermes-test',home:store.root,run:async(executable,args)=>{calls.push(args.join(' '));return {stdout:''};}});
   let beats=0;scheduler.onProgress=()=>{beats++;};
   await scheduler.tick();
-  assert.equal(ran,1,'the tick should have reached the scheduler');
+  assert.equal(calls.filter(c=>c==='cron tick').length,1,'the tick should have reached the scheduler');
   assert.ok(beats>0,'an idle tick must still report that the scheduler is alive');
 });
 

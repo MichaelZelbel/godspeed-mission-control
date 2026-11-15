@@ -39,9 +39,9 @@ export function AuthProvider({children}: {children:React.ReactNode}) {
   useEffect(()=>{
     mounted.current=true;refreshSession();
     const original=window.fetch;
-    const watched:typeof fetch=async(...args)=>{
-      const response=await original(...args);
-      const url=new URL(args[0] instanceof Request?args[0].url:String(args[0]),location.href);
+    const watched:typeof fetch=async(input,init)=>{
+      const response=await original(input,init);
+      const url=new URL(input instanceof Request?input.url:String(input),location.href);
       if(active.current && response.status===401 && url.origin===location.origin && url.pathname.startsWith('/api/') && !url.pathname.startsWith('/api/auth/') && !['/api/login','/api/session'].includes(url.pathname)) refreshSession();
       return response;
     };

@@ -1,6 +1,6 @@
 ---
 name: tracker
-description: Track anything the person names. Use for every message that starts with "track" (any case, typed or dictated, "Track:" too, also inside a German sentence), the habits, headaches, the period and food included, since this recipe hands those on, but not "track journal" or "track Tagebuch", which go to the journal; when they answer yes to "Start a new tracker called ...?"; when they ask to set up a tracker ("I want to track my sleep: hours, and quality from 1 to 5"); when they correct or delete a tracked entry ("that was 91, not 92", "delete the last belly", "delete the last walk to work"); when they ask about something they track ("how has my belly changed this month?"); and when they say which coaching talk may look at a tracker or a habit, or no longer needs it ("The health talk may also look at my sleep tracker", "The health talk no longer needs my sleep tracker", "The work talk may also look at my stretching habit").
+description: Track anything the person names. Use for every message that starts with "track" (any case, typed or dictated, "Track:" too, also inside a German sentence), the habits, headaches, the period and food included, since this recipe hands those on, but not "track journal" or "track Tagebuch", which go to the journal; when they answer yes to "Start a new tracker called ...?"; when they ask to set up a tracker ("I want to track my sleep: hours, and quality from 1 to 5"); when they correct or delete a tracked entry ("that was 91, not 92", "delete the last belly", "delete the last walk to work"); when they ask about something they track ("how has my belly changed this month?"); when they want a tracker to count a kind of mail ("count the mails from Etsy that say new order", "count the replies to my job applications"); and when they say which coaching talk may look at a tracker or a habit, or no longer needs it ("The health talk may also look at my sleep tracker", "The health talk no longer needs my sleep tracker", "The work talk may also look at my stretching habit").
 ---
 
 # Tracker
@@ -39,8 +39,12 @@ Holidays, illness and outages are exemptions, never scarce protection. Preserve 
 4. **Food, a meal or something they ate or drank** ("track food, tofu with rice", "track lunch, two
    eggs", "track usual breakfast"): load the food-tracker recipe and do what it says; its `food`
    operation keeps their food tracker. Never `track` on the food tracker (`"specialist":"food"`).
-5. **One of the trackers' names or other names**: yours, below.
-6. **Anything else**: a new tracker, asked about once, below.
+5. **The Charm Challenge** ("track charm challenge", "track charm slip", or anything else about the
+   Charm Challenge): load the charm-challenge recipe and do what it says; its `godspeed-charm` command
+   keeps the count. Never `track` on the Charm Challenge tracker (`"specialist":"charm"`), and never
+   hold or start a tracker called Charm Challenge.
+6. **One of the trackers' names or other names**: yours, below.
+7. **Anything else**: a new tracker, asked about once, below.
 
 The journal no longer takes "track", with one exception: "track journal" or "track Tagebuch" names
 the journal itself, the way "track headache" names the Headaches tracker. That message is a journal
@@ -100,6 +104,29 @@ hold or start a tracker called Journal.
    own area's talk always looks at it and is never taken away; the others only look.
    The reply is your answer, as in 8. Anything else a talk may look at, or must never do, is the
    coach recipe's ("Changing an area").
+
+## Counting mails
+
+A tracker can count a kind of mail from each mail's sender, subject and date, never from its text.
+A routine does the counting every morning once they said yes. Setting it up is these calls, never
+`mail_search` or `mail_read`:
+
+1. **Ask only what you cannot tell.** The rule needs the senders (an address, or a domain such as
+   `shop.example.com`), the words the subject says (any of them counts, any case), and the mailbox
+   (`gmail`, their own, or `godspeed`, the mission control's own address; `gmail` when they do not
+   say). Ask for a sender they did not name; never guess one, and never put a shop or a phrase in
+   that they did not say. Name the tracker it extends, or a name for a new one.
+2. **Ask:** `{"type":"tracker-mail","action":"ask","tracker":"<id or name>" or "name":"<new name>","senders":["<address or domain>"],"subjects":["<phrase>","<phrase>"],"mailbox":"gmail","words":"<their message>"}`.
+   Its `reply` is one sentence that says what will be counted and how many mails that is in the last
+   30 days. Give it exactly as it came (as in 8 above). A tracker that keeps one entry a day, or has
+   more than one column or one that is not a number or whose range leaves out 1, cannot count mails; the reply says so, and a new name starts a tracker for them.
+3. **Their yes** comes in a later message: `{"type":"tracker-create","proposal_id":"<id>","words":"<their answer>"}`,
+   with `"expected":{"collections/<id>":"<hash>"}` from `tracker-list` when it extends a tracker.
+4. **Changing the rule** is asking again for the same tracker and their yes. **Stopping** is
+   `{"type":"tracker-mail","action":"remove","tracker":"<id>","expected":{"collections/<id>":"<hash>"}}`:
+   what was counted stays. `tracker-list` shows each rule as `mail`.
+5. **"How many this week?"** is `{"type":"tracker-list","days":7}`: each mail is one entry under
+   `recent`. A goal that reads a weekly number reads it from those entries, as for any tracker.
 
 ## Never
 

@@ -144,11 +144,13 @@ test('a sync round with nothing new does not read the whole vault while holding 
   assert.equal(a.reads-reads,0,'an idle sync round read the whole vault '+(a.reads-reads)+' times');
 });
 
-test('a sync round with a saved conflict still refuses, even with nothing new to upload',()=>{
+test('a sync round with a saved conflict still reports it, even with nothing new to upload',()=>{
   const {a}=fixture(),A=new FileSync(a);
   fs.mkdirSync(path.join(a.root,'conflicts'),{recursive:true});
   atomic(path.join(a.root,'conflicts','pending.json'),JSON.stringify({id:'pending',path:'notebook/notes/x.md'}));
-  assert.equal(A.reconcile().state,'conflict');
+  const result=A.reconcile();
+  assert.equal(result.state,'conflict');
+  assert.equal(result.error,undefined,JSON.stringify(result));
 });
 
 test('taking the other side\'s commit that changes nothing does not rebuild the workspace',()=>{
@@ -174,4 +176,15 @@ test('a merge never acts on a view of the vault older than the lock it holds',()
   assert.equal(A.reconcile().state,'synced');
   assert.equal(new Store(a.root).get('notes',note.id).content,'Saved here a moment ago','the merge must keep the newer local save');
   assert.equal(new Store(a.root).list('contacts').length,1);
+});
+
+test('a sync refused for lack of a GitHub sign-in stays pending and queues one Connect notice a day',()=>{
+  const {a}=fixture(),sync=new FileSync(a),original=sync.git.bind(sync);
+  sync.git=(args,cwd)=>{
+    if(['fetch','ls-remote'].includes(args[0]))throw Object.assign(new Error('git failed'),{stderr:'fatal: could not read Username for \'https://github.com\': terminal prompts disabled'});
+    return original(args,cwd);
+  };
+  assert.equal(sync.reconcile().state,'pending');assert.equal(sync.reconcile().state,'pending');
+  const notices=JSON.parse(fs.readFileSync(path.join(a.state,'notices.json'),'utf8')).notices.filter(n=>/^git-sign-in-/.test(n.id));
+  assert.equal(notices.length,1);assert.match(notices[0].text,/Connect record sync/);
 });

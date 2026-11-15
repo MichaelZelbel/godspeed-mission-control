@@ -7,13 +7,15 @@
  *
  * Why it exists. In the mission control this kit comes from, its owner approved and published a
  * post in a working session. The session committed the texts and the memory recorded the post as
- * published that day, but nobody ran `mc-due done`, so for five mornings the brief said the
- * finished work was waiting. Done is now an event in world/events/ (see due/README.md), and this
+ * published that day, but nobody closed the deadline, so for five mornings the brief said the
+ * finished work was waiting. A deadline is a page in your notebook and closing one is a moment on
+ * its timeline (the deadlines text in the notebook's `due` recipe says how), and this
  * hook is the moment every session passes: it asks `mc-due state` which deadlines are not closed
  * yet, compares their titles with what THIS session said (your own messages and its commit
  * messages, never file paths), and when at least half of a title's words appear, one of them
  * specific to that deadline, it stops the session once and names it. The assistant then closes it
- * with what shows it (`mc-due done <name> --evidence "..."`) and may say in plain words what is now settled. If it is
+ * with what shows it (`godspeed due done <slug> --evidence "..."`, which writes that moment) and
+ * may say in plain words what is now settled. If it is
  * not finished, the assistant does nothing and says nothing: you never hear about a deadline a
  * session did not finish. Your approving or doing the work in the session is your word; you are
  * never asked to confirm it.
@@ -70,10 +72,17 @@ function tokens(s) {
 
 function words(s) { return tokens(s).map((t) => t.w); }
 
+// The marks every mission control has, close to the ones mc-due itself looks for (tools/due.js,
+// looksLikeGodspeed). Until 30 October 2026 this looked for a folder of deadline files; a mission
+// control installed after that has none, because its deadlines are pages in its notebook, and this
+// hook would then never have run in a new install. Two marks, not one: an AGENTS.md on its own
+// sits in plenty of folders that are somebody's code, and running the deadline program against one
+// of those would make a notebook where nobody asked for one.
+const MARKS = ["notebook", "profile", "rules", "observations"];
 function projectDir() {
   const here = path.dirname(path.dirname(path.dirname(fs.realpathSync(__filename))));
   for (const d of [process.env.CLAUDE_PROJECT_DIR, here]) {
-    if (d && fs.existsSync(path.join(d, "due"))) return d;
+    if (d && fs.existsSync(path.join(d, "AGENTS.md")) && MARKS.some((n) => fs.existsSync(path.join(d, n)))) return d;
   }
   return "";
 }
@@ -101,15 +110,11 @@ function stillOpen(root) {
   return Array.isArray(rows) ? rows.filter((x) => x && (x.state === "open" || x.state === "unopened")) : [];
 }
 
-// An older due.js has no selfCheck in its rows, so the head is read from the file.
-function selfCheck(root, o) {
-  if (typeof o.selfCheck === "string") return o.selfCheck || "none";
-  try {
-    const m = fs.readFileSync(path.join(root, "due", o.slug + ".md"), "utf8").match(/^SELF-CHECK:[ \t]*(.*)$/m);
-    return (m && m[1].trim().toLowerCase()) || "none";
-  } catch (_) {
-    return "none";
-  }
+// Every row mc-due gives says what the deadline's self check is, so this reads it from the row and
+// from nowhere else. An older due.js, whose rows had no selfCheck, leaves this "none", which is
+// what it means for the deadlines a session can finish by hand: those are raised on words.
+function selfCheck(o) {
+  return typeof o.selfCheck === "string" && o.selfCheck ? o.selfCheck : "none";
 }
 
 // What this session said: the person's messages and the commit messages. Never the assistant's
@@ -214,7 +219,7 @@ function main() {
     // the next morning run. Quiet, bounded, and whatever it says, it never blocks.
     if (touchedSecrets) { try { due(root, ["check"]); } catch (_) { /* fail open */ } }
     if (!text) process.exit(0);
-    const open = stillOpen(root).filter((o) => selfCheck(root, o) === "none");
+    const open = stillOpen(root).filter((o) => selfCheck(o) === "none");
     if (!open.length) process.exit(0);
     const f = raisedFile(payload.session_id ?? payload.sessionId);
     let raised = [];
@@ -233,7 +238,8 @@ function main() {
       "This session may have finished " + (hits.length === 1 ? "an open deadline" : "open deadlines") + ":\n" +
       lines.join("\n") + "\n" +
       "For each one: if this session's work, or what the person said or approved in it, meets 'finished when', " +
-      "close it now: mc-due done <name> --evidence \"<a commit, or their words>\". If you mention it in your " +
+      "close it now: godspeed due done <name> --evidence \"<a commit, or their words>\", which writes the " +
+      "closing as a moment on their notebook's timeline. If you mention it in your " +
       "final message, say in plain words what is now settled and why, never its name, the command or the " +
       "matched words. If it does not, do nothing and do not mention it: end the turn without any " +
       "text about it. Do not ask the person to confirm it: their approval in this session is their word. " +

@@ -30,6 +30,7 @@ import { Loader2, Plus, Search, Trash2, User, Users, X } from "lucide-react";
 import { PeopleTree } from "@/components/people/PeopleTree";
 import { PersonDetail } from "@/components/people/PersonDetail";
 import { MergePersonDialog } from "@/components/people/MergePersonDialog";
+import { personLabel } from "@/components/timeline/people";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useGroups, useCreateGroup, useUpdateGroup, useArchiveGroup, useRestoreGroup } from "@/hooks/useGroups";
 import { useAllMemberships, useAddMembership, useRemoveMembership } from "@/hooks/useGroupMemberships";
@@ -374,7 +375,7 @@ export default function People() {
             <AlertDialogTitle>Delete this person?</AlertDialogTitle>
             <AlertDialogDescription className="space-y-2">
               <span className="block">
-                <strong>{deleteTarget?.name ?? "This person"}</strong> will be permanently deleted.
+                <strong>{deleteTarget ? personLabel(deleteTarget) : "This person"}</strong> will be permanently deleted.
               </span>
               <span className="block">
                 Their topics, facts, logged interactions, relationships and group memberships

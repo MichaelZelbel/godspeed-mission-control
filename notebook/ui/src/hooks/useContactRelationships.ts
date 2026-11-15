@@ -4,6 +4,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { relationshipPairKey, type EntityRef } from "@/lib/relationship-canonical";
 import { relationshipWriteDecision } from "@/lib/profile-integrity";
 import { fetchAllPages } from "@/lib/postgrest";
+import { personLabel } from "@/components/timeline/people";
 
 /** A relationship write refused as a duplicate (the dedup check or the database's pair index). */
 export function isDuplicateRelationshipError(error: unknown): boolean {
@@ -95,7 +96,7 @@ export function useContactRelationships(contactId: string | null) {
           .in("id", [...contactIds]);
         if (contactsError) throw contactsError;
         for (const c of contacts || []) {
-          contactMap.set(c.id, c.name);
+          contactMap.set(c.id, personLabel(c));
         }
       }
 

@@ -11,7 +11,7 @@ import { fileURLToPath } from "node:url";
 import { tmpMission, area, S } from "./helpers.mjs";
 import { contextBlock, waitingTalks } from "../lib/context.mjs";
 import { listAreas } from "../lib/areas.mjs";
-import { openTalk, readTalk } from "../lib/talks.mjs";
+import { openTalk, readTalk, addSaid } from "../lib/talks.mjs";
 import { saveSettings, validateSettings } from "../lib/settings.mjs";
 import { hasTalkJob, hasTickJob, NO_MESSENGER } from "../lib/setup.mjs";
 import { brief } from "../lib/brief.mjs";
@@ -159,4 +159,12 @@ test("while one talk is open or waiting, the block says asking for another talk 
   assert.match(both, /^- Open talk: Health \(id for commands: health\),/m);
   assert.match(both, /^- Open talk: Psychology \(id for commands: psychology\),/m);
   assert.doesNotMatch(both, /Waiting talk/);
+});
+
+test("the block tells the model an earlier unanswered talk is replaced on a talk day, and says nothing of it for today's talk", () => {
+  const { mc, a } = chatMission();
+  openTalk(a, "2026-10-09", { opening: "Earlier." }, new Date("2026-10-09T17:00:00Z"));
+  assert.match(contextBlock(mc, { ...S, talk_delivery: "chat" }, AT), /Exception: if they ask for a talk of this area on one of its talk days/);
+  addSaid(a, "2026-10-09", ["- 19:10 hi"]);
+  assert.doesNotMatch(contextBlock(mc, { ...S, talk_delivery: "chat" }, AT), /Exception/);
 });

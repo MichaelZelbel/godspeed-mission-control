@@ -31,6 +31,12 @@ area's style, tone and limits, its preparation, the question queued for today, t
 full, what other talks raised this week, the habits' week (its own, and other areas' habits this
 talk may look at), the goals it serves, and the talk prepared ahead when there is one.
 
+0. If the brief has a section "Not prepared", the preparation is missing or was refused. The opening
+   starts, after where it comes from and which talk it is, with the one sentence that section gives,
+   word for word, then carries on from the brief as steps 2 to 4 say. Never say or imply how long or
+   how widely anything was researched. The brief's research sections are then the nightly goal
+   research as it stands, not a reviewed preparation: when you use one, say its date, and never
+   present it as this week's research result or say the research found nothing useful.
 1. If the brief carries a prepared talk (its section "The prepared talk"), that is the preparation
    and the opening is written: skip steps 2 to 4, run the open command the brief prints (with
    `--from-prep`) as step 5 says, and your final answer is the opening it prints, exactly.
@@ -85,7 +91,14 @@ talk they start themselves".
    evidence does. The talk card in the block is the short version; the prepared talk file
    (`coach/<area>/prep/<date>.md`) holds the depth, so when the card does not answer them, read
    that file once rather than searching anywhere else.
-4. The area's LIMIT lines are binding in every reply. Where an area has none, these hold anyway:
+4. Never claim how long or how widely research ran ("I looked into this for days", "I read many
+   studies"). Say what the preparation file shows: when asked what was researched, run
+   `godspeed-coach talk evidence <area>` once and answer from its routes, sources and second check,
+   or say there is no preparation for this talk. When it names an earlier preparation, the talk has
+   none of its own: give that preparation's date with anything you take from it. A search that found
+   no new study means no new study, not that nothing is useful: answer from its routes, rejected
+   routes and coverage.
+5. The area's LIMIT lines are binding in every reply. Where an area has none, these hold anyway:
    a health talk never diagnoses, never makes "see a doctor" the answer and never tells them to buy
    or book anything; a money talk never moves money, buys or signs up for anything; a relationships
    talk never contacts anyone for them and raises romance only when they do.
@@ -108,7 +121,16 @@ that makes sense on its own and ask:
 2. Fill the record `coach/<area>/talks/<date>.md`: "What was read" (what you actually used),
    "What changed" (the decision in their terms, and each habit started, paused or graduated). Keep
    "What you said" as the command wrote it.
-3. `godspeed-coach talk held <area>`.
+   If they corrected something in the talk ("no, I already walk ten thousand steps"), also write it
+   as a line under a section "Corrections" in the same record.
+3. `godspeed-coach talk held <area>`. For an area that serves goals, this also writes the next
+   talk's live questions, `coach/<area>/questions/<next talk date>.md`: one per goal it serves, per
+   decision or promise, per correction and per thing they asked to be looked into, each with why it
+   is open. The nightly goal research works on them until that talk, and its preparation reads them
+   first. If they asked in the talk for something more to be looked into, add it with
+   `godspeed-coach questions <area> add "<the question>" --why "<why>"`; `questions <area> drop
+   "<words>"` takes one away and plain `questions <area>` lists them. Never edit the file by hand.
+   A talk that ends with no closing turn gets its questions at the next coach tick, however late (for the first talk day still to come).
 4. For each goal in the area's SERVES that the change moves, one line:
    `godspeed goals progress <goal> --evidence "<date> <area> talk: <what changed>"`.
    If that command is not available here, write the same line under "What changed" instead.
@@ -187,7 +209,12 @@ missed day.
 and follow "Opening a talk" in this conversation (skip the `[SILENT]` rule). The open command that
 brief prints ends with `--shown`, because they read the opening right here: run it exactly as
 printed, so a later conversation does not bring the talk up again. If a talk of that area is
-already open, continue it instead. This holds while a talk of another area is open: that talk stays
+already open, continue it instead, with one exception: on a talk day of that area (a day its newest
+rhythm change dropped counts as one when nobody asked for that change: the coach prepares it like one;
+a change they asked for with `area set` drops no talk day), when the open talk is an earlier one with no reply from them, run the brief anyway. It opens today's talk from
+its preparation and closes the earlier one as not held, and the opening names that earlier talk in
+one short sentence. If today's talk is the open one, the brief says so: continue it. A talk with a
+reply is always continued. This holds while a talk of another area is open: that talk stays
 open as it is, and the request is never saved with `talk said` as an answer to it.
 
 ## A new area
@@ -254,7 +281,15 @@ talk that already exists or an area with no talk yet:
   `"never suggest buying anything"`; taking it back: the same with `--remove`. A limit binds every
   reply of that talk.
 
-`godspeed-coach area read <area>` and `area limit <area>` list what is there now. Confirm in one
+- **Where the research looks first** ("The health talk should follow Peter Attia", "Add this
+  newsletter to the health sources", "Stop using that forum"): the area's `SOURCE:` lines, an
+  expert, a newsletter or a community, which the goal research reads first for the questions of
+  that talk (a community is only a lead to check, never proof). A new health, money, work,
+  relationships or psychology talk starts with a few sensible ones.
+  `godspeed-coach area source <area> "<the source, in their words>"`; taking it back: the same
+  with `--remove`.
+
+`godspeed-coach area read <area>`, `area limit <area>` and `area source <area>` list what is there now. Confirm in one
 short sentence that makes sense on its own, in their words, never the command's output as it is:
 "The health talk may now look at your running app.", "The health talk will never suggest buying
 anything.", "The health talk no longer looks at your running app.", "The psychology talk may now

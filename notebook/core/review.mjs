@@ -4,6 +4,7 @@ import {fieldList} from './fields.mjs';
 import {sameIndex,personKey,relationKey} from './same-thing.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
+import {carriedRoot,keepMedia} from './media-store.mjs';
 const NOT_UNDOABLE='Godspeed cannot tell exactly what this change did, so it cannot undo it. Correct it on the profile or person instead.';
 const key=value=>String(value||'').normalize('NFKD').toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,''),same=value=>String(value??'').trim().toLowerCase();
 export function factSubject(p){const subject_type=p.entity_id?'entity':p.contact_id?'contact':p.subject_type||'self';return {subject_type,subject_id:p.entity_id||p.contact_id||p.subject_id||null,attribute:p.attribute||key(p.canonical_label||p.label)};}
@@ -92,12 +93,14 @@ export class Review {
       if(id&&result.facts[0].outcome!=='inserted')targets.push({type:'claims',id,before:this.store.get('claims',id),after_hash:this.store.get('claims',id)._hash,shared:true});
     }else if(type==='media_conflict'){
       const root=this.domains.mediaRoot;
-      for(const mapping of [p.local,p.remote])if(hash(fs.readFileSync(path.join(root,safe(mapping.file))))!==mapping.sha256)throw new Error('A retained media version needs repair before resolving');
-      const local={...p.local,path:p.local.path+'.conflict-'+p.local.sha256.slice(0,12)};
-      atomic(path.join(root,hash(local.path)+'.mapping.json'),JSON.stringify(local));atomic(path.join(root,hash(p.remote.path)+'.mapping.json'),JSON.stringify(p.remote));
+      const local={...p.local,path:p.local.path+'.conflict-'+p.local.sha256.slice(0,12)},kept=[local,p.remote].map(mapping=>[mapping,fs.readFileSync(path.join(root,safe(mapping.file)))]);
+      if(kept.some(([mapping,data])=>hash(data)!==mapping.sha256))throw new Error('A retained media version needs repair before resolving');
+      for(const [mapping,data] of kept){atomic(path.join(root,hash(mapping.path)+'.mapping.json'),JSON.stringify(mapping));keepMedia(carriedRoot(this.store),mapping,data);}
     }else if(type==='source_version'){
       if(!this.store.get('notes',p.previous_note_id)||!this.store.get('notes',p.new_note_id))throw new Error('An imported source version is missing');
     }else if(type==='add_contact'){
+      // A person needs a name; a suggestion without a usable one cannot become one (issue 154: until 2.0.0-beta.14 Keep wrote a nameless review-<id> person).
+      if(typeof p.name!=='string'||!p.name.trim())throw new Error('This suggestion has no name, so it cannot become a person. Remove it instead.');
       // A person of that name (or nickname) who exists already is the one
       // meant: Keep links the suggestion to them and creates no one, so Undo
       // removes no one. Until 6 October 2026 every Keep made a new person.
@@ -150,6 +153,10 @@ export class Review {
       }
       primaryId=keep.id;linked={type:'contacts',id:keep.id};
     }else if(type==='adjudicate_relationship'){}
+    // A reminder whose file in due/ and whose page in the notebook both changed since the page was
+    // copied from the file (due-copy.mjs). The page is kept and the file's version is here to be
+    // read, so Keep confirms what is already true and changes nothing.
+    else if(type==='deadline_both_changed'){}
     else if(type==='resolve_relationship_conflict')throw Error('Choose which role to keep on the suggestion itself.');
     else throw new Error('Unsupported review suggestion '+type);
     const receipt=[...changed].map(([key,record])=>({type:record.type,id:record.id,before:before.get(key)||null,after_hash:this.store.get(record.type,record.id)._hash}));

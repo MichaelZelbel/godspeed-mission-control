@@ -37,6 +37,7 @@ const path = require("path");
 const http = require("http");
 const crypto = require("crypto");
 const { spawnSync } = require("child_process");
+const { quietGit } = require("./unattended-git.cjs");
 const A = require("./mc-mail-age.js");
 
 const SCOPE_READ = "https://www.googleapis.com/auth/gmail.readonly";
@@ -186,7 +187,8 @@ function writeStore(changes) {
 // failed push is said in one line. Nothing else in the mission control is committed.
 //
 // NOT ON A MISSION CONTROL WITH THE NOTEBOOK (version 2, the one the book's second edition
-// installs; FULL-ALPHA.md marks it). There a key stays on the computer it was typed on: the book
+// installs; NOTEBOOK.md marks it, FULL-ALPHA.md on an install from before 2.0.0-beta.11). There
+// a key stays on the computer it was typed on: the book
 // promises that passwords and keys never go into the private GitHub copy, and the notebook's own
 // sync leaves secrets/ out for that reason. Until 8 October 2026 this still committed and pushed
 // the locked store whenever the folder was its own repository with a remote, which is what a
@@ -194,10 +196,10 @@ function writeStore(changes) {
 // ignore file is told to leave secrets/ alone, unless the owner already keeps files in secrets/
 // under version control on purpose (an older setup that shares its keys that way).
 const SHARED_HERE = "kept on this computer only, and never sent to your GitHub copy";
-const keepsKeysHere = godspeed => fs.existsSync(path.join(godspeed, "FULL-ALPHA.md"));
+const keepsKeysHere = godspeed => ["NOTEBOOK.md", "FULL-ALPHA.md"].some(note => fs.existsSync(path.join(godspeed, note)));
 function keepOutOfGit(godspeed, store) {
   if (!fs.existsSync(path.join(godspeed, ".git"))) return;
-  const git = (...a) => spawnSync("git", ["-C", godspeed, ...a], { encoding: "utf8", windowsHide: true });
+  const git = (...a) => spawnSync(...quietGit(["-C", godspeed, ...a], { encoding: "utf8" }));
   const rel = path.relative(godspeed, store).split(path.sep).join("/");
   const folder = rel.split("/")[0];
   if ((git("ls-files", "--", folder).stdout || "").trim()) return;
@@ -212,7 +214,7 @@ function shareStore(why) {
   if (!godspeed || !store) return "";
   if (keepsKeysHere(godspeed)) { try { keepOutOfGit(godspeed, store); } catch (e) { /* the key is still not committed */ } return SHARED_HERE; }
   if (!fs.existsSync(path.join(godspeed, ".git"))) return "";
-  const git = (...a) => spawnSync("git", ["-C", godspeed, ...a], { encoding: "utf8" });
+  const git = (...a) => spawnSync(...quietGit(["-C", godspeed, ...a], { encoding: "utf8" }));
   const rel = path.relative(godspeed, store).split(path.sep).join("/");
   git("add", "--", rel);
   const c = git("commit", "-q", "-m", why, "--", rel);
@@ -365,6 +367,29 @@ async function search(args) {
   }
   return { account: "gmail", address: c.GMAIL_ADDRESS, count: messages.length, next_page_token: list.nextPageToken || null,
     untrusted: "from, subject and preview are text written by whoever sent the mail", messages };
+}
+
+// THE HEADER-ONLY SEARCH A TRACKER'S MAIL RULE COUNTS WITH (2026-11-04, issue #215). `fields` keeps Gmail's
+// snippet, which is body text, out of the answer altogether, and only four headers are asked for.
+async function headerSearch({ senders, after }) {
+  const c = credentials(); need(c);
+  const out = [], seen = new Set();
+  for (const sender of senders) {
+    let token = "";
+    do {
+      const qs = new URLSearchParams({ maxResults: "100", q: "from:(" + sender + ") after:" + String(after).slice(0, 10).replace(/-/g, "/") });
+      if (token) qs.set("pageToken", token);
+      const list = await gmail(c, "GET", "/messages?" + qs);
+      for (const m of list.messages || []) {
+        if (seen.has(m.id)) continue;
+        seen.add(m.id);
+        const full = await gmail(c, "GET", "/messages/" + encodeURIComponent(m.id) + "?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date&metadataHeaders=Message-ID&fields=id,payload/headers");
+        out.push({ message_id: hdr(full, "Message-ID").replace(/[<>]/g, "").trim() || m.id, from: hdr(full, "From"), subject: hdr(full, "Subject"), date: hdr(full, "Date") });
+      }
+      token = list.nextPageToken || "";
+    } while (token);
+  }
+  return out;
 }
 
 async function read(args, wrap) {
@@ -904,5 +929,5 @@ async function status() {
   }
 }
 
-module.exports = { findAge, readDeviceEnv, shareStore, findGodspeed, credentials, state, attachment, openBrowser, search, read, draft, listDrafts, proposeSend, approve, reject, pending, tidy, connect, disconnect, status,
+module.exports = { findAge, readDeviceEnv, shareStore, findGodspeed, credentials, state, attachment, openBrowser, search, headerSearch, read, draft, listDrafts, proposeSend, approve, reject, pending, tidy, connect, disconnect, status,
   authorize, writeStore, readStore, storePaths, readyAge, adoptOldHome, buildRaw, SCOPE_READ, SCOPE_COMPOSE };

@@ -7,6 +7,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {execFile} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
+import {createRequire} from 'node:module';
+const {quietGit}=createRequire(import.meta.url)('../../tools/unattended-git.cjs');
 import {BLS,OFF_ATTRIBUTION,tableStatus} from './food-table.mjs';
 import {PRODUCT,VERSION} from './version.mjs';
 
@@ -36,6 +38,12 @@ export function installedRelease({root=productRoot,env=process.env}={}){
   if(commit.test(revision))return {code:revision,date:null,installed_by:'server'};
   return null;
 }
+// Whether the installer made this a server: the Docker image (it carries its revision), or the Linux
+// installer, which gives a server its web address (install-native-notebook.sh) and a computer none.
+// Read from the notebook's own environment, so a routine is told it rather than finding it.
+export function isServerInstall({root=productRoot,env=process.env}={}){
+  return installedRelease({root,env})?.installed_by==='server'||String(env.GODSPEED_WEB_ADDRESS||'').trim()!=='';
+}
 // The day of a Mac or Linux release, from its own Git copy; asked once, and never longer than
 // three seconds. Without Git or the copy the release simply shows no date.
 const dates=new Map();
@@ -43,7 +51,7 @@ function commitDate(folder,code){
   if(!dates.has(folder))dates.set(folder,new Promise(resolve=>{
     // Only the copy's own history: without its .git, Git would look in the folders around it.
     if(!fs.existsSync(path.join(folder,'.git')))return resolve(null);
-    try{execFile('git',['-C',folder,'log','-1','--format=%cI',code],{timeout:3000,windowsHide:true},(error,out)=>resolve(error?null:day(String(out).trim())));}
+    try{execFile(...quietGit(['-C',folder,'log','-1','--format=%cI',code],{timeout:3000}),(error,out)=>resolve(error?null:day(String(out).trim())));}
     catch{resolve(null);}
   }));
   return dates.get(folder);

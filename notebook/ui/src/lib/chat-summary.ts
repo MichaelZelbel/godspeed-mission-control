@@ -8,6 +8,8 @@ export interface ChatSummaryResult {
   messageCount: number;
 }
 
+export type ChatFunction = "note-chat" | "collection-chat" | "conversation-chat";
+
 /**
  * Fold the messages that left the window into the rolling summary, when
  * enough have (nextSummaryBatch). Best effort: null when nothing is due or the
@@ -15,7 +17,7 @@ export interface ChatSummaryResult {
  * answer never waits for a second model call.
  */
 export async function summarizeChat(
-  chatFn: "note-chat" | "collection-chat",
+  chatFn: ChatFunction,
   state: PersistedChatState,
 ): Promise<ChatSummaryResult | null> {
   const batch = nextSummaryBatch(state);

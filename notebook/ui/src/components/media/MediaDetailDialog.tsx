@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { FileText, ExternalLink, Loader2, RefreshCw, AlertCircle, CheckCircle2 } from "lucide-react";
+import { FileText, ExternalLink, Loader2, RefreshCw, AlertCircle, CheckCircle2, CloudOff } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useReanalyzeMedia } from "@/hooks/useMediaAnalysis";
@@ -27,10 +27,11 @@ export interface MediaDetailItem {
 interface Props {
   item: MediaDetailItem | null;
   noteTitle?: string;
+  missingHere?: boolean;
   onClose: () => void;
 }
 
-export function MediaDetailDialog({ item, noteTitle, onClose }: Props) {
+export function MediaDetailDialog({ item, noteTitle, missingHere = false, onClose }: Props) {
   const navigate = useNavigate();
   const reanalyze = useReanalyzeMedia();
   const [signedUrl, setSignedUrl] = useState<string>("");
@@ -95,7 +96,14 @@ export function MediaDetailDialog({ item, noteTitle, onClose }: Props) {
 
         {/* Preview */}
         <div className="flex-1 min-h-[40vh] md:min-h-0 bg-muted/40 flex items-center justify-center overflow-hidden">
-          {signFailed ? (
+          {missingHere ? (
+            <div role="status" className="flex flex-col items-center gap-2 text-muted-foreground px-4 text-center">
+              <CloudOff className="h-12 w-12" />
+              <span className="text-xs">
+                This file is kept on another computer. Files over 50 MB stay on the computer they were added on; open it there.
+              </span>
+            </div>
+          ) : signFailed ? (
             <div role="alert" className="flex flex-col items-center gap-2 text-muted-foreground px-4 text-center">
               <FileText className="h-12 w-12" />
               <span className="text-xs">The preview could not be loaded. Close this and open it again to retry.</span>
@@ -201,7 +209,7 @@ export function MediaDetailDialog({ item, noteTitle, onClose }: Props) {
               <ExternalLink className="h-3.5 w-3.5 mr-1.5" />
               Open note
             </Button>
-            {(item.analysis_status === "failed" || item.analysis_status === "complete" || previewFailed) && (
+            {!missingHere && (item.analysis_status === "failed" || item.analysis_status === "complete" || previewFailed) && (
               <Button variant="secondary" size="sm" disabled={isPending} onClick={handleRetry}>
                 {isPending ? (
                   <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />

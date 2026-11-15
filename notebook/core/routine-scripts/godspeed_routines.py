@@ -19,8 +19,24 @@ Each routine runs the original programs of the mission control, never a copy of 
   work        mc-work-run, the daily round's work (the work-item recipe). Prints one sentence for
               each finished piece the person will open, one for each step that went out on a
               kind of step they allowed once, one for each piece whose check failed, or nothing.
+  brief       the notebook's own morning briefing (notebook/scripts/morning-brief.mjs, core/briefing.mjs):
+              saved in the notebook as "Your morning briefing" and printed, with the Charm Challenge
+              line and without a sentence that breaks the person's writing rules; nothing when the
+              same briefing went out already (#160, 3 November 2026: it was the starter recipe).
   due         mc-due check and mc-due today. Prints the reminders that need saying today, or
               nothing, and nothing at all on a day a morning brief carries them.
+  connection-check  the Daily connection check (notebook/scripts/connection-check.mjs): one harmless call
+               to each connection that is set up and, on a server, its local disk; prints only the
+               notices it queued (a login or key refused, a quiet phone, a full disk, or a second
+               failed morning in a row).
+  cleanup     the nightly cleanup (notebook/scripts/nightly-cleanup.mjs): files untouched for 30 days
+              are removed from a fixed list of places (core/cleanup.mjs). It prints nothing for the
+              person; what it freed and the disk before and after go to the error stream.
+  mail-count  the Mail counts (notebook/scripts/mail-count.mjs): counts the mails a tracker's mail rule names,
+              from their headers only, and adds them to that tracker. It prints nothing, and a mail
+              connection that does not answer is left to the daily connection check.
+  notices     the notice sender of a mission control not made from the starter (#225): every 15
+              minutes it says the oldest queued notice, and never one marked not_sent.
   coach-gate  godspeed-coach gate: the talk brief when a talk is due, else {"wakeAgent": false}.
   coach-prep  mc-coach-prep, every night at 03:00: each coaching talk of the next day is prepared
               with the coach-prep recipe, within two hours. It prints nothing: a talk it could not
@@ -32,12 +48,16 @@ Each routine runs the original programs of the mission control, never a copy of 
               while nobody waits for an answer, through the assistant's own control channel. It is
               the one routine that runs no program of the mission control's; its rules and reasons
               are in its own block below (chat_tidy). It prints nothing for the person: its log is
-              its output and goes to the error stream, and it sends nothing to the chat. No
-              install is given this routine since 27 October 2026 (notebook-routines.mjs).
+              its output and goes to the error stream, and it sends nothing to the chat. Every
+              install with a chat app connected has it (notebook-routines.mjs).
 
 The two that run every 15 minutes, coach-tick and journal-tick, also say once what the notebook
 needs the person to hear and could not send itself, such as a nightly backup that failed: the
-notebook queues it in notices.json in its own state, and each one is said once (notices).
+notebook queues it in notices.json in its own state, and each one is said once (notice), one a
+run and only when the routine has no line of its own. The notebook writes it with the guidance the
+chat reads. A mission control not made from the starter has a third one, notices, that says only notices; a
+notice marked not_sent (queued before that routine first started) is never said. Every message a routine sends is recorded in the notebook's conversation_messages, so
+the chat can tell what a message was about (core/background-reports.mjs).
 
 Printing nothing is Hermes' silence: nothing is sent and no note is saved. A failure exits non-zero
 with one plain sentence, which the notebook's Routines list shows as the last run.
@@ -48,8 +68,15 @@ reaches only the Routines list). Its one plain sentence is printed like any othe
 reaches the person the way their lines do (a note in "From your routines" on a computer, Telegram
 on a server), and it is kept in godspeed-routines-status.json beside Hermes' own record, from which
 the Routines list still says that the run failed (starting-routines.mjs, routineStatus).
+
+A routine that has a promise in work/promises/ (a line ROUTINE: <kind>, which setup writes when it
+makes the routine) leaves the person's date in routines/ran/<kind>.txt after every run that ended
+well (stamp). That date is the promise's proof, so a routine that stopped running is told at the
+top of the next morning, where a quiet one is not.
 """
 import argparse
+import hashlib
+import contextlib
 import json
 import os
 import queue
@@ -168,11 +195,16 @@ def fail(sentence, result=None):
 
 
 STATUS = "godspeed-routines-status.json"
+# Set when this run kept a failure (remember): such a run is not proof that a promise was kept.
+FAILED_THIS_RUN = False
 
 
 def remember(c, kind, failed=None):
     """What this run of a daily-round routine came to, beside Hermes' own record: the Routines list
     shows a run that printed its failure as failed (starting-routines.mjs, routineStatus)."""
+    global FAILED_THIS_RUN
+    if failed:
+        FAILED_THIS_RUN = True
     path = os.path.join(c["home"], STATUS)
     try:
         with open(path, encoding="utf-8") as f:
@@ -181,7 +213,16 @@ def remember(c, kind, failed=None):
             status = {}
     except Exception:
         status = {}
-    status[kind] = {"at": datetime.now(timezone.utc).isoformat(), "failed": failed}
+    previous = status.get(kind)
+    if not isinstance(previous, dict):
+        previous = {}
+    # Old records have no count, but their one retained outcome is still the immediately preceding
+    # run. Count it so an upgrade does not overlook the next consecutive failure.
+    streak = previous.get("failure_streak")
+    if not isinstance(streak, int) or streak < 0:
+        streak = 1 if previous.get("failed") else 0
+    status[kind] = {"at": datetime.now(timezone.utc).isoformat(), "failed": failed,
+                    "failure_streak": streak + 1 if failed else 0}
     try:
         tmp = path + ".tmp"
         with open(tmp, "w", encoding="utf-8") as f:
@@ -297,10 +338,19 @@ def local_day(stamp, c):
 BRIEF = re.compile(r"morning[\s_-]*brief", re.I)
 
 
+# The Morning brief that is the notebook's own briefing (#160, notebook-routines.mjs BRIEF_SCRIPT).
+BRIEF_SCRIPT = "godspeed-morning-brief.py"
+
+
 def brief_today(c, day):
     """Whether a morning brief that is switched on runs today: (already ran today, still to run
     today). The brief carries the dates and the daily round's line itself (Teach It Once,
-    Chapter 25), so the routines here never say the same thing twice in one morning."""
+    Chapter 25), so the routines here never say the same thing twice in one morning.
+
+    Only the starter recipe's brief does that. The notebook's own briefing (BRIEF_SCRIPT, since
+    3 November 2026) carries neither the daily round's line nor the steps going out tonight unless
+    the person says stop, so beside it the daily round and the deadline reminders speak for
+    themselves: a step must never go out without its one chance to be stopped."""
     try:
         with open(os.path.join(c["home"], "cron", "jobs.json"), encoding="utf-8") as f:
             data = json.load(f)
@@ -310,6 +360,8 @@ def brief_today(c, day):
     ran = later = False
     for j in jobs:
         if not isinstance(j, dict) or j.get("enabled") is False or str(j.get("state") or "") in ("paused", "completed"):
+            continue
+        if j.get("script") == BRIEF_SCRIPT:
             continue
         names = [j.get("skill") or ""] + list(j.get("skills") or []) + [j.get("name") or "", j.get("prompt") or ""]
         if not any(BRIEF.search(str(n)) for n in names):
@@ -605,34 +657,245 @@ def due(c):
     return ("From your deadline reminders:\n" + "\n".join(said)) if said else ""
 
 
+def brief(c):
+    """The Morning brief routine: the notebook's own briefing, its words printed for Hermes to deliver."""
+    day = today(c)
+    env = environment(c, day)
+    try:
+        r = run([c["node"], c["brief"]], c, env, timeout=LIMIT)
+    except subprocess.TimeoutExpired:
+        fail("The morning brief took too long and was stopped.")
+    if r.returncode != 0:
+        fail("The morning brief could not be written.", r)
+    return r.stdout.strip()
+
+
 NOTICES_SAID = "godspeed-notices-said.json"
 
 
-def notices(c):
-    """What the notebook queued for the person (core/notices.mjs), each said once on this machine."""
-    queued = c.get("notices")
-    if not queued:
-        return []
-    try:
-        with open(queued, encoding="utf-8") as f:
-            waiting = [n for n in (json.load(f) or {}).get("notices", []) if isinstance(n, dict) and n.get("id") and n.get("text")]
-    except Exception:
-        return []
-    said_file = os.path.join(c["home"], NOTICES_SAID)
+CLAIM_STALE = 900  # seconds: longer than say() may take, so a claim whose run died can be taken over
+
+
+def said_ids(said_file):
     try:
         with open(said_file, encoding="utf-8") as f:
-            said = list((json.load(f) or {}).get("ids", []))
+            return list((json.load(f) or {}).get("ids", []))
     except Exception:
-        said = []
-    fresh = [n for n in waiting if n["id"] not in said]
-    if not fresh:
         return []
-    keep = (said + [n["id"] for n in fresh])[-200:]
-    tmp = said_file + ".tmp"
+
+
+def claim(said_file, notice_id):
+    """Take the right to say one notice, or None. The two 15-minute routines can run at once; the
+    claim (an exclusive file per notice) covers selection through marking, so only one says it."""
+    path = "%s.%s.claim" % (said_file, hashlib.sha256(notice_id.encode("utf-8")).hexdigest()[:16])
+    for _ in range(2):
+        try:
+            os.close(os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY))
+            return path
+        except FileExistsError:
+            try:
+                if time.time() - os.path.getmtime(path) < CLAIM_STALE:
+                    return None
+                os.rename(path, "%s.stale-%d" % (path, os.getpid()))
+                os.remove("%s.stale-%d" % (path, os.getpid()))
+            except OSError:
+                return None
+    return None
+
+
+def release(path):
+    try:
+        os.remove(path)
+    except OSError:
+        pass
+
+
+def notice(c, only=""):
+    """The oldest thing the notebook queued for the person (core/notices.mjs) that this machine has
+    not said and no other run is saying, claimed, as (notice, said file, claim); or None. One a run:
+    a message is about one thing. Whoever gets it releases the claim (tick).
+    only limits it to notices whose id starts with it, so a routine says what it queued and leaves
+    the rest to the notice routines; a notice with that prefix and no text raises ValueError, and
+    so does an unreadable queue.
+    Entries that are not objects with a string id are ignored."""
+    queued = c.get("notices")
+    if not queued:
+        return None
+    waiting = []
+    before_sender = held_ids(c)
+    try:
+        with open(queued, encoding="utf-8") as f:
+            text = f.read()
+        if text.strip():
+            waiting = [n for n in json.loads(text).get("notices", []) if isinstance(n, dict) and isinstance(n.get("id"), str) and n["id"].startswith(only) and n["id"] not in before_sender and not n.get("not_sent")]
+    except FileNotFoundError:
+        return None
+    except Exception:
+        # Whoever asks for its own notices must hear that the queue is unreadable; the general notice routine just has nothing to say.
+        if only:
+            raise
+        return None
+    if only and any(not isinstance(n.get("text"), str) or not n["text"].strip() for n in waiting):
+        raise ValueError("a queued notice has no text")
+    waiting = [n for n in waiting if isinstance(n.get("text"), str) and n["text"].strip()]
+    said_file = os.path.join(c["home"], NOTICES_SAID)
+    for n in waiting:
+        if not n["id"].startswith(only) or n["id"] in said_ids(said_file):
+            continue
+        held = claim(said_file, n["id"])
+        if not held:
+            continue
+        if n["id"] in said_ids(said_file):  # said by a run that finished between the look and the claim
+            release(held)
+            continue
+        return n, said_file, held
+    return None
+
+
+@contextlib.contextmanager
+def one_at_a_time(path):
+    """Holds an operating-system lock on path, waiting for it: it goes with the process that holds
+    it, so it can neither be stolen from a live holder nor outlive a dead one."""
+    with open(path, "a+b") as f:
+        if os.name == "nt":
+            import msvcrt
+            f.seek(0)
+            while True:
+                try:
+                    msvcrt.locking(f.fileno(), msvcrt.LK_LOCK, 1)
+                    break
+                except OSError:
+                    continue
+        else:
+            import fcntl
+            fcntl.flock(f, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            if os.name == "nt":
+                f.seek(0)
+                msvcrt.locking(f.fileno(), msvcrt.LK_UNLCK, 1)
+
+
+def mark_said(n, said_file):
+    """Adds the notice to what this machine has said, on top of what is there now (the caller holds
+    the notices lock, since runs saying different notices all write this one file)."""
+    keep = (said_ids(said_file) + [n["id"]])[-200:]
+    tmp = "%s.%d.tmp" % (said_file, os.getpid())
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump({"ids": keep}, f)
     os.replace(tmp, said_file)
-    return [n["text"] for n in fresh]
+
+
+def reports(c, env, args, stdin, timeout):
+    """core/background-reports.mjs through its script (notebook/scripts/background-report.mjs): its
+    stdout, or None where no script is configured. A message that could not be recorded does not go
+    out: a run that fails says so and the notice stays unsaid."""
+    script = c.get("reports")
+    if not script:
+        return None
+    try:
+        r = subprocess.run([c["node"], script] + args + ["--godspeed", c["root"], "--home", c["home"]], cwd=c["root"], env=env,
+                           input=stdin, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout)
+    except Exception:
+        fail("What was sent to you could not be recorded in your notebook.")
+    if r.returncode != 0:
+        fail("What was sent to you could not be recorded in your notebook.", r)
+    return r.stdout.strip()
+
+
+def say(c, env, n):
+    """The words for a notice: written with the chat's guidance and recorded where the chat reads it
+    (its plain text where no script is configured)."""
+    return reports(c, env, ["say"], json.dumps(n), 360) or n["text"]
+
+
+def record(c, env, kind, text):
+    """A routine's own words, recorded as printed."""
+    reports(c, env, ["record", "--routine", kind], text, 120)
+
+
+def say_claimed(c, env, found):
+    """Says a claimed notice and marks it said, then releases the claim."""
+    n, said_file, held = found
+    try:
+        with one_at_a_time(said_file + ".lock"):  # the notebook has one writer at a time
+            words = say(c, env, n)
+            mark_said(n, said_file)
+    finally:
+        release(held)
+    return words
+
+
+def tick(c, env, kind, r):
+    """What a 15-minute routine says: its own line when it has one, else the oldest fresh notice,
+    else (a program that failed) its failure. Returns (text, already recorded)."""
+    own = r.stdout.strip() if r is not None and r.returncode == 0 else ""
+    if own:
+        return own, False
+    found = notice(c)
+    if found:
+        return say_claimed(c, env, found), True
+    return "", True
+
+
+NOTICES_STARTED = "godspeed-notices-started"
+NOT_SENT_BEFORE_SENDER = "Queued before Godspeed began sending notices on this machine, so it was kept and not sent."
+
+
+def now_ms():
+    return datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+
+
+def held_ids(c):
+    """The ids of every notice queued before the notice sender first started, in a mission control not
+    made from the starter (#225); empty in any other. The first call there marks all queued notices
+    not_sent and records their ids in the marker file, a permanent set kept apart from the bounded
+    said history, and notice() refuses every id in it. That also covers a producer's stale write of the
+    whole queue that brings one back unmarked; a notice queued later has a new id. It all happens under
+    the lock every delivery path takes, and the marker is published whole, so a run that sees it sees a
+    finished hold. A queue that cannot be read raises, so the run fails and says nothing."""
+    queued = c.get("notices")
+    if not c.get("adopted") or not queued:
+        return set()
+    marker = os.path.join(c["home"], NOTICES_STARTED)
+    said_file = os.path.join(c["home"], NOTICES_SAID)
+    with one_at_a_time(said_file + ".lock"):
+        if not os.path.exists(marker):
+            at = now_ms()
+            ids = []
+            try:
+                with open(queued, encoding="utf-8") as f:
+                    data = json.loads(f.read())
+            except FileNotFoundError:
+                data = None
+            if data is not None:
+                if not isinstance(data, dict) or not isinstance(data.get("notices"), list):
+                    raise ValueError("the queued notices cannot be read")
+                ids = [n["id"] for n in data["notices"] if isinstance(n, dict) and isinstance(n.get("id"), str)]
+                held = [dict(n, not_sent={"reason": NOT_SENT_BEFORE_SENDER, "at": at}) if isinstance(n, dict) and not n.get("not_sent") else n for n in data["notices"]]
+                if held != data["notices"]:
+                    tmp = "%s.%d.tmp" % (queued, os.getpid())
+                    with open(tmp, "w", encoding="utf-8") as f:
+                        f.write(json.dumps(dict(data, notices=held), indent=2) + "\n")
+                    os.replace(tmp, queued)
+            tmp = "%s.%d.tmp" % (marker, os.getpid())
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump({"at": at, "ids": ids}, f)
+            os.replace(tmp, marker)
+        try:
+            with open(marker, encoding="utf-8") as f:
+                return set(json.load(f).get("ids", []))
+        except Exception:
+            return set()
+
+
+def notices(c):
+    """The notice sender of a mission control not made from the starter (#225): it says the oldest queued
+    notice and nothing else."""
+    env = environment(c, today(c))
+    found = notice(c)
+    return (say_claimed(c, env, found), True) if found else ("", True)
 
 
 def journal_tick(c):
@@ -643,12 +906,10 @@ def journal_tick(c):
         r = run([c["node"], c["journal"], "tick", "--godspeed", c["root"]], c, env, timeout=600)
     except subprocess.TimeoutExpired:
         r = None
-    said = notices(c)
-    if r is None or r.returncode != 0:
-        if said:
-            return "\n\n".join(said)
+    text, recorded = tick(c, env, "journal-tick", r)
+    if not text and (r is None or r.returncode != 0):
         fail("The journal's check-ins could not run.", r)
-    return "\n\n".join(said + ([r.stdout.strip()] if r.stdout.strip() else []))
+    return text, recorded
 
 
 # ===================================================================== THE NIGHT CHAT TIDY-UP
@@ -660,23 +921,28 @@ def journal_tick(c):
 # assistant has no idle-time summarising of its own (idle_compact_after_seconds also runs before the
 # next reply) and no compress command.
 #
-# What it does have is its own control channel, the stdio JSON-RPC its terminal and desktop apps use
-# (python -m tui_gateway.entry): session.resume opens a stored conversation and session.compress
-# summarises it under the assistant's own compression lock. The gateway reloads the chat from the
-# database on every message, so a summary written here at night is what the next morning's message
-# starts from.
+# The gateway refuses an outside summary of a chat app's chat (Hermes 0.22.5: session.compress,
+# session.mutate compress and command.dispatch /compress all answer that the gateway owns it). What
+# it runs itself is the handler behind the owner's own /compress in the chat app, and a plugin
+# command is the supported way to run code in the gateway: the godspeed-chat-tidy plugin
+# (assistant-files/godspeed-chat-tidy) registers /godspeed-chat-tidy <chat session key> <session id>.
+# This routine opens its own hidden local session over the assistant's control channel (python -m
+# tui_gateway.entry), dispatches that command on it, and then checks in the database that the
+# chat's conversation really got shorter. Only that check makes a run "tidied". The control channel
+# is a separate process from the running gateway, so the plugin there hands the request to its copy
+# in the gateway through a folder in the assistant's home and returns that copy's answer.
 #
 # RULES IT HOLDS ITSELF TO
 #   - It only ever summarises the conversation the gateway's routing table names for the owner's
-#     chat, and only after session.resume confirms that exact conversation. Any other answer stops
-#     it. (On 26 October 2026 a hand test whose copy step failed went on to summarise the live chat
-#     instead of the copy; every step here is checked before the next one runs.)
+#     chat: it names that key and session id to the plugin, which refuses anything else, and it
+#     reads the routing table again before the command; a moved route stops the run.
 #   - It does nothing while the chat is in use: last message less than --idle-minutes ago, an open
-#     turn lease on any conversation of its chain, or the conversation reported running.
+#     turn lease on any conversation of its chain (the plugin also refuses while a turn runs).
 #   - It does nothing below --min-tokens (the last real prompt size the gateway recorded), because
 #     summarising an already short chat only rewrites the summary.
-#   - It talks to the assistant only through that control channel, checks every answer before the
-#     next step, always closes what it opened, and opens the database read-only.
+#   - It talks to the assistant only through that control channel and the plugin command, checks
+#     every answer before the next step, and opens the database read-only. A refusal or a chat that
+#     did not get shorter is logged as such and is not a failed run.
 #   - It sends nothing to the chat. Its output is its log, which goes to the error stream so that
 #     what the routine prints for the person stays empty: the assistant's silence, so nothing is
 #     sent and no note is saved. A run that went wrong says one sentence and exits non-zero.
@@ -685,9 +951,8 @@ def journal_tick(c):
 # (godspeed-routines.json, written by starting-routines.mjs), never from a path written by hand.
 #
 # By hand, from the assistant's scripts folder:
-#   godspeed-chat-tidy.py --dry-run             find the chat, open and close it, say what it would do
-#   godspeed-chat-tidy.py --session ID --force  summarise one named stored conversation whatever its
-#                                               size (for a test on a copy; a chat in use is refused)
+#   godspeed-chat-tidy.py --dry-run   find the chat and say what it would do
+#   godspeed-chat-tidy.py --force     summarise whatever its size (a chat in use is still left alone)
 #
 # The routing key of the owner's own chat in a chat app. The app's name is the routing table's, so a
 # chat app the gateway routes the same way needs no new code here (today: telegram, a private chat).
@@ -697,7 +962,7 @@ def journal_tick(c):
 # the routine found two chats beside a Telegram one and refused every night ("found 2"), and with no
 # chat app at all it would have summarised a terminal conversation.
 CHAT_KEY_LIKE = "agent:main:%:dm:%"
-CHAT_KEY = re.compile(r"^agent:main:(?!local:)[^:]+:dm:.+$")
+CHAT_KEY = re.compile(r"^agent:main:(?!(?:local|cli|tui|cron|webhook|api_server):)[^:]+:dm:.+$")
 
 
 def chat_log(line):
@@ -718,10 +983,9 @@ def chat_db(c):
 
 
 def chat_session(c, con):
-    """The stored conversation the gateway currently routes the owner's chat to, or None while it
+    """The (session key, stored conversation) the gateway currently routes the owner's chat to, or None while it
     routes none: the routine is made from the moment a chat app is connected, and a chat app
-    connected today has nothing routed until the first message (made for no install since 27
-    October 2026, notebook-routines.mjs says why). Nothing to tidy up is not a failure. More than
+    connected today has nothing routed until the first message. Nothing to tidy up is not a failure. More than
     one chat is: acting then could summarise the wrong conversation, which is the one thing this
     must never do."""
     scope = os.path.join(c["home"], "sessions")
@@ -741,7 +1005,7 @@ def chat_session(c, con):
         entry = {}
     if not entry.get("session_id"):
         fail("The assistant's routing table names no stored conversation for %s." % rows[0][0])
-    return entry["session_id"]
+    return rows[0][0], entry["session_id"]
 
 
 def chat_state(con, session_id):
@@ -807,7 +1071,7 @@ class Channel:
         time.sleep(0.2)  # the reader thread takes the last line just after the exit
         return (": " + self.said[-1]) if self.said else ""
 
-    def call(self, method, params, timeout):
+    def call(self, method, params, timeout, soft=False):
         self.n += 1
         try:
             self.p.stdin.write(json.dumps({"jsonrpc": "2.0", "id": self.n, "method": method, "params": params}) + "\n")
@@ -828,6 +1092,8 @@ class Channel:
                 continue
             if msg.get("id") == self.n:
                 if msg.get("error"):
+                    if soft:
+                        return None
                     fail("%s refused: %s" % (method, msg["error"]))
                 return msg.get("result") or {}
         fail("%s: no answer within %d s." % (method, timeout))
@@ -840,12 +1106,38 @@ class Channel:
             self.p.kill()
 
 
+CHAT_TIDY_TITLE = "Godspeed chat tidy"
+CHAT_TIDY_COMMAND = "godspeed-chat-tidy"
+
+
+def chat_messages(con, session_id):
+    return con.execute("select count(*) from messages where session_id = ?", (session_id,)).fetchone()[0]
+
+
+def chat_route(c):
+    """The owner's chat as the routing table has it right now: (session key, session id) or None."""
+    con = chat_db(c)
+    try:
+        return chat_session(c, con)
+    finally:
+        con.close()
+
+
+def chat_hidden_session(ch, timeout):
+    """A fresh hidden local session for this run. The assistant keeps no database row for a hidden
+    session that never receives a message, so nothing piles up night after night. It is never the
+    owner's chat, so nothing here can touch a conversation of theirs."""
+    made = ch.call("session.create", {"title": CHAT_TIDY_TITLE, "hidden": True}, timeout)
+    if not made.get("session_id"):
+        fail("The assistant made no session for the chat tidy-up.")
+    return made["session_id"]
+
+
 def chat_tidy(c):
     ap = argparse.ArgumentParser(prog="godspeed-chat-tidy",
                                  description="Summarise the long chat with the assistant at night.")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--force", action="store_true", help="ignore --min-tokens")
-    ap.add_argument("--session", help="a stored conversation id instead of the owner's chat")
     ap.add_argument("--min-tokens", type=int, default=60000)
     ap.add_argument("--idle-minutes", type=int, default=30)
     ap.add_argument("--resume-timeout", type=int, default=180)
@@ -854,16 +1146,18 @@ def chat_tidy(c):
 
     con = chat_db(c)
     try:
-        target = a.session or chat_session(c, con)
-        state = chat_state(con, target) if target else None
+        route = chat_session(c, con)
+        state = chat_state(con, route[1]) if route else None
+        before = chat_messages(con, route[1]) if route else None
     finally:
         try:
             con.close()
         except sqlite3.Error:
             pass
-    if not target:
+    if not route:
         chat_log("skip: the assistant routes no chat of the owner's yet")
         return ""
+    key, target = route
     tokens, last, leases = state
     idle_min = (time.time() - last) / 60 if last else None
     if idle_min is None:
@@ -884,34 +1178,44 @@ def chat_tidy(c):
     if not a.force and tokens < a.min_tokens:
         chat_log("skip: below %d tokens" % a.min_tokens)
         return ""
-
-    ch, sid = Channel(c), None
-    try:
-        res = ch.call("session.resume", {"session_id": target}, a.resume_timeout)
-        sid = res.get("session_id")
-        if res.get("resumed") != target or not sid:
-            fail("Resume opened %r, not %r; stopping." % (res.get("resumed"), target))
-        if res.get("running") or res.get("inflight") or res.get("status") != "idle":
-            chat_log("skip: conversation busy (status %s)" % res.get("status"))
-            return ""
-        if a.dry_run:
-            chat_log("dry run: would summarise %s (%s messages loaded)" % (target, res.get("message_count")))
-            return ""
-        started = time.time()
-        out = ch.call("session.compress", {"session_id": sid}, a.compress_timeout)
-        chat_log("summarised in %.0f s: status %s, messages %s -> %s, about %s -> %s tokens"
-                 % (time.time() - started, out.get("status"), out.get("before_messages"),
-                    out.get("after_messages"), out.get("before_tokens"), out.get("after_tokens")))
-        if out.get("status") != "compressed":
-            fail("The summary ended with status %r." % out.get("status"))
+    if a.dry_run:
+        chat_log("dry run: would summarise %s (%d messages)" % (target, before))
         return ""
+
+    def still_routed(step):
+        now = chat_route(c)
+        if now != (key, target):
+            fail("The chat moved before %s; stopping." % step)
+
+    ch = Channel(c)
+    try:
+        sid = chat_hidden_session(ch, a.resume_timeout)
+        still_routed("the summary")
+        started = time.time()
+        out = ch.call("command.dispatch", {"name": CHAT_TIDY_COMMAND, "arg": "%s %s" % (key, target),
+                                           "session_id": sid}, a.compress_timeout)
     finally:
-        if sid:
-            try:
-                ch.call("session.close", {"session_id": sid}, 30)
-            except SystemExit as error:
-                chat_log("close: %s" % error)
         ch.close()
+    said = str(out.get("output") or "").strip().splitlines()
+    line = said[0].strip() if said else ""
+    if line.startswith("refused:"):
+        chat_log("not summarised: %s" % line)
+        return ""
+    if not line.startswith("ok:"):
+        fail("The summary command answered %r." % line[:200])
+    if chat_route(c) != (key, target):
+        chat_log("route moved during the summary: not tidied")
+        return ""
+    con = chat_db(c)
+    try:
+        after = chat_messages(con, target)
+    finally:
+        con.close()
+    if after < before:
+        chat_log("tidied in %.0f s: %s; messages %d -> %d" % (time.time() - started, line, before, after))
+    else:
+        chat_log("not tidied: %s; messages %d -> %d" % (line, before, after))
+    return ""
 
 
 def coach(c, command):
@@ -923,20 +1227,146 @@ def coach(c, command):
         r = None
     if command == "gate":
         return r.stdout.strip() if r is not None and r.returncode == 0 and r.stdout.strip() else NO_WAKE
-    said = notices(c)
-    if r is None or r.returncode != 0:
-        if said:
-            return "\n\n".join(said)
+    text, recorded = tick(c, env, "coach-tick", r)
+    if not text and (r is None or r.returncode != 0):
         fail("The coach's reminders could not run.", r)
-    return "\n\n".join(said + ([r.stdout.strip()] if r.stdout.strip() else []))
+    return text, recorded
+
+
+# Every other routine's words are recorded as printed (record); the two 15-minute routines record a
+# notice themselves, when it is written (tick). These print nothing for the person or feed an agent job.
+NOT_RECORDED = ("research", "coach-gate", "coach-prep", "chat-tidy", "cleanup", "mail-count")
+
+
+def connection_check(c):
+    """The Daily connection check (core/connection-check.mjs): it makes its calls and queues what the
+    person must be told as notices. They are said in this same run only when the check succeeded; after a failure they wait
+    for the next successful run."""
+    day = today(c)
+    env = environment(c, day)
+    try:
+        held_ids(c)  # the hold must precede the check's own notices, which are not older than the sender
+    except Exception:
+        fail("The daily connection check could not run.")
+    args = [c["node"], c["connection_check"]]
+    if c.get("hermes"):
+        args += ["--hermes", c["hermes"]]
+    if c.get("hermes_source"):
+        args += ["--hermes-source", c["hermes_source"]]
+    try:
+        r = run(args, c, env, timeout=900)
+    except subprocess.TimeoutExpired:
+        r = None
+    if r is None or r.returncode != 0:
+        # A failed run's result is not shown to the person, so what was queued stays unsaid for the next run that succeeds.
+        fail("The daily connection check could not run.", r)
+    # Claim everything queued now before saying any: saying may split a report into new notices, and
+    # those wait for the notice routine rather than extending this run.
+    waiting = []
+    try:
+        found = notice(c, only=c["connection_notice_prefix"])
+        while found:
+            waiting.append(found)
+            found = notice(c, only=c["connection_notice_prefix"])
+    except Exception:
+        for _, _, held in waiting:
+            release(held)
+        fail("The daily connection check could not run.")
+    said = []
+    try:
+        while waiting:
+            said.append(say_claimed(c, env, waiting.pop(0)))
+    finally:
+        for _, _, held in waiting:
+            release(held)
+    return "\n\n".join(said), True
+
+
+def cleanup(c):
+    """The nightly cleanup (core/cleanup.mjs): its log is its output."""
+    try:
+        r = run([c["node"], c["cleanup"]], c, environment(c, today(c)), timeout=900)
+    except subprocess.TimeoutExpired:
+        r = None
+    if r is None or r.returncode != 0:
+        fail("The nightly cleanup could not run.", r)
+    sys.stderr.write(r.stderr)
+
+def mail_count(c):
+    """The Mail counts (core/mail-trackers.mjs). Silent whatever happens to the mail connection: only a
+    failure of the notebook's own files fails the run, with a sentence that carries no mail data."""
+    try:
+        r = run([c["node"], c["mail_count"]], c, environment(c, today(c)), timeout=900)
+    except subprocess.TimeoutExpired:
+        r = None
+    if r is None or r.returncode != 0:
+        fail("The mail counts could not be updated.")
+    return ""
+
+
+def workouts(c):
+    """The carried Workouts importer owns its key and its normal notification channels."""
+    env = environment(c, today(c))
+    if c.get("workouts_notebook"):
+        env["GODSPEED_WORKOUTS_NOTEBOOK"] = c["workouts_notebook"]
+    try:
+        r = run([c["node"], c["workouts"], "run", "--scheduled"], c, env, timeout=900)
+    except subprocess.TimeoutExpired:
+        r = None
+    if r is None or r.returncode != 0:
+        fail("Workouts from Hevy could not run.")
+    return ""
+
+
+def memory_daily(c):
+    """File dated, evidenced memories from the prompt archive; it never speaks."""
+    try:
+        r = run([c["node"], c["memory_daily"]], c, environment(c, today(c)), timeout=900)
+    except subprocess.TimeoutExpired:
+        r = None
+    if r is None or r.returncode != 0:
+        fail("Remember what you said could not finish.", r)
+    sys.stderr.write(r.stderr)
+    return ""
+
+
+# Every routine wrapper the notebook writes (routineFiles in starting-routines.mjs) names one of these.
+ROUTINES = {"research": research, "decide": decide, "work": work, "due": due, "brief": brief, "coach-prep": coach_prep,
+            "coach-gate": lambda c: coach(c, "gate"), "coach-tick": lambda c: coach(c, "tick"),
+            "journal-tick": journal_tick, "notices": notices, "chat-tidy": chat_tidy, "connection-check": connection_check,
+             "cleanup": cleanup, "mail-count": mail_count, "workouts": workouts, "memory-daily": memory_daily}
+
+
+def stamp(c, kind):
+    """The proof of a promise kept: the person's date in routines/ran/<kind>.txt, written only for a
+    routine some promise names, and never failing the run that writes it."""
+    try:
+        claim = "ROUTINE: " + kind
+        promises = Path(c["root"]) / "work" / "promises"
+        if not any(claim in (l.strip() for l in read(str(f)).splitlines()) for f in promises.glob("*.md")):
+            return
+        path = Path(c["root"]) / "routines" / "ran" / (kind + ".txt")
+        text = today(c) + "\n"
+        if read(str(path)) == text:
+            return
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = str(path) + ".tmp"
+        with open(tmp, "w", encoding="utf-8", newline="\n") as f:
+            f.write(text)
+        os.replace(tmp, str(path))
+    except Exception:
+        pass
 
 
 def main(kind):
     c = config()
-    out = {"research": research, "decide": decide, "work": work, "due": due, "coach-prep": coach_prep,
-           "coach-gate": lambda c: coach(c, "gate"), "coach-tick": lambda c: coach(c, "tick"),
-           "journal-tick": journal_tick, "chat-tidy": chat_tidy}[kind](c)
+    out = ROUTINES[kind](c)
+    if not FAILED_THIS_RUN:
+        stamp(c, kind)
+    out, recorded = out if isinstance(out, tuple) else (out, kind in NOT_RECORDED)
     if out:
+        if not recorded:
+            record(c, environment(c, today(c)), kind, out)
         # UTF-8 whatever the console's code page: a curly quote must not end the run on Windows.
         sys.stdout.buffer.write((out + "\n").encode("utf-8"))
         sys.stdout.flush()

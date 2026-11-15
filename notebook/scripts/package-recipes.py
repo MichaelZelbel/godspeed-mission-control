@@ -38,11 +38,28 @@ specific={
 'move-godspeed':'Stop the candidate service, verify a complete knowledge and media backup, copy the workspace into an empty destination and validate identities, references and restored contents. Change only the candidate installation path. Restart and read the original note and media; preserve the old folder for rollback.',
 }
 company={'found-company','pattern1-build','sap-ai-agent-low-code','sap-ai-agent-pro-code','sap-build-ai-patterns'}
+# THE RECIPES THAT LEFT THE DEFAULT SET (31 October 2026, release 2.0.0-beta.13). A skill whose only
+# job is making or finishing video is no longer handed to every new reader: the video add-on
+# (mc-video) carries four of them in its own skill/ folder and installs the other nineteen from the
+# HyperFrames release it is pinned to, so only a reader who sets that add-on up gets them. They are
+# skipped here so a later run of this script cannot put them back into notebook/recipes.
+# gsap-core and gsap-timeline are NOT in this list: they are the official GSAP skills for a
+# JavaScript animation library (React/Vue/vanilla, scroll-driven animation, Webflow Interactions),
+# which is web work as much as video, and HyperFrames v0.8.43 does not publish them, so nothing
+# would put them back. notebook/data/recipe-revisions.json keeps every hash it ever shipped of the
+# ones below: that is how an update tells a reader's untouched copy, which it removes, from one the
+# reader changed, which it keeps (notebook/core/retired-skills.mjs).
+left_the_default_set={'embedded-captions','faceless-explainer','figma','general-video','hyperframes',
+ 'hyperframes-animation','hyperframes-audio','hyperframes-cli','hyperframes-core','hyperframes-creative',
+ 'hyperframes-keyframes','hyperframes-registry','media-use','motion-graphics','music-to-video','pr-to-video',
+ 'product-launch-video','remotion-to-hyperframes','slideshow','talking-head-recut','video-captions',
+ 'video-finishing','video-hooks'}
 media={'embedded-captions','faceless-explainer','figma','general-video','gsap-core','gsap-timeline','hyperframes','hyperframes-animation','hyperframes-audio','hyperframes-cli','hyperframes-core','hyperframes-creative','hyperframes-keyframes','hyperframes-registry','media-use','motion-graphics','music-to-video','nano-banana-images','pr-to-video','product-launch-video','remotion-to-hyperframes','slideshow','talking-head-recut','video-captions','scroll-craft'}
 aliases={'mc-brief-operations':'daily-brief','morning-note':'morning-note','subscription-review':'subscription-review','talk-about':'talk-about','memory-audit':'memory-audit','social-visuals':'social-visuals','video-hooks':'video-hooks'}
 classified=[]
 for skill in inventory['skills']:
  name=skill['name']
+ if name in left_the_default_set:continue
  if name in company:
   classified.append({'name':name,'classification':'separately owned','reason':'Company and specialist enterprise-agent systems remain separate from personal Mission Control.'});continue
  purpose=specific.get(aliases.get(name,name))
@@ -73,9 +90,18 @@ for skill in inventory['skills']:
 # notebook/recipes is their source and stays as it is. The tracker recipe owns "track" (D-321), and
 # hands the period and food to their own recipes; context-setup leads the getting-to-know-you chat
 # after the technical setup (16 October 2026); coach-prep prepares each coaching talk the day before
-# (18 October 2026).
-for name in ['tracker','context-setup','cycle-tracker','food-tracker','coach-prep']:
+# (18 October 2026), and coach-prep-review is the second AI that checks it before the talk may open
+# from it (3 November 2026).
+for name in ['tracker','context-setup','cycle-tracker','food-tracker','coach-prep','coach-prep-review']:
  if not (root/'notebook/recipes'/name/'SKILL.md').exists():raise ValueError('Missing product recipe '+name)
+ classified.append({'name':name,'classification':'source only','reason':'Portable recipe and shared record/runtime operations; no private incident prose or account details.'})
+# The product's own add-ons with no Mission Control original either: the add-on that ships the recipe
+# is its source, copied here as the native recipes above are (the Charm Challenge, 21 October 2026).
+# They are never in the source inventory, which inventory.py rewrites from Mission Control's skills.
+for name,(addon,recipe) in {'charm-challenge':('godspeed-charm','charm-challenge')}.items():
+ source=root/'third-party/addons'/addon/'skill'/recipe
+ if not (source/'SKILL.md').exists():raise ValueError('Missing maintained workflow '+name)
+ shutil.copytree(source,root/'notebook/recipes'/name,dirs_exist_ok=True)
  classified.append({'name':name,'classification':'source only','reason':'Portable recipe and shared record/runtime operations; no private incident prose or account details.'})
 (root/'notebook/data/recipe-inventory.json').write_text(json.dumps(classified,indent=2)+'\n',encoding='utf-8',newline='\n')
 print('Classified',len(classified),'recipes; packaged',len(classified)-len(company),'portable recipes')

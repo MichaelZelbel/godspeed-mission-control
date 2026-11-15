@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+. "$(dirname "${BASH_SOURCE[0]}")/test-progress.sh"
 image=${1:?Supply the freshly built image}
 name=godspeed-image-verification
 volume=godspeed-image-verification-data
@@ -94,7 +95,9 @@ docker exec -u hermes "$target" test -f /opt/godspeed/kit/tools/mc-mail.js || { 
 echo "The mail tool answers, and Gmail is connected from the server's own terminal with: $line"
 # Run the actual modules shipped in this image, with small synthetic fixtures.
 # A failure names its tests in the build log; the whole log stays in the evidence.
-docker exec -e GODSPEED_ORIGINAL_RUNTIME=off -w /opt/godspeed/kit/notebook "$name" sh -c 'node scripts/run-tests.mjs test/*.test.mjs' > "$evidence/server-tests.log" 2>&1 || { grep -E '^not ok|^# (tests|pass|fail)' "$evidence/server-tests.log"; grep -E -A12 '^not ok' "$evidence/server-tests.log" | grep -E 'error|expected|actual|Error|FAIL|assert' | head -60; exit 1; }
+# Each test (and each file) has a time limit, so a hang fails with its name in minutes instead of silently eating the job
+# (the 6 November 2026 run printed nothing for 35 minutes); the progress lines show as they come, the whole log stays in the evidence.
+run_server_tests "$name" "$evidence/server-tests.log" || { server_test_failure_summary "$evidence/server-tests.log"; exit 1; }
 # The hourly conversation archive, run every few seconds here: a Telegram exchange reaches the
 # archive with its answer, the backup and a second machine (test-prompt-archive.sh).
 bash docker/full-candidate/test-prompt-archive.sh "$name" | tee "$evidence/prompt-archive.log"; [ "${PIPESTATUS[0]}" -eq 0 ] || exit 1
@@ -110,6 +113,9 @@ docker run -d --name "$name-https" --network "$network" --memory=256m --cpus=1 \
   caddy:2.10.2-alpine@sha256:4c6e91c6ed0e2fa03efd5b44747b625fec79bc9cd06ac5235a779726618e530d >/dev/null
 runtime=$(mktemp -d)
 npm install --prefix "$runtime" --no-audit --no-fund playwright@1.56.1 >/dev/null
+# On a GitHub runner whose apt mirror does not resolve, fall back to archive.ubuntu.com first (ci-apt-mirror.sh, issue #442).
+. docker/full-candidate/ci-apt-mirror.sh
+ci_apt_prepare
 "$runtime/node_modules/.bin/playwright" install --with-deps chromium >/dev/null
 export NODE_PATH="$runtime/node_modules"
 node docker/full-candidate/test-browser.cjs "$name" "$evidence"

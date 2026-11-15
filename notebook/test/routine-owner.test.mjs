@@ -16,8 +16,9 @@ const setup=device=>{
 
 test('only the chosen machine ticks the assistant\'s schedule',async()=>{
   const laptop=setup('local');await laptop.scheduler.tick();assert.equal(laptop.calls.length,0);
-  const server=setup('vps');await server.scheduler.tick();assert.deepEqual(server.calls.map(c=>c.args),[['cron','tick']]);
-  server.store.save('settings',{id:'installation',owner:'local'});server.scheduler.lastTick=0;await server.scheduler.tick();assert.equal(server.calls.length,1,'after the owner moves, the old machine stops');
+  const server=setup('vps');await server.scheduler.tick();// A folder with no manual of its own is not a starter-made one, so it also gets the notice sender (#225).
+  assert.deepEqual(server.calls.map(c=>c.args).filter(a=>a[1]!=='create'),[['cron','tick']]);
+  server.store.save('settings',{id:'installation',owner:'local'});server.scheduler.lastTick=0;await server.scheduler.tick();assert.equal(server.calls.filter(c=>c.args[1]==='tick').length,1,'after the owner moves, the old machine stops');
 });
 
 test('"daily at 05:16" in the owner\'s timezone, for the assistant\'s schedule and the built-in one',async()=>{

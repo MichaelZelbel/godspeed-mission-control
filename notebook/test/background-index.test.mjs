@@ -23,7 +23,7 @@ test('background refresh reads changed bytes with restored timestamps, skips unc
     fs.writeFileSync(file,encode({...note,removed_at:new Date().toISOString()}));fs.unlinkSync(path.join(root,'profile','visible.md'));
     await index.rebuildBackground();assert.equal(index.search('Fictional').length,0);assert.equal(index.search('visible-marker').length,0);
     fs.writeFileSync(file,'invalid canonical record');await index.rebuildBackground();assert.equal(index.search('fictional-note').length,0);
-  }finally{index.close();fs.rmSync(root,{recursive:true,force:true});}
+  }finally{await index.close();fs.rmSync(root,{recursive:true,force:true,maxRetries:10,retryDelay:100});}
 });
 
 test('concurrent background refreshes coalesce and foreground rebuild cannot be overwritten',async()=>{
@@ -34,7 +34,7 @@ test('concurrent background refreshes coalesce and foreground rebuild cannot be 
     const first=index.rebuildBackground();assert.equal(index.rebuildBackground(),first);await started;
     fs.writeFileSync(store.file(note),encode({...note,content:'after'}));index.rebuild();release();await first;
     assert.equal(calls,2);assert.equal(index.search('after').length,1);assert.equal(index.search('before').length,0);
-  }finally{index.close();fs.rmSync(root,{recursive:true,force:true});}
+  }finally{await index.close();fs.rmSync(root,{recursive:true,force:true,maxRetries:10,retryDelay:100});}
 });
 
 test('actual file indexing leaves static and authentication requests responsive',async t=>{

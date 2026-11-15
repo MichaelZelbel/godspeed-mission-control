@@ -1,5 +1,6 @@
-import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import http from 'node:http';
+import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import http from 'node:http';import {EventEmitter} from 'node:events';import {PassThrough} from 'node:stream';
 import {providerTimeBudget,providerTimeoutMessage,jobExecutor,modelProvider,hermesProvider,hermesFailureMessage} from '../core/runtime.mjs';import {Store} from '../core/records/store.mjs';import {QueryService} from '../core/query.mjs';
+import {withBackup} from '../core/backup-ai.mjs';
 test('interactive and background calls remain bounded, with no arbitrary timeout extension',()=>{
  assert.equal(providerTimeBudget({}),600000);assert.equal(providerTimeBudget({timeout_ms:300000}),300000);
  for(const timeout_ms of [0,-1,Infinity,'300000',3600000])assert.throws(()=>providerTimeBudget({timeout_ms}),/supported/);
@@ -14,6 +15,14 @@ test('the short suggestion budget is accepted only for drafting and aborts nativ
  const original=globalThis.fetch;globalThis.fetch=async(url,options)=>{observed=options.signal;return await new Promise((resolve,reject)=>{options.signal.addEventListener('abort',()=>reject(options.signal.reason),{once:true});});};
  try{const controller=new AbortController(),call=modelProvider({url:'http://localhost/fixture',key:'fictional',model:'fictional'})({kind:'draft-event',timeout_ms:20000,signal:controller.signal});controller.abort();await assert.rejects(call);assert.equal(observed.aborted,true);}finally{globalThis.fetch=original;}
 });
+test('the short health-check budget is accepted only for connection checks',()=>{
+ assert.equal(providerTimeBudget({kind:'connection-check',timeout_ms:15000}),15000);
+ assert.throws(()=>providerTimeBudget({kind:'conversation-chat',timeout_ms:15000}),/supported/);
+});
+test('the configured model remains visible through the provider wrapper used by the server',async()=>{
+ const provider=withBackup(modelProvider({url:'http://localhost/fixture',key:'fictional',model:'configured-super-readable-model'}),()=>null);
+ assert.deepEqual(await provider.options(),{current:'configured-super-readable-model',models:[{id:'configured-super-readable-model',efforts:[]}]});
+});
 test('scheduled coaching uses its background budget and preserves the chosen model effort',async()=>{
  const store=new Store(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-background-budget-'))),query=new QueryService(store),calls=[],provider=async input=>{calls.push(input);return 'Which fictional habit feels easiest?';};
  provider.options=async()=>({current:'fictional-model',models:[{id:'fictional-model',efforts:['low','medium']}]});
@@ -24,6 +33,18 @@ test('unsupported Hermes budget rejects before creating attachment files or star
  const home=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-rejected-budget-'));
  await assert.rejects(hermesProvider({home,cwd:home})({timeout_ms:3600000,attachments:[{mime:'image/png',data:'AA=='}]}),/supported/);
  assert.deepEqual(fs.readdirSync(home),[]);
+});
+test('Hermes one-turn routine requests explicitly select no tools',async()=>{
+ const home=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-hermes-one-turn-'));let captured;
+ const provider=hermesProvider({home,cwd:home,spawnProcess:(executable,args)=>{captured={executable,args};const child=new EventEmitter();child.stdin=new PassThrough();child.stdout=new PassThrough();child.stderr=new PassThrough();child.stdin.on('data',()=>queueMicrotask(()=>{child.stdout.end('Connected.\n');child.stderr.end();child.emit('close',0);}));return child;}});
+ assert.equal(await provider({kind:'connection-test'}),'Connected.');
+ assert.equal(captured.executable,'hermes');assert.deepEqual(captured.args,['chat','--query-file','-','--quiet','--oneshot','--max-turns','1','--toolsets','no_mcp','--in',home,'--source','tool']);
+ assert.equal(captured.args.filter(a=>a==='--toolsets').length,1);
+});
+test('a Hermes that refuses the toolset name none, as 0.22 and 0.23.1 do, still answers',async()=>{
+ const home=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-hermes-refuses-none-'));
+ const provider=hermesProvider({home,cwd:home,spawnProcess:(executable,args)=>{const toolsets=args[args.indexOf('--toolsets')+1];const child=new EventEmitter();child.stdin=new PassThrough();child.stdout=new PassThrough();child.stderr=new PassThrough();child.stdin.on('data',()=>queueMicrotask(()=>{if(toolsets==='none'){child.stdout.end("Hermes couldn't start the model connection: invalid_params (toolsets: unknown or invalid toolset name: 'none'). Your message was not sent.\n");child.stderr.end();child.emit('close',1);}else{child.stdout.end('Connected.\n');child.stderr.end();child.emit('close',0);}}));return child;}});
+ assert.equal(await provider({kind:'connection-test'}),'Connected.');
 });
 test('endpoint control budget is not sent as source text and cancellation remains effective',async()=>{
  let received;const server=http.createServer(async(req,res)=>{let raw='';for await(const chunk of req)raw+=chunk;received=JSON.parse(raw);res.setHeader('Content-Type','application/json');res.end(JSON.stringify({choices:[{message:{content:'Fictional bounded reply'}}]}));});await new Promise(r=>server.listen(0,'127.0.0.1',r));
@@ -45,6 +66,26 @@ test('a passing 502, 503, 504 or 429 from the provider is tried again, and other
   calls=0;answers.push([503,{}],[503,{}],[503,{error:{message:'Still down'}}]);
   await assert.rejects(provider({kind:'connection-test'}),/Model provider failed with HTTP 503: Still down/);assert.equal(calls,3,'tried three times in all');
   calls=0;answers.push([401,{error:{message:'Invalid key'}}]);
+  assert.deepEqual(await provider.options(),{current:'fictional-model',models:[{id:'fictional-model',efforts:[]}]});
   await assert.rejects(provider({kind:'connection-test'}),/HTTP 401: Invalid key/);assert.equal(calls,1,'a wrong key is said at once');
+  assert.deepEqual(await provider.options(),{current:'fictional-model',models:[{id:'fictional-model',efforts:[]}]},'a refused key does not erase the configured model identity');
+  answers.push([200,{choices:[{message:{content:'Connected again.'}}]}]);
+  assert.equal(await provider({kind:'connection-test'}),'Connected again.');
+  assert.deepEqual(await provider.options(),{current:'fictional-model',models:[{id:'fictional-model',efforts:[]}]});
  }finally{await new Promise(r=>server.close(r));}
+});
+
+// Only a connection that failed is called unreachable (#506): a header Node refused on this computer
+// and a stopped request keep their own errors.
+test('a stopped request keeps its own error and a local fetch error is not called unreachable',async()=>{
+ const original=globalThis.fetch,ask=modelProvider({url:'http://localhost/fixture',key:'fictional',model:'fictional',retryWaits:[]});
+ try{
+  globalThis.fetch=async()=>{throw new TypeError('Cannot convert argument to a ByteString');};
+  await assert.rejects(ask({kind:'chat'}),{name:'TypeError',message:'Cannot convert argument to a ByteString'});
+  globalThis.fetch=async(url,options)=>{throw options.signal.reason;};
+  const controller=new AbortController();controller.abort();
+  await assert.rejects(ask({kind:'chat',signal:controller.signal}),{name:'AbortError'});
+  globalThis.fetch=async()=>{throw new TypeError('fetch failed');};
+  await assert.rejects(ask({kind:'chat'}),{message:/^The AI at localhost could not be reached\./});
+ }finally{globalThis.fetch=original;}
 });

@@ -99,7 +99,7 @@ test('a possessive is its word',()=>{
   assert.deepEqual(queryTerms('excluded-marker v2.18'),[['excluded','marker'],['v2','18']]);
 });
 
-test('the chat answers with the assistant home\'s own model; the notebook\'s model only when picked or when the home has none',async t=>{
+test('the chat answers with the assistant home\'s own model; the notebook\'s model only when picked; a home with none says what to do',async t=>{
   const dir=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-home-model-'));t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
   const home=path.join(dir,'home'),bare=path.join(dir,'bare'),providerFile=path.join(dir,'provider.json');
   fs.mkdirSync(home);fs.mkdirSync(bare);
@@ -112,8 +112,11 @@ test('the chat answers with the assistant home\'s own model; the notebook\'s mod
   assert.equal(own.args.includes('--provider'),false);assert.equal(own.args.includes('--model'),false);assert.equal(own.env.OPENAI_API_KEY,undefined);
   const picked=await run(home,{model:'fictional/large'});
   assert.deepEqual(picked.args.slice(picked.args.indexOf('--model'),picked.args.indexOf('--model')+2),['--model','fictional/large']);assert.ok(picked.args.includes('--provider'));
-  const none=await run(bare,{});
-  assert.deepEqual(none.args.slice(none.args.indexOf('--model'),none.args.indexOf('--model')+2),['--model','fictional/small']);assert.equal(none.env.OPENAI_API_KEY,'fictional-key');
+  // A home with no model is not asked with flags the assistant refuses (issue #127), and is not given
+  // the notebook's AI behind the person's back: the chat says what to do and the home stays as it was.
+  let asked=false;const quiet=nativeAgent({executable:'hermes',home:bare,cwd:dir,providerFile,spawnProcess:()=>{asked=true;throw Error('never');}});
+  await assert.rejects(quiet({message:'Fictional question'}),/Settings/);
+  assert.equal(asked,false);assert.equal(homeHasModel(bare),false);
 });
 
 test('one fixed name per kind of fact: the newest value of a one-at-a-time fact is its value, under any name and from either store',async()=>{

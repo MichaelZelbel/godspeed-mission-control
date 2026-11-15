@@ -229,7 +229,9 @@ test('an update changes nothing outside what the copy holds: init over a mission
   for(const [name,text] of [['work/plan.md','My plan\n'],['work/recording.bin','x'.repeat(4096)],['goals/mine.md','My goal\n'],['profile/me.md','About me\n'],['rules/mine.md','My rule\n'],['skills/mine/SKILL.md','My recipe\n'],['prompts/2026-10/chat.md','A chat\n'],['world/events/e.md','An event\n']])write(root,name,text);
   for(const name of Object.keys(tree(root)).filter(n=>/^(work|goals|profile|rules|observations|ideas|due|world|forecasts|inbox)\//.test(n)).slice(0,20))fs.appendFileSync(path.join(root,...name.split('/')),'\nEdited by the owner.\n');
   // What an earlier version left, which this update brings up to date: the notebook's note as
-  // it read before the notebook folder was renamed (bin/godspeed.mjs init).
+  // it read before the notebook folder was renamed (bin/godspeed.mjs init), under the name it had
+  // until 2.0.0-beta.11, which the update renames (core/notebook-note.mjs).
+  fs.rmSync(path.join(root,'NOTEBOOK.md'));
   write(root,'FULL-ALPHA.md','# Integrated notebook\n\nThis is the complete Godspeed Mission Control starter with an integrated notebook. AGENTS.md and the original folder workflow remain the operating manual. Notebook records live in records/ alongside those folders. Use the notebook or its MCP tools for notebook edits; use the original commands and readable files for Godspeed work. Credentials and disposable SQLite indexes stay in .godspeed and never enter private Git sync. Connected file sync uses the conflict-preserving reconciler; do not run a second Git synchronizer on the same workspace.\n');
   const before=tree(root);
   const again=run(root,['init'],env);assert.equal(again.status,0,again.stderr);

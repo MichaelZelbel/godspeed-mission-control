@@ -96,6 +96,13 @@ Plan v2:
 
 Checked on 16 October 2026 in a real browser at 1440px and 390px against a throwaway copy of the owner's rules, profile, skills, notebook and AGENTS.md (never his folder itself), with a stand-in assistant that changed rule 12 through the real path from the chat.
 
+Names instead of pages (26 October 2026, the owner: "a page is in a book or a magazine"): the
+section "What it knows about you" shows each file of `profile/` by its own title, numbered
+("3. My projects and priorities"), says "What it knows about you, your work and your voice" and
+"Nothing about you yet." when there are none; the list the chat is given names them the same way
+(core/identity-shelf.mjs). Read the 16 October plan's "numbered profile pages" with that. The
+screen itself is still a page ("this page").
+
 The 15 October design, kept for its reasons:
 
 Reading this as: a book reader looking at, and changing, what makes their mission control behave the way it does, in Operate mode, on desktop and phone. Vibe: familiar, calm, trustworthy.

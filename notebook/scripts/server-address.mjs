@@ -51,12 +51,15 @@ function localNames(){
 
 // The computer's own names first, then the names its public addresses have in reverse DNS
 // (a Hetzner server is static.<address>.clients.your-server.de there); the first one whose
-// public DNS answer is one of this computer's public addresses.
-export async function serverName({addresses=publicAddresses(),names,resolve4,reverse}={}){
+// public DNS answer is one of this computer's public addresses. If neither works, use the
+// same free IP-based hostname the Docker server installer offers, after checking its A record.
+export async function serverName({addresses=publicAddresses(),names,resolve4,reverse,resolver}={}){
   if(!addresses.length)return null;
-  const resolver=new Resolver({timeout:3000,tries:2});resolver.setServers(dnsServers());
+  resolver||=new Resolver({timeout:3000,tries:2});resolver.setServers(dnsServers());
   resolve4||=name=>resolver.resolve4(name);
-  reverse||=address=>resolver.reverse(address);
+  // Resolver.reverse() can return [] for a valid PTR (seen on a Hetzner server
+  // with Node 22.19); asking for the PTR record directly finds that name.
+  reverse||=address=>resolver.resolvePtr(address.split('.').reverse().join('.')+'.in-addr.arpa');
   const candidates=[...(names||localNames())];
   for(const address of addresses)candidates.push(...await reverse(address).catch(()=>[]));
   const tried=new Set();
@@ -66,13 +69,20 @@ export async function serverName({addresses=publicAddresses(),names,resolve4,rev
     tried.add(name);
     if((await resolve4(name).catch(()=>[])).some(address=>addresses.includes(address)))return name;
   }
+  for(const address of addresses){
+    const name=address.replaceAll('.','-')+'.sslip.io';
+    if((await resolve4(name).catch(()=>[])).includes(address))return name;
+  }
   return null;
 }
 
 // node server-address.mjs             prints this server's name, or nothing
 // node server-address.mjs --name <x>  prints <x> as a name, or fails when it is not one
+// node server-address.mjs --has-public-ip  succeeds when this machine has one
 if(process.argv[1]&&path.resolve(process.argv[1])===fileURLToPath(import.meta.url)){
-  if(process.argv[2]==='--name'){
+  if(process.argv[2]==='--has-public-ip'){
+    process.exit(publicAddresses().length?0:1);
+  }else if(process.argv[2]==='--name'){
     const name=hostName(process.argv[3]);
     if(!name)process.exit(1);
     process.stdout.write(name);

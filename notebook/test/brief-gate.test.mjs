@@ -1,6 +1,11 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';
-import {Store} from '../core/records/store.mjs';import {QueryService} from '../core/query.mjs';import {jobExecutor} from '../core/runtime.mjs';
+import {Store} from '../core/records/store.mjs';import {QueryService} from '../core/query.mjs';import {jobExecutor} from '../core/runtime.mjs';import {briefing} from '../core/briefing.mjs';
 import {dueCommand} from '../core/native-due.mjs';
+import {personalOperation} from '../core/personal-operations.mjs';
+// Where one reminder is kept: its page under notebook/Deadlines/, which is what a rehearsal must
+// leave exactly as it was (since 30 October 2026 a reminder is a record, not a file in due/).
+const page=(store,slug)=>store.file(store.list('deadlines').find(r=>r.native_slug===slug));
+const readerFails=(input,reason)=>input.check==='source-facts'?{passed:true,reason:'Fictional sources checked.'}:{passed:false,reason,rejection_scope:'non-source',rejected_source_ids:[]};
 test('a briefing cannot request a decision on a prepared artifact changed during judgment',async()=>{
  const store=new Store(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-brief-action-stale-'))),query=new QueryService(store),goal=store.save('goals',{title:'Fictional inspect sources',status:'adopted'}),draft=store.save('notes',{title:'Fictional exact proposed change',content:'Original fictional proposal.'});
  store.save('work_items',{title:'Fictional source review',state:'awaiting_approval',goal_id:goal.id,draft_id:draft.id});let checks=0;
@@ -19,12 +24,40 @@ test('the briefing preserves the full ready contribution and link without claimi
  const provider=async input=>{if(input.kind==='brief-verification')return {passed:true,reason:'Fixture current sources and reader checked'};writes++;if(writes===1)return 'No fresh fictional health observations are available. A fictional post is ready.';assert.ok(input.context.check_feedback.some(f=>/complete checked contribution/.test(f)));return 'No fresh fictional health observations are available. Choose a draft to post.\n\n'+input.context.contribution.content+'\n\n'+input.context.contribution.link;};
  const result=await jobExecutor(provider,query)({kind:'morning-brief',id:'fictional-lead-brief'},{store,settings:{}}),saved=store.get('notes',result.record_id),queued=store.get('lead_entries',entry.id);assert.equal(writes,2);assert.ok(saved.content.includes(content));assert.ok(saved.content.includes('/dashboard/notes/'+note.id));assert.equal(queued.status,'queued');assert.equal(queued.shown_at,undefined);assert.equal(queued.posted_at,undefined);assert.equal(queued.delivery_note_id,saved.id);
 });
-test('brief sources are prepared before writing and failed judgment prevents delivery',async()=>{
+test('brief sources are prepared before writing and a failed judgment delivers checked facts only',async()=>{
  const store=new Store(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-brief-'))),query=new QueryService(store),calls=[];
  store.save('health_observations',{metric:'Fictional energy',value:6,observed_at:new Date().toISOString()});
- const provider=async i=>{calls.push(i);return i.kind==='brief-verification'?JSON.stringify({passed:false,reason:'Invented result absent from sources'}):'Fictional energy improved to 10.';};
- await assert.rejects(jobExecutor(provider,query)({kind:'morning-brief',id:'brief'},{store,settings:{}}),/Invented/);assert.equal(query.rows('notes').filter(n=>n.source_app==='morning-brief').length,0);
- assert.ok(calls.find(i=>i.kind==='morning-brief').context.health.some(h=>h.value===6));assert.ok(query.rows('job_receipts').some(r=>r.kind==='brief-verification'&&r.state==='failed'));
+ const provider=async i=>{calls.push(i);return i.kind==='brief-verification'?JSON.stringify(readerFails(i,'Invented result absent from sources')):'Fictional energy improved to 10.';};
+ const result=await jobExecutor(provider,query)({kind:'morning-brief',id:'brief'},{store,settings:{}});
+ const note=store.get('notes',result.record_id);assert.equal(result.fallback,true);assert.match(note.content,/Fictional energy: 6/);assert.doesNotMatch(note.content,/improved to 10/);
+ assert.ok(calls.find(i=>i.kind==='morning-brief').context.health.some(h=>h.value===6));assert.ok(query.rows('job_receipts').some(r=>r.kind==='brief-delivery-verification'&&r.state==='failed'));
+});
+
+test('a briefing treats a short phone day as unknown until a manual settlement arrives',async()=>{
+ const store=new Store(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-brief-incomplete-health-'))),query=new QueryService(store),day='2026-11-04';
+ store.save('settings',{id:'installation',timezone:'UTC'});store.save('health_observations',{metric:'protein_g',value:50,source:'Health Auto Export',via:'phone-receiver',observed_on:day,date_precision:'day',observed_at:day+'T00:00:00Z',data_until:'19:55:00'});
+ let writes=0;const provider=async input=>{
+  if(input.kind==='brief-verification')return {passed:true,reason:'Fixture checked the incomplete phone day.'};
+  writes++;const freshness=input.context.health_freshness,protein=freshness.days.find(row=>row.date===day)?.columns.protein_g;
+  if(writes===1)return {text:'Have a protein shake to reach your target.',health_claims:[]};
+  if(writes===2){assert.ok(input.context.check_feedback.some(reason=>/Assistant output cannot be used/.test(reason)));return {text:'Weekly protein: 0 known days and 1 unknown day.',health_claims:[]};}
+  assert.deepEqual(protein,{value:80,source:'manual',state:'settled'});return 'Protein was 80 g. Weekly protein: 1 known day and 0 unknown days.';
+ };
+ const first=await briefing({id:'brief-incomplete-one'},{store,query,provider,now:new Date('2026-11-05T08:00:00Z')}),firstNote=store.get('notes',first.record_id).content;
+ assert.match(firstNote,/protein_g was 50 so far/);assert.match(firstNote,/19:55:00/);assert.match(firstNote,/This week has 1 unknown phone-health day/);assert.doesNotMatch(firstNote,/protein shake/);assert.equal(query.rows('job_receipts').filter(row=>row.kind==='brief-code-gate'&&row.state==='failed').length,2);
+ personalOperation({store,query},{type:'health-add',metric:'protein_g',value:80,unit:'g',observed_at:day+'T12:00:00Z'});
+ const second=await briefing({id:'brief-incomplete-two'},{store,query,provider,now:new Date('2026-11-06T08:00:00Z')});assert.match(store.get('notes',second.record_id).content,/1 known day and 0 unknown days/);
+});
+test('a briefing counts several unknown phone columns on one day once',async()=>{
+ const store=new Store(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-brief-unknown-day-count-'))),query=new QueryService(store),day='2026-11-04';
+ store.save('settings',{id:'installation',timezone:'UTC'});
+ for(const [metric,value] of [['steps',4200],['protein_g',50]])store.save('health_observations',{metric,value,source:'Health Auto Export',via:'phone-receiver',observed_on:day,date_precision:'day',observed_at:day+'T00:00:00Z',data_until:'19:55:00'});
+ const provider=async input=>{
+  if(input.kind==='brief-verification')return {passed:true,reason:'Fixture checked the incomplete phone day count.'};
+  return 'Do not use this fictional health advice.';
+ };
+ const result=await briefing({id:'brief-unknown-day-count'},{store,query,provider,now:new Date('2026-11-05T08:00:00Z')});
+ assert.match(store.get('notes',result.record_id).content,/This week has 1 unknown phone-health day\./);
 });
 
 test('a mechanical briefing failure gets one evidence-led rewrite and only the checked bytes are saved',async()=>{
@@ -65,7 +98,8 @@ test('rehearsal executes reminder completion in its retained copy without changi
 test('rehearsal includes canonical native obligations without altering their live text or timestamp',async()=>{
  const store=new Store(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-native-brief-rehearsal-'))),query=new QueryService(store),today=new Date().toISOString().slice(0,10);
  dueCommand(store,['add','fictional-native','--title','Fictional native practice','--from',today,'--to',today,'--done-when','Practice recorded','--cost','Fictional missed practice']);
- const source=path.join(store.root,'due','fictional-native.md'),original=fs.readFileSync(source,'utf8'),modified=fs.statSync(source).mtimeMs;
+ // The reminder itself, as a person opens it: its page under notebook/Deadlines/ (#90).
+ const source=page(store,'fictional-native'),original=fs.readFileSync(source,'utf8'),modified=fs.statSync(source).mtimeMs;
  const provider=async input=>{if(input.kind==='brief-verification')return {passed:true,reason:'Fixture checked.'};assert.ok(input.context.deadlines.some(d=>d.native_slug==='fictional-native'));return 'No fresh fictional health observations are available. Complete the fictional practice today.';};
  const result=await jobExecutor(provider,query)({kind:'brief-rehearsal',id:'native-rehearsal'},{store,settings:{}});
  assert.equal(fs.readFileSync(source,'utf8'),original);assert.equal(fs.statSync(source).mtimeMs,modified);
@@ -77,11 +111,11 @@ test('rehearsal preserves file-newer completion evidence without copying the dep
  fs.mkdirSync(path.join(store.root,'work'),{recursive:true});const dependency=path.join(store.root,'work','fictional-result.txt');fs.writeFileSync(dependency,'Fictional private result, not needed to check its date.');
  const before=fs.readFileSync(dependency,'utf8'),stamp=fs.statSync(dependency).mtimeMs;
  dueCommand(store,['add','fictional-date','--title','Fictional dated result','--from',today,'--to',today,'--done-when','The result file exists in this window','--cost','Fictional missed result','--self-check','file-newer','--self-check-arg','work/fictional-result.txt']);
- const originalDue=fs.readFileSync(path.join(store.root,'due','fictional-date.md'),'utf8');
+ const originalPage=fs.readFileSync(page(store,'fictional-date'),'utf8');
  const provider=async input=>{if(input.kind==='brief-verification')return {passed:true,reason:'Fixture checked.'};assert.ok(!input.context.deadlines.some(d=>d.native_slug==='fictional-date'));return 'No fresh fictional health observations are available. The fictional result has been recorded.';};
  const result=await jobExecutor(provider,query)({kind:'brief-rehearsal',id:'date-rehearsal'},{store,settings:{}}),copied=path.join(result.rehearsal_workspace,'work','fictional-result.txt');
  assert.equal(fs.readFileSync(copied,'utf8'),'');assert.ok(Math.abs(fs.statSync(copied).mtimeMs-stamp)<1);
- assert.equal(fs.readFileSync(dependency,'utf8'),before);assert.equal(fs.statSync(dependency).mtimeMs,stamp);assert.equal(fs.readFileSync(path.join(store.root,'due','fictional-date.md'),'utf8'),originalDue);
+ assert.equal(fs.readFileSync(dependency,'utf8'),before);assert.equal(fs.statSync(dependency).mtimeMs,stamp);assert.equal(fs.readFileSync(page(store,'fictional-date'),'utf8'),originalPage);
  assert.equal(new QueryService(new Store(result.rehearsal_workspace)).rows('deadlines').find(d=>d.native_slug==='fictional-date').status,'closed');
 });
 
@@ -93,6 +127,24 @@ test('a briefing cannot deliver after its adopted goal or health source changes 
   await assert.rejects(jobExecutor(provider,query)({kind:'morning-brief',id:'brief-stale-'+change},{store,settings:{}}),/sources changed/);
   assert.equal(store.list('notes').filter(n=>n.source_app==='morning-brief').length,0);assert.equal(store.list('notifications').length,0);assert.equal(checks,2);
  }
+});
+
+test('a briefing cannot deliver after its rehearsal receipt or ready contribution changes during judgment',async()=>{
+ for(const change of ['receipt','contribution']){
+  const store=new Store(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-brief-added-source-stale-'))),query=new QueryService(store);let source,content,note,checks=0;
+  if(change==='receipt')source=store.save('job_receipts',{kind:'brief-rehearsal',state:'verified',result:'Fictional rehearsal completed'});
+  else {content='Fictional copy-ready contribution.';note=store.save('notes',{title:'Fictional contribution',content});source=store.save('lead_entries',{title:note.title,content,note_id:note.id,status:'ready',delivery_day:'2026-01-01'});}
+  const provider=async input=>{if(input.kind==='brief-verification'){if(++checks===2)store.save(change==='receipt'?'job_receipts':'lead_entries',{id:source.id,state:change==='receipt'?'failed':undefined,status:change==='contribution'?'queued':undefined});return {passed:true,reason:'Fictional checker accepted the old snapshot'};}return change==='receipt'?'No fresh fictional health observations are available. The fictional rehearsal is complete.':'No fresh fictional health observations are available. Review this fictional contribution.\n\n'+content+'\n\n/dashboard/notes/'+note.id;};
+  await assert.rejects(jobExecutor(provider,query)({kind:'morning-brief',id:'brief-added-source-'+change},{store,settings:{}}),/sources changed/);
+  assert.equal(store.list('notes').filter(n=>n.source_app==='morning-brief').length,0);assert.equal(store.list('notifications').length,0);assert.equal(checks,2);
+ }
+});
+
+test('a briefing cannot deliver after a previous briefing changes during judgment',async()=>{
+ const store=new Store(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-brief-prior-stale-'))),query=new QueryService(store),prior=store.save('notes',{title:'Previous fictional briefing',content:'Old fictional advice.',source_app:'morning-brief'});let checks=0;
+ const provider=async input=>{if(input.kind==='brief-verification'){if(++checks===2)store.save('notes',{id:prior.id,content:'Changed fictional advice.'});return {passed:true,reason:'Fixture checked the old previous briefing'};}return 'No fresh fictional health observations are available. Inspect the fictional source.';};
+ await assert.rejects(jobExecutor(provider,query)({kind:'morning-brief',id:'brief-prior-stale'},{store,settings:{}}),/sources changed/);
+ assert.equal(store.list('notes').filter(n=>n.source_app==='morning-brief').length,1);assert.equal(store.list('notifications').length,0);assert.equal(checks,2);
 });
 
 test('overlapping checked briefings file identical content only once',async()=>{
@@ -119,4 +171,37 @@ test('a changed briefing method or already-delivered selected finding invalidate
   const provider=async input=>{if(input.kind==='brief-verification'){if(++checks===2){if(change==='method')fs.appendFileSync(path.join(folder,'SKILL.md'),'The user changed the fictional method.\n');else store.save('watch_findings',{id:finding.id,status:'shown'});}return {passed:true,reason:'Fictional checker accepted the previous selected method'};}return 'No fresh fictional health observations are available. Fictional source changed: https://fictional.invalid/source';};
   await assert.rejects(jobExecutor(provider,query)({kind:'morning-brief',id:'brief-scope-'+change},{store,settings:{}}),/sources changed/);assert.equal(store.list('notes').filter(n=>n.source_app==='morning-brief').length,0);assert.equal(store.list('notifications').length,0);
  }
+});
+
+test('a briefing never judges today\'s phone day: it is unknown, while a settled manual column stays usable',async()=>{
+ const store=new Store(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-brief-today-'))),query=new QueryService(store),today='2026-11-05';
+ store.save('settings',{id:'installation',timezone:'UTC'});
+ store.save('health_observations',{metric:'steps',value:4200,source:'Health Auto Export',via:'phone-receiver',observed_on:today,date_precision:'day',observed_at:today+'T00:00:00Z',data_until:'07:40:00'});
+ personalOperation({store,query},{type:'health-add',metric:'protein_g',value:80,unit:'g',observed_at:today+'T06:00:00Z'});
+ let writes=0;const feedback=[];
+ const provider=async input=>{
+  if(input.kind==='brief-verification')return {passed:true,reason:'Fixture checked the unknown day.'};
+  writes++;assert.match(input.contract,/settled/);
+  const day=input.context.health_freshness.days.find(row=>row.date===today);
+  assert.equal(day.columns.protein_g.state,'settled','the manual column is usable');
+  if(writes===1)return {text:'Steps were 4200, a short day, and you missed the target. Protein was 80 g.',health_claims:[]};
+  feedback.push(...(input.context.check_feedback||[]));
+  return {text:'Protein was 80 g.',health_claims:[]};
+ };
+ const result=await briefing({id:'brief-today-unknown'},{store,query,provider,now:new Date('2026-11-05T08:00:00Z')}),saved=store.get('notes',result.record_id).content;
+ assert.equal(writes,2,'the provider prose was refused while a phone day was unknown');
+ assert.ok(feedback.some(reason=>/Assistant output cannot be used/.test(reason)));
+ assert.match(saved,/so far/);assert.match(saved,/07:40:00/);assert.doesNotMatch(saved,/Protein was 80 g|short day|missed/i);
+});
+
+// Archon R2: the factual fallback never states an unfinished phone total as settled. Today's phone
+// value and an earlier day that stopped before 21:00 are said "so far" with their stopped time.
+for(const [name,offset,until] of [['today\'s phone day',0,'07:40:00'],['an earlier incomplete phone day',2,'19:55:00']])test('the factual fallback says '+name+' only as "so far"',async()=>{
+ const store=new Store(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-brief-fallback-phone-'))),query=new QueryService(store),day=new Date(Date.now()-offset*86400000).toISOString().slice(0,10);
+ store.save('settings',{id:'installation',timezone:'UTC'});store.save('goals',{title:'Prepare a fictional guide',status:'adopted'});
+ store.save('health_observations',{metric:'steps',value:4200,source:'Health Auto Export',via:'phone-receiver',observed_on:day,date_precision:'day',observed_at:day+'T00:00:00Z',data_until:until});
+ const provider=async input=>input.kind==='brief-verification'?readerFails(input,'No useful action'):'Unsupported draft.';
+ const result=await jobExecutor(provider,query)({kind:'morning-brief',id:'brief-fallback-phone-'+offset},{store,settings:{}}),content=store.get('notes',result.record_id).content;
+ assert.equal(result.fallback,true);assert.doesNotMatch(content,/observation is steps: 4200/);
+ assert.ok(content.includes('On '+day+', steps was 4200 so far; phone data stopped at '+until+'.'),content);
 });

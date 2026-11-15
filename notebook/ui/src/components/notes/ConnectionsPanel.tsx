@@ -16,6 +16,7 @@ import {
   Sparkles,
   RefreshCw,
 } from "lucide-react";
+import { personLabel } from "@/components/timeline/people";
 
 interface ConnectionResult {
   id: string;
@@ -218,7 +219,7 @@ export function ConnectionsPanel({ noteId }: { noteId: string }) {
                     className="w-full flex items-center gap-2 rounded-md px-2 py-1.5 text-left hover:bg-accent transition-colors"
                   >
                     <UserCircle className="h-3 w-3 text-info shrink-0" />
-                    <span className="text-xs text-foreground">{contact.name}</span>
+                    <span className="text-xs text-foreground">{personLabel(contact)}</span>
                     {contact.relationship && (
                       <Badge variant="secondary" className="text-[9px] px-1.5 py-0">
                         {contact.relationship}

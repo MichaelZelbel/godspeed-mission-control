@@ -22,6 +22,7 @@ import { Slider } from "@/components/ui/slider";
 import { parseDateOnly } from "@/lib/local-date";
 import { fetchAllPages } from "@/lib/postgrest";
 import { dbErrorMessage } from "@/lib/function-error";
+import { displayPeople } from "@/components/timeline/people";
 import AddEventDialog, { type EditMomentData, type TimelineContact } from "@/components/timeline/AddEventDialog";
 
 interface TimelineMoment {
@@ -50,6 +51,8 @@ const statusClasses: Record<string, string> = {
 
 import {impactLabels} from "../../../core/impact-scale.mjs";
 const statuses = ["past_fact", "future_plan", "ongoing", "unknown"];
+// A record from elsewhere may carry a status the timeline does not know (the notebook's default is "confirmed"): show it as unknown.
+const knownStatus = (status: string | null | undefined) => (statuses.includes(status as string) ? (status as string) : "unknown");
 
 export default function TimelinePage() {
   const { user } = useAuth();
@@ -97,8 +100,8 @@ export default function TimelinePage() {
           supabase.from("moment_provenance" as any).select("moment_id, document_id").eq("user_id", user.id)
             .order("id").range(from, to)),
       ]);
-      setMoments(momentRows);
-      setPeople(peopleRows);
+      setMoments(momentRows.map((m) => ({ ...m, status: knownStatus(m.status) })));
+      setPeople(displayPeople(peopleRows));
 
       const parts: Record<string, string[]> = {};
       for (const row of partRows) {

@@ -1,5 +1,6 @@
 import { useDockedChat } from "@/lib/side-chat";
 import ChatComposer, {type ChatFile} from "@/components/chat/ChatComposer";
+import {ChatConnectionEmptyState} from "@/components/chat/ChatConnectionEmptyState";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -331,14 +332,14 @@ export function NoteChatPanel({ note, onClose, onNoteChanged }: NoteChatPanelPro
       {/* Messages */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto min-h-0 p-3 space-y-3">
         {state.messages.length === 0 && (
-          <div className="text-center text-muted-foreground text-xs py-8 space-y-2">
+          <ChatConnectionEmptyState ready={<div className="text-center text-muted-foreground text-xs py-8 space-y-2">
             <Bot className="h-8 w-8 mx-auto opacity-40" />
             <p>Ask me anything about this note or your knowledge base.</p>
             <p className="text-[10px]">
               I can search your notes, add content, update tags & metadata, and
               create links.
             </p>
-          </div>
+          </div>}/>
         )}
 
         {state.messages.map((msg, i) => (

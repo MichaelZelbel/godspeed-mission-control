@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import {randomUUID} from 'node:crypto';
 import path from 'node:path';
 import {createRequire} from 'node:module';
 import {fileURLToPath} from 'node:url';
@@ -7,6 +8,7 @@ import {hash} from './records/store.mjs';
 import {durable,windowsInvalid} from './file-policy.mjs';
 import {newFindings} from './context-scan.mjs';
 import {ShelfHistory,COMMIT_PREFIX} from './identity-history.mjs';
+import {isNotebookAuthor} from './sync/git.mjs';
 import {readSoul,syncSoul,soulChars,EXTRA,SOUL_LIMIT} from './assistant-soul.mjs';
 import {normalized} from './packaged-skills.mjs';
 
@@ -26,9 +28,9 @@ import {normalized} from './packaged-skills.mjs';
 //   skill:x  skills/x/SKILL.md; a skill the package keeps up to date stays the person's once they
 //            change it (packaged-skills.mjs keeps an edited skill and offers the update for review)
 //
-// The page numbers rules, profile pages and skills (overview), and the chat on the page is given
-// the same numbers (chatContext), so "change rule 13" means the rule the page shows as 13, and the
-// rules read before every job carry the numbers AGENTS.md gives them.
+// The page numbers rules, the files about the owner and skills (overview), and the chat on the
+// page is given the same numbers (chatContext), so "change rule 13" means the rule the page shows
+// as 13, and the rules read before every job carry the numbers AGENTS.md gives them.
 //
 // What the page shows must save: a field the person did not change is never refused for its
 // length or form, and never written (rulePlan).
@@ -129,6 +131,7 @@ export function proseStart(body,max=220){
 }
 // A rule's kind in words, as the page tags it and as the chat is told it.
 export const KIND_WORDS={must:'Must',never:'Never',how:'How it works'};
+const kindLine=r=>(KIND_WORDS[r.group]||KIND_WORDS.how)+': '+r.line;
 // Where a rule that is not read before every job is read, in the page's words, and the order of
 // those groups on the page: the companies, each skill, when its subject comes up, then the rest.
 export function placeOf(where){
@@ -139,16 +142,46 @@ export function placeOf(where){
   return {key:w,label:inWords(w),rank:3};
 }
 
+// How a new rule from the assistant is added (the settings record "rules"): at once, or shown to
+// the owner first. No record, or any other value, is "automatic", as every rule was added before.
+export const NEW_RULES=['automatic','ask-first'];
+const NEW_RULES_WORDS={automatic:'Add automatically','ask-first':'Ask first'};
+// "Is there already a rule that says this?": words of three letters or more shared by the two
+// texts, without these, each cut to a rough stem. Similar is at least two shared words, one of them
+// a word of the rule's own name (what the rule is about), that make up more than half of the new
+// rule's words; or, for a short new rule, every word of the rule's name, making up at least half of
+// the new rule's words ("never sign emails as me" is the rule "Never sign as me"). When the name has
+// a single such word, the new rule also needs another word of the name (NAME_SKIP below aside):
+// "never sign emails as me" has "sign" and "as", "Ask me about doubt" has "doubt" and "ask" of "When
+// in doubt, ask", while "Sign me up for the gym" and "Never sign up for newsletters" share only "sign"
+// and are not "Never sign as me". Near-duplicates of the starter rules match. A single word in
+// common never turns an automatic save into a question, and neither do everyday words a long rule happens to use: "Put
+// emoji in an email you draft for me" shares "email" and "draft" with "Never send anything in my
+// name", and is still not that rule.
+const STOP=new Set('a an the and or but if then so to of in on at for from by with without about into over under as is are be been being was were do does did done not no never always must i me my mine you your it its this that these those there here what which who whom when where why how any anything something everything some all each every one ever just only also than too very can could should would will shall may might ask asked'.split(' '));
+const plainWords=text=>String(text??'').toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9 ]+/g,' ').split(/\s+/).filter(Boolean);
+const stem=w=>w.replace(/(ing|ed|es|s)$/,'').replace(/(.)\1$/,'$1');
+const contentWords=text=>new Set(plainWords(text).filter(w=>w.length>2&&!STOP.has(w)).map(stem));
+// The words of a rule's name for that second word: any word but "never" and the like and the
+// pronouns of the owner and the assistant ("as" and "in" count, "me" does not).
+const NAME_SKIP=new Set('never always not no don dont i me my mine you your'.split(' '));
+const nameWords=text=>new Set(plainWords(text).filter(w=>!NAME_SKIP.has(w)).map(w=>w.length>2&&!STOP.has(w)?stem(w):w));
+// A rule shown to the owner first waits here for their answer: at most this many, for this long.
+// A restart forgets them; answering one then says it is no longer waiting, and the rule is shown again.
+const PROPOSALS_KEPT=20,PROPOSAL_MS=24*60*60*1000;
+const ANSWERS=['add','reword','change','leave'];
+
 export class IdentityShelf{
   constructor(store,{assistantHome=()=>null,now=()=>new Date(),recentWindowMs=20*60*1000}={}){
     this.store=store;this.root=store.root;this.assistantHome=assistantHome;this.now=now;this.recentWindowMs=recentWindowMs;this.history=new ShelfHistory(store);
+    this.proposals=new Map();
   }
   // ---- Paths --------------------------------------------------------------------------------
   target(target){
     const t=String(target??'');
     if(t==='who')return {kind:'who',target:t,file:MANUAL,label:'who it is'};
     if(t==='extra')return {kind:'extra',target:t,file:EXTRA,label:'the extra instructions',missingOk:true};
-    const m=/^(rule|profile|skill):(.+)$/.exec(t);if(!m)refuse('Choose a part of this page: who it is, the extra instructions, a rule, a profile page or a skill.','UNKNOWN_TARGET');
+    const m=/^(rule|profile|skill):(.+)$/.exec(t);if(!m)refuse('Choose a part of this page: who it is, the extra instructions, a rule, something it knows about you or a skill.','UNKNOWN_TARGET');
     const [,kind,name]=m;
     if(name.includes('..')||windowsInvalid(name)||!(kind==='rule'?SLUG:NAME).test(name)||kind==='rule'&&['readme','memory'].includes(name.toLowerCase()))refuse('That is not one of the files this page shows.','UNKNOWN_TARGET');
     const file=kind==='rule'?'rules/'+name+'.md':kind==='profile'?'profile/'+name+'.md':'skills/'+name+'/SKILL.md';
@@ -255,8 +288,8 @@ export class IdentityShelf{
   }
   // Everything the page shows, numbered. Rules come in the order the page lists them: first the
   // ones read before every job, with the numbers AGENTS.md gives them (ruleNumbers), then the rest
-  // grouped by where they are read (placeOf), numbered on. Profile pages and skills are numbered
-  // 1, 2, 3 in their own lists.
+  // grouped by where they are read (placeOf), numbered on. The files about the owner and the
+  // skills are numbered 1, 2, 3 in their own lists.
   overview(){
     const manual=this.readText(MANUAL),waiting=this.waitingReviews();
     const persona=manual===null?null:personaOf(manual);
@@ -270,7 +303,7 @@ export class IdentityShelf{
     const profile=this.profileNames().map(name=>{try{const text=this.readText('profile/'+name+'.md'),body=lf(splitFront(text).body),title=(body.match(/^#\s+(.+)$/m)||[])[1]||inWords(name);return {target:'profile:'+name,name,title:oneLine(title),preview:proseStart(body),review_waiting:waiting.has('profile/'+name+'.md')};}catch{return null;}}).filter(Boolean).map((p,i)=>({n:i+1,...p}));
     const skills=this.skillNames().map(name=>{try{const bytes=this.readBytes('skills/'+name+'/SKILL.md'),h=readFront(splitFront(bytes.toString('utf8')).front);return {target:'skill:'+name,name,title:inWords(h.name||name),description:h.description||'',origin:this.skillOrigin(name,bytes),review_waiting:waiting.has('skills/'+name+'/SKILL.md')};}catch{return null;}}).filter(Boolean).map((k,i)=>({n:i+1,...k}));
     let extra;try{const e=this.read('extra');extra={state:e.state,text:e.text,hash:e.hash,review_waiting:e.review_waiting};}catch(error){extra={state:'unavailable',text:'',reason:error.message};}
-    return {manual:{...this.manualInfo(manual),review_waiting:waiting.has(MANUAL),rules_list:this.rulesState(manual),rules_program:this.rulesKeeper(manual)?.program??null},who,extra,soul:this.soulInfo(),rules,profile,skills};
+    return {manual:{...this.manualInfo(manual),review_waiting:waiting.has(MANUAL),rules_list:this.rulesState(manual),rules_program:this.rulesKeeper(manual)?.program??null},who,extra,soul:this.soulInfo(),rules,profile,skills,new_rules:this.newRules()};
   }
   // slug -> number. The rules read before every job keep the number the list in AGENTS.md gives
   // them (the compiler reads it back, compile-rules.js listed): that list is what the assistant
@@ -287,8 +320,9 @@ export class IdentityShelf{
     for(const {slug} of placed)out.set(slug,++last);
     return out;
   }
-  // A part named the way the page names it: 'rule 29, "Tickets arrive readable"', 'profile page 2,
-  // "About me"', 'skill 4, "Keep a note"'; without a number when it has none (a rule removed).
+  // A part named the way the page names it: 'rule 29, "Tickets arrive readable"', 'skill 4, "Keep
+  // a note"', and a file about the owner by its own title alone, '"My projects and priorities"' (a
+  // page is in a book or a magazine, 26 October 2026); a rule removed has no number left.
   // Every version's message says this, never a file name (16 October 2026: 'Changed the rule
   // "tickets-reach-fictional-alex-as-formatted-markdown"'). Messages written before stay as they were.
   pageName(t){
@@ -301,8 +335,8 @@ export class IdentityShelf{
       if(t.kind==='profile'||t.kind==='skill'){
         const names=t.kind==='profile'?this.profileNames():this.skillNames(),i=names.indexOf(t.name),text=this.readText(t.file);
         const title=t.kind==='profile'?oneLine((lf(splitFront(text||'').body).match(/^#\s+(.+)$/m)||[])[1]||inWords(t.name)):inWords(readFront(splitFront(text||'').front).name||t.name);
-        const what=t.kind==='profile'?'profile page':'skill';
-        return i>=0?what+' '+(i+1)+', "'+title+'"':'the '+what+' "'+title+'"';
+        if(t.kind==='profile')return '"'+title+'"';
+        return i>=0?'skill '+(i+1)+', "'+title+'"':'the skill "'+title+'"';
       }
     }catch{}
     return t.label;
@@ -316,13 +350,15 @@ export class IdentityShelf{
   chatContext({label,detail=false}={}){
     const o=this.overview(),name=oneLine(label).slice(0,40),always=o.rules.filter(r=>r.always),rest=o.rules.filter(r=>!r.always);
     const said=r=>r.line?'. '+(r.always||r.stated?KIND_WORDS[r.group]+': ':'')+r.line:'';
-    const lines=['The owner has the notebook page '+(name?'"'+name+'" ':'')+'open that shows who you are, your rules, what you know about them and your skills, numbered as below. When they name one by its number ("rule 13", "profile page 2", "skill 4"), they mean the one with that number here. Change these only with the identity_files tool, as that page does: read the part first, then change it with its expected_hash and their words. Never change these files with file tools.',
+    const lines=['The owner has the notebook page '+(name?'"'+name+'" ':'')+'open that shows who you are, your rules, what you know about them and your skills, numbered as below. When they name one by its number ("rule 13", "skill 4"), they mean the one with that number here. Change these only with the identity_files tool, as that page does: read the part first, then change it with its expected_hash and their words. Never change these files with file tools.',
       'Who you are: target "who".'+(detail&&o.who.text?' Now: "'+oneLine(o.who.text)+'"':''),
       'Extra instructions, read right after who you are: target "extra".'+(detail?o.extra.text?' Now: "'+oneLine(o.extra.text)+'"':' None yet.':'')];
     if(always.length)lines.push('Rules read before every job, numbered as in AGENTS.md. Each sentence follows its kind: "Must:" is something you always do, "Never:" something you must never do (AGENTS.md lists it under "I must never"), "How it works:" how things work here. Quote a rule with its kind, never its sentence alone: a "Never" sentence alone says the opposite.',...always.map(r=>r.n+'. '+r.title+' ('+r.target+')'+said(r)));
     if(rest.length)lines.push('Rules read only when their subject comes up:',...rest.map(r=>r.n+'. '+r.title+' ('+r.target+'; '+r.place.label.toLowerCase()+')'+said(r)));
-    if(o.profile.length)lines.push('Profile pages:',...o.profile.map(p=>p.n+'. '+p.title+' ('+p.target+')'));
+    if(o.profile.length)lines.push('What you know about them:',...o.profile.map(p=>p.n+'. '+p.title+' ('+p.target+')'));
     if(o.skills.length)lines.push('Skills:',...o.skills.map(k=>k.n+'. '+k.title+' ('+k.target+')'));
+    lines.push('New rules: '+NEW_RULES_WORDS[o.new_rules]+'. Add a rule with add_rule; when its answer holds a proposal, show its "say" as one message and wait for their answer.',
+      ...this.waitingProposals().map(p=>'Waiting for their answer: proposal '+p.id+', "'+kindLine(p.proposed)+'"'));
     return lines.join('\n');
   }
   // A cheap sign of whether any file the page shows changed: the chat compares it before and after
@@ -509,13 +545,75 @@ export class IdentityShelf{
     return {writes,message};
   }
   nextOrder(group){let max=0;for(const slug of this.ruleNames()){const h=readFront(splitFront(this.readText('rules/'+slug+'.md')).front);if((h.group||'how')===group&&/^\d+$/.test(h.order||''))max=Math.max(max,Number(h.order));}return max+1;}
-  async addRule(fields={},options={}){
+  // The file a new rule would get, and its short name.
+  newRuleTarget(fields){
     const title=oneLine(fields.title)||firstWords(fields.line,NAME_LIMIT);if(!title)refuse('Give the rule a name or its one sentence.','BLANK');
     if(chars(title)>NAME_LIMIT)refuse('Keep the rule\'s name to a few words, at most '+NAME_LIMIT+' characters, so you can find it. The whole rule goes in its sentence and its story.','TOO_LONG');
     const base=title.normalize('NFKD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,60).replace(/-+$/,'')||'rule';
     const taken=new Set(this.ruleNames());let slug=base;for(let n=2;taken.has(slug)||fs.existsSync(path.join(this.root,'rules',slug+'.md'));n++)slug=base+'-'+n;
-    const t={...this.target('rule:'+slug),missingOk:true};
+    return {t:{...this.target('rule:'+slug),missingOk:true},title};
+  }
+  async addRule(fields={},options={}){
+    const {t,title}=this.newRuleTarget(fields);
     return this.change(t,current=>this.rulePlan(t,current,{...fields,title},'added the rule "'+title+'"',{create:true}),{...options,expected_hash:undefined}).then(result=>({...result,target:t.target}));
+  }
+  // ---- A new rule from the assistant ---------------------------------------------------------------
+  newRules(){return this.store.get('settings','rules')?.new_rules==='ask-first'?'ask-first':'automatic';}
+  async setNewRules(mode){
+    if(!NEW_RULES.includes(mode))refuse('Choose Add automatically or Ask first.','BAD_MODE');
+    await this.store.saveAsync('settings',{id:'rules',new_rules:mode});
+    return {saved:true,new_rules:mode};
+  }
+  // The rules that say much the same as these fields (STOP above), most alike first, at most three.
+  similarRules(fields){
+    const text=oneLine(fields.title)+' '+oneLine(fields.line),proposed=contentWords(text),said=nameWords(text);if(!proposed.size)return [];
+    return this.overview().rules.map(r=>{const own=contentWords(r.title+' '+(r.line||r.about||'')),named=contentWords(r.title),shared=[...proposed].filter(w=>own.has(w));
+      return {rule:r,shared:shared.length,named:shared.some(w=>named.has(w)),wholeName:named.size>0&&[...named].every(w=>proposed.has(w))&&(named.size>1||[...nameWords(r.title)].filter(w=>said.has(w)).length>=2),cover:shared.length/proposed.size};})
+      .filter(x=>x.named&&(x.shared>=2&&x.cover>0.5||x.wholeName&&x.cover>=0.5)).sort((a,b)=>b.cover-a.cover||b.shared-a.shared).slice(0,3)
+      .map(({rule:r})=>({target:r.target,n:r.n,title:r.title,group:r.group,line:r.line||r.about||''}));
+  }
+  // A rule the assistant was asked to add. Saved at once when new rules are added automatically and
+  // no rule says much the same; otherwise nothing is written, and the answer is a proposal: the
+  // one message to show the owner (say), and the id the assistant answers it with (answerRule).
+  async offerRule(fields={},options={}){
+    const similar=this.similarRules(fields),mode=this.newRules();
+    if(mode==='automatic'&&!similar.length)return this.addRule(fields,options);
+    const {t,title}=this.newRuleTarget(fields),proposed={...fields,title};
+    this.rulePlan(t,null,proposed,'',{create:true});
+    const now=this.now().getTime(),id='rule-'+randomUUID().slice(0,8);
+    for(const [key,p] of this.proposals)if(now-p.at>PROPOSAL_MS)this.proposals.delete(key);
+    this.proposals.set(id,{id,at:now,fields:{...fields},title,similar});
+    while(this.proposals.size>PROPOSALS_KEPT)this.proposals.delete(this.proposals.keys().next().value);
+    const shown={title,group:proposed.group||'how',line:oneLine(proposed.line)},first=similar[0];
+    const say=first?'You already have '+(first.n?'rule '+first.n+', ':'the rule ')+'"'+first.title+'": "'+kindLine(first)+'". Shall I change that rule to say "'+kindLine(shown)+'" instead, add this as a new rule, change the wording, or leave it?'
+      :'I can add this rule: "'+kindLine(shown)+'". Add it as written, change the wording, or leave it?';
+    return {saved:false,proposal:id,new_rules:mode,proposed:shown,similar,choices:first?ANSWERS:ANSWERS.filter(a=>a!=='change'),say};
+  }
+  // The owner's answer to a proposal: words must be in a message they sent after it was made, so
+  // the request that made it never answers it. add saves it as proposed, reword with the new
+  // wording in fields, change puts it into an existing rule (target) instead, leave saves nothing.
+  async answerRule(id,answer,{fields,target,...options}={}){
+    const proposal=this.proposals.get(String(id??''));
+    if(!proposal||this.now().getTime()-proposal.at>PROPOSAL_MS)refuse('That proposed rule is no longer waiting. Propose it again.','NO_PROPOSAL',{status:404});
+    if(!ANSWERS.includes(answer))refuse('Answer with add, reword, change or leave.','BAD_ANSWER');
+    if(!this.ownerAsked(options.words,{since:proposal.at}))refuse('Pass the owner\'s answer, copied exactly from the message they sent after you showed them the rule.','NOT_ANSWERED');
+    const given=fields&&typeof fields==='object'?fields:{};
+    if(answer==='reword'&&!['line','title'].some(k=>given[k]!==undefined&&oneLine(given[k])!==oneLine(k==='title'?proposal.title:proposal.fields[k])))refuse('Pass the new wording in fields: line, and title if the name changes.','BLANK');
+    let result;
+    if(answer==='leave')result={saved:false,left:true};
+    else if(answer==='add')result=await this.addRule(proposal.fields,options);
+    else if(answer==='reword')result=await this.addRule({...proposal.fields,...given},options);
+    else{
+      const t=this.target(target);if(t.kind!=='rule')refuse('Name the rule to change as its target, "rule:<name>".','UNKNOWN_TARGET');
+      const now=this.read(t.target);
+      result={...await this.save(t.target,{fields:{line:proposal.fields.line,group:proposal.fields.group||'how',...given}},{...options,expected_hash:now.hash}),target:t.target};
+    }
+    this.proposals.delete(proposal.id);
+    return result;
+  }
+  waitingProposals(){
+    const now=this.now().getTime();
+    return [...this.proposals.values()].filter(p=>now-p.at<=PROPOSAL_MS).map(p=>({id:p.id,proposed:{title:p.title,group:p.fields.group||'how',line:oneLine(p.fields.line)},similar:p.similar.map(r=>r.target)}));
   }
   async removeRule(target,options={}){
     const t=this.target(target);if(t.kind!=='rule')refuse('Only a rule can be removed here.','REFUSED');
@@ -546,11 +644,28 @@ export class IdentityShelf{
     return out.reverse().slice(0,limit).map((v,i)=>({id:v.commit||'now',at:v.at,current:i===0&&v.view===currentView,removed:v.view===null,by:this.byWhom(v),message:v.message&&v.message.startsWith(COMMIT_PREFIX)?v.message.slice(COMMIT_PREFIX.length):v.message,
       ...(t.kind==='who'||t.kind==='extra'?{text:v.view}:{fields:v.view===null?null:JSON.parse(v.view)}),...(v.unrecorded?{unrecorded:true}:{})}));
   }
+  // The rules taken away: those whose newest version is the removal, newest removal first. Each
+  // carries what it said before it was removed, and the id of that version (restore brings it back).
+  async removedRules(){
+    const now=new Set(this.ruleNames()),slugs=[];
+    for(const file of await this.history.deletedFiles('rules/')){
+      const m=/^rules\/([^/]+)\.md$/.exec(file);
+      if(m&&SLUG.test(m[1])&&!['readme','memory'].includes(m[1].toLowerCase())&&!now.has(m[1])&&!slugs.includes(m[1]))slugs.push(m[1]);
+    }
+    const out=[];
+    for(const slug of slugs){
+      let list;try{list=await this.versions('rule:'+slug,{limit:200});}catch{continue;}
+      if(!list.length||!list[0].removed||list[0].unrecorded)continue;
+      const before=list.find(v=>!v.removed&&v.fields);if(!before)continue;
+      out.push({target:'rule:'+slug,slug,title:before.fields.title||inWords(slug),line:before.fields.line||'',group:before.fields.group,removed_at:list[0].at,by:list[0].by,version:before.id});
+    }
+    return out.sort((a,b)=>Date.parse(b.removed_at)-Date.parse(a.removed_at));
+  }
   byWhom(v){
     if(v.unrecorded)return 'not kept as a version yet';
     if(String(v.message).startsWith(COMMIT_PREFIX+'kept the version from before'))return 'kept by your notebook';
-    if(v.author==='Godspeed Mission Control'&&String(v.message).startsWith(COMMIT_PREFIX))return /\(asked in chat\)$/.test(v.message)?'your assistant, asked in chat':'you, on this page';
-    if(v.author==='Godspeed Mission Control')return 'saved by your notebook';
+    if(isNotebookAuthor(v.author)&&String(v.message).startsWith(COMMIT_PREFIX))return /\(asked in chat\)$/.test(v.message)?'your assistant, asked in chat':'you, on this page';
+    if(isNotebookAuthor(v.author))return 'saved by your notebook';
     return v.author||'unknown';
   }
   async undo(target,options={}){
@@ -624,10 +739,11 @@ export class IdentityShelf{
   // words are in a message the owner sent in the last twenty minutes: in the notebook's chat, or
   // in the assistant's own conversation store (Telegram, the notebook's chat through Hermes). Text
   // that reached the assistant from a web page, a mail or a tool is never such a message.
-  ownerAsked(words){
+  // since (ms): only a message sent from then on counts, for an answer to a question shown then.
+  ownerAsked(words,{since:after=0}={}){
     const norm=s=>String(s??'').toLowerCase().replace(/[‘’]/g,"'").replace(/[“”]/g,'"').replace(/\s+/g,' ').trim(),said=norm(words);
     if(said.length<3)return false;
-    const since=this.now().getTime()-this.recentWindowMs;
+    const since=Math.max(this.now().getTime()-this.recentWindowMs,after);
     try{for(const m of this.store.list('conversation_messages'))if(m.role==='user'&&Date.parse(m.created_at)>=since&&norm(m.content).includes(said))return true;}catch{}
     const home=this.assistantHome();
     if(home&&fs.existsSync(path.join(home,'state.db'))){

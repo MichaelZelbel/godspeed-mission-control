@@ -170,7 +170,7 @@ export function failureWords(problem){
 export function noteVoiceFailed(state,problem,now=new Date()){
  if(!state)return;
  const record=readVoiceRecord(state);record.failing_since??=now.toISOString();record.last_error=String(problem||'');record.last_failed_at=now.toISOString();
- if(record.told_for!==record.failing_since){try{queueNotice({state},{id:'voice-reply-'+record.failing_since,text:failureWords(problem)});record.told_for=record.failing_since;}catch{}}
+ if(record.told_for!==record.failing_since){try{queueNotice({state},{id:'voice-reply-'+record.failing_since,text:failureWords(problem),about:'voice replies'});record.told_for=record.failing_since;}catch{}}
  try{writeVoiceRecord(state,record);}catch{}
 }
 export function noteVoiceWorked(state){

@@ -1,0 +1,12 @@
+{
+  "name": "godspeed-charm",
+  "version": "0.1.0",
+  "description": "The Charm Challenge for Godspeed Mission Control: 21 days of charming your AI into the result instead of arguing, counted down by itself and never reset without a yes.",
+  "license": "MIT",
+  "type": "module",
+  "bin": { "godspeed-charm": "bin/godspeed-charm.mjs" },
+  "files": ["bin", "lib", "skill", "hermes", "README.md", "LICENSE"],
+  "engines": { "node": ">=22" },
+  "scripts": { "test": "node --test \"test/*.test.mjs\"" },
+  "repository": { "type": "git", "url": "https://github.com/MichaelZelbel/godspeed-mission-control.git", "directory": "third-party/addons/godspeed-charm" }
+}

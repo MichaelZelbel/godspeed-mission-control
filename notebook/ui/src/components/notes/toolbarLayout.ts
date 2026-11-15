@@ -5,7 +5,8 @@
  * every group, whole groups collapse (in COLLAPSE_ORDER) into a "more
  * formatting" popover. Group widths are static because every control is a
  * fixed-size 28px icon button - the one variable-width control (the block-type
- * trigger) is given a fixed width by the toolbar for exactly this reason.
+ * trigger) is as wide as its longest label at every caret position and never
+ * narrower than BLOCK_TYPE_WIDTH.
  */
 
 export type ToolbarGroupId =
@@ -66,6 +67,17 @@ export const COLLAPSE_ORDER: ToolbarGroupId[] = [
   "blockType",
 ];
 
+/**
+ * Width charged for the block-type trigger (its min-w-[120px]). Its longest
+ * label, "Normal text", is 67px in Plus Jakarta Sans at text-xs; with the
+ * padding (px-1.5), the pilcrow, the chevron and the gaps the trigger renders
+ * 119px wide in Chromium. A font that renders wider grows the trigger rather than cut the
+ * label, and SLACK absorbs the difference; charging more than needed would
+ * collapse Undo/Redo at 1366px with the note list open. The old fixed 112 (w-28) left the label
+ * 76px for 85px of pilcrow and text, which read "Normal te" (#553).
+ */
+export const BLOCK_TYPE_WIDTH = 120;
+
 const BUTTON = 28; // h-7 w-7 icon button
 const GAP = 2; // gap-0.5 between buttons in a group
 const CONDITIONAL_BUTTON = BUTTON + GAP;
@@ -85,7 +97,7 @@ export function getGroupWidth(id: ToolbarGroupId, ctx: ToolbarLayoutContext): nu
     case "history":
       return buttons(2); // undo, redo
     case "blockType":
-      return 112; // fixed w-28 dropdown trigger
+      return BLOCK_TYPE_WIDTH; // min-w-[120px] dropdown trigger, as wide as its longest label
     case "coreMarks":
       return buttons(4); // bold, italic, underline, strike
     case "extendedMarks":

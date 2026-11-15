@@ -12,6 +12,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { showToast } from "@/lib/toast";
 import { initials } from "@/lib/group-utils";
 import { fetchAllPages } from "@/lib/postgrest";
+import { personLabel } from "@/components/timeline/people";
 
 type ContactGroup = Database["public"]["Tables"]["contact_groups"]["Row"];
 type Contact = Pick<Database["public"]["Tables"]["contacts"]["Row"], "id" | "name" | "company" | "role">;
@@ -32,7 +33,7 @@ export function AddMemberDialog({ group, existingPersonIds }: { group: ContactGr
         supabase.from("contacts").select("id, name, company, role").eq("user_id", user!.id).is("merged_into", null).order("name").order("id").range(from, to),
       ),
   });
-  const available = contacts.filter((contact) => !existingPersonIds.has(contact.id) && contact.name.toLowerCase().includes(search.toLowerCase()));
+  const available = contacts.filter((contact) => !existingPersonIds.has(contact.id) && personLabel(contact).toLowerCase().includes(search.toLowerCase()));
 
   const submit = async () => {
     try {
@@ -60,8 +61,8 @@ export function AddMemberDialog({ group, existingPersonIds }: { group: ContactGr
             {isLoading ? <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div> : available.map((contact) => (
               <label key={contact.id} className="flex cursor-pointer items-center gap-3 rounded-md p-2 hover:bg-accent">
                 <Checkbox checked={selected.includes(contact.id)} onCheckedChange={(checked) => setSelected((prev) => checked ? [...prev, contact.id] : prev.filter((id) => id !== contact.id))} />
-                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-xs font-medium text-primary">{initials(contact.name)}</span>
-                <span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium">{contact.name}</span><span className="block truncate text-xs text-muted-foreground">{[contact.role, contact.company].filter(Boolean).join(" · ")}</span></span>
+                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-xs font-medium text-primary">{initials(personLabel(contact))}</span>
+                <span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium">{personLabel(contact)}</span><span className="block truncate text-xs text-muted-foreground">{[contact.role, contact.company].filter(Boolean).join(" · ")}</span></span>
               </label>
             ))}
             {!isLoading && available.length === 0 && <p className="py-8 text-center text-sm text-muted-foreground">No available people found.</p>}

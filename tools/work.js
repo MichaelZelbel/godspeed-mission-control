@@ -22,6 +22,12 @@
 //    expires; `tick` gives back a lease that ran out with no report.
 //  - OUTWARD work - a send, a spend, a post, a listing, a sign-up - is filed blocked, is never
 //    retried on its own, and cannot be taken or unblocked without your own words quoted on it.
+//  - PUBLICATION IS ASKED FOR, NEVER INFERRED (#268). On 6 November 2026 an unattended run made a
+//    public page of an item whose WHAT said it was private and whose OUTWARD was no, because the
+//    runner published every verified file. A page is a post, so `--publish yes` files the item
+//    outward with PUBLISH: yes, blocked until your words are on it. mc-work-run publishes a file
+//    only when its item has OUTWARD yes, PUBLISH yes and APPROVED, and its own words do not call it
+//    private; every other finished file stays private.
 //  - A failure gets a growing gap, not a hammer: one day, then two, then four, up to MAX
 //    ATTEMPTS, and after that a person decides what happens.
 //  - `sweep --card` cancels the work under a card you answered. `sweep --goal` marks the work
@@ -72,10 +78,121 @@ const NEEDS = /^(none|person|authorization|capability:.+)$/;
 const asNeeds = (v) => (PERSON.test(v) ? 'person' : v);
 const KINDS = ['do', 'learn', 'repair'];
 // A learn item is done when its answer is in a file. "Names a file" means: a token with a
-// slash in it, ending in .md, .csv, .json or .txt, trailing punctuation ignored.
+// slash or backslash in it, ending in .md, .csv, .json or .txt, trailing punctuation ignored.
 const namesFile = (s) => String(s || '').split(/\s+/).map(t => t.replace(/[.,;:)"'\]]+$/, ''))
-  .some(t => t.includes('/') && /\.(md|csv|json|txt)$/i.test(t));
-const ORDER = ['ID', 'STATUS', 'KIND', 'KEY', 'GOAL', 'CARD', 'WHAT', 'DONE WHEN', 'CHECK', 'OWNER', 'NEEDS', 'OUTWARD', 'ATTEMPTS', 'MAX ATTEMPTS',
+  .some(t => /[\\/]/.test(t) && /\.(md|csv|json|txt)$/i.test(t));
+// WHERE A RESULT IS KEPT (#543). On 14 November 2026 a daily round kept a person's finished
+// checklist in routines/next-action/<day>/, a run-log folder the nightly cleanup empties after 30
+// days, and verified the item on it there. So `file` refuses a DONE WHEN, --path or CHECK that names
+// a file inside one of those folders (run-log-folders.js holds the list the cleanup sweeps).
+//
+// The path is worked out the way a file system reads it, not matched as text (#551): three patches
+// in a row (#544, #545, #548) each taught a pattern one more spelling of the same folder. Either
+// separator splits steps; `.` and empty steps go; `..` removes the step before it; trailing dots and
+// spaces go (Windows drops them, so routines/work./ is routines/work/); capitals are ignored (Windows
+// and a Mac's usual disk ignore them). A plain relative path is read from the mission control, as
+// CHECK runs there, so it lies in a folder only when it starts with it. Where text cannot say where a
+// path starts (an absolute path, $VAR/..., ~/..., OUT=..., or one that climbs above its start with
+// ..), the folder may appear anywhere in it. A path that names the folder itself is refused like a
+// file inside it (#561): `routines/work/` is where the cleanup sweeps, whatever follows.
+const { RUN_LOG_FOLDERS } = require(path.join(__dirname, 'run-log-folders.js'));
+const RUN_LOG_STEPS = RUN_LOG_FOLDERS.map(f => ({ folder: f, steps: f.split('/') }));
+// The words of a text that may be paths: split at spaces and shell punctuation, and also with the
+// spaces kept that a run of spaces and dots carries up to a separator, so `routines/work /x.md` and
+// `routines/work . /x.md` are each one candidate (#561), as Windows reads both as routines/work/.
+// A web address (https://host/...) is not a path of the notebook, so it is taken out first; a
+// file:// address names a file on this computer and stays.
+const PATH_STOP = /[\s"'`;|&<>()]+/;
+const PATH_STOP_KEEPING_SPACE_BEFORE_SEP = /[\s"'`;|&<>()]*["'`;|&<>()][\s"'`;|&<>()]*|\s+(?![. ]*[\\/])/;
+const WEB_ADDRESS = /(?<![A-Za-z0-9+.-])(?!file:)[A-Za-z][A-Za-z0-9+.-]+:\/\/[^\s"'`<>()]*/gi;
+const pathCandidates = (text) => {
+  const s = String(text || '').replace(WEB_ADDRESS, ' ');
+  return [...new Set([...s.split(PATH_STOP_KEEPING_SPACE_BEFORE_SEP), ...s.split(PATH_STOP)])]
+    .map(t => t.replace(/[.,;:]+$/, '')).filter(Boolean);
+};
+// The steps of a path as written, capitals kept (pathSteps below ignores them).
+const pathParts = (p) => {
+  const out = [];
+  for (const raw of p.split(/[\\/]/)) {
+    if (raw === '..') { if (out.length && out[out.length - 1] !== '..') out.pop(); else out.push('..'); continue; }
+    const name = raw.replace(/[. ]+$/, '');
+    if (name) out.push(name);
+  }
+  return out;
+};
+const pathSteps = (p) => pathParts(p).map(s => (s === '..' ? s : s.toLowerCase()));
+// A first step with anything but a plain name in it (`OUT=`, `--path=`, `$GODSPEED_ROOT`, `~`, `C:`)
+// is not a folder of the mission control: the path proper starts after its last such character.
+const GLUED_PREFIX = /^[^\\/]*[^A-Za-z0-9_. \-\\/]/;
+const runLogFolderAt = (candidate) => {
+  const anchored = /^[\\/]/.test(candidate) || GLUED_PREFIX.test(candidate);
+  const steps = pathSteps(candidate.replace(GLUED_PREFIX, ''));
+  const starts = anchored || steps[0] === '..' ? steps.map((_, i) => i) : [0];
+  for (const i of starts) {
+    const hit = RUN_LOG_STEPS.find(f => steps.length >= i + f.steps.length && f.steps.every((x, k) => steps[i + k] === x));
+    if (hit) return { folder: hit.folder, itself: steps.length === i + hit.steps.length };
+  }
+  return null;
+};
+// A path may also be glued after an earlier one (`work/a.md,routines/work/b.md`, `a:routines/...`,
+// `x+routines/...`, `OUT=routines/...`): the text after every character that is not part of a plain
+// path is tried as a path of its own, so a run-log path refused alone stays refused when glued on.
+const PATH_GLUE = /[^A-Za-z0-9_. \-\\/]/g;
+const runLogFolderOf = (candidate) => {
+  const starts = [0, ...[...candidate.matchAll(PATH_GLUE)].map(m => m.index + 1)];
+  for (const i of starts) { const p = candidate.slice(i), hit = runLogFolderAt(p); if (hit) return { path: p, ...hit }; }
+  return null;
+};
+// The first path in the text that lies in a run-log folder, as written (from where it is glued on),
+// with that folder; or null.
+const runLogPath = (text) => {
+  for (const written of pathCandidates(text)) { const hit = runLogFolderOf(written); if (hit) return hit; }
+  return null;
+};
+// THE FILE AN ITEM NAMES, AS IT LIES ON DISK (#571). mc-work-run commits and publishes the file an
+// item's DONE WHEN names, and until 14 November 2026 it found that file with its own copy of a text
+// pattern, so every path this program learned to read (backslashes, other capitals, doubled
+// separators, ./ steps, names ending in space-dot) still missed there, and a space cut a path in
+// two. Now it asks `files`, which reads a path with the steps above and looks each step up in the
+// folder it names: the same name first, else the one Windows or a Mac would open for it (capitals
+// ignored, trailing dots and spaces dropped). A path may hold spaces, so runs of words are tried
+// too, earliest first and shortest first. Only a file of the mission control that is there counts;
+// the answer is its path from the mission control with / between steps, written as on disk.
+const NAMED_FILE_EXT = /\.(md|csv|json|txt|html)$/i;
+const fileOnDisk = (written, root) => {
+  let c = written.replace(/^["'`(\[<]+/, '').replace(/[.,;:)"'`\]>]+$/, '');
+  if (!/[\\/]/.test(c) || !NAMED_FILE_EXT.test(c)) return '';
+  if (/^([\\/]|[A-Za-z]:[\\/])/.test(c)) {
+    const rel = path.relative(root, c);
+    if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) return '';
+    c = rel;
+  }
+  const parts = pathParts(c);
+  if (!parts.length || parts.includes('..')) return '';
+  let dir = root; const out = [];
+  for (const part of parts) {
+    let names; try { names = fs.readdirSync(dir); } catch (e) { return ''; }
+    const want = part.toLowerCase();
+    const name = names.includes(part) ? part : names.find(n => n.replace(/[. ]+$/, '').toLowerCase() === want);
+    if (!name) return '';
+    out.push(name); dir = path.join(dir, name);
+  }
+  try { return fs.statSync(dir).isFile() ? out.join('/') : ''; } catch (e) { return ''; }
+};
+const fileNamed = (text, root = GODSPEED) => {
+  const words = String(text || '').replace(WEB_ADDRESS, ' ').split(/(\s+)/);
+  for (let i = 0; i < words.length; i += 2) {
+    let joined = '';
+    for (let j = i; j < words.length && j < i + 24; j += 2) {
+      joined += (j > i ? words[j - 1] : '') + words[j];
+      // A path glued after other text (OUT=..., --path=..., a:...) is tried from after each glue too.
+      const starts = [0, ...[...joined.matchAll(PATH_GLUE)].map(m => m.index + 1)];
+      for (const k of starts) { const hit = fileOnDisk(joined.slice(k), root); if (hit) return hit; }
+    }
+  }
+  return '';
+};
+const ORDER = ['ID', 'STATUS', 'KIND', 'KEY', 'GOAL', 'CARD', 'TOUCHES', 'WHAT', 'DONE WHEN', 'CHECK', 'OWNER', 'NEEDS', 'OUTWARD', 'PUBLISH', 'ATTEMPTS', 'MAX ATTEMPTS',
   'LEASE', 'NEXT TRY', 'STALE AFTER', 'FILED', 'SOURCE', 'RESULT', 'LINK', 'APPROVED', 'MAY', 'GOES OUT', 'ANNOUNCED'];
 const S = L.store(DIR, ORDER);
 const { die, say, oneLine, flag, today, q } = L;
@@ -108,6 +225,31 @@ function standing(goal) {
   return standings[goal];
 }
 function goalMay(goal) { const st = standing(goal); return st ? st.lines : null; }
+
+// ---------------------------------------------------------------------------
+// holds: a step the person declined or postponed (#282), read live from world/claims through
+// holds.js, so it lifts by itself when its claim ends. A card names what it touches in TOUCHES;
+// one without it is never held. Without holds.js beside this program nothing is held; one that is
+// there and fails stops the command, because "could not tell" must never read as "not held".
+// ---------------------------------------------------------------------------
+let holdsJs;
+const holdsBroken = (e) => die(`what the person declined or postponed could not be read (holds.js: ${String(e.message).split('\n')[0]}), so nothing is decided about held steps; mc-holds list says what is wrong`);
+function holdsLib() {
+  if (holdsJs === undefined) {
+    const file = path.join(__dirname, 'holds.js');
+    try { holdsJs = fs.existsSync(file) ? require(file) : null; } catch (e) { holdsBroken(e); }
+  }
+  return holdsJs;
+}
+const holdsOn = {};
+function heldOf(c, d = today()) {
+  if (!c.f.TOUCHES) return null;
+  const h = holdsLib();
+  if (!h) return null;
+  if (!(d in holdsOn)) { try { holdsOn[d] = h.currentHolds(GODSPEED, d); } catch (e) { holdsBroken(e); } }
+  return h.heldBy(holdsOn[d], { touches: c.f.TOUCHES, text: c.f.WHAT });
+}
+const heldWhy = (c, h) => `${c.id} is held: ${h.id} says "${h.value}" (${h.stance}); it comes back when that ends. To go ahead now, end it first: mc-holds end ${h.name} --words "..."`;
 // A CHECK THAT LOOKS AT NOTHING CHECKS NOTHING (final review, 2026-10-13). A step that goes out
 // without a yes each time is verified by its CHECK, and `true`, `:`, `exit 0`, `true;` or `echo ok`
 // pass whatever happened. So the check must hold at least one command that looks at something:
@@ -357,8 +499,16 @@ cmds.file = (a) => {
   let done = oneLine(a['done-when']);
   const where = oneLine(a.path);
   if (!done && kind === 'learn' && where) done = `the answer to ${q(question || what)} is written in ${where}, with the evidence read`;
+  // Before the learn check below, so a Windows path in a run-log folder hears why it is refused (#545).
+  for (const [label, text] of [['DONE WHEN', done], ['--path', where], ['CHECK', a.check === true ? '' : oneLine(a.check)]]) {
+    const inLog = runLogPath(text);
+    if (inLog) die(`${label} names ${inLog.path}, ${inLog.itself ? 'which is' : 'inside'} ${inLog.folder}/, a run-log folder whose files the nightly cleanup deletes after 30 days. A result is kept with the person's work: put it under work/, goals/ or ideas/ (for example work/<a short name>.md) and name that path instead`);
+  }
   if (kind === 'learn' && !namesFile(done)) die('a learn item is done when the answer is written somewhere a reader can open: its DONE WHEN must name a file (a path ending in .md, .csv, .json or .txt), or give --path <file>');
   if (!done) die('--done-when is required: what a reader will see when this is done, so it can be verified by someone who is not the runner');
+  const touches = a.touches === undefined || a.touches === 'true' ? [] : (holdsLib() || die('--touches needs holds.js beside this program')).touchTokens(a.touches);
+  const badSlug = touches.find(t => !holdsLib().SLUG.test(t));
+  if (badSlug) die(`--touches names world entities by their slugs (world/entities/<slug>.md), comma-separated; "${badSlug}" is not one`);
   const key = oneLine(a.key || what.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 80));
   const dup = S.all().find(c => c.f.KEY === key && OPEN.includes(c.f.STATUS));
   if (dup) { say(`${dup.id}: already on the register with this key (${dup.f.STATUS}); nothing filed twice`); return; }
@@ -366,7 +516,13 @@ cmds.file = (a) => {
   if (!OWNERS.test(owner)) die('--owner must be godspeed, person or company:<slug>');
   let needs = asNeeds(oneLine(a.needs || 'none'));
   if (!NEEDS.test(needs)) die('--needs must be none, person, authorization or capability:<what is missing>');
-  const outward = a.outward === 'yes' ? 'yes' : 'no';
+  if (a.publish !== undefined && !['yes', 'no'].includes(a.publish)) die('--publish must be yes or no');
+  const publish = a.publish === 'yes';
+  if (publish) {
+    if (a.may !== undefined) die('a page goes out on a yes for this item, not on a standing permission: file it without --may');
+    if (!namesFile(done)) die('--publish needs a DONE WHEN that names the file to publish (a path ending in .md, .csv, .json or .txt)');
+  }
+  const outward = a.outward === 'yes' || publish ? 'yes' : 'no';
   if (kind === 'repair' && (outward === 'yes' || a.may !== undefined)) die('a repair mends this machine and reaches nobody else, so it is never outward: file the outward part as an item of its own');
   if (outward === 'yes' && needs === 'none') needs = 'authorization';
   if (owner === 'person' && needs === 'none') needs = 'person';
@@ -420,8 +576,8 @@ cmds.file = (a) => {
   const id = a.id ? L.safeId(a.id) : nextId(d);
   if (S.exists(id)) die(`${id} already exists`);
   const f = {
-    ID: id, STATUS: needs === 'none' ? 'planned' : 'blocked', KIND: kind, KEY: key, GOAL: oneLine(a.goal), CARD: oneLine(a.card), WHAT: what, 'DONE WHEN': done,
-    CHECK: oneLine(a.check), OWNER: owner, NEEDS: needs, OUTWARD: outward, ATTEMPTS: '0', 'MAX ATTEMPTS': String(parseInt(a['max-attempts'] || '3', 10) || 3),
+    ID: id, STATUS: needs === 'none' ? 'planned' : 'blocked', KIND: kind, KEY: key, GOAL: oneLine(a.goal), CARD: oneLine(a.card), TOUCHES: touches.join(', '), WHAT: what, 'DONE WHEN': done,
+    CHECK: oneLine(a.check), OWNER: owner, NEEDS: needs, OUTWARD: outward, PUBLISH: publish ? 'yes' : '', ATTEMPTS: '0', 'MAX ATTEMPTS': String(parseInt(a['max-attempts'] || '3', 10) || 3),
     'STALE AFTER': String(parseInt(a['stale-after'] || '7', 10) || 7), FILED: d, SOURCE: oneLine(a.source || 'unknown'),
     APPROVED: standingWords, MAY: may ? may.kind : '', 'GOES OUT': goesOut,
   };
@@ -435,6 +591,7 @@ cmds.file = (a) => {
   const how = overLimit ? ` outward: this week's ${may.perWeek} ${may.kind} steps${of} are used, so this one needs a fresh yes`
     : standingWords && goesOut ? ` outward: goes out at ${goesOut} UTC unless stopped (standing ${may.kind}${of})`
     : standingWords ? ` outward: goes out when ready and is reported after (standing ${may.kind}${of})`
+    : publish ? ' outward: a page, made only after your yes (unblock --approved-by)'
     : outward === 'yes' ? ' outward: never on its own' : '';
   say(`${id}: ${f.STATUS}` + (f.STATUS === 'blocked' ? ` (needs ${needs})` : '') + how);
 };
@@ -453,6 +610,8 @@ cmds.take = (a) => {
   if (notYetDue(c) && !flag(a, 'now')) die(`${c.id} goes out at ${c.f['GOES OUT']} UTC unless stopped; not before`);
   if (isStanding(c) && !standingHolds(c)) die(`${c.id} was filed on the standing permission ${c.f.MAY || '(none named)'} of ${c.f.GOAL || 'its goal'}, which is no longer on the goal card in the words it was filed under; it waits for a fresh yes (unblock --approved-by)`);
   if (unshown(c)) die(`${c.id} has not been shown in a morning message, so the person could not stop it; it does not go out until it was (mc-work announce)`);
+  const held = heldOf(c, d);
+  if (held) die(heldWhy(c, held));
   if (c.f.OUTWARD === 'yes') {
     // Approved once is approved for this item: a yes already on record (from `unblock
     // --approved-by`) lets the runner take it, so a move the person said yes to actually lands
@@ -545,6 +704,8 @@ cmds.unblock = (a) => {
   if (!why) die('--why is required: what arrived (your word on it, the missing capability, the approval)');
   const d = a.date || today();
   if (c.f.OUTWARD === 'yes' && !oneLine(a['approved-by'])) die('outward work is unblocked only with --approved-by "<your words>"');
+  const held = heldOf(c, d);
+  if (held) die(heldWhy(c, held));
   if (a['approved-by']) { c.f.APPROVED = `${d} ${q(oneLine(a['approved-by']))}`; L.logLine(c, d, 'APPROVED', q(oneLine(a['approved-by']))); }
   c.f.STATUS = 'planned'; c.f.NEEDS = 'none';
   L.logLine(c, d, 'UNBLOCKED', why);
@@ -616,7 +777,7 @@ cmds['going-out'] = (a) => {
   // out within the next 24 hours.
   const to = minuteFrom(DAY_MS);
   const rows = (a.date ? dayList(a.date) : comingList().filter(r => r.c.f['GOES OUT'] <= to))
-    .filter(r => ['planned', 'dispatched'].includes(r.c.f.STATUS));
+    .filter(r => ['planned', 'dispatched'].includes(r.c.f.STATUS) && !heldOf(r.c));
   if (flag(a, 'json')) {
     say(JSON.stringify(rows.map(({ n, c }) => ({ n, id: c.id, at: c.f['GOES OUT'], what: c.f.WHAT, goal: c.f.GOAL || '', link: c.f.LINK || '', status: c.f.STATUS, announced: c.f.ANNOUNCED || '' }))));
     return;
@@ -643,7 +804,8 @@ cmds.announce = (a) => {
     const why = !c ? 'no such work'
       : !UNSENT.includes(c.f.STATUS) ? `is ${c.f.STATUS}`
       : !c.f['GOES OUT'] ? 'has no GOES OUT (it goes out alone, or only with a yes of its own)'
-      : goesOutBad(c) ? `has GOES OUT "${c.f['GOES OUT']}", not YYYY-MM-DDTHH:MM (UTC)` : '';
+      : goesOutBad(c) ? `has GOES OUT "${c.f['GOES OUT']}", not YYYY-MM-DDTHH:MM (UTC)`
+      : heldOf(c) ? heldWhy(c, heldOf(c)).replace(`${c.id} `, '') : '';
     if (why) { missed++; say(`${id}: ${why}, not marked`); continue; }
     c.f.ANNOUNCED = d;
     L.logLine(c, d, 'ANNOUNCED', 'in the morning message');
@@ -734,16 +896,33 @@ cmds.next = (a) => {
     && (c.f.OUTWARD !== 'yes' || (c.f.APPROVED && c.f.STATUS === 'planned')) && c.f.NEEDS === 'none' && !leaseLive(c) && (!a.goal || c.f.GOAL === a.goal)
     // a step that goes out unless stopped waits for its time (UTC) and for a morning message to
     // have shown it, and one whose standing permission was taken back does not go out on it at all
-    && !notYetDue(c) && !unshown(c) && !(isStanding(c) && !standingHolds(c)));
+    && !notYetDue(c) && !unshown(c) && !(isStanding(c) && !standingHolds(c)) && !heldOf(c, d));
   if (flag(a, 'json')) { say(JSON.stringify(rows.map(c => Object.assign({ id: c.id }, c.f)))); return; }
   if (!rows.length) { say('nothing runnable now'); return; }
   for (const c of rows) say(`${c.id.padEnd(16)} ${c.f.STATUS.padEnd(9)} ${(c.f.KIND || 'do').padEnd(5)} ${c.f.WHAT}` + (c.f.GOAL ? `  [${c.f.GOAL}]` : ''));
 };
 cmds.list = (a) => {
   const rows = (flag(a, 'all') ? S.all() : S.all().filter(c => OPEN.includes(c.f.STATUS))).filter(c => (!a.goal || c.f.GOAL === a.goal) && (!a.status || c.f.STATUS === a.status));
-  if (flag(a, 'json')) { say(JSON.stringify(rows.map(c => Object.assign({ id: c.id, log: c.log }, c.f)), null, 2)); return; }
+  // Held is decided for the day being listed: --date D (mc-decide --date D hands its run this list,
+  // and a hold that has ended by D no longer holds that day's steps, #406), today without it.
+  if (a.date !== undefined && !L.isoDate(a.date)) die(`--date ${a.date} is not a date (YYYY-MM-DD)`);
+  const d = a.date || today();
+  const heldId = (c) => { const h = heldOf(c, d); return h ? h.id : ''; };
+  if (flag(a, 'json')) { say(JSON.stringify(rows.map(c => Object.assign({ id: c.id, log: c.log }, c.f, { held_by: heldId(c) })), null, 2)); return; }
   if (!rows.length) { say('no open work'); return; }
-  for (const c of rows) say(`${c.f.STATUS.padEnd(10)} ${(c.f.KIND || 'do').padEnd(5)} ${c.id.padEnd(16)} ${(c.f.OWNER || '').padEnd(10)} ${c.f.WHAT}` + (c.f.NEEDS !== 'none' ? `  needs ${c.f.NEEDS}` : '') + (c.f.GOAL ? `  [${c.f.GOAL}]` : '') + (c.f.CARD ? `  {${c.f.CARD}}` : ''));
+  for (const c of rows) say(`${c.f.STATUS.padEnd(10)} ${(c.f.KIND || 'do').padEnd(5)} ${c.id.padEnd(16)} ${(c.f.OWNER || '').padEnd(10)} ${c.f.WHAT}` + (c.f.NEEDS !== 'none' ? `  needs ${c.f.NEEDS}` : '') + (c.f.GOAL ? `  [${c.f.GOAL}]` : '') + (c.f.CARD ? `  {${c.f.CARD}}` : '') + (heldId(c) ? `  held by ${heldId(c)}` : ''));
+};
+// files [<id>...] [--verified-on D]: the file each item's DONE WHEN names, one per line, as it lies on
+// disk (fileNamed). mc-work-run commits and publishes by these names.
+cmds.files = (a) => {
+  if (a['verified-on'] !== undefined && !L.isoDate(a['verified-on'])) die(`--verified-on ${a['verified-on']} is not a date (YYYY-MM-DD)`);
+  const rows = a._.length ? a._.map(id => S.read(id) || die(`no such work: ${id}`)) : S.all();
+  const seen = new Set();
+  for (const c of rows) {
+    if (a['verified-on'] && !(c.log || []).some(l => l.event === 'VERIFIED' && l.date === a['verified-on'])) continue;
+    const f = fileNamed(c.f['DONE WHEN']);
+    if (f && !seen.has(f)) { seen.add(f); say(f); }
+  }
 };
 cmds.show = (a) => { const c = S.read(a._[0] || die('which item?')) || die('no such work'); say(S.render(c).trimEnd()); };
 cmds.check = () => {
@@ -780,10 +959,16 @@ cmds.help = () => say(`mc-work: dispatched, attempted and verified are three dif
   file --what "..." --done-when "..." [--key K] [--goal G] [--card C] [--check "<shell, exit 0 when done>"]
        [--owner godspeed|person|company:<slug>] [--needs none|person|authorization|capability:<x>] [--outward yes|no]
        [--max-attempts 3] [--stale-after 7] [--source "..."]       a second file with the same open KEY files nothing
+       [--touches "<slug>, <slug>"]     the world entities it is about (world/entities/<slug>.md): a step the person
+                                        declined or postponed on one of them (mc-holds) is held: listed as held,
+                                        never taken, unblocked, announced or going out until that claim ends
        [--kind do|learn|repair]         a learn item is a question; its DONE WHEN must name a file the answer is written in.
                                         a repair mends the mission control's own machinery on the machine the run is on:
                                         mc-work-run lets that run change the files outside the folder the mission control
                                         installed or runs there, keeping a copy of each first; never outward
+       [--publish yes]                  its file becomes a page only with this: filed outward and blocked; mc-work-run
+                                        --publish-cmd publishes it once your yes is on it and its check verified.
+                                        Without it a finished file stays private
        [--learn "<question>" --path <file>]   sugar: KIND learn, WHAT the question, DONE WHEN "the answer ... is written in <file>"
        [--outward yes --goal G --may <kind> --check "<live check>" [--goes-out YYYY-MM-DDTHH:MM]]
                                         outward work on a standing permission of goal G (mc-goals allow; a strategy
@@ -821,7 +1006,10 @@ cmds.help = () => say(`mc-work: dispatched, attempted and verified are three dif
   sweep --goal <id> [--cancel|--stale] --reason "..."   a goal changed; its work is re-planned
   tick [--date D] [--json]           dead leases, due retries, stale plans, waiting on you over two weeks
   link <id> --url https://...        the page a finished piece became; the note and the card hand it over
-  next [--goal G] [--json] | list [--all] [--goal G] [--status S] [--json] | show <id> | check`);
+  files [<id>...] [--verified-on D]  the file each item's DONE WHEN names, as it lies in the mission control
+                                     (backslashes, capitals and spaces read as the file system reads them)
+  next [--goal G] [--json] | list [--all] [--goal G] [--status S] [--date D] [--json] | show <id> | check
+                                     list marks a step held by what holds it on that day (--date D), today without it`);
 
 const a = L.parseArgs(process.argv.slice(2));
 L.alias(a, 'approved-by-him', 'approved-by');

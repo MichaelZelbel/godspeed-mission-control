@@ -50,3 +50,12 @@ export function retainCompletedConversation(store,input,result,{asyncWriter=fals
   store.commit([store.prepare('note_conversations',{id,context_key:key,state:{...state,messages},completed_request_ids:[...(old?.completed_request_ids||[]),...(input.request_id?[input.request_id]:[])]},old)]);
  },{signal});
 }
+
+// A message the notebook itself says into a notebook chat, such as a waiting step's question.
+export function appendAssistantMessage(store,key,content){
+ const id='chat-'+hash(key).slice(0,24);
+ return store.withLock(()=>{
+  const old=store.get('note_conversations',id),state=old?.state||{messages:[],summary:'',summarizedUpTo:0};
+  store.commit([store.prepare('note_conversations',{id,context_key:key,state:{...state,messages:[...state.messages,{role:'assistant',content}]}},old)]);
+ });
+}

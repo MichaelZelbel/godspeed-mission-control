@@ -8,6 +8,7 @@ import {addDays,daysBetween} from '../../third-party/addons/godspeed-coach/lib/c
 import {schemaFor} from './trackers.mjs';
 
 export const MEALS=['breakfast','lunch','dinner','snack','none'];
+export const FOOD_TOTAL_COLUMNS=Object.freeze({food_kcal:'kcal',protein_g:'protein_g',carbs_g:'carbs_g',fat_g:'fat_g'});
 const MEAL_RE={breakfast:/(?<!\p{L})(?:breakfast|frühstück\p{L}*)(?!\p{L})/iu,lunch:/(?<!\p{L})(?:lunch|mittag\p{L}*)(?!\p{L})/iu,dinner:/(?<!\p{L})(?:dinner|supper|abendessen|abendbrot)(?!\p{L})/iu,snack:/(?<!\p{L})(?:snacks?|zwischenmahlzeit\p{L}*)(?!\p{L})/iu};
 export const mealOf=text=>Object.keys(MEAL_RE).find(m=>MEAL_RE[m].test(String(text||'')))||'none';
 // The words that hand a "track" to this tracker: food, a meal, what she ate, in both languages.

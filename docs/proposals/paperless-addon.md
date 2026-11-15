@@ -131,7 +131,7 @@ flowchart LR
 ```
 
 **Where the add-on runs.** On the computer or server where the user's Godspeed runs its routines,
-as its own small background service like the Wingman's, because the notebook and the AI
+as its own small background service, because the notebook and the AI
 connection are there. When it installs Paperless, Paperless runs on that same machine. An existing
 Paperless elsewhere (a NAS at home) is reached over its web address, and only through Paperless's
 API: the add-on never runs a command on that machine, so it never updates it or backs it up there.
@@ -531,7 +531,7 @@ a run finds every file, note and deadline again and makes none twice.
 
 - The product is a **Godspeed add-on that scans, sorts and files documents**; Paperless-ngx is only
   the engine underneath (22 October 2026).
-- **Its own repository,** like the Wingman (22 October 2026).
+- **Its own repository** (22 October 2026).
 - **The installer installs and initializes Paperless,** yes by default when there is none, exactly
   the way it was done by hand on 22 October, so the user never deals with Paperless's setup (22
   October 2026).
@@ -549,7 +549,7 @@ a run finds every file, note and deadline again and makes none twice.
   appears in a "Documents" collection in the notebook** (F17), so checking what it did is opening
   one list (22 October 2026).
 - **The tax check (L1) comes right after the first version** (22 October 2026).
-- **The name is The Clerk,** command and repository `godspeed-clerk`, next to The Wingman (22
+- **The name is The Clerk,** command and repository `godspeed-clerk` (22
   October 2026).
 - **The server keeps every document,** not only recent ones, so the phone app can search them all;
   the notebook holds every letter's text on that server anyway (22 October 2026).

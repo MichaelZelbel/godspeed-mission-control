@@ -228,8 +228,8 @@ docker exec -d godspeed sh -c 'PY=/opt/hermes/.venv/bin/python3; [ -x "$PY" ] ||
 tg_done() { docker exec godspeed grep -q '"done": true' /opt/data/.godspeed/telegram-setup.json 2>/dev/null; }
 for _ in $(seq 1 300); do tg_done && break; sleep 3; done
 check "the chat setup finishes by itself" tg_done
-check "the first writer is greeted and owns the bot" grep -q 'Hi Tess' "$WORK/tg/record.json"
-check "a stranger is turned away" grep -q 'This assistant belongs to someone else' "$WORK/tg/record.json"
+check "the first writer is greeted and owns the bot" docker exec godspeed grep -q 'Hi Tess' /opt/test/tg/record.json
+check "a stranger is turned away" docker exec godspeed grep -q 'This assistant belongs to someone else' /opt/test/tg/record.json
 check "the installer built the folder and pushed it" x sh -c \
   'test -f /opt/data/godspeed/AGENTS.md && git -C /opt/data/godspeed ls-remote --exit-code origin >/dev/null'
 check "the chat setup leaves no install-count answer either" x sh -c '! grep -q "^GODSPEED_INSTALL_COUNT" /opt/data/.godspeed/device.env'
@@ -237,7 +237,7 @@ check "the image's GitHub tool knows every flag the shared installer uses" x sh 
 check "the bot is handed to Hermes, for its owner only" x sh -c \
   "grep -qx 'TELEGRAM_ALLOWED_USERS=111' /opt/data/.env && grep -qx 'TELEGRAM_HOME_CHANNEL=111' /opt/data/.env && grep -q '^TELEGRAM_BOT_TOKEN=' /opt/data/.env"
 check "the Hermes settings file is private" x sh -c '[ "$(stat -c %a /opt/data/.env)" = 600 ]'
-check "the first message reached the chat" grep -q 'this is its chat' "$WORK/tg/record.json"
+check "the first message reached the chat" docker exec godspeed grep -q 'this is its chat' /opt/test/tg/record.json
 check "the token is not in the chat setup's log" sh -c \
   "docker exec godspeed test -s /opt/data/logs/godspeed-telegram-setup.log && ! docker exec godspeed grep -qF '$TG_TOKEN' /opt/data/logs/godspeed-telegram-setup.log"
 check "the chat setup is gone once done" sh -c "! docker exec godspeed pgrep -f 'bin/godspeed-telegram-setup'"
@@ -261,6 +261,6 @@ if [ "$FAILS" -eq 0 ]; then echo "ALL PASS"; else
   echo "$FAILS FAILED. Setup's output:"; sed 's/\x1b\[[0-9;]*m//g' "$WORK/setup.log" | tail -60
   docker exec godspeed tail -20 /opt/data/logs/godspeed-upgrade.log 2>/dev/null
   echo "== the chat setup's log"; docker exec godspeed tail -60 /opt/data/logs/godspeed-telegram-setup.log 2>/dev/null
-  echo "== what the stand-in Telegram received"; cat "$WORK/tg/record.json" 2>/dev/null | head -80
+  echo "== what the stand-in Telegram received"; docker exec godspeed head -80 /opt/test/tg/record.json 2>/dev/null
   exit 1
 fi

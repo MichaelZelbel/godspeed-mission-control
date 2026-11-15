@@ -69,18 +69,13 @@ source: where this came from
 What happened, in free text.
 ```
 
-**An event can finish one of your deadlines.** Two more lines do it:
-
-```
-closes: [due/car-service]
-evidence: the garage's invoice is in my mail, 2027-01-12
-```
-
-`closes:` names files in `due/` that this event finished (`due/<name>#<first day>` names one
-window of a repeating one); `drops:` works the same for one you called off. `evidence:` is
-required: an event that says a thing is done without what shows it closes nothing. This is the
-only place "done" is written, so the deadline list, your brief and your assistant all read the
-same answer. `mc-due done` writes such an event for you.
+**Finishing one of your deadlines is not written here.** Your reminders are pages under
+`Deadlines/` in your notebook, and closing one is a moment on your notebook's timeline, carrying
+what shows it. `mc-due done` writes that moment for you, your notebook carries it to your other
+computers, and the deadline list, your brief and your assistant all read the same answer from it.
+A closing an older version of this kit wrote into this folder, with `closes:` and an `evidence:`
+line, still closes its reminder: it is taken into the notebook on the next run, and nothing in
+here is read for a deadline after that.
 
 `claims/<subject>--<attribute>--<date>.md`:
 
@@ -99,6 +94,14 @@ Optional detail.
 
 `type`, `attribute` and `confidence` are open vocabulary. A missing `valid_to` means "believed
 true today". A missing `valid_from` means "true since before you started recording".
+
+**A claim can hold a step back.** When you decline or postpone something your mission control
+proposed, it writes a claim with `stance: declined` or `stance: postponed` (`mc-holds hold`).
+`steps: [interview]` names the kinds of step it holds (without it, every step about the subject),
+and `until: <another claim file>` makes a postponement last only while that claim is current. A
+proposal that names the subject among the entities it touches (TOUCHES) is kept off your card
+until the claim gets a `valid_to`, or the claim it waits on ends. `mc-holds list` shows what is held,
+and names a claim it cannot read as one (a subject that is not an entity's slug holds nothing).
 
 ## Filling it
 

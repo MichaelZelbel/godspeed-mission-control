@@ -11,7 +11,7 @@ you don't need this folder.
 ## What it is
 
 - **One command of its own**, `godspeed-journal`, with a subcommand for each move: `start`,
-  `define`, `done`, `drop`, `met`, `reopen`, `note`, `open`, `day`, `week`, `words`, `evidence`,
+  `define`, `done`, `drop`, `met`, `impact`, `reopen`, `note`, `open`, `day`, `week`, `words`, `evidence`,
   `config`. One file per entry, so two devices writing at the same time never collide.
 - **One recipe**, `interstitial-journal`, copied into your mission control's skills folder. It
   tells your assistant how to recognise an entry, when to ask what done means, how to check a
@@ -82,11 +82,18 @@ control already sent you. "Track journal" is the one to use when you dictate: sp
 often turns "log" into "look". Every other message that starts with "track", such as "track belly
 92" or "track headache", goes to your trackers instead.
 
+You can say when something happened: "an hour ago", "at 11", "yesterday afternoon", "from 9 to
+10:30", "vor einer Stunde", "um halb zehn". Each move in a message gets its own time, in the order
+you told it, read in the time zone your settings name; a move with no time is saved as now. When
+the time could mean two things, is still ahead, or puts a finish before its start, your assistant
+asks you once instead of guessing, and its reply says the time it recorded.
+
 Prefer typing it yourself:
 
 ```
 godspeed-journal start "Edit the invoice" --done-means "sent and filed"
 godspeed-journal done "invoice" --met "sent and filed"
+godspeed-journal done "invoice" --when "an hour ago"
 
 # words that run over several lines, from any shell: put them in a file first
 godspeed-journal note --words-file words.txt --task invoice
@@ -105,6 +112,9 @@ godspeed-journal words
 
 # something you left out at the finish happened after all
 godspeed-journal met "letter" --met "letter scanned"
+
+# that finish mattered more than everyday (1 everyday to 4 life-defining)
+godspeed-journal impact "invoice" 3
 
 # every setting and its current value
 godspeed-journal config show
@@ -128,6 +138,14 @@ The hours are counted time. A task's clock runs only while it is the last thing 
 wrote a note about: starting something else stops it, a note about it starts it again, and any
 four hours without an entry stop it at your last entry before them. A task left open overnight
 therefore shows as "at least" the time you were seen on it, or "time unknown", never as 26 hours.
+
+Every task you finish also becomes one moment in the notebook's timeline, with its title, when
+you started and finished it, what done meant, and an impact that is everyday unless you or your
+assistant say otherwise; when it looks like it mattered more, your assistant may ask you once.
+Reopening a task takes its moment back out until you finish it again. A task finished while the
+notebook is not running gets its moment when the notebook next runs, and your finish is saved
+either way. `godspeed-journal config set save_as_moments off` stops it: a task finished while it
+is off never becomes a moment, even after you turn it back on.
 
 ## Settings
 
@@ -153,6 +171,8 @@ Say what you want in your own words; your assistant runs `godspeed-journal confi
 - **Language**: `en` or `de`, for the check-in and evening texts. "Journal in German."
 - **Prefix required**: whether an entry has to start with "journal" (or "j:") to count as one.
   "I don't want to say journal first."
+- **Moments** (`save_as_moments`): on by default, each finished task becomes a moment in the
+  notebook's timeline. "Don't put my tasks in the timeline."
 - **Syncing** (`git_sync`): `auto` (the default) commits and pushes each entry, `commit` only
   commits, `off` leaves git alone. It works per mission control folder in effect: one push sends
   every local commit, so what an add-on set to `commit` saved goes out with the next push of one

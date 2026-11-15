@@ -43,6 +43,7 @@ import {
   Users,
 } from "lucide-react";
 import { Link } from "react-router-dom";
+import { personLabel } from "@/components/timeline/people";
 
 // Group-linked action_items store metadata as: { group_membership_id: "uuid", group_id: "uuid", contact_id: "uuid" }.
 type ActionItem = Omit<Database["public"]["Tables"]["action_items"]["Row"], "metadata"> & {
@@ -148,7 +149,8 @@ export default function Actions() {
   const contactName = useCallback(
     (id: string | null) => {
       if (!id) return null;
-      return (contacts.find((c: any) => c.id === id) as any)?.name || null;
+      const c = contacts.find((c: any) => c.id === id) as any;
+      return c ? personLabel(c) : null;
     },
     [contacts]
   );

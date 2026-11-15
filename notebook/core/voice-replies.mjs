@@ -85,12 +85,28 @@ export function withFreeVoice(text){
  if((!provider||provider==='edge')&&readConfigValue(out,['tts','edge','voice'])===null)out=setConfigValue(out,['tts','edge','voice'],JSON.stringify(FREE_VOICE));
  return out;
 }
-// AT EVERY WIRING (scripts/wire-assistant.mjs), for a mission control made from the starter: an
-// ElevenLabs voice chosen in Settings gets its command again, since an update moves the script; a
-// tts.provider the owner set in Hermes by hand is theirs and stays.
-export function godspeedVoiceSettings(text,{home,state,node,script,platform}){
+// AT EVERY WIRING (scripts/wire-assistant.mjs), FOR EVERY MISSION CONTROL, adopted or made from the
+// starter: an ElevenLabs voice chosen in Settings gets its command again, since an update installs
+// the speech script in a new version folder and takes the old folder away. Until 31 October 2026
+// this renewal sat with the starter's own voice choices below, inside wire-assistant's starterBorn
+// block, so in an adopted mission control it never ran: a voice chosen on Michael's server on
+// 27 October answered with text only from the next update on, because the command still named a
+// version folder that was gone ("Cannot find module .../versions/63b3b1e3.../elevenlabs-voice.mjs").
+// Settings writes the same command for an adopted mission control as for a starter-born one, so the
+// renewal has to reach both.
+export function chosenElevenLabs(text,state){
  const provider=unquote(readConfigValue(text,['tts','provider'])||''),record=readVoiceRecord(state);
- if(provider===PROVIDER&&record.service==='elevenlabs'&&record.elevenlabs?.voice_id)return withElevenLabs(text,{home,state,choice:record.elevenlabs,node,script,platform});
+ return provider===PROVIDER&&record.service==='elevenlabs'&&record.elevenlabs?.voice_id?record.elevenlabs:null;
+}
+export function renewElevenLabsCommand(text,{home,state,node,script,platform}){
+ const choice=chosenElevenLabs(text,state);
+ return choice?withElevenLabs(text,{home,state,choice,node,script,platform}):text;
+}
+// What only a mission control made from the starter gets, beside that renewal: the multilingual free
+// voice where nobody chose one. A tts.provider the owner set in Hermes by hand is theirs and stays.
+export function godspeedVoiceSettings(text,{home,state,node,script,platform}){
+ if(chosenElevenLabs(text,state))return renewElevenLabsCommand(text,{home,state,node,script,platform});
+ const provider=unquote(readConfigValue(text,['tts','provider'])||'');
  if(!provider||provider==='edge')return withFreeVoice(text);
  return text;
 }

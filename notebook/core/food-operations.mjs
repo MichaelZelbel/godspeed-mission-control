@@ -7,6 +7,7 @@ import {trackers,entries,proposalState,dayOf,whenFor,norm,HOLD_MS,entryOn,talkEx
 import {now as clockNow,localParts} from '../../third-party/addons/godspeed-coach/lib/clock.mjs';
 import {readTable} from '../../third-party/addons/godspeed-coach/lib/auto.mjs';
 import {loadSettings as coachSettings} from '../../third-party/addons/godspeed-coach/lib/settings.mjs';
+import {latestPerDayMetric} from './health-inputs.mjs';
 import {foodTable,foodById,searchFoods} from './food-table.mjs';
 import {lookupBarcode,searchProducts,productById,cachedProducts} from './food-products.mjs';
 import {MEALS,MEAL_SAID,lang,foodSchema,foodCard,resolveItems,portionsFrom,rowOf,totalsOf,nutrients,foodIdOf,sourceOf,unitKey,targetFor,currentTarget,weightsFrom,
@@ -46,7 +47,7 @@ const keptLine=l=>l==='de'?' Ich behalte die Mahlzeit, bis du es mir sagst.':" I
 // Her weights, for the target and its weekly adaptation: health observations and the coach's daily table.
 function weightsOf(store,zone){
  let table={};try{const s=coachSettings(store.root);if(s.daily_table)table=readTable(path.isAbsolute(s.daily_table)?s.daily_table:path.join(store.root,s.daily_table));}catch{}
- return weightsFrom(store.list('health_observations'),table,at=>at?localParts(new Date(at),zone).date:null);
+ return weightsFrom(latestPerDayMetric(store.list('health_observations')),table,at=>at?localParts(new Date(at),zone).date:null);
 }
 const latestWeight=(weights,today)=>{const w=weights.filter(x=>x.day<=today).at(-1);if(!w)return null;const age=(Date.parse(today)-Date.parse(w.day))/86400000;return age<=30?w:null;};
 // The last meal: the rows of the newest row's time and meal that one operation wrote with it (written

@@ -11,12 +11,13 @@ import { TelegramConnect } from "./ConnectTelegram";
 const waiting = { available: true, managed: "web", connected: true, phase: "waiting", bot: { username: "fictional_bot", name: "Fictional" },
   link: "https://t.me/fictional_bot?start=fictionalCode0123456789abcdefgh", start_message: "/start fictionalCode0123456789abcdefgh" };
 const none = { available: true, managed: "web", connected: false, phase: "none" };
-function show(answers: Record<string, unknown>) {
+function show(answers: Record<string, unknown | (() => unknown)>) {
   const calls: { route: string; body: any }[] = [];
   vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
     const route = String(url).replace(/^\/api\//, "");
     calls.push({ route, body: init?.body ? JSON.parse(String(init.body)) : undefined });
-    return new Response(JSON.stringify(answers[route]), { status: 200, headers: { "Content-Type": "application/json" } });
+    const answer=answers[route];
+    return new Response(JSON.stringify(typeof answer==='function'?answer():answer), { status: 200, headers: { "Content-Type": "application/json" } });
   }));
   render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><TelegramConnect /></QueryClientProvider>);
   return calls;
@@ -45,5 +46,18 @@ describe("TelegramConnect", () => {
     await screen.findByText("/start fictionalCode0123456789abcdefgh");
     const sent = calls.find(c => c.route === "telegram/connect")?.body;
     expect(sent).toEqual({ token: "123456789:AAHfictionalKeyForTestsOnly_0123456789", timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, address: window.location.origin });
+  });
+  it("shows a gateway routing failure, then refreshes to the connected state", async () => {
+    let reads=0;
+    show({ telegram: () => ++reads===1?{ available: true, managed: "web", connected: true, phase: "gateway-route-failed", bot: { username: "fictional_bot", name: "Fictional" } }:{ available: true, managed: "web", connected: true, phase: "ready", bot: { username: "fictional_bot", name: "Fictional" } } });
+    expect(await screen.findByRole("alert")).toHaveTextContent("Telegram cannot start because this server cannot apply its Telegram API address.");
+    expect(screen.queryByText(/Telegram is connected/)).not.toBeInTheDocument();
+    expect(await screen.findByText(/Telegram is connected/,{}, {timeout:4500})).toBeInTheDocument();
+    expect(reads).toBe(2);
+  },5000);
+  it("treats a server phase it does not know as an error", async () => {
+    show({ telegram: { available: true, managed: "web", connected: true, phase: "later", bot: { username: "fictional_bot", name: "Fictional" } } });
+    expect(await screen.findByRole("alert")).toHaveTextContent("Telegram returned a status this page does not understand.");
+    expect(screen.queryByText(/Telegram is connected/)).not.toBeInTheDocument();
   });
 });

@@ -10,7 +10,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { triggerCreditsRefresh } from "@/lib/credits-events";
-import { summarizeChat } from "@/lib/chat-summary";
+import { summarizeChat, type ChatFunction } from "@/lib/chat-summary";
 import { functionErrorMessage, OUT_OF_CREDITS_MESSAGE } from "@/lib/function-error";
 import {
   loadChatState,
@@ -49,7 +49,10 @@ import {
 const ChatMarkdown = lazy(() => import("./ChatMarkdown"));
 
 import ChatComposer, {type ChatFile} from "./ChatComposer";
+import {ChatConnectionEmptyState} from "./ChatConnectionEmptyState";
+import { useChatEntryInView } from "./chat-entry";
 import { BRAIN_PAGE } from "@/lib/brain-page";
+import { personLabel } from "@/components/timeline/people";
 type ChatMessage = PersistedChatMessage;
 type SizeMode = "docked" | "expanded" | "fullscreen";
 
@@ -78,6 +81,8 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
   const pageChat=pageContext??(page?PAGE_CHATS[new URLSearchParams(location.search).get('page')||'']:undefined);
   const queryClient = useQueryClient();
   const isMobile = useIsMobile();
+  // A narrow window shows one way into the chat at a time (chat-entry.ts, issue #530).
+  const entryInView = useChatEntryInView();
   const [open, setOpen] = useState(page);
   const openChangeRef=useRef(onOpenChange);openChangeRef.current=onOpenChange;
   useEffect(()=>{openChangeRef.current?.(open);},[open]);
@@ -130,20 +135,21 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
     return match ? match[1] : page?new URLSearchParams(location.search).get("person"):null;
   }, [location.pathname,location.search,page]);
 
-  // Detect collection context from /collections/:slug and optional /:itemId
+  // Detect collection context from /collections/:slug and optional /:itemId; the chat in its own
+  // window (/dashboard/chat?collection=slug&item=id) reads the same from its address (issue #588).
   const collectionSlug = useMemo(() => {
     const match = location.pathname.match(/^\/collections\/([^/]+)/);
-    return match ? match[1] : null;
-  }, [location.pathname]);
+    return match ? match[1] : page?new URLSearchParams(location.search).get("collection"):null;
+  }, [location.pathname,location.search,page]);
 
   const collectionItemId = useMemo(() => {
     // /collections/:slug/:itemId - but skip reserved subroutes like /schema
     const match = location.pathname.match(/^\/collections\/[^/]+\/([^/]+)$/);
-    if (!match) return null;
+    if (!match) return page&&collectionSlug?new URLSearchParams(location.search).get("item"):null;
     const seg = match[1];
     if (seg === "schema" || seg === "new") return null;
     return seg;
-  }, [location.pathname]);
+  }, [location.pathname,location.search,page,collectionSlug]);
 
 
   const [collectionId, setCollectionId] = useState<string | null>(null);
@@ -175,7 +181,10 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
         ? `person:${personId}`
         : "general";
 
-  useEffect(()=>{let active=true;setContextTitle(noteTitle||'');if(noteId&&noteTitle===undefined)supabase.from('notes').select('*').eq('id',noteId).single().then(({data}:any)=>{if(active&&data)setContextTitle(data.title||'Untitled note');});else if(personId)supabase.from('contacts').select('*').eq('id',personId).single().then(({data}:any)=>{if(active&&data)setContextTitle(data.name||'Current person');});return()=>{active=false;};},[noteId,personId,noteTitle]);
+  useEffect(()=>{let active=true;setContextTitle(noteTitle||'');if(noteId&&noteTitle===undefined)supabase.from('notes').select('*').eq('id',noteId).single().then(({data}:any)=>{if(active&&data)setContextTitle(data.title||'Untitled note');});else if(personId)supabase.from('contacts').select('*').eq('id',personId).single().then(({data}:any)=>{if(active&&data)setContextTitle(personLabel(data));});return()=>{active=false;};},[noteId,personId,noteTitle]);
+
+  // The same conversation in its own window: the address names the context in the order contextKey picks it.
+  const popOutHref='/dashboard/chat'+(pageChat?'?page='+encodeURIComponent(pageChat.page):collectionSlug?'?collection='+encodeURIComponent(collectionSlug)+(collectionItemId?'&item='+encodeURIComponent(collectionItemId):''):noteId?'?note='+encodeURIComponent(noteId):personId?'?person='+encodeURIComponent(personId):'');
 
   // Persisted chat state for the current context
   const chatKey = `${user?.id ?? "anon"}|${contextKey}`;
@@ -270,7 +279,7 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
 
   /** Fold older turns into the summary after the reply is shown, without holding it back. */
   const summarizeLater = useCallback(
-    (chatFn: "note-chat" | "collection-chat", key: string, userId: string | undefined, ctx: string, from: PersistedChatState) => {
+    (chatFn: ChatFunction, key: string, userId: string | undefined, ctx: string, from: PersistedChatState) => {
       if (summarizingRef.current) return;
       summarizingRef.current = true;
       void summarizeChat(chatFn, from)
@@ -512,7 +521,7 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
   return (
     <>
       {/* FAB button */}
-      {!page && !embedded && !open && (
+      {!page && !embedded && !open && !(isMobile && entryInView) && (
         <button
           onClick={() => setOpen(true)}
           className={cn(
@@ -558,7 +567,7 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
               </div>
               {page&&<Button variant="ghost" className="h-11" onClick={handleClear} disabled={isLoading || isClearing}>Clear conversation</Button>}
               {!page&&<div className="flex items-center gap-1">
-                <a className="inline-flex h-11 w-11 sm:h-10 sm:w-10 items-center justify-center rounded hover:bg-muted" href={'/dashboard/chat'+(pageChat?'?page='+encodeURIComponent(pageChat.page):noteId?'?note='+encodeURIComponent(noteId):personId?'?person='+encodeURIComponent(personId):'')} target="_blank" rel="noreferrer" aria-label="Open chat in a new window" title="Open chat in a new window"><ExternalLink className="h-4 w-4"/></a>
+                <a className="inline-flex h-11 w-11 sm:h-10 sm:w-10 items-center justify-center rounded hover:bg-muted" href={popOutHref} target="_blank" rel="noreferrer" aria-label="Open chat in a new window" title="Open chat in a new window"><ExternalLink className="h-4 w-4"/></a>
                 {!embedded&&<span className="text-[10px] text-muted-foreground hidden xl:inline mr-1">Ctrl+Shift+K</span>}
                 {state.messages.length > 0 && (
                   <Button
@@ -622,13 +631,13 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
               )}
             >
               {state.messages.length === 0 && (
-                <div className={cn("text-center text-muted-foreground text-sm",embedded&&isMobile?"py-2 space-y-2":"py-12 space-y-3")}>
+                <ChatConnectionEmptyState ready={<div className={cn("text-center text-muted-foreground text-sm",embedded&&isMobile?"py-2 space-y-2":"py-12 space-y-3")}>
                   {!(embedded&&isMobile)&&<Bot className="h-8 w-8 mx-auto opacity-40" />}
                   <h2 className={cn("font-semibold text-foreground",embedded&&isMobile?"text-base":"text-xl")}>{embedded&&isMobile?(pageChat?'Ask about this page':'Ask about this note'):'What would you like to work on?'}</h2><p>{emptyText}</p>
                   {!(embedded&&isMobile)&&<p className="text-[10px]">
                     Attach a document or image, or ask about a note. Your conversations are saved here.
                   </p>}
-                </div>
+                </div>}/>
               )}
 
               {state.messages.map((msg, i) => (

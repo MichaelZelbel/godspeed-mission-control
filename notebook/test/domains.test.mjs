@@ -54,3 +54,11 @@ test('outward routine waits for permission and interrupted attempted receipt nev
   const job=store.get('jobs','deadline-reminder'),id=job.id+'-'+Date.parse(job.next_run);store.save('job_receipts',{id,state:'attempted'});
   const before=workCalls.filter(id=>id==='deadline-reminder').length;await scheduler.tick(Date.parse(job.next_run)+1);assert.equal(store.get('jobs','deadline-reminder').state,'needs_review');assert.equal(workCalls.filter(id=>id==='deadline-reminder').length,before);
 });
+// With no AI connected, the chat says where one is connected, in the Settings page's words (#552).
+test('the chat with no AI connected names Settings, Your AI',async()=>{
+  const {domains}=setup();
+  for(const name of ['conversation-chat','note-chat'])await assert.rejects(domains.invoke(name,{message:'Hello',conversation_id:'c1'}),{message:'No AI is connected yet. Connect your AI service in Settings, Your AI, then ask Godspeed again.'});
+  await assert.rejects(domains.invoke('conversation-chat',{mode:'summarize',messages:[{role:'user',content:'Hi'}]}),/Settings, Your AI/);
+  const {draftEvent}=await import('../core/draft-event.mjs');
+  await assert.rejects(draftEvent(null,{message:'Lunch with Ana'}),/Settings, Your AI/);
+});

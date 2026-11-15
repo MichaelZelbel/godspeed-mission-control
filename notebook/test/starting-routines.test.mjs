@@ -1,9 +1,10 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';
 import {fileURLToPath} from 'node:url';import {execFileSync,spawnSync} from 'node:child_process';
-import {Store} from '../core/records/store.mjs';import {NativeScheduler} from '../core/native-scheduler.mjs';import {installStarter} from '../core/starter-workspace.mjs';
+import {Store} from '../core/records/store.mjs';import {checkConnections,CONNECTIONS} from '../core/connection-check.mjs';import {NativeScheduler} from '../core/native-scheduler.mjs';import {installStarter} from '../core/starter-workspace.mjs';
 import {finalReply,saveRoutineResults,RESULTS_FOLDER,routineFiles,prepareCheckIn,coachRoutineTimes} from '../core/starting-routines.mjs';import {QueryService} from '../core/query.mjs';
 import {withTimezone} from '../core/hermes-config.mjs';
 import {routineRow,scheduleWords} from '../ui/src/local/routine-row.mjs';
+import {checkRoutines} from '../core/routine-check.mjs';import {readNotices} from '../core/notices.mjs';
 
 const temporary=(t,name)=>{const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-'+name+'-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));return root;};
 const python=process.env.GODSPEED_TEST_PYTHON||(process.platform==='win32'?'python':'python3');
@@ -52,6 +53,16 @@ test('on a computer, every run of a routine that reaches nobody becomes one note
  jobsFile(otherHome,[{id:'chat1',name:'Plan my day',deliver:'origin'}]);saveRoutineResults(otherStore,{home:otherHome,jobs:[{id:'chat1',deliver:'origin'}],messenger:true});
  output(otherHome,'chat1','2026-10-09_07-00-00.md',agentRun('Sent by Telegram.'));
  assert.equal(saveRoutineResults(otherStore,{home:otherHome,jobs:[{id:'chat1',deliver:'origin'}],messenger:true}).length,0);
+});
+
+test('the Morning brief run is no second note: the notebook keeps it as Your morning briefing (#160)',t=>{
+ const root=temporary(t,'results-brief'),home=path.join(root,'.hermes');installStarter(root);
+ const store=new Store(root,{device:'pc'});
+ jobsFile(home,[{id:'brief',name:'Morning brief',deliver:'local',script:'godspeed-morning-brief.py',no_agent:true}]);
+ const jobs=JSON.parse(fs.readFileSync(path.join(home,'cron','jobs.json'),'utf8')).jobs;
+ saveRoutineResults(store,{home,jobs});
+ output(home,'brief','2026-10-09_07-00-00.md',agentRun('Your morning briefing, made up.'));
+ assert.equal(saveRoutineResults(store,{home,jobs}).length,0);
 });
 
 test('an adopted mission control gets no notes from its routines',async t=>{
@@ -127,6 +138,13 @@ test('deadline reminders: the dates that need a mention today, without a morning
  // Nothing to say: nothing printed, which is Hermes' silence.
  const empty=scriptFixture(t),quiet=runScript(empty.home,'godspeed-deadline-reminders.py');
  assert.equal(quiet.status,0,quiet.stderr);assert.equal(quiet.stdout,'');
+});
+
+test('beside the notebook\'s own morning briefing the deadline reminders speak for themselves (#160)',{skip:!havePython&&'no Python here'},t=>{
+ const brief={id:'brief',name:'Morning brief',script:'godspeed-morning-brief.py',no_agent:true,enabled:true,state:'scheduled',next_run_at:berlinAt(berlinDay,'23:59:00'),last_run_at:null};
+ const {root,home}=scriptFixture(t,{brief});addDue(root);
+ const run=runScript(home,'godspeed-deadline-reminders.py');
+ assert.equal(run.status,0,run.stderr);assert.match(run.stdout,/^From your deadline reminders:/,'the notebook\'s briefing does not carry the reminders\' lines');
 });
 
 test('deadline reminders say nothing on a day a morning brief carries the dates, and speak when it is paused',{skip:!havePython&&'no Python here'},t=>{
@@ -301,6 +319,26 @@ test('a daily round that went wrong tells the person in one line, once a day, an
  assert.match(routineRow(query.rows('jobs').find(j=>j.id==='choose'),{timeZone:'Europe/Berlin'}).last,/and it worked\.$/);
 });
 
+// The proof of a routine's promise (work/promises/, tools/promises.js): its date after every run
+// that ended well, only for a routine some promise names.
+const routinePromise=(root,kind)=>fs.writeFileSync(path.join(root,'work','promises','routine-'+kind+'.md'),'PROMISE: routine-'+kind+'\nROUTINE: '+kind+'\n');
+test('a routine with a promise leaves its date after a run that ended well, and one without leaves nothing',{skip:!havePython&&'no Python here'},t=>{
+ const {root,home}=scriptFixture(t);routinePromise(root,'due');
+ const run=runScript(home,'godspeed-deadline-reminders.py');assert.equal(run.status,0,run.stderr);
+ assert.equal(fs.readFileSync(path.join(root,'routines','ran','due.txt'),'utf8'),berlinDay+'\n');
+ const other=scriptFixture(t),quiet=runScript(other.home,'godspeed-deadline-reminders.py');assert.equal(quiet.status,0,quiet.stderr);
+ assert.equal(fs.existsSync(path.join(other.root,'routines','ran')),false);
+});
+
+test('a daily round that went wrong leaves no proof that its promise was kept',{skip:(!havePython||!bash)&&'no Python or bash here'},t=>{
+ const {root,home}=scriptFixture(t),fake=path.join(root,'.fake-assistant');fs.mkdirSync(fake,{recursive:true});routinePromise(root,'decide');
+ fs.writeFileSync(path.join(fake,'hermes'),'#!/usr/bin/env bash\ncat >/dev/null\necho "Upstream idle timeout exceeded" >&2\nexit 1\n',{mode:0o755});
+ const settings=path.join(home,'scripts','godspeed-routines.json');fs.writeFileSync(settings,JSON.stringify({...JSON.parse(fs.readFileSync(settings,'utf8')),hermes:path.join(fake,'hermes')}));
+ const run=runScript(home,'godspeed-daily-round-choose.py');
+ assert.equal(run.status,0,run.stderr);assert.match(run.stdout,/did not finish/);
+ assert.equal(fs.existsSync(path.join(root,'routines','ran','decide.txt')),false);
+});
+
 test('a piece of the daily round\'s work that failed its check is said in one line',{skip:!havePython&&'no Python here'},t=>{
  const {home}=scriptFixture(t);
  // mc-work-run's own log lines (tools/mc-work-run), as the routine reads them.
@@ -314,10 +352,90 @@ print(json.dumps(g.work(g.config())))`;
  const run=spawnSync(python,['-c',code],{cwd:path.join(home,'scripts'),input:log,encoding:'utf8',env:{...process.env,PYTHONIOENCODING:'utf-8'}});
  assert.equal(run.status,0,run.stderr);
  assert.deepEqual(JSON.parse(run.stdout).split('\n'),['Today\'s work did not pass its check, so it is not done yet: "How do people who reached two new clients get there?".','Today\'s work could not be finished, so it is not done yet: "Draft the pitch email".']);
- const status=JSON.parse(fs.readFileSync(path.join(home,'godspeed-routines-status.json'),'utf8'));assert.match(status.work.failed,/did not pass its check/);
+ const status=JSON.parse(fs.readFileSync(path.join(home,'godspeed-routines-status.json'),'utf8'));assert.match(status.work.failed,/did not pass its check/);assert.equal(status.work.failure_streak,1);
  // Exit 1 to 3 is a run that never started, and says only that.
  const never=spawnSync(python,['-c',code.replace('returncode=4','returncode=1')],{cwd:path.join(home,'scripts'),input:'',encoding:'utf8',env:{...process.env,PYTHONIOENCODING:'utf-8'}});
  assert.equal(never.status,0,never.stderr);assert.equal(JSON.parse(never.stdout),'The daily round\'s work could not start today.');
+ assert.equal(JSON.parse(fs.readFileSync(path.join(home,'godspeed-routines-status.json'),'utf8')).work.failure_streak,2);
+ const recovered=spawnSync(python,['-c',code.replace('returncode=4','returncode=0')],{cwd:path.join(home,'scripts'),input:'',encoding:'utf8',env:{...process.env,PYTHONIOENCODING:'utf-8'}});
+ assert.equal(recovered.status,0,recovered.stderr);assert.equal(JSON.parse(fs.readFileSync(path.join(home,'godspeed-routines-status.json'),'utf8')).work.failure_streak,0);
+});
+
+test('an upgraded failed work sidecar reaches the routine-health notice on its next failure',{skip:!havePython&&'no Python here'},t=>{
+ const {root,home}=scriptFixture(t),fake=path.join(root,'.fake-tools');fs.mkdirSync(fake,{recursive:true});
+ fs.writeFileSync(path.join(home,'godspeed-routines-status.json'),JSON.stringify({work:{failed:'The previous work run did not finish.',at:'2026-11-04T16:00:00Z'}}));
+ fs.writeFileSync(path.join(fake,'mc-work-run'),'#!/bin/sh\nexit 1\n',{mode:0o755});
+ const settings=path.join(home,'scripts','godspeed-routines.json');fs.writeFileSync(settings,JSON.stringify({...JSON.parse(fs.readFileSync(settings,'utf8')),tools:fake}));
+ const run=runScript(home,'godspeed-daily-round-work.py',{GODSPEED_TODAY:'2026-11-05'});
+ assert.equal(run.status,0,run.stderr);assert.match(run.stdout,/The daily round's work could not start today/);
+ const status=JSON.parse(fs.readFileSync(path.join(home,'godspeed-routines-status.json'),'utf8')).work;
+ assert.equal(status.failure_streak,2);
+ const store=new Store(root,{device:'pc'}),job={id:'work',name:'Daily round: do the work',enabled:true,script:'godspeed-daily-round-work.py',schedule:{kind:'cron',expr:'0 10,16 * * *'},created_at:'2026-11-01T00:00:00Z',last_run_at:status.at,last_status:'ok',next_run_at:'2026-11-06T10:00:00Z'};
+ checkRoutines({store,home,day:'2026-11-05',timezone:'UTC',now:()=>new Date('2026-11-05T17:00:00Z'),jobs:[job]});
+ assert.match(readNotices(store)[0].text,/"Daily round: do the work" failed its last two runs: The daily round's work could not start today/);
+});
+
+test('a failed daily connection check leaves what it queued unsaid, and a timeout is a failure too',{skip:!havePython&&'no Python here'},t=>{
+ const {root,home}=scriptFixture(t),queued=path.join(root,'queued-notices.json'),said=path.join(home,'godspeed-notices-said.json');
+ fs.writeFileSync(queued,JSON.stringify({notices:[{id:'connection-notice-telegram-key',text:'Telegram refused your bot\'s key.'}]}));
+ const attempt=result=>{
+  const code=`import sys,types,subprocess;sys.path.insert(0,${JSON.stringify(path.join(home,'scripts'))})
+import godspeed_routines as g
+${result}
+c=g.config();c["connection_check"]="x";c["notices"]=${JSON.stringify(queued)}
+print(g.connection_check(c)[0])`;
+  return spawnSync(python,['-c',code],{cwd:path.join(home,'scripts'),encoding:'utf8',env:{...process.env,PYTHONIOENCODING:'utf-8'}});
+ };
+ for(const result of ['g.run=lambda args,c,env,timeout=None:types.SimpleNamespace(returncode=1,stdout="",stderr="boom")','def r(*a,**k): raise subprocess.TimeoutExpired("x",1)\ng.run=r']){
+  const run=attempt(result);
+  assert.equal(run.status,1);assert.equal(run.stdout,'');assert.match(run.stderr,/^The daily connection check could not run\./);
+  assert.equal(fs.existsSync(said),false,'a failed run marks nothing as said');
+ }
+ const okRun='g.run=lambda args,c,env,timeout=None:types.SimpleNamespace(returncode=0,stdout="",stderr="")',ok=attempt(okRun);
+ assert.equal(ok.status,0,ok.stderr);assert.match(ok.stdout,/Telegram refused your bot's key\./);
+ assert.deepEqual(JSON.parse(fs.readFileSync(said,'utf8')).ids,['connection-notice-telegram-key']);
+ // A report provider that splits every notice in two must not extend the run: the split-off notice waits for the notice routine.
+ fs.rmSync(said,{force:true});fs.writeFileSync(queued,JSON.stringify({notices:[{id:'connection-notice-seed',text:'First.'}]}));
+ const split=attempt(okRun+`
+def say(c,env,n):
+    import json
+    q=json.load(open(c["notices"]));q["notices"].append({"id":n["id"]+"~2","text":"Split off."});json.dump(q,open(c["notices"],"w"));return n["text"]
+g.say=say`);
+ assert.equal(split.status,0,split.stderr);assert.equal(split.stdout.trim(),'First.');
+ assert.deepEqual(JSON.parse(fs.readFileSync(said,'utf8')).ids,['connection-notice-seed']);
+ // A report that cannot be said fails the run and says nothing; the notices it never attempted are released, not left claimed.
+ fs.rmSync(said,{force:true});fs.writeFileSync(queued,JSON.stringify({notices:[{id:'connection-notice-one',text:'First.'},{id:'connection-notice-two',text:'Second.'}]}));
+ const claims=()=>fs.readdirSync(home).filter(f=>f.endsWith('.claim'));
+ const broken=attempt(okRun+`
+def say(c,env,n):
+    raise RuntimeError("provider down")
+g.say=say`);
+ assert.notEqual(broken.status,0);assert.equal(broken.stdout,'');assert.match(broken.stderr,/provider down/);
+ assert.equal(fs.existsSync(said)&&JSON.parse(fs.readFileSync(said,'utf8')).ids.length>0,false,'no id is said');
+ assert.deepEqual(claims(),[],'no claim file remains');
+ // A healthy check says nothing of what other routines queued.
+ fs.rmSync(said,{force:true});fs.writeFileSync(queued,JSON.stringify({notices:[{id:'unrelated-backup',text:'The backup failed.'}]}));
+ const unrelated=attempt(okRun);
+ assert.equal(unrelated.status,0,unrelated.stderr);assert.equal(unrelated.stdout.trim(),'');assert.equal(fs.existsSync(said),false,'an unrelated notice is not said');
+ // A queue entry whose id is not a string is not this check's: ignored, never read, nothing said.
+ fs.rmSync(said,{force:true});fs.writeFileSync(queued,JSON.stringify({notices:[{id:7,text:'Seven.'},{id:null,text:'None.'},'text',{id:['connection-notice-x'],text:'List.'}]}));
+ const nonString=attempt(okRun);
+ assert.equal(nonString.status,0,nonString.stderr);assert.equal(nonString.stdout.trim(),'');assert.equal(fs.existsSync(said),false,'nothing is said');
+ // A notice with this check's prefix and no usable text fails the run with the fixed sentence and says nothing.
+ for(const bad of [{id:'connection-notice-bad',text:42},{id:'connection-notice-bad',text:'  '}]){
+  fs.rmSync(said,{force:true});fs.writeFileSync(queued,JSON.stringify({notices:[{id:'connection-notice-good',text:'Good.'},bad]}));
+  const run=attempt(okRun);
+  assert.equal(run.status,1);assert.equal(run.stdout,'');assert.match(run.stderr,/^The daily connection check could not run\.\n?$/);
+  assert.equal(fs.existsSync(said),false,'no id is said');assert.deepEqual(claims(),[],'no claim file remains');
+ }
+ fs.writeFileSync(queued,'{not json}');
+ const damaged=attempt(okRun);
+ assert.equal(damaged.status,1);assert.equal(damaged.stdout,'');assert.match(damaged.stderr,/^The daily connection check could not run\.\n?$/);
+ for(const quiet of [null,'','{"notices":[]}']){
+  if(quiet===null)fs.rmSync(queued,{force:true});else fs.writeFileSync(queued,quiet);
+  const run=attempt(okRun);
+  assert.equal(run.status,0,run.stderr);assert.equal(run.stdout.trim(),'');
+ }
 });
 
 // 9 October 2026, a live run: the Weekly check-in row said "Runs every 15 minutes.", which is only
@@ -376,4 +494,30 @@ test('the coaching talk preparation runs mc-coach-prep with a two-hour budget an
  assert.match(status().failed,/could not be prepared ahead/);
  tool('echo "mc-coach-prep: the coach (godspeed-coach) is not installed" >&2\nexit 3\n');
  assert.match(runScript(home,'godspeed-coach-prep.py').stdout,/could not start tonight/);
+});
+
+test('every routine wrapper the notebook writes names a routine the Python runner dispatches',{skip:!havePython&&'no Python here'},t=>{
+ const {home}=scriptFixture(t),scripts=path.join(home,'scripts');
+ const wrapped=fs.readdirSync(scripts).filter(f=>f.endsWith('.py')&&f!=='godspeed_routines.py').map(f=>/main\("([^"]+)"\)/.exec(fs.readFileSync(path.join(scripts,f),'utf8'))?.[1]);
+ assert.ok(wrapped.length>=8&&wrapped.every(Boolean),wrapped.join());
+ const run=spawnSync(python,['-c','import json,sys;sys.path.insert(0,sys.argv[1]);import godspeed_routines as g;print(json.dumps(sorted(g.ROUTINES)))',scripts],{encoding:'utf8'});
+ assert.equal(run.status,0,run.stderr);
+ assert.deepEqual(JSON.parse(run.stdout),[...new Set(wrapped)].sort());
+});
+
+for(const [kind,days,words] of [['sign-in',['2026-11-04'],/Telegram/],['other',['2026-11-04','2026-11-05'],/Telegram/]])test(`the daily connection check says the ${kind} notice the connection check really queued`,{skip:!havePython&&'no Python here'},async t=>{
+ const {root,home}=scriptFixture(t),store=new Store(root,{device:'pc'}),said=path.join(home,'godspeed-notices-said.json');
+ const ok=async()=>({set_up:true,ok:true});
+ // Every source the check has gets a probe (taken from the check itself, so a new source cannot be missing here): all fine, except Telegram, which fails as the case says, and the phone, which this install does not have set up.
+ const probes=Object.fromEntries(Object.keys(CONNECTIONS).map(name=>[name,name==='telegram'?async()=>({set_up:true,ok:false,kind}):name==='phone'?async()=>({set_up:false}):ok]));
+ for(const day of days)await checkConnections({store,day,probes});
+ const queued=path.join(store.state,'notices.json'),id=JSON.parse(fs.readFileSync(queued,'utf8')).notices[0].id;
+ const code=`import sys,types;sys.path.insert(0,${JSON.stringify(path.join(home,'scripts'))})
+import godspeed_routines as g
+g.run=lambda args,c,env,timeout=None:types.SimpleNamespace(returncode=0,stdout="",stderr="")
+c=g.config();c["connection_check"]="x";c["notices"]=${JSON.stringify(queued)}
+print(g.connection_check(c)[0])`;
+ const run=spawnSync(python,['-c',code],{cwd:path.join(home,'scripts'),encoding:'utf8',env:{...process.env,PYTHONIOENCODING:'utf-8'}});
+ assert.equal(run.status,0,run.stderr);assert.match(run.stdout,words);
+ assert.deepEqual(JSON.parse(fs.readFileSync(said,'utf8')).ids,[id]);
 });

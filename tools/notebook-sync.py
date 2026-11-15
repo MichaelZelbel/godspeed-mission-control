@@ -38,10 +38,21 @@ import json
 import os
 import pathlib
 import re
+import shutil
 import subprocess
 import sys
 import urllib.error
 import urllib.request
+
+def unattended_git():
+    """The command that runs git without any chance of a sign-in window (tools/unattended-git.cjs)."""
+    node = shutil.which("node")
+    helper = pathlib.Path(__file__).resolve().parent / "unattended-git.cjs"
+    if node and helper.is_file():
+        return [node, str(helper)]
+    # Plain git, without unattended-git.cjs: these commands are local and read no credential, so no window can open.
+    return ["git"]
+
 
 # ---- what stays home ------------------------------------------------------------------
 # THE SAME LIST LIVES IN tools/search.js (mc-search), which falls back to searching
@@ -228,7 +239,7 @@ def tracked_markdown(repo_root: pathlib.Path):
     rest of this program as "every file was deleted".
     """
     def git(*args):
-        return subprocess.run(["git", "-C", str(repo_root)] + list(args),
+        return subprocess.run(unattended_git() + ["-C", str(repo_root)] + list(args),
                               stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=60)
     try:
         top = git("rev-parse", "--show-cdup")

@@ -168,6 +168,10 @@ export const QUICK_ALIASES=[['radar','/mc-radar'],['subs','/subscription-review'
 //   window (0.75 of 272,000 tokens), which a real chat of 224,000 tokens had not reached.
 //   compression.threshold_tokens is Hermes' absolute cap, off by default; 100,000 tokens summarises
 //   long before anyone is kept waiting for it.
+// - Every routine's message arrived framed as "Cronjob Response: <name> (job_id: <code>)" with a
+//   footer on how to stop the job (9 November 2026): Hermes wraps what a routine delivers unless
+//   cron.wrap_response is false, so the owner got a code in each one, and the words the notebook
+//   records for the chat (godspeed-cron-provider.py) were not the words he read.
 export const COMPRESSION_THRESHOLD_TOKENS=100000;
 // Hermes' own words for true and false (gateway/display_config.py), plus YAML's bare off, and the
 // ways a file says a key holds nothing.
@@ -201,6 +205,7 @@ export function godspeedHermesSettings(text){
   [['display','platforms','telegram','interim_assistant_messages'],'false',HERMES_TRUE],
   [['display','platforms','telegram','long_running_notifications'],'false',HERMES_TRUE],
   [['compression','threshold_tokens'],String(COMPRESSION_THRESHOLD_TOKENS),HERMES_UNSET],
+  [['cron','wrap_response'],'false',HERMES_TRUE],
  ])if(hermesOwn(out,keys,defaults))out=setConfigValue(out,keys,value);
  return out;
 }

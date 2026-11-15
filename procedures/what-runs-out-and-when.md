@@ -225,10 +225,10 @@ five separate reminders you will scroll past.
 ## Wiring it into the brief you already have
 
 Open the chat in your mission control, the one whose brief you set up in Chapter 25,
-and paste this:
+and paste this. Do this only on a mission control without `godspeed-brief` (a server's morning job). Where that command exists, the notebook's own briefing is delivered and ignores the recipe, so editing it changes nothing the person receives; skip this and leave the recipe as it is.
 
 ```
-Update skills/morning-brief/SKILL.md with a section called Deadlines and targets.
+Only where `godspeed-brief` does not exist, update skills/morning-brief/SKILL.md with a section called Deadlines and targets.
 
 First run mc-due check, then mc-due today. Put what mc-due today prints into that section word for word, every title included, and keep any error it reports. Leave the section out only when it says nothing needs saying and there was no error.
 
@@ -259,7 +259,7 @@ it forward is what replacing a key looks like from the outside, so the reminder
 closes itself.
 
 If you took the key paragraph from `keys-that-expire.md` and pasted it into your
-morning brief recipe, you can take it back out now. One thing, one place.
+morning brief recipe (only possible without `godspeed-brief`), you can take it back out now. One thing, one place.
 
 ## If you do have a calendar
 

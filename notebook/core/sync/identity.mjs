@@ -26,6 +26,7 @@
 import { recordsFolder } from '../file-policy.mjs';
 import { decode, encode, hash } from '../records/store.mjs';
 import path from 'node:path';
+import { DEFAULTS as processingDefaults } from '../processing.mjs';
 import { candidate, folderFor, nameFor, candidateName, isReadable, childrenOf, key as nameKey } from '../records/layout.mjs';
 
 const prefix = recordsFolder + '/';
@@ -34,6 +35,18 @@ const inNotebook = name => name.startsWith(prefix) && !name.includes('\n') && ca
 const canonical = value => JSON.stringify(value, (k, v) => v && typeof v === 'object' && !Array.isArray(v) ? Object.fromEntries(Object.keys(v).sort().map(key => [key, v[key]])) : v);
 const same = (a, b) => canonical(a) === canonical(b);
 const parentedTypes = new Set([...childrenOf.values()].flat().map(child => child.type));
+// What a record keeps about itself rather than about anyone's choices.
+const bookkeeping = new Set(['uid', 'device', 'revision', 'created_at', 'updated_at', '_hash']);
+// Fields a machine stamps on its own when it writes the record: the first
+// processing run saves the processing settings with the moment it started
+// (NoteProcessing.tick), so two fresh installs' copies differ there although
+// nobody chose anything.
+const stamped = { 'settings/processing': ['since'] };
+const choices = record => Object.fromEntries(Object.entries(record).filter(([field]) => !bookkeeping.has(field) && !(stamped[record.type + '/' + record.id] || []).includes(field)));
+const sameChoices = (a, b) => a.type === b.type && a.id === b.id && same(choices(a), choices(b));
+// The processing settings as the first processing run saves them, which nobody
+// chose. A field the record lacks reads as its default (processingSettings).
+const untouched = record => record.type === 'settings' && record.id === 'processing' && Object.entries(processingDefaults).every(([field, value]) => same(Object.hasOwn(record, field) ? record[field] : value, value));
 const parented = record => isReadable(record) && parentedTypes.has(record.type);
 
 // Field-by-field three-way merge of one record. `mergeText(base, local,
@@ -171,7 +184,9 @@ export function identityPlan({ git, mergeText, find = () => undefined, base, loc
     return [base, base.replace(/ (?:[2-9]|[1-9]\d+)$/, '')].some(b => nameKey(b) === nameKey(name));
   };
   const finals = new Map(), reviews = [], planned = new Set();
-  const review = (file, e, kept) => reviews.push({ id: hash(file + '\0' + remoteCommit).slice(0, 24), path: file, kind: 'git', kept, base: e.base?.text ?? null, local: e.local?.text ?? null, remote: e.remote?.text ?? null, remote_commit: remoteCommit, at: new Date().toISOString() });
+  // remote_path: where the other side has the record, when that is another
+  // file (renamed there too). Sync holds both files back while the review waits.
+  const review = (file, e, kept) => reviews.push({ id: hash(file + '\0' + remoteCommit).slice(0, 24), path: file, ...(e.remote?.file && e.remote.file !== file ? { remote_path: e.remote.file } : {}), kind: 'git', kept, base: e.base?.text ?? null, local: e.local?.text ?? null, remote: e.remote?.text ?? null, remote_commit: remoteCommit, at: new Date().toISOString() });
   for (const e of place.values()) {
     const ls = status(e, 'local'), rs = status(e, 'remote');
     if (ls === 'unchanged' || ls === 'absent' && rs !== 'absent') { finals.set(e.uid, e.remote && { file: e.remote.file, text: e.remote.text, from: 'remote' }); continue; }
@@ -229,14 +244,28 @@ export function identityPlan({ git, mergeText, find = () => undefined, base, loc
     // for review under the identity of the one that stayed, so choosing it
     // replaces that one's values. Until 7 October 2026 the other was moved to
     // "installation 2.md", which nothing reads, and one machine's settings
-    // were replaced without a word.
+    // were replaced without a word. A copy that holds the same choices (only
+    // its identity, its times and what the machine stamped on its own differ)
+    // is the same settings: no review. Until 13 November 2026 two fresh
+    // installs' processing settings were kept for review, and the second
+    // computer's sync stopped for a conflict nobody made. A copy of the
+    // processing settings nobody changed is set aside without review too, so
+    // the other computer's stays. Until 13 November 2026 a fresh install
+    // joining a copy whose processing settings had been changed stopped its
+    // first sync for a conflict nobody made.
     const recordOf = o => (place.get(o.uid).local || place.get(o.uid).remote)?.record;
     if (!documents.length && records.length > 1 && records.every(o => { const r = recordOf(o); return r && !isReadable(r); })) {
       const keep = (preferRemote ? records.find(o => !o.local) : records.find(o => o.local)) || records[0], kept = keep.local ? 'local' : 'remote', kept_ = recordOf(keep);
       for (const o of records) if (o !== keep) {
-        const other = recordOf(o), side = kept === 'local' ? 'remote' : 'local', as = { text: encode({ ...other, uid: kept_.uid }) };
+        const other = recordOf(o);
         planned.add(o.uid); planned.add(keep.uid); finals.set(o.uid, null);
-        review(keep.file, { base: null, [kept]: place.get(keep.uid)[kept] || { text: encode(kept_) }, [side]: as }, kept);
+        if (sameChoices(kept_, other) || untouched(other)) continue;
+        // The review is of the other record's choices under this machine's
+        // record, also when the merge keeps the other one: sync holds the file
+        // back (sync/git.mjs heldPaths), so this machine's record is the one
+        // that stays here until the person decides.
+        const mine = o.local ? o : keep, theirs = mine === o ? keep : o, mine_ = recordOf(mine), side = mine.local ? 'local' : kept, otherSide = side === 'local' ? 'remote' : 'local';
+        review(mine.file, { base: null, [side]: place.get(mine.uid)[side] || { text: encode(mine_) }, [otherSide]: { text: encode({ ...recordOf(theirs), uid: mine_.uid }) } }, side);
       }
       continue;
     }

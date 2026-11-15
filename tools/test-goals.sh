@@ -21,7 +21,7 @@ TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP" "$TEST_GUARD_HOME"' EXIT
 mkdir -p "$TMP/rules" "$TMP/bin"
 : > "$TMP/AGENTS.md"
-cp "$HERE/goals.js" "$HERE/work.js" "$HERE/forecast.js" "$TMP/bin/"
+cp "$HERE/goals.js" "$HERE/work.js" "$HERE/run-log-folders.js" "$HERE/forecast.js" "$TMP/bin/"
 cp "$HERE/mc-cards.js" "$TMP/bin/"
 export GODSPEED_ROOT="$TMP"
 export GODSPEED_TODAY="2026-09-13"

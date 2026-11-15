@@ -31,3 +31,27 @@ test('a file too large for the remote stays local and does not block the rest of
   const onRemote=git(dir,'ls-tree','-r','--name-only','origin/main');
   assert.match(onRemote,/First\.md/);assert.match(onRemote,/Second\.md/,'the note saved alongside the oversized file still reached the remote');
 });
+
+// Pictures the notebook carries (media-store.mjs) are named *.png and the like,
+// which the ignore policy leaves out; they still reach the other machine.
+test('the notebook\'s carried pictures travel to a second machine, and the ignore policy stays as it is',()=>{
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-carried-knowledge-')),remote=path.join(root,'remote.git');
+  fs.mkdirSync(remote);git(remote,'init','--bare','--initial-branch=main');
+  const machine=name=>{const dir=path.join(root,name);git(root,'clone','-q','-c','core.autocrlf=false',remote,dir);git(dir,'config','user.name','Test');git(dir,'config','user.email','t@localhost');
+    const store=new Store(dir,{device:name}),sync=new FileSync(store,{largeFile:1024*1024});sync.initialize('https://github.com/synthetic/private.git');return {dir,store,sync};};
+  const a=machine('desktop');a.store.save('notes',{title:'With a picture',content:'see below\n'});assert.equal(a.sync.reconcile().state,'synced');
+  // The second machine already holds the notebook, so the picture arrives through a merge.
+  const b=machine('laptop');assert.equal(b.sync.reconcile().state,'synced');
+  const media=path.join(a.dir,'notebook','_media'),picture=Buffer.from([137,80,78,71,0,1,2,3]),name='c'.repeat(64)+'.png',mapping='d'.repeat(64)+'.mapping.json',big='e'.repeat(64)+'.pdf';
+  fs.mkdirSync(media,{recursive:true});fs.writeFileSync(path.join(media,name),picture);fs.writeFileSync(path.join(media,mapping),'{"path":"p.png"}\n');fs.writeFileSync(path.join(media,big),Buffer.alloc(2*1024*1024,1));
+  const ignore=path.join(a.dir,'.gitignore'),policy=fs.readFileSync(ignore,'utf8');
+  assert.equal(a.sync.reconcile().state,'synced');
+  assert.equal(fs.readFileSync(ignore,'utf8'),policy,'the committed ignore file is unchanged');
+  const onRemote=git(a.dir,'ls-tree','-r','--name-only','origin/main');
+  assert.match(onRemote,new RegExp('notebook/_media/'+name));assert.match(onRemote,new RegExp('notebook/_media/'+mapping));
+  assert.doesNotMatch(onRemote,new RegExp(big),'a file too large for the remote stays here');
+  assert.equal(b.sync.reconcile().state,'synced');
+  assert.deepEqual(fs.readFileSync(path.join(b.dir,'notebook','_media',name)),picture);
+  assert.equal(fs.readFileSync(path.join(b.dir,'notebook','_media',mapping),'utf8'),'{"path":"p.png"}\n');
+  assert.deepEqual(b.store.problems,[]);assert.deepEqual([...b.store.records.values()].filter(r=>r.type==='notes').map(r=>r.title),['With a picture']);
+});

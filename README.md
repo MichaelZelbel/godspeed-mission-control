@@ -1,12 +1,179 @@
 # Godspeed Mission Control
 
+A personal AI that runs on your own computer or server and works from one folder of plain files you own: your goals, notes, people, deadlines and the routines it runs for you, including a briefing every morning. It thinks with your own AI (your ChatGPT plan, or an API key from Claude or another AI company) and keeps what it learns in that folder.
+
+Free and open source. No account with us; you connect your own AI after installing.
+
+- **Windows:** [download GodspeedSetup.exe](https://github.com/MichaelZelbel/godspeed-mission-control/releases/latest/download/GodspeedSetup.exe) and run it.
+- **Mac or Linux:** `curl -fsSL https://godspeedmissioncontrol.com/install | bash` (on a Mac, checked on GitHub's Mac test machines, not yet a whole install on a real Mac)
+- **A Linux server:** `curl -fsSL https://godspeedmissioncontrol.com/server | bash` (it runs in Docker; [what it does](docker/README.md))
+
+In use by its maintainer since April 2026. Counted in his own folder on 26 October 2026:
+
+- **115 mornings** with a written briefing, since 4 July 2026.
+- **365 decisions** written down, each with its reason.
+- **181 jobs** it set itself and finished, each confirmed by a check it ran afterwards, since 13 September 2026.
+
+Each install in detail, and what every version changed, are further down.
+
+## About this version
+
 Godspeed with the integrated notebook, for readers of [Teach It Once: Make AI your mission control for life and work](https://leanpub.com/teachitonce). It includes Menerio's notebook functionality: notes, collections, people, world knowledge, timeline, media, comments and memory review, alongside Godspeed's goals, chat, routines and recovery controls.
 
 New here and not a reader yet? The first chapters are free: [download the free sample of *Teach It Once* on Leanpub](https://leanpub.com/teachitonce).
 
 A new release comes out most weeks. I write about what my AI does for me and what I will not let it do in a free newsletter: [subscribe on Substack](https://michaelzelbel.substack.com/subscribe).
 
-Version 2 is the current edition. The lines below install the current public version, which is the branch `beta` of this repository; `main` is where the work goes on, and a change merged into it reaches nobody until the next version is released. The installers set up a new, separate folder. They do not move an existing version 1 Godspeed folder or your Menerio account.
+Version 2 is the current edition. The install lines on this page install the current public version, which is the branch `beta` of this repository; `main` is where the work goes on, and a change merged into it reaches nobody until the next version is released. The installers set up a new, separate folder. They do not move an existing version 1 Godspeed folder or your Menerio account.
+
+## Workouts from Hevy
+
+Godspeed carries the Workouts add-on. With Hevy Pro, open **Settings** > **Workouts from Hevy**, make a Hevy developer key, and connect it there. The key stays in the add-on's private state; Settings shows the imported-row count and last run, and the one hourly **Workouts from Hevy** routine appears under **Settings** > **Routines**. When taking over a standalone add-on schedule, Godspeed first proves the carried routine can import; if setup fails, Settings names the safe reason and retry time while the existing schedule stays in place. If retiring that schedule fails after the proof, the carried routine keeps running and Settings reports the removal retry. Disconnect stops that routine while keeping the tracker and its rows.
+
+## New in 2.0.0-beta.24
+
+Godspeed no longer leaves you empty-handed when one of its own safety checks refuses what the AI wrote, and your pictures and PDFs travel with your notebook.
+
+- **A coaching talk always starts.** When the AI's first reply misses the prepared opening, Godspeed asks once more, and if that misses too it opens the talk from the prepared record itself, never an error instead of a talk.
+- **The morning brief always arrives.** A sentence the source check refuses is dropped, and the brief is saved with what passed.
+- **Pictures and PDFs travel with the notebook.** Each one of 50 MB or less is kept in the private GitHub copy beside your notes, so a new computer or server shows every picture. A larger file stays on its computer and the media library says so. After the update, the media already on your computer is added to the copy once.
+- **The first day's work finishes** on a fresh Docker server, or says why it stopped.
+- **Short English replies on Telegram stay English**, even when the AI slips in a German word.
+- **Update now's proof works again** right after a release.
+
+## New in 2.0.0-beta.23
+
+Godspeed can update itself, a question on Telegram is one message with its buttons, and your assistant gets the safeguards its maintainer uses. This release also carries everything built for 2.0.0-beta.21 and 2.0.0-beta.22.
+
+- **Update with one button, or automatically.** **Settings** has an **Update now** button, and `godspeed-update` is one command, that bring Godspeed to the newest stable release. You can also let it update itself at a time you choose, or pause that. On the Docker server the button shows the line to run instead.
+- **A question from background work is one Telegram message with its Yes and No buttons.** A plain yes, typed or pressed, answers the step that is waiting. Reports from background work speak in plain words, only about what you can decide, one thing per message, and never ask you to type a code.
+- **Safeguards for every assistant.** Your assistant asks itself once whether it is really finished before it gives up or hands work back. It never hands you a page or a message with blanks to fill in. It may draft posts but never publishes, schedules or queues one on a social platform in your name. A promise on a clock ("every Sunday") is written down and run, and a missed one is named at the top of the morning list. No new folders or files appear at the top of your mission control unless you named them.
+- **The journal knows when things happened.** "An hour ago", "at 11" or "yesterday afternoon" is recorded as that time, and every finished journal task also becomes a moment in the notebook's timeline.
+- **You choose how a new rule is added:** on its own, or shown to you first. A short rule that repeats one you already have is offered as a change to it.
+- **The Telegram chat no longer goes silent when the assistant program under it changes:** it restarts onto the new code and keeps answering. It also answers an English message in English again.
+- **Coaching talks and a changed rhythm.** A rhythm you changed on purpose no longer makes the dropped day a talk day. When a change you did not ask for dropped a talk day and the last talk got no reply, the new talk opens from its preparation and the unanswered one is filed as not held.
+- **The morning brief** keeps its items, tells only fresh news, checks whose trip it is before it says "you", and holds back proposals you declined or postponed.
+- **Linux on a server without a screen** gives an address that opens from another device, with HTTPS, as the server installer already does.
+
+Updating keeps your folder, notes and settings.
+
+## New in 2.0.0-beta.20
+
+Workouts from Hevy come with Godspeed, what you told it during the day is remembered overnight, and Godspeed keeps its assistant program current.
+
+- **Workouts from Hevy, for anyone with Hevy Pro.** Connecting needs Hevy Pro. In **Settings**, **Workouts from Hevy**, paste your own Hevy key. Godspeed checks it with Hevy, says so there if Hevy refuses it (and keeps nothing), keeps it in the add-on's private folder, makes a **Workouts** tracker with one row per workout and every set, brings in your workouts so far and then updates them once an hour as a routine, **Workouts from Hevy**, listed in **Settings**, **Routines**. A workout you change in Hevy changes its row on the next run, and one you delete in Hevy loses its row, unless the row holds something of yours (a comment, a cell you changed): then it stays, and its Workout cell says "(deleted in Hevy)". Disconnecting stops the routine and keeps your tracker, rows and key file. If you used the standalone Workouts add-on before, Godspeed proves the carried routine's first import before retiring the add-on's own hourly timer. If setup cannot create that routine, the timer stays; if the timer cannot be retired after that proof, the routine keeps importing and Settings says why retirement will retry.
+- **What you said becomes what Godspeed remembers.** A new routine, **Remember what you said** (03:40, listed in **Settings**, **Routines** with its own Pause switch), reads the messages you typed to your assistant that day, asks your own connected AI which lasting facts about your life they contain, and files each one as a dated fact or event with your exact words and where you said them as its source. A new fact that replaces an older one closes the older, and nothing is deleted. Anything whose quote is not word for word in your message is refused, machine-written prompts and messages that start with "track" are skipped, and an install with no AI skips the night quietly. On an install that adopted an existing folder it is a switch that starts off.
+- **Godspeed keeps your assistant program current, and safe.** On an install where Godspeed set up the assistant program (Hermes) itself, on Linux and on a Mac, Godspeed checks once a night for a stable release at least 7 days old of the same major version, installs it with Hermes' own updater, and then checks that the chat service came back, the program runs, it can list its routines and your AI answers. If a check fails it goes back to the version before, checks that the program, its routine list, its plugins and the chat service work again (your AI is not asked a second time when its answer was what failed), and tells you once in plain words in the notebook; a failed release is not tried again for 30 days. **Settings**, **Assistant updates** turns it off. The Docker server and Windows are not changed.
+- **A routine that missed its time or keeps failing is told once.** The daily connection check now also looks at your routines. At most once per check you get one grouped message about routines that did not run when due or failed their last two runs, told once per spell and closed by the routine's next good run. Paused routines, routines made today and failures caused by your AI's sign-in say nothing.
+- **A routine that cannot be set up keeps its error and backs off.** When Godspeed cannot set up one of its background routines (such as the nightly cleanup or the notice sender), it keeps the reason on that machine, tries again less often instead of every minute, and after three failures puts one notice in the notebook's bell that names what could not be set up and says what stopped it. The notice closes itself when setup works.
+- **A morning brief is not lost when its own checks reject the drafts.** When both of your AI's drafts fail the fact or reader review, Godspeed now saves a short note built only from facts it can show, with one concrete next step, instead of nothing; the rejected draft and the reasons are kept privately for repair. A draft that passes is unchanged, and an install with no AI still says so.
+- **A coaching talk you ask for in chat only starts once its record exists.** When you ask your assistant to start one of your coaching talks, Godspeed writes the talk's record first and answers only when that record is open and complete, instead of replying without one.
+
+Updating keeps your folder, notes and settings.
+
+## New in 2.0.0-beta.19
+
+Your server looks after itself, your deadlines can close themselves, and a day that is not over is never judged.
+
+- **A server warns you before its disk is full.** On a server, the daily connection check also looks at the disk. At 85 percent full or more you get one message with how full it is and the three biggest folders, and a deadline that closes by itself once the disk is under 80 percent. Between 80 and 85 percent nothing changes, and a repeat check at 86 percent says nothing more. A computer is not checked this way.
+- **Old working files are cleared every night.** On every install, a new routine, **Nightly cleanup** (02:45, no AI, listed in **Settings**, **Routines** with its own Pause switch), removes your assistant's old request dumps and session transcripts, and your routines' old run files, once they have gone untouched for 30 days. The files of a chat your assistant still lists are kept, and so is the undo copy of a change the work routine made.
+- **The night chat tidy-up is back.** Once Godspeed has made the starting routines of an install it set up, and a chat app such as Telegram is connected, it also adds **Night chat tidy-up** once, listed in **Settings**, **Routines** and running at 01:30 on your clock. If you connect the chat app later, it is added then. It summarises a long, idle private chat with your assistant before you are waiting for a reply, without an AI of its own, and it sends nothing to the chat app. An install with no chat app gets none. A tidy-up you removed stays removed, and one you paused or changed stays as you left it. An install whose assistant already had routines of its own when Godspeed looked, and a mission control you moved in from outside Godspeed, keep what they have and do not get it.
+- **A deadline can close itself.** Besides your word and a file being written, a deadline can now close when a key of that name in your key store is replaced (Godspeed remembers only a one-way fingerprint, never the key), or when the daily connection check finds a connection working: your AI, Telegram, GitHub, Gmail, your mission control's own mailbox, the phone's health data or your server's disk. "Renew the key" and "reconnect Telegram" no longer wait for you to say you did it.
+- **A phone day that is not complete is unknown.** The morning briefing and the health talks treat a day built from your phone's data as unknown until its last measurement (not counting sleep) is after 21:00. Until then, totals are given as so-far values with the time the phone stopped, today is never judged, and no shortfall advice or weekly miss is made from them. A value you enter by hand settles that measurement for the day, and so do the Food tracker's totals.
+
+Updating keeps your folder, notes and settings.
+
+## New in 2.0.0-beta.18
+
+Your phone's health data reaches your server, and a tracker can count a kind of mail.
+
+- **Health data from your phone, on a server install.** Set the iPhone app Health Auto Export to send its data to a private address (a REST API automation, JSON format) and your server keeps it as day records: steps, distance, energy, food, sleep, weight and workouts. Your morning briefing and your health talks read them. In **Settings**, **Health data from your phone** shows the address to paste into the app, once you are signed in on your server's https web address, and a button that makes a new address and stops the old one at once. A server without an https address says it needs one first, and a Windows or Mac notebook says the phone needs the server install. Where a phone value and a CSV value exist for the same day and measurement, the one written last is used. The raw uploads stay on the server for 30 days, are never synced or backed up, and neither the address nor your health values appear in the logs.
+- **Bring history over from another receiver.** `health import FOLDER` builds the same day records from the old lines of a receiver you used before. On Docker, copy the folder into the volume and run `docker exec -it --user hermes godspeed node /opt/godspeed/kit/notebook/bin/godspeed.mjs health import <folder>`.
+- **The daily connection check watches the phone.** After the first upload has arrived, the check reads when the last one came. If your phone has sent no health data for 36 hours, you get one message and a deadline that closes itself with the next upload. It reads a note kept on the server and never calls your phone.
+- **A tracker can count a kind of mail.** Tell your assistant in the chat which senders and subject words to count, for example shop orders or replies to applications. It asks once, with the number from the last 30 days, and saves the rule when you say yes. From then on a daily routine, **Mail counts** (04:30, listed in **Settings**, **Routines** with its own Pause switch), adds one entry for each matching mail on the day it arrived, and never counts one twice. It reads only the sender, the subject and the date, never the text of a mail. You can change or remove the rule by asking again; entries already counted stay. If the mail connection is missing or refused, nothing is counted and the daily connection check tells you.
+- **A refused oversized phone upload no longer leaves a connection open on the server.**
+
+Updating keeps your folder, notes and settings.
+
+## New in 2.0.0-beta.17
+
+A plain yes is enough, and Godspeed tells you when a connection needs your sign-in.
+
+- **Answer a waiting step with yes or no.** When something your assistant started in the background needs your say-so, it asks one question in plain words. Reply "yes" or "no", in the notebook chat or in your private Telegram chat, and that is the answer. You no longer type a command or copy a code, and `/approve` is gone. With two questions waiting, your assistant asks in words which one you mean. With nothing waiting, "yes" approves nothing.
+- **Yes and No buttons on Telegram.** The question of a waiting step arrives with Yes and No buttons. A press answers only that question. A second press, or a press after you already typed your answer, changes nothing and says so.
+- **Fewer questions to begin with.** Before it asks, Godspeed checks the question. A step it can simply do, such as restarting its own gateway, is done quietly. A question you already answered is answered from your earlier decision, unless you gave that decision an end date and it has passed, or the step changed since. An optional extra step that clearly fits what you allowed is done, or dropped, and never asked. Anything that reaches outside, such as sending or buying, is always asked.
+- **A daily connection check.** Early every morning, before your briefing, Godspeed makes one harmless call to each connection you set up: the AI your routines and chat use, Telegram, the GitHub sync, Gmail, and the mission control's own mailbox when a tracker rule uses it. If a sign-in or key is refused, you get one message and a deadline, and the deadline closes itself the first day the connection works again. Any other failure is reported only when it happens two mornings in a row. It also reads Hermes' own list of your routines without making a call, and tells you once when an enabled routine on an interval or a cron schedule Godspeed creates did not run when due, or failed twice in a row. Other Hermes cron schedules do not create a missed-run notice, though their repeated failures still do. On a server it also tells you once when the disk passes 85% full. When everything works, nothing is sent. It is a new routine in **Settings**, **Routines**, on when Telegram or Gmail is connected, a tracker has a mail rule, a phone upload has arrived, another routine is active, or this is a server install, and paused when none is. The nightly cleanup is scheduled on every installation before any goal; because of the connection check, a first goal leads to eight other routines, joining the original seven at the notebook's next scheduling round.
+- **A mission control that Godspeed did not create can use the routines too.** If you adopted a mission control that was not made from Godspeed's starter, it now gets Godspeed's own notice sender, so a waiting step's question and a connection notice reach you. Its goal-dependent routines are listed in **Settings**, **Routines**, all off, under a line saying the mission control was adopted. Switch on the ones you want. The mandatory nightly cleanup is already scheduled; pause it directly in **Settings**, **Routines**. An update never switches one off.
+- **A talk you ask for on a talk day opens that day's talk.** When you ask for an area's talk in the chat on its talk day, and an earlier talk of that area is still open with no reply from you, the earlier talk is closed as not held and today's prepared talk opens. The opening says so in one sentence. A talk you replied to is never closed this way. On a day that is not a talk day, an open talk is still continued.
+
+Updating keeps your folder, notes and settings.
+
+## New in 2.0.0-beta.16
+
+Coaching talks arrive prepared, and a talk that is not prepared says so.
+
+- **A talk's open questions are worked on all week.** When a talk ends, the coach writes down what the next one has to answer: a question for each goal the area serves, and one for each thing you promised, corrected or asked it to look into. Until the next talk, the nightly goal research works on those questions, reading the area's own sources first (experts and newsletters; communities only as leads to check, never as proof), and the preparation says for each question what was found, what was ruled out and what is still open. Ask in a talk for something more to be looked into and it joins the questions; say "add this newsletter to the health sources" and the research reads it first.
+- **A second AI checks the preparation.** Where a talk's area names research topics, the list of pages the preparation read comes from your assistant's own record of the run, never from the AI's word, and a second AI that did not write it checks it: every research topic and every goal the talk serves, good options it missed, and findings against it. Each suggestion keeps its source, its measured effect, its limits, its cost and an experiment you could try, and each one turned down keeps its reason. A preparation that fails the check is tried again with what the check found; after three failed tries in a row, a repair item tells you. Until now a talk on such an area could never open prepared.
+- **A talk that is not prepared says so.** When its preparation is missing or did not pass the check, the talk opens with one short sentence saying so and why, and it never claims how long or how widely it researched. In a talk, ask "what did you research?" and it answers from what the preparation recorded.
+- **"Today's brief" in the chat is your morning briefing.** Ask the chat for "today's brief", "my brief" or "the brief again" and you get the briefing the morning made, with your Charm Challenge line and without a sentence that breaks your writing rules. If none was made yet today, it is made once; asking again makes no second one, and the morning does not send you one you already read in the chat. Until now the chat wrote a different brief of its own.
+- **The Charm Challenge asks every time.** When you vent at your assistant, the program, not the assistant, decides to ask "Back to 21? Yes / No", once. On Telegram the question comes as its own message with Yes and No buttons; elsewhere it ends the answer. Until now it sometimes did not, because the assistant had to copy a long conversation code into its command.
+- **Messages Godspeed sends on its own are kept in the chat.** Every message a routine sends you, on Telegram or in the notebook, is saved in the chat, so you can reply "what is this about?" and your assistant knows what it sent you that day. A notice, such as a failed backup, is written in your assistant's usual voice, one notice per message, and is sent once even when two routines run at the same time. A message that cannot be saved is not sent, and the routine says so.
+- **No GitHub sign-in window out of nowhere.** When this computer is not signed in to GitHub, Godspeed's own Git work no longer opens a sign-in window or stops to ask for a username. Instead you get one notice a day saying that what this computer saves stays on it, and that **Connect record sync** in the notebook's Settings signs it in.
+
+Updating keeps your folder, notes and settings.
+
+## New in 2.0.0-beta.15
+
+Six things that were wrong for people using Godspeed are fixed.
+
+- **Telegram answers in the language you wrote in.** Write in English and the answer comes in English, write in German and it comes in German, even when the AI drafted it in the other language. A short message ("Danke", "Thanks") gets the language of your recent messages, and when those do not tell, the language set in your add-ons' settings. When you ask for a language ("answer in German"), that wins. Scheduled messages are left as they are.
+- **An older Windows install moves to the plain folder names.** If you installed before 2.0.0-beta.11, this update moves `Godspeed Mission Control Full Alpha` and `Godspeed Mission Control Full Alpha State` in your local app data folder to `Godspeed Mission Control` and `Godspeed Mission Control State`, with everything in them, and points the Start menu, the scheduled tasks and the uninstall entry at the new place. If a file is in use, your install keeps working where it is and the next update tries again.
+- **Smaller repairs.** A rule you removed on **Godspeed's brain** is listed under **Removed rules**, with its earlier versions and **Bring it back**. A deadline you mark done or drop shows in the timeline like any other moment. A second computer joined through your private GitHub copy alone gets everything, because the first computer's first sync now fills an empty copy by itself. When your assistant has no AI of its own, the chat names the Settings box as Settings shows it.
+
+Updating keeps your folder, notes and settings.
+
+## New in 2.0.0-beta.14
+
+Your morning briefing arrives even when one sentence breaks your writing rules, and the chat tells you what to do when your AI does not answer.
+
+- **One sentence no longer costs you the morning briefing.** When a sentence breaks a writing rule of yours in `profile/voice.md`, Godspeed cuts that sentence and sends the rest. A line it has to carry word for word, such as your Charm Challenge line, is left out when it breaks one of your rules, and a repair item tells you which line and why. Until now the whole briefing was dropped that morning.
+- **A failed chat request says what to do next.** "The AI request failed" now gives your AI company's own reason when it sent one, and tells you to check the AI connection in **Settings** and try again. When the AI you connected in Settings was not set up for your assistant, because **Use it for the daily routines and the chat too** was unticked, the chat says so and how to fix it, instead of failing on your first message.
+- **The timeline opens when a contact has no name.** A person saved without a name made the timeline show its error screen. Such a person now shows as "Unnamed person" and can still be picked, and the record stays as it was.
+
+Updating keeps your folder, notes and settings.
+
+## New in 2.0.0-beta.13
+
+Godspeed keeps your 21-day Charm Challenge, and a fresh install hands your assistant a shorter list of skills.
+
+- **The Charm Challenge is built in.** Say "start the Charm Challenge" and Godspeed counts the 21 days for you: one line in your morning brief, a card on the Trackers shelf, and the record behind it. When you vent at your assistant it does the work you asked for first and then asks once, "Back to 21? Yes / No" — and it never starts your count over without your yes.
+- **No video skills unless you want them.** A fresh install no longer copies twenty-five skills for making and finishing video into your skills folder, so your assistant has a shorter list to choose from and picks better. Set up the video add-on and you have all of them. When you update, only the copies Godspeed itself put there and nobody changed are taken away: one you edited stays, and an install with the video add-on keeps every one.
+- **Your notebook names the thing instead of saying "page".** What Godspeed knows about you is listed by each file's own title, "My projects and priorities", on the screen and in what your assistant is told, so it never calls it "profile page 3" to you either.
+- **A server install with no notebook has its reminders back.** On the Docker image, which is what the one-line server installer and a Hostinger reader get, the last version had quietly left you with no reminders at all: every reminder command refused, the morning brief said nothing about your days, and nothing closed a key that had been renewed. It works again, and the check that would have caught it runs from now on.
+
+Updating keeps your folder, notes and settings.
+
+## New in 2.0.0-beta.12
+
+Your reminders travel between your computers by themselves.
+
+- **A reminder you close on one computer is closed on every computer.** Reminders and their closings now live in your notebook, so they travel with every note, through the same sync and the same conflict handling. Nobody saves anything by hand any more: before this version a closing could stay on the computer it was made on while the morning brief on another kept asking about something you had finished.
+- **A reminder is a page you can read.** Each one is a page under `Deadlines/` in your mission control folder, carrying what done means, what slipping costs, its days and its log, so you can read and edit it in Obsidian or any editor. A closing or a drop is a moment on your notebook's timeline, with the evidence you gave.
+- **Nothing you see changes.** The same reminders, the same days, the same wording, the same loudness, and still one calendar entry each. Your reminders and their closings from before are taken into the notebook the first time you start this version, with nothing lost, and the old files are kept in `archives/`; where your mission control is a Git repository of your own, they are left untouched with one note beside them saying where the reminders are now.
+
+Updating keeps your folder, notes and settings.
+
+## New in 2.0.0-beta.11
+
+What you meet in your first hour is cleaned up.
+
+- **No dead end when you ask for your own browser.** Asked to use a browser on your computer with your logins, your assistant now says plainly that this is not available yet and offers its own browser for public pages. It no longer sends you to a setup question that does not exist any more, and neither does the Telegram welcome on a new server.
+- **No "Full Alpha" in a new Windows install.** A new install keeps its program in `Godspeed Mission Control` and its data in `Godspeed Mission Control State`, both in your local app data folder, and its scripts have plain names. An install made before this version keeps its folders and keeps working; a later version moves them.
+- **`NOTEBOOK.md` instead of `FULL-ALPHA.md`.** The note at the top of your mission control folder has a plain name. A folder you share between computers through Git keeps the old name for now, so a computer that is not updated yet never loses it.
+- **Servers say only what is true about email.** The server installer and the Docker image check whether a mailbox is connected before they say anything about email, name no book chapter, and no longer point to a Menerio import page that a server does not have.
+- **Small things.** `mc-search` no longer mentions Menerio. **Open the Windows assistant** shows only on Windows. `mc-research`, `mc-check-built-on` and the other commands print in PowerShell. The notebook installed as an app from Chrome or Edge is called **Godspeed Mission Control notebook**, so Windows Apps no longer shows two entries with the same name.
+
+Updating keeps your folder, notes and settings.
 
 ## New in 2.0.0-beta.10
 
@@ -219,7 +386,7 @@ The installers' last words say what comes next. The Windows setup's last page, a
 
 ## New on 15 October 2026
 
-- The notebook has an Identity page, under System: who your assistant is, what it may and may not do (your rules, and the instructions for connected AI apps that My Profile held), what it knows about you (your profile pages) and how it does its jobs (your recipes). You see and change them there. Every part keeps its earlier versions, with "Undo last change" and "Restore this version", and your assistant can make the same changes when you ask it in the chat.
+- The notebook has an Identity page, under System: who your assistant is, what it may and may not do (your rules, and the instructions for connected AI apps that My Profile held), what it knows about you, and how it does its jobs (your recipes). You see and change them there. Every part keeps its earlier versions, with "Undo last change" and "Restore this version", and your assistant can make the same changes when you ask it in the chat.
 - Hermes, the program behind your assistant, now takes its identity from "who it is". Until now it told itself "You are Hermes Agent" before it read your manual. Its identity file (`SOUL.md` in the assistant's own folder) is written from the "who it is" paragraph of your `AGENTS.md`. On an installation you update, this happens during the update and each time the notebook starts, and the text it replaces is kept beside it. A `SOUL.md` you wrote yourself is left as it is; the Identity page names it and offers to replace it.
 - If a program of your own keeps the list of rules in your `AGENTS.md`, the Identity page changes a rule only when it would write that list exactly as your program does. Otherwise it leaves your rules to that program.
 - Habits are forgiving. Every day you did a habit stays in its lifetime total, even after a break. Two missed days a month are covered automatically, holidays and illness can be excused afterwards, and each habit shows a calendar of its last seven days. On Telegram, a habit reminder has buttons to mark it done.
@@ -263,7 +430,7 @@ The notebook no longer calls every installation a test installation. Its unavail
 
 ## New on 9 October 2026, for the book's second edition
 
-- Your first goal starts five routines by itself: the daily round's two (one picks the day's work, one does it), deadline reminders, and a weekly check-in about the goal on Sundays with the coach's reminders. Later releases added the nightly goal research and the preparation of coaching talks, so a first goal starts seven today.
+- Your first goal starts five routines by itself: the daily round's two (one picks the day's work, one does it), deadline reminders, and a weekly check-in about the goal on Sundays with the coach's reminders. Later releases added the nightly goal research and the preparation of coaching talks, so a first goal started seven by beta.16. The daily connection check of beta.17 makes it eight. The nightly cleanup is separate: every installation schedules it before any goal.
 - The notebook keeps the people, facts and events you tell it about, one page per person. Each kind of fact has one fixed name, and a newer value ends the older one.
 - The note graph is back, worked out from your notes when you open it.
 - A computer can connect its own GitHub copy from Settings, and mail works on a computer too.

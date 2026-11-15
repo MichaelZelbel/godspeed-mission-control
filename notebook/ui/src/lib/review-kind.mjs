@@ -24,6 +24,7 @@ export function reviewKind(item, names = new Map()) {
     case 'merge_duplicate_person': return {label: 'Same person twice', hint: 'Keep makes these people one.'};
     case 'resolve_relationship_conflict': return {label: 'Relationship conflict', hint: 'Two relationships that cannot both be right. Choose which one to keep.'};
     case 'adjudicate_relationship': return {label: 'Relationship evidence', hint: 'What a note says about how two people are related.'};
+    case 'deadline_both_changed': return {label: 'A reminder changed in two places', hint: 'Its file in due/ and its page in the notebook were both changed. The page is being kept; both versions are here.'};
     case 'source_version': return {label: 'New version of a file', hint: 'An imported file changed. Keep takes the new version.'};
     case 'media_conflict': return {label: 'Two versions of a file', hint: 'A file was changed in two places. Keep holds on to both.'};
     case 'outward_patch': return {label: 'Change to send out', hint: 'Keep sends this change.'};

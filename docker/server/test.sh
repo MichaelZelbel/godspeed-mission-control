@@ -6,7 +6,8 @@
 #                                       the busy-port and certificate-timeout messages, the systems
 #                                       it installs Docker on, waiting while the server installs
 #                                       its own updates, Docker's installer tried three times with
-#                                       a stand-in for get.docker.com. Runs anywhere with bash and
+#                                       a stand-in for get.docker.com, and godspeed-update with a
+#                                       release stood in on this machine. Runs anywhere with bash and
 #                                       python3; the waiting part needs Linux and perl, and the two
 #                                       compose files are rendered where there is Docker.
 #   sudo bash docker/server/test.sh e2e also the whole reader's path on THIS machine, as root:
@@ -235,6 +236,54 @@ if docker compose version >/dev/null 2>&1; then
 else
   echo "SKIP  docker compose config of the two compose files (no Docker here)"
 fi
+
+# --- godspeed-update on the server (docker/server/update.sh, #456) --------------------------
+# A release stood in on this machine (GitHub's Latest, its SHA256SUMS and its source archive, whose
+# docker/server/install.sh is a stand-in that writes down how it was run) and stage folders of our
+# own. Everything is decided on the server, from the release and its stage file alone.
+check "the update command parses" bash -n docker/server/update.sh
+ulib() { GODSPEED_UPDATE_LIB=1 bash -c "source '$ROOT/docker/server/update.sh'; $1"; }
+check "versions are compared the way semantic versioning orders them" ulib '
+  version_newer 2.0.0-beta.10 2.0.0-beta.9 && version_newer 2.0.0 2.0.0-rc.1 && version_newer 2.0.0-rc.1 2.0.0-beta.30 &&
+  version_newer 2.0.0-beta.20.commit.abc1234 2.0.0-beta.20 && version_newer 2.1.0 2.0.9 &&
+  ! version_newer 2.0.0-beta.20 2.0.0-beta.20 && ! version_newer 2.0.0-beta.9 2.0.0-beta.10 && ! version_newer 2.0.0-rc.1 2.0.0 && ! version_newer nonsense 2.0.0'
+make_stage update-release "$CANDIDATE_REF" "d['version']='$CANDIDATE_VER'; d['serverEditions']['server']['image']='$OTHER_IMG'" >/dev/null 2>&1
+make_stage update-release beta >/dev/null 2>&1
+make_stage update-withdrawn "$CANDIDATE_REF" "d['version']='$CANDIDATE_VER'; d['serverEditions']['server']['image']='$OTHER_IMG'" >/dev/null 2>&1
+make_stage update-withdrawn beta "d['withdrawn']=['$CANDIDATE_VER']" >/dev/null 2>&1
+RELEASE="$WORK/release"
+mkdir -p "$RELEASE/releases" "$RELEASE/download/$CANDIDATE_REF" "$WORK/archive/godspeed-mission-control/docker/server"
+printf '{"tag_name": "%s", "draft": false, "prerelease": false}\n' "$CANDIDATE_REF" > "$RELEASE/releases/latest"
+printf '#!/bin/bash\nprintf "%%s %%s %%s\\n" "$GODSPEED_STAGE_REF" "$GODSPEED_IMAGE" "$GODSPEED_DIR" > "%s"\n' "$WORK/installer-ran" > "$WORK/archive/godspeed-mission-control/docker/server/install.sh"
+tar -czf "$RELEASE/download/$CANDIDATE_REF/Godspeed-v2-integrated-source.tar.gz" -C "$WORK/archive" godspeed-mission-control
+sums() { printf '%s  Godspeed-v2-integrated-source.tar.gz\n' "${1:-$(sha256sum "$RELEASE/download/$CANDIDATE_REF/Godspeed-v2-integrated-source.tar.gz" | cut -d' ' -f1)}" > "$RELEASE/download/$CANDIDATE_REF/SHA256SUMS"; }
+python3 -u -m http.server --bind 127.0.0.1 0 --directory "$RELEASE" > "$WORK/release.log" 2>&1 &
+RELEASE_PID=$!
+trap 'kill "$RELEASE_PID" 2>/dev/null; rm -rf "$WORK"' EXIT
+for _ in $(seq 1 50); do RELEASE_PORT="$(sed -n 's/.* port \([0-9]*\) .*/\1/p' "$WORK/release.log" | head -1)"; [ -n "$RELEASE_PORT" ] && break; sleep 0.1; done
+# One run of the command as the administrator, on a server whose .env runs the image $1.
+update_run() { # <image in .env> <stage folder> [--check]
+  rm -f "$WORK/installer-ran"; mkdir -p "$WORK/udir"
+  printf 'GODSPEED_HOST=localhost\nGODSPEED_SETUP_CODE=%s\nGODSPEED_SERVER_IMAGE=%s\n' "$CODE" "$1" > "$WORK/udir/.env"
+  GODSPEED_UPDATE_LIB=1 GODSPEED_DIR="$WORK/udir" GODSPEED_SCENARIO_RELEASES_URL="http://127.0.0.1:$RELEASE_PORT" GODSPEED_STAGE_RAW="$(file_url "$WORK/$2")" \
+    bash -c "source '$ROOT/docker/server/update.sh'; id() { echo 0; }; main ${3:-}" 2>&1
+}
+sums
+out="$(update_run "$OTHER_IMG" update-release)"
+check "a server that runs the newest release's image hears so, and nothing runs" bash -c 'grep -qx "You have the newest version, $2. Nothing was changed." <<<"$1" && [ ! -e "$3" ]' _ "$out" "$CANDIDATE_VER" "$WORK/installer-ran"
+out="$(update_run "$STAGE_IMG" update-release --check)"
+check "--check names the newest stable version and its notes, and changes nothing" bash -c 'grep -qx "Newest stable: $2" <<<"$1" && grep -qx "What changed: https://github.com/MichaelZelbel/godspeed-mission-control/releases/tag/candidate/$2" <<<"$1" && grep -qx "A newer version is ready. To install it, run: sudo godspeed-update" <<<"$1" && [ ! -e "$3" ]' _ "$out" "$CANDIDATE_VER" "$WORK/installer-ran"
+sums "$(printf '0%.0s' $(seq 1 64))"
+out="$(update_run "$STAGE_IMG" update-release)"
+check "a download whose checksum is not the published one is refused before any installer runs" bash -c 'grep -qF "does not match the checksum its release publishes, so nothing was installed. The version you have keeps running." <<<"$1" && [ ! -e "$2" ]' _ "$out" "$WORK/installer-ran"
+sums
+out="$(update_run "$STAGE_IMG" update-withdrawn)"
+check "a version taken back is refused" bash -c 'grep -qF "$2 was taken back, so nothing was changed." <<<"$1" && [ ! -e "$3" ]' _ "$out" "$CANDIDATE_VER" "$WORK/installer-ran"
+out="$(update_run "$STAGE_IMG" update-release)"
+check "a newer release runs the install.sh out of its checked archive, at its tag and on the stage's image" bash -c 'grep -qF "matched the checksum its release publishes" <<<"$1" && [ "$(cat "$2")" = "$3 release $4" ]' _ "$out" "$WORK/installer-ran" "$CANDIDATE_REF" "$WORK/udir"
+check "the update command is installed, and another installation's is kept" lib "GODSPEED_RAW=$ROOT_URL; GODSPEED_MODEL_COMMAND_DIR=$WORK/update-bin; install_update_command && test -s \"\$DIR/.godspeed/update.sh\" && bash -n \"\$GODSPEED_MODEL_COMMAND_DIR/godspeed-update\" && grep -qxF \"install=\$(printf %q \"\$DIR\")\" \"\$GODSPEED_MODEL_COMMAND_DIR/godspeed-update\" && printf 'keep another installation\n' > \"\$GODSPEED_MODEL_COMMAND_DIR/godspeed-update\" && install_update_command && grep -qx 'keep another installation' \"\$GODSPEED_MODEL_COMMAND_DIR/godspeed-update\""
+check "a new version that does not start puts the one before back, with its compose file" lib "mkdir -p \"\$DIR\" && echo before > \"\$DIR/compose.yaml.before\" && echo after > \"\$DIR/compose.yaml\" && compose() { :; } && wait_healthy() { :; } && IMAGE=$OTHER_IMG TRY= PREVIOUS_IMAGE=$STAGE_IMG PREVIOUS_TRY= && put_back_previous localhost $CODE && grep -qx 'GODSPEED_SERVER_IMAGE=$STAGE_IMG' \"\$DIR/.env\" && grep -qx before \"\$DIR/compose.yaml\""
+check "and a first install, or a run on the same image, has nothing to put back" lib "mkdir -p \"\$DIR\" && echo before > \"\$DIR/compose.yaml.before\" && IMAGE=$STAGE_IMG && ! PREVIOUS_IMAGE= put_back_previous localhost $CODE && PREVIOUS_IMAGE=$STAGE_IMG && ! put_back_previous localhost $CODE"
 
 printf 'ID=ubuntu\nPRETTY_NAME="Ubuntu 24.04.5 LTS"\n' > "$WORK/ubuntu"
 printf 'ID=linuxmint\nID_LIKE="ubuntu debian"\n' > "$WORK/mint"

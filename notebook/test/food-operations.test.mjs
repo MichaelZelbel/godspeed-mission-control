@@ -127,6 +127,19 @@ test('the target asks once for what it does not know, with her weight from her h
  assert.match(r.reply,/^Your daily target: 1,451 kcal, 105 g protein/);
 });
 
+test('the target uses the newest same-day weight, whichever feed wrote it: a later CSV correction beats the phone',async()=>{
+ const f=await fixture();
+ const held=await f.op({type:'food',action:'track',items:[TOFU]});await f.op({type:'tracker-create',proposal_id:held.proposal_id});
+ const day='2026-10-10',row=(source,value)=>({id:'w-'+source.split(' ')[0].toLowerCase(),metric:'weight_kg',value,unit:'kg',source,...(source==='Health Auto Export'?{via:'phone-receiver'}:{}),observed_on:day,date_precision:'day',observed_at:day+'T00:00:00Z'});
+ f.store.save('health_observations',row('Health Auto Export',90));await new Promise(r=>setTimeout(r,5));
+ f.store.save('health_observations',row('Fictional CSV',70));
+ const r=await f.op({type:'food',action:'target',sex:'female',age:34,height_cm:168,activity:'light',goal:'lose'});
+ assert.match(r.reply,/^Your daily target: 1,451 kcal, 105 g protein/,'70 kg from the later CSV, not 90 kg from the phone');
+ await new Promise(r=>setTimeout(r,5));f.store.save('health_observations',row('Health Auto Export',91));
+ const again=await f.op({type:'food',action:'target',sex:'female',age:34,height_cm:168,activity:'light',goal:'lose'});
+ assert.doesNotMatch(again.reply,/^Your daily target: 1,451 kcal/,'a phone value written after the CSV is the newest and is used');
+});
+
 test('German in, German out: the setup question, the answer and the day',async()=>{
  const f=await fixture();
  const held=await f.op({type:'food',action:'track',language:'de',meal:'breakfast',items:[{food:'C133000',item:'Haferflocken',grams:60},{food:'M111200',item:'Milch',count:1,unit:'Glas'}]});

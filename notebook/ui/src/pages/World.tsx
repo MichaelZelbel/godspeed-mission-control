@@ -7,6 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Plus, Search, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SEOHead } from "@/components/SEOHead";
+import { personLabel, personNames } from "@/components/timeline/people";
 import { EntityDetail } from "@/components/world/EntityDetail";
 import { ENTITY_TYPE_SUGGESTIONS, useCreateEntity, useEntities } from "@/hooks/useEntities";
 import { useWorldClaims, useWorldEntities, useWorldEvents } from "@/hooks/useWorld";
@@ -20,6 +21,13 @@ import { groupClaims, isHumanWritten, isStale } from "@/lib/world-claims";
  * people, your moments and your facts, so nothing is copied and no name ends up
  * in two places.
  */
+// What a row shows for an entity: its name, or for a contact without one (#154) "Unnamed person",
+// as the People page and the timeline show it, and "Unnamed" for anything else without a name.
+function entityLabel(e: { kind?: unknown; name?: unknown }): string {
+  if (typeof e.name === "string" && e.name.trim()) return e.name;
+  return e.kind === "person" ? personLabel(e) : "Unnamed";
+}
+
 export default function World() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -38,7 +46,7 @@ export default function World() {
 
   const nameById = useMemo(() => {
     const map = new Map<string, string>();
-    for (const e of entities) map.set(e.id, e.name);
+    for (const e of entities) map.set(e.id, entityLabel(e));
     return map;
   }, [entities]);
 
@@ -53,10 +61,10 @@ export default function World() {
     return entities.filter((e) => {
       if (kindFilter && e.kind !== kindFilter) return false;
       if (!q) return true;
+      // A contact without a name is an entity too (#154): names and aliases that are not text are skipped.
       return (
-        e.name.toLowerCase().includes(q) ||
-        (e.aliases || []).some((a) => a.toLowerCase().includes(q)) ||
-        (e.description || "").toLowerCase().includes(q)
+        personNames(e).some((n) => n.includes(q)) ||
+        String(e.description || "").toLowerCase().includes(q)
       );
     });
   }, [entities, search, kindFilter]);
@@ -66,8 +74,8 @@ export default function World() {
     if (!q) return events;
     return events.filter(
       (e) =>
-        e.title.toLowerCase().includes(q) ||
-        (e.description || "").toLowerCase().includes(q),
+        String(e.title || "").toLowerCase().includes(q) ||
+        String(e.description || "").toLowerCase().includes(q),
     );
   }, [events, search]);
 
@@ -222,7 +230,7 @@ export default function World() {
                       className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm hover:bg-accent/60"
                     >
                       <span className="min-w-0">
-                        <span className="block truncate">{entity.name}</span>
+                        <span className="block truncate">{entityLabel(entity)}</span>
                         {entity.description && (
                           <span className="block truncate text-xs text-muted-foreground">
                             {entity.description}

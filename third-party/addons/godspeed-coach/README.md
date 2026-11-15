@@ -36,8 +36,9 @@ something another talk raised in the last seven days.
 ## What it is
 
 - **One folder per area** under `coach/` in your mission control: `area.md` (rhythm, time,
-  style, tone, limits, how to prepare), `questions.md`, `talks/` (one record per talk) and
-  `habits/` (one file per habit). Plain text you can read and edit.
+  style, tone, limits, how to prepare), `questions.md`, `talks/` (one record per talk),
+  `habits/` (one file per habit) and, once you change the rhythm with `area set`,
+  `rhythm-set.md` (that change, so it drops no talk day). Plain text you can read and edit.
 - **One command**, `godspeed-coach`, that the recipe and the schedule use.
 - **One recipe**, `coach`, copied into your skills folder: how to open, continue and close a talk,
   how to track a habit, and what never to do (a wall of text, praise, a habit you did not agree to).
@@ -55,10 +56,22 @@ something another talk raised in the last seven days.
 - **A talk prepared ahead, when a job of yours writes one.** A minute before a talk is too little
   time to prepare it well. If something writes `coach/<area>/prep/<talk date>.md` ahead of time
   (`STATE: ready`, a section "The opening" and a section "Talk card"), the talk opens with that
-  opening as written, and every interface carries its talk card while the talk is open, with the
+  opening as written (except that a talk asked for on a talk day, or on a day the newest rhythm change dropped when nobody asked for it, replacing an earlier unanswered
+  talk, adds one sentence naming and closing that earlier talk), and every interface carries its talk card while the talk is open, with the
   file behind it for depth. `godspeed-coach prep-due` tells that job which coming talks still need it,
   and which were prepared more than 48 hours before they start and need it again;
-  `godspeed-coach prep-check` says whether one talk's file is ready. In Godspeed Mission Control the
+  `godspeed-coach prep-check` says whether one talk's file is ready. With `--rhythm-changes`,
+  `prep-due` also lists a day that the area's newest rhythm change in git dropped, until the new
+  rhythm's first talk, so a talk they start themselves that day still opens prepared. A change
+  they asked for with `area set`, which writes `coach/<area>/rhythm-set.md`, drops no talk day:
+  that day is not listed;
+  `godspeed-coach prep-missed` lists the talks of the last day that opened without the
+  preparation due for them (in an area whose talks are prepared ahead, a talk day or a day whose
+  preparation was refused; in any area, a day a rhythm change nobody asked for dropped, because the job lists that
+  day to be prepared, and a talk they start on it without one says so). A rhythm change that was not
+  committed yet keeps the day it was made when a later coach save commits it. A talk with no preparation of its own answers "what did you research?"
+  (`talk evidence`) from the area's newest preparation whose research and review still pass the
+  gate, all but the area's own seal, with its date. In Godspeed Mission Control the
   routine "Coaching talk preparation" is that job: every night it prepares each talk of the next day
   with the coach-prep recipe.
 
@@ -112,6 +125,12 @@ godspeed-coach habits week                    # the last seven days of each habi
 godspeed-coach talk state health              # the last five health talks and how they went
 godspeed-coach talk said health --words "first message" --words "second message"   # one --words per message
 godspeed-coach prep-due --within-hours 48     # the coming talks with no prepared talk yet (--json too)
+godspeed-coach prep-due --within-hours 48 --rhythm-changes   # and a day a rhythm change just dropped
+godspeed-coach prep-missed --days 1           # the talks of the last day that opened without their preparation (--json too)
+godspeed-coach questions health                  # the live questions of the next health talk (coach/health/questions/<date>.md)
+godspeed-coach questions health add "Is zone 2 worth it?" --why "they asked"   # the model refines them only here
+godspeed-coach questions health drop "zone 2"    # takes one away
+godspeed-coach area source health "Peter Attia, The Drive"   # where the research looks first (SOURCE: lines in area.md); --remove takes one back
 godspeed-coach prep-check health --date 2026-10-18   # is that talk's preparation ready? (--json too)
 godspeed-coach talk open health --from-prep coach/health/prep/2026-10-18.md   # open from a prepared talk
 godspeed-coach config show                    # time zone, language, habit check time, cap
@@ -120,6 +139,19 @@ godspeed-coach config show                    # time zone, language, habit check
 godspeed-coach talk said health --words-file words.txt
 godspeed-coach talk open health --opening-file opening.txt --prepared-file prepared.txt --read "the week's runs"
 ```
+
+## Live questions
+
+When a talk closes (`talk held`), an area that serves goals (`SERVES:`) gets the questions its next
+talk must answer, in `coach/<area>/questions/<next talk date>.md`: a plain list, one question per
+goal, per decision or promise, per correction and per thing the person asked to be looked into, each
+with why it is open. The coach program writes the file from the talk's record; a second close for the
+same next talk updates it and never lists a question twice. A talk that ends without a closing turn
+gets its questions at the next coach tick, however late: they are for the first talk day still to come. Each night until the talk, the nightly goal research
+(`mc-research`) for each goal the area serves reads the file and works on the questions, using the
+area's `SOURCE:` lines first (an expert, a newsletter, a community as a lead only); the preparation
+the day before says for each question what was found, what was ruled out and what is still open. An
+area that serves no goal has none, and `brief` is unchanged for an area without a questions file.
 
 ## Honest limits
 
@@ -150,10 +182,36 @@ Tests: `npm test`, and `npm run test:hermes` for the Hermes plugin (Python 3).
 
 Areas can require verified preparation by adding repeated `RESEARCH DOMAIN: id | scope` header
 lines to `area.md`. Those preparations need `<date>.evidence.json` and `<date>.review.json`
-beside the Markdown file. The preparation runner collects successful source-page reads from the
-actual execution transcript, then runs a separate reviewer for every configured domain. The
-runtime checks both receipts against the exact preparation and area file hashes before a brief
-or `talk open --from-prep` may use it. Changing the preparation, its evidence, or the area's scope
-invalidates the review. Search snippets alone and the writer's `STATE: ready` cannot pass.
-Areas without research domains retain the earlier preparation behavior. Future preparation
-timestamps are refused for every area, with one minute allowed for clock differences.
+beside the Markdown file, and both are written by the job that prepares the talk, never by the
+model (in Godspeed Mission Control, `mc-coach-prep`, through `lib/prep-receipts.mjs`):
+
+- **Receipts.** Each run's prompt carries a fresh marker (`RUN MARKER: gs-prep-...`). After the run,
+  `godspeed-coach prep-receipts` finds the run's own record by it, Claude Code's transcript
+  (`~/.claude/projects/...`) or Hermes' session store (`state.db`), and writes the evidence: the
+  run's marker, session, the record's sha256, its start and end, and every source page it opened
+  successfully between the two, with the URL, the time, the tool call's id and the text read. Only
+  page reads count: Claude Code's `WebFetch` and Hermes' `web_extract`, listed once as
+  `READING_TOOLS` in `lib/prep-evidence.mjs`. A search snippet is never a reading.
+- **The review step.** A preparation that says `STATE: ready` is then read by a second run that did
+  not write it, with a marker of its own and the `coach-prep-review` recipe: it gets the preparation,
+  the area and the evidence, searches on its own for routes the preparation missed and for contrary
+  findings, and answers only with JSON (`{"verdict","coverage":[{"id","verdict","reason","sources"}],
+  "issues"}`). It cannot write: with Claude Code its tools are Read, Grep, Glob, WebSearch and
+  WebFetch; with Hermes only the `web` toolset. `godspeed-coach prep-seal` seals its answer as the
+  review, with the reviewer's own marker, session and record hash and the hashes of the preparation,
+  the area and the evidence, and checks the pair. Both stay in the run folder until they pass, then
+  go beside the preparation, over any file the model wrote there, so an older preparation that
+  still opens its talk keeps its own proof.
+- **Tries.** A failed review's issues go to the next try, which must resolve each with evidence, not
+  new wording. After three failed tries in a row for one talk, one repair item is filed in the
+  notebook's work list; a try that passes ends the count.
+
+The coach checks both receipts against the exact preparation and area file hashes before a brief
+or `talk open --from-prep` may use it. The review must judge every research domain and every goal
+in the area's `SERVES` line, each with a source page from the evidence; the preparation must fill
+its research sections, "Routes" among them (each route with its source, when it was published and
+read, who was studied, the measured effect, its limits, contrary evidence, its fit, its cost and an
+experiment). Changing the preparation, its evidence, or the area's scope invalidates the review.
+Search snippets alone and the writer's `STATE: ready` cannot pass. Areas without research domains
+retain the earlier preparation behavior. Future preparation timestamps are refused for every area,
+with one minute allowed for clock differences.

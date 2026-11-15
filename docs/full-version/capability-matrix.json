@@ -1,6 +1,6 @@
 {
   "format": 2,
-  "checked_at": "2026-10-18T19:08:21.616Z",
+  "checked_at": "2026-10-21T15:32:19.098Z",
   "complete": false,
   "items": [
     {
@@ -3937,6 +3937,22 @@
       "target_test": "Exercise coach-prep through its installed entry point and check actual results after restart"
     },
     {
+      "key": "recipe:charm-challenge",
+      "kind": "recipe",
+      "name": "charm-challenge",
+      "trigger": "Installed skill charm-challenge",
+      "durable_state": "Skill-specific files and receipts",
+      "execution": "skills/charm-challenge/SKILL.md",
+      "activation": "Explicit user choice; inspect installed schedules and settings",
+      "permissions": "Authenticated owner; outward changes require exact approval",
+      "dependencies": [],
+      "criterion": "The Charm Challenge, 21 days of charming your AI into the result instead of arguing with it. Use when the person says \"start the Charm Challenge\", \"Charm Challenge starten\", \"charm slip\", \"how is my Charm Challenge\", \"stop the Charm Challenge\"; when they answer yes or no while the [godspeed-charm] block shows an open question for this conversation; and when they tell a story of venting at an AI (\"I yelled at Copilot again\", \"I called ChatGPT useless\"). Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation.",
+      "status": "source only",
+      "evidence": [],
+      "required": true,
+      "target_test": "Exercise charm-challenge through its installed entry point and check actual results after restart"
+    },
+    {
       "key": "behavior:first-goal",
       "kind": "behavior",
       "name": "first-goal",
@@ -4076,14 +4092,14 @@
       "activation": "Explicit user choice; inspect installed schedules and settings",
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
-      "criterion": "Collect/check sources; failed gate prevents delivery; useful fresh health line",
+      "criterion": "Collect/check sources; after both permitted draft attempts remain rejected, a checked factual fallback may deliver; failed final safety gate prevents delivery; useful fresh health line",
       "status": "partial",
       "evidence": [
         "Normal notebook recorded fictional energy 7 and enabled briefing with a selected watch source. Drafts containing the banned em dash failed delivery. Writing contract now explicitly forbids it; accepted fresh-health delivery remains pending.",
         "Normal fictional selected briefing saved Your morning briefing (your-morning-briefing-36f5e3de), including the recorded energy value 7, Friday watch change and pending outline review. Earlier failed punctuation checks remain. Selected routines later paused during interrupted runs; lasting unattended reliability remains incomplete."
       ],
       "required": true,
-      "target_test": "Inspect an accepted installed briefing with exact fresh measurement, supported action and changed source; failed gates prevent delivery and unchanged advice stays quiet."
+      "target_test": "Inspect an accepted installed briefing with exact fresh measurement, supported action and changed source; after both permitted draft attempts remain rejected, a checked factual fallback may deliver, while a failed final safety gate prevents delivery; unchanged advice stays quiet."
     },
     {
       "key": "behavior:repairs",

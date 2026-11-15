@@ -1,3 +1,4 @@
+import {recordReport,delivered} from '../core/background-reports.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -144,6 +145,78 @@ print(json.dumps(m.on_pre_llm_call(platform="cron")))`,plugin],{encoding:'utf8'}
   assert.match(started,/getting-to-know-you chat with your owner/);
   assert.deepEqual(none,[null,null,null,null],'waiting, done, an invitation weeks old, nothing');
   assert.equal(blocks[1],'null','never in a scheduled run');
+});
+
+test('a plain yes in the owner\'s private Telegram chat reaches the waiting step command, and nowhere else does',{skip:!havePython&&'no Python here'},t=>{
+  const plugin=path.join(kit,'notebook','assistant-files','godspeed-context','__init__.py');
+  const out=execFileSync(python,['-c',`import importlib.util,json,sys
+spec=importlib.util.spec_from_file_location("p",sys.argv[1]);m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
+reports=[{"kind":"answered","context":"[godspeed-step] a"},{"kind":"ask","context":"b"},{"kind":"choose","context":"c"},{"kind":"future","context":"d"},{"kind":"none"},{"kind":"ask"},"x",None]
+print(json.dumps([m.step_block(r) for r in reports]))
+print(json.dumps(m.on_pre_llm_call(platform="telegram",user_message="yes",session_id="s")))
+print(json.dumps(m.on_pre_llm_call(platform="cron",user_message="yes",session_id="s")))`,plugin],{encoding:'utf8'}).trim().split('\n');
+  assert.deepEqual(JSON.parse(out[0]),['[godspeed-step] a','b','c','d',null,null,null,null]);
+  assert.equal(out[1],'null','without the owner\'s Telegram session nothing is asked of the step command');
+  assert.equal(out[2],'null');
+});
+
+test('the installed plugin hands the owner\'s private Telegram yes to a real waiting step, and no other session reaches it',{skip:!havePython&&'no Python here'},async t=>{
+  const base=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-step-plugin-')),root=path.join(base,'workspace'),home=path.join(base,'assistant');t.after(()=>fs.rmSync(base,{recursive:true,force:true}));
+  installStarter(root);
+  execFileSync(process.execPath,[path.join(kit,'notebook','scripts','wire-assistant.mjs'),home],{env:{...process.env,GODSPEED_WORKSPACE:root,GODSPEED_PORT:'41990',GODSPEED_DEVICE:'local'},windowsHide:true});
+  fs.mkdirSync(path.join(base,'stubs','gateway'),{recursive:true});fs.writeFileSync(path.join(base,'stubs','gateway','__init__.py'),'');
+  fs.writeFileSync(path.join(base,'stubs','gateway','session_context.py'),'import os\ndef get_session_env(key, default=""):\n    return os.environ.get("STUB_" + key, default)\n');
+  const step=(...args)=>JSON.parse(execFileSync(process.execPath,[path.join(kit,'notebook','bin','godspeed-step.mjs'),...args,'--godspeed',root],{encoding:'utf8'}));
+  const open=async about=>{const {id,message}=step('open','--about',about,'--question','Restart it?','--yes','I restart it.','--no','I leave it.','--by','routine:test','--chat','telegram');const store=new Store(root,{device:'vps'});await recordReport(store,{text:message,steps:[id],delivery:'telegram'});delivered(store,message);return id;};
+  const plugin=path.join(home,'plugins','godspeed-context','__init__.py');
+  const lines=[];
+  const turn=(session,words='yes')=>{
+    const out=execFileSync(python,['-c',`import importlib.util,json,sys,logging
+seen=[];h=logging.Handler();h.emit=lambda r:seen.append(r.getMessage());logging.getLogger("godspeed-step").addHandler(h);logging.getLogger("godspeed-step").setLevel(logging.INFO)
+spec=importlib.util.spec_from_file_location("p",sys.argv[1]);m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
+r=m.on_pre_llm_call(platform="telegram",user_message=sys.argv[2],session_id="sess")
+print(json.dumps(seen));print(json.dumps(r))`,plugin,words],
+      {encoding:'utf8',env:{...process.env,PYTHONPATH:path.join(base,'stubs'),TELEGRAM_ALLOWED_USERS:'4242',STUB_HERMES_SESSION_PLATFORM:'telegram',STUB_HERMES_SESSION_CHAT_TYPE:'dm',
+        STUB_HERMES_SESSION_CHAT_ID:session.chat,STUB_HERMES_SESSION_USER_ID:session.user,STUB_HERMES_SESSION_ID:session.id}}).trim().split('\n');
+    lines.push(...JSON.parse(out[0]));
+    return JSON.parse(out[1]);
+  };
+  const owner={chat:'4242',user:'4242',id:'sess'},status=id=>step('get',id).status;
+  const stranger=await open('The disk is full.');
+  for(const other of [{...owner,user:'7'},{...owner,chat:'-100'},{...owner,id:'other'}])assert.equal(turn(other)?.context?.includes('godspeed-step')??false,false);
+  assert.equal(status(stranger),'waiting');
+  const reply=turn(owner);assert.match(reply.context,/the program has recorded it/);assert.equal(status(stranger),'yes');
+  const refused=await open('The cache is stale.');
+  assert.match(turn(owner,'no').context,/the program has recorded it/);assert.equal(status(refused),'no');
+  const command=path.join(home,'plugins','godspeed-context','step-command.txt'),kept=fs.readFileSync(command,'utf8');
+  fs.writeFileSync(command,JSON.stringify([path.join(base,'no-such-node'),'x','y'])+'\n');
+  const failed=turn(owner);assert.match(failed.context,/send it again/);assert.ok(!/no-such-node/.test(failed.context));
+  // The gateway log says what the match did each turn, and never the owner's words (#372).
+  assert.deepEqual(lines.filter(l=>/not the owner's private chat in this session/.test(l)).map(l=>l.match(/session \((.*) differs\)/)[1]),['USER_ID','CHAT_ID','ID'],lines.join('\n'));
+  assert.ok(lines.includes('godspeed-step (telegram): a message of 1 words was heard as answered'),lines.join('\n'));
+  assert.match(lines.at(-1),/^godspeed-step \(telegram\): a message of 1 words could not be matched: /);
+  fs.writeFileSync(command,kept);
+  turn(owner,'the cache one please');
+  assert.equal(lines.at(-1),'godspeed-step (telegram): a message of 4 words was heard as none');
+  assert.ok(lines.every(l=>!/\b(yes|no|cache)\b/.test(l.replace(/^godspeed-step \(telegram\): /,''))),lines.join('\n'));
+  // Hermes can leave the session id empty after the owner's first message (#372). The owner's
+  // decision on #482: an empty id passes only when every other check matches the owner, the chat id
+  // included, and says so in the log; a different id is still refused.
+  const accepted='godspeed-step (telegram): a message in the owner\'s private chat was accepted without a session id (Hermes gave none; every other check matched)';
+  const later=await open('The backup is late.');
+  let from=lines.length;
+  assert.equal(turn({...owner,chat:'-100',id:''})?.context?.includes('godspeed-step')??false,false,'empty id, another chat: refused');
+  assert.equal(status(later),'waiting');
+  assert.ok(!lines.slice(from).includes(accepted),lines.join('\n'));
+  assert.match(lines.at(-1),/not the owner's private chat in this session \(CHAT_ID, ID \(empty\) differs\)/);
+  from=lines.length;
+  assert.equal(turn({...owner,id:'another-session'})?.context?.includes('godspeed-step')??false,false,'a different id: refused');
+  assert.equal(status(later),'waiting');
+  assert.match(lines.at(-1),/not the owner's private chat in this session \(ID differs\)/);
+  from=lines.length;
+  assert.match(turn({...owner,id:''}).context,/the program has recorded it/,'empty id, everything else the owner: accepted');
+  assert.equal(status(later),'yes');
+  assert.deepEqual(lines.slice(from),[accepted,'godspeed-step (telegram): a message of 1 words was heard as answered'],lines.join('\n'));
 });
 
 test('the recipe is installed for a starter-born assistant, names its doors and uses only tools the notebook has',async t=>{

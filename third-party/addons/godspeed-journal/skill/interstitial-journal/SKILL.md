@@ -54,14 +54,35 @@ was saved: save it again with `--words-file`.
 - Starting something: `godspeed-journal start "<short title in their words>" --done-means "<item>" ... --words "<verbatim>"`
 - Adding to what done means: `godspeed-journal define [<task>] --done-means "<item>" ...`
 - Finishing: first `godspeed-journal open --json` if you need the definition, then decide met and
-  missed (below), then `godspeed-journal done [<task>] --met "<item>" ... --missed "<item>" ... --words "<verbatim>" --json`
+  missed (below), then `godspeed-journal done [<task>] --met "<item>" ... --missed "<item>" ... --words "<verbatim>" --json`,
+  with `--impact <2-4>` when you are sure it mattered more than everyday (see "Impact" below)
 - Giving up or parking for good: `godspeed-journal drop [<task>] --words "<verbatim>"`
 - Something a finish left out that happened after all ("the letter's signed now"):
   `godspeed-journal met [<task>] --met "<item>" --words "<verbatim>"`. When the block lists the
   task under "Finished without" and their words say one of those items happened, it is `met`,
   never a note and never a second done.
+- How much a finished task mattered, when they answer the impact question:
+  `godspeed-journal impact [<task>] <1-4> --words "<verbatim>"`
 - Anything else (a thought, a feeling, "still on it"): `godspeed-journal note "<verbatim>" [--task <task>]`,
   or `godspeed-journal note --words-file <file> [--task <task>]` when it runs over more than one line
+
+## When it happened
+
+When their words say when a move happened ("an hour ago", "at 11", "yesterday afternoon",
+"vor 20 Minuten"), add those words, as they said them, to that move's command:
+`--when "<their words>"` on `start`, `done`, `drop`, `note` or `met`. Never work out a time
+yourself and never pass one they did not say. A move with no time word gets no `--when` and is
+saved as now. Several moves each get their own, in the order told, and a move told as following
+straight on from a timed one ("then", "danach") gets the same words. "I finished the weekly plan
+an hour ago, then had breakfast, and breakfast is done now" is
+`done "weekly plan" --when "an hour ago"`, `start "Breakfast" --when "an hour ago"`, `done "breakfast"`.
+A whole task told after the fact ("wrote the report from 9 to 10:30") is one `start` with
+`--when "from 9 to 10:30"`, and `--met`/`--missed` from the done check.
+
+When the command answers with a question ("Nothing was saved. Ask them: ..."), that move was not
+saved: ask exactly that question, once, and nothing else. When they answer, save that move and
+the ones after it, with their answer as `--when`. Your reply names the time the command printed,
+in their language: `Saved, finished today at 10:40.`
 
 Titles are three to six words, the person's own. A title names the thing, never the act of
 starting it: "Blogartikel", not "starting the blog article"; never begin one with starting,
@@ -72,7 +93,8 @@ beginning or anfangen. Done items are short and checkable ("thumbnail made", not
 The settings line in the [godspeed-journal] block, or `godspeed-journal config show`, gives
 `feedback`, `length` and `ask_done_definition`.
 
-**feedback = off.** Reply `Saved.` and nothing else, in their language. Never ask anything.
+**feedback = off.** Reply `Saved.` and nothing else, in their language, or, when a move carried
+`--when`, `Saved,` and the time the command printed. Never ask anything but the command's own question.
 
 **feedback = check** (the default) and **coach**:
 
@@ -100,6 +122,22 @@ The settings line in the [godspeed-journal] block, or `godspeed-journal config s
    finished"); "done" for one of those, or "the letter's signed", runs `met` and gets `Saved.`
    Each is named in one evening list only. The block lists them for a day after the finish,
    under "Finished without"; never bring one up yourself.
+
+### Impact
+
+Every finished task also becomes a moment in the notebook's timeline, with an impact: 1 everyday,
+2 short-term, 3 lasting, 4 life-defining. Everyday is the default, so most finishes need nothing.
+
+- Plainly everyday (dishes, an email, a routine call): pass nothing and ask nothing.
+- You are sure it mattered more (signed a contract, moved house): pass `--impact <2-4>` on `done`.
+- You would rate it above everyday but are not sure: close it without `--impact` and ask one
+  question in that reply, `Was that just everyday, or does it matter more?` (German:
+  `War das einfach Alltag, oder ist es dir wichtiger?`). Their answer runs
+  `godspeed-journal impact <task> <2-4>`; "everyday" runs nothing.
+- When the finish reply already asks about a missing item, the impact question waits until
+  that is settled. With `coach` it takes the place of the reflective question for that finish.
+- With `feedback = off`, or when the settings line says `save_as_moments=false`, the impact
+  question is never asked.
 
 `length = short` means the lines above and no more. `length = long` allows one more sentence
 of plain, specific acknowledgement. Never a summary of their day, never advice, never praise
@@ -141,6 +179,7 @@ reply in one line with what changed. The keys:
 - "a weekly summary on Sundays": `weekly.enabled true`, `weekly.day sun`
 - "journal in German": `language de` (the fixed check-in and evening texts)
 - "I don't want to say journal first": `prefix_required false`
+- "don't put my tasks in the timeline": `save_as_moments false`
 
 `godspeed-journal config set` refuses a wrong value with a sentence; pass that sentence on.
 Once a check-in, the evening list or the weekly summary is switched on, the machine that runs the

@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { atomic,hash,safe } from '../records/store.mjs';
+import { carriedName,carriedRoot } from '../media-store.mjs';
 export class MediaSync {
   constructor(store,mediaRoot){this.store=store;this.root=mediaRoot;this.configPath=path.join(store.state,'pair.json');this.last=null;this.hashes=new Map();}
   // The sha256 of a downloaded media file, cached by its size and mtime so an
@@ -12,6 +13,12 @@ export class MediaSync {
     const stat=fs.statSync(file),cached=this.hashes.get(file);
     if(cached&&cached.size===stat.size&&cached.mtimeMs===stat.mtimeMs)return cached.sha;
     const sha=hash(fs.readFileSync(file));this.hashes.set(file,{size:stat.size,mtimeMs:stat.mtimeMs,sha});return sha;
+  }
+  // The file already in the notebook's own copy (media-store.mjs), which a
+  // clone of the private GitHub copy brings, so it need not be downloaded.
+  carried(mapping){
+    let file;try{file=path.join(carriedRoot(this.store),carriedName(mapping.sha256,mapping.path));}catch{return null;}
+    return fs.existsSync(file)&&this.fileHash(file)===mapping.sha256?file:null;
   }
   config(){return fs.existsSync(this.configPath)?JSON.parse(fs.readFileSync(this.configPath,'utf8')):null;}
   // The name of the server this machine is paired with, which the routine owner is set to when
@@ -33,7 +40,7 @@ export class MediaSync {
   async reconcile(){
     try{
       const config=this.config();if(!config)return {state:'unpaired'};
-      const remote=await(await this.request('/api/media/manifest')).json(),local=this.manifest();let downloaded=0,uploaded=0;
+      const remote=await(await this.request('/api/media/manifest')).json(),local=this.manifest();let downloaded=0,uploaded=0,found=0,carried;
       for(const mapping of remote.data){
         if(mapping.removed_at){
           const prior=local.find(m=>m.path===mapping.path);
@@ -51,6 +58,7 @@ export class MediaSync {
         }
         if(config.offline==='selected'&&!config.selected?.includes(mapping.path))continue;
         if(fs.existsSync(path.join(this.root,safe(mapping.file)))){if(this.fileHash(path.join(this.root,mapping.file))!==mapping.sha256)throw new Error('Local media integrity mismatch');}
+        else if(carried=this.carried(mapping)){atomic(path.join(this.root,safe(mapping.file)),fs.readFileSync(carried));found++;}
         else {const bytes=Buffer.from(await(await this.request('/api/media/blob/'+encodeURIComponent(mapping.file))).arrayBuffer());if(hash(bytes)!==mapping.sha256)throw new Error('Downloaded media integrity mismatch');atomic(path.join(this.root,safe(mapping.file)),bytes);downloaded++;}
         const prior=local.find(m=>m.path===mapping.path);
         if(prior?.removed_at&&prior.sha256===mapping.sha256){await this.request('/api/media/tombstone',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(prior)});continue;}
@@ -61,7 +69,7 @@ export class MediaSync {
         const bytes=fs.readFileSync(path.join(this.root,safe(mapping.file)));if(hash(bytes)!==mapping.sha256)throw new Error('Upload integrity mismatch');
         await this.request('/api/media/transfer',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mapping,data:bytes.toString('base64')})});uploaded++;
       }
-      this.last={state:'synced',at:new Date().toISOString(),downloaded,uploaded};
+      this.last={state:'synced',at:new Date().toISOString(),downloaded,uploaded,found};
     }catch(e){this.last={state:'pending',at:new Date().toISOString(),error:e.message};}
     atomic(path.join(this.store.state,'media-sync-status.json'),JSON.stringify(this.last));return this.last;
   }

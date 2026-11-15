@@ -139,6 +139,12 @@ async function main() {
   ok("17 unread: only the unread message", unread.count === 1 && /:41$/.test(unread.messages[0].message_id), JSON.stringify(unread.messages));
   const two = await I.search({ query: "cards instructions" }), none = await I.search({ query: "cards koeln" });
   ok("17b several words must all match, newest first, and only the page is fetched", two.count === 1 && none.count === 0 && two.total_matches === 1, JSON.stringify([two.count, none.count]));
+  // A tracker's mail rule counts from envelopes only: no message text is fetched, and each mail's id is its own Message-ID.
+  const headCmds = f.commands.length;
+  const heads = await I.headerSearch({ senders: ["example.invalid"], after: "2026-09-01" });
+  const headSent = f.commands.slice(headCmds).join(" | ");
+  ok("17c header search returns id, sender, subject and date from envelopes, and fetches no body", heads.length >= 1 && heads.every(m => m.message_id && Object.keys(m).sort().join() === "date,from,message_id,subject")
+    && heads.some(m => m.message_id === "gruesse@example.invalid") && !/BODY|RFC822|TEXT/.test(headSent), JSON.stringify(heads) + headSent);
   const wrap = (h, b) => h.concat(["<<<UNTRUSTED>>>"], b, ["<<<END>>>"]).join("\n");
   const cmdsBefore = f.commands.length;
   const body = await I.read({ message_id: found.messages[0].message_id }, wrap);

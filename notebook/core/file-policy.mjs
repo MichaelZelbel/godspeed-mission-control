@@ -3,10 +3,35 @@
 // was records/ until 2026-10-05; Store moves an older folder here once.
 export const recordsFolder='notebook';
 export const legacyRecordsFolder='records';
+export const rememberWhatYouSaidRoot='routines/remember-what-you-said';
 // assistant: the owner's extra instructions for the assistant (assistant/extra-instructions.md),
 // which its program reads right after "who it is" (assistant-soul.mjs).
-export const durableRoots=[recordsFolder,'coach','journal','routines/journal','routines/headache','profile','rules','observations','goals','work','due','world','prompts','ideas','inbox','forecasts','skills','assistant-state','assistant'];
-export const durableFiles=['AGENTS.md','CLAUDE.md','README.md','procedures.md','decisions.md','MEMORY.md','FULL-ALPHA.md'];
+//
+// due AND world STAY IN THIS LIST THOUGH NOTHING DURABLE IS KEPT IN THEM ANY MORE (2026-10-30,
+// #90). A reminder is a page in the notebook and its closing a moment on the timeline; due/ holds
+// only what an older version or another machine left there and the note saying where the reminders
+// went. Taking `due` out would not leave those files alone, it would delete them: a commit from a
+// notebook connected to a repository of its own runs untrackPrivate (sync/git.mjs), `git rm
+// --cached` over every tracked path shared() has stopped allowing, so the path leaves the
+// repository - and a computer still on the older version, where due IS durable, takes that removal
+// and loses its reminders. It would also drop them out of the copy an installer makes before an
+// update (updateCopyRoots, below), and it would untrack a file this release deliberately left in
+// place because the records and the files do not agree yet (core/due-retire.mjs).
+// notebook/test/due-root-policy.test.mjs holds both roots here for those reasons. world/ keeps the
+// rest of its kinds anyway; they move in a later release.
+export const durableRoots=[recordsFolder,'coach','journal','routines/journal','routines/headache','routines/charm',rememberWhatYouSaidRoot,'profile','rules','observations','goals','work','due','world','prompts','ideas','inbox','forecasts','skills','assistant-state','assistant'];
+// The note at the top of the folder that says it is a mission control with the notebook
+// (core/notebook-note.mjs): NOTEBOOK.md, and FULL-ALPHA.md until 2.0.0-beta.11, which the notebook
+// renames only where it never leaves this computer through Git. syncedFiles are the files a copy
+// made in Settings carries (sync/git.mjs), the same list as in 2.0.0-beta.10: NOTEBOOK.md stays
+// out of it in this release, so a computer of the same copy that still runs beta.10 sees nothing
+// change. With it in (ticket 08's first review, 29 October 2026), that computer deleted its note
+// and untracked the new one, and both computers pushed their own ignore file every minute.
+// durableFiles adds NOTEBOOK.md, so this machine's backups and the copy before an update hold it.
+export const notebookNote='NOTEBOOK.md';
+export const retiredNotebookNote='FULL-ALPHA.md';
+export const syncedFiles=['AGENTS.md','CLAUDE.md','README.md','procedures.md','decisions.md','MEMORY.md',retiredNotebookNote];
+export const durableFiles=[...syncedFiles,notebookNote];
 // Inside a durable root but device-private: kept on this machine, never put in
 // the knowledge repository and never indexed. assistant-state/history is the
 // assistant's own undo archive. It holds every previous version of its state,
@@ -36,7 +61,7 @@ export function inUpdateCopy(name){
 // path that is one without being the other, so the two had to stop being the
 // same question.
 export function durable(name){return !name.split('/').some(p=>p==='..'||p.startsWith('.')||/^(secrets|node_modules)$/i.test(p))&&(durableRoots.some(root=>name.startsWith(root+'/'))||durableFiles.includes(name));}
-export function shared(name){return durable(name)&&!devicePrivate(name);}
+export function shared(name){return durable(name)&&!devicePrivate(name)&&name!==notebookNote;}
 // Bookkeeping a machine may delete outright: the scheduler prunes old run
 // receipts and the earlier versions of jobs (jobs/scheduler.mjs prune), which
 // nothing reads. Their removal travels as a removal, never turned into a

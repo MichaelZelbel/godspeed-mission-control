@@ -49,11 +49,13 @@ or `n` to switch it off. Everything else stays as it is.
 install line in a terminal on the server, as above.
 
 **With a morning brief you scheduled yourself** (with `morning-brief-setup.md`, or the cron line in
-`where-it-runs.md`): add this sentence to the end of the job's prompt:
+`where-it-runs.md`) **on a machine where `godspeed-brief` does not exist**, which writes the brief file: add this sentence to the end of the job's prompt:
 
 ```
 Last, after both checks and before you commit, run mc-observed-state --append on today's brief file: it adds one line about the world at the very end, written by the program. Never reword, shorten, move or remove that line, and never add a score, rating or ranking to it; copy it into your reply exactly as the file holds it, link included.
 ```
+
+Where `godspeed-brief` exists the briefing is saved in the notebook and no brief file is written, so there is nothing to append to: the observed-state line is not added to that briefing, and `mc-observed-state` alone prints it.
 
 ## The command
 

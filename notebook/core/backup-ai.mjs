@@ -181,7 +181,7 @@ export function noteBackupAnswered(state,{provider,model}={},now=new Date()){
  const usage=readUsage(state);usage.answers=(usage.answers||0)+1;usage.last_answer_at=now.toISOString();usage.last_answer={provider:provider||null,model:model||null};
  const since=usage.main_failing_since;
  if(since&&now-Date.parse(since)>=CARRYING_AFTER_MS&&usage.told_for!==since){
-  try{if(queueNotice({state},{id:'backup-ai-'+since,text:carryingWords(model)}))usage.told_for=since;}catch{}
+  try{if(queueNotice({state},{id:'backup-ai-'+since,text:carryingWords(model),about:'your backup AI answering for your main AI'}))usage.told_for=since;}catch{}
  }
  writeUsage(state,usage);
 }

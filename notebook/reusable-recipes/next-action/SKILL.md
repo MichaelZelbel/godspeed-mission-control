@@ -111,6 +111,15 @@ If one of them says it is not installed, say so in the record and carry on with 
    **An answer to a ship list** ("ship all", "1 and 3", "not 2") unblocks exactly the APPLY
    items it names, with their words quoted: `mc-work unblock <id> --why "ship list answer"
    --approved-by "<their words>"`. Lines it did not name stay on the list until they expire.
+   **A "no" or a "not yet"** ("not 2", "no more interviews", "not until the book is out") is
+   written as a hold on what the line touches, never as a line in `decisions.md`:
+   `mc-holds hold --subject <a slug on the line's TOUCHES> --steps "<the kind of step, one word>"
+   --stance declined --words "<their words>"`. "Not yet, until X" is `--stance postponed` with
+   `--until <X's claim file in world/claims/>` (write that claim first if there is none), or
+   `--to <the day>`. A held step stays off every card until the hold ends, and comes back then by
+   itself. A line that touches nothing has nothing to hold on: cancel its item with their words
+   (`mc-work cancel <id> --why "<their words>"`). A yes that reverses an earlier no or not yet ends
+   the hold: `mc-holds end <claim file> --words "<their words>"`.
 2. `tick.txt` and `work.txt` in the run folder: what time did to the tracker, and every item on
    it. What is in flight, what the runner verified since yesterday, what failed, what is waiting
    on them or on something the mission control cannot do. A failed item whose attempts are used up is a
@@ -338,6 +347,8 @@ MAKE item for the runner (Step 4), and joins the ship list the day it is ready.
 
     ### <n>. <one line a stranger understands: what changes where>
     GOAL: <id>
+    TOUCHES: <the slugs of the world entities this move is about (world/entities/<slug>.md),
+             comma-separated, or none>
     BET: <the weekly number now> -> <what you expect it to be seven days after this goes live>
     AIMS AT: <the LIMIT from the goal's research brief (a strategy's or project's without one:
              the brief of the first outcome on its SERVES line that has one), quoted, then in
@@ -364,7 +375,9 @@ is in Sent, the event is in the calendar); its seven days start the day that ite
 step whose honest bet is no change (a thank-you, a call's agenda, a habit held) is not a move for
 that number; file it as work beside the moves, and the check refuses it as a move.
 
-**4. Apply or ask.** A move under one of the goal's MAY lines is filed as "Standing permissions"
+**4. Apply or ask.** First read `holds.txt` in the run folder: what the person declined or
+postponed. Propose nothing it holds (a move that touches its subject and is the kind of step it
+names); an item `work.txt` marks "held by" stays off the card and needs no HOLD line. A move under one of the goal's MAY lines is filed as "Standing permissions"
 above says, and goes out on its own (notice: at its time unless stopped; alone: when ready). A
 move inside the ALLOWED line of a goal with no MAY lines gets an APPLY item (Step 4) and the
 runner applies it today. Every other prepared move, together with prepared moves from earlier days
@@ -379,7 +392,8 @@ as a page (the mission control's own publish command, if it has one) and write O
     NEXT: Reply ship all, or the numbers you want. I apply them today and check each one live.
     LINK: <the published page>
 
-Then file each listed move's APPLY item `--outward yes` with KEY `apply-<slug>`; the answer, quoted,
+Then file each listed move's APPLY item `--outward yes` with KEY `apply-<slug>` and `--touches`
+set to its block's TOUCHES; the answer, quoted,
 unblocks the ones they chose (`mc-work unblock <id> --approved-by "<their words>"`). Write each
 item's id into its block as a line `APPLY: <id>` right under the heading, so an answer by number
 reaches the right item. On the card, a line that only they can do says so ("yours to film"), and

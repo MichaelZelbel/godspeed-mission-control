@@ -2,7 +2,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {execFile,execFileSync} from 'node:child_process';
 import {promisify} from 'node:util';
-import {FileSync,readSyncConfig} from './sync/git.mjs';
+import {createRequire} from 'node:module';
+const {quietGit}=createRequire(import.meta.url)('../../tools/unattended-git.cjs');
+import {FileSync,readSyncConfig,commitIdentity} from './sync/git.mjs';
 import {shared} from './file-policy.mjs';
 
 // EARLIER VERSIONS OF THE FILES ON THE IDENTITY PAGE, KEPT AS GIT HISTORY.
@@ -32,12 +34,12 @@ export class ShelfHistory{
   privateDir(){return path.join(this.store.state,'identity-history.git');}
   // A private repository's own git, never the owner's settings or hooks.
   privateGit(args,{env={},input,encoding='utf8'}={}){
-    const out=execFileSync('git',['--git-dir='+this.privateDir(),...args],{cwd:this.store.state,windowsHide:true,timeout:60000,maxBuffer:64*1024*1024,env:{...process.env,GIT_TERMINAL_PROMPT:'0',...env},...(input===undefined?{stdio:['ignore','pipe','pipe']}:{input,stdio:['pipe','pipe','pipe']})});
+    const out=execFileSync(...quietGit(['--git-dir='+this.privateDir(),...args],{cwd:this.store.state,timeout:60000,maxBuffer:64*1024*1024,env:{...process.env,...env},...(input===undefined?{stdio:['ignore','pipe','pipe']}:{input,stdio:['pipe','pipe','pipe']})}));
     return encoding?out.toString(encoding).trim():out;
   }
   ensurePrivate(){
     const dir=this.privateDir();
-    if(!fs.existsSync(path.join(dir,'HEAD'))){fs.mkdirSync(dir,{recursive:true});execFileSync('git',['init','--bare','--quiet','--initial-branch=main',dir],{windowsHide:true,stdio:'ignore'});}
+    if(!fs.existsSync(path.join(dir,'HEAD'))){fs.mkdirSync(dir,{recursive:true});execFileSync(...quietGit(['init','--bare','--quiet','--initial-branch=main',dir],{stdio:'ignore'}));}
   }
   // The repository a change to `files` is committed to, as a runner of git commands.
   carrier(files){
@@ -86,8 +88,7 @@ export class ShelfHistory{
         raw(['update-index','-z','--index-info'],{env,input:entries.join('\0')+'\0'});
         const tree=git(['write-tree'],{env});
         if(base&&tree===git(['rev-parse',base+'^{tree}']))return {commit:base,entries:[]};
-        const identity={GIT_AUTHOR_NAME:'Godspeed Mission Control',GIT_AUTHOR_EMAIL:'godspeed@localhost',GIT_COMMITTER_NAME:'Godspeed Mission Control',GIT_COMMITTER_EMAIL:'godspeed@localhost'};
-        return {commit:git(['commit-tree',tree,...(base?['-p',base]:[]),'-m',text,...(extra?['-m',extra]:[])],{env:identity}),entries};
+        return {commit:git(['commit-tree',tree,...(base?['-p',base]:[]),'-m',text,...(extra?['-m',extra]:[])],{env:commitIdentity(this.store)}),entries};
       }finally{drop();}
     };
     // The text each file had before, when the repository does not hold it yet.
@@ -109,7 +110,7 @@ export class ShelfHistory{
   readers(){
     const out=[],seen=new Set(),root=this.store.root,config=readSyncConfig(this.store.state);
     const add=(key,dir,gitArgs)=>{if(seen.has(dir))return;seen.add(dir);out.push({key,git:async(args,{input}={})=>{
-      const child=execFileAsync('git',[...gitArgs,...args],{cwd:root,windowsHide:true,timeout:60000,maxBuffer:128*1024*1024,encoding:'buffer',env:{...process.env,GIT_TERMINAL_PROMPT:'0'}});
+      const child=execFileAsync(...quietGit([...gitArgs,...args],{cwd:root,timeout:60000,maxBuffer:128*1024*1024,encoding:'buffer'}));
       if(input!==undefined){child.child.stdin.end(input);}
       return (await child).stdout;
     }});};
@@ -118,6 +119,15 @@ export class ShelfHistory{
     if(fs.existsSync(path.join(root,'.git')))add('folder',path.join(root,'.git'),[]);
     if(fs.existsSync(path.join(this.privateDir(),'HEAD')))add('machine',this.privateDir(),['--git-dir='+this.privateDir()]);
     return out;
+  }
+  // The files under `prefix` that some recorded change deleted (they may exist again).
+  async deletedFiles(prefix){
+    const out=new Set();
+    for(const reader of this.readers()){
+      let log;try{log=(await reader.git(['log','--diff-filter=D','--name-only','-z','--format=','-n','500','--',prefix])).toString('utf8');}catch{continue;}
+      for(const name of log.split('\0').map(n=>n.replace(/^\n+/,'')).filter(Boolean))out.add(name);
+    }
+    return [...out];
   }
   // Every recorded version of `file`, newest first, one per change: {id, at, author, message,
   // body, text} (text null where the file did not exist). Up to `limit` commits per repository.

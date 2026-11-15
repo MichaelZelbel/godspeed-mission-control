@@ -406,6 +406,69 @@ def activate():
     sqlite3.connect = connect
 
 
+def telegram_api(value):
+    """GODSPEED_TELEGRAM_API as notebook/core/telegram-api.mjs accepts it: HTTPS, or HTTP on loopback."""
+    try:
+        url = urlsplit(value)
+        host = (url.hostname or '').lower()
+    except ValueError:
+        return None
+    if url.username or url.password or url.query or url.fragment or '?' in value or '#' in value:
+        return None
+    if url.scheme != 'https' and not (url.scheme == 'http' and host in ('127.0.0.1', 'localhost', '::1')):
+        return None
+    return value.rstrip('/')
+
+
+def route_telegram_bot_api(api):
+    """A server set to its own Bot API server (GODSPEED_TELEGRAM_API) hands that address to the
+    gateway as platforms.telegram.extra.base_url, but a routine run outside the gateway (`hermes
+    cron run`, Settings' Run now) sends through a Bot that python-telegram-bot builds without a
+    base_url, so it went to api.telegram.org. A Bot given no address now gets this one."""
+    import importlib.abc
+    import importlib.util
+    import sys
+
+    def patch(module):
+        bot = getattr(module, 'Bot', None)
+        if bot is None or getattr(bot.__init__, '_godspeed_api', False):
+            return
+        original = bot.__init__
+
+        def init(self, token, base_url=None, base_file_url=None, *args, **kwargs):
+            return original(self, token, base_url if base_url is not None else api + '/bot',
+                            base_file_url if base_file_url is not None else api + '/file/bot', *args, **kwargs)
+
+        init._godspeed_api = True
+        bot.__init__ = init
+
+    class Finder(importlib.abc.MetaPathFinder):
+        def find_spec(self, name, path=None, target=None):
+            if name != 'telegram._bot':
+                return None
+            sys.meta_path.remove(self)
+            try:
+                spec = importlib.util.find_spec(name)
+            finally:
+                sys.meta_path.insert(0, self)
+            if spec is None or spec.loader is None:
+                return spec
+            run = spec.loader.exec_module
+
+            def exec_module(module):
+                run(module)
+                patch(module)
+
+            spec.loader.exec_module = exec_module
+            return spec
+
+    sys.meta_path.insert(0, Finder())
+
+
+if telegram_api(os.environ.get('GODSPEED_TELEGRAM_API', '')):
+    route_telegram_bot_api(telegram_api(os.environ['GODSPEED_TELEGRAM_API']))
+
+
 if os.environ.get('GODSPEED_FILE_HERMES') == '1':
     # sitecustomize exceptions normally let Python continue without the adapter.
     # Fail closed rather than silently reverting to database authority.

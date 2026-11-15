@@ -43,10 +43,13 @@ const versions = [
   { id: "c2", at: "2026-10-15T08:00:00Z", current: true, removed: false, by: "you, on this page", message: "changed who it is", text: who },
   { id: "c1", at: "2026-10-14T08:00:00Z", current: false, removed: false, by: "kept by your notebook", message: "kept the version from before the next change", text: "You are Godspeed." },
 ];
-// A rule as an owner's own files hold it: its name from the file, a long summary nobody sees.
+// A file about the owner as the server gives it, and a rule as an owner's own files hold it: its
+// name from the file, a long summary nobody sees.
 const ruleItem = { target: "rule:never-spend", kind: "rule", file: "rules/never-spend.md", label: "the rule", state: "ok", hash: "h-rule", fields: { slug: "never-spend", title: "Never spend my money", line: "Buy anything for me.", group: "never", always: true, where: "always", story: "Story." } };
+const pageItem = { target: "profile:about-me", kind: "profile", file: "profile/about-me.md", label: "profile/about-me.md", state: "ok", hash: "h-page", fields: { text: "# About me\n\nI grow tomatoes.", kept_details: true } };
 let calls: { route: string; body?: any }[] = [];
 let state: ReturnType<typeof overview>;
+let removedList: Record<string, unknown>[] = [];
 let chatAnswer: Record<string, unknown> = { reply: "Done.", identity_changed: true };
 function serve() {
   calls = [];
@@ -55,9 +58,23 @@ function serve() {
     calls.push({ route, body });
     const json = (data: unknown, status = 200) => ({ ok: status < 400, status, json: async () => data, clone: () => ({}) });
     if (route === "/api/identity") return json(state);
+    if (route === "/api/identity/removed") return json({ data: removedList });
+    if (route === "/api/identity/remove") {
+      const gone = (state.rules as any[]).find((r) => r.target === body.target)!;
+      state = { ...state, rules: (state.rules as any[]).filter((r) => r !== gone) };
+      removedList = [{ target: gone.target, slug: gone.slug, title: gone.title, line: gone.line, group: gone.group, removed_at: "2026-10-15T09:00:00Z", by: "you, on this page", version: "v-before" }];
+      return json({ saved: true, now: { removed: true } });
+    }
+    if (route === "/api/identity/restore" && body.target.startsWith("rule:")) {
+      const back = removedList.find((r) => r.target === body.target)!;
+      state = { ...state, rules: [...(state.rules as any[]), rule(5, back.slug as string, back.title as string, back.line as string, "never")] };
+      removedList = [];
+      return json({ saved: true });
+    }
     if (route.startsWith("/api/identity/item")) {
       const target = decodeURIComponent(route.split("target=")[1]);
       if (target.startsWith("rule:")) return json(ruleItem);
+      if (target.startsWith("profile:")) return json(pageItem);
       if (target === "extra") return json({ target: "extra", kind: "extra", file: "assistant/extra-instructions.md", label: "the extra instructions", state: state.extra.text ? "ok" : "missing", text: state.extra.text, hash: "h-extra", soul: state.soul });
       return json({ target: "who", kind: "who", file: "AGENTS.md", label: "who it is", state: "ok", text: who, hash: "h-who", manual: state.manual, soul: state.soul });
     }
@@ -75,7 +92,7 @@ function open() {
 }
 
 describe("Godspeed's brain", () => {
-  beforeEach(() => { state = overview(); chatAnswer = { reply: "Done.", identity_changed: true }; serve(); window.localStorage.clear(); });
+  beforeEach(() => { state = overview(); removedList = []; chatAnswer = { reply: "Done.", identity_changed: true }; serve(); window.localStorage.clear(); });
   afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
   it("shows its parts in plain words under its own name, with no word for the machinery", async () => {
@@ -93,6 +110,31 @@ describe("Godspeed's brain", () => {
     for (const word of [/manual/i, /recipe/i, /markdown/i, /commit/i, /repository/i, /persona/i, /Identity/, /—/]) expect(document.body.textContent).not.toMatch(word);
   });
 
+  it("shows no Removed rules heading while no rule is removed", async () => {
+    open();
+    await screen.findByRole("heading", { level: 2, name: "Rules" });
+    await screen.findByText("Always address me as Sam.");
+    expect(screen.queryByText(/Removed rules/)).toBeNull();
+  });
+
+  it("moves a removed rule to Removed rules, opens its earlier versions there, and brings it back", async () => {
+    open();
+    fireEvent.click(await screen.findByRole("button", { name: /Never spend my money/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /Remove this rule/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Remove" }));
+    const closed = await screen.findByRole("button", { name: "Removed rules (1)" });
+    expect(closed).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByRole("button", { name: /^Never spend my money/ })).toBeNull();
+    fireEvent.click(closed);
+    fireEvent.click(await screen.findByRole("button", { name: "Open Never spend my money" }));
+    expect(await screen.findByRole("heading", { name: "Earlier versions" })).toBeVisible();
+    expect(await screen.findByText("2 versions, newest first.")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Bring it back" }));
+    await waitFor(() => expect(calls.find((c) => c.route === "/api/identity/restore")?.body).toMatchObject({ target: "rule:never-spend", version: "v-before" }));
+    await waitFor(() => expect(screen.queryByText(/Removed rules/)).toBeNull());
+    expect(await screen.findByRole("button", { name: /Never spend my money/ })).toBeVisible();
+  });
+
   it("numbers the rules as the server does, the kind as a tag, and keeps the one-job rules closed until asked", async () => {
     open();
     const first = await screen.findByRole("button", { name: /When in doubt, ask/ });
@@ -107,9 +149,36 @@ describe("Godspeed's brain", () => {
     expect(await screen.findByRole("heading", { name: "For the companies (1)" })).toBeVisible();
     expect(screen.getByRole("heading", { name: "For the skill daily brief (1)" })).toBeVisible();
     expect(within(screen.getByRole("button", { name: /Founder only/ })).getByText("3")).toBeVisible();
-    // Profile pages and skills are numbered too.
+    // What it knows about you, and the skills, are numbered too.
     expect(within(screen.getByRole("button", { name: /About me/ })).getByText("1")).toBeVisible();
     expect(within(screen.getByRole("button", { name: /Keep a note/ })).getByText("1")).toBeVisible();
+  });
+
+  it("names each file about you by its own title, numbered, and never calls one a page", async () => {
+    open();
+    // The section says what they are, instead of "Pages about you...".
+    expect(await screen.findByText(/What it knows about you, your work and your voice\./)).toBeVisible();
+    const file = await screen.findByRole("button", { name: /About me/ });
+    expect(within(file).getByText("1")).toBeVisible();
+    expect(within(file).getByText("About me")).toBeVisible();
+    // The screen itself is still a page.
+    expect(screen.getByRole("navigation", { name: "Parts of this page" })).toBeVisible();
+    // Open it: its own title, its number, and the file it is kept in.
+    fireEvent.click(file);
+    expect(await screen.findByRole("heading", { name: "About me" })).toBeVisible();
+    expect(screen.getByText(/^1\. Kept in/)).toBeVisible();
+    expect(screen.getByText("profile/about-me.md")).toBeVisible();
+    // Nowhere a page, in the tiles or in the editor (26 October 2026: "a page is in a book or a
+    // magazine").
+    expect(document.body.textContent).not.toMatch(/profile page/i);
+    expect(document.body.textContent).not.toMatch(/pages about/i);
+  });
+
+  it("says what is missing when it knows nothing about you yet", async () => {
+    state = overview({ profile: [] });
+    open();
+    expect(await screen.findByText("Nothing about you yet.")).toBeVisible();
+    expect(document.body.textContent).not.toMatch(/no pages yet/i);
   });
 
   it("saves a rule with only \"Read before every job\" switched, and holds only a changed name to a few words", async () => {

@@ -25,6 +25,7 @@ test('browser chat authenticates, saves messages and recalls history after resta
 });
 test('Hermes startup diagnostics do not become model JSON',()=>{
   assert.equal(hermesResponse('Warning: Unknown toolsets: none\n\n\x1b[2m  ⚠ tirith security scanner enabled but not available — command scanning will use pattern matching only\x1b[0m\n{"reply":"hello"}\n'),'{"reply":"hello"}');
+  assert.equal(hermesResponse('Warning: Unknown toolsets: no_mcp\nPlain answer.\n'),'Plain answer.');
   assert.equal(hermesResponse('{"reply":"Warning: keep this actual response"}'),'{"reply":"Warning: keep this actual response"}');
 });
 // The three waiting lines that ended chat replies in the live run of 9 October 2026.
@@ -37,7 +38,7 @@ test('Hermes\' waiting lines never reach a chat reply, and lines like them that 
 });
 test('Hermes failures distinguish context, usage and sign-in without exposing diagnostics',()=>{
  const secret='synthetic-private-credential';
- for(const [diagnostic,expected] of [['Context length exceeded: 413,274 tokens. Cannot compress further.',/context limit/],['rate_limit_exceeded',/usage limit/],['AuthenticationError: token expired',/needs sign-in/],['unclassified process failure',/diagnostics/]]){
+ for(const [diagnostic,expected] of [['Context length exceeded: 413,274 tokens. Cannot compress further.',/context limit/],['rate_limit_exceeded',/usage limit/],['AuthenticationError: token expired',/needs sign-in/],['unclassified process failure',/Check the AI connection in Settings, then try again/]]){
   const message=hermesFailureMessage(diagnostic+' '+secret);assert.match(message,expected);assert.ok(!message.includes(secret));assert.ok(!message.includes('413,274'));
  }
  assert.match(hermesFailureMessage('Context length exceeded; AuthenticationError'),/context limit/);

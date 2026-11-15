@@ -35,13 +35,13 @@
 //   unquoted   a text to post or send ("send this as is", "post it") with no
 //              quoted line: mc-judge-brief finds the lines it judges by their
 //              quotes, so a text without them would reach you unjudged.
-//   deadline   a line that talks about something still open in due/ anywhere but in
+//   deadline   a line that talks about a still-open deadline or target anywhere but in
 //              mc-due's own lines or under a Deadlines heading. mc-due today decides
 //              what is said about those and on which morning (Chapter 30).
 //
 // WHY THE LAST ONE (2026-09-30). In the practice run for targets, the brief was told in
 // its recipe, in plain words, that the deadline lines are the only place it speaks about
-// due/. It still wrote "the fence is a week overdue" beside the helper's calm weekly line,
+// a reminder. It still wrote "the fence is a week overdue" beside the helper's calm weekly line,
 // carried over from an earlier brief: a target missed costs nothing and is never overdue,
 // and a line in the prose every morning undoes the helper's once-a-week rhythm. Prose did
 // not hold three runs in a row, so the check does. Only things still open are matched, so a
@@ -254,12 +254,17 @@ function shapeFaults(text) {
   return faults;
 }
 
-// The mission control a brief belongs to: the nearest folder above it with a due/ folder and an
-// AGENTS.md. None (a brief checked from stdin, far from any) means this check has nothing to read.
+// The mission control a brief belongs to: the nearest folder above it with an AGENTS.md and one of
+// the folders every mission control has, which is how mc-due itself finds one (tools/due.js,
+// looksLikeGodspeed). Until 30 October 2026 it looked for a due/ folder, and a mission control
+// installed after that date has none: its reminders are pages in its notebook, so the rule below
+// would have gone quiet on every new install.
+// None (a brief checked from stdin, far from any) means this check has nothing to read.
+const MARKS = ['notebook', 'profile', 'rules', 'observations'];
 function missionControlOf(start) {
   let d = path.resolve(start || '.');
   for (let i = 0; i < 6; i++) {
-    if (fs.existsSync(path.join(d, 'due')) && fs.existsSync(path.join(d, 'AGENTS.md'))) return d;
+    if (fs.existsSync(path.join(d, 'AGENTS.md')) && MARKS.some(n => fs.existsSync(path.join(d, n)))) return d;
     const up = path.dirname(d);
     if (up === d) break;
     d = up;
@@ -267,7 +272,9 @@ function missionControlOf(start) {
   return null;
 }
 // The titles of what is still open, asked of mc-due itself (it sits next to this file), so
-// "open" means exactly what it means everywhere else: no event in world/events/ closed it.
+// "open" means exactly what it means everywhere else: no moment on the notebook's timeline
+// closed it. Asking the program, rather than reading its records, is what keeps this check true
+// however the reminders are kept.
 // Asked for the brief's own day, and "open" includes what has not opened yet: neither is for the
 // prose to bring up.
 function openTitles(root, day) {
@@ -310,7 +317,7 @@ function deadlineFaults(text, root, day) {
     if (t) {
       faults.push('REFUSED, line ' + (i + 1) + ': this talks about "' + t + '" outside the deadline lines:\n' +
         '    ' + line.trim() + '\n' +
-        '    Only mc-due today says what to mention about the things in due/, and on which\n' +
+        '    Only mc-due today says what to mention about a deadline or a target, and on which\n' +
         '    morning. Take this mention out; the Deadlines section carries what is due today.');
     }
   });

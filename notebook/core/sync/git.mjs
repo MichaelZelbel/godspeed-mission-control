@@ -4,18 +4,37 @@ import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { Store, atomic, decode, encode, hash, identityIds } from '../records/store.mjs';
 import { identityPlan, identities, readBlobs } from './identity.mjs';
-import { shared,durableRoots,durableFiles,devicePrivatePaths,recordsFolder,isRecordPath,deletableTypes,windowsInvalid } from '../file-policy.mjs';
+// What a copy made in Settings carries: syncedFiles, the list 2.0.0-beta.10 has too (file-policy.mjs).
+import { shared,durableRoots,syncedFiles,devicePrivatePaths,recordsFolder,isRecordPath,deletableTypes,windowsInvalid,notebookNote,retiredNotebookNote } from '../file-policy.mjs';
 import { candidate, key as nameKey } from '../records/layout.mjs';
 import {validateAssistantFiles} from '../assistant-files.mjs';
+import {CARRIED_FOLDER,CARRY_LIMIT,isCarriedPath} from '../media-store.mjs';
 import {resolveSavedConflict} from '../conflicts.mjs';
+import {queueNotice} from '../notices.mjs';
+import {createRequire} from 'node:module';
+import {machineDevice,LEGACY_DEVICE} from '../device-id.mjs';
+const {quietGit,signInMissing,signInNotice}=createRequire(import.meta.url)('../../../tools/unattended-git.cjs');
 
 // What sync never puts in a repository, whichever repository it is: build
 // output, archives, recordings, pictures and the disposable SQLite indexes.
 const keptLocal=['sqlite*','png','jpg','mp4','mp3','pdf','zip','tar','gz','tgz','7z','exe','msi','dmg','iso','mov','webm','wav','m4a','tmp'];
+// Each computer signs the notebook's commits with its own machine name, so the
+// copy's history and a later conflict review can tell which computer changed
+// what. The name is the one device-id.mjs gave this install; the sync worker's
+// Store has no device of its own, so it reads the same name from the folder.
+export const NOTEBOOK_AUTHOR='Godspeed Mission Control';
+export const isNotebookAuthor=name=>name===NOTEBOOK_AUTHOR||String(name).startsWith(NOTEBOOK_AUTHOR+' (');
+export function commitIdentity(store){
+  const machine=String(store.device&&store.device!==LEGACY_DEVICE?store.device:machineDevice(store.root).id);
+  const name=NOTEBOOK_AUTHOR+' ('+machine.replace(/[<>\r\n]/g,'')+')';
+  const email=(machine.toLowerCase().replace(/[^a-z0-9._-]+/g,'-').replace(/^-+|-+$/g,'')||'computer')+'@godspeed.localhost';
+  return {GIT_AUTHOR_NAME:name,GIT_AUTHOR_EMAIL:email,GIT_COMMITTER_NAME:name,GIT_COMMITTER_EMAIL:email};
+}
 export function readSyncConfig(state){try{return JSON.parse(fs.readFileSync(path.join(state,'sync-config.json'),'utf8'));}catch{return null;}}
 export const folderModeRefusal='This notebook already syncs through the folder\'s own repository, so a separate repository cannot be connected here';
 const posix=file=>file.split(path.sep).join('/');
 const readJson=file=>{try{return JSON.parse(fs.readFileSync(file,'utf8'));}catch{return null;}};
+const mergeReview=c=>c?.kind==='git'&&typeof c.remote_commit==='string'&&typeof c.path==='string'&&shared(c.path);
 // One path kept for review in conflicts/ (conflicts.mjs): base, local and
 // remote as they were, as text unless one of them is binary.
 function reviewItem(id,name,versions,remoteCommit,extra={}){
@@ -55,7 +74,7 @@ const staleLockAge=15*60*1000;
 // repository. "*" means every shared path, for a folder nobody else commits to.
 export function folderPaths(paths){
   const list=paths===undefined?[recordsFolder]:paths;
-  if(!Array.isArray(list)||!list.length||list.some(p=>typeof p!=='string'||!(p==='*'||p===recordsFolder||durableRoots.includes(p)||durableFiles.includes(p))))throw new Error('Invalid sync configuration');
+  if(!Array.isArray(list)||!list.length||list.some(p=>typeof p!=='string'||!(p==='*'||p===recordsFolder||durableRoots.includes(p)||syncedFiles.includes(p))))throw new Error('Invalid sync configuration');
   return [...new Set(list)];
 }
 
@@ -70,18 +89,32 @@ export async function useFolderRepository(store,paths,{branch='main',remote='ori
   // A new installation's folder has its first commit but no copy on GitHub yet.
   let url;try{url=probe.git(['remote','get-url',remote]);}catch{throw new Error('This folder\'s repository has no copy on GitHub yet ('+remote+'); connect one with Connect record sync in Settings');}
   await probe.verifyRemote(url);
-  const local=['.godspeed/probe','conflicts/probe.json','FULL-ALPHA.md',...(probe.inScope('assistant-state/probe/x.json')?[]:['assistant-state/probe/x.json'])];
-  const visible=local.filter(name=>{try{probe.git(['check-ignore','-q','--no-index',name]);return false;}catch{return true;}});
+  const ignored=name=>{try{probe.git(['check-ignore','-q','--no-index',name]);return true;}catch{return false;}};
+  // The notebook's note under the name this folder has: FULL-ALPHA.md where it is still here (a
+  // note that leaves this computer keeps that name in 2.0.0-beta.11), otherwise NOTEBOOK.md. An
+  // ignore line for FULL-ALPHA.md counts for NOTEBOOK.md too: the notebook puts the line for
+  // NOTEBOOK.md into this repository's own exclude file at init and at its start, before it
+  // writes the note (notebook-note.mjs carryIgnoreLine). This check changes nothing itself.
+  const note=fs.existsSync(path.join(store.root,retiredNotebookNote))?(ignored(retiredNotebookNote)?null:retiredNotebookNote):(ignored(notebookNote)||ignored(retiredNotebookNote)?null:notebookNote);
+  const local=['.godspeed/probe','conflicts/probe.json',note,...(probe.inScope('assistant-state/probe/x.json')?[]:['assistant-state/probe/x.json'])];
+  let visible=local.filter(name=>name&&(name===note||!ignored(name)));
+  // The two lines the product itself asks for are written by the product (2 November 2026), when
+  // nothing else is wrong and the owner has no unsaved change in the ignore file.
+  const mine=visible.filter(name=>name===notebookNote||name==='assistant-state/probe/x.json'),said=[];
+  let toWrite=null;
+  if(mine.length&&mine.length===visible.length&&probe.git(['status','--porcelain','--','.gitignore'])===''){toWrite=mine.map(n=>n===notebookNote?'/'+notebookNote:'/assistant-state/');visible=[];}
   if(visible.length)throw new Error('Add these to the ignore file of the repository first: '+visible.map(n=>n.split('/')[0]+(n.includes('/')?'/':'')).join(', '));
   // The notebook commits a page an ignore rule happens to match (a title like
   // "id_rsa rotation"), but a rule that hides pages as such is a mistake.
   const hidden=['Page.md','Projects/Page.md','_system/notes/page.md','_system/jobs/job.json'].map(n=>recordsFolder+'/'+n).filter(name=>{try{probe.git(['check-ignore','-q','--no-index',name]);return true;}catch{return false;}});
   if(hidden.length)throw new Error('The ignore file of the repository hides notebook pages ('+hidden[0]+'); stop ignoring them first');
   const endings=probe.lineEndingProblem();if(endings)throw new Error(endings);
+  // Only now, with nothing left to refuse, is anything written.
+  if(toWrite)said.push(probe.writeIgnoreLines(toWrite));
   const old=path.join(store.state,'sync.git');
   if(fs.existsSync(old))fs.renameSync(old,path.join(store.state,'retired-sync.git-'+new Date().toISOString().replace(/[:.]/g,'-')));
   const config={enabled:true,repository:'folder',paths:list};atomic(path.join(store.state,'sync-config.json'),JSON.stringify(config));
-  return {...config,remote:url};
+  return {...config,remote:url,...(said.length?{said:said[0]}:{})};
 }
 
 // The installers' join (`godspeed sync folder` with no paths), run once when a
@@ -109,8 +142,24 @@ export async function joinRepository(store,options={}){
   return {...config,remote:url};
 }
 
+// GitHub's privacy answer was neither 200 nor 404. GitHub refuses unauthenticated questions from
+// one address after 60 an hour (403 or 429 with x-ratelimit-remaining: 0, or a retry-after), which
+// is common behind a shared network; the person is told to wait, and until when, rather than to
+// look for something wrong with the repository. The sync worker passes this message on as it is.
+export class PrivacyUnverified extends Error {
+  constructor(response){
+    const now=Date.now(),h=name=>response.headers?.get?.(name)??null,status=response.status;
+    if(status===429||(status===403&&(h('x-ratelimit-remaining')==='0'||h('retry-after')!==null))){
+      const after=h('retry-after'),reset=h('x-ratelimit-reset');
+      const at=after!==null?(/^\d+$/.test(after.trim())?now+Number(after)*1000:Date.parse(after)):reset!==null&&/^\d+$/.test(reset.trim())?Number(reset)*1000:NaN;
+      super('GitHub is limiting requests from this network right now, so whether the repository is private could not be verified; no files were uploaded. '+(Number.isFinite(at)?'Try again after '+new Date(Math.max(at,now)).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',timeZoneName:'short'})+'.':'Try again in an hour.'));
+    }else super('GitHub answered '+status+' when asked whether the repository is private, so its privacy could not be verified; no files were uploaded. Try again later; if it keeps happening, check https://www.githubstatus.com.');
+    this.name='PrivacyUnverified';
+  }
+}
+
 export class FileSync {
-  constructor(store,{branch='main',remote='origin',largeFile=50*1024*1024}={}) {
+  constructor(store,{branch='main',remote='origin',largeFile=CARRY_LIMIT}={}) {
     if(!/^[\w/.-]+$/.test(branch)||branch.startsWith('-')||!/^\w+$/.test(remote))throw new Error('Invalid sync configuration');
     this.store=store;this.branch=branch;this.remote=remote;this.largeFile=largeFile;this.last=null;
     // A mission control that is already its own repository, cloned to the
@@ -132,7 +181,9 @@ export class FileSync {
   // pass Windows' 260-character path limit, which Git for Windows refuses
   // unless told otherwise. Node writes such a file fine; without this, sync
   // would stop at it on Windows only.
-  gitBytes(args,cwd=this.store.root,{env={},timeout=30000,input}={}){if(this.gitDir&&cwd===this.store.root)args=['--git-dir='+this.gitDir,'--work-tree='+this.store.root,...args];if(process.platform==='win32')args=['-c','core.longpaths=true',...args];return execFileSync('git',args,{cwd,windowsHide:true,timeout,maxBuffer:256*1024*1024,env:{...process.env,GIT_TERMINAL_PROMPT:'0',GCM_INTERACTIVE:'Never',...env},...(input===undefined?{stdio:['ignore','pipe','pipe']}:{input,stdio:['pipe','pipe','pipe']})});}
+  gitBytes(args,cwd=this.store.root,{env={},timeout=30000,input}={}){if(this.gitDir&&cwd===this.store.root)args=['--git-dir='+this.gitDir,'--work-tree='+this.store.root,...args];return execFileSync(...quietGit(args,{cwd,timeout,maxBuffer:256*1024*1024,env:{...process.env,...env},...(input===undefined?{stdio:['ignore','pipe','pipe']}:{input,stdio:['pipe','pipe','pipe']})}));}
+  // A sync round that failed for lack of a GitHub sign-in says so once a day; a notices error never fails the round.
+  tellSignInMissing(error){if(signInMissing(error?.stderr))try{queueNotice(this.store,signInNotice());}catch{}}
   git(args,cwd=this.store.root,options){return this.gitBytes(args,cwd,options).toString('utf8').trim();}
   // File names exactly as Git has them. Its line output quotes a name with an
   // umlaut or an emoji, and notes are named after their titles; `args` must
@@ -146,11 +197,75 @@ export class FileSync {
   }
   // A conflict file that does not read is still waiting (and shown as damaged): it never throws the list away.
   pendingConflicts(){const dir=path.join(this.store.root,'conflicts');return fs.existsSync(dir)?fs.readdirSync(dir).filter(n=>{if(!n.endsWith('.json'))return false;try{return !JSON.parse(fs.readFileSync(path.join(dir,n),'utf8')).resolved_at;}catch{return true;}}):[];}
+  // The files an unresolved saved conflict holds back (#570): this computer
+  // keeps its own version on disk, uncommitted, while the shared history
+  // follows the other computers for that file, and every other file keeps
+  // syncing. Only a review a merge saved (it names the other computers'
+  // commit) holds its file, and the other side's name for it when they
+  // renamed it differently. Every other review holds nothing: an edit made
+  // here from an older version (stale-write), a packaged skill's new version,
+  // a mass removal, or one that does not read.
+  heldPaths(){
+    const dir=path.join(this.store.root,'conflicts'),held=new Set();
+    for(const n of this.pendingConflicts()){
+      const c=readJson(path.join(dir,n));if(!mergeReview(c))continue;
+      for(const name of [c.path,c.remote_path])if(typeof name==='string'&&shared(name))held.add(name);
+    }
+    return held;
+  }
+  // A held file the other computers changed again: its review shows their
+  // newest version (as the merge in `dir` has it), so choosing it later never
+  // undoes their later edit. This computer's version and the base stay as
+  // they were. A record whose file the merge no longer has was moved there,
+  // not removed, and its review stays as it was. The same fixed-id record made
+  // on both computers is shown under this computer's identity, as
+  // identity.mjs shows it, so choosing it keeps the record that is here.
+  refreshHeld(dir,remoteCommit){
+    const folder=path.join(this.store.root,'conflicts');
+    for(const n of this.pendingConflicts()){
+      const file=path.join(folder,n),c=readJson(file);if(!mergeReview(c))continue;
+      const name=typeof c.remote_path==='string'?c.remote_path:c.path,bytes=v=>v===null||v===undefined?null:Buffer.from(v,c.encoding==='base64'?'base64':'utf8');
+      const record=v=>{if(!v||!isRecordPath(name))return null;try{return decode(v.toString('utf8'),name);}catch{return null;}};
+      const local=bytes(c.local),stored=bytes(c.remote);let remote=null;try{remote=this.gitBytes(['cat-file','blob','HEAD:'+name],dir);}catch{}
+      if(!remote&&record(stored))continue;
+      const mine=record(local),other=record(remote);
+      if(mine&&other&&mine.uid!==other.uid&&mine.type===other.type&&mine.id===other.id)remote=Buffer.from(encode({...other,uid:mine.uid}));
+      if(remote===null?stored===null:stored!==null&&stored.equals(remote))continue;
+      const {encoding,digests,...rest}=c;
+      atomic(file,JSON.stringify({...rest,...reviewItem(c.id,c.path,{base:bytes(c.base),local,remote},remoteCommit),kind:c.kind,at:c.at},null,2));
+    }
+  }
   async verifyRemote(remoteUrl){
     const match=String(remoteUrl).match(/^(?:https:\/\/github\.com\/|git@github\.com:)([\w.-]+)\/([\w.-]+?)(?:\.git)?\/?$/);if(!match)throw new Error('Use a GitHub repository address without embedded credentials');
     const response=await fetch('https://api.github.com/repos/'+match[1]+'/'+match[2],{headers:{Accept:'application/vnd.github+json'},signal:AbortSignal.timeout(15000)});
-    if(response.status===200)throw new Error('This repository is publicly readable. Choose a private repository for your knowledge');if(response.status!==404)throw new Error('Repository privacy could not be verified; no files were uploaded');
+    if(response.status===200)throw new Error('This repository is publicly readable. Choose a private repository for your knowledge');if(response.status!==404)throw new PrivacyUnverified(response);
     try{this.git(['ls-remote',remoteUrl]);}catch{throw new Error('The private repository could not be read with this device Git credentials; no files were uploaded');}
+  }
+  // Adds the lines to the folder's own .gitignore, stops tracking NOTEBOOK.md (the first commit of a
+  // new install holds it) and commits exactly that, in an index of its own, as the notebook's
+  // commits are made; the owner's other staged work stays staged. Returns the one line it says.
+  writeIgnoreLines(lines){
+    const file=path.join(this.store.root,'.gitignore');let text='';try{text=fs.readFileSync(file,'utf8');}catch{}
+    atomic(file,(text?text.replace(/\n*$/,'\n'):'')+lines.join('\n')+'\n');
+    let head=null;try{head=this.git(['rev-parse','--verify','-q','HEAD']);}catch{}
+    if(head){
+      const index=path.join(this.store.state,'sync-ignore-index'),env={GIT_INDEX_FILE:index};this.dropIndex(index);
+      try{
+        this.git(['read-tree',head],undefined,{env});
+        const oid=this.git(['hash-object','-w','--no-filters','--',file]);
+        this.git(['update-index','--add','--cacheinfo','100644,'+oid+',.gitignore'],undefined,{env});
+        const tracked=this.git(['ls-tree','--name-only',head,'--',notebookNote])!=='';
+        if(tracked)this.git(['update-index','--force-remove','--',notebookNote],undefined,{env});
+        const tree=this.git(['write-tree'],undefined,{env});
+        if(tree!==this.git(['rev-parse',head+'^{tree}'])){
+          const commit=this.git(['commit-tree',tree,'-p',head,'-m','Keep NOTEBOOK.md and assistant-state/ on this computer'],undefined,{env:this.identity()});
+          this.indexFree();this.git(['update-ref','-m','Keep NOTEBOOK.md and assistant-state/ on this computer','refs/heads/'+this.branch,commit,head]);
+          this.git(['update-index','--add','--cacheinfo','100644,'+oid+',.gitignore']);
+          if(tracked)this.git(['update-index','--force-remove','--',notebookNote]);
+        }
+      }finally{this.dropIndex(index);}
+    }
+    return 'Added '+lines.map(l=>l.replace(/^\//,'')).join(' and ')+' to .gitignore and committed it; the first sync sends it.';
   }
   initialize(remoteUrl) {
     // Connecting a knowledge repository replaced the folder setting with
@@ -205,7 +320,7 @@ export class FileSync {
   // without "!routines/" meant the journal and the headache log could never be
   // staged, and `git add` stopped the whole sync over it. The parent negation
   // only lets Git descend; the leading "*" still ignores its other children.
-  ignoreText(){return '*\n'+[...new Set(durableRoots.flatMap(r=>r.split('/').map((_,i,parts)=>parts.slice(0,i+1).join('/'))))].map(r=>'!'+r+'/\n').join('')+durableRoots.map(r=>'!'+r+'/**\n').join('')+durableFiles.map(r=>'!'+r+'\n').join('')+devicePrivatePaths.map(r=>r+'/\n').join('')+'**/.*\n!.gitignore\n**/secrets/\n**/node_modules/\n**/*.sqlite*\n**/*.png\n**/*.jpg\n**/*.mp4\n**/*.mp3\n**/*.pdf\n'+
+  ignoreText(){return '*\n'+[...new Set(durableRoots.flatMap(r=>r.split('/').map((_,i,parts)=>parts.slice(0,i+1).join('/'))))].map(r=>'!'+r+'/\n').join('')+durableRoots.map(r=>'!'+r+'/**\n').join('')+syncedFiles.map(r=>'!'+r+'\n').join('')+devicePrivatePaths.map(r=>r+'/\n').join('')+'**/.*\n!.gitignore\n**/secrets/\n**/node_modules/\n**/*.sqlite*\n**/*.png\n**/*.jpg\n**/*.mp4\n**/*.mp3\n**/*.pdf\n'+
     // Installers, archives and recordings are build output and copies, not
     // knowledge. An owner's work/ folder held 4 GB of them, one file 1 GB: every
     // `git add` ran into the time limit, and GitHub refuses any file over 100 MB.
@@ -275,16 +390,16 @@ export class FileSync {
   // (an empty folder) or link is not a document to bring in.
   blobFiles(cwd){return this.names(['ls-files','-s','-z'],cwd).map(line=>line.match(/^100(?:644|755) [0-9a-f]+ \d\t([\s\S]+)$/)?.[1]).filter(Boolean);}
   largeFiles(){
-    const roots=[...durableRoots,...durableFiles].filter(r=>fs.existsSync(path.join(this.store.root,r)));if(!roots.length)return [];
+    const roots=[...durableRoots,...syncedFiles].filter(r=>fs.existsSync(path.join(this.store.root,r)));if(!roots.length)return [];
     return this.gitBytes(['ls-files','-z','--others','--exclude-standard','--',...roots]).toString('utf8').split('\0').filter(name=>{if(!name)return false;try{return fs.statSync(path.join(this.store.root,name)).size>this.largeFile;}catch{return false;}});
   }
-  // Through the folder's own repository a saved conflict is already merged
-  // (this machine's version stays, both wait for review), so it no longer
-  // holds back the rest of the notebook.
+  // A saved conflict does not stop the rest of the notebook from syncing:
+  // here it holds back only its own file (heldPaths), and through the
+  // folder's own repository it is already merged with this machine's version.
   // A save that could not finish and was set aside (store.mjs setAside) is kept for the
   // owner to look at, but every record on disk is whole: it is listed, and does not hold
   // back every other note's sync until someone marks it reviewed.
-  validate(){this.store.scan();if(this.store.problems.some(p=>!p.set_aside))throw new Error('Resolve record validation problems before syncing');if(!this.folder||this.inScope('assistant-state/profile.json'))validateAssistantFiles(this.store.root);if(!this.folder&&this.pendingConflicts().length)throw new Error('Resolve saved conflicts before syncing');}
+  validate(){this.store.scan();if(this.store.problems.some(p=>!p.set_aside))throw new Error('Resolve record validation problems before syncing');if(!this.folder||this.inScope('assistant-state/profile.json'))validateAssistantFiles(this.store.root);}
   // A path that was synced before it became device-private stays in the index
   // and Git keeps hashing it on every status and every add. Untrack it once,
   // leaving the file itself on disk, so an existing installation gets the same
@@ -294,8 +409,17 @@ export class FileSync {
     for(let i=0;i<tracked.length;i+=200)this.git(['rm','--cached','--quiet','-r','--',...tracked.slice(i,i+200)]);
     return tracked.length;
   }
+  // The pictures and PDFs the notebook carries (media-store.mjs) that the
+  // ignore policy leaves out by their extension (**/*.png). They are added by
+  // name instead of through the policy: the plain-mode .gitignore is
+  // committed, and a computer still on 2.0.0-beta.23 would write its own back
+  // every round.
+  carriedMedia(){
+    const folder=recordsFolder+'/'+CARRIED_FOLDER;if(!fs.existsSync(path.join(this.store.root,folder)))return [];
+    return this.names(['--literal-pathspecs','ls-files','-z','--others','--ignored','--exclude-standard','--',folder]).filter(name=>{if(!isCarriedPath(name))return false;try{const stat=fs.lstatSync(path.join(this.store.root,name));return stat.isFile()&&stat.size<=this.largeFile;}catch{return false;}});
+  }
   commitLocal(){
-    if(this.pendingConflicts().length)throw new Error('Resolve saved conflicts before syncing');
+    const held=this.heldPaths();
     this.writeIgnoreFile();
     this.untrackPrivate();
     // --diff-filter=d leaves out removals: untracking a path that became
@@ -303,21 +427,22 @@ export class FileSync {
     // correct, and the guard must not read it as an attempt to sync one.
     const staged=this.names(['diff','--cached','--name-only','-z','--diff-filter=d']);
     if(staged.some(n=>!shared(n)&&n!=='.gitignore'))throw new Error('Sync repository contains staged files outside durable state');
-    const roots=[...durableRoots.filter(r=>fs.existsSync(path.join(this.store.root,r))),...durableFiles.filter(r=>fs.existsSync(path.join(this.store.root,r))),...(this.gitDir?[]:['.gitignore'])];
-    const untracked=this.untrackSpecial(roots.filter(r=>r!=='.gitignore')),heavy=new Set(this.heavyLocalFiles());
+    const roots=[...durableRoots.filter(r=>fs.existsSync(path.join(this.store.root,r))),...syncedFiles.filter(r=>fs.existsSync(path.join(this.store.root,r))),...(this.gitDir?[]:['.gitignore'])];
+    const untracked=this.untrackSpecial(roots.filter(r=>r!=='.gitignore')),heavy=new Set(this.heavyLocalFiles()),media=this.carriedMedia().filter(name=>!held.has(name));
     const changes=this.names(['status','--porcelain','-z','--no-renames','--untracked-files=all','--',...roots]),kept=changes.filter(e=>e.startsWith('?? ')).map(e=>e.slice(3)).filter(name=>this.keptLocal(name));
     // Validation guards what a commit uploads. With nothing to commit there is
     // nothing to guard, and reading the whole vault to validate it anyway held
     // the workspace for a second of every idle round on an imported vault.
-    if(!staged.length&&!untracked&&!changes.map(e=>e.slice(3)).some(name=>!heavy.has(name)&&!kept.includes(name)))return false;
-    this.removalsAsTombstones();
+    if(!staged.length&&!untracked&&!media.length&&!changes.map(e=>e.slice(3)).some(name=>!heavy.has(name)&&!kept.includes(name)&&!held.has(name)))return false;
+    this.removalsAsTombstones(held);
     this.validate();
     // On a file system that ignores case, `git add` files a page whose title
     // changed only in case (Original to ORIGINAL) under the name it already
     // tracks, so the rename never left this machine. Its old entry goes first.
-    const respelled=this.respelled(this.names(['--literal-pathspecs','diff','--name-only','-z','--no-renames','--diff-filter=M','--',recordsFolder]));
+    const respelled=this.respelled(this.names(['--literal-pathspecs','diff','--name-only','-z','--no-renames','--diff-filter=M','--',recordsFolder]).filter(name=>!held.has(name)));
     for(let i=0;i<respelled.length;i+=200)this.git(['--literal-pathspecs','rm','--cached','--quiet','--',...respelled.slice(i,i+200).map(([old])=>old)]);
-    this.git(['add','--',...roots,...[...heavy,...kept].map(name=>':(exclude,literal)'+name.replace(/\/$/,''))]);
+    this.git(['add','--',...roots,...[...heavy,...kept,...held].map(name=>':(exclude,literal)'+name.replace(/\/$/,''))]);
+    for(let i=0;i<media.length;i+=200)this.git(['--literal-pathspecs','add','-f','--',...media.slice(i,i+200)]);
     if(this.names(['diff','--cached','--name-only','-z','--diff-filter=d']).some(n=>!shared(n)&&n!=='.gitignore'))throw new Error('A private path was staged; sync stopped');
     if(this.git(['diff','--cached','--name-only']))this.git(['commit','-m','Save Godspeed Mission Control records'],undefined,{env:this.identity(),timeout:120000});
   }
@@ -326,9 +451,10 @@ export class FileSync {
   // refused that removal for good (6 October 2026). The record is kept as a
   // tombstone, as the notebook's remove keeps one, so a reference to it stays
   // valid and the removal reaches every machine. A record moved or renamed by
-  // hand is still there, and many at once are stopped instead.
-  removalsAsTombstones(){
-    let gone;try{gone=this.names(['--literal-pathspecs','diff','--name-only','-z','--no-renames','--diff-filter=D','HEAD','--',recordsFolder]);}catch{return;}
+  // hand is still there, and many at once are stopped instead. A held file
+  // missing here is a removal still under review, not one made by hand.
+  removalsAsTombstones(held){
+    let gone;try{gone=this.names(['--literal-pathspecs','diff','--name-only','-z','--no-renames','--diff-filter=D','HEAD','--',recordsFolder]).filter(name=>!held.has(name));}catch{return;}
     if(!gone.length)return;
     this.store.scan();
     const records=this.decodedAt('HEAD',gone).filter(r=>!this.store.keyOfUid.has(r.uid)&&!deletableTypes.has(r.type));
@@ -400,13 +526,15 @@ export class FileSync {
         });
         if(networkError)throw networkError;
         this.git(['push',this.remote,'HEAD:refs/heads/'+this.branch]);
-        const pending=this.store.withLock(()=>{const heavy=new Set(this.heavyLocalFiles());return new Set([
+        const pending=this.store.withLock(()=>{const heavy=new Set(this.heavyLocalFiles()),held=this.heldPaths();return new Set([
           ...this.gitBytes(['diff','--name-only','-z']).toString('utf8').split('\0'),
           ...this.gitBytes(['diff','--cached','--name-only','-z']).toString('utf8').split('\0'),
-          ...this.gitBytes(['ls-files','--others','--exclude-standard','-z']).toString('utf8').split('\0').filter(name=>!this.keptLocal(name))
-        ].filter(name=>name&&!heavy.has(name)&&(shared(name)||(name==='.gitignore'&&!this.gitDir)))).size;});
-        this.last={state:pending?'pending':'synced',at:new Date().toISOString(),pending,...(pending?{detail:'New local edits will upload on the next synchronization cycle.'}:{})};
-    }catch(error){this.last={state:this.pendingConflicts().length?'conflict':'pending',at:new Date().toISOString(),error:'Sync did not complete; local files remain available',detail:error.message==='Workspace is being written by another process'?'The assistant is saving its state.':String(error.message).split('\n')[0]};}
+          ...this.gitBytes(['ls-files','--others','--exclude-standard','-z']).toString('utf8').split('\0').filter(name=>!this.keptLocal(name)),
+          ...this.carriedMedia()
+        ].filter(name=>name&&!heavy.has(name)&&!held.has(name)&&(shared(name)||(name==='.gitignore'&&!this.gitDir)))).size;});
+        const waiting=this.pendingConflicts().length;
+        this.last={state:waiting?'conflict':pending?'pending':'synced',at:new Date().toISOString(),pending,...(waiting||pending?{detail:[waiting&&'A conflict is waiting for your review in Settings.',pending?'New local edits will upload on the next synchronization cycle.':waiting&&'Everything else is synced.'].filter(Boolean).join(' ')}:{})};
+    }catch(error){this.tellSignInMissing(error);this.last={state:this.pendingConflicts().length?'conflict':'pending',at:new Date().toISOString(),error:'Sync did not complete; local files remain available',detail:error.message==='Workspace is being written by another process'?'The assistant is saving its state.':String(error.message).split('\n')[0]};}
     atomic(path.join(this.store.state,'sync-status.json'),JSON.stringify(this.last,null,2));return this.last;
   }
   // Whether commit `ancestor` is already part of the history of `descendant`.
@@ -426,7 +554,7 @@ export class FileSync {
     }finally{this.dropIndex(index);}
   }
   integrate(remoteRef,{fastForward=false}={}){
-    const carried=this.names(['ls-tree','-r','-z','--name-only',remoteRef,'--',...durableRoots,...durableFiles]).filter(windowsInvalid);
+    const carried=this.names(['ls-tree','-r','-z','--name-only',remoteRef,'--',...durableRoots,...syncedFiles]).filter(windowsInvalid);
     if(carried.length)remoteRef=this.without(remoteRef,carried);
     const integrationRoot=path.join(this.store.state,'sync-worktrees'),dir=path.join(integrationRoot,randomUUID());fs.mkdirSync(integrationRoot,{recursive:true});
     if(!path.resolve(dir).startsWith(path.resolve(integrationRoot)+path.sep))throw new Error('Unsafe sync staging path');
@@ -434,6 +562,7 @@ export class FileSync {
     // The merge compares against this view, so it is read under the lock it
     // runs in, whatever commitLocal did or skipped before it.
     this.store.scan(true);
+    const held=this.heldPaths(),heldKey=key=>held.has(posix(path.relative(this.store.root,this.store.fileOf.get(key))));
     this.git(['worktree','add','--detach',dir,'HEAD']);
     try {
       // Independently created profiles can look like renames to Git. Their paths
@@ -451,6 +580,13 @@ export class FileSync {
       // joining stays.
       let firstJoin=false;try{this.git(['merge-base','HEAD',remoteRef],dir);}catch{firstJoin=true;}
       const remoteCommit=this.git(['rev-parse',remoteRef]);let merging=false;
+      // A held file takes the other computers' version in the merge, so what
+      // this computer has of it never leaves; the file here stays as it is.
+      const hold=name=>{
+        held.add(name);
+        if(this.git(['--literal-pathspecs','ls-tree','--name-only',remoteCommit,'--',name],dir))this.git(['--literal-pathspecs','checkout',remoteCommit,'--',name],dir);
+        else this.git(['--literal-pathspecs','rm','--force','--quiet','--ignore-unmatch','--',name],dir);
+      };
       try { this.git(fastForward?['merge','--ff-only',remoteRef]:['merge','--no-edit','--no-ff','--no-commit',...(firstJoin?['--strategy=ort','-X',this.gitDir?'ours':'theirs','-X','no-renames']:['--strategy=resolve']),'--allow-unrelated-histories',remoteRef],dir,{env:this.identity(),timeout:120000});merging=!fastForward; }
       catch(e) {if(!this.names(['diff','--name-only','-z','--diff-filter=U'],dir).length)throw e;merging=true;}
       const base=firstJoin?this.git(['mktree'],dir,{input:''}):this.git(['merge-base',localHead,remoteCommit],dir);
@@ -461,12 +597,14 @@ export class FileSync {
         if(plan){
           for(const name of plan.deletes){fs.rmSync(path.join(dir,name),{force:true});this.git(['--literal-pathspecs','rm','--cached','--quiet','--ignore-unmatch','--',name],dir);}
           for(const [name,text] of plan.writes){atomic(path.join(dir,name),text);this.git(['--literal-pathspecs','add','--',name],dir);}
-          for(const review of plan.reviews)atomic(path.join(this.store.root,'conflicts',review.id+'.json'),JSON.stringify(review,null,2));
+          for(const review of plan.reviews){
+            if(!held.has(review.path))atomic(path.join(this.store.root,'conflicts',review.id+'.json'),JSON.stringify(review,null,2));
+            for(const name of [review.path,review.remote_path])if(name)hold(name);
+          }
         }
       }
       const conflicted=merging?this.names(['diff','--name-only','-z','--diff-filter=U'],dir):[];
       if(conflicted.length){
-        const unresolved=[];
         for(const name of conflicted){
           // A path that no longer leaves this machine has no meaningful remote
           // side: what the remote carries is only what was uploaded before the
@@ -475,6 +613,7 @@ export class FileSync {
           // later synchronization over a file nobody can review, and the next
           // merge wrote the conflict again, so clearing them never held.
           if(!shared(name)){this.git(['--literal-pathspecs','rm','--force','--quiet','--ignore-unmatch','--',name],dir);continue;}
+          if(held.has(name)){hold(name);continue;}
           const stages=this.git(['--literal-pathspecs','ls-files','--stage','--',name],dir).split('\n').map(line=>Number(line.match(/^\d+ [a-f0-9]+ (\d)\t/)?.[1])).filter(Boolean);
           const read=stage=>stages.includes(stage)?this.gitBytes(['show',':'+stage+':'+name],dir):null;
           const id=hash(name).slice(0,24),saved=path.join(this.store.root,'conflicts',id+'.json');
@@ -493,12 +632,11 @@ export class FileSync {
           const versions={base:read(1),local:read(2),remote:read(3)},binary=Object.values(versions).some(v=>v&&(v.includes(0)||!Buffer.from(v.toString('utf8')).equals(v)));
           const conflict={id,path:name,kind:'git',...(binary?{encoding:'base64',digests:Object.fromEntries(Object.entries(versions).map(([key,v])=>[key,v&&hash(v)]))}:{}),...Object.fromEntries(Object.entries(versions).map(([key,v])=>[key,v===null?null:v.toString(binary?'base64':'utf8')])),remote_commit:remoteCommit,at:new Date().toISOString()};
           atomic(path.join(this.store.root,'conflicts',id+'.json'),JSON.stringify(conflict,null,2));
-          unresolved.push(name);
+          hold(name);
         }
-        if(unresolved.length)throw new Error('Concurrent edits were preserved for review');
       }
       let merged=new Store(dir);
-      const lost=()=>[...this.store.records.keys()].filter(key=>!merged.records.has(key));
+      const lost=()=>[...this.store.records.keys()].filter(key=>!merged.records.has(key)&&!heldKey(key));
       const proven=key=>[...merged.records.values()].some(r=>r.uid===this.store.records.get(key).uid&&[...(r.former_ids||[]),...(r.aliases||[])].includes(this.store.records.get(key).id));
       const deletable=key=>deletableTypes.has(key.split('/')[0]),unproven=lost().filter(key=>!proven(key)&&!deletable(key));let accepted=new Set();
       if(unproven.length){
@@ -511,15 +649,14 @@ export class FileSync {
         // which until 6 October 2026 it did without saying what to review.
         // Choosing the removal makes the record a tombstone here
         // (conflicts.mjs); choosing to keep it brings it back in this merge.
-        const kept=[],open=[];
+        const kept=[];
         for(const key of decision?.choice==='remote'?[]:unproven){
           const name=posix(path.relative(this.store.root,this.store.fileOf.get(key))),id=hash(name).slice(0,24),saved=path.join(this.store.root,'conflicts',id+'.json'),previous=readJson(saved);
           // Removed there, as when it was reviewed: the decision holds.
           if(decision||previous?.resolved_at&&(previous.remote_commit===remoteCommit||previous.remote===null)){kept.push(name);continue;}
           let before=null;try{before=this.gitBytes(['cat-file','blob',base+':'+name],dir);}catch{}
-          atomic(saved,JSON.stringify(reviewItem(id,name,{base:before,local:fs.readFileSync(this.store.fileOf.get(key)),remote:null},remoteCommit,{reason:'Removed on another machine without a tombstone'}),null,2));open.push(name);
+          atomic(saved,JSON.stringify(reviewItem(id,name,{base:before,local:fs.readFileSync(this.store.fileOf.get(key)),remote:null},remoteCommit,{reason:'Removed on another machine without a tombstone'}),null,2));held.add(name);
         }
-        if(open.length)throw new Error('Records removed on another machine without a tombstone were kept for review: '+open.join(', '));
         for(const name of kept){atomic(path.join(dir,...name.split('/')),fs.readFileSync(path.join(this.store.root,...name.split('/'))));this.git(['--literal-pathspecs','add','--',name],dir);}
         if(kept.length&&!merging)this.git(['commit','-q','-m','Keep the records chosen on this machine'],dir,{env:this.identity(),timeout:120000});
         if(kept.length)merged=new Store(dir);
@@ -533,7 +670,9 @@ export class FileSync {
       // machine renames the file here, and every machine names it the same.
       const inside=(store,file)=>path.relative(store.recordsRoot,file).split(path.sep).join('/'),recordFiles=store=>new Set([...store.fileOf.values()].map(file=>path.relative(store.root,file).split(path.sep).join('/')));
       const localRecords=recordFiles(this.store),mergedRecords=recordFiles(merged),paths=new Map();
+      this.refreshHeld(dir,remoteCommit);
       const batch=[...merged.records.entries()].filter(([key,r])=>{
+        if(this.store.records.has(key)&&heldKey(key)||held.has(posix(path.relative(merged.root,merged.fileOf.get(key)))))return false;
         const mine=this.store.records.get(key),at=inside(merged,merged.fileOf.get(key));paths.set(key,at);
         return mine?._hash!==r._hash||!this.store.fileOf.has(key)||inside(this.store,this.store.fileOf.get(key))!==at;
       }).map(([,r])=>{const value={...r};delete value._hash;return value;});
@@ -560,7 +699,8 @@ export class FileSync {
       // 2026 the merged version replaced that write. Such a file stays as it
       // is now, with the merged version kept for review; one the merge left
       // as it was is simply left alone, and the next commit takes the edit.
-      const differing=this.blobFiles(dir).filter(n=>shared(n)&&!mergedRecords.has(n)).map(file=>({file,text:fs.readFileSync(path.join(dir,file))})).filter(item=>!fs.existsSync(path.join(this.store.root,item.file))||!fs.readFileSync(path.join(this.store.root,item.file)).equals(item.text));
+      // A carried media file already here is the same file: its name is its content hash.
+      const differing=this.blobFiles(dir).filter(n=>shared(n)&&!held.has(n)&&!mergedRecords.has(n)&&!(isCarriedPath(n)&&fs.existsSync(path.join(this.store.root,n)))).map(file=>({file,text:fs.readFileSync(path.join(dir,file))})).filter(item=>!fs.existsSync(path.join(this.store.root,item.file))||!fs.readFileSync(path.join(this.store.root,item.file)).equals(item.text));
       const committed=readBlobs((args,options)=>this.gitBytes(args,undefined,options),differing.map(item=>localHead+':'+item.file)),documents=[];
       differing.forEach((item,i)=>{
         const live=path.join(this.store.root,item.file),now=fs.existsSync(live)?fs.readFileSync(live):null,then=committed[i];
@@ -574,7 +714,7 @@ export class FileSync {
       // only records carried removals: a deleted rule or skill stayed on every
       // other machine, and the next upload from any of them put it back. A
       // file changed here meanwhile is a modify/delete conflict above instead.
-      const gone=this.names(['diff','--name-only','-z','--no-renames','--diff-filter=D',localHead,'HEAD'],dir).filter(n=>{if(!shared(n)||localRecords.has(n)||mergedRecords.has(n)||windowsInvalid(n))return false;try{return fs.lstatSync(path.join(this.store.root,n)).isFile();}catch{return false;}})
+      const gone=this.names(['diff','--name-only','-z','--no-renames','--diff-filter=D',localHead,'HEAD'],dir).filter(n=>{if(!shared(n)||held.has(n)||localRecords.has(n)||mergedRecords.has(n)||windowsInvalid(n))return false;try{return fs.lstatSync(path.join(this.store.root,n)).isFile();}catch{return false;}})
         .filter(n=>this.git(['hash-object','--',n])===this.git(['rev-parse',localHead+':'+n]));
       const tracked=this.blobFiles(dir).filter(n=>shared(n)&&!mergedRecords.has(n)).length;
       if(gone.length>25&&gone.length*5>tracked+gone.length)throw new Error('Remote removal of '+gone.length+' files needs review');
@@ -598,8 +738,9 @@ export class FileSync {
   // and to the owner.
   inScope(name){
     // A notebook page is always the notebook's, whatever its title ends in:
-    // a note called "backup.sqlite" is backup.sqlite.md.
-    const page=name.startsWith(recordsFolder+'/')&&name.endsWith('.md');
+    // a note called "backup.sqlite" is backup.sqlite.md. So is a picture the
+    // notebook carries (media-store.mjs), whose name is its content hash.
+    const page=name.startsWith(recordsFolder+'/')&&name.endsWith('.md')||isCarriedPath(name);
     if(!shared(name)||(!page&&keptLocal.some(ext=>new RegExp('\\.'+ext.replace('*','.*')+'$','i').test(name))))return false;
     const paths=this.folder.paths;return paths.includes('*')||paths.some(p=>name===p||name.startsWith(p+'/'));
   }
@@ -618,12 +759,12 @@ export class FileSync {
     fs.writeFileSync(path.join(folder,'README.txt'),'These files on this machine stood in the way of the other machines\' changes and were never part of what the notebook commits. They are kept here whole.\n'+names.join('\n')+'\n');
     return folder;
   }
-  scopeRoots(){return this.folder.paths.includes('*')?[...durableRoots,...durableFiles]:this.folder.paths;}
+  scopeRoots(){return this.folder.paths.includes('*')?[...durableRoots,...syncedFiles]:this.folder.paths;}
   // Git's own hooks belong to the owner's commits and pushes from a person:
   // the notebook's commits must not start the owner's post-commit jobs. Its
   // push still runs the owner's pre-push gate.
   quiet(){const dir=path.join(this.store.state,'no-hooks');fs.mkdirSync(dir,{recursive:true});return ['-c','core.hooksPath='+dir];}
-  identity(){return {GIT_AUTHOR_NAME:'Godspeed Mission Control',GIT_AUTHOR_EMAIL:'godspeed@localhost',GIT_COMMITTER_NAME:'Godspeed Mission Control',GIT_COMMITTER_EMAIL:'godspeed@localhost'};}
+  identity(){return this.identityEnv||=commitIdentity(this.store);}
   // Another program may be in the middle of something with this repository.
   // The notebook waits for the next round instead of acting on half a merge.
   // A lock that a killed Git left behind is cleared first (staleLocks).
@@ -659,7 +800,7 @@ export class FileSync {
   // left the machine while sync said "synced".
   folderChanges(){
     const out=this.gitBytes(['--no-optional-locks','--literal-pathspecs','status','--porcelain','-z','--no-renames','--untracked-files=all','--ignore-submodules=all','--',...this.scopeRoots()]).toString('utf8');
-    const ignored=this.inScope(recordsFolder+'/Page.md')&&fs.existsSync(this.store.recordsRoot)?this.names(['--literal-pathspecs','ls-files','-z','--others','--ignored','--exclude-standard','--',recordsFolder]).filter(name=>candidate(name.slice(recordsFolder.length+1))).map(name=>'!! '+name):[];
+    const ignored=this.inScope(recordsFolder+'/Page.md')&&fs.existsSync(this.store.recordsRoot)?this.names(['--literal-pathspecs','ls-files','-z','--others','--ignored','--exclude-standard','--',recordsFolder]).filter(name=>candidate(name.slice(recordsFolder.length+1))||isCarriedPath(name)).map(name=>'!! '+name):[];
     return [...out.split('\0').filter(Boolean),...ignored].map(entry=>({code:entry.slice(0,2),name:entry.slice(3)}))
       .filter(({code,name})=>!name.endsWith('/')&&!windowsInvalid(name)&&this.inScope(name)&&(code.includes('D')||(()=>{try{return fs.statSync(path.join(this.store.root,name)).size<=this.largeFile;}catch{return false;}})()))
       .map(({name})=>name);
@@ -741,6 +882,13 @@ export class FileSync {
     const {commit:target,reviews}=this.mergeFolder(local,remoteHead);
     const keep=this.checkIncoming(local,target,remoteHead);
     return {head,local,target:keep.length?this.restore(target,keep,local):target,lines,reviews};
+  }
+  // The first round to a copy with no branch yet: this machine's notebook changes as a commit, and
+  // the whole branch goes out with it, the owner's first commit included.
+  planFirst(){
+    const head=this.git(['rev-parse','HEAD']),files=this.folderChanges();
+    const {commit:local,lines}=files.length?this.commitFolder(head,files):{commit:head,lines:[]};
+    return {head,local,target:local,lines,reviews:[]};
   }
   // Before the branch takes `target`: the notebook this machine would read
   // must still read. Until 6 October 2026 a merged notebook was taken
@@ -968,11 +1116,17 @@ export class FileSync {
     try{
       this.folderReady();
       let networkError=null;
+      let empty=false;
       try{this.git(['fetch','--no-tags',this.remote,this.branch],undefined,{timeout:120000});}catch(error){networkError=error;}
+      // A new private copy on GitHub has no branch yet, so that fetch fails although the copy is
+      // reachable; until 2 November 2026 that read as "offline" and the first round never sent
+      // anything (the second computer of beta.14's reminder-closed-elsewhere cloned an empty
+      // repository). A copy that answers and holds no branch at all is empty: the round sends to it. One that has other branches but not this one is not (its default branch would stay the other, and a clone would not get this), so it waits as before.
+      if(networkError){try{if(this.git(['ls-remote','--heads',this.remote],undefined,{timeout:120000})==='')empty=true;}catch{}if(empty)networkError=null;}
       const remoteRef=this.remote+'/'+this.branch,pushing=path.join(this.store.state,'sync-pushing.json');
       // Offline nothing is committed: the edits wait as files, which a plain
       // `git pull --rebase` of the owner's leaves alone.
-      const plan=this.store.withLock(()=>{this.folderReady();this.finishPush(remoteRef,{fetched:!networkError});return networkError?null:this.planFolder(remoteRef);});
+      const plan=this.store.withLock(()=>{this.folderReady();this.finishPush(remoteRef,{fetched:!networkError});return networkError?null:empty?this.planFirst():this.planFolder(remoteRef);});
       if(networkError)throw networkError;
       if(plan){
         // Exactly the commit checked under the lock goes out, with whatever
@@ -992,7 +1146,7 @@ export class FileSync {
       }
       const pending=this.folderChanges().length;
       this.last={state:pending?'pending':'synced',at:new Date().toISOString(),pending,...(pending?{detail:'New local edits will upload on the next synchronization cycle.'}:{})};
-    }catch(error){this.last={state:error.code==='REVIEW'?'conflict':'pending',at:new Date().toISOString(),error:'Sync did not complete; local files remain available',detail:error.message==='Workspace is being written by another process'?'The assistant is saving its state.':String(error.message).split('\n')[0]};}
+    }catch(error){this.tellSignInMissing(error);this.last={state:error.code==='REVIEW'?'conflict':'pending',at:new Date().toISOString(),error:'Sync did not complete; local files remain available',detail:error.message==='Workspace is being written by another process'?'The assistant is saving its state.':String(error.message).split('\n')[0]};}
     atomic(path.join(this.store.state,'sync-status.json'),JSON.stringify(this.last,null,2));return this.last;
   }
 }

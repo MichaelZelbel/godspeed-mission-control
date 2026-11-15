@@ -1,6 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {randomBytes} from 'node:crypto';
+import {telegramAPI} from '../core/telegram-api.mjs';
+import {telegramPhase} from '../shared/telegram-status.mjs';
 
 // Telegram for the one-click server, connected from the web page after the account is made.
 // The bot's key goes from the owner's browser to this server and nowhere else: it is checked
@@ -29,7 +31,7 @@ export function browserAddress(value){
 
 export class TelegramConnection{
   constructor({dir=process.env.GODSPEED_TELEGRAM_DIR,mode=process.env.GODSPEED_TELEGRAM,environmentBot=!!process.env.GODSPEED_CANDIDATE_BOT_TOKEN,originalRuntime=process.env.GODSPEED_ORIGINAL_RUNTIME==='on',hermesHome=process.env.HERMES_HOME,api=process.env.GODSPEED_TELEGRAM_API||'https://api.telegram.org',fetcher=fetch}={}){
-    Object.assign(this,{dir,mode,environmentBot,originalRuntime,hermesHome,api:api.replace(/\/+$/,''),fetcher});
+    Object.assign(this,{dir,mode,environmentBot,originalRuntime,hermesHome,api,fetcher});
   }
   // On a server whose operator set the bot in its environment, or switched Telegram off,
   // the page has nothing to connect. So does any install the supervisor does not run.
@@ -37,23 +39,25 @@ export class TelegramConnection{
   file(name){return path.join(this.dir,name);}
   read(name){try{return JSON.parse(fs.readFileSync(this.file(name),'utf8'));}catch{return null;}}
   status(){
-    if(this.mode==='on'&&this.environmentBot)return {available:false,managed:'environment',connected:true,phase:'ready'};
-    if(!this.available)return {available:false,managed:null,connected:false,phase:'none'};
+    if(this.mode==='on'&&this.environmentBot)return {available:false,managed:'environment',connected:true,phase:telegramPhase.ready};
+    if(!this.available)return {available:false,managed:null,connected:false,phase:telegramPhase.none};
     const connection=this.read('connection.json');
-    if(!connection?.token)return {available:true,managed:'web',connected:false,phase:'none'};
-    const setup=this.read('setup.json')||{},mine=String(setup.bot_id||'')===String(connection.bot_id);
-    const phase=mine&&setup.problem==='refused'?'refused':mine&&setup.done?'ready':mine&&setup.owner_id?'setting-up':'waiting';
+    if(!connection?.token)return {available:true,managed:'web',connected:false,phase:telegramPhase.none};
+    const setup=this.read('setup.json')||{},mine=String(setup.bot_id||'')===String(connection.bot_id),runner=this.read('runner.json');
+    let endpointSafe=true;try{telegramAPI(this.api);}catch{endpointSafe=false;}
+    const phase=mine&&setup.problem==='refused'?telegramPhase.refused:mine&&setup.done&&(!endpointSafe||runner?.state==='gateway-route-failed')?telegramPhase.gatewayRouteFailed:mine&&setup.done?telegramPhase.ready:mine&&setup.owner_id?telegramPhase.settingUp:telegramPhase.waiting;
     // The message itself too, to copy: a bot its owner has chatted with before shows no Start
     // button, and only "/start <code>" makes its sender the owner (godspeed-telegram-setup). The
     // link already carries the code, so this shows the signed-in owner nothing new.
     return {available:true,managed:'web',connected:true,phase,bot:{username:connection.username,name:connection.name},
-      ...(phase==='waiting'?{link:`https://t.me/${connection.username}?start=${connection.start_code}`,start_message:'/start '+connection.start_code}:{}),
-      ...(['setting-up','ready'].includes(phase)?{owner:setup.owner_name||null}:{}),
+      ...(phase===telegramPhase.waiting?{link:`https://t.me/${connection.username}?start=${connection.start_code}`,start_message:'/start '+connection.start_code}:{}),
+      ...([telegramPhase.settingUp,telegramPhase.ready].includes(phase)?{owner:setup.owner_name||null}:{}),
       connected_at:connection.connected_at};
   }
   async telegram(token,method){
-    let response;
-    try{response=await this.fetcher(`${this.api}/bot${token}/${method}`,{method:'POST',headers:{'Content-Type':'application/json'},body:'{}',signal:AbortSignal.timeout(15000)});}
+    let api,response;
+    try{api=telegramAPI(this.api);}catch{throw fail('Telegram API requires HTTPS or a loopback HTTP endpoint');}
+    try{response=await this.fetcher(`${api}/bot${token}/${method}`,{method:'POST',headers:{'Content-Type':'application/json'},body:'{}',signal:AbortSignal.timeout(15000)});}
     catch{throw fail('Your server could not reach Telegram. Try again in a minute.',502);}
     const data=await response.json().catch(()=>({}));
     if([401,404].includes(response.status)||data.error_code===401)throw fail('Telegram does not know this key. Copy the whole key from BotFather\'s last message and try again.');

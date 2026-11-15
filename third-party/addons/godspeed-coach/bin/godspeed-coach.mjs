@@ -7,7 +7,7 @@ import { findMissionControl, appHome } from "../lib/paths.mjs";
 import { now, localParts, addDays, weekdayOf, WEEKDAY_WORDS } from "../lib/clock.mjs";
 import { loadSettings, setSetting, DEFAULTS } from "../lib/settings.mjs";
 import { listAreas, findArea, isTalkDay, addArea, setAreaField, nextTalkDay, habitArea, AREA_FIELDS, addAreaLine, removeAreaLine } from "../lib/areas.mjs";
-import { openTalk, readTalk, setTalkState, setFollowUp, addSaid, setShown, talkDates, talkFile } from "../lib/talks.mjs";
+import { openTalk, unansweredBefore, readTalk, setTalkState, setFollowUp, addSaid, setShown, talkDates, talkFile } from "../lib/talks.mjs";
 import { addHabit, listHabits, findHabit, track, untrack, lastAnsweredDay, setStatus, stats, askedOn, answerOn,setHabitSchedule,setHabitDisplay,exemptHabitDays, setHabitReader, habitReadersWords } from "../lib/habits.mjs";
 import {habitProgress,assertDay} from '../lib/progress.mjs';
 import { readTable } from "../lib/auto.mjs";
@@ -15,14 +15,17 @@ import { brief, habitLine } from "../lib/brief.mjs";
 import { gate, NO_WAKE } from "../lib/gate.mjs";
 import { dueTick } from "../lib/tick.mjs";
 import { contextBlock, waitingTalks } from "../lib/context.mjs";
-import { readPrep, prepProblem, prepDue, prepPath, prepCheck } from "../lib/prep.mjs";
+import { readPrep, prepProblem, prepForBrief, prepDue, prepPath, prepCheck, prepFile, prepDir, prepMissing, prepExpected, rhythmDrop, countsAsTalkDay } from "../lib/prep.mjs";
+import { researchDomains } from "../lib/prep-evidence.mjs";
+import { writeQuestions, readQuestions, questionsFile, openQuestionsDate, addQuestion, dropQuestion, hasQuestions } from "../lib/questions.mjs";
+import { recordRhythmSet } from "../lib/rhythm-change.mjs";
 import { commitCoach, syncInBackground, syncQueued, pullQuietly } from "../lib/sync.mjs";
 import { decodeArgv, readTextFile, restoreShellEnv, startedFromGitBash, gitBashPath, LAUNCHER_ENV, CMDLINE_ENV } from "../lib/argv.mjs";
 
-const FLAGS = new Set(["json", "yes", "no-hermes", "no-claude", "all", "scheduled", "remove", "shown"]);
+const FLAGS = new Set(["json", "yes", "no-hermes", "no-claude", "all", "scheduled", "remove", "shown", "rhythm-changes"]);
 // The values that name a file or folder. From Git Bash these are turned into Windows paths;
 // the person's words never are (lib/argv.mjs).
-const PATH_FLAGS = ["godspeed", "words-file", "opening-file", "prepared-file", "from-prep", "extra-skills-dir", "daily-table"];
+const PATH_FLAGS = ["godspeed", "out", "evidence", "answer", "issues-out", "words-file", "opening-file", "prepared-file", "from-prep", "extra-skills-dir", "daily-table"];
 // Free text that may run over several lines, and the flag that takes it from a file instead.
 const TEXT_FILES = [["words-file", "words"], ["opening-file", "opening"], ["prepared-file", "prepared"]];
 // A flag given more than once keeps its last value in f, as always, and every value in all: "talk
@@ -99,6 +102,21 @@ function openTalkDate(a) {
   if (!open) die(`No ${a.title} talk is open. Give the day with --date.`);
   return open;
 }
+// A talk with no preparation of its own may still quote the area's newest researched preparation that
+// passes the gate, dated on or before the talk, with its date (#359). Only area.md's hash is left out
+// of the check: any later edit of area.md (a RHYTHM change too) breaks the seal that lets a
+// preparation open a talk, not the research its review passed.
+const NO_NEW_STUDY = "A search that found no new study means no new study, not that nothing is useful: answer from the routes, rejected routes and coverage above.";
+function reviewedBefore(a, ymd) {
+  if (!researchDomains(a).length) return null;
+  let names = [];
+  try { names = fs.readdirSync(prepDir(a)).filter((n) => /^\d{4}-\d{2}-\d{2}\.md$/.test(n) && n.slice(0, 10) <= ymd).sort().reverse(); } catch { /* no prep folder */ }
+  for (const n of names) {
+    const p = readPrep(path.join(prepDir(a), n));
+    if (!prepProblem(p, a, at, { anyScope: true })) return { ...p, date: n.slice(0, 10) };
+  }
+  return null;
+}
 function needHabit(words, opts) {
   const h = findHabit(mcDir, words, opts);
   const names = listHabits(mcDir, { status: "active" }).map((x) => x.title).join(", ") || "none";
@@ -145,6 +163,7 @@ const commands = {
       if (!key || !v.length) die(`godspeed-coach area set <area> <${AREA_FIELDS.join("|")}> <value>`);
       try {
         let b = setAreaField(a, key, v.join(" "));
+        if (key.toUpperCase() === "RHYTHM") recordRhythmSet(mcDir, a, a.rhythmText, b.rhythmText);
         // An area that had no talk gets one from tomorrow when it is given a rhythm.
         if (key.toUpperCase() === "RHYTHM" && b.rhythm && !b.starts) b = setAreaField(b, "STARTS", addDays(today, 1));
         saved(`area ${b.slug} ${key.toUpperCase()}`);
@@ -152,18 +171,19 @@ const commands = {
         return out(`Changed: ${b.title} ${key.toUpperCase()} = ${v.join(" ")}. ${b.noTalk ? "It has no talk." : b.on ? `Next talk: ${first || "none"}.` : "Paused: no talks until it is on again."}`, { ok: true, next: b.noTalk ? null : first });
       } catch (e) { die(e.message); }
     }
-    if (sub === "read" || sub === "limit") {
+    if (sub === "read" || sub === "limit" || sub === "source") {
       // "The health talk may also look at my sleep tracker" (read), "must never suggest buying
       // anything" (limit), and --remove to take one back. Only that header line changes
       // (lib/areas.mjs addAreaLine, removeAreaLine).
       const a = needArea(name);
-      const K = sub === "read" ? "MAY READ" : "LIMIT";
+      const K = sub === "read" ? "MAY READ" : sub === "source" ? "SOURCE" : "LIMIT";
       const talk = `the ${a.title} talk`;
-      const state = (b) => ({ ok: true, area: b.slug, may_read: b.lists["MAY READ"] || [], limits: b.lists.LIMIT || [] });
+      const state = (b) => ({ ok: true, area: b.slug, may_read: b.lists["MAY READ"] || [], limits: b.lists.LIMIT || [], ...(sub === "source" || (b.lists.SOURCE || []).length ? { sources: b.lists.SOURCE || [] } : {}) });
       const later = a.noTalk ? " It has no talk yet; the talk it gets later keeps this." : "";
       if (pos.length < 3) {
         const have = a.lists[K] || [];
         const T = talk.charAt(0).toUpperCase() + talk.slice(1);
+        if (sub === "source") return out(have.length ? `${T} reads first: ${have.join("; ")}.` : `Nothing is named for ${talk} to read first.`, state(a));
         return out(sub === "read"
           ? (have.length ? `${T} may look at: ${have.join("; ")}.` : `Nothing is named for ${talk} to look at.`)
           : (have.length ? `${T}'s limits: ${have.join("; ")}.` : `${T} has no limits of its own.`), state(a));
@@ -173,15 +193,17 @@ const commands = {
         if (f.remove) {
           const r = removeAreaLine(a, K, what);
           saved(`area ${a.slug} ${K} taken away`);
+          if (sub === "source") return out(`Taken away: ${talk} no longer reads ${r.removed.join(" and ")} first.`, { ...state(r.area), removed: r.removed });
           return out(sub === "read" ? `Taken away: ${talk} no longer looks at ${r.removed.join(" and ")}.` : `Taken away: ${talk}'s limit ${r.removed.map((x) => `"${x}"`).join(" and ")}.`, { ...state(r.area), removed: r.removed });
         }
         const r = addAreaLine(a, K, what);
         if (r.changed) saved(`area ${a.slug} ${K} added`);
+        if (sub === "source") return out(r.changed ? `Added: ${talk} reads ${r.line} first.` : `Already there: ${talk} reads ${r.line} first. Nothing changed.`, { ...state(r.area), changed: r.changed });
         const said = sub === "read" ? `${talk} may look at ${r.line}.` : r.changed ? `Added a limit to ${talk}: ${r.line}.` : `${talk}'s limit "${r.line}".`;
         return out(r.changed ? (sub === "read" ? `Added: ${said}` : said) + later : `Already there: ${said} Nothing changed.`, { ...state(r.area), changed: r.changed });
       } catch (e) { die(e.message); }
     }
-    die("godspeed-coach area add <name> --title ... --rhythm ... | area set <area> <SETTING> <value> | area read <area> \"<what it may look at>\" [--remove] | area limit <area> \"<what it must never do>\" [--remove]");
+    die("godspeed-coach area add <name> --title ... --rhythm ... | area set <area> <SETTING> <value> | area read <area> \"<what it may look at>\" [--remove] | area limit <area> \"<what it must never do>\" [--remove] | area source <area> \"<what the research reads first>\" [--remove]");
   },
   // Asked for in the conversation ("Can we do the health talk now?"): the open command it prints
   // carries --shown. The scheduled talk gets its brief from the gate, without it.
@@ -191,11 +213,37 @@ const commands = {
   "prep-due"() {
     const raw = f["within-hours"];
     const hours = Number(raw);
-    if (raw === undefined || !Number.isFinite(hours) || hours <= 0) die("godspeed-coach prep-due --within-hours <hours> [--json]: the talks that start within that many hours and are not prepared yet.");
-    const due = prepDue(mcDir, s, at, hours);
+    if (raw === undefined || !Number.isFinite(hours) || hours <= 0) die("godspeed-coach prep-due --within-hours <hours> [--rhythm-changes] [--json]: the talks that start within that many hours and are not prepared yet; with --rhythm-changes also a day a rhythm change just dropped.");
+    const due = prepDue(mcDir, s, at, hours, { rhythmChanges: Boolean(f["rhythm-changes"]) });
     // A stale one says when it was prepared, in the talk's own time zone.
     const when = (x) => { if (!x.prepared) return "no PREPARED time"; const p = localParts(new Date(x.prepared), x.timezone); return `prepared ${p.date} ${p.hm}`; };
-    out(due.map((x) => `${x.area}: ${x.title}, ${WEEKDAY_WORDS.en[weekdayOf(x.date)]} ${x.date} at ${x.time} (${x.timezone}), prepare ${x.file}${x.stale ? ` (stale, ${when(x)})` : ""}`).join("\n") || "Nothing to prepare.", due);
+    const bridged = (x) => x.bridge ? ` (not a talk day since the rhythm changed on ${localParts(new Date(x.rhythm_change.changed), x.timezone).date} from "${x.rhythm_change.from}" to "${x.rhythm_change.to}")` : "";
+    out(due.map((x) => `${x.area}: ${x.title}, ${WEEKDAY_WORDS.en[weekdayOf(x.date)]} ${x.date} at ${x.time} (${x.timezone}), prepare ${x.file}${x.stale ? ` (stale, ${when(x)})` : ""}${bridged(x)}`).join("\n") || "Nothing to prepare.", due);
+  },
+  // For the same job (#359): the talks of the last --days days (default 1) that opened without a
+  // preparation that was due (lib/prep.mjs, prepMissing), why, and the area's next talk day with no
+  // record yet. It only reads.
+  "prep-missed"() {
+    const raw = f.days ?? "1";
+    if (!/^\d+$/.test(String(raw))) die("godspeed-coach prep-missed [--days <whole number>] [--json]: the talks of the last days that opened without their preparation.");
+    const from = addDays(today, -Number(raw));
+    const missed = [];
+    for (const a of listAreas(mcDir)) {
+      if (!a.on || a.noTalk || !a.rhythm) continue;
+      // A talk they started on a day nothing was due to be prepared for may say it is not ready. A day
+      // the newest rhythm change dropped is due in any area: the nightly job lists it to be prepared.
+      const expected = prepExpected(a);
+      const drop = rhythmDrop(mcDir, a, s.timezone);
+      const due = (d) => drop?.dropped(d) || (expected && (isTalkDay(a, d) || fs.existsSync(prepFile(a, d))));
+      for (const d of talkDates(a).filter((x) => x >= from && x <= today)) {
+        if (readTalk(a, d).prep || !due(d)) continue;
+        let next = nextTalkDay(a, today);
+        while (next && fs.existsSync(talkFile(a, next))) next = nextTalkDay(a, addDays(next, 1));
+        missed.push({ area: a.slug, title: a.title, date: d, talk: path.relative(mcDir, talkFile(a, d)).replace(/\\/g, "/"),
+          reason: prepMissing(a, d, at, { mcDir, tz: s.timezone }) || "it did not open from its preparation", next: next || "" });
+      }
+    }
+    out(missed.map((x) => `${x.area}: the ${x.title} talk of ${x.date} opened without its preparation (${x.reason}); next talk ${x.next || "none"}`).join("\n") || "No talk opened without its preparation.", missed);
   },
   // One talk's preparation (lib/prep.mjs, prepCheck): "ready" when it can open the talk, else why
   // not; exit 1 when it cannot. The day is the talk's next one unless --date names another.
@@ -206,9 +254,53 @@ const commands = {
     if (!d) die(`The ${a.title} talk has no coming day.`);
     const r = prepCheck(mcDir, s, a, d);
     const when = r.prepared ? (() => { const p = localParts(new Date(r.prepared), s.timezone); return `prepared ${p.date} ${p.hm}`; })() : "no PREPARED time";
-    const day = r.talk_day ? "" : ` (${d} is not a day of the ${a.title} talk)`;
+    const change = r.rhythm_change && `the rhythm change on ${localParts(new Date(r.rhythm_change.changed), s.timezone).date}`;
+    const day = r.bridge ? ` (${change} dropped this day, so it counts as a talk day)`
+      : r.rhythm_change?.deliberate ? ` (${change} from "${r.rhythm_change.from}" to "${r.rhythm_change.to}" was asked for, so this day is not a talk day and is not prepared)`
+      : r.talk_day ? "" : ` (${d} is not a day of the ${a.title} talk)`;
     out(r.ready ? `ready: ${r.file}, ${when}${r.stale ? ", stale: more than 48 hours before the talk" : ""}${day}` : `not ready: ${r.file}: ${r.problem}${day}`, r);
     if (!r.ready) process.exitCode = 1;
+  },
+  // THE RECEIPTS OF A PREPARATION RUN (lib/prep-receipts.mjs), for the job that prepares talks
+  // (mc-coach-prep): after the run, the pages it read are taken from its own record (Claude Code's
+  // transcript or Hermes' session store, found by --marker) and written to --out as the evidence.
+  // Exit 1, with the reason, when no record holds the marker or the run read no page.
+  async "prep-receipts"() {
+    const a = needArea(pos[0]);
+    const d = dateArg(f.date);
+    if (!f.marker || !f.started || !f.finished || !f.out) die("godspeed-coach prep-receipts <area> --date <talk day> --marker <run marker> --started <time> --finished <time> --out <file> [--json]");
+    const { captureRun, writeEvidence } = await import("../lib/prep-receipts.mjs");
+    const run = await captureRun({ marker: f.marker, startedMs: Date.parse(f.started), finishedMs: Date.parse(f.finished) });
+    if (run.problem) { out(`no receipts: ${run.problem}`, { ok: false, problem: run.problem }); process.exitCode = 1; return; }
+    const file = prepFile(a, d);
+    if (!fs.existsSync(file)) { out(`no receipts: there is no ${prepPath(mcDir, file)}`, { ok: false, problem: "there is no preparation" }); process.exitCode = 1; return; }
+    const ev = writeEvidence({ prepFile: file, area: a, run: { ...run, marker: f.marker }, out: path.resolve(f.out) });
+    const n = ev.sources.length;
+    const said = `${run.assistant} session ${run.session_id}: ${n} source page${n === 1 ? "" : "s"} read${run.dropped ? `, ${run.dropped} reading${run.dropped === 1 ? "" : "s"} left out (failed, empty or outside the run's time)` : ""}`;
+    out(n ? `receipts: ${said}` : `no receipts: ${said}`, { ok: n > 0, assistant: run.assistant, session_id: run.session_id, sources: n, dropped: run.dropped, ...(n ? {} : { problem: "the run opened no source page successfully" }) });
+    if (!n) process.exitCode = 1;
+  },
+  // THE SEAL OF THE SEPARATE REVIEW: the reviewer's answer (--answer, its JSON) and its own run's
+  // record (--marker) become the review in --out, bound to the preparation, the area and --evidence;
+  // then the coach's gate checks the pair. Exit 0 when it opens the talk; 1 with the reason, and the
+  // issues for the next try in --issues-out, when it does not.
+  async "prep-seal"() {
+    const a = needArea(pos[0]);
+    const d = dateArg(f.date);
+    if (!f.marker || !f.started || !f.finished || !f.out || !f.evidence || !f.answer) die("godspeed-coach prep-seal <area> --date <talk day> --evidence <file> --answer <reviewer's answer> --marker <review marker> --started <time> --finished <time> --out <file> [--issues-out <file>] [--json]");
+    const { captureRun, sealReview } = await import("../lib/prep-receipts.mjs");
+    const fail = (problem, issues) => {
+      if (f["issues-out"]) fs.writeFileSync(path.resolve(f["issues-out"]), issues.map((x) => `- ${x}\n`).join(""));
+      out(`not sealed: ${problem}`, { ok: false, problem, issues }); process.exitCode = 1;
+    };
+    const run = await captureRun({ marker: f.marker, startedMs: Date.parse(f.started), finishedMs: Date.parse(f.finished) });
+    if (run.problem) return fail(`the review run: ${run.problem}`, ["The review could not be checked: " + run.problem]);
+    let answer = "";
+    try { answer = fs.readFileSync(path.resolve(f.answer), "utf8"); } catch { /* none */ }
+    const r = sealReview({ prepFile: prepFile(a, d), area: a, evidenceFile: path.resolve(f.evidence), answer, out: path.resolve(f.out),
+      reviewer: { ...run, marker: f.marker }, reviewedAt: run.finished_at, now: at });
+    if (r.problem) return fail(r.problem, r.issues);
+    out(`sealed: the review passed, ${r.review.coverage.length} domains and goals judged`, { ok: true, coverage: r.review.coverage.length });
   },
   gate() {
     pullQuietly(mcDir, syncMode);
@@ -236,11 +328,42 @@ const commands = {
         Object.assign(t, { opening: p.opening, prepared: p.card, read: f.read || `the prepared talk ${prepPath(mcDir, file)}`, prep: prepPath(mcDir, file) });
       }
       if (!t.opening) die('Give the opening: --opening "<what you are sending them>", or --from-prep <file> for a talk prepared ahead');
+      // A prepared talk they asked for on a talk day (or a day the newest rhythm change dropped, which
+      // counts as one) replaces an earlier one that got no reply. The opening is sealed, so the one
+      // sentence naming the replaced talk is added to it here.
+      const replaced = t.prep && shown && countsAsTalkDay(mcDir, a, d, s.timezone) ? unansweredBefore(a, d) : [];
+      if (replaced.length) t.opening = `${t.opening}\n\nYour ${a.title} talk of ${replaced.at(-1)} got no reply, so I closed it as not held.`;
       const r = openTalk(a, d, t, at);
+      if (r.created) for (const e of replaced) setTalkState(a, e, "not-held");
       if (r.created) saved(`${a.slug} talk opened ${d}`);
       const where = path.relative(mcDir, r.file).replace(/\\/g, "/");
       if (r.created && t.prep) return out(`Opened: ${where}. The opening, to send exactly as it is:\n\n${t.opening}`, { ok: true, created: true, file: r.file, opening: t.opening });
       return out(r.created ? `Opened: ${where}` : `Already open: ${where} (kept the first opening)`, { ok: true, created: r.created, file: r.file });
+    }
+    if (sub === "evidence") {
+      // What the preparation behind a talk shows (routes, sources read, the second check), so "what did
+      // you actually research?" is answered from it. Read only.
+      const ds = talkDates(a);
+      const d = f.date ? dateArg(f.date) : ([...ds].reverse().find((x) => readTalk(a, x).state === "opened") || today);
+      const t = ds.includes(d) ? readTalk(a, d) : null;
+      const found = t ? null : prepForBrief(a, d);
+      const own = t ? (t.prep ? readPrep(path.resolve(mcDir, t.prep)) : null) : (found ? readPrep(found.file) : null);
+      const p = own || reviewedBefore(a, d);
+      if (!p) return out(`There is no preparation to show for the ${a.title} talk of ${d}: do not claim any research for it.`, { ok: true, prep: null });
+      const lines = [`Preparation: ${prepPath(mcDir, p.file)}`, `Prepared: ${p.head.PREPARED || "no time recorded"}`];
+      if (!own) lines.unshift(`This talk has no preparation of its own. The newest reviewed preparation of the ${a.title} talk is from ${p.date}: say that date when you use it, and never call it this week's research.`);
+      const sec = (n) => { const k = Object.keys(p.sections).find((x) => x.toLowerCase() === n.toLowerCase()); return k ? String(p.sections[k]).trim() : ""; };
+      const shown = {};
+      for (const n of ["Routes", "Rejected routes", "Opportunities", "Research coverage", "Cut, and why"]) if (sec(n)) { lines.push("", `${n}:`, sec(n)); shown[n] = sec(n); }
+      let review = null, sources = [];
+      const base = p.file.replace(/\.md$/i, "");
+      try { review = JSON.parse(fs.readFileSync(`${base}.review.json`, "utf8")); } catch { /* none */ }
+      try { sources = JSON.parse(fs.readFileSync(`${base}.evidence.json`, "utf8")).sources || []; } catch { /* none */ }
+      lines.push("", review ? `Second check: ${review.verdict}, ${review.reviewed_at || "no time recorded"}` : "Second check: none recorded");
+      if (sources.length) { lines.push("Sources read:"); for (const x of sources) lines.push(`- ${x.url} (read ${x.read_at || "at no recorded time"}${x.tool ? `, with ${x.tool}` : ""})`); }
+      else lines.push("No source pages were recorded.");
+      lines.push("", NO_NEW_STUDY);
+      return out(lines.join("\n"), { ok: true, prep: prepPath(mcDir, p.file), ...(own ? {} : { fallback: true, date: p.date }), prepared: p.head.PREPARED || "", sections: shown, review: review ? { verdict: review.verdict, reviewed_at: review.reviewed_at } : null, sources });
     }
     if (sub === "said") {
       // One --words per message: where commands show on their screen, the whole talk is saved in
@@ -256,14 +379,53 @@ const commands = {
     if (sub === "held" || sub === "not-held") {
       const d = f.date ? dateArg(f.date) : (talkDates(a).at(-1) || die(`No ${a.title} talk exists yet.`));
       setTalkState(a, d, sub);
+      // Closing a talk writes the next talk's live questions (lib/questions.mjs), for an area that serves a goal.
+      const q = sub === "held" ? writeQuestions(mcDir, a, d, at, today) : null;
       saved(`${a.slug} talk ${d} ${sub}`);
-      return out(`Recorded: the ${a.title} talk of ${d} is ${sub}.`, { ok: true, date: d, state: sub });
+      return out(`Recorded: the ${a.title} talk of ${d} is ${sub}.`, { ok: true, date: d, state: sub, ...(q ? { questions: path.relative(mcDir, q.file).replace(/\\/g, "/"), questions_date: q.date } : {}) });
     }
     if (sub === "state") {
       const ds = talkDates(a);
       return out(ds.slice(-5).map((d) => `${d}: ${readTalk(a, d).state}`).join("\n") || "No talks yet.", ds.map((d) => ({ date: d, state: readTalk(a, d).state })));
     }
-    die("godspeed-coach talk open|said|held|not-held|state <area>");
+    die("godspeed-coach talk open|said|evidence|held|not-held|state <area>");
+  },
+  // The live questions of an area's next talk (lib/questions.mjs). The program writes the file when
+  // a talk closes; the model refines it only here. With no date: the next talk that has a file, else
+  // the next talk day.
+  questions() {
+    const [name, sub, ...args] = pos;
+    const a = needArea(name);
+    if (!hasQuestions(a)) die(`The ${a.title} area serves no goal, so it has no live questions.`);
+    const d = f.date ? dateArg(f.date) : openQuestionsDate(a, today) || nextTalkDay(a, today);
+    if (!d) die(`The ${a.title} talk has no coming day.`);
+    const rel = (p) => path.relative(mcDir, p).replace(/\\/g, "/");
+    if (!sub || sub === "show") {
+      const q = readQuestions(questionsFile(a, d));
+      if (!q) return out(`No questions yet for the ${a.title} talk of ${d}. They are written when a talk closes.`, { ok: true, date: d, questions: [] });
+      return out(`${rel(q.file)}\n` + q.items.map((i) => `- ${i.text}\n  why: ${i.why}`).join("\n"), { ok: true, date: d, file: rel(q.file), questions: q.items });
+    }
+    try {
+      if (sub === "add") {
+        const r = addQuestion(a, d, args.join(" "), f.why, at);
+        if (r.changed) saved(`${a.slug} question added for ${d}`);
+        return out(r.changed ? `Added to ${rel(r.file)}.` : "Already there. Nothing changed.", { ok: true, date: d, changed: r.changed });
+      }
+      if (sub === "drop") {
+        const r = dropQuestion(a, d, args.join(" "), at);
+        saved(`${a.slug} question dropped for ${d}`);
+        return out(`Dropped: ${r.dropped}`, { ok: true, date: d, dropped: r.dropped });
+      }
+      if (sub === "write") {
+        const last = talkDates(a).filter((x) => x < d).at(-1);
+        if (!last) die(`The ${a.title} area has no talk before ${d} to write questions from.`);
+        const r = writeQuestions(mcDir, a, last, at);
+        if (!r) die("No questions could be written.");
+        saved(`${a.slug} questions ${r.date}`);
+        return out(`Written: ${rel(r.file)} (${r.count} questions).`, { ok: true, date: r.date, count: r.count });
+      }
+    } catch (e) { die(e.message); }
+    die('godspeed-coach questions <area> [show] | add "<question>" --why "<why>" | drop "<words>" | write [--date <talk day>]');
   },
   habit() {
     const [sub, ...args] = pos;
@@ -389,6 +551,7 @@ const commands = {
       else if (w.kind === "auto") track(w.habit, w.ymd, "done", "data", w.words);
       else if (w.kind === "follow-up") setFollowUp(w.area, w.ymd, w.at);
       else if (w.kind === "not-held") setTalkState(w.area, w.ymd, "not-held");
+      else if (w.kind === "questions") writeQuestions(mcDir, w.area, w.ymd, at, w.from);
     }
     commitCoach(mcDir, writes.length ? `coach: ${[...new Set(writes.map((w) => w.kind))].join(", ")}` : "coach: pending changes", syncMode);
     if (messages.length) process.stdout.write(messages.join("\n\n") + "\n");

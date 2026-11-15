@@ -23,14 +23,14 @@ import { BRAIN_PAGE } from "@/lib/brain-page";
 import { PageMarkdown, ShowMore } from "@/components/brain/PageMarkdown";
 import {
   GROUPS, NAME_LIMIT, ORIGIN_NOTE, ORIGIN_WORDS, PAGE_CHAT, PAGE_CHAT_CHANGED, TOGGLE_PAGE_CHAT, chars, identity, kindTag, manualAfter, places, plainInline, reflow, ruleListLine, sizeLine, sizeState, versionWords, whenLabel,
-  type Instruction, type InstructionVersion, type Item, type ManualSize, type NotebookTotals, type Overview, type PageFields, type RuleFields, type RuleGroup, type SkillFields, type SoulSize, type Version,
+  type Instruction, type InstructionVersion, type Item, type ManualSize, type NotebookTotals, type Overview, type PageFields, type RemovedRule, type RuleFields, type RuleGroup, type SkillFields, type SoulSize, type Version,
 } from "@/lib/identity";
 
 // GODSPEED'S BRAIN (lib/brain-page.ts; notebook/ui/DESIGN.md, "Godspeed's brain"): the files that
 // make this mission control behave as it does, each changed here or by asking in the chat docked
 // beside the page. Every change keeps the earlier version, and any version can be brought back as
-// a new change. Rules, profile pages and skills carry the numbers the chat is told, so "change
-// rule 13" means the tile that shows 13.
+// a new change. Rules, what it knows about you and skills carry the numbers the chat is told, so
+// "change rule 13" means the tile that shows 13.
 const selectClass = "block w-full min-h-11 rounded-md border border-input bg-background px-3 text-base sm:text-sm";
 const CHAT = { page: PAGE_CHAT, label: BRAIN_PAGE.label, toggleEvent: TOGGLE_PAGE_CHAT, changedEvent: PAGE_CHAT_CHANGED };
 
@@ -185,8 +185,8 @@ function Editor({ target, overview, onClose }: { target: string; overview?: Over
     finally { setBusy(false); setConfirmRemove(false); }
   };
   const tile = overview?.rules.find((r) => r.target === target), page = overview?.profile.find((p) => p.target === target), skill = overview?.skills.find((k) => k.target === target);
-  const title = !d ? "Loading…" : d.kind === "who" ? "Who it is" : d.kind === "extra" ? "Extra instructions" : d.kind === "rule" ? (tile?.title || (d.fields as RuleFields).title) : d.kind === "skill" ? "Skill: " + (skill?.title ?? (d.fields as SkillFields).name) : (page?.title ?? "Profile page");
-  const numbered = tile ? "Rule " + tile.n + ". " : page ? "Profile page " + page.n + ". " : skill ? "Skill " + skill.n + ". " : "";
+  const title = !d ? "Loading…" : d.kind === "who" ? "Who it is" : d.kind === "extra" ? "Extra instructions" : d.kind === "rule" ? (tile?.title || (d.fields as RuleFields).title) : d.kind === "skill" ? "Skill: " + (skill?.title ?? (d.fields as SkillFields).name) : (page?.title ?? "What it knows about you");
+  const numbered = tile ? "Rule " + tile.n + ". " : page ? page.n + ". " : skill ? "Skill " + skill.n + ". " : "";
   // What a change does to AGENTS.md and to what the assistant's program reads first.
   const manualSize = d?.manual ?? overview?.manual, soulSize = d?.soul ?? overview?.soul;
   const ruleBefore = d?.kind === "rule" && (d.fields as RuleFields).always ? (d.fields as RuleFields).line : "", ruleAfter = d?.kind === "rule" && draft?.always ? draft?.line ?? "" : "";
@@ -314,6 +314,43 @@ function NewRule({ overview, onClose }: { overview?: Overview; onClose: () => vo
 }
 
 // Instructions for the AI apps connected to the notebook: records they receive with the profile.
+// Rules taken away, closed until asked: each opens its earlier versions, with a way to bring it back.
+function RemovedRules() {
+  const removed = useQuery({ queryKey: ["identity", "removed"], queryFn: identity.removedRules });
+  const invalidate = useInvalidate();
+  const [openList, setOpenList] = useState(false), [of, setOf] = useState<RemovedRule | null>(null), [busy, setBusy] = useState(false), [error, setError] = useState("");
+  const list = removed.data ?? [];
+  if (!list.length) return null;
+  const bringBack = async (rule: RemovedRule) => {
+    setBusy(true); setError("");
+    try { await identity.restore(rule.target, rule.version); toast.success("Brought back. The removal is kept as an earlier version."); invalidate(rule.target); setOf(null); }
+    catch (e) { setError((e as Error).message); }
+    finally { setBusy(false); }
+  };
+  return (
+    <>
+      <Collapsible open={openList} onOpenChange={setOpenList} className="rounded-lg border border-border">
+        <CollapsibleTrigger asChild><button type="button" className="flex min-h-12 w-full items-center justify-between gap-2 rounded-lg px-4 py-2 text-left text-base font-semibold hover:bg-accent/50"><span>Removed rules ({list.length})</span><ChevronDown className={cn("h-5 w-5 shrink-0 transition-transform", openList && "rotate-180")} aria-hidden="true" /></button></CollapsibleTrigger>
+        <CollapsibleContent className="space-y-2 px-4 pb-4 pt-1">
+          {list.map((r) => <div key={r.target} className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border p-3">
+            <div className="min-w-0"><p className="text-sm font-medium">{r.title}</p>{r.line && <p className="text-xs text-muted-foreground">{plainInline(r.line)}</p>}<p className="text-xs text-muted-foreground">Removed {whenLabel(r.removed_at)}</p></div>
+            <Button size="sm" variant="outline" className="min-h-11 sm:min-h-9" onClick={() => { setError(""); setOf(r); }}>{`Open ${r.title}`}</Button>
+          </div>)}
+        </CollapsibleContent>
+      </Collapsible>
+      {of && <Dialog open onOpenChange={(o) => { if (!o) setOf(null); }}>
+        <DialogContent className="max-h-[92dvh] max-w-2xl overflow-y-auto p-4 sm:p-6">
+          <DialogHeader><DialogTitle className="pr-6 text-xl leading-snug">{of.title}</DialogTitle><DialogDescription>This rule was removed. Your assistant does not follow it now.</DialogDescription></DialogHeader>
+          <h3 className="text-base font-semibold">Earlier versions</h3>
+          {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+          <Button className="min-h-11 sm:min-h-9" disabled={busy} onClick={() => void bringBack(of)}>Bring it back</Button>
+          <Versions target={of.target} kind="rule" onChanged={() => { invalidate(of.target); setOf(null); }} />
+        </DialogContent>
+      </Dialog>}
+    </>
+  );
+}
+
 function Instructions() {
   const invalidate = useInvalidate();
   const list = useQuery({ queryKey: ["identity-instructions"], queryFn: identity.instructions });
@@ -561,14 +598,15 @@ export default function Identity() {
                   </CollapsibleContent>
                 </Collapsible>}
                 {!o.rules.length && <p className="text-sm text-muted-foreground">No rules yet.</p>}
+                <RemovedRules />
                 <Instructions />
               </Section>
 
-              <Section id="profile" icon={<BookUser className="h-5 w-5" />} title="What it knows about you" explain="Pages about you, your work and your voice. Your assistant opens them when its main instructions point to them or when their subject comes up.">
+              <Section id="profile" icon={<BookUser className="h-5 w-5" />} title="What it knows about you" explain="What it knows about you, your work and your voice. Your assistant opens them when its main instructions point to them or when their subject comes up.">
                 {o.profile.length > 0 && <div className={grid}>
                   {o.profile.map((p) => <Tile key={p.target} n={p.n} name={p.title} text={plainInline(p.preview)} waiting={p.review_waiting} onOpen={() => setOpen(p.target)} />)}
                 </div>}
-                {!o.profile.length && <p className="text-sm text-muted-foreground">No pages yet.</p>}
+                {!o.profile.length && <p className="text-sm text-muted-foreground">Nothing about you yet.</p>}
                 <InYourNotebook />
               </Section>
 

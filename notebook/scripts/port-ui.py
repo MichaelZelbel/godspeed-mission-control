@@ -13,6 +13,7 @@ for group in ['dependencies','devDependencies']:
     for name in list(package[group]):
         if name.startswith('@powersync/') or name.startswith('@journeyapps/') or name in ['@tauri-apps/cli','lovable-tagger','vite-plugin-pwa']: del package[group][name]
 (target/'package.json').write_text(json.dumps(package,indent=2)+'\n',encoding='utf-8')
+# A person is present: a maintainer runs this script by hand.
 (target/'UPSTREAM.md').write_text('Reused from MichaelZelbel/menerio at '+subprocess.check_output(['git','-C',str(source),'rev-parse','HEAD'],text=True).strip()+'.\nLicense: AGPL-3.0-only. See LICENSE. No personal data or upstream credentials are included.\n',encoding='utf-8')
 # Replaced files are maintained locally and reapplied from a separate adapter directory.
 adapters=pathlib.Path(__file__).resolve().parents[1]/'adapters'

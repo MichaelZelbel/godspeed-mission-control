@@ -20,8 +20,10 @@ import {readEntries as headacheEntries} from '../../third-party/addons/godspeed-
 import {episodesFrom} from '../../third-party/addons/godspeed-headache/lib/episodes.mjs';
 import {logFromRows} from '../../third-party/addons/godspeed-headache/lib/rows.mjs';
 import {visibleRows} from './visibility.mjs';
-import {currentHealth} from './health-inputs.mjs';
+import {currentHealth,isAutomaticHealthColumn} from './health-inputs.mjs';
+import {QueryService} from './query.mjs';
 import {loadSettings as headacheSettings,saveSettings as saveHeadache} from '../../third-party/addons/godspeed-headache/lib/settings.mjs';
+import {loadSettings as charmSettings,saveSettings as saveCharm} from '../../third-party/addons/godspeed-charm/lib/settings.mjs';
 const iso=()=>new Date().toISOString();
 // The Headaches tracker (D-321): the collection whose tracker card names the headache specialist,
 // the oldest should there be two, as the add-on's own lib/notebook.mjs picks it. Once it exists its
@@ -35,7 +37,7 @@ export function nativeRows(store,type){
  if(['health_episodes','medications'].includes(type)){const data=headacheLog(store),file=data.tracker?'notebook/Collections':'routines/headache';if(type==='health_episodes')return data.episodes.map(({item,...e})=>({...e,id:'headache-'+e.id,uid:hash(e.id),native_file:file,onset_at:e.start,created_at:e.start,type,_hash:hash(e)}));return [...data.loose.map(({item,...m})=>m),...data.episodes.flatMap(e=>e.meds)].map(m=>({...m,id:'medication-'+hash(m),uid:hash(m),taken_at:m.taken,created_at:m.taken,type,_hash:hash(m)}));}
  if(type==='coach_talks')return listAreas(store.root).flatMap(area=>talkDates(area).map(day=>{const talk=readTalk(area,day),content=fs.readFileSync(talk.file,'utf8');return {id:'talk-'+area.slug+'-'+day,uid:hash(talk.file).slice(0,32),area:area.slug,native_file:path.relative(store.root,talk.file).replaceAll('\\','/'),question:talk.sections['The opening']||'',replies:(talk.sections['What you said']||'').split('\n').filter(Boolean).map(content=>({content})),sources:talk.sections['What was read']||'',status:talk.state==='opened'?'open':'closed',created_at:talk.opened||day+'T00:00:00Z',_hash:hash(content),type};}));
  if(type==='habits')return listHabits(store.root).map(h=>({id:'habit-'+h.area+'-'+h.slug,uid:hash(h.file).slice(0,32),native_file:path.relative(store.root,h.file).replaceAll('\\','/'),title:h.title,name:h.title,doneMeans:h.doneMeans,days:h.days,daysText:h.daysText,started:h.started,progress:habitProgress(h,{timezone:store.get('settings','installation')?.timezone||'UTC'}),area:h.area,status:h.status,agreement:h.agreed,talk_id:h.agreed.match(/\[talk:(.+?)\]/)?.[1]||null,check_at:parseDoc(fs.readFileSync(h.file,'utf8')).head['CHECK-AT']||null,observations:Object.entries(h.log).map(([at,o])=>({at,content:o.words,answer:o.answer})),_hash:hash(fs.readFileSync(h.file)),created_at:h.started+'T00:00:00Z',type}));
- if(type==='journal')return readEntries(store.root,journalSettings(store.root),{days:3650}).map(e=>({id:'journal-'+hash(e),uid:hash(e).slice(0,32),...e,content:e.words,created_at:e.at,type}));
+ if(type==='journal')return readEntries(store.root,journalSettings(store.root),{days:3650}).filter(e=>e.kind!=='impact').map(e=>({id:'journal-'+hash(e),uid:hash(e).slice(0,32),...e,content:e.words,created_at:e.at,type}));
  return [];
 }
 export function rememberFile(store,file){if(fs.existsSync(file)){const content=fs.readFileSync(file);atomic(path.join(store.root,'coach','history',hash(file)+'-'+hash(content)+'.txt'),content);}}
@@ -71,20 +73,37 @@ export function nativeOperation(store,input){
  if(input.type==='journal-switch'){const settings=journalSettings(store.root);saveJournal(store.root,{...settings,capture_enabled:input.enabled});return {enabled:input.enabled};}
  return null;
 }
-export function addonCommand(store,{addon,args}){
- if(!['coach','journal','headache'].includes(addon)||!Array.isArray(args)||args.some(a=>typeof a!=='string'||a.length>20000)||args.some(a=>['--godspeed','--evidence-script'].includes(a)))throw Error('Invalid personal command');
- const allowed=addon==='headache'?['help','start','log','end','set','med','cancel','open','list','show','patterns','daily','context','config']:addon==='coach'?['help','areas','show','area','brief','talk','habit','habits','context','config']:['help','start','define','note','done','drop','reopen','check','status','context','report','week','words','open','met','config'];
- if(!allowed.includes(args[0]))throw Error('This personal command is not available through the notebook');
+// A refusal of the charm add-on (it exits 2, ruling R4): nothing was written, and the reply is a
+// plain sentence for the person, never "Personal command failed". charm-operation.mjs answers with
+// it; /charm shows the add-on's own {ok:false,reply,state} (personal-operations.mjs).
+const refusal=(reply,state=null,output=JSON.stringify({ok:false,reply,state}))=>Object.assign(Error(reply),{refusal:{reply,state},output});
+// The checked command line of an add-on and how to run it; addonCommand runs it and waits, a caller
+// that must not block the server runs it itself. `judge` takes a command to run (--model-command), so
+// only charm-judgement.mjs, which fixes that command, may ask for it.
+export function addonInvocation(store,{addon,args},{judge=false}={}){
+ if(!['coach','journal','headache','charm'].includes(addon)||!Array.isArray(args)||args.some(a=>typeof a!=='string'||a.length>20000)||args.some(a=>['--godspeed','--evidence-script'].includes(a)))throw Error('Invalid personal command');
+ const allowed=addon==='charm'?['help','start','status','asked','answer','slip','stop','brief','context','config']:addon==='headache'?['help','start','log','end','set','med','cancel','open','list','show','patterns','daily','context','config']:addon==='coach'?['help','areas','show','area','brief','talk','habit','habits','context','config']:['help','start','define','note','done','drop','reopen','check','status','context','report','week','words','open','met','config'];
+ if(!allowed.includes(args[0])&&!(judge&&addon==='charm'&&args[0]==='judge'))throw Error('This personal command is not available through the notebook');
  if(args.some(a=>/^(?:evidence[.]script|--hook|--command|--script)$/.test(a)))throw Error('Executable hooks require a separately reviewed installation');
  const autoIndex=args.indexOf('--auto');if(autoIndex!==-1&&!parseAuto(args[autoIndex+1]))throw Error('Automatic habit evidence needs a numeric measurement comparison');
- const timezone=store.get('settings','installation')?.timezone||'UTC',load=addon==='headache'?headacheSettings:addon==='coach'?coachSettings:journalSettings,save=addon==='headache'?saveHeadache:addon==='coach'?saveCoach:saveJournal,settings=load(store.root);if(settings.timezone!==timezone)save(store.root,{...settings,timezone});
+ const timezone=store.get('settings','installation')?.timezone||'UTC',load=addon==='charm'?charmSettings:addon==='headache'?headacheSettings:addon==='coach'?coachSettings:journalSettings,save=addon==='charm'?saveCharm:addon==='headache'?saveHeadache:addon==='coach'?saveCoach:saveJournal;
+ // The charm's settings name the day boundary of its count, so a file it cannot read stops it
+ // (its loadSettings throws) rather than filing events on a guessed day: a refusal, said plainly.
+ // The sentence is the notebook's own, in English, so the chat puts it in the person's language.
+ let settings;try{settings=load(store.root);}catch(error){if(addon!=='charm')throw error;const said=refusal('The Charm Challenge cannot read its settings file, so nothing was changed.');said.refusal.language='en';throw said;}
+ if(settings.timezone!==timezone)save(store.root,{...settings,timezone});
  if(addon==='coach'&&settings.daily_table)localPath(store.root,settings.daily_table);
  if(args[0]==='config'&&args[1]==='set'&&args[2]==='daily_table'&&args[3])localPath(store.root,args[3]);
  if(addon==='journal'&&settings.evidence?.script&&args[0]==='check')throw Error('Executable journal evidence requires a separately reviewed installation');
  fs.mkdirSync(path.join(store.root,'observations'),{recursive:true});
  if(!fs.existsSync(path.join(store.root,'AGENTS.md')))atomic(path.join(store.root,'AGENTS.md'),'# Personal workspace\n\nKeep durable state in user files. Outward actions require exact approval.\n');
  const script=fileURLToPath(new URL('../../third-party/addons/godspeed-'+addon+'/bin/godspeed-'+addon+'.mjs',import.meta.url));
- const run=spawnSync(process.execPath,[script,...args,'--godspeed',store.root,'--json'],{cwd:store.root,windowsHide:true,shell:false,timeout:15000,encoding:'utf8',env:{...process.env,GODSPEED_COACH_APP:path.join(store.state,'coach-app'),GODSPEED_JOURNAL_APP:path.join(store.state,'journal-app'),GODSPEED_COACH_GIT_SYNC:'off',GODSPEED_JOURNAL_GIT_SYNC:'off',GODSPEED_HEADACHE_GIT_SYNC:'off'}});
+ return {command:process.execPath,argv:[script,...args,'--godspeed',store.root,'--json'],cwd:store.root,env:{...process.env,GODSPEED_COACH_APP:path.join(store.state,'coach-app'),GODSPEED_JOURNAL_APP:path.join(store.state,'journal-app'),GODSPEED_COACH_GIT_SYNC:'off',GODSPEED_JOURNAL_GIT_SYNC:'off',GODSPEED_HEADACHE_GIT_SYNC:'off'}};
+}
+export function addonCommand(store,{addon,args}){
+ const {command,argv,cwd,env}=addonInvocation(store,{addon,args});
+ const run=spawnSync(command,argv,{cwd,windowsHide:true,shell:false,timeout:15000,encoding:'utf8',env});
+ if(addon==='charm'&&run.status===2){let said=null;try{said=JSON.parse(run.stdout.trim());}catch{}if(said&&said.ok===false&&typeof said.reply==='string')throw refusal(said.reply,said.state??null,run.stdout.trim());}
  if(run.status!==0)throw Error('Personal command failed: '+String(run.stderr||'No result').slice(0,300));return {result:run.stdout.trim()};
 }
 export function nativeCoachContext(store,area){const a=findArea(store.root,area);if(!a)return null;return brief(store.root,coachSettings(store.root),a,localParts(new Date(),coachSettings(store.root).timezone).date);}
@@ -101,11 +120,15 @@ export function retainHabitReview(store,habit,question,sources){
   const note=store.prepare('notes',{title:'Review '+current.title,content:question,source_app:'habit-check',habit_ids:[current.id],observation_day:localParts(new Date(),store.get('settings','installation')?.timezone||'UTC').date});store.commit([note],{files:[{file:current.native_file,text},{file:'coach/history/'+hash(file)+'-'+hash(previous)+'.txt',text:previous}]});return note;
  });
 }
+const coachColumn=metric=>metric.replaceAll(' ','_');
 export function nativeTick(store,addon,now=new Date(),query){
  let messages=[],writes=[];
  const timezone=store.get('settings','installation')?.timezone||'UTC';
  if(addon==='coach'){
-  const settings={...coachSettings(store.root),timezone},table={};for(const observation of (query?currentHealth(query,{now:now.getTime()}).observations:store.list('health_observations').filter(r=>r.ai_visibility!=='hidden'&&!r.is_sensitive&&Date.parse(r.observed_at)<=now.getTime()&&Date.parse(r.observed_at)>=now.getTime()-7*86400000)).sort((a,b)=>a.observed_at.localeCompare(b.observed_at))){const day=observation.observed_on||localParts(new Date(observation.observed_at),timezone).date;(table[day]||={date:day})[observation.metric.replaceAll(' ','_')]=String(observation.value);}({messages,writes}=dueTick(store.root,settings,now,table));
+  const settings={...coachSettings(store.root),timezone},table={},health=currentHealth(query||new QueryService(store),{now:now.getTime()}),resolvedColumns=new Set(health.days.flatMap(day=>Object.keys(day.columns).map(metric=>day.date+'\n'+coachColumn(metric)))),put=(day,metric,value)=>{(table[day]||={date:day})[coachColumn(metric)]=String(value);};
+  for(const day of health.days)for(const [metric,column] of Object.entries(day.columns))if(isAutomaticHealthColumn(column))put(day.date,metric,column.value);
+  for(const observation of health.observations.filter(row=>row.date_precision!=='day'||!row.observed_on).sort((a,b)=>String(a.observed_at).localeCompare(String(b.observed_at)))){const date=localParts(new Date(observation.observed_at),timezone).date;if(!resolvedColumns.has(date+'\n'+coachColumn(observation.metric)))put(date,observation.metric,observation.value);}
+  ({messages,writes}=dueTick(store.root,settings,now,table));
  }else{
   const settings={...journalSettings(store.root),timezone};if(settings.capture_enabled===false)return {verified:true,silent:true};
   // The integrated worker reads record evidence. Executable evidence hooks are

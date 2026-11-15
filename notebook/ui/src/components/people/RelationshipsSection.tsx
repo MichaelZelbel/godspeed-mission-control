@@ -38,6 +38,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { showToast } from "@/lib/toast";
+import { personLabel } from "@/components/timeline/people";
 
 export interface RelationshipMilestone {
   id: string;
@@ -493,7 +494,7 @@ export function RelationshipsSection({ contactId, contactName, milestones = [] }
                 </SelectTrigger>
                 <SelectContent>
                   {availableContacts.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                    <SelectItem key={c.id} value={c.id}>{personLabel(c)}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>

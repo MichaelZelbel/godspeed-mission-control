@@ -49,6 +49,12 @@ part in the chat, then, whenever you like, a short chat in which your assistant 
 - **Run it again at any time.** It keeps the setup code, the address and all data, updates to
   the image `compose.yaml` pins today, and never makes a second owner: before the account
   exists it prints a fresh link (the old one stops working), after that it says to sign in.
+  When the new version does not start, the one that ran before is started again.
+- **Updating.** `sudo godspeed-update` on the server brings it to the newest stable release, the
+  one GitHub marks Latest; `sudo godspeed-update --check` only says which version runs and which is
+  the newest. It downloads that release's source, keeps it only when its checksum is the one the
+  release's `SHA256SUMS` lists, and runs this same installer from it. Settings, About in the notebook
+  shows the newest version and this line; the notebook in the container never runs it.
 - **What it noted** is in `/opt/godspeed-mission-control/install.log`. By hand afterwards:
   `cd /opt/godspeed-mission-control && docker compose ps` (or `logs`).
 - **Trying a version before it is released.** The stage this line installs names the image it runs,

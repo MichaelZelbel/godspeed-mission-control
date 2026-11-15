@@ -42,7 +42,7 @@ act() {
 
   say "The owner sets their own summarising threshold, the way they would in the assistant's settings"
   owner_sets_threshold "$HERMES/config.yaml" 150000
-  install_the_stage_line "$EVIDENCE/second-trace.log"
+  GODSPEED_SCENARIO_REUSE_INSTALL= install_the_stage_line "$EVIDENCE/second-trace.log"
   assistant_home
   [ -f "$HERMES/config.yaml" ] || fail "the second run of the line left no settings file behind"
   cp "$HERMES/config.yaml" "$EVIDENCE/config-after-owner-change.yaml"

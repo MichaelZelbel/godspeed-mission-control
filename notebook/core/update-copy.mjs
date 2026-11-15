@@ -5,6 +5,8 @@ import {createHash,randomUUID} from 'node:crypto';
 import {atomic,hash,retrying,Store} from './records/store.mjs';
 import {inUpdateCopy,updateCopyRoots,updateCopyFiles,updateUntouchedRoots,devicePrivate,devicePrivatePaths,recordsFolder} from './file-policy.mjs';
 import {partialOf,requireSpace,readBackupManifest} from './archives.mjs';
+import {createRequire} from 'node:module';
+const {quietGit}=createRequire(import.meta.url)('../../tools/unattended-git.cjs');
 
 // THE COPY AN UPDATE MAKES BEFORE IT CHANGES ANYTHING (21 October 2026).
 //
@@ -40,9 +42,9 @@ const pathspecs=[...updateCopyRoots,...updateCopyFiles];
 const excluded=[':(exclude)work',...devicePrivatePaths.map(p=>':(exclude)'+p),':(exclude,glob)**/node_modules/**',':(exclude,glob)**/.*',':(exclude,glob)**/.*/**'];
 
 function git(cwd,args,{env={},input}={}){
-  const run=spawnSync('git',['-C',cwd,...args],{encoding:'buffer',windowsHide:true,maxBuffer:1<<30,timeout:600000,input:input===undefined?undefined:Buffer.from(input,'utf8'),
-    // Never a prompt, and never a write to the owner's index (status and diff refresh it otherwise).
-    env:{...process.env,GIT_OPTIONAL_LOCKS:'0',GIT_TERMINAL_PROMPT:'0',...env}});
+  const run=spawnSync(...quietGit(['-C',cwd,...args],{encoding:'buffer',maxBuffer:1<<30,timeout:600000,input:input===undefined?undefined:Buffer.from(input,'utf8'),
+    // Never a prompt (quietGit), and never a write to the owner's index (status and diff refresh it otherwise).
+    env:{...process.env,GIT_OPTIONAL_LOCKS:'0',...env}}));
   if(run.error)throw run.error;
   if(run.status!==0)throw Object.assign(Error(String(run.stderr||'').trim().split('\n')[0]||('git '+args[0]+' failed')),{code:'GIT_FAILED'});
   return run.stdout;

@@ -1,5 +1,11 @@
 import fs from 'node:fs';import path from 'node:path';import {spawnSync} from 'node:child_process';import {createRequire} from 'node:module';import {fileURLToPath} from 'node:url';import {hash,safe} from './records/store.mjs';
 const {parseCard,renderCard}=createRequire(import.meta.url)('../../tools/mc-cards.js');
+// A work card the person declined or postponed (a current hold claim in world/claims, #282) is
+// shown as held, never as waiting for their approval. Read live and never stored, so it lifts by
+// itself when its claim ends. Holds that cannot be read mark every card that touches an entity
+// held, because "could not tell" must never show a step the person may have declined.
+const holdsFile=fileURLToPath(new URL('../../tools/holds.js',import.meta.url));
+let holds=null,holdsError='';if(fs.existsSync(holdsFile)){try{holds=createRequire(import.meta.url)(holdsFile);}catch(e){holdsError=String(e.message).split('\n')[0];}}
 import {localPath} from './local-path.mjs';
 const table={goals:'goals',forecast:'forecasts',work:'work_items'};
 function regularTree(root){for(const entry of fs.readdirSync(root,{withFileTypes:true})){const file=path.join(root,entry.name);if(entry.isSymbolicLink())throw Error('Personal card files must not contain symbolic links');if(entry.isDirectory())regularTree(file);}}
@@ -51,10 +57,12 @@ export function filedAt(card,stored,file){
 export function nativeCardRows(store,type){
  const kind=Object.keys(table).find(k=>table[k]===type);if(!kind)return null;
  const folder=path.join(store.root,kind==='forecast'?'forecasts':kind);if(!fs.existsSync(folder))return [];
+ let inForce=[],unread=holdsError;
+ if(kind==='work'&&holds)try{inForce=holds.currentHolds(store.root,process.env.GODSPEED_TODAY||new Date().toISOString().slice(0,10));}catch(e){unread=String(e.message).split('\n')[0];}
  return fs.readdirSync(folder).filter(n=>n.endsWith('.md')&&n!=='README.md').flatMap(name=>{
   const file=path.join(folder,name),text=fs.readFileSync(file,'utf8'),card=parseCard(text);if(!card.f.ID)return [];
-  const stored=store.get(type,card.f.ID);
-  return [{...stored,...values(card,kind),legacy_fields:card.f,legacy_log:card.log,legacy_source:path.relative(store.root,file).replaceAll('\\','/'),created_at:filedAt(card,stored,file),_hash:hash(text)}];
+  const stored=store.get(type,card.f.ID),held=kind==='work'&&unread&&card.f.TOUCHES?{id:`holds not read: ${unread}`}:inForce.length?holds.heldBy(inForce,{touches:card.f.TOUCHES,text:card.f.WHAT}):null;
+  return [{...stored,...values(card,kind),...(held?{state:'held',held_by:held.id}:{}),legacy_fields:card.f,legacy_log:card.log,legacy_source:path.relative(store.root,file).replaceAll('\\','/'),created_at:filedAt(card,stored,file),_hash:hash(text)}];
  });
 }
 // What a card command may do in the record runtime, for everyone, and in either

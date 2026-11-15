@@ -5,8 +5,10 @@
  *
  * Case 1 is the incident behind it: a post approved and published in a working session, and the
  * two deadlines about it left open because nothing closed them. The session must be stopped once
- * and named them; a second stop in the same session must pass; a deadline an event already closed
- * must never be raised. Everything runs in a throwaway mission control.
+ * and named them; a second stop in the same session must pass; a deadline a closing moment already
+ * closed must never be raised. Everything runs in a throwaway mission control of the shape an
+ * install has since 30 October 2026: its deadlines are pages in its notebook and it has no folder
+ * of plan files at all.
  *
  * Run: node tools/test-obligation-close-hook.js
  */
@@ -22,18 +24,25 @@ const HOOK = path.join(KIT, "starter-godspeed", ".claude", "hooks", "obligation-
 const DUE = path.join(KIT, "tools", "due.js");
 const TMP = fs.mkdtempSync(path.join(os.tmpdir(), "kit-occ-"));
 
-function deadline(root, name, title, doneWhen, window, selfCheck) {
-  fs.writeFileSync(path.join(root, "due", name + ".md"),
-    `# ${title}\n\nTITLE: ${title}\nDONE-WHEN: ${doneWhen}\nCOST-IF-MISSED: It slips.\nSELF-CHECK: ${selfCheck || "none"}\nREPEATS: no\n\n` +
-    `## Windows\n\nSTRIP: ${window}\n\n## Log\n\n- 2026-09-16 created\n`);
+// A deadline as a person's mission control holds one since 30 October 2026: a page in its
+// notebook, made by the program itself, never a file written into a folder of plans. The hook only
+// ever learns of it through `mc-due state --json`, so seeding it this way is what the hook meets.
+function deadline(root, name, title, doneWhen, from, to, selfCheck) {
+  const args = ["add", name, "--title", title, "--done-when", doneWhen, "--cost", "It slips.",
+    "--from", from, "--to", to, "--repeats", "no"];
+  if (selfCheck) args.push("--self-check", selfCheck, "--self-check-arg", path.join(root, "secrets", "expires.txt"));
+  const r = spawnSync(process.execPath, [DUE, "--godspeed", root, ...args],
+    { encoding: "utf8", env: Object.assign({}, process.env, { GODSPEED_TODAY: "2026-09-16" }) });
+  if (r.status !== 0) throw new Error("could not make the deadline " + name + ": " + (r.stdout || "") + (r.stderr || ""));
 }
 function fixture() {
   const root = fs.mkdtempSync(path.join(TMP, "mc-"));
-  for (const d of ["due", "world/events", "rules"]) fs.mkdirSync(path.join(root, d), { recursive: true });
+  // No folder of deadline files and no folder of events: this is the shape of a new install.
+  for (const d of ["rules", "secrets"]) fs.mkdirSync(path.join(root, d), { recursive: true });
   fs.writeFileSync(path.join(root, "AGENTS.md"), "");
-  deadline(root, "post-approve", "Read the newsletter post and welcome email and say yes", "You have said yes or what to change", "2026-09-23 2026-09-25");
-  deadline(root, "post-publish", "Say publish for the newsletter post", "You have said publish", "2026-09-28 2026-09-30");
-  deadline(root, "timesheet", "Your monthly timesheet", "It is submitted", "2026-09-01 2026-09-28");
+  deadline(root, "post-approve", "Read the newsletter post and welcome email and say yes", "You have said yes or what to change", "2026-09-23", "2026-09-25");
+  deadline(root, "post-publish", "Say publish for the newsletter post", "You have said publish", "2026-09-28", "2026-09-30");
+  deadline(root, "timesheet", "Your monthly timesheet", "It is submitted", "2026-09-01", "2026-09-28");
   return root;
 }
 function transcript(entries) {
@@ -73,7 +82,8 @@ check("incident: the session that did the work is stopped", r.verdict === "block
 check("it names the publish, whose window had not opened yet", /post-publish/.test(r.reason), r.reason);
 check("it names the approval", /post-approve/.test(r.reason), r.reason);
 check("it does not name a deadline the session never touched", !/timesheet/.test(r.reason), r.reason);
-check("it tells the assistant how to close it with evidence", /mc-due done <name> --evidence/.test(r.reason), r.reason);
+check("it tells the assistant how to close it with evidence, which writes the closing moment",
+  /godspeed due done <name> --evidence/.test(r.reason) && /moment on their notebook's timeline/.test(r.reason), r.reason);
 check("it never asks the person a question", !/\?/.test(r.reason), r.reason);
 check("never twice in one session", run(root, { session_id: "a", transcript_path: transcript(incident) }).verdict === "pass");
 check("a stop after a block passes", run(root, { session_id: "b", stop_hook_active: true, transcript_path: transcript(incident) }).verdict === "pass");
@@ -83,7 +93,7 @@ spawnSync(process.execPath, [DUE, "--godspeed", root, "done", "post-approve", "-
   { env: Object.assign({}, process.env, { GODSPEED_TODAY: "2026-09-23" }) });
 spawnSync(process.execPath, [DUE, "--godspeed", root, "done", "post-publish", "--evidence", "said publish in the session"],
   { env: Object.assign({}, process.env, { GODSPEED_TODAY: "2026-09-23" }) });
-check("once closed by an event, nothing is raised", run(root, { session_id: "c", transcript_path: transcript(incident) }).verdict === "pass");
+check("once a closing moment says it is done, nothing is raised", run(root, { session_id: "c", transcript_path: transcript(incident) }).verdict === "pass");
 
 root = fixture();
 check("the assistant's own words never count", run(root, { session_id: "d", transcript_path: transcript([said("What is on today?"), spoke("Your newsletter post and welcome email are waiting.")]) }).verdict === "pass");
@@ -102,7 +112,7 @@ check("it never asks for a line about what is not finished", !/say in one line w
 
 // A key with a self check is never raised on words; words are a guess, the check is proof.
 deadline(root, "key-planino-supabase-access-token", "Renew the key that lets your machines read and deploy the Planino database",
-  "The date in secrets/expires.txt says the new one", "2026-09-15 2026-10-20", "the date in secrets/expires.txt moves forward");
+  "The date in secrets/expires.txt says the new one", "2026-09-15", "2026-10-20", "file-newer");
 const menerio = [said("Deploy the edge functions to Supabase from this machine; I renewed the Planino key for the machines."),
   ran("git commit -m \"Edge functions deployed: renew and read the Planino database from both machines\"")];
 check("a deadline with a self check is never raised on words", run(root, { session_id: "h", transcript_path: transcript(menerio) }).verdict === "pass");
@@ -114,7 +124,7 @@ check("mc-due state --json names each deadline's self check",
 
 // Without a self check: common words alone never match; the word that names it does.
 root = fixture();
-deadline(root, "planino-key", "Renew the key that lets your machines read and deploy the Planino database", "Renewed", "2026-09-15 2026-10-20");
+deadline(root, "planino-key", "Renew the key that lets your machines read and deploy the Planino database", "Renewed", "2026-09-15", "2026-10-20");
 check("common words alone are never enough", run(root, { session_id: "i", transcript_path: transcript([
   said("Lets renew the database login so the machines can read it and deploy again.")]) }).verdict === "pass");
 r = run(root, { session_id: "j", transcript_path: transcript(menerio) });

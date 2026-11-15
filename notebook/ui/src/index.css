@@ -9,6 +9,42 @@
 @tailwind components;
 @tailwind utilities;
 
+/* A side or phone chat can be narrow even on a wide viewport. Give its current Model value the
+   whole composer width, while keeping the familiar one-row toolbar in wider chat surfaces. */
+.chat-composer {
+  container-type: inline-size;
+}
+
+@container (max-width: 32rem) {
+  .chat-composer [data-chat-toolbar] {
+    display: grid;
+    grid-template-columns: 2.75rem minmax(0, 1fr) auto;
+  }
+
+  .chat-composer [data-chat-model] {
+    grid-column: 1 / -1;
+    grid-row: 1;
+    max-width: none;
+    width: 100%;
+  }
+
+  .chat-composer [data-chat-attachment] {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  .chat-composer [data-chat-effort] {
+    grid-column: 2;
+    grid-row: 2;
+    max-width: none;
+  }
+
+  .chat-composer [data-chat-actions] {
+    grid-column: 3;
+    grid-row: 2;
+  }
+}
+
 @layer base {
   :root {
     --font-body: 'Plus Jakarta Sans Variable', 'Plus Jakarta Sans', system-ui, sans-serif;

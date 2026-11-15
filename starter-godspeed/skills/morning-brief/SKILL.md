@@ -1,14 +1,31 @@
 ---
 name: morning-brief
-description: Write today's morning brief into brief/YYYY-MM-DD.md, the short message that reaches the person each morning when they switched it on in setup, with what their watches found. The starter version every mission control ships with, which the person makes their own by asking you to change it. Use when the morning brief job runs, when the person asks for "today's brief", "my brief" or "the brief again", when they answer a list of steps going out (in the brief, or in the daily round's morning message on a day without a brief) with "stop" or "stop" and a number, when they ask to put back a step the brief reported as done without asking, and when they ask to switch the morning brief on.
+description: Show the person today's morning brief by running `godspeed-brief`, the notebook's own briefing, which also reaches them each morning when they switched it on in setup. Only where that command does not exist (a server's morning job) write the brief by hand into brief/YYYY-MM-DD.md, with what their watches found. The starter version every mission control ships with, which the person makes their own by asking you to change it. Use when the person asks for "today's brief", "my brief" or "the brief again", when a morning brief job without that command runs, when they answer a list of steps going out (in the brief, or in the daily round's morning message on a day without a brief) with "stop" or "stop" and a number, when they ask to put back a step the brief reported as done without asking, and when they ask to switch the morning brief on.
 ---
 
 # Morning brief (starter)
 
 This is the starter version. It exists so that a person who said yes to a morning brief
 gets a real one from the first morning, before they have shaped it. The person makes it their
-own (how: https://godspeedmissioncontrol.com/guide/morning-brief): when they ask you to change
-what goes into their brief, edit this file, and from then on it is theirs.
+own (how: https://godspeedmissioncontrol.com/guide/morning-brief): where `godspeed-brief` does not exist (a server's morning job), when they ask you to change
+what goes into their brief, edit this file, and from then on it is theirs. Where that command exists, the notebook's own briefing is delivered and ignores this file, so do not edit it for a change to the brief: say the notebook's briefing is not shaped by this file.
+
+## Where the command exists: run it
+
+When `godspeed-brief` is a command you can run (where assistant wiring installed it), it is the notebook's own briefing, and it is the only way to give the person a brief.
+Run `godspeed-brief`, with no other word. It prints today's "Your morning briefing" if the
+notebook already saved it, or writes it once and prints it. Your answer is its text, word for word.
+When it prints nothing and succeeds, the notebook keeps today's briefing silent: say in one
+sentence that there is no briefing today. When it fails, give its one sentence and stop. Never write
+`brief/YYYY-MM-DD.md` by hand for "today's brief", "my brief" or "the brief again", and never
+add to or reword what it printed. Requests that overlap in time rely on the notebook's existing same-day check, which refuses a note it already saved today. The sections below on going out tonight, going out without asking,
+and switching it on still apply; everything else from "What to read" through "Your answer" is
+the fallback.
+
+## The fallback: where `godspeed-brief` does not exist
+
+Only a mission control without that command (a server's morning job, which runs this recipe from its
+own prompt) writes the brief by hand, by the rest of this section's parts.
 
 ## What to read
 
@@ -19,7 +36,8 @@ if there is one: its "For you today" section is the daily round's choice. Then r
 and their notes are kept: call `get_user_profile` (their facts and the people closest to them)
 and `search_brain` for the people, projects and dates the files above name. Without the
 notebook tools, read `world/` instead and say in the brief that the notebook was not reached.
-Read the previous brief in `brief/` if there is one. Today is the date the terminal gives
+Read the previous brief in `brief/` if there is one. Never show a step that `mc-work list` marks
+"held by": the person declined or postponed it. Today is the date the terminal gives
 (`date +%F`, in the time zone the morning job runs in), also when the brief runs in the
 evening: never name a brief for another day. Do not invent change over time when there is no
 earlier record.
@@ -83,7 +101,8 @@ back every step of the day: `mc-work stop --today --words "<their words>"`. "sto
 line 2: find the `id` whose `n` is 2 in `mc-work going-out --json` and run
 `mc-work stop <id> --words "<their words>"` (for several numbers, once for each). Confirm in one
 plain sentence what is kept back. When nothing was going out, say "Nothing was going out today."
-and run nothing.
+and run nothing. "No more of these" or "not until ..." about a kind of step is recorded with
+`mc-holds hold`, as the next-action recipe's Step 0 says, never in `decisions.md`.
 
 ## Done yesterday without asking
 
@@ -106,8 +125,8 @@ say in one sentence that it is back.
 Run `mc-due check`, then `mc-due today`. Put what `mc-due today` prints into a section called
 **Deadlines and targets**, word for word, and keep any error it reports. Leave the section out
 when it says nothing needs saying and there was no error. This is the only place the brief
-speaks about anything in `due/`: never read `due/` yourself, never call something overdue or
-urgent on your own. This section does not count toward the 200 words.
+speaks about a deadline or a target: never read the reminders in the notebook yourself, never
+call something overdue or urgent on your own. This section does not count toward the 200 words.
 
 ## What your watches found
 

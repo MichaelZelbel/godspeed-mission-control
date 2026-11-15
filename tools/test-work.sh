@@ -19,9 +19,11 @@ trap 'rm -rf "$TMP" "$TEST_GUARD_HOME"' EXIT
 mkdir -p "$TMP/rules" "$TMP/bin"
 : > "$TMP/AGENTS.md"
 cp "$HERE/work.js" "$TMP/bin/"
+cp "$HERE/run-log-folders.js" "$TMP/bin/"
 cp "$HERE/goals.js" "$TMP/bin/"
 cp "$HERE/mc-cards.js" "$TMP/bin/"
 cp "$HERE/check-written.js" "$TMP/bin/"
+cp "$HERE/holds.js" "$TMP/bin/"
 export GODSPEED_ROOT="$TMP"
 export GODSPEED_TODAY="2026-09-13"
 export GODSPEED_NOW="2026-09-13T10:00:00.000Z"
@@ -171,6 +173,23 @@ OUT="$(hw file --what "Tell the host about the fault" --done-when "the host has 
 contains "  and says why" "$OUT" "never outward"
 check "  and files nothing" "$(idof rep-out)" "none"
 OUT="$(hw help 2>&1)"; contains "help names the repair kind" "$OUT" "--kind do|learn|repair"
+
+# --- a page is asked for, never inferred (#268) ------------------------------------------------------------
+OUT="$(hw file --learn "Which venues fit" --path research/venues.md --publish yes --key pub-yes --source test 2>&1)"
+contains "an item asking for a page files blocked, waiting for your yes" "$OUT" "blocked (needs authorization) outward: a page, made only after your yes"
+PUB="$(idof pub-yes)"
+check "  it is outward" "$(sed -n 's/^OUTWARD: //p' "$TMP/work/$PUB.md")" "yes"
+check "  and carries PUBLISH: yes" "$(sed -n 's/^PUBLISH: //p' "$TMP/work/$PUB.md")" "yes"
+OUT="$(hw file --what "Post the venues" --done-when "research/v2.md exists" --publish yes --outward yes --goal five --may replies --check "test -f research/v2.md" --key pub-may --source test 2>&1)"; check "a page on a standing permission is refused" "$?" "1"
+contains "  and says why" "$OUT" "not on a standing permission"
+OUT="$(hw file --what "Mend and publish" --done-when "research/fix.md exists" --kind repair --publish yes --key pub-rep --source test 2>&1)"; check "a repair that asks for a page is refused" "$?" "1"
+OUT="$(hw file --what "Publish something" --done-when "it is online" --publish yes --key pub-nofile --source test 2>&1)"; check "a page with no file named is refused" "$?" "1"
+contains "  and says why" "$OUT" "names the file to publish"
+OUT="$(hw file --what "Publish maybe" --done-when "research/m.md exists" --publish maybe --key pub-maybe --source test 2>&1)"; check "--publish takes only yes or no" "$?" "1"
+OUT="$(hw file --what "Publish bare" --done-when "research/m.md exists" --publish --key pub-bare --source test 2>&1)"; check "  and a bare --publish is refused too" "$?" "1"
+check "  none of those filed anything" "$(idof pub-may)$(idof pub-rep)$(idof pub-nofile)$(idof pub-maybe)$(idof pub-bare)" "nonenonenonenonenone"
+hw file --what "Write it privately" --done-when "research/p.md exists" --key pub-none --source test >/dev/null
+check "an item filed without --publish has no PUBLISH line" "$(grep -c '^PUBLISH:' "$TMP/work/$(idof pub-none).md")" "0"
 
 # --- sweep by goal, check ---------------------------------------------------------------------------
 hw file --what "Write the chapter" --done-when "chapter in the manuscript" --key chapter --goal book --source test >/dev/null
@@ -645,6 +664,194 @@ missing "  nor work that needed no permission" "$OUT" "$AL3"
 check "  --json carries id, kind and the day" "$(GODSPEED_TODAY=2026-10-01 hw went-out --json 2>&1 | "$NODE" -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{console.log(JSON.parse(s).map(r=>r.id+":"+r.kind+":"+r.verified).join(","))})')" "$AL1:al-pages:2026-09-30"
 contains "  a day later it is not listed again" "$(GODSPEED_TODAY=2026-10-02 hw went-out 2>&1)" "nothing went out without asking on 2026-10-01"
 contains "  --date names the day" "$(hw went-out --date 2026-09-30 2>&1)" "$AL1"
+
+# --- a step the person declined or postponed (#282) ------------------------------------------------
+# Held while a current world claim holds it, live, so it comes back by itself when that claim ends.
+echo "-- holds"
+mkdir -p "$TMP/world/claims"
+printf -- '---\nsubject: the-book\nattribute: status\nvalue: beta\nvalid_from: 2026-09-01\n---\n' > "$TMP/world/claims/the-book--status--2026-09-01.md"
+printf -- '---\nsubject: the-book\nattribute: interview-stance\nvalue: not yet, only once the book is out of beta\nstance: postponed\nsteps: [interview]\nuntil: the-book--status--2026-09-01\nvalid_from: 2026-09-10\n---\n' > "$TMP/world/claims/the-book--interview-stance--2026-09-10.md"
+HOLD=world/claims/the-book--interview-stance--2026-09-10.md
+OUT="$(hw file --what "Answer the podcast's interview invitation" --done-when "the answer is sent" --outward yes --key apply-interview --touches "the-book" --source next-action 2>&1)"
+HI="$(idof apply-interview)"
+contains "file --touches stores TOUCHES on the card" "$(cat "$TMP/work/$HI.md")" "TOUCHES: the-book"
+OUT="$(hw file --what "x" --done-when "y" --touches "The Book" --source t 2>&1)"; check "  a TOUCHES that is not a slug is refused" "$?" "1"
+contains "list shows it held by the claim" "$(hw list 2>&1 | grep "$HI")" "held by $HOLD"
+check "  and its JSON names the claim in held_by" "$(hw list --json | "$NODE" -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{console.log(JSON.parse(s).find(x=>x.id===process.argv[1]).held_by)})' "$HI")" "$HOLD"
+OUT="$(hw unblock "$HI" --why "ship list answer" --approved-by "ship all" 2>&1)"; check "unblock of a held step is refused" "$?" "1"
+contains "  naming the claim and how to end it" "$OUT" "is held: $HOLD says \"not yet, only once the book is out of beta\" (postponed)"
+contains "  and how to go ahead" "$OUT" "mc-holds end the-book--interview-stance--2026-09-10"
+"$NODE" -e 'const fs=require("fs"),f=process.argv[1];fs.writeFileSync(f,fs.readFileSync(f,"utf8").replace("STATUS: blocked","STATUS: planned").replace("APPROVED:","X:").replace(/\nNEEDS: .*/,"\nNEEDS: none\nAPPROVED: 2026-09-13 \"ship all\""))' "$TMP/work/$HI.md"
+missing "  a held step is never next for a runner" "$(hw next 2>&1)" "$HI"
+OUT="$(hw take "$HI" --runner test 2>&1)"; check "  nor taken" "$?" "1"
+contains "  because it is held" "$OUT" "is held: $HOLD"
+mv "$TMP/world/claims" "$TMP/world/claims.away"; printf 'not a folder\n' > "$TMP/world/claims"
+OUT="$(hw take "$HI" --runner test 2>&1)"; check "  holds that cannot be read: it is not taken either" "$?" "1"
+contains "  and that is said" "$OUT" "what the person declined or postponed could not be read"
+rm "$TMP/world/claims"; mv "$TMP/world/claims.away" "$TMP/world/claims"
+"$NODE" -e 'const fs=require("fs"),f=process.argv[1];fs.writeFileSync(f,fs.readFileSync(f,"utf8").replace("STATUS: planned","STATUS: blocked").replace("NEEDS: none","NEEDS: authorization").replace(/\nAPPROVED: .*/,""))' "$TMP/work/$HI.md"
+printf 'ID: book\nSTATUS: adopted\nTITLE: The book\n\nMAY: book-notes | send notes about the book | 10 per week | notice | "send them for me" 2026-09-10\n\n## Log\n- 2026-09-10 FILED adopted outcome, source: x\n' > "$TMP/goals/book.md"
+OUT="$(hw file --what "Say yes to the interview slot" --done-when "said" --outward yes --goal book --may book-notes --check "test -f live.txt" --goes-out 2026-09-13T18:00 --touches the-book --key held-notice --source t 2>&1)"
+HN="$(idof held-notice)"
+if [ "$HN" != none ] && grep -q "GOES OUT" "$TMP/work/$HN.md"; then
+  missing "  a held notice step is not going out" "$(hw going-out --date 2026-09-13 2>&1)" "Say yes to the interview slot"
+  OUT="$(hw announce "$HN" 2>&1)"; check "  and is not announced" "$?" "1"
+  contains "  naming the claim" "$OUT" "$HOLD"
+  hw cancel "$HN" --why "test over" >/dev/null 2>&1
+else bad "  the held notice step could not be filed: $OUT"; fi
+OUT="$(hw file --what "Answer the radio's interview invitation" --done-when "sent" --outward yes --key apply-radio --source next-action 2>&1)"
+missing "a card without TOUCHES is listed as before" "$(hw list 2>&1 | grep "$(idof apply-radio)")" "held by"
+OUT="$(hw unblock "$(idof apply-radio)" --why "ship list answer" --approved-by "yes" 2>&1)"; check "  and unblocked as before" "$?" "0"
+# #406: the hold ends on 2026-09-20 (it holds through the 19th); today is 2026-09-13.
+printf -- '---\nsubject: the-book\nattribute: status\nvalue: beta\nvalid_from: 2026-09-01\nvalid_to: 2026-09-20\n---\n' > "$TMP/world/claims/the-book--status--2026-09-01.md"
+heldjson() { hw list --json "$@" | "$NODE" -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{console.log("["+JSON.parse(s).find(x=>x.id===process.argv[1]).held_by+"]")})' "$HI"; }
+contains "list without --date marks by today, inside the hold" "$(hw list 2>&1 | grep "$HI")" "held by $HOLD"
+check "  and its JSON names the claim" "$(heldjson)" "[$HOLD]"
+contains "list --date on the hold's last day still marks it" "$(hw list --date 2026-09-19 2>&1 | grep "$HI")" "held by $HOLD"
+check "  and its JSON names the claim" "$(heldjson --date 2026-09-19)" "[$HOLD]"
+missing "list --date after the hold ended does not mark it" "$(hw list --date 2026-09-21 2>&1 | grep "$HI")" "held by"
+contains "  (it is listed)" "$(hw list --date 2026-09-21 2>&1)" "$HI"
+check "  and its JSON gives held_by empty" "$(heldjson --date 2026-09-21)" "[]"
+OUT="$(hw list --date tomorrow 2>&1)"; check "list --date that is not a date is refused" "$?" "1"
+printf -- '---\nsubject: the-book\nattribute: status\nvalue: beta\nvalid_from: 2026-09-01\nvalid_to: 2026-09-12\n---\n' > "$TMP/world/claims/the-book--status--2026-09-01.md"
+missing "once the claim it waits on ended, it is not held" "$(hw list 2>&1 | grep "$HI")" "held by"
+OUT="$(hw unblock "$HI" --why "ship list answer" --approved-by "ship all" 2>&1)"; check "  and unblock --approved-by works" "$?" "0"
+rm -rf "$TMP/world"
+
+# --- a result is kept with the person's work, never in a run-log folder (#543) --------------------
+OUT="$(hw file --what "Draft the household emergency-kit checklist" --done-when "the checklist is written in routines/next-action/2026-09-13/kit-checklist.md" --goal ready --key kit-in-log --source next-action 2>&1)"
+check "a DONE WHEN inside a run-log folder is refused" "$?" "1"
+contains "  and names the folder the cleanup empties" "$OUT" "routines/next-action/, a run-log folder whose files the nightly cleanup deletes"
+contains "  and says where a result goes" "$OUT" "put it under work/, goals/ or ideas/"
+check "  and nothing is filed" "$(idof kit-in-log)" "none"
+OUT="$(hw file --learn "What goes in an emergency kit?" --path routines/research/2026-09-13/kit.md --key kit-learn-in-log --source test 2>&1)"
+check "a --path inside a run-log folder is refused" "$?" "1"
+check "  and nothing is filed" "$(idof kit-learn-in-log)" "none"
+OUT="$(hw file --what "Draft the kit list" --done-when "the kit list is written" --check "test -s routines/work/2026-09-13/kit.md" --key kit-check-in-log --source test 2>&1)"
+check "a CHECK reading a file inside a run-log folder is refused" "$?" "1"
+check "  and nothing is filed" "$(idof kit-check-in-log)" "none"
+OUT="$(hw file --what "Draft the household emergency-kit checklist" --done-when "the checklist is written in work/kit-checklist.md" --check "test -s work/kit-checklist.md" --goal ready --key kit-in-work --source next-action 2>&1)"
+contains "the same item with its result under work/ files" "$OUT" ": planned"
+# On Windows and on a Mac's usual disk a folder name ignores capitals, and Windows writes \ (#545)
+OUT="$(hw file --what "Draft the kit checklist" --done-when "the checklist is written in routines/Next-Action/2026-09-13/kit.md" --key kit-caps-in-log --source test 2>&1)"
+check "a DONE WHEN in a run-log folder written with other capitals is refused" "$?" "1"
+contains "  with the same message, naming the folder the cleanup empties" "$OUT" "inside routines/next-action/, a run-log folder whose files the nightly cleanup deletes"
+contains "  and says where a result goes" "$OUT" "put it under work/, goals/ or ideas/"
+check "  and nothing is filed" "$(idof kit-caps-in-log)" "none"
+OUT="$(hw file --learn "What goes in a kit?" --path 'Routines\Work\2026-09-13\kit.md' --key kit-back-in-log --source test 2>&1)"
+check "a --path in a run-log folder written with backslashes and other capitals is refused" "$?" "1"
+contains "  with the same message, naming the folder the cleanup empties" "$OUT" "inside routines/work/, a run-log folder"
+check "  and nothing is filed" "$(idof kit-back-in-log)" "none"
+OUT="$(hw file --what "Draft the kit list" --done-when "the kit list is written" --check 'test -s routines\coach-prep\2026-09-13\kit.md' --key kit-check-back-in-log --source test 2>&1)"
+check "a CHECK reading a run-log file through backslashes is refused" "$?" "1"
+check "  and nothing is filed" "$(idof kit-check-back-in-log)" "none"
+# Every system reads routines//work/, routines\\work\\ and routines/./work/ as routines/work/ (#548)
+OUT="$(hw file --what "Draft the kit checklist" --done-when "the checklist is written in routines//next-action/2026-09-13/kit.md" --key kit-dbl-in-log --source test 2>&1)"
+check "a DONE WHEN in a run-log folder written with a doubled / is refused" "$?" "1"
+contains "  with the same message, naming the folder the cleanup empties" "$OUT" "inside routines/next-action/, a run-log folder whose files the nightly cleanup deletes"
+check "  and nothing is filed" "$(idof kit-dbl-in-log)" "none"
+OUT="$(hw file --learn "What goes in a kit?" --path 'routines/./research/2026-09-13/kit.md' --key kit-dot-in-log --source test 2>&1)"
+check "a --path in a run-log folder written with a ./ step is refused" "$?" "1"
+contains "  with the same message, naming the folder the cleanup empties" "$OUT" "inside routines/research/, a run-log folder"
+check "  and nothing is filed" "$(idof kit-dot-in-log)" "none"
+OUT="$(hw file --what "Draft the kit list" --done-when "the kit list is written" --check 'test -s routines\\work\\2026-09-13\\kit.md' --key kit-check-dbl-back-in-log --source test 2>&1)"
+check "a CHECK reading a run-log file through shell-escaped backslashes is refused" "$?" "1"
+contains "  with the same message, naming the folder the cleanup empties" "$OUT" "inside routines/work/, a run-log folder"
+check "  and nothing is filed" "$(idof kit-check-dbl-back-in-log)" "none"
+OUT="$(hw file --what "Draft the kit list" --done-when 'the kit list is written in routines\/.\coach-prep//kit.md' --key kit-mixed-in-log --source test 2>&1)"
+check "a DONE WHEN in a run-log folder written with mixed separators and ./ is refused" "$?" "1"
+contains "  with the same message, naming the folder the cleanup empties" "$OUT" "inside routines/coach-prep/, a run-log folder"
+check "  and nothing is filed" "$(idof kit-mixed-in-log)" "none"
+OUT="$(hw file --what "Write the round notes" --done-when "the notes are written in work/routines/next-action-notes.md" --check "test -s work/routines/next-action-notes.md" --key notes-look-alike --source test 2>&1)"
+contains "a path that only looks like a run-log folder files" "$OUT" ": planned"
+OUT="$(hw file --what "Write the kit notes" --done-when 'the notes are written in Work\kit-notes.md and work/kit-notes.md' --key kit-in-work-back --source test 2>&1)"
+contains "a result under work/ still files" "$OUT" ": planned"
+# The path is worked out as a file system reads it, not matched as text (#551)
+OUT="$(hw file --what "Draft the kit checklist" --done-when "the checklist is written in routines/work./2026-09-13/kit.md" --key kit-trail-dot-in-log --source test 2>&1)"
+check "a DONE WHEN in a run-log folder written with a trailing dot, which Windows drops, is refused" "$?" "1"
+contains "  with the same message, naming the folder the cleanup empties" "$OUT" "inside routines/work/, a run-log folder"
+check "  and nothing is filed" "$(idof kit-trail-dot-in-log)" "none"
+OUT="$(hw file --learn "What goes in a kit?" --path 'routines/work /2026-09-13/kit.md' --key kit-trail-space-in-log --source test 2>&1)"
+check "a --path in a run-log folder written with a trailing space, which Windows drops, is refused" "$?" "1"
+contains "  with the same message, naming the folder the cleanup empties" "$OUT" "inside routines/work/, a run-log folder"
+check "  and nothing is filed" "$(idof kit-trail-space-in-log)" "none"
+OUT="$(hw file --what "Draft the kit checklist" --done-when "the checklist is written in work/../routines/work/2026-09-13/kit.md" --key kit-climb-in-log --source test 2>&1)"
+check "a DONE WHEN that climbs back into a run-log folder is refused" "$?" "1"
+contains "  with the same message, naming the folder the cleanup empties" "$OUT" "inside routines/work/, a run-log folder"
+check "  and nothing is filed" "$(idof kit-climb-in-log)" "none"
+OUT="$(hw file --what "Draft the kit checklist" --done-when "the checklist is written in $TMP/routines/next-action/2026-09-13/kit.md" --key kit-abs-in-log --source test 2>&1)"
+check "a DONE WHEN naming a run-log folder by its full path is refused" "$?" "1"
+contains "  with the same message, naming the folder the cleanup empties" "$OUT" "inside routines/next-action/, a run-log folder"
+check "  and nothing is filed" "$(idof kit-abs-in-log)" "none"
+OUT="$(hw file --what "Draft the kit checklist" --done-when "the checklist is written in routines/work/../../work/kit.md" --key kit-climb-out --source test 2>&1)"
+contains "a DONE WHEN that climbs out of a run-log folder into work/ files" "$OUT" ": planned"
+OUT="$(hw file --what "Draft the kit list" --done-when "the kit list is written in work/kit-list.md" --check "test -s routines/research/../../work/kit-list.md" --key kit-check-climb-out --source test 2>&1)"
+contains "a CHECK that climbs out of a run-log folder into work/ files" "$OUT" ": planned"
+OUT="$(hw file --learn "What goes in a grab bag?" --path 'work\answers\a.md' --key learn-back-path --source test 2>&1)"
+contains "a learn --path written with backslashes names a file and files" "$OUT" ": planned"
+missing "  and is not told it names no file" "$OUT" "must name a file"
+# A run-log path glued after an earlier path is still refused, as on main (#551 review)
+gi=0
+for glue in ',' ':' '+' '='; do
+  gi=$((gi+1))
+  OUT="$(hw file --what "Draft the kit checklist" --done-when "the checklist is written in work/a.md${glue}routines/work/2026-09-13/kit.md" --key "kit-glued-$gi" --source test 2>&1)"
+  check "a DONE WHEN with a run-log path glued on by '$glue' is refused" "$?" "1"
+  contains "  naming that path and the folder the cleanup empties" "$OUT" "names routines/work/2026-09-13/kit.md, inside routines/work/, a run-log folder"
+  check "  and nothing is filed" "$(idof "kit-glued-$gi")" "none"
+done
+OUT="$(hw file --what "Draft the kit list" --done-when "the kit list is written in work/kit-list.md" --check "cmp work/kit-list.md,work/a+b/routines/work/kit.md" --key kit-glued-look-alike --source test 2>&1)"
+contains "a path glued on that only looks like a run-log folder files" "$OUT" ": planned"
+# A folder name ending in spaces and dots before a separator is the folder Windows sees (#561)
+si=0
+for spelt in 'routines/work . /x.md' 'routines/work .. /x.md' 'Routines. /Work. . /x.md'; do
+  si=$((si+1))
+  OUT="$(hw file --what "Draft the kit checklist" --done-when "the checklist is written in $spelt" --key "kit-spdot-done-$si" --source test 2>&1)"
+  check "a DONE WHEN in '$spelt' is refused" "$?" "1"
+  contains "  naming the folder the cleanup empties" "$OUT" "inside routines/work/, a run-log folder"
+  check "  and nothing is filed" "$(idof "kit-spdot-done-$si")" "none"
+  OUT="$(hw file --learn "What goes in a kit?" --done-when "the answer is written in work/kit.md" --path "$spelt" --key "kit-spdot-path-$si" --source test 2>&1)"
+  check "  as a --path it is refused" "$?" "1"
+  contains "  naming the folder the cleanup empties" "$OUT" "--path names $spelt, inside routines/work/, a run-log folder"
+  OUT="$(hw file --what "Draft the kit list" --done-when "the kit list is written" --check "test -s '$spelt'" --key "kit-spdot-check-$si" --source test 2>&1)"
+  check "  as a CHECK it is refused" "$?" "1"
+  contains "  naming the folder the cleanup empties" "$OUT" "inside routines/work/, a run-log folder"
+done
+OUT="$(hw file --what "Write the notes" --done-when "the notes are written in work/notes . /x.md" --key notes-spdot-look-alike --source test 2>&1)"
+contains "a look-alike with a space-dot folder name files" "$OUT" ": planned"
+# A web address is not a path of the notebook; a run-log folder named alone is still that folder (#561)
+OUT="$(hw file --what "Read the page" --done-when "see https://example.com/routines/work/x.md" --key web-look-alike --source test 2>&1)"
+contains "a web address that only looks like a run-log path files" "$OUT" ": planned"
+OUT="$(hw file --what "Draft the kit" --done-when "the kit is written in routines/work/" --key kit-folder-alone --source test 2>&1)"
+check "a DONE WHEN naming only a run-log folder is refused" "$?" "1"
+contains "  naming the folder the cleanup empties" "$OUT" "names routines/work/, which is routines/work/, a run-log folder"
+check "  and nothing is filed" "$(idof kit-folder-alone)" "none"
+OUT="$(hw file --what "Draft the kit" --done-when "the kit is written in work/kit.md" --check "test -s file://$TMP/routines/work/kit.md" --key kit-file-url --source test 2>&1)"
+check "a file:// address into a run-log folder is still refused" "$?" "1"
+# One list of run-log folders (#551): mc-work refuses each folder the cleanup sweeps, and no other.
+CLEANUP="$HERE/../notebook/core/cleanup.mjs"
+if [ -f "$CLEANUP" ]; then
+  SWEPT="$("$NODE" --input-type=module -e '
+const {places}=await import(process.argv[1]);
+for(const p of places({root:process.argv[2],home:process.argv[2]+"/no-home"}))console.log(p.name);
+' "$CLEANUP" "$TMP")"
+  [ -n "$SWEPT" ] && ok "  the cleanup names the run-log folders it sweeps" || bad "  the cleanup names the run-log folders it sweeps"
+  i=0
+  while IFS= read -r folder; do
+    i=$((i+1))
+    OUT="$(hw file --what "Keep a note" --done-when "the note is written in $folder/2026-09-13/note.md" --key "drift-$i" --source test 2>&1)"
+    check "  mc-work refuses $folder/, which the nightly cleanup empties" "$?" "1"
+    contains "    naming that folder" "$OUT" "inside $folder/, a run-log folder"
+    check "    and nothing is filed" "$(idof "drift-$i")" "none"
+  done <<< "$SWEPT"
+  check "  the cleanup and mc-work read one list of run-log folders" \
+    "$("$NODE" --input-type=module -e '
+const {RUN_LOG_FOLDERS}=await import(process.argv[1]);
+console.log(JSON.stringify(RUN_LOG_FOLDERS));
+' "$CLEANUP")" \
+    "$("$NODE" -e 'console.log(JSON.stringify(require(process.argv[1]).RUN_LOG_FOLDERS))' "$TMP/bin/run-log-folders.js")"
+  OUT="$(hw file --what "Keep a note" --done-when "the note is written in routines/elsewhere/2026-09-13/note.md" --key drift-none --source test 2>&1)"
+  contains "  mc-work refuses no routines folder the cleanup leaves alone" "$OUT" ": planned"
+fi
 
 echo
 echo "$PASS passed, $FAIL failed"

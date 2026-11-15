@@ -14,6 +14,9 @@
 //   node night-tidy-chat.mjs --home <home> dump --session id      the conversation's own rows
 //   node night-tidy-chat.mjs --home <home> routing                the routing table's rows
 //   node night-tidy-chat.mjs --home <home> count --session id     messages=<n> tokens=<n>
+//   node night-tidy-chat.mjs --home <home> commands [--since <epoch seconds>]
+//        the assistant's command log, read only: one line per command the model ran with a tool,
+//        <epoch seconds><TAB><session id><TAB><the command as the model typed it>
 //
 // IT WRITES THE SCHEMA IT FINDS. The tables are the assistant's, not ours: a row is written by
 // taking the newest row of the table as its template and changing only what the scenario means to
@@ -180,8 +183,32 @@ function count(){
  process.stdout.write('messages='+messages+' tokens='+tokens+'\n');
 }
 
+// THE ASSISTANT'S COMMAND LOG, read only (2.0.0-beta.16, scenarios/charm-challenge.sh). The assistant
+// keeps every tool call the model made in the tool_calls column of the assistant message that made
+// it (the OpenAI shape: [{id, function: {name, arguments}}], arguments a JSON string). A call that
+// ran a command carries it as arguments.command. It is the command as the MODEL typed it: what a
+// hook added when the command was run is not in it, which is what "without --conversation" is
+// judged on. A store or a column that is not there yields no lines, never a crash.
+function commands(){
+ if(!tables().has('messages')||!columns('messages').some(c=>c.name==='tool_calls'))return;
+ const since=Number(option('since','0'));
+ const rows=db.prepare("select session_id, timestamp, tool_calls from messages where role = 'assistant' and tool_calls is not null and tool_calls != '' order by timestamp").all();
+ const lines=[];
+ for(const row of rows){
+  if(!(Number(row.timestamp)>=since))continue;
+  let calls;try{calls=JSON.parse(row.tool_calls);}catch{continue;}
+  for(const call of Array.isArray(calls)?calls:[]){
+   let args=call?.function?.arguments??call?.arguments??{};
+   if(typeof args==='string'){try{args=JSON.parse(args);}catch{args={};}}
+   const command=args&&typeof args.command==='string'?args.command:null;
+   if(command)lines.push([String(Math.floor(Number(row.timestamp))),row.session_id,command.replace(/\s+/g,' ').trim()].join('\t'));
+  }
+ }
+ if(lines.length)process.stdout.write(lines.join('\n')+'\n');
+}
+
 try{
- ({seed,retime,dump,routing,count}[command]||(()=>die('Say what to do: seed, retime, dump, routing or count.')))();
+({seed,retime,dump,routing,count,commands}[command]||(()=>die('Say what to do: seed, retime, dump, routing, count or commands.')))();
 }finally{
  try{db.close();}catch{}
 }

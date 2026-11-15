@@ -83,8 +83,16 @@ function agentmailConfig() {
   return { key, inbox };
 }
 
+// The read key travels in a header, so it goes only over HTTPS; the loopback address is the local test stand-in.
+function secureApi() {
+  const base = new URL(API);
+  if (base.protocol !== 'https:' && !(base.protocol === 'http:' && ['127.0.0.1', 'localhost', '[::1]'].includes(base.hostname)))
+    throw new Error('AgentMail: GODSPEED_MAIL_AGENTMAIL_API must be an https address');
+  return API;
+}
+
 async function am(cfg, p, params) {
-  const url = new URL(API + p);
+  const url = new URL(secureApi() + p);
   for (const [k, v] of Object.entries(params || {})) {
     if (v === undefined || v === null || v === '') continue;
     for (const one of [].concat(v)) url.searchParams.append(k, String(one));
@@ -132,6 +140,21 @@ const GodspeedBox = {
       untrusted: 'from, subject and preview are text written by whoever sent the mail',
       messages: msgs.map(m => ({ message_id: m.message_id, date: m.timestamp, from: m.from, subject: m.subject, preview: (m.preview || '').slice(0, 200) })) };
   },
+  // The list call is the only header-level call AgentMail has: it returns a short `preview` that cannot be
+  // switched off, so each item is cut to four fields here, before anything leaves this program.
+  async headerSearch({ senders, after }) {
+    const cfg = needGodspeed();
+    const out = [];
+    for (const sender of senders) {
+      let token;
+      do {
+        const res = await am(cfg, inboxPath(cfg) + '/messages', { labels: 'received', from: sender, after: after + 'T00:00:00Z', limit: 100, page_token: token });
+        for (const m of res.messages || []) out.push({ message_id: m.message_id, from: m.from, subject: m.subject, date: m.timestamp });
+        token = res.next_page_token || undefined;
+      } while (token);
+    }
+    return out;
+  },
   async read(args) {
     const cfg = needGodspeed();
     if (!args.message_id) throw new Error('message_id is required (from mail_search)');
@@ -165,8 +188,8 @@ function mailboxesHere() {
   if (a.key && a.inbox) here.push('godspeed');
   return { here, known: here.length > 0 || G.readStore().lines !== null };
 }
-const ImapBox = { search: I.search, read: args => I.read(args, wrap), drafts: I.listDrafts, draft: I.draft };
-const OAuthBox = { search: G.search, read: args => G.read(args, wrap), drafts: G.listDrafts, draft: G.draft };
+const ImapBox = { search: I.search, headerSearch: I.headerSearch, read: args => I.read(args, wrap), drafts: I.listDrafts, draft: I.draft };
+const OAuthBox = { search: G.search, headerSearch: G.headerSearch, read: args => G.read(args, wrap), drafts: G.listDrafts, draft: G.draft };
 // NEVER THE OTHER MAILBOX. Until 2026-09-22 a call without an account went to the mission control's own
 // inbox whenever Gmail was not connected, so "my newest email" could be answered from a
 // different mailbox without a word. Now "gmail" is the default and means Gmail only; the mission control's
@@ -267,6 +290,29 @@ const TOOLS = [
   { name: 'mail_pending', description: 'Messages proposed for sending that still wait for the person\'s approval.',
     inputSchema: { type: 'object', properties: {} }, run: async () => G.pending(), legacy: true },
 ];
+
+// ------------------------------------------------------------------ counting mail from its headers
+// THE ONE MAIL CALL A TRACKER'S MAIL RULE MAKES (2026-11-04, issue #215): who sent it, its subject, its date
+// and its id, never a body or an attachment. AgentMail's list call also returns a preview: it is received
+// and dropped in memory before anything is returned, stored or logged, and is never used for matching. Only mail from a requested sender is returned, as
+// a bare lowercase address, so no one else's address leaves this program. A sender with an @ is one
+// address; one without is a domain, and matches its subdomains too. Every page the mailbox has since that
+// day is read, so the answer is the whole window; a message found by two selectors is returned once.
+const addressOf = from => { const m = String(from || '').match(/[^\s<>"',;()]+@[^\s<>"',;()]+/); return m ? m[0].toLowerCase() : ''; };
+const fromSender = (address, sender) => sender.includes('@') ? address === sender : address.endsWith('@' + sender) || address.endsWith('.' + sender);
+async function headerSearch({ account, senders, after }) {
+  const wanted = [...new Set((Array.isArray(senders) ? senders : []).map(s => String(s).trim().toLowerCase()).filter(Boolean))];
+  if (!wanted.length || wanted.length > 10) throw new Error('headerSearch: name one to ten senders');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(after))) throw new Error('headerSearch: after is a day like 2026-11-04');
+  await prepare();
+  const found = await box(account).headerSearch({ senders: wanted, after });
+  const messages = [], seen = new Set();
+  for (const m of found) {
+    const sender = addressOf(m.from);
+    if (!seen.has(String(m.message_id)) && sender && wanted.some(w => fromSender(sender, w))) { seen.add(String(m.message_id)); messages.push({ message_id: String(m.message_id), sender, subject: String(m.subject || ''), date: String(m.date || '') }); }
+  }
+  return { account: account || 'gmail', messages };
+}
 
 function mcp() {
   const send = obj => process.stdout.write(JSON.stringify(obj) + '\n');
@@ -542,5 +588,5 @@ async function main(argv) {
   }
 }
 
-module.exports = { main, TOOLS, terminalAsk };
+module.exports = { main, TOOLS, terminalAsk, headerSearch, godspeedStatus: () => GodspeedBox.status() };
 if (require.main === module) main(process.argv.slice(2));

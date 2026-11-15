@@ -64,7 +64,7 @@ working folder and follow it."
 ## The four parts of a cron line (the typed twin, for a machine with no screen)
 
 ```
-hermes cron create "0 7 * * *" "Read AGENTS.md in the working folder and follow it. Read skills/morning-brief/SKILL.md and write today's brief to brief/ using that skill. Preserve any existing daily brief. Report unavailable inputs or failed checks. Do not send anything externally." --name morning-brief --workdir /path/to/your/godspeed
+hermes cron create "0 7 * * *" "Read AGENTS.md in the working folder and follow it. Read skills/morning-brief/SKILL.md and make today's brief using that skill: where godspeed-brief is a command you can run, run it and use its text, and do not write brief/ by hand; only where that command does not exist, write brief/YYYY-MM-DD.md. Preserve any existing daily brief. Report unavailable inputs or failed checks. Do not send anything externally." --name morning-brief --workdir /path/to/your/godspeed
 ```
 
 - **Schedule.** Five fields, minute then hour: `0 7 * * *` is seven every

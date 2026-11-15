@@ -56,9 +56,10 @@ const storage=(bucket:string)=>({
   remove:async(names:string[])=>request('media/remove',{paths:names}),
   download:async(name:string)=>{const r=await fetch('/api/media/file/'+encodeURIComponent(name));return r.ok?{data:await r.blob(),error:null}:{data:null,error:{message:'Media unavailable'}};}
 });
-export const supabase:any={
+const functions={invoke:<Data=any>(name:string,options:any={}):Promise<{data:Data|null;error:any}>=>request('functions/'+name,options.body||{},options.signal)};
+export const supabase:{functions:typeof functions;[part:string]:any}={
   from:(table:string)=>new Query(table),rpc:(name:string,args:any)=>new Query(undefined,name,args),
-  functions:{invoke:(name:string,options:any={})=>request('functions/'+name,options.body||{},options.signal)},
+  functions,
   storage:{from:storage},
   auth:{getSession:async()=>({data:{session:{access_token:'local-session',user:{id:'owner'}}},error:null}),getUser:async()=>({data:{user:{id:'owner'}},error:null}),onAuthStateChange:()=>({data:{subscription:{unsubscribe(){}}}})},
   channel:()=>({on(){return this;},subscribe(){return this;},unsubscribe(){}}),removeChannel:async()=>{},

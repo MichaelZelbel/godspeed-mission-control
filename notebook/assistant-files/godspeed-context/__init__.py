@@ -9,14 +9,28 @@ the owner one invitation to tell the assistant about themselves. Hermes does not
 scheduled job delivered into the chat the assistant sees next (only with cron.mirror_delivery or a
 job's attach_to_session, which its command line cannot set), so a plain "ok" to the invitation
 reached an assistant that never saw the invitation. While the invitation waits for an answer, or
-the chat is under way, this says so. Every failure returns None: it never breaks the assistant.
+the chat is under way, this says so. It also hands the owner's plain yes or no in their private Telegram
+chat to `godspeed-step`, which answers the waiting step it belongs to (see waiting_step_block). Every
+failure returns None: it never breaks the assistant.
+
+Reports (4 November 2026, #198): for the same reason, every message background work sends is
+recorded by the notebook (core/background-reports.mjs) as a conversation_messages record named
+background-report-*, and the last few of a day are listed before each reply (reports_block), so
+"what is this about?" can be answered from the message itself.
+
+Buttons: a waiting step's question in Telegram is sent once, as one message with Yes and No buttons (step_buttons.py).
 """
+import importlib.util
 import json
+import logging
 import os
 import re
+import subprocess
 import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+# One line per owner turn in the gateway log says what the waiting-step match did, never the words (#372).
+log = logging.getLogger("godspeed-step")
 INVITED_DAYS = 14   # the invitation says "today or next week"
 STARTED_HOURS = 24  # a chat left half way is not followed for ever
 
@@ -29,9 +43,13 @@ def _mission_control():
         return ""
 
 
-def _seconds_since(stamp):
+def _stamp(stamp):
     from datetime import datetime
-    return time.time() - datetime.fromisoformat(str(stamp).replace("Z", "+00:00")).timestamp()
+    return datetime.fromisoformat(str(stamp).replace("Z", "+00:00")).timestamp()
+
+
+def _seconds_since(stamp):
+    return time.time() - _stamp(stamp)
 
 
 def context_block(state):
@@ -102,12 +120,153 @@ def voice_block(message):
             "an ElevenLabs key in this chat.")
 
 
+REPORT_HOURS = 24  # a day's worth
+REPORT_MAX = 5
+REPORTS_HEADER = ("[godspeed-reports] Sent by background work, in your name, to this chat (newest first). These are "
+                  "your own messages; when they ask about one (\"what is this about?\"), answer from it and its "
+                  "facts. Never ask them to type a code.")
+
+
+def reports_block(root, platform, now=None):
+    """The block listing the reports sent to this kind of chat in the last day, or None."""
+    folder = os.path.join(root, "notebook", "_system", "conversation_messages")
+    to = "telegram" if platform == "telegram" else "notebook"
+    now = now or time.time()
+    found = []
+    for name in os.listdir(folder):
+        if not name.endswith(".json"):
+            continue
+        try:
+            with open(os.path.join(folder, name), encoding="utf-8") as f:
+                r = json.load(f)
+            sent = r["sent_at"]
+            if r.get("source_app") != "background" or r.get("delivered_to") != to or r.get("removed_at") or not 0 <= now - _stamp(sent) < REPORT_HOURS * 3600:
+                continue
+            found.append((sent, r))
+        except Exception:
+            continue
+    found.sort(key=lambda p: _stamp(p[0]), reverse=True)
+    lines = []
+    for sent, r in found[:REPORT_MAX]:
+        info = r.get("report") if isinstance(r.get("report"), dict) else {}
+        line = "- %s UTC, about %s: \"%s\"" % (str(sent)[:16].replace("T", " "), info.get("about") or "something", str(r.get("content", ""))[:600])
+        facts = [str(x) for x in info.get("facts") or [] if x]
+        if facts and info.get("written") != "routine":
+            line += "\n  Facts: " + "; ".join(facts)[:300]
+        if info.get("steps") or info.get("step"):
+            line += "\n  A step waits for their yes."
+        lines.append(line)
+    return REPORTS_HEADER + "\n" + "\n".join(lines) if lines else None
+
+
 def _backup_command():
     try:
         with open(os.path.join(HERE, "backup-command.txt"), encoding="utf-8") as f:
             return f.read().strip() or None
     except OSError:
         return None
+
+
+# A WAITING STEP (issue #196): background work asks the owner for a yes with `godspeed-step open`, and
+# the owner answers with a plain yes or no. The program matches the answer to the step before the model
+# runs (notebook/core/waiting-steps.mjs); this hands it the owner's message, in the owner's own private
+# Telegram chat only, and tells the model what happened or to ask which one is meant.
+def _owner_mismatch(session_id):
+    """The names of the checks the turn fails (never their values), or [] for the owner's own chat."""
+    try:
+        from gateway.session_context import get_session_env
+        got = {field: str(get_session_env("HERMES_SESSION_" + field, "") or "")
+               for field in ("PLATFORM", "CHAT_ID", "CHAT_TYPE", "USER_ID", "ID")}
+    except (ImportError, AttributeError):
+        return ["session context"]
+    owner = os.environ.get("TELEGRAM_ALLOWED_USERS", "").strip()
+    failed = [] if re.fullmatch(r"[1-9][0-9]*", owner) else ["TELEGRAM_ALLOWED_USERS"]
+    failed += [] if got["PLATFORM"] == "telegram" else ["PLATFORM"]
+    failed += [] if got["CHAT_TYPE"] in ("dm", "private") else ["CHAT_TYPE"]
+    failed += [] if got["CHAT_ID"] == owner else ["CHAT_ID"]
+    failed += [] if got["USER_ID"] == owner else ["USER_ID"]
+    if got["ID"] == session_id:
+        return failed
+    # After the owner's first message Hermes can leave HERMES_SESSION_ID empty while the turn is
+    # still theirs (#372; the owner's decision on #482): only then, and only when every other check
+    # matched the owner, chat id included, the empty id is accepted. A Telegram private chat's id is
+    # its user's id, so a value left over from another chat cannot pass. A different id never does.
+    if not got["ID"] and session_id and not failed:
+        _note("a message in the owner's private chat was accepted without a session id (Hermes gave none; every other check matched)")
+        return failed
+    return failed + ["ID" + (" (empty)" if not got["ID"] else "") + (" (no session_id)" if not session_id else "")]
+
+
+def _owner_telegram(session_id):
+    return not _owner_mismatch(session_id)
+
+
+def _step_command():
+    try:
+        with open(os.path.join(HERE, "step-command.txt"), encoding="utf-8") as f:
+            command = json.load(f)
+        return command if isinstance(command, list) and len(command) >= 3 else None
+    except (OSError, ValueError):
+        return None
+
+
+# The match could not be made: a plain yes or no may have been meant for a waiting step, so the owner
+# is asked to send it again rather than having it handled as an ordinary message. No diagnostics.
+STEP_RETRY_BLOCK = ("[godspeed-step] Your waiting questions could not be checked just now. If your owner's message is only a "
+                    "plain yes or no, tell them in one sentence that you could not process it and to send it again in a "
+                    "moment, and do nothing else with it. Otherwise ignore this note.")
+
+
+def step_block(report):
+    """The context the step command returned, whatever kind of result carried it, or None."""
+    if isinstance(report, dict) and isinstance(report.get("context"), str):
+        return report["context"] or None
+    return None
+
+
+def _step_timeout():
+    try:
+        return float(os.environ.get("GODSPEED_STEP_PLUGIN_TIMEOUT") or 5)
+    except ValueError:
+        return 5
+
+
+def _text(message):
+    if isinstance(message, list):
+        message = " ".join(str(p.get("text", "")) for p in message if isinstance(p, dict))
+    return message if isinstance(message, str) else ""
+
+
+def _note(line, *args):
+    try:
+        log.info("godspeed-step (telegram): " + line, *args)
+    except Exception:
+        pass
+
+
+def waiting_step_block(message, session_id):
+    command = _step_command()
+    if not command or not _text(message).strip():
+        return None
+    words = len(_text(message).split())
+    failed = _owner_mismatch(session_id)
+    if failed:
+        _note("a message of %d words was not matched: not the owner's private chat in this session (%s differs)", words, ", ".join(failed))
+        return None
+    try:
+        run = subprocess.run(command[:2] + ["heard", "--chat", "telegram"] + command[2:], input=_text(message),
+                             capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=_step_timeout())
+        if run.returncode == 0:
+            report = json.loads(run.stdout)
+            _note("a message of %d words was heard as %s", words, report.get("kind") if isinstance(report, dict) else "nothing")
+            return step_block(report)
+        last = (run.stderr or "").strip().splitlines()[-1:] or ["no error output"]
+        _note("a message of %d words could not be matched: the step command exited %d (%s)", words, run.returncode, last[0][:200])
+    except subprocess.TimeoutExpired:
+        _note("a message of %d words could not be matched: the step command took longer than %ss", words, _step_timeout())
+    except Exception as e:
+        _note("a message of %d words could not be matched: %s", words, type(e).__name__)
+    return STEP_RETRY_BLOCK
 
 
 def on_pre_llm_call(**kwargs):
@@ -124,11 +283,20 @@ def on_pre_llm_call(**kwargs):
             blocks.append(voice_block(kwargs.get("user_message")))
         except Exception:
             pass
+        try:
+            if str(kwargs.get("platform") or "") == "telegram":
+                blocks.append(waiting_step_block(kwargs.get("user_message"), str(kwargs.get("session_id") or "")))
+        except Exception:
+            pass
         root = _mission_control()
         if root:
             try:
                 with open(os.path.join(root, ".godspeed", "context-setup.json"), encoding="utf-8") as f:
                     blocks.append(context_block(json.load(f)))
+            except Exception:
+                pass
+            try:
+                blocks.append(reports_block(root, kwargs.get("platform")))
             except Exception:
                 pass
         blocks = [b for b in blocks if b]
@@ -137,5 +305,22 @@ def on_pre_llm_call(**kwargs):
         return None
 
 
+def _step_buttons():
+    try:
+        spec = importlib.util.spec_from_file_location("godspeed_context_step_buttons", os.path.join(HERE, "step_buttons.py"))
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module.StepButtons(_mission_control, _step_command)
+    except Exception:
+        return None
+
+
+_buttons = _step_buttons()
+
+
 def register(ctx):
     ctx.register_hook("pre_llm_call", on_pre_llm_call)
+    if _buttons is not None and callable(getattr(ctx, "register_telegram_handler", None)):
+        ctx.register_telegram_handler(_buttons.factory)
+        if callable(getattr(ctx, "on_unload", None)):
+            ctx.on_unload(_buttons.close)

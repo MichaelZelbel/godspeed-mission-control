@@ -8,13 +8,15 @@ import {fileURLToPath} from 'node:url';
 import {createRequire} from 'node:module';
 import {Store,atomic,hash} from '../core/records/store.mjs';
 import {FileSync} from '../core/sync/git.mjs';
-import {IdentityShelf,personaOf,MANUAL_LIMIT} from '../core/identity-shelf.mjs';
+import {IdentityShelf,personaOf,MANUAL_LIMIT,MANUAL_WARN} from '../core/identity-shelf.mjs';
+import {COMMIT_PREFIX} from '../core/identity-history.mjs';
 import {SOUL_MARK,HERMES_DEFAULTS} from '../core/assistant-soul.mjs';
 import {installSkillTree} from '../core/packaged-skills.mjs';
 import {scanContext} from '../core/context-scan.mjs';
 
-// The Identity page (core/identity-shelf.mjs): who it is, its rules, its profile pages and its
-// recipes, each change kept as an earlier version that undo and restore bring back as a new change.
+// The Identity page (core/identity-shelf.mjs): who it is, its rules, what it knows about its owner
+// and its recipes, each change kept as an earlier version that undo and restore bring back as a new
+// change.
 const kit=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..'),starter=path.join(kit,'starter-godspeed');
 const git=(cwd,...args)=>execFileSync('git',args,{cwd,encoding:'utf8',windowsHide:true,stdio:['ignore','pipe','pipe']}).trim();
 const read=(...parts)=>fs.readFileSync(path.join(...parts),'utf8');
@@ -118,6 +120,14 @@ test('rules: adding, changing and removing one keeps the list in AGENTS.md in st
   assert.equal(fs.existsSync(path.join(root,'rules','no-calls-after-nine.md')),false);assert.match(compileCheck(root),/up to date: 8 rules/);
   // A removed rule comes back with undo, and the list with it.
   await shelf.undo('rule:no-calls-after-nine');assert.equal(fs.existsSync(path.join(root,'rules','no-calls-after-nine.md')),true);
+  // The page lists a removed rule, and a rule brought back is no longer listed as removed.
+  await shelf.removeRule('rule:no-calls-after-nine');
+  const removedList=await shelf.removedRules();
+  assert.deepEqual(removedList.map(r=>r.target),['rule:no-calls-after-nine']);assert.equal(removedList[0].title,'No calls after nine');
+  const history=await shelf.versions('rule:no-calls-after-nine');assert.equal(history[0].removed,true);
+  await shelf.restore('rule:no-calls-after-nine',removedList[0].version);
+  assert.equal(fs.existsSync(path.join(root,'rules','no-calls-after-nine.md')),true);assert.deepEqual(await shelf.removedRules(),[]);
+  assert.ok((await shelf.versions('rule:no-calls-after-nine')).some(v=>v.removed),'the removal is kept as an earlier version');
   // Changing a starter rule keeps the lines of its header it did not touch as they were written.
   const spend=shelf.read('rule:never-spend-my-money'),old=read(root,'rules','never-spend-my-money.md');
   await shelf.save('rule:never-spend-my-money',{fields:{...spend.fields,story:spend.fields.story+'\nNot even a coffee.\n'}},{expected_hash:spend.hash});
@@ -140,8 +150,11 @@ test('a rule list that would pass its limit, or a rule without its sentence, is 
 });
 
 test('a change that would push the manual past what the assistant reads is refused; near it, a warning',async()=>{
-  const pad='\n\n'+'Reference material that belongs in its own file. '.repeat(4),{shelf,root}=workspace({manual:read(starter,'AGENTS.md')+pad});
-  const size=[...read(root,'AGENTS.md')].length;assert.ok(size>19000&&size<MANUAL_LIMIT,String(size));
+  // Padded to a size of its own, so this stays a test of the ceiling and not of how long the
+  // starter's manual happens to be (it has to stay well under it, for a reader's own rules).
+  const base=read(starter,'AGENTS.md'),pad=('\n\n'+'Reference material that belongs in its own file. '.repeat(400)).slice(0,MANUAL_WARN+190-[...base].length);
+  const {shelf,root}=workspace({manual:base+pad});
+  const size=[...read(root,'AGENTS.md')].length;assert.ok(size>MANUAL_WARN&&size<MANUAL_LIMIT,String(size));
   const now=shelf.read('who');
   const near=await shelf.save('who',{text:now.text+' Short.'},{expected_hash:now.hash});
   assert.match(near.manual.warning,/Short enough for you to read all of it\?/);
@@ -228,7 +241,8 @@ test('through the folder\'s own repository each change is a commit with its mess
   const shelf=new IdentityShelf(store),who=shelf.read('who');
   const saved=await shelf.save('who',{text:'You are Captain Speedy.'},{expected_hash:who.hash});
   assert.equal(saved.recorded.where,'folder');assert.ok(saved.recorded.commit);
-  assert.equal(git(dir,'log','-1','--format=%s|%an'),'Identity: changed who it is|Godspeed Mission Control');
+  const [subject,author]=git(dir,'log','-1','--format=%s|%an').split('|');
+  assert.equal(subject,'Identity: changed who it is');assert.match(author,/^Godspeed Mission Control \(.+\)$/);
   assert.deepEqual(git(dir,'show','--name-only','--format=','HEAD').split('\n'),['AGENTS.md'],'only the manual is in the commit');
   assert.equal(git(dir,'diff','--cached','--name-only'),'rules/when-in-doubt-ask.md','the session work stays staged');
   assert.equal(git(dir,'status','--porcelain','--','AGENTS.md'),'','Git sees the manual as committed');
@@ -237,6 +251,16 @@ test('through the folder\'s own repository each change is a commit with its mess
   const versions=await shelf.versions('who');assert.equal(versions[0].text,'You are Captain Speedy.');assert.match(versions[1].text,/^You are Godspeed Mission Control/);
   await shelf.undo('who');assert.equal(read(dir,'AGENTS.md'),read(seed,'AGENTS.md'));
   assert.equal(git(dir,'log','-1','--format=%s'),'Identity: undid the last change to who it is');
+});
+
+test('versions saved before each computer signed its own commits keep the labels the new ones get',()=>{
+  const {shelf}=workspace();
+  for(const author of ['Godspeed Mission Control','Godspeed Mission Control (envy)']){
+    assert.equal(shelf.byWhom({author,message:COMMIT_PREFIX+'changed who it is'}),'you, on this page',author);
+    assert.equal(shelf.byWhom({author,message:COMMIT_PREFIX+'changed who it is (asked in chat)'}),'your assistant, asked in chat',author);
+    assert.equal(shelf.byWhom({author,message:'sync: notebook changes'}),'saved by your notebook',author);
+  }
+  assert.equal(shelf.byWhom({author:'Michael',message:'edited by hand'}),'Michael');
 });
 
 test('an edit made outside the page and not committed yet is kept as a version before the next change',async()=>{
@@ -252,11 +276,17 @@ test('an edit made outside the page and not committed yet is kept as a version b
   await shelf.undo('who');assert.equal(personaOf(read(root,'AGENTS.md')),'You are Two.');
 });
 
-test('profile pages and recipes keep their headers; a changed packaged recipe survives the next update',async()=>{
+test('the files about the owner and the recipes keep their headers; a changed packaged recipe survives the next update',async()=>{
   const {shelf,root,store}=workspace();
   const page=shelf.read('profile:about-me');assert.match(page.fields.text,/^# About me/);
   await shelf.save('profile:about-me',{text:'# About me\n\nI grow tomatoes.\n'},{expected_hash:page.hash});
   assert.equal(read(root,'profile','about-me.md'),'# About me\n\nI grow tomatoes.\n');
+  // Its earlier versions name it by its own title alone, never "profile page 1" (26 October 2026:
+  // "a page is in a book or a magazine").
+  const kept=await shelf.versions('profile:about-me');
+  assert.equal(kept[0].message,'changed "About me"');
+  // A part that is not one of them is refused without that word either.
+  assert.throws(()=>shelf.read('profile'),error=>error.code==='UNKNOWN_TARGET'&&!/profile page/i.test(error.message));
   // The recipe as the package installed it.
   const source=path.join(starter,'skills','keep-a-note');fs.rmSync(path.join(root,'skills','keep-a-note'),{recursive:true});
   installSkillTree(store,source,path.join(root,'skills','keep-a-note'));
@@ -432,7 +462,7 @@ test('rules are numbered as AGENTS.md numbers them, and the rest follow by where
   const founder=shelf.overview().rules.find(r=>r.slug==='founder-only');assert.equal(founder.about,'Only the founder posts in company channels.');assert.equal(founder.stated,false);
   // A folder's README is not a page about the owner.
   atomic(path.join(root,'profile','README.md'),'# profile/ - what I know because you told me\n');assert.ok(!shelf.overview().profile.some(p=>p.name==='README'));
-  // A profile page's preview is its first paragraph of prose, past comments, tables and code, joined into one line.
+  // The preview of a file about the owner is its first paragraph of prose, past comments, tables and code, joined into one line.
   atomic(path.join(root,'profile','connections.md'),'---\nalways_read: true\n---\n# Connections\n\n<!-- kept by a script -->\n| a | b |\n|---|---|\n\n```\ncode\n```\n\n**Telefon:** use `godspeed phone`\nfor calls.\n');
   assert.equal(shelf.overview().profile.find(p=>p.name==='connections').preview,'**Telefon:** use `godspeed phone` for calls.');
   // A list written before a rule was added keeps its numbers: the new rule follows them.
@@ -444,10 +474,85 @@ test('rules are numbered as AGENTS.md numbers them, and the rest follow by where
   const told=shelf.chatContext({label:'Godspeed\'s brain'});
   assert.match(told,/notebook page "Godspeed's brain" open/);
   for(const r of behind.rules)assert.ok(told.includes('\n'+r.n+'. '+r.title+' ('+r.target),r.slug);
-  assert.match(told,/Profile pages:\n1\. /);assert.match(told,/Skills:\n1\. Keep a note \(skill:keep-a-note\)/);
+  // Each file about the owner by its own title, numbered, and never called a page.
+  assert.match(told,/What you know about them:\n1\. About me \(profile:about-me\)\n2\. Connections \(profile:connections\)\n/);
+  assert.match(told,/\n4\. My projects and priorities \(profile:projects\)\n/,'by its own title, as the page shows it');
+  assert.doesNotMatch(told,/profile page/i);
+  assert.match(told,/Skills:\n1\. Keep a note \(skill:keep-a-note\)/);
   // Each sentence after its kind in words, so it is quoted the right way round.
   assert.match(told,/\n\d+\. Verify before asserting \(rule:verify-before-asserting\)\. Must: Verify any claim you could act on live in this same turn or label it UNVERIFIED\.\n/);
   assert.match(told,/\n\d+\. Never spend my money \(rule:never-spend-my-money\)\. Never: Buy, book, subscribe/);
   assert.match(told,/a "Never" sentence alone says the opposite/);
   assert.match(told,/\n\d+\. Founder only \(rule:founder-only; for the companies\)\n/,'a rule without a sentence or a stated kind is named only');
+});
+
+test('the new-rules setting reads automatic until it is set, and keeps what is set',async()=>{
+  const {shelf,store}=workspace();
+  assert.equal(shelf.newRules(),'automatic');assert.equal(shelf.overview().new_rules,'automatic');
+  assert.deepEqual(await shelf.setNewRules('ask-first'),{saved:true,new_rules:'ask-first'});
+  assert.equal(new IdentityShelf(store).newRules(),'ask-first','read back from the store, not from memory');
+  await assert.rejects(shelf.setNewRules('sometimes'),error=>error.code==='BAD_MODE');
+  assert.equal(shelf.newRules(),'ask-first');
+});
+
+test('a similar rule is found for a near-duplicate and none for an unrelated rule',()=>{
+  const {shelf}=workspace();
+  assert.equal(shelf.similarRules({line:'Never delete my files or notes.'})[0]?.target,'rule:never-delete-without-asking');
+  assert.equal(shelf.similarRules({line:'Never send an email in my name without showing me the draft.'})[0]?.target,'rule:never-send-in-my-name');
+  assert.equal(shelf.similarRules({line:'Never spend my money.'})[0]?.target,'rule:never-spend-my-money');
+  // Unrelated rules, among them everyday ones that share common words ("email", "draft", "send",
+  // "message") with the long line of the starter safety rule "Never send anything in my name".
+  for(const line of ['Always reply in German.','Phone anyone for me after 9 pm.','Keep my notes short.',
+    'Put emoji in an email you draft for me.','Never use emoji in my emails.','Use my nickname in an email you draft for me.','Send me a message after 10pm.',
+    'Write emails in a formal tone.','Draft my messages in short sentences.'])assert.deepEqual(shelf.similarRules({line}),[],line);
+});
+
+test('a short near-duplicate of a rule finds that rule, and is offered as a change to it in both modes',async()=>{
+  const {shelf,root}=workspace();
+  const wordings=[{title:'Never sign emails as me',group:'never',line:'Sign emails as me.'},{title:'Never sign anything as me',group:'never',line:'Sign anything as me.'},
+    {line:'never sign emails as me'},{line:'never sign anything as me'}];
+  const rules=()=>fs.readdirSync(path.join(root,'rules')).sort();
+  for(const fields of wordings)assert.equal(shelf.similarRules(fields)[0]?.target,'rule:never-sign-as-me',JSON.stringify(fields));
+  // A longer wording that matched before still does.
+  assert.equal(shelf.similarRules({line:'Never sign letters as me or imitate my voice.'})[0]?.target,'rule:never-sign-as-me');
+  // A short rule that shares no meaningful word with any rule is no near-duplicate.
+  for(const line of ['never book flights before 9','Never book flights before 9 am.'])assert.deepEqual(shelf.similarRules({line}),[],line);
+  const before=rules();
+  for(const mode of ['automatic','ask-first']){
+    await shelf.setNewRules(mode);
+    for(const fields of wordings.slice(0,2)){
+      const offer=await shelf.offerRule(fields);
+      assert.equal(offer.saved,false,mode+': '+fields.title+' is not saved beside the rule it repeats');
+      assert.equal(offer.similar[0]?.target,'rule:never-sign-as-me');assert.ok(offer.choices.includes('change'));
+      assert.match(offer.say,/You already have rule \d+, "Never sign as me".*Shall I change that rule/);
+    }
+  }
+  assert.deepEqual(rules(),before,'no second rule is written');
+});
+
+test('a short rule that shares only one name word with a rule, in another sense, is not that rule',async()=>{
+  const {shelf,root}=workspace();
+  const others=['Sign me up for the gym','Never sign up for newsletters'];
+  for(const line of others){
+    assert.ok(!shelf.similarRules({line}).some(r=>r.target==='rule:never-sign-as-me'),line);
+    assert.ok(!shelf.similarRules({title:line,group:'never',line}).some(r=>r.target==='rule:never-sign-as-me'),line+' as a title');
+  }
+  // What a short wording that repeats a rule found still finds it.
+  assert.equal(shelf.similarRules({line:'never sign emails as me'})[0]?.target,'rule:never-sign-as-me');
+  assert.equal(shelf.similarRules({line:'Never spend money on apps'})[0]?.target,'rule:never-spend-my-money');
+  assert.equal(shelf.similarRules({line:'Ask me about doubt'})[0]?.target,'rule:when-in-doubt-ask');
+  await shelf.setNewRules('ask-first');
+  for(const line of others){
+    const offer=await shelf.offerRule({line});
+    assert.equal(offer.saved,false,'ask-first: '+line+' is shown first');
+    assert.ok(!offer.similar.some(r=>r.target==='rule:never-sign-as-me'),line);
+    assert.doesNotMatch(offer.say,/Never sign as me/,line);
+  }
+  await shelf.setNewRules('automatic');
+  const before=fs.readdirSync(path.join(root,'rules')).length;
+  for(const line of others){
+    const saved=await shelf.offerRule({line});
+    assert.equal(saved.saved,true,'automatic: '+line+' is saved without a question');
+  }
+  assert.equal(fs.readdirSync(path.join(root,'rules')).length,before+2,'both are saved as rules of their own');
 });

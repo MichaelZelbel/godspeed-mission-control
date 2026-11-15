@@ -30,6 +30,14 @@ test('the server name is the one public DNS gives this server\'s own address',as
   assert.equal(await serverName({addresses:['5.161.10.20'],names:['srv1000001.hstgr.cloud','srv1000001'],...dns({'srv1000001.hstgr.cloud':['5.161.10.20']})}),'srv1000001.hstgr.cloud');
   // Hetzner: the computer is called "ubuntu-4gb"; the address's reverse name leads to it.
   assert.equal(await serverName({addresses:['5.75.1.2'],names:['ubuntu-4gb'],...dns({'ptr:static.2.1.75.5.clients.your-server.de':['5.75.1.2'],'static.2.1.75.5.clients.your-server.de':['5.75.1.2']})}),'static.2.1.75.5.clients.your-server.de');
+  // Node's Resolver.reverse returned [] on a real Hetzner host while a direct
+  // PTR query returned its valid provider hostname.
+  const queries=[];
+  const resolver={setServers(){},reverse:async()=>[],resolvePtr:async name=>{queries.push(name);return ['static.28.54.109.65.clients.your-server.de'];},resolve4:async()=>['65.109.54.28']};
+  assert.equal(await serverName({addresses:['65.109.54.28'],names:['ubuntu-4gb'],resolver}),'static.28.54.109.65.clients.your-server.de');
+  assert.deepEqual(queries,['28.54.109.65.in-addr.arpa']);
+  // A server with no provider name still gets the same public address as the Docker edition.
+  assert.equal(await serverName({addresses:['5.75.1.2'],names:['unnamed'],reverse:async()=>[],resolve4:async name=>name==='5-75-1-2.sslip.io'?['5.75.1.2']:[]}), '5-75-1-2.sslip.io');
   // A name that points somewhere else is not this server's.
   assert.equal(await serverName({addresses:['5.161.10.20'],names:['shop.example.com'],...dns({'shop.example.com':['93.184.216.34']})}),null);
   // No public address: no name is even looked up.

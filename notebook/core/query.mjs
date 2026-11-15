@@ -12,6 +12,9 @@ import {isTalkGate,talkArea,talkCalendar} from './routine-times.mjs';
 const talkRow=(job,root)=>{if(!isTalkGate(job))return {};const calendar=talkCalendar(talkArea(root));return calendar?{calendar,talk:true}:{};};
 import {nativeCardRows} from './card-commands.mjs';
 import {momentDates} from './timestamps.mjs';
+// A record with no name and no nickname (only written before 2.0.0-beta.14, issue 266) is not listed
+// among the people, though it stays on disk with whatever links to it.
+import {personNames} from './person-names.mjs';
 
 const inventory = JSON.parse(fs.readFileSync(fileURLToPath(new URL('../../docs/full-version/source-inventory.json', import.meta.url)), 'utf8'));
 export const tables = new Set(inventory.dependencies.flatMap(d => d.tables).filter(t => t !== 'note-attachments'));
@@ -32,6 +35,8 @@ tables.add('lead_comparisons');
 tables.add('tracker_proposals');tables.add('tracker_deletions');
 // A meal held for its one question about an amount, and her answer (D-321 step 5).
 tables.add('food_questions');
+// What the notebook has already copied out of due/ and world/events/, per old file (due-copy.mjs).
+tables.add('due_copies');
 const defaults = {
   // Postgres filled in status; an item saved without one would now be left
   // out by Actions' .neq("status", "dismissed"), since NULL <> x is not true.
@@ -180,14 +185,35 @@ const folderLine=path=>path?path.split('/').map((part,i,parts)=>parts.slice(0,i+
 const underFolder=(path,folder)=>path===folder||path.startsWith(folder+'/');
 export class QueryService {
   constructor(store) { this.store = store; }
-  withSnapshot(read){if(!this.snapshotDepth)this.store.scan();this.snapshotDepth=(this.snapshotDepth||0)+1;try{return read();}finally{this.snapshotDepth--;}}
+  // ONE READ OF THE VAULT SERVES EVERY STEP INSIDE, the store's own reads as well as this
+  // service's (records/store.mjs, snapshot). A reminder is a record now (#90), and dueRows
+  // reaches the store for its pages, its moments and the installation's clock, so a read that
+  // held only this service's snapshot read the whole vault six times for one Settings poll
+  // (/api/personal, every five seconds) and nine times for one chat context
+  // (notebook/test/chat-context-snapshot.test.mjs, 30 October 2026). A write inside still
+  // refreshes the view it wrote, through scan(true).
+  withSnapshot(read){return this.store.snapshot(()=>{this.snapshotDepth=(this.snapshotDepth||0)+1;try{return read();}finally{this.snapshotDepth--;}});}
   rows(table) {
     // With the original assistant the routines are Hermes' jobs, plus the notebook's own record
     // routines that run beside them (NativeScheduler.recordKinds). Until 6 October 2026 only
     // Hermes' were listed, so a watch or radar routine could be neither seen nor paused.
     // The routines a first goal started say in a sentence what they do (starting-routines.mjs).
     if(table==='jobs'&&this.nativeHermesHome){if(!this.snapshotDepth)this.store.scan();const what=new Map([...(readMachineRecord(this.store)?.jobs||[]),...readNotebookRoutines(this.store).jobs].filter(j=>j.what).map(j=>[j.id,j.what]));return [...nativeJobs(this.nativeHermesHome,this.store.device).map(j=>({...j,...(what.get(j.id)?{what:what.get(j.id)}:{}),...coachRoutineTimes(j,this.store.root),...talkRow(j,this.store.root)})),...this.store.list('jobs').filter(j=>NativeScheduler.recordKinds.includes(j.kind))];}
-    if(this.nativeHermesHome&&['goals','forecasts','work_items'].includes(table))return nativeCardRows(this.store,table);
+    if(this.nativeHermesHome&&['goals','forecasts','work_items'].includes(table)){
+     const cards=nativeCardRows(this.store,table);
+     if(table!=='work_items')return cards;
+     // THE NOTEBOOK'S OWN REPAIR ITEMS (#163). With the original assistant the work list is the
+     // assistant's work cards, and until 3 November 2026 that was all it held: a repair item the
+     // notebook files itself (a morning brief that left out a line breaking the person's writing
+     // rules, a routine that missed its run) is a record with no card, so it was saved and never
+     // listed, and the person was never told. They are listed beside the cards; a card's own record
+     // (legacy_source) and an id a card already has are the card's, not a second item.
+     if(!this.snapshotDepth)this.store.scan();
+     const ids=new Set(cards.map(card=>card.id));
+     const own=(typeof this.store.ofType==='function'?this.store.ofType('work_items'):[...this.store.records.values()].filter(r=>r.type==='work_items'))
+      .filter(r=>r.kind==='repair'&&!r.removed_at&&!r.legacy_source&&!ids.has(r.id));
+     return [...cards,...own];
+    }
     if(!this.snapshotDepth)this.store.scan();
     // Records of one type come from the store's per-type lists: filtering all
     // sixteen thousand records once per table and query added up.
@@ -195,7 +221,12 @@ export class QueryService {
     const ofType=type=>typeof this.store.ofType==='function'?this.store.ofType(type):all().filter(r=>r.type===type);
     const memo=new Map(),list = type => {
       if(memo.has(type))return memo.get(type);
-      const values=ofType(type).filter(r=>!r.removed_at);if(type==='deadlines')values.push(...dueRows(this.store));
+      // A reminder with a day attached is listed once, through dueRows: the page itself is left out
+      // above and dueRows puts it back with what only the program that owns it can work out - which
+      // window is open, how loud it is today, the one sentence it says - from the records
+      // (tools/due.js on the notebook's store, #90). Listing the page as well would stand it in
+      // this list twice, in the brief, in Settings and in the chat's context.
+      const values=ofType(type).filter(r=>!r.removed_at&&!(type==='deadlines'&&r.native_slug));if(type==='deadlines')values.push(...this.store.snapshot(()=>dueRows(this.store)));
       if(type!=='moments'){memo.set(type,values);return values;}
       const byMoment=new Map();for(const c of ofType('event_corrections')){let l=byMoment.get(c.moment_id);if(!l)byMoment.set(c.moment_id,l=[]);l.push(c);}
       // Dates as ISO 8601, the shape the Menerio screens read (timestamps.mjs).
@@ -376,6 +407,10 @@ export class QueryService {
             return correction;
           }
           const record = this.store.prepare(table, { ...(defaults[table] || {}), ...old, ...payload }, old);
+          // Opening a person records when (last_viewed_at); that is not a change to them, and is
+          // let through for a person saved without a name before the rule. Until issue 266 it was
+          // refused, and the first open of such a person ended in this error.
+          if(table==='contacts'&&operation!=='delete'&&!(old&&Object.keys(payload).every(key=>key==='last_viewed_at'||key==='id'))&&!(typeof record.name==='string'&&record.name.trim()))throw new Error('A person needs a name. Type their name and save again.');
           if(table==='contact_groups'&&payload.type&&payload.type!=='contact_groups')record.group_type=payload.type;
           if(table==='contact_group_memberships'&&!record.status_changed_at)record.status_changed_at=record.created_at;
           if(table==='contact_group_memberships'&&(!record.last_movement_at||old&&payload.status&&old.status!==payload.status))record.last_movement_at=record.updated_at;
@@ -463,7 +498,7 @@ export class QueryService {
       // and every capitalised name after a lowercase or accented one (Nina,
       // Otto after Ömer) was never listed.
       const byName = (a, b) => compareValues(String(a.name ?? ''), String(b.name ?? '')) || compareValues(String(a.id), String(b.id));
-      const query = String(args.search_text || '').toLowerCase(), all = this.rows('contacts').filter(r => !r.merged_into && r.id !== args.exclude_contact_id && [r.name, ...(r.aliases || [])].some(n => String(n ?? '').toLowerCase().includes(query))).sort(byName);
+      const query = String(args.search_text || '').toLowerCase(), all = this.rows('contacts').filter(r => !r.merged_into && r.id !== args.exclude_contact_id && personNames(r).some(n => n.includes(query))).sort(byName);
       const after = all.filter(r => !args.after_id || byName(r, { name: args.after_name, id: args.after_id }) > 0);
       const rows = after.slice(0, args.page_size || 50), last = rows.at(-1); return { rows, total: all.length, next: after.length > rows.length ? { name: last.name, id: last.id } : null };
     }

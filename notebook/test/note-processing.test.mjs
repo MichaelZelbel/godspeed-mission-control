@@ -70,10 +70,12 @@ test('another machine, the daily limit and a missing model all leave notes alone
   const b=setup(),processing=new NoteProcessing({store:b.store,query:b.query,domains:b.domains,device:'vps'});
   await processing.tick();b.store.save('settings',{id:'processing',daily_limit:1});
   b.store.save('notes',{title:'One',content:'First fictional note mentioning Fictional Ana.'});b.store.save('notes',{title:'Two',content:'Second fictional note mentioning Fictional Ana.'});
-  await processing.tick({now:Date.now()+600000});const second=await processing.tick({now:Date.now()+700000});
+  // A fixed clock of its own (noon, June 2099): the real clock plus ten minutes crossed midnight Berlin time late in the evening and the day's count started again.
+  const noon=Date.parse('2099-06-15T10:00:00Z');
+  await processing.tick({now:noon});const second=await processing.tick({now:noon+100000});
   assert.equal(second.skipped,'daily limit reached');assert.equal(b.calls(),1);
   b.domains.provider=null;b.store.save('settings',{id:'processing',daily_limit:10});
-  assert.equal((await processing.tick({now:Date.now()+800000})).skipped,'no model connected');
+  assert.equal((await processing.tick({now:noon+200000})).skipped,'no model connected');
   assert.equal((await b.domains.invoke('sweep-note-processing',{})).waiting,1);
 });
 
@@ -123,4 +125,21 @@ test('the daily limit counts every processing run, not every note',async()=>{
   const p2=new NoteProcessing({store:s2,query:q2,domains,device:'local'}),broken=s2.save('notes',{title:'Broken note',content:'This one always fails'});failing.add(broken.id);paid=0;
   const start=lateMorningInBerlin();for(let i=0;i<5;i++)await p2.tick({now:start+i*60000});
   assert.equal(paid,2);
+});
+
+// Until 13 November 2026 processing settings written in part before the
+// runner's first run (from a screen, the API or another computer) left no
+// start, and processing never started.
+test('processing settings written in part before the first run keep what was written, and processing still starts',async()=>{
+  const {store,query,domains}=setup(),processing=new NoteProcessing({store,query,domains,device:'vps'});
+  await query.executeAsync({table:'settings',operation:'upsert',values:{id:'processing',daily_limit:5}});
+  await processing.tick({now:Date.now()-1000});
+  const started=store.get('settings','processing');
+  assert.ok(started.since,'the first run gives the saved settings a start');
+  assert.equal(started.daily_limit,5);
+  const note=store.save('notes',{title:'Climbing',content:'Fictional Ana and I go climbing on Monday the 12th.'});
+  assert.equal((await processing.tick({now:Date.parse(note.updated_at)+180000})).processed,1);
+  await query.executeAsync({table:'settings',operation:'upsert',values:{id:'processing',quiet_minutes:5}});
+  const later=store.get('settings','processing');
+  assert.equal(later.since,started.since);assert.equal(later.daily_limit,5);assert.equal(later.quiet_minutes,5);
 });
