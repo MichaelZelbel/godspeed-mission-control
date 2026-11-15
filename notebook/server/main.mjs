@@ -694,7 +694,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
       if(route==='/api/chat/options'&&req.method==='GET'){
         if(!domains.provider||assistantMissing)return send(res,200,{connected:false,usable:false,current:'No AI connected',models:[{id:'',efforts:[]}]});
         let options=provider?.options?await provider.options():{current:'Connected model',models:[{id:'',efforts:[]}]};
-        if(provider?.check&&Date.now()-chatAICheckedAt>30000){chatAICheckedAt=Date.now();try{await provider.check();chatAIUsable=true;}catch(error){chatAIUsable=false;console.error('Godspeed Mission Control: the chat AI connection check failed:',error.message);}}
+        if(provider?.check&&Date.now()-chatAICheckedAt>=5000){chatAICheckedAt=Date.now();try{await provider.check();chatAIUsable=true;}catch(error){chatAIUsable=false;console.error('Godspeed Mission Control: the chat AI connection check failed:',error.message);}}
         return send(res,200,{connected:true,usable:chatAIUsable,...options});
       }
       if(route==='/api/chat/stop'&&req.method==='POST'){const input=JSON.parse(await body(req));chatRequests.get(input.id)?.abort();return send(res,200,{ok:true});}
